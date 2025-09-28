@@ -1,6 +1,7 @@
 package exec
 
 import (
+	"errors"
 	"fmt"
 	"os"
 
@@ -33,26 +34,26 @@ type ProUnlockCmdArgs struct {
 func parseLockUnlockCliArgs(cmd *cobra.Command, args []string) (ProLockUnlockCmdArgs, error) {
 	info, err := ProcessCommandLineArgs("terraform", cmd, args, nil)
 	if err != nil {
-		return ProLockUnlockCmdArgs{}, fmt.Errorf(errUtils.ErrStringWrappingFormat, errUtils.ErrFailedToProcessArgs, err)
+		return ProLockUnlockCmdArgs{}, errors.Join(errUtils.ErrFailedToProcessArgs, err)
 	}
 
 	// InitCliConfig finds and merges CLI configurations in the following order:
 	// system dir, home dir, current dir, ENV vars, command-line arguments
 	atmosConfig, err := cfg.InitCliConfig(info, true)
 	if err != nil {
-		return ProLockUnlockCmdArgs{}, fmt.Errorf(errUtils.ErrStringWrappingFormat, errUtils.ErrFailedToInitConfig, err)
+		return ProLockUnlockCmdArgs{}, errors.Join(errUtils.ErrFailedToInitConfig, err)
 	}
 
 	flags := cmd.Flags()
 
 	component, err := flags.GetString("component")
 	if err != nil {
-		return ProLockUnlockCmdArgs{}, fmt.Errorf(errUtils.ErrStringWrappingFormat, errUtils.ErrFailedToGetComponentFlag, err)
+		return ProLockUnlockCmdArgs{}, errors.Join(errUtils.ErrFailedToGetComponentFlag, err)
 	}
 
 	stack, err := flags.GetString("stack")
 	if err != nil {
-		return ProLockUnlockCmdArgs{}, fmt.Errorf(errUtils.ErrStringWrappingFormat, errUtils.ErrFailedToGetStackFlag, err)
+		return ProLockUnlockCmdArgs{}, errors.Join(errUtils.ErrFailedToGetStackFlag, err)
 	}
 
 	if component == "" || stack == "" {
@@ -125,12 +126,12 @@ func ExecuteProLockCommand(cmd *cobra.Command, args []string) error {
 
 	repo, err := git.GetLocalRepo()
 	if err != nil {
-		return fmt.Errorf(errUtils.ErrStringWrappingFormat, errUtils.ErrFailedToGetLocalRepo, err)
+		return errors.Join(errUtils.ErrFailedToGetLocalRepo, err)
 	}
 
 	repoInfo, err := git.GetRepoInfo(repo)
 	if err != nil {
-		return fmt.Errorf(errUtils.ErrStringWrappingFormat, errUtils.ErrFailedToGetRepoInfo, err)
+		return errors.Join(errUtils.ErrFailedToGetRepoInfo, err)
 	}
 
 	owner := repoInfo.RepoOwner
@@ -145,12 +146,12 @@ func ExecuteProLockCommand(cmd *cobra.Command, args []string) error {
 
 	apiClient, err := pro.NewAtmosProAPIClientFromEnv(&a.AtmosConfig)
 	if err != nil {
-		return fmt.Errorf(errUtils.ErrStringWrappingFormat, errUtils.ErrFailedToCreateAPIClient, err)
+		return errors.Join(errUtils.ErrFailedToCreateAPIClient, err)
 	}
 
 	lock, err := apiClient.LockStack(&dto)
 	if err != nil {
-		return fmt.Errorf(errUtils.ErrStringWrappingFormat, errUtils.ErrFailedToLockStack, err)
+		return errors.Join(errUtils.ErrFailedToLockStack, err)
 	}
 
 	log.Info("Stack successfully locked.\n")
@@ -170,12 +171,12 @@ func ExecuteProUnlockCommand(cmd *cobra.Command, args []string) error {
 
 	repo, err := git.GetLocalRepo()
 	if err != nil {
-		return fmt.Errorf(errUtils.ErrStringWrappingFormat, errUtils.ErrFailedToGetLocalRepo, err)
+		return errors.Join(errUtils.ErrFailedToGetLocalRepo, err)
 	}
 
 	repoInfo, err := git.GetRepoInfo(repo)
 	if err != nil {
-		return fmt.Errorf(errUtils.ErrStringWrappingFormat, errUtils.ErrFailedToGetRepoInfo, err)
+		return errors.Join(errUtils.ErrFailedToGetRepoInfo, err)
 	}
 
 	owner := repoInfo.RepoOwner
@@ -187,12 +188,12 @@ func ExecuteProUnlockCommand(cmd *cobra.Command, args []string) error {
 
 	apiClient, err := pro.NewAtmosProAPIClientFromEnv(&a.AtmosConfig)
 	if err != nil {
-		return fmt.Errorf(errUtils.ErrStringWrappingFormat, errUtils.ErrFailedToCreateAPIClient, err)
+		return errors.Join(errUtils.ErrFailedToCreateAPIClient, err)
 	}
 
 	_, err = apiClient.UnlockStack(&dto)
 	if err != nil {
-		return fmt.Errorf(errUtils.ErrStringWrappingFormat, errUtils.ErrFailedToUnlockStack, err)
+		return errors.Join(errUtils.ErrFailedToUnlockStack, err)
 	}
 
 	log.Info(fmt.Sprintf("Key '%s' successfully unlocked.\n", dto.Key))
@@ -210,7 +211,7 @@ func uploadStatus(info *schema.ConfigAndStacksInfo, exitCode int, client pro.Atm
 	// Get the git repository info
 	repoInfo, err := gitRepo.GetLocalRepoInfo()
 	if err != nil {
-		return fmt.Errorf(errUtils.ErrStringWrappingFormat, errUtils.ErrFailedToGetLocalRepo, err)
+		return errors.Join(errUtils.ErrFailedToGetLocalRepo, err)
 	}
 
 	// Get current git SHA
@@ -242,7 +243,7 @@ func uploadStatus(info *schema.ConfigAndStacksInfo, exitCode int, client pro.Atm
 
 	// Upload the status
 	if err := client.UploadInstanceStatus(&dto); err != nil {
-		return fmt.Errorf(errUtils.ErrStringWrappingFormat, errUtils.ErrFailedToUploadInstanceStatus, err)
+		return errors.Join(errUtils.ErrFailedToUploadInstanceStatus, err)
 	}
 
 	return nil

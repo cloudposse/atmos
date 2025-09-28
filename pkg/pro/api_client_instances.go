@@ -3,6 +3,7 @@ package pro
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -23,7 +24,7 @@ const (
 // UploadInstances uploads drift detection data to the API.
 func (c *AtmosProAPIClient) UploadInstances(dto *dtos.InstancesUploadRequest) error {
 	if dto == nil {
-		return fmt.Errorf(errUtils.ErrStringWrappingFormat, errUtils.ErrNilRequestDTO, "UploadInstances")
+		return errors.Join(errUtils.ErrNilRequestDTO, fmt.Errorf("method: %s", "UploadInstances"))
 	}
 	endpoint := fmt.Sprintf("%s/%s/instances", c.BaseURL, c.BaseAPIEndpoint)
 
@@ -35,7 +36,7 @@ func (c *AtmosProAPIClient) UploadInstances(dto *dtos.InstancesUploadRequest) er
 
 	data, err := utils.ConvertToJSON(dto)
 	if err != nil {
-		return fmt.Errorf(errUtils.ErrStringWrappingFormat, errUtils.ErrFailedToMarshalPayload, err)
+		return errors.Join(errUtils.ErrFailedToMarshalPayload, err)
 	}
 
 	// Log safe metadata instead of full payload to prevent secret leakage
@@ -44,19 +45,19 @@ func (c *AtmosProAPIClient) UploadInstances(dto *dtos.InstancesUploadRequest) er
 
 	req, err := getAuthenticatedRequest(c, "POST", endpoint, strings.NewReader(data))
 	if err != nil {
-		return fmt.Errorf(errUtils.ErrStringWrappingFormat, errUtils.ErrFailedToCreateAuthRequest, err)
+		return errors.Join(errUtils.ErrFailedToCreateAuthRequest, err)
 	}
 
 	log.Debug("Uploading instances.", "endpoint", endpoint)
 
 	resp, err := client.Do(req)
 	if err != nil {
-		return fmt.Errorf(errUtils.ErrStringWrappingFormat, errUtils.ErrFailedToMakeRequest, err)
+		return errors.Join(errUtils.ErrFailedToMakeRequest, err)
 	}
 	defer resp.Body.Close()
 
 	if err := handleAPIResponse(resp, "UploadInstances"); err != nil {
-		return fmt.Errorf(errUtils.ErrStringWrappingFormat, errUtils.ErrFailedToUploadInstances, err)
+		return errors.Join(errUtils.ErrFailedToUploadInstances, err)
 	}
 	log.Debug("Uploaded instances.", "endpoint", endpoint)
 

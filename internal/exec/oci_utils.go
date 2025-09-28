@@ -3,6 +3,7 @@ package exec
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -10,7 +11,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	log "github.com/cloudposse/atmos/pkg/logger" // Charmbracelet structured logger
-	"github.com/pkg/errors"
+	pkgErrors "github.com/pkg/errors"
 
 	"github.com/google/go-containerregistry/pkg/authn"
 	"github.com/google/go-containerregistry/pkg/name"
@@ -22,7 +23,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-var ErrNoLayers = errors.New("the OCI image does not have any layers")
+var ErrNoLayers = pkgErrors.New("the OCI image does not have any layers")
 
 const (
 	targetArtifactType = "application/vnd.atmos.component.terraform.v1+tar+gzip" // Target artifact type for Atmos components
@@ -33,19 +34,19 @@ const (
 func processOciImage(atmosConfig *schema.AtmosConfiguration, imageName string, destDir string) error {
 	tempDir, err := os.MkdirTemp("", uuid.New().String())
 	if err != nil {
-		return fmt.Errorf(errUtils.ErrStringWrappingFormat, errUtils.ErrCreateTempDirectory, err)
+		return errors.Join(errUtils.ErrCreateTempDirectory, err)
 	}
 	defer removeTempDir(tempDir)
 
 	ref, err := name.ParseReference(imageName)
 	if err != nil {
 		log.Error("Failed to parse OCI image reference", "image", imageName, "error", err)
-		return fmt.Errorf(errUtils.ErrStringWrappingFormat, errUtils.ErrInvalidImageReference, err)
+		return errors.Join(errUtils.ErrInvalidImageReference, err)
 	}
 
 	descriptor, err := pullImage(ref)
 	if err != nil {
-		return fmt.Errorf(errUtils.ErrStringWrappingFormat, errUtils.ErrPullImage, err)
+		return errors.Join(errUtils.ErrPullImage, err)
 	}
 
 	img, err := descriptor.Image()
@@ -59,7 +60,7 @@ func processOciImage(atmosConfig *schema.AtmosConfiguration, imageName string, d
 	layers, err := img.Layers()
 	if err != nil {
 		log.Error("Failed to retrieve layers from OCI image", "image", imageName, "error", err)
-		return fmt.Errorf(errUtils.ErrStringWrappingFormat, errUtils.ErrGetImageLayers, err)
+		return errors.Join(errUtils.ErrGetImageLayers, err)
 	}
 
 	if len(layers) == 0 {
@@ -114,13 +115,13 @@ func processLayer(layer v1.Layer, index int, destDir string) error {
 	uncompressed, err := layer.Uncompressed()
 	if err != nil {
 		log.Error("Layer decompression failed", "index", index, "digest", layerDesc, "error", err)
-		return fmt.Errorf(errUtils.ErrStringWrappingFormat, errUtils.ErrLayerDecompression, err)
+		return errors.Join(errUtils.ErrLayerDecompression, err)
 	}
 	defer uncompressed.Close()
 
 	if err := extractTarball(uncompressed, destDir); err != nil {
 		log.Error("Layer extraction failed", "index", index, "digest", layerDesc, "error", err)
-		return fmt.Errorf(errUtils.ErrStringWrappingFormat, errUtils.ErrTarballExtraction, err)
+		return errors.Join(errUtils.ErrTarballExtraction, err)
 	}
 
 	return nil

@@ -131,7 +131,8 @@ func Test_processArgsAndFlags_invalidFlag(t *testing.T) {
 	)
 
 	assert.Error(t, err)
-	assert.ErrorContains(t, err, "invalid flag: --init-pass-vars=invalid=true")
+	assert.ErrorContains(t, err, "invalid flag")
+	assert.ErrorContains(t, err, "--init-pass-vars=invalid=true")
 }
 
 func Test_getCliVars(t *testing.T) {

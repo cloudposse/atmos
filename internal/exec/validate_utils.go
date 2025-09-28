@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -12,7 +13,6 @@ import (
 	"github.com/open-policy-agent/opa/rego"
 	"github.com/open-policy-agent/opa/sdk"
 	opaTestServer "github.com/open-policy-agent/opa/sdk/test"
-	"github.com/pkg/errors"
 	"github.com/santhosh-tekuri/jsonschema/v5"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -138,7 +138,7 @@ func ValidateWithOpa(
 		return false, errors.New(invalidRegoPolicyErrorMessage)
 	}
 	if len(ers) > 0 {
-		return false, fmt.Errorf(errUtils.ErrStringWrappingFormat, errUtils.ErrOPAPolicyViolations, strings.Join(u.SliceOfInterfacesToSliceOfStrings(ers), "\n"))
+		return false, errors.Join(errUtils.ErrOPAPolicyViolations, fmt.Errorf("%s", strings.Join(u.SliceOfInterfacesToSliceOfStrings(ers), "\n")))
 	}
 
 	return true, nil
@@ -229,7 +229,7 @@ func ValidateWithOpaLegacy(
 
 	ers, ok := result.Result.([]any)
 	if ok && len(ers) > 0 {
-		return false, fmt.Errorf(errUtils.ErrStringWrappingFormat, errUtils.ErrOPAPolicyViolations, strings.Join(u.SliceOfInterfacesToSliceOfStrings(ers), "\n"))
+		return false, errors.Join(errUtils.ErrOPAPolicyViolations, fmt.Errorf("%s", strings.Join(u.SliceOfInterfacesToSliceOfStrings(ers), "\n")))
 	}
 
 	return true, nil

@@ -3,6 +3,7 @@ package pro
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/url"
 	"time"
@@ -45,22 +46,22 @@ func (c *AtmosProAPIClient) UploadInstanceStatus(dto *dtos.InstanceStatusUploadR
 
 	data, err := json.Marshal(payload)
 	if err != nil {
-		return fmt.Errorf(errUtils.ErrStringWrappingFormat, errUtils.ErrFailedToMarshalPayload, err)
+		return errors.Join(errUtils.ErrFailedToMarshalPayload, err)
 	}
 
 	req, err := getAuthenticatedRequest(c, "PATCH", targetURL, bytes.NewBuffer(data))
 	if err != nil {
-		return fmt.Errorf(errUtils.ErrStringWrappingFormat, errUtils.ErrFailedToCreateAuthRequest, err)
+		return errors.Join(errUtils.ErrFailedToCreateAuthRequest, err)
 	}
 
 	resp, err := c.HTTPClient.Do(req)
 	if err != nil {
-		return fmt.Errorf(errUtils.ErrStringWrappingFormat, errUtils.ErrFailedToMakeRequest, err)
+		return errors.Join(errUtils.ErrFailedToMakeRequest, err)
 	}
 	defer resp.Body.Close()
 
 	if err := handleAPIResponse(resp, "UploadInstanceStatus"); err != nil {
-		return fmt.Errorf(errUtils.ErrStringWrappingFormat, errUtils.ErrFailedToUploadInstanceStatus, err)
+		return errors.Join(errUtils.ErrFailedToUploadInstanceStatus, err)
 	}
 
 	log.Debug("Uploaded instance status.", "url", targetURL)

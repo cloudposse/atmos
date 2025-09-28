@@ -1,6 +1,7 @@
 package git
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/go-git/go-git/v5"
@@ -148,7 +149,7 @@ func (d *DefaultGitRepo) GetRepoInfo(repo *git.Repository) (RepoInfo, error) {
 			repoPath = "unknown"
 		}
 		cause := fmt.Errorf("GetRepoInfo failed for repo %s: %w", repoPath, err)
-		return RepoInfo{}, fmt.Errorf(errUtils.ErrStringWrappingFormat, errUtils.ErrFailedToGetRepoInfo, cause)
+		return RepoInfo{}, errors.Join(errUtils.ErrFailedToGetRepoInfo, cause)
 	}
 	return info, nil
 }

@@ -1,27 +1,27 @@
 package exec
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 
 	log "github.com/cloudposse/atmos/pkg/logger"
-	"github.com/pkg/errors"
+	pkgErrors "github.com/pkg/errors"
 	"github.com/spf13/cobra"
 
-	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 var (
-	ErrInvalidFormat                      = errors.New("invalid format")
-	ErrCreatingTempDirectory              = errors.New("error creating temporary directory")
-	ErrCreatingIntermediateSubdirectories = errors.New("error creating intermediate subdirectories")
-	ErrGettingJsonForPlanfile             = errors.New("error getting JSON for planfile")
-	ErrConvertingJsonToGoType             = errors.New("error converting JSON to Go type")
-	ErrNoComponent                        = errors.New("no component specified")
+	ErrInvalidFormat                      = pkgErrors.New("invalid format")
+	ErrCreatingTempDirectory              = pkgErrors.New("error creating temporary directory")
+	ErrCreatingIntermediateSubdirectories = pkgErrors.New("error creating intermediate subdirectories")
+	ErrGettingJsonForPlanfile             = pkgErrors.New("error getting JSON for planfile")
+	ErrConvertingJsonToGoType             = pkgErrors.New("error converting JSON to Go type")
+	ErrNoComponent                        = pkgErrors.New("no component specified")
 )
 
 // PlanfileOptions holds the options for generating a Terraform planfile.
@@ -132,7 +132,7 @@ func ExecuteTerraformGeneratePlanfile(
 	// Create a temporary directory for all temporary files.
 	tmpDir, err := os.MkdirTemp("", "atmos-terraform-generate-planfile")
 	if err != nil {
-		return fmt.Errorf(errUtils.ErrStringWrappingFormat, ErrCreatingTempDirectory, err)
+		return errors.Join(ErrCreatingTempDirectory, err)
 	}
 
 	defer func(path string) {
@@ -151,7 +151,7 @@ func ExecuteTerraformGeneratePlanfile(
 	// Get the JSON representation of the new plan.
 	planJSON, err := getTerraformPlanJSON(&atmosConfig, info, componentPath, planFile)
 	if err != nil {
-		return fmt.Errorf(errUtils.ErrStringWrappingFormat, ErrGettingJsonForPlanfile, err)
+		return errors.Join(ErrGettingJsonForPlanfile, err)
 	}
 
 	// Resolve the planfile path based on options. If a custom file is specified, use that. Otherwise, use the default path.
@@ -206,7 +206,7 @@ func resolvePlanfilePath(componentPath, format string, customFile string, info *
 
 	err := u.EnsureDir(planFilePath)
 	if err != nil {
-		return "", fmt.Errorf(errUtils.ErrStringWrappingFormat, ErrCreatingIntermediateSubdirectories, err)
+		return "", errors.Join(ErrCreatingIntermediateSubdirectories, err)
 	}
 
 	return planFilePath, nil

@@ -4,14 +4,6 @@ import (
 	"errors"
 )
 
-const (
-	ErrWrappingFormat           = "%w: %w"
-	ErrStringWrappingFormat     = "%w: %s"
-	ErrValueWrappingFormat      = "%w: %v"
-	ErrPathWrappingFormat       = "%w %q: %s"
-	ErrPathStringWrappingFormat = "%w %s: %s"
-)
-
 var (
 	ErrNoGitRepo                             = errors.New("not in a git repository")
 	ErrDownloadPackage                       = errors.New("failed to download package")

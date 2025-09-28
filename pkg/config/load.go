@@ -352,7 +352,7 @@ func processConfigImportsAndReapply(path string, tempViper *viper.Viper, content
 	// This ensures proper precedence: each config file's own settings override
 	// the settings from any files it imports (directly or transitively).
 	if err := tempViper.MergeConfig(bytes.NewReader(content)); err != nil {
-		return fmt.Errorf(errUtils.ErrStringWrappingFormat, errUtils.ErrMergeConfiguration, err)
+		return errors.Join(errUtils.ErrMergeConfiguration, err)
 	}
 
 	// Now merge commands in the correct order with proper override behavior:
@@ -386,7 +386,7 @@ func marshalViperToYAML(tempViper *viper.Viper) ([]byte, error) {
 	allSettings := tempViper.AllSettings()
 	yamlBytes, err := yaml.Marshal(allSettings)
 	if err != nil {
-		return nil, fmt.Errorf(errUtils.ErrStringWrappingFormat, errUtils.ErrFailedMarshalConfigToYaml, err)
+		return nil, errors.Join(errUtils.ErrFailedMarshalConfigToYaml, err)
 	}
 	return yamlBytes, nil
 }
@@ -395,7 +395,7 @@ func marshalViperToYAML(tempViper *viper.Viper) ([]byte, error) {
 func mergeYAMLIntoViper(v *viper.Viper, configFilePath string, yamlContent []byte) error {
 	v.SetConfigFile(configFilePath)
 	if err := v.MergeConfig(strings.NewReader(string(yamlContent))); err != nil {
-		return fmt.Errorf(errUtils.ErrStringWrappingFormat, errUtils.ErrMerge, err)
+		return errors.Join(errUtils.ErrMerge, err)
 	}
 	return nil
 }
@@ -427,7 +427,7 @@ func mergeConfig(v *viper.Viper, path string, fileName string, processImports bo
 
 	// Process YAML functions
 	if err := preprocessAtmosYamlFunc(content, tempViper); err != nil {
-		return fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrPreprocessYAMLFunctions, err)
+		return errors.Join(errUtils.ErrPreprocessYAMLFunctions, err)
 	}
 
 	// Marshal to YAML
@@ -650,7 +650,7 @@ func loadEmbeddedConfig(v *viper.Viper) error {
 
 	// Merge the embedded configuration into Viper
 	if err := v.MergeConfig(reader); err != nil {
-		return fmt.Errorf(errUtils.ErrStringWrappingFormat, errUtils.ErrMergeEmbeddedConfig, err)
+		return errors.Join(errUtils.ErrMergeEmbeddedConfig, err)
 	}
 
 	return nil
