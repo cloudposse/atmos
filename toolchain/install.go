@@ -205,7 +205,7 @@ func installFromToolVersions(toolVersionsPath string, reinstallFlag bool) error 
 		case "skipped":
 			alreadyInstalledCount++
 		}
-		showProgress(os.Stderr, spinner, progressBar, i, len(toolList), result, tool, err)
+		showProgress(os.Stderr, &spinner, progressBar, i, len(toolList), result, tool, err)
 	}
 
 	printSummary(os.Stderr, installedCount, failedCount, alreadyInstalledCount, len(toolList))
@@ -250,7 +250,7 @@ func installOrSkipTool(installer *Installer, tool struct {
 
 func showProgress(
 	stderr *os.File,
-	spinner bspinner.Model,
+	spinner *bspinner.Model,
 	progressBar progress.Model,
 	index, total int,
 	result string,
@@ -274,7 +274,8 @@ func showProgress(
 
 	for j := 0; j < 5; j++ {
 		printProgressBar(stderr, term.IsTerminal(int(stderr.Fd())), fmt.Sprintf("%s %s", spinner.View(), bar))
-		spinner, _ = spinner.Update(bspinner.TickMsg{})
+		spin, _ := spinner.Update(bspinner.TickMsg{})
+		spinner = &spin
 		time.Sleep(50 * time.Millisecond)
 	}
 }
