@@ -11,7 +11,6 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/charmbracelet/bubbles/list"
 	"github.com/charmbracelet/bubbles/viewport"
@@ -887,32 +886,6 @@ func TestCustomDelegateEdgeCases(t *testing.T) {
 
 // Test fetchGitHubVersions network edge cases.
 func TestFetchGitHubVersionsNetworkEdgeCases(t *testing.T) {
-	t.Run("Network timeout simulation", func(t *testing.T) {
-		// Create a server that delays response
-		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			time.Sleep(100 * time.Millisecond) // Small delay
-			w.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(w).Encode([]map[string]interface{}{})
-		}))
-		defer server.Close()
-
-		// Redirect stdout
-		oldStdout := os.Stdout
-		r, w, _ := os.Pipe()
-		os.Stdout = w
-
-		_, err := fetchGitHubVersionsWithCustomURL("owner", "repo", server.URL)
-
-		w.Close()
-		os.Stdout = oldStdout
-		io.Copy(&bytes.Buffer{}, r)
-
-		// Should handle the delay gracefully
-		if err == nil {
-			// Empty response should trigger "no non-prerelease versions" error
-		}
-	})
-
 	t.Run("Malformed URL", func(t *testing.T) {
 		_, err := fetchGitHubVersionsWithCustomURL("owner", "repo", "not-a-url")
 		if err == nil {
