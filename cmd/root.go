@@ -410,9 +410,9 @@ func Execute() error {
 		}
 	}
 
-	// Print telemetry disclosure if needed (skip for completion commands)
+	// Print telemetry disclosure if needed (skip for completion commands and when CLI config not found)
 	// We need to show this before command execution
-	if !isCompletionCommand() {
+	if !isCompletionCommand() && !errors.Is(initErr, cfg.NotFound) {
 		telemetry.PrintTelemetryDisclosure()
 	}
 

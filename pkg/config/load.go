@@ -296,7 +296,7 @@ func loadConfigFile(path string, fileName string) (*viper.Viper, error) {
 			return nil, err
 		}
 		// Wrap any other error with context
-		return nil, fmt.Errorf("%w: %s/%s: %w", errUtils.ErrReadConfig, path, fileName, err)
+		return nil, errors.Join(errUtils.ErrReadConfig, fmt.Errorf("%s/%s: %w", path, fileName, err))
 	}
 
 	return tempViper, nil
@@ -306,7 +306,7 @@ func loadConfigFile(path string, fileName string) (*viper.Viper, error) {
 func readConfigFileContent(configFilePath string) ([]byte, error) {
 	content, err := os.ReadFile(configFilePath)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %s: %w", errUtils.ErrReadConfig, configFilePath, err)
+		return nil, errors.Join(errUtils.ErrReadConfig, fmt.Errorf("%s: %w", configFilePath, err))
 	}
 	return content, nil
 }
@@ -350,7 +350,7 @@ func processConfigImportsAndReapply(path string, tempViper *viper.Viper, content
 	// This ensures proper precedence: each config file's own settings override
 	// the settings from any files it imports (directly or transitively).
 	if err := tempViper.MergeConfig(bytes.NewReader(content)); err != nil {
-		return fmt.Errorf("%w: %w", errUtils.ErrMergeTempConfig, err)
+		return errors.Join(errUtils.ErrMergeTempConfig, err)
 	}
 
 	// Now merge commands in the correct order with proper override behavior:
@@ -425,7 +425,7 @@ func mergeConfig(v *viper.Viper, path string, fileName string, processImports bo
 
 	// Process YAML functions
 	if err := preprocessAtmosYamlFunc(content, tempViper); err != nil {
-		return fmt.Errorf("%w: %w", errUtils.ErrPreprocessYAMLFunctions, err)
+		return errors.Join(errUtils.ErrPreprocessYAMLFunctions, err)
 	}
 
 	// Marshal to YAML
@@ -648,7 +648,7 @@ func loadEmbeddedConfig(v *viper.Viper) error {
 
 	// Merge the embedded configuration into Viper
 	if err := v.MergeConfig(reader); err != nil {
-		return fmt.Errorf("%w: %w", errUtils.ErrMergeEmbeddedConfig, err)
+		return errors.Join(errUtils.ErrMergeEmbeddedConfig, err)
 	}
 
 	return nil

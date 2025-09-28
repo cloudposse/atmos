@@ -25,9 +25,21 @@ type CacheConfig struct {
 }
 
 func GetCacheFilePath() (string, error) {
-	// Use the XDG library which automatically handles XDG_CACHE_HOME
-	// and falls back to the correct default based on the OS
-	cacheDir := filepath.Join(xdg.CacheHome, "atmos")
+	// Bind both ATMOS_XDG_CACHE_HOME and XDG_CACHE_HOME to support ATMOS override
+	// This allows operators to use ATMOS_XDG_CACHE_HOME to override the standard XDG_CACHE_HOME
+	v := viper.New()
+	if err := v.BindEnv("XDG_CACHE_HOME", "ATMOS_XDG_CACHE_HOME", "XDG_CACHE_HOME"); err != nil {
+		return "", errors.Wrap(err, "error binding XDG_CACHE_HOME environment variables")
+	}
+
+	var cacheDir string
+	if customCacheHome := v.GetString("XDG_CACHE_HOME"); customCacheHome != "" {
+		// Use the custom cache home from either ATMOS_XDG_CACHE_HOME or XDG_CACHE_HOME
+		cacheDir = filepath.Join(customCacheHome, "atmos")
+	} else {
+		// Fall back to XDG library default behavior
+		cacheDir = filepath.Join(xdg.CacheHome, "atmos")
+	}
 
 	if err := os.MkdirAll(cacheDir, 0o755); err != nil {
 		return "", errors.Wrap(err, "error creating cache directory")

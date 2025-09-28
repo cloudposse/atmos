@@ -492,7 +492,7 @@ func checkAtmosConfig(opts ...AtmosValidateOption) {
 // printMessageForMissingAtmosConfig prints Atmos logo and instructions on how to configure and start using Atmos
 func printMessageForMissingAtmosConfig(atmosConfig schema.AtmosConfiguration) {
 	c1 := theme.Colors.Info
-	c2 := theme.Colors.Success
+	// c2 is no longer needed since we're using PrintfMarkdownToTUI
 
 	fmt.Println()
 	err := tuiUtils.PrintStyledText("ATMOS")
@@ -501,34 +501,47 @@ func printMessageForMissingAtmosConfig(atmosConfig schema.AtmosConfiguration) {
 	// Check if we're in a git repo. Warn if not.
 	verifyInsideGitRepo()
 
+	stacksDir := filepath.Join(atmosConfig.BasePath, atmosConfig.Stacks.BasePath)
+
 	if atmosConfig.Default {
 		// If Atmos did not find an `atmos.yaml` config file and is using the default config
 		u.PrintMessageInColor("atmos.yaml", c1)
 		fmt.Println(" CLI config file was not found.")
-		fmt.Print("\nThe default Atmos stacks directory is set to ")
-		u.PrintMessageInColor(filepath.Join(atmosConfig.BasePath, atmosConfig.Stacks.BasePath), c1)
-		fmt.Println(",\nbut the directory does not exist in the current path.")
+		if stacksDir == "" {
+			fmt.Println("\nThe CLI config does not specify the directory for Atmos stacks and the directory does not exist.")
+		} else {
+			fmt.Print("\nThe default Atmos stacks directory is set to ")
+			u.PrintMessageInColor(stacksDir, c1)
+			fmt.Println(",\nbut the directory does not exist in the current path.")
+		}
 	} else {
 		// If Atmos found an `atmos.yaml` config file, but it defines invalid paths to Atmos stacks and components
 		u.PrintMessageInColor("atmos.yaml", c1)
-		fmt.Print(" CLI config file specifies the directory for Atmos stacks as ")
-		u.PrintMessageInColor(filepath.Join(atmosConfig.BasePath, atmosConfig.Stacks.BasePath), c1)
-		fmt.Println(",\nbut the directory does not exist.")
+		if stacksDir == "" {
+			fmt.Println(" CLI config file does not specify the directory for Atmos stacks and the directory does not exist.")
+		} else {
+			fmt.Print(" CLI config file specifies the directory for Atmos stacks as ")
+			u.PrintMessageInColor(stacksDir, c1)
+			fmt.Println(",\nbut the directory does not exist.")
+		}
 	}
 
-	u.PrintMessage("\nTo configure and start using Atmos, refer to the following documents:\n")
+	// Use markdown formatting for consistent output to stderr
+	u.PrintfMarkdownToTUI(`
+To configure and start using Atmos, refer to the following documents:
 
-	u.PrintMessageInColor("Atmos CLI Configuration:\n", c2)
-	u.PrintMessage("https://atmos.tools/cli/configuration\n")
+**Atmos CLI Configuration:**
+https://atmos.tools/cli/configuration
 
-	u.PrintMessageInColor("Atmos Components:\n", c2)
-	u.PrintMessage("https://atmos.tools/core-concepts/components\n")
+**Atmos Components:**
+https://atmos.tools/core-concepts/components
 
-	u.PrintMessageInColor("Atmos Stacks:\n", c2)
-	u.PrintMessage("https://atmos.tools/core-concepts/stacks\n")
+**Atmos Stacks:**
+https://atmos.tools/core-concepts/stacks
 
-	u.PrintMessageInColor("Quick Start:\n", c2)
-	u.PrintMessage("https://atmos.tools/quick-start\n")
+**Quick Start:**
+https://atmos.tools/quick-start
+`)
 }
 
 // CheckForAtmosUpdateAndPrintMessage checks if a version update is needed and prints a message if a newer version is found.

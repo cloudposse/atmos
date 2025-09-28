@@ -197,7 +197,7 @@ func TestIsVersionCommand(t *testing.T) {
 func skipIfPackerNotInstalled(t *testing.T) {
 	t.Helper()
 	if _, err := exec.LookPath("packer"); err != nil {
-		t.Skip("Skipping test: packer is not installed or not in PATH")
+		t.Skipf("packer not installed: %v", err)
 	}
 }
 
@@ -205,6 +205,6 @@ func skipIfPackerNotInstalled(t *testing.T) {
 func skipIfHelmfileNotInstalled(t *testing.T) {
 	t.Helper()
 	if _, err := exec.LookPath("helmfile"); err != nil {
-		t.Skip("Skipping test: helmfile is not installed or not in PATH")
+		t.Skipf("helmfile not installed: %v", err)
 	}
 }
