@@ -16,7 +16,7 @@ This PRD documents the architectural decision to separate path construction from
 
 ### Background
 When component paths were configured with absolute paths in Atmos, the `filepath.Join()` function on Unix systems incorrectly handled two absolute paths, causing path duplication. This manifested as broken GitHub Actions pipelines with duplicated paths like:
-```
+```text
 /home/runner/_work/infrastructure/infrastructure/home/runner/_work/infrastructure/infrastructure/atmos/components/terraform
 ```
 
@@ -71,7 +71,7 @@ The issue stemmed from mixing path construction logic with filesystem validation
 
 ### Architecture Overview
 
-```
+```text
 ┌─────────────────────────────────────────┐
 │           Application Layer              │
 │  (Commands: terraform, helmfile, etc.)   │

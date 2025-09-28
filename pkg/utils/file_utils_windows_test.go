@@ -335,8 +335,8 @@ func TestJoinPath_WindowsPathNormalization(t *testing.T) {
 			providedPath: `\\components\\`,
 			description:  "filepath.Join normalizes multiple slashes",
 			checkFunc: func(t *testing.T, result string) {
-				// Double backslash at start is treated as UNC path by filepath.IsAbs
-				// So it returns as absolute, but filepath.Join would clean it
+				// Double backslash at start is treated as UNC path by filepath.IsAbs.
+				// So it returns as absolute, but filepath.Join would clean it.
 				assert.Equal(t, `\\components\\`, result)
 			},
 		},

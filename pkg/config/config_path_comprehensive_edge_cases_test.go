@@ -6,6 +6,7 @@ import (
 	"runtime"
 	"testing"
 
+	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -328,35 +329,25 @@ func TestPathJoining_ComprehensiveEdgeCases(t *testing.T) {
 				t.Skipf("Skipping Windows-specific test on non-Windows")
 			}
 
-			// Test filepath.Join behavior (this is where the bug occurs)
-			joinedPath := filepath.Join(tt.atmosBasePath, tt.componentBasePath, tt.componentName)
-			t.Logf("filepath.Join(%q, %q, %q) = %q",
-				tt.atmosBasePath, tt.componentBasePath, tt.componentName, joinedPath)
+			// Test production path logic using utils.JoinPath
+			base := u.JoinPath(tt.atmosBasePath, tt.componentBasePath)
+			joinedPath := u.JoinPath(base, tt.componentName)
+			t.Logf("utils.JoinPath(%q, %q) -> JoinPath(%q, %q) = %q",
+				tt.atmosBasePath, tt.componentBasePath, base, tt.componentName, joinedPath)
 
-			// Test for path duplication
-			if tt.shouldHaveDuplication {
-				// Document that this is a bug
-				t.Logf("⚠️  This case demonstrates the path duplication bug")
+			// All cases should avoid duplication now with utils.JoinPath
+			// Check that paths don't have duplication patterns
+			assert.NotContains(t, joinedPath, string([]byte{os.PathSeparator, os.PathSeparator}),
+				"Path should not contain double separators")
+			assert.NotContains(t, joinedPath, "//",
+				"Path should not contain double slashes")
+			assert.NotContains(t, joinedPath, "/./",
+				"Path should not contain /./ pattern (should be cleaned)")
 
-				// On Unix, joining two absolute paths causes issues
-				if runtime.GOOS != "windows" && filepath.IsAbs(tt.atmosBasePath) && filepath.IsAbs(tt.componentBasePath) {
-					// The bug: path gets duplicated
-					// We're documenting the incorrect behavior here
-					assert.Contains(t, joinedPath, filepath.Dir(tt.atmosBasePath),
-						"Bug: Absolute paths cause duplication in filepath.Join")
-				}
-			} else {
-				// These cases should NOT have duplication
-				assert.NotContains(t, joinedPath, "//",
-					"Path should not contain double slashes")
-				assert.NotContains(t, joinedPath, "/./",
-					"Path should not contain /./ pattern (should be cleaned)")
-
-				// Clean path should equal joined path
-				cleanPath := filepath.Clean(joinedPath)
-				assert.Equal(t, cleanPath, joinedPath,
-					"filepath.Join should produce a clean path")
-			}
+			// Clean path should equal joined path
+			cleanPath := filepath.Clean(joinedPath)
+			assert.Equal(t, cleanPath, joinedPath,
+				"utils.JoinPath should produce a clean path")
 
 			// Test filepath.Abs behavior
 			absPath, err := filepath.Abs(joinedPath)
@@ -427,25 +418,9 @@ func TestCorrectPathJoining_Solution(t *testing.T) {
 			var result string
 
 			// First, handle component base path
-			var baseForComponent string
-			if filepath.IsAbs(tt.componentBasePath) {
-				// If component base is absolute, use it as-is
-				baseForComponent = tt.componentBasePath
-			} else {
-				// If component base is relative, join with ATMOS base
-				baseForComponent = filepath.Join(tt.atmosBasePath, tt.componentBasePath)
-			}
-
-			// Then, handle component name
-			if filepath.IsAbs(tt.componentName) {
-				// If component name is absolute, use it as-is
-				result = tt.componentName
-			} else {
-				// If component name is relative, join with base
-				result = filepath.Join(baseForComponent, tt.componentName)
-			}
-
-			// Clean the result
+			// Use the production helpers instead of reimplementing
+			base := u.JoinPath(tt.atmosBasePath, tt.componentBasePath)
+			result = u.JoinPath(base, tt.componentName)
 			result = filepath.Clean(result)
 
 			t.Logf("Correct joining: %q", result)
@@ -544,7 +519,9 @@ func TestEnvironmentVariablePathCombinations(t *testing.T) {
 				basePath = "." // Default if not set
 			}
 
-			joinedPath := filepath.Join(basePath, tt.componentBasePath, tt.componentName)
+			// Use production helpers to process paths
+			base := u.JoinPath(basePath, tt.componentBasePath)
+			joinedPath := u.JoinPath(base, tt.componentName)
 			t.Logf("With ATMOS_BASE_PATH=%q: %q", tt.envBasePathValue, joinedPath)
 
 			// Clean and check

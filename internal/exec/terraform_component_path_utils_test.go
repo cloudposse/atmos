@@ -128,7 +128,7 @@ func TestConstructTerraformComponentWorkingDir_ConsistencyWithGetComponentPath(t
 			terraformBasePath:     "atmos/components/terraform",
 			componentFolderPrefix: "",
 			finalComponent:        "iam-role-legacy",
-			description:           "Reproduces the exact GitHub Actions error case",
+			description:           "Absolute paths with Terraform components in subdirectory structure",
 			skipOnWindows:         true,
 		},
 		{

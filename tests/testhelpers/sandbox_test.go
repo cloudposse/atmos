@@ -689,7 +689,7 @@ components:
 // are handled correctly when written to and read from YAML configuration files.
 func TestSandboxWindowsPathsInYAML(t *testing.T) {
 	if runtime.GOOS != "windows" {
-		t.Skip("Skipping Windows-specific path test on non-Windows OS")
+		t.Skipf("Skipping Windows-specific path test on non-Windows OS")
 	}
 
 	// Test various ways Windows users might write paths in YAML

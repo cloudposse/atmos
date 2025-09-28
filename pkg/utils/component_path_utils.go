@@ -29,12 +29,41 @@ func hasSequenceRepeat(parts []string, start, length int) bool {
 
 // removeDuplicateSequence removes a duplicate sequence from path parts.
 func removeDuplicateSequence(parts []string, start, length int, originalPath string) string {
+	// Extract the volume/UNC prefix from the original path
+	volume := filepath.VolumeName(originalPath)
+
 	newParts := make([]string, 0, len(parts)-length)
 	newParts = append(newParts, parts[:start+length]...)
 	newParts = append(newParts, parts[start+length*2:]...)
 	cleanedPath := filepath.Join(newParts...)
-	if filepath.IsAbs(originalPath) && !filepath.IsAbs(cleanedPath) {
-		cleanedPath = string(filepath.Separator) + cleanedPath
+
+	// Handle different volume/path scenarios
+	return preserveVolume(cleanedPath, volume, originalPath)
+}
+
+// preserveVolume preserves UNC paths and volume names in the cleaned path.
+func preserveVolume(cleanedPath, volume, originalPath string) string {
+	if volume == "" {
+		// No volume - just ensure Unix absolute paths stay absolute
+		if filepath.IsAbs(originalPath) && !filepath.IsAbs(cleanedPath) {
+			return string(filepath.Separator) + cleanedPath
+		}
+		return cleanedPath
+	}
+
+	// Check if it's a UNC path (starts with \\)
+	if len(volume) >= 2 && volume[0] == '\\' && volume[1] == '\\' {
+		// Remove the volume from the cleaned path if it got duplicated
+		cleanedPathWithoutVolume := cleanedPath
+		if len(cleanedPath) > len(volume) && cleanedPath[:len(volume)] == volume {
+			cleanedPathWithoutVolume = cleanedPath[len(volume):]
+		}
+		return volume + cleanedPathWithoutVolume
+	}
+
+	// For regular volumes (like C:), join properly if path is not absolute
+	if !filepath.IsAbs(cleanedPath) {
+		return filepath.Join(volume, cleanedPath)
 	}
 	return cleanedPath
 }
