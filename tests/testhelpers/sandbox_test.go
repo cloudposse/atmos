@@ -685,6 +685,106 @@ components:
 	}
 }
 
+// TestSandboxWindowsPathsInYAML verifies that Windows-style paths with backslashes
+// are handled correctly when written to and read from YAML configuration files.
+func TestSandboxWindowsPathsInYAML(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("Skipping Windows-specific path test on non-Windows OS")
+	}
+
+	// Test various ways Windows users might write paths in YAML
+	testCases := []struct {
+		name        string
+		yamlContent string
+		shouldWork  bool
+		description string
+	}{
+		{
+			name: "escaped_backslashes",
+			yamlContent: `
+components:
+  terraform:
+    base_path: "C:\\Users\\test\\components\\terraform"
+`,
+			shouldWork:  true,
+			description: "Double backslashes (escaped) should work",
+		},
+		{
+			name: "forward_slashes",
+			yamlContent: `
+components:
+  terraform:
+    base_path: "C:/Users/test/components/terraform"
+`,
+			shouldWork:  true,
+			description: "Forward slashes should work on Windows",
+		},
+		{
+			name: "single_backslashes",
+			yamlContent: `
+components:
+  terraform:
+    base_path: "C:\Users\test\components\terraform"
+`,
+			shouldWork:  false,
+			description: "Single backslashes get eaten by YAML parser",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			// Create a temporary workdir
+			workdir, err := os.MkdirTemp("", "sandbox-yaml-test-*")
+			require.NoError(t, err)
+			defer os.RemoveAll(workdir)
+
+			// Create a dummy component structure
+			componentDir := filepath.Join("C:", "Users", "test", "components", "terraform", "test-component")
+			if err := os.MkdirAll(componentDir, 0o755); err != nil {
+				// If we can't create the exact path, skip this test
+				t.Skipf("Cannot create test directory at %s: %v", componentDir, err)
+			}
+			defer os.RemoveAll(filepath.Join("C:", "Users", "test"))
+
+			componentFile := filepath.Join(componentDir, "main.tf")
+			require.NoError(t, os.WriteFile(componentFile, []byte("# Test"), 0o644))
+
+			// Write the YAML file with the test case content
+			atmosYaml := filepath.Join(workdir, "atmos.yaml")
+			require.NoError(t, os.WriteFile(atmosYaml, []byte(tc.yamlContent), 0o644))
+
+			// Try to setup the sandbox
+			sandbox, err := SetupSandbox(t, workdir)
+
+			// Handle expected failures
+			if !tc.shouldWork {
+				if err == nil && sandbox != nil {
+					defer sandbox.Cleanup()
+					// Check if components were actually found (they shouldn't be)
+					sandboxComponentPath := filepath.Join(sandbox.ComponentsPath, "terraform", "test-component", "main.tf")
+					if _, err := os.Stat(sandboxComponentPath); err == nil {
+						t.Errorf("%s: Component was found but shouldn't have been", tc.description)
+					}
+				}
+				return
+			}
+
+			// Handle expected successes
+			if err != nil {
+				t.Errorf("%s: %v", tc.description, err)
+				return
+			}
+
+			defer sandbox.Cleanup()
+			// Verify the component was found and copied
+			sandboxComponentPath := filepath.Join(sandbox.ComponentsPath, "terraform", "test-component", "main.tf")
+			if _, err := os.Stat(sandboxComponentPath); os.IsNotExist(err) {
+				t.Errorf("%s: Component not copied to sandbox", tc.description)
+			}
+		})
+	}
+}
+
 func TestSandboxActuallyUsedByAtmos(t *testing.T) {
 	// This test proves that when we set sandbox environment variables,
 	// Atmos would actually use the sandboxed components.
