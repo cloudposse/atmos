@@ -541,17 +541,17 @@ func ProcessStacks(
 	configAndStacksInfo.ComponentSection[cfg.TerraformCliVarsSectionName] = cliVars
 
 	// Add TF_CLI_ARGS arguments and variables to the component section
-	tfCliArgs := GetTerraformEnvCliArgs()
-	if len(tfCliArgs) > 0 {
-		configAndStacksInfo.ComponentSection[cfg.TerraformCliArgsEnvSectionName] = tfCliArgs
+	tfEnvCliArgs := GetTerraformEnvCliArgs()
+	if len(tfEnvCliArgs) > 0 {
+		configAndStacksInfo.ComponentSection[cfg.TerraformCliArgsEnvSectionName] = tfEnvCliArgs
 	}
 
-	tfCliVars, err := GetTerraformEnvCliVars()
+	tfEnvCliVars, err := GetTerraformEnvCliVars()
 	if err != nil {
 		return configAndStacksInfo, err
 	}
-	if len(tfCliVars) > 0 {
-		configAndStacksInfo.ComponentSection[cfg.TerraformCliVarsEnvSectionName] = tfCliVars
+	if len(tfEnvCliVars) > 0 {
+		configAndStacksInfo.ComponentSection[cfg.TerraformCliVarsEnvSectionName] = tfEnvCliVars
 	}
 
 	// Add Atmos CLI config
