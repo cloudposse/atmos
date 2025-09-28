@@ -3,7 +3,7 @@ package cmd
 import (
 	"errors"
 
-	log "github.com/charmbracelet/log"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/spf13/cobra"
 
 	"github.com/cloudposse/atmos/internal/exec"
@@ -25,7 +25,7 @@ import (
 var ValidateSchemaCmd = &cobra.Command{
 	Use:   "schema",
 	Short: "Validate YAML files against JSON schemas defined in atmos.yaml",
-	Long: `The validate schema command reads the ` + "`" + `schemas` + "`" + ` section of the atmos.yaml file 
+	Long: `The validate schema command reads the ` + "`" + `schemas` + "`" + ` section of the atmos.yaml file
 and validates matching YAML files against their corresponding JSON schemas.
 
 Each entry under ` + "`" + `schemas` + "`" + ` should define:
@@ -38,7 +38,7 @@ For every schema entry:
   - Each matching YAML file is parsed and converted to JSON.
   - The converted YAML is validated against the schema.
 
-This command helps ensure that configuration files follow a defined structure 
+This command helps ensure that configuration files follow a defined structure
 and are compliant with expected formats, reducing configuration drift and runtime errors.
 `,
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},

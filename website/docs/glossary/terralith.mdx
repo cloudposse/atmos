@@ -5,7 +5,7 @@ title: Terralith
 hoverText: "On overly large Terraform \"root module\" a large portion of the infrastructure."
 ---
 
-A monolithic Terraform "root module" is also known as a Terralith. It's characterized by an expansive, all-encompassing Terraform configuration that attempts to manage every aspect of the infrastructure within a single module. 
+A monolithic Terraform "root module" is also known as a Terralith. It's characterized by an expansive, all-encompassing Terraform configuration that attempts to manage every aspect of the infrastructure within a single module.
 
 ```mermaid
 ---
@@ -31,6 +31,6 @@ graph TD
     end
 ```
 
-In Atmos, this is considered an anti-pattern; instead, this should be broken down into [components](/core-concepts/components) and configured with [stacks](/core-concepts/stacks). 
+In Atmos, this is considered an anti-pattern; instead, this should be broken down into [components](/core-concepts/components) and configured with [stacks](/core-concepts/stacks).
 
 To learn more, see [Stage 2](/introduction/why-atmos/stage-2) of the typical Terraform maturity path.

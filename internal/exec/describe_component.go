@@ -1,7 +1,7 @@
 package exec
 
 import (
-	log "github.com/charmbracelet/log"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/samber/lo"
 
 	"github.com/cloudposse/atmos/internal/tui/templates/term"
@@ -18,7 +18,6 @@ type DescribeComponentParams struct {
 	ProcessYamlFunctions bool
 	Skip                 []string
 	Query                string
-	Pager                string
 	Format               string
 	File                 string
 }
@@ -50,7 +49,6 @@ func (d *DescribeComponentExec) ExecuteDescribeComponentCmd(describeComponentPar
 	processYamlFunctions := describeComponentParams.ProcessYamlFunctions
 	skip := describeComponentParams.Skip
 	query := describeComponentParams.Query
-	pager := describeComponentParams.Pager
 	format := describeComponentParams.Format
 	file := describeComponentParams.File
 
@@ -77,9 +75,6 @@ func (d *DescribeComponentExec) ExecuteDescribeComponentCmd(describeComponentPar
 	}
 
 	var res any
-	if pager != "" {
-		atmosConfig.Settings.Terminal.Pager = pager
-	}
 
 	if query != "" {
 		res, err = d.evaluateYqExpression(&atmosConfig, componentSection, query)

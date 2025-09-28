@@ -3,7 +3,7 @@
 #
 atmos packer --help
 atmos packer version --help
-atmos packer validate--help
+atmos packer validate --help
 atmos packer inspect --help
 atmos packer init --help
 atmos packer build --help

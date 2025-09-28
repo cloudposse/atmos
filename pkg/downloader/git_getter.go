@@ -5,7 +5,7 @@ import (
 	"os"
 	"path/filepath"
 
-	log "github.com/charmbracelet/log"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/hashicorp/go-getter"
 )
 
@@ -17,15 +17,14 @@ type CustomGitGetter struct {
 // Get implements the custom getter logic removing symlinks.
 func (c *CustomGitGetter) Get(dst string, url *url.URL) error {
 	// Normal clone
-	if err := c.GitGetter.Get(dst, url); err != nil {
+	if err := c.GetCustom(dst, url); err != nil {
 		return err
 	}
 	// Remove symlinks
 	return removeSymlinks(dst)
 }
 
-// removeSymlinks walks the directory and removes any symlinks
-// it encounters.
+// removeSymlinks walks the directory and removes any symlinks it encounters.
 func removeSymlinks(root string) error {
 	return filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
 		if err != nil {

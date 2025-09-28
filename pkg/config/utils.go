@@ -8,9 +8,7 @@ import (
 	"strconv"
 	"strings"
 
-	log "github.com/charmbracelet/log"
-
-	"github.com/cloudposse/atmos/pkg/logger"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/store"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -419,7 +417,7 @@ func checkConfig(atmosConfig schema.AtmosConfiguration, isProcessStack bool) err
 	}
 
 	if len(atmosConfig.Logs.Level) > 0 {
-		if _, err := logger.ParseLogLevel(atmosConfig.Logs.Level); err != nil {
+		if _, err := log.ParseLogLevel(atmosConfig.Logs.Level); err != nil {
 			return err
 		}
 	}
@@ -585,7 +583,7 @@ func setSchemaDirs(atmosConfig *schema.AtmosConfiguration, configAndStacksInfo *
 
 func setLoggingConfig(atmosConfig *schema.AtmosConfiguration, configAndStacksInfo *schema.ConfigAndStacksInfo) error {
 	if len(configAndStacksInfo.LogsLevel) > 0 {
-		if _, err := logger.ParseLogLevel(configAndStacksInfo.LogsLevel); err != nil {
+		if _, err := log.ParseLogLevel(configAndStacksInfo.LogsLevel); err != nil {
 			return err
 		}
 		// Only set the log level if validation passes
@@ -740,7 +738,7 @@ func ReplaceContextTokens(context schema.Context, pattern string) string {
 		"{stage}", context.Stage,
 		"{workspace}", context.Workspace,
 		"{terraform_workspace}", context.TerraformWorkspace,
-		"{attributes}", strings.Join(u.SliceOfInterfacesToSliceOdStrings(context.Attributes), "-"),
+		"{attributes}", strings.Join(u.SliceOfInterfacesToSliceOfStrings(context.Attributes), "-"),
 	)
 	return r.Replace(pattern)
 }

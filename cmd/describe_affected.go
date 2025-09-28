@@ -1,7 +1,7 @@
 package cmd
 
 import (
-	log "github.com/charmbracelet/log"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/spf13/cobra"
 
 	"github.com/cloudposse/atmos/internal/exec"
@@ -70,13 +70,7 @@ func getRunnableDescribeAffectedCmd(
 			}
 		}
 
-		if cmd.Flags().Changed("pager") {
-			// TODO: update this post pr:https://github.com/cloudposse/atmos/pull/1174 is merged
-			props.CLIConfig.Settings.Terminal.Pager, err = cmd.Flags().GetString("pager")
-			if err != nil {
-				return err
-			}
-		}
+		// Global --pager flag is now handled in cfg.InitCliConfig
 
 		err = newDescribeAffectedExec(props.CLIConfig).Execute(&props)
 		return err

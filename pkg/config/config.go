@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	log "github.com/charmbracelet/log"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/pkg/errors"
 
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -77,10 +77,38 @@ func setLogConfig(atmosConfig *schema.AtmosConfiguration) {
 	if v, ok := flagKeyValue["logs-file"]; ok {
 		atmosConfig.Logs.File = v
 	}
-	if flagKeyValue, ok := flagKeyValue["no-color"]; ok || flagKeyValue == "true" {
-		atmosConfig.Settings.Terminal.NoColor = true
-	} else if flagKeyValue == "false" {
-		atmosConfig.Settings.Terminal.NoColor = false
+	if val, ok := flagKeyValue["no-color"]; ok {
+		valLower := strings.ToLower(val)
+		switch valLower {
+		case "true":
+			atmosConfig.Settings.Terminal.NoColor = true
+			atmosConfig.Settings.Terminal.Color = false
+		case "false":
+			atmosConfig.Settings.Terminal.NoColor = false
+			atmosConfig.Settings.Terminal.Color = true
+		}
+		// If value is neither "true" nor "false", leave defaults unchanged
+	}
+
+	// Handle --pager global flag
+	if v, ok := flagKeyValue["pager"]; ok {
+		atmosConfig.Settings.Terminal.Pager = v
+	}
+
+	// Handle NO_PAGER environment variable (standard CLI convention)
+	// Check this after --pager flag so CLI flag takes precedence
+	//nolint:forbidigo // NO_PAGER is a standard CLI convention that requires direct env access.
+	// We intentionally don't use viper.BindEnv() here because:
+	// 1. NO_PAGER uses negative logic (NO_PAGER=true disables pager)
+	// 2. Atmos config convention uses positive boolean names (pager: true enables pager)
+	// 3. We don't want a configurable "no_pager" field that would confuse the config schema
+	// 4. NO_PAGER should remain an environment-only standard, not a config file setting
+	if os.Getenv("NO_PAGER") != "" {
+		// Check if --pager flag was explicitly provided
+		if _, hasPagerFlag := flagKeyValue["pager"]; !hasPagerFlag {
+			// NO_PAGER is set and no explicit --pager flag was provided, disable the pager
+			atmosConfig.Settings.Terminal.Pager = "false"
+		}
 	}
 }
 

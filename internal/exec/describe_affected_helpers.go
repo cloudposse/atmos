@@ -6,7 +6,7 @@ import (
 	"os"
 	"strings"
 
-	log "github.com/charmbracelet/log"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/transport/ssh"
@@ -364,10 +364,9 @@ func ExecuteDescribeAffectedWithTargetRepoPath(
 		return nil, nil, nil, "", err
 	}
 
-	remoteRepo, err := git.PlainOpenWithOptions(targetRefPath, &git.PlainOpenOptions{
-		DetectDotGit:          false,
-		EnableDotGitCommonDir: false,
-	})
+	// Use worktree-aware helper to open the repository at the target path
+	// This handles both regular repositories and worktrees correctly
+	remoteRepo, err := g.OpenWorktreeAwareRepo(targetRefPath)
 	if err != nil {
 		return nil, nil, nil, "", errors.Join(err, RemoteRepoIsNotGitRepoError)
 	}

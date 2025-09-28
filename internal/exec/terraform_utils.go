@@ -6,7 +6,7 @@ import (
 	"os"
 	"path/filepath"
 
-	log "github.com/charmbracelet/log"
+	log "github.com/cloudposse/atmos/pkg/logger"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -51,8 +51,13 @@ func cleanTerraformWorkspace(atmosConfig schema.AtmosConfiguration, componentPat
 	if _, err := os.Stat(filePath); err == nil {
 		log.Debug("Terraform environment file found. Proceeding with deletion.", "file", filePath)
 
-		if err := os.Remove(filePath); err != nil {
-			log.Debug("Failed to delete Terraform environment file.", "file", filePath, "error", err)
+		// Use retry logic on Windows to handle file locking
+		deleteErr := retryOnWindows(func() error {
+			return os.Remove(filePath)
+		})
+
+		if deleteErr != nil {
+			log.Debug("Failed to delete Terraform environment file.", "file", filePath, "error", deleteErr)
 		} else {
 			log.Debug("Successfully deleted Terraform environment file.", "file", filePath)
 		}

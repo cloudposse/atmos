@@ -6,9 +6,9 @@ import (
 	"runtime"
 	"strings"
 
-	log "github.com/charmbracelet/log"
 	tuiUtils "github.com/cloudposse/atmos/internal/tui/utils"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/telemetry"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -49,7 +49,7 @@ func (v versionExec) Execute(checkFlag bool, format string) error {
 	v.printMessage("")
 	err := v.printStyledText("ATMOS")
 	if err != nil {
-		//nolint:revive
+		//nolint:revive // deep-exit: log.Fatal is appropriate here for version display errors
 		log.Fatal(err)
 	}
 

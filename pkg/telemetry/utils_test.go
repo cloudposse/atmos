@@ -459,7 +459,7 @@ func TestTelemetryDisclosureMessage(t *testing.T) {
 	assert.NotEmpty(t, message1)
 	assert.Equal(t, message1, `Notice: Atmos now collects completely anonymous telemetry regarding usage.
 This information is used to shape Atmos roadmap and prioritize features.
-You can learn more, including how to opt-out if you'd not like to participate in this anonymous program, 
+You can learn more, including how to opt-out if you'd not like to participate in this anonymous program,
 by visiting the following URL: https://atmos.tools/cli/telemetry
 
 `)
@@ -533,4 +533,125 @@ func TestTelemetryDisclosureMessageHideIfTelemetryDisabled(t *testing.T) {
 	message := disclosureMessage()
 	assert.Empty(t, message)
 	os.Unsetenv("ATMOS_TELEMETRY_ENABLED")
+}
+
+// TestGetTelemetryFromConfigWithLoggingEnabled tests that logging can be enabled via environment variable.
+func TestGetTelemetryFromConfigWithLoggingEnabled(t *testing.T) {
+	currentEnvVars := PreserveCIEnvVars()
+	defer RestoreCIEnvVars(currentEnvVars)
+
+	ctrl := gomock.NewController(t)
+	mockClientProvider := mock_telemetry.NewMockTelemetryClientProviderMock(ctrl)
+	mockClient := mock_telemetry.NewMockClient(ctrl)
+
+	// Expect no client creation since we're just testing config loading.
+	mockClientProvider.EXPECT().NewMockClient(gomock.Any(), gomock.Any()).Return(mockClient, nil).Times(0)
+	mockClient.EXPECT().Enqueue(gomock.Any()).Return(nil).Times(0)
+	mockClient.EXPECT().Close().Return(nil).Times(0)
+
+	// Enable logging via environment variable.
+	os.Setenv("ATMOS_TELEMETRY_LOGGING", "true")
+	defer os.Unsetenv("ATMOS_TELEMETRY_LOGGING")
+
+	// Get telemetry configuration.
+	telemetry := getTelemetryFromConfig(mockClientProvider.NewMockClient)
+
+	// Verify logging is enabled.
+	assert.NotNil(t, telemetry)
+	assert.True(t, telemetry.logging, "Logging should be enabled when ATMOS_TELEMETRY_LOGGING=true")
+}
+
+// TestGetTelemetryFromConfigWithLoggingDisabled tests that logging can be disabled via environment variable.
+func TestGetTelemetryFromConfigWithLoggingDisabled(t *testing.T) {
+	currentEnvVars := PreserveCIEnvVars()
+	defer RestoreCIEnvVars(currentEnvVars)
+
+	ctrl := gomock.NewController(t)
+	mockClientProvider := mock_telemetry.NewMockTelemetryClientProviderMock(ctrl)
+	mockClient := mock_telemetry.NewMockClient(ctrl)
+
+	// Expect no client creation since we're just testing config loading.
+	mockClientProvider.EXPECT().NewMockClient(gomock.Any(), gomock.Any()).Return(mockClient, nil).Times(0)
+	mockClient.EXPECT().Enqueue(gomock.Any()).Return(nil).Times(0)
+	mockClient.EXPECT().Close().Return(nil).Times(0)
+
+	// Explicitly disable logging via environment variable.
+	os.Setenv("ATMOS_TELEMETRY_LOGGING", "false")
+	defer os.Unsetenv("ATMOS_TELEMETRY_LOGGING")
+
+	// Get telemetry configuration.
+	telemetry := getTelemetryFromConfig(mockClientProvider.NewMockClient)
+
+	// Verify logging is disabled.
+	assert.NotNil(t, telemetry)
+	assert.False(t, telemetry.logging, "Logging should be disabled when ATMOS_TELEMETRY_LOGGING=false")
+}
+
+// TestGetTelemetryFromConfigWithLoggingDefault tests the default logging configuration.
+func TestGetTelemetryFromConfigWithLoggingDefault(t *testing.T) {
+	currentEnvVars := PreserveCIEnvVars()
+	defer RestoreCIEnvVars(currentEnvVars)
+
+	ctrl := gomock.NewController(t)
+	mockClientProvider := mock_telemetry.NewMockTelemetryClientProviderMock(ctrl)
+	mockClient := mock_telemetry.NewMockClient(ctrl)
+
+	// Expect no client creation since we're just testing config loading.
+	mockClientProvider.EXPECT().NewMockClient(gomock.Any(), gomock.Any()).Return(mockClient, nil).Times(0)
+	mockClient.EXPECT().Enqueue(gomock.Any()).Return(nil).Times(0)
+	mockClient.EXPECT().Close().Return(nil).Times(0)
+
+	// Ensure ATMOS_TELEMETRY_LOGGING is not set.
+	os.Unsetenv("ATMOS_TELEMETRY_LOGGING")
+
+	// Get telemetry configuration.
+	telemetry := getTelemetryFromConfig(mockClientProvider.NewMockClient)
+
+	// Verify logging defaults to false (as configured in atmos.yaml).
+	assert.NotNil(t, telemetry)
+	assert.False(t, telemetry.logging, "Logging should default to false")
+}
+
+// TestCaptureCmdWithLoggingEnabled tests that telemetry capture works with logging enabled.
+func TestCaptureCmdWithLoggingEnabled(t *testing.T) {
+	currentEnvVars := PreserveCIEnvVars()
+	defer RestoreCIEnvVars(currentEnvVars)
+
+	ctrl := gomock.NewController(t)
+	mockClientProvider := mock_telemetry.NewMockTelemetryClientProviderMock(ctrl)
+	mockClient := mock_telemetry.NewMockClient(ctrl)
+
+	// Set up expectations for successful capture with logging enabled.
+	mockClientProvider.EXPECT().NewMockClient(gomock.Any(), gomock.Any()).Return(mockClient, nil).Times(1)
+	mockClient.EXPECT().Enqueue(gomock.Any()).Return(nil).Times(1)
+	mockClient.EXPECT().Close().Return(nil).Times(1)
+
+	// Enable logging via environment variable.
+	os.Setenv("ATMOS_TELEMETRY_LOGGING", "true")
+	defer os.Unsetenv("ATMOS_TELEMETRY_LOGGING")
+
+	// Capture telemetry event.
+	captureCmdString("test-cmd-with-logging", nil, mockClientProvider.NewMockClient)
+}
+
+// TestCaptureCmdWithLoggingDisabled tests that telemetry capture works with logging disabled.
+func TestCaptureCmdWithLoggingDisabled(t *testing.T) {
+	currentEnvVars := PreserveCIEnvVars()
+	defer RestoreCIEnvVars(currentEnvVars)
+
+	ctrl := gomock.NewController(t)
+	mockClientProvider := mock_telemetry.NewMockTelemetryClientProviderMock(ctrl)
+	mockClient := mock_telemetry.NewMockClient(ctrl)
+
+	// Set up expectations for successful capture with logging disabled.
+	mockClientProvider.EXPECT().NewMockClient(gomock.Any(), gomock.Any()).Return(mockClient, nil).Times(1)
+	mockClient.EXPECT().Enqueue(gomock.Any()).Return(nil).Times(1)
+	mockClient.EXPECT().Close().Return(nil).Times(1)
+
+	// Explicitly disable logging via environment variable.
+	os.Setenv("ATMOS_TELEMETRY_LOGGING", "false")
+	defer os.Unsetenv("ATMOS_TELEMETRY_LOGGING")
+
+	// Capture telemetry event.
+	captureCmdString("test-cmd-no-logging", nil, mockClientProvider.NewMockClient)
 }

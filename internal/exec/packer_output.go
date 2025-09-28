@@ -5,7 +5,7 @@ import (
 	"os"
 	"path/filepath"
 
-	log "github.com/charmbracelet/log"
+	log "github.com/cloudposse/atmos/pkg/logger"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
@@ -38,14 +38,20 @@ func ExecutePackerOutput(
 	}
 
 	// Check if the component exists as a Packer component.
-	componentPath := filepath.Join(atmosConfig.PackerDirAbsolutePath, info.ComponentFolderPrefix, info.FinalComponent)
+	componentPath, err := u.GetComponentPath(&atmosConfig, "packer", info.ComponentFolderPrefix, info.FinalComponent)
+	if err != nil {
+		return nil, fmt.Errorf("failed to resolve component path: %w", err)
+	}
+
 	componentPathExists, err := u.IsDirectory(componentPath)
 	if err != nil || !componentPathExists {
+		// Get the base path for error message, respecting user's actual config
+		basePath, _ := u.GetComponentBasePath(&atmosConfig, "packer")
 		return nil, fmt.Errorf("%w: Atmos component `%s` points to the Packer component `%s`, but it does not exist in `%s`",
 			errUtils.ErrInvalidComponent,
 			info.ComponentFromArg,
 			info.FinalComponent,
-			filepath.Join(atmosConfig.Components.Packer.BasePath, info.ComponentFolderPrefix),
+			basePath,
 		)
 	}
 

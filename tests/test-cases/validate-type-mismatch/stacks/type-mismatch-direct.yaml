@@ -1,0 +1,22 @@
+# Direct type mismatch test case
+# This imports files with conflicting types for the same field
+
+import:
+  # First import base with array subnets
+  - path: "base.yaml"
+  
+  # Then import override which tries to change subnets to a string
+  - path: "override.yaml"
+
+vars:
+  stage: "test"
+  environment: "type-mismatch"
+  
+components:
+  terraform:
+    vpc:
+      vars:
+        # Final attempt to change type - this should trigger merge errors
+        subnets:
+          primary: ["10.0.100.0/24", "10.0.101.0/24"]
+          secondary: "10.0.200.0/24"  # Mixed types within object

@@ -5,7 +5,7 @@ import (
 	"os"
 	"path/filepath"
 
-	log "github.com/charmbracelet/log"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/pkg/errors"
 	"github.com/samber/lo"
 )
@@ -15,13 +15,21 @@ var ErrRelPath = errors.New("error determining relative path")
 // getAllStacksComponentsPaths retrieves all components relatives paths to base Terraform directory from the stacks map.
 func getAllStacksComponentsPaths(stacksMap map[string]any) []string {
 	var allComponentsPaths []string
+	uniquePaths := make(map[string]bool)
+
 	for _, stackData := range stacksMap {
 		componentsPath, err := getComponentsPaths(stackData)
 		if err != nil {
 			log.Debug("Skip invalid components path", "path", componentsPath)
 			continue // Skip invalid components path.
 		}
-		allComponentsPaths = append(allComponentsPaths, componentsPath...)
+		// Add only unique paths to avoid duplicates when multiple stacks reference the same component.
+		for _, path := range componentsPath {
+			if !uniquePaths[path] {
+				uniquePaths[path] = true
+				allComponentsPaths = append(allComponentsPaths, path)
+			}
+		}
 	}
 	return allComponentsPaths
 }

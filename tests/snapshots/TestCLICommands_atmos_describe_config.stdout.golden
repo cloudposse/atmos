@@ -81,10 +81,10 @@
         "lexer": "",
         "formatter": "",
         "theme": "",
-        "pager": false,
         "line_numbers": false,
         "wrap": false
       },
+      "color": true,
       "no_color": false
     },
     "docs": {
@@ -139,7 +139,8 @@
     "telemetry": {
       "enabled": true,
       "endpoint": "https://us.i.posthog.com",
-      "token": "phc_7s7MrHWxPR2if1DHHDrKBRgx7SvlaoSM59fIiQueexS"
+      "token": "phc_TEST_TOKEN_PLACEHOLDER",
+      "logging": false
     }
   },
   "describe": {
@@ -185,5 +186,12 @@
         "terraform": {}
       }
     }
+  },
+  "profiler": {
+    "enabled": false,
+    "port": 0,
+    "host": "",
+    "file": "",
+    "profile_type": ""
   }
 }

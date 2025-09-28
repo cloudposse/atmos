@@ -26,8 +26,8 @@ or in the `settings.templates.settings.gomplate.datasources` section of any [Atm
 
 The `gomplate.datasources` section is a map of [Gomplate Datasource](https://docs.gomplate.ca/datasources) definitions.
 
-The keys of the map are the data source names (aliases) that you will use to refer to them. For example, 
-if you define a data source called `foobar` which has a property called `tag`, you could refer to it like this in a 
+The keys of the map are the data source names (aliases) that you will use to refer to them. For example,
+if you define a data source called `foobar` which has a property called `tag`, you could refer to it like this in a
 stack manifest: `{{ (datasource "foobar").tag }}`.
 
 For example:
@@ -97,7 +97,7 @@ The following are the types of data sources are supported by Atmos via [Gomplate
     <dd>Use HashiCorp Consul provides as a backend key/value store</dd>
 
     <dt>`env://`</dt>
-    <dd>Environment variables can be used as data sources, although [template functions](/core-concepts/stacks/templates/functions) might make more sense.</dd>
+    <dd>Environment variables can be used as data sources, although [template functions](/functions/template) might make more sense.</dd>
 
     <dt>`file://`</dt>
     <dd>Files can be read in any of the supported formats (JSON, YAML). Directories are also supported, just end the URL path with a `/`.</dd>

@@ -1,0 +1,43 @@
+tests:
+  - name: atmos list instances
+    snapshot: true
+    enabled: true
+    tty: true
+    skip:
+      # PTY not supported on windows
+      os: !not windows
+    description: "Ensure Atmos processes instances"
+    workdir: "fixtures/scenarios/atmos-pro"
+    command: "atmos"
+    args:
+      - "list"
+      - "instances"
+    expect:
+      exit_code: 0
+      stdout:
+        - "Component.*Stack"
+        - "mock/disabled.*nonprod"
+        - "mock/drift.*nonprod"
+        - "mock/nodrift.*nonprod"
+        - "mock/drift.*prod"
+        - "mock/nodrift.*prod"
+
+  - name: atmos list instances no tty
+    snapshot: true
+    enabled: true
+    tty: false
+    description: "Ensure Atmos processes instances without TTY"
+    workdir: "fixtures/scenarios/atmos-pro"
+    command: "atmos"
+    args:
+      - "list"
+      - "instances"
+    expect:
+      exit_code: 0
+      stdout:
+        - "Component,Stack"
+        - "mock/disabled,nonprod"
+        - "mock/drift,nonprod"
+        - "mock/nodrift,nonprod"
+        - "mock/drift,prod"
+        - "mock/nodrift,prod"

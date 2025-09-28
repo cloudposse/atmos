@@ -154,7 +154,7 @@ To vendor remote artifacts, create a `vendor.yaml` file similar to the example b
 With this configuration, it would be possible to run the following commands:
 <Terminal>
 ```shell
-# atmos vendor pull 
+# atmos vendor pull
 # atmos vendor pull --everything
 # atmos vendor pull --component vpc-mixin-1
 # atmos vendor pull -c vpc-mixin-2
@@ -217,7 +217,7 @@ The `vendor.yaml` vendoring manifest supports Kubernetes-style YAML config to de
 
   <dt>`included_paths` and `excluded_paths`</dt>
   <dd>
-  `included_paths` and `excluded_paths` support [POSIX-style greedy Globs](https://en.wikipedia.org/wiki/Glob_(programming)) for filenames/paths (double-star/globstar `**` is supported as well). For more details, see [Vendoring with Globs](#vendoring-with-globs).  
+  `included_paths` and `excluded_paths` support [POSIX-style greedy Globs](https://en.wikipedia.org/wiki/Glob_(programming)) for filenames/paths (double-star/globstar `**` is supported as well). For more details, see [Vendoring with Globs](#vendoring-with-globs).
   </dd>
 
   <dt>`component`</dt>
@@ -300,7 +300,7 @@ The vendor manifest supports basic template parameters, which is useful for vers
   </dd>
 </dl>
 
-You can also use any of the [hundreds of go-template functions](/core-concepts/stacks/templates/functions/). For example, to extract the major and minor version from the `{{ .Version }}` attribute, use the following template:
+You can also use any of the [hundreds of go-template functions](/functions/template). For example, to extract the major and minor version from the `{{ .Version }}` attribute, use the following template:
 
 ```yaml
 targets:
@@ -500,7 +500,7 @@ atmos vendor pull -c vpc
 
 ## Vendoring with Globs
 
-In Atmos, **glob patterns** define which files and directories are included or excluded during vendoring. These patterns go beyond simple wildcard characters like `*`—they follow specific rules that dictate how paths are matched. Understanding the difference between **greedy** (`**`) and **non-greedy** (`*`) patterns, along with other advanced glob syntax, ensures precise control over vendoring behavior.  
+In Atmos, **glob patterns** define which files and directories are included or excluded during vendoring. These patterns go beyond simple wildcard characters like `*`—they follow specific rules that dictate how paths are matched. Understanding the difference between **greedy** (`**`) and **non-greedy** (`*`) patterns, along with other advanced glob syntax, ensures precise control over vendoring behavior.
 
 ### Understanding Wildcards, Ranges, and Recursion
 

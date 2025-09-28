@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	log "github.com/charmbracelet/log"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/editorconfig-checker/editorconfig-checker/v3/pkg/config"
 	er "github.com/editorconfig-checker/editorconfig-checker/v3/pkg/error"
 	"github.com/editorconfig-checker/editorconfig-checker/v3/pkg/files"
@@ -111,12 +111,18 @@ func replaceAtmosConfigInConfig(cmd *cobra.Command, atmosConfig schema.AtmosConf
 		}
 		cliConfig.Format = format
 	}
-	if !cmd.Flags().Changed("logs-level") && atmosConfig.Logs.Level == "trace" {
-		cliConfig.Verbose = true
-	} else if cmd.Flags().Changed("logs-level") {
-		if v, err := cmd.Flags().GetString("logs-level"); err == nil && v == "trace" {
-			cliConfig.Verbose = true
+	// Set verbose mode if log level is Trace
+	traceFromConfig := !cmd.Flags().Changed("logs-level") && atmosConfig.Logs.Level == u.LogLevelTrace
+	traceFromFlag := false
+	if cmd.Flags().Changed("logs-level") {
+		if v, err := cmd.Flags().GetString("logs-level"); err == nil {
+			if parsedLevel, parseErr := log.ParseLogLevel(v); parseErr == nil {
+				traceFromFlag = parsedLevel == u.LogLevelTrace
+			}
 		}
+	}
+	if traceFromConfig || traceFromFlag {
+		cliConfig.Verbose = true
 	}
 	if !cmd.Flags().Changed("no-color") && atmosConfig.Settings.Terminal.NoColor {
 		cliConfig.NoColor = atmosConfig.Settings.Terminal.NoColor

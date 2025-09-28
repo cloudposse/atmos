@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	log "github.com/charmbracelet/log"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/stretchr/testify/assert"
 
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -17,7 +17,7 @@ func TestExecutePacker_Validate(t *testing.T) {
 	workDir := "../../tests/fixtures/scenarios/packer"
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", workDir)
 	t.Setenv("ATMOS_BASE_PATH", workDir)
-	t.Setenv("ATMOS_LOGS_LEVEL", "Info")
+	t.Setenv("ATMOS_LOGS_LEVEL", "Warning")
 	log.SetLevel(log.InfoLevel)
 
 	info := schema.ConfigAndStacksInfo{
@@ -65,7 +65,7 @@ func TestExecutePacker_Inspect(t *testing.T) {
 	workDir := "../../tests/fixtures/scenarios/packer"
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", workDir)
 	t.Setenv("ATMOS_BASE_PATH", workDir)
-	t.Setenv("ATMOS_LOGS_LEVEL", "Info")
+	t.Setenv("ATMOS_LOGS_LEVEL", "Warning")
 	log.SetLevel(log.InfoLevel)
 
 	info := schema.ConfigAndStacksInfo{
@@ -113,7 +113,7 @@ func TestExecutePacker_Version(t *testing.T) {
 	workDir := "../../tests/fixtures/scenarios/packer"
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", workDir)
 	t.Setenv("ATMOS_BASE_PATH", workDir)
-	t.Setenv("ATMOS_LOGS_LEVEL", "Info")
+	t.Setenv("ATMOS_LOGS_LEVEL", "Warning")
 	log.SetLevel(log.InfoLevel)
 
 	info := schema.ConfigAndStacksInfo{
@@ -155,7 +155,7 @@ func TestExecutePacker_Init(t *testing.T) {
 	workDir := "../../tests/fixtures/scenarios/packer"
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", workDir)
 	t.Setenv("ATMOS_BASE_PATH", workDir)
-	t.Setenv("ATMOS_LOGS_LEVEL", "Info")
+	t.Setenv("ATMOS_LOGS_LEVEL", "Warning")
 	log.SetLevel(log.InfoLevel)
 
 	info := schema.ConfigAndStacksInfo{
@@ -179,7 +179,7 @@ func TestExecutePacker_Errors(t *testing.T) {
 	workDir := "../../tests/fixtures/scenarios/packer"
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", workDir)
 	t.Setenv("ATMOS_BASE_PATH", workDir)
-	t.Setenv("ATMOS_LOGS_LEVEL", "Info")
+	t.Setenv("ATMOS_LOGS_LEVEL", "Warning")
 	log.SetLevel(log.InfoLevel)
 
 	// Store original PATH and modify it to ensure packer is not found in PATH

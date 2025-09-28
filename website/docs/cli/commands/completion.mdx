@@ -7,10 +7,11 @@ description: Use this command to generate completion scripts for `Bash`, `Zsh`, 
 import Screengrab from '@site/src/components/Screengrab'
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';
+import Intro from '@site/src/components/Intro'
 
-:::note Purpose
+<Intro>
 Use this command to generate completion scripts for `Bash`, `Zsh`, `Fish` and `PowerShell`.
-:::
+</Intro>
 
 <Screengrab title="atmos completion --help" slug="atmos-completion--help" />
 
@@ -120,9 +121,10 @@ source <(atmos completion bash)
 
 ## Arguments
 
-| Argument      | Description                                                         | Required |
-|:--------------|:--------------------------------------------------------------------|:---------|
-| `shell_name ` | Shell name. Valid values are `bash`, `zsh`, `fish` and `powershell` | yes      |
+<dl>
+  <dt>`shell_name` <em>(required)</em></dt>
+  <dd>Shell name. Valid values are `bash`, `zsh`, `fish` and `powershell`.</dd>
+</dl>
 
 :::info
 Refer to [Command-line completion](https://en.wikipedia.org/wiki/Command-line_completion) for more details

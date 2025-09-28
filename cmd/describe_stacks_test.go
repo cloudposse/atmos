@@ -128,6 +128,21 @@ func TestSetFlagValueInDescribeStacksCliArgs(t *testing.T) {
 	}
 }
 
+func TestSetCliArgs_ComponentTypes_StringSlice(t *testing.T) {
+	fs := pflag.NewFlagSet("test", pflag.ContinueOnError)
+	// Define only the flags we plan to change
+	fs.StringSlice("component-types", nil, "Filter by specific component types")
+
+	// Provide slice-style input (CSV is supported by pflag for StringSlice)
+	err := fs.Parse([]string{"--component-types=terraform,helmfile"})
+	assert.NoError(t, err)
+
+	args := &exec.DescribeStacksArgs{}
+	err = setCliArgsForDescribeStackCli(fs, args)
+	assert.NoError(t, err)
+	assert.Equal(t, []string{"terraform", "helmfile"}, args.ComponentTypes)
+}
+
 func TestDescribeStacksCmd_Error(t *testing.T) {
 	stacksPath := "../tests/fixtures/scenarios/terraform-apply-affected"
 
