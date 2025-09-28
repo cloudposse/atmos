@@ -608,65 +608,73 @@ func Unzip(src, dest string) error {
 
 // ExtractTarGz extracts a .tar.gz file to the given destination directory.
 func ExtractTarGz(src, dest string) error {
-	// Open the source file
 	f, err := os.Open(src)
 	if err != nil {
 		return fmt.Errorf("failed to open source file: %w", err)
 	}
 	defer f.Close()
 
-	// Create a gzip reader
 	gzr, err := gzip.NewReader(f)
 	if err != nil {
 		return fmt.Errorf("failed to create gzip reader: %w", err)
 	}
 	defer gzr.Close()
 
-	// Create a tar reader
 	tr := tar.NewReader(gzr)
-
-	// Iterate through tar entries
 	for {
 		header, err := tr.Next()
 		if err == io.EOF {
-			break // End of archive
+			break
 		}
 		if err != nil {
 			return fmt.Errorf("error reading tar: %w", err)
 		}
 
-		targetPath := filepath.Join(dest, header.Name)
-
-		// Prevent ZipSlip
-		if !strings.HasPrefix(filepath.Clean(targetPath), filepath.Clean(dest)+string(os.PathSeparator)) {
-			return fmt.Errorf("illegal file path: %s", header.Name)
+		if err := extractEntry(tr, header, dest); err != nil {
+			return err
 		}
+	}
+	return nil
+}
 
-		switch header.Typeflag {
-		case tar.TypeDir:
-			// Create directory if it doesn't exist
-			if err := os.MkdirAll(targetPath, os.FileMode(header.Mode)); err != nil {
-				return fmt.Errorf("failed to create directory: %w", err)
-			}
-		case tar.TypeReg:
-			// Ensure parent directory exists
-			if err := os.MkdirAll(filepath.Dir(targetPath), 0o755); err != nil {
-				return fmt.Errorf("failed to create parent directory: %w", err)
-			}
-			// Create file
-			outFile, err := os.OpenFile(targetPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, os.FileMode(header.Mode))
-			if err != nil {
-				return fmt.Errorf("failed to create file: %w", err)
-			}
-			if _, err := io.Copy(outFile, tr); err != nil {
-				outFile.Close()
-				return fmt.Errorf("failed to write file: %w", err)
-			}
-			outFile.Close()
-		default:
-			// Skip special file types
-			fmt.Printf("Skipping unknown type: %s\n", header.Name)
-		}
+func extractEntry(tr *tar.Reader, header *tar.Header, dest string) error {
+	targetPath := filepath.Join(dest, header.Name)
+	if !isSafePath(targetPath, dest) {
+		return fmt.Errorf("illegal file path: %s", header.Name)
+	}
+
+	switch header.Typeflag {
+	case tar.TypeDir:
+		return extractDir(targetPath, header)
+	case tar.TypeReg:
+		return extractFile(tr, targetPath, header)
+	default:
+		fmt.Printf("Skipping unknown type: %s\n", header.Name)
+		return nil
+	}
+}
+
+func isSafePath(path, dest string) bool {
+	cleanDest := filepath.Clean(dest) + string(os.PathSeparator)
+	return strings.HasPrefix(filepath.Clean(path), cleanDest)
+}
+
+func extractDir(path string, header *tar.Header) error {
+	return os.MkdirAll(path, os.FileMode(header.Mode))
+}
+
+func extractFile(tr *tar.Reader, path string, header *tar.Header) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return fmt.Errorf("failed to create parent directory: %w", err)
+	}
+	outFile, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, os.FileMode(header.Mode))
+	if err != nil {
+		return fmt.Errorf("failed to create file: %w", err)
+	}
+	defer outFile.Close()
+
+	if _, err := io.Copy(outFile, tr); err != nil {
+		return fmt.Errorf("failed to write file: %w", err)
 	}
 	return nil
 }
