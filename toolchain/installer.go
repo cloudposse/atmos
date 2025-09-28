@@ -232,7 +232,7 @@ func (i *Installer) buildAssetURL(tool *Tool, version string) (string, error) {
 
 		// Remove 'v' prefix from version for asset naming
 		versionForAsset := version
-		if strings.HasPrefix(versionForAsset, "v") {
+		if strings.HasPrefix(versionForAsset, versionPrefix) {
 			versionForAsset = versionForAsset[1:]
 		}
 
@@ -254,7 +254,7 @@ func (i *Installer) buildAssetURL(tool *Tool, version string) (string, error) {
 		// Register custom template functions
 		funcMap := template.FuncMap{
 			"trimV": func(s string) string {
-				return strings.TrimPrefix(s, "v")
+				return strings.TrimPrefix(s, versionPrefix)
 			},
 			"trimPrefix": func(prefix, s string) string {
 				return strings.TrimPrefix(s, prefix)
@@ -294,7 +294,7 @@ func (i *Installer) buildAssetURL(tool *Tool, version string) (string, error) {
 
 		// Remove 'v' prefix from version for asset naming
 		versionForAsset := version
-		versionForAsset = strings.TrimPrefix(versionForAsset, "v")
+		versionForAsset = strings.TrimPrefix(versionForAsset, versionPrefix)
 
 		// Create template data
 		data := struct {
@@ -314,7 +314,7 @@ func (i *Installer) buildAssetURL(tool *Tool, version string) (string, error) {
 		// Register custom template functions
 		funcMap := template.FuncMap{
 			"trimV": func(s string) string {
-				return strings.TrimPrefix(s, "v")
+				return strings.TrimPrefix(s, versionPrefix)
 			},
 			"trimPrefix": func(prefix, s string) string {
 				return strings.TrimPrefix(s, prefix)
@@ -406,10 +406,10 @@ func (i *Installer) downloadAssetWithVersionFallback(tool *Tool, version, assetU
 	}
 	// Try fallback with or without 'v'
 	var fallbackVersion string
-	if strings.HasPrefix(version, "v") {
-		fallbackVersion = strings.TrimPrefix(version, "v")
+	if strings.HasPrefix(version, versionPrefix) {
+		fallbackVersion = strings.TrimPrefix(version, versionPrefix)
 	} else {
-		fallbackVersion = "v" + version
+		fallbackVersion = versionPrefix + version
 	}
 	if fallbackVersion == version {
 		return "", err // nothing to try

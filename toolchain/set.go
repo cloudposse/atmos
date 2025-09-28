@@ -361,7 +361,7 @@ func fetchGitHubVersions(owner, repo string) ([]versionItem, error) {
 	for _, release := range releases {
 		if !release.Prerelease {
 			// Remove 'v' prefix if present
-			version := strings.TrimPrefix(release.TagName, "v")
+			version := strings.TrimPrefix(release.TagName, versionPrefix)
 
 			// Use the release name if available, otherwise use the tag name
 			title := release.Name

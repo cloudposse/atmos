@@ -462,7 +462,7 @@ func fetchGitHubVersionsWithCustomURL(owner, repo, apiURL string) ([]versionItem
 	var items []versionItem
 	for _, release := range releases {
 		if !release.Prerelease {
-			version := strings.TrimPrefix(release.TagName, "v")
+			version := strings.TrimPrefix(release.TagName, versionPrefix)
 			title := release.Name
 			if title == "" {
 				title = release.TagName
@@ -1454,7 +1454,7 @@ func (c *RealGitHubClient) FetchVersions(owner, repo string) ([]versionItem, err
 	var items []versionItem
 	for _, release := range releases {
 		if !release.Prerelease {
-			version := strings.TrimPrefix(release.TagName, "v")
+			version := strings.TrimPrefix(release.TagName, versionPrefix)
 			title := release.Name
 			if title == "" {
 				title = release.TagName
