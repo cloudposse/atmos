@@ -58,7 +58,7 @@ func ensureToolInstalled(tool string) (string, error) {
 
 	fmt.Printf("🔧 Tool %s is not installed. Installing automatically...\n", tool)
 	if installErr := RunInstall(tool, false, true); installErr != nil {
-		return "", fmt.Errorf("failed to auto-install %s: %w.",
+		return "", fmt.Errorf("failed to auto-install %s: %w",
 			tool, installErr)
 	}
 
