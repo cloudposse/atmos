@@ -146,4 +146,7 @@ var (
 	ErrCacheWrite     = errors.New("cache write failed")
 	ErrCacheUnmarshal = errors.New("cache unmarshal failed")
 	ErrCacheMarshal   = errors.New("cache marshal failed")
+
+	// Profiler-related errors.
+	ErrProfilerStart = errors.New("profiler start failed")
 )
