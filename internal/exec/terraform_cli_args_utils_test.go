@@ -54,7 +54,7 @@ func TestGetTFCliArgs(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Store original value to restore later.
+			// Store the original value to restore later.
 			originalValue := os.Getenv("TF_CLI_ARGS")
 			defer func() {
 				if originalValue != "" {
@@ -64,7 +64,7 @@ func TestGetTFCliArgs(t *testing.T) {
 				}
 			}()
 
-			// Set test environment variable
+			// Set test environment variable.
 			os.Setenv("TF_CLI_ARGS", tt.envValue)
 
 			// Test the function
