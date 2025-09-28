@@ -110,8 +110,13 @@ func isWindowsAbsolutePath(path string) bool {
 
 // JoinPath joins two paths handling absolute paths correctly.
 // If the second path is absolute, it returns the second path.
-// Otherwise, it joins the paths and returns the absolute path.
-// This function does NOT check if the path exists on the filesystem.
+// Otherwise, it joins the paths using filepath.Join which:
+//   - Normalizes path separators to the OS-specific separator
+//   - Cleans the resulting path (removes . and .. elements)
+//   - Handles empty paths appropriately
+//
+// This function follows standard Go path behavior and does NOT check
+// if the path exists on the filesystem.
 func JoinPath(basePath string, providedPath string) string {
 	// Handle empty paths
 	if result, handled := handleEmptyPaths(basePath, providedPath); handled {
@@ -124,11 +129,15 @@ func JoinPath(basePath string, providedPath string) string {
 	}
 
 	// On Windows, handle special cases that filepath.IsAbs doesn't catch
+	// (paths starting with \ or / are absolute on Windows)
 	if runtime.GOOS == "windows" && isWindowsAbsolutePath(providedPath) {
 		return providedPath
 	}
 
-	// Join the base path with the provided path
+	// Join the base path with the provided path using standard Go behavior
+	// filepath.Join will:
+	// - Clean the path (remove . and .. elements)
+	// - Normalize separators to OS-specific (\ on Windows, / on Unix)
 	return filepath.Join(basePath, providedPath)
 }
 

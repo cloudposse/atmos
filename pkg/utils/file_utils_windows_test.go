@@ -166,8 +166,8 @@ func TestJoinPath_WindowsEdgeCases(t *testing.T) {
 			name:         "Forward slashes in Windows path",
 			basePath:     `C:/project/folder`,
 			providedPath: `components/terraform`,
-			expected:     `C:/project/folder\components/terraform`,
-			description:  "filepath.Join uses OS separator",
+			expected:     `C:\project\folder\components\terraform`,
+			description:  "filepath.Join normalizes to OS separator",
 		},
 		{
 			name:         "Mixed slashes",
@@ -205,22 +205,22 @@ func TestJoinPath_WindowsEdgeCases(t *testing.T) {
 			name:         "Current directory dot",
 			basePath:     `C:\project`,
 			providedPath: `.\components\terraform`,
-			expected:     `C:\project\.\components\terraform`,
-			description:  "Dot for current directory",
+			expected:     `C:\project\components\terraform`,
+			description:  "filepath.Join cleans dot for current directory",
 		},
 		{
 			name:         "Parent directory dots",
 			basePath:     `C:\project\subfolder`,
 			providedPath: `..\components\terraform`,
-			expected:     `C:\project\subfolder\..\components\terraform`,
-			description:  "Parent directory navigation",
+			expected:     `C:\project\components\terraform`,
+			description:  "filepath.Join resolves parent directory navigation",
 		},
 		{
 			name:         "Multiple parent directories",
 			basePath:     `C:\a\b\c\d`,
 			providedPath: `..\..\components`,
-			expected:     `C:\a\b\c\d\..\..\components`,
-			description:  "Multiple parent directory navigations",
+			expected:     `C:\a\b\components`,
+			description:  "filepath.Join resolves multiple parent directory navigations",
 		},
 
 		// ============ ENVIRONMENT VARIABLES (NOT EXPANDED) ============
@@ -330,14 +330,13 @@ func TestJoinPath_WindowsPathNormalization(t *testing.T) {
 			},
 		},
 		{
-			name:         "Don't normalize without Clean",
+			name:         "Normalize multiple slashes",
 			basePath:     `C:\\project\\`,
 			providedPath: `\\components\\`,
-			description:  "Multiple slashes preserved until Clean() called",
+			description:  "filepath.Join normalizes multiple slashes",
 			checkFunc: func(t *testing.T, result string) {
-				// filepath.Join actually does some normalization
-				// but our JoinPath doesn't call Clean explicitly
-				assert.NotEmpty(t, result)
+				// filepath.Join normalizes paths automatically
+				assert.Equal(t, `\components\`, result)
 			},
 		},
 		{
