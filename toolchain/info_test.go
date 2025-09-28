@@ -130,7 +130,7 @@ func TestFormatToolInfoAsTable(t *testing.T) {
 		BinaryName: "terraform",
 	}
 
-	table := formatToolInfoAsTable("terraform", "hashicorp", "terraform", tool, "1.11.4", installer)
+	table := formatToolInfoAsTable(toolContext{Name: "terraform", Owner: "hashicorp", Repo: "terraform", Tool: tool, Version: "1.11.4", Installer: installer})
 
 	// Verify all required information is present
 	requiredInfo := []string{
@@ -244,7 +244,7 @@ func TestInfoCommand_TableOutputFormat(t *testing.T) {
 		BinaryName: "terraform",
 	}
 
-	table := formatToolInfoAsTable("terraform", "hashicorp", "terraform", tool, "1.11.4", installer)
+	table := formatToolInfoAsTable(toolContext{Name: "terraform", Owner: "hashicorp", Repo: "terraform", Tool: tool, Version: "1.11.4", Installer: installer})
 
 	// Verify all required information is present
 	requiredInfo := []string{
@@ -365,7 +365,7 @@ func TestInfoCommand_LocalConfigTools(t *testing.T) {
 			assert.Contains(t, yamlData, "repo_name: "+tc.expectedRepo)
 
 			// Test table output
-			table := formatToolInfoAsTable(tc.toolName, owner, repo, tool, "1.0.0", installer)
+			table := formatToolInfoAsTable(toolContext{Name: tc.toolName, Owner: owner, Repo: repo, Tool: tool, Version: "1.0.0", Installer: installer})
 			assert.Contains(t, table, "Tool")
 			assert.Contains(t, table, tc.toolName)
 			assert.Contains(t, table, "Type")
@@ -424,7 +424,7 @@ func TestInfoCommand_AquaRegistryTools(t *testing.T) {
 				assert.Contains(t, yamlData, "repo_name: "+tc.expectedRepo)
 
 				// Test table output
-				table := formatToolInfoAsTable(tc.toolName, owner, repo, tool, "latest", installer)
+				table := formatToolInfoAsTable(toolContext{Name: tc.toolName, Owner: owner, Repo: repo, Tool: tool, Version: "latest", Installer: installer})
 				assert.Contains(t, table, "Tool")
 				assert.Contains(t, table, tc.toolName)
 			}
@@ -455,7 +455,7 @@ func TestInfoCommand_VersionConstraints(t *testing.T) {
 	assert.Contains(t, yamlData, "type: github_release")
 
 	// Test table output with version constraints
-	table := formatToolInfoAsTable("opentofu", owner, repo, tool, "1.10.0", installer)
+	table := formatToolInfoAsTable(toolContext{Name: "opentofu", Owner: owner, Repo: repo, Tool: tool, Version: "1.10.0", Installer: installer})
 	assert.Contains(t, table, "Version")
 	assert.Contains(t, table, "1.10.0")
 }
@@ -499,7 +499,7 @@ func TestInfoCommand_DifferentToolTypes(t *testing.T) {
 			assert.NoError(t, err)
 			assert.Contains(t, yamlData, "type: "+tc.expectedType)
 
-			table := formatToolInfoAsTable(tc.toolName, owner, repo, tool, "1.0.0", installer)
+			table := formatToolInfoAsTable(toolContext{Name: tc.toolName, Owner: owner, Repo: repo, Tool: tool, Version: "1.0.0", Installer: installer})
 			assert.Contains(t, table, "Type")
 			assert.Contains(t, table, tc.expectedType)
 		})
@@ -522,7 +522,7 @@ func TestInfoCommand_EdgeCases(t *testing.T) {
 			},
 		}
 
-		table := formatToolInfoAsTable("test-tool", "test", "tool-with-files", tool, "1.0.0", installer)
+		table := formatToolInfoAsTable(toolContext{Name: "test-tool", Owner: "test", Repo: "tool-with-files", Tool: tool, Version: "1.0.0", Installer: installer})
 		assert.Contains(t, table, "File")
 		assert.Contains(t, table, "tool -> binary")
 		assert.Contains(t, table, "config.yaml -> config")
@@ -540,7 +540,7 @@ func TestInfoCommand_EdgeCases(t *testing.T) {
 			},
 		}
 
-		table := formatToolInfoAsTable("test-tool", "test", "tool-with-overrides", tool, "1.0.0", installer)
+		table := formatToolInfoAsTable(toolContext{Name: "test-tool", Owner: "test", Repo: "tool-with-overrides", Tool: tool, Version: "1.0.0", Installer: installer})
 		assert.Contains(t, table, "Override")
 		assert.Contains(t, table, "darwin/arm64")
 		assert.Contains(t, table, "linux/amd64")
@@ -560,7 +560,7 @@ func TestInfoCommand_EdgeCases(t *testing.T) {
 		assert.Contains(t, yamlData, "repo_owner: test")
 		assert.Contains(t, yamlData, "repo_name: minimal-tool")
 
-		table := formatToolInfoAsTable("minimal-tool", "test", "minimal-tool", tool, "1.0.0", installer)
+		table := formatToolInfoAsTable(toolContext{Name: "minimal-tool", Owner: "test", Repo: "minimal-tool", Tool: tool, Version: "1.0.0", Installer: installer})
 		assert.Contains(t, table, "Tool")
 		assert.Contains(t, table, "minimal-tool")
 		assert.Contains(t, table, "Type")
