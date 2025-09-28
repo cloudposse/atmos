@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestGetTFCliArgs(t *testing.T) {
+func TestGetTerraformEnvCliArgs(t *testing.T) {
 	tests := []struct {
 		name     string
 		envValue string
@@ -68,17 +68,17 @@ func TestGetTFCliArgs(t *testing.T) {
 			os.Setenv("TF_CLI_ARGS", tt.envValue)
 
 			// Test the function
-			result := GetTFCliArgs()
+			result := GetTerraformEnvCliArgs()
 
 			// Assert results
 			if !reflect.DeepEqual(result, tt.expected) {
-				t.Errorf("GetTFCliArgs() = %v, expected %v", result, tt.expected)
+				t.Errorf("GetTerraformEnvCliArgs() = %v, expected %v", result, tt.expected)
 			}
 		})
 	}
 }
 
-func TestGetTFCliVars(t *testing.T) {
+func TestGetTerraformEnvCliVars(t *testing.T) {
 	tests := []struct {
 		name        string
 		envValue    string
@@ -207,7 +207,7 @@ func TestGetTFCliVars(t *testing.T) {
 			os.Setenv("TF_CLI_ARGS", tt.envValue)
 
 			// Test the function
-			result, err := GetTFCliVars()
+			result, err := GetTerraformEnvCliVars()
 
 			// Assert error expectation
 			if tt.expectError {
@@ -221,7 +221,7 @@ func TestGetTFCliVars(t *testing.T) {
 	}
 }
 
-func TestGetTFCliVars_NoEnvironmentVariable(t *testing.T) {
+func TestGetTerraformEnvCliVars_NoEnvironmentVariable(t *testing.T) {
 	// Ensure TF_CLI_ARGS is not set.
 	originalValue := os.Getenv("TF_CLI_ARGS")
 	os.Unsetenv("TF_CLI_ARGS")
@@ -231,7 +231,7 @@ func TestGetTFCliVars_NoEnvironmentVariable(t *testing.T) {
 		}
 	}()
 
-	result, err := GetTFCliVars()
+	result, err := GetTerraformEnvCliVars()
 
 	// Should return empty map when environment variable is not set.
 	assert.NoError(t, err)
@@ -239,7 +239,7 @@ func TestGetTFCliVars_NoEnvironmentVariable(t *testing.T) {
 	assert.Equal(t, expected, result)
 }
 
-func BenchmarkGetTFCliArgs(b *testing.B) {
+func BenchmarkGetTerraformEnvCliArgs(b *testing.B) {
 	// Create a realistic TF_CLI_ARGS string for benchmarking
 	largeTFCliArgs := "-auto-approve -input=false"
 	for i := 0; i < 10; i++ {
@@ -258,11 +258,11 @@ func BenchmarkGetTFCliArgs(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		GetTFCliArgs()
+		GetTerraformEnvCliArgs()
 	}
 }
 
-func BenchmarkGetTFCliVars(b *testing.B) {
+func BenchmarkGetTerraformEnvCliVars(b *testing.B) {
 	// Create a realistic TF_CLI_ARGS string for benchmarking
 	largeTFCliArgs := "-auto-approve -input=false"
 	for i := 0; i < 10; i++ {
@@ -281,6 +281,6 @@ func BenchmarkGetTFCliVars(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		GetTFCliVars()
+		GetTerraformEnvCliVars()
 	}
 }

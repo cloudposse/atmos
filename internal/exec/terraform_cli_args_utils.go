@@ -57,10 +57,10 @@ func handleQuoteChar(char rune, inQuotes bool, quoteChar rune, current *strings.
 	}
 }
 
-// GetTFCliArgs reads the TF_CLI_ARGS environment variable and returns a slice of arguments.
+// GetTerraformEnvCliArgs reads the TF_CLI_ARGS environment variable and returns a slice of arguments.
 // Example: TF_CLI_ARGS="-var environment=prod -auto-approve -var region=us-east-1".
 // Returns: ["-var", "environment=prod", "-auto-approve", "-var", "region=us-east-1"].
-func GetTFCliArgs() []string {
+func GetTerraformEnvCliArgs() []string {
 	// Get TF_CLI_ARGS environment variable using viper.
 	if err := viper.BindEnv(tfCliArgsEnvVar); err != nil {
 		log.Debug("Failed to bind TF_CLI_ARGS environment variable", "error", err)
@@ -76,14 +76,14 @@ func GetTFCliArgs() []string {
 	return parseArgs(tfCliArgs)
 }
 
-// GetTFCliVars reads the TF_CLI_ARGS environment variable, parses all -var arguments,
+// GetTerraformEnvCliVars reads the TF_CLI_ARGS environment variable, parses all -var arguments,
 // and returns them as a map of variables with proper type conversion.
 // This function processes JSON values and returns them as parsed objects.
 // It handles both formats: -var key=value and -var=key=value.
 // Example: TF_CLI_ARGS='-var name=test -var=region=us-east-1 -var tags={"env":"prod","team":"devops"}'
 // Returns: map[string]any{"name": "test", "region": "us-east-1", "tags": map[string]any{"env": "prod", "team": "devops"}}.
-func GetTFCliVars() (map[string]any, error) {
-	args := GetTFCliArgs()
+func GetTerraformEnvCliVars() (map[string]any, error) {
+	args := GetTerraformEnvCliArgs()
 	if len(args) == 0 {
 		return map[string]any{}, nil
 	}
