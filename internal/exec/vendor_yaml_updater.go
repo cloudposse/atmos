@@ -1,11 +1,9 @@
 package exec
 
 import (
-	"bytes"
 	"fmt"
 	"os"
 
-	"github.com/goccy/go-yaml"
 	"github.com/goccy/go-yaml/ast"
 	"github.com/goccy/go-yaml/parser"
 )
@@ -70,15 +68,15 @@ func (u *YAMLVersionUpdater) applyUpdatesAndEncode(file *ast.File, updates map[s
 	// Apply updates to the AST
 	u.applyUpdatesToNodes(componentNodes, updates)
 
-	// Convert AST back to YAML bytes
-	var buf bytes.Buffer
-	encoder := yaml.NewEncoder(&buf)
-
-	if err := encoder.Encode(file.Docs[0].Body); err != nil {
-		return nil, fmt.Errorf("failed to encode YAML: %w", err)
+	// Try to convert AST back to YAML string
+	// Using the AST String() method directly to preserve anchors and aliases
+	if file.Docs[0].Body != nil {
+		yamlStr := file.String()
+		return []byte(yamlStr), nil
 	}
 
-	return buf.Bytes(), nil
+	// Fallback to empty YAML if body is nil
+	return []byte{}, nil
 }
 
 // applyUpdatesToNodes applies version updates to the component nodes.
@@ -110,9 +108,14 @@ func (u *YAMLVersionUpdater) findComponentNodes(node ast.Node) map[string][]*ast
 // extractComponentName extracts the component name from a mapping node.
 func (u *YAMLVersionUpdater) extractComponentName(mapping *ast.MappingNode) string {
 	for _, value := range mapping.Values {
+		if value == nil || value.Key == nil {
+			continue
+		}
 		if keyNode, ok := value.Key.(*ast.StringNode); ok && keyNode.Value == "component" {
-			if valueNode, ok := value.Value.(*ast.StringNode); ok {
-				return valueNode.Value
+			if value.Value != nil {
+				if valueNode, ok := value.Value.(*ast.StringNode); ok {
+					return valueNode.Value
+				}
 			}
 		}
 	}
@@ -122,6 +125,9 @@ func (u *YAMLVersionUpdater) extractComponentName(mapping *ast.MappingNode) stri
 // updateVersionInNode updates the version field in a mapping node.
 func (u *YAMLVersionUpdater) updateVersionInNode(mapping *ast.MappingNode, newVersion string) {
 	for _, value := range mapping.Values {
+		if value == nil || value.Key == nil {
+			continue
+		}
 		if keyNode, ok := value.Key.(*ast.StringNode); ok && keyNode.Value == "version" {
 			// Update the version value
 			if valueNode, ok := value.Value.(*ast.StringNode); ok {
@@ -182,8 +188,10 @@ func (u *YAMLVersionUpdater) walkNodeChildren(node ast.Node, visitor func(ast.No
 // walkMappingNode walks all values in a mapping node.
 func (u *YAMLVersionUpdater) walkMappingNode(n *ast.MappingNode, visitor func(ast.Node) bool) {
 	for _, value := range n.Values {
-		u.walkAST(value.Key, visitor)
-		u.walkAST(value.Value, visitor)
+		if value != nil {
+			u.walkAST(value.Key, visitor)
+			u.walkAST(value.Value, visitor)
+		}
 	}
 }
 
