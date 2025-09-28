@@ -169,4 +169,7 @@ var (
 
 	// Logger errors.
 	ErrInvalidLogLevel = errors.New("invalid log level")
+
+	// Profiler-related errors.
+	ErrProfilerStart = errors.New("profiler start failed")
 )
