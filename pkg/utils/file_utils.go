@@ -103,9 +103,24 @@ func handleEmptyPaths(basePath, providedPath string) (string, bool) {
 	return "", false
 }
 
-// isWindowsAbsolutePath checks if a path is absolute on Windows (including paths starting with \ or /).
+// isWindowsAbsolutePath checks if a path is absolute on Windows.
+// This handles special Windows cases that filepath.IsAbs might miss:
+// - Paths starting with / (treated as absolute on current drive)
+// - Single backslash paths like \Windows (absolute on current drive)
+// Note: Double backslash (\\) paths are handled by filepath.IsAbs as UNC paths.
 func isWindowsAbsolutePath(path string) bool {
-	return len(path) > 0 && (path[0] == '\\' || path[0] == '/')
+	if len(path) == 0 {
+		return false
+	}
+	// Only treat single backslash or forward slash at start as absolute
+	// Double backslash (\\) is handled by filepath.IsAbs for UNC paths
+	if path[0] == '/' {
+		return true
+	}
+	if path[0] == '\\' && (len(path) == 1 || path[1] != '\\') {
+		return true
+	}
+	return false
 }
 
 // JoinPath joins two paths handling absolute paths correctly.

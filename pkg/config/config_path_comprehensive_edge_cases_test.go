@@ -286,12 +286,19 @@ func TestPathJoining_ComprehensiveEdgeCases(t *testing.T) {
 			onlyOnWindows:         true,
 		},
 		{
-			name:                  "URL-like path (should be treated as relative)",
-			atmosBasePath:         "https://example.com/infrastructure",
-			componentBasePath:     "components/terraform",
-			componentName:         "vpc",
-			description:           "URL-like paths",
-			expectedPattern:       "https://example.com/infrastructure/components/terraform/vpc",
+			name:              "URL-like path (should be treated as relative)",
+			atmosBasePath:     "https://example.com/infrastructure",
+			componentBasePath: "components/terraform",
+			componentName:     "vpc",
+			description:       "URL-like paths",
+			// On Windows, colons in paths are converted to drive separators
+			// https://example.com becomes https:\example.com
+			expectedPattern: func() string {
+				if runtime.GOOS == "windows" {
+					return "https:\\example.com\\infrastructure\\components\\terraform\\vpc"
+				}
+				return "https://example.com/infrastructure/components/terraform/vpc"
+			}(),
 			shouldHaveDuplication: false,
 			skipOnWindows:         false,
 		},

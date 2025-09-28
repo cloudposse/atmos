@@ -154,11 +154,11 @@ func TestJoinPath_WindowsEdgeCases(t *testing.T) {
 			description:  "Leading backslash indicates absolute path on Windows",
 		},
 		{
-			name:         "Multiple backslashes (UNC path)",
+			name:         "Multiple backslashes (UNC-like path)",
 			basePath:     `C:\\project\\`,
 			providedPath: `\\components\\terraform`,
 			expected:     `\\components\\terraform`,
-			description:  "UNC path format treated as absolute",
+			description:  "Double backslash at start treated as UNC-like absolute path",
 		},
 
 		// ============ MIXED FORWARD AND BACKWARD SLASHES ============
@@ -335,8 +335,9 @@ func TestJoinPath_WindowsPathNormalization(t *testing.T) {
 			providedPath: `\\components\\`,
 			description:  "filepath.Join normalizes multiple slashes",
 			checkFunc: func(t *testing.T, result string) {
-				// filepath.Join normalizes paths automatically
-				assert.Equal(t, `\components\`, result)
+				// Double backslash at start is treated as UNC path by filepath.IsAbs
+				// So it returns as absolute, but filepath.Join would clean it
+				assert.Equal(t, `\\components\\`, result)
 			},
 		},
 		{

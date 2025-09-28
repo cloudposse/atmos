@@ -655,12 +655,16 @@ func TestSandboxWithAbsoluteComponentPaths(t *testing.T) {
 	defer os.RemoveAll(workdir)
 
 	// Write atmos.yaml with absolute path.
+	// On Windows, we need to escape backslashes in the YAML
 	atmosYaml := filepath.Join(workdir, "atmos.yaml")
+	componentPath := filepath.Join(tempDir, "mycomponents", "terraform")
+	// Convert backslashes to forward slashes for YAML (works on all platforms)
+	componentPath = filepath.ToSlash(componentPath)
 	atmosContent := fmt.Sprintf(`
 components:
   terraform:
     base_path: "%s"
-`, filepath.Join(tempDir, "mycomponents", "terraform"))
+`, componentPath)
 	require.NoError(t, os.WriteFile(atmosYaml, []byte(atmosContent), 0o644))
 
 	// Setup sandbox.
