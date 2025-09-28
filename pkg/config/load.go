@@ -319,7 +319,7 @@ func processConfigImportsAndReapply(path string, tempViper *viper.Viper, content
 	mainViper := viper.New()
 	mainViper.SetConfigType(yamlType)
 	if err := mainViper.ReadConfig(bytes.NewReader(content)); err != nil {
-		return fmt.Errorf("parse main config: %w", err)
+		return errors.Join(errUtils.ErrMergeConfiguration, fmt.Errorf("parse main config: %w", err))
 	}
 	mainCommands := mainViper.Get(commandsKey)
 
@@ -333,7 +333,7 @@ func processConfigImportsAndReapply(path string, tempViper *viper.Viper, content
 	// Now load the main config temporarily to process explicit imports.
 	// We need this because the import paths are defined in the main config.
 	if err := tempViper.MergeConfig(bytes.NewReader(content)); err != nil {
-		return fmt.Errorf("merge main config: %w", err)
+		return errors.Join(errUtils.ErrMergeConfiguration, fmt.Errorf("merge main config: %w", err))
 	}
 
 	// Clear commands before processing imports to collect only imported commands.
