@@ -17,6 +17,28 @@ var (
 	ErrUnknownComponentType = errors.New("unknown component type")
 )
 
+// hasSequenceRepeat checks if parts[start:start+length] equals parts[start+length:start+length*2].
+func hasSequenceRepeat(parts []string, start, length int) bool {
+	for j := 0; j < length; j++ {
+		if parts[start+j] != parts[start+length+j] {
+			return false
+		}
+	}
+	return true
+}
+
+// removeDuplicateSequence removes a duplicate sequence from path parts.
+func removeDuplicateSequence(parts []string, start, length int, originalPath string) string {
+	newParts := make([]string, 0, len(parts)-length)
+	newParts = append(newParts, parts[:start+length]...)
+	newParts = append(newParts, parts[start+length*2:]...)
+	cleanedPath := filepath.Join(newParts...)
+	if filepath.IsAbs(originalPath) && !filepath.IsAbs(cleanedPath) {
+		cleanedPath = string(filepath.Separator) + cleanedPath
+	}
+	return cleanedPath
+}
+
 // cleanDuplicatedPath detects and removes path duplication patterns.
 // For example: /path/to/base/.//path/to/base/components -> /path/to/base/components
 // This only removes duplications when a significant path segment is duplicated,
@@ -29,7 +51,6 @@ func cleanDuplicatedPath(path string) string {
 	// First clean the path to normalize separators and remove ./ patterns
 	cleanedPath := filepath.Clean(path)
 
-	// Look for patterns like /base/path/.//base/path or /base/path/base/path
 	// Split the path into parts
 	parts := strings.Split(cleanedPath, string(filepath.Separator))
 
@@ -40,33 +61,18 @@ func cleanDuplicatedPath(path string) string {
 	}
 
 	// Only look for duplications of sequences that are at least 3 parts long
-	// This avoids removing legitimate repeated single directory names
 	minLength := 3
 	if len(parts)-startIdx < minLength*2 {
-		// Not enough parts to have a significant duplication
 		return cleanedPath
 	}
 
 	// Look for consecutive duplicate sequences of significant length
 	for length := minLength; length <= (len(parts)-startIdx)/2; length++ {
-		// Check if a sequence of 'length' parts repeats immediately after itself
 		for start := startIdx; start+length*2 <= len(parts); start++ {
-			sequenceRepeats := true
-			for j := 0; j < length; j++ {
-				if parts[start+j] != parts[start+length+j] {
-					sequenceRepeats = false
-					break
-				}
-			}
-			if sequenceRepeats {
-				// Found a duplicate sequence, remove it
-				newParts := append(parts[:start+length], parts[start+length*2:]...)
-				cleanedPath = filepath.Join(newParts...)
-				if filepath.IsAbs(path) && !filepath.IsAbs(cleanedPath) {
-					cleanedPath = string(filepath.Separator) + cleanedPath
-				}
-				// Recursively clean in case there are more duplications
-				return cleanDuplicatedPath(cleanedPath)
+			if hasSequenceRepeat(parts, start, length) {
+				// Found a duplicate sequence, remove it and recurse
+				result := removeDuplicateSequence(parts, start, length, path)
+				return cleanDuplicatedPath(result)
 			}
 		}
 	}
