@@ -51,7 +51,7 @@ func (ar *AquaRegistry) GetTool(owner, repo string) (*Tool, error) {
 	// Check local configuration first
 	if localTool, exists := ar.local.GetTool(owner, repo); exists {
 		log.Debug("Using local configuration", "owner", owner, "repo", repo)
-		return ar.convertLocalToolToTool(localTool, owner, repo), nil
+		return ar.convertLocalToolToTool(localTool, repo), nil
 	}
 
 	// Fall back to remote registry
@@ -347,7 +347,7 @@ func (ar *AquaRegistry) BuildAssetURL(tool *Tool, version string) (string, error
 }
 
 // convertLocalToolToTool converts a local tool definition to a Tool.
-func (ar *AquaRegistry) convertLocalToolToTool(localTool *LocalTool, owner, repo string) *Tool {
+func (ar *AquaRegistry) convertLocalToolToTool(localTool *LocalTool, repo string) *Tool {
 	tool := &Tool{
 		Name:      repo,
 		Type:      localTool.Type,
