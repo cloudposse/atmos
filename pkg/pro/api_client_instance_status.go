@@ -17,7 +17,7 @@ import (
 // UploadInstanceStatus uploads the drift detection result status to the pro API.
 func (c *AtmosProAPIClient) UploadInstanceStatus(dto *dtos.InstanceStatusUploadRequest) error {
 	if dto == nil {
-		return fmt.Errorf("%w: %s", errUtils.ErrFailedToUploadInstanceStatus, errUtils.ErrNilRequestDTO)
+		return errors.Join(errUtils.ErrFailedToUploadInstanceStatus, errUtils.ErrNilRequestDTO)
 	}
 	// Use the correct endpoint format: /api/v1/repos/{owner}/{repo}/instances/{stack}/{component}
 	targetURL := fmt.Sprintf("%s/%s/repos/%s/%s/instances/%s/%s",

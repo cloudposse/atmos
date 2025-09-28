@@ -31,7 +31,7 @@ func withCacheFileLockUnix(cacheFile string, fn func() error) error {
 	for i := 0; i < maxRetries; i++ {
 		locked, err = lock.TryLock()
 		if err != nil {
-			return errors.Join(errUtils.ErrCacheLocked, fmt.Errorf("%v", err))
+			return errors.Join(errUtils.ErrCacheLocked, err)
 		}
 		if locked {
 			break
@@ -62,7 +62,7 @@ func loadCacheWithReadLockUnix(cacheFile string) (CacheConfig, error) {
 	lock := flock.New(lockPath)
 	locked, err := lock.TryRLock()
 	if err != nil {
-		return cfg, errors.Join(errUtils.ErrCacheLocked, fmt.Errorf("%v", err))
+		return cfg, errors.Join(errUtils.ErrCacheLocked, err)
 	}
 	if !locked {
 		// If we can't get the lock immediately, return empty config
@@ -81,10 +81,10 @@ func loadCacheWithReadLockUnix(cacheFile string) (CacheConfig, error) {
 		if _, ok := err.(viper.ConfigFileNotFoundError); ok {
 			return cfg, nil
 		}
-		return cfg, errors.Join(errUtils.ErrCacheRead, fmt.Errorf("%v", err))
+		return cfg, errors.Join(errUtils.ErrCacheRead, err)
 	}
 	if err := v.Unmarshal(&cfg); err != nil {
-		return cfg, errors.Join(errUtils.ErrCacheUnmarshal, fmt.Errorf("%v", err))
+		return cfg, errors.Join(errUtils.ErrCacheUnmarshal, err)
 	}
 	return cfg, nil
 }

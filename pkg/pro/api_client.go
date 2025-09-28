@@ -28,6 +28,7 @@ const (
 	logKeyURL                        = "url"
 	logKeyOperation                  = "operation"
 	logKeyRequest                    = "request"
+	errMessageFormat                 = "%w: %s" // Error format for wrapping with message
 	logKeyStatus                     = "status"
 	logKeySuccess                    = "success"
 	logKeyTraceID                    = "trace_id"
@@ -127,7 +128,7 @@ func NewAtmosProAPIClientFromEnv(atmosConfig *schema.AtmosConfiguration) (*Atmos
 	// Get workspace ID from environment
 	workspaceID := atmosConfig.Settings.Pro.WorkspaceID
 	if workspaceID == "" {
-		return nil, errors.Join(errUtils.ErrOIDCWorkspaceIDRequired, fmt.Errorf("environment variable: %s", cfg.AtmosProWorkspaceIDEnvVarName))
+		return nil, fmt.Errorf("%w: environment variable: %s", errUtils.ErrOIDCWorkspaceIDRequired, cfg.AtmosProWorkspaceIDEnvVarName)
 	}
 
 	// Exchange OIDC token for Atmos token
@@ -216,13 +217,13 @@ func (c *AtmosProAPIClient) doStackLockAction(params *schema.StackLockActionPara
 		logProAPIResponse(params.Op, responseData.AtmosApiResponse)
 		if !responseData.Success {
 			errorMsg := logAndReturnProAPIError(params.Op, responseData.AtmosApiResponse)
-			return errors.Join(params.WrapErr, fmt.Errorf("%s", errorMsg))
+			return fmt.Errorf(errMessageFormat, params.WrapErr, errorMsg)
 		}
 	case *dtos.UnlockStackResponse:
 		logProAPIResponse(params.Op, responseData.AtmosApiResponse)
 		if !responseData.Success {
 			errorMsg := logAndReturnProAPIError(params.Op, responseData.AtmosApiResponse)
-			return errors.Join(params.WrapErr, fmt.Errorf("%s", errorMsg))
+			return fmt.Errorf(errMessageFormat, params.WrapErr, errorMsg)
 		}
 	}
 
@@ -286,7 +287,7 @@ func handleAPIResponse(resp *http.Response, operation string) error {
 	if err := json.Unmarshal(body, &apiResponse); err != nil {
 		// If we can't parse the response as JSON, handle based on status code
 		if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusBadRequest {
-			return errors.Join(errUtils.ErrFailedToUnmarshalAPIResponse, fmt.Errorf("HTTP status: %s", resp.Status))
+			return fmt.Errorf("%w: HTTP status: %s", errUtils.ErrFailedToUnmarshalAPIResponse, resp.Status)
 		}
 		// For successful responses that can't be parsed, just return nil
 		return nil
@@ -303,7 +304,7 @@ func handleAPIResponse(resp *http.Response, operation string) error {
 
 	// For error HTTP responses, return an error
 	errorMsg := logAndReturnProAPIError(operation, apiResponse)
-	return errors.Join(errUtils.ErrAPIResponseError, fmt.Errorf("%s", errorMsg))
+	return fmt.Errorf(errMessageFormat, errUtils.ErrAPIResponseError, errorMsg)
 }
 
 // getGitHubOIDCToken retrieves an OIDC token from GitHub Actions.
@@ -341,7 +342,7 @@ func getGitHubOIDCToken(githubOIDCSettings schema.GithubOIDCSettings) (string, e
 
 	if resp.StatusCode != http.StatusOK {
 		log.Debug("getGitHubOIDCToken", "resp.StatusCode", resp.StatusCode)
-		return "", errors.Join(errUtils.ErrFailedToGetOIDCToken, fmt.Errorf("HTTP status: %s", resp.Status))
+		return "", fmt.Errorf("%w: HTTP status: %s", errUtils.ErrFailedToGetOIDCToken, resp.Status)
 	}
 
 	var tokenResp dtos.GetGitHubOIDCResponse
@@ -414,7 +415,7 @@ func exchangeOIDCTokenForAtmosToken(baseURL, baseAPIEndpoint, oidcToken, workspa
 
 	if !tokenResp.Success {
 		errMsg := logAndReturnProAPIError("ExchangeOIDCToken", tokenResp.AtmosApiResponse)
-		return "", errors.Join(errUtils.ErrFailedToExchangeOIDCToken, fmt.Errorf("%s", errMsg))
+		return "", fmt.Errorf(errMessageFormat, errUtils.ErrFailedToExchangeOIDCToken, errMsg)
 	}
 
 	return tokenResp.Data.Token, nil

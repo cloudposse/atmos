@@ -207,10 +207,10 @@ func generateDocument(
 	}
 	outputPath, err := resolvePath(outputFile, baseDir)
 	if err != nil {
-		return errors.Join(errUtils.ErrResolveOutputPath, fmt.Errorf("%s: %s", outputFile, err))
+		return fmt.Errorf("%w: %s: %s", errUtils.ErrResolveOutputPath, outputFile, err)
 	}
 	if err = os.WriteFile(outputPath, []byte(rendered), defaultFilePermissions); err != nil {
-		return errors.Join(errUtils.ErrWriteOutput, fmt.Errorf("%s: %s", outputPath, err))
+		return fmt.Errorf("%w: %s: %s", errUtils.ErrWriteOutput, outputPath, err)
 	}
 
 	log.Info("Generated docs", "output", outputPath)

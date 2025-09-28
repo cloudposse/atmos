@@ -138,7 +138,7 @@ func ValidateWithOpa(
 		return false, errors.New(invalidRegoPolicyErrorMessage)
 	}
 	if len(ers) > 0 {
-		return false, errors.Join(errUtils.ErrOPAPolicyViolations, fmt.Errorf("%s", strings.Join(u.SliceOfInterfacesToSliceOfStrings(ers), "\n")))
+		return false, fmt.Errorf("%w: %s", errUtils.ErrOPAPolicyViolations, strings.Join(u.SliceOfInterfacesToSliceOfStrings(ers), "\n"))
 	}
 
 	return true, nil
@@ -229,7 +229,7 @@ func ValidateWithOpaLegacy(
 
 	ers, ok := result.Result.([]any)
 	if ok && len(ers) > 0 {
-		return false, errors.Join(errUtils.ErrOPAPolicyViolations, fmt.Errorf("%s", strings.Join(u.SliceOfInterfacesToSliceOfStrings(ers), "\n")))
+		return false, fmt.Errorf("%w: %s", errUtils.ErrOPAPolicyViolations, strings.Join(u.SliceOfInterfacesToSliceOfStrings(ers), "\n"))
 	}
 
 	return true, nil

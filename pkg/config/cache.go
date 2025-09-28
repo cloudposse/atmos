@@ -108,12 +108,12 @@ func SaveCache(cfg CacheConfig) error {
 		enc := yaml.NewEncoder(&buf)
 		enc.SetIndent(2)
 		if err := enc.Encode(data); err != nil {
-			return errors.Join(errUtils.ErrCacheMarshal, fmt.Errorf("%v", err))
+			return errors.Join(errUtils.ErrCacheMarshal, err)
 		}
 
 		// Write atomically.
 		if err := writeFileAtomic(cacheFile, buf.Bytes(), 0o644); err != nil {
-			return errors.Join(errUtils.ErrCacheWrite, fmt.Errorf("%v", err))
+			return errors.Join(errUtils.ErrCacheWrite, err)
 		}
 		return nil
 	})
@@ -148,10 +148,10 @@ func UpdateCache(update func(*CacheConfig)) error {
 			v := viper.New()
 			v.SetConfigFile(cacheFile)
 			if err := v.ReadInConfig(); err != nil {
-				return errors.Join(errUtils.ErrCacheRead, fmt.Errorf("%v", err))
+				return errors.Join(errUtils.ErrCacheRead, err)
 			}
 			if err := v.Unmarshal(&cfg); err != nil {
-				return errors.Join(errUtils.ErrCacheUnmarshal, fmt.Errorf("%v", err))
+				return errors.Join(errUtils.ErrCacheUnmarshal, err)
 			}
 		}
 
@@ -170,12 +170,12 @@ func UpdateCache(update func(*CacheConfig)) error {
 		enc := yaml.NewEncoder(&buf)
 		enc.SetIndent(2)
 		if err := enc.Encode(data); err != nil {
-			return errors.Join(errUtils.ErrCacheMarshal, fmt.Errorf("%v", err))
+			return errors.Join(errUtils.ErrCacheMarshal, err)
 		}
 
 		// Write atomically.
 		if err := writeFileAtomic(cacheFile, buf.Bytes(), 0o644); err != nil {
-			return errors.Join(errUtils.ErrCacheWrite, fmt.Errorf("%v", err))
+			return errors.Join(errUtils.ErrCacheWrite, err)
 		}
 		return nil
 	})

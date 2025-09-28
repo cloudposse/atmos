@@ -119,31 +119,50 @@ viper.SetEnvPrefix("ATMOS")
 
 ### Error Handling (MANDATORY)
 - **All errors MUST be wrapped using static errors defined in `errors/errors.go`**
-- **NEVER use dynamic errors directly** - this will trigger linting warnings:
-  ```go
-  // WRONG: Dynamic error (will trigger linting warning)
-  return fmt.Errorf("processing component %s: %w", component, err)
+- **Use `errors.Join` for combining multiple errors** (Go 1.20+) - preserves both error chains
+- **Use `fmt.Errorf` with `%w` for adding string context** - when you need formatted strings
+- **NEVER use dynamic errors directly** - this will trigger linting warnings
+- **See `docs/prd/error-handling-strategy.md`** for complete guidelines
 
-  // CORRECT: Use static error from errors package
-  import errUtils "github.com/cloudposse/atmos/errors"
+#### Error Handling Patterns
 
-  return fmt.Errorf("%w: Atmos component `%s` is invalid",
-      errUtils.ErrInvalidComponent,
-      component,
-  )
-  ```
-- **Define static errors in `errors/errors.go`**:
-  ```go
-  var (
-      ErrInvalidComponent = errors.New("invalid component")
-      ErrInvalidStack     = errors.New("invalid stack")
-      ErrInvalidConfig    = errors.New("invalid configuration")
-  )
-  ```
-- **Error wrapping pattern**:
-  - Always wrap with static error first: `fmt.Errorf("%w: details", errUtils.ErrStaticError, ...)`
-  - Add context-specific details after the static error
-  - Use `%w` verb to preserve error chain for `errors.Is()` and `errors.As()`
+**Pattern 1: Combining Multiple Errors**
+```go
+// ✅ CORRECT: Use errors.Join for multiple errors
+return errors.Join(errUtils.ErrFailedToProcess, underlyingErr)
+
+// ❌ WRONG: fmt.Errorf with multiple %w (invalid in Go)
+return fmt.Errorf("%w: %w", errUtils.ErrFailedToProcess, underlyingErr)
+```
+
+**Pattern 2: Adding String Context**
+```go
+// ✅ CORRECT: Use fmt.Errorf with single %w for context
+return fmt.Errorf("%w: component=%s stack=%s", errUtils.ErrInvalidComponent, component, stack)
+return fmt.Errorf("%w: %s", errUtils.ErrFileNotFound, filepath)
+```
+
+**Pattern 3: Converting Strings to Errors**
+```go
+// ✅ CORRECT: Converting string to error with context
+violations := []string{"rule1 failed", "rule2 failed"}
+return errors.Join(errUtils.ErrValidation, fmt.Errorf("%s", strings.Join(violations, "\n")))
+```
+
+**Static Error Definitions**
+```go
+// Define in errors/errors.go
+var (
+    ErrInvalidComponent = errors.New("invalid component")
+    ErrInvalidStack     = errors.New("invalid stack")
+    ErrInvalidConfig    = errors.New("invalid configuration")
+)
+```
+
+- **Error wrapping decision tree**:
+  - Multiple errors? → Use `errors.Join`
+  - Need string context? → Use `fmt.Errorf("%w: context", err)`
+  - Otherwise → Return error directly
 - Provide actionable error messages with troubleshooting hints
 - Log detailed errors for debugging, user-friendly messages for CLI
 

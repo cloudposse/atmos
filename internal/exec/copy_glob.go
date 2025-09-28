@@ -1,7 +1,6 @@
 package exec
 
 import (
-	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -13,6 +12,11 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 	cp "github.com/otiai10/copy" // Using the optimized copy library when no filtering is required.
+)
+
+// Error format constants.
+const (
+	errPathFormat = "%w: %q: %s"
 )
 
 // Named constants to avoid literal duplication.
@@ -51,7 +55,7 @@ type CopyContext struct {
 func copyFile(src, dst string) error {
 	sourceFile, err := os.Open(src)
 	if err != nil {
-		return errors.Join(errUtils.ErrOpenFile, fmt.Errorf("%q: %s", src, err))
+		return fmt.Errorf(errPathFormat, errUtils.ErrOpenFile, src, err)
 	}
 	defer sourceFile.Close()
 
@@ -61,7 +65,7 @@ func copyFile(src, dst string) error {
 
 	destinationFile, err := os.Create(dst)
 	if err != nil {
-		return errors.Join(errUtils.ErrOpenFile, fmt.Errorf("%q: %s", dst, err))
+		return fmt.Errorf(errPathFormat, errUtils.ErrOpenFile, dst, err)
 	}
 	defer destinationFile.Close()
 
@@ -71,7 +75,7 @@ func copyFile(src, dst string) error {
 
 	info, err := os.Stat(src)
 	if err != nil {
-		return errors.Join(errUtils.ErrStatFile, fmt.Errorf("%q: %s", src, err))
+		return fmt.Errorf(errPathFormat, errUtils.ErrStatFile, src, err)
 	}
 	if err := os.Chmod(dst, info.Mode()); err != nil {
 		return fmt.Errorf("%w on %q: %s", errUtils.ErrSetPermissions, dst, err)
@@ -156,7 +160,7 @@ func processDirEntry(entry os.DirEntry, ctx *CopyContext) error {
 
 	info, err := entry.Info()
 	if err != nil {
-		return errors.Join(errUtils.ErrStatFile, fmt.Errorf("%q: %s", srcPath, err))
+		return fmt.Errorf(errPathFormat, errUtils.ErrStatFile, srcPath, err)
 	}
 
 	if shouldSkipEntry(info, srcPath, ctx.BaseDir, ctx.Excluded, ctx.Included) {
@@ -172,7 +176,7 @@ func processDirEntry(entry os.DirEntry, ctx *CopyContext) error {
 
 	if info.IsDir() {
 		if err := os.MkdirAll(dstPath, info.Mode()); err != nil {
-			return errors.Join(errUtils.ErrCreateDirectory, fmt.Errorf("%q: %s", dstPath, err))
+			return fmt.Errorf(errPathFormat, errUtils.ErrCreateDirectory, dstPath, err)
 		}
 		// Recurse with the same context but with updated source and destination directories.
 		newCtx := &CopyContext{
@@ -191,7 +195,7 @@ func processDirEntry(entry os.DirEntry, ctx *CopyContext) error {
 func copyDirRecursive(ctx *CopyContext) error {
 	entries, err := os.ReadDir(ctx.SrcDir)
 	if err != nil {
-		return errors.Join(errUtils.ErrReadDirectory, fmt.Errorf("%q: %s", ctx.SrcDir, err))
+		return fmt.Errorf(errPathFormat, errUtils.ErrReadDirectory, ctx.SrcDir, err)
 	}
 	for _, entry := range entries {
 		if err := processDirEntry(entry, ctx); err != nil {
@@ -236,7 +240,7 @@ func processPrefixEntry(entry os.DirEntry, ctx *PrefixCopyContext) error {
 
 	info, err := entry.Info()
 	if err != nil {
-		return errors.Join(errUtils.ErrStatFile, fmt.Errorf("%q: %s", srcPath, err))
+		return fmt.Errorf(errPathFormat, errUtils.ErrStatFile, srcPath, err)
 	}
 
 	if entry.Name() == ".git" {
@@ -250,7 +254,7 @@ func processPrefixEntry(entry os.DirEntry, ctx *PrefixCopyContext) error {
 
 	if info.IsDir() {
 		if err := os.MkdirAll(dstPath, info.Mode()); err != nil {
-			return errors.Join(errUtils.ErrCreateDirectory, fmt.Errorf("%q: %s", dstPath, err))
+			return fmt.Errorf(errPathFormat, errUtils.ErrCreateDirectory, dstPath, err)
 		}
 		newCtx := &PrefixCopyContext{
 			SrcDir:     srcPath,
@@ -268,7 +272,7 @@ func processPrefixEntry(entry os.DirEntry, ctx *PrefixCopyContext) error {
 func copyDirRecursiveWithPrefix(ctx *PrefixCopyContext) error {
 	entries, err := os.ReadDir(ctx.SrcDir)
 	if err != nil {
-		return errors.Join(errUtils.ErrReadDirectory, fmt.Errorf("%q: %s", ctx.SrcDir, err))
+		return fmt.Errorf(errPathFormat, errUtils.ErrReadDirectory, ctx.SrcDir, err)
 	}
 	for _, entry := range entries {
 		if err := processPrefixEntry(entry, ctx); err != nil {
@@ -321,7 +325,7 @@ func isShallowPattern(pattern string) bool {
 func processMatch(sourceDir, targetPath, file string, shallow bool, excluded []string) error {
 	info, err := os.Stat(file)
 	if err != nil {
-		return errors.Join(errUtils.ErrStatFile, fmt.Errorf("%q: %s", file, err))
+		return fmt.Errorf(errPathFormat, errUtils.ErrStatFile, file, err)
 	}
 	relPath, err := filepath.Rel(sourceDir, file)
 	if err != nil {
@@ -462,7 +466,7 @@ func ComponentOrMixinsCopy(sourceFile, finalTarget string) error {
 		parent := filepath.Dir(dest)
 		if err := os.MkdirAll(parent, os.ModePerm); err != nil {
 			log.Debug("ComponentOrMixinsCopy: error creating parent directory", "parent", parent, "error", err)
-			return errors.Join(errUtils.ErrCreateDirectory, fmt.Errorf("%q: %s", parent, err))
+			return fmt.Errorf(errPathFormat, errUtils.ErrCreateDirectory, parent, err)
 		}
 		log.Debug("ComponentOrMixinsCopy: file-to-file copy", "sourceFile", sourceFile, "destination", dest)
 	}
@@ -470,7 +474,7 @@ func ComponentOrMixinsCopy(sourceFile, finalTarget string) error {
 	if info, err := os.Stat(dest); err == nil && info.IsDir() {
 		log.Debug("ComponentOrMixinsCopy: destination exists as directory, removing", "destination", dest)
 		if err := os.RemoveAll(dest); err != nil {
-			return errors.Join(errUtils.ErrRemoveDirectory, fmt.Errorf("%q: %s", dest, err))
+			return fmt.Errorf(errPathFormat, errUtils.ErrRemoveDirectory, dest, err)
 		}
 	}
 	return cp.Copy(sourceFile, dest)

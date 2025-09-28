@@ -15,6 +15,11 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
+// Error format constants.
+const (
+	errFlagFormat = "%w: flag: %s"
+)
+
 // `commonFlags` are a list of flags that Atmos understands, but the underlying tools do not (e.g., Terraform/OpenTofu, Helmfile, etc.).
 // These flags get removed from the arg list after Atmos uses them, so the underlying tool does not get passed a flag it doesn't accept.
 var commonFlags = []string{
@@ -184,274 +189,274 @@ func processArgsAndFlags(
 
 		if arg == cfg.TerraformCommandFlag {
 			if len(inputArgsAndFlags) <= (i + 1) {
-				return info, errors.Join(errUtils.ErrInvalidFlag, fmt.Errorf("flag: %s", arg))
+				return info, fmt.Errorf(errFlagFormat, errUtils.ErrInvalidFlag, arg)
 			}
 			info.TerraformCommand = inputArgsAndFlags[i+1]
 		} else if strings.HasPrefix(arg+"=", cfg.TerraformCommandFlag) {
 			terraformCommandFlagParts := strings.Split(arg, "=")
 			if len(terraformCommandFlagParts) != 2 {
-				return info, errors.Join(errUtils.ErrInvalidFlag, fmt.Errorf("flag: %s", arg))
+				return info, fmt.Errorf(errFlagFormat, errUtils.ErrInvalidFlag, arg)
 			}
 			info.TerraformCommand = terraformCommandFlagParts[1]
 		}
 
 		if arg == cfg.TerraformDirFlag {
 			if len(inputArgsAndFlags) <= (i + 1) {
-				return info, errors.Join(errUtils.ErrInvalidFlag, fmt.Errorf("flag: %s", arg))
+				return info, fmt.Errorf(errFlagFormat, errUtils.ErrInvalidFlag, arg)
 			}
 			info.TerraformDir = inputArgsAndFlags[i+1]
 		} else if strings.HasPrefix(arg+"=", cfg.TerraformDirFlag) {
 			terraformDirFlagParts := strings.Split(arg, "=")
 			if len(terraformDirFlagParts) != 2 {
-				return info, errors.Join(errUtils.ErrInvalidFlag, fmt.Errorf("flag: %s", arg))
+				return info, fmt.Errorf(errFlagFormat, errUtils.ErrInvalidFlag, arg)
 			}
 			info.TerraformDir = terraformDirFlagParts[1]
 		}
 
 		if arg == cfg.AppendUserAgentFlag {
 			if len(inputArgsAndFlags) <= (i + 1) {
-				return info, errors.Join(errUtils.ErrInvalidFlag, fmt.Errorf("flag: %s", arg))
+				return info, fmt.Errorf(errFlagFormat, errUtils.ErrInvalidFlag, arg)
 			}
 			info.AppendUserAgent = inputArgsAndFlags[i+1]
 		} else if strings.HasPrefix(arg+"=", cfg.AppendUserAgentFlag) {
 			appendUserAgentFlagParts := strings.Split(arg, "=")
 			if len(appendUserAgentFlagParts) != 2 {
-				return info, errors.Join(errUtils.ErrInvalidFlag, fmt.Errorf("flag: %s", arg))
+				return info, fmt.Errorf(errFlagFormat, errUtils.ErrInvalidFlag, arg)
 			}
 			info.AppendUserAgent = appendUserAgentFlagParts[1]
 		}
 
 		if arg == cfg.HelmfileCommandFlag {
 			if len(inputArgsAndFlags) <= (i + 1) {
-				return info, errors.Join(errUtils.ErrInvalidFlag, fmt.Errorf("flag: %s", arg))
+				return info, fmt.Errorf(errFlagFormat, errUtils.ErrInvalidFlag, arg)
 			}
 			info.HelmfileCommand = inputArgsAndFlags[i+1]
 		} else if strings.HasPrefix(arg+"=", cfg.HelmfileCommandFlag) {
 			helmfileCommandFlagParts := strings.Split(arg, "=")
 			if len(helmfileCommandFlagParts) != 2 {
-				return info, errors.Join(errUtils.ErrInvalidFlag, fmt.Errorf("flag: %s", arg))
+				return info, fmt.Errorf(errFlagFormat, errUtils.ErrInvalidFlag, arg)
 			}
 			info.HelmfileCommand = helmfileCommandFlagParts[1]
 		}
 
 		if arg == cfg.HelmfileDirFlag {
 			if len(inputArgsAndFlags) <= (i + 1) {
-				return info, errors.Join(errUtils.ErrInvalidFlag, fmt.Errorf("flag: %s", arg))
+				return info, fmt.Errorf(errFlagFormat, errUtils.ErrInvalidFlag, arg)
 			}
 			info.HelmfileDir = inputArgsAndFlags[i+1]
 		} else if strings.HasPrefix(arg+"=", cfg.HelmfileDirFlag) {
 			helmfileDirFlagParts := strings.Split(arg, "=")
 			if len(helmfileDirFlagParts) != 2 {
-				return info, errors.Join(errUtils.ErrInvalidFlag, fmt.Errorf("flag: %s", arg))
+				return info, fmt.Errorf(errFlagFormat, errUtils.ErrInvalidFlag, arg)
 			}
 			info.HelmfileDir = helmfileDirFlagParts[1]
 		}
 
 		if arg == cfg.CliConfigDirFlag {
 			if len(inputArgsAndFlags) <= (i + 1) {
-				return info, errors.Join(errUtils.ErrInvalidFlag, fmt.Errorf("flag: %s", arg))
+				return info, fmt.Errorf(errFlagFormat, errUtils.ErrInvalidFlag, arg)
 			}
 			info.ConfigDir = inputArgsAndFlags[i+1]
 		} else if strings.HasPrefix(arg+"=", cfg.CliConfigDirFlag) {
 			configDirFlagParts := strings.Split(arg, "=")
 			if len(configDirFlagParts) != 2 {
-				return info, errors.Join(errUtils.ErrInvalidFlag, fmt.Errorf("flag: %s", arg))
+				return info, fmt.Errorf(errFlagFormat, errUtils.ErrInvalidFlag, arg)
 			}
 			info.ConfigDir = configDirFlagParts[1]
 		}
 
 		if arg == cfg.StackDirFlag {
 			if len(inputArgsAndFlags) <= (i + 1) {
-				return info, errors.Join(errUtils.ErrInvalidFlag, fmt.Errorf("flag: %s", arg))
+				return info, fmt.Errorf(errFlagFormat, errUtils.ErrInvalidFlag, arg)
 			}
 			info.StacksDir = inputArgsAndFlags[i+1]
 		} else if strings.HasPrefix(arg+"=", cfg.StackDirFlag) {
 			stacksDirFlagParts := strings.Split(arg, "=")
 			if len(stacksDirFlagParts) != 2 {
-				return info, errors.Join(errUtils.ErrInvalidFlag, fmt.Errorf("flag: %s", arg))
+				return info, fmt.Errorf(errFlagFormat, errUtils.ErrInvalidFlag, arg)
 			}
 			info.StacksDir = stacksDirFlagParts[1]
 		}
 
 		if arg == cfg.BasePathFlag {
 			if len(inputArgsAndFlags) <= (i + 1) {
-				return info, errors.Join(errUtils.ErrInvalidFlag, fmt.Errorf("flag: %s", arg))
+				return info, fmt.Errorf(errFlagFormat, errUtils.ErrInvalidFlag, arg)
 			}
 			info.BasePath = inputArgsAndFlags[i+1]
 		} else if strings.HasPrefix(arg+"=", cfg.BasePathFlag) {
 			stacksDirFlagParts := strings.Split(arg, "=")
 			if len(stacksDirFlagParts) != 2 {
-				return info, errors.Join(errUtils.ErrInvalidFlag, fmt.Errorf("flag: %s", arg))
+				return info, fmt.Errorf(errFlagFormat, errUtils.ErrInvalidFlag, arg)
 			}
 			info.BasePath = stacksDirFlagParts[1]
 		}
 
 		if arg == cfg.VendorBasePathFlag {
 			if len(inputArgsAndFlags) <= (i + 1) {
-				return info, errors.Join(errUtils.ErrInvalidFlag, fmt.Errorf("flag: %s", arg))
+				return info, fmt.Errorf(errFlagFormat, errUtils.ErrInvalidFlag, arg)
 			}
 			info.VendorBasePath = inputArgsAndFlags[i+1]
 		} else if strings.HasPrefix(arg+"=", cfg.VendorBasePathFlag) {
 			vendorBasePathFlagParts := strings.Split(arg, "=")
 			if len(vendorBasePathFlagParts) != 2 {
-				return info, errors.Join(errUtils.ErrInvalidFlag, fmt.Errorf("flag: %s", arg))
+				return info, fmt.Errorf(errFlagFormat, errUtils.ErrInvalidFlag, arg)
 			}
 			info.VendorBasePath = vendorBasePathFlagParts[1]
 		}
 
 		if arg == cfg.DeployRunInitFlag {
 			if len(inputArgsAndFlags) <= (i + 1) {
-				return info, errors.Join(errUtils.ErrInvalidFlag, fmt.Errorf("flag: %s", arg))
+				return info, fmt.Errorf(errFlagFormat, errUtils.ErrInvalidFlag, arg)
 			}
 			info.DeployRunInit = inputArgsAndFlags[i+1]
 		} else if strings.HasPrefix(arg+"=", cfg.DeployRunInitFlag) {
 			deployRunInitFlagParts := strings.Split(arg, "=")
 			if len(deployRunInitFlagParts) != 2 {
-				return info, errors.Join(errUtils.ErrInvalidFlag, fmt.Errorf("flag: %s", arg))
+				return info, fmt.Errorf(errFlagFormat, errUtils.ErrInvalidFlag, arg)
 			}
 			info.DeployRunInit = deployRunInitFlagParts[1]
 		}
 
 		if arg == cfg.AutoGenerateBackendFileFlag {
 			if len(inputArgsAndFlags) <= (i + 1) {
-				return info, errors.Join(errUtils.ErrInvalidFlag, fmt.Errorf("flag: %s", arg))
+				return info, fmt.Errorf(errFlagFormat, errUtils.ErrInvalidFlag, arg)
 			}
 			info.AutoGenerateBackendFile = inputArgsAndFlags[i+1]
 		} else if strings.HasPrefix(arg+"=", cfg.AutoGenerateBackendFileFlag) {
 			autoGenerateBackendFileFlagParts := strings.Split(arg, "=")
 			if len(autoGenerateBackendFileFlagParts) != 2 {
-				return info, errors.Join(errUtils.ErrInvalidFlag, fmt.Errorf("flag: %s", arg))
+				return info, fmt.Errorf(errFlagFormat, errUtils.ErrInvalidFlag, arg)
 			}
 			info.AutoGenerateBackendFile = autoGenerateBackendFileFlagParts[1]
 		}
 
 		if arg == cfg.WorkflowDirFlag {
 			if len(inputArgsAndFlags) <= (i + 1) {
-				return info, errors.Join(errUtils.ErrInvalidFlag, fmt.Errorf("flag: %s", arg))
+				return info, fmt.Errorf(errFlagFormat, errUtils.ErrInvalidFlag, arg)
 			}
 			info.WorkflowsDir = inputArgsAndFlags[i+1]
 		} else if strings.HasPrefix(arg+"=", cfg.WorkflowDirFlag) {
 			workflowDirFlagParts := strings.Split(arg, "=")
 			if len(workflowDirFlagParts) != 2 {
-				return info, errors.Join(errUtils.ErrInvalidFlag, fmt.Errorf("flag: %s", arg))
+				return info, fmt.Errorf(errFlagFormat, errUtils.ErrInvalidFlag, arg)
 			}
 			info.WorkflowsDir = workflowDirFlagParts[1]
 		}
 
 		if arg == cfg.InitRunReconfigure {
 			if len(inputArgsAndFlags) <= (i + 1) {
-				return info, errors.Join(errUtils.ErrInvalidFlag, fmt.Errorf("flag: %s", arg))
+				return info, fmt.Errorf(errFlagFormat, errUtils.ErrInvalidFlag, arg)
 			}
 			info.InitRunReconfigure = inputArgsAndFlags[i+1]
 		} else if strings.HasPrefix(arg+"=", cfg.InitRunReconfigure) {
 			initRunReconfigureParts := strings.Split(arg, "=")
 			if len(initRunReconfigureParts) != 2 {
-				return info, errors.Join(errUtils.ErrInvalidFlag, fmt.Errorf("flag: %s", arg))
+				return info, fmt.Errorf(errFlagFormat, errUtils.ErrInvalidFlag, arg)
 			}
 			info.InitRunReconfigure = initRunReconfigureParts[1]
 		}
 
 		if arg == cfg.InitPassVars {
 			if len(inputArgsAndFlags) <= (i + 1) {
-				return info, errors.Join(errUtils.ErrInvalidFlag, fmt.Errorf("flag: %s", arg))
+				return info, fmt.Errorf(errFlagFormat, errUtils.ErrInvalidFlag, arg)
 			}
 			info.InitPassVars = inputArgsAndFlags[i+1]
 		} else if strings.HasPrefix(arg+"=", cfg.InitPassVars) {
 			initPassVarsParts := strings.Split(arg, "=")
 			if len(initPassVarsParts) != 2 {
-				return info, errors.Join(errUtils.ErrInvalidFlag, fmt.Errorf("flag: %s", arg))
+				return info, fmt.Errorf(errFlagFormat, errUtils.ErrInvalidFlag, arg)
 			}
 			info.InitPassVars = initPassVarsParts[1]
 		}
 
 		if arg == cfg.PlanSkipPlanfile {
 			if len(inputArgsAndFlags) <= (i + 1) {
-				return info, errors.Join(errUtils.ErrInvalidFlag, fmt.Errorf("flag: %s", arg))
+				return info, fmt.Errorf(errFlagFormat, errUtils.ErrInvalidFlag, arg)
 			}
 			info.PlanSkipPlanfile = inputArgsAndFlags[i+1]
 		} else if strings.HasPrefix(arg+"=", cfg.PlanSkipPlanfile) {
 			planSkipPlanfileParts := strings.Split(arg, "=")
 			if len(planSkipPlanfileParts) != 2 {
-				return info, errors.Join(errUtils.ErrInvalidFlag, fmt.Errorf("flag: %s", arg))
+				return info, fmt.Errorf(errFlagFormat, errUtils.ErrInvalidFlag, arg)
 			}
 			info.PlanSkipPlanfile = planSkipPlanfileParts[1]
 		}
 
 		if arg == cfg.JsonSchemaDirFlag {
 			if len(inputArgsAndFlags) <= (i + 1) {
-				return info, errors.Join(errUtils.ErrInvalidFlag, fmt.Errorf("flag: %s", arg))
+				return info, fmt.Errorf(errFlagFormat, errUtils.ErrInvalidFlag, arg)
 			}
 			info.JsonSchemaDir = inputArgsAndFlags[i+1]
 		} else if strings.HasPrefix(arg+"=", cfg.JsonSchemaDirFlag) {
 			jsonschemaDirFlagParts := strings.Split(arg, "=")
 			if len(jsonschemaDirFlagParts) != 2 {
-				return info, errors.Join(errUtils.ErrInvalidFlag, fmt.Errorf("flag: %s", arg))
+				return info, fmt.Errorf(errFlagFormat, errUtils.ErrInvalidFlag, arg)
 			}
 			info.JsonSchemaDir = jsonschemaDirFlagParts[1]
 		}
 
 		if arg == cfg.OpaDirFlag {
 			if len(inputArgsAndFlags) <= (i + 1) {
-				return info, errors.Join(errUtils.ErrInvalidFlag, fmt.Errorf("flag: %s", arg))
+				return info, fmt.Errorf(errFlagFormat, errUtils.ErrInvalidFlag, arg)
 			}
 			info.OpaDir = inputArgsAndFlags[i+1]
 		} else if strings.HasPrefix(arg+"=", cfg.OpaDirFlag) {
 			opaDirFlagParts := strings.Split(arg, "=")
 			if len(opaDirFlagParts) != 2 {
-				return info, errors.Join(errUtils.ErrInvalidFlag, fmt.Errorf("flag: %s", arg))
+				return info, fmt.Errorf(errFlagFormat, errUtils.ErrInvalidFlag, arg)
 			}
 			info.OpaDir = opaDirFlagParts[1]
 		}
 
 		if arg == cfg.CueDirFlag {
 			if len(inputArgsAndFlags) <= (i + 1) {
-				return info, errors.Join(errUtils.ErrInvalidFlag, fmt.Errorf("flag: %s", arg))
+				return info, fmt.Errorf(errFlagFormat, errUtils.ErrInvalidFlag, arg)
 			}
 			info.CueDir = inputArgsAndFlags[i+1]
 		} else if strings.HasPrefix(arg+"=", cfg.CueDirFlag) {
 			cueDirFlagParts := strings.Split(arg, "=")
 			if len(cueDirFlagParts) != 2 {
-				return info, errors.Join(errUtils.ErrInvalidFlag, fmt.Errorf("flag: %s", arg))
+				return info, fmt.Errorf(errFlagFormat, errUtils.ErrInvalidFlag, arg)
 			}
 			info.CueDir = cueDirFlagParts[1]
 		}
 
 		if arg == cfg.AtmosManifestJsonSchemaFlag {
 			if len(inputArgsAndFlags) <= (i + 1) {
-				return info, errors.Join(errUtils.ErrInvalidFlag, fmt.Errorf("flag: %s", arg))
+				return info, fmt.Errorf(errFlagFormat, errUtils.ErrInvalidFlag, arg)
 			}
 			info.AtmosManifestJsonSchema = inputArgsAndFlags[i+1]
 		} else if strings.HasPrefix(arg+"=", cfg.AtmosManifestJsonSchemaFlag) {
 			atmosManifestJsonSchemaFlagParts := strings.Split(arg, "=")
 			if len(atmosManifestJsonSchemaFlagParts) != 2 {
-				return info, errors.Join(errUtils.ErrInvalidFlag, fmt.Errorf("flag: %s", arg))
+				return info, fmt.Errorf(errFlagFormat, errUtils.ErrInvalidFlag, arg)
 			}
 			info.AtmosManifestJsonSchema = atmosManifestJsonSchemaFlagParts[1]
 		}
 
 		if arg == cfg.RedirectStdErrFlag {
 			if len(inputArgsAndFlags) <= (i + 1) {
-				return info, errors.Join(errUtils.ErrInvalidFlag, fmt.Errorf("flag: %s", arg))
+				return info, fmt.Errorf(errFlagFormat, errUtils.ErrInvalidFlag, arg)
 			}
 			info.RedirectStdErr = inputArgsAndFlags[i+1]
 		} else if strings.HasPrefix(arg+"=", cfg.RedirectStdErrFlag) {
 			redirectStderrParts := strings.Split(arg, "=")
 			if len(redirectStderrParts) != 2 {
-				return info, errors.Join(errUtils.ErrInvalidFlag, fmt.Errorf("flag: %s", arg))
+				return info, fmt.Errorf(errFlagFormat, errUtils.ErrInvalidFlag, arg)
 			}
 			info.RedirectStdErr = redirectStderrParts[1]
 		}
 
 		if arg == cfg.PlanFileFlag {
 			if len(inputArgsAndFlags) <= (i + 1) {
-				return info, errors.Join(errUtils.ErrInvalidFlag, fmt.Errorf("flag: %s", arg))
+				return info, fmt.Errorf(errFlagFormat, errUtils.ErrInvalidFlag, arg)
 			}
 			info.PlanFile = inputArgsAndFlags[i+1]
 			info.UseTerraformPlan = true
 		} else if strings.HasPrefix(arg+"=", cfg.PlanFileFlag) {
 			planFileFlagParts := strings.Split(arg, "=")
 			if len(planFileFlagParts) != 2 {
-				return info, errors.Join(errUtils.ErrInvalidFlag, fmt.Errorf("flag: %s", arg))
+				return info, fmt.Errorf(errFlagFormat, errUtils.ErrInvalidFlag, arg)
 			}
 			info.PlanFile = planFileFlagParts[1]
 			info.UseTerraformPlan = true
@@ -459,52 +464,52 @@ func processArgsAndFlags(
 
 		if arg == cfg.LogsLevelFlag {
 			if len(inputArgsAndFlags) <= (i + 1) {
-				return info, errors.Join(errUtils.ErrInvalidFlag, fmt.Errorf("flag: %s", arg))
+				return info, fmt.Errorf(errFlagFormat, errUtils.ErrInvalidFlag, arg)
 			}
 			info.LogsLevel = inputArgsAndFlags[i+1]
 		} else if strings.HasPrefix(arg+"=", cfg.LogsLevelFlag) {
 			logsLevelFlagParts := strings.Split(arg, "=")
 			if len(logsLevelFlagParts) != 2 {
-				return info, errors.Join(errUtils.ErrInvalidFlag, fmt.Errorf("flag: %s", arg))
+				return info, fmt.Errorf(errFlagFormat, errUtils.ErrInvalidFlag, arg)
 			}
 			info.LogsLevel = logsLevelFlagParts[1]
 		}
 
 		if arg == cfg.LogsFileFlag {
 			if len(inputArgsAndFlags) <= (i + 1) {
-				return info, errors.Join(errUtils.ErrInvalidFlag, fmt.Errorf("flag: %s", arg))
+				return info, fmt.Errorf(errFlagFormat, errUtils.ErrInvalidFlag, arg)
 			}
 			info.LogsFile = inputArgsAndFlags[i+1]
 		} else if strings.HasPrefix(arg+"=", cfg.LogsFileFlag) {
 			logsFileFlagParts := strings.Split(arg, "=")
 			if len(logsFileFlagParts) != 2 {
-				return info, errors.Join(errUtils.ErrInvalidFlag, fmt.Errorf("flag: %s", arg))
+				return info, fmt.Errorf(errFlagFormat, errUtils.ErrInvalidFlag, arg)
 			}
 			info.LogsFile = logsFileFlagParts[1]
 		}
 
 		if arg == cfg.SettingsListMergeStrategyFlag {
 			if len(inputArgsAndFlags) <= (i + 1) {
-				return info, errors.Join(errUtils.ErrInvalidFlag, fmt.Errorf("flag: %s", arg))
+				return info, fmt.Errorf(errFlagFormat, errUtils.ErrInvalidFlag, arg)
 			}
 			info.SettingsListMergeStrategy = inputArgsAndFlags[i+1]
 		} else if strings.HasPrefix(arg+"=", cfg.SettingsListMergeStrategyFlag) {
 			settingsListMergeStrategyParts := strings.Split(arg, "=")
 			if len(settingsListMergeStrategyParts) != 2 {
-				return info, errors.Join(errUtils.ErrInvalidFlag, fmt.Errorf("flag: %s", arg))
+				return info, fmt.Errorf(errFlagFormat, errUtils.ErrInvalidFlag, arg)
 			}
 			info.SettingsListMergeStrategy = settingsListMergeStrategyParts[1]
 		}
 
 		if arg == cfg.QueryFlag {
 			if len(inputArgsAndFlags) <= (i + 1) {
-				return info, errors.Join(errUtils.ErrInvalidFlag, fmt.Errorf("flag: %s", arg))
+				return info, fmt.Errorf(errFlagFormat, errUtils.ErrInvalidFlag, arg)
 			}
 			info.Query = inputArgsAndFlags[i+1]
 		} else if strings.HasPrefix(arg+"=", cfg.QueryFlag) {
 			parts := strings.Split(arg, "=")
 			if len(parts) != 2 {
-				return info, errors.Join(errUtils.ErrInvalidFlag, fmt.Errorf("flag: %s", arg))
+				return info, fmt.Errorf(errFlagFormat, errUtils.ErrInvalidFlag, arg)
 			}
 			info.Query = parts[1]
 		}
