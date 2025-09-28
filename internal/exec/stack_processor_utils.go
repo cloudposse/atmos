@@ -202,6 +202,38 @@ func ProcessYAMLConfigFile(
 	)
 }
 
+// ShouldProcessFileAsTemplate determines if a file should be processed as a Go template
+// based on its file extension and whether context is provided.
+//
+// Rules:
+// 1. Files with .yaml.tmpl or .yml.tmpl extensions are ALWAYS processed.
+// 2. Files with .tmpl extension are ALWAYS processed.
+// 3. ANY file with provided context is processed as template.
+// 4. All other cases: no template processing.
+func ShouldProcessFileAsTemplate(filePath string, context map[string]any, skipTemplatesProcessing bool) bool {
+	// Never process if explicitly skipped
+	if skipTemplatesProcessing {
+		return false
+	}
+
+	// Always process .yaml.tmpl and .yml.tmpl files
+	if u.IsTemplateFile(filePath) {
+		return true
+	}
+
+	// Always process .tmpl files
+	if strings.HasSuffix(filePath, u.TemplateExtension) {
+		return true
+	}
+
+	// Process any file if context is provided
+	if len(context) > 0 {
+		return true
+	}
+
+	return false
+}
+
 // formatTemplateProcessingError formats template processing errors with proper context.
 func formatTemplateProcessingError(
 	err error,
@@ -297,12 +329,9 @@ func ProcessYAMLConfigFileWithContext(
 
 	stackManifestTemplatesProcessed := stackYamlConfig
 
-	// Process `Go` templates in the imported stack manifest if:
-	// 1. File has .yaml.tmpl or .yml.tmpl extension (always process as template)
-	// 2. OR file has .tmpl extension AND context is provided.
+	// Process `Go` templates in the imported stack manifest based on file type and context.
 	// https://atmos.tools/core-concepts/stacks/imports#go-templates-in-imports
-	if !skipTemplatesProcessingInImports &&
-		(u.IsTemplateFile(filePath) || (strings.HasSuffix(filePath, u.TemplateExtension) && len(context) > 0)) {
+	if ShouldProcessFileAsTemplate(filePath, context, skipTemplatesProcessingInImports) {
 		stackManifestTemplatesProcessed, err = ProcessTmpl(relativeFilePath, stackYamlConfig, context, ignoreMissingTemplateValues)
 		if err != nil {
 			return nil, nil, nil, nil, nil, nil, nil, formatTemplateProcessingError(
