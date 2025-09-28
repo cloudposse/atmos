@@ -133,11 +133,9 @@ func TestGitHubAuthenticatedTransport_RoundTrip(t *testing.T) {
 					t.Errorf("Expected User-Agent header %q, got %q",
 						expectedUA, capturedRequest.Header.Get("User-Agent"))
 				}
-			} else {
-				if capturedRequest.Header.Get("User-Agent") != "" {
-					t.Errorf("Expected no User-Agent header, got %q",
-						capturedRequest.Header.Get("User-Agent"))
-				}
+			} else if capturedRequest.Header.Get("User-Agent") != "" {
+				t.Errorf("Expected no User-Agent header, got %q",
+					capturedRequest.Header.Get("User-Agent"))
 			}
 		})
 	}
