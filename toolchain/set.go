@@ -307,20 +307,38 @@ func SetToolVersion(toolName, version string, scrollSpeed int) error {
 
 // fetchGitHubVersions fetches available versions and titles from GitHub releases.
 func fetchGitHubVersions(owner, repo string) ([]versionItem, error) {
-	// GitHub API endpoint for releases with per_page parameter to get more releases
 	apiURL := fmt.Sprintf("https://api.github.com/repos/%s/%s/releases?per_page=100", owner, repo)
 
-	// Get GitHub token for authenticated requests
-	token := viper.GetString("github-token")
+	resp, err := makeGitHubRequest(apiURL)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
 
-	// Create HTTP client
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("GitHub API returned status %d", resp.StatusCode)
+	}
+
+	releases, err := parseReleases(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	items := transformReleases(releases)
+	if len(items) == 0 {
+		return nil, fmt.Errorf("no non-prerelease versions found for %s/%s", owner, repo)
+	}
+
+	return items, nil
+}
+
+func makeGitHubRequest(apiURL string) (*http.Response, error) {
+	token := viper.GetString("github-token")
 	client := &http.Client{}
 	req, err := http.NewRequest("GET", apiURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
-
-	// Add GitHub token if available
 	if token != "" {
 		req.Header.Set("Authorization", "Bearer "+token)
 	}
@@ -329,66 +347,45 @@ func fetchGitHubVersions(owner, repo string) ([]versionItem, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch releases from GitHub: %w", err)
 	}
-	defer resp.Body.Close()
+	return resp, nil
+}
 
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("GitHub API returned status %d", resp.StatusCode)
-	}
+type release struct {
+	TagName     string `json:"tag_name"`
+	Name        string `json:"name"`
+	Body        string `json:"body"`
+	Prerelease  bool   `json:"prerelease"`
+	PublishedAt string `json:"published_at"`
+}
 
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read response body: %w", err)
-	}
-
-	// Parse the JSON response
-	var releases []struct {
-		TagName     string `json:"tag_name"`
-		Name        string `json:"name"`
-		Body        string `json:"body"`
-		Prerelease  bool   `json:"prerelease"`
-		PublishedAt string `json:"published_at"`
-	}
-
-	if err := json.Unmarshal(body, &releases); err != nil {
+func parseReleases(r io.Reader) ([]release, error) {
+	var releases []release
+	if err := json.NewDecoder(r).Decode(&releases); err != nil {
 		return nil, fmt.Errorf("failed to parse releases JSON: %w", err)
 	}
+	return releases, nil
+}
 
-	// Debug: Print the number of releases fetched
-	fmt.Printf("Fetched %d total releases from GitHub\n", len(releases))
-
-	// Extract all non-prerelease versions with their titles and release notes
+func transformReleases(releases []release) []versionItem {
 	var items []versionItem
-	for _, release := range releases {
-		if !release.Prerelease {
-			// Remove 'v' prefix if present
-			version := strings.TrimPrefix(release.TagName, versionPrefix)
-
-			// Use the release name if available, otherwise use the tag name
-			title := release.Name
-			if title == "" {
-				title = release.TagName
-			}
-
-			// Format release notes
-			releaseNotes := formatReleaseNotes(release.Name, release.TagName, release.Body, release.PublishedAt)
-
-			items = append(items, versionItem{
-				version:      version,
-				title:        title,
-				desc:         fmt.Sprintf("Version %s", version),
-				releaseNotes: releaseNotes,
-			})
+	for _, r := range releases {
+		if r.Prerelease {
+			continue
 		}
+		version := strings.TrimPrefix(r.TagName, versionPrefix)
+		title := r.Name
+		if title == "" {
+			title = r.TagName
+		}
+		notes := formatReleaseNotes(r.Name, r.TagName, r.Body, r.PublishedAt)
+		items = append(items, versionItem{
+			version:      version,
+			title:        title,
+			desc:         fmt.Sprintf("Version %s", version),
+			releaseNotes: notes,
+		})
 	}
-
-	// Debug: Print the number of non-prerelease versions
-	fmt.Printf("Found %d non-prerelease versions\n", len(items))
-
-	if len(items) == 0 {
-		return nil, fmt.Errorf("no non-prerelease versions found for %s/%s", owner, repo)
-	}
-
-	return items, nil
+	return items
 }
 
 // formatReleaseNotes formats the release notes for display.
