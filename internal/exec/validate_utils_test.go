@@ -175,7 +175,7 @@ This is not valid Rego syntax
 			expectError:    true,
 		},
 		{
-			name: "Context timeout is handled",
+			name: "Empty errors array means validation passes",
 			data: map[string]any{
 				"test": "data",
 			},
@@ -183,11 +183,10 @@ This is not valid Rego syntax
 			schemaText: `
 package atmos
 
+# No errors defined, so validation passes.
 errors[msg] {
-	# Simulate a long-running operation.
-	# In real tests, we'd need a way to force a timeout.
-	true
-	msg := "test"
+	false
+	msg := "This will never trigger"
 }
 `,
 			timeoutSeconds: 0, // Will use default of 20 seconds.
