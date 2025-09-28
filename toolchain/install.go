@@ -234,7 +234,8 @@ func buildToolList(installer *Installer, toolVersions *ToolVersions) []struct {
 
 func installOrSkipTool(installer *Installer, tool struct {
 	tool, version, owner, repo string
-}, reinstallFlag bool) (string, error) {
+}, reinstallFlag bool,
+) (string, error) {
 	_, err := installer.FindBinaryPath(tool.owner, tool.repo, tool.version)
 	if err == nil && !reinstallFlag {
 		return "skipped", nil
