@@ -5,12 +5,12 @@ import (
 	"os"
 	"path/filepath"
 
-	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/mitchellh/mapstructure"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -33,7 +33,7 @@ func ExecuteValidateComponentCmd(cmd *cobra.Command, args []string) (string, str
 
 	componentName := args[0]
 
-	// Initialize spinner
+	// Initialize spinner.
 	message := fmt.Sprintf("Validating Atmos Component: %s", componentName)
 	p := NewSpinner(message)
 	spinnerDone := make(chan struct{})

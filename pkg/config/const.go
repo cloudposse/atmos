@@ -75,6 +75,7 @@ const (
 	InheritanceSectionName            = "inheritance"
 	IntegrationsSectionName           = "integrations"
 	GithubSectionName                 = "github"
+	ProcessEnvSectionName             = "process_env"
 	CliArgsSectionName                = "cli_args"
 	TerraformCliVarsSectionName       = "tf_cli_vars"
 	TerraformCliArgsEnvSectionName    = "env_tf_cli_args"
