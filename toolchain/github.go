@@ -85,7 +85,7 @@ func (g *GitHubAPIClient) FetchReleases(owner, repo string, limit int) ([]string
 	for _, release := range releases {
 		if !release.Prerelease {
 			// Remove 'v' prefix if present
-			version := strings.TrimPrefix(release.TagName, "v")
+			version := strings.TrimPrefix(release.TagName, versionPrefix)
 			versions = append(versions, version)
 		}
 	}

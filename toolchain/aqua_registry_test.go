@@ -491,7 +491,7 @@ func TestAquaRegistry_GetAvailableVersions(t *testing.T) {
 	// All versions should be valid semver
 	for _, version := range versions {
 		assert.NotEmpty(t, version)
-		assert.False(t, strings.HasPrefix(version, "v"))
+		assert.False(t, strings.HasPrefix(version, versionPrefix))
 	}
 }
 
