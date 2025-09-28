@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
 	"path"
@@ -18,6 +19,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/internal/gcp"
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -124,7 +126,7 @@ func ReadTerraformBackendGCS(
 
 	// Extract the GCS-specific configuration section (same pattern as stack processor).
 	gcsBackend := map[string]any{}
-	if gcsSection, ok := backend["gcs"].(map[string]any); ok {
+	if gcsSection, ok := backend[cfg.BackendTypeGCS].(map[string]any); ok {
 		gcsBackend = gcsSection
 	} else {
 		// If no nested gcs section, assume the backend config is already flattened (e.g., from stack processor).
@@ -212,9 +214,9 @@ func ReadTerraformBackendGCSInternal(
 		reader, err := objectHandle.NewReader(ctx)
 		if err != nil {
 			cancel() // Cancel immediately after use
-					// Check if the error is because the object doesn't exist.
-		// If the state file does not exist (the component in the stack has not been provisioned yet), return a `nil` result and no error.
-			if status.Code(err) == codes.NotFound {
+			// Check if the error is because the object doesn't exist.
+			// If the state file does not exist (the component in the stack has not been provisioned yet), return a `nil` result and no error.
+			if errors.Is(err, storage.ErrObjectNotExist) || status.Code(err) == codes.NotFound {
 				log.Debug("Terraform state file doesn't exist in the GCS bucket; returning 'null'", "file", tfStateFilePath, "bucket", bucket)
 				return nil, nil
 			}
