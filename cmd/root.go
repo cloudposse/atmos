@@ -22,6 +22,7 @@ import (
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/pager"
+	"github.com/cloudposse/atmos/pkg/profiler"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/telemetry"
 	"github.com/cloudposse/atmos/pkg/utils"
@@ -35,6 +36,9 @@ const (
 // atmosConfig This is initialized before everything in the Execute function. So we can directly use this.
 var atmosConfig schema.AtmosConfiguration
 
+// profilerServer holds the global profiler server instance.
+var profilerServer *profiler.Server
+
 // logFileHandle holds the opened log file for the lifetime of the program.
 var logFileHandle *os.File
 
@@ -45,14 +49,14 @@ var RootCmd = &cobra.Command{
 	Long:               `Atmos is a universal tool for DevOps and cloud automation used for provisioning, managing and orchestrating workflows across various toolchains`,
 	FParseErrWhitelist: cobra.FParseErrWhitelist{UnknownFlags: true},
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {
-		// Determine if the command is a help command or if the help flag is set
+		// Determine if the command is a help command or if the help flag is set.
 		isHelpCommand := cmd.Name() == "help"
 		helpFlag := cmd.Flags().Changed("help")
 
 		isHelpRequested := isHelpCommand || helpFlag
 
 		if isHelpRequested {
-			// Do not silence usage or errors when help is invoked
+			// Do not silence usage or errors when help is invoked.
 			cmd.SilenceUsage = false
 			cmd.SilenceErrors = false
 		} else {
@@ -60,11 +64,11 @@ var RootCmd = &cobra.Command{
 			cmd.SilenceErrors = true
 		}
 		configAndStacksInfo := schema.ConfigAndStacksInfo{}
-		// Only validate the config, don't store it yet since commands may need to add more info
-		_, err := cfg.InitCliConfig(configAndStacksInfo, false)
+		// Load the config (includes env var bindings); don't store globally yet.
+		tmpConfig, err := cfg.InitCliConfig(configAndStacksInfo, false)
 		if err != nil {
 			if errors.Is(err, cfg.NotFound) {
-				// For help commands or when help flag is set, we don't want to show the error
+				// For help commands or when help flag is set, we don't want to show the error.
 				if !isHelpRequested {
 					log.Warn(err.Error())
 				}
@@ -72,12 +76,27 @@ var RootCmd = &cobra.Command{
 				errUtils.CheckErrorPrintAndExit(err, "", "")
 			}
 		}
+
+		// Setup profiler before command execution (but skip for help commands).
+		if !isHelpRequested {
+			if setupErr := setupProfiler(cmd, &tmpConfig); setupErr != nil {
+				errUtils.CheckErrorPrintAndExit(setupErr, "Failed to setup profiler", "")
+			}
+		}
+	},
+	PersistentPostRun: func(cmd *cobra.Command, args []string) {
+		// Stop profiler after command execution.
+		if profilerServer != nil {
+			if stopErr := profilerServer.Stop(); stopErr != nil {
+				log.Error("Failed to stop profiler", "error", stopErr)
+			}
+		}
 	},
 	RunE: func(cmd *cobra.Command, args []string) error {
-		// Check Atmos configuration
+		// Check Atmos configuration.
 		checkAtmosConfig()
 
-		// Print a styled Atmos logo to the terminal
+		// Print a styled Atmos logo to the terminal.
 		fmt.Println()
 		err := tuiUtils.PrintStyledText("ATMOS")
 		if err != nil {
@@ -89,6 +108,7 @@ var RootCmd = &cobra.Command{
 	},
 }
 
+// setupLogger configures the global logger based on the provided Atmos configuration.
 func setupLogger(atmosConfig *schema.AtmosConfiguration) {
 	switch atmosConfig.Logs.Level {
 	case "Trace":
@@ -105,19 +125,19 @@ func setupLogger(atmosConfig *schema.AtmosConfiguration) {
 		log.SetLevel(log.WarnLevel)
 	}
 
-	// Always set up styles to ensure trace level shows as "TRCE"
+	// Always set up styles to ensure trace level shows as "TRCE".
 	styles := log.DefaultStyles()
 
-	// Set trace level to show "TRCE" instead of being blank/DEBU
+	// Set trace level to show "TRCE" instead of being blank/DEBU.
 	if debugStyle, ok := styles.Levels[log.DebugLevel]; ok {
 		// Copy debug style but set the string to "TRCE"
 		styles.Levels[log.TraceLevel] = debugStyle.SetString("TRCE")
 	} else {
-		// Fallback if debug style doesn't exist
+		// Fallback if debug style doesn't exist.
 		styles.Levels[log.TraceLevel] = lipgloss.NewStyle().SetString("TRCE")
 	}
 
-	// If colors are disabled, clear the colors but keep the level strings
+	// If colors are disabled, clear the colors but keep the level strings.
 	if !atmosConfig.Settings.Terminal.IsColorEnabled() {
 		clearedStyles := &log.Styles{}
 		clearedStyles.Levels = make(map[log.Level]lipgloss.Style)
@@ -134,7 +154,7 @@ func setupLogger(atmosConfig *schema.AtmosConfiguration) {
 	} else {
 		log.SetStyles(styles)
 	}
-	// Only set output if a log file is configured
+	// Only set output if a log file is configured.
 	if atmosConfig.Logs.File != "" {
 		var output io.Writer
 
@@ -177,12 +197,188 @@ func Cleanup() {
 	cleanupLogFile()
 }
 
+// setupProfiler initializes and starts the profiler if enabled.
+func setupProfiler(cmd *cobra.Command, atmosConfig *schema.AtmosConfiguration) error {
+	// Build profiler configuration from multiple sources.
+	profilerConfig, err := buildProfilerConfig(cmd, atmosConfig)
+	if err != nil {
+		return err
+	}
+
+	// Skip when not enabled (server) and no file-based profiling requested.
+	if !profilerConfig.Enabled && profilerConfig.File == "" {
+		return nil
+	}
+
+	// Create and start the profiler.
+	profilerServer = profiler.New(profilerConfig)
+	if err := profilerServer.Start(); err != nil {
+		return fmt.Errorf("%w: failed to start profiler: %v", errUtils.ErrProfilerStart, err)
+	}
+
+	return nil
+}
+
+// buildProfilerConfig constructs profiler configuration from environment and CLI flags.
+func buildProfilerConfig(cmd *cobra.Command, atmosConfig *schema.AtmosConfiguration) (profiler.Config, error) {
+	// Start with environment/config values or defaults.
+	profilerConfig := getBaseProfilerConfig(atmosConfig)
+
+	// Apply environment variable overrides.
+	if err := applyProfilerEnvironmentOverrides(&profilerConfig, atmosConfig); err != nil {
+		return profilerConfig, err
+	}
+
+	// Apply CLI flag overrides.
+	if err := applyCLIFlagOverrides(&profilerConfig, cmd); err != nil {
+		return profilerConfig, err
+	}
+
+	return profilerConfig, nil
+}
+
+// getBaseProfilerConfig returns the base configuration from the config file or defaults.
+func getBaseProfilerConfig(atmosConfig *schema.AtmosConfiguration) profiler.Config {
+	profilerConfig := atmosConfig.Profiler
+
+	// Check if the profiler config is completely empty.
+	isEmpty := profilerConfig.Host == "" &&
+		profilerConfig.Port == 0 &&
+		profilerConfig.File == "" &&
+		profilerConfig.ProfileType == "" &&
+		!profilerConfig.Enabled
+
+	if isEmpty {
+		return profiler.DefaultConfig()
+	}
+
+	// Default individual fields independently to avoid partial configurations.
+	defaultConfig := profiler.DefaultConfig()
+	if profilerConfig.Host == "" {
+		profilerConfig.Host = defaultConfig.Host
+	}
+	if profilerConfig.Port == 0 {
+		profilerConfig.Port = defaultConfig.Port
+	}
+	if profilerConfig.ProfileType == "" {
+		profilerConfig.ProfileType = defaultConfig.ProfileType
+	}
+
+	return profilerConfig
+}
+
+// applyProfilerEnvironmentOverrides applies environment variable values to profiler config.
+func applyProfilerEnvironmentOverrides(config *profiler.Config, atmosConfig *schema.AtmosConfiguration) error {
+	if atmosConfig.Profiler.Host != "" {
+		config.Host = atmosConfig.Profiler.Host
+	}
+	if atmosConfig.Profiler.Port != 0 {
+		config.Port = atmosConfig.Profiler.Port
+	}
+	if atmosConfig.Profiler.File != "" {
+		config.File = atmosConfig.Profiler.File
+		// Enable profiler automatically when a file is specified via ENV var.
+		config.Enabled = true
+	}
+	if atmosConfig.Profiler.ProfileType != "" {
+		parsedType, parseErr := profiler.ParseProfileType(string(atmosConfig.Profiler.ProfileType))
+		if parseErr != nil {
+			return fmt.Errorf("%w: invalid ATMOS_PROFILE_TYPE %q: %v", errUtils.ErrParseFlag, atmosConfig.Profiler.ProfileType, parseErr)
+		}
+		config.ProfileType = parsedType
+	}
+	if atmosConfig.Profiler.Enabled {
+		config.Enabled = atmosConfig.Profiler.Enabled
+	}
+
+	return nil
+}
+
+// applyCLIFlagOverrides applies CLI flag values to profiler config.
+func applyCLIFlagOverrides(config *profiler.Config, cmd *cobra.Command) error {
+	applyBoolFlag(cmd, "profiler-enabled", func(val bool) { config.Enabled = val })
+	applyIntFlag(cmd, "profiler-port", func(val int) { config.Port = val })
+	applyStringFlag(cmd, "profiler-host", func(val string) { config.Host = val })
+
+	if err := applyProfileFileFlag(config, cmd); err != nil {
+		return err
+	}
+
+	if err := applyProfileTypeFlag(config, cmd); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// applyBoolFlag applies a boolean CLI flag to the config.
+func applyBoolFlag(cmd *cobra.Command, flagName string, setter func(bool)) {
+	if cmd.Flags().Changed(flagName) {
+		if val, err := cmd.Flags().GetBool(flagName); err == nil {
+			setter(val)
+		}
+	}
+}
+
+// applyIntFlag applies an integer CLI flag to the config.
+func applyIntFlag(cmd *cobra.Command, flagName string, setter func(int)) {
+	if cmd.Flags().Changed(flagName) {
+		if val, err := cmd.Flags().GetInt(flagName); err == nil {
+			setter(val)
+		}
+	}
+}
+
+// applyStringFlag applies a string CLI flag to the config.
+func applyStringFlag(cmd *cobra.Command, flagName string, setter func(string)) {
+	if cmd.Flags().Changed(flagName) {
+		if val, err := cmd.Flags().GetString(flagName); err == nil {
+			setter(val)
+		}
+	}
+}
+
+// applyProfileFileFlag applies the profile-file flag with auto-enable logic.
+func applyProfileFileFlag(config *profiler.Config, cmd *cobra.Command) error {
+	if cmd.Flags().Changed("profile-file") {
+		file, err := cmd.Flags().GetString("profile-file")
+		if err == nil {
+			config.File = file
+			// Enable profiler automatically when file is specified
+			if file != "" {
+				config.Enabled = true
+			}
+		}
+	}
+	return nil
+}
+
+// applyProfileTypeFlag applies the profile-type flag with validation.
+func applyProfileTypeFlag(config *profiler.Config, cmd *cobra.Command) error {
+	if !cmd.Flags().Changed("profile-type") {
+		return nil
+	}
+
+	profileType, err := cmd.Flags().GetString("profile-type")
+	if err != nil {
+		return fmt.Errorf("%w: failed to get profile-type flag: %v", errUtils.ErrInvalidFlag, err)
+	}
+
+	parsedType, parseErr := profiler.ParseProfileType(profileType)
+	if parseErr != nil {
+		return fmt.Errorf("%w: invalid profile type '%s': %v", errUtils.ErrParseFlag, profileType, parseErr)
+	}
+
+	config.ProfileType = parsedType
+	return nil
+}
+
 // Execute adds all child commands to the root command and sets flags appropriately.
 // This is called by main.main(). It only needs to happen once to the RootCmd.
 func Execute() error {
 	// InitCliConfig finds and merges CLI configurations in the following order:
 	// system dir, home dir, current dir, ENV vars, command-line arguments
-	// Here we need the custom commands from the config
+	// Here we need the custom commands from the config.
 	var initErr error
 	atmosConfig, initErr = cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
 
@@ -197,11 +393,11 @@ func Execute() error {
 		}
 	}
 
-	// Set the log level for the charmbracelet/log package based on the atmosConfig
+	// Set the log level for the charmbracelet/log package based on the atmosConfig.
 	setupLogger(&atmosConfig)
 
 	var err error
-	// If CLI configuration was found, process its custom commands and command aliases
+	// If CLI configuration was found, process its custom commands and command aliases.
 	if initErr == nil {
 		err = processCustomCommands(atmosConfig, atmosConfig.Commands, RootCmd, true)
 		if err != nil {
@@ -214,9 +410,10 @@ func Execute() error {
 		}
 	}
 
-	// Cobra for some reason handles root command in such a way that custom usage and help command don't work as per expectations
+	// Cobra for some reason handles root command in such a way that custom usage and help command don't work as per expectations.
 	RootCmd.SilenceErrors = true
 	cmd, err := RootCmd.ExecuteC()
+
 	telemetry.CaptureCmd(cmd, err)
 	if err != nil {
 		if strings.Contains(err.Error(), "unknown command") {
@@ -227,14 +424,15 @@ func Execute() error {
 	return err
 }
 
+// getInvalidCommandName extracts the invalid command name from an error message.
 func getInvalidCommandName(input string) string {
-	// Regular expression to match the command name inside quotes
+	// Regular expression to match the command name inside quotes.
 	re := regexp.MustCompile(`unknown command "([^"]+)"`)
 
-	// Find the match
+	// Find the match.
 	match := re.FindStringSubmatch(input)
 
-	// Check if a match is found
+	// Check if a match is found.
 	if len(match) > 1 {
 		command := match[1] // The first capturing group contains the command
 		return command
@@ -243,7 +441,7 @@ func getInvalidCommandName(input string) string {
 }
 
 func init() {
-	// Add the template function for wrapped flag usages
+	// Add the template function for wrapped flag usages.
 	cobra.AddTemplateFunc("wrappedFlagUsages", templates.WrappedFlagUsages)
 
 	RootCmd.PersistentFlags().String("redirect-stderr", "", "File descriptor to redirect `stderr` to. "+
@@ -256,9 +454,16 @@ func init() {
 	RootCmd.PersistentFlags().StringSlice("config-path", []string{}, "Paths to configuration directories (comma-separated or repeated flag)")
 	RootCmd.PersistentFlags().Bool("no-color", false, "Disable color output")
 	RootCmd.PersistentFlags().String("pager", "", "Enable pager for output (--pager or --pager=true to enable, --pager=false to disable, --pager=less to use specific pager)")
-	// Set NoOptDefVal so --pager without value means "true"
+	// Set NoOptDefVal so --pager without value means "true".
 	RootCmd.PersistentFlags().Lookup("pager").NoOptDefVal = "true"
-	// Set custom usage template
+	RootCmd.PersistentFlags().Bool("profiler-enabled", false, "Enable pprof profiling server")
+	RootCmd.PersistentFlags().Int("profiler-port", profiler.DefaultProfilerPort, "Port for pprof profiling server")
+	RootCmd.PersistentFlags().String("profiler-host", "localhost", "Host for pprof profiling server")
+	RootCmd.PersistentFlags().String("profile-file", "", "Write profiling data to file instead of starting server")
+	RootCmd.PersistentFlags().String("profile-type", "cpu",
+		"Type of profile to collect when using --profile-file. "+
+			"Options: cpu, heap, allocs, goroutine, block, mutex, threadcreate, trace")
+	// Set custom usage template.
 	err := templates.SetCustomUsageFunc(RootCmd)
 	if err != nil {
 		errUtils.CheckErrorPrintAndExit(err, "", "")
@@ -267,6 +472,7 @@ func init() {
 	initCobraConfig()
 }
 
+// initCobraConfig initializes Cobra command configuration and styling.
 func initCobraConfig() {
 	RootCmd.SetOut(os.Stdout)
 	styles := boa.DefaultStyles()
@@ -295,7 +501,7 @@ func initCobraConfig() {
 			}
 			showUsageAndExit(command, arguments)
 		}
-		// Print a styled Atmos logo to the terminal
+		// Print a styled Atmos logo to the terminal.
 		if command.Use != "atmos" || command.Flags().Changed("help") {
 			var buf bytes.Buffer
 			var err error
@@ -316,12 +522,12 @@ func initCobraConfig() {
 				errUtils.CheckErrorPrintAndExit(err, "", "")
 			}
 
-			// Check if pager should be enabled based on flag, env var, or config
+			// Check if pager should be enabled based on flag, env var, or config.
 			pagerEnabled := atmosConfig.Settings.Terminal.IsPagerEnabled()
 
-			// Check if --pager flag was explicitly set
+			// Check if --pager flag was explicitly set.
 			if pagerFlag, err := command.Flags().GetString("pager"); err == nil && pagerFlag != "" {
-				// Handle --pager flag values using switch for better readability
+				// Handle --pager flag values using switch for better readability.
 				switch pagerFlag {
 				case "true", "on", "yes", "1":
 					pagerEnabled = true
