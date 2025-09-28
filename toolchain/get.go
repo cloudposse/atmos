@@ -21,7 +21,7 @@ func ListToolVersions(showAll bool, limit int, toolName string) error {
 	}
 	resolvedKey := owner + "/" + repo
 
-	versions, defaultVersion, err := getVersions(showAll, limit, owner, repo, toolName, resolvedKey, filePath)
+	versions, defaultVersion, err := getVersions(versionOptions{showAll, limit, owner, repo, toolName, resolvedKey, filePath})
 	if err != nil {
 		return err
 	}
@@ -34,30 +34,40 @@ func ListToolVersions(showAll bool, limit int, toolName string) error {
 	return nil
 }
 
-func getVersions(showAll bool, limit int, owner, repo, toolName, resolvedKey, filePath string) ([]string, string, error) {
-	if showAll {
-		allVersions, err := fetchAllGitHubVersions(owner, repo, limit)
+type versionOptions struct {
+	ShowAll     bool
+	Limit       int
+	Owner       string
+	Repo        string
+	ToolName    string
+	ResolvedKey string
+	FilePath    string
+}
+
+func getVersions(opts versionOptions) ([]string, string, error) {
+	if opts.ShowAll {
+		allVersions, err := fetchAllGitHubVersions(opts.Owner, opts.Repo, opts.Limit)
 		if err != nil {
 			return nil, "", fmt.Errorf("failed to fetch versions from GitHub: %w", err)
 		}
-		defaultVersion := getDefaultFromFile(filePath, resolvedKey, toolName)
+		defaultVersion := getDefaultFromFile(opts.FilePath, opts.ResolvedKey, opts.ToolName)
 		return allVersions, defaultVersion, nil
 	}
 
-	toolVersions, err := LoadToolVersions(filePath)
+	toolVersions, err := LoadToolVersions(opts.FilePath)
 	if err != nil {
 		return nil, "", fmt.Errorf("failed to load .tool-versions: %w", err)
 	}
 
-	fileVersions, exists := toolVersions.Tools[resolvedKey]
+	fileVersions, exists := toolVersions.Tools[opts.ResolvedKey]
 	if !exists {
-		fileVersions, exists = toolVersions.Tools[toolName]
+		fileVersions, exists = toolVersions.Tools[opts.ToolName]
 		if !exists {
-			return nil, "", fmt.Errorf("tool '%s' not found in %s", toolName, filePath)
+			return nil, "", fmt.Errorf("tool '%s' not found in %s", opts.ToolName, opts.FilePath)
 		}
 	}
 	if len(fileVersions) == 0 {
-		return nil, "", fmt.Errorf("no versions configured for tool '%s' in %s", toolName, filePath)
+		return nil, "", fmt.Errorf("no versions configured for tool '%s' in %s", opts.ToolName, opts.FilePath)
 	}
 	return fileVersions, fileVersions[0], nil
 }
