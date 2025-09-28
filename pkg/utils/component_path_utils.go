@@ -52,13 +52,8 @@ func preserveVolume(cleanedPath, volume, originalPath string) string {
 	}
 
 	// Check if it's a UNC path (starts with \\)
-	if len(volume) >= 2 && volume[0] == '\\' && volume[1] == '\\' {
-		// Remove the volume from the cleaned path if it got duplicated
-		cleanedPathWithoutVolume := cleanedPath
-		if len(cleanedPath) > len(volume) && cleanedPath[:len(volume)] == volume {
-			cleanedPathWithoutVolume = cleanedPath[len(volume):]
-		}
-		return volume + cleanedPathWithoutVolume
+	if isUNCPath(volume) {
+		return handleUNCPath(cleanedPath, volume)
 	}
 
 	// For regular volumes (like C:), join properly if path is not absolute
@@ -66,6 +61,33 @@ func preserveVolume(cleanedPath, volume, originalPath string) string {
 		return filepath.Join(volume, cleanedPath)
 	}
 	return cleanedPath
+}
+
+// isUNCPath checks if the volume is a UNC path.
+func isUNCPath(volume string) bool {
+	return len(volume) >= 2 && volume[0] == '\\' && volume[1] == '\\'
+}
+
+// handleUNCPath processes UNC paths to avoid duplication.
+func handleUNCPath(cleanedPath, volume string) string {
+	// Strip the UNC prefix from cleanedPath if it starts with the same volume
+	if !strings.HasPrefix(cleanedPath, volume) {
+		return cleanedPath
+	}
+
+	remainder := cleanedPath[len(volume):]
+	// If nothing remains after stripping, return just the volume
+	if remainder == "" {
+		return volume
+	}
+
+	// If remainder starts with separator, trim it to avoid double separator
+	remainder = strings.TrimPrefix(remainder, string(os.PathSeparator))
+	// Only add separator if we have a non-empty remainder
+	if remainder != "" {
+		return filepath.Join(volume, remainder)
+	}
+	return volume
 }
 
 // cleanDuplicatedPath detects and removes path duplication patterns.

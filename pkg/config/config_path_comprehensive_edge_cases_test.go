@@ -14,11 +14,11 @@ import (
 // TestPathJoining_ComprehensiveEdgeCases tests ALL combinations of absolute/relative paths
 // with and without dot-slash prefixes, trailing slashes, etc.
 func TestPathJoining_ComprehensiveEdgeCases(t *testing.T) {
-	// Test matrix: every combination of path types
+	// Test matrix: every combination of path types.
 	tests := []struct {
 		name                  string
 		atmosBasePath         string // ATMOS_BASE_PATH or base_path in config
-		componentBasePath     string // terraform.base_path, helmfile.base_path, etc.
+		componentBasePath     string // terraform.base_path, helmfile.base_path, etc
 		componentName         string // The actual component
 		description           string
 		expectedPattern       string // What the result should contain
@@ -329,14 +329,14 @@ func TestPathJoining_ComprehensiveEdgeCases(t *testing.T) {
 				t.Skipf("Skipping Windows-specific test on non-Windows")
 			}
 
-			// Test production path logic using utils.JoinPath
+			// Test production path logic using utils.JoinPath.
 			base := u.JoinPath(tt.atmosBasePath, tt.componentBasePath)
 			joinedPath := u.JoinPath(base, tt.componentName)
 			t.Logf("utils.JoinPath(%q, %q) -> JoinPath(%q, %q) = %q",
 				tt.atmosBasePath, tt.componentBasePath, base, tt.componentName, joinedPath)
 
-			// All cases should avoid duplication now with utils.JoinPath
-			// Check that paths don't have duplication patterns
+			// All cases should avoid duplication now with utils.JoinPath.
+			// Check that paths don't have duplication patterns.
 			assert.NotContains(t, joinedPath, string([]byte{os.PathSeparator, os.PathSeparator}),
 				"Path should not contain double separators")
 			assert.NotContains(t, joinedPath, "//",
@@ -344,17 +344,17 @@ func TestPathJoining_ComprehensiveEdgeCases(t *testing.T) {
 			assert.NotContains(t, joinedPath, "/./",
 				"Path should not contain /./ pattern (should be cleaned)")
 
-			// Clean path should equal joined path
+			// Clean path should equal joined path.
 			cleanPath := filepath.Clean(joinedPath)
 			assert.Equal(t, cleanPath, joinedPath,
 				"utils.JoinPath should produce a clean path")
 
-			// Test filepath.Abs behavior
+			// Test filepath.Abs behavior.
 			absPath, err := filepath.Abs(joinedPath)
 			require.NoError(t, err)
 			t.Logf("filepath.Abs(%q) = %q", joinedPath, absPath)
 
-			// Check that expected pattern is in the result
+			// Check that expected pattern is in the result.
 			if tt.expectedPattern != "" && !tt.shouldHaveDuplication {
 				assert.Contains(t, absPath, filepath.Clean(tt.expectedPattern),
 					"Result should contain expected pattern")
@@ -414,11 +414,11 @@ func TestCorrectPathJoining_Solution(t *testing.T) {
 				t.Skipf("Skipping Unix-specific test on Windows")
 			}
 
-			// Correct path joining logic
+			// Correct path joining logic.
 			var result string
 
-			// First, handle component base path
-			// Use the production helpers instead of reimplementing
+			// First, handle component base path.
+			// Use the production helpers instead of reimplementing.
 			base := u.JoinPath(tt.atmosBasePath, tt.componentBasePath)
 			result = u.JoinPath(base, tt.componentName)
 			result = filepath.Clean(result)
@@ -427,7 +427,7 @@ func TestCorrectPathJoining_Solution(t *testing.T) {
 			assert.Equal(t, tt.expectedResult, result,
 				"Correctly joined path should match expected")
 
-			// Verify no duplication
+			// Verify no duplication.
 			assert.NotContains(t, result, "//",
 				"Should not contain double slashes")
 			assert.NotContains(t, result, "/./",
@@ -495,7 +495,7 @@ func TestEnvironmentVariablePathCombinations(t *testing.T) {
 				t.Skipf("Skipping Unix-specific test on Windows")
 			}
 
-			// Save and restore environment variable
+			// Save and restore environment variable.
 			oldEnv := os.Getenv("ATMOS_BASE_PATH")
 			defer func() {
 				if oldEnv != "" {
@@ -505,7 +505,7 @@ func TestEnvironmentVariablePathCombinations(t *testing.T) {
 				}
 			}()
 
-			// Set test environment variable
+			// Set test environment variable.
 			if tt.envBasePathValue != "" {
 				err := os.Setenv("ATMOS_BASE_PATH", tt.envBasePathValue)
 				require.NoError(t, err)
@@ -513,18 +513,18 @@ func TestEnvironmentVariablePathCombinations(t *testing.T) {
 				os.Unsetenv("ATMOS_BASE_PATH")
 			}
 
-			// Simulate path joining with env variable
+			// Simulate path joining with env variable.
 			basePath := tt.envBasePathValue
 			if basePath == "" {
-				basePath = "." // Default if not set
+				basePath = "." // Default if not set.
 			}
 
-			// Use production helpers to process paths
+			// Use production helpers to process paths.
 			base := u.JoinPath(basePath, tt.componentBasePath)
 			joinedPath := u.JoinPath(base, tt.componentName)
 			t.Logf("With ATMOS_BASE_PATH=%q: %q", tt.envBasePathValue, joinedPath)
 
-			// Clean and check
+			// Clean and check.
 			cleanPath := filepath.Clean(joinedPath)
 			if tt.expectedPattern != "" {
 				assert.Contains(t, cleanPath, filepath.Clean(tt.expectedPattern),
