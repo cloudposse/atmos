@@ -192,5 +192,12 @@
     "file_path": "",
     "tools_dir": "",
     "tools_config_file": ""
+  },
+  "profiler": {
+    "enabled": false,
+    "port": 0,
+    "host": "",
+    "file": "",
+    "profile_type": ""
   }
 }
