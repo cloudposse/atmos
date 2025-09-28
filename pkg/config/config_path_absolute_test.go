@@ -81,8 +81,8 @@ func TestInitCliConfig_AbsolutePathHandling(t *testing.T) {
 				},
 			}
 
-			// Call the actual atmosConfigAbsolutePaths function (from InitCliConfig)
-			err := atmosConfigAbsolutePaths(&atmosConfig)
+			// Call the actual AtmosConfigAbsolutePaths function (from InitCliConfig)
+			err := AtmosConfigAbsolutePaths(&atmosConfig)
 			require.NoError(t, err)
 
 			t.Logf("Input: BasePath=%q, Terraform.BasePath=%q", tt.basePath, tt.terraformBasePath)

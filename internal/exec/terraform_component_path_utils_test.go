@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/stretchr/testify/assert"
@@ -19,7 +20,6 @@ func TestConstructTerraformComponentWorkingDir_AbsolutePathHandling(t *testing.T
 		name                      string
 		basePath                  string
 		terraformBasePath         string
-		terraformDirAbsolutePath  string
 		componentFolderPrefix     string
 		finalComponent            string
 		expectedPathContains      string
@@ -27,10 +27,9 @@ func TestConstructTerraformComponentWorkingDir_AbsolutePathHandling(t *testing.T
 	}{
 		{
 			name: "GitHub Actions environment with absolute BasePath",
-			// Simulating the GitHub Actions environment where BasePath is already absolute
+			// Testing the GitHub Actions environment where BasePath is already absolute
 			basePath:                  "/home/runner/_work/infrastructure/infrastructure/atmos",
 			terraformBasePath:         "components/terraform",
-			terraformDirAbsolutePath:  "/home/runner/_work/infrastructure/infrastructure/atmos/components/terraform",
 			componentFolderPrefix:     "",
 			finalComponent:            "iam-role-legacy",
 			expectedPathContains:      "components/terraform/iam-role-legacy",
@@ -40,7 +39,6 @@ func TestConstructTerraformComponentWorkingDir_AbsolutePathHandling(t *testing.T
 			name:                      "GitHub Actions with component folder prefix",
 			basePath:                  "/home/runner/_work/infrastructure/infrastructure",
 			terraformBasePath:         "atmos/components/terraform",
-			terraformDirAbsolutePath:  "/home/runner/_work/infrastructure/infrastructure/atmos/components/terraform",
 			componentFolderPrefix:     "aws",
 			finalComponent:            "vpc",
 			expectedPathContains:      "components/terraform/aws/vpc",
@@ -50,7 +48,6 @@ func TestConstructTerraformComponentWorkingDir_AbsolutePathHandling(t *testing.T
 			name:                      "Relative BasePath (normal case)",
 			basePath:                  ".",
 			terraformBasePath:         "components/terraform",
-			terraformDirAbsolutePath:  "", // Will be constructed
 			componentFolderPrefix:     "",
 			finalComponent:            "vpc",
 			expectedPathContains:      "components/terraform/vpc",
@@ -60,7 +57,6 @@ func TestConstructTerraformComponentWorkingDir_AbsolutePathHandling(t *testing.T
 			name:                      "Complex absolute path with dots",
 			basePath:                  "/home/runner/_work/infrastructure/infrastructure/./atmos",
 			terraformBasePath:         "components/terraform",
-			terraformDirAbsolutePath:  "/home/runner/_work/infrastructure/infrastructure/atmos/components/terraform",
 			componentFolderPrefix:     "",
 			finalComponent:            "test-component",
 			expectedPathContains:      "components/terraform/test-component",
@@ -76,14 +72,20 @@ func TestConstructTerraformComponentWorkingDir_AbsolutePathHandling(t *testing.T
 			}
 
 			atmosConfig := &schema.AtmosConfiguration{
-				BasePath:                 tt.basePath,
-				TerraformDirAbsolutePath: tt.terraformDirAbsolutePath,
+				BasePath: tt.basePath,
 				Components: schema.Components{
 					Terraform: schema.Terraform{
 						BasePath: tt.terraformBasePath,
 					},
+					Helmfile: schema.Helmfile{},
+					Packer:   schema.Packer{},
 				},
+				Stacks: schema.Stacks{},
 			}
+
+			// Use the actual function that computes absolute paths
+			err := cfg.AtmosConfigAbsolutePaths(atmosConfig)
+			require.NoError(t, err, "AtmosConfigAbsolutePaths should not fail")
 
 			info := &schema.ConfigAndStacksInfo{
 				ComponentFolderPrefix: tt.componentFolderPrefix,
@@ -172,14 +174,15 @@ func TestConstructTerraformComponentWorkingDir_ConsistencyWithGetComponentPath(t
 					Terraform: schema.Terraform{
 						BasePath: tt.terraformBasePath,
 					},
+					Helmfile: schema.Helmfile{},
+					Packer:   schema.Packer{},
 				},
+				Stacks: schema.Stacks{},
 			}
 
-			// Simulate what InitCliConfig does: compute absolute paths
-			terraformBasePath := filepath.Join(atmosConfig.BasePath, atmosConfig.Components.Terraform.BasePath)
-			terraformDirAbsPath, err := filepath.Abs(terraformBasePath)
-			require.NoError(t, err)
-			atmosConfig.TerraformDirAbsolutePath = terraformDirAbsPath
+			// Call the actual function that sets absolute paths instead of simulating it
+			err := cfg.AtmosConfigAbsolutePaths(atmosConfig)
+			require.NoError(t, err, "AtmosConfigAbsolutePaths should not fail")
 
 			info := &schema.ConfigAndStacksInfo{
 				ComponentFolderPrefix: tt.componentFolderPrefix,
@@ -213,6 +216,80 @@ func TestConstructTerraformComponentWorkingDir_ConsistencyWithGetComponentPath(t
 				"Path should contain the final component")
 			assert.Contains(t, workingDir, tt.finalComponent,
 				"Path should contain the final component")
+		})
+	}
+}
+
+// TestAtmosConfigAbsolutePathsIntegration verifies that we're using the actual
+// AtmosConfigAbsolutePaths function from the config package, not simulating it.
+// This test ensures that any changes to the actual implementation are reflected in our tests.
+func TestAtmosConfigAbsolutePathsIntegration(t *testing.T) {
+	tests := []struct {
+		name              string
+		basePath          string
+		terraformBasePath string
+		expectedPrefix    string
+		skipOnWindows     bool
+	}{
+		{
+			name:              "Using actual AtmosConfigAbsolutePaths with absolute base",
+			basePath:          "/home/runner/work",
+			terraformBasePath: "components/terraform",
+			expectedPrefix:    "/home/runner/work/components/terraform",
+			skipOnWindows:     true,
+		},
+		{
+			name:              "Using actual AtmosConfigAbsolutePaths with relative base",
+			basePath:          ".",
+			terraformBasePath: "components/terraform",
+			expectedPrefix:    "components/terraform",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.skipOnWindows && runtime.GOOS == "windows" {
+				t.Skipf("Skipping Unix path test on Windows")
+			}
+
+			atmosConfig := &schema.AtmosConfiguration{
+				BasePath: tt.basePath,
+				Components: schema.Components{
+					Terraform: schema.Terraform{
+						BasePath: tt.terraformBasePath,
+					},
+					Helmfile: schema.Helmfile{},
+					Packer:   schema.Packer{},
+				},
+				Stacks: schema.Stacks{},
+			}
+
+			// This is the actual function from the config package, not a simulation
+			err := cfg.AtmosConfigAbsolutePaths(atmosConfig)
+			require.NoError(t, err)
+
+			// Verify that TerraformDirAbsolutePath was set
+			assert.NotEmpty(t, atmosConfig.TerraformDirAbsolutePath,
+				"TerraformDirAbsolutePath should be set by AtmosConfigAbsolutePaths")
+
+			// Verify it's an absolute path
+			assert.True(t, filepath.IsAbs(atmosConfig.TerraformDirAbsolutePath),
+				"TerraformDirAbsolutePath should be an absolute path")
+
+			// Verify it contains the expected components
+			if tt.expectedPrefix != "" && filepath.IsAbs(tt.expectedPrefix) {
+				assert.Equal(t, tt.expectedPrefix, atmosConfig.TerraformDirAbsolutePath)
+			} else if tt.expectedPrefix != "" {
+				assert.Contains(t, atmosConfig.TerraformDirAbsolutePath, tt.expectedPrefix)
+			}
+
+			// Verify other absolute paths were also set
+			assert.NotEmpty(t, atmosConfig.HelmfileDirAbsolutePath,
+				"HelmfileDirAbsolutePath should be set")
+			assert.NotEmpty(t, atmosConfig.PackerDirAbsolutePath,
+				"PackerDirAbsolutePath should be set")
+			assert.NotEmpty(t, atmosConfig.StacksBaseAbsolutePath,
+				"StacksBaseAbsolutePath should be set")
 		})
 	}
 }

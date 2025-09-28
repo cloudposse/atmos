@@ -44,7 +44,7 @@ func InitCliConfig(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks
 		return atmosConfig, err
 	}
 
-	err = atmosConfigAbsolutePaths(&atmosConfig)
+	err = AtmosConfigAbsolutePaths(&atmosConfig)
 	if err != nil {
 		return atmosConfig, err
 	}
@@ -175,7 +175,10 @@ func processAtmosConfigs(configAndStacksInfo *schema.ConfigAndStacksInfo) (schem
 }
 
 // atmosConfigAbsolutePaths converts paths to absolute paths.
-func atmosConfigAbsolutePaths(atmosConfig *schema.AtmosConfiguration) error {
+// AtmosConfigAbsolutePaths converts all base paths in the configuration to absolute paths.
+// This function sets TerraformDirAbsolutePath, HelmfileDirAbsolutePath, PackerDirAbsolutePath,
+// StacksBaseAbsolutePath, IncludeStackAbsolutePaths, and ExcludeStackAbsolutePaths.
+func AtmosConfigAbsolutePaths(atmosConfig *schema.AtmosConfiguration) error {
 	// Convert stacks base path to an absolute path
 	stacksBasePath := filepath.Join(atmosConfig.BasePath, atmosConfig.Stacks.BasePath)
 	stacksBaseAbsPath, err := filepath.Abs(stacksBasePath)
