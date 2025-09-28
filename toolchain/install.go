@@ -182,35 +182,10 @@ func installFromToolVersions(toolVersionsPath string, reinstallFlag bool) error 
 		return fmt.Errorf("failed to load .tool-versions: %w", err)
 	}
 
-	totalTools := len(toolVersions.Tools)
-	if totalTools == 0 {
+	toolList := buildToolList(installer, toolVersions)
+	if len(toolList) == 0 {
 		fmt.Fprintf(os.Stderr, "No tools found in %s\n", toolVersionsPath)
 		return nil
-	}
-
-	installedCount := 0
-	failedCount := 0
-	alreadyInstalledCount := 0
-
-	toolList := make([]struct {
-		tool    string
-		version string
-		owner   string
-		repo    string
-	}, 0, totalTools)
-	for tool, versions := range toolVersions.Tools {
-		owner, repo, err := installer.parseToolSpec(tool)
-		if err != nil {
-			continue
-		}
-		for _, version := range versions {
-			toolList = append(toolList, struct {
-				tool    string
-				version string
-				owner   string
-				repo    string
-			}{tool, version, owner, repo})
-		}
 	}
 
 	spinner := bspinner.New()
@@ -218,64 +193,105 @@ func installFromToolVersions(toolVersionsPath string, reinstallFlag bool) error 
 	spinner.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
 	progressBar := progress.New(progress.WithDefaultGradient())
 
+	var installedCount, failedCount, alreadyInstalledCount int
+
 	for i, tool := range toolList {
-		_, err := installer.FindBinaryPath(tool.owner, tool.repo, tool.version)
-		if err == nil && !reinstallFlag {
-			msg := fmt.Sprintf("%s Skipped %s/%s@%s (already installed)", checkMark.Render(), tool.owner, tool.repo, tool.version)
-			percent := float64(i+1) / float64(len(toolList))
-			bar := progressBar.ViewAs(percent)
-			resetLine(os.Stderr, term.IsTerminal(int(os.Stderr.Fd())))
-			fmt.Fprintln(os.Stderr, msg)
-			// Show animated progress for a moment.
-			for j := 0; j < 5; j++ {
-				printProgressBar(os.Stderr, term.IsTerminal(int(os.Stderr.Fd())), fmt.Sprintf("%s %s", spinner.View(), bar))
-				spinner, _ = spinner.Update(bspinner.TickMsg{})
-				time.Sleep(50 * time.Millisecond)
-			}
+		result, err := installOrSkipTool(installer, tool, reinstallFlag)
+		switch result {
+		case "installed":
+			installedCount++
+		case "failed":
+			failedCount++
+		case "skipped":
 			alreadyInstalledCount++
+		}
+		showProgress(os.Stderr, spinner, progressBar, i, len(toolList), result, tool, err)
+	}
+
+	printSummary(os.Stderr, installedCount, failedCount, alreadyInstalledCount, len(toolList))
+	return nil
+}
+
+func buildToolList(installer *Installer, toolVersions *ToolVersions) []struct {
+	tool, version, owner, repo string
+} {
+	var toolList []struct {
+		tool, version, owner, repo string
+	}
+	for tool, versions := range toolVersions.Tools {
+		owner, repo, err := installer.parseToolSpec(tool)
+		if err != nil {
 			continue
 		}
-
-		err = InstallSingleTool(tool.owner, tool.repo, tool.version, tool.version == "latest", false)
-		var msg string
-		if err == nil {
-			msg = fmt.Sprintf("%s Installed %s/%s@%s", checkMark.Render(), tool.owner, tool.repo, tool.version)
-			installedCount++
-		} else {
-			msg = fmt.Sprintf("%s Install failed %s/%s@%s: %v", xMark.Render(), tool.owner, tool.repo, tool.version, err)
-			failedCount++
-		}
-		percent := float64(i+1) / float64(len(toolList))
-		bar := progressBar.ViewAs(percent)
-		resetLine(os.Stderr, term.IsTerminal(int(os.Stderr.Fd())))
-		fmt.Fprintln(os.Stderr, msg)
-		// Show animated progress for a moment.
-		for j := 0; j < 5; j++ {
-			printProgressBar(os.Stderr, term.IsTerminal(int(os.Stderr.Fd())), fmt.Sprintf("%s %s", spinner.View(), bar))
-			spinner, _ = spinner.Update(bspinner.TickMsg{})
-			time.Sleep(50 * time.Millisecond)
+		for _, version := range versions {
+			toolList = append(toolList, struct {
+				tool, version, owner, repo string
+			}{tool, version, owner, repo})
 		}
 	}
+	return toolList
+}
 
-	// Stop spinner animation.
-	// spinnerDone.Store(true) // This line is removed as per the new_code.
-
-	// At the end, clear the progress bar line before printing the summary.
-	resetLine(os.Stderr, term.IsTerminal(int(os.Stderr.Fd())))
-	fmt.Fprintln(os.Stderr)
-	if totalTools == 0 {
-		printStatusLine(os.Stderr, term.IsTerminal(int(os.Stderr.Fd())), fmt.Sprintf("%s No tools to install", checkMark.Render()))
-	} else if failedCount == 0 && alreadyInstalledCount == 0 {
-		printStatusLine(os.Stderr, term.IsTerminal(int(os.Stderr.Fd())), fmt.Sprintf("%s Installed %d tools", checkMark.Render(), installedCount))
-	} else if failedCount == 0 && alreadyInstalledCount > 0 {
-		printStatusLine(os.Stderr, term.IsTerminal(int(os.Stderr.Fd())), fmt.Sprintf("%s Installed %d tools, skipped %d", checkMark.Render(), installedCount, alreadyInstalledCount))
-	} else if failedCount > 0 && alreadyInstalledCount == 0 {
-		printStatusLine(os.Stderr, term.IsTerminal(int(os.Stderr.Fd())), fmt.Sprintf("%s Installed %d tools, failed %d", xMark.Render(), installedCount, failedCount))
-	} else if failedCount > 0 && alreadyInstalledCount > 0 {
-		printStatusLine(os.Stderr, term.IsTerminal(int(os.Stderr.Fd())), fmt.Sprintf("%s Installed %d tools, failed %d, skipped %d", xMark.Render(), installedCount, failedCount, alreadyInstalledCount))
-	} else {
-		printStatusLine(os.Stderr, term.IsTerminal(int(os.Stderr.Fd())), fmt.Sprintf("%s Installed %d tools, failed %d, skipped %d", checkMark.Render(), installedCount, failedCount, alreadyInstalledCount))
+func installOrSkipTool(installer *Installer, tool struct {
+	tool, version, owner, repo string
+}, reinstallFlag bool) (string, error) {
+	_, err := installer.FindBinaryPath(tool.owner, tool.repo, tool.version)
+	if err == nil && !reinstallFlag {
+		return "skipped", nil
 	}
 
-	return nil
+	err = InstallSingleTool(tool.owner, tool.repo, tool.version, tool.version == "latest", false)
+	if err != nil {
+		return "failed", err
+	}
+	return "installed", nil
+}
+
+func showProgress(
+	stderr *os.File,
+	spinner bspinner.Model,
+	progressBar progress.Model,
+	index, total int,
+	result string,
+	tool struct{ tool, version, owner, repo string },
+	err error,
+) {
+	var msg string
+	switch result {
+	case "skipped":
+		msg = fmt.Sprintf("%s Skipped %s/%s@%s (already installed)", checkMark.Render(), tool.owner, tool.repo, tool.version)
+	case "installed":
+		msg = fmt.Sprintf("%s Installed %s/%s@%s", checkMark.Render(), tool.owner, tool.repo, tool.version)
+	case "failed":
+		msg = fmt.Sprintf("%s Install failed %s/%s@%s: %v", xMark.Render(), tool.owner, tool.repo, tool.version, err)
+	}
+
+	percent := float64(index+1) / float64(total)
+	bar := progressBar.ViewAs(percent)
+	resetLine(stderr, term.IsTerminal(int(stderr.Fd())))
+	fmt.Fprintln(stderr, msg)
+
+	for j := 0; j < 5; j++ {
+		printProgressBar(stderr, term.IsTerminal(int(stderr.Fd())), fmt.Sprintf("%s %s", spinner.View(), bar))
+		spinner, _ = spinner.Update(bspinner.TickMsg{})
+		time.Sleep(50 * time.Millisecond)
+	}
+}
+
+func printSummary(stderr *os.File, installed, failed, skipped, total int) {
+	resetLine(stderr, term.IsTerminal(int(stderr.Fd())))
+	fmt.Fprintln(stderr)
+
+	switch {
+	case total == 0:
+		printStatusLine(stderr, term.IsTerminal(int(stderr.Fd())), fmt.Sprintf("%s No tools to install", checkMark.Render()))
+	case failed == 0 && skipped == 0:
+		printStatusLine(stderr, term.IsTerminal(int(stderr.Fd())), fmt.Sprintf("%s Installed %d tools", checkMark.Render(), installed))
+	case failed == 0 && skipped > 0:
+		printStatusLine(stderr, term.IsTerminal(int(stderr.Fd())), fmt.Sprintf("%s Installed %d tools, skipped %d", checkMark.Render(), installed, skipped))
+	case failed > 0 && skipped == 0:
+		printStatusLine(stderr, term.IsTerminal(int(stderr.Fd())), fmt.Sprintf("%s Installed %d tools, failed %d", xMark.Render(), installed, failed))
+	default:
+		printStatusLine(stderr, term.IsTerminal(int(stderr.Fd())), fmt.Sprintf("%s Installed %d tools, failed %d, skipped %d", xMark.Render(), installed, failed, skipped))
+	}
 }
