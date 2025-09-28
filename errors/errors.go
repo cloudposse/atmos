@@ -183,4 +183,7 @@ var (
 	ErrResolveOutputPath     = errors.New("failed to resolve output path")
 	ErrWriteOutput           = errors.New("failed to write output")
 	ErrInvalidPagerCommand   = errors.New("invalid pager command")
+
+	// Profiler-related errors.
+	ErrProfilerStart = errors.New("profiler start failed")
 )
