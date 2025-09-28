@@ -13,114 +13,111 @@ import (
 // ListToolVersions handles the logic for listing tool versions.
 func ListToolVersions(showAll bool, limit int, toolName string) error {
 	filePath := GetToolVersionsFilePath()
-	// Resolve the tool name to handle aliases
 	installer := NewInstaller()
+
 	owner, repo, err := installer.parseToolSpec(toolName)
 	if err != nil {
 		return fmt.Errorf("invalid tool name: %w", err)
 	}
 	resolvedKey := owner + "/" + repo
 
-	var versions []string
-	var defaultVersion string
+	versions, defaultVersion, err := getVersions(showAll, limit, owner, repo, toolName, resolvedKey, filePath)
+	if err != nil {
+		return err
+	}
 
+	versions = dedupeAndSort(versions)
+	installed := markInstalled(installer, owner, repo, versions)
+	installedStyle, notInstalledStyle := selectStyles()
+
+	printVersions(versions, defaultVersion, installed, installedStyle, notInstalledStyle)
+	return nil
+}
+
+func getVersions(showAll bool, limit int, owner, repo, toolName, resolvedKey, filePath string) ([]string, string, error) {
 	if showAll {
-		// Fetch all available versions from GitHub
 		allVersions, err := fetchAllGitHubVersions(owner, repo, limit)
 		if err != nil {
-			return fmt.Errorf("failed to fetch versions from GitHub: %w", err)
+			return nil, "", fmt.Errorf("failed to fetch versions from GitHub: %w", err)
 		}
-		versions = allVersions
+		defaultVersion := getDefaultFromFile(filePath, resolvedKey, toolName)
+		return allVersions, defaultVersion, nil
+	}
 
-		// Load tool versions to get the default
-		toolVersions, err := LoadToolVersions(filePath)
-		if err == nil {
-			if configuredVersions, exists := toolVersions.Tools[resolvedKey]; exists && len(configuredVersions) > 0 {
-				defaultVersion = configuredVersions[0]
-			} else if configuredVersions, exists := toolVersions.Tools[toolName]; exists && len(configuredVersions) > 0 {
-				defaultVersion = configuredVersions[0]
-			}
-		}
-	} else {
-		// Load tool versions from file
-		toolVersions, err := LoadToolVersions(filePath)
-		if err != nil {
-			return fmt.Errorf("failed to load .tool-versions: %w", err)
-		}
+	toolVersions, err := LoadToolVersions(filePath)
+	if err != nil {
+		return nil, "", fmt.Errorf("failed to load .tool-versions: %w", err)
+	}
 
-		// Get versions for the tool - try both resolved key and original tool name
-		fileVersions, exists := toolVersions.Tools[resolvedKey]
+	fileVersions, exists := toolVersions.Tools[resolvedKey]
+	if !exists {
+		fileVersions, exists = toolVersions.Tools[toolName]
 		if !exists {
-			fileVersions, exists = toolVersions.Tools[toolName]
-			if !exists {
-				return fmt.Errorf("tool '%s' not found in %s", toolName, filePath)
-			}
-		}
-
-		if len(fileVersions) == 0 {
-			return fmt.Errorf("no versions configured for tool '%s' in %s", toolName, filePath)
-		}
-
-		versions = fileVersions
-		defaultVersion = versions[0]
-	}
-
-	// Deduplicate versions
-	seen := make(map[string]bool)
-	uniqueVersions := []string{}
-	for _, version := range versions {
-		if !seen[version] {
-			seen[version] = true
-			uniqueVersions = append(uniqueVersions, version)
+			return nil, "", fmt.Errorf("tool '%s' not found in %s", toolName, filePath)
 		}
 	}
-	versions = uniqueVersions
-
-	// Sort versions in semver order
-	sortedVersions := sortVersionsSemver(versions)
-
-	// Check which versions are actually installed
-	installedVersions := make(map[string]bool)
-	for _, version := range sortedVersions {
-		_, err := installer.FindBinaryPath(owner, repo, version)
-		installedVersions[version] = err == nil
+	if len(fileVersions) == 0 {
+		return nil, "", fmt.Errorf("no versions configured for tool '%s' in %s", toolName, filePath)
 	}
+	return fileVersions, fileVersions[0], nil
+}
 
-	// Define styles with TTY-aware dark/light mode detection
+func getDefaultFromFile(filePath, resolvedKey, toolName string) string {
+	toolVersions, err := LoadToolVersions(filePath)
+	if err != nil {
+		return ""
+	}
+	if configured, ok := toolVersions.Tools[resolvedKey]; ok && len(configured) > 0 {
+		return configured[0]
+	}
+	if configured, ok := toolVersions.Tools[toolName]; ok && len(configured) > 0 {
+		return configured[0]
+	}
+	return ""
+}
+
+func dedupeAndSort(versions []string) []string {
+	seen := make(map[string]struct{})
+	unique := []string{}
+	for _, v := range versions {
+		if _, exists := seen[v]; !exists {
+			seen[v] = struct{}{}
+			unique = append(unique, v)
+		}
+	}
+	return sortVersionsSemver(unique)
+}
+
+func markInstalled(installer *Installer, owner, repo string, versions []string) map[string]bool {
+	installed := make(map[string]bool, len(versions))
+	for _, v := range versions {
+		_, err := installer.FindBinaryPath(owner, repo, v)
+		installed[v] = err == nil
+	}
+	return installed
+}
+
+func selectStyles() (lipgloss.Style, lipgloss.Style) {
 	profile := termenv.ColorProfile()
-	var installedStyle, notInstalledStyle lipgloss.Style
-
 	if profile == termenv.ANSI256 || profile == termenv.TrueColor {
-		// Dark background - use grayscale
-		installedStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("15")) // Bright white
-		notInstalledStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("240")) // Dim gray
-	} else {
-		// Light background or no color support - use basic styling
-		installedStyle = lipgloss.NewStyle().
-			Bold(true)
-		notInstalledStyle = lipgloss.NewStyle()
+		return lipgloss.NewStyle().Foreground(lipgloss.Color("15")), // white
+			lipgloss.NewStyle().Foreground(lipgloss.Color("240")) // gray
 	}
+	return lipgloss.NewStyle().Bold(true), lipgloss.NewStyle()
+}
 
-	// Display the results
-	for _, version := range sortedVersions {
-		isInstalled := installedVersions[version]
-		isDefault := version == defaultVersion
+func printVersions(versions []string, defaultVersion string, installed map[string]bool, installedStyle, notInstalledStyle lipgloss.Style) {
+	for _, v := range versions {
 		indicator := " "
-		if isDefault {
+		if v == defaultVersion {
 			indicator = checkMark.String()
 		}
-
-		// Apply styling based on installation status
-		if isInstalled {
-			fmt.Printf("%s %s\n", indicator, installedStyle.Render(version))
+		if installed[v] {
+			fmt.Printf("%s %s\n", indicator, installedStyle.Render(v))
 		} else {
-			fmt.Printf("%s %s\n", indicator, notInstalledStyle.Render(version))
+			fmt.Printf("%s %s\n", indicator, notInstalledStyle.Render(v))
 		}
 	}
-
-	return nil
 }
 
 // sortVersionsSemver sorts versions in semantic version order.
