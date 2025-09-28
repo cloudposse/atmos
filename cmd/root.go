@@ -38,7 +38,7 @@ var atmosConfig schema.AtmosConfiguration
 // logFileHandle holds the opened log file for the lifetime of the program.
 var logFileHandle *os.File
 
-// RootCmd represents the base command when called without any subcommands
+// RootCmd represents the base command when called without any subcommands.
 var RootCmd = &cobra.Command{
 	Use:                "atmos",
 	Short:              "Universal Tool for DevOps and Cloud Automation",
