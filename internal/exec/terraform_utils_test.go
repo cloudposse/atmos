@@ -3,11 +3,13 @@ package exec
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"reflect"
 	"testing"
 
 	"github.com/agiledragon/gomonkey/v2"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -538,5 +540,806 @@ func BenchmarkParseTFCliArgsVars(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		ParseTFCliArgsVars()
+	}
+}
+
+func TestCheckTerraformConfig(t *testing.T) {
+	tests := []struct {
+		name        string
+		config      schema.AtmosConfiguration
+		expectError bool
+	}{
+		{
+			name: "valid config with base path",
+			config: schema.AtmosConfiguration{
+				Components: schema.Components{
+					Terraform: schema.Terraform{
+						BasePath: "/path/to/terraform",
+					},
+				},
+			},
+			expectError: false,
+		},
+		{
+			name: "invalid config with empty base path",
+			config: schema.AtmosConfiguration{
+				Components: schema.Components{
+					Terraform: schema.Terraform{
+						BasePath: "",
+					},
+				},
+			},
+			expectError: true,
+		},
+		{
+			name: "invalid config with no base path",
+			config: schema.AtmosConfiguration{
+				Components: schema.Components{
+					Terraform: schema.Terraform{},
+				},
+			},
+			expectError: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := checkTerraformConfig(tt.config)
+			if tt.expectError {
+				assert.Error(t, err)
+				assert.Contains(t, err.Error(), "Base path to terraform components must be provided")
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
+func TestCleanTerraformWorkspace(t *testing.T) {
+	// Create a temporary directory for testing.
+	tempDir, err := os.MkdirTemp("", "terraform_test")
+	require.NoError(t, err)
+	defer os.RemoveAll(tempDir)
+
+	tests := []struct {
+		name               string
+		setupTfDataDir     string
+		createEnvFile      bool
+		expectedFileExists bool
+	}{
+		{
+			name:               "removes existing environment file in default .terraform dir",
+			setupTfDataDir:     "",
+			createEnvFile:      true,
+			expectedFileExists: false,
+		},
+		{
+			name:               "handles missing environment file gracefully",
+			setupTfDataDir:     "",
+			createEnvFile:      false,
+			expectedFileExists: false,
+		},
+		{
+			name:               "removes environment file in custom TF_DATA_DIR",
+			setupTfDataDir:     "custom-tf-dir",
+			createEnvFile:      true,
+			expectedFileExists: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Create test-specific subdirectory.
+			testDir := filepath.Join(tempDir, tt.name)
+			err := os.MkdirAll(testDir, 0o755)
+			require.NoError(t, err)
+
+			// Setup TF_DATA_DIR if specified.
+			originalTfDataDir := os.Getenv("TF_DATA_DIR")
+			if tt.setupTfDataDir != "" {
+				os.Setenv("TF_DATA_DIR", tt.setupTfDataDir)
+			} else {
+				os.Unsetenv("TF_DATA_DIR")
+			}
+			defer os.Setenv("TF_DATA_DIR", originalTfDataDir)
+
+			// Determine the terraform data directory.
+			tfDataDir := tt.setupTfDataDir
+			if tfDataDir == "" {
+				tfDataDir = ".terraform"
+			}
+			if !filepath.IsAbs(tfDataDir) {
+				tfDataDir = filepath.Join(testDir, tfDataDir)
+			}
+
+			// Create the terraform data directory and environment file if needed.
+			if tt.createEnvFile {
+				err := os.MkdirAll(tfDataDir, 0o755)
+				require.NoError(t, err)
+				envFilePath := filepath.Join(tfDataDir, "environment")
+				err = os.WriteFile(envFilePath, []byte("test-workspace"), 0o644)
+				require.NoError(t, err)
+			}
+
+			// Test the function.
+			config := schema.AtmosConfiguration{}
+			cleanTerraformWorkspace(config, testDir)
+
+			// Verify the result.
+			envFilePath := filepath.Join(tfDataDir, "environment")
+			_, statErr := os.Stat(envFilePath)
+			if tt.expectedFileExists {
+				assert.NoError(t, statErr, "Expected environment file to exist")
+			} else {
+				assert.True(t, os.IsNotExist(statErr), "Expected environment file to not exist")
+			}
+		})
+	}
+}
+
+func TestShouldProcessStacks(t *testing.T) {
+	tests := []struct {
+		name                     string
+		info                     *schema.ConfigAndStacksInfo
+		expectedShouldProcess    bool
+		expectedShouldCheckStack bool
+	}{
+		{
+			name: "normal command with component and stack",
+			info: &schema.ConfigAndStacksInfo{
+				SubCommand:       "plan",
+				ComponentFromArg: "vpc",
+				Stack:            "prod",
+			},
+			expectedShouldProcess:    true,
+			expectedShouldCheckStack: true,
+		},
+		{
+			name: "clean command with component and stack",
+			info: &schema.ConfigAndStacksInfo{
+				SubCommand:       "clean",
+				ComponentFromArg: "vpc",
+				Stack:            "prod",
+			},
+			expectedShouldProcess:    true,
+			expectedShouldCheckStack: true,
+		},
+		{
+			name: "clean command with component but no stack",
+			info: &schema.ConfigAndStacksInfo{
+				SubCommand:       "clean",
+				ComponentFromArg: "vpc",
+				Stack:            "",
+			},
+			expectedShouldProcess:    true,
+			expectedShouldCheckStack: false,
+		},
+		{
+			name: "clean command without component but with stack",
+			info: &schema.ConfigAndStacksInfo{
+				SubCommand:       "clean",
+				ComponentFromArg: "",
+				Stack:            "prod",
+			},
+			expectedShouldProcess:    false,
+			expectedShouldCheckStack: true,
+		},
+		{
+			name: "clean command without component or stack",
+			info: &schema.ConfigAndStacksInfo{
+				SubCommand:       "clean",
+				ComponentFromArg: "",
+				Stack:            "",
+			},
+			expectedShouldProcess:    false,
+			expectedShouldCheckStack: false,
+		},
+		{
+			name: "non-clean command without component or stack",
+			info: &schema.ConfigAndStacksInfo{
+				SubCommand:       "apply",
+				ComponentFromArg: "",
+				Stack:            "",
+			},
+			expectedShouldProcess:    true,
+			expectedShouldCheckStack: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			shouldProcess, shouldCheckStack := shouldProcessStacks(tt.info)
+			assert.Equal(t, tt.expectedShouldProcess, shouldProcess)
+			assert.Equal(t, tt.expectedShouldCheckStack, shouldCheckStack)
+		})
+	}
+}
+
+func TestGenerateBackendConfig(t *testing.T) {
+	// Create a temporary directory for testing.
+	tempDir, err := os.MkdirTemp("", "backend_test")
+	require.NoError(t, err)
+	defer os.RemoveAll(tempDir)
+
+	tests := []struct {
+		name               string
+		config             *schema.AtmosConfiguration
+		info               *schema.ConfigAndStacksInfo
+		expectedFileExists bool
+		expectError        bool
+	}{
+		{
+			name: "auto-generate enabled, not dry run",
+			config: &schema.AtmosConfiguration{
+				Components: schema.Components{
+					Terraform: schema.Terraform{
+						AutoGenerateBackendFile: true,
+					},
+				},
+			},
+			info: &schema.ConfigAndStacksInfo{
+				ComponentBackendType:    "s3",
+				ComponentBackendSection: map[string]any{"bucket": "test-bucket"},
+				TerraformWorkspace:      "default",
+				DryRun:                  false,
+			},
+			expectedFileExists: true,
+			expectError:        false,
+		},
+		{
+			name: "auto-generate enabled, dry run",
+			config: &schema.AtmosConfiguration{
+				Components: schema.Components{
+					Terraform: schema.Terraform{
+						AutoGenerateBackendFile: true,
+					},
+				},
+			},
+			info: &schema.ConfigAndStacksInfo{
+				ComponentBackendType:    "s3",
+				ComponentBackendSection: map[string]any{"bucket": "test-bucket"},
+				TerraformWorkspace:      "default",
+				DryRun:                  true,
+			},
+			expectedFileExists: false,
+			expectError:        false,
+		},
+		{
+			name: "auto-generate disabled",
+			config: &schema.AtmosConfiguration{
+				Components: schema.Components{
+					Terraform: schema.Terraform{
+						AutoGenerateBackendFile: false,
+					},
+				},
+			},
+			info: &schema.ConfigAndStacksInfo{
+				ComponentBackendType:    "s3",
+				ComponentBackendSection: map[string]any{"bucket": "test-bucket"},
+				TerraformWorkspace:      "default",
+				DryRun:                  false,
+			},
+			expectedFileExists: false,
+			expectError:        false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := generateBackendConfig(tt.config, tt.info, tempDir)
+
+			if tt.expectError {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+			}
+
+			backendFilePath := filepath.Join(tempDir, "backend.tf.json")
+			_, fileErr := os.Stat(backendFilePath)
+			if tt.expectedFileExists {
+				assert.NoError(t, fileErr, "Expected backend.tf.json file to exist")
+			} else {
+				assert.True(t, os.IsNotExist(fileErr), "Expected backend.tf.json file to not exist")
+			}
+
+			// Clean up any created files for next test.
+			os.Remove(backendFilePath)
+		})
+	}
+}
+
+func TestGenerateProviderOverrides(t *testing.T) {
+	// Create a temporary directory for testing.
+	tempDir, err := os.MkdirTemp("", "provider_test")
+	require.NoError(t, err)
+	defer os.RemoveAll(tempDir)
+
+	tests := []struct {
+		name               string
+		config             *schema.AtmosConfiguration
+		info               *schema.ConfigAndStacksInfo
+		expectedFileExists bool
+		expectError        bool
+	}{
+		{
+			name:   "providers section configured, not dry run",
+			config: &schema.AtmosConfiguration{},
+			info: &schema.ConfigAndStacksInfo{
+				ComponentProvidersSection: map[string]any{
+					"aws": map[string]any{
+						"region": "us-east-1",
+					},
+				},
+				DryRun: false,
+			},
+			expectedFileExists: true,
+			expectError:        false,
+		},
+		{
+			name:   "providers section configured, dry run",
+			config: &schema.AtmosConfiguration{},
+			info: &schema.ConfigAndStacksInfo{
+				ComponentProvidersSection: map[string]any{
+					"aws": map[string]any{
+						"region": "us-east-1",
+					},
+				},
+				DryRun: true,
+			},
+			expectedFileExists: false,
+			expectError:        false,
+		},
+		{
+			name:   "no providers section configured",
+			config: &schema.AtmosConfiguration{},
+			info: &schema.ConfigAndStacksInfo{
+				ComponentProvidersSection: map[string]any{},
+				DryRun:                    false,
+			},
+			expectedFileExists: false,
+			expectError:        false,
+		},
+		{
+			name:   "nil providers section",
+			config: &schema.AtmosConfiguration{},
+			info: &schema.ConfigAndStacksInfo{
+				ComponentProvidersSection: nil,
+				DryRun:                    false,
+			},
+			expectedFileExists: false,
+			expectError:        false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := generateProviderOverrides(tt.config, tt.info, tempDir)
+
+			if tt.expectError {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+			}
+
+			providerFilePath := filepath.Join(tempDir, "providers_override.tf.json")
+			_, fileErr := os.Stat(providerFilePath)
+			if tt.expectedFileExists {
+				assert.NoError(t, fileErr, "Expected providers_override.tf.json file to exist")
+			} else {
+				assert.True(t, os.IsNotExist(fileErr), "Expected providers_override.tf.json file to not exist")
+			}
+
+			// Clean up any created files for next test.
+			os.Remove(providerFilePath)
+		})
+	}
+}
+
+func TestNeedProcessTemplatesAndYamlFunctions(t *testing.T) {
+	tests := []struct {
+		name     string
+		command  string
+		expected bool
+	}{
+		{
+			name:     "init command needs processing",
+			command:  "init",
+			expected: true,
+		},
+		{
+			name:     "plan command needs processing",
+			command:  "plan",
+			expected: true,
+		},
+		{
+			name:     "apply command needs processing",
+			command:  "apply",
+			expected: true,
+		},
+		{
+			name:     "deploy command needs processing",
+			command:  "deploy",
+			expected: true,
+		},
+		{
+			name:     "destroy command needs processing",
+			command:  "destroy",
+			expected: true,
+		},
+		{
+			name:     "generate command needs processing",
+			command:  "generate",
+			expected: true,
+		},
+		{
+			name:     "output command needs processing",
+			command:  "output",
+			expected: true,
+		},
+		{
+			name:     "clean command needs processing",
+			command:  "clean",
+			expected: true,
+		},
+		{
+			name:     "shell command needs processing",
+			command:  "shell",
+			expected: true,
+		},
+		{
+			name:     "write command needs processing",
+			command:  "write",
+			expected: true,
+		},
+		{
+			name:     "force-unlock command needs processing",
+			command:  "force-unlock",
+			expected: true,
+		},
+		{
+			name:     "import command needs processing",
+			command:  "import",
+			expected: true,
+		},
+		{
+			name:     "refresh command needs processing",
+			command:  "refresh",
+			expected: true,
+		},
+		{
+			name:     "show command needs processing",
+			command:  "show",
+			expected: true,
+		},
+		{
+			name:     "taint command needs processing",
+			command:  "taint",
+			expected: true,
+		},
+		{
+			name:     "untaint command needs processing",
+			command:  "untaint",
+			expected: true,
+		},
+		{
+			name:     "validate command needs processing",
+			command:  "validate",
+			expected: true,
+		},
+		{
+			name:     "state list command needs processing",
+			command:  "state list",
+			expected: true,
+		},
+		{
+			name:     "state mv command needs processing",
+			command:  "state mv",
+			expected: true,
+		},
+		{
+			name:     "state pull command needs processing",
+			command:  "state pull",
+			expected: true,
+		},
+		{
+			name:     "state push command needs processing",
+			command:  "state push",
+			expected: true,
+		},
+		{
+			name:     "state replace-provider command needs processing",
+			command:  "state replace-provider",
+			expected: true,
+		},
+		{
+			name:     "state rm command needs processing",
+			command:  "state rm",
+			expected: true,
+		},
+		{
+			name:     "state show command needs processing",
+			command:  "state show",
+			expected: true,
+		},
+		{
+			name:     "unknown command does not need processing",
+			command:  "unknown",
+			expected: false,
+		},
+		{
+			name:     "fmt command does not need processing",
+			command:  "fmt",
+			expected: false,
+		},
+		{
+			name:     "version command does not need processing",
+			command:  "version",
+			expected: false,
+		},
+		{
+			name:     "empty command does not need processing",
+			command:  "",
+			expected: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := needProcessTemplatesAndYamlFunctions(tt.command)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestExtractVarFromNextArg(t *testing.T) {
+	tests := []struct {
+		name           string
+		args           []string
+		startIndex     int
+		expectedResult map[string]string
+		expectedIndex  int
+	}{
+		{
+			name:           "valid key-value pair",
+			args:           []string{"-var", "key=value"},
+			startIndex:     0,
+			expectedResult: map[string]string{"key": "value"},
+			expectedIndex:  1,
+		},
+		{
+			name:           "key-value with complex value",
+			args:           []string{"-var", "instance_type=t3.large"},
+			startIndex:     0,
+			expectedResult: map[string]string{"instance_type": "t3.large"},
+			expectedIndex:  1,
+		},
+		{
+			name:           "key-value with multiple equals",
+			args:           []string{"-var", "config=key=value=more"},
+			startIndex:     0,
+			expectedResult: map[string]string{"config": "key=value=more"},
+			expectedIndex:  1,
+		},
+		{
+			name:           "key-value with empty value",
+			args:           []string{"-var", "empty="},
+			startIndex:     0,
+			expectedResult: map[string]string{"empty": ""},
+			expectedIndex:  1,
+		},
+		{
+			name:           "no next argument",
+			args:           []string{"-var"},
+			startIndex:     0,
+			expectedResult: map[string]string{},
+			expectedIndex:  0,
+		},
+		{
+			name:           "invalid format without equals",
+			args:           []string{"-var", "invalidformat"},
+			startIndex:     0,
+			expectedResult: map[string]string{},
+			expectedIndex:  1,
+		},
+		{
+			name:           "index at end of array",
+			args:           []string{"-var", "key=value"},
+			startIndex:     1,
+			expectedResult: map[string]string{},
+			expectedIndex:  1,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := make(map[string]string)
+			index := extractVarFromNextArg(tt.args, tt.startIndex, result)
+
+			assert.Equal(t, tt.expectedResult, result)
+			assert.Equal(t, tt.expectedIndex, index)
+		})
+	}
+}
+
+func TestExtractVarFromEqualFormat(t *testing.T) {
+	tests := []struct {
+		name           string
+		arg            string
+		expectedResult map[string]string
+	}{
+		{
+			name:           "valid key-value pair",
+			arg:            "-var=key=value",
+			expectedResult: map[string]string{"key": "value"},
+		},
+		{
+			name:           "key-value with complex value",
+			arg:            "-var=instance_type=t3.large",
+			expectedResult: map[string]string{"instance_type": "t3.large"},
+		},
+		{
+			name:           "key-value with multiple equals",
+			arg:            "-var=config=key=value=more",
+			expectedResult: map[string]string{"config": "key=value=more"},
+		},
+		{
+			name:           "key-value with empty value",
+			arg:            "-var=empty=",
+			expectedResult: map[string]string{"empty": ""},
+		},
+		{
+			name:           "invalid format without value equals",
+			arg:            "-var=invalidformat",
+			expectedResult: map[string]string{},
+		},
+		{
+			name:           "just the var flag",
+			arg:            "-var=",
+			expectedResult: map[string]string{},
+		},
+		{
+			name:           "key with spaces in value",
+			arg:            "-var=message=hello world",
+			expectedResult: map[string]string{"message": "hello world"},
+		},
+		{
+			name:           "key with special characters",
+			arg:            "-var=special=!@#$%^&*()",
+			expectedResult: map[string]string{"special": "!@#$%^&*()"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := make(map[string]string)
+			extractVarFromEqualFormat(tt.arg, result)
+
+			assert.Equal(t, tt.expectedResult, result)
+		})
+	}
+}
+
+func TestIsQuoteChar(t *testing.T) {
+	tests := []struct {
+		name     string
+		char     rune
+		expected bool
+	}{
+		{
+			name:     "double quote is quote char",
+			char:     '"',
+			expected: true,
+		},
+		{
+			name:     "single quote is quote char",
+			char:     '\'',
+			expected: true,
+		},
+		{
+			name:     "regular letter is not quote char",
+			char:     'a',
+			expected: false,
+		},
+		{
+			name:     "number is not quote char",
+			char:     '1',
+			expected: false,
+		},
+		{
+			name:     "space is not quote char",
+			char:     ' ',
+			expected: false,
+		},
+		{
+			name:     "equals is not quote char",
+			char:     '=',
+			expected: false,
+		},
+		{
+			name:     "dash is not quote char",
+			char:     '-',
+			expected: false,
+		},
+		{
+			name:     "backtick is not quote char",
+			char:     '`',
+			expected: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := isQuoteChar(tt.char)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+// Benchmark tests for the new functions.
+func BenchmarkCheckTerraformConfig(b *testing.B) {
+	config := schema.AtmosConfiguration{
+		Components: schema.Components{
+			Terraform: schema.Terraform{
+				BasePath: "/path/to/terraform",
+			},
+		},
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		checkTerraformConfig(config)
+	}
+}
+
+func BenchmarkShouldProcessStacks(b *testing.B) {
+	info := &schema.ConfigAndStacksInfo{
+		SubCommand:       "plan",
+		ComponentFromArg: "vpc",
+		Stack:            "prod",
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		shouldProcessStacks(info)
+	}
+}
+
+func BenchmarkNeedProcessTemplatesAndYamlFunctions(b *testing.B) {
+	commands := []string{"init", "plan", "apply", "unknown", "fmt"}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		command := commands[i%len(commands)]
+		needProcessTemplatesAndYamlFunctions(command)
+	}
+}
+
+func BenchmarkExtractVarFromNextArg(b *testing.B) {
+	args := []string{"-var", "key=value", "-var", "other=test"}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		result := make(map[string]string)
+		extractVarFromNextArg(args, 0, result)
+	}
+}
+
+func BenchmarkExtractVarFromEqualFormat(b *testing.B) {
+	arg := "-var=key=value"
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		result := make(map[string]string)
+		extractVarFromEqualFormat(arg, result)
+	}
+}
+
+func BenchmarkIsQuoteChar(b *testing.B) {
+	chars := []rune{'"', '\'', 'a', '1', ' '}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		char := chars[i%len(chars)]
+		isQuoteChar(char)
 	}
 }
