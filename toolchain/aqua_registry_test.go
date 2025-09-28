@@ -419,7 +419,7 @@ func TestAquaRegistry_convertLocalToolToTool(t *testing.T) {
 		BinaryName: "custom-tool",
 	}
 
-	tool := ar.convertLocalToolToTool(localTool, "test", "tool")
+	tool := ar.convertLocalToolToTool(localTool, "test")
 	assert.NotNil(t, tool)
 	assert.Equal(t, "custom-tool", tool.Name)
 	assert.Equal(t, "test", tool.RepoOwner)
