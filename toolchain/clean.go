@@ -9,59 +9,13 @@ import (
 // CleanToolsAndCaches handles the business logic for cleaning tools and cache directories.
 // It performs file counting, deletion, and writes UI messages to stderr.
 func CleanToolsAndCaches(toolsDir, cacheDir, tempCacheDir string) error {
-	toolsCount := 0
-	err := filepath.Walk(toolsDir, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
-		if path != toolsDir {
-			toolsCount++
-		}
-		return nil
-	})
-	if err != nil && !os.IsNotExist(err) {
-		return fmt.Errorf("failed to count files in %s: %w", toolsDir, err)
-	}
-	err = os.RemoveAll(toolsDir)
-	if err != nil && !os.IsNotExist(err) {
-		return fmt.Errorf("failed to delete %s: %w", toolsDir, err)
+	toolsCount, err := cleanDir(toolsDir, true)
+	if err != nil {
+		return err
 	}
 
-	cacheCount := 0
-	err = filepath.Walk(cacheDir, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
-		if path != cacheDir {
-			cacheCount++
-		}
-		return nil
-	})
-	if err != nil && !os.IsNotExist(err) {
-		fmt.Printf("Warning: failed to count files in %s: %v\n", cacheDir, err)
-	}
-	err = os.RemoveAll(cacheDir)
-	if err != nil && !os.IsNotExist(err) {
-		fmt.Printf("Warning: failed to delete %s: %v\n", cacheDir, err)
-	}
-
-	tempCacheCount := 0
-	err = filepath.Walk(tempCacheDir, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
-		if path != tempCacheDir {
-			tempCacheCount++
-		}
-		return nil
-	})
-	if err != nil && !os.IsNotExist(err) {
-		fmt.Printf("Warning: failed to count files in %s: %v\n", tempCacheDir, err)
-	}
-	err = os.RemoveAll(tempCacheDir)
-	if err != nil && !os.IsNotExist(err) {
-		fmt.Printf("Warning: failed to delete %s: %v\n", tempCacheDir, err)
-	}
+	cacheCount, _ := cleanDir(cacheDir, false) // warnings only
+	tempCacheCount, _ := cleanDir(tempCacheDir, false)
 
 	fmt.Printf("%s Deleted %d files/directories from %s\n", checkMark.Render(), toolsCount, toolsDir)
 	if cacheCount > 0 {
@@ -72,4 +26,40 @@ func CleanToolsAndCaches(toolsDir, cacheDir, tempCacheDir string) error {
 	}
 
 	return nil
+}
+
+func cleanDir(path string, fatal bool) (int, error) {
+	count, err := countFiles(path)
+	if err != nil && !os.IsNotExist(err) {
+		msg := fmt.Sprintf("failed to count files in %s: %v", path, err)
+		if fatal {
+			return 0, fmt.Errorf(msg)
+		}
+		fmt.Println("Warning:", msg)
+	}
+
+	err = os.RemoveAll(path)
+	if err != nil && !os.IsNotExist(err) {
+		msg := fmt.Sprintf("failed to delete %s: %v", path, err)
+		if fatal {
+			return count, fmt.Errorf(msg)
+		}
+		fmt.Println("Warning:", msg)
+	}
+
+	return count, nil
+}
+
+func countFiles(root string) (int, error) {
+	count := 0
+	err := filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if path != root {
+			count++
+		}
+		return nil
+	})
+	return count, err
 }
