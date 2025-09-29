@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -101,10 +102,18 @@ func ValidateWithOpa(
 		return false, err
 	}
 
+	// Normalize paths for cross-platform compatibility, especially Windows.
+	// Convert all paths to use forward slashes and clean them.
+	normalizedSchemaPath := filepath.ToSlash(filepath.Clean(schemaPath))
+	normalizedModulePaths := make([]string, len(modulePaths))
+	for i, path := range modulePaths {
+		normalizedModulePaths[i] = filepath.ToSlash(filepath.Clean(path))
+	}
+
 	// Construct a Rego object that can be prepared or evaluated.
 	r := rego.New(
 		rego.Query("data.atmos.errors"),
-		rego.Load(append([]string{schemaPath}, modulePaths...),
+		rego.Load(append([]string{normalizedSchemaPath}, normalizedModulePaths...),
 			loader.GlobExcludeName("*_test.rego", 0),
 		),
 	)
