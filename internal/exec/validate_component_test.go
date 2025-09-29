@@ -3,7 +3,6 @@ package exec
 import (
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -217,22 +216,9 @@ errors["process_env section is empty"] {
 		},
 	}
 
-	// Set some test environment variables.
-	originalEnv := os.Environ()
-	defer func() {
-		// Restore original environment
-		os.Clearenv()
-		for _, envVar := range originalEnv {
-			parts := strings.SplitN(envVar, "=", 2)
-			if len(parts) == 2 {
-				os.Setenv(parts[0], parts[1])
-			}
-		}
-	}()
-
-	// Set specific test environment variables.
-	os.Setenv("ATMOS_TEST_VAR", "test_value")
-	os.Setenv("ANOTHER_TEST_VAR", "another_value")
+	// Set specific test environment variables using t.Setenv for automatic cleanup.
+	t.Setenv("ATMOS_TEST_VAR", "test_value")
+	t.Setenv("ANOTHER_TEST_VAR", "another_value")
 
 	tests := []struct {
 		name         string
@@ -335,24 +321,9 @@ func TestValidateComponentInternal_ProcessEnvSectionContent(t *testing.T) {
 		"HOME":                 "/home/test",
 	}
 
-	// Store original values to restore later.
-	originalValues := make(map[string]string)
-	for key := range testEnvVars {
-		originalValues[key] = os.Getenv(key)
-	}
-	defer func() {
-		for key, value := range originalValues {
-			if value == "" {
-				os.Unsetenv(key)
-			} else {
-				os.Setenv(key, value)
-			}
-		}
-	}()
-
-	// Set test environment variables.
+	// Set test environment variables using t.Setenv for automatic cleanup.
 	for key, value := range testEnvVars {
-		os.Setenv(key, value)
+		t.Setenv(key, value)
 	}
 
 	componentSection := map[string]any{
@@ -398,9 +369,8 @@ func TestValidateComponentInternal_ProcessEnvSectionContent(t *testing.T) {
 			},
 		}
 
-		// Set a new environment variable.
-		os.Setenv("ATMOS_NEW_TEST_VAR", "new-test-value")
-		defer os.Unsetenv("ATMOS_NEW_TEST_VAR")
+		// Set a new environment variable using t.Setenv for automatic cleanup.
+		t.Setenv("ATMOS_NEW_TEST_VAR", "new-test-value")
 
 		// Call validateComponentInternal again
 		_, _ = validateComponentInternal(atmosConfig, componentSection2, "minimal.json", "jsonschema", []string{}, 30)

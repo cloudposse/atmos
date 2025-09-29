@@ -269,8 +269,7 @@ func TestExecuteTerraform_TerraformPlanWithoutProcessingTemplates(t *testing.T) 
 }
 
 func TestExecuteTerraform_TerraformWorkspace(t *testing.T) {
-	err := os.Setenv("ATMOS_LOGS_LEVEL", "Debug")
-	assert.NoError(t, err, "Setting 'ATMOS_LOGS_LEVEL' environment variable should execute without error")
+	t.Setenv("ATMOS_LOGS_LEVEL", "Debug")
 
 	// Capture the starting working directory
 	startingDir, err := os.Getwd()
@@ -617,9 +616,8 @@ func TestExecuteTerraform_DeploymentStatus(t *testing.T) {
 		t.Fatalf("Failed to change directory to %q: %v", workDir, err)
 	}
 
-	// Set up test environment
-	err = os.Setenv("ATMOS_LOGS_LEVEL", "Debug")
-	assert.NoError(t, err, "Setting 'ATMOS_LOGS_LEVEL' environment variable should execute without error")
+	// Set up test environment.
+	t.Setenv("ATMOS_LOGS_LEVEL", "Debug")
 
 	testCases := []struct {
 		name              string
@@ -897,29 +895,10 @@ func TestExecuteTerraform_OpaValidationFunctionality(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Set up environment variables for this test
-			originalEnvVars := make(map[string]string)
+			// Set up environment variables for this test using t.Setenv for automatic cleanup.
 			for key, value := range tt.envVars {
-				originalEnvVars[key] = os.Getenv(key)
-				if err := os.Setenv(key, value); err != nil {
-					t.Fatalf("Failed to set environment variable %s: %v", key, err)
-				}
+				t.Setenv(key, value)
 			}
-
-			// Clean up environment variables after the test.
-			defer func() {
-				for key, originalValue := range originalEnvVars {
-					if originalValue == "" {
-						if err := os.Unsetenv(key); err != nil {
-							t.Logf("Failed to unset environment variable %s: %v", key, err)
-						}
-					} else {
-						if err := os.Setenv(key, originalValue); err != nil {
-							t.Logf("Failed to restore environment variable %s: %v", key, err)
-						}
-					}
-				}
-			}()
 
 			// Test validation directly using ExecuteValidateComponent instead of ExecuteTerraform
 			// to avoid TF_CLI_ARGS conflicts with actual terraform execution

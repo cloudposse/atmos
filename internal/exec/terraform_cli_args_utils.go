@@ -63,7 +63,7 @@ func handleQuoteChar(char rune, inQuotes bool, quoteChar rune, current *strings.
 func GetTerraformEnvCliArgs() []string {
 	// Get TF_CLI_ARGS environment variable directly from os.Getenv for better cross-platform compatibility.
 	// Using os.Getenv instead of viper to avoid potential viper binding issues on Windows.
-	tfCliArgs := os.Getenv(tfCliArgsEnvVar) //nolint:forbidigo // This is not a CLI command, but an internal utility for parsing TF_CLI_ARGS
+	tfCliArgs := os.Getenv(tfCliArgsEnvVar) //nolint:forbidigo // This is not a CLI command, but an internal utility for parsing TF_CLI_ARGS.
 	if tfCliArgs == "" {
 		return []string{}
 	}
