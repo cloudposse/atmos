@@ -188,14 +188,14 @@ func AtmosConfigAbsolutePaths(atmosConfig *schema.AtmosConfiguration) error {
 	atmosConfig.StacksBaseAbsolutePath = stacksBaseAbsPath
 
 	// Convert the included stack paths to absolute paths
-	includeStackAbsPaths, err := u.JoinAbsolutePathWithPaths(stacksBaseAbsPath, atmosConfig.Stacks.IncludedPaths)
+	includeStackAbsPaths, err := u.JoinPaths(stacksBaseAbsPath, atmosConfig.Stacks.IncludedPaths)
 	if err != nil {
 		return err
 	}
 	atmosConfig.IncludeStackAbsolutePaths = includeStackAbsPaths
 
 	// Convert the excluded stack paths to absolute paths
-	excludeStackAbsPaths, err := u.JoinAbsolutePathWithPaths(stacksBaseAbsPath, atmosConfig.Stacks.ExcludedPaths)
+	excludeStackAbsPaths, err := u.JoinPaths(stacksBaseAbsPath, atmosConfig.Stacks.ExcludedPaths)
 	if err != nil {
 		return err
 	}

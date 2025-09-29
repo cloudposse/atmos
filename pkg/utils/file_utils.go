@@ -66,12 +66,13 @@ func ConvertPathsToAbsolutePaths(paths []string) ([]string, error) {
 	return res, nil
 }
 
-// JoinAbsolutePathWithPaths joins a base path with each item in the path slice and returns a slice of absolute paths.
-func JoinAbsolutePathWithPaths(basePath string, paths []string) ([]string, error) {
+// JoinPaths joins a base path with each item in the path slice and returns a slice of joined paths.
+// This is a pure path construction function without filesystem validation.
+func JoinPaths(basePath string, paths []string) ([]string, error) {
 	res := []string{}
 
 	for _, p := range paths {
-		res = append(res, filepath.Join(basePath, p))
+		res = append(res, JoinPath(basePath, p))
 	}
 
 	return res, nil
@@ -156,37 +157,27 @@ func JoinPath(basePath string, providedPath string) string {
 	return filepath.Join(basePath, providedPath)
 }
 
-// JoinAbsolutePathWithPath checks if the provided path is absolute. If the provided path is relative, it joins the base path with the path and returns the absolute path.
-func JoinAbsolutePathWithPath(basePath string, providedPath string) (string, error) {
-	// If the provided path is an absolute path, return it
-	if filepath.IsAbs(providedPath) {
-		return providedPath, nil
-	}
+// JoinPathAndValidate joins paths and validates the result exists in filesystem.
+// It builds on JoinPath for path construction and adds filesystem validation.
+func JoinPathAndValidate(basePath string, providedPath string) (string, error) {
+	// Step 1: Use pure path construction
+	constructedPath := JoinPath(basePath, providedPath)
 
-	// Join the base path with the provided path
-	joinedPath := filepath.Join(basePath, providedPath)
-
-	// If the joined path is an absolute path and exists in the file system, return it
-	if filepath.IsAbs(joinedPath) {
-		_, err := os.Stat(joinedPath)
-		if err == nil {
-			return joinedPath, nil
+	// Step 2: Convert to absolute path if needed
+	if !filepath.IsAbs(constructedPath) {
+		absPath, err := filepath.Abs(constructedPath)
+		if err != nil {
+			return "", err
 		}
+		constructedPath = absPath
 	}
 
-	// Convert the joined path to an absolute path
-	absPath, err := filepath.Abs(joinedPath)
-	if err != nil {
+	// Step 3: Validate existence
+	if _, err := os.Stat(constructedPath); err != nil {
 		return "", err
 	}
 
-	// Check if the final absolute path exists in the file system
-	_, err = os.Stat(absPath)
-	if err != nil {
-		return "", err
-	}
-
-	return absPath, nil
+	return constructedPath, nil
 }
 
 // EnsureDir accepts a file path and creates all the intermediate subdirectories
