@@ -1,6 +1,7 @@
 package exec
 
 import (
+	"os"
 	"path/filepath"
 	"reflect"
 
@@ -38,8 +39,9 @@ func executeDescribeAffected(
 		return nil, nil, nil, err
 	}
 
-	log.Debug("Current", "HEAD", localRepoHead)
-	log.Debug("Current", "BASE", remoteRepoHead)
+	log.Debug("Current", "HEAD", localRepoHead.Hash().String())
+	log.Debug("Current", "BASE", remoteRepoHead.Hash().String())
+	log.Debug("Repository paths", "local", localRepoFileSystemPath, "remote", remoteRepoFileSystemPath)
 
 	currentStacks, err := ExecuteDescribeStacks(
 		atmosConfig,
@@ -56,6 +58,7 @@ func executeDescribeAffected(
 	if err != nil {
 		return nil, nil, nil, err
 	}
+	log.Debug("Current stacks loaded", "count", len(currentStacks))
 
 	localRepoFileSystemPathAbs, err := filepath.Abs(localRepoFileSystemPath)
 	if err != nil {
@@ -63,6 +66,23 @@ func executeDescribeAffected(
 	}
 
 	basePath := atmosConfig.BasePath
+	log.Debug("Base path info", "basePath", basePath, "localRepoPath", localRepoFileSystemPathAbs)
+
+	// When running from a subdirectory of the repo (e.g., examples/quick-start-advanced),
+	// we need to calculate the relative path from the repo root to the current directory
+	// and apply that to the remote repo.
+	currentDir, err := os.Getwd()
+	if err != nil {
+		return nil, nil, nil, err
+	}
+
+	// Calculate the relative path from the repo root to the current working directory
+	relativePathFromRoot, err := filepath.Rel(localRepoFileSystemPathAbs, currentDir)
+	if err != nil {
+		// If we can't determine the relative path, use the base path as is
+		relativePathFromRoot = ""
+	}
+	log.Debug("Relative path from repo root", "relativePath", relativePathFromRoot)
 
 	// Handle `atmos` absolute base path.
 	// Absolute base path can be set in the `base_path` attribute in `atmos.yaml`, or using the ENV var `ATMOS_BASE_PATH` (as it's done in `geodesic`)
@@ -73,6 +93,15 @@ func executeDescribeAffected(
 		if err != nil {
 			return nil, nil, nil, err
 		}
+		log.Debug("Adjusted base path for remote", "adjustedBasePath", basePath)
+	} else if relativePathFromRoot != "" && relativePathFromRoot != "." {
+		// If basePath is relative and we're in a subdirectory, adjust the base path
+		if basePath == "." {
+			basePath = relativePathFromRoot
+		} else {
+			basePath = filepath.Join(relativePathFromRoot, basePath)
+		}
+		log.Debug("Adjusted base path for subdirectory", "adjustedBasePath", basePath)
 	}
 
 	// Update paths to point to the cloned remote repo dir
@@ -86,6 +115,8 @@ func executeDescribeAffected(
 	atmosConfig.TerraformDirAbsolutePath = filepath.Join(remoteRepoFileSystemPath, basePath, atmosConfig.Components.Terraform.BasePath)
 	atmosConfig.HelmfileDirAbsolutePath = filepath.Join(remoteRepoFileSystemPath, basePath, atmosConfig.Components.Helmfile.BasePath)
 	atmosConfig.PackerDirAbsolutePath = filepath.Join(remoteRepoFileSystemPath, basePath, atmosConfig.Components.Packer.BasePath)
+
+	log.Debug("Remote paths", "stacksPath", atmosConfig.StacksBaseAbsolutePath, "terraformPath", atmosConfig.TerraformDirAbsolutePath)
 	atmosConfig.StackConfigFilesAbsolutePaths, err = u.JoinAbsolutePathWithPaths(
 		filepath.Join(remoteRepoFileSystemPath, basePath, atmosConfig.Stacks.BasePath),
 		atmosConfig.StackConfigFilesRelativePaths,
@@ -109,6 +140,7 @@ func executeDescribeAffected(
 	if err != nil {
 		return nil, nil, nil, err
 	}
+	log.Debug("Remote stacks loaded", "count", len(remoteStacks))
 
 	// Restore atmosConfig
 	atmosConfig.StacksBaseAbsolutePath = currentStacksBaseAbsolutePath
@@ -165,6 +197,7 @@ func executeDescribeAffected(
 
 		for _, fileStat := range patch.Stats() {
 			changedFiles = append(changedFiles, fileStat.Name)
+			log.Debug("Changed file", "name", fileStat.Name)
 		}
 	} else {
 		log.Debug("The current working branch and remote target branch are the same")

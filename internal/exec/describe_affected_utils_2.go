@@ -7,6 +7,7 @@ import (
 	"reflect"
 	"strings"
 
+	log "github.com/charmbracelet/log"
 	"github.com/hashicorp/terraform-config-inspect/tfconfig"
 	"github.com/mitchellh/mapstructure"
 
@@ -116,20 +117,53 @@ func isEqual(
 	localSection map[string]any,
 	sectionName string,
 ) bool {
-	if remoteStackSection, ok := (*remoteStacks)[localStackName].(map[string]any); ok {
-		if remoteComponentsSection, ok := remoteStackSection["components"].(map[string]any); ok {
-			if remoteComponentTypeSection, ok := remoteComponentsSection[componentType].(map[string]any); ok {
-				if remoteComponentSection, ok := remoteComponentTypeSection[localComponentName].(map[string]any); ok {
-					if remoteSection, ok := remoteComponentSection[sectionName].(map[string]any); ok {
-						if reflect.DeepEqual(localSection, remoteSection) {
-							return true
-						}
-					}
-				}
-			}
-		}
+	remoteStackSection, ok := (*remoteStacks)[localStackName].(map[string]any)
+	if !ok {
+		// Stack doesn't exist in remote - this is a new stack
+		return false
 	}
-	return false
+
+	remoteComponentsSection, ok := remoteStackSection["components"].(map[string]any)
+	if !ok {
+		// No components section in remote stack
+		return false
+	}
+
+	remoteComponentTypeSection, ok := remoteComponentsSection[componentType].(map[string]any)
+	if !ok {
+		// Component type doesn't exist in remote stack
+		return false
+	}
+
+	remoteComponentSection, ok := remoteComponentTypeSection[localComponentName].(map[string]any)
+	if !ok {
+		// Component doesn't exist in remote stack - this is a new component
+		return false
+	}
+
+	remoteSection, ok := remoteComponentSection[sectionName].(map[string]any)
+	if !ok {
+		// Section doesn't exist in remote component
+		// If local section is empty, they're equal
+		if len(localSection) == 0 {
+			return true
+		}
+		return false
+	}
+
+	// Compare the sections
+	equal := reflect.DeepEqual(localSection, remoteSection)
+
+	// Debug output when sections are not equal
+	if !equal && sectionName == "metadata" {
+		log.Debug("Metadata sections differ",
+			"stack", localStackName,
+			"component", localComponentName,
+			"localSection", localSection,
+			"remoteSection", remoteSection)
+	}
+
+	return equal
 }
 
 // isComponentDependentFolderOrFileChanged checks if a folder or file that the component depends on has changed.
@@ -137,57 +171,77 @@ func isComponentDependentFolderOrFileChanged(
 	changedFiles []string,
 	deps schema.DependsOn,
 ) (bool, string, string, error) {
-	hasDependencies := false
-	isChanged := false
-	changedType := ""
-	changedFileOrFolder := ""
-	pathPatternSuffix := ""
+	// Variables to track the overall result
+	var resultIsChanged bool
+	var resultChangedType string
+	var resultChangedFileOrFolder string
 
 	for _, dep := range deps {
-		if isChanged {
-			break
-		}
+		// Reset variables for each dependency entry
+		var currentType string
+		var currentFileOrFolder string
+		var pathPatternSuffix string
+		hasDependency := false
 
+		// Check if this dependency has a file or folder to check
 		if dep.File != "" {
-			changedType = "file"
-			changedFileOrFolder = dep.File
+			currentType = "file"
+			currentFileOrFolder = dep.File
 			pathPatternSuffix = ""
-			hasDependencies = true
+			hasDependency = true
 		} else if dep.Folder != "" {
-			changedType = "folder"
-			changedFileOrFolder = dep.Folder
+			currentType = "folder"
+			currentFileOrFolder = dep.Folder
 			pathPatternSuffix = "/**"
-			hasDependencies = true
+			hasDependency = true
 		}
 
-		if hasDependencies {
-			changedFileOrFolderAbs, err := filepath.Abs(changedFileOrFolder)
+		// Skip this dependency if it doesn't have a file or folder
+		// (it might only have a component field, which we don't check here)
+		if !hasDependency {
+			continue
+		}
+
+		// Additional defensive check (should never happen now, but good practice)
+		if currentFileOrFolder == "" {
+			continue
+		}
+
+		// Get absolute path
+		changedFileOrFolderAbs, err := filepath.Abs(currentFileOrFolder)
+		if err != nil {
+			return false, "", "", fmt.Errorf("failed to get absolute path for %s '%s': %w",
+				currentType, currentFileOrFolder, err)
+		}
+
+		pathPattern := changedFileOrFolderAbs + pathPatternSuffix
+
+		// Check if any changed file matches this dependency
+		for _, changedFile := range changedFiles {
+			changedFileAbs, err := filepath.Abs(changedFile)
 			if err != nil {
-				return false, "", "", err
+				return false, "", "", fmt.Errorf("failed to get absolute path for changed file '%s': %w",
+					changedFile, err)
 			}
 
-			pathPattern := changedFileOrFolderAbs + pathPatternSuffix
+			match, err := u.PathMatch(pathPattern, changedFileAbs)
+			if err != nil {
+				return false, "", "", fmt.Errorf("failed to match pattern '%s' against '%s': %w",
+					pathPattern, changedFileAbs, err)
+			}
 
-			for _, changedFile := range changedFiles {
-				changedFileAbs, err := filepath.Abs(changedFile)
-				if err != nil {
-					return false, "", "", err
-				}
-
-				match, err := u.PathMatch(pathPattern, changedFileAbs)
-				if err != nil {
-					return false, "", "", err
-				}
-
-				if match {
-					isChanged = true
-					break
-				}
+			if match {
+				// Found a match - save the result and return immediately
+				resultIsChanged = true
+				resultChangedType = currentType
+				resultChangedFileOrFolder = currentFileOrFolder
+				return resultIsChanged, resultChangedType, resultChangedFileOrFolder, nil
 			}
 		}
 	}
 
-	return isChanged, changedType, changedFileOrFolder, nil
+	// No matches found
+	return resultIsChanged, resultChangedType, resultChangedFileOrFolder, nil
 }
 
 // isComponentFolderChanged checks if the component folder changed (has changed files in the folder or its subfolders).
