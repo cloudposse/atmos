@@ -157,9 +157,19 @@ func (r *AtmosRunner) prepareEnvironment() []string {
 	// Ensure test binary is in PATH using testable utility functions
 	updatedEnv := utils.EnsureBinaryInPath(env, r.binaryPath)
 
-	// Add GOCOVERDIR if coverage is enabled
+	// Handle GOCOVERDIR based on coverage settings
 	if r.coverDir != "" {
+		// Coverage enabled: set GOCOVERDIR to our coverage directory
 		updatedEnv = append(updatedEnv, fmt.Sprintf("GOCOVERDIR=%s", r.coverDir))
+	} else {
+		// Coverage disabled: remove any existing GOCOVERDIR from environment
+		var filteredEnv []string
+		for _, envVar := range updatedEnv {
+			if !strings.HasPrefix(envVar, "GOCOVERDIR=") {
+				filteredEnv = append(filteredEnv, envVar)
+			}
+		}
+		updatedEnv = filteredEnv
 	}
 
 	return updatedEnv
@@ -173,14 +183,19 @@ func (r *AtmosRunner) BinaryPath() string {
 // Cleanup removes temporary binary and its directory.
 func (r *AtmosRunner) Cleanup() {
 	if r.binaryPath != "" {
-		// Remove the entire temp directory that contains our binary
 		tempDir := os.TempDir()
 		binaryDir := filepath.Dir(r.binaryPath)
 		// Clean paths for comparison.
 		tempDir = filepath.Clean(tempDir)
 		binaryDir = filepath.Clean(binaryDir)
+
+		// Check if binary is in a temp subdirectory or directly in temp dir
 		if binaryDir != tempDir && strings.HasPrefix(binaryDir, tempDir+string(filepath.Separator)) {
-			os.RemoveAll(binaryDir) // Remove the entire directory
+			// Binary is in a subdirectory of temp - remove the entire directory
+			os.RemoveAll(binaryDir)
+		} else if binaryDir == tempDir && (strings.Contains(filepath.Base(r.binaryPath), "atmos-test") || strings.Contains(filepath.Base(r.binaryPath), "cleanup-test")) {
+			// Binary is directly in temp dir and looks like a test binary - remove just the file
+			os.Remove(r.binaryPath)
 		}
 	}
 }
