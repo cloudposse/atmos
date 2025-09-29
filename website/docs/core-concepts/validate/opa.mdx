@@ -349,9 +349,19 @@ contains_plan_flag(args) {
 # Validate parallelism settings
 errors[message] {
   some i
+  # equals form: -parallelism=50
   startswith(input.env_tf_cli_args[i], "-parallelism=")
-  parallelism_str := substring(input.env_tf_cli_args[i], 13, -1)
-  parallelism := to_number(parallelism_str)
+  parallelism := to_number(replace(input.env_tf_cli_args[i], "-parallelism=", ""))
+  parallelism > 20
+  message = sprintf("Parallelism cannot exceed 20, got %d", [parallelism])
+}
+
+errors[message] {
+  some i
+  # space form: -parallelism 50
+  input.env_tf_cli_args[i] == "-parallelism"
+  i + 1 < count(input.env_tf_cli_args)
+  parallelism := to_number(input.env_tf_cli_args[i+1])
   parallelism > 20
   message = sprintf("Parallelism cannot exceed 20, got %d", [parallelism])
 }
