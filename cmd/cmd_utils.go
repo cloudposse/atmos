@@ -377,6 +377,7 @@ func executeCustomCommand(
 
 		// Prepare ENV vars
 		// ENV var values support Go templates and have access to {{ .ComponentConfig.xxx.yyy.zzz }} Go template variables
+		// Start with current environment to inherit PATH and other variables set by AtmosRunner
 		var envVarsList []string
 		for _, v := range commandConfig.Env {
 			key := strings.TrimSpace(v.Key)
@@ -418,7 +419,12 @@ func executeCustomCommand(
 
 		// Execute the command step
 		commandName := fmt.Sprintf("%s-step-%d", commandConfig.Name, i)
-		err = e.ExecuteShell(commandToRun, commandName, currentDirPath, envVarsList, false)
+
+		env := os.Environ()
+
+		// Pass current environment to ensure PATH and other variables from AtmosRunner are inherited
+		// os.Environ() includes the PATH that AtmosRunner set up for this process
+		err = e.ExecuteShell(commandToRun, commandName, currentDirPath, env, false)
 		errUtils.CheckErrorPrintAndExit(err, "", "")
 	}
 }

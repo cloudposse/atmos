@@ -637,26 +637,28 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 		existingEnv = []string{}
 	}
 
-	// Set environment variables without inheriting from the current environment.
-	// This ensures an isolated test environment, preventing unintended side effects
-	// and improving reproducibility across different systems.
+	// Preserve all environment variables from AtmosRunner (including PATH and GOCOVERDIR)
+	// and add/override with test-specific environment variables
 	var envVars []string
 
-	// First, check if GOCOVERDIR is already set by atmosRunner
-	var hasCoverDir bool
-	for _, env := range existingEnv {
-		if strings.HasPrefix(env, "GOCOVERDIR=") {
-			envVars = append(envVars, env)
-			hasCoverDir = true
-			break
-		}
+	// Start with the environment from AtmosRunner if available
+	if len(existingEnv) > 0 {
+		envVars = append(envVars, existingEnv...)
 	}
 
-	// Add test-specific environment variables
+	// Add/override test-specific environment variables
 	for key, value := range tc.Env {
-		// Don't override GOCOVERDIR if it was set by atmosRunner
-		if key == "GOCOVERDIR" && hasCoverDir {
+		// NEVER allow test cases to override PATH - AtmosRunner's PATH must be preserved
+		if key == "PATH" {
 			continue
+		}
+
+		// Remove any existing env var with the same key before adding the new one
+		for i, env := range envVars {
+			if strings.HasPrefix(env, key+"=") {
+				envVars = append(envVars[:i], envVars[i+1:]...)
+				break
+			}
 		}
 		envVars = append(envVars, fmt.Sprintf("%s=%s", key, value))
 	}

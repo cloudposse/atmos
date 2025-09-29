@@ -11,6 +11,7 @@ import (
 	"sync"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/utils"
 )
 
 const (
@@ -52,7 +53,14 @@ func (r *AtmosRunner) Build() error {
 
 // buildWithoutCoverage builds Atmos without coverage instrumentation.
 func (r *AtmosRunner) buildWithoutCoverage() error {
-	tempBinary := filepath.Join(os.TempDir(), fmt.Sprintf("atmos-test-%d", os.Getpid()))
+	// Create a unique temp directory for this test process
+	tempDir := filepath.Join(os.TempDir(), fmt.Sprintf("atmos-test-%d", os.Getpid()))
+	if err := os.MkdirAll(tempDir, executablePerm); err != nil {
+		return fmt.Errorf("failed to create temp directory: %w", err)
+	}
+
+	// Build the binary with the standard name 'atmos' so shell commands can find it
+	tempBinary := filepath.Join(tempDir, "atmos")
 	// Add .exe extension on Windows.
 	if runtime.GOOS == windowsOS {
 		tempBinary += ".exe"
@@ -72,6 +80,11 @@ func (r *AtmosRunner) buildWithoutCoverage() error {
 		return fmt.Errorf("failed to build atmos: %w\nOutput: %s", err, output)
 	}
 
+	// Verify binary was created
+	if _, err := os.Stat(tempBinary); err != nil {
+		return fmt.Errorf("binary not created at %s: %w", tempBinary, err)
+	}
+
 	// Make the binary executable (Unix only, Windows doesn't need this).
 	if runtime.GOOS != windowsOS {
 		if err := os.Chmod(tempBinary, executablePerm); err != nil {
@@ -85,7 +98,14 @@ func (r *AtmosRunner) buildWithoutCoverage() error {
 
 // buildWithCoverage builds Atmos with coverage instrumentation.
 func (r *AtmosRunner) buildWithCoverage() error {
-	tempBinary := filepath.Join(os.TempDir(), fmt.Sprintf("atmos-coverage-%d", os.Getpid()))
+	// Create a unique temp directory for this test process
+	tempDir := filepath.Join(os.TempDir(), fmt.Sprintf("atmos-coverage-%d", os.Getpid()))
+	if err := os.MkdirAll(tempDir, executablePerm); err != nil {
+		return fmt.Errorf("failed to create temp directory: %w", err)
+	}
+
+	// Build the binary with the standard name 'atmos' so shell commands can find it
+	tempBinary := filepath.Join(tempDir, "atmos")
 	// Add .exe extension on Windows.
 	if runtime.GOOS == windowsOS {
 		tempBinary += ".exe"
@@ -116,22 +136,33 @@ func (r *AtmosRunner) buildWithCoverage() error {
 	return nil
 }
 
-// Command creates an exec.Cmd with GOCOVERDIR set.
+// Command creates an exec.Cmd with GOCOVERDIR and PATH set for nested atmos calls.
 func (r *AtmosRunner) Command(args ...string) *exec.Cmd {
 	cmd := exec.Command(r.binaryPath, args...) //nolint:gosec // Binary path is controlled internally
-	if r.coverDir != "" {
-		cmd.Env = append(os.Environ(), fmt.Sprintf("GOCOVERDIR=%s", r.coverDir))
-	}
+	cmd.Env = r.prepareEnvironment()
 	return cmd
 }
 
-// CommandContext creates an exec.Cmd with context and GOCOVERDIR.
+// CommandContext creates an exec.Cmd with context, GOCOVERDIR and PATH set for nested atmos calls.
 func (r *AtmosRunner) CommandContext(ctx context.Context, args ...string) *exec.Cmd {
 	cmd := exec.CommandContext(ctx, r.binaryPath, args...) //nolint:gosec // Binary path is controlled internally
-	if r.coverDir != "" {
-		cmd.Env = append(os.Environ(), fmt.Sprintf("GOCOVERDIR=%s", r.coverDir))
-	}
+	cmd.Env = r.prepareEnvironment()
 	return cmd
+}
+
+// prepareEnvironment sets up the environment for atmos commands with proper PATH and GOCOVERDIR.
+func (r *AtmosRunner) prepareEnvironment() []string {
+	env := os.Environ()
+
+	// Ensure test binary is in PATH using testable utility functions
+	updatedEnv := utils.EnsureBinaryInPath(env, r.binaryPath)
+
+	// Add GOCOVERDIR if coverage is enabled
+	if r.coverDir != "" {
+		updatedEnv = append(updatedEnv, fmt.Sprintf("GOCOVERDIR=%s", r.coverDir))
+	}
+
+	return updatedEnv
 }
 
 // BinaryPath returns the path to the binary being used.
@@ -139,17 +170,17 @@ func (r *AtmosRunner) BinaryPath() string {
 	return r.binaryPath
 }
 
-// Cleanup removes temporary binary.
+// Cleanup removes temporary binary and its directory.
 func (r *AtmosRunner) Cleanup() {
-	if r.coverDir != "" && r.binaryPath != "" {
-		// Check if binary is in temp directory by checking if it starts with temp dir path.
+	if r.binaryPath != "" {
+		// Remove the entire temp directory that contains our binary
 		tempDir := os.TempDir()
 		binaryDir := filepath.Dir(r.binaryPath)
 		// Clean paths for comparison.
 		tempDir = filepath.Clean(tempDir)
 		binaryDir = filepath.Clean(binaryDir)
-		if binaryDir == tempDir || strings.HasPrefix(binaryDir, tempDir+string(filepath.Separator)) {
-			os.Remove(r.binaryPath)
+		if binaryDir != tempDir && strings.HasPrefix(binaryDir, tempDir+string(filepath.Separator)) {
+			os.RemoveAll(binaryDir) // Remove the entire directory
 		}
 	}
 }
