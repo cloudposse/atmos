@@ -448,6 +448,8 @@ func shouldSkipSource(s *schema.AtmosVendorSource, component string, tags []stri
 //   - "github.com/repo.git?ref=v1.0.0" -> "github.com/repo.git//.?ref=v1.0.0"
 //   - "github.com/repo.git///some/path?ref=v1.0.0" -> "github.com/repo.git//some/path?ref=v1.0.0"
 //   - "github.com/repo.git//some/path?ref=v1.0.0" -> unchanged
+//
+//nolint:godot // Helper function comment uses conventional Go doc pattern
 func normalizeVendorURI(uri string) string {
 	// Skip normalization for special URI types
 	if isFileURI(uri) || isOCIURI(uri) || isS3URI(uri) || isLocalPath(uri) || isNonGitHTTPURI(uri) {
