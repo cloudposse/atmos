@@ -234,13 +234,13 @@ base_path: "."
 When configuring paths in `atmos.yaml` on Windows, there are important considerations for how YAML interprets backslashes:
 
 :::warning Windows Path Escaping
-YAML treats backslashes (`\`) as escape characters. This means Windows paths with single backslashes will not work as expected.
+Backslashes (`\`) are treated as escape characters only inside double-quoted YAML scalars. Single-quoted and plain scalars treat backslashes literally. Use single quotes or plain scalars for Windows paths, or double-escape backslashes in double quotes.
 :::
 
 #### Correct Ways to Specify Windows Paths
 
-<Tabs>
-<TabItem value="forward" label="Forward Slashes (Recommended)" default>
+<Tabs defaultValue="forward">
+<TabItem value="forward" label="Forward Slashes (Recommended)">
 ```yaml
 # Forward slashes work on all platforms including Windows
 components:
@@ -255,6 +255,15 @@ components:
 components:
   terraform:
     base_path: "C:\\Users\\username\\projects\\components\\terraform"
+```
+</TabItem>
+
+<TabItem value="single" label="Single Quotes (Backslashes Literal)">
+```yaml
+# Single quotes treat backslashes as literal characters
+components:
+  terraform:
+    base_path: 'C:\Users\username\projects\components\terraform'
 ```
 </TabItem>
 

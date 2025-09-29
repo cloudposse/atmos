@@ -114,7 +114,7 @@ func TestJoinPath(t *testing.T) {
 // TestJoinPath_WindowsAbsolutePaths specifically tests Windows absolute path scenarios.
 func TestJoinPath_WindowsAbsolutePaths(t *testing.T) {
 	if runtime.GOOS != "windows" {
-		t.Skip("Skipping Windows-specific test on non-Windows OS")
+		t.Skipf("Skipping Windows-specific test on non-Windows OS")
 	}
 
 	tests := []struct {
@@ -163,7 +163,7 @@ func TestJoinPath_WindowsAbsolutePaths(t *testing.T) {
 // TestJoinPath_UnixAbsolutePaths specifically tests Unix absolute path scenarios.
 func TestJoinPath_UnixAbsolutePaths(t *testing.T) {
 	if runtime.GOOS == "windows" {
-		t.Skip("Skipping Unix-specific test on Windows")
+		t.Skipf("Skipping Unix-specific test on Windows")
 	}
 
 	tests := []struct {

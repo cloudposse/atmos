@@ -26,7 +26,7 @@ func TestPathJoining_ComprehensiveEdgeCases(t *testing.T) {
 		skipOnWindows         bool
 		onlyOnWindows         bool // Run only on Windows
 	}{
-		// ============ ABSOLUTE ATMOS BASE PATH TESTS ============
+		// ============ ABSOLUTE ATMOS BASE PATH TESTS ============.
 		{
 			name:                  "Absolute ATMOS base + Absolute component base",
 			atmosBasePath:         "/home/runner/work/infrastructure",
@@ -78,7 +78,7 @@ func TestPathJoining_ComprehensiveEdgeCases(t *testing.T) {
 			skipOnWindows:         true,
 		},
 
-		// ============ RELATIVE ATMOS BASE PATH TESTS ============
+		// ============ RELATIVE ATMOS BASE PATH TESTS ============.
 		{
 			name:                  "Relative ATMOS base + Relative component base",
 			atmosBasePath:         ".",
@@ -120,7 +120,7 @@ func TestPathJoining_ComprehensiveEdgeCases(t *testing.T) {
 			skipOnWindows:         false,
 		},
 
-		// ============ DOT-SLASH PREFIX VARIATIONS ============
+		// ============ DOT-SLASH PREFIX VARIATIONS ============.
 		{
 			name:                  "No dot-slash anywhere",
 			atmosBasePath:         "infrastructure",
@@ -172,7 +172,7 @@ func TestPathJoining_ComprehensiveEdgeCases(t *testing.T) {
 			skipOnWindows:         false,
 		},
 
-		// ============ TRAILING SLASH VARIATIONS ============
+		// ============ TRAILING SLASH VARIATIONS ============.
 		{
 			name:                  "Trailing slash on ATMOS base only",
 			atmosBasePath:         "infrastructure/",
@@ -214,7 +214,7 @@ func TestPathJoining_ComprehensiveEdgeCases(t *testing.T) {
 			skipOnWindows:         false,
 		},
 
-		// ============ SPECIAL EDGE CASES ============
+		// ============ SPECIAL EDGE CASES ============.
 		{
 			name:                  "Empty ATMOS base path",
 			atmosBasePath:         "",
@@ -297,7 +297,7 @@ func TestPathJoining_ComprehensiveEdgeCases(t *testing.T) {
 			skipOnWindows:         true, // URLs are not valid Windows file paths
 		},
 
-		// ============ THE EXACT BUG SCENARIO ============
+		// ============ THE EXACT BUG SCENARIO ============.
 		{
 			name:                  "GitHub Actions exact bug scenario",
 			atmosBasePath:         "/home/runner/_work/infrastructure/infrastructure",
@@ -363,7 +363,7 @@ func TestPathJoining_ComprehensiveEdgeCases(t *testing.T) {
 	}
 }
 
-// TestCorrectPathJoining_Solution demonstrates how paths SHOULD be joined
+// TestCorrectPathJoining_Solution demonstrates how paths SHOULD be joined.
 // to avoid the duplication bug.
 func TestCorrectPathJoining_Solution(t *testing.T) {
 	tests := []struct {
@@ -436,7 +436,7 @@ func TestCorrectPathJoining_Solution(t *testing.T) {
 	}
 }
 
-// TestEnvironmentVariablePathCombinations tests ATMOS_BASE_PATH environment variable
+// TestEnvironmentVariablePathCombinations tests ATMOS_BASE_PATH environment variable.
 // with various path combinations.
 func TestEnvironmentVariablePathCombinations(t *testing.T) {
 	tests := []struct {

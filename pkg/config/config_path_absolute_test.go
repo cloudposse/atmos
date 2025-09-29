@@ -178,13 +178,12 @@ func TestConfigPathJoining_EdgeCases(t *testing.T) {
 
 			// Special case: two absolute paths
 			if filepath.IsAbs(tt.basePath) && filepath.IsAbs(tt.componentPath) {
-				// Document the actual behavior
+				// Document the actual filepath.Join behavior with two absolute paths
+				// filepath.Join treats the second absolute path as relative by stripping leading separator
 				if runtime.GOOS != "windows" {
-					// On Unix, filepath.Join with two absolute paths doesn't return the second path
-					// Instead, it strips the leading slash from the second path and joins
-					expectedWrong := filepath.Clean(tt.basePath + "/" + tt.componentPath[1:])
-					assert.Equal(t, expectedWrong, joined,
-						"filepath.Join with two absolute Unix paths has unexpected behavior")
+					expected := filepath.Clean(tt.basePath + tt.componentPath)
+					assert.Equal(t, expected, joined,
+						"filepath.Join with two absolute Unix paths strips leading slash from second path")
 				}
 			}
 

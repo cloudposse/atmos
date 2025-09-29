@@ -17,6 +17,12 @@ var (
 	ErrUnknownComponentType = errors.New("unknown component type")
 )
 
+// Constants for path handling.
+const (
+	windowsPathSeparator = `\`
+	uncPrefix            = `\\`
+)
+
 // hasSequenceRepeat checks if parts[start:start+length] equals parts[start+length:start+length*2].
 func hasSequenceRepeat(parts []string, start, length int) bool {
 	for j := 0; j < length; j++ {
@@ -35,7 +41,7 @@ func removeDuplicateSequence(parts []string, start, length int, originalPath str
 	newParts := make([]string, 0, len(parts)-length)
 	newParts = append(newParts, parts[:start+length]...)
 	newParts = append(newParts, parts[start+length*2:]...)
-	cleanedPath := filepath.Join(newParts...)
+	cleanedPath := strings.Join(newParts, string(filepath.Separator))
 
 	// Handle different volume/path scenarios
 	return preserveVolume(cleanedPath, volume, originalPath)
@@ -56,38 +62,43 @@ func preserveVolume(cleanedPath, volume, originalPath string) string {
 		return handleUNCPath(cleanedPath, volume)
 	}
 
-	// For regular volumes (like C:), join properly if path is not absolute
-	if !filepath.IsAbs(cleanedPath) {
-		return filepath.Join(volume, cleanedPath)
+	// For regular volumes (like C:), ensure proper Windows drive-root style path
+	if cleanedPath == "" {
+		return volume + string(filepath.Separator)
 	}
-	return cleanedPath
+	if strings.HasPrefix(cleanedPath, string(filepath.Separator)) {
+		return volume + cleanedPath
+	}
+	return volume + string(filepath.Separator) + cleanedPath
 }
 
 // isUNCPath checks if the volume is a UNC path.
 func isUNCPath(volume string) bool {
-	return len(volume) >= 2 && volume[0] == '\\' && volume[1] == '\\'
+	return strings.HasPrefix(volume, uncPrefix)
 }
 
 // handleUNCPath processes UNC paths to avoid duplication.
 func handleUNCPath(cleanedPath, volume string) string {
-	// Strip the UNC prefix from cleanedPath if it starts with the same volume
-	if !strings.HasPrefix(cleanedPath, volume) {
-		return cleanedPath
+	// Always reconstruct the path using the original volume to preserve UNC prefix
+	volumeWithoutPrefix := strings.TrimPrefix(volume, uncPrefix)
+
+	// Try to strip the full volume first
+	remainder := strings.TrimPrefix(cleanedPath, volume)
+	if remainder == cleanedPath {
+		// If full volume stripping didn't work, try without UNC prefix
+		remainder = strings.TrimPrefix(cleanedPath, volumeWithoutPrefix)
 	}
 
-	remainder := cleanedPath[len(volume):]
-	// If nothing remains after stripping, return just the volume
+	// Trim any leading path separators from the remainder
+	remainder = strings.TrimLeft(remainder, windowsPathSeparator)
+
+	// If no remainder, return just the volume
 	if remainder == "" {
 		return volume
 	}
 
-	// If remainder starts with separator, trim it to avoid double separator
-	remainder = strings.TrimPrefix(remainder, string(os.PathSeparator))
-	// Only add separator if we have a non-empty remainder
-	if remainder != "" {
-		return filepath.Join(volume, remainder)
-	}
-	return volume
+	// Reconstruct with original volume + separator + remainder
+	return volume + windowsPathSeparator + remainder
 }
 
 // cleanDuplicatedPath detects and removes path duplication patterns.
