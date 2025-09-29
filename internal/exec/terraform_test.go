@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/stretchr/testify/assert"
 
@@ -819,4 +820,132 @@ func extractKeyValuePairs(input string) map[string]string {
 	}
 
 	return config
+}
+
+// TestExecuteTerraform_OpaValidationFunctionality tests the OPA validation functionality by using validate component directly.
+func TestExecuteTerraform_OpaValidationFunctionality(t *testing.T) {
+	// Capture the starting working directory.
+	startingDir, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Failed to get the current working directory: %v", err)
+	}
+
+	defer func() {
+		// Change back to the original working directory after the test.
+		if err := os.Chdir(startingDir); err != nil {
+			t.Fatalf("Failed to change back to the starting directory: %v", err)
+		}
+	}()
+
+	// Define the working directory.
+	workDir := "../../tests/fixtures/scenarios/atmos-stacks-validation"
+	if err := os.Chdir(workDir); err != nil {
+		t.Fatalf("Failed to change directory to %q: %v", workDir, err)
+	}
+
+	tests := []struct {
+		name          string
+		component     string
+		stack         string
+		envVars       map[string]string
+		shouldFail    bool
+		expectedError string
+		description   string
+	}{
+		{
+			name:        "test process_env validation - should pass",
+			component:   "component-test-process-env",
+			stack:       "nonprod",
+			envVars:     map[string]string{"ATMOS_TEST_VAR": "test_value"},
+			shouldFail:  false,
+			description: "Test that process_env section is properly populated and validated",
+		},
+		{
+			name:          "test process_env validation - should fail when ATMOS_TEST_VAR missing",
+			component:     "component-test-process-env",
+			stack:         "nonprod",
+			envVars:       map[string]string{},
+			shouldFail:    true,
+			expectedError: "ATMOS_TEST_VAR environment variable is missing from process_env in test mode",
+			description:   "Test that validation fails when required env var is missing",
+		},
+		{
+			name:        "test cli_args validation - should pass",
+			component:   "component-test-cli-args",
+			stack:       "nonprod",
+			shouldFail:  false,
+			description: "Test that cli_args section contains proper terraform command structure",
+		},
+		{
+			name:        "test tf_cli_vars validation with TF_CLI_ARGS variables",
+			component:   "component-test-tf-cli-vars",
+			stack:       "nonprod",
+			envVars:     map[string]string{"TF_CLI_ARGS": "-var test_var=test_value -var count=5"},
+			shouldFail:  false,
+			description: "Test that tf_cli_vars are properly parsed from TF_CLI_ARGS",
+		},
+		{
+			name:          "test tf_cli_vars validation - should fail when test_var missing",
+			component:     "component-test-tf-cli-vars",
+			stack:         "nonprod",
+			envVars:       map[string]string{"TF_CLI_ARGS": "-var other_var=other_value"},
+			shouldFail:    true,
+			expectedError: "test_var is missing from env_tf_cli_vars when test_tf_cli_vars is enabled",
+			description:   "Test that validation fails when expected test_var is missing from TF_CLI_ARGS",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Set up environment variables for this test
+			originalEnvVars := make(map[string]string)
+			for key, value := range tt.envVars {
+				originalEnvVars[key] = os.Getenv(key)
+				if err := os.Setenv(key, value); err != nil {
+					t.Fatalf("Failed to set environment variable %s: %v", key, err)
+				}
+			}
+
+			// Clean up environment variables after the test.
+			defer func() {
+				for key, originalValue := range originalEnvVars {
+					if originalValue == "" {
+						if err := os.Unsetenv(key); err != nil {
+							t.Logf("Failed to unset environment variable %s: %v", key, err)
+						}
+					} else {
+						if err := os.Setenv(key, originalValue); err != nil {
+							t.Logf("Failed to restore environment variable %s: %v", key, err)
+						}
+					}
+				}
+			}()
+
+			// Test validation directly using ExecuteValidateComponent instead of ExecuteTerraform
+			// to avoid TF_CLI_ARGS conflicts with actual terraform execution
+			info := schema.ConfigAndStacksInfo{
+				ComponentFromArg: tt.component,
+				Stack:            tt.stack,
+				ComponentType:    "terraform",
+			}
+
+			// Initialize Atmos config
+			atmosConfig, err := cfg.InitCliConfig(info, true)
+			if err != nil {
+				t.Fatalf("Failed to initialize Atmos config: %v", err)
+			}
+
+			// Execute validation directly
+			_, err = ExecuteValidateComponent(&atmosConfig, info, tt.component, tt.stack, "", "", []string{}, 0)
+
+			if tt.shouldFail {
+				assert.Error(t, err, "Expected test to fail for %s", tt.description)
+				if tt.expectedError != "" {
+					assert.ErrorContains(t, err, tt.expectedError, "Expected specific error message for %s", tt.description)
+				}
+			} else {
+				assert.NoError(t, err, "Expected test to pass for %s", tt.description)
+			}
+		})
+	}
 }
