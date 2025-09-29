@@ -10,7 +10,7 @@ import (
 	"strconv"
 	"strings"
 
-	log "github.com/charmbracelet/log"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/spf13/viper"
 	"mvdan.cc/sh/v3/expand"
 	"mvdan.cc/sh/v3/interp"
@@ -63,7 +63,13 @@ func ShellRunner(command string, name string, dir string, env []string, out io.W
 		return err
 	}
 
-	environ := append(os.Environ(), env...)
+	// Use provided environment directly to preserve PATH modifications
+	// If no environment provided, fall back to current process environment
+	environ := env
+	if len(environ) == 0 {
+		environ = os.Environ()
+	}
+
 	listEnviron := expand.ListEnviron(environ...)
 	runner, err := interp.New(
 		interp.Dir(dir),
