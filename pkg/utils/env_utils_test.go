@@ -70,6 +70,13 @@ func TestGetPathFromEnvironment(t *testing.T) {
 }
 
 func TestUpdateEnvironmentPath(t *testing.T) {
+	// Use cross-platform paths
+	homeDir := filepath.Join(string(filepath.Separator), "home", "user")
+	testBinDir := filepath.Join(string(filepath.Separator), "test", "bin")
+	usrBinDir := filepath.Join(string(filepath.Separator), "usr", "bin")
+	binDir := filepath.Join(string(filepath.Separator), "bin")
+	existingPath := usrBinDir + string(os.PathListSeparator) + binDir
+
 	tests := []struct {
 		name     string
 		env      []string
@@ -78,20 +85,20 @@ func TestUpdateEnvironmentPath(t *testing.T) {
 	}{
 		{
 			name:   "add PATH to empty environment",
-			env:    []string{"HOME=/home/user"},
-			newDir: "/test/bin",
+			env:    []string{"HOME=" + homeDir},
+			newDir: testBinDir,
 			expected: []string{
-				"HOME=/home/user",
-				"PATH=/test/bin",
+				"HOME=" + homeDir,
+				"PATH=" + testBinDir,
 			},
 		},
 		{
 			name:   "update existing PATH",
-			env:    []string{"HOME=/home/user", "PATH=/usr/bin:/bin"},
-			newDir: "/test/bin",
+			env:    []string{"HOME=" + homeDir, "PATH=" + existingPath},
+			newDir: testBinDir,
 			expected: []string{
-				"HOME=/home/user",
-				"PATH=/test/bin" + string(os.PathListSeparator) + "/usr/bin:/bin",
+				"HOME=" + homeDir,
+				"PATH=" + testBinDir + string(os.PathListSeparator) + existingPath,
 			},
 		},
 	}
@@ -105,6 +112,16 @@ func TestUpdateEnvironmentPath(t *testing.T) {
 }
 
 func TestEnsureBinaryInPath(t *testing.T) {
+	// Use cross-platform paths
+	binDir1 := filepath.Join(string(filepath.Separator), "usr", "bin")
+	binDir2 := filepath.Join(string(filepath.Separator), "bin")
+	testBinDir := filepath.Join(string(filepath.Separator), "test", "bin")
+	testBinary := filepath.Join(testBinDir, "atmos")
+
+	// Create cross-platform PATH values
+	existingPath := binDir1 + string(os.PathListSeparator) + binDir2
+	pathWithTestDir := testBinDir + string(os.PathListSeparator) + existingPath
+
 	tests := []struct {
 		name       string
 		env        []string
@@ -113,20 +130,20 @@ func TestEnsureBinaryInPath(t *testing.T) {
 	}{
 		{
 			name:       "binary directory not in PATH",
-			env:        []string{"PATH=/usr/bin:/bin"},
-			binaryPath: "/test/bin/atmos",
+			env:        []string{"PATH=" + existingPath},
+			binaryPath: testBinary,
 			expected: func(result []string) bool {
 				path := GetPathFromEnvironment(result)
-				return strings.HasPrefix(path, "/test/bin"+string(os.PathListSeparator))
+				return strings.HasPrefix(path, testBinDir+string(os.PathListSeparator))
 			},
 		},
 		{
 			name:       "binary directory already in PATH",
-			env:        []string{"PATH=/test/bin:/usr/bin:/bin"},
-			binaryPath: "/test/bin/atmos",
+			env:        []string{"PATH=" + pathWithTestDir},
+			binaryPath: testBinary,
 			expected: func(result []string) bool {
 				path := GetPathFromEnvironment(result)
-				return path == "/test/bin:/usr/bin:/bin"
+				return path == pathWithTestDir
 			},
 		},
 	}
@@ -141,9 +158,15 @@ func TestEnsureBinaryInPath(t *testing.T) {
 
 func TestEnvironmentPathIntegration(t *testing.T) {
 	// Integration test: simulate the full AtmosRunner workflow
+	// Use cross-platform paths
+	homeDir := filepath.Join(string(filepath.Separator), "home", "user")
+	usrBinDir := filepath.Join(string(filepath.Separator), "usr", "bin")
+	binDir := filepath.Join(string(filepath.Separator), "bin")
+	originalPath := usrBinDir + string(os.PathListSeparator) + binDir
+
 	originalEnv := []string{
-		"HOME=/home/user",
-		"PATH=/usr/bin:/bin",
+		"HOME=" + homeDir,
+		"PATH=" + originalPath,
 		"USER=testuser",
 	}
 
@@ -160,6 +183,6 @@ func TestEnvironmentPathIntegration(t *testing.T) {
 		"PATH should start with test binary directory: %s", updatedPath)
 
 	// Verify original PATH components are preserved
-	assert.Contains(t, updatedPath, "/usr/bin:/bin",
+	assert.Contains(t, updatedPath, originalPath,
 		"Original PATH should be preserved: %s", updatedPath)
 }
