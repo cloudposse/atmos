@@ -9,7 +9,7 @@ import (
 	"strings"
 
 	"github.com/bmatcuk/doublestar/v4"
-	log "github.com/charmbracelet/log"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	cp "github.com/otiai10/copy"
 	"github.com/pkg/errors"
 	"github.com/samber/lo"
@@ -20,7 +20,11 @@ import (
 )
 
 // Dedicated logger for stderr to keep stdout clean of detailed messaging, e.g. for files vendoring.
-var StderrLogger = log.New(os.Stderr)
+var StderrLogger = func() *log.AtmosLogger {
+	l := log.New()
+	l.SetOutput(os.Stderr)
+	return l
+}()
 
 var (
 	ErrVendorComponents              = errors.New("failed to vendor components")
@@ -556,73 +560,4 @@ func shouldIncludeFile(src string, includedPaths []string, trimmedSrc string) (b
 		log.Debug("Excluding path since it does not match any pattern from 'included_paths'", "path", trimmedSrc)
 		return true, nil
 	}
-}
-
-// updateVendorConfigFile updates only the version fields in the vendor configuration file
-func updateVendorConfigFile(sources []schema.AtmosVendorSource, updatedVersions map[string]string, vendorConfigFile string) error {
-	// Read the file content
-	data, err := os.ReadFile(vendorConfigFile)
-	if err != nil {
-		return fmt.Errorf("failed to read vendor configuration file: %w", err)
-	}
-
-	// Convert to string for line-by-line processing
-	content := string(data)
-	lines := strings.Split(content, "\n")
-
-	// Track the component we're currently processing
-	var currentComponent string
-	var modified []string
-
-	// Process each line
-	for _, line := range lines {
-		trimmedLine := strings.TrimSpace(line)
-		if strings.Contains(trimmedLine, "component:") {
-			// Extract component name (handles both "component:" and "- component:" formats)
-			parts := strings.SplitN(trimmedLine, "component:", 2)
-			if len(parts) == 2 {
-				currentComponent = strings.TrimSpace(parts[1])
-				// Remove quotes if present
-				currentComponent = strings.Trim(currentComponent, `""`)
-			}
-			modified = append(modified, line)
-			continue
-		}
-
-		if strings.HasPrefix(trimmedLine, "version:") && currentComponent != "" {
-			// Check if we have an update for this component
-			if newVersion, ok := updatedVersions[currentComponent]; ok {
-				// Calculate leading whitespace to preserve indentation
-				leadingSpace := line[:len(line)-len(strings.TrimLeft(line, " \t"))]
-
-				// Preserve original quote formatting
-				originalVersionPart := strings.TrimSpace(strings.TrimPrefix(trimmedLine, "version:"))
-				formattedVersion := newVersion
-
-				// If original had quotes, preserve them
-				if strings.HasPrefix(originalVersionPart, `"`) && strings.HasSuffix(originalVersionPart, `"`) {
-					formattedVersion = fmt.Sprintf(`"%s"`, newVersion)
-				}
-
-				// Create new line with same indentation and formatting
-				newLine := fmt.Sprintf("%sversion: %s", leadingSpace, formattedVersion)
-				modified = append(modified, newLine)
-				continue
-			}
-		}
-
-		// Keep line as is if no modifications needed
-		modified = append(modified, line)
-	}
-
-	// Convert back to bytes with proper line endings
-	newContent := strings.Join(modified, "\n")
-	if !strings.HasSuffix(content, "\n") && strings.HasSuffix(newContent, "\n") {
-		newContent = strings.TrimSuffix(newContent, "\n")
-	} else if strings.HasSuffix(content, "\n") && !strings.HasSuffix(newContent, "\n") {
-		newContent += "\n"
-	}
-
-	// Write the file back
-	return os.WriteFile(vendorConfigFile, []byte(newContent), 0o644)
 }
