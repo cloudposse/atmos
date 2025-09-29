@@ -1,10 +1,10 @@
 # PRD: Path Construction vs Validation Architecture
 
 ## Document Control
-- **PRD Number**: PRD-2024-001
+- **PRD Number**: PRD-2025-001
 - **Author**: Engineering Team
-- **Date Created**: 2024-09-27
-- **Last Updated**: 2024-09-27
+- **Date Created**: 2025-09-27
+- **Last Updated**: 2025-09-27
 - **Status**: Implemented
 - **Related Issues**: #1512, #1535
 
