@@ -120,9 +120,14 @@ var (
 	ErrFailedToCreateLogger      = errors.New("failed to create logger")
 	ErrFailedToGetComponentFlag  = errors.New("failed to get '--component' flag")
 	ErrFailedToGetStackFlag      = errors.New("failed to get '--stack' flag")
-	ErrOPAPolicyViolations       = errors.New("OPA policy violations detected")
-	ErrOPATimeout                = errors.New("timeout evaluating OPA policy")
-	ErrInvalidRegoPolicy         = errors.New("invalid Rego policy")
+	ErrOPAPolicyViolations          = errors.New("OPA policy violations detected")
+	ErrOPATimeout                   = errors.New("timeout evaluating OPA policy")
+	ErrInvalidRegoPolicy            = errors.New("invalid Rego policy")
+	ErrInvalidOPAPolicy             = errors.New("invalid OPA policy")
+	ErrTerraformEnvCliVarJSON       = errors.New("failed to parse JSON variable from TF_CLI_ARGS environment variable")
+	ErrWorkflowBasePathNotConfigured = errors.New("'workflows.base_path' must be configured in 'atmos.yaml'")
+	ErrInvalidComponentArgument      = errors.New("invalid arguments. The command requires one argument 'componentName'")
+	ErrValidation                    = errors.New("validation failed")
 
 	// List package errors.
 	ErrExecuteDescribeStacks     = errors.New("failed to execute describe stacks")

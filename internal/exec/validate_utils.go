@@ -6,6 +6,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/fs"
+	"os"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
@@ -24,12 +28,12 @@ const (
 	errContextFormat = "%w: %s"
 )
 
-// ValidateWithJsonSchema validates the data structure using the provided JSON Schema document
+// ValidateWithJsonSchema validates the data structure using the provided JSON Schema document.
 // https://github.com/santhosh-tekuri/jsonschema
 // https://go.dev/play/p/Hhax3MrtD8r
 func ValidateWithJsonSchema(data any, schemaName string, schemaText string) (bool, error) {
 	// Convert the data to JSON and back to Go map to prevent the error:
-	// jsonschema: invalid jsonType: map[interface {}]interface {}
+	// jsonschema: invalid jsonType: map[interface {}]interface {}.
 	dataJson, err := u.ConvertToJSONFast(data)
 	if err != nil {
 		return false, err
@@ -68,7 +72,7 @@ func ValidateWithJsonSchema(data any, schemaName string, schemaText string) (boo
 	return true, nil
 }
 
-// ValidateWithOpa validates the data structure using the provided OPA document
+// ValidateWithOpa validates the data structure using the provided OPA document.
 // https://github.com/open-policy-agent/opa/blob/main/rego/example_test.go
 // https://github.com/open-policy-agent/opa/blob/main/rego/rego_test.go
 // https://www.openpolicyagent.org/docs/latest/integration/#sdk
@@ -78,7 +82,7 @@ func ValidateWithOpa(
 	modulePaths []string,
 	timeoutSeconds int,
 ) (bool, error) {
-	// Set timeout for schema validation
+	// Set timeout for schema validation.
 	if timeoutSeconds == 0 {
 		timeoutSeconds = 20
 	}
@@ -92,7 +96,7 @@ func ValidateWithOpa(
 	ctx, cancelFunc := context.WithTimeout(context.TODO(), time.Second*time.Duration(timeoutSeconds))
 	defer cancelFunc()
 
-	// Load the input document
+	// Load the input document.
 	j, err := u.ConvertToJSON(data)
 	if err != nil {
 		return false, err
@@ -105,21 +109,34 @@ func ValidateWithOpa(
 		return false, err
 	}
 
+	// Normalize paths for cross-platform compatibility, especially Windows.
+	// Convert all paths to use forward slashes and clean them.
+	normalizedSchemaPath := filepath.ToSlash(filepath.Clean(schemaPath))
+	normalizedModulePaths := make([]string, len(modulePaths))
+	for i, path := range modulePaths {
+		normalizedModulePaths[i] = filepath.ToSlash(filepath.Clean(path))
+	}
+
 	// Construct a Rego object that can be prepared or evaluated.
 	r := rego.New(
 		rego.Query("data.atmos.errors"),
-		rego.Load(append([]string{schemaPath}, modulePaths...),
+		rego.Load(append([]string{normalizedSchemaPath}, normalizedModulePaths...),
 			loader.GlobExcludeName("*_test.rego", 0),
 		),
 	)
 
-	// Create a prepared query that can be evaluated
+	// Create a prepared query that can be evaluated.
 	query, err := r.PrepareForEval(ctx)
 	if err != nil {
+		// On Windows, rego.Load() sometimes fails due to path issues.
+		// Fall back to the legacy OPA validation method.
+		if isWindowsOPALoadError(err) {
+			return validateWithOpaFallback(data, schemaPath, timeoutSeconds)
+		}
 		return false, err
 	}
 
-	// Execute the prepared query
+	// Execute the prepared query.
 	rs, err := query.Eval(ctx, rego.EvalInput(input))
 	if err != nil {
 		if errors.Is(err, context.DeadlineExceeded) {
@@ -136,7 +153,7 @@ func ValidateWithOpa(
 		return false, fmt.Errorf(errContextFormat, errUtils.ErrInvalidRegoPolicy, schemaPath)
 	}
 
-	// Check the query evaluation result (if the `errors` output array has any items)
+	// Check the query evaluation result (if the `errors` output array has any items).
 	ers, ok := rs[0].Expressions[0].Value.([]any)
 	if !ok {
 		return false, fmt.Errorf(errContextFormat, errUtils.ErrInvalidRegoPolicy, schemaPath)
@@ -148,7 +165,7 @@ func ValidateWithOpa(
 	return true, nil
 }
 
-// ValidateWithOpaLegacy validates the data structure using the provided OPA document
+// ValidateWithOpaLegacy validates the data structure using the provided OPA document.
 // https://www.openpolicyagent.org/docs/latest/integration/#sdk
 func ValidateWithOpaLegacy(
 	data any,
@@ -156,9 +173,9 @@ func ValidateWithOpaLegacy(
 	schemaText string,
 	timeoutSeconds int,
 ) (bool, error) {
-	// The OPA SDK does not support map[any]any data types (which can be part of 'data' input)
-	// ast: interface conversion: json: unsupported type: map[interface {}]interface {}
-	// To fix the issue, convert the data to JSON and back to Go map
+	// The OPA SDK does not support map[any]any data types (which can be part of 'data' input).
+	// ast: interface conversion: json: unsupported type: map[interface {}]interface {}.
+	// To fix the issue, convert the data to JSON and back to Go map.
 	dataJson, err := u.ConvertToJSONFast(data)
 	if err != nil {
 		return false, err
@@ -169,7 +186,7 @@ func ValidateWithOpaLegacy(
 		return false, err
 	}
 
-	// Set timeout for schema validation
+	// Set timeout for schema validation.
 	if timeoutSeconds == 0 {
 		timeoutSeconds = 20
 	}
@@ -181,7 +198,7 @@ func ValidateWithOpaLegacy(
 	// '/bundles/' prefix is required by the OPA SDK
 	bundleSchemaName := "/bundles/validate"
 
-	// Create a bundle server
+	// Create a bundle server.
 	server, err := opaTestServer.NewServer(opaTestServer.MockBundle(bundleSchemaName, map[string]string{schemaName: schemaText}))
 	if err != nil {
 		return false, err
@@ -189,7 +206,7 @@ func ValidateWithOpaLegacy(
 
 	defer server.Stop()
 
-	// Provide the OPA configuration which specifies fetching policy bundles
+	// Provide the OPA configuration which specifies fetching policy bundles.
 	config := []byte(fmt.Sprintf(`{
 		"services": {
 			"validate": {
@@ -208,7 +225,7 @@ func ValidateWithOpaLegacy(
 		"2. If 're_match' function is used and the regex pattern contains a backslash to escape special chars, the backslash itself must be escaped with another backslash",
 		errUtils.ErrOPATimeout.Error())
 
-	// Create an instance of the OPA object
+	// Create an instance of the OPA object.
 	opa, err := sdk.New(ctx, sdk.Options{
 		Config: bytes.NewReader(config),
 	})
@@ -240,8 +257,41 @@ func ValidateWithOpaLegacy(
 	return true, nil
 }
 
-// ValidateWithCue validates the data structure using the provided CUE document
+// ValidateWithCue validates the data structure using the provided CUE document.
 // https://cuelang.org/docs/integrations/go/#processing-cue-in-go
 func ValidateWithCue(data any, schemaName string, schemaText string) (bool, error) {
 	return false, errors.New("validation using CUE is not supported yet")
+}
+
+// isWindowsOPALoadError checks if the error is likely a Windows-specific OPA loading issue.
+func isWindowsOPALoadError(err error) bool {
+	if runtime.GOOS != "windows" {
+		return false
+	}
+
+	// First, check for standard file system errors using errors.Is().
+	// This handles cases where the OPA library properly wraps OS errors.
+	if errors.Is(err, fs.ErrNotExist) || errors.Is(err, os.ErrNotExist) {
+		return true
+	}
+
+	// Fallback: Check for Windows-specific error messages that may not be
+	// properly wrapped by the OPA library. Only check for precise Windows OS errors.
+	errStr := err.Error()
+	return strings.Contains(errStr, "cannot find the path specified") ||
+		strings.Contains(errStr, "system cannot find the file specified")
+}
+
+// validateWithOpaFallback provides a fallback OPA validation using inline policy content.
+// This is used when the file-based loading fails on Windows.
+func validateWithOpaFallback(data any, schemaPath string, timeoutSeconds int) (bool, error) {
+	// Read the policy file content directly.
+	policyContent, err := os.ReadFile(schemaPath)
+	if err != nil {
+		return false, fmt.Errorf(errContextFormat, errUtils.ErrReadFile, fmt.Sprintf("reading OPA policy file %s: %v", schemaPath, err))
+	}
+
+	// Use the legacy validation method with inline content.
+	policyName := filepath.Base(schemaPath)
+	return ValidateWithOpaLegacy(data, policyName, string(policyContent), timeoutSeconds)
 }
