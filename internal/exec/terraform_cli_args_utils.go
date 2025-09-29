@@ -2,13 +2,11 @@ package exec
 
 import (
 	"fmt"
+	"os"
 	"strings"
-
-	"github.com/spf13/viper"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/filetype"
-	log "github.com/cloudposse/atmos/pkg/logger"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -63,13 +61,9 @@ func handleQuoteChar(char rune, inQuotes bool, quoteChar rune, current *strings.
 // Example: TF_CLI_ARGS="-var environment=prod -auto-approve -var region=us-east-1".
 // Returns: ["-var", "environment=prod", "-auto-approve", "-var", "region=us-east-1"].
 func GetTerraformEnvCliArgs() []string {
-	// Get TF_CLI_ARGS environment variable using viper.
-	if err := viper.BindEnv(tfCliArgsEnvVar); err != nil {
-		log.Debug("Failed to bind TF_CLI_ARGS environment variable", "error", err)
-		return []string{}
-	}
-
-	tfCliArgs := viper.GetString(tfCliArgsEnvVar)
+	// Get TF_CLI_ARGS environment variable directly from os.Getenv for better cross-platform compatibility.
+	// Using os.Getenv instead of viper to avoid potential viper binding issues on Windows.
+	tfCliArgs := os.Getenv(tfCliArgsEnvVar) //nolint:forbidigo // This is not a CLI command, but an internal utility for parsing TF_CLI_ARGS
 	if tfCliArgs == "" {
 		return []string{}
 	}
