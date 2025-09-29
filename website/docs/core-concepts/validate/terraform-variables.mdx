@@ -199,7 +199,7 @@ atmos terraform apply my-component -s plat-ue2-dev
 In addition to `tf_cli_vars` (which contains variables passed via `-var` flags on the command line),
 Atmos also provides access to the variables through the `env_tf_cli_vars` section passed via the `TF_CLI_ARGS` environment variable.
 
-### Require an variable to be set via the `TF_CLI_ARGS` environment variable
+### Require a variable to be set via the `TF_CLI_ARGS` environment variable
 
 If you need to enforce that a specific Terraform variable must be set, add the following OPA policy:
 

@@ -1,10 +1,12 @@
 package exec
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/spf13/viper"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/filetype"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -76,7 +78,7 @@ func GetTerraformEnvCliArgs() []string {
 	return parseArgs(tfCliArgs)
 }
 
-// GetTerraformEnvCliVars reads the TF_CLI_ARGS environment variable, parses all -var arguments,
+// GetTerraformEnvCliVars reads the TF_CLI_ARGS environment variable, parses all `-var` arguments,
 // and returns them as a map of variables with proper type conversion.
 // This function processes JSON values and returns them as parsed objects.
 // It handles both formats: -var key=value and -var=key=value.
@@ -93,7 +95,7 @@ func GetTerraformEnvCliVars() (map[string]any, error) {
 		arg := args[i]
 
 		var kv string
-		// Look for -var arguments.
+		// Look for the `-var` arguments.
 		switch {
 		case arg == "-var" && i+1 < len(args):
 			kv = args[i+1]
@@ -108,7 +110,7 @@ func GetTerraformEnvCliVars() (map[string]any, error) {
 		// Process the key=value pair.
 		parts := strings.SplitN(kv, "=", 2)
 		if len(parts) != 2 {
-			continue // Skip malformed arguments
+			continue // Skip malformed arguments.
 		}
 
 		varName := parts[0]
@@ -119,7 +121,7 @@ func GetTerraformEnvCliVars() (map[string]any, error) {
 		if filetype.IsJSON(part2) {
 			v, err := u.ConvertFromJSON(part2)
 			if err != nil {
-				return nil, err
+				return nil, fmt.Errorf("%w: parsing TF_CLI_ARGS -var JSON for %q: %v", errUtils.ErrTerraformEnvCliVarJSON, varName, err)
 			}
 			varValue = v
 		} else {

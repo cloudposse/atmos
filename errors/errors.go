@@ -127,6 +127,7 @@ var (
 	ErrFailedToGetComponentFlag  = errors.New("failed to get '--component' flag")
 	ErrFailedToGetStackFlag      = errors.New("failed to get '--stack' flag")
 	ErrOPAPolicyViolations       = errors.New("OPA policy violations detected")
+	ErrTerraformEnvCliVarJSON    = errors.New("failed to parse JSON variable from TF_CLI_ARGS environment variable")
 
 	// List package errors.
 	ErrExecuteDescribeStacks     = errors.New("failed to execute describe stacks")
