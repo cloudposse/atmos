@@ -134,8 +134,8 @@ func ValidateWithOpa(
 	// Execute the prepared query.
 	rs, err := query.Eval(ctx, rego.EvalInput(input))
 	if err != nil {
-		if err.Error() == "context deadline exceeded" {
-			err = errors.New(timeoutErrorMessage)
+		if errors.Is(err, context.DeadlineExceeded) {
+			err = fmt.Errorf("%s: %w", timeoutErrorMessage, err)
 		}
 		// On Windows, query execution sometimes fails due to platform-specific issues.
 		// Fall back to the legacy OPA validation method.
@@ -229,8 +229,8 @@ func ValidateWithOpaLegacy(
 		Config: bytes.NewReader(config),
 	})
 	if err != nil {
-		if err.Error() == "context deadline exceeded" {
-			err = errors.New(timeoutErrorMessage)
+		if errors.Is(err, context.DeadlineExceeded) {
+			err = fmt.Errorf("%s: %w", timeoutErrorMessage, err)
 		}
 		return false, err
 	}
@@ -242,8 +242,8 @@ func ValidateWithOpaLegacy(
 		Path:  "/atmos/errors",
 		Input: dataFromJson,
 	}); err != nil {
-		if err.Error() == "context deadline exceeded" {
-			err = errors.New(timeoutErrorMessage)
+		if errors.Is(err, context.DeadlineExceeded) {
+			err = fmt.Errorf("%s: %w", timeoutErrorMessage, err)
 		}
 		return false, err
 	}
@@ -282,10 +282,11 @@ func isWindowsOPAError(err error) bool {
 	}
 
 	errStr := err.Error()
-	// Common Windows OPA execution issues.
-	return strings.Contains(errStr, "undefined") ||
-		strings.Contains(errStr, "compile") ||
-		strings.Contains(errStr, "prepare")
+	// Specific Windows OPA execution issues that indicate rego compilation/preparation problems.
+	return strings.Contains(errStr, "rego_compile_error") ||
+		strings.Contains(errStr, "rego_parse_error") ||
+		strings.Contains(errStr, "undefined function") ||
+		strings.Contains(errStr, "undefined rule")
 }
 
 // validateWithOpaFallback provides a fallback OPA validation using inline policy content.
