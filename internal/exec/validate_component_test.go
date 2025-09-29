@@ -415,6 +415,657 @@ func TestValidateComponentInternal_ProcessEnvSectionContent(t *testing.T) {
 	})
 }
 
+func TestValidateComponent(t *testing.T) {
+	// Create temporary directory structure for testing.
+	tempDir, err := os.MkdirTemp("", "atmos_test")
+	require.NoError(t, err)
+	defer os.RemoveAll(tempDir)
+
+	// Create test schema files.
+	jsonSchemaDir := filepath.Join(tempDir, "schemas", "jsonschema")
+	opaSchemaDir := filepath.Join(tempDir, "schemas", "opa")
+	err = os.MkdirAll(jsonSchemaDir, 0o755)
+	require.NoError(t, err)
+	err = os.MkdirAll(opaSchemaDir, 0o755)
+	require.NoError(t, err)
+
+	// Create JSON schema files.
+	validJsonSchemaFile := filepath.Join(jsonSchemaDir, "valid.json")
+	validJsonSchema := `{"type": "object"}`
+	err = os.WriteFile(validJsonSchemaFile, []byte(validJsonSchema), 0o644)
+	require.NoError(t, err)
+
+	strictJsonSchemaFile := filepath.Join(jsonSchemaDir, "strict.json")
+	strictJsonSchema := `{
+		"type": "object",
+		"properties": {
+			"vars": {
+				"type": "object",
+				"properties": {
+					"required_var": {"type": "string"}
+				},
+				"required": ["required_var"]
+			}
+		},
+		"required": ["vars"]
+	}`
+	err = os.WriteFile(strictJsonSchemaFile, []byte(strictJsonSchema), 0o644)
+	require.NoError(t, err)
+
+	// Create OPA policy files.
+	validOpaFile := filepath.Join(opaSchemaDir, "valid.rego")
+	validOpaPolicy := `package atmos
+
+# This policy always passes - it only adds errors if this impossible condition is met
+errors["this will never happen"] {
+    input.vars.this_impossible_var == "impossible_value"
+}`
+	err = os.WriteFile(validOpaFile, []byte(validOpaPolicy), 0o644)
+	require.NoError(t, err)
+
+	strictOpaFile := filepath.Join(opaSchemaDir, "strict.rego")
+	strictOpaPolicy := `package atmos
+
+errors["vars section is missing"] {
+    not input.vars
+}
+
+errors["required_var is missing"] {
+    not input.vars.required_var
+}`
+	err = os.WriteFile(strictOpaFile, []byte(strictOpaPolicy), 0o644)
+	require.NoError(t, err)
+
+	atmosConfig := &schema.AtmosConfiguration{
+		BasePath: tempDir,
+		Schemas: map[string]any{
+			"jsonschema": schema.ResourcePath{
+				BasePath: "schemas/jsonschema",
+			},
+			"opa": schema.ResourcePath{
+				BasePath: "schemas/opa",
+			},
+		},
+	}
+
+	tests := []struct {
+		name             string
+		componentName    string
+		componentSection map[string]any
+		schemaPath       string
+		schemaType       string
+		modulePaths      []string
+		timeoutSeconds   int
+		expectedResult   bool
+		expectError      bool
+		errorContains    string
+	}{
+		{
+			name:          "direct validation with valid JSON schema",
+			componentName: "test-component",
+			componentSection: map[string]any{
+				"vars": map[string]any{
+					"environment": "dev",
+				},
+			},
+			schemaPath:     "valid.json",
+			schemaType:     "jsonschema",
+			modulePaths:    []string{},
+			timeoutSeconds: 30,
+			expectedResult: true,
+			expectError:    false,
+		},
+		{
+			name:          "direct validation with strict JSON schema - missing required field",
+			componentName: "test-component",
+			componentSection: map[string]any{
+				"vars": map[string]any{
+					"environment": "dev",
+				},
+			},
+			schemaPath:     "strict.json",
+			schemaType:     "jsonschema",
+			modulePaths:    []string{},
+			timeoutSeconds: 30,
+			expectedResult: false,
+			expectError:    true, // JSON Schema validation returns an error when it fails
+		},
+		{
+			name:          "direct validation with strict JSON schema - with required field",
+			componentName: "test-component",
+			componentSection: map[string]any{
+				"vars": map[string]any{
+					"environment":  "dev",
+					"required_var": "test-value",
+				},
+			},
+			schemaPath:     "strict.json",
+			schemaType:     "jsonschema",
+			modulePaths:    []string{},
+			timeoutSeconds: 30,
+			expectedResult: true,
+			expectError:    false,
+		},
+		{
+			name:          "direct validation with valid OPA policy",
+			componentName: "test-component",
+			componentSection: map[string]any{
+				"vars": map[string]any{
+					"environment": "dev",
+				},
+			},
+			schemaPath:     "valid.rego",
+			schemaType:     "opa",
+			modulePaths:    []string{},
+			timeoutSeconds: 30,
+			expectedResult: true,
+			expectError:    false,
+		},
+		{
+			name:          "direct validation with strict OPA policy - missing required field",
+			componentName: "test-component",
+			componentSection: map[string]any{
+				"vars": map[string]any{
+					"environment": "dev",
+				},
+			},
+			schemaPath:     "strict.rego",
+			schemaType:     "opa",
+			modulePaths:    []string{},
+			timeoutSeconds: 30,
+			expectedResult: false,
+			expectError:    true, // OPA validation returns an error when it fails
+		},
+		{
+			name:          "direct validation with strict OPA policy - with required field",
+			componentName: "test-component",
+			componentSection: map[string]any{
+				"vars": map[string]any{
+					"environment":  "dev",
+					"required_var": "test-value",
+				},
+			},
+			schemaPath:     "strict.rego",
+			schemaType:     "opa",
+			modulePaths:    []string{},
+			timeoutSeconds: 30,
+			expectedResult: true,
+			expectError:    false,
+		},
+		{
+			name:          "validation using component settings - single validation",
+			componentName: "test-component",
+			componentSection: map[string]any{
+				"vars": map[string]any{
+					"environment": "dev",
+				},
+				"settings": map[string]any{
+					"validation": map[string]any{
+						"test-validation": map[string]any{
+							"schema_type": "jsonschema",
+							"schema_path": "valid.json",
+							"timeout":     30,
+							"disabled":    false,
+						},
+					},
+				},
+			},
+			schemaPath:     "", // Empty to trigger settings-based validation
+			schemaType:     "",
+			modulePaths:    []string{},
+			timeoutSeconds: 0,
+			expectedResult: true,
+			expectError:    false,
+		},
+		{
+			name:          "validation using component settings - multiple validations",
+			componentName: "test-component",
+			componentSection: map[string]any{
+				"vars": map[string]any{
+					"environment":  "dev",
+					"required_var": "test-value",
+				},
+				"settings": map[string]any{
+					"validation": map[string]any{
+						"json-validation": map[string]any{
+							"schema_type": "jsonschema",
+							"schema_path": "strict.json",
+							"timeout":     30,
+							"disabled":    false,
+						},
+						"opa-validation": map[string]any{
+							"schema_type": "opa",
+							"schema_path": "strict.rego",
+							"timeout":     30,
+							"disabled":    false,
+						},
+					},
+				},
+			},
+			schemaPath:     "",
+			schemaType:     "",
+			modulePaths:    []string{},
+			timeoutSeconds: 0,
+			expectedResult: true,
+			expectError:    false,
+		},
+		{
+			name:          "validation using component settings - one validation fails",
+			componentName: "test-component",
+			componentSection: map[string]any{
+				"vars": map[string]any{
+					"environment": "dev",
+					// Missing required_var
+				},
+				"settings": map[string]any{
+					"validation": map[string]any{
+						"valid-validation": map[string]any{
+							"schema_type": "jsonschema",
+							"schema_path": "valid.json",
+							"timeout":     30,
+							"disabled":    false,
+						},
+						"strict-validation": map[string]any{
+							"schema_type": "jsonschema",
+							"schema_path": "strict.json",
+							"timeout":     30,
+							"disabled":    false,
+						},
+					},
+				},
+			},
+			schemaPath:     "",
+			schemaType:     "",
+			modulePaths:    []string{},
+			timeoutSeconds: 0,
+			expectedResult: false,
+			expectError:    true, // One validation fails with an error
+		},
+		{
+			name:          "validation using component settings - disabled validation",
+			componentName: "test-component",
+			componentSection: map[string]any{
+				"vars": map[string]any{
+					"environment": "dev",
+					// Missing required_var, but validation is disabled
+				},
+				"settings": map[string]any{
+					"validation": map[string]any{
+						"disabled-validation": map[string]any{
+							"schema_type": "jsonschema",
+							"schema_path": "strict.json",
+							"timeout":     30,
+							"disabled":    true, // This validation is disabled
+						},
+					},
+				},
+			},
+			schemaPath:     "",
+			schemaType:     "",
+			modulePaths:    []string{},
+			timeoutSeconds: 0,
+			expectedResult: true, // Should pass because validation is disabled
+			expectError:    false,
+		},
+		{
+			name:          "CLI parameters override component settings",
+			componentName: "test-component",
+			componentSection: map[string]any{
+				"vars": map[string]any{
+					"environment": "dev",
+				},
+				"settings": map[string]any{
+					"validation": map[string]any{
+						"component-validation": map[string]any{
+							"schema_type": "jsonschema",
+							"schema_path": "strict.json", // Would fail
+							"timeout":     10,
+							"disabled":    false,
+						},
+					},
+				},
+			},
+			schemaPath:     "valid.json", // CLI override to use valid schema
+			schemaType:     "jsonschema",
+			modulePaths:    []string{},
+			timeoutSeconds: 60, // CLI override timeout
+			expectedResult: true,
+			expectError:    false,
+		},
+		{
+			name:          "no validation configured",
+			componentName: "test-component",
+			componentSection: map[string]any{
+				"vars": map[string]any{
+					"environment": "dev",
+				},
+			},
+			schemaPath:     "",
+			schemaType:     "",
+			modulePaths:    []string{},
+			timeoutSeconds: 0,
+			expectedResult: true, // No validation configured, should pass
+			expectError:    false,
+		},
+		{
+			name:          "invalid schema type error",
+			componentName: "test-component",
+			componentSection: map[string]any{
+				"vars": map[string]any{
+					"environment": "dev",
+				},
+			},
+			schemaPath:     "valid.json",
+			schemaType:     "invalid-schema-type",
+			modulePaths:    []string{},
+			timeoutSeconds: 30,
+			expectedResult: false,
+			expectError:    true,
+			errorContains:  "invalid schema type",
+		},
+		{
+			name:          "missing schema file error",
+			componentName: "test-component",
+			componentSection: map[string]any{
+				"vars": map[string]any{
+					"environment": "dev",
+				},
+			},
+			schemaPath:     "nonexistent.json",
+			schemaType:     "jsonschema",
+			modulePaths:    []string{},
+			timeoutSeconds: 30,
+			expectedResult: false,
+			expectError:    true,
+			errorContains:  "does not exist",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := ValidateComponent(
+				atmosConfig,
+				tt.componentName,
+				tt.componentSection,
+				tt.schemaPath,
+				tt.schemaType,
+				tt.modulePaths,
+				tt.timeoutSeconds,
+			)
+
+			if tt.expectError {
+				assert.Error(t, err)
+				if tt.errorContains != "" {
+					assert.Contains(t, err.Error(), tt.errorContains)
+				}
+			} else {
+				assert.NoError(t, err)
+				assert.Equal(t, tt.expectedResult, result, "Validation result should match expected")
+			}
+
+			// Verify that process_env section was added in cases where validation actually ran.
+			// process_env is only added when validateComponentInternal is called.
+			if !tt.expectError && (tt.schemaPath != "" || hasValidationSettings(tt.componentSection)) {
+				assert.Contains(t, tt.componentSection, cfg.ProcessEnvSectionName, "process_env section should be added when validation runs")
+			}
+		})
+	}
+}
+
+// Helper function to check if the component section has validation settings.
+func hasValidationSettings(componentSection map[string]any) bool {
+	settings, ok := componentSection["settings"].(map[string]any)
+	if !ok {
+		return false
+	}
+
+	validation, ok := settings["validation"].(map[string]any)
+	if !ok {
+		return false
+	}
+
+	// Check if there are any enabled validations
+	for _, v := range validation {
+		validationItem, ok := v.(map[string]any)
+		if !ok {
+			continue
+		}
+
+		disabled, exists := validationItem["disabled"].(bool)
+		if !exists || !disabled {
+			return true // Found at least one enabled validation
+		}
+	}
+
+	return false
+}
+
+func TestExecuteValidateComponent(t *testing.T) {
+	// Change to the test fixtures directory for stack processing.
+	originalDir, err := os.Getwd()
+	require.NoError(t, err)
+	defer os.Chdir(originalDir)
+
+	fixturesDir := "../../tests/fixtures/scenarios/complete"
+	err = os.Chdir(fixturesDir)
+	require.NoError(t, err)
+
+	tests := []struct {
+		name           string
+		componentName  string
+		stack          string
+		schemaPath     string
+		schemaType     string
+		modulePaths    []string
+		timeoutSeconds int
+		expectedResult bool
+		expectError    bool
+		errorContains  string
+	}{
+		{
+			name:           "component validation without schema - should pass",
+			componentName:  "test/test-component",
+			stack:          "tenant1-ue2-dev",
+			schemaPath:     "",
+			schemaType:     "",
+			modulePaths:    []string{},
+			timeoutSeconds: 0,
+			expectedResult: true,
+			expectError:    false,
+		},
+		{
+			name:           "invalid component name",
+			componentName:  "nonexistent-component",
+			stack:          "tenant1-ue2-dev",
+			schemaPath:     "",
+			schemaType:     "",
+			modulePaths:    []string{},
+			timeoutSeconds: 0,
+			expectedResult: false,
+			expectError:    true,
+			errorContains:  "Could not find the component 'nonexistent-component'",
+		},
+		{
+			name:           "invalid stack name",
+			componentName:  "test/test-component",
+			stack:          "nonexistent-stack",
+			schemaPath:     "",
+			schemaType:     "",
+			modulePaths:    []string{},
+			timeoutSeconds: 0,
+			expectedResult: false,
+			expectError:    true,
+			errorContains:  "Could not find the component",
+		},
+		{
+			name:           "invalid schema type",
+			componentName:  "test/test-component",
+			stack:          "tenant1-ue2-dev",
+			schemaPath:     "test.json",
+			schemaType:     "invalid-schema-type",
+			modulePaths:    []string{},
+			timeoutSeconds: 30,
+			expectedResult: false,
+			expectError:    true,
+			errorContains:  "invalid schema type",
+		},
+		{
+			name:           "component type auto-detection - terraform",
+			componentName:  "test/test-component",
+			stack:          "tenant1-ue2-dev",
+			schemaPath:     "",
+			schemaType:     "",
+			modulePaths:    []string{},
+			timeoutSeconds: 0,
+			expectedResult: true,
+			expectError:    false,
+		},
+		{
+			name:           "component type auto-detection - helmfile",
+			componentName:  "echo-server",
+			stack:          "tenant1-ue2-dev",
+			schemaPath:     "",
+			schemaType:     "",
+			modulePaths:    []string{},
+			timeoutSeconds: 0,
+			expectedResult: true,
+			expectError:    false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Initialize configuration.
+			info := schema.ConfigAndStacksInfo{}
+			atmosConfig, err := cfg.InitCliConfig(info, true)
+			require.NoError(t, err)
+
+			// Execute the function under test.
+			result, err := ExecuteValidateComponent(
+				&atmosConfig,
+				info,
+				tt.componentName,
+				tt.stack,
+				tt.schemaPath,
+				tt.schemaType,
+				tt.modulePaths,
+				tt.timeoutSeconds,
+			)
+
+			// Verify results.
+			if tt.expectError {
+				assert.Error(t, err)
+				if tt.errorContains != "" {
+					assert.Contains(t, err.Error(), tt.errorContains)
+				}
+			} else {
+				assert.NoError(t, err)
+				assert.Equal(t, tt.expectedResult, result, "Validation result should match expected")
+			}
+		})
+	}
+}
+
+func TestExecuteValidateComponent_ComponentTypeDetection(t *testing.T) {
+	// Test that the function correctly tries different component types in order.
+
+	// Change to the test fixtures directory.
+	originalDir, err := os.Getwd()
+	require.NoError(t, err)
+	defer os.Chdir(originalDir)
+
+	fixturesDir := "../../tests/fixtures/scenarios/complete"
+	err = os.Chdir(fixturesDir)
+	require.NoError(t, err)
+
+	tests := []struct {
+		name          string
+		componentName string
+		stack         string
+		expectSuccess bool
+	}{
+		{
+			name:          "terraform component detection",
+			componentName: "test/test-component",
+			stack:         "tenant1-ue2-dev",
+			expectSuccess: true,
+		},
+		{
+			name:          "helmfile component detection",
+			componentName: "echo-server",
+			stack:         "tenant1-ue2-dev",
+			expectSuccess: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			info := schema.ConfigAndStacksInfo{}
+			atmosConfig, err := cfg.InitCliConfig(info, true)
+			require.NoError(t, err)
+
+			result, err := ExecuteValidateComponent(
+				&atmosConfig,
+				info,
+				tt.componentName,
+				tt.stack,
+				"", // No schema to test component type detection only
+				"",
+				[]string{},
+				0,
+			)
+
+			if tt.expectSuccess {
+				assert.NoError(t, err)
+				assert.True(t, result)
+			} else {
+				assert.Error(t, err)
+			}
+		})
+	}
+}
+
+func TestExecuteValidateComponent_WithComponentValidationSettings(t *testing.T) {
+	// Test validation using component settings rather than direct parameters.
+
+	// Change to the test fixtures directory.
+	originalDir, err := os.Getwd()
+	require.NoError(t, err)
+	defer os.Chdir(originalDir)
+
+	fixturesDir := "../../tests/fixtures/scenarios/complete"
+	err = os.Chdir(fixturesDir)
+	require.NoError(t, err)
+
+	info := schema.ConfigAndStacksInfo{}
+	atmosConfig, err := cfg.InitCliConfig(info, true)
+	require.NoError(t, err)
+
+	// Test with empty schema parameters to trigger settings-based validation.
+	// Note: This component might have validation settings defined.
+	result, err := ExecuteValidateComponent(
+		&atmosConfig,
+		info,
+		"test/test-component",
+		"tenant1-ue2-dev",
+		"", // Empty to trigger settings-based validation
+		"", // Empty to trigger settings-based validation
+		[]string{},
+		0, // Default timeout
+	)
+
+	// The result depends on whether the component has validation settings.
+	// If no validation is configured, it should pass.
+	if err != nil {
+		// If there's an error, it should be a validation error, not a configuration error.
+		assert.NotContains(t, err.Error(), "invalid schema type")
+		assert.NotContains(t, err.Error(), "component")
+	} else {
+		// If no error, validation should pass.
+		assert.True(t, result)
+	}
+}
+
 // Helper function to get a sample of environment variables for logging.
 func getSampleEnvVars(envMap map[string]string, count int) map[string]string {
 	sample := make(map[string]string)
