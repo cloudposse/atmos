@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -263,10 +264,14 @@ func isWindowsOPALoadError(err error) bool {
 		return false
 	}
 
+	// Check for standard file system errors using errors.Is().
+	if errors.Is(err, fs.ErrNotExist) || errors.Is(err, os.ErrNotExist) {
+		return true
+	}
+
+	// Check for Windows-specific path errors that may not be wrapped as standard errors.
 	errStr := err.Error()
-	// Specific Windows OPA loader errors.
-	return strings.Contains(errStr, "no such file or directory") ||
-		strings.Contains(errStr, "cannot find the path specified") ||
+	return strings.Contains(errStr, "cannot find the path specified") ||
 		strings.Contains(errStr, "system cannot find the file specified")
 }
 
