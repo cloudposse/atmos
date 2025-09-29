@@ -146,17 +146,17 @@ func ValidateWithOpa(
 	}
 
 	if len(rs) < 1 {
-		return false, errors.New(invalidRegoPolicyErrorMessage)
+		return false, fmt.Errorf(errUtils.ErrStringWrappingFormat, errUtils.ErrInvalidOPAPolicy, invalidRegoPolicyErrorMessage)
 	}
 
 	if len(rs[0].Expressions) < 1 {
-		return false, errors.New(invalidRegoPolicyErrorMessage)
+		return false, fmt.Errorf(errUtils.ErrStringWrappingFormat, errUtils.ErrInvalidOPAPolicy, invalidRegoPolicyErrorMessage)
 	}
 
 	// Check the query evaluation result (if the `errors` output array has any items).
 	ers, ok := rs[0].Expressions[0].Value.([]any)
 	if !ok {
-		return false, errors.New(invalidRegoPolicyErrorMessage)
+		return false, fmt.Errorf(errUtils.ErrStringWrappingFormat, errUtils.ErrInvalidOPAPolicy, invalidRegoPolicyErrorMessage)
 	}
 	if len(ers) > 0 {
 		return false, fmt.Errorf(errUtils.ErrStringWrappingFormat, errUtils.ErrOPAPolicyViolations, strings.Join(u.SliceOfInterfacesToSliceOfStrings(ers), "\n"))
@@ -269,12 +269,10 @@ func isWindowsOPALoadError(err error) bool {
 	}
 
 	errStr := err.Error()
-	// Common Windows OPA loader issues.
+	// Specific Windows OPA loader errors.
 	return strings.Contains(errStr, "no such file or directory") ||
 		strings.Contains(errStr, "cannot find the path specified") ||
-		strings.Contains(errStr, "system cannot find the file specified") ||
-		strings.Contains(errStr, "path") ||
-		strings.Contains(errStr, "file")
+		strings.Contains(errStr, "system cannot find the file specified")
 }
 
 // isWindowsOPAError checks if the error is likely a Windows-specific OPA execution issue.
