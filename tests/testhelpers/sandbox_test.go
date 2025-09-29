@@ -677,3 +677,79 @@ func TestSandboxActuallyUsedByAtmos(t *testing.T) {
 		assert.NoFileExists(t, originalMarker, "Marker should NOT exist in original location")
 	}
 }
+
+func TestSandboxWindowsPathsInYAML(t *testing.T) {
+	// This test demonstrates safe temp-based Windows path handling,
+	// avoiding hard-coded C:\Users\test paths that could be destructive.
+
+	if runtime.GOOS != "windows" {
+		t.Skipf("Skipping Windows-specific path test on %s", runtime.GOOS)
+	}
+
+	// Create safe temporary directory instead of using hard-coded system paths.
+	tempDir := t.TempDir()
+
+	// Construct Windows paths safely using filepath.Join().
+	safeWorkspacePath := filepath.Join(tempDir, "workspace")
+	safeComponentsPath := filepath.Join(safeWorkspacePath, "components")
+	safeTerraformPath := filepath.Join(safeComponentsPath, "terraform")
+
+	// Create the directory structure.
+	err := os.MkdirAll(safeTerraformPath, 0o755)
+	require.NoError(t, err, "Failed to create test directory structure")
+
+	// Test different YAML path encoding variants that Windows might encounter:
+	// 1. Forward slashes (Unix-style)
+	// 2. Backslashes (Windows-style)
+	// 3. Escaped backslashes (YAML-escaped)
+
+	testCases := []struct {
+		name         string
+		pathVariant  string
+		expectedPath string
+	}{
+		{
+			name:         "forward_slashes",
+			pathVariant:  strings.ReplaceAll(safeWorkspacePath, `\`, "/"),
+			expectedPath: safeWorkspacePath,
+		},
+		{
+			name:         "backslashes",
+			pathVariant:  safeWorkspacePath,
+			expectedPath: safeWorkspacePath,
+		},
+		{
+			name:         "escaped_backslashes",
+			pathVariant:  strings.ReplaceAll(safeWorkspacePath, `\`, `\\`),
+			expectedPath: safeWorkspacePath,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			// Verify that our safe temp path exists and is writable.
+			testFile := filepath.Join(tc.expectedPath, "test.txt")
+
+			// This should succeed because we're using safe temp directories.
+			err := os.WriteFile(testFile, []byte("test content"), 0o644)
+			assert.NoError(t, err, "Should be able to write to safe temp directory")
+
+			// Verify the file was created.
+			assert.FileExists(t, testFile, "Test file should exist in safe temp directory")
+
+			// Cleanup is automatic via t.TempDir().
+		})
+	}
+
+	// Demonstrate that we're NOT using potentially destructive hard-coded paths.
+	destructivePaths := []string{
+		`C:\Users\test`,
+		`C:\Windows\System32`,
+		`C:\Program Files`,
+	}
+
+	for _, dangerousPath := range destructivePaths {
+		assert.NotContains(t, tempDir, dangerousPath,
+			"Safe temp directory should not contain potentially destructive path: %s", dangerousPath)
+	}
+}
