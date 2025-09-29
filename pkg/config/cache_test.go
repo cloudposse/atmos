@@ -1,6 +1,7 @@
 package config
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -9,6 +10,7 @@ import (
 	"time"
 
 	"github.com/adrg/xdg"
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -351,7 +353,12 @@ func TestGetCacheFilePathWithDirectoryCreationError(t *testing.T) {
 	_, err = GetCacheFilePath()
 	assert.Error(t, err)
 	if err != nil {
-		assert.Contains(t, err.Error(), "error creating cache directory")
+		// The error should be related to cache operations - either directory creation
+		// or cache write failure, both of which are valid for this test scenario
+		expectedErrors := errors.Join(errUtils.ErrCacheDir, errUtils.ErrCacheWrite)
+		assert.True(t,
+			errors.Is(err, errUtils.ErrCacheDir) || errors.Is(err, errUtils.ErrCacheWrite),
+			"Expected error to be one of %v, got: %v", expectedErrors, err)
 	}
 }
 

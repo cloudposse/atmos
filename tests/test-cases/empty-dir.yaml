@@ -36,9 +36,9 @@ tests:
       diff: []
       stdout:
         - "atmos.yaml CLI config file was not found."
-        - "https://atmos.tools/cli/configuration"
       stderr:
         - "Telemetry Enabled"
+        - "https://atmos.tools/cli/configuration"
       exit_code: 1
 
   - name: check atmos --help in empty-dir

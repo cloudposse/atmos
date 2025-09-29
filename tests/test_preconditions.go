@@ -340,3 +340,29 @@ func RequireOCIAuthentication(t *testing.T) {
 	// Token exists, log that authentication is available
 	t.Logf("OCI authentication available via GitHub token")
 }
+
+// RequireGitCommitConfig checks if Git is configured for making commits.
+// This checks for user.name and user.email configuration which are required for commits.
+func RequireGitCommitConfig(t *testing.T) {
+	t.Helper()
+
+	if !ShouldCheckPreconditions() {
+		return
+	}
+
+	// Check for git user.name
+	cmd := exec.Command("git", "config", "--get", "user.name")
+	output, err := cmd.Output()
+	if err != nil || len(output) == 0 {
+		t.Skipf("Git user.name not configured: required for creating commits. Run 'git config user.name \"Your Name\"' or set ATMOS_TEST_SKIP_PRECONDITION_CHECKS=true")
+	}
+
+	// Check for git user.email
+	cmd = exec.Command("git", "config", "--get", "user.email")
+	output, err = cmd.Output()
+	if err != nil || len(output) == 0 {
+		t.Skipf("Git user.email not configured: required for creating commits. Run 'git config user.email \"your.email@example.com\"' or set ATMOS_TEST_SKIP_PRECONDITION_CHECKS=true")
+	}
+
+	t.Logf("Git commit configuration available")
+}

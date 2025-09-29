@@ -166,6 +166,7 @@ var (
 	ErrCacheWrite     = errors.New("cache write failed")
 	ErrCacheUnmarshal = errors.New("cache unmarshal failed")
 	ErrCacheMarshal   = errors.New("cache marshal failed")
+	ErrCacheDir       = errors.New("cache directory creation failed")
 
 	// Logger errors.
 	ErrInvalidLogLevel = errors.New("invalid log level")

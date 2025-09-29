@@ -42,7 +42,7 @@ func GetCacheFilePath() (string, error) {
 	}
 
 	if err := os.MkdirAll(cacheDir, 0o755); err != nil {
-		return "", errors.Wrap(err, "error creating cache directory")
+		return "", fmt.Errorf(errUtils.ErrValueWrappingFormat, errUtils.ErrCacheDir, err)
 	}
 
 	return filepath.Join(cacheDir, "cache.yaml"), nil
