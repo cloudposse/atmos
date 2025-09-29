@@ -264,9 +264,17 @@ func isWindowsOPALoadError(err error) bool {
 		return false
 	}
 
-	// Check for standard file system errors using errors.Is().
-	// This should catch most legitimate file not found cases on Windows.
-	return errors.Is(err, fs.ErrNotExist) || errors.Is(err, os.ErrNotExist)
+	// First, check for standard file system errors using errors.Is().
+	// This handles cases where the OPA library properly wraps OS errors.
+	if errors.Is(err, fs.ErrNotExist) || errors.Is(err, os.ErrNotExist) {
+		return true
+	}
+
+	// Fallback: Check for Windows-specific error messages that may not be
+	// properly wrapped by the OPA library. Only check for precise Windows OS errors.
+	errStr := err.Error()
+	return strings.Contains(errStr, "cannot find the path specified") ||
+		strings.Contains(errStr, "system cannot find the file specified")
 }
 
 // validateWithOpaFallback provides a fallback OPA validation using inline policy content.
@@ -275,7 +283,7 @@ func validateWithOpaFallback(data any, schemaPath string, timeoutSeconds int) (b
 	// Read the policy file content directly.
 	policyContent, err := os.ReadFile(schemaPath)
 	if err != nil {
-		return false, fmt.Errorf("%w reading OPA policy file %s: %v", errUtils.ErrReadFile, schemaPath, err)
+		return false, fmt.Errorf(errUtils.ErrStringWrappingFormat, errUtils.ErrReadFile, fmt.Sprintf("reading OPA policy file %s: %v", schemaPath, err))
 	}
 
 	// Use the legacy validation method with inline content.
