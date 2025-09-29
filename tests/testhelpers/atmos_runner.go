@@ -166,18 +166,18 @@ func (r *AtmosRunner) prepareEnvironment() []string {
 	updatedEnv := utils.EnsureBinaryInPath(env, r.binaryPath)
 
 	// Handle GOCOVERDIR based on coverage settings
+	// First filter out any existing GOCOVERDIR entries
+	var filteredEnv []string
+	for _, envVar := range updatedEnv {
+		if !strings.HasPrefix(envVar, "GOCOVERDIR=") {
+			filteredEnv = append(filteredEnv, envVar)
+		}
+	}
+	updatedEnv = filteredEnv
+
 	if r.coverDir != "" {
 		// Coverage enabled: set GOCOVERDIR to our coverage directory
 		updatedEnv = append(updatedEnv, fmt.Sprintf("GOCOVERDIR=%s", r.coverDir))
-	} else {
-		// Coverage disabled: remove any existing GOCOVERDIR from environment
-		var filteredEnv []string
-		for _, envVar := range updatedEnv {
-			if !strings.HasPrefix(envVar, "GOCOVERDIR=") {
-				filteredEnv = append(filteredEnv, envVar)
-			}
-		}
-		updatedEnv = filteredEnv
 	}
 
 	return updatedEnv

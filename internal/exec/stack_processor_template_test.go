@@ -439,6 +439,6 @@ components:
 	vars2 := test2["vars"].(map[string]any)
 
 	// The template should be evaluated
-	assert.Equal(t, "3", vars2["computed"])
+	assert.Equal(t, 3, vars2["computed"])
 	assert.Equal(t, 10, vars2["value"])
 }

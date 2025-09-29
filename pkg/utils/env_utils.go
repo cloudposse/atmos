@@ -45,37 +45,41 @@ func PrependToPath(currentPath, newDir string) string {
 	return fmt.Sprintf("%s%c%s", newDir, os.PathListSeparator, currentPath)
 }
 
+// findPathIndex returns the index of the PATH entry (case-insensitive) and the key casing to use ("PATH" or "Path").
+func findPathIndex(env []string) (int, string) {
+	for i, envVar := range env {
+		if len(envVar) >= pathPrefixLength && strings.EqualFold(envVar[:pathPrefixLength], "PATH=") {
+			return i, envVar[:pathPrefixLength-1] // keep existing key's casing (exclude "=").
+		}
+	}
+	return -1, "PATH"
+}
+
 // UpdateEnvironmentPath updates the PATH in an environment slice.
 // Returns a new environment slice with the updated PATH.
 func UpdateEnvironmentPath(env []string, newDir string) []string {
-	var updatedEnv []string
-	pathUpdated := false
-
-	for _, envVar := range env {
-		if strings.HasPrefix(envVar, "PATH=") {
-			currentPath := envVar[pathPrefixLength:] // Remove "PATH=" prefix
-			newPath := fmt.Sprintf("PATH=%s", PrependToPath(currentPath, newDir))
-			updatedEnv = append(updatedEnv, newPath)
-			pathUpdated = true
-		} else {
-			updatedEnv = append(updatedEnv, envVar)
+	idx, key := findPathIndex(env) // case-insensitive match for "PATH=".
+	if idx >= 0 {
+		updated := make([]string, 0, len(env))
+		for i, envVar := range env {
+			if i == idx {
+				currentPath := envVar[len(key)+1:] // Remove "KEY=" prefix
+				updated = append(updated, fmt.Sprintf("%s=%s", key, PrependToPath(currentPath, newDir)))
+			} else {
+				updated = append(updated, envVar)
+			}
 		}
+		return updated
 	}
-
-	// If PATH wasn't found, add it
-	if !pathUpdated {
-		updatedEnv = append(updatedEnv, fmt.Sprintf("PATH=%s", newDir))
-	}
-
-	return updatedEnv
+	// If PATH wasn't found, add it with canonical "PATH" key.
+	return append(append([]string{}, env...), fmt.Sprintf("PATH=%s", newDir))
 }
 
 // GetPathFromEnvironment extracts the PATH value from an environment slice.
 func GetPathFromEnvironment(env []string) string {
-	for _, envVar := range env {
-		if strings.HasPrefix(envVar, "PATH=") {
-			return envVar[pathPrefixLength:] // Remove "PATH=" prefix
-		}
+	idx, key := findPathIndex(env)
+	if idx >= 0 {
+		return env[idx][len(key)+1:] // Remove "KEY=" prefix
 	}
 	return ""
 }

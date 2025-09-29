@@ -377,7 +377,7 @@ func executeCustomCommand(
 
 		// Prepare ENV vars
 		// ENV var values support Go templates and have access to {{ .ComponentConfig.xxx.yyy.zzz }} Go template variables
-		// Start with current environment to inherit PATH and other variables set by AtmosRunner
+		// Start with current environment to inherit PATH and other variables set by AtmosRunner.
 		var envVarsList []string
 		for _, v := range commandConfig.Env {
 			key := strings.TrimSpace(v.Key)
