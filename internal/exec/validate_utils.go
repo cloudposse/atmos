@@ -137,11 +137,6 @@ func ValidateWithOpa(
 		if errors.Is(err, context.DeadlineExceeded) {
 			err = fmt.Errorf("%s: %w", timeoutErrorMessage, err)
 		}
-		// On Windows, query execution sometimes fails due to platform-specific issues.
-		// Fall back to the legacy OPA validation method.
-		if isWindowsOPAError(err) {
-			return validateWithOpaFallback(data, schemaPath, timeoutSeconds)
-		}
 		return false, err
 	}
 
@@ -273,20 +268,6 @@ func isWindowsOPALoadError(err error) bool {
 	return strings.Contains(errStr, "no such file or directory") ||
 		strings.Contains(errStr, "cannot find the path specified") ||
 		strings.Contains(errStr, "system cannot find the file specified")
-}
-
-// isWindowsOPAError checks if the error is likely a Windows-specific OPA execution issue.
-func isWindowsOPAError(err error) bool {
-	if runtime.GOOS != "windows" {
-		return false
-	}
-
-	errStr := err.Error()
-	// Specific Windows OPA execution issues that indicate rego compilation/preparation problems.
-	return strings.Contains(errStr, "rego_compile_error") ||
-		strings.Contains(errStr, "rego_parse_error") ||
-		strings.Contains(errStr, "undefined function") ||
-		strings.Contains(errStr, "undefined rule")
 }
 
 // validateWithOpaFallback provides a fallback OPA validation using inline policy content.
