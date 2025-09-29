@@ -265,14 +265,8 @@ func isWindowsOPALoadError(err error) bool {
 	}
 
 	// Check for standard file system errors using errors.Is().
-	if errors.Is(err, fs.ErrNotExist) || errors.Is(err, os.ErrNotExist) {
-		return true
-	}
-
-	// Check for Windows-specific path errors that may not be wrapped as standard errors.
-	errStr := err.Error()
-	return strings.Contains(errStr, "cannot find the path specified") ||
-		strings.Contains(errStr, "system cannot find the file specified")
+	// This should catch most legitimate file not found cases on Windows.
+	return errors.Is(err, fs.ErrNotExist) || errors.Is(err, os.ErrNotExist)
 }
 
 // validateWithOpaFallback provides a fallback OPA validation using inline policy content.
