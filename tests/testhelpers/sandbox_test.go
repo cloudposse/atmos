@@ -690,7 +690,17 @@ func TestSandboxWindowsPathsInYAML(t *testing.T) {
 		t.Skipf("Skipping Windows-specific path test on non-Windows OS")
 	}
 
-	// Test various ways Windows users might write paths in YAML
+	// Derive a safe Windows path rooted in temp.
+	base := t.TempDir()
+	// Build a real components path we will create on disk.
+	realComponents := filepath.Join(base, "components", "terraform")
+	// Variants for YAML encoding.
+	fwd := filepath.ToSlash(realComponents) // C:/... form
+	// On Windows, filepath.Join already uses '\' separators.
+	back := realComponents                     // C:\...\ form
+	esc := strings.ReplaceAll(back, `\`, `\\`) // C:\\... form
+
+	// Test various ways Windows users might write paths in YAML.
 	testCases := []struct {
 		name        string
 		yamlContent string
@@ -699,31 +709,28 @@ func TestSandboxWindowsPathsInYAML(t *testing.T) {
 	}{
 		{
 			name: "escaped_backslashes",
-			yamlContent: `
-components:
+			yamlContent: fmt.Sprintf(`components:
   terraform:
-    base_path: "C:\\Users\\test\\components\\terraform"
-`,
+    base_path: "%s"
+`, esc),
 			shouldWork:  true,
 			description: "Double backslashes (escaped) should work",
 		},
 		{
 			name: "forward_slashes",
-			yamlContent: `
-components:
+			yamlContent: fmt.Sprintf(`components:
   terraform:
-    base_path: "C:/Users/test/components/terraform"
-`,
+    base_path: "%s"
+`, fwd),
 			shouldWork:  true,
 			description: "Forward slashes should work on Windows",
 		},
 		{
 			name: "single_backslashes",
-			yamlContent: `
-components:
+			yamlContent: fmt.Sprintf(`components:
   terraform:
-    base_path: "C:\Users\test\components\terraform"
-`,
+    base_path: "%s"
+`, back),
 			shouldWork:  false,
 			description: "Single backslashes get eaten by YAML parser",
 		},
@@ -731,18 +738,11 @@ components:
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			// Create a temporary workdir
-			workdir, err := os.MkdirTemp("", "sandbox-yaml-test-*")
-			require.NoError(t, err)
-			defer os.RemoveAll(workdir)
+			workdir := t.TempDir()
 
-			// Create a dummy component structure
-			componentDir := filepath.Join("C:", "Users", "test", "components", "terraform", "test-component")
-			if err := os.MkdirAll(componentDir, 0o755); err != nil {
-				// If we can't create the exact path, skip this test
-				t.Skipf("Cannot create test directory at %s: %v", componentDir, err)
-			}
-			defer os.RemoveAll(filepath.Join("C:", "Users", "test"))
+			// Create a dummy component structure that matches realComponents.
+			componentDir := filepath.Join(realComponents, "test-component")
+			require.NoError(t, os.MkdirAll(componentDir, 0o755))
 
 			componentFile := filepath.Join(componentDir, "main.tf")
 			require.NoError(t, os.WriteFile(componentFile, []byte("# Test"), 0o644))
@@ -756,13 +756,14 @@ components:
 
 			// Handle expected failures
 			if !tc.shouldWork {
-				if err == nil && sandbox != nil {
-					defer sandbox.Cleanup()
-					// Check if components were actually found (they shouldn't be)
-					sandboxComponentPath := filepath.Join(sandbox.ComponentsPath, "terraform", "test-component", "main.tf")
-					if _, err := os.Stat(sandboxComponentPath); err == nil {
-						t.Errorf("%s: Component was found but shouldn't have been", tc.description)
-					}
+				// Either we fail to set up, or we set up but nothing gets copied from the bogus path.
+				if err != nil {
+					return
+				}
+				defer sandbox.Cleanup()
+				sandboxComponentPath := filepath.Join(sandbox.ComponentsPath, "terraform", "test-component", "main.tf")
+				if _, statErr := os.Stat(sandboxComponentPath); statErr == nil {
+					t.Errorf("%s: Component was found but shouldn't have been", tc.description)
 				}
 				return
 			}
