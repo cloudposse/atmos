@@ -521,7 +521,7 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 	xdgCacheHome := filepath.Join(tempDir, ".cache")
 	tc.Env["XDG_CACHE_HOME"] = xdgCacheHome
 	// Also set the process environment so removeCacheFile() uses the test path
-	os.Setenv("XDG_CACHE_HOME", xdgCacheHome)
+	t.Setenv("XDG_CACHE_HOME", xdgCacheHome)
 	// Reload XDG to pick up the new environment
 	xdg.Reload()
 
@@ -622,6 +622,11 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 	// This is to ensure that the test is not affected by the CI environment variables.
 	currentEnvVars := telemetry.PreserveCIEnvVars()
 	defer telemetry.RestoreCIEnvVars(currentEnvVars)
+
+	// Set any environment variables defined in the test case using t.Setenv for proper isolation
+	for key, value := range tc.Env {
+		t.Setenv(key, value)
+	}
 
 	// Prepare the command based on what's being tested
 	var cmd *exec.Cmd
