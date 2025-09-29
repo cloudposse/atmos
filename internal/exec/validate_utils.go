@@ -295,7 +295,7 @@ func validateWithOpaFallback(data any, schemaPath string, timeoutSeconds int) (b
 	// Read the policy file content directly.
 	policyContent, err := os.ReadFile(schemaPath)
 	if err != nil {
-		return false, fmt.Errorf(errUtils.ErrStringWrappingFormat, errUtils.ErrReadFile, fmt.Sprintf("reading OPA policy file %s", schemaPath))
+		return false, fmt.Errorf("%w reading OPA policy file %s: %v", errUtils.ErrReadFile, schemaPath, err)
 	}
 
 	// Use the legacy validation method with inline content.
