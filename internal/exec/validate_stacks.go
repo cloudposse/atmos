@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	log "github.com/charmbracelet/log"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 

@@ -7,9 +7,11 @@ import (
 const (
 	ErrWrappingFormat       = "%w: %w"
 	ErrStringWrappingFormat = "%w: %s"
+	ErrValueWrappingFormat  = "%w: %v"
 )
 
 var (
+	ErrNoGitRepo                             = errors.New("not in a git repository")
 	ErrDownloadPackage                       = errors.New("failed to download package")
 	ErrProcessOCIImage                       = errors.New("failed to process OCI image")
 	ErrCopyPackage                           = errors.New("failed to copy package")
@@ -28,8 +30,11 @@ var (
 	ErrMultipleFilesFound                    = errors.New("multiple files found in directory")
 	ErrSourceDirNotExist                     = errors.New("source directory does not exist")
 	ErrEmptyFilePath                         = errors.New("file path is empty")
+	ErrEmptyWorkdir                          = errors.New("workdir cannot be empty")
+	ErrWorkdirNotExist                       = errors.New("workdir does not exist")
 	ErrPathResolution                        = errors.New("failed to resolve absolute path")
 	ErrInvalidTemplateFunc                   = errors.New("invalid template function")
+	ErrRefuseDeleteSymbolicLink              = errors.New("refusing to delete symbolic link")
 	ErrNoDocsGenerateEntry                   = errors.New("no docs.generate entry found")
 	ErrMissingDocType                        = errors.New("doc-type argument missing")
 	ErrUnsupportedInputType                  = errors.New("unsupported input type")
@@ -128,4 +133,14 @@ var (
 	ErrProcessInstances          = errors.New("failed to process instances")
 	ErrParseFlag                 = errors.New("failed to parse flag value")
 	ErrFailedToFinalizeCSVOutput = errors.New("failed to finalize CSV output")
+
+	// Cache-related errors.
+	ErrCacheLocked    = errors.New("cache file is locked")
+	ErrCacheRead      = errors.New("cache read failed")
+	ErrCacheWrite     = errors.New("cache write failed")
+	ErrCacheUnmarshal = errors.New("cache unmarshal failed")
+	ErrCacheMarshal   = errors.New("cache marshal failed")
+
+	// Profiler-related errors.
+	ErrProfilerStart = errors.New("profiler start failed")
 )
