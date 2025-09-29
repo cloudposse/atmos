@@ -280,7 +280,9 @@ func TestAtmosConfigAbsolutePathsIntegration(t *testing.T) {
 			if tt.expectedPrefix != "" && filepath.IsAbs(tt.expectedPrefix) {
 				assert.Equal(t, tt.expectedPrefix, atmosConfig.TerraformDirAbsolutePath)
 			} else if tt.expectedPrefix != "" {
-				assert.Contains(t, atmosConfig.TerraformDirAbsolutePath, tt.expectedPrefix)
+				// Convert expected prefix to use correct path separators for this platform
+				expectedPlatformPath := filepath.FromSlash(tt.expectedPrefix)
+				assert.Contains(t, atmosConfig.TerraformDirAbsolutePath, expectedPlatformPath)
 			}
 
 			// Verify other absolute paths were also set
