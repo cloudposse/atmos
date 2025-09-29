@@ -363,7 +363,7 @@ func TestPathJoining_ComprehensiveEdgeCases(t *testing.T) {
 	}
 }
 
-// TestCorrectPathJoining_Solution demonstrates how paths SHOULD be joined.
+// TestCorrectPathJoining_Solution demonstrates how paths SHOULD be joined
 // to avoid the duplication bug.
 func TestCorrectPathJoining_Solution(t *testing.T) {
 	tests := []struct {
@@ -436,7 +436,7 @@ func TestCorrectPathJoining_Solution(t *testing.T) {
 	}
 }
 
-// TestEnvironmentVariablePathCombinations tests ATMOS_BASE_PATH environment variable.
+// TestEnvironmentVariablePathCombinations tests ATMOS_BASE_PATH environment variable
 // with various path combinations.
 func TestEnvironmentVariablePathCombinations(t *testing.T) {
 	tests := []struct {

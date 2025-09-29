@@ -15,49 +15,45 @@ import (
 // specifies the component path, which can be absolute or relative.
 func TestMetadataComponent_PathHandling(t *testing.T) {
 	tests := []struct {
-		name                      string
-		atmosBasePath             string
-		terraformBasePath         string
-		metadataComponent         string // The value in metadata.component
-		componentFolderPrefix     string
-		description               string
-		expectedFinalComponent    string
-		shouldHavePathDuplication bool
-		skipOnWindows             bool
+		name                   string
+		atmosBasePath          string
+		terraformBasePath      string
+		metadataComponent      string // The value in metadata.component
+		componentFolderPrefix  string
+		description            string
+		expectedFinalComponent string
+		skipOnWindows          bool
 	}{
 		// ============ ABSOLUTE metadata.component TESTS ============
 		{
-			name:                      "Absolute metadata.component path",
-			atmosBasePath:             "/home/runner/work/infrastructure",
-			terraformBasePath:         "components/terraform",
-			metadataComponent:         "/absolute/path/to/component",
-			componentFolderPrefix:     "",
-			description:               "metadata.component with absolute path should override everything",
-			expectedFinalComponent:    "/absolute/path/to/component",
-			shouldHavePathDuplication: false,
-			skipOnWindows:             true,
+			name:                   "Absolute metadata.component path",
+			atmosBasePath:          "/home/runner/work/infrastructure",
+			terraformBasePath:      "components/terraform",
+			metadataComponent:      "/absolute/path/to/component",
+			componentFolderPrefix:  "",
+			description:            "metadata.component with absolute path should override everything",
+			expectedFinalComponent: "/absolute/path/to/component",
+			skipOnWindows:          true,
 		},
 		{
-			name:                      "Absolute metadata.component with absolute terraform base",
-			atmosBasePath:             "/home/runner/work/infrastructure",
-			terraformBasePath:         "/home/runner/work/infrastructure/components/terraform",
-			metadataComponent:         "/custom/absolute/vpc",
-			componentFolderPrefix:     "aws",
-			description:               "Absolute metadata.component ignores terraform base path",
-			expectedFinalComponent:    "/custom/absolute/vpc",
-			shouldHavePathDuplication: false,
-			skipOnWindows:             true,
+			name:                   "Absolute metadata.component with absolute terraform base",
+			atmosBasePath:          "/home/runner/work/infrastructure",
+			terraformBasePath:      "/home/runner/work/infrastructure/components/terraform",
+			metadataComponent:      "/custom/absolute/vpc",
+			componentFolderPrefix:  "aws",
+			description:            "Absolute metadata.component ignores terraform base path",
+			expectedFinalComponent: "/custom/absolute/vpc",
+			skipOnWindows:          true,
 		},
 		{
-			name:                      "Absolute metadata.component with folder prefix",
-			atmosBasePath:             "/project/root",
-			terraformBasePath:         "components/terraform",
-			metadataComponent:         "/override/path/component",
-			componentFolderPrefix:     "should-be-ignored",
-			description:               "Folder prefix should be ignored with absolute metadata.component",
-			expectedFinalComponent:    "/override/path/component",
-			shouldHavePathDuplication: false,
-			skipOnWindows:             true,
+			name:                   "Absolute metadata.component with folder prefix",
+			atmosBasePath:          "/project/root",
+			terraformBasePath:      "components/terraform",
+			metadataComponent:      "/override/path/component",
+			componentFolderPrefix:  "should-be-ignored",
+			description:            "Folder prefix should be ignored with absolute metadata.component",
+			expectedFinalComponent: "/override/path/component",
+			skipOnWindows:          true,
 		},
 
 		// ============ RELATIVE metadata.component TESTS ============
@@ -178,28 +174,26 @@ func TestMetadataComponent_PathHandling(t *testing.T) {
 			skipOnWindows:          true,
 		},
 		{
-			name:                      "metadata.component with URL-like path",
-			atmosBasePath:             "/project",
-			terraformBasePath:         "components/terraform",
-			metadataComponent:         "https://github.com/org/repo/vpc",
-			componentFolderPrefix:     "",
-			description:               "URL-like path in metadata.component",
-			expectedFinalComponent:    "https://github.com/org/repo/vpc",
-			shouldHavePathDuplication: false,
-			skipOnWindows:             false,
+			name:                   "metadata.component with URL-like path",
+			atmosBasePath:          "/project",
+			terraformBasePath:      "components/terraform",
+			metadataComponent:      "https://github.com/org/repo/vpc",
+			componentFolderPrefix:  "",
+			description:            "URL-like path in metadata.component",
+			expectedFinalComponent: "https://github.com/org/repo/vpc",
+			skipOnWindows:          false,
 		},
 
 		// ============ THE GITHUB ACTIONS BUG SCENARIO ============
 		{
-			name:                      "GitHub Actions with absolute metadata.component",
-			atmosBasePath:             "/home/runner/_work/infrastructure/infrastructure",
-			terraformBasePath:         "/home/runner/_work/infrastructure/infrastructure/atmos/components/terraform",
-			metadataComponent:         "/home/runner/_work/infrastructure/infrastructure/atmos/components/terraform/iam-role",
-			componentFolderPrefix:     "",
-			description:               "Absolute metadata.component matching terraform base path",
-			expectedFinalComponent:    "/home/runner/_work/infrastructure/infrastructure/atmos/components/terraform/iam-role",
-			shouldHavePathDuplication: false, // Should NOT duplicate when metadata.component is absolute
-			skipOnWindows:             true,
+			name:                   "GitHub Actions with absolute metadata.component",
+			atmosBasePath:          "/home/runner/_work/infrastructure/infrastructure",
+			terraformBasePath:      "/home/runner/_work/infrastructure/infrastructure/atmos/components/terraform",
+			metadataComponent:      "/home/runner/_work/infrastructure/infrastructure/atmos/components/terraform/iam-role",
+			componentFolderPrefix:  "",
+			description:            "Absolute metadata.component matching terraform base path",
+			expectedFinalComponent: "/home/runner/_work/infrastructure/infrastructure/atmos/components/terraform/iam-role",
+			skipOnWindows:          true,
 		},
 	}
 
@@ -287,12 +281,10 @@ func TestMetadataComponent_PathHandling(t *testing.T) {
 					assert.NotContains(t, componentPath, "//",
 						"Path should not contain // pattern")
 
-					if !tt.shouldHavePathDuplication {
-						// Check for the specific GitHub Actions duplication pattern
-						assert.NotContains(t, componentPath,
-							"/home/runner/_work/infrastructure/infrastructure/.//home/runner/_work/infrastructure/infrastructure",
-							"Path should not have the duplication bug")
-					}
+					// Check for the specific GitHub Actions duplication pattern
+					assert.NotContains(t, componentPath,
+						"/home/runner/_work/infrastructure/infrastructure/.//home/runner/_work/infrastructure/infrastructure",
+						"Path should not have the duplication bug")
 				}
 			}
 		})
