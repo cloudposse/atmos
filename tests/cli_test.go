@@ -464,13 +464,9 @@ func TestMain(m *testing.M) {
 
 // prepareAtmosCommand prepares an atmos command with coverage support if enabled.
 func prepareAtmosCommand(t *testing.T, ctx context.Context, args ...string) *exec.Cmd {
-	// Lazy initialize atmosRunner only when needed for atmos commands
+	// AtmosRunner should be initialized early in runCLICommandTest before directory changes
 	if atmosRunner == nil {
-		atmosRunner = testhelpers.NewAtmosRunner(coverDir)
-		if err := atmosRunner.Build(); err != nil {
-			t.Skipf("Failed to initialize Atmos: %v", err)
-		}
-		logger.Info("Atmos runner initialized for test", "coverageEnabled", coverDir != "")
+		t.Fatalf("AtmosRunner should have been initialized before directory changes")
 	}
 	return atmosRunner.CommandContext(ctx, args...)
 }
@@ -482,6 +478,15 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 			t.Fatalf("Failed to change back to the starting directory: %v", err)
 		}
 	}()
+
+	// Initialize AtmosRunner early, before any directory changes, so it can build from the git repo
+	if tc.Command == "atmos" && atmosRunner == nil {
+		atmosRunner = testhelpers.NewAtmosRunner(coverDir)
+		if err := atmosRunner.Build(); err != nil {
+			t.Skipf("Failed to initialize Atmos: %v", err)
+		}
+		logger.Info("Atmos runner initialized for test", "coverageEnabled", coverDir != "")
+	}
 
 	// Create a context with timeout if specified
 	var ctx context.Context

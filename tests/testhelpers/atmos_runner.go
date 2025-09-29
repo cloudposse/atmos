@@ -140,6 +140,10 @@ func (r *AtmosRunner) buildWithCoverage() error {
 func (r *AtmosRunner) Command(args ...string) *exec.Cmd {
 	cmd := exec.Command(r.binaryPath, args...) //nolint:gosec // Binary path is controlled internally
 	cmd.Env = r.prepareEnvironment()
+	// Inherit current working directory
+	if wd, err := os.Getwd(); err == nil {
+		cmd.Dir = wd
+	}
 	return cmd
 }
 
@@ -147,6 +151,10 @@ func (r *AtmosRunner) Command(args ...string) *exec.Cmd {
 func (r *AtmosRunner) CommandContext(ctx context.Context, args ...string) *exec.Cmd {
 	cmd := exec.CommandContext(ctx, r.binaryPath, args...) //nolint:gosec // Binary path is controlled internally
 	cmd.Env = r.prepareEnvironment()
+	// Inherit current working directory
+	if wd, err := os.Getwd(); err == nil {
+		cmd.Dir = wd
+	}
 	return cmd
 }
 
