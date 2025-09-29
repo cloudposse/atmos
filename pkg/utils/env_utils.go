@@ -10,6 +10,8 @@ import (
 const (
 	// PathPrefixLength is the length of "PATH=" prefix.
 	pathPrefixLength = 5
+	// EnvVarFormat is the format string for environment variables.
+	envVarFormat = "%s=%s"
 )
 
 // ConvertEnvVars converts ENV vars from a map to a list of strings in the format ["key1=val1", "key2=val2", "key3=val3" ...].
@@ -18,7 +20,7 @@ func ConvertEnvVars(envVarsMap map[string]any) []string {
 
 	for k, v := range envVarsMap {
 		if v != "null" && v != nil {
-			res = append(res, fmt.Sprintf("%s=%s", k, v))
+			res = append(res, fmt.Sprintf(envVarFormat, k, v))
 		}
 	}
 	return res
@@ -64,7 +66,7 @@ func UpdateEnvironmentPath(env []string, newDir string) []string {
 		for i, envVar := range env {
 			if i == idx {
 				currentPath := envVar[len(key)+1:] // Remove "KEY=" prefix
-				updated = append(updated, fmt.Sprintf("%s=%s", key, PrependToPath(currentPath, newDir)))
+				updated = append(updated, fmt.Sprintf(envVarFormat, key, PrependToPath(currentPath, newDir)))
 			} else {
 				updated = append(updated, envVar)
 			}
@@ -72,7 +74,7 @@ func UpdateEnvironmentPath(env []string, newDir string) []string {
 		return updated
 	}
 	// If PATH wasn't found, add it with canonical "PATH" key.
-	return append(append([]string{}, env...), fmt.Sprintf("PATH=%s", newDir))
+	return append(append([]string{}, env...), fmt.Sprintf(envVarFormat, "PATH", newDir))
 }
 
 // GetPathFromEnvironment extracts the PATH value from an environment slice.
@@ -96,4 +98,29 @@ func EnsureBinaryInPath(env []string, binaryPath string) []string {
 	}
 
 	return UpdateEnvironmentPath(env, binaryDir)
+}
+
+// UpdateEnvVar updates or adds an environment variable in an environment slice.
+// Returns a new environment slice with the variable updated.
+func UpdateEnvVar(env []string, key, value string) []string {
+	keyPrefix := key + "="
+
+	// Look for existing variable (case-sensitive for non-PATH variables)
+	for i, envVar := range env {
+		if strings.HasPrefix(envVar, keyPrefix) {
+			// Update existing variable
+			updated := make([]string, 0, len(env))
+			for j, e := range env {
+				if j == i {
+					updated = append(updated, fmt.Sprintf(envVarFormat, key, value))
+				} else {
+					updated = append(updated, e)
+				}
+			}
+			return updated
+		}
+	}
+
+	// Variable not found, add it
+	return append(append([]string{}, env...), fmt.Sprintf(envVarFormat, key, value))
 }

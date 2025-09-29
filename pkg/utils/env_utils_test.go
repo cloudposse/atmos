@@ -156,6 +156,73 @@ func TestEnsureBinaryInPath(t *testing.T) {
 	}
 }
 
+func TestUpdateEnvVar(t *testing.T) {
+	tests := []struct {
+		name     string
+		env      []string
+		key      string
+		value    string
+		expected func([]string) bool
+	}{
+		{
+			name:  "add new variable to empty environment",
+			env:   []string{},
+			key:   "TEST_VAR",
+			value: "test_value",
+			expected: func(result []string) bool {
+				return len(result) == 1 && result[0] == "TEST_VAR=test_value"
+			},
+		},
+		{
+			name:  "add new variable to existing environment",
+			env:   []string{"HOME=/home/user", "USER=testuser"},
+			key:   "TEST_VAR",
+			value: "test_value",
+			expected: func(result []string) bool {
+				return len(result) == 3 && result[2] == "TEST_VAR=test_value"
+			},
+		},
+		{
+			name:  "update existing variable",
+			env:   []string{"HOME=/home/user", "TEST_VAR=old_value", "USER=testuser"},
+			key:   "TEST_VAR",
+			value: "new_value",
+			expected: func(result []string) bool {
+				for _, envVar := range result {
+					if envVar == "TEST_VAR=new_value" {
+						return true
+					}
+					if strings.HasPrefix(envVar, "TEST_VAR=old_value") {
+						return false // Old value should not exist
+					}
+				}
+				return false
+			},
+		},
+		{
+			name:  "update variable with empty value",
+			env:   []string{"HOME=/home/user", "TEST_VAR=old_value"},
+			key:   "TEST_VAR",
+			value: "",
+			expected: func(result []string) bool {
+				for _, envVar := range result {
+					if envVar == "TEST_VAR=" {
+						return true
+					}
+				}
+				return false
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := UpdateEnvVar(tt.env, tt.key, tt.value)
+			assert.True(t, tt.expected(result), "UpdateEnvVar result validation failed for test: %s", tt.name)
+		})
+	}
+}
+
 func TestEnvironmentPathIntegration(t *testing.T) {
 	// Integration test: simulate the full AtmosRunner workflow
 	// Use cross-platform paths

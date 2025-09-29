@@ -377,8 +377,8 @@ func executeCustomCommand(
 
 		// Prepare ENV vars
 		// ENV var values support Go templates and have access to {{ .ComponentConfig.xxx.yyy.zzz }} Go template variables
-		// Start with current environment to inherit PATH and other variables set by AtmosRunner.
-		var envVarsList []string
+		// Start with current environment to inherit PATH and other variables.
+		env := os.Environ()
 		for _, v := range commandConfig.Env {
 			key := strings.TrimSpace(v.Key)
 			value := v.Value
@@ -394,7 +394,7 @@ func executeCustomCommand(
 			// If the command to get the value for the ENV var is provided, execute it
 			if valCommand != "" {
 				valCommandName := fmt.Sprintf("env-var-%s-valcommand", key)
-				res, err := u.ExecuteShellAndReturnOutput(valCommand, valCommandName, currentDirPath, nil, false)
+				res, err := u.ExecuteShellAndReturnOutput(valCommand, valCommandName, currentDirPath, env, false)
 				errUtils.CheckErrorPrintAndExit(err, "", "")
 				value = strings.TrimRight(res, "\r\n")
 			} else {
@@ -403,13 +403,16 @@ func executeCustomCommand(
 				errUtils.CheckErrorPrintAndExit(err, "", "")
 			}
 
-			envVarsList = append(envVarsList, fmt.Sprintf("%s=%s", key, value))
-			err = os.Setenv(key, value)
-			errUtils.CheckErrorPrintAndExit(err, "", "")
+			// Add or update the environment variable in the env slice
+			env = u.UpdateEnvVar(env, key, value)
 		}
 
-		if len(envVarsList) > 0 && commandConfig.Verbose {
-			log.Debug("Using ENV vars", "env", envVarsList)
+		if len(commandConfig.Env) > 0 && commandConfig.Verbose {
+			var envVarsList []string
+			for _, v := range commandConfig.Env {
+				envVarsList = append(envVarsList, fmt.Sprintf("%s=%s", strings.TrimSpace(v.Key), "***"))
+			}
+			log.Debug("Using custom ENV vars", "env", envVarsList)
 		}
 
 		// Process Go templates in the command's steps.
@@ -420,10 +423,7 @@ func executeCustomCommand(
 		// Execute the command step
 		commandName := fmt.Sprintf("%s-step-%d", commandConfig.Name, i)
 
-		env := os.Environ()
-
-		// Pass current environment to ensure PATH and other variables from AtmosRunner are inherited
-		// os.Environ() includes the PATH that AtmosRunner set up for this process
+		// Pass the prepared environment with custom variables to the subprocess
 		err = e.ExecuteShell(commandToRun, commandName, currentDirPath, env, false)
 		errUtils.CheckErrorPrintAndExit(err, "", "")
 	}
