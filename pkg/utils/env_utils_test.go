@@ -1,401 +1,255 @@
 package utils
 
 import (
-	"fmt"
 	"os"
-	"reflect"
-	"sort"
+	"path/filepath"
+	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
-func TestConvertEnvVars(t *testing.T) {
+func TestPrependToPath(t *testing.T) {
+	tests := []struct {
+		name        string
+		currentPath string
+		newDir      string
+		expected    string
+	}{
+		{
+			name:        "empty path",
+			currentPath: "",
+			newDir:      "/test/bin",
+			expected:    "/test/bin",
+		},
+		{
+			name:        "existing path",
+			currentPath: "/usr/bin:/bin",
+			newDir:      "/test/bin",
+			expected:    "/test/bin" + string(os.PathListSeparator) + "/usr/bin:/bin",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := PrependToPath(tt.currentPath, tt.newDir)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestGetPathFromEnvironment(t *testing.T) {
 	tests := []struct {
 		name     string
-		input    map[string]any
+		env      []string
+		expected string
+	}{
+		{
+			name:     "no PATH variable",
+			env:      []string{"HOME=/home/user", "USER=testuser"},
+			expected: "",
+		},
+		{
+			name:     "PATH exists",
+			env:      []string{"HOME=/home/user", "PATH=/usr/bin:/bin", "USER=testuser"},
+			expected: "/usr/bin:/bin",
+		},
+		{
+			name:     "empty PATH",
+			env:      []string{"PATH=", "USER=testuser"},
+			expected: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := GetPathFromEnvironment(tt.env)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestUpdateEnvironmentPath(t *testing.T) {
+	// Use cross-platform paths
+	homeDir := filepath.Join(string(filepath.Separator), "home", "user")
+	testBinDir := filepath.Join(string(filepath.Separator), "test", "bin")
+	usrBinDir := filepath.Join(string(filepath.Separator), "usr", "bin")
+	binDir := filepath.Join(string(filepath.Separator), "bin")
+	existingPath := usrBinDir + string(os.PathListSeparator) + binDir
+
+	tests := []struct {
+		name     string
+		env      []string
+		newDir   string
 		expected []string
 	}{
 		{
-			name:     "empty map",
-			input:    map[string]any{},
-			expected: []string{},
-		},
-		{
-			name:     "nil map",
-			input:    nil,
-			expected: []string{},
-		},
-		{
-			name: "single string value",
-			input: map[string]any{
-				"KEY1": "value1",
-			},
-			expected: []string{"KEY1=value1"},
-		},
-		{
-			name: "multiple string values",
-			input: map[string]any{
-				"KEY1": "value1",
-				"KEY2": "value2",
-				"KEY3": "value3",
-			},
-			expected: []string{"KEY1=value1", "KEY2=value2", "KEY3=value3"},
-		},
-		{
-			name: "mixed types",
-			input: map[string]any{
-				"STRING_VAR": "string_value",
-				"INT_VAR":    123,
-				"BOOL_VAR":   true,
-				"FLOAT_VAR":  3.14,
-			},
+			name:   "add PATH to empty environment",
+			env:    []string{"HOME=" + homeDir},
+			newDir: testBinDir,
 			expected: []string{
-				"STRING_VAR=string_value",
-				"INT_VAR=123",
-				"BOOL_VAR=true",
-				"FLOAT_VAR=3.14",
+				"HOME=" + homeDir,
+				"PATH=" + testBinDir,
 			},
 		},
 		{
-			name: "null string value should be excluded",
-			input: map[string]any{
-				"VALID_KEY":   "valid_value",
-				"NULL_KEY":    "null",
-				"ANOTHER_KEY": "another_value",
-			},
-			expected: []string{"VALID_KEY=valid_value", "ANOTHER_KEY=another_value"},
-		},
-		{
-			name: "nil value should be excluded",
-			input: map[string]any{
-				"VALID_KEY": "valid_value",
-				"NIL_KEY":   nil,
-			},
-			expected: []string{"VALID_KEY=valid_value"},
-		},
-		{
-			name: "empty string value should be included",
-			input: map[string]any{
-				"EMPTY_KEY": "",
-				"VALID_KEY": "value",
-			},
-			expected: []string{"EMPTY_KEY=", "VALID_KEY=value"},
-		},
-		{
-			name: "zero values should be included",
-			input: map[string]any{
-				"ZERO_INT":   0,
-				"FALSE_VAL":  false,
-				"ZERO_FLOAT": 0.0,
-			},
-			expected: []string{"ZERO_INT=0", "FALSE_VAL=false", "ZERO_FLOAT=0"},
-		},
-		{
-			name: "special characters in values",
-			input: map[string]any{
-				"SPECIAL_CHARS": "value with spaces and symbols!@#$%",
-				"EQUALS_SIGN":   "key=value=more",
-				"QUOTES":        `"quoted value"`,
-			},
+			name:   "update existing PATH",
+			env:    []string{"HOME=" + homeDir, "PATH=" + existingPath},
+			newDir: testBinDir,
 			expected: []string{
-				"SPECIAL_CHARS=value with spaces and symbols!@#$%",
-				"EQUALS_SIGN=key=value=more",
-				"QUOTES=\"quoted value\"",
+				"HOME=" + homeDir,
+				"PATH=" + testBinDir + string(os.PathListSeparator) + existingPath,
 			},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := ConvertEnvVars(tt.input)
-
-			// Sort both slices to ensure consistent comparison since map iteration order is not guaranteed.
-			sort.Strings(result)
-			sort.Strings(tt.expected)
-
-			if !reflect.DeepEqual(result, tt.expected) {
-				t.Errorf("ConvertEnvVars() = %v, expected %v", result, tt.expected)
-			}
+			result := UpdateEnvironmentPath(tt.env, tt.newDir)
+			assert.Equal(t, tt.expected, result)
 		})
 	}
 }
 
-func TestConvertEnvVars_DeterministicOrder(t *testing.T) {
-	// Test that multiple calls with the same input produce results with the same elements
-	// (order may vary due to map iteration, but content should be identical).
-	input := map[string]any{
-		"KEY1": "value1",
-		"KEY2": "value2",
-		"KEY3": "value3",
-	}
+func TestEnsureBinaryInPath(t *testing.T) {
+	// Use cross-platform paths
+	binDir1 := filepath.Join(string(filepath.Separator), "usr", "bin")
+	binDir2 := filepath.Join(string(filepath.Separator), "bin")
+	testBinDir := filepath.Join(string(filepath.Separator), "test", "bin")
+	testBinary := filepath.Join(testBinDir, "atmos")
 
-	result1 := ConvertEnvVars(input)
-	result2 := ConvertEnvVars(input)
+	// Create cross-platform PATH values
+	existingPath := binDir1 + string(os.PathListSeparator) + binDir2
+	pathWithTestDir := testBinDir + string(os.PathListSeparator) + existingPath
 
-	// Sort both results and compare
-	sort.Strings(result1)
-	sort.Strings(result2)
-
-	if !reflect.DeepEqual(result1, result2) {
-		t.Errorf("ConvertEnvVars() should produce consistent results, got %v and %v", result1, result2)
-	}
-}
-
-func TestEnvironToMap(t *testing.T) {
 	tests := []struct {
-		name        string
-		setupEnvs   map[string]string // Environment variables to set for the test
-		cleanupEnvs []string          // Environment variables to unset after test
+		name       string
+		env        []string
+		binaryPath string
+		expected   func([]string) bool // Function to validate result
 	}{
 		{
-			name: "basic environment variables",
-			setupEnvs: map[string]string{
-				"TEST_VAR_1": "value1",
-				"TEST_VAR_2": "value2",
+			name:       "binary directory not in PATH",
+			env:        []string{"PATH=" + existingPath},
+			binaryPath: testBinary,
+			expected: func(result []string) bool {
+				path := GetPathFromEnvironment(result)
+				return strings.HasPrefix(path, testBinDir+string(os.PathListSeparator))
 			},
-			cleanupEnvs: []string{"TEST_VAR_1", "TEST_VAR_2"},
 		},
 		{
-			name: "environment variable with empty value",
-			setupEnvs: map[string]string{
-				"EMPTY_VAR": "",
+			name:       "binary directory already in PATH",
+			env:        []string{"PATH=" + pathWithTestDir},
+			binaryPath: testBinary,
+			expected: func(result []string) bool {
+				path := GetPathFromEnvironment(result)
+				return path == pathWithTestDir
 			},
-			cleanupEnvs: []string{"EMPTY_VAR"},
-		},
-		{
-			name: "environment variable with special characters",
-			setupEnvs: map[string]string{
-				"SPECIAL_VAR": "value with spaces and symbols!@#$%^&*()",
-			},
-			cleanupEnvs: []string{"SPECIAL_VAR"},
-		},
-		{
-			name: "environment variable with equals signs in value",
-			setupEnvs: map[string]string{
-				"EQUALS_VAR": "key=value=more=data",
-			},
-			cleanupEnvs: []string{"EQUALS_VAR"},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Setup: Set test environment variables.
-			originalEnvs := make(map[string]string)
-			for key, value := range tt.setupEnvs {
-				if originalVal, exists := os.LookupEnv(key); exists {
-					originalEnvs[key] = originalVal
-				}
-				os.Setenv(key, value)
-			}
+			result := EnsureBinaryInPath(tt.env, tt.binaryPath)
+			assert.True(t, tt.expected(result))
+		})
+	}
+}
 
-			// Cleanup: Restore original environment after test.
-			defer func() {
-				for _, key := range tt.cleanupEnvs {
-					if originalVal, exists := originalEnvs[key]; exists {
-						os.Setenv(key, originalVal)
-					} else {
-						os.Unsetenv(key)
+func TestUpdateEnvVar(t *testing.T) {
+	tests := []struct {
+		name     string
+		env      []string
+		key      string
+		value    string
+		expected func([]string) bool
+	}{
+		{
+			name:  "add new variable to empty environment",
+			env:   []string{},
+			key:   "TEST_VAR",
+			value: "test_value",
+			expected: func(result []string) bool {
+				return len(result) == 1 && result[0] == "TEST_VAR=test_value"
+			},
+		},
+		{
+			name:  "add new variable to existing environment",
+			env:   []string{"HOME=/home/user", "USER=testuser"},
+			key:   "TEST_VAR",
+			value: "test_value",
+			expected: func(result []string) bool {
+				return len(result) == 3 && result[2] == "TEST_VAR=test_value"
+			},
+		},
+		{
+			name:  "update existing variable",
+			env:   []string{"HOME=/home/user", "TEST_VAR=old_value", "USER=testuser"},
+			key:   "TEST_VAR",
+			value: "new_value",
+			expected: func(result []string) bool {
+				for _, envVar := range result {
+					if envVar == "TEST_VAR=new_value" {
+						return true
+					}
+					if strings.HasPrefix(envVar, "TEST_VAR=old_value") {
+						return false // Old value should not exist
 					}
 				}
-			}()
-
-			// Test the function
-			result := EnvironToMap()
-
-			// Verify that our test environment variables are present with correct values.
-			for key, expectedValue := range tt.setupEnvs {
-				if actualValue, exists := result[key]; !exists {
-					t.Errorf("Expected environment variable %s to be present in result", key)
-				} else if actualValue != expectedValue {
-					t.Errorf("Expected %s=%s, got %s=%s", key, expectedValue, key, actualValue)
+				return false
+			},
+		},
+		{
+			name:  "update variable with empty value",
+			env:   []string{"HOME=/home/user", "TEST_VAR=old_value"},
+			key:   "TEST_VAR",
+			value: "",
+			expected: func(result []string) bool {
+				for _, envVar := range result {
+					if envVar == "TEST_VAR=" {
+						return true
+					}
 				}
-			}
+				return false
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := UpdateEnvVar(tt.env, tt.key, tt.value)
+			assert.True(t, tt.expected(result), "UpdateEnvVar result validation failed for test: %s", tt.name)
 		})
 	}
 }
 
-func TestEnvironToMap_SystemEnvironment(t *testing.T) {
-	// Test that the function returns a map that includes actual system environment variables.
-	result := EnvironToMap()
+func TestEnvironmentPathIntegration(t *testing.T) {
+	// Integration test: simulate the full AtmosRunner workflow
+	// Use cross-platform paths
+	homeDir := filepath.Join(string(filepath.Separator), "home", "user")
+	usrBinDir := filepath.Join(string(filepath.Separator), "usr", "bin")
+	binDir := filepath.Join(string(filepath.Separator), "bin")
+	originalPath := usrBinDir + string(os.PathListSeparator) + binDir
 
-	// Get the current environment using os.Environ().
-	systemEnv := os.Environ()
-
-	// Verify that the number of entries matches
-	if len(result) != len(systemEnv) {
-		t.Errorf("Expected %d environment variables, got %d", len(systemEnv), len(result))
+	originalEnv := []string{
+		"HOME=" + homeDir,
+		"PATH=" + originalPath,
+		"USER=testuser",
 	}
 
-	// Verify that each system environment variable is correctly parsed.
-	for _, envPair := range systemEnv {
-		// Split at first occurrence of '=' (same logic as EnvironToMap)
-		parts := SplitStringAtFirstOccurrence(envPair, "=")
-		if len(parts) != 2 {
-			t.Errorf("Invalid environment variable format: %s", envPair)
-			continue
-		}
+	// Simulate test binary in temp directory
+	testBinaryPath := filepath.Join(os.TempDir(), "atmos-test-12345", "atmos")
 
-		key := parts[0]
-		expectedValue := parts[1]
+	// Update environment with test binary
+	updatedEnv := EnsureBinaryInPath(originalEnv, testBinaryPath)
 
-		if actualValue, exists := result[key]; !exists {
-			t.Errorf("Environment variable %s not found in result", key)
-		} else if actualValue != expectedValue {
-			t.Errorf("Mismatch for %s: expected %q, got %q", key, expectedValue, actualValue)
-		}
-	}
-}
+	// Verify test binary directory is first in PATH
+	updatedPath := GetPathFromEnvironment(updatedEnv)
+	expectedPrefix := filepath.Join(os.TempDir(), "atmos-test-12345") + string(os.PathListSeparator)
+	assert.True(t, strings.HasPrefix(updatedPath, expectedPrefix),
+		"PATH should start with test binary directory: %s", updatedPath)
 
-func TestEnvironToMap_EmptyValues(t *testing.T) {
-	// Test handling of environment variables with empty values.
-	testKey := "TEST_EMPTY_VALUE"
-
-	// Ensure the test key doesn't exist initially
-	originalVal, existed := os.LookupEnv(testKey)
-
-	// Set an empty value
-	os.Setenv(testKey, "")
-
-	// Cleanup after test
-	defer func() {
-		if existed {
-			os.Setenv(testKey, originalVal)
-		} else {
-			os.Unsetenv(testKey)
-		}
-	}()
-
-	result := EnvironToMap()
-
-	if value, exists := result[testKey]; !exists {
-		t.Errorf("Expected environment variable %s with empty value to be present", testKey)
-	} else if value != "" {
-		t.Errorf("Expected empty value for %s, got %q", testKey, value)
-	}
-}
-
-func TestEnvironToMap_SpecialCharactersInValue(t *testing.T) {
-	// Test handling of environment variables with special characters in values.
-	testCases := []struct {
-		key   string
-		value string
-	}{
-		{"TEST_SPACES", "value with spaces"},
-		{"TEST_SYMBOLS", "!@#$%^&*()"},
-		{"TEST_QUOTES", `"quoted value"`},
-		{"TEST_NEWLINES", "line1\nline2"},
-		{"TEST_TABS", "value\twith\ttabs"},
-		{"TEST_UNICODE", "value with unicode: 🚀 ñ ü"},
-	}
-
-	// Store original values for cleanup
-	originalVals := make(map[string]string)
-	existedVals := make(map[string]bool)
-
-	for _, tc := range testCases {
-		if val, existed := os.LookupEnv(tc.key); existed {
-			originalVals[tc.key] = val
-			existedVals[tc.key] = true
-		}
-		os.Setenv(tc.key, tc.value)
-	}
-
-	// Cleanup after test
-	defer func() {
-		for _, tc := range testCases {
-			if existedVals[tc.key] {
-				os.Setenv(tc.key, originalVals[tc.key])
-			} else {
-				os.Unsetenv(tc.key)
-			}
-		}
-	}()
-
-	result := EnvironToMap()
-
-	for _, tc := range testCases {
-		if value, exists := result[tc.key]; !exists {
-			t.Errorf("Expected environment variable %s to be present", tc.key)
-		} else if value != tc.value {
-			t.Errorf("Mismatch for %s: expected %q, got %q", tc.key, tc.value, value)
-		}
-	}
-}
-
-func TestEnvironToMap_KeysWithEqualsInValue(t *testing.T) {
-	// Test the specific case where environment variable values contain equals signs
-	// This tests the SplitStringAtFirstOccurrence logic
-	testKey := "TEST_EQUALS_IN_VALUE"
-	testValue := "key=value=more=data"
-
-	originalVal, existed := os.LookupEnv(testKey)
-
-	os.Setenv(testKey, testValue)
-
-	defer func() {
-		if existed {
-			os.Setenv(testKey, originalVal)
-		} else {
-			os.Unsetenv(testKey)
-		}
-	}()
-
-	result := EnvironToMap()
-
-	if value, exists := result[testKey]; !exists {
-		t.Errorf("Expected environment variable %s to be present", testKey)
-	} else if value != testValue {
-		t.Errorf("Expected %s=%s, got %s=%s", testKey, testValue, testKey, value)
-	}
-}
-
-func TestEnvironToMap_ErrorHandling(t *testing.T) {
-	// Test that the function handles edge cases gracefully.
-	// Note: We can't easily create malformed environment variables through os.Setenv,
-	// but we can test that the function doesn't panic and handles normal cases properly.
-
-	testKey := "TEST_ERROR_HANDLING"
-	testValue := ""
-
-	originalVal, existed := os.LookupEnv(testKey)
-
-	os.Setenv(testKey, testValue)
-
-	defer func() {
-		if existed {
-			os.Setenv(testKey, originalVal)
-		} else {
-			os.Unsetenv(testKey)
-		}
-	}()
-
-	// Should not panic and should handle empty values correctly.
-	result := EnvironToMap()
-
-	if value, exists := result[testKey]; !exists {
-		t.Errorf("Expected environment variable %s with empty value to be present", testKey)
-	} else if value != testValue {
-		t.Errorf("Expected %s=%s, got %s=%s", testKey, testValue, testKey, value)
-	}
-}
-
-// Benchmark tests to ensure functions perform well with larger inputs.
-func BenchmarkConvertEnvVars(b *testing.B) {
-	// Create a large map for benchmarking.
-	largeMap := make(map[string]any)
-	for i := 0; i < 1000; i++ {
-		largeMap[fmt.Sprintf("KEY_%d", i)] = fmt.Sprintf("value_%d", i)
-	}
-
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		ConvertEnvVars(largeMap)
-	}
-}
-
-func BenchmarkEnvironToMap(b *testing.B) {
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		EnvironToMap()
-	}
+	// Verify original PATH components are preserved
+	assert.Contains(t, updatedPath, originalPath,
+		"Original PATH should be preserved: %s", updatedPath)
 }
