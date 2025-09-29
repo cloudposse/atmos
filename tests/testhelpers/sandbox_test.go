@@ -558,9 +558,7 @@ func TestSandboxEnvironmentIsolation(t *testing.T) {
 	workdir := "../fixtures/scenarios/env"
 
 	// Set an environment variable that might affect tests.
-	originalValue := os.Getenv("ATMOS_COMPONENTS_TERRAFORM_BASE_PATH")
-	os.Setenv("ATMOS_COMPONENTS_TERRAFORM_BASE_PATH", "/should/not/be/used")
-	defer os.Setenv("ATMOS_COMPONENTS_TERRAFORM_BASE_PATH", originalValue)
+	t.Setenv("ATMOS_COMPONENTS_TERRAFORM_BASE_PATH", "/should/not/be/used")
 
 	sandbox, err := SetupSandbox(t, workdir)
 	require.NoError(t, err)
