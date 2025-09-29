@@ -5,7 +5,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
@@ -121,6 +123,11 @@ func ValidateWithOpa(
 	// Create a prepared query that can be evaluated
 	query, err := r.PrepareForEval(ctx)
 	if err != nil {
+		// On Windows, rego.Load() sometimes fails due to path issues.
+		// Fall back to the legacy OPA validation method.
+		if isWindowsOPALoadError(err) {
+			return validateWithOpaFallback(data, schemaPath, timeoutSeconds)
+		}
 		return false, err
 	}
 
@@ -129,6 +136,11 @@ func ValidateWithOpa(
 	if err != nil {
 		if err.Error() == "context deadline exceeded" {
 			err = errors.New(timeoutErrorMessage)
+		}
+		// On Windows, query execution sometimes fails due to platform-specific issues.
+		// Fall back to the legacy OPA validation method.
+		if isWindowsOPAError(err) {
+			return validateWithOpaFallback(data, schemaPath, timeoutSeconds)
 		}
 		return false, err
 	}
@@ -248,4 +260,46 @@ func ValidateWithOpaLegacy(
 // https://cuelang.org/docs/integrations/go/#processing-cue-in-go
 func ValidateWithCue(data any, schemaName string, schemaText string) (bool, error) {
 	return false, errors.New("validation using CUE is not supported yet")
+}
+
+// isWindowsOPALoadError checks if the error is likely a Windows-specific OPA loading issue.
+func isWindowsOPALoadError(err error) bool {
+	if runtime.GOOS != "windows" {
+		return false
+	}
+
+	errStr := err.Error()
+	// Common Windows OPA loader issues
+	return strings.Contains(errStr, "no such file or directory") ||
+		strings.Contains(errStr, "cannot find the path specified") ||
+		strings.Contains(errStr, "system cannot find the file specified") ||
+		strings.Contains(errStr, "path") ||
+		strings.Contains(errStr, "file")
+}
+
+// isWindowsOPAError checks if the error is likely a Windows-specific OPA execution issue.
+func isWindowsOPAError(err error) bool {
+	if runtime.GOOS != "windows" {
+		return false
+	}
+
+	errStr := err.Error()
+	// Common Windows OPA execution issues
+	return strings.Contains(errStr, "undefined") ||
+		strings.Contains(errStr, "compile") ||
+		strings.Contains(errStr, "prepare")
+}
+
+// validateWithOpaFallback provides a fallback OPA validation using inline policy content.
+// This is used when the file-based loading fails on Windows.
+func validateWithOpaFallback(data any, schemaPath string, timeoutSeconds int) (bool, error) {
+	// Read the policy file content directly
+	policyContent, err := os.ReadFile(schemaPath)
+	if err != nil {
+		return false, fmt.Errorf("failed to read OPA policy file: %w", err)
+	}
+
+	// Use the legacy validation method with inline content
+	policyName := filepath.Base(schemaPath)
+	return ValidateWithOpaLegacy(data, policyName, string(policyContent), timeoutSeconds)
 }
