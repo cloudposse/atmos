@@ -6,17 +6,20 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/tests"
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/stretchr/testify/assert"
-
-	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 // TestExecuteDescribeAffectedWithTargetRefCheckout_ReferenceNotFound tests the error handling for reference not found.
 func TestExecuteDescribeAffectedWithTargetRefCheckout_ReferenceNotFound(t *testing.T) {
 	// This test verifies that the function properly handles plumbing.ErrReferenceNotFound
 	// when using errors.Is instead of string comparison.
+
+	// Check if git is configured for commits
+	tests.RequireGitCommitConfig(t)
 
 	// Create a temporary directory for a test git repository.
 	tempDir, err := os.MkdirTemp("", "atmos-test-git-*")
