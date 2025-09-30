@@ -476,13 +476,9 @@ func TestMain(m *testing.M) {
 
 // prepareAtmosCommand prepares an atmos command with coverage support if enabled.
 func prepareAtmosCommand(t *testing.T, ctx context.Context, args ...string) *exec.Cmd {
-	// Lazy initialize atmosRunner only when needed for atmos commands
+	// AtmosRunner should be initialized early in runCLICommandTest before directory changes
 	if atmosRunner == nil {
-		atmosRunner = testhelpers.NewAtmosRunner(coverDir)
-		if err := atmosRunner.Build(); err != nil {
-			t.Skipf("Failed to initialize Atmos: %v", err)
-		}
-		logger.Info("Atmos runner initialized for test", "coverageEnabled", coverDir != "")
+		t.Fatalf("AtmosRunner should have been initialized before directory changes")
 	}
 	return atmosRunner.CommandContext(ctx, args...)
 }
@@ -494,6 +490,15 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 			t.Fatalf("Failed to change back to the starting directory: %v", err)
 		}
 	}()
+
+	// Initialize AtmosRunner early, before any directory changes, so it can build from the git repo
+	if tc.Command == "atmos" && atmosRunner == nil {
+		atmosRunner = testhelpers.NewAtmosRunner(coverDir)
+		if err := atmosRunner.Build(); err != nil {
+			t.Skipf("Failed to initialize Atmos: %v", err)
+		}
+		logger.Info("Atmos runner initialized for test", "coverageEnabled", coverDir != "")
+	}
 
 	// Create a context with timeout if specified
 	var ctx context.Context
@@ -528,7 +533,7 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 	xdgCacheHome := filepath.Join(tempDir, ".cache")
 	tc.Env["XDG_CACHE_HOME"] = xdgCacheHome
 	// Also set the process environment so removeCacheFile() uses the test path
-	os.Setenv("XDG_CACHE_HOME", xdgCacheHome)
+	t.Setenv("XDG_CACHE_HOME", xdgCacheHome)
 	// Reload XDG to pick up the new environment
 	xdg.Reload()
 
@@ -630,6 +635,11 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 	currentEnvVars := telemetry.PreserveCIEnvVars()
 	defer telemetry.RestoreCIEnvVars(currentEnvVars)
 
+	// Set any environment variables defined in the test case using t.Setenv for proper isolation
+	for key, value := range tc.Env {
+		t.Setenv(key, value)
+	}
+
 	// Prepare the command based on what's being tested
 	var cmd *exec.Cmd
 	if tc.Command == "atmos" {
@@ -649,26 +659,28 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 		existingEnv = []string{}
 	}
 
-	// Set environment variables without inheriting from the current environment.
-	// This ensures an isolated test environment, preventing unintended side effects
-	// and improving reproducibility across different systems.
+	// Preserve all environment variables from AtmosRunner (including PATH and GOCOVERDIR)
+	// and add/override with test-specific environment variables
 	var envVars []string
 
-	// First, check if GOCOVERDIR is already set by atmosRunner
-	var hasCoverDir bool
-	for _, env := range existingEnv {
-		if strings.HasPrefix(env, "GOCOVERDIR=") {
-			envVars = append(envVars, env)
-			hasCoverDir = true
-			break
-		}
+	// Start with the environment from AtmosRunner if available
+	if len(existingEnv) > 0 {
+		envVars = append(envVars, existingEnv...)
 	}
 
-	// Add test-specific environment variables
+	// Add/override test-specific environment variables
 	for key, value := range tc.Env {
-		// Don't override GOCOVERDIR if it was set by atmosRunner
-		if key == "GOCOVERDIR" && hasCoverDir {
+		// NEVER allow test cases to override PATH - AtmosRunner's PATH must be preserved
+		if key == "PATH" {
 			continue
+		}
+
+		// Remove any existing env var with the same key before adding the new one
+		for i, env := range envVars {
+			if strings.HasPrefix(env, key+"=") {
+				envVars = append(envVars[:i], envVars[i+1:]...)
+				break
+			}
 		}
 		envVars = append(envVars, fmt.Sprintf("%s=%s", key, value))
 	}

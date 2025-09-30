@@ -86,6 +86,11 @@ var (
 	ErrReadFile    = errors.New("error reading file")
 	ErrInvalidFlag = errors.New("invalid flag")
 
+	// File and URL handling errors.
+	ErrInvalidPagerCommand = errors.New("invalid pager command")
+	ErrEmptyURL            = errors.New("empty URL provided")
+	ErrFailedToFindImport  = errors.New("failed to find import")
+
 	// Config loading errors.
 	ErrAtmosDirConfigNotFound      = errors.New("atmos config directory not found")
 	ErrReadConfig                  = errors.New("failed to read config")
@@ -148,6 +153,8 @@ var (
 	ErrFailedToGetComponentFlag  = errors.New("failed to get '--component' flag")
 	ErrFailedToGetStackFlag      = errors.New("failed to get '--stack' flag")
 	ErrOPAPolicyViolations       = errors.New("OPA policy violations detected")
+	ErrInvalidOPAPolicy          = errors.New("invalid OPA policy")
+	ErrTerraformEnvCliVarJSON    = errors.New("failed to parse JSON variable from TF_CLI_ARGS environment variable")
 
 	// List package errors.
 	ErrExecuteDescribeStacks     = errors.New("failed to execute describe stacks")

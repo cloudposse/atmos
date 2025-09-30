@@ -84,6 +84,7 @@ tests:
       - "-s"
       - "nonprod"
     env:
+      ATMOS_TEST_1: "test-env-and-terraform-output-functions"
       # The ENV variables will not be set in the child process (that executes the functions from `terraform-exec`)
       # (because they are prohibited in the `terraform-exec` library)
       TF_VAR_spacelift_stack: "test"
