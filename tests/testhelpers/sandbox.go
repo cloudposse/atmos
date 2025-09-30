@@ -225,16 +225,21 @@ func copyDir(src, dst string) error {
 
 // copyFile copies a single file preserving permissions.
 func copyFile(src, dst string) error {
+	// Get source file info using Lstat to detect symlinks.
+	srcInfo, err := os.Lstat(src)
+	if err != nil {
+		return fmt.Errorf("failed to stat source file %q: %w", src, err)
+	}
+
+	// Skip symlinks - they can cause issues especially on Windows.
+	if srcInfo.Mode()&os.ModeSymlink != 0 {
+		return nil
+	}
+
 	// Read source file.
 	data, err := os.ReadFile(src)
 	if err != nil {
 		return fmt.Errorf("failed to read source file %q: %w", src, err)
-	}
-
-	// Get source file permissions.
-	srcInfo, err := os.Stat(src)
-	if err != nil {
-		return fmt.Errorf("failed to stat source file %q: %w", src, err)
 	}
 
 	// Write destination file with same permissions.

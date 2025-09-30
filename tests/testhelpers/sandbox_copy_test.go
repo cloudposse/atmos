@@ -3,6 +3,7 @@ package testhelpers
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -44,6 +45,10 @@ func TestCopyFile(t *testing.T) {
 
 // TestCopyFileExecutable tests copying an executable file.
 func TestCopyFileExecutable(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skipf("Skipping executable bit test on Windows: Windows does not use Unix execute permissions")
+	}
+
 	// Create temporary directories for test.
 	srcDir := t.TempDir()
 	dstDir := t.TempDir()
@@ -222,6 +227,10 @@ func TestCopyDirNestedStructure(t *testing.T) {
 
 // TestCopyDirPreservesPermissions tests that directory permissions are preserved.
 func TestCopyDirPreservesPermissions(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skipf("Skipping permission preservation test on Windows: Windows uses a different permission model than Unix")
+	}
+
 	// Create temporary directories for test.
 	srcDir := t.TempDir()
 	dstDir := t.TempDir()
