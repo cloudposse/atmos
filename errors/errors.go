@@ -157,9 +157,6 @@ var (
 	ErrSetPermissions      = errors.New("failed to set permissions")
 	ErrReadDirectory       = errors.New("failed to read directory")
 	ErrComputeRelativePath = errors.New("failed to compute relative path")
-	ErrEmptyURL            = errors.New("empty URL provided")
-	ErrExtractFilename     = errors.New("unable to extract filename from URL")
-	ErrGlobMatch           = errors.New("failed to find a match for the import")
 
 	// OCI/Container image errors.
 	ErrCreateTempDirectory   = errors.New("failed to create temp directory")
@@ -190,7 +187,6 @@ var (
 	ErrRenderTemplate        = errors.New("failed to render template with datasources")
 	ErrResolveOutputPath     = errors.New("failed to resolve output path")
 	ErrWriteOutput           = errors.New("failed to write output")
-	ErrInvalidPagerCommand   = errors.New("invalid pager command")
 
 	// Profiler-related errors.
 	ErrProfilerStart = errors.New("profiler start failed")

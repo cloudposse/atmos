@@ -59,7 +59,7 @@ require (
 	github.com/jwalton/go-supportscolor v1.2.0
 	github.com/kubescape/go-git-url v0.0.30
 	github.com/lrstanley/bubblezone v1.0.0
-	github.com/mattn/go-runewidth v0.0.18
+	github.com/mattn/go-runewidth v0.0.19
 	github.com/mikefarah/yq/v4 v4.47.2
 	github.com/mitchellh/go-wordwrap v1.0.1
 	github.com/mitchellh/mapstructure v1.5.0
