@@ -14,6 +14,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"testing"
 	"time"
@@ -48,6 +49,8 @@ var (
 	skipReason          string                   // Package-level variable to track why tests should be skipped
 	atmosRunner         *testhelpers.AtmosRunner // Global runner for executing Atmos with coverage support (lazy initialized)
 	coverDir            string                   // GOCOVERDIR environment variable value
+	sandboxRegistry     = make(map[string]*testhelpers.SandboxEnvironment)
+	sandboxMutex        sync.RWMutex
 )
 
 // Define styles using lipgloss.
@@ -80,7 +83,7 @@ type TestCase struct {
 	Tty         bool              `yaml:"tty"`         // Enable TTY simulation
 	Snapshot    bool              `yaml:"snapshot"`    // Enable snapshot comparison
 	Clean       bool              `yaml:"clean"`       // Removes untracked files in work directory
-	Sandbox     bool              `yaml:"sandbox"`     // Run in sandboxed environment with isolated components
+	Sandbox     interface{}       `yaml:"sandbox"`     // bool (true=random) or string (named) or false (no sandbox)
 	Skip        struct {
 		OS MatchPattern `yaml:"os"`
 	} `yaml:"skip"`
@@ -93,6 +96,50 @@ type TestSuite struct {
 type MatchPattern struct {
 	Pattern string
 	Negate  bool
+}
+
+// GetOrCreateNamedSandbox returns an existing named sandbox or creates a new one.
+// Named sandboxes are shared across tests and cleaned up by TestMain.
+// Workdir must be an absolute path.
+func getOrCreateNamedSandbox(t *testing.T, name string, workdir string) *testhelpers.SandboxEnvironment {
+	sandboxMutex.Lock()
+	defer sandboxMutex.Unlock()
+
+	if env, exists := sandboxRegistry[name]; exists {
+		t.Logf("Reusing existing sandbox %q", name)
+		return env
+	}
+
+	t.Logf("Creating new sandbox %q", name)
+	env, err := testhelpers.SetupSandbox(t, workdir)
+	if err != nil {
+		t.Fatalf("Failed to setup sandbox %q: %v", name, err)
+	}
+	sandboxRegistry[name] = env
+	return env
+}
+
+// CreateIsolatedSandbox creates a new isolated sandbox for a single test.
+// Not added to registry, caller must clean up.
+// Workdir must be an absolute path.
+func createIsolatedSandbox(t *testing.T, workdir string) *testhelpers.SandboxEnvironment {
+	t.Logf("Creating isolated sandbox")
+	env, err := testhelpers.SetupSandbox(t, workdir)
+	if err != nil {
+		t.Fatalf("Failed to setup isolated sandbox: %v", err)
+	}
+	return env
+}
+
+// cleanupSandboxes cleans up all registered sandboxes.
+func cleanupSandboxes() {
+	sandboxMutex.Lock()
+	defer sandboxMutex.Unlock()
+
+	for name, env := range sandboxRegistry {
+		env.Cleanup()
+		delete(sandboxRegistry, name)
+	}
 }
 
 func (m *MatchPattern) UnmarshalYAML(value *yaml.Node) error {
@@ -454,6 +501,9 @@ func TestMain(m *testing.M) {
 	flag.Parse()        // Parse command-line flags
 	exitCode := m.Run() // ALWAYS run tests so they can skip properly
 
+	// Clean up sandboxes.
+	cleanupSandboxes()
+
 	// Clean up the temporary binary if we built one
 	if atmosRunner != nil {
 		atmosRunner.Cleanup()
@@ -464,13 +514,9 @@ func TestMain(m *testing.M) {
 
 // prepareAtmosCommand prepares an atmos command with coverage support if enabled.
 func prepareAtmosCommand(t *testing.T, ctx context.Context, args ...string) *exec.Cmd {
-	// Lazy initialize atmosRunner only when needed for atmos commands
+	// AtmosRunner should be initialized early in runCLICommandTest before directory changes
 	if atmosRunner == nil {
-		atmosRunner = testhelpers.NewAtmosRunner(coverDir)
-		if err := atmosRunner.Build(); err != nil {
-			t.Skipf("Failed to initialize Atmos: %v", err)
-		}
-		logger.Info("Atmos runner initialized for test", "coverageEnabled", coverDir != "")
+		t.Fatalf("AtmosRunner should have been initialized before directory changes")
 	}
 	return atmosRunner.CommandContext(ctx, args...)
 }
@@ -482,6 +528,15 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 			t.Fatalf("Failed to change back to the starting directory: %v", err)
 		}
 	}()
+
+	// Initialize AtmosRunner early, before any directory changes, so it can build from the git repo
+	if tc.Command == "atmos" && atmosRunner == nil {
+		atmosRunner = testhelpers.NewAtmosRunner(coverDir)
+		if err := atmosRunner.Build(); err != nil {
+			t.Skipf("Failed to initialize Atmos: %v", err)
+		}
+		logger.Info("Atmos runner initialized for test", "coverageEnabled", coverDir != "")
+	}
 
 	// Create a context with timeout if specified
 	var ctx context.Context
@@ -516,7 +571,7 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 	xdgCacheHome := filepath.Join(tempDir, ".cache")
 	tc.Env["XDG_CACHE_HOME"] = xdgCacheHome
 	// Also set the process environment so removeCacheFile() uses the test path
-	os.Setenv("XDG_CACHE_HOME", xdgCacheHome)
+	t.Setenv("XDG_CACHE_HOME", xdgCacheHome)
 	// Reload XDG to pick up the new environment
 	xdg.Reload()
 
@@ -558,16 +613,29 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 
 		// Setup sandbox environment if enabled
 		var sandboxEnv *testhelpers.SandboxEnvironment
-		if tc.Sandbox {
-			logger.Info("Setting up sandbox environment", "workdir", tc.Workdir)
-
-			env, err := testhelpers.SetupSandbox(t, absoluteWorkdir)
-			if err != nil {
-				t.Fatalf("Failed to setup sandbox for test %q: %v", tc.Name, err)
+		switch v := tc.Sandbox.(type) {
+		case bool:
+			if v {
+				// Boolean true = isolated sandbox for this test only
+				logger.Info("Setting up isolated sandbox", "workdir", absoluteWorkdir)
+				sandboxEnv = createIsolatedSandbox(t, absoluteWorkdir)
+				// Clean up immediately after test
+				defer func() {
+					logger.Debug("Cleaning up isolated sandbox", "tempdir", sandboxEnv.TempDir)
+					sandboxEnv.Cleanup()
+				}()
 			}
-			sandboxEnv = env
+		case string:
+			if v != "" {
+				// Named sandbox = shared across related tests
+				logger.Info("Using named sandbox", "name", v, "workdir", absoluteWorkdir)
+				sandboxEnv = getOrCreateNamedSandbox(t, v, absoluteWorkdir)
+				// Cleanup handled by TestMain
+			}
+		}
 
-			// Add sandbox environment variables to override component paths
+		// Add sandbox environment variables to override component paths
+		if sandboxEnv != nil {
 			if tc.Env == nil {
 				tc.Env = make(map[string]string)
 			}
@@ -575,12 +643,6 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 				logger.Debug("Setting sandbox env var", "key", k, "value", v)
 				tc.Env[k] = v
 			}
-
-			// Ensure sandbox is cleaned up after test
-			defer func() {
-				logger.Debug("Cleaning up sandbox", "tempdir", sandboxEnv.TempDir)
-				sandboxEnv.Cleanup()
-			}()
 		}
 
 		// Clean the directory if enabled
@@ -618,6 +680,11 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 	currentEnvVars := telemetry.PreserveCIEnvVars()
 	defer telemetry.RestoreCIEnvVars(currentEnvVars)
 
+	// Set any environment variables defined in the test case using t.Setenv for proper isolation
+	for key, value := range tc.Env {
+		t.Setenv(key, value)
+	}
+
 	// Prepare the command based on what's being tested
 	var cmd *exec.Cmd
 	if tc.Command == "atmos" {
@@ -637,26 +704,28 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 		existingEnv = []string{}
 	}
 
-	// Set environment variables without inheriting from the current environment.
-	// This ensures an isolated test environment, preventing unintended side effects
-	// and improving reproducibility across different systems.
+	// Preserve all environment variables from AtmosRunner (including PATH and GOCOVERDIR)
+	// and add/override with test-specific environment variables
 	var envVars []string
 
-	// First, check if GOCOVERDIR is already set by atmosRunner
-	var hasCoverDir bool
-	for _, env := range existingEnv {
-		if strings.HasPrefix(env, "GOCOVERDIR=") {
-			envVars = append(envVars, env)
-			hasCoverDir = true
-			break
-		}
+	// Start with the environment from AtmosRunner if available
+	if len(existingEnv) > 0 {
+		envVars = append(envVars, existingEnv...)
 	}
 
-	// Add test-specific environment variables
+	// Add/override test-specific environment variables
 	for key, value := range tc.Env {
-		// Don't override GOCOVERDIR if it was set by atmosRunner
-		if key == "GOCOVERDIR" && hasCoverDir {
+		// NEVER allow test cases to override PATH - AtmosRunner's PATH must be preserved
+		if key == "PATH" {
 			continue
+		}
+
+		// Remove any existing env var with the same key before adding the new one
+		for i, env := range envVars {
+			if strings.HasPrefix(env, key+"=") {
+				envVars = append(envVars[:i], envVars[i+1:]...)
+				break
+			}
 		}
 		envVars = append(envVars, fmt.Sprintf("%s=%s", key, value))
 	}
