@@ -9,11 +9,13 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+
+	errUtils "github.com/cloudposse/atmos/errors"
 )
 
 var ErrFailedToProcessHclFile = errors.New("failed to process HCL file")
 
-// IsDirectory checks if the path is a directory
+// IsDirectory checks if the path is a directory.
 func IsDirectory(path string) (bool, error) {
 	fileInfo, err := os.Stat(path)
 	if err != nil {
@@ -22,7 +24,7 @@ func IsDirectory(path string) (bool, error) {
 	return fileInfo.IsDir(), err
 }
 
-// FileExists checks if the file exists and is not a directory
+// FileExists checks if the file exists and is not a directory.
 func FileExists(filename string) bool {
 	fileInfo, err := os.Stat(filename)
 	if os.IsNotExist(err) || err != nil {
@@ -31,16 +33,13 @@ func FileExists(filename string) bool {
 	return !fileInfo.IsDir()
 }
 
-// FileOrDirExists checks if the file or directory exists
+// FileOrDirExists checks if the file or directory exists.
 func FileOrDirExists(filename string) bool {
 	_, err := os.Stat(filename)
-	if err != nil {
-		return false
-	}
-	return true
+	return err == nil
 }
 
-// IsYaml checks if the file has YAML extension (does not check file schema, nor validates the file)
+// IsYaml checks if the file has YAML extension (does not check file schema, nor validates the file).
 func IsYaml(file string) bool {
 	yamlExtensions := []string{YamlFileExtension, YmlFileExtension, YamlTemplateExtension, YmlTemplateExtension}
 	ext := filepath.Ext(file)
@@ -52,7 +51,7 @@ func IsYaml(file string) bool {
 	return SliceContainsString(yamlExtensions, ext)
 }
 
-// ConvertPathsToAbsolutePaths converts a slice of paths to a slice of absolute paths
+// ConvertPathsToAbsolutePaths converts a slice of paths to a slice of absolute paths.
 func ConvertPathsToAbsolutePaths(paths []string) ([]string, error) {
 	res := []string{}
 
@@ -67,7 +66,7 @@ func ConvertPathsToAbsolutePaths(paths []string) ([]string, error) {
 	return res, nil
 }
 
-// JoinAbsolutePathWithPaths joins a base path with each item in the path slice and returns a slice of absolute paths
+// JoinAbsolutePathWithPaths joins a base path with each item in the path slice and returns a slice of absolute paths.
 func JoinAbsolutePathWithPaths(basePath string, paths []string) ([]string, error) {
 	res := []string{}
 
@@ -78,19 +77,19 @@ func JoinAbsolutePathWithPaths(basePath string, paths []string) ([]string, error
 	return res, nil
 }
 
-// TrimBasePathFromPath trims the base path prefix from the path
+// TrimBasePathFromPath trims the base path prefix from the path.
 func TrimBasePathFromPath(basePath string, path string) string {
 	basePath = filepath.ToSlash(basePath)
 	path = filepath.ToSlash(path)
 	return strings.TrimPrefix(path, basePath)
 }
 
-// IsPathAbsolute checks if the provided file path is absolute
+// IsPathAbsolute checks if the provided file path is absolute.
 func IsPathAbsolute(path string) bool {
 	return filepath.IsAbs(path)
 }
 
-// JoinAbsolutePathWithPath checks if the provided path is absolute. If the provided path is relative, it joins the base path with the path and returns the absolute path
+// JoinAbsolutePathWithPath checks if the provided path is absolute. If the provided path is relative, it joins the base path with the path and returns the absolute path.
 func JoinAbsolutePathWithPath(basePath string, providedPath string) (string, error) {
 	// If the provided path is an absolute path, return it
 	if filepath.IsAbs(providedPath) {
@@ -135,7 +134,7 @@ func EnsureDir(fileName string) error {
 	return nil
 }
 
-// SliceOfPathsContainsPath checks if a slice of file paths contains a path
+// SliceOfPathsContainsPath checks if a slice of file paths contains a path.
 func SliceOfPathsContainsPath(paths []string, checkPath string) bool {
 	for _, v := range paths {
 		dir := filepath.Dir(v)
@@ -146,7 +145,7 @@ func SliceOfPathsContainsPath(paths []string, checkPath string) bool {
 	return false
 }
 
-// GetAllFilesInDir returns all files in the provided directory and all subdirectories
+// GetAllFilesInDir returns all files in the provided directory and all subdirectories.
 func GetAllFilesInDir(dir string) ([]string, error) {
 	var files []string
 	err := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
@@ -158,7 +157,7 @@ func GetAllFilesInDir(dir string) ([]string, error) {
 	return files, err
 }
 
-// GetAllYamlFilesInDir returns all YAML files in the provided directory and all subdirectories
+// GetAllYamlFilesInDir returns all YAML files in the provided directory and all subdirectories.
 func GetAllYamlFilesInDir(dir string) ([]string, error) {
 	var res []string
 
@@ -176,7 +175,7 @@ func GetAllYamlFilesInDir(dir string) ([]string, error) {
 	return res, nil
 }
 
-// IsSocket checks if a file is a socket
+// IsSocket checks if a file is a socket.
 func IsSocket(path string) (bool, error) {
 	fileInfo, err := os.Stat(path)
 	if err != nil {
@@ -188,7 +187,7 @@ func IsSocket(path string) (bool, error) {
 
 // SearchConfigFile searches for a config file in the provided path.
 // If the path has a file extension, it checks if the file exists.
-// If the path does not have a file extension, it checks for the existence of the file with the provided path and the possible config file extensions
+// If the path does not have a file extension, it checks for the existence of the file with the provided path and the possible config file extensions.
 func SearchConfigFile(path string) (string, bool) {
 	// Check if the provided path has a file extension and the file exists
 	if filepath.Ext(path) != "" {
@@ -207,7 +206,7 @@ func SearchConfigFile(path string) (string, bool) {
 	return "", false
 }
 
-// IsURL checks if a string is a URL
+// IsURL checks if a string is a URL.
 func IsURL(s string) bool {
 	u, err := url.Parse(s)
 	if err != nil {
@@ -226,10 +225,10 @@ func IsURL(s string) bool {
 	return schemeValid
 }
 
-// GetFileNameFromURL extracts the file name from a URL
+// GetFileNameFromURL extracts the file name from a URL.
 func GetFileNameFromURL(rawURL string) (string, error) {
 	if rawURL == "" {
-		return "", fmt.Errorf("empty URL provided")
+		return "", errUtils.ErrEmptyURL
 	}
 
 	parsedURL, err := url.Parse(rawURL)
@@ -243,7 +242,7 @@ func GetFileNameFromURL(rawURL string) (string, error) {
 	// Get the base name of the path
 	fileName := filepath.Base(urlPath)
 	if fileName == "/" || fileName == "." {
-		return "", fmt.Errorf("unable to extract filename from URL: %s", rawURL)
+		return "", fmt.Errorf("%w: %s", errUtils.ErrExtractFilename, rawURL)
 	}
 	return fileName, nil
 }
@@ -280,7 +279,7 @@ func ResolveRelativePath(path string, basePath string) string {
 	return path
 }
 
-// GetLineEnding returns the appropriate line ending for the current platform
+// GetLineEnding returns the appropriate line ending for the current platform.
 func GetLineEnding() string {
 	if runtime.GOOS == "windows" {
 		return "\r\n"

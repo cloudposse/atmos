@@ -19,6 +19,11 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
+// Error format constants.
+const (
+	errContextFormat = "%w: %s"
+)
+
 // ValidateWithJsonSchema validates the data structure using the provided JSON Schema document
 // https://github.com/santhosh-tekuri/jsonschema
 // https://go.dev/play/p/Hhax3MrtD8r
@@ -78,11 +83,10 @@ func ValidateWithOpa(
 		timeoutSeconds = 20
 	}
 
-	timeoutErrorMessage := "Timeout evaluating the OPA policy. Please check the following:\n" +
-		"1. Rego syntax\n" +
-		"2. If 're_match' function is used and the regex pattern contains a backslash to escape special chars, the backslash itself must be escaped with another backslash"
-
-	invalidRegoPolicyErrorMessage := fmt.Sprintf("invalid Rego policy in the file '%s'", schemaPath)
+	timeoutErrorMessage := fmt.Sprintf("%s. Please check the following:\n"+
+		"1. Rego syntax\n"+
+		"2. If 're_match' function is used and the regex pattern contains a backslash to escape special chars, the backslash itself must be escaped with another backslash",
+		errUtils.ErrOPATimeout.Error())
 
 	// https://stackoverflow.com/questions/17573190/how-to-multiply-duration-by-integer
 	ctx, cancelFunc := context.WithTimeout(context.TODO(), time.Second*time.Duration(timeoutSeconds))
@@ -119,26 +123,26 @@ func ValidateWithOpa(
 	rs, err := query.Eval(ctx, rego.EvalInput(input))
 	if err != nil {
 		if errors.Is(err, context.DeadlineExceeded) {
-			err = errors.New(timeoutErrorMessage)
+			return false, errors.Join(errUtils.ErrOPATimeout, fmt.Errorf("%s", timeoutErrorMessage))
 		}
 		return false, err
 	}
 
 	if len(rs) < 1 {
-		return false, errors.New(invalidRegoPolicyErrorMessage)
+		return false, fmt.Errorf(errContextFormat, errUtils.ErrInvalidRegoPolicy, schemaPath)
 	}
 
 	if len(rs[0].Expressions) < 1 {
-		return false, errors.New(invalidRegoPolicyErrorMessage)
+		return false, fmt.Errorf(errContextFormat, errUtils.ErrInvalidRegoPolicy, schemaPath)
 	}
 
 	// Check the query evaluation result (if the `errors` output array has any items)
 	ers, ok := rs[0].Expressions[0].Value.([]any)
 	if !ok {
-		return false, errors.New(invalidRegoPolicyErrorMessage)
+		return false, fmt.Errorf(errContextFormat, errUtils.ErrInvalidRegoPolicy, schemaPath)
 	}
 	if len(ers) > 0 {
-		return false, fmt.Errorf("%w: %s", errUtils.ErrOPAPolicyViolations, strings.Join(u.SliceOfInterfacesToSliceOfStrings(ers), "\n"))
+		return false, fmt.Errorf(errContextFormat, errUtils.ErrOPAPolicyViolations, strings.Join(u.SliceOfInterfacesToSliceOfStrings(ers), "\n"))
 	}
 
 	return true, nil
@@ -199,9 +203,10 @@ func ValidateWithOpaLegacy(
 		}
 	}`, server.URL(), bundleSchemaName))
 
-	timeoutErrorMessage := "Timeout evaluating the OPA policy. Please check the following:\n" +
-		"1. Rego syntax\n" +
-		"2. If 're_match' function is used and the regex pattern contains a backslash to escape special chars, the backslash itself must be escaped with another backslash"
+	timeoutErrorMessage := fmt.Sprintf("%s. Please check the following:\n"+
+		"1. Rego syntax\n"+
+		"2. If 're_match' function is used and the regex pattern contains a backslash to escape special chars, the backslash itself must be escaped with another backslash",
+		errUtils.ErrOPATimeout.Error())
 
 	// Create an instance of the OPA object
 	opa, err := sdk.New(ctx, sdk.Options{
@@ -209,7 +214,7 @@ func ValidateWithOpaLegacy(
 	})
 	if err != nil {
 		if errors.Is(err, context.DeadlineExceeded) {
-			err = errors.New(timeoutErrorMessage)
+			return false, errors.Join(errUtils.ErrOPATimeout, fmt.Errorf("%s", timeoutErrorMessage))
 		}
 		return false, err
 	}
@@ -222,14 +227,14 @@ func ValidateWithOpaLegacy(
 		Input: dataFromJson,
 	}); err != nil {
 		if errors.Is(err, context.DeadlineExceeded) {
-			err = errors.New(timeoutErrorMessage)
+			return false, errors.Join(errUtils.ErrOPATimeout, fmt.Errorf("%s", timeoutErrorMessage))
 		}
 		return false, err
 	}
 
 	ers, ok := result.Result.([]any)
 	if ok && len(ers) > 0 {
-		return false, fmt.Errorf("%w: %s", errUtils.ErrOPAPolicyViolations, strings.Join(u.SliceOfInterfacesToSliceOfStrings(ers), "\n"))
+		return false, fmt.Errorf(errContextFormat, errUtils.ErrOPAPolicyViolations, strings.Join(u.SliceOfInterfacesToSliceOfStrings(ers), "\n"))
 	}
 
 	return true, nil

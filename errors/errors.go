@@ -121,6 +121,8 @@ var (
 	ErrFailedToGetComponentFlag  = errors.New("failed to get '--component' flag")
 	ErrFailedToGetStackFlag      = errors.New("failed to get '--stack' flag")
 	ErrOPAPolicyViolations       = errors.New("OPA policy violations detected")
+	ErrOPATimeout                = errors.New("timeout evaluating OPA policy")
+	ErrInvalidRegoPolicy         = errors.New("invalid Rego policy")
 
 	// List package errors.
 	ErrExecuteDescribeStacks     = errors.New("failed to execute describe stacks")
@@ -144,6 +146,9 @@ var (
 	ErrSetPermissions      = errors.New("failed to set permissions")
 	ErrReadDirectory       = errors.New("failed to read directory")
 	ErrComputeRelativePath = errors.New("failed to compute relative path")
+	ErrEmptyURL            = errors.New("empty URL provided")
+	ErrExtractFilename     = errors.New("unable to extract filename from URL")
+	ErrGlobMatch           = errors.New("failed to find a match for the import")
 
 	// OCI/Container image errors.
 	ErrCreateTempDirectory   = errors.New("failed to create temp directory")

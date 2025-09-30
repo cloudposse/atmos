@@ -149,6 +149,19 @@ linters:
       - linters:
           - cyclop
         path: (.+)_test\.go
+      # Allow fmt.Errorf when wrapping static errors from errUtils package
+      - linters:
+          - err113
+        source: 'fmt\.Errorf\("%w: .+", errUtils\.'
+      # Allow fmt.Errorf when wrapping any static Err* variable
+      - linters:
+          - err113
+        source: 'fmt\.Errorf\("%w: .+", Err[A-Z]'
+      # Allow errors.Join with fmt.Errorf for converting strings to errors
+      - linters:
+          - err113
+        path: ".*"
+        source: 'errors\.Join\(.*errUtils\..*fmt\.Errorf'
     paths:
       - experiments/.*
       - third_party$
@@ -157,26 +170,6 @@ linters:
 issues:
   max-issues-per-linter: 0
   max-same-issues: 0
-  # Exclude specific error patterns that are legitimate
-  exclude:
-    # Allow fmt.Errorf inside errors.Join for string-to-error conversion
-    - 'do not define dynamic errors, use wrapped static errors instead: "fmt\.Errorf'
-  exclude-rules:
-    # Allow fmt.Errorf when wrapping static errors from errUtils package
-    - linters:
-        - err113
-      source: 'fmt\.Errorf\("%w: .+", errUtils\.'
-
-    # Allow fmt.Errorf when wrapping any static Err* variable
-    - linters:
-        - err113
-      source: 'fmt\.Errorf\("%w: .+", Err[A-Z]'
-
-    # Allow errors.Join with fmt.Errorf for converting strings to errors
-    - linters:
-        - err113
-      path: ".*"
-      source: 'errors\.Join\(.*errUtils\..*fmt\.Errorf'
 
 severity:
   default: error

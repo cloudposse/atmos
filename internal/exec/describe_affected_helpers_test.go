@@ -5,11 +5,13 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/tests"
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
+	"github.com/go-git/go-git/v5/plumbing/object"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -50,7 +52,13 @@ func TestExecuteDescribeAffectedWithTargetRefCheckout_ReferenceNotFound(t *testi
 		t.Fatalf("Failed to add file: %v", err)
 	}
 
-	_, err = worktree.Commit("Initial commit", &git.CommitOptions{})
+	_, err = worktree.Commit("Initial commit", &git.CommitOptions{
+		Author: &object.Signature{
+			Name:  "Test User",
+			Email: "test@example.com",
+			When:  time.Now(),
+		},
+	})
 	if err != nil {
 		t.Fatalf("Failed to commit: %v", err)
 	}

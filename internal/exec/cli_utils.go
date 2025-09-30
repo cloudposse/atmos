@@ -649,8 +649,8 @@ func processArgsAndFlags(
 	return info, nil
 }
 
-// getCliVars returns a map of variables provided on the command-line.
-// atmos terraform apply template-functions-test -s tenant1-ue2-prod -var name=test2 -var stage=dev -var 'tags={"a":"value2", "Name":"test"}'.
+// GetCliVars returns a map of variables provided on the command-line.
+// Example: atmos terraform apply template-functions-test -s tenant1-ue2-prod -var name=test2 -var stage=dev -var 'tags={"a":"value2", "Name":"test"}'.
 func getCliVars(args []string) (map[string]any, error) {
 	variables := make(map[string]any)
 	for i := 0; i < len(args); i++ {
