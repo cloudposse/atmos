@@ -323,111 +323,39 @@ The pattern also has limitations:
 
 ## Best Practices
 
-### 1. Version Lifecycle Management
+- **Version Lifecycle Management:** Define clear lifecycle stages for component versions including Preview (experimental, API unstable), Beta (feature complete, testing in progress), Stable (production ready), Deprecated (marked for removal), and Archived (no longer maintained). Document transition criteria and timelines between stages.
 
-Define clear lifecycle stages:
+  <File title="docs/version-lifecycle.md">
+  ```markdown
+  # Component Version Lifecycle
 
-<File title="docs/version-lifecycle.md">
-```markdown
-# Component Version Lifecycle
+  ## Stages
+  1. **Preview** (-preview suffix): Experimental, API unstable
+  2. **Beta** (-beta suffix): Feature complete, testing in progress
+  3. **Stable** (no suffix or -v2): Production ready
+  4. **Deprecated** (-deprecated suffix): Marked for removal
+  5. **Archived** (moved to archive/): No longer maintained
 
-## Stages
-1. **Preview** (-preview suffix): Experimental, API unstable
-2. **Beta** (-beta suffix): Feature complete, testing in progress
-3. **Stable** (no suffix or -v2): Production ready
-4. **Deprecated** (-deprecated suffix): Marked for removal
-5. **Archived** (moved to archive/): No longer maintained
+  ## Transitions
+  - Preview → Beta: After API stabilization
+  - Beta → Stable: After production validation
+  - Stable → Deprecated: When newer version is stable
+  - Deprecated → Archived: After all migrations complete
 
-## Transitions
-- Preview → Beta: After API stabilization
-- Beta → Stable: After production validation
-- Stable → Deprecated: When newer version is stable
-- Deprecated → Archived: After all migrations complete
+  ## Timeline
+  - Minimum 30 days in Beta before Stable
+  - Minimum 90 days Deprecated before removal
+  - Document migration path before deprecation
+  ```
+  </File>
 
-## Timeline
-- Minimum 30 days in Beta before Stable
-- Minimum 90 days Deprecated before removal
-- Document migration path before deprecation
-```
-</File>
+- **Version Documentation:** Maintain clear documentation for each version including a component version matrix showing status (Stable, Beta, Preview, Deprecated) and version-specific notes with deprecation dates and migration guidance.
 
-### 2. Version Documentation
+- **Shared Code Management:** Minimize duplication by using shared modules that can be imported by multiple versions, reducing maintenance burden while allowing version-specific variations.
 
-Maintain clear documentation for each version:
+- **Testing Strategy:** Test all active versions using Atmos validation commands to ensure each version continues to function correctly as the codebase evolves.
 
-```markdown
-# Component Version Matrix
-
-| Component | v1 | v2 | v3 |
-|-----------|----|----|-----|
-| vpc | Stable (Deprecated) | Stable (Current) | Preview |
-| rds | Stable | Beta | - |
-| eks | Stable | - | - |
-
-## Version Notes
-- **vpc/v1**: Deprecated as of 2024-01-01, removal planned 2024-04-01
-- **vpc/v2**: Current recommended version
-- **vpc/v3**: Preview features, not for production
-```
-
-### 3. Shared Code Management
-
-Minimize duplication using shared modules:
-
-```
-components/
-  terraform/
-    vpc/
-      main.tf                   # Imports from shared
-    vpc/v2/
-      main.tf                   # Imports from shared
-    vpc-shared/                 # Shared code
-      modules/
-        subnets/
-        security-groups/
-        flow-logs/
-```
-
-### 4. Testing Strategy
-
-Test all active versions using Atmos validation:
-
-```bash
-# Validate all components and their versions
-atmos validate stacks
-atmos validate components
-
-# Test specific versioned components
-atmos terraform validate vpc/v2 --stack dev-us-east-1
-atmos terraform validate vpc/v3-preview --stack dev-us-east-1
-
-# Run validation for all stacks
-atmos validate all
-```
-
-### 5. Migration Process
-
-Migrate components to new versions using Atmos:
-
-```yaml
-# Update stack configuration to reference new version
-components:
-  terraform:
-    vpc:
-      metadata:
-        # Change from vpc/v1 to vpc/v2
-        component: vpc/v2
-```
-
-Then apply the migration:
-
-```bash
-# Preview the migration changes
-atmos terraform plan vpc --stack prod-us-east-1
-
-# Apply the migration with interactive approval
-atmos terraform apply vpc --stack prod-us-east-1 --auto-approve=false
-```
+- **Migration Process:** Migrate components to new versions by updating stack configuration to reference the new version folder, then preview and apply changes using Atmos terraform commands.
 
 ## Migration from Other Patterns
 

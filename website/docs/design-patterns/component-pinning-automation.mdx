@@ -9,15 +9,20 @@ import File from '@site/src/components/File'
 import PillBox from '@site/src/components/PillBox'
 import Intro from '@site/src/components/Intro'
 import KeyPoints from '@site/src/components/KeyPoints'
+import Tabs from '@theme/Tabs'
+import TabItem from '@theme/TabItem'
 
 <PillBox>Atmos Design Pattern</PillBox>
-<PillBox>Recommended Default</PillBox>
 
 <Intro>
 The **Component Pinning with Automation** pattern is the recommended default approach for managing component versions in Atmos. All environments pin to the same component version on the main branch, with automated testing and deployment pipelines controlling the rollout. This pattern decouples release from deployment using automation rather than version control strategies, promoting strong convergence while maintaining safety through comprehensive testing.
 </Intro>
 
 This pattern represents the sweet spot for most organizations—simple enough to understand and operate, yet powerful enough to handle complex deployment scenarios. By keeping all environments on the same version and using automation to control the rollout, teams can move fast with confidence while maintaining visibility into change impacts across their entire infrastructure.
+
+:::tip Strategies Are Not Mutually Exclusive
+This pattern can be combined with other approaches when needed. For example, you might use [Folder-Based Versioning](/design-patterns/folder-based-versioning) to manage breaking changes or experimental features alongside your main automation-driven workflow, allowing stable components to follow the automation pattern while high-risk changes get explicit version boundaries.
+:::
 
 <KeyPoints>
 - All environments use the same component version from the main branch (trunk-based development)
@@ -384,43 +389,44 @@ components:
 
 ## Comparison with Other Patterns
 
-### vs. Strict Version Pinning
+<Tabs>
+<TabItem value="strict-pinning" label="vs. Strict Version Pinning" default>
 
-**Strict Pinning**:
-- ❌ High operational overhead
-- ❌ Weak feedback loops
-- ❌ Promotes divergence
-- ✅ Strong reproducibility
+| Aspect | Strict Pinning | Component Pinning with Automation |
+|--------|----------------|-----------------------------------|
+| **Operational Overhead** | High - manage individual pins per environment | Low - single version for all environments |
+| **Feedback Loops** | Weak - issues surface late | Strong - immediate visibility across environments |
+| **Convergence** | Promotes divergence | Promotes convergence |
+| **Reproducibility** | Strong - explicit pins | Good - via Git history |
 
-**Component Pinning with Automation**:
-- ✅ Low operational overhead
-- ✅ Strong feedback loops
-- ✅ Promotes convergence
-- ✅ Good reproducibility (via Git history)
+**When to prefer Strict Pinning:** Compliance requirements demand cryptographic proof of exact versions deployed.
 
-### vs. Release Tracks
+</TabItem>
+<TabItem value="release-tracks" label="vs. Release Tracks">
 
-**Release Tracks**:
-- ❌ Must manage track definitions
-- ❌ Additional abstraction layer
-- ✅ Gradual rollout built-in
+| Aspect | Release Tracks | Component Pinning with Automation |
+|--------|----------------|-----------------------------------|
+| **Track Management** | Must manage track definitions | No track management needed |
+| **Abstraction** | Additional layer of indirection | Direct and simple |
+| **Gradual Rollout** | Built into track progression | Achieved via CI/CD pipeline |
+| **Flexibility** | Grouped environment control | Individual pipeline control |
 
-**Component Pinning with Automation**:
-- ✅ No track management
-- ✅ Direct and simple
-- ✅ Gradual rollout via pipeline
+**When to prefer Release Tracks:** Many environments need coordinated version progression with clear promotion stages.
 
-### vs. Git Flow
+</TabItem>
+<TabItem value="git-flow" label="vs. Git Flow">
 
-**Git Flow**:
-- ❌ Complex branch management
-- ❌ Merge conflicts between branches
-- ❌ Slower integration
+| Aspect | Git Flow | Component Pinning with Automation |
+|--------|----------|-----------------------------------|
+| **Branch Management** | Complex - maintain multiple long-lived branches | Simple - trunk-based development |
+| **Merge Conflicts** | Frequent conflicts between branches | No branch conflicts |
+| **Integration Speed** | Slower - changes isolated in branches | Fast - frequent integration to main |
+| **Deployment Model** | Branches represent environments | Automation controls deployment |
 
-**Component Pinning with Automation**:
-- ✅ Simple trunk-based flow
-- ✅ No branch conflicts
-- ✅ Fast integration
+**When to prefer Git Flow:** Legacy systems where branch-per-environment is deeply embedded in processes.
+
+</TabItem>
+</Tabs>
 
 ## When to Use This Pattern
 
@@ -445,103 +451,31 @@ Consider alternatives when:
 
 ## Best Practices
 
-### 1. Comprehensive Testing
+- **Comprehensive Testing:** Invest in thorough testing at each stage including unit tests (component-level), integration tests (cross-component), smoke tests (basic functionality), performance tests (load and scale), security scans (vulnerability assessment), and chaos testing (resilience validation).
 
-Invest in thorough testing at each stage:
+- **Clear Rollback Procedures:** Rollback is straightforward: revert the problematic commit on the main branch and let your deployment pipeline apply the previous state across all environments. This approach maintains consistency and leverages the same automation that deployed the change originally.
 
-```yaml
-# Example test stages
-stages:
-  - unit_tests          # Component-level tests
-  - integration_tests   # Cross-component tests
-  - smoke_tests        # Basic functionality
-  - performance_tests  # Load and scale testing
-  - security_scan     # Vulnerability assessment
-  - chaos_testing    # Resilience validation
-```
+- **Environment Parity:** Keep environments as similar as possible by using inheritance for shared configuration and minimizing environment-specific overrides.
 
-### 2. Clear Rollback Procedures
-
-Document and automate rollback:
-
-```bash
-#!/bin/bash
-# rollback.sh
-
-COMMIT_TO_REVERT=$1
-ENVIRONMENT=$2
-
-# Revert the commit
-git revert $COMMIT_TO_REVERT --no-edit
-
-# Push to trigger pipeline
-git push origin main
-
-# Or manually apply previous state
-atmos terraform apply component -s $ENVIRONMENT --auto-approve
-```
-
-### 3. Environment Parity
-
-Keep environments as similar as possible:
-
-```yaml
-# Use inheritance for consistency
-catalog:
-  base-vpc:
-    vars:
-      enable_dns_hostnames: true
-      enable_dns_support: true
-      # Shared configuration
-
-# Then customize minimally per environment
-components:
-  terraform:
-    vpc:
-      metadata:
-        inherits:
-          - base-vpc
+  ```yaml
+  # Use inheritance for consistency
+  catalog:
+    base-vpc:
       vars:
-        # Only environment-specific overrides
-```
+        enable_dns_hostnames: true
+        enable_dns_support: true
+        # Shared configuration
 
-### 4. Monitoring and Observability
-
-Implement comprehensive monitoring:
-
-- Deployment frequency and duration
-- Success/failure rates
-- Time to recovery
-- Change failure rate
-- Mean time between failures
-
-### 5. Progressive Rollout Controls
-
-Use multiple mechanisms for safe rollout:
-
-1. **Feature Flags**: Runtime behavior control
-2. **Configuration Management**: Environment-specific settings
-3. **Traffic Management**: Load balancer weights
-4. **Deployment Windows**: Time-based restrictions
-5. **Manual Gates**: Human approval for critical environments
-
-## Migration Guide
-
-### From Strict Version Pinning
-
-1. **Consolidate versions**: Identify which version each environment uses
-2. **Align environments**: Progressively update lagging environments
-3. **Remove version pins**: Update stack configs to use unversioned components
-4. **Implement automation**: Build out CI/CD pipelines
-5. **Add safety controls**: Implement feature flags and testing
-
-### From Git Flow
-
-1. **Merge long-lived branches**: Consolidate to main branch
-2. **Update references**: Point all environments to main branch
-3. **Simplify pipeline**: Remove branch-specific logic
-4. **Implement protections**: Add testing and approval gates
-5. **Train team**: Educate on trunk-based development
+  # Then customize minimally per environment
+  components:
+    terraform:
+      vpc:
+        metadata:
+          inherits:
+            - base-vpc
+        vars:
+          # Only environment-specific overrides
+  ```
 
 ## Troubleshooting
 
@@ -569,9 +503,7 @@ The pattern's strength lies not in complex version management, but in robust aut
 Don't solve deployment challenges with version control gymnastics. Use automation, testing, and progressive rollout strategies to maintain safety while keeping operations simple.
 :::
 
-## Related Patterns
+## See Also
 
-- [Version Management](/design-patterns/version-management) - Overview of all version management strategies
-- [Multiple Component Instances](/design-patterns/multiple-component-instances) - Running multiple versions simultaneously
-- [Component Catalog](/design-patterns/component-catalog) - Organizing shared components
-- [Component Inheritance](/design-patterns/component-inheritance) - Sharing configuration across environments
+- **[Folder-Based Versioning](/design-patterns/folder-based-versioning)** - Use this alongside automation when you need explicit version boundaries for breaking changes or experimental features that require extended parallel development.
+- **[Release Tracks/Channels](/design-patterns/release-tracks-channels)** - Consider this alternative when managing many environments that need coordinated version progression with clear promotion stages and grouped rollout control.

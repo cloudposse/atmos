@@ -265,51 +265,47 @@ The pattern has significant trade-offs to consider:
 
 ## Best Practices
 
-### 1. Use Feature Flags for Long-Running Changes
+- **Use Feature Flags for Long-Running Changes:** Combine branches with feature flags to enable gradual rollout and environment-specific behavior, allowing features to be toggled based on deployment channel without code changes.
 
-Combine branches with feature flags:
+  <File title="components/terraform/vpc/variables.tf">
+  ```hcl
+  variable "enable_experimental_features" {
+    description = "Enable experimental VPC features"
+    type        = bool
+    default     = false
+  }
 
-<File title="components/terraform/vpc/variables.tf">
-```hcl
-variable "enable_experimental_features" {
-  description = "Enable experimental VPC features"
-  type        = bool
-  default     = false
-}
+  variable "channel" {
+    description = "Deployment channel (dev/staging/prod)"
+    type        = string
+  }
 
-variable "channel" {
-  description = "Deployment channel (dev/staging/prod)"
-  type        = string
-}
+  locals {
+    # Enable features based on channel
+    enable_flow_logs = var.channel != "dev" ? true : var.enable_experimental_features
+    enable_ipv6      = var.channel == "dev" ? true : false
+  }
+  ```
+  </File>
 
-locals {
-  # Enable features based on channel
-  enable_flow_logs = var.channel != "dev" ? true : var.enable_experimental_features
-  enable_ipv6      = var.channel == "dev" ? true : false
-}
-```
-</File>
+- **Document Channel Policies:** Maintain clear channel policies documenting channel definitions, promotion rules, and approval requirements to ensure consistent promotion practices across the team.
 
-### 2. Document Channel Policies
+  <File title="docs/channel-policy.md">
+  ```markdown
+  # Channel Branch Policy
 
-Maintain clear channel policies:
+  ## Channel Definitions
+  - **channels/dev**: Latest development, updated continuously
+  - **channels/staging**: Pre-production validation, updated daily
+  - **channels/prod**: Production stable, updated weekly
 
-<File title="docs/channel-policy.md">
-```markdown
-# Channel Branch Policy
-
-## Channel Definitions
-- **channels/dev**: Latest development, updated continuously
-- **channels/staging**: Pre-production validation, updated daily
-- **channels/prod**: Production stable, updated weekly
-
-## Promotion Rules
-1. All changes must enter through channels/dev
-2. Automated tests must pass before promotion
-3. Staging requires soak time before prod promotion
-4. Production promotions require approvals
-```
-</File>
+  ## Promotion Rules
+  1. All changes must enter through channels/dev
+  2. Automated tests must pass before promotion
+  3. Staging requires soak time before prod promotion
+  4. Production promotions require approvals
+  ```
+  </File>
 
 ## Security and Access Control
 

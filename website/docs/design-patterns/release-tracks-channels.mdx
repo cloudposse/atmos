@@ -431,104 +431,34 @@ The pattern also has some limitations:
 
 ## Best Practices
 
-When using release tracks:
+- **Design Clear Track Hierarchy:** Define tracks that match your promotion flow: `alpha` or `dev` for latest changes with highest risk, `beta` or `staging` for pre-production validation, `prod` or `stable` for production-ready versions, and optionally `lts` for long-term support of critical systems.
 
-### 1. Design Clear Track Hierarchy
-Define tracks that match your promotion flow:
-- `alpha` or `dev`: Latest changes, highest risk
-- `beta` or `staging`: Pre-production validation
-- `prod` or `stable`: Production-ready versions
-- `lts`: Long-term support for critical systems
+- **Automate Track Promotion:** Use CI/CD pipelines to automate version promotion through tracks by updating track configuration files (such as `tracks.yaml`) and running validation before deployment. This ensures consistent promotion processes and reduces manual errors.
 
-### 2. Automate Track Promotion
-Use CI/CD to automate version promotion through tracks:
+- **Monitor Track Health:** Monitor track version consistency to identify and address drift between environments subscribed to the same track.
 
-```yaml
-# GitHub Actions example
-name: Promote Track
-on:
-  workflow_dispatch:
-    inputs:
-      component:
-        description: 'Component to promote'
-        required: true
-      from_track:
-        description: 'Source track'
-        required: true
-        type: choice
-        options:
-          - alpha
-          - beta
-      to_track:
-        description: 'Target track'
-        required: true
-        type: choice
-        options:
-          - beta
-          - prod
+- **Document Track Policy:** Maintain clear documentation about track policies including track definitions, promotion criteria, and emergency procedures.
 
-jobs:
-  promote:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-      - name: Setup Atmos
-        uses: cloudposse/github-action-atmos@v2
-      - name: Promote Version
-        run: |
-          # Update track configuration
-          yq eval -i ".vars.tracks.component_versions.${{ inputs.component }}.${{ inputs.to_track }} = \
-            $(yq eval '.vars.tracks.component_versions.${{ inputs.component }}.${{ inputs.from_track }}' stacks/catalog/tracks.yaml)" \
-            stacks/catalog/tracks.yaml
+  <File title="docs/track-policy.md">
+  ```markdown
+  # Release Track Policy
 
-          # Validate changes
-          atmos validate stacks
-```
+  ## Track Definitions
+  - **Alpha**: Latest development versions, updated daily
+  - **Beta**: Release candidates, updated weekly
+  - **Prod**: Stable versions, updated bi-weekly
 
-### 3. Monitor Track Health
-Set up monitoring for track divergence:
+  ## Promotion Criteria
+  - Alpha → Beta: Passing all automated tests
+  - Beta → Prod: 7 days in staging without issues
 
-```bash
-# Check version consistency within tracks
-for track in alpha beta prod; do
-  echo "Checking $track track..."
-  atmos describe stacks --format=json | \
-    jq ".[] | select(.track==\"$track\") | .components.terraform.vpc.source"
-done
-```
+  ## Emergency Procedures
+  - Hotfixes can skip alpha and go directly to beta
+  - Critical security updates can be applied to all tracks simultaneously
+  ```
+  </File>
 
-### 4. Document Track Policy
-Maintain clear documentation about track policies:
-
-<File title="docs/track-policy.md">
-```markdown
-# Release Track Policy
-
-## Track Definitions
-- **Alpha**: Latest development versions, updated daily
-- **Beta**: Release candidates, updated weekly
-- **Prod**: Stable versions, updated bi-weekly
-
-## Promotion Criteria
-- Alpha → Beta: Passing all automated tests
-- Beta → Prod: 7 days in staging without issues
-
-## Emergency Procedures
-- Hotfixes can skip alpha and go directly to beta
-- Critical security updates can be applied to all tracks simultaneously
-```
-</File>
-
-### 5. Plan Across Tracks
-Regularly run plans across all environments in a track:
-
-```bash
-# Plan all environments in a track
-TRACK="beta"
-for stack in $(atmos list stacks | grep $TRACK); do
-  atmos terraform plan vpc --stack $stack
-done
-```
+- **Plan Across Tracks:** Regularly run Terraform plans across all environments within a track to validate consistency and catch issues before deployment.
 
 ## Migration Strategies
 
