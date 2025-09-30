@@ -5,6 +5,13 @@ const matter = require('gray-matter');
 /**
  * Glossary Tooltips Plugin for Docusaurus.
  * Provides hover tooltips for glossary terms throughout documentation.
+ *
+ * This is a custom implementation inspired by @grnet/docusaurus-terminology
+ * (https://github.com/grnet/docusaurus-terminology) but written from scratch
+ * to avoid security vulnerabilities in the original package's dependencies.
+ *
+ * Original plugin: BSD-2-Clause License, Copyright (c) National Infrastructures
+ * for Research and Technology (GRNET).
  */
 module.exports = function (context, options) {
   const {

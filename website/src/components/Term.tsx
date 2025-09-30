@@ -34,7 +34,13 @@ declare global {
 
 /**
  * Term component that displays a link to a glossary term with hover tooltip.
- * Replaces @grnet/docusaurus-term-preview functionality.
+ *
+ * This is a custom implementation inspired by the functionality of
+ * @grnet/docusaurus-terminology (https://github.com/grnet/docusaurus-terminology)
+ * but written from scratch for better control and to avoid dependency vulnerabilities.
+ *
+ * Original plugin: BSD-2-Clause License, Copyright (c) National Infrastructures
+ * for Research and Technology (GRNET).
  */
 const Term: React.FC<TermProps> = ({ termId, children }) => {
   const [glossary, setGlossary] = useState<GlossaryData | null>(null);
