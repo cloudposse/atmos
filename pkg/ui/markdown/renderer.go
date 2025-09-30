@@ -15,7 +15,7 @@ import (
 
 const defaultWidth = 80
 
-// Renderer is a markdown renderer using Glamour
+// Renderer is a markdown renderer using Glamour.
 type Renderer struct {
 	renderer              *glamour.TermRenderer
 	width                 uint

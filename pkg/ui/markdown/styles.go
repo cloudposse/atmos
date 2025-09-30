@@ -7,7 +7,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-// applyStyleSafely applies a color to a style primitive safely handling nil pointers
+// applyStyleSafely applies a color to a style primitive safely handling nil pointers.
 func applyStyleSafely(style *ansi.StylePrimitive, color string) {
 	if style == nil {
 		return
@@ -20,7 +20,7 @@ func applyStyleSafely(style *ansi.StylePrimitive, color string) {
 }
 
 // GetDefaultStyle returns the markdown style configuration from atmos.yaml settings
-// or falls back to built-in defaults if not configured
+// or falls back to built-in defaults if not configured.
 func GetDefaultStyle(atmosConfig schema.AtmosConfiguration) ([]byte, error) {
 	// Get the built-in default style
 	defaultBytes, err := getBuiltinDefaultStyle()
@@ -91,7 +91,7 @@ func GetDefaultStyle(atmosConfig schema.AtmosConfiguration) ([]byte, error) {
 
 const newline = "\n"
 
-// this only returns the built-in default style configuration
+// This only returns the built-in default style configuration.
 func getBuiltinDefaultStyle() ([]byte, error) {
 	style := ansi.StyleConfig{
 		Document: ansi.StyleBlock{

@@ -30,7 +30,7 @@ func NewCustomGitDetector(atmosConfig *schema.AtmosConfiguration, source string)
 
 // Detect implements the getter.Detector interface for go-getter v1.
 func (d *CustomGitDetector) Detect(src, _ string) (string, bool, error) {
-	log.Debug("CustomGitDetector.Detect called")
+	log.Trace("CustomGitDetector.Detect called")
 
 	if len(src) == 0 {
 		return "", false, nil
