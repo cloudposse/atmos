@@ -54,7 +54,7 @@ module.exports = function (context, options) {
           // Use provided slug or generate from ID.
           const slug = data.slug || `/terms/${termId}`;
 
-          glossaryData[slug] = {
+          const entry = {
             metadata: {
               id: termId,
               title: termTitle,
@@ -64,6 +64,10 @@ module.exports = function (context, options) {
             },
             content: mdContent.trim(),
           };
+
+          // Register entry under both slug and id for flexible lookups.
+          glossaryData[slug] = entry;
+          glossaryData[termId] = entry;
         }
       }
 

@@ -64,7 +64,24 @@ const Term: React.FC<TermProps> = ({ termId, children }) => {
     }
   }, [withBaseUrl]);
 
-  const termData = glossary?.[termId];
+  // Try multiple normalized keys to handle encoding, casing, and custom slugs.
+  let termData = null;
+  if (glossary) {
+    // Try decoded URI first (handles %20, %2F, etc.).
+    const decodedTermId = decodeURIComponent(termId);
+    termData = glossary[decodedTermId];
+
+    // Try lowercase normalized form.
+    if (!termData) {
+      const normalizedLower = termId.toLowerCase();
+      termData = glossary[normalizedLower];
+    }
+
+    // Fallback to original termId.
+    if (!termData) {
+      termData = glossary[termId];
+    }
+  }
 
   if (!termData) {
     // Fallback: render as plain link if term not found.
