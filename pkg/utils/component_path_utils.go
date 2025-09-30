@@ -23,79 +23,145 @@ const (
 	uncPrefix            = `\\`
 )
 
-// isUNCPath checks if a path is a UNC path (\\server\share format).
-func isUNCPath(path string) bool {
-	return strings.HasPrefix(path, uncPrefix) && len(strings.Split(path, windowsPathSeparator)) >= 4
-}
-
-// ensureAbsolutePath converts a path to absolute while preserving UNC paths.
-func ensureAbsolutePath(path string) (string, error) {
-	// UNC paths are already absolute, don't use filepath.Abs() which can corrupt them.
-	if isUNCPath(path) {
-		return path, nil
-	}
-
-	// For regular paths, use filepath.Abs().
-	if !filepath.IsAbs(path) {
-		absPath, err := filepath.Abs(path)
-		if err != nil {
-			return "", fmt.Errorf("failed to resolve absolute path: %w", err)
+// hasSequenceRepeat checks if parts[start:start+length] equals parts[start+length:start+length*2].
+func hasSequenceRepeat(parts []string, start, length int) bool {
+	for j := 0; j < length; j++ {
+		if parts[start+j] != parts[start+length+j] {
+			return false
 		}
-		return absPath, nil
 	}
-
-	return path, nil
+	return true
 }
 
-// joinUNCPath joins a UNC base path with additional components using Windows separators.
-func joinUNCPath(basePath, component string) string {
-	if component == "" {
-		return basePath
+// removeDuplicateSequence removes a duplicate sequence from path parts.
+func removeDuplicateSequence(parts []string, start, length int, originalPath string) string {
+	// Extract the volume/UNC prefix from the original path
+	volume := filepath.VolumeName(originalPath)
+
+	newParts := make([]string, 0, len(parts)-length)
+	newParts = append(newParts, parts[:start+length]...)
+	newParts = append(newParts, parts[start+length*2:]...)
+	cleanedPath := strings.Join(newParts, string(filepath.Separator))
+
+	// Handle different volume/path scenarios
+	return preserveVolume(cleanedPath, volume, originalPath)
+}
+
+// preserveVolume preserves UNC paths and volume names in the cleaned path.
+func preserveVolume(cleanedPath, volume, originalPath string) string {
+	if volume == "" {
+		// No volume - just ensure Unix absolute paths stay absolute
+		if filepath.IsAbs(originalPath) && !filepath.IsAbs(cleanedPath) {
+			return string(filepath.Separator) + cleanedPath
+		}
+		return cleanedPath
 	}
 
+	// Check if it's a UNC path (starts with \\)
+	if isUNCPath(volume) {
+		return handleUNCPath(cleanedPath, volume)
+	}
+
+	// For regular volumes (like C:), ensure proper Windows drive-root style path
+	if cleanedPath == "" {
+		return volume + string(filepath.Separator)
+	}
+	if strings.HasPrefix(cleanedPath, string(filepath.Separator)) {
+		return volume + cleanedPath
+	}
+	return volume + string(filepath.Separator) + cleanedPath
+}
+
+// isUNCPath checks if the volume is a UNC path.
+func isUNCPath(volume string) bool {
+	return strings.HasPrefix(volume, uncPrefix)
+}
+
+// handleUNCPath processes UNC paths to avoid duplication.
+func handleUNCPath(cleanedPath, volume string) string {
+	// Always reconstruct the path using the original volume to preserve UNC prefix
+	volumeWithoutPrefix := strings.TrimPrefix(volume, uncPrefix)
+
+	// Try to strip the full volume first
+	remainder := strings.TrimPrefix(cleanedPath, volume)
+	if remainder == cleanedPath {
+		// If full volume stripping didn't work, try without UNC prefix
+		remainder = strings.TrimPrefix(cleanedPath, volumeWithoutPrefix)
+	}
+
+	// Trim any leading path separators from the remainder
+	remainder = strings.TrimLeft(remainder, windowsPathSeparator)
+
+	// If no remainder, return just the volume
+	if remainder == "" {
+		return volume
+	}
+
+	// Reconstruct with original volume + separator + remainder
+	return volume + windowsPathSeparator + remainder
+}
+
+// cleanDuplicatedPath detects and removes path duplication patterns.
+// For example: /path/to/base/.//path/to/base/components -> /path/to/base/components
+// This only removes duplications when a significant path segment is duplicated,
+// not just when a single directory name appears multiple times.
+func cleanDuplicatedPath(path string) string {
+	if path == "" {
+		return ""
+	}
+
+	// First clean the path to normalize separators and remove ./ patterns
+	cleanedPath := filepath.Clean(path)
+
+	// Split the path into parts
+	parts := strings.Split(cleanedPath, string(filepath.Separator))
+
+	// For absolute paths, the first part will be empty, skip it
+	startIdx := 0
+	if len(parts) > 0 && parts[0] == "" {
+		startIdx = 1
+	}
+
+	// Only look for duplications of sequences that are at least 3 parts long
+	minLength := 3
+	if len(parts)-startIdx < minLength*2 {
+		return cleanedPath
+	}
+
+	// Look for consecutive duplicate sequences of significant length
+	for length := minLength; length <= (len(parts)-startIdx)/2; length++ {
+		for start := startIdx; start+length*2 <= len(parts); start++ {
+			if hasSequenceRepeat(parts, start, length) {
+				// Found a duplicate sequence, remove it and recurse
+				result := removeDuplicateSequence(parts, start, length, path)
+				return cleanDuplicatedPath(result)
+			}
+		}
+	}
+
+	return cleanedPath
+}
+
+// buildComponentPath builds the component path handling absolute vs relative cases.
+func buildComponentPath(basePath, componentFolderPrefix, component string) string {
+	// Check if the component itself is an absolute path
+	if component != "" && filepath.IsAbs(component) {
+		// If component is absolute, use it as the base and only append folder prefix if needed
+		if componentFolderPrefix != "" {
+			return filepath.Join(component, componentFolderPrefix)
+		}
+		return component
+	}
+
+	// Build path step by step using JoinPath to handle absolute paths correctly
 	result := basePath
-	if !strings.HasSuffix(result, windowsPathSeparator) {
-		result += windowsPathSeparator
+	if componentFolderPrefix != "" {
+		result = JoinPath(result, componentFolderPrefix)
 	}
-
-	// Convert forward slashes to backslashes for UNC paths.
-	component = strings.ReplaceAll(component, "/", windowsPathSeparator)
-	result += component
-
+	if component != "" {
+		result = JoinPath(result, component)
+	}
 	return result
-}
-
-// cleanUNCPath cleans a UNC path while preserving the UNC prefix.
-func cleanUNCPath(path string) string {
-	if !strings.HasPrefix(path, uncPrefix) {
-		return path
-	}
-
-	cleanPath := path
-	// Remove any sequences of 3 or more consecutive backslashes, keeping only single backslashes.
-	// We need to be careful to preserve the UNC prefix (\\).
-	for {
-		// Look for any sequence of 3+ backslashes.
-		tripleOrMore := windowsPathSeparator + windowsPathSeparator + windowsPathSeparator
-		if !strings.Contains(cleanPath, tripleOrMore) {
-			break
-		}
-		// Replace sequences of 3+ backslashes with single backslash.
-		cleanPath = strings.ReplaceAll(cleanPath, tripleOrMore, windowsPathSeparator)
-	}
-
-	// Handle double backslashes that aren't the UNC prefix.
-	// Split at UNC prefix, clean the rest, then rejoin.
-	if len(cleanPath) > 2 {
-		suffix := cleanPath[2:] // Everything after the UNC prefix
-		// Replace any remaining double backslashes in the suffix with single backslash.
-		for strings.Contains(suffix, windowsPathSeparator+windowsPathSeparator) {
-			suffix = strings.ReplaceAll(suffix, windowsPathSeparator+windowsPathSeparator, windowsPathSeparator)
-		}
-		cleanPath = uncPrefix + suffix
-	}
-
-	return cleanPath
 }
 
 // getBasePathForComponentType returns the base path for a specific component type.
@@ -135,12 +201,7 @@ func getBasePathForComponentType(atmosConfig *schema.AtmosConfiguration, compone
 		basePath = resolvedPath
 	} else {
 		// Construct from configured paths (could be anything - opentofu/, tf/, etc.).
-		// Handle UNC paths specially to preserve their format.
-		if isUNCPath(atmosConfig.BasePath) {
-			basePath = joinUNCPath(atmosConfig.BasePath, configBasePath)
-		} else {
-			basePath = filepath.Join(atmosConfig.BasePath, configBasePath)
-		}
+		basePath = filepath.Join(atmosConfig.BasePath, configBasePath)
 	}
 
 	return basePath, envVarName, nil
@@ -159,39 +220,24 @@ func GetComponentPath(atmosConfig *schema.AtmosConfiguration, componentType stri
 		return "", err
 	}
 
-	// Ensure base path is absolute while preserving UNC paths.
-	absPath, err := ensureAbsolutePath(basePath)
-	if err != nil {
-		return "", fmt.Errorf("failed to resolve absolute path for %s base path '%s': %w",
-			componentType, basePath, err)
+	// Clean up path duplication that might occur from incorrect configuration
+	basePath = cleanDuplicatedPath(basePath)
+
+	// Ensure base path is absolute.
+	if !filepath.IsAbs(basePath) {
+		absPath, err := filepath.Abs(basePath)
+		if err != nil {
+			return "", fmt.Errorf("failed to resolve absolute path for %s base path '%s': %w",
+				componentType, basePath, err)
+		}
+		basePath = absPath
 	}
-	basePath = absPath
 
 	// Build the full component path.
-	var componentPath string
-	if isUNCPath(basePath) {
-		// For UNC paths, use helper function to preserve UNC format.
-		componentPath = joinUNCPath(basePath, componentFolderPrefix)
-		componentPath = joinUNCPath(componentPath, component)
-	} else {
-		// For regular paths, use filepath.Join().
-		pathParts := []string{basePath}
-		if componentFolderPrefix != "" {
-			pathParts = append(pathParts, componentFolderPrefix)
-		}
-		if component != "" {
-			pathParts = append(pathParts, component)
-		}
-		componentPath = filepath.Join(pathParts...)
-	}
+	componentPath := buildComponentPath(basePath, componentFolderPrefix, component)
 
 	// Clean the path to handle any redundant separators or relative components.
-	var cleanPath string
-	if isUNCPath(componentPath) {
-		cleanPath = cleanUNCPath(componentPath)
-	} else {
-		cleanPath = filepath.Clean(componentPath)
-	}
+	cleanPath := filepath.Clean(componentPath)
 
 	log.Debug("Resolved component path",
 		"type", componentType,
