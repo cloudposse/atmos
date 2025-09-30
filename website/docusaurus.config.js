@@ -153,6 +153,22 @@ const config = {
         ],
         [
             path.resolve(__dirname, 'plugins', 'fetch-latest-release'), {}
+        ],
+        [
+            'docusaurus-plugin-llms',
+            {
+                generateLLMsTxt: true,
+                generateLLMsFullTxt: true,
+                docsDir: 'docs',
+                includeBlog: true,
+                includeOrder: [
+                    'introduction/*',
+                    'quick-start/*',
+                    'install/*',
+                    'core-concepts/*',
+                    'cli/*',
+                ],
+            },
         ]
     ],
 
