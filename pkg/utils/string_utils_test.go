@@ -49,6 +49,20 @@ func TestSplitStringByDelimiter(t *testing.T) {
 			expected:  []string{"foo:", "!env", "FOO"},
 			expectErr: false,
 		},
+		{
+			name:      "Single quoted value with nested double quotes",
+			input:     "core '.security.users[\"github-dependabot\"].access.key.id'",
+			delimiter: ' ',
+			expected:  []string{"core", ".security.users[\"github-dependabot\"].access.key.id"},
+			expectErr: false,
+		},
+		{
+			name:      "Unmatched leading quote is preserved",
+			input:     "foo 'bar",
+			delimiter: ' ',
+			expected:  []string{"foo", "'bar"},
+			expectErr: false,
+		},
 
 		{
 			name:      "Error case with invalid CSV format",
