@@ -57,6 +57,13 @@ func TestSplitStringByDelimiter(t *testing.T) {
 			expectErr: false,
 		},
 		{
+			name:      "Quoted empty values are removed",
+			input:     "foo '' \"\" bar",
+			delimiter: ' ',
+			expected:  []string{"foo", "bar"},
+			expectErr: false,
+		},
+		{
 			name:      "Unmatched leading quote is preserved",
 			input:     "foo 'bar",
 			delimiter: ' ',

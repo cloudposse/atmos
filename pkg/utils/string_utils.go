@@ -2,6 +2,7 @@ package utils
 
 import (
 	"encoding/csv"
+	"errors"
 	"strings"
 
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -38,7 +39,7 @@ func SplitStringByDelimiter(str string, delimiter rune) ([]string, error) {
 
 	parts, err := read(false)
 	if err != nil {
-		if parseErr, ok := err.(*csv.ParseError); ok && parseErr.Err == csv.ErrBareQuote {
+		if parseErr, ok := err.(*csv.ParseError); ok && errors.Is(parseErr.Err, csv.ErrBareQuote) {
 			parts, err = read(true)
 		}
 	}
@@ -49,10 +50,11 @@ func SplitStringByDelimiter(str string, delimiter rune) ([]string, error) {
 	// Remove empty strings caused by multiple spaces and trim matching quotes.
 	filteredParts := make([]string, 0, len(parts))
 	for _, part := range parts {
-		if part == "" {
+		trimmed := trimMatchingQuotes(part)
+		if trimmed == "" {
 			continue
 		}
-		filteredParts = append(filteredParts, trimMatchingQuotes(part))
+		filteredParts = append(filteredParts, trimmed)
 	}
 
 	return filteredParts, nil
