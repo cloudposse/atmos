@@ -119,52 +119,44 @@ viper.SetEnvPrefix("ATMOS")
 
 ### Error Handling (MANDATORY)
 - **All errors MUST be wrapped using static errors defined in `errors/errors.go`**
-- **Use `errors.Join` for combining multiple errors** (Go 1.20+) - preserves both error chains
+- **Use `errors.Join` for combining multiple errors** - preserves all error chains
 - **Use `fmt.Errorf` with `%w` for adding string context** - when you need formatted strings
-- **NEVER use dynamic errors directly** - this will trigger linting warnings
+- **Use `errors.Is()` for error checking** - robust against wrapping
+- **NEVER use dynamic errors directly** - triggers linting warnings
 - **See `docs/prd/error-handling-strategy.md`** for complete guidelines
 
 #### Error Handling Patterns
 
-**Pattern 1: Combining Multiple Errors**
+**Combining Multiple Errors:**
 ```go
-// ✅ CORRECT: Use errors.Join for multiple errors
+// ✅ CORRECT: Use errors.Join (unlimited errors, no formatting)
 return errors.Join(errUtils.ErrFailedToProcess, underlyingErr)
 
-// ❌ WRONG: fmt.Errorf with multiple %w (invalid in Go)
-return fmt.Errorf("%w: %w", errUtils.ErrFailedToProcess, underlyingErr)
+// Note: Go 1.20+ supports fmt.Errorf("%w: %w", ...) but errors.Join is preferred
 ```
 
-**Pattern 2: Adding String Context**
+**Adding String Context:**
 ```go
-// ✅ CORRECT: Use fmt.Errorf with single %w for context
 return fmt.Errorf("%w: component=%s stack=%s", errUtils.ErrInvalidComponent, component, stack)
-return fmt.Errorf("%w: %s", errUtils.ErrFileNotFound, filepath)
 ```
 
-**Pattern 3: Converting Strings to Errors**
+**Checking Errors:**
 ```go
-// ✅ CORRECT: Converting string to error with context
-violations := []string{"rule1 failed", "rule2 failed"}
-return errors.Join(errUtils.ErrValidation, fmt.Errorf("%s", strings.Join(violations, "\n")))
+// ✅ CORRECT: Works with wrapped errors
+if errors.Is(err, context.DeadlineExceeded) { ... }
+
+// ❌ WRONG: Breaks with wrapping
+if err.Error() == "context deadline exceeded" { ... }
 ```
 
-**Static Error Definitions**
+**Static Error Definitions:**
 ```go
 // Define in errors/errors.go
 var (
     ErrInvalidComponent = errors.New("invalid component")
     ErrInvalidStack     = errors.New("invalid stack")
-    ErrInvalidConfig    = errors.New("invalid configuration")
 )
 ```
-
-- **Error wrapping decision tree**:
-  - Multiple errors? → Use `errors.Join`
-  - Need string context? → Use `fmt.Errorf("%w: context", err)`
-  - Otherwise → Return error directly
-- Provide actionable error messages with troubleshooting hints
-- Log detailed errors for debugging, user-friendly messages for CLI
 
 ### Testing Strategy
 - **Unit tests**: Focus on pure functions, use table-driven tests
