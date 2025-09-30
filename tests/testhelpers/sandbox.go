@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/utils"
 	"gopkg.in/yaml.v3"
 )
 
@@ -102,7 +103,7 @@ func copyComponentsToSandbox(absWorkdir, sandboxComponentsPath string, component
 //
 //nolint:nilerr // We intentionally return nil for non-existent components to continue processing other components
 func copySingleComponentType(absWorkdir, sandboxComponentsPath, componentType, relPath string) error {
-	srcPath := filepath.Join(absWorkdir, relPath)
+	srcPath := utils.JoinPath(absWorkdir, relPath)
 	srcAbsPath, err := filepath.Abs(srcPath)
 	if err != nil {
 		// Skip if path doesn't resolve, not a critical error for sandbox setup.
