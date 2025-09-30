@@ -69,19 +69,20 @@ type Expectation struct {
 	Valid         []string                  `yaml:"valid"`           // Format validations: "yaml", "json"
 }
 type TestCase struct {
-	Name        string            `yaml:"name"`        // Name of the test
-	Description string            `yaml:"description"` // Description of the test
-	Enabled     bool              `yaml:"enabled"`     // Enable or disable the test
-	Workdir     string            `yaml:"workdir"`     // Working directory for the command
-	Command     string            `yaml:"command"`     // Command to run
-	Args        []string          `yaml:"args"`        // Command arguments
-	Env         map[string]string `yaml:"env"`         // Environment variables
-	Expect      Expectation       `yaml:"expect"`      // Expected output
-	Tty         bool              `yaml:"tty"`         // Enable TTY simulation
-	Snapshot    bool              `yaml:"snapshot"`    // Enable snapshot comparison
-	Clean       bool              `yaml:"clean"`       // Removes untracked files in work directory
-	Sandbox     bool              `yaml:"sandbox"`     // Run in sandboxed environment with isolated components
-	Skip        struct {
+	Name          string            `yaml:"name"`          // Name of the test
+	Description   string            `yaml:"description"`   // Description of the test
+	Enabled       bool              `yaml:"enabled"`       // Enable or disable the test
+	Workdir       string            `yaml:"workdir"`       // Working directory for the command
+	Command       string            `yaml:"command"`       // Command to run
+	Args          []string          `yaml:"args"`          // Command arguments
+	Env           map[string]string `yaml:"env"`           // Environment variables
+	Expect        Expectation       `yaml:"expect"`        // Expected output
+	Tty           bool              `yaml:"tty"`           // Enable TTY simulation
+	Snapshot      bool              `yaml:"snapshot"`      // Enable snapshot comparison
+	Clean         bool              `yaml:"clean"`         // Removes untracked files in work directory
+	Sandbox       bool              `yaml:"sandbox"`       // Run in sandboxed environment with isolated components
+	Preconditions []string          `yaml:"preconditions"` // Required preconditions for test execution
+	Skip          struct {
 		OS MatchPattern `yaml:"os"`
 	} `yaml:"skip"`
 }
@@ -462,6 +463,26 @@ func TestMain(m *testing.M) {
 	errUtils.Exit(exitCode)
 }
 
+// checkPreconditions checks if all required preconditions for a test are met.
+// If any precondition is not met, the test is skipped with an appropriate message.
+func checkPreconditions(t *testing.T, preconditions []string) {
+	t.Helper()
+
+	// Map of precondition names to their check functions
+	preconditionChecks := map[string]func(*testing.T){
+		"github_token": RequireOCIAuthentication,
+	}
+
+	// Check each precondition
+	for _, precondition := range preconditions {
+		checkFunc, exists := preconditionChecks[precondition]
+		if !exists {
+			t.Fatalf("Unknown precondition: %s", precondition)
+		}
+		checkFunc(t)
+	}
+}
+
 // prepareAtmosCommand prepares an atmos command with coverage support if enabled.
 func prepareAtmosCommand(t *testing.T, ctx context.Context, args ...string) *exec.Cmd {
 	// AtmosRunner should be initialized early in runCLICommandTest before directory changes
@@ -478,6 +499,9 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 			t.Fatalf("Failed to change back to the starting directory: %v", err)
 		}
 	}()
+
+	// Check preconditions before running the test
+	checkPreconditions(t, tc.Preconditions)
 
 	// Initialize AtmosRunner early, before any directory changes, so it can build from the git repo
 	if tc.Command == "atmos" && atmosRunner == nil {
