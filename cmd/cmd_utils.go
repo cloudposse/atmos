@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	_ "embed"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -19,10 +20,18 @@ import (
 	tuiUtils "github.com/cloudposse/atmos/internal/tui/utils"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/cloudposse/atmos/pkg/ui/theme"
 	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/cloudposse/atmos/pkg/version"
 )
+
+//go:embed markdown/getting_started.md
+var gettingStartedMarkdown string
+
+//go:embed markdown/missing_config_default.md
+var missingConfigDefaultMarkdown string
+
+//go:embed markdown/missing_config_found.md
+var missingConfigFoundMarkdown string
 
 // Define a constant for the dot string that appears multiple times.
 const currentDirPath = "."
@@ -495,11 +504,8 @@ func checkAtmosConfig(opts ...AtmosValidateOption) {
 	}
 }
 
-// printMessageForMissingAtmosConfig prints Atmos logo and instructions on how to configure and start using Atmos
+// printMessageForMissingAtmosConfig prints Atmos logo and instructions on how to configure and start using Atmos.
 func printMessageForMissingAtmosConfig(atmosConfig schema.AtmosConfiguration) {
-	c1 := theme.Colors.Info
-	// c2 is no longer needed since we're using PrintfMarkdownToTUI
-
 	fmt.Println()
 	err := tuiUtils.PrintStyledText("ATMOS")
 	errUtils.CheckErrorPrintAndExit(err, "", "")
@@ -509,45 +515,20 @@ func printMessageForMissingAtmosConfig(atmosConfig schema.AtmosConfiguration) {
 
 	stacksDir := filepath.Join(atmosConfig.BasePath, atmosConfig.Stacks.BasePath)
 
+	u.PrintfMarkdownToTUI("\n")
+
 	if atmosConfig.Default {
-		// If Atmos did not find an `atmos.yaml` config file and is using the default config
-		u.PrintMessageInColor("atmos.yaml", c1)
-		fmt.Println(" CLI config file was not found.")
-		if stacksDir == "" {
-			fmt.Println("\nThe CLI config does not specify the directory for Atmos stacks and the directory does not exist.")
-		} else {
-			fmt.Print("\nThe default Atmos stacks directory is set to ")
-			u.PrintMessageInColor(stacksDir, c1)
-			fmt.Println(",\nbut the directory does not exist in the current path.")
-		}
+		// If Atmos did not find an `atmos.yaml` config file and is using the default config.
+		u.PrintfMarkdownToTUI(missingConfigDefaultMarkdown, stacksDir)
 	} else {
-		// If Atmos found an `atmos.yaml` config file, but it defines invalid paths to Atmos stacks and components
-		u.PrintMessageInColor("atmos.yaml", c1)
-		if stacksDir == "" {
-			fmt.Println(" CLI config file does not specify the directory for Atmos stacks and the directory does not exist.")
-		} else {
-			fmt.Print(" CLI config file specifies the directory for Atmos stacks as ")
-			u.PrintMessageInColor(stacksDir, c1)
-			fmt.Println(",\nbut the directory does not exist.")
-		}
+		// If Atmos found an `atmos.yaml` config file, but it defines invalid paths to Atmos stacks and components.
+		u.PrintfMarkdownToTUI(missingConfigFoundMarkdown, stacksDir)
 	}
 
-	// Use markdown formatting for consistent output to stderr
-	u.PrintfMarkdownToTUI(`
-To configure and start using Atmos, refer to the following documents:
+	u.PrintfMarkdownToTUI("\n")
 
-**Atmos CLI Configuration:**
-https://atmos.tools/cli/configuration
-
-**Atmos Components:**
-https://atmos.tools/core-concepts/components
-
-**Atmos Stacks:**
-https://atmos.tools/core-concepts/stacks
-
-**Quick Start:**
-https://atmos.tools/quick-start
-`)
+	// Use markdown formatting for consistent output to stderr.
+	u.PrintfMarkdownToTUI("%s", gettingStartedMarkdown)
 }
 
 // CheckForAtmosUpdateAndPrintMessage checks if a version update is needed and prints a message if a newer version is found.

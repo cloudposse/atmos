@@ -89,13 +89,15 @@ func GetDefaultStyle(atmosConfig schema.AtmosConfiguration) ([]byte, error) {
 	return json.Marshal(style)
 }
 
+const newline = "\n"
+
 // this only returns the built-in default style configuration
 func getBuiltinDefaultStyle() ([]byte, error) {
 	style := ansi.StyleConfig{
 		Document: ansi.StyleBlock{
 			StylePrimitive: ansi.StylePrimitive{
 				BlockPrefix: "",
-				BlockSuffix: "\n",
+				BlockSuffix: newline,
 				Color:       stringPtr(White),
 			},
 			Margin: uintPtr(0),
@@ -110,9 +112,10 @@ func getBuiltinDefaultStyle() ([]byte, error) {
 		Paragraph: ansi.StyleBlock{
 			StylePrimitive: ansi.StylePrimitive{
 				BlockPrefix: "",
-				BlockSuffix: "",
+				BlockSuffix: newline,
 				Color:       stringPtr(White),
 			},
+			Margin: uintPtr(1),
 		},
 		List: ansi.StyleList{
 			LevelIndent: 4,
@@ -120,7 +123,7 @@ func getBuiltinDefaultStyle() ([]byte, error) {
 		Heading: ansi.StyleBlock{
 			StylePrimitive: ansi.StylePrimitive{
 				BlockPrefix: "",
-				BlockSuffix: "\n",
+				BlockSuffix: newline,
 				Color:       stringPtr(Blue),
 				Bold:        boolPtr(true),
 			},
@@ -188,6 +191,7 @@ func getBuiltinDefaultStyle() ([]byte, error) {
 		},
 		Item: ansi.StylePrimitive{
 			BlockPrefix: "• ",
+			BlockSuffix: newline,
 		},
 		Enumeration: ansi.StylePrimitive{
 			BlockPrefix: ". ",
