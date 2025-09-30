@@ -99,6 +99,7 @@ var (
 	ErrInvalidListMergeStrategy = errors.New("invalid list merge strategy")
 	ErrMerge                    = errors.New("merge error")
 	ErrInvalidStackManifest     = errors.New("invalid stack manifest")
+	ErrInvalidLogLevel          = errors.New("invalid log level")
 
 	// Pro API client errors.
 	ErrFailedToCreateRequest        = errors.New("failed to create request")
