@@ -82,8 +82,14 @@ const Term: React.FC<TermProps> = ({ termId, children }) => {
   let termData = null;
   if (glossary) {
     // Try decoded URI first (handles %20, %2F, etc.).
-    const decodedTermId = decodeURIComponent(termId);
-    termData = glossary[decodedTermId];
+    // Wrap in try/catch to handle malformed percent-escape sequences.
+    try {
+      const decodedTermId = decodeURIComponent(termId);
+      termData = glossary[decodedTermId];
+    } catch {
+      // Skip decoded lookup if percent-escape is malformed (e.g., %E0%A4%A or %%).
+      // Continue to lowercase normalization and original termId fallbacks.
+    }
 
     // Try lowercase normalized form.
     if (!termData) {
