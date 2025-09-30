@@ -38,12 +38,26 @@ module.exports = function (context, options) {
           const content = fs.readFileSync(filePath, 'utf-8');
           const { data, content: mdContent } = matter(content);
 
-          const slug = data.slug || `/terms/${data.id || path.basename(file, path.extname(file))}`;
+          // Validate required frontmatter fields.
+          const filename = path.basename(file, path.extname(file));
+          const termId = data.id || filename;
+          const termTitle = data.title;
+
+          // Skip files without required title field.
+          if (!termTitle) {
+            console.warn(
+              `[glossary-tooltips] Skipping ${file}: missing required 'title' field in frontmatter`
+            );
+            continue;
+          }
+
+          // Use provided slug or generate from ID.
+          const slug = data.slug || `/terms/${termId}`;
 
           glossaryData[slug] = {
             metadata: {
-              id: data.id,
-              title: data.title,
+              id: termId,
+              title: termTitle,
               hoverText: data.hoverText || '',
               slug: slug,
               disambiguation: data.disambiguation || {},
@@ -79,8 +93,6 @@ module.exports = function (context, options) {
     },
 
     configureWebpack(config, isServer, utils) {
-      const termsRegex = new RegExp(`${termsDir.replace(/^\.\//, '').replace(/\//g, '[\\\\/]')}.*?\\.mdx?$`);
-
       // Find the MDX rule.
       let rule = config.module.rules.find((rule) => {
         return rule.test && rule.test.toString().includes('mdx');

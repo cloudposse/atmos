@@ -68,6 +68,19 @@ const Term: React.FC<TermProps> = ({ termId, children }) => {
 
   if (!termData) {
     // Fallback: render as plain link if term not found.
+    // Check if this is an external URL (http://, https://, mailto:, or other protocols).
+    const isExternalUrl = /^[a-z]+:/i.test(termId);
+
+    if (isExternalUrl) {
+      // For external URLs, use plain anchor tag with security attributes.
+      return (
+        <a href={termId} target="_blank" rel="noopener noreferrer">
+          {children}
+        </a>
+      );
+    }
+
+    // For internal routes, use Docusaurus Link.
     return <Link to={termId}>{children}</Link>;
   }
 
