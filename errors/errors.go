@@ -7,9 +7,11 @@ import (
 const (
 	ErrWrappingFormat       = "%w: %w"
 	ErrStringWrappingFormat = "%w: %s"
+	ErrValueWrappingFormat  = "%w: %v"
 )
 
 var (
+	ErrNoGitRepo                             = errors.New("not in a git repository")
 	ErrDownloadPackage                       = errors.New("failed to download package")
 	ErrProcessOCIImage                       = errors.New("failed to process OCI image")
 	ErrCopyPackage                           = errors.New("failed to copy package")
@@ -32,6 +34,7 @@ var (
 	ErrWorkdirNotExist                       = errors.New("workdir does not exist")
 	ErrPathResolution                        = errors.New("failed to resolve absolute path")
 	ErrInvalidTemplateFunc                   = errors.New("invalid template function")
+	ErrRefuseDeleteSymbolicLink              = errors.New("refusing to delete symbolic link")
 	ErrNoDocsGenerateEntry                   = errors.New("no docs.generate entry found")
 	ErrMissingDocType                        = errors.New("doc-type argument missing")
 	ErrUnsupportedInputType                  = errors.New("unsupported input type")
@@ -77,6 +80,12 @@ var (
 
 	ErrReadFile    = errors.New("error reading file")
 	ErrInvalidFlag = errors.New("invalid flag")
+
+	// File and URL handling errors.
+	ErrInvalidPagerCommand = errors.New("invalid pager command")
+	ErrEmptyURL            = errors.New("empty URL provided")
+	ErrInvalidURL          = errors.New("invalid URL")
+	ErrFailedToFindImport  = errors.New("failed to find import")
 
 	ErrMissingStack                       = errors.New("stack is required; specify it on the command line using the flag `--stack <stack>` (shorthand `-s`)")
 	ErrInvalidComponent                   = errors.New("invalid component")
@@ -124,10 +133,22 @@ var (
 	ErrFailedToGetComponentFlag  = errors.New("failed to get '--component' flag")
 	ErrFailedToGetStackFlag      = errors.New("failed to get '--stack' flag")
 	ErrOPAPolicyViolations       = errors.New("OPA policy violations detected")
+	ErrInvalidOPAPolicy          = errors.New("invalid OPA policy")
+	ErrTerraformEnvCliVarJSON    = errors.New("failed to parse JSON variable from TF_CLI_ARGS environment variable")
 
 	// List package errors.
 	ErrExecuteDescribeStacks     = errors.New("failed to execute describe stacks")
 	ErrProcessInstances          = errors.New("failed to process instances")
 	ErrParseFlag                 = errors.New("failed to parse flag value")
 	ErrFailedToFinalizeCSVOutput = errors.New("failed to finalize CSV output")
+
+	// Cache-related errors.
+	ErrCacheLocked    = errors.New("cache file is locked")
+	ErrCacheRead      = errors.New("cache read failed")
+	ErrCacheWrite     = errors.New("cache write failed")
+	ErrCacheUnmarshal = errors.New("cache unmarshal failed")
+	ErrCacheMarshal   = errors.New("cache marshal failed")
+
+	// Profiler-related errors.
+	ErrProfilerStart = errors.New("profiler start failed")
 )

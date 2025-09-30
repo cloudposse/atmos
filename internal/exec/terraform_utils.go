@@ -6,9 +6,8 @@ import (
 	"os"
 	"path/filepath"
 
-	log "github.com/charmbracelet/log"
-
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )

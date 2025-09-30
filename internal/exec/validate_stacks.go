@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	log "github.com/charmbracelet/log"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 
@@ -140,7 +140,7 @@ func ValidateStacks(atmosConfig *schema.AtmosConfiguration) error {
 		"**/*.yml.tmpl",
 	}
 
-	includeStackAbsPaths, err := u.JoinAbsolutePathWithPaths(atmosConfig.StacksBaseAbsolutePath, includedPaths)
+	includeStackAbsPaths, err := u.JoinPaths(atmosConfig.StacksBaseAbsolutePath, includedPaths)
 	if err != nil {
 		return err
 	}

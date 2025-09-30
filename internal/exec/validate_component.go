@@ -5,12 +5,12 @@ import (
 	"os"
 	"path/filepath"
 
-	log "github.com/charmbracelet/log"
 	"github.com/mitchellh/mapstructure"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -33,7 +33,7 @@ func ExecuteValidateComponentCmd(cmd *cobra.Command, args []string) (string, str
 
 	componentName := args[0]
 
-	// Initialize spinner
+	// Initialize spinner.
 	message := fmt.Sprintf("Validating Atmos Component: %s", componentName)
 	p := NewSpinner(message)
 	spinnerDone := make(chan struct{})
@@ -114,7 +114,7 @@ func ExecuteValidateComponent(
 func ValidateComponent(
 	atmosConfig *schema.AtmosConfiguration,
 	componentName string,
-	componentSection any,
+	componentSection map[string]any,
 	schemaPath string,
 	schemaType string,
 	modulePaths []string,
@@ -131,7 +131,7 @@ func ValidateComponent(
 			return false, err
 		}
 	} else {
-		validations, err := FindValidationSection(componentSection.(map[string]any))
+		validations, err := FindValidationSection(componentSection)
 		if err != nil {
 			return false, err
 		}
@@ -192,7 +192,7 @@ func ValidateComponent(
 
 func validateComponentInternal(
 	atmosConfig *schema.AtmosConfiguration,
-	componentSection any,
+	componentSection map[string]any,
 	schemaPath string,
 	schemaType string,
 	modulePaths []string,
@@ -232,6 +232,9 @@ func validateComponentInternal(
 	schemaText := string(fileContent)
 	var ok bool
 
+	// Add the process environment variables to the component section.
+	componentSection[cfg.ProcessEnvSectionName] = u.EnvironToMap()
+
 	switch schemaType {
 	case "jsonschema":
 		{
@@ -242,7 +245,7 @@ func validateComponentInternal(
 		}
 	case "opa":
 		{
-			modulePathsAbsolute, err := u.JoinAbsolutePathWithPaths(filepath.Join(atmosConfig.BasePath, atmosConfig.GetResourcePath("opa").BasePath), modulePaths)
+			modulePathsAbsolute, err := u.JoinPaths(filepath.Join(atmosConfig.BasePath, atmosConfig.GetResourcePath("opa").BasePath), modulePaths)
 			if err != nil {
 				return false, err
 			}

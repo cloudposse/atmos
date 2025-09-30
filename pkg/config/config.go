@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	log "github.com/charmbracelet/log"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/pkg/errors"
 
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -44,7 +44,7 @@ func InitCliConfig(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks
 		return atmosConfig, err
 	}
 
-	err = atmosConfigAbsolutePaths(&atmosConfig)
+	err = AtmosConfigAbsolutePaths(&atmosConfig)
 	if err != nil {
 		return atmosConfig, err
 	}
@@ -175,7 +175,10 @@ func processAtmosConfigs(configAndStacksInfo *schema.ConfigAndStacksInfo) (schem
 }
 
 // atmosConfigAbsolutePaths converts paths to absolute paths.
-func atmosConfigAbsolutePaths(atmosConfig *schema.AtmosConfiguration) error {
+// AtmosConfigAbsolutePaths converts all base paths in the configuration to absolute paths.
+// This function sets TerraformDirAbsolutePath, HelmfileDirAbsolutePath, PackerDirAbsolutePath,
+// StacksBaseAbsolutePath, IncludeStackAbsolutePaths, and ExcludeStackAbsolutePaths.
+func AtmosConfigAbsolutePaths(atmosConfig *schema.AtmosConfiguration) error {
 	// Convert stacks base path to an absolute path
 	stacksBasePath := filepath.Join(atmosConfig.BasePath, atmosConfig.Stacks.BasePath)
 	stacksBaseAbsPath, err := filepath.Abs(stacksBasePath)
@@ -185,21 +188,21 @@ func atmosConfigAbsolutePaths(atmosConfig *schema.AtmosConfiguration) error {
 	atmosConfig.StacksBaseAbsolutePath = stacksBaseAbsPath
 
 	// Convert the included stack paths to absolute paths
-	includeStackAbsPaths, err := u.JoinAbsolutePathWithPaths(stacksBaseAbsPath, atmosConfig.Stacks.IncludedPaths)
+	includeStackAbsPaths, err := u.JoinPaths(stacksBaseAbsPath, atmosConfig.Stacks.IncludedPaths)
 	if err != nil {
 		return err
 	}
 	atmosConfig.IncludeStackAbsolutePaths = includeStackAbsPaths
 
 	// Convert the excluded stack paths to absolute paths
-	excludeStackAbsPaths, err := u.JoinAbsolutePathWithPaths(stacksBaseAbsPath, atmosConfig.Stacks.ExcludedPaths)
+	excludeStackAbsPaths, err := u.JoinPaths(stacksBaseAbsPath, atmosConfig.Stacks.ExcludedPaths)
 	if err != nil {
 		return err
 	}
 	atmosConfig.ExcludeStackAbsolutePaths = excludeStackAbsPaths
 
 	// Convert Terraform dir to an absolute path.
-	terraformBasePath := filepath.Join(atmosConfig.BasePath, atmosConfig.Components.Terraform.BasePath)
+	terraformBasePath := u.JoinPath(atmosConfig.BasePath, atmosConfig.Components.Terraform.BasePath)
 	terraformDirAbsPath, err := filepath.Abs(terraformBasePath)
 	if err != nil {
 		return err
@@ -207,7 +210,7 @@ func atmosConfigAbsolutePaths(atmosConfig *schema.AtmosConfiguration) error {
 	atmosConfig.TerraformDirAbsolutePath = terraformDirAbsPath
 
 	// Convert Helmfile dir to an absolute path.
-	helmfileBasePath := filepath.Join(atmosConfig.BasePath, atmosConfig.Components.Helmfile.BasePath)
+	helmfileBasePath := u.JoinPath(atmosConfig.BasePath, atmosConfig.Components.Helmfile.BasePath)
 	helmfileDirAbsPath, err := filepath.Abs(helmfileBasePath)
 	if err != nil {
 		return err
@@ -215,7 +218,7 @@ func atmosConfigAbsolutePaths(atmosConfig *schema.AtmosConfiguration) error {
 	atmosConfig.HelmfileDirAbsolutePath = helmfileDirAbsPath
 
 	// Convert Packer dir to an absolute path.
-	packerBasePath := filepath.Join(atmosConfig.BasePath, atmosConfig.Components.Packer.BasePath)
+	packerBasePath := u.JoinPath(atmosConfig.BasePath, atmosConfig.Components.Packer.BasePath)
 	packerDirAbsPath, err := filepath.Abs(packerBasePath)
 	if err != nil {
 		return err

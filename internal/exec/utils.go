@@ -6,7 +6,7 @@ import (
 	"sort"
 	"strings"
 
-	log "github.com/charmbracelet/log"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/hashicorp/terraform-config-inspect/tfconfig"
 	"github.com/mitchellh/mapstructure"
 
@@ -539,6 +539,20 @@ func ProcessStacks(
 		return configAndStacksInfo, err
 	}
 	configAndStacksInfo.ComponentSection[cfg.TerraformCliVarsSectionName] = cliVars
+
+	// Add TF_CLI_ARGS arguments and variables to the component section
+	tfEnvCliArgs := GetTerraformEnvCliArgs()
+	if len(tfEnvCliArgs) > 0 {
+		configAndStacksInfo.ComponentSection[cfg.TerraformCliArgsEnvSectionName] = tfEnvCliArgs
+	}
+
+	tfEnvCliVars, err := GetTerraformEnvCliVars()
+	if err != nil {
+		return configAndStacksInfo, err
+	}
+	if len(tfEnvCliVars) > 0 {
+		configAndStacksInfo.ComponentSection[cfg.TerraformCliVarsEnvSectionName] = tfEnvCliVars
+	}
 
 	// Add Atmos CLI config
 	atmosCliConfig := map[string]any{}
