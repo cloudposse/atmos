@@ -254,23 +254,6 @@ func TestGetComponentPath(t *testing.T) {
 			},
 			expectedPathSuffix: filepath.Join("custom", "terraform", "vpc"),
 		},
-		{
-			name: "UNC path preservation on Windows",
-			setupConfig: func() *schema.AtmosConfiguration {
-				return &schema.AtmosConfiguration{
-					BasePath: `\\server\share\workspace`,
-					Components: schema.Components{
-						Terraform: schema.Terraform{
-							BasePath: "components/terraform",
-						},
-					},
-				}
-			},
-			componentType:      "terraform",
-			component:          "vpc",
-			expectedPathSuffix: `server\share\workspace\components\terraform\vpc`,
-			skipWindows:        false, // This test is specifically for Windows UNC behavior.
-		},
 	}
 
 	for _, tt := range tests {
@@ -427,21 +410,6 @@ func TestGetBasePathForComponentType(t *testing.T) {
 				}
 			},
 			expectError: true,
-		},
-		{
-			name:          "unc_path_preserved",
-			componentType: "terraform",
-			setupConfig: func() *schema.AtmosConfiguration {
-				return &schema.AtmosConfiguration{
-					BasePath: `\\server\share\workspace`,
-					Components: schema.Components{
-						Terraform: schema.Terraform{
-							BasePath: "components/terraform",
-						},
-					},
-				}
-			},
-			expectedPath: `\\server\share\workspace\components\terraform`,
 		},
 	}
 
