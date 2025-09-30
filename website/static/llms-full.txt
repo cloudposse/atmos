@@ -7,7 +7,6 @@ This file contains all documentation content in a single document following the 
 ## Best Practices
 
 
-
 > <q>Physics is the law, everything else is a recommendation.
 > Anyone can break laws created by people, but I have yet to see anyone break the laws of physics.
 > — **Elon Musk**</q>
@@ -19,7 +18,6 @@ Learn how to best leverage Stacks and Components together with Atmos.
 ---
 
 ## Component Best Practices
-
 
 
 <Intro>
@@ -187,7 +185,6 @@ In this model, the "spoke" will usually have two providers, one for the current 
 ## Stacks Best Practices
 
 
-
 <Intro>
 Here are some essential best practices to follow when designing the Stack configurations that describe your architectures. These guidelines are intended to help developers and operators think about how they model the configuration of their infrastructure in Atmos, for maximum clarity and long-term maintainability.
 </Intro>
@@ -280,7 +277,6 @@ as needed, allowing the same component to be validated differently depending on 
 ## Terraform Best Practices with Atmos
 
 
-
 <Intro>
 These are some of the best practices we recommend when using Terraform with Atmos. They are opinionated and based on our experience working with Terraform and Atmos. When followed, they lead to more reusable and maintainable infrastructure as code.
 </Intro>
@@ -330,9 +326,6 @@ You can think of it also like [Monkey Patching](https://en.wikipedia.org/wiki/Mo
 ---
 
 ## CLI Commands Cheat Sheet
-
-
-
 
 
 <CardGroup title="General" className="cheatsheet">
@@ -551,9 +544,6 @@ You can think of it also like [Monkey Patching](https://en.wikipedia.org/wiki/Mo
 ## Atmos Cheatsheet
 
 
-
-
-
 <CardGroup title="Stacks" className="cheatsheet">
     <Card title="List Stacks">
     ```shell
@@ -680,9 +670,6 @@ You can think of it also like [Monkey Patching](https://en.wikipedia.org/wiki/Mo
 ## Components Cheatsheet
 
 
-
-
-
 <CardGroup title="Configuration" className="cheatsheet">
   <Card title="Folder Structure">
   ```
@@ -746,9 +733,6 @@ You can think of it also like [Monkey Patching](https://en.wikipedia.org/wiki/Mo
 ---
 
 ## Stacks Cheatsheet
-
-
-
 
 
 <CardGroup title="Configuration" className="cheatsheet">
@@ -830,8 +814,6 @@ You can think of it also like [Monkey Patching](https://en.wikipedia.org/wiki/Mo
 ## Vendoring Cheatsheet
 
 
-
-
 <CardGroup title="Configuration" className="cheatsheet">
   <Card title="Filesystem Layout">
   ```
@@ -907,9 +889,6 @@ You can think of it also like [Monkey Patching](https://en.wikipedia.org/wiki/Mo
 ## Atmos CLI
 
 
-
-
-
 <Intro>
 Use this command to start an interactive UI to run Atmos commands against any component or stack. Press `Enter` to execute the command for the selected
 stack and component
@@ -964,8 +943,6 @@ You can also search for the stacks where a component is configured.
 ---
 
 ## atmos atlantis generate repo-config
-
-
 
 
 <Intro>
@@ -1076,9 +1053,6 @@ Refer to [Atlantis Integration](/integrations/atlantis) for more details on the 
 ## atmos atlantis
 
 
-
-
-
 <Intro>
 Use these subcommands to execute commands that generate Atlantis configurations.
 </Intro>
@@ -1094,8 +1068,6 @@ Use these subcommands to execute commands that generate Atlantis configurations.
 ---
 
 ## atmos aws eks update-kubeconfig
-
-
 
 
 <Intro>
@@ -1206,9 +1178,6 @@ atmos aws eks update-kubeconfig --verbose=true
 ## atmos aws
 
 
-
-
-
 <Screengrab title="atmos aws --help" slug="atmos-aws--help" />
 
 ## Subcommands
@@ -1224,9 +1193,6 @@ Use these subcommands to interact with AWS.
 ## Atmos CLI Commands
 
 
-
-
-
 <Intro>
 Use these commands to perform operations.
 </Intro>
@@ -1240,10 +1206,6 @@ Use these commands to perform operations.
 ---
 
 ## atmos completion
-
-
-
-
 
 
 <Intro>
@@ -1370,10 +1332,6 @@ Refer to [Command-line completion](https://en.wikipedia.org/wiki/Command-line_co
 ---
 
 ## atmos describe affected
-
-
-
-
 
 
 <Intro>
@@ -2484,9 +2442,6 @@ where:
 ## atmos describe component
 
 
-
-
-
 <Intro>
 Use this command to describe the complete configuration for an [Atmos component](/core-concepts/components) in
 an [Atmos stack](/core-concepts/stacks).
@@ -3356,9 +3311,6 @@ The first item in the list was processed the last and its `variable_value` overr
 ## atmos describe config
 
 
-
-
-
 <Intro>
 Use this command to show the final (deep-merged) [CLI configuration](/cli/configuration) of all `atmos.yaml` file(s).
 </Intro>
@@ -3402,9 +3354,6 @@ atmos describe config --query <yq-expression>
 ---
 
 ## atmos describe dependents
-
-
-
 
 
 <Intro>
@@ -3803,8 +3752,6 @@ Atmos components and are not meant to be provisioned.
 ## atmos describe stacks
 
 
-
-
 <Intro>
 Use this command to show the fully deep-merged configuration for all stacks and the components in the stacks.
 </Intro>
@@ -3890,9 +3837,6 @@ Use the `--query` flag (shorthand `-q`) to filter the output.
 ---
 
 ## atmos describe workflows
-
-
-
 
 
 <Intro>
@@ -4078,8 +4022,6 @@ Use the [atmos workflow](/cli/commands/workflow) CLI command to execute an Atmos
 ## atmos describe
 
 
-
-
 <Screengrab title="atmos describe --help" slug="atmos-describe--help" />
 
 ## Subcommands
@@ -4089,8 +4031,6 @@ Use the [atmos workflow](/cli/commands/workflow) CLI command to execute an Atmos
 ---
 
 ## atmos docs generate
-
-
 
 
 <Intro>
@@ -4218,9 +4158,6 @@ To download remote files, Atmos uses [`go-getter`](https://github.com/hashicorp/
 ## atmos docs
 
 
-
-
-
 <Intro>
 Use this command to open the [Atmos docs](https://atmos.tools/)
 </Intro>
@@ -4243,9 +4180,6 @@ atmos docs eks/cluster
 ---
 
 ## atmos helmfile generate varfile
-
-
-
 
 
 <Intro>
@@ -4300,10 +4234,6 @@ atmos helmfile generate varfile echo-server --stack tenant1-ue2-dev --file=vars.
 ---
 
 ## atmos helmfile
-
-
-
-
 
 
 <Intro>
@@ -4397,8 +4327,6 @@ All native `helmfile` flags, command options, and arguments are supported
 ## atmos help
 
 
-
-
 <Screengrab title="atmos help" slug="atmos--help" />
 
 ## Usage
@@ -4443,7 +4371,6 @@ The `atmos help` starts an interactive help UI in the terminal:
 ---
 
 ## atmos list components
-
 
 
 :::note purpose
@@ -4742,9 +4669,6 @@ list:
 ---
 
 ## atmos list stacks
-
-
-
 
 
 <Intro>
@@ -5223,9 +5147,6 @@ Running `atmos list workflows` will display these columns.
 ## atmos list
 
 
-
-
-
 <Intro>
 Use these subcommands to list sections of Atmos configurations.
 </Intro>
@@ -5376,9 +5297,6 @@ The appearance of the output table depends on whether `atmos` detects an interac
 ## atmos packer build
 
 
-
-
-
 :::note purpose
 Use this command to process a Packer template configured for an Atmos component in a stack, and build it to generate a set of artifacts.
 The builds specified within a template are executed in parallel, unless otherwise specified.
@@ -5511,9 +5429,6 @@ us-east-2: ami-0b2b3b68aa3c5ada8
 ## atmos packer init
 
 
-
-
-
 :::note purpose
 Use this command to initialize Packer and install plugins according to an HCL template configuration for an Atmos component in a stack.
 :::
@@ -5577,9 +5492,6 @@ Installed plugin github.com/hashicorp/amazon v1.3.9 in "~/.config/packer/plugins
 ---
 
 ## atmos packer inspect
-
-
-
 
 
 :::note purpose
@@ -5690,9 +5602,6 @@ manifest
 ## atmos packer output
 
 
-
-
-
 :::note purpose
 Use this command to get an output from a Packer manifest.
 Manifests are generated by Packer when executing `packer build` commands (if configured in the Packer template and Atmos stack).
@@ -5796,9 +5705,6 @@ ami-0c2ca16b7fcac7529
 ## atmos packer validate
 
 
-
-
-
 :::note purpose
 Use this command to validate the syntax and configuration of a Packer template configured for an Atmos component in a stack.
 :::
@@ -5856,7 +5762,6 @@ atmos packer validate aws/bastion -s nonprod -t main.nonprod.pkr.hcl
 ## atmos packer version
 
 
-
 :::note purpose
 Use this command to display the currently installed Packer version.
 :::
@@ -5872,12 +5777,6 @@ atmos packer version
 ---
 
 ## atmos packer
-
-
-
-
-
-
 
 
 <Intro>
@@ -5957,8 +5856,6 @@ atmos packer output aws/bastion -s prod -q '.builds[0].artifact_id | split(":")[
 ## atmos pro lock
 
 
-
-
 <Intro>
 This command implements the locking feature of [Atmos Pro](https://atmos-pro.com/docs). Use this command to lock
 a stack in Atmos Pro so that it cannot be planned or applied by another process (pull request, CI/CD, etc.)
@@ -6011,8 +5908,6 @@ atmos pro lock --component vpc --stack plat-ue2-dev --ttl 300
 ## atmos pro unlock
 
 
-
-
 <Intro>
 This command implements the locking feature of [Atmos Pro](https://atmos-pro.com/docs). Use this command to unlock
 a stack in Atmos Pro that has previously been locked by the lock command.
@@ -6058,9 +5953,6 @@ atmos pro unlock --component vpc --stack plat-ue2-dev
 ## atmos pro
 
 
-
-
-
 <Intro>
 Use these subcommands to interact with Atmos Pro.
 </Intro>
@@ -6072,8 +5964,6 @@ Use these subcommands to interact with Atmos Pro.
 ---
 
 ## atmos terraform clean
-
-
 
 
 :::note purpose
@@ -6151,8 +6041,6 @@ atmos terraform clean test/test-component-override-3 -s tenant1-ue2-dev
 ---
 
 ## atmos terraform deploy
-
-
 
 
 :::note purpose
@@ -6326,8 +6214,6 @@ can't be provided on the command line. To use a previously generated planfile, u
 ## atmos terraform generate backend
 
 
-
-
 :::note purpose
 Use this command to generate a Terraform backend config file for an Atmos terraform component in a stack.
 :::
@@ -6428,8 +6314,6 @@ on `terraform` backends and supported formats
 ## atmos terraform generate backends
 
 
-
-
 :::note purpose
 Use this command to generate the Terraform backend config files for all Atmos terraform [components](/core-concepts/components) in
 all [stacks](/core-concepts/stacks).
@@ -6513,7 +6397,6 @@ on `terraform` backends and supported formats
 ---
 
 ## atmos terraform generate planfile
-
 
 
 :::note purpose
@@ -6651,7 +6534,6 @@ for more information.
 ## atmos terraform generate varfile
 
 
-
 :::note purpose
 Use this command to generate a varfile (`.tfvar` ) for an Atmos terraform [component](/core-concepts/components) in a [stack](/core-concepts/stacks).
 :::
@@ -6748,8 +6630,6 @@ atmos terraform generate varfile test/test-component-override-3 -s tenant1-ue2-d
 ## atmos terraform generate varfiles
 
 
-
-
 <Intro>
 Use this command to generate the Terraform varfiles (`.tfvar`) for all Atmos terraform [components](/core-concepts/components) in
 all [stacks](/core-concepts/stacks).
@@ -6822,8 +6702,6 @@ atmos terraform generate varfiles --format yaml --file-template <file_template>
 ---
 
 ## atmos terraform plan-diff
-
-
 
 
 # terraform plan-diff
@@ -6948,8 +6826,6 @@ The command:
 ## atmos terraform shell
 
 
-
-
 <Intro>
 This command starts a new `SHELL` configured with the environment for an Atmos component in a Stack to allow executing all native terraform commands
 inside the shell without using any atmos-specific arguments and flags.
@@ -7064,8 +6940,6 @@ atmos terraform shell test/test-component-override-3 -s tenant2-ue2-prod
 ## atmos terraform workspace
 
 
-
-
 <Intro>
 Use this command to calculate the `terraform` workspace for an Atmos component (from the context variables and stack config). It will
 run `terraform init -reconfigure` and then select the workspace by executing the `terraform workspace select` command.
@@ -7164,11 +7038,6 @@ atmos terraform workspace test/test-component-override-3 -s tenant1-ue2-dev
 ---
 
 ## atmos terraform
-
-
-
-
-
 
 
 <Intro>
@@ -7913,9 +7782,6 @@ Executing command="atmos terraform apply eks/karpenter-node-pool -s prod" depend
 ## atmos validate
 
 
-
-
-
 <Intro>
 Use these subcommands to validate Atmos configurations.
 </Intro>
@@ -7929,7 +7795,6 @@ Use these subcommands to validate Atmos configurations.
 ---
 
 ## atmos validate component
-
 
 
 :::note purpose
@@ -7992,7 +7857,6 @@ atmos validate component infra/vpc -s tenant1-ue2-dev --timeout 15
 ---
 
 ## atmos validate editorconfig
-
 
 
 :::note purpose
@@ -8078,7 +7942,6 @@ atmos validate editorconfig --dry-run
 ## atmos validate schema
 
 
-
 :::note purpose
 Use this command to validate files against the rules defined in your schema in atmos.yaml.
 :::
@@ -8128,9 +7991,6 @@ schemas:
 ---
 
 ## atmos validate stacks
-
-
-
 
 
 <Intro>
@@ -8339,9 +8199,6 @@ file 'catalog/invalid-yaml-and-schema/invalid-schema-8.yaml':
 ## atmos vendor
 
 
-
-
-
 <Intro>
 Use these subcommands to vendor Atmos components and stacks.
 </Intro>
@@ -8354,8 +8211,6 @@ Use these subcommands to vendor Atmos components and stacks.
 ---
 
 ## atmos vendor pull
-
-
 
 
 <Intro>
@@ -8627,8 +8482,6 @@ When executing the `atmos vendor pull` command, Atmos performs the following ste
 ## atmos version
 
 
-
-
 <Intro>
 Use this command to get the Atmos CLI version
 </Intro>
@@ -8686,9 +8539,6 @@ If the installed Atmos version is out of date, the following information is pres
 ---
 
 ## atmos workflow
-
-
-
 
 
 <Intro>
@@ -8794,10 +8644,6 @@ Run `atmos workflow --help` to see all the available options
 ---
 
 ## Customize Commands
-
-
-
-
 
 
 <Intro>
@@ -9006,10 +8852,6 @@ commands:
 ## Customize Component Behavior
 
 
-
-
-
-
 <Intro>
 In Atmos, every component is associated with a command. The command is what drives or provisions that component.
 For example, [Terraform "root modules"](/core-concepts/components/terraform) can be used as components in Atmos.
@@ -9211,12 +9053,6 @@ components:
 ---
 
 ## CLI Configuration
-
-
-
-
-
-
 
 
 # CLI Configuration
@@ -10158,8 +9994,6 @@ configuration, Atmos may set the following environment variables in the spawned 
 ## Markdown Styling
 
 
-
-
 # Markdown Styling
 
 <Intro>
@@ -10425,10 +10259,6 @@ The styling is managed internally by Glamour and does not require manual configu
 ## Customize Stack Behavior
 
 
-
-
-
-
 <Intro>
 The `stacks` section of the `atmos.yaml` defines how Atmos locates and manages your stack configurations. Think of it as the bootstrapping configuration. Here you can define the stack name pattern or template used to build the "slugs" and specify where to find stack files.
 </Intro>
@@ -10658,10 +10488,6 @@ Refer to [Atmos Design Patterns](/design-patterns) for the examples on how to co
 ## Terminal Settings
 
 
-
-
-
-
 <Intro>
 Atmos provides configurable terminal settings that allow you to customize the output appearance, including syntax highlighting for YAML and JSON outputs. These settings can be configured in your `atmos.yaml` configuration file.
 </Intro>
@@ -10811,8 +10637,6 @@ Atmos supports a wide range of themes for syntax highlighting. You can find the 
 ---
 
 ## Global Flags
-
-
 
 
 # Global Flags
@@ -11214,8 +11038,6 @@ kubectl get pods
 ## Atmos Manifest JSON Schema
 
 
-
-
 <Intro>
 [Atmos Manifest JSON Schema](pathname:///schemas/atmos/atmos-manifest/1.0/atmos-manifest.json) can be used to validate Atmos stack manifests and provide auto-completion.
 </Intro>
@@ -11360,9 +11182,6 @@ yaml: line 4: could not find expected ':'
 ## Telemetry
 
 
-
-
-
 <Intro>
 Atmos collects **anonymous telemetry** to help improve the product by understanding how it's used.
 This data helps us identify which features are most valuable and where we can make improvements.
@@ -11455,7 +11274,6 @@ PostHog logging is useful for debugging telemetry connection issues or when conf
 ## Atmos Versioning
 
 
-
 <Intro>
 Atmos follows the Semantic Versioning (SemVer) convention: <code>major.minor.patch.</code>
 </Intro>
@@ -11493,8 +11311,6 @@ It contains an ordered list of all bug fixes and new features under each release
 ## Community
 
 
-
-
 # Community Resources
 
 <Intro>
@@ -11518,7 +11334,6 @@ Are you more into email? Sign up for [Cloud Posse's Weekly Newsletter](https://n
 ---
 
 ## Office Hours
-
 
 
 # Office Hours Registration
@@ -11558,7 +11373,6 @@ Atmos has a great community of active users who are all more than willing to hel
 ## Code of Conduct
 
 
-
 <Intro>
 As contributors and maintainers of the Atmos project by [Cloud Posse](https://cloudposse.com), we pledge to respect everyone who contributes by posting issues, updating documentation, submitting pull requests, providing feedback in comments, and any other activities.
 </Intro>
@@ -11574,7 +11388,6 @@ removing issues, comments, and PRs or blocking accounts as deemed appropriate.
 ---
 
 ## Contributing
-
 
 
 
@@ -11634,7 +11447,6 @@ the [Apache license](http://www.apache.org/licenses).
 ---
 
 ## Component Library
-
 
 
 <Intro>
@@ -11729,7 +11541,6 @@ Use multiple component to break infrastructure apart into smaller pieces based o
 ## Atmos Components
 
 
-
 <Intro>
 When you design cloud architectures with Atmos, you start by breaking them apart into pieces called components. Then, you [implement Terraform "root modules"](/core-concepts/components/terraform) for each of those components, and [compose them with Stack configurations](/core-concepts/stacks).
 </Intro>
@@ -11775,7 +11586,6 @@ One important distinction about components that is worth noting about Terraform 
 ## Using Helmfiles
 
 
-
 <Intro>
 Atmos natively supports opinionated workflows for [Helmfile](https://github.com/helmfile/helmfile). Helmfile provides a declarative specification for deploying helm charts.
 </Intro>
@@ -11814,8 +11624,6 @@ atmos helmfile deploy nginx-ingress -s ue2-dev
 ---
 
 ## Terraform/OpenTofu Backends
-
-
 
 
 <Intro>
@@ -12454,7 +12262,6 @@ for all supported backend types.
 ## Brownfield Considerations
 
 
-
 <Intro>
 There are some considerations you should be aware of when adopting Atmos in a brownfield environment. Atmos works best when you adopt the [Atmos mindset](/quick-start/mindset).
 </Intro>
@@ -12674,9 +12481,6 @@ The `vpc_flow_logs_bucket_arn` is then used as an input for the `vpc` component.
 ## Terraform Providers
 
 
-
-
-
 <Intro>
 Terraform utilizes plugins known as [providers](https://developer.hashicorp.com/terraform/language/providers) for
 communication with cloud providers, SaaS providers, and various APIs.
@@ -12862,7 +12666,6 @@ For more details, refer to [Atmos CLI Settings](/cli/configuration/#settings).
 ## State Backend Configuration
 
 
-
 <Intro>
 Atmos supports configuring [Terraform/OpenTofu Backends](/core-concepts/components/terraform/backends)
 to define where [Terraform](https://developer.hashicorp.com/terraform/language/state) and [OpenTofu](https://opentofu.org/docs/language/state/) store its state,
@@ -12947,9 +12750,6 @@ used. But when reading the remote state of components, the `terraform-backend-re
 ---
 
 ## Terraform Root Modules
-
-
-
 
 
 <Intro>
@@ -13124,9 +12924,6 @@ Learn how to best leverage Terraform together with Atmos.
 ---
 
 ## Terraform Workspaces
-
-
-
 
 
 <Intro>
@@ -13375,7 +13172,6 @@ By properly configuring workspace support, you can ensure that Atmos works seaml
 ## Core Concepts of the Atmos Framework
 
 
-
 Atmos simplifies the process of managing and deploying your infrastructure across cloud platforms.
 Dive into these core concepts of Atmos to discover how they facilitate these processes.
 
@@ -13386,8 +13182,6 @@ You're about to discover a new way to think about things...
 ---
 
 ## Atmos Custom Commands
-
-
 
 
 <Intro>
@@ -13910,7 +13704,6 @@ commands:
 ## Deploy Components
 
 
-
 <Intro>
     Once you're done developing your components and configuring them with stacks, you can deploy them with a single command or in a CI/CD pipeline.
 </Intro>
@@ -13952,9 +13745,6 @@ Atmos supports [workflows](/core-concepts/workflows), which provide a convenient
 ## Describe Components
 
 
-
-
-
 <Intro>
 Describing components helps understand the final, fully deep-merged configuration for an [Atmos component](/core-concepts/components) in each [stack](/core-concepts/stacks).
 </Intro>
@@ -13982,8 +13772,6 @@ The other helpful use-case for describing components and stacks is when developi
 ## Describe Configuration
 
 
-
-
 <Intro>
 Atmos is a framework for defining cloud architectures in YAML. To understand what the fully-deep merged configuration will look like, you can describe it.
 </Intro>
@@ -13997,10 +13785,6 @@ In this chapter, you’ll learn to describe all aspects of the fully-deep merged
 ---
 
 ## Describe Stacks
-
-
-
-
 
 
 <Intro>
@@ -14188,12 +13972,6 @@ plat-ue2-dev:
 ---
 
 ## Configure Atmos CLI
-
-
-
-
-
-
 
 
 <Intro>
@@ -14446,8 +14224,6 @@ This means that `atmos.yaml` file must be at a location in the file system where
 ## Configure Helmfile
 
 
-
-
 <Intro>
 Atmos natively supports opinionated workflows for Helmfile. It's compatible with every version of helmfile and designed to work with multiple different versions of Helmfile concurrently.
 </Intro>
@@ -14517,9 +14293,6 @@ components:
 ---
 
 ## Configure OpenTofu
-
-
-
 
 
 <Intro>
@@ -14686,11 +14459,6 @@ atmos tofu apply eks -s ue2-dev
 ---
 
 ## Configure Packer
-
-
-
-
-
 
 
 <Intro>
@@ -15329,7 +15097,6 @@ ami-0c2ca16b7fcac7529
 ## Configure Stores
 
 
-
 <Intro>
 Atmos supports the concept of remote stores to facilitate the sharing of values between components or between
 some external process and a component. In Atmos, values are saved to stores via
@@ -15648,8 +15415,6 @@ URL format is described in the Redis [docs](https://redis.github.io/lettuce/user
 ## Configure Terraform
 
 
-
-
 <Intro>
 Atmos natively supports opinionated workflows for [Terraform](https://www.terraform.io/) and [OpenTofu](/core-concepts/projects/configuration/opentofu).
 It's compatible with every version of terraform and designed to work with multiple different versions of Terraform
@@ -15777,8 +15542,6 @@ module "vars" {
 ## Folder Structure
 
 
-
-
 <Intro>
 At the root of your project, you’ll typically find an `atmos.yaml` configuration file. This file defines how Atmos should discover your stack files for configuration and your Terraform root modules as components.
 </Intro>
@@ -15885,9 +15648,6 @@ We usually organize our stacks by organization, organizational unit, and environ
 ## Setup Projects for Atmos
 
 
-
-
-
 <Intro>
 Atmos is a framework, so we suggest some conventions for organizing your infrastructure using folders to separate configuration from components. This separation is key to making your components highly reusable.
 </Intro>
@@ -15911,10 +15671,6 @@ Learn how to best configure a project to work with Atmos. We recommend some conv
 ---
 
 ## Configure Your Editor for Atmos
-
-
-
-
 
 
 <Intro>
@@ -16149,12 +15905,6 @@ To work effectively with Atmos, we recommend configuring your VS Code editor for
 ---
 
 ## Using Remote State
-
-
-
-
-
-
 
 
 <Intro>
@@ -16516,13 +16266,6 @@ and configuring Terraform/OpenTofu components to use the module.
 ## Share Data Between Components
 
 
-
-
-
-
-
-
-
 <Intro>
 Breaking up your infrastructure components into loosely coupled components is a great way to manage complexity and
 reuse code. However, these smaller components often lead to a situation where you need to share data between components.
@@ -16831,7 +16574,6 @@ resource "aws_network_acl" "default" {
 ## Stack Catalogs
 
 
-
 <Intro>
 As you start splitting your stacks apart into smaller configurations, it often makes to organize those into a catalog of reusable configurations. That way you can take advantage of imports, to reuse configuration in multiple places. Catalogs are how to logically organize all the child [Stack](/core-concepts/stacks) configurations on the filesystem for use by [imports](/core-concepts/stacks/imports).
 </Intro>
@@ -17013,7 +16755,6 @@ One of the amazing things about the Atmos [Stack](/core-concepts/stacks) configu
 ---
 
 ## Configuring Components in Stacks
-
 
 
 <Intro>
@@ -17268,9 +17009,6 @@ Using the `metadata.locked` flag helps protect critical infrastructure from unin
 ---
 
 ## Configure Dependencies Between Components
-
-
-
 
 
 <Intro>
@@ -17540,9 +17278,6 @@ and [`atmos describe affected`](/cli/commands/describe/affected) CLI commands.
 ## Manage Lifecycle Events with Hooks
 
 
-
-
-
 <Intro>
 Atmos supports the ability to take action at various points in the lifecycle of your components. This is done by
 configuring the `hooks` section in your stack manifest for the component that you want to take action on.
@@ -17641,8 +17376,6 @@ The `store` command is used to write data to a remote store.
 ---
 
 ## Import Stack Configurations
-
-
 
 
 <Intro>
@@ -18142,10 +17875,6 @@ for [EKS blue-green deployment](https://aws.amazon.com/blogs/containers/kubernet
 ---
 
 ## Inherit Configurations in Atmos Stacks
-
-
-
-
 
 
 <Intro>
@@ -18826,11 +18555,6 @@ Inheritance: derived-component-2 -> base-component-2 -> derived-component-1 -> b
 ## Stack Mixins
 
 
-
-
-
-
-
 <PillBox>Advanced</PillBox>
 
 <Intro>
@@ -18926,9 +18650,6 @@ Mixins are really just a [Design Pattern](/design-patterns/component-catalog-wit
 ---
 
 ## Override Configurations
-
-
-
 
 
 <Intro>
@@ -19296,9 +19017,6 @@ Refer to [`atmos describe component`](/cli/commands/describe/component) CLI comm
 ## Atmos Stacks
 
 
-
-
-
 <Intro>
 When you design cloud architectures with Atmos, you break them apart into pieces called components that you implement with Terraform "root modules". Stacks are how you connect your components with configuration, so that everything comes together.
 </Intro>
@@ -19490,10 +19208,6 @@ hundreds of accounts and regions that you operate in. Use [Catalogs](/core-conce
 ---
 
 ## Template Data Sources
-
-
-
-
 
 
 <PillBox>Advanced</PillBox>
@@ -19868,13 +19582,6 @@ The tags will be added to all the AWS resources provisioned by the `vpc` Terrafo
 ---
 
 ## Stack Manifest Templating
-
-
-
-
-
-
-
 
 
 <PillBox>Advanced</PillBox>
@@ -20607,9 +20314,6 @@ with data sources.
 ## EditorConfig Validation
 
 
-
-
-
 <Intro>
 Atmos supports validation of EditorConfigs to check the formatting of your configuration files. By enforcing the canonical rules specified in your `.editorconfig` file, it helps ensure consistent formatting across your project.
 </Intro>
@@ -20674,10 +20378,6 @@ atmos validate editorconfig --logs-level trace
 ## JSON Schema Validation
 
 
-
-
-
-
 <Intro>
 Atmos supports [JSON Schema](https://json-schema.org/) validation, which can validate the schema of configurations such as stacks, workflows, and vendoring manifests.
 JSON Schema is an industry standard and provides a vocabulary to annotate and validate JSON documents for correctness.
@@ -20722,10 +20422,6 @@ file [`stacks/schemas/jsonschema/vpc/validate-vpc-component.json`](https://githu
 ---
 
 ## Open Policy Agent (OPA) Validation
-
-
-
-
 
 
 <Intro>
@@ -21256,10 +20952,6 @@ get_total_instances := total {
 ## Terraform Input Variables Validation
 
 
-
-
-
-
 <Intro>
 Use [Open Policy Agent](https://www.openpolicyagent.org/docs/latest/) (OPA) policies to validate Terraform input variables.
 </Intro>
@@ -21576,9 +21268,6 @@ Together, they give you complete control over how variables are passed to Terraf
 ## Validating Stack Configurations
 
 
-
-
-
 <Intro>
 Validation is essential for ensuring clean and correct configurations, especially in environments where multiple teams contribute
 to the development and deployment processes.
@@ -21719,9 +21408,6 @@ For more details, refer to [`atmos validate stacks`](/cli/commands/validate/stac
 ---
 
 ## Component Manifest
-
-
-
 
 
 <Intro>
@@ -21892,10 +21578,6 @@ spec:
 ---
 
 ## Vendor Manifest
-
-
-
-
 
 
 <Intro>
@@ -22499,9 +22181,6 @@ By carefully combining `included_paths`, `excluded_paths`, and `{...}` expansion
 ## Vendoring
 
 
-
-
-
 <Intro>
 Atmos natively supports "vendoring," a practice that involves replicating 3rd-party components, stacks, and artifacts within your own repository. This feature is particularly beneficial for managing dependencies in software like Terraform, which do not support pulling root modules remotely by configuration.
 </Intro>
@@ -22561,9 +22240,6 @@ While Atmos does not call `vendir`, it functions and supports a subset of the co
 ---
 
 ## Workflows
-
-
-
 
 
 <Intro>
@@ -23010,9 +22686,6 @@ modifications and without dealing with multiple workflows that are similar but d
 ## Abstract Component
 
 
-
-
-
 <PillBox>Atmos Design Pattern</PillBox>
 
 <Intro>
@@ -23245,9 +22918,6 @@ being deployed by 'metadata.type: abstract' attribute
 ## Component Catalog Template
 
 
-
-
-
 <PillBox>Atmos Design Pattern</PillBox>
 
 <Intro>
@@ -23444,9 +23114,6 @@ To address the limitations of the **Component Catalog Template** Design Pattern,
 ---
 
 ## Component Catalog with Mixins
-
-
-
 
 
 <PillBox>Atmos Design Pattern</PillBox>
@@ -23880,9 +23547,6 @@ using the following patterns:
 ## Component Catalog
 
 
-
-
-
 <PillBox>Atmos Design Pattern</PillBox>
 <Intro>
 The **Component Catalog** is a powerful pattern for organizing and managing the configuration of components across multiple stacks, enabling easy reuse of default configurations. Use this pattern to maintain a DRY (Don't Repeat Yourself) configuration approach, ensuring consistent and efficient deployments across various environments and regions.
@@ -24257,9 +23921,6 @@ patterns:
 ## Component Inheritance
 
 
-
-
-
 <PillBox>Atmos Design Pattern</PillBox>
 <Intro>
 The **Component Inheritance** Design Pattern describes the mechanism of deriving Atmos components from one or more base components, allowing reusing the base components' configurations.
@@ -24443,9 +24104,6 @@ components:
 ---
 
 ## Component Overrides
-
-
-
 
 
 <PillBox>Atmos Design Pattern</PillBox>
@@ -24851,8 +24509,6 @@ corresponding layers.
 ## The _defaults.yaml Design Pattern
 
 
-
-
 <PillBox>Atmos Design Pattern</PillBox>
 
 <Intro>
@@ -25148,9 +24804,6 @@ This convention has emerged from real-world usage as a best practice for organiz
 ## Atmos Design Patterns
 
 
-
-
-
 <Intro>
 Atmos Design Patterns are a collection of conventions, best practices, concepts, principles and insights derived from our experience building enterprise scale architectures. These are vital for effectively structuring and organizing infrastructures, components, and stacks. They empower implementers and cloud architects alike, by providing access to the collective wisdom of seasoned professionals.
 </Intro>
@@ -25221,9 +24874,6 @@ We view this collection of Design Patterns as neither exhaustive nor fixed. Inst
 ---
 
 ## Inline Component Configuration
-
-
-
 
 
 <PillBox>Atmos Design Pattern</PillBox>
@@ -25384,9 +25034,6 @@ Use the [Inline Component Customization](/design-patterns/inline-component-custo
 ---
 
 ## Inline Component Customization
-
-
-
 
 
 <PillBox>Atmos Design Pattern</PillBox>
@@ -25629,9 +25276,6 @@ To address the limitations of the **Inline Component Customization** Design Patt
 ---
 
 ## Layered Stack Configuration
-
-
-
 
 
 <PillBox>Atmos Design Pattern</PillBox>
@@ -25960,9 +25604,6 @@ Make sure to import only the layers that define the component that need to be pr
 ## Multiple Component Instances
 
 
-
-
-
 <PillBox>Atmos Design Pattern</PillBox>
 
 <Intro>
@@ -26173,9 +25814,6 @@ The names are generated from the context using the following template:
 ---
 
 ## Organizational Structure Configuration
-
-
-
 
 
 <PillBox>Atmos Design Pattern</PillBox>
@@ -26745,9 +26383,6 @@ easy to extend the configuration without changing anything for the exiting envir
 ## Partial Component Configuration
 
 
-
-
-
 <PillBox>Atmos Design Pattern</PillBox>
 
 <Intro>
@@ -26981,9 +26616,6 @@ clusters in the other accounts and regions will stay at the current Kubernetes v
 ---
 
 ## Partial Stack Configuration
-
-
-
 
 
 <PillBox>Atmos Design Pattern</PillBox>
@@ -27283,7 +26915,6 @@ the [Layered Stack Configuration](/design-patterns/layered-stack-configuration) 
 ## Summary
 
 
-
 <Intro>
 Architecting and provisioning enterprise-grade infrastructure is challenging, and making all the components and
 configurations [reusable](https://en.wikipedia.org/wiki/Reusability) and [DRY](https://en.wikipedia.org/wiki/Don%27t_repeat_yourself) is even more difficult. These Atmos Design Patterns can help with structuring and organizing your design to provision multi-account enterprise-grade environments for complex organizations.
@@ -27333,8 +26964,6 @@ If you are architecting the infrastructure to provision multi-account multi-regi
 ---
 
 ## Atmos Functions
-
-
 
 
 <Intro>
@@ -27434,9 +27063,6 @@ If you have existing template functions, consider migrating to YAML functions:
 ---
 
 ## atmos.Component
-
-
-
 
 
 <Intro>
@@ -27782,8 +27408,6 @@ vars:
 ## atmos.GomplateDatasource
 
 
-
-
 <Intro>
 **Stop hardcoding values in your infrastructure configurations.** The `atmos.GomplateDatasource` function lets you pull live data from anywhere - APIs, cloud services, databases, files - directly into your Atmos stacks. Instead of manually updating IP addresses, account IDs, or configuration values, your infrastructure can fetch them automatically at runtime. Plus, with built-in caching, it's lightning fast even when you reference the same data hundreds of times.
 </Intro>
@@ -28024,9 +27648,6 @@ components:
 ---
 
 ## atmos.Store
-
-
-
 
 
 <Intro>
@@ -28303,9 +27924,6 @@ or the [Gomplate `default` function](https://docs.gomplate.ca/functions/conv/#co
 ## Atmos Template Functions
 
 
-
-
-
 <PillBox>Use with Caution</PillBox>
 
 <Intro>
@@ -28416,7 +28034,6 @@ Consider migrating template functions to YAML functions:
 ## !env
 
 
-
 <Intro>
     The `!env` Atmos YAML function is used to retrieve environment variables
     and assign them to the sections in Atmos stack manifests.
@@ -28493,7 +28110,6 @@ the function dynamically.
 ## !exec
 
 
-
 <Intro>
     The `!exec` Atmos YAML function is used to execute shell scripts and assign
     the results to the sections in Atmos stack manifests.
@@ -28557,9 +28173,6 @@ the function dynamically.
 ---
 
 ## !include
-
-
-
 
 
 <Intro>
@@ -28883,9 +28496,6 @@ components:
 ## !include.raw
 
 
-
-
-
 <Intro>
     The `!include.raw` function forces any file to be included as a raw string,
     bypassing automatic parsing based on file extension.
@@ -29083,10 +28693,6 @@ The `!include.raw` function supports the same sources as `!include`:
 ## Atmos YAML Functions
 
 
-
-
-
-
 <PillBox>Recommended</PillBox>
 
 <Intro>
@@ -29237,7 +28843,6 @@ Atmos natively supports the following YAML functions:
 ## !repo-root
 
 
-
 <Intro>
     The `!repo-root` Atmos YAML function is used to retrieve the root directory of the Atmos repository.
 </Intro>
@@ -29269,8 +28874,6 @@ vars:
 ---
 
 ## !store.get
-
-
 
 
 <Intro>
@@ -29430,9 +29033,6 @@ follow Atmos naming conventions
 ---
 
 ## !store
-
-
-
 
 
 <Intro>
@@ -29636,7 +29236,6 @@ tenant `net` (instead of `plat`):
 ## !template
 
 
-
 <Intro>
     The `!template` Atmos YAML function is used to [handle the outputs containing maps or
     lists](/functions/template/atmos.Component#handling-outputs-containing-maps-or-lists)
@@ -29820,9 +29419,6 @@ allowed_cidr_blocks: !template '{{ toJson (concat .settings.allowed_ingress_cidr
 ---
 
 ## !terraform.output
-
-
-
 
 
 <Intro>
@@ -30256,9 +29852,6 @@ vars:
 ---
 
 ## !terraform.state
-
-
-
 
 
 <Intro>
@@ -30884,8 +30477,6 @@ To learn more, see [Stage 2](/introduction/why-atmos/stage-2) of the typical Ter
 ---
 
 ## Atlantis Integration
-
-
 
 
 <Intro>
@@ -31671,8 +31262,6 @@ For more information, refer to:
 ## Affected Stacks
 
 
-
-
 <Intro>
 The [Atmos Affected Stacks GitHub Action](https://github.com/cloudposse/github-action-atmos-affected-stacks) makes it easy identify the affected [atmos stacks](/core-concepts/stacks/) for a pull request. Use it to build a matrix so you can run other actions based on what was affected.
 </Intro>
@@ -31705,8 +31294,6 @@ This action has the requirements as [Github Actions](/integrations/github-action
 ---
 
 ## Atmos Terraform Apply
-
-
 
 
 <Intro>
@@ -31762,8 +31349,6 @@ This action has the requirements as [Github Actions](/integrations/github-action
 ---
 
 ## Atmos Terraform Drift Detection
-
-
 
 
 <Intro>
@@ -31916,8 +31501,6 @@ This action has the requirements as [Github Actions](/integrations/github-action
 ## Atmos Terraform Drift Remediation
 
 
-
-
 <Intro>
 The  "Atmos Terraform Drift Remediation" GitHub Action provides a way for easily remediating Terraform drift and works with GitHub Issues using IssueOps.
 </Intro>
@@ -31996,8 +31579,6 @@ This action has the requirements as [Github Actions](/integrations/github-action
 ---
 
 ## Atmos Terraform Plan
-
-
 
 
 <Intro>
@@ -32159,12 +31740,6 @@ Next, create a role for GitHub workflows to use to plan and apply Terraform. We 
 ---
 
 ## Component Updater
-
-
-
-
-
-
 
 
 
@@ -32362,10 +31937,6 @@ The backtick symbols must be escaped in the GitHub Action parameters. This is be
 ## GitHub Actions
 
 
-
-
-
-
 <Intro>
 GitHub Actions are a powerful way to automate your workflows with Atmos. Use these actions to plan, apply, and manage your Terraform infrastructure with Atmos.
 </Intro>
@@ -32533,8 +32104,6 @@ If you are using Atmos `< 1.63.0`, please refer to the following table:
 ## Setup Atmos
 
 
-
-
 <Intro>
 The Cloud Posse GitHub Action to “Setup Atmos” makes it easy to run atmos in your GitHub Action workflows by installing Atmos.
 </Intro>
@@ -32570,13 +32139,11 @@ jobs:
 ## Infrastructure CI/CD (GitOps)
 
 
-
 <DocCardList/>
 
 ---
 
 ## Spacelift Integration
-
 
 
 <Intro>
@@ -32731,7 +32298,6 @@ Refer to [`atmos describe dependents` CLI command](/cli/commands/describe/depend
 ## Atmos FAQ
 
 
-
 ### Why is the tool called Atmos?
 
 *Once upon a time*, in the vast expanse of cloud computing, there was a need for a tool that could orchestrate and manage the complex layers of infrastructure with ease and precision. This tool would need to rise above the rest, be completely automated, providing oversight and control much like a protective layer enveloping the Earth. Thus, the idea of "atmos" was born, drawing inspiration from the visionary science fiction of the 1986 "Aliens" movie, where [atmospheric terraformers](https://avp.fandom.com/wiki/Atmosphere_Processing_Plant) transform alien worlds into hospitable realms.
@@ -32857,7 +32423,6 @@ like GitHub, GitHub Actions, Datadog, OpsGenie, Okta, etc.
 ## Atmos Features
 
 
-
 <Intro>
 Atmos streamlines Terraform orchestration, environment, and configuration management, offering developers and DevOps a framework and a set of powerful tools to tackle deployment challenges.
 </Intro>
@@ -32891,9 +32456,6 @@ Designed to be cloud agnostic, it enables you to operate consistently across var
 ---
 
 ## Getting Started with Atmos
-
-
-
 
 
 Atmos is a cloud architecture framework for native Terraform.
@@ -33060,7 +32622,6 @@ like GitHub, GitHub Actions, Datadog, OpsGenie, Okta, etc.
 ## Atmos Use-Cases
 
 
-
 <Intro>
 Atmos has proven time and again that it works great for these key use cases. It’s versatile like a Swiss Army knife and reliable like a well-oiled machine, making it a solid choice for cloud infrastructure and DevOps.
 </Intro>
@@ -33079,11 +32640,6 @@ Don't see your use-case listed? Ask us in the [`#atmos`](/community/slack) Slack
 ---
 
 ## Nirvana 💫
-
-
-
-
-
 
 
 <Intro>
@@ -33130,8 +32686,6 @@ Oh yes, and it's entirely free and truly Open Source (licensed APACHE2) like [ev
 ## Stage 0: ClickOps
 
 
-
-
 <Intro>
 ClickOps is the "art" of provisioning or setting up your infrastructure using the _click_ of the mouse,
 aimed at the web console of your chosen cloud provider.
@@ -33172,8 +32726,6 @@ So developers [begin their journey with Terraform](/introduction/why-atmos/stage
 ## Stage 1: Introduction to Terraform
 
 
-
-
 <Intro>
 At this initial stage, developers begin their Terraform journey with the basics, focusing on getting a grasp of Terraform's
 core concepts with a straightforward and simple implementation.
@@ -33205,10 +32757,6 @@ With this quick win, developers realize Terraform's power, so they are eager to 
 ---
 
 ## Stage 10: Terraform Bankruptcy 💥
-
-
-
-
 
 
 <Intro>
@@ -33270,8 +32818,6 @@ After a little bit of Googling, searching Reddit and asking around, they then [s
 ## Stage 2: The Monolithic Root Module
 
 
-
-
 <Intro>
 As developers grow more comfortable with Terraform, they often transition to a more ambitious approach of automating everything. This results in creating a monolithic "root module," also known as a [Terralith](/terms/terralith).
 </Intro>
@@ -33313,8 +32859,6 @@ Everything seemed easy enough; just using plain resources worked. However, as th
 ## Stage 3: Move Towards Modularization
 
 
-
-
 <Intro>
 As developers dive deeper into Terraform's capabilities, they begin to recognize the inefficiencies of their initial approaches.
 The move towards modularization represents a significant leap in managing infrastructure as code more effectively.
@@ -33349,8 +32893,6 @@ of [Cloud Posse's hundreds of terraform modules](https://github.com/cloudposse).
 ## Stage 4: Adoption of Open Source Modules
 
 
-
-
 <Intro>
 Developers begin their Terraform journey by often crafting their own modules. But as they research how to accomplish various things with Terraform, they usually stumble across one of [Cloud Posse's hundreds of terraform modules](https://github.com/cloudposse). Then it dawns on them that they could avoid reinventing the wheel by using these modules instead.
 </Intro>
@@ -33381,8 +32923,6 @@ They realize the time has come to do a refactor, [decomposing the monolithic roo
 ---
 
 ## Stage 5: Refactor Root Modules
-
-
 
 
 <Intro>
@@ -33420,8 +32960,6 @@ Developers hate repeating themselves, so attention shifts to [DRY Configuration]
 ## Stage 6: Optimize for DRY Configuration
 
 
-
-
 <Intro>
 As developers navigate the complexities of managing multiple environments, root modules, and accounts or organizations,
 the focus shifts from merely defining infrastructure as code to the overarching challenge of maintaining these expansive
@@ -33454,8 +32992,6 @@ more time in [scripting and automation](/introduction/why-atmos/stage-7) to mana
 ---
 
 ## Stage 7: Terraform Scripting
-
-
 
 
 <Intro>
@@ -33517,8 +33053,6 @@ However, these limitations stem from the architecture, design, and use of Terraf
 ## Stage 8: Team Challenges
 
 
-
-
 <Intro>
 As Terraform use grows within the team, it becomes clear that what facilitated the initial success, is insufficient for the next level of growth and teamwork. This stage is a turning point, emphasizing the need for evolved workflows, enhanced collaboration tools, and a
 more structured approach to managing scalable infrastructure projects.
@@ -33551,8 +33085,6 @@ To solve these problems, developers realize it's time to bite the bullet and [im
 ---
 
 ## Stage 9: DIY CI/CD with Terraform
-
-
 
 
 <Intro>
@@ -33599,8 +33131,6 @@ Developers have [hit a wall](/introduction/why-atmos/stage-10) and realize they 
 ## Why Does Atmos Exist?
 
 
-
-
 # Why Does Atmos Exist?
 <Intro>
 Atmos fills the gap for Terraform users by offering a proven framework complete with conventions, methodologies, design patterns, and best practices, ensuring teams succeed with Terraform from the start.
@@ -33630,8 +33160,6 @@ Let's explore the challenges and constraints we faced using Terraform without a 
 ---
 
 ## Add Custom Commands
-
-
 
 
 Atmos can be easily extended to support any number of custom CLI commands.
@@ -33734,7 +33262,6 @@ vpc-flow-logs-bucket
 ## Advanced Tutorial
 
 
-
 <PillBox>Advanced</PillBox>
 
 # Advanced Tutorial
@@ -33779,13 +33306,11 @@ The 10 steps to configure and provision the infrastructure are as follows:
 We'll then conclude with some [final notes](/quick-start/advanced/final-notes) and [next steps](/quick-start/advanced/next-steps)
 
 
-
 <DocCardList/>
 
 ---
 
 ## Configure Atmos CLI(Advanced)
-
 
 
 In the previous step, we've decided on the following:
@@ -34101,7 +33626,6 @@ For a Quick Start example, refer to [Atmos Quick Start](https://github.com/cloud
 ---
 
 ## Configure Terraform Backend
-
 
 
 In the previous steps, we've configured the `vpc-flow-logs-bucket` and `vpc` Terraform components to be provisioned into three AWS accounts
@@ -34698,7 +34222,6 @@ For more information, refer to:
 ## Create Atmos Stacks
 
 
-
 In the previous step, we've configured the Terraform components and described how they can be vendored into the repository.
 
 Next step is to create and configure [Atmos stacks](/core-concepts/stacks).
@@ -35252,7 +34775,6 @@ import:
 ## Automate Common Workflows
 
 
-
 Atmos workflows are a way of combining multiple commands into executable units of work.
 
 :::tip
@@ -35571,10 +35093,6 @@ Let's consider what Atmos does when executing the command `atmos terraform apply
 ## Vendor Components
 
 
-
-
-
-
 In the previous steps, we've configured the repository and decided to provision the `vpc-flow-logs-bucket` and `vpc` Terraform
 components into three AWS accounts (`dev`, `staging`, `prod`) in the two AWS regions (`us-east-2` and `us-west-2`).
 We've also configured the Atmos CLI in the `atmos.yaml` CLI config file to search for the Terraform components in
@@ -35830,13 +35348,6 @@ For a complete description of how Atmos components use remote state, refer to [C
 ---
 
 ## Install Atmos
-
-
-
-
-
-
-
 
 
 <Intro>
@@ -36168,10 +35679,6 @@ Now, try one of our Quick Start guides to get started with Atmos
 ## Quick Start Introduction
 
 
-
-
-
-
 <Intro>
 Atmos is a CLI and a powerful enterprise-grade workflow automation tool for DevOps. It's also a framework that prescribes patterns and best practices to structure and organize components and stacks to design for organizational complexity and provision multi-account environments for complex organizations.
 </Intro>
@@ -36197,14 +35704,6 @@ In this Quick Start guide, we describe how to provision infrastructure managed b
 ---
 
 ## Thinking Like Atmos
-
-
-
-
-
-
-
-
 
 
 <Intro>
@@ -36447,17 +35946,6 @@ or delve deeper into the [syntax and concepts](/core-concepts) used in this tuto
 ## Configure Atmos CLI(Simple)
 
 
-
-
-
-
-
-
-
-
-
-
-
 <Intro>
 The `atmos.yaml` configuration file controls the behavior of the `atmos` CLI and how Atmos will work with your project.
 </Intro>
@@ -36627,11 +36115,6 @@ Initial Atmos configuration can be controlled by these ENV vars:
 ## Start Your Project
 
 
-
-
-
-
-
 <Intro>
 The folder structure for an Atmos project is designed to organize your infrastructure effectively on the file system. It separates configuration from code, ensuring your Terraform root modules are distinct and reusable.
 </Intro>
@@ -36741,13 +36224,6 @@ The following example provides the simplest filesystem layout that Atmos can wor
 ---
 
 ## Use Your Component in a Stack
-
-
-
-
-
-
-
 
 
 <Intro>
@@ -36908,11 +36384,6 @@ Now, we're finally ready to deploy our components. We'll show you how to do this
 ## Deploy Another App
 
 
-
-
-
-
-
 <Intro>
 We can provision more than one instance of the same Terraform component (with the same or different settings)
 into the same environment by defining many Atmos components that provide configuration for the Terraform component.
@@ -36978,12 +36449,6 @@ Sweet! You’ve just finished your first Atmos QuickStart tutorial. Now you're a
 ## Add Custom Commands(Extra-credit)
 
 
-
-
-
-
-
-
 <Intro>
 Atmos can be easily extended to support any number of custom CLI commands. For example, imagine you wanted to add a command
 like `atmos reload-database`, you can do that with custom commands.
@@ -37041,12 +36506,6 @@ Run the following Atmos command to retrieve your current public IP address.
 ---
 
 ## Automate Common Workflows(Extra-credit)
-
-
-
-
-
-
 
 
 <Intro>
@@ -37154,9 +36613,6 @@ Refer to [atmos workflow](/cli/commands/workflow) for more information on the `a
 ## Extra Credit!
 
 
-
-
-
 <Intro>
 Now we want to provide you with some bonus material because we didn’t want to overwhelm you when you were just getting started.
 These are common ways we use Atmos daily in the infrastructures we manage.
@@ -37176,14 +36632,6 @@ These are common ways we use Atmos daily in the infrastructures we manage.
 ---
 
 ## Vendor Dependencies
-
-
-
-
-
-
-
-
 
 
 <Intro>
@@ -37330,11 +36778,6 @@ In this example, could add additional vendoring configurations in the `vendor/` 
 ## Deploy Everything
 
 
-
-
-
-
-
 <Intro>
 After you've written your components and configured your stacks, now we're ready to deploy them!
 </Intro>
@@ -37395,12 +36838,6 @@ Let's consider what Atmos does when executing the command `atmos terraform apply
 ---
 
 ## Simple Atmos Tutorial
-
-
-
-
-
-
 
 
 <PillBox>Easy</PillBox>
@@ -37473,10 +36910,6 @@ Start your first project in 5 easy steps. After this, you can configure and prov
 ## Where to go from here...
 
 
-
-
-
-
 <Intro>
 Atmos provides unlimited flexibility in defining and configuring stacks and components in the stacks.
 </Intro>
@@ -37506,17 +36939,6 @@ As you continue to poke around, here are some suggestions for what to do next:
 ---
 
 ## Write Some Components
-
-
-
-
-
-
-
-
-
-
-
 
 
 <Intro>
@@ -37632,7 +37054,6 @@ In object-oriented parlance, think of your outputs as the “public” attribute
 ---
 
 ## Atmos Alternatives & Inspirations
-
 
 
 <Intro>
@@ -37794,13 +37215,11 @@ https://github.com/binbashar/leverage
 ## Reference
 
 
-
 <DocCardList/>
 
 ---
 
 ## Slides
-
 
 
 <Slides/>
@@ -37967,9 +37386,6 @@ For more information, refer to:
 ---
 
 ## Performance Profiling
-
-
-
 
 
 <Intro>
@@ -39227,7 +38643,6 @@ With this knowledge, you're now ready to actually build projects on AWS using th
 
 
 Here are some lessons on how to implement Atmos in a project.
-
 
 
 <DocCardList/>
