@@ -70,13 +70,13 @@ func processConfigImports(source *schema.AtmosConfiguration, dst *viper.Viper) e
 
 	for _, resolvedPath := range resolvedPaths {
 		// Debug: log what we're about to merge.
-		log.Debug("attempting to merge import", "import", resolvedPath.importPaths, "file_path", resolvedPath.filePath)
+		log.Trace("attempting to merge import", "import", resolvedPath.importPaths, "file_path", resolvedPath.filePath)
 		err := mergeConfigFile(resolvedPath.filePath, dst)
 		if err != nil {
-			log.Debug("error loading config file", "import", resolvedPath.importPaths, "file_path", resolvedPath.filePath, "error", err)
+			log.Trace("error loading config file", "import", resolvedPath.importPaths, "file_path", resolvedPath.filePath, "error", err)
 			continue
 		}
-		log.Debug("successfully merged config from import", "import", resolvedPath.importPaths, "file_path", resolvedPath.filePath)
+		log.Trace("successfully merged config from import", "import", resolvedPath.importPaths, "file_path", resolvedPath.filePath)
 	}
 
 	return nil

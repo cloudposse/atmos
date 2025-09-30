@@ -521,7 +521,7 @@ func mergeDefaultImports(dirPath string, dst *viper.Viper) error {
 			log.Debug("error loading config file", "path", filePath, "error", err)
 			continue
 		}
-		log.Debug("atmos merged config", "path", filePath)
+		log.Trace("atmos merged config", "path", filePath)
 	}
 	return nil
 }
