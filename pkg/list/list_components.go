@@ -69,7 +69,7 @@ func getComponentsForSpecificStack(stackName string, stacksMap map[string]any) (
 	// Get components for the specific stack.
 	stackComponents, err := getStackComponents(stackData)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %s: %s", ErrProcessStack, stackName, err)
+		return nil, fmt.Errorf("%w: %s: %v", ErrProcessStack, stackName, err)
 	}
 
 	return stackComponents, nil
