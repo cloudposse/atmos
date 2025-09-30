@@ -49,11 +49,11 @@
     "react-table": "^7.8.0",
     "remark-html": "^16.0.1",
     "remark-parse": "^11.0.0",
-    "unified": "^11.0.5"
+    "unified": "^11.0.5",
+    "docusaurus-plugin-llms": "^0.2.2"
   },
   "devDependencies": {
     "@docusaurus/module-type-aliases": "^3.6.3",
-    "docusaurus-plugin-llms": "^0.2.2",
     "prettier": "^3.4.2"
   },
   "browserslist": {
