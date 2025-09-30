@@ -18,7 +18,6 @@ type SandboxEnvironment struct {
 	TempDir         string
 	ComponentsPath  string
 	OriginalWorkdir string
-	t               *testing.T
 }
 
 // SetupSandbox creates an isolated test environment with copied components.
@@ -50,7 +49,6 @@ func SetupSandbox(t *testing.T, workdir string) (*SandboxEnvironment, error) {
 		TempDir:         tempDir,
 		ComponentsPath:  sandboxComponentsPath,
 		OriginalWorkdir: absWorkdir,
-		t:               t,
 	}, nil
 }
 
