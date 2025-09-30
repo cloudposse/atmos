@@ -68,6 +68,7 @@ tests:
 
   - name: "!terraform.output from component with !env function test"
     enabled: true
+    sandbox: true
     tty: false
     description: "Ensure !terraform.output from component with !env function works."
     workdir: "fixtures/scenarios/atmos-functions/"
