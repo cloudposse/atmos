@@ -124,6 +124,7 @@ func TestIncludeLocalFileNotFound(t *testing.T) {
 	assert.NotContains(t, err.Error(), "relative paths require a module with a pwd")
 	assert.NotContains(t, err.Error(), "relative path")
 	assert.NotContains(t, err.Error(), "pwd")
+	assert.Contains(t, err.Error(), "could not find local file")
 }
 
 // TestIncludeGoGetterShorthand tests that go-getter shorthand paths like

@@ -99,7 +99,6 @@ var (
 	ErrInvalidListMergeStrategy = errors.New("invalid list merge strategy")
 	ErrMerge                    = errors.New("merge error")
 	ErrInvalidStackManifest     = errors.New("invalid stack manifest")
-	ErrRefuseToDeleteSymlink    = errors.New("refusing to delete symbolic link")
 	ErrInvalidLogLevel          = errors.New("invalid log level")
 
 	// Pro API client errors.

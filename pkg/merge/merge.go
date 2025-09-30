@@ -75,9 +75,9 @@ func Merge(
 	atmosConfig *schema.AtmosConfiguration,
 	inputs []map[string]any,
 ) (map[string]any, error) {
-	// Check for nil config to prevent panic
+	// Check for nil config to prevent panic.
 	if atmosConfig == nil {
-		return nil, fmt.Errorf("%w: %s", errUtils.ErrMerge, errUtils.ErrAtmosConfigIsNil.Error())
+		return nil, fmt.Errorf("%w: %v", errUtils.ErrMerge, errUtils.ErrAtmosConfigIsNil)
 	}
 
 	// Default to replace strategy if strategy is empty
