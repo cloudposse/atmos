@@ -11,10 +11,10 @@ This file contains links to documentation sections following the llmstxt.org sta
 - [Stacks Best Practices](https://atmos.tools/docs/best-practices/stacks): Learn the opinionated "Best Practices" for using Stacks with Atmos
 - [Terraform Best Practices with Atmos](https://atmos.tools/docs/best-practices/terraform): Learn the opinionated "Best Practices" for using Terraform with Atmos
 - [CLI Commands Cheat Sheet](https://atmos.tools/docs/cheatsheets/commands): CLI Commands Cheat Sheet
-- [Atmos Cheatsheet](https://atmos.tools/docs/cheatsheets/common): import Link from '@docusaurus/Link'
-- [Components Cheatsheet](https://atmos.tools/docs/cheatsheets/components): import Link from '@docusaurus/Link'
-- [Stacks Cheatsheet](https://atmos.tools/docs/cheatsheets/stacks): import Link from '@docusaurus/Link'
-- [Vendoring Cheatsheet](https://atmos.tools/docs/cheatsheets/vendoring): import Card from '@site/src/components/Card'
+- [Atmos Cheatsheet](https://atmos.tools/docs/cheatsheets/common): [Description not available]
+- [Components Cheatsheet](https://atmos.tools/docs/cheatsheets/components): [Description not available]
+- [Stacks Cheatsheet](https://atmos.tools/docs/cheatsheets/stacks): [Description not available]
+- [Vendoring Cheatsheet](https://atmos.tools/docs/cheatsheets/vendoring): [Description not available]
 - [Atmos CLI](https://atmos.tools/docs/cli/cli): This command starts an interactive UI to select an Atmos command, component and stack. Press "Enter" to execute the command
 - [atmos atlantis generate repo-config](https://atmos.tools/docs/cli/commands/atlantis/atlantis-generate-repo-config): Use this command to generate a repository configuration for Atlantis.
 - [atmos atlantis](https://atmos.tools/docs/cli/commands/atlantis/usage): Atmos Atlantis Commands
@@ -32,8 +32,8 @@ This file contains links to documentation sections following the llmstxt.org sta
 - [atmos docs generate](https://atmos.tools/docs/cli/commands/docs/docs-generate): Generate documentation artifacts based on a named section under `docs.generate` in atmos.yaml
 - [atmos docs](https://atmos.tools/docs/cli/commands/docs/usage): Use this command to open the Atmos docs
 - [atmos helmfile generate varfile](https://atmos.tools/docs/cli/commands/helmfile/helmfile-generate-varfile): Use this command to generate a varfile for a `helmfile` component in a stack.
-- [atmos helmfile](https://atmos.tools/docs/cli/commands/helmfile/usage): import Screengrab from '@site/src/components/Screengrab'
-- [atmos help](https://atmos.tools/docs/cli/commands/help): import Screengrab from '@site/src/components/Screengrab'
+- [atmos helmfile](https://atmos.tools/docs/cli/commands/helmfile/usage): [Description not available]
+- [atmos help](https://atmos.tools/docs/cli/commands/help): [Description not available]
 - [atmos list components](https://atmos.tools/docs/cli/commands/list/list-components): Use this command to list Atmos components
 - [atmos list metadata](https://atmos.tools/docs/cli/commands/list/list-metadata): The `atmos list metadata` command displays component metadata across all stacks.
 - [atmos list settings](https://atmos.tools/docs/cli/commands/list/list-settings): The `atmos list settings` command displays component settings across all stacks.
@@ -42,27 +42,27 @@ This file contains links to documentation sections following the llmstxt.org sta
 - [atmos list vars](https://atmos.tools/docs/cli/commands/list/list-vars): The `atmos list vars` command displays component variables across all stacks where the component is used.
 - [atmos list workflows](https://atmos.tools/docs/cli/commands/list/list-workflows): The `atmos list workflows` command displays all Atmos workflows defined in your project.
 - [atmos list](https://atmos.tools/docs/cli/commands/list/usage): List Atmos Stacks and Components
-- [atmos packer build](https://atmos.tools/docs/cli/commands/packer/packer-build): import File from '@site/src/components/File'
-- [atmos packer init](https://atmos.tools/docs/cli/commands/packer/packer-init): import File from '@site/src/components/File'
-- [atmos packer inspect](https://atmos.tools/docs/cli/commands/packer/packer-inspect): import File from '@site/src/components/File'
-- [atmos packer output](https://atmos.tools/docs/cli/commands/packer/packer-output): import File from '@site/src/components/File'
-- [atmos packer validate](https://atmos.tools/docs/cli/commands/packer/packer-validate): import File from '@site/src/components/File'
-- [atmos packer version](https://atmos.tools/docs/cli/commands/packer/packer-version): import useBaseUrl from '@docusaurus/useBaseUrl';
-- [atmos packer](https://atmos.tools/docs/cli/commands/packer/usage): import Screengrab from '@site/src/components/Screengrab'
+- [atmos packer build](https://atmos.tools/docs/cli/commands/packer/packer-build): [Description not available]
+- [atmos packer init](https://atmos.tools/docs/cli/commands/packer/packer-init): [Description not available]
+- [atmos packer inspect](https://atmos.tools/docs/cli/commands/packer/packer-inspect): [Description not available]
+- [atmos packer output](https://atmos.tools/docs/cli/commands/packer/packer-output): [Description not available]
+- [atmos packer validate](https://atmos.tools/docs/cli/commands/packer/packer-validate): [Description not available]
+- [atmos packer version](https://atmos.tools/docs/cli/commands/packer/packer-version): [Description not available]
+- [atmos packer](https://atmos.tools/docs/cli/commands/packer/usage): [Description not available]
 - [atmos pro lock](https://atmos.tools/docs/cli/commands/pro/pro-lock): Use this command to lock a stack in Atmos Pro so that it cannot be planned or applied by another process (pull request, CI/CD, etc.)
 - [atmos pro unlock](https://atmos.tools/docs/cli/commands/pro/pro-unlock): Use this command to unlock a stack in Atmos Pro that has previously been locked by the lock command.
 - [atmos pro](https://atmos.tools/docs/cli/commands/pro/usage): Atmos Pro Commands
-- [atmos terraform clean](https://atmos.tools/docs/cli/commands/terraform/terraform-clean): import Screengrab from '@site/src/components/Screengrab'
-- [atmos terraform deploy](https://atmos.tools/docs/cli/commands/terraform/terraform-deploy): import Screengrab from '@site/src/components/Screengrab'
+- [atmos terraform clean](https://atmos.tools/docs/cli/commands/terraform/terraform-clean): [Description not available]
+- [atmos terraform deploy](https://atmos.tools/docs/cli/commands/terraform/terraform-deploy): [Description not available]
 - [atmos terraform generate backend](https://atmos.tools/docs/cli/commands/terraform/terraform-generate-backend): Use this command to generate a Terraform backend config file for an Atmos terraform component in a stack.
 - [atmos terraform generate backends](https://atmos.tools/docs/cli/commands/terraform/terraform-generate-backends): Use this command to generate the Terraform backend config files for all Atmos terraform components in all stacks.
-- [atmos terraform generate planfile](https://atmos.tools/docs/cli/commands/terraform/terraform-generate-planfile): import Screengrab from '@site/src/components/Screengrab'
-- [atmos terraform generate varfile](https://atmos.tools/docs/cli/commands/terraform/terraform-generate-varfile): import Screengrab from '@site/src/components/Screengrab'
+- [atmos terraform generate planfile](https://atmos.tools/docs/cli/commands/terraform/terraform-generate-planfile): [Description not available]
+- [atmos terraform generate varfile](https://atmos.tools/docs/cli/commands/terraform/terraform-generate-varfile): [Description not available]
 - [atmos terraform generate varfiles](https://atmos.tools/docs/cli/commands/terraform/terraform-generate-varfiles): Use this command to generate the Terraform varfiles (`.tfvar`) for all Atmos terraform components in all stacks.
-- [atmos terraform plan-diff](https://atmos.tools/docs/cli/commands/terraform/terraform-plan-diff): import Tabs from "@theme/Tabs";
+- [atmos terraform plan-diff](https://atmos.tools/docs/cli/commands/terraform/terraform-plan-diff): [Description not available]
 - [atmos terraform shell](https://atmos.tools/docs/cli/commands/terraform/terraform-shell): This command starts a new `SHELL` configured with the environment for an Atmos component in a stack to allow execution of all native terraform comm...
 - [atmos terraform workspace](https://atmos.tools/docs/cli/commands/terraform/terraform-workspace): This command calculates the `terraform` workspace for an Atmos component (from the context variables and stack config). It runs `terraform init -re...
-- [atmos terraform](https://atmos.tools/docs/cli/commands/terraform/usage): import Screengrab from '@site/src/components/Screengrab'
+- [atmos terraform](https://atmos.tools/docs/cli/commands/terraform/usage): [Description not available]
 - [atmos validate](https://atmos.tools/docs/cli/commands/validate/usage): Validate Atmos Configurations
 - [atmos validate component](https://atmos.tools/docs/cli/commands/validate/validate-component): Use this command to validate an Atmos component in a stack using JSON Schema and OPA policies.
 - [atmos validate editorconfig](https://atmos.tools/docs/cli/commands/validate/validate-editorconfig): Use this command to validate the workdir of the Atmos project against the rules defined in the .editorconfig file.
@@ -81,50 +81,50 @@ This file contains links to documentation sections following the llmstxt.org sta
 - [Global Flags](https://atmos.tools/docs/cli/global-flags): Complete reference for all global command-line flags available in Atmos
 - [Atmos Manifest JSON Schema](https://atmos.tools/docs/cli/schemas): Atmos Schemas
 - [Telemetry](https://atmos.tools/docs/cli/telemetry): Collect Atmos usage telemetry
-- [Atmos Versioning](https://atmos.tools/docs/cli/versioning): import Intro from '@site/src/components/Intro'
+- [Atmos Versioning](https://atmos.tools/docs/cli/versioning): [Description not available]
 - [Community](https://atmos.tools/docs/community/community): Community
 - [Office Hours](https://atmos.tools/docs/community/office-hours): Office Hours with Cloud Posse
 - [#atmos](https://atmos.tools/docs/community/slack): Cloud Posse's SweetOps Slack Community
-- [Code of Conduct](https://atmos.tools/docs/contribute/coc): import Intro from '@site/src/components/Intro'
+- [Code of Conduct](https://atmos.tools/docs/contribute/coc): [Description not available]
 - [Contributing](https://atmos.tools/docs/contribute/contributing): Contributing
 - [How to Contribute](https://atmos.tools/docs/contribute/how-to-contribute): Thanks for the interest in contributing to the Atmos project!
 - [Component Library](https://atmos.tools/docs/core-concepts/components/component-library): A component library is a collection of reusable building blocks.
 - [Atmos Components](https://atmos.tools/docs/core-concepts/components/components): Components are opinionated building blocks of infrastructure as code that solve one specific problem or use-case.
-- [Using Helmfiles](https://atmos.tools/docs/core-concepts/components/helmfile): import Intro from '@site/src/components/Intro'
+- [Using Helmfiles](https://atmos.tools/docs/core-concepts/components/helmfile): [Description not available]
 - [Terraform/OpenTofu Backends](https://atmos.tools/docs/core-concepts/components/terraform/backends): Configure Terraform/OpenTofu Backends.
-- [Brownfield Considerations](https://atmos.tools/docs/core-concepts/components/terraform/brownfield): import Intro from '@site/src/components/Intro'
+- [Brownfield Considerations](https://atmos.tools/docs/core-concepts/components/terraform/brownfield): [Description not available]
 - [Terraform Providers](https://atmos.tools/docs/core-concepts/components/terraform/providers): Configure and override Terraform Providers.
-- [State Backend Configuration](https://atmos.tools/docs/core-concepts/components/terraform/state-backend): import Intro from '@site/src/components/Intro'
+- [State Backend Configuration](https://atmos.tools/docs/core-concepts/components/terraform/state-backend): [Description not available]
 - [Terraform Root Modules](https://atmos.tools/docs/core-concepts/components/terraform/terraform): Learn why Atmos can change how you think about the Terraform modules that you use to build your infrastructure.
 - [Terraform Workspaces](https://atmos.tools/docs/core-concepts/components/terraform/workspaces): Terraform Workspaces.
 - [Core Concepts of the Atmos Framework](https://atmos.tools/docs/core-concepts/core-concepts): Atmos Core Concepts
-- [Atmos Custom Commands](https://atmos.tools/docs/core-concepts/custom-commands/custom-commands): import File from '@site/src/components/File'
+- [Atmos Custom Commands](https://atmos.tools/docs/core-concepts/custom-commands/custom-commands): [Description not available]
 - [Deploy Components](https://atmos.tools/docs/core-concepts/deploy/deploy): Deploy components with a single command or in a CI/CD pipeline.
 - [Describe Components](https://atmos.tools/docs/core-concepts/describe/components): Describe a component in a stack to view the fully deep-merged configuration
 - [Describe Configuration](https://atmos.tools/docs/core-concepts/describe/describe): Describing your configuration so you understand what's happening.
 - [Describe Stacks](https://atmos.tools/docs/core-concepts/describe/stacks): Describe stacks to view the fully deep-merged configuration
 - [Configure Atmos CLI](https://atmos.tools/docs/core-concepts/projects/configuration/configuration): CLI configuration for Atmos to find your Terraform components and Atmos stacks
-- [Configure Helmfile](https://atmos.tools/docs/core-concepts/projects/configuration/helmfile): import Intro from '@site/src/components/Intro'
-- [Configure OpenTofu](https://atmos.tools/docs/core-concepts/projects/configuration/opentofu): import useBaseUrl from '@docusaurus/useBaseUrl';
-- [Configure Packer](https://atmos.tools/docs/core-concepts/projects/configuration/packer): import useBaseUrl from '@docusaurus/useBaseUrl';
-- [Configure Stores](https://atmos.tools/docs/core-concepts/projects/configuration/stores): import Intro from '@site/src/components/Intro'
-- [Configure Terraform](https://atmos.tools/docs/core-concepts/projects/configuration/terraform): import useBaseUrl from '@docusaurus/useBaseUrl';
+- [Configure Helmfile](https://atmos.tools/docs/core-concepts/projects/configuration/helmfile): [Description not available]
+- [Configure OpenTofu](https://atmos.tools/docs/core-concepts/projects/configuration/opentofu): [Description not available]
+- [Configure Packer](https://atmos.tools/docs/core-concepts/projects/configuration/packer): [Description not available]
+- [Configure Stores](https://atmos.tools/docs/core-concepts/projects/configuration/stores): [Description not available]
+- [Configure Terraform](https://atmos.tools/docs/core-concepts/projects/configuration/terraform): [Description not available]
 - [Folder Structure](https://atmos.tools/docs/core-concepts/projects/layout): Recommended way to organize your Atmos stacks and components
-- [Setup Projects for Atmos](https://atmos.tools/docs/core-concepts/projects/projects): import DocCardList from '@theme/DocCardList'
-- [Configure Your Editor for Atmos](https://atmos.tools/docs/core-concepts/projects/setup-editor): import TabItem from "@theme/TabItem";
-- [Using Remote State](https://atmos.tools/docs/core-concepts/share-data/remote-state): import Intro from '@site/src/components/Intro'
+- [Setup Projects for Atmos](https://atmos.tools/docs/core-concepts/projects/projects): [Description not available]
+- [Configure Your Editor for Atmos](https://atmos.tools/docs/core-concepts/projects/setup-editor): [Description not available]
+- [Using Remote State](https://atmos.tools/docs/core-concepts/share-data/remote-state): [Description not available]
 - [Share Data Between Components](https://atmos.tools/docs/core-concepts/share-data/share-data): Share data between loosely-coupled components in Atmos
 - [Stack Catalogs](https://atmos.tools/docs/core-concepts/stacks/catalogs): Organize Stack configurations into catalogs for easy imports.
-- [Configuring Components in Stacks](https://atmos.tools/docs/core-concepts/stacks/define-components): import Intro from '@site/src/components/Intro'
-- [Configure Dependencies Between Components](https://atmos.tools/docs/core-concepts/stacks/dependencies): import File from '@site/src/components/File'
+- [Configuring Components in Stacks](https://atmos.tools/docs/core-concepts/stacks/define-components): [Description not available]
+- [Configure Dependencies Between Components](https://atmos.tools/docs/core-concepts/stacks/dependencies): [Description not available]
 - [Manage Lifecycle Events with Hooks](https://atmos.tools/docs/core-concepts/stacks/hooks): Use lifecycle hooks to take action at various points in the lifecycle of your components.
-- [Import Stack Configurations](https://atmos.tools/docs/core-concepts/stacks/imports): import File from '@site/src/components/File'
-- [Inherit Configurations in Atmos Stacks](https://atmos.tools/docs/core-concepts/stacks/inheritance/inheritance): import File from '@site/src/components/File'
-- [Stack Mixins](https://atmos.tools/docs/core-concepts/stacks/inheritance/mixins): import File from '@site/src/components/File'
+- [Import Stack Configurations](https://atmos.tools/docs/core-concepts/stacks/imports): [Description not available]
+- [Inherit Configurations in Atmos Stacks](https://atmos.tools/docs/core-concepts/stacks/inheritance/inheritance): [Description not available]
+- [Stack Mixins](https://atmos.tools/docs/core-concepts/stacks/inheritance/mixins): [Description not available]
 - [Override Configurations](https://atmos.tools/docs/core-concepts/stacks/overrides): Use the 'Component Overrides' pattern to modify components' configuration and behavior in the current scope.
 - [Atmos Stacks](https://atmos.tools/docs/core-concepts/stacks/stacks): Use Stacks to configure Components for an environment
-- [Template Data Sources](https://atmos.tools/docs/core-concepts/stacks/templates/datasources): import File from '@site/src/components/File'
-- [Stack Manifest Templating](https://atmos.tools/docs/core-concepts/stacks/templates/templates): import File from '@site/src/components/File'
+- [Template Data Sources](https://atmos.tools/docs/core-concepts/stacks/templates/datasources): [Description not available]
+- [Stack Manifest Templating](https://atmos.tools/docs/core-concepts/stacks/templates/templates): [Description not available]
 - [EditorConfig Validation](https://atmos.tools/docs/core-concepts/validate/editorconfig): Use EditorConfig Checker to validate your configurations.
 - [JSON Schema Validation](https://atmos.tools/docs/core-concepts/validate/json-schema): Use JSON Schema policies to validate Stacks and Component configurations.
 - [Open Policy Agent (OPA) Validation](https://atmos.tools/docs/core-concepts/validate/opa): Use OPA policies to validate Stacks and Component configurations.
@@ -133,7 +133,7 @@ This file contains links to documentation sections following the llmstxt.org sta
 - [Component Manifest](https://atmos.tools/docs/core-concepts/vendor/components-manifest): Use Component manifests to make copies of 3rd-party components in your own repo.
 - [Vendor Manifest](https://atmos.tools/docs/core-concepts/vendor/vendor-manifest): Use Atmos vendoring to make copies of 3rd-party components, stacks, and other artifacts in your own repo.
 - [Vendoring](https://atmos.tools/docs/core-concepts/vendor/vendor): Use Atmos vendoring to make copies of 3rd-party components, stacks, and other artifacts in your own repo.
-- [Workflows](https://atmos.tools/docs/core-concepts/workflows/workflows): import File from '@site/src/components/File'
+- [Workflows](https://atmos.tools/docs/core-concepts/workflows/workflows): [Description not available]
 - [Abstract Component](https://atmos.tools/docs/design-patterns/abstract-component): Abstract Component Atmos Design Pattern
 - [Component Catalog Template](https://atmos.tools/docs/design-patterns/component-catalog-template): Component Catalog Template Atmos Design Pattern
 - [Component Catalog with Mixins](https://atmos.tools/docs/design-patterns/component-catalog-with-mixins): Component Catalog with Mixins Atmos Design Pattern
@@ -159,7 +159,7 @@ This file contains links to documentation sections following the llmstxt.org sta
 - [!exec](https://atmos.tools/docs/functions/yaml/exec): Execute shell scripts and assign the results to the sections in Atmos stack manifests
 - [!include](https://atmos.tools/docs/functions/yaml/include): Download local or remote files from different sources, and insert their contents or specific values directly into sections of your stack manifests
 - [!include.raw](https://atmos.tools/docs/functions/yaml/include.raw): Force inclusion of files as raw strings regardless of their extension or content
-- [Atmos YAML Functions](https://atmos.tools/docs/functions/yaml): import File from '@site/src/components/File'
+- [Atmos YAML Functions](https://atmos.tools/docs/functions/yaml): [Description not available]
 - [!repo-root](https://atmos.tools/docs/functions/yaml/repo-root): Get the root directory of the Atmos repository
 - [!store.get](https://atmos.tools/docs/functions/yaml/store.get): Retrieve arbitrary keys directly from a store
 - [!store](https://atmos.tools/docs/functions/yaml/store): Read a value from a store for an Atmos component in a stack
@@ -192,7 +192,7 @@ This file contains links to documentation sections following the llmstxt.org sta
 - [Terraform "Child Module"](https://atmos.tools/docs/glossary/terraform-child-module): Any Terraform module that is invoked by another module, distinguishing itself by not maintaining a separate Terraform state.
 - [Terralith](https://atmos.tools/docs/glossary/terralith): A monolithic Terraform "root module" is also known as a Terralith. It's characterized by an expansive, all-encompassing Terraform configuration tha...
 - [Vendoring](https://atmos.tools/docs/glossary/vendoring): *Vendoring* is a mechanism of making a copy of 3rd-party components within your repository.
-- [Atlantis Integration](https://atmos.tools/docs/integrations/atlantis): import Terminal from '@site/src/components/Terminal'
+- [Atlantis Integration](https://atmos.tools/docs/integrations/atlantis): [Description not available]
 - [Affected Stacks](https://atmos.tools/docs/integrations/github-actions/affected-stacks): Identify the affected stacks and components in a pull request
 - [Atmos Terraform Apply](https://atmos.tools/docs/integrations/github-actions/atmos-terraform-apply): Run a `terraform apply` to provision changes
 - [Atmos Terraform Drift Detection](https://atmos.tools/docs/integrations/github-actions/atmos-terraform-drift-detection): Identify drift and create GitHub Issues for remediation
@@ -202,11 +202,11 @@ This file contains links to documentation sections following the llmstxt.org sta
 - [GitHub Actions](https://atmos.tools/docs/integrations/github-actions/github-actions): Use GitHub Actions with Atmos
 - [Setup Atmos](https://atmos.tools/docs/integrations/github-actions/setup-atmos): Install Atmos in your GitHub Action workflows
 - [Infrastructure CI/CD (GitOps)](https://atmos.tools/docs/integrations/integrations): Natively supported CI/CD integrations in Atmos
-- [Spacelift Integration](https://atmos.tools/docs/integrations/spacelift): import Intro from '@site/src/components/Intro'
-- [Atmos FAQ](https://atmos.tools/docs/introduction/faq): import ReactPlayer from 'react-player'
-- [Atmos Features](https://atmos.tools/docs/introduction/features): import Intro from '@site/src/components/Intro'
+- [Spacelift Integration](https://atmos.tools/docs/integrations/spacelift): [Description not available]
+- [Atmos FAQ](https://atmos.tools/docs/introduction/faq): [Description not available]
+- [Atmos Features](https://atmos.tools/docs/introduction/features): [Description not available]
 - [Getting Started with Atmos](https://atmos.tools/docs/introduction): Atmos is a Component Oriented Framework and Orchestration Tool for DevOps that makes it easy to automate Terraform Environments and manage complex ...
-- [Atmos Use-Cases](https://atmos.tools/docs/introduction/use-cases): import Intro from '@site/src/components/Intro'
+- [Atmos Use-Cases](https://atmos.tools/docs/introduction/use-cases): [Description not available]
 - [Nirvana 💫](https://atmos.tools/docs/introduction/why-atmos/nirvana): Teams who adopt Atmos have total clarity of their infrastructure.
 - [Stage 0: ClickOps](https://atmos.tools/docs/introduction/why-atmos/stage-0): All infrastructure is manually provisioned using web interfaces.
 - [Stage 1: Introduction to Terraform](https://atmos.tools/docs/introduction/why-atmos/stage-1): Exploration into Terraform begins with a simple example.
@@ -220,36 +220,36 @@ This file contains links to documentation sections following the llmstxt.org sta
 - [Stage 8: Team Challenges](https://atmos.tools/docs/introduction/why-atmos/stage-8): Team expands and begins to struggle with Terraform
 - [Stage 9: DIY CI/CD with Terraform](https://atmos.tools/docs/introduction/why-atmos/stage-9): Terraform is deployed with a CI/CD pipeline
 - [Why Does Atmos Exist?](https://atmos.tools/docs/introduction/why-atmos/why-atmos): Learn about the typical Terraform journey when not using Atmos.
-- [Add Custom Commands](https://atmos.tools/docs/quick-start/advanced/add-custom-commands): import Terminal from '@site/src/components/Terminal'
+- [Add Custom Commands](https://atmos.tools/docs/quick-start/advanced/add-custom-commands): [Description not available]
 - [Advanced Tutorial](https://atmos.tools/docs/quick-start/advanced/advanced): Take 30 minutes to learn the most important Atmos concepts.
-- [Configure Atmos CLI](https://atmos.tools/docs/quick-start/advanced/configure-cli): import File from '@site/src/components/File'
+- [Configure Atmos CLI](https://atmos.tools/docs/quick-start/advanced/configure-cli): [Description not available]
 - [Configure Project Repository](https://atmos.tools/docs/quick-start/advanced/configure-repository): Atmos supports both the [monorepo and polyrepo architectures](https://en.wikipedia.org/wiki/Monorepo) when managing the configurations for components
-- [Configure Terraform Backend](https://atmos.tools/docs/quick-start/advanced/configure-terraform-backend): import File from '@site/src/components/File'
+- [Configure Terraform Backend](https://atmos.tools/docs/quick-start/advanced/configure-terraform-backend): [Description not available]
 - [Validate Configurations](https://atmos.tools/docs/quick-start/advanced/configure-validation): Atmos supports [Stack Schema Validation](/cli/schemas) and [Custom Policy Validation](/core-concepts/validate)
-- [Create Atmos Stacks](https://atmos.tools/docs/quick-start/advanced/create-atmos-stacks): import File from '@site/src/components/File'
-- [Automate Common Workflows](https://atmos.tools/docs/quick-start/advanced/create-workflows): import Terminal from '@site/src/components/Terminal'
+- [Create Atmos Stacks](https://atmos.tools/docs/quick-start/advanced/create-atmos-stacks): [Description not available]
+- [Automate Common Workflows](https://atmos.tools/docs/quick-start/advanced/create-workflows): [Description not available]
 - [Final Notes](https://atmos.tools/docs/quick-start/advanced/final-notes): Atmos provides unlimited flexibility in defining and configuring stacks and components in the stacks.
 - [Next Steps](https://atmos.tools/docs/quick-start/advanced/next-steps): You have just learned the **essentials of Atmos**.
 - [Provision](https://atmos.tools/docs/quick-start/advanced/provision): Having configured the Terraform components, the Atmos components catalog, all the mixins and defaults, and the Atmos top-level stacks, we can now
-- [Vendor Components](https://atmos.tools/docs/quick-start/advanced/vendor-components): import Terminal from '@site/src/components/Terminal'
-- [Install Atmos](https://atmos.tools/docs/quick-start/install-atmos): import Tabs from '@theme/Tabs';
-- [Quick Start Introduction](https://atmos.tools/docs/quick-start/introduction): import Link from '@docusaurus/Link'
-- [Thinking Like Atmos](https://atmos.tools/docs/quick-start/mindset): import Link from '@docusaurus/Link'
-- [Configure Atmos CLI](https://atmos.tools/docs/quick-start/simple/configure-cli): import EmbedFile from '@site/src/components/EmbedFile'
-- [Start Your Project](https://atmos.tools/docs/quick-start/simple/configure-project): import KeyPoints from '@site/src/components/KeyPoints'
-- [Use Your Component in a Stack](https://atmos.tools/docs/quick-start/simple/configure-stacks): import File from '@site/src/components/File'
+- [Vendor Components](https://atmos.tools/docs/quick-start/advanced/vendor-components): [Description not available]
+- [Install Atmos](https://atmos.tools/docs/quick-start/install-atmos): [Description not available]
+- [Quick Start Introduction](https://atmos.tools/docs/quick-start/introduction): [Description not available]
+- [Thinking Like Atmos](https://atmos.tools/docs/quick-start/mindset): [Description not available]
+- [Configure Atmos CLI](https://atmos.tools/docs/quick-start/simple/configure-cli): [Description not available]
+- [Start Your Project](https://atmos.tools/docs/quick-start/simple/configure-project): [Description not available]
+- [Use Your Component in a Stack](https://atmos.tools/docs/quick-start/simple/configure-stacks): [Description not available]
 - [Deploy Another App](https://atmos.tools/docs/quick-start/simple/extra-credit/add-another-component): Provision multiple components in the same stack
 - [Add Custom Commands](https://atmos.tools/docs/quick-start/simple/extra-credit/add-custom-commands): Extend Atmos with your own custom CLI commands
 - [Automate Common Workflows](https://atmos.tools/docs/quick-start/simple/extra-credit/create-workflows): Automate your repetitive tasks with workflows
-- [Extra Credit!](https://atmos.tools/docs/quick-start/simple/extra-credit/extra-credit): import KeyPoints from '@site/src/components/KeyPoints'
+- [Extra Credit!](https://atmos.tools/docs/quick-start/simple/extra-credit/extra-credit): [Description not available]
 - [Vendor Dependencies](https://atmos.tools/docs/quick-start/simple/extra-credit/vendor-components): Learn how to vendor components from remote sources
-- [Deploy Everything](https://atmos.tools/docs/quick-start/simple/provision): import KeyPoints from '@site/src/components/KeyPoints'
+- [Deploy Everything](https://atmos.tools/docs/quick-start/simple/provision): [Description not available]
 - [Simple Atmos Tutorial](https://atmos.tools/docs/quick-start/simple/simple): Take 30 minutes to learn the most important Atmos concepts.
-- [Where to go from here...](https://atmos.tools/docs/quick-start/simple/summary): import KeyPoints from '@site/src/components/KeyPoints'
-- [Write Some Components](https://atmos.tools/docs/quick-start/simple/write-components): import EmbedFile from '@site/src/components/EmbedFile'
-- [Atmos Alternatives & Inspirations](https://atmos.tools/docs/reference/alternatives): import Intro from '@site/src/components/Intro'
+- [Where to go from here...](https://atmos.tools/docs/quick-start/simple/summary): [Description not available]
+- [Write Some Components](https://atmos.tools/docs/quick-start/simple/write-components): [Description not available]
+- [Atmos Alternatives & Inspirations](https://atmos.tools/docs/reference/alternatives): [Description not available]
 - [Reference](https://atmos.tools/docs/reference/reference): Reference
-- [Slides](https://atmos.tools/docs/reference/slides): import Slides from "@site/src/components/Slides";
+- [Slides](https://atmos.tools/docs/reference/slides): [Description not available]
 - [Debugging](https://atmos.tools/docs/troubleshoot/debugging): :::note
 - [Common Errors](https://atmos.tools/docs/troubleshoot/errors): * Running out of date version of `atmos` with newer configuration parameters
 - [Performance Profiling](https://atmos.tools/docs/troubleshoot/profiling): Use pprof to analyze Atmos performance and identify bottlenecks.

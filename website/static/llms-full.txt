@@ -6,7 +6,7 @@ This file contains all documentation content in a single document following the 
 
 ## Best Practices
 
-import DocCardList from '@theme/DocCardList'
+
 
 > <q>Physics is the law, everything else is a recommendation.
 > Anyone can break laws created by people, but I have yet to see anyone break the laws of physics.
@@ -20,7 +20,7 @@ Learn how to best leverage Stacks and Components together with Atmos.
 
 ## Component Best Practices
 
-import Intro from '@site/src/components/Intro'
+
 
 <Intro>
 Here are some essential best practices to follow when designing architectures using infrastructure as code (IaC), focusing on optimizing
@@ -186,7 +186,7 @@ In this model, the "spoke" will usually have two providers, one for the current 
 
 ## Stacks Best Practices
 
-import Intro from '@site/src/components/Intro'
+
 
 <Intro>
 Here are some essential best practices to follow when designing the Stack configurations that describe your architectures. These guidelines are intended to help developers and operators think about how they model the configuration of their infrastructure in Atmos, for maximum clarity and long-term maintainability.
@@ -279,7 +279,7 @@ as needed, allowing the same component to be validated differently depending on 
 
 ## Terraform Best Practices with Atmos
 
-import Intro from '@site/src/components/Intro'
+
 
 <Intro>
 These are some of the best practices we recommend when using Terraform with Atmos. They are opinionated and based on our experience working with Terraform and Atmos. When followed, they lead to more reusable and maintainable infrastructure as code.
@@ -331,9 +331,9 @@ You can think of it also like [Monkey Patching](https://en.wikipedia.org/wiki/Mo
 
 ## CLI Commands Cheat Sheet
 
-import Link from '@docusaurus/Link'
-import Card from '@site/src/components/Card'
-import CardGroup from '@site/src/components/CardGroup'
+
+
+
 
 <CardGroup title="General" className="cheatsheet">
 
@@ -550,9 +550,9 @@ import CardGroup from '@site/src/components/CardGroup'
 
 ## Atmos Cheatsheet
 
-import Link from '@docusaurus/Link'
-import Card from '@site/src/components/Card'
-import CardGroup from '@site/src/components/CardGroup'
+
+
+
 
 <CardGroup title="Stacks" className="cheatsheet">
     <Card title="List Stacks">
@@ -679,9 +679,9 @@ import CardGroup from '@site/src/components/CardGroup'
 
 ## Components Cheatsheet
 
-import Link from '@docusaurus/Link'
-import Card from '@site/src/components/Card'
-import CardGroup from '@site/src/components/CardGroup'
+
+
+
 
 <CardGroup title="Configuration" className="cheatsheet">
   <Card title="Folder Structure">
@@ -747,9 +747,9 @@ import CardGroup from '@site/src/components/CardGroup'
 
 ## Stacks Cheatsheet
 
-import Link from '@docusaurus/Link'
-import Card from '@site/src/components/Card'
-import CardGroup from '@site/src/components/CardGroup'
+
+
+
 
 <CardGroup title="Configuration" className="cheatsheet">
   <Card title="Folder Structure">
@@ -829,8 +829,8 @@ import CardGroup from '@site/src/components/CardGroup'
 
 ## Vendoring Cheatsheet
 
-import Card from '@site/src/components/Card'
-import CardGroup from '@site/src/components/CardGroup'
+
+
 
 <CardGroup title="Configuration" className="cheatsheet">
   <Card title="Filesystem Layout">
@@ -906,9 +906,9 @@ import CardGroup from '@site/src/components/CardGroup'
 
 ## Atmos CLI
 
-import Screengrab from '@site/src/components/Screengrab'
-import Terminal from '@site/src/components/Terminal'
-import Intro from '@site/src/components/Intro'
+
+
+
 
 <Intro>
 Use this command to start an interactive UI to run Atmos commands against any component or stack. Press `Enter` to execute the command for the selected
@@ -965,8 +965,8 @@ You can also search for the stacks where a component is configured.
 
 ## atmos atlantis generate repo-config
 
-import Screengrab from '@site/src/components/Screengrab'
-import Intro from '@site/src/components/Intro'
+
+
 
 <Intro>
 Use this command to generate a repository configuration (`atlantis.yaml`) for Atlantis.
@@ -1075,9 +1075,9 @@ Refer to [Atlantis Integration](/integrations/atlantis) for more details on the 
 
 ## atmos atlantis
 
-import DocCardList from '@theme/DocCardList';
-import Screengrab from '@site/src/components/Screengrab'
-import Intro from '@site/src/components/Intro'
+
+
+
 
 <Intro>
 Use these subcommands to execute commands that generate Atlantis configurations.
@@ -1095,8 +1095,8 @@ Use these subcommands to execute commands that generate Atlantis configurations.
 
 ## atmos aws eks update-kubeconfig
 
-import Screengrab from '@site/src/components/Screengrab'
-import Intro from '@site/src/components/Intro'
+
+
 
 <Intro>
 Use this command to download `kubeconfig` from an EKS cluster and save it to a file.
@@ -1205,9 +1205,9 @@ atmos aws eks update-kubeconfig --verbose=true
 
 ## atmos aws
 
-import Screengrab from '@site/src/components/Screengrab'
-import DocCardList from '@theme/DocCardList';
-import Intro from '@site/src/components/Intro'
+
+
+
 
 <Screengrab title="atmos aws --help" slug="atmos-aws--help" />
 
@@ -1223,9 +1223,9 @@ Use these subcommands to interact with AWS.
 
 ## Atmos CLI Commands
 
-import Screengrab from '@site/src/components/Screengrab'
-import DocCardList from '@theme/DocCardList'
-import Intro from '@site/src/components/Intro'
+
+
+
 
 <Intro>
 Use these commands to perform operations.
@@ -1241,10 +1241,10 @@ Use these commands to perform operations.
 
 ## atmos completion
 
-import Screengrab from '@site/src/components/Screengrab'
-import Tabs from '@theme/Tabs';
-import TabItem from '@theme/TabItem';
-import Intro from '@site/src/components/Intro'
+
+
+
+
 
 <Intro>
 Use this command to generate completion scripts for `Bash`, `Zsh`, `Fish` and `PowerShell`.
@@ -1371,10 +1371,10 @@ Refer to [Command-line completion](https://en.wikipedia.org/wiki/Command-line_co
 
 ## atmos describe affected
 
-import Terminal from '@site/src/components/Terminal'
-import File from '@site/src/components/File'
-import Screengrab from '@site/src/components/Screengrab'
-import Intro from '@site/src/components/Intro'
+
+
+
+
 
 <Intro>
 Use this command to show a list of the affected Atmos components and stacks given two Git commits.
@@ -2483,9 +2483,9 @@ where:
 
 ## atmos describe component
 
-import Terminal from '@site/src/components/Terminal'
-import Screengrab from '@site/src/components/Screengrab'
-import Intro from '@site/src/components/Intro'
+
+
+
 
 <Intro>
 Use this command to describe the complete configuration for an [Atmos component](/core-concepts/components) in
@@ -3355,9 +3355,9 @@ The first item in the list was processed the last and its `variable_value` overr
 
 ## atmos describe config
 
-import Terminal from '@site/src/components/Terminal'
-import Screengrab from '@site/src/components/Screengrab'
-import Intro from '@site/src/components/Intro'
+
+
+
 
 <Intro>
 Use this command to show the final (deep-merged) [CLI configuration](/cli/configuration) of all `atmos.yaml` file(s).
@@ -3403,9 +3403,9 @@ atmos describe config --query <yq-expression>
 
 ## atmos describe dependents
 
-import Terminal from '@site/src/components/Terminal'
-import Screengrab from '@site/src/components/Screengrab'
-import Intro from '@site/src/components/Intro'
+
+
+
 
 <Intro>
 Use this command to show a list of Atmos components in Atmos stacks that depend on the provided Atmos component.
@@ -3802,8 +3802,8 @@ Atmos components and are not meant to be provisioned.
 
 ## atmos describe stacks
 
-import Screengrab from '@site/src/components/Screengrab'
-import Intro from '@site/src/components/Intro'
+
+
 
 <Intro>
 Use this command to show the fully deep-merged configuration for all stacks and the components in the stacks.
@@ -3891,9 +3891,9 @@ Use the `--query` flag (shorthand `-q`) to filter the output.
 
 ## atmos describe workflows
 
-import Terminal from '@site/src/components/Terminal'
-import Screengrab from '@site/src/components/Screengrab'
-import Intro from '@site/src/components/Intro'
+
+
+
 
 <Intro>
 Use this command to show all configured Atmos workflows.
@@ -4077,8 +4077,8 @@ Use the [atmos workflow](/cli/commands/workflow) CLI command to execute an Atmos
 
 ## atmos describe
 
-import Screengrab from '@site/src/components/Screengrab'
-import DocCardList from '@theme/DocCardList';
+
+
 
 <Screengrab title="atmos describe --help" slug="atmos-describe--help" />
 
@@ -4090,8 +4090,8 @@ import DocCardList from '@theme/DocCardList';
 
 ## atmos docs generate
 
-import Screengrab from '@site/src/components/Screengrab'
-import Intro from '@site/src/components/Intro'
+
+
 
 <Intro>
 
@@ -4217,9 +4217,9 @@ To download remote files, Atmos uses [`go-getter`](https://github.com/hashicorp/
 
 ## atmos docs
 
-import Screengrab from '@site/src/components/Screengrab'
-import DocCardList from '@theme/DocCardList';
-import Intro from '@site/src/components/Intro'
+
+
+
 
 <Intro>
 Use this command to open the [Atmos docs](https://atmos.tools/)
@@ -4244,9 +4244,9 @@ atmos docs eks/cluster
 
 ## atmos helmfile generate varfile
 
-import Screengrab from '@site/src/components/Screengrab'
-import Terminal from '@site/src/components/Terminal'
-import Intro from '@site/src/components/Intro'
+
+
+
 
 <Intro>
 Use this command to generate a varfile for a `helmfile` component in a stack.
@@ -4301,10 +4301,10 @@ atmos helmfile generate varfile echo-server --stack tenant1-ue2-dev --file=vars.
 
 ## atmos helmfile
 
-import Screengrab from '@site/src/components/Screengrab'
-import Terminal from '@site/src/components/Terminal'
-import DocCardList from '@theme/DocCardList';
-import Intro from '@site/src/components/Intro'
+
+
+
+
 
 <Intro>
 Use these subcommands to run `helmfile` commands.
@@ -4396,8 +4396,8 @@ All native `helmfile` flags, command options, and arguments are supported
 
 ## atmos help
 
-import Screengrab from '@site/src/components/Screengrab'
-import Terminal from '@site/src/components/Terminal'
+
+
 
 <Screengrab title="atmos help" slug="atmos--help" />
 
@@ -4444,7 +4444,7 @@ The `atmos help` starts an interactive help UI in the terminal:
 
 ## atmos list components
 
-import Screengrab from '@site/src/components/Screengrab'
+
 
 :::note purpose
 Use this command to list all Atmos components or Atmos components in a specified stack.
@@ -4743,9 +4743,9 @@ list:
 
 ## atmos list stacks
 
-import Screengrab from '@site/src/components/Screengrab'
-import Terminal from '@site/src/components/Terminal'
-import Intro from '@site/src/components/Intro'
+
+
+
 
 <Intro>
 Use this command to list Atmos stacks.
@@ -5222,9 +5222,9 @@ Running `atmos list workflows` will display these columns.
 
 ## atmos list
 
-import Screengrab from '@site/src/components/Screengrab';
-import DocCardList from '@theme/DocCardList';
-import Intro from '@site/src/components/Intro'
+
+
+
 
 <Intro>
 Use these subcommands to list sections of Atmos configurations.
@@ -5375,9 +5375,9 @@ The appearance of the output table depends on whether `atmos` detects an interac
 
 ## atmos packer build
 
-import File from '@site/src/components/File'
-import Terminal from '@site/src/components/Terminal'
-import useBaseUrl from '@docusaurus/useBaseUrl';
+
+
+
 
 :::note purpose
 Use this command to process a Packer template configured for an Atmos component in a stack, and build it to generate a set of artifacts.
@@ -5510,9 +5510,9 @@ us-east-2: ami-0b2b3b68aa3c5ada8
 
 ## atmos packer init
 
-import File from '@site/src/components/File'
-import Terminal from '@site/src/components/Terminal'
-import useBaseUrl from '@docusaurus/useBaseUrl';
+
+
+
 
 :::note purpose
 Use this command to initialize Packer and install plugins according to an HCL template configuration for an Atmos component in a stack.
@@ -5578,9 +5578,9 @@ Installed plugin github.com/hashicorp/amazon v1.3.9 in "~/.config/packer/plugins
 
 ## atmos packer inspect
 
-import File from '@site/src/components/File'
-import Terminal from '@site/src/components/Terminal'
-import useBaseUrl from '@docusaurus/useBaseUrl';
+
+
+
 
 :::note purpose
 Use this command to inspect the various components that a Packer template configured for an Atmos component in a stack defines.
@@ -5689,9 +5689,9 @@ manifest
 
 ## atmos packer output
 
-import File from '@site/src/components/File'
-import Terminal from '@site/src/components/Terminal'
-import useBaseUrl from '@docusaurus/useBaseUrl';
+
+
+
 
 :::note purpose
 Use this command to get an output from a Packer manifest.
@@ -5795,9 +5795,9 @@ ami-0c2ca16b7fcac7529
 
 ## atmos packer validate
 
-import File from '@site/src/components/File'
-import Terminal from '@site/src/components/Terminal'
-import useBaseUrl from '@docusaurus/useBaseUrl';
+
+
+
 
 :::note purpose
 Use this command to validate the syntax and configuration of a Packer template configured for an Atmos component in a stack.
@@ -5855,7 +5855,7 @@ atmos packer validate aws/bastion -s nonprod -t main.nonprod.pkr.hcl
 
 ## atmos packer version
 
-import useBaseUrl from '@docusaurus/useBaseUrl';
+
 
 :::note purpose
 Use this command to display the currently installed Packer version.
@@ -5873,12 +5873,12 @@ atmos packer version
 
 ## atmos packer
 
-import Screengrab from '@site/src/components/Screengrab'
-import DocCardList from '@theme/DocCardList'
-import File from '@site/src/components/File'
-import Terminal from '@site/src/components/Terminal'
-import useBaseUrl from '@docusaurus/useBaseUrl';
-import Intro from '@site/src/components/Intro'
+
+
+
+
+
+
 
 <Intro>
 Use these subcommands to interact with [HashiCorp Packer](https://developer.hashicorp.com/packer)
@@ -5956,8 +5956,8 @@ atmos packer output aws/bastion -s prod -q '.builds[0].artifact_id | split(":")[
 
 ## atmos pro lock
 
-import Screengrab from "@site/src/components/Screengrab";
-import Intro from '@site/src/components/Intro'
+
+
 
 <Intro>
 This command implements the locking feature of [Atmos Pro](https://atmos-pro.com/docs). Use this command to lock
@@ -6010,8 +6010,8 @@ atmos pro lock --component vpc --stack plat-ue2-dev --ttl 300
 
 ## atmos pro unlock
 
-import Screengrab from "@site/src/components/Screengrab";
-import Intro from '@site/src/components/Intro'
+
+
 
 <Intro>
 This command implements the locking feature of [Atmos Pro](https://atmos-pro.com/docs). Use this command to unlock
@@ -6057,9 +6057,9 @@ atmos pro unlock --component vpc --stack plat-ue2-dev
 
 ## atmos pro
 
-import Screengrab from "@site/src/components/Screengrab";
-import DocCardList from "@theme/DocCardList";
-import Intro from '@site/src/components/Intro'
+
+
+
 
 <Intro>
 Use these subcommands to interact with Atmos Pro.
@@ -6073,8 +6073,8 @@ Use these subcommands to interact with Atmos Pro.
 
 ## atmos terraform clean
 
-import Screengrab from '@site/src/components/Screengrab'
-import Terminal from '@site/src/components/Terminal'
+
+
 
 :::note purpose
 Use this command to delete the `.terraform` folder, the folder that `TF_DATA_DIR` ENV var points to, `.terraform.lock.hcl` file, `varfile`
@@ -6152,8 +6152,8 @@ atmos terraform clean test/test-component-override-3 -s tenant1-ue2-dev
 
 ## atmos terraform deploy
 
-import Screengrab from '@site/src/components/Screengrab'
-import Terminal from '@site/src/components/Terminal'
+
+
 
 :::note purpose
 Use this command to execute `terraform apply -auto-approve` on an Atmos component in an Atmos stack.
@@ -6325,8 +6325,8 @@ can't be provided on the command line. To use a previously generated planfile, u
 
 ## atmos terraform generate backend
 
-import Screengrab from '@site/src/components/Screengrab'
-import Terminal from '@site/src/components/Terminal'
+
+
 
 :::note purpose
 Use this command to generate a Terraform backend config file for an Atmos terraform component in a stack.
@@ -6427,8 +6427,8 @@ on `terraform` backends and supported formats
 
 ## atmos terraform generate backends
 
-import Screengrab from '@site/src/components/Screengrab'
-import Terminal from '@site/src/components/Terminal'
+
+
 
 :::note purpose
 Use this command to generate the Terraform backend config files for all Atmos terraform [components](/core-concepts/components) in
@@ -6514,7 +6514,7 @@ on `terraform` backends and supported formats
 
 ## atmos terraform generate planfile
 
-import Screengrab from '@site/src/components/Screengrab'
+
 
 :::note purpose
 Use this command to generate a planfile for an Atmos Terraform/OpenTofu [component](/core-concepts/components) in a [stack](/core-concepts/stacks).
@@ -6650,7 +6650,7 @@ for more information.
 
 ## atmos terraform generate varfile
 
-import Screengrab from '@site/src/components/Screengrab'
+
 
 :::note purpose
 Use this command to generate a varfile (`.tfvar` ) for an Atmos terraform [component](/core-concepts/components) in a [stack](/core-concepts/stacks).
@@ -6747,8 +6747,8 @@ atmos terraform generate varfile test/test-component-override-3 -s tenant1-ue2-d
 
 ## atmos terraform generate varfiles
 
-import Screengrab from '@site/src/components/Screengrab'
-import Intro from '@site/src/components/Intro'
+
+
 
 <Intro>
 Use this command to generate the Terraform varfiles (`.tfvar`) for all Atmos terraform [components](/core-concepts/components) in
@@ -6823,8 +6823,8 @@ atmos terraform generate varfiles --format yaml --file-template <file_template>
 
 ## atmos terraform plan-diff
 
-import Tabs from "@theme/Tabs";
-import TabItem from "@theme/TabItem";
+
+
 
 # terraform plan-diff
 
@@ -6947,8 +6947,8 @@ The command:
 
 ## atmos terraform shell
 
-import Screengrab from '@site/src/components/Screengrab'
-import Intro from '@site/src/components/Intro'
+
+
 
 <Intro>
 This command starts a new `SHELL` configured with the environment for an Atmos component in a Stack to allow executing all native terraform commands
@@ -7063,8 +7063,8 @@ atmos terraform shell test/test-component-override-3 -s tenant2-ue2-prod
 
 ## atmos terraform workspace
 
-import Screengrab from '@site/src/components/Screengrab'
-import Intro from '@site/src/components/Intro'
+
+
 
 <Intro>
 Use this command to calculate the `terraform` workspace for an Atmos component (from the context variables and stack config). It will
@@ -7165,11 +7165,11 @@ atmos terraform workspace test/test-component-override-3 -s tenant1-ue2-dev
 
 ## atmos terraform
 
-import Screengrab from '@site/src/components/Screengrab'
-import DocCardList from '@theme/DocCardList'
-import File from '@site/src/components/File'
-import Terminal from '@site/src/components/Terminal'
-import Intro from '@site/src/components/Intro'
+
+
+
+
+
 
 <Intro>
 Use these subcommands to interact with Terraform and OpenTofu.
@@ -7912,9 +7912,9 @@ Executing command="atmos terraform apply eks/karpenter-node-pool -s prod" depend
 
 ## atmos validate
 
-import Screengrab from '@site/src/components/Screengrab'
-import DocCardList from '@theme/DocCardList';
-import Intro from '@site/src/components/Intro'
+
+
+
 
 <Intro>
 Use these subcommands to validate Atmos configurations.
@@ -7930,7 +7930,7 @@ Use these subcommands to validate Atmos configurations.
 
 ## atmos validate component
 
-import Screengrab from '@site/src/components/Screengrab'
+
 
 :::note purpose
 Use this command to validate an Atmos component in a stack using JSON Schema and OPA policies.
@@ -7993,7 +7993,7 @@ atmos validate component infra/vpc -s tenant1-ue2-dev --timeout 15
 
 ## atmos validate editorconfig
 
-import Screengrab from '@site/src/components/Screengrab'
+
 
 :::note purpose
 Use this command to validate files against the rules defined in .editorconfig file.
@@ -8077,7 +8077,7 @@ atmos validate editorconfig --dry-run
 
 ## atmos validate schema
 
-import Screengrab from '@site/src/components/Screengrab'
+
 
 :::note purpose
 Use this command to validate files against the rules defined in your schema in atmos.yaml.
@@ -8129,9 +8129,9 @@ schemas:
 
 ## atmos validate stacks
 
-import Screengrab from '@site/src/components/Screengrab'
-import Terminal from '@site/src/components/Terminal'
-import Intro from '@site/src/components/Intro'
+
+
+
 
 <Intro>
 Use this command to validate Atmos stack manifest configurations.
@@ -8338,9 +8338,9 @@ file 'catalog/invalid-yaml-and-schema/invalid-schema-8.yaml':
 
 ## atmos vendor
 
-import Screengrab from '@site/src/components/Screengrab'
-import DocCardList from '@theme/DocCardList';
-import Intro from '@site/src/components/Intro'
+
+
+
 
 <Intro>
 Use these subcommands to vendor Atmos components and stacks.
@@ -8355,8 +8355,8 @@ Use these subcommands to vendor Atmos components and stacks.
 
 ## atmos vendor pull
 
-import Screengrab from '@site/src/components/Screengrab'
-import Intro from '@site/src/components/Intro'
+
+
 
 <Intro>
 This command implements [Atmos Vendoring](/core-concepts/vendor/). Use this command to download sources from local and remote
@@ -8626,8 +8626,8 @@ When executing the `atmos vendor pull` command, Atmos performs the following ste
 
 ## atmos version
 
-import Screengrab from '@site/src/components/Screengrab'
-import Intro from '@site/src/components/Intro'
+
+
 
 <Intro>
 Use this command to get the Atmos CLI version
@@ -8687,9 +8687,9 @@ If the installed Atmos version is out of date, the following information is pres
 
 ## atmos workflow
 
-import Screengrab from '@site/src/components/Screengrab'
-import Terminal from '@site/src/components/Terminal'
-import Intro from '@site/src/components/Intro'
+
+
+
 
 <Intro>
 Use this command to perform sequential execution of `atmos` and `shell` commands defined as workflow steps.
@@ -8795,10 +8795,10 @@ Run `atmos workflow --help` to see all the available options
 
 ## Customize Commands
 
-import Screengrab from '@site/src/components/Screengrab'
-import Terminal from '@site/src/components/Terminal'
-import File from '@site/src/components/File'
-import Intro from '@site/src/components/Intro'
+
+
+
+
 
 <Intro>
 You can extend the Atmos CLI and add as many custom commands as you want. This is a great way to increase improve the DX by exposing a consistent CLI interface to developers.
@@ -9005,10 +9005,10 @@ commands:
 
 ## Customize Component Behavior
 
-import Screengrab from '@site/src/components/Screengrab'
-import Terminal from '@site/src/components/Terminal'
-import File from '@site/src/components/File'
-import Intro from '@site/src/components/Intro'
+
+
+
+
 
 <Intro>
 In Atmos, every component is associated with a command. The command is what drives or provisions that component.
@@ -9212,12 +9212,12 @@ components:
 
 ## CLI Configuration
 
-import Screengrab from '@site/src/components/Screengrab'
-import Terminal from '@site/src/components/Terminal'
-import File from '@site/src/components/File'
-import Intro from '@site/src/components/Intro'
-import Tabs from '@theme/Tabs'
-import TabItem from '@theme/TabItem'
+
+
+
+
+
+
 
 # CLI Configuration
 
@@ -10157,8 +10157,8 @@ configuration, Atmos may set the following environment variables in the spawned 
 
 ## Markdown Styling
 
-import File from '@site/src/components/File'
-import Intro from '@site/src/components/Intro'
+
+
 
 # Markdown Styling
 
@@ -10424,10 +10424,10 @@ The styling is managed internally by Glamour and does not require manual configu
 
 ## Customize Stack Behavior
 
-import Screengrab from '@site/src/components/Screengrab'
-import Terminal from '@site/src/components/Terminal'
-import File from '@site/src/components/File'
-import Intro from '@site/src/components/Intro'
+
+
+
+
 
 <Intro>
 The `stacks` section of the `atmos.yaml` defines how Atmos locates and manages your stack configurations. Think of it as the bootstrapping configuration. Here you can define the stack name pattern or template used to build the "slugs" and specify where to find stack files.
@@ -10657,10 +10657,10 @@ Refer to [Atmos Design Patterns](/design-patterns) for the examples on how to co
 
 ## Terminal Settings
 
-import Intro from '@site/src/components/Intro';
-import KeyPoints from '@site/src/components/KeyPoints';
-import Note from '@site/src/components/Note';
-import File from '@site/src/components/File';
+
+
+
+
 
 <Intro>
 Atmos provides configurable terminal settings that allow you to customize the output appearance, including syntax highlighting for YAML and JSON outputs. These settings can be configured in your `atmos.yaml` configuration file.
@@ -10812,8 +10812,8 @@ Atmos supports a wide range of themes for syntax highlighting. You can find the 
 
 ## Global Flags
 
-import Intro from '@site/src/components/Intro';
-import Note from '@site/src/components/Note';
+
+
 
 # Global Flags
 
@@ -11213,8 +11213,8 @@ kubectl get pods
 
 ## Atmos Manifest JSON Schema
 
-import Terminal from '@site/src/components/Terminal'
-import Intro from '@site/src/components/Intro'
+
+
 
 <Intro>
 [Atmos Manifest JSON Schema](pathname:///schemas/atmos/atmos-manifest/1.0/atmos-manifest.json) can be used to validate Atmos stack manifests and provide auto-completion.
@@ -11359,9 +11359,9 @@ yaml: line 4: could not find expected ':'
 
 ## Telemetry
 
-import Terminal from '@site/src/components/Terminal'
-import Intro from '@site/src/components/Intro'
-import File from '@site/src/components/File'
+
+
+
 
 <Intro>
 Atmos collects **anonymous telemetry** to help improve the product by understanding how it's used.
@@ -11454,7 +11454,7 @@ PostHog logging is useful for debugging telemetry connection issues or when conf
 
 ## Atmos Versioning
 
-import Intro from '@site/src/components/Intro'
+
 
 <Intro>
 Atmos follows the Semantic Versioning (SemVer) convention: <code>major.minor.patch.</code>
@@ -11492,8 +11492,8 @@ It contains an ordered list of all bug fixes and new features under each release
 
 ## Community
 
-import DocCardList from '@theme/DocCardList'
-import Intro from '@site/src/components/Intro'
+
+
 
 # Community Resources
 
@@ -11519,7 +11519,7 @@ Are you more into email? Sign up for [Cloud Posse's Weekly Newsletter](https://n
 
 ## Office Hours
 
-import HubspotForm from 'react-hubspot-form'
+
 
 # Office Hours Registration
 
@@ -11557,7 +11557,7 @@ Atmos has a great community of active users who are all more than willing to hel
 
 ## Code of Conduct
 
-import Intro from '@site/src/components/Intro'
+
 
 <Intro>
 As contributors and maintainers of the Atmos project by [Cloud Posse](https://cloudposse.com), we pledge to respect everyone who contributes by posting issues, updating documentation, submitting pull requests, providing feedback in comments, and any other activities.
@@ -11576,7 +11576,7 @@ removing issues, comments, and PRs or blocking accounts as deemed appropriate.
 ## Contributing
 
 
-import DocCardList from '@theme/DocCardList'
+
 
 <DocCardList/>
 
@@ -11635,7 +11635,7 @@ the [Apache license](http://www.apache.org/licenses).
 
 ## Component Library
 
-import Intro from '@site/src/components/Intro'
+
 
 <Intro>
 A component library is a collection of reusable "components" that are reused any number of times from within [Stacks](/core-concepts/stacks).  It's helpful to think of these "building blocks" as the essentials of infrastructure, like VPCs, clusters or databases. They should all be kept in a library.
@@ -11728,7 +11728,7 @@ Use multiple component to break infrastructure apart into smaller pieces based o
 
 ## Atmos Components
 
-import Intro from '@site/src/components/Intro'
+
 
 <Intro>
 When you design cloud architectures with Atmos, you start by breaking them apart into pieces called components. Then, you [implement Terraform "root modules"](/core-concepts/components/terraform) for each of those components, and [compose them with Stack configurations](/core-concepts/stacks).
@@ -11774,7 +11774,7 @@ One important distinction about components that is worth noting about Terraform 
 
 ## Using Helmfiles
 
-import Intro from '@site/src/components/Intro'
+
 
 <Intro>
 Atmos natively supports opinionated workflows for [Helmfile](https://github.com/helmfile/helmfile). Helmfile provides a declarative specification for deploying helm charts.
@@ -11815,8 +11815,8 @@ atmos helmfile deploy nginx-ingress -s ue2-dev
 
 ## Terraform/OpenTofu Backends
 
-import Terminal from '@site/src/components/Terminal'
-import Intro from '@site/src/components/Intro'
+
+
 
 <Intro>
 Backends define where [Terraform](https://opentofu.org/docs/language/state/) and
@@ -12453,7 +12453,7 @@ for all supported backend types.
 
 ## Brownfield Considerations
 
-import Intro from '@site/src/components/Intro'
+
 
 <Intro>
 There are some considerations you should be aware of when adopting Atmos in a brownfield environment. Atmos works best when you adopt the [Atmos mindset](/quick-start/mindset).
@@ -12673,9 +12673,9 @@ The `vpc_flow_logs_bucket_arn` is then used as an input for the `vpc` component.
 
 ## Terraform Providers
 
-import File from '@site/src/components/File'
-import Terminal from '@site/src/components/Terminal'
-import Intro from '@site/src/components/Intro'
+
+
+
 
 <Intro>
 Terraform utilizes plugins known as [providers](https://developer.hashicorp.com/terraform/language/providers) for
@@ -12861,7 +12861,7 @@ For more details, refer to [Atmos CLI Settings](/cli/configuration/#settings).
 
 ## State Backend Configuration
 
-import Intro from '@site/src/components/Intro'
+
 
 <Intro>
 Atmos supports configuring [Terraform/OpenTofu Backends](/core-concepts/components/terraform/backends)
@@ -12948,9 +12948,9 @@ used. But when reading the remote state of components, the `terraform-backend-re
 
 ## Terraform Root Modules
 
-import DocCardList from '@theme/DocCardList'
-import KeyPoints from '@site/src/components/KeyPoints'
-import Intro from '@site/src/components/Intro'
+
+
+
 
 <Intro>
 Use Atmos to provision your Terraform root modules and manage their configurations consistently and repeatably
@@ -13125,9 +13125,9 @@ Learn how to best leverage Terraform together with Atmos.
 
 ## Terraform Workspaces
 
-import File from '@site/src/components/File'
-import Terminal from '@site/src/components/Terminal'
-import Intro from '@site/src/components/Intro'
+
+
+
 
 <Intro>
 In Terraform, a [workspace](https://developer.hashicorp.com/terraform/language/state/workspaces) is a feature that allows
@@ -13374,7 +13374,7 @@ By properly configuring workspace support, you can ensure that Atmos works seaml
 
 ## Core Concepts of the Atmos Framework
 
-import DocCardList from '@theme/DocCardList'
+
 
 Atmos simplifies the process of managing and deploying your infrastructure across cloud platforms.
 Dive into these core concepts of Atmos to discover how they facilitate these processes.
@@ -13387,8 +13387,8 @@ You're about to discover a new way to think about things...
 
 ## Atmos Custom Commands
 
-import File from '@site/src/components/File'
-import Intro from '@site/src/components/Intro'
+
+
 
 <Intro>
 Atmos can be easily extended to support any number of custom CLI commands. Custom commands are exposed through the `atmos` CLI when you run `atmos help`. It's a great way to centralize the way operational tools are run in order to improve DX.
@@ -13909,7 +13909,7 @@ commands:
 
 ## Deploy Components
 
-import Intro from '@site/src/components/Intro';
+
 
 <Intro>
     Once you're done developing your components and configuring them with stacks, you can deploy them with a single command or in a CI/CD pipeline.
@@ -13951,9 +13951,9 @@ Atmos supports [workflows](/core-concepts/workflows), which provide a convenient
 
 ## Describe Components
 
-import Intro from '@site/src/components/Intro'
-import ActionCard from '@site/src/components/ActionCard'
-import PrimaryCTA from '@site/src/components/PrimaryCTA'
+
+
+
 
 <Intro>
 Describing components helps understand the final, fully deep-merged configuration for an [Atmos component](/core-concepts/components) in each [stack](/core-concepts/stacks).
@@ -13981,8 +13981,8 @@ The other helpful use-case for describing components and stacks is when developi
 
 ## Describe Configuration
 
-import DocCardList from '@theme/DocCardList'
-import Intro from '@site/src/components/Intro'
+
+
 
 <Intro>
 Atmos is a framework for defining cloud architectures in YAML. To understand what the fully-deep merged configuration will look like, you can describe it.
@@ -13998,10 +13998,10 @@ In this chapter, you’ll learn to describe all aspects of the fully-deep merged
 
 ## Describe Stacks
 
-import Terminal from '@site/src/components/Terminal'
-import Intro from '@site/src/components/Intro'
-import ActionCard from '@site/src/components/ActionCard'
-import PrimaryCTA from '@site/src/components/PrimaryCTA'
+
+
+
+
 
 <Intro>
 Describing stacks is helpful to understand what the final, fully computed and deep-merged configuration of a stack will look like. Use this to slice and dice the Stack configuration to show different information about stacks and component.
@@ -14189,12 +14189,12 @@ plat-ue2-dev:
 
 ## Configure Atmos CLI
 
-import EmbedFile from '@site/src/components/EmbedFile'
-import KeyPoints from '@site/src/components/KeyPoints'
-import Screengrab from '@site/src/components/Screengrab'
-import Intro from '@site/src/components/Intro'
-import ActionCard from '@site/src/components/ActionCard'
-import PrimaryCTA from '@site/src/components/PrimaryCTA'
+
+
+
+
+
+
 
 <Intro>
 The `atmos.yaml` configuration file is used to control the behavior of the `atmos` CLI for your project. This is how Atmos knows where to find your stack configurations and components. Almost everything in Atmos is configurable via this file.
@@ -14445,8 +14445,8 @@ This means that `atmos.yaml` file must be at a location in the file system where
 
 ## Configure Helmfile
 
-import Intro from '@site/src/components/Intro'
-import File from '@site/src/components/File'
+
+
 
 <Intro>
 Atmos natively supports opinionated workflows for Helmfile. It's compatible with every version of helmfile and designed to work with multiple different versions of Helmfile concurrently.
@@ -14518,9 +14518,9 @@ components:
 
 ## Configure OpenTofu
 
-import useBaseUrl from '@docusaurus/useBaseUrl';
-import KeyPoints from '@site/src/components/KeyPoints'
-import Intro from '@site/src/components/Intro'
+
+
+
 
 <Intro>
 Atmos natively supports [OpenTofu](https://opentofu.org), similar to the way it supports [Terraform](/core-concepts/projects/configuration/terraform). It's compatible with every version of `opentofu` and designed to work with multiple different versions of it concurrently, and can even work alongside with [HashiCorp Terraform](/core-concepts/projects/configuration/terraform).
@@ -14687,11 +14687,11 @@ atmos tofu apply eks -s ue2-dev
 
 ## Configure Packer
 
-import useBaseUrl from '@docusaurus/useBaseUrl';
-import KeyPoints from '@site/src/components/KeyPoints'
-import Intro from '@site/src/components/Intro'
-import File from '@site/src/components/File'
-import Terminal from '@site/src/components/Terminal'
+
+
+
+
+
 
 <Intro>
 Atmos natively supports [HashiCorp Packer](https://developer.hashicorp.com/packer) and lets you create identical
@@ -15328,7 +15328,7 @@ ami-0c2ca16b7fcac7529
 
 ## Configure Stores
 
-import Intro from '@site/src/components/Intro'
+
 
 <Intro>
 Atmos supports the concept of remote stores to facilitate the sharing of values between components or between
@@ -15647,8 +15647,8 @@ URL format is described in the Redis [docs](https://redis.github.io/lettuce/user
 
 ## Configure Terraform
 
-import useBaseUrl from '@docusaurus/useBaseUrl';
-import Intro from '@site/src/components/Intro'
+
+
 
 <Intro>
 Atmos natively supports opinionated workflows for [Terraform](https://www.terraform.io/) and [OpenTofu](/core-concepts/projects/configuration/opentofu).
@@ -15776,8 +15776,8 @@ module "vars" {
 
 ## Folder Structure
 
-import KeyPoints from '@site/src/components/KeyPoints'
-import Intro from '@site/src/components/Intro'
+
+
 
 <Intro>
 At the root of your project, you’ll typically find an `atmos.yaml` configuration file. This file defines how Atmos should discover your stack files for configuration and your Terraform root modules as components.
@@ -15884,9 +15884,9 @@ We usually organize our stacks by organization, organizational unit, and environ
 
 ## Setup Projects for Atmos
 
-import DocCardList from '@theme/DocCardList'
-import KeyPoints from '@site/src/components/KeyPoints'
-import Intro from '@site/src/components/Intro'
+
+
+
 
 <Intro>
 Atmos is a framework, so we suggest some conventions for organizing your infrastructure using folders to separate configuration from components. This separation is key to making your components highly reusable.
@@ -15912,10 +15912,10 @@ Learn how to best configure a project to work with Atmos. We recommend some conv
 
 ## Configure Your Editor for Atmos
 
-import TabItem from "@theme/TabItem";
-import Tabs from "@theme/Tabs";
-import Intro from "@site/src/components/Intro";
-import KeyPoints from "@site/src/components/KeyPoints";
+
+
+
+
 
 <Intro>
   A properly configured editor can make working with Atmos configurations more
@@ -16150,12 +16150,12 @@ To work effectively with Atmos, we recommend configuring your VS Code editor for
 
 ## Using Remote State
 
-import Intro from '@site/src/components/Intro'
-import KeyPoints from '@site/src/components/KeyPoints'
-import Note from '@site/src/components/Note'
-import ActionCard from '@site/src/components/ActionCard'
-import PrimaryCTA from '@site/src/components/PrimaryCTA'
-import File from '@site/src/components/File'
+
+
+
+
+
+
 
 <Intro>
 Terraform natively supports the concept of remote state and there's a very easy way to access the outputs of one Terraform component in another component. We simplify this using the `remote-state` module, which is stack-aware and can be used to access the remote state of a component in the same or a different Atmos stack.
@@ -16515,13 +16515,13 @@ and configuring Terraform/OpenTofu components to use the module.
 
 ## Share Data Between Components
 
-import Intro from '@site/src/components/Intro'
-import ActionCard from '@site/src/components/ActionCard'
-import PrimaryCTA from '@site/src/components/PrimaryCTA'
-import KeyPoints from '@site/src/components/KeyPoints'
-import CollapsibleText from '@site/src/components/CollapsibleText'
-import File from '@site/src/components/File'
-import Note from '@site/src/components/Note'
+
+
+
+
+
+
+
 
 <Intro>
 Breaking up your infrastructure components into loosely coupled components is a great way to manage complexity and
@@ -16830,7 +16830,7 @@ resource "aws_network_acl" "default" {
 
 ## Stack Catalogs
 
-import Intro from '@site/src/components/Intro'
+
 
 <Intro>
 As you start splitting your stacks apart into smaller configurations, it often makes to organize those into a catalog of reusable configurations. That way you can take advantage of imports, to reuse configuration in multiple places. Catalogs are how to logically organize all the child [Stack](/core-concepts/stacks) configurations on the filesystem for use by [imports](/core-concepts/stacks/imports).
@@ -17014,7 +17014,7 @@ One of the amazing things about the Atmos [Stack](/core-concepts/stacks) configu
 
 ## Configuring Components in Stacks
 
-import Intro from '@site/src/components/Intro'
+
 
 <Intro>
 Stacks are used to compose multiple components together and provide their configuration. The schema is the same for all stacks, but the configuration can be different. Use a combination of [imports](/core-concepts/stacks/imports), [inheritance](/core-concepts/stacks/inheritance), and [catalogs](/core-concepts/stacks/catalogs) for a template-free way to reuse configuration and [override](/core-concepts/stacks/overrides) values when needed.
@@ -17269,9 +17269,9 @@ Using the `metadata.locked` flag helps protect critical infrastructure from unin
 
 ## Configure Dependencies Between Components
 
-import File from '@site/src/components/File'
-import Intro from '@site/src/components/Intro'
-import Terminal from '@site/src/components/Terminal'
+
+
+
 
 <Intro>
     Atmos supports configuring the relationships between components in the same or different stacks. You can define
@@ -17539,9 +17539,9 @@ and [`atmos describe affected`](/cli/commands/describe/affected) CLI commands.
 
 ## Manage Lifecycle Events with Hooks
 
-import Terminal from '@site/src/components/Terminal'
-import Intro from '@site/src/components/Intro'
-import File from '@site/src/components/File'
+
+
+
 
 <Intro>
 Atmos supports the ability to take action at various points in the lifecycle of your components. This is done by
@@ -17642,8 +17642,8 @@ The `store` command is used to write data to a remote store.
 
 ## Import Stack Configurations
 
-import File from '@site/src/components/File'
-import Intro from '@site/src/components/Intro'
+
+
 
 <Intro>
 As your stacks grow taller with more and more component configurations, it often makes sense to start splitting them apart into different files. That's why you might want to take advantage of imports. This helps you keep your stack files smaller so they are easier to understand, while reusing their configuration in multiple places.
@@ -18143,10 +18143,10 @@ for [EKS blue-green deployment](https://aws.amazon.com/blogs/containers/kubernet
 
 ## Inherit Configurations in Atmos Stacks
 
-import File from '@site/src/components/File'
-import Terminal from '@site/src/components/Terminal'
-import PillBox from '@site/src/components/PillBox'
-import Intro from '@site/src/components/Intro'
+
+
+
+
 
 <Intro>
 Inheritance provides a template-free way to customize Stack configurations. When combined with [imports](/core-concepts/stacks/imports), it provides the ability to combine multiple configurations through ordered deep-merging of configurations. Inheritance is how you manage configuration variations, without resorting to [templating](/core-concepts/stacks/templates).
@@ -18825,11 +18825,11 @@ Inheritance: derived-component-2 -> base-component-2 -> derived-component-1 -> b
 
 ## Stack Mixins
 
-import File from '@site/src/components/File'
-import PillBox from '@site/src/components/PillBox'
-import Intro from '@site/src/components/Intro'
-import ActionCard from '@site/src/components/ActionCard'
-import PrimaryCTA from '@site/src/components/PrimaryCTA'
+
+
+
+
+
 
 <PillBox>Advanced</PillBox>
 
@@ -18927,9 +18927,9 @@ Mixins are really just a [Design Pattern](/design-patterns/component-catalog-wit
 
 ## Override Configurations
 
-import Terminal from '@site/src/components/Terminal'
-import Intro from '@site/src/components/Intro'
-import File from '@site/src/components/File'
+
+
+
 
 <Intro>
 Atmos supports the ability to override the behavior of [imports](/core-concepts/stacks/imports) when the order of
@@ -19295,9 +19295,9 @@ Refer to [`atmos describe component`](/cli/commands/describe/component) CLI comm
 
 ## Atmos Stacks
 
-import File from '@site/src/components/File'
-import Intro from '@site/src/components/Intro'
-import ActionCard from '@site/src/components/ActionCard'
+
+
+
 
 <Intro>
 When you design cloud architectures with Atmos, you break them apart into pieces called components that you implement with Terraform "root modules". Stacks are how you connect your components with configuration, so that everything comes together.
@@ -19491,10 +19491,10 @@ hundreds of accounts and regions that you operate in. Use [Catalogs](/core-conce
 
 ## Template Data Sources
 
-import File from '@site/src/components/File'
-import Terminal from '@site/src/components/Terminal'
-import PillBox from '@site/src/components/PillBox'
-import Intro from '@site/src/components/Intro'
+
+
+
+
 
 <PillBox>Advanced</PillBox>
 
@@ -19869,13 +19869,13 @@ The tags will be added to all the AWS resources provisioned by the `vpc` Terrafo
 
 ## Stack Manifest Templating
 
-import File from '@site/src/components/File'
-import Terminal from '@site/src/components/Terminal'
-import PillBox from '@site/src/components/PillBox'
-import Intro from '@site/src/components/Intro'
-import ActionCard from '@site/src/components/ActionCard'
-import PrimaryCTA from '@site/src/components/PrimaryCTA'
-import SecondaryCTA from '@site/src/components/SecondaryCTA'
+
+
+
+
+
+
+
 
 <PillBox>Advanced</PillBox>
 
@@ -20606,9 +20606,9 @@ with data sources.
 
 ## EditorConfig Validation
 
-import Terminal from '@site/src/components/Terminal'
-import File from '@site/src/components/File'
-import Intro from '@site/src/components/Intro'
+
+
+
 
 <Intro>
 Atmos supports validation of EditorConfigs to check the formatting of your configuration files. By enforcing the canonical rules specified in your `.editorconfig` file, it helps ensure consistent formatting across your project.
@@ -20673,10 +20673,10 @@ atmos validate editorconfig --logs-level trace
 
 ## JSON Schema Validation
 
-import Terminal from '@site/src/components/Terminal'
-import File from '@site/src/components/File'
-import EmbedFile from '@site/src/components/EmbedFile'
-import Intro from '@site/src/components/Intro'
+
+
+
+
 
 <Intro>
 Atmos supports [JSON Schema](https://json-schema.org/) validation, which can validate the schema of configurations such as stacks, workflows, and vendoring manifests.
@@ -20723,10 +20723,10 @@ file [`stacks/schemas/jsonschema/vpc/validate-vpc-component.json`](https://githu
 
 ## Open Policy Agent (OPA) Validation
 
-import Terminal from '@site/src/components/Terminal'
-import File from '@site/src/components/File'
-import EmbedFile from '@site/src/components/EmbedFile'
-import Intro from '@site/src/components/Intro'
+
+
+
+
 
 <Intro>
 The [Open Policy Agent](https://www.openpolicyagent.org/docs/latest/) (OPA) is the open-source industry standard for policy-as-code validation. It provides a general-purpose policy engine to unify policy enforcement across your stacks.
@@ -21255,10 +21255,10 @@ get_total_instances := total {
 
 ## Terraform Input Variables Validation
 
-import Terminal from '@site/src/components/Terminal'
-import File from '@site/src/components/File'
-import EmbedFile from '@site/src/components/EmbedFile'
-import Intro from '@site/src/components/Intro'
+
+
+
+
 
 <Intro>
 Use [Open Policy Agent](https://www.openpolicyagent.org/docs/latest/) (OPA) policies to validate Terraform input variables.
@@ -21575,9 +21575,9 @@ Together, they give you complete control over how variables are passed to Terraf
 
 ## Validating Stack Configurations
 
-import Terminal from '@site/src/components/Terminal'
-import File from '@site/src/components/File'
-import Intro from '@site/src/components/Intro'
+
+
+
 
 <Intro>
 Validation is essential for ensuring clean and correct configurations, especially in environments where multiple teams contribute
@@ -21720,9 +21720,9 @@ For more details, refer to [`atmos validate stacks`](/cli/commands/validate/stac
 
 ## Component Manifest
 
-import File from '@site/src/components/File'
-import Terminal from '@site/src/components/Terminal'
-import Intro from '@site/src/components/Intro'
+
+
+
 
 <Intro>
 Atmos natively supports the concept of "vendoring" individual components by defining a `component.yaml` inside of the component directory, which is making a copy of 3rd-party components or other dependencies in your own repo.
@@ -21893,10 +21893,10 @@ spec:
 
 ## Vendor Manifest
 
-import File from '@site/src/components/File'
-import Terminal from '@site/src/components/Terminal'
-import Intro from '@site/src/components/Intro'
-import CollapsibleText from '@site/src/components/CollapsibleText'
+
+
+
+
 
 <Intro>
 The vendoring configuration is defined in the `vendor.yaml` manifest (vendor config file). The vendoring manifest is used to make copies of 3rd-party components, stacks, and other artifacts in your own repository.
@@ -22498,9 +22498,9 @@ By carefully combining `included_paths`, `excluded_paths`, and `{...}` expansion
 
 ## Vendoring
 
-import File from '@site/src/components/File'
-import Terminal from '@site/src/components/Terminal'
-import Intro from '@site/src/components/Intro'
+
+
+
 
 <Intro>
 Atmos natively supports "vendoring," a practice that involves replicating 3rd-party components, stacks, and artifacts within your own repository. This feature is particularly beneficial for managing dependencies in software like Terraform, which do not support pulling root modules remotely by configuration.
@@ -22562,9 +22562,9 @@ While Atmos does not call `vendir`, it functions and supports a subset of the co
 
 ## Workflows
 
-import File from '@site/src/components/File'
-import Terminal from '@site/src/components/Terminal'
-import Intro from '@site/src/components/Intro'
+
+
+
 
 <Intro>
 Workflows are a way of combining multiple commands into one executable unit of work.
@@ -23009,9 +23009,9 @@ modifications and without dealing with multiple workflows that are similar but d
 
 ## Abstract Component
 
-import File from '@site/src/components/File'
-import Intro from '@site/src/components/Intro'
-import PillBox from '@site/src/components/PillBox'
+
+
+
 
 <PillBox>Atmos Design Pattern</PillBox>
 
@@ -23244,9 +23244,9 @@ being deployed by 'metadata.type: abstract' attribute
 
 ## Component Catalog Template
 
-import File from '@site/src/components/File'
-import Intro from '@site/src/components/Intro'
-import PillBox from '@site/src/components/PillBox'
+
+
+
 
 <PillBox>Atmos Design Pattern</PillBox>
 
@@ -23445,9 +23445,9 @@ To address the limitations of the **Component Catalog Template** Design Pattern,
 
 ## Component Catalog with Mixins
 
-import File from '@site/src/components/File'
-import Intro from '@site/src/components/Intro'
-import PillBox from '@site/src/components/PillBox'
+
+
+
 
 <PillBox>Atmos Design Pattern</PillBox>
 
@@ -23879,9 +23879,9 @@ using the following patterns:
 
 ## Component Catalog
 
-import File from '@site/src/components/File'
-import Intro from '@site/src/components/Intro'
-import PillBox from '@site/src/components/PillBox'
+
+
+
 
 <PillBox>Atmos Design Pattern</PillBox>
 <Intro>
@@ -24256,9 +24256,9 @@ patterns:
 
 ## Component Inheritance
 
-import File from '@site/src/components/File'
-import PillBox from '@site/src/components/PillBox'
-import Intro from '@site/src/components/Intro'
+
+
+
 
 <PillBox>Atmos Design Pattern</PillBox>
 <Intro>
@@ -24444,9 +24444,9 @@ components:
 
 ## Component Overrides
 
-import File from '@site/src/components/File'
-import PillBox from '@site/src/components/PillBox'
-import Intro from '@site/src/components/Intro'
+
+
+
 
 <PillBox>Atmos Design Pattern</PillBox>
 
@@ -24850,8 +24850,8 @@ corresponding layers.
 
 ## The _defaults.yaml Design Pattern
 
-import Intro from '@site/src/components/Intro'
-import PillBox from '@site/src/components/PillBox'
+
+
 
 <PillBox>Atmos Design Pattern</PillBox>
 
@@ -25147,9 +25147,9 @@ This convention has emerged from real-world usage as a best practice for organiz
 
 ## Atmos Design Patterns
 
-import DocCardList from '@theme/DocCardList'
-import Intro from '@site/src/components/Intro'
-import KeyPoints from '@site/src/components/KeyPoints'
+
+
+
 
 <Intro>
 Atmos Design Patterns are a collection of conventions, best practices, concepts, principles and insights derived from our experience building enterprise scale architectures. These are vital for effectively structuring and organizing infrastructures, components, and stacks. They empower implementers and cloud architects alike, by providing access to the collective wisdom of seasoned professionals.
@@ -25222,9 +25222,9 @@ We view this collection of Design Patterns as neither exhaustive nor fixed. Inst
 
 ## Inline Component Configuration
 
-import File from '@site/src/components/File'
-import PillBox from '@site/src/components/PillBox'
-import Intro from '@site/src/components/Intro'
+
+
+
 
 <PillBox>Atmos Design Pattern</PillBox>
 
@@ -25385,9 +25385,9 @@ Use the [Inline Component Customization](/design-patterns/inline-component-custo
 
 ## Inline Component Customization
 
-import File from '@site/src/components/File'
-import PillBox from '@site/src/components/PillBox'
-import Intro from '@site/src/components/Intro'
+
+
+
 
 <PillBox>Atmos Design Pattern</PillBox>
 
@@ -25630,9 +25630,9 @@ To address the limitations of the **Inline Component Customization** Design Patt
 
 ## Layered Stack Configuration
 
-import File from '@site/src/components/File'
-import PillBox from '@site/src/components/PillBox'
-import Intro from '@site/src/components/Intro'
+
+
+
 
 <PillBox>Atmos Design Pattern</PillBox>
 
@@ -25959,9 +25959,9 @@ Make sure to import only the layers that define the component that need to be pr
 
 ## Multiple Component Instances
 
-import File from '@site/src/components/File'
-import PillBox from '@site/src/components/PillBox'
-import Intro from '@site/src/components/Intro'
+
+
+
 
 <PillBox>Atmos Design Pattern</PillBox>
 
@@ -26174,9 +26174,9 @@ The names are generated from the context using the following template:
 
 ## Organizational Structure Configuration
 
-import File from '@site/src/components/File'
-import PillBox from '@site/src/components/PillBox'
-import Intro from '@site/src/components/Intro'
+
+
+
 
 <PillBox>Atmos Design Pattern</PillBox>
 
@@ -26744,9 +26744,9 @@ easy to extend the configuration without changing anything for the exiting envir
 
 ## Partial Component Configuration
 
-import File from '@site/src/components/File'
-import PillBox from '@site/src/components/PillBox'
-import Intro from '@site/src/components/Intro'
+
+
+
 
 <PillBox>Atmos Design Pattern</PillBox>
 
@@ -26982,9 +26982,9 @@ clusters in the other accounts and regions will stay at the current Kubernetes v
 
 ## Partial Stack Configuration
 
-import File from '@site/src/components/File'
-import PillBox from '@site/src/components/PillBox'
-import Intro from '@site/src/components/Intro'
+
+
+
 
 <PillBox>Atmos Design Pattern</PillBox>
 
@@ -27282,7 +27282,7 @@ the [Layered Stack Configuration](/design-patterns/layered-stack-configuration) 
 
 ## Summary
 
-import Intro from '@site/src/components/Intro'
+
 
 <Intro>
 Architecting and provisioning enterprise-grade infrastructure is challenging, and making all the components and
@@ -27334,8 +27334,8 @@ If you are architecting the infrastructure to provision multi-account multi-regi
 
 ## Atmos Functions
 
-import DocCardList from '@theme/DocCardList'
-import Intro from '@site/src/components/Intro'
+
+
 
 <Intro>
 Atmos provides two types of functions for dynamic configuration: **YAML Functions** (recommended) and **Template Functions**. Understanding the difference is crucial for writing reliable, maintainable configurations.
@@ -27435,9 +27435,9 @@ If you have existing template functions, consider migrating to YAML functions:
 
 ## atmos.Component
 
-import File from '@site/src/components/File'
-import Intro from '@site/src/components/Intro'
-import Terminal from '@site/src/components/Terminal'
+
+
+
 
 <Intro>
 The `atmos.Component` template function allows reading any Atmos section or any attribute from a section for an
@@ -27781,8 +27781,8 @@ vars:
 
 ## atmos.GomplateDatasource
 
-import File from '@site/src/components/File'
-import Intro from '@site/src/components/Intro'
+
+
 
 <Intro>
 **Stop hardcoding values in your infrastructure configurations.** The `atmos.GomplateDatasource` function lets you pull live data from anywhere - APIs, cloud services, databases, files - directly into your Atmos stacks. Instead of manually updating IP addresses, account IDs, or configuration values, your infrastructure can fetch them automatically at runtime. Plus, with built-in caching, it's lightning fast even when you reference the same data hundreds of times.
@@ -28025,9 +28025,9 @@ components:
 
 ## atmos.Store
 
-import File from '@site/src/components/File'
-import Intro from '@site/src/components/Intro'
-import Terminal from '@site/src/components/Terminal'
+
+
+
 
 <Intro>
 The `atmos.Store` template function allows reading the values from a remote [store](/core-concepts/projects/configuration/stores)
@@ -28302,9 +28302,9 @@ or the [Gomplate `default` function](https://docs.gomplate.ca/functions/conv/#co
 
 ## Atmos Template Functions
 
-import DocCardList from '@theme/DocCardList'
-import Intro from '@site/src/components/Intro'
-import PillBox from '@site/src/components/PillBox'
+
+
+
 
 <PillBox>Use with Caution</PillBox>
 
@@ -28415,7 +28415,7 @@ Consider migrating template functions to YAML functions:
 
 ## !env
 
-import Intro from '@site/src/components/Intro'
+
 
 <Intro>
     The `!env` Atmos YAML function is used to retrieve environment variables
@@ -28492,7 +28492,7 @@ the function dynamically.
 
 ## !exec
 
-import Intro from '@site/src/components/Intro'
+
 
 <Intro>
     The `!exec` Atmos YAML function is used to execute shell scripts and assign
@@ -28558,9 +28558,9 @@ the function dynamically.
 
 ## !include
 
-import Intro from '@site/src/components/Intro'
-import File from '@site/src/components/File'
-import Note from "@site/src/components/Note"
+
+
+
 
 <Intro>
     The `!include` function lets you load files — either local or remote — and insert their contents or specific values
@@ -28882,9 +28882,9 @@ components:
 
 ## !include.raw
 
-import Intro from '@site/src/components/Intro'
-import File from '@site/src/components/File'
-import Note from "@site/src/components/Note"
+
+
+
 
 <Intro>
     The `!include.raw` function forces any file to be included as a raw string,
@@ -29082,10 +29082,10 @@ The `!include.raw` function supports the same sources as `!include`:
 
 ## Atmos YAML Functions
 
-import File from '@site/src/components/File'
-import PillBox from '@site/src/components/PillBox'
-import Intro from '@site/src/components/Intro'
-import DocCardList from '@theme/DocCardList'
+
+
+
+
 
 <PillBox>Recommended</PillBox>
 
@@ -29236,7 +29236,7 @@ Atmos natively supports the following YAML functions:
 
 ## !repo-root
 
-import Intro from '@site/src/components/Intro'
+
 
 <Intro>
     The `!repo-root` Atmos YAML function is used to retrieve the root directory of the Atmos repository.
@@ -29270,8 +29270,8 @@ vars:
 
 ## !store.get
 
-import Intro from '@site/src/components/Intro'
-import File from '@site/src/components/File'
+
+
 
 <Intro>
     The `!store.get` YAML function allows retrieving arbitrary keys directly from a [store](/core-concepts/projects/configuration/stores)
@@ -29431,9 +29431,9 @@ follow Atmos naming conventions
 
 ## !store
 
-import File from '@site/src/components/File'
-import Intro from '@site/src/components/Intro'
-import Terminal from '@site/src/components/Terminal'
+
+
+
 
 <Intro>
 The `!store` YAML function allows reading the values from a remote [store](/core-concepts/projects/configuration/stores)
@@ -29635,7 +29635,7 @@ tenant `net` (instead of `plat`):
 
 ## !template
 
-import Intro from '@site/src/components/Intro'
+
 
 <Intro>
     The `!template` Atmos YAML function is used to [handle the outputs containing maps or
@@ -29821,9 +29821,9 @@ allowed_cidr_blocks: !template '{{ toJson (concat .settings.allowed_ingress_cidr
 
 ## !terraform.output
 
-import File from '@site/src/components/File'
-import Intro from '@site/src/components/Intro'
-import Terminal from '@site/src/components/Terminal'
+
+
+
 
 <Intro>
 The `!terraform.output` YAML function allows reading the outputs ([remote state](/core-concepts/share-data/remote-state))
@@ -30257,9 +30257,9 @@ vars:
 
 ## !terraform.state
 
-import File from '@site/src/components/File'
-import Intro from '@site/src/components/Intro'
-import Terminal from '@site/src/components/Terminal'
+
+
+
 
 <Intro>
 The `!terraform.state` YAML function is the **fastest** way to read Terraform/OpenTofu outputs ([remote state](/core-concepts/share-data/remote-state))
@@ -30885,8 +30885,8 @@ To learn more, see [Stage 2](/introduction/why-atmos/stage-2) of the typical Ter
 
 ## Atlantis Integration
 
-import Terminal from '@site/src/components/Terminal'
-import Intro from '@site/src/components/Intro'
+
+
 
 <Intro>
 Atmos natively supports [Atlantis](https://runatlantis.io) for Terraform Pull Request Automation.
@@ -31670,8 +31670,8 @@ For more information, refer to:
 
 ## Affected Stacks
 
-import Intro from '@site/src/components/Intro'
-import RemoteFile from '@site/src/components/RemoteFile'
+
+
 
 <Intro>
 The [Atmos Affected Stacks GitHub Action](https://github.com/cloudposse/github-action-atmos-affected-stacks) makes it easy identify the affected [atmos stacks](/core-concepts/stacks/) for a pull request. Use it to build a matrix so you can run other actions based on what was affected.
@@ -31706,8 +31706,8 @@ This action has the requirements as [Github Actions](/integrations/github-action
 
 ## Atmos Terraform Apply
 
-import Intro from '@site/src/components/Intro'
-import RemoteFile from '@site/src/components/RemoteFile'
+
+
 
 <Intro>
 Simplify provisioning Terraform entirely from within GitHub Action workflows. This action makes it very easy to apply that changes from a `terraform plan` from directly within the GitHub UI. Use this action in your workflows to apply changes to your infrastructure.
@@ -31763,8 +31763,8 @@ This action has the requirements as [Github Actions](/integrations/github-action
 
 ## Atmos Terraform Drift Detection
 
-import Intro from '@site/src/components/Intro'
-import RemoteFile from '@site/src/components/RemoteFile'
+
+
 
 <Intro>
 The  "Atmos Terraform Drift Detection" and "Atmos Terraform Drift Remediation" GitHub Actions provide a scalable pattern for detecting and remediating Terraform drift from within GitHub by utilizing a combination of scheduled GitHub Workflows and GitHub Issues.
@@ -31915,8 +31915,8 @@ This action has the requirements as [Github Actions](/integrations/github-action
 
 ## Atmos Terraform Drift Remediation
 
-import Intro from '@site/src/components/Intro'
-import RemoteFile from '@site/src/components/RemoteFile'
+
+
 
 <Intro>
 The  "Atmos Terraform Drift Remediation" GitHub Action provides a way for easily remediating Terraform drift and works with GitHub Issues using IssueOps.
@@ -31997,8 +31997,8 @@ This action has the requirements as [Github Actions](/integrations/github-action
 
 ## Atmos Terraform Plan
 
-import Intro from '@site/src/components/Intro'
-import RemoteFile from '@site/src/components/RemoteFile'
+
+
 
 <Intro>
 Simplify provisioning Terraform entirely from within GitHub Action workflows. This action makes it very easy to understand exactly what will happen from from the changes in a Pull Request (or any commit) by running a `terraform plan` and surfacing the output as a neatly formatted Job Summary viewable directly within the GitHub UI.
@@ -32160,13 +32160,13 @@ Next, create a role for GitHub workflows to use to plan and apply Terraform. We 
 
 ## Component Updater
 
-import File from '@site/src/components/File'
-import RemoteFile from '@site/src/components/RemoteFile'
-import Intro from '@site/src/components/Intro'
-import Admonition from '@theme/Admonition';
 
-import Step from '@site/src/components/Step'
-import StepNumber from '@site/src/components/StepNumber'
+
+
+
+
+
+
 
 <Intro>
 Keep your infrastructure repositories current with the latest versions of [vendored components](/core-concepts/vendor) using the [Atmos Component Updater GitHub Action](https://github.com/cloudposse/github-action-atmos-component-updater). This powerful action simplifies and accelerates the management of component updates across repositories by using pull requests, ensuring that updates are processed quickly, accurately, and without hassle.
@@ -32361,10 +32361,10 @@ The backtick symbols must be escaped in the GitHub Action parameters. This is be
 
 ## GitHub Actions
 
-import File from '@site/src/components/File'
-import DocCardList from '@theme/DocCardList'
-import Intro from '@site/src/components/Intro'
-import PrimaryCTA from '@site/src/components/PrimaryCTA'
+
+
+
+
 
 <Intro>
 GitHub Actions are a powerful way to automate your workflows with Atmos. Use these actions to plan, apply, and manage your Terraform infrastructure with Atmos.
@@ -32532,8 +32532,8 @@ If you are using Atmos `< 1.63.0`, please refer to the following table:
 
 ## Setup Atmos
 
-import File from '@site/src/components/File'
-import Intro from '@site/src/components/Intro'
+
+
 
 <Intro>
 The Cloud Posse GitHub Action to “Setup Atmos” makes it easy to run atmos in your GitHub Action workflows by installing Atmos.
@@ -32569,7 +32569,7 @@ jobs:
 
 ## Infrastructure CI/CD (GitOps)
 
-import DocCardList from '@theme/DocCardList'
+
 
 <DocCardList/>
 
@@ -32577,7 +32577,7 @@ import DocCardList from '@theme/DocCardList'
 
 ## Spacelift Integration
 
-import Intro from '@site/src/components/Intro'
+
 
 <Intro>
 Atmos natively supports [Spacelift](https://spacelift.io). This is accomplished using this [terraform module](https://github.com/cloudposse/terraform-spacelift-cloud-infrastructure-automation) that reads the YAML Stack configurations and provisions the Spacelift resources.
@@ -32730,7 +32730,7 @@ Refer to [`atmos describe dependents` CLI command](/cli/commands/describe/depend
 
 ## Atmos FAQ
 
-import ReactPlayer from 'react-player'
+
 
 ### Why is the tool called Atmos?
 
@@ -32856,7 +32856,7 @@ like GitHub, GitHub Actions, Datadog, OpsGenie, Okta, etc.
 
 ## Atmos Features
 
-import Intro from '@site/src/components/Intro'
+
 
 <Intro>
 Atmos streamlines Terraform orchestration, environment, and configuration management, offering developers and DevOps a framework and a set of powerful tools to tackle deployment challenges.
@@ -32892,9 +32892,9 @@ Designed to be cloud agnostic, it enables you to operate consistently across var
 
 ## Getting Started with Atmos
 
-import ReactPlayer from 'react-player'
-import Link from '@docusaurus/Link'
-import Intro from '@site/src/components/Intro'
+
+
+
 
 Atmos is a cloud architecture framework for native Terraform.
 
@@ -33059,7 +33059,7 @@ like GitHub, GitHub Actions, Datadog, OpsGenie, Okta, etc.
 
 ## Atmos Use-Cases
 
-import Intro from '@site/src/components/Intro'
+
 
 <Intro>
 Atmos has proven time and again that it works great for these key use cases. It’s versatile like a Swiss Army knife and reliable like a well-oiled machine, making it a solid choice for cloud infrastructure and DevOps.
@@ -33080,11 +33080,11 @@ Don't see your use-case listed? Ask us in the [`#atmos`](/community/slack) Slack
 
 ## Nirvana 💫
 
-import Link from '@docusaurus/Link'
-import Intro from '@site/src/components/Intro'
-import ActionCard from '@site/src/components/ActionCard'
-import PrimaryCTA from '@site/src/components/PrimaryCTA'
-import SecondaryCTA from '@site/src/components/SecondaryCTA'
+
+
+
+
+
 
 <Intro>
 ## The Atmos Difference
@@ -33129,8 +33129,8 @@ Oh yes, and it's entirely free and truly Open Source (licensed APACHE2) like [ev
 
 ## Stage 0: ClickOps
 
-import Link from '@docusaurus/Link'
-import Intro from '@site/src/components/Intro'
+
+
 
 <Intro>
 ClickOps is the "art" of provisioning or setting up your infrastructure using the _click_ of the mouse,
@@ -33171,8 +33171,8 @@ So developers [begin their journey with Terraform](/introduction/why-atmos/stage
 
 ## Stage 1: Introduction to Terraform
 
-import Link from '@docusaurus/Link'
-import Intro from '@site/src/components/Intro'
+
+
 
 <Intro>
 At this initial stage, developers begin their Terraform journey with the basics, focusing on getting a grasp of Terraform's
@@ -33206,10 +33206,10 @@ With this quick win, developers realize Terraform's power, so they are eager to 
 
 ## Stage 10: Terraform Bankruptcy 💥
 
-import Link from '@docusaurus/Link'
-import KeyPoints from '@site/src/components/KeyPoints'
-import Intro from '@site/src/components/Intro'
-import Definition from '@site/src/components/Definition'
+
+
+
+
 
 <Intro>
 At this point, developers might be ready to throw in the towel on Terraform.
@@ -33269,8 +33269,8 @@ After a little bit of Googling, searching Reddit and asking around, they then [s
 
 ## Stage 2: The Monolithic Root Module
 
-import Link from '@docusaurus/Link'
-import Intro from '@site/src/components/Intro'
+
+
 
 <Intro>
 As developers grow more comfortable with Terraform, they often transition to a more ambitious approach of automating everything. This results in creating a monolithic "root module," also known as a [Terralith](/terms/terralith).
@@ -33312,8 +33312,8 @@ Everything seemed easy enough; just using plain resources worked. However, as th
 
 ## Stage 3: Move Towards Modularization
 
-import Link from '@docusaurus/Link'
-import Intro from '@site/src/components/Intro'
+
+
 
 <Intro>
 As developers dive deeper into Terraform's capabilities, they begin to recognize the inefficiencies of their initial approaches.
@@ -33348,8 +33348,8 @@ of [Cloud Posse's hundreds of terraform modules](https://github.com/cloudposse).
 
 ## Stage 4: Adoption of Open Source Modules
 
-import Link from '@docusaurus/Link'
-import Intro from '@site/src/components/Intro'
+
+
 
 <Intro>
 Developers begin their Terraform journey by often crafting their own modules. But as they research how to accomplish various things with Terraform, they usually stumble across one of [Cloud Posse's hundreds of terraform modules](https://github.com/cloudposse). Then it dawns on them that they could avoid reinventing the wheel by using these modules instead.
@@ -33382,8 +33382,8 @@ They realize the time has come to do a refactor, [decomposing the monolithic roo
 
 ## Stage 5: Refactor Root Modules
 
-import Link from '@docusaurus/Link'
-import Intro from '@site/src/components/Intro'
+
+
 
 <Intro>
 Developers recognize the pitfalls of having all environments in one root module. After having refactored their code heavily into modules, Developers realized it was a bad idea to define dev, staging and prod, all in the same root module. Developers realize terraform gets very slow and brittle when a root module is too large.
@@ -33419,8 +33419,8 @@ Developers hate repeating themselves, so attention shifts to [DRY Configuration]
 
 ## Stage 6: Optimize for DRY Configuration
 
-import Link from '@docusaurus/Link'
-import Intro from '@site/src/components/Intro'
+
+
 
 <Intro>
 As developers navigate the complexities of managing multiple environments, root modules, and accounts or organizations,
@@ -33455,8 +33455,8 @@ more time in [scripting and automation](/introduction/why-atmos/stage-7) to mana
 
 ## Stage 7: Terraform Scripting
 
-import Link from '@docusaurus/Link'
-import Intro from '@site/src/components/Intro'
+
+
 
 <Intro>
 As Terraform projects grow in complexity and scale, developers seek ways to automate and streamline their workflows beyond what native Terraform commands offer. This leads to exploring scripting as a means to orchestrate Terraform operations.
@@ -33516,8 +33516,8 @@ However, these limitations stem from the architecture, design, and use of Terraf
 
 ## Stage 8: Team Challenges
 
-import Link from '@docusaurus/Link'
-import Intro from '@site/src/components/Intro'
+
+
 
 <Intro>
 As Terraform use grows within the team, it becomes clear that what facilitated the initial success, is insufficient for the next level of growth and teamwork. This stage is a turning point, emphasizing the need for evolved workflows, enhanced collaboration tools, and a
@@ -33552,8 +33552,8 @@ To solve these problems, developers realize it's time to bite the bullet and [im
 
 ## Stage 9: DIY CI/CD with Terraform
 
-import Link from '@docusaurus/Link'
-import Intro from '@site/src/components/Intro'
+
+
 
 <Intro>
 With the greater adoption of Terraform and DevOps principles, Developers are now using Terraform daily. They decide to use the same patterns for deploying applications with Terraform.
@@ -33598,8 +33598,8 @@ Developers have [hit a wall](/introduction/why-atmos/stage-10) and realize they 
 
 ## Why Does Atmos Exist?
 
-import DocCardList from '@theme/DocCardList'
-import Intro from '@site/src/components/Intro'
+
+
 
 # Why Does Atmos Exist?
 <Intro>
@@ -33631,8 +33631,8 @@ Let's explore the challenges and constraints we faced using Terraform without a 
 
 ## Add Custom Commands
 
-import Terminal from '@site/src/components/Terminal'
-import File from '@site/src/components/File'
+
+
 
 Atmos can be easily extended to support any number of custom CLI commands.
 
@@ -33733,7 +33733,7 @@ vpc-flow-logs-bucket
 
 ## Advanced Tutorial
 
-import PillBox from '@site/src/components/PillBox'
+
 
 <PillBox>Advanced</PillBox>
 
@@ -33778,7 +33778,7 @@ The 10 steps to configure and provision the infrastructure are as follows:
 
 We'll then conclude with some [final notes](/quick-start/advanced/final-notes) and [next steps](/quick-start/advanced/next-steps)
 
-import DocCardList from '@theme/DocCardList'
+
 
 <DocCardList/>
 
@@ -33786,7 +33786,7 @@ import DocCardList from '@theme/DocCardList'
 
 ## Configure Atmos CLI(Advanced)
 
-import File from '@site/src/components/File'
+
 
 In the previous step, we've decided on the following:
 
@@ -34102,7 +34102,7 @@ For a Quick Start example, refer to [Atmos Quick Start](https://github.com/cloud
 
 ## Configure Terraform Backend
 
-import File from '@site/src/components/File'
+
 
 In the previous steps, we've configured the `vpc-flow-logs-bucket` and `vpc` Terraform components to be provisioned into three AWS accounts
 (`dev`, `staging`, `prod`) in the two AWS regions (`us-east-2` and `us-west-2`).
@@ -34697,7 +34697,7 @@ For more information, refer to:
 
 ## Create Atmos Stacks
 
-import File from '@site/src/components/File'
+
 
 In the previous step, we've configured the Terraform components and described how they can be vendored into the repository.
 
@@ -35251,7 +35251,7 @@ import:
 
 ## Automate Common Workflows
 
-import Terminal from '@site/src/components/Terminal'
+
 
 Atmos workflows are a way of combining multiple commands into executable units of work.
 
@@ -35570,10 +35570,10 @@ Let's consider what Atmos does when executing the command `atmos terraform apply
 
 ## Vendor Components
 
-import Terminal from '@site/src/components/Terminal'
-import File from '@site/src/components/File'
-import Step from '@site/src/components/Step'
-import StepNumber from '@site/src/components/StepNumber'
+
+
+
+
 
 In the previous steps, we've configured the repository and decided to provision the `vpc-flow-logs-bucket` and `vpc` Terraform
 components into three AWS accounts (`dev`, `staging`, `prod`) in the two AWS regions (`us-east-2` and `us-west-2`).
@@ -35831,13 +35831,13 @@ For a complete description of how Atmos components use remote state, refer to [C
 
 ## Install Atmos
 
-import Tabs from '@theme/Tabs';
-import TabItem from '@theme/TabItem';
-import Link from '@docusaurus/Link';
-import Intro from '@site/src/components/Intro'
-import LatestRelease from '@site/src/components/LatestRelease'
-import File from '@site/src/components/File'
-import CodeBlock from '@theme/CodeBlock';
+
+
+
+
+
+
+
 
 <Intro>
 There are many ways to install Atmos. Choose the method that works best for you!
@@ -36167,10 +36167,10 @@ Now, try one of our Quick Start guides to get started with Atmos
 
 ## Quick Start Introduction
 
-import Link from '@docusaurus/Link'
-import Intro from '@site/src/components/Intro'
-import PrimaryCTA from '@site/src/components/PrimaryCTA'
-import SecondaryCTA from '@site/src/components/SecondaryCTA'
+
+
+
+
 
 <Intro>
 Atmos is a CLI and a powerful enterprise-grade workflow automation tool for DevOps. It's also a framework that prescribes patterns and best practices to structure and organize components and stacks to design for organizational complexity and provision multi-account environments for complex organizations.
@@ -36198,14 +36198,14 @@ In this Quick Start guide, we describe how to provision infrastructure managed b
 
 ## Thinking Like Atmos
 
-import Link from '@docusaurus/Link'
-import KeyPoints from '@site/src/components/KeyPoints'
-import Screengrab from '@site/src/components/Screengrab';
-import Step from '@site/src/components/Step'
-import StepNumber from '@site/src/components/StepNumber'
-import Intro from '@site/src/components/Intro'
-import ActionCard from '@site/src/components/ActionCard'
-import PrimaryCTA from '@site/src/components/PrimaryCTA'
+
+
+
+
+
+
+
+
 
 <Intro>
     Atmos can change how you think about the Terraform code you write to build your infrastructure.
@@ -36446,17 +36446,17 @@ or delve deeper into the [syntax and concepts](/core-concepts) used in this tuto
 
 ## Configure Atmos CLI(Simple)
 
-import EmbedFile from '@site/src/components/EmbedFile'
-import KeyPoints from '@site/src/components/KeyPoints'
-import Screengrab from '@site/src/components/Screengrab'
-import LatestRelease from '@site/src/components/LatestRelease'
-import Step from '@site/src/components/Step'
-import StepNumber from '@site/src/components/StepNumber'
-import Intro from '@site/src/components/Intro'
-import ActionCard from '@site/src/components/ActionCard'
-import PrimaryCTA from '@site/src/components/PrimaryCTA'
-import SecondaryCTA from '@site/src/components/SecondaryCTA'
-import Note from '@site/src/components/Note'
+
+
+
+
+
+
+
+
+
+
+
 
 <Intro>
 The `atmos.yaml` configuration file controls the behavior of the `atmos` CLI and how Atmos will work with your project.
@@ -36626,11 +36626,11 @@ Initial Atmos configuration can be controlled by these ENV vars:
 
 ## Start Your Project
 
-import KeyPoints from '@site/src/components/KeyPoints'
-import Intro from '@site/src/components/Intro'
-import ActionCard from '@site/src/components/ActionCard'
-import PrimaryCTA from '@site/src/components/PrimaryCTA'
-import SecondaryCTA from '@site/src/components/SecondaryCTA'
+
+
+
+
+
 
 <Intro>
 The folder structure for an Atmos project is designed to organize your infrastructure effectively on the file system. It separates configuration from code, ensuring your Terraform root modules are distinct and reusable.
@@ -36742,13 +36742,13 @@ The following example provides the simplest filesystem layout that Atmos can wor
 
 ## Use Your Component in a Stack
 
-import File from '@site/src/components/File'
-import KeyPoints from '@site/src/components/KeyPoints'
-import Intro from '@site/src/components/Intro'
-import EmbedFile from '@site/src/components/EmbedFile'
-import ActionCard from '@site/src/components/ActionCard'
-import PrimaryCTA from '@site/src/components/PrimaryCTA'
-import Note from '@site/src/components/Note'
+
+
+
+
+
+
+
 
 <Intro>
 [Atmos Stacks](/core-concepts/stacks) are the configuration for your components. It's how you can combine multiple reusable, stateful
@@ -36907,11 +36907,11 @@ Now, we're finally ready to deploy our components. We'll show you how to do this
 
 ## Deploy Another App
 
-import File from '@site/src/components/File'
-import Intro from '@site/src/components/Intro'
-import ActionCard from '@site/src/components/ActionCard'
-import PrimaryCTA from '@site/src/components/PrimaryCTA'
-import Note from '@site/src/components/Note'
+
+
+
+
+
 
 <Intro>
 We can provision more than one instance of the same Terraform component (with the same or different settings)
@@ -36977,12 +36977,12 @@ Sweet! You’ve just finished your first Atmos QuickStart tutorial. Now you're a
 
 ## Add Custom Commands(Extra-credit)
 
-import Terminal from '@site/src/components/Terminal'
-import File from '@site/src/components/File'
-import Intro from '@site/src/components/Intro'
-import ActionCard from '@site/src/components/ActionCard'
-import PrimaryCTA from '@site/src/components/PrimaryCTA'
-import Note from '@site/src/components/Note'
+
+
+
+
+
+
 
 <Intro>
 Atmos can be easily extended to support any number of custom CLI commands. For example, imagine you wanted to add a command
@@ -37042,12 +37042,12 @@ Run the following Atmos command to retrieve your current public IP address.
 
 ## Automate Common Workflows(Extra-credit)
 
-import Terminal from '@site/src/components/Terminal'
-import Step from '@site/src/components/Step'
-import StepNumber from '@site/src/components/StepNumber'
-import Intro from '@site/src/components/Intro'
-import ActionCard from '@site/src/components/ActionCard'
-import PrimaryCTA from '@site/src/components/PrimaryCTA'
+
+
+
+
+
+
 
 <Intro>
 [Atmos Workflows](/core-concepts/workflows) combine multiple commands into executable units of work, ideal for automating common
@@ -37153,9 +37153,9 @@ Refer to [atmos workflow](/cli/commands/workflow) for more information on the `a
 
 ## Extra Credit!
 
-import KeyPoints from '@site/src/components/KeyPoints'
-import DocCardList from '@theme/DocCardList'
-import Intro from '@site/src/components/Intro'
+
+
+
 
 <Intro>
 Now we want to provide you with some bonus material because we didn’t want to overwhelm you when you were just getting started.
@@ -37177,14 +37177,14 @@ These are common ways we use Atmos daily in the infrastructures we manage.
 
 ## Vendor Dependencies
 
-import Terminal from '@site/src/components/Terminal'
-import File from '@site/src/components/File'
-import Intro from '@site/src/components/Intro'
-import Note from '@site/src/components/Note'
-import ActionCard from '@site/src/components/ActionCard'
-import PrimaryCTA from '@site/src/components/PrimaryCTA'
-import Step from '@site/src/components/Step'
-import StepNumber from '@site/src/components/StepNumber'
+
+
+
+
+
+
+
+
 
 <Intro>
 In the previous steps, we wrote our own component from scratch. In practice, you'll often want to reuse components that are already available in the open-source community, or within your organization. To do that, you'll leverage vendoring.
@@ -37329,11 +37329,11 @@ In this example, could add additional vendoring configurations in the `vendor/` 
 
 ## Deploy Everything
 
-import KeyPoints from '@site/src/components/KeyPoints'
-import Intro from '@site/src/components/Intro'
-import ActionCard from '@site/src/components/ActionCard'
-import PrimaryCTA from '@site/src/components/PrimaryCTA'
-import SecondaryCTA from '@site/src/components/SecondaryCTA'
+
+
+
+
+
 
 <Intro>
 After you've written your components and configured your stacks, now we're ready to deploy them!
@@ -37396,12 +37396,12 @@ Let's consider what Atmos does when executing the command `atmos terraform apply
 
 ## Simple Atmos Tutorial
 
-import PillBox from '@site/src/components/PillBox'
-import DocCardList from '@theme/DocCardList'
-import KeyPoints from '@site/src/components/KeyPoints'
-import Intro from '@site/src/components/Intro'
-import ActionCard from '@site/src/components/ActionCard'
-import PrimaryCTA from '@site/src/components/PrimaryCTA'
+
+
+
+
+
+
 
 <PillBox>Easy</PillBox>
 
@@ -37472,10 +37472,10 @@ Start your first project in 5 easy steps. After this, you can configure and prov
 
 ## Where to go from here...
 
-import KeyPoints from '@site/src/components/KeyPoints'
-import Intro from '@site/src/components/Intro'
-import ActionCard from '@site/src/components/ActionCard'
-import PrimaryCTA from '@site/src/components/PrimaryCTA'
+
+
+
+
 
 <Intro>
 Atmos provides unlimited flexibility in defining and configuring stacks and components in the stacks.
@@ -37507,17 +37507,17 @@ As you continue to poke around, here are some suggestions for what to do next:
 
 ## Write Some Components
 
-import EmbedFile from '@site/src/components/EmbedFile'
-import KeyPoints from '@site/src/components/KeyPoints'
-import Screengrab from '@site/src/components/Screengrab'
-import LatestRelease from '@site/src/components/LatestRelease'
-import Step from '@site/src/components/Step'
-import StepNumber from '@site/src/components/StepNumber'
-import Intro from '@site/src/components/Intro'
-import ActionCard from '@site/src/components/ActionCard'
-import PrimaryCTA from '@site/src/components/PrimaryCTA'
-import SecondaryCTA from '@site/src/components/SecondaryCTA'
-import Note from '@site/src/components/Note'
+
+
+
+
+
+
+
+
+
+
+
 
 <Intro>
 When you [design cloud architectures with Atmos](/quick-start/mindset), you will first break them apart into pieces called [components](/core-concepts/components). Then, you will implement [Terraform "root modules"](/core-concepts/components/terraform) for each of those components.
@@ -37633,7 +37633,7 @@ In object-oriented parlance, think of your outputs as the “public” attribute
 
 ## Atmos Alternatives & Inspirations
 
-import Intro from '@site/src/components/Intro'
+
 
 <Intro>
 To better understand where Atmos fits in, it may be helpful to understand some of the tooling that has inspired its design or serve as possible alternatives to its approach.
@@ -37793,7 +37793,7 @@ https://github.com/binbashar/leverage
 
 ## Reference
 
-import DocCardList from '@theme/DocCardList'
+
 
 <DocCardList/>
 
@@ -37801,7 +37801,7 @@ import DocCardList from '@theme/DocCardList'
 
 ## Slides
 
-import Slides from "@site/src/components/Slides";
+
 
 <Slides/>
 
@@ -37968,9 +37968,9 @@ For more information, refer to:
 
 ## Performance Profiling
 
-import Terminal from '@site/src/components/Terminal'
-import File from '@site/src/components/File'
-import Intro from '@site/src/components/Intro'
+
+
+
 
 <Intro>
     Atmos includes built-in support for performance profiling using Go's standard `pprof` tool.
@@ -39228,7 +39228,7 @@ With this knowledge, you're now ready to actually build projects on AWS using th
 
 Here are some lessons on how to implement Atmos in a project.
 
-import DocCardList from '@theme/DocCardList'
+
 
 <DocCardList/>
 
