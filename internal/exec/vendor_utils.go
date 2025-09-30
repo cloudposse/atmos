@@ -486,7 +486,7 @@ func copyToTarget(tempDir, targetPath string, s *schema.AtmosVendorSource, sourc
 // Based on the vendor source configuration. It uses the provided patterns in ExcludedPaths.
 // And IncludedPaths to filter files during the copy operation.
 //
-// Parameters:
+// Parameters:.
 //   - atmosConfig: The CLI configuration for logging.
 //   - tempDir: The temporary directory containing the files to copy.
 //   - s: The vendor source configuration containing exclusion/inclusion patterns.
@@ -560,4 +560,11 @@ func shouldIncludeFile(src string, includedPaths []string, trimmedSrc string) (b
 		log.Debug("Excluding path since it does not match any pattern from 'included_paths'", "path", trimmedSrc)
 		return true, nil
 	}
+}
+
+// updateVendorConfigFile updates only the version fields in the vendor configuration file.
+func updateVendorConfigFile(updatedVersions map[string]string, vendorConfigFile string) error {
+	// Use the simple YAML updater that preserves formatting and comments
+	updater := NewSimpleYAMLVersionUpdater()
+	return updater.UpdateVersionsInFile(vendorConfigFile, updatedVersions)
 }

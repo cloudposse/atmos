@@ -292,6 +292,7 @@ type TemplatesSettings struct {
 	Enabled     bool                      `yaml:"enabled" json:"enabled" mapstructure:"enabled"`
 	Sprig       TemplatesSettingsSprig    `yaml:"sprig" json:"sprig" mapstructure:"sprig"`
 	Gomplate    TemplatesSettingsGomplate `yaml:"gomplate" json:"gomplate" mapstructure:"gomplate"`
+	Import      TemplatesSettingsImport   `yaml:"import" json:"import" mapstructure:"import"`
 	Delimiters  []string                  `yaml:"delimiters,omitempty" json:"delimiters,omitempty" mapstructure:"delimiters"`
 	Evaluations int                       `yaml:"evaluations,omitempty" json:"evaluations,omitempty" mapstructure:"evaluations"`
 	Env         map[string]string         `yaml:"env,omitempty" json:"env,omitempty" mapstructure:"env"`
@@ -299,6 +300,10 @@ type TemplatesSettings struct {
 
 type TemplatesSettingsSprig struct {
 	Enabled bool `yaml:"enabled" json:"enabled" mapstructure:"enabled"`
+}
+
+type TemplatesSettingsImport struct {
+	ProcessWithoutContext bool `yaml:"process_without_context" json:"process_without_context" mapstructure:"process_without_context"`
 }
 
 type TemplatesSettingsGomplateDatasource struct {

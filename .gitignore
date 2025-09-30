@@ -64,3 +64,4 @@ coverage.*.tmp
 coverage/
 .gocoverdir/
 tests.test
+exec.test
