@@ -52,6 +52,7 @@
   },
   "devDependencies": {
     "@docusaurus/module-type-aliases": "^3.6.3",
+    "docusaurus-plugin-llms": "^0.2.2",
     "prettier": "^3.4.2"
   },
   "browserslist": {
