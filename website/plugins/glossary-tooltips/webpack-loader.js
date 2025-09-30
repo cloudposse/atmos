@@ -23,7 +23,9 @@ module.exports = function(source) {
     const linkText = match[1];
     const linkUrl = match[2];
 
-    // Check if this is a term link (contains /terms/ or points to glossary directory).
+    // Broad initial filter: check if this might be a term link.
+    // We use a permissive filter here to catch both absolute (/terms/) and relative (../glossary/)
+    // links, then perform more specific validation below to ensure only actual term links are transformed.
     if (linkUrl.includes('/terms/') || linkUrl.includes('glossary/')) {
       // Skip multi-line link text.
       if (linkText.includes('\n')) {

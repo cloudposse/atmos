@@ -55,6 +55,10 @@ const Term: React.FC<TermProps> = ({ termId, children }) => {
           })
           .catch((err) => {
             console.error('[Term] Failed to load glossary:', err);
+            // Set empty object to prevent repeated fetch attempts.
+            const emptyGlossary = {};
+            setGlossary(emptyGlossary);
+            window._cachedGlossary = emptyGlossary;
           });
       }
     }

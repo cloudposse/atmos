@@ -67,10 +67,15 @@ module.exports = function (context, options) {
       if (!fs.existsSync(staticPath)) {
         fs.mkdirSync(staticPath, { recursive: true });
       }
-      fs.writeFileSync(
-        path.join(staticPath, 'glossary.json'),
-        JSON.stringify(content, null, 2)
-      );
+      try {
+        fs.writeFileSync(
+          path.join(staticPath, 'glossary.json'),
+          JSON.stringify(content, null, 2)
+        );
+      } catch (err) {
+        console.error('[glossary-tooltips] Failed to write glossary.json:', err);
+        throw err;
+      }
     },
 
     configureWebpack(config, isServer, utils) {
