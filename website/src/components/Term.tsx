@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useId } from 'react';
 import Link from '@docusaurus/Link';
 import { useBaseUrlUtils } from '@docusaurus/useBaseUrl';
 import './Term.css';
@@ -28,6 +28,7 @@ interface TermProps {
 declare global {
   interface Window {
     _cachedGlossary?: GlossaryData;
+    _glossaryPromise?: Promise<GlossaryData>;
   }
 }
 
@@ -39,6 +40,7 @@ const Term: React.FC<TermProps> = ({ termId, children }) => {
   const [glossary, setGlossary] = useState<GlossaryData | null>(null);
   const [showTooltip, setShowTooltip] = useState(false);
   const { withBaseUrl } = useBaseUrlUtils();
+  const tooltipId = useId();
 
   useEffect(() => {
     // Load glossary data from JSON file.
@@ -47,18 +49,24 @@ const Term: React.FC<TermProps> = ({ termId, children }) => {
         setGlossary(window._cachedGlossary);
       } else {
         const glossaryUrl = withBaseUrl('/glossary.json');
-        fetch(glossaryUrl)
-          .then((res) => res.json())
-          .then((data) => {
-            setGlossary(data);
-            window._cachedGlossary = data;
-          })
+        if (!window._glossaryPromise) {
+          window._glossaryPromise = fetch(glossaryUrl)
+            .then((res) => {
+              if (!res.ok) throw new Error(`HTTP ${res.status}`);
+              return res.json();
+            })
+            .then((data: GlossaryData) => {
+              window._cachedGlossary = data;
+              return data;
+            });
+        }
+        window._glossaryPromise
+          .then((data) => setGlossary(data))
           .catch((err) => {
             console.error('[Term] Failed to load glossary:', err);
-            // Set empty object to prevent repeated fetch attempts.
-            const emptyGlossary = {};
-            setGlossary(emptyGlossary);
+            const emptyGlossary: GlossaryData = {};
             window._cachedGlossary = emptyGlossary;
+            setGlossary(emptyGlossary);
           });
       }
     }
@@ -85,8 +93,8 @@ const Term: React.FC<TermProps> = ({ termId, children }) => {
 
   if (!termData) {
     // Fallback: render as plain link if term not found.
-    // Check if this is an external URL (http://, https://, mailto:, or other protocols).
-    const isExternalUrl = /^[a-z]+:/i.test(termId);
+    // Check if this is an external URL (http://, https://, mailto:, protocol-relative //, etc.).
+    const isExternalUrl = /^[a-z]+:/i.test(termId) || termId.startsWith('//');
 
     if (isExternalUrl) {
       // For external URLs, use plain anchor tag with security attributes.
@@ -107,14 +115,17 @@ const Term: React.FC<TermProps> = ({ termId, children }) => {
   return (
     <span
       className="term-wrapper"
+      tabIndex={0}
       onMouseEnter={() => setShowTooltip(true)}
       onMouseLeave={() => setShowTooltip(false)}
+      onFocus={() => setShowTooltip(true)}
+      onBlur={() => setShowTooltip(false)}
     >
-      <Link to={termUrl} className="term-link">
+      <Link to={termUrl} className="term-link" aria-describedby={hoverText ? tooltipId : undefined}>
         {children}
       </Link>
       {showTooltip && hoverText && (
-        <span className="term-tooltip" role="tooltip">
+        <span className="term-tooltip" role="tooltip" id={tooltipId}>
           {hoverText}
         </span>
       )}
