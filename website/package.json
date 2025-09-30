@@ -6,6 +6,7 @@
     "docusaurus": "docusaurus",
     "start": "docusaurus start",
     "build": "docusaurus build",
+    "postbuild": "cp build/llms.txt static/llms.txt && cp build/llms-full.txt static/llms-full.txt && ./scripts/clean-llms-imports.sh",
     "swizzle": "docusaurus swizzle",
     "deploy": "docusaurus deploy",
     "clear": "docusaurus clear",
@@ -48,7 +49,8 @@
     "react-table": "^7.8.0",
     "remark-html": "^16.0.1",
     "remark-parse": "^11.0.0",
-    "unified": "^11.0.5"
+    "unified": "^11.0.5",
+    "docusaurus-plugin-llms": "^0.2.2"
   },
   "devDependencies": {
     "@docusaurus/module-type-aliases": "^3.6.3",
