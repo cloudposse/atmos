@@ -6,9 +6,9 @@ import (
 	"path/filepath"
 
 	"github.com/mitchellh/mapstructure"
-	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -28,7 +28,7 @@ func ExecuteValidateComponentCmd(cmd *cobra.Command, args []string) (string, str
 	}
 
 	if len(args) != 1 {
-		return "", "", errors.New("invalid arguments. The command requires one argument 'componentName'")
+		return "", "", errUtils.ErrInvalidComponentArgument
 	}
 
 	componentName := args[0]

@@ -63,7 +63,7 @@ func ValidateWithJsonSchema(data any, schemaName string, schemaText string) (boo
 			if err2 != nil {
 				return false, err2
 			}
-			return false, errors.New(string(b))
+			return false, errors.Join(errUtils.ErrValidation, fmt.Errorf("%s", string(b)))
 		default:
 			return false, err
 		}

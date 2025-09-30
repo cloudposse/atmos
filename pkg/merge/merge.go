@@ -1,6 +1,7 @@
 package merge
 
 import (
+	"errors"
 	"fmt"
 
 	"dario.cat/mergo"
@@ -77,9 +78,7 @@ func Merge(
 ) (map[string]any, error) {
 	// Check for nil config to prevent panic
 	if atmosConfig == nil {
-		// First wrap with ErrAtmosConfigIsNil, then wrap with ErrMerge
-		err := errUtils.ErrAtmosConfigIsNil
-		return nil, fmt.Errorf("%w: %w", errUtils.ErrMerge, err)
+		return nil, errors.Join(errUtils.ErrMerge, errUtils.ErrAtmosConfigIsNil)
 	}
 
 	// Default to replace strategy if strategy is empty
@@ -91,12 +90,11 @@ func Merge(
 	if strategy != ListMergeStrategyReplace &&
 		strategy != ListMergeStrategyAppend &&
 		strategy != ListMergeStrategyMerge {
-		// First wrap with ErrInvalidListMergeStrategy details, then wrap with ErrMerge
 		err := fmt.Errorf("%w: '%s'. Supported list merge strategies are: %s",
 			errUtils.ErrInvalidListMergeStrategy,
 			strategy,
 			fmt.Sprintf("%s, %s, %s", ListMergeStrategyReplace, ListMergeStrategyAppend, ListMergeStrategyMerge))
-		return nil, fmt.Errorf("%w: %w", errUtils.ErrMerge, err)
+		return nil, errors.Join(errUtils.ErrMerge, err)
 	}
 
 	sliceDeepCopy := false
