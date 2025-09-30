@@ -60,15 +60,31 @@ func SplitStringByDelimiter(str string, delimiter rune) ([]string, error) {
 	return filteredParts, nil
 }
 
+// trimMatchingQuotes removes matching leading and trailing quote characters and normalizes any escaped quotes within the value.
 func trimMatchingQuotes(value string) string {
-	if len(value) >= 2 {
-		first := value[0]
-		last := value[len(value)-1]
-		if (first == '\'' || first == '"') && first == last {
-			return value[1 : len(value)-1]
-		}
+	if len(value) < 2 {
+		return value
 	}
-	return value
+
+	first := value[0]
+	if first != '\'' && first != '"' {
+		return value
+	}
+
+	if value[len(value)-1] != first {
+		return value
+	}
+
+	inner := value[1 : len(value)-1]
+
+	switch first {
+	case '\'':
+		inner = strings.ReplaceAll(inner, "''", "'")
+	case '"':
+		inner = strings.ReplaceAll(inner, "\"\"", "\"")
+	}
+
+	return inner
 }
 
 // SplitStringAtFirstOccurrence splits a string into two parts at the first occurrence of the separator

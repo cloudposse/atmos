@@ -57,6 +57,20 @@ func TestSplitStringByDelimiter(t *testing.T) {
 			expectErr: false,
 		},
 		{
+			name:      "Single quoted value with escaped single quotes",
+			input:     "core '.security.users[''github-dependabot''].access.key.id'",
+			delimiter: ' ',
+			expected:  []string{"core", ".security.users['github-dependabot'].access.key.id"},
+			expectErr: false,
+		},
+		{
+			name:      "Double quoted value with escaped double quotes",
+			input:     "\"foo\"\"bar\" baz",
+			delimiter: ' ',
+			expected:  []string{"foo\"bar", "baz"},
+			expectErr: false,
+		},
+		{
 			name:      "Quoted empty values are removed",
 			input:     "foo '' \"\" bar",
 			delimiter: ' ',
