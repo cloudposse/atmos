@@ -34,9 +34,8 @@ tests:
     args: []
     expect:
       diff: []
-      stdout:
-        - "atmos.yaml CLI config file was not found."
       stderr:
+        - "atmos.yaml CLI config file was not found."
         - "Telemetry Enabled"
         - "https://atmos.tools/cli/configuration"
       exit_code: 1

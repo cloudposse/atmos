@@ -629,7 +629,7 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 		case bool:
 			if v {
 				// Boolean true = isolated sandbox for this test only
-				logger.Info("Setting up isolated sandbox", "workdir", absoluteWorkdir)
+				logger.Info("Setting up isolated sandbox", "test", tc.Name, "workdir", absoluteWorkdir)
 				sandboxEnv = createIsolatedSandbox(t, absoluteWorkdir)
 				// Clean up immediately after test
 				defer func() {
@@ -640,7 +640,7 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 		case string:
 			if v != "" {
 				// Named sandbox = shared across related tests
-				logger.Info("Using named sandbox", "name", v, "workdir", absoluteWorkdir)
+				logger.Info("Using named sandbox", "test", tc.Name, "name", v, "workdir", absoluteWorkdir)
 				sandboxEnv = getOrCreateNamedSandbox(t, v, absoluteWorkdir)
 				// Cleanup handled by TestMain
 			}
