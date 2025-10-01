@@ -1095,7 +1095,10 @@ func updateSnapshot(fullPath, output string) {
 	if err != nil {
 		panic(fmt.Sprintf("Failed to create snapshot directory: %v", err))
 	}
-	err = os.WriteFile(fullPath, []byte(output), 0o644) // Write snapshot
+	// Normalize line endings to LF for cross-platform consistency.
+	// This ensures snapshots work reliably across Windows, macOS, and Linux.
+	normalized := normalizeLineEndings(output)
+	err = os.WriteFile(fullPath, []byte(normalized), 0o644) // Write snapshot
 	if err != nil {
 		panic(fmt.Sprintf("Failed to write snapshot file: %v", err))
 	}
@@ -1106,7 +1109,25 @@ func readSnapshot(t *testing.T, fullPath string) string {
 	if err != nil {
 		t.Fatalf("Error reading snapshot file %q: %v", fullPath, err)
 	}
-	return string(data)
+	// Normalize line endings when reading to gracefully handle any existing
+	// snapshots that were committed with CRLF line endings.
+	return normalizeLineEndings(string(data))
+}
+
+// normalizeLineEndings converts CRLF line endings to LF for cross-platform consistency.
+// This ensures snapshots work reliably across Windows, macOS, and Linux development.
+//
+// Important: Only CRLF sequences (\r\n) are converted to LF (\n).
+// Standalone CR (\r) characters are preserved, as they're used by spinners and
+// progress indicators to overwrite terminal lines.
+//
+// Examples:
+//   - "line1\r\nline2\r\n" → "line1\nline2\n" (CRLF normalized)
+//   - "line1\nline2\n" → "line1\nline2\n" (LF unchanged)
+//   - "Progress\r" → "Progress\r" (spinner CR preserved)
+func normalizeLineEndings(s string) string {
+	// Only replace CRLF with LF, preserve standalone CR for spinners.
+	return strings.ReplaceAll(s, "\r\n", "\n")
 }
 
 // Generate a unified diff using gotextdiff.
@@ -1185,6 +1206,11 @@ func verifySnapshot(t *testing.T, tc TestCase, stdoutOutput, stderrOutput string
 	if err != nil {
 		t.Fatalf("failed to sanitize stderr output: %v", err)
 	}
+
+	// Normalize line endings in actual output for cross-platform consistency.
+	// This handles cases where CLI might output CRLF on Windows but snapshots use LF.
+	stdoutOutput = normalizeLineEndings(stdoutOutput)
+	stderrOutput = normalizeLineEndings(stderrOutput)
 
 	testName := sanitizeTestName(t.Name())
 	stdoutFileName := fmt.Sprintf("%s.stdout.golden", testName)

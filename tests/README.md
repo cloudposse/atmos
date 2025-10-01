@@ -269,6 +269,29 @@ After generating new golden snapshots, don't forget to add them.
 git add tests/snapshots/*
 ```
 
+### Line Ending Normalization
+
+Golden snapshots always use Unix line endings (LF: `\n`) regardless of the platform they're generated on. The test infrastructure automatically normalizes line endings to ensure cross-platform consistency:
+
+- **CRLF (`\r\n`)** is converted to **LF (`\n`)** when writing and comparing snapshots
+- **Standalone CR (`\r`)** characters are preserved for spinner and progress indicator output
+- This ensures developers on Windows, macOS, and Linux see consistent test results
+
+**What gets normalized:**
+- Windows line endings: `"line1\r\nline2\r\n"` → `"line1\nline2\n"`
+- Mixed endings: `"line1\r\nline2\n"` → `"line1\nline2\n"`
+
+**What stays the same:**
+- Unix line endings: `"line1\nline2\n"` → `"line1\nline2\n"` (unchanged)
+- Spinner output: `"Progress\rDone\r"` → `"Progress\rDone\r"` (preserved)
+
+This normalization happens automatically in:
+- `updateSnapshot()` - when writing snapshots
+- `readSnapshot()` - when reading snapshots
+- `verifySnapshot()` - when comparing actual output to snapshots
+
+See `tests/cli_snapshot_test.go` for comprehensive tests of this behavior.
+
 ### Example Configuration
 
 We support an explicit type `!not` on the `expect.stdout` and `expect.stderr` sections (not on `expect.diff`)
