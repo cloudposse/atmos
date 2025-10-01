@@ -1,7 +1,6 @@
 package perf
 
 import (
-	"os"
 	"sort"
 	"sync"
 	"time"
@@ -38,21 +37,21 @@ var reg = &registry{
 	start: time.Now(),
 }
 
-func Enabled() bool {
-	// Check environment variable at runtime, not at package initialization.
-	return os.Getenv("ATMOS_PROF") == "1"
+var hdrEnabled bool
+
+// EnableHDR enables HDR histogram tracking for P95 latency calculations.
+func EnableHDR(enabled bool) {
+	hdrEnabled = enabled
 }
 
 func withHDR() bool {
-	// Check environment variable at runtime, not at package initialization.
-	return os.Getenv("ATMOS_PROF_HDR") == "1"
+	return hdrEnabled
 }
 
 // Track returns a func you should defer to record duration for `name`.
+// Performance tracking is always enabled with minimal overhead.
+// Use --heatmap flag to display the collected metrics.
 func Track(name string) func() {
-	if !Enabled() {
-		return func() {}
-	}
 	t0 := time.Now()
 	return func() {
 		d := time.Since(t0)

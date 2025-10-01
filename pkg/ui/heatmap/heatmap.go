@@ -332,26 +332,24 @@ func (m *model) handleTickMsg(msg tickMsg) tea.Cmd {
 
 func (m *model) updatePerformanceData() {
 	// Update table with latest performance data.
-	if perf.Enabled() {
-		snap := perf.SnapshotTop("total", topFunctionsLimit)
-		rows := []table.Row{}
+	snap := perf.SnapshotTop("total", topFunctionsLimit)
+	rows := []table.Row{}
 
-		for _, r := range snap.Rows {
-			p95 := "-"
-			if r.P95 > 0 {
-				p95 = r.P95.Truncate(time.Millisecond).String()
-			}
-			rows = append(rows, table.Row{
-				truncate(r.Name, tableFunctionWidth-2),
-				fmt.Sprintf("%d", r.Count),
-				r.Total.Truncate(time.Millisecond).String(),
-				r.Avg.Truncate(time.Millisecond).String(),
-				r.Max.Truncate(time.Millisecond).String(),
-				p95,
-			})
+	for _, r := range snap.Rows {
+		p95 := "-"
+		if r.P95 > 0 {
+			p95 = r.P95.Truncate(time.Millisecond).String()
 		}
-		m.table.SetRows(rows)
+		rows = append(rows, table.Row{
+			truncate(r.Name, tableFunctionWidth-2),
+			fmt.Sprintf("%d", r.Count),
+			r.Total.Truncate(time.Millisecond).String(),
+			r.Avg.Truncate(time.Millisecond).String(),
+			r.Max.Truncate(time.Millisecond).String(),
+			p95,
+		})
 	}
+	m.table.SetRows(rows)
 }
 
 func (m *model) View() string {

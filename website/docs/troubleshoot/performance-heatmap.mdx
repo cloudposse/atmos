@@ -28,12 +28,9 @@ instrumented functions with minimal overhead.
 
 ## Quick Start
 
-Enable performance tracking and display the heatmap after command execution:
+Display the performance heatmap after command execution:
 
 ```shell
-# Set environment variable to enable performance tracking
-export ATMOS_PROF=1
-
 # Run any Atmos command with the --heatmap flag
 atmos describe stacks --heatmap
 ```
@@ -52,40 +49,28 @@ atmos describe stacks --heatmap
 
 ## Configuration
 
-### Environment Variables
-
-Performance tracking is controlled by two environment variables:
-
-<dl>
-    <dt>`ATMOS_PROF`</dt>
-    <dd>Enable performance tracking (set to `1` to enable)</dd>
-
-    <dt>`ATMOS_PROF_HDR`</dt>
-    <dd>Enable HDR histogram for percentile calculations like P95 (set to `1` to enable, requires `ATMOS_PROF=1`)</dd>
-</dl>
-
-**Basic tracking (count, total, avg, max):**
-```bash
-export ATMOS_PROF=1
-atmos terraform plan vpc -s dev --heatmap
-```
-
-**Advanced tracking with percentiles (P95):**
-```bash
-export ATMOS_PROF=1
-export ATMOS_PROF_HDR=1
-atmos terraform plan vpc -s dev --heatmap
-```
-
 ### CLI Flags
 
 <dl>
     <dt>`--heatmap`</dt>
-    <dd>Display performance heatmap visualization after command execution (requires `ATMOS_PROF=1`)</dd>
+    <dd>Display performance heatmap visualization after command execution</dd>
 
     <dt>`--heatmap-mode`</dt>
     <dd>Visualization mode: `bar`, `ascii`, `table`, or `sparkline` (default: `bar`). In interactive mode, press 1-4 to switch modes.</dd>
+
+    <dt>`--heatmap-hdr`</dt>
+    <dd>Enable HDR histogram for P95 latency calculations (slightly higher overhead)</dd>
 </dl>
+
+**Basic usage:**
+```bash
+atmos terraform plan vpc -s dev --heatmap
+```
+
+**With percentile statistics (P95):**
+```bash
+atmos terraform plan vpc -s dev --heatmap --heatmap-hdr
+```
 
 ## Visualization Modes
 
@@ -226,7 +211,7 @@ Each tracked function displays:
     <dd>Maximum execution time for a single call</dd>
 
     <dt>`P95`</dt>
-    <dd>95th percentile latency (only shown when `ATMOS_PROF_HDR=1`)</dd>
+    <dd>95th percentile latency (only shown when `--heatmap-hdr` flag is used)</dd>
 </dl>
 
 ### Interactive Mode
@@ -250,11 +235,8 @@ When running in scripts or CI/CD pipelines without a TTY, the heatmap displays a
 Track which functions consume the most execution time:
 
 ```bash
-export ATMOS_PROF=1
-export ATMOS_PROF_HDR=1
-
-# Profile a slow command
-atmos terraform plan large-component -s prod --heatmap
+# Profile a slow command with percentile statistics
+atmos terraform plan large-component -s prod --heatmap --heatmap-hdr
 
 # Look for functions with high Total time in the output
 ```
@@ -270,11 +252,10 @@ Compare performance before and after optimizations:
 
 ```bash
 # Baseline measurement
-export ATMOS_PROF=1
-atmos describe stacks --heatmap > baseline.txt
+atmos describe stacks --heatmap 2>baseline.txt
 
 # After optimization
-atmos describe stacks --heatmap > optimized.txt
+atmos describe stacks --heatmap 2>optimized.txt
 
 # Compare the Total times for key functions
 diff baseline.txt optimized.txt
@@ -285,12 +266,8 @@ diff baseline.txt optimized.txt
 Capture performance metrics in automated pipelines:
 
 ```bash
-# In CI/CD pipeline
-export ATMOS_PROF=1
-export ATMOS_PROF_HDR=1
-
-# Run commands and capture metrics
-atmos terraform plan vpc -s prod --heatmap 2>&1 | tee performance.log
+# In CI/CD pipeline - run commands and capture metrics
+atmos terraform plan vpc -s prod --heatmap --heatmap-hdr 2>&1 | tee performance.log
 
 # Parse performance.log for regression detection
 ```
@@ -300,13 +277,12 @@ atmos terraform plan vpc -s prod --heatmap 2>&1 | tee performance.log
 Use during development to validate performance impact:
 
 ```bash
-# Enable in your shell profile for persistent tracking
-echo 'export ATMOS_PROF=1' >> ~/.bashrc
-echo 'export ATMOS_PROF_HDR=1' >> ~/.bashrc
+# Create an alias for convenient heatmap usage
+alias atmos-perf='atmos --heatmap --heatmap-hdr'
 
 # Run commands with heatmap during development
-atmos validate stacks --heatmap
-atmos describe component vpc -s dev --heatmap
+atmos-perf validate stacks
+atmos-perf describe component vpc -s dev
 ```
 
 ## Performance Heatmap vs. pprof Profiling
@@ -362,9 +338,8 @@ The performance heatmap feature is under active development. Future enhancements
 
 **Problem**: Running `--heatmap` flag but no performance data is displayed.
 
-**Solution**: Ensure `ATMOS_PROF=1` is set:
+**Solution**: The `--heatmap` flag should always display the performance summary. If you're not seeing it, ensure you're using the latest version of Atmos:
 ```bash
-export ATMOS_PROF=1
 atmos version --heatmap
 ```
 
@@ -381,7 +356,6 @@ atmos version --heatmap
 
 **Workaround**: Run commands that process stacks and components, which have more instrumentation:
 ```bash
-export ATMOS_PROF=1
 atmos describe stacks --heatmap
 atmos terraform plan component -s stack --heatmap
 ```
@@ -390,11 +364,9 @@ atmos terraform plan component -s stack --heatmap
 
 **Problem**: P95 column displays `-` instead of values
 
-**Solution**: Enable HDR histogram tracking:
+**Solution**: Enable HDR histogram tracking with the `--heatmap-hdr` flag:
 ```bash
-export ATMOS_PROF=1
-export ATMOS_PROF_HDR=1  # Required for P95 calculations
-atmos describe stacks --heatmap
+atmos describe stacks --heatmap --heatmap-hdr
 ```
 
 ### Interactive Mode Not Working
@@ -420,37 +392,31 @@ Elapsed: 123.45ms  Functions: 5  Calls: 42
 
 **Solution**: Yes, they are independent and can be used together:
 ```bash
-export ATMOS_PROF=1
-export ATMOS_PROF_HDR=1
-
 # Run with both heatmap and pprof profiling
 atmos terraform plan vpc -s prod \
   --heatmap \
+  --heatmap-hdr \
   --profile-file=cpu.prof \
   --profile-type=cpu
 
-# Analyze heatmap during command
-# Then analyze pprof data after completion
+# View heatmap summary after command
+# Then analyze detailed pprof data
 go tool pprof -http=:8080 cpu.prof
 ```
 
 ## Best Practices
 
-### Enable Selectively
+### Use When Needed
 
-Only enable performance tracking when needed:
+Performance tracking is always enabled with minimal overhead, but displaying the heatmap adds some processing time:
 
 ```bash
-# Development: Enable in current shell
-export ATMOS_PROF=1
+# Development: Use heatmap when investigating performance
+atmos terraform plan vpc -s prod --heatmap
 
-# Production: Enable for specific commands only
-ATMOS_PROF=1 atmos terraform plan vpc -s prod --heatmap
-
-# CI/CD: Enable conditionally
+# CI/CD: Enable conditionally for performance regression testing
 if [ "$ENABLE_PERF_TRACKING" = "true" ]; then
-  export ATMOS_PROF=1
-  export ATMOS_PROF_HDR=1
+  atmos terraform plan vpc -s prod --heatmap --heatmap-hdr 2>perf.log
 fi
 ```
 
@@ -468,13 +434,11 @@ Choose visualization mode based on your context:
 Correlate performance metrics with debug logs:
 
 ```bash
-export ATMOS_PROF=1
-export ATMOS_PROF_HDR=1
-
-# Run with debug logging
+# Run with debug logging and performance heatmap
 atmos describe stacks \
   --logs-level=Debug \
   --heatmap \
+  --heatmap-hdr \
   2>&1 | tee debug-with-perf.log
 ```
 
@@ -486,11 +450,8 @@ Track performance in CI/CD to detect regressions:
 #!/bin/bash
 # ci-performance-check.sh
 
-export ATMOS_PROF=1
-export ATMOS_PROF_HDR=1
-
 # Capture performance metrics
-atmos validate stacks --heatmap 2>&1 | tee perf-output.txt
+atmos validate stacks --heatmap --heatmap-hdr 2>&1 | tee perf-output.txt
 
 # Extract elapsed time
 elapsed=$(grep "Elapsed:" perf-output.txt | awk '{print $2}')

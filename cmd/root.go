@@ -91,6 +91,11 @@ var RootCmd = &cobra.Command{
 				errUtils.CheckErrorPrintAndExit(setupErr, "Failed to setup profiler", "")
 			}
 		}
+
+		// Enable HDR histogram if heatmap-hdr flag is set.
+		if heatmapHDR, _ := cmd.Flags().GetBool("heatmap-hdr"); heatmapHDR {
+			perf.EnableHDR(true)
+		}
 	},
 	PersistentPostRun: func(cmd *cobra.Command, args []string) {
 		// Stop profiler after command execution.
@@ -461,12 +466,6 @@ func getInvalidCommandName(input string) string {
 //
 //nolint:unparam // cmd parameter reserved for future use
 func displayPerformanceHeatmap(cmd *cobra.Command, mode string) error {
-	// Check if performance profiling is enabled.
-	if !perf.Enabled() {
-		fmt.Fprintf(os.Stderr, "\n⚠️  Performance profiling is not enabled. Set ATMOS_PROF=1 to enable heatmap visualization.\n")
-		return nil
-	}
-
 	// Print performance summary to console.
 	snap := perf.SnapshotTop("total", defaultTopFunctionsMax)
 	fmt.Fprintf(os.Stderr, "\n=== Atmos Performance Summary ===\n")
@@ -544,8 +543,9 @@ func init() {
 	RootCmd.PersistentFlags().String("profile-type", "cpu",
 		"Type of profile to collect when using --profile-file. "+
 			"Options: cpu, heap, allocs, goroutine, block, mutex, threadcreate, trace")
-	RootCmd.PersistentFlags().Bool("heatmap", false, "Show performance heatmap visualization after command execution (requires ATMOS_PROF=1)")
+	RootCmd.PersistentFlags().Bool("heatmap", false, "Show performance heatmap visualization after command execution")
 	RootCmd.PersistentFlags().String("heatmap-mode", "bar", "Heatmap visualization mode: bar, ascii, table, sparkline (press 1-4 to switch in TUI)")
+	RootCmd.PersistentFlags().Bool("heatmap-hdr", false, "Enable HDR histogram for P95 latency calculations in heatmap (slightly higher overhead)")
 	// Set custom usage template.
 	err := templates.SetCustomUsageFunc(RootCmd)
 	if err != nil {

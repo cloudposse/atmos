@@ -138,10 +138,6 @@ func setEnv(v *viper.Viper) {
 	bindEnv(v, "profiler.port", "ATMOS_PROFILER_PORT")
 	bindEnv(v, "profiler.file", "ATMOS_PROFILE_FILE")
 	bindEnv(v, "profiler.profile_type", "ATMOS_PROFILE_TYPE")
-
-	// Performance heatmap settings
-	bindEnv(v, "performance.enabled", "ATMOS_PROF")
-	bindEnv(v, "performance.hdr_histogram", "ATMOS_PROF_HDR")
 }
 
 func bindEnv(v *viper.Viper, key ...string) {
