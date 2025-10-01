@@ -44,6 +44,7 @@ var (
 )
 
 type processTargetsParams struct {
+	AtmosConfig          *schema.AtmosConfiguration
 	IndexSource          int
 	Source               *schema.AtmosVendorSource
 	TemplateData         struct{ Component, Version string }
@@ -213,7 +214,7 @@ func ExecuteAtmosVendorInternal(params *executeVendorOptions) error {
 		return err
 	}
 
-	packages, err := processAtmosVendorSource(sources, params.component, params.tags, params.vendorConfigFileName, vendorConfigFilePath)
+	packages, err := processAtmosVendorSource(params.atmosConfig, sources, params.component, params.tags, params.vendorConfigFileName, vendorConfigFilePath)
 	if err != nil {
 		return err
 	}
@@ -257,7 +258,7 @@ func validateTagsAndComponents(
 	return nil
 }
 
-func processAtmosVendorSource(sources []schema.AtmosVendorSource, component string, tags []string, vendorConfigFileName, vendorConfigFilePath string) ([]pkgAtmosVendor, error) {
+func processAtmosVendorSource(atmosConfig *schema.AtmosConfiguration, sources []schema.AtmosVendorSource, component string, tags []string, vendorConfigFileName, vendorConfigFilePath string) ([]pkgAtmosVendor, error) {
 	var packages []pkgAtmosVendor
 	for indexSource := range sources {
 		if shouldSkipSource(&sources[indexSource], component, tags) {
@@ -274,7 +275,7 @@ func processAtmosVendorSource(sources []schema.AtmosVendorSource, component stri
 		}{sources[indexSource].Component, sources[indexSource].Version}
 
 		// Parse 'source' template
-		uri, err := ProcessTmpl(fmt.Sprintf("source-%d", indexSource), sources[indexSource].Source, tmplData, false)
+		uri, err := ProcessTmpl(atmosConfig, fmt.Sprintf("source-%d", indexSource), sources[indexSource].Source, tmplData, false)
 		if err != nil {
 			return nil, err
 		}
@@ -298,6 +299,7 @@ func processAtmosVendorSource(sources []schema.AtmosVendorSource, component stri
 
 		// Process each target within the source
 		pkgs, err := processTargets(&processTargetsParams{
+			AtmosConfig:          atmosConfig,
 			IndexSource:          indexSource,
 			Source:               &sources[indexSource],
 			TemplateData:         tmplData,
@@ -327,7 +329,7 @@ func determinePackageType(useOciScheme, useLocalFileSystem bool) pkgType {
 func processTargets(params *processTargetsParams) ([]pkgAtmosVendor, error) {
 	var packages []pkgAtmosVendor
 	for indexTarget, tgt := range params.Source.Targets {
-		target, err := ProcessTmpl(fmt.Sprintf("target-%d-%d", params.IndexSource, indexTarget), tgt, params.TemplateData, false)
+		target, err := ProcessTmpl(params.AtmosConfig, fmt.Sprintf("target-%d-%d", params.IndexSource, indexTarget), tgt, params.TemplateData, false)
 		if err != nil {
 			return nil, err
 		}

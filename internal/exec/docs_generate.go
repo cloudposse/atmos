@@ -37,7 +37,7 @@ type defaultTemplateRenderer struct{}
 
 // Render delegates rendering to the existing ProcessTmplWithDatasourcesGomplate function.
 func (d defaultTemplateRenderer) Render(tmplName, tmplValue string, mergedData map[string]interface{}, ignoreMissing bool) (string, error) {
-	return ProcessTmplWithDatasourcesGomplate(tmplName, tmplValue, mergedData, ignoreMissing)
+	return ProcessTmplWithDatasourcesGomplate(&schema.AtmosConfiguration{}, tmplName, tmplValue, mergedData, ignoreMissing)
 }
 
 // ExecuteDocsGenerateCmd implements the 'atmos docs generate <doc-type>' logic.

@@ -102,65 +102,30 @@ func TestTrackMultipleCalls(t *testing.T) {
 	}
 }
 
-func TestEnableHDR(t *testing.T) {
-	// Reset registry and HDR state.
+func TestP95Histogram(t *testing.T) {
+	// Reset registry.
 	reg = &registry{
 		data:  make(map[string]*Metric),
 		start: time.Now(),
 	}
-	hdrEnabled = false
+	EnableTracking(true)
 
-	tests := []struct {
-		name      string
-		enableHDR bool
-		expectP95 bool
-	}{
-		{
-			name:      "HDR disabled",
-			enableHDR: false,
-			expectP95: false,
-		},
-		{
-			name:      "HDR enabled",
-			enableHDR: true,
-			expectP95: true,
-		},
+	functionName := "p95TestFunc"
+	done := Track(nil, functionName)
+	time.Sleep(1 * time.Millisecond)
+	done()
+
+	reg.mu.Lock()
+	metric, exists := reg.data[functionName]
+	reg.mu.Unlock()
+
+	if !exists {
+		t.Fatal("expected metric to exist")
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			// Reset for each test.
-			reg = &registry{
-				data:  make(map[string]*Metric),
-				start: time.Now(),
-			}
-
-			EnableHDR(tt.enableHDR)
-			EnableTracking(true)
-
-			functionName := "hdrTestFunc"
-			done := Track(nil, functionName)
-			time.Sleep(1 * time.Millisecond)
-			done()
-
-			reg.mu.Lock()
-			metric, exists := reg.data[functionName]
-			reg.mu.Unlock()
-
-			if !exists {
-				t.Fatal("expected metric to exist")
-			}
-
-			if tt.expectP95 {
-				if metric.Hist == nil {
-					t.Error("expected histogram to be created when HDR is enabled")
-				}
-			} else {
-				if metric.Hist != nil {
-					t.Error("expected histogram to be nil when HDR is disabled")
-				}
-			}
-		})
+	// HDR histogram should always be created when tracking is enabled.
+	if metric.Hist == nil {
+		t.Error("expected histogram to be created automatically")
 	}
 }
 
@@ -393,12 +358,11 @@ func TestSortRows(t *testing.T) {
 }
 
 func TestP95WithHDR(t *testing.T) {
-	// Reset registry and enable HDR.
+	// Reset registry and enable tracking (HDR is automatically enabled).
 	reg = &registry{
 		data:  make(map[string]*Metric),
 		start: time.Now(),
 	}
-	EnableHDR(true)
 	EnableTracking(true)
 
 	functionName := "p95TestFunc"
@@ -427,7 +391,7 @@ func TestP95WithHDR(t *testing.T) {
 	row := snap.Rows[0]
 
 	if row.P95 == 0 {
-		t.Error("expected non-zero P95 when HDR is enabled")
+		t.Error("expected non-zero P95 when tracking is enabled")
 	}
 
 	// P95 should be greater than or equal to the average.

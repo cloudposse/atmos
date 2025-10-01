@@ -305,7 +305,7 @@ For each annotated function, the following metrics are tracked with **microsecon
 - **Total**: Total execution time across all calls (displayed with microsecond precision)
 - **Avg**: Average execution time per call (Total ÷ Count, displayed with microsecond precision)
 - **Max**: Maximum execution time for a single call (displayed with microsecond precision)
-- **P95**: 95th percentile latency (when `--heatmap-hdr` flag is used, displayed with microsecond precision)
+- **P95**: 95th percentile latency (automatically calculated when tracking is enabled, displayed with microsecond precision)
 
 All durations are displayed in Go's duration format (e.g., `123.456µs`, `12.345ms`, `1.234s`) with microsecond-level granularity to capture fast function executions accurately.
 
@@ -314,11 +314,8 @@ All durations are displayed in Go's duration format (e.g., `123.456µs`, `12.345
 View the performance heatmap after running any command:
 
 ```bash
-# Basic heatmap
+# Basic heatmap (includes P95 percentile tracking)
 atmos describe stacks --heatmap
-
-# With P95 percentile tracking
-atmos describe stacks --heatmap --heatmap-hdr
 
 # With specific visualization mode
 atmos describe stacks --heatmap --heatmap-mode=table

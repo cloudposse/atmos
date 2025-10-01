@@ -92,12 +92,8 @@ var RootCmd = &cobra.Command{
 			}
 		}
 
-		// Enable HDR histogram if heatmap-hdr flag is set.
-		if heatmapHDR, _ := cmd.Flags().GetBool("heatmap-hdr"); heatmapHDR {
-			perf.EnableHDR(true)
-		}
-
 		// Enable performance tracking if heatmap flag is set.
+		// P95 latency tracking via HDR histogram is automatically enabled.
 		if showHeatmap, _ := cmd.Flags().GetBool("heatmap"); showHeatmap {
 			perf.EnableTracking(true)
 		}
@@ -554,9 +550,8 @@ func init() {
 	RootCmd.PersistentFlags().String("profile-type", "cpu",
 		"Type of profile to collect when using --profile-file. "+
 			"Options: cpu, heap, allocs, goroutine, block, mutex, threadcreate, trace")
-	RootCmd.PersistentFlags().Bool("heatmap", false, "Show performance heatmap visualization after command execution")
+	RootCmd.PersistentFlags().Bool("heatmap", false, "Show performance heatmap visualization after command execution (includes P95 latency)")
 	RootCmd.PersistentFlags().String("heatmap-mode", "bar", "Heatmap visualization mode: bar, ascii, table, sparkline (press 1-4 to switch in TUI)")
-	RootCmd.PersistentFlags().Bool("heatmap-hdr", false, "Enable HDR histogram for P95 latency calculations in heatmap (slightly higher overhead)")
 	// Set custom usage template.
 	err := templates.SetCustomUsageFunc(RootCmd)
 	if err != nil {

@@ -93,7 +93,7 @@ settings:
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			// Test with nil context
-			result, err := ProcessTmpl("test.yaml.tmpl", tc.template, nil, false)
+			result, err := ProcessTmpl(nil, "test.yaml.tmpl", tc.template, nil, false)
 			if tc.expectError {
 				require.Error(t, err)
 			} else {
@@ -103,7 +103,7 @@ settings:
 
 			// Test with empty context
 			emptyContext := map[string]any{}
-			result2, err2 := ProcessTmpl("test.yaml.tmpl", tc.template, emptyContext, false)
+			result2, err2 := ProcessTmpl(nil, "test.yaml.tmpl", tc.template, emptyContext, false)
 			if tc.expectError {
 				require.Error(t, err2)
 			} else {
@@ -129,7 +129,7 @@ timestamp: {{ now | date "2006-01-02" }}
 build_number: {{ env "BUILD_NUMBER" | default "local" }}
 calculated: {{ add 10 20 }}`
 
-	result, err := ProcessTmpl("test.yaml.tmpl", template, context, false)
+	result, err := ProcessTmpl(nil, "test.yaml.tmpl", template, context, false)
 	require.NoError(t, err)
 
 	assert.Contains(t, result, "app: test-app")
@@ -146,14 +146,14 @@ app: {{ .name }}
 timestamp: {{ now | date "2006-01-02" }}`
 
 	// With ignoreMissingTemplateValues = false (should error)
-	_, err := ProcessTmpl("test.yaml.tmpl", template, nil, false)
+	_, err := ProcessTmpl(nil, "test.yaml.tmpl", template, nil, false)
 	assert.Error(t, err)
 	// The error message can vary between Go versions
 	assert.True(t, strings.Contains(err.Error(), "no entry for key") ||
 		strings.Contains(err.Error(), "nil data"))
 
 	// With ignoreMissingTemplateValues = true (should not error)
-	result, err := ProcessTmpl("test.yaml.tmpl", template, nil, true)
+	result, err := ProcessTmpl(nil, "test.yaml.tmpl", template, nil, true)
 	assert.NoError(t, err)
 	assert.Contains(t, result, "app: <no value>")
 	assert.Contains(t, result, "timestamp:")
@@ -181,7 +181,7 @@ func TestProcessTemplateErrorCases(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			_, err := ProcessTmpl("test.yaml.tmpl", tc.template, tc.context, false)
+			_, err := ProcessTmpl(nil, "test.yaml.tmpl", tc.template, tc.context, false)
 			assert.Error(t, err)
 		})
 	}
@@ -267,7 +267,7 @@ func TestProcessTemplateWithSprigFunctions(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := ProcessTmpl("test.yaml.tmpl", tc.template, nil, false)
+			result, err := ProcessTmpl(nil, "test.yaml.tmpl", tc.template, nil, false)
 			require.NoError(t, err)
 			tc.validate(t, result)
 		})
@@ -281,7 +281,7 @@ func BenchmarkTemplateProcessing(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, _ = ProcessTmpl("bench.yaml.tmpl", template, context, false)
+		_, _ = ProcessTmpl(nil, "bench.yaml.tmpl", template, context, false)
 	}
 }
 
@@ -296,7 +296,7 @@ config:
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, _ = ProcessTmpl("bench.yaml.tmpl", template, context, false)
+		_, _ = ProcessTmpl(nil, "bench.yaml.tmpl", template, context, false)
 	}
 }
 
@@ -312,6 +312,6 @@ timestamp: {{ now | date "2006-01-02" }}`
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, _ = ProcessTmpl("bench.yaml.tmpl", template, context, false)
+		_, _ = ProcessTmpl(nil, "bench.yaml.tmpl", template, context, false)
 	}
 }

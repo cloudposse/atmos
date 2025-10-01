@@ -154,6 +154,10 @@ linters:
       - linters:
           - forbidigo
         path: pkg/perf/.*\.go$
+      - linters:
+          - revive
+        path: internal/exec/vendor_utils\.go$
+        text: "argument-limit"
     paths:
       - experiments/.*
       - third_party$

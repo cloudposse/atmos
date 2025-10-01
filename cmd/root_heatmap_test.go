@@ -15,14 +15,12 @@ import (
 func TestDisplayPerformanceHeatmap(t *testing.T) {
 	tests := []struct {
 		name           string
-		enableHDR      bool
 		mode           string
 		expectedOutput []string
 	}{
 		{
-			name:      "Basic heatmap output",
-			enableHDR: false,
-			mode:      "bar",
+			name: "Basic heatmap output",
+			mode: "bar",
 			expectedOutput: []string{
 				"=== Atmos Performance Summary ===",
 				"Elapsed:",
@@ -31,9 +29,8 @@ func TestDisplayPerformanceHeatmap(t *testing.T) {
 			},
 		},
 		{
-			name:      "Heatmap with HDR enabled",
-			enableHDR: true,
-			mode:      "table",
+			name: "Heatmap with P95",
+			mode: "table",
 			expectedOutput: []string{
 				"=== Atmos Performance Summary ===",
 				"Elapsed:",
@@ -44,8 +41,7 @@ func TestDisplayPerformanceHeatmap(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Reset perf registry for clean test.
-			perf.EnableHDR(tt.enableHDR)
+			// Reset perf registry and enable tracking (P95 is automatically enabled).
 			perf.EnableTracking(true)
 
 			// Add some test tracking data.
@@ -120,17 +116,10 @@ func TestHeatmapFlags(t *testing.T) {
 		assert.NotNil(t, flag, "--heatmap-mode flag should be registered")
 		assert.Equal(t, "bar", flag.DefValue, "--heatmap-mode should default to bar")
 	})
-
-	t.Run("Heatmap HDR flag exists", func(t *testing.T) {
-		flag := RootCmd.PersistentFlags().Lookup("heatmap-hdr")
-		assert.NotNil(t, flag, "--heatmap-hdr flag should be registered")
-		assert.Equal(t, "false", flag.DefValue, "--heatmap-hdr should default to false")
-	})
 }
 
 func TestHeatmapNonTTYOutput(t *testing.T) {
-	// Reset perf registry.
-	perf.EnableHDR(false)
+	// Reset perf registry and enable tracking.
 	perf.EnableTracking(true)
 
 	// Add test data.

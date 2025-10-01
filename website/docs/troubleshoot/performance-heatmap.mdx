@@ -20,7 +20,7 @@ The performance heatmap is a lightweight profiling visualization tool that track
 
 - **Function call counts**: How many times each function is called
 - **Execution times**: Total, average, and maximum duration for each function (microsecond precision)
-- **Percentile statistics**: P95 latency for detailed performance analysis (when enabled)
+- **Percentile statistics**: P95 latency for detailed performance analysis
 - **Interactive visualizations**: Multiple display modes for analyzing performance data
 
 Unlike pprof profiling which captures detailed runtime data, the heatmap provides focused, real-time metrics on
@@ -53,23 +53,15 @@ atmos describe stacks --heatmap
 
 <dl>
     <dt>`--heatmap`</dt>
-    <dd>Display performance heatmap visualization after command execution</dd>
+    <dd>Display performance heatmap visualization after command execution (includes P95 latency tracking)</dd>
 
     <dt>`--heatmap-mode`</dt>
     <dd>Visualization mode: `bar`, `ascii`, `table`, or `sparkline` (default: `bar`). In interactive mode, press 1-4 to switch modes.</dd>
-
-    <dt>`--heatmap-hdr`</dt>
-    <dd>Enable HDR histogram for P95 latency calculations (slightly higher overhead)</dd>
 </dl>
 
 **Basic usage:**
 ```bash
 atmos terraform plan vpc -s dev --heatmap
-```
-
-**With percentile statistics (P95):**
-```bash
-atmos terraform plan vpc -s dev --heatmap --heatmap-hdr
 ```
 
 ## Visualization Modes
@@ -212,7 +204,7 @@ Each tracked function displays:
     <dd>Maximum execution time for a single call</dd>
 
     <dt>`P95`</dt>
-    <dd>95th percentile latency (only shown when `--heatmap-hdr` flag is used)</dd>
+    <dd>95th percentile latency (automatically calculated when tracking is enabled)</dd>
 </dl>
 
 ### Interactive Mode
@@ -237,7 +229,7 @@ Track which functions consume the most execution time:
 
 ```bash
 # Profile a slow command with percentile statistics
-atmos terraform plan large-component -s prod --heatmap --heatmap-hdr
+atmos terraform plan large-component -s prod --heatmap
 
 # Look for functions with high Total time in the output
 ```
@@ -268,7 +260,7 @@ Capture performance metrics in automated pipelines:
 
 ```bash
 # In CI/CD pipeline - run commands and capture metrics
-atmos terraform plan vpc -s prod --heatmap --heatmap-hdr 2>&1 | tee performance.log
+atmos terraform plan vpc -s prod --heatmap 2>&1 | tee performance.log
 
 # Parse performance.log for regression detection
 ```
@@ -279,7 +271,7 @@ Use during development to validate performance impact:
 
 ```bash
 # Create an alias for convenient heatmap usage
-alias atmos-perf='atmos --heatmap --heatmap-hdr'
+alias atmos-perf='atmos --heatmap'
 
 # Run commands with heatmap during development
 atmos-perf validate stacks
@@ -361,13 +353,16 @@ atmos describe stacks --heatmap
 atmos terraform plan component -s stack --heatmap
 ```
 
-### P95 Column Shows Dashes
+### P95 Column Shows Zero
 
-**Problem**: P95 column displays `-` instead of values
+**Problem**: P95 column displays `0` or unusually low values
 
-**Solution**: Enable HDR histogram tracking with the `--heatmap-hdr` flag:
+**Explanation**: P95 calculations require multiple function calls to be statistically meaningful. If a function is only called once or twice, P95 may not be representative.
+
+**Expected Behavior**: Run commands that execute functions multiple times to see meaningful P95 values:
 ```bash
-atmos describe stacks --heatmap --heatmap-hdr
+atmos describe stacks --heatmap
+atmos terraform plan component -s stack --heatmap
 ```
 
 ### Interactive Mode Not Working
@@ -396,7 +391,6 @@ Elapsed: 123.45ms  Functions: 5  Calls: 42
 # Run with both heatmap and pprof profiling
 atmos terraform plan vpc -s prod \
   --heatmap \
-  --heatmap-hdr \
   --profile-file=cpu.prof \
   --profile-type=cpu
 
@@ -417,7 +411,7 @@ atmos terraform plan vpc -s prod --heatmap
 
 # CI/CD: Enable conditionally for performance regression testing
 if [ "$ENABLE_PERF_TRACKING" = "true" ]; then
-  atmos terraform plan vpc -s prod --heatmap --heatmap-hdr 2>perf.log
+  atmos terraform plan vpc -s prod --heatmap 2>perf.log
 fi
 ```
 
@@ -439,7 +433,6 @@ Correlate performance metrics with debug logs:
 atmos describe stacks \
   --logs-level=Debug \
   --heatmap \
-  --heatmap-hdr \
   2>&1 | tee debug-with-perf.log
 ```
 
@@ -452,7 +445,7 @@ Track performance in CI/CD to detect regressions:
 # ci-performance-check.sh
 
 # Capture performance metrics
-atmos validate stacks --heatmap --heatmap-hdr 2>&1 | tee perf-output.txt
+atmos validate stacks --heatmap 2>&1 | tee perf-output.txt
 
 # Extract elapsed time
 elapsed=$(grep "Elapsed:" perf-output.txt | awk '{print $2}')

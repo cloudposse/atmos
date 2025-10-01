@@ -385,7 +385,7 @@ func ExecuteAtlantisGenerateRepoConfig(
 
 				switch {
 				case stackNameTemplate != "":
-					stackSlug, err = ProcessTmpl("atlantis-stack-name-template", stackNameTemplate, configAndStacksInfo.ComponentSection, false)
+					stackSlug, err = ProcessTmpl(atmosConfig, "atlantis-stack-name-template", stackNameTemplate, configAndStacksInfo.ComponentSection, false)
 					if err != nil {
 						return err
 					}

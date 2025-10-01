@@ -271,7 +271,7 @@ func ProcessStacks(
 			}
 
 			if atmosConfig.Stacks.NameTemplate != "" {
-				tmpl, err2 := ProcessTmpl("name-template", atmosConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, false)
+				tmpl, err2 := ProcessTmpl(atmosConfig, "name-template", atmosConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, false)
 				if err2 != nil {
 					continue
 				}

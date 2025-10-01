@@ -269,7 +269,7 @@ func ExecuteDescribeStacks(
 
 						// Stack name
 						if atmosConfig.Stacks.NameTemplate != "" {
-							stackName, err = ProcessTmpl("describe-stacks-name-template", atmosConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, false)
+							stackName, err = ProcessTmpl(atmosConfig, "describe-stacks-name-template", atmosConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, false)
 							if err != nil {
 								return nil, err
 							}
@@ -497,7 +497,7 @@ func ExecuteDescribeStacks(
 
 						// Stack name
 						if atmosConfig.Stacks.NameTemplate != "" {
-							stackName, err = ProcessTmpl("describe-stacks-name-template", atmosConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, false)
+							stackName, err = ProcessTmpl(atmosConfig, "describe-stacks-name-template", atmosConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, false)
 							if err != nil {
 								return nil, err
 							}
@@ -701,7 +701,7 @@ func ExecuteDescribeStacks(
 
 						// Stack name
 						if atmosConfig.Stacks.NameTemplate != "" {
-							stackName, err = ProcessTmpl("describe-stacks-name-template", atmosConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, false)
+							stackName, err = ProcessTmpl(atmosConfig, "describe-stacks-name-template", atmosConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, false)
 							if err != nil {
 								return nil, err
 							}

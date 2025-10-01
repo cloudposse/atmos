@@ -39,21 +39,10 @@ var reg = &registry{
 	start: time.Now(),
 }
 
-var (
-	hdrEnabled      bool
-	trackingEnabled bool
-)
-
-// EnableHDR enables HDR histogram tracking for P95 latency calculations.
-func EnableHDR(enabled bool) {
-	hdrEnabled = enabled
-}
-
-func withHDR() bool {
-	return hdrEnabled
-}
+var trackingEnabled bool
 
 // EnableTracking enables performance tracking globally.
+// HDR histogram for P95 latency is automatically enabled when tracking is enabled.
 func EnableTracking(enabled bool) {
 	trackingEnabled = enabled
 }
@@ -79,10 +68,8 @@ func Track(atmosConfig *schema.AtmosConfiguration, name string) func() {
 		reg.mu.Lock()
 		m := reg.data[name]
 		if m == nil {
-			var h *hdrhistogram.Histogram
-			if withHDR() {
-				h = hdrhistogram.New(histogramMinValue, histogramMaxValue, histogramPrecision)
-			}
+			// Always create HDR histogram when tracking is enabled.
+			h := hdrhistogram.New(histogramMinValue, histogramMaxValue, histogramPrecision)
 			m = &Metric{Name: name, Hist: h}
 			reg.data[name] = m
 		}

@@ -285,7 +285,7 @@ func ProcessYAMLConfigFileWithContext(
 	// https://atmos.tools/core-concepts/stacks/imports#go-templates-in-imports
 	if !skipTemplatesProcessingInImports && (u.IsTemplateFile(filePath) || len(context) > 0) { //nolint:nestif // Template processing error handling requires conditional formatting based on context
 		var tmplErr error
-		stackManifestTemplatesProcessed, tmplErr = ProcessTmpl(relativeFilePath, stackYamlConfig, context, ignoreMissingTemplateValues)
+		stackManifestTemplatesProcessed, tmplErr = ProcessTmpl(atmosConfig, relativeFilePath, stackYamlConfig, context, ignoreMissingTemplateValues)
 		if tmplErr != nil {
 			if atmosConfig.Logs.Level == u.LogLevelTrace || atmosConfig.Logs.Level == u.LogLevelDebug {
 				stackManifestTemplatesErrorMessage = fmt.Sprintf("\n\n%s", stackYamlConfig)
@@ -481,7 +481,7 @@ func ProcessYAMLConfigFileWithContext(
 			importMatches, err = u.GetGlobMatches(impWithExtPath)
 			if err != nil || len(importMatches) == 0 {
 				// The import was not found -> check if the import is a Go template; if not, return the error
-				isGolangTemplate, err2 := IsGolangTemplate(imp)
+				isGolangTemplate, err2 := IsGolangTemplate(atmosConfig, imp)
 				if err2 != nil {
 					return nil, nil, nil, nil, nil, nil, nil, err2
 				}
