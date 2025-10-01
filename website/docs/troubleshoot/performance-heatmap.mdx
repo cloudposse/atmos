@@ -19,12 +19,12 @@ import Intro from '@site/src/components/Intro'
 The performance heatmap is a lightweight profiling visualization tool that tracks and displays:
 
 - **Function call counts**: How many times each function is called
-- **Execution times**: Total, average, and maximum duration for each function
+- **Execution times**: Total, average, and maximum duration for each function (microsecond precision)
 - **Percentile statistics**: P95 latency for detailed performance analysis (when enabled)
 - **Interactive visualizations**: Multiple display modes for analyzing performance data
 
 Unlike pprof profiling which captures detailed runtime data, the heatmap provides focused, real-time metrics on
-instrumented functions with minimal overhead.
+instrumented functions with minimal overhead. All timing measurements use microsecond precision to capture fast function executions.
 
 ## Quick Start
 
@@ -40,10 +40,10 @@ atmos describe stacks --heatmap
     === Atmos Performance Summary ===
     Elapsed: 234.56ms  Functions: 12  Calls: 156
     Function                                  Count      Total        Avg        Max      P95
-    ProcessStackConfig                           45     120ms       2ms        8ms        -
-    LoadYAMLFile                                 32      65ms       2ms        5ms        -
-    ProcessTemplates                             28      42ms       1ms        3ms        -
-    ValidateComponentConfig                      18      18ms       1ms        2ms        -
+    ProcessStackConfig                           45   120.5ms    2.678ms    8.123ms        -
+    LoadYAMLFile                                 32    65.3ms    2.041ms    5.432ms        -
+    ProcessTemplates                             28    42.1ms    1.504ms    3.211ms        -
+    ValidateComponentConfig                      18    18.7ms    1.039ms    2.145ms        -
     ```
 </Terminal>
 

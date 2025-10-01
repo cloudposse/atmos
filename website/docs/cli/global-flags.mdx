@@ -199,6 +199,42 @@ These flags are available across multiple commands but not universally:
 </dl>
 
 
+### Performance Heatmap Flags
+
+<dl>
+    <dt>`--heatmap`</dt>
+    <dd>
+        Display performance heatmap visualization after command execution.
+        - Default: `false`
+        - Shows function call counts, execution times, and performance metrics
+        - Automatically tracks function execution with microsecond precision
+        - Displays interactive TUI if terminal is available, otherwise static output
+    </dd>
+
+    <dt>`--heatmap-mode`</dt>
+    <dd>
+        Visualization mode for the performance heatmap.
+        - Options: `bar`, `ascii`, `table`, `sparkline`
+        - Default: `bar`
+        - `bar`: Colored horizontal bar chart with function names and durations
+        - `ascii`: Color-coded ASCII bars (Red >1ms, Orange >500µs, Yellow >100µs, Green <100µs)
+        - `table`: Interactive table with sortable columns
+        - `sparkline`: Compact sparklines showing relative performance
+        - Only used with `--heatmap` flag
+    </dd>
+
+    <dt>`--heatmap-hdr`</dt>
+    <dd>
+        Enable HDR histogram for P95 latency calculations.
+        - Default: `false`
+        - Uses High Dynamic Range histograms for accurate percentile metrics
+        - Adds P95 column to performance output when enabled
+        - Useful for identifying performance outliers and latency spikes
+        - Minimal performance overhead (recommended for production profiling)
+        - Only used with `--heatmap` flag
+    </dd>
+</dl>
+
 ## Environment Variables
 
 All global flags can be set using environment variables. The precedence order is:

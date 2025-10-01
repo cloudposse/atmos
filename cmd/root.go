@@ -474,10 +474,10 @@ func displayPerformanceHeatmap(cmd *cobra.Command, mode string) error {
 	for _, r := range snap.Rows {
 		p95 := "-"
 		if r.P95 > 0 {
-			p95 = r.P95.Truncate(time.Millisecond).String()
+			p95 = formatDuration(r.P95)
 		}
 		fmt.Fprintf(os.Stderr, "%-40s %6d %10s %10s %10s %8s\n",
-			r.Name, r.Count, r.Total.Truncate(time.Millisecond), r.Avg.Truncate(time.Millisecond), r.Max.Truncate(time.Millisecond), p95)
+			r.Name, r.Count, formatDuration(r.Total), formatDuration(r.Avg), formatDuration(r.Max), p95)
 	}
 
 	// Check if we have a TTY for interactive mode.
@@ -488,9 +488,6 @@ func displayPerformanceHeatmap(cmd *cobra.Command, mode string) error {
 
 	// Create an empty heat model for now (we'll enhance this later to track actual execution steps).
 	heatModel := heatmap.NewHeatModel()
-
-	fmt.Fprintf(os.Stderr, "\n🎨 Starting performance visualization TUI...\n")
-	fmt.Fprintf(os.Stderr, "Press 1-4 to switch visualization modes, 'q' to quit\n\n")
 
 	// Create context for TUI with cancellation.
 	ctx, cancel := context.WithCancel(context.Background())
@@ -518,6 +515,15 @@ func isTTY() bool {
 		return (fileInfo.Mode() & os.ModeCharDevice) != 0
 	}
 	return false
+}
+
+// formatDuration formats a duration for display, showing "0" instead of "0s" for zero durations.
+func formatDuration(d time.Duration) string {
+	truncated := d.Truncate(time.Microsecond)
+	if truncated == 0 {
+		return "0"
+	}
+	return truncated.String()
 }
 
 func init() {

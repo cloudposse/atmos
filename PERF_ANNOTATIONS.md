@@ -299,13 +299,15 @@ When running `atmos describe stacks`, the functions are typically called in this
 
 ## Performance Metrics Collected
 
-For each annotated function, the following metrics are tracked:
+For each annotated function, the following metrics are tracked with **microsecond precision**:
 
 - **Count**: Number of times the function was called
-- **Total**: Total execution time across all calls
-- **Avg**: Average execution time per call (Total ÷ Count)
-- **Max**: Maximum execution time for a single call
-- **P95**: 95th percentile latency (when `--heatmap-hdr` flag is used)
+- **Total**: Total execution time across all calls (displayed with microsecond precision)
+- **Avg**: Average execution time per call (Total ÷ Count, displayed with microsecond precision)
+- **Max**: Maximum execution time for a single call (displayed with microsecond precision)
+- **P95**: 95th percentile latency (when `--heatmap-hdr` flag is used, displayed with microsecond precision)
+
+All durations are displayed in Go's duration format (e.g., `123.456µs`, `12.345ms`, `1.234s`) with microsecond-level granularity to capture fast function executions accurately.
 
 ## Usage
 

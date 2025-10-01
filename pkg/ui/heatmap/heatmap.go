@@ -29,16 +29,23 @@ const (
 	maxBarChartWidth         = 40
 	topFunctionsLimit        = 15
 
-	// Performance thresholds (milliseconds).
+	// Performance thresholds (microseconds).
 	thresholdGreen  = 100
 	thresholdYellow = 500
-	thresholdOrange = 1000
+	thresholdRed    = 1000
+
+	// Function name truncation.
+	funcNameMaxWidth      = 28
+	funcNameTruncateWidth = 25
+	funcNameBarWidth      = 25
+	funcNameBarTruncate   = 22
+	sparklineRepeat       = 10
 
 	// Formatting.
 	stepLabelWidth  = 15
 	tickInterval    = 200 * time.Millisecond
 	leftAlignFormat = "%-*s"
-	contextSubtract = 4
+	horizontalSpace = " "
 )
 
 type Step string
@@ -168,13 +175,14 @@ func toTitle(s string) string {
 
 // BubbleTea Model.
 type model struct {
-	heatModel  *HeatModel
-	visualMode string
-	table      table.Model
-	width      int
-	height     int
-	lastUpdate time.Time
-	ctx        context.Context
+	heatModel   *HeatModel
+	visualMode  string
+	table       table.Model
+	width       int
+	height      int
+	lastUpdate  time.Time
+	ctx         context.Context
+	initialSnap perf.Snapshot // Snapshot captured at TUI start
 }
 
 // Messages.
@@ -196,30 +204,6 @@ var (
 	tableStyle = lipgloss.NewStyle().
 			BorderStyle(lipgloss.RoundedBorder()).
 			BorderForeground(lipgloss.Color("#874BFD"))
-
-	// Heat map intensity colors (dark to bright red).
-	heatColors = []lipgloss.Color{
-		"#000000", // Black (no activity)
-		"#1a0000", // Very dark red
-		"#330000", // Dark red
-		"#4d0000", // Medium dark red
-		"#660000", // Medium red
-		"#800000", // Red
-		"#990000", // Bright red
-		"#b30000", // Brighter red
-		"#cc0000", // Very bright red
-		"#e60000", // Intense red
-		"#ff0000", // Maximum red
-	}
-
-	// Bar chart colors.
-	barColors = []lipgloss.Color{
-		"#ff6b6b", // Red
-		"#4ecdc4", // Teal
-		"#45b7d1", // Blue
-		"#96ceb4", // Green
-		"#ffeaa7", // Yellow
-	}
 )
 
 func newModel(heatModel *HeatModel, mode string, ctx context.Context) *model {
@@ -235,7 +219,7 @@ func newModel(heatModel *HeatModel, mode string, ctx context.Context) *model {
 
 	t := table.New(
 		table.WithColumns(columns),
-		table.WithFocused(false),
+		table.WithFocused(true),
 		table.WithHeight(tableHeight),
 	)
 
@@ -261,6 +245,12 @@ func newModel(heatModel *HeatModel, mode string, ctx context.Context) *model {
 }
 
 func (m *model) Init() tea.Cmd {
+	// Capture snapshot at TUI start to freeze elapsed time.
+	m.initialSnap = perf.SnapshotTop("total", topFunctionsLimit)
+
+	// Load initial performance data.
+	m.updatePerformanceData()
+
 	return tea.Batch(
 		tickCmd(),
 		tea.EnterAltScreen,
@@ -274,6 +264,7 @@ func tickCmd() tea.Cmd {
 }
 
 func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	var cmd tea.Cmd
 	var cmds []tea.Cmd
 
 	switch msg := msg.(type) {
@@ -287,29 +278,74 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	}
 
+	// Update table for navigation.
+	m.table, cmd = m.table.Update(msg)
+	cmds = append(cmds, cmd)
+
 	return m, tea.Batch(cmds...)
 }
 
 func (m *model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
-	case "ctrl+c", "q":
+	case "ctrl+c", "q", "esc":
 		return m, tea.Quit
-	case "1":
-		m.visualMode = "bar"
-	case "2":
-		m.visualMode = "ascii"
-	case "3":
-		m.visualMode = "table"
-	case "4":
-		m.visualMode = "sparkline"
+	case "1", "2", "3", "4":
+		m.handleVisualizationModeKey(msg.String())
+		return m, nil
+	case "up", "k":
+		return m, m.handleNavigationUp(msg)
+	case "down", "j":
+		return m, m.handleNavigationDown(msg)
+	default:
+		return m, m.handleDefaultKey(msg)
 	}
-	return m, nil
+}
+
+func (m *model) handleVisualizationModeKey(key string) {
+	modes := map[string]string{
+		"1": "bar",
+		"2": "ascii",
+		"3": "table",
+		"4": "sparkline",
+	}
+	if mode, ok := modes[key]; ok {
+		m.visualMode = mode
+	}
+}
+
+func (m *model) handleNavigationUp(msg tea.KeyMsg) tea.Cmd {
+	var cmd tea.Cmd
+	// Wraparound: if at top, go to bottom.
+	if m.table.Cursor() == 0 {
+		m.table.SetCursor(len(m.table.Rows()) - 1)
+	} else {
+		m.table, cmd = m.table.Update(msg)
+	}
+	return cmd
+}
+
+func (m *model) handleNavigationDown(msg tea.KeyMsg) tea.Cmd {
+	var cmd tea.Cmd
+	// Wraparound: if at bottom, go to top.
+	if m.table.Cursor() == len(m.table.Rows())-1 {
+		m.table.SetCursor(0)
+	} else {
+		m.table, cmd = m.table.Update(msg)
+	}
+	return cmd
+}
+
+func (m *model) handleDefaultKey(msg tea.KeyMsg) tea.Cmd {
+	var cmd tea.Cmd
+	// Pass other keys to the table.
+	m.table, cmd = m.table.Update(msg)
+	return cmd
 }
 
 func (m *model) handleWindowSizeMsg(msg tea.WindowSizeMsg) {
 	m.width = msg.Width
 	m.height = msg.Height
-	m.table.SetWidth(msg.Width - contextSubtract)
+	// Don't set table width - let it use natural column widths for consistency with visualization.
 }
 
 func (m *model) handleTickMsg(msg tickMsg) tea.Cmd {
@@ -338,14 +374,14 @@ func (m *model) updatePerformanceData() {
 	for _, r := range snap.Rows {
 		p95 := "-"
 		if r.P95 > 0 {
-			p95 = r.P95.Truncate(time.Millisecond).String()
+			p95 = formatDuration(r.P95)
 		}
 		rows = append(rows, table.Row{
 			truncate(r.Name, tableFunctionWidth-2),
 			fmt.Sprintf("%d", r.Count),
-			r.Total.Truncate(time.Millisecond).String(),
-			r.Avg.Truncate(time.Millisecond).String(),
-			r.Max.Truncate(time.Millisecond).String(),
+			formatDuration(r.Total),
+			formatDuration(r.Avg),
+			formatDuration(r.Max),
 			p95,
 		})
 	}
@@ -361,7 +397,7 @@ func (m *model) View() string {
 
 	// Header.
 	header := headerStyle.Width(m.width - 2).Render(
-		fmt.Sprintf("Atmos Performance Results - %s Mode (Press 1-4 to switch modes, q to quit)",
+		fmt.Sprintf("Atmos Performance Results - %s Mode (Press 1-4 to switch modes, q/esc to quit)",
 			toTitle(m.visualMode)))
 	sections = append(sections, header)
 
@@ -373,15 +409,23 @@ func (m *model) View() string {
 	tableSection := tableStyle.Render(m.table.View())
 	sections = append(sections, tableSection)
 
-	// Status bar.
-	_, minV, maxV := m.heatModel.Normalized()
+	// Status bar with frozen performance data from TUI start.
 	status := lipgloss.NewStyle().
 		Foreground(lipgloss.Color("241")).
-		Render(fmt.Sprintf("📊 Command completed | Min: %.0fms | Max: %.0fms | Runs: %d | Press q to quit",
-			minV, maxV, m.heatModel.runCount))
+		Render(fmt.Sprintf("📊 Command completed | Functions: %d | Total Calls: %d | Elapsed: %s | Press q/esc to quit",
+			m.initialSnap.TotalFuncs, m.initialSnap.TotalCalls, m.initialSnap.Elapsed.Truncate(time.Microsecond)))
 	sections = append(sections, status)
 
 	return lipgloss.JoinVertical(lipgloss.Left, sections...)
+}
+
+// formatDuration formats a duration for display, showing "0" instead of "0s" for zero durations.
+func formatDuration(d time.Duration) string {
+	truncated := d.Truncate(time.Microsecond)
+	if truncated == 0 {
+		return "0"
+	}
+	return truncated.String()
 }
 
 // StartBubbleTeaUI starts the Bubble Tea interface.

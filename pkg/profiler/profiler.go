@@ -215,7 +215,7 @@ func (p *Server) startServerBasedProfiling() error {
 		// Server started successfully (no immediate error)
 	}
 
-	log.Info("Profiler server available at:", "url", fmt.Sprintf("http://%s/debug/pprof/", addr))
+	log.Debug("Profiler server available at:", "url", fmt.Sprintf("http://%s/debug/pprof/", addr))
 	log.Debug("Profiler server started successfully")
 	return nil
 }
