@@ -95,8 +95,6 @@ atmos describe stacks --heatmap --heatmap-mode=bar
     ProcessTemplates      ████████ 42ms
     ValidateConfig        ███ 18ms
     MergeOverrides        ██ 12ms
-
-    Press 1-4 to switch modes | q to quit
     ```
 </Terminal>
 
@@ -120,8 +118,6 @@ atmos describe stacks --heatmap --heatmap-mode=ascii
     MergeOverrides      █░░░░░░░
 
     Color Legend: █ >1s  █ >500ms  █ >100ms  █ <100ms
-
-    Press 1-4 to switch modes | q to quit
     ```
 </Terminal>
 
@@ -147,8 +143,6 @@ atmos describe stacks --heatmap --heatmap-mode=table
     │ ValidateComponentConfig             │    18 │    18ms  │    1ms   │    2ms   │   2ms   │
     │ MergeOverrides                      │    12 │    12ms  │    1ms   │    2ms   │   1ms   │
     └─────────────────────────────────────┴───────┴──────────┴──────────┴──────────┴─────────┘
-
-    Press 1-4 to switch modes | q to quit
     ```
 </Terminal>
 
@@ -170,8 +164,6 @@ atmos describe stacks --heatmap --heatmap-mode=sparkline
     ProcessTemplates      ▂▃▅█▆▄▂▁   42ms (28 calls)
     ValidateConfig        ▃▅█▅▃▁     18ms (18 calls)
     MergeOverrides        ▄█▅▂       12ms (12 calls)
-
-    Press 1-4 to switch modes | q to quit
     ```
 </Terminal>
 
@@ -293,7 +285,7 @@ Choose the right tool for your use case:
 |--------------------|--------------------------------|---------------------------------------|
 | **Overhead**       | Minimal (microsecond tracking) | Higher (full runtime instrumentation) |
 | **Granularity**    | Function-level metrics         | Line-level profiling                  |
-| **Setup**          | Environment variable only      | Requires flags or config              |
+| **Setup**          | CLI flag only (`--heatmap`)    | Requires flags or config              |
 | **Output**         | Real-time visualization        | File or HTTP endpoint                 |
 | **Use Case**       | Quick performance checks       | Deep performance analysis             |
 | **Visualization**  | Built-in interactive UI        | Requires `go tool pprof`              |
@@ -408,7 +400,7 @@ go tool pprof -http=:8080 cpu.prof
 
 ### Use When Needed
 
-Performance tracking is always enabled with minimal overhead, but displaying the heatmap adds some processing time:
+Performance tracking is only enabled when the `--heatmap` flag is used, ensuring zero overhead during normal operations:
 
 ```bash
 # Development: Use heatmap when investigating performance
