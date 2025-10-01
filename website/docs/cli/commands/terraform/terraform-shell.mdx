@@ -58,26 +58,22 @@ components:
     # Auto-generate backend configuration
     auto_generate_backend_file: true
 
-    # Run 'terraform init' when entering shell
+    # Run 'terraform init -reconfigure' when entering shell
     init_run_reconfigure: true
 
-    # Process Go templates in stack manifests
-    process_templates: true
+    # Enable workspace management
+    workspaces_enabled: true
 
-    # Process YAML functions in stack manifests
-    process_functions: true
-
-    # Workspace configuration
-    workspace_enabled: true
+    # Customize the shell prompt
+    shell:
+      prompt: "atmos [%s] %s $ "
 ```
 
 These settings can also be controlled via environment variables:
 ```shell
 export ATMOS_COMPONENTS_TERRAFORM_AUTO_GENERATE_BACKEND_FILE=true
 export ATMOS_COMPONENTS_TERRAFORM_INIT_RUN_RECONFIGURE=true
-export ATMOS_COMPONENTS_TERRAFORM_PROCESS_TEMPLATES=true
-export ATMOS_COMPONENTS_TERRAFORM_PROCESS_FUNCTIONS=true
-export ATMOS_COMPONENTS_TERRAFORM_WORKSPACE_ENABLED=true
+export ATMOS_COMPONENTS_TERRAFORM_WORKSPACES_ENABLED=true
 ```
 
 ## Examples
