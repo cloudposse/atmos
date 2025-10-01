@@ -13,7 +13,7 @@ rm -rf "$COVERAGE_DIR"
 mkdir -p "$COVERAGE_DIR/integration"
 
 # Run tests with coverage enabled - subprocesses will write to GOCOVERDIR
-GOCOVERDIR="$(pwd)/$COVERAGE_DIR/integration" go test $TEST -v \
+GOCOVERDIR="$(pwd)/$COVERAGE_DIR/integration" go test $TEST \
     -cover -coverpkg=./... $TESTARGS -timeout 40m \
     -coverprofile="$COVERAGE_DIR/unit.txt"
 

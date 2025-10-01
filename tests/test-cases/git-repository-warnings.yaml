@@ -17,21 +17,22 @@ tests:
       exit_code: 1 # We expect a non-zero exit code because the dir doesnt have an atmos config
 
   # Test that atmos doesnt warn if not run inside of a git repo but has an atmos config
-  # This test is disabled because setting ATMOS_BASE_PATH to an absolute path
-  # would not work reliably across different CI environments
+  # This test is disabled because:
+  # 1. verifyInsideGitRepo() is called unconditionally in cmd_utils.go:511
+  # 2. It always warns when not in a git repo, even with atmos.yaml present
+  # 3. The test expectation (no warning) conflicts with current implementation
+  # TODO: Decide if warning should be suppressed when atmos.yaml is found
   - name: atmos doesnt warn if not in git repo with atmos config
     enabled: false
     snapshot: false
     description: "Test that atmos doesnt warn if not run inside of a git repo but has an atmos config"
-    workdir: "/tmp"
+    workdir: "/"
     command: "atmos"
     args:
       - list
       - stacks
     env:
       ATMOS_LOGS_LEVEL: Warning
-      # This would need an absolute path which doesn't work in CI
-      # ATMOS_BASE_PATH: "/path/to/tests/fixtures/scenarios/basic"
     expect:
       diff: []
       stdout:
