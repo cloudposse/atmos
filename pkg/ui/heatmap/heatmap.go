@@ -50,6 +50,7 @@ const (
 	horizontalSpace = " "
 )
 
+// Step represents a stage in the Atmos workflow execution lifecycle.
 type Step string
 
 const (
@@ -60,13 +61,16 @@ const (
 	StepApply       Step = "terraform_apply"
 )
 
+// Steps is the ordered list of all workflow execution steps.
 var Steps = []Step{StepParseConfig, StepLoadStacks, StepResolveDeps, StepPlan, StepApply}
 
+// RunSample represents a single execution run with timing data for each step.
 type RunSample struct {
 	RunIndex int
 	StepDur  map[Step]time.Duration
 }
 
+// HeatModel stores performance timing data for multiple execution runs in a matrix format.
 type HeatModel struct {
 	mu        sync.Mutex
 	runCount  int
@@ -74,6 +78,7 @@ type HeatModel struct {
 	matrix    [][]float64 // [row=step][col=run] in ms
 }
 
+// NewHeatModel creates and initializes a new HeatModel with empty timing matrix.
 func NewHeatModel() *HeatModel {
 	sm := &HeatModel{stepIndex: make(map[Step]int)}
 	for i, s := range Steps {
@@ -86,6 +91,7 @@ func NewHeatModel() *HeatModel {
 	return sm
 }
 
+// AddRun adds timing data from a single execution run to the heatmap model.
 func (m *HeatModel) AddRun(sample RunSample) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -103,6 +109,7 @@ func (m *HeatModel) AddRun(sample RunSample) {
 	}
 }
 
+// Normalized returns a normalized copy of the timing matrix with values scaled to [0,1] range, along with min and max values in milliseconds.
 func (m *HeatModel) Normalized() ([][]float64, float64, float64) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
