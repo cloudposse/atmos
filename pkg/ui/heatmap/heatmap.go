@@ -305,8 +305,8 @@ func (m *model) handleVisualizationModeKey(key string) {
 	modes := map[string]string{
 		"1": "bar",
 		"2": "ascii",
-		"3": "table",
-		"4": "sparkline",
+		"3": "sparkline",
+		"4": "table",
 	}
 	if mode, ok := modes[key]; ok {
 		m.visualMode = mode

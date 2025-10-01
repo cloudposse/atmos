@@ -75,7 +75,12 @@ atmos terraform plan vpc -s dev --heatmap --heatmap-hdr
 ## Visualization Modes
 
 The heatmap supports multiple visualization modes for analyzing performance data.
-In interactive mode (when a TTY is available), you can switch between modes by pressing 1-4.
+In interactive mode (when a TTY is available), you can switch between modes by pressing 1-4:
+
+1. **Bar Chart** - Horizontal bars showing relative execution times
+2. **ASCII Heatmap** - Color-coded grid visualization
+3. **Sparklines** - Compact sparkline charts
+4. **Table** - Detailed tabular view with all metrics
 
 ### Bar Chart Mode (Default)
 
@@ -121,6 +126,29 @@ atmos describe stacks --heatmap --heatmap-mode=ascii
     ```
 </Terminal>
 
+### Sparkline Mode
+
+Compact sparkline charts for quick overview:
+
+```shell
+atmos describe stacks --heatmap --heatmap-mode=sparkline
+```
+
+<Terminal title="Sparkline visualization">
+    ```
+    🔥 Performance Heatmap - Sparklines
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+    ProcessStackConfig     ▁▂▃▅▇█▆▄▃▂ 120ms (45 calls)
+    LoadYAMLFile          ▁▂▄▆█▅▃▂▁  65ms (32 calls)
+    ProcessTemplates      ▂▃▅█▆▄▂▁   42ms (28 calls)
+    ValidateConfig        ▃▅█▅▃▁     18ms (18 calls)
+    MergeOverrides        ▄█▅▂       12ms (12 calls)
+
+    Press 1-4 to switch modes | q to quit
+    ```
+</Terminal>
+
 ### Table Mode
 
 Detailed tabular view with all metrics:
@@ -143,27 +171,8 @@ atmos describe stacks --heatmap --heatmap-mode=table
     │ ValidateComponentConfig             │    18 │    18ms  │    1ms   │    2ms   │   2ms   │
     │ MergeOverrides                      │    12 │    12ms  │    1ms   │    2ms   │   1ms   │
     └─────────────────────────────────────┴───────┴──────────┴──────────┴──────────┴─────────┘
-    ```
-</Terminal>
 
-### Sparkline Mode
-
-Compact sparkline charts for quick overview:
-
-```shell
-atmos describe stacks --heatmap --heatmap-mode=sparkline
-```
-
-<Terminal title="Sparkline visualization">
-    ```
-    🔥 Performance Heatmap - Sparklines
-    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-    ProcessStackConfig     ▁▂▃▅▇█▆▄▃▂ 120ms (45 calls)
-    LoadYAMLFile          ▁▂▄▆█▅▃▂▁  65ms (32 calls)
-    ProcessTemplates      ▂▃▅█▆▄▂▁   42ms (28 calls)
-    ValidateConfig        ▃▅█▅▃▁     18ms (18 calls)
-    MergeOverrides        ▄█▅▂       12ms (12 calls)
+    Press 1-4 to switch modes | q to quit
     ```
 </Terminal>
 
@@ -213,9 +222,9 @@ When running in a terminal with TTY support, the heatmap launches an interactive
 **Keyboard Controls:**
 - **1**: Switch to bar chart mode
 - **2**: Switch to ASCII heatmap mode
-- **3**: Switch to table mode
-- **4**: Switch to sparkline mode
-- **q**: Quit and return to terminal
+- **3**: Switch to sparkline mode
+- **4**: Switch to table mode
+- **q/esc**: Quit and return to terminal
 
 **Non-TTY Mode:**
 When running in scripts or CI/CD pipelines without a TTY, the heatmap displays a static summary instead of launching the interactive UI.
@@ -418,8 +427,8 @@ Choose visualization mode based on your context:
 
 - **bar**: Best for identifying relative performance differences
 - **ascii**: Best for visual pattern recognition
-- **table**: Best for detailed metric analysis
 - **sparkline**: Best for quick overview of many functions
+- **table**: Best for detailed metric analysis
 
 ### Combine with Logging
 

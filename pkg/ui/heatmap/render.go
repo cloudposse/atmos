@@ -98,7 +98,7 @@ func (m *model) renderBarsFromPerf(snap perf.Snapshot) []string {
 
 		value := lipgloss.NewStyle().
 			Foreground(lipgloss.Color("241")).
-			Render(fmt.Sprintf(horizontalSpace+"%s", formatDuration(r.Total)))
+			Render(fmt.Sprintf(horizontalSpace+"%s (×%d)", formatDuration(r.Total), r.Count))
 
 		bars = append(bars, lipgloss.JoinHorizontal(lipgloss.Left, label, horizontalSpace, coloredBar, value))
 	}
@@ -183,7 +183,7 @@ func (m *model) renderASCIIBarRow(r perf.Row, maxTotal time.Duration) string {
 
 	value := lipgloss.NewStyle().
 		Foreground(lipgloss.Color("241")).
-		Render(fmt.Sprintf(horizontalSpace+"%s", formatDuration(r.Total)))
+		Render(fmt.Sprintf(horizontalSpace+"%s (×%d)", formatDuration(r.Total), r.Count))
 
 	return lipgloss.JoinHorizontal(lipgloss.Left, label, horizontalSpace, coloredBar, value)
 }
