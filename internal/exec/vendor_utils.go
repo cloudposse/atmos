@@ -10,7 +10,6 @@ import (
 
 	"github.com/bmatcuk/doublestar/v4"
 	log "github.com/cloudposse/atmos/pkg/logger"
-	cp "github.com/otiai10/copy"
 	"github.com/pkg/errors"
 	"github.com/samber/lo"
 	"gopkg.in/yaml.v3"
@@ -462,102 +461,4 @@ func determineSourceType(uri *string, vendorConfigFilePath string) (bool, bool, 
 	}
 
 	return useOciScheme, useLocalFileSystem, sourceIsLocalFile, nil
-}
-
-func copyToTarget(tempDir, targetPath string, s *schema.AtmosVendorSource, sourceIsLocalFile bool, uri string) error {
-	copyOptions := cp.Options{
-		Skip:          generateSkipFunction(tempDir, s),
-		PreserveTimes: false,
-		PreserveOwner: false,
-		OnSymlink:     func(src string) cp.SymlinkAction { return cp.Deep },
-	}
-
-	// Adjust the target path if it's a local file with no extension
-	if sourceIsLocalFile && filepath.Ext(targetPath) == "" {
-		// Sanitize the URI for safe filenames, especially on Windows
-		sanitizedBase := SanitizeFileName(uri)
-		targetPath = filepath.Join(targetPath, sanitizedBase)
-	}
-
-	return cp.Copy(tempDir, targetPath, copyOptions)
-}
-
-// GenerateSkipFunction creates a function that determines whether to skip files during copying.
-// Based on the vendor source configuration. It uses the provided patterns in ExcludedPaths.
-// And IncludedPaths to filter files during the copy operation.
-//
-// Parameters:
-//   - atmosConfig: The CLI configuration for logging.
-//   - tempDir: The temporary directory containing the files to copy.
-//   - s: The vendor source configuration containing exclusion/inclusion patterns.
-//
-// Returns a function that determines if a file should be skipped during copying.
-func generateSkipFunction(tempDir string, s *schema.AtmosVendorSource) func(os.FileInfo, string, string) (bool, error) {
-	return func(srcInfo os.FileInfo, src, dest string) (bool, error) {
-		// Skip .git directories
-		if filepath.Base(src) == ".git" {
-			return true, nil
-		}
-
-		// Normalize paths
-		tempDir = filepath.ToSlash(tempDir)
-		src = filepath.ToSlash(src)
-		trimmedSrc := u.TrimBasePathFromPath(tempDir+"/", src)
-
-		// Check if the file should be excluded
-		if len(s.ExcludedPaths) > 0 {
-			return shouldExcludeFile(src, s.ExcludedPaths, trimmedSrc)
-		}
-
-		// Only include the files that match the 'included_paths' patterns (if any pattern is specified)
-		if len(s.IncludedPaths) > 0 {
-			return shouldIncludeFile(src, s.IncludedPaths, trimmedSrc)
-		}
-
-		// If 'included_paths' is not provided, include all files that were not excluded
-		StderrLogger.Debug("Including", "path", u.TrimBasePathFromPath(tempDir+"/", src))
-		return false, nil
-	}
-}
-
-// Exclude the files that match the 'excluded_paths' patterns.
-// It supports POSIX-style Globs for file names/paths (double-star `**` is supported).
-// https://en.wikipedia.org/wiki/Glob_(programming).
-// https://github.com/bmatcuk/doublestar#pattern.
-func shouldExcludeFile(src string, excludedPaths []string, trimmedSrc string) (bool, error) {
-	for _, excludePath := range excludedPaths {
-		excludeMatch, err := u.PathMatch(excludePath, src)
-		if err != nil {
-			return true, err
-		} else if excludeMatch {
-			// If the file matches ANY of the 'excluded_paths' patterns, exclude the file
-			log.Debug("Excluding file since it match any pattern from 'excluded_paths'", "excluded_paths", excludePath, "source", trimmedSrc)
-			return true, nil
-		}
-	}
-	return false, nil
-}
-
-// Helper function to check if a file should be included.
-func shouldIncludeFile(src string, includedPaths []string, trimmedSrc string) (bool, error) {
-	anyMatches := false
-	for _, includePath := range includedPaths {
-		includeMatch, err := u.PathMatch(includePath, src)
-		if err != nil {
-			return true, err
-		} else if includeMatch {
-			// If the file matches ANY of the 'included_paths' patterns, include the file
-			log.Debug("Including path since it matches the '%s' pattern from 'included_paths'", "included_paths", includePath, "path", trimmedSrc)
-
-			anyMatches = true
-			break
-		}
-	}
-
-	if anyMatches {
-		return false, nil
-	} else {
-		log.Debug("Excluding path since it does not match any pattern from 'included_paths'", "path", trimmedSrc)
-		return true, nil
-	}
 }

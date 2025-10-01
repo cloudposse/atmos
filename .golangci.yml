@@ -25,6 +25,7 @@ linters:
     - tparallel
     - unconvert
     - unparam
+    - unused
     - whitespace
   settings:
     cyclop:
