@@ -39,7 +39,11 @@ func ProcessTmpl(
 	ctx := context.TODO()
 
 	// Add Gomplate, Sprig and Atmos template functions.
-	funcs := lo.Assign(gomplate.CreateFuncs(ctx, &d), sprig.FuncMap(), FuncMap(&schema.AtmosConfiguration{}, &schema.ConfigAndStacksInfo{}, ctx, &d))
+	cfg := atmosConfig
+	if cfg == nil {
+		cfg = &schema.AtmosConfiguration{}
+	}
+	funcs := lo.Assign(gomplate.CreateFuncs(ctx, &d), sprig.FuncMap(), FuncMap(cfg, &schema.ConfigAndStacksInfo{}, ctx, &d))
 
 	t, err := template.New(tmplName).Funcs(funcs).Parse(tmplValue)
 	if err != nil {
