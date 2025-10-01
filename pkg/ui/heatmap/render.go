@@ -14,8 +14,6 @@ func (m *model) renderVisualization() string {
 	switch m.visualMode {
 	case "bar":
 		return m.renderBarChart()
-	case "ascii":
-		return m.renderASCIIHeatMap()
 	case "table":
 		return m.renderTableHeatMap()
 	case "sparkline":
@@ -117,49 +115,6 @@ func (m *model) renderBarsFromPerf(snap perf.Snapshot) []string {
 	return bars
 }
 
-func (m *model) renderASCIIHeatMap() string {
-	// Use the frozen snapshot captured at TUI start, limited to top functions for visual display.
-	snap := m.getLimitedSnapshot()
-
-	if len(snap.Rows) == 0 {
-		return heatMapStyle.Render(lipgloss.NewStyle().
-			Foreground(lipgloss.Color("240")).
-			Render("No performance data available"))
-	}
-
-	title := lipgloss.NewStyle().
-		Bold(true).
-		Foreground(lipgloss.Color("205")).
-		Render("🔥 Performance Heatmap - Function Times")
-
-	rows := m.renderASCIIBarsFromPerf(snap)
-
-	lines := append([]string{title, ""}, rows...)
-
-	content := strings.Join(lines, "\n")
-	return heatMapStyle.Render(content)
-}
-
-func (m *model) renderASCIIBarsFromPerf(snap perf.Snapshot) []string {
-	var rows []string
-
-	if len(snap.Rows) == 0 {
-		return rows
-	}
-
-	maxTotal := m.findMaxTotal(snap.Rows)
-	if maxTotal == 0 {
-		return rows
-	}
-
-	for _, r := range snap.Rows {
-		row := m.renderASCIIBarRow(r, maxTotal)
-		rows = append(rows, row)
-	}
-
-	return rows
-}
-
 func (m *model) findMaxTotal(rows []perf.Row) time.Duration {
 	maxTotal := rows[0].Total
 	for _, r := range rows {
@@ -168,50 +123,6 @@ func (m *model) findMaxTotal(rows []perf.Row) time.Duration {
 		}
 	}
 	return maxTotal
-}
-
-func (m *model) renderASCIIBarRow(r perf.Row, maxTotal time.Duration) string {
-	// Create visual bar based on total time.
-	ratio := float64(r.Total) / float64(maxTotal)
-	barWidth := int(ratio * 40)
-	if barWidth < 1 && r.Total > 0 {
-		barWidth = 1
-	}
-
-	bar := strings.Repeat("█", barWidth)
-	color := m.selectColorByDuration(r.Total)
-	coloredBar := lipgloss.NewStyle().Foreground(color).Render(bar)
-
-	// Truncate function name if too long.
-	funcName := r.Name
-	if len(funcName) > funcNameMaxWidth {
-		funcName = funcName[:funcNameTruncateWidth] + "..."
-	}
-
-	label := lipgloss.NewStyle().
-		Width(funcNameMaxWidth).
-		Align(lipgloss.Left).
-		Render(funcName)
-
-	value := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("241")).
-		Render(fmt.Sprintf(horizontalSpace+"%s (×%d)", FormatDuration(r.Total), r.Count))
-
-	return lipgloss.JoinHorizontal(lipgloss.Left, label, horizontalSpace, coloredBar, value)
-}
-
-func (m *model) selectColorByDuration(d time.Duration) lipgloss.Color {
-	us := d.Microseconds()
-	switch {
-	case us > thresholdRed: // >1ms
-		return lipgloss.Color("196") // Red
-	case us > thresholdYellow: // >500µs
-		return lipgloss.Color("214") // Orange
-	case us > thresholdGreen: // >100µs
-		return lipgloss.Color("226") // Yellow
-	default:
-		return lipgloss.Color("118") // Green
-	}
 }
 
 func (m *model) renderTableHeatMap() string {

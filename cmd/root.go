@@ -527,7 +527,7 @@ func init() {
 		"Type of profile to collect when using --profile-file. "+
 			"Options: cpu, heap, allocs, goroutine, block, mutex, threadcreate, trace")
 	RootCmd.PersistentFlags().Bool("heatmap", false, "Show performance heatmap visualization after command execution (includes P95 latency)")
-	RootCmd.PersistentFlags().String("heatmap-mode", "bar", "Heatmap visualization mode: bar, ascii, table, sparkline (press 1-4 to switch in TUI)")
+	RootCmd.PersistentFlags().String("heatmap-mode", "bar", "Heatmap visualization mode: bar, sparkline, table (press 1-3 to switch in TUI)")
 	// Set custom usage template.
 	err := templates.SetCustomUsageFunc(RootCmd)
 	if err != nil {

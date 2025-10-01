@@ -30,12 +30,7 @@ const (
 	maxSparklineWidth        = 50
 	maxBarChartWidth         = 40
 	topFunctionsLimit        = 50 // For the full table view
-	topFunctionsVisualLimit  = 25 // For bar chart, sparkline, and ASCII heatmap views
-
-	// Performance thresholds (microseconds).
-	thresholdGreen  = 100
-	thresholdYellow = 500
-	thresholdRed    = 1000
+	topFunctionsVisualLimit  = 25 // For bar chart, sparkline, and table views
 
 	// Function name truncation.
 	funcNameMaxWidth      = 50
@@ -305,7 +300,7 @@ func (m *model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "ctrl+c", "q", "esc":
 		return m, tea.Quit
-	case "1", "2", "3", "4":
+	case "1", "2", "3":
 		m.handleVisualizationModeKey(msg.String())
 		return m, nil
 	case "up", "k":
@@ -320,9 +315,8 @@ func (m *model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 func (m *model) handleVisualizationModeKey(key string) {
 	modes := map[string]string{
 		"1": "bar",
-		"2": "ascii",
-		"3": "sparkline",
-		"4": "table",
+		"2": "sparkline",
+		"3": "table",
 	}
 	if mode, ok := modes[key]; ok {
 		m.visualMode = mode
@@ -413,7 +407,7 @@ func (m *model) View() string {
 
 	// Header.
 	header := headerStyle.Width(m.width - 2).Render(
-		fmt.Sprintf("Atmos Performance Results - %s Mode (Press 1-4 to switch modes, q/esc to quit)",
+		fmt.Sprintf("Atmos Performance Results - %s Mode (Press 1-3 to switch modes, q/esc to quit)",
 			toTitle(m.visualMode)))
 	sections = append(sections, header)
 

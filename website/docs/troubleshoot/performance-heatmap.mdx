@@ -35,7 +35,7 @@ Display the performance heatmap after command execution:
 atmos describe stacks --heatmap
 ```
 
-This will launch an interactive TUI (Terminal User Interface) where you can switch between different visualization modes by pressing 1-4.
+This will launch an interactive TUI (Terminal User Interface) where you can switch between different visualization modes by pressing 1-3.
 
 ### Example: Real Performance Analysis
 
@@ -46,12 +46,6 @@ Here's a real example of analyzing performance with `atmos describe stacks --hea
 ![Performance Heatmap - Bar Chart](/img/cli/perf/atmos-describe-stacks-heatmap-bar-chart.png)
 
 The bar chart shows the top 25 functions by execution time, making it easy to identify performance bottlenecks at a glance.
-
-**Function Times View** (Press `2` in interactive mode):
-
-![Performance Heatmap - Function Times](/img/cli/perf/atmos-describe-stacks-heatmap-func-times.png)
-
-The ASCII heatmap provides a color-coded visualization of execution times across all tracked functions.
 
 **Non-Interactive Mode** (when running in CI/CD or scripts):
 
@@ -111,7 +105,7 @@ The ASCII heatmap provides a color-coded visualization of execution times across
     <dd>Display performance heatmap visualization after command execution (includes P95 latency tracking)</dd>
 
     <dt>`--heatmap-mode`</dt>
-    <dd>Visualization mode: `bar`, `ascii`, `table`, or `sparkline` (default: `bar`). In interactive mode, press 1-4 to switch modes.</dd>
+    <dd>Visualization mode: `bar`, `sparkline`, or `table` (default: `bar`). In interactive mode, press 1-3 to switch modes.</dd>
 </dl>
 
 **Basic usage:**
@@ -122,12 +116,11 @@ atmos terraform plan vpc -s dev --heatmap
 ## Visualization Modes
 
 The heatmap supports multiple visualization modes for analyzing performance data.
-In interactive mode (when a TTY is available), you can switch between modes by pressing 1-4:
+In interactive mode (when a TTY is available), you can switch between modes by pressing 1-3:
 
-1. **Bar Chart** - Horizontal bars showing relative execution times
-2. **ASCII Heatmap** - Color-coded grid visualization
-3. **Sparklines** - Compact sparkline charts
-4. **Table** - Detailed tabular view with all metrics
+1. **Bar Chart** - Horizontal bars showing relative execution times with color gradient
+2. **Sparklines** - Compact sparkline charts for quick overview
+3. **Table** - Detailed tabular view with all metrics
 
 ### Bar Chart Mode (Default)
 
@@ -150,29 +143,6 @@ atmos describe stacks --heatmap --heatmap-mode=bar
     ```
 </Terminal>
 
-### ASCII Heatmap Mode
-
-Color-coded grid showing performance distribution across functions:
-
-```shell
-atmos describe stacks --heatmap --heatmap-mode=ascii
-```
-
-<Terminal title="ASCII heatmap visualization">
-    ```
-    🔥 Performance Heatmap - ASCII Heat Map
-    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-    ProcessStackConfig  ████████
-    LoadYAMLFile        ████░░░░
-    ProcessTemplates    ███░░░░░
-    ValidateConfig      ██░░░░░░
-    MergeOverrides      █░░░░░░░
-
-    Color Legend: █ >1s  █ >500ms  █ >100ms  █ <100ms
-    ```
-</Terminal>
-
 ### Sparkline Mode
 
 Compact sparkline charts for quick overview:
@@ -192,7 +162,7 @@ atmos describe stacks --heatmap --heatmap-mode=sparkline
     ValidateConfig        ▃▅█▅▃▁     18ms (18 calls)
     MergeOverrides        ▄█▅▂       12ms (12 calls)
 
-    Press 1-4 to switch modes | q to quit
+    Press 1-3 to switch modes | q to quit
     ```
 </Terminal>
 
@@ -219,7 +189,7 @@ atmos describe stacks --heatmap --heatmap-mode=table
     │ MergeOverrides                      │    12 │    12ms  │    1ms   │    2ms   │   1ms   │
     └─────────────────────────────────────┴───────┴──────────┴──────────┴──────────┴─────────┘
 
-    Press 1-4 to switch modes | q to quit
+    Press 1-3 to switch modes | q to quit
     ```
 </Terminal>
 
@@ -268,9 +238,8 @@ When running in a terminal with TTY support, the heatmap launches an interactive
 
 **Keyboard Controls:**
 - **1**: Switch to Bar Chart mode
-- **2**: Switch to ASCII Heatmap mode
-- **3**: Switch to Sparkline mode
-- **4**: Switch to Table mode
+- **2**: Switch to Sparkline mode
+- **3**: Switch to Table mode
 - **q/esc**: Quit and return to terminal
 
 **Non-TTY Mode:**
@@ -474,8 +443,7 @@ fi
 
 Choose visualization mode based on your context:
 
-- **bar**: Best for identifying relative performance differences
-- **ascii**: Best for visual pattern recognition
+- **bar**: Best for identifying relative performance differences with color-coded gradient
 - **sparkline**: Best for quick overview of many functions
 - **table**: Best for detailed metric analysis
 
