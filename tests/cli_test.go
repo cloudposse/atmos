@@ -61,8 +61,9 @@ var (
 var logger *log.AtmosLogger
 
 type Expectation struct {
-	Stdout        []MatchPattern            `yaml:"stdout"`          // Expected stdout output
-	Stderr        []MatchPattern            `yaml:"stderr"`          // Expected stderr output
+	Stdout        []MatchPattern            `yaml:"stdout"`          // Expected stdout output (non-TTY mode)
+	Stderr        []MatchPattern            `yaml:"stderr"`          // Expected stderr output (non-TTY mode)
+	Tty           []MatchPattern            `yaml:"tty"`             // Expected TTY output (TTY mode - combined stdout+stderr)
 	ExitCode      int                       `yaml:"exit_code"`       // Expected exit code
 	FileExists    []string                  `yaml:"file_exists"`     // Files to validate
 	FileNotExists []string                  `yaml:"file_not_exists"` // Files that should not exist
@@ -828,15 +829,8 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 		t.Errorf("Description: %s", tc.Description)
 	}
 
-	// Validate stdout
-	if !verifyOutput(t, "stdout", stdout.String(), tc.Expect.Stdout) {
-		t.Errorf("Stdout mismatch for test: %s", tc.Name)
-	}
-
-	// Validate stderr
-	if !verifyOutput(t, "stderr", stderr.String(), tc.Expect.Stderr) {
-		t.Errorf("Stderr mismatch for test: %s", tc.Name)
-	}
+	// Validate output based on TTY mode
+	verifyTestOutputs(t, &tc, stdout.String(), stderr.String())
 
 	// Validate format (YAML/JSON)
 	if len(tc.Expect.Valid) > 0 {
@@ -1245,6 +1239,26 @@ $ go test ./tests -run %q -regenerate-snapshots`, ttyPath, t.Name())
 	}
 
 	return true
+}
+
+// verifyTestOutputs validates test outputs based on TTY mode.
+func verifyTestOutputs(t *testing.T, tc *TestCase, stdout, stderr string) {
+	if tc.Tty {
+		// TTY mode: validate combined output against tty expectations
+		if !verifyOutput(t, "tty", stdout, tc.Expect.Tty) {
+			t.Errorf("TTY output mismatch for test: %s", tc.Name)
+		}
+		return
+	}
+
+	// Non-TTY mode: validate stdout and stderr separately
+	if !verifyOutput(t, "stdout", stdout, tc.Expect.Stdout) {
+		t.Errorf("Stdout mismatch for test: %s", tc.Name)
+	}
+
+	if !verifyOutput(t, "stderr", stderr, tc.Expect.Stderr) {
+		t.Errorf("Stderr mismatch for test: %s", tc.Name)
+	}
 }
 
 func verifySnapshot(t *testing.T, tc TestCase, stdoutOutput, stderrOutput string, regenerate bool) bool {

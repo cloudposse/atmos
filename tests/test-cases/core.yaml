@@ -12,10 +12,8 @@ tests:
       # PTY not supported on windows
       os: !not windows
     expect:
-      stdout:
+      tty:
         - "^(/dev)"
-      stderr:
-        - "^$"
       exit_code: 0
 
   - name: "test non-tty"

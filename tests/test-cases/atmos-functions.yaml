@@ -19,9 +19,7 @@ tests:
       os: !not windows
     expect:
       exit_code: 0
-      # NOTE: TTY mode uses .tty.golden snapshot which contains combined stdout+stderr output.
-      # Telemetry notices (stderr) and command output (stdout) appear together in TTY snapshots.
-      stdout:
+      tty:
         - "Telemetry Enabled"
         - "Fetching baz output from component-3 in nonprod"
         - "Fetching foo output from component-1 in nonprod"

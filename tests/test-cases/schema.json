@@ -61,14 +61,39 @@
                       }
                     ]
                   },
-                  "description": "Expected patterns in stdout."
+                  "description": "Expected patterns in stdout (non-TTY mode)."
                 },
                 "stderr": {
                   "type": "array",
                   "items": {
-                    "type": "string"
+                    "anyOf": [
+                      { "type": "string" },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "not": { "type": "string" }
+                        },
+                        "required": ["not"]
+                      }
+                    ]
                   },
-                  "description": "Expected patterns in stderr."
+                  "description": "Expected patterns in stderr (non-TTY mode)."
+                },
+                "tty": {
+                  "type": "array",
+                  "items": {
+                    "anyOf": [
+                      { "type": "string" },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "not": { "type": "string" }
+                        },
+                        "required": ["not"]
+                      }
+                    ]
+                  },
+                  "description": "Expected patterns in combined TTY output (TTY mode - stdout and stderr merged)."
                 },
                 "exit_code": {
                   "type": "integer",
