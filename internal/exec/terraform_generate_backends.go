@@ -6,18 +6,20 @@ import (
 	"path/filepath"
 	"strings"
 
-	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/mitchellh/mapstructure"
 	"github.com/spf13/cobra"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 // ExecuteTerraformGenerateBackendsCmd executes `terraform generate backends` command.
 func ExecuteTerraformGenerateBackendsCmd(cmd *cobra.Command, args []string) error {
+	defer perf.Track(nil, "exec.ExecuteTerraformGenerateBackendsCmd")()
 	info, err := ProcessCommandLineArgs("terraform", cmd, args, nil)
 	if err != nil {
 		return err
@@ -77,6 +79,7 @@ func ExecuteTerraformGenerateBackends(
 	stacks []string,
 	components []string,
 ) error {
+	defer perf.Track(atmosConfig, "exec.ExecuteTerraformGenerateBackends")()
 	stacksMap, _, err := FindStacksMap(atmosConfig, false)
 	if err != nil {
 		return err

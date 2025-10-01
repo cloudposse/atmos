@@ -6,18 +6,20 @@ import (
 	"path/filepath"
 	"strings"
 
-	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/mitchellh/mapstructure"
 	"github.com/spf13/cobra"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
-// ExecuteTerraformGenerateVarfilesCmd executes `terraform generate varfiles` command
+// ExecuteTerraformGenerateVarfilesCmd executes `terraform generate varfiles` command.
 func ExecuteTerraformGenerateVarfilesCmd(cmd *cobra.Command, args []string) error {
+	defer perf.Track(nil, "exec.ExecuteTerraformGenerateVarfilesCmd")()
 	info, err := ProcessCommandLineArgs("terraform", cmd, args, nil)
 	if err != nil {
 		return err
@@ -69,7 +71,7 @@ func ExecuteTerraformGenerateVarfilesCmd(cmd *cobra.Command, args []string) erro
 	return ExecuteTerraformGenerateVarfiles(&atmosConfig, fileTemplate, format, stacks, components)
 }
 
-// ExecuteTerraformGenerateVarfiles generates varfiles for all terraform components in all stacks
+// ExecuteTerraformGenerateVarfiles generates varfiles for all terraform components in all stacks.
 func ExecuteTerraformGenerateVarfiles(
 	atmosConfig *schema.AtmosConfiguration,
 	fileTemplate string,
@@ -77,6 +79,7 @@ func ExecuteTerraformGenerateVarfiles(
 	stacks []string,
 	components []string,
 ) error {
+	defer perf.Track(atmosConfig, "exec.ExecuteTerraformGenerateVarfiles")()
 	stacksMap, _, err := FindStacksMap(atmosConfig, false)
 	if err != nil {
 		return err

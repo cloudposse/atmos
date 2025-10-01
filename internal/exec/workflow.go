@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"sort"
 
+	"github.com/cloudposse/atmos/pkg/perf"
+
 	"github.com/spf13/cobra"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -15,8 +17,9 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
-// ExecuteWorkflowCmd executes an Atmos workflow
+// ExecuteWorkflowCmd executes an Atmos workflow.
 func ExecuteWorkflowCmd(cmd *cobra.Command, args []string) error {
+	defer perf.Track(nil, "exec.ExecuteWorkflowCmd")()
 	var workflowName string
 	var workflowFile string
 	var fromStep string

@@ -9,22 +9,24 @@ import (
 	"strings"
 	"time"
 
-	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/datafetcher"
 	"github.com/cloudposse/atmos/pkg/downloader"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	m "github.com/cloudposse/atmos/pkg/merge"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 const atmosManifestDefaultFileName = "schemas/atmos/atmos-manifest/1.0/atmos-manifest.json"
 
-// ExecuteValidateStacksCmd executes `validate stacks` command
+// ExecuteValidateStacksCmd executes `validate stacks` command.
 func ExecuteValidateStacksCmd(cmd *cobra.Command, args []string) error {
+	defer perf.Track(nil, "exec.ExecuteValidateStacksCmd")()
 	// Initialize spinner
 	message := "Validating Atmos Stacks..."
 	p := NewSpinner(message)
@@ -61,8 +63,9 @@ func ExecuteValidateStacksCmd(cmd *cobra.Command, args []string) error {
 	return err
 }
 
-// ValidateStacks validates Atmos stack configuration
+// ValidateStacks validates Atmos stack configuration.
 func ValidateStacks(atmosConfig *schema.AtmosConfiguration) error {
+	defer perf.Track(atmosConfig, "exec.ValidateStacks")()
 	var validationErrorMessages []string
 
 	// 1. Process top-level stack manifests and detect duplicate components in the same stack

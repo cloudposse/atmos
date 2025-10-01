@@ -12,13 +12,13 @@ import (
 	"time"
 
 	"github.com/Masterminds/sprig/v3"
-	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/hairyhenderson/gomplate/v3"
 	"github.com/hairyhenderson/gomplate/v3/data"
 	_ "github.com/hairyhenderson/gomplate/v4"
 	"github.com/mitchellh/mapstructure"
 	"github.com/samber/lo"
 
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/merge"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -33,7 +33,7 @@ func ProcessTmpl(
 	tmplData any,
 	ignoreMissingTemplateValues bool,
 ) (string, error) {
-	defer perf.Track(atmosConfig, "ProcessTmpl")()
+	defer perf.Track(atmosConfig, "exec.ProcessTmpl")()
 
 	d := data.Data{}
 	ctx := context.TODO()
@@ -78,7 +78,7 @@ func ProcessTmplWithDatasources(
 	tmplData any,
 	ignoreMissingTemplateValues bool,
 ) (string, error) {
-	defer perf.Track(atmosConfig, "ProcessTmplWithDatasources")()
+	defer perf.Track(atmosConfig, "exec.ProcessTmplWithDatasources")()
 
 	if !atmosConfig.Templates.Settings.Enabled {
 		log.Debug("ProcessTmplWithDatasources: not processing templates since templating is disabled in 'atmos.yaml'", "template", tmplName)
@@ -247,7 +247,7 @@ func ProcessTmplWithDatasources(
 
 // IsGolangTemplate checks if the provided string is a Go template.
 func IsGolangTemplate(atmosConfig *schema.AtmosConfiguration, str string) (bool, error) {
-	defer perf.Track(atmosConfig, "IsGolangTemplate")()
+	defer perf.Track(atmosConfig, "exec.IsGolangTemplate")()
 
 	t, err := template.New(str).Parse(str)
 	if err != nil {
@@ -355,7 +355,7 @@ func ProcessTmplWithDatasourcesGomplate(
 	mergedData map[string]interface{},
 	ignoreMissingTemplateValues bool,
 ) (string, error) {
-	defer perf.Track(atmosConfig, "ProcessTmplWithDatasourcesGomplate")()
+	defer perf.Track(atmosConfig, "exec.ProcessTmplWithDatasourcesGomplate")()
 
 	tempDir, err := createTempDirectory()
 	if err != nil {

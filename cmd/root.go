@@ -38,7 +38,7 @@ const (
 	// LogFileMode is the file mode for log files.
 	logFileMode = 0o644
 	// DefaultTopFunctionsMax is the default number of top functions to display in performance summary.
-	defaultTopFunctionsMax = 25
+	defaultTopFunctionsMax = 50
 )
 
 // atmosConfig This is initialized before everything in the Execute function. So we can directly use this.
@@ -468,7 +468,8 @@ func getInvalidCommandName(input string) string {
 //nolint:unparam // cmd parameter reserved for future use
 func displayPerformanceHeatmap(cmd *cobra.Command, mode string) error {
 	// Print performance summary to console.
-	snap := perf.SnapshotTop("total", defaultTopFunctionsMax)
+	// Filter out functions with zero total time for cleaner output.
+	snap := perf.SnapshotTopFiltered("total", defaultTopFunctionsMax)
 	fmt.Fprintf(os.Stderr, "\n=== Atmos Performance Summary ===\n")
 	fmt.Fprintf(os.Stderr, "Elapsed: %s  Functions: %d  Calls: %d\n", snap.Elapsed, snap.TotalFuncs, snap.TotalCalls)
 	fmt.Fprintf(os.Stderr, "%-50s %6s %10s %10s %10s %8s\n", "Function", "Count", "Total", "Avg", "Max", "P95")

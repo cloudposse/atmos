@@ -7,6 +7,8 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/cloudposse/atmos/pkg/perf"
+
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
@@ -26,8 +28,9 @@ func ExecuteHelmfileCmd(cmd *cobra.Command, args []string, additionalArgsAndFlag
 	return ExecuteHelmfile(info)
 }
 
-// ExecuteHelmfile executes helmfile commands
+// ExecuteHelmfile executes helmfile commands.
 func ExecuteHelmfile(info schema.ConfigAndStacksInfo) error {
+	defer perf.Track(nil, "exec.ExecuteHelmfile")()
 	atmosConfig, err := cfg.InitCliConfig(info, true)
 	if err != nil {
 		return err

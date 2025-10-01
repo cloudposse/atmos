@@ -9,12 +9,13 @@ import (
 	"strings"
 
 	"github.com/bmatcuk/doublestar/v4"
-	log "github.com/cloudposse/atmos/pkg/logger"
 	cp "github.com/otiai10/copy"
 	"github.com/pkg/errors"
 	"github.com/samber/lo"
 	"gopkg.in/yaml.v3"
 
+	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -68,6 +69,7 @@ func ReadAndProcessVendorConfigFile(
 	vendorConfigFile string,
 	checkGlobalConfig bool,
 ) (schema.AtmosVendorConfig, bool, string, error) {
+	defer perf.Track(atmosConfig, "exec.ReadAndProcessVendorConfigFile")()
 	var vendorConfig schema.AtmosVendorConfig
 	vendorConfig.Spec.Sources = []schema.AtmosVendorSource{} // Initialize empty sources slice
 
@@ -187,6 +189,7 @@ func mergeVendorConfigFiles(configFiles []string) (schema.AtmosVendorConfig, err
 
 // ExecuteAtmosVendorInternal downloads the artifacts from the sources and writes them to the targets.
 func ExecuteAtmosVendorInternal(params *executeVendorOptions) error {
+	defer perf.Track(nil, "exec.ExecuteAtmosVendorInternal")()
 	var err error
 	vendorConfigFilePath := filepath.Dir(params.vendorConfigFileName)
 

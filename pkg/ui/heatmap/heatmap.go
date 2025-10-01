@@ -20,14 +20,14 @@ const (
 	tableFunctionWidth = 50
 	tableCountWidth    = 8
 	tableDurationWidth = 10
-	tableHeight        = 10
+	tableHeight        = 20
 
 	// Display limits.
 	maxHeatMapDisplayColumns = 20
 	maxTableDisplayRuns      = 8
 	maxSparklineWidth        = 50
 	maxBarChartWidth         = 40
-	topFunctionsLimit        = 15
+	topFunctionsLimit        = 50
 
 	// Performance thresholds (microseconds).
 	thresholdGreen  = 100
@@ -182,7 +182,7 @@ type model struct {
 	height      int
 	lastUpdate  time.Time
 	ctx         context.Context
-	initialSnap perf.Snapshot // Snapshot captured at TUI start
+	initialSnap perf.Snapshot // Snapshot captured at TUI start (filtered)
 }
 
 // Messages.
@@ -246,7 +246,8 @@ func newModel(heatModel *HeatModel, mode string, ctx context.Context) *model {
 
 func (m *model) Init() tea.Cmd {
 	// Capture snapshot at TUI start to freeze elapsed time.
-	m.initialSnap = perf.SnapshotTop("total", topFunctionsLimit)
+	// Filter out functions with zero total time.
+	m.initialSnap = perf.SnapshotTopFiltered("total", topFunctionsLimit)
 
 	// Load initial performance data.
 	m.updatePerformanceData()
@@ -367,11 +368,11 @@ func (m *model) handleTickMsg(msg tickMsg) tea.Cmd {
 }
 
 func (m *model) updatePerformanceData() {
-	// Update table with latest performance data.
-	snap := perf.SnapshotTop("total", topFunctionsLimit)
+	// Update table with frozen snapshot from TUI start.
+	// The snapshot is already filtered to exclude zero-time functions.
 	rows := []table.Row{}
 
-	for _, r := range snap.Rows {
+	for _, r := range m.initialSnap.Rows {
 		p95 := "-"
 		if r.P95 > 0 {
 			p95 = formatDuration(r.P95)

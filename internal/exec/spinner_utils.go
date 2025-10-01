@@ -3,6 +3,8 @@ package exec
 import (
 	"fmt"
 
+	"github.com/cloudposse/atmos/pkg/perf"
+
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	l "github.com/charmbracelet/log"
@@ -21,6 +23,7 @@ func (m modelSpinner) Init() tea.Cmd {
 }
 
 func (m modelSpinner) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	defer perf.Track(nil, "exec.Update")()
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		switch msg.String() {
@@ -42,8 +45,9 @@ func (m modelSpinner) View() string {
 	return fmt.Sprintf("\r%s %s", m.spinner.View(), m.message)
 }
 
-// NewSpinner initializes a spinner and returns a pointer to a tea.Program
+// NewSpinner initializes a spinner and returns a pointer to a tea.Program.
 func NewSpinner(message string) *tea.Program {
+	defer perf.Track(nil, "exec.NewSpinner")()
 	s := spinner.New()
 	s.Style = theme.Styles.Link
 
@@ -63,7 +67,7 @@ func NewSpinner(message string) *tea.Program {
 	return p
 }
 
-// RunSpinner executes the spinner program in a goroutine
+// RunSpinner executes the spinner program in a goroutine.
 func RunSpinner(p *tea.Program, spinnerChan chan struct{}, message string) {
 	go func() {
 		defer close(spinnerChan)
@@ -75,8 +79,9 @@ func RunSpinner(p *tea.Program, spinnerChan chan struct{}, message string) {
 	}()
 }
 
-// StopSpinner stops the spinner program and waits for the completion
+// StopSpinner stops the spinner program and waits for the completion.
 func StopSpinner(p *tea.Program, spinnerChan chan struct{}) {
+	defer perf.Track(nil, "exec.StopSpinner")()
 	p.Quit()
 	<-spinnerChan
 }

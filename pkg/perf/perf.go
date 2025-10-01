@@ -102,10 +102,33 @@ type Snapshot struct {
 }
 
 func SnapshotTop(by string, topN int) Snapshot {
+	return snapshotTopInternal(by, topN, false)
+}
+
+// SnapshotTopFiltered returns the top N functions sorted by the given field, filtering out functions with zero total time.
+func SnapshotTopFiltered(by string, topN int) Snapshot {
+	return snapshotTopInternal(by, topN, true)
+}
+
+func snapshotTopInternal(by string, topN int, filterZero bool) Snapshot {
 	reg.mu.Lock()
 	defer reg.mu.Unlock()
 
 	rows := buildRows()
+
+	// Filter out zero-time functions if requested.
+	// We check the truncated value (to microsecond precision) to match what's displayed.
+	if filterZero {
+		filtered := make([]Row, 0, len(rows))
+		for _, r := range rows {
+			// Filter based on what will actually be displayed (truncated to microseconds).
+			if r.Total.Truncate(time.Microsecond) > 0 {
+				filtered = append(filtered, r)
+			}
+		}
+		rows = filtered
+	}
+
 	sortRows(rows, by)
 
 	if topN > 0 && topN < len(rows) {

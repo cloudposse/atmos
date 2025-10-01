@@ -65,6 +65,7 @@ func NewDescribeStacksExec() DescribeStacksExec {
 
 // Execute executes `describe stacks` command.
 func (d *describeStacksExec) Execute(atmosConfig *schema.AtmosConfiguration, args *DescribeStacksArgs) error {
+	defer perf.Track(atmosConfig, "exec.Execute")()
 	finalStacksMap, err := d.executeDescribeStacks(
 		atmosConfig,
 		args.FilterByStack,
@@ -117,7 +118,7 @@ func ExecuteDescribeStacks(
 	includeEmptyStacks bool,
 	skip []string,
 ) (map[string]any, error) {
-	defer perf.Track(atmosConfig, "ExecuteDescribeStacks")()
+	defer perf.Track(atmosConfig, "exec.ExecuteDescribeStacks")()
 
 	stacksMap, _, err := FindStacksMap(atmosConfig, ignoreMissingFiles)
 	if err != nil {

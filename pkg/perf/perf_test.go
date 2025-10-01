@@ -224,6 +224,71 @@ func TestSnapshotTop(t *testing.T) {
 	}
 }
 
+func TestSnapshotTopFiltered(t *testing.T) {
+	// Reset registry for clean test.
+	reg = &registry{
+		data:  make(map[string]*Metric),
+		start: time.Now(),
+	}
+	// Enable tracking for tests.
+	EnableTracking(true)
+
+	// Create test data with non-zero time functions.
+	functions := []struct {
+		name     string
+		duration time.Duration
+	}{
+		{"slowFunc", 100 * time.Millisecond},
+		{"mediumFunc", 50 * time.Millisecond},
+		{"fastFunc", 10 * time.Millisecond},
+	}
+
+	for _, fn := range functions {
+		done := Track(nil, fn.name)
+		time.Sleep(fn.duration)
+		done()
+	}
+
+	// Manually add zero-time functions to registry.
+	reg.mu.Lock()
+	reg.data["zeroFunc1"] = &Metric{Name: "zeroFunc1", Count: 1, Total: 0, Max: 0}
+	reg.data["zeroFunc2"] = &Metric{Name: "zeroFunc2", Count: 2, Total: 0, Max: 0}
+	reg.mu.Unlock()
+
+	t.Run("Filter out zero-time functions", func(t *testing.T) {
+		// Unfiltered should show all 5 functions.
+		snapUnfiltered := SnapshotTop("total", 0)
+		if len(snapUnfiltered.Rows) != 5 {
+			t.Errorf("unfiltered: expected 5 rows, got %d", len(snapUnfiltered.Rows))
+		}
+
+		// Filtered should show only 3 functions with non-zero time.
+		snapFiltered := SnapshotTopFiltered("total", 0)
+		if len(snapFiltered.Rows) != 3 {
+			t.Errorf("filtered: expected 3 rows, got %d", len(snapFiltered.Rows))
+		}
+
+		// Verify all filtered rows have non-zero total time.
+		for _, r := range snapFiltered.Rows {
+			if r.Total == 0 {
+				t.Errorf("filtered snapshot contains zero-time function: %s", r.Name)
+			}
+		}
+
+		// Verify unfiltered contains zero-time functions.
+		hasZero := false
+		for _, r := range snapUnfiltered.Rows {
+			if r.Total == 0 {
+				hasZero = true
+				break
+			}
+		}
+		if !hasZero {
+			t.Error("unfiltered snapshot should contain zero-time functions")
+		}
+	})
+}
+
 func TestConcurrentTracking(t *testing.T) {
 	// Reset registry for clean test.
 	reg = &registry{

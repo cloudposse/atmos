@@ -16,7 +16,7 @@ func ProcessCustomYamlTags(
 	currentStack string,
 	skip []string,
 ) (schema.AtmosSectionMapType, error) {
-	defer perf.Track(atmosConfig, "ProcessCustomYamlTags")()
+	defer perf.Track(atmosConfig, "exec.ProcessCustomYamlTags")()
 
 	return processNodes(atmosConfig, input, currentStack, skip), nil
 }

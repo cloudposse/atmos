@@ -107,6 +107,51 @@ atmos vendor pull
   // WRONG: This function processes the input data
   ```
 
+### Import Organization (MANDATORY)
+- **Group imports into three sections** separated by blank lines:
+  1. **Go native imports** - Standard library packages (fmt, os, strings, etc.)
+  2. **3rd-party imports** - External packages from github.com, gopkg.in, etc. (NOT github.com/cloudposse/atmos)
+  3. **Atmos imports** - Packages from github.com/cloudposse/atmos
+- **Sort alphabetically within each group** - Ignore alias prefixes when sorting
+- **Maintain import aliases** - Keep existing aliases like `cfg`, `log`, `u`, `errUtils`, etc.
+- Examples:
+  ```go
+  // CORRECT: Three groups, sorted alphabetically
+  import (
+      "errors"
+      "fmt"
+      "strings"
+
+      "github.com/go-git/go-git/v5/plumbing"
+      giturl "github.com/kubescape/go-git-url"
+      "github.com/spf13/cobra"
+      "github.com/spf13/pflag"
+
+      errUtils "github.com/cloudposse/atmos/errors"
+      "github.com/cloudposse/atmos/internal/tui/templates/term"
+      cfg "github.com/cloudposse/atmos/pkg/config"
+      log "github.com/cloudposse/atmos/pkg/logger"
+      "github.com/cloudposse/atmos/pkg/perf"
+      "github.com/cloudposse/atmos/pkg/schema"
+      u "github.com/cloudposse/atmos/pkg/utils"
+  )
+
+  // WRONG: Mixed groups, not sorted
+  import (
+      "errors"
+      "fmt"
+
+      "github.com/cloudposse/atmos/pkg/perf"
+
+      log "github.com/cloudposse/atmos/pkg/logger"
+      "github.com/go-git/go-git/v5/plumbing"
+      "github.com/spf13/cobra"
+
+      errUtils "github.com/cloudposse/atmos/errors"
+      cfg "github.com/cloudposse/atmos/pkg/config"
+  )
+  ```
+
 ### Configuration Loading
 Configuration follows strict precedence: CLI flags → ENV vars → config files → defaults
 ```go

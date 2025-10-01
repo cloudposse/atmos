@@ -6,6 +6,8 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/cloudposse/atmos/pkg/perf"
+
 	"github.com/mitchellh/mapstructure"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -55,6 +57,7 @@ type describeDependentsExec struct {
 
 // NewDescribeDependentsExec creates a new `describe dependents` executor.
 func NewDescribeDependentsExec(atmosConfig *schema.AtmosConfiguration) DescribeDependentsExec {
+	defer perf.Track(atmosConfig, "exec.NewDescribeDependentsExec")()
 	return &describeDependentsExec{
 		executeDescribeDependents: ExecuteDescribeDependents,
 		newPageCreator:            pager.New(),
@@ -65,6 +68,7 @@ func NewDescribeDependentsExec(atmosConfig *schema.AtmosConfiguration) DescribeD
 }
 
 func (d *describeDependentsExec) Execute(describeDependentsExecProps *DescribeDependentsExecProps) error {
+	defer perf.Track(nil, "exec.Execute")()
 	dependents, err := d.executeDescribeDependents(
 		d.atmosConfig,
 		describeDependentsExecProps.Component,
@@ -111,6 +115,7 @@ func ExecuteDescribeDependents(
 	processYamlFunctions bool,
 	skip []string,
 ) ([]schema.Dependent, error) {
+	defer perf.Track(atmosConfig, "exec.ExecuteDescribeDependents")()
 	if atmosConfig == nil {
 		return nil, errUtils.ErrAtmosConfigIsNil
 	}

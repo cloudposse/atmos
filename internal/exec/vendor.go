@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/cloudposse/atmos/pkg/perf"
+
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/pkg/errors"
@@ -24,6 +26,7 @@ var (
 
 // ExecuteVendorPullCmd executes `vendor pull` commands.
 func ExecuteVendorPullCmd(cmd *cobra.Command, args []string) error {
+	defer perf.Track(nil, "exec.ExecuteVendorPullCmd")()
 	return ExecuteVendorPullCommand(cmd, args)
 }
 
@@ -43,6 +46,7 @@ type VendorFlags struct {
 
 // ExecuteVendorPullCommand executes `atmos vendor` commands.
 func ExecuteVendorPullCommand(cmd *cobra.Command, args []string) error {
+	defer perf.Track(nil, "exec.ExecuteVendorPullCommand")()
 	info, err := ProcessCommandLineArgs("terraform", cmd, args, nil)
 	if err != nil {
 		return err

@@ -12,6 +12,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cloudposse/atmos/pkg/perf"
+
 	"github.com/open-policy-agent/opa/loader"
 	"github.com/open-policy-agent/opa/rego"
 	"github.com/open-policy-agent/opa/sdk"
@@ -27,6 +29,7 @@ import (
 // https://github.com/santhosh-tekuri/jsonschema
 // https://go.dev/play/p/Hhax3MrtD8r
 func ValidateWithJsonSchema(data any, schemaName string, schemaText string) (bool, error) {
+	defer perf.Track(nil, "exec.ValidateWithJsonSchema")()
 	// Convert the data to JSON and back to Go map to prevent the error:
 	// jsonschema: invalid jsonType: map[interface {}]interface {}.
 	dataJson, err := u.ConvertToJSONFast(data)
@@ -77,6 +80,7 @@ func ValidateWithOpa(
 	modulePaths []string,
 	timeoutSeconds int,
 ) (bool, error) {
+	defer perf.Track(nil, "exec.ValidateWithOpa")()
 	// Set timeout for schema validation.
 	if timeoutSeconds == 0 {
 		timeoutSeconds = 20
@@ -169,6 +173,7 @@ func ValidateWithOpaLegacy(
 	schemaText string,
 	timeoutSeconds int,
 ) (bool, error) {
+	defer perf.Track(nil, "exec.ValidateWithOpaLegacy")()
 	// The OPA SDK does not support map[any]any data types (which can be part of 'data' input).
 	// ast: interface conversion: json: unsupported type: map[interface {}]interface {}.
 	// To fix the issue, convert the data to JSON and back to Go map.
@@ -255,6 +260,7 @@ func ValidateWithOpaLegacy(
 // ValidateWithCue validates the data structure using the provided CUE document.
 // https://cuelang.org/docs/integrations/go/#processing-cue-in-go
 func ValidateWithCue(data any, schemaName string, schemaText string) (bool, error) {
+	defer perf.Track(nil, "exec.ValidateWithCue")()
 	return false, errors.New("validation using CUE is not supported yet")
 }
 

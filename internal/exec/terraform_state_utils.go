@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/cloudposse/atmos/pkg/perf"
+
 	log "github.com/cloudposse/atmos/pkg/logger"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -33,6 +35,7 @@ func GetTerraformState(
 	output string,
 	skipCache bool,
 ) (any, error) {
+	defer perf.Track(atmosConfig, "exec.GetTerraformState")()
 	stackSlug := fmt.Sprintf("%s-%s", stack, component)
 
 	// If the result for the component in the stack already exists in the cache, return it.

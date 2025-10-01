@@ -8,6 +8,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cloudposse/atmos/pkg/perf"
+
 	"github.com/charmbracelet/bubbles/progress"
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
@@ -49,6 +51,7 @@ type installedPkgMsg struct {
 }
 
 func (p pkgType) String() string {
+	defer perf.Track(nil, "exec.String")()
 	names := [...]string{"remote", "oci", "local"}
 	if p < pkgTypeRemote || p > pkgTypeLocal {
 		return "unknown"
@@ -190,6 +193,7 @@ func (m *modelVendor) Init() tea.Cmd {
 }
 
 func (m *modelVendor) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	defer perf.Track(nil, "exec.Update")()
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
@@ -295,6 +299,7 @@ func (m *modelVendor) logNonNTYFinalStatus(pkg pkgVendor, mark *lipgloss.Style) 
 }
 
 func (m *modelVendor) View() string {
+	defer perf.Track(nil, "exec.View")()
 	n := len(m.packages)
 	w := lipgloss.Width(fmt.Sprintf("%d", n))
 	if m.done {
@@ -484,6 +489,7 @@ func newInstallError(err error, name string) installedPkgMsg {
 }
 
 func ExecuteInstall(installer pkgVendor, dryRun bool, atmosConfig *schema.AtmosConfiguration) tea.Cmd {
+	defer perf.Track(atmosConfig, "exec.ExecuteInstall")()
 	if installer.atmosPackage != nil {
 		return downloadAndInstall(installer.atmosPackage, dryRun, atmosConfig)
 	}

@@ -25,7 +25,7 @@ func MergeWithOptions(
 	appendSlice bool,
 	sliceDeepCopy bool,
 ) (map[string]any, error) {
-	defer perf.Track(atmosConfig, "MergeWithOptions")()
+	defer perf.Track(atmosConfig, "merge.MergeWithOptions")()
 
 	merged := map[string]any{}
 
@@ -79,7 +79,7 @@ func Merge(
 	atmosConfig *schema.AtmosConfiguration,
 	inputs []map[string]any,
 ) (map[string]any, error) {
-	defer perf.Track(atmosConfig, "Merge")()
+	defer perf.Track(atmosConfig, "merge.Merge")()
 
 	// Check for nil config to prevent panic.
 	if atmosConfig == nil {
@@ -120,7 +120,7 @@ func MergeWithContext(
 	inputs []map[string]any,
 	context *MergeContext,
 ) (map[string]any, error) {
-	defer perf.Track(atmosConfig, "MergeWithContext")()
+	defer perf.Track(atmosConfig, "merge.MergeWithContext")()
 
 	// Check for nil config to prevent panic
 	if atmosConfig == nil {
@@ -172,7 +172,7 @@ func MergeWithOptionsAndContext(
 	sliceDeepCopy bool,
 	context *MergeContext,
 ) (map[string]any, error) {
-	defer perf.Track(atmosConfig, "MergeWithOptionsAndContext")()
+	defer perf.Track(atmosConfig, "merge.MergeWithOptionsAndContext")()
 
 	// Remove verbose merge operation logging - it creates too much noise
 	// Users can use ATMOS_LOGS_LEVEL=Trace if they need detailed merge debugging
