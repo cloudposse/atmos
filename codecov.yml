@@ -9,11 +9,15 @@ coverage:
         threshold: 1%     # Allow up to 1% drop in overall project coverage
         base: auto
         if_not_found: success  # Don't fail if base coverage is missing
+        paths:            # Only track Go files for coverage calculations
+          - "**/*.go"
     patch:
       default:
         target: 80% # Require at least 80% test coverage on new/changed lines
         threshold: 2% # Allow a small drop in coverage
         base: auto
+        paths:            # Only track Go files for coverage calculations
+          - "**/*.go"
   ignore:
     - "**/mock_*.go"  # Adjust this pattern based on your project structure
     - "mock_*.go"  # Adjust this pattern based on your project structure
@@ -27,4 +31,3 @@ comment:
 
 github_checks:
   annotations: true    # Enable GitHub Checks Annotations
-  informational: false # Fail the PR check if coverage is too low
