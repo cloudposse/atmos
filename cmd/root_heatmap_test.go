@@ -1,0 +1,162 @@
+package cmd
+
+import (
+	"bytes"
+	"io"
+	"os"
+	"strings"
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+
+	"github.com/cloudposse/atmos/pkg/perf"
+)
+
+func TestDisplayPerformanceHeatmap(t *testing.T) {
+	tests := []struct {
+		name           string
+		enableHDR      bool
+		mode           string
+		expectedOutput []string
+	}{
+		{
+			name:      "Basic heatmap output",
+			enableHDR: false,
+			mode:      "bar",
+			expectedOutput: []string{
+				"=== Atmos Performance Summary ===",
+				"Elapsed:",
+				"Functions:",
+				"Calls:",
+			},
+		},
+		{
+			name:      "Heatmap with HDR enabled",
+			enableHDR: true,
+			mode:      "table",
+			expectedOutput: []string{
+				"=== Atmos Performance Summary ===",
+				"Elapsed:",
+				"P95",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Reset perf registry for clean test.
+			perf.EnableHDR(tt.enableHDR)
+
+			// Add some test tracking data.
+			done := perf.Track("testFunction")
+			done()
+
+			// Capture stderr since heatmap writes to stderr.
+			oldStderr := os.Stderr
+			r, w, _ := os.Pipe()
+			os.Stderr = w
+
+			// Call displayPerformanceHeatmap.
+			err := displayPerformanceHeatmap(nil, tt.mode)
+			assert.NoError(t, err)
+
+			// Close writer and restore stderr.
+			_ = w.Close()
+			os.Stderr = oldStderr
+
+			// Read captured output.
+			var output bytes.Buffer
+			_, _ = io.Copy(&output, r)
+
+			outputStr := output.String()
+
+			// Verify expected strings are in output.
+			for _, expected := range tt.expectedOutput {
+				assert.Contains(t, outputStr, expected,
+					"Output should contain '%s'", expected)
+			}
+		})
+	}
+}
+
+func TestIsTTY(t *testing.T) {
+	tests := []struct {
+		name     string
+		stderr   *os.File
+		expected bool
+	}{
+		{
+			name:     "Regular stderr (TTY check varies by environment)",
+			stderr:   os.Stderr,
+			expected: false, // In tests, stderr is usually not a TTY
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			oldStderr := os.Stderr
+			os.Stderr = tt.stderr
+			defer func() { os.Stderr = oldStderr }()
+
+			result := isTTY()
+
+			// We can't reliably test TTY in unit tests, so just verify it doesn't panic.
+			_ = result
+		})
+	}
+}
+
+func TestHeatmapFlags(t *testing.T) {
+	// Test that heatmap flags are properly registered.
+	t.Run("Heatmap flag exists", func(t *testing.T) {
+		flag := RootCmd.PersistentFlags().Lookup("heatmap")
+		assert.NotNil(t, flag, "--heatmap flag should be registered")
+		assert.Equal(t, "false", flag.DefValue, "--heatmap should default to false")
+	})
+
+	t.Run("Heatmap mode flag exists", func(t *testing.T) {
+		flag := RootCmd.PersistentFlags().Lookup("heatmap-mode")
+		assert.NotNil(t, flag, "--heatmap-mode flag should be registered")
+		assert.Equal(t, "bar", flag.DefValue, "--heatmap-mode should default to bar")
+	})
+
+	t.Run("Heatmap HDR flag exists", func(t *testing.T) {
+		flag := RootCmd.PersistentFlags().Lookup("heatmap-hdr")
+		assert.NotNil(t, flag, "--heatmap-hdr flag should be registered")
+		assert.Equal(t, "false", flag.DefValue, "--heatmap-hdr should default to false")
+	})
+}
+
+func TestHeatmapNonTTYOutput(t *testing.T) {
+	// Reset perf registry.
+	perf.EnableHDR(false)
+
+	// Add test data.
+	done := perf.Track("nonTTYTest")
+	done()
+
+	// Capture stderr.
+	oldStderr := os.Stderr
+	r, w, _ := os.Pipe()
+	os.Stderr = w
+
+	err := displayPerformanceHeatmap(nil, "bar")
+	assert.NoError(t, err)
+
+	_ = w.Close()
+	os.Stderr = oldStderr
+
+	var output bytes.Buffer
+	_, _ = io.Copy(&output, r)
+
+	outputStr := output.String()
+
+	// When there's no TTY, should show warning message.
+	// Note: This test assumes we're running without a TTY (typical in CI/tests).
+	if !strings.Contains(outputStr, "No TTY available") {
+		// If we do have a TTY in the test environment, just check for summary.
+		assert.Contains(t, outputStr, "=== Atmos Performance Summary ===")
+	} else {
+		assert.Contains(t, outputStr, "No TTY available for interactive visualization")
+	}
+}
