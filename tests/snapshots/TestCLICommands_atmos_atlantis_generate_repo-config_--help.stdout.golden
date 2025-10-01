@@ -76,6 +76,14 @@ Global Flags:
                                      (comma-separated or repeated flag) (default
                                      [])
 
+        --heatmap                    Show performance heatmap visualization
+                                     after command execution (includes P95
+                                     latency) (default false)
+
+        --heatmap-mode string        Heatmap visualization mode: bar, ascii,
+                                     table, sparkline (press 1-4 to switch in
+                                     TUI) (default bar)
+
         --logs-file string           The file to write Atmos logs to. Logs can
                                      be written to any file or any standard file
                                      descriptor, including '/dev/stdout',

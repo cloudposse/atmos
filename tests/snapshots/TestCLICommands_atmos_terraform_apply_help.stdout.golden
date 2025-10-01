@@ -63,6 +63,14 @@ Global Flags:
         --dry-run                     Simulate the command without making any
                                       changes (default false)
 
+        --heatmap                     Show performance heatmap visualization
+                                      after command execution (includes P95
+                                      latency) (default false)
+
+        --heatmap-mode string         Heatmap visualization mode: bar, ascii,
+                                      table, sparkline (press 1-4 to switch in
+                                      TUI) (default bar)
+
         --include-dependents          For each affected component, detect the
                                       dependent components and process them in
                                       the dependency order, recursively: atmos
