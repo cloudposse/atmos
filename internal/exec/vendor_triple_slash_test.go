@@ -25,10 +25,9 @@ func TestVendorPullWithTripleSlashPattern(t *testing.T) {
 	// Store original environment variables.
 	originalCliPath := os.Getenv("ATMOS_CLI_CONFIG_PATH")
 	originalBasePath := os.Getenv("ATMOS_BASE_PATH")
-	originalLogLevel := os.Getenv("ATMOS_LOGS_LEVEL")
 
 	// Set debug logging to see what's happening.
-	os.Setenv("ATMOS_LOGS_LEVEL", "Debug")
+	t.Setenv("ATMOS_LOGS_LEVEL", "Debug")
 
 	// Capture the starting working directory.
 	startingDir, err := os.Getwd()
@@ -46,12 +45,6 @@ func TestVendorPullWithTripleSlashPattern(t *testing.T) {
 			os.Setenv("ATMOS_BASE_PATH", originalBasePath)
 		} else {
 			os.Unsetenv("ATMOS_BASE_PATH")
-		}
-
-		if originalLogLevel != "" {
-			os.Setenv("ATMOS_LOGS_LEVEL", originalLogLevel)
-		} else {
-			os.Unsetenv("ATMOS_LOGS_LEVEL")
 		}
 
 		// Change back to the original working directory after the test.
@@ -139,10 +132,9 @@ func TestVendorPullWithMultipleVendorFiles(t *testing.T) {
 	// Store original environment variables.
 	originalCliPath := os.Getenv("ATMOS_CLI_CONFIG_PATH")
 	originalBasePath := os.Getenv("ATMOS_BASE_PATH")
-	originalLogLevel := os.Getenv("ATMOS_LOGS_LEVEL")
 
 	// Set debug logging to see what's happening.
-	os.Setenv("ATMOS_LOGS_LEVEL", "Debug")
+	t.Setenv("ATMOS_LOGS_LEVEL", "Debug")
 
 	// Capture the starting working directory.
 	startingDir, err := os.Getwd()
@@ -160,12 +152,6 @@ func TestVendorPullWithMultipleVendorFiles(t *testing.T) {
 			os.Setenv("ATMOS_BASE_PATH", originalBasePath)
 		} else {
 			os.Unsetenv("ATMOS_BASE_PATH")
-		}
-
-		if originalLogLevel != "" {
-			os.Setenv("ATMOS_LOGS_LEVEL", originalLogLevel)
-		} else {
-			os.Unsetenv("ATMOS_LOGS_LEVEL")
 		}
 
 		// Change back to the original working directory after the test.

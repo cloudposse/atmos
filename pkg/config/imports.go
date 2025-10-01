@@ -29,16 +29,35 @@ var (
 )
 
 // sanitizeImport redacts credentials and query values from URLs while leaving paths intact.
+// Sanitizes credentials from any URL scheme (http, https, git, ssh, s3, gcs, oci, etc.).
 func sanitizeImport(s string) string {
-	u, err := url.Parse(s)
-	if err != nil || (u.Scheme != "http" && u.Scheme != "https") {
-		// Local path or unparsable; return as-is.
+	// Handle go-getter style URLs with :: separator (e.g., git::https://...).
+	parts := strings.SplitN(s, "::", 2)
+	var prefix string
+	urlPart := s
+
+	if len(parts) == 2 {
+		prefix = parts[0] + "::"
+		urlPart = parts[1]
+	}
+
+	u, err := url.Parse(urlPart)
+	if err != nil {
+		// Unparsable; return as-is (might be SCP-style git).
 		return s
 	}
-	u.User = nil
-	// Optionally keep keys only; here we drop query entirely.
-	u.RawQuery = ""
-	return u.String()
+
+	// Clear credentials regardless of scheme.
+	if u.User != nil {
+		u.User = nil
+	}
+
+	// Clear query params (may contain tokens/credentials).
+	if u.RawQuery != "" {
+		u.RawQuery = ""
+	}
+
+	return prefix + u.String()
 }
 
 type importTypes int

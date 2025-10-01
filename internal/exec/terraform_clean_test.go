@@ -8,6 +8,30 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// verifyFileExists checks that all files in the list exist.
+// Returns true if all files exist, false otherwise with the first missing file path.
+func verifyFileExists(t *testing.T, files []string) (bool, string) {
+	t.Helper()
+	for _, file := range files {
+		if _, err := os.Stat(file); err != nil {
+			return false, file
+		}
+	}
+	return true, ""
+}
+
+// verifyFileDeleted checks that all files in the list have been deleted.
+// Returns true if all files are deleted, false otherwise with the first existing file path.
+func verifyFileDeleted(t *testing.T, files []string) (bool, string) {
+	t.Helper()
+	for _, file := range files {
+		if _, err := os.Stat(file); err == nil {
+			return false, file
+		}
+	}
+	return true, ""
+}
+
 // test ExecuteTerraform clean command.
 func TestCLITerraformClean(t *testing.T) {
 	err := os.Unsetenv("ATMOS_CLI_CONFIG_PATH")
@@ -58,10 +82,9 @@ func TestCLITerraformClean(t *testing.T) {
 		"../../components/terraform/mock-subcomponents/component-1/component-2/terraform.tfstate.d/staging-component-2/terraform.tfstate",
 	}
 	// Verify that expected files exist after apply
-	for _, file := range files {
-		if _, err := os.Stat(file); err != nil {
-			t.Fatalf("Expected file %s does not exist: %v", file, err)
-		}
+	exists, missingFile := verifyFileExists(t, files)
+	if !exists {
+		t.Fatalf("Expected file does not exist: %s", missingFile)
 	}
 	var cleanInfo schema.ConfigAndStacksInfo
 	cleanInfo.SubCommand = "clean"
@@ -70,10 +93,9 @@ func TestCLITerraformClean(t *testing.T) {
 	err = ExecuteTerraform(cleanInfo)
 	require.NoError(t, err)
 	// Verify that files were deleted after clean
-	for _, file := range files {
-		if _, err := os.Stat(file); !os.IsNotExist(err) {
-			t.Fatalf("File %s should have been deleted but still exists", file)
-		}
+	deleted, existingFile := verifyFileDeleted(t, files)
+	if !deleted {
+		t.Fatalf("File should have been deleted but still exists: %s", existingFile)
 	}
 }
 
