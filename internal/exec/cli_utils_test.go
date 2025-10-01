@@ -300,6 +300,42 @@ func Test_processArgsAndFlags_errorPaths(t *testing.T) {
 			inputArgsAndFlags: []string{"plan", "--logs-file=/path=extra"},
 			expectedError:     "--logs-file=/path=extra",
 		},
+		{
+			name:              "init-pass-vars flag without value",
+			componentType:     "terraform",
+			inputArgsAndFlags: []string{"init", "--init-pass-vars"},
+			expectedError:     "--init-pass-vars",
+		},
+		{
+			name:              "init-pass-vars with multiple equals",
+			componentType:     "terraform",
+			inputArgsAndFlags: []string{"init", "--init-pass-vars=true=extra"},
+			expectedError:     "--init-pass-vars=true=extra",
+		},
+		{
+			name:              "skip-planfile flag without value",
+			componentType:     "terraform",
+			inputArgsAndFlags: []string{"plan", "--skip-planfile"},
+			expectedError:     "--skip-planfile",
+		},
+		{
+			name:              "skip-planfile with multiple equals",
+			componentType:     "terraform",
+			inputArgsAndFlags: []string{"plan", "--skip-planfile=true=extra"},
+			expectedError:     "--skip-planfile=true=extra",
+		},
+		{
+			name:              "schemas-atmos-manifest flag without value",
+			componentType:     "terraform",
+			inputArgsAndFlags: []string{"plan", "--schemas-atmos-manifest"},
+			expectedError:     "--schemas-atmos-manifest",
+		},
+		{
+			name:              "schemas-atmos-manifest with multiple equals",
+			componentType:     "terraform",
+			inputArgsAndFlags: []string{"plan", "--schemas-atmos-manifest=/path=extra"},
+			expectedError:     "--schemas-atmos-manifest=/path=extra",
+		},
 	}
 
 	for _, tt := range tests {
