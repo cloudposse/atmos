@@ -336,6 +336,102 @@ func Test_processArgsAndFlags_errorPaths(t *testing.T) {
 			inputArgsAndFlags: []string{"plan", "--schemas-atmos-manifest=/path=extra"},
 			expectedError:     "--schemas-atmos-manifest=/path=extra",
 		},
+		{
+			name:              "redirect-stderr flag without value",
+			componentType:     "terraform",
+			inputArgsAndFlags: []string{"plan", "--redirect-stderr"},
+			expectedError:     "--redirect-stderr",
+		},
+		{
+			name:              "redirect-stderr with multiple equals",
+			componentType:     "terraform",
+			inputArgsAndFlags: []string{"plan", "--redirect-stderr=/path=extra"},
+			expectedError:     "--redirect-stderr=/path=extra",
+		},
+		{
+			name:              "planfile flag without value",
+			componentType:     "terraform",
+			inputArgsAndFlags: []string{"plan", "--planfile"},
+			expectedError:     "--planfile",
+		},
+		{
+			name:              "planfile with multiple equals",
+			componentType:     "terraform",
+			inputArgsAndFlags: []string{"plan", "--planfile=/path=extra"},
+			expectedError:     "--planfile=/path=extra",
+		},
+		{
+			name:              "schemas-jsonschema-dir flag without value",
+			componentType:     "terraform",
+			inputArgsAndFlags: []string{"plan", "--schemas-jsonschema-dir"},
+			expectedError:     "--schemas-jsonschema-dir",
+		},
+		{
+			name:              "schemas-jsonschema-dir with multiple equals",
+			componentType:     "terraform",
+			inputArgsAndFlags: []string{"plan", "--schemas-jsonschema-dir=/path=extra"},
+			expectedError:     "--schemas-jsonschema-dir=/path=extra",
+		},
+		{
+			name:              "schemas-opa-dir flag without value",
+			componentType:     "terraform",
+			inputArgsAndFlags: []string{"plan", "--schemas-opa-dir"},
+			expectedError:     "--schemas-opa-dir",
+		},
+		{
+			name:              "schemas-opa-dir with multiple equals",
+			componentType:     "terraform",
+			inputArgsAndFlags: []string{"plan", "--schemas-opa-dir=/path=extra"},
+			expectedError:     "--schemas-opa-dir=/path=extra",
+		},
+		{
+			name:              "schemas-cue-dir flag without value",
+			componentType:     "terraform",
+			inputArgsAndFlags: []string{"plan", "--schemas-cue-dir"},
+			expectedError:     "--schemas-cue-dir",
+		},
+		{
+			name:              "schemas-cue-dir with multiple equals",
+			componentType:     "terraform",
+			inputArgsAndFlags: []string{"plan", "--schemas-cue-dir=/path=extra"},
+			expectedError:     "--schemas-cue-dir=/path=extra",
+		},
+		{
+			name:              "settings-list-merge-strategy flag without value",
+			componentType:     "terraform",
+			inputArgsAndFlags: []string{"plan", "--settings-list-merge-strategy"},
+			expectedError:     "--settings-list-merge-strategy",
+		},
+		{
+			name:              "settings-list-merge-strategy with multiple equals",
+			componentType:     "terraform",
+			inputArgsAndFlags: []string{"plan", "--settings-list-merge-strategy=append=extra"},
+			expectedError:     "--settings-list-merge-strategy=append=extra",
+		},
+		{
+			name:              "query flag without value",
+			componentType:     "terraform",
+			inputArgsAndFlags: []string{"plan", "--query"},
+			expectedError:     "--query",
+		},
+		{
+			name:              "query with multiple equals",
+			componentType:     "terraform",
+			inputArgsAndFlags: []string{"plan", "--query=.foo=bar"},
+			expectedError:     "--query=.foo=bar",
+		},
+		{
+			name:              "workflows-dir flag without value",
+			componentType:     "terraform",
+			inputArgsAndFlags: []string{"plan", "--workflows-dir"},
+			expectedError:     "--workflows-dir",
+		},
+		{
+			name:              "workflows-dir with multiple equals",
+			componentType:     "terraform",
+			inputArgsAndFlags: []string{"plan", "--workflows-dir=/path=extra"},
+			expectedError:     "--workflows-dir=/path=extra",
+		},
 	}
 
 	for _, tt := range tests {
