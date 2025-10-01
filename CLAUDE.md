@@ -152,6 +152,46 @@ atmos vendor pull
   )
   ```
 
+### Performance Tracking (MANDATORY)
+- **Add `defer perf.Track()` to all public functions** and critical private functions
+- **Always include a blank line after the perf.Track call** to separate instrumentation from logic
+- **Package prefix naming:** Use `"packagename.FunctionName"` format
+- **Parameter usage:**
+  - Use `atmosConfig` parameter if the function has it
+  - Use `nil` if the function doesn't have `atmosConfig` parameter
+- Examples:
+  ```go
+  // CORRECT: With atmosConfig parameter and blank line
+  func ProcessComponent(atmosConfig *schema.AtmosConfiguration, component string) error {
+      defer perf.Track(atmosConfig, "exec.ProcessComponent")()
+
+      // Function logic starts here
+      return nil
+  }
+
+  // CORRECT: Without atmosConfig parameter and blank line
+  func ValidateInput(input string) error {
+      defer perf.Track(nil, "utils.ValidateInput")()
+
+      // Function logic starts here
+      return nil
+  }
+
+  // WRONG: Missing blank line after perf.Track
+  func ProcessComponent(atmosConfig *schema.AtmosConfiguration, component string) error {
+      defer perf.Track(atmosConfig, "exec.ProcessComponent")()
+      // Function logic starts here (no blank line)
+      return nil
+  }
+
+  // WRONG: Incorrect package prefix
+  func ProcessComponent(atmosConfig *schema.AtmosConfiguration, component string) error {
+      defer perf.Track(atmosConfig, "ProcessComponent")() // Missing package prefix
+
+      return nil
+  }
+  ```
+
 ### Configuration Loading
 Configuration follows strict precedence: CLI flags → ENV vars → config files → defaults
 ```go

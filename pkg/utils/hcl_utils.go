@@ -4,16 +4,20 @@ import (
 	"os"
 	"strings"
 
-	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/hashicorp/hcl/hcl/ast"
 	"github.com/hashicorp/hcl/hcl/printer"
 	jsonParser "github.com/hashicorp/hcl/json/parser"
 	"github.com/hashicorp/hcl/v2/hclwrite"
 	"github.com/zclconf/go-cty/cty"
+
+	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/perf"
 )
 
 // PrintAsHcl prints the provided value as HCL (HashiCorp Language) document to the console
 func PrintAsHcl(data any) error {
+	defer perf.Track(nil, "utils.PrintAsHcl")()
+
 	astree, err := ConvertToHclAst(data)
 	if err != nil {
 		return err
@@ -33,6 +37,8 @@ func WriteToFileAsHcl(
 	data any,
 	fileMode os.FileMode,
 ) error {
+	defer perf.Track(nil, "utils.WriteToFileAsHcl")()
+
 	astree, err := ConvertToHclAst(data)
 	if err != nil {
 		return err
@@ -60,6 +66,8 @@ func WriteToFileAsHcl(
 
 // ConvertToHclAst converts the provided value to an HCL abstract syntax tree
 func ConvertToHclAst(data any) (ast.Node, error) {
+	defer perf.Track(nil, "utils.ConvertToHclAst")()
+
 	j, err := ConvertToJSONFast(data)
 	if err != nil {
 		return nil, err
@@ -91,6 +99,8 @@ func WriteTerraformBackendConfigToFileAsHcl(
 	backendType string,
 	backendConfig map[string]any,
 ) error {
+	defer perf.Track(nil, "utils.WriteTerraformBackendConfigToFileAsHcl")()
+
 	hclFile := hclwrite.NewEmptyFile()
 	rootBody := hclFile.Body()
 	tfBlock := rootBody.AppendNewBlock("terraform", nil)

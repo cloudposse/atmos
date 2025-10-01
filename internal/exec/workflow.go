@@ -7,12 +7,11 @@ import (
 	"path/filepath"
 	"sort"
 
-	"github.com/cloudposse/atmos/pkg/perf"
-
 	"github.com/spf13/cobra"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )

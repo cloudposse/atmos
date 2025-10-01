@@ -8,7 +8,9 @@ import (
 	"sync"
 
 	"github.com/bmatcuk/doublestar/v4"
+
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/perf"
 )
 
 var getGlobMatchesSyncMap = sync.Map{}
@@ -16,6 +18,8 @@ var getGlobMatchesSyncMap = sync.Map{}
 // GetGlobMatches tries to read and return the Glob matches content from the sync map if it exists in the map,
 // otherwise it finds and returns all files matching the pattern, stores the files in the map and returns the files.
 func GetGlobMatches(pattern string) ([]string, error) {
+	defer perf.Track(nil, "utils.GetGlobMatches")()
+
 	existingMatches, found := getGlobMatchesSyncMap.Load(pattern)
 	if found && existingMatches != nil {
 		return strings.Split(existingMatches.(string), ","), nil
@@ -54,5 +58,7 @@ func GetGlobMatches(pattern string) ([]string, error) {
 // separator. If you can't be sure of that, use filepath.ToSlash() on both
 // `pattern` and `name`, and then use the Match() function instead.
 func PathMatch(pattern, name string) (bool, error) {
+	defer perf.Track(nil, "utils.PathMatch")()
+
 	return doublestar.PathMatch(pattern, name)
 }
