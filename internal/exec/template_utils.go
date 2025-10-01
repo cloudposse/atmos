@@ -20,6 +20,7 @@ import (
 	"github.com/samber/lo"
 
 	"github.com/cloudposse/atmos/pkg/merge"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -74,6 +75,8 @@ func ProcessTmplWithDatasources(
 	tmplData any,
 	ignoreMissingTemplateValues bool,
 ) (string, error) {
+	defer perf.Track("ProcessTmplWithDatasources")()
+
 	if !atmosConfig.Templates.Settings.Enabled {
 		log.Debug("ProcessTmplWithDatasources: not processing templates since templating is disabled in 'atmos.yaml'", "template", tmplName)
 		return tmplValue, nil
@@ -346,6 +349,8 @@ func ProcessTmplWithDatasourcesGomplate(
 	mergedData map[string]interface{},
 	ignoreMissingTemplateValues bool,
 ) (string, error) {
+	defer perf.Track("ProcessTmplWithDatasourcesGomplate")()
+
 	tempDir, err := createTempDirectory()
 	if err != nil {
 		return "", err

@@ -17,6 +17,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	m "github.com/cloudposse/atmos/pkg/merge"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -50,6 +51,8 @@ func ProcessYAMLConfigFiles(
 	map[string]map[string]any,
 	error,
 ) {
+	defer perf.Track("ProcessYAMLConfigFiles")()
+
 	count := len(filePaths)
 	listResult := make([]string, count)
 	mapResult := map[string]any{}
@@ -662,6 +665,8 @@ func ProcessStackConfig(
 	importsConfig map[string]map[string]any,
 	checkBaseComponentExists bool,
 ) (map[string]any, error) {
+	defer perf.Track("ProcessStackConfig")()
+
 	stackName := strings.TrimSuffix(
 		strings.TrimSuffix(
 			u.TrimBasePathFromPath(stacksBasePath+"/", stack),
@@ -2630,6 +2635,8 @@ func FindComponentsDerivedFromBaseComponents(
 	allComponents map[string]any,
 	baseComponents []string,
 ) ([]string, error) {
+	defer perf.Track("FindComponentsDerivedFromBaseComponents")()
+
 	res := []string{}
 
 	for component, compSection := range allComponents {

@@ -6,6 +6,7 @@ import (
 	"dario.cat/mergo"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -23,6 +24,8 @@ func MergeWithOptions(
 	appendSlice bool,
 	sliceDeepCopy bool,
 ) (map[string]any, error) {
+	defer perf.Track("MergeWithOptions")()
+
 	merged := map[string]any{}
 
 	for index := range inputs {
@@ -75,6 +78,8 @@ func Merge(
 	atmosConfig *schema.AtmosConfiguration,
 	inputs []map[string]any,
 ) (map[string]any, error) {
+	defer perf.Track("Merge")()
+
 	// Check for nil config to prevent panic.
 	if atmosConfig == nil {
 		return nil, fmt.Errorf("%w: %v", errUtils.ErrMerge, errUtils.ErrAtmosConfigIsNil)
@@ -114,6 +119,8 @@ func MergeWithContext(
 	inputs []map[string]any,
 	context *MergeContext,
 ) (map[string]any, error) {
+	defer perf.Track("MergeWithContext")()
+
 	// Check for nil config to prevent panic
 	if atmosConfig == nil {
 		err := fmt.Errorf("%w: %w", errUtils.ErrMerge, errUtils.ErrAtmosConfigIsNil)
@@ -163,6 +170,8 @@ func MergeWithOptionsAndContext(
 	sliceDeepCopy bool,
 	context *MergeContext,
 ) (map[string]any, error) {
+	defer perf.Track("MergeWithOptionsAndContext")()
+
 	// Remove verbose merge operation logging - it creates too much noise
 	// Users can use ATMOS_LOGS_LEVEL=Trace if they need detailed merge debugging
 

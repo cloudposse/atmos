@@ -11,6 +11,7 @@ import (
 	"github.com/cloudposse/atmos/internal/tui/templates/term"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/pager"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -116,6 +117,8 @@ func ExecuteDescribeStacks(
 	includeEmptyStacks bool,
 	skip []string,
 ) (map[string]any, error) {
+	defer perf.Track("ExecuteDescribeStacks")()
+
 	stacksMap, _, err := FindStacksMap(atmosConfig, ignoreMissingFiles)
 	if err != nil {
 		return nil, err

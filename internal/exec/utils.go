@@ -12,6 +12,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -157,6 +158,8 @@ func FindStacksMap(atmosConfig *schema.AtmosConfiguration, ignoreMissingFiles bo
 	map[string]map[string]any,
 	error,
 ) {
+	defer perf.Track("FindStacksMap")()
+
 	// Process stack config file(s)
 	_, stacksMap, rawStackConfigs, err := ProcessYAMLConfigFiles(
 		atmosConfig,
@@ -185,6 +188,8 @@ func ProcessStacks(
 	processYamlFunctions bool,
 	skip []string,
 ) (schema.ConfigAndStacksInfo, error) {
+	defer perf.Track("ProcessStacks")()
+
 	// Check if stack was provided
 	if checkStack && len(configAndStacksInfo.Stack) < 1 {
 		message := fmt.Sprintf("`stack` is required.\n\nUsage:\n\n`atmos %s <command> <component> -s <stack>`", configAndStacksInfo.ComponentType)
