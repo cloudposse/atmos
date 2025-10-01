@@ -15,6 +15,11 @@ import (
 	"github.com/cloudposse/atmos/pkg/ui/markdown"
 )
 
+const (
+	// Newline is the newline character constant.
+	Newline = "\n"
+)
+
 // render is the global Markdown renderer instance initialized via InitializeMarkdown.
 var render *markdown.Renderer
 
@@ -34,11 +39,11 @@ func trimRenderedMarkdown(md string, isTerminal bool) string {
 		return md
 	}
 
-	lines := strings.Split(md, "\n")
+	lines := strings.Split(md, Newline)
 	for i, line := range lines {
 		lines[i] = strings.TrimRight(line, " \t")
 	}
-	return strings.Join(lines, "\n")
+	return strings.Join(lines, Newline)
 }
 
 // printfMarkdownTo prints a message in Markdown format to the specified writer.
@@ -58,6 +63,12 @@ func printfMarkdownTo(w io.Writer, format string, a ...interface{}) {
 
 	isTerminal := isWriterTerminal(w)
 	md = trimRenderedMarkdown(md, isTerminal)
+
+	// Ensure rendered markdown ends with a newline to prevent content from
+	// running into subsequent output (e.g., log lines).
+	if !strings.HasSuffix(md, Newline) {
+		md += Newline
+	}
 
 	_, err := fmt.Fprint(w, md)
 	errUtils.CheckErrorAndPrint(err, "", "")

@@ -449,7 +449,7 @@ func TestTelemetryDisclosureMessage(t *testing.T) {
 	// First call should return the disclosure message.
 	message1 := disclosureMessage()
 	assert.NotEmpty(t, message1)
-	assert.Equal(t, message1, DisclosureMessage)
+	assert.Equal(t, message1, telemetryNoticeMarkdown)
 
 	// Second call should return empty string since disclosure has been marked as shown.
 	message2 := disclosureMessage()

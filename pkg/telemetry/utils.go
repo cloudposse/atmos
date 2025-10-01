@@ -1,6 +1,7 @@
 package telemetry
 
 import (
+	_ "embed"
 	"runtime"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
@@ -14,16 +15,10 @@ import (
 )
 
 // CommandEventName is the standard event name used for command telemetry.
-const (
-	CommandEventName = "command"
+const CommandEventName = "command"
 
-	// DisclosureMessage contains the standard telemetry disclosure message shown to users
-	// when telemetry is first enabled. It explains that Atmos collects anonymous
-	// usage data and provides a link for users to learn more or opt out.
-	DisclosureMessage = `**Notice:** Telemetry Enabled - Atmos now collects completely anonymous telemetry regarding usage. This information is used to shape the Atmos roadmap and prioritize features. You can learn more, including how to opt out if you'd not like to participate in this anonymous program, by visiting: https://atmos.tools/cli/telemetry
-
-`
-)
+//go:embed markdown/telemetry_notice.md
+var telemetryNoticeMarkdown string
 
 // CaptureCmdString is the public API for capturing command string telemetry.
 // It accepts an optional error parameter and handles the case where no error is provided.
@@ -164,7 +159,7 @@ func disclosureMessage() string {
 	if TelemetryDisclosureShown {
 		return ""
 	}
-	return DisclosureMessage
+	return telemetryNoticeMarkdown
 }
 
 // getOrInitializeCacheValue retrieves a value from cache or initializes it with a default value if not present.
