@@ -40,8 +40,17 @@
               "default": []
             },
             "sandbox": {
-              "type": "boolean",
-              "description": "Run test in a sandboxed environment with isolated component copies.",
+              "oneOf": [
+                {
+                  "type": "boolean",
+                  "description": "Enable/disable sandboxing."
+                },
+                {
+                  "type": "string",
+                  "description": "Sandbox name for isolated component copies."
+                }
+              ],
+              "description": "Run test in a sandboxed environment. Use boolean to enable/disable or string to specify sandbox name.",
               "default": false
             },
             "expect": {
