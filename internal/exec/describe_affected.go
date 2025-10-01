@@ -115,6 +115,7 @@ func NewDescribeAffectedExec(
 	atmosConfig *schema.AtmosConfiguration,
 ) DescribeAffectedExec {
 	defer perf.Track(atmosConfig, "exec.NewDescribeAffectedExec")()
+
 	return &describeAffectedExec{
 		atmosConfig: atmosConfig,
 		executeDescribeAffectedWithTargetRepoPath:    ExecuteDescribeAffectedWithTargetRepoPath,
@@ -130,6 +131,7 @@ func NewDescribeAffectedExec(
 // ParseDescribeAffectedCliArgs parses the command-line arguments of the `atmos describe affected` command.
 func ParseDescribeAffectedCliArgs(cmd *cobra.Command, args []string) (DescribeAffectedCmdArgs, error) {
 	defer perf.Track(nil, "exec.ParseDescribeAffectedCliArgs")()
+
 	var atmosConfig schema.AtmosConfiguration
 	if info, err := ProcessCommandLineArgs("", cmd, args, nil); err != nil {
 		return DescribeAffectedCmdArgs{}, err
@@ -160,6 +162,7 @@ func ParseDescribeAffectedCliArgs(cmd *cobra.Command, args []string) (DescribeAf
 // SetDescribeAffectedFlagValueInCliArgs sets the flag values in CLI arguments.
 func SetDescribeAffectedFlagValueInCliArgs(flags *pflag.FlagSet, describe *DescribeAffectedCmdArgs) {
 	defer perf.Track(nil, "exec.SetDescribeAffectedFlagValueInCliArgs")()
+
 	flagsKeyValue := map[string]any{
 		"ref":                            &describe.Ref,
 		"sha":                            &describe.SHA,
@@ -218,6 +221,7 @@ func SetDescribeAffectedFlagValueInCliArgs(flags *pflag.FlagSet, describe *Descr
 // Execute executes `describe affected` command.
 func (d *describeAffectedExec) Execute(a *DescribeAffectedCmdArgs) error {
 	defer perf.Track(nil, "exec.Execute")()
+
 	var affected []schema.Affected
 	var headHead, baseHead *plumbing.Reference
 	var repoUrl string

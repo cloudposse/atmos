@@ -64,6 +64,7 @@ func ReadAndProcessComponentVendorConfigFile(
 	componentType string,
 ) (schema.VendorComponentConfig, string, error) {
 	defer perf.Track(atmosConfig, "exec.ReadAndProcessComponentVendorConfigFile")()
+
 	var componentBasePath string
 	var componentConfig schema.VendorComponentConfig
 
@@ -124,6 +125,7 @@ func ExecuteStackVendorInternal(
 	dryRun bool,
 ) error {
 	defer perf.Track(nil, "exec.ExecuteStackVendorInternal")()
+
 	return ErrStackPullNotSupported
 }
 
@@ -232,6 +234,7 @@ func ExecuteComponentVendorInternal(
 	dryRun bool,
 ) error {
 	defer perf.Track(atmosConfig, "exec.ExecuteComponentVendorInternal")()
+
 	if vendorComponentSpec.Source.Uri == "" {
 		return fmt.Errorf("%w:'%s'", ErrUriMustSpecified, cfg.ComponentVendorConfigFileName)
 	}

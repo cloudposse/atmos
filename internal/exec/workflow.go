@@ -20,6 +20,7 @@ import (
 // ExecuteWorkflowCmd executes an Atmos workflow.
 func ExecuteWorkflowCmd(cmd *cobra.Command, args []string) error {
 	defer perf.Track(nil, "exec.ExecuteWorkflowCmd")()
+
 	var workflowName string
 	var workflowFile string
 	var fromStep string

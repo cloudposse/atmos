@@ -12,6 +12,7 @@ import (
 // BuildSpaceliftStackName builds a Spacelift stack name from the provided context and stack name pattern.
 func BuildSpaceliftStackName(spaceliftSettings map[string]any, context schema.Context, contextPrefix string) (string, string, error) {
 	defer perf.Track(nil, "exec.BuildSpaceliftStackName")()
+
 	if spaceliftStackNamePattern, ok := spaceliftSettings["stack_name_pattern"].(string); ok {
 		return cfg.ReplaceContextTokens(context, spaceliftStackNamePattern), spaceliftStackNamePattern, nil
 	} else if spaceliftStackName, ok := spaceliftSettings["stack_name"].(string); ok {
@@ -25,6 +26,7 @@ func BuildSpaceliftStackName(spaceliftSettings map[string]any, context schema.Co
 // BuildSpaceliftStackNames builds Spacelift stack names.
 func BuildSpaceliftStackNames(stacks map[string]any, stackNamePattern string) ([]string, error) {
 	defer perf.Track(nil, "exec.BuildSpaceliftStackNames")()
+
 	var allStackNames []string
 
 	for stackName, stackConfig := range stacks {
@@ -90,6 +92,7 @@ func BuildSpaceliftStackNameFromComponentConfig(
 	configAndStacksInfo schema.ConfigAndStacksInfo,
 ) (string, error) {
 	defer perf.Track(atmosConfig, "exec.BuildSpaceliftStackNameFromComponentConfig")()
+
 	var spaceliftStackName string
 	var spaceliftSettingsSection map[string]any
 	var contextPrefix string

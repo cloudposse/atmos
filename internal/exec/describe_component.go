@@ -34,6 +34,7 @@ type DescribeComponentExec struct {
 
 func NewDescribeComponentExec() *DescribeComponentExec {
 	defer perf.Track(nil, "exec.NewDescribeComponentExec")()
+
 	return &DescribeComponentExec{
 		printOrWriteToFile:       printOrWriteToFile,
 		IsTTYSupportForStdout:    term.IsTTYSupportForStdout,
@@ -46,6 +47,7 @@ func NewDescribeComponentExec() *DescribeComponentExec {
 
 func (d *DescribeComponentExec) ExecuteDescribeComponentCmd(describeComponentParams DescribeComponentParams) error {
 	defer perf.Track(nil, "exec.ExecuteDescribeComponentCmd")()
+
 	component := describeComponentParams.Component
 	stack := describeComponentParams.Stack
 	processTemplates := describeComponentParams.ProcessTemplates
@@ -145,6 +147,7 @@ func ExecuteDescribeComponent(
 	skip []string,
 ) (map[string]any, error) {
 	defer perf.Track(nil, "exec.ExecuteDescribeComponent")()
+
 	var configAndStacksInfo schema.ConfigAndStacksInfo
 	configAndStacksInfo.ComponentFromArg = component
 	configAndStacksInfo.Stack = stack
@@ -184,6 +187,7 @@ func ExecuteDescribeComponent(
 // FilterAbstractComponents This function removes abstract components and returns the list of components.
 func FilterAbstractComponents(componentsMap map[string]any) []string {
 	defer perf.Track(nil, "exec.FilterAbstractComponents")()
+
 	if componentsMap == nil {
 		return []string{}
 	}

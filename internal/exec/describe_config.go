@@ -21,6 +21,7 @@ type DescribeConfigFormatError struct {
 
 func (e DescribeConfigFormatError) Error() string {
 	defer perf.Track(nil, "exec.Error")()
+
 	return fmt.Sprintf("invalid 'format': %s", e.format)
 }
 
@@ -45,6 +46,7 @@ func NewDescribeConfig(atmosConfig *schema.AtmosConfiguration) *describeConfigEx
 // ExecuteDescribeConfigCmd executes `describe config` command.
 func (d *describeConfigExec) ExecuteDescribeConfigCmd(query, format, output string) error {
 	defer perf.Track(nil, "exec.ExecuteDescribeConfigCmd")()
+
 	var res *schema.AtmosConfiguration
 	var err error
 	if query != "" {

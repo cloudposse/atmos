@@ -15,6 +15,7 @@ import (
 // ExecuteTerraformGenerateVarfileCmd executes `terraform generate varfile` command.
 func ExecuteTerraformGenerateVarfileCmd(cmd *cobra.Command, args []string) error {
 	defer perf.Track(nil, "exec.ExecuteTerraformGenerateVarfileCmd")()
+
 	if len(args) != 1 {
 		return errors.New("invalid arguments. The command requires one argument `component`")
 	}

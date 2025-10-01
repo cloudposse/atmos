@@ -14,6 +14,7 @@ import (
 // BuildTerraformWorkspace builds Terraform workspace.
 func BuildTerraformWorkspace(atmosConfig *schema.AtmosConfiguration, configAndStacksInfo schema.ConfigAndStacksInfo) (string, error) {
 	defer perf.Track(atmosConfig, "exec.BuildTerraformWorkspace")()
+
 	// Return 'default' workspace if workspaces are disabled
 	// Terraform always operates in the `default` workspace when multiple workspaces are unsupported or disabled,
 	// preventing switching or creating additional workspaces.
@@ -70,6 +71,7 @@ func ProcessComponentMetadata(
 	componentSection map[string]any,
 ) (map[string]any, string, bool, bool, bool) {
 	defer perf.Track(nil, "exec.ProcessComponentMetadata")()
+
 	baseComponentName := ""
 	componentIsAbstract := false
 	componentIsEnabled := true
@@ -122,6 +124,7 @@ func BuildDependentStackNameFromDependsOnLegacy(
 	currentComponentName string,
 ) (string, error) {
 	defer perf.Track(nil, "exec.BuildDependentStackNameFromDependsOnLegacy")()
+
 	var dependentStackName string
 
 	dep := strings.Replace(dependsOn, "/", "-", -1)
@@ -153,6 +156,7 @@ func BuildDependentStackNameFromDependsOn(
 	allStackNames []string,
 ) (string, error) {
 	defer perf.Track(nil, "exec.BuildDependentStackNameFromDependsOn")()
+
 	dep := strings.Replace(fmt.Sprintf("%s-%s", dependsOnStackName, dependsOnComponentName), "/", "-", -1)
 
 	if u.SliceContainsString(allStackNames, dep) {
@@ -177,6 +181,7 @@ func BuildComponentPath(
 	componentType string,
 ) string {
 	defer perf.Track(atmosConfig, "exec.BuildComponentPath")()
+
 	var componentPath string
 
 	if stackComponentSection, ok := (*componentSectionMap)[cfg.ComponentSectionName].(string); ok {
@@ -201,6 +206,7 @@ func GetStackNamePattern(atmosConfig *schema.AtmosConfiguration) string {
 // GetStackNameTemplate returns the stack name template.
 func GetStackNameTemplate(atmosConfig *schema.AtmosConfiguration) string {
 	defer perf.Track(atmosConfig, "exec.GetStackNameTemplate")()
+
 	return atmosConfig.Stacks.NameTemplate
 }
 
@@ -217,6 +223,7 @@ func IsComponentAbstract(metadataSection map[string]any) bool {
 // IsComponentEnabled returns 'true' if the component is enabled.
 func IsComponentEnabled(varsSection map[string]any) bool {
 	defer perf.Track(nil, "exec.IsComponentEnabled")()
+
 	if enabled, ok := varsSection["enabled"].(bool); ok {
 		if enabled == false {
 			return false

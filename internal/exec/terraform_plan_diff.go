@@ -35,6 +35,7 @@ type PlanFileOptions struct {
 // TerraformPlanDiff represents the plan-diff command implementation.
 func TerraformPlanDiff(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) error {
 	defer perf.Track(atmosConfig, "exec.TerraformPlanDiff")()
+
 	// Extract flags and setup paths
 	origPlanFile, newPlanFile, err := parsePlanDiffFlags(info.AdditionalArgsAndFlags)
 	if err != nil {

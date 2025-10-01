@@ -27,6 +27,7 @@ const atmosManifestDefaultFileName = "schemas/atmos/atmos-manifest/1.0/atmos-man
 // ExecuteValidateStacksCmd executes `validate stacks` command.
 func ExecuteValidateStacksCmd(cmd *cobra.Command, args []string) error {
 	defer perf.Track(nil, "exec.ExecuteValidateStacksCmd")()
+
 	// Initialize spinner
 	message := "Validating Atmos Stacks..."
 	p := NewSpinner(message)
@@ -66,6 +67,7 @@ func ExecuteValidateStacksCmd(cmd *cobra.Command, args []string) error {
 // ValidateStacks validates Atmos stack configuration.
 func ValidateStacks(atmosConfig *schema.AtmosConfiguration) error {
 	defer perf.Track(atmosConfig, "exec.ValidateStacks")()
+
 	var validationErrorMessages []string
 
 	// 1. Process top-level stack manifests and detect duplicate components in the same stack
@@ -263,6 +265,8 @@ func createComponentStackMap(
 	stacksMap map[string]any,
 	componentType string,
 ) (map[string]map[string][]string, error) {
+	defer perf.Track(atmosConfig, "exec.createComponentStackMap")()
+
 	var varsSection map[string]any
 	var metadataSection map[string]any
 	var settingsSection map[string]any
@@ -370,6 +374,8 @@ func createComponentStackMap(
 }
 
 func checkComponentStackMap(componentStackMap map[string]map[string][]string) ([]string, error) {
+	defer perf.Track(nil, "exec.checkComponentStackMap")()
+
 	var res []string
 
 	for componentName, componentSection := range componentStackMap {
@@ -443,6 +449,8 @@ func checkComponentStackMap(componentStackMap map[string]map[string][]string) ([
 
 // downloadSchemaFromURL downloads the Atmos JSON Schema file from the provided URL.
 func downloadSchemaFromURL(atmosConfig *schema.AtmosConfiguration) (string, error) {
+	defer perf.Track(atmosConfig, "exec.downloadSchemaFromURL")()
+
 	manifestSchema := atmosConfig.GetSchemaRegistry("atmos")
 	manifestURL := manifestSchema.Manifest
 	parsedURL, err := url.Parse(manifestURL)
@@ -470,6 +478,8 @@ func downloadSchemaFromURL(atmosConfig *schema.AtmosConfiguration) (string, erro
 }
 
 func getEmbeddedSchemaPath(atmosConfig *schema.AtmosConfiguration) (string, error) {
+	defer perf.Track(atmosConfig, "exec.getEmbeddedSchemaPath")()
+
 	fetcher := datafetcher.NewDataFetcher(atmosConfig)
 	embedded, err := fetcher.GetData("atmos://schema/atmos/manifest/1.0")
 	if err != nil {

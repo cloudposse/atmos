@@ -18,6 +18,7 @@ import (
 // ExecuteAtmosCmd executes `atmos` command.
 func ExecuteAtmosCmd() error {
 	defer perf.Track(nil, "exec.ExecuteAtmosCmd")()
+
 	commands := []string{
 		"terraform plan",
 		"terraform apply",

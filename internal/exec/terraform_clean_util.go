@@ -71,6 +71,7 @@ func getComponentsPaths(stackData any) ([]string, error) {
 
 func CollectComponentsDirectoryObjects(terraformDirAbsolutePath string, allComponentsRelativePaths []string, filesToClear []string) ([]Directory, error) {
 	defer perf.Track(nil, "exec.CollectComponentsDirectoryObjects")()
+
 	var allFolders []Directory
 	for _, path := range allComponentsRelativePaths {
 		componentPath := filepath.Join(terraformDirAbsolutePath, path)
@@ -86,6 +87,7 @@ func CollectComponentsDirectoryObjects(terraformDirAbsolutePath string, allCompo
 
 func CollectComponentObjects(terraformDirAbsolutePath string, componentPath string, patterns []string) ([]Directory, error) {
 	defer perf.Track(nil, "exec.CollectComponentObjects")()
+
 	if err := validateInputPath(terraformDirAbsolutePath); err != nil {
 		return nil, err
 	}

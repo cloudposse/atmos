@@ -31,6 +31,7 @@ func ExecuteHelmfileCmd(cmd *cobra.Command, args []string, additionalArgsAndFlag
 // ExecuteHelmfile executes helmfile commands.
 func ExecuteHelmfile(info schema.ConfigAndStacksInfo) error {
 	defer perf.Track(nil, "exec.ExecuteHelmfile")()
+
 	atmosConfig, err := cfg.InitCliConfig(info, true)
 	if err != nil {
 		return err

@@ -24,6 +24,7 @@ func (m modelSpinner) Init() tea.Cmd {
 
 func (m modelSpinner) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	defer perf.Track(nil, "exec.Update")()
+
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		switch msg.String() {
@@ -48,6 +49,7 @@ func (m modelSpinner) View() string {
 // NewSpinner initializes a spinner and returns a pointer to a tea.Program.
 func NewSpinner(message string) *tea.Program {
 	defer perf.Track(nil, "exec.NewSpinner")()
+
 	s := spinner.New()
 	s.Style = theme.Styles.Link
 
@@ -82,6 +84,7 @@ func RunSpinner(p *tea.Program, spinnerChan chan struct{}, message string) {
 // StopSpinner stops the spinner program and waits for the completion.
 func StopSpinner(p *tea.Program, spinnerChan chan struct{}) {
 	defer perf.Track(nil, "exec.StopSpinner")()
+
 	p.Quit()
 	<-spinnerChan
 }

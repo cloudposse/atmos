@@ -65,6 +65,7 @@ var (
 // ExecuteTerraform executes terraform commands.
 func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 	defer perf.Track(nil, "exec.ExecuteTerraform")()
+
 	info.CliArgs = []string{"terraform", info.SubCommand, info.SubCommand2}
 
 	atmosConfig, err := cfg.InitCliConfig(info, true)

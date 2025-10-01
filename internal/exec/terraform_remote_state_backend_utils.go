@@ -8,6 +8,7 @@ import (
 // GetComponentRemoteStateBackendStaticType returns the `remote_state_backend` section for a component in a stack.
 func GetComponentRemoteStateBackendStaticType(sections *map[string]any) map[string]any {
 	defer perf.Track(nil, "exec.GetComponentRemoteStateBackendStaticType")()
+
 	var remoteStateBackend map[string]any
 	var remoteStateBackendType string
 	var ok bool

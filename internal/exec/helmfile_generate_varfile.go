@@ -15,6 +15,7 @@ import (
 // ExecuteHelmfileGenerateVarfileCmd executes `helmfile generate varfile` command.
 func ExecuteHelmfileGenerateVarfileCmd(cmd *cobra.Command, args []string) error {
 	defer perf.Track(nil, "exec.ExecuteHelmfileGenerateVarfileCmd")()
+
 	if len(args) != 1 {
 		return errors.New("invalid arguments. The command requires one argument `component`")
 	}

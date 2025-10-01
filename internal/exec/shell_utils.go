@@ -30,6 +30,7 @@ func ExecuteShellCommand(
 	redirectStdError string,
 ) error {
 	defer perf.Track(&atmosConfig, "exec.ExecuteShellCommand")()
+
 	newShellLevel, err := u.GetNextShellLevel()
 	if err != nil {
 		return err
@@ -86,6 +87,7 @@ func ExecuteShell(
 	dryRun bool,
 ) error {
 	defer perf.Track(nil, "exec.ExecuteShell")()
+
 	newShellLevel, err := u.GetNextShellLevel()
 	if err != nil {
 		return err

@@ -451,6 +451,7 @@ func copyToTargetWithPatterns(
 // ComponentOrMixinsCopy covers 2 cases: file-to-folder and file-to-file copy.
 func ComponentOrMixinsCopy(sourceFile, finalTarget string) error {
 	defer perf.Track(nil, "exec.ComponentOrMixinsCopy")()
+
 	var dest string
 	if filepath.Ext(finalTarget) == "" {
 		// File-to-folder copy: append the source file's base name to the directory.

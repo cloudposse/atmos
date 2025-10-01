@@ -353,6 +353,7 @@ func GetTerraformOutput(
 	skipCache bool,
 ) any {
 	defer perf.Track(atmosConfig, "exec.GetTerraformOutput")()
+
 	stackSlug := fmt.Sprintf("%s-%s", stack, component)
 
 	// If the result for the component in the stack already exists in the cache, return it
@@ -445,6 +446,7 @@ func GetStaticRemoteStateOutput(
 	output string,
 ) any {
 	defer perf.Track(atmosConfig, "exec.GetStaticRemoteStateOutput")()
+
 	val := output
 	if !strings.HasPrefix(output, ".") {
 		val = "." + val

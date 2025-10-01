@@ -19,15 +19,15 @@ Atmos is a sophisticated Go CLI tool for managing complex cloud infrastructure u
 ### Development Workflow
 ```bash
 # Build the project
-make build                    # Build default binary to ./build/atmos
+make build                   # Build default binary to ./build/atmos
 make build-linux             # Build for Linux
 make build-windows           # Build for Windows
 make build-macos             # Build for macOS
 
 # Testing
 make testacc                 # Run acceptance tests
-make testacc-cover          # Run tests with coverage
-make testacc-coverage       # Generate coverage HTML report
+make testacc-cover           # Run tests with coverage
+make testacc-coverage        # Generate coverage HTML report
 
 # Code Quality
 make lint                    # Run golangci-lint (only files changed from origin/main)

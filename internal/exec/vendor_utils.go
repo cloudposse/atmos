@@ -70,6 +70,7 @@ func ReadAndProcessVendorConfigFile(
 	checkGlobalConfig bool,
 ) (schema.AtmosVendorConfig, bool, string, error) {
 	defer perf.Track(atmosConfig, "exec.ReadAndProcessVendorConfigFile")()
+
 	var vendorConfig schema.AtmosVendorConfig
 	vendorConfig.Spec.Sources = []schema.AtmosVendorSource{} // Initialize empty sources slice
 
@@ -190,6 +191,7 @@ func mergeVendorConfigFiles(configFiles []string) (schema.AtmosVendorConfig, err
 // ExecuteAtmosVendorInternal downloads the artifacts from the sources and writes them to the targets.
 func ExecuteAtmosVendorInternal(params *executeVendorOptions) error {
 	defer perf.Track(nil, "exec.ExecuteAtmosVendorInternal")()
+
 	var err error
 	vendorConfigFilePath := filepath.Dir(params.vendorConfigFileName)
 

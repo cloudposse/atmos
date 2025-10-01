@@ -66,6 +66,7 @@ func NewDescribeStacksExec() DescribeStacksExec {
 // Execute executes `describe stacks` command.
 func (d *describeStacksExec) Execute(atmosConfig *schema.AtmosConfiguration, args *DescribeStacksArgs) error {
 	defer perf.Track(atmosConfig, "exec.Execute")()
+
 	finalStacksMap, err := d.executeDescribeStacks(
 		atmosConfig,
 		args.FilterByStack,

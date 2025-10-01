@@ -17,6 +17,7 @@ import (
 
 func ExecuteAwsEksUpdateKubeconfigCommand(cmd *cobra.Command, args []string) error {
 	defer perf.Track(nil, "exec.ExecuteAwsEksUpdateKubeconfigCommand")()
+
 	flags := cmd.Flags()
 
 	stack, err := flags.GetString("stack")
@@ -89,6 +90,7 @@ func ExecuteAwsEksUpdateKubeconfigCommand(cmd *cobra.Command, args []string) err
 // https://docs.aws.amazon.com/cli/latest/reference/eks/update-kubeconfig.html
 func ExecuteAwsEksUpdateKubeconfig(kubeconfigContext schema.AwsEksUpdateKubeconfigContext) error {
 	defer perf.Track(nil, "exec.ExecuteAwsEksUpdateKubeconfig")()
+
 	// AWS profile to authenticate to the cluster
 	profile := kubeconfigContext.Profile
 

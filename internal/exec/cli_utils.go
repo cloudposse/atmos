@@ -68,6 +68,7 @@ func ProcessCommandLineArgs(
 	additionalArgsAndFlags []string,
 ) (schema.ConfigAndStacksInfo, error) {
 	defer perf.Track(nil, "exec.ProcessCommandLineArgs")()
+
 	var configAndStacksInfo schema.ConfigAndStacksInfo
 
 	cmd.DisableFlagParsing = false

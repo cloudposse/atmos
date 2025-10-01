@@ -20,6 +20,7 @@ import (
 // ExecuteTerraformGenerateVarfilesCmd executes `terraform generate varfiles` command.
 func ExecuteTerraformGenerateVarfilesCmd(cmd *cobra.Command, args []string) error {
 	defer perf.Track(nil, "exec.ExecuteTerraformGenerateVarfilesCmd")()
+
 	info, err := ProcessCommandLineArgs("terraform", cmd, args, nil)
 	if err != nil {
 		return err
@@ -80,6 +81,7 @@ func ExecuteTerraformGenerateVarfiles(
 	components []string,
 ) error {
 	defer perf.Track(atmosConfig, "exec.ExecuteTerraformGenerateVarfiles")()
+
 	stacksMap, _, err := FindStacksMap(atmosConfig, false)
 	if err != nil {
 		return err

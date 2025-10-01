@@ -43,6 +43,7 @@ func ExecuteDescribeAffectedWithTargetRefClone(
 	excludeLocked bool,
 ) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error) {
 	defer perf.Track(atmosConfig, "exec.ExecuteDescribeAffectedWithTargetRefClone")()
+
 	localRepo, err := g.GetLocalRepo()
 	if err != nil {
 		return nil, nil, nil, "", err
@@ -197,6 +198,7 @@ func ExecuteDescribeAffectedWithTargetRefCheckout(
 	excludeLocked bool,
 ) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error) {
 	defer perf.Track(atmosConfig, "exec.ExecuteDescribeAffectedWithTargetRefCheckout")()
+
 	localRepo, err := g.GetLocalRepo()
 	if err != nil {
 		return nil, nil, nil, "", err
@@ -359,6 +361,7 @@ func ExecuteDescribeAffectedWithTargetRepoPath(
 	excludeLocked bool,
 ) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error) {
 	defer perf.Track(atmosConfig, "exec.ExecuteDescribeAffectedWithTargetRepoPath")()
+
 	localRepo, err := g.GetLocalRepo()
 	if err != nil {
 		return nil, nil, nil, "", err

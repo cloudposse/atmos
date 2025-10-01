@@ -74,6 +74,7 @@ func printOrWriteToFile(
 // SanitizeFileName replaces invalid characters and query strings with underscores for Windows.
 func SanitizeFileName(uri string) string {
 	defer perf.Track(nil, "exec.SanitizeFileName")()
+
 	// Parse the URI to handle paths and query strings properly
 	parsed, err := url.Parse(uri)
 	if err != nil {

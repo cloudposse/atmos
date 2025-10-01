@@ -186,6 +186,7 @@ func ProcessYAMLConfigFile(
 	error,
 ) {
 	defer perf.Track(atmosConfig, "exec.ProcessYAMLConfigFile")()
+
 	// Call the context-aware version with a nil context for backward compatibility
 	return ProcessYAMLConfigFileWithContext(
 		atmosConfig,
@@ -2142,6 +2143,7 @@ func FindComponentStacks(
 	componentStackMap map[string]map[string][]string,
 ) ([]string, error) {
 	defer perf.Track(nil, "exec.FindComponentStacks")()
+
 	var stacks []string
 
 	if componentStackConfig, componentStackConfigExists := componentStackMap[componentType]; componentStackConfigExists {
@@ -2178,6 +2180,7 @@ func FindComponentDependenciesLegacy(
 	stackImports map[string]map[string]any,
 ) ([]string, error) {
 	defer perf.Track(nil, "exec.FindComponentDependenciesLegacy")()
+
 	var deps []string
 
 	sectionsToCheck := []string{
@@ -2286,6 +2289,7 @@ func FindComponentDependenciesLegacy(
 // 3. StackImport structs containing either of the above path types (e.g. "path: mixins/region/us-east-2").
 func ProcessImportSection(stackMap map[string]any, filePath string) ([]schema.StackImport, error) {
 	defer perf.Track(nil, "exec.ProcessImportSection")()
+
 	stackImports, ok := stackMap[cfg.ImportSectionName]
 
 	// If the stack file does not have the `import` section, return
@@ -2352,6 +2356,7 @@ func sectionContainsAnyNotEmptySections(section map[string]any, sectionsToCheck 
 // otherwise it reads the file, stores its content in the map and returns the content.
 func GetFileContent(filePath string) (string, error) {
 	defer perf.Track(nil, "exec.GetFileContent")()
+
 	existingContent, found := getFileContentSyncMap.Load(filePath)
 	if found && existingContent != nil {
 		return fmt.Sprintf("%s", existingContent), nil
@@ -2379,6 +2384,7 @@ func ProcessBaseComponentConfig(
 	baseComponents *[]string,
 ) error {
 	defer perf.Track(atmosConfig, "exec.ProcessBaseComponentConfig")()
+
 	if component == baseComponent {
 		return nil
 	}

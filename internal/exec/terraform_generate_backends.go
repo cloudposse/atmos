@@ -20,6 +20,7 @@ import (
 // ExecuteTerraformGenerateBackendsCmd executes `terraform generate backends` command.
 func ExecuteTerraformGenerateBackendsCmd(cmd *cobra.Command, args []string) error {
 	defer perf.Track(nil, "exec.ExecuteTerraformGenerateBackendsCmd")()
+
 	info, err := ProcessCommandLineArgs("terraform", cmd, args, nil)
 	if err != nil {
 		return err
@@ -80,6 +81,7 @@ func ExecuteTerraformGenerateBackends(
 	components []string,
 ) error {
 	defer perf.Track(atmosConfig, "exec.ExecuteTerraformGenerateBackends")()
+
 	stacksMap, _, err := FindStacksMap(atmosConfig, false)
 	if err != nil {
 		return err

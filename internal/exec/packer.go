@@ -28,6 +28,7 @@ func ExecutePacker(
 	packerFlags *PackerFlags,
 ) error {
 	defer perf.Track(nil, "exec.ExecutePacker")()
+
 	atmosConfig, err := cfg.InitCliConfig(*info, true)
 	if err != nil {
 		return err

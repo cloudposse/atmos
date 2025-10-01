@@ -36,6 +36,7 @@ func GetTerraformState(
 	skipCache bool,
 ) (any, error) {
 	defer perf.Track(atmosConfig, "exec.GetTerraformState")()
+
 	stackSlug := fmt.Sprintf("%s-%s", stack, component)
 
 	// If the result for the component in the stack already exists in the cache, return it.

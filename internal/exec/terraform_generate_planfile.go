@@ -40,6 +40,7 @@ type PlanfileOptions struct {
 // ExecuteTerraformGeneratePlanfileCmd executes `terraform generate planfile` command.
 func ExecuteTerraformGeneratePlanfileCmd(cmd *cobra.Command, args []string) error {
 	defer perf.Track(nil, "exec.ExecuteTerraformGeneratePlanfileCmd")()
+
 	if len(args) == 0 {
 		return ErrNoComponent
 	}
@@ -104,6 +105,7 @@ func ExecuteTerraformGeneratePlanfile(
 	info *schema.ConfigAndStacksInfo,
 ) error {
 	defer perf.Track(nil, "exec.ExecuteTerraformGeneratePlanfile")()
+
 	if err := validatePlanfileFormat(&options.Format); err != nil {
 		return err
 	}

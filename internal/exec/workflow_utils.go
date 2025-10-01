@@ -66,6 +66,7 @@ func ExecuteWorkflow(
 	fromStep string,
 ) error {
 	defer perf.Track(&atmosConfig, "exec.ExecuteWorkflow")()
+
 	steps := workflowDefinition.Steps
 
 	if len(steps) == 0 {
@@ -225,6 +226,7 @@ func ExecuteDescribeWorkflows(
 	atmosConfig schema.AtmosConfiguration,
 ) ([]schema.DescribeWorkflowsItem, map[string][]string, map[string]schema.WorkflowManifest, error) {
 	defer perf.Track(&atmosConfig, "exec.ExecuteDescribeWorkflows")()
+
 	listResult := []schema.DescribeWorkflowsItem{}
 	mapResult := make(map[string][]string)
 	allResult := make(map[string]schema.WorkflowManifest)
@@ -325,6 +327,7 @@ func checkAndGenerateWorkflowStepNames(workflowDefinition *schema.WorkflowDefini
 
 func ExecuteWorkflowUI(atmosConfig schema.AtmosConfiguration) (string, string, string, error) {
 	defer perf.Track(&atmosConfig, "exec.ExecuteWorkflowUI")()
+
 	_, _, allWorkflows, err := ExecuteDescribeWorkflows(atmosConfig)
 	if err != nil {
 		return "", "", "", err

@@ -28,6 +28,7 @@ type describeWorkflowsExec struct {
 
 func NewDescribeWorkflowsExec() DescribeWorkflowsExec {
 	defer perf.Track(nil, "exec.NewDescribeWorkflowsExec")()
+
 	return &describeWorkflowsExec{
 		printOrWriteToFile:       printOrWriteToFile,
 		IsTTYSupportForStdout:    term.IsTTYSupportForStdout,
@@ -39,6 +40,7 @@ func NewDescribeWorkflowsExec() DescribeWorkflowsExec {
 // ExecuteDescribeWorkflowsCmd executes `atmos describe workflows` CLI command.
 func (d *describeWorkflowsExec) Execute(atmosConfig *schema.AtmosConfiguration, describeWorkflowsArgs *DescribeWorkflowsArgs) error {
 	defer perf.Track(atmosConfig, "exec.Execute")()
+
 	outputType := describeWorkflowsArgs.OutputType
 	query := describeWorkflowsArgs.Query
 	format := describeWorkflowsArgs.Format

@@ -18,6 +18,7 @@ func BuildAtlantisProjectNameFromComponentConfig(
 	configAndStacksInfo schema.ConfigAndStacksInfo,
 ) (string, error) {
 	defer perf.Track(atmosConfig, "exec.BuildAtlantisProjectNameFromComponentConfig")()
+
 	var atlantisProjectTemplate schema.AtlantisProjectConfig
 	var atlantisProjectName string
 

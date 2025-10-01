@@ -26,6 +26,7 @@ func FuncMap(
 	gomplateData *data.Data,
 ) template.FuncMap {
 	defer perf.Track(atmosConfig, "exec.FuncMap")()
+
 	atmosFuncs := &AtmosFuncs{atmosConfig, configAndStacksInfo, ctx, gomplateData}
 
 	return map[string]any{
@@ -50,5 +51,6 @@ func (f AtmosFuncs) GomplateDatasource(alias string, args ...string) (any, error
 
 func (f AtmosFuncs) Store(store string, stack string, component string, key string) (any, error) {
 	defer perf.Track(nil, "exec.Store")()
+
 	return storeFunc(f.atmosConfig, store, stack, component, key)
 }

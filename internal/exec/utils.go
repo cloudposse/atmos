@@ -26,6 +26,7 @@ func ProcessComponentConfig(
 	component string,
 ) error {
 	defer perf.Track(nil, "exec.ProcessComponentConfig")()
+
 	var stackSection map[string]any
 	var componentsSection map[string]any
 	var componentTypeSection map[string]any
@@ -624,6 +625,7 @@ func generateComponentProviderOverrides(providerOverrides map[string]any) map[st
 // FindComponentDependencies finds all imports that the component depends on, and all imports that the component has any sections defined in.
 func FindComponentDependencies(currentStack string, sources schema.ConfigSources) ([]string, []string, error) {
 	defer perf.Track(nil, "exec.FindComponentDependencies")()
+
 	var deps []string
 	var depsAll []string
 

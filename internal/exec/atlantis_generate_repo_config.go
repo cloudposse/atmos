@@ -21,6 +21,7 @@ import (
 // ExecuteAtlantisGenerateRepoConfigCmd executes 'atlantis generate repo-config' command.
 func ExecuteAtlantisGenerateRepoConfigCmd(cmd *cobra.Command, args []string) error {
 	defer perf.Track(nil, "exec.ExecuteAtlantisGenerateRepoConfigCmd")()
+
 	info, err := ProcessCommandLineArgs("", cmd, args, nil)
 	if err != nil {
 		return err
@@ -143,6 +144,7 @@ func ExecuteAtlantisGenerateRepoConfigAffectedOnly(
 	stack string,
 ) error {
 	defer perf.Track(atmosConfig, "exec.ExecuteAtlantisGenerateRepoConfigAffectedOnly")()
+
 	if repoPath != "" && (ref != "" || sha != "" || sshKeyPath != "" || sshKeyPassword != "") {
 		return errors.New("if the '--repo-path' flag is specified, the '--ref', '--sha', '--ssh-key' and '--ssh-key-password' flags can't be used")
 	}
@@ -234,6 +236,7 @@ func ExecuteAtlantisGenerateRepoConfig(
 	components []string,
 ) error {
 	defer perf.Track(atmosConfig, "exec.ExecuteAtlantisGenerateRepoConfig")()
+
 	stacksMap, _, err := FindStacksMap(atmosConfig, false)
 	if err != nil {
 		return err
