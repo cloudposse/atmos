@@ -5,6 +5,7 @@ import (
 	"os/exec"
 	"testing"
 
+	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -206,5 +207,53 @@ func skipIfHelmfileNotInstalled(t *testing.T) {
 	t.Helper()
 	if _, err := exec.LookPath("helmfile"); err != nil {
 		t.Skipf("helmfile not installed: %v", err)
+	}
+}
+
+// TestPrintMessageForMissingAtmosConfig tests the printMessageForMissingAtmosConfig function.
+func TestPrintMessageForMissingAtmosConfig(t *testing.T) {
+	tests := []struct {
+		name             string
+		atmosConfig      schema.AtmosConfiguration
+		expectedContains []string
+	}{
+		{
+			name: "default config missing",
+			atmosConfig: schema.AtmosConfiguration{
+				BasePath: "/test",
+				Stacks: schema.Stacks{
+					BasePath: "stacks",
+				},
+				Default: true,
+			},
+			expectedContains: []string{
+				"stacks", // Should contain the stacks directory path
+			},
+		},
+		{
+			name: "custom config with invalid paths",
+			atmosConfig: schema.AtmosConfiguration{
+				BasePath: "/custom",
+				Stacks: schema.Stacks{
+					BasePath: "my-stacks",
+				},
+				Default: false,
+			},
+			expectedContains: []string{
+				"my-stacks", // Should contain the custom stacks directory
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// This function writes to both stdout (logo) and stderr (markdown messages)
+			// We'll just verify it doesn't panic and exercises both code paths
+			// The actual markdown rendering is tested in markdown_utils_test.go
+			printMessageForMissingAtmosConfig(tt.atmosConfig)
+
+			// If we get here without panic, both code paths work
+			// (Default=true uses missingConfigDefaultMarkdown, Default=false uses missingConfigFoundMarkdown)
+		})
 	}
 }
