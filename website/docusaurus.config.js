@@ -123,11 +123,10 @@ const config = {
             },
         ],
         [
-            '@grnet/docusaurus-terminology', {
+            path.resolve(__dirname, './plugins/glossary-tooltips'), {
                 docsDir: './docs/',
-                termsDir: './reference/glossary/',
-                glossaryFilepath: './docs/reference/glossary/index.mdx',
-                glossaryComponentPath: '../../../src/components/glossary/Glossary.tsx'
+                termsDir: './docs/glossary/',
+                glossaryFilepath: './docs/glossary/index.mdx',
         }],
         [
             'custom-loaders', {}
