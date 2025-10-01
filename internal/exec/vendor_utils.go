@@ -63,6 +63,15 @@ type executeVendorOptions struct {
 	dryRun               bool
 }
 
+type vendorSourceParams struct {
+	atmosConfig          *schema.AtmosConfiguration
+	sources              []schema.AtmosVendorSource
+	component            string
+	tags                 []string
+	vendorConfigFileName string
+	vendorConfigFilePath string
+}
+
 // ReadAndProcessVendorConfigFile reads and processes the Atmos vendoring config file `vendor.yaml`.
 func ReadAndProcessVendorConfigFile(
 	atmosConfig *schema.AtmosConfiguration,
@@ -219,7 +228,15 @@ func ExecuteAtmosVendorInternal(params *executeVendorOptions) error {
 		return err
 	}
 
-	packages, err := processAtmosVendorSource(params.atmosConfig, sources, params.component, params.tags, params.vendorConfigFileName, vendorConfigFilePath)
+	sourceParams := &vendorSourceParams{
+		atmosConfig:          params.atmosConfig,
+		sources:              sources,
+		component:            params.component,
+		tags:                 params.tags,
+		vendorConfigFileName: params.vendorConfigFileName,
+		vendorConfigFilePath: vendorConfigFilePath,
+	}
+	packages, err := processAtmosVendorSource(sourceParams)
 	if err != nil {
 		return err
 	}
@@ -263,29 +280,29 @@ func validateTagsAndComponents(
 	return nil
 }
 
-func processAtmosVendorSource(atmosConfig *schema.AtmosConfiguration, sources []schema.AtmosVendorSource, component string, tags []string, vendorConfigFileName, vendorConfigFilePath string) ([]pkgAtmosVendor, error) {
+func processAtmosVendorSource(params *vendorSourceParams) ([]pkgAtmosVendor, error) {
 	var packages []pkgAtmosVendor
-	for indexSource := range sources {
-		if shouldSkipSource(&sources[indexSource], component, tags) {
+	for indexSource := range params.sources {
+		if shouldSkipSource(&params.sources[indexSource], params.component, params.tags) {
 			continue
 		}
 
-		if err := validateSourceFields(&sources[indexSource], vendorConfigFileName); err != nil {
+		if err := validateSourceFields(&params.sources[indexSource], params.vendorConfigFileName); err != nil {
 			return nil, err
 		}
 
 		tmplData := struct {
 			Component string
 			Version   string
-		}{sources[indexSource].Component, sources[indexSource].Version}
+		}{params.sources[indexSource].Component, params.sources[indexSource].Version}
 
 		// Parse 'source' template
-		uri, err := ProcessTmpl(atmosConfig, fmt.Sprintf("source-%d", indexSource), sources[indexSource].Source, tmplData, false)
+		uri, err := ProcessTmpl(params.atmosConfig, fmt.Sprintf("source-%d", indexSource), params.sources[indexSource].Source, tmplData, false)
 		if err != nil {
 			return nil, err
 		}
 
-		useOciScheme, useLocalFileSystem, sourceIsLocalFile, err := determineSourceType(&uri, vendorConfigFilePath)
+		useOciScheme, useLocalFileSystem, sourceIsLocalFile, err := determineSourceType(&uri, params.vendorConfigFilePath)
 		if err != nil {
 			return nil, err
 		}
@@ -293,9 +310,9 @@ func processAtmosVendorSource(atmosConfig *schema.AtmosConfiguration, sources []
 			err = u.ValidateURI(uri)
 			if err != nil {
 				if strings.Contains(uri, "..") {
-					return nil, fmt.Errorf("invalid URI for component %s: %w: Please ensure the source is a valid local path", sources[indexSource].Component, err)
+					return nil, fmt.Errorf("invalid URI for component %s: %w: Please ensure the source is a valid local path", params.sources[indexSource].Component, err)
 				}
-				return nil, fmt.Errorf("invalid URI for component %s: %w", sources[indexSource].Component, err)
+				return nil, fmt.Errorf("invalid URI for component %s: %w", params.sources[indexSource].Component, err)
 			}
 		}
 
@@ -304,11 +321,11 @@ func processAtmosVendorSource(atmosConfig *schema.AtmosConfiguration, sources []
 
 		// Process each target within the source
 		pkgs, err := processTargets(&processTargetsParams{
-			AtmosConfig:          atmosConfig,
+			AtmosConfig:          params.atmosConfig,
 			IndexSource:          indexSource,
-			Source:               &sources[indexSource],
+			Source:               &params.sources[indexSource],
 			TemplateData:         tmplData,
-			VendorConfigFilePath: vendorConfigFilePath,
+			VendorConfigFilePath: params.vendorConfigFilePath,
 			URI:                  uri,
 			PkgType:              pType,
 			SourceIsLocalFile:    sourceIsLocalFile,
