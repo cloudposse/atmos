@@ -311,9 +311,13 @@ func sanitizeOutput(output string) (string, error) {
 	//    - And explicitly collapse extra slashes.
 	normalizedRepoRoot := collapseExtraSlashes(filepath.ToSlash(filepath.Clean(repoRoot)))
 	// Also normalize the output to use forward slashes.
-	// Note: On Unix systems, filepath.ToSlash does not convert backslashes since they are not path separators.
-	// We need to manually replace backslashes to handle Windows-style paths in test output.
-	normalizedOutput := strings.ReplaceAll(filepath.ToSlash(output), "\\", "/")
+	// Note: On Windows, filepath.ToSlash converts backslashes to forward slashes.
+	// On Unix systems, backslashes are NOT path separators and should be preserved (they're used in escape sequences).
+	normalizedOutput := filepath.ToSlash(output)
+	// On Windows only, manually replace any remaining backslashes to handle edge cases.
+	if runtime.GOOS == "windows" {
+		normalizedOutput = strings.ReplaceAll(normalizedOutput, "\\", "/")
+	}
 
 	// 3. Build a regex that matches the repository root even if extra slashes appear.
 	//    First, escape any regex metacharacters in the normalized repository root.
