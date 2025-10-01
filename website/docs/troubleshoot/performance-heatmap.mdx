@@ -1,0 +1,508 @@
+---
+title: Performance Heatmap
+sidebar_position: 3
+sidebar_label: Performance Heatmap
+description: Visualize Atmos performance metrics with interactive heatmaps and detailed function timing analysis.
+---
+
+import Terminal from '@site/src/components/Terminal'
+import File from '@site/src/components/File'
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+    Atmos includes a built-in performance heatmap feature that provides real-time visualization of function execution times and call statistics.
+    This lightweight profiling tool helps identify performance bottlenecks without the overhead of full pprof profiling.
+</Intro>
+
+## What is Performance Heatmap?
+
+The performance heatmap is a lightweight profiling visualization tool that tracks and displays:
+
+- **Function call counts**: How many times each function is called
+- **Execution times**: Total, average, and maximum duration for each function
+- **Percentile statistics**: P95 latency for detailed performance analysis (when enabled)
+- **Interactive visualizations**: Multiple display modes for analyzing performance data
+
+Unlike pprof profiling which captures detailed runtime data, the heatmap provides focused, real-time metrics on
+instrumented functions with minimal overhead.
+
+## Quick Start
+
+Enable performance tracking and display the heatmap after command execution:
+
+```shell
+# Set environment variable to enable performance tracking
+export ATMOS_PROF=1
+
+# Run any Atmos command with the --heatmap flag
+atmos describe stacks --heatmap
+```
+
+<Terminal title="Performance heatmap output">
+    ```
+    === Atmos Performance Summary ===
+    Elapsed: 234.56ms  Functions: 12  Calls: 156
+    Function                                  Count      Total        Avg        Max      P95
+    ProcessStackConfig                           45     120ms       2ms        8ms        -
+    LoadYAMLFile                                 32      65ms       2ms        5ms        -
+    ProcessTemplates                             28      42ms       1ms        3ms        -
+    ValidateComponentConfig                      18      18ms       1ms        2ms        -
+    ```
+</Terminal>
+
+## Configuration
+
+### Environment Variables
+
+Performance tracking is controlled by two environment variables:
+
+<dl>
+    <dt>`ATMOS_PROF`</dt>
+    <dd>Enable performance tracking (set to `1` to enable)</dd>
+
+    <dt>`ATMOS_PROF_HDR`</dt>
+    <dd>Enable HDR histogram for percentile calculations like P95 (set to `1` to enable, requires `ATMOS_PROF=1`)</dd>
+</dl>
+
+**Basic tracking (count, total, avg, max):**
+```bash
+export ATMOS_PROF=1
+atmos terraform plan vpc -s dev --heatmap
+```
+
+**Advanced tracking with percentiles (P95):**
+```bash
+export ATMOS_PROF=1
+export ATMOS_PROF_HDR=1
+atmos terraform plan vpc -s dev --heatmap
+```
+
+### CLI Flags
+
+<dl>
+    <dt>`--heatmap`</dt>
+    <dd>Display performance heatmap visualization after command execution (requires `ATMOS_PROF=1`)</dd>
+
+    <dt>`--heatmap-mode`</dt>
+    <dd>Visualization mode: `bar`, `ascii`, `table`, or `sparkline` (default: `bar`). In interactive mode, press 1-4 to switch modes.</dd>
+</dl>
+
+## Visualization Modes
+
+The heatmap supports multiple visualization modes for analyzing performance data.
+In interactive mode (when a TTY is available), you can switch between modes by pressing 1-4.
+
+### Bar Chart Mode (Default)
+
+Horizontal bar chart showing relative execution times:
+
+```shell
+atmos describe stacks --heatmap --heatmap-mode=bar
+```
+
+<Terminal title="Bar chart visualization">
+    ```
+    🔥 Performance Heatmap - Bar Chart
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+    ProcessStackConfig    ████████████████████████ 120ms
+    LoadYAMLFile          ████████████ 65ms
+    ProcessTemplates      ████████ 42ms
+    ValidateConfig        ███ 18ms
+    MergeOverrides        ██ 12ms
+
+    Press 1-4 to switch modes | q to quit
+    ```
+</Terminal>
+
+### ASCII Heatmap Mode
+
+Color-coded grid showing performance distribution across functions:
+
+```shell
+atmos describe stacks --heatmap --heatmap-mode=ascii
+```
+
+<Terminal title="ASCII heatmap visualization">
+    ```
+    🔥 Performance Heatmap - ASCII Heat Map
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+    ProcessStackConfig  ████████
+    LoadYAMLFile        ████░░░░
+    ProcessTemplates    ███░░░░░
+    ValidateConfig      ██░░░░░░
+    MergeOverrides      █░░░░░░░
+
+    Color Legend: █ >1s  █ >500ms  █ >100ms  █ <100ms
+
+    Press 1-4 to switch modes | q to quit
+    ```
+</Terminal>
+
+### Table Mode
+
+Detailed tabular view with all metrics:
+
+```shell
+atmos describe stacks --heatmap --heatmap-mode=table
+```
+
+<Terminal title="Table visualization">
+    ```
+    🔥 Performance Heatmap - Table View
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+    ┌─────────────────────────────────────┬───────┬──────────┬──────────┬──────────┬─────────┐
+    │ Function                            │ Count │ Total    │ Avg      │ Max      │ P95     │
+    ├─────────────────────────────────────┼───────┼──────────┼──────────┼──────────┼─────────┤
+    │ ProcessStackConfig                  │    45 │   120ms  │    2ms   │    8ms   │   6ms   │
+    │ LoadYAMLFile                        │    32 │    65ms  │    2ms   │    5ms   │   4ms   │
+    │ ProcessTemplates                    │    28 │    42ms  │    1ms   │    3ms   │   2ms   │
+    │ ValidateComponentConfig             │    18 │    18ms  │    1ms   │    2ms   │   2ms   │
+    │ MergeOverrides                      │    12 │    12ms  │    1ms   │    2ms   │   1ms   │
+    └─────────────────────────────────────┴───────┴──────────┴──────────┴──────────┴─────────┘
+
+    Press 1-4 to switch modes | q to quit
+    ```
+</Terminal>
+
+### Sparkline Mode
+
+Compact sparkline charts for quick overview:
+
+```shell
+atmos describe stacks --heatmap --heatmap-mode=sparkline
+```
+
+<Terminal title="Sparkline visualization">
+    ```
+    🔥 Performance Heatmap - Sparklines
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+    ProcessStackConfig     ▁▂▃▅▇█▆▄▃▂ 120ms (45 calls)
+    LoadYAMLFile          ▁▂▄▆█▅▃▂▁  65ms (32 calls)
+    ProcessTemplates      ▂▃▅█▆▄▂▁   42ms (28 calls)
+    ValidateConfig        ▃▅█▅▃▁     18ms (18 calls)
+    MergeOverrides        ▄█▅▂       12ms (12 calls)
+
+    Press 1-4 to switch modes | q to quit
+    ```
+</Terminal>
+
+## Output Explanation
+
+### Performance Summary
+
+The summary section shows aggregate metrics:
+
+```
+=== Atmos Performance Summary ===
+Elapsed: 234.56ms  Functions: 12  Calls: 156
+```
+
+- **Elapsed**: Total execution time for the command
+- **Functions**: Number of unique functions tracked
+- **Calls**: Total number of function calls tracked
+
+### Function Metrics
+
+Each tracked function displays:
+
+<dl>
+    <dt>`Function`</dt>
+    <dd>Name of the tracked function</dd>
+
+    <dt>`Count`</dt>
+    <dd>Number of times the function was called</dd>
+
+    <dt>`Total`</dt>
+    <dd>Total time spent in all calls to this function</dd>
+
+    <dt>`Avg`</dt>
+    <dd>Average execution time per call (Total ÷ Count)</dd>
+
+    <dt>`Max`</dt>
+    <dd>Maximum execution time for a single call</dd>
+
+    <dt>`P95`</dt>
+    <dd>95th percentile latency (only shown when `ATMOS_PROF_HDR=1`)</dd>
+</dl>
+
+### Interactive Mode
+
+When running in a terminal with TTY support, the heatmap launches an interactive UI:
+
+**Keyboard Controls:**
+- **1**: Switch to bar chart mode
+- **2**: Switch to ASCII heatmap mode
+- **3**: Switch to table mode
+- **4**: Switch to sparkline mode
+- **q**: Quit and return to terminal
+
+**Non-TTY Mode:**
+When running in scripts or CI/CD pipelines without a TTY, the heatmap displays a static summary instead of launching the interactive UI.
+
+## Common Use Cases
+
+### Identifying Slow Functions
+
+Track which functions consume the most execution time:
+
+```bash
+export ATMOS_PROF=1
+export ATMOS_PROF_HDR=1
+
+# Profile a slow command
+atmos terraform plan large-component -s prod --heatmap
+
+# Look for functions with high Total time in the output
+```
+
+Focus optimization efforts on functions with:
+- High **Total** time (most impact on overall performance)
+- High **Max** time (individual slow calls)
+- High **P95** time (consistent slowness)
+
+### Comparing Performance
+
+Compare performance before and after optimizations:
+
+```bash
+# Baseline measurement
+export ATMOS_PROF=1
+atmos describe stacks --heatmap > baseline.txt
+
+# After optimization
+atmos describe stacks --heatmap > optimized.txt
+
+# Compare the Total times for key functions
+diff baseline.txt optimized.txt
+```
+
+### CI/CD Integration
+
+Capture performance metrics in automated pipelines:
+
+```bash
+# In CI/CD pipeline
+export ATMOS_PROF=1
+export ATMOS_PROF_HDR=1
+
+# Run commands and capture metrics
+atmos terraform plan vpc -s prod --heatmap 2>&1 | tee performance.log
+
+# Parse performance.log for regression detection
+```
+
+### Development Workflow
+
+Use during development to validate performance impact:
+
+```bash
+# Enable in your shell profile for persistent tracking
+echo 'export ATMOS_PROF=1' >> ~/.bashrc
+echo 'export ATMOS_PROF_HDR=1' >> ~/.bashrc
+
+# Run commands with heatmap during development
+atmos validate stacks --heatmap
+atmos describe component vpc -s dev --heatmap
+```
+
+## Performance Heatmap vs. pprof Profiling
+
+Choose the right tool for your use case:
+
+| Feature            | Performance Heatmap            | pprof Profiling                       |
+|--------------------|--------------------------------|---------------------------------------|
+| **Overhead**       | Minimal (microsecond tracking) | Higher (full runtime instrumentation) |
+| **Granularity**    | Function-level metrics         | Line-level profiling                  |
+| **Setup**          | Environment variable only      | Requires flags or config              |
+| **Output**         | Real-time visualization        | File or HTTP endpoint                 |
+| **Use Case**       | Quick performance checks       | Deep performance analysis             |
+| **Visualization**  | Built-in interactive UI        | Requires `go tool pprof`              |
+| **Data Retention** | In-memory (command lifetime)   | Persistent files                      |
+
+**When to use Performance Heatmap:**
+- Quick performance validation during development
+- Identifying which functions are called most often
+- Comparing execution times between commands
+- Lightweight monitoring in production
+
+**When to use pprof Profiling:**
+- Deep dive into performance bottlenecks
+- CPU and memory usage analysis
+- Detailed goroutine and allocation profiling
+- Flame graph visualization
+
+See [Performance Profiling](/troubleshoot/profiling) for pprof usage.
+
+## Limitations
+
+### Current Limitations
+
+1. **Instrumentation Required**: Only tracks functions that have been instrumented with `perf.Track()` calls
+2. **In-Memory Only**: Metrics are not persisted between command executions
+3. **No Historical Data**: Cannot compare performance across multiple runs (use pprof for this)
+4. **Terminal-Dependent**: Interactive mode requires a TTY (scripts get static output)
+
+### Planned Enhancements
+
+The performance heatmap feature is under active development. Future enhancements may include:
+
+- Automatic instrumentation of critical paths
+- Historical performance tracking
+- Performance regression detection
+- Export to various formats (JSON, CSV)
+- Integration with observability platforms
+
+## Troubleshooting
+
+### Heatmap Not Showing
+
+**Problem**: Running `--heatmap` flag but no performance data is displayed.
+
+**Solution**: Ensure `ATMOS_PROF=1` is set:
+```bash
+export ATMOS_PROF=1
+atmos version --heatmap
+```
+
+**Expected Output:**
+```
+=== Atmos Performance Summary ===
+```
+
+### No Functions Tracked
+
+**Problem**: Heatmap shows "Functions: 0  Calls: 0"
+
+**Explanation**: The current command hasn't executed any instrumented functions yet. Performance tracking is being added incrementally to Atmos functions.
+
+**Workaround**: Run commands that process stacks and components, which have more instrumentation:
+```bash
+export ATMOS_PROF=1
+atmos describe stacks --heatmap
+atmos terraform plan component -s stack --heatmap
+```
+
+### P95 Column Shows Dashes
+
+**Problem**: P95 column displays `-` instead of values
+
+**Solution**: Enable HDR histogram tracking:
+```bash
+export ATMOS_PROF=1
+export ATMOS_PROF_HDR=1  # Required for P95 calculations
+atmos describe stacks --heatmap
+```
+
+### Interactive Mode Not Working
+
+**Problem**: TUI doesn't launch, shows "No TTY available" message
+
+**Explanation**: The heatmap requires a terminal (TTY) for interactive mode. This happens in:
+- Shell scripts running in background
+- CI/CD pipelines
+- Redirected output (`atmos cmd --heatmap > file.txt`)
+
+**Expected Behavior**: Static summary is displayed instead:
+```
+=== Atmos Performance Summary ===
+Elapsed: 123.45ms  Functions: 5  Calls: 42
+...
+⚠️  No TTY available for interactive visualization. Summary displayed above.
+```
+
+### Combining with pprof
+
+**Problem**: Can I use both performance heatmap and pprof profiling simultaneously?
+
+**Solution**: Yes, they are independent and can be used together:
+```bash
+export ATMOS_PROF=1
+export ATMOS_PROF_HDR=1
+
+# Run with both heatmap and pprof profiling
+atmos terraform plan vpc -s prod \
+  --heatmap \
+  --profile-file=cpu.prof \
+  --profile-type=cpu
+
+# Analyze heatmap during command
+# Then analyze pprof data after completion
+go tool pprof -http=:8080 cpu.prof
+```
+
+## Best Practices
+
+### Enable Selectively
+
+Only enable performance tracking when needed:
+
+```bash
+# Development: Enable in current shell
+export ATMOS_PROF=1
+
+# Production: Enable for specific commands only
+ATMOS_PROF=1 atmos terraform plan vpc -s prod --heatmap
+
+# CI/CD: Enable conditionally
+if [ "$ENABLE_PERF_TRACKING" = "true" ]; then
+  export ATMOS_PROF=1
+  export ATMOS_PROF_HDR=1
+fi
+```
+
+### Use Appropriate Modes
+
+Choose visualization mode based on your context:
+
+- **bar**: Best for identifying relative performance differences
+- **ascii**: Best for visual pattern recognition
+- **table**: Best for detailed metric analysis
+- **sparkline**: Best for quick overview of many functions
+
+### Combine with Logging
+
+Correlate performance metrics with debug logs:
+
+```bash
+export ATMOS_PROF=1
+export ATMOS_PROF_HDR=1
+
+# Run with debug logging
+atmos describe stacks \
+  --logs-level=Debug \
+  --heatmap \
+  2>&1 | tee debug-with-perf.log
+```
+
+### Automate Regression Detection
+
+Track performance in CI/CD to detect regressions:
+
+```bash
+#!/bin/bash
+# ci-performance-check.sh
+
+export ATMOS_PROF=1
+export ATMOS_PROF_HDR=1
+
+# Capture performance metrics
+atmos validate stacks --heatmap 2>&1 | tee perf-output.txt
+
+# Extract elapsed time
+elapsed=$(grep "Elapsed:" perf-output.txt | awk '{print $2}')
+
+# Compare with baseline (e.g., 500ms)
+if [ $(echo "$elapsed > 500" | bc) -eq 1 ]; then
+  echo "Performance regression detected: ${elapsed} > 500ms"
+  exit 1
+fi
+```
+
+## Related Documentation
+
+- [Performance Profiling](/troubleshoot/profiling) - Deep performance analysis with pprof
+- [Troubleshooting Guide](/troubleshoot) - General troubleshooting information

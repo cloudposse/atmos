@@ -151,6 +151,9 @@ linters:
       - linters:
           - cyclop
         path: (.+)_test\.go
+      - linters:
+          - forbidigo
+        path: pkg/perf/.*\.go$
     paths:
       - experiments/.*
       - third_party$

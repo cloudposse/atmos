@@ -1,12 +1,12 @@
 package perf
 
 import (
+	"os"
 	"sort"
 	"sync"
 	"time"
 
 	"github.com/HdrHistogram/hdrhistogram-go"
-	"github.com/spf13/viper"
 )
 
 const (
@@ -28,30 +28,29 @@ type Metric struct {
 }
 
 type registry struct {
-	mu      sync.Mutex
-	enabled bool
-	withHDR bool
-	data    map[string]*Metric
-	start   time.Time
-}
-
-func init() {
-	_ = viper.BindEnv("ATMOS_PROF", "ATMOS_PROF")
-	_ = viper.BindEnv("ATMOS_PROF_HDR", "ATMOS_PROF_HDR")
+	mu    sync.Mutex
+	data  map[string]*Metric
+	start time.Time
 }
 
 var reg = &registry{
-	enabled: viper.GetString("ATMOS_PROF") == "1",
-	withHDR: viper.GetString("ATMOS_PROF_HDR") == "1",
-	data:    make(map[string]*Metric),
-	start:   time.Now(),
+	data:  make(map[string]*Metric),
+	start: time.Now(),
 }
 
-func Enabled() bool { return reg.enabled }
+func Enabled() bool {
+	// Check environment variable at runtime, not at package initialization.
+	return os.Getenv("ATMOS_PROF") == "1"
+}
+
+func withHDR() bool {
+	// Check environment variable at runtime, not at package initialization.
+	return os.Getenv("ATMOS_PROF_HDR") == "1"
+}
 
 // Track returns a func you should defer to record duration for `name`.
 func Track(name string) func() {
-	if !reg.enabled {
+	if !Enabled() {
 		return func() {}
 	}
 	t0 := time.Now()
@@ -61,7 +60,7 @@ func Track(name string) func() {
 		m := reg.data[name]
 		if m == nil {
 			var h *hdrhistogram.Histogram
-			if reg.withHDR {
+			if withHDR() {
 				h = hdrhistogram.New(histogramMinValue, histogramMaxValue, histogramPrecision)
 			}
 			m = &Metric{Name: name, Hist: h}

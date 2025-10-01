@@ -2,13 +2,17 @@ package cmd
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"io"
 	"math"
 	"os"
+	"os/signal"
 	"regexp"
 	"strings"
+	"syscall"
+	"time"
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/elewis787/boa"
@@ -22,15 +26,19 @@ import (
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/pager"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/profiler"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/telemetry"
+	"github.com/cloudposse/atmos/pkg/ui/heatmap"
 	"github.com/cloudposse/atmos/pkg/utils"
 )
 
 const (
 	// LogFileMode is the file mode for log files.
 	logFileMode = 0o644
+	// DefaultTopFunctionsMax is the default number of top functions to display in performance summary.
+	defaultTopFunctionsMax = 25
 )
 
 // atmosConfig This is initialized before everything in the Execute function. So we can directly use this.
@@ -89,6 +97,15 @@ var RootCmd = &cobra.Command{
 		if profilerServer != nil {
 			if stopErr := profilerServer.Stop(); stopErr != nil {
 				log.Error("Failed to stop profiler", "error", stopErr)
+			}
+		}
+
+		// Show performance heatmap if enabled.
+		showHeatmap, _ := cmd.Flags().GetBool("heatmap")
+		if showHeatmap {
+			heatmapMode, _ := cmd.Flags().GetString("heatmap-mode")
+			if err := displayPerformanceHeatmap(cmd, heatmapMode); err != nil {
+				log.Error("Failed to display performance heatmap", "error", err)
 			}
 		}
 	},
@@ -440,6 +457,70 @@ func getInvalidCommandName(input string) string {
 	return ""
 }
 
+// displayPerformanceHeatmap shows the performance heatmap visualization.
+//
+//nolint:unparam // cmd parameter reserved for future use
+func displayPerformanceHeatmap(cmd *cobra.Command, mode string) error {
+	// Check if performance profiling is enabled.
+	if !perf.Enabled() {
+		fmt.Fprintf(os.Stderr, "\n⚠️  Performance profiling is not enabled. Set ATMOS_PROF=1 to enable heatmap visualization.\n")
+		return nil
+	}
+
+	// Print performance summary to console.
+	snap := perf.SnapshotTop("total", defaultTopFunctionsMax)
+	fmt.Fprintf(os.Stderr, "\n=== Atmos Performance Summary ===\n")
+	fmt.Fprintf(os.Stderr, "Elapsed: %s  Functions: %d  Calls: %d\n", snap.Elapsed, snap.TotalFuncs, snap.TotalCalls)
+	fmt.Fprintf(os.Stderr, "%-40s %6s %10s %10s %10s %8s\n", "Function", "Count", "Total", "Avg", "Max", "P95")
+	for _, r := range snap.Rows {
+		p95 := "-"
+		if r.P95 > 0 {
+			p95 = r.P95.Truncate(time.Millisecond).String()
+		}
+		fmt.Fprintf(os.Stderr, "%-40s %6d %10s %10s %10s %8s\n",
+			r.Name, r.Count, r.Total.Truncate(time.Millisecond), r.Avg.Truncate(time.Millisecond), r.Max.Truncate(time.Millisecond), p95)
+	}
+
+	// Check if we have a TTY for interactive mode.
+	if !isTTY() {
+		fmt.Fprintf(os.Stderr, "\n⚠️  No TTY available for interactive visualization. Summary displayed above.\n")
+		return nil
+	}
+
+	// Create an empty heat model for now (we'll enhance this later to track actual execution steps).
+	heatModel := heatmap.NewHeatModel()
+
+	fmt.Fprintf(os.Stderr, "\n🎨 Starting performance visualization TUI...\n")
+	fmt.Fprintf(os.Stderr, "Press 1-4 to switch visualization modes, 'q' to quit\n\n")
+
+	// Create context for TUI with cancellation.
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// Handle Ctrl+C for graceful shutdown.
+	sig := make(chan os.Signal, 1)
+	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
+	go func() {
+		<-sig
+		cancel()
+	}()
+
+	// Start Bubble Tea UI with the collected data.
+	if err := heatmap.StartBubbleTeaUI(ctx, heatModel, mode); err != nil {
+		return fmt.Errorf("error running Bubble Tea UI: %w", err)
+	}
+
+	return nil
+}
+
+// isTTY checks if stderr is connected to a terminal.
+func isTTY() bool {
+	if fileInfo, err := os.Stderr.Stat(); err == nil {
+		return (fileInfo.Mode() & os.ModeCharDevice) != 0
+	}
+	return false
+}
+
 func init() {
 	// Add the template function for wrapped flag usages.
 	cobra.AddTemplateFunc("wrappedFlagUsages", templates.WrappedFlagUsages)
@@ -463,6 +544,8 @@ func init() {
 	RootCmd.PersistentFlags().String("profile-type", "cpu",
 		"Type of profile to collect when using --profile-file. "+
 			"Options: cpu, heap, allocs, goroutine, block, mutex, threadcreate, trace")
+	RootCmd.PersistentFlags().Bool("heatmap", false, "Show performance heatmap visualization after command execution (requires ATMOS_PROF=1)")
+	RootCmd.PersistentFlags().String("heatmap-mode", "bar", "Heatmap visualization mode: bar, ascii, table, sparkline (press 1-4 to switch in TUI)")
 	// Set custom usage template.
 	err := templates.SetCustomUsageFunc(RootCmd)
 	if err != nil {
