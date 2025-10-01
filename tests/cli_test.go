@@ -692,6 +692,19 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 	currentEnvVars := telemetry.PreserveCIEnvVars()
 	defer telemetry.RestoreCIEnvVars(currentEnvVars)
 
+	// Force consistent color/terminal environment for reproducible ANSI codes across platforms.
+	// Test cases can still override these by explicitly setting them.
+	if _, exists := tc.Env["TERM"]; !exists {
+		tc.Env["TERM"] = "xterm-256color"
+	}
+	if _, exists := tc.Env["COLORTERM"]; !exists {
+		tc.Env["COLORTERM"] = "" // Explicitly empty to prevent truecolor (force 256-color)
+	}
+	// Ensure NO_COLOR is not inherited unless test explicitly sets it (presence disables color).
+	if _, exists := tc.Env["NO_COLOR"]; !exists {
+		delete(tc.Env, "NO_COLOR")
+	}
+
 	// Set any environment variables defined in the test case using t.Setenv for proper isolation
 	for key, value := range tc.Env {
 		t.Setenv(key, value)
