@@ -221,155 +221,73 @@ func TestUploadStatus(t *testing.T) {
 
 // TestParseLockUnlockCliArgs tests the parseLockUnlockCliArgs function error handling.
 func TestParseLockUnlockCliArgs(t *testing.T) {
-	// Skip this test as it requires full command setup with ProcessCommandLineArgs.
-	t.Skipf("Requires full command setup with ProcessCommandLineArgs which depends on global state")
+	t.Run("cfg.InitCliConfig failure returns wrapped error", func(t *testing.T) {
+		// Create a command with all required flags for ProcessCommandLineArgs.
+		cmd := &cobra.Command{
+			Use: "test",
+		}
+		// Add all flags that ProcessCommandLineArgs expects.
+		cmd.Flags().String("base-path", "./", "Base path for Atmos")
+		cmd.Flags().StringSlice("config", []string{}, "Config files")
+		cmd.Flags().StringSlice("config-path", []string{}, "Config paths")
+		cmd.Flags().String("component", "test-comp", "Component name")
+		cmd.Flags().String("stack", "test-stack", "Stack name")
+
+		_, err := parseLockUnlockCliArgs(cmd, []string{})
+
+		// Should get an error from cfg.InitCliConfig since there's no valid Atmos config.
+		assert.Error(t, err)
+		// Error should be wrapped with ErrFailedToInitConfig (line 44 of pro.go).
+		assert.ErrorIs(t, err, errUtils.ErrFailedToInitConfig)
+	})
 }
 
 // TestParseLockCliArgs tests the parseLockCliArgs function.
 func TestParseLockCliArgs(t *testing.T) {
-	// Skip this test as it requires full command setup with ProcessCommandLineArgs
-	// which internally calls cfg.InitCliConfig and needs a valid Atmos configuration.
-	t.Skipf("Skipping parseLockCliArgs test: requires full Atmos configuration setup")
-	tests := []struct {
-		name        string
-		setupCmd    func() *cobra.Command
-		args        []string
-		expectError bool
-		expectedTTL int32
-		expectedMsg string
-	}{
-		{
-			name: "Success with defaults",
-			setupCmd: func() *cobra.Command {
-				cmd := &cobra.Command{}
-				cmd.Flags().String("component", "test-component", "Component name")
-				cmd.Flags().String("stack", "test-stack", "Stack name")
-				cmd.Flags().Int32("ttl", 30, "TTL in seconds")
-				cmd.Flags().String("message", "", "Lock message")
-				cmd.Flags().String("base-path", "./", "Base path for Atmos")
-				cmd.Flags().StringSlice("config", []string{}, "Config files")
-				cmd.Flags().StringSlice("config-path", []string{}, "Config paths")
-				return cmd
-			},
-			args:        []string{},
-			expectError: false,
-			expectedTTL: 30,
-			expectedMsg: "Locked by Atmos",
-		},
-		{
-			name: "Success with custom values",
-			setupCmd: func() *cobra.Command {
-				cmd := &cobra.Command{}
-				cmd.Flags().String("component", "vpc", "Component name")
-				cmd.Flags().String("stack", "prod", "Stack name")
-				cmd.Flags().Int32("ttl", 60, "TTL in seconds")
-				cmd.Flags().String("message", "Custom lock", "Lock message")
-				cmd.Flags().String("base-path", "./", "Base path for Atmos")
-				cmd.Flags().StringSlice("config", []string{}, "Config files")
-				cmd.Flags().StringSlice("config-path", []string{}, "Config paths")
-				cmd.Flags().Set("message", "Custom lock")
-				return cmd
-			},
-			args:        []string{},
-			expectError: false,
-			expectedTTL: 60,
-			expectedMsg: "Custom lock",
-		},
-		{
-			name: "Invalid TTL flag",
-			setupCmd: func() *cobra.Command {
-				cmd := &cobra.Command{}
-				cmd.Flags().String("component", "test-component", "Component name")
-				cmd.Flags().String("stack", "test-stack", "Stack name")
-				// Intentionally not setting up TTL flag to simulate error
-				return cmd
-			},
-			args:        []string{},
-			expectError: true,
-		},
-		{
-			name: "Invalid message flag",
-			setupCmd: func() *cobra.Command {
-				cmd := &cobra.Command{}
-				cmd.Flags().String("component", "test-component", "Component name")
-				cmd.Flags().String("stack", "test-stack", "Stack name")
-				cmd.Flags().Int32("ttl", 60, "TTL in seconds")
-				// Intentionally not setting up message flag to simulate error
-				return cmd
-			},
-			args:        []string{},
-			expectError: true,
-		},
-	}
+	t.Run("propagates error from parseLockUnlockCliArgs", func(t *testing.T) {
+		// Create a command with flags that will trigger error in parseLockUnlockCliArgs.
+		cmd := &cobra.Command{
+			Use: "test",
+		}
+		// Add required flags plus lock-specific flags.
+		cmd.Flags().String("base-path", "./", "Base path for Atmos")
+		cmd.Flags().StringSlice("config", []string{}, "Config files")
+		cmd.Flags().StringSlice("config-path", []string{}, "Config paths")
+		cmd.Flags().String("component", "test-comp", "Component name")
+		cmd.Flags().String("stack", "test-stack", "Stack name")
+		cmd.Flags().Int32("ttl", 30, "TTL in seconds")
+		cmd.Flags().String("message", "test", "Lock message")
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			cmd := tt.setupCmd()
-			result, err := parseLockCliArgs(cmd, tt.args)
+		_, err := parseLockCliArgs(cmd, []string{})
 
-			if tt.expectError {
-				assert.Error(t, err)
-			} else {
-				assert.NoError(t, err)
-				assert.Equal(t, tt.expectedTTL, result.LockTTL)
-				assert.Equal(t, tt.expectedMsg, result.LockMessage)
-			}
-		})
-	}
+		// Should get an error (line 74-75 of pro.go propagates error).
+		assert.Error(t, err)
+		// Error should be from parseLockUnlockCliArgs (InitCliConfig failure).
+		assert.ErrorIs(t, err, errUtils.ErrFailedToInitConfig)
+	})
 }
 
 // TestParseUnlockCliArgs tests the parseUnlockCliArgs function.
 func TestParseUnlockCliArgs(t *testing.T) {
-	// Skip this test as it requires full command setup with ProcessCommandLineArgs
-	// which internally calls cfg.InitCliConfig and needs a valid Atmos configuration.
-	t.Skipf("Skipping parseUnlockCliArgs test: requires full Atmos configuration setup")
-	tests := []struct {
-		name        string
-		setupCmd    func() *cobra.Command
-		args        []string
-		expectError bool
-	}{
-		{
-			name: "Success",
-			setupCmd: func() *cobra.Command {
-				cmd := &cobra.Command{}
-				cmd.Flags().String("component", "test-component", "Component name")
-				cmd.Flags().String("stack", "test-stack", "Stack name")
-				cmd.Flags().String("base-path", "./", "Base path for Atmos")
-				cmd.Flags().StringSlice("config", []string{}, "Config files")
-				cmd.Flags().StringSlice("config-path", []string{}, "Config paths")
-				return cmd
-			},
-			args:        []string{},
-			expectError: false,
-		},
-		{
-			name: "Missing key flag",
-			setupCmd: func() *cobra.Command {
-				cmd := &cobra.Command{}
-				cmd.Flags().String("component", "test-component", "Component name")
-				cmd.Flags().String("stack", "test-stack", "Stack name")
-				// Intentionally not setting up key flag to simulate error
-				return cmd
-			},
-			args:        []string{},
-			expectError: true,
-		},
-	}
+	t.Run("propagates error from parseLockUnlockCliArgs", func(t *testing.T) {
+		// Create a command with flags that will trigger error in parseLockUnlockCliArgs.
+		cmd := &cobra.Command{
+			Use: "test",
+		}
+		// Add required flags.
+		cmd.Flags().String("base-path", "./", "Base path for Atmos")
+		cmd.Flags().StringSlice("config", []string{}, "Config files")
+		cmd.Flags().StringSlice("config-path", []string{}, "Config paths")
+		cmd.Flags().String("component", "test-comp", "Component name")
+		cmd.Flags().String("stack", "test-stack", "Stack name")
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			cmd := tt.setupCmd()
-			result, err := parseUnlockCliArgs(cmd, tt.args)
+		_, err := parseUnlockCliArgs(cmd, []string{})
 
-			if tt.expectError {
-				assert.Error(t, err)
-			} else {
-				assert.NoError(t, err)
-				assert.NotNil(t, result)
-			}
-		})
-	}
+		// Should get an error (line 108-110 of pro.go propagates error).
+		assert.Error(t, err)
+		// Error should be from parseLockUnlockCliArgs (InitCliConfig failure).
+		assert.ErrorIs(t, err, errUtils.ErrFailedToInitConfig)
+	})
 }
 
 // TestProLockStack tests the proLockStack function error handling.
@@ -428,27 +346,4 @@ func TestProUnlockStack(t *testing.T) {
 			assert.NotNil(t, tt.expectedErr)
 		})
 	}
-}
-
-// TestParseLockUnlockCliArgs_ErrorWrapping tests error wrapping in parseLockUnlockCliArgs.
-func TestParseLockUnlockCliArgs_ErrorWrapping(t *testing.T) {
-	t.Run("cfg.InitCliConfig failure returns wrapped error", func(t *testing.T) {
-		// Create a command with all required flags for ProcessCommandLineArgs.
-		cmd := &cobra.Command{
-			Use: "test",
-		}
-		// Add all flags that ProcessCommandLineArgs expects.
-		cmd.Flags().String("base-path", "./", "Base path for Atmos")
-		cmd.Flags().StringSlice("config", []string{}, "Config files")
-		cmd.Flags().StringSlice("config-path", []string{}, "Config paths")
-		cmd.Flags().String("component", "test-comp", "Component name")
-		cmd.Flags().String("stack", "test-stack", "Stack name")
-
-		_, err := parseLockUnlockCliArgs(cmd, []string{})
-
-		// Should get an error from cfg.InitCliConfig since there's no valid Atmos config.
-		assert.Error(t, err)
-		// Error should be wrapped with ErrFailedToInitConfig (line 44 of pro.go).
-		assert.ErrorIs(t, err, errUtils.ErrFailedToInitConfig)
-	})
 }
