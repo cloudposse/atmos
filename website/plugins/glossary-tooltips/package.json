@@ -1,0 +1,8 @@
+{
+  "name": "glossary-tooltips",
+  "version": "1.0.0",
+  "description": "Glossary tooltips plugin for Docusaurus",
+  "main": "index.js",
+  "keywords": ["docusaurus", "glossary", "terminology", "tooltips"],
+  "license": "Apache-2.0"
+}
