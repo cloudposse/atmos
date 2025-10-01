@@ -35,15 +35,70 @@ Display the performance heatmap after command execution:
 atmos describe stacks --heatmap
 ```
 
+This will launch an interactive TUI (Terminal User Interface) where you can switch between different visualization modes by pressing 1-4.
+
+### Example: Real Performance Analysis
+
+Here's a real example of analyzing performance with `atmos describe stacks --heatmap`:
+
+**Bar Chart View** (Press `1` in interactive mode):
+
+![Performance Heatmap - Bar Chart](/img/cli/perf/atmos-describe-stacks-heatmap-bar-chart.png)
+
+The bar chart shows the top 25 functions by execution time, making it easy to identify performance bottlenecks at a glance.
+
+**Function Times View** (Press `2` in interactive mode):
+
+![Performance Heatmap - Function Times](/img/cli/perf/atmos-describe-stacks-heatmap-func-times.png)
+
+The ASCII heatmap provides a color-coded visualization of execution times across all tracked functions.
+
+**Non-Interactive Mode** (when running in CI/CD or scripts):
+
 <Terminal title="Performance heatmap output">
     ```
     === Atmos Performance Summary ===
-    Elapsed: 234.56ms  Functions: 12  Calls: 156
-    Function                                  Count      Total        Avg        Max      P95
-    ProcessStackConfig                           45   120.5ms    2.678ms    8.123ms        -
-    LoadYAMLFile                                 32    65.3ms    2.041ms    5.432ms        -
-    ProcessTemplates                             28    42.1ms    1.504ms    3.211ms        -
-    ValidateComponentConfig                      18    18.7ms    1.039ms    2.145ms        -
+    Elapsed: 54.164125ms  Functions: 42  Calls: 5980
+    Function                                            Count      Total        Avg        Max      P95
+    exec.ProcessYAMLConfigFileWithContext                  52    7.488ms      144µs      760µs    662µs
+    exec.Execute                                            1    6.233ms    6.233ms    6.233ms  6.235ms
+    exec.ValidateStacks                                     1    5.499ms    5.499ms    5.499ms  5.499ms
+    merge.MergeWithOptions                                746    4.561ms        6µs      654µs     21µs
+    utils.processCustomTags                              1024     4.27ms        4µs      146µs     15µs
+    utils.GetHighlightedYAML                                1     3.86ms     3.86ms     3.86ms  3.861ms
+    utils.HighlightCodeWithConfig                           1    3.545ms    3.545ms    3.545ms  3.545ms
+    merge.MergeWithContext                                356    3.123ms        8µs      655µs     29µs
+    merge.MergeWithOptionsAndContext                      356    3.052ms        8µs      654µs     29µs
+    utils.ConvertToYAML                                   177      2.5ms       14µs      309µs     56µs
+    exec.ProcessStackConfig                                12    1.926ms      160µs      367µs    186µs
+    utils.GetGlobMatches                                   48    1.859ms       38µs      418µs    226µs
+    merge.Merge                                           390    1.728ms        4µs      154µs     21µs
+    exec.FindStacksMap                                      2     1.61ms      805µs    1.035ms  1.035ms
+    exec.ProcessYAMLConfigFiles                             2    1.594ms      797µs     1.02ms   1.02ms
+    config.FindAllStackConfigsInPaths                       1    1.045ms    1.045ms    1.045ms  1.045ms
+    exec.ProcessYAMLConfigFile                              8      914µs      114µs      222µs    222µs
+    exec.ExecuteDescribeStacks                              1      662µs      662µs      662µs    662µs
+    exec.GetFileContent                                    52      511µs        9µs       73µs     54µs
+    exec.getEmbeddedSchemaPath                              1      266µs      266µs      266µs    266µs
+    utils.SliceContainsString                            2456      148µs          0        6µs        -
+    utils.PathMatch                                        32       58µs        1µs        2µs      2µs
+    exec.ProcessImportSection                              52       57µs        1µs       15µs      4µs
+    exec.processSettingsIntegrationsGithub                 30       26µs          0        9µs      6µs
+    utils.JoinPaths                                         5       24µs        4µs       22µs     22µs
+    utils.EnsureDir                                         1       22µs       22µs       22µs     22µs
+    utils.GetHighlightSettings                              2       19µs        9µs       18µs     18µs
+    exec.createComponentStackMap                            2       12µs        6µs       12µs     12µs
+    utils.ResolveRelativePath                              32       10µs          0        4µs        -
+    exec.ProcessCommandLineArgs                             1        8µs        8µs        8µs      8µs
+    utils.IsTemplateFile                                   52        5µs          0        2µs        -
+    exec.FindComponentsDerivedFromBaseComponents           10        4µs          0          0        -
+    utils.UniqueStrings                                    38        4µs          0          0        -
+    utils.getLexer                                          1        4µs        4µs        4µs      4µs
+    utils.IsDirectory                                       1        4µs        4µs        4µs      4µs
+    config.matchesStackFilePattern                          4        3µs          0        3µs      3µs
+    utils.JoinPath                                         11        3µs          0          0        -
+    exec.BuildTerraformWorkspace                           10        3µs          0        1µs      1µs
+    config.processEnvVars                                   2        2µs        1µs        1µs      1µs
     ```
 </Terminal>
 
@@ -460,4 +515,4 @@ fi
 ## Related Documentation
 
 - [Performance Profiling](/troubleshoot/profiling) - Deep performance analysis with pprof
-- [Troubleshooting Guide](/troubleshoot) - General troubleshooting information
+- [Error Messages](/troubleshoot/errors) - Common error messages and solutions

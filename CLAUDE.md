@@ -498,6 +498,36 @@ Use fixtures in `tests/test-cases/` for integration tests. Each test case should
 - **Include purpose note** and help screengrab
 - **Use consistent section ordering**: Usage → Examples → Arguments → Flags
 
+### Website Documentation Build (MANDATORY)
+- **ALWAYS build the website after any documentation changes** to verify there are no broken links or formatting issues
+- **Build command**: Run from the `website/` directory:
+  ```bash
+  cd website
+  npm run build
+  ```
+- **When to build**:
+  - After adding/modifying any `.mdx` or `.md` files in `website/docs/`
+  - After adding images to `website/static/img/`
+  - After changing navigation in `website/sidebars.js`
+  - After modifying any component in `website/src/`
+- **What to check**:
+  - Build completes without errors
+  - No broken links reported
+  - No missing images
+  - Proper rendering of MDX components
+- **Example workflow**:
+  ```bash
+  # 1. Make documentation changes
+  vim website/docs/cli/commands/describe/stacks.mdx
+
+  # 2. Build to verify
+  cd website
+  npm run build
+
+  # 3. If errors, fix and rebuild
+  # 4. Commit changes only after successful build
+  ```
+
 ### Pull Request Requirements (MANDATORY)
 - **Follow the pull request template** in `.github/PULL_REQUEST_TEMPLATE.md`:
   ```markdown
