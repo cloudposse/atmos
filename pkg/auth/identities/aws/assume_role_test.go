@@ -320,7 +320,7 @@ func TestAssumeRoleIdentity_Authenticate_ValidationErrors(t *testing.T) {
 				SessionToken:    "basetoken",
 				Region:          "us-east-1",
 			}
-			
+
 			_, err := tt.identity.Authenticate(context.Background(), inputCreds)
 			if tt.expectError {
 				assert.Error(t, err)

@@ -649,7 +649,7 @@ func TestManager_Authenticate_UsesCachedTargetCredentials(t *testing.T) {
 func TestManager_Authenticate_ExpiredCredentials(t *testing.T) {
 	// Create expired credentials
 	expiredTime := ptrTime(time.Now().UTC().Add(-time.Hour))
-	
+
 	// Pre-seed store with expired creds for target identity
 	s := &testStore{
 		data:    map[string]any{"dev": &testCreds{exp: expiredTime}},
@@ -758,7 +758,7 @@ func TestManager_GetStackInfo(t *testing.T) {
 
 func TestManager_GetChain_Empty(t *testing.T) {
 	m := &manager{}
-	
+
 	chain := m.GetChain()
 	assert.Empty(t, chain)
 }
@@ -767,7 +767,7 @@ func TestManager_GetChain_WithData(t *testing.T) {
 	m := &manager{
 		chain: []string{"provider", "identity1", "identity2"},
 	}
-	
+
 	chain := m.GetChain()
 	assert.Equal(t, []string{"provider", "identity1", "identity2"}, chain)
 }
