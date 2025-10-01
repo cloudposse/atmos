@@ -429,3 +429,26 @@ func TestProUnlockStack(t *testing.T) {
 		})
 	}
 }
+
+// TestParseLockUnlockCliArgs_ErrorWrapping tests error wrapping in parseLockUnlockCliArgs.
+func TestParseLockUnlockCliArgs_ErrorWrapping(t *testing.T) {
+	t.Run("cfg.InitCliConfig failure returns wrapped error", func(t *testing.T) {
+		// Create a command with all required flags for ProcessCommandLineArgs.
+		cmd := &cobra.Command{
+			Use: "test",
+		}
+		// Add all flags that ProcessCommandLineArgs expects.
+		cmd.Flags().String("base-path", "./", "Base path for Atmos")
+		cmd.Flags().StringSlice("config", []string{}, "Config files")
+		cmd.Flags().StringSlice("config-path", []string{}, "Config paths")
+		cmd.Flags().String("component", "test-comp", "Component name")
+		cmd.Flags().String("stack", "test-stack", "Stack name")
+
+		_, err := parseLockUnlockCliArgs(cmd, []string{})
+
+		// Should get an error from cfg.InitCliConfig since there's no valid Atmos config.
+		assert.Error(t, err)
+		// Error should be wrapped with ErrFailedToInitConfig (line 44 of pro.go).
+		assert.ErrorIs(t, err, errUtils.ErrFailedToInitConfig)
+	})
+}
