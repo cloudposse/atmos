@@ -134,6 +134,8 @@ func buildRows() []Row {
 
 func sortRows(rows []Row, by string) {
 	switch by {
+	case "name":
+		sort.Slice(rows, func(i, j int) bool { return rows[i].Name < rows[j].Name })
 	case "total":
 		sort.Slice(rows, func(i, j int) bool { return rows[i].Total > rows[j].Total })
 	case "avg":
