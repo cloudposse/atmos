@@ -421,6 +421,18 @@ func Test_processArgsAndFlags_errorPaths(t *testing.T) {
 			expectedError:     "--query=.foo=bar",
 		},
 		{
+			name:              "stacks-dir flag without value",
+			componentType:     "terraform",
+			inputArgsAndFlags: []string{"plan", "--stacks-dir"},
+			expectedError:     "--stacks-dir",
+		},
+		{
+			name:              "stacks-dir with multiple equals",
+			componentType:     "terraform",
+			inputArgsAndFlags: []string{"plan", "--stacks-dir=/path=extra"},
+			expectedError:     "--stacks-dir=/path=extra",
+		},
+		{
 			name:              "workflows-dir flag without value",
 			componentType:     "terraform",
 			inputArgsAndFlags: []string{"plan", "--workflows-dir"},
