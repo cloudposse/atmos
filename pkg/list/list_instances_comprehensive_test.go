@@ -376,3 +376,89 @@ func TestCollectInstances(t *testing.T) {
 		assert.Empty(t, result)
 	})
 }
+
+// Test isProDriftDetectionEnabled edge cases.
+func TestIsProDriftDetectionEnabled(t *testing.T) {
+	t.Run("pro settings missing", func(t *testing.T) {
+		instance := &schema.Instance{
+			Component: "test",
+			Stack:     "test",
+			Settings:  map[string]any{},
+		}
+		result := isProDriftDetectionEnabled(instance)
+		assert.False(t, result)
+	})
+
+	t.Run("pro settings not a map", func(t *testing.T) {
+		instance := &schema.Instance{
+			Component: "test",
+			Stack:     "test",
+			Settings: map[string]any{
+				"pro": "invalid",
+			},
+		}
+		result := isProDriftDetectionEnabled(instance)
+		assert.False(t, result)
+	})
+
+	t.Run("pro explicitly disabled", func(t *testing.T) {
+		instance := &schema.Instance{
+			Component: "test",
+			Stack:     "test",
+			Settings: map[string]any{
+				"pro": map[string]any{
+					"enabled": false,
+					"drift_detection": map[string]any{
+						"enabled": true,
+					},
+				},
+			},
+		}
+		result := isProDriftDetectionEnabled(instance)
+		assert.False(t, result)
+	})
+
+	t.Run("drift detection missing", func(t *testing.T) {
+		instance := &schema.Instance{
+			Component: "test",
+			Stack:     "test",
+			Settings: map[string]any{
+				"pro": map[string]any{},
+			},
+		}
+		result := isProDriftDetectionEnabled(instance)
+		assert.False(t, result)
+	})
+
+	t.Run("drift detection enabled", func(t *testing.T) {
+		instance := &schema.Instance{
+			Component: "test",
+			Stack:     "test",
+			Settings: map[string]any{
+				"pro": map[string]any{
+					"drift_detection": map[string]any{
+						"enabled": true,
+					},
+				},
+			},
+		}
+		result := isProDriftDetectionEnabled(instance)
+		assert.True(t, result)
+	})
+
+	t.Run("drift detection enabled is not bool", func(t *testing.T) {
+		instance := &schema.Instance{
+			Component: "test",
+			Stack:     "test",
+			Settings: map[string]any{
+				"pro": map[string]any{
+					"drift_detection": map[string]any{
+						"enabled": "true",
+					},
+				},
+			},
+		}
+		result := isProDriftDetectionEnabled(instance)
+		assert.False(t, result)
+	})
+}

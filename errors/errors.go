@@ -160,7 +160,7 @@ var (
 	ErrComputeRelativePath = errors.New("failed to compute relative path")
 
 	// OCI/Container image errors.
-	ErrCreateTempDirectory   = errors.New("failed to create temp directory")
+	ErrCreateTempDirectory   = ErrCreateTempDir // Alias to avoid duplicate sentinels
 	ErrInvalidImageReference = errors.New("invalid image reference")
 	ErrPullImage             = errors.New("failed to pull image")
 	ErrGetImageDescriptor    = errors.New("cannot get a descriptor for the OCI image")
