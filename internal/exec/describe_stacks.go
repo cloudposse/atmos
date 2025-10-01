@@ -117,7 +117,7 @@ func ExecuteDescribeStacks(
 	includeEmptyStacks bool,
 	skip []string,
 ) (map[string]any, error) {
-	defer perf.Track("ExecuteDescribeStacks")()
+	defer perf.Track(atmosConfig, "ExecuteDescribeStacks")()
 
 	stacksMap, _, err := FindStacksMap(atmosConfig, ignoreMissingFiles)
 	if err != nil {

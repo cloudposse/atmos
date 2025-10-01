@@ -12,6 +12,8 @@ func TestTrack(t *testing.T) {
 		data:  make(map[string]*Metric),
 		start: time.Now(),
 	}
+	// Enable tracking for tests.
+	EnableTracking(true)
 
 	tests := []struct {
 		name          string
@@ -32,7 +34,7 @@ func TestTrack(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			done := Track(tt.functionName)
+			done := Track(nil, tt.functionName)
 			time.Sleep(tt.sleepDuration)
 			done()
 
@@ -67,12 +69,14 @@ func TestTrackMultipleCalls(t *testing.T) {
 		data:  make(map[string]*Metric),
 		start: time.Now(),
 	}
+	// Enable tracking for tests.
+	EnableTracking(true)
 
 	functionName := "multiCallFunc"
 	numCalls := 5
 
 	for i := 0; i < numCalls; i++ {
-		done := Track(functionName)
+		done := Track(nil, functionName)
 		time.Sleep(1 * time.Millisecond)
 		done()
 	}
@@ -132,9 +136,10 @@ func TestEnableHDR(t *testing.T) {
 			}
 
 			EnableHDR(tt.enableHDR)
+			EnableTracking(true)
 
 			functionName := "hdrTestFunc"
-			done := Track(functionName)
+			done := Track(nil, functionName)
 			time.Sleep(1 * time.Millisecond)
 			done()
 
@@ -165,6 +170,8 @@ func TestSnapshotTop(t *testing.T) {
 		data:  make(map[string]*Metric),
 		start: time.Now(),
 	}
+	// Enable tracking for tests.
+	EnableTracking(true)
 
 	// Create some test data.
 	functions := []struct {
@@ -177,7 +184,7 @@ func TestSnapshotTop(t *testing.T) {
 	}
 
 	for _, fn := range functions {
-		done := Track(fn.name)
+		done := Track(nil, fn.name)
 		time.Sleep(fn.duration)
 		done()
 	}
@@ -258,6 +265,8 @@ func TestConcurrentTracking(t *testing.T) {
 		data:  make(map[string]*Metric),
 		start: time.Now(),
 	}
+	// Enable tracking for tests.
+	EnableTracking(true)
 
 	functionName := "concurrentFunc"
 	numGoroutines := 100
@@ -268,7 +277,7 @@ func TestConcurrentTracking(t *testing.T) {
 	for i := 0; i < numGoroutines; i++ {
 		go func() {
 			defer wg.Done()
-			done := Track(functionName)
+			done := Track(nil, functionName)
 			time.Sleep(1 * time.Millisecond)
 			done()
 		}()
@@ -390,6 +399,7 @@ func TestP95WithHDR(t *testing.T) {
 		start: time.Now(),
 	}
 	EnableHDR(true)
+	EnableTracking(true)
 
 	functionName := "p95TestFunc"
 
@@ -403,7 +413,7 @@ func TestP95WithHDR(t *testing.T) {
 	}
 
 	for _, d := range durations {
-		done := Track(functionName)
+		done := Track(nil, functionName)
 		time.Sleep(d)
 		done()
 	}

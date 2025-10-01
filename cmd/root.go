@@ -96,6 +96,11 @@ var RootCmd = &cobra.Command{
 		if heatmapHDR, _ := cmd.Flags().GetBool("heatmap-hdr"); heatmapHDR {
 			perf.EnableHDR(true)
 		}
+
+		// Enable performance tracking if heatmap flag is set or if configured in atmos.yaml.
+		if showHeatmap, _ := cmd.Flags().GetBool("heatmap"); showHeatmap || tmpConfig.PerformanceHeatmap.Enabled {
+			perf.EnableTracking(true)
+		}
 	},
 	PersistentPostRun: func(cmd *cobra.Command, args []string) {
 		// Stop profiler after command execution.
@@ -470,13 +475,13 @@ func displayPerformanceHeatmap(cmd *cobra.Command, mode string) error {
 	snap := perf.SnapshotTop("total", defaultTopFunctionsMax)
 	fmt.Fprintf(os.Stderr, "\n=== Atmos Performance Summary ===\n")
 	fmt.Fprintf(os.Stderr, "Elapsed: %s  Functions: %d  Calls: %d\n", snap.Elapsed, snap.TotalFuncs, snap.TotalCalls)
-	fmt.Fprintf(os.Stderr, "%-40s %6s %10s %10s %10s %8s\n", "Function", "Count", "Total", "Avg", "Max", "P95")
+	fmt.Fprintf(os.Stderr, "%-50s %6s %10s %10s %10s %8s\n", "Function", "Count", "Total", "Avg", "Max", "P95")
 	for _, r := range snap.Rows {
 		p95 := "-"
 		if r.P95 > 0 {
 			p95 = formatDuration(r.P95)
 		}
-		fmt.Fprintf(os.Stderr, "%-40s %6d %10s %10s %10s %8s\n",
+		fmt.Fprintf(os.Stderr, "%-50s %6d %10s %10s %10s %8s\n",
 			r.Name, r.Count, formatDuration(r.Total), formatDuration(r.Avg), formatDuration(r.Max), p95)
 	}
 

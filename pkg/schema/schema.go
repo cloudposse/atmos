@@ -23,6 +23,11 @@ type Describe struct {
 	Settings DescribeSettings `yaml:"settings,omitempty" json:"settings,omitempty" mapstructure:"settings"`
 }
 
+// PerformanceHeatmapConfig contains configuration for performance heatmap tracking.
+type PerformanceHeatmapConfig struct {
+	Enabled bool `yaml:"enabled" json:"enabled" mapstructure:"enabled"`
+}
+
 // AtmosConfiguration structure represents schema for `atmos.yaml` CLI config.
 type AtmosConfiguration struct {
 	BasePath                      string             `yaml:"base_path" json:"base_path" mapstructure:"base_path"`
@@ -55,11 +60,12 @@ type AtmosConfiguration struct {
 	// Stores is never read from yaml, it is populated in processStoreConfig and it's used to pass to the populated store
 	// registry through to the yaml parsing functions when !store is run and to pass the registry to the hooks
 	// functions to be able to call stores from within hooks.
-	Stores        store.StoreRegistry `yaml:"stores_registry,omitempty" json:"stores_registry,omitempty" mapstructure:"stores_registry"`
-	CliConfigPath string              `yaml:"cli_config_path" json:"cli_config_path,omitempty" mapstructure:"cli_config_path"`
-	Import        []string            `yaml:"import" json:"import" mapstructure:"import"`
-	Docs          Docs                `yaml:"docs,omitempty" json:"docs,omitempty" mapstructure:"docs"`
-	Profiler      profiler.Config     `yaml:"profiler,omitempty" json:"profiler,omitempty" mapstructure:"profiler"`
+	Stores             store.StoreRegistry      `yaml:"stores_registry,omitempty" json:"stores_registry,omitempty" mapstructure:"stores_registry"`
+	CliConfigPath      string                   `yaml:"cli_config_path" json:"cli_config_path,omitempty" mapstructure:"cli_config_path"`
+	Import             []string                 `yaml:"import" json:"import" mapstructure:"import"`
+	Docs               Docs                     `yaml:"docs,omitempty" json:"docs,omitempty" mapstructure:"docs"`
+	Profiler           profiler.Config          `yaml:"profiler,omitempty" json:"profiler,omitempty" mapstructure:"profiler"`
+	PerformanceHeatmap PerformanceHeatmapConfig `yaml:"performance_heatmap,omitempty" json:"performance_heatmap,omitempty" mapstructure:"performance_heatmap"`
 }
 
 func (m *AtmosConfiguration) GetSchemaRegistry(key string) SchemaRegistry {

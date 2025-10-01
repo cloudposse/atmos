@@ -46,9 +46,10 @@ func TestDisplayPerformanceHeatmap(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			// Reset perf registry for clean test.
 			perf.EnableHDR(tt.enableHDR)
+			perf.EnableTracking(true)
 
 			// Add some test tracking data.
-			done := perf.Track("testFunction")
+			done := perf.Track(nil, "testFunction")
 			done()
 
 			// Capture stderr since heatmap writes to stderr.
@@ -130,9 +131,10 @@ func TestHeatmapFlags(t *testing.T) {
 func TestHeatmapNonTTYOutput(t *testing.T) {
 	// Reset perf registry.
 	perf.EnableHDR(false)
+	perf.EnableTracking(true)
 
 	// Add test data.
-	done := perf.Track("nonTTYTest")
+	done := perf.Track(nil, "nonTTYTest")
 	done()
 
 	// Capture stderr.

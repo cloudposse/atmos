@@ -17,7 +17,7 @@ import (
 
 const (
 	// Table dimensions.
-	tableFunctionWidth = 34
+	tableFunctionWidth = 50
 	tableCountWidth    = 8
 	tableDurationWidth = 10
 	tableHeight        = 10
@@ -35,10 +35,10 @@ const (
 	thresholdRed    = 1000
 
 	// Function name truncation.
-	funcNameMaxWidth      = 28
-	funcNameTruncateWidth = 25
-	funcNameBarWidth      = 25
-	funcNameBarTruncate   = 22
+	funcNameMaxWidth      = 50
+	funcNameTruncateWidth = 47
+	funcNameBarWidth      = 50
+	funcNameBarTruncate   = 47
 	sparklineRepeat       = 10
 
 	// Formatting.

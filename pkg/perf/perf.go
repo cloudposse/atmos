@@ -6,6 +6,8 @@ import (
 	"time"
 
 	"github.com/HdrHistogram/hdrhistogram-go"
+
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 const (
@@ -37,7 +39,10 @@ var reg = &registry{
 	start: time.Now(),
 }
 
-var hdrEnabled bool
+var (
+	hdrEnabled      bool
+	trackingEnabled bool
+)
 
 // EnableHDR enables HDR histogram tracking for P95 latency calculations.
 func EnableHDR(enabled bool) {
@@ -48,10 +53,25 @@ func withHDR() bool {
 	return hdrEnabled
 }
 
+// EnableTracking enables performance tracking globally.
+func EnableTracking(enabled bool) {
+	trackingEnabled = enabled
+}
+
+func isTrackingEnabled() bool {
+	return trackingEnabled
+}
+
 // Track returns a func you should defer to record duration for `name`.
-// Performance tracking is always enabled with minimal overhead.
+// Performance tracking is only enabled when EnableTracking(true) is called or when atmosConfig.PerformanceHeatmap.Enabled is true.
 // Use --heatmap flag to display the collected metrics.
-func Track(name string) func() {
+func Track(atmosConfig *schema.AtmosConfiguration, name string) func() {
+	// Check if performance tracking is enabled globally or via config.
+	if !isTrackingEnabled() && (atmosConfig == nil || !atmosConfig.PerformanceHeatmap.Enabled) {
+		// Return a no-op function when tracking is disabled.
+		return func() {}
+	}
+
 	t0 := time.Now()
 	return func() {
 		d := time.Since(t0)

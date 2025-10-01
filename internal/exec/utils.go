@@ -158,7 +158,7 @@ func FindStacksMap(atmosConfig *schema.AtmosConfiguration, ignoreMissingFiles bo
 	map[string]map[string]any,
 	error,
 ) {
-	defer perf.Track("FindStacksMap")()
+	defer perf.Track(atmosConfig, "FindStacksMap")()
 
 	// Process stack config file(s)
 	_, stacksMap, rawStackConfigs, err := ProcessYAMLConfigFiles(
@@ -188,7 +188,7 @@ func ProcessStacks(
 	processYamlFunctions bool,
 	skip []string,
 ) (schema.ConfigAndStacksInfo, error) {
-	defer perf.Track("ProcessStacks")()
+	defer perf.Track(atmosConfig, "ProcessStacks")()
 
 	// Check if stack was provided
 	if checkStack && len(configAndStacksInfo.Stack) < 1 {

@@ -51,7 +51,7 @@ func ProcessYAMLConfigFiles(
 	map[string]map[string]any,
 	error,
 ) {
-	defer perf.Track("ProcessYAMLConfigFiles")()
+	defer perf.Track(atmosConfig, "ProcessYAMLConfigFiles")()
 
 	count := len(filePaths)
 	listResult := make([]string, count)
@@ -236,6 +236,8 @@ func ProcessYAMLConfigFileWithContext(
 	map[string]any,
 	error,
 ) {
+	defer perf.Track(atmosConfig, "ProcessYAMLConfigFileWithContext")()
+
 	var stackConfigs []map[string]any
 	relativeFilePath := u.TrimBasePathFromPath(basePath+"/", filePath)
 
@@ -665,7 +667,7 @@ func ProcessStackConfig(
 	importsConfig map[string]map[string]any,
 	checkBaseComponentExists bool,
 ) (map[string]any, error) {
-	defer perf.Track("ProcessStackConfig")()
+	defer perf.Track(atmosConfig, "ProcessStackConfig")()
 
 	stackName := strings.TrimSuffix(
 		strings.TrimSuffix(
@@ -2635,7 +2637,7 @@ func FindComponentsDerivedFromBaseComponents(
 	allComponents map[string]any,
 	baseComponents []string,
 ) ([]string, error) {
-	defer perf.Track("FindComponentsDerivedFromBaseComponents")()
+	defer perf.Track(nil, "FindComponentsDerivedFromBaseComponents")()
 
 	res := []string{}
 
