@@ -43,6 +43,37 @@ func TestGetCacheFilePathWithoutXDGCacheHome(t *testing.T) {
 	assert.Equal(t, expectedPath, path)
 }
 
+func TestGetCacheFilePathWithATMOSXDGCacheHome(t *testing.T) {
+	// Test that ATMOS_XDG_CACHE_HOME overrides XDG_CACHE_HOME.
+	testDir := t.TempDir()
+	atmosTestDir := filepath.Join(testDir, "atmos-cache")
+	xdgTestDir := filepath.Join(testDir, "xdg-cache")
+
+	// Create the directories.
+	err := os.MkdirAll(atmosTestDir, 0o755)
+	assert.NoError(t, err)
+	err = os.MkdirAll(xdgTestDir, 0o755)
+	assert.NoError(t, err)
+
+	// Set both ATMOS_XDG_CACHE_HOME and XDG_CACHE_HOME.
+	// ATMOS_XDG_CACHE_HOME should take precedence.
+	t.Setenv("ATMOS_XDG_CACHE_HOME", atmosTestDir)
+	t.Setenv("XDG_CACHE_HOME", xdgTestDir)
+
+	// Reload XDG to pick up the environment changes.
+	defer xdg.Reload()
+	xdg.Reload()
+
+	path, err := GetCacheFilePath()
+	assert.NoError(t, err)
+
+	// Should use ATMOS_XDG_CACHE_HOME, not XDG_CACHE_HOME.
+	expectedPath := filepath.Join(atmosTestDir, "atmos", "cache.yaml")
+	assert.Equal(t, expectedPath, path)
+	assert.True(t, strings.HasPrefix(path, atmosTestDir))
+	assert.False(t, strings.HasPrefix(path, xdgTestDir))
+}
+
 func TestCacheSharedBetweenVersionAndTelemetry(t *testing.T) {
 	// This test verifies that the cache structure supports both
 	// version checking (LastChecked) and telemetry disclosure
