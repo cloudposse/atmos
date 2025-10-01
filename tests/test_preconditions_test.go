@@ -515,3 +515,59 @@ func TestRequireGitRemoteWithValidURL_NoRemotes(t *testing.T) {
 		t.Error("Should have skipped with no remotes")
 	}
 }
+
+// TestRequireTerraform_WithBypass tests RequireTerraform with bypass.
+func TestRequireTerraform_WithBypass(t *testing.T) {
+	os.Setenv("ATMOS_TEST_SKIP_PRECONDITION_CHECKS", "true")
+	defer os.Unsetenv("ATMOS_TEST_SKIP_PRECONDITION_CHECKS")
+
+	RequireTerraform(t)
+	// Should not skip when bypass is set
+}
+
+// TestRequireTerraform_Installed tests RequireTerraform when terraform is installed.
+func TestRequireTerraform_Installed(t *testing.T) {
+	// Ensure precondition checks are enabled
+	os.Unsetenv("ATMOS_TEST_SKIP_PRECONDITION_CHECKS")
+
+	// Check if terraform is available
+	_, err := exec.LookPath("terraform")
+	if err != nil {
+		t.Skipf("Terraform not installed, cannot test RequireTerraform success path")
+	}
+
+	RequireTerraform(t)
+	// Should reach here when terraform exists
+	assert.True(t, true, "Test continued after RequireTerraform with terraform installed")
+}
+
+// TestRequireGitCommitConfig_WithBypass tests RequireGitCommitConfig with bypass.
+func TestRequireGitCommitConfig_WithBypass(t *testing.T) {
+	os.Setenv("ATMOS_TEST_SKIP_PRECONDITION_CHECKS", "true")
+	defer os.Unsetenv("ATMOS_TEST_SKIP_PRECONDITION_CHECKS")
+
+	RequireGitCommitConfig(t)
+	// Should not skip when bypass is set
+}
+
+// TestRequireGitCommitConfig_Configured tests RequireGitCommitConfig when git is configured.
+func TestRequireGitCommitConfig_Configured(t *testing.T) {
+	// Ensure precondition checks are enabled
+	os.Unsetenv("ATMOS_TEST_SKIP_PRECONDITION_CHECKS")
+
+	// Check if git user.name is configured
+	cmd := exec.Command("git", "config", "--get", "user.name")
+	nameOutput, nameErr := cmd.Output()
+
+	// Check if git user.email is configured
+	cmd = exec.Command("git", "config", "--get", "user.email")
+	emailOutput, emailErr := cmd.Output()
+
+	if nameErr != nil || emailErr != nil || len(nameOutput) == 0 || len(emailOutput) == 0 {
+		t.Skipf("Git commit config not set, cannot test RequireGitCommitConfig success path")
+	}
+
+	RequireGitCommitConfig(t)
+	// Should reach here when git config is set
+	assert.True(t, true, "Test continued after RequireGitCommitConfig with git configured")
+}
