@@ -14,7 +14,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
-// PrintAsHcl prints the provided value as HCL (HashiCorp Language) document to the console
+// PrintAsHcl prints the provided value as HCL (HashiCorp Language) document to the console.
 func PrintAsHcl(data any) error {
 	defer perf.Track(nil, "utils.PrintAsHcl")()
 
@@ -31,7 +31,7 @@ func PrintAsHcl(data any) error {
 	return nil
 }
 
-// WriteToFileAsHcl converts the provided value to HCL (HashiCorp Language) and writes it to the specified file
+// WriteToFileAsHcl converts the provided value to HCL (HashiCorp Language) and writes it to the specified file.
 func WriteToFileAsHcl(
 	filePath string,
 	data any,
@@ -64,7 +64,7 @@ func WriteToFileAsHcl(
 	return nil
 }
 
-// ConvertToHclAst converts the provided value to an HCL abstract syntax tree
+// ConvertToHclAst converts the provided value to an HCL abstract syntax tree.
 func ConvertToHclAst(data any) (ast.Node, error) {
 	defer perf.Track(nil, "utils.ConvertToHclAst")()
 
@@ -79,7 +79,7 @@ func ConvertToHclAst(data any) (ast.Node, error) {
 	}
 
 	// Remove the double quotes around the terraform variable names (the double quotes come from JSON keys)
-	// since they will be written to the terraform varfiles and terraform does not like it
+	// since they will be written to the terraform varfiles and terraform does not like it.
 	if objectList, ok := astree.Node.(*ast.ObjectList); ok {
 		for _, item := range objectList.Items {
 			for i, key := range item.Keys {
@@ -91,7 +91,7 @@ func ConvertToHclAst(data any) (ast.Node, error) {
 	return astree.Node, nil
 }
 
-// WriteTerraformBackendConfigToFileAsHcl writes the provided Terraform backend config to the specified file
+// WriteTerraformBackendConfigToFileAsHcl writes the provided Terraform backend config to the specified file.
 // https://dev.to/pdcommunity/write-terraform-files-in-go-with-hclwrite-2e1j
 // https://pkg.go.dev/github.com/hashicorp/hcl/v2/hclwrite
 func WriteTerraformBackendConfigToFileAsHcl(
