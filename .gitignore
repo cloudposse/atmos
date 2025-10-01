@@ -64,3 +64,6 @@ coverage.*.tmp
 coverage/
 .gocoverdir/
 tests.test
+
+**/llms.txt
+**/llms-full.txt
