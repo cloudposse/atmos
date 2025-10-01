@@ -318,6 +318,20 @@ func RequireTerraform(t *testing.T) {
 	RequireExecutable(t, "terraform", "terraform operations")
 }
 
+// RequirePacker checks if packer is installed and available in PATH.
+// This is a convenience function that uses RequireExecutable specifically for packer.
+func RequirePacker(t *testing.T) {
+	t.Helper()
+	RequireExecutable(t, "packer", "packer operations")
+}
+
+// RequireHelmfile checks if helmfile is installed and available in PATH.
+// This is a convenience function that uses RequireExecutable specifically for helmfile.
+func RequireHelmfile(t *testing.T) {
+	t.Helper()
+	RequireExecutable(t, "helmfile", "helmfile operations")
+}
+
 // RequireOCIAuthentication checks if authentication is configured for pulling OCI images from GitHub Container Registry.
 // This is typically provided by GITHUB_TOKEN or ATMOS_GITHUB_TOKEN environment variables.
 func RequireOCIAuthentication(t *testing.T) {
