@@ -46,6 +46,29 @@ func (m *model) renderBarChart() string {
 	return heatMapStyle.Render(content)
 }
 
+// getBarColorGradient returns a color gradient from red (slowest/top) to green (fastest/bottom).
+func getBarColorGradient() []lipgloss.Color {
+	return []lipgloss.Color{
+		lipgloss.Color("196"), // Red
+		lipgloss.Color("202"), // Orange-Red
+		lipgloss.Color("208"), // Orange
+		lipgloss.Color("214"), // Yellow-Orange
+		lipgloss.Color("226"), // Yellow
+		lipgloss.Color("190"), // Yellow-Green
+		lipgloss.Color("154"), // Light Green
+		lipgloss.Color("118"), // Green
+	}
+}
+
+// getColorForPosition returns the appropriate color for a bar based on its position in the list.
+func getColorForPosition(position, totalItems int, colors []lipgloss.Color) lipgloss.Color {
+	colorIndex := int(float64(position) / float64(totalItems) * float64(len(colors)))
+	if colorIndex >= len(colors) {
+		colorIndex = len(colors) - 1
+	}
+	return colors[colorIndex]
+}
+
 func (m *model) renderBarsFromPerf(snap perf.Snapshot) []string {
 	var bars []string
 
@@ -53,26 +76,12 @@ func (m *model) renderBarsFromPerf(snap perf.Snapshot) []string {
 		return bars
 	}
 
-	// Find max total time for scaling.
-	maxTotal := snap.Rows[0].Total
-	for _, r := range snap.Rows {
-		if r.Total > maxTotal {
-			maxTotal = r.Total
-		}
-	}
-
+	maxTotal := m.findMaxTotal(snap.Rows)
 	if maxTotal == 0 {
 		return bars
 	}
 
-	barColors := []lipgloss.Color{
-		lipgloss.Color("205"), // Pink
-		lipgloss.Color("214"), // Orange
-		lipgloss.Color("226"), // Yellow
-		lipgloss.Color("118"), // Green
-		lipgloss.Color("39"),  // Blue
-		lipgloss.Color("170"), // Purple
-	}
+	barColors := getBarColorGradient()
 
 	for i, r := range snap.Rows {
 		ratio := float64(r.Total) / float64(maxTotal)
@@ -81,9 +90,10 @@ func (m *model) renderBarsFromPerf(snap perf.Snapshot) []string {
 			barWidth = 1
 		}
 
+		color := getColorForPosition(i, len(snap.Rows), barColors)
 		bar := strings.Repeat("█", barWidth)
 		coloredBar := lipgloss.NewStyle().
-			Foreground(barColors[i%len(barColors)]).
+			Foreground(color).
 			Render(bar)
 
 		// Truncate function name if too long.
