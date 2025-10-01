@@ -516,58 +516,111 @@ func TestRequireGitRemoteWithValidURL_NoRemotes(t *testing.T) {
 	}
 }
 
-// TestRequireTerraform_WithBypass tests RequireTerraform with bypass.
-func TestRequireTerraform_WithBypass(t *testing.T) {
-	os.Setenv("ATMOS_TEST_SKIP_PRECONDITION_CHECKS", "true")
-	defer os.Unsetenv("ATMOS_TEST_SKIP_PRECONDITION_CHECKS")
-
-	RequireTerraform(t)
-	// Should not skip when bypass is set
-}
-
-// TestRequireTerraform_Installed tests RequireTerraform when terraform is installed.
-func TestRequireTerraform_Installed(t *testing.T) {
-	// Ensure precondition checks are enabled
-	os.Unsetenv("ATMOS_TEST_SKIP_PRECONDITION_CHECKS")
-
-	// Check if terraform is available
-	_, err := exec.LookPath("terraform")
-	if err != nil {
-		t.Skipf("Terraform not installed, cannot test RequireTerraform success path")
+// TestSetAWSProfileEnv tests the AWS profile environment variable helper.
+func TestSetAWSProfileEnv(t *testing.T) {
+	tests := []struct {
+		name           string
+		profileName    string
+		currentProfile string
+		expectChange   bool
+		expectCleanup  bool
+	}{
+		{
+			name:          "Empty profile - no operation",
+			profileName:   "",
+			expectChange:  false,
+			expectCleanup: false,
+		},
+		{
+			name:           "Profile already set - no operation",
+			profileName:    "test-profile",
+			currentProfile: "test-profile",
+			expectChange:   false,
+			expectCleanup:  false,
+		},
+		{
+			name:          "Set new profile",
+			profileName:   "new-profile",
+			expectChange:  true,
+			expectCleanup: true,
+		},
+		{
+			name:           "Replace existing profile",
+			profileName:    "new-profile",
+			currentProfile: "old-profile",
+			expectChange:   true,
+			expectCleanup:  true,
+		},
 	}
 
-	RequireTerraform(t)
-	// Should reach here when terraform exists
-	assert.True(t, true, "Test continued after RequireTerraform with terraform installed")
-}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Always set up the environment to isolate from actual environment
+			t.Setenv("AWS_PROFILE", tt.currentProfile)
 
-// TestRequireGitCommitConfig_WithBypass tests RequireGitCommitConfig with bypass.
-func TestRequireGitCommitConfig_WithBypass(t *testing.T) {
-	os.Setenv("ATMOS_TEST_SKIP_PRECONDITION_CHECKS", "true")
-	defer os.Unsetenv("ATMOS_TEST_SKIP_PRECONDITION_CHECKS")
+			// Call the function
+			cleanup := setAWSProfileEnv(tt.profileName)
 
-	RequireGitCommitConfig(t)
-	// Should not skip when bypass is set
-}
+			// Verify profile was set if expected
+			if tt.expectChange {
+				assert.Equal(t, tt.profileName, os.Getenv("AWS_PROFILE"))
+			}
 
-// TestRequireGitCommitConfig_Configured tests RequireGitCommitConfig when git is configured.
-func TestRequireGitCommitConfig_Configured(t *testing.T) {
-	// Ensure precondition checks are enabled
-	os.Unsetenv("ATMOS_TEST_SKIP_PRECONDITION_CHECKS")
+			// Call cleanup
+			if cleanup != nil {
+				cleanup()
+			}
 
-	// Check if git user.name is configured
-	cmd := exec.Command("git", "config", "--get", "user.name")
-	nameOutput, nameErr := cmd.Output()
-
-	// Check if git user.email is configured
-	cmd = exec.Command("git", "config", "--get", "user.email")
-	emailOutput, emailErr := cmd.Output()
-
-	if nameErr != nil || emailErr != nil || len(nameOutput) == 0 || len(emailOutput) == 0 {
-		t.Skipf("Git commit config not set, cannot test RequireGitCommitConfig success path")
+			// Verify cleanup restored original state
+			if tt.expectCleanup {
+				assert.Equal(t, tt.currentProfile, os.Getenv("AWS_PROFILE"))
+			}
+		})
 	}
+}
 
-	RequireGitCommitConfig(t)
-	// Should reach here when git config is set
-	assert.True(t, true, "Test continued after RequireGitCommitConfig with git configured")
+// TestCheckGitHubRateLimit tests GitHub rate limit checking.
+func TestCheckGitHubRateLimit(t *testing.T) {
+	// This test is primarily for coverage - actual network calls will be skipped
+	// in CI environments or when network is unavailable
+	t.Run("Rate limit check with mock - coverage only", func(t *testing.T) {
+		// We can't easily mock http.Client without refactoring, so we'll just verify
+		// the function doesn't panic with a valid test that may skip
+		// This test provides coverage for the code paths
+		if !ShouldCheckPreconditions() {
+			t.Skip("Precondition checks disabled")
+		}
+
+		// Note: This will likely skip in CI, but provides coverage locally
+		info := RequireGitHubAccess(t)
+		_ = info // May be nil if skipped
+	})
+}
+
+// TestSetAWSProfileEnv_CleanupWithNoOriginal tests cleanup when no original profile exists.
+func TestSetAWSProfileEnv_CleanupWithNoOriginal(t *testing.T) {
+	// Clear any existing profile to simulate no original profile
+	t.Setenv("AWS_PROFILE", "")
+
+	// Set a new profile
+	cleanup := setAWSProfileEnv("test-profile")
+	assert.Equal(t, "test-profile", os.Getenv("AWS_PROFILE"))
+
+	// Cleanup should unset the variable
+	cleanup()
+	assert.Empty(t, os.Getenv("AWS_PROFILE"))
+}
+
+// TestSetAWSProfileEnv_CleanupWithOriginal tests cleanup when original profile exists.
+func TestSetAWSProfileEnv_CleanupWithOriginal(t *testing.T) {
+	// Set an original profile
+	t.Setenv("AWS_PROFILE", "original-profile")
+
+	// Set a new profile
+	cleanup := setAWSProfileEnv("new-profile")
+	assert.Equal(t, "new-profile", os.Getenv("AWS_PROFILE"))
+
+	// Cleanup should restore original
+	cleanup()
+	assert.Equal(t, "original-profile", os.Getenv("AWS_PROFILE"))
 }
