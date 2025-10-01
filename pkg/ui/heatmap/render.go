@@ -26,8 +26,8 @@ func (m *model) renderVisualization() string {
 }
 
 func (m *model) renderBarChart() string {
-	// Use the frozen snapshot captured at TUI start.
-	snap := m.initialSnap
+	// Use the frozen snapshot captured at TUI start, limited to top functions for visual display.
+	snap := m.getLimitedSnapshot()
 
 	if len(snap.Rows) == 0 {
 		return heatMapStyle.Render(lipgloss.NewStyle().
@@ -108,8 +108,8 @@ func (m *model) renderBarsFromPerf(snap perf.Snapshot) []string {
 }
 
 func (m *model) renderASCIIHeatMap() string {
-	// Use the frozen snapshot captured at TUI start.
-	snap := m.initialSnap
+	// Use the frozen snapshot captured at TUI start, limited to top functions for visual display.
+	snap := m.getLimitedSnapshot()
 
 	if len(snap.Rows) == 0 {
 		return heatMapStyle.Render(lipgloss.NewStyle().
@@ -219,8 +219,8 @@ func (m *model) renderTableHeatMap() string {
 }
 
 func (m *model) renderSparklines() string {
-	// Use the frozen snapshot captured at TUI start.
-	snap := m.initialSnap
+	// Use the frozen snapshot captured at TUI start, limited to top functions for visual display.
+	snap := m.getLimitedSnapshot()
 
 	if len(snap.Rows) == 0 {
 		return heatMapStyle.Render(lipgloss.NewStyle().

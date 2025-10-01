@@ -27,7 +27,8 @@ const (
 	maxTableDisplayRuns      = 8
 	maxSparklineWidth        = 50
 	maxBarChartWidth         = 40
-	topFunctionsLimit        = 50
+	topFunctionsLimit        = 50 // For the full table view
+	topFunctionsVisualLimit  = 25 // For bar chart, sparkline, and ASCII heatmap views
 
 	// Performance thresholds (microseconds).
 	thresholdGreen  = 100
@@ -242,6 +243,15 @@ func newModel(heatModel *HeatModel, mode string, ctx context.Context) *model {
 		ctx:        ctx,
 		lastUpdate: time.Now(),
 	}
+}
+
+// getLimitedSnapshot returns a copy of the initial snapshot with only the top N functions for visual displays.
+func (m *model) getLimitedSnapshot() perf.Snapshot {
+	snap := m.initialSnap
+	if len(snap.Rows) > topFunctionsVisualLimit {
+		snap.Rows = snap.Rows[:topFunctionsVisualLimit]
+	}
+	return snap
 }
 
 func (m *model) Init() tea.Cmd {
