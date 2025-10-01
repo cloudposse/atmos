@@ -13,6 +13,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
 
 const (
@@ -193,18 +194,14 @@ type tickMsg time.Time
 var (
 	headerStyle = lipgloss.NewStyle().
 			Bold(true).
-			Foreground(lipgloss.Color("#FAFAFA")).
-			Background(lipgloss.Color("#7D56F4")).
+			Foreground(lipgloss.Color(theme.ColorWhite)).
+			Background(lipgloss.Color(theme.ColorBlue)).
 			Padding(0, 1)
 
-	heatMapStyle = lipgloss.NewStyle().
-			BorderStyle(lipgloss.RoundedBorder()).
-			BorderForeground(lipgloss.Color("#874BFD")).
+	heatMapStyle = theme.Styles.Border.
 			Padding(1, 2)
 
-	tableStyle = lipgloss.NewStyle().
-			BorderStyle(lipgloss.RoundedBorder()).
-			BorderForeground(lipgloss.Color("#874BFD"))
+	tableStyle = theme.Styles.Border
 )
 
 func newModel(heatModel *HeatModel, mode string, ctx context.Context) *model {
