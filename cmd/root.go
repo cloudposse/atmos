@@ -482,7 +482,7 @@ func displayPerformanceHeatmap(cmd *cobra.Command, mode string) error {
 	}
 
 	// Check if we have a TTY for interactive mode.
-	if !isTTY() {
+	if !term.IsTTYSupportForStderr() {
 		fmt.Fprintf(os.Stderr, "\n⚠️  No TTY available for interactive visualization. Summary displayed above.\n")
 		return nil
 	}
@@ -497,18 +497,10 @@ func displayPerformanceHeatmap(cmd *cobra.Command, mode string) error {
 
 	// Start Bubble Tea UI with the collected data.
 	if err := heatmap.StartBubbleTeaUI(sigCtx, heatModel, mode); err != nil {
-		return fmt.Errorf("error running Bubble Tea UI: %w", err)
+		return fmt.Errorf("%w: error running Bubble Tea UI: %v", errUtils.ErrTUIRun, err)
 	}
 
 	return nil
-}
-
-// isTTY checks if stderr is connected to a terminal.
-func isTTY() bool {
-	if fileInfo, err := os.Stderr.Stat(); err == nil {
-		return (fileInfo.Mode() & os.ModeCharDevice) != 0
-	}
-	return false
 }
 
 func init() {

@@ -9,6 +9,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
+	"github.com/cloudposse/atmos/internal/tui/templates/term"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
@@ -95,7 +96,7 @@ func TestIsTTY(t *testing.T) {
 			os.Stderr = tt.stderr
 			defer func() { os.Stderr = oldStderr }()
 
-			result := isTTY()
+			result := term.IsTTYSupportForStderr()
 
 			// We can't reliably test TTY in unit tests, so just verify it doesn't panic.
 			_ = result
