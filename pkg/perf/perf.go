@@ -62,12 +62,13 @@ func isTrackingEnabled() bool {
 	return trackingEnabled
 }
 
-// Track returns a func you should defer to record duration for `name`.
-// Performance tracking is only enabled when EnableTracking(true) is called or when atmosConfig.PerformanceHeatmap.Enabled is true.
-// Use --heatmap flag to display the collected metrics.
+// Track returns a func you should defer to record duration for a Go function.
+// Performance tracking is enabled via the `--heatmap` flag.
+// Use `--heatmap` flag to display the collected metrics.
+// Note: `atmosConfig` parameter is reserved for future use.
 func Track(atmosConfig *schema.AtmosConfiguration, name string) func() {
-	// Check if performance tracking is enabled globally or via config.
-	if !isTrackingEnabled() && (atmosConfig == nil || !atmosConfig.PerformanceHeatmap.Enabled) {
+	// Check if performance tracking is enabled globally.
+	if !isTrackingEnabled() {
 		// Return a no-op function when tracking is disabled.
 		return func() {}
 	}

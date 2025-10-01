@@ -97,8 +97,8 @@ var RootCmd = &cobra.Command{
 			perf.EnableHDR(true)
 		}
 
-		// Enable performance tracking if heatmap flag is set or if configured in atmos.yaml.
-		if showHeatmap, _ := cmd.Flags().GetBool("heatmap"); showHeatmap || tmpConfig.PerformanceHeatmap.Enabled {
+		// Enable performance tracking if heatmap flag is set.
+		if showHeatmap, _ := cmd.Flags().GetBool("heatmap"); showHeatmap {
 			perf.EnableTracking(true)
 		}
 	},
