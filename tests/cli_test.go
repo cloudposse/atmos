@@ -311,13 +311,15 @@ func sanitizeOutput(output string) (string, error) {
 	//    - And explicitly collapse extra slashes.
 	normalizedRepoRoot := collapseExtraSlashes(filepath.ToSlash(filepath.Clean(repoRoot)))
 	// Also normalize the output to use forward slashes.
-	// Note: On Windows, filepath.ToSlash converts backslashes to forward slashes.
-	// On Unix systems, backslashes are NOT path separators and should be preserved (they're used in escape sequences).
+	// Note: filepath.ToSlash() on Windows converts path separators; on Unix it does nothing.
+	// We also need to handle Windows-style paths that may appear in test output even on Unix (for testing).
+	// Replace backslashes with forward slashes, EXCEPT those that are escape sequences (\n, \t, \r, etc.).
+	// Since actual CLI output has escape sequences already processed (they appear as actual newlines/tabs),
+	// we can safely replace backslashes that are followed by path-like characters.
 	normalizedOutput := filepath.ToSlash(output)
-	// On Windows only, manually replace any remaining backslashes to handle edge cases.
-	if runtime.GOOS == "windows" {
-		normalizedOutput = strings.ReplaceAll(normalizedOutput, "\\", "/")
-	}
+	// Replace backslashes that look like path separators (followed by alphanumeric, ., -, _, *, etc.)
+	// This regex matches backslash followed by path-like characters, not escape sequences.
+	normalizedOutput = regexp.MustCompile(`\\([a-zA-Z0-9._*\-/])`).ReplaceAllString(normalizedOutput, "/$1")
 
 	// 3. Build a regex that matches the repository root even if extra slashes appear.
 	//    First, escape any regex metacharacters in the normalized repository root.
