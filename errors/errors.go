@@ -81,6 +81,12 @@ var (
 	ErrReadFile    = errors.New("error reading file")
 	ErrInvalidFlag = errors.New("invalid flag")
 
+	// File and URL handling errors.
+	ErrInvalidPagerCommand = errors.New("invalid pager command")
+	ErrEmptyURL            = errors.New("empty URL provided")
+	ErrInvalidURL          = errors.New("invalid URL")
+	ErrFailedToFindImport  = errors.New("failed to find import")
+
 	ErrMissingStack                       = errors.New("stack is required; specify it on the command line using the flag `--stack <stack>` (shorthand `-s`)")
 	ErrInvalidComponent                   = errors.New("invalid component")
 	ErrAbstractComponentCantBeProvisioned = errors.New("abstract component cannot be provisioned")
@@ -94,6 +100,7 @@ var (
 	ErrInvalidListMergeStrategy      = errors.New("invalid list merge strategy")
 	ErrMerge                         = errors.New("merge error")
 	ErrInvalidStackManifest          = errors.New("invalid stack manifest")
+	ErrInvalidLogLevel               = errors.New("invalid log level")
 
 	// Pro API client errors.
 	ErrFailedToCreateRequest        = errors.New("failed to create request")
@@ -128,6 +135,8 @@ var (
 	ErrFailedToGetComponentFlag  = errors.New("failed to get '--component' flag")
 	ErrFailedToGetStackFlag      = errors.New("failed to get '--stack' flag")
 	ErrOPAPolicyViolations       = errors.New("OPA policy violations detected")
+	ErrInvalidOPAPolicy          = errors.New("invalid OPA policy")
+	ErrTerraformEnvCliVarJSON    = errors.New("failed to parse JSON variable from TF_CLI_ARGS environment variable")
 
 	// List package errors.
 	ErrExecuteDescribeStacks     = errors.New("failed to execute describe stacks")
@@ -186,4 +195,7 @@ var (
 
 	ErrAuthOidcDecodeFailed    = errors.New("failed to decode OIDC token")
 	ErrAuthOidcUnmarshalFailed = errors.New("failed to unmarshal oidc claims")
+
+	// Profiler-related errors.
+	ErrProfilerStart = errors.New("profiler start failed")
 )

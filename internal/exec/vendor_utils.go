@@ -9,7 +9,7 @@ import (
 	"strings"
 
 	"github.com/bmatcuk/doublestar/v4"
-	log "github.com/charmbracelet/log"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	cp "github.com/otiai10/copy"
 	"github.com/pkg/errors"
 	"github.com/samber/lo"
@@ -20,7 +20,11 @@ import (
 )
 
 // Dedicated logger for stderr to keep stdout clean of detailed messaging, e.g. for files vendoring.
-var StderrLogger = log.New(os.Stderr)
+var StderrLogger = func() *log.AtmosLogger {
+	l := log.New()
+	l.SetOutput(os.Stderr)
+	return l
+}()
 
 var (
 	ErrVendorComponents              = errors.New("failed to vendor components")
@@ -434,7 +438,7 @@ func determineSourceType(uri *string, vendorConfigFilePath string) (bool, bool, 
 		return useOciScheme, useLocalFileSystem, sourceIsLocalFile, nil
 	}
 
-	absPath, err := u.JoinAbsolutePathWithPath(filepath.ToSlash(vendorConfigFilePath), *uri)
+	absPath, err := u.JoinPathAndValidate(filepath.ToSlash(vendorConfigFilePath), *uri)
 	// if URI contain path traversal is path should be resolved
 	if err != nil && strings.Contains(*uri, "..") && !strings.HasPrefix(*uri, "file://") {
 		return useOciScheme, useLocalFileSystem, sourceIsLocalFile, fmt.Errorf("invalid source path '%s': %w", *uri, err)

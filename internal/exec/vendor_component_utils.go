@@ -291,7 +291,7 @@ func handleLocalFileScheme(componentPath, uri string) (string, bool, bool) {
 	var useLocalFileSystem, sourceIsLocalFile bool
 
 	// Handle absolute path resolution
-	if absPath, err := u.JoinAbsolutePathWithPath(componentPath, uri); err == nil {
+	if absPath, err := u.JoinPathAndValidate(componentPath, uri); err == nil {
 		uri = absPath
 		useLocalFileSystem = true
 		sourceIsLocalFile = u.FileExists(uri)
@@ -338,12 +338,12 @@ func processComponentMixins(vendorComponentSpec *schema.VendorComponentSpec, com
 		// If it's a file path, check if it's an absolute path.
 		// If it's not absolute path, join it with the base path (component dir) and convert to absolute path.
 		if !useOciScheme {
-			if absPath, err := u.JoinAbsolutePathWithPath(componentPath, uri); err == nil {
+			if absPath, err := u.JoinPathAndValidate(componentPath, uri); err == nil {
 				uri = absPath
 			}
 		}
 		// Check if it's a local file .
-		if absPath, err := u.JoinAbsolutePathWithPath(componentPath, uri); err == nil {
+		if absPath, err := u.JoinPathAndValidate(componentPath, uri); err == nil {
 			if u.FileExists(absPath) {
 				continue
 			}

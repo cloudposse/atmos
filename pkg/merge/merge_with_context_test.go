@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	log "github.com/charmbracelet/log"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/stretchr/testify/assert"
 
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -127,7 +127,8 @@ func TestMergeWithContext_ErrorIsLogged(t *testing.T) {
 	oldLogger := log.Default()
 
 	// Create a logger that writes to our buffer
-	testLogger := log.New(&logBuffer)
+	testLogger := log.New()
+	testLogger.SetOutput(&logBuffer)
 	testLogger.SetLevel(log.DebugLevel)
 	log.SetDefault(testLogger)
 	defer log.SetDefault(oldLogger)

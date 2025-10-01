@@ -9,8 +9,9 @@ import (
 	"github.com/cloudposse/atmos/internal/tui/utils"
 
 	"github.com/charmbracelet/huh"
-	log "github.com/charmbracelet/log"
+	"github.com/charmbracelet/lipgloss"
 	errUtils "github.com/cloudposse/atmos/errors"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 	u "github.com/cloudposse/atmos/pkg/utils"
