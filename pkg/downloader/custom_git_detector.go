@@ -214,11 +214,3 @@ func (d *CustomGitDetector) getDefaultUsername(host string) string {
 		return "x-access-token"
 	}
 }
-
-// adjustSubdir is deprecated and no longer used.
-// URI normalization is now handled by normalizeVendorURI in the vendor processing pipeline.
-// This function is kept for backward compatibility but does nothing.
-// TODO: Remove this function in a future version after ensuring no external dependencies.
-func (d *CustomGitDetector) adjustSubdir(parsedURL *url.URL, source string) {
-	// No-op: normalization is handled earlier in the pipeline
-}

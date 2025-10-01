@@ -433,8 +433,8 @@ func shouldSkipSource(s *schema.AtmosVendorSource, component string, tags []stri
 	return (component != "" && s.Component != component) || (len(tags) > 0 && len(lo.Intersect(tags, s.Tags)) == 0)
 }
 
-// normalizeVendorURI normalizes vendor source URIs to handle all patterns consistently.
-// In go-getter syntax, the double-slash (//) is a delimiter between the repository URL
+// normalizeVendorURI Normalizes vendor source URIs to handle all patterns consistently.
+// It uses go-getter syntax where the double-slash (//) is a delimiter between the repository URL
 // and the subdirectory path within that repository. The dot (.) indicates the current
 // directory (root of the repository).
 //
@@ -449,7 +449,7 @@ func shouldSkipSource(s *schema.AtmosVendorSource, component string, tags []stri
 //   - "github.com/repo.git///some/path?ref=v1.0.0" -> "github.com/repo.git//some/path?ref=v1.0.0"
 //   - "github.com/repo.git//some/path?ref=v1.0.0" -> unchanged
 //
-//nolint:godot // Helper function comment uses conventional Go doc pattern
+//nolint:godot // Private function, follows standard Go documentation style.
 func normalizeVendorURI(uri string) string {
 	// Skip normalization for special URI types
 	if isFileURI(uri) || isOCIURI(uri) || isS3URI(uri) || isLocalPath(uri) || isNonGitHTTPURI(uri) {
