@@ -277,23 +277,18 @@ func ProcessYAMLConfigFileWithContext(
 	// Process `Go` templates in the imported stack manifest if it has a template extension
 	// Files with .yaml.tmpl or .yml.tmpl extensions are always processed as templates
 	// https://atmos.tools/core-concepts/stacks/imports#go-templates-in-imports
-	if !skipTemplatesProcessingInImports && u.IsTemplateFile(filePath) {
-		stackManifestTemplatesProcessed, err = ProcessTmpl(relativeFilePath, stackYamlConfig, context, ignoreMissingTemplateValues)
-		if err != nil {
+	if !skipTemplatesProcessingInImports && u.IsTemplateFile(filePath) { //nolint:nestif // Template processing error handling requires conditional formatting based on context
+		var tmplErr error
+		stackManifestTemplatesProcessed, tmplErr = ProcessTmpl(relativeFilePath, stackYamlConfig, context, ignoreMissingTemplateValues)
+		if tmplErr != nil {
 			if atmosConfig.Logs.Level == u.LogLevelTrace || atmosConfig.Logs.Level == u.LogLevelDebug {
 				stackManifestTemplatesErrorMessage = fmt.Sprintf("\n\n%s", stackYamlConfig)
 			}
-			// Check if we have merge context to provide enhanced error formatting
+			wrappedErr := fmt.Errorf("%w: %v", errUtils.ErrInvalidStackManifest, tmplErr)
 			if mergeContext != nil {
-				// Wrap the error with the sentinel first to preserve it
-				wrappedErr := fmt.Errorf("%w: %v", errUtils.ErrInvalidStackManifest, err)
-				// Then format it with context information
-				e := mergeContext.FormatError(wrappedErr, fmt.Sprintf("stack manifest '%s'%s", relativeFilePath, stackManifestTemplatesErrorMessage))
-				return nil, nil, nil, nil, nil, nil, nil, e
-			} else {
-				e := fmt.Errorf("%w: stack manifest '%s'\n%v%s", errUtils.ErrInvalidStackManifest, relativeFilePath, err, stackManifestTemplatesErrorMessage)
-				return nil, nil, nil, nil, nil, nil, nil, e
+				return nil, nil, nil, nil, nil, nil, nil, mergeContext.FormatError(wrappedErr, fmt.Sprintf("stack manifest '%s'%s", relativeFilePath, stackManifestTemplatesErrorMessage))
 			}
+			return nil, nil, nil, nil, nil, nil, nil, fmt.Errorf("%w: stack manifest '%s'\n%v%s", errUtils.ErrInvalidStackManifest, relativeFilePath, tmplErr, stackManifestTemplatesErrorMessage)
 		}
 	}
 

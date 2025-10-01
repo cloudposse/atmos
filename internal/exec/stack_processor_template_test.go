@@ -386,7 +386,7 @@ components:
 		map[string]map[string]any{},
 		nil,
 		false,
-		true, // skipTemplatesProcessingInImports = true
+		true,
 		true,
 		false,
 		nil,
@@ -418,7 +418,7 @@ components:
 		map[string]map[string]any{},
 		nil,
 		false,
-		false, // skipTemplatesProcessingInImports = false
+		false,
 		true,
 		false,
 		nil,
