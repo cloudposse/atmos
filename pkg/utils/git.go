@@ -12,7 +12,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
-// GetGitRoot returns the root directory of the Git repository using go-git.
+// ProcessTagGitRoot returns the root directory of the Git repository using go-git.
 func ProcessTagGitRoot(input string) (string, error) {
 	defer perf.Track(nil, "utils.ProcessTagGitRoot")()
 
