@@ -406,9 +406,9 @@ func applyIgnorePatterns(input string, patterns []string) string {
 // in one place; there's no separate "stderr screen" and "stdout screen".
 //
 // This means:
-// - All output (stdout + stderr) will be captured together
-// - The returned string contains both streams merged
-// - This matches real terminal behavior where users see everything in one stream
+// - All output (stdout + stderr) will be captured together.
+// - The returned string contains both streams merged.
+// - This matches real terminal behavior where users see everything in one stream.
 //
 // For tests that need separate stderr/stdout streams, use non-TTY execution instead.
 func simulateTtyCommand(t *testing.T, cmd *exec.Cmd, input string) (string, error) {

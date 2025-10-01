@@ -5,8 +5,6 @@ import (
 	"os"
 	"strings"
 	"testing"
-
-	"github.com/stretchr/testify/assert"
 )
 
 // testCaptureCommandOutput executes a command in a specific directory and captures its stdout output.
@@ -34,19 +32,25 @@ func testCaptureCommandOutput(t *testing.T, workDir string, commandFunc func() e
 
 	// Create a pipe to capture stdout.
 	oldStdout := os.Stdout
-	r, w, _ := os.Pipe()
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("Failed to create pipe: %v", err)
+	}
 	os.Stdout = w
+
+	// Ensure stdout restoration happens even if commandFunc panics.
+	defer func() {
+		if err := w.Close(); err != nil {
+			t.Fatalf("Failed to close pipe writer: %v", err)
+		}
+		os.Stdout = oldStdout
+	}()
 
 	// Execute the command.
 	err = commandFunc()
 	if err != nil {
 		t.Fatalf("Failed to execute command: %v", err)
 	}
-
-	// Restore stdout.
-	err = w.Close()
-	assert.NoError(t, err)
-	os.Stdout = oldStdout
 
 	// Read the captured output.
 	var buf bytes.Buffer

@@ -28,11 +28,6 @@ func TestTestCaseSchemaValidation(t *testing.T) {
 
 	// Validate each YAML file.
 	for _, file := range files {
-		// Skip schema.json itself.
-		if filepath.Base(file) == "schema.json" {
-			continue
-		}
-
 		t.Run(filepath.Base(file), func(t *testing.T) {
 			// Read YAML file.
 			yamlData, err := os.ReadFile(file)

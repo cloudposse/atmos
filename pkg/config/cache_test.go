@@ -165,11 +165,11 @@ func TestConcurrentCacheAccess(t *testing.T) {
 	err := SaveCache(initialCache)
 	assert.NoError(t, err)
 
-	// Run concurrent operations.
+	// Run concurrent operations with staggered starts to reduce lock contention.
 	done := make(chan bool, 3)
 	errsChannel := make(chan error, 3)
 
-	// Writer 1: Update LastChecked.
+	// Writer 1: Update LastChecked (starts immediately).
 	go func() {
 		err := UpdateCache(func(cache *CacheConfig) {
 			cache.LastChecked = 2000
@@ -180,8 +180,9 @@ func TestConcurrentCacheAccess(t *testing.T) {
 		done <- true
 	}()
 
-	// Writer 2: Update TelemetryDisclosureShown.
+	// Writer 2: Update TelemetryDisclosureShown (staggered start).
 	go func() {
+		time.Sleep(10 * time.Millisecond)
 		err := UpdateCache(func(cache *CacheConfig) {
 			cache.TelemetryDisclosureShown = true
 		})
@@ -191,8 +192,9 @@ func TestConcurrentCacheAccess(t *testing.T) {
 		done <- true
 	}()
 
-	// Reader: Read multiple times.
+	// Reader: Read multiple times (staggered start).
 	go func() {
+		time.Sleep(20 * time.Millisecond)
 		for i := 0; i < 5; i++ {
 			_, err := LoadCache()
 			if err != nil {

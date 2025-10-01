@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
 )
@@ -35,7 +36,7 @@ func TestFileDownloader_Fetch_Failure(t *testing.T) {
 	fd := NewFileDownloader(mockFactory)
 	err := fd.Fetch("src", "dest", ClientModeFile, 10*time.Second)
 	assert.Error(t, err)
-	assert.Equal(t, expectedErr, errors.Unwrap(err))
+	assert.ErrorIs(t, err, errUtils.ErrCreateDownloadClient)
 }
 
 func TestFileDownloader_FetchData(t *testing.T) {

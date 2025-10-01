@@ -117,18 +117,30 @@ func TestMarkdownRendering(t *testing.T) {
 
 			// Capture stdout
 			oldStdout := os.Stdout
-			r, w, _ := os.Pipe()
+			r, w, err := os.Pipe()
+			if err != nil {
+				t.Fatalf("Failed to create pipe: %v", err)
+			}
 			os.Stdout = w
+
+			// Ensure cleanup happens even on failure
+			t.Cleanup(func() {
+				os.Stdout = oldStdout
+				r.Close()
+			})
 
 			// Print markdown
 			PrintfMarkdown("%s", tt.input)
 
-			w.Close()
-			os.Stdout = oldStdout
+			if err := w.Close(); err != nil {
+				t.Fatalf("Failed to close pipe writer: %v", err)
+			}
 
 			// Read output
 			var output bytes.Buffer
-			io.Copy(&output, r)
+			if _, err := io.Copy(&output, r); err != nil {
+				t.Fatalf("Failed to read pipe output: %v", err)
+			}
 			result := output.String()
 
 			// Verify all expected content is present
