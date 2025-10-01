@@ -271,7 +271,7 @@ vars:
   access_key: !include ./config.yaml '.security.users["github-dependabot"].access.key.id'
 ```
 
-For paths that already require double quotes, combine both patterns—`!include '"path with spaces.yaml" ".data[\"key\"]"'`—and see the linked documentation for more escaping techniques.
+For paths that already require double quotes, combine both patterns—`!include '"path with spaces.yaml" ".data[""key""]"'`—and see the linked documentation for more escaping techniques.
 
 :::tip
 `!include`, `!terraform.output`, and the other YAML functions share the same parser, so you only need to learn the quoting rules once.
