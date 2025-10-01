@@ -43,9 +43,10 @@ type AtmosConfiguration struct {
 	StacksBaseAbsolutePath        string             `yaml:"stacksBaseAbsolutePath,omitempty" json:"stacksBaseAbsolutePath,omitempty" mapstructure:"stacksBaseAbsolutePath"`
 	IncludeStackAbsolutePaths     []string           `yaml:"includeStackAbsolutePaths,omitempty" json:"includeStackAbsolutePaths,omitempty" mapstructure:"includeStackAbsolutePaths"`
 	ExcludeStackAbsolutePaths     []string           `yaml:"excludeStackAbsolutePaths,omitempty" json:"excludeStackAbsolutePaths,omitempty" mapstructure:"excludeStackAbsolutePaths"`
-	TerraformDirAbsolutePath      string             `yaml:"terraformDirAbsolutePath,omitempty" json:"terraformDirAbsolutePath,omitempty" mapstructure:"terraformDirAbsolutePath"`
-	HelmfileDirAbsolutePath       string             `yaml:"helmfileDirAbsolutePath,omitempty" json:"helmfileDirAbsolutePath,omitempty" mapstructure:"helmfileDirAbsolutePath"`
-	PackerDirAbsolutePath         string             `yaml:"packerDirAbsolutePath,omitempty" json:"packerDirAbsolutePath,omitempty" mapstructure:"packerDirAbsolutePath"`
+    TerraformDirAbsolutePath      string             `yaml:"terraformDirAbsolutePath,omitempty" json:"terraformDirAbsolutePath,omitempty" mapstructure:"terraformDirAbsolutePath"`
+    HelmfileDirAbsolutePath       string             `yaml:"helmfileDirAbsolutePath,omitempty" json:"helmfileDirAbsolutePath,omitempty" mapstructure:"helmfileDirAbsolutePath"`
+    PackerDirAbsolutePath         string             `yaml:"packerDirAbsolutePath,omitempty" json:"packerDirAbsolutePath,omitempty" mapstructure:"packerDirAbsolutePath"`
+    AnsibleDirAbsolutePath        string             `yaml:"ansibleDirAbsolutePath,omitempty" json:"ansibleDirAbsolutePath,omitempty" mapstructure:"ansibleDirAbsolutePath"`
 	StackConfigFilesRelativePaths []string           `yaml:"stackConfigFilesRelativePaths,omitempty" json:"stackConfigFilesRelativePaths,omitempty" mapstructure:"stackConfigFilesRelativePaths"`
 	StackConfigFilesAbsolutePaths []string           `yaml:"stackConfigFilesAbsolutePaths,omitempty" json:"stackConfigFilesAbsolutePaths,omitempty" mapstructure:"stackConfigFilesAbsolutePaths"`
 	StackType                     string             `yaml:"stackType,omitempty" json:"StackType,omitempty" mapstructure:"stackType"`
@@ -352,10 +353,16 @@ type Packer struct {
 	Command  string `yaml:"command" json:"command" mapstructure:"command"`
 }
 
+type Ansible struct {
+    BasePath string `yaml:"base_path" json:"base_path" mapstructure:"base_path"`
+    Command  string `yaml:"command" json:"command" mapstructure:"command"`
+}
+
 type Components struct {
 	Terraform Terraform `yaml:"terraform" json:"terraform" mapstructure:"terraform"`
 	Helmfile  Helmfile  `yaml:"helmfile" json:"helmfile" mapstructure:"helmfile"`
 	Packer    Packer    `yaml:"packer" json:"packer" mapstructure:"packer"`
+    Ansible   Ansible   `yaml:"ansible" json:"ansible" mapstructure:"ansible"`
 }
 
 type Stacks struct {
@@ -423,8 +430,10 @@ type ArgsAndFlagsInfo struct {
 	TerraformDir              string
 	HelmfileCommand           string
 	HelmfileDir               string
-	PackerCommand             string
-	PackerDir                 string
+    PackerCommand             string
+    PackerDir                 string
+    AnsibleCommand            string
+    AnsibleDir                string
 	ConfigDir                 string
 	StacksDir                 string
 	WorkflowsDir              string
@@ -487,8 +496,10 @@ type ConfigAndStacksInfo struct {
 	TerraformDir                  string
 	HelmfileCommand               string
 	HelmfileDir                   string
-	PackerCommand                 string
-	PackerDir                     string
+    PackerCommand                 string
+    PackerDir                     string
+    AnsibleCommand                string
+    AnsibleDir                    string
 	ConfigDir                     string
 	StacksDir                     string
 	WorkflowsDir                  string

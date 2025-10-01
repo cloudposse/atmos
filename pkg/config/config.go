@@ -176,7 +176,7 @@ func processAtmosConfigs(configAndStacksInfo *schema.ConfigAndStacksInfo) (schem
 
 // atmosConfigAbsolutePaths converts paths to absolute paths.
 // AtmosConfigAbsolutePaths converts all base paths in the configuration to absolute paths.
-// This function sets TerraformDirAbsolutePath, HelmfileDirAbsolutePath, PackerDirAbsolutePath,
+// This function sets TerraformDirAbsolutePath, HelmfileDirAbsolutePath, PackerDirAbsolutePath, AnsibleDirAbsolutePath
 // StacksBaseAbsolutePath, IncludeStackAbsolutePaths, and ExcludeStackAbsolutePaths.
 func AtmosConfigAbsolutePaths(atmosConfig *schema.AtmosConfiguration) error {
 	// Convert stacks base path to an absolute path
@@ -217,13 +217,21 @@ func AtmosConfigAbsolutePaths(atmosConfig *schema.AtmosConfiguration) error {
 	}
 	atmosConfig.HelmfileDirAbsolutePath = helmfileDirAbsPath
 
-	// Convert Packer dir to an absolute path.
+    // Convert Packer dir to an absolute path.
 	packerBasePath := u.JoinPath(atmosConfig.BasePath, atmosConfig.Components.Packer.BasePath)
 	packerDirAbsPath, err := filepath.Abs(packerBasePath)
 	if err != nil {
 		return err
 	}
 	atmosConfig.PackerDirAbsolutePath = packerDirAbsPath
+
+    // Convert Ansible dir to an absolute path.
+    ansibleBasePath := u.JoinPath(atmosConfig.BasePath, atmosConfig.Components.Ansible.BasePath)
+    ansibleDirAbsPath, err := filepath.Abs(ansibleBasePath)
+    if err != nil {
+        return err
+    }
+    atmosConfig.AnsibleDirAbsolutePath = ansibleDirAbsPath
 
 	return nil
 }

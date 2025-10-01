@@ -343,6 +343,18 @@ func processEnvVars(atmosConfig *schema.AtmosConfiguration) error {
 		atmosConfig.Components.Packer.BasePath = componentsPackerBasePath
 	}
 
+	componentsAnsibleCommand := os.Getenv("ATMOS_COMPONENTS_ANSIBLE_COMMAND")
+	if len(componentsAnsibleCommand) > 0 {
+		log.Debug(foundEnvVarMessage, "ATMOS_COMPONENTS_ANSIBLE_COMMAND", componentsAnsibleCommand)
+		atmosConfig.Components.Ansible.Command = componentsAnsibleCommand
+	}
+
+	componentsAnsibleBasePath := os.Getenv("ATMOS_COMPONENTS_ANSIBLE_BASE_PATH")
+	if len(componentsAnsibleBasePath) > 0 {
+		log.Debug(foundEnvVarMessage, "ATMOS_COMPONENTS_ANSIBLE_BASE_PATH", componentsAnsibleBasePath)
+		atmosConfig.Components.Ansible.BasePath = componentsAnsibleBasePath
+	}
+
 	workflowsBasePath := os.Getenv("ATMOS_WORKFLOWS_BASE_PATH")
 	if len(workflowsBasePath) > 0 {
 		log.Debug(foundEnvVarMessage, "ATMOS_WORKFLOWS_BASE_PATH", workflowsBasePath)
@@ -437,9 +449,12 @@ func processCommandLineArgs(atmosConfig *schema.AtmosConfiguration, configAndSta
 	if err := setHelmfileConfig(atmosConfig, configAndStacksInfo); err != nil {
 		return err
 	}
-	if err := setPackerConfig(atmosConfig, configAndStacksInfo); err != nil {
+    if err := setPackerConfig(atmosConfig, configAndStacksInfo); err != nil {
 		return err
 	}
+    if err := setAnsibleConfig(atmosConfig, configAndStacksInfo); err != nil {
+        return err
+    }
 	if err := setStacksConfig(atmosConfig, configAndStacksInfo); err != nil {
 		return err
 	}
@@ -501,6 +516,18 @@ func setPackerConfig(atmosConfig *schema.AtmosConfiguration, configAndStacksInfo
 		log.Debug(cmdLineArg, PackerDirFlag, configAndStacksInfo.PackerDir)
 	}
 	return nil
+}
+
+func setAnsibleConfig(atmosConfig *schema.AtmosConfiguration, configAndStacksInfo *schema.ConfigAndStacksInfo) error {
+    if len(configAndStacksInfo.AnsibleCommand) > 0 {
+        atmosConfig.Components.Ansible.Command = configAndStacksInfo.AnsibleCommand
+        log.Debug(cmdLineArg, AnsibleCommandFlag, configAndStacksInfo.AnsibleCommand)
+    }
+    if len(configAndStacksInfo.AnsibleDir) > 0 {
+        atmosConfig.Components.Ansible.BasePath = configAndStacksInfo.AnsibleDir
+        log.Debug(cmdLineArg, AnsibleDirFlag, configAndStacksInfo.AnsibleDir)
+    }
+    return nil
 }
 
 func setStacksConfig(atmosConfig *schema.AtmosConfiguration, configAndStacksInfo *schema.ConfigAndStacksInfo) error {
