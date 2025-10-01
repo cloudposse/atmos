@@ -104,11 +104,9 @@ func TestCaptureCmdString(t *testing.T) {
 	mockClient.EXPECT().Close().Return(nil).Times(1)
 
 	// Set up CI environment and workspace ID.
-	os.Setenv("CI", "true")
-	os.Setenv("ATMOS_PRO_WORKSPACE_ID", atmosProWorkspaceID)
+	t.Setenv("CI", "true")
+	t.Setenv("ATMOS_PRO_WORKSPACE_ID", atmosProWorkspaceID)
 	captureCmdString("test-cmd", nil, mockClientProvider.NewMockClient)
-	os.Unsetenv("CI")
-	os.Unsetenv("ATMOS_PRO_WORKSPACE_ID")
 }
 
 // TestCaptureCmdErrorString tests capturing command telemetry when an error occurs.
@@ -170,9 +168,8 @@ func TestCaptureCmdStringDisabledWithEnvvar(t *testing.T) {
 	mockClient.EXPECT().Close().Return(nil).Times(0)
 
 	// Disable telemetry via environment variable
-	os.Setenv("ATMOS_TELEMETRY_ENABLED", "false")
+	t.Setenv("ATMOS_TELEMETRY_ENABLED", "false")
 	captureCmdString("test-cmd", nil, mockClientProvider.NewMockClient)
-	os.Unsetenv("ATMOS_TELEMETRY_ENABLED")
 }
 
 // TestCaptureCmdFailureStringDisabledWithEnvvar tests that error telemetry is also disabled when ATMOS_TELEMETRY_ENABLED=false.
@@ -193,9 +190,8 @@ func TestCaptureCmdFailureStringDisabledWithEnvvar(t *testing.T) {
 	mockClient.EXPECT().Close().Return(nil).Times(0)
 
 	// Disable telemetry via environment variable.
-	os.Setenv("ATMOS_TELEMETRY_ENABLED", "false")
+	t.Setenv("ATMOS_TELEMETRY_ENABLED", "false")
 	captureCmdString("test-cmd", errors.New("test-error"), mockClientProvider.NewMockClient)
-	os.Unsetenv("ATMOS_TELEMETRY_ENABLED")
 }
 
 // TestGetTelemetryFromConfigTokenWithEnvvar tests telemetry configuration with custom token, endpoint, and enabled status via environment variables.
@@ -226,13 +222,10 @@ func TestGetTelemetryFromConfigTokenWithEnvvar(t *testing.T) {
 	mockClient.EXPECT().Enqueue(gomock.Any()).Return(nil).Times(0)
 	mockClient.EXPECT().Close().Return(nil).Times(0)
 
-	os.Setenv("ATMOS_TELEMETRY_TOKEN", token)
-	os.Setenv("ATMOS_TELEMETRY_ENABLED", strconv.FormatBool(enabled))
-	os.Setenv("ATMOS_TELEMETRY_ENDPOINT", endpoint)
+	t.Setenv("ATMOS_TELEMETRY_TOKEN", token)
+	t.Setenv("ATMOS_TELEMETRY_ENABLED", strconv.FormatBool(enabled))
+	t.Setenv("ATMOS_TELEMETRY_ENDPOINT", endpoint)
 	telemetry := getTelemetryFromConfig(mockClientProvider.NewMockClient)
-	os.Unsetenv("ATMOS_TELEMETRY_TOKEN")
-	os.Unsetenv("ATMOS_TELEMETRY_ENABLED")
-	os.Unsetenv("ATMOS_TELEMETRY_ENDPOINT")
 
 	assert.NotNil(t, telemetry)
 	assert.Equal(t, telemetry.isEnabled, enabled)
@@ -315,9 +308,8 @@ func TestCaptureCmd(t *testing.T) {
 	mockClient.EXPECT().Close().Return(nil).Times(1)
 
 	// Set Jenkins CI environment and test command capture.
-	os.Setenv("JENKINS_URL", "https://jenkins.example.com")
+	t.Setenv("JENKINS_URL", "https://jenkins.example.com")
 	captureCmd(cmd, nil, mockClientProvider.NewMockClient)
-	os.Unsetenv("JENKINS_URL")
 }
 
 // TestCaptureCmdError tests the captureCmd function for failed command execution
@@ -374,13 +366,10 @@ func TestCaptureCmdError(t *testing.T) {
 	mockClient.EXPECT().Close().Return(nil).Times(1)
 
 	// Set CI environment variables and test error command capture.
-	os.Setenv("CI", "true")
-	os.Setenv("GITHUB_ACTIONS", "true")
-	os.Setenv("ATMOS_PRO_WORKSPACE_ID", atmosProWorkspaceID)
+	t.Setenv("CI", "true")
+	t.Setenv("GITHUB_ACTIONS", "true")
+	t.Setenv("ATMOS_PRO_WORKSPACE_ID", atmosProWorkspaceID)
 	captureCmd(cmd, errors.New("test-error"), mockClientProvider.NewMockClient)
-	os.Unsetenv("CI")
-	os.Unsetenv("GITHUB_ACTIONS")
-	os.Unsetenv("ATMOS_PRO_WORKSPACE_ID")
 }
 
 // TestCaptureCmdDisabledWithEnvvar tests that telemetry is disabled when
@@ -408,9 +397,8 @@ func TestCaptureCmdDisabledWithEnvvar(t *testing.T) {
 	}
 
 	// Disable telemetry via environment variable and test command capture.
-	os.Setenv("ATMOS_TELEMETRY_ENABLED", "false")
+	t.Setenv("ATMOS_TELEMETRY_ENABLED", "false")
 	captureCmd(cmd, nil, mockClientProvider.NewMockClient)
-	os.Unsetenv("ATMOS_TELEMETRY_ENABLED")
 }
 
 // TestCaptureCmdFailureDisabledWithEnvvar tests that telemetry is disabled for failed commands
@@ -438,9 +426,8 @@ func TestCaptureCmdFailureDisabledWithEnvvar(t *testing.T) {
 	}
 
 	// Disable telemetry via environment variable and test error command capture.
-	os.Setenv("ATMOS_TELEMETRY_ENABLED", "false")
+	t.Setenv("ATMOS_TELEMETRY_ENABLED", "false")
 	captureCmd(cmd, errors.New("test-error"), mockClientProvider.NewMockClient)
-	os.Unsetenv("ATMOS_TELEMETRY_ENABLED")
 }
 
 // TestTelemetryDisclosureMessage tests the disclosure message functionality when telemetry disclosure
@@ -505,11 +492,10 @@ func TestTelemetryDisclosureMessageHideForCI(t *testing.T) {
 	assert.NoError(t, saveErr)
 
 	// Set CI environment variable to simulate CI environment.
-	os.Setenv("CI", "true")
+	t.Setenv("CI", "true")
 	// Should return empty string when running in CI environment.
 	message := disclosureMessage()
 	assert.Empty(t, message)
-	os.Unsetenv("CI")
 }
 
 // TestTelemetryDisclosureMessageHideIfTelemetryDisabled tests that disclosure messages are suppressed
@@ -528,11 +514,10 @@ func TestTelemetryDisclosureMessageHideIfTelemetryDisabled(t *testing.T) {
 	assert.NoError(t, saveErr)
 
 	// Disable telemetry via environment variable.
-	os.Setenv("ATMOS_TELEMETRY_ENABLED", "false")
+	t.Setenv("ATMOS_TELEMETRY_ENABLED", "false")
 	// Should return empty string when telemetry is disabled.
 	message := disclosureMessage()
 	assert.Empty(t, message)
-	os.Unsetenv("ATMOS_TELEMETRY_ENABLED")
 }
 
 // TestGetTelemetryFromConfigWithLoggingEnabled tests that logging can be enabled via environment variable.
@@ -550,8 +535,7 @@ func TestGetTelemetryFromConfigWithLoggingEnabled(t *testing.T) {
 	mockClient.EXPECT().Close().Return(nil).Times(0)
 
 	// Enable logging via environment variable.
-	os.Setenv("ATMOS_TELEMETRY_LOGGING", "true")
-	defer os.Unsetenv("ATMOS_TELEMETRY_LOGGING")
+	t.Setenv("ATMOS_TELEMETRY_LOGGING", "true")
 
 	// Get telemetry configuration.
 	telemetry := getTelemetryFromConfig(mockClientProvider.NewMockClient)
@@ -576,8 +560,7 @@ func TestGetTelemetryFromConfigWithLoggingDisabled(t *testing.T) {
 	mockClient.EXPECT().Close().Return(nil).Times(0)
 
 	// Explicitly disable logging via environment variable.
-	os.Setenv("ATMOS_TELEMETRY_LOGGING", "false")
-	defer os.Unsetenv("ATMOS_TELEMETRY_LOGGING")
+	t.Setenv("ATMOS_TELEMETRY_LOGGING", "false")
 
 	// Get telemetry configuration.
 	telemetry := getTelemetryFromConfig(mockClientProvider.NewMockClient)
@@ -601,8 +584,7 @@ func TestGetTelemetryFromConfigWithLoggingDefault(t *testing.T) {
 	mockClient.EXPECT().Enqueue(gomock.Any()).Return(nil).Times(0)
 	mockClient.EXPECT().Close().Return(nil).Times(0)
 
-	// Ensure ATMOS_TELEMETRY_LOGGING is not set.
-	os.Unsetenv("ATMOS_TELEMETRY_LOGGING")
+	// Ensure ATMOS_TELEMETRY_LOGGING is not set (not needed with t.Setenv in other tests).
 
 	// Get telemetry configuration.
 	telemetry := getTelemetryFromConfig(mockClientProvider.NewMockClient)
@@ -627,8 +609,7 @@ func TestCaptureCmdWithLoggingEnabled(t *testing.T) {
 	mockClient.EXPECT().Close().Return(nil).Times(1)
 
 	// Enable logging via environment variable.
-	os.Setenv("ATMOS_TELEMETRY_LOGGING", "true")
-	defer os.Unsetenv("ATMOS_TELEMETRY_LOGGING")
+	t.Setenv("ATMOS_TELEMETRY_LOGGING", "true")
 
 	// Capture telemetry event.
 	captureCmdString("test-cmd-with-logging", nil, mockClientProvider.NewMockClient)
@@ -649,8 +630,7 @@ func TestCaptureCmdWithLoggingDisabled(t *testing.T) {
 	mockClient.EXPECT().Close().Return(nil).Times(1)
 
 	// Explicitly disable logging via environment variable.
-	os.Setenv("ATMOS_TELEMETRY_LOGGING", "false")
-	defer os.Unsetenv("ATMOS_TELEMETRY_LOGGING")
+	t.Setenv("ATMOS_TELEMETRY_LOGGING", "false")
 
 	// Capture telemetry event.
 	captureCmdString("test-cmd-no-logging", nil, mockClientProvider.NewMockClient)
@@ -752,8 +732,7 @@ func TestPrintTelemetryDisclosureDisabledInCI(t *testing.T) {
 	defer RestoreCIEnvVars(currentEnvVars)
 
 	// Set CI environment variable
-	os.Setenv("CI", "true")
-	defer os.Unsetenv("CI")
+	t.Setenv("CI", "true")
 
 	// Clean up test cache
 	cacheDir := "./.atmos"
@@ -789,8 +768,7 @@ func TestPrintTelemetryDisclosureDisabledByConfig(t *testing.T) {
 	defer RestoreCIEnvVars(currentEnvVars)
 
 	// Disable telemetry
-	os.Setenv("ATMOS_TELEMETRY_ENABLED", "false")
-	defer os.Unsetenv("ATMOS_TELEMETRY_ENABLED")
+	t.Setenv("ATMOS_TELEMETRY_ENABLED", "false")
 
 	// Clean up test cache
 	cacheDir := "./.atmos"

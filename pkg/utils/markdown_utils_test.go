@@ -263,3 +263,86 @@ func TestMarkdownFormatting(t *testing.T) {
 		})
 	}
 }
+
+// TestIsWriterTerminal tests terminal detection for different writers.
+func TestIsWriterTerminal(t *testing.T) {
+	tests := []struct {
+		name       string
+		writer     io.Writer
+		isTerminal bool
+	}{
+		{
+			name:       "stdout is a terminal (in actual terminal)",
+			writer:     os.Stdout,
+			isTerminal: true, // This will be true when running in actual terminal
+		},
+		{
+			name:       "stderr is a terminal (in actual terminal)",
+			writer:     os.Stderr,
+			isTerminal: true, // This will be true when running in actual terminal
+		},
+		{
+			name:       "bytes.Buffer is not a terminal",
+			writer:     &bytes.Buffer{},
+			isTerminal: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := isWriterTerminal(tt.writer)
+			// Only check bytes.Buffer case since os.Stdout/Stderr depend on test environment
+			if _, ok := tt.writer.(*bytes.Buffer); ok {
+				assert.Equal(t, tt.isTerminal, result)
+			}
+		})
+	}
+}
+
+// TestTrimRenderedMarkdown tests trimming logic for terminal vs non-terminal output.
+func TestTrimRenderedMarkdown(t *testing.T) {
+	tests := []struct {
+		name       string
+		input      string
+		isTerminal bool
+		expected   string
+	}{
+		{
+			name:       "Terminal output preserves trailing spaces",
+			input:      "Line 1   \nLine 2\t\t\nLine 3 ",
+			isTerminal: true,
+			expected:   "Line 1   \nLine 2\t\t\nLine 3 ",
+		},
+		{
+			name:       "Non-terminal output trims trailing spaces",
+			input:      "Line 1   \nLine 2\t\t\nLine 3 ",
+			isTerminal: false,
+			expected:   "Line 1\nLine 2\nLine 3",
+		},
+		{
+			name:       "Empty string",
+			input:      "",
+			isTerminal: false,
+			expected:   "",
+		},
+		{
+			name:       "No trailing spaces",
+			input:      "Line 1\nLine 2\nLine 3",
+			isTerminal: false,
+			expected:   "Line 1\nLine 2\nLine 3",
+		},
+		{
+			name:       "Mixed tabs and spaces",
+			input:      "Line 1 \t \nLine 2\t \nLine 3",
+			isTerminal: false,
+			expected:   "Line 1\nLine 2\nLine 3",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := trimRenderedMarkdown(tt.input, tt.isTerminal)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}

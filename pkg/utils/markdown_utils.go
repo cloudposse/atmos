@@ -18,6 +18,29 @@ import (
 // render is the global Markdown renderer instance initialized via InitializeMarkdown.
 var render *markdown.Renderer
 
+// isWriterTerminal checks if the writer is a terminal.
+func isWriterTerminal(w io.Writer) bool {
+	if file, ok := w.(*os.File); ok {
+		return term.IsTerminal(int(file.Fd()))
+	}
+	return false
+}
+
+// trimRenderedMarkdown trims trailing spaces from each line of rendered markdown
+// when not outputting to a terminal. This prevents unnecessary whitespace in
+// non-terminal outputs (logs, files, pipes).
+func trimRenderedMarkdown(md string, isTerminal bool) string {
+	if isTerminal {
+		return md
+	}
+
+	lines := strings.Split(md, "\n")
+	for i, line := range lines {
+		lines[i] = strings.TrimRight(line, " \t")
+	}
+	return strings.Join(lines, "\n")
+}
+
 // printfMarkdownTo prints a message in Markdown format to the specified writer.
 func printfMarkdownTo(w io.Writer, format string, a ...interface{}) {
 	if render == nil {
@@ -33,22 +56,10 @@ func printfMarkdownTo(w io.Writer, format string, a ...interface{}) {
 		errUtils.CheckErrorPrintAndExit(renderErr, "", "")
 	}
 
-	// Check if output is to a terminal
-	isTerminal := false
-	if file, ok := w.(*os.File); ok {
-		isTerminal = term.IsTerminal(int(file.Fd()))
-	}
+	isTerminal := isWriterTerminal(w)
+	md = trimRenderedMarkdown(md, isTerminal)
 
-	// Trim trailing spaces from each line when not outputting to a terminal
-	if !isTerminal {
-		lines := strings.Split(md, "\n")
-		for i, line := range lines {
-			lines[i] = strings.TrimRight(line, " \t")
-		}
-		md = strings.Join(lines, "\n")
-	}
-
-	_, err := fmt.Fprint(w, md+"\n")
+	_, err := fmt.Fprint(w, md)
 	errUtils.CheckErrorAndPrint(err, "", "")
 }
 

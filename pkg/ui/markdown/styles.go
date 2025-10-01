@@ -112,7 +112,7 @@ func getBuiltinDefaultStyle() ([]byte, error) {
 		Paragraph: ansi.StyleBlock{
 			StylePrimitive: ansi.StylePrimitive{
 				BlockPrefix: "",
-				BlockSuffix: newline,
+				BlockSuffix: "",
 				Color:       stringPtr(White),
 			},
 			Margin: uintPtr(1),
@@ -191,7 +191,6 @@ func getBuiltinDefaultStyle() ([]byte, error) {
 		},
 		Item: ansi.StylePrimitive{
 			BlockPrefix: "• ",
-			BlockSuffix: newline,
 		},
 		Enumeration: ansi.StylePrimitive{
 			BlockPrefix: ". ",

@@ -86,8 +86,9 @@ export ATMOS_GITHUB_TOKEN=<your-token>
 │   │   └── relative-paths/                          # Test configurations for relative imports
 │   └── schemas/                                     # Schemas used for JSON validation
 ├── snapshots/                                       # Golden snapshots (what we expect output to look like)
-│   ├── TestCLICommands.stderr.golden
-│   └── TestCLICommands_which_atmos.stdout.golden
+│   ├── TestCLICommands.stderr.golden                # stderr snapshot for non-TTY test
+│   ├── TestCLICommands_which_atmos.stdout.golden    # stdout snapshot for non-TTY test
+│   └── TestCLICommands_atmos_list.tty.golden        # Combined snapshot for TTY test
 └── test-cases/
     ├── complete.yaml
     ├── core.yaml
@@ -189,48 +190,56 @@ See [Testing Strategy PRD](../docs/prd/testing-strategy.md) for the complete des
 
 Our convention is to implement a test-case configuration file per scenario. Then place all smoke tests related to that scenario in the file.
 
-### PTY (Pseudo-Terminal) Behavior
+### Snapshot Files
 
-#### Important: Understanding TTY vs Non-TTY Tests
+The test framework uses three types of snapshot files to capture expected output:
 
-Tests can run in two modes:
-- **TTY mode** (`tty: true`): Uses a pseudo-terminal (PTY) to emulate a real terminal
-- **Non-TTY mode** (`tty: false`): Standard pipes without terminal emulation
+#### 1. `.stdout.golden` - Standard Output (Non-TTY)
+Used when `tty: false`. Contains only stdout data (results meant for piping, JSON output, CSV data).
 
-**Critical Difference**: In PTY/TTY mode, **stderr and stdout are merged into a single stream** that appears in stdout. This is not a bug - it's how terminals work!
+**Example**: `TestCLICommands_atmos_list_components.stdout.golden`
 
-Think of it like a monitor display - there's no separate "stderr screen" and "stdout screen". Everything appears on the same display. This is why:
+#### 2. `.stderr.golden` - Standard Error (Non-TTY)
+Used when `tty: false`. Contains only stderr data (UI messages, warnings, progress indicators).
 
-1. In TTY test snapshots (e.g., `TestCLICommands_atmos_list_instances.stdout.golden`), you'll see telemetry notices, tables, and error messages all in stdout
-2. In non-TTY test snapshots (e.g., `TestCLICommands_atmos_list_instances_no_tty.stderr.golden`), stderr and stdout are properly separated
+**Example**: `TestCLICommands_atmos_list_components.stderr.golden`
 
-#### Why This Matters
+#### 3. `.tty.golden` - TTY Output (Combined)
+Used when `tty: true`. Contains **both stdout and stderr merged** as they appear in a real terminal.
 
-- **For TTY tests**: Expect all output (including stderr content like telemetry notices) to appear in the stdout snapshot
-- **For non-TTY tests**: stderr and stdout are kept separate, enabling proper piping and redirection
-- **Golden snapshots**: Will differ between TTY and non-TTY modes, which is why we maintain separate snapshots for each
+**Example**: `TestCLICommands_atmos_list_components.tty.golden`
+
+#### Why Different Snapshot Types?
+
+**PTY/TTY Behavior**: When `tty: true`, the test uses a pseudo-terminal (PTY) that **merges stderr and stdout into a single stream**. This mimics how real terminals work - there's no separate "stderr screen" and "stdout screen". Everything appears on the same display.
+
+**Non-TTY Behavior**: When `tty: false`, the test uses standard pipes where stdout and stderr remain separate. This enables proper piping and redirection (e.g., `atmos list components | jq`).
 
 #### Example Test Configuration
 
 ```yaml
 tests:
-  - name: atmos list instances        # TTY version
-    tty: true                         # PTY merges stderr→stdout
+  # TTY mode: single .tty.golden file
+  - name: atmos list instances
+    tty: true                         # Uses PTY (combines streams)
     snapshot: true
-    expect:
-      stdout:                         # Contains BOTH stdout and stderr
-        - "Notice: Telemetry"         # stderr content appears here
-        - "Component.*Stack"          # stdout content
+    # Creates: TestCLICommands_atmos_list_instances.tty.golden
+    # Contains: telemetry notices (stderr) + table output (stdout)
 
-  - name: atmos list instances no tty # Non-TTY version
-    tty: false                        # Keeps streams separate
+  # Non-TTY mode: separate .stdout.golden and .stderr.golden files
+  - name: atmos list instances no tty
+    tty: false                        # Uses pipes (keeps streams separate)
     snapshot: true
-    expect:
-      stdout:                         # Only actual stdout
-        - "Component,Stack"           # CSV output
-      stderr:                         # Only actual stderr
-        - "Notice: Telemetry"         # Telemetry notice
+    # Creates: TestCLICommands_atmos_list_instances_no_tty.stdout.golden
+    #          TestCLICommands_atmos_list_instances_no_tty.stderr.golden
 ```
+
+#### Important Notes
+
+- **TTY tests** only create `.tty.golden` (no `.stdout.golden` or `.stderr.golden`)
+- **Non-TTY tests** create both `.stdout.golden` and `.stderr.golden` (no `.tty.golden`)
+- The snapshot type is automatically determined by the `tty:` flag in the test case
+- When regenerating snapshots, old files from the wrong type are **not** automatically deleted
 
 ### Environment Variables
 

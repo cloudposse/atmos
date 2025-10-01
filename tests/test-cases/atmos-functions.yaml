@@ -19,10 +19,8 @@ tests:
       os: !not windows
     expect:
       exit_code: 0
-      # IMPORTANT: When TTY is enabled, we check stdout instead of stderr for telemetry output.
-      # This is because PTY (pseudo-terminal) combines both stdout and stderr into a single stream.
-      # Even though telemetry is written to stderr in the code, with TTY it appears in stdout.
-      # This is expected behavior of our TTY simulator and how PTY works.
+      # NOTE: TTY mode uses .tty.golden snapshot which contains combined stdout+stderr output.
+      # Telemetry notices (stderr) and command output (stdout) appear together in TTY snapshots.
       stdout:
         - "Telemetry Enabled"
         - "Fetching baz output from component-3 in nonprod"

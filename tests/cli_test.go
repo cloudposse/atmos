@@ -1204,6 +1204,49 @@ func colorizeDiffWithThreshold(actual, expected string, threshold int) string {
 	return sb.String()
 }
 
+// getSnapshotFilenames returns the appropriate snapshot filenames based on whether TTY mode is enabled.
+// When isTty is true, returns only the .tty.golden filename.
+// When isTty is false, returns .stdout.golden and .stderr.golden filenames.
+func getSnapshotFilenames(testName string, isTty bool) (stdout, stderr, tty string) {
+	sanitized := sanitizeTestName(testName)
+	if isTty {
+		return "", "", filepath.Join(snapshotBaseDir, sanitized+".tty.golden")
+	}
+	return filepath.Join(snapshotBaseDir, sanitized+".stdout.golden"),
+		filepath.Join(snapshotBaseDir, sanitized+".stderr.golden"),
+		""
+}
+
+// verifyTTYSnapshot handles snapshot verification for TTY mode tests.
+func verifyTTYSnapshot(t *testing.T, tc *TestCase, ttyPath, combinedOutput string, regenerate bool) bool {
+	if regenerate {
+		t.Logf("Updating TTY snapshot at %q", ttyPath)
+		updateSnapshot(ttyPath, combinedOutput)
+		return true
+	}
+
+	if _, err := os.Stat(ttyPath); errors.Is(err, os.ErrNotExist) {
+		t.Fatalf(`TTY snapshot file not found: %q
+Run the following command to create it:
+$ go test ./tests -run %q -regenerate-snapshots`, ttyPath, t.Name())
+	}
+
+	filteredActual := applyIgnorePatterns(combinedOutput, tc.Expect.Diff)
+	filteredExpected := applyIgnorePatterns(readSnapshot(t, ttyPath), tc.Expect.Diff)
+
+	if filteredExpected != filteredActual {
+		var diff string
+		if isCIEnvironment() || !term.IsTerminal(int(os.Stdout.Fd())) {
+			diff = generateUnifiedDiff(filteredActual, filteredExpected)
+		} else {
+			diff = colorizeDiffWithThreshold(filteredActual, filteredExpected, 10)
+		}
+		t.Errorf("TTY output mismatch for %q:\n%s", ttyPath, diff)
+	}
+
+	return true
+}
+
 func verifySnapshot(t *testing.T, tc TestCase, stdoutOutput, stderrOutput string, regenerate bool) bool {
 	if !tc.Snapshot {
 		return true
@@ -1225,13 +1268,15 @@ func verifySnapshot(t *testing.T, tc TestCase, stdoutOutput, stderrOutput string
 	stdoutOutput = normalizeLineEndings(stdoutOutput)
 	stderrOutput = normalizeLineEndings(stderrOutput)
 
-	testName := sanitizeTestName(t.Name())
-	stdoutFileName := fmt.Sprintf("%s.stdout.golden", testName)
-	stderrFileName := fmt.Sprintf("%s.stderr.golden", testName)
-	stdoutPath := filepath.Join(snapshotBaseDir, stdoutFileName)
-	stderrPath := filepath.Join(snapshotBaseDir, stderrFileName)
+	stdoutPath, stderrPath, ttyPath := getSnapshotFilenames(t.Name(), tc.Tty)
 
-	// Regenerate snapshots if the flag is set
+	// TTY mode: combined output in single .tty.golden file
+	if tc.Tty {
+		// In TTY mode, stdout contains the combined output (from PTY)
+		return verifyTTYSnapshot(t, &tc, ttyPath, stdoutOutput, regenerate)
+	}
+
+	// Non-TTY mode: separate stdout and stderr snapshots
 	if regenerate {
 		t.Logf("Updating stdout snapshot at %q", stdoutPath)
 		updateSnapshot(stdoutPath, stdoutOutput)
