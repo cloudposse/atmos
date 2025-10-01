@@ -645,3 +645,129 @@ func TestManager_Authenticate_UsesCachedTargetCredentials(t *testing.T) {
 	assert.Equal(t, "dev", info.Identity)
 	assert.True(t, called, "PostAuthenticate should be called when using cached credentials")
 }
+
+func TestManager_Authenticate_ExpiredCredentials(t *testing.T) {
+	// Create expired credentials
+	expiredTime := ptrTime(time.Now().UTC().Add(-time.Hour))
+	
+	// Pre-seed store with expired creds for target identity
+	s := &testStore{
+		data:    map[string]any{"dev": &testCreds{exp: expiredTime}},
+		expired: map[string]bool{"dev": true}, // Mark as expired
+	}
+
+	called := false
+	m := &manager{
+		config: &schema.AuthConfig{
+			Providers: map[string]schema.Provider{"p": {Kind: "aws/iam-identity-center"}},
+			Identities: map[string]schema.Identity{
+				"dev": {Kind: "aws/permission-set", Via: &schema.IdentityVia{Provider: "p"}},
+			},
+		},
+		providers:       map[string]types.Provider{"p": &testProvider{name: "p", creds: &testCreds{}}},
+		identities:      map[string]types.Identity{"dev": stubPSIdentity{provider: "p", out: &testCreds{}, postCalled: &called}},
+		credentialStore: s,
+		validator:       dummyValidator{},
+	}
+
+	// Should perform fresh authentication since cached credentials are expired
+	info, err := m.Authenticate(context.Background(), "dev")
+	require.NoError(t, err)
+	assert.Equal(t, "dev", info.Identity)
+	assert.True(t, called, "PostAuthenticate should be called for fresh authentication")
+}
+
+func TestManager_ListProviders(t *testing.T) {
+	m := &manager{
+		config: &schema.AuthConfig{
+			Providers: map[string]schema.Provider{
+				"sso":    {Kind: "aws/iam-identity-center"},
+				"saml":   {Kind: "aws/saml"},
+				"github": {Kind: "github/oidc"},
+			},
+		},
+		providers: map[string]types.Provider{
+			"sso":    &testProvider{name: "sso"},
+			"saml":   &testProvider{name: "saml"},
+			"github": &testProvider{name: "github"},
+		},
+	}
+
+	providers := m.ListProviders()
+	assert.Len(t, providers, 3)
+	assert.Contains(t, providers, "sso")
+	assert.Contains(t, providers, "saml")
+	assert.Contains(t, providers, "github")
+}
+
+func TestManager_GetProviders(t *testing.T) {
+	expectedProviders := map[string]schema.Provider{
+		"sso":  {Kind: "aws/iam-identity-center", Region: "us-east-1"},
+		"saml": {Kind: "aws/saml", URL: "https://example.com", Region: "us-west-2"},
+	}
+
+	m := &manager{
+		config: &schema.AuthConfig{
+			Providers: expectedProviders,
+		},
+	}
+
+	providers := m.GetProviders()
+	assert.Equal(t, expectedProviders, providers)
+	assert.Equal(t, "aws/iam-identity-center", providers["sso"].Kind)
+	assert.Equal(t, "aws/saml", providers["saml"].Kind)
+	assert.Equal(t, "us-east-1", providers["sso"].Region)
+	assert.Equal(t, "us-west-2", providers["saml"].Region)
+}
+
+func TestManager_GetIdentities(t *testing.T) {
+	expectedIdentities := map[string]schema.Identity{
+		"dev":  {Kind: "aws/user", Default: true},
+		"prod": {Kind: "aws/assume-role", Principal: map[string]any{"assume_role": "arn:aws:iam::123:role/Prod"}},
+	}
+
+	m := &manager{
+		config: &schema.AuthConfig{
+			Identities: expectedIdentities,
+		},
+	}
+
+	identities := m.GetIdentities()
+	assert.Equal(t, expectedIdentities, identities)
+	assert.Equal(t, "aws/user", identities["dev"].Kind)
+	assert.Equal(t, "aws/assume-role", identities["prod"].Kind)
+	assert.True(t, identities["dev"].Default)
+	assert.False(t, identities["prod"].Default)
+}
+
+func TestManager_GetStackInfo(t *testing.T) {
+	stackInfo := &schema.ConfigAndStacksInfo{
+		ComponentEnvSection: schema.AtmosSectionMapType{"TEST": "value"},
+		Identity:            "test-identity",
+	}
+
+	m := &manager{
+		stackInfo: stackInfo,
+	}
+
+	result := m.GetStackInfo()
+	assert.Equal(t, stackInfo, result)
+	assert.Equal(t, "value", result.ComponentEnvSection["TEST"])
+	assert.Equal(t, "test-identity", result.Identity)
+}
+
+func TestManager_GetChain_Empty(t *testing.T) {
+	m := &manager{}
+	
+	chain := m.GetChain()
+	assert.Empty(t, chain)
+}
+
+func TestManager_GetChain_WithData(t *testing.T) {
+	m := &manager{
+		chain: []string{"provider", "identity1", "identity2"},
+	}
+	
+	chain := m.GetChain()
+	assert.Equal(t, []string{"provider", "identity1", "identity2"}, chain)
+}

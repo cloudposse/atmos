@@ -30,6 +30,10 @@ const (
 	maxSTSSeconds         = 43200
 )
 
+type assumeRoleWithSAMLClient interface {
+	AssumeRoleWithSAML(ctx context.Context, params *sts.AssumeRoleWithSAMLInput, optFns ...func(*sts.Options)) (*sts.AssumeRoleWithSAMLOutput, error)
+}
+
 // samlProvider implements AWS SAML authentication using saml2aws.
 type samlProvider struct {
 	name   string
@@ -221,13 +225,25 @@ func (p *samlProvider) selectRole(awsRoles []*saml2aws.AWSRole) *saml2aws.AWSRol
 
 // assumeRoleWithSAML assumes an AWS role using SAML assertion.
 func (p *samlProvider) assumeRoleWithSAML(ctx context.Context, samlAssertion string, role *saml2aws.AWSRole) (*types.AWSCredentials, error) {
+	return p.assumeRoleWithSAMLWithDeps(ctx, samlAssertion, role, config.LoadDefaultConfig, func(cfg aws.Config) assumeRoleWithSAMLClient {
+		return sts.NewFromConfig(cfg)
+	})
+}
+
+func (p *samlProvider) assumeRoleWithSAMLWithDeps(
+	ctx context.Context,
+	samlAssertion string,
+	role *saml2aws.AWSRole,
+	loader func(context.Context, ...func(*config.LoadOptions) error) (aws.Config, error),
+	factory func(aws.Config) assumeRoleWithSAMLClient,
+) (*types.AWSCredentials, error) {
 	// Load AWS configuration (v2).
-	cfg, err := config.LoadDefaultConfig(ctx, config.WithRegion(p.region))
+	cfg, err := loader(ctx, config.WithRegion(p.region))
 	if err != nil {
 		return nil, fmt.Errorf("%w: failed to create AWS config: %v", errUtils.ErrAuthenticationFailed, err)
 	}
 
-	stsClient := sts.NewFromConfig(cfg)
+	stsClient := factory(cfg)
 
 	// Assume role with SAML.
 	input := &sts.AssumeRoleWithSAMLInput{

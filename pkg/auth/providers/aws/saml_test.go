@@ -2,9 +2,16 @@ package aws
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"os"
 	"testing"
+	"time"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/service/sts"
+	stsTypes "github.com/aws/aws-sdk-go-v2/service/sts/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/versent/saml2aws/v2/pkg/creds"
@@ -180,6 +187,20 @@ func (s stubSAMLClient) Authenticate(_ *creds.LoginDetails) (string, error) {
 }
 func (s stubSAMLClient) Validate(_ *creds.LoginDetails) error { return nil }
 
+type stubSTSClient struct {
+	output        *sts.AssumeRoleWithSAMLOutput
+	err           error
+	capturedInput *sts.AssumeRoleWithSAMLInput
+}
+
+func (s *stubSTSClient) AssumeRoleWithSAML(_ context.Context, params *sts.AssumeRoleWithSAMLInput, _ ...func(*sts.Options)) (*sts.AssumeRoleWithSAMLOutput, error) {
+	s.capturedInput = params
+	if s.err != nil {
+		return nil, s.err
+	}
+	return s.output, nil
+}
+
 func TestSAMLProvider_createSAMLConfig_LoginDetails(t *testing.T) {
 	p, err := NewSAMLProvider("p", &schema.Provider{Kind: "aws/saml", URL: "https://idp.example.com", Region: "eu-west-1", Username: "user", Password: "pass", DownloadBrowserDriver: true})
 	require.NoError(t, err)
@@ -209,4 +230,265 @@ func TestSAMLProvider_authenticateAndGetAssertion_SuccessAndEmpty(t *testing.T) 
 	out, err = sp.authenticateAndGetAssertion(stubSAMLClient{assertion: ""}, &creds.LoginDetails{})
 	assert.Error(t, err)
 	assert.Equal(t, "", out)
+}
+
+func Test_samlProvider_assumeRoleWithSAML(t *testing.T) {
+	type fields struct {
+		name                      string
+		config                    *schema.Provider
+		url                       string
+		region                    string
+		RoleToAssumeFromAssertion string
+	}
+	type args struct {
+		ctx           context.Context
+		samlAssertion string
+		role          *saml2aws.AWSRole
+	}
+	type (
+		configLoader  func(context.Context, ...func(*config.LoadOptions) error) (aws.Config, error)
+		clientFactory func(aws.Config) assumeRoleWithSAMLClient
+	)
+	tests := []struct {
+		name    string
+		fields  fields
+		args    args
+		want    *types.AWSCredentials
+		wantErr assert.ErrorAssertionFunc
+		setup   func(t *testing.T) (configLoader, clientFactory, *stubSTSClient)
+		after   func(t *testing.T, stub *stubSTSClient)
+	}{
+		{
+			name: "successful assume role",
+			fields: fields{
+				region: "us-east-1",
+				config: &schema.Provider{Session: &schema.SessionConfig{Duration: "2h"}},
+			},
+			args: args{
+				ctx:           context.Background(),
+				samlAssertion: "ZmFrZS1hc3NlcnRpb24=",
+				role: &saml2aws.AWSRole{
+					RoleARN:      "arn:aws:iam::123456789012:role/Dev",
+					PrincipalARN: "arn:aws:iam::123456789012:saml-provider/idp",
+				},
+			},
+			want: &types.AWSCredentials{
+				AccessKeyID:     "ASIAEXAMPLE",
+				SecretAccessKey: "secret",
+				SessionToken:    "session",
+				Region:          "us-east-1",
+				Expiration:      "2024-01-02T03:04:05Z",
+			},
+			wantErr: assert.NoError,
+			setup: func(t *testing.T) (configLoader, clientFactory, *stubSTSClient) {
+				stub := &stubSTSClient{
+					output: &sts.AssumeRoleWithSAMLOutput{
+						Credentials: &stsTypes.Credentials{
+							AccessKeyId:     aws.String("ASIAEXAMPLE"),
+							SecretAccessKey: aws.String("secret"),
+							SessionToken:    aws.String("session"),
+							Expiration:      aws.Time(time.Date(2024, 1, 2, 3, 4, 5, 0, time.UTC)),
+						},
+					},
+				}
+				loader := func(_ context.Context, _ ...func(*config.LoadOptions) error) (aws.Config, error) {
+					return aws.Config{Region: "us-east-1"}, nil
+				}
+				factory := func(cfg aws.Config) assumeRoleWithSAMLClient {
+					assert.Equal(t, "us-east-1", cfg.Region)
+					return stub
+				}
+				return loader, factory, stub
+			},
+			after: func(t *testing.T, stub *stubSTSClient) {
+				require.NotNil(t, stub)
+				require.NotNil(t, stub.capturedInput)
+				assert.Equal(t, "ZmFrZS1hc3NlcnRpb24=", aws.ToString(stub.capturedInput.SAMLAssertion))
+				assert.Equal(t, "arn:aws:iam::123456789012:role/Dev", aws.ToString(stub.capturedInput.RoleArn))
+				assert.Equal(t, "arn:aws:iam::123456789012:saml-provider/idp", aws.ToString(stub.capturedInput.PrincipalArn))
+				assert.Equal(t, int32(7200), aws.ToInt32(stub.capturedInput.DurationSeconds))
+			},
+		},
+		{
+			name:   "config load failure",
+			fields: fields{region: "us-west-1"},
+			args: args{
+				ctx:           context.Background(),
+				samlAssertion: "anything",
+				role: &saml2aws.AWSRole{
+					RoleARN:      "arn:aws:iam::123456789012:role/Test",
+					PrincipalARN: "arn:aws:iam::123456789012:saml-provider/idp",
+				},
+			},
+			want:    nil,
+			wantErr: assert.Error,
+			setup: func(t *testing.T) (configLoader, clientFactory, *stubSTSClient) {
+				loader := func(_ context.Context, _ ...func(*config.LoadOptions) error) (aws.Config, error) {
+					return aws.Config{}, errors.New("config boom")
+				}
+				factory := func(cfg aws.Config) assumeRoleWithSAMLClient {
+					return &stubSTSClient{}
+				}
+				return loader, factory, nil
+			},
+		},
+		{
+			name:   "sts error bubbles up",
+			fields: fields{region: "us-west-2"},
+			args: args{
+				ctx:           context.Background(),
+				samlAssertion: "ZmFpbC1hc3NlcnRpb24=",
+				role: &saml2aws.AWSRole{
+					RoleARN:      "arn:aws:iam::999999999999:role/Fail",
+					PrincipalARN: "arn:aws:iam::999999999999:saml-provider/idp",
+				},
+			},
+			want:    nil,
+			wantErr: assert.Error,
+			setup: func(t *testing.T) (configLoader, clientFactory, *stubSTSClient) {
+				stub := &stubSTSClient{err: errors.New("sts failure")}
+				loader := func(_ context.Context, _ ...func(*config.LoadOptions) error) (aws.Config, error) {
+					return aws.Config{Region: "us-west-2"}, nil
+				}
+				factory := func(cfg aws.Config) assumeRoleWithSAMLClient {
+					assert.Equal(t, "us-west-2", cfg.Region)
+					return stub
+				}
+				return loader, factory, stub
+			},
+		},
+	}
+	for _, tt := range tests {
+		tc := tt
+		t.Run(tc.name, func(t *testing.T) {
+			var (
+				loader  configLoader
+				factory clientFactory
+				stub    *stubSTSClient
+			)
+			if tc.setup != nil {
+				loader, factory, stub = tc.setup(t)
+			}
+			if loader == nil {
+				loader = config.LoadDefaultConfig
+			}
+			if factory == nil {
+				factory = func(cfg aws.Config) assumeRoleWithSAMLClient {
+					return sts.NewFromConfig(cfg)
+				}
+			}
+			p := &samlProvider{
+				name:                      tc.fields.name,
+				config:                    tc.fields.config,
+				url:                       tc.fields.url,
+				region:                    tc.fields.region,
+				RoleToAssumeFromAssertion: tc.fields.RoleToAssumeFromAssertion,
+			}
+			got, err := p.assumeRoleWithSAMLWithDeps(tc.args.ctx, tc.args.samlAssertion, tc.args.role, loader, factory)
+			if !tc.wantErr(t, err, fmt.Sprintf("assumeRoleWithSAML(%v, %v, %v)", tc.args.ctx, tc.args.samlAssertion, tc.args.role)) {
+				return
+			}
+			assert.Equalf(t, tc.want, got, "assumeRoleWithSAML(%v, %v, %v)", tc.args.ctx, tc.args.samlAssertion, tc.args.role)
+			if tc.after != nil {
+				tc.after(t, stub)
+			}
+		})
+	}
+}
+
+func TestSAMLProvider_createSAMLConfig_AllFields(t *testing.T) {
+	p, err := NewSAMLProvider("test-provider", &schema.Provider{
+		Kind:                  "aws/saml",
+		URL:                   "https://idp.example.com/saml",
+		Region:                "eu-central-1",
+		Username:              "testuser",
+		Password:              "testpass",
+		ProviderType:          "Okta",
+		DownloadBrowserDriver: true,
+		Session:               &schema.SessionConfig{Duration: "2h"},
+	})
+	require.NoError(t, err)
+	sp := p.(*samlProvider)
+
+	cfg := sp.createSAMLConfig()
+	assert.Equal(t, "https://idp.example.com/saml", cfg.URL)
+	assert.Equal(t, "test-provider", cfg.Profile)
+	assert.Equal(t, "eu-central-1", cfg.Region)
+	assert.Equal(t, "testuser", cfg.Username)
+	assert.Equal(t, "Okta", cfg.Provider)
+	assert.Equal(t, "Auto", cfg.MFA)
+	assert.False(t, cfg.SkipVerify)
+	assert.Equal(t, 30, cfg.Timeout)
+	assert.Equal(t, "urn:amazon:webservices", cfg.AmazonWebservicesURN)
+	assert.True(t, cfg.DownloadBrowser)
+	assert.False(t, cfg.Headless)
+}
+
+func TestSAMLProvider_createLoginDetails_WithPassword(t *testing.T) {
+	p, err := NewSAMLProvider("test-provider", &schema.Provider{
+		Kind:     "aws/saml",
+		URL:      "https://idp.example.com/saml",
+		Region:   "us-east-1",
+		Username: "testuser",
+		Password: "secretpass",
+	})
+	require.NoError(t, err)
+	sp := p.(*samlProvider)
+
+	ld := sp.createLoginDetails()
+	assert.Equal(t, "https://idp.example.com/saml", ld.URL)
+	assert.Equal(t, "testuser", ld.Username)
+	assert.Equal(t, "secretpass", ld.Password)
+}
+
+func TestSAMLProvider_createLoginDetails_NoPassword(t *testing.T) {
+	p, err := NewSAMLProvider("test-provider", &schema.Provider{
+		Kind:     "aws/saml",
+		URL:      "https://idp.example.com/saml",
+		Region:   "us-east-1",
+		Username: "testuser",
+		// No password provided
+	})
+	require.NoError(t, err)
+	sp := p.(*samlProvider)
+
+	ld := sp.createLoginDetails()
+	assert.Equal(t, "https://idp.example.com/saml", ld.URL)
+	assert.Equal(t, "testuser", ld.Username)
+	assert.Empty(t, ld.Password) // Should be empty when not provided
+}
+
+func TestSAMLProvider_selectRole_MultipleRoles(t *testing.T) {
+	sp := &samlProvider{RoleToAssumeFromAssertion: "DevAccess"}
+	roles := []*saml2aws.AWSRole{
+		{RoleARN: "arn:aws:iam::123:role/ProdAccess", PrincipalARN: "arn:aws:iam::123:saml-provider/idp"},
+		{RoleARN: "arn:aws:iam::123:role/DevAccess", PrincipalARN: "arn:aws:iam::123:saml-provider/idp"},
+		{RoleARN: "arn:aws:iam::123:role/TestAccess", PrincipalARN: "arn:aws:iam::123:saml-provider/idp"},
+	}
+
+	// Should select the role matching the hint
+	sel := sp.selectRole(roles)
+	require.NotNil(t, sel)
+	assert.Equal(t, "arn:aws:iam::123:role/DevAccess", sel.RoleARN)
+}
+
+func TestSAMLProvider_selectRole_NoRoles(t *testing.T) {
+	sp := &samlProvider{RoleToAssumeFromAssertion: "AnyRole"}
+	roles := []*saml2aws.AWSRole{}
+
+	sel := sp.selectRole(roles)
+	assert.Nil(t, sel)
+}
+
+func TestSAMLProvider_selectRole_PartialMatch(t *testing.T) {
+	sp := &samlProvider{RoleToAssumeFromAssertion: "dev"}
+	roles := []*saml2aws.AWSRole{
+		{RoleARN: "arn:aws:iam::123:role/Production", PrincipalARN: "arn:aws:iam::123:saml-provider/idp"},
+		{RoleARN: "arn:aws:iam::123:role/Development", PrincipalARN: "arn:aws:iam::123:saml-provider/idp"},
+	}
+
+	// Should match "Development" because it contains "dev"
+	sel := sp.selectRole(roles)
+	require.NotNil(t, sel)
+	assert.Equal(t, "arn:aws:iam::123:role/Development", sel.RoleARN)
 }

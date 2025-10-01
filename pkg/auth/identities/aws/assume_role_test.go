@@ -239,3 +239,95 @@ func TestAssumeRoleIdentity_toAWSCredentials_DefaultRegion(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "us-east-1", c.(*types.AWSCredentials).Region)
 }
+
+func TestAssumeRoleIdentity_Authenticate_ErrorCases(t *testing.T) {
+	tests := []struct {
+		name        string
+		identity    *assumeRoleIdentity
+		inputCreds  types.ICredentials
+		expectError bool
+		errorMsg    string
+	}{
+		{
+			name: "nil input credentials",
+			identity: &assumeRoleIdentity{
+				name:    "test-role",
+				config:  &schema.Identity{Kind: "aws/assume-role", Principal: map[string]any{"assume_role": "arn:aws:iam::123456789012:role/TestRole"}},
+				roleArn: "arn:aws:iam::123456789012:role/TestRole",
+			},
+			inputCreds:  nil,
+			expectError: true,
+			errorMsg:    "base AWS credentials are required",
+		},
+		{
+			name: "invalid credentials type",
+			identity: &assumeRoleIdentity{
+				name:    "test-role",
+				config:  &schema.Identity{Kind: "aws/assume-role", Principal: map[string]any{"assume_role": "arn:aws:iam::123456789012:role/TestRole"}},
+				roleArn: "arn:aws:iam::123456789012:role/TestRole",
+			},
+			inputCreds:  &types.OIDCCredentials{Token: "test"},
+			expectError: true,
+			errorMsg:    "base AWS credentials are required",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := tt.identity.Authenticate(context.Background(), tt.inputCreds)
+			if tt.expectError {
+				assert.Error(t, err)
+				assert.Contains(t, err.Error(), tt.errorMsg)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
+func TestAssumeRoleIdentity_Authenticate_ValidationErrors(t *testing.T) {
+	tests := []struct {
+		name        string
+		identity    *assumeRoleIdentity
+		expectError bool
+		errorMsg    string
+	}{
+		{
+			name: "missing role ARN in principal",
+			identity: &assumeRoleIdentity{
+				name:   "test-role",
+				config: &schema.Identity{Kind: "aws/assume-role", Principal: map[string]any{}},
+			},
+			expectError: true,
+			errorMsg:    "assume_role is required in principal",
+		},
+		{
+			name: "nil principal",
+			identity: &assumeRoleIdentity{
+				name:   "test-role",
+				config: &schema.Identity{Kind: "aws/assume-role", Principal: nil},
+			},
+			expectError: true,
+			errorMsg:    "principal is required",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			inputCreds := &types.AWSCredentials{
+				AccessKeyID:     "AKIAEXAMPLE",
+				SecretAccessKey: "basesecret",
+				SessionToken:    "basetoken",
+				Region:          "us-east-1",
+			}
+			
+			_, err := tt.identity.Authenticate(context.Background(), inputCreds)
+			if tt.expectError {
+				assert.Error(t, err)
+				assert.Contains(t, err.Error(), tt.errorMsg)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
