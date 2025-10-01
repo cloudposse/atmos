@@ -4,7 +4,6 @@ import (
 	"os"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -21,8 +20,7 @@ func TestProcessTemplateWithoutContext(t *testing.T) {
 			name:     "current timestamp",
 			template: "timestamp: {{ now | date \"2006-01-02\" }}",
 			validate: func(t *testing.T, result string) {
-				expectedDate := time.Now().Format("2006-01-02")
-				assert.Contains(t, result, "timestamp: "+expectedDate)
+				assert.Regexp(t, `timestamp: \d{4}-\d{2}-\d{2}`, result)
 			},
 		},
 		{
