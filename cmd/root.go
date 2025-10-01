@@ -12,7 +12,6 @@ import (
 	"regexp"
 	"strings"
 	"syscall"
-	"time"
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/elewis787/boa"
@@ -476,10 +475,10 @@ func displayPerformanceHeatmap(cmd *cobra.Command, mode string) error {
 	for _, r := range snap.Rows {
 		p95 := "-"
 		if r.P95 > 0 {
-			p95 = formatDuration(r.P95)
+			p95 = heatmap.FormatDuration(r.P95)
 		}
 		fmt.Fprintf(os.Stderr, "%-50s %6d %10s %10s %10s %8s\n",
-			r.Name, r.Count, formatDuration(r.Total), formatDuration(r.Avg), formatDuration(r.Max), p95)
+			r.Name, r.Count, heatmap.FormatDuration(r.Total), heatmap.FormatDuration(r.Avg), heatmap.FormatDuration(r.Max), p95)
 	}
 
 	// Check if we have a TTY for interactive mode.
@@ -491,20 +490,13 @@ func displayPerformanceHeatmap(cmd *cobra.Command, mode string) error {
 	// Create an empty heat model for now (we'll enhance this later to track actual execution steps).
 	heatModel := heatmap.NewHeatModel()
 
-	// Create context for TUI with cancellation.
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	// Handle Ctrl+C for graceful shutdown.
-	sig := make(chan os.Signal, 1)
-	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
-	go func() {
-		<-sig
-		cancel()
-	}()
+	// Create context that cancels on SIGINT/SIGTERM.
+	base := context.Background()
+	sigCtx, stop := signal.NotifyContext(base, syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
 
 	// Start Bubble Tea UI with the collected data.
-	if err := heatmap.StartBubbleTeaUI(ctx, heatModel, mode); err != nil {
+	if err := heatmap.StartBubbleTeaUI(sigCtx, heatModel, mode); err != nil {
 		return fmt.Errorf("error running Bubble Tea UI: %w", err)
 	}
 
@@ -517,15 +509,6 @@ func isTTY() bool {
 		return (fileInfo.Mode() & os.ModeCharDevice) != 0
 	}
 	return false
-}
-
-// formatDuration formats a duration for display, showing "0" instead of "0s" for zero durations.
-func formatDuration(d time.Duration) string {
-	truncated := d.Truncate(time.Microsecond)
-	if truncated == 0 {
-		return "0"
-	}
-	return truncated.String()
 }
 
 func init() {

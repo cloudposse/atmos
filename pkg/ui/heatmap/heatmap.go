@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"os"
 	"sync"
 	"time"
 	"unicode"
@@ -389,14 +390,14 @@ func (m *model) updatePerformanceData() {
 	for _, r := range m.initialSnap.Rows {
 		p95 := "-"
 		if r.P95 > 0 {
-			p95 = formatDuration(r.P95)
+			p95 = FormatDuration(r.P95)
 		}
 		rows = append(rows, table.Row{
 			truncate(r.Name, tableFunctionWidth-2),
 			fmt.Sprintf("%d", r.Count),
-			formatDuration(r.Total),
-			formatDuration(r.Avg),
-			formatDuration(r.Max),
+			FormatDuration(r.Total),
+			FormatDuration(r.Avg),
+			FormatDuration(r.Max),
 			p95,
 		})
 	}
@@ -434,8 +435,8 @@ func (m *model) View() string {
 	return lipgloss.JoinVertical(lipgloss.Left, sections...)
 }
 
-// formatDuration formats a duration for display, showing "0" instead of "0s" for zero durations.
-func formatDuration(d time.Duration) string {
+// FormatDuration formats a duration for display, showing "0" instead of "0s" for zero durations.
+func FormatDuration(d time.Duration) string {
 	truncated := d.Truncate(time.Microsecond)
 	if truncated == 0 {
 		return "0"
@@ -446,7 +447,7 @@ func formatDuration(d time.Duration) string {
 // StartBubbleTeaUI starts the Bubble Tea interface.
 func StartBubbleTeaUI(ctx context.Context, heatModel *HeatModel, mode string) error {
 	m := newModel(heatModel, mode, ctx)
-	p := tea.NewProgram(m, tea.WithAltScreen())
+	p := tea.NewProgram(m, tea.WithAltScreen(), tea.WithOutput(os.Stderr))
 
 	// Run the program directly (blocking).
 	_, err := p.Run()
