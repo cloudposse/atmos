@@ -20,7 +20,7 @@ func ConvertEnvVars(envVarsMap map[string]any) []string {
 
 	for k, v := range envVarsMap {
 		if v != "null" && v != nil {
-			res = append(res, fmt.Sprintf(envVarFormat, k, v))
+			res = append(res, fmt.Sprintf(envVarFormat, k, fmt.Sprint(v)))
 		}
 	}
 	return res

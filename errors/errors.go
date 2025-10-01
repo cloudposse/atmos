@@ -151,5 +151,12 @@ var (
 	ErrCacheMarshal   = errors.New("cache marshal failed")
 
 	// Profiler-related errors.
-	ErrProfilerStart = errors.New("profiler start failed")
+	ErrProfilerStart             = errors.New("profiler start failed")
+	ErrProfilerUnsupportedType   = errors.New("profiler: unsupported profile type")
+	ErrProfilerStartCPU          = errors.New("profiler: failed to start CPU profile")
+	ErrProfilerStartTrace        = errors.New("profiler: failed to start trace profile")
+	ErrProfilerCreateFile        = errors.New("profiler: failed to create profile file")
+	ErrProfilerParseMainConfig   = errors.New("profiler: failed to parse main config")
+	ErrProfilerMergeMainConfig   = errors.New("profiler: failed to merge main config")
+	ErrProfilerReapplyMainConfig = errors.New("profiler: failed to re-apply main config")
 )

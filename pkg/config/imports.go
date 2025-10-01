@@ -28,6 +28,19 @@ var (
 	ErrMaxImportDepth     = errors.New("maximum import depth reached")
 )
 
+// sanitizeImport redacts credentials and query values from URLs while leaving paths intact.
+func sanitizeImport(s string) string {
+	u, err := url.Parse(s)
+	if err != nil || (u.Scheme != "http" && u.Scheme != "https") {
+		// Local path or unparsable; return as-is.
+		return s
+	}
+	u.User = nil
+	// Optionally keep keys only; here we drop query entirely.
+	u.RawQuery = ""
+	return u.String()
+}
+
 type importTypes int
 
 const (
@@ -69,14 +82,14 @@ func processConfigImports(source *schema.AtmosConfiguration, dst *viper.Viper) e
 	log.Debug("processConfigImports resolved paths", "count", len(resolvedPaths))
 
 	for _, resolvedPath := range resolvedPaths {
-		// Debug: log what we're about to merge.
-		log.Debug("attempting to merge import", "import", resolvedPath.importPaths, "file_path", resolvedPath.filePath)
+		// Debug: log what we're about to merge (sanitized).
+		log.Debug("attempting to merge import", "import", sanitizeImport(resolvedPath.importPaths), "file_path", resolvedPath.filePath)
 		err := mergeConfigFile(resolvedPath.filePath, dst)
 		if err != nil {
-			log.Debug("error loading config file", "import", resolvedPath.importPaths, "file_path", resolvedPath.filePath, "error", err)
+			log.Debug("error loading config file", "import", sanitizeImport(resolvedPath.importPaths), "file_path", resolvedPath.filePath, "error", err)
 			continue
 		}
-		log.Debug("successfully merged config from import", "import", resolvedPath.importPaths, "file_path", resolvedPath.filePath)
+		log.Debug("successfully merged config from import", "import", sanitizeImport(resolvedPath.importPaths), "file_path", resolvedPath.filePath)
 	}
 
 	return nil
