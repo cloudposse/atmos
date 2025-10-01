@@ -9,6 +9,237 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 )
 
+func TestSliceContainsString(t *testing.T) {
+	tests := []struct {
+		name     string
+		slice    []string
+		str      string
+		expected bool
+	}{
+		{
+			name:     "string present in slice",
+			slice:    []string{"foo", "bar", "baz"},
+			str:      "bar",
+			expected: true,
+		},
+		{
+			name:     "string not present in slice",
+			slice:    []string{"foo", "bar", "baz"},
+			str:      "qux",
+			expected: false,
+		},
+		{
+			name:     "empty slice",
+			slice:    []string{},
+			str:      "foo",
+			expected: false,
+		},
+		{
+			name:     "empty string in slice",
+			slice:    []string{"", "foo", "bar"},
+			str:      "",
+			expected: true,
+		},
+		{
+			name:     "nil slice",
+			slice:    nil,
+			str:      "foo",
+			expected: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := SliceContainsString(tt.slice, tt.str)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestSliceContainsInt(t *testing.T) {
+	tests := []struct {
+		name     string
+		slice    []int
+		num      int
+		expected bool
+	}{
+		{
+			name:     "int present in slice",
+			slice:    []int{1, 2, 3, 4, 5},
+			num:      3,
+			expected: true,
+		},
+		{
+			name:     "int not present in slice",
+			slice:    []int{1, 2, 3, 4, 5},
+			num:      10,
+			expected: false,
+		},
+		{
+			name:     "empty slice",
+			slice:    []int{},
+			num:      1,
+			expected: false,
+		},
+		{
+			name:     "zero in slice",
+			slice:    []int{0, 1, 2},
+			num:      0,
+			expected: true,
+		},
+		{
+			name:     "negative numbers",
+			slice:    []int{-5, -3, -1, 0, 1},
+			num:      -3,
+			expected: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := SliceContainsInt(tt.slice, tt.num)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+//nolint:dupl // Test structure similar to TestSliceContainsStringHasPrefix but tests different function behavior.
+func TestSliceContainsStringStartsWith(t *testing.T) {
+	tests := []struct {
+		name     string
+		slice    []string
+		str      string
+		expected bool
+	}{
+		{
+			name:     "string starts with element in slice",
+			slice:    []string{"foo", "bar", "baz"},
+			str:      "foobar",
+			expected: true,
+		},
+		{
+			name:     "string does not start with any element",
+			slice:    []string{"foo", "bar", "baz"},
+			str:      "qux",
+			expected: false,
+		},
+		{
+			name:     "exact match",
+			slice:    []string{"foo", "bar"},
+			str:      "foo",
+			expected: true,
+		},
+		{
+			name:     "empty string in slice matches everything",
+			slice:    []string{"", "foo"},
+			str:      "anything",
+			expected: true,
+		},
+		{
+			name:     "empty slice",
+			slice:    []string{},
+			str:      "foo",
+			expected: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := SliceContainsStringStartsWith(tt.slice, tt.str)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+//nolint:dupl // Test structure similar to TestSliceContainsStringStartsWith but tests different function behavior.
+func TestSliceContainsStringHasPrefix(t *testing.T) {
+	tests := []struct {
+		name     string
+		slice    []string
+		prefix   string
+		expected bool
+	}{
+		{
+			name:     "element starts with prefix",
+			slice:    []string{"foobar", "barbaz", "qux"},
+			prefix:   "foo",
+			expected: true,
+		},
+		{
+			name:     "no element starts with prefix",
+			slice:    []string{"foobar", "barbaz", "qux"},
+			prefix:   "xyz",
+			expected: false,
+		},
+		{
+			name:     "empty prefix matches everything",
+			slice:    []string{"foo", "bar"},
+			prefix:   "",
+			expected: true,
+		},
+		{
+			name:     "exact match",
+			slice:    []string{"foo", "bar"},
+			prefix:   "foo",
+			expected: true,
+		},
+		{
+			name:     "empty slice",
+			slice:    []string{},
+			prefix:   "foo",
+			expected: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := SliceContainsStringHasPrefix(tt.slice, tt.prefix)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestSliceOfStringsToSpaceSeparatedString(t *testing.T) {
+	tests := []struct {
+		name     string
+		slice    []string
+		expected string
+	}{
+		{
+			name:     "multiple strings",
+			slice:    []string{"foo", "bar", "baz"},
+			expected: "foo bar baz",
+		},
+		{
+			name:     "single string",
+			slice:    []string{"foo"},
+			expected: "foo",
+		},
+		{
+			name:     "empty slice",
+			slice:    []string{},
+			expected: "",
+		},
+		{
+			name:     "strings with spaces",
+			slice:    []string{"hello world", "foo bar"},
+			expected: "hello world foo bar",
+		},
+		{
+			name:     "empty strings",
+			slice:    []string{"", "foo", ""},
+			expected: " foo ",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := SliceOfStringsToSpaceSeparatedString(tt.slice)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
 func TestSliceOfInterfacesToSliceOfStrings(t *testing.T) {
 	var input []any
 	input = append(input, "a")
