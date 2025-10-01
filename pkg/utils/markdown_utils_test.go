@@ -346,3 +346,118 @@ func TestTrimRenderedMarkdown(t *testing.T) {
 		})
 	}
 }
+
+// TestPrintfMarkdownToTUIWithoutRenderer tests that PrintfMarkdownToTUI works without initialized renderer.
+func TestPrintfMarkdownToTUIWithoutRenderer(t *testing.T) {
+	// Set render to nil to simulate uninitialized state
+	render = nil
+
+	// Capture stderr
+	oldStderr := os.Stderr
+	t.Cleanup(func() {
+		os.Stderr = oldStderr
+	})
+
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("Failed to create pipe: %v", err)
+	}
+	t.Cleanup(func() {
+		r.Close()
+	})
+
+	os.Stderr = w
+
+	// Should still print raw text without rendering
+	PrintfMarkdownToTUI("Test message to TUI")
+
+	if err := w.Close(); err != nil {
+		t.Fatalf("Failed to close writer: %v", err)
+	}
+
+	// Read output
+	var output bytes.Buffer
+	if _, err := io.Copy(&output, r); err != nil {
+		t.Fatalf("Failed to copy output: %v", err)
+	}
+	result := output.String()
+
+	// Should contain raw text since renderer is nil
+	assert.Contains(t, result, "Test message to TUI")
+}
+
+// TestPrintfMarkdownToEnsuresTrailingNewline tests that rendered markdown always ends with a newline.
+func TestPrintfMarkdownToEnsuresTrailingNewline(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{
+			name:     "input without trailing newline gets one added",
+			input:    "Test message without newline",
+			expected: "Test message without newline\n",
+		},
+		{
+			name:     "input with trailing newline is preserved",
+			input:    "Test message with newline\n",
+			expected: "Test message with newline\n",
+		},
+		{
+			name:     "empty input gets newline",
+			input:    "",
+			expected: "\n",
+		},
+		{
+			name:     "multiline input without trailing newline gets one added",
+			input:    "Line 1\nLine 2\nLine 3",
+			expected: "Line 1\nLine 2\nLine 3\n",
+		},
+		{
+			name:     "multiline input with trailing newline is preserved",
+			input:    "Line 1\nLine 2\nLine 3\n",
+			expected: "Line 1\nLine 2\nLine 3\n",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Initialize renderer
+			InitializeMarkdown(schema.AtmosConfiguration{})
+
+			// Capture output to stderr (where PrintfMarkdownToTUI writes)
+			oldStderr := os.Stderr
+			t.Cleanup(func() {
+				os.Stderr = oldStderr
+			})
+
+			r, w, err := os.Pipe()
+			if err != nil {
+				t.Fatalf("Failed to create pipe: %v", err)
+			}
+			t.Cleanup(func() {
+				r.Close()
+			})
+
+			os.Stderr = w
+
+			// Print the input
+			PrintfMarkdownToTUI("%s", tt.input)
+
+			if err := w.Close(); err != nil {
+				t.Fatalf("Failed to close writer: %v", err)
+			}
+
+			// Read output
+			var output bytes.Buffer
+			if _, err := io.Copy(&output, r); err != nil {
+				t.Fatalf("Failed to copy output: %v", err)
+			}
+
+			result := output.String()
+
+			// Verify output ends with newline
+			assert.True(t, strings.HasSuffix(result, "\n"), "Output should end with newline")
+		})
+	}
+}
