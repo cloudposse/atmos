@@ -252,6 +252,27 @@ func TestRunTerraformDocs_Error(t *testing.T) {
 	}
 }
 
+// TestMergeInputs_UnsupportedType tests error handling for unsupported input types.
+func TestMergeInputs_UnsupportedType(t *testing.T) {
+	atmosConfig := schema.AtmosConfiguration{}
+	baseDir := t.TempDir()
+
+	// Provide an unsupported type (int) to trigger error.
+	docsGen := schema.DocsGenerate{
+		Input: []any{
+			123, // int is not supported, should trigger error
+		},
+	}
+
+	_, err := mergeInputs(&atmosConfig, baseDir, &docsGen)
+	if err == nil {
+		t.Error("Expected error from mergeInputs with unsupported input type")
+	}
+	if !strings.Contains(err.Error(), "unsupported input type") {
+		t.Errorf("Expected error about unsupported input type, got: %v", err)
+	}
+}
+
 // TestMergeInputs covers various merge scenarios: local only, remote overrides local, inline overrides all.
 func TestMergeInputs(t *testing.T) {
 	tests := []struct {
