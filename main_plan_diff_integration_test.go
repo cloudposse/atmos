@@ -50,15 +50,10 @@ func TestMainTerraformPlanDiffIntegration(t *testing.T) {
 			}
 		}()
 
-		// Handle Windows specially - just wait for exit code
-		if runtime.GOOS == "windows" {
-			return <-exitCodeCh
-		}
-
-		// For non-Windows platforms, use the original logic
+		// Wait for exit code and ensure goroutine completes (all platforms)
 		select {
 		case code := <-exitCodeCh:
-			<-done // Wait for main to finish on non-Windows platforms
+			<-done // Wait for main to finish including all defers
 			return code
 		case <-done:
 			// Main completed without calling OsExit
