@@ -2,7 +2,7 @@ package main
 
 import (
 	"os"
-	"path"
+	"path/filepath"
 	"runtime"
 	"testing"
 	"time"
@@ -88,8 +88,8 @@ func TestMainTerraformPlanDiffIntegration(t *testing.T) {
 	}
 	defer os.RemoveAll(tmpDir)
 
-	origPlanFile := path.Join(tmpDir, "orig.plan")
-	newPlanFile := path.Join(tmpDir, "new.plan")
+	origPlanFile := filepath.Join(tmpDir, "orig.plan")
+	newPlanFile := filepath.Join(tmpDir, "new.plan")
 
 	// Generate the original plan
 	os.Args = []string{"atmos", "terraform", "plan", "component-1", "-s", "nonprod", "-out=" + origPlanFile}
