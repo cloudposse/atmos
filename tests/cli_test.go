@@ -701,12 +701,7 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 	if _, exists := tc.Env["COLORTERM"]; !exists {
 		tc.Env["COLORTERM"] = "" // Explicitly empty to prevent truecolor (force 256-color)
 	}
-	// Ensure NO_COLOR is not inherited unless test explicitly sets it (presence disables color).
-	if _, exists := tc.Env["NO_COLOR"]; !exists {
-		delete(tc.Env, "NO_COLOR")
-	}
-
-	// Set any environment variables defined in the test case using t.Setenv for proper isolation
+	// Set any environment variables defined in the test case using t.Setenv for proper isolation.
 	for key, value := range tc.Env {
 		t.Setenv(key, value)
 	}
@@ -755,6 +750,17 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 		}
 		envVars = append(envVars, fmt.Sprintf("%s=%s", key, value))
 	}
+
+	// Ensure NO_COLOR is not inherited unless test explicitly sets it (presence disables color).
+	if _, exists := tc.Env["NO_COLOR"]; !exists {
+		for i, env := range envVars {
+			if strings.HasPrefix(env, "NO_COLOR=") {
+				envVars = append(envVars[:i], envVars[i+1:]...)
+				break
+			}
+		}
+	}
+
 	cmd.Env = envVars
 
 	var stdout, stderr bytes.Buffer

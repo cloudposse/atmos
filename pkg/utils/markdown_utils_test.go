@@ -51,21 +51,27 @@ func TestPrintfMarkdownToTUI(t *testing.T) {
 
 	// Capture stderr
 	oldStderr := os.Stderr
-	r, w, _ := os.Pipe()
+	r, w, err := os.Pipe()
+	require.NoError(t, err, "Failed to create pipe")
+
 	os.Stderr = w
+
+	// Ensure cleanup happens
+	t.Cleanup(func() {
+		os.Stderr = oldStderr
+		r.Close()
+	})
 
 	// Print to TUI (stderr)
 	PrintfMarkdownToTUI("Test: %s", "Message to stderr")
 
-	err := w.Close()
-	require.NoError(t, err)
-
-	os.Stderr = oldStderr
+	err = w.Close()
+	require.NoError(t, err, "Failed to close pipe writer")
 
 	// Read captured output
 	var output bytes.Buffer
 	_, err = io.Copy(&output, r)
-	require.NoError(t, err)
+	require.NoError(t, err, "Failed to read pipe output")
 
 	// Verify output went to stderr
 	assert.Contains(t, output.String(), "Test: Message to stderr")
