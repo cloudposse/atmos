@@ -74,6 +74,10 @@ Atmos takes a different approach to component sourcing than conventional tools. 
 - **Pin components to folders**: Reference vendored folders in your component configurations
 - **Make explicit what other tools do implicitly**: Other tools clone sources just-in-time to temporary folders; we make this explicit and permanent
 
+:::tip AI Coding Tools Love This
+AI assistants like Claude Code and Cursor work significantly better with vendored code. When components are local, AI tools have full context of your codebase—they can navigate between files, understand dependencies, and provide accurate suggestions without needing to fetch external repositories.
+:::
+
 This emerged from countless projects where pure remote sourcing created productivity blockers:
 - **Coordination nightmare**: Cross-cutting changes required dozens of PRs across multiple repositories
 - **Developer friction**: Can't search codebase, IDE navigation breaks, constant context switching to external repos
