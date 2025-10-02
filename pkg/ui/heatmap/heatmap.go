@@ -13,6 +13,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
@@ -451,7 +452,7 @@ func StartBubbleTeaUI(ctx context.Context, heatModel *HeatModel, mode string) er
 	p := tea.NewProgram(m, tea.WithAltScreen(), tea.WithOutput(os.Stderr))
 
 	if _, err := p.Run(); err != nil {
-		return fmt.Errorf("failed to run performance heatmap TUI: %w", err)
+		return fmt.Errorf("%w: failed to run performance heatmap TUI: %v", errUtils.ErrTUIRun, err)
 	}
 	return nil
 }
