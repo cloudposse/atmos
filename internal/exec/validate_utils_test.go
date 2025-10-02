@@ -41,8 +41,50 @@ deny[msg] {
 	assert.ErrorIs(t, err, errUtils.ErrOPATimeout)
 }
 
-// TestContextDeadlineExceededWrapping ensures that context.DeadlineExceeded errors
-// are properly wrapped with errors.Join and ErrOPATimeout.
+// TestIsWindowsOPALoadError tests the isWindowsOPALoadError function.
+func TestIsWindowsOPALoadError(t *testing.T) {
+	tests := []struct {
+		name     string
+		err      error
+		expected bool
+	}{
+		{
+			name:     "nil error",
+			err:      nil,
+			expected: false,
+		},
+		{
+			name:     "fs.ErrNotExist wrapped error",
+			err:      errors.New("wrapped: file does not exist"),
+			expected: false,
+		},
+		{
+			name:     "Windows path not specified error",
+			err:      errors.New("cannot find the path specified"),
+			expected: false, // On non-Windows, should return false
+		},
+		{
+			name:     "Windows file not found error",
+			err:      errors.New("system cannot find the file specified"),
+			expected: false, // On non-Windows, should return false
+		},
+		{
+			name:     "generic error",
+			err:      errors.New("some other error"),
+			expected: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := isWindowsOPALoadError(tt.err)
+			// On non-Windows, all should return false
+			// On Windows, only Windows-specific errors should return true
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
 func TestContextDeadlineExceededWrapping(t *testing.T) {
 	// Create a context that's already cancelled to simulate timeout.
 	ctx, cancel := context.WithCancel(context.Background())
