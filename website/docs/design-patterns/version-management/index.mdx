@@ -65,6 +65,24 @@ This contrasts with **Git Flow**, which uses:
 - Promotion through merges between branches
 - More complex branching strategies
 
+### Component Sourcing Philosophy
+
+Atmos takes a different approach to component sourcing than conventional tools. Instead of pinning to remote sources dynamically, we advocate **explicit vendoring**—creating local immutable copies of upstream components.
+
+**The Atmos Approach:**
+- **Vendor root modules**: Create local copies and commit them to your repository
+- **Pin components to folders**: Reference vendored folders in your component configurations
+- **Make explicit what other tools do implicitly**: Other tools clone sources just-in-time to temporary folders; we make this explicit and permanent
+
+This emerged from countless projects where pure remote sourcing created productivity blockers:
+- **Coordination nightmare**: Cross-cutting changes required dozens of PRs across multiple repositories
+- **Developer friction**: Can't search codebase, IDE navigation breaks, constant context switching to external repos
+- **Emergency response delays**: Security patches blocked waiting for upstream release cycles
+
+**The Pragmatic Principle:** Converge with upstream when it makes sense, diverge when you need to. Pure DRY leads to complexity rashes—dogmatic approaches kill operational efficiency.
+
+For complete details on the benefits and implementation, see [Vendoring Component Versions](/design-patterns/version-management/vendoring-components).
+
 ## Available Patterns
 
 This guide covers two primary deployment strategies you can implement using Atmos: **Continuous Version Deployment** (trunk-based, recommended) and **Git Flow** (branch-based). Within Continuous Version Deployment, you can use different folder organization approaches.
@@ -119,14 +137,24 @@ A technique that works with any deployment strategy to automate copying componen
 
 ## Quick Comparison
 
-| Strategy                 | Development Model | Convergence | Feedback During Plan | Rollback Ease | Overhead @ Scale | Version Skipping Risk |
-|--------------------------|------------------|-------------|---------------------|---------------|------------------|----------------------|
-| Continuous Version Deployment | Trunk-based  | Very High   | Strong              | Easy          | Low              | Minimal Risk         |
-| Folder-Based Versioning  | Trunk-based      | Medium      | Strong (explicit)   | Medium        | Medium           | Lower Risk           |
-| Release Tracks/Channels  | Trunk-based      | High        | Strong              | Medium        | Medium           | Lower Risk           |
-| Strict Pinning           | Trunk-based      | Low         | Weak (late)         | Strong        | High             | **High Risk**        |
-| Vendoring                | Trunk-based      | Medium–High | Strong (local)      | Medium        | Medium           | Lower Risk           |
-| Git Flow (per channel)   | Branch-based     | Medium      | Medium              | Medium        | Medium–High      | High if skipped      |
+### Deployment Strategies
+
+| Strategy | Development Model | Convergence | Feedback | Automation | Best For |
+|----------|------------------|-------------|----------|------------|----------|
+| **Continuous Version Deployment** | Trunk-based | Very High | Strong | Required | Most teams - simple, automated convergence |
+| **Git Flow** | Branch-based | Medium | Medium | Optional | Legacy systems with established branch workflows |
+
+### Folder Organization Approaches (within Continuous Version Deployment)
+
+| Approach | Structure Example | Convergence | Operational Overhead | When to Use |
+|----------|------------------|-------------|---------------------|-------------|
+| **Folder-Based Versioning** | `vpc/`, `eks/`, `rds/` | High | Low | Default - simple, explicit folders |
+| **Release Tracks/Channels** | `alpha/vpc`, `beta/vpc`, `prod/vpc` | High | Medium | Multiple environments needing coordinated progression |
+| **Strict Version Pinning** | `vpc/1.2.3`, `vpc/2.0.0` | Low | High | Vendored components requiring exact version tracking |
+
+### Complementary Technique
+
+**Vendoring Component Versions**: Works with any deployment strategy and folder approach. Automates copying external component versions locally with manifest tracking for origin/lineage.
 
 ## Choosing a Pattern
 

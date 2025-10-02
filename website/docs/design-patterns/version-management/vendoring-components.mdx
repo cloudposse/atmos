@@ -17,11 +17,75 @@ import KeyPoints from '@site/src/components/KeyPoints'
 Vendoring gives teams local control over external dependencies by bringing component code in-house while maintaining metadata about origin and lineage. Whether you use [Folder-Based Versioning](/design-patterns/version-management/folder-based-versioning), [Release Tracks](/design-patterns/version-management/release-tracks-channels), or [Strict Version Pinning](/design-patterns/version-management/strict-version-pinning), vendoring provides predictable update cycles and the ability to apply custom modifications when necessary.
 
 <KeyPoints>
-- How vendoring provides control over external dependencies and update timing
-- Why maintaining origin metadata is crucial for lineage tracking
-- Strategies for bulk updates and intentional divergence
-- The trade-offs between local control and maintenance burden
+- Why Atmos makes explicit what other tools do implicitly (just-in-time cloning)
+- Operational benefits: visibility, audit trail, emergency agility, explicit divergence
+- Developer experience benefits: searchability, readability, IDE support
+- How to converge with upstream when it makes sense and diverge when needed
+- The pragmatic approach that emerged from countless projects
 </KeyPoints>
+
+## Philosophy: Explicit Over Implicit
+
+Most tools that "pin to remote sources" actually do this behind the scenes:
+1. Clone the remote source to a temporary folder (just-in-time vendoring)
+2. Point Terraform/tooling at that temporary folder
+3. Clean up the folder after execution
+
+**Atmos makes this process explicit:**
+1. Vendor upstream components with `atmos vendor pull`
+2. Commit the vendored code to your repository
+3. Pin components to those vendored folders
+4. Update vendored code on your schedule
+
+The result is functionally the same, but with critical advantages for operations and developer experience.
+
+### Why We Vendor: Lessons from Countless Projects
+
+This approach emerged from real operational pain across countless projects. We tried pure remote sourcing—it created productivity blockers:
+
+**The Coordination Nightmare:**
+Cross-cutting changes required opening dozens of PRs across multiple repositories. If you discovered a problem at any step, you started over. Or you took shortcuts (pinning to branches instead of versions), creating technical debt to clean up later.
+
+**The Developer Experience Problem:**
+When everything is a remote reference, developers can't search the codebase for definitions, IDE navigation breaks ("Go to definition" fails), and understanding requires dereferencing dozens of sources. The cognitive overhead compounds quickly.
+
+**The Emergency Response Problem:**
+Security patches get blocked waiting for upstream review and release cycles. When minutes matter, multi-repository coordination kills agility.
+
+**Pure DRY leads to complexity rashes.** The pragmatic approach: vendor explicitly, converge with upstream when it makes sense, diverge when you need to.
+
+## Benefits of Explicit Vendoring
+
+### Operational Benefits
+
+**Visibility via Git Diff:**
+When you update vendored dependencies, `git diff` shows the actual code changes—not just version number bumps. This makes code review meaningful and catches breaking changes before deployment.
+
+**Immutable Audit Trail:**
+Every vendored update is a commit in your repository. You have a complete, immutable record of what code ran when, satisfying compliance requirements without additional tooling.
+
+**Emergency Agility:**
+Need to patch a vulnerability? Make changes directly in the vendored folder and deploy immediately. No waiting for upstream PRs, reviews, or release cycles. Re-sync with upstream when the dust settles.
+
+**Explicit Divergence Signaling:**
+When you need to diverge from upstream (emergency patches, business-specific changes), disable the vendoring config for that component. This clearly signals to your team: "we've intentionally diverged here."
+
+### Developer Experience Benefits
+
+**Searchable Codebase:**
+`grep` and IDE search work across all vendored components. Finding where something is defined takes seconds, not minutes of jumping between repositories.
+
+**Readable Code:**
+Open files and understand implementation without dereferencing remote sources. The code is right there, readable and navigable.
+
+**IDE Functionality Works:**
+"Go to definition", "Find references", and other IDE features work across vendored components. Developer tools function as intended.
+
+**Reduced Cognitive Load:**
+No constant context switching to external repositories. Everything needed to understand the system is in one place.
+
+**Better Onboarding:**
+New team members can explore the actual code to learn how things work, not just read abstract documentation or hunt through remote references.
 
 ## Use Cases
 
@@ -348,17 +412,40 @@ spec:
 ```
 </File>
 
-## Benefits
+## Diverging from Upstream
 
-The **Vendoring Components** pattern provides:
+When you need to diverge from upstream (emergency patches, business-specific changes), Atmos provides a clear path:
 
-- **Local Control**: Full control over code and update timing
-- **Predictable Updates**: Updates happen on your schedule
-- **Audit Capability**: Review all code before deployment
-- **Offline Operation**: No runtime dependency on external repositories
-- **Custom Patches**: Apply and maintain local modifications
-- **Compliance**: Meet security and audit requirements
-- **Resilience**: Protected from upstream availability issues
+**1. Make Local Changes:**
+Edit the vendored component directly in your repository. The changes are immediately visible in git diff.
+
+**2. Disable Vendoring for That Component:**
+Comment out or remove the component from `vendor.yaml` to signal intentional divergence:
+
+<File title="vendor.yaml">
+```yaml
+spec:
+  sources:
+    # DIVERGED: vpc component has custom security patches
+    # See components/terraform/vpc/LOCAL_MODIFICATIONS.md
+    # - component: vpc
+    #   source: "github.com/cloudposse/terraform-aws-vpc.git///?ref={{.Version}}"
+    #   version: "2.1.0"
+    #   targets:
+    #     - "components/terraform/vpc"
+```
+</File>
+
+**3. Document the Divergence:**
+Create a `LOCAL_MODIFICATIONS.md` file in the component directory explaining what changed and why.
+
+**4. Reconverge When Ready:**
+When upstream incorporates your changes or you're ready to drop local modifications:
+- Re-enable the vendoring config
+- Run `atmos vendor pull` to sync with upstream
+- Review and resolve any conflicts
+
+This explicit workflow ensures divergence is visible, documented, and intentional—not hidden or accidental.
 
 ## Drawbacks
 
