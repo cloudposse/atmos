@@ -2,6 +2,8 @@ package exec
 
 import (
 	"strings"
+
+	"github.com/hashicorp/go-getter"
 )
 
 // isFileURI checks if the URI is a file:// scheme.
@@ -20,22 +22,66 @@ func isS3URI(uri string) bool {
 }
 
 // isLocalPath checks if the URI is a local file system path.
+// Examples:
+//   - Local: "/absolute/path", "./relative/path", "../parent/path", "components/terraform"
+//   - Remote: "github.com/owner/repo", "https://example.com", "git.company.com/repo"
 func isLocalPath(uri string) bool {
 	// Local paths start with /, ./, ../, or are relative paths without scheme
+	// Examples: "/abs/path", "./rel/path", "../parent", "components/terraform"
 	if strings.HasPrefix(uri, "/") || strings.HasPrefix(uri, "./") || strings.HasPrefix(uri, "../") {
 		return true
 	}
+
 	// If it contains a scheme separator, it's not a local path
+	// Examples: "https://github.com", "git::https://...", "s3::..."
+	// This check must come BEFORE the '//' check to avoid false positives from "://"
 	if strings.Contains(uri, "://") || strings.Contains(uri, "::") {
 		return false
 	}
-	// If it looks like a Git host, it's not a local path
-	if strings.Contains(uri, "github.com") || strings.Contains(uri, "gitlab.com") ||
-		strings.Contains(uri, "bitbucket.org") || strings.Contains(uri, ".git") {
+
+	// If it contains the go-getter subdirectory delimiter, it's not a local path
+	// Examples: "github.com/repo//path", "git.company.com/repo//modules"
+	if strings.Contains(uri, "//") {
 		return false
 	}
+
+	// If it looks like a Git repository, it's not a local path
+	// Examples: "github.com/owner/repo", "gitlab.com/project", "repo.git", "org/_git/repo" (Azure DevOps)
+	if isGitLikeURI(uri) {
+		return false
+	}
+
+	// If it has a domain-like structure (hostname.domain/path), it's not a local path
+	// Examples: "git.company.com/repo", "gitea.io/owner/repo"
+	if isDomainLikeURI(uri) {
+		return false
+	}
+
 	// Otherwise, it's likely a relative local path
+	// Examples: "components/terraform", "mixins/context.tf"
 	return true
+}
+
+// isGitLikeURI checks if the URI contains patterns typical of Git repositories.
+func isGitLikeURI(uri string) bool {
+	return strings.Contains(uri, "github.com") ||
+		strings.Contains(uri, "gitlab.com") ||
+		strings.Contains(uri, "bitbucket.org") ||
+		strings.Contains(uri, ".git") ||
+		strings.Contains(uri, "_git/") // Azure DevOps pattern
+}
+
+// isDomainLikeURI checks if the URI has a domain-like structure (hostname.domain/path).
+func isDomainLikeURI(uri string) bool {
+	dotPos := strings.Index(uri, ".")
+	if dotPos <= 0 || dotPos >= len(uri)-1 {
+		return false
+	}
+
+	// Check if there's a slash after the dot (indicating a domain with path)
+	afterDot := uri[dotPos+1:]
+	slashPos := strings.Index(afterDot, "/")
+	return slashPos > 0
 }
 
 // isNonGitHTTPURI checks if the URI is an HTTP/HTTPS URL that doesn't appear to be a Git repository.
@@ -79,43 +125,35 @@ func isGitURI(uri string) bool {
 }
 
 // hasSubdirectory checks if the URI already has a subdirectory delimiter.
+// Uses go-getter's SourceDirSubdir to properly parse the URL.
 func hasSubdirectory(uri string) bool {
-	// Look for the // delimiter that's not part of a scheme (like https://)
-	// First, remove any scheme prefix to avoid false positives
-	workingURI := uri
-
-	// Handle git:: prefix specially - it can have an underlying scheme
-	workingURI = strings.TrimPrefix(workingURI, "git::")
-
-	// Remove common scheme prefixes
-	schemes := []string{"https://", "http://", "ssh://", "git+https://", "git+ssh://"}
-	for _, scheme := range schemes {
-		if strings.HasPrefix(workingURI, scheme) {
-			workingURI = strings.TrimPrefix(workingURI, scheme)
-			break
-		}
-	}
-
-	// Now check if there's a // in the remaining part
-	return strings.Contains(workingURI, "//")
+	// Use go-getter's built-in parser to extract subdirectory
+	_, subdir := getter.SourceDirSubdir(uri)
+	return subdir != ""
 }
 
-// containsTripleSlash checks if the URI contains the triple-slash pattern for Git repos.
+// containsTripleSlash checks if the URI contains the triple-slash pattern.
+// This is a legacy pattern that needs normalization.
 func containsTripleSlash(uri string) bool {
-	return strings.Contains(uri, ".git///") || strings.Contains(uri, ".com///") || strings.Contains(uri, ".org///")
+	// Check for literal triple-slash pattern in the URI
+	// This is the most reliable way to detect the pattern regardless of platform
+	return strings.Contains(uri, "///")
 }
 
-// extractURIParts splits a Git URI into base and suffix parts around the triple-slash.
-func extractURIParts(uri string, pattern string) (base string, suffix string, found bool) {
-	pos := strings.Index(uri, pattern)
-	if pos == -1 {
-		return "", "", false
-	}
+// parseSubdirFromTripleSlash extracts source and subdirectory from a triple-slash URI.
+// Uses go-getter's SourceDirSubdir for proper parsing.
+// Examples:
+//   - Input: "github.com/owner/repo.git///?ref=v1.0" → source="github.com/owner/repo.git?ref=v1.0", subdir=""
+//   - Input: "github.com/owner/repo.git///path?ref=v1.0" → source="github.com/owner/repo.git?ref=v1.0", subdir="path"
+func parseSubdirFromTripleSlash(uri string) (source string, subdir string) {
+	source, subdir = getter.SourceDirSubdir(uri)
 
-	patternLen := len(pattern)
-	base = uri[:pos+patternLen-3] // Keep up to and including .git or .com/.org
-	suffix = uri[pos+patternLen:] // Everything after ///
-	return base, suffix, true
+	// If subdirectory starts with "/", it means triple-slash was used
+	// Remove the leading "/" to get the actual subdirectory path
+	// Examples: "/" → "", "/path" → "path"
+	subdir = strings.TrimPrefix(subdir, "/")
+
+	return source, subdir
 }
 
 // needsDoubleSlashDot determines if a URI needs double-slash-dot appended.

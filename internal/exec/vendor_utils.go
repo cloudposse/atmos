@@ -471,33 +471,34 @@ func normalizeVendorURI(uri string) string {
 }
 
 // normalizeTripleSlash converts triple-slash patterns to appropriate double-slash patterns.
+// Uses go-getter's SourceDirSubdir for robust parsing across all Git platforms.
 func normalizeTripleSlash(uri string) string {
-	// Try different triple-slash patterns
-	patterns := []string{".git///", ".com///", ".org///"}
+	// Use go-getter to parse the URI and extract subdirectory
+	// Note: source will include query parameters from the original URI
+	source, subdir := parseSubdirFromTripleSlash(uri)
 
-	for _, pattern := range patterns {
-		base, suffix, found := extractURIParts(uri, pattern)
-		if !found {
-			continue
-		}
-
-		// Check what comes after the triple slash
-		if suffix == "" || strings.HasPrefix(suffix, "?") {
-			// Root of repository case: convert /// to //.
-			normalized := base + "//." + suffix
-			log.Debug("Normalized triple-slash to double-slash-dot for repository root",
-				"original", uri, "normalized", normalized)
-			return normalized
-		}
-
-		// Path specified after triple slash: convert /// to //
-		normalized := base + "//" + suffix
-		log.Debug("Normalized triple-slash to double-slash with path",
-			"original", uri, "normalized", normalized)
-		return normalized
+	// Separate query parameters from source if present
+	var queryParams string
+	if queryPos := strings.Index(source, "?"); queryPos != -1 {
+		queryParams = source[queryPos:]
+		source = source[:queryPos]
 	}
 
-	return uri
+	// Determine the normalized form based on subdirectory
+	var normalized string
+	if subdir == "" {
+		// Root of repository case: convert /// to //.
+		normalized = source + "//." + queryParams
+		log.Debug("Normalized triple-slash to double-slash-dot for repository root",
+			"original", uri, "normalized", normalized)
+	} else {
+		// Path specified after triple slash: convert /// to //
+		normalized = source + "//" + subdir + queryParams
+		log.Debug("Normalized triple-slash to double-slash with path",
+			"original", uri, "normalized", normalized)
+	}
+
+	return normalized
 }
 
 func determineSourceType(uri *string, vendorConfigFilePath string) (bool, bool, bool, error) {

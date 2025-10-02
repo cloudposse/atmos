@@ -112,6 +112,36 @@ func TestNormalizeVendorURI(t *testing.T) {
 			input:    "https://example.com/archive.tar.gz",
 			expected: "https://example.com/archive.tar.gz",
 		},
+		{
+			name:     "Azure DevOps with triple-slash root",
+			input:    "dev.azure.com/organization/project/_git/repository///?ref=main",
+			expected: "dev.azure.com/organization/project/_git/repository//.?ref=main",
+		},
+		{
+			name:     "Azure DevOps with triple-slash path",
+			input:    "dev.azure.com/organization/project/_git/repository///terraform/modules?ref=main",
+			expected: "dev.azure.com/organization/project/_git/repository//terraform/modules?ref=main",
+		},
+		{
+			name:     "self-hosted Git with triple-slash root",
+			input:    "git.company.com/team/repository.git///?ref=v1.0.0",
+			expected: "git.company.com/team/repository.git//.?ref=v1.0.0",
+		},
+		{
+			name:     "self-hosted Git with triple-slash path",
+			input:    "git.company.com/team/repository.git///infrastructure/terraform?ref=v1.0.0",
+			expected: "git.company.com/team/repository.git//infrastructure/terraform?ref=v1.0.0",
+		},
+		{
+			name:     "Gitea with triple-slash root",
+			input:    "gitea.company.io/owner/repo///?ref=master",
+			expected: "gitea.company.io/owner/repo//.?ref=master",
+		},
+		{
+			name:     "self-hosted without .git extension",
+			input:    "git.company.com/team/repository///?ref=v1.0.0",
+			expected: "git.company.com/team/repository//.?ref=v1.0.0",
+		},
 	}
 
 	for _, tt := range tests {
