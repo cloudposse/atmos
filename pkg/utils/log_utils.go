@@ -5,8 +5,6 @@ import (
 	"os"
 
 	"github.com/fatih/color"
-
-	"github.com/cloudposse/atmos/pkg/perf"
 )
 
 const (
@@ -29,7 +27,5 @@ func PrintMessageInColor(message string, messageColor *color.Color) {
 
 // PrintfMessageToTUI prints the message to the stderr.
 func PrintfMessageToTUI(message string, args ...any) {
-	defer perf.Track(nil, "utils.PrintfMessageToTUI")()
-
 	fmt.Fprintf(os.Stderr, message, args...)
 }

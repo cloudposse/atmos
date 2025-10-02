@@ -469,21 +469,21 @@ func displayPerformanceHeatmap(cmd *cobra.Command, mode string) error {
 	// Print performance summary to console.
 	// Filter out functions with zero total time for cleaner output.
 	snap := perf.SnapshotTopFiltered("total", defaultTopFunctionsMax)
-	fmt.Fprintf(os.Stderr, "\n=== Atmos Performance Summary ===\n")
-	fmt.Fprintf(os.Stderr, "Elapsed: %s  Functions: %d  Calls: %d\n", snap.Elapsed, snap.TotalFuncs, snap.TotalCalls)
-	fmt.Fprintf(os.Stderr, "%-50s %6s %10s %10s %10s %8s\n", "Function", "Count", "Total", "Avg", "Max", "P95")
+	utils.PrintfMessageToTUI("\n=== Atmos Performance Summary ===\n")
+	utils.PrintfMessageToTUI("Elapsed: %s  Functions: %d  Calls: %d\n", snap.Elapsed, snap.TotalFuncs, snap.TotalCalls)
+	utils.PrintfMessageToTUI("%-50s %6s %10s %10s %10s %8s\n", "Function", "Count", "Total", "Avg", "Max", "P95")
 	for _, r := range snap.Rows {
 		p95 := "-"
 		if r.P95 > 0 {
 			p95 = heatmap.FormatDuration(r.P95)
 		}
-		fmt.Fprintf(os.Stderr, "%-50s %6d %10s %10s %10s %8s\n",
+		utils.PrintfMessageToTUI("%-50s %6d %10s %10s %10s %8s\n",
 			r.Name, r.Count, heatmap.FormatDuration(r.Total), heatmap.FormatDuration(r.Avg), heatmap.FormatDuration(r.Max), p95)
 	}
 
 	// Check if we have a TTY for interactive mode.
 	if !term.IsTTYSupportForStderr() {
-		fmt.Fprintf(os.Stderr, "\n⚠️  No TTY available for interactive visualization. Summary displayed above.\n")
+		utils.PrintfMessageToTUI("\n⚠️  No TTY available for interactive visualization. Summary displayed above.\n")
 		return nil
 	}
 
