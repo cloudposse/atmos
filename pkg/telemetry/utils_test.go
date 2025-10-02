@@ -672,7 +672,7 @@ func TestPrintTelemetryDisclosure(t *testing.T) {
 	// In a non-TTY environment, it will be plain text
 	assert.Contains(t, output, "Notice:")
 	assert.Contains(t, output, "Telemetry Enabled")
-	assert.Contains(t, output, "Atmos now collects completely anonymous telemetry")
+	assert.Contains(t, output, "Atmos now collects anonymous telemetry")
 	assert.Contains(t, output, "https://atmos.tools/cli/telemetry")
 }
 

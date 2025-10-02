@@ -40,9 +40,6 @@ func testCaptureCommandOutput(t *testing.T, workDir string, commandFunc func() e
 
 	// Ensure stdout restoration happens even if commandFunc panics.
 	defer func() {
-		if err := w.Close(); err != nil {
-			t.Fatalf("Failed to close pipe writer: %v", err)
-		}
 		os.Stdout = oldStdout
 	}()
 
@@ -50,6 +47,11 @@ func testCaptureCommandOutput(t *testing.T, workDir string, commandFunc func() e
 	err = commandFunc()
 	if err != nil {
 		t.Fatalf("Failed to execute command: %v", err)
+	}
+
+	// Close the writer before reading to send EOF to the reader.
+	if err := w.Close(); err != nil {
+		t.Fatalf("Failed to close pipe writer: %v", err)
 	}
 
 	// Read the captured output.
