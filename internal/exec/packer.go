@@ -6,10 +6,10 @@ import (
 	"path/filepath"
 	"strings"
 
-	log "github.com/cloudposse/atmos/pkg/logger"
-
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -25,6 +25,8 @@ func ExecutePacker(
 	info *schema.ConfigAndStacksInfo,
 	packerFlags *PackerFlags,
 ) error {
+	defer perf.Track(nil, "exec.ExecutePacker")()
+
 	atmosConfig, err := cfg.InitCliConfig(*info, true)
 	if err != nil {
 		return err

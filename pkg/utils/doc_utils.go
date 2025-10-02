@@ -7,12 +7,15 @@ import (
 	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/perf"
 )
 
 // DisplayDocs displays component documentation directly through the terminal or
 // through a pager (like less). The use of a pager is determined by the pagination value
 // set in the CLI Settings for Atmos.
 func DisplayDocs(componentDocs string, usePager bool) error {
+	defer perf.Track(nil, "utils.DisplayDocs")()
+
 	if !usePager {
 		fmt.Println(componentDocs)
 		return nil
