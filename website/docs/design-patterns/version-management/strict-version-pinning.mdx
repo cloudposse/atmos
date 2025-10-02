@@ -1,8 +1,8 @@
 ---
 title: Strict Version Pinning
-sidebar_position: 21
+sidebar_position: 5
 sidebar_label: Strict Version Pinning
-description: Strict Version Pinning Atmos Design Pattern
+description: Strict Version Pinning - Organize components using explicit SemVer versions within Continuous Version Deployment
 ---
 import File from '@site/src/components/File'
 import PillBox from '@site/src/components/PillBox'
@@ -11,10 +11,10 @@ import KeyPoints from '@site/src/components/KeyPoints'
 
 <PillBox>Atmos Design Pattern</PillBox>
 <Intro>
-The **Strict Version Pinning** Design Pattern is a trunk-based approach where every environment pins to specific component versions using tags or commit SHAs from the main branch. While this traditional approach optimizes for reproducibility and rollback capabilities, it often creates divergence between environments and weakens the feedback loop during planning.
+**Strict Version Pinning** extends [Folder-Based Versioning](/design-patterns/version-management/folder-based-versioning) by creating explicit component versions following SemVer (`vpc/1.2.3`, `vpc/2.0.0`) within the [Continuous Version Deployment](/design-patterns/version-management/continuous-version-deployment) strategy. This approach works particularly well when vendoring from external sources or managing shared component libraries within your organization.
 </Intro>
 
-Strict Version Pinning is the most traditional approach to version management in infrastructure-as-code. As a trunk-based pattern, all code lives in the main branch, and environments reference specific points in that branch's history through version tags or commit identifiers. Each environment explicitly declares which version of each component it uses, providing maximum control and reproducibility. However, this pattern requires careful management to avoid environment drift and must be applied with discipline to prevent state migration issues.
+This folder organization approach provides the most granular version control by using semantic versioning. Components are organized into version-specific folders, making it explicit which exact version each environment uses. This is especially useful when [vendoring components](/design-patterns/version-management/vendoring-components) from external sources where you want to track specific upstream versions.
 
 <KeyPoints>
 - How strict pinning provides reproducibility but encourages environment divergence

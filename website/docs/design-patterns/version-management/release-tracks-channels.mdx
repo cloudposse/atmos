@@ -1,8 +1,8 @@
 ---
 title: Release Tracks/Channels
-sidebar_position: 22
+sidebar_position: 4
 sidebar_label: Release Tracks/Channels
-description: Release Tracks/Channels Atmos Design Pattern
+description: Release Tracks/Channels - Organize components by named channels within Continuous Version Deployment
 ---
 import File from '@site/src/components/File'
 import PillBox from '@site/src/components/PillBox'
@@ -13,10 +13,10 @@ import TabItem from '@theme/TabItem'
 
 <PillBox>Atmos Design Pattern</PillBox>
 <Intro>
-The **Release Tracks/Channels** Design Pattern is a trunk-based approach where environments subscribe to moving version tracks (e.g., `alpha`, `beta`, `prod`) defined in configuration files on the main branch. This approach dramatically reduces operational overhead while maintaining strong convergence and feedback loops across environments.
+**Release Tracks/Channels** extends [Folder-Based Versioning](/design-patterns/version-management/folder-based-versioning) with named release channels (`alpha/vpc`, `beta/vpc`, `prod/vpc`) within the [Continuous Version Deployment](/design-patterns/version-management/continuous-version-deployment) strategy. Environments subscribe to channels and converge to whatever version is in their track through progressive automated rollout.
 </Intro>
 
-Release Tracks provide a middle ground between strict version pinning and bleeding-edge updates. As a trunk-based pattern, all components and track definitions live in the main branch, with tracks pointing to different versions or commits within that same branch. By grouping environments into tracks and promoting versions through tracks rather than individual environments, teams can maintain control while reducing the burden of version management. This pattern scales well and provides early warning of issues through strong cross-environment feedback.
+This approach provides a middle ground between simple folder-based versioning and [Strict Version Pinning](/design-patterns/version-management/strict-version-pinning). By organizing components into channels, you promote tracks rather than individual environment pins, reducing operational overhead while maintaining control. Environments grouped to the same track converge together, providing early feedback on changes before broader rollout.
 
 <KeyPoints>
 - How tracks reduce version management overhead across many environments

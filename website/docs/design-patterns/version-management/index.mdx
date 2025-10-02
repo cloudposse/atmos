@@ -1,6 +1,6 @@
 ---
 title: Version Management Patterns
-sidebar_position: 20
+sidebar_position: 1
 sidebar_label: Version Management
 description: Version Management Patterns in Atmos - Strategies for Managing Component Versions
 id: version-management
@@ -67,68 +67,55 @@ This contrasts with **Git Flow**, which uses:
 
 ## Available Patterns
 
-Atmos supports five primary version management patterns. The first four are **trunk-based** approaches, while the fifth adapts **Git Flow** for infrastructure.
+This guide covers two primary deployment strategies you can implement using Atmos: **Continuous Version Deployment** (trunk-based, recommended) and **Git Flow** (branch-based). Within Continuous Version Deployment, you can use different folder organization approaches.
 
-### Default Recommendation: Universal Pinning with Automation
+### Recommended Strategy: [Continuous Version Deployment](/design-patterns/version-management/continuous-version-deployment)
 
-**The simplest and most recommended approach** is to pin all environments to the same component version and decouple release from deployment using automation rather than version control strategies. This approach:
+**The recommended trunk-based deployment strategy** where environments progressively converge to whatever component path they reference in stack configurations. All environments work from the main branch, using automation and progressive rollout to control deployment safety.
 
-- **Promotes convergence**: All environments run the same version, reducing drift
+This approach:
+
+- **Promotes convergence**: All environments converge to the same version through progressive rollout, reducing drift
 - **Embraces trunk-based development**: Single source of truth in the main branch
 - **Enables easy previews**: You can immediately see change impacts across all dependent environments
 - **Simplifies operations**: No complex version tracking or branch management
 - **Supports rapid iteration**: Deploy frequently with confidence
 
-<File title="Example: All environments on same version">
+<File title="Example: All environments converge to same component">
 ```yaml
 # stacks/dev/us-east-1.yaml, stacks/staging/us-east-1.yaml, stacks/prod/us-east-1.yaml
 components:
   terraform:
     vpc:
       metadata:
-        component: vpc  # All environments use the same component
+        component: vpc  # All environments converge to this component path
       vars:
         # Environment-specific configuration
 ```
 </File>
 
-Use feature flags, environment-specific configuration, and deployment automation to control rollout rather than versioning strategies. Only adopt the patterns below when you have specific requirements that universal pinning cannot address.
+Use feature flags, environment-specific configuration, and deployment automation to control rollout. You can organize your components using different folder structures depending on your needs.
 
-### Alternative Pattern: Release Artifacts (Advanced)
+#### Folder Organization Approaches
 
-For teams requiring immutable deployment records, consider creating **release artifacts** separate from Git that represent exactly what was deployed to each environment. These artifacts:
+Within Continuous Version Deployment, choose how to organize your component folders:
 
-- Provide an immutable audit trail independent of Git history
-- Support cryptographic signing for compliance requirements
-- Enable exact reproduction of any historical deployment
-- Decouple deployment records from version control changes
+##### 1. [Folder-Based Versioning](/design-patterns/version-management/folder-based-versioning)
+The foundational approach—organize components in simple folders (`vpc/`, `eks/`, `rds/`). What you see is what you get, with no magic. Explicit folder structure makes divergence visible and patching any version straightforward. All subsequent approaches build on this foundation.
 
-This pattern adds complexity but provides the strongest guarantees for regulated environments.
+##### 2. [Release Tracks/Channels](/design-patterns/version-management/release-tracks-channels)
+Extends folder-based versioning with named release channels (`alpha/vpc`, `beta/vpc`, `prod/vpc`). Environments subscribe to moving tracks; you promote tracks, not individual environment pins.
 
-### Trunk-Based Patterns
+##### 3. [Strict Version Pinning](/design-patterns/version-management/strict-version-pinning)
+Creates explicit component versions following SemVer (`vpc/1.2.3`, `vpc/2.0.0`). Works well when vendoring from external sources or managing shared component libraries within your organization.
 
-#### 1. [Strict Version Pinning](/design-patterns/strict-version-pinning)
-**Trunk-based**: Pin component versions per environment using tags or commit SHAs from the main branch. Optimizes for reproducibility and rollback capability at the cost of high operational overhead and weak feedback loops. Requires lockstep promotions.
+### Alternative Strategy: [Git Flow: Branches as Channels](/design-patterns/version-management/git-flow-branches-as-channels)
 
-#### 2. [Release Tracks/Channels](/design-patterns/release-tracks-channels)
-**Trunk-based**: Environments subscribe to moving tracks (e.g., `alpha`, `beta`, `prod`) defined in configuration on the main branch. You promote tracks, not individual environment pins. Provides strong convergence and feedback with medium overhead.
+**The branch-based alternative** where long-lived branches map to release channels. Environments track branches; promotions happen via merges between branches. Uses simple folder-based versioning since branches serve as the versioning mechanism.
 
-#### 3. [Folder-Based Versioning](/design-patterns/folder-based-versioning)
-**Trunk-based**: Create new component folders for deliberate, long-lived divergence (e.g., `vpc-v2`) in the main branch. Makes versioning explicit in the repository structure and allows gradual convergence by switching folders.
+### Complementary Technique: [Vendoring Component Versions](/design-patterns/version-management/vendoring-components)
 
-#### 4. [Vendoring Components](/design-patterns/vendoring-components)
-**Trunk-based**: Copy upstream code locally into the main branch with a manifest tracking origin and lineage. Update locally in bulk; diverge intentionally when needed. Provides strong local control with predictable update windows.
-
-#### 5. [Continuous Version Deployment](/design-patterns/continuous-version-deployment) (Recommended Default)
-**Trunk-based**: All environments deploy from the same component on the main branch, with automated testing and deployment pipelines. Decouples release from deploy using automation rather than VCS strategies. Promotes strong convergence, embraces trunk-based development, and allows easy preview of change impact across all dependent environments. This is the recommended default for most teams.
-
-#### 6. Immutable Release Artifacts
-**Artifact-based**: Generate immutable release artifacts (e.g., tarballs, container images) for each environment separate from Git. These artifacts represent an exact, reproducible record of what was deployed, including all dependencies and configurations frozen at a point in time. Provides the strongest guarantee of reproducibility but requires sophisticated artifact management infrastructure.
-
-### Git Flow Pattern
-
-#### 7. [Git Flow: Branches as Channels](/design-patterns/git-flow-branches-as-channels)
-**Branch-based**: Long-lived branches map to release channels. Environments track branches; promotions happen via merges between branches. This is the only pattern that diverges from trunk-based development, using Git Flow's branching model instead.
+A technique that works with any deployment strategy to automate copying component versions from multiple external sources. Maintains a manifest tracking origin and lineage, providing strong local control with predictable update windows. Can be combined with any folder organization approach.
 
 ## Quick Comparison
 
@@ -139,7 +126,6 @@ This pattern adds complexity but provides the strongest guarantees for regulated
 | Folder-Based Versioning  | Trunk-based      | Medium      | Strong (explicit)   | Medium        | Medium           | Lower Risk           |
 | Vendoring                | Trunk-based      | Medium–High | Strong (local)      | Medium        | Medium           | Lower Risk           |
 | **Component Pinning**    | **Trunk-based**  | **Very High** | **Strong**        | **Easy**      | **Low**          | **Minimal Risk**     |
-| Immutable Artifacts      | Artifact-based   | High        | Strong              | Strong        | High             | Lower Risk           |
 | Git Flow (per channel)   | Branch-based     | Medium      | Medium              | Medium        | Medium–High      | High if skipped      |
 
 ## Choosing a Pattern
@@ -182,9 +168,6 @@ Whatever pattern you choose, regularly test the full promotion path from develop
 ### 4. Monitor Divergence
 Set up monitoring to track version divergence across environments. Alert when environments drift beyond acceptable thresholds.
 
-### 5. Plan for Migration
-Choose patterns that allow migration to other patterns if your needs change. Avoid decisions that lock you into a specific approach permanently.
-
 ## Combining Patterns
 
 You don't need to use a single pattern exclusively. Common combinations include:
@@ -202,6 +185,17 @@ The key is to choose patterns deliberately based on your organization's culture,
 :::tip Next Steps
 Review each pattern in detail to understand its implementation, trade-offs, and best practices. Start with the pattern that best matches your current workflow, then iterate based on experience.
 :::
+
+## Honorable Mention: Release Artifacts (Advanced)
+
+For teams requiring immutable deployment records, consider creating **release artifacts** separate from Git that represent exactly what was deployed to each environment. These artifacts:
+
+- Provide an immutable audit trail independent of Git history
+- Support cryptographic signing for compliance requirements
+- Enable exact reproduction of any historical deployment
+- Decouple deployment records from version control changes
+
+This pattern adds significant complexity. Beyond artifact generation, you must maintain a robust system of record that maps which artifact versions are deployed to each environment and manages their progression paths. This becomes particularly challenging in organizations with complex environment topologies that don't follow simple linear promotion flows.
 
 ## Related Patterns
 

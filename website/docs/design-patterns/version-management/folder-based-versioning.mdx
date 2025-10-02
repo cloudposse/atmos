@@ -1,8 +1,8 @@
 ---
 title: Folder-Based Versioning
-sidebar_position: 23
+sidebar_position: 3
 sidebar_label: Folder-Based Versioning
-description: Folder-Based Versioning Atmos Design Pattern
+description: Folder-Based Versioning - The foundational approach for organizing components with explicit folder structure
 ---
 import File from '@site/src/components/File'
 import PillBox from '@site/src/components/PillBox'
@@ -11,16 +11,17 @@ import KeyPoints from '@site/src/components/KeyPoints'
 
 <PillBox>Atmos Design Pattern</PillBox>
 <Intro>
-The **Folder-Based Versioning** Design Pattern is a trunk-based approach that uses the repository's directory structure on the main branch to manage component versions. By creating separate folders for different versions (e.g., `vpc/v1`, `vpc/v2`), teams can safely iterate on new versions while maintaining stability for existing deployments.
+**Folder-Based Versioning** is the foundational folder organization approach within [Continuous Version Deployment](/design-patterns/version-management/continuous-version-deployment). Components are organized in simple, explicit folders (`vpc/`, `eks/`, `rds/`) on the main branch. What you see is what you get—no magic, no hidden versioning. This straightforward structure makes divergence visible and patching any version straightforward.
 </Intro>
 
-Folder-Based Versioning makes version boundaries explicit and visible in the repository structure. As a trunk-based pattern, all version folders exist in the main branch simultaneously, allowing environments to choose their version by selecting the appropriate folder. This approach allows for long-lived divergence between versions, gradual migration paths, and clear separation of concerns. It's particularly useful for major version changes that require extended development and testing periods.
+This is the recommended starting point for most teams and what most components use. The explicit folder structure provides clarity: you can see at a glance which components exist and how they're organized. All subsequent folder organization approaches ([Release Tracks/Channels](/design-patterns/version-management/release-tracks-channels) and [Strict Version Pinning](/design-patterns/version-management/strict-version-pinning)) build on this foundation.
 
 <KeyPoints>
-- How folder structure provides explicit version boundaries
-- Why this pattern excels for long-lived, breaking changes
-- The importance of stable workspace keys when switching versions
-- Strategies for managing multiple versions in parallel
+- No magic: what you see in the folder structure is what you get
+- Explicit divergence visibility through folder organization
+- Straightforward patching—modify the component folder directly
+- Foundation that other folder organization approaches build upon
+- Clear separation between different components
 </KeyPoints>
 
 ## Use Cases
@@ -302,14 +303,15 @@ atmos describe component vpc --stack prod-us-east-1 | grep "component:"
 
 ## Benefits
 
-The **Folder-Based Versioning** pattern provides:
+The **Folder-Based Versioning** approach provides:
 
-- **Explicit Boundaries**: Version differences are clear in the repository structure
-- **Safe Experimentation**: New versions can be developed without affecting stable code
-- **Gradual Migration**: Environments can migrate at their own pace
-- **Parallel Development**: Multiple versions can evolve independently
-- **Instant Rollback**: Simply change the folder reference to revert
-- **Clear Deprecation Path**: Old versions are visibly marked for removal
+- **No Magic**: What you see in the folder structure is exactly what you get—no hidden versioning mechanisms or complex abstractions
+- **Explicit Divergence**: When components diverge (e.g., creating `vpc/v2` alongside `vpc/`), it's immediately visible in the repository structure
+- **Straightforward Patching**: Need to patch a component? Modify the folder directly. No need to track down version references or update manifests
+- **Foundation for Extensions**: Provides the base that [Release Tracks](/design-patterns/version-management/release-tracks-channels) and [Strict Version Pinning](/design-patterns/version-management/strict-version-pinning) build upon
+- **Clear Organization**: Component structure is self-documenting through the folder hierarchy
+- **Safe Experimentation**: New versions can be developed in separate folders without affecting existing deployments
+- **Gradual Migration**: Environments can switch folders at their own pace
 
 ## Drawbacks
 

@@ -1,8 +1,8 @@
 ---
-title: Vendoring Components
-sidebar_position: 24
-sidebar_label: Vendoring Components
-description: Vendoring Components Atmos Design Pattern
+title: Vendoring Component Versions
+sidebar_position: 6
+sidebar_label: Vendoring Component Versions
+description: Vendoring Component Versions - A complementary technique for automating component version copying
 ---
 import File from '@site/src/components/File'
 import PillBox from '@site/src/components/PillBox'
@@ -11,10 +11,10 @@ import KeyPoints from '@site/src/components/KeyPoints'
 
 <PillBox>Atmos Design Pattern</PillBox>
 <Intro>
-The **Vendoring Components** Design Pattern is a trunk-based approach that involves copying external component code into your main branch while maintaining metadata about its origin and lineage. This approach provides local control over third-party dependencies, predictable update cycles, and the ability to apply custom modifications when necessary.
+**Vendoring Component Versions** is a complementary technique that automates copying component versions from multiple external sources into your repository. This works with any deployment strategy—[Continuous Version Deployment](/design-patterns/version-management/continuous-version-deployment) or [Git Flow](/design-patterns/version-management/git-flow-branches-as-channels)—and can be combined with any folder organization approach.
 </Intro>
 
-Vendoring gives teams full control over their infrastructure dependencies by bringing external code in-house. As a trunk-based pattern, all vendored code lives in the main branch alongside your other infrastructure code, with version updates happening through commits to that branch. Unlike direct references to external repositories, vendored components can be audited, modified, and updated on your schedule. This pattern is particularly valuable when dealing with critical third-party modules, compliance requirements, or when you need to maintain patches against upstream code.
+Vendoring gives teams local control over external dependencies by bringing component code in-house while maintaining metadata about origin and lineage. Whether you use [Folder-Based Versioning](/design-patterns/version-management/folder-based-versioning), [Release Tracks](/design-patterns/version-management/release-tracks-channels), or [Strict Version Pinning](/design-patterns/version-management/strict-version-pinning), vendoring provides predictable update cycles and the ability to apply custom modifications when necessary.
 
 <KeyPoints>
 - How vendoring provides control over external dependencies and update timing

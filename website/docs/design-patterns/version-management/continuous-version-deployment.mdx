@@ -1,8 +1,8 @@
 ---
 title: Continuous Version Deployment
-sidebar_position: 25
+sidebar_position: 2
 sidebar_label: Continuous Version Deployment
-description: Continuous Version Deployment Pattern - The recommended default for managing component versions with automated progressive rollout
+description: Continuous Version Deployment - The recommended trunk-based deployment strategy with automated progressive rollout
 id: continuous-version-deployment
 ---
 import File from '@site/src/components/File'
@@ -15,13 +15,15 @@ import TabItem from '@theme/TabItem'
 <PillBox>Atmos Design Pattern</PillBox>
 
 <Intro>
-The **Continuous Version Deployment** pattern is the recommended default approach for managing component versions in Atmos. All environments deploy commits from the same main branch trunk, with automated testing and deployment pipelines controlling progressive rollout. This pattern decouples release from deployment using automation rather than version control strategies, promoting automated convergence while maintaining safety through comprehensive testing.
+**Continuous Version Deployment** is the recommended trunk-based deployment strategy where environments progressively converge to whatever component path they reference in stack configurations. All environments work from the main branch trunk, with automated testing and deployment pipelines controlling progressive rollout. This strategy decouples release from deployment using automation rather than version control strategies, promoting automated convergence while maintaining safety through comprehensive testing.
 </Intro>
 
-This pattern represents the sweet spot for most organizations—simple enough to understand and operate, yet powerful enough to handle complex deployment scenarios. By deploying all environments from the same trunk and using automation to control the rollout, teams can move fast with confidence while maintaining visibility into change impacts across their entire infrastructure.
+This strategy represents the sweet spot for most organizations—simple enough to understand and operate, yet powerful enough to handle complex deployment scenarios. By deploying all environments from the same trunk and using automation to control the rollout, teams can move fast with confidence while maintaining visibility into change impacts across their entire infrastructure.
 
-:::tip Strategies Are Not Mutually Exclusive
-This pattern can be combined with other approaches when needed. Most components use continuous deployment from trunk, while specific components requiring planned divergence can use [Folder-Based Versioning](/design-patterns/folder-based-versioning) or [Release Tracks](/design-patterns/release-tracks-channels). See the [Planned Divergence](#planned-divergence) section for detailed examples of mixing strategies.
+Within this strategy, you can organize your components using different folder structures depending on your needs: simple [Folder-Based Versioning](/design-patterns/version-management/folder-based-versioning), [Release Tracks/Channels](/design-patterns/version-management/release-tracks-channels), or [Strict Version Pinning](/design-patterns/version-management/strict-version-pinning).
+
+:::tip Folder Organization Approaches
+This deployment strategy supports multiple folder organization approaches. Most components use simple folder-based versioning, while specific components requiring planned divergence can use release tracks or strict version pinning. See the [Planned Divergence](#planned-divergence) section for detailed examples of combining approaches.
 :::
 
 <KeyPoints>
@@ -32,9 +34,11 @@ This pattern can be combined with other approaches when needed. Most components 
 - Automation drives convergence, reducing operational overhead and drift
 </KeyPoints>
 
-## Pattern Overview
+## Strategy Overview
 
-The Continuous Version Deployment pattern embraces simplicity: all environments deploy from the same component on your main branch trunk. There are no version folders like `vpc/v1/` or `vpc/v2/`—just a single `vpc/` component that all environments converge to over time. Instead of managing different versions per environment through Git branching or folder structures, you use:
+Continuous Version Deployment is the overarching trunk-based deployment strategy where environments progressively converge to whatever component path they reference in their stack configurations. The key principle: whatever component folder your stack references, your environment will converge to that version through automated progressive rollout.
+
+Instead of managing different versions per environment through Git branching, you use:
 
 1. **Automated testing pipelines** to validate changes before they reach production
 2. **Progressive deployment strategies** to roll out commits incrementally across environments
@@ -42,6 +46,18 @@ The Continuous Version Deployment pattern embraces simplicity: all environments 
 4. **CI/CD automation** to orchestrate the convergence process
 
 This approach aligns with modern DevOps practices and trunk-based development, where the main branch is always deployable and releases are controlled through automation. Environments naturally diverge during the rollout window (while the pipeline executes), then automatically converge once the deployment completes.
+
+## Folder Organization Approaches
+
+Within this deployment strategy, you can organize your component folders in different ways depending on your needs:
+
+**[Folder-Based Versioning](/design-patterns/version-management/folder-based-versioning)** - The foundational approach with simple folders (`vpc/`, `eks/`, `rds/`). All environments typically reference the same component folder and converge to it. This is the recommended starting point and what most teams use for most components.
+
+**[Release Tracks/Channels](/design-patterns/version-management/release-tracks-channels)** - Organizes components into named channels (`alpha/vpc`, `beta/vpc`, `prod/vpc`). Environments subscribe to tracks and converge to whatever version is in their track.
+
+**[Strict Version Pinning](/design-patterns/version-management/strict-version-pinning)** - Uses explicit SemVer versions (`vpc/1.2.3`, `vpc/2.0.0`). Works well when vendoring from external sources or managing shared component libraries.
+
+All these approaches share the same deployment philosophy: environments converge to the component path they reference through progressive automated rollout.
 
 ## How It Works
 
