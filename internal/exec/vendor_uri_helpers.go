@@ -249,15 +249,23 @@ func needsDoubleSlashDot(uri string) bool {
 }
 
 // appendDoubleSlashDot adds double-slash-dot to a URI, handling query parameters correctly.
+// Removes any trailing "//" from the base URI before appending "//." to avoid creating "////".
 func appendDoubleSlashDot(uri string) string {
 	// Find the position of query parameters if they exist
 	queryPos := strings.Index(uri, "?")
 
+	var base, queryPart string
 	if queryPos != -1 {
-		// Insert //. before the query parameters
-		return uri[:queryPos] + "//." + uri[queryPos:]
+		base = uri[:queryPos]
+		queryPart = uri[queryPos:]
+	} else {
+		base = uri
+		queryPart = ""
 	}
 
-	// No query parameters, just append
-	return uri + "//."
+	// Remove trailing "//" if present to avoid creating "////"
+	base = strings.TrimSuffix(base, "//")
+
+	// Append //. and query parameters
+	return base + "//." + queryPart
 }

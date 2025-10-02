@@ -960,6 +960,11 @@ func TestAppendDoubleSlashDot(t *testing.T) {
 			expected: "//.",
 		},
 		{
+			name:     "URI already ending with //",
+			uri:      "github.com/org/repo.git//?ref=v1.0",
+			expected: "github.com/org/repo.git//.?ref=v1.0",
+		},
+		{
 			name:     "SCP-style URL",
 			uri:      "git@github.com:owner/repo.git",
 			expected: "git@github.com:owner/repo.git//.",
