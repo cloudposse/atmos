@@ -496,11 +496,7 @@ func displayPerformanceHeatmap(cmd *cobra.Command, mode string) error {
 	defer stop()
 
 	// Start Bubble Tea UI with the collected data.
-	if err := heatmap.StartBubbleTeaUI(sigCtx, heatModel, mode); err != nil {
-		return fmt.Errorf("%w: error running Bubble Tea UI: %v", errUtils.ErrTUIRun, err)
-	}
-
-	return nil
+	return heatmap.StartBubbleTeaUI(sigCtx, heatModel, mode)
 }
 
 func init() {

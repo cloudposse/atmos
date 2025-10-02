@@ -450,7 +450,8 @@ func StartBubbleTeaUI(ctx context.Context, heatModel *HeatModel, mode string) er
 	m := newModel(heatModel, mode, ctx)
 	p := tea.NewProgram(m, tea.WithAltScreen(), tea.WithOutput(os.Stderr))
 
-	// Run the program directly (blocking).
-	_, err := p.Run()
-	return err
+	if _, err := p.Run(); err != nil {
+		return fmt.Errorf("failed to run performance heatmap TUI: %w", err)
+	}
+	return nil
 }
