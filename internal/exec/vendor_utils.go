@@ -9,12 +9,13 @@ import (
 	"strings"
 
 	"github.com/bmatcuk/doublestar/v4"
-	log "github.com/cloudposse/atmos/pkg/logger"
 	cp "github.com/otiai10/copy"
 	"github.com/pkg/errors"
 	"github.com/samber/lo"
 	"gopkg.in/yaml.v3"
 
+	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -44,6 +45,7 @@ var (
 )
 
 type processTargetsParams struct {
+	AtmosConfig          *schema.AtmosConfiguration
 	IndexSource          int
 	Source               *schema.AtmosVendorSource
 	TemplateData         struct{ Component, Version string }
@@ -61,12 +63,23 @@ type executeVendorOptions struct {
 	dryRun               bool
 }
 
+type vendorSourceParams struct {
+	atmosConfig          *schema.AtmosConfiguration
+	sources              []schema.AtmosVendorSource
+	component            string
+	tags                 []string
+	vendorConfigFileName string
+	vendorConfigFilePath string
+}
+
 // ReadAndProcessVendorConfigFile reads and processes the Atmos vendoring config file `vendor.yaml`.
 func ReadAndProcessVendorConfigFile(
 	atmosConfig *schema.AtmosConfiguration,
 	vendorConfigFile string,
 	checkGlobalConfig bool,
 ) (schema.AtmosVendorConfig, bool, string, error) {
+	defer perf.Track(atmosConfig, "exec.ReadAndProcessVendorConfigFile")()
+
 	var vendorConfig schema.AtmosVendorConfig
 	vendorConfig.Spec.Sources = []schema.AtmosVendorSource{} // Initialize empty sources slice
 
@@ -186,6 +199,8 @@ func mergeVendorConfigFiles(configFiles []string) (schema.AtmosVendorConfig, err
 
 // ExecuteAtmosVendorInternal downloads the artifacts from the sources and writes them to the targets.
 func ExecuteAtmosVendorInternal(params *executeVendorOptions) error {
+	defer perf.Track(nil, "exec.ExecuteAtmosVendorInternal")()
+
 	var err error
 	vendorConfigFilePath := filepath.Dir(params.vendorConfigFileName)
 
@@ -213,7 +228,15 @@ func ExecuteAtmosVendorInternal(params *executeVendorOptions) error {
 		return err
 	}
 
-	packages, err := processAtmosVendorSource(sources, params.component, params.tags, params.vendorConfigFileName, vendorConfigFilePath)
+	sourceParams := &vendorSourceParams{
+		atmosConfig:          params.atmosConfig,
+		sources:              sources,
+		component:            params.component,
+		tags:                 params.tags,
+		vendorConfigFileName: params.vendorConfigFileName,
+		vendorConfigFilePath: vendorConfigFilePath,
+	}
+	packages, err := processAtmosVendorSource(sourceParams)
 	if err != nil {
 		return err
 	}
@@ -257,24 +280,24 @@ func validateTagsAndComponents(
 	return nil
 }
 
-func processAtmosVendorSource(sources []schema.AtmosVendorSource, component string, tags []string, vendorConfigFileName, vendorConfigFilePath string) ([]pkgAtmosVendor, error) {
+func processAtmosVendorSource(params *vendorSourceParams) ([]pkgAtmosVendor, error) {
 	var packages []pkgAtmosVendor
-	for indexSource := range sources {
-		if shouldSkipSource(&sources[indexSource], component, tags) {
+	for indexSource := range params.sources {
+		if shouldSkipSource(&params.sources[indexSource], params.component, params.tags) {
 			continue
 		}
 
-		if err := validateSourceFields(&sources[indexSource], vendorConfigFileName); err != nil {
+		if err := validateSourceFields(&params.sources[indexSource], params.vendorConfigFileName); err != nil {
 			return nil, err
 		}
 
 		tmplData := struct {
 			Component string
 			Version   string
-		}{sources[indexSource].Component, sources[indexSource].Version}
+		}{params.sources[indexSource].Component, params.sources[indexSource].Version}
 
 		// Parse 'source' template
-		uri, err := ProcessTmpl(fmt.Sprintf("source-%d", indexSource), sources[indexSource].Source, tmplData, false)
+		uri, err := ProcessTmpl(params.atmosConfig, fmt.Sprintf("source-%d", indexSource), params.sources[indexSource].Source, tmplData, false)
 		if err != nil {
 			return nil, err
 		}
@@ -284,7 +307,7 @@ func processAtmosVendorSource(sources []schema.AtmosVendorSource, component stri
 		// security fixes.
 		uri = normalizeVendorURI(uri)
 
-		useOciScheme, useLocalFileSystem, sourceIsLocalFile, err := determineSourceType(&uri, vendorConfigFilePath)
+		useOciScheme, useLocalFileSystem, sourceIsLocalFile, err := determineSourceType(&uri, params.vendorConfigFilePath)
 		if err != nil {
 			return nil, err
 		}
@@ -292,9 +315,9 @@ func processAtmosVendorSource(sources []schema.AtmosVendorSource, component stri
 			err = u.ValidateURI(uri)
 			if err != nil {
 				if strings.Contains(uri, "..") {
-					return nil, fmt.Errorf("invalid URI for component %s: %w: Please ensure the source is a valid local path", sources[indexSource].Component, err)
+					return nil, fmt.Errorf("invalid URI for component %s: %w: Please ensure the source is a valid local path", params.sources[indexSource].Component, err)
 				}
-				return nil, fmt.Errorf("invalid URI for component %s: %w", sources[indexSource].Component, err)
+				return nil, fmt.Errorf("invalid URI for component %s: %w", params.sources[indexSource].Component, err)
 			}
 		}
 
@@ -303,10 +326,11 @@ func processAtmosVendorSource(sources []schema.AtmosVendorSource, component stri
 
 		// Process each target within the source
 		pkgs, err := processTargets(&processTargetsParams{
+			AtmosConfig:          params.atmosConfig,
 			IndexSource:          indexSource,
-			Source:               &sources[indexSource],
+			Source:               &params.sources[indexSource],
 			TemplateData:         tmplData,
-			VendorConfigFilePath: vendorConfigFilePath,
+			VendorConfigFilePath: params.vendorConfigFilePath,
 			URI:                  uri,
 			PkgType:              pType,
 			SourceIsLocalFile:    sourceIsLocalFile,
@@ -332,7 +356,7 @@ func determinePackageType(useOciScheme, useLocalFileSystem bool) pkgType {
 func processTargets(params *processTargetsParams) ([]pkgAtmosVendor, error) {
 	var packages []pkgAtmosVendor
 	for indexTarget, tgt := range params.Source.Targets {
-		target, err := ProcessTmpl(fmt.Sprintf("target-%d-%d", params.IndexSource, indexTarget), tgt, params.TemplateData, false)
+		target, err := ProcessTmpl(params.AtmosConfig, fmt.Sprintf("target-%d-%d", params.IndexSource, indexTarget), tgt, params.TemplateData, false)
 		if err != nil {
 			return nil, err
 		}

@@ -83,7 +83,7 @@ func ProcessComponentFromContext(
 			},
 		}
 
-		stack, err = e.ProcessTmpl("name-template-from-context", stackNameTemplate, ctx, false)
+		stack, err = e.ProcessTmpl(&atmosConfig, "name-template-from-context", stackNameTemplate, ctx, false)
 		if err != nil {
 			log.Error(err)
 			return nil, err
