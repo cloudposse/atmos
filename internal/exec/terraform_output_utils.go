@@ -9,6 +9,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cloudposse/atmos/pkg/perf"
+
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/hashicorp/terraform-exec/tfexec"
 	"github.com/samber/lo"
@@ -350,6 +352,8 @@ func GetTerraformOutput(
 	output string,
 	skipCache bool,
 ) any {
+	defer perf.Track(atmosConfig, "exec.GetTerraformOutput")()
+
 	stackSlug := fmt.Sprintf("%s-%s", stack, component)
 
 	// If the result for the component in the stack already exists in the cache, return it
@@ -441,6 +445,8 @@ func GetStaticRemoteStateOutput(
 	remoteStateSection map[string]any,
 	output string,
 ) any {
+	defer perf.Track(atmosConfig, "exec.GetStaticRemoteStateOutput")()
+
 	val := output
 	if !strings.HasPrefix(output, ".") {
 		val = "." + val

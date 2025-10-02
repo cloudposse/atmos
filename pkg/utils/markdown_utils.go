@@ -11,6 +11,7 @@ import (
 	"golang.org/x/term"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui/markdown"
 )
@@ -76,6 +77,8 @@ func printfMarkdownTo(w io.Writer, format string, a ...interface{}) {
 
 // PrintfMarkdown prints a message in Markdown format.
 func PrintfMarkdown(format string, a ...interface{}) {
+	defer perf.Track(nil, "utils.PrintfMarkdown")()
+
 	printfMarkdownTo(os.Stdout, format, a...)
 }
 
@@ -83,11 +86,15 @@ func PrintfMarkdown(format string, a ...interface{}) {
 // This is useful for notices, warnings, and other messages that should not
 // interfere with stdout when piping command output.
 func PrintfMarkdownToTUI(format string, a ...interface{}) {
+	defer perf.Track(nil, "utils.PrintfMarkdownToTUI")()
+
 	printfMarkdownTo(os.Stderr, format, a...)
 }
 
 // InitializeMarkdown initializes a new Markdown renderer.
 func InitializeMarkdown(atmosConfig schema.AtmosConfiguration) {
+	defer perf.Track(&atmosConfig, "utils.InitializeMarkdown")()
+
 	var err error
 	render, err = markdown.NewTerminalMarkdownRenderer(atmosConfig)
 	if err != nil {

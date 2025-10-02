@@ -1,10 +1,13 @@
 package exec
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/cloudposse/atmos/pkg/perf"
 
 	"github.com/charmbracelet/huh"
 	"github.com/charmbracelet/lipgloss"
@@ -13,7 +16,6 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 	u "github.com/cloudposse/atmos/pkg/utils"
-	"github.com/pkg/errors"
 )
 
 var (
@@ -88,6 +90,8 @@ func findFoldersNamesWithPrefix(root, prefix string) ([]string, error) {
 }
 
 func CollectDirectoryObjects(basePath string, patterns []string) ([]Directory, error) {
+	defer perf.Track(nil, "exec.CollectDirectoryObjects")()
+
 	if basePath == "" {
 		return nil, ErrEmptyPath
 	}
@@ -275,6 +279,8 @@ func confirmDeleteTerraformLocal(message string) (confirm bool, err error) {
 
 // DeletePathTerraform deletes the specified file or folder with a checkmark or xmark.
 func DeletePathTerraform(fullPath string, objectName string) error {
+	defer perf.Track(nil, "exec.DeletePathTerraform")()
+
 	// Normalize path separators to forward slashes for consistent output across platforms
 	normalizedObjectName := filepath.ToSlash(objectName)
 
@@ -392,6 +398,8 @@ func initializeFilesToClear(info schema.ConfigAndStacksInfo, atmosConfig *schema
 }
 
 func IsValidDataDir(tfDataDir string) error {
+	defer perf.Track(nil, "exec.IsValidDataDir")()
+
 	if tfDataDir == "" {
 		return ErrEmptyEnvDir
 	}

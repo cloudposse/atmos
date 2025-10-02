@@ -17,6 +17,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	m "github.com/cloudposse/atmos/pkg/merge"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -46,6 +47,8 @@ func ProcessYAMLConfigFiles(
 	map[string]map[string]any,
 	error,
 ) {
+	defer perf.Track(atmosConfig, "exec.ProcessYAMLConfigFiles")()
+
 	count := len(filePaths)
 	listResult := make([]string, count)
 	mapResult := map[string]any{}
@@ -178,6 +181,8 @@ func ProcessYAMLConfigFile(
 	map[string]any,
 	error,
 ) {
+	defer perf.Track(atmosConfig, "exec.ProcessYAMLConfigFile")()
+
 	// Call the context-aware version with a nil context for backward compatibility
 	return ProcessYAMLConfigFileWithContext(
 		atmosConfig,
@@ -229,6 +234,8 @@ func ProcessYAMLConfigFileWithContext(
 	map[string]any,
 	error,
 ) {
+	defer perf.Track(atmosConfig, "exec.ProcessYAMLConfigFileWithContext")()
+
 	var stackConfigs []map[string]any
 	relativeFilePath := u.TrimBasePathFromPath(basePath+"/", filePath)
 
@@ -276,7 +283,7 @@ func ProcessYAMLConfigFileWithContext(
 	// https://atmos.tools/core-concepts/stacks/imports#go-templates-in-imports
 	if !skipTemplatesProcessingInImports && (u.IsTemplateFile(filePath) || len(context) > 0) { //nolint:nestif // Template processing error handling requires conditional formatting based on context
 		var tmplErr error
-		stackManifestTemplatesProcessed, tmplErr = ProcessTmpl(relativeFilePath, stackYamlConfig, context, ignoreMissingTemplateValues)
+		stackManifestTemplatesProcessed, tmplErr = ProcessTmpl(atmosConfig, relativeFilePath, stackYamlConfig, context, ignoreMissingTemplateValues)
 		if tmplErr != nil {
 			if atmosConfig.Logs.Level == u.LogLevelTrace || atmosConfig.Logs.Level == u.LogLevelDebug {
 				stackManifestTemplatesErrorMessage = fmt.Sprintf("\n\n%s", stackYamlConfig)
@@ -472,7 +479,7 @@ func ProcessYAMLConfigFileWithContext(
 			importMatches, err = u.GetGlobMatches(impWithExtPath)
 			if err != nil || len(importMatches) == 0 {
 				// The import was not found -> check if the import is a Go template; if not, return the error
-				isGolangTemplate, err2 := IsGolangTemplate(imp)
+				isGolangTemplate, err2 := IsGolangTemplate(atmosConfig, imp)
 				if err2 != nil {
 					return nil, nil, nil, nil, nil, nil, nil, err2
 				}
@@ -655,6 +662,8 @@ func ProcessStackConfig(
 	importsConfig map[string]map[string]any,
 	checkBaseComponentExists bool,
 ) (map[string]any, error) {
+	defer perf.Track(atmosConfig, "exec.ProcessStackConfig")()
+
 	stackName := strings.TrimSuffix(
 		strings.TrimSuffix(
 			u.TrimBasePathFromPath(stacksBasePath+"/", stack),
@@ -2087,6 +2096,8 @@ func ProcessStackConfig(
 
 // processSettingsIntegrationsGithub deep-merges the `settings.integrations.github` section from stack manifests with the `integrations.github` section from `atmos.yaml`.
 func processSettingsIntegrationsGithub(atmosConfig *schema.AtmosConfiguration, settings map[string]any) (map[string]any, error) {
+	defer perf.Track(atmosConfig, "exec.processSettingsIntegrationsGithub")()
+
 	settingsIntegrationsSection := make(map[string]any)
 	settingsIntegrationsGithubSection := make(map[string]any)
 
@@ -2129,6 +2140,8 @@ func FindComponentStacks(
 	baseComponent string,
 	componentStackMap map[string]map[string][]string,
 ) ([]string, error) {
+	defer perf.Track(nil, "exec.FindComponentStacks")()
+
 	var stacks []string
 
 	if componentStackConfig, componentStackConfigExists := componentStackMap[componentType]; componentStackConfigExists {
@@ -2164,6 +2177,8 @@ func FindComponentDependenciesLegacy(
 	baseComponents []string,
 	stackImports map[string]map[string]any,
 ) ([]string, error) {
+	defer perf.Track(nil, "exec.FindComponentDependenciesLegacy")()
+
 	var deps []string
 
 	sectionsToCheck := []string{
@@ -2271,6 +2286,8 @@ func FindComponentDependenciesLegacy(
 // 2. Paths relative to the current stack file (e.g. "./_defaults")
 // 3. StackImport structs containing either of the above path types (e.g. "path: mixins/region/us-east-2").
 func ProcessImportSection(stackMap map[string]any, filePath string) ([]schema.StackImport, error) {
+	defer perf.Track(nil, "exec.ProcessImportSection")()
+
 	stackImports, ok := stackMap[cfg.ImportSectionName]
 
 	// If the stack file does not have the `import` section, return
@@ -2336,6 +2353,8 @@ func sectionContainsAnyNotEmptySections(section map[string]any, sectionsToCheck 
 // GetFileContent tries to read and return the file content from the sync map if it exists in the map,
 // otherwise it reads the file, stores its content in the map and returns the content.
 func GetFileContent(filePath string) (string, error) {
+	defer perf.Track(nil, "exec.GetFileContent")()
+
 	existingContent, found := getFileContentSyncMap.Load(filePath)
 	if found && existingContent != nil {
 		return fmt.Sprintf("%s", existingContent), nil
@@ -2362,6 +2381,8 @@ func ProcessBaseComponentConfig(
 	checkBaseComponentExists bool,
 	baseComponents *[]string,
 ) error {
+	defer perf.Track(atmosConfig, "exec.ProcessBaseComponentConfig")()
+
 	if component == baseComponent {
 		return nil
 	}
@@ -2623,6 +2644,8 @@ func FindComponentsDerivedFromBaseComponents(
 	allComponents map[string]any,
 	baseComponents []string,
 ) ([]string, error) {
+	defer perf.Track(nil, "exec.FindComponentsDerivedFromBaseComponents")()
+
 	res := []string{}
 
 	for component, compSection := range allComponents {

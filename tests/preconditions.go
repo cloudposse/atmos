@@ -332,7 +332,8 @@ func RequireHelmfile(t *testing.T) {
 	RequireExecutable(t, "helmfile", "helmfile operations")
 }
 
-// RequireOCIAuthentication checks if authentication is configured for pulling OCI images from GitHub Container Registry.
+// RequireOCIAuthentication checks if authentication is configured for GitHub API access.
+// This is required for pulling OCI images from ghcr.io, cloning from github.com, and avoiding GitHub API rate limits.
 // This is typically provided by GITHUB_TOKEN or ATMOS_GITHUB_TOKEN environment variables.
 func RequireOCIAuthentication(t *testing.T) {
 	t.Helper()
@@ -348,11 +349,11 @@ func RequireOCIAuthentication(t *testing.T) {
 	}
 
 	if githubToken == "" {
-		t.Skipf("GitHub token not configured: required for pulling OCI images from ghcr.io. Set GITHUB_TOKEN or ATMOS_GITHUB_TOKEN environment variable, or set ATMOS_TEST_SKIP_PRECONDITION_CHECKS=true")
+		t.Skipf("GitHub token not configured: required for GitHub API access (OCI images, cloning repos, avoiding rate limits). Set GITHUB_TOKEN or ATMOS_GITHUB_TOKEN environment variable, or set ATMOS_TEST_SKIP_PRECONDITION_CHECKS=true")
 	}
 
 	// Token exists, log that authentication is available
-	t.Logf("OCI authentication available via GitHub token")
+	t.Logf("GitHub authentication available via token")
 }
 
 // RequireGitCommitConfig checks if Git is configured for making commits.

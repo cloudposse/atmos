@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/cloudposse/atmos/pkg/perf"
+
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	git "github.com/cloudposse/atmos/pkg/git"
@@ -118,6 +120,8 @@ func parseUnlockCliArgs(cmd *cobra.Command, args []string) (ProUnlockCmdArgs, er
 
 // ExecuteProLockCommand executes `atmos pro lock` command.
 func ExecuteProLockCommand(cmd *cobra.Command, args []string) error {
+	defer perf.Track(nil, "exec.ExecuteProLockCommand")()
+
 	a, err := parseLockCliArgs(cmd, args)
 	if err != nil {
 		return err
@@ -163,6 +167,8 @@ func ExecuteProLockCommand(cmd *cobra.Command, args []string) error {
 
 // ExecuteProUnlockCommand executes `atmos pro unlock` command.
 func ExecuteProUnlockCommand(cmd *cobra.Command, args []string) error {
+	defer perf.Track(nil, "exec.ExecuteProUnlockCommand")()
+
 	a, err := parseUnlockCliArgs(cmd, args)
 	if err != nil {
 		return err

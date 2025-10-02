@@ -70,7 +70,7 @@ func TestGetPathFromEnvironment(t *testing.T) {
 }
 
 func TestUpdateEnvironmentPath(t *testing.T) {
-	// Use cross-platform paths
+	// Use cross-platform paths.
 	homeDir := filepath.Join(string(filepath.Separator), "home", "user")
 	testBinDir := filepath.Join(string(filepath.Separator), "test", "bin")
 	usrBinDir := filepath.Join(string(filepath.Separator), "usr", "bin")
@@ -112,13 +112,13 @@ func TestUpdateEnvironmentPath(t *testing.T) {
 }
 
 func TestEnsureBinaryInPath(t *testing.T) {
-	// Use cross-platform paths
+	// Use cross-platform paths.
 	binDir1 := filepath.Join(string(filepath.Separator), "usr", "bin")
 	binDir2 := filepath.Join(string(filepath.Separator), "bin")
 	testBinDir := filepath.Join(string(filepath.Separator), "test", "bin")
 	testBinary := filepath.Join(testBinDir, "atmos")
 
-	// Create cross-platform PATH values
+	// Create cross-platform PATH values.
 	existingPath := binDir1 + string(os.PathListSeparator) + binDir2
 	pathWithTestDir := testBinDir + string(os.PathListSeparator) + existingPath
 
@@ -224,8 +224,8 @@ func TestUpdateEnvVar(t *testing.T) {
 }
 
 func TestEnvironmentPathIntegration(t *testing.T) {
-	// Integration test: simulate the full AtmosRunner workflow
-	// Use cross-platform paths
+	// Integration test: simulate the full AtmosRunner workflow.
+	// Use cross-platform paths.
 	homeDir := filepath.Join(string(filepath.Separator), "home", "user")
 	usrBinDir := filepath.Join(string(filepath.Separator), "usr", "bin")
 	binDir := filepath.Join(string(filepath.Separator), "bin")
@@ -237,19 +237,19 @@ func TestEnvironmentPathIntegration(t *testing.T) {
 		"USER=testuser",
 	}
 
-	// Simulate test binary in temp directory
+	// Simulate test binary in temp directory.
 	testBinaryPath := filepath.Join(os.TempDir(), "atmos-test-12345", "atmos")
 
-	// Update environment with test binary
+	// Update environment with test binary.
 	updatedEnv := EnsureBinaryInPath(originalEnv, testBinaryPath)
 
-	// Verify test binary directory is first in PATH
+	// Verify test binary directory is first in PATH.
 	updatedPath := GetPathFromEnvironment(updatedEnv)
 	expectedPrefix := filepath.Join(os.TempDir(), "atmos-test-12345") + string(os.PathListSeparator)
 	assert.True(t, strings.HasPrefix(updatedPath, expectedPrefix),
 		"PATH should start with test binary directory: %s", updatedPath)
 
-	// Verify original PATH components are preserved
+	// Verify original PATH components are preserved.
 	assert.Contains(t, updatedPath, originalPath,
 		"Original PATH should be preserved: %s", updatedPath)
 }

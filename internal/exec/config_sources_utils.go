@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"reflect"
 
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -12,6 +13,8 @@ func ProcessConfigSources(
 	configAndStacksInfo schema.ConfigAndStacksInfo,
 	rawStackConfigs map[string]map[string]any,
 ) (schema.ConfigSources, error) {
+	defer perf.Track(nil, "exec.ProcessConfigSources")()
+
 	result := schema.ConfigSources{}
 
 	// `vars` section
