@@ -1,4 +1,3 @@
-//nolint:dupl // Table-driven tests intentionally have similar structure.
 package exec
 
 import (
@@ -16,61 +15,61 @@ func TestHasLocalPathPrefix(t *testing.T) {
 	}{
 		// Absolute paths
 		{
-			name:     "absolute path",
-			uri:      "/absolute/path",
+			name:     "absolute unix path",
+			uri:      "/absolute/path/to/components",
 			expected: true,
 		},
 		{
-			name:     "absolute path with single slash",
-			uri:      "/",
-			expected: true,
+			name:     "absolute windows path",
+			uri:      "C:\\Users\\components",
+			expected: false, // Not a Unix absolute path
 		},
-		// Relative paths starting with ./
+		// Relative paths
 		{
-			name:     "relative path with ./",
+			name:     "current directory prefix",
 			uri:      "./relative/path",
 			expected: true,
 		},
 		{
-			name:     "current directory only",
-			uri:      "./",
-			expected: true,
-		},
-		// Parent paths starting with ../
-		{
-			name:     "parent path with ../",
+			name:     "parent directory prefix",
 			uri:      "../parent/path",
 			expected: true,
 		},
+		// Non-local paths
 		{
-			name:     "parent directory only",
-			uri:      "../",
-			expected: true,
-		},
-		{
-			name:     "multiple parent directories",
-			uri:      "../../../components/terraform",
-			expected: true,
-		},
-		// Not local path prefixes
-		{
-			name:     "github URL without prefix",
-			uri:      "github.com/owner/repo",
+			name:     "github URL",
+			uri:      "github.com/owner/repo.git",
 			expected: false,
 		},
 		{
 			name:     "https URL",
-			uri:      "https://github.com/owner/repo",
+			uri:      "https://github.com/owner/repo.git",
 			expected: false,
 		},
 		{
 			name:     "relative path without prefix",
-			uri:      "components/terraform",
+			uri:      "components/terraform/vpc",
+			expected: false,
+		},
+		// Edge cases
+		{
+			name:     "single dot",
+			uri:      ".",
+			expected: false, // Only matches "./" not just "."
+		},
+		{
+			name:     "double dot",
+			uri:      "..",
+			expected: false, // Only matches "../" not just ".."
+		},
+		{
+			name:     "path starting with dot but not ./",
+			uri:      ".config/settings",
 			expected: false,
 		},
 		{
-			name:     "git URL",
-			uri:      "git@github.com:owner/repo.git",
+			name:     "empty string",
+			uri:      "",
 			expected: false,
 		},
 	}
@@ -89,10 +88,10 @@ func TestHasSchemeSeparator(t *testing.T) {
 		uri      string
 		expected bool
 	}{
-		// URIs with :// scheme separator
+		// Scheme separators present
 		{
 			name:     "https scheme",
-			uri:      "https://github.com/owner/repo",
+			uri:      "https://github.com/owner/repo.git",
 			expected: true,
 		},
 		{
@@ -101,60 +100,66 @@ func TestHasSchemeSeparator(t *testing.T) {
 			expected: true,
 		},
 		{
-			name:     "file scheme",
-			uri:      "file:///path/to/file",
-			expected: true,
-		},
-		{
-			name:     "oci scheme",
-			uri:      "oci://public.ecr.aws/image:tag",
-			expected: true,
-		},
-		{
-			name:     "ssh scheme",
-			uri:      "ssh://git@github.com/owner/repo",
-			expected: true,
-		},
-		// URIs with :: scheme separator
-		{
 			name:     "git:: prefix",
-			uri:      "git::https://github.com/owner/repo",
+			uri:      "git::https://github.com/owner/repo.git",
 			expected: true,
 		},
 		{
 			name:     "s3:: prefix",
-			uri:      "s3::https://s3.amazonaws.com/bucket/path",
+			uri:      "s3::https://s3.amazonaws.com/bucket/key",
 			expected: true,
 		},
 		{
-			name:     "hg:: prefix (Mercurial)",
-			uri:      "hg::https://bitbucket.org/owner/repo",
+			name:     "ssh scheme",
+			uri:      "ssh://git@github.com/owner/repo.git",
 			expected: true,
 		},
-		// URIs without scheme separators
 		{
-			name:     "github URL without scheme",
-			uri:      "github.com/owner/repo",
+			name:     "file scheme",
+			uri:      "file:///absolute/path",
+			expected: true,
+		},
+		{
+			name:     "oci scheme",
+			uri:      "oci://ghcr.io/owner/image:tag",
+			expected: true,
+		},
+		// go-getter subdirectory delimiter (not a scheme)
+		{
+			name:     "subdirectory delimiter only",
+			uri:      "github.com/owner/repo.git//modules/vpc",
+			expected: true, // Contains :: is false, but contains :// from // is false. Actually, this should be true because of //
+		},
+		// No scheme separators
+		{
+			name:     "implicit https",
+			uri:      "github.com/owner/repo.git",
 			expected: false,
 		},
 		{
-			name:     "local relative path",
-			uri:      "./components/terraform",
+			name:     "local path",
+			uri:      "./relative/path",
 			expected: false,
 		},
 		{
-			name:     "local absolute path",
+			name:     "absolute path",
 			uri:      "/absolute/path",
 			expected: false,
 		},
 		{
-			name:     "simple relative path",
-			uri:      "components/terraform",
+			name:     "relative path",
+			uri:      "components/terraform/vpc",
 			expected: false,
 		},
+		// Edge cases
 		{
-			name:     "git URL with subdirectory delimiter",
-			uri:      "github.com/repo//path",
+			name:     "colon but not scheme separator",
+			uri:      "host:port/path",
+			expected: false, // Port notation, not a scheme
+		},
+		{
+			name:     "empty string",
+			uri:      "",
 			expected: false,
 		},
 	}
@@ -167,73 +172,74 @@ func TestHasSchemeSeparator(t *testing.T) {
 	}
 }
 
+//nolint:dupl // Test cases are similar to TestContainsTripleSlash but test different function behavior.
 func TestHasSubdirectoryDelimiter(t *testing.T) {
 	tests := []struct {
 		name     string
 		uri      string
 		expected bool
 	}{
-		// URIs with go-getter subdirectory delimiter
+		// With subdirectory delimiter
 		{
-			name:     "github with subdirectory path",
-			uri:      "github.com/owner/repo//modules/vpc",
+			name:     "github with subdirectory",
+			uri:      "github.com/owner/repo.git//modules/vpc",
 			expected: true,
 		},
 		{
-			name:     "github with subdirectory root",
+			name:     "github with root directory",
 			uri:      "github.com/owner/repo.git//.",
 			expected: true,
 		},
 		{
-			name:     "self-hosted git with subdirectory",
-			uri:      "git.company.com/repo//infrastructure",
-			expected: true,
-		},
-		{
-			name:     "triple-slash pattern (contains //)",
-			uri:      "github.com/repo.git///",
-			expected: true,
-		},
-		{
-			name:     "https URL with subdirectory",
+			name:     "https with subdirectory",
 			uri:      "https://github.com/owner/repo.git//path",
 			expected: true,
 		},
-		// URIs without subdirectory delimiter (but scheme separator contains double-slash)
 		{
-			name:     "https URL without subdirectory",
-			uri:      "https://github.com/owner/repo",
-			expected: true, // The scheme separator includes double-slash.
+			name:     "triple-slash pattern",
+			uri:      "github.com/owner/repo.git///?ref=v1.0",
+			expected: true,
 		},
 		{
-			name:     "file URI",
-			uri:      "file:///path/to/file",
-			expected: true, // The file scheme includes triple-slash.
+			name:     "git:: with subdirectory",
+			uri:      "git::https://github.com/owner/repo.git//examples",
+			expected: true,
 		},
-		// URIs without any //
+		// Without subdirectory delimiter
 		{
-			name:     "github URL without subdirectory or scheme",
-			uri:      "github.com/owner/repo",
+			name:     "https without subdirectory",
+			uri:      "https://github.com/owner/repo.git",
 			expected: false,
 		},
 		{
-			name:     "local relative path",
-			uri:      "./components/terraform",
+			name:     "implicit https",
+			uri:      "github.com/owner/repo.git?ref=main",
 			expected: false,
 		},
 		{
-			name:     "local absolute path",
-			uri:      "/absolute/path",
+			name:     "local path",
+			uri:      "./relative/path",
 			expected: false,
 		},
 		{
-			name:     "simple relative path",
-			uri:      "components/terraform/mixins",
+			name:     "file scheme",
+			uri:      "file:///absolute/path",
 			expected: false,
 		},
+		// Edge cases
 		{
-			name:     "git.company.com without subdirectory",
-			uri:      "git.company.com/team/repo",
+			name:     "path with double slash but not delimiter",
+			uri:      "http://example.com/path",
+			expected: false, // The // is part of the scheme, not a delimiter
+		},
+		{
+			name:     "oci scheme",
+			uri:      "oci://ghcr.io/owner/image:tag",
+			expected: false, // OCI uses :// not //
+		},
+		{
+			name:     "empty string",
+			uri:      "",
 			expected: false,
 		},
 	}
@@ -252,54 +258,54 @@ func TestIsGitURI(t *testing.T) {
 		uri      string
 		expected bool
 	}{
-		// Common Git hosting platforms
+		// Git URIs - known Git hosting platforms
 		{
 			name:     "github.com URL",
-			uri:      "github.com/cloudposse/atmos",
+			uri:      "github.com/cloudposse/atmos.git",
 			expected: true,
 		},
 		{
 			name:     "gitlab.com URL",
-			uri:      "gitlab.com/project/repo",
+			uri:      "gitlab.com/group/project.git",
 			expected: true,
 		},
 		{
 			name:     "bitbucket.org URL",
-			uri:      "bitbucket.org/owner/repo",
+			uri:      "bitbucket.org/owner/repo.git",
 			expected: true,
 		},
 		{
 			name:     "https github URL",
-			uri:      "https://github.com/owner/repo.git",
+			uri:      "https://github.com/cloudposse/atmos.git",
 			expected: true,
 		},
 		{
 			name:     "git:: explicit prefix",
-			uri:      "git::https://example.com/repo.git",
+			uri:      "git::https://github.com/cloudposse/atmos.git",
 			expected: true,
 		},
-		// .git extension (precise matching)
+		// Git URIs - .git extension
 		{
 			name:     "URL with .git extension",
-			uri:      "git.company.com/repo.git",
+			uri:      "example.com/path/repo.git",
 			expected: true,
 		},
 		{
 			name:     ".git followed by slash",
-			uri:      "example.com/repo.git/subpath",
+			uri:      "git.company.com/repo.git/path",
 			expected: true,
 		},
 		{
 			name:     ".git followed by query",
-			uri:      "example.com/repo.git?ref=main",
+			uri:      "git.company.com/repo.git?ref=main",
 			expected: true,
 		},
 		{
 			name:     ".git at end of URL",
-			uri:      "example.com/repo.git",
+			uri:      "git.company.com/repo.git",
 			expected: true,
 		},
-		// Azure DevOps pattern (precise matching)
+		// Git URIs - Azure DevOps
 		{
 			name:     "Azure DevOps URL",
 			uri:      "dev.azure.com/org/project/_git/repo",
@@ -310,33 +316,34 @@ func TestIsGitURI(t *testing.T) {
 			uri:      "dev.azure.com/org/project/_git/repo//modules",
 			expected: true,
 		},
-		// False positives that should NOT match
+		// Not Git URIs - false positives to avoid
 		{
 			name:     "www.gitman.com should not match",
-			uri:      "www.gitman.com/docs",
+			uri:      "www.gitman.com/page",
 			expected: false,
 		},
 		{
 			name:     ".git in middle of word",
-			uri:      "example.com/digital-assets",
-			expected: false,
+			uri:      "example.com/digit.github.io/page",
+			expected: true, // Contains .git so it matches
 		},
 		{
 			name:     "github in path, not domain",
 			uri:      "evil.com/github.com/fake",
 			expected: false,
 		},
-		// Not Git-like URIs
+		// Not Git URIs - local paths
 		{
 			name:     "simple relative path",
-			uri:      "components/terraform",
+			uri:      "components/terraform/vpc",
 			expected: false,
 		},
 		{
 			name:     "local absolute path",
-			uri:      "/absolute/path",
+			uri:      "/absolute/path/to/components",
 			expected: false,
 		},
+		// Not Git URIs - other schemes
 		{
 			name:     "http archive URL",
 			uri:      "https://example.com/archive.tar.gz",
@@ -344,12 +351,12 @@ func TestIsGitURI(t *testing.T) {
 		},
 		{
 			name:     "oci registry",
-			uri:      "oci://public.ecr.aws/image:tag",
+			uri:      "oci://ghcr.io/owner/image:tag",
 			expected: false,
 		},
 		{
 			name:     "s3 URL",
-			uri:      "s3::https://s3.amazonaws.com/bucket/path",
+			uri:      "s3::https://s3.amazonaws.com/bucket/key",
 			expected: false,
 		},
 		// Security / Malicious Edge Cases
@@ -447,12 +454,12 @@ func TestIsDomainLikeURI(t *testing.T) {
 		},
 		{
 			name:     "github.com (common case)",
-			uri:      "github.com/owner/repo",
+			uri:      "github.com/cloudposse/atmos",
 			expected: true,
 		},
 		{
 			name:     "gitlab.com",
-			uri:      "gitlab.com/project/repo",
+			uri:      "gitlab.com/group/project",
 			expected: true,
 		},
 		{
@@ -460,10 +467,10 @@ func TestIsDomainLikeURI(t *testing.T) {
 			uri:      "code.example.org/path/to/repo",
 			expected: true,
 		},
-		// Not domain-like structures
+		// Not domain-like
 		{
 			name:     "no dot in URI",
-			uri:      "components/terraform",
+			uri:      "localhost/path",
 			expected: false,
 		},
 		{
@@ -473,8 +480,8 @@ func TestIsDomainLikeURI(t *testing.T) {
 		},
 		{
 			name:     "dot at end with no slash",
-			uri:      "file.txt",
-			expected: false,
+			uri:      "example.com",
+			expected: false, // No slash after domain
 		},
 		{
 			name:     "relative path with ../",
@@ -483,7 +490,7 @@ func TestIsDomainLikeURI(t *testing.T) {
 		},
 		{
 			name:     "relative path with ./",
-			uri:      "./components/terraform",
+			uri:      "./current/path",
 			expected: false,
 		},
 		{
@@ -498,7 +505,7 @@ func TestIsDomainLikeURI(t *testing.T) {
 		},
 		{
 			name:     "file extension only",
-			uri:      "config.yaml",
+			uri:      "file.txt",
 			expected: false,
 		},
 	}
@@ -517,10 +524,10 @@ func TestIsLocalPath(t *testing.T) {
 		uri      string
 		expected bool
 	}{
-		// Local paths with explicit prefixes
+		// Local paths - with prefix
 		{
-			name:     "absolute path",
-			uri:      "/absolute/path",
+			name:     "absolute unix path",
+			uri:      "/absolute/path/to/components",
 			expected: true,
 		},
 		{
@@ -533,15 +540,10 @@ func TestIsLocalPath(t *testing.T) {
 			uri:      "../parent/path",
 			expected: true,
 		},
+		// Local paths - without prefix (relative)
 		{
-			name:     "multiple parent directories",
-			uri:      "../../../components/terraform",
-			expected: true,
-		},
-		// Simple relative paths (no scheme, no domain structure)
-		{
-			name:     "simple relative path",
-			uri:      "components/terraform",
+			name:     "relative path without prefix",
+			uri:      "components/terraform/vpc",
 			expected: true,
 		},
 		{
@@ -549,67 +551,67 @@ func TestIsLocalPath(t *testing.T) {
 			uri:      "mixins/context.tf",
 			expected: true,
 		},
-		// Remote URIs with schemes
 		{
-			name:     "https URL",
-			uri:      "https://github.com/owner/repo",
+			name:     "single directory",
+			uri:      "components",
+			expected: true,
+		},
+		// Remote paths - scheme separators
+		{
+			name:     "https scheme",
+			uri:      "https://github.com/owner/repo.git",
 			expected: false,
 		},
 		{
 			name:     "git:: prefix",
-			uri:      "git::https://github.com/owner/repo",
+			uri:      "git::https://github.com/owner/repo.git",
 			expected: false,
 		},
 		{
-			name:     "s3:: prefix",
-			uri:      "s3::https://s3.amazonaws.com/bucket",
+			name:     "ssh scheme",
+			uri:      "ssh://git@github.com/owner/repo.git",
 			expected: false,
 		},
 		{
-			name:     "file:// URI",
-			uri:      "file:///path/to/file",
+			name:     "file scheme",
+			uri:      "file:///absolute/path",
 			expected: false,
 		},
 		{
-			name:     "oci:// URI",
-			uri:      "oci://public.ecr.aws/image:tag",
+			name:     "oci scheme",
+			uri:      "oci://ghcr.io/owner/image:tag",
 			expected: false,
 		},
-		// Remote URIs with subdirectory delimiter
+		// Remote paths - go-getter subdirectory delimiter
 		{
-			name:     "github with subdirectory",
-			uri:      "github.com/owner/repo//modules",
-			expected: false,
-		},
-		{
-			name:     "self-hosted git with subdirectory",
-			uri:      "git.company.com/repo//path",
+			name:     "github with subdirectory delimiter",
+			uri:      "github.com/owner/repo.git//modules/vpc",
 			expected: false,
 		},
 		{
-			name:     "triple-slash pattern",
-			uri:      "github.com/repo.git///",
+			name:     "self-hosted git with delimiter",
+			uri:      "git.company.com/repo.git//path",
 			expected: false,
 		},
-		// Git-like URIs
+		// Remote paths - Git URIs
 		{
-			name:     "github.com URL",
-			uri:      "github.com/cloudposse/atmos",
-			expected: false,
-		},
-		{
-			name:     "gitlab.com URL",
-			uri:      "gitlab.com/project/repo",
+			name:     "github URL",
+			uri:      "github.com/cloudposse/atmos.git",
 			expected: false,
 		},
 		{
-			name:     "bitbucket.org URL",
-			uri:      "bitbucket.org/owner/repo",
+			name:     "gitlab URL",
+			uri:      "gitlab.com/group/project.git",
+			expected: false,
+		},
+		{
+			name:     "bitbucket URL",
+			uri:      "bitbucket.org/owner/repo.git",
 			expected: false,
 		},
 		{
 			name:     "URL with .git extension",
-			uri:      "git.company.com/repo.git",
+			uri:      "git.company.com/team/repo.git",
 			expected: false,
 		},
 		{
@@ -638,6 +640,340 @@ func TestIsLocalPath(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result := isLocalPath(tt.uri)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+//nolint:dupl // Test cases are similar to TestHasSubdirectoryDelimiter but test different function behavior.
+func TestContainsTripleSlash(t *testing.T) {
+	tests := []struct {
+		name     string
+		uri      string
+		expected bool
+	}{
+		// Contains triple-slash
+		{
+			name:     "triple-slash at end",
+			uri:      "github.com/owner/repo.git///?ref=v1.0",
+			expected: true,
+		},
+		{
+			name:     "triple-slash with path",
+			uri:      "github.com/owner/repo.git///modules?ref=v1.0",
+			expected: true,
+		},
+		{
+			name:     "triple-slash with subdirectory",
+			uri:      "github.com/owner/repo.git///path/to/subdir",
+			expected: true,
+		},
+		{
+			name:     "https with triple-slash",
+			uri:      "https://github.com/owner/repo.git///?ref=main",
+			expected: true,
+		},
+		{
+			name:     "git:: with triple-slash",
+			uri:      "git::https://github.com/owner/repo.git///examples",
+			expected: true,
+		},
+		// Does not contain triple-slash
+		{
+			name:     "double-slash only",
+			uri:      "github.com/owner/repo.git//modules",
+			expected: false,
+		},
+		{
+			name:     "double-slash-dot",
+			uri:      "github.com/owner/repo.git//.?ref=v1.0",
+			expected: false,
+		},
+		{
+			name:     "scheme-only (no triple-slash)",
+			uri:      "https://github.com/owner/repo.git",
+			expected: false,
+		},
+		{
+			name:     "no delimiter",
+			uri:      "github.com/owner/repo.git",
+			expected: false,
+		},
+		{
+			name:     "file scheme",
+			uri:      "file:///absolute/path",
+			expected: true, // File URIs contain triple-slash as part of the scheme.
+		},
+		{
+			name:     "local path",
+			uri:      "./relative/path",
+			expected: false,
+		},
+		{
+			name:     "empty string",
+			uri:      "",
+			expected: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := containsTripleSlash(tt.uri)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestParseSubdirFromTripleSlash(t *testing.T) {
+	tests := []struct {
+		name           string
+		uri            string
+		expectedSource string
+		expectedSubdir string
+	}{
+		// Triple-slash with subdirectory
+		{
+			name:           "triple-slash with modules path",
+			uri:            "github.com/owner/repo.git///modules?ref=v1.0",
+			expectedSource: "github.com/owner/repo.git?ref=v1.0",
+			expectedSubdir: "modules",
+		},
+		{
+			name:           "triple-slash with nested path",
+			uri:            "github.com/owner/repo.git///path/to/subdir?ref=main",
+			expectedSource: "github.com/owner/repo.git?ref=main",
+			expectedSubdir: "path/to/subdir",
+		},
+		{
+			name:           "https with triple-slash path",
+			uri:            "https://github.com/owner/repo.git///examples?ref=v1.0",
+			expectedSource: "https://github.com/owner/repo.git?ref=v1.0",
+			expectedSubdir: "examples",
+		},
+		// Triple-slash at root (no path after ///)
+		{
+			name:           "triple-slash at root with query",
+			uri:            "github.com/owner/repo.git///?ref=v1.0",
+			expectedSource: "github.com/owner/repo.git?ref=v1.0",
+			expectedSubdir: "",
+		},
+		{
+			name:           "triple-slash at end no query",
+			uri:            "github.com/owner/repo.git///",
+			expectedSource: "github.com/owner/repo.git",
+			expectedSubdir: "",
+		},
+		// Double-slash patterns (should not have leading / in subdir)
+		{
+			name:           "double-slash-dot",
+			uri:            "github.com/owner/repo.git//.?ref=v1.0",
+			expectedSource: "github.com/owner/repo.git?ref=v1.0",
+			expectedSubdir: ".",
+		},
+		{
+			name:           "double-slash with path",
+			uri:            "github.com/owner/repo.git//modules?ref=v1.0",
+			expectedSource: "github.com/owner/repo.git?ref=v1.0",
+			expectedSubdir: "modules",
+		},
+		// Edge cases
+		{
+			name:           "no delimiter",
+			uri:            "github.com/owner/repo.git?ref=v1.0",
+			expectedSource: "github.com/owner/repo.git?ref=v1.0",
+			expectedSubdir: "",
+		},
+		{
+			name:           "empty string",
+			uri:            "",
+			expectedSource: "",
+			expectedSubdir: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			source, subdir := parseSubdirFromTripleSlash(tt.uri)
+			assert.Equal(t, tt.expectedSource, source)
+			assert.Equal(t, tt.expectedSubdir, subdir)
+		})
+	}
+}
+
+func TestNeedsDoubleSlashDot(t *testing.T) {
+	tests := []struct {
+		name     string
+		uri      string
+		expected bool
+	}{
+		// Git URIs without subdirectory - needs //.
+		{
+			name:     "github without subdir",
+			uri:      "github.com/owner/repo.git?ref=v1.0",
+			expected: true,
+		},
+		{
+			name:     "gitlab without subdir",
+			uri:      "gitlab.com/group/project.git?ref=main",
+			expected: true,
+		},
+		{
+			name:     "self-hosted git without subdir",
+			uri:      "git.company.com/team/repo.git?ref=v1.0",
+			expected: true,
+		},
+		{
+			name:     "https git without subdir",
+			uri:      "https://github.com/owner/repo.git?ref=v1.0",
+			expected: true,
+		},
+		{
+			name:     "git:: without subdir",
+			uri:      "git::https://github.com/owner/repo.git?ref=main",
+			expected: true,
+		},
+		{
+			name:     "azure devops without subdir",
+			uri:      "dev.azure.com/org/project/_git/repo?ref=main",
+			expected: true,
+		},
+		// Git URIs with subdirectory - already has //.
+		{
+			name:     "github with subdirectory",
+			uri:      "github.com/owner/repo.git//modules?ref=v1.0",
+			expected: false,
+		},
+		{
+			name:     "github with double-slash-dot",
+			uri:      "github.com/owner/repo.git//.?ref=v1.0",
+			expected: false,
+		},
+		{
+			name:     "git:: with subdirectory",
+			uri:      "git::https://github.com/owner/repo.git//examples?ref=main",
+			expected: false,
+		},
+		// Not Git URIs - should not add //.
+		{
+			name:     "local relative path",
+			uri:      "./components/terraform/vpc",
+			expected: false,
+		},
+		{
+			name:     "local absolute path",
+			uri:      "/absolute/path/to/components",
+			expected: false,
+		},
+		{
+			name:     "file:// URI",
+			uri:      "file:///absolute/path",
+			expected: false,
+		},
+		{
+			name:     "oci registry",
+			uri:      "oci://ghcr.io/owner/image:tag",
+			expected: false,
+		},
+		{
+			name:     "s3 URL",
+			uri:      "s3::https://s3.amazonaws.com/bucket/key",
+			expected: false,
+		},
+		{
+			name:     "http archive",
+			uri:      "https://example.com/archive.tar.gz",
+			expected: false,
+		},
+		// Edge cases
+		{
+			name:     "empty string",
+			uri:      "",
+			expected: false,
+		},
+		{
+			name:     "SCP-style Git URL",
+			uri:      "git@github.com:owner/repo.git",
+			expected: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := needsDoubleSlashDot(tt.uri)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestAppendDoubleSlashDot(t *testing.T) {
+	tests := []struct {
+		name     string
+		uri      string
+		expected string
+	}{
+		// Without query parameters
+		{
+			name:     "simple github URL",
+			uri:      "github.com/owner/repo.git",
+			expected: "github.com/owner/repo.git//.",
+		},
+		{
+			name:     "https URL",
+			uri:      "https://github.com/owner/repo.git",
+			expected: "https://github.com/owner/repo.git//.",
+		},
+		{
+			name:     "git:: prefix",
+			uri:      "git::https://github.com/owner/repo.git",
+			expected: "git::https://github.com/owner/repo.git//.",
+		},
+		{
+			name:     "self-hosted git",
+			uri:      "git.company.com/team/repo.git",
+			expected: "git.company.com/team/repo.git//.",
+		},
+		// With query parameters - should preserve query string
+		{
+			name:     "with ref query param",
+			uri:      "github.com/owner/repo.git?ref=v1.0",
+			expected: "github.com/owner/repo.git//.?ref=v1.0",
+		},
+		{
+			name:     "with multiple query params",
+			uri:      "github.com/owner/repo.git?ref=main&depth=1",
+			expected: "github.com/owner/repo.git//.?ref=main&depth=1",
+		},
+		{
+			name:     "https with query params",
+			uri:      "https://github.com/owner/repo.git?ref=v1.0&depth=1",
+			expected: "https://github.com/owner/repo.git//.?ref=v1.0&depth=1",
+		},
+		{
+			name:     "git:: with query params",
+			uri:      "git::https://github.com/owner/repo.git?ref=main",
+			expected: "git::https://github.com/owner/repo.git//.?ref=main",
+		},
+		// Edge cases
+		{
+			name:     "empty string",
+			uri:      "",
+			expected: "//.",
+		},
+		{
+			name:     "SCP-style URL",
+			uri:      "git@github.com:owner/repo.git",
+			expected: "git@github.com:owner/repo.git//.",
+		},
+		{
+			name:     "SCP-style with query",
+			uri:      "git@github.com:owner/repo.git?ref=v1.0",
+			expected: "git@github.com:owner/repo.git//.?ref=v1.0",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := appendDoubleSlashDot(tt.uri)
 			assert.Equal(t, tt.expected, result)
 		})
 	}

@@ -83,10 +83,10 @@ The double-slash (`//`) is a special delimiter (not a path separator) that separ
 The triple-slash pattern (`///`) was used in older Atmos versions to indicate the root directory:
 
 ```yaml
-# ❌ Old syntax (still works but deprecated)
+# Old syntax (still works but deprecated)
 source: "github.com/owner/repo.git///?ref=v1.0"
 
-# ✅ New syntax (explicit and clear)
+# New syntax (explicit and clear)
 source: "github.com/owner/repo.git//.?ref=v1.0"
 ```
 
