@@ -111,14 +111,14 @@ atmos describe stacks --heatmap --heatmap-mode=sparkline
 
 #### 3. Table Mode
 
-Detailed tabular view with all metrics:
+Detailed tabular view with all metric columns (top 50 rows):
 
 ```shell
 atmos describe stacks --heatmap --heatmap-mode=table
 ```
 
-- Complete metric details
-- Sortable columns (in interactive mode)
+- All metric columns (Count/Total/Avg/Max/P95)
+- Shows top 50 functions by total time
 - Best for detailed analysis
 
 ### Understanding Metrics
@@ -167,10 +167,10 @@ Elapsed: 234.56ms  Functions: 12  Calls: 156
 
 <dl>
     <dt>`--heatmap`</dt>
-    <dd>Enable performance heatmap visualization</dd>
+    <dd>Show performance heatmap visualization after command execution (includes P95 latency) (default: `false`)</dd>
 
     <dt>`--heatmap-mode`</dt>
-    <dd>Visualization mode: `bar`, `sparkline`, or `table` (default: `bar`)</dd>
+    <dd>Heatmap visualization mode: `bar`, `sparkline`, `table` (press 1-3 to switch in TUI) (default: `bar`)</dd>
 </dl>
 
 ### Common Use Cases
@@ -290,19 +290,19 @@ open http://localhost:6060/debug/pprof/
 
 <dl>
     <dt>`--profile-file`</dt>
-    <dd>Write profiling data to the specified file (enables profiling automatically)</dd>
+    <dd>Write profiling data to file instead of starting server</dd>
 
     <dt>`--profile-type`</dt>
-    <dd>Type of profile to collect: `cpu`, `heap`, `allocs`, `goroutine`, `block`, `mutex`, `threadcreate`, `trace` (default: `cpu`)</dd>
+    <dd>Type of profile to collect when using `--profile-file`. Options: `cpu`, `heap`, `allocs`, `goroutine`, `block`, `mutex`, `threadcreate`, `trace` (default: `cpu`)</dd>
 
     <dt>`--profiler-enabled`</dt>
-    <dd>Enable pprof profiling server (default: false)</dd>
+    <dd>Enable pprof profiling server (default: `false`)</dd>
 
     <dt>`--profiler-host`</dt>
-    <dd>Host address for profiling server (default: localhost)</dd>
+    <dd>Host for pprof profiling server (default: `localhost`)</dd>
 
     <dt>`--profiler-port`</dt>
-    <dd>Port for profiling server (default: 6060)</dd>
+    <dd>Port for pprof profiling server (default: `6060`)</dd>
 </dl>
 
 **Environment Variables:**
