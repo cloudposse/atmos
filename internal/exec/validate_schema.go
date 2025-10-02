@@ -3,7 +3,9 @@ package exec
 import (
 	"fmt"
 
-	log "github.com/charmbracelet/log"
+	"github.com/cloudposse/atmos/pkg/perf"
+
+	log "github.com/cloudposse/atmos/pkg/logger"
 
 	"github.com/cloudposse/atmos/pkg/downloader"
 	"github.com/cloudposse/atmos/pkg/filematch"
@@ -30,6 +32,8 @@ type atmosValidatorExecutor struct {
 }
 
 func NewAtmosValidatorExecutor(atmosConfig *schema.AtmosConfiguration) *atmosValidatorExecutor {
+	defer perf.Track(atmosConfig, "exec.NewAtmosValidatorExecutor")()
+
 	fileDownloader := downloader.NewGoGetterDownloader(atmosConfig)
 	return &atmosValidatorExecutor{
 		validator:      validator.NewYAMLSchemaValidator(atmosConfig),
@@ -40,6 +44,8 @@ func NewAtmosValidatorExecutor(atmosConfig *schema.AtmosConfiguration) *atmosVal
 }
 
 func (av *atmosValidatorExecutor) ExecuteAtmosValidateSchemaCmd(sourceKey string, customSchema string) error {
+	defer perf.Track(nil, "exec.ExecuteAtmosValidateSchemaCmd")()
+
 	validationSchemaWithFiles, err := av.buildValidationSchema(sourceKey, customSchema)
 	if err != nil {
 		return err

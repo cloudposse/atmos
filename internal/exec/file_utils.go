@@ -8,7 +8,9 @@ import (
 	"runtime"
 	"strings"
 
-	log "github.com/charmbracelet/log"
+	"github.com/cloudposse/atmos/pkg/perf"
+
+	log "github.com/cloudposse/atmos/pkg/logger"
 
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -71,6 +73,8 @@ func printOrWriteToFile(
 
 // SanitizeFileName replaces invalid characters and query strings with underscores for Windows.
 func SanitizeFileName(uri string) string {
+	defer perf.Track(nil, "exec.SanitizeFileName")()
+
 	// Parse the URI to handle paths and query strings properly
 	parsed, err := url.Parse(uri)
 	if err != nil {

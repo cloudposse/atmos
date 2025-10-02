@@ -2,10 +2,14 @@ package exec
 
 import (
 	"fmt"
+	"os"
 
+	"github.com/cloudposse/atmos/pkg/perf"
+
+	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
-	"github.com/cloudposse/atmos/pkg/git"
-	l "github.com/cloudposse/atmos/pkg/logger"
+	git "github.com/cloudposse/atmos/pkg/git"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/pro"
 	"github.com/cloudposse/atmos/pkg/pro/dtos"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -14,7 +18,6 @@ import (
 
 type ProLockUnlockCmdArgs struct {
 	Component   string
-	Logger      *l.Logger
 	Stack       string
 	AtmosConfig schema.AtmosConfiguration
 }
@@ -32,40 +35,34 @@ type ProUnlockCmdArgs struct {
 func parseLockUnlockCliArgs(cmd *cobra.Command, args []string) (ProLockUnlockCmdArgs, error) {
 	info, err := ProcessCommandLineArgs("terraform", cmd, args, nil)
 	if err != nil {
-		return ProLockUnlockCmdArgs{}, err
+		return ProLockUnlockCmdArgs{}, fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrFailedToProcessArgs, err)
 	}
 
 	// InitCliConfig finds and merges CLI configurations in the following order:
 	// system dir, home dir, current dir, ENV vars, command-line arguments
 	atmosConfig, err := cfg.InitCliConfig(info, true)
 	if err != nil {
-		return ProLockUnlockCmdArgs{}, err
-	}
-
-	logger, err := l.NewLoggerFromCliConfig(atmosConfig)
-	if err != nil {
-		return ProLockUnlockCmdArgs{}, err
+		return ProLockUnlockCmdArgs{}, fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrFailedToInitConfig, err)
 	}
 
 	flags := cmd.Flags()
 
 	component, err := flags.GetString("component")
 	if err != nil {
-		return ProLockUnlockCmdArgs{}, err
+		return ProLockUnlockCmdArgs{}, fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrFailedToGetComponentFlag, err)
 	}
 
 	stack, err := flags.GetString("stack")
 	if err != nil {
-		return ProLockUnlockCmdArgs{}, err
+		return ProLockUnlockCmdArgs{}, fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrFailedToGetStackFlag, err)
 	}
 
 	if component == "" || stack == "" {
-		return ProLockUnlockCmdArgs{}, fmt.Errorf("both '--component' and '--stack' flag must be provided")
+		return ProLockUnlockCmdArgs{}, errUtils.ErrComponentAndStackRequired
 	}
 
 	result := ProLockUnlockCmdArgs{
 		Component:   component,
-		Logger:      logger,
 		Stack:       stack,
 		AtmosConfig: atmosConfig,
 	}
@@ -121,8 +118,10 @@ func parseUnlockCliArgs(cmd *cobra.Command, args []string) (ProUnlockCmdArgs, er
 	return result, nil
 }
 
-// ExecuteProLockCommand executes `atmos pro lock` command
+// ExecuteProLockCommand executes `atmos pro lock` command.
 func ExecuteProLockCommand(cmd *cobra.Command, args []string) error {
+	defer perf.Track(nil, "exec.ExecuteProLockCommand")()
+
 	a, err := parseLockCliArgs(cmd, args)
 	if err != nil {
 		return err
@@ -130,12 +129,12 @@ func ExecuteProLockCommand(cmd *cobra.Command, args []string) error {
 
 	repo, err := git.GetLocalRepo()
 	if err != nil {
-		return err
+		return fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrFailedToGetLocalRepo, err)
 	}
 
 	repoInfo, err := git.GetRepoInfo(repo)
 	if err != nil {
-		return err
+		return fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrFailedToGetRepoInfo, err)
 	}
 
 	owner := repoInfo.RepoOwner
@@ -148,26 +147,28 @@ func ExecuteProLockCommand(cmd *cobra.Command, args []string) error {
 		Properties:  nil,
 	}
 
-	apiClient, err := pro.NewAtmosProAPIClientFromEnv(a.Logger, &a.AtmosConfig)
+	apiClient, err := pro.NewAtmosProAPIClientFromEnv(&a.AtmosConfig)
 	if err != nil {
-		return err
+		return fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrFailedToCreateAPIClient, err)
 	}
 
-	lock, err := apiClient.LockStack(dto)
+	lock, err := apiClient.LockStack(&dto)
 	if err != nil {
-		return err
+		return fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrFailedToLockStack, err)
 	}
 
-	a.Logger.Info("Stack successfully locked.\n")
-	a.Logger.Info(fmt.Sprintf("Key: %s", lock.Data.Key))
-	a.Logger.Info(fmt.Sprintf("LockID: %s", lock.Data.ID))
-	a.Logger.Info(fmt.Sprintf("Expires %s", lock.Data.ExpiresAt))
+	log.Info("Stack successfully locked.\n")
+	log.Info(fmt.Sprintf("Key: %s", lock.Data.Key))
+	log.Info(fmt.Sprintf("LockID: %s", lock.Data.ID))
+	log.Info(fmt.Sprintf("Expires %s", lock.Data.ExpiresAt))
 
 	return nil
 }
 
-// ExecuteProUnlockCommand executes `atmos pro unlock` command
+// ExecuteProUnlockCommand executes `atmos pro unlock` command.
 func ExecuteProUnlockCommand(cmd *cobra.Command, args []string) error {
+	defer perf.Track(nil, "exec.ExecuteProUnlockCommand")()
+
 	a, err := parseUnlockCliArgs(cmd, args)
 	if err != nil {
 		return err
@@ -175,12 +176,12 @@ func ExecuteProUnlockCommand(cmd *cobra.Command, args []string) error {
 
 	repo, err := git.GetLocalRepo()
 	if err != nil {
-		return err
+		return fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrFailedToGetLocalRepo, err)
 	}
 
 	repoInfo, err := git.GetRepoInfo(repo)
 	if err != nil {
-		return err
+		return fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrFailedToGetRepoInfo, err)
 	}
 
 	owner := repoInfo.RepoOwner
@@ -190,17 +191,85 @@ func ExecuteProUnlockCommand(cmd *cobra.Command, args []string) error {
 		Key: fmt.Sprintf("%s/%s/%s/%s", owner, repoName, a.Stack, a.Component),
 	}
 
-	apiClient, err := pro.NewAtmosProAPIClientFromEnv(a.Logger, &a.AtmosConfig)
+	apiClient, err := pro.NewAtmosProAPIClientFromEnv(&a.AtmosConfig)
 	if err != nil {
-		return err
+		return fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrFailedToCreateAPIClient, err)
 	}
 
-	_, err = apiClient.UnlockStack(dto)
+	_, err = apiClient.UnlockStack(&dto)
 	if err != nil {
-		return err
+		return fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrFailedToUnlockStack, err)
 	}
 
-	a.Logger.Info(fmt.Sprintf("Key '%s' successfully unlocked.\n", dto.Key))
+	log.Info(fmt.Sprintf("Key '%s' successfully unlocked.\n", dto.Key))
 
 	return nil
+}
+
+// uploadStatus uploads the terraform results to the pro API.
+func uploadStatus(info *schema.ConfigAndStacksInfo, exitCode int, client pro.AtmosProAPIClientInterface, gitRepo git.GitRepoInterface) error {
+	// Only upload if exit code is 0 (no changes) or 2 (changes)
+	if exitCode != 0 && exitCode != 2 {
+		return nil
+	}
+
+	// Get the git repository info
+	repoInfo, err := gitRepo.GetLocalRepoInfo()
+	if err != nil {
+		return fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrFailedToGetLocalRepo, err)
+	}
+
+	// Get current git SHA
+	gitSHA, err := gitRepo.GetCurrentCommitSHA()
+	if err != nil {
+		// Log warning but don't fail the upload
+		log.Warn(fmt.Sprintf("Failed to get current git SHA: %v", err))
+		gitSHA = ""
+	}
+
+	// Get run ID from environment variables.
+	// Note: This is an exception to the general rule of using viper.BindEnv for environment variables.
+	// The run ID is always provided by the CI/CD environment and is not part of the stack configuration.
+	//nolint:forbidigo // Exception: Run ID is always from CI/CD environment, not config
+	atmosProRunID := os.Getenv("ATMOS_PRO_RUN_ID")
+
+	// Create the DTO
+	dto := dtos.InstanceStatusUploadRequest{
+		AtmosProRunID: atmosProRunID,
+		GitSHA:        gitSHA,
+		RepoURL:       repoInfo.RepoUrl,
+		RepoName:      repoInfo.RepoName,
+		RepoOwner:     repoInfo.RepoOwner,
+		RepoHost:      repoInfo.RepoHost,
+		Stack:         info.Stack,
+		Component:     info.Component,
+		HasDrift:      exitCode == 2,
+	}
+
+	// Upload the status
+	if err := client.UploadInstanceStatus(&dto); err != nil {
+		return fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrFailedToUploadInstanceStatus, err)
+	}
+
+	return nil
+}
+
+// shouldUploadStatus determines if status should be uploaded.
+func shouldUploadStatus(info *schema.ConfigAndStacksInfo) bool {
+	// Only upload for plan command
+	if info.SubCommand != "plan" {
+		return false
+	}
+
+	// Check if pro is enabled in component settings
+	if proSettings, ok := info.ComponentSettingsSection["pro"].(map[string]interface{}); ok {
+		if enabled, ok := proSettings["enabled"].(bool); ok && enabled {
+			return true
+		}
+	}
+
+	// Log warning if pro is not enabled
+	log.Warn("Pro is not enabled. Skipping upload of Terraform result.")
+
+	return false
 }

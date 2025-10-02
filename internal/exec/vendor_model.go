@@ -8,11 +8,13 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cloudposse/atmos/pkg/perf"
+
 	"github.com/charmbracelet/bubbles/progress"
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	log "github.com/charmbracelet/log"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/hashicorp/go-getter"
 	cp "github.com/otiai10/copy"
 
@@ -49,6 +51,8 @@ type installedPkgMsg struct {
 }
 
 func (p pkgType) String() string {
+	defer perf.Track(nil, "exec.String")()
+
 	names := [...]string{"remote", "oci", "local"}
 	if p < pkgTypeRemote || p > pkgTypeLocal {
 		return "unknown"
@@ -190,6 +194,8 @@ func (m *modelVendor) Init() tea.Cmd {
 }
 
 func (m *modelVendor) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	defer perf.Track(nil, "exec.Update")()
+
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
@@ -295,6 +301,8 @@ func (m *modelVendor) logNonNTYFinalStatus(pkg pkgVendor, mark *lipgloss.Style) 
 }
 
 func (m *modelVendor) View() string {
+	defer perf.Track(nil, "exec.View")()
+
 	n := len(m.packages)
 	w := lipgloss.Width(fmt.Sprintf("%d", n))
 	if m.done {
@@ -346,6 +354,7 @@ func downloadAndInstall(p *pkgAtmosVendor, dryRun bool, atmosConfig *schema.Atmo
 		if err := p.installer(&tempDir, atmosConfig); err != nil {
 			return newInstallError(err, p.name)
 		}
+
 		if err := copyToTargetWithPatterns(tempDir, p.targetPath, &p.atmosVendorSource, p.sourceIsLocalFile); err != nil {
 			return newInstallError(fmt.Errorf("failed to copy package: %w", err), p.name)
 		}
@@ -360,7 +369,6 @@ func (p *pkgAtmosVendor) installer(tempDir *string, atmosConfig *schema.AtmosCon
 	switch p.pkgType {
 	case pkgTypeRemote:
 		// Use go-getter to download remote packages
-
 		if err := downloader.NewGoGetterDownloader(atmosConfig).Fetch(p.uri, *tempDir, downloader.ClientModeAny, 10*time.Minute); err != nil {
 			return fmt.Errorf("failed to download package: %w", err)
 		}
@@ -484,6 +492,8 @@ func newInstallError(err error, name string) installedPkgMsg {
 }
 
 func ExecuteInstall(installer pkgVendor, dryRun bool, atmosConfig *schema.AtmosConfiguration) tea.Cmd {
+	defer perf.Track(atmosConfig, "exec.ExecuteInstall")()
+
 	if installer.atmosPackage != nil {
 		return downloadAndInstall(installer.atmosPackage, dryRun, atmosConfig)
 	}

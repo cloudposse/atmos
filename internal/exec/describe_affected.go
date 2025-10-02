@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 
-	log "github.com/charmbracelet/log"
 	"github.com/go-git/go-git/v5/plumbing"
 	giturl "github.com/kubescape/go-git-url"
 	"github.com/spf13/cobra"
@@ -13,8 +12,9 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/internal/tui/templates/term"
 	cfg "github.com/cloudposse/atmos/pkg/config"
-	l "github.com/cloudposse/atmos/pkg/logger"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/pager"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/pro"
 	"github.com/cloudposse/atmos/pkg/pro/dtos"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -116,6 +116,8 @@ type describeAffectedExec struct {
 func NewDescribeAffectedExec(
 	atmosConfig *schema.AtmosConfiguration,
 ) DescribeAffectedExec {
+	defer perf.Track(atmosConfig, "exec.NewDescribeAffectedExec")()
+
 	return &describeAffectedExec{
 		atmosConfig: atmosConfig,
 		executeDescribeAffectedWithTargetRepoPath:    ExecuteDescribeAffectedWithTargetRepoPath,
@@ -130,6 +132,8 @@ func NewDescribeAffectedExec(
 
 // ParseDescribeAffectedCliArgs parses the command-line arguments of the `atmos describe affected` command.
 func ParseDescribeAffectedCliArgs(cmd *cobra.Command, args []string) (DescribeAffectedCmdArgs, error) {
+	defer perf.Track(nil, "exec.ParseDescribeAffectedCliArgs")()
+
 	var atmosConfig schema.AtmosConfiguration
 	if info, err := ProcessCommandLineArgs("", cmd, args, nil); err != nil {
 		return DescribeAffectedCmdArgs{}, err
@@ -159,6 +163,8 @@ func ParseDescribeAffectedCliArgs(cmd *cobra.Command, args []string) (DescribeAf
 
 // SetDescribeAffectedFlagValueInCliArgs sets the flag values in CLI arguments.
 func SetDescribeAffectedFlagValueInCliArgs(flags *pflag.FlagSet, describe *DescribeAffectedCmdArgs) {
+	defer perf.Track(nil, "exec.SetDescribeAffectedFlagValueInCliArgs")()
+
 	flagsKeyValue := map[string]any{
 		"ref":                            &describe.Ref,
 		"sha":                            &describe.SHA,
@@ -217,6 +223,8 @@ func SetDescribeAffectedFlagValueInCliArgs(flags *pflag.FlagSet, describe *Descr
 
 // Execute executes `describe affected` command.
 func (d *describeAffectedExec) Execute(a *DescribeAffectedCmdArgs) error {
+	defer perf.Track(nil, "exec.Execute")()
+
 	var affected []schema.Affected
 	var headHead, baseHead *plumbing.Reference
 	var repoUrl string
@@ -314,7 +322,9 @@ func (d *describeAffectedExec) uploadableQuery(args *DescribeAffectedCmdArgs, re
 	if err != nil {
 		return err
 	}
-	logger, err := l.NewLoggerFromCliConfig(*d.atmosConfig)
+
+	log.Debug("Creating API client")
+	apiClient, err := pro.NewAtmosProAPIClientFromEnv(d.atmosConfig)
 	if err != nil {
 		return err
 	}
@@ -328,13 +338,8 @@ func (d *describeAffectedExec) uploadableQuery(args *DescribeAffectedCmdArgs, re
 		RepoHost:  gitURL.GetHostName(),
 		Stacks:    affected,
 	}
-	log.Debug("Preparing upload affected stacks request", "req", req)
 
-	log.Debug("Creating API client")
-	apiClient, err := pro.NewAtmosProAPIClientFromEnv(logger, d.atmosConfig)
-	if err != nil {
-		return err
-	}
+	log.Debug("Preparing upload affected stacks request", "req", req)
 
 	return apiClient.UploadAffectedStacks(&req)
 }

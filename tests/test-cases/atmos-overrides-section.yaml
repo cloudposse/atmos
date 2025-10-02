@@ -14,6 +14,8 @@ tests:
       - "-s"
       - "prod"
     expect:
+      valid:
+        - "yaml"
       exit_code: 0
       stdout:
         - "a: a-prod"
@@ -38,6 +40,8 @@ tests:
       - "-s"
       - "staging"
     expect:
+      valid:
+        - "yaml"
       exit_code: 0
       stdout:
         - "a: a-staging"
@@ -62,6 +66,8 @@ tests:
       - "-s"
       - "dev"
     expect:
+      valid:
+        - "yaml"
       exit_code: 0
       stdout:
         - "a: a-dev"
@@ -86,6 +92,8 @@ tests:
       - "-s"
       - "sandbox"
     expect:
+      valid:
+        - "yaml"
       exit_code: 0
       stdout:
         - "a: a-team2"
@@ -110,6 +118,8 @@ tests:
       - "-s"
       - "test"
     expect:
+      valid:
+        - "yaml"
       exit_code: 0
       stdout:
         - "a: a-test-2"

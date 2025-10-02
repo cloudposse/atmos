@@ -7,7 +7,6 @@ import (
 	"strings"
 	"time"
 
-	log "github.com/charmbracelet/log"
 	"github.com/spf13/cobra"
 	tfdocsFormat "github.com/terraform-docs/terraform-docs/format"
 	tfdocsPrint "github.com/terraform-docs/terraform-docs/print"
@@ -17,7 +16,9 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/downloader"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/merge"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -37,11 +38,13 @@ type defaultTemplateRenderer struct{}
 
 // Render delegates rendering to the existing ProcessTmplWithDatasourcesGomplate function.
 func (d defaultTemplateRenderer) Render(tmplName, tmplValue string, mergedData map[string]interface{}, ignoreMissing bool) (string, error) {
-	return ProcessTmplWithDatasourcesGomplate(tmplName, tmplValue, mergedData, ignoreMissing)
+	return ProcessTmplWithDatasourcesGomplate(&schema.AtmosConfiguration{}, tmplName, tmplValue, mergedData, ignoreMissing)
 }
 
 // ExecuteDocsGenerateCmd implements the 'atmos docs generate <doc-type>' logic.
 func ExecuteDocsGenerateCmd(cmd *cobra.Command, args []string) error {
+	defer perf.Track(nil, "exec.ExecuteDocsGenerateCmd")()
+
 	if len(args) == 0 {
 		return errUtils.ErrMissingDocType
 	}

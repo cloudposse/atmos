@@ -1,0 +1,194 @@
+---
+title: "!template"
+sidebar_position: 9
+sidebar_label: "!template"
+sidebar_class_name: command
+description: Handle outputs containing maps or lists returned from the atmos.Component template function
+---
+
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+    The `!template` Atmos YAML function is used to [handle the outputs containing maps or
+    lists](/functions/template/atmos.Component#handling-outputs-containing-maps-or-lists)
+    returned from the [`atmos.Component`](/functions/template/atmos.Component) template function.
+</Intro>
+
+## Usage
+
+```yaml
+# Process the output of type list from the `atmos.Component` template function in the provided stack
+var1: !template '{{ toJson (atmos.Component "<component>" "<stack>").outputs.test_list }}'
+
+# Process the output of type map from the `atmos.Component` template function in the current stack
+var2: !template '{{ toJson (atmos.Component "component1" .stack).outputs.test_map }}'
+```
+
+## Why `!template` is needed?
+
+You can use the [`atmos.Component`](/functions/template/atmos.Component) template function to
+read outputs (remote state) from Terraform/OpenTofu components, and use those in your stack manifests.
+
+When the output of the `atmos.Component` function is a simple type (string or number), it's correctly handled in YAML,
+and is sent to the Terraform/OpenTofu component as a simple type.
+
+For example, this function:
+
+```yaml
+var1: '{{ (atmos.Component "<component>" "<stack>").outputs.test_string }}'
+```
+
+produces the following result:
+
+```yaml
+var1: test
+```
+
+When the outputs are complex types (list or map):
+
+```yaml
+var1: '{{ toJson (atmos.Component "<component>" "<stack>").outputs.test_list }}'
+var2: '{{ toJson (atmos.Component "component1" "<stack>").outputs.test_map }}'
+```
+
+we'll get the following results:
+
+```yaml
+var1: '["item_1","item_2","item_3"]'
+var2: '{"a":1,"b":2,"c":3}'
+```
+
+Because the template expressions are quoted, the results are JSON-encoded strings, not objects.
+
+The results can be sent to the `var1` and `var2` Terraform variables, but the variables need to be of type `string`, and
+you'll have to decode the strings into Terraform list and map using the
+[`jsondecode`](https://developer.hashicorp.com/terraform/language/functions/jsondecode) function in your Terraform code.
+In many cases, this is not an acceptable solution because the Terraform variables `var1` and `var2` are already of type list and map,
+and you can't (or don't want to) change the Terraform code to convert them into strings.
+
+We can try to un-quote the template expressions:
+
+```yaml
+var1: {{ toJson (atmos.Component "<component>" "<stack>").outputs.test_list }}
+var2: {{ toJson (atmos.Component "component1" "<stack>").outputs.test_map }}
+```
+
+but it does not work because it's not a valid YAML.
+In YAML, curly braces `{ }` are used to denote a JSON-like inline mapping, which corresponds to a map or dictionary in YAML,
+and the double curly braces are not valid in YAML.
+
+We can try to use [YAML multiline strings](https://yaml-multiline.info/) with the block style indicator, and un-quote the templates:
+
+```yaml
+var1: >-
+  {{ toJson (atmos.Component "<component>" "<stack>").outputs.test_list }}
+
+var2: >-
+  {{ toJson (atmos.Component "component1" "<stack>").outputs.test_map }}
+```
+
+but it still generates the same result (JSON-encoded strings, not JSON objects):
+
+```yaml
+var1: |
+  ["item_1","item_2","item_3"]
+
+var2: |
+  {"a":1,"b":2,"c":3}
+```
+
+<br/>
+
+__The `!template` Atmos YAML function to the rescue!__
+
+The `!template` YAML function receives the result
+from the [`atmos.Component`](/functions/template/atmos.Component)
+and [`toJson`](https://masterminds.github.io/sprig/defaults.html) functions, and converts it into the complex
+types (list or map) by decoding the JSON strings.
+
+The following `!template` function calls:
+
+```yaml
+var1: !template '{{ toJson (atmos.Component "<component>" "<stack>").outputs.test_list }}'
+var2: !template '{{ toJson (atmos.Component "component1" .stack).outputs.test_map }}'
+```
+
+generates the following YAML:
+
+```yaml
+var1:
+  - item_1
+  - item_2
+  - item_3
+
+var2:
+  a: 1
+  b: 2
+  c: 3
+```
+
+The results are correct list and map YAML types, and can be sent to the Terraform component without modifying the types
+of its input variables.
+
+:::tip
+
+When reading Atmos components outputs (remote state) in Atmos stack manifests, instead of using the three functions
+`atmos.Component`, `toJson` and `!template`, use the [`!terraform.output`](/functions/yaml/terraform.output)
+YAML function. It produces the same results, correctly handles the complex types (lists and maps), and has a much simpler syntax.
+
+:::
+
+## Advanced Examples
+
+The `!template` Atmos YAML function can be used to make your stack configuration DRY and reusable.
+
+For example, suppose we need to restrict the Security Group ingresses on all components provisioned in the infrastructure
+(e.g. EKS cluster, RDS Aurora cluster, MemoryDB cluster, Istio Ingress Gateway) to a specific list of IP CIDR blocks.
+
+We can define the list of allowed CIDR blocks in the global `settings` section (used by all components in all stacks)
+in the `allowed_ingress_cidrs` variable:
+
+```yaml
+settings:
+  allowed_ingress_cidrs:
+    - "10.20.0.0/20"  # VPN 1
+    - "10.30.0.0/20"  # VPN 2
+```
+
+We can then use the `!template` function with the following template in all components that need their Security Group
+to be restricted:
+
+```yaml
+# EKS cluster
+# Allow ingress only from the allowed CIDR blocks
+allowed_cidr_blocks: !template '{{ toJson .settings.allowed_ingress_cidrs }}'
+```
+
+```yaml
+# RDS cluster
+# Allow ingress only from the allowed CIDR blocks
+cidr_blocks: !template '{{ toJson .settings.allowed_ingress_cidrs }}'
+```
+
+```yaml
+# Istio Ingress Gateway
+# Allow ingress only from the allowed CIDR blocks
+security_group_ingress_cidrs: !template '{{ toJson .settings.allowed_ingress_cidrs }}'
+```
+
+<br/>
+
+The `!template` function and the `'{{ toJson .settings.allowed_ingress_cidrs }}'` expression allows you to
+use the global `allowed_ingress_cidrs` variable and the same template even if the components have different
+variable names for the allowed CIDR blocks (which would be difficult to implement using
+[Atmos inheritance](/core-concepts/stacks/inheritance) or other [Atmos design patterns](/design-patterns)).
+
+:::tip
+To append additional CIDRs to the template itself, use the `list` and [Sprig](https://masterminds.github.io/sprig/lists.html)
+`concat` functions:
+
+```yaml
+allowed_cidr_blocks: !template '{{ toJson (concat .settings.allowed_ingress_cidrs (list "172.20.0.0/16")) }}'
+```
+:::

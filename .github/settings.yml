@@ -31,3 +31,9 @@ labels:
   - name: release/feature
     color: '#d73a4a'
     description: Create release from this PR
+  - name: dependencies
+    color: '#0366d6'
+    description: Pull requests that update a dependency file
+  - name: go
+    color: '#00add8'
+    description: Pull requests that update Go code

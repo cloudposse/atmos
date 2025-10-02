@@ -4,7 +4,9 @@ import (
 	"fmt"
 	"strings"
 
-	log "github.com/charmbracelet/log"
+	"github.com/cloudposse/atmos/pkg/perf"
+
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/samber/lo"
 
 	tui "github.com/cloudposse/atmos/internal/tui/atmos"
@@ -13,8 +15,10 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
-// ExecuteAtmosCmd executes `atmos` command
+// ExecuteAtmosCmd executes `atmos` command.
 func ExecuteAtmosCmd() error {
+	defer perf.Track(nil, "exec.ExecuteAtmosCmd")()
+
 	commands := []string{
 		"terraform plan",
 		"terraform apply",
