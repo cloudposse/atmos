@@ -3,10 +3,14 @@ package utils
 import (
 	"encoding/csv"
 	"strings"
+
+	"github.com/cloudposse/atmos/pkg/perf"
 )
 
 // UniqueStrings returns a unique subset of the string slice provided
 func UniqueStrings(input []string) []string {
+	defer perf.Track(nil, "utils.UniqueStrings")()
+
 	u := make([]string, 0, len(input))
 	m := make(map[string]bool)
 
@@ -22,6 +26,8 @@ func UniqueStrings(input []string) []string {
 
 // SplitStringByDelimiter splits a string by the delimiter, not splitting inside quotes.
 func SplitStringByDelimiter(str string, delimiter rune) ([]string, error) {
+	defer perf.Track(nil, "utils.SplitStringByDelimiter")()
+
 	r := csv.NewReader(strings.NewReader(str))
 	r.Comma = delimiter
 	r.TrimLeadingSpace = true // Trim leading spaces in fields
@@ -44,6 +50,8 @@ func SplitStringByDelimiter(str string, delimiter rune) ([]string, error) {
 
 // SplitStringAtFirstOccurrence splits a string into two parts at the first occurrence of the separator
 func SplitStringAtFirstOccurrence(s string, sep string) [2]string {
+	defer perf.Track(nil, "utils.SplitStringAtFirstOccurrence")()
+
 	parts := strings.SplitN(s, sep, 2)
 	if len(parts) == 1 {
 		return [2]string{parts[0], ""}

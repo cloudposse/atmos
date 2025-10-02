@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -177,7 +178,7 @@ commands:
 				for _, cmd := range commands {
 					if cmd.Name == "my-local-cmd" {
 						foundLocal = true
-					} else if cmd.Name[:8] == "upstream" {
+					} else if strings.HasPrefix(cmd.Name, "upstream") {
 						upstreamCount++
 					}
 				}

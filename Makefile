@@ -57,7 +57,7 @@ deps:
 
 testacc: get
 	@echo "Running acceptance tests"
-	go test $(TEST) -v $(TESTARGS) -timeout 40m
+	go test $(TEST) $(TESTARGS) -timeout 40m
 
 # Run tests with subprocess coverage collection (Go 1.20+)
 testacc-cover: get

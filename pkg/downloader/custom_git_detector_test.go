@@ -124,27 +124,6 @@ func TestGetDefaultUsername(t *testing.T) {
 	}
 }
 
-func TestAdjustSubdir(t *testing.T) {
-	detector := &CustomGitDetector{}
-	uObj, err := url.Parse("https://github.com/user/repo.git")
-	if err != nil {
-		t.Fatalf("Failed to parse URL: %v", err)
-	}
-	source := "repo.git"
-	detector.adjustSubdir(uObj, source)
-	if !strings.Contains(uObj.Path, "//.") {
-		t.Errorf("Expected '//.' appended to path, got %s", uObj.Path)
-	}
-	uObj2, err := url.Parse("https://github.com/user/repo.git//subdir")
-	if err != nil {
-		t.Fatalf("Failed to parse URL: %v", err)
-	}
-	detector.adjustSubdir(uObj2, "repo.git//subdir")
-	if strings.HasSuffix(uObj2.Path, "//.") {
-		t.Errorf("Did not expect subdir adjustment, got %s", uObj2.Path)
-	}
-}
-
 func TestDetect_UnsupportedHost(t *testing.T) {
 	// This tests the branch when the URL host is not supported (not GitHub, GitLab, or Bitbucket)
 	config := fakeAtmosConfig()

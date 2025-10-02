@@ -68,6 +68,7 @@ To vendor remote artifacts, create a `vendor.yaml` file similar to the example b
       # `source` supports the following protocols: local paths (absolute and relative), OCI (https://opencontainers.org),
       # Git, Mercurial, HTTP, HTTPS, Amazon S3, Google GCP,
       # and all URL and archive formats as described in https://github.com/hashicorp/go-getter.
+      # See https://atmos.tools/core-concepts/vendor/url-syntax for complete URL syntax documentation.
       # In 'source' and 'targets', Golang templates are supported  https://pkg.go.dev/text/template.
       # Currently the fields '{{.Component}}' and '{{.Version}}' are supported.
       # Download the component from the AWS public ECR registry (https://docs.aws.amazon.com/AmazonECR/latest/public/public-registries.html).
@@ -92,7 +93,7 @@ To vendor remote artifacts, create a `vendor.yaml` file similar to the example b
           - test
           - networking
       - component: "vpc-flow-logs-bucket"
-        source: "github.com/cloudposse/terraform-aws-components.git//modules/vpc-flow-logs-bucket?ref={{.Version}}"
+        source: "github.com/cloudposse-terraform-components/aws-vpc-flow-logs-bucket.git?ref={{.Version}}"
         version: "1.323.0"
         targets:
           - "components/terraform/infra/{{.Component}}/{{.Version}}"
@@ -180,12 +181,14 @@ The `vendor.yaml` vendoring manifest supports Kubernetes-style YAML config to de
   <dd>
     The `source` attribute supports all protocols (local files, Git, Mercurial, HTTP, HTTPS, Amazon S3, Google GCP), and all the URL and archive formats as described in [go-getter](https://github.com/hashicorp/go-getter), and also the `oci://` scheme to download artifacts from [OCI registries](https://opencontainers.org).
 
+    See [Vendor URL Syntax](/core-concepts/vendor/url-syntax) for complete documentation on supported URL formats, authentication, and subdirectory syntax.
+
     **IMPORTANT:** Include the `{{ .Version }}` parameter in your `source` URI to ensure the correct version of the artifact is downloaded.
 
     For example, for `http` and `https` sources, use the following format:
 
     ```yaml
-    source: "github.com/cloudposse/terraform-aws-components.git//modules/vpc-flow-logs-bucket?ref={{.Version}}"
+    source: "github.com/cloudposse-terraform-components/aws-vpc-flow-logs-bucket.git?ref={{.Version}}"
     ```
 
     For private Git repositories, prepend the URI with `git::` and use the following format to pass a environment variable with the GitHub token:
@@ -256,7 +259,7 @@ The `vendor.yaml` vendoring manifest supports Kubernetes-style YAML config to de
   spec:
     sources:
       - component: "vpc-flow-logs-bucket"
-        source: "github.com/cloudposse/terraform-aws-components.git//modules/vpc-flow-logs-bucket?ref={{.Version}}"
+        source: "github.com/cloudposse-terraform-components/aws-vpc-flow-logs-bucket.git?ref={{.Version}}"
         version: "1.323.0"
         targets:
           - "components/terraform/vpc-flow-logs-bucket"
@@ -352,7 +355,7 @@ spec:
       targets:
         - "components/terraform/infra/vpc3"
     - component: "vpc-flow-logs-bucket"
-      source: "github.com/cloudposse/terraform-aws-components.git//modules/vpc-flow-logs-bucket?ref={{.Version}}"
+      source: "github.com/cloudposse-terraform-components/aws-vpc-flow-logs-bucket.git?ref={{.Version}}"
       version: "1.323.0"
       targets:
         - "components/terraform/infra/vpc-flow-logs-bucket/{{.Version}}"
@@ -393,7 +396,7 @@ spec:
 
   sources:
     - component: "my-vpc4"
-      source: "github.com/cloudposse/terraform-aws-components.git//modules/vpc?ref={{.Version}}"
+      source: "github.com/cloudposse-terraform-components/aws-vpc.git?ref={{.Version}}"
       version: "1.319.0"
       targets:
         - "components/terraform/infra/my-vpc4"
@@ -415,13 +418,13 @@ are defined:
 > atmos vendor pull
 
 Processing vendor config file 'vendor.yaml'
-Pulling sources for the component 'my-vpc6' from 'github.com/cloudposse/terraform-aws-components.git//modules/vpc?ref=1.315.0' into 'components/terraform/infra/my-vpc6'
-Pulling sources for the component 'my-vpc5' from 'github.com/cloudposse/terraform-aws-components.git//modules/vpc?ref=1.317.0' into 'components/terraform/infra/my-vpc5'
-Pulling sources for the component 'my-vpc4' from 'github.com/cloudposse/terraform-aws-components.git//modules/vpc?ref=1.319.0' into 'components/terraform/infra/my-vpc4'
+Pulling sources for the component 'my-vpc6' from 'github.com/cloudposse-terraform-components/aws-vpc.git?ref=1.315.0' into 'components/terraform/infra/my-vpc6'
+Pulling sources for the component 'my-vpc5' from 'github.com/cloudposse-terraform-components/aws-vpc.git?ref=1.317.0' into 'components/terraform/infra/my-vpc5'
+Pulling sources for the component 'my-vpc4' from 'github.com/cloudposse-terraform-components/aws-vpc.git?ref=1.319.0' into 'components/terraform/infra/my-vpc4'
 Pulling sources for the component 'my-vpc1' from 'public.ecr.aws/cloudposse/components/terraform/stable/aws/vpc:1.0.2' into 'components/terraform/infra/my-vpc1'
-Pulling sources for the component 'my-vpc2' from 'github.com/cloudposse/terraform-aws-components.git//modules/vpc?ref=1.320.0' into 'components/terraform/infra/my-vpc2'
+Pulling sources for the component 'my-vpc2' from 'github.com/cloudposse-terraform-components/aws-vpc.git?ref=1.320.0' into 'components/terraform/infra/my-vpc2'
 Pulling sources for the component 'vpc' from 'public.ecr.aws/cloudposse/components/terraform/stable/aws/vpc:latest' into 'components/terraform/infra/vpc3'
-Pulling sources for the component 'vpc-flow-logs-bucket' from 'github.com/cloudposse/terraform-aws-components.git//modules/vpc-flow-logs-bucket?ref=1.323.0' into 'components/terraform/infra/vpc-flow-logs-bucket/1.323.0'
+Pulling sources for the component 'vpc-flow-logs-bucket' from 'github.com/cloudposse-terraform-components/aws-vpc-flow-logs-bucket.git?ref=1.323.0' into 'components/terraform/infra/vpc-flow-logs-bucket/1.323.0'
 ```
 </Terminal>
 

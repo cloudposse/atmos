@@ -13,7 +13,7 @@ rm -rf "$COVERAGE_DIR"
 mkdir -p "$COVERAGE_DIR/integration"
 
 # Run tests with coverage enabled - subprocesses will write to GOCOVERDIR
-GOCOVERDIR="$(pwd)/$COVERAGE_DIR/integration" go test $TEST -v \
+GOCOVERDIR="$(pwd)/$COVERAGE_DIR/integration" go test $TEST \
     -cover -coverpkg=./... $TESTARGS -timeout 40m \
     -coverprofile="$COVERAGE_DIR/unit.txt"
 
@@ -33,8 +33,12 @@ else
     cp "$COVERAGE_DIR/unit.txt" coverage.raw
 fi
 
-# Filter out mock files
-grep -v "mock_" coverage.raw > coverage.out || cp coverage.raw coverage.out
+# Filter out mock files - handle cross-platform grep behavior
+if grep -q "mock_" coverage.raw 2>/dev/null; then
+    grep -v "mock_" coverage.raw > coverage.out
+else
+    cp coverage.raw coverage.out
+fi
 rm -f coverage.raw
 
 echo "Coverage report generated: coverage.out"

@@ -20,6 +20,8 @@ tests:
     args:
       - "vendor"
       - "pull"
+    preconditions:
+      - "github_token"
     expect:
       file_exists:
         - "./components/terraform/github/stargazers/main/main.tf"
@@ -51,6 +53,8 @@ tests:
       - "vendor"
       - "pull"
       - "--tags=oci"
+    preconditions:
+      - "github_token"
     expect:
       file_exists:
         # From ghcr.io/cloudposse/atmos/tests/fixtures/components/terraform/mock:v0

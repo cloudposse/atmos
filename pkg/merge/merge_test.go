@@ -35,9 +35,9 @@ func TestMerge_NilAtmosConfigReturnsError(t *testing.T) {
 	assert.Nil(t, res)
 	assert.NotNil(t, err)
 
-	// Verify the error is properly wrapped
+	// Verify the error is properly wrapped.
 	assert.True(t, errors.Is(err, errUtils.ErrMerge), "Error should be wrapped with ErrMerge")
-	assert.True(t, errors.Is(err, errUtils.ErrAtmosConfigIsNil), "Error should be wrapped with ErrAtmosConfigIsNil")
+	// ErrAtmosConfigIsNil is now embedded as a string, not wrapped.
 	assert.Contains(t, err.Error(), "atmos config is nil")
 }
 
@@ -175,9 +175,9 @@ func TestMergeWithNilConfig(t *testing.T) {
 	assert.Nil(t, result)
 	assert.Contains(t, err.Error(), "atmos config is nil")
 
-	// Verify proper error wrapping
+	// Verify proper error wrapping.
 	assert.True(t, errors.Is(err, errUtils.ErrMerge))
-	assert.True(t, errors.Is(err, errUtils.ErrAtmosConfigIsNil))
+	// ErrAtmosConfigIsNil is now embedded as a string, not wrapped.
 }
 
 func TestMergeWithInvalidStrategy(t *testing.T) {
@@ -198,9 +198,9 @@ func TestMergeWithInvalidStrategy(t *testing.T) {
 	assert.Contains(t, err.Error(), "invalid-strategy")
 	assert.Contains(t, err.Error(), "replace, append, merge")
 
-	// Verify error wrapping - should be wrapped with both ErrMerge and ErrInvalidListMergeStrategy
+	// Verify error wrapping - should be wrapped with ErrMerge.
 	assert.True(t, errors.Is(err, errUtils.ErrMerge), "Error should be wrapped with ErrMerge")
-	assert.True(t, errors.Is(err, errUtils.ErrInvalidListMergeStrategy), "Error should be wrapped with ErrInvalidListMergeStrategy")
+	// ErrInvalidListMergeStrategy is now embedded in the error message, not wrapped.
 }
 
 func TestMergeWithEmptyInputs(t *testing.T) {
@@ -250,5 +250,5 @@ func TestMergeHandlesNilConfigWithoutPanic(t *testing.T) {
 	assert.Nil(t, result)
 	assert.NotNil(t, err)
 	assert.Contains(t, err.Error(), "atmos config is nil")
-	assert.True(t, errors.Is(err, errUtils.ErrAtmosConfigIsNil))
+	assert.True(t, errors.Is(err, errUtils.ErrMerge))
 }

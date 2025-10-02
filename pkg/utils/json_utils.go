@@ -9,11 +9,14 @@ import (
 
 	jsoniter "github.com/json-iterator/go"
 
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 // PrintAsJSON prints the provided value as a JSON document to the console.
 func PrintAsJSON(atmosConfig *schema.AtmosConfiguration, data any) error {
+	defer perf.Track(atmosConfig, "utils.PrintAsJSON")()
+
 	highlighted, err := GetHighlightedJSON(atmosConfig, data)
 	if err != nil {
 		return err
@@ -23,6 +26,8 @@ func PrintAsJSON(atmosConfig *schema.AtmosConfiguration, data any) error {
 }
 
 func GetHighlightedJSON(atmosConfig *schema.AtmosConfiguration, data any) (string, error) {
+	defer perf.Track(atmosConfig, "utils.GetHighlightedJSON")()
+
 	j, err := ConvertToJSON(data)
 	if err != nil {
 		return "", err
@@ -41,6 +46,8 @@ func GetHighlightedJSON(atmosConfig *schema.AtmosConfiguration, data any) (strin
 }
 
 func GetAtmosConfigJSON(atmosConfig *schema.AtmosConfiguration) (string, error) {
+	defer perf.Track(atmosConfig, "utils.GetAtmosConfigJSON")()
+
 	j, err := ConvertToJSON(atmosConfig)
 	if err != nil {
 		return "", err
@@ -62,6 +69,8 @@ func GetAtmosConfigJSON(atmosConfig *schema.AtmosConfiguration) (string, error) 
 
 // PrintAsJSONToFileDescriptor prints the provided value as JSON document to a file descriptor
 func PrintAsJSONToFileDescriptor(atmosConfig schema.AtmosConfiguration, data any) error {
+	defer perf.Track(&atmosConfig, "utils.PrintAsJSONToFileDescriptor")()
+
 	j, err := ConvertToJSON(data)
 	if err != nil {
 		return err
@@ -72,6 +81,8 @@ func PrintAsJSONToFileDescriptor(atmosConfig schema.AtmosConfiguration, data any
 
 // WriteToFileAsJSON converts the provided value to JSON and writes it to the specified file
 func WriteToFileAsJSON(filePath string, data any, fileMode os.FileMode) error {
+	defer perf.Track(nil, "utils.WriteToFileAsJSON")()
+
 	j, err := ConvertToJSON(data)
 	if err != nil {
 		return err
@@ -99,6 +110,8 @@ func WriteToFileAsJSON(filePath string, data any, fileMode os.FileMode) error {
 
 // ConvertToJSON converts the provided value to a JSON-encoded string
 func ConvertToJSON(data any) (string, error) {
+	defer perf.Track(nil, "utils.ConvertToJSON")()
+
 	jc := jsoniter.Config{
 		EscapeHTML:                    true,
 		ObjectFieldMustBeSimpleString: false,
@@ -115,6 +128,8 @@ func ConvertToJSON(data any) (string, error) {
 
 // ConvertToJSONFast converts the provided value to a JSON-encoded string using 'ConfigFastest' config and json.Marshal without indents
 func ConvertToJSONFast(data any) (string, error) {
+	defer perf.Track(nil, "utils.ConvertToJSONFast")()
+
 	jc := jsoniter.Config{
 		EscapeHTML:                    false,
 		MarshalFloatWith6Digits:       true,
@@ -132,6 +147,8 @@ func ConvertToJSONFast(data any) (string, error) {
 
 // ConvertFromJSON converts the provided JSON-encoded string to Go data types
 func ConvertFromJSON(jsonString string) (any, error) {
+	defer perf.Track(nil, "utils.ConvertFromJSON")()
+
 	jc := jsoniter.Config{
 		EscapeHTML:                    false,
 		MarshalFloatWith6Digits:       true,
@@ -150,6 +167,8 @@ func ConvertFromJSON(jsonString string) (any, error) {
 
 // JSONToMapOfInterfaces takes a JSON string as input and returns a map[string]any
 func JSONToMapOfInterfaces(input string) (schema.AtmosSectionMapType, error) {
+	defer perf.Track(nil, "utils.JSONToMapOfInterfaces")()
+
 	var data schema.AtmosSectionMapType
 	byt := []byte(input)
 

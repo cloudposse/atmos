@@ -12,6 +12,8 @@ import (
 	"text/template"
 	"time"
 
+	"github.com/cloudposse/atmos/pkg/perf"
+
 	"github.com/Masterminds/sprig/v3"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/hairyhenderson/gomplate/v3"
@@ -61,6 +63,8 @@ func ReadAndProcessComponentVendorConfigFile(
 	component string,
 	componentType string,
 ) (schema.VendorComponentConfig, string, error) {
+	defer perf.Track(atmosConfig, "exec.ReadAndProcessComponentVendorConfigFile")()
+
 	var componentBasePath string
 	var componentConfig schema.VendorComponentConfig
 
@@ -120,6 +124,8 @@ func ExecuteStackVendorInternal(
 	stack string,
 	dryRun bool,
 ) error {
+	defer perf.Track(nil, "exec.ExecuteStackVendorInternal")()
+
 	return ErrStackPullNotSupported
 }
 
@@ -227,6 +233,8 @@ func ExecuteComponentVendorInternal(
 	componentPath string,
 	dryRun bool,
 ) error {
+	defer perf.Track(atmosConfig, "exec.ExecuteComponentVendorInternal")()
+
 	if vendorComponentSpec.Source.Uri == "" {
 		return fmt.Errorf("%w:'%s'", ErrUriMustSpecified, cfg.ComponentVendorConfigFileName)
 	}
@@ -291,7 +299,7 @@ func handleLocalFileScheme(componentPath, uri string) (string, bool, bool) {
 	var useLocalFileSystem, sourceIsLocalFile bool
 
 	// Handle absolute path resolution
-	if absPath, err := u.JoinAbsolutePathWithPath(componentPath, uri); err == nil {
+	if absPath, err := u.JoinPathAndValidate(componentPath, uri); err == nil {
 		uri = absPath
 		useLocalFileSystem = true
 		sourceIsLocalFile = u.FileExists(uri)
@@ -338,12 +346,12 @@ func processComponentMixins(vendorComponentSpec *schema.VendorComponentSpec, com
 		// If it's a file path, check if it's an absolute path.
 		// If it's not absolute path, join it with the base path (component dir) and convert to absolute path.
 		if !useOciScheme {
-			if absPath, err := u.JoinAbsolutePathWithPath(componentPath, uri); err == nil {
+			if absPath, err := u.JoinPathAndValidate(componentPath, uri); err == nil {
 				uri = absPath
 			}
 		}
 		// Check if it's a local file .
-		if absPath, err := u.JoinAbsolutePathWithPath(componentPath, uri); err == nil {
+		if absPath, err := u.JoinPathAndValidate(componentPath, uri); err == nil {
 			if u.FileExists(absPath) {
 				continue
 			}

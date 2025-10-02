@@ -18,6 +18,9 @@
 **/kubeconfig.yaml
 **/*.planfile.json
 
+# Atmos binary
+atmos
+
 # Module directory
 .terraform
 **/.idea
@@ -66,3 +69,6 @@ tests.test
 # Toolchain installed tools
 toolchain/.tools/
 toolchain/.tool-versions
+
+**/llms.txt
+**/llms-full.txt

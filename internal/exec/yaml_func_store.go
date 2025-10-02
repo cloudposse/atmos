@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"strings"
 
-	log "github.com/cloudposse/atmos/pkg/logger"
-
 	errUtils "github.com/cloudposse/atmos/errors"
+	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -21,6 +21,8 @@ type params struct {
 }
 
 func processTagStore(atmosConfig *schema.AtmosConfiguration, input string, currentStack string) any {
+	defer perf.Track(atmosConfig, "exec.processTagStore")()
+
 	log.Debug("Executing Atmos YAML function", "function", input)
 
 	str, err := getStringAfterTag(input, u.AtmosYamlFuncStore)
