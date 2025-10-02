@@ -2,6 +2,7 @@
 package exec
 
 import (
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -367,5 +368,75 @@ common: remote
 				}
 			}
 		})
+	}
+}
+
+// mockErrorRenderer simulates a renderer that always returns an error.
+type mockErrorRenderer struct{}
+
+func (m mockErrorRenderer) Render(tmplName, tmplValue string, mergedData map[string]interface{}, ignoreMissing bool) (string, error) {
+	return "", fmt.Errorf("mock renderer error")
+}
+
+// TestGenerateDocument_RenderError tests error handling when renderer fails.
+func TestGenerateDocument_RenderError(t *testing.T) {
+	atmosConfig := schema.AtmosConfiguration{}
+	baseDir := t.TempDir()
+
+	// Create a valid input file so mergeInputs succeeds.
+	inputFile := filepath.Join(baseDir, "input.yaml")
+	if err := os.WriteFile(inputFile, []byte("name: test\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	docsGen := schema.DocsGenerate{
+		Input: []any{inputFile},
+		Terraform: schema.TerraformDocsReadmeSettings{
+			Enabled: false,
+		},
+	}
+
+	// Use the error renderer to trigger render failure.
+	err := generateDocument(&atmosConfig, baseDir, &docsGen, mockErrorRenderer{})
+	if err == nil {
+		t.Error("Expected error from generateDocument when renderer fails")
+	}
+	if !strings.Contains(err.Error(), "failed to render template with datasources") {
+		t.Errorf("Expected error about rendering template, got: %v", err)
+	}
+}
+
+// TestGenerateDocument_WriteFileError tests error handling when os.WriteFile fails.
+func TestGenerateDocument_WriteFileError(t *testing.T) {
+	atmosConfig := schema.AtmosConfiguration{}
+	baseDir := t.TempDir()
+
+	// Create a valid input file.
+	inputFile := filepath.Join(baseDir, "input.yaml")
+	if err := os.WriteFile(inputFile, []byte("name: test\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Set output to a directory that exists to trigger write error.
+	// Create a directory with the output filename to prevent writing.
+	outputDir := filepath.Join(baseDir, "output.md")
+	if err := os.Mkdir(outputDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	docsGen := schema.DocsGenerate{
+		Input:  []any{inputFile},
+		Output: outputDir, // This is a directory, not a file, so WriteFile will fail.
+		Terraform: schema.TerraformDocsReadmeSettings{
+			Enabled: false,
+		},
+	}
+
+	err := generateDocument(&atmosConfig, baseDir, &docsGen, mockRenderer{})
+	if err == nil {
+		t.Error("Expected error from generateDocument when os.WriteFile fails")
+	}
+	if !strings.Contains(err.Error(), "failed to write output") {
+		t.Errorf("Expected error about writing output, got: %v", err)
 	}
 }
