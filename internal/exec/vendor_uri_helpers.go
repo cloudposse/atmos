@@ -219,21 +219,22 @@ func parseSubdirFromTripleSlash(uri string) (source string, subdir string) {
 
 // needsDoubleSlashDot determines if a URI needs double-slash-dot appended.
 func needsDoubleSlashDot(uri string) bool {
-	// Skip if not a Git URI
+	// Only Git URIs need double-slash-dot (e.g., github.com/owner/repo.git needs github.com/owner/repo.git//.)
 	if !isGitURI(uri) {
-		return false
+		return false // Not a Git URI, doesn't need //.
 	}
 
-	// Skip if it already has a subdirectory
+	// Already has subdirectory specified, no need to add //.
 	if hasSubdirectory(uri) {
 		return false
 	}
 
-	// Skip special URI types that don't need modification
+	// These special URI types shouldn't be modified even if they look like Git.
 	if isFileURI(uri) || isOCIURI(uri) || isS3URI(uri) || isLocalPath(uri) || isNonGitHTTPURI(uri) {
 		return false
 	}
 
+	// It's a Git URI without a subdirectory, needs //. appended.
 	return true
 }
 
