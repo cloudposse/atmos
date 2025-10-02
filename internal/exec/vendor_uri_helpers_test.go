@@ -2,6 +2,7 @@
 package exec
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -350,6 +351,72 @@ func TestIsGitURI(t *testing.T) {
 			name:     "s3 URL",
 			uri:      "s3::https://s3.amazonaws.com/bucket/path",
 			expected: false,
+		},
+		// Security / Malicious Edge Cases
+		{
+			name:     "path traversal in URL",
+			uri:      "github.com/owner/repo/../../../etc/passwd",
+			expected: true, // Still a Git URL, path traversal handled by downloader
+		},
+		{
+			name:     "null bytes in URL (Go's url.Parse handles this)",
+			uri:      "github.com/owner/repo\x00/malicious",
+			expected: false, // URL parsing fails, returns false
+		},
+		{
+			name:     "unicode homograph attack - gιthub.com (Greek iota)",
+			uri:      "gιthub.com/owner/repo",
+			expected: false, // Not actual github.com
+		},
+		{
+			name:     "double scheme exploitation attempt",
+			uri:      "git::git::https://github.com/owner/repo",
+			expected: true, // Has git:: prefix
+		},
+		{
+			name:     "file:// with git patterns to trick detection",
+			uri:      "file:///tmp/fake.git",
+			expected: true, // Has .git in path, but file:// scheme prevents actual Git clone
+		},
+		{
+			name:     "javascript: pseudo-protocol",
+			uri:      "javascript:alert('XSS').git",
+			expected: false, // Not a Git URL
+		},
+		{
+			name:     "data: URL with .git",
+			uri:      "data:text/html,<script>alert('XSS')</script>.git",
+			expected: false, // Not a Git URL
+		},
+		{
+			name:     "extremely long URL to test DoS",
+			uri:      "github.com/" + strings.Repeat("a", 10000) + "/repo.git",
+			expected: true, // Still valid Git URL, length handled elsewhere
+		},
+		{
+			name:     "URL with credentials in path segment",
+			uri:      "evil.com/https://user:pass@github.com/fake",
+			expected: false, // Not actual GitHub in host
+		},
+		{
+			name:     "Mixed case attack - GiThUb.CoM",
+			uri:      "GiThUb.CoM/owner/repo",
+			expected: true, // Case-insensitive matching
+		},
+		{
+			name:     "Subdomain confusion - evil-github.com",
+			uri:      "evil-github.com/owner/repo.git",
+			expected: true, // Has .git extension, would attempt Git clone
+		},
+		{
+			name:     "Port number in URL (url.Parse handles correctly)",
+			uri:      "github.com:22/owner/repo.git",
+			expected: true, // url.Parse treats :22 as port, still github.com host with .git
+		},
+		{
+			name:     "SCP-style Git URL (not standard HTTP URL)",
+			uri:      "git@github.com:owner/repo.git",
+			expected: true, // SCP-style detected via regex pattern before url.Parse
 		},
 	}
 

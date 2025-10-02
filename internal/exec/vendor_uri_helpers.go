@@ -1,10 +1,16 @@
 package exec
 
 import (
+	"net/url"
+	"regexp"
 	"strings"
 
 	"github.com/hashicorp/go-getter"
 )
+
+// scpURLPattern matches SCP-style Git URLs (e.g., git@github.com:owner/repo.git).
+// This pattern is also used by CustomGitDetector.rewriteSCPURL in pkg/downloader/.
+var scpURLPattern = regexp.MustCompile(`^(([\w.-]+)@)?([\w.-]+\.[\w.-]+):([\w./-]+)(\.git)?(.*)$`)
 
 // isFileURI checks if the URI is a file:// scheme.
 func isFileURI(uri string) bool {
@@ -116,67 +122,67 @@ func isNonGitHTTPURI(uri string) bool {
 	return false
 }
 
-// parseGitHostAndPath separates a URI into host and path components.
-func parseGitHostAndPath(uri string) (host string, path string) {
-	// Remove scheme if present to get the actual host/path
-	workingURI := uri
-	if idx := strings.Index(uri, "://"); idx != -1 {
-		workingURI = uri[idx+3:]
-	}
-
-	// Split on first / to separate host from path
-	parts := strings.SplitN(workingURI, "/", 2)
-	host = strings.ToLower(parts[0])
-	if len(parts) > 1 {
-		path = "/" + parts[1]
-	}
-	return host, path
-}
-
-// isKnownGitHost checks if the host is a known Git hosting platform.
-func isKnownGitHost(host string) bool {
-	gitHosts := []string{"github.com", "gitlab.com", "bitbucket.org"}
-	for _, gitHost := range gitHosts {
-		if host == gitHost || strings.HasSuffix(host, "."+gitHost) {
-			return true
-		}
-	}
-	return false
-}
-
-// hasGitExtension checks if the path has a .git extension in the correct position.
-func hasGitExtension(path string) bool {
-	idx := strings.Index(path, ".git")
-	if idx == -1 {
-		return false
-	}
-	afterGit := path[idx+4:]
-	return afterGit == "" || strings.HasPrefix(afterGit, "/") || strings.HasPrefix(afterGit, "?")
-}
-
 // isGitURI checks if the URI appears to be a Git repository URL.
-// Properly parses URLs to check host and path separately, avoiding false positives.
+// We cannot use go-getter's Detect() because it only detects specific platforms (GitHub/GitLab/BitBucket)
+// and treats everything else as file://. We need broader detection for self-hosted Git, Azure DevOps, etc.
+//
+// This uses net/url.Parse for proper host/path separation instead of custom string manipulation.
+// Detection rules:
+// 1. Explicit git:: prefix.
+// 2. SCP-style URLs (git@github.com:owner/repo.git).
+// 3. Known Git hosting platforms (github.com, gitlab.com, bitbucket.org) in host.
+// 4. .git extension in path (not in host).
+// 5. Azure DevOps _git/ pattern in path.
 func isGitURI(uri string) bool {
-	// Check for explicit git:: prefix
+	// Check for explicit git:: forced getter prefix
 	if strings.HasPrefix(uri, "git::") {
 		return true
 	}
 
-	// Parse the URI to separate host from path
-	host, path := parseGitHostAndPath(uri)
+	// Remove go-getter's subdirectory delimiter for parsing
+	srcURI, _ := getter.SourceDirSubdir(uri)
 
-	// Check if host is a known Git hosting platform
-	if isKnownGitHost(host) {
+	// Check for SCP-style URLs (git@github.com:owner/repo.git)
+	// Use same pattern as CustomGitDetector.rewriteSCPURL
+	if scpURLPattern.MatchString(srcURI) {
 		return true
 	}
 
-	// Check path for .git extension
-	if hasGitExtension(path) {
+	// Use standard library url.Parse for proper URL parsing
+	// Add https:// scheme if missing to help url.Parse identify the host
+	parseURI := srcURI
+	if !strings.Contains(parseURI, "://") {
+		parseURI = "https://" + parseURI
+	}
+
+	parsedURL, err := url.Parse(parseURI)
+	if err != nil {
+		// If URL parsing fails, it's likely not a valid Git URL
+		return false
+	}
+
+	host := strings.ToLower(parsedURL.Host)
+	path := parsedURL.Path
+
+	// Check for known Git hosting platforms
+	knownHosts := []string{"github.com", "gitlab.com", "bitbucket.org"}
+	for _, knownHost := range knownHosts {
+		if host == knownHost || strings.HasSuffix(host, "."+knownHost) {
+			return true
+		}
+	}
+
+	// Check for .git extension in path (not in host)
+	if strings.Contains(path, ".git") {
 		return true
 	}
 
-	// Check path for Azure DevOps _git/ pattern
-	return strings.Contains(path, "/_git/")
+	// Check for Azure DevOps _git/ pattern
+	if strings.Contains(path, "/_git/") {
+		return true
+	}
+
+	return false
 }
 
 // hasSubdirectory checks if the URI already has a subdirectory delimiter.
