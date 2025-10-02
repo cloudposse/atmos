@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 	"testing"
 
 	v1 "github.com/google/go-containerregistry/pkg/v1"
@@ -135,4 +136,81 @@ func TestRemoveTempDir_NonExistent(t *testing.T) {
 	// This should not panic, just log an error.
 	removeTempDir("/nonexistent/directory/path")
 	// Test passes if no panic occurs.
+}
+
+// TestParseOCIManifest tests the parseOCIManifest function.
+func TestParseOCIManifest(t *testing.T) {
+	tests := []struct {
+		name        string
+		input       string
+		expectError bool
+	}{
+		{
+			name: "Valid OCI manifest",
+			input: `{
+				"schemaVersion": 2,
+				"mediaType": "application/vnd.oci.image.manifest.v1+json",
+				"config": {
+					"mediaType": "application/vnd.oci.image.config.v1+json",
+					"digest": "sha256:abc123",
+					"size": 1024
+				},
+				"layers": [
+					{
+						"mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+						"digest": "sha256:layer1",
+						"size": 2048
+					}
+				]
+			}`,
+			expectError: false,
+		},
+		{
+			name: "Minimal valid manifest",
+			input: `{
+				"schemaVersion": 2
+			}`,
+			expectError: false,
+		},
+		{
+			name:        "Invalid JSON",
+			input:       `{"schemaVersion": 2,`,
+			expectError: true,
+		},
+		{
+			name:        "Empty JSON",
+			input:       `{}`,
+			expectError: false,
+		},
+		{
+			name:        "Invalid structure",
+			input:       `"just a string"`,
+			expectError: true,
+		},
+		{
+			name:        "Array instead of object",
+			input:       `[1, 2, 3]`,
+			expectError: true,
+		},
+		{
+			name:        "Empty string",
+			input:       ``,
+			expectError: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			reader := strings.NewReader(tt.input)
+			manifest, err := parseOCIManifest(reader)
+
+			if tt.expectError {
+				assert.Error(t, err)
+				assert.Nil(t, manifest)
+			} else {
+				assert.NoError(t, err)
+				assert.NotNil(t, manifest)
+			}
+		})
+	}
 }
