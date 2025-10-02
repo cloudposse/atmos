@@ -28,7 +28,7 @@ Managing versions of infrastructure components requires careful consideration of
 
 Traditional Terraform/IaC wisdom advocates pinning every version per environment for reproducibility. While this improves predictability, it often creates significant challenges:
 
-### Problems with Universal Pinning
+### Problems with Strict Pinning
 
 1. **Optimizes for Divergence**: Each environment drifts unless you constantly update pins
 2. **Weakens Cross-Environment Feedback**: Lower environments stay pinned to old versions, so `terraform plan` doesn't reveal cross-environment impact

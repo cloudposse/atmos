@@ -280,33 +280,30 @@ Choose names that reflect your organization's mental model. If your team thinks 
 
 ### Managing Track Versions
 
-Regardless of organization, use a centralized configuration to manage track versions:
-
-<File title="stacks/catalog/tracks.yaml">
-```yaml
-vars:
-  component_tracks:
-    vpc:
-      alpha: "v1.14.0"
-      beta: "v1.13.2"
-      prod: "v1.12.8"
-    rds:
-      alpha: "v2.3.0"
-      beta: "v2.2.1"
-      prod: "v2.1.5"
-```
-</File>
+With folder-based tracks, versions are managed by vendoring components into track-specific folders:
 
 <File title="vendor.yaml">
 ```yaml
-# Vendor components at their track versions
+# Vendor components to track-specific folders
 spec:
   sources:
-    - component: vpc
-      source: "git::https://github.com/acme/terraform-components.git//modules/vpc?ref={{.Version}}"
-      version: "{{ .vars.component_tracks.vpc.prod }}"
+    # Alpha track - latest version
+    - component: vpc-alpha
+      source: "git::https://github.com/acme/terraform-components.git//modules/vpc?ref=v1.14.0"
       targets:
-        - "components/terraform/vpc/prod"
+        - "components/terraform/alpha/vpc"
+
+    # Beta track - stable version
+    - component: vpc-beta
+      source: "git::https://github.com/acme/terraform-components.git//modules/vpc?ref=v1.13.2"
+      targets:
+        - "components/terraform/beta/vpc"
+
+    # Production track - proven version
+    - component: vpc-prod
+      source: "git::https://github.com/acme/terraform-components.git//modules/vpc?ref=v1.12.8"
+      targets:
+        - "components/terraform/prod/vpc"
 ```
 </File>
 
@@ -317,9 +314,11 @@ Here's a typical workflow for promoting versions through tracks:
 ### 1. Development Testing
 New versions land in the `alpha` track for initial testing:
 
+**Update vendor.yaml** to vendor the new version to the alpha track folder, then pull and test:
+
 ```bash
-# Update alpha track to latest version
-atmos vendor pull --component vpc --track alpha --version v1.14.1
+# Vendor new version to alpha track
+atmos vendor pull --component vpc-alpha
 
 # Test in alpha environments
 atmos terraform plan vpc --stack dev-us-east-1
@@ -327,11 +326,11 @@ atmos terraform apply vpc --stack dev-us-east-1
 ```
 
 ### 2. Staging Validation
-After validation, promote to `beta` track:
+After validation, **promote to `beta` track** by updating vendor.yaml to vendor the validated version to the beta track folder:
 
 ```bash
-# Promote version from alpha to beta
-atmos vendor pull --component vpc --track beta --version v1.14.1
+# Vendor promoted version to beta track
+atmos vendor pull --component vpc-beta
 
 # Validate in staging environments
 atmos terraform plan vpc --stack staging-us-east-1
@@ -339,16 +338,20 @@ atmos terraform apply vpc --stack staging-us-east-1
 ```
 
 ### 3. Production Deployment
-Finally, promote to production track:
+Finally, **promote to production track** by updating vendor.yaml to vendor the proven version to the prod track folder:
 
 ```bash
-# Promote version from beta to prod
-atmos vendor pull --component vpc --track prod --version v1.14.1
+# Vendor promoted version to prod track
+atmos vendor pull --component vpc-prod
 
 # Deploy to production environments
 atmos terraform plan vpc --stack prod-us-east-1
 atmos terraform apply vpc --stack prod-us-east-1
 ```
+
+:::tip Track Promotion
+Track promotion means updating the component version reference in `vendor.yaml` for the target track, then running `atmos vendor pull` to update that track's folder. This makes the new version available to all environments subscribing to that track.
+:::
 
 ## Benefits
 
@@ -373,9 +376,11 @@ The pattern also has limitations:
 
 ## Rollback Strategy
 
-Release tracks make rollback simple by reverting the track version:
+Release tracks make rollback simple by reverting the track folder to a previous version:
 
-### Option 1: Revert Track in Vendor Configuration
+### Revert Track Version in vendor.yaml
+
+Update the version reference for the problematic track:
 
 ```yaml
 # vendor.yaml - Revert prod track to previous version
@@ -386,24 +391,13 @@ spec:
       # Reverting to: v1.12.8 (last known good)
       source: "git::https://github.com/acme/terraform-components.git//modules/vpc?ref=v1.12.8"
       targets:
-        - "components/terraform/vpc/prod"
-```
-
-### Option 2: Revert Track in Configuration Variables
-
-```yaml
-# stacks/catalog/tracks.yaml
-vars:
-  tracks:
-    component_versions:
-      vpc:
-        prod: "v1.12.8"  # Was v1.13.2, rolling back
+        - "components/terraform/prod/vpc"
 ```
 
 ### Apply the Rollback
 
 ```bash
-# Re-vendor if using vendor.yaml approach
+# Re-vendor the track folder with previous version
 atmos vendor pull --component vpc-prod
 
 # Validate rollback across all prod stacks
@@ -414,7 +408,7 @@ atmos terraform apply vpc --stack prod-us-east-1
 ```
 
 :::tip
-Track-based rollback affects all environments subscribed to that track, providing consistent rollback across similar environments.
+Track-based rollback affects all environments subscribed to that track, providing consistent rollback across similar environments. The folder structure (`prod/vpc`) stays the same, only the component code inside changes.
 :::
 
 ## Best Practices
