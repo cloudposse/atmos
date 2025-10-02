@@ -157,11 +157,76 @@ A core principle of this pattern is separating deployment (putting code in produ
 
 **Faster Incident Response**: When issues arise, you can disable problematic features via configuration changes and redeploy, which is faster than reverting code. While not instant (redeployment is still required), preparing flag-disabled configurations in advance enables rapid response.
 
-**Progressive Feature Rollout**: Release features gradually (5% of users, then 20%, then 100%) without redeploying code, reducing blast radius of issues.
-
-**A/B Testing and Experimentation**: Test different feature variations in production without multiple deployments.
-
 This decoupling is achieved through feature flags (environment variables, configuration files, or feature flag services) that control feature availability at runtime, enabling all environments to run the same code while exposing different capabilities.
+
+### Progressive Rollout Across Environments
+
+When you merge code to main, you're declaring you want this code live in all environments (dev, staging, prod). However, **progressive rollout** means deploying to environments sequentially with approval gates:
+
+1. **Deploy to dev** - Automatically after merge
+2. **Let it sit** - Validate in dev environment
+3. **Approve deployment to staging** - Manual or automated gate
+4. **Validate in staging** - Pre-production testing
+5. **Approve deployment to production** - Manual approval gate
+6. **All environments converged** - Same code running everywhere
+
+This progressive environment rollout provides safety through validation at each stage while driving convergence across all environments.
+
+## Experimentation
+
+Experimentation in Atmos is achieved through folder-based component isolation, not feature percentage rollouts. When you need to test a new approach or validate an experimental change, create a dedicated component folder for your experiment and pin specific environments to it.
+
+### Creating an Experiment
+
+<File title="Directory Structure">
+```
+components/terraform/
+  vpc/                    # Current stable version
+    main.tf
+    variables.tf
+  vpc-experiment/         # Experimental version
+    main.tf
+    variables.tf
+```
+</File>
+
+### Pinning Environment to Experiment
+
+<File title="stacks/dev/us-east-1.yaml">
+```yaml
+components:
+  terraform:
+    vpc:
+      metadata:
+        component: vpc-experiment  # Pin dev to experiment
+      vars:
+        name: "dev-vpc-experiment"
+```
+</File>
+
+<File title="stacks/prod/us-east-1.yaml">
+```yaml
+components:
+  terraform:
+    vpc:
+      metadata:
+        component: vpc  # Production stays on stable
+      vars:
+        name: "prod-vpc"
+```
+</File>
+
+### Experiment Lifecycle
+
+1. **Create experiment folder** - Copy stable component to new folder (e.g., `vpc-experiment`)
+2. **Make changes** - Modify experimental component without affecting stable
+3. **Pin test environment** - Update dev/staging to reference experiment folder
+4. **Validate** - Test experimental changes in isolated environment
+5. **Promote or discard**:
+   - **Success**: Merge changes back to stable component, remove experiment folder
+   - **Failure**: Delete experiment folder, revert environment pins
+
+This approach provides complete isolation for experiments while maintaining the benefits of trunk-based development. Each experiment is visible in the repository structure and can be managed through standard Git workflows.
 
 ## Understanding Divergence
 
