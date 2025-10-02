@@ -7,11 +7,12 @@ import (
 	"os"
 	"path/filepath"
 
-	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -28,6 +29,8 @@ func ExecuteHelmfileCmd(cmd *cobra.Command, args []string, additionalArgsAndFlag
 
 // ExecuteHelmfile executes helmfile commands.
 func ExecuteHelmfile(info schema.ConfigAndStacksInfo) error {
+	defer perf.Track(nil, "exec.ExecuteHelmfile")()
+
 	atmosConfig, err := cfg.InitCliConfig(info, true)
 	if err != nil {
 		return err

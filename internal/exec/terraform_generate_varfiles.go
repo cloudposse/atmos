@@ -6,18 +6,21 @@ import (
 	"path/filepath"
 	"strings"
 
-	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/mitchellh/mapstructure"
 	"github.com/spf13/cobra"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 // ExecuteTerraformGenerateVarfilesCmd executes `terraform generate varfiles` command.
 func ExecuteTerraformGenerateVarfilesCmd(cmd *cobra.Command, args []string) error {
+	defer perf.Track(nil, "exec.ExecuteTerraformGenerateVarfilesCmd")()
+
 	info, err := ProcessCommandLineArgs("terraform", cmd, args, nil)
 	if err != nil {
 		return err
@@ -77,6 +80,8 @@ func ExecuteTerraformGenerateVarfiles(
 	stacks []string,
 	components []string,
 ) error {
+	defer perf.Track(atmosConfig, "exec.ExecuteTerraformGenerateVarfiles")()
+
 	stacksMap, _, err := FindStacksMap(atmosConfig, false)
 	if err != nil {
 		return err
@@ -203,7 +208,7 @@ func ExecuteTerraformGenerateVarfiles(
 				// Stack name
 				var stackName string
 				if atmosConfig.Stacks.NameTemplate != "" {
-					stackName, err = ProcessTmpl("terraform-generate-varfiles-template", atmosConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, false)
+					stackName, err = ProcessTmpl(atmosConfig, "terraform-generate-varfiles-template", atmosConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, false)
 					if err != nil {
 						return err
 					}

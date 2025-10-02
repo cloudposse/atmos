@@ -6,6 +6,8 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/cloudposse/atmos/pkg/perf"
+
 	log "github.com/cloudposse/atmos/pkg/logger"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -19,6 +21,8 @@ func ExecutePackerOutput(
 	info *schema.ConfigAndStacksInfo,
 	packerFlags *PackerFlags,
 ) (any, error) {
+	defer perf.Track(nil, "exec.ExecutePackerOutput")()
+
 	atmosConfig, err := cfg.InitCliConfig(*info, true)
 	if err != nil {
 		return nil, err

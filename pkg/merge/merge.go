@@ -7,6 +7,7 @@ import (
 	"dario.cat/mergo"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -20,10 +21,13 @@ const (
 // MergeWithOptions takes a list of maps and options as input, deep-merges the items in the order they are defined in the list,
 // and returns a single map with the merged contents.
 func MergeWithOptions(
+	atmosConfig *schema.AtmosConfiguration,
 	inputs []map[string]any,
 	appendSlice bool,
 	sliceDeepCopy bool,
 ) (map[string]any, error) {
+	defer perf.Track(atmosConfig, "merge.MergeWithOptions")()
+
 	merged := map[string]any{}
 
 	for index := range inputs {
@@ -76,6 +80,8 @@ func Merge(
 	atmosConfig *schema.AtmosConfiguration,
 	inputs []map[string]any,
 ) (map[string]any, error) {
+	defer perf.Track(atmosConfig, "merge.Merge")()
+
 	// Check for nil config to prevent panic.
 	if atmosConfig == nil {
 		return nil, errors.Join(errUtils.ErrMerge, errUtils.ErrAtmosConfigIsNil)
@@ -107,7 +113,7 @@ func Merge(
 		appendSlice = true
 	}
 
-	return MergeWithOptions(inputs, appendSlice, sliceDeepCopy)
+	return MergeWithOptions(atmosConfig, inputs, appendSlice, sliceDeepCopy)
 }
 
 // MergeWithContext performs a merge operation with file context tracking for better error messages.
@@ -116,6 +122,8 @@ func MergeWithContext(
 	inputs []map[string]any,
 	context *MergeContext,
 ) (map[string]any, error) {
+	defer perf.Track(atmosConfig, "merge.MergeWithContext")()
+
 	// Check for nil config to prevent panic
 	if atmosConfig == nil {
 		err := fmt.Errorf("%w: %s", errUtils.ErrMerge, errUtils.ErrAtmosConfigIsNil)
@@ -155,20 +163,23 @@ func MergeWithContext(
 		appendSlice = true
 	}
 
-	return MergeWithOptionsAndContext(inputs, appendSlice, sliceDeepCopy, context)
+	return MergeWithOptionsAndContext(atmosConfig, inputs, appendSlice, sliceDeepCopy, context)
 }
 
 // MergeWithOptionsAndContext performs merge with options and context tracking.
 func MergeWithOptionsAndContext(
+	atmosConfig *schema.AtmosConfiguration,
 	inputs []map[string]any,
 	appendSlice bool,
 	sliceDeepCopy bool,
 	context *MergeContext,
 ) (map[string]any, error) {
+	defer perf.Track(atmosConfig, "merge.MergeWithOptionsAndContext")()
+
 	// Remove verbose merge operation logging - it creates too much noise
 	// Users can use ATMOS_LOGS_LEVEL=Trace if they need detailed merge debugging
 
-	result, err := MergeWithOptions(inputs, appendSlice, sliceDeepCopy)
+	result, err := MergeWithOptions(atmosConfig, inputs, appendSlice, sliceDeepCopy)
 	if err != nil {
 		// Remove verbose merge failure logging
 		// The error context will be shown in the formatted error message

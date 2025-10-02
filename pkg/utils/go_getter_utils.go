@@ -5,6 +5,8 @@ package utils
 import (
 	"fmt"
 	"strings"
+
+	"github.com/cloudposse/atmos/pkg/perf"
 )
 
 var (
@@ -21,6 +23,8 @@ const MaxURISize = 2048
 
 // ValidateURI validates URIs.
 func ValidateURI(uri string) error {
+	defer perf.Track(nil, "utils.ValidateURI")()
+
 	if uri == "" {
 		return ErrURIEmpty
 	}
@@ -51,6 +55,8 @@ func ValidateURI(uri string) error {
 
 // IsValidScheme checks if the URL scheme is valid.
 func IsValidScheme(scheme string) bool {
+	defer perf.Track(nil, "utils.IsValidScheme")()
+
 	validSchemes := map[string]bool{
 		"http":       true,
 		"https":      true,

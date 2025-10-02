@@ -4,6 +4,8 @@ import (
 	"reflect"
 	"strings"
 
+	"github.com/cloudposse/atmos/pkg/perf"
+
 	"github.com/mitchellh/mapstructure"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
@@ -15,6 +17,8 @@ func BuildAtlantisProjectNameFromComponentConfig(
 	atmosConfig *schema.AtmosConfiguration,
 	configAndStacksInfo schema.ConfigAndStacksInfo,
 ) (string, error) {
+	defer perf.Track(atmosConfig, "exec.BuildAtlantisProjectNameFromComponentConfig")()
+
 	var atlantisProjectTemplate schema.AtlantisProjectConfig
 	var atlantisProjectName string
 

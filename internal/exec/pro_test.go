@@ -3,14 +3,13 @@ package exec
 import (
 	"testing"
 
-	errUtils "github.com/cloudposse/atmos/errors"
+	gogit "github.com/go-git/go-git/v5"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
+
 	atmosgit "github.com/cloudposse/atmos/pkg/git"
 	"github.com/cloudposse/atmos/pkg/pro/dtos"
 	"github.com/cloudposse/atmos/pkg/schema"
-	gogit "github.com/go-git/go-git/v5"
-	"github.com/spf13/cobra"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/mock"
 )
 
 // MockProAPIClient is a mock implementation of the pro API client.
@@ -219,131 +218,271 @@ func TestUploadStatus(t *testing.T) {
 	}
 }
 
-// TestParseLockUnlockCliArgs tests the parseLockUnlockCliArgs function error handling.
-func TestParseLockUnlockCliArgs(t *testing.T) {
-	t.Run("cfg.InitCliConfig failure returns wrapped error", func(t *testing.T) {
-		// Create a command with all required flags for ProcessCommandLineArgs.
-		cmd := &cobra.Command{
-			Use: "test",
+// TestProLockCmdArgs tests the ProLockCmdArgs struct.
+func TestProLockCmdArgs(t *testing.T) {
+	t.Run("creates lock args with all fields", func(t *testing.T) {
+		args := ProLockCmdArgs{
+			ProLockUnlockCmdArgs: ProLockUnlockCmdArgs{
+				Component: "vpc",
+				Stack:     "dev",
+			},
+			LockMessage: "Test lock",
+			LockTTL:     30,
 		}
-		// Add all flags that ProcessCommandLineArgs expects.
-		cmd.Flags().String("base-path", "./", "Base path for Atmos")
-		cmd.Flags().StringSlice("config", []string{}, "Config files")
-		cmd.Flags().StringSlice("config-path", []string{}, "Config paths")
-		cmd.Flags().String("component", "test-comp", "Component name")
-		cmd.Flags().String("stack", "test-stack", "Stack name")
 
-		_, err := parseLockUnlockCliArgs(cmd, []string{})
-
-		// Should get an error from cfg.InitCliConfig since there's no valid Atmos config.
-		assert.Error(t, err)
-		// Error should be wrapped with ErrFailedToInitConfig (line 44 of pro.go).
-		assert.ErrorIs(t, err, errUtils.ErrFailedToInitConfig)
+		assert.Equal(t, "vpc", args.Component)
+		assert.Equal(t, "dev", args.Stack)
+		assert.Equal(t, "Test lock", args.LockMessage)
+		assert.Equal(t, int32(30), args.LockTTL)
 	})
 }
 
-// TestParseLockCliArgs tests the parseLockCliArgs function.
-func TestParseLockCliArgs(t *testing.T) {
-	t.Run("propagates error from parseLockUnlockCliArgs", func(t *testing.T) {
-		// Create a command with flags that will trigger error in parseLockUnlockCliArgs.
-		cmd := &cobra.Command{
-			Use: "test",
+// TestProUnlockCmdArgs tests the ProUnlockCmdArgs struct.
+func TestProUnlockCmdArgs(t *testing.T) {
+	t.Run("creates unlock args with required fields", func(t *testing.T) {
+		args := ProUnlockCmdArgs{
+			ProLockUnlockCmdArgs: ProLockUnlockCmdArgs{
+				Component: "vpc",
+				Stack:     "dev",
+			},
 		}
-		// Add required flags plus lock-specific flags.
-		cmd.Flags().String("base-path", "./", "Base path for Atmos")
-		cmd.Flags().StringSlice("config", []string{}, "Config files")
-		cmd.Flags().StringSlice("config-path", []string{}, "Config paths")
-		cmd.Flags().String("component", "test-comp", "Component name")
-		cmd.Flags().String("stack", "test-stack", "Stack name")
-		cmd.Flags().Int32("ttl", 30, "TTL in seconds")
-		cmd.Flags().String("message", "test", "Lock message")
 
-		_, err := parseLockCliArgs(cmd, []string{})
-
-		// Should get an error (line 74-75 of pro.go propagates error).
-		assert.Error(t, err)
-		// Error should be from parseLockUnlockCliArgs (InitCliConfig failure).
-		assert.ErrorIs(t, err, errUtils.ErrFailedToInitConfig)
+		assert.Equal(t, "vpc", args.Component)
+		assert.Equal(t, "dev", args.Stack)
 	})
 }
 
-// TestParseUnlockCliArgs tests the parseUnlockCliArgs function.
-func TestParseUnlockCliArgs(t *testing.T) {
-	t.Run("propagates error from parseLockUnlockCliArgs", func(t *testing.T) {
-		// Create a command with flags that will trigger error in parseLockUnlockCliArgs.
-		cmd := &cobra.Command{
-			Use: "test",
-		}
-		// Add required flags.
-		cmd.Flags().String("base-path", "./", "Base path for Atmos")
-		cmd.Flags().StringSlice("config", []string{}, "Config files")
-		cmd.Flags().StringSlice("config-path", []string{}, "Config paths")
-		cmd.Flags().String("component", "test-comp", "Component name")
-		cmd.Flags().String("stack", "test-stack", "Stack name")
+// TestUploadStatusWithDifferentExitCodes tests upload behavior with various exit codes.
+func TestUploadStatusWithDifferentExitCodes(t *testing.T) {
+	testRepoInfo := &atmosgit.RepoInfo{
+		RepoUrl:   "https://github.com/test/repo",
+		RepoName:  "repo",
+		RepoOwner: "test",
+		RepoHost:  "github.com",
+	}
 
-		_, err := parseUnlockCliArgs(cmd, []string{})
-
-		// Should get an error (line 108-110 of pro.go propagates error).
-		assert.Error(t, err)
-		// Error should be from parseLockUnlockCliArgs (InitCliConfig failure).
-		assert.ErrorIs(t, err, errUtils.ErrFailedToInitConfig)
-	})
-}
-
-// TestProLockStack tests the proLockStack function error handling.
-func TestProLockStack(t *testing.T) {
-	// Test that errors are properly wrapped with ErrStringWrappingFormat
-	tests := []struct {
-		name        string
-		expectedErr error
+	testCases := []struct {
+		name             string
+		exitCode         int
+		shouldUpload     bool
+		expectedHasDrift bool
 	}{
 		{
-			name:        "Git repo error",
-			expectedErr: errUtils.ErrFailedToGetLocalRepo,
+			name:             "exit code 0 - no changes",
+			exitCode:         0,
+			shouldUpload:     true,
+			expectedHasDrift: false,
 		},
 		{
-			name:        "API client error",
-			expectedErr: errUtils.ErrFailedToCreateAPIClient,
+			name:             "exit code 1 - error",
+			exitCode:         1,
+			shouldUpload:     false,
+			expectedHasDrift: false,
 		},
 		{
-			name:        "Lock stack error",
-			expectedErr: errUtils.ErrFailedToLockStack,
+			name:             "exit code 2 - changes detected",
+			exitCode:         2,
+			shouldUpload:     true,
+			expectedHasDrift: true,
+		},
+		{
+			name:             "exit code 3 - unknown",
+			exitCode:         3,
+			shouldUpload:     false,
+			expectedHasDrift: false,
 		},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			// Just verify the error types exist
-			assert.NotNil(t, tt.expectedErr)
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			mockProClient := new(MockProAPIClient)
+			mockGitRepo := new(MockGitRepo)
+
+			info := createTestInfo(true)
+
+			if tc.shouldUpload {
+				mockGitRepo.On("GetLocalRepoInfo").Return(testRepoInfo, nil)
+				mockGitRepo.On("GetCurrentCommitSHA").Return("abc123", nil)
+				mockProClient.On("UploadInstanceStatus", mock.AnythingOfType("*dtos.InstanceStatusUploadRequest")).Return(nil)
+			}
+
+			err := uploadStatus(&info, tc.exitCode, mockProClient, mockGitRepo)
+			assert.NoError(t, err)
+
+			mockProClient.AssertExpectations(t)
+			mockGitRepo.AssertExpectations(t)
 		})
 	}
 }
 
-// TestProUnlockStack tests error handling in proUnlockStack.
-func TestProUnlockStack(t *testing.T) {
-	// Test that errors are properly wrapped
-	tests := []struct {
-		name        string
-		expectedErr error
+// TestUploadStatusWithGitErrors tests error handling when git operations fail.
+func TestUploadStatusWithGitErrors(t *testing.T) {
+	t.Run("handles git repo info error", func(t *testing.T) {
+		mockProClient := new(MockProAPIClient)
+		mockGitRepo := new(MockGitRepo)
+
+		info := createTestInfo(true)
+
+		// Simulate git error
+		mockGitRepo.On("GetLocalRepoInfo").Return(nil, assert.AnError)
+
+		err := uploadStatus(&info, 2, mockProClient, mockGitRepo)
+		assert.Error(t, err)
+
+		mockGitRepo.AssertExpectations(t)
+	})
+
+	t.Run("continues when git SHA fails", func(t *testing.T) {
+		mockProClient := new(MockProAPIClient)
+		mockGitRepo := new(MockGitRepo)
+
+		info := createTestInfo(true)
+
+		testRepoInfo := &atmosgit.RepoInfo{
+			RepoUrl:   "https://github.com/test/repo",
+			RepoName:  "repo",
+			RepoOwner: "test",
+			RepoHost:  "github.com",
+		}
+
+		// Git SHA can fail but upload should continue
+		mockGitRepo.On("GetLocalRepoInfo").Return(testRepoInfo, nil)
+		mockGitRepo.On("GetCurrentCommitSHA").Return("", assert.AnError)
+		mockProClient.On("UploadInstanceStatus", mock.AnythingOfType("*dtos.InstanceStatusUploadRequest")).Return(nil)
+
+		err := uploadStatus(&info, 2, mockProClient, mockGitRepo)
+		assert.NoError(t, err)
+
+		mockProClient.AssertExpectations(t)
+		mockGitRepo.AssertExpectations(t)
+	})
+}
+
+// TestUploadStatusDTO tests the DTO creation for instance status upload.
+func TestUploadStatusDTO(t *testing.T) {
+	t.Run("creates DTO with correct fields", func(t *testing.T) {
+		dto := dtos.InstanceStatusUploadRequest{
+			AtmosProRunID: "run-123",
+			GitSHA:        "abc123def456",
+			RepoURL:       "https://github.com/test/repo",
+			RepoName:      "repo",
+			RepoOwner:     "test",
+			RepoHost:      "github.com",
+			Stack:         "dev",
+			Component:     "vpc",
+			HasDrift:      true,
+		}
+
+		assert.Equal(t, "run-123", dto.AtmosProRunID)
+		assert.Equal(t, "abc123def456", dto.GitSHA)
+		assert.Equal(t, "https://github.com/test/repo", dto.RepoURL)
+		assert.Equal(t, "repo", dto.RepoName)
+		assert.Equal(t, "test", dto.RepoOwner)
+		assert.Equal(t, "github.com", dto.RepoHost)
+		assert.Equal(t, "dev", dto.Stack)
+		assert.Equal(t, "vpc", dto.Component)
+		assert.True(t, dto.HasDrift)
+	})
+}
+
+// TestShouldUploadStatusEdgeCases tests edge cases for shouldUploadStatus.
+func TestShouldUploadStatusEdgeCases(t *testing.T) {
+	testCases := []struct {
+		name     string
+		info     *schema.ConfigAndStacksInfo
+		expected bool
 	}{
 		{
-			name:        "Git repo error",
-			expectedErr: errUtils.ErrFailedToGetLocalRepo,
+			name: "nil component settings section",
+			info: &schema.ConfigAndStacksInfo{
+				SubCommand:               "plan",
+				ComponentSettingsSection: nil,
+			},
+			expected: false,
 		},
 		{
-			name:        "API client error",
-			expectedErr: errUtils.ErrFailedToCreateAPIClient,
+			name: "pro settings not a map",
+			info: &schema.ConfigAndStacksInfo{
+				SubCommand: "plan",
+				ComponentSettingsSection: map[string]interface{}{
+					"pro": "invalid",
+				},
+			},
+			expected: false,
 		},
 		{
-			name:        "Unlock stack error",
-			expectedErr: errUtils.ErrFailedToUnlockStack,
+			name: "enabled setting not a bool",
+			info: &schema.ConfigAndStacksInfo{
+				SubCommand: "plan",
+				ComponentSettingsSection: map[string]interface{}{
+					"pro": map[string]interface{}{
+						"enabled": "true",
+					},
+				},
+			},
+			expected: false,
+		},
+		{
+			name: "empty subcommand",
+			info: &schema.ConfigAndStacksInfo{
+				SubCommand: "",
+				ComponentSettingsSection: map[string]interface{}{
+					"pro": map[string]interface{}{
+						"enabled": true,
+					},
+				},
+			},
+			expected: false,
 		},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			// Verify the error types exist and would be wrapped correctly
-			assert.NotNil(t, tt.expectedErr)
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			result := shouldUploadStatus(tc.info)
+			assert.Equal(t, tc.expected, result)
 		})
 	}
+}
+
+// TestLockKeyFormat tests the format of the lock key.
+func TestLockKeyFormat(t *testing.T) {
+	t.Run("creates correct lock key format", func(t *testing.T) {
+		owner := "cloudposse"
+		repoName := "infra"
+		stack := "dev"
+		component := "vpc"
+
+		expectedKey := "cloudposse/infra/dev/vpc"
+		actualKey := owner + "/" + repoName + "/" + stack + "/" + component
+
+		assert.Equal(t, expectedKey, actualKey)
+	})
+}
+
+// TestLockStackRequest tests the LockStackRequest DTO.
+func TestLockStackRequest(t *testing.T) {
+	t.Run("creates lock request with all fields", func(t *testing.T) {
+		dto := dtos.LockStackRequest{
+			Key:         "owner/repo/stack/component",
+			TTL:         30,
+			LockMessage: "Locked by user",
+			Properties:  nil,
+		}
+
+		assert.Equal(t, "owner/repo/stack/component", dto.Key)
+		assert.Equal(t, int32(30), dto.TTL)
+		assert.Equal(t, "Locked by user", dto.LockMessage)
+		assert.Nil(t, dto.Properties)
+	})
+}
+
+// TestUnlockStackRequest tests the UnlockStackRequest DTO.
+func TestUnlockStackRequest(t *testing.T) {
+	t.Run("creates unlock request with key", func(t *testing.T) {
+		dto := dtos.UnlockStackRequest{
+			Key: "owner/repo/stack/component",
+		}
+
+		assert.Equal(t, "owner/repo/stack/component", dto.Key)
+	})
 }

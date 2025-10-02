@@ -6,6 +6,8 @@ import (
 	"os"
 	"strings"
 
+	"github.com/cloudposse/atmos/pkg/perf"
+
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
@@ -40,6 +42,8 @@ func ExecuteDescribeAffectedWithTargetRefClone(
 	skip []string,
 	excludeLocked bool,
 ) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error) {
+	defer perf.Track(atmosConfig, "exec.ExecuteDescribeAffectedWithTargetRefClone")()
+
 	localRepo, err := g.GetLocalRepo()
 	if err != nil {
 		return nil, nil, nil, "", err
@@ -193,6 +197,8 @@ func ExecuteDescribeAffectedWithTargetRefCheckout(
 	skip []string,
 	excludeLocked bool,
 ) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error) {
+	defer perf.Track(atmosConfig, "exec.ExecuteDescribeAffectedWithTargetRefCheckout")()
+
 	localRepo, err := g.GetLocalRepo()
 	if err != nil {
 		return nil, nil, nil, "", err
@@ -354,6 +360,8 @@ func ExecuteDescribeAffectedWithTargetRepoPath(
 	skip []string,
 	excludeLocked bool,
 ) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error) {
+	defer perf.Track(atmosConfig, "exec.ExecuteDescribeAffectedWithTargetRepoPath")()
+
 	localRepo, err := g.GetLocalRepo()
 	if err != nil {
 		return nil, nil, nil, "", err
