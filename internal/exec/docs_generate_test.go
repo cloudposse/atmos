@@ -352,19 +352,19 @@ func TestResolvePath_JoinBehavior(t *testing.T) {
 		name           string
 		path           string
 		baseDir        string
-		expectedSuffix string // What the path should contain after baseDir
+		expectedSuffix string // What the path should contain (platform-agnostic)
 	}{
 		{
 			name:           "implicit relative joins with baseDir",
 			path:           "foo/bar.txt",
 			baseDir:        "/tmp/base",
-			expectedSuffix: "base/foo/bar.txt",
+			expectedSuffix: filepath.Join("base", "foo", "bar.txt"),
 		},
 		{
 			name:           "simple filename joins with baseDir",
 			path:           "file.txt",
 			baseDir:        "/tmp/base",
-			expectedSuffix: "base/file.txt",
+			expectedSuffix: filepath.Join("base", "file.txt"),
 		},
 	}
 
@@ -374,8 +374,11 @@ func TestResolvePath_JoinBehavior(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Unexpected error: %v", err)
 			}
-			if !strings.Contains(result, tt.expectedSuffix) {
-				t.Errorf("Expected result to contain %q, got %q", tt.expectedSuffix, result)
+			// Normalize both paths to use forward slashes for comparison
+			normalizedResult := filepath.ToSlash(result)
+			normalizedExpected := filepath.ToSlash(tt.expectedSuffix)
+			if !strings.Contains(normalizedResult, normalizedExpected) {
+				t.Errorf("Expected result to contain %q, got %q", normalizedExpected, normalizedResult)
 			}
 		})
 	}

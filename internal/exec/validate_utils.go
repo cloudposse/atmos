@@ -264,8 +264,15 @@ func ValidateWithCue(data any, schemaName string, schemaText string) (bool, erro
 }
 
 // isWindowsOPALoadError checks if the error is likely a Windows-specific OPA loading issue.
+//
+// NOTE: This function was introduced in PR #1540 (commit 9e43f19cf) as a workaround for
+// rego.Load() failing on Windows despite path normalization attempts (lines 114-118 above).
+// We don't fully understand why the path normalization doesn't work or why this Windows-specific
+// fallback is necessary. The function detects file-not-found errors on Windows and triggers
+// a fallback to validateWithOpaFallback() which uses the legacy OPA validation method.
+// If you understand why this is needed, please update this comment.
 func isWindowsOPALoadError(err error) bool {
-	if runtime.GOOS != "windows" {
+	if err == nil || runtime.GOOS != "windows" {
 		return false
 	}
 
