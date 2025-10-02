@@ -20,22 +20,16 @@ A common user pattern emerged where users write `///` to indicate "clone from th
 source: "github.com/terraform-aws-modules/terraform-aws-s3-bucket.git///?ref=v5.7.0"
 ```
 
-This pattern broke in go-getter v1.7.9 due to CVE-2025-8959 security fixes. The initial fix used heuristic-based pattern matching:
+This pattern broke in go-getter v1.7.9 due to CVE-2025-8959 security fixes. **The main branch has no triple-slash handling**, resulting in:
+1. Silent failures - zero files downloaded
+2. Empty directories created
+3. No error messages to indicate the problem
 
-```go
-// Current problematic approach
-func containsTripleSlash(uri string) bool {
-    return strings.Contains(uri, ".git///") ||
-           strings.Contains(uri, ".com///") ||
-           strings.Contains(uri, ".org///")
-}
-```
-
-**Problems with this approach:**
-1. Hardcoded domain suffixes don't work for Azure DevOps (`dev.azure.com`), Gitea, self-hosted Git
-2. Doesn't leverage go-getter's built-in `SourceDirSubdir()` function
-3. Heuristic-based instead of proper URL parsing
-4. Not maintainable or extensible
+**This PR solves the problem by:**
+1. Detecting triple-slash patterns using go-getter's built-in `SourceDirSubdir()` parser
+2. Converting `///` → `//.` (root) or `///path` → `//path` (subdirectory)
+3. Working with all Git platforms: GitHub, GitLab, Azure DevOps, Gitea, self-hosted
+4. Leveraging go-getter's official API instead of heuristics
 
 ## go-getter URL Syntax
 
