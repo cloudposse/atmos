@@ -151,13 +151,15 @@ var (
 	ErrCacheUnmarshal = errors.New("cache unmarshal failed")
 	ErrCacheMarshal   = errors.New("cache marshal failed")
 
+	// Config loading errors.
+	ErrParseMainConfig   = errors.New("failed to parse main config")
+	ErrMergeMainConfig   = errors.New("failed to merge main config")
+	ErrReapplyMainConfig = errors.New("failed to re-apply main config")
+
 	// Profiler-related errors.
-	ErrProfilerStart             = errors.New("profiler start failed")
-	ErrProfilerUnsupportedType   = errors.New("profiler: unsupported profile type")
-	ErrProfilerStartCPU          = errors.New("profiler: failed to start CPU profile")
-	ErrProfilerStartTrace        = errors.New("profiler: failed to start trace profile")
-	ErrProfilerCreateFile        = errors.New("profiler: failed to create profile file")
-	ErrProfilerParseMainConfig   = errors.New("profiler: failed to parse main config")
-	ErrProfilerMergeMainConfig   = errors.New("profiler: failed to merge main config")
-	ErrProfilerReapplyMainConfig = errors.New("profiler: failed to re-apply main config")
+	ErrProfilerStart           = errors.New("profiler start failed")
+	ErrProfilerUnsupportedType = errors.New("profiler: unsupported profile type")
+	ErrProfilerStartCPU        = errors.New("profiler: failed to start CPU profile")
+	ErrProfilerStartTrace      = errors.New("profiler: failed to start trace profile")
+	ErrProfilerCreateFile      = errors.New("profiler: failed to create profile file")
 )
