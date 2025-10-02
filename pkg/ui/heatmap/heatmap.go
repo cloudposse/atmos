@@ -148,11 +148,18 @@ func (m *HeatModel) normalizeMatrix(minV, maxV float64) [][]float64 {
 		norm[r] = make([]float64, len(m.matrix[r]))
 		for c := range m.matrix[r] {
 			v := m.matrix[r][c]
-			if maxV == minV {
-				norm[r][c] = 0
-			} else {
-				norm[r][c] = (v - minV) / (maxV - minV)
+			if v <= 0 {
+				continue
 			}
+			if maxV == minV {
+				norm[r][c] = 1
+				continue
+			}
+			n := (v - minV) / (maxV - minV)
+			if n < 0 {
+				n = 0
+			}
+			norm[r][c] = n
 		}
 	}
 	return norm
