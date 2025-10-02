@@ -3,6 +3,9 @@ package exec
 import (
 	"context"
 	"errors"
+	"io/fs"
+	"os"
+	"runtime"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -43,44 +46,61 @@ deny[msg] {
 
 // TestIsWindowsOPALoadError tests the isWindowsOPALoadError function.
 func TestIsWindowsOPALoadError(t *testing.T) {
+	isWindows := runtime.GOOS == "windows"
+
 	tests := []struct {
-		name     string
-		err      error
-		expected bool
+		name               string
+		err                error
+		expectedWindows    bool
+		expectedNonWindows bool
 	}{
 		{
-			name:     "nil error",
-			err:      nil,
-			expected: false,
+			name:               "nil error",
+			err:                nil,
+			expectedWindows:    false,
+			expectedNonWindows: false,
 		},
 		{
-			name:     "fs.ErrNotExist wrapped error",
-			err:      errors.New("wrapped: file does not exist"),
-			expected: false,
+			name:               "fs.ErrNotExist error",
+			err:                fs.ErrNotExist,
+			expectedWindows:    true,
+			expectedNonWindows: false,
 		},
 		{
-			name:     "Windows path not specified error",
-			err:      errors.New("cannot find the path specified"),
-			expected: false, // On non-Windows, should return false
+			name:               "os.ErrNotExist error",
+			err:                os.ErrNotExist,
+			expectedWindows:    true,
+			expectedNonWindows: false,
 		},
 		{
-			name:     "Windows file not found error",
-			err:      errors.New("system cannot find the file specified"),
-			expected: false, // On non-Windows, should return false
+			name:               "Windows path not specified error",
+			err:                errors.New("cannot find the path specified"),
+			expectedWindows:    true,
+			expectedNonWindows: false,
 		},
 		{
-			name:     "generic error",
-			err:      errors.New("some other error"),
-			expected: false,
+			name:               "Windows file not found error",
+			err:                errors.New("system cannot find the file specified"),
+			expectedWindows:    true,
+			expectedNonWindows: false,
+		},
+		{
+			name:               "generic error",
+			err:                errors.New("some other error"),
+			expectedWindows:    false,
+			expectedNonWindows: false,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result := isWindowsOPALoadError(tt.err)
-			// On non-Windows, all should return false
-			// On Windows, only Windows-specific errors should return true
-			assert.Equal(t, tt.expected, result)
+
+			if isWindows {
+				assert.Equal(t, tt.expectedWindows, result, "Expected %v on Windows for: %v", tt.expectedWindows, tt.err)
+			} else {
+				assert.Equal(t, tt.expectedNonWindows, result, "Expected %v on non-Windows for: %v", tt.expectedNonWindows, tt.err)
+			}
 		})
 	}
 }
