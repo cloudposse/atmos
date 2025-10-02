@@ -190,6 +190,20 @@ var (
 	ErrResolveOutputPath     = errors.New("failed to resolve output path")
 	ErrWriteOutput           = errors.New("failed to write output")
 
+	// Import-related errors.
+	ErrBasePath             = errors.New("base path required to process imports")
+	ErrTempDir              = errors.New("temporary directory required to process imports")
+	ErrResolveLocal         = errors.New("failed to resolve local import path")
+	ErrSourceDestination    = errors.New("source and destination cannot be nil")
+	ErrImportPathRequired   = errors.New("import path required to process imports")
+	ErrNoFileMatchPattern   = errors.New("no files matching patterns found")
+	ErrMaxImportDepth       = errors.New("maximum import depth reached")
+	ErrNoValidAbsolutePaths = errors.New("no valid absolute paths found")
+
 	// Profiler-related errors.
-	ErrProfilerStart = errors.New("profiler start failed")
+	ErrProfilerStart           = errors.New("profiler start failed")
+	ErrProfilerUnsupportedType = errors.New("profiler: unsupported profile type")
+	ErrProfilerStartCPU        = errors.New("profiler: failed to start CPU profile")
+	ErrProfilerStartTrace      = errors.New("profiler: failed to start trace profile")
+	ErrProfilerCreateFile      = errors.New("profiler: failed to create profile file")
 )

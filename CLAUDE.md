@@ -576,6 +576,42 @@ gh pr checks 1450 --repo cloudposse/atmos
 gh api repos/cloudposse/atmos/check-runs/49737026433/annotations
 ```
 
+### Responding to PR Review Threads (MANDATORY)
+- **ALWAYS reply to specific review threads** - Do not create new PR comments
+- **Use GraphQL API to reply to threads**:
+  ```bash
+  gh api graphql -f query='
+  mutation {
+    addPullRequestReviewThreadReply(input: {
+      pullRequestReviewThreadId: "PRRT_kwDOEW4XoM5..."
+      body: "Your response here"
+    }) {
+      comment { id }
+    }
+  }'
+  ```
+- Get unresolved threads:
+  ```bash
+  gh api graphql -f query='
+  query {
+    repository(owner: "cloudposse", name: "atmos") {
+      pullRequest(number: 1504) {
+        reviewThreads(first: 50) {
+          nodes {
+            id
+            isResolved
+            path
+            line
+            comments(first: 1) {
+              nodes { body }
+            }
+          }
+        }
+      }
+    }
+  }' | jq -r '.data.repository.pullRequest.reviewThreads.nodes[] | select(.isResolved == false)'
+  ```
+
 ### Adding Template Function
 1. Implement in `internal/exec/template_funcs.go`
 2. Register in template function map

@@ -71,6 +71,16 @@ var RootCmd = &cobra.Command{
 			cmd.SilenceErrors = true
 		}
 		configAndStacksInfo := schema.ConfigAndStacksInfo{}
+		// Honor CLI overrides for resolving atmos.yaml and its imports.
+		if bp, _ := cmd.Flags().GetString("base-path"); bp != "" {
+			configAndStacksInfo.AtmosBasePath = bp
+		}
+		if cfgFiles, _ := cmd.Flags().GetStringSlice("config"); len(cfgFiles) > 0 {
+			configAndStacksInfo.AtmosConfigFilesFromArg = cfgFiles
+		}
+		if cfgDirs, _ := cmd.Flags().GetStringSlice("config-path"); len(cfgDirs) > 0 {
+			configAndStacksInfo.AtmosConfigDirsFromArg = cfgDirs
+		}
 		// Load the config (includes env var bindings); don't store globally yet.
 		tmpConfig, err := cfg.InitCliConfig(configAndStacksInfo, false)
 		if err != nil {

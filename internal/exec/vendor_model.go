@@ -354,6 +354,7 @@ func downloadAndInstall(p *pkgAtmosVendor, dryRun bool, atmosConfig *schema.Atmo
 		if err := p.installer(&tempDir, atmosConfig); err != nil {
 			return newInstallError(err, p.name)
 		}
+
 		if err := copyToTargetWithPatterns(tempDir, p.targetPath, &p.atmosVendorSource, p.sourceIsLocalFile); err != nil {
 			return newInstallError(fmt.Errorf("failed to copy package: %w", err), p.name)
 		}
@@ -368,7 +369,6 @@ func (p *pkgAtmosVendor) installer(tempDir *string, atmosConfig *schema.AtmosCon
 	switch p.pkgType {
 	case pkgTypeRemote:
 		// Use go-getter to download remote packages
-
 		if err := downloader.NewGoGetterDownloader(atmosConfig).Fetch(p.uri, *tempDir, downloader.ClientModeAny, 10*time.Minute); err != nil {
 			return fmt.Errorf("failed to download package: %w", err)
 		}
