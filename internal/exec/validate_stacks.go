@@ -23,7 +23,7 @@ import (
 
 const atmosManifestDefaultFileName = "schemas/atmos/atmos-manifest/1.0/atmos-manifest.json"
 
-// ExecuteValidateStacksCmd executes `validate stacks` command
+// ExecuteValidateStacksCmd executes `validate stacks` command.
 func ExecuteValidateStacksCmd(cmd *cobra.Command, args []string) error {
 	// Initialize spinner
 	message := "Validating Atmos Stacks..."
@@ -61,7 +61,7 @@ func ExecuteValidateStacksCmd(cmd *cobra.Command, args []string) error {
 	return err
 }
 
-// ValidateStacks validates Atmos stack configuration
+// ValidateStacks validates Atmos stack configuration.
 func ValidateStacks(atmosConfig *schema.AtmosConfiguration) error {
 	var validationErrorMessages []string
 

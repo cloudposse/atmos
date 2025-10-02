@@ -13,7 +13,7 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
-// ExecuteAtmosCmd executes `atmos` command
+// ExecuteAtmosCmd executes `atmos` command.
 func ExecuteAtmosCmd() error {
 	commands := []string{
 		"terraform plan",

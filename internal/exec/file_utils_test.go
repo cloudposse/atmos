@@ -217,7 +217,7 @@ func TestToFileScheme(t *testing.T) {
 			{
 				name:     "windows UNC path",
 				input:    `\\server\share\file.txt`,
-				expected: "file:///server/share/file.txt",
+				expected: "file://server/share/file.txt",
 			},
 		}...)
 	}

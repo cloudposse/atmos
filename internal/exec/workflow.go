@@ -15,7 +15,7 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
-// ExecuteWorkflowCmd executes an Atmos workflow
+// ExecuteWorkflowCmd executes an Atmos workflow.
 func ExecuteWorkflowCmd(cmd *cobra.Command, args []string) error {
 	var workflowName string
 	var workflowFile string

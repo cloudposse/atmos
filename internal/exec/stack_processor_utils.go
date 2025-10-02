@@ -2269,7 +2269,7 @@ func FindComponentDependenciesLegacy(
 // The `import` section can contain:
 // 1. Project-relative paths (e.g. "mixins/region/us-east-2")
 // 2. Paths relative to the current stack file (e.g. "./_defaults")
-// 3. StackImport structs containing either of the above path types (e.g. "path: mixins/region/us-east-2")
+// 3. StackImport structs containing either of the above path types (e.g. "path: mixins/region/us-east-2").
 func ProcessImportSection(stackMap map[string]any, filePath string) ([]schema.StackImport, error) {
 	stackImports, ok := stackMap[cfg.ImportSectionName]
 
@@ -2334,7 +2334,7 @@ func sectionContainsAnyNotEmptySections(section map[string]any, sectionsToCheck 
 }
 
 // GetFileContent tries to read and return the file content from the sync map if it exists in the map,
-// otherwise it reads the file, stores its content in the map and returns the content
+// otherwise it reads the file, stores its content in the map and returns the content.
 func GetFileContent(filePath string) (string, error) {
 	existingContent, found := getFileContentSyncMap.Load(filePath)
 	if found && existingContent != nil {

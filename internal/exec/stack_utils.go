@@ -197,7 +197,7 @@ func GetStackNameTemplate(atmosConfig *schema.AtmosConfiguration) string {
 	return atmosConfig.Stacks.NameTemplate
 }
 
-// IsComponentAbstract returns 'true' if the component is abstract
+// IsComponentAbstract returns 'true' if the component is abstract.
 func IsComponentAbstract(metadataSection map[string]any) bool {
 	if metadataType, ok := metadataSection["type"].(string); ok {
 		if metadataType == "abstract" {

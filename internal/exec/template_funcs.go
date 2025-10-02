@@ -16,7 +16,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-// FuncMap creates and returns a map of template functions
+// FuncMap creates and returns a map of template functions.
 func FuncMap(
 	atmosConfig *schema.AtmosConfiguration,
 	configAndStacksInfo *schema.ConfigAndStacksInfo,

@@ -161,7 +161,7 @@ func ExecuteProLockCommand(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-// ExecuteProUnlockCommand executes `atmos pro unlock` command
+// ExecuteProUnlockCommand executes `atmos pro unlock` command.
 func ExecuteProUnlockCommand(cmd *cobra.Command, args []string) error {
 	a, err := parseUnlockCliArgs(cmd, args)
 	if err != nil {
