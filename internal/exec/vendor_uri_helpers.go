@@ -21,6 +21,30 @@ func isS3URI(uri string) bool {
 	return strings.HasPrefix(uri, "s3::")
 }
 
+// hasLocalPathPrefix checks if the URI starts with local path prefixes.
+// Examples:
+//   - true: "/absolute/path", "./relative/path", "../parent/path"
+//   - false: "github.com/repo", "https://example.com", "components/terraform"
+func hasLocalPathPrefix(uri string) bool {
+	return strings.HasPrefix(uri, "/") || strings.HasPrefix(uri, "./") || strings.HasPrefix(uri, "../")
+}
+
+// hasSchemeSeparator checks if the URI contains a scheme separator.
+// Examples:
+//   - true: "https://github.com", "git::https://...", "s3::https://..."
+//   - false: "github.com/repo", "./local/path", "components/terraform"
+func hasSchemeSeparator(uri string) bool {
+	return strings.Contains(uri, "://") || strings.Contains(uri, "::")
+}
+
+// hasSubdirectoryDelimiter checks if the URI contains the go-getter subdirectory delimiter.
+// Examples:
+//   - true: "github.com/repo//path", "git.company.com/repo//modules"
+//   - false: "github.com/repo", "https://github.com/repo", "./local/path"
+func hasSubdirectoryDelimiter(uri string) bool {
+	return strings.Contains(uri, "//")
+}
+
 // isLocalPath checks if the URI is a local file system path.
 // Examples:
 //   - Local: "/absolute/path", "./relative/path", "../parent/path", "components/terraform"
@@ -28,20 +52,20 @@ func isS3URI(uri string) bool {
 func isLocalPath(uri string) bool {
 	// Local paths start with /, ./, ../, or are relative paths without scheme
 	// Examples: "/abs/path", "./rel/path", "../parent", "components/terraform"
-	if strings.HasPrefix(uri, "/") || strings.HasPrefix(uri, "./") || strings.HasPrefix(uri, "../") {
+	if hasLocalPathPrefix(uri) {
 		return true
 	}
 
 	// If it contains a scheme separator, it's not a local path
 	// Examples: "https://github.com", "git::https://...", "s3::..."
 	// This check must come BEFORE the '//' check to avoid false positives from "://"
-	if strings.Contains(uri, "://") || strings.Contains(uri, "::") {
+	if hasSchemeSeparator(uri) {
 		return false
 	}
 
 	// If it contains the go-getter subdirectory delimiter, it's not a local path
 	// Examples: "github.com/repo//path", "git.company.com/repo//modules"
-	if strings.Contains(uri, "//") {
+	if hasSubdirectoryDelimiter(uri) {
 		return false
 	}
 
