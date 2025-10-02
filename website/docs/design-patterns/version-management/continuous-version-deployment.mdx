@@ -453,30 +453,30 @@ It's important to distinguish between two types of divergence:
 - **Duration**: Weeks to months for strategic reasons
 - **Purpose**: Extended parallel operation during migrations, experiments, or high-risk changes
 - **Outcome**: Intentional separation with manual convergence when ready
-- **Example**: Prod on PostgreSQL 13, dev/staging testing PostgreSQL 15 migration for 6 weeks
+- **Example**: Prod on PostgreSQL 13, dev/staging testing PostgreSQL 15 upgrade for 6 weeks
 
 ### Use Cases for Planned Divergence
 
 **Breaking Changes with Extended Testing**:
 Major architectural changes that require weeks or months of validation before production deployment.
 
-**Database Engine Migrations**:
-Moving from PostgreSQL to Aurora, MySQL to PostgreSQL, or major version upgrades that need extended parallel operation.
+**Database Engine Upgrades**:
+Major version upgrades within the same database engine (e.g., PostgreSQL 13 → 15, MySQL 5.7 → 8.0) that need extended parallel operation and testing. Note that migrations between different engines would be separate components (e.g., a `postgres` component and an `aurora` component), not versions of the same component.
 
-**Cloud Provider Transitions**:
-Testing AWS alternatives on Azure or GCP before committing production workloads.
+**Major Terraform Provider Updates**:
+Upgrading to new major versions of Terraform providers that include breaking changes requiring extensive validation.
+
+**Architectural Changes to Components**:
+Significant restructuring of component implementations that changes resource dependencies or state structure.
 
 **Regulatory Compliance Staging**:
 When regulations require frozen production versions during audit periods while development continues.
 
-**A/B Testing Infrastructure**:
-Running competing infrastructure designs in parallel to measure performance differences.
-
 **Major Kubernetes Version Upgrades**:
 Testing k8s 1.27 → 1.30 upgrades in isolated environments before production rollout.
 
-**Experimental Features**:
-Trying new Terraform providers, modules, or architectural patterns without risking production stability.
+**Experimental Features & Skunk Works**:
+Trying new Terraform providers, modules, or architectural patterns without risking production stability. Isolated experimentation before committing to production rollout.
 
 ### Combining Strategies
 
