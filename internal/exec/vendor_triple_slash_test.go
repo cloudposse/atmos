@@ -22,36 +22,17 @@ func TestVendorPullWithTripleSlashPattern(t *testing.T) {
 		t.Skipf("Insufficient GitHub API requests remaining (%d). Test may require ~10 requests", rateLimits.Remaining)
 	}
 
-	// Store original environment variables.
-	originalCliPath := os.Getenv("ATMOS_CLI_CONFIG_PATH")
-	originalBasePath := os.Getenv("ATMOS_BASE_PATH")
-
-	// Set debug logging to see what's happening.
-	t.Setenv("ATMOS_LOGS_LEVEL", "Debug")
-
-	// Capture the starting working directory.
+	// Capture the starting working directory and register cleanup.
 	startingDir, err := os.Getwd()
 	require.NoError(t, err, "Failed to get the current working directory")
+	t.Cleanup(func() {
+		require.NoError(t, os.Chdir(startingDir))
+	})
 
-	defer func() {
-		// Restore original environment variables.
-		if originalCliPath != "" {
-			os.Setenv("ATMOS_CLI_CONFIG_PATH", originalCliPath)
-		} else {
-			os.Unsetenv("ATMOS_CLI_CONFIG_PATH")
-		}
-
-		if originalBasePath != "" {
-			os.Setenv("ATMOS_BASE_PATH", originalBasePath)
-		} else {
-			os.Unsetenv("ATMOS_BASE_PATH")
-		}
-
-		// Change back to the original working directory after the test.
-		if err := os.Chdir(startingDir); err != nil {
-			t.Fatalf("Failed to change back to the starting directory: %v", err)
-		}
-	}()
+	// Set environment variables using t.Setenv (automatically restores on cleanup).
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", "./atmos.yaml")
+	t.Setenv("ATMOS_BASE_PATH", ".")
+	t.Setenv("ATMOS_LOGS_LEVEL", "Debug")
 
 	// Define the test directory.
 	testDir := "../../tests/fixtures/scenarios/vendor-triple-slash"
@@ -111,11 +92,11 @@ func TestVendorPullWithTripleSlashPattern(t *testing.T) {
 	}
 
 	// Clean up: Remove the created directory and its contents.
-	defer func() {
+	t.Cleanup(func() {
 		if err := os.RemoveAll(targetDir); err != nil {
 			t.Logf("Failed to clean up target directory: %v", err)
 		}
-	}()
+	})
 }
 
 // TestVendorPullWithMultipleVendorFiles tests that vendor pull works correctly.
@@ -129,36 +110,17 @@ func TestVendorPullWithMultipleVendorFiles(t *testing.T) {
 		t.Skipf("Insufficient GitHub API requests remaining (%d). Test may require ~10 requests", rateLimits.Remaining)
 	}
 
-	// Store original environment variables.
-	originalCliPath := os.Getenv("ATMOS_CLI_CONFIG_PATH")
-	originalBasePath := os.Getenv("ATMOS_BASE_PATH")
-
-	// Set debug logging to see what's happening.
-	t.Setenv("ATMOS_LOGS_LEVEL", "Debug")
-
-	// Capture the starting working directory.
+	// Capture the starting working directory and register cleanup.
 	startingDir, err := os.Getwd()
 	require.NoError(t, err, "Failed to get the current working directory")
+	t.Cleanup(func() {
+		require.NoError(t, os.Chdir(startingDir))
+	})
 
-	defer func() {
-		// Restore original environment variables.
-		if originalCliPath != "" {
-			os.Setenv("ATMOS_CLI_CONFIG_PATH", originalCliPath)
-		} else {
-			os.Unsetenv("ATMOS_CLI_CONFIG_PATH")
-		}
-
-		if originalBasePath != "" {
-			os.Setenv("ATMOS_BASE_PATH", originalBasePath)
-		} else {
-			os.Unsetenv("ATMOS_BASE_PATH")
-		}
-
-		// Change back to the original working directory after the test.
-		if err := os.Chdir(startingDir); err != nil {
-			t.Fatalf("Failed to change back to the starting directory: %v", err)
-		}
-	}()
+	// Set environment variables using t.Setenv (automatically restores on cleanup).
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", "./atmos.yaml")
+	t.Setenv("ATMOS_BASE_PATH", ".")
+	t.Setenv("ATMOS_LOGS_LEVEL", "Debug")
 
 	// Define the test directory.
 	testDir := "../../tests/fixtures/scenarios/vendor-triple-slash"
@@ -200,9 +162,9 @@ func TestVendorPullWithMultipleVendorFiles(t *testing.T) {
 	assert.NotEmpty(t, entries, "Target directory should not be empty - files should have been pulled")
 
 	// Clean up: Remove the created directory and its contents.
-	defer func() {
+	t.Cleanup(func() {
 		if err := os.RemoveAll(targetDir); err != nil {
 			t.Logf("Failed to clean up target directory: %v", err)
 		}
-	}()
+	})
 }
