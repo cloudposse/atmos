@@ -245,7 +245,7 @@ func TestHasSubdirectoryDelimiter(t *testing.T) {
 	}
 }
 
-func TestIsGitLikeURI(t *testing.T) {
+func TestIsGitURI(t *testing.T) {
 	tests := []struct {
 		name     string
 		uri      string
@@ -272,18 +272,33 @@ func TestIsGitLikeURI(t *testing.T) {
 			uri:      "https://github.com/owner/repo.git",
 			expected: true,
 		},
-		// .git extension
+		{
+			name:     "git:: explicit prefix",
+			uri:      "git::https://example.com/repo.git",
+			expected: true,
+		},
+		// .git extension (precise matching)
 		{
 			name:     "URL with .git extension",
 			uri:      "git.company.com/repo.git",
 			expected: true,
 		},
 		{
-			name:     "local path with .git directory",
-			uri:      "/path/to/repo.git",
+			name:     ".git followed by slash",
+			uri:      "example.com/repo.git/subpath",
 			expected: true,
 		},
-		// Azure DevOps pattern
+		{
+			name:     ".git followed by query",
+			uri:      "example.com/repo.git?ref=main",
+			expected: true,
+		},
+		{
+			name:     ".git at end of URL",
+			uri:      "example.com/repo.git",
+			expected: true,
+		},
+		// Azure DevOps pattern (precise matching)
 		{
 			name:     "Azure DevOps URL",
 			uri:      "dev.azure.com/org/project/_git/repo",
@@ -293,6 +308,22 @@ func TestIsGitLikeURI(t *testing.T) {
 			name:     "Azure DevOps with subdirectory",
 			uri:      "dev.azure.com/org/project/_git/repo//modules",
 			expected: true,
+		},
+		// False positives that should NOT match
+		{
+			name:     "www.gitman.com should not match",
+			uri:      "www.gitman.com/docs",
+			expected: false,
+		},
+		{
+			name:     ".git in middle of word",
+			uri:      "example.com/digital-assets",
+			expected: false,
+		},
+		{
+			name:     "github in path, not domain",
+			uri:      "evil.com/github.com/fake",
+			expected: false,
 		},
 		// Not Git-like URIs
 		{
@@ -324,7 +355,7 @@ func TestIsGitLikeURI(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := isGitLikeURI(tt.uri)
+			result := isGitURI(tt.uri)
 			assert.Equal(t, tt.expected, result)
 		})
 	}

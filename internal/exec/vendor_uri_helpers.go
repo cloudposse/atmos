@@ -16,9 +16,10 @@ func isOCIURI(uri string) bool {
 	return strings.HasPrefix(uri, "oci://")
 }
 
-// isS3URI checks if the URI is an S3 URI.
+// IsS3URI checks if the URI is an S3 URI.
+// Go-getter supports both explicit s3:: prefix and auto-detected .amazonaws.com URLs.
 func isS3URI(uri string) bool {
-	return strings.HasPrefix(uri, "s3::")
+	return strings.HasPrefix(uri, "s3::") || strings.Contains(uri, ".amazonaws.com/")
 }
 
 // hasLocalPathPrefix checks if the URI starts with local path prefixes.
@@ -71,7 +72,7 @@ func isLocalPath(uri string) bool {
 
 	// If it looks like a Git repository, it's not a local path
 	// Examples: "github.com/owner/repo", "gitlab.com/project", "repo.git", "org/_git/repo" (Azure DevOps)
-	if isGitLikeURI(uri) {
+	if isGitURI(uri) {
 		return false
 	}
 
@@ -84,15 +85,6 @@ func isLocalPath(uri string) bool {
 	// Otherwise, it's likely a relative local path
 	// Examples: "components/terraform", "mixins/context.tf"
 	return true
-}
-
-// isGitLikeURI checks if the URI contains patterns typical of Git repositories.
-func isGitLikeURI(uri string) bool {
-	return strings.Contains(uri, "github.com") ||
-		strings.Contains(uri, "gitlab.com") ||
-		strings.Contains(uri, "bitbucket.org") ||
-		strings.Contains(uri, ".git") ||
-		strings.Contains(uri, "_git/") // Azure DevOps pattern
 }
 
 // isDomainLikeURI checks if the URI has a domain-like structure (hostname.domain/path).
@@ -124,28 +116,67 @@ func isNonGitHTTPURI(uri string) bool {
 	return false
 }
 
+// parseGitHostAndPath separates a URI into host and path components.
+func parseGitHostAndPath(uri string) (host string, path string) {
+	// Remove scheme if present to get the actual host/path
+	workingURI := uri
+	if idx := strings.Index(uri, "://"); idx != -1 {
+		workingURI = uri[idx+3:]
+	}
+
+	// Split on first / to separate host from path
+	parts := strings.SplitN(workingURI, "/", 2)
+	host = strings.ToLower(parts[0])
+	if len(parts) > 1 {
+		path = "/" + parts[1]
+	}
+	return host, path
+}
+
+// isKnownGitHost checks if the host is a known Git hosting platform.
+func isKnownGitHost(host string) bool {
+	gitHosts := []string{"github.com", "gitlab.com", "bitbucket.org"}
+	for _, gitHost := range gitHosts {
+		if host == gitHost || strings.HasSuffix(host, "."+gitHost) {
+			return true
+		}
+	}
+	return false
+}
+
+// hasGitExtension checks if the path has a .git extension in the correct position.
+func hasGitExtension(path string) bool {
+	idx := strings.Index(path, ".git")
+	if idx == -1 {
+		return false
+	}
+	afterGit := path[idx+4:]
+	return afterGit == "" || strings.HasPrefix(afterGit, "/") || strings.HasPrefix(afterGit, "?")
+}
+
 // isGitURI checks if the URI appears to be a Git repository URL.
+// Properly parses URLs to check host and path separately, avoiding false positives.
 func isGitURI(uri string) bool {
 	// Check for explicit git:: prefix
 	if strings.HasPrefix(uri, "git::") {
 		return true
 	}
 
-	// Check for common Git hosting platforms
-	gitHosts := []string{"github.com", "gitlab.com", "bitbucket.org", "git."}
-	lowerURI := strings.ToLower(uri)
-	for _, host := range gitHosts {
-		if strings.Contains(lowerURI, host) {
-			return true
-		}
-	}
+	// Parse the URI to separate host from path
+	host, path := parseGitHostAndPath(uri)
 
-	// Check for .git suffix
-	if strings.Contains(uri, ".git") {
+	// Check if host is a known Git hosting platform
+	if isKnownGitHost(host) {
 		return true
 	}
 
-	return false
+	// Check path for .git extension
+	if hasGitExtension(path) {
+		return true
+	}
+
+	// Check path for Azure DevOps _git/ pattern
+	return strings.Contains(path, "/_git/")
 }
 
 // hasSubdirectory checks if the URI already has a subdirectory delimiter.
