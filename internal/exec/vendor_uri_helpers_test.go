@@ -890,6 +890,27 @@ func TestNeedsDoubleSlashDot(t *testing.T) {
 			uri:      "https://example.com/archive.tar.gz",
 			expected: false,
 		},
+		// Special case: URIs that pass isGitURI() but are special types (lines 243-245).
+		{
+			name:     "file:// with .git pattern",
+			uri:      "file:///tmp/repo.git",
+			expected: false, // Has .git but file:// URIs should not get //.
+		},
+		{
+			name:     "github archive download URL",
+			uri:      "https://github.com/cloudposse/atmos/archive/refs/tags/v1.0.tar.gz",
+			expected: false, // Contains github.com but is an archive, not a Git repo.
+		},
+		{
+			name:     "github release tarball",
+			uri:      "https://github.com/owner/repo/releases/download/v1.0/package.tgz",
+			expected: false, // Contains github.com but is a release archive, not Git.
+		},
+		{
+			name:     "gitlab archive URL with .git in path",
+			uri:      "https://gitlab.com/group/project/-/archive/main/project.tar.gz",
+			expected: false, // Contains gitlab.com but is an archive URL.
+		},
 		// Edge cases
 		{
 			name:     "empty string",

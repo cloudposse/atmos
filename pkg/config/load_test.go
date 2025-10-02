@@ -655,3 +655,56 @@ func TestMergeDefaultImports_WindowsCaseInsensitive(t *testing.T) {
 	// Should skip and return nil since paths match case-insensitively on Windows
 	assert.NoError(t, err, "Should match case-insensitively on Windows")
 }
+
+func TestProcessConfigImportsAndReapply_MalformedYAML(t *testing.T) {
+	tests := []struct {
+		name          string
+		configContent string
+		description   string
+	}{
+		{
+			name: "invalid_yaml_syntax",
+			configContent: `
+base_path: /test
+components:
+  terraform:
+    - invalid: yaml
+    - content: here
+    base_path: components/terraform
+`,
+			description: "Should return error when YAML has invalid syntax",
+		},
+		{
+			name: "unclosed_bracket",
+			configContent: `
+base_path: /test
+components: {
+  terraform: {
+    base_path: components/terraform
+`,
+			description: "Should return error when YAML has unclosed brackets",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Create temp directory
+			tempDir := t.TempDir()
+
+			// Write malformed config file
+			configPath := filepath.Join(tempDir, "atmos.yaml")
+			err := os.WriteFile(configPath, []byte(tt.configContent), 0o644)
+			assert.NoError(t, err)
+
+			// Create viper instance
+			v := viper.New()
+			v.SetConfigFile(configPath)
+
+			// Call the function - should return error on malformed YAML
+			err = processConfigImportsAndReapply(configPath, v, []byte(tt.configContent))
+
+			// Assert that an error was returned
+			assert.Error(t, err, tt.description)
+		})
+	}
+}
