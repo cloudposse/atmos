@@ -13,10 +13,18 @@ import TabItem from '@theme/TabItem'
 
 <PillBox>Atmos Design Pattern</PillBox>
 <Intro>
-**Release Tracks/Channels** extends [Folder-Based Versioning](/design-patterns/version-management/folder-based-versioning) with named release channels (`alpha/vpc`, `beta/vpc`, `prod/vpc`) within the [Continuous Version Deployment](/design-patterns/version-management/continuous-version-deployment) strategy. Environments subscribe to channels and converge to whatever version is in their track through progressive automated rollout.
+**Release Tracks/Channels** extends [Folder-Based Versioning](/design-patterns/version-management/folder-based-versioning) with named release channels using **label-based [versioning schemes](/design-patterns/version-management/versioning-schemes)** (`alpha/vpc`, `beta/vpc`, `prod/vpc`) within the [Continuous Version Deployment](/design-patterns/version-management/continuous-version-deployment) strategy. Environments subscribe to channels and converge to whatever version is in their track through progressive automated rollout.
 </Intro>
 
-This approach provides a middle ground between simple folder-based versioning and [Strict Version Pinning](/design-patterns/version-management/strict-version-pinning). By organizing components into channels, you promote tracks rather than individual environment pins, reducing operational overhead while maintaining control. Environments grouped to the same track converge together, providing early feedback on changes before broader rollout.
+This approach provides a middle ground between simple folder-based versioning and [Strict Version Pinning](/design-patterns/version-management/strict-version-pinning). By organizing components into channels using **moving targets** (labels that point to evolving versions), you promote tracks rather than individual environment pins, reducing operational overhead while maintaining control. Environments grouped to the same track converge together, providing early feedback on changes before broader rollout.
+
+:::info Label-Based Versioning Schemes
+Release Tracks/Channels work with **label-based [versioning schemes](/design-patterns/version-management/versioning-schemes)** that create evolving stage identifiers:
+- **[Maturity Levels](/design-patterns/version-management/versioning-schemes#maturity-levels)** (`alpha`, `beta`, `stable`) - Stability indicators
+- **[Environment Names](/design-patterns/version-management/versioning-schemes#environment-names)** (`dev`, `staging`, `prod`) - Deployment stage alignment
+
+These are **moving targets**—the label stays the same but points to different versions as they're promoted through tracks. This contrasts with [Strict Version Pinning](/design-patterns/version-management/strict-version-pinning) which uses **fixed points** (numbers like `1.2.3`) that never change once created.
+:::
 
 <KeyPoints>
 - How tracks reduce version management overhead across many environments
@@ -468,6 +476,7 @@ Release tracks reduce the operational burden of version management while maintai
 
 ## Related Patterns
 
+- [Versioning Schemes](./versioning-schemes) - Label-based schemes (Maturity Levels, Environment Names) that work with tracks
 - [Strict Version Pinning](./strict-version-pinning) - Individual version control per environment
 - [Folder-Based Versioning](./folder-based-versioning) - Version through repository structure
 - [Vendoring Components](./vendoring-components) - Local control with bulk updates

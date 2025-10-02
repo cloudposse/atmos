@@ -14,6 +14,12 @@ import KeyPoints from '@site/src/components/KeyPoints'
 **Git Flow: Branches as Channels** is the branch-based deployment strategy alternative to [Continuous Version Deployment](/design-patterns/version-management/continuous-version-deployment). Instead of trunk-based deployment, long-lived branches map to release channels with environments tracking specific branches and promotions happening through merges. Uses simple [Folder-Based Versioning](/design-patterns/version-management/folder-based-versioning) since branches serve as the versioning mechanism.
 </Intro>
 
+:::info Idiomatic Versioning for Git Flow
+Git Flow idiomatically uses **[Environment Names](/design-patterns/version-management/versioning-schemes#environment-names)** because **branches ARE the environments** (`channels/dev`, `channels/staging`, `channels/prod`).
+
+It doesn't make sense to use number-based schemes (SemVer, CalVer) or other label-based schemes (Maturity Levels) with Git Flow—branches carry the version semantics through the merge/promotion flow. The branch name itself indicates which stage a version is in.
+:::
+
 ## Understanding Git Flow
 
 Git Flow is a branching model introduced by Vincent Driessen in 2010 that has become widely adopted in software development. It defines a strict branching structure designed around project releases, using multiple parallel long-lived branches.
@@ -439,6 +445,7 @@ Git Flow for infrastructure works best when you have strong CI/CD practices and 
 
 ## Related Patterns
 
+- [Versioning Schemes](./versioning-schemes) - Environment Names are idiomatic for Git Flow
 - [Release Tracks/Channels](./release-tracks-channels) - Configuration-based channel management
 - [Strict Version Pinning](./strict-version-pinning) - Tag-based version control
 - [Folder-Based Versioning](./folder-based-versioning) - File system-based versioning

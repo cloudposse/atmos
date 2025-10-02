@@ -196,13 +196,34 @@ Whatever pattern you choose, regularly test the full promotion path from develop
 ### 4. Monitor Divergence
 Set up monitoring to track version divergence across environments. Alert when environments drift beyond acceptable thresholds.
 
-## Combining Patterns
+## Versioning Schemes
+
+Different patterns work best with specific [versioning schemes](/design-patterns/version-management/versioning-schemes)—naming conventions for identifying component versions:
+
+**Number-Based Schemes** (fixed points):
+- **SemVer** (`1.2.3`), **CalVer** (`2024.10.1`), **Sequential** (`v1`, `v2`)
+- Work with: [Strict Version Pinning](/design-patterns/version-management/strict-version-pinning)
+- Create immutable version identifiers that never change
+
+**Label-Based Schemes** (moving targets):
+- **Maturity Levels** (`alpha`, `beta`, `stable`), **Environment Names** (`dev`, `staging`, `prod`)
+- Work with: [Release Tracks/Channels](/design-patterns/version-management/release-tracks-channels)
+- Create stage identifiers that point to evolving versions
+
+See the [Versioning Schemes reference](/design-patterns/version-management/versioning-schemes) for detailed guidance on choosing and implementing naming conventions.
+
+## Mixing Strategies
+
+:::tip Idiomatic Implementations
+These strategies can be mixed and matched, but **the patterns shown here represent idiomatic implementations that work well together**. While technically possible to use any versioning scheme with any pattern, certain combinations are more natural and operationally efficient.
+:::
 
 You don't need to use a single pattern exclusively. Common combinations include:
 
 - **Tracks for Applications, Pinning for Platform**: Use release tracks for frequently-updated application components while strictly pinning critical platform components
 - **Vendoring + Tracks**: Vendor third-party code while using release tracks for internal components
 - **Folder Versioning for Major Changes**: Use folder-based versioning for breaking changes while using tracks for routine updates
+- **Different Schemes per Component Type**: Platform components use SemVer while application components use maturity levels
 
 ## Summary
 
@@ -227,6 +248,7 @@ This pattern adds significant complexity. Beyond artifact generation, you must m
 
 ## Related Patterns
 
+- [Versioning Schemes](/design-patterns/version-management/versioning-schemes) - Naming conventions for component versions
 - [Component Inheritance](/design-patterns/component-inheritance) - Base components that serve as blueprints
 - [Component Catalog](/design-patterns/component-catalog) - Centralized component library
 - [Multiple Component Instances](/design-patterns/multiple-component-instances) - Deploying multiple instances of the same component
