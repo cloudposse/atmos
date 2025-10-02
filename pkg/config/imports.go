@@ -88,11 +88,6 @@ func processConfigImports(source *schema.AtmosConfiguration, dst *viper.Viper) e
 		return err
 	}
 
-	// Sort resolvedPaths by file path to ensure deterministic log order.
-	sort.Slice(resolvedPaths, func(i, j int) bool {
-		return resolvedPaths[i].filePath < resolvedPaths[j].filePath
-	})
-
 	log.Debug("processConfigImports resolved paths", "count", len(resolvedPaths))
 
 	for _, resolvedPath := range resolvedPaths {
