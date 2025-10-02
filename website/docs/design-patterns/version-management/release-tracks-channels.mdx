@@ -52,7 +52,7 @@ Release Tracks solve these problems by introducing an abstraction layer between 
 Instead of each environment pinning versions directly, define tracks that represent promotion stages. Environments subscribe to tracks, and you promote versions by updating the track definition.
 
 :::info Builds on Folder-Based Versioning
-This pattern extends the [Folder-Based Versioning](/design-patterns/folder-based-versioning) strategy by adding a layer of indirection. While folder-based versioning requires each environment to explicitly reference version folders, Release Tracks allow multiple environments to follow a shared track that points to the appropriate version.
+This pattern extends the [Folder-Based Versioning](/design-patterns/version-management/folder-based-versioning) strategy by adding a layer of indirection. While folder-based versioning requires each environment to explicitly reference version folders, Release Tracks allow multiple environments to follow a shared track that points to the appropriate version.
 :::
 
 ### Track Design Principles
@@ -408,26 +408,6 @@ atmos terraform apply vpc --stack prod-us-east-1
 :::tip
 Track-based rollback affects all environments subscribed to that track, providing consistent rollback across similar environments.
 :::
-
-## Benefits
-
-The **Release Tracks/Channels** pattern provides:
-
-- **Reduced Overhead**: Update tracks instead of individual environments
-- **Strong Convergence**: Environments on the same track stay in sync
-- **Early Feedback**: Issues surface quickly as changes flow through tracks
-- **Clear Semantics**: Simple promotion model (advance the track)
-- **Flexible Rollback**: Roll back entire tracks when needed
-- **Scalability**: Works well with many environments
-
-## Drawbacks
-
-The pattern also has some limitations:
-
-- **Track Discipline Required**: Must maintain clear track lifecycle and promotion rules
-- **Coarser Rollback**: Rolling back affects all environments on a track
-- **Initial Setup Complexity**: Requires upfront design of track structure
-- **Potential for Track Drift**: Tracks can diverge if not managed carefully
 
 ## Best Practices
 

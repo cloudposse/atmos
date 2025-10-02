@@ -121,11 +121,11 @@ A technique that works with any deployment strategy to automate copying componen
 
 | Strategy                 | Development Model | Convergence | Feedback During Plan | Rollback Ease | Overhead @ Scale | Version Skipping Risk |
 |--------------------------|------------------|-------------|---------------------|---------------|------------------|----------------------|
-| Strict Pinning           | Trunk-based      | Low         | Weak (late)         | Strong        | High             | **High Risk**        |
-| Release Tracks/Channels  | Trunk-based      | High        | Strong              | Medium        | Medium           | Lower Risk           |
+| Continuous Version Deployment | Trunk-based  | Very High   | Strong              | Easy          | Low              | Minimal Risk         |
 | Folder-Based Versioning  | Trunk-based      | Medium      | Strong (explicit)   | Medium        | Medium           | Lower Risk           |
+| Release Tracks/Channels  | Trunk-based      | High        | Strong              | Medium        | Medium           | Lower Risk           |
+| Strict Pinning           | Trunk-based      | Low         | Weak (late)         | Strong        | High             | **High Risk**        |
 | Vendoring                | Trunk-based      | Medium–High | Strong (local)      | Medium        | Medium           | Lower Risk           |
-| **Component Pinning**    | **Trunk-based**  | **Very High** | **Strong**        | **Easy**      | **Low**          | **Minimal Risk**     |
 | Git Flow (per channel)   | Branch-based     | Medium      | Medium              | Medium        | Medium–High      | High if skipped      |
 
 ## Choosing a Pattern

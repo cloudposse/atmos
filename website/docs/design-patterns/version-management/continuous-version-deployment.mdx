@@ -414,7 +414,7 @@ terraform/
 
 ### Strategy Combinations
 
-**With [Folder-Based Versioning](/design-patterns/folder-based-versioning)**:
+**With [Folder-Based Versioning](/design-patterns/version-management/folder-based-versioning)**:
 
 Create explicit version boundaries through folder structure. Environments reference specific version folders during the divergence period.
 
@@ -456,7 +456,7 @@ components:
 ```
 </File>
 
-**With [Release Tracks/Channels](/design-patterns/release-tracks-channels)**:
+**With [Release Tracks/Channels](/design-patterns/version-management/release-tracks-channels)**:
 
 Use tracks to coordinate planned divergence across multiple components. Useful when several components need synchronized version progression.
 
@@ -471,7 +471,7 @@ components:
 ```
 </File>
 
-**With [Strict Version Pinning](/design-patterns/strict-version-pinning)**:
+**With [Strict Version Pinning](/design-patterns/version-management/strict-version-pinning)**:
 
 Temporarily pin critical environments during high-risk periods, then return to continuous deployment after validation.
 
@@ -733,6 +733,6 @@ Don't solve deployment challenges with version control gymnastics. Use automatio
 
 ## See Also
 
-- **[Folder-Based Versioning](/design-patterns/folder-based-versioning)** - Combine with this pattern for components requiring planned divergence during breaking changes or extended migrations.
-- **[Release Tracks/Channels](/design-patterns/release-tracks-channels)** - Use alongside trunk-based deployment when coordinating multi-component migrations across many environments.
-- **[Strict Version Pinning](/design-patterns/strict-version-pinning)** - Temporarily apply to specific components during high-risk periods while others use continuous deployment.
+- **[Folder-Based Versioning](/design-patterns/version-management/folder-based-versioning)** - Combine with this pattern for components requiring planned divergence during breaking changes or extended migrations.
+- **[Release Tracks/Channels](/design-patterns/version-management/release-tracks-channels)** - Use alongside trunk-based deployment when coordinating multi-component migrations across many environments.
+- **[Strict Version Pinning](/design-patterns/version-management/strict-version-pinning)** - Temporarily apply to specific components during high-risk periods while others use continuous deployment.
