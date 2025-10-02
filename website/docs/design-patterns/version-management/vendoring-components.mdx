@@ -628,25 +628,6 @@ git checkout HEAD~1 -- components/terraform/vpc/ # Rollback
 If you have local modifications, ensure they're preserved during rollback or reapplied afterward.
 :::
 
-## Migration Strategies
-
-### To Vendoring from Direct References
-
-1. **Inventory External Dependencies**: List all external module references
-2. **Create Vendor Configuration**: Define sources in vendor.yaml
-3. **Initial Vendoring**: Run `atmos vendor pull`
-4. **Update Stack References**: Change from external URLs to local paths
-5. **Test Thoroughly**: Ensure vendored version produces same results
-6. **Document Origin**: Update vendor.yaml with source information
-
-### From Vendoring to Other Patterns
-
-If moving away from vendoring:
-
-1. **To Direct References**: Update source URIs to point to external repositories
-2. **To Release Tracks**: Organize vendored components into track folders
-3. **To Folder Versioning**: Rename vendored folders with version suffixes
-
 ## Summary
 
 Vendoring Components provides maximum control over external dependencies at the cost of increased maintenance responsibility. It's ideal for organizations with strict compliance requirements, those needing predictable update windows, or teams that must maintain custom patches. While it increases repository size and maintenance burden, the benefits of local control, audit capability, and resilience often justify these trade-offs for critical infrastructure components.

@@ -442,24 +442,6 @@ Track-based rollback affects all environments subscribed to that track, providin
 
 - **Plan Across Tracks:** Regularly run Terraform plans across all environments within a track to validate consistency and catch issues before deployment.
 
-## Migration Strategies
-
-### From Strict Pinning to Tracks
-
-1. **Analyze Current Versions**: Identify version clusters across environments
-2. **Define Initial Tracks**: Create tracks based on current version distribution
-3. **Update Stack Configurations**: Replace direct version pins with track references
-4. **Test Thoroughly**: Validate that track-based configs produce identical plans
-5. **Switch Over**: Deploy the track-based configuration
-
-### From Tracks to Other Patterns
-
-If you need to migrate away from tracks:
-
-- **To Strict Pinning**: Replace track variables with explicit version pins
-- **To Folder Versioning**: Convert track folders to versioned component folders
-- **To Vendoring**: Use tracks as the basis for vendor manifest organization
-
 ## Summary
 
 Release Tracks/Channels provide an excellent balance between control and operational efficiency. By grouping environments into tracks and promoting versions through tracks rather than individual environments, teams can maintain strong convergence and feedback loops while reducing management overhead. This pattern scales well and is particularly effective for organizations with many environments that need to stay relatively synchronized.

@@ -197,6 +197,20 @@ atmos terraform plan vpc --stack prod-us-east-1
 atmos terraform apply vpc --stack prod-us-east-1
 ```
 
+### Verify the Rollback
+
+```bash
+# Quick sanity check - verify stack config points to correct folder
+atmos describe component vpc --stack prod-us-east-1 | grep "component:"
+# Should show: component: vpc/v1.12.3
+
+# TRUE VERIFICATION - plan should show no changes
+atmos terraform plan vpc --stack prod-us-east-1
+# Should output: No changes. Your infrastructure matches the configuration.
+```
+
+The "no changes" output proves that the rollback was successfully applied to the infrastructure, not just the configuration.
+
 :::tip
 No re-vendoring required! If you've maintained versioned folders through your vendor process, you can simply update the component reference to point to the previous version that's already vendored.
 :::
@@ -231,22 +245,6 @@ When using strict version pinning:
 4. **Plan Broadly**: Regularly run plans across all environments, not just the one being updated
 5. **Document Everything**: Maintain clear records of version histories and promotion decisions
 6. **Consider Escape Routes**: Design your workspace keys to allow migration to other patterns if needed
-
-## Migration Strategies
-
-If you need to migrate away from strict pinning:
-
-### To Release Tracks
-1. Group environments by track (alpha, beta, prod)
-2. Create track-based configurations
-3. Update environments to reference tracks instead of versions
-4. Update tracks instead of individual environments
-
-### To Folder-Based Versioning
-1. Ensure workspace keys don't include versions
-2. Create versioned component folders
-3. Update stack references to point to folders
-4. Manage versions through folder selection
 
 ## Drawbacks and Trade-offs
 

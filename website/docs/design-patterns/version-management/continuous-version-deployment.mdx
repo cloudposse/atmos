@@ -69,6 +69,8 @@ These folder organization approaches work seamlessly with [Vendoring Component V
 
 All your stack configurations reference the same components without version qualifiers:
 
+<Tabs>
+<TabItem value="dev" label="Development">
 <File title="stacks/dev/us-east-1.yaml">
 ```yaml
 import:
@@ -85,7 +87,9 @@ components:
         enable_nat_gateway: false  # Dev-specific configuration
 ```
 </File>
+</TabItem>
 
+<TabItem value="staging" label="Staging">
 <File title="stacks/staging/us-east-1.yaml">
 ```yaml
 import:
@@ -102,7 +106,9 @@ components:
         enable_nat_gateway: true  # Staging-specific configuration
 ```
 </File>
+</TabItem>
 
+<TabItem value="prod" label="Production">
 <File title="stacks/prod/us-east-1.yaml">
 ```yaml
 import:
@@ -120,30 +126,32 @@ components:
         enable_flow_logs: true  # Prod-specific configuration
 ```
 </File>
+</TabItem>
+</Tabs>
 
 ### Deployment Pipeline
 
 The key to this pattern is a robust deployment pipeline that validates changes progressively. Your CI/CD system orchestrates the convergence process:
 
 **Validation Stage** (on pull request):
-- Run `terraform validate` and security scans (tfsec, checkov, etc.)
-- Execute policy checks (OPA, Sentinel)
-- Generate and display terraform plans for all environments
-- Provide visibility into what will change across dev, staging, and production
+1. Run `terraform validate` and security scans (tfsec, checkov, etc.)
+2. Execute policy checks (OPA, Sentinel)
+3. Generate and display terraform plans for all environments
+4. Provide visibility into what will change across dev, staging, and production
 
 **Progressive Deployment** (after merge to main):
-- **Dev deployment**: Automatically deploy to development environment
-- **Dev validation**: Run smoke tests and basic functionality checks
-- **Staging deployment**: Deploy to staging after dev validation passes
-- **Staging validation**: Execute comprehensive integration and performance tests
-- **Production approval**: Require manual approval or wait for time-based gate
-- **Production deployment**: Deploy to production with monitoring
-- **Production validation**: Post-deployment health checks and alerting
+1. **Dev deployment**: Automatically deploy to development environment
+2. **Dev validation**: Run smoke tests and basic functionality checks
+3. **Staging deployment**: Deploy to staging after dev validation passes
+4. **Staging validation**: Execute comprehensive integration and performance tests
+5. **Production approval**: Require manual approval or wait for time-based gate
+6. **Production deployment**: Deploy to production with monitoring
+7. **Production validation**: Post-deployment health checks and alerting
 
 **Monitoring & Rollback**:
-- Track deployment metrics and error rates
-- Configure automated alerts for anomalies
-- Maintain rollback procedures (revert commit + re-run pipeline)
+1. Track deployment metrics and error rates
+2. Configure automated alerts for anomalies
+3. Maintain rollback procedures (revert commit + re-run pipeline)
 
 ## Decoupling Release from Deployment
 
@@ -157,7 +165,15 @@ A core principle of this pattern is separating deployment (putting code in produ
 
 **Faster Incident Response**: When issues arise, you can disable problematic features via configuration changes and redeploy, which is faster than reverting code. While not instant (redeployment is still required), preparing flag-disabled configurations in advance enables rapid response.
 
-This decoupling is achieved through feature flags (environment variables, configuration files, or feature flag services) that control feature availability at runtime, enabling all environments to run the same code while exposing different capabilities.
+This decoupling is achieved through two distinct separation mechanisms in Atmos:
+
+1. **Environmental Configuration Separation**: Stack configurations (stacks/dev/, stacks/staging/, stacks/prod/) provide environment-specific variables and settings, allowing the same component to behave differently per environment.
+
+2. **Component Version Separation**: The `metadata.component` path determines which component implementation to use, enabling environments to reference different versions through folder organization.
+
+The **primary mechanism** controlling when deployments are released to each environment is **CI/CD approval gates** (GitHub Actions, GitLab CI, etc.). These gates control the progression of deployments across environments through automated testing, manual approvals, and time-based holds.
+
+**Feature flags** are an optional supplementary technique for runtime behavior control within the same code, useful for gradual feature rollout or A/B testing within an environment—but they're not the primary mechanism for decoupling release from deployment across environments.
 
 ### Progressive Rollout Across Environments
 
@@ -622,51 +638,6 @@ resource "aws_db_instance" "main" {
 
 ## Advanced Patterns
 
-### Blue-Green Deployments
-
-Use Atmos component instances for blue-green deployments:
-
-<File title="stacks/prod/us-east-1.yaml">
-```yaml
-components:
-  terraform:
-    app-blue:
-      metadata:
-        component: app
-        inherits:
-          - app-base
-      vars:
-        deployment_color: blue
-        traffic_weight: 100
-
-    app-green:
-      metadata:
-        component: app
-        inherits:
-          - app-base
-      vars:
-        deployment_color: green
-        traffic_weight: 0
-```
-</File>
-
-### Canary Releases
-
-Implement canary releases through configuration:
-
-<File title="stacks/prod/us-east-1.yaml">
-```yaml
-components:
-  terraform:
-    app:
-      vars:
-        canary_enabled: true
-        canary_percentage: 5
-        canary_version: "v2.0.0"
-        stable_version: "v1.9.0"
-```
-</File>
-
 ### Emergency Overrides
 
 Support emergency overrides when needed:
@@ -754,14 +725,26 @@ Consider alternatives when:
 
 - **Environment Parity:** Keep environments as similar as possible by using inheritance for shared configuration and minimizing environment-specific overrides.
 
+  <File title="stacks/catalog/vpc-base.yaml">
   ```yaml
-  # Use inheritance for consistency
-  catalog:
-    base-vpc:
-      vars:
-        enable_dns_hostnames: true
-        enable_dns_support: true
-        # Shared configuration
+  # Reusable base configuration in catalog
+  components:
+    terraform:
+      vpc-base:
+        metadata:
+          type: abstract
+        vars:
+          enable_dns_hostnames: true
+          enable_dns_support: true
+          # Shared configuration
+  ```
+  </File>
+
+  <File title="stacks/prod/us-east-1.yaml">
+  ```yaml
+  # Import catalog configuration
+  import:
+    - catalog/vpc-base
 
   # Then customize minimally per environment
   components:
@@ -769,10 +752,12 @@ Consider alternatives when:
       vpc:
         metadata:
           inherits:
-            - base-vpc
+            - vpc-base
         vars:
           # Only environment-specific overrides
+          cidr_block: "10.2.0.0/16"
   ```
+  </File>
 
 ## Troubleshooting
 

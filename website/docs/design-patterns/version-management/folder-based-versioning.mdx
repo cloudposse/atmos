@@ -214,32 +214,6 @@ prod:
 ```
 </File>
 
-### Blue-Green Migration
-
-Run both versions in parallel, then switch:
-
-<File title="stacks/prod/us-east-1.yaml">
-```yaml
-components:
-  terraform:
-    # Original VPC (blue)
-    vpc:
-      metadata:
-        component: vpc/v1  # Original version
-      settings:
-        workspace_key_prefix: "prod/vpc"
-
-    # New VPC (green) - different workspace key for parallel run
-    vpc-next:
-      metadata:
-        component: vpc/v2  # New version
-      settings:
-        workspace_key_prefix: "prod/vpc-next"
-```
-</File>
-
-After validation, update references and destroy the old version.
-
 ### In-Place Upgrade
 
 For backwards-compatible changes, switch the folder reference:
@@ -295,11 +269,16 @@ Since the old version folder still exists unchanged, rollback is instantaneous a
 ### Rollback Verification
 
 ```bash
-# Verify the component is using the correct version
+# Quick sanity check - verify stack config points to correct folder
 atmos describe component vpc --stack prod-us-east-1 | grep "component:"
-
 # Should show: component: vpc/v1
+
+# TRUE VERIFICATION - plan should show no changes
+atmos terraform plan vpc --stack prod-us-east-1
+# Should output: No changes. Your infrastructure matches the configuration.
 ```
+
+The "no changes" output proves that the rollback was successfully applied to the infrastructure, not just the configuration.
 
 ## Benefits
 
@@ -358,22 +337,6 @@ The pattern also has limitations:
 - **Testing Strategy:** Test all active versions using Atmos validation commands to ensure each version continues to function correctly as the codebase evolves.
 
 - **Migration Process:** Migrate components to new versions by updating stack configuration to reference the new version folder, then preview and apply changes using Atmos terraform commands.
-
-## Migration from Other Patterns
-
-### From Strict Pinning
-
-1. Create versioned folders for each unique version in use
-2. Update stack configurations to reference folders instead of Git refs
-3. Consolidate common versions into single folders
-4. Gradually converge to fewer versions
-
-### From Release Tracks
-
-1. Convert track folders to version folders
-2. Update stack configurations to explicitly choose versions
-3. Remove track abstraction layer
-4. Implement direct folder references
 
 ## Drawbacks and Trade-offs
 
