@@ -750,6 +750,12 @@ func TestParseSubdirFromTripleSlash(t *testing.T) {
 			expectedSource: "https://github.com/owner/repo.git?ref=v1.0",
 			expectedSubdir: "examples",
 		},
+		{
+			name:           "Azure DevOps with triple-slash modules path (DEV-3639 regression)",
+			uri:            "https://dev.azure.com/org/proj/_git/repo///modules?ref=main",
+			expectedSource: "https://dev.azure.com/org/proj/_git/repo?ref=main",
+			expectedSubdir: "modules",
+		},
 		// Triple-slash at root (no path after ///)
 		{
 			name:           "triple-slash at root with query",
