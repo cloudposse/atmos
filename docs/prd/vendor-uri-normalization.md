@@ -37,7 +37,7 @@ This pattern broke in go-getter v1.7.9 due to CVE-2025-8959 security fixes. **Th
 
 go-getter uses a specific URL syntax where `//` serves as a delimiter between the repository URL and the subdirectory path:
 
-```
+```text
 <repository-url>//<subdirectory-path>
 ```
 
@@ -53,7 +53,7 @@ The double-slash (`//`) is **not** a path separator—it's a **delimiter** that 
 2. **Right side**: The subdirectory within that source to extract
 
 **How go-getter interprets this:**
-```
+```text
 github.com/cloudposse/atmos.git//examples/demo-library/weather?ref=v1.0.0
 └─────────────────────────────┘  └──────────────────────────────┘ └────────┘
          Repository URL              Subdirectory Path           Query Params
@@ -73,7 +73,7 @@ The `.` represents the current directory (root of repository), following POSIX c
 
 Query parameters are appended after the subdirectory path and apply to the source download:
 
-```
+```text
 github.com/owner/repo.git//path/to/subdir?ref=v1.0.0&depth=1
 ```
 
@@ -195,7 +195,7 @@ spec:
 ```
 
 **Normalized to:**
-```
+```text
 git::https://github.com/cloudposse/terraform-aws-components.git//modules/vpc?ref=1.398.0&depth=1
 ```
 
@@ -211,7 +211,7 @@ spec:
 ```
 
 **Normalized to:**
-```
+```text
 git::https://github.com/terraform-aws-modules/terraform-aws-s3-bucket.git//.?ref=v5.7.0&depth=1
 ```
 
@@ -227,7 +227,7 @@ spec:
 ```
 
 **Should normalize to:**
-```
+```text
 git::https://github.com/terraform-aws-modules/terraform-aws-s3-bucket.git//.?ref=v5.7.0&depth=1
 ```
 
@@ -243,7 +243,7 @@ spec:
 ```
 
 **Normalized to:**
-```
+```text
 git::ssh://git@github.com/cloudposse/terraform-null-label.git?ref=0.25.0&depth=1
 ```
 
