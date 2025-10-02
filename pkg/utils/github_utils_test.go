@@ -83,17 +83,15 @@ func TestGetLatestGitHubRepoRelease(t *testing.T) {
 			t.Skipf("Need at least 5 GitHub API requests, only %d remaining", rateLimits.Remaining)
 		}
 
-		// Test with a repo that might not have releases
-		// Using a valid owner but potentially a repo without releases
+		// Test with a repo that might not have releases.
+		// Using a valid owner but potentially a repo without releases.
 		owner := "cloudposse"
 		repo := "test-harness-this-repo-should-not-exist"
 
 		tag, err := GetLatestGitHubRepoRelease(owner, repo)
-		// Should get an error for non-existent repo
-		if err != nil {
-			assert.Error(t, err)
-			assert.Empty(t, tag)
-		}
+		// Should get an error for non-existent repo.
+		require.Error(t, err)
+		assert.Empty(t, tag)
 	})
 
 	t.Run("handles invalid owner", func(t *testing.T) {
@@ -293,19 +291,6 @@ func TestGitHubAPIRateLimit(t *testing.T) {
 	})
 }
 
-// TestGetLatestGitHubRepoReleaseEmptyResponse tests handling of repos with no releases.
-func TestGetLatestGitHubRepoReleaseEmptyResponse(t *testing.T) {
-	t.Run("handles nil release response", func(t *testing.T) {
-		// The function should handle nil release or nil TagName gracefully.
-		// We can't easily test this without mocking, but we can verify
-		// the function's error handling logic is sound.
-
-		// This is a documentation test showing expected behavior:
-		// If GetLatestRelease returns (nil, nil), the function returns ("", nil).
-		// If GetLatestRelease returns (release, nil) but release.TagName is nil, it returns ("", nil).
-	})
-}
-
 // TestGitHubClientConfiguration tests client configuration options.
 func TestGitHubClientConfiguration(t *testing.T) {
 	t.Run("client is properly configured", func(t *testing.T) {
@@ -341,10 +326,8 @@ func TestConcurrentGitHubAPICalls(t *testing.T) {
 		for _, r := range repos {
 			go func(owner, repo string) {
 				_, err := GetLatestGitHubRepoRelease(owner, repo)
-				// Don't assert on error - could be rate limited
-				if err != nil {
-					t.Logf("Error fetching %s/%s: %v", owner, repo, err)
-				}
+				// Don't assert on error - could be rate limited.
+				_ = err
 				done <- true
 			}(r.owner, r.repo)
 		}

@@ -127,43 +127,6 @@ func TestGenerateBackendConfigWithMultipleFormats(t *testing.T) {
 	}
 }
 
-// TestBackendFileCreation tests that backend files are created correctly.
-func TestBackendFileCreation(t *testing.T) {
-	t.Run("creates backend.tf in component directory", func(t *testing.T) {
-		tempDir := t.TempDir()
-		componentDir := filepath.Join(tempDir, "components", "terraform", "vpc")
-		err := os.MkdirAll(componentDir, 0o755)
-		require.NoError(t, err)
-
-		// Create a basic stack config
-		stacksDir := filepath.Join(tempDir, "stacks")
-		err = os.MkdirAll(stacksDir, 0o755)
-		require.NoError(t, err)
-
-		stackConfig := `
-components:
-  terraform:
-    vpc:
-      backend_type: s3
-      backend:
-        bucket: test-bucket
-        key: vpc.tfstate
-        region: us-east-1
-      vars:
-        namespace: test
-        tenant: platform
-        environment: dev
-        stage: staging
-`
-		stackFile := filepath.Join(stacksDir, "test.yaml")
-		err = os.WriteFile(stackFile, []byte(stackConfig), 0o644)
-		require.NoError(t, err)
-
-		// Note: This test verifies the function runs without error.
-		// Full integration testing would require setting up complete atmos config and stack processing.
-	})
-}
-
 // TestBackendTemplateProcessing tests template processing in backend configs.
 func TestBackendTemplateProcessing(t *testing.T) {
 	t.Run("processes Go templates in backend config", func(t *testing.T) {
@@ -456,14 +419,14 @@ func TestProcessedComponentsTracking(t *testing.T) {
 		processedComponents := make(map[string]any)
 		componentName := "vpc"
 
-		// First time - not processed
+		// First time - not processed.
 		exists := u.MapKeyExists(processedComponents, componentName)
 		assert.False(t, exists)
 
-		// Mark as processed
+		// Mark as processed.
 		processedComponents[componentName] = componentName
 
-		// Second time - already processed
+		// Second time - already processed.
 		exists = u.MapKeyExists(processedComponents, componentName)
 		assert.True(t, exists)
 	})
