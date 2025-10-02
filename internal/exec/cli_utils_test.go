@@ -134,6 +134,126 @@ func Test_processArgsAndFlags_invalidFlag(t *testing.T) {
 	assert.ErrorContains(t, err, "invalid flag: --init-pass-vars=invalid=true")
 }
 
+func Test_processArgsAndFlags_errorCases(t *testing.T) {
+	tests := []struct {
+		name              string
+		componentType     string
+		inputArgsAndFlags []string
+		wantErr           bool
+		errContains       string
+	}{
+		// Test invalid flag formats (multiple equals signs)
+		{
+			name:              "terraform-command flag with multiple equals",
+			componentType:     "terraform",
+			inputArgsAndFlags: []string{"init", "--terraform-command=value=extra"},
+			wantErr:           true,
+			errContains:       "invalid flag",
+		},
+		{
+			name:              "terraform-dir flag with multiple equals",
+			componentType:     "terraform",
+			inputArgsAndFlags: []string{"init", "--terraform-dir==value"},
+			wantErr:           true,
+			errContains:       "invalid flag",
+		},
+		{
+			name:              "append-user-agent flag with multiple equals",
+			componentType:     "terraform",
+			inputArgsAndFlags: []string{"init", "--append-user-agent=val=ue"},
+			wantErr:           true,
+			errContains:       "invalid flag",
+		},
+		{
+			name:              "helmfile-command flag with multiple equals",
+			componentType:     "helmfile",
+			inputArgsAndFlags: []string{"sync", "--helmfile-command=a=b=c"},
+			wantErr:           true,
+			errContains:       "invalid flag",
+		},
+		{
+			name:              "config-dir flag with multiple equals",
+			componentType:     "terraform",
+			inputArgsAndFlags: []string{"init", "--config-dir=a=b"},
+			wantErr:           true,
+			errContains:       "invalid flag",
+		},
+		{
+			name:              "stacks-dir flag with multiple equals",
+			componentType:     "terraform",
+			inputArgsAndFlags: []string{"init", "--stacks-dir=a=b=c"},
+			wantErr:           true,
+			errContains:       "invalid flag",
+		},
+		{
+			name:              "base-path flag with multiple equals",
+			componentType:     "terraform",
+			inputArgsAndFlags: []string{"init", "--base-path=x=y"},
+			wantErr:           true,
+			errContains:       "invalid flag",
+		},
+		{
+			name:              "vendor-base-path flag with multiple equals",
+			componentType:     "terraform",
+			inputArgsAndFlags: []string{"init", "--vendor-base-path=a=b=c=d"},
+			wantErr:           true,
+			errContains:       "invalid flag",
+		},
+		{
+			name:              "deploy-run-init flag with multiple equals",
+			componentType:     "terraform",
+			inputArgsAndFlags: []string{"init", "--deploy-run-init=a=b"},
+			wantErr:           true,
+			errContains:       "invalid flag",
+		},
+		{
+			name:              "auto-generate-backend-file flag with multiple equals",
+			componentType:     "terraform",
+			inputArgsAndFlags: []string{"init", "--auto-generate-backend-file=x=y"},
+			wantErr:           true,
+			errContains:       "invalid flag",
+		},
+		{
+			name:              "planfile flag with multiple equals",
+			componentType:     "terraform",
+			inputArgsAndFlags: []string{"apply", "--planfile=a=b"},
+			wantErr:           true,
+			errContains:       "invalid flag",
+		},
+		{
+			name:              "logs-level flag with multiple equals",
+			componentType:     "terraform",
+			inputArgsAndFlags: []string{"init", "--logs-level=Debug=Extra"},
+			wantErr:           true,
+			errContains:       "invalid flag",
+		},
+		{
+			name:              "logs-file flag with multiple equals",
+			componentType:     "terraform",
+			inputArgsAndFlags: []string{"init", "--logs-file=path=to=file"},
+			wantErr:           true,
+			errContains:       "invalid flag",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := processArgsAndFlags(tt.componentType, tt.inputArgsAndFlags)
+
+			if tt.wantErr {
+				assert.Error(t, err)
+				if tt.errContains != "" {
+					assert.Contains(t, err.Error(), tt.errContains)
+				}
+				return
+			}
+
+			assert.NoError(t, err)
+			_ = got
+		})
+	}
+}
+
 func Test_getCliVars(t *testing.T) {
 	tests := []struct {
 		name      string
