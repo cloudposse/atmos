@@ -49,7 +49,17 @@ func hasSchemeSeparator(uri string) bool {
 //   - true: "github.com/repo//path", "git.company.com/repo//modules"
 //   - false: "github.com/repo", "https://github.com/repo", "./local/path"
 func hasSubdirectoryDelimiter(uri string) bool {
-	return strings.Contains(uri, "//")
+	idx := strings.Index(uri, "//")
+	if idx == -1 {
+		return false
+	}
+	// If // is preceded by :, it's a scheme separator (://) not a subdirectory delimiter.
+	if idx > 0 && uri[idx-1] == ':' {
+		// Check if there's another // after the scheme separator.
+		remaining := uri[idx+2:]
+		return strings.Contains(remaining, "//")
+	}
+	return true
 }
 
 // isLocalPath checks if the URI is a local file system path.

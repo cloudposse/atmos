@@ -128,7 +128,7 @@ func TestHasSchemeSeparator(t *testing.T) {
 		{
 			name:     "subdirectory delimiter only",
 			uri:      "github.com/owner/repo.git//modules/vpc",
-			expected: true, // Contains :: is false, but contains :// from // is false. Actually, this should be true because of //
+			expected: false, // Has // but not :// or ::, so no scheme separator.
 		},
 		// No scheme separators
 		{
