@@ -74,7 +74,7 @@ func ExecuteShellCommand(
 	return cmd.Run()
 }
 
-// ExecuteShell runs a shell script
+// ExecuteShell runs a shell script.
 func ExecuteShell(
 	command string,
 	name string,

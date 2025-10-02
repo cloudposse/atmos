@@ -42,7 +42,7 @@ func (m modelSpinner) View() string {
 	return fmt.Sprintf("\r%s %s", m.spinner.View(), m.message)
 }
 
-// NewSpinner initializes a spinner and returns a pointer to a tea.Program
+// NewSpinner initializes a spinner and returns a pointer to a tea.Program.
 func NewSpinner(message string) *tea.Program {
 	s := spinner.New()
 	s.Style = theme.Styles.Link
@@ -63,7 +63,7 @@ func NewSpinner(message string) *tea.Program {
 	return p
 }
 
-// RunSpinner executes the spinner program in a goroutine
+// RunSpinner executes the spinner program in a goroutine.
 func RunSpinner(p *tea.Program, spinnerChan chan struct{}, message string) {
 	go func() {
 		defer close(spinnerChan)
@@ -75,7 +75,7 @@ func RunSpinner(p *tea.Program, spinnerChan chan struct{}, message string) {
 	}()
 }
 
-// StopSpinner stops the spinner program and waits for the completion
+// StopSpinner stops the spinner program and waits for the completion.
 func StopSpinner(p *tea.Program, spinnerChan chan struct{}) {
 	p.Quit()
 	<-spinnerChan

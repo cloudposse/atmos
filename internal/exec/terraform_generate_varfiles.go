@@ -16,7 +16,7 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
-// ExecuteTerraformGenerateVarfilesCmd executes `terraform generate varfiles` command
+// ExecuteTerraformGenerateVarfilesCmd executes `terraform generate varfiles` command.
 func ExecuteTerraformGenerateVarfilesCmd(cmd *cobra.Command, args []string) error {
 	info, err := ProcessCommandLineArgs("terraform", cmd, args, nil)
 	if err != nil {
@@ -69,7 +69,7 @@ func ExecuteTerraformGenerateVarfilesCmd(cmd *cobra.Command, args []string) erro
 	return ExecuteTerraformGenerateVarfiles(&atmosConfig, fileTemplate, format, stacks, components)
 }
 
-// ExecuteTerraformGenerateVarfiles generates varfiles for all terraform components in all stacks
+// ExecuteTerraformGenerateVarfiles generates varfiles for all terraform components in all stacks.
 func ExecuteTerraformGenerateVarfiles(
 	atmosConfig *schema.AtmosConfiguration,
 	fileTemplate string,

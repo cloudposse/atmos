@@ -7,7 +7,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-// ProcessConfigSources processes the sources (files) for all sections for a component in a stack
+// ProcessConfigSources processes the sources (files) for all sections for a component in a stack.
 func ProcessConfigSources(
 	configAndStacksInfo schema.ConfigAndStacksInfo,
 	rawStackConfigs map[string]map[string]any,

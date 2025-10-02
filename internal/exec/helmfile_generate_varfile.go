@@ -10,7 +10,7 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
-// ExecuteHelmfileGenerateVarfileCmd executes `helmfile generate varfile` command
+// ExecuteHelmfileGenerateVarfileCmd executes `helmfile generate varfile` command.
 func ExecuteHelmfileGenerateVarfileCmd(cmd *cobra.Command, args []string) error {
 	if len(args) != 1 {
 		return errors.New("invalid arguments. The command requires one argument `component`")

@@ -275,7 +275,7 @@ func confirmDeleteTerraformLocal(message string) (confirm bool, err error) {
 	return confirm, nil
 }
 
-// DeletePathTerraform deletes the specified file or folder. with a checkmark or xmark
+// DeletePathTerraform deletes the specified file or folder with a checkmark or xmark.
 func DeletePathTerraform(fullPath string, objectName string) error {
 	// Normalize path separators to forward slashes for consistent output across platforms
 	normalizedObjectName := filepath.ToSlash(objectName)

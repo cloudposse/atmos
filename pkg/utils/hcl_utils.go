@@ -12,7 +12,7 @@ import (
 	"github.com/zclconf/go-cty/cty"
 )
 
-// PrintAsHcl prints the provided value as HCL (HashiCorp Language) document to the console
+// PrintAsHcl prints the provided value as HCL (HashiCorp Language) document to the console.
 func PrintAsHcl(data any) error {
 	astree, err := ConvertToHclAst(data)
 	if err != nil {
@@ -27,7 +27,7 @@ func PrintAsHcl(data any) error {
 	return nil
 }
 
-// WriteToFileAsHcl converts the provided value to HCL (HashiCorp Language) and writes it to the specified file
+// WriteToFileAsHcl converts the provided value to HCL (HashiCorp Language) and writes it to the specified file.
 func WriteToFileAsHcl(
 	filePath string,
 	data any,
@@ -58,7 +58,7 @@ func WriteToFileAsHcl(
 	return nil
 }
 
-// ConvertToHclAst converts the provided value to an HCL abstract syntax tree
+// ConvertToHclAst converts the provided value to an HCL abstract syntax tree.
 func ConvertToHclAst(data any) (ast.Node, error) {
 	j, err := ConvertToJSONFast(data)
 	if err != nil {

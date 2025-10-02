@@ -133,7 +133,7 @@ func (d *DescribeComponentExec) viewConfig(atmosConfig *schema.AtmosConfiguratio
 	return nil
 }
 
-// ExecuteDescribeComponent describes component config
+// ExecuteDescribeComponent describes component config.
 func ExecuteDescribeComponent(
 	component string,
 	stack string,

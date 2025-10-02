@@ -24,7 +24,7 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
-// ProcessTmpl parses and executes Go templates
+// ProcessTmpl parses and executes Go templates.
 func ProcessTmpl(
 	tmplName string,
 	tmplValue string,
@@ -64,7 +64,7 @@ func ProcessTmpl(
 	return res.String(), nil
 }
 
-// ProcessTmplWithDatasources parses and executes Go templates with datasources
+// ProcessTmplWithDatasources parses and executes Go templates with datasources.
 func ProcessTmplWithDatasources(
 	atmosConfig *schema.AtmosConfiguration,
 	configAndStacksInfo *schema.ConfigAndStacksInfo,
@@ -239,7 +239,7 @@ func ProcessTmplWithDatasources(
 	return result, nil
 }
 
-// IsGolangTemplate checks if the provided string is a Go template
+// IsGolangTemplate checks if the provided string is a Go template.
 func IsGolangTemplate(str string) (bool, error) {
 	t, err := template.New(str).Parse(str)
 	if err != nil {

@@ -102,6 +102,8 @@ func ReadTerraformBackendS3Internal(
 	backend *map[string]any,
 ) ([]byte, error) {
 	// Path to the tfstate file in the s3 bucket.
+	// S3 paths always use forward slashes, so path.Join is appropriate here.
+	//nolint:forbidigo // S3 paths require forward slashes regardless of OS
 	tfStateFilePath := path.Join(
 		GetBackendAttribute(backend, "workspace_key_prefix"),
 		GetTerraformWorkspace(componentSections),

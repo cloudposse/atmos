@@ -26,7 +26,7 @@ func ExecuteHelmfileCmd(cmd *cobra.Command, args []string, additionalArgsAndFlag
 	return ExecuteHelmfile(info)
 }
 
-// ExecuteHelmfile executes helmfile commands
+// ExecuteHelmfile executes helmfile commands.
 func ExecuteHelmfile(info schema.ConfigAndStacksInfo) error {
 	atmosConfig, err := cfg.InitCliConfig(info, true)
 	if err != nil {

@@ -17,7 +17,7 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
-// ExecuteAtlantisGenerateRepoConfigCmd executes 'atlantis generate repo-config' command
+// ExecuteAtlantisGenerateRepoConfigCmd executes 'atlantis generate repo-config' command.
 func ExecuteAtlantisGenerateRepoConfigCmd(cmd *cobra.Command, args []string) error {
 	info, err := ProcessCommandLineArgs("", cmd, args, nil)
 	if err != nil {
@@ -126,7 +126,7 @@ func ExecuteAtlantisGenerateRepoConfigCmd(cmd *cobra.Command, args []string) err
 	)
 }
 
-// ExecuteAtlantisGenerateRepoConfigAffectedOnly generates repository configuration for Atlantis only for the affected components and stacks
+// ExecuteAtlantisGenerateRepoConfigAffectedOnly generates repository configuration for Atlantis only for the affected components and stacks.
 func ExecuteAtlantisGenerateRepoConfigAffectedOnly(
 	atmosConfig *schema.AtmosConfiguration,
 	outputPath string,
@@ -221,7 +221,7 @@ func ExecuteAtlantisGenerateRepoConfigAffectedOnly(
 	)
 }
 
-// ExecuteAtlantisGenerateRepoConfig generates repository configuration for Atlantis
+// ExecuteAtlantisGenerateRepoConfig generates repository configuration for Atlantis.
 func ExecuteAtlantisGenerateRepoConfig(
 	atmosConfig *schema.AtmosConfiguration,
 	outputPath string,
