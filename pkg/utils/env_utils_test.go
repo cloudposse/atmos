@@ -9,6 +9,102 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+func TestConvertEnvVars(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    map[string]any
+		expected []string
+	}{
+		{
+			name:     "empty map",
+			input:    map[string]any{},
+			expected: []string{},
+		},
+		{
+			name: "string values",
+			input: map[string]any{
+				"KEY1": "value1",
+				"KEY2": "value2",
+			},
+			expected: []string{"KEY1=value1", "KEY2=value2"},
+		},
+		{
+			name: "mixed types",
+			input: map[string]any{
+				"KEY1": "value1",
+				"KEY2": 123,
+				"KEY3": true,
+			},
+			expected: []string{"KEY1=value1", "KEY2=123", "KEY3=true"},
+		},
+		{
+			name: "null value excluded",
+			input: map[string]any{
+				"KEY1": "value1",
+				"KEY2": "null",
+			},
+			expected: []string{"KEY1=value1"},
+		},
+		{
+			name: "nil value excluded",
+			input: map[string]any{
+				"KEY1": "value1",
+				"KEY2": nil,
+			},
+			expected: []string{"KEY1=value1"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := ConvertEnvVars(tt.input)
+			assert.ElementsMatch(t, tt.expected, result)
+		})
+	}
+}
+
+func TestFindPathIndex(t *testing.T) {
+	tests := []struct {
+		name        string
+		env         []string
+		expectedIdx int
+		expectedKey string
+	}{
+		{
+			name:        "PATH found",
+			env:         []string{"HOME=/home/user", "PATH=/usr/bin", "USER=test"},
+			expectedIdx: 1,
+			expectedKey: "PATH",
+		},
+		{
+			name:        "Path found (Windows style)",
+			env:         []string{"HOME=/home/user", "Path=/usr/bin", "USER=test"},
+			expectedIdx: 1,
+			expectedKey: "Path",
+		},
+		{
+			name:        "PATH not found",
+			env:         []string{"HOME=/home/user", "USER=test"},
+			expectedIdx: -1,
+			expectedKey: "PATH",
+		},
+		{
+			name:        "empty env",
+			env:         []string{},
+			expectedIdx: -1,
+			expectedKey: "PATH",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			idx, key := findPathIndex(tt.env)
+			assert.Equal(t, tt.expectedIdx, idx)
+			assert.Equal(t, tt.expectedKey, key)
+		})
+	}
+}
+
 func TestPrependToPath(t *testing.T) {
 	tests := []struct {
 		name        string
