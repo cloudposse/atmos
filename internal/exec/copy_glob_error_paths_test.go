@@ -97,13 +97,17 @@ func TestCopyFile_CopyContentError_WithMock(t *testing.T) {
 
 	copier := NewFileCopier(mockFS, mockGlob, mockIO)
 
-	// Create temporary files for testing
-	tmpDir := t.TempDir()
-	srcFile, err := os.CreateTemp(tmpDir, "source-*.txt")
+	// Use real filesystem to create temp files (we need actual *os.File objects)
+	realFS := filesystem.NewOSFileSystem()
+	tmpDir, err := realFS.MkdirTemp("", "copy-test-*")
+	require.NoError(t, err)
+	defer realFS.RemoveAll(tmpDir)
+
+	srcFile, err := realFS.Create(filepath.Join(tmpDir, "source.txt"))
 	require.NoError(t, err)
 	defer srcFile.Close()
 
-	destFile, err := os.CreateTemp(tmpDir, "dest-*.txt")
+	destFile, err := realFS.Create(filepath.Join(tmpDir, "dest.txt"))
 	require.NoError(t, err)
 	defer destFile.Close()
 
@@ -135,13 +139,17 @@ func TestCopyFile_StatSourceError_WithMock(t *testing.T) {
 
 	copier := NewFileCopier(mockFS, mockGlob, mockIO)
 
-	// Create temporary files for testing
-	tmpDir := t.TempDir()
-	srcFile, err := os.CreateTemp(tmpDir, "source-*.txt")
+	// Use real filesystem to create temp files (we need actual *os.File objects)
+	realFS := filesystem.NewOSFileSystem()
+	tmpDir, err := realFS.MkdirTemp("", "copy-test-*")
+	require.NoError(t, err)
+	defer realFS.RemoveAll(tmpDir)
+
+	srcFile, err := realFS.Create(filepath.Join(tmpDir, "source.txt"))
 	require.NoError(t, err)
 	defer srcFile.Close()
 
-	destFile, err := os.CreateTemp(tmpDir, "dest-*.txt")
+	destFile, err := realFS.Create(filepath.Join(tmpDir, "dest.txt"))
 	require.NoError(t, err)
 	defer destFile.Close()
 
@@ -174,13 +182,17 @@ func TestCopyFile_ChmodError_WithMock(t *testing.T) {
 
 	copier := NewFileCopier(mockFS, mockGlob, mockIO)
 
-	// Create temporary files for testing
-	tmpDir := t.TempDir()
-	srcFile, err := os.CreateTemp(tmpDir, "source-*.txt")
+	// Use real filesystem to create temp files (we need actual *os.File objects)
+	realFS := filesystem.NewOSFileSystem()
+	tmpDir, err := realFS.MkdirTemp("", "copy-test-*")
+	require.NoError(t, err)
+	defer realFS.RemoveAll(tmpDir)
+
+	srcFile, err := realFS.Create(filepath.Join(tmpDir, "source.txt"))
 	require.NoError(t, err)
 	defer srcFile.Close()
 
-	destFile, err := os.CreateTemp(tmpDir, "dest-*.txt")
+	destFile, err := realFS.Create(filepath.Join(tmpDir, "dest.txt"))
 	require.NoError(t, err)
 	defer destFile.Close()
 
