@@ -9,6 +9,8 @@ import File from '@site/src/components/File'
 import PillBox from '@site/src/components/PillBox'
 import Intro from '@site/src/components/Intro'
 import KeyPoints from '@site/src/components/KeyPoints'
+import Tabs from '@theme/Tabs'
+import TabItem from '@theme/TabItem'
 
 <PillBox>Atmos Design Pattern</PillBox>
 <Intro>
@@ -103,18 +105,52 @@ This approach:
 - **Simplifies operations**: No complex version tracking or branch management
 - **Supports rapid iteration**: Deploy frequently with confidence
 
-<File title="Example: All environments converge to same component">
+<Tabs>
+<TabItem value="dev" label="Development" default>
+<File title="stacks/dev/us-east-1.yaml">
 ```yaml
-# stacks/dev/us-east-1.yaml, stacks/staging/us-east-1.yaml, stacks/prod/us-east-1.yaml
 components:
   terraform:
     vpc:
       metadata:
         component: vpc  # All environments converge to this component path
       vars:
-        # Environment-specific configuration
+        environment: dev
+        cidr_block: "10.0.0.0/16"
 ```
 </File>
+</TabItem>
+
+<TabItem value="staging" label="Staging">
+<File title="stacks/staging/us-east-1.yaml">
+```yaml
+components:
+  terraform:
+    vpc:
+      metadata:
+        component: vpc  # Same component as dev
+      vars:
+        environment: staging
+        cidr_block: "10.1.0.0/16"
+```
+</File>
+</TabItem>
+
+<TabItem value="prod" label="Production">
+<File title="stacks/prod/us-east-1.yaml">
+```yaml
+components:
+  terraform:
+    vpc:
+      metadata:
+        component: vpc  # Same component as all environments
+      vars:
+        environment: prod
+        cidr_block: "10.2.0.0/16"
+```
+</File>
+</TabItem>
+</Tabs>
 
 Use feature flags, environment-specific configuration, and deployment automation to control rollout. You can organize your components using different folder structures depending on your needs.
 
