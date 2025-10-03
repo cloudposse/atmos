@@ -122,3 +122,110 @@ func TestContextDeadlineExceededWrapping(t *testing.T) {
 		assert.ErrorIs(t, wrappedErr, errUtils.ErrOPATimeout)
 	}
 }
+
+// TestValidateWithCue tests that CUE validation returns not supported error.
+func TestValidateWithCue(t *testing.T) {
+	data := map[string]interface{}{
+		"test": "value",
+	}
+
+	valid, err := ValidateWithCue(data, "test.cue", "test: string")
+
+	assert.False(t, valid)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "not supported yet")
+}
+
+// TestValidateWithOpaFallback_FileReadError tests the fallback when file cannot be read.
+func TestValidateWithOpaFallback_FileReadError(t *testing.T) {
+	data := map[string]interface{}{
+		"test": "value",
+	}
+
+	// Use a non-existent file path.
+	valid, err := validateWithOpaFallback(data, "/nonexistent/policy.rego", 10)
+
+	assert.False(t, valid)
+	assert.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrReadFile)
+}
+
+// TestValidateWithJsonSchema_ValidationError tests JSON schema validation with invalid data.
+func TestValidateWithJsonSchema_ValidationError(t *testing.T) {
+	schema := `{
+		"$schema": "https://json-schema.org/draft/2020-12/schema",
+		"type": "object",
+		"properties": {
+			"name": {
+				"type": "string"
+			},
+			"age": {
+				"type": "number"
+			}
+		},
+		"required": ["name"]
+	}`
+
+	// Invalid data: missing required "name" field.
+	data := map[string]interface{}{
+		"age": 25,
+	}
+
+	valid, err := ValidateWithJsonSchema(data, "test-schema", schema)
+
+	assert.False(t, valid)
+	assert.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrValidation)
+}
+
+// TestValidateWithJsonSchema_Valid tests JSON schema validation with valid data.
+func TestValidateWithJsonSchema_Valid(t *testing.T) {
+	schema := `{
+		"$schema": "https://json-schema.org/draft/2020-12/schema",
+		"type": "object",
+		"properties": {
+			"name": {
+				"type": "string"
+			}
+		},
+		"required": ["name"]
+	}`
+
+	data := map[string]interface{}{
+		"name": "John",
+	}
+
+	valid, err := ValidateWithJsonSchema(data, "test-schema", schema)
+
+	assert.True(t, valid)
+	assert.NoError(t, err)
+}
+
+// TestValidateWithJsonSchema_InvalidSchema tests with malformed JSON schema.
+func TestValidateWithJsonSchema_InvalidSchema(t *testing.T) {
+	schema := `{
+		"type": "invalid-type-here"
+	}`
+
+	data := map[string]interface{}{
+		"test": "value",
+	}
+
+	valid, err := ValidateWithJsonSchema(data, "test-schema", schema)
+
+	assert.False(t, valid)
+	assert.Error(t, err)
+}
+
+// TestIsWindowsOPALoadError_WrappedError tests wrapped fs.ErrNotExist.
+func TestIsWindowsOPALoadError_WrappedError(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skipf("Skipping Windows-specific test on %s", runtime.GOOS)
+	}
+
+	// Test wrapped fs.ErrNotExist.
+	wrappedErr := errors.Join(errors.New("wrapper"), fs.ErrNotExist)
+	result := isWindowsOPALoadError(wrappedErr)
+
+	assert.True(t, result, "Expected true for wrapped fs.ErrNotExist on Windows")
+}
