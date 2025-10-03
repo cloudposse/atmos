@@ -118,6 +118,99 @@ const config = {
                     {
                         from: '/core-concepts/template-functions',
                         to: '/functions'
+                    },
+                    // Redirects for reorganized stack configuration pages
+                    {
+                        from: '/core-concepts/stacks/imports',
+                        to: '/stacks/imports'
+                    },
+                    {
+                        from: '/core-concepts/stacks/inheritance/inheritance',
+                        to: '/stacks/inheritance'
+                    },
+                    {
+                        from: '/core-concepts/stacks/inheritance',
+                        to: '/stacks/inheritance'
+                    },
+                    {
+                        from: '/core-concepts/stacks/inheritance/mixins',
+                        to: '/stacks/mixins'
+                    },
+                    {
+                        from: '/core-concepts/stacks/overrides',
+                        to: '/stacks/overrides'
+                    },
+                    {
+                        from: '/core-concepts/stacks/dependencies',
+                        to: '/stacks/dependencies'
+                    },
+                    {
+                        from: '/core-concepts/stacks/hooks',
+                        to: '/stacks/hooks'
+                    },
+                    {
+                        from: '/core-concepts/stacks/catalogs',
+                        to: '/stacks/catalogs'
+                    },
+                    // Redirects for workflow pages moved to top level
+//                     {
+//                         from: '/core-concepts/workflows',
+//                         to: '/workflows/workflows'
+//                     },
+//                     {
+//                         from: '/core-concepts/workflows/workflows',
+//                         to: '/workflows/workflows'
+//                     },
+                    // Redirects for vendoring pages moved to top level
+                    {
+                        from: '/core-concepts/vendor',
+                        to: '/vendoring/vendor'
+                    },
+                    {
+                        from: '/core-concepts/vendor/vendor',
+                        to: '/vendoring/vendor'
+                    },
+                    {
+                        from: '/core-concepts/vendor/vendor-package',
+                        to: '/vendoring/component-manifest'
+                    },
+                    {
+                        from: '/core-concepts/vendor/vendor-lock',
+                        to: '/vendoring/vendor-manifest'
+                    },
+                    // Redirects for validation pages moved to top level
+                    {
+                        from: '/core-concepts/validate',
+                        to: '/validation/validating'
+                    },
+                    {
+                        from: '/core-concepts/validate/validate',
+                        to: '/validation/validating'
+                    },
+                    {
+                        from: '/core-concepts/validate/json-schema',
+                        to: '/validation/json-schema'
+                    },
+                    {
+                        from: '/core-concepts/validate/opa',
+                        to: '/validation/opa'
+                    },
+                    {
+                        from: '/core-concepts/validate/editorconfig',
+                        to: '/validation/editorconfig-validation'
+                    },
+                    {
+                        from: '/core-concepts/validate/terraform-variables',
+                        to: '/validation/terraform-variables'
+                    },
+                    // Redirects for template pages moved to top level
+//                     {
+//                         from: '/core-concepts/stacks/templates',
+//                         to: '/templates/templates'
+//                     },
+                    {
+                        from: '/core-concepts/stacks/templates/datasources',
+                        to: '/templates/datasources'
                     }
                 ],
             },

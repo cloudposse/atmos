@@ -1,0 +1,302 @@
+---
+title: YAML in Atmos
+sidebar_position: 4
+sidebar_label: YAML Guide
+description: Understanding how Atmos uses YAML for configuration
+id: yaml-guide
+---
+import File from '@site/src/components/File'
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Atmos uses YAML as its configuration language because it's human-readable, portable, and powerful enough to handle complex infrastructure configurations. But YAML in Atmos works a bit differently than you might expect—especially when it comes to scope and merging.
+</Intro>
+
+Let's clear up the most common misconceptions and show you how to use YAML effectively in Atmos.
+
+## YAML Scope is Depth-Relative
+
+The most important thing to understand: **there is no file-level scope in Atmos**. When you import multiple YAML files, Atmos merges them into a single, unified configuration. The scope is determined by the depth in the YAML tree, not by which file something is defined in.
+
+Think of it like this: after all imports are processed, Atmos sees one big YAML document. Variables and settings at the same depth in the tree have the same scope.
+
+<File title="stacks/globals.yaml">
+```yaml
+vars:
+  environment: production
+  region: us-east-1
+```
+</File>
+
+<File title="stacks/prod.yaml">
+```yaml
+import:
+  - globals
+
+vars:
+  namespace: myapp
+
+components:
+  terraform:
+    vpc:
+      vars:
+        cidr_block: "10.0.0.0/16"
+```
+</File>
+
+After processing, Atmos sees this as one merged configuration:
+
+```yaml
+vars:
+  environment: production
+  region: us-east-1
+  namespace: myapp
+
+components:
+  terraform:
+    vpc:
+      vars:
+        cidr_block: "10.0.0.0/16"
+```
+
+All three variables (`environment`, `region`, `namespace`) have the same scope—they're all at the top-level `vars` depth.
+
+## Deep Merge: Maps Combine, Values Override
+
+When Atmos processes imports, it **deep merges** YAML configurations. Here's how it works:
+
+- **Maps (objects) merge recursively** - Keys from both maps combine
+- **Later values override earlier ones** - Import order matters
+- **Lists replace entirely** - No list merging, last one wins
+
+<File title="stacks/base.yaml">
+```yaml
+vars:
+  tags:
+    ManagedBy: Atmos
+    Team: Platform
+
+components:
+  terraform:
+    vpc:
+      vars:
+        enable_dns: true
+        enable_nat: false
+```
+</File>
+
+<File title="stacks/dev.yaml">
+```yaml
+import:
+  - base
+
+vars:
+  tags:
+    Environment: Development  # New key, merges in
+    ManagedBy: Atmos-Dev      # Same key, overrides
+
+components:
+  terraform:
+    vpc:
+      vars:
+        enable_nat: true  # Overrides false from base
+        # enable_dns: true still inherited
+```
+</File>
+
+**Result after merge:**
+
+```yaml
+vars:
+  tags:
+    ManagedBy: Atmos-Dev      # Overridden
+    Team: Platform            # Inherited
+    Environment: Development  # Added
+
+components:
+  terraform:
+    vpc:
+      vars:
+        enable_dns: true   # Inherited
+        enable_nat: true   # Overridden
+```
+
+:::tip
+Import order matters! Files are processed sequentially. Later imports override earlier ones.
+:::
+
+## YAML Tags: Native Functions
+
+Atmos extends YAML with custom tags that act like native functions. These are processed during YAML parsing, before templates run.
+
+### Common YAML Tags
+
+**`!ENV`** - Read environment variables
+
+```yaml
+vars:
+  api_token: !ENV GITHUB_TOKEN
+  region: !ENV AWS_REGION
+```
+
+**`!stack`** - Reference values from other stacks
+
+```yaml
+components:
+  terraform:
+    app:
+      vars:
+        vpc_id: !stack outputs.vpc.vpc_id
+```
+
+**`!template`** - Evaluate Go templates inline
+
+```yaml
+vars:
+  bucket_name: !template "{{.vars.namespace}}-{{.vars.environment}}-data"
+```
+
+YAML tags are **evaluated once during YAML parsing**. They're perfect for simple value substitution.
+
+## YAML Tags vs Go Templates
+
+Atmos supports both YAML tags and Go templates. When should you use each?
+
+<dl>
+  <dt>**Use YAML Tags when:**</dt>
+  <dd>
+    - You need simple value substitution<br/>
+    - You want native YAML syntax<br/>
+    - You're reading environment variables or outputs
+  </dd>
+
+  <dt>**Use Go Templates when:**</dt>
+  <dd>
+    - You need conditional logic or loops<br/>
+    - You're doing string manipulation<br/>
+    - You need access to template functions (`atmos.Component`, `terraform.output`, etc.)
+  </dd>
+</dl>
+
+**Example: YAML Tag**
+```yaml
+vars:
+  # Simple substitution
+  database_password: !ENV DB_PASSWORD
+```
+
+**Example: Go Template**
+```yaml
+vars:
+  # Complex logic
+  cluster_name: '{{ if eq .vars.environment "prod" }}prod-cluster{{ else }}dev-cluster{{ end }}'
+```
+
+:::info
+Go templates are processed **after** YAML tags. You can combine them:
+```yaml
+vars:
+  token: !ENV API_TOKEN
+  header: '{{ printf "Bearer %s" .vars.token }}'
+```
+:::
+
+## Why YAML for Configuration?
+
+YAML is ideal for infrastructure configuration because:
+
+✅ **Human-readable** - Easy to read, write, and review in PRs
+✅ **Supports comments** - Document your configuration inline
+✅ **Hierarchical** - Natural fit for nested infrastructure config
+✅ **Portable** - Every language can parse it
+✅ **Type-aware** - Strings, numbers, booleans, null
+
+Compare to alternatives:
+
+| Format | Comments | Hierarchy | Type System | Complexity |
+|--------|----------|-----------|-------------|------------|
+| YAML   | ✅       | ✅        | ✅          | Low        |
+| JSON   | ❌       | ✅        | ✅          | Low        |
+| HCL    | ✅       | ✅        | ✅          | Medium     |
+
+YAML keeps configuration simple while HCL handles the infrastructure logic.
+
+## YAML Gotchas & How to Avoid Them
+
+### 1. Type Coercion
+
+YAML auto-converts values. Sometimes this surprises people:
+
+```yaml
+# These are NOT strings
+vars:
+  yes_value: yes        # Becomes boolean true
+  no_value: no          # Becomes boolean false
+  version: 1.20         # Becomes float 1.2
+  zip_code: 07094       # Becomes integer 7094
+```
+
+**Fix: Quote strings explicitly**
+
+```yaml
+vars:
+  yes_value: "yes"      # String "yes"
+  no_value: "no"        # String "no"
+  version: "1.20"       # String "1.20"
+  zip_code: "07094"     # String "07094"
+```
+
+### 2. Indentation Matters
+
+YAML uses indentation for structure. Mixing tabs/spaces causes errors.
+
+```yaml
+# WRONG - Mixed indentation
+components:
+  terraform:
+	vpc:  # Tab here
+      vars:  # Spaces here
+        cidr: "10.0.0.0/16"
+```
+
+**Fix: Use 2 spaces consistently**
+
+```yaml
+# CORRECT
+components:
+  terraform:
+    vpc:
+      vars:
+        cidr: "10.0.0.0/16"
+```
+
+### 3. Special Characters in Strings
+
+Characters like `:`, `{`, `[`, `>`, `|` have special meaning. Quote them:
+
+```yaml
+# WRONG
+vars:
+  url: https://example.com  # Colon causes parse error
+
+# CORRECT
+vars:
+  url: "https://example.com"
+```
+
+## Key Takeaways
+
+✅ **Scope is YAML-depth relative**, not file-level
+✅ **Deep merge** combines maps, overrides values
+✅ **Import order matters** - last import wins
+✅ **YAML tags** for simple substitution
+✅ **Go templates** for complex logic
+✅ **Quote special values** to avoid type coercion
+
+## What's Next
+
+Now that you understand YAML in Atmos, you're ready to start building reusable configurations:
+
+- **[Learn about Imports](/core-concepts/imports-basics)** - Reuse configuration across stacks
+- **[Learn about Inheritance](/core-concepts/inheritance-basics)** - Create component variations
+- **[Organize your Stacks](/core-concepts/organizing-stacks)** - Structure for scale

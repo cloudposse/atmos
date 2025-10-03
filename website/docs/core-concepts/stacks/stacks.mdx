@@ -73,7 +73,7 @@ When a component is added to a stack, we call that a "Component Instance"
   <dd>These are the top-level stacks that are responsible for importing Child stacks. Components inside of Parent stacks are deployable, unlike in Child stacks.</dd>
 
   <dt>Child Stacks</dt>
-  <dd>These are any stacks whose components cannot be deployed independently without being imported by a Parent Stack. <a href="/core-concepts/stacks/catalogs">Catalogs</a> are typically where we keep our Child stacks.</dd>
+  <dd>These are any stacks whose components cannot be deployed independently without being imported by a Parent Stack. <a href="/stacks/catalogs">Catalogs</a> are typically where we keep our Child stacks.</dd>
 </dl>
 
 ### Logical Stacks vs. Physical Stack Manifests
@@ -98,7 +98,7 @@ Note, the logical representation is never influenced by file paths or directorie
 
 ## Schema
 
-A Stack file contains a manifest defined in YAML that follows a simple, extensible schema. In fact, every Stack file follows exactly the same schema, and every setting in the configuration is optional. Enforcing a consistent schema ensures we can easily [import and deep-merge](/core-concepts/stacks/imports) configurations and use [inheritance](/core-concepts/stacks/inheritance) to achieve DRY configuration.
+A Stack file contains a manifest defined in YAML that follows a simple, extensible schema. In fact, every Stack file follows exactly the same schema, and every setting in the configuration is optional. Enforcing a consistent schema ensures we can easily [import and deep-merge](/stacks/imports) configurations and use [inheritance](/stacks/inheritance) to achieve DRY configuration.
 
 <File title="stack.yaml">
 ```yaml
@@ -197,4 +197,4 @@ resources". You might want to put these into a file like `stacks/global-region.y
 ### Hierarchical Layout
 
 We recommend using a hierarchical layout that follows the way AWS thinks about infrastructure. This works very well when you may have dozens or
-hundreds of accounts and regions that you operate in. Use [Catalogs](/core-concepts/stacks/catalogs) to organize your Stack configurations.
+hundreds of accounts and regions that you operate in. Use [Catalogs](/stacks/catalogs) to organize your Stack configurations.

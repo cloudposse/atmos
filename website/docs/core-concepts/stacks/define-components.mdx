@@ -7,7 +7,7 @@ id: define-components
 import Intro from '@site/src/components/Intro'
 
 <Intro>
-Stacks are used to compose multiple components together and provide their configuration. The schema is the same for all stacks, but the configuration can be different. Use a combination of [imports](/core-concepts/stacks/imports), [inheritance](/core-concepts/stacks/inheritance), and [catalogs](/core-concepts/stacks/catalogs) for a template-free way to reuse configuration and [override](/core-concepts/stacks/overrides) values when needed.
+Stacks are used to compose multiple components together and provide their configuration. The schema is the same for all stacks, but the configuration can be different. Use a combination of [imports](/stacks/imports), [inheritance](/stacks/inheritance), and [catalogs](/stacks/catalogs) for a template-free way to reuse configuration and [override](/stacks/overrides) values when needed.
 </Intro>
 
 ## Component Schema
@@ -66,7 +66,7 @@ components:
 
 <dl>
   <dt>`vars` (optional)</dt>
-  <dd>The `vars` section is a free-form map. Use [component validation](/core-concepts/validate) to enforce policies.</dd>
+  <dd>The `vars` section is a free-form map. Use [component validation](/validation/validating) to enforce policies.</dd>
 
   <dt>`vars.namespace` (optional)</dt>
   <dd>
@@ -173,7 +173,7 @@ components:
 <dl>
 
   <dt>`vars` (optional)</dt>
-  <dd>The `vars` section is a free-form map. Use [component validation](/core-concepts/validate) to enforce policies.</dd>
+  <dd>The `vars` section is a free-form map. Use [component validation](/validation/validating) to enforce policies.</dd>
 
   <dt>`vars.namespace` (optional)</dt>
   <dd>

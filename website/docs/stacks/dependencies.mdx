@@ -83,7 +83,7 @@ If `stack` is specified, it's processed first and the `namespace`, `tenant`, `en
 :::
 
 :::tip
-You can use [Atmos Stack Manifest Templating](/core-concepts/stacks/templates) in `depends_on`.
+You can use [Atmos Stack Manifest Templating](/templates) in `depends_on`.
 Atmos processes the templates first, and then detects all the dependencies, allowing you to provide the parameters to
 `depends_on` dynamically.
 :::
@@ -153,7 +153,7 @@ components:
 The `stack` attribute has higher precedence than the other context variables.
 If `stack` is specified, the `namespace`, `tenant`, `environment` and `stage` attributes are ignored.
 
-As you can see in the examples above, we can use [Atmos Stack Manifest Templating](/core-concepts/stacks/templates) in the `stack` attribute to dynamically specify the stack.
+As you can see in the examples above, we can use [Atmos Stack Manifest Templating](/templates) in the `stack` attribute to dynamically specify the stack.
 
 This is useful when configuring
 [`stacks.name_template` in `atmos.yaml`](/core-concepts/projects/configuration/#stack-names-slugs) to define and refer to stacks.

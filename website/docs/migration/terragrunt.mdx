@@ -1,0 +1,573 @@
+---
+title: Migrating from Terragrunt
+sidebar_position: 1
+sidebar_label: From Terragrunt
+description: How to migrate from Terragrunt to Atmos
+id: terragrunt
+---
+import File from '@site/src/components/File'
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Terragrunt and Atmos solve similar problems—managing Terraform at scale with DRY configurations. If you're coming from Terragrunt, this guide will help you understand the differences and migrate your infrastructure.
+</Intro>
+
+## Key Differences at a Glance
+
+| Concept | Terragrunt | Atmos |
+|---------|------------|-------|
+| **Configuration Format** | HCL (`terragrunt.hcl`) | YAML (`.yaml`) |
+| **Reuse Mechanism** | `include {}` blocks | `import:` with deep merge |
+| **Dependencies** | `dependency` blocks | Remote state + `atmos.Component()` |
+| **Variable Passing** | `inputs = {}` | `vars:` with inheritance |
+| **Module Source** | `terraform { source = "..." }` | `metadata.component` |
+| **CLI** | `terragrunt plan/apply` | `atmos terraform plan/apply` |
+| **State Backend** | Per-directory `backend {}` | Centralized in stack config |
+| **Environments** | Directory structure | Stack files (YAML) |
+
+## Concept Mapping
+
+### Terragrunt `include` → Atmos `import`
+
+**Terragrunt:**
+<File title="terragrunt.hcl">
+```hcl
+include "root" {
+  path = find_in_parent_folders()
+}
+
+include "envcommon" {
+  path = "${dirname(find_in_parent_folders())}/_envcommon/vpc.hcl"
+  expose = true
+}
+```
+</File>
+
+**Atmos:**
+<File title="stacks/prod.yaml">
+```yaml
+import:
+  - _defaults/globals
+  - _defaults/vpc-defaults
+```
+</File>
+
+Atmos imports are simpler—just list the files. They deep-merge automatically.
+
+### Terragrunt `dependency` → Atmos Remote State
+
+**Terragrunt:**
+<File title="eks/terragrunt.hcl">
+```hcl
+dependency "vpc" {
+  config_path = "../vpc"
+}
+
+inputs = {
+  vpc_id     = dependency.vpc.outputs.vpc_id
+  subnet_ids = dependency.vpc.outputs.private_subnet_ids
+}
+```
+</File>
+
+**Atmos (Option 1: YAML):**
+<File title="stacks/prod.yaml">
+```yaml
+components:
+  terraform:
+    eks:
+      vars:
+        vpc_id: '{{ (atmos.Component "vpc" .stack).outputs.vpc_id }}'
+        subnet_ids: '{{ (atmos.Component "vpc" .stack).outputs.private_subnet_ids }}'
+```
+</File>
+
+**Atmos (Option 2: Terraform):**
+<File title="components/terraform/eks/remote_state.tf">
+```hcl
+module "vpc" {
+  source  = "cloudposse/stack-config/yaml//modules/remote-state"
+  version = "1.5.0"
+
+  component = "vpc"
+  context   = module.this.context
+}
+
+# Use: module.vpc.outputs.vpc_id
+```
+</File>
+
+### Terragrunt `inputs` → Atmos `vars`
+
+**Terragrunt:**
+<File title="vpc/terragrunt.hcl">
+```hcl
+inputs = {
+  cidr_block           = "10.0.0.0/16"
+  enable_dns_hostnames = true
+  environment          = "production"
+}
+```
+</File>
+
+**Atmos:**
+<File title="stacks/prod.yaml">
+```yaml
+components:
+  terraform:
+    vpc:
+      vars:
+        cidr_block: "10.0.0.0/16"
+        enable_dns_hostnames: true
+        environment: production
+```
+</File>
+
+### Terragrunt `terraform.source` → Atmos `metadata.component`
+
+**Terragrunt:**
+<File title="vpc/terragrunt.hcl">
+```hcl
+terraform {
+  source = "git::https://github.com/terraform-aws-modules/terraform-aws-vpc.git?ref=v5.0.0"
+}
+```
+</File>
+
+**Atmos:**
+<File title="stacks/prod.yaml">
+```yaml
+components:
+  terraform:
+    vpc:
+      metadata:
+        component: vpc  # Points to components/terraform/vpc/
+```
+</File>
+
+With Atmos, you vendor the component locally first:
+
+<File title="vendor.yaml">
+```yaml
+apiVersion: atmos/v1
+kind: ComponentConfig
+spec:
+  sources:
+    - source: "git::https://github.com/terraform-aws-modules/terraform-aws-vpc.git?ref=v5.0.0"
+      targets:
+        - "components/terraform/vpc"
+```
+</File>
+
+Then run: `atmos vendor pull`
+
+### Terragrunt `generate` → Atmos Auto-Generation
+
+**Terragrunt:**
+<File title="terragrunt.hcl">
+```hcl
+generate "provider" {
+  path      = "provider.tf"
+  if_exists = "overwrite"
+  contents  = <<EOF
+provider "aws" {
+  region = "${local.aws_region}"
+}
+EOF
+}
+```
+</File>
+
+**Atmos:**
+
+Atmos auto-generates backend and provider configuration from stack YAML—no `generate` blocks needed.
+
+<File title="stacks/prod.yaml">
+```yaml
+terraform:
+  backend_type: s3
+  backend:
+    s3:
+      bucket: terraform-state
+      region: us-east-1
+
+components:
+  terraform:
+    vpc:
+      vars:
+        region: us-east-1
+```
+</File>
+
+Atmos creates `backend.tf.json` and passes variables automatically.
+
+## Directory Structure Comparison
+
+### Terragrunt Typical Structure
+
+```
+infrastructure/
+├── terragrunt.hcl                 # Root config
+├── _envcommon/
+│   ├── vpc.hcl
+│   └── eks.hcl
+├── prod/
+│   ├── us-east-1/
+│   │   ├── vpc/
+│   │   │   └── terragrunt.hcl
+│   │   └── eks/
+│   │       └── terragrunt.hcl
+│   └── terragrunt.hcl
+└── dev/
+    └── us-east-1/
+        ├── vpc/
+        │   └── terragrunt.hcl
+        └── eks/
+            └── terragrunt.hcl
+```
+
+### Atmos Equivalent Structure
+
+```
+infrastructure/
+├── atmos.yaml                     # Atmos config
+├── components/
+│   └── terraform/
+│       ├── vpc/
+│       │   ├── main.tf
+│       │   └── variables.tf
+│       └── eks/
+│           ├── main.tf
+│           └── variables.tf
+└── stacks/
+    ├── _defaults/
+    │   ├── globals.yaml
+    │   └── vpc-defaults.yaml
+    ├── prod-us-east-1.yaml
+    └── dev-us-east-1.yaml
+```
+
+**Key difference:** Atmos separates components (code) from stacks (configuration). Terragrunt interleaves them.
+
+## Migration Steps
+
+### 1. Convert `terragrunt.hcl` to Stack YAML
+
+**Terragrunt:**
+<File title="prod/us-east-1/vpc/terragrunt.hcl">
+```hcl
+include "root" {
+  path = find_in_parent_folders()
+}
+
+terraform {
+  source = "../../../../modules/vpc"
+}
+
+inputs = {
+  cidr_block  = "10.0.0.0/16"
+  environment = "prod"
+  region      = "us-east-1"
+}
+```
+</File>
+
+**Atmos:**
+<File title="stacks/prod-us-east-1.yaml">
+```yaml
+import:
+  - _defaults/globals
+
+vars:
+  environment: prod
+  region: us-east-1
+
+components:
+  terraform:
+    vpc:
+      metadata:
+        component: vpc  # Points to components/terraform/vpc
+      vars:
+        cidr_block: "10.0.0.0/16"
+```
+</File>
+
+### 2. Extract Common Configuration
+
+**Terragrunt:**
+<File title="terragrunt.hcl (root)">
+```hcl
+remote_state {
+  backend = "s3"
+  config = {
+    bucket = "terraform-state"
+    region = "us-east-1"
+  }
+}
+```
+</File>
+
+**Atmos:**
+<File title="stacks/_defaults/globals.yaml">
+```yaml
+terraform:
+  backend_type: s3
+  backend:
+    s3:
+      bucket: terraform-state
+      region: us-east-1
+      dynamodb_table: terraform-lock
+```
+</File>
+
+Then import in all stacks:
+<File title="stacks/prod-us-east-1.yaml">
+```yaml
+import:
+  - _defaults/globals
+```
+</File>
+
+### 3. Convert Dependencies
+
+**Terragrunt:**
+<File title="eks/terragrunt.hcl">
+```hcl
+dependency "vpc" {
+  config_path = "../vpc"
+}
+
+inputs = {
+  vpc_id = dependency.vpc.outputs.vpc_id
+}
+```
+</File>
+
+**Atmos (YAML approach):**
+<File title="stacks/prod-us-east-1.yaml">
+```yaml
+components:
+  terraform:
+    eks:
+      vars:
+        vpc_id: '{{ (atmos.Component "vpc" .stack).outputs.vpc_id }}'
+```
+</File>
+
+**Atmos (Terraform approach):**
+<File title="components/terraform/eks/remote_state.tf">
+```hcl
+module "vpc" {
+  source  = "cloudposse/stack-config/yaml//modules/remote-state"
+  version = "1.5.0"
+
+  component = "vpc"
+  context   = module.this.context
+}
+
+# Use: module.vpc.outputs.vpc_id
+```
+</File>
+
+### 4. Move Terraform Modules
+
+Move your Terraform modules from `modules/` to `components/terraform/`:
+
+```bash
+# Terragrunt structure
+modules/
+├── vpc/
+│   ├── main.tf
+│   └── variables.tf
+└── eks/
+    ├── main.tf
+    └── variables.tf
+
+# Atmos structure
+components/terraform/
+├── vpc/
+│   ├── main.tf
+│   └── variables.tf
+└── eks/
+    ├── main.tf
+    └── variables.tf
+```
+
+### 5. Update Backend Configuration
+
+Terragrunt generates backend config per-directory. Atmos centralizes it in stack YAML.
+
+**Remove from Terraform:**
+```hcl
+# Delete backend.tf files
+```
+
+**Add to Atmos stack:**
+<File title="stacks/prod-us-east-1.yaml">
+```yaml
+terraform:
+  backend_type: s3
+  backend:
+    s3:
+      bucket: terraform-state
+      key: terraform.tfstate
+      region: us-east-1
+      workspace_key_prefix: vpc  # Component-specific prefix
+
+components:
+  terraform:
+    vpc:
+      backend:
+        s3:
+          workspace_key_prefix: vpc
+```
+</File>
+
+### 6. Update CLI Commands
+
+| Terragrunt | Atmos |
+|------------|-------|
+| `terragrunt plan` | `atmos terraform plan <component> -s <stack>` |
+| `terragrunt apply` | `atmos terraform apply <component> -s <stack>` |
+| `terragrunt run-all plan` | `atmos workflow <workflow> -f <file>` |
+| `terragrunt run-all apply` | `atmos workflow <workflow> -f <file>` |
+
+**Example:**
+```bash
+# Terragrunt
+cd prod/us-east-1/vpc
+terragrunt plan
+
+# Atmos (from repo root)
+atmos terraform plan vpc -s prod-us-east-1
+```
+
+## Advanced Migration
+
+### Migrating `locals`
+
+**Terragrunt:**
+<File title="terragrunt.hcl">
+```hcl
+locals {
+  account_id   = "123456789012"
+  region       = "us-east-1"
+  cluster_name = "${local.account_id}-${local.region}-eks"
+}
+
+inputs = {
+  cluster_name = local.cluster_name
+}
+```
+</File>
+
+**Atmos:**
+<File title="stacks/prod-us-east-1.yaml">
+```yaml
+vars:
+  account_id: "123456789012"
+  region: us-east-1
+  cluster_name: '{{ .vars.account_id }}-{{ .vars.region }}-eks'
+
+components:
+  terraform:
+    eks:
+      vars:
+        cluster_name: '{{ .vars.cluster_name }}'
+```
+</File>
+
+### Migrating `run_cmd`
+
+**Terragrunt:**
+<File title="terragrunt.hcl">
+```hcl
+locals {
+  account_id = run_cmd("aws", "sts", "get-caller-identity", "--query", "Account", "--output", "text")
+}
+```
+</File>
+
+**Atmos:**
+<File title="stacks/prod-us-east-1.yaml">
+```yaml
+vars:
+  account_id: '{{ exec "aws" "sts" "get-caller-identity" "--query" "Account" "--output" "text" }}'
+```
+</File>
+
+### Migrating `extra_arguments`
+
+**Terragrunt:**
+<File title="terragrunt.hcl">
+```hcl
+terraform {
+  extra_arguments "common_vars" {
+    commands = ["plan", "apply"]
+    arguments = ["-var-file=common.tfvars"]
+  }
+}
+```
+</File>
+
+**Atmos:**
+
+Use component-level settings:
+<File title="stacks/prod-us-east-1.yaml">
+```yaml
+components:
+  terraform:
+    vpc:
+      settings:
+        terraform:
+          args:
+            - "-var-file=common.tfvars"
+```
+</File>
+
+## Migration Checklist
+
+- [ ] Install Atmos CLI
+- [ ] Create `atmos.yaml` configuration
+- [ ] Move Terraform modules to `components/terraform/`
+- [ ] Convert `terragrunt.hcl` files to stack YAML
+- [ ] Extract common config to `_defaults/`
+- [ ] Convert `dependency` blocks to remote state
+- [ ] Update backend configuration
+- [ ] Test with `atmos terraform plan`
+- [ ] Update CI/CD pipelines
+- [ ] Train team on new commands
+
+## Why Migrate?
+
+### Advantages of Atmos
+
+✅ **YAML > HCL for config** - More portable, every language can parse it
+✅ **True separation of concerns** - Code and config in different directories
+✅ **Deep merge semantics** - More powerful than `include`
+✅ **Schema validation** - JSON Schema + OPA policies
+✅ **Multi-tool orchestration** - Not just Terraform (Helmfile, Packer, etc.)
+✅ **Powerful templating** - Gomplate functions + custom functions
+✅ **Active development** - Regular releases, responsive community
+
+### When to Stay with Terragrunt
+
+- **Small projects** - If you have 5 Terraform modules, Terragrunt may be simpler
+- **HCL preference** - If your team strongly prefers HCL for everything
+- **Existing investment** - If you have 100+ Terragrunt configs, migration cost may be high
+
+## Get Help
+
+Migrating a large codebase? We're here to help:
+
+- **[Slack Community](/community/slack)** - Ask migration questions
+- **[Office Hours](/community/office-hours)** - Live support for complex migrations
+- **[GitHub Discussions](https://github.com/cloudposse/atmos/discussions)** - Share your migration story
+
+## Next Steps
+
+Now that you understand the migration path:
+
+- **[Try the Quick Start](/quick-start/simple)** - Get hands-on with Atmos
+- **[Read Core Concepts](/core-concepts/)** - Understand Atmos deeply
+- **[Explore Stack Configuration](/stacks/)** - Advanced YAML features

@@ -138,7 +138,7 @@ This has several important implications:
    files and reused across multiple stacks or components. You can use it in place of YAML anchors, which don't work across files.
 
 - **Preprocessing for Inheritance**
-  Includes are resolved *before* Atmos processes stacks and components, enabling powerful [inheritance](/core-concepts/stacks/inheritance/) and deep-merging
+  Includes are resolved *before* Atmos processes stacks and components, enabling powerful [inheritance](/stacks/inheritance/) and deep-merging
   behaviors using fully expanded configuration data.
 
 - **Adopting Existing Terraform/OpenTofu Root Modules as Atmos Components**
@@ -189,7 +189,7 @@ components:
 
 This pattern allows you to plug Atmos into your existing Terraform/OpenTofu root modules with minimal changes — no need to
 duplicate or reformat your varfiles. You also unlock additional capabilities like [listing all your stacks](/cli/commands/list/stacks)
-and [components](/cli/commands/list/components), leveraging layered configurations, [stack inheritance with imports](/core-concepts/stacks/imports),
+and [components](/cli/commands/list/components), leveraging layered configurations, [stack inheritance with imports](/stacks/imports),
 and consistent promotion of settings across environments.
 
 ## Usage

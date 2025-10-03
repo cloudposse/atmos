@@ -17,7 +17,7 @@ In Atmos, when we talk about "Deployment," it refers to taking the [fully render
 
 Deployment in Atmos can be approached in several ways.
 
-1. **Command Line Deployment**: You can always deploy on the command line using Atmos, which is particularly useful for local development or in environments that are less mature and do not yet have CI/CD capabilities. For more complicated deployments, you can leverage [workflows](/core-concepts/workflows) to orchestrate multiple deployments in a specific order or run other commands, including [custom commands](/core-concepts/custom-commands).
+1. **Command Line Deployment**: You can always deploy on the command line using Atmos, which is particularly useful for local development or in environments that are less mature and do not yet have CI/CD capabilities. For more complicated deployments, you can leverage [workflows](/workflows) to orchestrate multiple deployments in a specific order or run other commands, including [custom commands](/core-concepts/custom-commands).
 
 2. **CI/CD Integrations**: Atmos supports several common methods for CI/CD, with [GitHub Actions](/integrations/github-actions) being the recommended method. We maintain and invest the most time and effort into GitHub Actions. However, we also support integrations with [Spacelift](/integrations/spacelift) and [Atlantis](/integrations/atlantis).
 
@@ -25,7 +25,7 @@ Deployment in Atmos can be approached in several ways.
 
 When deploying components, it's important to consider the dependencies between components. For example, a database component might depend on a network component. When this happens, it's important to ensure that the network component is deployed before the database component.
 
-Make sure to [configure dependencies](/core-concepts/stacks/dependencies) between components using the `settings.depends_on` section.
+Make sure to [configure dependencies](/stacks/dependencies) between components using the `settings.depends_on` section.
 
 ### Managing Dependency Order Between Components
 
@@ -41,4 +41,4 @@ All configurations in Atmos are defined in YAML. If you can write a Terraform mo
 
 ### Automate Cold Starts
 
-Atmos supports [workflows](/core-concepts/workflows), which provide a convenient way to automate deployments, especially for cold starts. A cold start is when you go from zero to a full deployment, typically occurring on day zero in the life cycle of your resources.
+Atmos supports [workflows](/workflows), which provide a convenient way to automate deployments, especially for cold starts. A cold start is when you go from zero to a full deployment, typically occurring on day zero in the life cycle of your resources.

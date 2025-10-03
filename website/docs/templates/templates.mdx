@@ -15,7 +15,7 @@ import SecondaryCTA from '@site/src/components/SecondaryCTA'
 <PillBox>Advanced</PillBox>
 
 <Intro>
-    Use templates as an _escape hatch_, when standard [inheritance](/core-concepts/stacks/inheritance) or
+    Use templates as an _escape hatch_, when standard [inheritance](/stacks/inheritance) or
     [Atmos Functions](/functions/yaml) are insufficient.
     Atmos supports [Go templates](https://pkg.go.dev/text/template) in stack manifests and functions to customize Stack configurations.
 </Intro>
@@ -37,7 +37,7 @@ Templating in Atmos stack manifests is configured in the `atmos.yaml` [CLI confi
 
   <dt> `settings.templates.settings`</dt>
   <dd>
-    In the `settings.templates.settings` section in [Atmos stack manifests](/core-concepts/stacks). The `settings.templates.settings` section can be defined globally per organization, tenant, account, or per component. Atmos deep-merges the configurations from all scopes into the final result using [inheritance](/core-concepts/stacks/inheritance).
+    In the `settings.templates.settings` section in [Atmos stack manifests](/core-concepts/stacks). The `settings.templates.settings` section can be defined globally per organization, tenant, account, or per component. Atmos deep-merges the configurations from all scopes into the final result using [inheritance](/stacks/inheritance).
   </dd>
 
   <dt>`templates.settings.enabled`</dt>
@@ -148,7 +148,7 @@ In `Go` templates, you can use the following functions and data sources:
 Templating in Atmos can also be configured in the `settings.templates.settings` section in stack manifests.
 
 The `settings.templates.settings` section can be defined globally per organization, tenant, account, or per component.
-Atmos deep-merges the configurations from all scopes into the final result using [inheritance](/core-concepts/stacks/inheritance).
+Atmos deep-merges the configurations from all scopes into the final result using [inheritance](/stacks/inheritance).
 
 The schema is the same as `templates.settings` in the `atmos.yaml` [CLI config file](/cli/configuration),
 except the following settings are not supported in the `settings.templates.settings` section:
@@ -197,7 +197,7 @@ settings:
 </File>
 
 Atmos deep-merges the configurations from the `settings.templates.settings` section in [Atmos stack manifests](/core-concepts/stacks)
-with the `templates.settings` section in `atmos.yaml` [CLI config file](/cli/configuration) using [inheritance](/core-concepts/stacks/inheritance).
+with the `templates.settings` section in `atmos.yaml` [CLI config file](/cli/configuration) using [inheritance](/stacks/inheritance).
 
 The `settings.templates.settings` section in [Atmos stack manifests](/core-concepts/stacks) takes precedence over
 the `templates.settings` section in `atmos.yaml` [CLI config file](/cli/configuration), allowing you to define the global
@@ -387,9 +387,9 @@ To avoid potential pitfalls and maximize efficiency, follow these best practices
 Atmos supports many different ways of configuring and using `Go` templates:
 
 - In [Atmos Custom Commands](/core-concepts/custom-commands)
-- In [Atmos Vendoring](/core-concepts/vendor)
-- In [Atmos Component Vendoring](/core-concepts/vendor/vendor-manifest)
-- In [Imports](/core-concepts/stacks/imports)
+- In [Atmos Vendoring](/vendoring/vendor)
+- In [Atmos Component Vendoring](/vendoring/vendor-manifest)
+- In [Imports](/stacks/imports)
 - In [Stack Manifests](/core-concepts/stacks)
 
 
@@ -404,11 +404,11 @@ These templates are processed in different phases and use different context:
   exposing all the component sections that are returned by the `atmos describe component <component> -s <stack>` CLI
   command
 
-- `Go` templates in [Atmos Vendoring](/core-concepts/vendor) and [Atmos Component Vendoring](/core-concepts/vendor/vendor-manifest)
+- `Go` templates in [Atmos Vendoring](/vendoring/vendor) and [Atmos Component Vendoring](/vendoring/vendor-manifest)
   are processed when the CLI command [`atmos vendor pull`](/cli/commands/vendor/pull) is executed. The templates in
   the vendoring manifests support the `{{.Version}}` variable, and the execution context is provided in the `version` attribute
 
-- [`Go` Templates in Imports](/core-concepts/stacks/imports#go-templates-in-imports) are used in imported stack
+- [`Go` Templates in Imports](/stacks/imports#go-templates-in-imports) are used in imported stack
   manifests to make them DRY and reusable. The context (variables) for the `Go` templates is provided via the static
   `context` section. Atmos processes `Go` templates in imports as the **very first** phase of the stack processing pipeline.
   When executing the [CLI commands](/cli/commands), Atmos parses and executes the templates using the provided static
@@ -424,7 +424,7 @@ in different phases of the stack processing pipeline.
 
 For more details, refer to:
 
-- [`Go` Templates in Imports](/core-concepts/stacks/imports#go-templates-in-imports)
+- [`Go` Templates in Imports](/stacks/imports#go-templates-in-imports)
 - [Excluding templates in imports from processing by Atmos](#excluding-templates-in-stack-manifest-from-processing-by-atmos)
 
 ### Processing Pipelines
@@ -580,7 +580,7 @@ chart_values:
 
 ## Excluding Templates in Imports
 
-If you are using [`Go` Templates in Imports](/core-concepts/stacks/imports#go-templates-in-imports) and `Go` templates
+If you are using [`Go` Templates in Imports](/stacks/imports#go-templates-in-imports) and `Go` templates
 in stack manifests in the same Atmos manifest, take into account that in this case Atmos will do `Go`
 template processing two times (two passes):
 
@@ -735,7 +735,7 @@ The above example shows the supported functionality in Atmos templating.
 You can use it for some use-cases, but it does not mean that you **should** use it just for the sake of using, since
 it's not easy to read and understand what data we have after each evaluation step.
 
-The [Using Templates in the URLs of Datasources](/core-concepts/stacks/templates/datasources#using-templates-in-the-urls-of-datasources)
+The [Using Templates in the URLs of Datasources](/templates/datasources#using-templates-in-the-urls-of-datasources)
 document describes a practical approach to using evaluation steps in Atmos templates to work
 with data sources.
 

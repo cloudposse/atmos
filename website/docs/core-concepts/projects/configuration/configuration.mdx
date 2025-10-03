@@ -38,37 +38,37 @@ In Atmos, there are some different types of configuration files to be aware of. 
 
     <dt>`vendor.yaml`</dt>
     <dd>
-        Vendoring manifest for any third-party dependencies. See [vendoring](/core-concepts/vendor/vendor-manifest).
+        Vendoring manifest for any third-party dependencies. See [vendoring](/vendoring/vendor-manifest).
         __NOTE__: The vendor manifest can import other vendor manifests, allowing you to compose them together.
     </dd>
 
     <dt>`stacks/**/*.yaml`</dt>
     <dd>
-        Vendoring manifest for any third-party dependencies. See [vendoring](/core-concepts/vendor/vendor-manifest).
+        Vendoring manifest for any third-party dependencies. See [vendoring](/vendoring/vendor-manifest).
         __NOTE__: the actual path to the stacks directory is configurable in the `atmos.yaml` file, via the `stacks.base_path` setting.
     </dd>
 
     <dt>`workflows/**/*.yaml`</dt>
     <dd>
-        Workflow definitions. See [workflows](/core-concepts/workflows).
+        Workflow definitions. See [workflows](/workflows).
         __NOTE__: the actual path to the workflows directory is configurable in the `atmos.yaml` file, via the `workflows.base_path` setting.
     </dd>
 
     <dt>`**/components/**/component.yaml`</dt>
     <dd>
-        Component manifest for vendoring individual components. See [component manifest](/core-concepts/vendor/component-manifest).
+        Component manifest for vendoring individual components. See [component manifest](/vendoring/component-manifest).
         __NOTE__: the actual path to the components directory is configurable in the `atmos.yaml` file, via the `components.<toolchain>.base_path` setting.
     </dd>
 
     <dt>`schemas/*.schema.json`</dt>
     <dd>
-        JSON Schema for validating Atmos manifests. See [validation](/core-concepts/validate/json-schema).
+        JSON Schema for validating Atmos manifests. See [validation](/validation/json-schema).
         __NOTE__, the actual path to the schemas directory is configurable in the `atmos.yaml` file, via the `schemas.atmos.manifest` setting.
     </dd>
 
     <dt>`schemas/*.rego`</dt>
     <dd>
-        OPA Policy for validating Atmos manifests. See [validation](/core-concepts/validate/opa).
+        OPA Policy for validating Atmos manifests. See [validation](/validation/opa).
     </dd>
 </dl>
 
@@ -182,7 +182,7 @@ Well-known paths are how Atmos knows how to find all your stack configurations, 
   <dd>List of file paths to the top-level stacks in the `stacks` directory to exclude from search when Atmos searches for the stack where the component is defined when executing `atmos` commands</dd>
 
   <dt>`workflows.base_path`</dt>
-  <dd>The base path to Atmos [Workflows](/core-concepts/workflows) files</dd>
+  <dd>The base path to Atmos [Workflows](/workflows) files</dd>
 </dl>
 
 :::tip Environment variables
@@ -209,7 +209,7 @@ Workflows allow you to automate routine operations, such as orchestrating the st
 
 <ActionCard title="Want to go deeper on this topic?">
     Workflows allow you to orchestrate your components or any command. Unlike Custom Commands, Workflows focus on orchestration and are reentrant, allowing you to start at any step in the workflow.
-    <PrimaryCTA to="/core-concepts/workflows">Learn Workflows</PrimaryCTA>
+    <PrimaryCTA to="/workflows">Learn Workflows</PrimaryCTA>
 </ActionCard>
 
 ## Schema Validation
@@ -219,7 +219,7 @@ Workflows allow you to automate routine operations, such as orchestrating the st
   <dd>
   [JSON Schema](https://json-schema.org/) and [OPA Policy](https://www.openpolicyagent.org/) configurations for:
   - [Atmos Manifests Validation](/cli/schemas)
-  - [Atmos Stack Validation](/core-concepts/validate)
+  - [Atmos Stack Validation](/validation/validating)
   </dd>
 </dl>
 

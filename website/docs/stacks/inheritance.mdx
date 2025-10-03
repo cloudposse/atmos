@@ -10,18 +10,18 @@ import PillBox from '@site/src/components/PillBox'
 import Intro from '@site/src/components/Intro'
 
 <Intro>
-Inheritance provides a template-free way to customize Stack configurations. When combined with [imports](/core-concepts/stacks/imports), it provides the ability to combine multiple configurations through ordered deep-merging of configurations. Inheritance is how you manage configuration variations, without resorting to [templating](/core-concepts/stacks/templates).
+Inheritance provides a template-free way to customize Stack configurations. When combined with [imports](/stacks/imports), it provides the ability to combine multiple configurations through ordered deep-merging of configurations. Inheritance is how you manage configuration variations, without resorting to [templating](/templates).
 </Intro>
 
 Atmos supports the following concepts and principles of **Component-Oriented Programming (COP)**:
 
-- [Single Inheritance](/core-concepts/stacks/inheritance#single-inheritance) - when an Atmos component inherits the configuration properties from
+- [Single Inheritance](/stacks/inheritance#single-inheritance) - when an Atmos component inherits the configuration properties from
   another Atmos component
 
-- [Multiple Inheritance](/core-concepts/stacks/inheritance#multiple-inheritance) - when an Atmos component inherits the configuration from more than one Atmos
+- [Multiple Inheritance](/stacks/inheritance#multiple-inheritance) - when an Atmos component inherits the configuration from more than one Atmos
   component
 
-These concepts and principles are implemented and used in Atmos by combining two features: [`import`](/core-concepts/stacks/imports)
+These concepts and principles are implemented and used in Atmos by combining two features: [`import`](/stacks/imports)
 and [`metadata`](/core-concepts/stacks/define-components) component's configuration section.
 
 :::info
@@ -30,7 +30,7 @@ components (e.g. terraform), and does not magically implement inheritance for HC
 well, we're able to achieve many of the same benefits.
 :::
 
-Component Inheritance is implemented and used in Atmos by combining two features: [`import`](/core-concepts/stacks/imports)
+Component Inheritance is implemented and used in Atmos by combining two features: [`import`](/stacks/imports)
 and `metadata` component's configuration section.
 
 ### Definitions
@@ -261,7 +261,7 @@ the [C3 linearization](https://en.wikipedia.org/wiki/C3_linearization) algorithm
 In **Object-Oriented Programming (OOP)**, a mixin is a class that contains methods for use by other classes without having to be the parent class of
 those other classes.
 
-In **Component-Oriented Programming (COP)** implemented in Atmos, a [mixin](/core-concepts/stacks/inheritance/mixins) is an abstract base component that is never
+In **Component-Oriented Programming (COP)** implemented in Atmos, a [mixin](/stacks/mixins) is an abstract base component that is never
 meant to be provisioned and does not have any physical implementation - it just contains default settings/variables/properties for use by other Atmos
 components.
 

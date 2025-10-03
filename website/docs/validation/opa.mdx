@@ -185,7 +185,7 @@ When Atmos runs a command, it supplies an input object to OPA policies that cont
 - `tf_cli_vars`: a map of variables with proper type conversion from the command-line `-var` arguments
 - `env_tf_cli_args`: a list of arguments from the [`TF_CLI_ARGS`](https://developer.hashicorp.com/terraform/cli/config/environment-variables#tf_cli_args-and-tf_cli_args_name) environment variable
 - `env_tf_cli_vars`: a map of variables with proper type conversion from the [`TF_CLI_ARGS`](https://developer.hashicorp.com/terraform/cli/config/environment-variables#tf_cli_args-and-tf_cli_args_name) environment variable
-- `vars`: a map of variables passed to the command, either via the stack config files or [CLI flags](/core-concepts/validate/terraform-variables)
+- `vars`: a map of variables passed to the command, either via the stack config files or [CLI flags](/validation/terraform-variables)
 - other contextual attributes that are returned from the [`atmos describe component`](/cli/commands/describe/component) command for a component in a stack
 
 ### Policy Execution Context Example
