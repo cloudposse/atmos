@@ -187,13 +187,6 @@
       }
     }
   },
-  "profiler": {
-    "enabled": false,
-    "port": 0,
-    "host": "",
-    "file": "",
-    "profile_type": ""
-  },
   "auth": {
     "logs": {
       "file": "",
@@ -201,5 +194,12 @@
     },
     "providers": null,
     "identities": null
+  },
+  "profiler": {
+    "enabled": false,
+    "port": 0,
+    "host": "",
+    "file": "",
+    "profile_type": ""
   }
 }
