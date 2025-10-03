@@ -10,9 +10,8 @@ import (
 	"runtime"
 	"strings"
 
-	"gopkg.in/yaml.v3"
-
 	"github.com/spf13/viper"
+	"go.yaml.in/yaml/v3"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/config/go-homedir"
