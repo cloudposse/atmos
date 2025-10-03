@@ -11,9 +11,7 @@ import (
 	"github.com/cloudposse/atmos/internal/tui/templates/term"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/pager"
-	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/cloudposse/atmos/pkg/ui/provenance"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -30,7 +28,6 @@ type DescribeStacksArgs struct {
 	Skip                 []string
 	Format               string
 	File                 string
-	ShowProvenance       bool
 }
 
 //go:generate mockgen -source=$GOFILE -destination=mock_$GOFILE -package=$GOPACKAGE
@@ -67,8 +64,6 @@ func NewDescribeStacksExec() DescribeStacksExec {
 
 // Execute executes `describe stacks` command.
 func (d *describeStacksExec) Execute(atmosConfig *schema.AtmosConfiguration, args *DescribeStacksArgs) error {
-	defer perf.Track(atmosConfig, "exec.Execute")()
-
 	finalStacksMap, err := d.executeDescribeStacks(
 		atmosConfig,
 		args.FilterByStack,
@@ -96,11 +91,6 @@ func (d *describeStacksExec) Execute(atmosConfig *schema.AtmosConfiguration, arg
 		res = finalStacksMap
 	}
 
-	// Handle provenance display if requested
-	if args.ShowProvenance {
-		return d.renderStacksWithProvenance(atmosConfig, args.Format, args.File, res)
-	}
-
 	return viewWithScroll(&viewWithScrollProps{
 		pageCreator:           d.pageCreator,
 		isTTYSupportForStdout: d.isTTYSupportForStdout,
@@ -111,126 +101,6 @@ func (d *describeStacksExec) Execute(atmosConfig *schema.AtmosConfiguration, arg
 		file:                  args.File,
 		res:                   res,
 	})
-}
-
-// renderStacksWithProvenance renders stacks configuration with provenance information.
-func (d *describeStacksExec) renderStacksWithProvenance(atmosConfig *schema.AtmosConfiguration, format string, file string, data any) error {
-	defer perf.Track(atmosConfig, "exec.renderStacksWithProvenance")()
-
-	// Extract sources from the data
-	// The data structure is: map[stackName]map[componentType]map[componentName]map[...]
-	// We need to recursively extract sources from each component
-	sources := d.extractSourcesFromStacks(data)
-
-	if sources == nil {
-		// No sources available, fall back to regular rendering
-		return d.printOrWriteToFile(atmosConfig, format, file, data)
-	}
-
-	// Create provenance renderer
-	renderer := provenance.NewProvenanceRenderer(atmosConfig)
-
-	var output string
-	var err error
-
-	switch format {
-	case "yaml":
-		output, err = renderer.RenderYAMLWithProvenance(data, sources)
-		if err != nil {
-			return err
-		}
-	case "json":
-		output, err = renderer.RenderJSONWithProvenance(data, sources)
-		if err != nil {
-			return err
-		}
-	default:
-		return ErrInvalidFormat
-	}
-
-	// Output to file or stdout
-	if file != "" {
-		err = u.WriteToFileAsYAML(file, output, defaultFilePermissions)
-		if err != nil {
-			return err
-		}
-	} else {
-		u.PrintMessage(output)
-	}
-
-	return nil
-}
-
-// extractSourcesFromStacks recursively extracts ConfigSources from the stacks data structure.
-func (d *describeStacksExec) extractSourcesFromStacks(data any) schema.ConfigSources {
-	defer perf.Track(nil, "exec.extractSourcesFromStacks")()
-
-	dataMap, ok := data.(map[string]any)
-	if !ok {
-		return nil
-	}
-
-	for _, stackData := range dataMap {
-		if sources := extractSourcesFromStack(stackData); sources != nil {
-			return sources
-		}
-	}
-
-	return nil
-}
-
-func extractSourcesFromStack(stackData any) schema.ConfigSources {
-	stackMap, ok := stackData.(map[string]any)
-	if !ok {
-		return nil
-	}
-
-	components, ok := stackMap["components"].(map[string]any)
-	if !ok {
-		return nil
-	}
-
-	for _, componentType := range components {
-		if sources := extractSourcesFromComponentType(componentType); sources != nil {
-			return sources
-		}
-	}
-
-	return nil
-}
-
-func extractSourcesFromComponentType(componentType any) schema.ConfigSources {
-	typeMap, ok := componentType.(map[string]any)
-	if !ok {
-		return nil
-	}
-
-	for _, component := range typeMap {
-		if sources := extractSourcesFromComponent(component); sources != nil {
-			return sources
-		}
-	}
-
-	return nil
-}
-
-func extractSourcesFromComponent(component any) schema.ConfigSources {
-	compMap, ok := component.(map[string]any)
-	if !ok {
-		return nil
-	}
-
-	sourcesData, ok := compMap["sources"]
-	if !ok {
-		return nil
-	}
-
-	sources, ok := sourcesData.(schema.ConfigSources)
-	if !ok {
-		return nil
-	}
-
-	return sources
 }
 
 // ExecuteDescribeStacks processes stack manifests and returns the final map of stacks and components.
@@ -246,8 +116,6 @@ func ExecuteDescribeStacks(
 	includeEmptyStacks bool,
 	skip []string,
 ) (map[string]any, error) {
-	defer perf.Track(atmosConfig, "exec.ExecuteDescribeStacks")()
-
 	stacksMap, _, err := FindStacksMap(atmosConfig, ignoreMissingFiles)
 	if err != nil {
 		return nil, err

@@ -1,15 +1,13 @@
 package exec
 
 import (
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/samber/lo"
 
 	"github.com/cloudposse/atmos/internal/tui/templates/term"
 	cfg "github.com/cloudposse/atmos/pkg/config"
-	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/pager"
-	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/cloudposse/atmos/pkg/ui/provenance"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -22,7 +20,6 @@ type DescribeComponentParams struct {
 	Query                string
 	Format               string
 	File                 string
-	ShowProvenance       bool
 }
 
 type DescribeComponentExec struct {
@@ -35,8 +32,6 @@ type DescribeComponentExec struct {
 }
 
 func NewDescribeComponentExec() *DescribeComponentExec {
-	defer perf.Track(nil, "exec.NewDescribeComponentExec")()
-
 	return &DescribeComponentExec{
 		printOrWriteToFile:       printOrWriteToFile,
 		IsTTYSupportForStdout:    term.IsTTYSupportForStdout,
@@ -48,8 +43,6 @@ func NewDescribeComponentExec() *DescribeComponentExec {
 }
 
 func (d *DescribeComponentExec) ExecuteDescribeComponentCmd(describeComponentParams DescribeComponentParams) error {
-	defer perf.Track(nil, "exec.ExecuteDescribeComponentCmd")()
-
 	component := describeComponentParams.Component
 	stack := describeComponentParams.Stack
 	processTemplates := describeComponentParams.ProcessTemplates
@@ -58,7 +51,6 @@ func (d *DescribeComponentExec) ExecuteDescribeComponentCmd(describeComponentPar
 	query := describeComponentParams.Query
 	format := describeComponentParams.Format
 	file := describeComponentParams.File
-	showProvenance := describeComponentParams.ShowProvenance
 
 	var err error
 	var atmosConfig schema.AtmosConfiguration
@@ -91,15 +83,6 @@ func (d *DescribeComponentExec) ExecuteDescribeComponentCmd(describeComponentPar
 		}
 	} else {
 		res = componentSection
-	}
-
-	// Handle provenance display if requested
-	if showProvenance {
-		err = d.renderWithProvenance(&atmosConfig, format, file, res)
-		if err != nil {
-			return err
-		}
-		return nil
 	}
 
 	if atmosConfig.Settings.Terminal.IsPagerEnabled() {
@@ -150,63 +133,6 @@ func (d *DescribeComponentExec) viewConfig(atmosConfig *schema.AtmosConfiguratio
 	return nil
 }
 
-// renderWithProvenance renders component configuration with provenance information.
-func (d *DescribeComponentExec) renderWithProvenance(atmosConfig *schema.AtmosConfiguration, format string, file string, data any) error {
-	defer perf.Track(atmosConfig, "exec.renderWithProvenance")()
-
-	sources := extractSourcesFromData(data)
-	if sources == nil {
-		return d.printOrWriteToFile(atmosConfig, format, file, data)
-	}
-
-	renderer := provenance.NewProvenanceRenderer(atmosConfig)
-	output, err := d.renderProvenanceByFormat(renderer, data, sources, format)
-	if err != nil {
-		return err
-	}
-
-	return d.writeProvenanceOutput(file, output)
-}
-
-func extractSourcesFromData(data any) schema.ConfigSources {
-	dataMap, ok := data.(map[string]any)
-	if !ok {
-		return nil
-	}
-
-	sourcesData, ok := dataMap["sources"]
-	if !ok {
-		return nil
-	}
-
-	sources, ok := sourcesData.(schema.ConfigSources)
-	if !ok {
-		return nil
-	}
-
-	return sources
-}
-
-func (d *DescribeComponentExec) renderProvenanceByFormat(renderer *provenance.ProvenanceRenderer, data any, sources schema.ConfigSources, format string) (string, error) {
-	switch format {
-	case "yaml":
-		return renderer.RenderYAMLWithProvenance(data, sources)
-	case "json":
-		return renderer.RenderJSONWithProvenance(data, sources)
-	default:
-		return "", DescribeConfigFormatError{format}
-	}
-}
-
-func (d *DescribeComponentExec) writeProvenanceOutput(file string, output string) error {
-	if file != "" {
-		return u.WriteToFileAsYAML(file, output, defaultFilePermissions)
-	}
-
-	u.PrintMessage(output)
-	return nil
-}
-
 // ExecuteDescribeComponent describes component config.
 func ExecuteDescribeComponent(
 	component string,
@@ -215,8 +141,6 @@ func ExecuteDescribeComponent(
 	processYamlFunctions bool,
 	skip []string,
 ) (map[string]any, error) {
-	defer perf.Track(nil, "exec.ExecuteDescribeComponent")()
-
 	var configAndStacksInfo schema.ConfigAndStacksInfo
 	configAndStacksInfo.ComponentFromArg = component
 	configAndStacksInfo.Stack = stack
@@ -255,8 +179,6 @@ func ExecuteDescribeComponent(
 
 // FilterAbstractComponents This function removes abstract components and returns the list of components.
 func FilterAbstractComponents(componentsMap map[string]any) []string {
-	defer perf.Track(nil, "exec.FilterAbstractComponents")()
-
 	if componentsMap == nil {
 		return []string{}
 	}

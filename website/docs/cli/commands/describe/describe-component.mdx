@@ -58,8 +58,6 @@ atmos describe component vpc -s plat-ue2-prod --query .vars.tags
 atmos describe component vpc -s plat-ue2-prod -q .settings
 
 atmos describe component vpc -s plat-ue2-prod --pager=more
-
-atmos describe component vpc -s tenant1-ue2-dev --show-provenance
 ```
 
 ## Arguments
@@ -95,9 +93,6 @@ atmos describe component vpc -s tenant1-ue2-dev --show-provenance
 
   <dt>`--pager` <em>(optional)</em></dt>
   <dd>Disable/Enable the paging user experience.</dd>
-
-  <dt>`--show-provenance` <em>(optional)</em></dt>
-  <dd>Display the source file and line information for each configuration value, showing where each setting comes from in the inheritance chain. When enabled, the output includes provenance annotations alongside the configuration values.</dd>
 </dl>
 
 ## Output
@@ -875,82 +870,5 @@ sources:
 
 The `stack_dependencies` inheritance chain shows the sources of the setting in the reverse order the sources were processed.
 The first item in the list was processed the last and its `variable_value` overrode all the previous values of the setting.
-
-:::
-
-## Provenance Display with `--show-provenance`
-
-The `--show-provenance` flag provides a user-friendly visualization of configuration sources, displaying them alongside the configuration values in a two-column format when running in a terminal (TTY).
-
-### Terminal (TTY) Output
-
-When running in a terminal, provenance information is displayed in a two-column layout:
-
-```shell
-atmos describe component vpc -s tenant1-ue2-dev --show-provenance
-```
-
-The output shows:
-- **Left column**: The YAML/JSON configuration (syntax-highlighted)
-- **Right column**: Source annotations showing which files contributed each value
-
-Example output:
-```
-vars:                                    │ Sources
-  name: "vpc"                           │   stacks/network.yaml (inline)
-  cidr: "10.0.0.0/16"                  │   stacks/prod.yaml (inline)
-  enabled: true                         │   stacks/base.yaml (import)
-```
-
-### Non-Terminal Output
-
-When output is redirected or piped (non-TTY), provenance is shown as inline comments:
-
-```yaml
-vars:
-  name: "vpc"  # from: stacks/network.yaml (inline)
-  cidr: "10.0.0.0/16"  # from: stacks/prod.yaml (inline)
-  enabled: true  # from: stacks/base.yaml (import)
-```
-
-### JSON Format with Provenance
-
-When using `--format=json` with `--show-provenance`, provenance metadata is embedded in the JSON structure:
-
-```json
-{
-  "vars": {
-    "value": {
-      "name": "vpc",
-      "cidr": "10.0.0.0/16"
-    },
-    "__provenance": {
-      "name": {
-        "sources": [
-          {"file": "stacks/network.yaml", "type": "inline"}
-        ]
-      },
-      "cidr": {
-        "sources": [
-          {"file": "stacks/prod.yaml", "type": "inline"}
-        ]
-      }
-    }
-  }
-}
-```
-
-### Use Cases for Provenance
-
-The `--show-provenance` flag is useful for:
-
-- **Debugging configuration**: Quickly identify where a specific value comes from in complex inheritance chains
-- **Auditing changes**: Understand which files need to be modified to change a specific value
-- **Documentation**: Generate visual representations of configuration sources
-- **Compliance**: Track the origin of security-sensitive configuration values
-
-:::tip
-
-The `sources` section in the standard output provides detailed inheritance information, while `--show-provenance` provides a more visual, side-by-side view of the same information.
 
 :::
