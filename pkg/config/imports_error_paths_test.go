@@ -1,14 +1,17 @@
 package config
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
 
+	"github.com/golang/mock/gomock"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/filesystem"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -47,40 +50,33 @@ func TestProcessConfigImports_EmptyImports(t *testing.T) {
 	assert.NoError(t, err) // Should return nil when no imports
 }
 
-// TestProcessConfigImports_AbsPathError tests error path at imports.go:77-80.
-func TestProcessConfigImports_AbsPathError(t *testing.T) {
-	// On most systems, an empty string won't cause filepath.Abs to error
-	// but this tests the error path exists
+// DELETED: TestProcessConfigImports_AbsPathError - Was a fake test using `_ = err`.
+// Comment admitted: "Will succeed as empty path is converted to current directory".
+// filepath.Abs() errors are nearly impossible to trigger without OS-level failures.
+
+// DELETED: TestProcessConfigImports_MkdirTempError - Was a fake test using `_ = err`.
+// Comment admitted: "This is hard to trigger without modifying system state".
+// Replaced with real mocked test below.
+
+// TestProcessConfigImports_MkdirTempError_WithMock tests MkdirTemp error path using mocks.
+func TestProcessConfigImports_MkdirTempError_WithMock(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockFS := filesystem.NewMockFileSystem(ctrl)
+	mockFS.EXPECT().MkdirTemp("", "atmos-import-*").Return("", errors.New("disk full"))
+
 	source := &schema.AtmosConfiguration{
-		BasePath: "",
-		Import:   []string{"test.yaml"},
+		BasePath: "/test",
+		Import:   []string{"config.yaml"},
 	}
 
 	v := viper.New()
 	v.SetConfigType("yaml")
 
-	err := processConfigImports(source, v)
-	// Will succeed as empty path is converted to current directory
-	// This documents the error check exists
-	_ = err
-}
-
-// TestProcessConfigImports_MkdirTempError tests error path at imports.go:81-84.
-func TestProcessConfigImports_MkdirTempError(t *testing.T) {
-	// This is hard to trigger without modifying system state
-	// We document that the error path exists and is checked
-	source := &schema.AtmosConfiguration{
-		BasePath: t.TempDir(),
-		Import:   []string{"test.yaml"},
-	}
-
-	v := viper.New()
-	v.SetConfigType("yaml")
-
-	err := processConfigImports(source, v)
-	// Will likely succeed or fail at processImports
-	// This documents the error check at line 81-84 exists
-	_ = err
+	err := processConfigImportsWithFS(source, v, mockFS)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "disk full")
 }
 
 // TestProcessImports_EmptyBasePath tests error path at imports.go:108-110.
@@ -110,15 +106,9 @@ func TestProcessImports_MaxDepthExceeded(t *testing.T) {
 	assert.ErrorIs(t, err, errUtils.ErrMaxImportDepth)
 }
 
-// TestProcessImports_AbsPathError tests error path at imports.go:117-121.
-func TestProcessImports_AbsPathError(t *testing.T) {
-	tempDir := t.TempDir()
-
-	// Normal paths should succeed in getting absolute path
-	_, err := processImports(tempDir, []string{"test.yaml"}, tempDir, 1, MaximumImportLvL)
-	// Will fail at processLocalImport but not at filepath.Abs
-	_ = err
-}
+// DELETED: TestProcessImports_AbsPathError - Was a fake test using `_ = err`.
+// Comment admitted: "Will fail at processLocalImport but not at filepath.Abs".
+// This didn't actually test the filepath.Abs error path.
 
 // TestProcessImports_EmptyImportPath tests skip path at imports.go:124-126.
 func TestProcessImports_EmptyImportPath(t *testing.T) {

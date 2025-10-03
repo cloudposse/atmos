@@ -1,15 +1,34 @@
 package exec
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
+	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/cloudposse/atmos/pkg/filesystem"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
+
+// mockFileInfo is a simple mock for os.FileInfo.
+type mockFileInfo struct {
+	name  string
+	size  int64
+	mode  os.FileMode
+	isDir bool
+}
+
+func (m mockFileInfo) Name() string       { return m.name }
+func (m mockFileInfo) Size() int64        { return m.size }
+func (m mockFileInfo) Mode() os.FileMode  { return m.mode }
+func (m mockFileInfo) IsDir() bool        { return m.isDir }
+func (m mockFileInfo) ModTime() time.Time { return time.Time{} }
+func (m mockFileInfo) Sys() interface{}   { return nil }
 
 // TestCopyFile_OpenSourceError tests error path at copy_glob.go:52-55.
 func TestCopyFile_OpenSourceError(t *testing.T) {
@@ -64,53 +83,93 @@ func TestCopyFile_CreateDestFileError(t *testing.T) {
 	// Error message depends on OS, but should contain "creating destination file" or similar
 }
 
-// TestCopyFile_CopyContentError tests error path at copy_glob.go:68-70.
-func TestCopyFile_CopyContentError(t *testing.T) {
-	// This is hard to trigger without mocking io.Copy
-	// The error path exists and is tested by the structure
-	tempDir := t.TempDir()
+// DELETED: TestCopyFile_CopyContentError - Was a fake test that tested success, not error.
+// REPLACED with real mocked test below.
 
-	src := filepath.Join(tempDir, "source.txt")
-	err := os.WriteFile(src, []byte("test"), 0o644)
-	require.NoError(t, err)
+// TestCopyFile_CopyContentError_WithMock tests io.Copy error path using mocks.
+func TestCopyFile_CopyContentError_WithMock(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
 
-	dst := filepath.Join(tempDir, "dest.txt")
+	mockFS := filesystem.NewMockFileSystem(ctrl)
+	mockGlob := filesystem.NewMockGlobMatcher(ctrl)
+	mockIO := filesystem.NewMockIOCopier(ctrl)
 
-	// Normal case should succeed
-	err = copyFile(src, dst)
-	assert.NoError(t, err)
+	copier := NewFileCopier(mockFS, mockGlob, mockIO)
+
+	// Set up successful Open, MkdirAll, Create
+	mockFS.EXPECT().Open("source.txt").Return(os.Stdin, nil) // Use real file for simplicity
+	mockFS.EXPECT().MkdirAll(gomock.Any(), gomock.Any()).Return(nil)
+	mockFS.EXPECT().Create("dest.txt").Return(os.Stdout, nil)
+
+	// Mock io.Copy to fail
+	expectedErr := errors.New("disk full")
+	mockIO.EXPECT().Copy(gomock.Any(), gomock.Any()).Return(int64(0), expectedErr)
+
+	err := copier.copyFile("source.txt", "dest.txt")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "copying content")
 }
 
-// TestCopyFile_StatSourceError tests error path at copy_glob.go:72-75.
-func TestCopyFile_StatSourceError(t *testing.T) {
-	// This error is rare since we just opened the file
-	// But the error check exists at lines 72-75
-	tempDir := t.TempDir()
+// DELETED: TestCopyFile_StatSourceError - Was a fake test that tested success, not error.
+// REPLACED with real mocked test below.
 
-	src := filepath.Join(tempDir, "source.txt")
-	err := os.WriteFile(src, []byte("test"), 0o644)
-	require.NoError(t, err)
+// TestCopyFile_StatSourceError_WithMock tests os.Stat error path using mocks.
+func TestCopyFile_StatSourceError_WithMock(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
 
-	dst := filepath.Join(tempDir, "dest.txt")
+	mockFS := filesystem.NewMockFileSystem(ctrl)
+	mockGlob := filesystem.NewMockGlobMatcher(ctrl)
+	mockIO := filesystem.NewMockIOCopier(ctrl)
 
-	err = copyFile(src, dst)
-	assert.NoError(t, err) // Should succeed in normal case
+	copier := NewFileCopier(mockFS, mockGlob, mockIO)
+
+	// Set up successful Open, MkdirAll, Create, Copy
+	mockFS.EXPECT().Open("source.txt").Return(os.Stdin, nil)
+	mockFS.EXPECT().MkdirAll(gomock.Any(), gomock.Any()).Return(nil)
+	mockFS.EXPECT().Create("dest.txt").Return(os.Stdout, nil)
+	mockIO.EXPECT().Copy(gomock.Any(), gomock.Any()).Return(int64(100), nil)
+
+	// Mock Stat to fail
+	expectedErr := errors.New("file disappeared")
+	mockFS.EXPECT().Stat("source.txt").Return(nil, expectedErr)
+
+	err := copier.copyFile("source.txt", "dest.txt")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "getting file info")
 }
 
-// TestCopyFile_ChmodError tests error path at copy_glob.go:76-78.
-func TestCopyFile_ChmodError(t *testing.T) {
-	// Difficult to trigger chmod error without mocking
-	// Test documents the error path exists
-	tempDir := t.TempDir()
+// DELETED: TestCopyFile_ChmodError - Was a fake test that tested success, not error.
+// REPLACED with real mocked test below.
 
-	src := filepath.Join(tempDir, "source.txt")
-	err := os.WriteFile(src, []byte("test"), 0o644)
-	require.NoError(t, err)
+// TestCopyFile_ChmodError_WithMock tests os.Chmod error path using mocks.
+func TestCopyFile_ChmodError_WithMock(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
 
-	dst := filepath.Join(tempDir, "dest.txt")
+	mockFS := filesystem.NewMockFileSystem(ctrl)
+	mockGlob := filesystem.NewMockGlobMatcher(ctrl)
+	mockIO := filesystem.NewMockIOCopier(ctrl)
 
-	err = copyFile(src, dst)
-	assert.NoError(t, err)
+	copier := NewFileCopier(mockFS, mockGlob, mockIO)
+
+	// Set up successful Open, MkdirAll, Create, Copy, Stat
+	mockFS.EXPECT().Open("source.txt").Return(os.Stdin, nil)
+	mockFS.EXPECT().MkdirAll(gomock.Any(), gomock.Any()).Return(nil)
+	mockFS.EXPECT().Create("dest.txt").Return(os.Stdout, nil)
+	mockIO.EXPECT().Copy(gomock.Any(), gomock.Any()).Return(int64(100), nil)
+
+	fileInfo := mockFileInfo{name: "source.txt", mode: 0o644, isDir: false}
+	mockFS.EXPECT().Stat("source.txt").Return(fileInfo, nil)
+
+	// Mock Chmod to fail
+	expectedErr := errors.New("permission denied")
+	mockFS.EXPECT().Chmod("dest.txt", os.FileMode(0o644)).Return(expectedErr)
+
+	err := copier.copyFile("source.txt", "dest.txt")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "setting permissions")
 }
 
 // TestShouldExcludePath_PathMatchError tests error path at copy_glob.go:86-90.
@@ -361,11 +420,12 @@ func TestGetMatchesForPattern_RecursivePattern(t *testing.T) {
 func TestGetMatchesForPattern_RecursivePatternError(t *testing.T) {
 	tempDir := t.TempDir()
 
-	// This is hard to trigger since the pattern is constructed internally
-	// We document the error path exists
+	// When the path doesn't exist, GetGlobMatches returns "failed to find import" error.
+	// This tests the recursive pattern error path when the base directory doesn't contain the pattern.
 	matches, err := getMatchesForPattern(tempDir, "test/**")
-	assert.NoError(t, err)
-	assert.Empty(t, matches) // No matches
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to find import")
+	assert.Empty(t, matches)
 }
 
 // TestProcessMatch_StatError tests error path at copy_glob.go:322-325.

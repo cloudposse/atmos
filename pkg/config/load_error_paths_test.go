@@ -1,16 +1,19 @@
 package config
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
 	"testing"
 
+	"github.com/golang/mock/gomock"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/filesystem"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -80,28 +83,24 @@ func TestReadSystemConfig_NonExistentPath(t *testing.T) {
 	assert.NoError(t, err) // Should not error on ConfigFileNotFoundError
 }
 
-// TestReadHomeConfig_HomedirError tests homedir behavior when HOME is unset at load.go:216-219.
-// Note: homedir package has OS-specific fallbacks that prevent errors even when HOME is unset.
-func TestReadHomeConfig_HomedirError(t *testing.T) {
-	// Save original HOME/USERPROFILE
-	var origHome string
-	if runtime.GOOS == "windows" {
-		origHome = os.Getenv("USERPROFILE")
-		defer os.Setenv("USERPROFILE", origHome)
-		os.Unsetenv("USERPROFILE")
-	} else {
-		origHome = os.Getenv("HOME")
-		defer os.Setenv("HOME", origHome)
-		os.Unsetenv("HOME")
-	}
+// DELETED: TestReadHomeConfig_HomedirError - Was a fake test using `_ = err`.
+// Comment admitted: "homedir package has OS-specific fallbacks that prevent errors".
+// Replaced with real mocked test below.
+
+// TestReadHomeConfig_HomeDirProviderError_WithMock tests homedir.Dir() error path using mocks.
+func TestReadHomeConfig_HomeDirProviderError_WithMock(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockHomeProvider := filesystem.NewMockHomeDirProvider(ctrl)
+	mockHomeProvider.EXPECT().Dir().Return("", errors.New("home directory unavailable"))
 
 	v := viper.New()
 	v.SetConfigType("yaml")
 
-	err := readHomeConfig(v)
-	// homedir has OS-specific fallbacks (getDarwinHomeDir/getUnixHomeDir),
-	// so this typically returns nil or ConfigFileNotFoundError, not a homedir error
-	_ = err // May be nil or ConfigFileNotFoundError
+	err := readHomeConfigWithProvider(v, mockHomeProvider)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "home directory unavailable")
 }
 
 // TestReadHomeConfig_ConfigFileNotFound tests viper.ConfigFileNotFoundError at load.go:223-228.
