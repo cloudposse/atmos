@@ -33,7 +33,7 @@ var (
 	// Mutex to serialize updates of the result map of ProcessYAMLConfigFiles function.
 	processYAMLConfigFilesLock = &sync.Mutex{}
 
-	// lastMergeContext stores the most recent MergeContext when provenance tracking is enabled.
+	// The lastMergeContext stores the most recent MergeContext when provenance tracking is enabled.
 	// This is used to capture provenance data for the describe component command.
 	lastMergeContext   *m.MergeContext
 	lastMergeContextMu sync.RWMutex
@@ -41,6 +41,8 @@ var (
 
 // SetLastMergeContext stores the merge context for later retrieval.
 func SetLastMergeContext(ctx *m.MergeContext) {
+	defer perf.Track(nil, "exec.SetLastMergeContext")()
+
 	lastMergeContextMu.Lock()
 	defer lastMergeContextMu.Unlock()
 	lastMergeContext = ctx
@@ -48,6 +50,8 @@ func SetLastMergeContext(ctx *m.MergeContext) {
 
 // GetLastMergeContext retrieves the last stored merge context.
 func GetLastMergeContext() *m.MergeContext {
+	defer perf.Track(nil, "exec.GetLastMergeContext")()
+
 	lastMergeContextMu.RLock()
 	defer lastMergeContextMu.RUnlock()
 	return lastMergeContext
@@ -55,6 +59,8 @@ func GetLastMergeContext() *m.MergeContext {
 
 // ClearLastMergeContext clears the stored merge context.
 func ClearLastMergeContext() {
+	defer perf.Track(nil, "exec.ClearLastMergeContext")()
+
 	lastMergeContextMu.Lock()
 	defer lastMergeContextMu.Unlock()
 	lastMergeContext = nil
@@ -87,17 +93,6 @@ func ProcessYAMLConfigFiles(
 	var wg sync.WaitGroup
 	wg.Add(count)
 
-	// Create a shared merge context for all parallel goroutines if provenance tracking is enabled.
-	// This ensures all imports are tracked in one context, not lost across goroutine boundaries.
-	var sharedMergeContext *m.MergeContext
-	if atmosConfig != nil && atmosConfig.TrackProvenance {
-		sharedMergeContext = m.NewMergeContext()
-		sharedMergeContext.EnableProvenance()
-	} else {
-		// For non-provenance runs, each goroutine gets its own context
-		sharedMergeContext = nil
-	}
-
 	for i, filePath := range filePaths {
 		go func(i int, p string) {
 			defer wg.Done()
@@ -114,12 +109,12 @@ func ProcessYAMLConfigFiles(
 				".yml",
 			)
 
-			// Use shared merge context if provenance tracking is enabled, otherwise create a new one
-			var mergeContext *m.MergeContext
-			if sharedMergeContext != nil {
-				mergeContext = sharedMergeContext
-			} else {
-				mergeContext = m.NewMergeContext()
+			// Each goroutine gets its own merge context to avoid data races.
+			// For single-file operations (like describe component), use the
+			// SetLastMergeContext/GetLastMergeContext mechanism instead.
+			mergeContext := m.NewMergeContext()
+			if atmosConfig != nil && atmosConfig.TrackProvenance {
+				mergeContext.EnableProvenance()
 			}
 
 			deepMergedStackConfig, importsConfig, stackConfig, _, _, _, _, err := ProcessYAMLConfigFileWithContext(
@@ -201,12 +196,6 @@ func ProcessYAMLConfigFiles(
 
 	if errorResult != nil {
 		return nil, nil, nil, errorResult
-	}
-
-	// Save the shared merge context after all parallel processing completes.
-	// This ensures all import provenance metadata is available for describe component.
-	if sharedMergeContext != nil && sharedMergeContext.IsProvenanceEnabled() {
-		SetLastMergeContext(sharedMergeContext)
 	}
 
 	return listResult, mapResult, rawStackConfigs, nil
@@ -493,11 +482,8 @@ func ProcessYAMLConfigFileWithContext(
 			// Look up position for this import array element.
 			arrayPath := fmt.Sprintf("import[%d]", i)
 			if pos, exists := positions[arrayPath]; exists {
-				// Calculate depth from import chain.
-				depth := len(mergeContext.ImportChain) - 1
-				if depth < 0 {
-					depth = 0
-				}
+				// Get depth from merge context using the dedicated method.
+				depth := mergeContext.GetImportDepth()
 
 				entry := m.ProvenanceEntry{
 					File:   relativeFilePath,
@@ -678,11 +664,8 @@ func ProcessYAMLConfigFileWithContext(
 			// We record every time we encounter an import to track all files that import it,
 			// but we use the path as a unique key so only the first entry is kept per import path.
 			if atmosConfig.TrackProvenance && mergeContext != nil && mergeContext.IsProvenanceEnabled() {
-				// Calculate depth from import chain.
-				depth := len(mergeContext.ImportChain) - 1
-				if depth < 0 {
-					depth = 0
-				}
+				// Get depth from merge context using the dedicated method.
+				depth := mergeContext.GetImportDepth()
 
 				// Store metadata using special key format: "__import_meta__:<import-path>".
 				// Note: We don't have line number info here since this is during recursive processing,

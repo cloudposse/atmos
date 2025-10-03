@@ -2,11 +2,13 @@ package exec
 
 import (
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/samber/lo"
+	"golang.org/x/term"
 
-	"github.com/cloudposse/atmos/internal/tui/templates/term"
+	tuiTerm "github.com/cloudposse/atmos/internal/tui/templates/term"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	m "github.com/cloudposse/atmos/pkg/merge"
@@ -41,7 +43,7 @@ type DescribeComponentExec struct {
 func NewDescribeComponentExec() *DescribeComponentExec {
 	return &DescribeComponentExec{
 		printOrWriteToFile:       printOrWriteToFile,
-		IsTTYSupportForStdout:    term.IsTTYSupportForStdout,
+		IsTTYSupportForStdout:    tuiTerm.IsTTYSupportForStdout,
 		pageCreator:              pager.New(),
 		initCliConfig:            cfg.InitCliConfig,
 		executeDescribeComponent: ExecuteDescribeComponent,
@@ -127,7 +129,20 @@ func (d *DescribeComponentExec) ExecuteDescribeComponentCmd(describeComponentPar
 	// If provenance is enabled and we have a merge context, render with inline provenance
 	if provenance && mergeContext != nil && mergeContext.IsProvenanceEnabled() {
 		output := p.RenderInlineProvenanceWithStackFile(res, mergeContext, &atmosConfig, stackFile)
-		u.PrintfMessageToTUI("%s", output)
+
+		// Write to file if specified
+		if file != "" {
+			err = os.WriteFile(file, []byte(output), 0o600)
+			if err != nil {
+				return err
+			}
+		}
+
+		// Print to TTY (stderr) for interactive viewing
+		if file == "" || term.IsTerminal(int(os.Stdout.Fd())) {
+			u.PrintfMessageToTUI("%s", output)
+		}
+
 		return nil
 	}
 
