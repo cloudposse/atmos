@@ -175,8 +175,13 @@ func (p *oidcProvider) getOIDCToken(ctx context.Context, requestURL, requestToke
 
 // Validate validates the provider configuration.
 func (p *oidcProvider) Validate() error {
-	// GitHub OIDC provider doesn't require additional configuration.
-	// It relies on GitHub Actions environment variables.
+	audience, err := p.audience()
+	if err != nil {
+		return err
+	}
+	if audience == "" {
+		return fmt.Errorf(errUtils.ErrStringWrappingFormat, errUtils.ErrInvalidProviderConfig, "audience is required in provider spec")
+	}
 	return nil
 }
 

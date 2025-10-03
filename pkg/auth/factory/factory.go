@@ -1,10 +1,10 @@
-package auth
+package factory
 
 import (
 	"fmt"
 
 	errUtils "github.com/cloudposse/atmos/errors"
-	"github.com/cloudposse/atmos/pkg/auth/identities/aws"
+	awsIdentities "github.com/cloudposse/atmos/pkg/auth/identities/aws"
 	awsProviders "github.com/cloudposse/atmos/pkg/auth/providers/aws"
 	githubProviders "github.com/cloudposse/atmos/pkg/auth/providers/github"
 	"github.com/cloudposse/atmos/pkg/auth/types"
@@ -35,11 +35,11 @@ func NewIdentity(name string, config *schema.Identity) (types.Identity, error) {
 	}
 	switch config.Kind {
 	case "aws/permission-set":
-		return aws.NewPermissionSetIdentity(name, config)
+		return awsIdentities.NewPermissionSetIdentity(name, config)
 	case "aws/assume-role":
-		return aws.NewAssumeRoleIdentity(name, config)
+		return awsIdentities.NewAssumeRoleIdentity(name, config)
 	case "aws/user":
-		return aws.NewUserIdentity(name, config)
+		return awsIdentities.NewUserIdentity(name, config)
 	default:
 		return nil, fmt.Errorf("%w: unsupported identity kind: %s", errUtils.ErrInvalidIdentityKind, config.Kind)
 	}

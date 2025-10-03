@@ -9,6 +9,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	log "github.com/charmbracelet/log"
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/auth/factory"
 	"github.com/cloudposse/atmos/pkg/auth/identities/aws"
 	"github.com/cloudposse/atmos/pkg/auth/types"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -250,7 +251,7 @@ func (m *manager) ListProviders() []string {
 func (m *manager) initializeProviders() error {
 	//nolint:gocritic // rangeValCopy: map stores structs; address of map element can't be taken. Passing copy to factory is intended.
 	for name, providerConfig := range m.config.Providers {
-		provider, err := NewProvider(name, &providerConfig)
+		provider, err := factory.NewProvider(name, &providerConfig)
 		if err != nil {
 			errUtils.CheckErrorAndPrint(errUtils.ErrInvalidProviderConfig, "initializeProviders", "")
 			return fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrInvalidProviderConfig, err)
@@ -263,7 +264,7 @@ func (m *manager) initializeProviders() error {
 // initializeIdentities creates identity instances from configuration.
 func (m *manager) initializeIdentities() error {
 	for name, identityConfig := range m.config.Identities {
-		identity, err := NewIdentity(name, &identityConfig)
+		identity, err := factory.NewIdentity(name, &identityConfig)
 		if err != nil {
 			errUtils.CheckErrorAndPrint(errUtils.ErrInvalidIdentityConfig, "initializeIdentities", "")
 			return fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrInvalidIdentityConfig, err)

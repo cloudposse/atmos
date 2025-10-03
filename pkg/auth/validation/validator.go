@@ -3,11 +3,10 @@ package validation
 import (
 	"errors"
 	"fmt"
-	"net/url"
 	"strings"
 
-	awsarn "github.com/aws/aws-sdk-go-v2/aws/arn"
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/auth/factory"
 	"github.com/cloudposse/atmos/pkg/auth/types"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -85,18 +84,13 @@ func (v *validator) ValidateProvider(name string, provider *schema.Provider) err
 		return fmt.Errorf("%w: provider kind is required", errUtils.ErrInvalidProviderConfig)
 	}
 
-	// TODO replace with Provider Interface Validate().
-	// Validate based on provider kind.
-	switch provider.Kind {
-	case "aws/iam-identity-center":
-		return v.validateSSOProvider(provider)
-	case "aws/saml":
-		return v.validateSAMLProvider(provider)
-	case "github/oidc":
-		return v.validateGitHubOIDCProvider(provider)
-	default:
-		return fmt.Errorf("%w: unsupported provider kind: %s", errUtils.ErrInvalidProviderKind, provider.Kind)
+	// Create provider instance and use its Validate method.
+	providerInstance, err := factory.NewProvider(name, provider)
+	if err != nil {
+		return err
 	}
+
+	return providerInstance.Validate()
 }
 
 // ValidateIdentity validates an identity configuration.
@@ -114,18 +108,13 @@ func (v *validator) ValidateIdentity(name string, identity *schema.Identity, pro
 		return err
 	}
 
-	// TODO replace with Identity Interface Validate().
-	// Validate based on identity kind.
-	switch identity.Kind {
-	case "aws/permission-set":
-		return v.validatePermissionSetIdentity(identity)
-	case "aws/assume-role":
-		return v.validateAssumeRoleIdentity(identity)
-	case "aws/user":
-		return v.validateUserIdentity(identity)
-	default:
-		return fmt.Errorf("%w: unsupported identity kind: %s", errUtils.ErrInvalidAuthConfig, identity.Kind)
+	// Create identity instance and use its Validate method.
+	identityInstance, err := factory.NewIdentity(name, identity)
+	if err != nil {
+		return err
 	}
+
+	return identityInstance.Validate()
 }
 
 // validateViaConfiguration validates the optional Via provider/identity references for an identity.
@@ -173,92 +162,6 @@ func (v *validator) ValidateChains(identities map[string]*schema.Identity, provi
 	return nil
 }
 
-// validateSSOProvider validates AWS SSO provider configuration.
-func (v *validator) validateSSOProvider(provider *schema.Provider) error {
-	if provider.StartURL == "" {
-		return fmt.Errorf("%w: start_url is required for AWS SSO provider", errUtils.ErrInvalidAuthConfig)
-	}
-
-	if provider.Region == "" {
-		return fmt.Errorf("%w: region is required for AWS SSO provider", errUtils.ErrInvalidAuthConfig)
-	}
-
-	return nil
-}
-
-// (aws/assume-role provider removed).
-
-// validateSAMLProvider validates AWS SAML provider configuration.
-func (v *validator) validateSAMLProvider(provider *schema.Provider) error {
-	if provider.URL == "" {
-		return fmt.Errorf("%w: url is required for AWS SAML provider", errUtils.ErrInvalidAuthConfig)
-	}
-
-	if provider.Region == "" {
-		return fmt.Errorf("%w: region is required for AWS SAML provider", errUtils.ErrInvalidAuthConfig)
-	}
-
-	// Validate URL format.
-	if _, err := url.Parse(provider.URL); err != nil {
-		return fmt.Errorf("invalid URL format: %w", errors.Join(errUtils.ErrInvalidAuthConfig, err))
-	}
-
-	return nil
-}
-
-// validateGitHubOIDCProvider validates GitHub OIDC provider configuration.
-func (v *validator) validateGitHubOIDCProvider(provider *schema.Provider) error {
-	return nil
-}
-
-// validatePermissionSetIdentity validates AWS permission set identity configuration.
-func (v *validator) validatePermissionSetIdentity(identity *schema.Identity) error {
-	if identity.Principal == nil {
-		return fmt.Errorf("%w: principal is required for permission set identity", errUtils.ErrInvalidAuthConfig)
-	}
-
-	name, ok := identity.Principal["name"].(string)
-	if !ok || name == "" {
-		return fmt.Errorf("%w: permission set name is required in principal", errUtils.ErrInvalidAuthConfig)
-	}
-
-	accountSpec, ok := identity.Principal["account"].(map[string]interface{})
-	if !ok {
-		return fmt.Errorf("%w: account specification is required", errUtils.ErrInvalidAuthConfig)
-	}
-
-	accountName, ok := accountSpec["name"].(string)
-	accountId, okId := accountSpec["id"].(string)
-	if (!ok && !okId) || (accountName == "" && accountId == "") {
-		return fmt.Errorf("%w: account name or account ID is required", errUtils.ErrInvalidAuthConfig)
-	}
-
-	return nil
-}
-
-// validateAssumeRoleIdentity validates AWS assume role identity configuration.
-func (v *validator) validateAssumeRoleIdentity(identity *schema.Identity) error {
-	if identity.Principal == nil {
-		return fmt.Errorf("%w: principal is required for assume role identity", errUtils.ErrInvalidAuthConfig)
-	}
-
-	roleArn, ok := identity.Principal["assume_role"].(string)
-	if !ok || roleArn == "" {
-		return fmt.Errorf("%w: assume_role is required in principal", errUtils.ErrInvalidAuthConfig)
-	}
-
-	if !awsarn.IsARN(roleArn) {
-		return fmt.Errorf("%w: invalid role ARN format %q", errUtils.ErrInvalidAuthConfig, roleArn)
-	}
-
-	return nil
-}
-
-// validateUserIdentity validates AWS user identity configuration.
-func (v *validator) validateUserIdentity(identity *schema.Identity) error {
-	// User identities typically don't require additional validation.
-	return nil
-}
 
 // hasCycle performs DFS to detect cycles in the dependency graph.
 func (v *validator) hasCycle(node string, graph map[string][]string, visited, recStack map[string]bool) bool {

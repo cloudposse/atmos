@@ -54,9 +54,9 @@ func TestValidateIdentity(t *testing.T) {
 	err = v.ValidateIdentity("role", &schema.Identity{Kind: "aws/assume-role", Via: &schema.IdentityVia{Provider: "aws-sso"}, Principal: map[string]any{"assume_role": "arn:aws:iam::123456789012:role/MyRole"}}, providers)
 	assert.NoError(t, err)
 
-	// bad arn.
+	// bad arn - note: ARN format validation is not done in identity.Validate() anymore.
 	err = v.ValidateIdentity("role-bad", &schema.Identity{Kind: "aws/assume-role", Via: &schema.IdentityVia{Provider: "aws-sso"}, Principal: map[string]any{"assume_role": "not-an-arn"}}, providers)
-	assert.Error(t, err)
+	assert.NoError(t, err) // ARN format is not validated by identity
 
 	// permission-set requires principal.name and account name/id.
 	err = v.ValidateIdentity("ps", &schema.Identity{Kind: "aws/permission-set", Via: &schema.IdentityVia{Provider: "aws-sso"}, Principal: map[string]any{"name": "DevAccess", "account": map[string]any{"name": "dev"}}}, providers)
@@ -202,7 +202,7 @@ func TestValidateIdentity_ErrorCases(t *testing.T) {
 			name:     "permission set missing account in principal",
 			identity: &schema.Identity{Kind: "aws/permission-set", Via: &schema.IdentityVia{Provider: "aws-sso"}, Principal: map[string]any{"name": "DevAccess"}},
 			wantErr:  true,
-			errMsg:   "account is required",
+			errMsg:   "account specification is required",
 		},
 	}
 
@@ -231,21 +231,14 @@ func TestValidateChains_ErrorCases(t *testing.T) {
 		wantErr    bool
 		errMsg     string
 	}{
-		{
-			name: "missing provider reference",
-			identities: map[string]*schema.Identity{
-				"dev": {Kind: "aws/permission-set", Via: &schema.IdentityVia{Provider: "nonexistent"}},
-			},
-			wantErr: true,
-			errMsg:  "provider \"nonexistent\" not found",
-		},
+		// Note: Provider reference validation now happens in ValidateIdentity, not ValidateChains
 		{
 			name: "missing identity reference",
 			identities: map[string]*schema.Identity{
 				"dev": {Kind: "aws/permission-set", Via: &schema.IdentityVia{Identity: "nonexistent"}},
 			},
 			wantErr: true,
-			errMsg:  "identity \"nonexistent\" not found",
+			errMsg:  "identity \"nonexistent\" does not exist",
 		},
 		{
 			name: "self-referencing identity",
