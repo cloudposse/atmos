@@ -132,11 +132,10 @@ const config = {
             },
         ],
         [
-            '@grnet/docusaurus-terminology', {
+            path.resolve(__dirname, './plugins/glossary-tooltips'), {
                 docsDir: './docs/',
-                termsDir: './reference/glossary/',
-                glossaryFilepath: './docs/reference/glossary/index.mdx',
-                glossaryComponentPath: '../../../src/components/glossary/Glossary.tsx'
+                termsDir: './docs/glossary/',
+                glossaryFilepath: './docs/glossary/index.mdx',
         }],
         [
             'custom-loaders', {}
@@ -163,6 +162,22 @@ const config = {
         ],
         [
             path.resolve(__dirname, 'plugins', 'fetch-latest-release'), {}
+        ],
+        [
+            'docusaurus-plugin-llms',
+            {
+                generateLLMsTxt: true,
+                generateLLMsFullTxt: true,
+                docsDir: 'docs',
+                includeBlog: true,
+                includeOrder: [
+                    'introduction/*',
+                    'quick-start/*',
+                    'install/*',
+                    'core-concepts/*',
+                    'cli/*',
+                ],
+            },
         ]
     ],
 

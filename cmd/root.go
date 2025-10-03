@@ -2,13 +2,16 @@ package cmd
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"io"
 	"math"
 	"os"
+	"os/signal"
 	"regexp"
 	"strings"
+	"syscall"
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/elewis787/boa"
@@ -22,15 +25,19 @@ import (
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/pager"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/profiler"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/telemetry"
+	"github.com/cloudposse/atmos/pkg/ui/heatmap"
 	"github.com/cloudposse/atmos/pkg/utils"
 )
 
 const (
 	// LogFileMode is the file mode for log files.
 	logFileMode = 0o644
+	// DefaultTopFunctionsMax is the default number of top functions to display in performance summary.
+	defaultTopFunctionsMax = 50
 )
 
 // atmosConfig This is initialized before everything in the Execute function. So we can directly use this.
@@ -64,6 +71,16 @@ var RootCmd = &cobra.Command{
 			cmd.SilenceErrors = true
 		}
 		configAndStacksInfo := schema.ConfigAndStacksInfo{}
+		// Honor CLI overrides for resolving atmos.yaml and its imports.
+		if bp, _ := cmd.Flags().GetString("base-path"); bp != "" {
+			configAndStacksInfo.AtmosBasePath = bp
+		}
+		if cfgFiles, _ := cmd.Flags().GetStringSlice("config"); len(cfgFiles) > 0 {
+			configAndStacksInfo.AtmosConfigFilesFromArg = cfgFiles
+		}
+		if cfgDirs, _ := cmd.Flags().GetStringSlice("config-path"); len(cfgDirs) > 0 {
+			configAndStacksInfo.AtmosConfigDirsFromArg = cfgDirs
+		}
 		// Load the config (includes env var bindings); don't store globally yet.
 		tmpConfig, err := cfg.InitCliConfig(configAndStacksInfo, false)
 		if err != nil {
@@ -83,12 +100,27 @@ var RootCmd = &cobra.Command{
 				errUtils.CheckErrorPrintAndExit(setupErr, "Failed to setup profiler", "")
 			}
 		}
+
+		// Enable performance tracking if heatmap flag is set.
+		// P95 latency tracking via HDR histogram is automatically enabled.
+		if showHeatmap, _ := cmd.Flags().GetBool("heatmap"); showHeatmap {
+			perf.EnableTracking(true)
+		}
 	},
 	PersistentPostRun: func(cmd *cobra.Command, args []string) {
 		// Stop profiler after command execution.
 		if profilerServer != nil {
 			if stopErr := profilerServer.Stop(); stopErr != nil {
 				log.Error("Failed to stop profiler", "error", stopErr)
+			}
+		}
+
+		// Show performance heatmap if enabled.
+		showHeatmap, _ := cmd.Flags().GetBool("heatmap")
+		if showHeatmap {
+			heatmapMode, _ := cmd.Flags().GetString("heatmap-mode")
+			if err := displayPerformanceHeatmap(cmd, heatmapMode); err != nil {
+				log.Error("Failed to display performance heatmap", "error", err)
 			}
 		}
 	},
@@ -440,6 +472,43 @@ func getInvalidCommandName(input string) string {
 	return ""
 }
 
+// displayPerformanceHeatmap shows the performance heatmap visualization.
+//
+//nolint:unparam // cmd parameter reserved for future use
+func displayPerformanceHeatmap(cmd *cobra.Command, mode string) error {
+	// Print performance summary to console.
+	// Filter out functions with zero total time for cleaner output.
+	snap := perf.SnapshotTopFiltered("total", defaultTopFunctionsMax)
+	utils.PrintfMessageToTUI("\n=== Atmos Performance Summary ===\n")
+	utils.PrintfMessageToTUI("Elapsed: %s  Functions: %d  Calls: %d\n", snap.Elapsed, snap.TotalFuncs, snap.TotalCalls)
+	utils.PrintfMessageToTUI("%-50s %6s %10s %10s %10s %8s\n", "Function", "Count", "Total", "Avg", "Max", "P95")
+	for _, r := range snap.Rows {
+		p95 := "-"
+		if r.P95 > 0 {
+			p95 = heatmap.FormatDuration(r.P95)
+		}
+		utils.PrintfMessageToTUI("%-50s %6d %10s %10s %10s %8s\n",
+			r.Name, r.Count, heatmap.FormatDuration(r.Total), heatmap.FormatDuration(r.Avg), heatmap.FormatDuration(r.Max), p95)
+	}
+
+	// Check if we have a TTY for interactive mode.
+	if !term.IsTTYSupportForStderr() {
+		utils.PrintfMessageToTUI("\n⚠️  No TTY available for interactive visualization. Summary displayed above.\n")
+		return nil
+	}
+
+	// Create an empty heat model for now (we'll enhance this later to track actual execution steps).
+	heatModel := heatmap.NewHeatModel()
+
+	// Create context that cancels on SIGINT/SIGTERM.
+	base := context.Background()
+	sigCtx, stop := signal.NotifyContext(base, syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+
+	// Start Bubble Tea UI with the collected data.
+	return heatmap.StartBubbleTeaUI(sigCtx, heatModel, mode)
+}
+
 func init() {
 	// Add the template function for wrapped flag usages.
 	cobra.AddTemplateFunc("wrappedFlagUsages", templates.WrappedFlagUsages)
@@ -463,6 +532,8 @@ func init() {
 	RootCmd.PersistentFlags().String("profile-type", "cpu",
 		"Type of profile to collect when using --profile-file. "+
 			"Options: cpu, heap, allocs, goroutine, block, mutex, threadcreate, trace")
+	RootCmd.PersistentFlags().Bool("heatmap", false, "Show performance heatmap visualization after command execution (includes P95 latency)")
+	RootCmd.PersistentFlags().String("heatmap-mode", "bar", "Heatmap visualization mode: bar, sparkline, table (press 1-3 to switch in TUI)")
 	// Set custom usage template.
 	err := templates.SetCustomUsageFunc(RootCmd)
 	if err != nil {

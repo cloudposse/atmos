@@ -1,0 +1,21 @@
+apiVersion: atmos/v1
+kind: AtmosVendorConfig
+metadata:
+  name: vendor-config
+  description: Atmos terraform component vendoring manifest
+spec:
+  imports: []
+  sources:
+    - component: s3-bucket
+      source: github.com/terraform-aws-modules/terraform-aws-s3-bucket.git///?ref={{.Version}}
+      version: v5.7.0
+      targets: ["components/terraform/s3-bucket"]
+      included_paths:
+        - "**/modules/**"
+        - "**/*.tf"
+        - "**/README.md"
+        - "**/CHANGELOG.md"
+        - "**/LICENSE"
+      tags:
+        - aws
+        - storage

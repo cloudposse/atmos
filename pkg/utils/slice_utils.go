@@ -5,10 +5,13 @@ import (
 	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/perf"
 )
 
 // SliceContainsString checks if a string is present in a slice.
 func SliceContainsString(s []string, str string) bool {
+	defer perf.Track(nil, "utils.SliceContainsString")()
+
 	for _, v := range s {
 		if v == str {
 			return true
@@ -19,6 +22,8 @@ func SliceContainsString(s []string, str string) bool {
 
 // SliceContainsInt checks if an int is present in a slice.
 func SliceContainsInt(s []int, i int) bool {
+	defer perf.Track(nil, "utils.SliceContainsInt")()
+
 	for _, v := range s {
 		if v == i {
 			return true
@@ -55,6 +60,8 @@ func SliceOfStringsToSpaceSeparatedString(s []string) string {
 // SliceOfInterfacesToSliceOfStrings converts a slice of any to a slice of strings.
 // Each element is converted to a string using fmt.Sprintf with the "%v" format.
 func SliceOfInterfacesToSliceOfStrings(input []any) []string {
+	defer perf.Track(nil, "utils.SliceOfInterfacesToSliceOfStrings")()
+
 	res := make([]string, len(input))
 
 	for i, v := range input {
@@ -67,6 +74,8 @@ func SliceOfInterfacesToSliceOfStrings(input []any) []string {
 // SliceOfInterfacesToSliceOfStringsWithTypeAssertion takes a slice of interfaces and converts it to a slice of strings using type assertion.
 // This function returns an error if any element is not a string.
 func SliceOfInterfacesToSliceOfStringsWithTypeAssertion(input []any) ([]string, error) {
+	defer perf.Track(nil, "utils.SliceOfInterfacesToSliceOfStringsWithTypeAssertion")()
+
 	if input == nil {
 		return nil, errUtils.ErrNilInput
 	}
@@ -88,6 +97,8 @@ func SliceOfInterfacesToSliceOfStringsWithTypeAssertion(input []any) ([]string, 
 // Callers must use the returned slice (assign it) because the original slice may be modified or re-sliced.
 // Advise callers to copy the slice before calling if they need to preserve the original contents.
 func SliceRemoveString(slice []string, str string) []string {
+	defer perf.Track(nil, "utils.SliceRemoveString")()
+
 	for i, v := range slice {
 		if v == str {
 			// Avoid retaining reference to the removed element.
@@ -103,6 +114,8 @@ func SliceRemoveString(slice []string, str string) []string {
 // This function safely handles multiple occurrences and returns a new slice with all flag instances removed.
 // The function preserves the original slice and returns a new slice with the flags removed.
 func SliceRemoveFlag(slice []string, flagName string) []string {
+	defer perf.Track(nil, "utils.SliceRemoveFlag")()
+
 	if slice == nil {
 		return nil
 	}
@@ -132,6 +145,8 @@ func SliceRemoveFlag(slice []string, flagName string) []string {
 // SliceRemoveFlagAndValue removes --flag and an optional following value (if the next arg
 // does not start with "-"). It preserves order of remaining args.
 func SliceRemoveFlagAndValue(args []string, flagName string) []string {
+	defer perf.Track(nil, "utils.SliceRemoveFlagAndValue")()
+
 	if args == nil || flagName == "" {
 		return append([]string(nil), args...)
 	}

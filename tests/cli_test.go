@@ -14,6 +14,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"testing"
 	"time"
@@ -48,6 +49,8 @@ var (
 	skipReason          string                   // Package-level variable to track why tests should be skipped
 	atmosRunner         *testhelpers.AtmosRunner // Global runner for executing Atmos with coverage support (lazy initialized)
 	coverDir            string                   // GOCOVERDIR environment variable value
+	sandboxRegistry     = make(map[string]*testhelpers.SandboxEnvironment)
+	sandboxMutex        sync.RWMutex
 )
 
 // Define styles using lipgloss.
@@ -69,19 +72,20 @@ type Expectation struct {
 	Valid         []string                  `yaml:"valid"`           // Format validations: "yaml", "json"
 }
 type TestCase struct {
-	Name        string            `yaml:"name"`        // Name of the test
-	Description string            `yaml:"description"` // Description of the test
-	Enabled     bool              `yaml:"enabled"`     // Enable or disable the test
-	Workdir     string            `yaml:"workdir"`     // Working directory for the command
-	Command     string            `yaml:"command"`     // Command to run
-	Args        []string          `yaml:"args"`        // Command arguments
-	Env         map[string]string `yaml:"env"`         // Environment variables
-	Expect      Expectation       `yaml:"expect"`      // Expected output
-	Tty         bool              `yaml:"tty"`         // Enable TTY simulation
-	Snapshot    bool              `yaml:"snapshot"`    // Enable snapshot comparison
-	Clean       bool              `yaml:"clean"`       // Removes untracked files in work directory
-	Sandbox     bool              `yaml:"sandbox"`     // Run in sandboxed environment with isolated components
-	Skip        struct {
+	Name          string            `yaml:"name"`          // Name of the test
+	Description   string            `yaml:"description"`   // Description of the test
+	Enabled       bool              `yaml:"enabled"`       // Enable or disable the test
+	Workdir       string            `yaml:"workdir"`       // Working directory for the command
+	Command       string            `yaml:"command"`       // Command to run
+	Args          []string          `yaml:"args"`          // Command arguments
+	Env           map[string]string `yaml:"env"`           // Environment variables
+	Expect        Expectation       `yaml:"expect"`        // Expected output
+	Tty           bool              `yaml:"tty"`           // Enable TTY simulation
+	Snapshot      bool              `yaml:"snapshot"`      // Enable snapshot comparison
+	Clean         bool              `yaml:"clean"`         // Removes untracked files in work directory
+	Sandbox       interface{}       `yaml:"sandbox"`       // bool (true=random) or string (named) or false (no sandbox)
+	Preconditions []string          `yaml:"preconditions"` // Required preconditions for test execution
+	Skip          struct {
 		OS MatchPattern `yaml:"os"`
 	} `yaml:"skip"`
 }
@@ -93,6 +97,50 @@ type TestSuite struct {
 type MatchPattern struct {
 	Pattern string
 	Negate  bool
+}
+
+// GetOrCreateNamedSandbox returns an existing named sandbox or creates a new one.
+// Named sandboxes are shared across tests and cleaned up by TestMain.
+// Workdir must be an absolute path.
+func getOrCreateNamedSandbox(t *testing.T, name string, workdir string) *testhelpers.SandboxEnvironment {
+	sandboxMutex.Lock()
+	defer sandboxMutex.Unlock()
+
+	if env, exists := sandboxRegistry[name]; exists {
+		t.Logf("Reusing existing sandbox %q", name)
+		return env
+	}
+
+	t.Logf("Creating new sandbox %q", name)
+	env, err := testhelpers.SetupSandbox(t, workdir)
+	if err != nil {
+		t.Fatalf("Failed to setup sandbox %q: %v", name, err)
+	}
+	sandboxRegistry[name] = env
+	return env
+}
+
+// CreateIsolatedSandbox creates a new isolated sandbox for a single test.
+// Not added to registry, caller must clean up.
+// Workdir must be an absolute path.
+func createIsolatedSandbox(t *testing.T, workdir string) *testhelpers.SandboxEnvironment {
+	t.Logf("Creating isolated sandbox")
+	env, err := testhelpers.SetupSandbox(t, workdir)
+	if err != nil {
+		t.Fatalf("Failed to setup isolated sandbox: %v", err)
+	}
+	return env
+}
+
+// cleanupSandboxes cleans up all registered sandboxes.
+func cleanupSandboxes() {
+	sandboxMutex.Lock()
+	defer sandboxMutex.Unlock()
+
+	for name, env := range sandboxRegistry {
+		env.Cleanup()
+		delete(sandboxRegistry, name)
+	}
 }
 
 func (m *MatchPattern) UnmarshalYAML(value *yaml.Node) error {
@@ -263,7 +311,15 @@ func sanitizeOutput(output string) (string, error) {
 	//    - And explicitly collapse extra slashes.
 	normalizedRepoRoot := collapseExtraSlashes(filepath.ToSlash(filepath.Clean(repoRoot)))
 	// Also normalize the output to use forward slashes.
+	// Note: filepath.ToSlash() on Windows converts path separators; on Unix it does nothing.
+	// We also need to handle Windows-style paths that may appear in test output even on Unix (for testing).
+	// Replace backslashes with forward slashes, EXCEPT those that are escape sequences (\n, \t, \r, etc.).
+	// Since actual CLI output has escape sequences already processed (they appear as actual newlines/tabs),
+	// we can safely replace backslashes that are followed by path-like characters.
 	normalizedOutput := filepath.ToSlash(output)
+	// Replace backslashes that look like path separators (followed by alphanumeric, ., -, _, *, etc.)
+	// This regex matches backslash followed by path-like characters, not escape sequences.
+	normalizedOutput = regexp.MustCompile(`\\([a-zA-Z0-9._*\-/])`).ReplaceAllString(normalizedOutput, "/$1")
 
 	// 3. Build a regex that matches the repository root even if extra slashes appear.
 	//    First, escape any regex metacharacters in the normalized repository root.
@@ -271,7 +327,8 @@ func sanitizeOutput(output string) (string, error) {
 	// Replace each literal "/" with the regex token "/+" so that e.g. "a/b/c" becomes "a/+b/+c".
 	patternBody := strings.ReplaceAll(quoted, "/", "/+")
 	// Allow for extra trailing slashes.
-	pattern := patternBody + "/*"
+	// Use case-insensitive matching to handle Windows drive letters (D: vs d:) and path differences.
+	pattern := "(?i)" + patternBody + "/*"
 	repoRootRegex, err := regexp.Compile(pattern)
 	if err != nil {
 		return "", err
@@ -454,12 +511,35 @@ func TestMain(m *testing.M) {
 	flag.Parse()        // Parse command-line flags
 	exitCode := m.Run() // ALWAYS run tests so they can skip properly
 
+	// Clean up sandboxes.
+	cleanupSandboxes()
+
 	// Clean up the temporary binary if we built one
 	if atmosRunner != nil {
 		atmosRunner.Cleanup()
 	}
 
 	errUtils.Exit(exitCode)
+}
+
+// checkPreconditions checks if all required preconditions for a test are met.
+// If any precondition is not met, the test is skipped with an appropriate message.
+func checkPreconditions(t *testing.T, preconditions []string) {
+	t.Helper()
+
+	// Map of precondition names to their check functions
+	preconditionChecks := map[string]func(*testing.T){
+		"github_token": RequireOCIAuthentication,
+	}
+
+	// Check each precondition
+	for _, precondition := range preconditions {
+		checkFunc, exists := preconditionChecks[precondition]
+		if !exists {
+			t.Fatalf("Unknown precondition: %s", precondition)
+		}
+		checkFunc(t)
+	}
 }
 
 // prepareAtmosCommand prepares an atmos command with coverage support if enabled.
@@ -478,6 +558,9 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 			t.Fatalf("Failed to change back to the starting directory: %v", err)
 		}
 	}()
+
+	// Check preconditions before running the test
+	checkPreconditions(t, tc.Preconditions)
 
 	// Initialize AtmosRunner early, before any directory changes, so it can build from the git repo
 	if tc.Command == "atmos" && atmosRunner == nil {
@@ -563,16 +646,29 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 
 		// Setup sandbox environment if enabled
 		var sandboxEnv *testhelpers.SandboxEnvironment
-		if tc.Sandbox {
-			logger.Info("Setting up sandbox environment", "workdir", tc.Workdir)
-
-			env, err := testhelpers.SetupSandbox(t, absoluteWorkdir)
-			if err != nil {
-				t.Fatalf("Failed to setup sandbox for test %q: %v", tc.Name, err)
+		switch v := tc.Sandbox.(type) {
+		case bool:
+			if v {
+				// Boolean true = isolated sandbox for this test only
+				logger.Info("Setting up isolated sandbox", "workdir", absoluteWorkdir)
+				sandboxEnv = createIsolatedSandbox(t, absoluteWorkdir)
+				// Clean up immediately after test
+				defer func() {
+					logger.Debug("Cleaning up isolated sandbox", "tempdir", sandboxEnv.TempDir)
+					sandboxEnv.Cleanup()
+				}()
 			}
-			sandboxEnv = env
+		case string:
+			if v != "" {
+				// Named sandbox = shared across related tests
+				logger.Info("Using named sandbox", "name", v, "workdir", absoluteWorkdir)
+				sandboxEnv = getOrCreateNamedSandbox(t, v, absoluteWorkdir)
+				// Cleanup handled by TestMain
+			}
+		}
 
-			// Add sandbox environment variables to override component paths
+		// Add sandbox environment variables to override component paths
+		if sandboxEnv != nil {
 			if tc.Env == nil {
 				tc.Env = make(map[string]string)
 			}
@@ -580,12 +676,6 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 				logger.Debug("Setting sandbox env var", "key", k, "value", v)
 				tc.Env[k] = v
 			}
-
-			// Ensure sandbox is cleaned up after test
-			defer func() {
-				logger.Debug("Cleaning up sandbox", "tempdir", sandboxEnv.TempDir)
-				sandboxEnv.Cleanup()
-			}()
 		}
 
 		// Clean the directory if enabled
