@@ -7,7 +7,7 @@
     "vendor.d/**/*.{yml,yaml}"
   ],
   "type": "object",
-  "additionalProperties": false,
+  "additionalProperties": true,
   "properties": {
     "apiVersion": {
       "type": "string",
@@ -21,7 +21,7 @@
     },
     "metadata": {
       "type": "object",
-      "additionalProperties": false,
+      "additionalProperties": true,
       "description": "Metadata for the vendoring configuration",
       "properties": {
         "name": {
@@ -33,11 +33,11 @@
           "description": "Description of the vendoring configuration"
         }
       },
-      "required": ["name", "description"]
+      "required": ["name"]
     },
     "spec": {
       "type": "object",
-      "additionalProperties": false,
+      "additionalProperties": true,
       "description": "Specification of the vendoring configuration",
       "properties": {
         "imports": {
@@ -54,7 +54,7 @@
           "description": "List of sources for the vendoring configuration",
           "items": {
             "type": "object",
-            "additionalProperties": false,
+            "additionalProperties": true,
             "properties": {
               "component": {
                 "type": "string",
@@ -105,13 +105,13 @@
                 "uniqueItems": true
               }
             },
-            "required": ["component", "source", "version", "targets"]
+            "required": ["component", "source"]
           },
           "minItems": 1
         }
       },
-      "required": ["sources"]
+      "required": []
     }
   },
-  "required": ["apiVersion", "kind", "metadata", "spec"]
+  "required": []
 }

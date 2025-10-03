@@ -7,7 +7,7 @@
     ],
     "type": "object",
     "description": "Schema for Atmos workflows",
-    "additionalProperties": false,
+    "additionalProperties": true,
     "properties": {
       "description": {
         "type": "string",
@@ -22,7 +22,7 @@
         "description": "The list of steps to execute in the workflow.",
         "items": {
           "type": "object",
-          "additionalProperties": false,
+          "additionalProperties": true,
           "properties": {
             "name": {
               "type": "string",
@@ -84,5 +84,5 @@
         }
       }
     },
-    "required": ["steps"]
+    "required": []
   }

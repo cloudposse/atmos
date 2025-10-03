@@ -23,7 +23,7 @@
             "description": "Path to vendor configuration file or directory containing vendor files"
           }
         },
-        "required": ["base_path"]
+        "additionalProperties": true
       },
       "version": {
         "type": "object",
@@ -720,9 +720,9 @@
               "type": "object"
             }
           },
-          "required": ["name", "description"]
+          "required": ["name"]
         }
       }
     },
-    "required": ["components", "stacks", "logs"]
+    "additionalProperties": true
   }
