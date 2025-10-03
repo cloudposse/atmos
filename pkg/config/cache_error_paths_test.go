@@ -15,8 +15,8 @@ func TestLoadCache_GetCacheFilePath(t *testing.T) {
 	// The xdg library provides fallbacks, so GetCacheFilePath rarely errors.
 	// This test documents that LoadCache calls GetCacheFilePath and checks for errors.
 	tempDir := t.TempDir()
-	t.Setenv("XDG_CACHE_HOME", tempDir)
-	xdg.Reload()
+	cleanup := withTestXDGHome(t, tempDir)
+	t.Cleanup(cleanup)
 
 	_, err := LoadCache()
 	// Should succeed with valid XDG_CACHE_HOME.
@@ -27,10 +27,8 @@ func TestLoadCache_GetCacheFilePath(t *testing.T) {
 func TestLoadCache_FileDoesNotExist(t *testing.T) {
 	// Create temp directory for cache.
 	tempDir := t.TempDir()
-
-	// Set XDG_CACHE_HOME to temp directory.
-	t.Setenv("XDG_CACHE_HOME", tempDir)
-	xdg.Reload()
+	cleanup := withTestXDGHome(t, tempDir)
+	t.Cleanup(cleanup)
 
 	// Ensure cache file doesn't exist.
 	cacheFile := filepath.Join(tempDir, "atmos", "cache.yaml")
@@ -52,10 +50,8 @@ func TestLoadCache_WindowsReadError(t *testing.T) {
 
 	// Create temp directory for cache.
 	tempDir := t.TempDir()
-
-	// Set LOCALAPPDATA to temp directory.
-	t.Setenv("LOCALAPPDATA", tempDir)
-	xdg.Reload()
+	cleanup := withTestXDGHome(t, tempDir)
+	t.Cleanup(cleanup)
 
 	// Create cache directory.
 	cacheDir := filepath.Join(tempDir, "atmos")
@@ -83,10 +79,8 @@ func TestLoadCache_UnixReadLockError(t *testing.T) {
 
 	// Create temp directory for cache.
 	tempDir := t.TempDir()
-
-	// Set XDG_CACHE_HOME to temp directory.
-	t.Setenv("XDG_CACHE_HOME", tempDir)
-	xdg.Reload()
+	cleanup := withTestXDGHome(t, tempDir)
+	t.Cleanup(cleanup)
 
 	// Create cache directory.
 	cacheDir := filepath.Join(tempDir, "atmos")
@@ -109,8 +103,8 @@ func TestLoadCache_UnixReadLockError(t *testing.T) {
 func TestSaveCache_GetCacheFilePath(t *testing.T) {
 	// The xdg library provides fallbacks, so GetCacheFilePath rarely errors.
 	tempDir := t.TempDir()
-	t.Setenv("XDG_CACHE_HOME", tempDir)
-	xdg.Reload()
+	cleanup := withTestXDGHome(t, tempDir)
+	t.Cleanup(cleanup)
 
 	cfg := CacheConfig{
 		LastChecked: 123456,
@@ -124,8 +118,8 @@ func TestSaveCache_GetCacheFilePath(t *testing.T) {
 func TestSaveCache_DirectoryCreation(t *testing.T) {
 	// GetCacheFilePath creates the directory, so this tests that code path.
 	tempDir := t.TempDir()
-	t.Setenv("XDG_CACHE_HOME", tempDir)
-	xdg.Reload()
+	cleanup := withTestXDGHome(t, tempDir)
+	t.Cleanup(cleanup)
 
 	cfg := CacheConfig{
 		LastChecked: 123456,
@@ -143,10 +137,8 @@ func TestSaveCache_DirectoryCreation(t *testing.T) {
 func TestSaveCache_MarshalError(t *testing.T) {
 	// Create temp directory.
 	tempDir := t.TempDir()
-
-	// Set XDG_CACHE_HOME to temp directory.
-	t.Setenv("XDG_CACHE_HOME", tempDir)
-	xdg.Reload()
+	cleanup := withTestXDGHome(t, tempDir)
+	t.Cleanup(cleanup)
 
 	// Normal config should marshal successfully.
 	cfg := CacheConfig{
@@ -163,9 +155,8 @@ func TestSaveCache_MarshalError(t *testing.T) {
 // TestSaveCache_FileLockPath tests file lock usage at cache.go:97-118.
 func TestSaveCache_FileLockPath(t *testing.T) {
 	tempDir := t.TempDir()
-
-	t.Setenv("XDG_CACHE_HOME", tempDir)
-	xdg.Reload()
+	cleanup := withTestXDGHome(t, tempDir)
+	t.Cleanup(cleanup)
 
 	cfg := CacheConfig{
 		LastChecked:              1234567890,
@@ -181,8 +172,8 @@ func TestSaveCache_FileLockPath(t *testing.T) {
 // TestUpdateCache_GetCacheFilePath tests cache file path check at cache.go:137-140.
 func TestUpdateCache_GetCacheFilePath(t *testing.T) {
 	tempDir := t.TempDir()
-	t.Setenv("XDG_CACHE_HOME", tempDir)
-	xdg.Reload()
+	cleanup := withTestXDGHome(t, tempDir)
+	t.Cleanup(cleanup)
 
 	err := UpdateCache(func(cfg *CacheConfig) {
 		cfg.LastChecked = 1234567890
@@ -194,8 +185,8 @@ func TestUpdateCache_GetCacheFilePath(t *testing.T) {
 // TestUpdateCache_FileLockPath tests file locking at cache.go:143.
 func TestUpdateCache_FileLockPath(t *testing.T) {
 	tempDir := t.TempDir()
-	t.Setenv("XDG_CACHE_HOME", tempDir)
-	xdg.Reload()
+	cleanup := withTestXDGHome(t, tempDir)
+	t.Cleanup(cleanup)
 
 	// UpdateCache uses file locking - test that path.
 	err := UpdateCache(func(cfg *CacheConfig) {
@@ -208,10 +199,8 @@ func TestUpdateCache_FileLockPath(t *testing.T) {
 func TestUpdateCache_ReadConfigError(t *testing.T) {
 	// Create temp directory.
 	tempDir := t.TempDir()
-
-	// Set XDG_CACHE_HOME to temp directory.
-	t.Setenv("XDG_CACHE_HOME", tempDir)
-	xdg.Reload()
+	cleanup := withTestXDGHome(t, tempDir)
+	t.Cleanup(cleanup)
 
 	// Create cache directory.
 	cacheDir := filepath.Join(tempDir, "atmos")
@@ -237,10 +226,8 @@ func TestUpdateCache_ReadConfigError(t *testing.T) {
 func TestUpdateCache_WriteAtomicPath(t *testing.T) {
 	// Create temp directory.
 	tempDir := t.TempDir()
-
-	// Set XDG_CACHE_HOME to temp directory.
-	t.Setenv("XDG_CACHE_HOME", tempDir)
-	xdg.Reload()
+	cleanup := withTestXDGHome(t, tempDir)
+	t.Cleanup(cleanup)
 
 	// Normal update should succeed.
 	err := UpdateCache(func(cfg *CacheConfig) {
@@ -332,9 +319,8 @@ func TestCacheConfig_DefaultValues(t *testing.T) {
 // TestSaveCache_ValidConfig tests successful save.
 func TestSaveCache_ValidConfig(t *testing.T) {
 	tempDir := t.TempDir()
-
-	t.Setenv("XDG_CACHE_HOME", tempDir)
-	xdg.Reload()
+	cleanup := withTestXDGHome(t, tempDir)
+	t.Cleanup(cleanup)
 
 	cfg := CacheConfig{
 		LastChecked:              1234567890,
@@ -354,9 +340,8 @@ func TestSaveCache_ValidConfig(t *testing.T) {
 // TestUpdateCache_ValidUpdate tests successful update.
 func TestUpdateCache_ValidUpdate(t *testing.T) {
 	tempDir := t.TempDir()
-
-	t.Setenv("XDG_CACHE_HOME", tempDir)
-	xdg.Reload()
+	cleanup := withTestXDGHome(t, tempDir)
+	t.Cleanup(cleanup)
 
 	// First update.
 	err := UpdateCache(func(cfg *CacheConfig) {
