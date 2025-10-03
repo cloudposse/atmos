@@ -1,8 +1,8 @@
-# PRD: Line-Level Provenance Tracking System
+# PRD: Import Provenance Tracking System
 
 ## Executive Summary
 
-Implement a comprehensive provenance tracking system that records the file and line number for **every value** in Atmos configurations, not just top-level keys. The system will be generic and reusable across all Atmos configuration types (stack configs, `atmos.yaml`, vendor manifests, workflows) and will replace the current limited `sources` implementation.
+Implement a comprehensive import provenance tracking system that records the file and line number for **every value** in Atmos configurations, showing exactly where each value comes from in the import/inheritance chain. The system will be generic and reusable across all Atmos configuration types (stack configs, `atmos.yaml`, vendor manifests, workflows) and will replace the current limited `sources` implementation.
 
 ## Background
 
