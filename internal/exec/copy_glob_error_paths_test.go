@@ -103,11 +103,11 @@ func TestCopyFile_CopyContentError_WithMock(t *testing.T) {
 	require.NoError(t, err)
 	defer realFS.RemoveAll(tmpDir)
 
-	srcFile, err := realFS.Create(filepath.Join(tmpDir, "source.txt"))
+	srcFile, err := realFS.CreateTemp(tmpDir, "source-*.txt")
 	require.NoError(t, err)
 	defer srcFile.Close()
 
-	destFile, err := realFS.Create(filepath.Join(tmpDir, "dest.txt"))
+	destFile, err := realFS.CreateTemp(tmpDir, "dest-*.txt")
 	require.NoError(t, err)
 	defer destFile.Close()
 
@@ -145,11 +145,11 @@ func TestCopyFile_StatSourceError_WithMock(t *testing.T) {
 	require.NoError(t, err)
 	defer realFS.RemoveAll(tmpDir)
 
-	srcFile, err := realFS.Create(filepath.Join(tmpDir, "source.txt"))
+	srcFile, err := realFS.CreateTemp(tmpDir, "source-*.txt")
 	require.NoError(t, err)
 	defer srcFile.Close()
 
-	destFile, err := realFS.Create(filepath.Join(tmpDir, "dest.txt"))
+	destFile, err := realFS.CreateTemp(tmpDir, "dest-*.txt")
 	require.NoError(t, err)
 	defer destFile.Close()
 
@@ -188,11 +188,11 @@ func TestCopyFile_ChmodError_WithMock(t *testing.T) {
 	require.NoError(t, err)
 	defer realFS.RemoveAll(tmpDir)
 
-	srcFile, err := realFS.Create(filepath.Join(tmpDir, "source.txt"))
+	srcFile, err := realFS.CreateTemp(tmpDir, "source-*.txt")
 	require.NoError(t, err)
 	defer srcFile.Close()
 
-	destFile, err := realFS.Create(filepath.Join(tmpDir, "dest.txt"))
+	destFile, err := realFS.CreateTemp(tmpDir, "dest-*.txt")
 	require.NoError(t, err)
 	defer destFile.Close()
 

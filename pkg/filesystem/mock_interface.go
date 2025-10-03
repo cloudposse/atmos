@@ -65,6 +65,21 @@ func (mr *MockFileSystemMockRecorder) Create(name interface{}) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Create", reflect.TypeOf((*MockFileSystem)(nil).Create), name)
 }
 
+// CreateTemp mocks base method.
+func (m *MockFileSystem) CreateTemp(dir, pattern string) (*os.File, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CreateTemp", dir, pattern)
+	ret0, _ := ret[0].(*os.File)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CreateTemp indicates an expected call of CreateTemp.
+func (mr *MockFileSystemMockRecorder) CreateTemp(dir, pattern interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateTemp", reflect.TypeOf((*MockFileSystem)(nil).CreateTemp), dir, pattern)
+}
+
 // Getwd mocks base method.
 func (m *MockFileSystem) Getwd() (string, error) {
 	m.ctrl.T.Helper()

@@ -29,6 +29,11 @@ type FileSystem interface {
 	// MkdirTemp creates a temporary directory.
 	MkdirTemp(dir, pattern string) (string, error)
 
+	// CreateTemp creates a temporary file in the directory dir with a name beginning with pattern.
+	// If dir is the empty string, CreateTemp uses the default directory for temporary files.
+	// It returns the opened file and its name.
+	CreateTemp(dir, pattern string) (*os.File, error)
+
 	// WriteFile writes data to a file.
 	WriteFile(name string, data []byte, perm os.FileMode) error
 

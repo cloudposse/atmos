@@ -46,6 +46,11 @@ func (o *OSFileSystem) MkdirTemp(dir, pattern string) (string, error) {
 	return os.MkdirTemp(dir, pattern)
 }
 
+// CreateTemp creates a temporary file in the directory dir with a name beginning with pattern.
+func (o *OSFileSystem) CreateTemp(dir, pattern string) (*os.File, error) {
+	return os.CreateTemp(dir, pattern)
+}
+
 // WriteFile writes data to a file.
 func (o *OSFileSystem) WriteFile(name string, data []byte, perm os.FileMode) error {
 	return os.WriteFile(name, data, perm)
