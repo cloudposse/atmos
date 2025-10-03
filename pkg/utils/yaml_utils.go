@@ -262,3 +262,41 @@ func UnmarshalYAMLFromFile[T any](atmosConfig *schema.AtmosConfiguration, input 
 
 	return data, nil
 }
+
+// UnmarshalYAMLFromFileWithPositions unmarshals YAML and returns position information.
+// The positions map contains line/column information for each value in the YAML.
+// If atmosConfig.TrackProvenance is false, returns an empty position map.
+func UnmarshalYAMLFromFileWithPositions[T any](atmosConfig *schema.AtmosConfiguration, input string, file string) (T, PositionMap, error) {
+	defer perf.Track(atmosConfig, "utils.UnmarshalYAMLFromFileWithPositions")()
+
+	if atmosConfig == nil {
+		return *new(T), nil, ErrNilAtmosConfig
+	}
+
+	var zeroValue T
+	var node yaml.Node
+	b := []byte(input)
+
+	// Unmarshal into yaml.Node
+	if err := yaml.Unmarshal(b, &node); err != nil {
+		return zeroValue, nil, err
+	}
+
+	// Extract positions if provenance tracking is enabled
+	var positions PositionMap
+	if atmosConfig.TrackProvenance {
+		positions = ExtractYAMLPositions(&node, true)
+	}
+
+	if err := processCustomTags(atmosConfig, &node, file); err != nil {
+		return zeroValue, nil, err
+	}
+
+	// Decode the yaml.Node into the desired type T
+	var data T
+	if err := node.Decode(&data); err != nil {
+		return zeroValue, nil, err
+	}
+
+	return data, positions, nil
+}

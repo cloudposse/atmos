@@ -32,7 +32,33 @@ var (
 
 	// Mutex to serialize updates of the result map of ProcessYAMLConfigFiles function.
 	processYAMLConfigFilesLock = &sync.Mutex{}
+
+	// lastMergeContext stores the most recent MergeContext when provenance tracking is enabled.
+	// This is used to capture provenance data for the describe component command.
+	lastMergeContext   *m.MergeContext
+	lastMergeContextMu sync.RWMutex
 )
+
+// SetLastMergeContext stores the merge context for later retrieval.
+func SetLastMergeContext(ctx *m.MergeContext) {
+	lastMergeContextMu.Lock()
+	defer lastMergeContextMu.Unlock()
+	lastMergeContext = ctx
+}
+
+// GetLastMergeContext retrieves the last stored merge context.
+func GetLastMergeContext() *m.MergeContext {
+	lastMergeContextMu.RLock()
+	defer lastMergeContextMu.RUnlock()
+	return lastMergeContext
+}
+
+// ClearLastMergeContext clears the stored merge context.
+func ClearLastMergeContext() {
+	lastMergeContextMu.Lock()
+	defer lastMergeContextMu.Unlock()
+	lastMergeContext = nil
+}
 
 // ProcessYAMLConfigFiles takes a list of paths to stack manifests, processes and deep-merges all imports, and returns a list of stack configs.
 func ProcessYAMLConfigFiles(
@@ -61,6 +87,17 @@ func ProcessYAMLConfigFiles(
 	var wg sync.WaitGroup
 	wg.Add(count)
 
+	// Create a shared merge context for all parallel goroutines if provenance tracking is enabled.
+	// This ensures all imports are tracked in one context, not lost across goroutine boundaries.
+	var sharedMergeContext *m.MergeContext
+	if atmosConfig != nil && atmosConfig.TrackProvenance {
+		sharedMergeContext = m.NewMergeContext()
+		sharedMergeContext.EnableProvenance()
+	} else {
+		// For non-provenance runs, each goroutine gets its own context
+		sharedMergeContext = nil
+	}
+
 	for i, filePath := range filePaths {
 		go func(i int, p string) {
 			defer wg.Done()
@@ -77,6 +114,14 @@ func ProcessYAMLConfigFiles(
 				".yml",
 			)
 
+			// Use shared merge context if provenance tracking is enabled, otherwise create a new one
+			var mergeContext *m.MergeContext
+			if sharedMergeContext != nil {
+				mergeContext = sharedMergeContext
+			} else {
+				mergeContext = m.NewMergeContext()
+			}
+
 			deepMergedStackConfig, importsConfig, stackConfig, _, _, _, _, err := ProcessYAMLConfigFileWithContext(
 				atmosConfig,
 				stackBasePath,
@@ -92,7 +137,7 @@ func ProcessYAMLConfigFiles(
 				map[string]any{},
 				map[string]any{},
 				"",
-				m.NewMergeContext(), // Add merge context for enhanced error reporting
+				mergeContext,
 			)
 			if err != nil {
 				errorResult = err
@@ -130,6 +175,10 @@ func ProcessYAMLConfigFiles(
 
 			finalConfig["imports"] = uniqueImports
 
+			// Note: Provenance for imports is recorded later in describe_component.go where we have
+			// access to the correct merge context. Recording it here causes race conditions due to
+			// parallel processing.
+
 			yamlConfig, err := u.ConvertToYAML(finalConfig)
 			if err != nil {
 				errorResult = err
@@ -152,6 +201,12 @@ func ProcessYAMLConfigFiles(
 
 	if errorResult != nil {
 		return nil, nil, nil, errorResult
+	}
+
+	// Save the shared merge context after all parallel processing completes.
+	// This ensures all import provenance metadata is available for describe component.
+	if sharedMergeContext != nil && sharedMergeContext.IsProvenanceEnabled() {
+		SetLastMergeContext(sharedMergeContext)
 	}
 
 	return listResult, mapResult, rawStackConfigs, nil
@@ -300,7 +355,7 @@ func ProcessYAMLConfigFileWithContext(
 		}
 	}
 
-	stackConfigMap, err := u.UnmarshalYAMLFromFile[schema.AtmosSectionMapType](atmosConfig, stackManifestTemplatesProcessed, filePath)
+	stackConfigMap, positions, err := u.UnmarshalYAMLFromFileWithPositions[schema.AtmosSectionMapType](atmosConfig, stackManifestTemplatesProcessed, filePath)
 	if err != nil {
 		if atmosConfig.Logs.Level == u.LogLevelTrace || atmosConfig.Logs.Level == u.LogLevelDebug {
 			stackManifestTemplatesErrorMessage = fmt.Sprintf("\n\n%s", stackYamlConfig)
@@ -316,6 +371,12 @@ func ProcessYAMLConfigFileWithContext(
 			e := fmt.Errorf("%w: stack manifest '%s'\n%v%s", errUtils.ErrInvalidStackManifest, relativeFilePath, err, stackManifestTemplatesErrorMessage)
 			return nil, nil, nil, nil, nil, nil, nil, e
 		}
+	}
+
+	// Enable provenance tracking in merge context if tracking is enabled
+	if atmosConfig.TrackProvenance && mergeContext != nil && len(positions) > 0 {
+		mergeContext.EnableProvenance()
+		mergeContext.Positions = positions // Store positions for merge operations
 	}
 
 	// If the path to the Atmos manifest JSON Schema is provided, validate the stack manifest against it
@@ -423,6 +484,40 @@ func ProcessYAMLConfigFileWithContext(
 	importStructs, err := ProcessImportSection(stackConfigMap, relativeFilePath)
 	if err != nil {
 		return nil, nil, nil, nil, nil, nil, nil, err
+	}
+
+	// Record provenance for each import if provenance tracking is enabled.
+	// Use the import path as the key so we can look it up later when building the final array.
+	if atmosConfig.TrackProvenance && mergeContext != nil && mergeContext.IsProvenanceEnabled() && len(importStructs) > 0 {
+		for i, importStruct := range importStructs {
+			// Look up position for this import array element.
+			arrayPath := fmt.Sprintf("import[%d]", i)
+			if pos, exists := positions[arrayPath]; exists {
+				// Calculate depth from import chain.
+				depth := len(mergeContext.ImportChain) - 1
+				if depth < 0 {
+					depth = 0
+				}
+
+				entry := m.ProvenanceEntry{
+					File:   relativeFilePath,
+					Line:   pos.Line,
+					Column: pos.Column,
+					Type:   mergeContext.GetProvenanceType(),
+					Depth:  depth,
+				}
+
+				// Store provenance using a special key format that includes the import path.
+				// This allows us to look it up later when building the final flattened array.
+				// Format: "__import__:<import-path>" (e.g., "__import__:mixins/region/us-east-2")
+				importKey := fmt.Sprintf("__import__:%s", importStruct.Path)
+
+				// Only record if not already recorded (first occurrence wins).
+				if !mergeContext.HasProvenance(importKey) {
+					mergeContext.RecordProvenance(importKey, entry)
+				}
+			}
+		}
 	}
 
 	for _, importStruct := range importStructs {
@@ -578,6 +673,34 @@ func ProcessYAMLConfigFileWithContext(
 			}
 
 			importRelativePathWithoutExt := strings.TrimSuffix(importRelativePathWithExt, ext2)
+
+			// Record metadata for this import.
+			// We record every time we encounter an import to track all files that import it,
+			// but we use the path as a unique key so only the first entry is kept per import path.
+			if atmosConfig.TrackProvenance && mergeContext != nil && mergeContext.IsProvenanceEnabled() {
+				// Calculate depth from import chain.
+				depth := len(mergeContext.ImportChain) - 1
+				if depth < 0 {
+					depth = 0
+				}
+
+				// Store metadata using special key format: "__import_meta__:<import-path>".
+				// Note: We don't have line number info here since this is during recursive processing,
+				// not YAML parsing. We'll use line 1 as a placeholder.
+				metaKey := fmt.Sprintf("__import_meta__:%s", importRelativePathWithoutExt)
+
+				// Only record if not already recorded (first occurrence wins for the metadata)
+				if !mergeContext.HasProvenance(metaKey) {
+					mergeContext.RecordProvenance(metaKey, m.ProvenanceEntry{
+						File:   mergeContext.CurrentFile, // The file that's importing this file
+						Line:   1,                        // Placeholder - we don't have exact line info here
+						Column: 1,
+						Type:   mergeContext.GetProvenanceType(),
+						Depth:  depth,
+					})
+				}
+			}
+
 			importsConfig[importRelativePathWithoutExt] = yamlConfigRaw
 		}
 	}
@@ -638,6 +761,11 @@ func ProcessYAMLConfigFileWithContext(
 	if err != nil {
 		// The error already contains context information from MergeWithContext
 		return nil, nil, nil, nil, nil, nil, nil, err
+	}
+
+	// Store merge context if provenance tracking is enabled
+	if atmosConfig != nil && atmosConfig.TrackProvenance && mergeContext != nil && mergeContext.IsProvenanceEnabled() {
+		SetLastMergeContext(mergeContext)
 	}
 
 	return stackConfigsDeepMerged,

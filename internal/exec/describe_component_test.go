@@ -3,6 +3,7 @@ package exec
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	log "github.com/cloudposse/atmos/pkg/logger"
@@ -397,4 +398,243 @@ func TestDescribeComponent_Packer(t *testing.T) {
 	val, err = u.EvaluateYqExpression(&atmosConfig, res, ".vars.assume_role_arn")
 	assert.Nil(t, err)
 	assert.Equal(t, "arn:aws:iam::PROD_ACCOUNT_ID:role/ROLE_NAME", val)
+}
+
+func TestDescribeComponentWithProvenance(t *testing.T) {
+	err := os.Unsetenv("ATMOS_CLI_CONFIG_PATH")
+	if err != nil {
+		t.Fatalf("Failed to unset 'ATMOS_CLI_CONFIG_PATH': %v", err)
+	}
+
+	err = os.Unsetenv("ATMOS_BASE_PATH")
+	if err != nil {
+		t.Fatalf("Failed to unset 'ATMOS_BASE_PATH': %v", err)
+	}
+
+	log.SetLevel(log.InfoLevel)
+	log.SetOutput(os.Stdout)
+
+	// Capture the starting working directory
+	startingDir, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Failed to get the current working directory: %v", err)
+	}
+
+	defer func() {
+		// Change back to the original working directory after the test
+		if err = os.Chdir(startingDir); err != nil {
+			t.Fatalf("Failed to change back to the starting directory: %v", err)
+		}
+	}()
+
+	// Define the working directory - using quick-start-advanced as it has a good mix of configs
+	workDir := "../../examples/quick-start-advanced"
+	if err := os.Chdir(workDir); err != nil {
+		t.Fatalf("Failed to change directory to %q: %v", workDir, err)
+	}
+
+	component := "vpc-flow-logs-bucket"
+	stack := "plat-ue2-dev"
+
+	// Execute describe component WITHOUT provenance first to get a baseline
+	componentSection, err := ExecuteDescribeComponent(
+		component,
+		stack,
+		true, // processTemplates
+		true, // processYamlFunctions
+		nil,  // skip
+	)
+	assert.NoError(t, err)
+	assert.NotNil(t, componentSection)
+
+	// Now execute with provenance by passing nil atmosConfig
+	// This will initialize it properly, but we need to set provenance tracking
+	// We'll use the DescribeComponentExec with the Provenance flag set
+	exec := NewDescribeComponentExec()
+
+	// Execute with provenance enabled
+	err = exec.ExecuteDescribeComponentCmd(DescribeComponentParams{
+		Component:            component,
+		Stack:                stack,
+		ProcessTemplates:     true,
+		ProcessYamlFunctions: true,
+		Provenance:           true,
+	})
+	assert.NoError(t, err)
+
+	// Get the last merge context that was stored
+	mergeContext := GetLastMergeContext()
+	assert.NotNil(t, mergeContext, "MergeContext should not be nil when provenance is enabled")
+	assert.True(t, mergeContext.IsProvenanceEnabled(), "MergeContext should have provenance enabled")
+
+	// Use the baseline component section for further checks
+	result := &DescribeComponentResult{
+		ComponentSection: componentSection,
+		MergeContext:     mergeContext,
+	}
+	assert.NotNil(t, result)
+
+	// Verify component section is populated
+	assert.NotNil(t, result.ComponentSection)
+	assert.NotEmpty(t, result.ComponentSection)
+
+	// Verify MergeContext is populated
+	assert.NotNil(t, result.MergeContext, "MergeContext should not be nil when provenance is enabled")
+	assert.True(t, result.MergeContext.IsProvenanceEnabled(), "MergeContext should have provenance enabled")
+
+	// Verify provenance data exists
+	provenancePaths := result.MergeContext.GetProvenancePaths()
+	assert.NotEmpty(t, provenancePaths, "Provenance paths should not be empty")
+
+	// Verify we have provenance entries for some expected paths
+	foundVarsEnabled := false
+	foundVarsName := false
+	for _, path := range provenancePaths {
+		entries := result.MergeContext.GetProvenance(path)
+		if len(entries) > 0 {
+			// Check for vars.enabled
+			if path == "vars.enabled" || path == "components.terraform.vpc-flow-logs-bucket.vars.enabled" {
+				foundVarsEnabled = true
+				// Verify the entry has file and line information
+				assert.NotEmpty(t, entries[0].File, "Provenance entry should have a file")
+				assert.Greater(t, entries[0].Line, 0, "Provenance entry should have a line number")
+			}
+			// Check for vars.name
+			if path == "vars.name" || path == "components.terraform.vpc-flow-logs-bucket.vars.name" {
+				foundVarsName = true
+				assert.NotEmpty(t, entries[0].File, "Provenance entry should have a file")
+				assert.Greater(t, entries[0].Line, 0, "Provenance entry should have a line number")
+			}
+		}
+	}
+
+	// At least one of these should be found
+	assert.True(t, foundVarsEnabled || foundVarsName, "Should find provenance for at least one vars field")
+
+	// Filter computed fields
+	filtered := FilterComputedFields(result.ComponentSection)
+
+	// Verify filtered section only has stack-defined fields
+	allowedFields := []string{"vars", "settings", "env", "backend", "metadata", "overrides", "providers"}
+	for k := range filtered {
+		assert.Contains(t, allowedFields, k, "Filtered component section should only contain stack-defined fields")
+	}
+
+	// Verify computed fields are removed
+	computedFields := []string{"atmos_component", "atmos_stack", "component_info", "cli_args", "sources", "deps", "workspace"}
+	for _, field := range computedFields {
+		assert.NotContains(t, filtered, field, "Filtered component section should not contain computed field: %s", field)
+	}
+
+	// Verify expected fields exist
+	assert.Contains(t, filtered, "vars", "Should contain vars")
+	assert.Contains(t, filtered, "settings", "Should contain settings")
+
+	// Verify vars content
+	vars, ok := filtered["vars"].(map[string]any)
+	assert.True(t, ok, "vars should be a map")
+	assert.NotEmpty(t, vars, "vars should not be empty")
+	assert.Contains(t, vars, "enabled", "vars should contain 'enabled'")
+	assert.Contains(t, vars, "name", "vars should contain 'name'")
+
+	// Verify we can convert to YAML without errors
+	yamlBytes, err := u.ConvertToYAML(filtered)
+	assert.NoError(t, err)
+	assert.NotEmpty(t, yamlBytes)
+
+	// Verify YAML contains expected content
+	yamlStr := string(yamlBytes)
+	assert.Contains(t, yamlStr, "vars:", "YAML should contain vars")
+	assert.Contains(t, yamlStr, "enabled:", "YAML should contain enabled")
+
+	// Verify YAML structure doesn't have unwanted top-level keys
+	// (We already verified this in the filtered map checks above, but double-check in YAML)
+	lines := strings.Split(yamlStr, "\n")
+	topLevelKeys := make(map[string]bool)
+	for _, line := range lines {
+		// Check for non-indented lines (top-level keys)
+		if len(line) > 0 && !strings.HasPrefix(line, " ") && strings.Contains(line, ":") {
+			key := strings.Split(line, ":")[0]
+			topLevelKeys[key] = true
+		}
+	}
+
+	// Verify computed fields are not top-level keys
+	assert.False(t, topLevelKeys["component_info"], "component_info should not be a top-level key")
+	assert.False(t, topLevelKeys["atmos_cli_config"], "atmos_cli_config should not be a top-level key")
+	assert.False(t, topLevelKeys["sources"], "sources should not be a top-level key")
+	assert.False(t, topLevelKeys["deps"], "deps should not be a top-level key")
+	assert.False(t, topLevelKeys["workspace"], "workspace should not be a top-level key")
+
+	t.Logf("Successfully tested provenance tracking with %d provenance paths", len(provenancePaths))
+}
+
+func TestFilterComputedFields(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    map[string]any
+		expected map[string]any
+	}{
+		{
+			name: "Filters out all computed fields",
+			input: map[string]any{
+				"vars":             map[string]any{"key": "value"},
+				"settings":         map[string]any{"setting": "value"},
+				"atmos_component":  "test-component",
+				"atmos_stack":      "test-stack",
+				"component_info":   map[string]any{"path": "/some/path"},
+				"cli_args":         []string{"arg1"},
+				"sources":          []string{"file1.yaml"},
+				"deps":             []string{"dep1"},
+				"workspace":        "default",
+				"atmos_cli_config": map[string]any{"base_path": "."},
+				"spacelift_stack":  "stack-name",
+				"atlantis_project": "project-name",
+				"atmos_stack_file": "stack.yaml",
+				"atmos_manifest":   "manifest.yaml",
+			},
+			expected: map[string]any{
+				"vars":     map[string]any{"key": "value"},
+				"settings": map[string]any{"setting": "value"},
+			},
+		},
+		{
+			name: "Keeps only allowed fields",
+			input: map[string]any{
+				"vars":      map[string]any{"enabled": true},
+				"env":       map[string]any{"VAR": "value"},
+				"backend":   map[string]any{"type": "s3"},
+				"metadata":  map[string]any{"type": "real"},
+				"overrides": map[string]any{"key": "val"},
+				"providers": map[string]any{"aws": "config"},
+				"settings":  map[string]any{"key": "val"},
+			},
+			expected: map[string]any{
+				"vars":      map[string]any{"enabled": true},
+				"env":       map[string]any{"VAR": "value"},
+				"backend":   map[string]any{"type": "s3"},
+				"metadata":  map[string]any{"type": "real"},
+				"overrides": map[string]any{"key": "val"},
+				"providers": map[string]any{"aws": "config"},
+				"settings":  map[string]any{"key": "val"},
+			},
+		},
+		{
+			name:     "Handles empty input",
+			input:    map[string]any{},
+			expected: map[string]any{},
+		},
+		{
+			name:     "Handles nil input",
+			input:    nil,
+			expected: map[string]any{},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := FilterComputedFields(tt.input)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
 }

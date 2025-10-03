@@ -177,7 +177,20 @@ func MergeWithOptionsAndContext(
 	// Remove verbose merge operation logging - it creates too much noise
 	// Users can use ATMOS_LOGS_LEVEL=Trace if they need detailed merge debugging
 
-	result, err := MergeWithOptions(atmosConfig, inputs, appendSlice, sliceDeepCopy)
+	var result map[string]any
+	var err error
+
+	// Use MergeWithProvenance when provenance tracking is enabled and positions are available
+	if atmosConfig != nil && atmosConfig.TrackProvenance &&
+		context != nil && context.IsProvenanceEnabled() &&
+		context.Positions != nil && len(context.Positions) > 0 {
+		// Perform provenance-aware merge
+		result, err = MergeWithProvenance(atmosConfig, inputs, context, context.Positions)
+	} else {
+		// Standard merge without provenance
+		result, err = MergeWithOptions(atmosConfig, inputs, appendSlice, sliceDeepCopy)
+	}
+
 	if err != nil {
 		// Remove verbose merge failure logging
 		// The error context will be shown in the formatted error message
