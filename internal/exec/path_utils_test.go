@@ -9,6 +9,105 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
+func TestConstructTerraformComponentPlanfileName(t *testing.T) {
+	tests := []struct {
+		name string
+		info schema.ConfigAndStacksInfo
+		want string
+	}{
+		{
+			name: "without folder prefix",
+			info: schema.ConfigAndStacksInfo{
+				ContextPrefix: "ue2-dev",
+				Component:     "vpc",
+			},
+			want: "ue2-dev-vpc.planfile",
+		},
+		{
+			name: "with folder prefix",
+			info: schema.ConfigAndStacksInfo{
+				ContextPrefix:                 "ue2-dev",
+				Component:                     "vpc",
+				ComponentFolderPrefixReplaced: "infra",
+			},
+			want: "ue2-dev-infra-vpc.planfile",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := constructTerraformComponentPlanfileName(&tt.info)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func TestConstructTerraformComponentVarfileName(t *testing.T) {
+	tests := []struct {
+		name string
+		info schema.ConfigAndStacksInfo
+		want string
+	}{
+		{
+			name: "without folder prefix",
+			info: schema.ConfigAndStacksInfo{
+				ContextPrefix: "ue2-dev",
+				Component:     "vpc",
+			},
+			want: "ue2-dev-vpc.terraform.tfvars.json",
+		},
+		{
+			name: "with folder prefix",
+			info: schema.ConfigAndStacksInfo{
+				ContextPrefix:                 "ue2-dev",
+				Component:                     "vpc",
+				ComponentFolderPrefixReplaced: "infra",
+			},
+			want: "ue2-dev-infra-vpc.terraform.tfvars.json",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := constructTerraformComponentVarfileName(&tt.info)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func TestConstructHelmfileComponentVarfileName(t *testing.T) {
+	tests := []struct {
+		name string
+		info schema.ConfigAndStacksInfo
+		want string
+	}{
+		{
+			name: "without folder prefix",
+			info: schema.ConfigAndStacksInfo{
+				ContextPrefix: "ue2-dev",
+				Component:     "nginx",
+			},
+			want: "ue2-dev-nginx.helmfile.vars.yaml",
+		},
+		{
+			name: "with folder prefix",
+			info: schema.ConfigAndStacksInfo{
+				ContextPrefix:                 "ue2-dev",
+				Component:                     "nginx",
+				ComponentFolderPrefixReplaced: "apps",
+			},
+			want: "ue2-dev-apps-nginx.helmfile.vars.yaml",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := constructHelmfileComponentVarfileName(&tt.info)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
 func TestConstructPackerComponentVarfileName(t *testing.T) {
 	tests := []struct {
 		name string
