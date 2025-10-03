@@ -162,7 +162,6 @@ func (v *validator) ValidateChains(identities map[string]*schema.Identity, provi
 	return nil
 }
 
-
 // hasCycle performs DFS to detect cycles in the dependency graph.
 func (v *validator) hasCycle(node string, graph map[string][]string, visited, recStack map[string]bool) bool {
 	visited[node] = true
