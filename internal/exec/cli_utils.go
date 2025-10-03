@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/cloudposse/atmos/pkg/perf"
+
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
@@ -67,6 +69,8 @@ func ProcessCommandLineArgs(
 	args []string,
 	additionalArgsAndFlags []string,
 ) (schema.ConfigAndStacksInfo, error) {
+	defer perf.Track(nil, "exec.ProcessCommandLineArgs")()
+
 	var configAndStacksInfo schema.ConfigAndStacksInfo
 
 	cmd.DisableFlagParsing = false

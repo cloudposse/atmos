@@ -8,7 +8,7 @@ import (
 	"strings"
 
 	log "github.com/cloudposse/atmos/pkg/logger"
-
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -106,6 +106,8 @@ func handleUNCPath(cleanedPath, volume string) string {
 // This only removes duplications when a significant path segment is duplicated,
 // not just when a single directory name appears multiple times.
 func cleanDuplicatedPath(path string) string {
+	defer perf.Track(nil, "utils.cleanDuplicatedPath")()
+
 	if path == "" {
 		return ""
 	}
@@ -144,6 +146,8 @@ func cleanDuplicatedPath(path string) string {
 
 // buildComponentPath builds the component path handling absolute vs relative cases.
 func buildComponentPath(basePath, componentFolderPrefix, component string) string {
+	defer perf.Track(nil, "utils.buildComponentPath")()
+
 	// Check if the component itself is an absolute path
 	if component != "" && filepath.IsAbs(component) {
 		// If component is absolute, use it as the base and only append folder prefix if needed
@@ -166,6 +170,8 @@ func buildComponentPath(basePath, componentFolderPrefix, component string) strin
 
 // getBasePathForComponentType returns the base path for a specific component type.
 func getBasePathForComponentType(atmosConfig *schema.AtmosConfiguration, componentType string) (string, string, error) {
+	defer perf.Track(atmosConfig, "utils.getBasePathForComponentType")()
+
 	var basePath string
 	var envVarName string
 	var resolvedPath string
@@ -219,6 +225,8 @@ func getBasePathForComponentType(atmosConfig *schema.AtmosConfiguration, compone
 //
 // This function makes NO assumptions about directory names - it only uses what's configured.
 func GetComponentPath(atmosConfig *schema.AtmosConfiguration, componentType string, componentFolderPrefix string, component string) (string, error) {
+	defer perf.Track(atmosConfig, "utils.GetComponentPath")()
+
 	basePath, envVarName, err := getBasePathForComponentType(atmosConfig, componentType)
 	if err != nil {
 		return "", err
@@ -257,5 +265,7 @@ func GetComponentPath(atmosConfig *schema.AtmosConfiguration, componentType stri
 // GetComponentBasePath returns just the base path for a component type.
 // Useful when you need the base directory without a specific component.
 func GetComponentBasePath(atmosConfig *schema.AtmosConfiguration, componentType string) (string, error) {
+	defer perf.Track(atmosConfig, "utils.GetComponentBasePath")()
+
 	return GetComponentPath(atmosConfig, componentType, "", "")
 }

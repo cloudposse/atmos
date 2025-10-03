@@ -46,7 +46,7 @@ These flags are available for every Atmos command:
     <dd>
         Set the logging level for Atmos operations.
         - Options: `Trace`, `Debug`, `Info`, `Warning`, `Off`
-        - Default: `Info`
+        - Default: `Warning`
         - Can also use `ATMOS_LOGS_LEVEL` environment variable
     </dd>
 
@@ -199,11 +199,37 @@ These flags are available across multiple commands but not universally:
 </dl>
 
 
+### Performance Heatmap Flags
+
+<dl>
+    <dt>`--heatmap`</dt>
+    <dd>
+        Display performance heatmap visualization after command execution.
+        - Default: `false`
+        - Shows function call counts, execution times, and performance metrics
+        - Automatically tracks function execution with microsecond precision
+        - Includes P95 latency calculations using High Dynamic Range histograms
+        - Displays interactive TUI if terminal is available, otherwise static output
+    </dd>
+
+    <dt>`--heatmap-mode`</dt>
+    <dd>
+        Visualization mode for the performance heatmap.
+        - Options: `bar`, `ascii`, `sparkline`, `table`
+        - Default: `bar`
+        - `bar`: Colored horizontal bar chart with function names and durations
+        - `ascii`: Color-coded ASCII bars (Red &gt;1ms, Orange &gt;500µs, Yellow &gt;100µs, Green &lt;100µs)
+        - `sparkline`: Compact sparklines showing relative performance
+        - `table`: Interactive table with sortable columns
+        - Only used with `--heatmap` flag
+    </dd>
+</dl>
+
 ## Environment Variables
 
 All global flags can be set using environment variables. The precedence order is:
 
-1. Command-line flags (highest priority)
+1. Command-line flags (the highest priority)
 2. Environment variables
 3. Configuration file (`atmos.yaml`)
 4. Default values (lowest priority)

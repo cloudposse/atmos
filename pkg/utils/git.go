@@ -6,13 +6,16 @@ import (
 	"path/filepath"
 	"strings"
 
-	log "github.com/cloudposse/atmos/pkg/logger"
-
 	git "github.com/go-git/go-git/v5"
+
+	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/perf"
 )
 
-// GetGitRoot returns the root directory of the Git repository using go-git.
+// ProcessTagGitRoot returns the root directory of the Git repository using go-git.
 func ProcessTagGitRoot(input string) (string, error) {
+	defer perf.Track(nil, "utils.ProcessTagGitRoot")()
+
 	str := strings.TrimPrefix(input, AtmosYamlFuncGitRoot)
 	defaultValue := strings.TrimSpace(str)
 

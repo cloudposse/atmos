@@ -19,15 +19,15 @@ Atmos is a sophisticated Go CLI tool for managing complex cloud infrastructure u
 ### Development Workflow
 ```bash
 # Build the project
-make build                    # Build default binary to ./build/atmos
+make build                   # Build default binary to ./build/atmos
 make build-linux             # Build for Linux
 make build-windows           # Build for Windows
 make build-macos             # Build for macOS
 
 # Testing
 make testacc                 # Run acceptance tests
-make testacc-cover          # Run tests with coverage
-make testacc-coverage       # Generate coverage HTML report
+make testacc-cover           # Run tests with coverage
+make testacc-coverage        # Generate coverage HTML report
 
 # Code Quality
 make lint                    # Run golangci-lint (only files changed from origin/main)
@@ -105,6 +105,91 @@ atmos vendor pull
   ```go
   // CORRECT: This function processes the input data.
   // WRONG: This function processes the input data
+  ```
+
+### Import Organization (MANDATORY)
+- **Group imports into three sections** separated by blank lines:
+  1. **Go native imports** - Standard library packages (fmt, os, strings, etc.)
+  2. **3rd-party imports** - External packages from github.com, gopkg.in, etc. (NOT github.com/cloudposse/atmos)
+  3. **Atmos imports** - Packages from github.com/cloudposse/atmos
+- **Sort alphabetically within each group** - Ignore alias prefixes when sorting
+- **Maintain import aliases** - Keep existing aliases like `cfg`, `log`, `u`, `errUtils`, etc.
+- Examples:
+  ```go
+  // CORRECT: Three groups, sorted alphabetically
+  import (
+      "errors"
+      "fmt"
+      "strings"
+
+      "github.com/go-git/go-git/v5/plumbing"
+      giturl "github.com/kubescape/go-git-url"
+      "github.com/spf13/cobra"
+      "github.com/spf13/pflag"
+
+      errUtils "github.com/cloudposse/atmos/errors"
+      "github.com/cloudposse/atmos/internal/tui/templates/term"
+      cfg "github.com/cloudposse/atmos/pkg/config"
+      log "github.com/cloudposse/atmos/pkg/logger"
+      "github.com/cloudposse/atmos/pkg/perf"
+      "github.com/cloudposse/atmos/pkg/schema"
+      u "github.com/cloudposse/atmos/pkg/utils"
+  )
+
+  // WRONG: Mixed groups, not sorted
+  import (
+      "errors"
+      "fmt"
+
+      "github.com/cloudposse/atmos/pkg/perf"
+
+      log "github.com/cloudposse/atmos/pkg/logger"
+      "github.com/go-git/go-git/v5/plumbing"
+      "github.com/spf13/cobra"
+
+      errUtils "github.com/cloudposse/atmos/errors"
+      cfg "github.com/cloudposse/atmos/pkg/config"
+  )
+  ```
+
+### Performance Tracking (MANDATORY)
+- **Add `defer perf.Track()` to all public functions** and critical private functions
+- **Always include a blank line after the perf.Track call** to separate instrumentation from logic
+- **Package prefix naming:** Use `"packagename.FunctionName"` format
+- **Parameter usage:**
+  - Use `atmosConfig` parameter if the function has it
+  - Use `nil` if the function doesn't have `atmosConfig` parameter
+- Examples:
+  ```go
+  // CORRECT: With atmosConfig parameter and blank line
+  func ProcessComponent(atmosConfig *schema.AtmosConfiguration, component string) error {
+      defer perf.Track(atmosConfig, "exec.ProcessComponent")()
+
+      // Function logic starts here
+      return nil
+  }
+
+  // CORRECT: Without atmosConfig parameter and blank line
+  func ValidateInput(input string) error {
+      defer perf.Track(nil, "utils.ValidateInput")()
+
+      // Function logic starts here
+      return nil
+  }
+
+  // WRONG: Missing blank line after perf.Track
+  func ProcessComponent(atmosConfig *schema.AtmosConfiguration, component string) error {
+      defer perf.Track(atmosConfig, "exec.ProcessComponent")()
+      // Function logic starts here (no blank line)
+      return nil
+  }
+
+  // WRONG: Incorrect package prefix
+  func ProcessComponent(atmosConfig *schema.AtmosConfiguration, component string) error {
+      defer perf.Track(atmosConfig, "ProcessComponent")() // Missing package prefix
+
+      return nil
+  }
   ```
 
 ### Configuration Loading
@@ -413,6 +498,36 @@ Use fixtures in `tests/test-cases/` for integration tests. Each test case should
 - **Include purpose note** and help screengrab
 - **Use consistent section ordering**: Usage → Examples → Arguments → Flags
 
+### Website Documentation Build (MANDATORY)
+- **ALWAYS build the website after any documentation changes** to verify there are no broken links or formatting issues
+- **Build command**: Run from the `website/` directory:
+  ```bash
+  cd website
+  npm run build
+  ```
+- **When to build**:
+  - After adding/modifying any `.mdx` or `.md` files in `website/docs/`
+  - After adding images to `website/static/img/`
+  - After changing navigation in `website/sidebars.js`
+  - After modifying any component in `website/src/`
+- **What to check**:
+  - Build completes without errors
+  - No broken links reported
+  - No missing images
+  - Proper rendering of MDX components
+- **Example workflow**:
+  ```bash
+  # 1. Make documentation changes
+  vim website/docs/cli/commands/describe/stacks.mdx
+
+  # 2. Build to verify
+  cd website
+  npm run build
+
+  # 3. If errors, fix and rebuild
+  # 4. Commit changes only after successful build
+  ```
+
 ### Pull Request Requirements (MANDATORY)
 - **Follow the pull request template** in `.github/PULL_REQUEST_TEMPLATE.md`:
   ```markdown
@@ -449,6 +564,42 @@ gh api repos/{owner/repo}/code-scanning/alerts
 gh pr checks 1450 --repo cloudposse/atmos
 gh api repos/cloudposse/atmos/check-runs/49737026433/annotations
 ```
+
+### Responding to PR Review Threads (MANDATORY)
+- **ALWAYS reply to specific review threads** - Do not create new PR comments
+- **Use GraphQL API to reply to threads**:
+  ```bash
+  gh api graphql -f query='
+  mutation {
+    addPullRequestReviewThreadReply(input: {
+      pullRequestReviewThreadId: "PRRT_kwDOEW4XoM5..."
+      body: "Your response here"
+    }) {
+      comment { id }
+    }
+  }'
+  ```
+- Get unresolved threads:
+  ```bash
+  gh api graphql -f query='
+  query {
+    repository(owner: "cloudposse", name: "atmos") {
+      pullRequest(number: 1504) {
+        reviewThreads(first: 50) {
+          nodes {
+            id
+            isResolved
+            path
+            line
+            comments(first: 1) {
+              nodes { body }
+            }
+          }
+        }
+      }
+    }
+  }' | jq -r '.data.repository.pullRequest.reviewThreads.nodes[] | select(.isResolved == false)'
+  ```
 
 ### Adding Template Function
 1. Implement in `internal/exec/template_funcs.go`

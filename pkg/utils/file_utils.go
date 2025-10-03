@@ -11,12 +11,15 @@ import (
 	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/perf"
 )
 
 var ErrFailedToProcessHclFile = errors.New("failed to process HCL file")
 
 // IsDirectory checks if the path is a directory.
 func IsDirectory(path string) (bool, error) {
+	defer perf.Track(nil, "utils.IsDirectory")()
+
 	fileInfo, err := os.Stat(path)
 	if err != nil {
 		return false, err
@@ -26,6 +29,8 @@ func IsDirectory(path string) (bool, error) {
 
 // FileExists checks if the file exists and is not a directory.
 func FileExists(filename string) bool {
+	defer perf.Track(nil, "utils.FileExists")()
+
 	fileInfo, err := os.Stat(filename)
 	if os.IsNotExist(err) || err != nil {
 		return false
@@ -41,6 +46,8 @@ func FileOrDirExists(filename string) bool {
 
 // IsYaml checks if the file has YAML extension (does not check file schema, nor validates the file).
 func IsYaml(file string) bool {
+	defer perf.Track(nil, "utils.IsYaml")()
+
 	yamlExtensions := []string{YamlFileExtension, YmlFileExtension, YamlTemplateExtension, YmlTemplateExtension}
 	ext := filepath.Ext(file)
 	if ext == ".tmpl" {
@@ -53,6 +60,8 @@ func IsYaml(file string) bool {
 
 // ConvertPathsToAbsolutePaths converts a slice of paths to a slice of absolute paths.
 func ConvertPathsToAbsolutePaths(paths []string) ([]string, error) {
+	defer perf.Track(nil, "utils.ConvertPathsToAbsolutePaths")()
+
 	res := []string{}
 
 	for _, dir := range paths {
@@ -69,6 +78,8 @@ func ConvertPathsToAbsolutePaths(paths []string) ([]string, error) {
 // JoinPaths joins a base path with each item in the path slice and returns a slice of joined paths.
 // This is a pure path construction function without filesystem validation.
 func JoinPaths(basePath string, paths []string) ([]string, error) {
+	defer perf.Track(nil, "utils.JoinPaths")()
+
 	res := []string{}
 
 	for _, p := range paths {
@@ -134,6 +145,8 @@ func isWindowsAbsolutePath(path string) bool {
 // This function follows standard Go path behavior and does NOT check
 // if the path exists on the filesystem.
 func JoinPath(basePath string, providedPath string) string {
+	defer perf.Track(nil, "utils.JoinPath")()
+
 	// Handle empty paths
 	if result, handled := handleEmptyPaths(basePath, providedPath); handled {
 		return result
@@ -160,6 +173,8 @@ func JoinPath(basePath string, providedPath string) string {
 // JoinPathAndValidate joins paths and validates the result exists in filesystem.
 // It builds on JoinPath for path construction and adds filesystem validation.
 func JoinPathAndValidate(basePath string, providedPath string) (string, error) {
+	defer perf.Track(nil, "utils.JoinPathAndValidate")()
+
 	// Step 1: Use pure path construction
 	constructedPath := JoinPath(basePath, providedPath)
 
@@ -182,6 +197,8 @@ func JoinPathAndValidate(basePath string, providedPath string) (string, error) {
 
 // EnsureDir accepts a file path and creates all the intermediate subdirectories
 func EnsureDir(fileName string) error {
+	defer perf.Track(nil, "utils.EnsureDir")()
+
 	dirName := filepath.Dir(fileName)
 	if _, err := os.Stat(dirName); err != nil {
 		err := os.MkdirAll(dirName, os.ModePerm)
@@ -205,6 +222,8 @@ func SliceOfPathsContainsPath(paths []string, checkPath string) bool {
 
 // GetAllFilesInDir returns all files in the provided directory and all subdirectories.
 func GetAllFilesInDir(dir string) ([]string, error) {
+	defer perf.Track(nil, "utils.GetAllFilesInDir")()
+
 	var files []string
 	err := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
 		if !info.IsDir() {
@@ -217,6 +236,8 @@ func GetAllFilesInDir(dir string) ([]string, error) {
 
 // GetAllYamlFilesInDir returns all YAML files in the provided directory and all subdirectories.
 func GetAllYamlFilesInDir(dir string) ([]string, error) {
+	defer perf.Track(nil, "utils.GetAllYamlFilesInDir")()
+
 	var res []string
 
 	allFiles, err := GetAllFilesInDir(dir)
@@ -247,6 +268,8 @@ func IsSocket(path string) (bool, error) {
 // If the path has a file extension, it checks if the file exists.
 // If the path does not have a file extension, it checks for the existence of the file with the provided path and the possible config file extensions.
 func SearchConfigFile(path string) (string, bool) {
+	defer perf.Track(nil, "utils.SearchConfigFile")()
+
 	// Check if the provided path has a file extension and the file exists
 	if filepath.Ext(path) != "" {
 		return path, FileExists(path)
@@ -266,6 +289,8 @@ func SearchConfigFile(path string) (string, bool) {
 
 // IsURL checks if a string is a URL.
 func IsURL(s string) bool {
+	defer perf.Track(nil, "utils.IsURL")()
+
 	u, err := url.Parse(s)
 	if err != nil {
 		return false
@@ -285,6 +310,8 @@ func IsURL(s string) bool {
 
 // GetFileNameFromURL extracts the file name from a URL.
 func GetFileNameFromURL(rawURL string) (string, error) {
+	defer perf.Track(nil, "utils.GetFileNameFromURL")()
+
 	if rawURL == "" {
 		return "", errUtils.ErrEmptyURL
 	}
@@ -309,6 +336,8 @@ func GetFileNameFromURL(rawURL string) (string, error) {
 // resolves it relative to the current file's directory. It ensures the resolved path
 // exists within the base path.
 func ResolveRelativePath(path string, basePath string) string {
+	defer perf.Track(nil, "utils.ResolveRelativePath")()
+
 	if path == "" {
 		return path
 	}

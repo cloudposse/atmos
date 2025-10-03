@@ -11,12 +11,15 @@ import (
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 // ExecuteValidateComponentCmd executes `validate component` command.
 func ExecuteValidateComponentCmd(cmd *cobra.Command, args []string) (string, string, error) {
+	defer perf.Track(nil, "exec.ExecuteValidateComponentCmd")()
+
 	info, err := ProcessCommandLineArgs("", cmd, args, nil)
 	if err != nil {
 		return "", "", err
@@ -88,6 +91,8 @@ func ExecuteValidateComponent(
 	modulePaths []string,
 	timeoutSeconds int,
 ) (bool, error) {
+	defer perf.Track(atmosConfig, "exec.ExecuteValidateComponent")()
+
 	configAndStacksInfo.ComponentFromArg = componentName
 	configAndStacksInfo.Stack = stack
 
@@ -120,6 +125,8 @@ func ValidateComponent(
 	modulePaths []string,
 	timeoutSeconds int,
 ) (bool, error) {
+	defer perf.Track(atmosConfig, "exec.ValidateComponent")()
+
 	ok := true
 	var err error
 
@@ -269,6 +276,8 @@ func validateComponentInternal(
 
 // FindValidationSection finds the 'validation' section in the component config.
 func FindValidationSection(componentSection map[string]any) (schema.Validation, error) {
+	defer perf.Track(nil, "exec.FindValidationSection")()
+
 	validationSection := map[string]any{}
 
 	if i, ok := componentSection["settings"].(map[string]any); ok {
