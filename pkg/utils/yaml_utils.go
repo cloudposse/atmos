@@ -6,9 +6,10 @@ import (
 	"os"
 	"strings"
 
-	log "github.com/charmbracelet/log"
 	"gopkg.in/yaml.v3"
 
+	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -48,6 +49,8 @@ var (
 
 // PrintAsYAML prints the provided value as YAML document to the console
 func PrintAsYAML(atmosConfig *schema.AtmosConfiguration, data any) error {
+	defer perf.Track(atmosConfig, "utils.PrintAsYAML")()
+
 	y, err := GetHighlightedYAML(atmosConfig, data)
 	if err != nil {
 		return err
@@ -64,6 +67,8 @@ func getIndentFromConfig(atmosConfig *schema.AtmosConfiguration) int {
 }
 
 func PrintAsYAMLWithConfig(atmosConfig *schema.AtmosConfiguration, data any) error {
+	defer perf.Track(atmosConfig, "utils.PrintAsYAMLWithConfig")()
+
 	if atmosConfig == nil {
 		return ErrNilAtmosConfig
 	}
@@ -84,6 +89,8 @@ func PrintAsYAMLWithConfig(atmosConfig *schema.AtmosConfiguration, data any) err
 }
 
 func GetHighlightedYAML(atmosConfig *schema.AtmosConfiguration, data any) (string, error) {
+	defer perf.Track(atmosConfig, "utils.GetHighlightedYAML")()
+
 	y, err := ConvertToYAML(data)
 	if err != nil {
 		return "", err
@@ -97,6 +104,8 @@ func GetHighlightedYAML(atmosConfig *schema.AtmosConfiguration, data any) (strin
 
 // PrintAsYAMLToFileDescriptor prints the provided value as YAML document to a file descriptor
 func PrintAsYAMLToFileDescriptor(atmosConfig *schema.AtmosConfiguration, data any) error {
+	defer perf.Track(atmosConfig, "utils.PrintAsYAMLToFileDescriptor")()
+
 	if atmosConfig == nil {
 		return ErrNilAtmosConfig
 	}
@@ -113,6 +122,8 @@ func PrintAsYAMLToFileDescriptor(atmosConfig *schema.AtmosConfiguration, data an
 
 // WriteToFileAsYAML converts the provided value to YAML and writes it to the specified file
 func WriteToFileAsYAML(filePath string, data any, fileMode os.FileMode) error {
+	defer perf.Track(nil, "utils.WriteToFileAsYAML")()
+
 	y, err := ConvertToYAML(data, YAMLOptions{Indent: DefaultYAMLIndent})
 	if err != nil {
 		return err
@@ -126,6 +137,8 @@ func WriteToFileAsYAML(filePath string, data any, fileMode os.FileMode) error {
 }
 
 func WriteToFileAsYAMLWithConfig(atmosConfig *schema.AtmosConfiguration, filePath string, data any, fileMode os.FileMode) error {
+	defer perf.Track(atmosConfig, "utils.WriteToFileAsYAMLWithConfig")()
+
 	if atmosConfig == nil {
 		return ErrNilAtmosConfig
 	}
@@ -150,6 +163,8 @@ type YAMLOptions struct {
 }
 
 func ConvertToYAML(data any, opts ...YAMLOptions) (string, error) {
+	defer perf.Track(nil, "utils.ConvertToYAML")()
+
 	var buf bytes.Buffer
 	encoder := yaml.NewEncoder(&buf)
 
@@ -166,6 +181,8 @@ func ConvertToYAML(data any, opts ...YAMLOptions) (string, error) {
 }
 
 func processCustomTags(atmosConfig *schema.AtmosConfiguration, node *yaml.Node, file string) error {
+	defer perf.Track(atmosConfig, "utils.processCustomTags")()
+
 	if node.Kind == yaml.DocumentNode && len(node.Content) > 0 {
 		return processCustomTags(atmosConfig, node.Content[0], file)
 	}

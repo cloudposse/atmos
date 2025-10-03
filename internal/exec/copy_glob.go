@@ -7,7 +7,9 @@ import (
 	"path/filepath"
 	"strings"
 
-	log "github.com/charmbracelet/log"
+	"github.com/cloudposse/atmos/pkg/perf"
+
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 	cp "github.com/otiai10/copy" // Using the optimized copy library when no filtering is required.
@@ -448,6 +450,8 @@ func copyToTargetWithPatterns(
 
 // ComponentOrMixinsCopy covers 2 cases: file-to-folder and file-to-file copy.
 func ComponentOrMixinsCopy(sourceFile, finalTarget string) error {
+	defer perf.Track(nil, "exec.ComponentOrMixinsCopy")()
+
 	var dest string
 	if filepath.Ext(finalTarget) == "" {
 		// File-to-folder copy: append the source file's base name to the directory.

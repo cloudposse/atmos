@@ -12,37 +12,45 @@ import (
 	"time"
 
 	"github.com/Masterminds/sprig/v3"
-	log "github.com/charmbracelet/log"
 	"github.com/hairyhenderson/gomplate/v3"
 	"github.com/hairyhenderson/gomplate/v3/data"
 	_ "github.com/hairyhenderson/gomplate/v4"
 	"github.com/mitchellh/mapstructure"
 	"github.com/samber/lo"
 
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/merge"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
-// ProcessTmpl parses and executes Go templates
+// ProcessTmpl parses and executes Go templates.
 func ProcessTmpl(
+	atmosConfig *schema.AtmosConfiguration,
 	tmplName string,
 	tmplValue string,
 	tmplData any,
 	ignoreMissingTemplateValues bool,
 ) (string, error) {
+	defer perf.Track(atmosConfig, "exec.ProcessTmpl")()
+
 	d := data.Data{}
 	ctx := context.TODO()
 
-	// Add Gomplate, Sprig and Atmos template functions
-	funcs := lo.Assign(gomplate.CreateFuncs(ctx, &d), sprig.FuncMap(), FuncMap(&schema.AtmosConfiguration{}, &schema.ConfigAndStacksInfo{}, ctx, &d))
+	// Add Gomplate, Sprig and Atmos template functions.
+	cfg := atmosConfig
+	if cfg == nil {
+		cfg = &schema.AtmosConfiguration{}
+	}
+	funcs := lo.Assign(gomplate.CreateFuncs(ctx, &d), sprig.FuncMap(), FuncMap(cfg, &schema.ConfigAndStacksInfo{}, ctx, &d))
 
 	t, err := template.New(tmplName).Funcs(funcs).Parse(tmplValue)
 	if err != nil {
 		return "", err
 	}
 
-	// Control the behavior during execution if a map is indexed with a key that is not present in the map
+	// Control the behavior during execution if a map is indexed with a key that is not present in the map.
 	// If the template context (`tmplData`) does not provide all the required variables, the following errors would be thrown:
 	// template: catalog/terraform/eks_cluster_tmpl_hierarchical.yaml:17:12: executing "catalog/terraform/eks_cluster_tmpl_hierarchical.yaml" at <.flavor>: map has no entry for key "flavor"
 	// template: catalog/terraform/eks_cluster_tmpl_hierarchical.yaml:12:36: executing "catalog/terraform/eks_cluster_tmpl_hierarchical.yaml" at <.stage>: map has no entry for key "stage"
@@ -64,7 +72,7 @@ func ProcessTmpl(
 	return res.String(), nil
 }
 
-// ProcessTmplWithDatasources parses and executes Go templates with datasources
+// ProcessTmplWithDatasources parses and executes Go templates with datasources.
 func ProcessTmplWithDatasources(
 	atmosConfig *schema.AtmosConfiguration,
 	configAndStacksInfo *schema.ConfigAndStacksInfo,
@@ -74,6 +82,8 @@ func ProcessTmplWithDatasources(
 	tmplData any,
 	ignoreMissingTemplateValues bool,
 ) (string, error) {
+	defer perf.Track(atmosConfig, "exec.ProcessTmplWithDatasources")()
+
 	if !atmosConfig.Templates.Settings.Enabled {
 		log.Debug("ProcessTmplWithDatasources: not processing templates since templating is disabled in 'atmos.yaml'", "template", tmplName)
 		return tmplValue, nil
@@ -239,8 +249,10 @@ func ProcessTmplWithDatasources(
 	return result, nil
 }
 
-// IsGolangTemplate checks if the provided string is a Go template
-func IsGolangTemplate(str string) (bool, error) {
+// IsGolangTemplate checks if the provided string is a Go template.
+func IsGolangTemplate(atmosConfig *schema.AtmosConfiguration, str string) (bool, error) {
+	defer perf.Track(atmosConfig, "exec.IsGolangTemplate")()
+
 	t, err := template.New(str).Parse(str)
 	if err != nil {
 		return false, err
@@ -341,11 +353,14 @@ func writeOuterTopLevelFile(tempDir string, fileURL string) (*url.URL, error) {
 
 // ProcessTmplWithDatasourcesGomplate parses and executes Go templates with datasources using Gomplate.
 func ProcessTmplWithDatasourcesGomplate(
+	atmosConfig *schema.AtmosConfiguration,
 	tmplName string,
 	tmplValue string,
 	mergedData map[string]interface{},
 	ignoreMissingTemplateValues bool,
 ) (string, error) {
+	defer perf.Track(atmosConfig, "exec.ProcessTmplWithDatasourcesGomplate")()
+
 	tempDir, err := createTempDirectory()
 	if err != nil {
 		return "", err

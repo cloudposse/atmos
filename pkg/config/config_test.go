@@ -437,7 +437,7 @@ func TestAtmosConfigAbsolutePaths(t *testing.T) {
 			Stacks: schema.Stacks{},
 		}
 
-		err := atmosConfigAbsolutePaths(config)
+		err := AtmosConfigAbsolutePaths(config)
 		assert.NoError(t, err)
 	})
 
@@ -458,7 +458,7 @@ func TestAtmosConfigAbsolutePaths(t *testing.T) {
 			},
 		}
 
-		err := atmosConfigAbsolutePaths(config)
+		err := AtmosConfigAbsolutePaths(config)
 		assert.NoError(t, err)
 
 		// Check if absolute paths remain unchanged

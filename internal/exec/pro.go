@@ -4,11 +4,12 @@ import (
 	"fmt"
 	"os"
 
-	log "github.com/charmbracelet/log"
+	"github.com/cloudposse/atmos/pkg/perf"
+
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	git "github.com/cloudposse/atmos/pkg/git"
-	l "github.com/cloudposse/atmos/pkg/logger"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/pro"
 	"github.com/cloudposse/atmos/pkg/pro/dtos"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -17,7 +18,6 @@ import (
 
 type ProLockUnlockCmdArgs struct {
 	Component   string
-	Logger      *l.Logger
 	Stack       string
 	AtmosConfig schema.AtmosConfiguration
 }
@@ -45,11 +45,6 @@ func parseLockUnlockCliArgs(cmd *cobra.Command, args []string) (ProLockUnlockCmd
 		return ProLockUnlockCmdArgs{}, fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrFailedToInitConfig, err)
 	}
 
-	logger, err := l.NewLoggerFromCliConfig(atmosConfig)
-	if err != nil {
-		return ProLockUnlockCmdArgs{}, fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrFailedToCreateLogger, err)
-	}
-
 	flags := cmd.Flags()
 
 	component, err := flags.GetString("component")
@@ -68,7 +63,6 @@ func parseLockUnlockCliArgs(cmd *cobra.Command, args []string) (ProLockUnlockCmd
 
 	result := ProLockUnlockCmdArgs{
 		Component:   component,
-		Logger:      logger,
 		Stack:       stack,
 		AtmosConfig: atmosConfig,
 	}
@@ -126,6 +120,8 @@ func parseUnlockCliArgs(cmd *cobra.Command, args []string) (ProUnlockCmdArgs, er
 
 // ExecuteProLockCommand executes `atmos pro lock` command.
 func ExecuteProLockCommand(cmd *cobra.Command, args []string) error {
+	defer perf.Track(nil, "exec.ExecuteProLockCommand")()
+
 	a, err := parseLockCliArgs(cmd, args)
 	if err != nil {
 		return err
@@ -161,16 +157,18 @@ func ExecuteProLockCommand(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrFailedToLockStack, err)
 	}
 
-	a.Logger.Info("Stack successfully locked.\n")
-	a.Logger.Info(fmt.Sprintf("Key: %s", lock.Data.Key))
-	a.Logger.Info(fmt.Sprintf("LockID: %s", lock.Data.ID))
-	a.Logger.Info(fmt.Sprintf("Expires %s", lock.Data.ExpiresAt))
+	log.Info("Stack successfully locked.\n")
+	log.Info(fmt.Sprintf("Key: %s", lock.Data.Key))
+	log.Info(fmt.Sprintf("LockID: %s", lock.Data.ID))
+	log.Info(fmt.Sprintf("Expires %s", lock.Data.ExpiresAt))
 
 	return nil
 }
 
-// ExecuteProUnlockCommand executes `atmos pro unlock` command
+// ExecuteProUnlockCommand executes `atmos pro unlock` command.
 func ExecuteProUnlockCommand(cmd *cobra.Command, args []string) error {
+	defer perf.Track(nil, "exec.ExecuteProUnlockCommand")()
+
 	a, err := parseUnlockCliArgs(cmd, args)
 	if err != nil {
 		return err
@@ -203,7 +201,7 @@ func ExecuteProUnlockCommand(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrFailedToUnlockStack, err)
 	}
 
-	a.Logger.Info(fmt.Sprintf("Key '%s' successfully unlocked.\n", dto.Key))
+	log.Info(fmt.Sprintf("Key '%s' successfully unlocked.\n", dto.Key))
 
 	return nil
 }

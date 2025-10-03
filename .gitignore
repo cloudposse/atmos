@@ -18,6 +18,9 @@
 **/kubeconfig.yaml
 **/*.planfile.json
 
+# Atmos binary
+atmos
+
 # Module directory
 .terraform
 **/.idea
@@ -54,6 +57,13 @@ tests/fixtures/scenarios/vendor/components/**
 internal/exec/output.*
 
 # Coverage files
-coverage.out
+**.out
+coverage*.out
 coverage.html
+coverage.*.tmp
+coverage/
+.gocoverdir/
 tests.test
+
+**/llms.txt
+**/llms-full.txt

@@ -9,9 +9,10 @@ import (
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/credentials/stscreds"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
-	log "github.com/charmbracelet/log"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/perf"
 )
 
 // LoadAWSConfig loads AWS config.
@@ -46,6 +47,8 @@ import (
 	  Provided programmatically using config.WithCredentialsProvider(...)
 */
 func LoadAWSConfig(ctx context.Context, region string, roleArn string, assumeRoleDuration time.Duration) (aws.Config, error) {
+	defer perf.Track(nil, "aws_utils.LoadAWSConfig")()
+
 	var cfgOpts []func(*config.LoadOptions) error
 
 	// Conditionally set the region

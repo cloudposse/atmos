@@ -57,15 +57,15 @@ deps:
 
 testacc: get
 	@echo "Running acceptance tests"
-	go test $(TEST) -v $(TESTARGS) -timeout 40m
+	go test $(TEST) $(TESTARGS) -timeout 40m
 
+# Run tests with subprocess coverage collection (Go 1.20+)
 testacc-cover: get
-	@echo "Running tests with coverage"
-	go test $(TEST) -v -coverpkg=./... $(TESTARGS) -timeout 40m -coverprofile=coverage.out.tmp
-	cat coverage.out.tmp | grep -v "mock_" > coverage.out
+	@scripts/collect-coverage.sh "$(TEST)" "$(TESTARGS)"
 
 # Run acceptance tests with coverage report
 testacc-coverage: testacc-cover
 	go tool cover -html=coverage.out -o coverage.html
+	@echo "Coverage report generated: coverage.html"
 
 .PHONY: lint get build version build-linux build-windows build-macos deps version-linux version-windows version-macos testacc testacc-cover testacc-coverage

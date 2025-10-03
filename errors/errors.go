@@ -7,9 +7,11 @@ import (
 const (
 	ErrWrappingFormat       = "%w: %w"
 	ErrStringWrappingFormat = "%w: %s"
+	ErrValueWrappingFormat  = "%w: %v"
 )
 
 var (
+	ErrNoGitRepo                             = errors.New("not in a git repository")
 	ErrDownloadPackage                       = errors.New("failed to download package")
 	ErrProcessOCIImage                       = errors.New("failed to process OCI image")
 	ErrCopyPackage                           = errors.New("failed to copy package")
@@ -24,6 +26,7 @@ var (
 	ErrFailedToInitializeTUIModelWithDetails = errors.New("failed to initialize TUI model: verify terminal capabilities and permissions")
 	ErrValidPackage                          = errors.New("no valid installer package provided for")
 	ErrTUIModel                              = errors.New("failed to initialize TUI model")
+	ErrTUIRun                                = errors.New("failed to run TUI")
 	ErrNoFilesFound                          = errors.New("no files found in directory")
 	ErrMultipleFilesFound                    = errors.New("multiple files found in directory")
 	ErrSourceDirNotExist                     = errors.New("source directory does not exist")
@@ -83,6 +86,12 @@ var (
 	ErrReadFile    = errors.New("error reading file")
 	ErrInvalidFlag = errors.New("invalid flag")
 
+	// File and URL handling errors.
+	ErrInvalidPagerCommand = errors.New("invalid pager command")
+	ErrEmptyURL            = errors.New("empty URL provided")
+	ErrInvalidURL          = errors.New("invalid URL")
+	ErrFailedToFindImport  = errors.New("failed to find import")
+
 	ErrMissingStack                       = errors.New("stack is required; specify it on the command line using the flag `--stack <stack>` (shorthand `-s`)")
 	ErrInvalidComponent                   = errors.New("invalid component")
 	ErrAbstractComponentCantBeProvisioned = errors.New("abstract component cannot be provisioned")
@@ -95,6 +104,7 @@ var (
 	ErrInvalidListMergeStrategy = errors.New("invalid list merge strategy")
 	ErrMerge                    = errors.New("merge error")
 	ErrInvalidStackManifest     = errors.New("invalid stack manifest")
+	ErrInvalidLogLevel          = errors.New("invalid log level")
 
 	// Pro API client errors.
 	ErrFailedToCreateRequest        = errors.New("failed to create request")
@@ -129,10 +139,36 @@ var (
 	ErrFailedToGetComponentFlag  = errors.New("failed to get '--component' flag")
 	ErrFailedToGetStackFlag      = errors.New("failed to get '--stack' flag")
 	ErrOPAPolicyViolations       = errors.New("OPA policy violations detected")
+	ErrInvalidOPAPolicy          = errors.New("invalid OPA policy")
+	ErrTerraformEnvCliVarJSON    = errors.New("failed to parse JSON variable from TF_CLI_ARGS environment variable")
 
 	// List package errors.
 	ErrExecuteDescribeStacks     = errors.New("failed to execute describe stacks")
 	ErrProcessInstances          = errors.New("failed to process instances")
 	ErrParseFlag                 = errors.New("failed to parse flag value")
 	ErrFailedToFinalizeCSVOutput = errors.New("failed to finalize CSV output")
+
+	// Cache-related errors.
+	ErrCacheLocked    = errors.New("cache file is locked")
+	ErrCacheRead      = errors.New("cache read failed")
+	ErrCacheWrite     = errors.New("cache write failed")
+	ErrCacheUnmarshal = errors.New("cache unmarshal failed")
+	ErrCacheMarshal   = errors.New("cache marshal failed")
+
+	// Import-related errors.
+	ErrBasePath             = errors.New("base path required to process imports")
+	ErrTempDir              = errors.New("temporary directory required to process imports")
+	ErrResolveLocal         = errors.New("failed to resolve local import path")
+	ErrSourceDestination    = errors.New("source and destination cannot be nil")
+	ErrImportPathRequired   = errors.New("import path required to process imports")
+	ErrNoFileMatchPattern   = errors.New("no files matching patterns found")
+	ErrMaxImportDepth       = errors.New("maximum import depth reached")
+	ErrNoValidAbsolutePaths = errors.New("no valid absolute paths found")
+
+	// Profiler-related errors.
+	ErrProfilerStart           = errors.New("profiler start failed")
+	ErrProfilerUnsupportedType = errors.New("profiler: unsupported profile type")
+	ErrProfilerStartCPU        = errors.New("profiler: failed to start CPU profile")
+	ErrProfilerStartTrace      = errors.New("profiler: failed to start trace profile")
+	ErrProfilerCreateFile      = errors.New("profiler: failed to create profile file")
 )
