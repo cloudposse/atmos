@@ -8,7 +8,7 @@ import Screengrab from '@site/src/components/Screengrab'
 import Terminal from '@site/src/components/Terminal'
 
 <Intro>
-Use this command to validate the Terraform configuration for an Atmos component in a stack, checking for syntax and consistency errors.
+Use this command to validate the Terraform HCL configuration files (`.tf` files) for an Atmos component in a stack, checking for syntax and consistency errors. This validates Terraform code, not Atmos stack YAML configurations.
 </Intro>
 
 <Screengrab title="atmos terraform validate --help" slug="atmos-terraform-validate--help" />
@@ -21,11 +21,26 @@ Execute the `terraform validate` command like this:
 atmos terraform validate <component> -s <stack> [options]
 ```
 
-This command validates the configuration files in a directory, referring only to the configuration and not accessing any remote services such as remote state, provider APIs, etc.
+This command validates the Terraform HCL configuration files in a component directory, referring only to the configuration and not accessing any remote services such as remote state, provider APIs, etc.
 
 :::info Atmos Behavior
 Atmos provides standard setup for this command including automatic `terraform init` and workspace selection. The validation itself is performed by native Terraform.
 :::
+
+## Configuration
+
+Configure validation behavior in your `atmos.yaml`:
+
+```yaml
+components:
+  terraform:
+    # Always run init before validate
+    init_run_reconfigure: false
+
+    # Auto-generate backend file for validation
+    auto_generate_backend_file: true
+```
+
 Validation includes:
 - Checking for syntax errors
 - Verifying internal consistency
@@ -60,15 +75,6 @@ Validate without running `terraform init` first:
 atmos terraform validate vpc -s dev --skip-init
 ```
 
-### Validation in CI/CD
-
-Use validation in CI/CD pipelines:
-
-```shell
-# Validate without color output and with JSON format
-atmos terraform validate vpc -s dev -json -no-color
-```
-
 ## When to Use Validate
 
 ### Pre-Deployment Checks
@@ -81,17 +87,6 @@ atmos terraform validate app -s prod
 
 # Then plan if validation succeeds
 atmos terraform plan app -s prod
-```
-
-### CI/CD Pipeline Integration
-
-```yaml
-# Example GitHub Actions workflow
-- name: Validate Terraform
-  run: |
-    atmos terraform validate vpc -s dev
-    atmos terraform validate app -s dev
-    atmos terraform validate database -s dev
 ```
 
 ### After Configuration Changes
@@ -180,7 +175,7 @@ The `atmos terraform validate` command supports all native `terraform validate` 
 
 ### Missing Required Arguments
 
-```hcl
+```console
 Error: Missing required argument
 
 The argument "vpc_id" is required, but no definition was found.
@@ -190,7 +185,7 @@ The argument "vpc_id" is required, but no definition was found.
 
 ### Undeclared Variables
 
-```hcl
+```console
 Error: Reference to undeclared variable
 
 A variable named "instance_type" is not declared.
@@ -200,7 +195,7 @@ A variable named "instance_type" is not declared.
 
 ### Invalid Resource Configuration
 
-```hcl
+```console
 Error: Invalid resource type
 
 The resource type "aws_not_real" is not supported by provider "aws".
@@ -210,7 +205,7 @@ The resource type "aws_not_real" is not supported by provider "aws".
 
 ### Syntax Errors
 
-```hcl
+```console
 Error: Argument or block definition required
 
 An argument or block definition is required here. To set an argument, use the
@@ -246,23 +241,20 @@ Add validation to your pre-commit hooks:
 
 ### 3. Combine with Other Checks
 
-Use validation alongside other quality checks:
+Use validation alongside other quality checks. For security scanning with tools like `tfsec`, `checkov`, or `terrascan`, use JSON planfiles generated with `atmos terraform generate planfile` for more accurate analysis.
 
-```bash
-#!/bin/bash
-# validate-all.sh
+This integration is best implemented using [Atmos custom commands](/cli/configuration/custom-commands) with embedded shell scripts:
 
-# Format check
-atmos terraform fmt vpc -s dev -check
-
-# Validate
-atmos terraform validate vpc -s dev
-
-# Security scan
-tfsec components/terraform/vpc
-
-# Lint
-tflint components/terraform/vpc
+```yaml
+# atmos.yaml
+commands:
+  - name: security-scan
+    description: Run security checks on component
+    steps:
+      - atmos terraform fmt {component} -s {stack} -check
+      - atmos terraform validate {component} -s {stack}
+      - atmos terraform generate planfile {component} -s {stack}
+      - checkov -f ./{component}-{stack}.planfile.json
 ```
 
 ### 4. Parse JSON Output
@@ -279,20 +271,6 @@ if [ "$valid" = "false" ]; then
     echo $result | jq -r '.diagnostics[]'
     exit 1
 fi
-```
-
-## Configuration
-
-Configure validation behavior in your `atmos.yaml`:
-
-```yaml
-components:
-  terraform:
-    # Always run init before validate
-    init_run_reconfigure: false
-
-    # Auto-generate backend file for validation
-    auto_generate_backend_file: true
 ```
 
 ## Related Commands

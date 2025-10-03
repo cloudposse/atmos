@@ -58,12 +58,12 @@ When you apply a planfile, Terraform uses this snapshot instead of re-calculatin
 - **Audit Trail**: Planfiles serve as immutable records of approved changes for compliance
 - **Review Process**: Security teams can analyze planfiles before approval
 - **Approval Workflows**: Enable separation of duties - developers plan, ops team approves and applies
-- **Policy Validation**: Run security scanners (Checkov, OPA) against planfiles before applying
+- **Policy Validation**: Run security scanners (Checkov, tfsec, OPA) against planfiles. Use [`atmos terraform generate planfile`](/cli/commands/terraform/generate-planfile) to create the JSON version needed by most security scanning tools
 
 ### 3. **CI/CD Pipeline Safety**
 - **Atomic Operations**: Apply exactly what passed through your CI/CD tests
-- **Artifact Storage**: Store planfiles alongside other deployment artifacts
-- **Rollback Understanding**: Saved planfiles document exactly what changes were made
+- **Artifact Storage**: Store planfiles in external storage (e.g., S3, GitHub Actions artifacts). Atmos provides a [planfile storage GitHub Action](https://github.com/cloudposse/github-action-atmos-terraform-planfile) for this purpose
+- **Change Documentation**: Saved planfiles provide a record of what changes were planned, useful for understanding what was deployed (not for automated rollback)
 - **Multi-Stage Pipelines**: Separate plan generation, validation, approval, and application stages
 
 ### 4. **Operational Efficiency**
@@ -76,6 +76,44 @@ When you apply a planfile, Terraform uses this snapshot instead of re-calculatin
 - **Async Workflows**: One engineer can generate plans for another to review and apply
 - **Change Windows**: Generate plans ahead of maintenance windows, apply during the window
 - **Knowledge Transfer**: Planfiles document infrastructure changes for team learning
+
+## Planfile Limitations and Challenges
+
+While planfiles provide significant benefits, they also have important limitations to understand:
+
+### Planfile Staleness
+
+**Planfiles become stale** and must be recreated if:
+- Infrastructure changes externally (e.g., manual changes, other automation)
+- Terraform state is updated by other operations
+- Configuration files are modified after plan generation
+- Provider data sources return different values
+
+### Plan Comparison and Verification
+
+When recreating planfiles, **you cannot automatically verify they're identical** to the original. Use [`atmos terraform plan-diff`](/cli/commands/terraform/plan-diff) to compare plans and determine if they are effectively the same or have material differences.
+
+```shell
+# Generate new planfile
+atmos terraform plan vpc -s dev -out vpc-dev.planfile
+
+# Compare with previous plan to detect drift
+atmos terraform plan-diff vpc -s dev
+```
+
+### IAM Role and Authentication Issues
+
+**If different IAM roles are used for plan vs apply**, the planfile will cause failures:
+- Planfiles embed the IAM role used during plan generation (via provider `assume_role` configuration)
+- If you apply with a different IAM role, Terraform will fail because the embedded credentials don't match
+- **Solution**: Use the same IAM role for both plan and apply, or regenerate the planfile with the apply role
+
+### Regeneration and Re-verification
+
+When any of these issues occur:
+1. **Regenerate the planfile** with current state and credentials
+2. **Re-verify the plan** matches expectations (use `plan-diff` if comparing to a previous plan)
+3. **Re-run approval workflows** if your process requires it
 
 ## Backend Limitations
 
