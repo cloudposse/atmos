@@ -102,9 +102,9 @@ func ExecuteAnsible(
 		}
 		playbook = p
 	}
-	if playbook == "" {
-		return fmt.Errorf("ansible playbook is required; specify `settings.ansible.playbook` or pass with -- [playbook options]")
-	}
+    if playbook == "" {
+        return fmt.Errorf(errUtils.ErrStringWrappingFormat, errUtils.ErrInvalidFlag, "missing ansible playbook: specify settings.ansible.playbook or pass after --")
+    }
 
 	// Print component variables
 	log.Debug("Variables for component in stack", "component", info.ComponentFromArg, "stack", info.Stack, "variables", info.ComponentVarsSection)
@@ -137,7 +137,7 @@ func ExecuteAnsible(
 	allArgsAndFlags = append(allArgsAndFlags, playbook)
 
 	// ENV vars
-	envVars := append(info.ComponentEnvList, fmt.Sprintf("ATMOS_CLI_CONFIG_PATH=%s", atmosConfig.CliConfigPath))
+    envVars := append(append([]string{}, info.ComponentEnvList...), fmt.Sprintf("ATMOS_CLI_CONFIG_PATH=%s", atmosConfig.CliConfigPath))
 	basePath, err := filepath.Abs(atmosConfig.BasePath)
 	if err != nil {
 		return err

@@ -6,7 +6,6 @@ import (
 	e "github.com/cloudposse/atmos/internal/exec"
 )
 
-// getAnsibleCommands returns statically defined Ansible commands with detailed help (Terraform-style wiring)
 func getAnsibleCommands() []*cobra.Command {
 	return []*cobra.Command{
 		{
@@ -27,7 +26,9 @@ Examples:
   atmos ansible run web -s tenant/ue2/dev -- --check
   atmos ansible run web -s tenant/ue2/dev -- -l app -t setup
   atmos ansible run web -s tenant/ue2/dev -- site.yml -e env=dev`,
-			Annotations: map[string]string{"nativeCommand": "true"},
+			Annotations: map[string]string{
+				"nativeCommand": "true",
+			},
 		},
 		{
 			Use:   "inventory",
@@ -43,7 +44,9 @@ Examples:
   atmos ansible inventory web -s tenant/ue2/dev
   atmos ansible inventory web -s tenant/ue2/dev -- --graph
   atmos ansible inventory web -s tenant/ue2/dev -- -i inventories/prod --list`,
-			Annotations: map[string]string{"nativeCommand": "true"},
+			Annotations: map[string]string{
+				"nativeCommand": "true",
+			},
 		},
 		{
 			Use:   "galaxy",
@@ -58,7 +61,9 @@ Examples:
   atmos ansible galaxy web -s tenant/ue2/dev
   atmos ansible galaxy web -s tenant/ue2/dev -- install -r requirements.yml
   atmos ansible galaxy web -s tenant/ue2/dev -- collection install community.general`,
-			Annotations: map[string]string{"nativeCommand": "true"},
+			Annotations: map[string]string{
+				"nativeCommand": "true",
+			},
 		},
 		{
 			Use:   "doc",
@@ -68,7 +73,9 @@ Examples:
 Examples:
   atmos ansible doc web -s tenant/ue2/dev -- -l
   atmos ansible doc web -s tenant/ue2/dev -- ping`,
-			Annotations: map[string]string{"nativeCommand": "true"},
+			Annotations: map[string]string{
+				"nativeCommand": "true",
+			},
 		},
 		{
 			Use:   "config",
@@ -78,7 +85,9 @@ Examples:
 Examples:
   atmos ansible config web -s tenant/ue2/dev -- dump
   atmos ansible config web -s tenant/ue2/dev -- view DEFAULT_ROLES_PATH`,
-			Annotations: map[string]string{"nativeCommand": "true"},
+			Annotations: map[string]string{
+				"nativeCommand": "true",
+			},
 		},
 		{
 			Use:   "vault",
@@ -89,13 +98,17 @@ Examples:
   atmos ansible vault web -s tenant/ue2/dev -- encrypt group_vars/all/vault.yml
   atmos ansible vault web -s tenant/ue2/dev -- edit group_vars/all/vault.yml
   atmos ansible vault web -s tenant/ue2/dev -- view group_vars/all/vault.yml`,
-			Annotations: map[string]string{"nativeCommand": "true"},
+			Annotations: map[string]string{
+				"nativeCommand": "true",
+			},
 		},
 		{
 			Use:         "version",
 			Short:       "Show ansible-playbook version",
 			Long:        "Displays the current version of ansible-playbook installed on the system.",
-			Annotations: map[string]string{"nativeCommand": "true"},
+			Annotations: map[string]string{
+				"nativeCommand": "true",
+			},
 		},
 	}
 }
