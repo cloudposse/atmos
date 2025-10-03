@@ -9,6 +9,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/pager"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui/provenance"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -21,6 +22,7 @@ type DescribeComponentParams struct {
 	Query                string
 	Format               string
 	File                 string
+	ShowProvenance       bool
 }
 
 type DescribeComponentExec struct {
@@ -56,6 +58,7 @@ func (d *DescribeComponentExec) ExecuteDescribeComponentCmd(describeComponentPar
 	query := describeComponentParams.Query
 	format := describeComponentParams.Format
 	file := describeComponentParams.File
+	showProvenance := describeComponentParams.ShowProvenance
 
 	var err error
 	var atmosConfig schema.AtmosConfiguration
@@ -88,6 +91,15 @@ func (d *DescribeComponentExec) ExecuteDescribeComponentCmd(describeComponentPar
 		}
 	} else {
 		res = componentSection
+	}
+
+	// Handle provenance display if requested
+	if showProvenance {
+		err = d.renderWithProvenance(&atmosConfig, format, file, res)
+		if err != nil {
+			return err
+		}
+		return nil
 	}
 
 	if atmosConfig.Settings.Terminal.IsPagerEnabled() {
@@ -135,6 +147,63 @@ func (d *DescribeComponentExec) viewConfig(atmosConfig *schema.AtmosConfiguratio
 	if err := d.pageCreator.Run(displayName, content); err != nil {
 		return err
 	}
+	return nil
+}
+
+// renderWithProvenance renders component configuration with provenance information.
+func (d *DescribeComponentExec) renderWithProvenance(atmosConfig *schema.AtmosConfiguration, format string, file string, data any) error {
+	defer perf.Track(atmosConfig, "exec.renderWithProvenance")()
+
+	sources := extractSourcesFromData(data)
+	if sources == nil {
+		return d.printOrWriteToFile(atmosConfig, format, file, data)
+	}
+
+	renderer := provenance.NewProvenanceRenderer(atmosConfig)
+	output, err := d.renderProvenanceByFormat(renderer, data, sources, format)
+	if err != nil {
+		return err
+	}
+
+	return d.writeProvenanceOutput(file, output)
+}
+
+func extractSourcesFromData(data any) schema.ConfigSources {
+	dataMap, ok := data.(map[string]any)
+	if !ok {
+		return nil
+	}
+
+	sourcesData, ok := dataMap["sources"]
+	if !ok {
+		return nil
+	}
+
+	sources, ok := sourcesData.(schema.ConfigSources)
+	if !ok {
+		return nil
+	}
+
+	return sources
+}
+
+func (d *DescribeComponentExec) renderProvenanceByFormat(renderer *provenance.ProvenanceRenderer, data any, sources schema.ConfigSources, format string) (string, error) {
+	switch format {
+	case "yaml":
+		return renderer.RenderYAMLWithProvenance(data, sources)
+	case "json":
+		return renderer.RenderJSONWithProvenance(data, sources)
+	default:
+		return "", DescribeConfigFormatError{format}
+	}
+}
+
+func (d *DescribeComponentExec) writeProvenanceOutput(file string, output string) error {
+	if file != "" {
+		return u.WriteToFileAsYAML(file, output, defaultFilePermissions)
+	}
+
+	u.PrintMessage(output)
 	return nil
 }
 

@@ -50,6 +50,8 @@ atmos describe stacks --skip=terraform.output
 atmos describe stacks --skip=terraform.output --skip=include
 atmos describe stacks --skip=include,eval
 atmos describe stacks --query <yq-expression>
+atmos describe stacks --show-provenance
+atmos describe stacks --components=infra/vpc --show-provenance
 ```
 
 :::tip
@@ -88,4 +90,7 @@ Use the `--query` flag (shorthand `-q`) to filter the output.
 
   <dt>`--query` / `-q` <em>(optional)</em></dt>
   <dd>Query the results of the command using `yq` expressions.<br/><br/>`atmos describe stacks --query <yq-expression>`.<br/><br/>For more details, refer to https://mikefarah.gitbook.io/yq.</dd>
+
+  <dt>`--show-provenance` <em>(optional)</em></dt>
+  <dd>Display the source file and line information for each configuration value, showing where each setting comes from in the inheritance chain. When enabled, the output includes provenance annotations alongside the configuration values for all components in the stacks.</dd>
 </dl>
