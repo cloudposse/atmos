@@ -97,16 +97,26 @@ func TestCopyFile_CopyContentError_WithMock(t *testing.T) {
 
 	copier := NewFileCopier(mockFS, mockGlob, mockIO)
 
+	// Create temporary files for testing
+	tmpDir := t.TempDir()
+	srcFile, err := os.CreateTemp(tmpDir, "source-*.txt")
+	require.NoError(t, err)
+	defer srcFile.Close()
+
+	destFile, err := os.CreateTemp(tmpDir, "dest-*.txt")
+	require.NoError(t, err)
+	defer destFile.Close()
+
 	// Set up successful Open, MkdirAll, Create
-	mockFS.EXPECT().Open("source.txt").Return(os.Stdin, nil) // Use real file for simplicity
+	mockFS.EXPECT().Open("source.txt").Return(srcFile, nil)
 	mockFS.EXPECT().MkdirAll(gomock.Any(), gomock.Any()).Return(nil)
-	mockFS.EXPECT().Create("dest.txt").Return(os.Stdout, nil)
+	mockFS.EXPECT().Create("dest.txt").Return(destFile, nil)
 
 	// Mock io.Copy to fail
 	expectedErr := errors.New("disk full")
 	mockIO.EXPECT().Copy(gomock.Any(), gomock.Any()).Return(int64(0), expectedErr)
 
-	err := copier.copyFile("source.txt", "dest.txt")
+	err = copier.copyFile("source.txt", "dest.txt")
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "copying content")
 }
@@ -125,17 +135,27 @@ func TestCopyFile_StatSourceError_WithMock(t *testing.T) {
 
 	copier := NewFileCopier(mockFS, mockGlob, mockIO)
 
+	// Create temporary files for testing
+	tmpDir := t.TempDir()
+	srcFile, err := os.CreateTemp(tmpDir, "source-*.txt")
+	require.NoError(t, err)
+	defer srcFile.Close()
+
+	destFile, err := os.CreateTemp(tmpDir, "dest-*.txt")
+	require.NoError(t, err)
+	defer destFile.Close()
+
 	// Set up successful Open, MkdirAll, Create, Copy
-	mockFS.EXPECT().Open("source.txt").Return(os.Stdin, nil)
+	mockFS.EXPECT().Open("source.txt").Return(srcFile, nil)
 	mockFS.EXPECT().MkdirAll(gomock.Any(), gomock.Any()).Return(nil)
-	mockFS.EXPECT().Create("dest.txt").Return(os.Stdout, nil)
+	mockFS.EXPECT().Create("dest.txt").Return(destFile, nil)
 	mockIO.EXPECT().Copy(gomock.Any(), gomock.Any()).Return(int64(100), nil)
 
 	// Mock Stat to fail
 	expectedErr := errors.New("file disappeared")
 	mockFS.EXPECT().Stat("source.txt").Return(nil, expectedErr)
 
-	err := copier.copyFile("source.txt", "dest.txt")
+	err = copier.copyFile("source.txt", "dest.txt")
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "getting file info")
 }
@@ -154,10 +174,20 @@ func TestCopyFile_ChmodError_WithMock(t *testing.T) {
 
 	copier := NewFileCopier(mockFS, mockGlob, mockIO)
 
+	// Create temporary files for testing
+	tmpDir := t.TempDir()
+	srcFile, err := os.CreateTemp(tmpDir, "source-*.txt")
+	require.NoError(t, err)
+	defer srcFile.Close()
+
+	destFile, err := os.CreateTemp(tmpDir, "dest-*.txt")
+	require.NoError(t, err)
+	defer destFile.Close()
+
 	// Set up successful Open, MkdirAll, Create, Copy, Stat
-	mockFS.EXPECT().Open("source.txt").Return(os.Stdin, nil)
+	mockFS.EXPECT().Open("source.txt").Return(srcFile, nil)
 	mockFS.EXPECT().MkdirAll(gomock.Any(), gomock.Any()).Return(nil)
-	mockFS.EXPECT().Create("dest.txt").Return(os.Stdout, nil)
+	mockFS.EXPECT().Create("dest.txt").Return(destFile, nil)
 	mockIO.EXPECT().Copy(gomock.Any(), gomock.Any()).Return(int64(100), nil)
 
 	fileInfo := mockFileInfo{name: "source.txt", mode: 0o644, isDir: false}
@@ -167,7 +197,7 @@ func TestCopyFile_ChmodError_WithMock(t *testing.T) {
 	expectedErr := errors.New("permission denied")
 	mockFS.EXPECT().Chmod("dest.txt", os.FileMode(0o644)).Return(expectedErr)
 
-	err := copier.copyFile("source.txt", "dest.txt")
+	err = copier.copyFile("source.txt", "dest.txt")
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "setting permissions")
 }
