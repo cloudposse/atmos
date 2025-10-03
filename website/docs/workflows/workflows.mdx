@@ -14,7 +14,7 @@ import Intro from '@site/src/components/Intro'
 Workflows are a way of combining multiple commands into one executable unit of work.
 </Intro>
 
-You can use [Atmos Custom Commands](/core-concepts/custom-commands) in Atmos Workflows, and Atmos Workflows in [Atmos Custom Commands](/core-concepts/custom-commands)
+You can use [Atmos Custom Commands](/custom-commands/custom-commands) in Atmos Workflows, and Atmos Workflows in [Atmos Custom Commands](/custom-commands/custom-commands)
 
 ## Simple Example
 
@@ -69,8 +69,8 @@ The workflow name can be anything you want, and the workflow can also accept com
 :::
 
 If you define this workflow in the file `workflow1.yaml`, it can we executed like this to provision
-the `vpc`, `eks/cluster` and `eks/alb-controller` [Atmos Components](/core-concepts/components) into
-the `tenant1-ue2-dev` [Atmos Stack](/core-concepts/stacks):
+the `vpc`, `eks/cluster` and `eks/alb-controller` [Atmos Components](/components/components) into
+the `tenant1-ue2-dev` [Atmos Stack](/learn/stacks):
 
 ```shell
 atmos workflow eks-up -f workflow1 --stack tenant1-ue2-dev

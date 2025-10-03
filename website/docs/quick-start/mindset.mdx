@@ -33,7 +33,7 @@ You're about to discover a new way to think about terraform...
 </Link>
 
 <Link
-    to="/core-concepts"
+    to="/learn"
     className="button button--lg button--outline button--primary ml20">
     Learn Atmos
 </Link>
@@ -82,9 +82,9 @@ Then, to implement this architecture with Atmos, you will usually follow these s
 <details>
 <summary>Why don't we just put everything into a single "Root module"?</summary>
 
-The goal should be to build a loosely coupled [service-oriented architecture (SOA)](https://en.wikipedia.org/wiki/Service-oriented_architecture). Like with modern app design, we should avoid monolithic infrastructure code. Decoupling our infrastructure into [components](/core-concepts/components) ensures resilience and maintainability.
+The goal should be to build a loosely coupled [service-oriented architecture (SOA)](https://en.wikipedia.org/wiki/Service-oriented_architecture). Like with modern app design, we should avoid monolithic infrastructure code. Decoupling our infrastructure into [components](/components/components) ensures resilience and maintainability.
 
-When we place all the infrastructure into a single "root module," we end up with a [Terralith](/terms/terralith), which is roughly [Stage-2 of the Terraform maturity path](/introduction/why-atmos/stage-2). All your eggs are in one basket.
+When we place all the infrastructure into a single "root module," we end up with a [Terralith](/terms/terralith), which is roughly [Stage-2 of the Terraform maturity path](/intro/why-atmos/stage-2). All your eggs are in one basket.
 
 - Massive blast radius for every change
 - Brittle and prolonged plan/apply cycles
@@ -107,7 +107,7 @@ Large root modules are less reusable across teams due to varying requirements, r
 
     <ActionCard>
         Projects are organized into a well-structured folder layout, embracing best practices and conventions for a consistently organized project.
-        <PrimaryCTA to="/core-concepts/stacks">Learn About Projects</PrimaryCTA>
+        <PrimaryCTA to="/learn/stacks">Learn About Projects</PrimaryCTA>
     </ActionCard>
 
 </Step>
@@ -157,14 +157,14 @@ Large root modules are less reusable across teams due to varying requirements, r
 
     <ActionCard>
         Components form the essential building blocks of your architecture. They are the smallest unit of infrastructure in a typical software development lifecycle (SDLC).
-        <PrimaryCTA to="/core-concepts/components">Learn Atmos Components</PrimaryCTA>
+        <PrimaryCTA to="/components">Learn Atmos Components</PrimaryCTA>
     </ActionCard>
 </Step>
 
 <Step>
     ### <StepNumber/> Pass Values Between Components
 
-    Use Terraform's native ability to read the remote state or configuration of any other component, for a "loosely coupled" architecture. Atmos provides [methods that make this easy](/core-concepts/share-data).
+    Use Terraform's native ability to read the remote state or configuration of any other component, for a "loosely coupled" architecture. Atmos provides [methods that make this easy](/connections).
 
     ```mermaid
     classDiagram
@@ -188,7 +188,7 @@ Large root modules are less reusable across teams due to varying requirements, r
 
     <ActionCard>
         Passing state between components is how you build a loosely coupled architecture.
-        <PrimaryCTA to="/core-concepts/share-data">Learn How</PrimaryCTA>
+        <PrimaryCTA to="/connections">Learn How</PrimaryCTA>
     </ActionCard>
 </Step>
 
@@ -203,7 +203,7 @@ Large root modules are less reusable across teams due to varying requirements, r
     </details>
     <ActionCard>
         Components are configured with Stacks, which are defined om YAML. Stacks are separate from Components (terraform root modules) to ensure root modules remain highly reusable across teams and promote testing.
-        <PrimaryCTA to="/core-concepts/stacks">Learn Configuration</PrimaryCTA>
+        <PrimaryCTA to="/learn/stacks">Learn Configuration</PrimaryCTA>
     </ActionCard>
 </Step>
 
@@ -228,7 +228,7 @@ Large root modules are less reusable across teams due to varying requirements, r
     </details>
     <ActionCard>
         Deploy Components with Atmos, fully integrated with GitOps workflows through GitHub Actions for seamless deployment automation.
-        <PrimaryCTA to="/core-concepts/deploy">Deploying with Atmos</PrimaryCTA>
+        <PrimaryCTA to="/deploy">Deploying with Atmos</PrimaryCTA>
     </ActionCard>
 </Step>
 
@@ -237,7 +237,7 @@ Large root modules are less reusable across teams due to varying requirements, r
 This brief introduction covered the essentials of designing cloud architectures that can be used with Atmos.
 
 Now you can start with your first Atmos project! Try out our [Simple](/quick-start/simple)/[Advanced](/quick-start/advanced) Quick Start,
-or delve deeper into the [syntax and concepts](/core-concepts) used in this tutorial.
+or delve deeper into the [syntax and concepts](/learn) used in this tutorial.
 
 <Link
     to="/quick-start/simple"
@@ -246,7 +246,7 @@ or delve deeper into the [syntax and concepts](/core-concepts) used in this tuto
 </Link>
 
 <Link
-    to="/core-concepts"
+    to="/learn"
     className="button button--lg button--outline button--primary ml20">
     Learn Atmos
 </Link>

@@ -10,8 +10,8 @@ import Intro from '@site/src/components/Intro'
 import Terminal from '@site/src/components/Terminal'
 
 <Intro>
-The `!terraform.state` YAML function is the **fastest** way to read Terraform/OpenTofu outputs ([remote state](/core-concepts/share-data/remote-state))
-in Atmos stack manifests. It retrieves outputs directly from the configured [backends](/core-concepts/components/terraform/backends)
+The `!terraform.state` YAML function is the **fastest** way to read Terraform/OpenTofu outputs ([remote state](/connections/remote-state))
+in Atmos stack manifests. It retrieves outputs directly from the configured [backends](/components/terraform/backends)
 without the overhead of initializing Terraform, downloading providers, or generating configuration files - making it significantly faster than `!terraform.output`.
 </Intro>
 
@@ -24,7 +24,7 @@ As support for new backend types is added (e.g. `azurerm`, `gcs`), this document
 
 Meanwhile, if you are using backends other than `local` and `s3`, consider the [__`!store`__](/functions/yaml/store)
 or [__`!terraform.output`__](/functions/yaml/terraform.output) YAML function to read remote state
-and [share data between components](/core-concepts/share-data).
+and [share data between components](/connections).
 :::
 
 ## Usage
@@ -362,7 +362,7 @@ In a production environment where many components are used, the speedup can be s
 
 ## Using `!terraform.state` with `static` remote state backend
 
-Atmos supports [brownfield configuration by using the remote state of type `static`](/core-concepts/components/terraform/brownfield/#hacking-remote-state-with-static-backends).
+Atmos supports [brownfield configuration by using the remote state of type `static`](/components/terraform/brownfield/#hacking-remote-state-with-static-backends).
 
 For example:
 

@@ -8,7 +8,7 @@ description: Organize Stack configurations into catalogs for easy imports.
 import Intro from '@site/src/components/Intro'
 
 <Intro>
-As you start splitting your stacks apart into smaller configurations, it often makes to organize those into a catalog of reusable configurations. That way you can take advantage of imports, to reuse configuration in multiple places. Catalogs are how to logically organize all the child [Stack](/core-concepts/stacks) configurations on the filesystem for use by [imports](/stacks/imports).
+As you start splitting your stacks apart into smaller configurations, it often makes to organize those into a catalog of reusable configurations. That way you can take advantage of imports, to reuse configuration in multiple places. Catalogs are how to logically organize all the child [Stack](/learn/stacks) configurations on the filesystem for use by [imports](/stacks/imports).
 </Intro>
 
 There's no "right or wrong" way to do it, and Atmos does not enforce any one convention.
@@ -178,7 +178,7 @@ For everything else, we usually have catalog that we just call `catalog/`. We pl
 
 ## Refactoring Configurations
 
-One of the amazing things about the Atmos [Stack](/core-concepts/stacks) configurations is that the entire state of configuration is stored in the YAML configurations. The filesystem layout has no bearing on the desired state of the configuration. This means that configurations can be easily refactored at at time in the future, if you discover there's a better way to organize your Stack configurations. So long as the deep-merged configuration is the same, it will not affect any of the [Components](/core-concepts/components).
+One of the amazing things about the Atmos [Stack](/learn/stacks) configurations is that the entire state of configuration is stored in the YAML configurations. The filesystem layout has no bearing on the desired state of the configuration. This means that configurations can be easily refactored at at time in the future, if you discover there's a better way to organize your Stack configurations. So long as the deep-merged configuration is the same, it will not affect any of the [Components](/components/components).
 
 ## References
 

@@ -22,7 +22,7 @@ For example, you can use data sources to fetch JSON metadata from API endpoints 
 Currently, Atmos supports all the [Gomplate Datasources](https://docs.gomplate.ca/datasources).
 More data sources will be added in the future (and this doc will be updated).
 All datasource configurations are defined in the `templates.settings.gomplate.datasources` section in `atmos.yaml` [CLI config file](/cli/configuration)
-or in the `settings.templates.settings.gomplate.datasources` section of any [Atmos stack manifests](/core-concepts/stacks).
+or in the `settings.templates.settings.gomplate.datasources` section of any [Atmos stack manifests](/learn/stacks).
 
 The `gomplate.datasources` section is a map of [Gomplate Datasource](https://docs.gomplate.ca/datasources) definitions.
 
@@ -137,7 +137,7 @@ The following are the types of data sources are supported by Atmos via [Gomplate
 
 Some data sources might need environment variables that are different from the environment variables in Stack configuration. Environment variables may be passed to data sources when processing and executing templates by defining `env` map.
 It's supported in both the `templates.settings` section in `atmos.yaml` [CLI config file](/cli/configuration) and in the
-`settings.templates.settings` section in [Atmos stack manifests](/core-concepts/stacks).
+`settings.templates.settings` section in [Atmos stack manifests](/learn/stacks).
 
 For example:
 

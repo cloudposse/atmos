@@ -22,10 +22,10 @@ Atmos supports the following concepts and principles of **Component-Oriented Pro
   component
 
 These concepts and principles are implemented and used in Atmos by combining two features: [`import`](/stacks/imports)
-and [`metadata`](/core-concepts/stacks/define-components) component's configuration section.
+and [`metadata`](/learn/stacks/define-components) component's configuration section.
 
 :::info
-The mechanics of mixins and inheritance apply only to the [Stack](/core-concepts/stacks) configurations. Atmos knows nothing about the underlying
+The mechanics of mixins and inheritance apply only to the [Stack](/learn/stacks) configurations. Atmos knows nothing about the underlying
 components (e.g. terraform), and does not magically implement inheritance for HCL. However, by designing highly reusable components that do one thing
 well, we're able to achieve many of the same benefits.
 :::
@@ -139,7 +139,7 @@ implementing and composing loosely-coupled independent components into systems.
   <dd>Ability to use and override base component(s) properties</dd>
 
   <dt>Encapsulation</dt>
-  <dd>Enclose a set of related configuration properties into reusable loosely-coupled modules. Encapsulation is implemented by <a href="/core-concepts/components">Atmos Components</a> which are opinionated building blocks of Infrastructure-as-Code (IAC) that solve one specific problem or use-case</dd>
+  <dd>Enclose a set of related configuration properties into reusable loosely-coupled modules. Encapsulation is implemented by <a href="/components">Atmos Components</a> which are opinionated building blocks of Infrastructure-as-Code (IAC) that solve one specific problem or use-case</dd>
 
   <dt>Abstraction</dt>
   <dd>

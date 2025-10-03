@@ -20,11 +20,11 @@ Use the `atmos.yaml` configuration file to control the behavior of the [Atmos CL
 </Intro>
 
 Everything in the [Atmos CLI](/cli) is configurable. The defaults are established in the `atmos.yaml` configuration file. The CLI configuration should not
-be confused with [Stack configurations](/core-concepts/stacks/), which have a different schema.
+be confused with [Stack configurations](/learn/stacks/), which have a different schema.
 
-Think of this file as where you [bootstrap the settings or configuration of your project](/core-concepts/projects). If you'll be using
-[terraform](/core-concepts/components/terraform), then [this is where](/cli/configuration/components#terraform-component-behavior)
-you'd specify the command to run (e.g. [`opentofu`](/core-concepts/projects/configuration/opentofu)),
+Think of this file as where you [bootstrap the settings or configuration of your project](/projects). If you'll be using
+[terraform](/components/terraform), then [this is where](/cli/configuration/components#terraform-component-behavior)
+you'd specify the command to run (e.g. [`opentofu`](/projects/configuration/opentofu)),
 the base path location of the components, and so forth.
 
 ## Configuration File (`atmos.yaml`)
@@ -723,7 +723,7 @@ By default, the profiler binds to `localhost` only, which prevents external acce
 CLI command aliases are configured in the `aliases` section.
 
 An alias lets you create a shortcut name for an existing CLI command. Any CLI command can be aliased, including the Atmos
-native commands like `terraform apply` or `describe stacks`, as well as [Atmos Custom Commands](/core-concepts/custom-commands).
+native commands like `terraform apply` or `describe stacks`, as well as [Atmos Custom Commands](/custom-commands/custom-commands).
 
 For example:
 

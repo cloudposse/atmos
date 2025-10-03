@@ -48,7 +48,7 @@ const config = {
 
                     {
                         from: '/reference/terraform-limitations',
-                        to: '/introduction/why-atmos'
+                        to: '/intro/why-atmos'
                     },
                     // Redirects for template functions moved to /functions/template/
                     {
@@ -211,7 +211,18 @@ const config = {
                     {
                         from: '/core-concepts/stacks/templates/datasources',
                         to: '/templates/datasources'
-                    }
+                    },
+                    // Redirects for directory renames: core-concepts → learn
+                    {from: '/core-concepts/why-atmos', to: '/learn/why-atmos'},
+                    {from: '/core-concepts/concepts-overview', to: '/learn/concepts-overview'},
+                    {from: '/core-concepts/first-stack', to: '/learn/first-stack'},
+                    {from: '/core-concepts/yaml-guide', to: '/learn/yaml'},
+                    {from: '/learn/yaml-guide', to: '/learn/yaml'},
+                    {from: '/core-concepts/imports-basics', to: '/learn/imports-basics'},
+                    {from: '/core-concepts/inheritance-basics', to: '/learn/inheritance-basics'},
+                    {from: '/core-concepts/organizing-stacks', to: '/learn/organizing-stacks'},
+                    {from: '/core-concepts/connecting-components', to: '/learn/connecting-components'},
+                    {from: '/core-concepts/next-steps', to: '/learn/next-steps'}
                 ],
             },
         ],
@@ -255,10 +266,10 @@ const config = {
                 docsDir: 'docs',
                 includeBlog: true,
                 includeOrder: [
-                    'introduction/*',
+                    'intro/*',
                     'quick-start/*',
                     'install/*',
-                    'core-concepts/*',
+                    'learn/*',
                     'cli/*',
                 ],
             },
@@ -320,7 +331,7 @@ const config = {
                     },
                     {
                         type: 'doc',
-                        docId: 'introduction/index',
+                        docId: 'intro/index',
                         position: 'left',
                         label: 'Learn',
                     },
