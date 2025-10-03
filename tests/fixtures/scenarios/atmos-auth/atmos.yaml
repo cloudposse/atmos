@@ -13,6 +13,8 @@ auth:
     provider-oidc:
       kind: github/oidc
       region: us-east-1
+      spec:
+        audience: sts.us-east-1.amazonaws.com
 
     test-sso:
       kind: aws/iam-identity-center
