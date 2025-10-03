@@ -617,7 +617,7 @@ func RenderInlineProvenanceWithStackFile(yamlData any, ctx *m.MergeContext, atmo
 	// Add legend at top
 	legendStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorDarkGray))
 	legend := "# Provenance Legend:\n" +
-		"#   ● [0] Defined at this level\n" +
+		"#   ● [0] Defined in parent stack\n" +
 		"#   ○ [N] Inherited/imported (N levels deep)\n" +
 		"#   ∴ Computed/templated\n"
 	result.WriteString(legendStyle.Render(legend))
@@ -630,8 +630,13 @@ func RenderInlineProvenanceWithStackFile(yamlData any, ctx *m.MergeContext, atmo
 	// Filter out empty sections without provenance
 	filteredData := filterEmptySections(yamlData, ctx)
 
+	// Wrap long strings to avoid horizontal scrolling.
+	// Use comment column minus buffer as the threshold.
+	maxLineLength := getCommentColumn() - 10
+	wrappedData := u.WrapLongStrings(filteredData, maxLineLength)
+
 	// Convert yamlData to YAML string
-	yamlBytes, err := u.ConvertToYAML(filteredData)
+	yamlBytes, err := u.ConvertToYAML(wrappedData)
 	if err != nil {
 		return fmt.Sprintf("Error rendering YAML: %v\n", err)
 	}

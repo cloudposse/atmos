@@ -162,6 +162,57 @@ type YAMLOptions struct {
 	Indent int
 }
 
+// LongString is a string type that encodes as a YAML folded scalar (>).
+// This is used to wrap long strings across multiple lines for better readability.
+type LongString string
+
+// MarshalYAML implements yaml.Marshaler to encode as a folded scalar.
+func (s LongString) MarshalYAML() (interface{}, error) {
+	node := &yaml.Node{
+		Kind:  yaml.ScalarNode,
+		Style: yaml.FoldedStyle, // Use > style for folded scalar
+		Value: string(s),
+	}
+	return node, nil
+}
+
+// WrapLongStrings walks a data structure and converts strings longer than maxLength
+// to LongString type, which will be encoded as YAML folded scalars (>) for better readability.
+func WrapLongStrings(data any, maxLength int) any {
+	defer perf.Track(nil, "utils.WrapLongStrings")()
+
+	if maxLength <= 0 {
+		return data
+	}
+
+	switch v := data.(type) {
+	case map[string]any:
+		result := make(map[string]any, len(v))
+		for key, value := range v {
+			result[key] = WrapLongStrings(value, maxLength)
+		}
+		return result
+
+	case []any:
+		result := make([]any, len(v))
+		for i, value := range v {
+			result[i] = WrapLongStrings(value, maxLength)
+		}
+		return result
+
+	case string:
+		// Convert long single-line strings to LongString
+		if len(v) > maxLength && !strings.Contains(v, "\n") {
+			return LongString(v)
+		}
+		return v
+
+	default:
+		// For all other types (int, bool, etc.), return as-is
+		return data
+	}
+}
+
 func ConvertToYAML(data any, opts ...YAMLOptions) (string, error) {
 	defer perf.Track(nil, "utils.ConvertToYAML")()
 
