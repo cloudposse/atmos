@@ -163,7 +163,7 @@ li.sidebar-title.menu__list-item:not(:first-child) {
   margin-top: 1.2em !important;
 }
 
-li.sidebar-title > ul:first .menu__list .menu__list {
+li.sidebar-title > ul:first-child .menu__list .menu__list {
   padding-left: 0;
 }
 

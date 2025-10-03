@@ -10,9 +10,9 @@ import (
 func NotifyDeprecatedField(oldPath string, newPath interface{}) {
 	var message string
 	if newPath != nil {
-		message = fmt.Sprintf("`%s` is deprecated; use `%s` instead", oldPath, newPath)
+		message = fmt.Sprintf("`%s` is deprecated; use `%v` instead.", oldPath, newPath)
 	} else {
-		message = fmt.Sprintf("`%s` is deprecated", oldPath)
+		message = fmt.Sprintf("`%s` is deprecated.", oldPath)
 	}
 	log.Warn(message)
 }

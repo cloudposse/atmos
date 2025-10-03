@@ -552,8 +552,8 @@ settings:
 
   # Component processing settings
   components:
-    # Component name pattern
-    name_pattern: "{namespace}-{component}"
+    # Component name template
+    name_template: "{{ .vars.namespace }}-{{ .vars.component }}"
     # Enable component vendoring
     vendoring_enabled: true
     # Enable component inheritance

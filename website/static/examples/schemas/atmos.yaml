@@ -1,3 +1,4 @@
+---
 # Comprehensive Atmos CLI Configuration Example
 # This file demonstrates all available configuration options with real-world values
 
@@ -75,8 +76,8 @@ validate:
   editorconfig:
     exclude:
       - "vendor/**"
-      - "**.tfstate"
-      - "**.terraform/**"
+      - "**/*.tfstate"
+      - "**/.terraform/**"
     ignore_defaults: false
     dry_run: false
     format: "default"     # Or "json"
@@ -176,7 +177,7 @@ integrations:
         name: "{tenant}-{environment}-{stage}-{component}"
         workspace: "{workspace}"
         dir: "{component-path}"
-        terraform_version: "v1.5.0"
+        terraform_version: "1.5.0"
         autoplan:
           enabled: true
           when_modified:

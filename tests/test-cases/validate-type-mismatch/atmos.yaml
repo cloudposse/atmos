@@ -2,7 +2,7 @@ base_path: "."
 
 stacks:
   base_path: "stacks"
-  name_pattern: "{stage}-{environment}"
+  name_template: "{{ .vars.stage }}-{{ .vars.environment }}"
   included_paths:
     - "**/*"
   excluded_paths:

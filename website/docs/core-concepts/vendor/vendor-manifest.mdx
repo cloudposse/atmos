@@ -255,15 +255,14 @@ View the full Vendor configuration schema in the [Vendor Schema](/schemas/vendor
           - "components/terraform/vpc-flow-logs-bucket"
         included_paths:
           - "**/**"
-          # If the component's folder has the `modules` sub-folder, it needs to be explicitly defined
+          # Note: doublestar `**` matches recursively across subdirectories; explicit patterns are optional
           - "**/modules/**"
     ```
     </File>
 
-    :::warning
+    :::note
 
-    The `glob` library that Atmos uses to download remote artifacts does not treat the double-star `**` as including sub-folders.
-    If the component's folder has sub-folders, and you need to vendor them, they have to be explicitly defined as in the following example.
+    Atmos uses doublestar-style globs where `**` matches across all nested directories. Use explicit sub-patterns only to narrow the match.
 
     :::
 

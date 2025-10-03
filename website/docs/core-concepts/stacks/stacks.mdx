@@ -106,12 +106,12 @@ stacks:
   name_template: "{{ .vars.tenant }}-{{ .vars.environment}}-{{ .vars.stage }}"
 ```
 
-This will use the `tenant`, `environment`, and `stage` variables from the component's configuration in the stack to compute the stack name.
+This computes the stack name from the `tenant`, `environment`, and `stage` variables in the stack configuration.
 
-For example, using the slug, we can reference a stack like this when applying the `vpc` stack in the `us2-dev` environment:
+For example, with `tenant=acme`, `environment=ue2`, and `stage=dev`, the slug is `acme-ue2-dev`. Apply the `vpc` component in that stack:
 
 ```bash
-atmos terraform apply vpc -s us2-dev
+atmos terraform apply vpc -s acme-ue2-dev
 ```
 
 ### Components vs Component Instances

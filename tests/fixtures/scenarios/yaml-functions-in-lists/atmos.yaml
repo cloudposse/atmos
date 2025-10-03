@@ -10,7 +10,7 @@ stacks:
     - "**/*"
   excluded_paths:
     - "workflows/**/*"
-  name_pattern: "{stage}"
+  name_template: "{{ .vars.stage }}"
 
 schemas:
   jsonschema:

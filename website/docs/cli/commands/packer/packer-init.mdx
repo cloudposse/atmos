@@ -7,13 +7,14 @@ id: init
 
 import File from '@site/src/components/File'
 import Terminal from '@site/src/components/Terminal'
+import Intro from '@site/src/components/Intro'
 import useBaseUrl from '@docusaurus/useBaseUrl';
 
 <img width="80" align="right" src={useBaseUrl('/img/hashicorp-packer.svg')} alt="Packer"/>
 
-:::note purpose
-Use this command to initialize Packer and install plugins according to an HCL template configuration for an Atmos component in a stack.
-:::
+<Intro>
+Initialize Packer working directories for your Atmos components. Downloads and installs required plugins in parallel, caching them for subsequent runs. Essential before running build, validate or inspect commands.
+</Intro>
 
 ## Usage
 
