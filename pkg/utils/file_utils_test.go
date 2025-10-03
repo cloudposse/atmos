@@ -2,6 +2,7 @@ package utils
 
 import (
 	"os"
+	"path/filepath"
 	"runtime"
 	"testing"
 
@@ -394,6 +395,11 @@ func TestEnsureDir(t *testing.T) {
 
 // TestSliceOfPathsContainsPath tests the SliceOfPathsContainsPath function.
 func TestSliceOfPathsContainsPath(t *testing.T) {
+	// Use temp dir for platform-agnostic paths.
+	tmpDir := t.TempDir()
+	file1 := filepath.Join(tmpDir, "file1.txt")
+	file2 := filepath.Join(tmpDir, "file2.txt")
+
 	tests := []struct {
 		name      string
 		paths     []string
@@ -402,20 +408,20 @@ func TestSliceOfPathsContainsPath(t *testing.T) {
 	}{
 		{
 			name:      "Path exists in slice",
-			paths:     []string{"/home/user/file1.txt", "/home/user/file2.txt"},
-			checkPath: "/home/user",
+			paths:     []string{file1, file2},
+			checkPath: tmpDir,
 			expected:  true,
 		},
 		{
 			name:      "Path does not exist in slice",
-			paths:     []string{"/home/user/file1.txt", "/home/user/file2.txt"},
+			paths:     []string{file1, file2},
 			checkPath: "/other/path",
 			expected:  false,
 		},
 		{
 			name:      "Empty slice",
 			paths:     []string{},
-			checkPath: "/home/user",
+			checkPath: tmpDir,
 			expected:  false,
 		},
 	}
@@ -861,10 +867,11 @@ func TestJoinPaths(t *testing.T) {
 // TestTrimBasePathFromPath tests the TrimBasePathFromPath function.
 func TestTrimBasePathFromPath(t *testing.T) {
 	tests := []struct {
-		name     string
-		basePath string
-		path     string
-		expected string
+		name        string
+		basePath    string
+		path        string
+		expected    string
+		windowsOnly bool
 	}{
 		{
 			name:     "Trim base path",
@@ -879,15 +886,20 @@ func TestTrimBasePathFromPath(t *testing.T) {
 			expected: "/other/path",
 		},
 		{
-			name:     "Windows path",
-			basePath: `C:\Users\project`,
-			path:     `C:\Users\project\file.txt`,
-			expected: `\file.txt`,
+			name:        "Windows path (converted to forward slashes)",
+			basePath:    `C:\Users\project`,
+			path:        `C:\Users\project\file.txt`,
+			expected:    "/file.txt", // Function converts to forward slashes on Windows
+			windowsOnly: true,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			if tt.windowsOnly && runtime.GOOS != "windows" {
+				t.Skipf("Skipping Windows-specific test on %s", runtime.GOOS)
+			}
+
 			result := TrimBasePathFromPath(tt.basePath, tt.path)
 			assert.Equal(t, tt.expected, result)
 		})
