@@ -83,14 +83,14 @@ func setFlagsForDescribeDependentsCmd(flags *pflag.FlagSet, describe *exec.Descr
 		return err
 	}
 
-	// `true` by default
+	// `true` by default.
 	describe.ProcessTemplates = true
 	err = setBoolFlagIfChanged(flags, "process-templates", &describe.ProcessTemplates)
 	if err != nil {
 		return err
 	}
 
-	// `true` by default
+	// `true` by default.
 	describe.ProcessYamlFunctions = true
 	err = setBoolFlagIfChanged(flags, "process-functions", &describe.ProcessYamlFunctions)
 	if err != nil {
@@ -115,6 +115,20 @@ func setFlagsForDescribeDependentsCmd(flags *pflag.FlagSet, describe *exec.Descr
 		return err
 	}
 
+	// `--stack` and `--only-from` flags cannot be used together, choose one or the other.
+	if describe.OnlyFrom != "" && describe.Stack != "" {
+		return errUtils.ErrStackAndOnlyFromFlagsCannotBeUsedTogether
+	}
+
+	// `--stack` or `--only-from` flag is required to specify the stack.
+	if describe.OnlyFrom == "" && describe.Stack == "" {
+		return errUtils.ErrStackOrOnlyFromFlagRequired
+	}
+
+	if describe.OnlyFrom != "" {
+		describe.Stack = describe.OnlyFrom
+	}
+
 	return nil
 }
 
@@ -128,10 +142,12 @@ func init() {
 	describeDependentsCmd.PersistentFlags().Bool("process-templates", true, "Enable/disable Go template processing in Atmos stack manifests when executing the command")
 	describeDependentsCmd.PersistentFlags().Bool("process-functions", true, "Enable/disable YAML functions processing in Atmos stack manifests when executing the command")
 	describeDependentsCmd.PersistentFlags().StringSlice("skip", nil, "Skip executing a YAML function when processing Atmos stack manifests")
-	describeDependentsCmd.PersistentFlags().String("only-from", "", "Return the dependent components from a specific stack")
+	describeDependentsCmd.PersistentFlags().String("only-from", "", "Specifies the stack for the component and its dependents. Like `--stack`, but only returns dependents from the given stack")
 
-	err := describeDependentsCmd.MarkPersistentFlagRequired("stack")
-	errUtils.CheckErrorPrintAndExit(err, "", "")
+	err := describeDependentsCmd.RegisterFlagCompletionFunc("only-from", stackFlagCompletion)
+	if err != nil {
+		return
+	}
 
 	describeCmd.AddCommand(describeDependentsCmd)
 }
