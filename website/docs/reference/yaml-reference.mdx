@@ -49,6 +49,135 @@ components:
 - ✅ Configuration that needs comments
 - ✅ Nested structures (cleaner indentation)
 
+## Dot Notation for Nested Keys
+
+When you only need to set a single value deep in a nested structure, you can use **dot notation** instead of creating the full hierarchy. This makes your configuration more concise and readable.
+
+### Traditional Nesting vs Dot Notation
+
+**Traditional approach (verbose):**
+
+<File title="stacks/prod.yaml">
+```yaml
+components:
+  terraform:
+    vpc:
+      metadata:
+        component: vpc-base
+        inherits:
+          - vpc-defaults
+      settings:
+        spacelift:
+          workspace_enabled: true
+          autodeploy: false
+        validation:
+          check_cloudformation: true
+```
+</File>
+
+**Dot notation (concise):**
+
+<File title="stacks/prod.yaml">
+```yaml
+components:
+  terraform:
+    vpc:
+      metadata.component: vpc-base
+      metadata.inherits:
+        - vpc-defaults
+      settings.spacelift.workspace_enabled: true
+      settings.spacelift.autodeploy: false
+      settings.validation.check_cloudformation: true
+```
+</File>
+
+Both configurations produce the exact same result. Dot notation is purely a syntax convenience for writing cleaner YAML.
+
+### Mixing Dot Notation and Traditional Nesting
+
+You can mix both approaches in the same configuration. Use dot notation for single values, traditional nesting for groups:
+
+<File title="stacks/prod.yaml">
+```yaml
+components:
+  terraform:
+    vpc:
+      # Dot notation for single deep values
+      metadata.component: vpc-base
+      settings.spacelift.workspace_enabled: true
+
+      # Traditional nesting for related groups
+      vars:
+        cidr_block: "10.0.0.0/16"
+        enable_dns_hostnames: true
+        enable_dns_support: true
+        availability_zones:
+          - us-east-1a
+          - us-east-1b
+          - us-east-1c
+
+      # Dot notation again for another single value
+      settings.validation.check_cloudformation: true
+```
+</File>
+
+### When to Use Dot Notation
+
+**✅ Use dot notation when:**
+- Setting a single value deep in the tree
+- You want more concise, readable configuration
+- The nested path is clear and self-documenting
+
+**❌ Use traditional nesting when:**
+- Setting multiple related values in the same section
+- You want to emphasize the structure
+- You're defining complex nested objects with many fields
+
+### Dot Notation Works Everywhere
+
+Dot notation isn't limited to component configuration—it works in any YAML section:
+
+<File title="stacks/globals.yaml">
+```yaml
+# Top-level vars with dot notation
+vars.tags.ManagedBy: Atmos
+vars.tags.Environment: production
+
+# Settings with dot notation
+settings.spacelift.workspace_enabled: true
+settings.github.default_branch: main
+
+# Environment variables
+env.TF_LOG: DEBUG
+env.AWS_DEFAULT_REGION: us-east-1
+```
+</File>
+
+This is equivalent to:
+
+<File title="stacks/globals.yaml">
+```yaml
+vars:
+  tags:
+    ManagedBy: Atmos
+    Environment: production
+
+settings:
+  spacelift:
+    workspace_enabled: true
+  github:
+    default_branch: main
+
+env:
+  TF_LOG: DEBUG
+  AWS_DEFAULT_REGION: us-east-1
+```
+</File>
+
+:::tip Best Practice
+Use dot notation when it improves readability. If you have 2+ values in the same section, traditional nesting is often clearer.
+:::
+
 ## Anchors and References (Aliases)
 
 YAML anchors (`&`) and references (`*`) let you reuse configuration within a single file. This is YAML's built-in DRY mechanism.

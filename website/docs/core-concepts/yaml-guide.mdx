@@ -125,6 +125,82 @@ components:
 Import order matters! Files are processed sequentially. Later imports override earlier ones.
 :::
 
+## Dot Notation: Flatten Deep Nesting
+
+When you only need to set one value in a deeply nested section, you don't have to create the full hierarchy. Use **dot notation** for cleaner, more readable configuration.
+
+**Instead of this (verbose nesting):**
+
+<File title="stacks/dev.yaml">
+```yaml
+components:
+  terraform:
+    vpc:
+      metadata:
+        component: vpc-base
+        inherits:
+          - vpc-defaults
+      settings:
+        spacelift:
+          workspace_enabled: true
+```
+</File>
+
+**You can write this (dot notation):**
+
+<File title="stacks/dev.yaml">
+```yaml
+components:
+  terraform:
+    vpc:
+      metadata.component: vpc-base
+      metadata.inherits:
+        - vpc-defaults
+      settings.spacelift.workspace_enabled: true
+```
+</File>
+
+Both configurations are equivalent, but dot notation is more concise when you're setting single values deep in the tree.
+
+### When to Use Dot Notation
+
+✅ **Use dot notation when:**
+- Setting single values in deeply nested structures
+- You want more readable configuration
+- You're only touching one or two values in a section
+
+❌ **Use traditional nesting when:**
+- Setting multiple values in the same section
+- You want to see the full structure at a glance
+- You're defining complex nested objects
+
+**Example: Mix both approaches**
+
+<File title="stacks/prod.yaml">
+```yaml
+components:
+  terraform:
+    vpc:
+      # Dot notation for single deep values
+      metadata.component: vpc-base
+      settings.spacelift.workspace_enabled: true
+
+      # Traditional nesting for multiple related values
+      vars:
+        cidr_block: "10.0.0.0/16"
+        enable_dns_hostnames: true
+        enable_dns_support: true
+        availability_zones:
+          - us-east-1a
+          - us-east-1b
+          - us-east-1c
+```
+</File>
+
+:::tip
+Dot notation works anywhere in Atmos YAML—not just in component configuration. Use it in `vars`, `settings`, `env`, or any nested section.
+:::
+
 ## YAML Tags: Native Functions
 
 Atmos extends YAML with custom tags that act like native functions. These are processed during YAML parsing, before templates run.
@@ -289,6 +365,7 @@ vars:
 ✅ **Scope is YAML-depth relative**, not file-level
 ✅ **Deep merge** combines maps, overrides values
 ✅ **Import order matters** - last import wins
+✅ **Dot notation** for cleaner single-value assignments
 ✅ **YAML tags** for simple substitution
 ✅ **Go templates** for complex logic
 ✅ **Quote special values** to avoid type coercion
