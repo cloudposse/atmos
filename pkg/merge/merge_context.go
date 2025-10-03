@@ -10,6 +10,9 @@ import (
 // MergeContext tracks file paths and import chains during merge operations
 // to provide better error messages when merge conflicts occur.
 // It also optionally tracks provenance information for configuration values.
+//
+// MergeContext implements the ProvenanceTracker interface, providing a concrete
+// implementation for stack component provenance tracking.
 type MergeContext struct {
 	// CurrentFile is the file currently being processed.
 	CurrentFile string
