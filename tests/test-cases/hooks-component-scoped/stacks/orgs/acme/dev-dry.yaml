@@ -1,5 +1,5 @@
 import:
-  - catalog/_defaults
+  - orgs/acme/_defaults
   - catalog/vpc-dry
   - catalog/rds-dry
   - catalog/lambda-dry
