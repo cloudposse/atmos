@@ -2,10 +2,14 @@ package utils
 
 import (
 	"github.com/zclconf/go-cty/cty"
+
+	"github.com/cloudposse/atmos/pkg/perf"
 )
 
 // CtyToGo converts cty.Value to Go types.
 func CtyToGo(value cty.Value) any {
+	defer perf.Track(nil, "utils.CtyToGo")()
+
 	switch {
 	case value.Type().IsObjectType(): // Handle maps
 		m := map[string]any{}

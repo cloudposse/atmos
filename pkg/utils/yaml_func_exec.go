@@ -4,11 +4,14 @@ import (
 	"encoding/json"
 
 	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/perf"
 )
 
 func ProcessTagExec(
 	input string,
 ) (any, error) {
+	defer perf.Track(nil, "utils.ProcessTagExec")()
+
 	log.Debug("Executing Atmos YAML function", "function", input)
 	str, err := getStringAfterTag(input, AtmosYamlFuncExec)
 	if err != nil {

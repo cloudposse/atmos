@@ -6,12 +6,13 @@ import (
 	"sort"
 	"strings"
 
-	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/hashicorp/terraform-config-inspect/tfconfig"
 	"github.com/mitchellh/mapstructure"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -24,6 +25,8 @@ func ProcessComponentConfig(
 	componentType string,
 	component string,
 ) error {
+	defer perf.Track(nil, "exec.ProcessComponentConfig")()
+
 	var stackSection map[string]any
 	var componentsSection map[string]any
 	var componentTypeSection map[string]any
@@ -163,6 +166,8 @@ func FindStacksMap(atmosConfig *schema.AtmosConfiguration, ignoreMissingFiles bo
 	map[string]map[string]any,
 	error,
 ) {
+	defer perf.Track(atmosConfig, "exec.FindStacksMap")()
+
 	// Process stack config file(s)
 	_, stacksMap, rawStackConfigs, err := ProcessYAMLConfigFiles(
 		atmosConfig,
@@ -191,6 +196,8 @@ func ProcessStacks(
 	processYamlFunctions bool,
 	skip []string,
 ) (schema.ConfigAndStacksInfo, error) {
+	defer perf.Track(atmosConfig, "exec.ProcessStacks")()
+
 	// Check if stack was provided
 	if checkStack && len(configAndStacksInfo.Stack) < 1 {
 		message := fmt.Sprintf("`stack` is required.\n\nUsage:\n\n`atmos %s <command> <component> -s <stack>`", configAndStacksInfo.ComponentType)
@@ -272,7 +279,7 @@ func ProcessStacks(
 			}
 
 			if atmosConfig.Stacks.NameTemplate != "" {
-				tmpl, err2 := ProcessTmpl("name-template", atmosConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, false)
+				tmpl, err2 := ProcessTmpl(atmosConfig, "name-template", atmosConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, false)
 				if err2 != nil {
 					continue
 				}
@@ -623,6 +630,8 @@ func generateComponentProviderOverrides(providerOverrides map[string]any) map[st
 
 // FindComponentDependencies finds all imports that the component depends on, and all imports that the component has any sections defined in.
 func FindComponentDependencies(currentStack string, sources schema.ConfigSources) ([]string, []string, error) {
+	defer perf.Track(nil, "exec.FindComponentDependencies")()
+
 	var deps []string
 	var depsAll []string
 

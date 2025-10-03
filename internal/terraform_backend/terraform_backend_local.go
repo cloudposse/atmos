@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -16,6 +17,8 @@ func ReadTerraformBackendLocal(
 	atmosConfig *schema.AtmosConfiguration,
 	componentSections *map[string]any,
 ) ([]byte, error) {
+	defer perf.Track(atmosConfig, "terraform_backend.ReadTerraformBackendLocal")()
+
 	tfStateFilePath := filepath.Join(
 		atmosConfig.TerraformDirAbsolutePath,
 		GetTerraformComponent(componentSections),

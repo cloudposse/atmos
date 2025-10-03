@@ -10,10 +10,10 @@ import (
 
 	auth "github.com/cloudposse/atmos/pkg/auth"
 
-	log "github.com/cloudposse/atmos/pkg/logger"
-
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	git "github.com/cloudposse/atmos/pkg/git"
+	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/pro"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -66,6 +66,8 @@ var (
 
 // ExecuteTerraform executes terraform commands.
 func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
+	defer perf.Track(nil, "exec.ExecuteTerraform")()
+
 	info.CliArgs = []string{"terraform", info.SubCommand, info.SubCommand2}
 
 	atmosConfig, err := cfg.InitCliConfig(info, true)

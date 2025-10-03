@@ -5,6 +5,8 @@ import (
 	"os"
 	"strings"
 
+	"github.com/cloudposse/atmos/pkg/perf"
+
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/filetype"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -61,6 +63,8 @@ func handleQuoteChar(char rune, inQuotes bool, quoteChar rune, current *strings.
 // Example: TF_CLI_ARGS="-var environment=prod -auto-approve -var region=us-east-1".
 // Returns: ["-var", "environment=prod", "-auto-approve", "-var", "region=us-east-1"].
 func GetTerraformEnvCliArgs() []string {
+	defer perf.Track(nil, "exec.GetTerraformEnvCliArgs")()
+
 	// Get TF_CLI_ARGS environment variable directly from os.Getenv for better cross-platform compatibility.
 	// Using os.Getenv instead of viper to avoid potential viper binding issues on Windows.
 	tfCliArgs := os.Getenv(tfCliArgsEnvVar) //nolint:forbidigo // This is not a CLI command, but an internal utility for parsing TF_CLI_ARGS.
@@ -79,6 +83,8 @@ func GetTerraformEnvCliArgs() []string {
 // Example: TF_CLI_ARGS='-var name=test -var=region=us-east-1 -var tags={"env":"prod","team":"devops"}'
 // Returns: map[string]any{"name": "test", "region": "us-east-1", "tags": map[string]any{"env": "prod", "team": "devops"}}.
 func GetTerraformEnvCliVars() (map[string]any, error) {
+	defer perf.Track(nil, "exec.GetTerraformEnvCliVars")()
+
 	args := GetTerraformEnvCliArgs()
 	if len(args) == 0 {
 		return map[string]any{}, nil

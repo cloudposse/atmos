@@ -12,6 +12,8 @@ import (
 	"text/template"
 	"time"
 
+	"github.com/cloudposse/atmos/pkg/perf"
+
 	"github.com/Masterminds/sprig/v3"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/hairyhenderson/gomplate/v3"
@@ -61,6 +63,8 @@ func ReadAndProcessComponentVendorConfigFile(
 	component string,
 	componentType string,
 ) (schema.VendorComponentConfig, string, error) {
+	defer perf.Track(atmosConfig, "exec.ReadAndProcessComponentVendorConfigFile")()
+
 	var componentBasePath string
 	var componentConfig schema.VendorComponentConfig
 
@@ -120,6 +124,8 @@ func ExecuteStackVendorInternal(
 	stack string,
 	dryRun bool,
 ) error {
+	defer perf.Track(nil, "exec.ExecuteStackVendorInternal")()
+
 	return ErrStackPullNotSupported
 }
 
@@ -227,6 +233,8 @@ func ExecuteComponentVendorInternal(
 	componentPath string,
 	dryRun bool,
 ) error {
+	defer perf.Track(atmosConfig, "exec.ExecuteComponentVendorInternal")()
+
 	if vendorComponentSpec.Source.Uri == "" {
 		return fmt.Errorf("%w:'%s'", ErrUriMustSpecified, cfg.ComponentVendorConfigFileName)
 	}

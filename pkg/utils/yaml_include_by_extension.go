@@ -7,10 +7,11 @@ import (
 	"strings"
 
 	"github.com/hashicorp/go-getter"
-	"gopkg.in/yaml.v3"
+	"go.yaml.in/yaml/v3"
 
 	"github.com/cloudposse/atmos/pkg/downloader"
 	"github.com/cloudposse/atmos/pkg/filetype"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -22,6 +23,8 @@ func ProcessIncludeTag(
 	val string,
 	file string,
 ) error {
+	defer perf.Track(atmosConfig, "utils.ProcessIncludeTag")()
+
 	return processIncludeTagInternal(atmosConfig, node, val, file, false)
 }
 
@@ -33,6 +36,8 @@ func ProcessIncludeRawTag(
 	val string,
 	file string,
 ) error {
+	defer perf.Track(atmosConfig, "utils.ProcessIncludeRawTag")()
+
 	return processIncludeTagInternal(atmosConfig, node, val, file, true)
 }
 
@@ -44,6 +49,8 @@ func processIncludeTagInternal(
 	file string,
 	forceRaw bool,
 ) error {
+	defer perf.Track(atmosConfig, "utils.processIncludeTagInternal")()
+
 	var includeFile string
 	var includeQuery string
 	var res any
@@ -116,6 +123,8 @@ func isRemoteURL(path string) bool {
 // It first checks for explicit URL protocols, then uses go-getter's detection
 // to handle shorthand formats like "github.com/org/repo".
 func shouldFetchRemote(path string) bool {
+	defer perf.Track(nil, "utils.shouldFetchRemote")()
+
 	// First check for explicit URL protocols
 	if isRemoteURL(path) {
 		return true
@@ -161,6 +170,8 @@ func resolveAbsolutePath(path string) string {
 
 // findLocalFile attempts to find a local file from various possible paths.
 func findLocalFile(includeFile, manifestFile string, atmosConfig *schema.AtmosConfiguration) string {
+	defer perf.Track(atmosConfig, "utils.findLocalFile")()
+
 	// Check if it's a URL - if so, it's not a local file
 	if isRemoteURL(includeFile) {
 		return ""
@@ -184,6 +195,8 @@ func findLocalFile(includeFile, manifestFile string, atmosConfig *schema.AtmosCo
 
 // processLocalFile reads and parses a local file.
 func processLocalFile(localFile string, forceRaw bool) (any, error) {
+	defer perf.Track(nil, "utils.processLocalFile")()
+
 	if forceRaw {
 		// Always return raw content for !include.raw
 		return filetype.ParseFileRaw(os.ReadFile, localFile)
@@ -194,6 +207,8 @@ func processLocalFile(localFile string, forceRaw bool) (any, error) {
 
 // processRemoteFile downloads and parses a remote file.
 func processRemoteFile(atmosConfig *schema.AtmosConfiguration, includeFile string, forceRaw bool) (any, error) {
+	defer perf.Track(atmosConfig, "utils.processRemoteFile")()
+
 	dl := downloader.NewGoGetterDownloader(atmosConfig)
 
 	if forceRaw {
@@ -234,6 +249,8 @@ func unmarshalYamlContent(y string, val string, file string) (*yaml.Node, error)
 
 // updateYamlNode updates the YAML node with the processed result.
 func updateYamlNode(node *yaml.Node, res any, val string, file string) error {
+	defer perf.Track(nil, "utils.updateYamlNode")()
+
 	// Handle string values that start with '#' (YAML comments)
 	if strVal, ok := res.(string); ok && strings.HasPrefix(strVal, "#") {
 		handleCommentString(node, strVal)
