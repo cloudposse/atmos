@@ -8,6 +8,8 @@ import File from '@site/src/components/File'
 import PillBox from '@site/src/components/PillBox'
 import Intro from '@site/src/components/Intro'
 import KeyPoints from '@site/src/components/KeyPoints'
+import Tabs from '@theme/Tabs'
+import TabItem from '@theme/TabItem'
 
 <PillBox>Atmos Design Pattern</PillBox>
 <Intro>
@@ -100,6 +102,8 @@ components/
 
 Environments reference specific version folders:
 
+<Tabs>
+<TabItem value="dev" label="Development" default>
 <File title="stacks/dev/us-east-1.yaml">
 ```yaml
 components:
@@ -115,7 +119,9 @@ components:
         cidr_block: "10.0.0.0/16"
 ```
 </File>
+</TabItem>
 
+<TabItem value="prod" label="Production">
 <File title="stacks/prod/us-east-1.yaml">
 ```yaml
 components:
@@ -131,6 +137,8 @@ components:
         cidr_block: "10.2.0.0/16"
 ```
 </File>
+</TabItem>
+</Tabs>
 
 ### Version Naming Conventions
 
@@ -342,30 +350,14 @@ The pattern also has limitations:
 
 While Folder-Based Versioning provides clear benefits, consider these trade-offs:
 
-### Increased Repository Size
-- **Multiple copies** of similar code across version folders
-- **Larger clone operations** as repository grows with versions
-- **Storage overhead** for maintaining parallel implementations
+### Code Duplication
+**Multiple copies** of similar code exist across version folders with considerable overlap, requiring updates in multiple locations when applying security patches or bug fixes to older versions still in use.
 
-### Maintenance Complexity
-- **Multiple locations** to apply security patches and bug fixes
-- **Divergence risk** as versions evolve independently
-- **Documentation burden** for each version's specifics
+### Divergence Risk
+When versions evolve independently over extended periods, environments can **drift significantly** from each other, making it difficult to reason about the overall system state and increasing the likelihood of environment-specific issues.
 
-### Limited Version Discovery
-- **Manual tracking** of which environments use which versions
-- **No automatic convergence** - requires active management
-- **Potential for version sprawl** without governance
-
-### Migration Challenges
-- **Testing overhead** for each version transition
-- **Rollback complexity** after extended periods on new versions
-- **State management** requires careful workspace key planning
-
-### Development Workflow Impact
-- **Parallel development** can lead to duplicated effort
-- **Cherry-picking fixes** between versions adds complexity
-- **Code review challenges** when changes span multiple versions
+### Release Tracking Challenge
+Git commits record when code changes were **merged**, not when they were **deployed** to environments. Without additional tooling or documentation, it's challenging to determine which version of a component is actually running in which environment at any given time. Git shows the history of the code, not the deployment state.
 
 ## Summary
 

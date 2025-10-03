@@ -8,6 +8,8 @@ import File from '@site/src/components/File'
 import PillBox from '@site/src/components/PillBox'
 import Intro from '@site/src/components/Intro'
 import KeyPoints from '@site/src/components/KeyPoints'
+import Tabs from '@theme/Tabs'
+import TabItem from '@theme/TabItem'
 
 <PillBox>Atmos Design Pattern</PillBox>
 <Intro>
@@ -152,6 +154,8 @@ spec:
 
 After vendoring components from the appropriate branches, stacks reference the local vendored components:
 
+<Tabs>
+<TabItem value="dev" label="Development" default>
 <File title="stacks/dev/us-east-1.yaml">
 ```yaml
 components:
@@ -168,7 +172,9 @@ components:
         cidr_block: "10.0.0.0/16"
 ```
 </File>
+</TabItem>
 
+<TabItem value="staging" label="Staging">
 <File title="stacks/staging/us-east-1.yaml">
 ```yaml
 components:
@@ -185,7 +191,9 @@ components:
         cidr_block: "10.1.0.0/16"
 ```
 </File>
+</TabItem>
 
+<TabItem value="prod" label="Production">
 <File title="stacks/prod/us-east-1.yaml">
 ```yaml
 components:
@@ -202,6 +210,8 @@ components:
         cidr_block: "10.2.0.0/16"
 ```
 </File>
+</TabItem>
+</Tabs>
 
 ## Rollback Strategy
 

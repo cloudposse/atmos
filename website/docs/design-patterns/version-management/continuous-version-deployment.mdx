@@ -208,6 +208,8 @@ components/terraform/
 
 ### Pinning Environment to Experiment
 
+<Tabs>
+<TabItem value="dev" label="Development" default>
 <File title="stacks/dev/us-east-1.yaml">
 ```yaml
 components:
@@ -219,7 +221,9 @@ components:
         name: "dev-vpc-experiment"
 ```
 </File>
+</TabItem>
 
+<TabItem value="prod" label="Production">
 <File title="stacks/prod/us-east-1.yaml">
 ```yaml
 components:
@@ -231,6 +235,8 @@ components:
         name: "prod-vpc"
 ```
 </File>
+</TabItem>
+</Tabs>
 
 ### Experiment Lifecycle
 
@@ -457,6 +463,8 @@ It's important to distinguish between two types of divergence:
 
 ### Use Cases for Planned Divergence
 
+Planned divergence is appropriate when changes are too risky or complex for progressive rollout, requiring extended parallel testing before committing all environments.
+
 **Breaking Changes with Extended Testing**:
 Major architectural changes that require weeks or months of validation before production deployment.
 
@@ -503,6 +511,8 @@ terraform/
 
 Create explicit version boundaries through folder structure. Environments reference specific version folders during the divergence period.
 
+<Tabs>
+<TabItem value="dev" label="Development" default>
 <File title="stacks/dev/us-east-1.yaml">
 ```yaml
 components:
@@ -521,7 +531,9 @@ components:
         engine_version: "15.4"
 ```
 </File>
+</TabItem>
 
+<TabItem value="prod" label="Production">
 <File title="stacks/prod/us-east-1.yaml">
 ```yaml
 components:
@@ -540,6 +552,8 @@ components:
         engine_version: "13.11"
 ```
 </File>
+</TabItem>
+</Tabs>
 
 **With [Release Tracks/Channels](/design-patterns/version-management/release-tracks-channels)**:
 
@@ -578,10 +592,15 @@ components:
 Choose planned divergence when:
 
 ✅ **Migration requires weeks/months** of parallel operation and testing
+
 ✅ **Risk is too high** for progressive rollout without extended validation
+
 ✅ **Rollback would be complex** or impossible (data migrations, schema changes)
+
 ✅ **Need production-scale testing** before committing all environments
+
 ✅ **Regulatory approval process** requires frozen versions during review
+
 ✅ **Breaking API changes** affect multiple downstream consumers
 
 ### Managing the Convergence Path
@@ -603,7 +622,7 @@ Define success criteria and cutover procedures before starting the divergence pe
 **Automate When Possible**:
 Even planned divergence can use automation—just with longer gates and explicit approval requirements.
 
-### Example: Database Migration
+### Example: Database Upgrade
 
 A complete example of planned divergence for a PostgreSQL major version upgrade:
 
@@ -630,10 +649,15 @@ resource "aws_db_instance" "main" {
 </File>
 
 **Week 1-2**: Deploy v2 to dev, run application tests
+
 **Week 3-4**: Deploy v2 to staging, run full integration suite
+
 **Week 5-6**: Load testing and performance validation on staging
+
 **Week 7**: Final approvals and production cutover planning
+
 **Week 8**: Deploy v2 to production, monitor closely
+
 **Week 9+**: After validation, remove v1 folder and converge all environments to v2
 
 ## Advanced Patterns
@@ -701,10 +725,15 @@ components:
 This pattern is ideal when:
 
 ✅ **You want simplicity**: Minimal concepts to understand and operate
+
 ✅ **You have good automation**: Strong CI/CD pipelines and testing
+
 ✅ **You value convergence**: Want environments to stay in sync
+
 ✅ **You practice trunk-based development**: Frequent integration to main
+
 ✅ **You can roll forward**: Culture supports fixing forward vs. rollback
+
 ✅ **You're starting fresh**: New projects without legacy constraints
 
 ## When Not to Use This Pattern
@@ -712,9 +741,13 @@ This pattern is ideal when:
 Consider alternatives when:
 
 ❌ **Strict compliance requirements**: Need cryptographic proof of deployments
+
 ❌ **No automation infrastructure**: Can't build robust pipelines
+
 ❌ **Very slow release cycles**: Months between production deployments
+
 ❌ **Multiple teams with conflicts**: Need isolation between team changes
+
 ❌ **Legacy migration**: Existing complex versioning must be maintained
 
 ## Best Practices
