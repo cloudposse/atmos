@@ -252,6 +252,75 @@ func TestRunTerraformDocs_Error(t *testing.T) {
 	}
 }
 
+// mockTerraformDocsRunner is a mock implementation for testing.
+type mockTerraformDocsRunner struct {
+	returnError error
+	returnValue string
+}
+
+func (m mockTerraformDocsRunner) Run(dir string, settings *schema.TerraformDocsReadmeSettings) (string, error) {
+	if m.returnError != nil {
+		return "", m.returnError
+	}
+	return m.returnValue, nil
+}
+
+// TestApplyTerraformDocsWithRunner_Error tests error handling when terraform-docs runner fails.
+func TestApplyTerraformDocsWithRunner_Error(t *testing.T) {
+	baseDir := t.TempDir()
+
+	// Create a subdirectory that exists (so getTerraformSource succeeds).
+	tfSource := filepath.Join(baseDir, "terraform")
+	if err := os.Mkdir(tfSource, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	docsGen := schema.DocsGenerate{
+		Terraform: schema.TerraformDocsReadmeSettings{
+			Enabled: true,
+			Source:  "terraform",
+		},
+	}
+	mergedData := make(map[string]any)
+
+	// Use mock runner that returns an error.
+	mockRunner := mockTerraformDocsRunner{
+		returnError: fmt.Errorf("mock terraform-docs error"),
+	}
+
+	err := applyTerraformDocsWithRunner(baseDir, &docsGen, mergedData, mockRunner)
+	if err == nil {
+		t.Error("Expected error from applyTerraformDocsWithRunner when runner fails")
+	}
+	if !strings.Contains(err.Error(), "failed to generate terraform docs") {
+		t.Errorf("Expected error message about terraform docs generation, got: %v", err)
+	}
+}
+
+// TestResolvePath_EmptyWithDefault tests resolvePath with empty path and valid default.
+func TestResolvePath_EmptyWithDefault(t *testing.T) {
+	baseDir := t.TempDir()
+	result, err := resolvePath("", baseDir, "README.md")
+	if err != nil {
+		t.Errorf("Unexpected error with empty path and valid default: %v", err)
+	}
+	if !strings.Contains(result, "README.md") {
+		t.Errorf("Expected result to contain README.md, got: %s", result)
+	}
+}
+
+// TestResolvePath_EmptyWithoutDefault tests resolvePath with empty path and empty default.
+func TestResolvePath_EmptyWithoutDefault(t *testing.T) {
+	baseDir := t.TempDir()
+	_, err := resolvePath("", baseDir, "")
+	if err == nil {
+		t.Error("Expected error with empty path and empty default")
+	}
+	if !strings.Contains(err.Error(), "file path is empty") {
+		t.Errorf("Expected error about empty file path, got: %v", err)
+	}
+}
+
 // TestMergeInputs_UnsupportedType tests error handling for unsupported input types.
 func TestMergeInputs_UnsupportedType(t *testing.T) {
 	atmosConfig := schema.AtmosConfiguration{}

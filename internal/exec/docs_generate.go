@@ -144,7 +144,23 @@ func getTemplateContent(atmosConfig *schema.AtmosConfiguration, templateURL, dir
 	return string(body), nil
 }
 
+// TerraformDocsRunner defines an interface for running terraform-docs.
+type TerraformDocsRunner interface {
+	Run(dir string, settings *schema.TerraformDocsReadmeSettings) (string, error)
+}
+
+// realTerraformDocsRunner is the production implementation.
+type realTerraformDocsRunner struct{}
+
+func (r realTerraformDocsRunner) Run(dir string, settings *schema.TerraformDocsReadmeSettings) (string, error) {
+	return runTerraformDocs(dir, settings)
+}
+
 func applyTerraformDocs(dir string, docsGenerate *schema.DocsGenerate, mergedData map[string]any) error {
+	return applyTerraformDocsWithRunner(dir, docsGenerate, mergedData, realTerraformDocsRunner{})
+}
+
+func applyTerraformDocsWithRunner(dir string, docsGenerate *schema.DocsGenerate, mergedData map[string]any, runner TerraformDocsRunner) error {
 	if !docsGenerate.Terraform.Enabled {
 		return nil
 	}
@@ -155,7 +171,7 @@ func applyTerraformDocs(dir string, docsGenerate *schema.DocsGenerate, mergedDat
 		return nil
 	}
 
-	terraformDocs, err := runTerraformDocs(terraformSource, &docsGenerate.Terraform)
+	terraformDocs, err := runner.Run(terraformSource, &docsGenerate.Terraform)
 	if err != nil {
 		return fmt.Errorf("failed to generate terraform docs: %w", err)
 	}
@@ -203,13 +219,9 @@ func generateDocument(
 	}
 
 	// 5) Resolve and write final document.
-	outputFile := docsGenerate.Output
-	if outputFile == "" {
-		outputFile = defaultReadmeOutput
-	}
-	outputPath, err := resolvePath(outputFile, baseDir)
+	outputPath, err := resolvePath(docsGenerate.Output, baseDir, defaultReadmeOutput)
 	if err != nil {
-		return fmt.Errorf("failed to resolve output path %s: %w", outputFile, err)
+		return fmt.Errorf("failed to resolve output path %s: %w", docsGenerate.Output, err)
 	}
 	if err = os.WriteFile(outputPath, []byte(rendered), defaultFilePermissions); err != nil {
 		return fmt.Errorf("failed to write output %s: %w", outputPath, err)
@@ -297,9 +309,9 @@ func downloadSource(
 	pathOrURL string,
 	baseDir string,
 ) (localPath string, temDir string, err error) {
-	// If path is not remote, resolve it.
+	// If path is not remote, resolve it (no default needed here).
 	if !isRemoteSource(pathOrURL) {
-		pathOrURL, err = resolvePath(pathOrURL, baseDir)
+		pathOrURL, err = resolvePath(pathOrURL, baseDir, "")
 		if err != nil {
 			return "", "", fmt.Errorf("%w: %s", errUtils.ErrPathResolution, err)
 		}
@@ -337,11 +349,17 @@ func isRemoteSource(s string) bool {
 	return false
 }
 
+// resolvePath resolves a file path according to the following rules:
+// - If path is empty, uses defaultPath
+// - Absolute paths: resolved as is.
 // - Explicit relative (./ or ../) relative to cwd.
 // - Implicit relative paths first against baseDir, then cwd.
-func resolvePath(path string, baseDir string) (string, error) {
+func resolvePath(path string, baseDir string, defaultPath string) (string, error) {
 	if path == "" {
-		return "", errUtils.ErrEmptyFilePath
+		if defaultPath == "" {
+			return "", errUtils.ErrEmptyFilePath
+		}
+		path = defaultPath
 	}
 
 	if !filepath.IsAbs(path) && !strings.HasPrefix(path, "./") && !strings.HasPrefix(path, "../") {
