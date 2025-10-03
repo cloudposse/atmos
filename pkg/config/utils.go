@@ -449,12 +449,12 @@ func processCommandLineArgs(atmosConfig *schema.AtmosConfiguration, configAndSta
 	if err := setHelmfileConfig(atmosConfig, configAndStacksInfo); err != nil {
 		return err
 	}
-    if err := setPackerConfig(atmosConfig, configAndStacksInfo); err != nil {
+	if err := setPackerConfig(atmosConfig, configAndStacksInfo); err != nil {
 		return err
 	}
-    if err := setAnsibleConfig(atmosConfig, configAndStacksInfo); err != nil {
-        return err
-    }
+	if err := setAnsibleConfig(atmosConfig, configAndStacksInfo); err != nil {
+		return err
+	}
 	if err := setStacksConfig(atmosConfig, configAndStacksInfo); err != nil {
 		return err
 	}
@@ -519,15 +519,15 @@ func setPackerConfig(atmosConfig *schema.AtmosConfiguration, configAndStacksInfo
 }
 
 func setAnsibleConfig(atmosConfig *schema.AtmosConfiguration, configAndStacksInfo *schema.ConfigAndStacksInfo) error {
-    if len(configAndStacksInfo.AnsibleCommand) > 0 {
-        atmosConfig.Components.Ansible.Command = configAndStacksInfo.AnsibleCommand
-        log.Debug(cmdLineArg, AnsibleCommandFlag, configAndStacksInfo.AnsibleCommand)
-    }
-    if len(configAndStacksInfo.AnsibleDir) > 0 {
-        atmosConfig.Components.Ansible.BasePath = configAndStacksInfo.AnsibleDir
-        log.Debug(cmdLineArg, AnsibleDirFlag, configAndStacksInfo.AnsibleDir)
-    }
-    return nil
+	if len(configAndStacksInfo.AnsibleCommand) > 0 {
+		atmosConfig.Components.Ansible.Command = configAndStacksInfo.AnsibleCommand
+		log.Debug(cmdLineArg, AnsibleCommandFlag, configAndStacksInfo.AnsibleCommand)
+	}
+	if len(configAndStacksInfo.AnsibleDir) > 0 {
+		atmosConfig.Components.Ansible.BasePath = configAndStacksInfo.AnsibleDir
+		log.Debug(cmdLineArg, AnsibleDirFlag, configAndStacksInfo.AnsibleDir)
+	}
+	return nil
 }
 
 func setStacksConfig(atmosConfig *schema.AtmosConfiguration, configAndStacksInfo *schema.ConfigAndStacksInfo) error {

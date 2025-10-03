@@ -217,7 +217,7 @@ func AtmosConfigAbsolutePaths(atmosConfig *schema.AtmosConfiguration) error {
 	}
 	atmosConfig.HelmfileDirAbsolutePath = helmfileDirAbsPath
 
-    // Convert Packer dir to an absolute path.
+	// Convert Packer dir to an absolute path.
 	packerBasePath := u.JoinPath(atmosConfig.BasePath, atmosConfig.Components.Packer.BasePath)
 	packerDirAbsPath, err := filepath.Abs(packerBasePath)
 	if err != nil {
@@ -225,13 +225,13 @@ func AtmosConfigAbsolutePaths(atmosConfig *schema.AtmosConfiguration) error {
 	}
 	atmosConfig.PackerDirAbsolutePath = packerDirAbsPath
 
-    // Convert Ansible dir to an absolute path.
-    ansibleBasePath := u.JoinPath(atmosConfig.BasePath, atmosConfig.Components.Ansible.BasePath)
-    ansibleDirAbsPath, err := filepath.Abs(ansibleBasePath)
-    if err != nil {
-        return err
-    }
-    atmosConfig.AnsibleDirAbsolutePath = ansibleDirAbsPath
+	// Convert Ansible dir to an absolute path.
+	ansibleBasePath := u.JoinPath(atmosConfig.BasePath, atmosConfig.Components.Ansible.BasePath)
+	ansibleDirAbsPath, err := filepath.Abs(ansibleBasePath)
+	if err != nil {
+		return err
+	}
+	atmosConfig.AnsibleDirAbsolutePath = ansibleDirAbsPath
 
 	return nil
 }

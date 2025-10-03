@@ -159,37 +159,37 @@ func constructPackerComponentWorkingDir(atmosConfig *schema.AtmosConfiguration, 
 
 // constructAnsibleComponentWorkingDir constructs the working dir for an Ansible component in a stack.
 func constructAnsibleComponentWorkingDir(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) string {
-    if atmosConfig.AnsibleDirAbsolutePath != "" {
-        path, err := u.GetComponentPath(atmosConfig, "ansible", info.ComponentFolderPrefix, info.FinalComponent)
-        if err == nil {
-            return path
-        }
-        log.Debug("Failed to resolve component path, falling back to construction", "error", err)
-    }
+	if atmosConfig.AnsibleDirAbsolutePath != "" {
+		path, err := u.GetComponentPath(atmosConfig, "ansible", info.ComponentFolderPrefix, info.FinalComponent)
+		if err == nil {
+			return path
+		}
+		log.Debug("Failed to resolve component path, falling back to construction", "error", err)
+	}
 
-    return filepath.Join(
-        atmosConfig.BasePath,
-        atmosConfig.Components.Ansible.BasePath,
-        info.ComponentFolderPrefix,
-        info.FinalComponent,
-    )
+	return filepath.Join(
+		atmosConfig.BasePath,
+		atmosConfig.Components.Ansible.BasePath,
+		info.ComponentFolderPrefix,
+		info.FinalComponent,
+	)
 }
 
 // constructAnsibleComponentVarfileName constructs the varfile name for an Ansible component in a stack.
 func constructAnsibleComponentVarfileName(info *schema.ConfigAndStacksInfo) string {
-    var varFile string
-    if len(info.ComponentFolderPrefixReplaced) == 0 {
-        varFile = fmt.Sprintf("%s-%s.ansible.vars.yaml", info.ContextPrefix, info.Component)
-    } else {
-        varFile = fmt.Sprintf("%s-%s-%s.ansible.vars.yaml", info.ContextPrefix, info.ComponentFolderPrefixReplaced, info.Component)
-    }
-    return varFile
+	var varFile string
+	if len(info.ComponentFolderPrefixReplaced) == 0 {
+		varFile = fmt.Sprintf("%s-%s.ansible.vars.yaml", info.ContextPrefix, info.Component)
+	} else {
+		varFile = fmt.Sprintf("%s-%s-%s.ansible.vars.yaml", info.ContextPrefix, info.ComponentFolderPrefixReplaced, info.Component)
+	}
+	return varFile
 }
 
 // constructAnsibleComponentVarfilePath constructs the varfile path for an Ansible component in a stack.
 func constructAnsibleComponentVarfilePath(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) string {
-    return filepath.Join(
-        constructAnsibleComponentWorkingDir(atmosConfig, info),
-        constructAnsibleComponentVarfileName(info),
-    )
+	return filepath.Join(
+		constructAnsibleComponentWorkingDir(atmosConfig, info),
+		constructAnsibleComponentVarfileName(info),
+	)
 }

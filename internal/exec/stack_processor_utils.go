@@ -675,8 +675,8 @@ func ProcessStackConfig(
 	globalEnvSection := map[string]any{}
 	globalTerraformSection := map[string]any{}
 	globalHelmfileSection := map[string]any{}
-    globalPackerSection := map[string]any{}
-    globalAnsibleSection := map[string]any{}
+	globalPackerSection := map[string]any{}
+	globalAnsibleSection := map[string]any{}
 	globalComponentsSection := map[string]any{}
 
 	terraformVars := map[string]any{}
@@ -691,20 +691,20 @@ func ProcessStackConfig(
 	helmfileEnv := map[string]any{}
 	helmfileCommand := ""
 
-    packerVars := map[string]any{}
-    packerSettings := map[string]any{}
-    packerEnv := map[string]any{}
-    packerCommand := ""
+	packerVars := map[string]any{}
+	packerSettings := map[string]any{}
+	packerEnv := map[string]any{}
+	packerCommand := ""
 
 	ansibleVars := map[string]any{}
-    ansibleSettings := map[string]any{}
-    ansibleEnv := map[string]any{}
-    ansibleCommand := ""
+	ansibleSettings := map[string]any{}
+	ansibleEnv := map[string]any{}
+	ansibleCommand := ""
 
 	terraformComponents := map[string]any{}
 	helmfileComponents := map[string]any{}
-    packerComponents := map[string]any{}
-    ansibleComponents := map[string]any{}
+	packerComponents := map[string]any{}
+	ansibleComponents := map[string]any{}
 	allComponents := map[string]any{}
 
 	// Global sections
@@ -757,12 +757,12 @@ func ProcessStackConfig(
 		}
 	}
 
-    if i, ok := config[cfg.AnsibleSectionName]; ok {
-        globalAnsibleSection, ok = i.(map[string]any)
-        if !ok {
-            return nil, fmt.Errorf("invalid 'ansible' section in the file '%s'", stackName)
-        }
-    }
+	if i, ok := config[cfg.AnsibleSectionName]; ok {
+		globalAnsibleSection, ok = i.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf("invalid 'ansible' section in the file '%s'", stackName)
+		}
+	}
 
 	if i, ok := config["components"]; ok {
 		globalComponentsSection, ok = i.(map[string]any)
@@ -962,52 +962,52 @@ func ProcessStackConfig(
 
 	globalAndPackerEnv, err := m.Merge(atmosConfig, []map[string]any{globalEnvSection, packerEnv})
 
-    // Ansible section
-    if i, ok := globalAnsibleSection[cfg.CommandSectionName]; ok {
-        ansibleCommand, ok = i.(string)
-        if !ok {
-            return nil, fmt.Errorf("invalid 'ansible.command' section in the file '%s'", stackName)
-        }
-    }
+	// Ansible section
+	if i, ok := globalAnsibleSection[cfg.CommandSectionName]; ok {
+		ansibleCommand, ok = i.(string)
+		if !ok {
+			return nil, fmt.Errorf("invalid 'ansible.command' section in the file '%s'", stackName)
+		}
+	}
 
-    if i, ok := globalAnsibleSection["vars"]; ok {
-        ansibleVars, ok = i.(map[string]any)
-        if !ok {
-            return nil, fmt.Errorf("invalid 'ansible.vars' section in the file '%s'", stackName)
-        }
-    }
+	if i, ok := globalAnsibleSection["vars"]; ok {
+		ansibleVars, ok = i.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf("invalid 'ansible.vars' section in the file '%s'", stackName)
+		}
+	}
 
-    globalAndAnsibleVars, err := m.Merge(atmosConfig, []map[string]any{globalVarsSection, ansibleVars})
-    if err != nil {
-        return nil, err
-    }
+	globalAndAnsibleVars, err := m.Merge(atmosConfig, []map[string]any{globalVarsSection, ansibleVars})
+	if err != nil {
+		return nil, err
+	}
 
-    if i, ok := globalAnsibleSection["settings"]; ok {
-        ansibleSettings, ok = i.(map[string]any)
-        if !ok {
-            return nil, fmt.Errorf("invalid 'ansible.settings' section in the file '%s'", stackName)
-        }
-    }
+	if i, ok := globalAnsibleSection["settings"]; ok {
+		ansibleSettings, ok = i.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf("invalid 'ansible.settings' section in the file '%s'", stackName)
+		}
+	}
 
-    globalAndAnsibleSettings, err := m.Merge(atmosConfig, []map[string]any{globalSettingsSection, ansibleSettings})
-    if err != nil {
-        return nil, err
-    }
+	globalAndAnsibleSettings, err := m.Merge(atmosConfig, []map[string]any{globalSettingsSection, ansibleSettings})
+	if err != nil {
+		return nil, err
+	}
 
-    if i, ok := globalAnsibleSection["env"]; ok {
-        ansibleEnv, ok = i.(map[string]any)
-        if !ok {
-            return nil, fmt.Errorf("invalid 'ansible.env' section in the file '%s'", stackName)
-        }
-    }
+	if i, ok := globalAnsibleSection["env"]; ok {
+		ansibleEnv, ok = i.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf("invalid 'ansible.env' section in the file '%s'", stackName)
+		}
+	}
 
-    globalAndAnsibleEnv, err := m.Merge(atmosConfig, []map[string]any{globalEnvSection, ansibleEnv})
+	globalAndAnsibleEnv, err := m.Merge(atmosConfig, []map[string]any{globalEnvSection, ansibleEnv})
 
 	if err != nil {
-      return nil, err
-    }
+		return nil, err
+	}
 
-    // Process all Terraform components
+	// Process all Terraform components
 	if componentTypeFilter == "" || componentTypeFilter == cfg.TerraformComponentType {
 		if allTerraformComponents, ok := globalComponentsSection[cfg.TerraformComponentType]; ok {
 
@@ -2137,224 +2137,224 @@ func ProcessStackConfig(
 		}
 	}
 
-    // Process all Ansible components
-    if componentTypeFilter == "" || componentTypeFilter == cfg.AnsibleComponentType {
-        if allAnsibleComponents, ok := globalComponentsSection[cfg.AnsibleComponentType]; ok {
-            allAnsibleComponentsMap, ok := allAnsibleComponents.(map[string]any)
-            if !ok {
-                return nil, fmt.Errorf("invalid 'components.ansible' section in the file '%s'", stackName)
-            }
+	// Process all Ansible components
+	if componentTypeFilter == "" || componentTypeFilter == cfg.AnsibleComponentType {
+		if allAnsibleComponents, ok := globalComponentsSection[cfg.AnsibleComponentType]; ok {
+			allAnsibleComponentsMap, ok := allAnsibleComponents.(map[string]any)
+			if !ok {
+				return nil, fmt.Errorf("invalid 'components.ansible' section in the file '%s'", stackName)
+			}
 
-            for cmp, v := range allAnsibleComponentsMap {
-                component := cmp
+			for cmp, v := range allAnsibleComponentsMap {
+				component := cmp
 
-                componentMap, ok := v.(map[string]any)
-                if !ok {
-                    return nil, fmt.Errorf("invalid 'components.ansible.%s' section in the file '%s'", component, stackName)
-                }
+				componentMap, ok := v.(map[string]any)
+				if !ok {
+					return nil, fmt.Errorf("invalid 'components.ansible.%s' section in the file '%s'", component, stackName)
+				}
 
-                componentVars := map[string]any{}
-                if i2, ok := componentMap[cfg.VarsSectionName]; ok {
-                    componentVars, ok = i2.(map[string]any)
-                    if !ok {
-                        return nil, fmt.Errorf("invalid 'components.ansible.%s.vars' section in the file '%s'", component, stackName)
-                    }
-                }
+				componentVars := map[string]any{}
+				if i2, ok := componentMap[cfg.VarsSectionName]; ok {
+					componentVars, ok = i2.(map[string]any)
+					if !ok {
+						return nil, fmt.Errorf("invalid 'components.ansible.%s.vars' section in the file '%s'", component, stackName)
+					}
+				}
 
-                componentSettings := map[string]any{}
-                if i, ok := componentMap[cfg.SettingsSectionName]; ok {
-                    componentSettings, ok = i.(map[string]any)
-                    if !ok {
-                        return nil, fmt.Errorf("invalid 'components.ansible.%s.settings' section in the file '%s'", component, stackName)
-                    }
-                }
+				componentSettings := map[string]any{}
+				if i, ok := componentMap[cfg.SettingsSectionName]; ok {
+					componentSettings, ok = i.(map[string]any)
+					if !ok {
+						return nil, fmt.Errorf("invalid 'components.ansible.%s.settings' section in the file '%s'", component, stackName)
+					}
+				}
 
-                componentEnv := map[string]any{}
-                if i, ok := componentMap[cfg.EnvSectionName]; ok {
-                    componentEnv, ok = i.(map[string]any)
-                    if !ok {
-                        return nil, fmt.Errorf("invalid 'components.ansible.%s.env' section in the file '%s'", component, stackName)
-                    }
-                }
+				componentEnv := map[string]any{}
+				if i, ok := componentMap[cfg.EnvSectionName]; ok {
+					componentEnv, ok = i.(map[string]any)
+					if !ok {
+						return nil, fmt.Errorf("invalid 'components.ansible.%s.env' section in the file '%s'", component, stackName)
+					}
+				}
 
-                // Component metadata (not deep-merged)
-                componentMetadata := map[string]any{}
-                if i, ok := componentMap[cfg.MetadataSectionName]; ok {
-                    componentMetadata, ok = i.(map[string]any)
-                    if !ok {
-                        return nil, fmt.Errorf("invalid 'components.ansible.%s.metadata' section in the file '%s'", component, stackName)
-                    }
-                }
+				// Component metadata (not deep-merged)
+				componentMetadata := map[string]any{}
+				if i, ok := componentMap[cfg.MetadataSectionName]; ok {
+					componentMetadata, ok = i.(map[string]any)
+					if !ok {
+						return nil, fmt.Errorf("invalid 'components.ansible.%s.metadata' section in the file '%s'", component, stackName)
+					}
+				}
 
-                componentAnsibleCommand := ""
-                if i, ok := componentMap[cfg.CommandSectionName]; ok {
-                    componentAnsibleCommand, ok = i.(string)
-                    if !ok {
-                        return nil, fmt.Errorf("invalid 'components.ansible.%s.command' attribute in the file '%s'", component, stackName)
-                    }
-                }
+				componentAnsibleCommand := ""
+				if i, ok := componentMap[cfg.CommandSectionName]; ok {
+					componentAnsibleCommand, ok = i.(string)
+					if !ok {
+						return nil, fmt.Errorf("invalid 'components.ansible.%s.command' attribute in the file '%s'", component, stackName)
+					}
+				}
 
-                // Overrides
-                componentOverrides := map[string]any{}
-                componentOverridesVars := map[string]any{}
-                componentOverridesSettings := map[string]any{}
-                componentOverridesEnv := map[string]any{}
-                componentOverridesAnsibleCommand := ""
+				// Overrides
+				componentOverrides := map[string]any{}
+				componentOverridesVars := map[string]any{}
+				componentOverridesSettings := map[string]any{}
+				componentOverridesEnv := map[string]any{}
+				componentOverridesAnsibleCommand := ""
 
-                if i, ok := componentMap[cfg.OverridesSectionName]; ok {
-                    if componentOverrides, ok = i.(map[string]any); !ok {
-                        return nil, fmt.Errorf("invalid 'components.ansible.%s.overrides' in the manifest '%s'", component, stackName)
-                    }
+				if i, ok := componentMap[cfg.OverridesSectionName]; ok {
+					if componentOverrides, ok = i.(map[string]any); !ok {
+						return nil, fmt.Errorf("invalid 'components.ansible.%s.overrides' in the manifest '%s'", component, stackName)
+					}
 
-                    if i, ok = componentOverrides[cfg.VarsSectionName]; ok {
-                        if componentOverridesVars, ok = i.(map[string]any); !ok {
-                            return nil, fmt.Errorf("invalid 'components.ansible.%s.overrides.vars' in the manifest '%s'", component, stackName)
-                        }
-                    }
+					if i, ok = componentOverrides[cfg.VarsSectionName]; ok {
+						if componentOverridesVars, ok = i.(map[string]any); !ok {
+							return nil, fmt.Errorf("invalid 'components.ansible.%s.overrides.vars' in the manifest '%s'", component, stackName)
+						}
+					}
 
-                    if i, ok = componentOverrides[cfg.SettingsSectionName]; ok {
-                        if componentOverridesSettings, ok = i.(map[string]any); !ok {
-                            return nil, fmt.Errorf("invalid 'components.ansible.%s.overrides.settings' in the manifest '%s'", component, stackName)
-                        }
-                    }
+					if i, ok = componentOverrides[cfg.SettingsSectionName]; ok {
+						if componentOverridesSettings, ok = i.(map[string]any); !ok {
+							return nil, fmt.Errorf("invalid 'components.ansible.%s.overrides.settings' in the manifest '%s'", component, stackName)
+						}
+					}
 
-                    if i, ok = componentOverrides[cfg.EnvSectionName]; ok {
-                        if componentOverridesEnv, ok = i.(map[string]any); !ok {
-                            return nil, fmt.Errorf("invalid 'components.ansible.%s.overrides.env' in the manifest '%s'", component, stackName)
-                        }
-                    }
+					if i, ok = componentOverrides[cfg.EnvSectionName]; ok {
+						if componentOverridesEnv, ok = i.(map[string]any); !ok {
+							return nil, fmt.Errorf("invalid 'components.ansible.%s.overrides.env' in the manifest '%s'", component, stackName)
+						}
+					}
 
-                    if i, ok = componentOverrides[cfg.CommandSectionName]; ok {
-                        if componentOverridesAnsibleCommand, ok = i.(string); !ok {
-                            return nil, fmt.Errorf("invalid 'components.ansible.%s.overrides.command' in the manifest '%s'", component, stackName)
-                        }
-                    }
-                }
+					if i, ok = componentOverrides[cfg.CommandSectionName]; ok {
+						if componentOverridesAnsibleCommand, ok = i.(string); !ok {
+							return nil, fmt.Errorf("invalid 'components.ansible.%s.overrides.command' in the manifest '%s'", component, stackName)
+						}
+					}
+				}
 
-                // Base component(s)
-                baseComponentVars := map[string]any{}
-                baseComponentSettings := map[string]any{}
-                baseComponentEnv := map[string]any{}
-                baseComponentName := ""
-                baseComponentAnsibleCommand := ""
-                var baseComponentConfig schema.BaseComponentConfig
-                var componentInheritanceChain []string
-                var baseComponents []string
+				// Base component(s)
+				baseComponentVars := map[string]any{}
+				baseComponentSettings := map[string]any{}
+				baseComponentEnv := map[string]any{}
+				baseComponentName := ""
+				baseComponentAnsibleCommand := ""
+				var baseComponentConfig schema.BaseComponentConfig
+				var componentInheritanceChain []string
+				var baseComponents []string
 
-                if baseComponent, baseComponentExist := componentMap[cfg.ComponentSectionName]; baseComponentExist {
-                    baseComponentName, ok = baseComponent.(string)
-                    if !ok {
-                        return nil, fmt.Errorf("invalid 'components.ansible.%s.component' attribute in the file '%s'", component, stackName)
-                    }
+				if baseComponent, baseComponentExist := componentMap[cfg.ComponentSectionName]; baseComponentExist {
+					baseComponentName, ok = baseComponent.(string)
+					if !ok {
+						return nil, fmt.Errorf("invalid 'components.ansible.%s.component' attribute in the file '%s'", component, stackName)
+					}
 
-                    err = ProcessBaseComponentConfig(
-                        atmosConfig,
-                        &baseComponentConfig,
-                        allAnsibleComponentsMap,
-                        component,
-                        stack,
-                        baseComponentName,
-                        atmosConfig.AnsibleDirAbsolutePath,
-                        checkBaseComponentExists,
-                        &baseComponents,
-                    )
-                    if err != nil {
-                        return nil, err
-                    }
+					err = ProcessBaseComponentConfig(
+						atmosConfig,
+						&baseComponentConfig,
+						allAnsibleComponentsMap,
+						component,
+						stack,
+						baseComponentName,
+						atmosConfig.AnsibleDirAbsolutePath,
+						checkBaseComponentExists,
+						&baseComponents,
+					)
+					if err != nil {
+						return nil, err
+					}
 
-                    baseComponentVars = baseComponentConfig.BaseComponentVars
-                    baseComponentSettings = baseComponentConfig.BaseComponentSettings
-                    baseComponentEnv = baseComponentConfig.BaseComponentEnv
-                    baseComponentName = baseComponentConfig.FinalBaseComponentName
-                    baseComponentAnsibleCommand = baseComponentConfig.BaseComponentCommand
-                    componentInheritanceChain = baseComponentConfig.ComponentInheritanceChain
-                }
+					baseComponentVars = baseComponentConfig.BaseComponentVars
+					baseComponentSettings = baseComponentConfig.BaseComponentSettings
+					baseComponentEnv = baseComponentConfig.BaseComponentEnv
+					baseComponentName = baseComponentConfig.FinalBaseComponentName
+					baseComponentAnsibleCommand = baseComponentConfig.BaseComponentCommand
+					componentInheritanceChain = baseComponentConfig.ComponentInheritanceChain
+				}
 
-                baseComponents = u.UniqueStrings(baseComponents)
-                sort.Strings(baseComponents)
+				baseComponents = u.UniqueStrings(baseComponents)
+				sort.Strings(baseComponents)
 
-                // Final configs
-                finalComponentVars, err := m.Merge(
-                    atmosConfig,
-                    []map[string]any{
-                        globalAndAnsibleVars,
-                        baseComponentVars,
-                        componentVars,
-                        componentOverridesVars,
-                    })
-                if err != nil {
-                    return nil, err
-                }
+				// Final configs
+				finalComponentVars, err := m.Merge(
+					atmosConfig,
+					[]map[string]any{
+						globalAndAnsibleVars,
+						baseComponentVars,
+						componentVars,
+						componentOverridesVars,
+					})
+				if err != nil {
+					return nil, err
+				}
 
-                finalComponentSettings, err := m.Merge(
-                    atmosConfig,
-                    []map[string]any{
-                        globalAndAnsibleSettings,
-                        baseComponentSettings,
-                        componentSettings,
-                        componentOverridesSettings,
-                    })
-                if err != nil {
-                    return nil, err
-                }
+				finalComponentSettings, err := m.Merge(
+					atmosConfig,
+					[]map[string]any{
+						globalAndAnsibleSettings,
+						baseComponentSettings,
+						componentSettings,
+						componentOverridesSettings,
+					})
+				if err != nil {
+					return nil, err
+				}
 
-                finalComponentEnv, err := m.Merge(
-                    atmosConfig,
-                    []map[string]any{
-                        globalAndAnsibleEnv,
-                        baseComponentEnv,
-                        componentEnv,
-                        componentOverridesEnv,
-                    })
-                if err != nil {
-                    return nil, err
-                }
+				finalComponentEnv, err := m.Merge(
+					atmosConfig,
+					[]map[string]any{
+						globalAndAnsibleEnv,
+						baseComponentEnv,
+						componentEnv,
+						componentOverridesEnv,
+					})
+				if err != nil {
+					return nil, err
+				}
 
-                // Final binary to execute
-                finalComponentAnsibleCommand := "ansible-playbook"
-                if atmosConfig.Components.Ansible.Command != "" {
-                    finalComponentAnsibleCommand = atmosConfig.Components.Ansible.Command
-                }
-                if ansibleCommand != "" {
-                    finalComponentAnsibleCommand = ansibleCommand
-                }
-                if baseComponentAnsibleCommand != "" {
-                    finalComponentAnsibleCommand = baseComponentAnsibleCommand
-                }
-                if componentAnsibleCommand != "" {
-                    finalComponentAnsibleCommand = componentAnsibleCommand
-                }
-                if componentOverridesAnsibleCommand != "" {
-                    finalComponentAnsibleCommand = componentOverridesAnsibleCommand
-                }
+				// Final binary to execute
+				finalComponentAnsibleCommand := "ansible-playbook"
+				if atmosConfig.Components.Ansible.Command != "" {
+					finalComponentAnsibleCommand = atmosConfig.Components.Ansible.Command
+				}
+				if ansibleCommand != "" {
+					finalComponentAnsibleCommand = ansibleCommand
+				}
+				if baseComponentAnsibleCommand != "" {
+					finalComponentAnsibleCommand = baseComponentAnsibleCommand
+				}
+				if componentAnsibleCommand != "" {
+					finalComponentAnsibleCommand = componentAnsibleCommand
+				}
+				if componentOverridesAnsibleCommand != "" {
+					finalComponentAnsibleCommand = componentOverridesAnsibleCommand
+				}
 
-                finalSettings, err := processSettingsIntegrationsGithub(atmosConfig, finalComponentSettings)
-                if err != nil {
-                    return nil, err
-                }
+				finalSettings, err := processSettingsIntegrationsGithub(atmosConfig, finalComponentSettings)
+				if err != nil {
+					return nil, err
+				}
 
-                comp := map[string]any{}
-                comp[cfg.VarsSectionName] = finalComponentVars
-                comp[cfg.SettingsSectionName] = finalSettings
-                comp[cfg.EnvSectionName] = finalComponentEnv
-                comp[cfg.CommandSectionName] = finalComponentAnsibleCommand
-                comp["inheritance"] = componentInheritanceChain
-                comp[cfg.MetadataSectionName] = componentMetadata
-                comp[cfg.OverridesSectionName] = componentOverrides
+				comp := map[string]any{}
+				comp[cfg.VarsSectionName] = finalComponentVars
+				comp[cfg.SettingsSectionName] = finalSettings
+				comp[cfg.EnvSectionName] = finalComponentEnv
+				comp[cfg.CommandSectionName] = finalComponentAnsibleCommand
+				comp["inheritance"] = componentInheritanceChain
+				comp[cfg.MetadataSectionName] = componentMetadata
+				comp[cfg.OverridesSectionName] = componentOverrides
 
-                if baseComponentName != "" {
-                    comp[cfg.ComponentSectionName] = baseComponentName
-                }
+				if baseComponentName != "" {
+					comp[cfg.ComponentSectionName] = baseComponentName
+				}
 
-                ansibleComponents[component] = comp
-            }
-        }
-    }
+				ansibleComponents[component] = comp
+			}
+		}
+	}
 
-    allComponents[cfg.TerraformComponentType] = terraformComponents
-    allComponents[cfg.HelmfileComponentType] = helmfileComponents
-    allComponents[cfg.PackerComponentType] = packerComponents
-    allComponents[cfg.AnsibleComponentType] = ansibleComponents
+	allComponents[cfg.TerraformComponentType] = terraformComponents
+	allComponents[cfg.HelmfileComponentType] = helmfileComponents
+	allComponents[cfg.PackerComponentType] = packerComponents
+	allComponents[cfg.AnsibleComponentType] = ansibleComponents
 
 	result := map[string]any{
 		cfg.ComponentsSectionName: allComponents,
