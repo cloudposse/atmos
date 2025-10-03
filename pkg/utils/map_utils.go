@@ -5,10 +5,14 @@ import (
 	"sort"
 
 	"github.com/samber/lo"
+
+	"github.com/cloudposse/atmos/pkg/perf"
 )
 
 // StringKeysFromMap returns a slice of sorted string keys from the provided map
 func StringKeysFromMap(m map[string]any) []string {
+	defer perf.Track(nil, "utils.StringKeysFromMap")()
+
 	keys := []string{}
 	for k := range m {
 		keys = append(keys, k)
@@ -25,6 +29,8 @@ func MapKeyExists(m map[string]any, key string) bool {
 
 // SortMapByKeysAndValuesUniq sorts the provided map by the keys, sorts the map values (lists of strings), and makes the values unique
 func SortMapByKeysAndValuesUniq(m map[string][]string) map[string][]string {
+	defer perf.Track(nil, "utils.SortMapByKeysAndValuesUniq")()
+
 	keys := lo.Keys(m)
 	sort.Strings(keys)
 	res := make(map[string][]string)
@@ -37,6 +43,8 @@ func SortMapByKeysAndValuesUniq(m map[string][]string) map[string][]string {
 
 // MapOfInterfacesToMapOfStrings converts map[string]any to map[string]string
 func MapOfInterfacesToMapOfStrings(input map[string]any) map[string]string {
+	defer perf.Track(nil, "utils.MapOfInterfacesToMapOfStrings")()
+
 	return lo.MapEntries(input, func(key string, value any) (string, string) {
 		return key, fmt.Sprintf("%v", value)
 	})
@@ -44,6 +52,8 @@ func MapOfInterfacesToMapOfStrings(input map[string]any) map[string]string {
 
 // MapOfInterfaceKeysToMapOfStringKeys converts map[any]any to map[string]any
 func MapOfInterfaceKeysToMapOfStringKeys(input map[any]any) map[string]any {
+	defer perf.Track(nil, "utils.MapOfInterfaceKeysToMapOfStringKeys")()
+
 	converted := make(map[string]any, len(input))
 	for key, value := range input {
 		strKey, ok := key.(string)

@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	log "github.com/charmbracelet/log"
+	log "github.com/cloudposse/atmos/pkg/logger"
 )
 
 func setupTestFixtures(baseDir string) error {

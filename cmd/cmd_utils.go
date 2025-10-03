@@ -6,11 +6,10 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"time"
 
-	log "github.com/charmbracelet/log"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/go-git/go-git/v5"
 	"github.com/samber/lo"
 	"github.com/spf13/cobra"
@@ -87,19 +86,11 @@ func processCustomCommands(
 					executeCustomCommand(atmosConfig, cmd, args, parentCommand, commandConfig)
 				},
 			}
-			// TODO: we need to update this post https://github.com/cloudposse/atmos/pull/959 gets merged
 			customCommand.PersistentFlags().Bool("", false, doubleDashHint)
 			// Process and add flags to the command
 			for _, flag := range commandConfig.Flags {
 				if flag.Type == "bool" {
 					defaultVal := false
-					if flag.Default != "" {
-						// Accept "true"/"false" as string for bool default
-						parsed, err := strconv.ParseBool(flag.Default)
-						if err == nil {
-							defaultVal = parsed
-						}
-					}
 					if flag.Shorthand != "" {
 						customCommand.PersistentFlags().BoolP(flag.Name, flag.Shorthand, defaultVal, flag.Usage)
 					} else {
@@ -107,9 +98,6 @@ func processCustomCommands(
 					}
 				} else {
 					defaultVal := ""
-					if flag.Default != "" {
-						defaultVal = flag.Default
-					}
 					if flag.Shorthand != "" {
 						customCommand.PersistentFlags().StringP(flag.Name, flag.Shorthand, defaultVal, flag.Usage)
 					} else {
@@ -366,7 +354,7 @@ func executeCustomCommand(
 		// process the component stack config and expose it in {{ .ComponentConfig.xxx.yyy.zzz }} Go template variables
 		if commandConfig.ComponentConfig.Component != "" && commandConfig.ComponentConfig.Stack != "" {
 			// Process Go templates in the command's 'component_config.component'
-			component, err := e.ProcessTmpl(fmt.Sprintf("component-config-component-%d", i), commandConfig.ComponentConfig.Component, data, false)
+			component, err := e.ProcessTmpl(&atmosConfig, fmt.Sprintf("component-config-component-%d", i), commandConfig.ComponentConfig.Component, data, false)
 			errUtils.CheckErrorPrintAndExit(err, "", "")
 			if component == "" || component == "<no value>" {
 				errUtils.CheckErrorPrintAndExit(fmt.Errorf("the command defines an invalid 'component_config.component: %s' in '%s'",
@@ -374,7 +362,7 @@ func executeCustomCommand(
 			}
 
 			// Process Go templates in the command's 'component_config.stack'
-			stack, err := e.ProcessTmpl(fmt.Sprintf("component-config-stack-%d", i), commandConfig.ComponentConfig.Stack, data, false)
+			stack, err := e.ProcessTmpl(&atmosConfig, fmt.Sprintf("component-config-stack-%d", i), commandConfig.ComponentConfig.Stack, data, false)
 			errUtils.CheckErrorPrintAndExit(err, "", "")
 			if stack == "" || stack == "<no value>" {
 				errUtils.CheckErrorPrintAndExit(fmt.Errorf("the command defines an invalid 'component_config.stack: %s' in '%s'",
@@ -389,7 +377,8 @@ func executeCustomCommand(
 
 		// Prepare ENV vars
 		// ENV var values support Go templates and have access to {{ .ComponentConfig.xxx.yyy.zzz }} Go template variables
-		var envVarsList []string
+		// Start with current environment to inherit PATH and other variables.
+		env := os.Environ()
 		for _, v := range commandConfig.Env {
 			key := strings.TrimSpace(v.Key)
 			value := v.Value
@@ -405,32 +394,37 @@ func executeCustomCommand(
 			// If the command to get the value for the ENV var is provided, execute it
 			if valCommand != "" {
 				valCommandName := fmt.Sprintf("env-var-%s-valcommand", key)
-				res, err := u.ExecuteShellAndReturnOutput(valCommand, valCommandName, currentDirPath, nil, false)
+				res, err := u.ExecuteShellAndReturnOutput(valCommand, valCommandName, currentDirPath, env, false)
 				errUtils.CheckErrorPrintAndExit(err, "", "")
 				value = strings.TrimRight(res, "\r\n")
 			} else {
 				// Process Go templates in the values of the command's ENV vars
-				value, err = e.ProcessTmpl(fmt.Sprintf("env-var-%d", i), value, data, false)
+				value, err = e.ProcessTmpl(&atmosConfig, fmt.Sprintf("env-var-%d", i), value, data, false)
 				errUtils.CheckErrorPrintAndExit(err, "", "")
 			}
 
-			envVarsList = append(envVarsList, fmt.Sprintf("%s=%s", key, value))
-			err = os.Setenv(key, value)
-			errUtils.CheckErrorPrintAndExit(err, "", "")
+			// Add or update the environment variable in the env slice
+			env = u.UpdateEnvVar(env, key, value)
 		}
 
-		if len(envVarsList) > 0 && commandConfig.Verbose {
-			log.Debug("Using ENV vars", "env", envVarsList)
+		if len(commandConfig.Env) > 0 && commandConfig.Verbose {
+			var envVarsList []string
+			for _, v := range commandConfig.Env {
+				envVarsList = append(envVarsList, fmt.Sprintf("%s=%s", strings.TrimSpace(v.Key), "***"))
+			}
+			log.Debug("Using custom ENV vars", "env", envVarsList)
 		}
 
 		// Process Go templates in the command's steps.
 		// Steps support Go templates and have access to {{ .ComponentConfig.xxx.yyy.zzz }} Go template variables
-		commandToRun, err := e.ProcessTmpl(fmt.Sprintf("step-%d", i), step, data, false)
+		commandToRun, err := e.ProcessTmpl(&atmosConfig, fmt.Sprintf("step-%d", i), step, data, false)
 		errUtils.CheckErrorPrintAndExit(err, "", "")
 
 		// Execute the command step
 		commandName := fmt.Sprintf("%s-step-%d", commandConfig.Name, i)
-		err = e.ExecuteShell(commandToRun, commandName, currentDirPath, envVarsList, false)
+
+		// Pass the prepared environment with custom variables to the subprocess
+		err = e.ExecuteShell(commandToRun, commandName, currentDirPath, env, false)
 		errUtils.CheckErrorPrintAndExit(err, "", "")
 	}
 }

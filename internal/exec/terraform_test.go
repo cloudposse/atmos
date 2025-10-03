@@ -2,11 +2,14 @@ package exec
 
 import (
 	"bytes"
+	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
-	log "github.com/charmbracelet/log"
+	cfg "github.com/cloudposse/atmos/pkg/config"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/stretchr/testify/assert"
 
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -23,7 +26,36 @@ func TestExecuteTerraform_ExportEnvVar(t *testing.T) {
 		t.Fatalf("Failed to get the current working directory: %v", err)
 	}
 
+	// Clean up any leftover terraform files from previous test runs to avoid conflicts
+	componentPath := filepath.Join(startingDir, "..", "..", "tests", "fixtures", "components", "terraform", "env-example")
+	cleanupFiles := []string{
+		filepath.Join(componentPath, ".terraform"),
+		filepath.Join(componentPath, ".terraform.lock.hcl"),
+		filepath.Join(componentPath, "terraform.tfstate.d"),
+		filepath.Join(componentPath, "backend.tf.json"),
+	}
+
+	// Clean before test
+	for _, path := range cleanupFiles {
+		os.RemoveAll(path)
+	}
+
+	// Also look for and remove any .tfvars.json files
+	matches, _ := filepath.Glob(filepath.Join(componentPath, "*.terraform.tfvars.json"))
+	for _, match := range matches {
+		os.Remove(match)
+	}
+
 	defer func() {
+		// Clean up after test
+		for _, path := range cleanupFiles {
+			os.RemoveAll(path)
+		}
+		matches, _ := filepath.Glob(filepath.Join(componentPath, "*.terraform.tfvars.json"))
+		for _, match := range matches {
+			os.Remove(match)
+		}
+
 		// Change back to the original working directory after the test
 		if err := os.Chdir(startingDir); err != nil {
 			t.Fatalf("Failed to change back to the starting directory: %v", err)
@@ -237,8 +269,7 @@ func TestExecuteTerraform_TerraformPlanWithoutProcessingTemplates(t *testing.T) 
 }
 
 func TestExecuteTerraform_TerraformWorkspace(t *testing.T) {
-	err := os.Setenv("ATMOS_LOGS_LEVEL", "Debug")
-	assert.NoError(t, err, "Setting 'ATMOS_LOGS_LEVEL' environment variable should execute without error")
+	t.Setenv("ATMOS_LOGS_LEVEL", "Debug")
 
 	// Capture the starting working directory
 	startingDir, err := os.Getwd()
@@ -569,6 +600,191 @@ func TestExecuteTerraform_TerraformPlanWithSkipPlanfile(t *testing.T) {
 	}
 }
 
+func TestExecuteTerraform_DeploymentStatus(t *testing.T) {
+	startingDir, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Failed to get the current working directory: %v", err)
+	}
+	defer func() {
+		if err := os.Chdir(startingDir); err != nil {
+			t.Fatalf("Failed to change back to the starting directory: %v", err)
+		}
+	}()
+
+	workDir := "../../tests/fixtures/scenarios/atmos-pro"
+	if err := os.Chdir(workDir); err != nil {
+		t.Fatalf("Failed to change directory to %q: %v", workDir, err)
+	}
+
+	// Set up test environment.
+	t.Setenv("ATMOS_LOGS_LEVEL", "Debug")
+
+	testCases := []struct {
+		name              string
+		stack             string
+		component         string
+		uploadStatus      bool
+		proEnabled        bool
+		checkProWarning   bool
+		checkDetailedExit bool
+		exitCode          int
+	}{
+		{
+			name:              "drift results enabled and pro disabled",
+			stack:             "nonprod",
+			component:         "mock/disabled",
+			uploadStatus:      true,
+			proEnabled:        false,
+			checkProWarning:   true,
+			checkDetailedExit: true,
+			exitCode:          0,
+		},
+		{
+			name:              "drift results enabled and pro enabled with drift",
+			stack:             "nonprod",
+			component:         "mock/drift",
+			uploadStatus:      true,
+			proEnabled:        true,
+			checkProWarning:   false,
+			checkDetailedExit: true,
+			exitCode:          2, // Simulate drift detected
+		},
+		{
+			name:              "drift results enabled and pro enabled without drift",
+			stack:             "nonprod",
+			component:         "mock/nodrift",
+			uploadStatus:      true,
+			proEnabled:        true,
+			checkProWarning:   false,
+			checkDetailedExit: true,
+			exitCode:          0, // Simulate no drift
+		},
+		{
+			name:              "drift results enabled and pro enabled with drift in prod",
+			stack:             "prod",
+			component:         "mock/drift",
+			uploadStatus:      true,
+			proEnabled:        true,
+			checkProWarning:   false,
+			checkDetailedExit: true,
+			exitCode:          2, // Simulate drift detected
+		},
+		{
+			name:              "drift results enabled and pro enabled without drift in prod",
+			stack:             "prod",
+			component:         "mock/nodrift",
+			uploadStatus:      true,
+			proEnabled:        true,
+			checkProWarning:   false,
+			checkDetailedExit: true,
+			exitCode:          0, // Simulate no drift
+		},
+		{
+			name:              "upload status explicitly disabled",
+			stack:             "nonprod",
+			component:         "mock/nodrift",
+			uploadStatus:      false,
+			proEnabled:        true,
+			checkProWarning:   false,
+			checkDetailedExit: false,
+			exitCode:          0,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			// Create test directories
+			stackDir := filepath.Join(workDir, "stacks", tc.stack)
+			if err := os.MkdirAll(stackDir, 0o755); err != nil {
+				t.Fatalf("Failed to create stack dir: %v", err)
+			}
+
+			// Create component directory
+			componentDir := filepath.Join(workDir, "components", "terraform", tc.component)
+			if err := os.MkdirAll(componentDir, 0o755); err != nil {
+				t.Fatalf("Failed to create component dir: %v", err)
+			}
+
+			// Create stack file
+			stackFile := filepath.Join(stackDir, "mock.yaml")
+			stackContent := fmt.Sprintf("components:\n  terraform:\n    %s:\n      settings:\n        pro:\n          enabled: %v\n      vars:\n        foo: %s-a\n        bar: %s-b\n        baz: %s-c",
+				tc.component, tc.proEnabled, tc.component, tc.component, tc.component)
+			if err := os.WriteFile(stackFile, []byte(stackContent), 0o644); err != nil {
+				t.Fatalf("Failed to write stack file: %v", err)
+			}
+			defer os.Remove(stackFile)
+
+			// Create a minimal terraform configuration
+			mainTf := filepath.Join(componentDir, "main.tf")
+			mainTfContent := `output "foo" { value = "test" }`
+			if err := os.WriteFile(mainTf, []byte(mainTfContent), 0o644); err != nil {
+				t.Fatalf("Failed to write main.tf: %v", err)
+			}
+			defer os.Remove(mainTf)
+
+			info := schema.ConfigAndStacksInfo{
+				Stack:            tc.stack,
+				ComponentType:    "terraform",
+				ComponentFromArg: tc.component,
+				SubCommand:       "plan",
+				ProcessTemplates: true,
+				ProcessFunctions: true,
+			}
+			if tc.uploadStatus {
+				info.AdditionalArgsAndFlags = append(info.AdditionalArgsAndFlags, "--upload-status")
+			} else {
+				info.AdditionalArgsAndFlags = append(info.AdditionalArgsAndFlags, "--upload-status=false")
+			}
+
+			// Create a pipe to capture stdout and stderr
+			oldStdout := os.Stdout
+			oldStderr := os.Stderr
+			r, w, _ := os.Pipe()
+			os.Stdout = w
+			os.Stderr = w
+
+			// Save original logger and set up test logger
+			originalLogger := log.Default()
+			logger := log.New()
+			logger.SetOutput(w)
+			log.SetDefault(logger)
+			defer log.SetDefault(originalLogger)
+
+			// Create a channel to signal when the pipe is closed
+			done := make(chan struct{})
+			go func() {
+				defer close(done)
+				defer w.Close()
+				_ = ExecuteTerraform(info)
+			}()
+
+			// Read the output
+			var buf bytes.Buffer
+			_, err = buf.ReadFrom(r)
+			if err != nil {
+				t.Fatalf("Failed to read from pipe: %v", err)
+			}
+			output := buf.String()
+
+			// Restore stdout, stderr, and logger
+			os.Stdout = oldStdout
+			os.Stderr = oldStderr
+			log.SetDefault(log.Default())
+
+			// Wait for the command to finish
+			<-done
+
+			// Check the output for drift/no drift and pro warning
+			assert.Contains(t, output, "Changes to Outputs", "Expected 'Changes to Outputs' in output")
+			if tc.checkProWarning {
+				assert.Contains(t, output, "Pro is not enabled. Skipping upload of Terraform result.")
+			} else {
+				assert.NotContains(t, output, "Pro is not enabled. Skipping upload of Terraform result.")
+			}
+		})
+	}
+}
+
 // Helper Function to extract key-value pairs from a string.
 func extractKeyValuePairs(input string) map[string]string {
 	// Split the input into lines
@@ -602,4 +818,113 @@ func extractKeyValuePairs(input string) map[string]string {
 	}
 
 	return config
+}
+
+// TestExecuteTerraform_OpaValidationFunctionality tests the OPA validation functionality by using validate component directly.
+func TestExecuteTerraform_OpaValidationFunctionality(t *testing.T) {
+	// Capture the starting working directory.
+	startingDir, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Failed to get the current working directory: %v", err)
+	}
+
+	defer func() {
+		// Change back to the original working directory after the test.
+		if err := os.Chdir(startingDir); err != nil {
+			t.Fatalf("Failed to change back to the starting directory: %v", err)
+		}
+	}()
+
+	// Define the working directory.
+	workDir := "../../tests/fixtures/scenarios/atmos-stacks-validation"
+	if err := os.Chdir(workDir); err != nil {
+		t.Fatalf("Failed to change directory to %q: %v", workDir, err)
+	}
+
+	tests := []struct {
+		name          string
+		component     string
+		stack         string
+		envVars       map[string]string
+		shouldFail    bool
+		expectedError string
+		description   string
+	}{
+		{
+			name:        "test process_env validation - should pass",
+			component:   "component-test-process-env",
+			stack:       "nonprod",
+			envVars:     map[string]string{"ATMOS_TEST_VAR": "test_value"},
+			shouldFail:  false,
+			description: "Test that process_env section is properly populated and validated",
+		},
+		{
+			name:          "test process_env validation - should fail when ATMOS_TEST_VAR missing",
+			component:     "component-test-process-env",
+			stack:         "nonprod",
+			envVars:       map[string]string{},
+			shouldFail:    true,
+			expectedError: "ATMOS_TEST_VAR environment variable is missing from process_env in test mode",
+			description:   "Test that validation fails when required env var is missing",
+		},
+		{
+			name:        "test cli_args validation - should pass",
+			component:   "component-test-cli-args",
+			stack:       "nonprod",
+			shouldFail:  false,
+			description: "Test that cli_args section contains proper terraform command structure",
+		},
+		{
+			name:        "test tf_cli_vars validation with TF_CLI_ARGS variables",
+			component:   "component-test-tf-cli-vars",
+			stack:       "nonprod",
+			envVars:     map[string]string{"TF_CLI_ARGS": "-var test_var=test_value -var count=5"},
+			shouldFail:  false,
+			description: "Test that tf_cli_vars are properly parsed from TF_CLI_ARGS",
+		},
+		{
+			name:          "test tf_cli_vars validation - should fail when test_var missing",
+			component:     "component-test-tf-cli-vars",
+			stack:         "nonprod",
+			envVars:       map[string]string{"TF_CLI_ARGS": "-var other_var=other_value"},
+			shouldFail:    true,
+			expectedError: "test_var is missing from env_tf_cli_vars when test_tf_cli_vars is enabled",
+			description:   "Test that validation fails when expected test_var is missing from TF_CLI_ARGS",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Set up environment variables for this test using t.Setenv for automatic cleanup.
+			for key, value := range tt.envVars {
+				t.Setenv(key, value)
+			}
+
+			// Test validation directly using ExecuteValidateComponent instead of ExecuteTerraform
+			// to avoid TF_CLI_ARGS conflicts with actual terraform execution
+			info := schema.ConfigAndStacksInfo{
+				ComponentFromArg: tt.component,
+				Stack:            tt.stack,
+				ComponentType:    "terraform",
+			}
+
+			// Initialize Atmos config
+			atmosConfig, err := cfg.InitCliConfig(info, true)
+			if err != nil {
+				t.Fatalf("Failed to initialize Atmos config: %v", err)
+			}
+
+			// Execute validation directly
+			_, err = ExecuteValidateComponent(&atmosConfig, info, tt.component, tt.stack, "", "", []string{}, 0)
+
+			if tt.shouldFail {
+				assert.Error(t, err, "Expected test to fail for %s", tt.description)
+				if tt.expectedError != "" {
+					assert.ErrorContains(t, err, tt.expectedError, "Expected specific error message for %s", tt.description)
+				}
+			} else {
+				assert.NoError(t, err, "Expected test to pass for %s", tt.description)
+			}
+		})
+	}
 }

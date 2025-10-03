@@ -1,27 +1,54 @@
 DEBU Set logs-level=debug logs-file=/dev/stderr
-DEBU merged config from import import=https://raw.githubusercontent.com/cloudposse/atmos/refs/heads/main/atmos.yaml file_path=/atmos-import/atmos-import.yaml
-DEBU merged config from import import=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/configs.d/**/* file_path=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/configs.d/commands.yaml
-DEBU merged config from import import=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/configs.d/**/* file_path=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/configs.d/vendor.yaml
-DEBU merged config from import import=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/configs.d/**/* file_path=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/configs.d/tools/stack.yml
-DEBU merged config from import import=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/configs.d/**/* file_path=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/configs.d/tools/terraform.yaml
-DEBU merged config from import import=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/logs.yaml file_path=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/logs.yaml
-DEBU merged config from import import=https://raw.githubusercontent.com/cloudposse/atmos/refs/heads/main/atmos.yaml file_path=/atmos-import/atmos-import.yaml
-DEBU merged config from import import=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/configs.d/**/* file_path=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/configs.d/commands.yaml
-DEBU merged config from import import=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/configs.d/**/* file_path=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/configs.d/vendor.yaml
-DEBU merged config from import import=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/configs.d/**/* file_path=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/configs.d/tools/stack.yml
-DEBU merged config from import import=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/configs.d/**/* file_path=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/configs.d/tools/terraform.yaml
-DEBU merged config from import import=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/logs.yaml file_path=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/logs.yaml
-DEBU Failed to use pager
-DEBU merged config from import import=https://raw.githubusercontent.com/cloudposse/atmos/refs/heads/main/atmos.yaml file_path=/atmos-import/atmos-import.yaml
-DEBU merged config from import import=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/configs.d/**/* file_path=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/configs.d/commands.yaml
-DEBU merged config from import import=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/configs.d/**/* file_path=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/configs.d/vendor.yaml
-DEBU merged config from import import=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/configs.d/**/* file_path=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/configs.d/tools/stack.yml
-DEBU merged config from import import=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/configs.d/**/* file_path=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/configs.d/tools/terraform.yaml
-DEBU merged config from import import=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/logs.yaml file_path=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/logs.yaml
-DEBU merged config from import import=https://raw.githubusercontent.com/cloudposse/atmos/refs/heads/main/atmos.yaml file_path=/atmos-import/atmos-import.yaml
-DEBU merged config from import import=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/configs.d/**/* file_path=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/configs.d/commands.yaml
-DEBU merged config from import import=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/configs.d/**/* file_path=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/configs.d/vendor.yaml
-DEBU merged config from import import=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/configs.d/**/* file_path=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/configs.d/tools/stack.yml
-DEBU merged config from import import=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/configs.d/**/* file_path=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/configs.d/tools/terraform.yaml
-DEBU merged config from import import=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/logs.yaml file_path=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/logs.yaml
+DEBU processConfigImports resolved paths count=6
+DEBU attempting to merge import import=https://raw.githubusercontent.com/cloudposse/atmos/refs/heads/main/atmos.yaml file_path=/atmos-import/atmos-import.yaml
+DEBU successfully merged config from import import=https://raw.githubusercontent.com/cloudposse/atmos/refs/heads/main/atmos.yaml file_path=/atmos-import/atmos-import.yaml
+DEBU attempting to merge import import=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/configs.d/**/* file_path=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/configs.d/commands.yaml
+DEBU successfully merged config from import import=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/configs.d/**/* file_path=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/configs.d/commands.yaml
+DEBU attempting to merge import import=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/configs.d/**/* file_path=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/configs.d/vendor.yaml
+DEBU successfully merged config from import import=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/configs.d/**/* file_path=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/configs.d/vendor.yaml
+DEBU attempting to merge import import=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/configs.d/**/* file_path=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/configs.d/tools/stack.yml
+DEBU successfully merged config from import import=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/configs.d/**/* file_path=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/configs.d/tools/stack.yml
+DEBU attempting to merge import import=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/configs.d/**/* file_path=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/configs.d/tools/terraform.yaml
+DEBU successfully merged config from import import=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/configs.d/**/* file_path=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/configs.d/tools/terraform.yaml
+DEBU attempting to merge import import=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/logs.yaml file_path=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/logs.yaml
+DEBU successfully merged config from import import=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/logs.yaml file_path=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/logs.yaml
+DEBU processConfigImports resolved paths count=6
+DEBU attempting to merge import import=https://raw.githubusercontent.com/cloudposse/atmos/refs/heads/main/atmos.yaml file_path=/atmos-import/atmos-import.yaml
+DEBU successfully merged config from import import=https://raw.githubusercontent.com/cloudposse/atmos/refs/heads/main/atmos.yaml file_path=/atmos-import/atmos-import.yaml
+DEBU attempting to merge import import=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/configs.d/**/* file_path=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/configs.d/commands.yaml
+DEBU successfully merged config from import import=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/configs.d/**/* file_path=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/configs.d/commands.yaml
+DEBU attempting to merge import import=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/configs.d/**/* file_path=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/configs.d/vendor.yaml
+DEBU successfully merged config from import import=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/configs.d/**/* file_path=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/configs.d/vendor.yaml
+DEBU attempting to merge import import=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/configs.d/**/* file_path=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/configs.d/tools/stack.yml
+DEBU successfully merged config from import import=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/configs.d/**/* file_path=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/configs.d/tools/stack.yml
+DEBU attempting to merge import import=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/configs.d/**/* file_path=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/configs.d/tools/terraform.yaml
+DEBU successfully merged config from import import=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/configs.d/**/* file_path=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/configs.d/tools/terraform.yaml
+DEBU attempting to merge import import=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/logs.yaml file_path=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/logs.yaml
+DEBU successfully merged config from import import=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/logs.yaml file_path=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/logs.yaml
+DEBU processConfigImports resolved paths count=6
+DEBU attempting to merge import import=https://raw.githubusercontent.com/cloudposse/atmos/refs/heads/main/atmos.yaml file_path=/atmos-import/atmos-import.yaml
+DEBU successfully merged config from import import=https://raw.githubusercontent.com/cloudposse/atmos/refs/heads/main/atmos.yaml file_path=/atmos-import/atmos-import.yaml
+DEBU attempting to merge import import=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/configs.d/**/* file_path=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/configs.d/commands.yaml
+DEBU successfully merged config from import import=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/configs.d/**/* file_path=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/configs.d/commands.yaml
+DEBU attempting to merge import import=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/configs.d/**/* file_path=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/configs.d/vendor.yaml
+DEBU successfully merged config from import import=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/configs.d/**/* file_path=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/configs.d/vendor.yaml
+DEBU attempting to merge import import=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/configs.d/**/* file_path=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/configs.d/tools/stack.yml
+DEBU successfully merged config from import import=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/configs.d/**/* file_path=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/configs.d/tools/stack.yml
+DEBU attempting to merge import import=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/configs.d/**/* file_path=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/configs.d/tools/terraform.yaml
+DEBU successfully merged config from import import=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/configs.d/**/* file_path=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/configs.d/tools/terraform.yaml
+DEBU attempting to merge import import=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/logs.yaml file_path=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/logs.yaml
+DEBU successfully merged config from import import=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/logs.yaml file_path=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/logs.yaml
+DEBU processConfigImports resolved paths count=6
+DEBU attempting to merge import import=https://raw.githubusercontent.com/cloudposse/atmos/refs/heads/main/atmos.yaml file_path=/atmos-import/atmos-import.yaml
+DEBU successfully merged config from import import=https://raw.githubusercontent.com/cloudposse/atmos/refs/heads/main/atmos.yaml file_path=/atmos-import/atmos-import.yaml
+DEBU attempting to merge import import=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/configs.d/**/* file_path=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/configs.d/commands.yaml
+DEBU successfully merged config from import import=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/configs.d/**/* file_path=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/configs.d/commands.yaml
+DEBU attempting to merge import import=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/configs.d/**/* file_path=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/configs.d/vendor.yaml
+DEBU successfully merged config from import import=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/configs.d/**/* file_path=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/configs.d/vendor.yaml
+DEBU attempting to merge import import=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/configs.d/**/* file_path=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/configs.d/tools/stack.yml
+DEBU successfully merged config from import import=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/configs.d/**/* file_path=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/configs.d/tools/stack.yml
+DEBU attempting to merge import import=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/configs.d/**/* file_path=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/configs.d/tools/terraform.yaml
+DEBU successfully merged config from import import=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/configs.d/**/* file_path=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/configs.d/tools/terraform.yaml
+DEBU attempting to merge import import=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/logs.yaml file_path=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/logs.yaml
+DEBU successfully merged config from import import=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/logs.yaml file_path=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/logs.yaml
 DEBU Telemetry event enqueued

@@ -11,18 +11,22 @@ import (
 	"context"
 	"text/template"
 
+	"github.com/cloudposse/atmos/pkg/perf"
+
 	"github.com/hairyhenderson/gomplate/v3/data"
 
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-// FuncMap creates and returns a map of template functions
+// FuncMap creates and returns a map of template functions.
 func FuncMap(
 	atmosConfig *schema.AtmosConfiguration,
 	configAndStacksInfo *schema.ConfigAndStacksInfo,
 	ctx context.Context,
 	gomplateData *data.Data,
 ) template.FuncMap {
+	defer perf.Track(atmosConfig, "exec.FuncMap")()
+
 	atmosFuncs := &AtmosFuncs{atmosConfig, configAndStacksInfo, ctx, gomplateData}
 
 	return map[string]any{
@@ -46,5 +50,7 @@ func (f AtmosFuncs) GomplateDatasource(alias string, args ...string) (any, error
 }
 
 func (f AtmosFuncs) Store(store string, stack string, component string, key string) (any, error) {
+	defer perf.Track(nil, "exec.Store")()
+
 	return storeFunc(f.atmosConfig, store, stack, component, key)
 }

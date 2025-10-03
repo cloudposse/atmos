@@ -4,14 +4,18 @@ import (
 	"context"
 	"os"
 
-	log "github.com/charmbracelet/log"
 	"github.com/google/go-github/v59/github"
 	"golang.org/x/oauth2"
+
+	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/perf"
 )
 
 // newGitHubClient creates a new GitHub client. If a token is provided, it returns an authenticated client;
 // otherwise, it returns an unauthenticated client.
 func newGitHubClient(ctx context.Context) *github.Client {
+	defer perf.Track(nil, "utils.newGitHubClient")()
+
 	githubToken := os.Getenv("GITHUB_TOKEN")
 	if githubToken == "" {
 		return github.NewClient(nil)
@@ -28,6 +32,8 @@ func newGitHubClient(ctx context.Context) *github.Client {
 
 // GetLatestGitHubRepoRelease returns the latest release tag for a GitHub repository.
 func GetLatestGitHubRepoRelease(owner string, repo string) (string, error) {
+	defer perf.Track(nil, "utils.GetLatestGitHubRepoRelease")()
+
 	log.Debug("Fetching latest release from Github API", "owner", owner, "repo", repo)
 
 	// Create a new GitHub client with authentication if available

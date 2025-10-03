@@ -10,11 +10,13 @@ import (
 	"strconv"
 	"strings"
 
-	log "github.com/charmbracelet/log"
 	"github.com/spf13/viper"
 	"mvdan.cc/sh/v3/expand"
 	"mvdan.cc/sh/v3/interp"
 	"mvdan.cc/sh/v3/syntax"
+
+	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/perf"
 )
 
 var (
@@ -34,6 +36,8 @@ func ExecuteShellAndReturnOutput(
 	env []string,
 	dryRun bool,
 ) (string, error) {
+	defer perf.Track(nil, "utils.ExecuteShellAndReturnOutput")()
+
 	var b bytes.Buffer
 
 	newShellLevel, err := GetNextShellLevel()
@@ -58,12 +62,20 @@ func ExecuteShellAndReturnOutput(
 
 // ShellRunner uses mvdan.cc/sh/v3's parser and interpreter to run a shell script and divert its stdout .
 func ShellRunner(command string, name string, dir string, env []string, out io.Writer) error {
+	defer perf.Track(nil, "utils.ShellRunner")()
+
 	parser, err := syntax.NewParser().Parse(strings.NewReader(command), name)
 	if err != nil {
 		return err
 	}
 
-	environ := append(os.Environ(), env...)
+	// Use provided environment directly to preserve PATH modifications
+	// If no environment provided, fall back to current process environment
+	environ := env
+	if len(environ) == 0 {
+		environ = os.Environ()
+	}
+
 	listEnviron := expand.ListEnviron(environ...)
 	runner, err := interp.New(
 		interp.Dir(dir),
@@ -79,6 +91,8 @@ func ShellRunner(command string, name string, dir string, env []string, out io.W
 
 // GetNextShellLevel increments the ATMOS_SHLVL and returns the new value or an error if maximum depth is exceeded .
 func GetNextShellLevel() (int, error) {
+	defer perf.Track(nil, "utils.GetNextShellLevel")()
+
 	// Create a new viper instance for this operation
 	v := viper.New()
 	if err := v.BindEnv("atmos_shell_level", "ATMOS_SHLVL"); err != nil {

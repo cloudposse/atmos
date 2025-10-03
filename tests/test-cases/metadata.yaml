@@ -51,6 +51,7 @@ tests:
   - name: atmos terraform plan locked component
     enabled: true
     snapshot: false
+    sandbox: "metadata"
     description: "Verify terraform plan works on locked component"
     workdir: "fixtures/scenarios/metadata"
     command: "atmos"

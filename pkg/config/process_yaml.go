@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	log "github.com/charmbracelet/log"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/spf13/viper"
 	"gopkg.in/yaml.v3"

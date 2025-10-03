@@ -5,7 +5,8 @@ import (
 	"os"
 	"strings"
 
-	log "github.com/charmbracelet/log"
+	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/perf"
 )
 
 var ErrInvalidAtmosYAMLFunction = fmt.Errorf("invalid Atmos YAML function")
@@ -13,6 +14,8 @@ var ErrInvalidAtmosYAMLFunction = fmt.Errorf("invalid Atmos YAML function")
 func ProcessTagEnv(
 	input string,
 ) (string, error) {
+	defer perf.Track(nil, "utils.ProcessTagEnv")()
+
 	log.Debug("Executing Atmos YAML function", "input", input)
 
 	str, err := getStringAfterTag(input, AtmosYamlFuncEnv)
@@ -57,6 +60,8 @@ func ProcessTagEnv(
 }
 
 func getStringAfterTag(input string, tag string) (string, error) {
+	defer perf.Track(nil, "utils.getStringAfterTag")()
+
 	str := strings.TrimPrefix(input, tag)
 	str = strings.TrimSpace(str)
 

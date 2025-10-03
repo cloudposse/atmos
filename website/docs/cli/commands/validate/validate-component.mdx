@@ -40,16 +40,26 @@ atmos validate component infra/vpc -s tenant1-ue2-dev --timeout 15
 
 ## Arguments
 
-| Argument    | Description     | Required |
-|:------------|:----------------|:---------|
-| `component` | Atmos component | yes      |
+<dl>
+  <dt>`component` <em>(required)</em></dt>
+  <dd>Atmos component.</dd>
+</dl>
 
 ## Flags
 
-| Flag             | Description                                                                                                                                                                                                                               | Alias | Required |
-|:-----------------|:------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|:------|:---------|
-| `--stack`        | Atmos stack                                                                                                                                                                                                                               | `-s`  | yes      |
-| `--schema-path`  | Path to the schema file.<br/>Can be an absolute path or a path relative to `schemas.jsonschema.base_path`<br/>and `schemas.opa.base_path` defined in `atmos.yaml`                                                                         |       | no       |
-| `--schema-type`  | Schema type: `jsonschema` or `opa`                                                                                                                                                                                                        |       | no       |
-| `--module-paths` | Comma-separated string of filesystem paths (folders or individual files) to the additional modules<br/>for schema validation. Each path can be an absolute path or a path relative to<br/>`schemas.opa.base_path` defined in `atmos.yaml` |       | no       |
-| `--timeout`      | Validation timeout in seconds. Can also be specified in `settings.validation` component config. If not provided, timeout of 20 seconds is used by default                                                                                 |       | no       |
+<dl>
+  <dt>`--stack` / `-s` <em>(required)</em></dt>
+  <dd>Atmos stack.</dd>
+
+  <dt>`--schema-path` <em>(optional)</em></dt>
+  <dd>Path to the schema file.<br/>Can be an absolute path or a path relative to `schemas.jsonschema.base_path`<br/>and `schemas.opa.base_path` defined in `atmos.yaml`.</dd>
+
+  <dt>`--schema-type` <em>(optional)</em></dt>
+  <dd>Schema type: `jsonschema` or `opa`.</dd>
+
+  <dt>`--module-paths` <em>(optional)</em></dt>
+  <dd>Comma-separated string of filesystem paths (folders or individual files) to the additional modules<br/>for schema validation. Each path can be an absolute path or a path relative to<br/>`schemas.opa.base_path` defined in `atmos.yaml`.</dd>
+
+  <dt>`--timeout` <em>(optional)</em></dt>
+  <dd>Validation timeout in seconds. Can also be specified in `settings.validation` component config. If not provided, timeout of 20 seconds is used by default.</dd>
+</dl>
