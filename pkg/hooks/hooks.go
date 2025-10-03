@@ -63,12 +63,11 @@ func (h Hooks) RunAll(event HookEvent, atmosConfig *schema.AtmosConfiguration, i
 	for _, hook := range h.items {
 		switch hook.Command {
 		case "store":
-			storeCmd := &StoreCommand{
-				Name:        "store",
-				atmosConfig: atmosConfig,
-				info:        info,
+			storeCmd, err := NewStoreCommand(atmosConfig, info)
+			if err != nil {
+				return err
 			}
-			err := storeCmd.RunE(&hook, event, cmd, args)
+			err = storeCmd.RunE(&hook, event, cmd, args)
 			if err != nil {
 				return err
 			}
