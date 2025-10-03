@@ -1,6 +1,7 @@
 package hooks
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -159,24 +160,6 @@ func TestGetHooks_WithRealComponent(t *testing.T) {
 	assert.Equal(t, "store", hooks.items["vpc-store-outputs"].Command)
 }
 
-func TestConvertToHooks(t *testing.T) {
-	// ConvertToHooks is currently a stub/placeholder that returns an empty Hooks struct.
-	// This test documents the current behavior.
-	h := Hooks{}
-
-	result, err := h.ConvertToHooks(map[string]any{
-		"test-hook": map[string]any{
-			"events":  []string{"after-terraform-apply"},
-			"command": "store",
-		},
-	})
-
-	assert.NoError(t, err)
-	assert.Empty(t, result.items)
-	assert.Nil(t, result.config)
-	assert.Nil(t, result.info)
-}
-
 func TestRunAll(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -258,6 +241,53 @@ func TestRunAll(t *testing.T) {
 			wantErr:     false,
 			expectCalls: 2,
 		},
+		{
+			name: "returns error when store not found",
+			hooks: Hooks{
+				config: &schema.AtmosConfiguration{
+					Stores: make(store.StoreRegistry),
+				},
+				info: &schema.ConfigAndStacksInfo{
+					ComponentFromArg: "test-component",
+					Stack:            "test-stack",
+				},
+				items: map[string]Hook{
+					"test-hook": {
+						Events:  []string{"after-terraform-apply"},
+						Command: "store",
+						Name:    "nonexistent-store",
+						Outputs: map[string]string{"key1": "value1"},
+					},
+				},
+			},
+			setupStore:  false,
+			wantErr:     true,
+			expectCalls: 0,
+		},
+		{
+			name: "returns error when store Set fails",
+			hooks: Hooks{
+				config: &schema.AtmosConfiguration{
+					Stores: make(store.StoreRegistry),
+				},
+				info: &schema.ConfigAndStacksInfo{
+					ComponentFromArg: "test-component",
+					Stack:            "test-stack",
+				},
+				items: map[string]Hook{
+					"test-hook": {
+						Events:  []string{"after-terraform-apply"},
+						Command: "store",
+						Name:    "test-store",
+						Outputs: map[string]string{"key1": "value1"},
+					},
+				},
+			},
+			setupStore:  true,
+			setupErr:    true,
+			wantErr:     true,
+			expectCalls: 1,
+		},
 	}
 
 	for _, tt := range tests {
@@ -267,18 +297,18 @@ func TestRunAll(t *testing.T) {
 				for _, hook := range tt.hooks.items {
 					mockStore := NewMockStore()
 					if tt.setupErr {
-						mockStore.SetSetError(assert.AnError)
+						mockStore.SetSetError(errors.New("store error"))
 					}
 					tt.hooks.config.Stores[hook.Name] = mockStore
 				}
 			}
 
-			// Note: RunAll calls CheckErrorPrintAndExit on errors, which would exit the process
-			// In a real scenario, this would need to be refactored to return errors instead
-			// For now, we can only test the successful path
-			if !tt.wantErr {
-				err := tt.hooks.RunAll(AfterTerraformApply, tt.hooks.config, tt.hooks.info, nil, nil)
-				assert.NoError(t, err)
+			err := tt.hooks.RunAll(AfterTerraformApply, tt.hooks.config, tt.hooks.info, nil, nil)
+
+			if tt.wantErr {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
 			}
 		})
 	}

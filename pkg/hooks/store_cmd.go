@@ -10,20 +10,32 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// assert that Command implements Command interface
+// TerraformOutputGetter retrieves terraform outputs.
+// This enables dependency injection for testing.
+type TerraformOutputGetter func(
+	atmosConfig *schema.AtmosConfiguration,
+	stack string,
+	component string,
+	output string,
+	failOnError bool,
+) any
+
+// assert that Command implements Command interface.
 var _ Command = &StoreCommand{}
 
 type StoreCommand struct {
-	Name        string
-	atmosConfig *schema.AtmosConfiguration
-	info        *schema.ConfigAndStacksInfo
+	Name         string
+	atmosConfig  *schema.AtmosConfiguration
+	info         *schema.ConfigAndStacksInfo
+	outputGetter TerraformOutputGetter
 }
 
 func NewStoreCommand(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) (*StoreCommand, error) {
 	return &StoreCommand{
-		Name:        "store",
-		atmosConfig: atmosConfig,
-		info:        info,
+		Name:         "store",
+		atmosConfig:  atmosConfig,
+		info:         info,
+		outputGetter: e.GetTerraformOutput,
 	}, nil
 }
 
@@ -49,13 +61,13 @@ func (c *StoreCommand) processStoreCommand(hook *Hook) error {
 	return nil
 }
 
-// getOutputValue gets an output from terraform
+// getOutputValue gets an output from terraform or returns a literal value.
 func (c *StoreCommand) getOutputValue(value string) (string, any) {
 	outputKey := strings.TrimPrefix(value, ".")
 	var outputValue any
 
 	if strings.Index(value, ".") == 0 {
-		outputValue = e.GetTerraformOutput(c.atmosConfig, c.info.Stack, c.info.ComponentFromArg, outputKey, true)
+		outputValue = c.outputGetter(c.atmosConfig, c.info.Stack, c.info.ComponentFromArg, outputKey, true)
 	} else {
 		outputValue = value
 	}

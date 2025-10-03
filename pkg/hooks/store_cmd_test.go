@@ -80,25 +80,76 @@ func TestStoreCommand_GetOutputValue(t *testing.T) {
 	}
 }
 
-func TestStoreCommand_GetOutputValue_DotPrefix(t *testing.T) {
-	t.Skipf("Skipping test that requires full Atmos configuration with terraform outputs")
-
-	// Test that dot prefix correctly strips the dot and prepares for terraform output lookup
-	// Note: This test verifies the key transformation only, not the actual terraform output retrieval
-	cmd := &StoreCommand{
-		atmosConfig: &schema.AtmosConfiguration{},
-		info: &schema.ConfigAndStacksInfo{
-			ComponentFromArg: "test-component",
-			Stack:            "test-stack",
+func TestStoreCommand_GetOutputValue_WithMockTerraform(t *testing.T) {
+	tests := []struct {
+		name           string
+		value          string
+		mockOutput     any
+		expectedKey    string
+		expectedValue  any
+		shouldCallMock bool
+	}{
+		{
+			name:           "dot prefix retrieves terraform output",
+			value:          ".vpc_id",
+			mockOutput:     "vpc-12345",
+			expectedKey:    "vpc_id",
+			expectedValue:  "vpc-12345",
+			shouldCallMock: true,
+		},
+		{
+			name:           "dot prefix with complex output",
+			value:          ".vpc_cidr_block",
+			mockOutput:     "10.0.0.0/16",
+			expectedKey:    "vpc_cidr_block",
+			expectedValue:  "10.0.0.0/16",
+			shouldCallMock: true,
+		},
+		{
+			name:           "dot prefix with structured output",
+			value:          ".vpc_config",
+			mockOutput:     map[string]any{"id": "vpc-12345", "cidr": "10.0.0.0/16"},
+			expectedKey:    "vpc_config",
+			expectedValue:  map[string]any{"id": "vpc-12345", "cidr": "10.0.0.0/16"},
+			shouldCallMock: true,
+		},
+		{
+			name:           "literal value does not call mock",
+			value:          "literal-value",
+			mockOutput:     nil,
+			expectedKey:    "literal-value",
+			expectedValue:  "literal-value",
+			shouldCallMock: false,
 		},
 	}
 
-	key, _ := cmd.getOutputValue(".vpc_id")
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockCalled := false
+			mockGetter := func(cfg *schema.AtmosConfiguration, stack, component, output string, failOnError bool) any {
+				mockCalled = true
+				assert.Equal(t, "test-stack", stack)
+				assert.Equal(t, "test-component", component)
+				assert.Equal(t, tt.expectedKey, output)
+				return tt.mockOutput
+			}
 
-	// Verify the dot is stripped from the key
-	assert.Equal(t, "vpc_id", key)
-	// The actual value retrieval would require GetTerraformOutput to work,
-	// which requires a full Atmos setup. We're only testing the key transformation here.
+			cmd := &StoreCommand{
+				atmosConfig: &schema.AtmosConfiguration{},
+				info: &schema.ConfigAndStacksInfo{
+					ComponentFromArg: "test-component",
+					Stack:            "test-stack",
+				},
+				outputGetter: mockGetter,
+			}
+
+			key, value := cmd.getOutputValue(tt.value)
+
+			assert.Equal(t, tt.expectedKey, key)
+			assert.Equal(t, tt.expectedValue, value)
+			assert.Equal(t, tt.shouldCallMock, mockCalled, "mock call expectation mismatch")
+		})
+	}
 }
 
 func TestStoreCommand_StoreOutput(t *testing.T) {
