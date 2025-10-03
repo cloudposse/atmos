@@ -1,90 +1,69 @@
 # PRD: Lifecycle Hooks Component Scoping
 
-## Executive Summary
+## Purpose
 
-Lifecycle hooks in Atmos are designed to execute automated actions at specific points in a component's lifecycle (e.g., after `terraform apply`). This document defines the design, implementation, and expected behavior of hook scoping to ensure hooks are properly isolated to their defining components and do not leak across component boundaries.
+Define how lifecycle hooks are scoped and inherited in Atmos to enable automated actions at specific points in a component's lifecycle while maintaining clear boundaries between components.
 
-## Problem Statement
+## Background
 
-When multiple components in a stack define lifecycle hooks, there is potential for:
+Lifecycle hooks allow users to execute automated actions (e.g., storing outputs to parameter stores, sending notifications) at specific lifecycle events such as `after-terraform-apply` or `before-terraform-plan`. These hooks need to support:
 
-1. **Hook pollution**: Hooks defined in one component appearing in other components
-2. **Output accumulation**: Outputs from multiple components merging together incorrectly
-3. **Unexpected behavior**: Components executing hooks not intended for them
-4. **Configuration complexity**: Difficulty understanding which hooks apply to which components
+- Reusability across multiple components through inheritance
+- Component-specific customization without duplication
+- Clear, predictable scoping rules
 
-## Design Goals
+## Design
 
-1. **Component isolation**: Hooks defined for a component should only apply to that component
-2. **DRY principle support**: Allow shared hook structure while maintaining output isolation
-3. **Predictable behavior**: Users should be able to easily understand hook scope
-4. **Template flexibility**: Support both simple and advanced hook configuration patterns
+### Scoping Model
 
-## Design Principles
+Hooks follow the same inheritance and scoping rules as all other Atmos configuration:
 
-### Scoping Rules
+1. **Hooks are defined within the configuration hierarchy** and inherit through the same chain as variables, settings, and other component properties
+2. **Each component receives only the hooks applicable to it** after the configuration is fully merged
+3. **Hooks defined at a component level are scoped to that component** and do not leak to other components
 
-1. **Hooks are component-scoped by default**: A hook defined in a component's configuration applies only to that component
-2. **Hook merging follows component inheritance**: Hooks merge through the same inheritance chain as other component properties
-3. **Output maps are component-specific**: Even when hook names are shared, output definitions remain isolated per component
-4. **Global hooks require explicit structure**: Shared hook configurations must be defined in defaults and overridden per component
+### Configuration Hierarchy
 
-## Architecture
-
-### Hook Configuration Hierarchy
-
-Hooks can be defined at multiple levels in the Atmos configuration hierarchy:
+Hooks can be defined at any level of the Atmos configuration hierarchy:
 
 ```
-Global (_defaults.yaml)
+Global defaults (_defaults.yaml)
   ↓
-Terraform Section (terraform.hooks)
+Terraform section defaults
   ↓
-Component (components.terraform.<component>.hooks)
+Base component configuration
   ↓
-Component Overrides (components.terraform.<component>.overrides.hooks)
+Component-specific configuration
+  ↓
+Component overrides
 ```
+
+Each level inherits and can override hooks from levels above it.
 
 ### Merging Behavior
 
-When hooks are merged through the inheritance chain:
+When configurations are merged:
 
-1. **Hook names are keys**: Hooks with the same name merge their properties
-2. **Properties are deep-merged**: Arrays and maps merge by default
-3. **Outputs are component-specific**: Each component's outputs override, not accumulate
+1. **Hooks merge by name** - A hook with the same name at different levels merges its properties
+2. **Maps deep-merge** - Nested maps (like `outputs`) merge by key
+3. **Arrays concatenate** - Arrays (like `events`) combine from all levels
+4. **Later values override earlier ones** - Component-specific values take precedence over defaults
 
-### Implementation
-
-Hook scoping is implemented in `internal/exec/stack_processor_utils.go` at line 1303-1313:
-
-```go
-finalComponentHooks, err := m.Merge(
-    atmosConfig,
-    []map[string]any{
-        globalAndTerraformHooks,
-        baseComponentHooks,
-        componentHooks,
-        componentOverridesHooks,
-    })
-```
-
-This ensures hooks are merged per-component during stack processing, maintaining isolation.
+This allows for the DRY principle: define structure once, customize per component.
 
 ## Configuration Patterns
 
-### Pattern 1: Unique Hook Names (Simple)
+### Pattern 1: Component-Specific Hooks
 
-Each component defines its complete hook configuration with a unique name.
+Define complete hook configuration at the component level.
 
-**Use Case**: Small number of components, each with distinct hook requirements.
+**When to use**: Components with unique hook requirements that aren't shared.
 
 ```yaml
 # stacks/catalog/vpc.yaml
 components:
   terraform:
     vpc:
-      metadata:
-        component: vpc
       hooks:
         vpc-store-outputs:
           events:
@@ -96,20 +75,16 @@ components:
             vpc_cidr_block: .vpc_cidr_block
 ```
 
-**Pros**:
-- Simple and explicit
-- No risk of naming conflicts
-- Easy to understand
+**Benefits**:
+- Self-contained and explicit
+- No dependencies on other configuration
+- Easy to understand in isolation
 
-**Cons**:
-- Duplicates hook structure across components
-- More verbose
+### Pattern 2: Shared Structure with Component Customization (Recommended)
 
-### Pattern 2: DRY Pattern (Recommended)
+Define hook structure globally, customize outputs per component.
 
-Global defaults define hook structure, components override outputs only.
-
-**Use Case**: Many components with similar hook structure but different outputs.
+**When to use**: Multiple components share the same hook behavior but need different outputs.
 
 ```yaml
 # stacks/catalog/_defaults.yaml
@@ -119,14 +94,11 @@ hooks:
       - after-terraform-apply
     command: store
     name: prod/ssm
-    # No outputs - defined per component
 
 # stacks/catalog/vpc.yaml
 components:
   terraform:
     vpc:
-      metadata:
-        component: vpc
       hooks:
         store-outputs:
           outputs:
@@ -137,8 +109,6 @@ components:
 components:
   terraform:
     rds:
-      metadata:
-        component: rds
       hooks:
         store-outputs:
           outputs:
@@ -146,19 +116,126 @@ components:
             cluster_id: .cluster_id
 ```
 
-**Pros**:
-- Reduces duplication
+**How it works**:
+- VPC component inherits `events`, `command`, and `name` from defaults
+- VPC adds its specific `outputs`
+- RDS component inherits the same base structure
+- RDS adds its own different `outputs`
+- Each component gets the same hook behavior with its own outputs
+
+**Benefits**:
+- Reduces duplication of hook configuration
 - Easy to update hook behavior globally
-- Maintains output isolation per component
-- Scalable to many components
+- Maintains clear component boundaries for outputs
+- Scales well to many components
 
-**Cons**:
-- Requires understanding of inheritance
-- Global changes affect all components
+### Pattern 3: Conditional Hooks
 
-**Why This Works**: The merging algorithm combines the global hook structure with component-specific outputs. Each component gets:
-- The `events`, `command`, and `name` from the global definition
-- Only the `outputs` it explicitly defines
+Use Atmos templates to conditionally define hooks.
+
+```yaml
+# stacks/catalog/defaults.yaml
+{{ if eq .stage "prod" }}
+hooks:
+  store-outputs:
+    events:
+      - after-terraform-apply
+    command: store
+    name: {{ .stage }}/ssm
+{{ end }}
+
+# Component inherits conditional hook only in prod
+components:
+  terraform:
+    app:
+      hooks:
+        store-outputs:
+          outputs:
+            app_url: .url
+```
+
+## Implementation
+
+### Stack Processing
+
+During stack processing (`internal/exec/stack_processor_utils.go`):
+
+1. Load all imported stack files in dependency order
+2. Build component configuration through hierarchical merging
+3. Merge hooks at each level using the same algorithm as other properties
+4. Result: Each component has fully resolved hooks applicable only to it
+
+### Hook Merging Code
+
+```go
+finalComponentHooks, err := m.Merge(
+    atmosConfig,
+    []map[string]any{
+        globalAndTerraformHooks,    // From _defaults.yaml and terraform section
+        baseComponentHooks,          // From base component
+        componentHooks,              // From component definition
+        componentOverridesHooks,     // From overrides
+    })
+```
+
+This ensures hooks follow the same inheritance chain as all other component configuration.
+
+## Expected Behavior
+
+### Example: Two Components with Shared Hook
+
+Given this configuration:
+
+```yaml
+# _defaults.yaml
+hooks:
+  store-outputs:
+    events: [after-terraform-apply]
+    command: store
+    name: prod/ssm
+
+# vpc.yaml
+components:
+  terraform:
+    vpc:
+      hooks:
+        store-outputs:
+          outputs:
+            vpc_id: .vpc_id
+
+# rds.yaml
+components:
+  terraform:
+    rds:
+      hooks:
+        store-outputs:
+          outputs:
+            db_endpoint: .endpoint
+```
+
+**Expected result when describing VPC**:
+```yaml
+hooks:
+  store-outputs:
+    events: [after-terraform-apply]
+    command: store
+    name: prod/ssm
+    outputs:
+      vpc_id: .vpc_id
+```
+
+**Expected result when describing RDS**:
+```yaml
+hooks:
+  store-outputs:
+    events: [after-terraform-apply]
+    command: store
+    name: prod/ssm
+    outputs:
+      db_endpoint: .endpoint
+```
+
+Each component inherits the structure but has only its own outputs.
 
 ## Test Coverage
 
@@ -167,39 +244,35 @@ components:
 - **Implementation**: `pkg/hooks/hooks_component_scope_test.go`
 - **Test Cases**: `tests/test-cases/hooks-component-scoped/`
 
-### Test Scenarios
+### Test 1: Component-Specific Hooks
 
-#### Test 1: `TestHooksAreComponentScoped`
-
-Verifies that components with unique hook names remain isolated.
+**Verifies**: Components with unique hook names remain isolated.
 
 **Setup**:
 - 3 components: vpc, rds, lambda
-- Each with uniquely named hooks
+- Each defines complete hook with unique name
 - All imported into one stack
 
-**Assertions**:
-- ✅ VPC has only `vpc-store-outputs`
-- ✅ RDS has only `rds-store-outputs`
-- ✅ Lambda has only `lambda-store-outputs`
-- ✅ No cross-component hook pollution
+**Validates**:
+- ✅ VPC has only `vpc-store-outputs` hook
+- ✅ RDS has only `rds-store-outputs` hook
+- ✅ Lambda has only `lambda-store-outputs` hook
 
-#### Test 2: `TestHooksWithDRYPattern`
+### Test 2: Shared Structure Pattern
 
-Verifies the DRY pattern maintains output scoping.
+**Verifies**: DRY pattern maintains proper output scoping.
 
 **Setup**:
-- Global `_defaults.yaml` with hook structure
+- Global `_defaults.yaml` defines hook structure
 - 3 components: vpc-dry, rds-dry, lambda-dry
-- Each defines only outputs
+- Each defines only component-specific outputs
 - All imported into one stack
 
-**Assertions**:
-- ✅ All components have `store-outputs` hook
-- ✅ VPC has only VPC outputs
-- ✅ RDS has only RDS outputs
-- ✅ Lambda has only Lambda outputs
-- ✅ No output accumulation across components
+**Validates**:
+- ✅ All components have `store-outputs` hook with correct structure
+- ✅ VPC has only VPC outputs (vpc_id, vpc_cidr_block)
+- ✅ RDS has only RDS outputs (cluster_endpoint, cluster_id, database_name)
+- ✅ Lambda has only Lambda outputs (lambda_function_arn, lambda_function_name)
 
 ### Running Tests
 
@@ -207,181 +280,191 @@ Verifies the DRY pattern maintains output scoping.
 # Run both scoping tests
 go test -v ./pkg/hooks -run TestHooks
 
-# Run specific tests
+# Run specific test
 go test -v ./pkg/hooks -run TestHooksAreComponentScoped
 go test -v ./pkg/hooks -run TestHooksWithDRYPattern
-
-# Run all hooks tests
-go test -v ./pkg/hooks
 ```
 
-## Expected Behavior
+## Usage Guidelines
 
-### What Should Happen
+### Recommended: Use Shared Structure Pattern
 
-1. **Component A** with `store-outputs` hook defining outputs `[a1, a2]`
-2. **Component B** with `store-outputs` hook defining outputs `[b1, b2]`
-3. When describing Component A: should see hook with outputs `[a1, a2]` only
-4. When describing Component B: should see hook with outputs `[b1, b2]` only
+For most use cases, define hook structure globally and customize per component:
 
-### What Should NOT Happen
-
-1. ❌ Component A should not see outputs `[b1, b2]`
-2. ❌ Component B should not see outputs `[a1, a2]`
-3. ❌ Either component should not see accumulated outputs `[a1, a2, b1, b2]`
-
-## Debugging Hook Scope Issues
-
-If users report hooks appearing globally:
-
-### Step 1: Verify Hook Definition Location
-
-Check where hooks are defined:
-
-```bash
-# View component configuration
-atmos describe component <component> -s <stack>
-
-# Check the hooks section
-atmos describe component <component> -s <stack> | yq '.hooks'
-```
-
-### Step 2: Check Import Chain
-
-Verify import hierarchy:
-
-```bash
-# View all imports
-atmos describe component <component> -s <stack> | yq '.imports'
-
-# View dependency chain
-atmos describe component <component> -s <stack> | yq '.deps'
-```
-
-### Step 3: Compare Against Test Cases
-
-Compare user configuration against working test cases:
-- `tests/test-cases/hooks-component-scoped/stacks/catalog/_defaults.yaml`
-- `tests/test-cases/hooks-component-scoped/stacks/catalog/*-dry.yaml`
-
-### Step 4: Verify Hook Name Uniqueness
-
-If using DRY pattern:
-- ✅ Same hook name across components is OK
-- ✅ Each component defines only its outputs
-- ❌ Do not define all outputs in _defaults.yaml
-
-## Common Pitfalls
-
-### Pitfall 1: Defining All Outputs Globally
-
-**Incorrect**:
 ```yaml
-# _defaults.yaml - WRONG
-hooks:
-  store-outputs:
-    outputs:
-      vpc_id: .vpc_id          # ❌ Will apply to ALL components
-      cluster_id: .cluster_id  # ❌ Will apply to ALL components
-```
-
-**Correct**:
-```yaml
-# _defaults.yaml - CORRECT
+# Define structure once in _defaults.yaml
 hooks:
   store-outputs:
     events: [after-terraform-apply]
     command: store
-    name: prod/ssm
-    # ✅ No outputs here
+    name: {{ .stage }}/ssm
 
-# vpc.yaml - CORRECT
-hooks:
-  store-outputs:
-    outputs:
-      vpc_id: .vpc_id  # ✅ Only for VPC
-```
-
-### Pitfall 2: Using Global Scope Incorrectly
-
-**Incorrect**:
-```yaml
-# At top-level of stack file - WRONG
-hooks:
-  store-outputs:
-    outputs:
-      vpc_id: .vpc_id  # ❌ May apply to all components in file
-```
-
-**Correct**:
-```yaml
-# Scoped to component - CORRECT
+# Customize per component
 components:
   terraform:
     vpc:
       hooks:
         store-outputs:
           outputs:
-            vpc_id: .vpc_id  # ✅ Only for VPC
+            vpc_id: .vpc_id
 ```
 
-## Implementation Details
+### When to Use Component-Specific Hooks
 
-### Stack Processing
+Use complete component-specific hooks when:
+- Component has unique hook requirements not shared with others
+- Hook structure differs significantly between components
+- Explicit self-contained configuration is preferred
 
-When processing a stack, Atmos:
+### Template Functions
 
-1. Loads all imported files in order
-2. Builds component configuration through merging
-3. Merges hooks using the same algorithm as other properties
-4. Ensures each component gets only its own hook definitions
+Hooks support all Atmos template functions:
 
-### Merge Algorithm
+```yaml
+hooks:
+  notify:
+    events: [after-terraform-apply]
+    command: exec
+    args:
+      - echo
+      - "Deployed {{ .atmos_component }} to {{ .stage }}"
+```
 
-The merge algorithm (`pkg/merge/`) handles hook merging:
+## Debugging
 
-1. **Maps merge by key**: Hooks with same name merge
-2. **Arrays concatenate**: Events can accumulate
-3. **Last write wins for scalars**: Later values override earlier ones
-4. **Deep merge for nested structures**: Outputs merge at the component level
+### View Component Hooks
 
-## Best Practices
+```bash
+# See all hooks for a component
+atmos describe component <component> -s <stack>
 
-### DO
+# See just the hooks section
+atmos describe component <component> -s <stack> | yq '.hooks'
+```
 
-✅ **Use the DRY pattern** for multiple components with similar hooks
-✅ **Define hook structure globally** (events, command, name)
-✅ **Define outputs per component** in component-specific files
-✅ **Use unique hook names** if components need different hook structures
-✅ **Test with `describe component`** to verify hook configuration
+### Verify Inheritance Chain
 
-### DON'T
+```bash
+# View component configuration sources
+atmos describe component <component> -s <stack> | yq '.imports'
+```
 
-❌ **Don't define all outputs in _defaults.yaml**
-❌ **Don't expect hooks to automatically scope without proper structure**
-❌ **Don't define hooks at top-level of stack files** (use component scope)
-❌ **Don't skip testing** - always verify with `describe component`
+### Compare Against Reference
 
-## Reference Implementation
+Working examples available in `tests/test-cases/hooks-component-scoped/`
 
-Complete working examples available in:
-- `tests/test-cases/hooks-component-scoped/`
+## Anti-Patterns to Avoid
+
+While the system works correctly, certain configurations can be confusing or error-prone:
+
+### ❌ Anti-Pattern 1: Defining All Outputs in Defaults
+
+**Don't do this**:
+```yaml
+# _defaults.yaml - Confusing
+hooks:
+  store-outputs:
+    outputs:
+      vpc_id: .vpc_id          # Will apply to all components
+      cluster_id: .cluster_id  # Will apply to all components
+```
+
+**Why**: All components would inherit all outputs, even if they don't produce them.
+
+**Do this instead**:
+```yaml
+# _defaults.yaml - Clear
+hooks:
+  store-outputs:
+    events: [after-terraform-apply]
+    command: store
+    # No outputs - defined per component
+```
+
+### ❌ Anti-Pattern 2: Hooks at Top-Level of Stack File
+
+**Don't do this**:
+```yaml
+# stack.yaml - Ambiguous
+hooks:
+  some-hook:
+    events: [after-terraform-apply]
+
+components:
+  terraform:
+    vpc: {}
+    rds: {}
+```
+
+**Why**: Unclear which components the hook applies to.
+
+**Do this instead**:
+```yaml
+# stack.yaml - Clear
+components:
+  terraform:
+    vpc:
+      hooks:
+        vpc-hook:
+          events: [after-terraform-apply]
+```
+
+### ❌ Anti-Pattern 3: Duplicating Hook Structure
+
+**Don't do this**:
+```yaml
+# Duplicated structure in each component
+components:
+  terraform:
+    vpc:
+      hooks:
+        store:
+          events: [after-terraform-apply]
+          command: store
+          name: prod/ssm
+          outputs: {vpc_id: .id}
+    rds:
+      hooks:
+        store:
+          events: [after-terraform-apply]
+          command: store
+          name: prod/ssm
+          outputs: {cluster_id: .id}
+```
+
+**Do this instead**:
+```yaml
+# _defaults.yaml
+hooks:
+  store:
+    events: [after-terraform-apply]
+    command: store
+    name: prod/ssm
+
+# Components just add outputs
+components:
+  terraform:
+    vpc:
+      hooks:
+        store:
+          outputs: {vpc_id: .id}
+```
 
 ## Related Documentation
 
-- [Lifecycle Hooks Overview](https://atmos.tools/core-concepts/stacks/hooks)
-- [Stack Processing](/docs/prd/stack-processing.md)
-- [Configuration Merging](/docs/prd/configuration-merging.md)
+- [Lifecycle Hooks](https://atmos.tools/core-concepts/stacks/hooks)
+- [Stack Configuration](https://atmos.tools/core-concepts/stacks)
+- [Component Inheritance](https://atmos.tools/core-concepts/components)
 
-## Version History
+## Reference Implementation
 
-- **v1.0** (2025-01): Initial PRD with test coverage for component scoping
-- Added DRY pattern as recommended approach
-- Comprehensive test coverage for both patterns
+Complete working examples: `tests/test-cases/hooks-component-scoped/`
 
-## Future Considerations
+## Future Enhancements
 
-1. **Conditional hooks**: Execute hooks based on component state
-2. **Hook dependencies**: Order hook execution across components
-3. **Hook templates**: Parameterized hook definitions
-4. **Validation**: Schema validation for hook configurations
+Potential future capabilities:
+
+1. **Hook dependencies** - Specify execution order across components
+2. **Conditional execution** - Run hooks based on component state
+3. **Hook templates** - Parameterized hook definitions
+4. **Validation schemas** - Validate hook configurations against schemas
