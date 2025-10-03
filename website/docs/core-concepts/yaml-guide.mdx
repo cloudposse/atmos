@@ -9,7 +9,7 @@ import File from '@site/src/components/File'
 import Intro from '@site/src/components/Intro'
 
 <Intro>
-Atmos uses YAML as its configuration language because it's human-readable, portable, and powerful enough to handle complex infrastructure configurations. But YAML in Atmos works a bit differently than you might expect—especially when it comes to scope and merging.
+Atmos uses YAML as its configuration language because it's human-readable, portable, and powerful enough to handle complex infrastructure configurations. YAML in Atmos has a few party tricks up its sleeve—especially around scope and merging. We like to think of them as features, not bugs. (Okay, they're definitely features.)
 </Intro>
 
 Let's clear up the most common misconceptions and show you how to use YAML effectively in Atmos.
@@ -18,7 +18,7 @@ Let's clear up the most common misconceptions and show you how to use YAML effec
 
 The most important thing to understand: **there is no file-level scope in Atmos**. When you import multiple YAML files, Atmos merges them into a single, unified configuration. The scope is determined by the depth in the YAML tree, not by which file something is defined in.
 
-Think of it like this: after all imports are processed, Atmos sees one big YAML document. Variables and settings at the same depth in the tree have the same scope.
+Think of it like this: Atmos processes all imports and sees one big YAML document. Variables and settings at the same depth in the tree have the same scope.
 
 <File title="stacks/globals.yaml">
 ```yaml
@@ -63,7 +63,11 @@ All three variables (`environment`, `region`, `namespace`) have the same scope�
 
 ## Deep Merge: Maps Combine, Values Override
 
-When Atmos processes imports, it **deep merges** YAML configurations. Here's how it works:
+When Atmos processes imports, it **deep merges** YAML configurations.
+
+Think of it like layering transparencies: maps blend together, but when the same key appears in multiple layers, the top layer wins. It's infrastructure inheritance, YAML style.
+
+Here's how it works:
 
 - **Maps (objects) merge recursively** - Keys from both maps combine
 - **Later values override earlier ones** - Import order matters
@@ -122,7 +126,7 @@ components:
 ```
 
 :::tip
-Import order matters! Files are processed sequentially. Later imports override earlier ones.
+Import order matters! Atmos processes files sequentially. Later imports override earlier ones.
 :::
 
 ## Dot Notation: Flatten Deep Nesting
@@ -203,7 +207,7 @@ Dot notation works anywhere in Atmos YAML—not just in component configuration.
 
 ## YAML Tags: Native Functions
 
-Atmos extends YAML with custom tags that act like native functions. These are processed during YAML parsing, before templates run.
+Atmos extends YAML with custom tags that act like native functions. Atmos processes these during YAML parsing, before templates run.
 
 ### Common YAML Tags
 
@@ -269,7 +273,7 @@ vars:
 ```
 
 :::info
-Go templates are processed **after** YAML tags. You can combine them:
+Atmos processes Go templates **after** YAML tags. You can combine them:
 ```yaml
 vars:
   token: !ENV API_TOKEN
@@ -299,15 +303,17 @@ YAML keeps configuration simple while HCL handles the infrastructure logic.
 
 ## YAML Gotchas & How to Avoid Them
 
-### 1. Type Coercion
+### 1. The `NO` Problem (Or: How Norway Broke YAML)
 
-YAML auto-converts values. Sometimes this surprises people:
+YAML has opinions about what counts as a boolean. Strong opinions.
+
+Unfortunately, "NO" (Norway's country code) is one of them.
 
 ```yaml
 # These are NOT strings
 vars:
   yes_value: yes        # Becomes boolean true
-  no_value: no          # Becomes boolean false
+  no_value: no          # Becomes boolean false (whoops, Norway!)
   version: 1.20         # Becomes float 1.2
   zip_code: 07094       # Becomes integer 7094
 ```
