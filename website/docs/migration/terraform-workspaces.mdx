@@ -169,6 +169,7 @@ terraform:
   backend:
     s3:
       bucket: terraform-state-prod  # Isolated backend
+      key: terraform.tfstate
       region: us-east-1
 
 components:
@@ -190,6 +191,7 @@ terraform:
   backend:
     s3:
       bucket: terraform-state-dev  # Separate backend!
+      key: terraform.tfstate
       region: us-east-1
 
 components:

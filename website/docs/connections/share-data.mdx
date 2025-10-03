@@ -100,7 +100,7 @@ For more advanced examples, check out the `!terraform.output` YAML function docu
 
 ###  Function: `!terraform.state`
 
-The [`!terraform.state`](/functions/yaml/terraform.state) YAML function reads outputs **directly from the configured Terraform or OpenTofu backend**, bypassing the `terraform output` or `tofu output` pipeline — it’s **very fast**, doesn’t require provider initialization, and currently supports [S3 and local backends](/components/terraform/backends) for accessing [remote state](/connections/remote-state).
+The [`!terraform.state`](/functions/yaml/terraform.state) YAML function reads outputs **directly from the configured Terraform or OpenTofu backend**, bypassing the `terraform output` or `tofu output` pipeline — it's **very fast**, doesn't require provider initialization, and supports [all Terraform/OpenTofu backends](/components/terraform/backends) (local, S3, azurerm, gcs, remote, consul, cos, http, kubernetes, oss, pg, cloud) for accessing [remote state](/connections/remote-state).
 
 For example, we can read the `vpc_id` output of the `vpc` component in the current stack:
 

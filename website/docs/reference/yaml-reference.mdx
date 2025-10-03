@@ -270,27 +270,16 @@ components:
 
 ### Real-World Example: Component Defaults
 
-<File title="stacks/catalog/vpc-defaults.yaml">
-```yaml
-components:
-  terraform:
-    vpc-base:
-      metadata:
-        type: abstract
-      vars: &vpc_defaults
-        enable_dns_hostnames: true
-        enable_dns_support: true
-        enable_nat_gateway: true
-        single_nat_gateway: false
-        create_igw: true
-        map_public_ip_on_launch: false
-```
-</File>
-
 <File title="stacks/prod-us-east-1.yaml">
 ```yaml
-import:
-  - catalog/vpc-defaults
+# Define VPC defaults as an anchor
+vars: &vpc_defaults
+  enable_dns_hostnames: true
+  enable_dns_support: true
+  enable_nat_gateway: true
+  single_nat_gateway: false
+  create_igw: true
+  map_public_ip_on_launch: false
 
 components:
   terraform:
@@ -298,12 +287,16 @@ components:
       metadata:
         component: vpc
       vars:
-        <<: *vpc_defaults  # Inherit all VPC defaults
+        <<: *vpc_defaults  # Reuse VPC defaults
         cidr_block: "10.0.0.0/16"
         availability_zones: ["us-east-1a", "us-east-1b", "us-east-1c"]
         single_nat_gateway: true  # Override for prod
 ```
 </File>
+
+:::tip
+For cross-file reuse, use [Atmos imports and inheritance](/stacks/inheritance) instead of YAML anchors.
+:::
 
 ### Multiple Anchors with Merge
 
