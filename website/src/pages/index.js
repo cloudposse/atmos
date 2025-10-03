@@ -20,7 +20,7 @@ function Home() {
           <img src={useBaseUrl('/img/demo.gif')} alt="Product Screenshot" className="screenshot" />
           <div className="hero__cta">
             <Link to="/quick-start/" className="button button--lg button--primary"><p>Try the Quick Start</p></Link>
-            <Link to="/introduction" className="button button--lg button--outline button--primary ml20"><p>Learn More</p></Link>
+            <Link to="/intro" className="button button--lg button--outline button--primary ml20"><p>Learn More</p></Link>
           </div>
           <h3>Use a Modern <strong className="underline">Composable Framework</strong> for Terraform, OpenTofu, Packer and Helmfile backed by YAML</h3>
         </header>
@@ -40,7 +40,7 @@ function Home() {
               <h2>Write your Components</h2>
               <p>Use your existing Terraform root modules or create new ones. Component libraries make sharing easy.
                  Use vendoring to pull down remote dependencies.</p>
-              <Link to="/core-concepts/components" className="button button--lg button--outline button--primary ml20"><p>Learn More</p></Link>
+              <Link to="/components/components" className="button button--lg button--outline button--primary ml20"><p>Learn More</p></Link>
             </div>
           </section>
           <section className="alternate-section section--image-right">
@@ -49,7 +49,7 @@ function Home() {
               <h2>Define your Stacks</h2>
               <p>Configure your environments—development, staging, production—each tailored to different stages of the lifecycle, ensuring smooth transitions and robust deployment strategies.
                  Inherit from a common baseline to keep it DRY.</p>
-              <Link to="/core-concepts/stacks" className="button button--lg button--outline button--primary ml20"><p>Learn More</p></Link>
+              <Link to="/learn/stacks" className="button button--lg button--outline button--primary ml20"><p>Learn More</p></Link>
             </div>
           </section>
           <section className="alternate-section section--image-left">
