@@ -7,15 +7,16 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/pkg/errors"
+	"go.yaml.in/yaml/v3"
+	"golang.org/x/term"
+
 	"github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/filetype"
 	"github.com/cloudposse/atmos/pkg/list/format"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/utils"
-	"github.com/pkg/errors"
-	"golang.org/x/term"
-	"gopkg.in/yaml.v3"
 )
 
 var (
