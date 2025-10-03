@@ -247,7 +247,8 @@ atmos describe dependents <component> -s <stack> -f yaml
 atmos describe dependents <component> -s <stack> --file dependents.json
 atmos describe dependents <component> -s <stack> --format yaml --file dependents.yaml
 atmos describe dependents <component> -s <stack> --query <yq-expression>
-atmos describe dependents <component> -s <stack> --dependents-stack <stack>
+atmos describe dependents <component> --only-from <stack>
+atmos describe dependents <component> --only-from <stack> --query <yq-expression>
 ```
 
 ## Arguments
@@ -312,11 +313,11 @@ atmos describe dependents <component> -s <stack> --dependents-stack <stack>
         `atmos describe dependents <component> -s <stack> --skip=terraform.output,include`
     </dd>
 
-    <dt>`--dependents-stack` <em>(optional)</em></dt>
+    <dt>`--only-from` <em>(optional)</em></dt>
     <dd>
-        Filter the dependent components by a specific stack.
+        Return the dependent components from a specific stack.
 
-        `atmos describe dependents <component> -s <stack> --dependents-stack <stack>`
+        `atmos describe dependents <component> --only-from <stack>`
     </dd>
 </dl>
 

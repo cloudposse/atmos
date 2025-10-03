@@ -28,7 +28,7 @@ type DescribeDependentsExecProps struct {
 	ProcessTemplates     bool
 	ProcessYamlFunctions bool
 	Skip                 []string
-	DependentsStack      string
+	OnlyFrom             string
 }
 
 //go:generate mockgen -source=$GOFILE -destination=mock_$GOFILE -package=$GOPACKAGE
@@ -81,7 +81,7 @@ func (d *describeDependentsExec) Execute(describeDependentsExecProps *DescribeDe
 		describeDependentsExecProps.ProcessTemplates,
 		describeDependentsExecProps.ProcessYamlFunctions,
 		describeDependentsExecProps.Skip,
-		describeDependentsExecProps.DependentsStack,
+		describeDependentsExecProps.OnlyFrom,
 	)
 	if err != nil {
 		return err

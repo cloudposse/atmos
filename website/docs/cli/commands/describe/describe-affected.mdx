@@ -107,7 +107,8 @@ atmos describe affected --clone-target-ref
 atmos describe affected --include-settings
 atmos describe affected --include-dependents
 atmos describe affected --stack <stack>
-atmos describe affected --stack <stack> --include-dependents --dependents-stack <stack>
+atmos describe affected --only-from <stack>
+atmos describe affected --only-from <stack> --include-dependents
 atmos describe affected --upload
 atmos describe affected --query <yq-expression>
 atmos describe affected --process-templates=false
@@ -273,14 +274,13 @@ Affected components and stacks:
         `atmos describe affected --include-dependents`
     </dd>
 
-    <dt>`--dependents-stack` <em>(optional)</em></dt>
+    <dt>`--only-from` <em>(optional)</em></dt>
     <dd>
-        Filter the dependent components by a specific stack.
-        Only used when `--include-dependents` is set to `true`.
+        Return the affected and dependent components from a specific stack.
 
-        `atmos describe affected --include-dependents --dependents-stack <stack>`
+        `atmos describe affected --only-from <stack>`
 
-        `atmos describe affected -s <stack> --include-dependents --dependents-stack <stack>`
+        `atmos describe affected --only-from <stack> --include-dependents`
     </dd>
 
     <dt>`--include-settings` <em>(optional)</em></dt>
