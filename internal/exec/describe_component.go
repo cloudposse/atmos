@@ -41,6 +41,8 @@ type DescribeComponentExec struct {
 }
 
 func NewDescribeComponentExec() *DescribeComponentExec {
+	defer perf.Track(nil, "exec.NewDescribeComponentExec")()
+
 	return &DescribeComponentExec{
 		printOrWriteToFile:       printOrWriteToFile,
 		IsTTYSupportForStdout:    tuiTerm.IsTTYSupportForStdout,
@@ -72,6 +74,8 @@ func (d *DescribeComponentExec) ExecuteDescribeComponentCmd(describeComponentPar
 	if err != nil {
 		return err
 	}
+
+	defer perf.Track(&atmosConfig, "exec.ExecuteDescribeComponentCmd")()
 
 	// Enable provenance tracking if requested.
 	if provenance {
@@ -209,6 +213,8 @@ func ExecuteDescribeComponent(
 	processYamlFunctions bool,
 	skip []string,
 ) (map[string]any, error) {
+	defer perf.Track(nil, "exec.ExecuteDescribeComponent")()
+
 	result, err := ExecuteDescribeComponentWithContext(nil, component, stack, processTemplates, processYamlFunctions, skip)
 	if err != nil {
 		return nil, err
@@ -396,6 +402,8 @@ func FilterComputedFields(componentSection map[string]any) map[string]any {
 
 // FilterAbstractComponents This function removes abstract components and returns the list of components.
 func FilterAbstractComponents(componentsMap map[string]any) []string {
+	defer perf.Track(nil, "exec.FilterAbstractComponents")()
+
 	if componentsMap == nil {
 		return []string{}
 	}

@@ -1,7 +1,7 @@
 package utils
 
 import (
-	"gopkg.in/yaml.v3"
+	yaml "gopkg.in/yaml.v3"
 )
 
 // Position represents a line and column position in a YAML file.

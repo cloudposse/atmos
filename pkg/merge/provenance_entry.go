@@ -2,6 +2,7 @@ package merge
 
 import (
 	"crypto/sha256"
+	"encoding/json"
 	"fmt"
 )
 
@@ -120,8 +121,14 @@ func hashValue(value any) string {
 		return ""
 	}
 
-	// Convert value to string representation
-	valueStr := fmt.Sprintf("%v", value)
+	// Convert value to a deterministic string representation.
+	valueBytes, err := json.Marshal(value)
+	valueStr := ""
+	if err == nil {
+		valueStr = string(valueBytes)
+	} else {
+		valueStr = fmt.Sprintf("%v", value)
+	}
 
 	// Create SHA-256 hash
 	hash := sha256.Sum256([]byte(valueStr))
