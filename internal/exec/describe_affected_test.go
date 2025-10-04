@@ -779,7 +779,7 @@ func TestDescribeAffectedWithDependentsFilteredByStack(t *testing.T) {
 	// Test affected with `processTemplates: true`, `processFunctions: true`, `excludeLocked: false`,
 	// process dependents (with `processTemplates: true`, `processFunctions: true` for the dependents),
 	// and filter the dependents by a specific stack.
-	dependentsStack := "ue1-network"
+	onlyInStack := "ue1-network"
 	//nolint:dupl // Test scenarios have similar structures for consistency
 	expected := []schema.Affected{
 		{
@@ -957,7 +957,7 @@ func TestDescribeAffectedWithDependentsFilteredByStack(t *testing.T) {
 		true,
 		true,
 		nil,
-		dependentsStack,
+		onlyInStack,
 	)
 	require.NoError(t, err)
 	// Order-agnostic equality on struct slices
@@ -973,7 +973,7 @@ func TestDescribeAffectedWithDisabledDependents(t *testing.T) {
 	// This also verifies that disabled dependents (metadata.enabled: false) are excluded from the results.
 	// In the test fixture, tgw/attachment is disabled in uw2-network (us-west-2.yaml), so it should NOT
 	// appear in the dependents list for vpc in uw2-network.
-	dependentsStack := "uw2-network"
+	onlyInStack := "uw2-network"
 	expected := []schema.Affected{
 		{
 			Component:            "vpc",
@@ -1066,7 +1066,7 @@ func TestDescribeAffectedWithDisabledDependents(t *testing.T) {
 		true,
 		true,
 		nil,
-		dependentsStack,
+		onlyInStack,
 	)
 	require.NoError(t, err)
 	// Order-agnostic equality on struct slices
