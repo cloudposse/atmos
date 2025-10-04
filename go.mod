@@ -90,6 +90,7 @@ require (
 	golang.org/x/term v0.35.0
 	golang.org/x/text v0.29.0
 	google.golang.org/api v0.251.0
+	google.golang.org/genai v1.28.0
 	google.golang.org/grpc v1.75.1
 	gopkg.in/op/go-logging.v1 v1.0.0-20160211212156-b2cb9fa56473
 	gopkg.in/yaml.v2 v2.4.0
@@ -218,6 +219,7 @@ require (
 	github.com/googleapis/enterprise-certificate-proxy v0.3.6 // indirect
 	github.com/gookit/color v1.5.4 // indirect
 	github.com/gorilla/css v1.0.1 // indirect
+	github.com/gorilla/websocket v1.5.4-0.20250319132907-e064f32e3674 // indirect
 	github.com/gosimple/slug v1.15.0 // indirect
 	github.com/gosimple/unidecode v1.0.1 // indirect
 	github.com/hack-pad/hackpadfs v0.2.4 // indirect
