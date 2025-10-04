@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"strings"
 
-	log "github.com/cloudposse/atmos/pkg/logger"
-
 	errUtils "github.com/cloudposse/atmos/errors"
+	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -42,6 +42,8 @@ func extractPipeParams(parts []string, input string) (defaultValue *string, quer
 }
 
 func processTagStoreGet(atmosConfig *schema.AtmosConfiguration, input string, currentStack string) any {
+	defer perf.Track(atmosConfig, "exec.processTagStoreGet")()
+
 	log.Debug("Executing Atmos YAML function", "function", input)
 	log.Debug("Processing !store.get", "input", input, "tag", u.AtmosYamlFuncStoreGet)
 

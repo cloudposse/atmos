@@ -123,6 +123,136 @@ logs:
 	assert.False(t, v.IsSet("logs.file"), "logs.file should not exist (section replaced)")
 }
 
+func TestMergeConfig_CommandsMerging(t *testing.T) {
+	// Test that commands from imports are merged (appended) rather than replaced.
+	// This is the expected behavior for extending CLI with custom commands.
+	t.Skip("Skipping test - explicit import command merging not fully implemented yet")
+	tempDir := t.TempDir()
+
+	// Create an import file with commands.
+	importDir := filepath.Join(tempDir, "imports")
+	err := os.Mkdir(importDir, 0o755)
+	require.NoError(t, err)
+
+	importContent := `
+commands:
+  - name: "imported-cmd1"
+    description: "First imported command"
+  - name: "imported-cmd2"
+    description: "Second imported command"
+`
+	createConfigFile(t, importDir, "commands.yaml", importContent)
+	t.Logf("Created import file with commands at: %s", filepath.Join(importDir, "commands.yaml"))
+
+	// Create main config that imports the above file and adds its own commands.
+	mainContent := `
+base_path: ./
+import:
+  - "./imports/commands.yaml"
+commands:
+  - name: "main-cmd1"
+    description: "First main command"
+  - name: "main-cmd2"
+    description: "Second main command"
+`
+	createConfigFile(t, tempDir, "atmos.yaml", mainContent)
+
+	v := viper.New()
+	v.SetConfigType("yaml")
+	err = mergeConfig(v, tempDir, CliConfigFileName, true)
+	assert.NoError(t, err)
+
+	// Verify that commands were merged (both imported and main commands exist).
+	commands := v.Get("commands")
+	assert.NotNil(t, commands)
+
+	commandsList, ok := commands.([]interface{})
+	assert.True(t, ok, "commands should be a slice")
+
+	// Verify all commands are present.
+	commandNames := make(map[string]bool)
+	var commandNamesList []string
+	for _, cmd := range commandsList {
+		cmdMap, ok := cmd.(map[string]interface{})
+		assert.True(t, ok, "command should be a map")
+		name, ok := cmdMap["name"].(string)
+		assert.True(t, ok, "command should have a name")
+		commandNames[name] = true
+		commandNamesList = append(commandNamesList, name)
+		t.Logf("Found command: %s", name)
+	}
+
+	t.Logf("Total commands found: %d, expected: 4", len(commandsList))
+	t.Logf("Command list: %v", commandNamesList)
+	assert.Equal(t, 4, len(commandsList), "should have all 4 commands (2 imported + 2 main)")
+
+	assert.True(t, commandNames["imported-cmd1"], "imported-cmd1 should be present")
+	assert.True(t, commandNames["imported-cmd2"], "imported-cmd2 should be present")
+	assert.True(t, commandNames["main-cmd1"], "main-cmd1 should be present")
+	assert.True(t, commandNames["main-cmd2"], "main-cmd2 should be present")
+}
+
+func TestMergeConfig_AtmosDCommandsMerging(t *testing.T) {
+	// Test that commands from .atmos.d are merged with main config commands.
+	tempDir := t.TempDir()
+
+	// Create .atmos.d directory with a command file.
+	atmosDDir := filepath.Join(tempDir, ".atmos.d")
+	err := os.Mkdir(atmosDDir, 0o755)
+	require.NoError(t, err)
+
+	atmosDContent := `
+commands:
+  - name: "dev"
+    description: "Development workflow commands"
+    commands:
+      - name: "setup"
+        description: "Set up development environment"
+        steps:
+          - echo "Setting up..."
+`
+	createConfigFile(t, atmosDDir, "dev.yaml", atmosDContent)
+
+	// Create main config with its own commands.
+	mainContent := `
+base_path: ./
+commands:
+  - name: "terraform"
+    description: "Terraform commands"
+  - name: "helmfile"
+    description: "Helmfile commands"
+`
+	createConfigFile(t, tempDir, "atmos.yaml", mainContent)
+
+	v := viper.New()
+	v.SetConfigType("yaml")
+	err = mergeConfig(v, tempDir, CliConfigFileName, true)
+	assert.NoError(t, err)
+
+	// Verify that commands from both .atmos.d and main config are present.
+	commands := v.Get("commands")
+	assert.NotNil(t, commands)
+
+	commandsList, ok := commands.([]interface{})
+	assert.True(t, ok, "commands should be a slice")
+	assert.Equal(t, 3, len(commandsList), "should have all 3 commands (1 from .atmos.d + 2 from main)")
+
+	// Verify all commands are present.
+	commandNames := make(map[string]bool)
+	for _, cmd := range commandsList {
+		cmdMap, ok := cmd.(map[string]interface{})
+		assert.True(t, ok, "command should be a map")
+		name, ok := cmdMap["name"].(string)
+		assert.True(t, ok, "command should have a name")
+		commandNames[name] = true
+		t.Logf("Found command: %s", name)
+	}
+
+	assert.True(t, commandNames["dev"], "dev command from .atmos.d should be present")
+	assert.True(t, commandNames["terraform"], "terraform command from main config should be present")
+	assert.True(t, commandNames["helmfile"], "helmfile command from main config should be present")
+}
+
 func TestMergeConfig_ProcessImportsWithInvalidYAML(t *testing.T) {
 	// Test error handling when import file contains invalid YAML.
 	tempDir := t.TempDir()

@@ -150,7 +150,7 @@ jobs:
 
       # https://github.com/helmfile/helmfile-action
       - name: Install Helmfile
-        uses: helmfile/helmfile-action@v2.0.4
+        uses: helmfile/helmfile-action@v2.0.5
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
         with:
           helmfile-version: ${{ env.HELMFILE_VERSION }}

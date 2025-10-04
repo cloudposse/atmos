@@ -9,22 +9,25 @@ import (
 	"strings"
 	"time"
 
-	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/datafetcher"
 	"github.com/cloudposse/atmos/pkg/downloader"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	m "github.com/cloudposse/atmos/pkg/merge"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 const atmosManifestDefaultFileName = "schemas/atmos/atmos-manifest/1.0/atmos-manifest.json"
 
-// ExecuteValidateStacksCmd executes `validate stacks` command
+// ExecuteValidateStacksCmd executes `validate stacks` command.
 func ExecuteValidateStacksCmd(cmd *cobra.Command, args []string) error {
+	defer perf.Track(nil, "exec.ExecuteValidateStacksCmd")()
+
 	// Initialize spinner
 	message := "Validating Atmos Stacks..."
 	p := NewSpinner(message)
@@ -61,8 +64,10 @@ func ExecuteValidateStacksCmd(cmd *cobra.Command, args []string) error {
 	return err
 }
 
-// ValidateStacks validates Atmos stack configuration
+// ValidateStacks validates Atmos stack configuration.
 func ValidateStacks(atmosConfig *schema.AtmosConfiguration) error {
+	defer perf.Track(atmosConfig, "exec.ValidateStacks")()
+
 	var validationErrorMessages []string
 
 	// 1. Process top-level stack manifests and detect duplicate components in the same stack
@@ -140,7 +145,7 @@ func ValidateStacks(atmosConfig *schema.AtmosConfiguration) error {
 		"**/*.yml.tmpl",
 	}
 
-	includeStackAbsPaths, err := u.JoinAbsolutePathWithPaths(atmosConfig.StacksBaseAbsolutePath, includedPaths)
+	includeStackAbsPaths, err := u.JoinPaths(atmosConfig.StacksBaseAbsolutePath, includedPaths)
 	if err != nil {
 		return err
 	}
@@ -260,6 +265,8 @@ func createComponentStackMap(
 	stacksMap map[string]any,
 	componentType string,
 ) (map[string]map[string][]string, error) {
+	defer perf.Track(atmosConfig, "exec.createComponentStackMap")()
+
 	var varsSection map[string]any
 	var metadataSection map[string]any
 	var settingsSection map[string]any
@@ -340,7 +347,7 @@ func createComponentStackMap(
 
 					// Find Atmos stack name
 					if atmosConfig.Stacks.NameTemplate != "" {
-						stackName, err = ProcessTmpl("validate-stacks-name-template", atmosConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, false)
+						stackName, err = ProcessTmpl(atmosConfig, "validate-stacks-name-template", atmosConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, false)
 						if err != nil {
 							return nil, err
 						}
@@ -367,6 +374,8 @@ func createComponentStackMap(
 }
 
 func checkComponentStackMap(componentStackMap map[string]map[string][]string) ([]string, error) {
+	defer perf.Track(nil, "exec.checkComponentStackMap")()
+
 	var res []string
 
 	for componentName, componentSection := range componentStackMap {
@@ -440,6 +449,8 @@ func checkComponentStackMap(componentStackMap map[string]map[string][]string) ([
 
 // downloadSchemaFromURL downloads the Atmos JSON Schema file from the provided URL.
 func downloadSchemaFromURL(atmosConfig *schema.AtmosConfiguration) (string, error) {
+	defer perf.Track(atmosConfig, "exec.downloadSchemaFromURL")()
+
 	manifestSchema := atmosConfig.GetSchemaRegistry("atmos")
 	manifestURL := manifestSchema.Manifest
 	parsedURL, err := url.Parse(manifestURL)
@@ -467,6 +478,8 @@ func downloadSchemaFromURL(atmosConfig *schema.AtmosConfiguration) (string, erro
 }
 
 func getEmbeddedSchemaPath(atmosConfig *schema.AtmosConfiguration) (string, error) {
+	defer perf.Track(atmosConfig, "exec.getEmbeddedSchemaPath")()
+
 	fetcher := datafetcher.NewDataFetcher(atmosConfig)
 	embedded, err := fetcher.GetData("atmos://schema/atmos/manifest/1.0")
 	if err != nil {

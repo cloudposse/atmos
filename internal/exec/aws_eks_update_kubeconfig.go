@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/cloudposse/atmos/pkg/perf"
+
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/spf13/cobra"
 
@@ -14,6 +16,8 @@ import (
 )
 
 func ExecuteAwsEksUpdateKubeconfigCommand(cmd *cobra.Command, args []string) error {
+	defer perf.Track(nil, "exec.ExecuteAwsEksUpdateKubeconfigCommand")()
+
 	flags := cmd.Flags()
 
 	stack, err := flags.GetString("stack")
@@ -82,9 +86,11 @@ func ExecuteAwsEksUpdateKubeconfigCommand(cmd *cobra.Command, args []string) err
 	return ExecuteAwsEksUpdateKubeconfig(executeAwsEksUpdateKubeconfigContext)
 }
 
-// ExecuteAwsEksUpdateKubeconfig executes 'aws eks update-kubeconfig'
+// ExecuteAwsEksUpdateKubeconfig executes 'aws eks update-kubeconfig'.
 // https://docs.aws.amazon.com/cli/latest/reference/eks/update-kubeconfig.html
 func ExecuteAwsEksUpdateKubeconfig(kubeconfigContext schema.AwsEksUpdateKubeconfigContext) error {
+	defer perf.Track(nil, "exec.ExecuteAwsEksUpdateKubeconfig")()
+
 	// AWS profile to authenticate to the cluster
 	profile := kubeconfigContext.Profile
 

@@ -7,6 +7,7 @@ import (
 	"os"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui/markdown"
 )
@@ -16,6 +17,8 @@ var render *markdown.Renderer
 
 // PrintfMarkdown prints a message in Markdown format.
 func PrintfMarkdown(format string, a ...interface{}) {
+	defer perf.Track(nil, "utils.PrintfMarkdown")()
+
 	if render == nil {
 		_, err := os.Stdout.WriteString(fmt.Sprintf(format, a...))
 		errUtils.CheckErrorAndPrint(err, "", "")
@@ -34,6 +37,8 @@ func PrintfMarkdown(format string, a ...interface{}) {
 
 // InitializeMarkdown initializes a new Markdown renderer.
 func InitializeMarkdown(atmosConfig schema.AtmosConfiguration) {
+	defer perf.Track(&atmosConfig, "utils.InitializeMarkdown")()
+
 	var err error
 	render, err = markdown.NewTerminalMarkdownRenderer(atmosConfig)
 	if err != nil {

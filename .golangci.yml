@@ -37,6 +37,8 @@ linters:
       forbid:
         - pattern: os\.Getenv
           msg: Use `viper.BindEnv` for new environment variables instead of `os.Getenv`
+      exclude-godoc-examples: false
+      analyze-types: false
     funlen:
       lines: 60
       statements: 40

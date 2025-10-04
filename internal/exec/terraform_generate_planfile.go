@@ -5,6 +5,8 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/cloudposse/atmos/pkg/perf"
+
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
@@ -37,6 +39,8 @@ type PlanfileOptions struct {
 
 // ExecuteTerraformGeneratePlanfileCmd executes `terraform generate planfile` command.
 func ExecuteTerraformGeneratePlanfileCmd(cmd *cobra.Command, args []string) error {
+	defer perf.Track(nil, "exec.ExecuteTerraformGeneratePlanfileCmd")()
+
 	if len(args) == 0 {
 		return ErrNoComponent
 	}
@@ -100,6 +104,8 @@ func ExecuteTerraformGeneratePlanfile(
 	options *PlanfileOptions,
 	info *schema.ConfigAndStacksInfo,
 ) error {
+	defer perf.Track(nil, "exec.ExecuteTerraformGeneratePlanfile")()
+
 	if err := validatePlanfileFormat(&options.Format); err != nil {
 		return err
 	}

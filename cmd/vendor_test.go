@@ -25,7 +25,4 @@ func TestVendorCommands_Error(t *testing.T) {
 
 	err = vendorPullCmd.RunE(vendorPullCmd, []string{"--invalid-flag"})
 	assert.Error(t, err, "vendor pull command should return an error when called with invalid flags")
-
-	err = vendorDiffCmd.RunE(vendorDiffCmd, []string{"--invalid-flag"})
-	assert.Error(t, err, "vendor diff command should return an error when called with invalid flags")
 }

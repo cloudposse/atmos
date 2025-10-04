@@ -1,6 +1,10 @@
 package utils
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+)
 
 func TestSplitStringByDelimiter(t *testing.T) {
 	tests := []struct {
@@ -79,4 +83,89 @@ func equalSlices(t *testing.T, a, b []string) bool {
 		}
 	}
 	return true
+}
+
+// TestUniqueStrings tests the UniqueStrings function.
+func TestUniqueStrings(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    []string
+		expected []string
+	}{
+		{
+			name:     "No duplicates",
+			input:    []string{"a", "b", "c"},
+			expected: []string{"a", "b", "c"},
+		},
+		{
+			name:     "With duplicates",
+			input:    []string{"a", "b", "a", "c", "b"},
+			expected: []string{"a", "b", "c"},
+		},
+		{
+			name:     "Empty slice",
+			input:    []string{},
+			expected: []string{},
+		},
+		{
+			name:     "All duplicates",
+			input:    []string{"a", "a", "a"},
+			expected: []string{"a"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := UniqueStrings(tt.input)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+// TestSplitStringAtFirstOccurrence tests the SplitStringAtFirstOccurrence function.
+func TestSplitStringAtFirstOccurrence(t *testing.T) {
+	tests := []struct {
+		name      string
+		input     string
+		separator string
+		expected  [2]string
+	}{
+		{
+			name:      "Split with separator present",
+			input:     "key=value",
+			separator: "=",
+			expected:  [2]string{"key", "value"},
+		},
+		{
+			name:      "Split with multiple separators",
+			input:     "key=value=extra",
+			separator: "=",
+			expected:  [2]string{"key", "value=extra"},
+		},
+		{
+			name:      "No separator present",
+			input:     "keyvalue",
+			separator: "=",
+			expected:  [2]string{"keyvalue", ""},
+		},
+		{
+			name:      "Empty string",
+			input:     "",
+			separator: "=",
+			expected:  [2]string{"", ""},
+		},
+		{
+			name:      "Separator at start",
+			input:     "=value",
+			separator: "=",
+			expected:  [2]string{"", "value"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := SplitStringAtFirstOccurrence(tt.input, tt.separator)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
 }

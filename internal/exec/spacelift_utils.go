@@ -5,11 +5,14 @@ import (
 	"strings"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-// BuildSpaceliftStackName builds a Spacelift stack name from the provided context and stack name pattern
+// BuildSpaceliftStackName builds a Spacelift stack name from the provided context and stack name pattern.
 func BuildSpaceliftStackName(spaceliftSettings map[string]any, context schema.Context, contextPrefix string) (string, string, error) {
+	defer perf.Track(nil, "exec.BuildSpaceliftStackName")()
+
 	if spaceliftStackNamePattern, ok := spaceliftSettings["stack_name_pattern"].(string); ok {
 		return cfg.ReplaceContextTokens(context, spaceliftStackNamePattern), spaceliftStackNamePattern, nil
 	} else if spaceliftStackName, ok := spaceliftSettings["stack_name"].(string); ok {
@@ -20,8 +23,10 @@ func BuildSpaceliftStackName(spaceliftSettings map[string]any, context schema.Co
 	}
 }
 
-// BuildSpaceliftStackNames builds Spacelift stack names
+// BuildSpaceliftStackNames builds Spacelift stack names.
 func BuildSpaceliftStackNames(stacks map[string]any, stackNamePattern string) ([]string, error) {
+	defer perf.Track(nil, "exec.BuildSpaceliftStackNames")()
+
 	var allStackNames []string
 
 	for stackName, stackConfig := range stacks {
@@ -81,11 +86,13 @@ func BuildSpaceliftStackNames(stacks map[string]any, stackNamePattern string) ([
 	return allStackNames, nil
 }
 
-// BuildSpaceliftStackNameFromComponentConfig builds Spacelift stack name from the component config
+// BuildSpaceliftStackNameFromComponentConfig builds Spacelift stack name from the component config.
 func BuildSpaceliftStackNameFromComponentConfig(
 	atmosConfig *schema.AtmosConfiguration,
 	configAndStacksInfo schema.ConfigAndStacksInfo,
 ) (string, error) {
+	defer perf.Track(atmosConfig, "exec.BuildSpaceliftStackNameFromComponentConfig")()
+
 	var spaceliftStackName string
 	var spaceliftSettingsSection map[string]any
 	var contextPrefix string
@@ -101,7 +108,7 @@ func BuildSpaceliftStackNameFromComponentConfig(
 		context.Component = strings.Replace(configAndStacksInfo.ComponentFromArg, "/", "-", -1)
 
 		if atmosConfig.Stacks.NameTemplate != "" {
-			contextPrefix, err = ProcessTmpl("name-template", atmosConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, false)
+			contextPrefix, err = ProcessTmpl(atmosConfig, "name-template", atmosConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, false)
 			if err != nil {
 				return "", err
 			}
