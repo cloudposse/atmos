@@ -1,21 +1,20 @@
 package exec
 
 import (
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 
-	"github.com/cloudposse/atmos/pkg/perf"
-
 	"github.com/charmbracelet/huh"
 	"github.com/charmbracelet/lipgloss"
-	log "github.com/charmbracelet/log"
 	errUtils "github.com/cloudposse/atmos/errors"
+	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 	u "github.com/cloudposse/atmos/pkg/utils"
+	"github.com/pkg/errors"
 )
 
 var (
@@ -279,7 +278,7 @@ func confirmDeleteTerraformLocal(message string) (confirm bool, err error) {
 	return confirm, nil
 }
 
-// DeletePathTerraform deletes the specified file or folder with a checkmark or xmark.
+// DeletePathTerraform deletes the specified file or folder. with a checkmark or xmark.
 func DeletePathTerraform(fullPath string, objectName string) error {
 	defer perf.Track(nil, "exec.DeletePathTerraform")()
 
@@ -515,7 +514,7 @@ func handleCleanSubCommand(info schema.ConfigAndStacksInfo, componentPath string
 				u.PrintMessage(fmt.Sprintf("Found ENV var TF_DATA_DIR=%s", tfDataDir))
 				u.PrintMessage(fmt.Sprintf("Do you want to delete the folder '%s'? ", tfDataDir))
 			}
-			u.PrintMessage(getDeleteMessage(total, info.Component, info.Stack, info.ComponentFromArg))
+			u.PrintMessage(getDeleteMessage(total, userFilesCount, info.Component, info.Stack, info.ComponentFromArg))
 			println()
 			if confirm, err := confirmDeletion(); err != nil || !confirm {
 				return err
@@ -523,7 +522,7 @@ func handleCleanSubCommand(info schema.ConfigAndStacksInfo, componentPath string
 		}
 		err := DeletePaths(userFiles)
 		if err != nil {
-			return err
+			return fmt.Errorf("deleting user-specified clean paths: %w", err)
 		}
 		deleteFolders(folders, relativePath, atmosConfig)
 		if len(tfDataDirFolders) > 0 {
@@ -535,15 +534,15 @@ func handleCleanSubCommand(info schema.ConfigAndStacksInfo, componentPath string
 	return nil
 }
 
-func getDeleteMessage(total int, component string, stack string, componentFromArg string) string {
+func getDeleteMessage(total int, userFilesCount int, component string, stack string, componentFromArg string) string {
 	var message string
 	switch {
 	case componentFromArg == "":
-		message = fmt.Sprintf("This will delete %v local terraform state files affecting all components", total)
+		message = fmt.Sprintf("This will delete %v local terraform state files and %v user-specified clean paths affecting all components", total, userFilesCount)
 	case component != "" && stack != "":
-		message = fmt.Sprintf("This will delete %v local terraform state files for component '%s' in stack '%s'", total, component, stack)
+		message = fmt.Sprintf("This will delete %v local terraform state files and %v user-specified clean paths for component '%s' in stack '%s'", total, userFilesCount, component, stack)
 	case componentFromArg != "":
-		message = fmt.Sprintf("This will delete %v local terraform state files for component '%s'", total, componentFromArg)
+		message = fmt.Sprintf("This will delete %v local terraform state files and %v user-specified clean paths for component '%s'", total, userFilesCount, componentFromArg)
 	}
 	return message
 }

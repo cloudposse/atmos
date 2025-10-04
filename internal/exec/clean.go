@@ -95,7 +95,11 @@ func extractCleanPatterns(componentValue any) ([]string, error) {
 	if !ok {
 		return nil, nil
 	}
-	cleanPatterns, ok := settings["clean"].([]any)
+	cleanSetting, ok := settings["clean"].(map[string]any)
+	if !ok {
+		return nil, nil
+	}
+	cleanPatterns, ok := cleanSetting["paths"].([]any)
 	if !ok {
 		return nil, nil
 	}
