@@ -48,7 +48,7 @@ func TestDescribeAffected(t *testing.T) {
 	}
 
 	d.atmosConfig = &schema.AtmosConfiguration{}
-	d.addDependentsToAffected = func(atmosConfig *schema.AtmosConfiguration, affected *[]schema.Affected, includeSettings bool, processTemplates bool, processFunctions bool, skip []string, onlyInstack string) error {
+	d.addDependentsToAffected = func(atmosConfig *schema.AtmosConfiguration, affected *[]schema.Affected, includeSettings bool, processTemplates bool, processFunctions bool, skip []string, onlyInStack string) error {
 		return nil
 	}
 	d.printOrWriteToFile = func(atmosConfig *schema.AtmosConfiguration, format, file string, data any) error {
@@ -100,7 +100,7 @@ func TestDescribeAffected(t *testing.T) {
 	})
 	assert.NoError(t, err)
 
-	// Test with IncludeDependents flag to cover the addDependentsToAffected code path
+	// Test with IncludeDependents flag to cover the addDependentsToAffected code path.
 	mockPager.EXPECT().Run(gomock.Any(), gomock.Any()).Return(nil)
 	err = d.Execute(&DescribeAffectedCmdArgs{
 		Format:            "json",
@@ -108,7 +108,7 @@ func TestDescribeAffected(t *testing.T) {
 	})
 	assert.NoError(t, err)
 
-	// Test with IncludeDependents and Stack filter to cover the onlyInStack parameter
+	// Test with IncludeDependents and Stack filter to cover the onlyInStack parameter.
 	mockPager.EXPECT().Run(gomock.Any(), gomock.Any()).Return(nil)
 	err = d.Execute(&DescribeAffectedCmdArgs{
 		Format:            "json",
@@ -938,7 +938,7 @@ func TestDescribeAffectedWithDependentsFilteredByStack(t *testing.T) {
 					},
 				},
 			},
-			Dependents: nil, // nil because component is not in the filtered stack (onlyInStack = "ue1-network")
+			Dependents: nil, // nil because component is not in the filtered stack (onlyInStack = "ue1-network").
 		},
 		{
 			Component:            "vpc",
@@ -952,7 +952,7 @@ func TestDescribeAffectedWithDependentsFilteredByStack(t *testing.T) {
 			Folder:               "",
 			IncludedInDependents: false,
 			Settings:             map[string]any{},
-			Dependents:           nil, // nil because component is not in the filtered stack (onlyInStack = "ue1-network")
+			Dependents:           nil, // nil because component is not in the filtered stack (onlyInStack = "ue1-network").
 		},
 	}
 	affected, _, _, _, err := ExecuteDescribeAffectedWithTargetRepoPath(
@@ -974,7 +974,7 @@ func TestDescribeAffectedWithDependentsFilteredByStack(t *testing.T) {
 		true,
 		true,
 		nil,
-		onlyInStack, // Filter dependents to only show those in "ue1-network" stack
+		onlyInStack, // Filter dependents to only show those in "ue1-network" stack.
 	)
 	require.NoError(t, err)
 	// Order-agnostic equality on struct slices
@@ -1004,7 +1004,7 @@ func TestDescribeAffectedWithDisabledDependents(t *testing.T) {
 			Folder:               "",
 			IncludedInDependents: false,
 			Settings:             map[string]any{},
-			Dependents:           nil, // nil because component is not in the filtered stack (onlyInStack = "uw2-network")
+			Dependents:           nil, // nil because component is not in the filtered stack (onlyInStack = "uw2-network").
 		},
 		{
 			Component:            "tgw/hub",
@@ -1025,7 +1025,7 @@ func TestDescribeAffectedWithDisabledDependents(t *testing.T) {
 					},
 				},
 			},
-			Dependents: nil, // nil because component is not in the filtered stack (onlyInStack = "uw2-network")
+			Dependents: nil, // nil because component is not in the filtered stack (onlyInStack = "uw2-network").
 		},
 		{
 			Component:            "tgw/cross-region-hub-connector",
@@ -1046,7 +1046,7 @@ func TestDescribeAffectedWithDisabledDependents(t *testing.T) {
 					},
 				},
 			},
-			Dependents: []schema.Dependent{}, // empty slice because component is in filtered stack but has no dependents
+			Dependents: []schema.Dependent{}, // empty slice because component is in filtered stack but has no dependents.
 		},
 		{
 			Component:            "vpc",
@@ -1083,7 +1083,7 @@ func TestDescribeAffectedWithDisabledDependents(t *testing.T) {
 		true,
 		true,
 		nil,
-		onlyInStack, // Filter dependents to only show those in "uw2-network" stack
+		onlyInStack, // Filter dependents to only show those in "uw2-network" stack.
 	)
 	require.NoError(t, err)
 	// Order-agnostic equality on struct slices
