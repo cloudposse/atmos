@@ -59,9 +59,10 @@ func TestSetFlagValueInDescribeStacksCliArgs(t *testing.T) {
 			},
 			describe: &exec.DescribeStacksArgs{},
 			expected: &exec.DescribeStacksArgs{
-				Format:           "json",
-				ProcessTemplates: true,
-				Skip:             []string{"tests"},
+				Format:               "json",
+				ProcessTemplates:     true,
+				ProcessYamlFunctions: true,
+				Skip:                 []string{"tests"},
 			},
 		},
 		{
@@ -71,7 +72,9 @@ func TestSetFlagValueInDescribeStacksCliArgs(t *testing.T) {
 			},
 			describe: &exec.DescribeStacksArgs{},
 			expected: &exec.DescribeStacksArgs{
-				Format: "yaml",
+				Format:               "yaml",
+				ProcessTemplates:     true,
+				ProcessYamlFunctions: true,
 			},
 		},
 		{
@@ -81,7 +84,9 @@ func TestSetFlagValueInDescribeStacksCliArgs(t *testing.T) {
 			},
 			describe: &exec.DescribeStacksArgs{},
 			expected: &exec.DescribeStacksArgs{
-				Format: "json",
+				Format:               "json",
+				ProcessTemplates:     true,
+				ProcessYamlFunctions: true,
 			},
 		},
 	}
