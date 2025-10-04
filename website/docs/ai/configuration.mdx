@@ -1,0 +1,257 @@
+---
+title: AI Configuration
+sidebar_label: Configuration
+sidebar_position: 2
+description: Configure AI providers for the Atmos AI Assistant
+---
+import Terminal from '@site/src/components/Terminal'
+import File from '@site/src/components/File'
+
+# AI Assistant Configuration
+
+Configure the Atmos AI Assistant to use different AI providers and customize their settings.
+
+## Basic Configuration
+
+Enable AI features in your `atmos.yaml` configuration file:
+
+<File title="atmos.yaml">
+```yaml
+settings:
+  ai:
+    enabled: true                    # Enable AI features (required)
+    provider: "anthropic"             # AI provider (default: anthropic)
+    model: "claude-3-5-sonnet-20241022" # Model to use
+    api_key_env: "ANTHROPIC_API_KEY" # Environment variable for API key
+    max_tokens: 4096                 # Maximum tokens per response
+```
+</File>
+
+## Provider-Specific Configuration
+
+### Anthropic (Claude)
+
+Claude is the default provider, offering advanced reasoning and detailed explanations.
+
+<File title="atmos.yaml">
+```yaml
+settings:
+  ai:
+    enabled: true
+    provider: "anthropic"
+    model: "claude-3-5-sonnet-20241022"  # Default model
+    api_key_env: "ANTHROPIC_API_KEY"     # Default: ANTHROPIC_API_KEY
+    max_tokens: 4096                     # Default: 4096
+```
+</File>
+
+**Available Models:**
+- `claude-3-5-sonnet-20241022` (recommended) - Best balance of speed and capability
+- `claude-3-opus-20240229` - Most capable, slower
+- `claude-3-haiku-20240307` - Fastest, lighter tasks
+
+**Setup:**
+
+1. Get an API key from [Anthropic Console](https://console.anthropic.com/)
+2. Set the environment variable:
+
+<Terminal title="shell">
+```bash
+export ANTHROPIC_API_KEY="your-api-key-here"
+```
+</Terminal>
+
+### OpenAI (GPT)
+
+OpenAI provides widely available models with strong general capabilities.
+
+<File title="atmos.yaml">
+```yaml
+settings:
+  ai:
+    enabled: true
+    provider: "openai"
+    model: "gpt-4o"                  # Default: gpt-4o
+    api_key_env: "OPENAI_API_KEY"   # Default: OPENAI_API_KEY
+    max_tokens: 4096                # Default: 4096
+```
+</File>
+
+**Available Models:**
+- `gpt-4o` (recommended) - Latest multimodal model
+- `gpt-4-turbo` - Fast GPT-4 variant
+- `gpt-3.5-turbo` - Faster, more economical
+
+**Setup:**
+
+1. Get an API key from [OpenAI Platform](https://platform.openai.com/)
+2. Set the environment variable:
+
+<Terminal title="shell">
+```bash
+export OPENAI_API_KEY="your-api-key-here"
+```
+</Terminal>
+
+### Google (Gemini)
+
+Gemini offers fast responses with a larger context window.
+
+<File title="atmos.yaml">
+```yaml
+settings:
+  ai:
+    enabled: true
+    provider: "gemini"
+    model: "gemini-2.0-flash-exp"      # Default: gemini-2.0-flash-exp
+    api_key_env: "GEMINI_API_KEY"      # Default: GEMINI_API_KEY
+    max_tokens: 8192                   # Default: 8192
+```
+</File>
+
+**Available Models:**
+- `gemini-2.0-flash-exp` (recommended) - Latest fast model
+- `gemini-1.5-pro` - Most capable
+- `gemini-1.5-flash` - Fastest
+
+**Setup:**
+
+1. Get an API key from [Google AI Studio](https://aistudio.google.com/)
+2. Set the environment variable:
+
+<Terminal title="shell">
+```bash
+export GEMINI_API_KEY="your-api-key-here"
+```
+</Terminal>
+
+### xAI (Grok)
+
+Grok provides OpenAI-compatible access with real-time knowledge capabilities.
+
+<File title="atmos.yaml">
+```yaml
+settings:
+  ai:
+    enabled: true
+    provider: "grok"
+    model: "grok-beta"                 # Default: grok-beta
+    api_key_env: "XAI_API_KEY"        # Default: XAI_API_KEY
+    max_tokens: 4096                  # Default: 4096
+    base_url: "https://api.x.ai/v1"   # Default: https://api.x.ai/v1
+```
+</File>
+
+**Available Models:**
+- `grok-beta` - Latest Grok model
+- `grok-2` - Previous version
+
+**Setup:**
+
+1. Get an API key from [xAI API](https://x.ai/api)
+2. Set the environment variable:
+
+<Terminal title="shell">
+```bash
+export XAI_API_KEY="your-api-key-here"
+```
+</Terminal>
+
+## Configuration Options
+
+### Required Settings
+
+<dl>
+  <dt>`enabled`</dt>
+  <dd>Enable or disable AI features (default: `false`)</dd>
+
+  <dt>`provider`</dt>
+  <dd>AI provider to use: `anthropic`, `openai`, `gemini`, or `grok` (default: `anthropic`)</dd>
+</dl>
+
+### Optional Settings
+
+<dl>
+  <dt>`model`</dt>
+  <dd>Specific model to use (defaults vary by provider)</dd>
+
+  <dt>`api_key_env`</dt>
+  <dd>Environment variable name containing the API key (defaults vary by provider)</dd>
+
+  <dt>`max_tokens`</dt>
+  <dd>Maximum tokens per response (defaults vary by provider)</dd>
+
+  <dt>`base_url`</dt>
+  <dd>Custom API endpoint URL (Grok only, optional for other providers)</dd>
+</dl>
+
+## Environment Variables
+
+You can use Atmos-prefixed environment variables as alternatives:
+
+<Terminal title="shell">
+```bash
+# Anthropic
+export ATMOS_ANTHROPIC_API_KEY="your-key"
+
+# OpenAI
+export ATMOS_OPENAI_API_KEY="your-key"
+
+# Gemini
+export ATMOS_GEMINI_API_KEY="your-key"
+
+# Grok
+export ATMOS_XAI_API_KEY="your-key"
+```
+</Terminal>
+
+## Verify Configuration
+
+Test your AI configuration:
+
+<Terminal title="atmos ai ask">
+```bash
+$ atmos ai ask "Hello, are you working?"
+
+🤔 Thinking...
+
+🤖 **Atmos AI:**
+
+Yes, I'm working! The AI assistant is properly configured and ready
+to help you with your Atmos infrastructure management tasks.
+```
+</Terminal>
+
+## Switching Providers
+
+You can easily switch between providers by changing the `provider` field:
+
+<File title="atmos.yaml">
+```yaml
+settings:
+  ai:
+    enabled: true
+    provider: "gemini"  # Changed from anthropic to gemini
+    # Other settings will use Gemini defaults
+```
+</File>
+
+Each provider has its strengths:
+
+- **Claude (Anthropic)**: Best for detailed explanations and complex reasoning
+- **GPT (OpenAI)**: Strong general capabilities, widely available
+- **Gemini (Google)**: Fast responses, excellent for large contexts
+- **Grok (xAI)**: Real-time knowledge, OpenAI-compatible
+
+## Security Best Practices
+
+1. **Never commit API keys** to version control
+2. **Use environment variables** for all API keys
+3. **Rotate keys regularly** per provider recommendations
+4. **Set spending limits** in provider dashboards
+5. **Monitor usage** to detect anomalies
+
+## Next Steps
+
+- [AI Commands](/cli/commands/ai/usage) - Learn how to use AI features
+- [Troubleshooting](/ai/troubleshooting) - Common configuration issues
