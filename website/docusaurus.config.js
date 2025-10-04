@@ -48,7 +48,7 @@ const config = {
 
                     {
                         from: '/reference/terraform-limitations',
-                        to: '/introduction/why-atmos'
+                        to: '/intro/why-atmos'
                     },
                     // Redirects for template functions moved to /functions/template/
                     {
@@ -118,7 +118,111 @@ const config = {
                     {
                         from: '/core-concepts/template-functions',
                         to: '/functions'
-                    }
+                    },
+                    // Redirects for reorganized stack configuration pages
+                    {
+                        from: '/core-concepts/stacks/imports',
+                        to: '/stacks/imports'
+                    },
+                    {
+                        from: '/core-concepts/stacks/inheritance/inheritance',
+                        to: '/stacks/inheritance'
+                    },
+                    {
+                        from: '/core-concepts/stacks/inheritance',
+                        to: '/stacks/inheritance'
+                    },
+                    {
+                        from: '/core-concepts/stacks/inheritance/mixins',
+                        to: '/stacks/mixins'
+                    },
+                    {
+                        from: '/core-concepts/stacks/overrides',
+                        to: '/stacks/overrides'
+                    },
+                    {
+                        from: '/core-concepts/stacks/dependencies',
+                        to: '/stacks/dependencies'
+                    },
+                    {
+                        from: '/core-concepts/stacks/hooks',
+                        to: '/stacks/hooks'
+                    },
+                    {
+                        from: '/core-concepts/stacks/catalogs',
+                        to: '/stacks/catalogs'
+                    },
+                    // Redirects for workflow pages moved to top level
+//                     {
+//                         from: '/core-concepts/workflows',
+//                         to: '/workflows/workflows'
+//                     },
+//                     {
+//                         from: '/core-concepts/workflows/workflows',
+//                         to: '/workflows/workflows'
+//                     },
+                    // Redirects for vendoring pages moved to top level
+                    {
+                        from: '/core-concepts/vendor',
+                        to: '/vendoring/vendor'
+                    },
+                    {
+                        from: '/core-concepts/vendor/vendor',
+                        to: '/vendoring/vendor'
+                    },
+                    {
+                        from: '/core-concepts/vendor/vendor-package',
+                        to: '/vendoring/component-manifest'
+                    },
+                    {
+                        from: '/core-concepts/vendor/vendor-lock',
+                        to: '/vendoring/vendor-manifest'
+                    },
+                    // Redirects for validation pages moved to top level
+                    {
+                        from: '/core-concepts/validate',
+                        to: '/validation/validating'
+                    },
+                    {
+                        from: '/core-concepts/validate/validate',
+                        to: '/validation/validating'
+                    },
+                    {
+                        from: '/core-concepts/validate/json-schema',
+                        to: '/validation/json-schema'
+                    },
+                    {
+                        from: '/core-concepts/validate/opa',
+                        to: '/validation/opa'
+                    },
+                    {
+                        from: '/core-concepts/validate/editorconfig',
+                        to: '/validation/editorconfig-validation'
+                    },
+                    {
+                        from: '/core-concepts/validate/terraform-variables',
+                        to: '/validation/terraform-variables'
+                    },
+                    // Redirects for template pages moved to top level
+//                     {
+//                         from: '/core-concepts/stacks/templates',
+//                         to: '/templates/templates'
+//                     },
+                    {
+                        from: '/core-concepts/stacks/templates/datasources',
+                        to: '/templates/datasources'
+                    },
+                    // Redirects for directory renames: core-concepts → learn
+                    {from: '/core-concepts/why-atmos', to: '/learn/why-atmos'},
+                    {from: '/core-concepts/concepts-overview', to: '/learn/concepts-overview'},
+                    {from: '/core-concepts/first-stack', to: '/learn/first-stack'},
+                    {from: '/core-concepts/yaml-guide', to: '/learn/yaml'},
+                    {from: '/learn/yaml-guide', to: '/learn/yaml'},
+                    {from: '/core-concepts/imports-basics', to: '/learn/imports-basics'},
+                    {from: '/core-concepts/inheritance-basics', to: '/learn/inheritance-basics'},
+                    {from: '/core-concepts/organizing-stacks', to: '/learn/organizing-stacks'},
+                    {from: '/core-concepts/connecting-components', to: '/learn/connecting-components'},
+                    {from: '/core-concepts/next-steps', to: '/learn/next-steps'}
                 ],
             },
         ],
@@ -162,10 +266,10 @@ const config = {
                 docsDir: 'docs',
                 includeBlog: true,
                 includeOrder: [
-                    'introduction/*',
+                    'intro/*',
                     'quick-start/*',
                     'install/*',
-                    'core-concepts/*',
+                    'learn/*',
                     'cli/*',
                 ],
             },
@@ -227,7 +331,7 @@ const config = {
                     },
                     {
                         type: 'doc',
-                        docId: 'introduction/index',
+                        docId: 'intro/index',
                         position: 'left',
                         label: 'Learn',
                     },
