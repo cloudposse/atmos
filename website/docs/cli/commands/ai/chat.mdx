@@ -1,0 +1,133 @@
+---
+title: atmos ai chat
+sidebar_label: chat
+sidebar_class_name: command
+id: chat
+description: Start an interactive AI chat session with the Atmos AI assistant
+---
+import Screengrab from '@site/src/components/Screengrab'
+import Terminal from '@site/src/components/Terminal'
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Use this command to start an interactive chat session with the Atmos AI assistant. Get intelligent help with Atmos concepts, configuration analysis, and best practices.
+</Intro>
+
+<Screengrab title="atmos ai chat --help" slug="atmos-ai-chat--help" />
+
+## Description
+
+The `atmos ai chat` command opens a terminal-based chat interface where you can have extended conversations with the AI assistant about your Atmos infrastructure.
+
+The AI assistant has access to your current Atmos configuration and can help with:
+- Explaining Atmos concepts and architecture
+- Analyzing your specific components and stacks
+- Suggesting optimizations and best practices
+- Debugging configuration issues
+- Providing step-by-step implementation guidance
+
+## Usage
+
+```shell
+atmos ai chat
+```
+
+## Configuration
+
+Before using AI features, you need to configure an AI provider in your `atmos.yaml`:
+
+```yaml
+settings:
+  ai:
+    enabled: true
+    provider: "anthropic"  # or "openai", "gemini", "grok"
+    model: "claude-3-5-sonnet-20241022"
+    api_key_env: "ANTHROPIC_API_KEY"
+```
+
+For detailed configuration options, see the [AI Assistant documentation](/docs/ai-assistant).
+
+## Supported Providers
+
+| Provider | Environment Variable | Default Model |
+|----------|---------------------|---------------|
+| Anthropic (Claude) | `ANTHROPIC_API_KEY` | `claude-3-5-sonnet-20241022` |
+| OpenAI (GPT) | `OPENAI_API_KEY` | `gpt-4o` |
+| Google (Gemini) | `GEMINI_API_KEY` | `gemini-2.0-flash-exp` |
+| xAI (Grok) | `XAI_API_KEY` | `grok-beta` |
+
+## Examples
+
+### Basic Chat Session
+
+```shell
+atmos ai chat
+```
+
+This opens an interactive chat where you can ask questions like:
+
+```
+You: What components are available in my configuration?
+AI: Based on your configuration, I can see the following components...
+
+You: How do I validate my stack configuration?
+AI: You can validate stack configurations using...
+```
+
+### Using with Different Providers
+
+<Terminal title="atmos ai chat">
+```console
+# Using Anthropic Claude (default)
+export ANTHROPIC_API_KEY="your-key"
+atmos ai chat
+
+# Using OpenAI GPT
+export OPENAI_API_KEY="your-key"
+atmos ai chat
+
+# Using Google Gemini
+export GEMINI_API_KEY="your-key"
+atmos ai chat
+
+# Using xAI Grok
+export XAI_API_KEY="your-key"
+atmos ai chat
+```
+</Terminal>
+
+## Interactive Features
+
+The chat interface supports:
+- **Multi-turn conversations**: Ask follow-up questions
+- **Context awareness**: The AI remembers your conversation
+- **Markdown rendering**: Responses include formatted code and documentation
+- **Exit commands**: Type `exit`, `quit`, or press `Ctrl+C` to close the chat
+
+## Common Use Cases
+
+### Learning Atmos Concepts
+
+```
+You: I'm new to Atmos. What should I know about stacks and components?
+AI: [Provides detailed explanation of Atmos architecture]
+```
+
+### Debugging Configuration Issues
+
+```
+You: I'm getting a validation error for my vpc component. How do I fix it?
+AI: [Analyzes the error and provides specific guidance]
+```
+
+### Best Practices
+
+```
+You: What's the best way to organize my stack configurations?
+AI: [Suggests organizational patterns and best practices]
+```
+
+## Related Commands
+
+- [`atmos ai ask`](/cli/commands/ai/ask) - Ask a single question without entering chat mode
+- [`atmos ai help`](/cli/commands/ai/ai-help) - Get help on specific Atmos topics

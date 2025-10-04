@@ -1,0 +1,81 @@
+package cmd
+
+import (
+	"context"
+	"fmt"
+	"strings"
+	"time"
+
+	"github.com/spf13/cobra"
+
+	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/ai"
+	cfg "github.com/cloudposse/atmos/pkg/config"
+	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/utils"
+)
+
+// aiAskCmd represents the ai ask command.
+var aiAskCmd = &cobra.Command{
+	Use:   "ask [question]",
+	Short: "Ask the AI assistant a question",
+	Long: `Ask the AI assistant a specific question and get a response.
+
+This command allows you to ask questions directly from the command line without
+entering an interactive chat session. The AI has access to your Atmos configuration
+and can provide context-aware responses.
+
+Examples:
+  atmos ai ask "What components are available?"
+  atmos ai ask "How do I validate my stack configuration?"
+  atmos ai ask "Explain the difference between components and stacks"
+  atmos ai ask "Describe the vpc component in the dev stack"`,
+	Args: cobra.MinimumNArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		// Initialize configuration.
+		configAndStacksInfo := schema.ConfigAndStacksInfo{}
+		atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
+		if err != nil {
+			return err
+		}
+
+		// Check if AI is enabled.
+		if !isAIEnabled(&atmosConfig) {
+			return fmt.Errorf("%w: AI features are not enabled. Set 'ai.enabled: true' in your atmos.yaml configuration",
+				errUtils.ErrAINotEnabled)
+		}
+
+		// Join all arguments as the question.
+		question := strings.Join(args, " ")
+
+		log.Debug("Asking AI question", "question", question)
+
+		// Create AI client using factory.
+		client, err := ai.NewClient(&atmosConfig)
+		if err != nil {
+			return fmt.Errorf("failed to create AI client: %w", err)
+		}
+
+		// Create context with timeout.
+		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+		defer cancel()
+
+		// Send question and get response.
+		utils.PrintfMessageToTUI("🤔 Thinking...\n")
+		response, err := client.SendMessage(ctx, question)
+		if err != nil {
+			return fmt.Errorf("failed to get AI response: %w", err)
+		}
+
+		// Print response.
+		utils.PrintfMessageToTUI("\n🤖 **Atmos AI:**\n\n")
+		fmt.Println(response)
+
+		return nil
+	},
+}
+
+func init() {
+	aiCmd.AddCommand(aiAskCmd)
+}

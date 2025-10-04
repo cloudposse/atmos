@@ -38,6 +38,31 @@ settings:
     max_tokens: 4096             # Maximum tokens per response (default: 4096)
 ```
 
+### Google (Gemini)
+
+```yaml
+settings:
+  ai:
+    enabled: true                    # Enable AI features (default: false)
+    provider: "gemini"               # AI provider
+    model: "gemini-2.0-flash-exp"    # Model to use (default: gemini-2.0-flash-exp)
+    api_key_env: "GEMINI_API_KEY"    # Environment variable for API key (default: GEMINI_API_KEY)
+    max_tokens: 8192                 # Maximum tokens per response (default: 8192)
+```
+
+### xAI (Grok)
+
+```yaml
+settings:
+  ai:
+    enabled: true                # Enable AI features (default: false)
+    provider: "grok"             # AI provider
+    model: "grok-beta"           # Model to use (default: grok-beta)
+    api_key_env: "XAI_API_KEY"   # Environment variable for API key (default: XAI_API_KEY)
+    max_tokens: 4096             # Maximum tokens per response (default: 4096)
+    base_url: "https://api.x.ai/v1" # API endpoint (default: https://api.x.ai/v1)
+```
+
 ### Environment Setup
 
 **For Anthropic (Claude):**
@@ -56,6 +81,24 @@ settings:
 2. **Set the Environment Variable**:
    ```bash
    export OPENAI_API_KEY="your-api-key-here"
+   ```
+
+**For Google (Gemini):**
+
+1. **Get a Google AI API Key**: Sign up at [https://aistudio.google.com/](https://aistudio.google.com/) and create an API key.
+
+2. **Set the Environment Variable**:
+   ```bash
+   export GEMINI_API_KEY="your-api-key-here"
+   ```
+
+**For xAI (Grok):**
+
+1. **Get an xAI API Key**: Sign up at [https://x.ai/api](https://x.ai/api) and create an API key.
+
+2. **Set the Environment Variable**:
+   ```bash
+   export XAI_API_KEY="your-api-key-here"
    ```
 
 **Verify Configuration:**
@@ -182,8 +225,10 @@ Atmos AI Assistant supports multiple AI providers:
 
 | Provider | Default Model | API Key Environment Variable | Notes |
 |----------|---------------|------------------------------|-------|
-| **Anthropic** | `claude-3-5-sonnet-20241022` | `ANTHROPIC_API_KEY` | Default provider, advanced reasoning |
-| **OpenAI** | `gpt-4o` | `OPENAI_API_KEY` | Alternative provider, widely available |
+| **Anthropic (Claude)** | `claude-3-5-sonnet-20241022` | `ANTHROPIC_API_KEY` | Default provider, advanced reasoning |
+| **OpenAI (GPT)** | `gpt-4o` | `OPENAI_API_KEY` | Widely available, strong general capabilities |
+| **Google (Gemini)** | `gemini-2.0-flash-exp` | `GEMINI_API_KEY` | Fast responses, larger context window |
+| **xAI (Grok)** | `grok-beta` | `XAI_API_KEY` | OpenAI-compatible, real-time knowledge |
 
 You can switch providers by changing the `provider` field in your configuration.
 
@@ -192,7 +237,7 @@ You can switch providers by changing the `provider` field in your configuration.
 - **API Key Security**: Store your API keys securely and never commit them to version control
 - **Configuration Privacy**: The AI assistant does not store or transmit your configuration data beyond the current session
 - **Local Processing**: All processing is done through the provider's API; no data is stored locally by the AI features
-- **Provider Terms**: Your usage is subject to the terms of service of your chosen provider (Anthropic or OpenAI)
+- **Provider Terms**: Your usage is subject to the terms of service of your chosen provider (Anthropic, OpenAI, Google, or xAI)
 
 ## Limitations
 
@@ -218,6 +263,12 @@ You can switch providers by changing the `provider` field in your configuration.
 
    # For OpenAI
    echo $OPENAI_API_KEY
+
+   # For Google Gemini
+   echo $GEMINI_API_KEY
+
+   # For xAI Grok
+   echo $XAI_API_KEY
    ```
 
 3. **Test Connectivity**:
@@ -229,10 +280,12 @@ You can switch providers by changing the `provider` field in your configuration.
 
 - **"AI features are not enabled"**: Add `ai.enabled: true` to your `atmos.yaml`
 - **"API key not found"**: Set the appropriate environment variable for your provider
-  - Anthropic: `ANTHROPIC_API_KEY`
-  - OpenAI: `OPENAI_API_KEY`
+  - Anthropic (Claude): `ANTHROPIC_API_KEY`
+  - OpenAI (GPT): `OPENAI_API_KEY`
+  - Google (Gemini): `GEMINI_API_KEY`
+  - xAI (Grok): `XAI_API_KEY`
 - **"Failed to create AI client"**: Check your API key is valid and has sufficient credits
-- **"Unsupported AI provider"**: Verify the `provider` field is set to `anthropic` or `openai`
+- **"Unsupported AI provider"**: Verify the `provider` field is set to `anthropic`, `openai`, `gemini`, or `grok`
 - **Rate limiting errors**: Wait and retry, or check your provider account usage
 
 ## Contributing

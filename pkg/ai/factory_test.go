@@ -74,6 +74,30 @@ func TestNewClient(t *testing.T) {
 			expectError: false,
 		},
 		{
+			name: "Gemini provider",
+			atmosConfig: &schema.AtmosConfiguration{
+				Settings: schema.AtmosSettings{
+					AI: map[string]interface{}{
+						"enabled":  true,
+						"provider": "gemini",
+					},
+				},
+			},
+			expectError: false,
+		},
+		{
+			name: "Grok provider",
+			atmosConfig: &schema.AtmosConfiguration{
+				Settings: schema.AtmosSettings{
+					AI: map[string]interface{}{
+						"enabled":  true,
+						"provider": "grok",
+					},
+				},
+			},
+			expectError: false,
+		},
+		{
 			name: "Disabled AI",
 			atmosConfig: &schema.AtmosConfiguration{
 				Settings: schema.AtmosSettings{
@@ -98,16 +122,18 @@ func TestNewClient(t *testing.T) {
 				}
 				assert.Nil(t, client)
 			} else {
-				// Note: These tests require API key to be set
-				// We're testing the factory routing logic, not the actual client creation
+				// Note: These tests require API key to be set.
+				// We're testing the factory routing logic, not the actual client creation.
 				if err != nil {
-					// Expected errors when API key is not set
+					// Expected errors when API key is not set.
 					if err.Error() == "AI features are disabled in configuration" ||
 						err.Error() == "API key not found in environment variable: ANTHROPIC_API_KEY" ||
-						err.Error() == "API key not found in environment variable: OPENAI_API_KEY" {
+						err.Error() == "API key not found in environment variable: OPENAI_API_KEY" ||
+						err.Error() == "API key not found in environment variable: GEMINI_API_KEY" ||
+						err.Error() == "API key not found in environment variable: XAI_API_KEY" {
 						t.Skipf("Skipping test: %s (expected for factory test without API key)", err.Error())
 					}
-					// Unexpected error
+					// Unexpected error.
 					assert.NoError(t, err)
 				}
 				assert.NotNil(t, client)
