@@ -14,13 +14,17 @@ import (
 
 // TerraformOutputGetter retrieves terraform outputs.
 // This enables dependency injection for testing.
+// Returns:
+//   - value: The output value (may be nil if the output exists but has a null value)
+//   - exists: Whether the output key exists in the terraform outputs
+//   - error: Any error that occurred during retrieval (SDK errors, network issues, etc.)
 type TerraformOutputGetter func(
 	atmosConfig *schema.AtmosConfiguration,
 	stack string,
 	component string,
 	output string,
-	failOnError bool,
-) any
+	skipCache bool,
+) (any, bool, error)
 
 // assert that Command implements Command interface.
 var _ Command = &StoreCommand{}
@@ -72,13 +76,23 @@ func (c *StoreCommand) getOutputValue(value string) (string, any, error) {
 	var outputValue any
 
 	if strings.Index(value, ".") == 0 {
-		outputValue = c.outputGetter(c.atmosConfig, c.info.Stack, c.info.ComponentFromArg, outputKey, true)
-
-		// Validate that terraform output is not nil.
-		// Nil outputs can occur from rate limits, partial failures, or missing outputs.
-		if outputValue == nil {
-			return "", nil, fmt.Errorf("%w for key %s - possible rate limit, API error, or missing output", errUtils.ErrNilTerraformOutput, outputKey)
+		var exists bool
+		var err error
+		outputValue, exists, err = c.outputGetter(c.atmosConfig, c.info.Stack, c.info.ComponentFromArg, outputKey, true)
+		// Handle errors from terraform output retrieval (SDK errors, network issues, etc.).
+		if err != nil {
+			return "", nil, fmt.Errorf("%w: failed to get terraform output for key %s: %w", errUtils.ErrNilTerraformOutput, outputKey, err)
 		}
+
+		// Handle missing outputs (key doesn't exist).
+		// This is different from a legitimate null value.
+		if !exists {
+			return "", nil, fmt.Errorf("%w: terraform output key %s does not exist", errUtils.ErrNilTerraformOutput, outputKey)
+		}
+
+		// At this point, exists==true, but outputValue may be nil.
+		// A nil value here is a legitimate Terraform output that is null, which is valid.
+		// We allow it to be stored.
 	} else {
 		outputValue = value
 	}

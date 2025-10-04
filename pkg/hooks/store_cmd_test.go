@@ -127,12 +127,13 @@ func TestStoreCommand_GetOutputValue_WithMockTerraform(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			mockCalled := false
-			mockGetter := func(cfg *schema.AtmosConfiguration, stack, component, output string, failOnError bool) any {
+			mockGetter := func(cfg *schema.AtmosConfiguration, stack, component, output string, skipCache bool) (any, bool, error) {
 				mockCalled = true
 				assert.Equal(t, "test-stack", stack)
 				assert.Equal(t, "test-component", component)
 				assert.Equal(t, tt.expectedKey, output)
-				return tt.mockOutput
+				// Return exists=true, no error for valid outputs
+				return tt.mockOutput, true, nil
 			}
 
 			cmd := &StoreCommand{

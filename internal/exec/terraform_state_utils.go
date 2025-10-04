@@ -72,7 +72,14 @@ func GetTerraformState(
 	if remoteStateBackendStaticTypeOutputs != nil {
 		// Cache the result
 		terraformStateCache.Store(stackSlug, remoteStateBackendStaticTypeOutputs)
-		result := GetStaticRemoteStateOutput(atmosConfig, component, stack, remoteStateBackendStaticTypeOutputs, output)
+		result, exists, err := GetStaticRemoteStateOutput(atmosConfig, component, stack, remoteStateBackendStaticTypeOutputs, output)
+		if err != nil {
+			return nil, fmt.Errorf("%w for component `%s` in stack `%s`\nin YAML function: `%s`\n%v", errUtils.ErrReadTerraformState, component, stack, yamlFunc, err)
+		}
+		if !exists {
+			return nil, fmt.Errorf("%w: output `%s` does not exist for component `%s` in stack `%s`\nin YAML function: `%s`", errUtils.ErrReadTerraformState, output, component, stack, yamlFunc)
+		}
+		// result may be nil if the output is legitimately null
 		return result, nil
 	}
 

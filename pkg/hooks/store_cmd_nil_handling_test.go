@@ -1,6 +1,7 @@
 package hooks
 
 import (
+	"errors"
 	"sync/atomic"
 	"testing"
 
@@ -11,15 +12,13 @@ import (
 	"github.com/cloudposse/atmos/pkg/store"
 )
 
-// TestStoreCommand_NilOutputBug reproduces the bug where nil terraform outputs
-// (from rate limits or partial failures) are silently stored instead of erroring.
+// TestStoreCommand_NilOutputHandling verifies proper handling of nil/missing terraform outputs.
 //
-// This test demonstrates the root cause of intermittent mock output failures:
-// 1. AWS rate limit triggers
-// 2. SDK retry returns partial/empty response
-// 3. Terraform output returns nil
-// 4. Code silently stores nil instead of using mock/default value.
-func TestStoreCommand_NilOutputBug(t *testing.T) {
+// Tests three distinct scenarios:
+// 1. Missing outputs (exists=false) - should error.
+// 2. Empty outputs map - valid (component has no outputs).
+// 3. Legitimate null values (exists=true, value=nil) - should store nil.
+func TestStoreCommand_NilOutputHandling(t *testing.T) {
 	tests := []struct {
 		name        string
 		mockOutput  any
@@ -27,15 +26,15 @@ func TestStoreCommand_NilOutputBug(t *testing.T) {
 		description string
 	}{
 		{
-			name:        "nil output simulates rate limit response",
+			name:        "missing output returns error",
 			mockOutput:  nil,
-			expectError: true, // Should error, not silently store nil
-			description: "When AWS rate limits, SDK may return nil - this should error",
+			expectError: true,
+			description: "Missing outputs should error (exists=false)",
 		},
 		{
-			name:        "empty map simulates partial failure",
+			name:        "empty outputs map is valid",
 			mockOutput:  map[string]any{},
-			expectError: false, // Empty map is valid (no outputs)
+			expectError: false,
 			description: "Empty outputs map is valid (component has no outputs)",
 		},
 		{
@@ -64,9 +63,17 @@ func TestStoreCommand_NilOutputBug(t *testing.T) {
 					ComponentFromArg: "test-component",
 					Stack:            "test-stack",
 				},
-				outputGetter: func(cfg *schema.AtmosConfiguration, stack, component, output string, failOnError bool) any {
-					// Simulate terraform output returning nil (rate limit case)
-					return tt.mockOutput
+				outputGetter: func(cfg *schema.AtmosConfiguration, stack, component, output string, skipCache bool) (any, bool, error) {
+					// Simulate different scenarios:
+					// - tt.mockOutput == nil && tt.expectError: simulate missing output (exists=false)
+					// - tt.mockOutput == nil && !tt.expectError: simulate legitimate null (exists=true, value=nil)
+					// - Otherwise: normal value (exists=true, value=mockOutput)
+					if tt.mockOutput == nil && tt.expectError {
+						// Missing output scenario
+						return nil, false, nil
+					}
+					// Valid output (may be nil if legitimate null)
+					return tt.mockOutput, true, nil
 				},
 			}
 
@@ -83,9 +90,7 @@ func TestStoreCommand_NilOutputBug(t *testing.T) {
 
 			// Verify error expectation
 			if tt.expectError {
-				// BUG: Currently this will NOT error when mockOutput is nil
-				// It will silently store nil value instead of erroring
-				assert.Error(t, err, "Expected error when terraform output returns nil, but got none - THIS IS THE BUG")
+				assert.Error(t, err, "Expected error for missing terraform output")
 
 				// Verify nil was NOT stored (it shouldn't be stored if error occurred)
 				storedData := mockStore.GetData()
@@ -116,11 +121,11 @@ func TestStoreCommand_NilOutputBug(t *testing.T) {
 	}
 }
 
-// TestStoreCommand_IntermittentNilFailure reproduces the reported issue:
-// "if I run the same test 10 times in a row, it'll fail once or twice"
+// TestStoreCommand_IntermittentFailureHandling verifies proper error handling
+// for intermittent failures (e.g., rate limits) that cause missing outputs.
 //
-// This simulates intermittent rate limit failures that return nil.
-func TestStoreCommand_IntermittentNilFailure(t *testing.T) {
+// Simulates 10% failure rate to verify errors are properly returned.
+func TestStoreCommand_IntermittentFailureHandling(t *testing.T) {
 	const iterations = 100
 	var nilReturned atomic.Int32
 	var successCount atomic.Int32
@@ -140,14 +145,14 @@ func TestStoreCommand_IntermittentNilFailure(t *testing.T) {
 			// Clear store for each iteration
 			mockStore.Clear()
 
-			// Simulate 10% failure rate (rate limit returns nil)
-			mockGetter := func(cfg *schema.AtmosConfiguration, stack, component, output string, failOnError bool) any {
-				// Simulate intermittent rate limit: 10% of calls return nil
+			// Simulate 10% failure rate (rate limit returns missing output)
+			mockGetter := func(cfg *schema.AtmosConfiguration, stack, component, output string, skipCache bool) (any, bool, error) {
+				// Simulate intermittent rate limit: 10% of calls return missing output
 				if iteration%10 == 0 {
 					nilReturned.Add(1)
-					return nil // Simulates rate limit returning empty response
+					return nil, false, nil // Simulates rate limit causing missing output
 				}
-				return "vpc-12345" // Normal success
+				return "vpc-12345", true, nil // Normal success
 			}
 
 			cmd := &StoreCommand{
@@ -192,23 +197,23 @@ func TestStoreCommand_IntermittentNilFailure(t *testing.T) {
 	t.Logf("Successful stores: %d (%.1f%%)", successTotal, float64(successTotal)/float64(iterations)*100)
 	t.Logf("Errors: %d (%.1f%%)", errorTotal, float64(errorTotal)/float64(iterations)*100)
 
-	// BUG VERIFICATION:
-	// Expected: errorTotal should equal nilCount (all nil returns should error)
-	// Actual: successTotal will include nil returns that were silently stored
-	if nilCount > 0 && errorTotal < nilCount {
-		t.Errorf("BUG DETECTED: %d nil returns but only %d errors - %d silent failures!",
+	// VERIFICATION:
+	// All missing output cases should error (errorTotal should equal nilCount)
+	if nilCount > 0 && errorTotal != nilCount {
+		t.Errorf("FAILURE: %d missing outputs but only %d errors - %d silent failures!",
 			nilCount, errorTotal, nilCount-errorTotal)
 	}
 }
 
-// TestStoreCommand_RateLimitSimulation simulates AWS SDK behavior during rate limiting.
+// TestStoreCommand_RateLimitErrorHandling verifies proper error handling when
+// rate limits cause missing outputs.
 //
 // AWS SDK retry behavior when rate limited:
-// 1. Initial call fails with throttle error
-// 2. SDK retries with exponential backoff
-// 3. After max retries, may return empty/nil response instead of error
-// 4. Code treats this as success and stores nil.
-func TestStoreCommand_RateLimitSimulation(t *testing.T) {
+// 1. Initial call fails with throttle error.
+// 2. SDK retries with exponential backoff.
+// 3. After max retries, returns missing output (exists=false).
+// 4. Code properly errors instead of storing nil.
+func TestStoreCommand_RateLimitErrorHandling(t *testing.T) {
 	// Track retry attempts
 	attemptCount := 0
 
@@ -220,20 +225,20 @@ func TestStoreCommand_RateLimitSimulation(t *testing.T) {
 	}
 
 	// Simulate AWS SDK retry behavior
-	mockGetter := func(cfg *schema.AtmosConfiguration, stack, component, output string, failOnError bool) any {
+	mockGetter := func(cfg *schema.AtmosConfiguration, stack, component, output string, skipCache bool) (any, bool, error) {
 		attemptCount++
 
 		// Simulate SDK retry pattern:
 		// - Attempts 1-2: Would fail with rate limit (SDK retries internally)
-		// - Attempt 3: SDK gives up, returns nil instead of error
+		// - Attempt 3: SDK gives up, returns missing output (exists=false)
 		if attemptCount >= 3 {
-			t.Logf("SDK exhausted retries, returning nil (simulates partial failure)")
-			return nil // BUG: This nil will be silently stored
+			t.Logf("SDK exhausted retries, returning missing output (simulates partial failure)")
+			return nil, false, nil // Missing output after retries
 		}
 
 		// Simulate internal SDK retries (not visible to our code)
 		t.Logf("Attempt %d: SDK retrying internally...", attemptCount)
-		return nil
+		return nil, false, nil
 	}
 
 	cmd := &StoreCommand{
@@ -252,23 +257,22 @@ func TestStoreCommand_RateLimitSimulation(t *testing.T) {
 
 	t.Logf("Total attempts: %d", attemptCount)
 
-	// BUG: This should error when nil is returned after retries
-	// Instead it silently stores nil
+	// Verify proper error handling
 	if err != nil {
-		t.Logf("✓ Correctly errored on nil response")
+		t.Logf("✓ Correctly errored on missing output after rate limit")
 	} else {
-		t.Errorf("✗ BUG: Silently accepted nil response from rate-limited SDK call")
+		t.Errorf("✗ FAILURE: Should have errored on missing output from rate-limited SDK call")
 
 		// Verify what was stored
 		storedData := mockStore.GetData()
 		key := "test-stack/test-component/vpc_id"
-		t.Logf("Stored value: %v (should have errored, not stored nil)", storedData[key])
+		t.Logf("Stored value: %v (should have errored, not stored)", storedData[key])
 	}
 }
 
-// TestStoreCommand_NilVsError tests the difference between nil value and error.
-// This clarifies the expected behavior.
-func TestStoreCommand_NilVsError(t *testing.T) {
+// TestStoreCommand_ErrorVsLegitimateNull tests the distinction between
+// error conditions (SDK errors, missing outputs) and legitimate null values.
+func TestStoreCommand_ErrorVsLegitimateNull(t *testing.T) {
 	tests := []struct {
 		name          string
 		mockGetter    TerraformOutputGetter
@@ -278,30 +282,40 @@ func TestStoreCommand_NilVsError(t *testing.T) {
 	}{
 		{
 			name: "error propagates correctly",
-			mockGetter: func(cfg *schema.AtmosConfiguration, stack, component, output string, failOnError bool) any {
-				// Simulate explicit error (this currently calls CheckErrorPrintAndExit internally)
-				// We can't easily test this without mocking that function
-				return nil // Simulates error path
+			mockGetter: func(cfg *schema.AtmosConfiguration, stack, component, output string, skipCache bool) (any, bool, error) {
+				// Simulate explicit SDK error
+				return nil, false, errors.New("SDK error: rate limit exceeded")
 			},
 			expectError:  true,
 			expectStored: false,
 		},
 		{
-			name: "nil value stored silently (BUG)",
-			mockGetter: func(cfg *schema.AtmosConfiguration, stack, component, output string, failOnError bool) any {
-				return nil // Returns nil without error
+			name: "missing output returns error",
+			mockGetter: func(cfg *schema.AtmosConfiguration, stack, component, output string, skipCache bool) (any, bool, error) {
+				// Output doesn't exist
+				return nil, false, nil
 			},
-			expectError:  true, // SHOULD error
+			expectError:  true,
 			expectStored: false,
 		},
 		{
 			name: "valid value stored correctly",
-			mockGetter: func(cfg *schema.AtmosConfiguration, stack, component, output string, failOnError bool) any {
-				return "vpc-12345"
+			mockGetter: func(cfg *schema.AtmosConfiguration, stack, component, output string, skipCache bool) (any, bool, error) {
+				return "vpc-12345", true, nil
 			},
 			expectError:   false,
 			expectStored:  true,
 			expectedValue: "vpc-12345",
+		},
+		{
+			name: "legitimate null value stored correctly",
+			mockGetter: func(cfg *schema.AtmosConfiguration, stack, component, output string, skipCache bool) (any, bool, error) {
+				// Terraform output exists but has null value
+				return nil, true, nil
+			},
+			expectError:   false,
+			expectStored:  true,
+			expectedValue: nil,
 		},
 	}
 
@@ -359,12 +373,12 @@ func TestStoreCommand_MockOutputGetter(t *testing.T) {
 		},
 	}
 
-	mockGetter := func(cfg *schema.AtmosConfiguration, stack, component, output string, failOnError bool) any {
+	mockGetter := func(cfg *schema.AtmosConfiguration, stack, component, output string, skipCache bool) (any, bool, error) {
 		getterCalled = true
 		assert.Equal(t, "test-stack", stack)
 		assert.Equal(t, "test-component", component)
 		assert.Equal(t, "vpc_id", output)
-		return "mocked-vpc-id"
+		return "mocked-vpc-id", true, nil
 	}
 
 	cmd := &StoreCommand{
@@ -388,8 +402,8 @@ func TestStoreCommand_MockOutputGetter(t *testing.T) {
 	assert.Equal(t, "mocked-vpc-id", storedData["test-stack/test-component/vpc_id"])
 }
 
-// TestStoreCommand_NilPropagation verifies nil values propagate through the system.
-func TestStoreCommand_NilPropagation(t *testing.T) {
+// TestStoreCommand_MissingOutputError verifies missing outputs properly error.
+func TestStoreCommand_MissingOutputError(t *testing.T) {
 	mockStore := &trackingMockStore{
 		MockStore: NewMockStore(),
 	}
@@ -404,8 +418,9 @@ func TestStoreCommand_NilPropagation(t *testing.T) {
 		Name:        "store",
 		atmosConfig: atmosConfig,
 		info:        &schema.ConfigAndStacksInfo{ComponentFromArg: "test-component", Stack: "test-stack"},
-		outputGetter: func(cfg *schema.AtmosConfiguration, stack, component, output string, failOnError bool) any {
-			return nil // Return nil to test propagation
+		outputGetter: func(cfg *schema.AtmosConfiguration, stack, component, output string, skipCache bool) (any, bool, error) {
+			// Return missing output to test that it errors
+			return nil, false, nil
 		},
 	}
 
@@ -418,14 +433,19 @@ func TestStoreCommand_NilPropagation(t *testing.T) {
 
 	// Check if Set was called with nil
 	if mockStore.setCalledWithNil {
-		t.Logf("BUG CONFIRMED: Set() was called with nil value")
+		t.Logf("Set() was called with nil value")
 		t.Logf("Set() was called %d times with nil", mockStore.nilSetCount)
 	}
 
-	// Current behavior: no error, nil stored (BUG)
-	// Expected behavior: error returned, nothing stored
-	if err == nil && mockStore.setCalledWithNil {
-		t.Errorf("BUG: processStoreCommand accepted nil value and called Set() with it")
+	// Verify proper error handling for missing outputs
+	if err == nil {
+		t.Errorf("FAILURE: processStoreCommand should error for missing output but didn't")
+	} else {
+		t.Logf("✓ Correctly errored for missing output: %v", err)
+	}
+
+	if mockStore.setCalledWithNil {
+		t.Errorf("FAILURE: Set() was called with nil despite error")
 	}
 }
 
