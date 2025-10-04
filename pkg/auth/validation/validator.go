@@ -33,14 +33,14 @@ func (v *validator) ValidateAuthConfig(config *schema.AuthConfig) error {
 
 	// Validate logs.
 	if err := v.ValidateLogsConfig(&config.Logs); err != nil {
-		return fmt.Errorf("%w: logs configuration validation failed: %v", errUtils.ErrInvalidAuthConfig, err)
+		return fmt.Errorf("%w: logs configuration validation failed: %w", errUtils.ErrInvalidAuthConfig, err)
 	}
 
 	// Validate providers.
 	//nolint:gocritic // rangeValCopy: map stores structs; address of map element can't be taken. Passing copy to factory is intended.
 	for name, provider := range config.Providers {
 		if err := v.ValidateProvider(name, &provider); err != nil {
-			return fmt.Errorf("%w: provider %q validation failed: %v", errUtils.ErrInvalidAuthConfig, name, err)
+			return fmt.Errorf("%w: provider %q validation failed: %w", errUtils.ErrInvalidAuthConfig, name, err)
 		}
 	}
 
@@ -48,13 +48,13 @@ func (v *validator) ValidateAuthConfig(config *schema.AuthConfig) error {
 
 	for name, identity := range config.Identities {
 		if err := v.ValidateIdentity(name, &identity, convertProviders(config.Providers)); err != nil {
-			return fmt.Errorf("%w: identity %q validation failed: %v", errUtils.ErrInvalidAuthConfig, name, err)
+			return fmt.Errorf("%w: identity %q validation failed: %w", errUtils.ErrInvalidAuthConfig, name, err)
 		}
 	}
 
 	// Validate chains.
 	if err := v.ValidateChains(convertIdentities(config.Identities), convertProviders(config.Providers)); err != nil {
-		return fmt.Errorf("%w: identity chain validation failed: %v", errUtils.ErrInvalidAuthConfig, err)
+		return fmt.Errorf("%w: identity chain validation failed: %w", errUtils.ErrInvalidAuthConfig, err)
 	}
 
 	return nil
@@ -81,7 +81,7 @@ func (v *validator) ValidateLogsConfig(logs *schema.Logs) error {
 
 // ValidateProvider validates a provider configuration.
 func (v *validator) ValidateProvider(name string, provider *schema.Provider) error {
-	defer perf.Track(nil, "pkg/auth/validation/validator.ValidateProvider")()
+	defer perf.Track(nil, "validation.ValidateProvider")()
 
 	if name == "" {
 		return fmt.Errorf("%w: provider name cannot be empty", errUtils.ErrInvalidProviderConfig)
@@ -102,7 +102,7 @@ func (v *validator) ValidateProvider(name string, provider *schema.Provider) err
 
 // ValidateIdentity validates an identity configuration.
 func (v *validator) ValidateIdentity(name string, identity *schema.Identity, providers map[string]*schema.Provider) error {
-	defer perf.Track(nil, "pkg/auth/validation/validator.ValidateIdentity")()
+	defer perf.Track(nil, "validation.ValidateIdentity")()
 
 	if name == "" {
 		return fmt.Errorf("%w: identity name cannot be empty", errUtils.ErrInvalidIdentityConfig)
@@ -132,7 +132,7 @@ func (v *validator) validateViaConfiguration(identity *schema.Identity, provider
 		return nil
 	}
 
-	// Enforce mutual exclusivity: exactly one of Provider or Identity must be set
+	// Enforce mutual exclusivity: exactly one of Provider or Identity must be set.
 	hasProvider := identity.Via.Provider != ""
 	hasIdentity := identity.Via.Identity != ""
 
@@ -144,7 +144,7 @@ func (v *validator) validateViaConfiguration(identity *schema.Identity, provider
 		return fmt.Errorf("%w: via.provider and via.identity are mutually exclusive; only one can be set", errUtils.ErrInvalidIdentityConfig)
 	}
 
-	// Validate that referenced provider exists
+	// Validate that referenced provider exists.
 	if hasProvider {
 		if _, exists := providers[identity.Via.Provider]; !exists {
 			return fmt.Errorf("%w: referenced provider %q does not exist", errUtils.ErrInvalidAuthConfig, identity.Via.Provider)
@@ -156,7 +156,7 @@ func (v *validator) validateViaConfiguration(identity *schema.Identity, provider
 
 // ValidateChains validates identity chains for cycles and invalid references.
 func (v *validator) ValidateChains(identities map[string]*schema.Identity, _ map[string]*schema.Provider) error {
-	defer perf.Track(nil, "ValidateChains")()
+	defer perf.Track(nil, "validation.ValidateChains")()
 	// Build dependency graph.
 	graph := make(map[string][]string)
 
