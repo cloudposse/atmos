@@ -191,7 +191,7 @@ func TestOIDCProvider_Environment(t *testing.T) {
 
 	env, err := provider.Environment()
 	assert.NoError(t, err)
-	assert.Empty(t, env) // GitHub OIDC provider doesn't set additional environment variables
+	assert.Empty(t, env) // GitHub OIDC provider doesn't set additional environment variables.
 }
 
 func TestOIDCProvider_isGitHubActions(t *testing.T) {
