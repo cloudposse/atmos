@@ -35,11 +35,8 @@ func TestNewOIDCProvider(t *testing.T) {
 		{
 			name:         "valid config",
 			providerName: "github-oidc",
-			config: &schema.Provider{
-				Kind:   "github/oidc",
-				Region: "us-east-1",
-			},
-			expectError: false,
+			config:       validOidcSpec(),
+			expectError:  false,
 		},
 		{
 			name:         "nil config",
@@ -102,15 +99,15 @@ func TestOIDCProvider_Authenticate(t *testing.T) {
 		{
 			name: "missing GitHub Actions environment",
 			setupEnv: func() {
-				t.Setenv("GITHUB_ACTIONS", "true")
-				t.Setenv("ACTIONS_ID_TOKEN_REQUEST_TOKEN", "test-token")
+				t.Setenv("GITHUB_ACTIONS", "")
+				t.Setenv("ACTIONS_ID_TOKEN_REQUEST_TOKEN", "")
 			},
 			cleanupEnv: func() {
 				t.Setenv("GITHUB_ACTIONS", "")
 				t.Setenv("ACTIONS_ID_TOKEN_REQUEST_TOKEN", "")
 			},
 			setOidcUrl:  true,
-			expectError: false,
+			expectError: true,
 			errorMsg:    "GitHub OIDC authentication is only available in GitHub Actions environment",
 		},
 		{
