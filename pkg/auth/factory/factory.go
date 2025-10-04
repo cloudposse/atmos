@@ -8,11 +8,13 @@ import (
 	awsProviders "github.com/cloudposse/atmos/pkg/auth/providers/aws"
 	githubProviders "github.com/cloudposse/atmos/pkg/auth/providers/github"
 	"github.com/cloudposse/atmos/pkg/auth/types"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 // NewProvider creates a new provider instance based on the provider configuration.
 func NewProvider(name string, config *schema.Provider) (types.Provider, error) {
+	defer perf.Track(nil, "factory.NewProvider")()
 	if config == nil {
 		return nil, fmt.Errorf("%w: provider config is nil", errUtils.ErrInvalidAuthConfig)
 	}
@@ -30,6 +32,7 @@ func NewProvider(name string, config *schema.Provider) (types.Provider, error) {
 
 // NewIdentity creates a new identity instance based on the identity configuration.
 func NewIdentity(name string, config *schema.Identity) (types.Identity, error) {
+	defer perf.Track(nil, "factory.NewIdentity")()
 	if config == nil {
 		return nil, fmt.Errorf("%w: identity config is nil", errUtils.ErrInvalidAuthConfig)
 	}

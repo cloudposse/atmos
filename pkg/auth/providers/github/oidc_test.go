@@ -14,6 +14,16 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
+func validOidcSpec() *schema.Provider {
+	return &schema.Provider{
+		Kind:   "github/oidc",
+		Region: "us-east-1",
+		Spec: map[string]interface{}{
+			"audience": "sts.us-east-1.amazonaws.com",
+		},
+	}
+}
+
 func TestNewOIDCProvider(t *testing.T) {
 	tests := []struct {
 		name         string
@@ -137,10 +147,7 @@ func TestOIDCProvider_Authenticate(t *testing.T) {
 			tt.setupEnv()
 			defer tt.cleanupEnv()
 
-			config := &schema.Provider{
-				Kind:   "github/oidc",
-				Region: "us-east-1",
-			}
+			config := validOidcSpec()
 			provider, err := NewOIDCProvider("github-oidc", config)
 			require.NoError(t, err)
 
@@ -172,10 +179,7 @@ func TestOIDCProvider_Authenticate(t *testing.T) {
 }
 
 func TestOIDCProvider_Validate(t *testing.T) {
-	config := &schema.Provider{
-		Kind:   "github/oidc",
-		Region: "us-east-1",
-	}
+	config := validOidcSpec()
 	provider, err := NewOIDCProvider("github-oidc", config)
 	require.NoError(t, err)
 
@@ -184,10 +188,7 @@ func TestOIDCProvider_Validate(t *testing.T) {
 }
 
 func TestOIDCProvider_Environment(t *testing.T) {
-	config := &schema.Provider{
-		Kind:   "github/oidc",
-		Region: "us-east-1",
-	}
+	config := validOidcSpec()
 	provider, err := NewOIDCProvider("github-oidc", config)
 	require.NoError(t, err)
 
@@ -238,10 +239,7 @@ func TestOIDCProvider_isGitHubActions(t *testing.T) {
 			tt.setupEnv()
 			defer tt.cleanup()
 
-			config := &schema.Provider{
-				Kind:   "github/oidc",
-				Region: "us-east-1",
-			}
+			config := validOidcSpec()
 			provider, err := NewOIDCProvider("github-oidc", config)
 			require.NoError(t, err)
 

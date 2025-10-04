@@ -8,6 +8,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth/factory"
 	"github.com/cloudposse/atmos/pkg/auth/types"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -24,20 +25,22 @@ var ErrIdentityCycle = errors.New("identity cycle detected")
 
 // ValidateAuthConfig validates the entire auth configuration.
 func (v *validator) ValidateAuthConfig(config *schema.AuthConfig) error {
+	defer perf.Track(nil, "ValidateAuthConfig")()
+
 	if config == nil {
 		return fmt.Errorf("%w: auth config cannot be nil", errUtils.ErrInvalidAuthConfig)
 	}
 
 	// Validate logs.
 	if err := v.ValidateLogsConfig(&config.Logs); err != nil {
-		return fmt.Errorf("logs configuration validation failed: %w", errors.Join(errUtils.ErrInvalidAuthConfig, err))
+		return fmt.Errorf("%w: logs configuration validation failed: %v", errUtils.ErrInvalidAuthConfig, err)
 	}
 
 	// Validate providers.
 	//nolint:gocritic // rangeValCopy: map stores structs; address of map element can't be taken. Passing copy to factory is intended.
 	for name, provider := range config.Providers {
 		if err := v.ValidateProvider(name, &provider); err != nil {
-			return fmt.Errorf("provider %q validation failed: %w", name, errors.Join(errUtils.ErrInvalidAuthConfig, err))
+			return fmt.Errorf("%w: provider %q validation failed: %v", errUtils.ErrInvalidAuthConfig, name, err)
 		}
 	}
 
@@ -45,13 +48,13 @@ func (v *validator) ValidateAuthConfig(config *schema.AuthConfig) error {
 
 	for name, identity := range config.Identities {
 		if err := v.ValidateIdentity(name, &identity, convertProviders(config.Providers)); err != nil {
-			return fmt.Errorf("identity %q validation failed: %w", name, errors.Join(errUtils.ErrInvalidAuthConfig, err))
+			return fmt.Errorf("%w: identity %q validation failed: %v", errUtils.ErrInvalidAuthConfig, name, err)
 		}
 	}
 
 	// Validate chains.
 	if err := v.ValidateChains(convertIdentities(config.Identities), convertProviders(config.Providers)); err != nil {
-		return fmt.Errorf("identity chain validation failed: %w", errors.Join(errUtils.ErrInvalidAuthConfig, err))
+		return fmt.Errorf("%w: identity chain validation failed: %v", errUtils.ErrInvalidAuthConfig, err)
 	}
 
 	return nil
@@ -59,6 +62,8 @@ func (v *validator) ValidateAuthConfig(config *schema.AuthConfig) error {
 
 // ValidateLogsConfig validates the logs configuration.
 func (v *validator) ValidateLogsConfig(logs *schema.Logs) error {
+	defer perf.Track(nil, "ValidateLogsConfig")()
+
 	if logs.Level == "" {
 		// Default to Info if not specified.
 		return nil
@@ -76,6 +81,8 @@ func (v *validator) ValidateLogsConfig(logs *schema.Logs) error {
 
 // ValidateProvider validates a provider configuration.
 func (v *validator) ValidateProvider(name string, provider *schema.Provider) error {
+	defer perf.Track(nil, "pkg/auth/validation/validator.ValidateProvider")()
+
 	if name == "" {
 		return fmt.Errorf("%w: provider name cannot be empty", errUtils.ErrInvalidProviderConfig)
 	}
@@ -95,6 +102,8 @@ func (v *validator) ValidateProvider(name string, provider *schema.Provider) err
 
 // ValidateIdentity validates an identity configuration.
 func (v *validator) ValidateIdentity(name string, identity *schema.Identity, providers map[string]*schema.Provider) error {
+	defer perf.Track(nil, "pkg/auth/validation/validator.ValidateIdentity")()
+
 	if name == "" {
 		return fmt.Errorf("%w: identity name cannot be empty", errUtils.ErrInvalidIdentityConfig)
 	}
@@ -131,7 +140,8 @@ func (v *validator) validateViaConfiguration(identity *schema.Identity, provider
 }
 
 // ValidateChains validates identity chains for cycles and invalid references.
-func (v *validator) ValidateChains(identities map[string]*schema.Identity, providers map[string]*schema.Provider) error {
+func (v *validator) ValidateChains(identities map[string]*schema.Identity, _ map[string]*schema.Provider) error {
+	defer perf.Track(nil, "ValidateChains")()
 	// Build dependency graph.
 	graph := make(map[string][]string)
 
