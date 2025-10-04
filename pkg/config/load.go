@@ -32,8 +32,6 @@ const (
 	yamlType = "yaml"
 )
 
-var ErrAtmosDirConfigNotFound = errors.New("atmos config directory not found")
-
 var defaultHomeDirProvider = filesystem.NewOSHomeDirProvider()
 
 // * Embedded atmos.yaml (`atmos/pkg/config/atmos.yaml`)
