@@ -2,6 +2,7 @@
 package exec
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -10,8 +11,16 @@ import (
 	"strings"
 	"testing"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
+
+// NOTE: Error Checking Best Practices
+// When testing errors, prefer errors.Is() or errors.As() over string matching.
+// WRONG: if !strings.Contains(err.Error(), "expected message")
+// RIGHT: if !errors.Is(err, errUtils.ErrExpected)
+// RIGHT: var pathErr *os.PathError; if !errors.As(err, &pathErr)
+// This makes tests more robust and follows Go idioms for error handling.
 
 // TestIsRemoteSource verifies that IsRemoteSource returns expected booleans.
 func TestIsRemoteSource(t *testing.T) {
@@ -63,8 +72,8 @@ func TestGetTerraformSource(t *testing.T) {
 	if err == nil {
 		t.Errorf("Expected error for nonexistent directory, got nil")
 	}
-	if !strings.Contains(err.Error(), "source directory does not exist") {
-		t.Errorf("Unexpected error message: %v", err)
+	if !errors.Is(err, errUtils.ErrSourceDirNotExist) {
+		t.Errorf("Expected ErrSourceDirNotExist, got: %v", err)
 	}
 
 	// Empty source should return baseDir.
@@ -292,8 +301,9 @@ func TestApplyTerraformDocsWithRunner_Error(t *testing.T) {
 	if err == nil {
 		t.Error("Expected error from applyTerraformDocsWithRunner when runner fails")
 	}
-	if !strings.Contains(err.Error(), "failed to generate terraform docs") {
-		t.Errorf("Expected error message about terraform docs generation, got: %v", err)
+	// Check that the mock error is wrapped.
+	if !errors.Is(err, mockRunner.returnError) {
+		t.Errorf("Expected error to wrap mock error, got: %v", err)
 	}
 }
 
@@ -316,8 +326,8 @@ func TestResolvePath_EmptyWithoutDefault(t *testing.T) {
 	if err == nil {
 		t.Error("Expected error with empty path and empty default")
 	}
-	if !strings.Contains(err.Error(), "file path is empty") {
-		t.Errorf("Expected error about empty file path, got: %v", err)
+	if !errors.Is(err, errUtils.ErrEmptyFilePath) {
+		t.Errorf("Expected ErrEmptyFilePath, got: %v", err)
 	}
 }
 
@@ -337,8 +347,8 @@ func TestMergeInputs_UnsupportedType(t *testing.T) {
 	if err == nil {
 		t.Error("Expected error from mergeInputs with unsupported input type")
 	}
-	if !strings.Contains(err.Error(), "unsupported input type") {
-		t.Errorf("Expected error about unsupported input type, got: %v", err)
+	if !errors.Is(err, errUtils.ErrUnsupportedInputType) {
+		t.Errorf("Expected ErrUnsupportedInputType, got: %v", err)
 	}
 }
 
@@ -464,8 +474,10 @@ common: remote
 // mockErrorRenderer simulates a renderer that always returns an error.
 type mockErrorRenderer struct{}
 
+var errMockRenderer = fmt.Errorf("mock renderer error")
+
 func (m mockErrorRenderer) Render(tmplName, tmplValue string, mergedData map[string]interface{}, ignoreMissing bool) (string, error) {
-	return "", fmt.Errorf("mock renderer error")
+	return "", errMockRenderer
 }
 
 // TestGenerateDocument_RenderError tests error handling when renderer fails.
@@ -491,8 +503,9 @@ func TestGenerateDocument_RenderError(t *testing.T) {
 	if err == nil {
 		t.Error("Expected error from generateDocument when renderer fails")
 	}
-	if !strings.Contains(err.Error(), "failed to render template with datasources") {
-		t.Errorf("Expected error about rendering template, got: %v", err)
+	// Check that the mock renderer error is wrapped.
+	if !errors.Is(err, errMockRenderer) {
+		t.Errorf("Expected error to wrap mock renderer error, got: %v", err)
 	}
 }
 
@@ -526,7 +539,10 @@ func TestGenerateDocument_WriteFileError(t *testing.T) {
 	if err == nil {
 		t.Error("Expected error from generateDocument when os.WriteFile fails")
 	}
-	if !strings.Contains(err.Error(), "failed to write output") {
-		t.Errorf("Expected error about writing output, got: %v", err)
+	// The underlying error should be a syscall error (directory is not a file).
+	// We verify the error is wrapped and is a path error.
+	var pathErr *os.PathError
+	if !errors.As(err, &pathErr) {
+		t.Errorf("Expected error to wrap os.PathError, got: %v", err)
 	}
 }
