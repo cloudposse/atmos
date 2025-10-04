@@ -14,17 +14,33 @@ The Atmos AI Assistant is an AI-powered terminal agent that helps with Atmos inf
 
 To enable AI features, add the following to your `atmos.yaml` configuration:
 
+### Anthropic (Claude)
+
 ```yaml
 settings:
   ai:
-    enabled: true                    # Enable AI features (default: false)
-    provider: "anthropic"            # AI provider (currently only "anthropic" supported)
-    model: "claude-3-5-sonnet-20241022"  # Model to use (default: claude-3-5-sonnet-20241022)
-    api_key_env: "ANTHROPIC_API_KEY" # Environment variable for API key (default: ANTHROPIC_API_KEY)
-    max_tokens: 4096                 # Maximum tokens per response (default: 4096)
+    enabled: true                          # Enable AI features (default: false)
+    provider: "anthropic"                  # AI provider (default: "anthropic")
+    model: "claude-3-5-sonnet-20241022"    # Model to use (default: claude-3-5-sonnet-20241022)
+    api_key_env: "ANTHROPIC_API_KEY"       # Environment variable for API key (default: ANTHROPIC_API_KEY)
+    max_tokens: 4096                       # Maximum tokens per response (default: 4096)
+```
+
+### OpenAI (GPT)
+
+```yaml
+settings:
+  ai:
+    enabled: true                # Enable AI features (default: false)
+    provider: "openai"           # AI provider
+    model: "gpt-4o"              # Model to use (default: gpt-4o)
+    api_key_env: "OPENAI_API_KEY" # Environment variable for API key (default: OPENAI_API_KEY)
+    max_tokens: 4096             # Maximum tokens per response (default: 4096)
 ```
 
 ### Environment Setup
+
+**For Anthropic (Claude):**
 
 1. **Get an Anthropic API Key**: Sign up at [https://console.anthropic.com/](https://console.anthropic.com/) and create an API key.
 
@@ -33,10 +49,19 @@ settings:
    export ANTHROPIC_API_KEY="your-api-key-here"
    ```
 
-3. **Verify Configuration**:
+**For OpenAI (GPT):**
+
+1. **Get an OpenAI API Key**: Sign up at [https://platform.openai.com/](https://platform.openai.com/) and create an API key.
+
+2. **Set the Environment Variable**:
    ```bash
-   atmos ai ask "Hello, are you working?"
+   export OPENAI_API_KEY="your-api-key-here"
    ```
+
+**Verify Configuration:**
+```bash
+atmos ai ask "Hello, are you working?"
+```
 
 ## Usage
 
@@ -151,18 +176,30 @@ atmos ai ask "How do I use Gomplate functions in my templates?"
 atmos ai ask "What's the best way to handle secrets in Atmos?"
 ```
 
+## Supported Providers
+
+Atmos AI Assistant supports multiple AI providers:
+
+| Provider | Default Model | API Key Environment Variable | Notes |
+|----------|---------------|------------------------------|-------|
+| **Anthropic** | `claude-3-5-sonnet-20241022` | `ANTHROPIC_API_KEY` | Default provider, advanced reasoning |
+| **OpenAI** | `gpt-4o` | `OPENAI_API_KEY` | Alternative provider, widely available |
+
+You can switch providers by changing the `provider` field in your configuration.
+
 ## Security and Privacy
 
-- **API Key Security**: Store your Anthropic API key securely and never commit it to version control
+- **API Key Security**: Store your API keys securely and never commit them to version control
 - **Configuration Privacy**: The AI assistant does not store or transmit your configuration data beyond the current session
-- **Local Processing**: All processing is done through the Anthropic API; no data is stored locally by the AI features
+- **Local Processing**: All processing is done through the provider's API; no data is stored locally by the AI features
+- **Provider Terms**: Your usage is subject to the terms of service of your chosen provider (Anthropic or OpenAI)
 
 ## Limitations
 
 - **AI Knowledge Cutoff**: The AI's knowledge of Atmos is current as of its training date
-- **API Dependencies**: Requires internet connection and valid Anthropic API key
+- **API Dependencies**: Requires internet connection and valid API key for your chosen provider
 - **Configuration Context**: The AI works with your current Atmos configuration but cannot make direct changes
-- **Rate Limits**: Subject to Anthropic API rate limits and usage policies
+- **Rate Limits**: Subject to your provider's API rate limits and usage policies
 
 ## Troubleshooting
 
@@ -174,9 +211,13 @@ atmos ai ask "What's the best way to handle secrets in Atmos?"
    grep -A 5 "ai:" atmos.yaml
    ```
 
-2. **Verify API Key**:
+2. **Verify API Key** (for your chosen provider):
    ```bash
+   # For Anthropic
    echo $ANTHROPIC_API_KEY
+
+   # For OpenAI
+   echo $OPENAI_API_KEY
    ```
 
 3. **Test Connectivity**:
@@ -187,9 +228,12 @@ atmos ai ask "What's the best way to handle secrets in Atmos?"
 ### Common Issues
 
 - **"AI features are not enabled"**: Add `ai.enabled: true` to your `atmos.yaml`
-- **"API key not found"**: Set the `ANTHROPIC_API_KEY` environment variable
+- **"API key not found"**: Set the appropriate environment variable for your provider
+  - Anthropic: `ANTHROPIC_API_KEY`
+  - OpenAI: `OPENAI_API_KEY`
 - **"Failed to create AI client"**: Check your API key is valid and has sufficient credits
-- **Rate limiting errors**: Wait and retry, or check your Anthropic account usage
+- **"Unsupported AI provider"**: Verify the `provider` field is set to `anthropic` or `openai`
+- **Rate limiting errors**: Wait and retry, or check your provider account usage
 
 ## Contributing
 

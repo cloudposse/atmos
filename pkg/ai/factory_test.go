@@ -62,6 +62,18 @@ func TestNewClient(t *testing.T) {
 			errorMsg:    "unsupported AI provider: unsupported",
 		},
 		{
+			name: "OpenAI provider",
+			atmosConfig: &schema.AtmosConfiguration{
+				Settings: schema.AtmosSettings{
+					AI: map[string]interface{}{
+						"enabled":  true,
+						"provider": "openai",
+					},
+				},
+			},
+			expectError: false,
+		},
+		{
 			name: "Disabled AI",
 			atmosConfig: &schema.AtmosConfiguration{
 				Settings: schema.AtmosSettings{
@@ -91,7 +103,8 @@ func TestNewClient(t *testing.T) {
 				if err != nil {
 					// Expected errors when API key is not set
 					if err.Error() == "AI features are disabled in configuration" ||
-						err.Error() == "API key not found in environment variable: ANTHROPIC_API_KEY" {
+						err.Error() == "API key not found in environment variable: ANTHROPIC_API_KEY" ||
+						err.Error() == "API key not found in environment variable: OPENAI_API_KEY" {
 						t.Skipf("Skipping test: %s (expected for factory test without API key)", err.Error())
 					}
 					// Unexpected error

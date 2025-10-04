@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/cloudposse/atmos/pkg/ai/agent/anthropic"
+	"github.com/cloudposse/atmos/pkg/ai/agent/openai"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -23,6 +24,8 @@ func NewClient(atmosConfig *schema.AtmosConfiguration) (Client, error) {
 	switch provider {
 	case "anthropic":
 		return anthropic.NewSimpleClient(atmosConfig)
+	case "openai":
+		return openai.NewClient(atmosConfig)
 	default:
 		return nil, fmt.Errorf("unsupported AI provider: %s", provider)
 	}
