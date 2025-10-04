@@ -167,4 +167,8 @@ var (
 	ErrProfilerStartCPU        = errors.New("profiler: failed to start CPU profile")
 	ErrProfilerStartTrace      = errors.New("profiler: failed to start trace profile")
 	ErrProfilerCreateFile      = errors.New("profiler: failed to create profile file")
+
+	// Store and hook errors.
+	ErrNilTerraformOutput = errors.New("terraform output returned nil")
+	ErrNilStoreValue      = errors.New("cannot store nil value")
 )

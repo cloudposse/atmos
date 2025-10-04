@@ -62,4 +62,5 @@ var (
 	// Shared errors.
 	ErrSerializeJSON = errors.New("failed to serialize value to JSON")
 	ErrMarshalValue  = errors.New("failed to marshal value")
+	ErrNilValue      = errors.New("cannot store nil value")
 )

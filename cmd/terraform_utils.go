@@ -30,7 +30,10 @@ func runHooks(event h.HookEvent, cmd *cobra.Command, args []string) error {
 
 	if hooks != nil && hooks.HasHooks() {
 		log.Info("Running hooks", "event", event)
-		return hooks.RunAll(event, &atmosConfig, &info, cmd, args)
+		err := hooks.RunAll(event, &atmosConfig, &info, cmd, args)
+		if err != nil {
+			errUtils.CheckErrorPrintAndExit(err, "", "")
+		}
 	}
 
 	return nil

@@ -1,0 +1,10 @@
+import:
+  - orgs/acme/_defaults
+  - catalog/vpc-dry
+  - catalog/rds-dry
+  - catalog/lambda-dry
+
+vars:
+  tenant: acme
+  environment: dev
+  stage: dry
