@@ -229,6 +229,9 @@ func (s *ArtifactoryStore) Set(stack string, component string, key string, value
 	if key == "" {
 		return ErrEmptyKey
 	}
+	if value == nil {
+		return fmt.Errorf("%w for key %s in stack %s component %s", ErrNilValue, key, stack, component)
+	}
 
 	// Construct the full parameter name using getKey
 	paramName, err := s.getKey(stack, component, key)

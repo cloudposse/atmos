@@ -72,7 +72,8 @@ func TestStoreCommand_GetOutputValue(t *testing.T) {
 				},
 			}
 
-			key, value := cmd.getOutputValue(tt.value)
+			key, value, err := cmd.getOutputValue(tt.value)
+			require.NoError(t, err)
 
 			assert.Equal(t, tt.expectedKey, key)
 			assert.Equal(t, tt.expectedValue, value)
@@ -143,7 +144,8 @@ func TestStoreCommand_GetOutputValue_WithMockTerraform(t *testing.T) {
 				outputGetter: mockGetter,
 			}
 
-			key, value := cmd.getOutputValue(tt.value)
+			key, value, err := cmd.getOutputValue(tt.value)
+			require.NoError(t, err)
 
 			assert.Equal(t, tt.expectedKey, key)
 			assert.Equal(t, tt.expectedValue, value)

@@ -5,9 +5,11 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/log"
+	"github.com/spf13/cobra"
+
+	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/spf13/cobra"
 )
 
 // TerraformOutputGetter retrieves terraform outputs.
@@ -51,9 +53,12 @@ func (c *StoreCommand) processStoreCommand(hook *Hook) error {
 
 	log.Debug("Executing 'after-terraform-apply' hook", "hook", hook.Name, "command", hook.Command)
 	for key, value := range hook.Outputs {
-		outputKey, outputValue := c.getOutputValue(value)
+		outputKey, outputValue, err := c.getOutputValue(value)
+		if err != nil {
+			return err
+		}
 
-		err := c.storeOutput(hook, key, outputKey, outputValue)
+		err = c.storeOutput(hook, key, outputKey, outputValue)
 		if err != nil {
 			return err
 		}
@@ -62,16 +67,22 @@ func (c *StoreCommand) processStoreCommand(hook *Hook) error {
 }
 
 // getOutputValue gets an output from terraform or returns a literal value.
-func (c *StoreCommand) getOutputValue(value string) (string, any) {
+func (c *StoreCommand) getOutputValue(value string) (string, any, error) {
 	outputKey := strings.TrimPrefix(value, ".")
 	var outputValue any
 
 	if strings.Index(value, ".") == 0 {
 		outputValue = c.outputGetter(c.atmosConfig, c.info.Stack, c.info.ComponentFromArg, outputKey, true)
+
+		// Validate that terraform output is not nil.
+		// Nil outputs can occur from rate limits, partial failures, or missing outputs.
+		if outputValue == nil {
+			return "", nil, fmt.Errorf("%w for key %s - possible rate limit, API error, or missing output", errUtils.ErrNilTerraformOutput, outputKey)
+		}
 	} else {
 		outputValue = value
 	}
-	return outputKey, outputValue
+	return outputKey, outputValue, nil
 }
 
 // storeOutput puts the value of the output in the store
