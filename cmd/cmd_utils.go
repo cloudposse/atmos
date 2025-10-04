@@ -9,7 +9,6 @@ import (
 	"strings"
 	"time"
 
-	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/go-git/go-git/v5"
 	"github.com/samber/lo"
 	"github.com/spf13/cobra"
@@ -18,6 +17,7 @@ import (
 	e "github.com/cloudposse/atmos/internal/exec"
 	tuiUtils "github.com/cloudposse/atmos/internal/tui/utils"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/telemetry"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
@@ -43,7 +43,7 @@ func WithStackValidation(check bool) AtmosValidateOption {
 	}
 }
 
-// processCustomCommands processes and executes custom commands
+// processCustomCommands processes and executes custom commands.
 func processCustomCommands(
 	atmosConfig schema.AtmosConfiguration,
 	commands []schema.Command,
@@ -127,7 +127,7 @@ func processCustomCommands(
 	return nil
 }
 
-// addCommandWithAlias adds a command hierarchy based on the full command
+// addCommandWithAlias adds a command hierarchy based on the full command.
 func addCommandWithAlias(parentCmd *cobra.Command, alias string, parts []string) {
 	if len(parts) == 0 {
 		return
@@ -156,7 +156,7 @@ func addCommandWithAlias(parentCmd *cobra.Command, alias string, parts []string)
 	}
 }
 
-// processCommandAliases processes the command aliases
+// processCommandAliases processes the command aliases.
 func processCommandAliases(
 	atmosConfig schema.AtmosConfiguration,
 	aliases schema.CommandAliases,
@@ -201,7 +201,7 @@ func processCommandAliases(
 	return nil
 }
 
-// preCustomCommand is run before a custom command is executed
+// preCustomCommand is run before a custom command is executed.
 func preCustomCommand(
 	cmd *cobra.Command,
 	args []string,
@@ -288,7 +288,7 @@ func preCustomCommand(
 	}
 }
 
-// getTopLevelCommands returns the top-level commands
+// getTopLevelCommands returns the top-level commands.
 func getTopLevelCommands() map[string]*cobra.Command {
 	existingTopLevelCommands := make(map[string]*cobra.Command)
 
@@ -299,7 +299,7 @@ func getTopLevelCommands() map[string]*cobra.Command {
 	return existingTopLevelCommands
 }
 
-// executeCustomCommand executes a custom command
+// executeCustomCommand executes a custom command.
 func executeCustomCommand(
 	atmosConfig schema.AtmosConfiguration,
 	cmd *cobra.Command,
@@ -354,7 +354,7 @@ func executeCustomCommand(
 		// process the component stack config and expose it in {{ .ComponentConfig.xxx.yyy.zzz }} Go template variables
 		if commandConfig.ComponentConfig.Component != "" && commandConfig.ComponentConfig.Stack != "" {
 			// Process Go templates in the command's 'component_config.component'
-			component, err := e.ProcessTmpl(fmt.Sprintf("component-config-component-%d", i), commandConfig.ComponentConfig.Component, data, false)
+			component, err := e.ProcessTmpl(&atmosConfig, fmt.Sprintf("component-config-component-%d", i), commandConfig.ComponentConfig.Component, data, false)
 			errUtils.CheckErrorPrintAndExit(err, "", "")
 			if component == "" || component == "<no value>" {
 				errUtils.CheckErrorPrintAndExit(fmt.Errorf("the command defines an invalid 'component_config.component: %s' in '%s'",
@@ -362,7 +362,7 @@ func executeCustomCommand(
 			}
 
 			// Process Go templates in the command's 'component_config.stack'
-			stack, err := e.ProcessTmpl(fmt.Sprintf("component-config-stack-%d", i), commandConfig.ComponentConfig.Stack, data, false)
+			stack, err := e.ProcessTmpl(&atmosConfig, fmt.Sprintf("component-config-stack-%d", i), commandConfig.ComponentConfig.Stack, data, false)
 			errUtils.CheckErrorPrintAndExit(err, "", "")
 			if stack == "" || stack == "<no value>" {
 				errUtils.CheckErrorPrintAndExit(fmt.Errorf("the command defines an invalid 'component_config.stack: %s' in '%s'",
@@ -377,7 +377,8 @@ func executeCustomCommand(
 
 		// Prepare ENV vars
 		// ENV var values support Go templates and have access to {{ .ComponentConfig.xxx.yyy.zzz }} Go template variables
-		var envVarsList []string
+		// Start with current environment to inherit PATH and other variables.
+		env := os.Environ()
 		for _, v := range commandConfig.Env {
 			key := strings.TrimSpace(v.Key)
 			value := v.Value
@@ -393,32 +394,37 @@ func executeCustomCommand(
 			// If the command to get the value for the ENV var is provided, execute it
 			if valCommand != "" {
 				valCommandName := fmt.Sprintf("env-var-%s-valcommand", key)
-				res, err := u.ExecuteShellAndReturnOutput(valCommand, valCommandName, currentDirPath, nil, false)
+				res, err := u.ExecuteShellAndReturnOutput(valCommand, valCommandName, currentDirPath, env, false)
 				errUtils.CheckErrorPrintAndExit(err, "", "")
 				value = strings.TrimRight(res, "\r\n")
 			} else {
 				// Process Go templates in the values of the command's ENV vars
-				value, err = e.ProcessTmpl(fmt.Sprintf("env-var-%d", i), value, data, false)
+				value, err = e.ProcessTmpl(&atmosConfig, fmt.Sprintf("env-var-%d", i), value, data, false)
 				errUtils.CheckErrorPrintAndExit(err, "", "")
 			}
 
-			envVarsList = append(envVarsList, fmt.Sprintf("%s=%s", key, value))
-			err = os.Setenv(key, value)
-			errUtils.CheckErrorPrintAndExit(err, "", "")
+			// Add or update the environment variable in the env slice
+			env = u.UpdateEnvVar(env, key, value)
 		}
 
-		if len(envVarsList) > 0 && commandConfig.Verbose {
-			log.Debug("Using ENV vars", "env", envVarsList)
+		if len(commandConfig.Env) > 0 && commandConfig.Verbose {
+			var envVarsList []string
+			for _, v := range commandConfig.Env {
+				envVarsList = append(envVarsList, fmt.Sprintf("%s=%s", strings.TrimSpace(v.Key), "***"))
+			}
+			log.Debug("Using custom ENV vars", "env", envVarsList)
 		}
 
 		// Process Go templates in the command's steps.
 		// Steps support Go templates and have access to {{ .ComponentConfig.xxx.yyy.zzz }} Go template variables
-		commandToRun, err := e.ProcessTmpl(fmt.Sprintf("step-%d", i), step, data, false)
+		commandToRun, err := e.ProcessTmpl(&atmosConfig, fmt.Sprintf("step-%d", i), step, data, false)
 		errUtils.CheckErrorPrintAndExit(err, "", "")
 
 		// Execute the command step
 		commandName := fmt.Sprintf("%s-step-%d", commandConfig.Name, i)
-		err = e.ExecuteShell(commandToRun, commandName, currentDirPath, envVarsList, false)
+
+		// Pass the prepared environment with custom variables to the subprocess
+		err = e.ExecuteShell(commandToRun, commandName, currentDirPath, env, false)
 		errUtils.CheckErrorPrintAndExit(err, "", "")
 	}
 }
@@ -452,7 +458,7 @@ func extractTrailingArgs(args []string, osArgs []string) ([]string, string) {
 	return mainArgs, trailingArgs
 }
 
-// cloneCommand clones a custom command config into a new struct
+// cloneCommand clones a custom command config into a new struct.
 func cloneCommand(orig *schema.Command) (*schema.Command, error) {
 	origJSON, err := json.Marshal(orig)
 	if err != nil {
@@ -467,7 +473,7 @@ func cloneCommand(orig *schema.Command) (*schema.Command, error) {
 	return &clone, nil
 }
 
-// checkAtmosConfig checks Atmos config
+// checkAtmosConfig checks Atmos config.
 func checkAtmosConfig(opts ...AtmosValidateOption) {
 	vCfg := &ValidateConfig{
 		CheckStack: true, // Default value true to check the stack
@@ -490,7 +496,7 @@ func checkAtmosConfig(opts ...AtmosValidateOption) {
 	}
 }
 
-// printMessageForMissingAtmosConfig prints Atmos logo and instructions on how to configure and start using Atmos
+// printMessageForMissingAtmosConfig prints Atmos logo and instructions on how to configure and start using Atmos.
 func printMessageForMissingAtmosConfig(atmosConfig schema.AtmosConfiguration) {
 	c1 := theme.Colors.Info
 	c2 := theme.Colors.Success
@@ -584,12 +590,12 @@ func CheckForAtmosUpdateAndPrintMessage(atmosConfig schema.AtmosConfiguration) {
 	}
 }
 
-// Check Atmos is version command
+// Check Atmos is version command.
 func isVersionCommand() bool {
 	return len(os.Args) > 1 && os.Args[1] == "version"
 }
 
-// handleHelpRequest shows help content and exits only if the first argument is "help" or "--help" or "-h"
+// handleHelpRequest shows help content and exits only if the first argument is "help" or "--help" or "-h".
 func handleHelpRequest(cmd *cobra.Command, args []string) {
 	if (len(args) > 0 && args[0] == "help") || Contains(args, "--help") || Contains(args, "-h") {
 		cmd.Help()
@@ -624,7 +630,7 @@ func showFlagUsageAndExit(cmd *cobra.Command, err error) error {
 	return nil
 }
 
-// getConfigAndStacksInfo processes the CLI config and stacks
+// getConfigAndStacksInfo processes the CLI config and stacks.
 func getConfigAndStacksInfo(commandName string, cmd *cobra.Command, args []string) schema.ConfigAndStacksInfo {
 	// Check Atmos configuration
 	checkAtmosConfig()

@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/cloudposse/atmos/pkg/perf"
+
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
@@ -65,6 +67,8 @@ func ProcessCommandLineArgs(
 	args []string,
 	additionalArgsAndFlags []string,
 ) (schema.ConfigAndStacksInfo, error) {
+	defer perf.Track(nil, "exec.ProcessCommandLineArgs")()
+
 	var configAndStacksInfo schema.ConfigAndStacksInfo
 
 	cmd.DisableFlagParsing = false
@@ -644,8 +648,11 @@ func processArgsAndFlags(
 	return info, nil
 }
 
-// getCliVars returns a map of variables provided on the command-line.
-// atmos terraform apply template-functions-test -s tenant1-ue2-prod -var name=test2 -var stage=dev -var 'tags={"a":"value2", "Name":"test"}'.
+// getCliVars parses command-line arguments and extracts all -var arguments,
+// returning them as a map of variables with proper type conversion.
+// This function processes JSON values and returns them as parsed objects.
+// Example: ["-var", "name=test", "-var", "tags={\"env\":\"prod\",\"team\":\"devops\"}"]
+// Returns: map[string]any{"name": "test", "tags": map[string]any{"env": "prod", "team": "devops"}}.
 func getCliVars(args []string) (map[string]any, error) {
 	variables := make(map[string]any)
 	for i := 0; i < len(args); i++ {

@@ -332,7 +332,7 @@ func addAffectedSpaceliftAdminStack(
 	var adminStackContextPrefix string
 
 	if atmosConfig.Stacks.NameTemplate != "" {
-		adminStackContextPrefix, err = ProcessTmpl("spacelift-admin-stack-name-template", atmosConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, false)
+		adminStackContextPrefix, err = ProcessTmpl(atmosConfig, "spacelift-admin-stack-name-template", atmosConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, false)
 		if err != nil {
 			return nil, err
 		}
@@ -371,7 +371,7 @@ func addAffectedSpaceliftAdminStack(
 							var contextPrefix string
 
 							if atmosConfig.Stacks.NameTemplate != "" {
-								contextPrefix, err = ProcessTmpl("spacelift-stack-name-template", atmosConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, false)
+								contextPrefix, err = ProcessTmpl(atmosConfig, "spacelift-stack-name-template", atmosConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, false)
 								if err != nil {
 									return nil, err
 								}
@@ -445,9 +445,15 @@ func addDependentsToAffected(
 	processTemplates bool,
 	processYamlFunctions bool,
 	skip []string,
+	onlyInStack string,
 ) error {
 	for i := 0; i < len(*affected); i++ {
 		a := &(*affected)[i]
+
+		// Skip if `onlyInStack` is specified and the affected component is not in the specified stack.
+		if onlyInStack != "" && a.Stack != onlyInStack {
+			continue
+		}
 
 		deps, err := ExecuteDescribeDependents(
 			atmosConfig,

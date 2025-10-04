@@ -3,10 +3,10 @@ package exec
 import (
 	"fmt"
 
-	log "github.com/cloudposse/atmos/pkg/logger"
-
 	"github.com/cloudposse/atmos/internal/tui/templates/term"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/pager"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -41,6 +41,8 @@ func NewDescribeConfig(atmosConfig *schema.AtmosConfiguration) *describeConfigEx
 
 // ExecuteDescribeConfigCmd executes `describe config` command.
 func (d *describeConfigExec) ExecuteDescribeConfigCmd(query, format, output string) error {
+	defer perf.Track(nil, "exec.DescribeConfigExec.ExecuteDescribeConfigCmd")()
+
 	var res *schema.AtmosConfiguration
 	var err error
 	if query != "" {

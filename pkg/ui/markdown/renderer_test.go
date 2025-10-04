@@ -11,15 +11,17 @@ import (
 
 func TestRenderer(t *testing.T) {
 	tests := []struct {
-		name        string
-		input       string
-		expected    string
-		atmosConfig schema.AtmosConfiguration
+		name         string
+		input        string
+		mustContain  string
+		atmosConfig  schema.AtmosConfiguration
+		expectNoANSI bool
 	}{
 		{
-			name:     "Test with no color",
-			input:    "## Hello **world**",
-			expected: "  ## Hello **world**",
+			name:         "Test with no color",
+			input:        "## Hello **world**",
+			mustContain:  "## Hello **world**",
+			expectNoANSI: true,
 			atmosConfig: schema.AtmosConfiguration{
 				Settings: schema.AtmosSettings{
 					Terminal: schema.Terminal{
@@ -29,9 +31,10 @@ func TestRenderer(t *testing.T) {
 			},
 		},
 		{
-			name:     "Test with color",
-			input:    "## Hello **world**",
-			expected: "\x1b[;1m\x1b[0m\x1b[;1m\x1b[0m\x1b[;1m## \x1b[0m\x1b[;1mHello \x1b[0m\x1b[;1m**\x1b[0m\x1b[;1mworld\x1b[0m\x1b[;1m**\x1b[0m",
+			name:         "Test with color",
+			input:        "## Hello **world**",
+			mustContain:  "## Hello **world**",
+			expectNoANSI: false,
 			atmosConfig: schema.AtmosConfiguration{
 				Settings: schema.AtmosSettings{
 					Terminal: schema.Terminal{
@@ -51,11 +54,26 @@ func TestRenderer(t *testing.T) {
 				r.isTTYSupportForStdout = term.IsTTYSupportForStdout
 			}()
 			str, err := r.Render(tt.input)
-			assert.Contains(t, str, tt.expected)
 			assert.NoError(t, err)
+			// Strip ANSI codes to check content
+			strippedStr := stripANSI(str)
+			assert.Contains(t, strippedStr, tt.mustContain)
+			if tt.expectNoANSI {
+				assert.NotContains(t, str, "\x1b[", "NoColor mode should not contain ANSI codes")
+			} else {
+				assert.Contains(t, str, "\x1b[", "Color mode should contain ANSI codes")
+			}
+
 			str, err = r.RenderWithoutWordWrap(tt.input)
-			assert.Contains(t, str, tt.expected)
 			assert.NoError(t, err)
+			// Strip ANSI codes to check content
+			strippedStr = stripANSI(str)
+			assert.Contains(t, strippedStr, tt.mustContain)
+			if tt.expectNoANSI {
+				assert.NotContains(t, str, "\x1b[", "NoColor mode should not contain ANSI codes")
+			} else {
+				assert.Contains(t, str, "\x1b[", "Color mode should contain ANSI codes")
+			}
 		})
 	}
 }

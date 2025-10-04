@@ -163,7 +163,7 @@ func TestProcessTmplWithDatasourcesGomplate(t *testing.T) {
 		// No variables to interpolate.
 	}
 	tmpl := "Static Content"
-	result, err := ProcessTmplWithDatasourcesGomplate("test", tmpl, mergedData, false)
+	result, err := ProcessTmplWithDatasourcesGomplate(nil, "test", tmpl, mergedData, false)
 	if err != nil {
 		t.Fatalf("ProcessTmplWithDatasourcesGomplate returned error: %v", err)
 	}
@@ -178,7 +178,7 @@ func TestProcessTmplWithDatasourcesGomplate(t *testing.T) {
 	}
 	tmpl = " {{- $data := (ds \"config\") -}}\n\nHello {{ $data.name | default \"Project Title\" }}!"
 
-	result, err = ProcessTmplWithDatasourcesGomplate("test", tmpl, mergedData, false)
+	result, err = ProcessTmplWithDatasourcesGomplate(nil, "test", tmpl, mergedData, false)
 	if err != nil {
 		t.Fatalf("ProcessTmplWithDatasourcesGomplate returned error: %v", err)
 	}
@@ -195,7 +195,7 @@ func TestProcessTmplWithDatasourcesGomplate(t *testing.T) {
 	}
 	tmpl = "{{- $data := (ds \"config\") -}}\n\nVersion: {{ $data.config.version }}"
 
-	result, err = ProcessTmplWithDatasourcesGomplate("test", tmpl, mergedData, false)
+	result, err = ProcessTmplWithDatasourcesGomplate(nil, "test", tmpl, mergedData, false)
 	if err != nil {
 		t.Fatalf("ProcessTmplWithDatasourcesGomplate returned error: %v", err)
 	}

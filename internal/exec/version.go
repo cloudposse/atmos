@@ -6,6 +6,8 @@ import (
 	"runtime"
 	"strings"
 
+	"github.com/cloudposse/atmos/pkg/perf"
+
 	tuiUtils "github.com/cloudposse/atmos/internal/tui/utils"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	log "github.com/cloudposse/atmos/pkg/logger"
@@ -28,6 +30,8 @@ type versionExec struct {
 }
 
 func NewVersionExec(atmosConfig *schema.AtmosConfiguration) *versionExec {
+	defer perf.Track(atmosConfig, "exec.NewVersionExec")()
+
 	return &versionExec{
 		atmosConfig:     atmosConfig,
 		printStyledText: tuiUtils.PrintStyledText,
@@ -42,6 +46,8 @@ func NewVersionExec(atmosConfig *schema.AtmosConfiguration) *versionExec {
 }
 
 func (v versionExec) Execute(checkFlag bool, format string) error {
+	defer perf.Track(nil, "exec.Execute")()
+
 	if format != "" {
 		return v.displayVersionInFormat(checkFlag, format)
 	}
@@ -106,6 +112,8 @@ func (v versionExec) isCheckVersionEnabled(forceCheck bool) bool {
 }
 
 func (v versionExec) GetLatestVersion(forceCheck bool) (string, bool) {
+	defer perf.Track(nil, "exec.GetLatestVersion")()
+
 	if !v.isCheckVersionEnabled(forceCheck) {
 		return "", false
 	}

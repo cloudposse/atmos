@@ -1,6 +1,7 @@
 package exec
 
 import (
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -16,6 +17,8 @@ type SectionFilter interface {
 type sectionFilter struct{}
 
 func (f *sectionFilter) Filter(data map[string]any) map[string]any {
+	defer perf.Track(nil, "exec.Filter")()
+
 	result := make(map[string]any)
 
 	for key, originalValue := range data {
@@ -55,6 +58,8 @@ func FilterEmptySections(data map[string]any, includeEmpty bool) map[string]any 
 }
 
 func GetIncludeEmptySetting(atmosConfig *schema.AtmosConfiguration) bool {
+	defer perf.Track(atmosConfig, "exec.GetIncludeEmptySetting")()
+
 	if atmosConfig == nil || atmosConfig.Describe.Settings.IncludeEmpty == nil {
 		return DefaultIncludeEmpty
 	}

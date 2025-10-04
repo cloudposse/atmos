@@ -6,9 +6,10 @@ import (
 	"os"
 	"path/filepath"
 
-	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/perf"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -179,6 +180,8 @@ func isWorkspacesEnabled(atmosConfig *schema.AtmosConfiguration, info *schema.Co
 
 // ExecuteTerraformAffected executes `atmos terraform <command> --affected`.
 func ExecuteTerraformAffected(args *DescribeAffectedCmdArgs, info *schema.ConfigAndStacksInfo) error {
+	defer perf.Track(nil, "exec.ExecuteTerraformAffected")()
+
 	var affectedList []schema.Affected
 	var err error
 
@@ -237,6 +240,7 @@ func ExecuteTerraformAffected(args *DescribeAffectedCmdArgs, info *schema.Config
 			args.ProcessTemplates,
 			args.ProcessYamlFunctions,
 			args.Skip,
+			"",
 		)
 		if err != nil {
 			return err
@@ -427,6 +431,8 @@ func processTerraformComponent(
 
 // ExecuteTerraformQuery executes `atmos terraform <command> --query <yq-expression --stack <stack>`.
 func ExecuteTerraformQuery(info *schema.ConfigAndStacksInfo) error {
+	defer perf.Track(nil, "exec.ExecuteTerraformQuery")()
+
 	atmosConfig, err := cfg.InitCliConfig(*info, true)
 	if err != nil {
 		return err
