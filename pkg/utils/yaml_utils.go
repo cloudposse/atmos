@@ -3,6 +3,7 @@ package utils
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"os"
 	"strings"
 
@@ -40,11 +41,26 @@ var (
 		AtmosYamlFuncEnv,
 	}
 
+	// AllSupportedYamlTags contains all YAML tags that Atmos supports.
+	AllSupportedYamlTags = []string{
+		AtmosYamlFuncExec,
+		AtmosYamlFuncStore,
+		AtmosYamlFuncStoreGet,
+		AtmosYamlFuncTemplate,
+		AtmosYamlFuncTerraformOutput,
+		AtmosYamlFuncTerraformState,
+		AtmosYamlFuncEnv,
+		AtmosYamlFuncInclude,
+		AtmosYamlFuncIncludeRaw,
+		AtmosYamlFuncGitRoot,
+	}
+
 	ErrIncludeYamlFunctionInvalidArguments    = errors.New("invalid number of arguments in the !include function")
 	ErrIncludeYamlFunctionInvalidFile         = errors.New("the !include function references a file that does not exist")
 	ErrIncludeYamlFunctionInvalidAbsPath      = errors.New("failed to convert the file path to an absolute path in the !include function")
 	ErrIncludeYamlFunctionFailedStackManifest = errors.New("failed to process the stack manifest with the !include function")
 	ErrNilAtmosConfig                         = errors.New("atmosConfig cannot be nil")
+	ErrUnsupportedYamlTag                     = errors.New("unsupported YAML tag")
 )
 
 // PrintAsYAML prints the provided value as YAML document to the console
@@ -190,6 +206,15 @@ func processCustomTags(atmosConfig *schema.AtmosConfiguration, node *yaml.Node, 
 	for _, n := range node.Content {
 		tag := strings.TrimSpace(n.Tag)
 		val := strings.TrimSpace(n.Value)
+
+		// Check if a tag is present and if it's unsupported
+		if tag != "" && !strings.HasPrefix(tag, "!!") { // !! tags are standard YAML tags
+			if !SliceContainsString(AllSupportedYamlTags, tag) {
+				supportedTags := strings.Join(AllSupportedYamlTags, ", ")
+				return fmt.Errorf("%w: '%s' found in file '%s'. Supported tags are: %s",
+					ErrUnsupportedYamlTag, tag, file, supportedTags)
+			}
+		}
 
 		if SliceContainsString(AtmosYamlTags, tag) {
 			n.Value = getValueWithTag(n)
