@@ -264,14 +264,14 @@ On macOS and Linux:
 
 **Using YQ Expressions with Bracket Notation**
 
-When a YQ expression needs double quotes inside bracket notation (for example, `["github-dependabot"]`), wrap the entire `!include` call in single quotes so the parser treats it as one argument. The detailed guidance lives in the [!terraform.output documentation](/functions/yaml/terraform.output#handling-yq-expressions-with-bracket-notation-and-quotes), which applies here as well.
+When a YQ expression needs double quotes inside bracket notation (for example, `["github-dependabot"]`), wrap the expression argument in single quotes while leaving the `!include` tag itself unquoted. This keeps the parser from splitting the expression into multiple arguments. The detailed guidance lives in the [!terraform.output documentation](/functions/yaml/terraform.output#handling-yq-expressions-with-bracket-notation-and-quotes), which applies here as well.
 
 ```yaml
 vars:
   access_key: !include ./config.yaml '.security.users["github-dependabot"].access.key.id'
 ```
 
-For paths that already require double quotes, combine both patterns—`!include '"path with spaces.yaml" ".data[""key""]"'`—and see the linked documentation for more escaping techniques.
+For paths that already require double quotes, put each argument in double quotes and wrap the entire arguments string in single quotes—`!include '"path with spaces.yaml" ".data[\"key\"]"'`—and see the linked documentation for more escaping techniques.
 
 :::tip
 `!include`, `!terraform.output`, and the other YAML functions share the same parser, so you only need to learn the quoting rules once.
