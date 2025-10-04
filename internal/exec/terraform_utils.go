@@ -240,6 +240,7 @@ func ExecuteTerraformAffected(args *DescribeAffectedCmdArgs, info *schema.Config
 			args.ProcessTemplates,
 			args.ProcessYamlFunctions,
 			args.Skip,
+			"",
 		)
 		if err != nil {
 			return err
