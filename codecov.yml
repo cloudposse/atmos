@@ -6,7 +6,7 @@ coverage:
     project:
       default:
         target: auto      # Automatically use the base branch's coverage
-        threshold: 0%     # Do not allow any drop in overall project coverage
+        threshold: 1%     # Allow up to 1% drop to account for Codecov rounding
         base: auto
         if_not_found: success  # Don't fail if base coverage is missing
         paths:            # Only track Go files for coverage calculations
