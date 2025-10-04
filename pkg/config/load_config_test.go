@@ -14,11 +14,7 @@ import (
 // test configuration with flags --config and --config-path with multiple files and directories merge.
 func TestLoadConfigFromCLIArgsMultipleMerge(t *testing.T) {
 	// create tmp folder
-	tmpDir, err := os.MkdirTemp("", "atmos-config-test")
-	if err != nil {
-		t.Fatalf("Failed to create temp directory: %v", err)
-	}
-	defer os.RemoveAll(tmpDir)
+	tmpDir := t.TempDir()
 	// create atmos.yaml file
 	atmosConfigFilePath := filepath.Join(tmpDir, "test-config.yaml")
 	f, err := os.Create(atmosConfigFilePath)
@@ -38,11 +34,7 @@ func TestLoadConfigFromCLIArgsMultipleMerge(t *testing.T) {
 	}
 	f.Close()
 	// write another config file
-	tmpDir2, err := os.MkdirTemp("", "atmos-config-test-2")
-	if err != nil {
-		t.Fatalf("Failed to create temp directory: %v", err)
-	}
-	defer os.RemoveAll(tmpDir2)
+	tmpDir2 := t.TempDir()
 	atmosConfigFilePath2 := filepath.Join(tmpDir2, "atmos.yaml")
 	f2, err := os.Create(atmosConfigFilePath2)
 	if err != nil {
@@ -148,7 +140,7 @@ logs:
 	}
 }
 
-func TestConnectPaths(t *testing.T) {
+func TestConnectPaths_WindowsPaths(t *testing.T) {
 	tests := []struct {
 		name     string
 		paths    []string
