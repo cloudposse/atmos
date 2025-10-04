@@ -12,14 +12,13 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
-	"github.com/cloudposse/atmos/pkg/ai/agent"
-	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ai"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
 
 // ChatModel represents the state of the chat TUI.
 type ChatModel struct {
-	client    *agent.SimpleClient
+	client    ai.Client
 	messages  []ChatMessage
 	viewport  viewport.Model
 	textarea  textarea.Model
@@ -38,12 +37,10 @@ type ChatMessage struct {
 	Time    time.Time
 }
 
-// NewChatModel creates a new chat model.
-func NewChatModel(atmosConfig *schema.AtmosConfiguration) (*ChatModel, error) {
-	// Create simple AI client
-	client, err := agent.NewSimpleClient(atmosConfig)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create AI client: %w", err)
+// NewChatModel creates a new chat model with the provided AI client.
+func NewChatModel(client ai.Client) (*ChatModel, error) {
+	if client == nil {
+		return nil, fmt.Errorf("AI client cannot be nil")
 	}
 
 	// Initialize viewport
@@ -302,9 +299,9 @@ func (m ChatModel) getAIResponse(userMessage string) tea.Cmd {
 	}
 }
 
-// RunChat starts the chat TUI.
-func RunChat(atmosConfig *schema.AtmosConfiguration) error {
-	model, err := NewChatModel(atmosConfig)
+// RunChat starts the chat TUI with the provided AI client.
+func RunChat(client ai.Client) error {
+	model, err := NewChatModel(client)
 	if err != nil {
 		return fmt.Errorf("failed to create chat model: %w", err)
 	}

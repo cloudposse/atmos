@@ -9,7 +9,7 @@ import (
 	"github.com/spf13/cobra"
 
 	errUtils "github.com/cloudposse/atmos/errors"
-	"github.com/cloudposse/atmos/pkg/ai/agent"
+	"github.com/cloudposse/atmos/pkg/ai"
 	"github.com/cloudposse/atmos/pkg/ai/tui"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	log "github.com/cloudposse/atmos/pkg/logger"
@@ -71,8 +71,14 @@ The AI assistant has access to your current Atmos configuration and can help wit
 
 		log.Debug("Starting AI chat session")
 
+		// Create AI client using factory
+		client, err := ai.NewClient(&atmosConfig)
+		if err != nil {
+			return fmt.Errorf("failed to create AI client: %w", err)
+		}
+
 		// Start chat TUI
-		if err := tui.RunChat(&atmosConfig); err != nil {
+		if err := tui.RunChat(client); err != nil {
 			return fmt.Errorf("chat session failed: %w", err)
 		}
 
@@ -115,8 +121,8 @@ Examples:
 
 		log.Debug("Asking AI question", "question", question)
 
-		// Create AI client
-		client, err := agent.NewSimpleClient(&atmosConfig)
+		// Create AI client using factory
+		client, err := ai.NewClient(&atmosConfig)
 		if err != nil {
 			return fmt.Errorf("failed to create AI client: %w", err)
 		}
@@ -207,8 +213,8 @@ Examples:
 
 		log.Debug("Getting AI help", "topic", topic)
 
-		// Create AI client
-		client, err := agent.NewSimpleClient(&atmosConfig)
+		// Create AI client using factory
+		client, err := ai.NewClient(&atmosConfig)
 		if err != nil {
 			return fmt.Errorf("failed to create AI client: %w", err)
 		}
