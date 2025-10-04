@@ -543,7 +543,7 @@ func TestDescribeComponentWithProvenance(t *testing.T) {
 	assert.NotEmpty(t, yamlBytes)
 
 	// Verify YAML contains expected content
-	yamlStr := string(yamlBytes)
+	yamlStr := yamlBytes
 	assert.Contains(t, yamlStr, "vars:", "YAML should contain vars")
 	assert.Contains(t, yamlStr, "enabled:", "YAML should contain enabled")
 

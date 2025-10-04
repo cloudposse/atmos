@@ -276,10 +276,8 @@ func TestGetImportDepth(t *testing.T) {
 			expected: 0,
 		},
 		{
-			name: "no parent",
-			setup: func() *MergeContext {
-				return NewMergeContext()
-			},
+			name:     "no parent",
+			setup:    NewMergeContext,
 			expected: 0,
 		},
 		{

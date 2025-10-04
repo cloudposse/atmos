@@ -135,15 +135,13 @@ func (d *DescribeComponentExec) ExecuteDescribeComponentCmd(describeComponentPar
 		output := p.RenderInlineProvenanceWithStackFile(res, mergeContext, &atmosConfig, stackFile)
 
 		// Write to file if specified
-		if file != "" {
-			err = os.WriteFile(file, []byte(output), 0o600)
-			if err != nil {
-				return err
-			}
+		err = writeOutputToFile(file, output)
+		if err != nil {
+			return err
 		}
 
 		// Print to TTY (stderr) for interactive viewing
-		if file == "" || term.IsTerminal(int(os.Stdout.Fd())) {
+		if shouldPrintToTTY(file) {
 			u.PrintfMessageToTUI("%s", output)
 		}
 
@@ -222,6 +220,131 @@ func ExecuteDescribeComponent(
 	return result.ComponentSection, nil
 }
 
+// writeOutputToFile writes output to a file if specified.
+func writeOutputToFile(file string, output string) error {
+	const filePermissions = 0o600
+	if file != "" {
+		return os.WriteFile(file, []byte(output), filePermissions)
+	}
+	return nil
+}
+
+// shouldPrintToTTY determines if output should be printed to TTY.
+func shouldPrintToTTY(file string) bool {
+	return file == "" || term.IsTerminal(int(os.Stdout.Fd()))
+}
+
+// extractImportsList converts imports from any type to []string.
+func extractImportsList(componentSection map[string]any) []string {
+	// Try []any first (most common after YAML unmarshaling), then []string
+	if importsAny, ok := componentSection["imports"].([]any); ok && len(importsAny) > 0 {
+		imports := make([]string, len(importsAny))
+		for idx, imp := range importsAny {
+			imports[idx] = imp.(string)
+		}
+		return imports
+	}
+	if importsStr, ok := componentSection["imports"].([]string); ok && len(importsStr) > 0 {
+		return importsStr
+	}
+	return nil
+}
+
+// tryGetProvenanceByKey tries to get provenance by exact key.
+func tryGetProvenanceByKey(mergeContext *m.MergeContext, key string) *m.ProvenanceEntry {
+	entries := mergeContext.GetProvenance(key)
+	if len(entries) > 0 {
+		return &entries[0]
+	}
+	return nil
+}
+
+// enhanceWithYAMLPosition enhances an entry with YAML parsing line/column info.
+func enhanceWithYAMLPosition(entry *m.ProvenanceEntry, mergeContext *m.MergeContext, importPath string) {
+	yamlKey := fmt.Sprintf("__import__:%s", importPath)
+	if yamlEntry := tryGetProvenanceByKey(mergeContext, yamlKey); yamlEntry != nil {
+		// Use line/column from YAML parsing, but keep depth from metadata.
+		entry.Line = yamlEntry.Line
+		entry.Column = yamlEntry.Column
+		// Keep everything else from metadata (file, depth, type)
+	}
+}
+
+// searchAllPaths searches all provenance paths for an import.
+func searchAllPaths(mergeContext *m.MergeContext, importPath string) *m.ProvenanceEntry {
+	allPaths := mergeContext.GetProvenancePaths()
+	for _, path := range allPaths {
+		// Check if this is a meta or yaml key for this import
+		if strings.HasPrefix(path, "__import_meta__:"+importPath) ||
+			strings.HasPrefix(path, "__import__:"+importPath) {
+			if entry := tryGetProvenanceByKey(mergeContext, path); entry != nil {
+				return entry
+			}
+		}
+	}
+	return nil
+}
+
+// findImportProvenanceEntry looks up provenance for an import path.
+// It tries __import_meta__ first, then __import__, then searches all paths.
+func findImportProvenanceEntry(mergeContext *m.MergeContext, importPath string) *m.ProvenanceEntry {
+	// Try __import_meta__ first (has accurate depth info but placeholder line numbers).
+	metaKey := fmt.Sprintf("__import_meta__:%s", importPath)
+	if entry := tryGetProvenanceByKey(mergeContext, metaKey); entry != nil {
+		// Found metadata from recursive import processing.
+		// Try to enhance with more accurate line number from YAML parsing.
+		enhanceWithYAMLPosition(entry, mergeContext, importPath)
+		return entry
+	}
+
+	// Fall back to YAML parsing data if metadata isn't available.
+	yamlKey := fmt.Sprintf("__import__:%s", importPath)
+	if entry := tryGetProvenanceByKey(mergeContext, yamlKey); entry != nil {
+		return entry
+	}
+
+	// No direct provenance found - search all paths.
+	return searchAllPaths(mergeContext, importPath)
+}
+
+// recordImportsKeyProvenance records provenance for the "imports" key itself.
+func recordImportsKeyProvenance(mergeContext *m.MergeContext, firstImport string) {
+	const importsKey = "imports"
+	firstMetaKey := fmt.Sprintf("__import_meta__:%s", firstImport)
+
+	if entry := tryGetProvenanceByKey(mergeContext, firstMetaKey); entry != nil {
+		mergeContext.RecordProvenance(importsKey, *entry)
+		return
+	}
+
+	// Fall back to YAML parsing data.
+	firstYAMLKey := fmt.Sprintf("__import__:%s", firstImport)
+	if entry := tryGetProvenanceByKey(mergeContext, firstYAMLKey); entry != nil {
+		mergeContext.RecordProvenance(importsKey, *entry)
+	}
+}
+
+// recordImportsProvenance records provenance for the imports array.
+func recordImportsProvenance(mergeContext *m.MergeContext, imports []string) {
+	for i, importPath := range imports {
+		entry := findImportProvenanceEntry(mergeContext, importPath)
+		if entry == nil {
+			// This import wasn't tracked - skip it.
+			// This likely means it came from a deeply nested import chain.
+			continue
+		}
+
+		// Record provenance for this array element in the final output.
+		arrayPath := fmt.Sprintf("imports[%d]", i)
+		mergeContext.RecordProvenance(arrayPath, *entry)
+	}
+
+	// Also record provenance for the "imports" key itself (using first import's metadata if available).
+	if len(imports) > 0 {
+		recordImportsKeyProvenance(mergeContext, imports[0])
+	}
+}
+
 // ExecuteDescribeComponentWithContext describes component config and returns the merge context.
 func ExecuteDescribeComponentWithContext(
 	atmosConfig *schema.AtmosConfiguration,
@@ -276,87 +399,9 @@ func ExecuteDescribeComponentWithContext(
 
 	// Record provenance for imports array if tracking is enabled.
 	if atmosConfig.TrackProvenance && mergeContext != nil && mergeContext.IsProvenanceEnabled() {
-		// Try []any first (most common after YAML unmarshaling), then []string
-		var imports []string
-		if importsAny, ok := configAndStacksInfo.ComponentSection["imports"].([]any); ok && len(importsAny) > 0 {
-			imports = make([]string, len(importsAny))
-			for idx, imp := range importsAny {
-				imports[idx] = imp.(string)
-			}
-		} else if importsStr, ok := configAndStacksInfo.ComponentSection["imports"].([]string); ok && len(importsStr) > 0 {
-			imports = importsStr
-		}
-
+		imports := extractImportsList(configAndStacksInfo.ComponentSection)
 		if len(imports) > 0 {
-			for i, importPath := range imports {
-				// Look up metadata recorded when the import was added to importsConfig.
-				// Try __import_meta__ first (has accurate depth info but placeholder line numbers).
-				metaKey := fmt.Sprintf("__import_meta__:%s", importPath)
-				var entry *m.ProvenanceEntry
-
-				if entries := mergeContext.GetProvenance(metaKey); entries != nil && len(entries) > 0 {
-					// Found metadata from recursive import processing.
-					entry = &entries[0]
-
-					// Try to enhance with more accurate line number from YAML parsing.
-					yamlKey := fmt.Sprintf("__import__:%s", importPath)
-					if yamlEntries := mergeContext.GetProvenance(yamlKey); yamlEntries != nil && len(yamlEntries) > 0 {
-						// Use line/column from YAML parsing, but keep depth from metadata.
-						yamlEntry := yamlEntries[0]
-						entry.Line = yamlEntry.Line
-						entry.Column = yamlEntry.Column
-						// Keep everything else from metadata (file, depth, type)
-					}
-				} else {
-					// Fall back to YAML parsing data if metadata isn't available.
-					yamlKey := fmt.Sprintf("__import__:%s", importPath)
-					if yamlEntries := mergeContext.GetProvenance(yamlKey); yamlEntries != nil && len(yamlEntries) > 0 {
-						entry = &yamlEntries[0]
-					} else {
-						// No direct provenance found.
-						// Search all provenance paths for this import to find where it came from.
-						allPaths := mergeContext.GetProvenancePaths()
-						found := false
-
-						for _, path := range allPaths {
-							// Check if this is a meta or yaml key for this import
-							if strings.HasPrefix(path, "__import_meta__:"+importPath) ||
-								strings.HasPrefix(path, "__import__:"+importPath) {
-								if entries := mergeContext.GetProvenance(path); len(entries) > 0 {
-									entry = &entries[0]
-									found = true
-									break
-								}
-							}
-						}
-
-						if !found {
-							// Still not found - this import wasn't tracked at all.
-							// This likely means it came from a deeply nested import chain.
-							// Don't add provenance for it - let the renderer skip it.
-							continue
-						}
-					}
-				}
-
-				// Record provenance for this array element in the final output.
-				arrayPath := fmt.Sprintf("imports[%d]", i)
-				mergeContext.RecordProvenance(arrayPath, *entry)
-			}
-
-			// Also record provenance for the "imports" key itself (using first import's metadata if available).
-			if len(imports) > 0 {
-				firstMetaKey := fmt.Sprintf("__import_meta__:%s", imports[0])
-				if entries := mergeContext.GetProvenance(firstMetaKey); entries != nil && len(entries) > 0 {
-					mergeContext.RecordProvenance("imports", entries[0])
-				} else {
-					// Fall back to YAML parsing data.
-					firstYAMLKey := fmt.Sprintf("__import__:%s", imports[0])
-					if entries := mergeContext.GetProvenance(firstYAMLKey); entries != nil && len(entries) > 0 {
-						mergeContext.RecordProvenance("imports", entries[0])
-					}
-				}
-			}
+			recordImportsProvenance(mergeContext, imports)
 		}
 	}
 

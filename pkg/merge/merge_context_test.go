@@ -527,11 +527,9 @@ func TestMergeContext_GetProvenanceType(t *testing.T) {
 			expected: ProvenanceTypeInline,
 		},
 		{
-			name: "new context (no imports) returns inline",
-			setupContext: func() *MergeContext {
-				return NewMergeContext()
-			},
-			expected: ProvenanceTypeInline,
+			name:         "new context (no imports) returns inline",
+			setupContext: NewMergeContext,
+			expected:     ProvenanceTypeInline,
 		},
 		{
 			name: "root file (first in chain) returns inline",

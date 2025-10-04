@@ -216,7 +216,7 @@ func RenderSideBySide(yamlData any, ctx *m.MergeContext, atmosConfig *schema.Atm
 	if err != nil {
 		return fmt.Sprintf("Error rendering YAML: %v\n", err)
 	}
-	leftYAML := string(yamlBytes)
+	leftYAML := yamlBytes
 
 	// Apply syntax highlighting to YAML
 	highlighted, err := u.HighlightCodeWithConfig(atmosConfig, leftYAML, "yaml")
@@ -261,6 +261,142 @@ func normalizeProvenancePath(path string) string {
 	return path
 }
 
+// isMultilineScalarIndicator checks if a value indicates a multi-line YAML scalar.
+func isMultilineScalarIndicator(value string) bool {
+	return value == "|" || value == "|-" || value == ">" || value == ">-"
+}
+
+// extractYAMLKey extracts the key from a YAML line, handling array items.
+func extractYAMLKey(trimmed string) string {
+	parts := strings.SplitN(trimmed, ":", 2)
+	key := strings.TrimSpace(parts[0])
+
+	// Handle array items like "- key:"
+	if strings.HasPrefix(key, "- ") {
+		key = strings.TrimPrefix(key, "- ")
+		key = strings.TrimSpace(key)
+	}
+
+	return key
+}
+
+// buildYAMLPath constructs a full YAML path from a stack and new key.
+func buildYAMLPath(pathStack []string, key string) string {
+	if len(pathStack) > 0 {
+		return strings.Join(append(pathStack, key), ".")
+	}
+	return key
+}
+
+// getArrayIndex returns the array index for the current level.
+func getArrayIndex(arrayIndexStack []int) (int, []int) {
+	var arrayIndex int
+
+	if len(arrayIndexStack) > 0 {
+		arrayIndex = arrayIndexStack[len(arrayIndexStack)-1]
+		newStack := make([]int, len(arrayIndexStack))
+		copy(newStack, arrayIndexStack)
+		newStack[len(newStack)-1]++ // Increment for next element
+		return arrayIndex, newStack
+	}
+
+	arrayIndex = 0
+	newStack := []int{1} // Start at 1 for next element
+	return arrayIndex, newStack
+}
+
+// popStacksForIndent pops the path, indent, and array index stacks when indentation decreases.
+func popStacksForIndent(indent int, pathStack []string, indentStack, arrayIndexStack []int) ([]string, []int, []int) {
+	for len(indentStack) > 1 && indent <= indentStack[len(indentStack)-1] {
+		pathStack = pathStack[:len(pathStack)-1]
+		indentStack = indentStack[:len(indentStack)-1]
+		if len(arrayIndexStack) > 0 {
+			arrayIndexStack = arrayIndexStack[:len(arrayIndexStack)-1]
+		}
+	}
+	return pathStack, indentStack, arrayIndexStack
+}
+
+// handleArrayItemLine processes a simple array item and records it.
+func handleArrayItemLine(lineNum int, pathStack []string, arrayIndexStack []int, lineInfo map[int]YAMLLineInfo) []int {
+	if len(pathStack) == 0 {
+		return arrayIndexStack
+	}
+
+	parentKey := pathStack[len(pathStack)-1]
+	arrayIndex, newStack := getArrayIndex(arrayIndexStack)
+
+	// Build path: parent[index]
+	currentPath := fmt.Sprintf("%s[%d]", parentKey, arrayIndex)
+
+	// Record this line as an array element
+	lineInfo[lineNum] = YAMLLineInfo{
+		Path:           currentPath,
+		IsKeyLine:      true,
+		IsContinuation: false,
+	}
+
+	return newStack
+}
+
+// yamlPathState holds the state returned from handleKeyLine.
+type yamlPathState struct {
+	pathStack       []string
+	indentStack     []int
+	arrayIndexStack []int
+	multilineStart  bool
+	multilinePath   string
+}
+
+// handleKeyLine processes a key: value line and updates stacks.
+func handleKeyLine(
+	lineNum int,
+	indent int,
+	parts []string,
+	trimmed string,
+	pathStack []string,
+	indentStack []int,
+	arrayIndexStack []int,
+	lineInfo map[int]YAMLLineInfo,
+) yamlPathState {
+	key := extractYAMLKey(trimmed)
+	currentPath := buildYAMLPath(pathStack, key)
+
+	// Determine value type
+	value := ""
+	if len(parts) > 1 {
+		value = strings.TrimSpace(parts[1])
+	}
+
+	// Check for multi-line scalar indicators
+	isMultilineStart := isMultilineScalarIndicator(value)
+
+	// Record this line as a key line
+	lineInfo[lineNum] = YAMLLineInfo{
+		Path:           currentPath,
+		IsKeyLine:      true,
+		IsContinuation: false,
+	}
+
+	state := yamlPathState{
+		pathStack:       pathStack,
+		indentStack:     indentStack,
+		arrayIndexStack: arrayIndexStack,
+		multilineStart:  isMultilineStart,
+		multilinePath:   currentPath,
+	}
+
+	// Push to stack if this is a parent key
+	if value == "" || value == "{}" || value == "[]" || isMultilineStart {
+		state.pathStack = append(state.pathStack, key)
+		state.indentStack = append(state.indentStack, indent)
+		// Reset array index counter for this new parent
+		state.arrayIndexStack = append(state.arrayIndexStack, 0)
+	}
+
+	return state
+}
+
 // buildYAMLPathMap creates a mapping from line numbers to YAML line information.
 // It parses YAML line-by-line, tracks nesting, and detects multi-line constructs.
 func buildYAMLPathMap(yamlLines []string) map[int]YAMLLineInfo {
@@ -303,89 +439,30 @@ func buildYAMLPathMap(yamlLines []string) map[int]YAMLLineInfo {
 		}
 
 		// Pop stack for decreased indentation
-		for len(indentStack) > 1 && indent <= indentStack[len(indentStack)-1] {
-			pathStack = pathStack[:len(pathStack)-1]
-			indentStack = indentStack[:len(indentStack)-1]
-			if len(arrayIndexStack) > 0 {
-				arrayIndexStack = arrayIndexStack[:len(arrayIndexStack)-1]
-			}
-		}
+		pathStack, indentStack, arrayIndexStack = popStacksForIndent(indent, pathStack, indentStack, arrayIndexStack)
 
 		// Handle simple array items (lines starting with "- " but no colon)
 		if strings.HasPrefix(trimmed, "- ") && !strings.Contains(trimmed, ":") {
-			// This is a simple array element like "- value"
-			if len(pathStack) > 0 {
-				parentKey := pathStack[len(pathStack)-1]
-
-				// Get or initialize array index for this level
-				var arrayIndex int
-				if len(arrayIndexStack) > 0 {
-					arrayIndex = arrayIndexStack[len(arrayIndexStack)-1]
-					arrayIndexStack[len(arrayIndexStack)-1]++ // Increment for next element
-				} else {
-					arrayIndex = 0
-					arrayIndexStack = append(arrayIndexStack, 1) // Start at 1 for next element
-				}
-
-				// Build path: parent[index]
-				currentPath := fmt.Sprintf("%s[%d]", parentKey, arrayIndex)
-
-				// Record this line as an array element
-				lineInfo[lineNum] = YAMLLineInfo{
-					Path:           currentPath,
-					IsKeyLine:      true,
-					IsContinuation: false,
-				}
-			}
+			arrayIndexStack = handleArrayItemLine(lineNum, pathStack, arrayIndexStack, lineInfo)
 			continue
 		}
 
 		// Extract key from "key:" or "key: value" or "- item"
 		if strings.Contains(trimmed, ":") {
 			parts := strings.SplitN(trimmed, ":", 2)
-			key := strings.TrimSpace(parts[0])
+			state := handleKeyLine(
+				lineNum, indent, parts, trimmed, pathStack, indentStack, arrayIndexStack, lineInfo,
+			)
 
-			// Handle array items like "- key:"
-			if strings.HasPrefix(key, "- ") {
-				key = strings.TrimPrefix(key, "- ")
-				key = strings.TrimSpace(key)
-			}
-
-			// Build full path
-			currentPath := key
-			if len(pathStack) > 0 {
-				currentPath = strings.Join(append(pathStack, key), ".")
-			}
-
-			// Determine value type
-			value := ""
-			if len(parts) > 1 {
-				value = strings.TrimSpace(parts[1])
-			}
-
-			// Check for multi-line scalar indicators
-			isMultilineStart := value == "|" || value == "|-" || value == ">" || value == ">-"
-
-			// Record this line as a key line
-			lineInfo[lineNum] = YAMLLineInfo{
-				Path:           currentPath,
-				IsKeyLine:      true,
-				IsContinuation: false,
-			}
+			pathStack = state.pathStack
+			indentStack = state.indentStack
+			arrayIndexStack = state.arrayIndexStack
+			multilinePath = state.multilinePath
 
 			// Enter multi-line mode if this is a multi-line scalar
-			if isMultilineStart {
+			if state.multilineStart {
 				inMultilineValue = true
 				multilineIndent = indent
-				multilinePath = currentPath
-			}
-
-			// Push to stack if this is a parent key
-			if value == "" || value == "{}" || value == "[]" || isMultilineStart {
-				pathStack = append(pathStack, key)
-				indentStack = append(indentStack, indent)
-				// Reset array index counter for this new parent
-				arrayIndexStack = append(arrayIndexStack, 0)
 			}
 		}
 	}
@@ -418,11 +495,7 @@ func findProvenance(ctx *m.MergeContext, normalizedPath string) *m.ProvenanceEnt
 }
 
 // formatProvenanceComment creates an inline comment for provenance.
-func formatProvenanceComment(entry *m.ProvenanceEntry) string {
-	return formatProvenanceCommentWithStackFile(entry, "")
-}
-
-func formatProvenanceCommentWithStackFile(entry *m.ProvenanceEntry, stackFile string) string {
+func formatProvenanceCommentWithStackFile(entry *m.ProvenanceEntry) string {
 	defer perf.Track(nil, "provenance.formatProvenanceCommentWithStackFile")()
 
 	if entry == nil {
@@ -431,11 +504,12 @@ func formatProvenanceCommentWithStackFile(entry *m.ProvenanceEntry, stackFile st
 
 	// Determine symbol based on depth and type.
 	var symbol string
-	if entry.Type == m.ProvenanceTypeComputed {
+	switch {
+	case entry.Type == m.ProvenanceTypeComputed:
 		symbol = SymbolComputed // ∴ (computed/templated)
-	} else if entry.Depth == 0 {
+	case entry.Depth == 0:
 		symbol = SymbolDefined // ● (defined at this level - depth 0)
-	} else {
+	default:
 		symbol = SymbolInherited // ○ (inherited/imported - depth 1+)
 	}
 
@@ -547,7 +621,7 @@ func renameImportsToImport(data any, ctx *m.MergeContext) any {
 		if !ctx.HasProvenance(oldPath) {
 			break
 		}
-		if entries := ctx.GetProvenance(oldPath); entries != nil && len(entries) > 0 {
+		if entries := ctx.GetProvenance(oldPath); len(entries) > 0 {
 			newPath := fmt.Sprintf("import[%d]", i)
 			// Use the latest entry (last in the slice).
 			ctx.RecordProvenance(newPath, entries[len(entries)-1])
@@ -640,13 +714,12 @@ func RenderInlineProvenanceWithStackFile(yamlData any, ctx *m.MergeContext, atmo
 	if err != nil {
 		return fmt.Sprintf("Error rendering YAML: %v\n", err)
 	}
-	yamlStr := string(yamlBytes)
 
 	// Apply syntax highlighting
-	highlighted, err := u.HighlightCodeWithConfig(atmosConfig, yamlStr, "yaml")
+	highlighted, err := u.HighlightCodeWithConfig(atmosConfig, yamlBytes, "yaml")
 	if err != nil {
 		// If highlighting fails, use plain YAML
-		highlighted = yamlStr
+		highlighted = yamlBytes
 	}
 
 	// Split into lines
@@ -687,7 +760,7 @@ func RenderInlineProvenanceWithStackFile(yamlData any, ctx *m.MergeContext, atmo
 			continue
 		}
 
-		comment := formatProvenanceCommentWithStackFile(entry, stackFile)
+		comment := formatProvenanceCommentWithStackFile(entry)
 		if comment == "" {
 			result.WriteString(line)
 			result.WriteString("\n")
@@ -847,18 +920,19 @@ func balanceColumns(leftLines, rightLines []string) ([]string, []string) {
 
 	for leftIdx < len(leftLines) || rightIdx < len(rightLines) {
 		// If both have content, check if they should align
-		if leftIdx < len(leftLines) && rightIdx < len(rightLines) {
+		switch {
+		case leftIdx < len(leftLines) && rightIdx < len(rightLines):
 			// Both sides have content - add both
 			balancedLeft = append(balancedLeft, leftLines[leftIdx])
 			balancedRight = append(balancedRight, rightLines[rightIdx])
 			leftIdx++
 			rightIdx++
-		} else if leftIdx < len(leftLines) {
+		case leftIdx < len(leftLines):
 			// Only left has content - add blank to right
 			balancedLeft = append(balancedLeft, leftLines[leftIdx])
 			balancedRight = append(balancedRight, "")
 			leftIdx++
-		} else {
+		default:
 			// Only right has content - add blank to left
 			balancedLeft = append(balancedLeft, "")
 			balancedRight = append(balancedRight, rightLines[rightIdx])
