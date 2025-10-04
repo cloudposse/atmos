@@ -195,7 +195,7 @@ Experimentation in Atmos is achieved through folder-based component isolation, n
 ### Creating an Experiment
 
 <File title="Directory Structure">
-```
+```text
 components/terraform/
   vpc/                    # Current stable version
     main.tf
@@ -258,7 +258,7 @@ All deployment systems experience periods where environments are in different st
 
 During progressive rollout, environments naturally diverge as commits flow through your pipeline:
 
-```
+```text
 Time 0: Commit abc123 merged to main
 ├─ Dev:     abc123 (deployed automatically)
 ├─ Staging: xyz789 (previous commit, divergence begins)
@@ -347,7 +347,7 @@ Aligns perfectly with trunk-based development practices:
 
 Organize components without version directories:
 
-```
+```text
 components/
 ├── terraform/
 │   ├── vpc/             # Single version of VPC component
@@ -383,8 +383,8 @@ Use configuration and feature flags for safety:
 
 <File title="components/terraform/app/main.tf">
 ```hcl
-variable "enable_new_feature" {
-  description = "Enable the new feature"
+variable "enable_enhanced_monitoring" {
+  description = "Enable enhanced CloudWatch monitoring"
   type        = bool
   default     = false
 }
@@ -394,7 +394,7 @@ resource "aws_lambda_function" "app" {
 
   environment {
     variables = {
-      FEATURE_FLAG_NEW_UI = var.enable_new_feature
+      ENABLE_ENHANCED_MONITORING = var.enable_enhanced_monitoring
     }
   }
 }
@@ -407,7 +407,7 @@ components:
   terraform:
     app:
       vars:
-        enable_new_feature: true  # Test in dev first
+        enable_enhanced_monitoring: true  # Test in dev first
 ```
 </File>
 
@@ -494,7 +494,7 @@ The power of Atmos is that you can mix strategies per component based on its nee
 **Strategic Components**: Use versioned folders or release tracks for planned divergence
 
 <File title="components/terraform/">
-```
+```text
 terraform/
 ├── vpc/                    # Trunk-based - all envs converge
 ├── eks/                    # Trunk-based - all envs converge
