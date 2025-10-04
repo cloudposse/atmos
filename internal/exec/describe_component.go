@@ -438,8 +438,8 @@ func ExecuteDescribeComponentWithContext(params DescribeComponentContextParams) 
 		atmosConfig = &config
 	}
 
-	// Clear any previous merge context before processing
-	ClearLastMergeContext()
+	// Clear any previous merge contexts before processing
+	ClearMergeContexts()
 
 	// Detect component type (Terraform, Helmfile, or Packer)
 	configAndStacksInfo, err = detectComponentType(atmosConfig, &configAndStacksInfo, params)
@@ -447,8 +447,15 @@ func ExecuteDescribeComponentWithContext(params DescribeComponentContextParams) 
 		return nil, err
 	}
 
-	// Get the merge context that was stored during processing
-	mergeContext := GetLastMergeContext()
+	// Get the merge context for the specific stack file that was stored during processing
+	var mergeContext *m.MergeContext
+	if configAndStacksInfo.StackFile != "" {
+		mergeContext = GetMergeContextForStack(configAndStacksInfo.StackFile)
+	}
+	// Fall back to the old method if the stack file is not set
+	if mergeContext == nil {
+		mergeContext = GetLastMergeContext()
+	}
 
 	// Record provenance for imports array if tracking is enabled.
 	if atmosConfig.TrackProvenance && mergeContext != nil && mergeContext.IsProvenanceEnabled() {

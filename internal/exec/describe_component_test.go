@@ -515,7 +515,7 @@ func TestDescribeComponentWithProvenance(t *testing.T) {
 	filtered := FilterComputedFields(result.ComponentSection)
 
 	// Verify filtered section only has stack-defined fields
-	allowedFields := []string{"vars", "settings", "env", "backend", "metadata", "overrides", "providers"}
+	allowedFields := []string{"vars", "settings", "env", "backend", "metadata", "overrides", "providers", "imports"}
 	for k := range filtered {
 		assert.Contains(t, allowedFields, k, "Filtered component section should only contain stack-defined fields")
 	}
