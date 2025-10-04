@@ -41,7 +41,7 @@ jobs:
           role-session-name: ${{ env.IAM_ROLE_SESSION_NAME }}
 
       - name: Checkout Repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
