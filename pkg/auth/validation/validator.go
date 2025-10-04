@@ -25,7 +25,7 @@ var ErrIdentityCycle = errors.New("identity cycle detected")
 
 // ValidateAuthConfig validates the entire auth configuration.
 func (v *validator) ValidateAuthConfig(config *schema.AuthConfig) error {
-	defer perf.Track(nil, "ValidateAuthConfig")()
+	defer perf.Track(nil, "validation.ValidateAuthConfig")()
 
 	if config == nil {
 		return fmt.Errorf("%w: auth config cannot be nil", errUtils.ErrInvalidAuthConfig)
@@ -62,7 +62,7 @@ func (v *validator) ValidateAuthConfig(config *schema.AuthConfig) error {
 
 // ValidateLogsConfig validates the logs configuration.
 func (v *validator) ValidateLogsConfig(logs *schema.Logs) error {
-	defer perf.Track(nil, "ValidateLogsConfig")()
+	defer perf.Track(nil, "validation.ValidateLogsConfig")()
 
 	if logs.Level == "" {
 		// Default to Info if not specified.
