@@ -99,6 +99,23 @@ func TestDescribeAffected(t *testing.T) {
 		Query:  ".0.stack",
 	})
 	assert.NoError(t, err)
+
+	// Test with IncludeDependents flag to cover the addDependentsToAffected code path
+	mockPager.EXPECT().Run(gomock.Any(), gomock.Any()).Return(nil)
+	err = d.Execute(&DescribeAffectedCmdArgs{
+		Format:            "json",
+		IncludeDependents: true,
+	})
+	assert.NoError(t, err)
+
+	// Test with IncludeDependents and Stack filter to cover the onlyInStack parameter
+	mockPager.EXPECT().Run(gomock.Any(), gomock.Any()).Return(nil)
+	err = d.Execute(&DescribeAffectedCmdArgs{
+		Format:            "json",
+		IncludeDependents: true,
+		Stack:             "test-stack",
+	})
+	assert.NoError(t, err)
 }
 
 func TestExecuteDescribeAffectedWithTargetRepoPath(t *testing.T) {
