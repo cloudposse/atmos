@@ -1,0 +1,323 @@
+---
+# Comprehensive Atmos CLI Configuration Example
+# This file demonstrates all available configuration options with real-world values
+
+# Base path for all Atmos components
+base_path: "."
+
+# Vendor configuration for pulling external components
+vendor:
+  base_path: "./vendor.yaml"  # Can be a single file or directory
+
+# Version checking configuration
+version:
+  check:
+    enabled: true          # Check for Atmos updates
+    timeout: 1000         # Timeout in milliseconds
+    frequency: "24h"      # Check once per day
+
+# Component configurations
+components:
+  # Terraform/OpenTofu configuration
+  terraform:
+    command: terraform                              # Or 'tofu' for OpenTofu
+    base_path: "components/terraform"              # Path to Terraform components
+    apply_auto_approve: false                      # Require manual approval for applies
+    deploy_run_init: true                          # Run init before deploy
+    init_run_reconfigure: true                     # Run init with -reconfigure flag
+    auto_generate_backend_file: false              # Don't auto-generate backend.tf
+    append_user_agent: "Atmos/1.0 (MyCompany)"    # Custom user agent for API calls
+    workspaces_enabled: true                       # Enable workspace support
+    shell:
+      prompt: "atmos> "                           # Custom shell prompt
+    init:
+      pass_vars: false                            # Don't pass vars during init
+    plan:
+      skip_planfile: false                        # Create planfile for applies
+
+  # Helmfile configuration
+  helmfile:
+    command: helmfile
+    base_path: "components/helmfile"
+    use_eks: true                                  # Enable EKS integration
+    kubeconfig_path: "/dev/shm"                   # Secure kubeconfig location
+    helm_aws_profile_pattern: "{namespace}-{tenant}-gbl-{stage}-helm"
+    cluster_name_template: "{namespace}-{tenant}-{environment}-{stage}-eks-cluster"
+
+  # Packer configuration
+  packer:
+    command: packer
+    base_path: "components/packer"
+
+# Stack configuration
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "orgs/**/*"
+    - "catalog/**/*"
+    - "mixins/**/*"
+  excluded_paths:
+    - "**/_defaults.yaml"
+    - "**/README.md"
+  # name_template: "{tenant}-{environment}-{stage}"  # DEPRECATED: Use name_template
+  name_template: "{{ .vars.tenant }}-{{ .vars.environment }}-{{ .vars.stage }}"
+
+# Workflow configuration
+workflows:
+  base_path: "stacks/workflows"
+
+# Logging configuration
+logs:
+  file: "/dev/stderr"     # Log to stderr (default)
+  level: "Info"          # Options: Trace, Debug, Info, Warning, Off
+
+# Validation configuration
+validate:
+  editorconfig:
+    exclude:
+      - "vendor/**"
+      - "**/*.tfstate"
+      - "**/.terraform/**"
+    ignore_defaults: false
+    dry_run: false
+    format: "default"     # Or "json"
+    color: true
+    disable_trim_trailing_whitespace: false
+    disable_end_of_line: false
+    disable_insert_final_newline: false
+    disable_indentation: false
+    disable_indent_size: false
+    disable_max_line_length: false
+
+# Command aliases for convenience
+aliases:
+  tf: terraform
+  hf: helmfile
+  pk: packer
+  desc: describe
+
+# External stores configuration for secrets and state
+stores:
+  # AWS Systems Manager Parameter Store
+  aws-ssm:
+    type: aws-ssm
+    region: us-east-1
+    profile: prod
+
+  # Azure Key Vault
+  azure-kv:
+    type: azure-keyvault
+    vault_name: mycompany-vault
+
+  # Google Secret Manager
+  gcp-sm:
+    type: google-secretmanager
+    project_id: my-project-123
+
+  # Redis cache
+  redis:
+    type: redis
+    host: redis.example.com
+    port: 6379
+    db: 0
+
+  # Artifactory
+  artifactory:
+    type: artifactory
+    url: https://artifactory.example.com
+    token: "${ARTIFACTORY_TOKEN}"
+
+# Schema validation settings
+schemas:
+  jsonschema:
+    base_path: "stacks/schemas/jsonschema"
+  opa:
+    base_path: "stacks/schemas/opa"
+  atmos:
+    manifest: "stacks/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json"
+    # Or use remote schema:
+    # manifest: "https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json"
+
+# Template processing configuration
+templates:
+  settings:
+    enabled: true
+    evaluations: 2        # Number of template evaluation passes
+    sprig:
+      enabled: true       # Enable Sprig template functions
+    gomplate:
+      enabled: true       # Enable Gomplate functions
+      timeout: 5         # Timeout in seconds
+      datasources:
+        # Example Gomplate datasources
+        config:
+          url: "file://config.yaml"
+        vault:
+          url: "vault://secret/data"
+        aws:
+          url: "aws+smp://parameter/name?region=us-east-1"
+    delimiters:          # Custom template delimiters (optional)
+      - "{{"
+      - "}}"
+
+# Third-party integrations
+integrations:
+  # Atlantis configuration
+  atlantis:
+    path: "atlantis.yaml"
+    config_templates:
+      default:
+        version: 3
+        automerge: true
+        delete_source_branch_on_merge: true
+        parallel_plan: true
+        parallel_apply: true
+    project_templates:
+      default:
+        name: "{tenant}-{environment}-{stage}-{component}"
+        workspace: "{workspace}"
+        dir: "{component-path}"
+        terraform_version: "1.5.0"
+        autoplan:
+          enabled: true
+          when_modified:
+            - "**/*.tf"
+            - "varfiles/$PROJECT_NAME.tfvars.json"
+    workflow_templates:
+      default:
+        plan:
+          steps:
+            - run: terraform init -input=false
+            - run: terraform workspace select $WORKSPACE || terraform workspace new $WORKSPACE
+            - run: terraform plan -input=false -out $PLANFILE
+        apply:
+          steps:
+            - run: terraform apply $PLANFILE
+
+  # GitHub Actions integration
+  github:
+    gitops:
+      opentofu-version: "1.8.4"
+      terraform-version: "1.9.8"
+      infracost-enabled: true
+
+# Global settings
+settings:
+  # List merge strategy for stack imports
+  list_merge_strategy: "replace"  # Options: replace, append, merge
+
+  # Token injection settings
+  inject_github_token: true        # Auto-inject GITHUB_TOKEN
+  inject_bitbucket_token: false    # Don't auto-inject Bitbucket token
+  inject_gitlab_token: false       # Don't auto-inject GitLab token
+
+  # Terminal display settings
+  terminal:
+    max_width: 120                # Maximum terminal width
+    pager: true                   # Enable pager for long output
+    unicode: true                 # Use unicode characters
+    # no_color: false             # DEPRECATED: Use 'color' instead
+    color: true                   # Enable colored output (preferred)
+    tab_width: 2                  # Tab width for indentation
+    syntax_highlighting:
+      enabled: true
+      lexer: "yaml"               # Default lexer
+      formatter: "terminal256"    # 256-color terminal formatter
+      theme: "monokai"           # Color theme
+      pager: true                # Use pager for highlighted output
+      line_numbers: false        # Don't show line numbers by default
+      wrap: false                # Don't wrap long lines
+
+  # DEPRECATED: Documentation settings (moved to terminal)
+  docs:
+    # max-width: 120             # DEPRECATED: Use settings.terminal.max_width
+    # pagination: true           # DEPRECATED: Use settings.terminal.pager
+
+  # Markdown rendering settings
+  markdown:
+    document:
+      color: "#FFFFFF"
+    heading:
+      color: "#00FFFF"
+      bold: true
+    code_block:
+      color: "#808080"
+      margin: 1
+    link:
+      color: "#00FF00"
+      underline: true
+    strong:
+      color: "#FFD700"
+      bold: true
+    emph:
+      color: "#C0C0C0"
+      italic: true
+
+  # Telemetry settings
+  telemetry:
+    enabled: true                 # Enable anonymous usage statistics
+    token: "${ATMOS_TELEMETRY_TOKEN}"
+    endpoint: "https://telemetry.atmos.tools"
+
+  # Atmos Pro settings
+  pro:
+    base_url: "https://api.atmos.tools"
+    endpoint: "/pro/v1"
+    token: "${ATMOS_PRO_TOKEN}"
+    workspace_id: "my-workspace-123"
+    github_oidc:
+      request_url: "${ACTIONS_ID_TOKEN_REQUEST_URL}"
+      request_token: "${ACTIONS_ID_TOKEN_REQUEST_TOKEN}"
+
+# Documentation generation settings
+docs:
+  generate:
+    readme:
+      base-dir: "."
+      input:
+        - "./README.yaml"
+        - "./docs/intro.md"
+      template: "https://raw.githubusercontent.com/cloudposse/.github/main/README.md.gotmpl"
+      output: "./README.md"
+      terraform:
+        source: "src/"
+        enabled: true
+        format: "markdown"
+        show_providers: true
+        show_inputs: true
+        show_outputs: true
+        sort_by: "name"
+        hide_empty: false
+        indent_level: 2
+
+# Custom CLI commands
+commands:
+  - name: tf
+    description: Execute terraform commands
+    commands:
+      - name: plan
+        description: Plan terraform components
+        arguments:
+          - name: component
+            description: Component to plan
+        flags:
+          - name: stack
+            shorthand: s
+            description: Stack name
+            required: true
+        env:
+          - key: TF_VAR_region
+            value: "{{ .Flags.region }}"
+        steps:
+          - atmos terraform plan {{ .Arguments.component }} -s {{ .Flags.stack }}
+
+  - name: deploy
+    description: Deploy infrastructure
+    commands:
+      - name: all
+        description: Deploy all components
+        steps:
+          - echo "Deploying all components..."
+          - atmos terraform apply vpc -s {{ .Flags.stack }} --auto-approve
+          - atmos terraform apply eks -s {{ .Flags.stack }} --auto-approve
+          - atmos helmfile apply nginx -s {{ .Flags.stack }}

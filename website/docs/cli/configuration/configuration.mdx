@@ -10,6 +10,7 @@ import Screengrab from '@site/src/components/Screengrab'
 import Terminal from '@site/src/components/Terminal'
 import File from '@site/src/components/File'
 import Intro from '@site/src/components/Intro'
+import Admonition from '@theme/Admonition'
 import Tabs from '@theme/Tabs'
 import TabItem from '@theme/TabItem'
 
@@ -75,18 +76,18 @@ components:
     use_eks: true
     kubeconfig_path: /dev/shm
     helm_aws_profile_pattern: '{namespace}-{tenant}-gbl-{stage}-helm'
-    cluster_name_pattern: '{namespace}-{tenant}-{environment}-{stage}-eks-cluster'
+    cluster_name_template: '{namespace}-{tenant}-{environment}-{stage}-eks-cluster'
 stacks:
   base_path: stacks
   included_paths:
     - "orgs/**/*"
   excluded_paths:
     - "**/_defaults.yaml"
-  # To define Atmos stack naming convention, use either `name_pattern` or `name_template`.
-  # `name_template` has higher priority (if `name_template` is specified, `name_pattern` will be ignored).
-  # `name_pattern` uses the predefined context tokens {namespace}, {tenant}, {environment}, {stage}.
-  # `name_pattern` can also be set using 'ATMOS_STACKS_NAME_PATTERN' ENV var
-  name_pattern: "{tenant}-{environment}-{stage}"
+  # To define Atmos stack naming convention, use either `name_template` or `name_template`.
+  # `name_template` has higher priority (if `name_template` is specified, `name_template` will be ignored).
+  # `name_template` uses the predefined context tokens {namespace}, {tenant}, {environment}, {stage}.
+  # `name_template` can also be set using 'ATMOS_STACKS_NAME_PATTERN' ENV var
+  name_template: "{tenant}-{environment}-{stage}"
   # `name_template` is a Golang template.
   # For the template tokens, and you can use any Atmos sections and attributes that the Atmos command
   # `atmos describe component <component> -s <stack>` generates (refer to https://atmos.tools/cli/commands/describe/component).
@@ -367,9 +368,10 @@ The `settings` section configures Atmos global settings.
 
   <dt>`settings.docs` (Deprecated)</dt>
   <dd>
-    :::warning Deprecated
-    The `settings.docs` section is deprecated and will be removed in a future version. Please use `settings.terminal` instead.
-    :::
+
+    <Admonition type="warning" title="Deprecated">
+      The `settings.docs` section is deprecated and will be removed in a future version. Please use `settings.terminal` instead.
+    </Admonition>
 
     <dl>
       <dt>`max-width` (Deprecated)</dt>
@@ -909,11 +911,11 @@ setting `ATMOS_STACKS_BASE_PATH` to a path in `/localhost` to your local develop
 | ATMOS_COMPONENTS_HELMFILE_USE_EKS                     | components.helmfile.use_eks                     | If set to `true`, download `kubeconfig` from EKS by running `aws eks update-kubeconfig` command before executing `atmos helmfile` commands                                                                                                                          |
 | ATMOS_COMPONENTS_HELMFILE_KUBECONFIG_PATH             | components.helmfile.kubeconfig_path             | Path to write the `kubeconfig` file when executing `aws eks update-kubeconfig` command                                                                                                                                                                              |
 | ATMOS_COMPONENTS_HELMFILE_HELM_AWS_PROFILE_PATTERN    | components.helmfile.helm_aws_profile_pattern    | Pattern for AWS profile to use when executing `atmos helmfile` commands                                                                                                                                                                                             |
-| ATMOS_COMPONENTS_HELMFILE_CLUSTER_NAME_PATTERN        | components.helmfile.cluster_name_pattern        | Pattern for EKS cluster name to use when executing `atmos helmfile` commands                                                                                                                                                                                        |
+| ATMOS_COMPONENTS_HELMFILE_CLUSTER_NAME_PATTERN        | components.helmfile.cluster_name_template        | Pattern for EKS cluster name to use when executing `atmos helmfile` commands                                                                                                                                                                                        |
 | ATMOS_STACKS_BASE_PATH                                | stacks.base_path                                | Base path to Atmos stack manifests                                                                                                                                                                                                                                  |
 | ATMOS_STACKS_INCLUDED_PATHS                           | stacks.included_paths                           | List of paths to use as top-level stack manifests                                                                                                                                                                                                                   |
 | ATMOS_STACKS_EXCLUDED_PATHS                           | stacks.excluded_paths                           | List of paths to not consider as top-level stacks                                                                                                                                                                                                                   |
-| ATMOS_STACKS_NAME_PATTERN                             | stacks.name_pattern                             | Stack name pattern to use as Atmos stack names                                                                                                                                                                                                                      |
+| ATMOS_STACKS_NAME_PATTERN                             | stacks.name_template                             | Stack name pattern to use as Atmos stack names                                                                                                                                                                                                                      |
 | ATMOS_STACKS_NAME_TEMPLATE                            | stacks.name_template                            | Stack name Golang template to use as Atmos stack names                                                                                                                                                                                                              |
 | ATMOS_WORKFLOWS_BASE_PATH                             | workflows.base_path                             | Base path to Atmos workflows                                                                                                                                                                                                                                        |
 | ATMOS_SCHEMAS_JSONSCHEMA_BASE_PATH                    | schemas.jsonschema.base_path                    | Base path to JSON schemas for component validation                                                                                                                                                                                                                  |

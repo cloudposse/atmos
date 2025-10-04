@@ -1,0 +1,88 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "https://atmos.tools/schemas/workflow/1.0.0",
+    "title": "Atmos Workflow Manifest",
+    "fileMatch": [
+        "workflows/**/*.{yml,yaml}"
+    ],
+    "type": "object",
+    "description": "Schema for Atmos workflows",
+    "additionalProperties": true,
+    "properties": {
+      "description": {
+        "type": "string",
+        "description": "A description of the workflow."
+      },
+      "stack": {
+        "type": "string",
+        "description": "The stack associated with this workflow."
+      },
+      "steps": {
+        "type": "array",
+        "description": "The list of steps to execute in the workflow.",
+        "items": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "name": {
+              "type": "string",
+              "description": "The name of the step."
+            },
+            "command": {
+              "type": "string",
+              "description": "The command to execute for this step."
+            },
+            "stack": {
+              "type": "string",
+              "description": "The stack to use for this step."
+            },
+            "type": {
+              "type": "string",
+              "description": "The type of step (e.g., shell, script, etc.)."
+            },
+            "retry": {
+              "type": "object",
+              "description": "Retry configuration for the step",
+              "properties": {
+                "max_attempts": {
+                  "type": "integer",
+                  "description": "Maximum number of retry attempts",
+                  "minimum": 1
+                },
+                "backoff_strategy": {
+                  "type": "string",
+                  "description": "Backoff strategy for retries",
+                  "enum": ["constant", "linear", "exponential"]
+                },
+                "initial_delay": {
+                  "type": "string",
+                  "description": "Initial delay between retries (e.g., '1s', '500ms')"
+                },
+                "max_delay": {
+                  "type": "string",
+                  "description": "Maximum delay between retries"
+                },
+                "random_jitter": {
+                  "type": "number",
+                  "description": "Random jitter to add to delay",
+                  "minimum": 0,
+                  "maximum": 1
+                },
+                "multiplier": {
+                  "type": "number",
+                  "description": "Multiplier for exponential backoff",
+                  "minimum": 1
+                },
+                "max_elapsed_time": {
+                  "type": "string",
+                  "description": "Maximum elapsed time for all retries"
+                }
+              }
+            }
+          },
+          "required": ["command"]
+        }
+      }
+    },
+    "required": []
+  }

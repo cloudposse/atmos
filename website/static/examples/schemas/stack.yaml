@@ -1,0 +1,364 @@
+# Comprehensive Atmos Stack Manifest Example
+# This file demonstrates all available stack configuration options
+
+# Import other stack configurations
+import:
+  - path: catalog/vpc
+  - path: mixins/region/us-east-1
+  - path: orgs/acme/_defaults
+  # Import with context variables
+  - path: "orgs/{{ .vars.tenant }}/{{ .vars.environment }}"
+    context:
+      tenant: acme
+      environment: dev
+  # Import from remote URL
+  - path: https://raw.githubusercontent.com/example/config/main/base.yaml
+
+# Global variables available to all components
+vars:
+  namespace: acme
+  tenant: platform
+  environment: ue1
+  stage: dev
+  region: us-east-1
+
+  # Custom business variables
+  cost_center: engineering
+  team: platform
+  contact: platform-team@example.com
+
+  # Feature flags
+  enable_monitoring: true
+  enable_backup: true
+  debug_mode: false
+
+# Environment variables for all components
+env:
+  AWS_REGION: "{{ .vars.region }}"
+  TF_VAR_namespace: "{{ .vars.namespace }}"
+  ENVIRONMENT: "{{ .vars.stage }}"
+  # Reference secrets from stores
+  DATABASE_PASSWORD: !store aws-ssm /myapp/{{ .vars.stage }}/db/password
+
+# Settings that affect component behavior
+settings:
+  # Dependency management
+  depends_on:
+    - component: vpc
+      namespace: "{{ .vars.namespace }}"
+      tenant: "{{ .vars.tenant }}"
+      environment: "{{ .vars.environment }}"
+      stage: "{{ .vars.stage }}"
+    - component: eks
+
+  # Validation rules
+  validation:
+    check-vpc-config:
+      schema_type: jsonschema
+      schema_path: schemas/vpc-component.json
+      description: Validate VPC configuration
+      disabled: false
+
+    check-security-policies:
+      schema_type: opa
+      schema_path: policies/security.rego
+      description: Enforce security policies
+      timeout: 30
+      module_paths:
+        - policies/lib
+
+  # Spacelift configuration
+  spacelift:
+    workspace_enabled: true
+    stack_name: "{{ .vars.namespace }}-{{ .vars.tenant }}-{{ .vars.environment }}-{{ .vars.stage }}"
+    administrative: false
+    autodeploy: true
+    before_init:
+      - spacelift/before-init.sh
+    labels:
+      - environment:{{ .vars.stage }}
+      - team:{{ .vars.team }}
+    policies:
+      - trigger-policy
+      - security-policy
+
+  # Atlantis configuration
+  atlantis:
+    enabled: true
+    apply_requirements:
+      - approved
+      - mergeable
+    workflow: custom
+    delete_source_branch_on_merge: true
+
+  # Template processing settings
+  templates:
+    enabled: true
+    env:
+      AWS_PROFILE: "{{ .vars.namespace }}-{{ .vars.tenant }}-{{ .vars.stage }}-terraform"
+
+# Terraform components
+terraform:
+  # Backend configuration (supports multiple backend types)
+  backend_type: s3  # Options: s3, remote, azurerm, gcs, local, etc.
+  backend:
+    # S3 backend example
+    s3:
+      encrypt: true
+      bucket: "{{ .vars.namespace }}-{{ .vars.tenant }}-terraform-state"
+      key: "terraform.tfstate"
+      dynamodb_table: "{{ .vars.namespace }}-{{ .vars.tenant }}-terraform-state-lock"
+      region: "{{ .vars.region }}"
+      role_arn: "arn:aws:iam::123456789012:role/terraform"
+
+  # Remote state configuration for data sources
+  remote_state_backend_type: s3
+  remote_state_backend:
+    s3:
+      encrypt: true
+      bucket: "{{ .vars.namespace }}-{{ .vars.tenant }}-terraform-state"
+      key: "terraform.tfstate"
+      dynamodb_table: "{{ .vars.namespace }}-{{ .vars.tenant }}-terraform-state-lock"
+      region: "{{ .vars.region }}"
+
+  # Global Terraform variables
+  vars:
+    terraform_version: "1.5.0"
+
+  # Environment variables for Terraform
+  env:
+    TF_IN_AUTOMATION: "true"
+
+  # Terraform providers configuration
+  providers:
+    aws:
+      region: "{{ .vars.region }}"
+      assume_role:
+        role_arn: "arn:aws:iam::123456789012:role/terraform"
+        session_name: "terraform-{{ .vars.namespace }}-{{ .vars.stage }}"
+    kubernetes:
+      host: !terraform.output eks {{ .vars.namespace }}-{{ .vars.tenant }}-{{ .vars.environment }}-{{ .vars.stage }} cluster_endpoint
+      cluster_ca_certificate: !terraform.output eks {{ .vars.namespace }}-{{ .vars.tenant }}-{{ .vars.environment }}-{{ .vars.stage }} cluster_ca_certificate
+      token: !exec aws eks get-token --cluster-name {{ .vars.namespace }}-{{ .vars.tenant }}-{{ .vars.environment }}-{{ .vars.stage }}-eks-cluster
+
+# Helmfile components
+helmfile:
+  vars:
+    cluster_name: "{{ .vars.namespace }}-{{ .vars.tenant }}-{{ .vars.environment }}-{{ .vars.stage }}-eks-cluster"
+  env:
+    KUBE_NAMESPACE: default
+    HELM_NAMESPACE: default
+
+# Packer components
+packer:
+  vars:
+    ami_name: "{{ .vars.namespace }}-{{ .vars.tenant }}-{{ .vars.stage }}-{{ .vars.component }}"
+    instance_type: t3.micro
+    source_ami: ami-0c94855ba95c574c8
+  env:
+    PKR_VAR_region: "{{ .vars.region }}"
+
+# Components section
+components:
+  terraform:
+    # VPC component configuration
+    vpc:
+      metadata:
+        type: real  # Options: abstract, real
+        enabled: true
+        component: vpc  # Points to components/terraform/vpc
+        inherits:
+          - vpc-defaults
+          - network-base
+        terraform_workspace_pattern: "{namespace}-{environment}-{stage}"
+        custom:
+          vpc_flow_logs_enabled: true
+        locked: false  # Set to true to prevent modifications
+
+      vars:
+        name: "{{ .vars.namespace }}-{{ .vars.tenant }}-{{ .vars.environment }}-{{ .vars.stage }}-vpc"
+        ipv4_primary_cidr_block: 10.0.0.0/16
+        availability_zones:
+          - us-east-1a
+          - us-east-1b
+          - us-east-1c
+        nat_gateway_enabled: true
+        nat_instance_enabled: false
+
+      env:
+        VPC_CUSTOM_VAR: custom-value
+
+      settings:
+        spacelift:
+          workspace_enabled: true
+
+      # Component-specific providers
+      providers:
+        aws:
+          region: us-east-1
+
+      # Lifecycle hooks
+      hooks:
+        before:
+          - name: validate-config
+            command: echo "Validating VPC configuration..."
+        after:
+          - name: notify-completion
+            command: echo "VPC deployment completed"
+
+    # EKS cluster component
+    eks:
+      metadata:
+        component: eks
+
+      vars:
+        cluster_name: "{{ .vars.namespace }}-{{ .vars.tenant }}-{{ .vars.environment }}-{{ .vars.stage }}-eks-cluster"
+        kubernetes_version: "1.28"
+        instance_types:
+          - t3.large
+          - t3.xlarge
+        desired_size: 3
+        min_size: 1
+        max_size: 10
+
+      # Component dependencies
+      settings:
+        depends_on:
+          - vpc  # Depends on VPC in same stack
+
+    # RDS database component
+    rds:
+      metadata:
+        component: rds
+
+      vars:
+        engine: postgres
+        engine_version: "15.4"
+        instance_class: db.t3.medium
+        allocated_storage: 100
+        storage_encrypted: true
+        multi_az: true
+        database_name: myapp
+        master_username: dbadmin
+        # Reference password from external store
+        master_password: !store aws-ssm /{{ .vars.namespace }}/{{ .vars.stage }}/rds/password
+
+      # Override backend for this component
+      backend:
+        s3:
+          bucket: "{{ .vars.namespace }}-sensitive-terraform-state"
+          encrypt: true
+
+  helmfile:
+    # nginx-ingress Helm release
+    nginx-ingress:
+      metadata:
+        component: nginx-ingress
+
+      vars:
+        chart: nginx-stable/nginx-ingress
+        chart_version: 0.17.1
+        namespace: ingress
+        create_namespace: true
+        values:
+          controller:
+            service:
+              type: LoadBalancer
+            metrics:
+              enabled: true
+
+    # Monitoring stack
+    monitoring:
+      metadata:
+        component: monitoring
+        inherits:
+          - monitoring-defaults
+
+      vars:
+        charts:
+          - name: prometheus
+            chart: prometheus-community/kube-prometheus-stack
+            version: 51.3.0
+          - name: grafana
+            chart: grafana/grafana
+            version: 6.59.0
+
+  packer:
+    # Base AMI for application servers
+    app-server:
+      metadata:
+        component: app-server
+
+      vars:
+        source_ami_filter:
+          name: "ubuntu/images/hvm-ssd/ubuntu-jammy-22.04-amd64-server-*"
+          owners:
+            - "099720109477"  # Canonical
+        ssh_username: ubuntu
+        provisioners:
+          - type: shell
+            scripts:
+              - scripts/setup.sh
+              - scripts/install-dependencies.sh
+          - type: ansible
+            playbook_file: ansible/app-server.yml
+
+# Overrides section for environment-specific overrides
+overrides:
+  # Override terraform components based on environment/stage
+  terraform:
+    vpc:
+      production:
+        vars:
+          nat_gateway_enabled: true
+          nat_instance_enabled: false
+      dev:
+        vars:
+          nat_gateway_enabled: false
+          nat_instance_enabled: true  # Use cheaper NAT instance in dev
+
+    eks:
+      production:
+        vars:
+          desired_size: 10
+          min_size: 5
+          max_size: 20
+      dev:
+        vars:
+          desired_size: 2
+          min_size: 1
+          max_size: 5
+
+  # Override helmfile releases
+  helmfile:
+    nginx-ingress:
+      production:
+        vars:
+          values:
+            controller:
+              replicaCount: 3
+              resources:
+                limits:
+                  memory: 512Mi
+                requests:
+                  memory: 256Mi
+
+# Workflows can also be defined in stack files
+workflows:
+  deploy-infrastructure:
+    description: Deploy complete infrastructure stack
+    steps:
+      - name: deploy-network
+        command: atmos terraform apply vpc -s {{ .stack }}
+      - name: deploy-compute
+        command: atmos terraform apply eks -s {{ .stack }}
+      - name: deploy-ingress
+        command: atmos helmfile apply nginx-ingress -s {{ .stack }}
+
+  validate-all:
+    description: Validate all components
+    steps:
+      - name: validate-terraform
+        command: atmos validate component vpc -s {{ .stack }}
+      - name: validate-policies
+        command: atmos validate stacks

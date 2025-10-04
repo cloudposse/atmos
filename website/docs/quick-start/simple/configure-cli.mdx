@@ -62,9 +62,9 @@ And here's what all that means...
 ### Basic Settings
 
 <dl>
-  <dt>`stacks.name_pattern`</dt>
+  <dt>`stacks.name_template`</dt>
   <dd>
-    Atmos uses “slugs” to refer to stacks, which are defined by the `name_pattern` setting.<br/>
+    Atmos uses “slugs” to refer to stacks, which are defined by the `name_template` setting.<br/>
     Instead of relying on file names and locations, which can change, Atmos uses context variables (`namespace`, `tenant`, `environment`, `stage`)
     to identify the stack. For example, with the command `atmos terraform apply myapp -s dev`,
     Atmos interprets the slug `dev` using the pattern `{stage}` to locate the correct stack configuration

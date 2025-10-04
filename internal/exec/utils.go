@@ -291,7 +291,7 @@ func ProcessStacks(
 					continue
 				}
 			} else {
-				return configAndStacksInfo, errors.New("'stacks.name_pattern' or 'stacks.name_template' needs to be specified in 'atmos.yaml' CLI config")
+				return configAndStacksInfo, errUtils.ErrMissingStackNameTemplateAndPattern
 			}
 
 			configAndStacksInfo.Context.Component = configAndStacksInfo.ComponentFromArg

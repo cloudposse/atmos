@@ -1,0 +1,20 @@
+---
+title: Atmos Configuration Schema
+sidebar_position: 1
+sidebar_label: CLI Configuration
+description: Atmos CLI Configuration Schema
+---
+import Schema from '@site/static/schemas/atmos/1.0/cli.json'
+import JSONSchemaViewer from "@theme/JSONSchemaViewer";
+import File from '@site/src/components/File'
+import AtmosYAML from '!!raw-loader!@site/static/examples/complete/atmos.yaml';
+
+<JSONSchemaViewer schema={ Schema } />
+
+## Complete Example
+
+The following example demonstrates all available CLI configuration options with real-world values and inline documentation:
+
+<File title="atmos.yaml" lang="yaml">
+{AtmosYAML}
+</File>

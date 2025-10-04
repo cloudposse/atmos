@@ -1,0 +1,728 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "title": "Atmos CLI Configuration",
+    "description": "Schema for Atmos CLI configuration",
+    "fileMatch": [
+        "atmos.{yml,yaml}",
+        "*.atmos.{yml,yaml}",
+        ".atmos.{yml,yaml}",
+        "atmos.d/**/*.{yml,yaml}"
+    ],
+    "type": "object",
+    "properties": {
+      "base_path": {
+        "type": "string",
+        "description": "Base path for components, stacks, and workflows configurations. Supports absolute and relative paths."
+      },
+      "vendor": {
+        "type": "object",
+        "description": "Vendor configuration settings",
+        "properties": {
+          "base_path": {
+            "type": "string",
+            "description": "Path to vendor configuration file or directory containing vendor files"
+          }
+        },
+        "additionalProperties": true
+      },
+      "version": {
+        "type": "object",
+        "description": "Version checking configuration",
+        "properties": {
+          "check": {
+            "type": "object",
+            "properties": {
+              "enabled": {
+                "type": "boolean",
+                "description": "Enable version checking"
+              },
+              "timeout": {
+                "type": "integer",
+                "description": "Timeout in milliseconds for version check"
+              },
+              "frequency": {
+                "type": "string",
+                "description": "Frequency to check for updates (e.g., '1h', '24h')"
+              }
+            }
+          }
+        }
+      },
+      "components": {
+        "type": "object",
+        "description": "Configuration for components",
+        "properties": {
+          "terraform": {
+            "type": "object",
+            "description": "Terraform component configuration",
+            "properties": {
+              "command": {
+                "type": "string",
+                "description": "Command to execute Terraform (e.g., terraform or tofu)"
+              },
+              "base_path": {
+                "type": "string",
+                "description": "Path to Terraform components directory"
+              },
+              "apply_auto_approve": {
+                "type": "boolean",
+                "description": "Automatically approve Terraform apply"
+              },
+              "deploy_run_init": {
+                "type": "boolean",
+                "description": "Run 'terraform init' before deploying"
+              },
+              "init_run_reconfigure": {
+                "type": "boolean",
+                "description": "Run 'terraform init -reconfigure'"
+              },
+              "auto_generate_backend_file": {
+                "type": "boolean",
+                "description": "Automatically generate backend file"
+              },
+              "append_user_agent": {
+                "type": "string",
+                "description": "Custom user agent string to append to Terraform HTTP requests"
+              },
+              "workspaces_enabled": {
+                "type": "boolean",
+                "description": "Enable Terraform workspaces"
+              },
+              "shell": {
+                "type": "object",
+                "properties": {
+                  "prompt": {
+                    "type": "string",
+                    "description": "Custom shell prompt for terraform shell"
+                  }
+                }
+              },
+              "init": {
+                "type": "object",
+                "properties": {
+                  "pass_vars": {
+                    "type": "boolean",
+                    "description": "Pass variables during terraform init"
+                  }
+                }
+              },
+              "plan": {
+                "type": "object",
+                "properties": {
+                  "skip_planfile": {
+                    "type": "boolean",
+                    "description": "Skip creating planfile during terraform plan"
+                  }
+                }
+              }
+            }
+          },
+          "helmfile": {
+            "type": "object",
+            "description": "Helmfile component configuration",
+            "properties": {
+              "command": {
+                "type": "string",
+                "description": "Command to execute helmfile"
+              },
+              "base_path": {
+                "type": "string",
+                "description": "Path to Helmfile components directory"
+              },
+              "use_eks": {
+                "type": "boolean",
+                "description": "Enable EKS integration"
+              },
+              "kubeconfig_path": {
+                "type": "string",
+                "description": "Path to kubeconfig file"
+              },
+              "helm_aws_profile_pattern": {
+                "type": "string",
+                "description": "Pattern for AWS profiles used by Helm"
+              },
+              "cluster_name_template": {
+                "type": "string",
+                "description": "Pattern for cluster names"
+              }
+            }
+          },
+          "packer": {
+            "type": "object",
+            "description": "Packer component configuration",
+            "properties": {
+              "command": {
+                "type": "string",
+                "description": "Command to execute packer"
+              },
+              "base_path": {
+                "type": "string",
+                "description": "Path to Packer components directory"
+              }
+            }
+          }
+        }
+      },
+      "stacks": {
+        "type": "object",
+        "description": "Configuration for stacks",
+        "properties": {
+          "base_path": {
+            "type": "string",
+            "description": "Path to stacks directory"
+          },
+          "included_paths": {
+            "type": "array",
+            "description": "Glob patterns for included paths",
+            "items": {
+              "type": "string"
+            }
+          },
+          "excluded_paths": {
+            "type": "array",
+            "description": "Glob patterns for excluded paths",
+            "items": {
+              "type": "string"
+            }
+          },
+          "name_pattern": {
+            "type": "string",
+            "description": "Deprecated: Use name_template instead",
+            "deprecated": true
+          },
+          "name_template": {
+            "type": "string",
+            "description": "Go template for stack names"
+          }
+        }
+      },
+      "workflows": {
+        "type": "object",
+        "description": "Configuration for workflows",
+        "properties": {
+          "base_path": {
+            "type": "string",
+            "description": "Path to workflows directory"
+          }
+        }
+      },
+      "logs": {
+        "type": "object",
+        "description": "Logging configuration",
+        "properties": {
+          "file": {
+            "type": "string",
+            "description": "File or descriptor to write logs to (e.g., /dev/stderr)"
+          },
+          "level": {
+            "type": "string",
+            "description": "Log level (Trace, Debug, Info, Warning, Off)",
+            "enum": ["Trace", "Debug", "Info", "Warning", "Off"]
+          }
+        }
+      },
+      "validate": {
+        "type": "object",
+        "description": "Validation configuration",
+        "properties": {
+          "editorconfig": {
+            "type": "object",
+            "description": "EditorConfig validation settings",
+            "properties": {
+              "exclude": {
+                "type": "array",
+                "description": "List of file paths or patterns to exclude from checks",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "ignore_defaults": {
+                "type": "boolean",
+                "description": "Ignore default patterns (e.g., .git/*)"
+              },
+              "dry_run": {
+                "type": "boolean",
+                "description": "Run checks in dry-run mode"
+              },
+              "format": {
+                "type": "string",
+                "description": "Output format for validation (default or json)",
+                "enum": ["default", "json"]
+              },
+              "color": {
+                "type": "boolean",
+                "description": "Enable colored output"
+              },
+              "disable_trim_trailing_whitespace": {
+                "type": "boolean",
+                "description": "Disable checking for trailing whitespace"
+              },
+              "disable_end_of_line": {
+                "type": "boolean",
+                "description": "Disable checking for consistent line endings"
+              },
+              "disable_insert_final_newline": {
+                "type": "boolean",
+                "description": "Disable checking for newline at end of file"
+              },
+              "disable_indentation": {
+                "type": "boolean",
+                "description": "Disable checking for consistent indentation style"
+              },
+              "disable_indent_size": {
+                "type": "boolean",
+                "description": "Disable checking for consistent indentation size"
+              },
+              "disable_max_line_length": {
+                "type": "boolean",
+                "description": "Disable checking for maximum line length"
+              }
+            }
+          }
+        }
+      },
+      "aliases": {
+        "type": "object",
+        "description": "Command aliases",
+        "additionalProperties": {
+          "type": "string"
+        }
+      },
+      "stores": {
+        "type": "object",
+        "description": "External stores configuration for secrets and state",
+        "additionalProperties": {
+          "type": "object"
+        }
+      },
+      "schemas": {
+        "type": "object",
+        "description": "Schema validation settings",
+        "properties": {
+          "jsonschema": {
+            "type": "object",
+            "properties": {
+              "base_path": {
+                "type": "string",
+                "description": "Base path to JSON schema files"
+              }
+            }
+          },
+          "opa": {
+            "type": "object",
+            "properties": {
+              "base_path": {
+                "type": "string",
+                "description": "Base path to OPA policy files"
+              }
+            }
+          },
+          "atmos": {
+            "type": "object",
+            "properties": {
+              "manifest": {
+                "type": "string",
+                "description": "Path or URL to Atmos manifest schema"
+              }
+            }
+          }
+        }
+      },
+      "templates": {
+        "type": "object",
+        "description": "Template processing configuration",
+        "properties": {
+          "settings": {
+            "type": "object",
+            "properties": {
+              "enabled": {
+                "type": "boolean",
+                "description": "Enable template processing"
+              },
+              "evaluations": {
+                "type": "integer",
+                "description": "Number of template evaluation passes"
+              },
+              "sprig": {
+                "type": "object",
+                "properties": {
+                  "enabled": {
+                    "type": "boolean",
+                    "description": "Enable Sprig template functions"
+                  }
+                }
+              },
+              "gomplate": {
+                "type": "object",
+                "properties": {
+                  "enabled": {
+                    "type": "boolean",
+                    "description": "Enable Gomplate template functions"
+                  },
+                  "timeout": {
+                    "type": "integer",
+                    "description": "Timeout for Gomplate operations"
+                  },
+                  "datasources": {
+                    "type": "object",
+                    "description": "Gomplate data sources",
+                    "additionalProperties": true
+                  }
+                }
+              },
+              "delimiters": {
+                "type": "array",
+                "description": "Custom template delimiters",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "integrations": {
+        "type": "object",
+        "description": "Third-party integrations",
+        "properties": {
+          "atlantis": {
+            "type": "object",
+            "description": "Atlantis integration configuration",
+            "properties": {
+              "path": {
+                "type": "string",
+                "description": "Path to generate atlantis.yaml"
+              },
+              "config_templates": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "project_templates": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "workflow_templates": {
+                "type": "object",
+                "additionalProperties": true
+              }
+            }
+          },
+          "github": {
+            "type": "object",
+            "description": "GitHub integration configuration",
+            "properties": {
+              "gitops": {
+                "type": "object",
+                "properties": {
+                  "opentofu-version": {
+                    "type": "string"
+                  },
+                  "terraform-version": {
+                    "type": "string"
+                  },
+                  "infracost-enabled": {
+                    "type": "boolean"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "settings": {
+        "type": "object",
+        "description": "Global settings",
+        "properties": {
+          "list_merge_strategy": {
+            "type": "string",
+            "description": "Strategy for merging lists (replace, append, merge)",
+            "enum": ["replace", "append", "merge"]
+          },
+          "inject_github_token": {
+            "type": "boolean",
+            "description": "Inject GitHub token as Bearer token for API requests"
+          },
+          "inject_bitbucket_token": {
+            "type": "boolean",
+            "description": "Inject Bitbucket token for API requests"
+          },
+          "inject_gitlab_token": {
+            "type": "boolean",
+            "description": "Inject GitLab token for API requests"
+          },
+          "terminal": {
+            "type": "object",
+            "description": "Terminal display settings",
+            "properties": {
+              "max_width": {
+                "type": "integer",
+                "description": "Maximum width for terminal output"
+              },
+              "pager": {
+                "type": ["string", "boolean"],
+                "description": "Enable pager for long output (on, off, less, true, false)"
+              },
+              "unicode": {
+                "type": "boolean",
+                "description": "Use unicode characters in output"
+              },
+              "no_color": {
+                "type": "boolean",
+                "description": "DEPRECATED: Use 'color' instead. Disable colored output",
+                "deprecated": true
+              },
+              "color": {
+                "type": "boolean",
+                "description": "Enable colored output (default: true)"
+              },
+              "tab_width": {
+                "type": "integer",
+                "description": "Tab width for indentation"
+              },
+              "syntax_highlighting": {
+                "type": "object",
+                "properties": {
+                  "enabled": {
+                    "type": "boolean",
+                    "description": "Enable syntax highlighting"
+                  },
+                  "lexer": {
+                    "type": "string",
+                    "description": "Lexer to use for syntax highlighting"
+                  },
+                  "formatter": {
+                    "type": "string",
+                    "description": "Formatter for syntax highlighting"
+                  },
+                  "theme": {
+                    "type": "string",
+                    "description": "Color theme for syntax highlighting"
+                  },
+                  "pager": {
+                    "type": "boolean",
+                    "description": "Use pager for highlighted output"
+                  },
+                  "line_numbers": {
+                    "type": "boolean",
+                    "description": "Show line numbers"
+                  },
+                  "wrap": {
+                    "type": "boolean",
+                    "description": "Wrap long lines"
+                  }
+                }
+              }
+            }
+          },
+          "docs": {
+            "type": "object",
+            "description": "DEPRECATED: Documentation settings (moved to settings.terminal)",
+            "deprecated": true,
+            "properties": {
+              "max-width": {
+                "type": "integer",
+                "description": "DEPRECATED: Use 'settings.terminal.max_width' instead",
+                "deprecated": true
+              },
+              "pagination": {
+                "type": "boolean",
+                "description": "DEPRECATED: Use 'settings.terminal.pager' instead",
+                "deprecated": true
+              }
+            }
+          },
+          "markdown": {
+            "type": "object",
+            "description": "Markdown rendering settings",
+            "properties": {
+              "document": {
+                "type": "object"
+              },
+              "heading": {
+                "type": "object"
+              },
+              "code_block": {
+                "type": "object"
+              },
+              "link": {
+                "type": "object"
+              },
+              "strong": {
+                "type": "object"
+              },
+              "emph": {
+                "type": "object"
+              }
+            }
+          },
+          "telemetry": {
+            "type": "object",
+            "description": "Telemetry settings",
+            "properties": {
+              "enabled": {
+                "type": "boolean",
+                "description": "Enable telemetry"
+              },
+              "token": {
+                "type": "string",
+                "description": "Telemetry token"
+              },
+              "endpoint": {
+                "type": "string",
+                "description": "Telemetry endpoint URL"
+              }
+            }
+          },
+          "pro": {
+            "type": "object",
+            "description": "Atmos Pro settings",
+            "properties": {
+              "base_url": {
+                "type": "string",
+                "description": "Base URL for Atmos Pro API"
+              },
+              "endpoint": {
+                "type": "string",
+                "description": "Atmos Pro API endpoint"
+              },
+              "token": {
+                "type": "string",
+                "description": "Atmos Pro authentication token"
+              },
+              "workspace_id": {
+                "type": "string",
+                "description": "Atmos Pro workspace ID"
+              },
+              "github_oidc": {
+                "type": "object",
+                "properties": {
+                  "request_url": {
+                    "type": "string",
+                    "description": "GitHub OIDC token request URL"
+                  },
+                  "request_token": {
+                    "type": "string",
+                    "description": "GitHub OIDC request token"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "docs": {
+        "type": "object",
+        "description": "Documentation generation settings",
+        "properties": {
+          "generate": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "object",
+              "properties": {
+                "base-dir": {
+                  "type": "string"
+                },
+                "input": {
+                  "type": "array",
+                  "items": {
+                    "type": ["string", "object"]
+                  }
+                },
+                "template": {
+                  "type": "string"
+                },
+                "output": {
+                  "type": "string"
+                },
+                "terraform": {
+                  "type": "object",
+                  "properties": {
+                    "source": {
+                      "type": "string"
+                    },
+                    "enabled": {
+                      "type": "boolean"
+                    },
+                    "format": {
+                      "type": "string"
+                    },
+                    "show_providers": {
+                      "type": "boolean"
+                    },
+                    "show_inputs": {
+                      "type": "boolean"
+                    },
+                    "show_outputs": {
+                      "type": "boolean"
+                    },
+                    "sort_by": {
+                      "type": "string"
+                    },
+                    "hide_empty": {
+                      "type": "boolean"
+                    },
+                    "indent_level": {
+                      "type": "integer"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "commands": {
+        "type": "array",
+        "description": "Custom CLI commands",
+        "items": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string",
+              "description": "Name of the command"
+            },
+            "description": {
+              "type": "string",
+              "description": "Description of the command"
+            },
+            "commands": {
+              "type": "array",
+              "description": "Subcommands",
+              "items": {
+                "type": "object"
+              }
+            },
+            "arguments": {
+              "type": "array",
+              "items": {
+                "type": "object"
+              }
+            },
+            "flags": {
+              "type": "array",
+              "items": {
+                "type": "object"
+              }
+            },
+            "env": {
+              "type": "array",
+              "items": {
+                "type": "object"
+              }
+            },
+            "steps": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "component_config": {
+              "type": "object"
+            }
+          },
+          "required": ["name"]
+        }
+      }
+    },
+    "additionalProperties": true
+  }

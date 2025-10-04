@@ -1,0 +1,296 @@
+# Comprehensive Atmos Vendor Configuration Example
+# This file demonstrates vendoring external components and modules
+
+apiVersion: atmos/v1
+kind: AtmosVendorConfig
+
+metadata:
+  name: main-vendor-config
+  description: Primary vendoring configuration for infrastructure components
+
+spec:
+  # Import other vendor configurations
+  imports:
+    - vendor/terraform-modules.yaml
+    - vendor/helm-charts.yaml
+    - vendor/policies.yaml
+
+  # Define sources to vendor
+  sources:
+    # Terraform component from GitHub
+    - component: vpc
+      source: github.com/cloudposse/terraform-aws-vpc.git//src
+      version: 1.2.0  # Git tag, branch, or commit SHA
+      targets:
+        - components/terraform/vpc
+      included_paths:
+        - "**/*.tf"
+        - "**/*.tfvars"
+        - "modules/**"
+        - "README.md"
+      excluded_paths:
+        - "examples/**"
+        - "test/**"
+        - ".github/**"
+      tags:
+        - networking
+        - aws
+        - terraform
+
+    # Terraform module with specific ref
+    - component: eks
+      source: github.com/cloudposse/terraform-aws-eks-cluster.git
+      version: main  # Branch name
+      targets:
+        - components/terraform/eks/cluster
+      included_paths:
+        - "**"
+      excluded_paths:
+        - ".git/**"
+        - "examples/**"
+      tags:
+        - kubernetes
+        - aws
+        - terraform
+
+    # Component from private GitHub repository
+    - component: rds
+      source: github.com/mycompany/terraform-aws-rds.git
+      version: v2.5.1
+      targets:
+        - components/terraform/rds
+      included_paths:
+        - "**/*.tf"
+        - "modules/**"
+      tags:
+        - database
+        - aws
+        - terraform
+
+    # Component from GitLab
+    - component: security-groups
+      source: gitlab.com/mycompany/terraform-aws-security-groups.git
+      version: 3.0.0
+      targets:
+        - components/terraform/security-groups
+      tags:
+        - security
+        - networking
+        - aws
+
+    # Component from Bitbucket
+    - component: lambda
+      source: bitbucket.org/myteam/terraform-aws-lambda.git
+      version: develop
+      targets:
+        - components/terraform/lambda
+      tags:
+        - serverless
+        - aws
+        - terraform
+
+    # Component from HTTP URL
+    - component: s3-bucket
+      source: https://example.com/terraform-modules/s3-bucket.tar.gz
+      version: 1.0.0  # Version in the URL or archive
+      targets:
+        - components/terraform/s3
+      included_paths:
+        - "**/*.tf"
+        - "README.md"
+      tags:
+        - storage
+        - aws
+
+    # Component from S3
+    - component: custom-module
+      source: s3::https://s3.amazonaws.com/mybucket/modules/custom-module.zip
+      version: 2024.01.15  # Version tag or date
+      targets:
+        - components/terraform/custom
+      tags:
+        - custom
+        - internal
+
+    # Component from GCS (Google Cloud Storage)
+    - component: gcp-module
+      source: gcs::https://storage.googleapis.com/mybucket/terraform-gcp-network.tar.gz
+      version: 1.3.0
+      targets:
+        - components/terraform/gcp/network
+      tags:
+        - gcp
+        - networking
+
+    # Component from local file system
+    - component: local-module
+      source: file:///usr/local/share/terraform-modules/monitoring
+      version: latest
+      targets:
+        - components/terraform/monitoring
+      tags:
+        - monitoring
+        - local
+
+    # Helmfile component
+    - component: nginx-ingress
+      source: github.com/cloudposse/helmfiles.git//releases/nginx-ingress
+      version: 0.145.0
+      targets:
+        - components/helmfile/nginx-ingress
+      included_paths:
+        - "**/*.yaml"
+        - "**/*.yml"
+        - "values/**"
+      excluded_paths:
+        - "test/**"
+      tags:
+        - helmfile
+        - kubernetes
+        - ingress
+
+    # Multiple Helm charts from monorepo
+    - component: monitoring-stack
+      source: github.com/prometheus-community/helm-charts.git
+      version: main
+      targets:
+        - components/helmfile/monitoring/prometheus
+        - components/helmfile/monitoring/grafana
+        - components/helmfile/monitoring/alertmanager
+      included_paths:
+        - "charts/kube-prometheus-stack/**"
+        - "charts/grafana/**"
+        - "charts/alertmanager/**"
+      tags:
+        - monitoring
+        - helm
+        - kubernetes
+
+    # OPA policies
+    - component: security-policies
+      source: github.com/open-policy-agent/library.git
+      version: main
+      targets:
+        - stacks/schemas/opa/policies
+      included_paths:
+        - "kubernetes/**/*.rego"
+        - "terraform/**/*.rego"
+      tags:
+        - opa
+        - policies
+        - security
+
+    # JSON schemas for validation
+    - component: validation-schemas
+      source: https://github.com/SchemaStore/schemastore.git
+      version: master
+      targets:
+        - stacks/schemas/jsonschema
+      included_paths:
+        - "src/schemas/json/terraform.json"
+        - "src/schemas/json/helmfile.json"
+      tags:
+        - validation
+        - jsonschema
+
+    # Packer templates
+    - component: base-ami
+      source: github.com/cloudposse/packer-templates.git
+      version: 1.0.0
+      targets:
+        - components/packer/base-ami
+      included_paths:
+        - "amazon-linux/**"
+        - "ubuntu/**"
+        - "scripts/**"
+      excluded_paths:
+        - "test/**"
+      tags:
+        - packer
+        - ami
+        - aws
+
+    # Vendor with authentication (using environment variables)
+    # Set GITHUB_TOKEN, GITLAB_TOKEN, BITBUCKET_USERNAME/PASSWORD as needed
+    - component: private-module
+      source: github.com/mycompany-private/terraform-modules.git//vpc
+      version: v1.0.0
+      targets:
+        - components/terraform/private/vpc
+      tags:
+        - private
+        - vpc
+        - terraform
+
+    # Component with post-processing hooks (executed after vendoring)
+    - component: processed-module
+      source: github.com/example/terraform-module.git
+      version: main
+      targets:
+        - components/terraform/processed
+      # These would be executed by a post-processing system
+      # hooks:
+      #   post_vendor:
+      #     - command: terraform fmt -recursive components/terraform/processed
+      #     - command: terraform-docs markdown components/terraform/processed > components/terraform/processed/README.md
+      tags:
+        - terraform
+        - processed
+
+    # Vendor multiple versions of the same component
+    - component: vpc-v1
+      source: github.com/cloudposse/terraform-aws-vpc.git
+      version: 0.28.0
+      targets:
+        - components/terraform/vpc/v1
+      tags:
+        - vpc
+        - legacy
+        - terraform
+
+    - component: vpc-v2
+      source: github.com/cloudposse/terraform-aws-vpc.git
+      version: 1.0.0
+      targets:
+        - components/terraform/vpc/v2
+      tags:
+        - vpc
+        - current
+        - terraform
+
+    # Complex vendoring with multiple targets and transforms
+    - component: multi-cloud-network
+      source: github.com/example/terraform-multi-cloud-network.git
+      version: 2.0.0
+      targets:
+        # Split into provider-specific directories
+        - components/terraform/aws/network
+        - components/terraform/azure/network
+        - components/terraform/gcp/network
+      included_paths:
+        - "modules/aws/**"
+        - "modules/azure/**"
+        - "modules/gcp/**"
+        - "README.md"
+        - "LICENSE"
+      excluded_paths:
+        - "**/*.backup"
+        - "**/.terraform/**"
+        - "**/terraform.tfstate*"
+      tags:
+        - multi-cloud
+        - networking
+        - terraform
+
+    # Vendor documentation and examples
+    - component: documentation
+      source: github.com/cloudposse/docs.git
+      version: main
+      targets:
+        - docs/components
+      included_paths:
+        - "content/components/**/*.md"
+        - "examples/**"
+      tags:
+        - documentation
+        - examples

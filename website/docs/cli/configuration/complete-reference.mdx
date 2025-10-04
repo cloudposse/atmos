@@ -1,0 +1,238 @@
+---
+title: Complete Configuration Reference
+sidebar_position: 10
+sidebar_label: Complete Reference
+description: Complete reference for all Atmos CLI configuration options
+---
+import File from '@site/src/components/File'
+import CompleteAtmosYAML from '!!raw-loader!@site/static/examples/complete/atmos.yaml';
+
+# Complete Configuration Reference
+
+This page provides a comprehensive reference for all available Atmos CLI configuration options. The example below includes every possible configuration section with detailed inline documentation.
+
+:::tip Configuration Best Practices
+
+1. Start with minimal configuration and add sections as needed
+2. Use environment variables for sensitive values (e.g., tokens, credentials)
+3. Leverage YAML anchors and aliases to reduce duplication
+4. Keep vendor configurations in separate files under `vendor.d/` for better organization
+5. Use the `schemas` section to validate your configurations
+
+:::
+
+## Complete Example
+
+The following `atmos.yaml` file demonstrates all available configuration options with real-world values and comprehensive inline documentation:
+
+<File title="atmos.yaml">
+```yaml
+{CompleteAtmosYAML}
+```
+</File>
+
+## Configuration Sections
+
+### Base Configuration
+
+#### `base_path`
+- **Type**: `string`
+- **Default**: Current directory
+- **Environment Variable**: `ATMOS_BASE_PATH`
+- **Description**: Base path for all Atmos components, stacks, and workflows. Supports both absolute and relative paths.
+
+### Vendor Configuration
+
+#### `vendor`
+- **Type**: `object`
+- **Description**: Configuration for pulling external components and configurations.
+- **Properties**:
+  - `base_path`: Path to vendor configuration file or directory
+
+### Version Checking
+
+#### `version`
+- **Type**: `object`
+- **Description**: Configuration for automatic version checking and updates.
+- **Properties**:
+  - `check.enabled`: Enable automatic version checking
+  - `check.timeout`: Timeout in milliseconds for version check
+  - `check.frequency`: How often to check for updates (e.g., "24h")
+
+### Components Configuration
+
+#### `components`
+- **Type**: `object`
+- **Description**: Configuration for infrastructure components (Terraform, Helmfile, Packer).
+
+##### Terraform/OpenTofu
+- `command`: Command to execute (`terraform` or `tofu`)
+- `base_path`: Path to Terraform components
+- `apply_auto_approve`: Auto-approve applies
+- `deploy_run_init`: Run init before deploy
+- `init_run_reconfigure`: Run init with -reconfigure
+- `auto_generate_backend_file`: Auto-generate backend.tf
+
+##### Helmfile
+- `command`: Helmfile command
+- `base_path`: Path to Helmfile components
+- `use_eks`: Enable EKS integration
+- `kubeconfig_path`: Path to kubeconfig
+- `helm_aws_profile_pattern`: AWS profile pattern for Helm
+- `cluster_name_template`: EKS cluster name template
+
+### Stack Configuration
+
+#### `stacks`
+- **Type**: `object`
+- **Description**: Configuration for stack manifests.
+- **Properties**:
+  - `base_path`: Base path for stacks
+  - `included_paths`: Paths to include (glob patterns)
+  - `excluded_paths`: Paths to exclude (glob patterns)
+  - `name_template`: Go template for stack naming
+
+### Workflow Configuration
+
+#### `workflows`
+- **Type**: `object`
+- **Description**: Configuration for workflow definitions.
+- **Properties**:
+  - `base_path`: Base path for workflow files
+
+### Logging
+
+#### `logs`
+- **Type**: `object`
+- **Description**: Logging configuration.
+- **Properties**:
+  - `file`: Log file path (use `/dev/stderr` for stderr)
+  - `level`: Log level (Trace, Debug, Info, Warning, Off)
+
+### Validation
+
+#### `validate`
+- **Type**: `object`
+- **Description**: Validation configuration for EditorConfig and other checks.
+
+### Command Aliases
+
+#### `aliases`
+- **Type**: `object`
+- **Description**: Command aliases for convenience.
+- **Example**: `tf: terraform`
+
+### External Stores
+
+#### `stores`
+- **Type**: `object`
+- **Description**: Configuration for external secret stores and state backends.
+- **Supported Types**:
+  - AWS Systems Manager Parameter Store
+  - Azure Key Vault
+  - Google Secret Manager
+  - Redis
+  - Artifactory
+
+### Schema Validation
+
+#### `schemas`
+- **Type**: `object`
+- **Description**: Configuration for JSON Schema and OPA validation.
+- **Properties**:
+  - `jsonschema.base_path`: Path to JSON schema files
+  - `opa.base_path`: Path to OPA policy files
+  - `atmos.manifest`: Path to Atmos manifest schema
+  - Custom schema definitions with glob patterns
+
+### Template Processing
+
+#### `templates`
+- **Type**: `object`
+- **Description**: Configuration for Go template processing.
+- **Properties**:
+  - `settings.enabled`: Enable template processing
+  - `settings.evaluations`: Number of evaluation passes
+  - `settings.sprig.enabled`: Enable Sprig functions
+  - `settings.gomplate.enabled`: Enable Gomplate functions
+  - `settings.gomplate.datasources`: Gomplate data sources
+
+### Integrations
+
+#### `integrations`
+- **Type**: `object`
+- **Description**: Third-party tool integrations.
+- **Supported Integrations**:
+  - **Atlantis**: GitOps for Terraform
+  - **GitHub Actions**: CI/CD workflows
+  - **Spacelift**: Infrastructure orchestration
+
+### Custom Commands
+
+#### `commands`
+- **Type**: `array`
+- **Description**: Custom CLI commands and workflows.
+- **Properties**:
+  - `name`: Command name
+  - `description`: Command description
+  - `arguments`: Command arguments
+  - `flags`: Command flags
+  - `env`: Environment variables
+  - `steps`: Execution steps
+
+### Global Settings
+
+#### `settings`
+- **Type**: `object`
+- **Description**: Global Atmos settings.
+- **Properties**:
+  - `list_merge_strategy`: Strategy for merging lists (replace, append, merge)
+  - `inject_github_token`: Auto-inject GitHub token
+  - `terminal.max_width`: Maximum terminal width
+  - `terminal.pager`: Enable pager for long output
+  - `terminal.unicode`: Use unicode characters
+  - `terminal.color`: Enable colored output
+
+## Environment Variables
+
+Most configuration options can be overridden using environment variables. The pattern is:
+- `ATMOS_<SECTION>_<PROPERTY>`
+- For nested properties: `ATMOS_<SECTION>_<SUBSECTION>_<PROPERTY>`
+
+Examples:
+- `ATMOS_BASE_PATH`
+- `ATMOS_COMPONENTS_TERRAFORM_COMMAND`
+- `ATMOS_LOGS_LEVEL`
+- `ATMOS_STACKS_BASE_PATH`
+
+## Configuration Precedence
+
+Configuration is loaded with the following precedence (highest to lowest):
+1. Command-line arguments
+2. Environment variables
+3. Current directory `atmos.yaml`
+4. Home directory `~/.atmos/atmos.yaml`
+5. System directory (`/usr/local/etc/atmos` on Linux, `%LOCALAPPDATA%/atmos` on Windows)
+
+## Schema Validation
+
+To validate your `atmos.yaml` configuration against the schema:
+
+```bash
+# Using the validation script
+./validate-all-schemas.sh
+
+# Using ajv directly
+yq -o json eval '.' atmos.yaml | ajv validate -s website/static/schemas/atmos/1.0/cli.json -d - --spec=draft2020
+
+# Using atmos validate command
+atmos validate schema cli --file atmos.yaml
+```
+
+## Related Documentation
+
+- [Configuration Overview](/cli/configuration)
+- [Stack Configuration](/core-concepts/stacks)
+- [Vendor Configuration](/core-concepts/vendor)
+- [Workflow Configuration](/core-concepts/workflows)
+- [Schema Validation](/cli/commands/validate/schema)

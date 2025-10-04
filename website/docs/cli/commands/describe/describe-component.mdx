@@ -236,7 +236,7 @@ atmos_cli_config:
       - orgs/**/*
     excluded_paths:
       - '**/_defaults.yaml'
-    name_pattern: '{tenant}-{environment}-{stage}'
+    name_template: '{tenant}-{environment}-{stage}'
   workflows:
     base_path: stacks/workflows
 atmos_component: test/test-component-override-3
@@ -401,7 +401,7 @@ settings:
   spacelift:
     protect_from_deletion: true
     stack_destructor_enabled: false
-    stack_name_pattern: '{tenant}-{environment}-{stage}-new-component'
+    stack_name_template: '{tenant}-{environment}-{stage}-new-component'
     workspace_enabled: false
 sources:
   backend:
@@ -455,7 +455,7 @@ sources:
       final_value:
         protect_from_deletion: true
         stack_destructor_enabled: false
-        stack_name_pattern: '{tenant}-{environment}-{stage}-new-component'
+        stack_name_template: '{tenant}-{environment}-{stage}-new-component'
         workspace_enabled: false
       name: spacelift
       stack_dependencies:
@@ -468,7 +468,7 @@ sources:
           stack_file: catalog/terraform/test-component-override-2
           stack_file_section: components.terraform.settings
           variable_value:
-            stack_name_pattern: '{tenant}-{environment}-{stage}-new-component'
+            stack_name_template: '{tenant}-{environment}-{stage}-new-component'
             workspace_enabled: true
         - dependency_type: import
           stack_file: catalog/terraform/test-component
@@ -836,7 +836,7 @@ sources:
       final_value:
         protect_from_deletion: true
         stack_destructor_enabled: false
-        stack_name_pattern: '{tenant}-{environment}-{stage}-new-component'
+        stack_name_template: '{tenant}-{environment}-{stage}-new-component'
         workspace_enabled: false
       name: spacelift
       stack_dependencies:
@@ -849,7 +849,7 @@ sources:
           stack_file: catalog/terraform/test-component-override-2
           stack_file_section: components.terraform.settings
           variable_value:
-            stack_name_pattern: '{tenant}-{environment}-{stage}-new-component'
+            stack_name_template: '{tenant}-{environment}-{stage}-new-component'
             workspace_enabled: true
         - dependency_type: import
           stack_file: catalog/terraform/test-component

@@ -7,16 +7,14 @@ id: build
 
 import File from '@site/src/components/File'
 import Terminal from '@site/src/components/Terminal'
+import Intro from '@site/src/components/Intro'
 import useBaseUrl from '@docusaurus/useBaseUrl';
 
 <img width="80" align="right" src={useBaseUrl('/img/hashicorp-packer.svg')} alt="Packer"/>
 
-:::note purpose
-Use this command to process a Packer template configured for an Atmos component in a stack, and build it to generate a set of artifacts.
-The builds specified within a template are executed in parallel, unless otherwise specified.
-The artifacts that are created will be outputted at the end of the build, and a Packer manifest
-(if configured in the Atmos component) will be updated with the results of the build.
-:::
+<Intro>
+Build machine images using Packer templates configured in your Atmos stacks. Executes builds in parallel and outputs artifacts to your configured destinations. Automatically manages Packer variables from your stack configuration and updates manifest files with build results.
+</Intro>
 
 ## Usage
 

@@ -42,7 +42,7 @@ components:
     # Can also be set using 'ATMOS_COMPONENTS_HELMFILE_HELM_AWS_PROFILE_PATTERN' ENV var
     helm_aws_profile_pattern: "{namespace}-{tenant}-gbl-{stage}-helm"
     # Can also be set using 'ATMOS_COMPONENTS_HELMFILE_CLUSTER_NAME_PATTERN' ENV var
-    cluster_name_pattern: "{namespace}-{tenant}-{environment}-{stage}-eks-cluster"
+    cluster_name_template: "{namespace}-{tenant}-{environment}-{stage}-eks-cluster"
   packer:
     # Can also be set using 'ATMOS_COMPONENTS_PACKER_COMMAND' ENV var, or '--packer-command' command-line argument
     command: packer
@@ -59,8 +59,8 @@ stacks:
   # Can also be set using 'ATMOS_STACKS_EXCLUDED_PATHS' ENV var (comma-separated values string)
   excluded_paths:
     - "**/_defaults.yaml"
-  # Can also be set using 'ATMOS_STACKS_NAME_PATTERN' ENV var
-  name_pattern: "{tenant}-{environment}-{stage}"
+  # Can also be set using 'ATMOS_STACKS_NAME_TEMPLATE' ENV var
+  name_template: "{{.vars.tenant}}-{{.vars.environment}}-{{.vars.stage}}"
 
 workflows:
   # Can also be set using 'ATMOS_WORKFLOWS_BASE_PATH' ENV var, or '--workflows-dir' command-line arguments
@@ -215,7 +215,7 @@ commands:
       Example usage:
         atmos set-eks-cluster eks/cluster -s tenant1-ue1-dev -r admin
         atmos set-eks-cluster eks/cluster -s tenant2-uw2-prod --role reader
-    verbose: false  # Set to `true` to see verbose outputs
+    verbose: false # Set to `true` to see verbose outputs
     arguments:
       - name: component
         description: Name of the component
@@ -252,7 +252,6 @@ commands:
 
 # Integrations
 integrations:
-
   # Atlantis integration
   # https://www.runatlantis.io/docs/repo-level-atlantis-yaml.html
   atlantis:

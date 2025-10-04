@@ -38,7 +38,7 @@ stacks:
     - "deploy/**/*"
   excluded_paths:
     - "**/_defaults.yaml"
-  name_pattern: "{stage}"
+  name_template: "{stage}"
 vendor:
   base_path: "./test-vendor.yaml"
 logs:
@@ -288,7 +288,7 @@ terraform:
 				baseInfo, err := os.Stat(cfg.BasePath)
 				require.NoError(t, err)
 				assert.True(t, baseInfo.IsDir())
-				assert.Equal(t, "{dev}", cfg.Stacks.NamePattern)
+				assert.Equal(t, "{stage}", cfg.Stacks.NameTemplate)
 			},
 		},
 		{

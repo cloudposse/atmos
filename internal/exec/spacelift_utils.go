@@ -13,7 +13,7 @@ import (
 func BuildSpaceliftStackName(spaceliftSettings map[string]any, context schema.Context, contextPrefix string) (string, string, error) {
 	defer perf.Track(nil, "exec.BuildSpaceliftStackName")()
 
-	if spaceliftStackNamePattern, ok := spaceliftSettings["stack_name_pattern"].(string); ok {
+	if spaceliftStackNamePattern, ok := spaceliftSettings["stack_name_template"].(string); ok {
 		return cfg.ReplaceContextTokens(context, spaceliftStackNamePattern), spaceliftStackNamePattern, nil
 	} else if spaceliftStackName, ok := spaceliftSettings["stack_name"].(string); ok {
 		return spaceliftStackName, contextPrefix, nil

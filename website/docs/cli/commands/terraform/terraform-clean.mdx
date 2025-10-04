@@ -6,12 +6,11 @@ id: clean
 ---
 import Screengrab from '@site/src/components/Screengrab'
 import Terminal from '@site/src/components/Terminal'
+import Intro from '@site/src/components/Intro'
 
-:::note purpose
-Use this command to delete the `.terraform` folder, the folder that `TF_DATA_DIR` ENV var points to, `.terraform.lock.hcl` file, `varfile`
-and `planfile` for a
-component in a stack.
-:::
+<Intro>
+Clean up your local Terraform workspace by removing `.terraform`, `.terraform.lock.hcl`, and other transient files. Useful for troubleshooting provider issues, clearing cached modules, or preparing for a fresh init. Only affects local filesystem - remote workspaces remain untouched.
+</Intro>
 
 <Screengrab title="atmos terraform clean --help" slug="atmos-terraform-clean--help" />
 

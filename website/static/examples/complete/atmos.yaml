@@ -1,0 +1,703 @@
+# Complete Atmos CLI Configuration Reference
+# This file demonstrates ALL available configuration options with comprehensive examples
+# Version: Atmos 1.0+
+# Documentation: https://atmos.tools/cli/configuration
+
+# Base path for all Atmos components, stacks, and workflows configurations
+# Can also be set using 'ATMOS_BASE_PATH' ENV var, or '--base-path' command-line argument
+# Supports both absolute and relative paths
+# If not provided or is an empty string, component/stack/workflow paths are independent
+base_path: "."
+
+# Vendor configuration for pulling external components
+# https://atmos.tools/core-concepts/vendor
+vendor:
+  # Path to vendor configuration file or directory containing vendor configs
+  # Can also be set using 'ATMOS_VENDOR_BASE_PATH' ENV var
+  base_path: "./vendor.yaml"  # Can be a single file or directory
+
+# Version checking configuration
+# https://atmos.tools/cli/commands/version
+version:
+  check:
+    # Enable automatic version checking
+    enabled: true
+    # Timeout in milliseconds for version check
+    timeout: 1000
+    # How often to check for updates (duration string)
+    frequency: "24h"  # Options: 24h, 1w, etc.
+
+# Component configurations
+components:
+  # Terraform/OpenTofu configuration
+  terraform:
+    # Command to execute (terraform or tofu)
+    # Can also be set using 'ATMOS_COMPONENTS_TERRAFORM_COMMAND' ENV var
+    command: terraform  # or 'tofu' for OpenTofu
+
+    # Base path for Terraform components
+    # Can also be set using 'ATMOS_COMPONENTS_TERRAFORM_BASE_PATH' ENV var, or '--terraform-dir' command-line argument
+    base_path: "components/terraform"
+
+    # Auto-approve terraform apply commands
+    # Can also be set using 'ATMOS_COMPONENTS_TERRAFORM_APPLY_AUTO_APPROVE' ENV var
+    apply_auto_approve: false
+
+    # Run terraform init before terraform deploy
+    # Can also be set using 'ATMOS_COMPONENTS_TERRAFORM_DEPLOY_RUN_INIT' ENV var, or '--deploy-run-init' command-line argument
+    deploy_run_init: true
+
+    # Run terraform init with -reconfigure flag
+    # Can also be set using 'ATMOS_COMPONENTS_TERRAFORM_INIT_RUN_RECONFIGURE' ENV var, or '--init-run-reconfigure' command-line argument
+    init_run_reconfigure: true
+
+    # Auto-generate backend.tf file
+    # Can also be set using 'ATMOS_COMPONENTS_TERRAFORM_AUTO_GENERATE_BACKEND_FILE' ENV var, or '--auto-generate-backend-file' command-line argument
+    auto_generate_backend_file: false
+
+    # Append custom User-Agent to Terraform HTTP requests
+    append_user_agent: "Atmos/1.0 (MyCompany)"
+
+    # Enable Terraform workspace support
+    workspaces_enabled: true
+
+    # Custom shell configuration for terraform shell command
+    shell:
+      prompt: "atmos> "
+
+    # Terraform init configuration
+    init:
+      # Pass variables during init phase
+      pass_vars: false
+
+    # Terraform plan configuration
+    plan:
+      # Skip creating planfile during plan
+      skip_planfile: false
+
+  # Helmfile configuration
+  helmfile:
+    # Command to execute
+    # Can also be set using 'ATMOS_COMPONENTS_HELMFILE_COMMAND' ENV var
+    command: helmfile
+
+    # Base path for Helmfile components
+    # Can also be set using 'ATMOS_COMPONENTS_HELMFILE_BASE_PATH' ENV var, or '--helmfile-dir' command-line argument
+    base_path: "components/helmfile"
+
+    # Enable EKS integration
+    # Can also be set using 'ATMOS_COMPONENTS_HELMFILE_USE_EKS' ENV var
+    use_eks: true
+
+    # Path to kubeconfig file
+    # Can also be set using 'ATMOS_COMPONENTS_HELMFILE_KUBECONFIG_PATH' ENV var
+    kubeconfig_path: "/dev/shm"
+
+    # AWS profile pattern for Helm
+    # Can also be set using 'ATMOS_COMPONENTS_HELMFILE_HELM_AWS_PROFILE_PATTERN' ENV var
+    helm_aws_profile_pattern: "{namespace}-{tenant}-gbl-{stage}-helm"
+
+    # EKS cluster name template
+    # Can also be set using 'ATMOS_COMPONENTS_HELMFILE_CLUSTER_NAME_PATTERN' ENV var
+    cluster_name_template: "{namespace}-{tenant}-{environment}-{stage}-eks-cluster"
+
+  # Packer configuration
+  packer:
+    # Command to execute
+    command: packer
+
+    # Base path for Packer components
+    base_path: "components/packer"
+
+# Stack configuration
+# https://atmos.tools/core-concepts/stacks
+stacks:
+  # Base path for stack configurations
+  # Can also be set using 'ATMOS_STACKS_BASE_PATH' ENV var, or '--config-dir' and '--stacks-dir' command-line arguments
+  base_path: "stacks"
+
+  # Paths to include when searching for stack configs (supports glob patterns)
+  included_paths:
+    - "orgs/**/*"
+    - "catalog/**/*"
+    - "mixins/**/*"
+    - "**/*.yaml"
+
+  # Paths to exclude when searching for stack configs (supports glob patterns)
+  excluded_paths:
+    - "**/_defaults.yaml"
+    - "**/README.md"
+    - "**/*.template.yaml"
+    - "**/test/**"
+
+  # Stack name template using Go template
+  # Available variables: .namespace, .tenant, .environment, .stage, .vars (any custom vars)
+  name_template: "{{ .vars.tenant }}-{{ .vars.environment }}-{{ .vars.stage }}"
+
+  # DEPRECATED: Use name_template instead
+  # name_pattern: "{tenant}-{environment}-{stage}"
+
+# Workflow configuration
+# https://atmos.tools/core-concepts/workflows
+workflows:
+  # Base path for workflow files
+  # Can also be set using 'ATMOS_WORKFLOWS_BASE_PATH' ENV var
+  base_path: "stacks/workflows"
+
+# Logging configuration
+# https://atmos.tools/cli/configuration#logs
+logs:
+  # Log file path (use /dev/stderr for stderr, /dev/stdout for stdout)
+  # Can also be set using 'ATMOS_LOGS_FILE' ENV var
+  file: "/dev/stderr"
+
+  # Log level
+  # Can also be set using 'ATMOS_LOGS_LEVEL' ENV var
+  level: "Info"  # Options: Trace, Debug, Info, Warning, Off
+
+# Validation configuration
+validate:
+  # EditorConfig validation settings
+  editorconfig:
+    # Files/directories to exclude from validation
+    exclude:
+      - "vendor/**"
+      - "**.tfstate"
+      - "**.terraform/**"
+      - "node_modules/**"
+
+    # Ignore default exclude patterns
+    ignore_defaults: false
+
+    # Run in dry-run mode (don't fix issues)
+    dry_run: false
+
+    # Output format
+    format: "default"  # Options: default, json
+
+    # Use color in output
+    color: true
+
+    # Validation rule toggles
+    disable_trim_trailing_whitespace: false
+    disable_end_of_line: false
+    disable_insert_final_newline: false
+    disable_indentation: false
+    disable_indent_size: false
+    disable_max_line_length: false
+
+# Command aliases for convenience
+# Can also be defined using 'ATMOS_ALIASES' ENV var
+aliases:
+  # Short aliases for common commands
+  tf: terraform
+  hf: helmfile
+  pk: packer
+  desc: describe
+  gen: generate
+  val: validate
+
+  # Complex command aliases
+  plan-all: "terraform plan --all"
+  apply-dev: "terraform apply --auto-approve --stack-pattern=dev-*"
+
+# External stores configuration for secrets and state
+# https://atmos.tools/core-concepts/vendor#remote-modules
+stores:
+  # AWS Systems Manager Parameter Store
+  aws-ssm:
+    type: aws-ssm
+    region: us-east-1
+    profile: prod
+    path_prefix: "/atmos"
+    max_results: 100
+    decrypt: true
+
+  # Azure Key Vault
+  azure-kv:
+    type: azure-keyvault
+    vault_name: mycompany-vault
+    tenant_id: "${AZURE_TENANT_ID}"
+    client_id: "${AZURE_CLIENT_ID}"
+    client_secret: "${AZURE_CLIENT_SECRET}"
+
+  # Google Secret Manager
+  gcp-sm:
+    type: google-secretmanager
+    project_id: my-project-123
+    credentials_path: "/path/to/credentials.json"
+
+  # Redis cache
+  redis:
+    type: redis
+    host: redis.example.com
+    port: 6379
+    db: 0
+    password: "${REDIS_PASSWORD}"
+    tls_enabled: true
+
+  # Artifactory
+  artifactory:
+    type: artifactory
+    url: https://artifactory.example.com
+    token: "${ARTIFACTORY_TOKEN}"
+    repository: "atmos-artifacts"
+
+# Schema validation configuration
+# https://atmos.tools/cli/commands/validate/schema
+schemas:
+  # JSON Schema validation
+  jsonschema:
+    # Base path for JSON schema files
+    # Can also be set using 'ATMOS_SCHEMAS_JSONSCHEMA_BASE_PATH' ENV var, or '--schemas-jsonschema-dir' command-line argument
+    base_path: "stacks/schemas/jsonschema"
+
+  # Open Policy Agent (OPA) validation
+  opa:
+    # Base path for OPA policy files
+    # Can also be set using 'ATMOS_SCHEMAS_OPA_BASE_PATH' ENV var, or '--schemas-opa-dir' command-line argument
+    base_path: "stacks/schemas/opa"
+
+  # Atmos manifest schema
+  atmos:
+    # Path to Atmos manifest JSON schema (local or remote)
+    # Can also be set using 'ATMOS_SCHEMAS_ATMOS_MANIFEST' ENV var, or '--schemas-atmos-manifest' command-line argument
+    manifest: "stacks/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json"
+    # Or use remote schema:
+    # manifest: "https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json"
+
+  # Schema definitions for validate schema command
+  # Each entry defines a schema and files to validate against it
+  atmos-config:
+    # Path to JSON schema file
+    schema: "website/static/schemas/atmos/1.0/cli.json"
+    # Glob patterns for files to validate
+    matches:
+      - "atmos.yaml"
+      - "atmos.yml"
+      - "**/atmos.yaml"
+
+  stack-manifests:
+    schema: "website/static/schemas/atmos/1.0/stack.json"
+    matches:
+      - "stacks/**/*.yaml"
+      - "catalog/**/*.yaml"
+      - "!**/_defaults.yaml"  # Exclude pattern
+
+  vendor-configs:
+    schema: "website/static/schemas/atmos/1.0/vendor.json"
+    matches:
+      - "vendor.yaml"
+      - "vendor/**/*.yaml"
+
+  workflow-configs:
+    schema: "website/static/schemas/atmos/1.0/workflow.json"
+    matches:
+      - "workflows/**/*.yaml"
+      - "stacks/workflows/**/*.yaml"
+
+# Template processing configuration
+# https://atmos.tools/core-concepts/stacks/templates
+templates:
+  settings:
+    # Enable template processing
+    enabled: true
+
+    # Number of template evaluation passes
+    evaluations: 2
+
+    # Sprig template functions
+    # https://masterminds.github.io/sprig
+    sprig:
+      enabled: true
+
+    # Gomplate template functions and datasources
+    # https://docs.gomplate.ca
+    gomplate:
+      enabled: true
+      # Timeout in seconds for gomplate operations
+      timeout: 5
+      # Gomplate datasources
+      datasources:
+        # File datasource
+        config:
+          url: "file://config.yaml"
+        # Vault datasource
+        vault:
+          url: "vault://secret/data"
+          headers:
+            X-Vault-Token: "${VAULT_TOKEN}"
+        # AWS datasource
+        aws:
+          url: "aws+smp://parameter/name?region=us-east-1"
+        # HTTP datasource
+        api:
+          url: "https://api.example.com/data"
+          headers:
+            Authorization: "Bearer ${API_TOKEN}"
+
+    # Custom template delimiters (optional)
+    # Default is {{ and }}
+    delimiters:
+      - "{{"
+      - "}}"
+
+# Third-party integrations
+integrations:
+  # Atlantis integration
+  # https://www.runatlantis.io
+  atlantis:
+    # Path to generate atlantis.yaml config file
+    # Can be overridden with '--output-path' in 'atmos atlantis generate repo-config'
+    path: "atlantis.yaml"
+
+    # Config templates for Atlantis
+    config_templates:
+      default:
+        version: 3
+        automerge: true
+        delete_source_branch_on_merge: true
+        parallel_plan: true
+        parallel_apply: true
+        allowed_regexp_prefixes:
+          - dev/
+          - staging/
+          - prod/
+
+    # Project templates for Atlantis
+    project_templates:
+      default:
+        name: "{tenant}-{environment}-{stage}-{component}"
+        workspace: "{workspace}"
+        dir: "{component-path}"
+        terraform_version: "v1.5.0"
+        delete_source_branch_on_merge: true
+        autoplan:
+          enabled: true
+          when_modified:
+            - "**/*.tf"
+            - "varfiles/$PROJECT_NAME.tfvars.json"
+        apply_requirements:
+          - approved
+          - mergeable
+
+    # Workflow templates for Atlantis
+    workflow_templates:
+      default:
+        plan:
+          steps:
+            - run: terraform init -input=false
+            - run: terraform workspace select $WORKSPACE || terraform workspace new $WORKSPACE
+            - run: terraform plan -input=false -refresh -out $PLANFILE -var-file varfiles/$PROJECT_NAME.tfvars.json
+        apply:
+          steps:
+            - run: terraform apply $PLANFILE
+
+  # GitHub Actions integration
+  github:
+    gitops:
+      # Terraform/OpenTofu versions
+      opentofu-version: "1.8.4"
+      terraform-version: "1.9.8"
+      # Enable Infracost integration
+      infracost-enabled: true
+      # Actions matrix settings
+      matrix:
+        os: ["ubuntu-latest", "windows-latest"]
+        terraform-version: ["1.5.0", "1.6.0"]
+
+  # Spacelift integration
+  spacelift:
+    # Spacelift workspace settings
+    workspace_enabled: true
+    stack_destructor_enabled: false
+    administrative: false
+    protect_from_deletion: true
+
+    # Labels to add to Spacelift stacks
+    labels:
+      - atmos
+      - managed
+
+    # Spacelift policies
+    policies:
+      - name: "plan-policy"
+        type: "PLAN"
+        body: |
+          package spacelift
+          deny["Plans are not allowed on Friday"] {
+            time.weekday(time.now_ns()) == 5
+          }
+
+# Custom commands configuration
+# https://atmos.tools/cli/commands/custom
+commands:
+  # Simple custom command
+  - name: list
+    description: "List all Atmos components and stacks"
+    steps:
+      - atmos list components
+      - atmos list stacks
+
+  # Complex custom command with arguments and flags
+  - name: deploy-all
+    description: "Deploy all components in a stack"
+    verbose: true
+    # Command arguments
+    arguments:
+      - name: stack
+        description: "Stack to deploy"
+        required: true
+    # Command flags
+    flags:
+      - name: dry-run
+        shorthand: d
+        description: "Run in dry-run mode"
+        type: bool
+        default: false
+    # Environment variables to set
+    env:
+      - key: ATMOS_DEPLOY_MODE
+        value: "all"
+    # Steps to execute
+    steps:
+      - atmos terraform plan --stack {{ .Arguments.stack }}
+      - |
+        if [[ "{{ .Flags.dry-run }}" != "true" ]]; then
+          atmos terraform apply --stack {{ .Arguments.stack }} --auto-approve
+        fi
+
+  # Command that calls other commands
+  - name: bootstrap
+    description: "Bootstrap a new environment"
+    steps:
+      - atmos vendor pull
+      - atmos terraform init --stack {{ .Arguments.stack }}
+      - atmos terraform plan --stack {{ .Arguments.stack }}
+
+# Global settings
+settings:
+  # List merge strategy for stack imports
+  # Options: replace, append, merge
+  list_merge_strategy: "replace"
+
+  # Spacelift settings
+  spacelift:
+    # Use Spacelift Terraform provider
+    terraform_provider: "spacelift"
+    # Spacelift workspace settings
+    workspace_enabled: true
+
+  # Token injection settings
+  inject_github_token: true      # Auto-inject GITHUB_TOKEN env var
+  inject_bitbucket_token: false  # Don't auto-inject Bitbucket token
+  inject_gitlab_token: false     # Don't auto-inject GitLab token
+
+  # Terminal display settings
+  terminal:
+    # Maximum terminal width
+    max_width: 120
+    # Enable pager for long output
+    pager: true
+    # Use unicode characters in output
+    unicode: true
+    # Color output (replaces deprecated no_color)
+    color: true
+
+  # Documentation generation settings
+  docs:
+    # Output format for docs generation
+    format: "markdown"  # Options: markdown, json, yaml
+    # Include component metadata
+    include_metadata: true
+    # Include examples
+    include_examples: true
+
+  # Affected components settings
+  affected:
+    # Include spacelift stacks
+    include_spacelift_stacks: true
+    # Include dependencies
+    include_dependencies: true
+    # Include settings
+    include_settings: true
+
+  # Describe component settings
+  describe:
+    # Component sections to include
+    sections:
+      - backend
+      - backend_type
+      - component
+      - deps
+      - env
+      - inheritance
+      - metadata
+      - remote_state_backend
+      - remote_state_backend_type
+      - settings
+      - sources
+      - vars
+
+  # Stack processing settings
+  stacks:
+    # Stack name pattern (deprecated, use name_template)
+    # name_pattern: "{tenant}-{environment}-{stage}"
+    # Enable stack imports
+    imports_enabled: true
+    # Enable stack inheritance
+    inheritance_enabled: true
+    # Enable stack mixins
+    mixins_enabled: true
+
+  # Component processing settings
+  components:
+    # Component name template
+    name_template: "{{ .vars.namespace }}-{{ .vars.component }}"
+    # Enable component vendoring
+    vendoring_enabled: true
+    # Enable component inheritance
+    inheritance_enabled: true
+
+  # Runtime settings
+  runtime:
+    # Timeout for operations (in seconds)
+    timeout: 300
+    # Retry settings
+    retry:
+      enabled: true
+      max_attempts: 3
+      backoff: "exponential"  # Options: linear, exponential
+      initial_interval: "1s"
+      max_interval: "30s"
+
+  # Cache settings
+  cache:
+    # Enable caching
+    enabled: true
+    # Cache directory
+    directory: ".atmos/cache"
+    # Cache TTL (time to live)
+    ttl: "1h"
+
+  # Vendoring settings
+  vendor:
+    # Enable vendoring
+    enabled: true
+    # Vendor base path
+    base_path: "vendor"
+    # Check for updates
+    check_updates: true
+    # Parallel downloads
+    parallel: true
+    # Max parallel downloads
+    max_parallel: 5
+
+# Environment-specific overrides
+# These can override any setting above based on the ATMOS_ENV environment variable
+environments:
+  dev:
+    logs:
+      level: "Debug"
+    components:
+      terraform:
+        apply_auto_approve: true
+
+  staging:
+    logs:
+      level: "Info"
+    settings:
+      terminal:
+        color: true
+
+  prod:
+    logs:
+      level: "Warning"
+    components:
+      terraform:
+        apply_auto_approve: false
+    settings:
+      runtime:
+        timeout: 600
+
+# Cloud provider settings (for future use)
+cloud:
+  # AWS settings
+  aws:
+    # Default AWS profile
+    profile: "default"
+    # Default AWS region
+    region: "us-east-1"
+    # Assume role settings
+    assume_role:
+      enabled: true
+      role_arn: "arn:aws:iam::123456789012:role/AtmosRole"
+      session_name: "AtmosSession"
+      duration: 3600
+
+  # Azure settings
+  azure:
+    # Default subscription
+    subscription_id: "${AZURE_SUBSCRIPTION_ID}"
+    # Default resource group
+    resource_group: "atmos-rg"
+
+  # GCP settings
+  gcp:
+    # Default project
+    project: "my-gcp-project"
+    # Default region
+    region: "us-central1"
+
+# Metrics and telemetry settings
+telemetry:
+  # Enable telemetry
+  enabled: false
+  # Telemetry endpoint
+  endpoint: "https://telemetry.atmos.tools"
+  # Metrics to collect
+  metrics:
+    - commands
+    - errors
+    - performance
+  # Anonymize data
+  anonymize: true
+
+# Pro/Enterprise features (when available)
+pro:
+  # Enable pro features
+  enabled: false
+  # License key
+  license_key: "${ATMOS_PRO_LICENSE_KEY}"
+  # Pro API endpoint
+  api_endpoint: "https://api.atmos.pro"
+  # Features
+  features:
+    # Enable policy enforcement
+    policy_enforcement: true
+    # Enable cost estimation
+    cost_estimation: true
+    # Enable security scanning
+    security_scanning: true
+    # Enable compliance checks
+    compliance_checks: true
+
+# Hooks configuration for lifecycle events
+hooks:
+  # Pre-command hooks
+  pre:
+    - command: "echo 'Starting Atmos command...'"
+      when: "always"
+    - command: "terraform fmt -check"
+      when: "terraform"
+
+  # Post-command hooks
+  post:
+    - command: "echo 'Atmos command completed'"
+      when: "always"
+    - command: "notify-slack"
+      when: "apply"
+      on_success: true
+      on_failure: true
+
+# End of complete Atmos configuration
