@@ -8,7 +8,7 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
-// describeAffectedCmd produces a list of the affected Atmos components and stacks given two Git commits
+// describeAffectedCmd produces a list of the affected Atmos components and stacks given two Git commits.
 var describeAffectedCmd = &cobra.Command{
 	Use:                "affected",
 	Short:              "List Atmos components and stacks affected by two Git commits",
@@ -42,6 +42,7 @@ func init() {
 	describeAffectedCmd.PersistentFlags().StringSlice("skip", nil, "Skip executing a YAML function when processing Atmos stack manifests")
 	describeAffectedCmd.PersistentFlags().Bool("verbose", false, "Deprecated. Alias for `--logs-level=Debug`")
 	describeAffectedCmd.PersistentFlags().Bool("exclude-locked", false, "Exclude the locked components (`metadata.locked: true`) from the output")
+	describeAffectedCmd.PersistentFlags().String("only-from", "", "Return the affected and dependent components from a specific stack")
 
 	describeCmd.AddCommand(describeAffectedCmd)
 }

@@ -1,7 +1,7 @@
 INSTALL_PATH ?= ../../website/src/components/Screengrabs
 all: build-all install
 
-# Write to /website/static/screengrab/
+# Write to website/src/components/Screengrabs/
 install:
 	@echo "Installing screengrabs to $(INSTALL_PATH)"
 	@mkdir -p $(INSTALL_PATH)

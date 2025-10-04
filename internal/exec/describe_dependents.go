@@ -28,6 +28,7 @@ type DescribeDependentsExecProps struct {
 	ProcessTemplates     bool
 	ProcessYamlFunctions bool
 	Skip                 []string
+	OnlyFrom             string
 }
 
 //go:generate mockgen -source=$GOFILE -destination=mock_$GOFILE -package=$GOPACKAGE
@@ -45,6 +46,7 @@ type describeDependentsExec struct {
 		processTemplates bool,
 		processYamlFunctions bool,
 		skip []string,
+		dependentsStack string,
 	) ([]schema.Dependent, error)
 	newPageCreator        pager.PageCreator
 	isTTYSupportForStdout func() bool
@@ -79,6 +81,7 @@ func (d *describeDependentsExec) Execute(describeDependentsExecProps *DescribeDe
 		describeDependentsExecProps.ProcessTemplates,
 		describeDependentsExecProps.ProcessYamlFunctions,
 		describeDependentsExecProps.Skip,
+		describeDependentsExecProps.OnlyFrom,
 	)
 	if err != nil {
 		return err
@@ -116,6 +119,7 @@ func ExecuteDescribeDependents(
 	processTemplates bool,
 	processYamlFunctions bool,
 	skip []string,
+	dependentsStack string,
 ) ([]schema.Dependent, error) {
 	defer perf.Track(atmosConfig, "exec.ExecuteDescribeDependents")()
 
@@ -129,7 +133,7 @@ func ExecuteDescribeDependents(
 	// Get all stacks with all components
 	stacks, err := ExecuteDescribeStacks(
 		atmosConfig,
-		"",
+		dependentsStack,
 		nil,
 		nil,
 		nil,
@@ -197,12 +201,15 @@ func ExecuteDescribeDependents(
 					continue
 				}
 
-				// Skip abstract components
+				// Skip abstract and disabled components
 				if metadataSection, ok := stackComponentMap["metadata"].(map[string]any); ok {
 					if metadataType, ok := metadataSection["type"].(string); ok {
 						if metadataType == "abstract" {
 							continue
 						}
+					}
+					if !isComponentEnabled(metadataSection, stackComponentName) {
+						continue
 					}
 				}
 

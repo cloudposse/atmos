@@ -88,10 +88,12 @@ var (
 	ErrInvalidURL          = errors.New("invalid URL")
 	ErrFailedToFindImport  = errors.New("failed to find import")
 
-	ErrMissingStack                       = errors.New("stack is required; specify it on the command line using the flag `--stack <stack>` (shorthand `-s`)")
-	ErrInvalidComponent                   = errors.New("invalid component")
-	ErrAbstractComponentCantBeProvisioned = errors.New("abstract component cannot be provisioned")
-	ErrLockedComponentCantBeProvisioned   = errors.New("locked component cannot be provisioned")
+	ErrMissingStack                              = errors.New("stack is required; specify it on the command line using the flag `--stack <stack>` (shorthand `-s`)")
+	ErrInvalidComponent                          = errors.New("invalid component")
+	ErrAbstractComponentCantBeProvisioned        = errors.New("abstract component cannot be provisioned")
+	ErrLockedComponentCantBeProvisioned          = errors.New("locked component cannot be provisioned")
+	ErrStackAndOnlyFromFlagsCannotBeUsedTogether = errors.New("`--stack` and `--only-from` flags cannot be used together, choose one or the other")
+	ErrStackOrOnlyFromFlagRequired               = errors.New("`--stack` or `--only-from` flag is required to specify the stack")
 
 	ErrMissingPackerTemplate = errors.New("packer template is required; it can be specified in the `settings.packer.template` section in the Atmos component manifest, or on the command line via the flag `--template <template>` (shorthand `-t`)")
 	ErrMissingPackerManifest = errors.New("packer manifest is missing")
