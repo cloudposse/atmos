@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/adrg/xdg"
-	"github.com/pkg/errors"
 	"github.com/spf13/viper"
 	"go.yaml.in/yaml/v3"
 
@@ -25,12 +24,15 @@ type CacheConfig struct {
 	TelemetryDisclosureShown bool   `mapstructure:"telemetry_disclosure_shown" yaml:"telemetry_disclosure_shown"`
 }
 
+// GetCacheFilePath returns the filesystem path to the Atmos cache file.
+// It respects ATMOS_XDG_CACHE_HOME and XDG_CACHE_HOME environment variables for cache directory location.
+// Returns an error if the cache directory cannot be created or if environment variables cannot be bound.
 func GetCacheFilePath() (string, error) {
 	// Bind both ATMOS_XDG_CACHE_HOME and XDG_CACHE_HOME to support ATMOS override
 	// This allows operators to use ATMOS_XDG_CACHE_HOME to override the standard XDG_CACHE_HOME
 	v := viper.New()
 	if err := v.BindEnv("XDG_CACHE_HOME", "ATMOS_XDG_CACHE_HOME", "XDG_CACHE_HOME"); err != nil {
-		return "", errors.Wrap(err, "error binding XDG_CACHE_HOME environment variables")
+		return "", fmt.Errorf("error binding XDG_CACHE_HOME environment variables: %w", err)
 	}
 
 	var cacheDir string

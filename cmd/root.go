@@ -442,10 +442,15 @@ func Execute() error {
 		}
 	}
 
-	// Print telemetry disclosure if needed (skip for completion commands and when CLI config not found)
-	// We need to show this before command execution
-	if !isCompletionCommand() && !errors.Is(initErr, cfg.NotFound) {
-		telemetry.PrintTelemetryDisclosure()
+	// Set up PersistentPreRun to print telemetry disclosure before command execution
+	// This ensures it works for both direct CLI invocations and programmatic SetArgs() calls
+	if RootCmd.PersistentPreRun == nil && RootCmd.PersistentPreRunE == nil {
+		RootCmd.PersistentPreRun = func(cmd *cobra.Command, args []string) {
+			// Print telemetry disclosure if needed (skip for completion commands and when CLI config not found)
+			if !isCompletionCommand(cmd) && !errors.Is(initErr, cfg.NotFound) {
+				telemetry.PrintTelemetryDisclosure()
+			}
+		}
 	}
 
 	// Cobra for some reason handles root command in such a way that custom usage and help command don't work as per expectations.
@@ -465,19 +470,17 @@ func Execute() error {
 // isCompletionCommand checks if the current invocation is for shell completion.
 // This includes both user-visible completion commands and Cobra's internal
 // hidden completion commands (__complete, __completeNoDesc).
-func isCompletionCommand() bool {
-	// Check if running completion commands
-	args := os.Args
-	if len(args) > 1 {
-		// Check for the regular completion command
-		if args[1] == "completion" {
-			return true
-		}
-		// Check for Cobra's hidden shell completion commands
-		// These are used internally by shell completion scripts
-		if args[1] == "__complete" || args[1] == "__completeNoDesc" {
-			return true
-		}
+// It works with both direct CLI invocations and programmatic SetArgs() calls.
+func isCompletionCommand(cmd *cobra.Command) bool {
+	if cmd == nil {
+		return false
+	}
+
+	// Check the command name directly from the Cobra command
+	// This works for both os.Args and SetArgs() invocations
+	cmdName := cmd.Name()
+	if cmdName == "completion" || cmdName == "__complete" || cmdName == "__completeNoDesc" {
+		return true
 	}
 
 	// Also check for shell completion environment variables

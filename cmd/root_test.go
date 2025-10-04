@@ -7,9 +7,10 @@ import (
 	"strings"
 	"testing"
 
-	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -369,8 +370,7 @@ func TestIsCompletionCommand(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Setup.
-			os.Args = tt.args
+			// Setup environment variables.
 			if tt.compLine != "" {
 				t.Setenv("COMP_LINE", tt.compLine)
 			}
@@ -378,8 +378,16 @@ func TestIsCompletionCommand(t *testing.T) {
 				t.Setenv("_ARGCOMPLETE", tt.argComp)
 			}
 
+			// Create a mock command with the appropriate name based on the test args.
+			var cmd *cobra.Command
+			if len(tt.args) > 1 {
+				cmd = &cobra.Command{
+					Use: tt.args[1],
+				}
+			}
+
 			// Test.
-			result := isCompletionCommand()
+			result := isCompletionCommand(cmd)
 			assert.Equal(t, tt.expected, result)
 		})
 	}

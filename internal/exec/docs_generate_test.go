@@ -15,11 +15,11 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-// NOTE: Error Checking Best Practices
+// NOTE: Error Checking Best Practices.
 // When testing errors, prefer errors.Is() or errors.As() over string matching.
-// WRONG: if !strings.Contains(err.Error(), "expected message")
-// RIGHT: if !errors.Is(err, errUtils.ErrExpected)
-// RIGHT: var pathErr *os.PathError; if !errors.As(err, &pathErr)
+// WRONG: if !strings.Contains(err.Error(), "expected message").
+// RIGHT: if !errors.Is(err, errUtils.ErrExpected).
+// RIGHT: var pathErr *os.PathError; if !errors.As(err, &pathErr).
 // This makes tests more robust and follows Go idioms for error handling.
 
 // TestIsRemoteSource verifies that IsRemoteSource returns expected booleans.

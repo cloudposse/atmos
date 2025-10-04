@@ -350,7 +350,7 @@ func isRemoteSource(s string) bool {
 }
 
 // resolvePath resolves a file path according to the following rules:
-// - If path is empty, uses defaultPath
+// - If path is empty, uses defaultPath.
 // - Absolute paths: resolved as is.
 // - Explicit relative (./ or ../) relative to cwd.
 // - Implicit relative paths first against baseDir, then cwd.
