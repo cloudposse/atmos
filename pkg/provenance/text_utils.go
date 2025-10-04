@@ -81,11 +81,12 @@ func wrapLine(line string, maxWidth int) []string {
 		wrapped = append(wrapped, currentLine.String())
 	}
 
-	// If we couldn't wrap nicely, just hard-wrap at maxWidth
+	// If we couldn't wrap nicely, just hard-wrap at maxWidth (rune-safe)
 	if len(wrapped) == 0 && len(plainText) > maxWidth {
-		wrapped = append(wrapped, line[:maxWidth])
-		if len(line) > maxWidth {
-			wrapped = append(wrapped, wrapLine(line[maxWidth:], maxWidth)...)
+		runes := []rune(line)
+		wrapped = append(wrapped, string(runes[:maxWidth]))
+		if len(runes) > maxWidth {
+			wrapped = append(wrapped, wrapLine(string(runes[maxWidth:]), maxWidth)...)
 		}
 	}
 

@@ -381,11 +381,11 @@ func prepareYAMLForProvenance(yamlData any, ctx *m.MergeContext, atmosConfig *sc
 		return "", err
 	}
 
-	// Apply syntax highlighting
-	highlighted, err := u.HighlightCodeWithConfig(atmosConfig, yamlBytes, "yaml")
-	if err != nil {
-		// If highlighting fails, use plain YAML
-		return yamlBytes, err
+	// Apply syntax highlighting - if it fails, fall back to plain YAML
+	highlighted, _ := u.HighlightCodeWithConfig(atmosConfig, yamlBytes, "yaml")
+	if highlighted == "" {
+		// Highlighting failed, return plain YAML
+		return yamlBytes, nil
 	}
 
 	return highlighted, nil

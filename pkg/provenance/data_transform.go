@@ -76,7 +76,8 @@ func filterEmptySections(data any, ctx *m.MergeContext) any {
 
 	for key, value := range dataMap {
 		// Check if this key or any of its array elements have provenance.
-		hasProvenance := false
+		// When ctx is nil (provenance tracking disabled), keep all keys.
+		hasProvenance := ctx == nil
 		if ctx != nil {
 			hasProvenance = ctx.HasProvenance(key)
 

@@ -238,16 +238,22 @@ func writeOutputToFile(file string, output string) error {
 
 // shouldPrintToTTY determines if output should be printed to TTY.
 func shouldPrintToTTY(file string) bool {
-	return file == "" || term.IsTerminal(int(os.Stdout.Fd()))
+	if file != "" {
+		return false
+	}
+	return term.IsTerminal(int(os.Stderr.Fd()))
 }
 
 // extractImportsList converts imports from any type to []string.
 func extractImportsList(componentSection map[string]any) []string {
 	// Try []any first (most common after YAML unmarshaling), then []string
 	if importsAny, ok := componentSection["imports"].([]any); ok && len(importsAny) > 0 {
-		imports := make([]string, len(importsAny))
-		for idx, imp := range importsAny {
-			imports[idx] = imp.(string)
+		imports := make([]string, 0, len(importsAny))
+		for _, imp := range importsAny {
+			if impStr, ok := imp.(string); ok {
+				imports = append(imports, impStr)
+			}
+			// Skip non-string imports
 		}
 		return imports
 	}

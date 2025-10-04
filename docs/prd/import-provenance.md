@@ -75,7 +75,7 @@ Atmos had two mechanisms for tracking configuration origins:
 **Colors**: All symbols use `ColorDarkGray` (#626262) for subtle, non-distracting display
 
 **Legend**: Always displayed at top of provenance output:
-```
+```text
 # Provenance Legend:
 #   ● [0] Defined in parent stack
 #   ○ [N] Inherited/imported (N levels deep)
@@ -178,7 +178,7 @@ type ProvenanceTracker interface {
 
 ### Architecture Overview
 
-```
+```text
 ┌─────────────────────────────────────────────────────────────┐
 │ YAML Parser (gopkg.in/yaml.v3 Node API)                    │
 │ - Preserves line/column numbers                            │
