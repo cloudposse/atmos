@@ -12,7 +12,7 @@ import (
 	tfdocsFormat "github.com/terraform-docs/terraform-docs/format"
 	tfdocsPrint "github.com/terraform-docs/terraform-docs/print"
 	tfdocsTf "github.com/terraform-docs/terraform-docs/terraform"
-	"gopkg.in/yaml.v3"
+	"go.yaml.in/yaml/v3"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"

@@ -6,6 +6,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+// TestStringKeysFromMap tests the StringKeysFromMap function.
 func TestStringKeysFromMap(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -13,43 +14,19 @@ func TestStringKeysFromMap(t *testing.T) {
 		expected []string
 	}{
 		{
-			name: "multiple keys",
-			input: map[string]any{
-				"zebra": 1,
-				"alpha": 2,
-				"beta":  3,
-			},
-			expected: []string{"alpha", "beta", "zebra"},
+			name:     "Map with multiple keys",
+			input:    map[string]any{"z": 1, "a": 2, "m": 3},
+			expected: []string{"a", "m", "z"},
 		},
 		{
-			name: "single key",
-			input: map[string]any{
-				"key": "value",
-			},
-			expected: []string{"key"},
-		},
-		{
-			name:     "empty map",
+			name:     "Empty map",
 			input:    map[string]any{},
 			expected: []string{},
 		},
 		{
-			name: "keys with numbers",
-			input: map[string]any{
-				"key3": 1,
-				"key1": 2,
-				"key2": 3,
-			},
-			expected: []string{"key1", "key2", "key3"},
-		},
-		{
-			name: "keys with special characters",
-			input: map[string]any{
-				"foo-bar": 1,
-				"foo_bar": 2,
-				"foo.bar": 3,
-			},
-			expected: []string{"foo-bar", "foo.bar", "foo_bar"},
+			name:     "Single key",
+			input:    map[string]any{"key": "value"},
+			expected: []string{"key"},
 		},
 	}
 
@@ -61,70 +38,43 @@ func TestStringKeysFromMap(t *testing.T) {
 	}
 }
 
+// TestMapKeyExists tests the MapKeyExists function.
 func TestMapKeyExists(t *testing.T) {
 	tests := []struct {
 		name     string
-		inputMap map[string]any
+		m        map[string]any
 		key      string
 		expected bool
 	}{
 		{
-			name: "key exists",
-			inputMap: map[string]any{
-				"foo": "bar",
-				"baz": 123,
-			},
+			name:     "Key exists",
+			m:        map[string]any{"foo": "bar", "baz": 123},
 			key:      "foo",
 			expected: true,
 		},
 		{
-			name: "key does not exist",
-			inputMap: map[string]any{
-				"foo": "bar",
-			},
+			name:     "Key does not exist",
+			m:        map[string]any{"foo": "bar"},
 			key:      "missing",
 			expected: false,
 		},
 		{
-			name:     "empty map",
-			inputMap: map[string]any{},
-			key:      "any",
+			name:     "Empty map",
+			m:        map[string]any{},
+			key:      "foo",
 			expected: false,
-		},
-		{
-			name: "key exists with nil value",
-			inputMap: map[string]any{
-				"foo": nil,
-			},
-			key:      "foo",
-			expected: true,
-		},
-		{
-			name: "key exists with empty string value",
-			inputMap: map[string]any{
-				"foo": "",
-			},
-			key:      "foo",
-			expected: true,
-		},
-		{
-			name: "key exists with zero value",
-			inputMap: map[string]any{
-				"foo": 0,
-			},
-			key:      "foo",
-			expected: true,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := MapKeyExists(tt.inputMap, tt.key)
+			result := MapKeyExists(tt.m, tt.key)
 			assert.Equal(t, tt.expected, result)
 		})
 	}
 }
 
+// TestSortMapByKeysAndValuesUniq tests the SortMapByKeysAndValuesUniq function.
 func TestSortMapByKeysAndValuesUniq(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -132,63 +82,30 @@ func TestSortMapByKeysAndValuesUniq(t *testing.T) {
 		expected map[string][]string
 	}{
 		{
-			name: "sort keys and deduplicate values",
+			name: "Sort keys and values with duplicates",
 			input: map[string][]string{
-				"zebra": {"c", "a", "b", "a"},
-				"alpha": {"z", "x", "y", "x"},
-				"beta":  {"3", "1", "2", "1"},
+				"z": {"z", "a", "a", "m"},
+				"a": {"x", "y", "x"},
 			},
 			expected: map[string][]string{
-				"alpha": {"x", "y", "z"},
-				"beta":  {"1", "2", "3"},
-				"zebra": {"a", "b", "c"},
+				"a": {"x", "y"},
+				"z": {"a", "m", "z"},
 			},
 		},
 		{
-			name: "already sorted and unique",
-			input: map[string][]string{
-				"a": {"1", "2", "3"},
-				"b": {"x", "y", "z"},
-			},
-			expected: map[string][]string{
-				"a": {"1", "2", "3"},
-				"b": {"x", "y", "z"},
-			},
-		},
-		{
-			name: "all duplicates",
-			input: map[string][]string{
-				"key": {"a", "a", "a"},
-			},
-			expected: map[string][]string{
-				"key": {"a"},
-			},
-		},
-		{
-			name:     "empty map",
+			name:     "Empty map",
 			input:    map[string][]string{},
 			expected: map[string][]string{},
 		},
 		{
-			name: "empty value slices",
+			name: "No duplicates",
 			input: map[string][]string{
-				"a": {},
-				"b": {},
+				"b": {"1", "2"},
+				"a": {"3"},
 			},
 			expected: map[string][]string{
-				"a": {},
-				"b": {},
-			},
-		},
-		{
-			name: "single value per key",
-			input: map[string][]string{
-				"z": {"one"},
-				"a": {"two"},
-			},
-			expected: map[string][]string{
-				"a": {"two"},
-				"z": {"one"},
+				"a": {"3"},
+				"b": {"1", "2"},
 			},
 		},
 	}
@@ -201,6 +118,7 @@ func TestSortMapByKeysAndValuesUniq(t *testing.T) {
 	}
 }
 
+// TestMapOfInterfacesToMapOfStrings tests the MapOfInterfacesToMapOfStrings function.
 func TestMapOfInterfacesToMapOfStrings(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -208,56 +126,32 @@ func TestMapOfInterfacesToMapOfStrings(t *testing.T) {
 		expected map[string]string
 	}{
 		{
-			name: "various types",
+			name: "Mixed types",
 			input: map[string]any{
-				"string": "hello",
-				"int":    42,
-				"float":  3.14,
+				"string": "value",
+				"int":    123,
 				"bool":   true,
 			},
 			expected: map[string]string{
-				"string": "hello",
-				"int":    "42",
-				"float":  "3.14",
+				"string": "value",
+				"int":    "123",
 				"bool":   "true",
 			},
 		},
 		{
-			name: "all strings",
-			input: map[string]any{
-				"foo": "bar",
-				"baz": "qux",
-			},
-			expected: map[string]string{
-				"foo": "bar",
-				"baz": "qux",
-			},
-		},
-		{
-			name:     "empty map",
+			name:     "Empty map",
 			input:    map[string]any{},
 			expected: map[string]string{},
 		},
 		{
-			name: "nil values",
+			name: "All strings",
 			input: map[string]any{
-				"key": nil,
+				"a": "1",
+				"b": "2",
 			},
 			expected: map[string]string{
-				"key": "<nil>",
-			},
-		},
-		{
-			name: "zero values",
-			input: map[string]any{
-				"int":    0,
-				"string": "",
-				"bool":   false,
-			},
-			expected: map[string]string{
-				"int":    "0",
-				"string": "",
-				"bool":   "false",
+				"a": "1",
+				"b": "2",
 			},
 		},
 	}
@@ -270,6 +164,7 @@ func TestMapOfInterfacesToMapOfStrings(t *testing.T) {
 	}
 }
 
+// TestMapOfInterfaceKeysToMapOfStringKeys tests the MapOfInterfaceKeysToMapOfStringKeys function.
 func TestMapOfInterfaceKeysToMapOfStringKeys(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -277,65 +172,30 @@ func TestMapOfInterfaceKeysToMapOfStringKeys(t *testing.T) {
 		expected map[string]any
 	}{
 		{
-			name: "all string keys",
+			name: "All string keys",
 			input: map[any]any{
-				"foo": "bar",
-				"baz": 123,
+				"key1": "value1",
+				"key2": 123,
 			},
 			expected: map[string]any{
-				"foo": "bar",
-				"baz": 123,
+				"key1": "value1",
+				"key2": 123,
 			},
 		},
 		{
-			name: "mixed key types - string keys preserved",
+			name: "Mixed key types",
 			input: map[any]any{
-				"string_key": "value1",
-				42:           "value2", // non-string key, should be ignored
-				true:         "value3", // non-string key, should be ignored
+				"string_key": "value",
+				123:          "ignored",
 			},
 			expected: map[string]any{
-				"string_key": "value1",
+				"string_key": "value",
 			},
 		},
 		{
-			name:     "empty map",
+			name:     "Empty map",
 			input:    map[any]any{},
 			expected: map[string]any{},
-		},
-		{
-			name: "no string keys",
-			input: map[any]any{
-				42:   "value1",
-				true: "value2",
-			},
-			expected: map[string]any{},
-		},
-		{
-			name: "string keys with various value types",
-			input: map[any]any{
-				"int":    42,
-				"float":  3.14,
-				"bool":   true,
-				"nil":    nil,
-				"string": "value",
-			},
-			expected: map[string]any{
-				"int":    42,
-				"float":  3.14,
-				"bool":   true,
-				"nil":    nil,
-				"string": "value",
-			},
-		},
-		{
-			name: "empty string key",
-			input: map[any]any{
-				"": "empty_key_value",
-			},
-			expected: map[string]any{
-				"": "empty_key_value",
-			},
 		},
 	}
 

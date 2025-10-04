@@ -49,16 +49,8 @@ func (f fakeDirEntry) Info() (os.FileInfo, error) { return nil, f.err }
 
 // TestCopyFile verifies that copyFile correctly copies file contents and preserves permissions.
 func TestCopyFile(t *testing.T) {
-	srcDir, err := os.MkdirTemp("", "copyfile-src")
-	if err != nil {
-		t.Fatalf("Failed to create source dir: %v", err)
-	}
-	defer os.RemoveAll(srcDir)
-	dstDir, err := os.MkdirTemp("", "copyfile-dst")
-	if err != nil {
-		t.Fatalf("Failed to create destination dir: %v", err)
-	}
-	defer os.RemoveAll(dstDir)
+	srcDir := t.TempDir()
+	dstDir := t.TempDir()
 	srcFile := filepath.Join(srcDir, "test.txt")
 	content := "copyFileTest"
 	if err := os.WriteFile(srcFile, []byte(content), 0o600); err != nil {
@@ -110,11 +102,7 @@ func TestShouldExcludePath_Directory(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skipf("Skipping directory exclusion test on Windows: path handling differs")
 	}
-	dir, err := os.MkdirTemp("", "dir-exclude")
-	if err != nil {
-		t.Fatalf("Failed to create temp dir: %v", err)
-	}
-	defer os.RemoveAll(dir)
+	dir := t.TempDir()
 	info, err := os.Stat(dir)
 	if err != nil {
 		t.Fatalf("Failed to stat directory: %v", err)
@@ -176,11 +164,7 @@ func TestShouldIncludePath_Error(t *testing.T) {
 
 // TestShouldSkipEntry verifies that a file is skipped if it matches an excluded pattern.
 func TestShouldSkipEntry(t *testing.T) {
-	baseDir, err := os.MkdirTemp("", "base")
-	if err != nil {
-		t.Fatalf("Failed to create base dir: %v", err)
-	}
-	defer os.RemoveAll(baseDir)
+	baseDir := t.TempDir()
 	subDir := filepath.Join(baseDir, "sub")
 	if err := os.Mkdir(subDir, 0o755); err != nil {
 		t.Fatalf("Failed to create sub dir: %v", err)
@@ -200,16 +184,8 @@ func TestShouldSkipEntry(t *testing.T) {
 
 // TestCopyDirRecursive ensures that copyDirRecursive copies a directory tree.
 func TestCopyDirRecursive(t *testing.T) {
-	srcDir, err := os.MkdirTemp("", "copydir-src")
-	if err != nil {
-		t.Fatalf("Failed to create src dir: %v", err)
-	}
-	defer os.RemoveAll(srcDir)
-	dstDir, err := os.MkdirTemp("", "copydir-dst")
-	if err != nil {
-		t.Fatalf("Failed to create dst dir: %v", err)
-	}
-	defer os.RemoveAll(dstDir)
+	srcDir := t.TempDir()
+	dstDir := t.TempDir()
 	subDir := filepath.Join(srcDir, "sub")
 	if err := os.Mkdir(subDir, 0o755); err != nil {
 		t.Fatalf("Failed to create sub dir: %v", err)
@@ -245,16 +221,8 @@ func TestProcessDirEntry_Symlink(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skipf("Skipping symlink test on Windows: symlinks require special privileges")
 	}
-	srcDir, err := os.MkdirTemp("", "symlink-src")
-	if err != nil {
-		t.Fatalf("Failed to create src dir: %v", err)
-	}
-	defer os.RemoveAll(srcDir)
-	dstDir, err := os.MkdirTemp("", "symlink-dst")
-	if err != nil {
-		t.Fatalf("Failed to create dst dir: %v", err)
-	}
-	defer os.RemoveAll(dstDir)
+	srcDir := t.TempDir()
+	dstDir := t.TempDir()
 	targetFile := filepath.Join(srcDir, "target.txt")
 	if err := os.WriteFile(targetFile, []byte("data"), 0o600); err != nil {
 		t.Fatalf("Failed to write target file: %v", err)
@@ -294,11 +262,7 @@ func TestProcessDirEntry_Symlink(t *testing.T) {
 
 // TestGetMatchesForPattern checks that getMatchesForPattern returns expected matches.
 func TestGetMatchesForPattern(t *testing.T) {
-	srcDir, err := os.MkdirTemp("", "glob-src")
-	if err != nil {
-		t.Fatalf("Failed to create src dir: %v", err)
-	}
-	defer os.RemoveAll(srcDir)
+	srcDir := t.TempDir()
 	fileA := filepath.Join(srcDir, "a.txt")
 	fileB := filepath.Join(srcDir, "b.log")
 	if err := os.WriteFile(fileA, []byte("content"), 0o600); err != nil {
@@ -323,11 +287,7 @@ func TestGetMatchesForPattern_NoMatches(t *testing.T) {
 	getGlobMatchesForTest = func(pattern string) ([]string, error) {
 		return []string{}, nil
 	}
-	srcDir, err := os.MkdirTemp("", "nomatch-src")
-	if err != nil {
-		t.Fatalf("Failed to create src dir: %v", err)
-	}
-	defer os.RemoveAll(srcDir)
+	srcDir := t.TempDir()
 	matches, err := getMatchesForPatternForTest(srcDir, "nonexistent*")
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
@@ -339,12 +299,8 @@ func TestGetMatchesForPattern_NoMatches(t *testing.T) {
 
 // TestGetMatchesForPattern_InvalidPattern ensures invalid patterns produce an error.
 func TestGetMatchesForPattern_InvalidPattern(t *testing.T) {
-	srcDir, err := os.MkdirTemp("", "invalid-src")
-	if err != nil {
-		t.Fatalf("Failed to create src dir: %v", err)
-	}
-	defer os.RemoveAll(srcDir)
-	_, err = getMatchesForPattern(srcDir, "[")
+	srcDir := t.TempDir()
+	_, err := getMatchesForPattern(srcDir, "[")
 	if err == nil {
 		t.Errorf("Expected error for invalid pattern, got nil")
 	}
@@ -364,16 +320,12 @@ func TestGetMatchesForPattern_ShallowNoMatch(t *testing.T) {
 		}
 		return []string{}, nil
 	}
-	srcDir, err := os.MkdirTemp("", "shallow-src")
-	if err != nil {
-		t.Fatalf("Failed to create src dir: %v", err)
-	}
-	defer os.RemoveAll(srcDir)
+	srcDir := t.TempDir()
 	emptyDir := filepath.Join(srcDir, "dir")
 	if err := os.Mkdir(emptyDir, 0o755); err != nil {
 		t.Fatalf("Failed to create empty directory: %v", err)
 	}
-	_, err = getMatchesForPatternForTest(srcDir, "dir/*")
+	_, err := getMatchesForPatternForTest(srcDir, "dir/*")
 	if err != nil {
 		t.Fatalf("Expected no error for shallow pattern with no matches, got %v", err)
 	}
@@ -390,11 +342,7 @@ func TestGetMatchesForPattern_RecursiveMatch(t *testing.T) {
 		}
 		return []string{}, nil
 	}
-	srcDir, err := os.MkdirTemp("", "recursive-src")
-	if err != nil {
-		t.Fatalf("Failed to create src dir: %v", err)
-	}
-	defer os.RemoveAll(srcDir)
+	srcDir := t.TempDir()
 	dir := filepath.Join(srcDir, "dir")
 	if err := os.Mkdir(dir, 0o755); err != nil {
 		t.Fatalf("Failed to create directory: %v", err)
@@ -428,16 +376,8 @@ func TestIsShallowPattern(t *testing.T) {
 
 // TestCopyDirRecursiveWithPrefix ensures prefix-based copy works.
 func TestCopyDirRecursiveWithPrefix(t *testing.T) {
-	srcDir, err := os.MkdirTemp("", "prefix-src")
-	if err != nil {
-		t.Fatalf("Failed to create src dir: %v", err)
-	}
-	defer os.RemoveAll(srcDir)
-	dstDir, err := os.MkdirTemp("", "prefix-dst")
-	if err != nil {
-		t.Fatalf("Failed to create dst dir: %v", err)
-	}
-	defer os.RemoveAll(dstDir)
+	srcDir := t.TempDir()
+	dstDir := t.TempDir()
 	filePath := filepath.Join(srcDir, "test.txt")
 	if err := os.WriteFile(filePath, []byte("content"), 0o600); err != nil {
 		t.Fatalf("Failed to write file: %v", err)
@@ -459,16 +399,8 @@ func TestCopyDirRecursiveWithPrefix(t *testing.T) {
 
 // TestProcessIncludedPattern ensures that matching files are copied.
 func TestProcessIncludedPattern(t *testing.T) {
-	srcDir, err := os.MkdirTemp("", "included-src")
-	if err != nil {
-		t.Fatalf("Failed to create src dir: %v", err)
-	}
-	defer os.RemoveAll(srcDir)
-	dstDir, err := os.MkdirTemp("", "included-dst")
-	if err != nil {
-		t.Fatalf("Failed to create dst dir: %v", err)
-	}
-	defer os.RemoveAll(dstDir)
+	srcDir := t.TempDir()
+	dstDir := t.TempDir()
 	fileMatch := filepath.Join(srcDir, "match.md")
 	if err := os.WriteFile(fileMatch, []byte("mdcontent"), 0o600); err != nil {
 		t.Fatalf("Failed to write matching file: %v", err)
@@ -491,16 +423,8 @@ func TestProcessIncludedPattern(t *testing.T) {
 
 // TestProcessIncludedPattern_Invalid ensures that an invalid pattern does not cause fatal errors.
 func TestProcessIncludedPattern_Invalid(t *testing.T) {
-	srcDir, err := os.MkdirTemp("", "invalid-src")
-	if err != nil {
-		t.Fatalf("Failed to create src dir: %v", err)
-	}
-	defer os.RemoveAll(srcDir)
-	dstDir, err := os.MkdirTemp("", "invalid-dst")
-	if err != nil {
-		t.Fatalf("Failed to create dst dir: %v", err)
-	}
-	defer os.RemoveAll(dstDir)
+	srcDir := t.TempDir()
+	dstDir := t.TempDir()
 	if err := processIncludedPattern(srcDir, dstDir, "[", []string{}); err != nil {
 		t.Fatalf("Expected processIncludedPattern to handle invalid pattern gracefully, got: %v", err)
 	}
@@ -508,16 +432,8 @@ func TestProcessIncludedPattern_Invalid(t *testing.T) {
 
 // TestProcessMatch_ShallowDirectory ensures directories are not copied when shallow is true.
 func TestProcessMatch_ShallowDirectory(t *testing.T) {
-	srcDir, err := os.MkdirTemp("", "pm-shallow-src")
-	if err != nil {
-		t.Fatalf("Failed to create src dir: %v", err)
-	}
-	defer os.RemoveAll(srcDir)
-	dstDir, err := os.MkdirTemp("", "pm-shallow-dst")
-	if err != nil {
-		t.Fatalf("Failed to create dst dir: %v", err)
-	}
-	defer os.RemoveAll(dstDir)
+	srcDir := t.TempDir()
+	dstDir := t.TempDir()
 	dirPath := filepath.Join(srcDir, "dir")
 	if err := os.Mkdir(dirPath, 0o755); err != nil {
 		t.Fatalf("Failed to create directory: %v", err)
@@ -532,16 +448,8 @@ func TestProcessMatch_ShallowDirectory(t *testing.T) {
 
 // TestProcessMatch_Directory ensures directories are copied when shallow is false.
 func TestProcessMatch_Directory(t *testing.T) {
-	srcDir, err := os.MkdirTemp("", "pm-dir-src")
-	if err != nil {
-		t.Fatalf("Failed to create src dir: %v", err)
-	}
-	defer os.RemoveAll(srcDir)
-	dstDir, err := os.MkdirTemp("", "pm-dir-dst")
-	if err != nil {
-		t.Fatalf("Failed to create dst dir: %v", err)
-	}
-	defer os.RemoveAll(dstDir)
+	srcDir := t.TempDir()
+	dstDir := t.TempDir()
 	dirPath := filepath.Join(srcDir, "dir")
 	if err := os.Mkdir(dirPath, 0o755); err != nil {
 		t.Fatalf("Failed to create directory: %v", err)
@@ -583,16 +491,8 @@ func TestCopyDirRecursive_ReadDirError(t *testing.T) {
 
 // TestCopyToTargetWithPatterns checks that included/excluded patterns work.
 func TestCopyToTargetWithPatterns(t *testing.T) {
-	srcDir, err := os.MkdirTemp("", "copyto-src")
-	if err != nil {
-		t.Fatalf("Failed to create src dir: %v", err)
-	}
-	defer os.RemoveAll(srcDir)
-	dstDir, err := os.MkdirTemp("", "copyto-dst")
-	if err != nil {
-		t.Fatalf("Failed to create dst dir: %v", err)
-	}
-	defer os.RemoveAll(dstDir)
+	srcDir := t.TempDir()
+	dstDir := t.TempDir()
 	subDir := filepath.Join(srcDir, "sub")
 	if err := os.Mkdir(subDir, 0o755); err != nil {
 		t.Fatalf("Failed to create sub dir: %v", err)
@@ -622,16 +522,8 @@ func TestCopyToTargetWithPatterns(t *testing.T) {
 
 // TestCopyToTargetWithPatterns_NoPatterns tests the branch using cp.Copy.
 func TestCopyToTargetWithPatterns_NoPatterns(t *testing.T) {
-	srcDir, err := os.MkdirTemp("", "nopattern-src")
-	if err != nil {
-		t.Fatalf("Failed to create src dir: %v", err)
-	}
-	defer os.RemoveAll(srcDir)
-	dstDir, err := os.MkdirTemp("", "nopattern-dst")
-	if err != nil {
-		t.Fatalf("Failed to create dst dir: %v", err)
-	}
-	defer os.RemoveAll(dstDir)
+	srcDir := t.TempDir()
+	dstDir := t.TempDir()
 	filePath := filepath.Join(srcDir, "file.txt")
 	if err := os.WriteFile(filePath, []byte("content"), 0o600); err != nil {
 		t.Fatalf("Failed to write file: %v", err)
@@ -650,16 +542,8 @@ func TestCopyToTargetWithPatterns_NoPatterns(t *testing.T) {
 
 // TestCopyToTargetWithPatterns_LocalFileBranch tests the sourceIsLocalFile branch.
 func TestCopyToTargetWithPatterns_LocalFileBranch(t *testing.T) {
-	srcDir, err := os.MkdirTemp("", "local-src")
-	if err != nil {
-		t.Fatalf("Failed to create src dir: %v", err)
-	}
-	defer os.RemoveAll(srcDir)
-	dstDir, err := os.MkdirTemp("", "local-dst")
-	if err != nil {
-		t.Fatalf("Failed to create dst dir: %v", err)
-	}
-	defer os.RemoveAll(dstDir)
+	srcDir := t.TempDir()
+	dstDir := t.TempDir()
 	filePath := filepath.Join(srcDir, "file.txt")
 	if err := os.WriteFile(filePath, []byte("data"), 0o600); err != nil {
 		t.Fatalf("Failed to write file: %v", err)
@@ -697,11 +581,7 @@ func TestProcessDirEntry_InfoError(t *testing.T) {
 
 // TestCopyFile_FailCreateDir simulates failure when creating the destination directory.
 func TestCopyFile_FailCreateDir(t *testing.T) {
-	srcDir, err := os.MkdirTemp("", "copyfile-src")
-	if err != nil {
-		t.Fatalf("Failed to create source dir: %v", err)
-	}
-	defer os.RemoveAll(srcDir)
+	srcDir := t.TempDir()
 	srcFile := filepath.Join(srcDir, "test.txt")
 	content := "copyFileTest"
 	if err := os.WriteFile(srcFile, []byte(content), 0o600); err != nil {
@@ -728,23 +608,15 @@ func TestCopyFile_FailChmod(t *testing.T) {
 	})
 	defer patches.Reset()
 
-	srcDir, err := os.MkdirTemp("", "copyfile-src")
-	if err != nil {
-		t.Fatalf("Failed to create source dir: %v", err)
-	}
-	defer os.RemoveAll(srcDir)
-	dstDir, err := os.MkdirTemp("", "copyfile-dst")
-	if err != nil {
-		t.Fatalf("Failed to create destination dir: %v", err)
-	}
-	defer os.RemoveAll(dstDir)
+	srcDir := t.TempDir()
+	dstDir := t.TempDir()
 	srcFile := filepath.Join(srcDir, "test.txt")
 	content := "copyFileTest"
 	if err := os.WriteFile(srcFile, []byte(content), 0o600); err != nil {
 		t.Fatalf("Failed to write source file: %v", err)
 	}
 	dstFile := filepath.Join(dstDir, "test.txt")
-	err = copyFile(srcFile, dstFile)
+	err := copyFile(srcFile, dstFile)
 	if err == nil {
 		t.Skipf("Skipping test: os.Chmod not effective on this platform")
 	}
@@ -770,11 +642,7 @@ func TestGetMatchesForPattern_GlobError(t *testing.T) {
 
 // TestInclusionExclusion_TrailingSlash tests the trailing-slash branch in shouldExcludePath for directories.
 func TestInclusionExclusion_TrailingSlash(t *testing.T) {
-	tmpDir, err := os.MkdirTemp("", "testdir")
-	if err != nil {
-		t.Fatalf("Failed to create temporary directory: %v", err)
-	}
-	defer os.RemoveAll(tmpDir)
+	tmpDir := t.TempDir()
 
 	info, err := os.Stat(tmpDir)
 	if err != nil {
@@ -841,16 +709,8 @@ func (fde fakeDirEntryWithInfo) Info() (os.FileInfo, error) { return fde.info, n
 
 // TestProcessPrefixEntry_FailMkdir simulates an error when creating a directory in processPrefixEntry.
 func TestProcessPrefixEntry_FailMkdir(t *testing.T) {
-	srcDir, err := os.MkdirTemp("", "prefix-src")
-	if err != nil {
-		t.Fatalf("Failed to create src dir: %v", err)
-	}
-	defer os.RemoveAll(srcDir)
-	dstDir, err := os.MkdirTemp("", "prefix-dst")
-	if err != nil {
-		t.Fatalf("Failed to create dst dir: %v", err)
-	}
-	defer os.RemoveAll(dstDir)
+	srcDir := t.TempDir()
+	dstDir := t.TempDir()
 
 	// Create a fake directory entry.
 	fi := fakeFileInfo{
@@ -876,7 +736,7 @@ func TestProcessPrefixEntry_FailMkdir(t *testing.T) {
 	})
 	defer patches.Reset()
 
-	err = processPrefixEntry(fakeEntry, ctx)
+	err := processPrefixEntry(fakeEntry, ctx)
 	if err == nil || !errors.Is(err, errUtils.ErrCreateDirectory) {
 		t.Errorf("Expected ErrCreateDirectory when creating directory fails, got %v", err)
 	}
@@ -884,16 +744,8 @@ func TestProcessPrefixEntry_FailMkdir(t *testing.T) {
 
 // TestCopyToTargetWithPatterns_UseCpCopy ensures that when no inclusion/exclusion patterns are defined, the cp.Copy branch is used.
 func TestCopyToTargetWithPatterns_UseCpCopy(t *testing.T) {
-	srcDir, err := os.MkdirTemp("", "nopattern-src")
-	if err != nil {
-		t.Fatalf("Failed to create src dir: %v", err)
-	}
-	defer os.RemoveAll(srcDir)
-	dstDir, err := os.MkdirTemp("", "nopattern-dst")
-	if err != nil {
-		t.Fatalf("Failed to create dst dir: %v", err)
-	}
-	defer os.RemoveAll(dstDir)
+	srcDir := t.TempDir()
+	dstDir := t.TempDir()
 
 	// Create a test file in the source directory.
 	filePath := filepath.Join(srcDir, "file.txt")
@@ -1248,26 +1100,6 @@ func TestComponentOrMixinsCopy_FileToFile_ExistingDir(t *testing.T) {
 	}
 	if info.IsDir() {
 		t.Errorf("Expected dest to be a file, not a directory")
-	}
-}
-
-// TestProcessIncludedPattern_NoMatches tests when pattern produces no matches.
-func TestProcessIncludedPattern_NoMatches(t *testing.T) {
-	srcDir, err := os.MkdirTemp("", "nomatch-src")
-	if err != nil {
-		t.Fatalf("Failed to create src dir: %v", err)
-	}
-	defer os.RemoveAll(srcDir)
-
-	dstDir, err := os.MkdirTemp("", "nomatch-dst")
-	if err != nil {
-		t.Fatalf("Failed to create dst dir: %v", err)
-	}
-	defer os.RemoveAll(dstDir)
-
-	// No files matching the pattern.
-	if err := processIncludedPattern(srcDir, dstDir, "**/*.xyz", []string{}); err != nil {
-		t.Errorf("Expected no error for no matches, got %v", err)
 	}
 }
 

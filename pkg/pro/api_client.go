@@ -76,6 +76,9 @@ func logAndReturnProAPIError(operation string, apiResponse dtos.AtmosApiResponse
 type AtmosProAPIClientInterface interface {
 	UploadInstances(req *dtos.InstancesUploadRequest) error
 	UploadInstanceStatus(dto *dtos.InstanceStatusUploadRequest) error
+	UploadAffectedStacks(dto *dtos.UploadAffectedStacksRequest) error
+	LockStack(dto *dtos.LockStackRequest) (dtos.LockStackResponse, error)
+	UnlockStack(dto *dtos.UnlockStackRequest) (dtos.UnlockStackResponse, error)
 }
 
 // AtmosProAPIClient represents the client to interact with the AtmosPro API.

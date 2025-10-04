@@ -9,9 +9,6 @@ import (
 	"os"
 	"strings"
 
-	errUtils "github.com/cloudposse/atmos/errors"
-	log "github.com/cloudposse/atmos/pkg/logger" // Charmbracelet structured logger
-
 	"github.com/google/go-containerregistry/pkg/authn"
 	"github.com/google/go-containerregistry/pkg/name"
 	v1 "github.com/google/go-containerregistry/pkg/v1"
@@ -19,6 +16,9 @@ import (
 	"github.com/google/uuid"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 
+	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/filesystem"
+	log "github.com/cloudposse/atmos/pkg/logger" // Charmbracelet structured logger
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -29,13 +29,24 @@ const (
 	githubTokenEnv     = "GITHUB_TOKEN"
 )
 
+var defaultOCIFileSystem = filesystem.NewOSFileSystem()
+
 // processOciImage processes an OCI image and extracts its layers to the specified destination directory.
 func processOciImage(atmosConfig *schema.AtmosConfiguration, imageName string, destDir string) error {
-	tempDir, err := os.MkdirTemp("", uuid.New().String())
+	return processOciImageWithFS(atmosConfig, imageName, destDir, defaultOCIFileSystem)
+}
+
+// processOciImageWithFS processes an OCI image using a FileSystem implementation.
+func processOciImageWithFS(_ *schema.AtmosConfiguration, imageName string, destDir string, fs filesystem.FileSystem) error {
+	tempDir, err := fs.MkdirTemp("", uuid.New().String())
 	if err != nil {
 		return errors.Join(errUtils.ErrCreateTempDirectory, err)
 	}
-	defer removeTempDir(tempDir)
+	defer func() {
+		if err := fs.RemoveAll(tempDir); err != nil {
+			log.Debug("Failed to remove temp directory", "path", tempDir, "error", err)
+		}
+	}()
 
 	ref, err := name.ParseReference(imageName)
 	if err != nil {

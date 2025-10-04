@@ -1,16 +1,7 @@
 package filematch
 
-import (
-	"os"
-	"path/filepath"
-)
-
-// fileSystem defines the filesystem operations needed by MatchFiles.
-type fileSystem interface {
-	Getwd() (string, error)
-	Walk(root string, walkFn filepath.WalkFunc) error
-	Stat(path string) (os.FileInfo, error)
-}
+// REMOVED: fileSystem interface - now using shared filesystem.FileSystem from pkg/filesystem.
+// This eliminates duplication and allows consistent mocking across the codebase.
 
 // globCompiler defines the glob pattern compilation behavior.
 type globCompiler interface {

@@ -3,11 +3,11 @@ package exec
 import (
 	"errors"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"strings"
 
+	"github.com/cloudposse/atmos/pkg/filesystem"
 	"github.com/cloudposse/atmos/pkg/perf"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -49,33 +49,64 @@ type CopyContext struct {
 	Included []string
 }
 
+// FileCopier provides file copying operations with injectable dependencies for testing.
+type FileCopier struct {
+	fs     filesystem.FileSystem
+	glob   filesystem.GlobMatcher
+	ioCopy filesystem.IOCopier
+}
+
+// NewFileCopier creates a new FileCopier with the given dependencies.
+func NewFileCopier(fs filesystem.FileSystem, glob filesystem.GlobMatcher, ioCopy filesystem.IOCopier) *FileCopier {
+	return &FileCopier{
+		fs:     fs,
+		glob:   glob,
+		ioCopy: ioCopy,
+	}
+}
+
+// defaultFileCopier is the default instance used by package-level functions.
+var defaultFileCopier = NewFileCopier(
+	filesystem.NewOSFileSystem(),
+	filesystem.NewOSGlobMatcher(),
+	filesystem.NewOSIOCopier(),
+)
+
 // copyFile copies a single file from src to dst while preserving file permissions.
+// This is a convenience wrapper around the default FileCopier.
 func copyFile(src, dst string) error {
-	sourceFile, err := os.Open(src)
+	return defaultFileCopier.copyFile(src, dst)
+}
+
+// copyFile copies a single file from src to dst while preserving file permissions.
+func (fc *FileCopier) copyFile(src, dst string) error {
+	sourceFile, err := fc.fs.Open(src)
 	if err != nil {
 		return errors.Join(errUtils.ErrOpenFile, fmt.Errorf("opening source file %q: %w", src, err))
 	}
 	defer sourceFile.Close()
-
-	if err := os.MkdirAll(filepath.Dir(dst), os.ModePerm); err != nil {
+	if err := fc.fs.MkdirAll(filepath.Dir(dst), os.ModePerm); err != nil {
 		return errors.Join(errUtils.ErrCreateDirectory, fmt.Errorf("creating destination directory for %q: %w", dst, err))
 	}
 
-	destinationFile, err := os.Create(dst)
+	destinationFile, err := fc.fs.Create(dst)
 	if err != nil {
 		return errors.Join(errUtils.ErrOpenFile, fmt.Errorf("creating destination file %q: %w", dst, err))
 	}
 	defer destinationFile.Close()
 
-	if _, err := io.Copy(destinationFile, sourceFile); err != nil {
+	// COVERAGE NOTE: Now testable via IOCopier mock - see copy_glob_error_paths_test.go.
+	if _, err := fc.ioCopy.Copy(destinationFile, sourceFile); err != nil {
 		return fmt.Errorf("copying content from %q to %q: %w", src, dst, err)
 	}
 
-	info, err := os.Stat(src)
+	// COVERAGE NOTE: Now testable via FileSystem mock - see copy_glob_error_paths_test.go.
+	info, err := fc.fs.Stat(src)
 	if err != nil {
 		return errors.Join(errUtils.ErrStatFile, fmt.Errorf("getting file info for %q: %w", src, err))
 	}
-	if err := os.Chmod(dst, info.Mode()); err != nil {
+	// COVERAGE NOTE: Now testable via FileSystem mock - see copy_glob_error_paths_test.go.
+	if err := fc.fs.Chmod(dst, info.Mode()); err != nil {
 		return errors.Join(errUtils.ErrSetPermissions, fmt.Errorf("setting permissions on %q: %w", dst, err))
 	}
 	return nil
@@ -83,9 +114,14 @@ func copyFile(src, dst string) error {
 
 // shouldExcludePath checks exclusion patterns for a given relative path and file info.
 func shouldExcludePath(info os.FileInfo, relPath string, excluded []string) bool {
+	return defaultFileCopier.shouldExcludePath(info, relPath, excluded)
+}
+
+// shouldExcludePath checks exclusion patterns for a given relative path and file info.
+func (fc *FileCopier) shouldExcludePath(info os.FileInfo, relPath string, excluded []string) bool {
 	for _, pattern := range excluded {
 		// Check plain relative path.
-		matched, err := u.PathMatch(pattern, relPath)
+		matched, err := fc.glob.PathMatch(pattern, relPath)
 		if err != nil {
 			log.Debug("Error matching exclusion pattern", logKeyPath, relPath, logKeyError, err)
 			continue
@@ -96,7 +132,7 @@ func shouldExcludePath(info os.FileInfo, relPath string, excluded []string) bool
 		}
 		// If a directory, also check with a trailing slash.
 		if info.IsDir() {
-			matched, err = u.PathMatch(pattern, relPath+"/")
+			matched, err = fc.glob.PathMatch(pattern, relPath+"/")
 			if err != nil {
 				log.Debug("Error matching exclusion pattern with trailing slash", logKeyPattern, pattern, logKeyPath, relPath+"/", logKeyError, err)
 				continue
@@ -112,12 +148,17 @@ func shouldExcludePath(info os.FileInfo, relPath string, excluded []string) bool
 
 // shouldIncludePath checks whether a file should be included based on inclusion patterns.
 func shouldIncludePath(info os.FileInfo, relPath string, included []string) bool {
+	return defaultFileCopier.shouldIncludePath(info, relPath, included)
+}
+
+// shouldIncludePath checks whether a file should be included based on inclusion patterns.
+func (fc *FileCopier) shouldIncludePath(info os.FileInfo, relPath string, included []string) bool {
 	// Directories are generally handled by recursion.
 	if len(included) == 0 || info.IsDir() {
 		return true
 	}
 	for _, pattern := range included {
-		matched, err := u.PathMatch(pattern, relPath)
+		matched, err := fc.glob.PathMatch(pattern, relPath)
 		if err != nil {
 			log.Debug("Error matching inclusion pattern", logKeyPattern, pattern, logKeyPath, relPath, logKeyError, err)
 			continue
@@ -282,8 +323,13 @@ func copyDirRecursiveWithPrefix(ctx *PrefixCopyContext) error {
 
 // getMatchesForPattern returns files/directories matching a pattern relative to sourceDir.
 func getMatchesForPattern(sourceDir, pattern string) ([]string, error) {
+	return defaultFileCopier.getMatchesForPattern(sourceDir, pattern)
+}
+
+// getMatchesForPattern returns files/directories matching a pattern relative to sourceDir.
+func (fc *FileCopier) getMatchesForPattern(sourceDir, pattern string) ([]string, error) {
 	fullPattern := filepath.Join(sourceDir, pattern)
-	matches, err := u.GetGlobMatches(fullPattern)
+	matches, err := fc.glob.GetGlobMatches(fullPattern)
 	if err != nil {
 		return nil, fmt.Errorf("error getting glob matches for %q: %w", fullPattern, err)
 	}
@@ -299,7 +345,7 @@ func getMatchesForPattern(sourceDir, pattern string) ([]string, error) {
 		}
 		recursivePattern := strings.TrimSuffix(pattern, shallowCopySuffix) + "/**"
 		fullRecursivePattern := filepath.Join(sourceDir, recursivePattern)
-		matches, err = u.GetGlobMatches(fullRecursivePattern)
+		matches, err = fc.glob.GetGlobMatches(fullRecursivePattern)
 		if err != nil {
 			return nil, fmt.Errorf("error getting glob matches for recursive pattern %q: %w", fullRecursivePattern, err)
 		}

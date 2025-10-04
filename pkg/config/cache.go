@@ -12,10 +12,11 @@ import (
 	"time"
 
 	"github.com/adrg/xdg"
+	"github.com/spf13/viper"
+	"go.yaml.in/yaml/v3"
+
 	errUtils "github.com/cloudposse/atmos/errors"
 	log "github.com/cloudposse/atmos/pkg/logger"
-	"github.com/spf13/viper"
-	"gopkg.in/yaml.v3"
 )
 
 type CacheConfig struct {
