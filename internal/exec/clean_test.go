@@ -36,7 +36,7 @@ func TestDeletePaths(t *testing.T) {
 			setup: func(t *testing.T) string {
 				dir := t.TempDir()
 				file := dir + "/testfile.txt"
-				err := os.WriteFile(file, []byte("content"), 0644)
+				err := os.WriteFile(file, []byte("content"), 0o644)
 				assert.NoError(t, err, "Failed to create test file")
 				return dir
 			},
@@ -45,7 +45,6 @@ func TestDeletePaths(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-
 			// Set up test environment
 			dir := tt.setup(t)
 			paths := tt.paths
@@ -121,7 +120,7 @@ func Test_deletePaths(t *testing.T) {
 			name:  "Successful deletion",
 			paths: []string{"/file.txt"},
 			setupMocks: func(fs *MockFilesystem) {
-				fs.EXPECT().Lstat("/file.txt").Return(&mockFileInfo2{name: "file.txt", mode: 0644}, nil)
+				fs.EXPECT().Lstat("/file.txt").Return(&mockFileInfo2{name: "file.txt", mode: 0o644}, nil)
 				fs.EXPECT().RemoveAll("/file.txt").Return(nil)
 				fs.EXPECT().Stat("/file.txt").Return(nil, os.ErrNotExist)
 			},
@@ -130,7 +129,7 @@ func Test_deletePaths(t *testing.T) {
 			name:  "RemoveAll failure",
 			paths: []string{"/fail"},
 			setupMocks: func(fs *MockFilesystem) {
-				fs.EXPECT().Lstat("/fail").Return(&mockFileInfo2{name: "fail", mode: 0644}, nil)
+				fs.EXPECT().Lstat("/fail").Return(&mockFileInfo2{name: "fail", mode: 0o644}, nil)
 				fs.EXPECT().RemoveAll("/fail").Return(errors.New("remove error"))
 			},
 			expectedErr: &multierror.Error{Errors: []error{fmt.Errorf("delete /fail: %w", errors.New("remove error"))}},
@@ -139,9 +138,9 @@ func Test_deletePaths(t *testing.T) {
 			name:  "File still exists after deletion",
 			paths: []string{"/persistent"},
 			setupMocks: func(fs *MockFilesystem) {
-				fs.EXPECT().Lstat("/persistent").Return(&mockFileInfo2{name: "persistent", mode: 0644}, nil)
+				fs.EXPECT().Lstat("/persistent").Return(&mockFileInfo2{name: "persistent", mode: 0o644}, nil)
 				fs.EXPECT().RemoveAll("/persistent").Return(nil)
-				fs.EXPECT().Stat("/persistent").Return(&mockFileInfo2{name: "persistent", mode: 0644}, nil)
+				fs.EXPECT().Stat("/persistent").Return(&mockFileInfo2{name: "persistent", mode: 0o644}, nil)
 			},
 			expectedErr: &multierror.Error{Errors: []error{fmt.Errorf("path /persistent still exists after deletion")}},
 		},
@@ -149,7 +148,7 @@ func Test_deletePaths(t *testing.T) {
 			name:  "Post-deletion stat error",
 			paths: []string{"/stat-error"},
 			setupMocks: func(fs *MockFilesystem) {
-				fs.EXPECT().Lstat("/stat-error").Return(&mockFileInfo2{name: "stat-error", mode: 0644}, nil)
+				fs.EXPECT().Lstat("/stat-error").Return(&mockFileInfo2{name: "stat-error", mode: 0o644}, nil)
 				fs.EXPECT().RemoveAll("/stat-error").Return(nil)
 				fs.EXPECT().Stat("/stat-error").Return(nil, errors.New("stat error"))
 			},
@@ -160,7 +159,7 @@ func Test_deletePaths(t *testing.T) {
 			paths: []string{"", "/nonexistent", "/file.txt", "/error"},
 			setupMocks: func(fs *MockFilesystem) {
 				fs.EXPECT().Lstat("/nonexistent").Return(nil, os.ErrNotExist)
-				fs.EXPECT().Lstat("/file.txt").Return(&mockFileInfo2{name: "file.txt", mode: 0644}, nil)
+				fs.EXPECT().Lstat("/file.txt").Return(&mockFileInfo2{name: "file.txt", mode: 0o644}, nil)
 				fs.EXPECT().RemoveAll("/file.txt").Return(nil)
 				fs.EXPECT().Stat("/file.txt").Return(nil, os.ErrNotExist)
 				fs.EXPECT().Lstat("/error").Return(nil, errors.New("lstat error"))
