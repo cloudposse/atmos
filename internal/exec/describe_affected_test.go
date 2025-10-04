@@ -921,7 +921,7 @@ func TestDescribeAffectedWithDependentsFilteredByStack(t *testing.T) {
 					},
 				},
 			},
-			Dependents: nil, // nil when filtered by stack and no dependents in that stack
+			Dependents: nil, // nil because component is not in the filtered stack (onlyInStack = "ue1-network")
 		},
 		{
 			Component:            "vpc",
@@ -935,7 +935,7 @@ func TestDescribeAffectedWithDependentsFilteredByStack(t *testing.T) {
 			Folder:               "",
 			IncludedInDependents: false,
 			Settings:             map[string]any{},
-			Dependents:           nil, // nil when filtered by stack and no dependents in that stack
+			Dependents:           nil, // nil because component is not in the filtered stack (onlyInStack = "ue1-network")
 		},
 	}
 	affected, _, _, _, err := ExecuteDescribeAffectedWithTargetRepoPath(
@@ -957,7 +957,7 @@ func TestDescribeAffectedWithDependentsFilteredByStack(t *testing.T) {
 		true,
 		true,
 		nil,
-		onlyInStack,
+		onlyInStack, // Filter dependents to only show those in "ue1-network" stack
 	)
 	require.NoError(t, err)
 	// Order-agnostic equality on struct slices
@@ -987,7 +987,7 @@ func TestDescribeAffectedWithDisabledDependents(t *testing.T) {
 			Folder:               "",
 			IncludedInDependents: false,
 			Settings:             map[string]any{},
-			Dependents:           nil, // nil when filtered by stack and no dependents in that stack
+			Dependents:           nil, // nil because component is not in the filtered stack (onlyInStack = "uw2-network")
 		},
 		{
 			Component:            "tgw/hub",
@@ -1008,7 +1008,7 @@ func TestDescribeAffectedWithDisabledDependents(t *testing.T) {
 					},
 				},
 			},
-			Dependents: nil, // nil when filtered by stack and no dependents in that stack
+			Dependents: nil, // nil because component is not in the filtered stack (onlyInStack = "uw2-network")
 		},
 		{
 			Component:            "tgw/cross-region-hub-connector",
@@ -1029,7 +1029,7 @@ func TestDescribeAffectedWithDisabledDependents(t *testing.T) {
 					},
 				},
 			},
-			Dependents: []schema.Dependent{}, // empty slice when in filtered stack but no dependents
+			Dependents: []schema.Dependent{}, // empty slice because component is in filtered stack but has no dependents
 		},
 		{
 			Component:            "vpc",
@@ -1044,7 +1044,7 @@ func TestDescribeAffectedWithDisabledDependents(t *testing.T) {
 			IncludedInDependents: false,
 			Settings:             map[string]any{},
 			// Note: tgw/attachment is NOT included here because it's disabled (enabled: false) in uw2-network
-			Dependents: []schema.Dependent{}, // empty slice when in filtered stack but no dependents
+			Dependents: []schema.Dependent{}, // empty slice because component is in filtered stack but has no dependents
 		},
 	}
 	affected, _, _, _, err := ExecuteDescribeAffectedWithTargetRepoPath(
@@ -1066,7 +1066,7 @@ func TestDescribeAffectedWithDisabledDependents(t *testing.T) {
 		true,
 		true,
 		nil,
-		onlyInStack,
+		onlyInStack, // Filter dependents to only show those in "uw2-network" stack
 	)
 	require.NoError(t, err)
 	// Order-agnostic equality on struct slices
