@@ -48,7 +48,7 @@ func TestDescribeAffected(t *testing.T) {
 	}
 
 	d.atmosConfig = &schema.AtmosConfiguration{}
-	d.addDependentsToAffected = func(atmosConfig *schema.AtmosConfiguration, affected *[]schema.Affected, includeSettings bool, processTemplates bool, processFunctions bool, skip []string) error {
+	d.addDependentsToAffected = func(atmosConfig *schema.AtmosConfiguration, affected *[]schema.Affected, includeSettings bool, processTemplates bool, processFunctions bool, skip []string, onlyInstack string) error {
 		return nil
 	}
 	d.printOrWriteToFile = func(atmosConfig *schema.AtmosConfiguration, format, file string, data any) error {
@@ -102,7 +102,7 @@ func TestDescribeAffected(t *testing.T) {
 }
 
 func TestExecuteDescribeAffectedWithTargetRepoPath(t *testing.T) {
-	// Check for Git repository with valid remotes precondition
+	// Check for Git repository with the valid remotes precondition.
 	tests.RequireGitRemoteWithValidURL(t)
 
 	stacksPath := "../../tests/fixtures/scenarios/atmos-describe-affected"
@@ -138,8 +138,11 @@ func TestExecuteDescribeAffectedWithTargetRepoPath(t *testing.T) {
 	assert.Equal(t, 0, len(affected))
 }
 
-func TestDescribeAffectedScenarios(t *testing.T) {
-	// Check for valid Git remote URL before running test
+// setupDescribeAffectedTest sets up the test environment for describe affected tests.
+func setupDescribeAffectedTest(t *testing.T) (atmosConfig schema.AtmosConfiguration, repoPath, componentPath string) {
+	t.Helper()
+
+	// Check for valid Git remote URL before running the test.
 	tests.RequireGitRemoteWithValidURL(t)
 
 	basePath := "tests/fixtures/scenarios/atmos-describe-affected-with-dependents-and-locked"
@@ -149,13 +152,15 @@ func TestDescribeAffectedScenarios(t *testing.T) {
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
 	t.Setenv("ATMOS_BASE_PATH", stacksPath)
 
-	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
+	config, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
 	require.NoError(t, err)
 
 	tempDir, err := os.MkdirTemp("", "")
 	require.NoError(t, err)
 
-	defer removeTempDir(tempDir)
+	t.Cleanup(func() {
+		removeTempDir(tempDir)
+	})
 
 	copyOptions := cp.Options{
 		PreserveTimes: false,
@@ -186,13 +191,20 @@ func TestDescribeAffectedScenarios(t *testing.T) {
 	// We are using `atmos.yaml` from this dir. This `atmos.yaml` has set base_path: "./",
 	// which will be wrong for the cloned repo in the temp dir.
 	// Set the correct base path for the cloned remote repo
-	atmosConfig.BasePath = basePath
+	config.BasePath = basePath
 
 	// Point to the copy of the local repository
-	repoPath := tempDir
+	repoPath = tempDir
 
 	// OS-specific expected component path
-	componentPath := filepath.Join("tests", "fixtures", "components", "terraform", "mock")
+	componentPath = filepath.Join("tests", "fixtures", "components", "terraform", "mock")
+
+	return config, repoPath, componentPath
+}
+
+//nolint:dupl // Test scenarios have similar structures but test different conditions.
+func TestDescribeAffectedWithTemplatesAndFunctions(t *testing.T) {
+	atmosConfig, repoPath, componentPath := setupDescribeAffectedTest(t)
 
 	// Test affected with `processTemplates: true`, `processFunctions: true` and `excludeLocked: false`
 	expected := []schema.Affected{
@@ -281,9 +293,14 @@ func TestDescribeAffectedScenarios(t *testing.T) {
 	require.NoError(t, err)
 	// Order-agnostic equality on struct slices
 	assert.ElementsMatch(t, expected, affected)
+}
+
+//nolint:dupl // Test scenarios have similar structures but test different conditions.
+func TestDescribeAffectedWithoutTemplatesAndFunctions(t *testing.T) {
+	atmosConfig, repoPath, componentPath := setupDescribeAffectedTest(t)
 
 	// Test affected with `processTemplates: false`, `processFunctions: false` and `excludeLocked: false`
-	expected = []schema.Affected{
+	expected := []schema.Affected{
 		{
 			Component:            "vpc",
 			ComponentType:        "terraform",
@@ -355,7 +372,7 @@ func TestDescribeAffectedScenarios(t *testing.T) {
 			},
 		},
 	}
-	affected, _, _, _, err = ExecuteDescribeAffectedWithTargetRepoPath(
+	affected, _, _, _, err := ExecuteDescribeAffectedWithTargetRepoPath(
 		&atmosConfig,
 		repoPath,
 		false,
@@ -369,9 +386,13 @@ func TestDescribeAffectedScenarios(t *testing.T) {
 	require.NoError(t, err)
 	// Order-agnostic equality on struct slices
 	assert.ElementsMatch(t, expected, affected)
+}
+
+func TestDescribeAffectedWithExcludeLocked(t *testing.T) {
+	atmosConfig, repoPath, componentPath := setupDescribeAffectedTest(t)
 
 	// Test affected with `processTemplates: true`, `processFunctions: true` and `excludeLocked: true`
-	expected = []schema.Affected{
+	expected := []schema.Affected{
 		{
 			Component:            "vpc",
 			ComponentType:        "terraform",
@@ -408,7 +429,7 @@ func TestDescribeAffectedScenarios(t *testing.T) {
 			},
 		},
 	}
-	affected, _, _, _, err = ExecuteDescribeAffectedWithTargetRepoPath(
+	affected, _, _, _, err := ExecuteDescribeAffectedWithTargetRepoPath(
 		&atmosConfig,
 		repoPath,
 		false,
@@ -422,10 +443,15 @@ func TestDescribeAffectedScenarios(t *testing.T) {
 	require.NoError(t, err)
 	// Order-agnostic equality on struct slices
 	assert.ElementsMatch(t, expected, affected)
+}
+
+//nolint:dupl // Test scenarios have similar structures but test different dependents processing.
+func TestDescribeAffectedWithDependents(t *testing.T) {
+	atmosConfig, repoPath, componentPath := setupDescribeAffectedTest(t)
 
 	// Test affected with `processTemplates: true`, `processFunctions: true`, `excludeLocked: false`,
 	// and process dependents (with `processTemplates: true`, `processFunctions: true` for the dependents)
-	expected = []schema.Affected{
+	expected := []schema.Affected{
 		{
 			Component:            "vpc",
 			ComponentType:        "terraform",
@@ -579,33 +605,10 @@ func TestDescribeAffectedScenarios(t *testing.T) {
 			Folder:               "",
 			IncludedInDependents: false,
 			Settings:             map[string]any{},
-			Dependents: []schema.Dependent{
-				{
-					Component:            "tgw/attachment",
-					ComponentType:        "terraform",
-					ComponentPath:        componentPath,
-					Environment:          "uw2",
-					Stage:                "network",
-					Stack:                "uw2-network",
-					StackSlug:            "uw2-network-tgw-attachment",
-					IncludedInDependents: false,
-					Settings: map[string]any{
-						"depends_on": map[any]any{
-							1: map[string]any{
-								"component": "vpc",
-							},
-							2: map[string]any{
-								"component": "tgw/hub",
-								"stack":     "ue1-network",
-							},
-						},
-					},
-					Dependents: []schema.Dependent{},
-				},
-			},
+			Dependents:           []schema.Dependent{},
 		},
 	}
-	affected, _, _, _, err = ExecuteDescribeAffectedWithTargetRepoPath(
+	affected, _, _, _, err := ExecuteDescribeAffectedWithTargetRepoPath(
 		&atmosConfig,
 		repoPath,
 		false,
@@ -624,14 +627,19 @@ func TestDescribeAffectedScenarios(t *testing.T) {
 		true,
 		true,
 		nil,
+		"",
 	)
 	require.NoError(t, err)
 	// Order-agnostic equality on struct slices
 	assert.ElementsMatch(t, expected, affected)
+}
+
+func TestDescribeAffectedWithDependentsWithoutTemplates(t *testing.T) {
+	atmosConfig, repoPath, componentPath := setupDescribeAffectedTest(t)
 
 	// Test affected with `processTemplates: false`, `processFunctions: false`, `excludeLocked: false`,
 	// and process dependents (with `processTemplates: false`, `processFunctions: false` for the dependents)
-	expected = []schema.Affected{
+	expected := []schema.Affected{
 		{
 			Component:            "vpc",
 			ComponentType:        "terraform",
@@ -736,31 +744,10 @@ func TestDescribeAffectedScenarios(t *testing.T) {
 			Folder:               "",
 			IncludedInDependents: false,
 			Settings:             map[string]any{},
-			Dependents: []schema.Dependent{
-				{
-					Component:            "tgw/attachment",
-					ComponentType:        "terraform",
-					ComponentPath:        componentPath,
-					Environment:          "uw2",
-					Stage:                "network",
-					Stack:                "uw2-network",
-					StackSlug:            "uw2-network-tgw-attachment",
-					IncludedInDependents: false,
-					Settings: map[string]any{
-						"depends_on": map[any]any{
-							1: map[string]any{"component": "vpc"},
-							2: map[string]any{
-								"component": "tgw/hub",
-								"stack":     "ue1-{{ .vars.stage }}",
-							},
-						},
-					},
-					Dependents: []schema.Dependent{},
-				},
-			},
+			Dependents:           []schema.Dependent{},
 		},
 	}
-	affected, _, _, _, err = ExecuteDescribeAffectedWithTargetRepoPath(
+	affected, _, _, _, err := ExecuteDescribeAffectedWithTargetRepoPath(
 		&atmosConfig,
 		repoPath,
 		false,
@@ -779,6 +766,307 @@ func TestDescribeAffectedScenarios(t *testing.T) {
 		false,
 		false,
 		nil,
+		"",
+	)
+	require.NoError(t, err)
+	// Order-agnostic equality on struct slices
+	assert.ElementsMatch(t, expected, affected)
+}
+
+func TestDescribeAffectedWithDependentsFilteredByStack(t *testing.T) {
+	atmosConfig, repoPath, componentPath := setupDescribeAffectedTest(t)
+
+	// Test affected with `processTemplates: true`, `processFunctions: true`, `excludeLocked: false`,
+	// process dependents (with `processTemplates: true`, `processFunctions: true` for the dependents),
+	// and filter the dependents by a specific stack.
+	dependentsStack := "ue1-network"
+	//nolint:dupl // Test scenarios have similar structures for consistency
+	expected := []schema.Affected{
+		{
+			Component:            "vpc",
+			ComponentType:        "terraform",
+			ComponentPath:        componentPath,
+			Stack:                "ue1-network",
+			StackSlug:            "ue1-network-vpc",
+			Affected:             "stack.vars",
+			AffectedAll:          []string{"stack.vars"},
+			File:                 "",
+			Folder:               "",
+			IncludedInDependents: false,
+			Settings:             map[string]any{},
+			Dependents: []schema.Dependent{
+				{
+					Component:            "tgw/attachment",
+					ComponentType:        "terraform",
+					ComponentPath:        componentPath,
+					Environment:          "ue1",
+					Stage:                "network",
+					Stack:                "ue1-network",
+					StackSlug:            "ue1-network-tgw-attachment",
+					IncludedInDependents: true,
+					Settings: map[string]any{
+						"depends_on": map[any]any{
+							1: map[string]any{
+								"component": "vpc",
+							},
+							2: map[string]any{
+								"component": "tgw/hub",
+							},
+						},
+					},
+					Dependents: []schema.Dependent{},
+				},
+				{
+					Component:            "tgw/hub",
+					ComponentType:        "terraform",
+					ComponentPath:        componentPath,
+					Environment:          "ue1",
+					Stage:                "network",
+					Stack:                "ue1-network",
+					StackSlug:            "ue1-network-tgw-hub",
+					IncludedInDependents: false,
+					Settings: map[string]any{
+						"depends_on": map[any]any{
+							1: map[string]any{
+								"component": "vpc",
+								"stack":     "ue1-network",
+							},
+						},
+					},
+					Dependents: []schema.Dependent{
+						{
+							Component:            "tgw/attachment",
+							ComponentType:        "terraform",
+							ComponentPath:        componentPath,
+							Environment:          "ue1",
+							Stage:                "network",
+							Stack:                "ue1-network",
+							StackSlug:            "ue1-network-tgw-attachment",
+							IncludedInDependents: false,
+							Settings: map[string]any{
+								"depends_on": map[any]any{
+									1: map[string]any{
+										"component": "vpc",
+									},
+									2: map[string]any{
+										"component": "tgw/hub",
+									},
+								},
+							},
+							Dependents: []schema.Dependent{},
+						},
+					},
+				},
+			},
+		},
+		{
+			Component:            "tgw/hub",
+			ComponentType:        "terraform",
+			ComponentPath:        componentPath,
+			Stack:                "ue1-network",
+			StackSlug:            "ue1-network-tgw-hub",
+			Affected:             "stack.settings",
+			AffectedAll:          []string{"stack.settings"},
+			File:                 "",
+			Folder:               "",
+			IncludedInDependents: true,
+			Settings: map[string]any{
+				"depends_on": map[any]any{
+					1: map[string]any{
+						"component": "vpc",
+						"stack":     "ue1-network",
+					},
+				},
+			},
+			Dependents: []schema.Dependent{
+				{
+					Component:            "tgw/attachment",
+					ComponentType:        "terraform",
+					ComponentPath:        componentPath,
+					Environment:          "ue1",
+					Stage:                "network",
+					Stack:                "ue1-network",
+					StackSlug:            "ue1-network-tgw-attachment",
+					IncludedInDependents: false,
+					Settings: map[string]any{
+						"depends_on": map[any]any{
+							1: map[string]any{
+								"component": "vpc",
+							},
+							2: map[string]any{
+								"component": "tgw/hub",
+							},
+						},
+					},
+					Dependents: []schema.Dependent{},
+				},
+			},
+		},
+		{
+			Component:            "tgw/cross-region-hub-connector",
+			ComponentType:        "terraform",
+			ComponentPath:        componentPath,
+			Stack:                "uw2-network",
+			StackSlug:            "uw2-network-tgw-cross-region-hub-connector",
+			Affected:             "stack.settings",
+			AffectedAll:          []string{"stack.settings"},
+			File:                 "",
+			Folder:               "",
+			IncludedInDependents: false,
+			Settings: map[string]any{
+				"depends_on": map[any]any{
+					1: map[string]any{
+						"component": "tgw/hub",
+						"stack":     "ue1-network",
+					},
+				},
+			},
+			Dependents: nil, // nil when filtered by stack and no dependents in that stack
+		},
+		{
+			Component:            "vpc",
+			ComponentType:        "terraform",
+			ComponentPath:        componentPath,
+			Stack:                "uw2-network",
+			StackSlug:            "uw2-network-vpc",
+			Affected:             "stack.vars",
+			AffectedAll:          []string{"stack.vars"},
+			File:                 "",
+			Folder:               "",
+			IncludedInDependents: false,
+			Settings:             map[string]any{},
+			Dependents:           nil, // nil when filtered by stack and no dependents in that stack
+		},
+	}
+	affected, _, _, _, err := ExecuteDescribeAffectedWithTargetRepoPath(
+		&atmosConfig,
+		repoPath,
+		false,
+		true,
+		"",
+		true,
+		true,
+		nil,
+		false,
+	)
+	require.NoError(t, err)
+	err = addDependentsToAffected(
+		&atmosConfig,
+		&affected,
+		true,
+		true,
+		true,
+		nil,
+		dependentsStack,
+	)
+	require.NoError(t, err)
+	// Order-agnostic equality on struct slices
+	assert.ElementsMatch(t, expected, affected)
+}
+
+func TestDescribeAffectedWithDisabledDependents(t *testing.T) {
+	atmosConfig, repoPath, componentPath := setupDescribeAffectedTest(t)
+
+	// Test affected with `processTemplates: true`, `processFunctions: true`, `excludeLocked: false`,
+	// process dependents (with `processTemplates: true`, `processFunctions: true` for the dependents),
+	// and filter the dependents by a specific stack.
+	// This also verifies that disabled dependents (metadata.enabled: false) are excluded from the results.
+	// In the test fixture, tgw/attachment is disabled in uw2-network (us-west-2.yaml), so it should NOT
+	// appear in the dependents list for vpc in uw2-network.
+	dependentsStack := "uw2-network"
+	expected := []schema.Affected{
+		{
+			Component:            "vpc",
+			ComponentType:        "terraform",
+			ComponentPath:        componentPath,
+			Stack:                "ue1-network",
+			StackSlug:            "ue1-network-vpc",
+			Affected:             "stack.vars",
+			AffectedAll:          []string{"stack.vars"},
+			File:                 "",
+			Folder:               "",
+			IncludedInDependents: false,
+			Settings:             map[string]any{},
+			Dependents:           nil, // nil when filtered by stack and no dependents in that stack
+		},
+		{
+			Component:            "tgw/hub",
+			ComponentType:        "terraform",
+			ComponentPath:        componentPath,
+			Stack:                "ue1-network",
+			StackSlug:            "ue1-network-tgw-hub",
+			Affected:             "stack.settings",
+			AffectedAll:          []string{"stack.settings"},
+			File:                 "",
+			Folder:               "",
+			IncludedInDependents: false,
+			Settings: map[string]any{
+				"depends_on": map[any]any{
+					1: map[string]any{
+						"component": "vpc",
+						"stack":     "ue1-network",
+					},
+				},
+			},
+			Dependents: nil, // nil when filtered by stack and no dependents in that stack
+		},
+		{
+			Component:            "tgw/cross-region-hub-connector",
+			ComponentType:        "terraform",
+			ComponentPath:        componentPath,
+			Stack:                "uw2-network",
+			StackSlug:            "uw2-network-tgw-cross-region-hub-connector",
+			Affected:             "stack.settings",
+			AffectedAll:          []string{"stack.settings"},
+			File:                 "",
+			Folder:               "",
+			IncludedInDependents: false,
+			Settings: map[string]any{
+				"depends_on": map[any]any{
+					1: map[string]any{
+						"component": "tgw/hub",
+						"stack":     "ue1-network",
+					},
+				},
+			},
+			Dependents: []schema.Dependent{}, // empty slice when in filtered stack but no dependents
+		},
+		{
+			Component:            "vpc",
+			ComponentType:        "terraform",
+			ComponentPath:        componentPath,
+			Stack:                "uw2-network",
+			StackSlug:            "uw2-network-vpc",
+			Affected:             "stack.vars",
+			AffectedAll:          []string{"stack.vars"},
+			File:                 "",
+			Folder:               "",
+			IncludedInDependents: false,
+			Settings:             map[string]any{},
+			// Note: tgw/attachment is NOT included here because it's disabled (enabled: false) in uw2-network
+			Dependents: []schema.Dependent{}, // empty slice when in filtered stack but no dependents
+		},
+	}
+	affected, _, _, _, err := ExecuteDescribeAffectedWithTargetRepoPath(
+		&atmosConfig,
+		repoPath,
+		false,
+		true,
+		"",
+		true,
+		true,
+		nil,
+		false,
+	)
+	require.NoError(t, err)
+	err = addDependentsToAffected(
+		&atmosConfig,
+		&affected,
+		true,
+		true,
+		true,
+		nil,
+		dependentsStack,
 	)
 	require.NoError(t, err)
 	// Order-agnostic equality on struct slices
