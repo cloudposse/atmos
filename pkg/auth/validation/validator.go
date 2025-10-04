@@ -131,11 +131,26 @@ func (v *validator) validateViaConfiguration(identity *schema.Identity, provider
 	if identity.Kind == "aws/user" || identity.Via == nil {
 		return nil
 	}
-	if identity.Via.Provider != "" {
+
+	// Enforce mutual exclusivity: exactly one of Provider or Identity must be set
+	hasProvider := identity.Via.Provider != ""
+	hasIdentity := identity.Via.Identity != ""
+
+	if !hasProvider && !hasIdentity {
+		return fmt.Errorf("%w: exactly one of via.provider or via.identity must be set", errUtils.ErrInvalidIdentityConfig)
+	}
+
+	if hasProvider && hasIdentity {
+		return fmt.Errorf("%w: via.provider and via.identity are mutually exclusive; only one can be set", errUtils.ErrInvalidIdentityConfig)
+	}
+
+	// Validate that referenced provider exists
+	if hasProvider {
 		if _, exists := providers[identity.Via.Provider]; !exists {
 			return fmt.Errorf("%w: referenced provider %q does not exist", errUtils.ErrInvalidAuthConfig, identity.Via.Provider)
 		}
 	}
+
 	return nil
 }
 
