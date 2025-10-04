@@ -44,7 +44,7 @@ func (d *CustomGitDetector) Detect(src, _ string) (string, bool, error) {
 	if err != nil {
 		maskedSrc, _ := maskBasicAuth(src)
 		log.Debug("Failed to parse URL", keyURL, maskedSrc, "error", err)
-		return "", false, fmt.Errorf("%w: %q: %v", errUtils.ErrParseURL, maskedSrc, err)
+		return "", false, fmt.Errorf("%w: %q: %w", errUtils.ErrParseURL, maskedSrc, err)
 	}
 
 	// If no host is detected, this is likely a local file path.
