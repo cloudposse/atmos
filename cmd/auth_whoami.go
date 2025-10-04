@@ -1,0 +1,140 @@
+package cmd
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"os"
+	"strings"
+
+	errUtils "github.com/cloudposse/atmos/errors"
+	authTypes "github.com/cloudposse/atmos/pkg/auth/types"
+	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/config/go-homedir"
+	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
+)
+
+var ErrNoActiveAuthSession = errors.New("no active authentication session found")
+
+// authWhoamiCmd shows current authentication status.
+var authWhoamiCmd = &cobra.Command{
+	Use:   "whoami",
+	Short: "Show current authentication status",
+	Long:  "Display information about the current effective authentication principal.",
+
+	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
+	RunE:               executeAuthWhoamiCommand,
+}
+
+func executeAuthWhoamiCommand(cmd *cobra.Command, args []string) error {
+	handleHelpRequest(cmd, args)
+
+	// Load atmos config and auth manager
+	authManager, err := loadAuthManager()
+	if err != nil {
+		return err
+	}
+
+	// Determine identity
+	identityName, err := identityFromFlagOrDefault(cmd, authManager)
+	if err != nil {
+		return err
+	}
+
+	// Query whoami
+	whoami, err := authManager.Whoami(context.Background(), identityName)
+	if err != nil {
+		errUtils.CheckErrorPrintAndExit(err, "", "")
+	}
+
+	// Output
+	if viper.GetString("auth.whoami.output") == "json" {
+		return printWhoamiJSON(whoami)
+	}
+	printWhoamiHuman(whoami)
+	return nil
+}
+
+func loadAuthManager() (authTypes.AuthManager, error) {
+	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load atmos config: %w", err)
+	}
+	return createAuthManager(&atmosConfig.Auth)
+}
+
+func identityFromFlagOrDefault(cmd *cobra.Command, authManager authTypes.AuthManager) (string, error) {
+	identityName, _ := cmd.Flags().GetString("identity")
+	if identityName != "" {
+		return identityName, nil
+	}
+	defaultIdentity, err := authManager.GetDefaultIdentity()
+	if err != nil {
+		return "", fmt.Errorf("no default identity configured and no identity specified: %w", err)
+	}
+	return defaultIdentity, nil
+}
+
+func printWhoamiJSON(whoami *authTypes.WhoamiInfo) error {
+	// Redact home directory in environment variable values before output
+	redactedWhoami := *whoami
+	homeDir, _ := homedir.Dir()
+	if whoami.Environment != nil && homeDir != "" {
+		redactedEnv := make(map[string]string, len(whoami.Environment))
+		for k, v := range whoami.Environment {
+			redactedEnv[k] = redactHomeDir(v, homeDir)
+		}
+		redactedWhoami.Environment = redactedEnv
+	}
+	jsonData, err := json.MarshalIndent(redactedWhoami, "", "  ")
+	if err != nil {
+		errUtils.CheckErrorAndPrint(errUtils.ErrInvalidAuthConfig, "Failed to marshal JSON", "")
+		return errUtils.ErrInvalidAuthConfig
+	}
+	fmt.Println(string(jsonData))
+	return nil
+}
+
+func printWhoamiHuman(whoami *authTypes.WhoamiInfo) {
+	fmt.Fprintf(os.Stderr, "Current Authentication Status\n\n")
+	fmt.Fprintf(os.Stderr, "Provider: %s\n", whoami.Provider)
+	fmt.Fprintf(os.Stderr, "Identity: %s\n", whoami.Identity)
+	if whoami.Principal != "" {
+		fmt.Fprintf(os.Stderr, "Principal: %s\n", whoami.Principal)
+	}
+	if whoami.Account != "" {
+		fmt.Fprintf(os.Stderr, "Account: %s\n", whoami.Account)
+	}
+	if whoami.Region != "" {
+		fmt.Fprintf(os.Stderr, "Region: %s\n", whoami.Region)
+	}
+	if whoami.Expiration != nil {
+		fmt.Fprintf(os.Stderr, "Expires: %s\n", whoami.Expiration.Format("2006-01-02 15:04:05 MST"))
+	}
+	fmt.Fprintf(os.Stderr, "Last Updated: %s\n", whoami.LastUpdated.Format("2006-01-02 15:04:05 MST"))
+}
+
+// redactHomeDir replaces occurrences of the homeDir at the start of v with "~" to avoid leaking user paths.
+func redactHomeDir(v string, homeDir string) string {
+	if homeDir == "" {
+		return v
+	}
+	// Ensure both have the same path separator
+	if strings.HasPrefix(v, homeDir+string(os.PathSeparator)) {
+		return "~" + v[len(homeDir):]
+	}
+	if v == homeDir {
+		return "~"
+	}
+	return v
+}
+
+func init() {
+	authWhoamiCmd.Flags().StringP("output", "o", "", "Output format (json)")
+	_ = viper.BindPFlag("auth.whoami.output", authWhoamiCmd.Flags().Lookup("output"))
+	_ = viper.BindEnv("auth.whoami.output", "ATMOS_AUTH_WHOAMI_OUTPUT")
+	authCmd.AddCommand(authWhoamiCmd)
+}
