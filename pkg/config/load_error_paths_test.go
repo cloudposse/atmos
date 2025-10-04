@@ -449,7 +449,7 @@ func TestMergeDefaultImports_NotDirectory(t *testing.T) {
 
 	err = mergeDefaultImports(filePath, v)
 	assert.Error(t, err)
-	assert.ErrorIs(t, err, ErrAtmosDIrConfigNotFound)
+	assert.ErrorIs(t, err, ErrAtmosDirConfigNotFound)
 }
 
 // TestMergeConfigFile_ReadFileError tests error path at load.go:550-553.

@@ -32,7 +32,7 @@ const (
 	yamlType = "yaml"
 )
 
-var ErrAtmosDIrConfigNotFound = errors.New("atmos config directory not found")
+var ErrAtmosDirConfigNotFound = errors.New("atmos config directory not found")
 
 var defaultHomeDirProvider = filesystem.NewOSHomeDirProvider()
 
