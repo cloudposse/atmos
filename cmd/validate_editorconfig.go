@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"strings"
 
-	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/editorconfig-checker/editorconfig-checker/v3/pkg/config"
 	er "github.com/editorconfig-checker/editorconfig-checker/v3/pkg/error"
 	"github.com/editorconfig-checker/editorconfig-checker/v3/pkg/files"
@@ -14,6 +13,7 @@ import (
 	"github.com/spf13/cobra"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/cloudposse/atmos/pkg/version"
@@ -47,7 +47,7 @@ var editorConfigCmd *cobra.Command = &cobra.Command{
 	},
 }
 
-// initializeConfig breaks the initialization cycle by separating the config setup
+// initializeConfig breaks the initialization cycle by separating the config setup.
 func initializeConfig(cmd *cobra.Command) {
 	replaceAtmosConfigInConfig(cmd, atmosConfig)
 
@@ -149,7 +149,7 @@ func replaceAtmosConfigInConfig(cmd *cobra.Command, atmosConfig schema.AtmosConf
 	}
 }
 
-// runMainLogic contains the main logic
+// runMainLogic contains the main logic.
 func runMainLogic() {
 	config := *currentConfig
 	log.Debug(config.String())
@@ -191,7 +191,7 @@ func checkVersion(config config.Config) error {
 	return nil
 }
 
-// addPersistentFlags adds flags to the root command
+// addPersistentFlags adds flags to the root command.
 func addPersistentFlags(cmd *cobra.Command) {
 	cmd.PersistentFlags().StringVar(&tmpExclude, "exclude", "", "Regex to exclude files from checking")
 	cmd.PersistentFlags().BoolVar(&initEditorConfig, "init", false, "Create an initial configuration")

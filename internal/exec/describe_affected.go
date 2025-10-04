@@ -99,6 +99,7 @@ type describeAffectedExec struct {
 		processTemplates bool,
 		processYamlFunctions bool,
 		skip []string,
+		onlyInStack string,
 	) error
 	printOrWriteToFile func(
 		atmosConfig *schema.AtmosConfiguration,
@@ -273,9 +274,9 @@ func (d *describeAffectedExec) Execute(a *DescribeAffectedCmdArgs) error {
 		return err
 	}
 
-	// Add dependent components and stacks for each affected component
+	// Add dependent components and stacks for each affected component.
 	if len(affected) > 0 && a.IncludeDependents {
-		err = d.addDependentsToAffected(a.CLIConfig, &affected, a.IncludeSettings, a.ProcessTemplates, a.ProcessYamlFunctions, a.Skip)
+		err = d.addDependentsToAffected(a.CLIConfig, &affected, a.IncludeSettings, a.ProcessTemplates, a.ProcessYamlFunctions, a.Skip, a.Stack)
 		if err != nil {
 			return err
 		}

@@ -10,12 +10,11 @@ import (
 	"runtime"
 	"strings"
 
+	"github.com/spf13/viper"
 	"gopkg.in/yaml.v3"
 
-	"github.com/spf13/viper"
-
 	errUtils "github.com/cloudposse/atmos/errors"
-	"github.com/cloudposse/atmos/pkg/config/go-homedir"
+	"github.com/cloudposse/atmos/pkg/filesystem"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/version"
@@ -34,6 +33,8 @@ const (
 )
 
 var ErrAtmosDIrConfigNotFound = errors.New("atmos config directory not found")
+
+var defaultHomeDirProvider = filesystem.NewOSHomeDirProvider()
 
 // * Embedded atmos.yaml (`atmos/pkg/config/atmos.yaml`)
 // * System dir (`/usr/local/etc/atmos` on Linux, `%LOCALAPPDATA%/atmos` on Windows).
@@ -213,7 +214,12 @@ func readSystemConfig(v *viper.Viper) error {
 
 // readHomeConfig load config from user's HOME dir.
 func readHomeConfig(v *viper.Viper) error {
-	home, err := homedir.Dir()
+	return readHomeConfigWithProvider(v, defaultHomeDirProvider)
+}
+
+// readHomeConfigWithProvider loads config from user's HOME dir using a HomeDirProvider.
+func readHomeConfigWithProvider(v *viper.Viper, homeProvider filesystem.HomeDirProvider) error {
+	home, err := homeProvider.Dir()
 	if err != nil {
 		return err
 	}

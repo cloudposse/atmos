@@ -11,7 +11,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// getTerraformCommands returns an array of statically defined Terraform commands with flags
+// getTerraformCommands returns an array of statically defined Terraform commands with flags.
 func getTerraformCommands() []*cobra.Command {
 	// List of Terraform commands
 	return []*cobra.Command{
@@ -267,7 +267,7 @@ Arguments:
 	}
 }
 
-// attachTerraformCommands attaches static Terraform commands to a provided parent command
+// attachTerraformCommands attaches static Terraform commands to a provided parent command.
 func attachTerraformCommands(parentCmd *cobra.Command) {
 	parentCmd.PersistentFlags().String("append-user-agent", "", fmt.Sprintf("Sets the TF_APPEND_USER_AGENT environment variable to customize the User-Agent string in Terraform provider requests. Example: `Atmos/%s (Cloud Posse; +https://atmos.tools)`. This flag works with almost all commands.", version.Version))
 	parentCmd.PersistentFlags().Bool("skip-init", false, "Skip running `terraform init` before executing terraform commands")

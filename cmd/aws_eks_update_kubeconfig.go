@@ -35,7 +35,7 @@ See https://docs.aws.amazon.com/cli/latest/reference/eks/update-kubeconfig.html 
 	},
 }
 
-// https://docs.aws.amazon.com/cli/latest/reference/eks/update-kubeconfig.html
+// https://docs.aws.amazon.com/cli/latest/reference/eks/update-kubeconfig.html.
 func init() {
 	awsEksCmdUpdateKubeconfigCmd.DisableFlagParsing = false
 	AddStackCompletion(awsEksCmdUpdateKubeconfigCmd)

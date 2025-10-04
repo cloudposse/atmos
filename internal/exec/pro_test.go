@@ -27,6 +27,27 @@ func (m *MockProAPIClient) UploadInstanceStatus(dto *dtos.InstanceStatusUploadRe
 	return args.Error(0)
 }
 
+func (m *MockProAPIClient) UploadAffectedStacks(dto *dtos.UploadAffectedStacksRequest) error {
+	args := m.Called(dto)
+	return args.Error(0)
+}
+
+func (m *MockProAPIClient) LockStack(dto *dtos.LockStackRequest) (dtos.LockStackResponse, error) {
+	args := m.Called(dto)
+	if args.Get(0) == nil {
+		return dtos.LockStackResponse{}, args.Error(1)
+	}
+	return args.Get(0).(dtos.LockStackResponse), args.Error(1)
+}
+
+func (m *MockProAPIClient) UnlockStack(dto *dtos.UnlockStackRequest) (dtos.UnlockStackResponse, error) {
+	args := m.Called(dto)
+	if args.Get(0) == nil {
+		return dtos.UnlockStackResponse{}, args.Error(1)
+	}
+	return args.Get(0).(dtos.UnlockStackResponse), args.Error(1)
+}
+
 // MockGitRepo is a mock implementation of the git repository.
 type MockGitRepo struct {
 	mock.Mock
@@ -456,6 +477,19 @@ func TestLockKeyFormat(t *testing.T) {
 		actualKey := owner + "/" + repoName + "/" + stack + "/" + component
 
 		assert.Equal(t, expectedKey, actualKey)
+	})
+}
+
+// TestProLockUnlockCmdArgs tests the ProLockUnlockCmdArgs struct.
+func TestProLockUnlockCmdArgs(t *testing.T) {
+	t.Run("creates lock/unlock args with required fields", func(t *testing.T) {
+		args := ProLockUnlockCmdArgs{
+			Component: "vpc",
+			Stack:     "dev",
+		}
+
+		assert.Equal(t, "vpc", args.Component)
+		assert.Equal(t, "dev", args.Stack)
 	})
 }
 

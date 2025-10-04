@@ -5,10 +5,11 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/spf13/viper"
+	"go.yaml.in/yaml/v3"
+
 	log "github.com/cloudposse/atmos/pkg/logger"
 	u "github.com/cloudposse/atmos/pkg/utils"
-	"github.com/spf13/viper"
-	"gopkg.in/yaml.v3"
 )
 
 const (

@@ -92,6 +92,10 @@ func setCliArgsForDescribeStackCli(flags *pflag.FlagSet, describe *exec.Describe
 		"skip":                 &describe.Skip,
 	}
 
+	// `true` by default.
+	describe.ProcessTemplates = true
+	describe.ProcessYamlFunctions = true
+
 	var err error
 	for k := range flagsKeyValue {
 		if !flags.Changed(k) {
