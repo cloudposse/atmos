@@ -83,6 +83,7 @@ require (
 	github.com/terraform-docs/terraform-docs v0.20.0
 	github.com/xeipuuv/gojsonschema v1.2.0
 	github.com/zclconf/go-cty v1.17.0
+	go.yaml.in/yaml/v3 v3.0.4
 	golang.org/x/oauth2 v0.31.0
 	golang.org/x/term v0.35.0
 	golang.org/x/text v0.29.0
@@ -348,7 +349,6 @@ require (
 	go.opentelemetry.io/otel/sdk/metric v1.38.0 // indirect
 	go.opentelemetry.io/otel/trace v1.38.0 // indirect
 	go.yaml.in/yaml/v2 v2.4.2 // indirect
-	go.yaml.in/yaml/v3 v3.0.4 // indirect
 	go4.org/intern v0.0.0-20230525184215-6c62f75575cb // indirect
 	go4.org/netipx v0.0.0-20231129151722-fdeea329fbba // indirect
 	go4.org/unsafe/assume-no-moving-gc v0.0.0-20231121144256-b99613f794b6 // indirect
