@@ -445,9 +445,15 @@ func addDependentsToAffected(
 	processTemplates bool,
 	processYamlFunctions bool,
 	skip []string,
+	onlyInStack string,
 ) error {
 	for i := 0; i < len(*affected); i++ {
 		a := &(*affected)[i]
+
+		// Skip if `onlyInStack` is specified and the affected component is not in the specified stack.
+		if onlyInStack != "" && a.Stack != onlyInStack {
+			continue
+		}
 
 		deps, err := ExecuteDescribeDependents(
 			atmosConfig,
