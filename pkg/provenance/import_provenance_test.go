@@ -262,19 +262,24 @@ func TestAllImportsHaveProvenance(t *testing.T) {
 			continue
 		}
 
-		if importSectionStarted {
-			// Check if this is an import item line (starts with "  - ")
-			trimmed := strings.TrimSpace(line)
-			if strings.HasPrefix(trimmed, "- ") {
-				totalImportLines++
-				// Check if this line has a provenance comment (contains "# ")
-				if strings.Contains(line, "# ") && (strings.Contains(line, "●") || strings.Contains(line, "○")) {
-					importLinesWithProvenance++
-				}
-			} else if trimmed != "" && !strings.HasPrefix(trimmed, "#") {
-				// We've left the import section
-				break
+		if !importSectionStarted {
+			continue
+		}
+
+		// Check if this is an import item line (starts with "  - ")
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "- ") {
+			totalImportLines++
+			// Check if this line has a provenance comment (contains "# ")
+			if strings.Contains(line, "# ") && (strings.Contains(line, "●") || strings.Contains(line, "○")) {
+				importLinesWithProvenance++
 			}
+			continue
+		}
+
+		if trimmed != "" && !strings.HasPrefix(trimmed, "#") {
+			// We've left the import section
+			break
 		}
 	}
 

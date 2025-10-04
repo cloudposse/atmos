@@ -49,15 +49,25 @@ type ProvenanceEntry struct {
 	Depth int
 }
 
+// ProvenanceEntryParams contains parameters for creating a provenance entry.
+type ProvenanceEntryParams struct {
+	File   string
+	Line   int
+	Column int
+	Type   ProvenanceType
+	Value  any
+	Depth  int
+}
+
 // NewProvenanceEntry creates a new provenance entry.
-func NewProvenanceEntry(file string, line, column int, typ ProvenanceType, value any, depth int) *ProvenanceEntry {
+func NewProvenanceEntry(params ProvenanceEntryParams) *ProvenanceEntry {
 	return &ProvenanceEntry{
-		File:      file,
-		Line:      line,
-		Column:    column,
-		Type:      typ,
-		ValueHash: hashValue(value),
-		Depth:     depth,
+		File:      params.File,
+		Line:      params.Line,
+		Column:    params.Column,
+		Type:      params.Type,
+		ValueHash: hashValue(params.Value),
+		Depth:     params.Depth,
 	}
 }
 

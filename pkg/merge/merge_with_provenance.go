@@ -37,89 +37,140 @@ func MergeWithProvenance(
 
 	// Record provenance for all values in the result.
 	// Walk the merged result and record where each value came from.
-	recordProvenanceRecursive(result, "", ctx, positions, ctx.CurrentFile, ctx.GetImportDepth())
+	recordProvenanceRecursive(provenanceRecursiveParams{
+		data:        result,
+		currentPath: "",
+		ctx:         ctx,
+		positions:   positions,
+		currentFile: ctx.CurrentFile,
+		depth:       ctx.GetImportDepth(),
+	})
 
 	return result, nil
 }
 
-// recordProvenanceRecursive walks a data structure and records provenance for all paths.
-func recordProvenanceRecursive(
-	data any,
-	currentPath string,
-	ctx *MergeContext,
-	positions u.PositionMap,
-	currentFile string,
-	depth int,
-) {
-	if data == nil || ctx == nil || !ctx.IsProvenanceEnabled() {
+// provenanceRecursiveParams contains parameters for recursive provenance recording.
+type provenanceRecursiveParams struct {
+	data        any
+	currentPath string
+	ctx         *MergeContext
+	positions   u.PositionMap
+	currentFile string
+	depth       int
+}
+
+// RecordMapProvenance records provenance for a map and its children.
+func recordMapProvenance(params provenanceRecursiveParams, m map[string]any) {
+	if params.currentPath != "" {
+		recordProvenanceEntry(provenanceEntryParams{
+			path:           params.currentPath,
+			ctx:            params.ctx,
+			positions:      params.positions,
+			currentFile:    params.currentFile,
+			depth:          params.depth,
+			provenanceType: ProvenanceTypeInline,
+		})
+	}
+
+	for key, value := range m {
+		childPath := u.AppendJSONPathKey(params.currentPath, key)
+		recordProvenanceRecursive(provenanceRecursiveParams{
+			data:        value,
+			currentPath: childPath,
+			ctx:         params.ctx,
+			positions:   params.positions,
+			currentFile: params.currentFile,
+			depth:       params.depth,
+		})
+	}
+}
+
+// recordArrayProvenance records provenance for an array and its elements.
+func recordArrayProvenance(params provenanceRecursiveParams, arr []any) {
+	if params.currentPath != "" {
+		recordProvenanceEntry(provenanceEntryParams{
+			path:           params.currentPath,
+			ctx:            params.ctx,
+			positions:      params.positions,
+			currentFile:    params.currentFile,
+			depth:          params.depth,
+			provenanceType: ProvenanceTypeInline,
+		})
+	}
+
+	for i, item := range arr {
+		childPath := u.AppendJSONPathIndex(params.currentPath, i)
+		recordProvenanceRecursive(provenanceRecursiveParams{
+			data:        item,
+			currentPath: childPath,
+			ctx:         params.ctx,
+			positions:   params.positions,
+			currentFile: params.currentFile,
+			depth:       params.depth,
+		})
+	}
+}
+
+func recordProvenanceRecursive(params provenanceRecursiveParams) {
+	if params.data == nil || params.ctx == nil || !params.ctx.IsProvenanceEnabled() {
 		return
 	}
 
-	switch v := data.(type) {
+	switch v := params.data.(type) {
 	case map[string]any:
-		// Record provenance for the map itself if it has a path.
-		if currentPath != "" {
-			recordProvenanceEntry(currentPath, ctx, positions, currentFile, depth, ProvenanceTypeInline)
-		}
-
-		// Recurse into map values.
-		for key, value := range v {
-			childPath := u.AppendJSONPathKey(currentPath, key)
-			recordProvenanceRecursive(value, childPath, ctx, positions, currentFile, depth)
-		}
-
+		recordMapProvenance(params, v)
 	case []any:
-		// Record provenance for the array itself if it has a path.
-		if currentPath != "" {
-			recordProvenanceEntry(currentPath, ctx, positions, currentFile, depth, ProvenanceTypeInline)
-		}
-
-		// Recurse into array elements.
-		for i, item := range v {
-			childPath := u.AppendJSONPathIndex(currentPath, i)
-			recordProvenanceRecursive(item, childPath, ctx, positions, currentFile, depth)
-		}
-
+		recordArrayProvenance(params, v)
 	default:
 		// Scalar value - record provenance.
-		if currentPath != "" {
-			recordProvenanceEntry(currentPath, ctx, positions, currentFile, depth, ProvenanceTypeInline)
+		if params.currentPath != "" {
+			recordProvenanceEntry(provenanceEntryParams{
+				path:           params.currentPath,
+				ctx:            params.ctx,
+				positions:      params.positions,
+				currentFile:    params.currentFile,
+				depth:          params.depth,
+				provenanceType: ProvenanceTypeInline,
+			})
 		}
 	}
 }
 
+// provenanceEntryParams contains parameters for recording a provenance entry.
+type provenanceEntryParams struct {
+	path           string
+	ctx            *MergeContext
+	positions      u.PositionMap
+	currentFile    string
+	depth          int
+	provenanceType ProvenanceType
+}
+
 // recordProvenanceEntry records a single provenance entry for a path.
-func recordProvenanceEntry(
-	path string,
-	ctx *MergeContext,
-	positions u.PositionMap,
-	currentFile string,
-	depth int,
-	provenanceType ProvenanceType,
-) {
-	if ctx == nil || !ctx.IsProvenanceEnabled() {
+func recordProvenanceEntry(params provenanceEntryParams) {
+	if params.ctx == nil || !params.ctx.IsProvenanceEnabled() {
 		return
 	}
 
 	// Get position from the position map.
-	pos := u.GetYAMLPosition(positions, path)
+	pos := u.GetYAMLPosition(params.positions, params.path)
 
 	// Determine provenance type based on depth.
-	pType := provenanceType
-	if depth > 0 {
+	pType := params.provenanceType
+	if params.depth > 0 {
 		pType = ProvenanceTypeImport
 	}
 
 	// Record the provenance entry.
 	entry := ProvenanceEntry{
-		File:   currentFile,
+		File:   params.currentFile,
 		Line:   pos.Line,
 		Column: pos.Column,
 		Type:   pType,
-		Depth:  depth,
+		Depth:  params.depth,
 	}
 
-	ctx.RecordProvenance(path, entry)
+	params.ctx.RecordProvenance(params.path, entry)
 }
 
 // GetImportDepth returns the current import depth from the merge context.

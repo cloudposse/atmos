@@ -88,14 +88,14 @@ func (d *DescribeComponentExec) ExecuteDescribeComponentCmd(describeComponentPar
 
 	if provenance {
 		// Use the context-aware version to get the merge context
-		result, err := ExecuteDescribeComponentWithContext(
-			&atmosConfig, // Pass atmosConfig with TrackProvenance = true
-			component,
-			stack,
-			processTemplates,
-			processYamlFunctions,
-			skip,
-		)
+		result, err := ExecuteDescribeComponentWithContext(DescribeComponentContextParams{
+			AtmosConfig:          &atmosConfig, // Pass atmosConfig with TrackProvenance = true
+			Component:            component,
+			Stack:                stack,
+			ProcessTemplates:     processTemplates,
+			ProcessYamlFunctions: processYamlFunctions,
+			Skip:                 skip,
+		})
 		if err != nil {
 			return err
 		}
@@ -213,7 +213,14 @@ func ExecuteDescribeComponent(
 ) (map[string]any, error) {
 	defer perf.Track(nil, "exec.ExecuteDescribeComponent")()
 
-	result, err := ExecuteDescribeComponentWithContext(nil, component, stack, processTemplates, processYamlFunctions, skip)
+	result, err := ExecuteDescribeComponentWithContext(DescribeComponentContextParams{
+		AtmosConfig:          nil,
+		Component:            component,
+		Stack:                stack,
+		ProcessTemplates:     processTemplates,
+		ProcessYamlFunctions: processYamlFunctions,
+		Skip:                 skip,
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -345,24 +352,82 @@ func recordImportsProvenance(mergeContext *m.MergeContext, imports []string) {
 	}
 }
 
-// ExecuteDescribeComponentWithContext describes component config and returns the merge context.
-func ExecuteDescribeComponentWithContext(
+// DescribeComponentContextParams contains parameters for describing a component with context.
+type DescribeComponentContextParams struct {
+	AtmosConfig          *schema.AtmosConfiguration
+	Component            string
+	Stack                string
+	ProcessTemplates     bool
+	ProcessYamlFunctions bool
+	Skip                 []string
+}
+
+// componentTypeProcessParams contains parameters for tryProcessWithComponentType.
+type componentTypeProcessParams struct {
+	atmosConfig          *schema.AtmosConfiguration
+	configAndStacksInfo  schema.ConfigAndStacksInfo
+	componentType        string
+	processTemplates     bool
+	processYamlFunctions bool
+	skip                 []string
+}
+
+// tryProcessWithComponentType attempts to process stacks with a specific component type.
+func tryProcessWithComponentType(params *componentTypeProcessParams) (schema.ConfigAndStacksInfo, error) {
+	params.configAndStacksInfo.ComponentType = params.componentType
+	result, err := ProcessStacks(params.atmosConfig, params.configAndStacksInfo, true, params.processTemplates, params.processYamlFunctions, params.skip)
+	result.ComponentSection[cfg.ComponentTypeSectionName] = params.componentType
+	return result, err
+}
+
+// detectComponentType tries to detect component type (Terraform, Helmfile, or Packer).
+func detectComponentType(
 	atmosConfig *schema.AtmosConfiguration,
-	component string,
-	stack string,
-	processTemplates bool,
-	processYamlFunctions bool,
-	skip []string,
-) (*DescribeComponentResult, error) {
-	defer perf.Track(atmosConfig, "exec.ExecuteDescribeComponentWithContext")()
+	configAndStacksInfo *schema.ConfigAndStacksInfo,
+	params DescribeComponentContextParams,
+) (schema.ConfigAndStacksInfo, error) {
+	baseParams := componentTypeProcessParams{
+		atmosConfig:          atmosConfig,
+		configAndStacksInfo:  *configAndStacksInfo,
+		processTemplates:     params.ProcessTemplates,
+		processYamlFunctions: params.ProcessYamlFunctions,
+		skip:                 params.Skip,
+	}
+
+	// Try Terraform
+	baseParams.componentType = cfg.TerraformComponentType
+	result, err := tryProcessWithComponentType(&baseParams)
+	if err != nil {
+		// Try Helmfile
+		baseParams.configAndStacksInfo = result
+		baseParams.componentType = cfg.HelmfileComponentType
+		result, err = tryProcessWithComponentType(&baseParams)
+		if err != nil {
+			// Try Packer
+			baseParams.configAndStacksInfo = result
+			baseParams.componentType = cfg.PackerComponentType
+			result, err = tryProcessWithComponentType(&baseParams)
+			if err != nil {
+				result.ComponentSection[cfg.ComponentTypeSectionName] = ""
+				return result, err
+			}
+		}
+	}
+	return result, nil
+}
+
+// ExecuteDescribeComponentWithContext describes component config and returns the merge context.
+func ExecuteDescribeComponentWithContext(params DescribeComponentContextParams) (*DescribeComponentResult, error) {
+	defer perf.Track(params.AtmosConfig, "exec.ExecuteDescribeComponentWithContext")()
 
 	var configAndStacksInfo schema.ConfigAndStacksInfo
-	configAndStacksInfo.ComponentFromArg = component
-	configAndStacksInfo.Stack = stack
+	configAndStacksInfo.ComponentFromArg = params.Component
+	configAndStacksInfo.Stack = params.Stack
 	configAndStacksInfo.CliArgs = []string{"describe", "component"}
 	configAndStacksInfo.ComponentSection = make(map[string]any)
 
 	var err error
+	atmosConfig := params.AtmosConfig
 	// Use provided atmosConfig or initialize a new one
 	if atmosConfig == nil {
 		var config schema.AtmosConfiguration
@@ -376,22 +441,10 @@ func ExecuteDescribeComponentWithContext(
 	// Clear any previous merge context before processing
 	ClearLastMergeContext()
 
-	configAndStacksInfo.ComponentType = cfg.TerraformComponentType
-	configAndStacksInfo, err = ProcessStacks(atmosConfig, configAndStacksInfo, true, processTemplates, processYamlFunctions, skip)
-	configAndStacksInfo.ComponentSection[cfg.ComponentTypeSectionName] = cfg.TerraformComponentType
+	// Detect component type (Terraform, Helmfile, or Packer)
+	configAndStacksInfo, err = detectComponentType(atmosConfig, &configAndStacksInfo, params)
 	if err != nil {
-		configAndStacksInfo.ComponentType = cfg.HelmfileComponentType
-		configAndStacksInfo, err = ProcessStacks(atmosConfig, configAndStacksInfo, true, processTemplates, processYamlFunctions, skip)
-		configAndStacksInfo.ComponentSection[cfg.ComponentTypeSectionName] = cfg.HelmfileComponentType
-		if err != nil {
-			configAndStacksInfo.ComponentType = cfg.PackerComponentType
-			configAndStacksInfo, err = ProcessStacks(atmosConfig, configAndStacksInfo, true, processTemplates, processYamlFunctions, skip)
-			configAndStacksInfo.ComponentSection[cfg.ComponentTypeSectionName] = cfg.PackerComponentType
-			if err != nil {
-				configAndStacksInfo.ComponentSection[cfg.ComponentTypeSectionName] = ""
-				return nil, err
-			}
-		}
+		return nil, err
 	}
 
 	// Get the merge context that was stored during processing

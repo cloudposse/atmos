@@ -23,6 +23,19 @@ const (
 	SymbolInherited = "○" // U+25CB WHITE CIRCLE
 	// SymbolComputed indicates a computed/templated value.
 	SymbolComputed = "∴"
+
+	// Rendering constants.
+	defaultSeparatorWidth = 60   // Width of separator lines
+	commentSpaceNeeded    = 60   // Space needed for provenance comments
+	maxLineLength         = 10   // Buffer subtracted from comment column
+	maxArrayCheckLimit    = 1000 // Maximum array elements to check for provenance
+
+	// String constants used repeatedly.
+	pathSeparator = "."
+	yamlKeySep    = ":"
+	pathSpace     = " "
+	newlineChar   = "\n"
+	importsKey    = "imports"
 )
 
 // FileTreeNode represents provenance items grouped by file.
@@ -59,9 +72,9 @@ func RenderTree(ctx *m.MergeContext, atmosConfig *schema.AtmosConfiguration, all
 	fileTree := buildFileTree(ctx, allowedPaths)
 
 	// Header
-	buf.WriteString("Provenance\n")
-	buf.WriteString(strings.Repeat("─", 60))
-	buf.WriteString("\n")
+	buf.WriteString("Provenance" + newlineChar)
+	buf.WriteString(strings.Repeat("─", defaultSeparatorWidth))
+	buf.WriteString(newlineChar)
 
 	// Render tree structure
 	renderFileTree(&buf, fileTree)
@@ -140,7 +153,7 @@ func renderFileTree(buf *strings.Builder, tree []FileTreeNode) {
 		buf.WriteString(connector)
 		buf.WriteString(" ")
 		buf.WriteString(colorize(node.File, lipgloss.Color(theme.ColorSelectedItem)))
-		buf.WriteString("\n")
+		buf.WriteString(newlineChar)
 
 		// Items
 		for j, item := range node.Items {
@@ -168,7 +181,7 @@ func renderFileTree(buf *strings.Builder, tree []FileTreeNode) {
 
 			// Path
 			buf.WriteString(item.Path)
-			buf.WriteString("\n")
+			buf.WriteString(newlineChar)
 		}
 	}
 }
@@ -191,11 +204,11 @@ func getSymbolForEntry(entry m.ProvenanceEntry) string {
 func getSymbolColor(symbol string) lipgloss.Color {
 	switch symbol {
 	case SymbolDefined:
-		return lipgloss.Color(theme.ColorDarkGray)
+		return lipgloss.Color(theme.ColorGreen)
 	case SymbolInherited:
-		return lipgloss.Color(theme.ColorDarkGray)
+		return lipgloss.Color(theme.ColorCyan)
 	case SymbolComputed:
-		return lipgloss.Color(theme.ColorDarkGray)
+		return lipgloss.Color(theme.ColorYellow)
 	default:
 		return lipgloss.Color(theme.ColorDarkGray)
 	}
@@ -232,242 +245,6 @@ func RenderSideBySide(yamlData any, ctx *m.MergeContext, atmosConfig *schema.Atm
 
 	// Combine side-by-side
 	return combineSideBySide(highlighted, rightTree, leftWidth)
-}
-
-// normalizeProvenancePath strips component inheritance prefixes from paths.
-// Examples:
-//   - "components.terraform.vpc-flow-logs-bucket.vars.enabled" → "vars.enabled"
-//   - "terraform.vars.tags" → "vars.tags"
-//   - "vars.enabled" → "vars.enabled" (already normalized)
-func normalizeProvenancePath(path string) string {
-	defer perf.Track(nil, "provenance.normalizeProvenancePath")()
-
-	parts := strings.Split(path, ".")
-
-	// Remove "components.terraform.<component>." prefix
-	if len(parts) >= 3 && parts[0] == "components" && parts[1] == "terraform" {
-		// Skip components.terraform.<name> - return rest
-		if len(parts) > 3 {
-			return strings.Join(parts[3:], ".")
-		}
-		return ""
-	}
-
-	// Remove "terraform." prefix
-	if len(parts) >= 2 && parts[0] == "terraform" {
-		return strings.Join(parts[1:], ".")
-	}
-
-	return path
-}
-
-// isMultilineScalarIndicator checks if a value indicates a multi-line YAML scalar.
-func isMultilineScalarIndicator(value string) bool {
-	return value == "|" || value == "|-" || value == ">" || value == ">-"
-}
-
-// extractYAMLKey extracts the key from a YAML line, handling array items.
-func extractYAMLKey(trimmed string) string {
-	parts := strings.SplitN(trimmed, ":", 2)
-	key := strings.TrimSpace(parts[0])
-
-	// Handle array items like "- key:"
-	if strings.HasPrefix(key, "- ") {
-		key = strings.TrimPrefix(key, "- ")
-		key = strings.TrimSpace(key)
-	}
-
-	return key
-}
-
-// buildYAMLPath constructs a full YAML path from a stack and new key.
-func buildYAMLPath(pathStack []string, key string) string {
-	if len(pathStack) > 0 {
-		return strings.Join(append(pathStack, key), ".")
-	}
-	return key
-}
-
-// getArrayIndex returns the array index for the current level.
-func getArrayIndex(arrayIndexStack []int) (int, []int) {
-	var arrayIndex int
-
-	if len(arrayIndexStack) > 0 {
-		arrayIndex = arrayIndexStack[len(arrayIndexStack)-1]
-		newStack := make([]int, len(arrayIndexStack))
-		copy(newStack, arrayIndexStack)
-		newStack[len(newStack)-1]++ // Increment for next element
-		return arrayIndex, newStack
-	}
-
-	arrayIndex = 0
-	newStack := []int{1} // Start at 1 for next element
-	return arrayIndex, newStack
-}
-
-// popStacksForIndent pops the path, indent, and array index stacks when indentation decreases.
-func popStacksForIndent(indent int, pathStack []string, indentStack, arrayIndexStack []int) ([]string, []int, []int) {
-	for len(indentStack) > 1 && indent <= indentStack[len(indentStack)-1] {
-		pathStack = pathStack[:len(pathStack)-1]
-		indentStack = indentStack[:len(indentStack)-1]
-		if len(arrayIndexStack) > 0 {
-			arrayIndexStack = arrayIndexStack[:len(arrayIndexStack)-1]
-		}
-	}
-	return pathStack, indentStack, arrayIndexStack
-}
-
-// handleArrayItemLine processes a simple array item and records it.
-func handleArrayItemLine(lineNum int, pathStack []string, arrayIndexStack []int, lineInfo map[int]YAMLLineInfo) []int {
-	if len(pathStack) == 0 {
-		return arrayIndexStack
-	}
-
-	parentKey := pathStack[len(pathStack)-1]
-	arrayIndex, newStack := getArrayIndex(arrayIndexStack)
-
-	// Build path: parent[index]
-	currentPath := fmt.Sprintf("%s[%d]", parentKey, arrayIndex)
-
-	// Record this line as an array element
-	lineInfo[lineNum] = YAMLLineInfo{
-		Path:           currentPath,
-		IsKeyLine:      true,
-		IsContinuation: false,
-	}
-
-	return newStack
-}
-
-// yamlPathState holds the state returned from handleKeyLine.
-type yamlPathState struct {
-	pathStack       []string
-	indentStack     []int
-	arrayIndexStack []int
-	multilineStart  bool
-	multilinePath   string
-}
-
-// handleKeyLine processes a key: value line and updates stacks.
-func handleKeyLine(
-	lineNum int,
-	indent int,
-	parts []string,
-	trimmed string,
-	pathStack []string,
-	indentStack []int,
-	arrayIndexStack []int,
-	lineInfo map[int]YAMLLineInfo,
-) yamlPathState {
-	key := extractYAMLKey(trimmed)
-	currentPath := buildYAMLPath(pathStack, key)
-
-	// Determine value type
-	value := ""
-	if len(parts) > 1 {
-		value = strings.TrimSpace(parts[1])
-	}
-
-	// Check for multi-line scalar indicators
-	isMultilineStart := isMultilineScalarIndicator(value)
-
-	// Record this line as a key line
-	lineInfo[lineNum] = YAMLLineInfo{
-		Path:           currentPath,
-		IsKeyLine:      true,
-		IsContinuation: false,
-	}
-
-	state := yamlPathState{
-		pathStack:       pathStack,
-		indentStack:     indentStack,
-		arrayIndexStack: arrayIndexStack,
-		multilineStart:  isMultilineStart,
-		multilinePath:   currentPath,
-	}
-
-	// Push to stack if this is a parent key
-	if value == "" || value == "{}" || value == "[]" || isMultilineStart {
-		state.pathStack = append(state.pathStack, key)
-		state.indentStack = append(state.indentStack, indent)
-		// Reset array index counter for this new parent
-		state.arrayIndexStack = append(state.arrayIndexStack, 0)
-	}
-
-	return state
-}
-
-// buildYAMLPathMap creates a mapping from line numbers to YAML line information.
-// It parses YAML line-by-line, tracks nesting, and detects multi-line constructs.
-func buildYAMLPathMap(yamlLines []string) map[int]YAMLLineInfo {
-	defer perf.Track(nil, "provenance.buildYAMLPathMap")()
-
-	lineInfo := make(map[int]YAMLLineInfo)
-	pathStack := []string{}    // Track nesting context
-	indentStack := []int{-1}   // Track indentation levels
-	arrayIndexStack := []int{} // Track array indices at each level
-
-	// Track multi-line values
-	inMultilineValue := false
-	multilineIndent := 0
-	multilinePath := ""
-
-	for lineNum, line := range yamlLines {
-		// Count leading spaces (accounting for ANSI codes)
-		plainLine := stripANSI(line)
-		indent := len(plainLine) - len(strings.TrimLeft(plainLine, " "))
-		trimmed := strings.TrimSpace(plainLine)
-
-		// Skip empty lines or comments
-		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
-			continue
-		}
-
-		// Check if we're exiting a multi-line value
-		if inMultilineValue && indent <= multilineIndent {
-			inMultilineValue = false
-		}
-
-		// Handle continuation lines in multi-line values
-		if inMultilineValue {
-			lineInfo[lineNum] = YAMLLineInfo{
-				Path:           multilinePath,
-				IsKeyLine:      false,
-				IsContinuation: true,
-			}
-			continue
-		}
-
-		// Pop stack for decreased indentation
-		pathStack, indentStack, arrayIndexStack = popStacksForIndent(indent, pathStack, indentStack, arrayIndexStack)
-
-		// Handle simple array items (lines starting with "- " but no colon)
-		if strings.HasPrefix(trimmed, "- ") && !strings.Contains(trimmed, ":") {
-			arrayIndexStack = handleArrayItemLine(lineNum, pathStack, arrayIndexStack, lineInfo)
-			continue
-		}
-
-		// Extract key from "key:" or "key: value" or "- item"
-		if strings.Contains(trimmed, ":") {
-			parts := strings.SplitN(trimmed, ":", 2)
-			state := handleKeyLine(
-				lineNum, indent, parts, trimmed, pathStack, indentStack, arrayIndexStack, lineInfo,
-			)
-
-			pathStack = state.pathStack
-			indentStack = state.indentStack
-			arrayIndexStack = state.arrayIndexStack
-			multilinePath = state.multilinePath
-
-			// Enter multi-line mode if this is a multi-line scalar
-			if state.multilineStart {
-				inMultilineValue = true
-				multilineIndent = indent
-			}
-		}
-	}
-
-	return lineInfo
 }
 
 // findProvenance looks up provenance for a normalized path.
@@ -580,104 +357,73 @@ func getCommentColumn() int {
 	return commentColumn
 }
 
-// renameImportsToImport renames the "imports" key to "import" and updates provenance paths.
-// This makes the output match the stack manifest schema (which uses "import:" not "imports:").
-func renameImportsToImport(data any, ctx *m.MergeContext) any {
-	defer perf.Track(nil, "provenance.renameImportsToImport")()
-
-	dataMap, ok := data.(map[string]any)
-	if !ok || ctx == nil {
-		return data
-	}
-
-	// Check if "imports" key exists.
-	_, hasImports := dataMap["imports"]
-	if !hasImports {
-		return data
-	}
-
-	// Create new map with "import" instead of "imports".
-	newMap := make(map[string]any, len(dataMap))
-	for k, v := range dataMap {
-		if k == "imports" {
-			newMap["import"] = v
-		} else {
-			newMap[k] = v
-		}
-	}
-
-	// Update provenance paths from "imports" → "import" and "imports[N]" → "import[N]".
-	if ctx.HasProvenance("imports") {
-		if entries := ctx.GetProvenance("imports"); entries != nil && len(entries) > 0 {
-			// Use the latest entry (last in the slice).
-			ctx.RecordProvenance("import", entries[len(entries)-1])
-		}
-	}
-
-	// Update array element paths.
-	i := 0
-	for {
-		oldPath := fmt.Sprintf("imports[%d]", i)
-		if !ctx.HasProvenance(oldPath) {
-			break
-		}
-		if entries := ctx.GetProvenance(oldPath); len(entries) > 0 {
-			newPath := fmt.Sprintf("import[%d]", i)
-			// Use the latest entry (last in the slice).
-			ctx.RecordProvenance(newPath, entries[len(entries)-1])
-		}
-		i++
-	}
-
-	return newMap
-}
-
-// filterEmptySections removes top-level sections that have no provenance.
-// This prevents displaying sections like "backend: {}" or "overrides: {}" when they
-// weren't explicitly defined in any file and are just generated placeholders.
-func filterEmptySections(data any, ctx *m.MergeContext) any {
-	defer perf.Track(nil, "provenance.filterEmptySections")()
-
-	dataMap, ok := data.(map[string]any)
-	if !ok {
-		return data
-	}
-
-	// Create a new map to hold filtered results
-	filtered := make(map[string]any)
-
-	for key, value := range dataMap {
-		// Check if this key or any of its array elements have provenance.
-		hasProvenance := false
-		if ctx != nil {
-			hasProvenance = ctx.HasProvenance(key)
-
-			// If no direct provenance, check for array element provenance.
-			if !hasProvenance {
-				// Check up to 1000 array elements (reasonable limit).
-				for i := 0; i < 1000; i++ {
-					arrayPath := fmt.Sprintf("%s[%d]", key, i)
-					if ctx.HasProvenance(arrayPath) {
-						hasProvenance = true
-						break
-					}
-				}
-			}
-		}
-
-		// Keep if has provenance.
-		if hasProvenance {
-			filtered[key] = value
-		}
-	}
-
-	return filtered
-}
-
 // RenderInlineProvenance renders YAML with provenance as inline comments.
 // Deprecated: Use RenderInlineProvenanceWithStackFile instead.
 func RenderInlineProvenance(yamlData any, ctx *m.MergeContext, atmosConfig *schema.AtmosConfiguration) string {
 	return RenderInlineProvenanceWithStackFile(yamlData, ctx, atmosConfig, "")
+}
+
+// PrepareYAMLForProvenance prepares YAML data for provenance rendering.
+func prepareYAMLForProvenance(yamlData any, ctx *m.MergeContext, atmosConfig *schema.AtmosConfiguration) (string, error) {
+	// Rename "imports" → "import"
+	yamlData = renameImportsToImport(yamlData, ctx)
+
+	// Filter out empty sections
+	filteredData := filterEmptySections(yamlData, ctx)
+
+	// Wrap long strings
+	wrappedMaxLength := getCommentColumn() - maxLineLength
+	wrappedData := u.WrapLongStrings(filteredData, wrappedMaxLength)
+
+	// Convert to YAML
+	yamlBytes, err := u.ConvertToYAML(wrappedData)
+	if err != nil {
+		return "", err
+	}
+
+	// Apply syntax highlighting
+	highlighted, err := u.HighlightCodeWithConfig(atmosConfig, yamlBytes, "yaml")
+	if err != nil {
+		// If highlighting fails, use plain YAML
+		return yamlBytes, err
+	}
+
+	return highlighted, nil
+}
+
+// addProvenanceToLine adds provenance comment to a YAML line.
+func addProvenanceToLine(
+	result *strings.Builder,
+	line string,
+	entry *m.ProvenanceEntry,
+	commentColumn int,
+) {
+	plainLine := stripANSI(line)
+	lineLen := len(plainLine)
+
+	comment := formatProvenanceCommentWithStackFile(entry)
+	if comment == "" {
+		result.WriteString(line)
+		result.WriteString(newlineChar)
+		return
+	}
+
+	// Add provenance comment
+	if lineLen < commentColumn {
+		// Line is short enough - add padding and comment on same line
+		result.WriteString(line)
+		padding := commentColumn - lineLen
+		result.WriteString(strings.Repeat(pathSpace, padding))
+		result.WriteString(comment)
+	} else {
+		// Line is too long - add comment on next line indented
+		result.WriteString(line)
+		result.WriteString(newlineChar)
+		result.WriteString(strings.Repeat(pathSpace, commentColumn))
+		result.WriteString(comment)
+	}
+
+	result.WriteString(newlineChar)
 }
 
 // RenderInlineProvenanceWithStackFile renders YAML with provenance as inline comments.
@@ -690,46 +436,23 @@ func RenderInlineProvenanceWithStackFile(yamlData any, ctx *m.MergeContext, atmo
 
 	// Add legend at top
 	legendStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorDarkGray))
-	legend := "# Provenance Legend:\n" +
-		"#   ● [0] Defined in parent stack\n" +
-		"#   ○ [N] Inherited/imported (N levels deep)\n" +
-		"#   ∴ Computed/templated\n"
+	legend := "# Provenance Legend:" + newlineChar +
+		"#   ● [0] Defined in parent stack" + newlineChar +
+		"#   ○ [N] Inherited/imported (N levels deep)" + newlineChar +
+		"#   ∴ Computed/templated" + newlineChar
 	result.WriteString(legendStyle.Render(legend))
-	result.WriteString("\n")
+	result.WriteString(newlineChar)
 
-	// Rename "imports" → "import" to match stack manifest schema when provenance is displayed.
-	// Also update provenance paths from "imports[N]" → "import[N]".
-	yamlData = renameImportsToImport(yamlData, ctx)
-
-	// Filter out empty sections without provenance
-	filteredData := filterEmptySections(yamlData, ctx)
-
-	// Wrap long strings to avoid horizontal scrolling.
-	// Use comment column minus buffer as the threshold.
-	maxLineLength := getCommentColumn() - 10
-	wrappedData := u.WrapLongStrings(filteredData, maxLineLength)
-
-	// Convert yamlData to YAML string
-	yamlBytes, err := u.ConvertToYAML(wrappedData)
+	// Prepare YAML with provenance
+	highlighted, err := prepareYAMLForProvenance(yamlData, ctx, atmosConfig)
 	if err != nil {
 		return fmt.Sprintf("Error rendering YAML: %v\n", err)
 	}
 
-	// Apply syntax highlighting
-	highlighted, err := u.HighlightCodeWithConfig(atmosConfig, yamlBytes, "yaml")
-	if err != nil {
-		// If highlighting fails, use plain YAML
-		highlighted = yamlBytes
-	}
-
-	// Split into lines
-	lines := strings.Split(highlighted, "\n")
-
-	// Build path mapping
+	// Split into lines and build path mapping
+	lines := strings.Split(highlighted, newlineChar)
 	pathMap := buildYAMLPathMap(lines)
-
-	// Add provenance comments to each line
-	commentColumn := getCommentColumn() // Dynamic based on terminal width
+	commentColumn := getCommentColumn()
 
 	for i, line := range lines {
 		info, exists := pathMap[i]
@@ -737,237 +460,27 @@ func RenderInlineProvenanceWithStackFile(yamlData any, ctx *m.MergeContext, atmo
 		// Skip provenance for continuation lines
 		if exists && info.IsContinuation {
 			result.WriteString(line)
-			result.WriteString("\n")
+			result.WriteString(newlineChar)
 			continue
 		}
 
 		// Only add provenance if this is a key line
 		if !exists || !info.IsKeyLine {
 			result.WriteString(line)
-			result.WriteString("\n")
+			result.WriteString(newlineChar)
 			continue
 		}
 
-		// This is a key line - look up provenance
-		plainLine := stripANSI(line)
-		lineLen := len(plainLine)
-
+		// Look up and add provenance
 		entry := findProvenance(ctx, info.Path)
 		if entry == nil {
-			// No provenance - just write the line
 			result.WriteString(line)
-			result.WriteString("\n")
+			result.WriteString(newlineChar)
 			continue
 		}
 
-		comment := formatProvenanceCommentWithStackFile(entry)
-		if comment == "" {
-			result.WriteString(line)
-			result.WriteString("\n")
-			continue
-		}
-
-		// Add provenance comment
-		if lineLen < commentColumn {
-			// Line is short enough - add padding and comment on same line
-			result.WriteString(line)
-			padding := commentColumn - lineLen
-			result.WriteString(strings.Repeat(" ", padding))
-			result.WriteString(comment)
-		} else {
-			// Line is too long - add comment on next line indented
-			result.WriteString(line)
-			result.WriteString("\n")
-			result.WriteString(strings.Repeat(" ", commentColumn))
-			result.WriteString(comment)
-		}
-
-		result.WriteString("\n")
+		addProvenanceToLine(&result, line, entry, commentColumn)
 	}
 
 	return result.String()
-}
-
-// wrapLine wraps a line to fit within maxWidth, preserving ANSI codes.
-func wrapLine(line string, maxWidth int) []string {
-	if maxWidth <= 0 {
-		return []string{line}
-	}
-
-	// Strip ANSI to measure actual width
-	plainText := stripANSI(line)
-	if len(plainText) <= maxWidth {
-		return []string{line}
-	}
-
-	// Split line into ANSI segments and text
-	var wrapped []string
-	var currentLine strings.Builder
-	var currentPlain strings.Builder
-	currentWidth := 0
-	inEscape := false
-
-	runes := []rune(line)
-	for i := 0; i < len(runes); i++ {
-		r := runes[i]
-
-		// Handle ANSI escape sequences
-		if r == '\x1b' {
-			inEscape = true
-			currentLine.WriteRune(r)
-			continue
-		}
-
-		if inEscape {
-			currentLine.WriteRune(r)
-			if r == 'm' {
-				inEscape = false
-			}
-			continue
-		}
-
-		// Regular character - check if we need to wrap
-		if currentWidth >= maxWidth && (r == ' ' || r == '\t') {
-			// Wrap at whitespace
-			wrapped = append(wrapped, currentLine.String())
-			currentLine.Reset()
-			currentPlain.Reset()
-			currentWidth = 0
-			continue
-		}
-
-		currentLine.WriteRune(r)
-		currentPlain.WriteRune(r)
-		currentWidth++
-	}
-
-	// Add remaining content
-	if currentLine.Len() > 0 {
-		wrapped = append(wrapped, currentLine.String())
-	}
-
-	// If we couldn't wrap nicely, just hard-wrap at maxWidth
-	if len(wrapped) == 0 && len(plainText) > maxWidth {
-		wrapped = append(wrapped, line[:maxWidth])
-		if len(line) > maxWidth {
-			wrapped = append(wrapped, wrapLine(line[maxWidth:], maxWidth)...)
-		}
-	}
-
-	return wrapped
-}
-
-// combineSideBySide combines left and right text into side-by-side layout.
-func combineSideBySide(left, right string, leftWidth int) string {
-	// Wrap left lines to fit within leftWidth
-	var wrappedLeftLines []string
-	for _, line := range strings.Split(left, "\n") {
-		wrapped := wrapLine(line, leftWidth-2) // Reserve 2 chars for padding
-		wrappedLeftLines = append(wrappedLeftLines, wrapped...)
-	}
-
-	rightLines := strings.Split(right, "\n")
-
-	// Balance the lines by inserting blanks where needed
-	balancedLeft, balancedRight := balanceColumns(wrappedLeftLines, rightLines)
-
-	var buf strings.Builder
-
-	// Header
-	buf.WriteString("Configuration")
-	buf.WriteString(strings.Repeat(" ", leftWidth-13))
-	buf.WriteString(" │  Provenance\n")
-	buf.WriteString(strings.Repeat("─", leftWidth))
-	buf.WriteString("┼")
-	buf.WriteString(strings.Repeat("─", 60))
-	buf.WriteString("\n")
-
-	// Combine lines
-	maxLines := max(len(balancedLeft), len(balancedRight))
-	for i := 0; i < maxLines; i++ {
-		// Left side
-		leftLine := ""
-		if i < len(balancedLeft) {
-			leftLine = balancedLeft[i]
-		}
-		buf.WriteString(leftLine)
-
-		// Pad to left width (accounting for ANSI color codes)
-		padding := leftWidth - len(stripANSI(leftLine))
-		if padding > 0 {
-			buf.WriteString(strings.Repeat(" ", padding))
-		}
-
-		// Separator
-		buf.WriteString(" │  ")
-
-		// Right side
-		if i < len(balancedRight) {
-			buf.WriteString(balancedRight[i])
-		}
-
-		buf.WriteString("\n")
-	}
-
-	return buf.String()
-}
-
-// balanceColumns aligns left and right columns by inserting blank lines.
-func balanceColumns(leftLines, rightLines []string) ([]string, []string) {
-	// Build aligned output
-	var balancedLeft, balancedRight []string
-	leftIdx, rightIdx := 0, 0
-
-	for leftIdx < len(leftLines) || rightIdx < len(rightLines) {
-		// If both have content, check if they should align
-		switch {
-		case leftIdx < len(leftLines) && rightIdx < len(rightLines):
-			// Both sides have content - add both
-			balancedLeft = append(balancedLeft, leftLines[leftIdx])
-			balancedRight = append(balancedRight, rightLines[rightIdx])
-			leftIdx++
-			rightIdx++
-		case leftIdx < len(leftLines):
-			// Only left has content - add blank to right
-			balancedLeft = append(balancedLeft, leftLines[leftIdx])
-			balancedRight = append(balancedRight, "")
-			leftIdx++
-		default:
-			// Only right has content - add blank to left
-			balancedLeft = append(balancedLeft, "")
-			balancedRight = append(balancedRight, rightLines[rightIdx])
-			rightIdx++
-		}
-	}
-
-	return balancedLeft, balancedRight
-}
-
-// stripANSI removes ANSI escape codes from a string for length calculation.
-func stripANSI(s string) string {
-	// Simple ANSI stripping - removes escape sequences
-	result := ""
-	inEscape := false
-	for _, r := range s {
-		if r == '\x1b' {
-			inEscape = true
-			continue
-		}
-		if inEscape {
-			if r == 'm' {
-				inEscape = false
-			}
-			continue
-		}
-		result += string(r)
-	}
-	return result
-}
-
-// max returns the maximum of two integers.
-func max(a, b int) int {
-	if a > b {
-		return a
-	}
-	return b
 }

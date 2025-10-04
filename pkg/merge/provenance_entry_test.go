@@ -90,7 +90,14 @@ func TestNewProvenanceEntry(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := NewProvenanceEntry(tt.file, tt.line, tt.column, tt.typ, tt.value, tt.depth)
+			result := NewProvenanceEntry(ProvenanceEntryParams{
+				File:   tt.file,
+				Line:   tt.line,
+				Column: tt.column,
+				Type:   tt.typ,
+				Value:  tt.value,
+				Depth:  tt.depth,
+			})
 
 			assert.Equal(t, tt.expected.File, result.File)
 			assert.Equal(t, tt.expected.Line, result.Line)

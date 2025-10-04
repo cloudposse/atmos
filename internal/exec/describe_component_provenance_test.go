@@ -47,14 +47,14 @@ func TestDescribeComponent_NestedImportProvenance(t *testing.T) {
 	ClearLastMergeContext()
 
 	// Execute describe component with context to get provenance
-	result, err := ExecuteDescribeComponentWithContext(
-		&atmosConfig,
-		"vpc-flow-logs-bucket",
-		"plat-ue2-dev",
-		true, // processTemplates
-		true, // processYamlFunctions
-		nil,  // skip
-	)
+	result, err := ExecuteDescribeComponentWithContext(DescribeComponentContextParams{
+		AtmosConfig:          &atmosConfig,
+		Component:            "vpc-flow-logs-bucket",
+		Stack:                "plat-ue2-dev",
+		ProcessTemplates:     true,
+		ProcessYamlFunctions: true,
+		Skip:                 nil,
+	})
 	require.NoError(t, err)
 	require.NotNil(t, result)
 	require.NotNil(t, result.MergeContext)
@@ -211,14 +211,14 @@ func TestDescribeComponent_DirectImportProvenance(t *testing.T) {
 	ClearLastMergeContext()
 
 	// Execute describe component with context to get provenance
-	result, err := ExecuteDescribeComponentWithContext(
-		&atmosConfig,
-		"vpc",
-		"plat-ue2-dev",
-		true, // processTemplates
-		true, // processYamlFunctions
-		nil,  // skip
-	)
+	result, err := ExecuteDescribeComponentWithContext(DescribeComponentContextParams{
+		AtmosConfig:          &atmosConfig,
+		Component:            "vpc",
+		Stack:                "plat-ue2-dev",
+		ProcessTemplates:     true,
+		ProcessYamlFunctions: true,
+		Skip:                 nil,
+	})
 	require.NoError(t, err)
 	require.NotNil(t, result)
 	require.NotNil(t, result.MergeContext)
