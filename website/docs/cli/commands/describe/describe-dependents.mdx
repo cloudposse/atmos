@@ -366,6 +366,7 @@ the `settings.atlantis` section in the stack manifest. Refer to [Atlantis Integr
 Abstract Atmos components (`metadata.type` is set to `abstract`) are not included in the output since they serve as blueprints for other
 Atmos components and are not meant to be provisioned.
 
+Disabled components (`metadata.enabled: false`) are also excluded from dependents.
 :::
 
 ## Output Example
