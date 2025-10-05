@@ -70,7 +70,7 @@ func TestDeletePaths(t *testing.T) {
 	}
 }
 
-// mockFileInfo2 implements os.FileInfo
+// mockFileInfo2 implements os.FileInfo.
 type mockFileInfo2 struct {
 	name    string
 	size    int64

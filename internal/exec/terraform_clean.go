@@ -278,7 +278,7 @@ func confirmDeleteTerraformLocal(message string) (confirm bool, err error) {
 	return confirm, nil
 }
 
-// DeletePathTerraform deletes the specified file or folder. with a checkmark or xmark.
+// DeletePathTerraform deletes the specified file or folder. With a checkmark or X mark.
 func DeletePathTerraform(fullPath string, objectName string) error {
 	defer perf.Track(nil, "exec.DeletePathTerraform")()
 
