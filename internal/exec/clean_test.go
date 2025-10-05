@@ -423,18 +423,18 @@ func TestExtractCleanPatterns(t *testing.T) {
 			for path, content := range tt.setupFiles {
 				if strings.HasSuffix(path, "/") {
 					// Create directory
-					if err := os.MkdirAll(path, 0755); err != nil {
+					if err := os.MkdirAll(path, 0o755); err != nil {
 						t.Fatalf("failed to create dir %s: %v", path, err)
 					}
 				} else {
 					// Create file with parent directories
 					dir := filepath.Dir(path)
 					if dir != "." {
-						if err := os.MkdirAll(dir, 0755); err != nil {
+						if err := os.MkdirAll(dir, 0o755); err != nil {
 							t.Fatalf("failed to create parent dir %s: %v", dir, err)
 						}
 					}
-					if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+					if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 						t.Fatalf("failed to create file %s: %v", path, err)
 					}
 				}
