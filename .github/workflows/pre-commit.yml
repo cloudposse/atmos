@@ -7,6 +7,10 @@ on:
 env:
   # Ensure pre-commit uses the right Python version
   PYTHON_VERSION: "3.11"
+  # Skip hooks that are already running in other CI jobs to avoid redundant work
+  # go-build-mod: Already runs in test.yml build job
+  # golangci-lint: Already runs in codeql.yml lint-golangci job
+  SKIP: go-build-mod,golangci-lint
 
 jobs:
   pre-commit:
