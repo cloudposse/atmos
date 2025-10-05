@@ -1,6 +1,7 @@
 package merge
 
 import (
+	"errors"
 	"fmt"
 
 	"dario.cat/mergo"
@@ -83,7 +84,7 @@ func Merge(
 
 	// Check for nil config to prevent panic.
 	if atmosConfig == nil {
-		return nil, fmt.Errorf("%w: %v", errUtils.ErrMerge, errUtils.ErrAtmosConfigIsNil)
+		return nil, errors.Join(errUtils.ErrMerge, errUtils.ErrAtmosConfigIsNil)
 	}
 
 	// Default to replace strategy if strategy is empty
@@ -95,10 +96,11 @@ func Merge(
 	if strategy != ListMergeStrategyReplace &&
 		strategy != ListMergeStrategyAppend &&
 		strategy != ListMergeStrategyMerge {
-		return nil, fmt.Errorf("%w: invalid list merge strategy '%s'. Supported list merge strategies are: %s",
-			errUtils.ErrMerge,
+		err := fmt.Errorf("%w: '%s'. Supported list merge strategies are: %s",
+			errUtils.ErrInvalidListMergeStrategy,
 			strategy,
 			fmt.Sprintf("%s, %s, %s", ListMergeStrategyReplace, ListMergeStrategyAppend, ListMergeStrategyMerge))
+		return nil, errors.Join(errUtils.ErrMerge, err)
 	}
 
 	sliceDeepCopy := false
@@ -124,7 +126,7 @@ func MergeWithContext(
 
 	// Check for nil config to prevent panic
 	if atmosConfig == nil {
-		err := fmt.Errorf("%w: %w", errUtils.ErrMerge, errUtils.ErrAtmosConfigIsNil)
+		err := fmt.Errorf("%w: %s", errUtils.ErrMerge, errUtils.ErrAtmosConfigIsNil)
 		if context != nil {
 			return nil, context.FormatError(err)
 		}
@@ -140,7 +142,7 @@ func MergeWithContext(
 	if strategy != ListMergeStrategyReplace &&
 		strategy != ListMergeStrategyAppend &&
 		strategy != ListMergeStrategyMerge {
-		err := fmt.Errorf("%w: %w: '%s'. Supported list merge strategies are: %s",
+		err := fmt.Errorf("%w: %s: '%s'. Supported list merge strategies are: %s",
 			errUtils.ErrMerge,
 			errUtils.ErrInvalidListMergeStrategy,
 			strategy,

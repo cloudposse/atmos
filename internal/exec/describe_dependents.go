@@ -6,14 +6,13 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/cloudposse/atmos/pkg/perf"
-
 	"github.com/mitchellh/mapstructure"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/internal/tui/templates/term"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/pager"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -197,12 +196,15 @@ func ExecuteDescribeDependents(
 					continue
 				}
 
-				// Skip abstract components
+				// Skip abstract and disabled components
 				if metadataSection, ok := stackComponentMap["metadata"].(map[string]any); ok {
 					if metadataType, ok := metadataSection["type"].(string); ok {
 						if metadataType == "abstract" {
 							continue
 						}
+					}
+					if !isComponentEnabled(metadataSection, stackComponentName) {
+						continue
 					}
 				}
 
