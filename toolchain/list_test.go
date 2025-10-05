@@ -35,11 +35,11 @@ func TestListCommand_WithInstalledTools(t *testing.T) {
 	require.NoError(t, err)
 	// Create mock installed binaries
 	terraformPath := filepath.Join(toolsDir, "bin", "hashicorp", "terraform", "1.11.4")
-	err = os.MkdirAll(terraformPath, 0o755)
+	err = os.MkdirAll(terraformPath, defaultMkdirPermissions)
 	require.NoError(t, err)
 
 	terraformBinary := filepath.Join(terraformPath, "terraform")
-	err = os.WriteFile(terraformBinary, []byte("mock terraform binary"), 0o755)
+	err = os.WriteFile(terraformBinary, []byte("mock terraform binary"), defaultMkdirPermissions)
 	require.NoError(t, err)
 
 	// Set modification time for testing
@@ -48,11 +48,11 @@ func TestListCommand_WithInstalledTools(t *testing.T) {
 	require.NoError(t, err)
 
 	kubectlPath := filepath.Join(toolsDir, "bin", "kubernetes", "kubectl", "1.28.0")
-	err = os.MkdirAll(kubectlPath, 0o755)
+	err = os.MkdirAll(kubectlPath, defaultMkdirPermissions)
 	require.NoError(t, err)
 
 	kubectlBinary := filepath.Join(kubectlPath, "kubectl")
-	err = os.WriteFile(kubectlBinary, []byte("mock kubectl binary"), 0o755)
+	err = os.WriteFile(kubectlBinary, []byte("mock kubectl binary"), defaultMkdirPermissions)
 	require.NoError(t, err)
 
 	// Test listing tools
@@ -136,11 +136,11 @@ func TestListCommand_MixedInstalledAndNotInstalled(t *testing.T) {
 
 	// Create only terraform binary
 	terraformPath := filepath.Join(toolsDir, "bin", "hashicorp", "terraform", "1.11.4")
-	err = os.MkdirAll(terraformPath, 0o755)
+	err = os.MkdirAll(terraformPath, defaultMkdirPermissions)
 	require.NoError(t, err)
 
 	terraformBinary := filepath.Join(terraformPath, "terraform")
-	err = os.WriteFile(terraformBinary, []byte("mock terraform binary"), 0o755)
+	err = os.WriteFile(terraformBinary, []byte("mock terraform binary"), defaultMkdirPermissions)
 	require.NoError(t, err)
 
 	SetAtmosConfig(&schema.AtmosConfiguration{
@@ -170,7 +170,7 @@ func TestListCommand_WithLatestVersion(t *testing.T) {
 
 	// Create mock latest file
 	latestPath := filepath.Join(toolsDir, "bin", "hashicorp", "terraform", "latest")
-	err = os.MkdirAll(latestPath, 0o755)
+	err = os.MkdirAll(latestPath, defaultMkdirPermissions)
 	require.NoError(t, err)
 
 	latestFile := filepath.Join(latestPath, "latest")
@@ -178,7 +178,7 @@ func TestListCommand_WithLatestVersion(t *testing.T) {
 	require.NoError(t, err)
 
 	terraformBinary := filepath.Join(latestPath, "terraform")
-	err = os.WriteFile(terraformBinary, []byte("mock terraform binary"), 0o755)
+	err = os.WriteFile(terraformBinary, []byte("mock terraform binary"), defaultMkdirPermissions)
 	require.NoError(t, err)
 
 	SetAtmosConfig(&schema.AtmosConfiguration{
@@ -239,11 +239,11 @@ func TestListCommand_WithCanonicalNames(t *testing.T) {
 
 	// Create mock installed binary with canonical name
 	terraformPath := filepath.Join(toolsDir, "bin", "hashicorp", "terraform", "1.11.4")
-	err = os.MkdirAll(terraformPath, 0o755)
+	err = os.MkdirAll(terraformPath, defaultMkdirPermissions)
 	require.NoError(t, err)
 
 	terraformBinary := filepath.Join(terraformPath, "terraform")
-	err = os.WriteFile(terraformBinary, []byte("mock terraform binary"), 0o755)
+	err = os.WriteFile(terraformBinary, []byte("mock terraform binary"), defaultMkdirPermissions)
 	require.NoError(t, err)
 	SetAtmosConfig(&schema.AtmosConfiguration{
 		Toolchain: schema.Toolchain{
@@ -272,19 +272,19 @@ func TestListCommand_WithMultipleVersions(t *testing.T) {
 
 	// Create mock installed binaries for both versions
 	terraformPath1 := filepath.Join(toolsDir, "bin", "hashicorp", "terraform", "1.11.4")
-	err = os.MkdirAll(terraformPath1, 0o755)
+	err = os.MkdirAll(terraformPath1, defaultMkdirPermissions)
 	require.NoError(t, err)
 
 	terraformBinary1 := filepath.Join(terraformPath1, "terraform")
-	err = os.WriteFile(terraformBinary1, []byte("mock terraform binary"), 0o755)
+	err = os.WriteFile(terraformBinary1, []byte("mock terraform binary"), defaultMkdirPermissions)
 	require.NoError(t, err)
 
 	terraformPath2 := filepath.Join(toolsDir, "bin", "hashicorp", "terraform", "1.9.8")
-	err = os.MkdirAll(terraformPath2, 0o755)
+	err = os.MkdirAll(terraformPath2, defaultMkdirPermissions)
 	require.NoError(t, err)
 
 	terraformBinary2 := filepath.Join(terraformPath2, "terraform")
-	err = os.WriteFile(terraformBinary2, []byte("mock terraform binary"), 0o755)
+	err = os.WriteFile(terraformBinary2, []byte("mock terraform binary"), defaultMkdirPermissions)
 	require.NoError(t, err)
 
 	SetAtmosConfig(&schema.AtmosConfiguration{

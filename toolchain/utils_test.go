@@ -169,7 +169,7 @@ func TestBasicDirectoryOperations(t *testing.T) {
 	newDir := filepath.Join(tempDir, "newdir")
 
 	// Test creating directory
-	err := os.Mkdir(newDir, 0o755)
+	err := os.Mkdir(newDir, defaultMkdirPermissions)
 	assert.NoError(t, err)
 
 	// Verify directory exists
@@ -177,10 +177,10 @@ func TestBasicDirectoryOperations(t *testing.T) {
 	assert.NoError(t, err)
 
 	// Test creating existing directory (should not error)
-	err = os.Mkdir(newDir, 0o755)
+	err = os.Mkdir(newDir, defaultMkdirPermissions)
 	assert.Error(t, err) // Should error because directory already exists
 
 	// Test creating directory with MkdirAll (should not error)
-	err = os.MkdirAll(newDir, 0o755)
+	err = os.MkdirAll(newDir, defaultMkdirPermissions)
 	assert.NoError(t, err) // Should not error because MkdirAll is idempotent
 }
