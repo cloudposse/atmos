@@ -283,7 +283,7 @@ func TestExtractCleanPatterns(t *testing.T) {
 				"cache/file.tmp":     "cache",
 				"cache/sub/test.tmp": "test",
 			},
-			want:    []string{"cache" + string(os.PathSeparator) + "file.tmp", "cache" + string(os.PathSeparator) + "sub" + string(os.PathSeparator) + "test.tmp", "temp", "temp" + string(os.PathSeparator) + "data.txt", "temp" + string(os.PathSeparator) + "old.log"},
+			want:    []string{filepath.Join("cache", "file.tmp"), filepath.Join("cache", "sub", "test.tmp"), "temp", filepath.Join("temp", "data.txt"), filepath.Join("temp", "old.log")},
 			wantErr: false,
 		},
 		{
