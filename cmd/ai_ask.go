@@ -62,14 +62,13 @@ Examples:
 		defer cancel()
 
 		// Send question and get response.
-		utils.PrintfMessageToTUI("🤔 Thinking...\n")
+		utils.PrintfMessageToTUI("👽 Thinking...\n")
 		response, err := client.SendMessage(ctx, question)
 		if err != nil {
 			return fmt.Errorf("failed to get AI response: %w", err)
 		}
 
 		// Print response.
-		utils.PrintfMessageToTUI("\n🤖 **Atmos AI:**\n\n")
 		fmt.Println(response)
 
 		return nil
