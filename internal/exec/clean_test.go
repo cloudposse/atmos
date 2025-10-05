@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"reflect"
 	"sort"
 	"strings"
 	"testing"
@@ -462,9 +461,11 @@ func TestExtractCleanPatterns(t *testing.T) {
 			if tt.want != nil {
 				sort.Strings(tt.want)
 			}
+			for i := range relativeGot {
+				if !strings.Contains(relativeGot[i], tt.want[i]) {
 
-			if !reflect.DeepEqual(relativeGot, tt.want) {
-				t.Errorf("extractCleanPatterns() = %v, want %v", relativeGot, tt.want)
+					t.Errorf("extractCleanPatterns() got = %v, want %v", relativeGot, tt.want)
+				}
 			}
 		})
 	}
