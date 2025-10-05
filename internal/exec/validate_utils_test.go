@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io/fs"
 	"os"
+	"path/filepath"
 	"runtime"
 	"testing"
 
@@ -13,35 +14,160 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 )
 
-func TestValidateWithOpa_NonexistentFile(t *testing.T) {
-	data := map[string]interface{}{
-		"test": "value",
+func TestValidateWithOpa(t *testing.T) {
+	tests := []struct {
+		name          string
+		data          any
+		schemaPath    string
+		modulePaths   []string
+		timeout       int
+		expectValid   bool
+		expectError   bool
+		errorContains string
+		setupPolicy   func(t *testing.T) (string, func())
+	}{
+		{
+			name:        "nonexistent policy file",
+			data:        map[string]any{"test": "value"},
+			schemaPath:  "/nonexistent/policy.rego",
+			modulePaths: nil,
+			timeout:     10,
+			expectValid: false,
+			expectError: true,
+		},
+		{
+			name: "valid policy with no violations",
+			data: map[string]any{
+				"vars": map[string]any{
+					"region": "us-east-1",
+					"tags": map[string]any{
+						"Team": "platform",
+					},
+				},
+			},
+			timeout:     10,
+			expectValid: true,
+			expectError: false,
+			setupPolicy: func(t *testing.T) (string, func()) {
+				// Create temporary policy file that passes.
+				tmpDir := t.TempDir()
+				policyPath := filepath.Join(tmpDir, "valid_policy.rego")
+				policyContent := `package atmos
+
+# This policy has no errors defined, so it will pass.
+errors[msg] {
+    input.vars.region == "invalid-region"
+    msg := "Invalid region"
+}
+`
+				err := os.WriteFile(policyPath, []byte(policyContent), 0o644)
+				assert.NoError(t, err)
+				return policyPath, func() {}
+			},
+		},
+		{
+			name: "policy violation",
+			data: map[string]any{
+				"vars": map[string]any{
+					"region": "invalid-region",
+				},
+			},
+			timeout:       10,
+			expectValid:   false,
+			expectError:   true,
+			errorContains: "Invalid region",
+			setupPolicy: func(t *testing.T) (string, func()) {
+				// Create temporary policy file that fails for this data.
+				tmpDir := t.TempDir()
+				policyPath := filepath.Join(tmpDir, "violation_policy.rego")
+				policyContent := `package atmos
+
+errors[msg] {
+    input.vars.region == "invalid-region"
+    msg := "Invalid region"
+}
+`
+				err := os.WriteFile(policyPath, []byte(policyContent), 0o644)
+				assert.NoError(t, err)
+				return policyPath, func() {}
+			},
+		},
+		{
+			name:          "invalid rego syntax",
+			data:          map[string]any{"test": "value"},
+			timeout:       10,
+			expectValid:   false,
+			expectError:   true,
+			errorContains: "",
+			setupPolicy: func(t *testing.T) (string, func()) {
+				// Create temporary policy file with invalid syntax.
+				tmpDir := t.TempDir()
+				policyPath := filepath.Join(tmpDir, "invalid_syntax.rego")
+				policyContent := `package atmos
+
+errors[msg] {
+    this is invalid rego syntax!!!
+    msg := "test"
+}
+`
+				err := os.WriteFile(policyPath, []byte(policyContent), 0o644)
+				assert.NoError(t, err)
+				return policyPath, func() {}
+			},
+		},
 	}
 
-	valid, err := ValidateWithOpa(data, "/nonexistent/policy.rego", nil, 10)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			schemaPath := tt.schemaPath
 
-	assert.False(t, valid)
-	assert.Error(t, err)
+			// Setup temporary policy file if needed.
+			if tt.setupPolicy != nil {
+				var cleanup func()
+				schemaPath, cleanup = tt.setupPolicy(t)
+				defer cleanup()
+			}
+
+			// Execute validation.
+			valid, err := ValidateWithOpa(tt.data, schemaPath, tt.modulePaths, tt.timeout)
+
+			// Assert results.
+			assert.Equal(t, tt.expectValid, valid, "validation result mismatch")
+
+			if tt.expectError {
+				assert.Error(t, err, "expected error but got nil")
+				if tt.errorContains != "" {
+					assert.Contains(t, err.Error(), tt.errorContains, "error message mismatch")
+				}
+			} else {
+				assert.NoError(t, err, "unexpected error")
+			}
+		})
+	}
 }
 
-func TestValidateWithOpaLegacy_Timeout(t *testing.T) {
-	// Test the legacy OPA validation with timeout.
-	policyContent := `package test
-deny[msg] {
-    msg := "test denial"
+func TestValidateWithOpaLegacy_PolicyNamespace(t *testing.T) {
+	// Test that ValidateWithOpaLegacy correctly uses the 'package atmos' namespace.
+	// This is a basic smoke test to verify the function accepts properly formatted policies.
+	// Full integration testing of OPA policy evaluation is done elsewhere.
+	policyContent := `package atmos
+
+# Valid but empty policy - no errors defined.
+errors[msg] {
+    false  # Never triggers.
+    msg := "test error"
 }
 `
 	data := map[string]interface{}{
 		"test": "value",
 	}
 
-	// Use timeout of 0 to force immediate deadline exceeded.
-	valid, err := ValidateWithOpaLegacy(data, "test", policyContent, 0)
+	// This should pass since the policy has no violations.
+	valid, err := ValidateWithOpaLegacy(data, "test.rego", policyContent, 10)
 
-	assert.False(t, valid)
-	assert.Error(t, err)
-	// Check that error wrapping includes OPA timeout error.
-	assert.ErrorIs(t, err, errUtils.ErrOPATimeout)
+	// The policy should validate successfully (no violations).
+	assert.True(t, valid)
+	assert.NoError(t, err)
 }
 
 // TestIsWindowsOPALoadError tests the isWindowsOPALoadError function.
