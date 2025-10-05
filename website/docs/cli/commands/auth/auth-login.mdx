@@ -6,10 +6,11 @@ id: login
 description: Authenticate to cloud providers using an identity defined in atmos.yaml.
 ---
 import Screengrab from '@site/src/components/Screengrab'
+import Intro from '@site/src/components/Intro'
 
-:::note Purpose
+<Intro>
 Authenticate with a configured identity using SSO, SAML, OIDC, or static credentials. Atmos retrieves and caches short-lived credentials so they can be reused until expiration, avoiding repeated logins for each command.
-:::
+</Intro>
 
 <Screengrab title="atmos auth login --help" slug="atmos-auth-login--help" />
 
