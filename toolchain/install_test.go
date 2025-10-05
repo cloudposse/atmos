@@ -18,7 +18,7 @@ func TestInstallResolvesAliasFromToolVersions(t *testing.T) {
 	t.Chdir(dir)
 
 	// Write a .tool-versions file with the full alias key
-	toolVersionsPath := filepath.Join(dir, ".tool-versions")
+	toolVersionsPath := filepath.Join(dir, DefaultToolVersionsFilePath)
 	err := os.WriteFile(toolVersionsPath, []byte("opentofu/opentofu 1.10.0\n"), defaultFileWritePermissions)
 	require.NoError(t, err)
 
@@ -67,7 +67,7 @@ func TestRunInstallWithNoArgs(t *testing.T) {
 	os.Setenv("HOME", tempDir)
 
 	// Create a .tool-versions file with some tools
-	toolVersionsPath := filepath.Join(tempDir, ".tool-versions")
+	toolVersionsPath := filepath.Join(tempDir, DefaultToolVersionsFilePath)
 	toolVersions := &ToolVersions{
 		Tools: map[string][]string{
 			"terraform": {"1.11.4"},

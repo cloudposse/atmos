@@ -10,7 +10,7 @@ import (
 
 func TestRemoveCommand_ValidTool(t *testing.T) {
 	tempDir := t.TempDir()
-	toolVersionsFile := filepath.Join(tempDir, ".tool-versions")
+	toolVersionsFile := filepath.Join(tempDir, DefaultToolVersionsFilePath)
 
 	// Create a .tool-versions file with some tools
 	toolVersions := &ToolVersions{
@@ -36,7 +36,7 @@ func TestRemoveCommand_ValidTool(t *testing.T) {
 
 func TestRemoveCommand_NonExistentTool(t *testing.T) {
 	tempDir := t.TempDir()
-	toolVersionsFile := filepath.Join(tempDir, ".tool-versions")
+	toolVersionsFile := filepath.Join(tempDir, DefaultToolVersionsFilePath)
 
 	// Create a .tool-versions file with some tools
 	toolVersions := &ToolVersions{
@@ -61,7 +61,7 @@ func TestRemoveCommand_NonExistentTool(t *testing.T) {
 
 func TestRemoveCommand_EmptyFile(t *testing.T) {
 	tempDir := t.TempDir()
-	toolVersionsFile := filepath.Join(tempDir, ".tool-versions")
+	toolVersionsFile := filepath.Join(tempDir, DefaultToolVersionsFilePath)
 
 	// Create an empty .tool-versions file
 	toolVersions := &ToolVersions{
@@ -108,7 +108,7 @@ func TestRemoveCommand_CustomFilePath(t *testing.T) {
 
 func TestRemoveCommand_CanonicalName(t *testing.T) {
 	tempDir := t.TempDir()
-	toolVersionsFile := filepath.Join(tempDir, ".tool-versions")
+	toolVersionsFile := filepath.Join(tempDir, DefaultToolVersionsFilePath)
 
 	// Create a .tool-versions file with canonical name
 	toolVersions := &ToolVersions{
@@ -131,7 +131,7 @@ func TestRemoveCommand_CanonicalName(t *testing.T) {
 
 func TestRemoveCommand_MultipleVersions(t *testing.T) {
 	tempDir := t.TempDir()
-	toolVersionsFile := filepath.Join(tempDir, ".tool-versions")
+	toolVersionsFile := filepath.Join(tempDir, DefaultToolVersionsFilePath)
 
 	// Create a .tool-versions file with multiple versions
 	toolVersions := &ToolVersions{
@@ -161,7 +161,7 @@ func TestRemoveCommand_NoArgs(t *testing.T) {
 
 func TestRemoveCommand_EmptyToolName(t *testing.T) {
 	tempDir := t.TempDir()
-	toolVersionsFile := filepath.Join(tempDir, ".tool-versions")
+	toolVersionsFile := filepath.Join(tempDir, DefaultToolVersionsFilePath)
 
 	// Create a .tool-versions file
 	toolVersions := &ToolVersions{
@@ -193,7 +193,7 @@ func TestRemoveCommand_FileDoesNotExist(t *testing.T) {
 
 func TestRemoveCommand_PreservesOtherTools(t *testing.T) {
 	tempDir := t.TempDir()
-	toolVersionsFile := filepath.Join(tempDir, ".tool-versions")
+	toolVersionsFile := filepath.Join(tempDir, DefaultToolVersionsFilePath)
 
 	// Create a .tool-versions file with multiple tools
 	toolVersions := &ToolVersions{
@@ -222,7 +222,7 @@ func TestRemoveCommand_PreservesOtherTools(t *testing.T) {
 
 func TestRemoveCommand_RemoveSpecificVersion(t *testing.T) {
 	tempDir := t.TempDir()
-	toolVersionsFile := filepath.Join(tempDir, ".tool-versions")
+	toolVersionsFile := filepath.Join(tempDir, DefaultToolVersionsFilePath)
 
 	toolVersions := &ToolVersions{
 		Tools: map[string][]string{
@@ -243,7 +243,7 @@ func TestRemoveCommand_RemoveSpecificVersion(t *testing.T) {
 
 func TestRemoveCommand_RemoveLastVersion_RemovesTool(t *testing.T) {
 	tempDir := t.TempDir()
-	toolVersionsFile := filepath.Join(tempDir, ".tool-versions")
+	toolVersionsFile := filepath.Join(tempDir, DefaultToolVersionsFilePath)
 
 	toolVersions := &ToolVersions{
 		Tools: map[string][]string{
@@ -263,7 +263,7 @@ func TestRemoveCommand_RemoveLastVersion_RemovesTool(t *testing.T) {
 
 func TestRemoveCommand_RemoveNonExistentVersion(t *testing.T) {
 	tempDir := t.TempDir()
-	toolVersionsFile := filepath.Join(tempDir, ".tool-versions")
+	toolVersionsFile := filepath.Join(tempDir, DefaultToolVersionsFilePath)
 
 	toolVersions := &ToolVersions{
 		Tools: map[string][]string{
@@ -284,7 +284,7 @@ func TestRemoveCommand_RemoveNonExistentVersion(t *testing.T) {
 
 func TestRemoveCommand_RemoveAllVersions(t *testing.T) {
 	tempDir := t.TempDir()
-	toolVersionsFile := filepath.Join(tempDir, ".tool-versions")
+	toolVersionsFile := filepath.Join(tempDir, DefaultToolVersionsFilePath)
 
 	toolVersions := &ToolVersions{
 		Tools: map[string][]string{
@@ -305,7 +305,7 @@ func TestRemoveCommand_RemoveAllVersions(t *testing.T) {
 
 func TestRemoveCommand_CanonicalNameWithVersion(t *testing.T) {
 	tempDir := t.TempDir()
-	toolVersionsFile := filepath.Join(tempDir, ".tool-versions")
+	toolVersionsFile := filepath.Join(tempDir, DefaultToolVersionsFilePath)
 
 	toolVersions := &ToolVersions{
 		Tools: map[string][]string{
@@ -325,7 +325,7 @@ func TestRemoveCommand_CanonicalNameWithVersion(t *testing.T) {
 
 func TestRemoveCommand_CanonicalNameAllVersions(t *testing.T) {
 	tempDir := t.TempDir()
-	toolVersionsFile := filepath.Join(tempDir, ".tool-versions")
+	toolVersionsFile := filepath.Join(tempDir, DefaultToolVersionsFilePath)
 
 	toolVersions := &ToolVersions{
 		Tools: map[string][]string{
@@ -345,7 +345,7 @@ func TestRemoveCommand_CanonicalNameAllVersions(t *testing.T) {
 
 func TestRemoveCommand_RemoveVersionFromToolWithOneVersion(t *testing.T) {
 	tempDir := t.TempDir()
-	toolVersionsFile := filepath.Join(tempDir, ".tool-versions")
+	toolVersionsFile := filepath.Join(tempDir, DefaultToolVersionsFilePath)
 
 	toolVersions := &ToolVersions{
 		Tools: map[string][]string{
@@ -365,7 +365,7 @@ func TestRemoveCommand_RemoveVersionFromToolWithOneVersion(t *testing.T) {
 
 func TestRemoveCommand_RemoveNonExistentTool(t *testing.T) {
 	tempDir := t.TempDir()
-	toolVersionsFile := filepath.Join(tempDir, ".tool-versions")
+	toolVersionsFile := filepath.Join(tempDir, DefaultToolVersionsFilePath)
 
 	toolVersions := &ToolVersions{
 		Tools: map[string][]string{
@@ -385,7 +385,7 @@ func TestRemoveCommand_RemoveNonExistentTool(t *testing.T) {
 
 func TestRemoveCommand_RemoveNonExistentToolWithVersion(t *testing.T) {
 	tempDir := t.TempDir()
-	toolVersionsFile := filepath.Join(tempDir, ".tool-versions")
+	toolVersionsFile := filepath.Join(tempDir, DefaultToolVersionsFilePath)
 
 	toolVersions := &ToolVersions{
 		Tools: map[string][]string{

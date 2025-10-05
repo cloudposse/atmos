@@ -77,7 +77,7 @@ func RunInstall(toolSpec string, setAsDefault, reinstallFlag bool) error {
 	}
 	if version == "" {
 		// Try to look up version in .tool-versions or fallback to alias/latest.
-		toolVersions, err := LoadToolVersions(".tool-versions")
+		toolVersions, err := LoadToolVersions(DefaultToolVersionsFilePath)
 		if err != nil {
 			return fmt.Errorf("invalid tool specification: %s. Expected format: owner/repo@version or tool@version, and failed to load .tool-versions: %w", toolSpec, err)
 		}
@@ -120,11 +120,11 @@ func RunInstall(toolSpec string, setAsDefault, reinstallFlag bool) error {
 
 	// Update .tool-versions: add version, set as default if requested.
 	if setAsDefault {
-		if err := AddToolToVersionsAsDefault(".tool-versions", tool, version); err != nil {
+		if err := AddToolToVersionsAsDefault(DefaultToolVersionsFilePath, tool, version); err != nil {
 			return fmt.Errorf("failed to update .tool-versions: %w", err)
 		}
 	} else {
-		if err := AddToolToVersions(".tool-versions", tool, version); err != nil {
+		if err := AddToolToVersions(DefaultToolVersionsFilePath, tool, version); err != nil {
 			return fmt.Errorf("failed to update .tool-versions: %w", err)
 		}
 	}
@@ -168,7 +168,7 @@ func InstallSingleTool(owner, repo, version string, isLatest bool, showProgressB
 		// Small delay to ensure spinner is cleared.
 		time.Sleep(100 * time.Millisecond)
 	}
-	if err := AddToolToVersions(".tool-versions", repo, version); err == nil && showProgressBar {
+	if err := AddToolToVersions(DefaultToolVersionsFilePath, repo, version); err == nil && showProgressBar {
 		fmt.Fprintf(os.Stderr, "%s Registered %s %s in .tool-versions\n", checkMark.Render(), repo, version)
 	}
 	return nil

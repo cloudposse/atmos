@@ -10,7 +10,7 @@ import (
 
 func TestAddToolToVersionsDuplicateCheck(t *testing.T) {
 	tempDir := t.TempDir()
-	filePath := filepath.Join(tempDir, ".tool-versions")
+	filePath := filepath.Join(tempDir, DefaultToolVersionsFilePath)
 
 	// First, add the full name version
 	err := AddToolToVersions(filePath, "opentofu/opentofu", "1.10.3")
@@ -36,7 +36,7 @@ func TestAddToolToVersionsDuplicateCheck(t *testing.T) {
 
 func TestAddToolToVersionsReverseDuplicateCheck(t *testing.T) {
 	tempDir := t.TempDir()
-	filePath := filepath.Join(tempDir, ".tool-versions")
+	filePath := filepath.Join(tempDir, DefaultToolVersionsFilePath)
 
 	// First, add the alias version
 	err := AddToolToVersions(filePath, "opentofu", "1.10.3")
@@ -62,7 +62,7 @@ func TestAddToolToVersionsReverseDuplicateCheck(t *testing.T) {
 
 func TestAddToolToVersionsDuplicateCheckWithExistingAlias(t *testing.T) {
 	tempDir := t.TempDir()
-	filePath := filepath.Join(tempDir, ".tool-versions")
+	filePath := filepath.Join(tempDir, DefaultToolVersionsFilePath)
 
 	// First, add the alias version (this simulates what happens when someone manually adds "opentofu 1.10.2")
 	err := AddToolToVersions(filePath, "opentofu", "1.10.2")
@@ -89,7 +89,7 @@ func TestAddToolToVersionsDuplicateCheckWithExistingAlias(t *testing.T) {
 
 func TestAddToolToVersionsDuplicateCheckWithMultipleVersions(t *testing.T) {
 	tempDir := t.TempDir()
-	filePath := filepath.Join(tempDir, ".tool-versions")
+	filePath := filepath.Join(tempDir, DefaultToolVersionsFilePath)
 
 	// First, add the alias version with multiple versions (like in your example)
 	err := AddToolToVersions(filePath, "opentofu", "1.10.3")
