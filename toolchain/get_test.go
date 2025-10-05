@@ -30,7 +30,7 @@ func createTempBinary(t *testing.T, owner, repo, version string) string {
 	if err != nil {
 		t.Fatalf("failed to create temp binary path: %v", err)
 	}
-	err = os.WriteFile(binaryPath, []byte("fake binary"), 0o755)
+	err = os.WriteFile(binaryPath, []byte("fake binary"), defaultMkdirPermissions)
 	if err != nil {
 		t.Fatalf("failed to create temp binary: %v", err)
 	}

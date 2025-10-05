@@ -118,7 +118,7 @@ func (i *Installer) installFromTool(tool *Tool, version string) (string, error) 
 	if err != nil {
 		return "", fmt.Errorf("failed to extract and install: %w", err)
 	}
-	if err := os.Chmod(binaryPath, 0o755); err != nil {
+	if err := os.Chmod(binaryPath, defaultMkdirPermissions); err != nil {
 		return "", fmt.Errorf("failed to make binary executable: %w", err)
 	}
 	// Set mod time to now so install date reflects installation, not archive timestamp
@@ -351,7 +351,7 @@ func (i *Installer) buildAssetURL(tool *Tool, version string) (string, error) {
 // downloadAsset downloads an asset to the cache directory.
 func (i *Installer) downloadAsset(url string) (string, error) {
 	// Create cache directory if it doesn't exist
-	if err := os.MkdirAll(i.cacheDir, 0o755); err != nil {
+	if err := os.MkdirAll(i.cacheDir, defaultMkdirPermissions); err != nil {
 		return "", fmt.Errorf("failed to create cache directory: %w", err)
 	}
 
@@ -435,7 +435,7 @@ func isHTTP404(err error) bool {
 func (i *Installer) extractAndInstall(tool *Tool, assetPath, version string) (string, error) {
 	// Create version-specific directory
 	versionDir := filepath.Join(i.binDir, tool.RepoOwner, tool.RepoName, version)
-	if err := os.MkdirAll(versionDir, 0o755); err != nil {
+	if err := os.MkdirAll(versionDir, defaultMkdirPermissions); err != nil {
 		return "", fmt.Errorf("failed to create version directory: %w", err)
 	}
 
@@ -536,7 +536,7 @@ func (i *Installer) extractZip(zipPath, binaryPath string, tool *Tool) error {
 
 	// Ensure the destination directory exists
 	dir := filepath.Dir(binaryPath)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := os.MkdirAll(dir, defaultMkdirPermissions); err != nil {
 		return fmt.Errorf("failed to create destination directory: %w", err)
 	}
 
@@ -551,6 +551,8 @@ func (i *Installer) extractZip(zipPath, binaryPath string, tool *Tool) error {
 // Unzip extracts a zip archive to a destination directory.
 // Works on Windows, macOS, and Linux.
 func Unzip(src, dest string) error {
+	const maxDecompressedSize = 100 * 1024 * 1024 // 100MB limit per file
+
 	r, err := zip.OpenReader(src)
 	if err != nil {
 		return err
@@ -592,8 +594,31 @@ func Unzip(src, dest string) error {
 			return err
 		}
 
-		// Copy contents
-		_, err = io.Copy(outFile, rc)
+		// Copy contents with size limit
+		var totalBytes int64
+		buf := make([]byte, 32*1024) // 32KB buffer
+		for {
+			n, err := rc.Read(buf)
+			if err != nil && err != io.EOF {
+				outFile.Close()
+				rc.Close()
+				return err
+			}
+			totalBytes += int64(n)
+			if totalBytes > maxDecompressedSize {
+				outFile.Close()
+				rc.Close()
+				return fmt.Errorf("decompressed size of %s exceeds limit: %d > %d", f.Name, totalBytes, maxDecompressedSize)
+			}
+			if n == 0 {
+				break // EOF
+			}
+			if _, err := outFile.Write(buf[:n]); err != nil {
+				outFile.Close()
+				rc.Close()
+				return err
+			}
+		}
 
 		// Close files
 		outFile.Close()
@@ -664,7 +689,7 @@ func extractDir(path string, header *tar.Header) error {
 }
 
 func extractFile(tr *tar.Reader, path string, header *tar.Header) error {
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(path), defaultMkdirPermissions); err != nil {
 		return fmt.Errorf("failed to create parent directory: %w", err)
 	}
 	outFile, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, os.FileMode(header.Mode))
@@ -719,7 +744,7 @@ func (i *Installer) extractTarGz(tarPath, binaryPath string, tool *Tool) error {
 
 	// Ensure the destination directory exists
 	dir := filepath.Dir(binaryPath)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := os.MkdirAll(dir, defaultMkdirPermissions); err != nil {
 		return fmt.Errorf("failed to create destination directory: %w", err)
 	}
 
@@ -735,7 +760,7 @@ func (i *Installer) extractTarGz(tarPath, binaryPath string, tool *Tool) error {
 // it falls back to a copy+remove.
 func MoveFile(src, dst string) error {
 	// Ensure target dir exists
-	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(dst), defaultMkdirPermissions); err != nil {
 		return fmt.Errorf("failed to create target dir: %w", err)
 	}
 
@@ -926,7 +951,7 @@ func (i *Installer) FindBinaryPath(owner, repo, version string) (string, error) 
 func (i *Installer) CreateLatestFile(owner, repo, version string) error {
 	// Create the latest file path
 	latestDir := filepath.Join(i.binDir, owner, repo)
-	if err := os.MkdirAll(latestDir, 0o755); err != nil {
+	if err := os.MkdirAll(latestDir, defaultMkdirPermissions); err != nil {
 		return fmt.Errorf("failed to create latest directory: %w", err)
 	}
 

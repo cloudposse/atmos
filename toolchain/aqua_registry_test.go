@@ -514,7 +514,7 @@ func TestAquaRegistry_CacheDirectory(t *testing.T) {
 	assert.Contains(t, ar.cache.baseDir, "tools-cache")
 
 	// Test that cache directory can be created
-	err := os.MkdirAll(ar.cache.baseDir, 0o755)
+	err := os.MkdirAll(ar.cache.baseDir, defaultMkdirPermissions)
 	assert.NoError(t, err)
 
 	// Verify directory exists

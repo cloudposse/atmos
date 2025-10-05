@@ -17,19 +17,19 @@ package toolchain
 
 // 	// Create mock installed binaries
 // 	terraformPath := filepath.Join(toolsDir, "bin", "hashicorp", "terraform", "1.11.4")
-// 	err = os.MkdirAll(terraformPath, 0o755)
+// 	err = os.MkdirAll(terraformPath, defaultMkdirPermissions)
 // 	require.NoError(t, err)
 
 // 	terraformBinary := filepath.Join(terraformPath, "terraform")
-// 	err = os.WriteFile(terraformBinary, []byte("mock terraform binary"), 0o755)
+// 	err = os.WriteFile(terraformBinary, []byte("mock terraform binary"), defaultMkdirPermissions)
 // 	require.NoError(t, err)
 
 // 	kubectlPath := filepath.Join(toolsDir, "bin", "kubernetes", "kubectl", "1.28.0")
-// 	err = os.MkdirAll(kubectlPath, 0o755)
+// 	err = os.MkdirAll(kubectlPath, defaultMkdirPermissions)
 // 	require.NoError(t, err)
 
 // 	kubectlBinary := filepath.Join(kubectlPath, "kubectl")
-// 	err = os.WriteFile(kubectlBinary, []byte("mock kubectl binary"), 0o755)
+// 	err = os.WriteFile(kubectlBinary, []byte("mock kubectl binary"), defaultMkdirPermissions)
 // 	require.NoError(t, err)
 
 // 	// Test path command
@@ -58,11 +58,11 @@ package toolchain
 
 // 	// Create mock installed binary
 // 	terraformPath := filepath.Join(toolsDir, "bin", "hashicorp", "terraform", "1.11.4")
-// 	err = os.MkdirAll(terraformPath, 0o755)
+// 	err = os.MkdirAll(terraformPath, defaultMkdirPermissions)
 // 	require.NoError(t, err)
 
 // 	terraformBinary := filepath.Join(terraformPath, "terraform")
-// 	err = os.WriteFile(terraformBinary, []byte("mock terraform binary"), 0o755)
+// 	err = os.WriteFile(terraformBinary, []byte("mock terraform binary"), defaultMkdirPermissions)
 // 	require.NoError(t, err)
 
 // 	// Test path command with export flag
@@ -91,11 +91,11 @@ package toolchain
 
 // 	// Create mock installed binary
 // 	terraformPath := filepath.Join(toolsDir, "bin", "hashicorp", "terraform", "1.11.4")
-// 	err = os.MkdirAll(terraformPath, 0o755)
+// 	err = os.MkdirAll(terraformPath, defaultMkdirPermissions)
 // 	require.NoError(t, err)
 
 // 	terraformBinary := filepath.Join(terraformPath, "terraform")
-// 	err = os.WriteFile(terraformBinary, []byte("mock terraform binary"), 0o755)
+// 	err = os.WriteFile(terraformBinary, []byte("mock terraform binary"), defaultMkdirPermissions)
 // 	require.NoError(t, err)
 
 // 	// Test path command with JSON flag
@@ -124,11 +124,11 @@ package toolchain
 
 // 	// Create mock installed binary
 // 	terraformPath := filepath.Join(toolsDir, "bin", "hashicorp", "terraform", "1.11.4")
-// 	err = os.MkdirAll(terraformPath, 0o755)
+// 	err = os.MkdirAll(terraformPath, defaultMkdirPermissions)
 // 	require.NoError(t, err)
 
 // 	terraformBinary := filepath.Join(terraformPath, "terraform")
-// 	err = os.WriteFile(terraformBinary, []byte("mock terraform binary"), 0o755)
+// 	err = os.WriteFile(terraformBinary, []byte("mock terraform binary"), defaultMkdirPermissions)
 // 	require.NoError(t, err)
 
 // 	// Test path command with relative flag
@@ -216,11 +216,11 @@ package toolchain
 
 // 	// Create only terraform binary
 // 	terraformPath := filepath.Join(toolsDir, "bin", "hashicorp", "terraform", "1.11.4")
-// 	err = os.MkdirAll(terraformPath, 0o755)
+// 	err = os.MkdirAll(terraformPath, defaultMkdirPermissions)
 // 	require.NoError(t, err)
 
 // 	terraformBinary := filepath.Join(terraformPath, "terraform")
-// 	err = os.WriteFile(terraformBinary, []byte("mock terraform binary"), 0o755)
+// 	err = os.WriteFile(terraformBinary, []byte("mock terraform binary"), defaultMkdirPermissions)
 // 	require.NoError(t, err)
 
 // 	// Test path command with mixed tools
@@ -248,11 +248,11 @@ package toolchain
 
 // 	// Create mock installed binary with canonical name
 // 	terraformPath := filepath.Join(toolsDir, "bin", "hashicorp", "terraform", "1.11.4")
-// 	err = os.MkdirAll(terraformPath, 0o755)
+// 	err = os.MkdirAll(terraformPath, defaultMkdirPermissions)
 // 	require.NoError(t, err)
 
 // 	terraformBinary := filepath.Join(terraformPath, "terraform")
-// 	err = os.WriteFile(terraformBinary, []byte("mock terraform binary"), 0o755)
+// 	err = os.WriteFile(terraformBinary, []byte("mock terraform binary"), defaultMkdirPermissions)
 // 	require.NoError(t, err)
 
 // 	// Test path command with canonical names
@@ -281,19 +281,19 @@ package toolchain
 
 // 	// Create mock installed binaries for both versions
 // 	terraformPath1 := filepath.Join(toolsDir, "bin", "hashicorp", "terraform", "1.11.4")
-// 	err = os.MkdirAll(terraformPath1, 0o755)
+// 	err = os.MkdirAll(terraformPath1, defaultMkdirPermissions)
 // 	require.NoError(t, err)
 
 // 	terraformBinary1 := filepath.Join(terraformPath1, "terraform")
-// 	err = os.WriteFile(terraformBinary1, []byte("mock terraform binary"), 0o755)
+// 	err = os.WriteFile(terraformBinary1, []byte("mock terraform binary"), defaultMkdirPermissions)
 // 	require.NoError(t, err)
 
 // 	terraformPath2 := filepath.Join(toolsDir, "bin", "hashicorp", "terraform", "1.9.8")
-// 	err = os.MkdirAll(terraformPath2, 0o755)
+// 	err = os.MkdirAll(terraformPath2, defaultMkdirPermissions)
 // 	require.NoError(t, err)
 
 // 	terraformBinary2 := filepath.Join(terraformPath2, "terraform")
-// 	err = os.WriteFile(terraformBinary2, []byte("mock terraform binary"), 0o755)
+// 	err = os.WriteFile(terraformBinary2, []byte("mock terraform binary"), defaultMkdirPermissions)
 // 	require.NoError(t, err)
 
 // 	// Test path command with multiple versions
@@ -339,11 +339,11 @@ package toolchain
 
 // 	// Create mock installed binary
 // 	terraformPath := filepath.Join(toolsDir, "bin", "hashicorp", "terraform", "1.11.4")
-// 	err = os.MkdirAll(terraformPath, 0o755)
+// 	err = os.MkdirAll(terraformPath, defaultMkdirPermissions)
 // 	require.NoError(t, err)
 
 // 	terraformBinary := filepath.Join(terraformPath, "terraform")
-// 	err = os.WriteFile(terraformBinary, []byte("mock terraform binary"), 0o755)
+// 	err = os.WriteFile(terraformBinary, []byte("mock terraform binary"), defaultMkdirPermissions)
 // 	require.NoError(t, err)
 
 // 	// Test path command with combined flags (JSON + relative)
@@ -371,11 +371,11 @@ package toolchain
 
 // 	// Create mock installed binary
 // 	terraformPath := filepath.Join(toolsDir, "bin", "hashicorp", "terraform", "1.11.4")
-// 	err = os.MkdirAll(terraformPath, 0o755)
+// 	err = os.MkdirAll(terraformPath, defaultMkdirPermissions)
 // 	require.NoError(t, err)
 
 // 	terraformBinary := filepath.Join(terraformPath, "terraform")
-// 	err = os.WriteFile(terraformBinary, []byte("mock terraform binary"), 0o755)
+// 	err = os.WriteFile(terraformBinary, []byte("mock terraform binary"), defaultMkdirPermissions)
 // 	require.NoError(t, err)
 
 // 	// Set a test PATH environment variable
@@ -422,11 +422,11 @@ package toolchain
 // 		}
 
 // 		toolPath := filepath.Join(toolsDir, "bin", owner, repo, "1.11.4")
-// 		err = os.MkdirAll(toolPath, 0o755)
+// 		err = os.MkdirAll(toolPath, defaultMkdirPermissions)
 // 		require.NoError(t, err)
 
 // 		binary := filepath.Join(toolPath, tool)
-// 		err = os.WriteFile(binary, []byte("mock binary"), 0o755)
+// 		err = os.WriteFile(binary, []byte("mock binary"), defaultMkdirPermissions)
 // 		require.NoError(t, err)
 // 	}
 

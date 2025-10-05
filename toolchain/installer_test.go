@@ -571,13 +571,13 @@ tools:
 
 // 				// Create mock installed tool
 // 				toolDir := filepath.Join(tempDir, ".tools", "bin", "hashicorp", "terraform", "1.5.0")
-// 				if err := os.MkdirAll(toolDir, 0o755); err != nil {
+// 				if err := os.MkdirAll(toolDir, defaultMkdirPermissions); err != nil {
 // 					t.Fatalf("Failed to create tool directory: %v", err)
 // 				}
 
 // 				// Create mock binary
 // 				binaryPath := filepath.Join(toolDir, "terraform")
-// 				if err := os.WriteFile(binaryPath, []byte("#!/bin/sh\necho terraform"), 0o755); err != nil {
+// 				if err := os.WriteFile(binaryPath, []byte("#!/bin/sh\necho terraform"), defaultMkdirPermissions); err != nil {
 // 					t.Fatalf("Failed to create mock binary: %v", err)
 // 				}
 // 			},
@@ -600,11 +600,11 @@ tools:
 
 // 				// Create mock installed terraform
 // 				terraformDir := filepath.Join(tempDir, ".tools", "bin", "hashicorp", "terraform", "1.5.0")
-// 				if err := os.MkdirAll(terraformDir, 0o755); err != nil {
+// 				if err := os.MkdirAll(terraformDir, defaultMkdirPermissions); err != nil {
 // 					t.Fatalf("Failed to create terraform directory: %v", err)
 // 				}
 // 				terraformBinary := filepath.Join(terraformDir, "terraform")
-// 				if err := os.WriteFile(terraformBinary, []byte("#!/bin/sh\necho terraform"), 0o755); err != nil {
+// 				if err := os.WriteFile(terraformBinary, []byte("#!/bin/sh\necho terraform"), defaultMkdirPermissions); err != nil {
 // 					t.Fatalf("Failed to create terraform binary: %v", err)
 // 				}
 // 			},
@@ -627,13 +627,13 @@ tools:
 
 // 				// Create mock installed tool
 // 				toolDir := filepath.Join(tempDir, ".tools", "bin", "hashicorp", "terraform", "1.5.0")
-// 				if err := os.MkdirAll(toolDir, 0o755); err != nil {
+// 				if err := os.MkdirAll(toolDir, defaultMkdirPermissions); err != nil {
 // 					t.Fatalf("Failed to create tool directory: %v", err)
 // 				}
 
 // 				// Create mock binary
 // 				binaryPath := filepath.Join(toolDir, "terraform")
-// 				if err := os.WriteFile(binaryPath, []byte("#!/bin/sh\necho terraform"), 0o755); err != nil {
+// 				if err := os.WriteFile(binaryPath, []byte("#!/bin/sh\necho terraform"), defaultMkdirPermissions); err != nil {
 // 					t.Fatalf("Failed to create mock binary: %v", err)
 // 				}
 // 			},
@@ -656,13 +656,13 @@ tools:
 
 // 				// Create mock installed tool
 // 				toolDir := filepath.Join(tempDir, ".tools", "bin", "hashicorp", "terraform", "1.5.0")
-// 				if err := os.MkdirAll(toolDir, 0o755); err != nil {
+// 				if err := os.MkdirAll(toolDir, defaultMkdirPermissions); err != nil {
 // 					t.Fatalf("Failed to create tool directory: %v", err)
 // 				}
 
 // 				// Create mock binary
 // 				binaryPath := filepath.Join(toolDir, "terraform")
-// 				if err := os.WriteFile(binaryPath, []byte("#!/bin/sh\necho terraform"), 0o755); err != nil {
+// 				if err := os.WriteFile(binaryPath, []byte("#!/bin/sh\necho terraform"), defaultMkdirPermissions); err != nil {
 // 					t.Fatalf("Failed to create mock binary: %v", err)
 // 				}
 // 			},
@@ -685,11 +685,11 @@ tools:
 
 // 				// Create mock installed terraform
 // 				terraformDir := filepath.Join(tempDir, ".tools", "bin", "hashicorp", "terraform", "1.5.0")
-// 				if err := os.MkdirAll(terraformDir, 0o755); err != nil {
+// 				if err := os.MkdirAll(terraformDir, defaultMkdirPermissions); err != nil {
 // 					t.Fatalf("Failed to create terraform directory: %v", err)
 // 				}
 // 				terraformBinary := filepath.Join(terraformDir, "terraform")
-// 				if err := os.WriteFile(terraformBinary, []byte("#!/bin/sh\necho terraform"), 0o755); err != nil {
+// 				if err := os.WriteFile(terraformBinary, []byte("#!/bin/sh\necho terraform"), defaultMkdirPermissions); err != nil {
 // 					t.Fatalf("Failed to create terraform binary: %v", err)
 // 				}
 // 			},
@@ -712,13 +712,13 @@ tools:
 
 // 				// Create mock installed tool
 // 				toolDir := filepath.Join(tempDir, ".tools", "bin", "hashicorp", "terraform", "1.5.0")
-// 				if err := os.MkdirAll(toolDir, 0o755); err != nil {
+// 				if err := os.MkdirAll(toolDir, defaultMkdirPermissions); err != nil {
 // 					t.Fatalf("Failed to create tool directory: %v", err)
 // 				}
 
 // 				// Create mock binary
 // 				binaryPath := filepath.Join(toolDir, "terraform")
-// 				if err := os.WriteFile(binaryPath, []byte("#!/bin/sh\necho terraform"), 0o755); err != nil {
+// 				if err := os.WriteFile(binaryPath, []byte("#!/bin/sh\necho terraform"), defaultMkdirPermissions); err != nil {
 // 					t.Fatalf("Failed to create mock binary: %v", err)
 // 				}
 // 			},
@@ -1033,7 +1033,7 @@ func TestExtractRawBinary(t *testing.T) {
 	// Create a mock raw binary file
 	rawBinaryPath := filepath.Join(tempDir, "test-binary")
 	rawBinaryContent := []byte("#!/bin/bash\necho 'test binary'")
-	if err := os.WriteFile(rawBinaryPath, rawBinaryContent, 0o755); err != nil {
+	if err := os.WriteFile(rawBinaryPath, rawBinaryContent, defaultMkdirPermissions); err != nil {
 		t.Fatalf("failed to create test binary: %v", err)
 	}
 
@@ -1121,7 +1121,7 @@ func TestExtractAndInstallWithRawBinary(t *testing.T) {
 	// Create a mock raw binary file
 	rawBinaryPath := filepath.Join(tempDir, "atmos")
 	rawBinaryContent := []byte("#!/bin/bash\necho 'atmos binary'")
-	if err := os.WriteFile(rawBinaryPath, rawBinaryContent, 0o755); err != nil {
+	if err := os.WriteFile(rawBinaryPath, rawBinaryContent, defaultMkdirPermissions); err != nil {
 		t.Fatalf("failed to create test binary: %v", err)
 	}
 

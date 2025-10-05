@@ -127,9 +127,9 @@ func TestWhichCommand_ToolConfiguredAndInstalled(t *testing.T) {
 	// So we need to create the binary in ./.tools/bin/hashicorp/terraform/1.11.4/terraform
 	installer := NewInstaller()
 	binaryPath := installer.getBinaryPath("hashicorp", "terraform", "1.11.4")
-	err = os.MkdirAll(filepath.Dir(binaryPath), 0o755)
+	err = os.MkdirAll(filepath.Dir(binaryPath), defaultMkdirPermissions)
 	require.NoError(t, err)
-	err = os.WriteFile(binaryPath, []byte("mock terraform"), 0o755)
+	err = os.WriteFile(binaryPath, []byte("mock terraform"), defaultMkdirPermissions)
 	require.NoError(t, err)
 	err = WhichExec("terraform")
 	require.NoError(t, err, "Should succeed when tool is configured and installed")
