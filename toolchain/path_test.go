@@ -2,7 +2,7 @@ package toolchain
 
 // func TestPathCommand_WithInstalledTools(t *testing.T) {
 // 	tempDir := t.TempDir()
-// 	toolVersionsFile := filepath.Join(tempDir, ".tool-versions")
+// 	toolVersionsFile := filepath.Join(tempDir, DefaultToolVersionsFilePath)
 // 	toolsDir := filepath.Join(tempDir, ".tools")
 
 // 	// Create a .tool-versions file with some tools
@@ -44,7 +44,7 @@ package toolchain
 
 // func TestPathCommand_ExportFlag(t *testing.T) {
 // 	tempDir := t.TempDir()
-// 	toolVersionsFile := filepath.Join(tempDir, ".tool-versions")
+// 	toolVersionsFile := filepath.Join(tempDir, DefaultToolVersionsFilePath)
 // 	toolsDir := filepath.Join(tempDir, ".tools")
 
 // 	// Create a .tool-versions file with a tool
@@ -77,7 +77,7 @@ package toolchain
 
 // func TestPathCommand_JSONFlag(t *testing.T) {
 // 	tempDir := t.TempDir()
-// 	toolVersionsFile := filepath.Join(tempDir, ".tool-versions")
+// 	toolVersionsFile := filepath.Join(tempDir, DefaultToolVersionsFilePath)
 // 	toolsDir := filepath.Join(tempDir, ".tools")
 
 // 	// Create a .tool-versions file with a tool
@@ -110,7 +110,7 @@ package toolchain
 
 // func TestPathCommand_RelativeFlag(t *testing.T) {
 // 	tempDir := t.TempDir()
-// 	toolVersionsFile := filepath.Join(tempDir, ".tool-versions")
+// 	toolVersionsFile := filepath.Join(tempDir, DefaultToolVersionsFilePath)
 // 	toolsDir := filepath.Join(tempDir, ".tools")
 
 // 	// Create a .tool-versions file with a tool
@@ -143,7 +143,7 @@ package toolchain
 
 // func TestPathCommand_EmptyToolVersionsFile(t *testing.T) {
 // 	tempDir := t.TempDir()
-// 	toolVersionsFile := filepath.Join(tempDir, ".tool-versions")
+// 	toolVersionsFile := filepath.Join(tempDir, DefaultToolVersionsFilePath)
 
 // 	// Create an empty .tool-versions file
 // 	toolVersions := &ToolVersions{
@@ -178,7 +178,7 @@ package toolchain
 
 // func TestPathCommand_ToolsNotInstalled(t *testing.T) {
 // 	tempDir := t.TempDir()
-// 	toolVersionsFile := filepath.Join(tempDir, ".tool-versions")
+// 	toolVersionsFile := filepath.Join(tempDir, DefaultToolVersionsFilePath)
 
 // 	// Create a .tool-versions file with tools that aren't installed
 // 	toolVersions := &ToolVersions{
@@ -201,7 +201,7 @@ package toolchain
 
 // func TestPathCommand_MixedInstalledAndNotInstalled(t *testing.T) {
 // 	tempDir := t.TempDir()
-// 	toolVersionsFile := filepath.Join(tempDir, ".tool-versions")
+// 	toolVersionsFile := filepath.Join(tempDir, DefaultToolVersionsFilePath)
 // 	toolsDir := filepath.Join(tempDir, ".tools")
 
 // 	// Create a .tool-versions file with mixed tools
@@ -234,7 +234,7 @@ package toolchain
 
 // func TestPathCommand_WithCanonicalNames(t *testing.T) {
 // 	tempDir := t.TempDir()
-// 	toolVersionsFile := filepath.Join(tempDir, ".tool-versions")
+// 	toolVersionsFile := filepath.Join(tempDir, DefaultToolVersionsFilePath)
 // 	toolsDir := filepath.Join(tempDir, ".tools")
 
 // 	// Create a .tool-versions file with canonical names
@@ -267,7 +267,7 @@ package toolchain
 
 // func TestPathCommand_WithMultipleVersions(t *testing.T) {
 // 	tempDir := t.TempDir()
-// 	toolVersionsFile := filepath.Join(tempDir, ".tool-versions")
+// 	toolVersionsFile := filepath.Join(tempDir, DefaultToolVersionsFilePath)
 // 	toolsDir := filepath.Join(tempDir, ".tools")
 
 // 	// Create a .tool-versions file with multiple versions
@@ -325,7 +325,7 @@ package toolchain
 
 // func TestPathCommand_CombinedFlags(t *testing.T) {
 // 	tempDir := t.TempDir()
-// 	toolVersionsFile := filepath.Join(tempDir, ".tool-versions")
+// 	toolVersionsFile := filepath.Join(tempDir, DefaultToolVersionsFilePath)
 // 	toolsDir := filepath.Join(tempDir, ".tools")
 
 // 	// Create a .tool-versions file with a tool
@@ -357,7 +357,7 @@ package toolchain
 
 // func TestPathCommand_IncludesCurrentPATH(t *testing.T) {
 // 	tempDir := t.TempDir()
-// 	toolVersionsFile := filepath.Join(tempDir, ".tool-versions")
+// 	toolVersionsFile := filepath.Join(tempDir, DefaultToolVersionsFilePath)
 // 	toolsDir := filepath.Join(tempDir, ".tools")
 
 // 	// Create a .tool-versions file with a tool
@@ -394,7 +394,7 @@ package toolchain
 
 // func TestPathCommand_SortedOutput(t *testing.T) {
 // 	tempDir := t.TempDir()
-// 	toolVersionsFile := filepath.Join(tempDir, ".tool-versions")
+// 	toolVersionsFile := filepath.Join(tempDir, DefaultToolVersionsFilePath)
 // 	toolsDir := filepath.Join(tempDir, ".tools")
 
 // 	// Create a .tool-versions file with tools in non-alphabetical order
@@ -459,7 +459,7 @@ func TestEmitPath(t *testing.T) {
 	os.Setenv("HOME", tempDir)
 
 	// Create a .tool-versions file with some tools
-	toolVersionsPath := filepath.Join(tempDir, ".tool-versions")
+	toolVersionsPath := filepath.Join(tempDir, DefaultToolVersionsFilePath)
 	toolVersions := &ToolVersions{
 		Tools: map[string][]string{
 			"terraform": {"1.11.4"},

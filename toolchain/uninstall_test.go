@@ -137,7 +137,7 @@ func TestUninstallWithNoArgs(t *testing.T) {
 	os.Setenv("HOME", tempDir)
 
 	// Create a .tool-versions file with some tools
-	toolVersionsPath := filepath.Join(tempDir, ".tool-versions")
+	toolVersionsPath := filepath.Join(tempDir, DefaultToolVersionsFilePath)
 	toolVersions := &ToolVersions{
 		Tools: map[string][]string{
 			"terraform": {"1.11.4", "1.9.8"},
@@ -200,7 +200,7 @@ func TestRunUninstallWithNoArgs(t *testing.T) {
 	os.Setenv("HOME", tempDir)
 
 	// Create a .tool-versions file with some tools
-	toolVersionsPath := filepath.Join(tempDir, ".tool-versions")
+	toolVersionsPath := filepath.Join(tempDir, DefaultToolVersionsFilePath)
 	toolVersions := &ToolVersions{
 		Tools: map[string][]string{
 			"terraform": {"1.11.4"},

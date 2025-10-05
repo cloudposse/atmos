@@ -13,7 +13,7 @@ import (
 func createTempToolVersionsFile(t *testing.T, content string) string {
 	t.Helper()
 	dir := t.TempDir()
-	filePath := filepath.Join(dir, ".tool-versions")
+	filePath := filepath.Join(dir, DefaultToolVersionsFilePath)
 	err := os.WriteFile(filePath, []byte(content), defaultFileWritePermissions)
 	if err != nil {
 		t.Fatalf("failed to create temp .tool-versions file: %v", err)

@@ -12,7 +12,7 @@ import (
 func TestAddCommand_ValidTool(t *testing.T) {
 	// Create a temporary .tool-versions file
 	tempDir := t.TempDir()
-	toolVersionsFile := filepath.Join(tempDir, ".tool-versions")
+	toolVersionsFile := filepath.Join(tempDir, DefaultToolVersionsFilePath)
 	SetAtmosConfig(&schema.AtmosConfiguration{
 		Toolchain: schema.Toolchain{FilePath: toolVersionsFile},
 	})
@@ -29,7 +29,7 @@ func TestAddCommand_ValidTool(t *testing.T) {
 func TestAddCommand_ValidToolWithAlias(t *testing.T) {
 	// Create a temporary .tool-versions file
 	tempDir := t.TempDir()
-	toolVersionsFile := filepath.Join(tempDir, ".tool-versions")
+	toolVersionsFile := filepath.Join(tempDir, DefaultToolVersionsFilePath)
 	SetAtmosConfig(&schema.AtmosConfiguration{
 		Toolchain: schema.Toolchain{FilePath: toolVersionsFile},
 	})
@@ -46,7 +46,7 @@ func TestAddCommand_ValidToolWithAlias(t *testing.T) {
 func TestAddCommand_ValidToolWithCanonicalName(t *testing.T) {
 	// Create a temporary .tool-versions file
 	tempDir := t.TempDir()
-	toolVersionsFile := filepath.Join(tempDir, ".tool-versions")
+	toolVersionsFile := filepath.Join(tempDir, DefaultToolVersionsFilePath)
 	SetAtmosConfig(&schema.AtmosConfiguration{
 		Toolchain: schema.Toolchain{FilePath: toolVersionsFile},
 	})
@@ -64,7 +64,7 @@ func TestAddCommand_ValidToolWithCanonicalName(t *testing.T) {
 func TestAddCommand_InvalidTool(t *testing.T) {
 	// Create a temporary .tool-versions file
 	tempDir := t.TempDir()
-	toolVersionsFile := filepath.Join(tempDir, ".tool-versions")
+	toolVersionsFile := filepath.Join(tempDir, DefaultToolVersionsFilePath)
 	SetAtmosConfig(&schema.AtmosConfiguration{
 		Toolchain: schema.Toolchain{FilePath: toolVersionsFile},
 	})
@@ -82,7 +82,7 @@ func TestAddCommand_InvalidTool(t *testing.T) {
 func TestAddCommand_InvalidToolWithCanonicalName(t *testing.T) {
 	// Create a temporary .tool-versions file
 	tempDir := t.TempDir()
-	toolVersionsFile := filepath.Join(tempDir, ".tool-versions")
+	toolVersionsFile := filepath.Join(tempDir, DefaultToolVersionsFilePath)
 	SetAtmosConfig(&schema.AtmosConfiguration{
 		Toolchain: schema.Toolchain{FilePath: toolVersionsFile},
 	})
@@ -101,7 +101,7 @@ func TestAddCommand_InvalidToolWithCanonicalName(t *testing.T) {
 func TestAddCommand_UpdateExistingTool(t *testing.T) {
 	// Create a temporary .tool-versions file with existing tool
 	tempDir := t.TempDir()
-	toolVersionsFile := filepath.Join(tempDir, ".tool-versions")
+	toolVersionsFile := filepath.Join(tempDir, DefaultToolVersionsFilePath)
 
 	// Add initial tool
 	initialToolVersions := &ToolVersions{
@@ -128,7 +128,7 @@ func TestAddCommand_UpdateExistingTool(t *testing.T) {
 func TestAddCommand_InvalidVersion(t *testing.T) {
 	// Create a temporary .tool-versions file
 	tempDir := t.TempDir()
-	toolVersionsFile := filepath.Join(tempDir, ".tool-versions")
+	toolVersionsFile := filepath.Join(tempDir, DefaultToolVersionsFilePath)
 
 	// Test adding a tool with an invalid version
 	// Note: Since we only validate that the tool exists in registry, not the specific version,
@@ -168,7 +168,7 @@ func TestAddCommand_CustomToolVersionsFile(t *testing.T) {
 func TestAddCommand_AquaRegistryTool(t *testing.T) {
 	// Create a temporary .tool-versions file
 	tempDir := t.TempDir()
-	toolVersionsFile := filepath.Join(tempDir, ".tool-versions")
+	toolVersionsFile := filepath.Join(tempDir, DefaultToolVersionsFilePath)
 
 	// Test adding a tool from Aqua registry
 	// Note: This test may fail if kubectl is not available in the Aqua registry
@@ -221,7 +221,7 @@ func TestAddCommand_EdgeCases(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			// Create a temporary .tool-versions file
 			tempDir := t.TempDir()
-			toolVersionsFile := filepath.Join(tempDir, ".tool-versions")
+			toolVersionsFile := filepath.Join(tempDir, DefaultToolVersionsFilePath)
 
 			SetAtmosConfig(&schema.AtmosConfiguration{
 				Toolchain: schema.Toolchain{FilePath: toolVersionsFile},

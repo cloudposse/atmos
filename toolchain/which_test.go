@@ -18,7 +18,7 @@ func TestWhichCommand_ToolNotConfigured(t *testing.T) {
 	emptyToolVersions := &ToolVersions{
 		Tools: map[string][]string{},
 	}
-	toolVersionsPath := filepath.Join(tempDir, ".tool-versions")
+	toolVersionsPath := filepath.Join(tempDir, DefaultToolVersionsFilePath)
 	err := SaveToolVersions(toolVersionsPath, emptyToolVersions)
 	require.NoError(t, err)
 	SetAtmosConfig(&schema.AtmosConfiguration{Toolchain: schema.Toolchain{ToolsDir: tempDir, FilePath: toolVersionsPath}})
@@ -36,7 +36,7 @@ func TestWhichCommand_InvalidTool(t *testing.T) {
 	emptyToolVersions := &ToolVersions{
 		Tools: map[string][]string{},
 	}
-	toolVersionsPath := filepath.Join(tempDir, ".tool-versions")
+	toolVersionsPath := filepath.Join(tempDir, DefaultToolVersionsFilePath)
 	err := SaveToolVersions(toolVersionsPath, emptyToolVersions)
 	require.NoError(t, err)
 
@@ -57,7 +57,7 @@ func TestWhichCommand_InvalidToolName(t *testing.T) {
 			"invalid/tool/name": {"1.0.0"},
 		},
 	}
-	toolVersionsPath := filepath.Join(tempDir, ".tool-versions")
+	toolVersionsPath := filepath.Join(tempDir, DefaultToolVersionsFilePath)
 	err := SaveToolVersions(toolVersionsPath, toolVersions)
 	require.NoError(t, err)
 
@@ -75,7 +75,7 @@ func TestWhichCommand_EmptyToolName(t *testing.T) {
 	emptyToolVersions := &ToolVersions{
 		Tools: map[string][]string{},
 	}
-	toolVersionsPath := filepath.Join(tempDir, ".tool-versions")
+	toolVersionsPath := filepath.Join(tempDir, DefaultToolVersionsFilePath)
 	err := SaveToolVersions(toolVersionsPath, emptyToolVersions)
 	require.NoError(t, err)
 
@@ -96,7 +96,7 @@ func TestWhichCommand_ToolConfiguredButNotInstalled(t *testing.T) {
 			"terraform": {"999.999.999"}, // Use a version that won't be installed
 		},
 	}
-	toolVersionsPath := filepath.Join(tempDir, ".tool-versions")
+	toolVersionsPath := filepath.Join(tempDir, DefaultToolVersionsFilePath)
 	err := SaveToolVersions(toolVersionsPath, toolVersions)
 	require.NoError(t, err)
 
@@ -117,7 +117,7 @@ func TestWhichCommand_ToolConfiguredAndInstalled(t *testing.T) {
 			"terraform": {"1.11.4"},
 		},
 	}
-	toolVersionsPath := filepath.Join(tempDir, ".tool-versions")
+	toolVersionsPath := filepath.Join(tempDir, DefaultToolVersionsFilePath)
 	SetAtmosConfig(&schema.AtmosConfiguration{Toolchain: schema.Toolchain{ToolsDir: tempDir, FilePath: toolVersionsPath}})
 	err := SaveToolVersions(toolVersionsPath, toolVersions)
 	require.NoError(t, err)
@@ -140,7 +140,7 @@ func TestWhichCommand_NoToolVersionsFile(t *testing.T) {
 	tempDir := t.TempDir()
 
 	// Don't create a .tool-versions file
-	toolVersionsPath := filepath.Join(tempDir, ".tool-versions")
+	toolVersionsPath := filepath.Join(tempDir, DefaultToolVersionsFilePath)
 
 	SetAtmosConfig(&schema.AtmosConfiguration{Toolchain: schema.Toolchain{ToolsDir: tempDir, FilePath: toolVersionsPath}})
 	err := WhichExec("terraform")

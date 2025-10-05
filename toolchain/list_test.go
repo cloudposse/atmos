@@ -15,7 +15,7 @@ func TestListCommand_WithInstalledTools(t *testing.T) {
 	tempDir := t.TempDir()
 	t.Chdir(tempDir)
 	t.Log(tempDir)
-	toolVersionsFile := filepath.Join(tempDir, ".tool-versions")
+	toolVersionsFile := filepath.Join(tempDir, DefaultToolVersionsFilePath)
 	toolsDir := filepath.Join(tempDir, ".tools")
 	atmosConfig := &schema.AtmosConfiguration{
 		Toolchain: schema.Toolchain{
@@ -64,7 +64,7 @@ func TestListCommand_WithInstalledTools(t *testing.T) {
 func TestListCommand_EmptyToolVersionsFile(t *testing.T) {
 	tempDir := t.TempDir()
 	t.Chdir(tempDir)
-	toolVersionsFile := filepath.Join(tempDir, ".tool-versions")
+	toolVersionsFile := filepath.Join(tempDir, DefaultToolVersionsFilePath)
 
 	// Create an empty .tool-versions file
 	toolVersions := &ToolVersions{
@@ -99,7 +99,7 @@ func TestListCommand_NonExistentToolVersionsFile(t *testing.T) {
 
 func TestListCommand_ToolsNotInstalled(t *testing.T) {
 	tempDir := t.TempDir()
-	toolVersionsFile := filepath.Join(tempDir, ".tool-versions")
+	toolVersionsFile := filepath.Join(tempDir, DefaultToolVersionsFilePath)
 
 	// Create a .tool-versions file with tools that aren't installed
 	toolVersions := &ToolVersions{
@@ -121,7 +121,7 @@ func TestListCommand_ToolsNotInstalled(t *testing.T) {
 
 func TestListCommand_MixedInstalledAndNotInstalled(t *testing.T) {
 	tempDir := t.TempDir()
-	toolVersionsFile := filepath.Join(tempDir, ".tool-versions")
+	toolVersionsFile := filepath.Join(tempDir, DefaultToolVersionsFilePath)
 	toolsDir := filepath.Join(tempDir, ".tools")
 
 	// Create a .tool-versions file with mixed tools
@@ -156,7 +156,7 @@ func TestListCommand_MixedInstalledAndNotInstalled(t *testing.T) {
 func TestListCommand_WithLatestVersion(t *testing.T) {
 	tempDir := t.TempDir()
 	t.Chdir(tempDir)
-	toolVersionsFile := filepath.Join(tempDir, ".tool-versions")
+	toolVersionsFile := filepath.Join(tempDir, DefaultToolVersionsFilePath)
 	toolsDir := filepath.Join(tempDir, ".tools")
 
 	// Create a .tool-versions file with latest version
@@ -225,7 +225,7 @@ func TestFormatFileSize(t *testing.T) {
 
 func TestListCommand_WithCanonicalNames(t *testing.T) {
 	tempDir := t.TempDir()
-	toolVersionsFile := filepath.Join(tempDir, ".tool-versions")
+	toolVersionsFile := filepath.Join(tempDir, DefaultToolVersionsFilePath)
 	toolsDir := filepath.Join(tempDir, ".tools")
 
 	// Create a .tool-versions file with canonical names
@@ -258,7 +258,7 @@ func TestListCommand_WithCanonicalNames(t *testing.T) {
 
 func TestListCommand_WithMultipleVersions(t *testing.T) {
 	tempDir := t.TempDir()
-	toolVersionsFile := filepath.Join(tempDir, ".tool-versions")
+	toolVersionsFile := filepath.Join(tempDir, DefaultToolVersionsFilePath)
 	toolsDir := filepath.Join(tempDir, ".tools")
 
 	// Create a .tool-versions file with multiple versions
