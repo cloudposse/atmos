@@ -685,6 +685,12 @@ func isSafePath(path, dest string) bool {
 }
 
 func extractDir(path string, header *tar.Header) error {
+	// Validate header.Mode
+	if header.Mode < 0 || header.Mode > 0o7777 { // Restrict to typical Unix permissions
+		return fmt.Errorf("invalid mode %d for %s: must be between 0 and 07777", header.Mode, path)
+	}
+
+	// Safe conversion to os.FileMode
 	return os.MkdirAll(path, os.FileMode(header.Mode))
 }
 
