@@ -172,15 +172,17 @@ func getUnixHomeDir() (string, error) {
 		return "", nil
 	}
 
-	passwd := strings.TrimSpace(stdout.String())
-	if passwd == "" {
+	output := strings.TrimSpace(stdout.String())
+	if output == "" {
 		return "", nil
 	}
 
-	// username:password:uid:gid:gecos:home:shell
-	passwdParts := strings.SplitN(passwd, ":", passwdFieldCount)
-	if len(passwdParts) > passwdHomeDirIndex {
-		return passwdParts[passwdHomeDirIndex], nil
+	// Parse passwd format: username:password:uid:gid:gecos:home:shell
+	// We only extract the home directory field (index 5) to avoid keeping
+	// potentially sensitive fields in memory or logs.
+	fields := strings.SplitN(output, ":", passwdFieldCount)
+	if len(fields) > passwdHomeDirIndex {
+		return fields[passwdHomeDirIndex], nil
 	}
 	return "", nil
 }
