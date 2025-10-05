@@ -6,10 +6,11 @@ id: exec
 description: Execute a command with authentication environment variables set for the selected identity.
 ---
 import Screengrab from '@site/src/components/Screengrab'
+import Intro from '@site/src/components/Intro'
 
-:::note Purpose
+<Intro>
 Run any tool (Terraform, AWS CLI, kubectl, etc.) with the right cloud identity injected automatically into the environment. Use `exec` when you want a one-off command to inherit secure, temporary credentials without polluting your shell session.
-:::
+</Intro>
 
 <Screengrab title="atmos auth exec --help" slug="atmos-auth-exec--help" />
 
