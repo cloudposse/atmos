@@ -10,7 +10,6 @@ import (
 	"strings"
 	"time"
 
-	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/go-git/go-git/v5"
 	"github.com/samber/lo"
 	"github.com/spf13/cobra"
@@ -19,6 +18,7 @@ import (
 	e "github.com/cloudposse/atmos/internal/exec"
 	tuiUtils "github.com/cloudposse/atmos/internal/tui/utils"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/cloudposse/atmos/pkg/version"
