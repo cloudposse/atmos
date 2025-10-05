@@ -240,7 +240,7 @@ func (ar *AquaRegistry) fetchRegistryFile(url string) (*Tool, error) {
 	}
 
 	// Cache the response
-	if err := os.WriteFile(cacheFile, data, 0o644); err != nil {
+	if err := os.WriteFile(cacheFile, data, defaultFileWritePermissions); err != nil {
 		// Log but don't fail
 		log.Debug("Failed to cache registry file", "error", err)
 	}

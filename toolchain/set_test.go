@@ -1719,7 +1719,7 @@ func setupTestVersionsFile(t *testing.T) string {
 	testVersionsFile := filepath.Join(tmpDir, "versions.yaml")
 
 	// Create empty versions file
-	err := os.WriteFile(testVersionsFile, []byte("tools: {}\n"), 0o644)
+	err := os.WriteFile(testVersionsFile, []byte("tools: {}\n"), defaultFileWritePermissions)
 	require.NoError(t, err)
 
 	return testVersionsFile

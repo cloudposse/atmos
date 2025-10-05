@@ -14,7 +14,7 @@ func createTempToolVersionsFile(t *testing.T, content string) string {
 	t.Helper()
 	dir := t.TempDir()
 	filePath := filepath.Join(dir, ".tool-versions")
-	err := os.WriteFile(filePath, []byte(content), 0o644)
+	err := os.WriteFile(filePath, []byte(content), defaultFileWritePermissions)
 	if err != nil {
 		t.Fatalf("failed to create temp .tool-versions file: %v", err)
 	}

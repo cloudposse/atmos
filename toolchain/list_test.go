@@ -174,7 +174,7 @@ func TestListCommand_WithLatestVersion(t *testing.T) {
 	require.NoError(t, err)
 
 	latestFile := filepath.Join(latestPath, "latest")
-	err = os.WriteFile(latestFile, []byte("1.11.4"), 0o644)
+	err = os.WriteFile(latestFile, []byte("1.11.4"), defaultFileWritePermissions)
 	require.NoError(t, err)
 
 	terraformBinary := filepath.Join(latestPath, "terraform")

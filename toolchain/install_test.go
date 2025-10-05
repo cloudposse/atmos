@@ -19,7 +19,7 @@ func TestInstallResolvesAliasFromToolVersions(t *testing.T) {
 
 	// Write a .tool-versions file with the full alias key
 	toolVersionsPath := filepath.Join(dir, ".tool-versions")
-	err := os.WriteFile(toolVersionsPath, []byte("opentofu/opentofu 1.10.0\n"), 0o644)
+	err := os.WriteFile(toolVersionsPath, []byte("opentofu/opentofu 1.10.0\n"), defaultFileWritePermissions)
 	require.NoError(t, err)
 
 	// Write a minimal tools.yaml with the alias
@@ -28,7 +28,7 @@ func TestInstallResolvesAliasFromToolVersions(t *testing.T) {
 	toolsYaml := `aliases:
   opentofu: opentofu/opentofu
 `
-	err = os.WriteFile(toolsYamlPath, []byte(toolsYaml), 0o644)
+	err = os.WriteFile(toolsYamlPath, []byte(toolsYaml), defaultFileWritePermissions)
 	require.NoError(t, err)
 
 	// Simulate install: should resolve alias 'opentofu' to 'opentofu/opentofu'

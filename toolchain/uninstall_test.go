@@ -31,7 +31,7 @@ func TestUninstallCleansUpLatestFile_Present(t *testing.T) {
 		err = os.WriteFile(binaryPath, []byte("mock binary"), defaultMkdirPermissions)
 		require.NoError(t, err)
 		latestFile := filepath.Join(tempDir, owner, repo, "latest")
-		err = os.WriteFile(latestFile, []byte(actualVersion), 0o644)
+		err = os.WriteFile(latestFile, []byte(actualVersion), defaultFileWritePermissions)
 		require.NoError(t, err)
 
 		// Ensure latest file exists
@@ -69,7 +69,7 @@ func TestUninstallCleansUpLatestFile_Present(t *testing.T) {
 		latestFile := filepath.Join(tempDir, owner, repo, "latest")
 		err := os.MkdirAll(filepath.Join(tempDir, owner, repo), defaultMkdirPermissions)
 		require.NoError(t, err)
-		err = os.WriteFile(latestFile, []byte(actualVersion), 0o644)
+		err = os.WriteFile(latestFile, []byte(actualVersion), defaultFileWritePermissions)
 		require.NoError(t, err)
 
 		// Ensure latest file exists
