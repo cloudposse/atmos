@@ -283,7 +283,7 @@ func TestExtractCleanPatterns(t *testing.T) {
 				"cache/file.tmp":     "cache",
 				"cache/sub/test.tmp": "test",
 			},
-			want:    []string{"cache/file.tmp", "cache/sub/test.tmp", "temp", "temp/data.txt", "temp/old.log"},
+			want:    []string{"cache" + string(os.PathSeparator) + "file.tmp", "cache" + string(os.PathSeparator) + "sub" + string(os.PathSeparator) + "test.tmp", "temp", "temp" + string(os.PathSeparator) + "data.txt", "temp" + string(os.PathSeparator) + "old.log"},
 			wantErr: false,
 		},
 		{
