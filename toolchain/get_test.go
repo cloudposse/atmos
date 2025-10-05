@@ -101,12 +101,14 @@ func TestListToolVersions(t *testing.T) {
 				defer os.Unsetenv("HOME")
 			}
 
-			if tt.filePath == "" {
-				tt.filePath = createTempToolVersionsFile(t, tt.toolVersions)
+			// Avoid mutating tt.filePath directly; use a local variable.
+			filePath := tt.filePath
+			if filePath == "" {
+				filePath = createTempToolVersionsFile(t, tt.toolVersions)
 			}
 			SetAtmosConfig(&schema.AtmosConfiguration{
 				Toolchain: schema.Toolchain{
-					FilePath: tt.filePath,
+					FilePath: filePath,
 				},
 			})
 			// Run the function
