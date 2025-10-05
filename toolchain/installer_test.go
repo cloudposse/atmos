@@ -425,7 +425,7 @@ tools:
     url: https://example.com/terraform.zip
 `
 
-	err := os.WriteFile(toolsYamlPath, []byte(content), 0o644)
+	err := os.WriteFile(toolsYamlPath, []byte(content), defaultFileWritePermissions)
 	if err != nil {
 		t.Fatalf("Failed to create test tools.yaml file: %v", err)
 	}
@@ -519,7 +519,7 @@ tools:
 // 			setupTools: func(tempDir string) {
 // 				// Create empty .tool-versions file
 // 				toolVersionsPath := filepath.Join(tempDir, ".tool-versions")
-// 				err := os.WriteFile(toolVersionsPath, []byte(""), 0o644)
+// 				err := os.WriteFile(toolVersionsPath, []byte(""), defaultFileWritePermissions)
 // 				if err != nil {
 // 					t.Fatalf("Failed to create empty .tool-versions: %v", err)
 // 				}
@@ -534,7 +534,7 @@ tools:
 // 			setupTools: func(tempDir string) {
 // 				// Create .tool-versions file
 // 				toolVersionsPath := filepath.Join(tempDir, ".tool-versions")
-// 				err := os.WriteFile(toolVersionsPath, []byte("terraform 1.5.0\n"), 0o644)
+// 				err := os.WriteFile(toolVersionsPath, []byte("terraform 1.5.0\n"), defaultFileWritePermissions)
 // 				if err != nil {
 // 					t.Fatalf("Failed to create .tool-versions: %v", err)
 // 				}
@@ -549,7 +549,7 @@ tools:
 // 			setupTools: func(tempDir string) {
 // 				// Create .tool-versions file
 // 				toolVersionsPath := filepath.Join(tempDir, ".tool-versions")
-// 				err := os.WriteFile(toolVersionsPath, []byte("terraform 1.5.0\nhelm 3.12.0\nkubectl 1.28.0\n"), 0o644)
+// 				err := os.WriteFile(toolVersionsPath, []byte("terraform 1.5.0\nhelm 3.12.0\nkubectl 1.28.0\n"), defaultFileWritePermissions)
 // 				if err != nil {
 // 					t.Fatalf("Failed to create .tool-versions: %v", err)
 // 				}
@@ -564,7 +564,7 @@ tools:
 // 			setupTools: func(tempDir string) {
 // 				// Create .tool-versions file
 // 				toolVersionsPath := filepath.Join(tempDir, ".tool-versions")
-// 				err := os.WriteFile(toolVersionsPath, []byte("terraform 1.5.0\n"), 0o644)
+// 				err := os.WriteFile(toolVersionsPath, []byte("terraform 1.5.0\n"), defaultFileWritePermissions)
 // 				if err != nil {
 // 					t.Fatalf("Failed to create .tool-versions: %v", err)
 // 				}
@@ -593,7 +593,7 @@ tools:
 // 			setupTools: func(tempDir string) {
 // 				// Create .tool-versions file
 // 				toolVersionsPath := filepath.Join(tempDir, ".tool-versions")
-// 				err := os.WriteFile(toolVersionsPath, []byte("terraform 1.5.0\nhelm 3.12.0\nkubectl 1.28.0\n"), 0o644)
+// 				err := os.WriteFile(toolVersionsPath, []byte("terraform 1.5.0\nhelm 3.12.0\nkubectl 1.28.0\n"), defaultFileWritePermissions)
 // 				if err != nil {
 // 					t.Fatalf("Failed to create .tool-versions: %v", err)
 // 				}
@@ -620,7 +620,7 @@ tools:
 // 			setupTools: func(tempDir string) {
 // 				// Create .tool-versions file
 // 				toolVersionsPath := filepath.Join(tempDir, ".tool-versions")
-// 				err := os.WriteFile(toolVersionsPath, []byte("terraform 1.5.0\n"), 0o644)
+// 				err := os.WriteFile(toolVersionsPath, []byte("terraform 1.5.0\n"), defaultFileWritePermissions)
 // 				if err != nil {
 // 					t.Fatalf("Failed to create .tool-versions: %v", err)
 // 				}
@@ -649,7 +649,7 @@ tools:
 // 			setupTools: func(tempDir string) {
 // 				// Create .tool-versions file
 // 				toolVersionsPath := filepath.Join(tempDir, ".tool-versions")
-// 				err := os.WriteFile(toolVersionsPath, []byte("terraform 1.5.0\n"), 0o644)
+// 				err := os.WriteFile(toolVersionsPath, []byte("terraform 1.5.0\n"), defaultFileWritePermissions)
 // 				if err != nil {
 // 					t.Fatalf("Failed to create .tool-versions: %v", err)
 // 				}
@@ -678,7 +678,7 @@ tools:
 // 			setupTools: func(tempDir string) {
 // 				// Create .tool-versions file
 // 				toolVersionsPath := filepath.Join(tempDir, ".tool-versions")
-// 				err := os.WriteFile(toolVersionsPath, []byte("terraform 1.5.0\nunknown-tool 1.0.0\n"), 0o644)
+// 				err := os.WriteFile(toolVersionsPath, []byte("terraform 1.5.0\nunknown-tool 1.0.0\n"), defaultFileWritePermissions)
 // 				if err != nil {
 // 					t.Fatalf("Failed to create .tool-versions: %v", err)
 // 				}
@@ -705,7 +705,7 @@ tools:
 // 			setupTools: func(tempDir string) {
 // 				// Create .tool-versions file
 // 				toolVersionsPath := filepath.Join(tempDir, ".tool-versions")
-// 				err := os.WriteFile(toolVersionsPath, []byte("# This is a comment\nterraform 1.5.0\n# Another comment\n"), 0o644)
+// 				err := os.WriteFile(toolVersionsPath, []byte("# This is a comment\nterraform 1.5.0\n# Another comment\n"), defaultFileWritePermissions)
 // 				if err != nil {
 // 					t.Fatalf("Failed to create .tool-versions: %v", err)
 // 				}
@@ -734,7 +734,7 @@ tools:
 // 			setupTools: func(tempDir string) {
 // 				// Create malformed .tool-versions file
 // 				toolVersionsPath := filepath.Join(tempDir, ".tool-versions")
-// 				err := os.WriteFile(toolVersionsPath, []byte("terraform\ninvalid line\n1.5.0\n"), 0o644)
+// 				err := os.WriteFile(toolVersionsPath, []byte("terraform\ninvalid line\n1.5.0\n"), defaultFileWritePermissions)
 // 				if err != nil {
 // 					t.Fatalf("Failed to create .tool-versions: %v", err)
 // 				}
@@ -1237,7 +1237,7 @@ func TestFileTypeDetection(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			// Create test file
 			filePath := filepath.Join(tempDir, tt.filename)
-			if err := os.WriteFile(filePath, tt.content, 0o644); err != nil {
+			if err := os.WriteFile(filePath, tt.content, defaultFileWritePermissions); err != nil {
 				t.Fatalf("failed to create test file: %v", err)
 			}
 

@@ -43,7 +43,7 @@ tools:
     format: zip
     binary_name: terraform
 `
-	err = os.WriteFile(configPath, []byte(configContent), 0o644)
+	err = os.WriteFile(configPath, []byte(configContent), defaultFileWritePermissions)
 	require.NoError(t, err)
 
 	err = ar.LoadLocalConfig(configPath)
@@ -66,7 +66,7 @@ tools:
     format: zip
     binary_name: terraform
 `
-	err := os.WriteFile(configPath, []byte(configContent), 0o644)
+	err := os.WriteFile(configPath, []byte(configContent), defaultFileWritePermissions)
 	require.NoError(t, err)
 
 	err = ar.LoadLocalConfig(configPath)
@@ -128,7 +128,7 @@ tools:
     format: zip
     binary_name: terraform
 `
-	err := os.WriteFile(configPath, []byte(configContent), 0o644)
+	err := os.WriteFile(configPath, []byte(configContent), defaultFileWritePermissions)
 	require.NoError(t, err)
 
 	err = ar.LoadLocalConfig(configPath)

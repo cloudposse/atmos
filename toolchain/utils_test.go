@@ -146,7 +146,7 @@ func TestBasicFileOperations(t *testing.T) {
 	testContent := []byte("test content")
 
 	// Test file operations
-	err := os.WriteFile(testFile, testContent, 0o644)
+	err := os.WriteFile(testFile, testContent, defaultFileWritePermissions)
 	require.NoError(t, err)
 
 	// Verify file exists

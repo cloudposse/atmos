@@ -19,6 +19,8 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+const defaultFileWritePermissions = 0o644
+
 // ToolResolver defines an interface for resolving tool names to owner/repo pairs
 // This allows for mocking in tests and flexible resolution in production.
 type ToolResolver interface {
@@ -964,7 +966,7 @@ func (i *Installer) CreateLatestFile(owner, repo, version string) error {
 	latestFilePath := filepath.Join(latestDir, "latest")
 
 	// Write the version to the latest file
-	if err := os.WriteFile(latestFilePath, []byte(version), 0o644); err != nil {
+	if err := os.WriteFile(latestFilePath, []byte(version), defaultFileWritePermissions); err != nil {
 		return fmt.Errorf("failed to write latest file: %w", err)
 	}
 

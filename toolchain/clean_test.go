@@ -18,7 +18,7 @@ func TestCleanToolsAndCaches(t *testing.T) {
 			t.Fatalf("failed to create test dir %s: %v", baseDir, err)
 		}
 		for _, file := range files {
-			if err := os.WriteFile(filepath.Join(baseDir, file), []byte("test"), 0o644); err != nil {
+			if err := os.WriteFile(filepath.Join(baseDir, file), []byte("test"), defaultFileWritePermissions); err != nil {
 				t.Fatalf("failed to create file %s: %v", file, err)
 			}
 		}

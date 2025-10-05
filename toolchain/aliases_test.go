@@ -19,7 +19,7 @@ func TestAliasesCommand_WithAliases(t *testing.T) {
   terraform: hashicorp/terraform
   kubectl: kubernetes/kubectl
   helm: helm/helm`
-	err := os.WriteFile(configFile, []byte(configContent), 0o644)
+	err := os.WriteFile(configFile, []byte(configContent), defaultFileWritePermissions)
 	require.NoError(t, err)
 
 	t.Chdir(tempDir)
@@ -36,7 +36,7 @@ func TestAliasesCommand_EmptyAliases(t *testing.T) {
 
 	// Create a tools.yaml file with no aliases
 	configContent := `aliases: {}`
-	err := os.WriteFile(configFile, []byte(configContent), 0o644)
+	err := os.WriteFile(configFile, []byte(configContent), defaultFileWritePermissions)
 	require.NoError(t, err)
 
 	// Change to the temp directory
@@ -64,7 +64,7 @@ func TestAliasesCommand_InvalidConfigFile(t *testing.T) {
 	configContent := `aliases:
   terraform: hashicorp/terraform
   invalid: yaml: content: here`
-	err := os.WriteFile(configFile, []byte(configContent), 0o644)
+	err := os.WriteFile(configFile, []byte(configContent), defaultFileWritePermissions)
 	require.NoError(t, err)
 
 	// Change to the temp directory
@@ -88,7 +88,7 @@ func TestAliasesCommand_MultipleAliases(t *testing.T) {
   helm: helm/helm
   awscli: aws/aws-cli
   docker: docker/cli`
-	err := os.WriteFile(configFile, []byte(configContent), 0o644)
+	err := os.WriteFile(configFile, []byte(configContent), defaultFileWritePermissions)
 	require.NoError(t, err)
 	t.Chdir(tempDir)
 	// Test aliases command with multiple aliases
@@ -102,7 +102,7 @@ func TestAliasesCommand_EmptyConfigFile(t *testing.T) {
 	configFile := filepath.Join(tempDir, "tools.yaml")
 
 	// Create an empty tools.yaml file
-	err := os.WriteFile(configFile, []byte(""), 0o644)
+	err := os.WriteFile(configFile, []byte(""), defaultFileWritePermissions)
 	require.NoError(t, err)
 
 	t.Chdir(tempDir)
@@ -119,7 +119,7 @@ func TestAliasesCommand_ConfigWithoutAliases(t *testing.T) {
 	// Create a tools.yaml file without aliases section
 	configContent := `other_config:
   setting: value`
-	err := os.WriteFile(configFile, []byte(configContent), 0o644)
+	err := os.WriteFile(configFile, []byte(configContent), defaultFileWritePermissions)
 	require.NoError(t, err)
 	t.Chdir(tempDir)
 
@@ -139,7 +139,7 @@ func TestAliasesCommand_SortedOutput(t *testing.T) {
   terraform: hashicorp/terraform
   awscli: aws/aws-cli
   helm: helm/helm`
-	err := os.WriteFile(configFile, []byte(configContent), 0o644)
+	err := os.WriteFile(configFile, []byte(configContent), defaultFileWritePermissions)
 	require.NoError(t, err)
 
 	// Change to the temp directory
@@ -160,7 +160,7 @@ func TestAliasesCommand_ComplexAliases(t *testing.T) {
   k9s: derailed/k9s
   gh: cli/cli
   gcloud: google/cloud-sdk`
-	err := os.WriteFile(configFile, []byte(configContent), 0o644)
+	err := os.WriteFile(configFile, []byte(configContent), defaultFileWritePermissions)
 	require.NoError(t, err)
 
 	// Change to the temp directory
@@ -198,7 +198,7 @@ func TestAliasesCommand_WithSpecialCharacters(t *testing.T) {
   "terraform-aws": hashicorp/terraform
   "k8s-cli": kubernetes/kubectl
   "aws-cli": aws/aws-cli`
-	err := os.WriteFile(configFile, []byte(configContent), 0o644)
+	err := os.WriteFile(configFile, []byte(configContent), defaultFileWritePermissions)
 	require.NoError(t, err)
 
 	// Change to the temp directory
