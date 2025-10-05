@@ -29,6 +29,7 @@ type DescribeStacksArgs struct {
 	Skip                 []string
 	Format               string
 	File                 string
+	Provenance           bool
 }
 
 //go:generate mockgen -source=$GOFILE -destination=mock_$GOFILE -package=$GOPACKAGE
@@ -65,7 +66,15 @@ func NewDescribeStacksExec() DescribeStacksExec {
 
 // Execute executes `describe stacks` command.
 func (d *describeStacksExec) Execute(atmosConfig *schema.AtmosConfiguration, args *DescribeStacksArgs) error {
-	defer perf.Track(atmosConfig, "exec.Execute")()
+	defer perf.Track(atmosConfig, "exec.DescribeStacksExec.Execute")()
+
+	// Enable provenance tracking if requested.
+	// Note: Provenance is tracked during stack processing but not rendered
+	// in the aggregated describe stacks output. To see provenance for specific
+	// components, use `atmos describe component <component> -s <stack> --provenance`.
+	if args.Provenance {
+		atmosConfig.TrackProvenance = true
+	}
 
 	finalStacksMap, err := d.executeDescribeStacks(
 		atmosConfig,
@@ -119,8 +128,6 @@ func ExecuteDescribeStacks(
 	includeEmptyStacks bool,
 	skip []string,
 ) (map[string]any, error) {
-	defer perf.Track(atmosConfig, "exec.ExecuteDescribeStacks")()
-
 	stacksMap, _, err := FindStacksMap(atmosConfig, ignoreMissingFiles)
 	if err != nil {
 		return nil, err

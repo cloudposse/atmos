@@ -14,6 +14,8 @@ const (
 	ColorBlue      = "#5F5FFF" // UI elements
 	ColorDarkGray  = "#626262" // Subtle text
 	ColorRed       = "#FF0000" // Errors, x mark
+	ColorYellow    = "#FFFF00" // Warnings, moderate depth
+	ColorOrange    = "#FFA500" // Caution, higher depth
 	ColorCheckmark = "#00D700" // Checkmark
 	ColorWhite     = "#FFFFFF" // Default text
 
