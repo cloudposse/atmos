@@ -176,7 +176,7 @@ func TestBasicDirectoryOperations(t *testing.T) {
 	_, err = os.Stat(newDir)
 	assert.NoError(t, err)
 
-	// Test creating existing directory (should not error)
+	// Test creating existing directory (should error).
 	err = os.Mkdir(newDir, defaultMkdirPermissions)
 	assert.Error(t, err) // Should error because directory already exists
 
