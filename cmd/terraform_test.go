@@ -8,9 +8,13 @@ import (
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
+
+	"github.com/cloudposse/atmos/tests"
 )
 
 func TestTerraformRun1(t *testing.T) {
+	tests.RequireTerraform(t)
+
 	if os.Getenv("TEST_EXIT") == "1" {
 		stacksPath := "../tests/fixtures/scenarios/stack-templates-2"
 
@@ -48,6 +52,8 @@ func TestTerraformRun1(t *testing.T) {
 }
 
 func TestTerraformRun2(t *testing.T) {
+	tests.RequireTerraform(t)
+
 	if os.Getenv("TEST_EXIT") == "1" {
 		stacksPath := "../tests/fixtures/scenarios/stack-templates-2"
 
@@ -87,6 +93,8 @@ func TestTerraformRun2(t *testing.T) {
 }
 
 func TestTerraformRun3(t *testing.T) {
+	tests.RequireTerraform(t)
+
 	if os.Getenv("TEST_EXIT") == "1" {
 		stacksPath := "../tests/fixtures/scenarios/stack-templates-2"
 

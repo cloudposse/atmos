@@ -1,4 +1,0 @@
-Component,Stack
-mock/disabled,nonprod
-mock/drift,nonprod
-mock/drift,prod

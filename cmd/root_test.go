@@ -7,9 +7,10 @@ import (
 	"strings"
 	"testing"
 
-	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -311,4 +312,83 @@ func TestSetupLogger_NoColorWithTraceLevel(t *testing.T) {
 
 	assert.Equal(t, log.TraceLevel, log.GetLevel(),
 		"Trace level should be set even with no color")
+}
+
+// TestIsCompletionCommand tests the isCompletionCommand function.
+func TestIsCompletionCommand(t *testing.T) {
+	// Save original args.
+	originalArgs := os.Args
+	defer func() {
+		os.Args = originalArgs
+	}()
+
+	tests := []struct {
+		name     string
+		args     []string
+		compLine string
+		argComp  string
+		expected bool
+	}{
+		{
+			name:     "regular completion command",
+			args:     []string{"atmos", "completion"},
+			expected: true,
+		},
+		{
+			name:     "__complete hidden command",
+			args:     []string{"atmos", "__complete"},
+			expected: true,
+		},
+		{
+			name:     "__completeNoDesc hidden command",
+			args:     []string{"atmos", "__completeNoDesc"},
+			expected: true,
+		},
+		{
+			name:     "COMP_LINE env var set",
+			args:     []string{"atmos", "terraform"},
+			compLine: "atmos terraform ",
+			expected: true,
+		},
+		{
+			name:     "_ARGCOMPLETE env var set",
+			args:     []string{"atmos", "terraform"},
+			argComp:  "1",
+			expected: true,
+		},
+		{
+			name:     "regular command - not completion",
+			args:     []string{"atmos", "version"},
+			expected: false,
+		},
+		{
+			name:     "no args",
+			args:     []string{"atmos"},
+			expected: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Setup environment variables.
+			if tt.compLine != "" {
+				t.Setenv("COMP_LINE", tt.compLine)
+			}
+			if tt.argComp != "" {
+				t.Setenv("_ARGCOMPLETE", tt.argComp)
+			}
+
+			// Create a mock command with the appropriate name based on the test args.
+			var cmd *cobra.Command
+			if len(tt.args) > 1 {
+				cmd = &cobra.Command{
+					Use: tt.args[1],
+				}
+			}
+
+			// Test.
+			result := isCompletionCommand(cmd)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
 }

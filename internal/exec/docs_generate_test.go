@@ -2,6 +2,8 @@
 package exec
 
 import (
+	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -9,8 +11,16 @@ import (
 	"strings"
 	"testing"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
+
+// NOTE: Error Checking Best Practices.
+// When testing errors, prefer errors.Is() or errors.As() over string matching.
+// WRONG: if !strings.Contains(err.Error(), "expected message").
+// RIGHT: if !errors.Is(err, errUtils.ErrExpected).
+// RIGHT: var pathErr *os.PathError; if !errors.As(err, &pathErr).
+// This makes tests more robust and follows Go idioms for error handling.
 
 // TestIsRemoteSource verifies that IsRemoteSource returns expected booleans.
 func TestIsRemoteSource(t *testing.T) {
@@ -62,8 +72,8 @@ func TestGetTerraformSource(t *testing.T) {
 	if err == nil {
 		t.Errorf("Expected error for nonexistent directory, got nil")
 	}
-	if !strings.Contains(err.Error(), "source directory does not exist") {
-		t.Errorf("Unexpected error message: %v", err)
+	if !errors.Is(err, errUtils.ErrSourceDirNotExist) {
+		t.Errorf("Expected ErrSourceDirNotExist, got: %v", err)
 	}
 
 	// Empty source should return baseDir.
@@ -251,6 +261,97 @@ func TestRunTerraformDocs_Error(t *testing.T) {
 	}
 }
 
+// mockTerraformDocsRunner is a mock implementation for testing.
+type mockTerraformDocsRunner struct {
+	returnError error
+	returnValue string
+}
+
+func (m mockTerraformDocsRunner) Run(dir string, settings *schema.TerraformDocsReadmeSettings) (string, error) {
+	if m.returnError != nil {
+		return "", m.returnError
+	}
+	return m.returnValue, nil
+}
+
+// TestApplyTerraformDocsWithRunner_Error tests error handling when terraform-docs runner fails.
+func TestApplyTerraformDocsWithRunner_Error(t *testing.T) {
+	baseDir := t.TempDir()
+
+	// Create a subdirectory that exists (so getTerraformSource succeeds).
+	tfSource := filepath.Join(baseDir, "terraform")
+	if err := os.Mkdir(tfSource, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	docsGen := schema.DocsGenerate{
+		Terraform: schema.TerraformDocsReadmeSettings{
+			Enabled: true,
+			Source:  "terraform",
+		},
+	}
+	mergedData := make(map[string]any)
+
+	// Use mock runner that returns an error.
+	mockRunner := mockTerraformDocsRunner{
+		returnError: fmt.Errorf("mock terraform-docs error"),
+	}
+
+	err := applyTerraformDocsWithRunner(baseDir, &docsGen, mergedData, mockRunner)
+	if err == nil {
+		t.Error("Expected error from applyTerraformDocsWithRunner when runner fails")
+	}
+	// Check that the mock error is wrapped.
+	if !errors.Is(err, mockRunner.returnError) {
+		t.Errorf("Expected error to wrap mock error, got: %v", err)
+	}
+}
+
+// TestResolvePath_EmptyWithDefault tests resolvePath with empty path and valid default.
+func TestResolvePath_EmptyWithDefault(t *testing.T) {
+	baseDir := t.TempDir()
+	result, err := resolvePath("", baseDir, "README.md")
+	if err != nil {
+		t.Errorf("Unexpected error with empty path and valid default: %v", err)
+	}
+	if !strings.Contains(result, "README.md") {
+		t.Errorf("Expected result to contain README.md, got: %s", result)
+	}
+}
+
+// TestResolvePath_EmptyWithoutDefault tests resolvePath with empty path and empty default.
+func TestResolvePath_EmptyWithoutDefault(t *testing.T) {
+	baseDir := t.TempDir()
+	_, err := resolvePath("", baseDir, "")
+	if err == nil {
+		t.Error("Expected error with empty path and empty default")
+	}
+	if !errors.Is(err, errUtils.ErrEmptyFilePath) {
+		t.Errorf("Expected ErrEmptyFilePath, got: %v", err)
+	}
+}
+
+// TestMergeInputs_UnsupportedType tests error handling for unsupported input types.
+func TestMergeInputs_UnsupportedType(t *testing.T) {
+	atmosConfig := schema.AtmosConfiguration{}
+	baseDir := t.TempDir()
+
+	// Provide an unsupported type (int) to trigger error.
+	docsGen := schema.DocsGenerate{
+		Input: []any{
+			123, // int is not supported, should trigger error
+		},
+	}
+
+	_, err := mergeInputs(&atmosConfig, baseDir, &docsGen)
+	if err == nil {
+		t.Error("Expected error from mergeInputs with unsupported input type")
+	}
+	if !errors.Is(err, errUtils.ErrUnsupportedInputType) {
+		t.Errorf("Expected ErrUnsupportedInputType, got: %v", err)
+	}
+}
+
 // TestMergeInputs covers various merge scenarios: local only, remote overrides local, inline overrides all.
 func TestMergeInputs(t *testing.T) {
 	tests := []struct {
@@ -367,5 +468,81 @@ common: remote
 				}
 			}
 		})
+	}
+}
+
+// mockErrorRenderer simulates a renderer that always returns an error.
+type mockErrorRenderer struct{}
+
+var errMockRenderer = fmt.Errorf("mock renderer error")
+
+func (m mockErrorRenderer) Render(tmplName, tmplValue string, mergedData map[string]interface{}, ignoreMissing bool) (string, error) {
+	return "", errMockRenderer
+}
+
+// TestGenerateDocument_RenderError tests error handling when renderer fails.
+func TestGenerateDocument_RenderError(t *testing.T) {
+	atmosConfig := schema.AtmosConfiguration{}
+	baseDir := t.TempDir()
+
+	// Create a valid input file so mergeInputs succeeds.
+	inputFile := filepath.Join(baseDir, "input.yaml")
+	if err := os.WriteFile(inputFile, []byte("name: test\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	docsGen := schema.DocsGenerate{
+		Input: []any{inputFile},
+		Terraform: schema.TerraformDocsReadmeSettings{
+			Enabled: false,
+		},
+	}
+
+	// Use the error renderer to trigger render failure.
+	err := generateDocument(&atmosConfig, baseDir, &docsGen, mockErrorRenderer{})
+	if err == nil {
+		t.Error("Expected error from generateDocument when renderer fails")
+	}
+	// Check that the mock renderer error is wrapped.
+	if !errors.Is(err, errMockRenderer) {
+		t.Errorf("Expected error to wrap mock renderer error, got: %v", err)
+	}
+}
+
+// TestGenerateDocument_WriteFileError tests error handling when os.WriteFile fails.
+func TestGenerateDocument_WriteFileError(t *testing.T) {
+	atmosConfig := schema.AtmosConfiguration{}
+	baseDir := t.TempDir()
+
+	// Create a valid input file.
+	inputFile := filepath.Join(baseDir, "input.yaml")
+	if err := os.WriteFile(inputFile, []byte("name: test\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Set output to a directory that exists to trigger write error.
+	// Create a directory with the output filename to prevent writing.
+	outputDir := filepath.Join(baseDir, "output.md")
+	if err := os.Mkdir(outputDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	docsGen := schema.DocsGenerate{
+		Input:  []any{inputFile},
+		Output: outputDir, // This is a directory, not a file, so WriteFile will fail.
+		Terraform: schema.TerraformDocsReadmeSettings{
+			Enabled: false,
+		},
+	}
+
+	err := generateDocument(&atmosConfig, baseDir, &docsGen, mockRenderer{})
+	if err == nil {
+		t.Error("Expected error from generateDocument when os.WriteFile fails")
+	}
+	// The underlying error should be a syscall error (directory is not a file).
+	// We verify the error is wrapped and is a path error.
+	var pathErr *os.PathError
+	if !errors.As(err, &pathErr) {
+		t.Errorf("Expected error to wrap os.PathError, got: %v", err)
 	}
 }

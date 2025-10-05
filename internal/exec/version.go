@@ -12,7 +12,6 @@ import (
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/cloudposse/atmos/pkg/telemetry"
 	u "github.com/cloudposse/atmos/pkg/utils"
 	"gopkg.in/yaml.v2"
 
@@ -58,8 +57,6 @@ func (v versionExec) Execute(checkFlag bool, format string) error {
 		//nolint:revive // deep-exit: log.Fatal is appropriate here for version display errors
 		log.Fatal(err)
 	}
-
-	telemetry.PrintTelemetryDisclosure()
 
 	atmosIcon := "\U0001F47D"
 

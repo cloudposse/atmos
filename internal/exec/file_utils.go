@@ -19,6 +19,7 @@ import (
 const (
 	DefaultFileMode os.FileMode = 0o644
 	forwardSlash                = "/"
+	uncPathPrefix               = "//" // UNC paths after filepath.ToSlash on Windows
 )
 
 func removeTempDir(path string) {
@@ -112,10 +113,17 @@ func toFileScheme(localPath string) string {
 	pathSlashed := filepath.ToSlash(localPath)
 
 	if runtime.GOOS == "windows" {
-		// If pathSlashed is "/D:/Temp/foo.json", remove the leading slash => "D:/Temp/foo.json"
-		// Then prepend "file://"
-		pathSlashed = strings.TrimPrefix(pathSlashed, forwardSlash)
+		// Handle UNC paths: \\server\share becomes //server/share after ToSlash
+		// Per RFC 8089, should become file://server/share (server as authority)
+		if strings.HasPrefix(pathSlashed, uncPathPrefix) {
+			// Remove both leading slashes for UNC paths
+			pathSlashed = strings.TrimPrefix(pathSlashed, uncPathPrefix)
+			return "file://" + pathSlashed // e.g. "file://server/share/file.txt"
+		}
 
+		// Regular Windows paths: D:\path becomes D:/path after ToSlash
+		// Should become file://D:/path
+		pathSlashed = strings.TrimPrefix(pathSlashed, forwardSlash)
 		return "file://" + pathSlashed // e.g. "file://D:/Temp/foo.json"
 	}
 

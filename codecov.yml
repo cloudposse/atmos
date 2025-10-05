@@ -22,6 +22,8 @@ coverage:
     - "**/mock_*.go"  # Adjust this pattern based on your project structure
     - "mock_*.go"  # Adjust this pattern based on your project structure
     - "**/mock/*.go" # Adjust interface required for mocking
+    - "**/*_test_helpers.go" # Test helper files (not test files but used only by tests)
+    - "**/testhelpers/**" # Test helper packages (used only by tests)
 
 comment:
   layout: "reach,diff,flags,tree"  # Display different coverage views

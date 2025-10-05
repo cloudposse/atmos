@@ -423,7 +423,7 @@ tests:
         - "--affected-only"
         - "--config-template"
       stderr:
-        - "^$"
+        - "Telemetry Enabled"
       exit_code: 0
   - name: atmos atlantis generate repo-config non-existent
     enabled: true
