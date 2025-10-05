@@ -1,7 +1,7 @@
 package filesystem
 
 import (
-	"github.com/cloudposse/atmos/pkg/config/go-homedir"
+	"github.com/cloudposse/atmos/pkg/config/homedir"
 )
 
 // HomeDirProvider defines the interface for resolving home directories.

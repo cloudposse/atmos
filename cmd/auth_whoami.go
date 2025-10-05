@@ -11,7 +11,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	authTypes "github.com/cloudposse/atmos/pkg/auth/types"
 	cfg "github.com/cloudposse/atmos/pkg/config"
-	"github.com/cloudposse/atmos/pkg/config/go-homedir"
+	"github.com/cloudposse/atmos/pkg/config/homedir"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
