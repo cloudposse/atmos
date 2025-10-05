@@ -434,14 +434,16 @@ func RenderInlineProvenanceWithStackFile(yamlData any, ctx *m.MergeContext, atmo
 
 	var result strings.Builder
 
-	// Add legend at top
-	legendStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorDarkGray))
-	legend := "# Provenance Legend:" + newlineChar +
-		"#   ● [0] Defined in parent stack" + newlineChar +
-		"#   ○ [N] Inherited/imported (N levels deep)" + newlineChar +
-		"#   ∴ Computed/templated" + newlineChar
-	result.WriteString(legendStyle.Render(legend))
-	result.WriteString(newlineChar)
+	// Add legend at top only if provenance is enabled
+	if ctx != nil && ctx.IsProvenanceEnabled() {
+		legendStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorDarkGray))
+		legend := "# Provenance Legend:" + newlineChar +
+			"#   ● [0] Defined in parent stack" + newlineChar +
+			"#   ○ [N] Inherited/imported (N levels deep)" + newlineChar +
+			"#   ∴ Computed/templated" + newlineChar
+		result.WriteString(legendStyle.Render(legend))
+		result.WriteString(newlineChar)
+	}
 
 	// Prepare YAML with provenance
 	highlighted, err := prepareYAMLForProvenance(yamlData, ctx, atmosConfig)

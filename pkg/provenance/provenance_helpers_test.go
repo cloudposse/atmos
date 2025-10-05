@@ -32,6 +32,8 @@ func TestRenderInlineProvenance_NoProvenance(t *testing.T) {
 
 	assert.Contains(t, result, "name: test")
 	assert.Contains(t, result, "value: 42")
+	assert.NotContains(t, result, "# from:")
+	assert.NotContains(t, result, "# Provenance Legend:")
 }
 
 func TestRenderInlineProvenance_WithProvenance(t *testing.T) {
@@ -65,6 +67,15 @@ func TestRenderInlineProvenance_WithProvenance(t *testing.T) {
 	assert.Contains(t, result, "# Provenance Legend:")
 	assert.Contains(t, result, "name: test")
 	assert.Contains(t, result, "value: 42")
+
+	// Verify provenance comments are present with correct format.
+	assert.Contains(t, result, "# ● [0] config.yaml:10")
+	assert.Contains(t, result, "# ● [0] config.yaml:11")
+
+	// Verify legend symbols and descriptions.
+	assert.Contains(t, result, "● [0] Defined in parent stack")
+	assert.Contains(t, result, "○ [N] Inherited/imported")
+	assert.Contains(t, result, "∴ Computed/templated")
 }
 
 func TestFormatProvenanceComment(t *testing.T) {

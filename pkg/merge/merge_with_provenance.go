@@ -64,8 +64,9 @@ type provenanceRecursiveParams struct {
 // RecordMapProvenance records provenance for a map and its children.
 func recordMapProvenance(params provenanceRecursiveParams, m map[string]any) {
 	if params.currentPath != "" {
-		recordProvenanceEntry(provenanceEntryParams{
+		recordProvenanceEntry(&provenanceEntryParams{
 			path:           params.currentPath,
+			value:          m,
 			ctx:            params.ctx,
 			positions:      params.positions,
 			currentFile:    params.currentFile,
@@ -99,8 +100,9 @@ func recordMapProvenance(params provenanceRecursiveParams, m map[string]any) {
 // recordArrayProvenance records provenance for an array and its elements.
 func recordArrayProvenance(params provenanceRecursiveParams, arr []any) {
 	if params.currentPath != "" {
-		recordProvenanceEntry(provenanceEntryParams{
+		recordProvenanceEntry(&provenanceEntryParams{
 			path:           params.currentPath,
+			value:          arr,
 			ctx:            params.ctx,
 			positions:      params.positions,
 			currentFile:    params.currentFile,
@@ -135,8 +137,9 @@ func recordProvenanceRecursive(params provenanceRecursiveParams) {
 	default:
 		// Scalar value - record provenance.
 		if params.currentPath != "" {
-			recordProvenanceEntry(provenanceEntryParams{
+			recordProvenanceEntry(&provenanceEntryParams{
 				path:           params.currentPath,
+				value:          v,
 				ctx:            params.ctx,
 				positions:      params.positions,
 				currentFile:    params.currentFile,
@@ -150,6 +153,7 @@ func recordProvenanceRecursive(params provenanceRecursiveParams) {
 // provenanceEntryParams contains parameters for recording a provenance entry.
 type provenanceEntryParams struct {
 	path           string
+	value          any
 	ctx            *MergeContext
 	positions      u.PositionMap
 	currentFile    string
@@ -158,7 +162,7 @@ type provenanceEntryParams struct {
 }
 
 // recordProvenanceEntry records a single provenance entry for a path.
-func recordProvenanceEntry(params provenanceEntryParams) {
+func recordProvenanceEntry(params *provenanceEntryParams) {
 	if params.ctx == nil || !params.ctx.IsProvenanceEnabled() {
 		return
 	}
@@ -174,11 +178,12 @@ func recordProvenanceEntry(params provenanceEntryParams) {
 
 	// Record the provenance entry.
 	entry := ProvenanceEntry{
-		File:   params.currentFile,
-		Line:   pos.Line,
-		Column: pos.Column,
-		Type:   pType,
-		Depth:  params.depth,
+		File:      params.currentFile,
+		Line:      pos.Line,
+		Column:    pos.Column,
+		Type:      pType,
+		ValueHash: hashValue(params.value),
+		Depth:     params.depth,
 	}
 
 	params.ctx.RecordProvenance(params.path, entry)
