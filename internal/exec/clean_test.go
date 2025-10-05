@@ -463,7 +463,6 @@ func TestExtractCleanPatterns(t *testing.T) {
 			}
 			for i := range relativeGot {
 				if !strings.Contains(relativeGot[i], tt.want[i]) {
-
 					t.Errorf("extractCleanPatterns() got = %v, want %v", relativeGot, tt.want)
 				}
 			}
