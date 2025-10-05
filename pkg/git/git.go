@@ -1,6 +1,7 @@
 package git
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/go-git/go-git/v5"
@@ -127,11 +128,11 @@ func NewDefaultGitRepo() GitRepoInterface {
 func (d *DefaultGitRepo) GetLocalRepoInfo() (*RepoInfo, error) {
 	repo, err := GetLocalRepo()
 	if err != nil {
-		return nil, fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrFailedToGetLocalRepo, fmt.Errorf("failed to get local repository: %w", err))
+		return nil, fmt.Errorf("%w: failed to get local repository: %s", errUtils.ErrFailedToGetLocalRepo, err)
 	}
 	info, err := GetRepoInfo(repo)
 	if err != nil {
-		return nil, fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrFailedToGetRepoInfo, fmt.Errorf("failed to get repository info: %w", err))
+		return nil, fmt.Errorf("%w: failed to get repository info: %s", errUtils.ErrFailedToGetRepoInfo, err)
 	}
 	return &info, nil
 }
@@ -148,7 +149,7 @@ func (d *DefaultGitRepo) GetRepoInfo(repo *git.Repository) (RepoInfo, error) {
 			repoPath = "unknown"
 		}
 		cause := fmt.Errorf("GetRepoInfo failed for repo %s: %w", repoPath, err)
-		return RepoInfo{}, fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrFailedToGetRepoInfo, cause)
+		return RepoInfo{}, errors.Join(errUtils.ErrFailedToGetRepoInfo, cause)
 	}
 	return info, nil
 }
@@ -157,12 +158,12 @@ func (d *DefaultGitRepo) GetRepoInfo(repo *git.Repository) (RepoInfo, error) {
 func (d *DefaultGitRepo) GetCurrentCommitSHA() (string, error) {
 	repo, err := GetLocalRepo()
 	if err != nil {
-		return "", fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrLocalRepoFetch, fmt.Errorf("failed to get local repository: %w", err))
+		return "", fmt.Errorf("%w: failed to get local repository: %s", errUtils.ErrLocalRepoFetch, err)
 	}
 
 	ref, err := repo.Head()
 	if err != nil {
-		return "", fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrHeadLookup, fmt.Errorf("failed to get HEAD reference: %w", err))
+		return "", fmt.Errorf("%w: failed to get HEAD reference: %s", errUtils.ErrHeadLookup, err)
 	}
 
 	return ref.Hash().String(), nil

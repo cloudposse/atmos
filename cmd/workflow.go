@@ -1,16 +1,11 @@
 package cmd
 
 import (
-	_ "embed"
-
 	"github.com/spf13/cobra"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
 )
-
-//go:embed markdown/workflow.md
-var workflowMarkdown string
 
 // workflowCmd executes a workflow
 var workflowCmd = &cobra.Command{

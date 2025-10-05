@@ -268,7 +268,7 @@ components:
 	err := processConfigImportsAndReapply(tempDir, v, invalidYAML)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "parse main config")
-	assert.ErrorIs(t, err, errUtils.ErrMerge)
+	assert.ErrorIs(t, err, errUtils.ErrMergeConfiguration)
 }
 
 // TestProcessConfigImportsAndReapply_MergeMainConfigError tests error path at load.go:335-337.
@@ -293,7 +293,7 @@ components:
 	// This tests that the function handles errors from MergeConfig
 	if err != nil {
 		assert.Contains(t, err.Error(), "merge main config")
-		assert.ErrorIs(t, err, errUtils.ErrMerge)
+		assert.ErrorIs(t, err, errUtils.ErrMergeConfiguration)
 	}
 }
 

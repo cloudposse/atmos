@@ -204,33 +204,44 @@ viper.SetEnvPrefix("ATMOS")
 
 ### Error Handling (MANDATORY)
 - **All errors MUST be wrapped using static errors defined in `errors/errors.go`**
-- **NEVER use dynamic errors directly** - this will trigger linting warnings:
-  ```go
-  // WRONG: Dynamic error (will trigger linting warning)
-  return fmt.Errorf("processing component %s: %w", component, err)
+- **Use `errors.Join` for combining multiple errors** - preserves all error chains
+- **Use `fmt.Errorf` with `%w` for adding string context** - when you need formatted strings
+- **Use `errors.Is()` for error checking** - robust against wrapping
+- **NEVER use dynamic errors directly** - triggers linting warnings
+- **See `docs/prd/error-handling-strategy.md`** for complete guidelines
 
-  // CORRECT: Use static error from errors package
-  import errUtils "github.com/cloudposse/atmos/errors"
+#### Error Handling Patterns
 
-  return fmt.Errorf("%w: Atmos component `%s` is invalid",
-      errUtils.ErrInvalidComponent,
-      component,
-  )
-  ```
-- **Define static errors in `errors/errors.go`**:
-  ```go
-  var (
-      ErrInvalidComponent = errors.New("invalid component")
-      ErrInvalidStack     = errors.New("invalid stack")
-      ErrInvalidConfig    = errors.New("invalid configuration")
-  )
-  ```
-- **Error wrapping pattern**:
-  - Always wrap with static error first: `fmt.Errorf("%w: details", errUtils.ErrStaticError, ...)`
-  - Add context-specific details after the static error
-  - Use `%w` verb to preserve error chain for `errors.Is()` and `errors.As()`
-- Provide actionable error messages with troubleshooting hints
-- Log detailed errors for debugging, user-friendly messages for CLI
+**Combining Multiple Errors:**
+```go
+// ✅ CORRECT: Use errors.Join (unlimited errors, no formatting)
+return errors.Join(errUtils.ErrFailedToProcess, underlyingErr)
+
+// Note: Go 1.20+ supports fmt.Errorf("%w: %w", ...) but errors.Join is preferred
+```
+
+**Adding String Context:**
+```go
+return fmt.Errorf("%w: component=%s stack=%s", errUtils.ErrInvalidComponent, component, stack)
+```
+
+**Checking Errors:**
+```go
+// ✅ CORRECT: Works with wrapped errors
+if errors.Is(err, context.DeadlineExceeded) { ... }
+
+// ❌ WRONG: Breaks with wrapping
+if err.Error() == "context deadline exceeded" { ... }
+```
+
+**Static Error Definitions:**
+```go
+// Define in errors/errors.go
+var (
+    ErrInvalidComponent = errors.New("invalid component")
+    ErrInvalidStack     = errors.New("invalid stack")
+)
+```
 
 ### Testing Strategy
 - **Unit tests**: Focus on pure functions, use table-driven tests
