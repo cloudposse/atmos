@@ -15,17 +15,15 @@ in Atmos stack manifests. It retrieves outputs directly from the configured [bac
 without the overhead of initializing Terraform, downloading providers, or generating configuration files - making it significantly faster than `!terraform.output`.
 </Intro>
 
-:::warning
-Currently, the `!terraform.state` YAML function supports the following backend types:
+:::note Backend Support
+Currently supports `local` and `s3` backends. For other backends, use [__`!store`__](/functions/yaml/store) or [__`!terraform.output`__](/functions/yaml/terraform.output).
+:::
+
+**Supported Backend Types:**
 - `local` ([Terraform](https://developer.hashicorp.com/terraform/language/settings/backends/local) and [OpenTofu](https://opentofu.org/docs/language/settings/backends/local))
 - `s3` ([Terraform](https://developer.hashicorp.com/terraform/language/settings/backends/s3) and [OpenTofu](https://opentofu.org/docs/language/settings/backends/s3))
 
-As support for new backend types is added (e.g. `azurerm`, `gcs`), this document will be updated accordingly.
-
-Meanwhile, if you are using backends other than `local` and `s3`, consider the [__`!store`__](/functions/yaml/store)
-or [__`!terraform.output`__](/functions/yaml/terraform.output) YAML function to read remote state
-and [share data between components](/connections).
-:::
+As support for additional backend types is added (e.g. `azurerm`, `gcs`), this document will be updated accordingly.
 
 ## Usage
 
@@ -83,22 +81,17 @@ The relevant output variable is extracted from the state file (using a [YQ](http
 Atmos parses and interpolates the value into the final configuration structure, replacing the `!terraform.state`
 directive in the YAML stack manifest with the final value.
 
-:::tip Performance Advantage
-**`!terraform.state` is dramatically faster than `!terraform.output`** - often 10-100x faster depending on your infrastructure size.
+## Performance Comparison
 
-While `!terraform.output` must:
-- Initialize Terraform/OpenTofu
-- Download and initialize all providers
-- Generate varfiles and backend configs
-- Execute terraform commands
+`!terraform.state` is **dramatically faster than `!terraform.output`** - often 10-100x faster depending on your infrastructure size.
 
-`!terraform.state` bypasses all of this overhead by reading directly from the state backend.
+While `!terraform.output` must initialize Terraform/OpenTofu, download and initialize all providers, generate varfiles and backend configs, and execute terraform commands, `!terraform.state` bypasses all of this overhead by reading directly from the state backend.
 
+:::tip
 Use `!terraform.state` when you need the **fastest possible** access to Terraform outputs. The functions accept the same parameters and produce identical results.
-
-Compare the [!terraform.output Execution Flow](/functions/yaml/terraform.output#terraformoutput-function-execution-flow) with the
-[!terraform.state Execution Flow](/functions/yaml/terraform.state#terraformstate-function-execution-flow) to see the dramatic difference.
 :::
+
+Compare the [!terraform.output Execution Flow](/functions/yaml/terraform.output#terraformoutput-function-execution-flow) with the [!terraform.state Execution Flow](/functions/yaml/terraform.state#terraformstate-function-execution-flow) to see the difference.
 
 ## Using YQ Expressions to retrieve items from complex output types
 
