@@ -21,7 +21,7 @@ func ListToolVersions(showAll bool, limit int, toolName string) error {
 	}
 	resolvedKey := owner + "/" + repo
 
-	versions, defaultVersion, err := getVersions(versionOptions{showAll, limit, owner, repo, toolName, resolvedKey, filePath})
+	versions, defaultVersion, err := getVersions(&versionOptions{showAll, limit, owner, repo, toolName, resolvedKey, filePath})
 	if err != nil {
 		return err
 	}
@@ -44,7 +44,7 @@ type versionOptions struct {
 	FilePath    string
 }
 
-func getVersions(opts versionOptions) ([]string, string, error) {
+func getVersions(opts *versionOptions) ([]string, string, error) {
 	if opts.ShowAll {
 		allVersions, err := fetchAllGitHubVersions(opts.Owner, opts.Repo, opts.Limit)
 		if err != nil {
