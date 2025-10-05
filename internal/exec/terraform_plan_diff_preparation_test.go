@@ -37,6 +37,16 @@ func TestFilterPlanDiffFlags(t *testing.T) {
 			args:     []string{"--var=foo=bar", "--orig=orig.plan", "--auto-approve", "--new=new.plan"},
 			expected: []string{"--var=foo=bar", "--auto-approve"},
 		},
+		{
+			name:     "with -var flag using space (integration test format)",
+			args:     []string{"--orig=orig.plan", "-var", "foo=new-value"},
+			expected: []string{"-var", "foo=new-value"},
+		},
+		{
+			name:     "preserves multiple -var flags",
+			args:     []string{"--orig", "orig.plan", "-var", "foo=bar", "-var", "baz=qux", "--new", "new.plan"},
+			expected: []string{"-var", "foo=bar", "-var", "baz=qux"},
+		},
 	}
 
 	for _, tc := range tests {

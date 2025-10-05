@@ -18,6 +18,14 @@ repos:
   # Run golangci-lint using system binary to avoid Go 1.25 compatibility issues
   - repo: local
     hooks:
+      - id: golangci-lint-config-verify
+        name: golangci-lint config verify
+        description: Validate golangci-lint configuration file schema
+        entry: golangci-lint config verify
+        language: system
+        files: ^\.golangci\.yml$
+        pass_filenames: false
+
       - id: golangci-lint
         name: golangci-lint
         description: Run golangci-lint on modified Go files

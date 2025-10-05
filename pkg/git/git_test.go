@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/cloudposse/atmos/tests"
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/config"
 	"github.com/go-git/go-git/v5/plumbing/object"
@@ -15,6 +16,9 @@ import (
 // Helper function to create an initial commit in a repository.
 func createInitialCommit(t *testing.T, repo *git.Repository, tempDir string) {
 	t.Helper()
+
+	// Check if git is configured for commits
+	tests.RequireGitCommitConfig(t)
 
 	worktree, err := repo.Worktree()
 	require.NoError(t, err)

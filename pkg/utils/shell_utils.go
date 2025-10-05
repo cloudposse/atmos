@@ -104,7 +104,7 @@ func GetNextShellLevel() (int, error) {
 	if atmosShellLvl != "" {
 		val, err := strconv.Atoi(atmosShellLvl)
 		if err != nil {
-			return 0, fmt.Errorf("%w: %w", ErrConvertingShellLevel, err)
+			return 0, fmt.Errorf("%w: %s", ErrConvertingShellLevel, err)
 		}
 		shellVal = val
 	}

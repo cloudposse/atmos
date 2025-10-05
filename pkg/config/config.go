@@ -180,7 +180,7 @@ func processAtmosConfigs(configAndStacksInfo *schema.ConfigAndStacksInfo) (schem
 // StacksBaseAbsolutePath, IncludeStackAbsolutePaths, and ExcludeStackAbsolutePaths.
 func AtmosConfigAbsolutePaths(atmosConfig *schema.AtmosConfiguration) error {
 	// Convert stacks base path to an absolute path
-	stacksBasePath := filepath.Join(atmosConfig.BasePath, atmosConfig.Stacks.BasePath)
+	stacksBasePath := u.JoinPath(atmosConfig.BasePath, atmosConfig.Stacks.BasePath)
 	stacksBaseAbsPath, err := filepath.Abs(stacksBasePath)
 	if err != nil {
 		return err
