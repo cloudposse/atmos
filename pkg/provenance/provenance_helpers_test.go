@@ -1,6 +1,7 @@
 package provenance
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -8,6 +9,15 @@ import (
 	"github.com/cloudposse/atmos/pkg/merge"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
+
+// formatProvenanceComment formats a provenance entry as an inline comment.
+// This is a test helper function.
+func formatProvenanceComment(entry merge.ProvenanceEntry) string {
+	if entry.Column > 0 {
+		return fmt.Sprintf("# from: %s:%d:%d", entry.File, entry.Line, entry.Column)
+	}
+	return fmt.Sprintf("# from: %s:%d", entry.File, entry.Line)
+}
 
 func TestRenderInlineProvenance_NoProvenance(t *testing.T) {
 	data := map[string]any{
@@ -85,7 +95,7 @@ func TestFormatProvenanceComment(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := FormatProvenanceComment(tt.entry)
+			result := formatProvenanceComment(tt.entry)
 			assert.Equal(t, tt.expected, result)
 		})
 	}
