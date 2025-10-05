@@ -93,10 +93,9 @@ func ValidateWithOpa(
 		timeoutSeconds = 20
 	}
 
-	timeoutErrorMessage := fmt.Sprintf("%s. Please check the following:\n"+
-		"1. Rego syntax\n"+
-		"2. If 're_match' function is used and the regex pattern contains a backslash to escape special chars, the backslash itself must be escaped with another backslash",
-		errUtils.ErrOPATimeout.Error())
+	timeoutErrorMessage := "Timeout evaluating the OPA policy. Please check the following:\n" +
+		"1. Rego syntax\n" +
+		"2. If 're_match' function is used and the regex pattern contains a backslash to escape special chars, the backslash itself must be escaped with another backslash"
 
 	// https://stackoverflow.com/questions/17573190/how-to-multiply-duration-by-integer
 	ctx, cancelFunc := context.WithTimeout(context.TODO(), time.Second*time.Duration(timeoutSeconds))
@@ -228,10 +227,9 @@ func ValidateWithOpaLegacy(
 		}
 	}`, server.URL(), bundleSchemaName))
 
-	timeoutErrorMessage := fmt.Sprintf("%s. Please check the following:\n"+
-		"1. Rego syntax\n"+
-		"2. If 're_match' function is used and the regex pattern contains a backslash to escape special chars, the backslash itself must be escaped with another backslash",
-		errUtils.ErrOPATimeout.Error())
+	timeoutErrorMessage := "Timeout evaluating the OPA policy. Please check the following:\n" +
+		"1. Rego syntax\n" +
+		"2. If 're_match' function is used and the regex pattern contains a backslash to escape special chars, the backslash itself must be escaped with another backslash"
 
 	// Create an instance of the OPA object.
 	opa, err := sdk.New(ctx, sdk.Options{
@@ -305,7 +303,7 @@ func validateWithOpaFallback(data any, schemaPath string, timeoutSeconds int) (b
 	// Read the policy file content directly.
 	policyContent, err := os.ReadFile(schemaPath)
 	if err != nil {
-		return false, fmt.Errorf(errContextFormat, errUtils.ErrReadFile, fmt.Sprintf("reading OPA policy file %s: %v", schemaPath, err))
+		return false, errors.Join(errUtils.ErrReadFile, fmt.Errorf("reading OPA policy file %s: %w", schemaPath, err))
 	}
 
 	// Use the legacy validation method with inline content.
