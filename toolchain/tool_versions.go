@@ -134,12 +134,11 @@ func addToolToVersionsInternal(filePath, tool, version string, asDefault bool) e
 	toolVersions, err := LoadToolVersions(filePath)
 	if err != nil {
 		// If file doesn't exist, create a new one
-		if os.IsNotExist(err) {
-			toolVersions = &ToolVersions{
-				Tools: make(map[string][]string),
-			}
-		} else {
+		if !os.IsNotExist(err) {
 			return fmt.Errorf("failed to load existing .tool-versions: %w", err)
+		}
+		toolVersions = &ToolVersions{
+			Tools: make(map[string][]string),
 		}
 	}
 
