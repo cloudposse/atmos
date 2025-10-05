@@ -133,7 +133,7 @@ func TestVersionListModelUpdate(t *testing.T) {
 	t.Run("Window size update", func(t *testing.T) {
 		result, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
 		resultModel := result.(versionListModel)
-		if resultModel.viewport.Width != 71 { // 100 - 100/4 - 2 - 2 = 73
+		if resultModel.viewport.Width != 71 {
 			t.Errorf("Expected viewport width to be 71, got %d", resultModel.viewport.Width)
 		}
 	})
