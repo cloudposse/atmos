@@ -89,11 +89,12 @@ func EmitPath(exportFlag, jsonFlag, relativeFlag bool) error {
 	finalPath := strings.Join(pathEntries, ":") + ":" + currentPath
 
 	// Output based on flags
-	if jsonFlag {
+	switch {
+	case jsonFlag:
 		return emitJSONPath(toolPaths, finalPath)
-	} else if exportFlag {
+	case exportFlag:
 		fmt.Printf("export PATH=\"%s\"\n", finalPath)
-	} else {
+	default:
 		fmt.Println(finalPath)
 	}
 
