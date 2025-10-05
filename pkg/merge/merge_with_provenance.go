@@ -1,6 +1,8 @@
 package merge
 
 import (
+	"sort"
+
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -72,7 +74,16 @@ func recordMapProvenance(params provenanceRecursiveParams, m map[string]any) {
 		})
 	}
 
-	for key, value := range m {
+	// Sort map keys to ensure deterministic iteration order.
+	keys := make([]string, 0, len(m))
+	for key := range m {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+
+	// Iterate over sorted keys for deterministic provenance recording.
+	for _, key := range keys {
+		value := m[key]
 		childPath := u.AppendJSONPathKey(params.currentPath, key)
 		recordProvenanceRecursive(provenanceRecursiveParams{
 			data:        value,
