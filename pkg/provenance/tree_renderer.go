@@ -284,24 +284,22 @@ func formatProvenanceCommentWithStackFile(entry *m.ProvenanceEntry) string {
 	switch {
 	case entry.Type == m.ProvenanceTypeComputed:
 		symbol = SymbolComputed // ∴ (computed/templated)
-	case entry.Depth == 0:
-		symbol = SymbolDefined // ● (defined at this level - depth 0)
+	case entry.Depth == 1:
+		symbol = SymbolDefined // ● (defined in parent stack - depth 1)
 	default:
-		symbol = SymbolInherited // ○ (inherited/imported - depth 1+)
+		symbol = SymbolInherited // ○ (inherited/imported - depth 2+)
 	}
 
 	file := shortenFilePath(entry.File)
 
 	// Color code the depth based on inheritance level.
-	// Depth 0-1: green, 2: yellow, 3: orange, 4+: red.
+	// Depth 1-2: green (parent + first import), 3: yellow, 4+: red.
 	var depthColor lipgloss.Color
 	switch entry.Depth {
-	case 0, 1:
+	case 1, 2:
 		depthColor = lipgloss.Color(theme.ColorGreen)
-	case 2:
-		depthColor = lipgloss.Color(theme.ColorYellow)
 	case 3:
-		depthColor = lipgloss.Color(theme.ColorOrange)
+		depthColor = lipgloss.Color(theme.ColorYellow)
 	default: // 4+
 		depthColor = lipgloss.Color(theme.ColorRed)
 	}
@@ -426,6 +424,24 @@ func addProvenanceToLine(
 	result.WriteString(newlineChar)
 }
 
+// renderProvenanceLegend renders the provenance legend and stack file header.
+func renderProvenanceLegend(result *strings.Builder, stackFile string) {
+	legendStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorDarkGray))
+	legend := "# Provenance Legend:" + newlineChar +
+		"#   ● [1] Defined in parent stack" + newlineChar +
+		"#   ○ [N] Inherited/imported (N=2+ levels deep)" + newlineChar +
+		"#   ∴ Computed/templated" + newlineChar
+	result.WriteString(legendStyle.Render(legend))
+	result.WriteString(newlineChar)
+
+	// Add stack file comment to show which file is being described
+	if stackFile != "" {
+		stackComment := fmt.Sprintf("# Stack: %s%s", stackFile, newlineChar)
+		result.WriteString(legendStyle.Render(stackComment))
+		result.WriteString(newlineChar)
+	}
+}
+
 // RenderInlineProvenanceWithStackFile renders YAML with provenance as inline comments.
 // The stackFile parameter is the stack manifest file being described (e.g., "orgs/acme/plat/dev/us-east-2.yaml").
 // Values from this file will be marked with ● (defined), while values from other files show ○ (inherited).
@@ -436,13 +452,7 @@ func RenderInlineProvenanceWithStackFile(yamlData any, ctx *m.MergeContext, atmo
 
 	// Add legend at top only if provenance is enabled
 	if ctx != nil && ctx.IsProvenanceEnabled() {
-		legendStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorDarkGray))
-		legend := "# Provenance Legend:" + newlineChar +
-			"#   ● [0] Defined in parent stack" + newlineChar +
-			"#   ○ [N] Inherited/imported (N levels deep)" + newlineChar +
-			"#   ∴ Computed/templated" + newlineChar
-		result.WriteString(legendStyle.Render(legend))
-		result.WriteString(newlineChar)
+		renderProvenanceLegend(&result, stackFile)
 	}
 
 	// Prepare YAML with provenance

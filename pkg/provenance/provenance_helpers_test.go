@@ -46,18 +46,20 @@ func TestRenderInlineProvenance_WithProvenance(t *testing.T) {
 	ctx.EnableProvenance()
 	ctx.CurrentFile = "config.yaml"
 
-	// Record provenance for both fields.
+	// Record provenance for both fields with depth 1 (parent stack).
 	ctx.RecordProvenance("name", merge.ProvenanceEntry{
 		File:   "config.yaml",
 		Line:   10,
 		Column: 5,
 		Type:   merge.ProvenanceTypeInline,
+		Depth:  1,
 	})
 	ctx.RecordProvenance("value", merge.ProvenanceEntry{
 		File:   "config.yaml",
 		Line:   11,
 		Column: 5,
 		Type:   merge.ProvenanceTypeInline,
+		Depth:  1,
 	})
 
 	atmosConfig := &schema.AtmosConfiguration{}
@@ -65,16 +67,17 @@ func TestRenderInlineProvenance_WithProvenance(t *testing.T) {
 
 	// Should contain valid YAML with provenance legend and both fields.
 	assert.Contains(t, result, "# Provenance Legend:")
+	assert.Contains(t, result, "# Stack: config.yaml")
 	assert.Contains(t, result, "name: test")
 	assert.Contains(t, result, "value: 42")
 
 	// Verify provenance comments are present with correct format.
-	assert.Contains(t, result, "# ● [0] config.yaml:10")
-	assert.Contains(t, result, "# ● [0] config.yaml:11")
+	assert.Contains(t, result, "# ● [1] config.yaml:10")
+	assert.Contains(t, result, "# ● [1] config.yaml:11")
 
 	// Verify legend symbols and descriptions.
-	assert.Contains(t, result, "● [0] Defined in parent stack")
-	assert.Contains(t, result, "○ [N] Inherited/imported")
+	assert.Contains(t, result, "● [1] Defined in parent stack")
+	assert.Contains(t, result, "○ [N] Inherited/imported (N=2+ levels deep)")
 	assert.Contains(t, result, "∴ Computed/templated")
 }
 

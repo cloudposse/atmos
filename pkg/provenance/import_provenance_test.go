@@ -35,7 +35,7 @@ func TestImportProvenanceRendering(t *testing.T) {
 		Line:   5,
 		Column: 3,
 		Type:   m.ProvenanceTypeInline,
-		Depth:  0,
+		Depth:  1,
 	})
 
 	ctx.RecordProvenance("import[1]", m.ProvenanceEntry{
@@ -43,7 +43,7 @@ func TestImportProvenanceRendering(t *testing.T) {
 		Line:   3,
 		Column: 3,
 		Type:   m.ProvenanceTypeImport,
-		Depth:  1,
+		Depth:  2,
 	})
 
 	ctx.RecordProvenance("import[2]", m.ProvenanceEntry{
@@ -51,7 +51,7 @@ func TestImportProvenanceRendering(t *testing.T) {
 		Line:   2,
 		Column: 3,
 		Type:   m.ProvenanceTypeImport,
-		Depth:  2,
+		Depth:  3,
 	})
 
 	// Record provenance for the import key itself.
@@ -60,7 +60,7 @@ func TestImportProvenanceRendering(t *testing.T) {
 		Line:   4,
 		Column: 1,
 		Type:   m.ProvenanceTypeInline,
-		Depth:  0,
+		Depth:  1,
 	})
 
 	// Record provenance for vars section.
@@ -69,7 +69,7 @@ func TestImportProvenanceRendering(t *testing.T) {
 		Line:   10,
 		Column: 1,
 		Type:   m.ProvenanceTypeImport,
-		Depth:  3,
+		Depth:  4,
 	})
 
 	ctx.RecordProvenance("vars.enabled", m.ProvenanceEntry{
@@ -77,7 +77,7 @@ func TestImportProvenanceRendering(t *testing.T) {
 		Line:   11,
 		Column: 3,
 		Type:   m.ProvenanceTypeImport,
-		Depth:  3,
+		Depth:  4,
 	})
 
 	atmosConfig := &schema.AtmosConfiguration{
@@ -98,20 +98,20 @@ func TestImportProvenanceRendering(t *testing.T) {
 	assert.Contains(t, output, "orgs/acme/_defaults", "Should have third import")
 
 	// Check for provenance comments with different symbols and depths.
-	// import[0] at depth 0 should show ● [0].
+	// import[0] at depth 1 should show ● [1].
 	assert.Contains(t, output, "catalog/vpc/dev.yaml:5", "Should have provenance for first import")
-	assert.Contains(t, output, "● [0]", "First import should show defined symbol with depth 0")
+	assert.Contains(t, output, "● [1]", "First import should show defined symbol with depth 1")
 
-	// import[1] at depth 1 should show ○ [1].
+	// import[1] at depth 2 should show ○ [2].
 	assert.Contains(t, output, "orgs/acme/plat/dev/us-east-2.yaml:3", "Should have provenance for second import")
-	assert.Contains(t, output, "○ [1]", "Second import should show inherited symbol with depth 1")
+	assert.Contains(t, output, "○ [2]", "Second import should show inherited symbol with depth 2")
 
-	// import[2] at depth 2 should show ○ [2].
+	// import[2] at depth 3 should show ○ [3].
 	assert.Contains(t, output, "orgs/acme/plat/_defaults.yaml:2", "Should have provenance for third import")
-	assert.Contains(t, output, "○ [2]", "Third import should show inherited symbol with depth 2")
+	assert.Contains(t, output, "○ [3]", "Third import should show inherited symbol with depth 3")
 }
 
-// TestImportProvenanceDepthZero tests that depth 0 imports show the defined symbol.
+// TestImportProvenanceDepthZero tests that depth 1 imports show the defined symbol.
 func TestImportProvenanceDepthZero(t *testing.T) {
 	data := map[string]any{
 		"import": []any{
@@ -123,13 +123,13 @@ func TestImportProvenanceDepthZero(t *testing.T) {
 	ctx := m.NewMergeContext()
 	ctx.EnableProvenance()
 
-	// Both imports at depth 0 (defined in the current stack file).
+	// Both imports at depth 1 (defined in the parent stack file).
 	ctx.RecordProvenance("import[0]", m.ProvenanceEntry{
 		File:   "orgs/acme/plat/dev/us-east-2.yaml",
 		Line:   5,
 		Column: 3,
 		Type:   m.ProvenanceTypeInline,
-		Depth:  0,
+		Depth:  1,
 	})
 
 	ctx.RecordProvenance("import[1]", m.ProvenanceEntry{
@@ -137,7 +137,7 @@ func TestImportProvenanceDepthZero(t *testing.T) {
 		Line:   6,
 		Column: 3,
 		Type:   m.ProvenanceTypeInline,
-		Depth:  0,
+		Depth:  1,
 	})
 
 	ctx.RecordProvenance("import", m.ProvenanceEntry{
@@ -145,7 +145,7 @@ func TestImportProvenanceDepthZero(t *testing.T) {
 		Line:   4,
 		Column: 1,
 		Type:   m.ProvenanceTypeInline,
-		Depth:  0,
+		Depth:  1,
 	})
 
 	atmosConfig := &schema.AtmosConfiguration{
@@ -157,15 +157,15 @@ func TestImportProvenanceDepthZero(t *testing.T) {
 	// Render with the stack file matching the provenance file.
 	output := RenderInlineProvenanceWithStackFile(data, ctx, atmosConfig, "orgs/acme/plat/dev/us-east-2.yaml")
 
-	// Both imports should show ● [0] because they're defined in the current stack.
+	// Both imports should show ● [1] because they're defined in the current stack.
 	assert.Contains(t, output, "catalog/vpc/dev", "Should have first import")
 	assert.Contains(t, output, "mixins/region/us-east-2", "Should have second import")
 
-	// Count occurrences of ● [0] - should appear at least twice (once for each import).
-	// Note: We can't do exact count because the import key itself might also show ● [0].
+	// Count occurrences of ● [1] - should appear at least twice (once for each import).
+	// Note: We can't do exact count because the import key itself might also show ● [1].
 	definedSymbolCount := 0
 	for i := 0; i < len(output); {
-		idx := findSubstring(output[i:], "● [0]")
+		idx := findSubstring(output[i:], "● [1]")
 		if idx == -1 {
 			break
 		}
@@ -173,7 +173,7 @@ func TestImportProvenanceDepthZero(t *testing.T) {
 		i += idx + 6 // Move past this occurrence.
 	}
 
-	assert.GreaterOrEqual(t, definedSymbolCount, 2, "Should have at least 2 occurrences of ● [0] for the two imports")
+	assert.GreaterOrEqual(t, definedSymbolCount, 2, "Should have at least 2 occurrences of ● [1] for the two imports")
 }
 
 // TestAllImportsHaveProvenance tests that every import in the list shows provenance.
