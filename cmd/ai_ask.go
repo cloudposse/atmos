@@ -57,13 +57,36 @@ Examples:
 			return fmt.Errorf("failed to create AI client: %w", err)
 		}
 
+		// Check if we should send context with the question.
+		sendContext, prompted, err := ai.ShouldSendContext(&atmosConfig, question)
+		if err != nil {
+			return fmt.Errorf("failed to determine context requirements: %w", err)
+		}
+
+		// Prepare the final question with optional context.
+		finalQuestion := question
+		if sendContext {
+			if prompted {
+				utils.PrintfMessageToTUI("📖 Reading stack configurations...\n")
+			}
+
+			stackContext, err := ai.GatherStackContext(&atmosConfig)
+			if err != nil {
+				utils.PrintfMessageToTUI("⚠️  Warning: Could not gather stack context: %v\n", err)
+				utils.PrintfMessageToTUI("Proceeding without context...\n\n")
+			} else {
+				// Combine context and question.
+				finalQuestion = fmt.Sprintf("%s\n\n%s", stackContext, question)
+			}
+		}
+
 		// Create context with timeout.
 		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 		defer cancel()
 
 		// Send question and get response.
 		utils.PrintfMessageToTUI("👽 Thinking...\n")
-		response, err := client.SendMessage(ctx, question)
+		response, err := client.SendMessage(ctx, finalQuestion)
 		if err != nil {
 			return fmt.Errorf("failed to get AI response: %w", err)
 		}

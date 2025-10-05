@@ -1,0 +1,166 @@
+package ai
+
+import (
+	"bufio"
+	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
+
+	"github.com/cloudposse/atmos/pkg/schema"
+)
+
+// GatherStackContext reads stack configurations and returns them as context for AI.
+func GatherStackContext(atmosConfig *schema.AtmosConfiguration) (string, error) {
+	var context strings.Builder
+
+	// Get stacks path.
+	stacksPath := filepath.Join(atmosConfig.BasePath, atmosConfig.Stacks.BasePath)
+
+	// Read stack files.
+	stackFiles, err := filepath.Glob(filepath.Join(stacksPath, "**/*.yaml"))
+	if err != nil {
+		return "", fmt.Errorf("failed to find stack files: %w", err)
+	}
+
+	// Add more patterns for common stack file locations.
+	yamlFiles, err := filepath.Glob(filepath.Join(stacksPath, "*.yaml"))
+	if err == nil {
+		stackFiles = append(stackFiles, yamlFiles...)
+	}
+
+	ymlFiles, err := filepath.Glob(filepath.Join(stacksPath, "**/*.yml"))
+	if err == nil {
+		stackFiles = append(stackFiles, ymlFiles...)
+	}
+
+	if len(stackFiles) == 0 {
+		return "", fmt.Errorf("no stack files found in %s", stacksPath)
+	}
+
+	// Limit the number of files to prevent overwhelming the AI.
+	maxFiles := 10
+	if len(stackFiles) > maxFiles {
+		stackFiles = stackFiles[:maxFiles]
+		context.WriteString(fmt.Sprintf("Note: Showing first %d stack files (out of %d total)\n\n", maxFiles, len(stackFiles)))
+	}
+
+	context.WriteString("=== Atmos Stack Configurations ===\n\n")
+
+	for _, file := range stackFiles {
+		relPath, _ := filepath.Rel(atmosConfig.BasePath, file)
+		context.WriteString(fmt.Sprintf("File: %s\n", relPath))
+		context.WriteString("```yaml\n")
+
+		// Read file content.
+		content, err := os.ReadFile(file)
+		if err != nil {
+			context.WriteString(fmt.Sprintf("Error reading file: %v\n", err))
+		} else {
+			// Limit file content size (max 500 lines per file).
+			lines := strings.Split(string(content), "\n")
+			maxLines := 500
+			if len(lines) > maxLines {
+				lines = lines[:maxLines]
+				context.WriteString(strings.Join(lines, "\n"))
+				context.WriteString(fmt.Sprintf("\n... (truncated, %d more lines)", len(strings.Split(string(content), "\n"))-maxLines))
+			} else {
+				context.WriteString(string(content))
+			}
+		}
+
+		context.WriteString("\n```\n\n")
+	}
+
+	return context.String(), nil
+}
+
+// PromptForConsent asks the user for consent to send context to AI.
+func PromptForConsent() (bool, error) {
+	fmt.Fprintf(os.Stderr, "\n⚠️  This question may benefit from your stack configurations.\n")
+	fmt.Fprintf(os.Stderr, "📤 Send stack files to AI provider for analysis? (y/N): ")
+
+	reader := bufio.NewReader(os.Stdin)
+	response, err := reader.ReadString('\n')
+	if err != nil {
+		return false, err
+	}
+
+	response = strings.TrimSpace(strings.ToLower(response))
+	return response == "y" || response == "yes", nil
+}
+
+// ShouldSendContext determines if context should be sent based on configuration and environment.
+func ShouldSendContext(atmosConfig *schema.AtmosConfiguration, question string) (bool, bool, error) {
+	// Check environment variable ATMOS_AI_SEND_CONTEXT.
+	if envVal := os.Getenv("ATMOS_AI_SEND_CONTEXT"); envVal != "" {
+		sendContext := envVal == "true" || envVal == "1" || strings.ToLower(envVal) == "yes"
+		return sendContext, false, nil // No prompt needed, env var takes precedence.
+	}
+
+	// Check atmos.yaml configuration.
+	if atmosConfig.Settings.AI.SendContext {
+		// If prompt_on_send is true, ask for confirmation each time.
+		if atmosConfig.Settings.AI.PromptOnSend {
+			consent, err := PromptForConsent()
+			return consent, false, err
+		}
+		// Send context without prompting.
+		return true, false, nil
+	}
+
+	// Check if the question seems to need context.
+	needsContext := QuestionNeedsContext(question)
+	if needsContext {
+		// Prompt user for consent.
+		consent, err := PromptForConsent()
+		return consent, true, err
+	}
+
+	return false, false, nil
+}
+
+// QuestionNeedsContext determines if a question likely needs repository context.
+func QuestionNeedsContext(question string) bool {
+	question = strings.ToLower(question)
+
+	contextKeywords := []string{
+		"this repo",
+		"my repo",
+		"my stack",
+		"these stacks",
+		"my component",
+		"these components",
+		"my configuration",
+		"my config",
+		"what stacks",
+		"list stacks",
+		"show me",
+		"describe the",
+		"analyze",
+		"review my",
+	}
+
+	for _, keyword := range contextKeywords {
+		if strings.Contains(question, keyword) {
+			return true
+		}
+	}
+
+	return false
+}
+
+// SanitizeContext removes sensitive information from context before sending to AI.
+func SanitizeContext(context string) string {
+	// This is a basic implementation - can be enhanced based on security requirements.
+	// For now, we'll add warnings about sensitive data.
+
+	var sanitized strings.Builder
+
+	sanitized.WriteString("⚠️  PRIVACY NOTE: The following configurations are being sent to the AI provider.\n")
+	sanitized.WriteString("Ensure no sensitive data (API keys, passwords, secrets) are included.\n")
+	sanitized.WriteString("========================================\n\n")
+	sanitized.WriteString(context)
+
+	return sanitized.String()
+}

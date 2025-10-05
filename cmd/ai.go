@@ -30,13 +30,7 @@ The assistant has access to your current Atmos configuration and can:
 
 // isAIEnabled checks if AI features are enabled in the configuration.
 func isAIEnabled(atmosConfig *schema.AtmosConfiguration) bool {
-	if atmosConfig.Settings.AI == nil {
-		return false
-	}
-	if enabled, ok := atmosConfig.Settings.AI["enabled"].(bool); ok {
-		return enabled
-	}
-	return false
+	return atmosConfig.Settings.AI.Enabled
 }
 
 func init() {

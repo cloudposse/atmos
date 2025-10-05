@@ -13,14 +13,10 @@ import (
 
 // NewClient creates a new AI client based on the provider configuration.
 func NewClient(atmosConfig *schema.AtmosConfiguration) (Client, error) {
-	if atmosConfig.Settings.AI == nil {
-		return nil, fmt.Errorf("AI settings not configured")
-	}
-
 	// Get provider from config, default to "anthropic".
 	provider := "anthropic"
-	if p, ok := atmosConfig.Settings.AI["provider"].(string); ok && p != "" {
-		provider = p
+	if atmosConfig.Settings.AI.Provider != "" {
+		provider = atmosConfig.Settings.AI.Provider
 	}
 
 	// Create client based on provider.

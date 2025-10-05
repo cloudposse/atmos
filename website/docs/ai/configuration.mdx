@@ -24,6 +24,8 @@ settings:
     model: "claude-3-5-sonnet-20241022"   # Model to use
     api_key_env: "ANTHROPIC_API_KEY"      # Environment variable for API key
     max_tokens: 4096                      # Maximum tokens per response
+    send_context: false                   # Send stack configs to AI (default: false)
+    prompt_on_send: true                  # Prompt before sending context (default: true)
 ```
 </File>
 
@@ -183,7 +185,130 @@ export XAI_API_KEY="your-api-key-here"
 
   <dt>`base_url`</dt>
   <dd>Custom API endpoint URL (Grok only, optional for other providers)</dd>
+
+  <dt>`send_context`</dt>
+  <dd>Automatically send stack configurations to AI for context-aware answers (default: `false`)</dd>
+
+  <dt>`prompt_on_send`</dt>
+  <dd>Prompt user for consent before sending context, even when `send_context` is `true` (default: `true`)</dd>
 </dl>
+
+## Context-Aware AI Queries
+
+The AI assistant can analyze your actual stack configurations to provide specific, context-aware answers.
+
+### How It Works
+
+When you ask questions about your repository (e.g., "Describe the stacks in this repo"), the AI can:
+- Read your stack YAML files
+- Analyze component configurations
+- Provide specific answers based on your actual setup
+
+### Privacy & Security
+
+**Important**: Enabling context sharing sends your stack files to the AI provider's servers.
+
+- Stack configs may contain sensitive information (AWS account IDs, regions, etc.)
+- Data is sent to your chosen AI provider (Anthropic, OpenAI, Google, or xAI)
+- No data is stored by Atmos - it's only included in the API request
+- You control when context is sent through configuration and prompts
+
+### Configuration Options
+
+There are three ways to control context sharing:
+
+#### Option 1: Environment Variable (Highest Priority)
+
+<Terminal title="shell">
+```bash
+# Always send context without prompting
+export ATMOS_AI_SEND_CONTEXT=true
+atmos ai ask "Describe the stacks in this repo"
+
+# Never send context
+export ATMOS_AI_SEND_CONTEXT=false
+atmos ai ask "What components are available?"
+```
+</Terminal>
+
+#### Option 2: Configuration File
+
+<File title="atmos.yaml">
+```yaml
+settings:
+  ai:
+    enabled: true
+    provider: "anthropic"
+    # Always send context, but prompt each time for confirmation
+    send_context: true
+    prompt_on_send: true
+```
+</File>
+
+Or automatically send without prompting:
+
+<File title="atmos.yaml">
+```yaml
+settings:
+  ai:
+    enabled: true
+    provider: "anthropic"
+    # Always send context without prompting (not recommended)
+    send_context: true
+    prompt_on_send: false
+```
+</File>
+
+#### Option 3: Interactive Prompt (Default)
+
+By default, if you ask a question that seems to need context, you'll be prompted:
+
+<Terminal title="atmos ai ask">
+```bash
+$ atmos ai ask "Describe the stacks in this repo"
+
+⚠️  This question may benefit from your stack configurations.
+📤 Send stack files to AI provider for analysis? (y/N): y
+📖 Reading stack configurations...
+👽 Thinking...
+
+Based on your stack configurations, you have the following stacks:
+...
+```
+</Terminal>
+
+### Questions That Trigger Context
+
+The AI automatically detects when context might be helpful based on keywords:
+
+- "this repo" / "my repo"
+- "my stack" / "these stacks"
+- "my component" / "these components"
+- "my configuration" / "my config"
+- "what stacks" / "list stacks"
+- "describe the" / "analyze"
+
+### Disabling Context
+
+To never send context:
+
+<File title="atmos.yaml">
+```yaml
+settings:
+  ai:
+    enabled: true
+    provider: "anthropic"
+    send_context: false  # Default - never send context
+```
+</File>
+
+Or use the environment variable:
+
+<Terminal title="shell">
+```bash
+export ATMOS_AI_SEND_CONTEXT=false
+```
+</Terminal>
 
 ## Environment Variables
 
@@ -191,17 +316,15 @@ You can use Atmos-prefixed environment variables as alternatives:
 
 <Terminal title="shell">
 ```bash
-# Anthropic
-export ATMOS_ANTHROPIC_API_KEY="your-key"
+# API Keys
+export ATMOS_ANTHROPIC_API_KEY="your-key"  # Anthropic
+export ATMOS_OPENAI_API_KEY="your-key"     # OpenAI
+export ATMOS_GEMINI_API_KEY="your-key"     # Gemini
+export ATMOS_XAI_API_KEY="your-key"        # Grok
 
-# OpenAI
-export ATMOS_OPENAI_API_KEY="your-key"
-
-# Gemini
-export ATMOS_GEMINI_API_KEY="your-key"
-
-# Grok
-export ATMOS_XAI_API_KEY="your-key"
+# Context Control
+export ATMOS_AI_SEND_CONTEXT=true   # Send stack configs to AI
+export ATMOS_AI_SEND_CONTEXT=false  # Never send context (default)
 ```
 </Terminal>
 

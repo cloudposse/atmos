@@ -61,20 +61,18 @@ func extractConfig(atmosConfig *schema.AtmosConfiguration) *Config {
 		MaxTokens: 4096,
 	}
 
-	// Check if AI settings exist in the configuration
-	if atmosConfig.Settings.AI != nil {
-		if enabled, ok := atmosConfig.Settings.AI["enabled"].(bool); ok {
-			config.Enabled = enabled
-		}
-		if model, ok := atmosConfig.Settings.AI["model"].(string); ok {
-			config.Model = model
-		}
-		if apiKeyEnv, ok := atmosConfig.Settings.AI["api_key_env"].(string); ok {
-			config.APIKeyEnv = apiKeyEnv
-		}
-		if maxTokens, ok := atmosConfig.Settings.AI["max_tokens"].(int); ok {
-			config.MaxTokens = maxTokens
-		}
+	// Override defaults with configuration from atmos.yaml.
+	if atmosConfig.Settings.AI.Enabled {
+		config.Enabled = atmosConfig.Settings.AI.Enabled
+	}
+	if atmosConfig.Settings.AI.Model != "" {
+		config.Model = atmosConfig.Settings.AI.Model
+	}
+	if atmosConfig.Settings.AI.ApiKeyEnv != "" {
+		config.APIKeyEnv = atmosConfig.Settings.AI.ApiKeyEnv
+	}
+	if atmosConfig.Settings.AI.MaxTokens > 0 {
+		config.MaxTokens = atmosConfig.Settings.AI.MaxTokens
 	}
 
 	return config

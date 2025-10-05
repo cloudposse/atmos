@@ -267,7 +267,19 @@ type AtmosSettings struct {
 	// Telemetry settings
 	Telemetry TelemetrySettings `yaml:"telemetry,omitempty" json:"telemetry,omitempty" mapstructure:"telemetry"`
 	// AI settings
-	AI map[string]interface{} `yaml:"ai,omitempty" json:"ai,omitempty" mapstructure:"ai"`
+	AI AISettings `yaml:"ai,omitempty" json:"ai,omitempty" mapstructure:"ai"`
+}
+
+// AISettings contains configuration for AI assistant.
+type AISettings struct {
+	Enabled      bool   `yaml:"enabled,omitempty" json:"enabled,omitempty" mapstructure:"enabled"`
+	Provider     string `yaml:"provider,omitempty" json:"provider,omitempty" mapstructure:"provider"`
+	Model        string `yaml:"model,omitempty" json:"model,omitempty" mapstructure:"model"`
+	ApiKeyEnv    string `yaml:"api_key_env,omitempty" json:"api_key_env,omitempty" mapstructure:"api_key_env"`
+	MaxTokens    int    `yaml:"max_tokens,omitempty" json:"max_tokens,omitempty" mapstructure:"max_tokens"`
+	BaseURL      string `yaml:"base_url,omitempty" json:"base_url,omitempty" mapstructure:"base_url"`
+	SendContext  bool   `yaml:"send_context,omitempty" json:"send_context,omitempty" mapstructure:"send_context"`
+	PromptOnSend bool   `yaml:"prompt_on_send,omitempty" json:"prompt_on_send,omitempty" mapstructure:"prompt_on_send"`
 }
 
 // TelemetrySettings contains configuration for telemetry collection.
