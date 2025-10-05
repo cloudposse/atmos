@@ -373,8 +373,14 @@ func prepareYAMLForProvenance(yamlData any, ctx *m.MergeContext, atmosConfig *sc
 	wrappedMaxLength := getCommentColumn() - maxLineLength
 	wrappedData := u.WrapLongStrings(filteredData, wrappedMaxLength)
 
-	// Convert to YAML
-	yamlBytes, err := u.ConvertToYAML(wrappedData)
+	// Get indent from configuration
+	indent := u.DefaultYAMLIndent
+	if atmosConfig != nil && atmosConfig.Settings.Terminal.TabWidth > 0 {
+		indent = atmosConfig.Settings.Terminal.TabWidth
+	}
+
+	// Convert to YAML with configured indent
+	yamlBytes, err := u.ConvertToYAML(wrappedData, u.YAMLOptions{Indent: indent})
 	if err != nil {
 		return "", err
 	}
