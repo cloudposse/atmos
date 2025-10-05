@@ -4,26 +4,27 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 
 	"github.com/cloudposse/atmos/pkg/merge"
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-func TestRenderInline_NoProvenance(t *testing.T) {
+func TestRenderInlineProvenance_NoProvenance(t *testing.T) {
 	data := map[string]any{
 		"name":  "test",
 		"value": 42,
 	}
 
-	// No context - should return regular YAML.
-	result, err := RenderInline(data, nil)
+	atmosConfig := &schema.AtmosConfiguration{}
 
-	require.NoError(t, err)
+	// No context - should return regular YAML without provenance comments.
+	result := RenderInlineProvenanceWithStackFile(data, nil, atmosConfig, "")
+
 	assert.Contains(t, result, "name: test")
 	assert.Contains(t, result, "value: 42")
 }
 
-func TestRenderInline_WithProvenance(t *testing.T) {
+func TestRenderInlineProvenance_WithProvenance(t *testing.T) {
 	data := map[string]any{
 		"name":  "test",
 		"value": 42,
@@ -33,18 +34,25 @@ func TestRenderInline_WithProvenance(t *testing.T) {
 	ctx.EnableProvenance()
 	ctx.CurrentFile = "config.yaml"
 
-	// Record some provenance.
+	// Record provenance for both fields.
 	ctx.RecordProvenance("name", merge.ProvenanceEntry{
 		File:   "config.yaml",
 		Line:   10,
 		Column: 5,
 		Type:   merge.ProvenanceTypeInline,
 	})
+	ctx.RecordProvenance("value", merge.ProvenanceEntry{
+		File:   "config.yaml",
+		Line:   11,
+		Column: 5,
+		Type:   merge.ProvenanceTypeInline,
+	})
 
-	result, err := RenderInline(data, ctx)
+	atmosConfig := &schema.AtmosConfiguration{}
+	result := RenderInlineProvenanceWithStackFile(data, ctx, atmosConfig, "config.yaml")
 
-	require.NoError(t, err)
-	// Should contain valid YAML.
+	// Should contain valid YAML with provenance legend and both fields.
+	assert.Contains(t, result, "# Provenance Legend:")
 	assert.Contains(t, result, "name: test")
 	assert.Contains(t, result, "value: 42")
 }
