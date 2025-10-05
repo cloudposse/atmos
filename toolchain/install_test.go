@@ -41,11 +41,13 @@ func TestInstallResolvesAliasFromToolVersions(t *testing.T) {
 			"helmfile":  {"helmfile", "helmfile"},
 		},
 	}
+	prevConfig := atmosConfig
 	SetAtmosConfig(&schema.AtmosConfiguration{
 		Toolchain: schema.Toolchain{
 			FilePath: toolVersionsPath,
 		},
 	})
+	t.Cleanup(func() { SetAtmosConfig(prevConfig) })
 	installer := NewInstallerWithResolver(mockResolver)
 	owner, repo, err := installer.parseToolSpec("opentofu")
 	assert.NoError(t, err)
