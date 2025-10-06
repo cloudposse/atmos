@@ -426,3 +426,34 @@ func TestRenderInlineProvenance_DifferentProvenanceTypes(t *testing.T) {
 	// Verify computed type uses ∴ (with depth indicator).
 	assert.Contains(t, result, "# ∴ [1] stack.yaml:40")
 }
+
+func TestRenderInlineProvenance_YAMLMarshallingError(t *testing.T) {
+	// Test that non-serializable values are handled gracefully.
+	// Note: gopkg.in/yaml.v3 has internal panic recovery that converts
+	// unmarshallable types (like functions, channels) to `{}` instead of
+	// propagating the panic. This test documents the behavior and ensures
+	// panic recovery is in place for any future YAML library changes.
+	//
+	// The panic recovery in RenderInlineProvenanceWithStackFile exists as
+	// defensive programming to handle edge cases, but current yaml.v3 behavior
+	// makes it difficult to trigger via test data without directly invoking
+	// the low-level encoder.
+	data := map[string]any{
+		"func": func() {},
+		"chan": make(chan int),
+	}
+
+	ctx := merge.NewMergeContext()
+	ctx.EnableProvenance()
+
+	atmosConfig := &schema.AtmosConfiguration{}
+	result := RenderInlineProvenanceWithStackFile(data, ctx, atmosConfig, "broken.yaml")
+
+	// yaml.v3 marshals these as `{}` instead of panicking.
+	// Since the values have no provenance, they're filtered out by filterEmptySections,
+	// resulting in an empty top-level map `{}`.
+	// Verify the function doesn't panic and returns valid output.
+	assert.NotEmpty(t, result)
+	assert.Contains(t, result, "Provenance Legend")
+	assert.Contains(t, result, "{}")
+}

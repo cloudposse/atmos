@@ -263,6 +263,29 @@ func TestCombineSideBySide(t *testing.T) {
 				assert.Contains(t, result, "Configuration", "Should have header")
 			},
 		},
+		{
+			name:      "small leftWidth does not panic",
+			left:      "test",
+			right:     "prov",
+			leftWidth: 5,
+			verify: func(t *testing.T, result string) {
+				// Should not panic even with leftWidth < 13
+				assert.Contains(t, result, "Configuration", "Should have header")
+				assert.Contains(t, result, "│", "Should have separator")
+				// Verify it doesn't panic - if we got here, test passed
+			},
+		},
+		{
+			name:      "zero leftWidth does not panic",
+			left:      "test",
+			right:     "prov",
+			leftWidth: 0,
+			verify: func(t *testing.T, result string) {
+				// Should not panic with zero leftWidth
+				assert.Contains(t, result, "Configuration", "Should have header")
+				// Just verify we didn't panic
+			},
+		},
 	}
 
 	for _, tt := range tests {

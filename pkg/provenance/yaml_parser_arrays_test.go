@@ -145,3 +145,142 @@ func TestSimpleArrayDebug(t *testing.T) {
 		}
 	}
 }
+
+// TestRootLevelArrayOfScalars tests that root-level arrays of scalars get indexed correctly.
+func TestRootLevelArrayOfScalars(t *testing.T) {
+	yaml := `- item1
+- item2
+- item3`
+
+	lines := strings.Split(yaml, "\n")
+	pathMap := buildYAMLPathMap(lines)
+
+	// Debug: print all paths
+	t.Log("\n=== ROOT SCALAR ARRAY PATH MAP ===")
+	for i := 0; i < len(lines); i++ {
+		if info, ok := pathMap[i]; ok {
+			t.Logf("Line %d: %q -> Path: %q", i, strings.TrimSpace(lines[i]), info.Path)
+		}
+	}
+
+	// Line 0: "- item1" should be [0]
+	if info, ok := pathMap[0]; ok {
+		assert.Equal(t, "[0]", info.Path, "First root scalar array element should have indexed path")
+		assert.True(t, info.IsKeyLine, "Should be marked as a key line")
+	} else {
+		t.Fatal("Line 0 not found in path map")
+	}
+
+	// Line 1: "- item2" should be [1]
+	if info, ok := pathMap[1]; ok {
+		assert.Equal(t, "[1]", info.Path, "Second root scalar array element should have indexed path")
+		assert.True(t, info.IsKeyLine, "Should be marked as a key line")
+	} else {
+		t.Fatal("Line 1 not found in path map")
+	}
+
+	// Line 2: "- item3" should be [2]
+	if info, ok := pathMap[2]; ok {
+		assert.Equal(t, "[2]", info.Path, "Third root scalar array element should have indexed path")
+		assert.True(t, info.IsKeyLine, "Should be marked as a key line")
+	} else {
+		t.Fatal("Line 2 not found in path map")
+	}
+}
+
+// TestRootLevelArrayOfMaps tests that root-level array-of-maps get indexed correctly.
+func TestRootLevelArrayOfMaps(t *testing.T) {
+	yaml := `- key: value1
+  name: first
+- key: value2
+  name: second`
+
+	lines := strings.Split(yaml, "\n")
+	pathMap := buildYAMLPathMap(lines)
+
+	// Debug: print all paths
+	t.Log("\n=== ROOT ARRAY PATH MAP ===")
+	for i := 0; i < len(lines); i++ {
+		if info, ok := pathMap[i]; ok {
+			t.Logf("Line %d: %q -> Path: %q", i, strings.TrimSpace(lines[i]), info.Path)
+		}
+	}
+
+	// Line 0: "- key: value1" should be [0].key
+	if info, ok := pathMap[0]; ok {
+		assert.Equal(t, "[0].key", info.Path, "First root array element 'key' should have indexed path")
+		assert.True(t, info.IsKeyLine, "Should be marked as a key line")
+	} else {
+		t.Fatal("Line 0 not found in path map")
+	}
+
+	// Line 1: "  name: first" should be [0].name
+	if info, ok := pathMap[1]; ok {
+		assert.Equal(t, "[0].name", info.Path, "First root array element 'name' should have indexed path")
+		assert.True(t, info.IsKeyLine, "Should be marked as a key line")
+	} else {
+		t.Fatal("Line 1 not found in path map")
+	}
+
+	// Line 2: "- key: value2" should be [1].key
+	if info, ok := pathMap[2]; ok {
+		assert.Equal(t, "[1].key", info.Path, "Second root array element 'key' should have indexed path")
+		assert.True(t, info.IsKeyLine, "Should be marked as a key line")
+	} else {
+		t.Fatal("Line 2 not found in path map")
+	}
+
+	// Line 3: "  name: second" should be [1].name
+	if info, ok := pathMap[3]; ok {
+		assert.Equal(t, "[1].name", info.Path, "Second root array element 'name' should have indexed path")
+		assert.True(t, info.IsKeyLine, "Should be marked as a key line")
+	} else {
+		t.Fatal("Line 3 not found in path map")
+	}
+}
+
+// TestNestedArrayOfScalars tests that scalar array items get full path prefixes.
+// This is a regression test for the bug where handleArrayItemLine only used the
+// last stack element, producing "items[0]" instead of "vars.items[0]".
+func TestNestedArrayOfScalars(t *testing.T) {
+	yaml := `vars:
+  items:
+    - scalar1
+    - scalar2
+    - scalar3`
+
+	lines := strings.Split(yaml, "\n")
+	pathMap := buildYAMLPathMap(lines)
+
+	// Debug: print all paths
+	t.Log("\n=== NESTED SCALAR ARRAY PATH MAP ===")
+	for i := 0; i < len(lines); i++ {
+		if info, ok := pathMap[i]; ok {
+			t.Logf("Line %d: %q -> Path: %q", i, strings.TrimSpace(lines[i]), info.Path)
+		}
+	}
+
+	// Line 2: "- scalar1" should be vars.items[0] (not just items[0])
+	if info, ok := pathMap[2]; ok {
+		assert.Equal(t, "vars.items[0]", info.Path, "First scalar should have full path prefix")
+		assert.True(t, info.IsKeyLine, "Should be marked as a key line")
+	} else {
+		t.Fatal("Line 2 not found in path map")
+	}
+
+	// Line 3: "- scalar2" should be vars.items[1]
+	if info, ok := pathMap[3]; ok {
+		assert.Equal(t, "vars.items[1]", info.Path, "Second scalar should have full path prefix")
+		assert.True(t, info.IsKeyLine, "Should be marked as a key line")
+	} else {
+		t.Fatal("Line 3 not found in path map")
+	}
+
+	// Line 4: "- scalar3" should be vars.items[2]
+	if info, ok := pathMap[4]; ok {
+		assert.Equal(t, "vars.items[2]", info.Path, "Third scalar should have full path prefix")
+		assert.True(t, info.IsKeyLine, "Should be marked as a key line")
+	} else {
+		t.Fatal("Line 4 not found in path map")
+	}
+}

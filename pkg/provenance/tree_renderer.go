@@ -9,6 +9,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"golang.org/x/term"
 
+	log "github.com/cloudposse/atmos/pkg/logger"
 	m "github.com/cloudposse/atmos/pkg/merge"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -223,8 +224,16 @@ func colorize(text string, color lipgloss.Color) string {
 }
 
 // RenderSideBySide renders YAML on the left and provenance tree on the right.
-func RenderSideBySide(yamlData any, ctx *m.MergeContext, atmosConfig *schema.AtmosConfiguration, leftWidth int) string {
+func RenderSideBySide(yamlData any, ctx *m.MergeContext, atmosConfig *schema.AtmosConfiguration, leftWidth int) (result string) {
 	defer perf.Track(atmosConfig, "provenance.RenderSideBySide")()
+
+	// Recover from panics in YAML marshalling (e.g., channels, funcs).
+	defer func() {
+		if r := recover(); r != nil {
+			log.Debug("Panic during YAML marshalling", "error", r)
+			result = fmt.Sprintf("Error rendering YAML: %v\n", r)
+		}
+	}()
 
 	// Generate left side (YAML)
 	yamlBytes, err := u.ConvertToYAML(yamlData)
@@ -365,6 +374,8 @@ func RenderInlineProvenance(yamlData any, ctx *m.MergeContext, atmosConfig *sche
 
 // PrepareYAMLForProvenance prepares YAML data for provenance rendering.
 func prepareYAMLForProvenance(yamlData any, ctx *m.MergeContext, atmosConfig *schema.AtmosConfiguration) (string, error) {
+	defer perf.Track(atmosConfig, "provenance.prepareYAMLForProvenance")()
+
 	// Rename "imports" → "import"
 	yamlData = renameImportsToImport(yamlData, ctx)
 
@@ -450,56 +461,84 @@ func renderProvenanceLegend(result *strings.Builder, stackFile string) {
 	}
 }
 
+// lineProvenanceContext holds context for processing a line with provenance.
+type lineProvenanceContext struct {
+	pathMap       map[int]YAMLLineInfo
+	ctx           *m.MergeContext
+	commentColumn int
+}
+
+// processYAMLLineWithProvenance processes a single line and adds provenance comment if applicable.
+func processYAMLLineWithProvenance(result *strings.Builder, line string, lineNum int, lpCtx *lineProvenanceContext) {
+	info, exists := lpCtx.pathMap[lineNum]
+
+	// Skip provenance for continuation lines.
+	if exists && info.IsContinuation {
+		result.WriteString(line)
+		result.WriteString(newlineChar)
+		return
+	}
+
+	// Only add provenance if this is a key line.
+	if !exists || !info.IsKeyLine {
+		result.WriteString(line)
+		result.WriteString(newlineChar)
+		return
+	}
+
+	// Look up and add provenance.
+	entry := findProvenance(lpCtx.ctx, info.Path)
+	if entry == nil {
+		result.WriteString(line)
+		result.WriteString(newlineChar)
+		return
+	}
+
+	addProvenanceToLine(result, line, entry, lpCtx.commentColumn)
+}
+
 // RenderInlineProvenanceWithStackFile renders YAML with provenance as inline comments.
 // The stackFile parameter is the stack manifest file being described (e.g., "orgs/acme/plat/dev/us-east-2.yaml").
 // Values from this file will be marked with ● (defined), while values from other files show ○ (inherited).
-func RenderInlineProvenanceWithStackFile(yamlData any, ctx *m.MergeContext, atmosConfig *schema.AtmosConfiguration, stackFile string) string {
+func RenderInlineProvenanceWithStackFile(yamlData any, ctx *m.MergeContext, atmosConfig *schema.AtmosConfiguration, stackFile string) (output string) {
 	defer perf.Track(atmosConfig, "provenance.RenderInlineProvenanceWithStackFile")()
+
+	// Recover from panics in YAML marshalling (e.g., channels, funcs).
+	defer func() {
+		if r := recover(); r != nil {
+			log.Debug("Panic during YAML marshalling", "error", r)
+			output = fmt.Sprintf("Error rendering YAML: %v\n", r)
+		}
+	}()
 
 	var result strings.Builder
 
-	// Add legend at top only if provenance is enabled
+	// Add legend at top only if provenance is enabled.
 	if ctx != nil && ctx.IsProvenanceEnabled() {
 		renderProvenanceLegend(&result, stackFile)
 	}
 
-	// Prepare YAML with provenance
+	// Prepare YAML with provenance.
 	highlighted, err := prepareYAMLForProvenance(yamlData, ctx, atmosConfig)
 	if err != nil {
 		return fmt.Sprintf("Error rendering YAML: %v\n", err)
 	}
 
-	// Split into lines and build path mapping
+	// Split into lines and build path mapping.
 	lines := strings.Split(highlighted, newlineChar)
 	pathMap := buildYAMLPathMap(lines)
 	commentColumn := getCommentColumn()
 
+	// Create context for line processing.
+	lpCtx := &lineProvenanceContext{
+		pathMap:       pathMap,
+		ctx:           ctx,
+		commentColumn: commentColumn,
+	}
+
+	// Process each line with provenance.
 	for i, line := range lines {
-		info, exists := pathMap[i]
-
-		// Skip provenance for continuation lines
-		if exists && info.IsContinuation {
-			result.WriteString(line)
-			result.WriteString(newlineChar)
-			continue
-		}
-
-		// Only add provenance if this is a key line
-		if !exists || !info.IsKeyLine {
-			result.WriteString(line)
-			result.WriteString(newlineChar)
-			continue
-		}
-
-		// Look up and add provenance
-		entry := findProvenance(ctx, info.Path)
-		if entry == nil {
-			result.WriteString(line)
-			result.WriteString(newlineChar)
-			continue
-		}
-
-		addProvenanceToLine(&result, line, entry, commentColumn)
+		processYAMLLineWithProvenance(&result, line, i, lpCtx)
 	}
 
 	return result.String()

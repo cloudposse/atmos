@@ -2,6 +2,11 @@ package provenance
 
 import (
 	"strings"
+	"unicode/utf8"
+)
+
+const (
+	configurationHeaderLength = 13 // Length of "Configuration" header text
 )
 
 // wrapState holds state for line wrapping.
@@ -55,7 +60,9 @@ func wrapLine(line string, maxWidth int) []string {
 	}
 
 	plainText := stripANSI(line)
-	if len(plainText) <= maxWidth {
+	// Count runes, not bytes.
+	visibleRunes := utf8.RuneCountInString(plainText)
+	if visibleRunes <= maxWidth {
 		return []string{line}
 	}
 
@@ -84,7 +91,7 @@ func wrapLine(line string, maxWidth int) []string {
 	}
 
 	// If we couldn't wrap nicely, use fallback hard-wrap
-	if len(wrapped) == 0 && len(plainText) > maxWidth {
+	if len(wrapped) == 0 && visibleRunes > maxWidth {
 		return hardWrapWithANSI(line, maxWidth)
 	}
 
@@ -141,7 +148,11 @@ func combineSideBySide(left, right string, leftWidth int) string {
 
 	// Header
 	buf.WriteString("Configuration")
-	buf.WriteString(strings.Repeat(pathSpace, leftWidth-13))
+	pad := leftWidth - configurationHeaderLength
+	if pad < 0 {
+		pad = 0
+	}
+	buf.WriteString(strings.Repeat(pathSpace, pad))
 	buf.WriteString(" │  Provenance\n")
 	buf.WriteString(strings.Repeat("─", leftWidth))
 	buf.WriteString("┼")

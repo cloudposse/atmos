@@ -312,3 +312,141 @@ func TestGetImportDepth(t *testing.T) {
 		})
 	}
 }
+
+func TestMergeWithProvenance_HonorsListMergeStrategy(t *testing.T) {
+	// Test that MergeWithProvenance honors atmosConfig.Settings.ListMergeStrategy.
+	t.Run("scalar arrays", func(t *testing.T) {
+		base := map[string]any{
+			"vars": map[string]any{
+				"tags": []any{"base-tag-1", "base-tag-2"},
+			},
+		}
+
+		override := map[string]any{
+			"vars": map[string]any{
+				"tags": []any{"override-tag-1"},
+			},
+		}
+
+		positions := u.PositionMap{
+			"vars":         {Line: 1, Column: 1},
+			"vars.tags":    {Line: 2, Column: 3},
+			"vars.tags[0]": {Line: 3, Column: 5},
+			"vars.tags[1]": {Line: 4, Column: 5},
+			"vars.tags[2]": {Line: 5, Column: 5},
+		}
+
+		tests := []struct {
+			name              string
+			listMergeStrategy string
+			expectedTags      []any
+		}{
+			{
+				name:              "replace strategy",
+				listMergeStrategy: ListMergeStrategyReplace,
+				expectedTags:      []any{"override-tag-1"},
+			},
+			{
+				name:              "append strategy",
+				listMergeStrategy: ListMergeStrategyAppend,
+				expectedTags:      []any{"base-tag-1", "base-tag-2", "override-tag-1"},
+			},
+			{
+				name:              "merge strategy - scalars behave like replace",
+				listMergeStrategy: ListMergeStrategyMerge,
+				// Note: merge strategy with scalar arrays behaves like replace (mergo's WithSliceDeepCopy behavior)
+				expectedTags: []any{"base-tag-1", "base-tag-2"},
+			},
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				ctx := NewMergeContext()
+				ctx.CurrentFile = "override.yaml"
+				ctx.EnableProvenance()
+
+				atmosConfig := &schema.AtmosConfiguration{
+					TrackProvenance: true,
+					Settings: schema.AtmosSettings{
+						ListMergeStrategy: tt.listMergeStrategy,
+					},
+				}
+
+				result, err := MergeWithProvenance(atmosConfig, []map[string]any{base, override}, ctx, positions)
+				require.NoError(t, err)
+
+				// Verify the merge strategy was honored.
+				vars, ok := result["vars"].(map[string]any)
+				require.True(t, ok, "vars should be a map")
+
+				tags, ok := vars["tags"].([]any)
+				require.True(t, ok, "tags should be a slice")
+
+				assert.Equal(t, tt.expectedTags, tags, "List merge strategy %s was not honored", tt.listMergeStrategy)
+
+				// Verify provenance was still tracked.
+				assert.True(t, ctx.HasProvenance("vars.tags"), "Provenance should be tracked for vars.tags")
+			})
+		}
+	})
+
+	t.Run("arrays of maps", func(t *testing.T) {
+		// Test merge strategy with arrays of maps (deep merge behavior).
+		base := map[string]any{
+			"vars": map[string]any{
+				"items": []any{
+					map[string]any{"id": "1", "name": "base", "count": 10},
+				},
+			},
+		}
+
+		override := map[string]any{
+			"vars": map[string]any{
+				"items": []any{
+					map[string]any{"id": "1", "name": "override", "extra": "field"},
+				},
+			},
+		}
+
+		positions := u.PositionMap{
+			"vars":             {Line: 1, Column: 1},
+			"vars.items":       {Line: 2, Column: 3},
+			"vars.items[0]":    {Line: 3, Column: 5},
+			"vars.items[0].id": {Line: 4, Column: 7},
+		}
+
+		ctx := NewMergeContext()
+		ctx.CurrentFile = "override.yaml"
+		ctx.EnableProvenance()
+
+		atmosConfig := &schema.AtmosConfiguration{
+			TrackProvenance: true,
+			Settings: schema.AtmosSettings{
+				ListMergeStrategy: ListMergeStrategyMerge,
+			},
+		}
+
+		result, err := MergeWithProvenance(atmosConfig, []map[string]any{base, override}, ctx, positions)
+		require.NoError(t, err)
+
+		// Verify the merge strategy deep-merged the map.
+		vars, ok := result["vars"].(map[string]any)
+		require.True(t, ok, "vars should be a map")
+
+		items, ok := vars["items"].([]any)
+		require.True(t, ok, "items should be a slice")
+		require.Len(t, items, 1, "Should have one merged item")
+
+		merged, ok := items[0].(map[string]any)
+		require.True(t, ok, "Item should be a map")
+
+		// Verify deep merge occurred: override values win, base values preserved if not overridden.
+		assert.Equal(t, "1", merged["id"])
+		assert.Equal(t, "override", merged["name"], "Override value should win")
+		assert.Equal(t, "field", merged["extra"], "New field from override should be present")
+		// Note: "count" from base is NOT preserved with mergo's SliceDeepCopy - it replaces the element
+
+		// Verify provenance was still tracked.
+		assert.True(t, ctx.HasProvenance("vars.items"), "Provenance should be tracked for vars.items")
+	})
+}

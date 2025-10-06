@@ -348,15 +348,27 @@ Uses JSONPath format to address any value in the configuration:
 **Implemented**:
 - ✅ Inline comment renderer (`RenderInlineProvenanceWithStackFile`)
 - ✅ Legend display at top of output
-- ✅ Symbol-based inheritance indicators (`●`, `○`, `∴`)
-- ✅ Depth tracking with `[N]` notation
-- ✅ Syntax highlighting for YAML
-- ✅ Long string wrapping to prevent horizontal scrolling
 - ✅ Tree renderer for debugging (`RenderTree`)
 
+**YAML Format on TTY** (inline comments with visual enhancements):
+- ✅ Symbol-based inheritance indicators (`●`, `○`, `∴`)
+- ✅ Depth tracking with `[N]` notation
+- ✅ Syntax highlighting with ANSI colors
+- ✅ Long string wrapping to prevent horizontal scrolling
+- ✅ Two-column side-by-side display (Configuration │ Provenance)
+
+**YAML Format non-TTY** (pipeable output):
+- ✅ Inline comments without color codes
+- ✅ Single-column layout (preserves valid YAML)
+
+**JSON Format** (all outputs):
+- ✅ Provenance embedded as `__atmos_provenance` metadata fields
+- ✅ Structure: `{"file": "path", "line": N, "column": N, "type": "import|inline|override|computed", "depth": N}`
+- ❌ No inline comments (JSON doesn't support comments)
+- ❌ No visual indicators (JSON is structured data)
+
 **Not Implemented** (Deferred):
-- ❌ Two-column side-by-side display (breaks valid YAML)
-- ❌ JSON embedded format (pollutes data structures)
+- ❌ Embedded provenance in standard JSON output (pollutes data structures, only available via `__atmos_provenance` fields)
 
 **Deliverables**:
 - `pkg/provenance/inline.go` - Basic inline rendering

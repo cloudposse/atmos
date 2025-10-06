@@ -36,8 +36,30 @@ func normalizeProvenancePath(path string) string {
 }
 
 // isMultilineScalarIndicator checks if a value indicates a multi-line YAML scalar.
+// Supports literal (|) and folded (>) styles with optional chomping (+/-) and indent indicators (0-9).
+// Examples: |, |-, |+, |2, |+2, >, >-, >+, >2, >-2, etc.
 func isMultilineScalarIndicator(value string) bool {
-	return value == "|" || value == "|-" || value == ">" || value == ">-"
+	if value == "" {
+		return false
+	}
+	switch value[0] {
+	case '|', '>':
+		rest := strings.TrimSpace(value[1:])
+		if rest == "" {
+			return true
+		}
+		if rest[0] == '+' || rest[0] == '-' {
+			rest = strings.TrimSpace(rest[1:])
+		}
+		for i := 0; i < len(rest); i++ {
+			if rest[i] < '0' || rest[i] > '9' {
+				return false
+			}
+		}
+		return true
+	default:
+		return false
+	}
 }
 
 // extractYAMLKey extracts the key from a YAML line, handling array items.
@@ -84,7 +106,9 @@ func popStacksForIndent(indent int, pathStack []string, indentStack, arrayIndexS
 	for len(indentStack) > 1 && indent <= indentStack[len(indentStack)-1] {
 		pathStack = pathStack[:len(pathStack)-1]
 		indentStack = indentStack[:len(indentStack)-1]
-		if len(arrayIndexStack) > 0 {
+		// Only pop arrayIndexStack if we're not at root level (indent > 0)
+		// Root-level arrays need to maintain their index counter across siblings
+		if len(arrayIndexStack) > 0 && indent > 0 {
 			arrayIndexStack = arrayIndexStack[:len(arrayIndexStack)-1]
 		}
 	}
@@ -93,15 +117,20 @@ func popStacksForIndent(indent int, pathStack []string, indentStack, arrayIndexS
 
 // handleArrayItemLine processes a simple array item and records it.
 func handleArrayItemLine(lineNum int, pathStack []string, arrayIndexStack []int, lineInfo map[int]YAMLLineInfo) []int {
-	if len(pathStack) == 0 {
-		return arrayIndexStack
-	}
-
-	parentKey := pathStack[len(pathStack)-1]
 	arrayIndex, newStack := getArrayIndex(arrayIndexStack)
 
-	// Build path: parent[index]
-	currentPath := fmt.Sprintf("%s[%d]", parentKey, arrayIndex)
+	var currentPath string
+	if len(pathStack) == 0 {
+		// Root-level sequence item: path is "[i]"
+		currentPath = utils.AppendJSONPathIndex("", arrayIndex)
+	} else {
+		parentKey := pathStack[len(pathStack)-1]
+
+		// Build path: prefix.parent[index]
+		prefix := append([]string{}, pathStack[:len(pathStack)-1]...)
+		indexedKey := fmt.Sprintf("%s[%d]", parentKey, arrayIndex)
+		currentPath = buildYAMLPath(prefix, indexedKey)
+	}
 
 	// Record this line as an array element
 	lineInfo[lineNum] = YAMLLineInfo{
@@ -141,8 +170,35 @@ type arrayElementPathResult struct {
 	arrayIndexStack []int
 }
 
+// buildRootArrayElementPath builds the path for a root-level array-of-maps element.
+func buildRootArrayElementPath(key string, arrayIndexStack []int) arrayElementPathResult {
+	arrayIndex := 0
+	if len(arrayIndexStack) > 0 {
+		arrayIndex = arrayIndexStack[len(arrayIndexStack)-1]
+	}
+	indexedParent := utils.AppendJSONPathIndex("", arrayIndex) // "[i]"
+	currentPath := strings.Join([]string{indexedParent, key}, pathSeparator)
+
+	newArrayIndexStack := append([]int{}, arrayIndexStack...)
+	if len(newArrayIndexStack) > 0 {
+		newArrayIndexStack[len(newArrayIndexStack)-1]++
+	} else {
+		newArrayIndexStack = []int{1}
+	}
+
+	return arrayElementPathResult{
+		currentPath:     currentPath,
+		pathStack:       []string{indexedParent},
+		arrayIndexStack: newArrayIndexStack,
+	}
+}
+
 // buildArrayElementPath builds the path for an array-of-maps element.
 func buildArrayElementPath(key string, pathStack []string, arrayIndexStack []int) arrayElementPathResult {
+	if len(pathStack) == 0 {
+		return buildRootArrayElementPath(key, arrayIndexStack)
+	}
+
 	lastElement := pathStack[len(pathStack)-1]
 
 	// Get the array parent by stripping any existing index
@@ -194,7 +250,7 @@ func handleKeyLine(params *handleKeyLineParams) yamlPathState {
 	var newPathStack []string
 	var newArrayIndexStack []int
 
-	if isArrayElement && len(params.pathStack) > 0 {
+	if isArrayElement {
 		result := buildArrayElementPath(key, params.pathStack, params.arrayIndexStack)
 		currentPath = result.currentPath
 		newPathStack = result.pathStack
@@ -227,6 +283,12 @@ func handleKeyLine(params *handleKeyLineParams) yamlPathState {
 		arrayIndexStack: newArrayIndexStack,
 		multilineStart:  isMultilineStart,
 		multilinePath:   currentPath,
+	}
+
+	// For root-level array elements, we need to track the indent so it can be popped
+	if isArrayElement && len(params.pathStack) == 0 && len(newPathStack) > len(params.pathStack) {
+		// We added the indexed parent to pathStack, so track its indent
+		state.indentStack = append(state.indentStack, params.indent)
 	}
 
 	// Push to stack if this is a parent key
