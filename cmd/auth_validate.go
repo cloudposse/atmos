@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/spf13/cobra"
@@ -44,7 +45,7 @@ func executeAuthValidateCommand(cmd *cobra.Command, args []string) error {
 	if err := validator.ValidateAuthConfig(&atmosConfig.Auth); err != nil {
 		u.PrintfMarkdown("**❌ Authentication configuration validation failed:**\n")
 		u.PrintfMarkdown("%s\n", err.Error())
-		return errUtils.ErrInvalidAuthConfig
+		return errors.Join(errUtils.ErrInvalidAuthConfig, err)
 	}
 
 	u.PrintfMarkdown("**✅ Authentication configuration is valid**\n")
