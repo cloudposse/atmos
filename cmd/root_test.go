@@ -352,7 +352,7 @@ func TestVersionFlagParsing(t *testing.T) {
 
 			// Check that the version flag is defined.
 			assert.NotNil(t, versionFlag, "version flag should be defined")
-			assert.Contains(t, versionFlag.Usage, "atmos version", "usage should mention atmos version")
+			assert.Contains(t, versionFlag.Usage, "Atmos CLI version", "usage should mention Atmos CLI version")
 
 			// Parse flags.
 			err := cmd.ParseFlags(tt.args)
