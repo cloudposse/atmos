@@ -101,10 +101,12 @@ These flags are available for every Atmos command:
 
     <dt>`--version`</dt>
     <dd>
-        Display the Atmos CLI version and exit.
-        - Equivalent to running `atmos version`
+        Print a minimal single-line Atmos CLI version and exit.
+        - Outputs a simple `atmos &lt;version&gt;` format without styling or additional information
+        - Does not perform update checks or support `--check`/`--format` flags
         - Available as a persistent flag on all commands
         - Always displays the **Atmos version**, not the version of underlying tools (Terraform, Helmfile, etc.)
+        - For richer output and additional flags, use the [`atmos version`](/cli/commands/version) command
         - Example: `atmos --version`
     </dd>
 </dl>
