@@ -12,10 +12,10 @@ import (
 // It tracks where each value originated (file, line, column) and at what import depth.
 //
 // Parameters:
-//   - atmosConfig: Atmos configuration with TrackProvenance flag
-//   - inputs: Maps to merge (in order: first is base, last wins)
-//   - ctx: Merge context with provenance storage
-//   - positions: Map of JSONPath -> Position from YAML parsing
+//   - atmosConfig: Atmos configuration with TrackProvenance flag.
+//   - inputs: Maps to merge (in order: first is base, last wins).
+//   - ctx: Merge context with provenance storage.
+//   - positions: Map of JSONPath -> Position from YAML parsing.
 //
 // Returns the merged map with provenance recorded in ctx.
 func MergeWithProvenance(
