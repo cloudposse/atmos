@@ -301,6 +301,15 @@ errUtils.CaptureErrorWithContext(err, context)
 - Target >80% coverage, especially for `pkg/` and `internal/exec/`
 - **Comments must end with periods**: All comments should be complete sentences ending with a period (enforced by golangci-lint)
 
+### Test Quality (MANDATORY)
+- **Test behavior, not implementation** - Verify inputs/outputs, not internal state
+- **Never test stub functions** - Either implement the function or remove the test
+- **Avoid tautological tests** - Don't test that hardcoded stubs return hardcoded values
+- **Make code testable** - Use dependency injection to avoid hard dependencies on `os.Exit`, `CheckErrorPrintAndExit`, or external systems
+- **No coverage theater** - Each test must validate real behavior, not inflate metrics
+- **Remove always-skipped tests** - Either fix the underlying issue or delete the test
+- **Table-driven tests need real scenarios** - Use production-like inputs, not contrived data
+
 ### Test Skipping Conventions (MANDATORY)
 - **ALWAYS use `t.Skipf()` instead of `t.Skip()`** - Provide clear reasons for skipped tests
 - **NEVER use `t.Skipf()` without a reason**
