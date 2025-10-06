@@ -28,6 +28,7 @@ const (
 	inputEnvVar              = "TF_INPUT"
 	automationEnvVar         = "TF_IN_AUTOMATION"
 	logEnvVar                = "TF_LOG"
+	outputPrefixDot          = "."
 	logCoreEnvVar            = "TF_LOG_CORE"
 	logPathEnvVar            = "TF_LOG_PATH"
 	logProviderEnvVar        = "TF_LOG_PROVIDER"
@@ -424,8 +425,8 @@ func getTerraformOutputVariable(
 	output string,
 ) any {
 	val := output
-	if !strings.HasPrefix(output, ".") {
-		val = "." + val
+	if !strings.HasPrefix(output, outputPrefixDot) {
+		val = outputPrefixDot + val
 	}
 
 	res, err := u.EvaluateYqExpression(atmosConfig, outputs, val)
@@ -448,8 +449,8 @@ func GetStaticRemoteStateOutput(
 	defer perf.Track(atmosConfig, "exec.GetStaticRemoteStateOutput")()
 
 	val := output
-	if !strings.HasPrefix(output, ".") {
-		val = "." + val
+	if !strings.HasPrefix(output, outputPrefixDot) {
+		val = outputPrefixDot + val
 	}
 
 	res, err := u.EvaluateYqExpression(atmosConfig, remoteStateSection, val)
