@@ -5,10 +5,11 @@ import (
 	"os"
 	"strings"
 
-	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/cockroachdb/errors"
 	"golang.org/x/term"
+
+	"github.com/cloudposse/atmos/pkg/ui/markdown"
 )
 
 const (
@@ -40,9 +41,23 @@ func DefaultFormatterConfig() FormatterConfig {
 	}
 }
 
+// renderHintWithMarkdown renders a hint using the configured Atmos markdown renderer.
+func renderHintWithMarkdown(hint string, renderer *markdown.Renderer) string {
+	// Render hint text with emoji and markdown support.
+	hintText := "💡 " + hint
+	if renderer != nil {
+		rendered, err := renderer.RenderWithoutWordWrap(hintText)
+		if err == nil {
+			// Add 4-space indent after rendering (consistent with Atmos list style).
+			trimmed := strings.TrimRight(rendered, " \n\t")
+			return "    " + trimmed
+		}
+	}
+	// Fallback: 4-space indent with plain text.
+	return "    " + hintText
+}
+
 // Format formats an error for display with smart chain handling.
-//
-//nolint:gocognit,nestif,revive // Error formatting requires branching logic and length.
 func Format(err error, config FormatterConfig) string {
 	if err == nil {
 		return ""
@@ -52,14 +67,10 @@ func Format(err error, config FormatterConfig) string {
 	useColor := shouldUseColor(config.Color)
 
 	// Define styles.
-	var (
-		errorStyle = lipgloss.NewStyle()
-		hintStyle  = lipgloss.NewStyle()
-	)
+	errorStyle := lipgloss.NewStyle()
 
 	if useColor {
 		errorStyle = errorStyle.Foreground(lipgloss.Color("#FF0000")) // Red
-		hintStyle = hintStyle.Foreground(lipgloss.Color("#00FFFF"))   // Cyan
 	}
 
 	var output strings.Builder
@@ -81,26 +92,13 @@ func Format(err error, config FormatterConfig) string {
 	if len(hints) > 0 {
 		output.WriteString("\n")
 		for _, hint := range hints {
-			hintText := "  💡 " + hint
 			if useColor {
-				// Use glamour to render markdown in hints (supports backticks).
-				renderer, err := glamour.NewTermRenderer(
-					glamour.WithAutoStyle(),
-					glamour.WithWordWrap(0), // No wrapping
-				)
-				if err == nil {
-					// Render the hint as markdown.
-					rendered, err := renderer.Render(hintText)
-					if err == nil {
-						output.WriteString(strings.TrimSpace(rendered))
-						output.WriteString("\n")
-						continue
-					}
-				}
-				// Fallback to styled hint if rendering fails.
-				output.WriteString(hintStyle.Render(hintText))
+				// Use the configured Atmos markdown renderer.
+				rendered := renderHintWithMarkdown(hint, GetMarkdownRenderer())
+				output.WriteString(rendered)
 			} else {
-				output.WriteString(hintText)
+				// Use 4-space indent for consistency.
+				output.WriteString("    💡 " + hint)
 			}
 			output.WriteString("\n")
 		}

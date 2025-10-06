@@ -45,6 +45,11 @@ func InitializeMarkdown(config *schema.AtmosConfiguration) {
 	}
 }
 
+// GetMarkdownRenderer returns the global markdown renderer.
+func GetMarkdownRenderer() *markdown.Renderer {
+	return render
+}
+
 // CheckErrorAndPrint prints an error message.
 func CheckErrorAndPrint(err error, title string, suggestion string) {
 	if err == nil {
