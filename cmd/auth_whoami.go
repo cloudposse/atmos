@@ -3,21 +3,19 @@ package cmd
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"os"
 	"strings"
+
+	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	authTypes "github.com/cloudposse/atmos/pkg/auth/types"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/config/homedir"
 	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 )
-
-var ErrNoActiveAuthSession = errors.New("no active authentication session found")
 
 // authWhoamiCmd shows current authentication status.
 var authWhoamiCmd = &cobra.Command{

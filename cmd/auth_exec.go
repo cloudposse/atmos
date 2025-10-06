@@ -8,10 +8,11 @@ import (
 	"os/exec"
 	"syscall"
 
+	"github.com/spf13/cobra"
+
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/spf13/cobra"
 )
 
 // authExecCmd executes a command with authentication environment variables.

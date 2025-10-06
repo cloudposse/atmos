@@ -14,6 +14,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/auth/identities/aws"
 	"github.com/cloudposse/atmos/pkg/auth/types"
 	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/telemetry"
 )
@@ -27,7 +28,7 @@ const (
 	errFormatWithString      = "%w: %s"
 )
 
-// manager implements the Authmanager interface.
+// manager implements the AuthManager interface.
 type manager struct {
 	config          *schema.AuthConfig
 	providers       map[string]types.Provider
@@ -40,7 +41,7 @@ type manager struct {
 	chain []string
 }
 
-// NewAuthManager creates a new Authmanager instance.
+// NewAuthManager creates a new AuthManager instance.
 func NewAuthManager(
 	config *schema.AuthConfig,
 	credentialStore types.CredentialStore,
@@ -86,11 +87,15 @@ func NewAuthManager(
 
 // GetStackInfo returns the associated stack info pointer (may be nil).
 func (m *manager) GetStackInfo() *schema.ConfigAndStacksInfo {
+	defer perf.Track(nil, "auth.GetStackInfo")()
+
 	return m.stackInfo
 }
 
 // Authenticate performs hierarchical authentication for the specified identity.
 func (m *manager) Authenticate(ctx context.Context, identityName string) (*types.WhoamiInfo, error) {
+	defer perf.Track(nil, "auth.Manager.Authenticate")()
+
 	// We expect the identity name to be provided by the caller.
 	if identityName == "" {
 		errUtils.CheckErrorAndPrint(errUtils.ErrNilParam, identityNameKey, "no identity specified")
@@ -142,6 +147,8 @@ func (m *manager) GetChain() []string {
 
 // Whoami returns information about the specified identity's credentials.
 func (m *manager) Whoami(ctx context.Context, identityName string) (*types.WhoamiInfo, error) {
+	defer perf.Track(nil, "auth.Manager.Whoami")()
+
 	if _, exists := m.identities[identityName]; !exists {
 		return nil, fmt.Errorf(errFormatWithString, errUtils.ErrIdentityNotFound, fmt.Sprintf(backtickedQuotedFmt, identityName))
 	}
@@ -164,6 +171,8 @@ func (m *manager) Whoami(ctx context.Context, identityName string) (*types.Whoam
 
 // Validate validates the entire auth configuration.
 func (m *manager) Validate() error {
+	defer perf.Track(nil, "auth.Manager.Validate")()
+
 	if err := m.validator.ValidateAuthConfig(m.config); err != nil {
 		return errors.Join(errUtils.ErrInvalidAuthConfig, err)
 	}
@@ -172,6 +181,8 @@ func (m *manager) Validate() error {
 
 // GetDefaultIdentity returns the name of the default identity, if any.
 func (m *manager) GetDefaultIdentity() (string, error) {
+	defer perf.Track(nil, "auth.Manager.GetDefaultIdentity")()
+
 	// Find all default identities.
 	var defaultIdentities []string
 	for name, identity := range m.config.Identities {
@@ -230,6 +241,8 @@ func (m *manager) promptForIdentity(message string, identities []string) (string
 
 // ListIdentities returns all available identity names.
 func (m *manager) ListIdentities() []string {
+	defer perf.Track(nil, "auth.Manager.ListIdentities")()
+
 	var names []string
 	for name := range m.config.Identities {
 		names = append(names, name)
@@ -239,6 +252,8 @@ func (m *manager) ListIdentities() []string {
 
 // ListProviders returns all available provider names.
 func (m *manager) ListProviders() []string {
+	defer perf.Track(nil, "auth.Manager.ListProviders")()
+
 	var names []string
 	for name := range m.config.Providers {
 		names = append(names, name)
@@ -304,6 +319,8 @@ func (m *manager) getProviderForIdentity(identityName string) string {
 // GetProviderForIdentity returns the provider name for the given identity.
 // Recursively resolves through identity chains to find the root provider.
 func (m *manager) GetProviderForIdentity(identityName string) string {
+	defer perf.Track(nil, "auth.Manager.GetProviderForIdentity")()
+
 	chain, err := m.buildAuthenticationChain(identityName)
 	if err != nil || len(chain) == 0 {
 		return ""
@@ -316,6 +333,8 @@ func (m *manager) GetProviderForIdentity(identityName string) string {
 
 // GetProviderKindForIdentity returns the provider kind for the given identity. By building the authentication chain and getting the root provider's kind.
 func (m *manager) GetProviderKindForIdentity(identityName string) (string, error) {
+	defer perf.Track(nil, "auth.Manager.GetProviderKindForIdentity")()
+
 	// Build the complete authentication chain.
 	chain, err := m.buildAuthenticationChain(identityName)
 	if err != nil {
@@ -413,7 +432,7 @@ func (m *manager) isCredentialValid(identityName string, cachedCreds types.ICred
 
 // authenticateFromIndex performs authentication starting from the given index in the chain.
 func (m *manager) authenticateFromIndex(ctx context.Context, startIndex int) (types.ICredentials, error) {
-	// TODO Ideally this wouldn't be here, and would be handled by an identity interface function.
+	// TODO: Ideally this wouldn't be here, and would be handled by an identity interface function.
 	// Handle special case: standalone AWS user identity.
 	if aws.IsStandaloneAWSUserChain(m.chain, m.config.Identities) {
 		return aws.AuthenticateStandaloneAWSUser(ctx, m.chain[0], m.identities)

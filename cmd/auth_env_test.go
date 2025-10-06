@@ -8,10 +8,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 func TestAuthEnvCmd(t *testing.T) {

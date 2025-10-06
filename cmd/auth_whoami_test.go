@@ -6,11 +6,12 @@ import (
 	"testing"
 	"time"
 
-	authTypes "github.com/cloudposse/atmos/pkg/auth/types"
-	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	authTypes "github.com/cloudposse/atmos/pkg/auth/types"
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 func TestAuthWhoamiCmd(t *testing.T) {

@@ -4,9 +4,10 @@ import (
 	"bytes"
 	"testing"
 
-	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
+
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 func TestAuthValidateCmd(t *testing.T) {
