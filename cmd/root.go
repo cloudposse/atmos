@@ -106,6 +106,11 @@ var RootCmd = &cobra.Command{
 		if showHeatmap, _ := cmd.Flags().GetBool("heatmap"); showHeatmap {
 			perf.EnableTracking(true)
 		}
+
+		// Print telemetry disclosure if needed (skip for completion commands and when CLI config not found).
+		if !isCompletionCommand(cmd) && err == nil {
+			telemetry.PrintTelemetryDisclosure()
+		}
 	},
 	PersistentPostRun: func(cmd *cobra.Command, args []string) {
 		// Stop profiler after command execution.
@@ -439,17 +444,6 @@ func Execute() error {
 		err = processCommandAliases(atmosConfig, atmosConfig.CommandAliases, RootCmd, true)
 		if err != nil {
 			return err
-		}
-	}
-
-	// Set up PersistentPreRun to print telemetry disclosure before command execution
-	// This ensures it works for both direct CLI invocations and programmatic SetArgs() calls
-	if RootCmd.PersistentPreRun == nil && RootCmd.PersistentPreRunE == nil {
-		RootCmd.PersistentPreRun = func(cmd *cobra.Command, args []string) {
-			// Print telemetry disclosure if needed (skip for completion commands and when CLI config not found)
-			if !isCompletionCommand(cmd) && !errors.Is(initErr, cfg.NotFound) {
-				telemetry.PrintTelemetryDisclosure()
-			}
 		}
 	}
 
