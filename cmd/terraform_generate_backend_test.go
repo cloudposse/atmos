@@ -6,6 +6,7 @@ import (
 	"os"
 	"testing"
 
+	"github.com/spf13/pflag"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -22,12 +23,11 @@ func TestTerraformGenerateBackendCmd(t *testing.T) {
 	assert.NoError(t, err, "Setting 'ATMOS_LOGS_LEVEL' environment variable should execute without error")
 
 	// Reset flag states to prevent pollution from other tests.
-	// Reset the version flag specifically since it can cause test failures if left in a changed state.
-	versionFlag := RootCmd.PersistentFlags().Lookup("version")
-	if versionFlag != nil {
-		_ = versionFlag.Value.Set("false")
-		versionFlag.Changed = false
-	}
+	// Only reset flags that were actually changed to avoid issues with complex flag types.
+	RootCmd.PersistentFlags().Visit(func(f *pflag.Flag) {
+		_ = f.Value.Set(f.DefValue)
+		f.Changed = false
+	})
 
 	// Capture stderr
 	oldStderr := os.Stderr
