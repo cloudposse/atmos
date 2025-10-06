@@ -58,6 +58,34 @@ These flags are available for every Atmos command:
         - Can also use `ATMOS_LOGS_FILE` environment variable
     </dd>
 
+    <dt>`--verbose`</dt>
+    <dd>
+        Show detailed error messages with full context and stack traces.
+        - Default: `false`
+        - When enabled, error messages include:
+          - Structured context displayed as a formatted table
+          - Full stack traces for debugging
+          - Additional error chain information
+        - Can also use `ATMOS_VERBOSE` environment variable or `errors.format.verbose: true` in `atmos.yaml`
+        - **Note**: This controls ERROR verbosity, not LOGGING verbosity (use `--logs-level=Debug` for verbose logging)
+
+        **Example output:**
+        ```
+        component not found
+            💡 Run 'atmos describe component vpc -s prod' to see configuration
+            💡 Check if the component exists in components/terraform/
+
+        ┏━━━━━━━━━━━┳━━━━━━━━━━━┓
+        ┃ Context   ┃ Value     ┃
+        ┣━━━━━━━━━━━╋━━━━━━━━━━━┫
+        ┃ component ┃ vpc       ┃
+        ┃ stack     ┃ prod      ┃
+        ┗━━━━━━━━━━━┻━━━━━━━━━━━┛
+
+        [stack trace...]
+        ```
+    </dd>
+
     <dt>`--no-color`</dt>
     <dd>
         Disable colored terminal output.
@@ -245,6 +273,9 @@ All global flags can be set using environment variables. The precedence order is
 
     <dt>`ATMOS_LOGS_FILE`</dt>
     <dd>Sets the log file location</dd>
+
+    <dt>`ATMOS_VERBOSE`</dt>
+    <dd>Enable verbose error messages with context tables and stack traces (set to `true` to enable)</dd>
 
     <dt>`ATMOS_COLOR` / `COLOR`</dt>
     <dd>

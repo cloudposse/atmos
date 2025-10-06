@@ -1,6 +1,7 @@
 package errors
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/cockroachdb/errors"
@@ -67,8 +68,71 @@ func TestErrorBuilder_WithContext(t *testing.T) {
 	assert.NotNil(t, err)
 
 	// Verify context is present by checking the error contains safe details.
-	details := errors.GetAllSafeDetails(err)
-	assert.NotEmpty(t, details)
+	details := errors.GetSafeDetails(err)
+	assert.NotEmpty(t, details.SafeDetails)
+
+	// Verify context contains expected values in sorted order.
+	// Format should be: "component=vpc stack=dev" (alphabetically sorted).
+	safeDetailsStr := ""
+	for _, detail := range details.SafeDetails {
+		safeDetailsStr = detail
+		break // Get first detail string
+	}
+	assert.Contains(t, safeDetailsStr, "component=vpc")
+	assert.Contains(t, safeDetailsStr, "stack=dev")
+}
+
+func TestErrorBuilder_WithContext_MultiplePairs(t *testing.T) {
+	baseErr := errors.New("test error")
+	err := Build(baseErr).
+		WithContext("component", "vpc").
+		WithContext("stack", "prod").
+		WithContext("region", "us-east-1").
+		Err()
+
+	assert.NotNil(t, err)
+
+	// Verify context is present.
+	details := errors.GetSafeDetails(err)
+	assert.NotEmpty(t, details.SafeDetails)
+
+	// Verify context contains all values in sorted order.
+	safeDetailsStr := ""
+	for _, detail := range details.SafeDetails {
+		safeDetailsStr = detail
+		break
+	}
+	assert.Contains(t, safeDetailsStr, "component=vpc")
+	assert.Contains(t, safeDetailsStr, "stack=prod")
+	assert.Contains(t, safeDetailsStr, "region=us-east-1")
+}
+
+func TestErrorBuilder_WithContext_SortedKeys(t *testing.T) {
+	baseErr := errors.New("test error")
+	// Add context in non-alphabetical order.
+	err := Build(baseErr).
+		WithContext("stack", "prod").
+		WithContext("component", "vpc").
+		WithContext("region", "us-east-1").
+		Err()
+
+	details := errors.GetSafeDetails(err)
+	assert.NotEmpty(t, details.SafeDetails)
+
+	// Keys should be sorted alphabetically: component, region, stack.
+	safeDetailsStr := ""
+	for _, detail := range details.SafeDetails {
+		safeDetailsStr = detail
+		break
+	}
+
+	// Check order by finding positions.
+	componentPos := strings.Index(safeDetailsStr, "component=")
+	regionPos := strings.Index(safeDetailsStr, "region=")
+	stackPos := strings.Index(safeDetailsStr, "stack=")
+
+	assert.True(t, componentPos < regionPos, "component should come before region")
+	assert.True(t, regionPos < stackPos, "region should come before stack")
 }
 
 func TestErrorBuilder_WithExitCode(t *testing.T) {

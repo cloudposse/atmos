@@ -45,9 +45,10 @@ func ProcessComponentConfig(
 	var ok bool
 
 	if len(stack) == 0 {
-		err := fmt.Errorf("%w", errUtils.ErrMissingStack)
-		err = errors.WithHint(err, "Specify stack using `--stack <stack>` (shorthand: `-s`)")
-		err = errors.WithHint(err, "Use `atmos list stacks` to see available stacks")
+		err := errUtils.Build(fmt.Errorf("%w", errUtils.ErrMissingStack)).
+			WithHint("Specify stack using `--stack <stack>` (shorthand: `-s`)").
+			WithHint("Use `atmos list stacks` to see available stacks").
+			Err()
 		return err
 	}
 
@@ -72,10 +73,14 @@ func ProcessComponentConfig(
 	}
 
 	if componentSection, ok = componentTypeSection[component].(map[string]any); !ok {
-		err := fmt.Errorf("%w: no config found for the component '%s' in the stack manifest '%s'",
-			errUtils.ErrInvalidComponent, component, stack)
-		err = errors.WithHint(err, fmt.Sprintf("Use `atmos describe component %s -s %s` to debug configuration", component, stack))
-		err = errors.WithHint(err, fmt.Sprintf("Verify the component exists in the `%s` type section", componentType))
+		err := errUtils.Build(fmt.Errorf("%w: no config found for the component '%s' in the stack manifest '%s'",
+			errUtils.ErrInvalidComponent, component, stack)).
+			WithContext("component", component).
+			WithContext("stack", stack).
+			WithContext("component_type", componentType).
+			WithHintf("Use `atmos describe component %s -s %s` to debug configuration", component, stack).
+			WithHintf("Verify the component exists in the `%s` type section", componentType).
+			Err()
 		return err
 	}
 

@@ -6,10 +6,12 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/lipgloss/table"
 	"github.com/cockroachdb/errors"
 	"golang.org/x/term"
 
 	"github.com/cloudposse/atmos/pkg/ui/markdown"
+	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
 
 const (
@@ -55,6 +57,58 @@ func renderHintWithMarkdown(hint string, renderer *markdown.Renderer) string {
 	}
 	// Fallback: 4-space indent with plain text.
 	return "    " + hintText
+}
+
+// formatContextTable creates a styled 2-column table for error context.
+// Context is extracted from cockroachdb/errors safe details and displayed
+// as key-value pairs in verbose mode.
+func formatContextTable(err error, useColor bool) string {
+	details := errors.GetSafeDetails(err)
+	if len(details.SafeDetails) == 0 {
+		return ""
+	}
+
+	// Parse "component=vpc stack=prod" format into key-value pairs.
+	var rows [][]string
+	for _, detail := range details.SafeDetails {
+		str := fmt.Sprintf("%v", detail)
+		pairs := strings.Split(str, " ")
+		for _, pair := range pairs {
+			if parts := strings.SplitN(pair, "=", 2); len(parts) == 2 {
+				rows = append(rows, []string{parts[0], parts[1]})
+			}
+		}
+	}
+
+	if len(rows) == 0 {
+		return ""
+	}
+
+	// Create styled table.
+	t := table.New().
+		Border(lipgloss.ThickBorder()).
+		Headers("Context", "Value").
+		Rows(rows...)
+
+	if useColor {
+		t = t.
+			BorderStyle(lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorBorder))).
+			StyleFunc(func(row, col int) lipgloss.Style {
+				style := lipgloss.NewStyle().PaddingLeft(1).PaddingRight(1)
+				if row == -1 {
+					// Header row - green and bold.
+					return style.Foreground(lipgloss.Color(theme.ColorGreen)).Bold(true)
+				}
+				if col == 0 {
+					// Key column - dimmed gray.
+					return style.Foreground(lipgloss.Color("#808080"))
+				}
+				// Value column - normal.
+				return style
+			})
+	}
+
+	return "\n" + t.String()
 }
 
 // Format formats an error for display with smart chain handling.
@@ -104,9 +158,14 @@ func Format(err error, config FormatterConfig) string {
 		}
 	}
 
-	// In verbose mode, show the full stack trace.
+	// In verbose mode, show context table and full stack trace.
 	if config.Verbose {
-		output.WriteString("\n\n")
+		contextTable := formatContextTable(err, useColor)
+		if contextTable != "" {
+			output.WriteString(contextTable)
+			output.WriteString(newline)
+		}
+		output.WriteString(newline)
 		output.WriteString(formatStackTrace(err, useColor))
 	}
 

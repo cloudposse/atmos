@@ -245,30 +245,35 @@ Use for:
 - Validation errors
 - Expected error conditions
 
-### 2. Wrapped Errors
+### 2. Builder-Enhanced Errors
 
-Add context to static errors:
+Use builder for structured context and enrichments:
 ```go
-fmt.Errorf("%w: component=%s stack=%s", ErrInvalidComponent, comp, stack)
+Build(err).
+    WithContext("component", "vpc").
+    WithContext("stack", "prod").
+    WithHint("Check configuration").
+    WithExitCode(2).
+    Err()
 ```
 
 Use for:
-- Adding runtime context
-- Preserving error type
-- Building error chains
-
-### 3. Builder-Enhanced Errors
-
-Complex errors with multiple enrichments:
-```go
-Build(err).WithHint(...).WithContext(...).WithExitCode(...).Err()
-```
-
-Use for:
-- User-facing errors
-- Errors needing hints
-- Errors with structured context
+- Structured, programmatic context
+- User-facing errors with hints
 - Errors requiring custom exit codes
+- Context displayed in verbose mode
+
+### 3. Simple Wrapped Errors
+
+Add descriptive text to errors (when structured context not needed):
+```go
+fmt.Errorf("%w: failed to process configuration", ErrInvalidComponent)
+```
+
+Use for:
+- Simple error descriptions
+- Preserving error type
+- When programmatic context access not needed
 
 ## Exit Code Strategy
 
@@ -313,14 +318,36 @@ func GetExitCode(err error) int {
 
 ### PII-Safe Context
 
-Use `WithSafeDetails()` or builder's `WithContext()` for error reporting:
+Use builder's `WithContext()` for structured, programmatic context:
 ```go
-// ✅ Safe
+// ✅ Safe - component/stack names
 .WithContext("component", "vpc")
 .WithContext("stack", "prod")
+.WithContext("region", "us-east-1")
 
-// ❌ Unsafe - contains credentials
+// ❌ Unsafe - contains credentials or PII
 .WithContext("password", userPassword)
+.WithContext("api_key", apiKey)
+.WithContext("email", userEmail)
+```
+
+**Context Usage:**
+- **Verbose Mode**: Displayed as styled 2-column table
+- **Programmatic Access**: Via `errors.GetSafeDetails(err)`
+- **Sentry Integration**: Automatically sent as structured tags
+- **Debug Output**: Included in `%+v` formatting
+
+**Example Verbose Output:**
+```
+component not found
+
+┏━━━━━━━━━━━┳━━━━━━━━━━━┓
+┃ Context   ┃ Value     ┃
+┣━━━━━━━━━━━╋━━━━━━━━━━━┫
+┃ component ┃ vpc       ┃
+┃ region    ┃ us-east-1 ┃
+┃ stack     ┃ prod      ┃
+┗━━━━━━━━━━━┻━━━━━━━━━━━┛
 ```
 
 ### Hint Guidelines
@@ -371,27 +398,51 @@ config := &schema.SentryConfig{
 
 ## Migration Path
 
-### Phase 1: Foundation (Current PR)
+### Phase 1: Foundation ✅ Complete
 
-- ✅ Add dependencies
+- ✅ Add dependencies (cockroachdb/errors)
 - ✅ Implement exit codes
-- ✅ Implement builder
-- ✅ Implement formatter
+- ✅ Implement builder with hints and context
+- ✅ Implement formatter with color support
 - ✅ Implement Sentry integration
 - ✅ Add configuration schema
 - ✅ Create documentation
 
-### Phase 2: Hint Migration (Future PR)
+### Phase 2: Component & Stack Hints ✅ Complete
 
-- Update existing errors to use static errors
-- Add hints to common error cases
-- Target: 80-90% hint coverage
+- ✅ Component discovery errors (5 scenarios)
+  - `ErrComponentNotFound` - suggests checking component name and paths
+  - `ErrComponentTypeNotValid` - suggests valid types (terraform, helmfile)
+  - `ErrInvalidComponent` - provides validation details
+  - `ErrStackNotFound` - suggests checking stack name
+  - `ErrInvalidStack` - provides validation details
 
-### Phase 3: Hint Addition (Future PR)
+### Phase 3: Workflow & Vendor Hints ✅ Complete
 
-- Identify missing hints
-- Add comprehensive hints
-- Update documentation
+- ✅ Workflow errors (2 scenarios)
+  - Workflow file not found - suggests checking path and existence
+  - Workflow syntax errors - suggests validation
+- ✅ Vendor errors (2 scenarios)
+  - Package errors - suggests checking vendor.yaml
+  - Missing sources - provides configuration examples
+
+### Phase 4: Validation Hints ✅ Complete
+
+- ✅ Schema validation errors (3 scenarios)
+  - OPA policy failures - shows policy violations
+  - JSON schema failures - shows validation errors
+  - Stack validation - provides specific error details
+- ✅ Advanced error scenarios (2 scenarios)
+  - Template rendering errors - suggests checking template syntax
+  - Backend configuration - suggests checking backend settings
+
+### Phase 5: Markdown Integration ✅ Complete
+
+- ✅ Use configured Atmos markdown renderer from `atmos.yaml`
+- ✅ Apply 4-space indentation (consistent with `LevelIndent: 4`)
+- ✅ Support custom markdown styles for hints
+- ✅ Graceful fallback to plain text when config unavailable
+- ✅ Emoji and markdown formatting in hints
 
 ## Performance Considerations
 

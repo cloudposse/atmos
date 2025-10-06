@@ -9,6 +9,7 @@ import (
 
 	"github.com/cockroachdb/errors"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	git "github.com/cloudposse/atmos/pkg/git"
 	log "github.com/cloudposse/atmos/pkg/logger"
@@ -130,26 +131,35 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 	if err != nil || !componentPathExists {
 		// Get the base path for error message, respecting user's actual config
 		basePath, _ := u.GetComponentBasePath(&atmosConfig, "terraform")
-		err := fmt.Errorf("%w: '%s' points to the Terraform component '%s', but it does not exist in '%s'",
+		err := errUtils.Build(fmt.Errorf("%w: '%s' points to the Terraform component '%s', but it does not exist in '%s'",
 			ErrInvalidTerraformComponent,
 			info.ComponentFromArg,
 			info.FinalComponent,
 			basePath,
-		)
-		err = errors.WithHint(err, "Use `atmos list components` to see available components")
-		err = errors.WithHint(err, fmt.Sprintf("Verify the component path: %s", basePath))
+		)).
+			WithContext("component", info.ComponentFromArg).
+			WithContext("terraform_component", info.FinalComponent).
+			WithContext("stack", info.Stack).
+			WithContext("base_path", basePath).
+			WithHint("Use `atmos list components` to see available components").
+			WithHintf("Verify the component path: %s", basePath).
+			Err()
 		return err
 	}
 
 	// Check if the component is allowed to be provisioned (the `metadata.type` attribute is not set to `abstract`).
 	if (info.SubCommand == "plan" || info.SubCommand == "apply" || info.SubCommand == "deploy" || info.SubCommand == "workspace") && info.ComponentIsAbstract {
-		err := fmt.Errorf("%w: the component '%s' cannot be provisioned because it's marked as abstract (metadata.type: abstract)",
+		err := errUtils.Build(fmt.Errorf("%w: the component '%s' cannot be provisioned because it's marked as abstract (metadata.type: abstract)",
 			ErrAbstractComponent,
 			filepath.Join(info.ComponentFolderPrefix,
 				info.Component,
-			))
-		err = errors.WithHint(err, "Abstract components are meant to be inherited, not provisioned directly")
-		err = errors.WithHint(err, fmt.Sprintf("Create a concrete component that inherits from `%s`", info.Component))
+			))).
+			WithContext("component", info.Component).
+			WithContext("stack", info.Stack).
+			WithContext("component_path", filepath.Join(info.ComponentFolderPrefix, info.Component)).
+			WithHint("Abstract components are meant to be inherited, not provisioned directly").
+			WithHintf("Create a concrete component that inherits from `%s`", info.Component).
+			Err()
 		return err
 	}
 
@@ -158,12 +168,17 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 		// Allow read-only commands, block modification commands
 		switch info.SubCommand {
 		case "apply", "deploy", "destroy", "import", "state", "taint", "untaint":
-			err := fmt.Errorf("%w: component '%s' cannot be modified (metadata.locked: true)",
+			err := errUtils.Build(fmt.Errorf("%w: component '%s' cannot be modified (metadata.locked: true)",
 				ErrLockedComponent,
 				filepath.Join(info.ComponentFolderPrefix, info.Component),
-			)
-			err = errors.WithHint(err, "Remove `metadata.locked: true` from the component configuration to enable modifications")
-			err = errors.WithHint(err, "Locked components are read-only to prevent accidental changes")
+			)).
+				WithContext("component", info.Component).
+				WithContext("stack", info.Stack).
+				WithContext("subcommand", info.SubCommand).
+				WithContext("component_path", filepath.Join(info.ComponentFolderPrefix, info.Component)).
+				WithHint("Remove `metadata.locked: true` from the component configuration to enable modifications").
+				WithHint("Locked components are read-only to prevent accidental changes").
+				Err()
 			return err
 		}
 	}
@@ -555,12 +570,16 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 	// but it's running in a scripted environment (where a `tty` is not attached or `stdin` is not attached)
 	if os.Stdin == nil && !u.SliceContainsString(info.AdditionalArgsAndFlags, autoApproveFlag) {
 		if info.SubCommand == "apply" {
-			err := fmt.Errorf("%w: `terraform apply` requires user interaction, but no TTY is attached",
+			err := errUtils.Build(fmt.Errorf("%w: `terraform apply` requires user interaction, but no TTY is attached",
 				ErrNoTty,
-			)
-			err = errors.WithHint(err, "Use `terraform apply -auto-approve` to skip confirmation")
-			err = errors.WithHint(err, "Or use `atmos terraform deploy` which applies without confirmation")
-			err = errors.WithHint(err, "Running in CI/CD? Ensure your pipeline provides a TTY or uses `-auto-approve`")
+			)).
+				WithContext("component", info.Component).
+				WithContext("stack", info.Stack).
+				WithContext("subcommand", "apply").
+				WithHint("Use `terraform apply -auto-approve` to skip confirmation").
+				WithHint("Or use `atmos terraform deploy` which applies without confirmation").
+				WithHint("Running in CI/CD? Ensure your pipeline provides a TTY or uses `-auto-approve`").
+				Err()
 			return err
 		}
 	}

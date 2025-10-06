@@ -82,7 +82,13 @@ err := errUtils.Build(baseErr).
 
 ### WithContext(key string, value interface{}) *ErrorBuilder
 
-Adds PII-safe structured context for error reporting:
+Adds PII-safe structured context for programmatic access and error reporting.
+
+Context is:
+- **Displayed in verbose mode** as a styled table (`--verbose` flag or `ATMOS_LOGS_LEVEL=Debug`)
+- **Sent to Sentry** automatically via `BuildSentryReport()`
+- **Programmatically accessible** via `errors.GetSafeDetails(err)`
+- **Included in verbose output** via `%+v` formatting
 
 ```go
 err := errUtils.Build(baseErr).
@@ -90,6 +96,19 @@ err := errUtils.Build(baseErr).
     WithContext("stack", "prod").
     WithContext("region", "us-east-1").
     Err()
+```
+
+**Verbose Mode Output:**
+```
+component not found
+
+┏━━━━━━━━━━━┳━━━━━━━━━━━┓
+┃ Context   ┃ Value     ┃
+┣━━━━━━━━━━━╋━━━━━━━━━━━┫
+┃ component ┃ vpc       ┃
+┃ region    ┃ us-east-1 ┃
+┃ stack     ┃ prod      ┃
+┗━━━━━━━━━━━┻━━━━━━━━━━━┛
 ```
 
 ### WithExitCode(code int) *ErrorBuilder
@@ -241,16 +260,31 @@ var (
 )
 ```
 
-### 2. Add Context for Debugging
+### 2. Add Structured Context
+
+Use `.WithContext()` for programmatic, structured context:
 
 ```go
 // ❌ BAD: No context
 return errUtils.ErrInvalidComponent
 
-// ✅ GOOD: With context
+// ✅ GOOD: Structured context (accessible programmatically, shown in verbose mode)
+return errUtils.Build(errUtils.ErrInvalidComponent).
+    WithContext("component", component).
+    WithContext("stack", stack).
+    Err()
+
+// ⚠️ ACCEPTABLE: String context (for simple error messages only)
+// Use this only when you don't need programmatic access to the values
 return fmt.Errorf("%w: component=%s stack=%s",
     errUtils.ErrInvalidComponent, component, stack)
 ```
+
+**Why use `.WithContext()`?**
+- Programmatically accessible via `errors.GetSafeDetails(err)`
+- Displayed as clean table in verbose mode
+- Automatically sent to Sentry as structured data
+- PII-safe by design
 
 ### 3. Provide Helpful Hints
 

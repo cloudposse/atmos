@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/Masterminds/sprig/v3"
-	"github.com/cockroachdb/errors"
 	"github.com/hairyhenderson/gomplate/v3"
 	"github.com/hairyhenderson/gomplate/v3/data"
 	_ "github.com/hairyhenderson/gomplate/v4"
@@ -183,12 +182,15 @@ func ProcessTmplWithDatasources(
 			if len(atmosConfig.Templates.Settings.Delimiters) != 2 ||
 				atmosConfig.Templates.Settings.Delimiters[0] == "" ||
 				atmosConfig.Templates.Settings.Delimiters[1] == "" {
-				err := fmt.Errorf("%w: invalid `templates.settings.delimiters` config in `atmos.yaml`: %v",
+				err := errUtils.Build(fmt.Errorf("%w: invalid `templates.settings.delimiters` config in `atmos.yaml`: %v",
 					errUtils.ErrInvalidTemplateSettings,
-					atmosConfig.Templates.Settings.Delimiters)
-				err = errors.WithHint(err, "`delimiters` must be an array with exactly two non-empty strings: [left, right]")
-				err = errors.WithHint(err, "Example: `delimiters: [\"<{\", \"}>\"]` for custom delimiters")
-				err = errors.WithHint(err, "Default delimiters are `{{` and `}}` if not specified")
+					atmosConfig.Templates.Settings.Delimiters)).
+					WithContext("delimiters", fmt.Sprintf("%v", atmosConfig.Templates.Settings.Delimiters)).
+					WithContext("config_file", "atmos.yaml").
+					WithHint("`delimiters` must be an array with exactly two non-empty strings: [left, right]").
+					WithHint("Example: `delimiters: [\"<{\", \"}>\"]` for custom delimiters").
+					WithHint("Default delimiters are `{{` and `}}` if not specified").
+					Err()
 				return "", err
 			}
 

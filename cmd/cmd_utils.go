@@ -621,6 +621,7 @@ func showFlagUsageAndExit(cmd *cobra.Command, err error) error {
 	flagErr = errors.WithHint(flagErr, fmt.Sprintf("Run `%s --help` for usage", cmd.CommandPath()))
 
 	// Use error formatter with markdown support (works even if atmosConfig is nil).
+	// Verbose mode is controlled by --verbose flag, ATMOS_VERBOSE env var, or config file.
 	formatted := errUtils.Format(flagErr, errUtils.DefaultFormatterConfig())
 	u.PrintfMessageToTUI("%s\n", formatted)
 	errUtils.Exit(1)

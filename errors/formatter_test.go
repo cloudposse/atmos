@@ -237,3 +237,104 @@ func TestFormatStackTrace(t *testing.T) {
 	resultColor := formatStackTrace(err, true)
 	assert.Contains(t, resultColor, "test error")
 }
+
+func TestFormatContextTable_NoContext(t *testing.T) {
+	err := errors.New("test error")
+
+	// Error without context should return empty string.
+	result := formatContextTable(err, false)
+	assert.Empty(t, result)
+}
+
+func TestFormatContextTable_WithContext(t *testing.T) {
+	err := Build(errors.New("test error")).
+		WithContext("component", "vpc").
+		WithContext("stack", "prod").
+		Err()
+
+	// Test without color.
+	result := formatContextTable(err, false)
+	assert.NotEmpty(t, result)
+	assert.Contains(t, result, "Context")
+	assert.Contains(t, result, "Value")
+	assert.Contains(t, result, "component")
+	assert.Contains(t, result, "vpc")
+	assert.Contains(t, result, "stack")
+	assert.Contains(t, result, "prod")
+}
+
+func TestFormatContextTable_WithColorAndMultipleContext(t *testing.T) {
+	err := Build(errors.New("test error")).
+		WithContext("component", "vpc").
+		WithContext("stack", "prod").
+		WithContext("region", "us-east-1").
+		Err()
+
+	// Test with color.
+	result := formatContextTable(err, true)
+	assert.NotEmpty(t, result)
+	assert.Contains(t, result, "component")
+	assert.Contains(t, result, "vpc")
+	assert.Contains(t, result, "stack")
+	assert.Contains(t, result, "prod")
+	assert.Contains(t, result, "region")
+	assert.Contains(t, result, "us-east-1")
+}
+
+func TestFormat_VerboseWithContext(t *testing.T) {
+	err := Build(errors.New("test error")).
+		WithContext("component", "vpc").
+		WithContext("stack", "prod").
+		WithHint("Check the configuration").
+		Err()
+
+	config := DefaultFormatterConfig()
+	config.Verbose = true
+	config.Color = "never"
+
+	result := Format(err, config)
+
+	// Should contain error message.
+	assert.Contains(t, result, "test error")
+
+	// Should contain hints.
+	assert.Contains(t, result, "💡")
+	assert.Contains(t, result, "Check the configuration")
+
+	// Should contain context table.
+	assert.Contains(t, result, "Context")
+	assert.Contains(t, result, "Value")
+	assert.Contains(t, result, "component")
+	assert.Contains(t, result, "vpc")
+	assert.Contains(t, result, "stack")
+	assert.Contains(t, result, "prod")
+
+	// Should contain stack trace.
+	assert.Contains(t, result, "stack trace")
+}
+
+func TestFormat_NonVerboseWithContext(t *testing.T) {
+	err := Build(errors.New("test error")).
+		WithContext("component", "vpc").
+		WithContext("stack", "prod").
+		WithHint("Check the configuration").
+		Err()
+
+	config := DefaultFormatterConfig()
+	config.Verbose = false // Non-verbose mode.
+	config.Color = "never"
+
+	result := Format(err, config)
+
+	// Should contain error message and hints.
+	assert.Contains(t, result, "test error")
+	assert.Contains(t, result, "💡")
+	assert.Contains(t, result, "Check the configuration")
+
+	// Should NOT contain context table in non-verbose mode.
+	assert.NotContains(t, result, "Context")
+	assert.NotContains(t, result, "Value")
+
+	// Should NOT contain stack trace in non-verbose mode.
+	assert.NotContains(t, result, "stack trace")
+}

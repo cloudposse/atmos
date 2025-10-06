@@ -2,6 +2,8 @@ package errors
 
 import (
 	"fmt"
+	"sort"
+	"strings"
 
 	"github.com/cockroachdb/errors"
 )
@@ -10,6 +12,7 @@ import (
 type ErrorBuilder struct {
 	err      error
 	hints    []string
+	context  map[string]interface{}
 	exitCode *int
 }
 
@@ -33,8 +36,12 @@ func (b *ErrorBuilder) WithHintf(format string, args ...interface{}) *ErrorBuild
 
 // WithContext adds safe structured context to the error.
 // This is PII-safe and will be included in error reporting.
+// Context is displayed in verbose mode and sent to Sentry.
 func (b *ErrorBuilder) WithContext(key string, value interface{}) *ErrorBuilder {
-	b.err = errors.WithSafeDetails(b.err, key, value)
+	if b.context == nil {
+		b.context = make(map[string]interface{})
+	}
+	b.context[key] = value
 	return b
 }
 
@@ -55,6 +62,27 @@ func (b *ErrorBuilder) Err() error {
 	// Add all hints.
 	for _, hint := range b.hints {
 		err = errors.WithHint(err, hint)
+	}
+
+	// Add context if present.
+	if len(b.context) > 0 {
+		// Sort keys for consistent output.
+		keys := make([]string, 0, len(b.context))
+		for k := range b.context {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+
+		// Build format string: "component=%s stack=%s".
+		var formatParts []string
+		var safeValues []interface{}
+
+		for _, key := range keys {
+			formatParts = append(formatParts, key+"=%s")
+			safeValues = append(safeValues, errors.Safe(b.context[key]))
+		}
+
+		err = errors.WithSafeDetails(err, strings.Join(formatParts, " "), safeValues...)
 	}
 
 	// Add exit code if specified.
