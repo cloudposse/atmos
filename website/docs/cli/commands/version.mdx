@@ -21,7 +21,13 @@ Execute the `atmos version` command like this:
 atmos version
 ```
 
-This will show the CLI version.
+Or use the `--version` flag on any Atmos command:
+
+```shell
+atmos --version
+```
+
+Both commands will show the Atmos CLI version.
 
 From time to time, Atmos will check for updates. The frequency of these checks is configured in the `atmos.yaml` file.
 
@@ -39,6 +45,17 @@ the `version.check.enabled` settings in `atmos.yaml`.
 ```shell
 atmos version --check
 ```
+
+:::caution Version Disambiguation
+When using `--version` with subcommands, it always displays the **Atmos CLI version**, not the underlying tool version:
+
+```shell
+atmos terraform --version  # Shows Atmos version, NOT Terraform version
+atmos helmfile --version   # Shows Atmos version, NOT Helmfile version
+```
+
+To check the version of Terraform, Helmfile, or other tools, use their native commands directly (e.g., `terraform version`, `helmfile version`).
+:::
 
 ## Flags
 
