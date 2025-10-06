@@ -785,7 +785,7 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 			// Check if the error is an ExitError
 			if exitErr, ok := err.(*exec.ExitError); ok {
 				// Capture the actual exit code
-				exitCode := exitErr.ExitCode()
+				exitCode = exitErr.ExitCode()
 
 				if exitCode < 0 {
 					// Negative exit code indicates interruption by a signal

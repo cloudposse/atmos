@@ -421,7 +421,7 @@ func ExecuteDescribeStacks(
 			}
 
 			// Helmfile
-			if len(componentTypes) == 0 || u.SliceContainsString(componentTypes, cfg.PackerSectionName) {
+			if len(componentTypes) == 0 || u.SliceContainsString(componentTypes, cfg.HelmfileSectionName) {
 				if helmfileSection, ok := componentsSection[cfg.HelmfileSectionName].(map[string]any); ok {
 					for componentName, compSection := range helmfileSection {
 						componentSection, ok := compSection.(map[string]any)
@@ -453,6 +453,10 @@ func ExecuteDescribeStacks(
 
 						if envSection, ok = componentSection[cfg.EnvSectionName].(map[string]any); !ok {
 							envSection = map[string]any{}
+						}
+
+						if authSection, ok = componentSection[cfg.AuthSectionName].(map[string]any); !ok {
+							authSection = map[string]any{}
 						}
 
 						if providersSection, ok = componentSection[cfg.ProvidersSectionName].(map[string]any); !ok {
@@ -659,6 +663,10 @@ func ExecuteDescribeStacks(
 
 						if envSection, ok = componentSection[cfg.EnvSectionName].(map[string]any); !ok {
 							envSection = map[string]any{}
+						}
+
+						if authSection, ok = componentSection[cfg.AuthSectionName].(map[string]any); !ok {
+							authSection = map[string]any{}
 						}
 
 						if providersSection, ok = componentSection[cfg.ProvidersSectionName].(map[string]any); !ok {
