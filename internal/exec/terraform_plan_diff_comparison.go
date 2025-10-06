@@ -254,7 +254,7 @@ func processResourceChanges(plan map[string]interface{}, result map[string]inter
 		if mode == "data" {
 			continue
 		}
-		
+
 		address, ok := addressVal.(string)
 		if !ok {
 			continue
