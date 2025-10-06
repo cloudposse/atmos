@@ -777,7 +777,7 @@ func ProcessStackConfig(
 	if i, ok := globalTerraformSection["hooks"]; ok {
 		terraformHooks, ok = i.(map[string]any)
 		if !ok {
-			return nil, errors.Wrapf(errUtils.ErrInvalidTerraformHooksSection, "in file '%s'", stackName)
+			return nil, fmt.Errorf("%w '%s'", errUtils.ErrInvalidTerraformHooksSection, stackName)
 		}
 	}
 
