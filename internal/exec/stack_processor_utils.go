@@ -2158,7 +2158,7 @@ func processAuthConfig(atmosConfig *schema.AtmosConfiguration, authConfig map[st
 	// Convert the global auth config struct to map[string]any for merging.
 	var globalAuthConfig map[string]any
 	if err := mapstructure.Decode(atmosConfig.Auth, &globalAuthConfig); err != nil {
-		return nil, fmt.Errorf("%w: failed to convert global auth config to map: %w", errUtils.ErrInvalidAuthConfig, err)
+		return nil, fmt.Errorf("%w: failed to convert global auth config to map: %v", errUtils.ErrInvalidAuthConfig, err)
 	}
 
 	mergedAuthConfig, err := m.Merge(
@@ -2168,7 +2168,7 @@ func processAuthConfig(atmosConfig *schema.AtmosConfiguration, authConfig map[st
 			authConfig,
 		})
 	if err != nil {
-		return nil, fmt.Errorf("%w: merge auth config: %w", errUtils.ErrInvalidAuthConfig, err)
+		return nil, fmt.Errorf("%w: merge auth config: %v", errUtils.ErrInvalidAuthConfig, err)
 	}
 
 	return mergedAuthConfig, nil

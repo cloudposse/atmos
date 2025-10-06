@@ -59,9 +59,13 @@ func executeAuthWhoamiCommand(cmd *cobra.Command, args []string) error {
 func loadAuthManager() (authTypes.AuthManager, error) {
 	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
 	if err != nil {
-		return nil, fmt.Errorf("failed to load atmos config: %w", err)
+		return nil, fmt.Errorf("%w: failed to load atmos config: %v", errUtils.ErrInvalidAuthConfig, err)
 	}
-	return createAuthManager(&atmosConfig.Auth)
+	manager, err := createAuthManager(&atmosConfig.Auth)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", errUtils.ErrInvalidAuthConfig, err)
+	}
+	return manager, nil
 }
 
 func identityFromFlagOrDefault(cmd *cobra.Command, authManager authTypes.AuthManager) (string, error) {
@@ -71,7 +75,7 @@ func identityFromFlagOrDefault(cmd *cobra.Command, authManager authTypes.AuthMan
 	}
 	defaultIdentity, err := authManager.GetDefaultIdentity()
 	if err != nil {
-		return "", fmt.Errorf("no default identity configured and no identity specified: %w", err)
+		return "", fmt.Errorf("%w: no default identity configured and no identity specified: %v", errUtils.ErrInvalidAuthConfig, err)
 	}
 	return defaultIdentity, nil
 }
