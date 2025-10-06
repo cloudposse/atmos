@@ -7,7 +7,7 @@ description: Components are opinionated building blocks of infrastructure as cod
 import Intro from '@site/src/components/Intro'
 
 <Intro>
-When you design cloud architectures with Atmos, you start by breaking them apart into pieces called components. Then, you [implement Terraform "root modules"](/core-concepts/components/terraform) for each of those components, and [compose them with Stack configurations](/core-concepts/stacks).
+When you design cloud architectures with Atmos, you start by breaking them apart into pieces called components. Then, you [implement Terraform "root modules"](/core-concepts/components/terraform/terraform) for each of those components, and [compose them with Stack configurations](/core-concepts/stacks/stacks).
 </Intro>
 
 The most common use-case for Atmos is using implementing components using [Terraform "root modules"](https://developer.hashicorp.com/terraform/language/modules#the-root-module). But since Atmos was designed to be tool-agnostic, [custom commands](/core-concepts/custom-commands) can be used to implement components for any type of tooling.
@@ -34,7 +34,7 @@ Components offer a multitude of applications across various business scenarios. 
 
 Atmos natively supports two kinds of components, but using [custom commands](/core-concepts/custom-commands), the [CLI](/cli) can be extended to support anything (e.g. `docker`, `packer`, `ansible`, etc.)
 
-1. [Terraform](/core-concepts/components/terraform): These are stand-alone "root modules" that implement some piece of your infrastructure. For example, typical components might be an
+1. [Terraform](/core-concepts/components/terraform/terraform): These are stand-alone "root modules" that implement some piece of your infrastructure. For example, typical components might be an
    EKS cluster, RDS cluster, EFS filesystem, S3 bucket, DynamoDB table, etc. You can find
    the [full library of SweetOps Terraform components on GitHub](https://github.com/cloudposse/terraform-aws-components). By convention, we store
    components in the `components/terraform/` directory within the infrastructure repository.
