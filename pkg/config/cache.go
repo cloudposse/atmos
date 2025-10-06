@@ -2,6 +2,7 @@ package config
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -11,11 +12,11 @@ import (
 	"time"
 
 	"github.com/adrg/xdg"
+	"github.com/spf13/viper"
+	"go.yaml.in/yaml/v3"
+
 	errUtils "github.com/cloudposse/atmos/errors"
 	log "github.com/cloudposse/atmos/pkg/logger"
-	"github.com/pkg/errors"
-	"github.com/spf13/viper"
-	"gopkg.in/yaml.v3"
 )
 
 type CacheConfig struct {
@@ -30,7 +31,7 @@ func GetCacheFilePath() (string, error) {
 	cacheDir := filepath.Join(xdg.CacheHome, "atmos")
 
 	if err := os.MkdirAll(cacheDir, 0o755); err != nil {
-		return "", errors.Wrap(err, "error creating cache directory")
+		return "", errors.Join(errUtils.ErrCacheWrite, err)
 	}
 
 	return filepath.Join(cacheDir, "cache.yaml"), nil
@@ -107,12 +108,12 @@ func SaveCache(cfg CacheConfig) error {
 		enc := yaml.NewEncoder(&buf)
 		enc.SetIndent(2)
 		if err := enc.Encode(data); err != nil {
-			return fmt.Errorf(errUtils.ErrValueWrappingFormat, errUtils.ErrCacheMarshal, err)
+			return errors.Join(errUtils.ErrCacheMarshal, err)
 		}
 
 		// Write atomically.
 		if err := writeFileAtomic(cacheFile, buf.Bytes(), 0o644); err != nil {
-			return fmt.Errorf(errUtils.ErrValueWrappingFormat, errUtils.ErrCacheWrite, err)
+			return errors.Join(errUtils.ErrCacheWrite, err)
 		}
 		return nil
 	})
@@ -147,10 +148,10 @@ func UpdateCache(update func(*CacheConfig)) error {
 			v := viper.New()
 			v.SetConfigFile(cacheFile)
 			if err := v.ReadInConfig(); err != nil {
-				return fmt.Errorf(errUtils.ErrValueWrappingFormat, errUtils.ErrCacheRead, err)
+				return errors.Join(errUtils.ErrCacheRead, err)
 			}
 			if err := v.Unmarshal(&cfg); err != nil {
-				return fmt.Errorf(errUtils.ErrValueWrappingFormat, errUtils.ErrCacheUnmarshal, err)
+				return errors.Join(errUtils.ErrCacheUnmarshal, err)
 			}
 		}
 
@@ -169,12 +170,12 @@ func UpdateCache(update func(*CacheConfig)) error {
 		enc := yaml.NewEncoder(&buf)
 		enc.SetIndent(2)
 		if err := enc.Encode(data); err != nil {
-			return fmt.Errorf(errUtils.ErrValueWrappingFormat, errUtils.ErrCacheMarshal, err)
+			return errors.Join(errUtils.ErrCacheMarshal, err)
 		}
 
 		// Write atomically.
 		if err := writeFileAtomic(cacheFile, buf.Bytes(), 0o644); err != nil {
-			return fmt.Errorf(errUtils.ErrValueWrappingFormat, errUtils.ErrCacheWrite, err)
+			return errors.Join(errUtils.ErrCacheWrite, err)
 		}
 		return nil
 	})

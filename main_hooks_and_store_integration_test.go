@@ -3,7 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
-	"path"
+	"path/filepath"
 	"testing"
 
 	"github.com/alicebob/miniredis/v2"
@@ -21,7 +21,7 @@ func TestMainHooksAndStoreIntegration(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to get current working directory: %v", err)
 	}
-	defer os.RemoveAll(path.Join(origDir, "tests", "fixtures", "scenarios", "hooks-test", ".terraform"))
+	defer os.RemoveAll(filepath.Join(origDir, "tests", "fixtures", "scenarios", "hooks-test", ".terraform"))
 	defer os.Chdir(origDir)
 
 	if err := os.Chdir("tests/fixtures/scenarios/hooks-test"); err != nil {

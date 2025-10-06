@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/cloudposse/atmos/pkg/schema"
+
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
@@ -42,6 +44,16 @@ func EnvironToMap() map[string]string {
 		envMap[k] = v
 	}
 	return envMap
+}
+
+// CommandEnvToMap converts a slice of schema.CommandEnv to a map[string]string.
+// Keys are taken from the Key field; later entries overwrite earlier ones on duplicate keys.
+func CommandEnvToMap(envs []schema.CommandEnv) map[string]string {
+	m := make(map[string]string, len(envs))
+	for _, e := range envs {
+		m[e.Key] = e.Value
+	}
+	return m
 }
 
 // PrependToPath adds a directory to the beginning of the PATH environment variable.

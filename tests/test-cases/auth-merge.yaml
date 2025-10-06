@@ -1,0 +1,25 @@
+# yaml-language-server: $schema=schema.json
+
+tests:
+  # Validation Tests
+  - name: atmos auth merging
+    enabled: true
+    snapshot: true
+    description: "Test auth merging"
+    workdir: "fixtures/scenarios/atmos-auth/"
+    command: "atmos"
+    args:
+      - "describe"
+      - "component"
+      - "mycomponent"
+      - "-s"
+      - "component-auth"
+      - "-q"
+      - ".auth"
+    expect:
+      diff: [ ]
+      stdout:
+        - "provider-oidc:"
+        - "kind: github/oidc"
+        - "region: us-east-1"
+      exit_code: 0

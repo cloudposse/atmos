@@ -5,8 +5,8 @@ import "errors"
 // Error format constants.
 const (
 	errFormat           = "%w: %v"
-	errWrapFormat       = "%w: %w"
-	errWrapFormatWithID = "%w '%s': %w"
+	errWrapFormat       = "%w: %s"
+	errWrapFormatWithID = "%w '%s': %s"
 )
 
 // Common errors shared across store implementations.
@@ -62,4 +62,5 @@ var (
 	// Shared errors.
 	ErrSerializeJSON = errors.New("failed to serialize value to JSON")
 	ErrMarshalValue  = errors.New("failed to marshal value")
+	ErrNilValue      = errors.New("cannot store nil value")
 )
