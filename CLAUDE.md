@@ -206,9 +206,10 @@ viper.SetEnvPrefix("ATMOS")
 - **All errors MUST be wrapped using static errors defined in `errors/errors.go`**
 - **Use `errors.Join` for combining multiple errors** - preserves all error chains
 - **Use `fmt.Errorf` with `%w` for adding string context** - when you need formatted strings
+- **Use error builder for complex errors** - adds hints, context, and exit codes
 - **Use `errors.Is()` for error checking** - robust against wrapping
 - **NEVER use dynamic errors directly** - triggers linting warnings
-- **See `docs/prd/error-handling-strategy.md`** for complete guidelines
+- **See `docs/errors.md`** for complete developer guide
 
 #### Error Handling Patterns
 
@@ -223,6 +224,18 @@ return errors.Join(errUtils.ErrFailedToProcess, underlyingErr)
 **Adding String Context:**
 ```go
 return fmt.Errorf("%w: component=%s stack=%s", errUtils.ErrInvalidComponent, component, stack)
+```
+
+**Error Builder for Complex Errors:**
+```go
+// Use builder for errors with hints, context, and exit codes
+err := errUtils.Build(errors.New("database connection failed")).
+    WithHint("Check database credentials in atmos.yaml").
+    WithHintf("Verify network connectivity to %s", dbHost).
+    WithContext("component", "vpc").
+    WithContext("stack", "prod").
+    WithExitCode(2).
+    Err()
 ```
 
 **Checking Errors:**
@@ -241,6 +254,44 @@ var (
     ErrInvalidComponent = errors.New("invalid component")
     ErrInvalidStack     = errors.New("invalid stack")
 )
+```
+
+**Exit Codes:**
+```go
+// Attach exit code
+err := errUtils.WithExitCode(err, 2)  // Usage error
+
+// Or use builder
+err := errUtils.Build(err).WithExitCode(2).Err()
+
+// Extract exit code
+exitCode := errUtils.GetExitCode(err)
+// Returns: 0 (nil), custom code, exec.ExitError code, or 1 (default)
+```
+
+**Error Formatting:**
+```go
+// Format error for display with hints and color
+config := errUtils.DefaultFormatterConfig()
+config.Verbose = false  // Compact mode
+config.Color = "auto"   // TTY detection
+
+formatted := errUtils.Format(err, config)
+fmt.Fprint(os.Stderr, formatted)
+```
+
+**Sentry Integration:**
+```go
+// Initialize Sentry from config
+err := errUtils.InitializeSentry(&atmosConfig.Errors.Sentry)
+defer errUtils.CloseSentry()
+
+// Capture error with Atmos context
+context := map[string]string{
+    "component": "vpc",
+    "stack":     "prod",
+}
+errUtils.CaptureErrorWithContext(err, context)
 ```
 
 ### Testing Strategy

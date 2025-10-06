@@ -350,7 +350,7 @@ func ReportError(err error, stackContext *schema.Context) string {
 - 100% test coverage on new code
 - Complete PRD
 - Developer guide (`docs/errors.md`)
-- User guide (`website/docs/core-concepts/errors.mdx`)
+- User guide (added to `website/docs/troubleshoot/errors.mdx`)
 - Updated CLAUDE.md
 - Working examples
 
@@ -451,8 +451,8 @@ docs/
     error-handling-strategy.md           # Updated
 
 website/docs/
-  core-concepts/
-    errors.mdx           # User guide (NEW)
+  troubleshoot/
+    errors.mdx           # Updated with error display section
 
 CLAUDE.md              # Updated with error handling patterns
 ```

@@ -150,3 +150,67 @@ For more information, refer to:
 - [Atmos Terraform/OpenTofu commands](/cli/commands/terraform/usage/)
 
 :::
+
+## Error Display and Formatting
+
+Atmos provides helpful error messages with hints to quickly resolve issues.
+
+### Error Format
+
+Errors display:
+- **Error Message** - Description of what went wrong
+- **Hints** (💡) - Actionable suggestions to fix the issue
+- **Context** - Component, stack, and other relevant details
+
+Example:
+```console
+Error: invalid component: component "vpc" not found in stack "prod"
+  💡 Check component name spelling in your stack configuration
+  💡 Run 'atmos list components' to see all available components
+```
+
+### Display Modes
+
+**Compact Mode** (default) - Shows error and hints:
+```bash
+atmos terraform plan vpc -s prod
+```
+
+**Verbose Mode** - Shows full error chain with stack traces:
+```bash
+atmos terraform plan vpc -s prod --verbose
+```
+
+### Configuration
+
+Configure error display in `atmos.yaml`:
+
+```yaml
+errors:
+  format:
+    verbose: false  # Set to true for detailed stack traces
+    color: auto     # auto, always, or never
+```
+
+### Color Output
+
+- **auto** (default) - Colors when outputting to a terminal
+- **always** - Forces colored output (for CI with ANSI support)
+- **never** - Disables colors (for logs)
+
+### Error Reporting
+
+Optionally report errors to [Sentry](https://sentry.io) for monitoring:
+
+```yaml
+errors:
+  sentry:
+    enabled: true
+    dsn: "${SENTRY_DSN}"
+    environment: "production"
+    sample_rate: 1.0
+```
+
+For complete error handling documentation, see:
+- [Error Handling Guide](/docs/errors) - Developer reference
+- [Error Handling Architecture](/docs/prd/atmos-error-handling) - Design details
