@@ -124,6 +124,7 @@ func ProcessYAMLConfigFiles(
 	mapResult := map[string]any{}
 	rawStackConfigs := map[string]map[string]any{}
 	var errorResult error
+	var errorLock sync.Mutex
 	var wg sync.WaitGroup
 	wg.Add(count)
 
@@ -169,7 +170,9 @@ func ProcessYAMLConfigFiles(
 				mergeContext,
 			)
 			if err != nil {
+				errorLock.Lock()
 				errorResult = err
+				errorLock.Unlock()
 				return
 			}
 
@@ -198,7 +201,9 @@ func ProcessYAMLConfigFiles(
 				importsConfig,
 				true)
 			if err != nil {
+				errorLock.Lock()
 				errorResult = err
+				errorLock.Unlock()
 				return
 			}
 
@@ -213,7 +218,9 @@ func ProcessYAMLConfigFiles(
 
 			yamlConfig, err := u.ConvertToYAML(finalConfig)
 			if err != nil {
+				errorLock.Lock()
 				errorResult = err
+				errorLock.Unlock()
 				return
 			}
 
