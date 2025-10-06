@@ -90,7 +90,6 @@ func setCliArgsForDescribeStackCli(flags *pflag.FlagSet, describe *exec.Describe
 		"process-functions":    &describe.ProcessYamlFunctions,
 		"query":                &describe.Query,
 		"skip":                 &describe.Skip,
-		"provenance":           &describe.Provenance,
 	}
 
 	// `true` by default.
@@ -155,8 +154,6 @@ func init() {
 	describeStacksCmd.PersistentFlags().Bool("include-empty-stacks", false, "Include stacks with no components in the output")
 
 	describeStacksCmd.PersistentFlags().StringSlice("skip", nil, "Skip executing a YAML function in the Atmos stack manifests when executing the command")
-
-	describeStacksCmd.PersistentFlags().Bool("provenance", false, "Enable provenance tracking to show where configuration values originated")
 
 	describeCmd.AddCommand(describeStacksCmd)
 }
