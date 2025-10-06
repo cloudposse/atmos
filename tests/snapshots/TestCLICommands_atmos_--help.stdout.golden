@@ -101,7 +101,7 @@ Flags:
                                      standard file descriptor (including
                                      /dev/null)
 
-        --version                    Alias for 'atmos version' command (default
+        --version                    Alias for atmos version command (default
                                      false)
 
 

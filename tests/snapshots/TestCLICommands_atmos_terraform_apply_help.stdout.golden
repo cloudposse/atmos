@@ -177,7 +177,7 @@ Global Flags:
                                       or configuration set for deployment in
                                       Atmos CLI.
 
-        --version                     Alias for 'atmos version' command (default
+        --version                     Alias for atmos version command (default
                                       false)
 
         --                            Use double dashes to separate
