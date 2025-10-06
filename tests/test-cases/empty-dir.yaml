@@ -17,14 +17,14 @@ tests:
   - name: check atmos --version in empty-dir
     enabled: true
     snapshot: false
-    description: "Check that atmos --version flag works without configuration."
+    description: "Check that atmos --version flag produces same output as version command."
     workdir: "fixtures/scenarios/empty-dir"
     command: "atmos"
     args:
       - "--version"
     expect:
       stdout:
-        - 'atmos (\d+\.\d+\.\d+|test)'
+        - '👽 Atmos (\d+\.\d+\.\d+|test) on [a-z]+/[a-z0-9]+'
       stderr:
         - "^$"
       exit_code: 0

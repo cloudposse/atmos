@@ -124,7 +124,8 @@ Global Flags:
                                      standard file descriptor (including
                                      /dev/null)
 
-        --version                    Show version information (default false)
+        --version                    Alias for 'atmos version' command (default
+                                     false)
 
         --                           Use double dashes to separate
                                      Atmos-specific options from native
