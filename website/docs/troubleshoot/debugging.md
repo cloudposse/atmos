@@ -315,7 +315,7 @@ When reporting issues:
 
 ## Related Documentation
 
-- [Global Flags](/cli/configuration/flags) - Complete list of CLI flags
+- [Global Flags](/cli/global-flags) - Complete list of CLI flags
 - [Error Handling](/cli/errors) - Understanding error messages
 - [Configuration](/cli/configuration) - Atmos configuration reference
 - [Profiling](/troubleshoot/profiling) - Performance troubleshooting

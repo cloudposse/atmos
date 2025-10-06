@@ -12,6 +12,11 @@ import (
 	"github.com/cloudposse/atmos/pkg/ui/markdown"
 )
 
+const (
+	// EnvVerbose is the environment variable name for verbose error output.
+	EnvVerbose = "ATMOS_VERBOSE"
+)
+
 // render is the global Markdown renderer instance initialized via InitializeMarkdown.
 var render *markdown.Renderer
 
@@ -21,9 +26,13 @@ var atmosConfig *schema.AtmosConfiguration
 // verboseFlag holds the value of the --verbose flag.
 var verboseFlag = false
 
+// verboseFlagSet tracks whether the verbose flag was explicitly set via CLI.
+var verboseFlagSet = false
+
 // SetVerboseFlag sets the verbose flag value.
 func SetVerboseFlag(verbose bool) {
 	verboseFlag = verbose
+	verboseFlagSet = true
 }
 
 // InitializeMarkdown initializes a new Markdown renderer.
@@ -74,15 +83,17 @@ func CheckErrorAndPrint(err error, title string, suggestion string) {
 // printFormattedError prints an error using the new formatter.
 func printFormattedError(err error) {
 	// Bind ATMOS_VERBOSE environment variable.
-	_ = viper.BindEnv("ATMOS_VERBOSE", "ATMOS_VERBOSE")
+	_ = viper.BindEnv(EnvVerbose, EnvVerbose)
 
 	// Check for --verbose flag (CLI flag > env var > config).
 	verbose := atmosConfig.Errors.Format.Verbose
-	if verboseFlag {
-		verbose = true
+
+	// Apply precedence: config < env < CLI.
+	if viper.IsSet(EnvVerbose) {
+		verbose = viper.GetBool(EnvVerbose)
 	}
-	if viper.GetBool("ATMOS_VERBOSE") {
-		verbose = true
+	if verboseFlagSet {
+		verbose = verboseFlag
 	}
 
 	// Determine color mode.

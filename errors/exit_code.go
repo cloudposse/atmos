@@ -45,9 +45,9 @@ func WithExitCode(err error, code int) error {
 // Returns 0 if err is nil, 1 by default, or the specified exit code.
 //
 // It checks for exit codes in this order:
-//  1. exitCoder attached via WithExitCode
-//  2. exec.ExitError from command execution
-//  3. Default to 1
+//  1. exitCoder attached via WithExitCode.
+//  2. exec.ExitError from command execution.
+//  3. Default to 1.
 func GetExitCode(err error) int {
 	if err == nil {
 		return 0

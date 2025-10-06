@@ -16,7 +16,7 @@ This document describes the architecture of Atmos's error handling system, which
 
 ### Core Components
 
-```
+```text
 errors/
 ├── exit_code.go          # Exit code wrapper and extraction
 ├── builder.go            # Fluent API for rich errors
@@ -169,7 +169,7 @@ err := Build(baseErr).
 
 ### Error Creation
 
-```
+```text
 1. Create base error (static or dynamic)
    ↓
 2. Optionally enrich with builder
@@ -182,7 +182,7 @@ err := Build(baseErr).
 
 ### Error Display
 
-```
+```text
 1. Receive error in CLI command
    ↓
 2. Check configuration
@@ -199,7 +199,7 @@ err := Build(baseErr).
 
 ### Error Reporting
 
-```
+```text
 1. Check Sentry enabled
    ↓
 2. Extract error data

@@ -2,6 +2,7 @@ package errors
 
 import (
 	"os/exec"
+	"runtime"
 	"testing"
 
 	"github.com/cockroachdb/errors"
@@ -95,21 +96,19 @@ func TestGetExitCode_DefaultValue(t *testing.T) {
 
 func TestGetExitCode_ExecExitError(t *testing.T) {
 	// Create a command that will fail with exit code 1
-	cmd := exec.Command("false")
-	err := cmd.Run()
+	err := failingCommand().Run()
 
 	assert.NotNil(t, err)
 
 	// Should extract exit code from exec.ExitError
 	code := GetExitCode(err)
 	assert.NotEqual(t, 0, code)
-	assert.Equal(t, 1, code) // false returns 1
+	assert.Equal(t, 1, code) // exit 1
 }
 
 func TestGetExitCode_WrappedExecError(t *testing.T) {
 	// Create a command that will fail
-	cmd := exec.Command("false")
-	baseErr := cmd.Run()
+	baseErr := failingCommand().Run()
 
 	// Wrap the exec error
 	err := errors.Wrap(baseErr, "command failed")
@@ -120,6 +119,14 @@ func TestGetExitCode_WrappedExecError(t *testing.T) {
 	// Should still extract exit code from wrapped exec.ExitError
 	code := GetExitCode(err)
 	assert.NotEqual(t, 0, code)
+}
+
+// failingCommand returns a cross-platform command that will fail with exit code 1.
+func failingCommand() *exec.Cmd {
+	if runtime.GOOS == "windows" {
+		return exec.Command("cmd", "/C", "exit 1")
+	}
+	return exec.Command("sh", "-c", "exit 1")
 }
 
 func TestExitCoder_Error(t *testing.T) {

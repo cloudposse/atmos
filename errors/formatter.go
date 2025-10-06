@@ -10,6 +10,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"golang.org/x/term"
 
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/ui/markdown"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
@@ -113,6 +114,8 @@ func formatContextTable(err error, useColor bool) string {
 
 // Format formats an error for display with smart chain handling.
 func Format(err error, config FormatterConfig) string {
+	defer perf.Track(nil, "errors.Format")()
+
 	if err == nil {
 		return ""
 	}
@@ -180,10 +183,10 @@ func shouldUseColor(colorMode string) bool {
 	case "never":
 		return false
 	case "auto":
-		// Check if stdout is a TTY.
-		return term.IsTerminal(int(os.Stdout.Fd()))
+		// Check if stderr is a TTY.
+		return term.IsTerminal(int(os.Stderr.Fd()))
 	default:
-		return term.IsTerminal(int(os.Stdout.Fd()))
+		return term.IsTerminal(int(os.Stderr.Fd()))
 	}
 }
 
