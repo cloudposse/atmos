@@ -1381,22 +1381,24 @@ func ProcessStackConfig(
 				// If it does not, use the component name instead and format it with the global backend key name to auto generate a unique Terraform state key
 				// The backend state file will be formatted like so: {global key name}/{component name}.terraform.tfstate
 				if finalComponentBackendType == "azurerm" {
-					if componentAzurerm, componentAzurermExists := componentBackendSection["azurerm"].(map[string]any); !componentAzurermExists {
-						if _, componentAzurermKeyExists := componentAzurerm["key"].(string); !componentAzurermKeyExists {
-							azureKeyPrefixComponent := component
-							var keyName []string
-							if baseComponentName != "" {
-								azureKeyPrefixComponent = baseComponentName
-							}
-							if globalAzurerm, globalAzurermExists := globalBackendSection["azurerm"].(map[string]any); globalAzurermExists {
-								if _, globalAzurermKeyExists := globalAzurerm["key"].(string); globalAzurermKeyExists {
-									keyName = append(keyName, globalAzurerm["key"].(string))
-								}
-							}
-							componentKeyName := strings.Replace(azureKeyPrefixComponent, "/", "-", -1)
-							keyName = append(keyName, fmt.Sprintf("%s.terraform.tfstate", componentKeyName))
-							finalComponentBackend["key"] = strings.Join(keyName, "/")
+					componentAzurerm, componentAzurermExists := componentBackendSection["azurerm"].(map[string]any)
+					if !componentAzurermExists {
+						componentAzurerm = map[string]any{}
+					}
+					if _, componentAzurermKeyExists := componentAzurerm["key"].(string); !componentAzurermKeyExists {
+						azureKeyPrefixComponent := component
+						var keyName []string
+						if baseComponentName != "" {
+							azureKeyPrefixComponent = baseComponentName
 						}
+						if globalAzurerm, globalAzurermExists := globalBackendSection["azurerm"].(map[string]any); globalAzurermExists {
+							if _, globalAzurermKeyExists := globalAzurerm["key"].(string); globalAzurermKeyExists {
+								keyName = append(keyName, globalAzurerm["key"].(string))
+							}
+						}
+						componentKeyName := strings.ReplaceAll(azureKeyPrefixComponent, "/", "-")
+						keyName = append(keyName, fmt.Sprintf("%s.terraform.tfstate", componentKeyName))
+						finalComponentBackend["key"] = strings.Join(keyName, "/")
 					}
 				}
 

@@ -35,6 +35,7 @@ var (
 	ErrRefusingToDeleteDir       = errors.New("refusing to delete root directory")
 	ErrRefusingToDelete          = errors.New("refusing to delete directory containing")
 	ErrRootPath                  = errors.New("root path cannot be empty")
+	ErrUserAborted               = errors.New("mission aborted")
 )
 
 type ObjectInfo struct {
@@ -265,7 +266,7 @@ func confirmDeleteTerraformLocal(message string) (confirm bool, err error) {
 		Value(&confirm).WithTheme(t)
 	if err := confirmPrompt.Run(); err != nil {
 		if err == huh.ErrUserAborted {
-			return confirm, fmt.Errorf("Mission aborted")
+			return confirm, fmt.Errorf("%w", ErrUserAborted)
 		}
 		return confirm, err
 	}
@@ -283,8 +284,7 @@ func DeletePathTerraform(fullPath string, objectName string) error {
 	fileInfo, err := os.Lstat(fullPath)
 	if os.IsNotExist(err) {
 		xMark := theme.Styles.XMark
-		fmt.Printf("%s Cannot delete %s: path does not exist", xMark, normalizedObjectName)
-		fmt.Println()
+		fmt.Fprintf(os.Stderr, "%s Cannot delete %s: path does not exist\n", xMark, normalizedObjectName)
 		return err
 	}
 	if fileInfo.Mode()&os.ModeSymlink != 0 {
@@ -294,13 +294,11 @@ func DeletePathTerraform(fullPath string, objectName string) error {
 	err = os.RemoveAll(fullPath)
 	if err != nil {
 		xMark := theme.Styles.XMark
-		fmt.Printf("%s Error deleting %s", xMark, normalizedObjectName)
-		fmt.Println()
+		fmt.Fprintf(os.Stderr, "%s Error deleting %s\n", xMark, normalizedObjectName)
 		return err
 	}
 	checkMark := theme.Styles.Checkmark
-	fmt.Printf("%s Deleted %s", checkMark, normalizedObjectName)
-	fmt.Println()
+	fmt.Fprintf(os.Stderr, "%s Deleted %s\n", checkMark, normalizedObjectName)
 	return nil
 }
 

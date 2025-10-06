@@ -79,6 +79,8 @@ func identityFromFlagOrDefault(cmd *cobra.Command, authManager authTypes.AuthMan
 func printWhoamiJSON(whoami *authTypes.WhoamiInfo) error {
 	// Redact home directory in environment variable values before output
 	redactedWhoami := *whoami
+	// Never emit credentials in JSON output.
+	redactedWhoami.Credentials = nil
 	homeDir, _ := homedir.Dir()
 	if whoami.Environment != nil && homeDir != "" {
 		redactedEnv := make(map[string]string, len(whoami.Environment))
