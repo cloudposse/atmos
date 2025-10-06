@@ -102,6 +102,25 @@ logs:
   # Supported log levels: Trace, Debug, Info, Warning, Off
   # Can also be set using 'ATMOS_LOGS_LEVEL' ENV var, or '--logs-level' command-line argument
   level: Info
+errors:
+  # Error formatting configuration
+  format:
+    # Show detailed error messages with full stack traces
+    # Can also be set using 'ATMOS_VERBOSE' ENV var, or '--verbose' command-line flag
+    verbose: false
+    # Color mode for error output: auto, always, or never
+    # 'auto' detects TTY support, 'always' forces colors, 'never' disables colors
+    color: auto
+  # Optional Sentry error reporting configuration
+  sentry:
+    enabled: false
+    dsn: ""  # Sentry DSN from your project settings
+    environment: ""  # e.g., "production", "staging"
+    release: ""  # Release version (defaults to Atmos version)
+    sample_rate: 1.0  # Error sampling rate (0.0 - 1.0)
+    debug: false  # Enable Sentry SDK debug output
+    capture_stack_context: true  # Include stack traces in error reports
+    tags: {}  # Custom tags to include with all error reports
 profiler:
   # Enable or disable the pprof profiling server
   # Can also be set using '--profiler-enabled' command-line flag

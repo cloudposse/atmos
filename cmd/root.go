@@ -415,7 +415,7 @@ func Execute() error {
 	atmosConfig, initErr = cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
 
 	utils.InitializeMarkdown(atmosConfig)
-	errUtils.InitializeMarkdown(atmosConfig)
+	errUtils.InitializeMarkdown(&atmosConfig)
 
 	if initErr != nil && !errors.Is(initErr, cfg.NotFound) {
 		if isVersionCommand() {
@@ -445,6 +445,11 @@ func Execute() error {
 	// Cobra for some reason handles root command in such a way that custom usage and help command don't work as per expectations.
 	RootCmd.SilenceErrors = true
 	cmd, err := RootCmd.ExecuteC()
+
+	// Set verbose flag for error formatting.
+	if verbose, flagErr := cmd.Flags().GetBool("verbose"); flagErr == nil && verbose {
+		errUtils.SetVerboseFlag(true)
+	}
 
 	telemetry.CaptureCmd(cmd, err)
 	if err != nil {
@@ -522,6 +527,7 @@ func init() {
 	RootCmd.PersistentFlags().StringSlice("config", []string{}, "Paths to configuration files (comma-separated or repeated flag)")
 	RootCmd.PersistentFlags().StringSlice("config-path", []string{}, "Paths to configuration directories (comma-separated or repeated flag)")
 	RootCmd.PersistentFlags().Bool("no-color", false, "Disable color output")
+	RootCmd.PersistentFlags().Bool("verbose", false, "Show detailed error messages with full stack traces")
 	RootCmd.PersistentFlags().String("pager", "", "Enable pager for output (--pager or --pager=true to enable, --pager=false to disable, --pager=less to use specific pager)")
 	// Set NoOptDefVal so --pager without value means "true".
 	RootCmd.PersistentFlags().Lookup("pager").NoOptDefVal = "true"
