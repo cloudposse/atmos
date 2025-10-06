@@ -385,14 +385,11 @@ func prepareYAMLForProvenance(yamlData any, ctx *m.MergeContext, atmosConfig *sc
 		return "", err
 	}
 
-	// Apply syntax highlighting - if it fails, fall back to plain YAML
-	highlighted, _ := u.HighlightCodeWithConfig(atmosConfig, yamlBytes, "yaml")
-	if highlighted == "" {
-		// Highlighting failed, return plain YAML
-		return yamlBytes, nil
-	}
-
-	return highlighted, nil
+	// NOTE: Syntax highlighting is disabled for provenance output because
+	// the Chroma highlighter adds extra indentation to YAML folded scalars,
+	// causing incorrect display of continuation lines.
+	// Return plain YAML without highlighting.
+	return yamlBytes, nil
 }
 
 // addProvenanceToLine adds provenance comment to a YAML line.
