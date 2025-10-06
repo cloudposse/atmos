@@ -1,0 +1,9 @@
+# Global defaults - DRY pattern for hooks
+# Define the hook structure globally, components override the outputs
+hooks:
+  store-outputs:
+    events:
+      - after-terraform-apply
+    command: store
+    name: prod/ssm
+    # No outputs defined here - each component will define their own
