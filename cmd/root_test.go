@@ -346,20 +346,19 @@ func TestVersionFlagParsing(t *testing.T) {
 				versionFlag.Changed = false
 			}
 
-			// Create a fresh command instance to avoid state pollution.
-			cmd := RootCmd
-			cmd.SetArgs(tt.args)
+			// Use the global RootCmd; state isolation is handled by flag reset above.
+			RootCmd.SetArgs(tt.args)
 
 			// Check that the version flag is defined.
 			assert.NotNil(t, versionFlag, "version flag should be defined")
 			assert.Contains(t, versionFlag.Usage, "Atmos CLI version", "usage should mention Atmos CLI version")
 
 			// Parse flags.
-			err := cmd.ParseFlags(tt.args)
+			err := RootCmd.ParseFlags(tt.args)
 			assert.NoError(t, err, "parsing flags should not error")
 
 			// Check if version flag was set to expected value.
-			versionSet, err := cmd.Flags().GetBool("version")
+			versionSet, err := RootCmd.Flags().GetBool("version")
 			assert.NoError(t, err)
 			assert.Equal(t, tt.expectValue, versionSet, "version flag should be %v", tt.expectValue)
 		})
@@ -387,7 +386,7 @@ func TestVersionFlagExecutionPath(t *testing.T) {
 			expectExit: 0,
 		},
 		{
-			name: "version flag false does not exit",
+			name: "version subcommand bypasses flag handler",
 			setup: func() {
 				versionFlag := RootCmd.PersistentFlags().Lookup("version")
 				if versionFlag != nil {
