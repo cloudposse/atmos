@@ -1,12 +1,12 @@
 package exec
 
 import (
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
 
+	"github.com/cockroachdb/errors"
 	"github.com/spf13/cobra"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -95,12 +95,14 @@ func ExecuteWorkflowCmd(cmd *cobra.Command, args []string) error {
 	}
 
 	if !u.FileExists(workflowPath) {
-		errUtils.CheckErrorPrintAndExit(
+		err := fmt.Errorf("%w: the workflow manifest file `%s` does not exist",
 			ErrWorkflowFileNotFound,
-			WorkflowErrTitle,
-			fmt.Sprintf("\n## Explanation\nThe workflow manifest file `%s` does not exist.", filepath.ToSlash(workflowPath)),
+			filepath.ToSlash(workflowPath),
 		)
-		return ErrWorkflowFileNotFound
+		err = errors.WithHint(err, "Use `atmos list workflows` to see available workflows")
+		err = errors.WithHint(err, fmt.Sprintf("Verify the workflow file exists at: %s", workflowPath))
+		err = errors.WithHint(err, fmt.Sprintf("Check `workflows.base_path` in `atmos.yaml`: %s", atmosConfig.Workflows.BasePath))
+		return err
 	}
 
 	fileContent, err := os.ReadFile(workflowPath)

@@ -1,11 +1,11 @@
 package exec
 
 import (
-	"errors"
 	"fmt"
 	"sort"
 	"strings"
 
+	"github.com/cockroachdb/errors"
 	"github.com/hashicorp/terraform-config-inspect/tfconfig"
 	"github.com/mitchellh/mapstructure"
 
@@ -45,7 +45,10 @@ func ProcessComponentConfig(
 	var ok bool
 
 	if len(stack) == 0 {
-		return errors.New("stack must be provided and must not be empty")
+		err := fmt.Errorf("%w", errUtils.ErrMissingStack)
+		err = errors.WithHint(err, "Specify stack using `--stack <stack>` (shorthand: `-s`)")
+		err = errors.WithHint(err, "Use `atmos list stacks` to see available stacks")
+		return err
 	}
 
 	if len(component) == 0 {
@@ -69,7 +72,11 @@ func ProcessComponentConfig(
 	}
 
 	if componentSection, ok = componentTypeSection[component].(map[string]any); !ok {
-		return fmt.Errorf("no config found for the component '%s' in the stack manifest '%s'", component, stack)
+		err := fmt.Errorf("%w: no config found for the component '%s' in the stack manifest '%s'",
+			errUtils.ErrInvalidComponent, component, stack)
+		err = errors.WithHint(err, fmt.Sprintf("Use `atmos describe component %s -s %s` to debug configuration", component, stack))
+		err = errors.WithHint(err, fmt.Sprintf("Verify the component exists in the `%s` type section", componentType))
+		return err
 	}
 
 	if componentVarsSection, ok = componentSection["vars"].(map[string]any); !ok {

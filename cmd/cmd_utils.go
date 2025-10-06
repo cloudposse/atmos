@@ -2,13 +2,13 @@ package cmd
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/errors"
 	"github.com/go-git/go-git/v5"
 	"github.com/samber/lo"
 	"github.com/spf13/cobra"
@@ -616,16 +616,13 @@ func showUsageAndExit(cmd *cobra.Command, args []string) {
 }
 
 func showFlagUsageAndExit(cmd *cobra.Command, err error) error {
-	unknownCommand := fmt.Sprintf("%v for command `%s`\n\n", err.Error(), cmd.CommandPath())
-	args := strings.Split(err.Error(), ": ")
-	if len(args) == 2 {
-		if strings.Contains(args[0], "flag needs an argument") {
-			unknownCommand = fmt.Sprintf("`%s` %s for command `%s`\n\n", args[1], args[0], cmd.CommandPath())
-		} else {
-			unknownCommand = fmt.Sprintf("%s `%s` for command `%s`\n\n", args[0], args[1], cmd.CommandPath())
-		}
-	}
-	showUsageExample(cmd, unknownCommand)
+	// Build error message with hint using cockroachdb/errors.
+	flagErr := fmt.Errorf("%w: %s", errUtils.ErrInvalidFlag, err.Error())
+	flagErr = errors.WithHint(flagErr, fmt.Sprintf("Run `%s --help` for usage", cmd.CommandPath()))
+
+	// Use error formatter directly (works even if atmosConfig is nil).
+	formatted := errUtils.Format(flagErr, errUtils.DefaultFormatterConfig())
+	u.PrintfMessageToTUI("%s\n", formatted)
 	errUtils.Exit(1)
 	return nil
 }

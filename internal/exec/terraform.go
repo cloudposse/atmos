@@ -1,12 +1,13 @@
 package exec
 
 import (
-	"errors"
 	"fmt"
 	"os"
 	osexec "os/exec"
 	"path/filepath"
 	"strings"
+
+	"github.com/cockroachdb/errors"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	git "github.com/cloudposse/atmos/pkg/git"
@@ -129,21 +130,27 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 	if err != nil || !componentPathExists {
 		// Get the base path for error message, respecting user's actual config
 		basePath, _ := u.GetComponentBasePath(&atmosConfig, "terraform")
-		return fmt.Errorf("%w: '%s' points to the Terraform component '%s', but it does not exist in '%s'",
+		err := fmt.Errorf("%w: '%s' points to the Terraform component '%s', but it does not exist in '%s'",
 			ErrInvalidTerraformComponent,
 			info.ComponentFromArg,
 			info.FinalComponent,
 			basePath,
 		)
+		err = errors.WithHint(err, "Use `atmos list components` to see available components")
+		err = errors.WithHint(err, fmt.Sprintf("Verify the component path: %s", basePath))
+		return err
 	}
 
 	// Check if the component is allowed to be provisioned (the `metadata.type` attribute is not set to `abstract`).
 	if (info.SubCommand == "plan" || info.SubCommand == "apply" || info.SubCommand == "deploy" || info.SubCommand == "workspace") && info.ComponentIsAbstract {
-		return fmt.Errorf("%w: the component '%s' cannot be provisioned because it's marked as abstract (metadata.type: abstract)",
+		err := fmt.Errorf("%w: the component '%s' cannot be provisioned because it's marked as abstract (metadata.type: abstract)",
 			ErrAbstractComponent,
 			filepath.Join(info.ComponentFolderPrefix,
 				info.Component,
 			))
+		err = errors.WithHint(err, "Abstract components are meant to be inherited, not provisioned directly")
+		err = errors.WithHint(err, fmt.Sprintf("Create a concrete component that inherits from `%s`", info.Component))
+		return err
 	}
 
 	// Check if the component is locked (`metadata.locked` is set to true).
@@ -151,10 +158,13 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 		// Allow read-only commands, block modification commands
 		switch info.SubCommand {
 		case "apply", "deploy", "destroy", "import", "state", "taint", "untaint":
-			return fmt.Errorf("%w: component '%s' cannot be modified (metadata.locked: true)",
+			err := fmt.Errorf("%w: component '%s' cannot be modified (metadata.locked: true)",
 				ErrLockedComponent,
 				filepath.Join(info.ComponentFolderPrefix, info.Component),
 			)
+			err = errors.WithHint(err, "Remove `metadata.locked: true` from the component configuration to enable modifications")
+			err = errors.WithHint(err, "Locked components are read-only to prevent accidental changes")
+			return err
 		}
 	}
 

@@ -9,15 +9,14 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/cloudposse/atmos/pkg/perf"
-
-	log "github.com/cloudposse/atmos/pkg/logger"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 	"github.com/samber/lo"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	w "github.com/cloudposse/atmos/internal/tui/workflow"
 	"github.com/cloudposse/atmos/pkg/config"
+	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/retry"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -245,7 +244,11 @@ func ExecuteDescribeWorkflows(
 
 	isDirectory, err := u.IsDirectory(workflowsDir)
 	if err != nil || !isDirectory {
-		return nil, nil, nil, fmt.Errorf("the workflow directory '%s' does not exist. Review 'workflows.base_path' in 'atmos.yaml'", workflowsDir)
+		err := fmt.Errorf("%w: the workflow directory '%s' does not exist", errUtils.ErrWorkflowDirectoryDoesNotExist, workflowsDir)
+		err = errors.WithHint(err, fmt.Sprintf("Create the directory: mkdir -p %s", workflowsDir))
+		err = errors.WithHint(err, fmt.Sprintf("Or update `workflows.base_path` in `atmos.yaml` (currently: %s)", atmosConfig.Workflows.BasePath))
+		err = errors.WithHint(err, "See https://atmos.tools/core-concepts/workflows for workflow configuration")
+		return nil, nil, nil, err
 	}
 
 	files, err := u.GetAllYamlFilesInDir(workflowsDir)

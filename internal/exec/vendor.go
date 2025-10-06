@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
@@ -152,7 +152,11 @@ func handleVendorConfig(atmosConfig *schema.AtmosConfiguration, flg *VendorFlags
 		return err
 	}
 	if !vendorConfigExists && flg.Everything {
-		return fmt.Errorf("%w: %s", ErrVendorConfigNotExist, cfg.AtmosVendorConfigFileName)
+		err := fmt.Errorf("%w: %s", ErrVendorConfigNotExist, cfg.AtmosVendorConfigFileName)
+		err = errors.WithHint(err, fmt.Sprintf("Create a `%s` file in your project root", cfg.AtmosVendorConfigFileName))
+		err = errors.WithHint(err, "Or use `--component` flag to vendor a specific component: `atmos vendor pull -c <component>`")
+		err = errors.WithHint(err, "See https://atmos.tools/core-concepts/vendoring for vendor configuration")
+		return err
 	}
 	if vendorConfigExists {
 		return ExecuteAtmosVendorInternal(&executeVendorOptions{
@@ -170,10 +174,15 @@ func handleVendorConfig(atmosConfig *schema.AtmosConfiguration, flg *VendorFlags
 	}
 
 	if len(args) > 0 {
-		q := fmt.Sprintf("Did you mean 'atmos vendor pull -c %s'?", args[0])
-		return fmt.Errorf("%w\n%s", ErrMissingComponent, q)
+		err := fmt.Errorf("%w", ErrMissingComponent)
+		err = errors.WithHint(err, fmt.Sprintf("Did you mean `atmos vendor pull -c %s`?", args[0]))
+		err = errors.WithHint(err, "Component name should be specified with `--component` (shorthand: `-c`) flag")
+		return err
 	}
-	return ErrMissingComponent
+	err = fmt.Errorf("%w", ErrMissingComponent)
+	err = errors.WithHint(err, "Use `--component` flag to vendor a specific component: `atmos vendor pull -c <component>`")
+	err = errors.WithHint(err, "Or use `--everything` flag to vendor all components defined in `vendor.yaml`")
+	return err
 }
 
 func handleComponentVendor(atmosConfig *schema.AtmosConfiguration, flg *VendorFlags) error {
