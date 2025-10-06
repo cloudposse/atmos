@@ -130,6 +130,7 @@ func ExecuteDescribeStacks(
 	processedStacks := make(map[string]bool)
 	var varsSection map[string]any
 	var metadataSection map[string]any
+	var authSection map[string]any
 	var settingsSection map[string]any
 	var envSection map[string]any
 	var providersSection map[string]any
@@ -220,6 +221,10 @@ func ExecuteDescribeStacks(
 							envSection = map[string]any{}
 						}
 
+						if authSection, ok = componentSection[cfg.AuthSectionName].(map[string]any); !ok {
+							authSection = map[string]any{}
+						}
+
 						if providersSection, ok = componentSection[cfg.ProvidersSectionName].(map[string]any); !ok {
 							providersSection = map[string]any{}
 						}
@@ -247,6 +252,7 @@ func ExecuteDescribeStacks(
 							ComponentVarsSection:      varsSection,
 							ComponentSettingsSection:  settingsSection,
 							ComponentEnvSection:       envSection,
+							ComponentAuthSection:      authSection,
 							ComponentProvidersSection: providersSection,
 							ComponentHooksSection:     hooksSection,
 							ComponentOverridesSection: overridesSection,
@@ -257,6 +263,7 @@ func ExecuteDescribeStacks(
 								cfg.MetadataSectionName:    metadataSection,
 								cfg.SettingsSectionName:    settingsSection,
 								cfg.EnvSectionName:         envSection,
+								cfg.AuthSectionName:        authSection,
 								cfg.ProvidersSectionName:   providersSection,
 								cfg.HooksSectionName:       hooksSection,
 								cfg.OverridesSectionName:   overridesSection,
@@ -414,7 +421,7 @@ func ExecuteDescribeStacks(
 			}
 
 			// Helmfile
-			if len(componentTypes) == 0 || u.SliceContainsString(componentTypes, cfg.PackerSectionName) {
+			if len(componentTypes) == 0 || u.SliceContainsString(componentTypes, cfg.HelmfileSectionName) {
 				if helmfileSection, ok := componentsSection[cfg.HelmfileSectionName].(map[string]any); ok {
 					for componentName, compSection := range helmfileSection {
 						componentSection, ok := compSection.(map[string]any)
@@ -448,6 +455,10 @@ func ExecuteDescribeStacks(
 							envSection = map[string]any{}
 						}
 
+						if authSection, ok = componentSection[cfg.AuthSectionName].(map[string]any); !ok {
+							authSection = map[string]any{}
+						}
+
 						if providersSection, ok = componentSection[cfg.ProvidersSectionName].(map[string]any); !ok {
 							providersSection = map[string]any{}
 						}
@@ -475,6 +486,7 @@ func ExecuteDescribeStacks(
 							ComponentVarsSection:      varsSection,
 							ComponentSettingsSection:  settingsSection,
 							ComponentEnvSection:       envSection,
+							ComponentAuthSection:      authSection,
 							ComponentProvidersSection: providersSection,
 							ComponentHooksSection:     hooksSection,
 							ComponentOverridesSection: overridesSection,
@@ -485,6 +497,7 @@ func ExecuteDescribeStacks(
 								cfg.MetadataSectionName:    metadataSection,
 								cfg.SettingsSectionName:    settingsSection,
 								cfg.EnvSectionName:         envSection,
+								cfg.AuthSectionName:        authSection,
 								cfg.ProvidersSectionName:   providersSection,
 								cfg.HooksSectionName:       hooksSection,
 								cfg.OverridesSectionName:   overridesSection,
@@ -652,6 +665,10 @@ func ExecuteDescribeStacks(
 							envSection = map[string]any{}
 						}
 
+						if authSection, ok = componentSection[cfg.AuthSectionName].(map[string]any); !ok {
+							authSection = map[string]any{}
+						}
+
 						if providersSection, ok = componentSection[cfg.ProvidersSectionName].(map[string]any); !ok {
 							providersSection = map[string]any{}
 						}
@@ -679,6 +696,7 @@ func ExecuteDescribeStacks(
 							ComponentVarsSection:      varsSection,
 							ComponentSettingsSection:  settingsSection,
 							ComponentEnvSection:       envSection,
+							ComponentAuthSection:      authSection,
 							ComponentProvidersSection: providersSection,
 							ComponentHooksSection:     hooksSection,
 							ComponentOverridesSection: overridesSection,
@@ -689,6 +707,7 @@ func ExecuteDescribeStacks(
 								cfg.MetadataSectionName:    metadataSection,
 								cfg.SettingsSectionName:    settingsSection,
 								cfg.EnvSectionName:         envSection,
+								cfg.AuthSectionName:        authSection,
 								cfg.ProvidersSectionName:   providersSection,
 								cfg.HooksSectionName:       hooksSection,
 								cfg.OverridesSectionName:   overridesSection,

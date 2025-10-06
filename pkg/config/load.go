@@ -323,7 +323,7 @@ func processConfigImportsAndReapply(path string, tempViper *viper.Viper, content
 	mainViper := viper.New()
 	mainViper.SetConfigType(yamlType)
 	if err := mainViper.ReadConfig(bytes.NewReader(content)); err != nil {
-		return fmt.Errorf("%w: parse main config: %v", errUtils.ErrMerge, err)
+		return errors.Join(errUtils.ErrMergeConfiguration, fmt.Errorf("parse main config: %w", err))
 	}
 	mainCommands := mainViper.Get(commandsKey)
 
@@ -337,7 +337,7 @@ func processConfigImportsAndReapply(path string, tempViper *viper.Viper, content
 	// Now load the main config temporarily to process explicit imports.
 	// We need this because the import paths are defined in the main config.
 	if err := tempViper.MergeConfig(bytes.NewReader(content)); err != nil {
-		return fmt.Errorf("%w: merge main config: %v", errUtils.ErrMerge, err)
+		return errors.Join(errUtils.ErrMergeConfiguration, fmt.Errorf("merge main config: %w", err))
 	}
 
 	// Clear commands before processing imports to collect only imported commands.
@@ -356,7 +356,7 @@ func processConfigImportsAndReapply(path string, tempViper *viper.Viper, content
 	// This ensures proper precedence: each config file's own settings override
 	// the settings from any files it imports (directly or transitively).
 	if err := tempViper.MergeConfig(bytes.NewReader(content)); err != nil {
-		return fmt.Errorf("%w: re-apply main config: %v", errUtils.ErrMerge, err)
+		return errors.Join(errUtils.ErrMergeConfiguration, fmt.Errorf("re-applying main config after processing imports: %w", err))
 	}
 
 	// Now merge commands in the correct order with proper override behavior:
@@ -390,7 +390,7 @@ func marshalViperToYAML(tempViper *viper.Viper) ([]byte, error) {
 	allSettings := tempViper.AllSettings()
 	yamlBytes, err := yaml.Marshal(allSettings)
 	if err != nil {
-		return nil, fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrFailedMarshalConfigToYaml, err)
+		return nil, errors.Join(errUtils.ErrFailedMarshalConfigToYaml, err)
 	}
 	return yamlBytes, nil
 }
@@ -399,7 +399,7 @@ func marshalViperToYAML(tempViper *viper.Viper) ([]byte, error) {
 func mergeYAMLIntoViper(v *viper.Viper, configFilePath string, yamlContent []byte) error {
 	v.SetConfigFile(configFilePath)
 	if err := v.MergeConfig(strings.NewReader(string(yamlContent))); err != nil {
-		return fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrMerge, err)
+		return errors.Join(errUtils.ErrMerge, err)
 	}
 	return nil
 }

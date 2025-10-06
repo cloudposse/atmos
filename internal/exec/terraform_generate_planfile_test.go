@@ -262,3 +262,105 @@ func TestExecuteTerraformGeneratePlanfileErrors(t *testing.T) {
 	assert.Error(t, err)
 	assert.ErrorIs(t, err, ErrNoComponent)
 }
+
+// TestValidatePlanfileFormat tests the validatePlanfileFormat function.
+func TestValidatePlanfileFormat(t *testing.T) {
+	tests := []struct {
+		name           string
+		format         string
+		expectedFormat string
+		expectError    bool
+	}{
+		{
+			name:           "Empty string defaults to json",
+			format:         "",
+			expectedFormat: "json",
+			expectError:    false,
+		},
+		{
+			name:           "Valid json format",
+			format:         "json",
+			expectedFormat: "json",
+			expectError:    false,
+		},
+		{
+			name:           "Valid yaml format",
+			format:         "yaml",
+			expectedFormat: "yaml",
+			expectError:    false,
+		},
+		{
+			name:        "Invalid format xml",
+			format:      "xml",
+			expectError: true,
+		},
+		{
+			name:        "Invalid format toml",
+			format:      "toml",
+			expectError: true,
+		},
+		{
+			name:        "Invalid format random",
+			format:      "random",
+			expectError: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			format := tt.format
+			err := validatePlanfileFormat(&format)
+
+			if tt.expectError {
+				assert.Error(t, err)
+				assert.ErrorIs(t, err, ErrInvalidFormat)
+			} else {
+				assert.NoError(t, err)
+				assert.Equal(t, tt.expectedFormat, format)
+			}
+		})
+	}
+}
+
+// TestPlanfileValidateComponent tests the validateComponent function in terraform_generate_planfile.go.
+func TestPlanfileValidateComponent(t *testing.T) {
+	tests := []struct {
+		name        string
+		component   string
+		expectError bool
+	}{
+		{
+			name:        "Valid component name",
+			component:   "vpc",
+			expectError: false,
+		},
+		{
+			name:        "Valid component with hyphen",
+			component:   "my-component",
+			expectError: false,
+		},
+		{
+			name:        "Valid component with underscore",
+			component:   "my_component",
+			expectError: false,
+		},
+		{
+			name:        "Empty component name",
+			component:   "",
+			expectError: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := validateComponent(tt.component)
+
+			if tt.expectError {
+				assert.Error(t, err)
+				assert.ErrorIs(t, err, ErrNoComponent)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}

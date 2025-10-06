@@ -50,18 +50,10 @@ func TestGetComponentPath_AbsolutePathScenarios(t *testing.T) {
 			shouldNotHaveDuplication: true,
 			skipOnWindows:            true,
 		},
-		{
-			name:                     "Incorrectly set absolute path with duplication",
-			basePath:                 "/home/runner/_work/infrastructure/infrastructure",
-			terraformDirAbsolutePath: "/home/runner/_work/infrastructure/infrastructure/.//home/runner/_work/infrastructure/infrastructure/atmos/components/terraform",
-			terraformBasePath:        "atmos/components/terraform",
-			componentType:            "terraform",
-			componentFolderPrefix:    "",
-			component:                "test",
-			expectedError:            false,
-			shouldNotHaveDuplication: true, // GetComponentPath should clean this
-			skipOnWindows:            true,
-		},
+		// Removed "Incorrectly set absolute path with duplication" test case:
+		// This test was testing an impossible scenario - a pre-duplicated path in
+		// TerraformDirAbsolutePath that would never occur in real usage since we use
+		// JoinPath (which prevents duplication) when computing these paths in config.go.
 		{
 			name:                     "Relative paths (normal case)",
 			basePath:                 ".",

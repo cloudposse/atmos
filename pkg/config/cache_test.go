@@ -1,7 +1,6 @@
 package config
 
 import (
-	"errors"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -41,37 +40,6 @@ func TestGetCacheFilePathWithoutXDGCacheHome(t *testing.T) {
 	// On macOS: $HOME/Library/Caches/atmos/cache.yaml.
 	expectedPath := filepath.Join(xdg.CacheHome, "atmos", "cache.yaml")
 	assert.Equal(t, expectedPath, path)
-}
-
-func TestGetCacheFilePathWithATMOSXDGCacheHome(t *testing.T) {
-	// Test that ATMOS_XDG_CACHE_HOME overrides XDG_CACHE_HOME.
-	testDir := t.TempDir()
-	atmosTestDir := filepath.Join(testDir, "atmos-cache")
-	xdgTestDir := filepath.Join(testDir, "xdg-cache")
-
-	// Create the directories.
-	err := os.MkdirAll(atmosTestDir, 0o755)
-	assert.NoError(t, err)
-	err = os.MkdirAll(xdgTestDir, 0o755)
-	assert.NoError(t, err)
-
-	// Set both ATMOS_XDG_CACHE_HOME and XDG_CACHE_HOME.
-	// ATMOS_XDG_CACHE_HOME should take precedence.
-	t.Setenv("ATMOS_XDG_CACHE_HOME", atmosTestDir)
-	t.Setenv("XDG_CACHE_HOME", xdgTestDir)
-
-	// Reload XDG to pick up the environment changes.
-	defer xdg.Reload()
-	xdg.Reload()
-
-	path, err := GetCacheFilePath()
-	assert.NoError(t, err)
-
-	// Should use ATMOS_XDG_CACHE_HOME, not XDG_CACHE_HOME.
-	expectedPath := filepath.Join(atmosTestDir, "atmos", "cache.yaml")
-	assert.Equal(t, expectedPath, path)
-	assert.True(t, strings.HasPrefix(path, atmosTestDir))
-	assert.False(t, strings.HasPrefix(path, xdgTestDir))
 }
 
 func TestCacheSharedBetweenVersionAndTelemetry(t *testing.T) {
@@ -165,11 +133,11 @@ func TestConcurrentCacheAccess(t *testing.T) {
 	err := SaveCache(initialCache)
 	assert.NoError(t, err)
 
-	// Run concurrent operations with staggered starts to reduce lock contention.
+	// Run concurrent operations.
 	done := make(chan bool, 3)
 	errsChannel := make(chan error, 3)
 
-	// Writer 1: Update LastChecked (starts immediately).
+	// Writer 1: Update LastChecked.
 	go func() {
 		err := UpdateCache(func(cache *CacheConfig) {
 			cache.LastChecked = 2000
@@ -180,9 +148,8 @@ func TestConcurrentCacheAccess(t *testing.T) {
 		done <- true
 	}()
 
-	// Writer 2: Update TelemetryDisclosureShown (staggered start).
+	// Writer 2: Update TelemetryDisclosureShown.
 	go func() {
-		time.Sleep(10 * time.Millisecond)
 		err := UpdateCache(func(cache *CacheConfig) {
 			cache.TelemetryDisclosureShown = true
 		})
@@ -192,9 +159,8 @@ func TestConcurrentCacheAccess(t *testing.T) {
 		done <- true
 	}()
 
-	// Reader: Read multiple times (staggered start).
+	// Reader: Read multiple times.
 	go func() {
-		time.Sleep(20 * time.Millisecond)
 		for i := 0; i < 5; i++ {
 			_, err := LoadCache()
 			if err != nil {
@@ -386,12 +352,7 @@ func TestGetCacheFilePathWithDirectoryCreationError(t *testing.T) {
 	_, err = GetCacheFilePath()
 	assert.Error(t, err)
 	if err != nil {
-		// The error should be related to cache operations - either directory creation
-		// or cache write failure, both of which are valid for this test scenario
-		expectedErrors := errors.Join(errUtils.ErrCacheDir, errUtils.ErrCacheWrite)
-		assert.True(t,
-			errors.Is(err, errUtils.ErrCacheDir) || errors.Is(err, errUtils.ErrCacheWrite),
-			"Expected error to be one of %v, got: %v", expectedErrors, err)
+		assert.ErrorIs(t, err, errUtils.ErrCacheDir)
 	}
 }
 

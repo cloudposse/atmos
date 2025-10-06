@@ -12,8 +12,10 @@ tests:
       # PTY not supported on windows
       os: !not windows
     expect:
-      tty:
+      stdout:
         - "^(/dev)"
+      stderr:
+        - "^$"
       exit_code: 0
 
   - name: "test non-tty"
@@ -39,10 +41,11 @@ tests:
     command: "atmos"
     expect:
       diff: []
-      stderr:
+      stdout:
         - "atmos.yaml CLI config file specifies the directory for Atmos stacks as stacks,"
         - "but the directory does not exist."
-        - "Telemetry Enabled"
+      stderr:
+        - "^$"
       exit_code: 1
 
   - name: atmos docs
@@ -57,6 +60,6 @@ tests:
       diff: []
       exit_code: 0
       stdout:
-        - "Opening default browser to 'https://atmos.tools'."
+        - "^$"
       stderr:
-        - "Telemetry Enabled"
+        - "Opening default browser to 'https://atmos.tools'."

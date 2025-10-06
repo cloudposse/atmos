@@ -1,6 +1,7 @@
 package exec
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -173,7 +174,7 @@ func applyTerraformDocsWithRunner(dir string, docsGenerate *schema.DocsGenerate,
 
 	terraformDocs, err := runner.Run(terraformSource, &docsGenerate.Terraform)
 	if err != nil {
-		return fmt.Errorf("failed to generate terraform docs: %w", err)
+		return errors.Join(errUtils.ErrGenerateTerraformDocs, err)
 	}
 	mergedData["terraform_docs"] = terraformDocs
 	return nil
@@ -201,7 +202,7 @@ func generateDocument(
 	// 1) Merge YAML inputs.
 	mergedData, err := mergeInputs(atmosConfig, baseDir, docsGenerate)
 	if err != nil {
-		return fmt.Errorf("failed to merge input YAMLs: %w", err)
+		return errors.Join(errUtils.ErrMergeInputYAMLs, err)
 	}
 
 	// 2) Generate terraform docs if enabled.
@@ -215,16 +216,16 @@ func generateDocument(
 	// 4) Render final document using the injected renderer.
 	rendered, err := renderer.Render("docs-generate", chosenTemplate, mergedData, true)
 	if err != nil {
-		return fmt.Errorf("failed to render template with datasources: %w", err)
+		return errors.Join(errUtils.ErrRenderTemplate, err)
 	}
 
 	// 5) Resolve and write final document.
 	outputPath, err := resolvePath(docsGenerate.Output, baseDir, defaultReadmeOutput)
 	if err != nil {
-		return fmt.Errorf("failed to resolve output path %s: %w", docsGenerate.Output, err)
+		return fmt.Errorf("%w: %s: %s", errUtils.ErrResolveOutputPath, docsGenerate.Output, err)
 	}
 	if err = os.WriteFile(outputPath, []byte(rendered), defaultFilePermissions); err != nil {
-		return fmt.Errorf("failed to write output %s: %w", outputPath, err)
+		return fmt.Errorf("%w: %s: %s", errUtils.ErrWriteOutput, outputPath, err)
 	}
 
 	log.Info("Generated docs", "output", outputPath)

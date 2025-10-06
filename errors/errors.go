@@ -2,12 +2,7 @@ package errors
 
 import (
 	"errors"
-)
-
-const (
-	ErrWrappingFormat       = "%w: %w"
-	ErrStringWrappingFormat = "%w: %s"
-	ErrValueWrappingFormat  = "%w: %v"
+	"fmt"
 )
 
 var (
@@ -112,9 +107,10 @@ var (
 	ErrMissingPackerTemplate = errors.New("packer template is required; it can be specified in the `settings.packer.template` section in the Atmos component manifest, or on the command line via the flag `--template <template>` (shorthand `-t`)")
 	ErrMissingPackerManifest = errors.New("packer manifest is missing")
 
-	ErrAtmosConfigIsNil         = errors.New("atmos config is nil")
-	ErrInvalidListMergeStrategy = errors.New("invalid list merge strategy")
-	ErrMerge                    = errors.New("merge error")
+	ErrAtmosConfigIsNil              = errors.New("atmos config is nil")
+	ErrFailedToInitializeAtmosConfig = errors.New("failed to initialize atmos config")
+	ErrInvalidListMergeStrategy      = errors.New("invalid list merge strategy")
+	ErrMerge                         = errors.New("merge error")
 
 	// Stack processing errors.
 	ErrInvalidStackManifest         = errors.New("invalid stack manifest")
@@ -146,16 +142,21 @@ var (
 	ErrAPIResponseError             = errors.New("API response error")
 
 	// Exec package errors.
-	ErrComponentAndStackRequired = errors.New("both '--component' and '--stack' flags must be provided")
-	ErrFailedToCreateAPIClient   = errors.New("failed to create API client")
-	ErrFailedToProcessArgs       = errors.New("failed to process command-line arguments")
-	ErrFailedToInitConfig        = errors.New("failed to initialize Atmos configuration")
-	ErrFailedToCreateLogger      = errors.New("failed to create logger")
-	ErrFailedToGetComponentFlag  = errors.New("failed to get '--component' flag")
-	ErrFailedToGetStackFlag      = errors.New("failed to get '--stack' flag")
-	ErrOPAPolicyViolations       = errors.New("OPA policy violations detected")
-	ErrInvalidOPAPolicy          = errors.New("invalid OPA policy")
-	ErrTerraformEnvCliVarJSON    = errors.New("failed to parse JSON variable from TF_CLI_ARGS environment variable")
+	ErrComponentAndStackRequired     = errors.New("both '--component' and '--stack' flags must be provided")
+	ErrFailedToCreateAPIClient       = errors.New("failed to create API client")
+	ErrFailedToProcessArgs           = errors.New("failed to process command-line arguments")
+	ErrFailedToInitConfig            = errors.New("failed to initialize Atmos configuration")
+	ErrFailedToCreateLogger          = errors.New("failed to create logger")
+	ErrFailedToGetComponentFlag      = errors.New("failed to get '--component' flag")
+	ErrFailedToGetStackFlag          = errors.New("failed to get '--stack' flag")
+	ErrOPAPolicyViolations           = errors.New("OPA policy violations detected")
+	ErrOPATimeout                    = errors.New("timeout evaluating OPA policy")
+	ErrInvalidRegoPolicy             = errors.New("invalid Rego policy")
+	ErrInvalidOPAPolicy              = errors.New("invalid OPA policy")
+	ErrTerraformEnvCliVarJSON        = errors.New("failed to parse JSON variable from TF_CLI_ARGS environment variable")
+	ErrWorkflowBasePathNotConfigured = errors.New("'workflows.base_path' must be configured in 'atmos.yaml'")
+	ErrInvalidComponentArgument      = errors.New("invalid arguments. The command requires one argument 'componentName'")
+	ErrValidation                    = errors.New("validation failed")
 
 	// List package errors.
 	ErrExecuteDescribeStacks     = errors.New("failed to execute describe stacks")
@@ -179,6 +180,43 @@ var (
 	// Logger errors.
 	ErrInvalidLogLevel = errors.New("invalid log level")
 
+	// File operation errors.
+	ErrCopyFile            = errors.New("failed to copy file")
+	ErrCreateDirectory     = errors.New("failed to create directory")
+	ErrOpenFile            = errors.New("failed to open file")
+	ErrStatFile            = errors.New("failed to stat file")
+	ErrRemoveDirectory     = errors.New("failed to remove directory")
+	ErrSetPermissions      = errors.New("failed to set permissions")
+	ErrReadDirectory       = errors.New("failed to read directory")
+	ErrComputeRelativePath = errors.New("failed to compute relative path")
+
+	// OCI/Container image errors.
+	ErrCreateTempDirectory   = ErrCreateTempDir // Alias to avoid duplicate sentinels
+	ErrInvalidImageReference = errors.New("invalid image reference")
+	ErrPullImage             = errors.New("failed to pull image")
+	ErrGetImageDescriptor    = errors.New("cannot get a descriptor for the OCI image")
+	ErrGetImageLayers        = errors.New("failed to get image layers")
+	ErrProcessLayer          = errors.New("failed to process layer")
+	ErrLayerDecompression    = errors.New("layer decompression error")
+	ErrTarballExtraction     = errors.New("tarball extraction error")
+
+	// Initialization and configuration errors.
+	ErrInitializeCLIConfig = errors.New("error initializing CLI config")
+	ErrGetHooks            = errors.New("error getting hooks")
+	ErrSetFlag             = errors.New("failed to set flag")
+	ErrVersionMismatch     = errors.New("version mismatch")
+	ErrCommandNil          = errors.New("command cannot be nil")
+
+	// Download and client errors.
+	ErrMergeConfiguration = errors.New("failed to merge configuration")
+
+	// Template and documentation errors.
+	ErrGenerateTerraformDocs = errors.New("failed to generate terraform docs")
+	ErrMergeInputYAMLs       = errors.New("failed to merge input YAMLs")
+	ErrRenderTemplate        = errors.New("failed to render template with datasources")
+	ErrResolveOutputPath     = errors.New("failed to resolve output path")
+	ErrWriteOutput           = errors.New("failed to write output")
+
 	// Import-related errors.
 	ErrBasePath             = errors.New("base path required to process imports")
 	ErrTempDir              = errors.New("temporary directory required to process imports")
@@ -195,4 +233,61 @@ var (
 	ErrProfilerStartCPU        = errors.New("profiler: failed to start CPU profile")
 	ErrProfilerStartTrace      = errors.New("profiler: failed to start trace profile")
 	ErrProfilerCreateFile      = errors.New("profiler: failed to create profile file")
+
+	// Auth package errors.
+	ErrInvalidAuthConfig            = errors.New("invalid auth config")
+	ErrInvalidIdentityKind          = errors.New("invalid identity kind")
+	ErrInvalidIdentityConfig        = errors.New("invalid identity config")
+	ErrInvalidProviderKind          = errors.New("invalid provider kind")
+	ErrInvalidProviderConfig        = errors.New("invalid provider config")
+	ErrAuthenticationFailed         = errors.New("authentication failed")
+	ErrPostAuthenticationHookFailed = errors.New("post authentication hook failed")
+	ErrAuthManager                  = errors.New("auth manager error")
+	ErrDefaultIdentity              = errors.New("default identity error")
+	ErrAwsAuth                      = errors.New("aws auth error")
+	ErrAwsUserNotConfigured         = errors.New("aws user not configured")
+	ErrAwsSAMLDecodeFailed          = errors.New("aws saml decode failed")
+	ErrUnsupportedPlatform          = errors.New("unsupported platform")
+
+	// Auth manager and identity/provider resolution errors (centralized sentinels).
+	ErrFailedToInitializeAuthManager = errors.New("failed to initialize auth manager")
+	ErrNoCredentialsFound            = errors.New("no credentials found for identity")
+	ErrExpiredCredentials            = errors.New("credentials for identity are expired or invalid")
+	ErrNilParam                      = errors.New("parameter cannot be nil")
+	ErrInitializingProviders         = errors.New("failed to initialize providers")
+	ErrInitializingIdentities        = errors.New("failed to initialize identities")
+	ErrInitializingCredentialStore   = errors.New("failed to initialize credential store")
+	ErrCircularDependency            = errors.New("circular dependency detected in identity chain")
+	ErrIdentityNotFound              = errors.New("identity not found")
+	ErrNoDefaultIdentity             = errors.New("no default identity configured for authentication")
+	ErrMultipleDefaultIdentities     = errors.New("multiple default identities found")
+	ErrNoIdentitiesAvailable         = errors.New("no identities available")
+	ErrInvalidStackConfig            = errors.New("invalid stack config")
+	ErrNoCommandSpecified            = errors.New("no command specified")
+	ErrCommandNotFound               = errors.New("command not found")
+
+	ErrInvalidSubcommand = errors.New("invalid subcommand")
+	ErrSubcommandFailed  = errors.New("subcommand failed")
+
+	ErrInvalidArgumentError = errors.New("invalid argument error")
+	ErrMissingInput         = errors.New("missing input")
+
+	ErrAuthAwsFileManagerFailed = errors.New("failed to create AWS file manager")
+
+	ErrAuthOidcDecodeFailed    = errors.New("failed to decode OIDC token")
+	ErrAuthOidcUnmarshalFailed = errors.New("failed to unmarshal oidc claims")
+
+	// Store and hook errors.
+	ErrNilTerraformOutput = errors.New("terraform output returned nil")
+	ErrNilStoreValue      = errors.New("cannot store nil value")
 )
+
+// ExitCodeError is a typed error that preserves subcommand exit codes.
+// This allows the root command to exit with the same code as the subcommand.
+type ExitCodeError struct {
+	Code int
+}
+
+func (e ExitCodeError) Error() string {
+	return fmt.Sprintf("subcommand exited with code %d", e.Code)
+}
