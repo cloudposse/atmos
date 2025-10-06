@@ -18,11 +18,11 @@ const (
 	// DefaultMaxLineLength is the default maximum line length before wrapping.
 	DefaultMaxLineLength = 80
 
-	// Newline is used for joining wrapped lines.
-	newline = "\n"
-
 	// Space is used for separating words.
 	space = " "
+
+	// Newline is used for line breaks.
+	newline = "\n"
 )
 
 // FormatterConfig controls error formatting behavior.
@@ -120,8 +120,8 @@ func buildMarkdownSections(err error, config FormatterConfig) string {
 	var md strings.Builder
 
 	// Section 1: Error header + message.
-	md.WriteString("# Error\n\n")
-	md.WriteString(err.Error() + "\n")
+	md.WriteString("# Error" + newline + newline)
+	md.WriteString(err.Error() + newline + newline)
 
 	// Section 2: Explanation.
 	addExplanationSection(&md, err)
@@ -144,10 +144,11 @@ func buildMarkdownSections(err error, config FormatterConfig) string {
 func addExplanationSection(md *strings.Builder, err error) {
 	details := errors.GetAllDetails(err)
 	if len(details) > 0 {
-		md.WriteString("\n## Explanation\n\n")
+		md.WriteString(newline + newline + "## Explanation" + newline + newline)
 		for _, detail := range details {
-			fmt.Fprintf(md, "%s\n", detail)
+			fmt.Fprintf(md, "%s"+newline, detail)
 		}
+		md.WriteString(newline)
 	}
 }
 
@@ -168,21 +169,23 @@ func addExampleAndHintsSection(md *strings.Builder, err error) {
 
 	// Add Example section.
 	if len(examples) > 0 {
-		md.WriteString("\n## Example\n\n")
+		md.WriteString(newline + newline + "## Example" + newline + newline)
 		for _, example := range examples {
 			md.WriteString(example)
-			if !strings.HasSuffix(example, "\n") {
-				md.WriteString("\n")
+			if !strings.HasSuffix(example, newline) {
+				md.WriteString(newline)
 			}
 		}
+		md.WriteString(newline)
 	}
 
 	// Add Hints section.
 	if len(hints) > 0 {
-		md.WriteString("\n## Hints\n\n")
+		md.WriteString(newline + newline + "## Hints" + newline + newline)
 		for _, hint := range hints {
-			md.WriteString("💡 " + hint + "\n")
+			md.WriteString("💡 " + hint + newline)
 		}
+		md.WriteString(newline)
 	}
 }
 
@@ -190,17 +193,18 @@ func addExampleAndHintsSection(md *strings.Builder, err error) {
 func addContextSection(md *strings.Builder, err error) {
 	context := formatContextForMarkdown(err)
 	if context != "" {
-		md.WriteString("\n## Context\n\n")
+		md.WriteString(newline + newline + "## Context" + newline + newline)
 		md.WriteString(context)
+		md.WriteString(newline)
 	}
 }
 
 // addStackTraceSection adds the stack trace section in verbose mode.
 func addStackTraceSection(md *strings.Builder, err error) {
-	md.WriteString("\n## Stack Trace\n\n")
-	md.WriteString("```\n")
+	md.WriteString(newline + newline + "## Stack Trace" + newline + newline)
+	md.WriteString("```" + newline)
 	fmt.Fprintf(md, "%+v", err)
-	md.WriteString("\n```\n")
+	md.WriteString(newline + "```" + newline)
 }
 
 // renderMarkdown renders markdown string through Glamour or returns plain markdown.

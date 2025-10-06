@@ -120,37 +120,10 @@ func (r *Renderer) RenderWithoutWordWrap(content string) (string, error) {
 
 // Render renders markdown content to ANSI styled text.
 func (r *Renderer) Render(content string) (string, error) {
-	var rendered string
-	var err error
 	if r.isTTYSupportForStdout() {
-		rendered, err = r.renderer.Render(content)
-	} else {
-		// Fallback to ASCII rendering for non-TTY stdout
-		rendered, err = r.RenderAscii(content)
+		return r.renderer.Render(content)
 	}
-	if err != nil {
-		return "", err
-	}
-	// Remove duplicate URLs and trailing newlines
-	lines := strings.Split(rendered, "\n")
-	var result []string
-
-	// Create a purple style
-	purpleStyle := termenv.Style{}.Foreground(r.profile.Color(Purple)).Bold()
-
-	for _, line := range lines {
-		trimmed := strings.TrimSpace(line)
-		if strings.HasPrefix(trimmed, "$") && term.IsTTYSupportForStdout() {
-			// Add custom styling for command examples
-			styled := purpleStyle.Styled(line)
-			result = append(result, " "+styled)
-		} else if trimmed != "" {
-			result = append(result, line)
-		}
-	}
-
-	// Add a single newline at the end plus extra spacing
-	return strings.Join(result, "\n"), nil
+	return r.RenderAscii(content)
 }
 
 func (r *Renderer) RenderAsciiWithoutWordWrap(content string) (string, error) {
