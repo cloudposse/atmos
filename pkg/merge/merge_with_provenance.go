@@ -11,7 +11,7 @@ import (
 // MergeWithProvenance merges multiple maps and records provenance information.
 // It tracks where each value originated (file, line, column) and at what import depth.
 //
-// Parameters:
+// Parameters.
 //   - atmosConfig: Atmos configuration with TrackProvenance flag.
 //   - inputs: Maps to merge (in order: first is base, last wins).
 //   - ctx: Merge context with provenance storage.

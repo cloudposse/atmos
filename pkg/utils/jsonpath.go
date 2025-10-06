@@ -11,6 +11,7 @@ import (
 //
 //	BuildJSONPath("vars", "name") -> "vars.name"
 //	BuildJSONPath("vars", "tags", "environment") -> "vars.tags.environment"
+//	BuildJSONPath("import", "[0]") -> "import[0]"
 func BuildJSONPath(components ...string) string {
 	if len(components) == 0 {
 		return ""
@@ -24,7 +25,21 @@ func BuildJSONPath(components ...string) string {
 		}
 	}
 
-	return strings.Join(filtered, ".")
+	// Build the path, skipping dots before array indices.
+	var sb strings.Builder
+	for _, comp := range filtered {
+		if sb.Len() > 0 {
+			// Don't add a dot before array index components.
+			if strings.HasPrefix(comp, "[") {
+				sb.WriteString(comp)
+				continue
+			}
+			sb.WriteString(".")
+		}
+		sb.WriteString(comp)
+	}
+
+	return sb.String()
 }
 
 // AppendJSONPathKey appends a key to an existing JSONPath.

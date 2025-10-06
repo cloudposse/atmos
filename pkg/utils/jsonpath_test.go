@@ -42,6 +42,26 @@ func TestBuildJSONPath(t *testing.T) {
 			components: []string{"", "", ""},
 			expected:   "",
 		},
+		{
+			name:       "with array index",
+			components: []string{"import", "[0]"},
+			expected:   "import[0]",
+		},
+		{
+			name:       "root array index",
+			components: []string{"[0]"},
+			expected:   "[0]",
+		},
+		{
+			name:       "multiple array indices",
+			components: []string{"matrix", "[0]", "[1]"},
+			expected:   "matrix[0][1]",
+		},
+		{
+			name:       "mixed keys and indices",
+			components: []string{"vars", "zones", "[0]", "name"},
+			expected:   "vars.zones[0].name",
+		},
 	}
 
 	for _, tt := range tests {
@@ -423,6 +443,22 @@ func TestJSONPath_RoundTrip(t *testing.T) {
 		{
 			name:       "single component",
 			components: []string{"vars"},
+		},
+		{
+			name:       "with array index",
+			components: []string{"import", "[0]"},
+		},
+		{
+			name:       "root array index",
+			components: []string{"[0]"},
+		},
+		{
+			name:       "multiple array indices",
+			components: []string{"matrix", "[0]", "[1]"},
+		},
+		{
+			name:       "mixed keys and indices",
+			components: []string{"vars", "zones", "[0]", "name"},
 		},
 	}
 
