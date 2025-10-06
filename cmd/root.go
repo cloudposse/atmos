@@ -58,7 +58,7 @@ var RootCmd = &cobra.Command{
 	FParseErrWhitelist: cobra.FParseErrWhitelist{UnknownFlags: true},
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {
 		// Check for --version flag first (simple version output, no other flags supported).
-		if versionFlag, _ := cmd.Flags().GetBool("version"); versionFlag {
+		if versionFlag, err := cmd.Flags().GetBool("version"); err == nil && versionFlag {
 			fmt.Printf("atmos %s\n", version.Version)
 			utils.OsExit(0)
 			return
