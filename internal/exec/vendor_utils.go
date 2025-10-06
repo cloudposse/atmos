@@ -9,8 +9,8 @@ import (
 	"strings"
 
 	"github.com/bmatcuk/doublestar/v4"
+	"github.com/cockroachdb/errors"
 	cp "github.com/otiai10/copy"
-	"github.com/pkg/errors"
 	"github.com/samber/lo"
 	"go.yaml.in/yaml/v3"
 
@@ -179,7 +179,10 @@ func mergeVendorConfigFiles(configFiles []string) (schema.AtmosVendorConfig, err
 			source := currentConfig.Spec.Sources[i]
 			if source.Component != "" {
 				if sourceMap[source.Component] {
-					return vendorConfig, fmt.Errorf("%w '%s' found in config file '%s'", ErrDuplicateComponentsFound, source.Component, configFile)
+					err := fmt.Errorf("%w '%s' found in config file '%s'", ErrDuplicateComponentsFound, source.Component, configFile)
+					err = errors.WithHint(err, fmt.Sprintf("Remove duplicate definition of component `%s` from `%s`", source.Component, configFile))
+					err = errors.WithHint(err, "Each component can only be defined once in vendor configuration")
+					return vendorConfig, err
 				}
 				sourceMap[source.Component] = true
 			}
@@ -268,8 +271,12 @@ func validateTagsAndComponents(
 	})
 
 	if duplicates := lo.FindDuplicates(components); len(duplicates) > 0 {
-		return fmt.Errorf("%w %v in the vendor config file '%s' and the imports",
+		err := fmt.Errorf("%w %v in the vendor config file '%s' and the imports",
 			ErrDuplicateComponents, duplicates, vendorConfigFileName)
+		err = errors.WithHint(err, fmt.Sprintf("Remove duplicate component definitions: %v", duplicates))
+		err = errors.WithHint(err, "Check both the main vendor config and any imported vendor configs")
+		err = errors.WithHint(err, "Each component must be defined only once across all vendor configs")
+		return err
 	}
 
 	if component != "" && !u.SliceContainsString(components, component) {

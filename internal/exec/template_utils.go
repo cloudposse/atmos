@@ -12,12 +12,14 @@ import (
 	"time"
 
 	"github.com/Masterminds/sprig/v3"
+	"github.com/cockroachdb/errors"
 	"github.com/hairyhenderson/gomplate/v3"
 	"github.com/hairyhenderson/gomplate/v3/data"
 	_ "github.com/hairyhenderson/gomplate/v4"
 	"github.com/mitchellh/mapstructure"
 	"github.com/samber/lo"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/merge"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -178,20 +180,16 @@ func ProcessTmplWithDatasources(
 		rightDelimiter := "}}"
 
 		if len(atmosConfig.Templates.Settings.Delimiters) > 0 {
-			delimiterError := fmt.Errorf("invalid 'templates.settings.delimiters' config in 'atmos.yaml': %v\n"+
-				"'delimiters' must be an array with two string items: left and right delimiter\n"+
-				"the left and right delimiters must not be an empty string", atmosConfig.Templates.Settings.Delimiters)
-
-			if len(atmosConfig.Templates.Settings.Delimiters) != 2 {
-				return "", delimiterError
-			}
-
-			if atmosConfig.Templates.Settings.Delimiters[0] == "" {
-				return "", delimiterError
-			}
-
-			if atmosConfig.Templates.Settings.Delimiters[1] == "" {
-				return "", delimiterError
+			if len(atmosConfig.Templates.Settings.Delimiters) != 2 ||
+				atmosConfig.Templates.Settings.Delimiters[0] == "" ||
+				atmosConfig.Templates.Settings.Delimiters[1] == "" {
+				err := fmt.Errorf("%w: invalid `templates.settings.delimiters` config in `atmos.yaml`: %v",
+					errUtils.ErrInvalidTemplateSettings,
+					atmosConfig.Templates.Settings.Delimiters)
+				err = errors.WithHint(err, "`delimiters` must be an array with exactly two non-empty strings: [left, right]")
+				err = errors.WithHint(err, "Example: `delimiters: [\"<{\", \"}>\"]` for custom delimiters")
+				err = errors.WithHint(err, "Default delimiters are `{{` and `}}` if not specified")
+				return "", err
 			}
 
 			leftDelimiter = atmosConfig.Templates.Settings.Delimiters[0]

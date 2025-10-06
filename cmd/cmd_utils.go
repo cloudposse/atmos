@@ -620,7 +620,7 @@ func showFlagUsageAndExit(cmd *cobra.Command, err error) error {
 	flagErr := fmt.Errorf("%w: %s", errUtils.ErrInvalidFlag, err.Error())
 	flagErr = errors.WithHint(flagErr, fmt.Sprintf("Run `%s --help` for usage", cmd.CommandPath()))
 
-	// Use error formatter directly (works even if atmosConfig is nil).
+	// Use error formatter with markdown support (works even if atmosConfig is nil).
 	formatted := errUtils.Format(flagErr, errUtils.DefaultFormatterConfig())
 	u.PrintfMessageToTUI("%s\n", formatted)
 	errUtils.Exit(1)

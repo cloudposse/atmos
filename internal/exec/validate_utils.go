@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io/fs"
 	"os"
@@ -13,8 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cloudposse/atmos/pkg/perf"
-
+	"github.com/cockroachdb/errors"
 	"github.com/open-policy-agent/opa/loader"
 	"github.com/open-policy-agent/opa/rego"
 	"github.com/open-policy-agent/opa/sdk"
@@ -22,6 +20,7 @@ import (
 	"github.com/santhosh-tekuri/jsonschema/v5"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/perf"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -67,7 +66,11 @@ func ValidateWithJsonSchema(data any, schemaName string, schemaText string) (boo
 			if err2 != nil {
 				return false, err2
 			}
-			return false, errors.Join(errUtils.ErrValidation, fmt.Errorf("%s", string(b)))
+			err := errors.Join(errUtils.ErrValidation, fmt.Errorf("%s", string(b)))
+			err = errors.WithHint(err, fmt.Sprintf("Review the JSON schema: `%s`", schemaName))
+			err = errors.WithHint(err, "Fix the validation errors listed above in your configuration")
+			err = errors.WithHint(err, "Use `atmos validate component <component> -s <stack>` to revalidate")
+			return false, err
 		default:
 			return false, err
 		}
@@ -164,7 +167,11 @@ func ValidateWithOpa(
 		return false, fmt.Errorf(errContextFormat, errUtils.ErrInvalidRegoPolicy, schemaPath)
 	}
 	if len(ers) > 0 {
-		return false, fmt.Errorf(errContextFormat, errUtils.ErrOPAPolicyViolations, strings.Join(u.SliceOfInterfacesToSliceOfStrings(ers), "\n"))
+		err := fmt.Errorf(errContextFormat, errUtils.ErrOPAPolicyViolations, strings.Join(u.SliceOfInterfacesToSliceOfStrings(ers), "\n"))
+		err = errors.WithHint(err, fmt.Sprintf("Review the OPA policy in `%s`", schemaPath))
+		err = errors.WithHint(err, "Fix the violations listed above in your component configuration")
+		err = errors.WithHint(err, "Use `atmos describe component <component> -s <stack>` to see the full configuration")
+		return false, err
 	}
 
 	return true, nil
@@ -257,7 +264,11 @@ func ValidateWithOpaLegacy(
 
 	ers, ok := result.Result.([]any)
 	if ok && len(ers) > 0 {
-		return false, fmt.Errorf(errContextFormat, errUtils.ErrOPAPolicyViolations, strings.Join(u.SliceOfInterfacesToSliceOfStrings(ers), "\n"))
+		err := fmt.Errorf(errContextFormat, errUtils.ErrOPAPolicyViolations, strings.Join(u.SliceOfInterfacesToSliceOfStrings(ers), "\n"))
+		err = errors.WithHint(err, fmt.Sprintf("Review the OPA policy in `%s`", schemaName))
+		err = errors.WithHint(err, "Fix the violations listed above in your component configuration")
+		err = errors.WithHint(err, "See https://atmos.tools/core-concepts/validate for validation documentation")
+		return false, err
 	}
 
 	return true, nil

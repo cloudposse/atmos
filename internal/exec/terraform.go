@@ -555,9 +555,13 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 	// but it's running in a scripted environment (where a `tty` is not attached or `stdin` is not attached)
 	if os.Stdin == nil && !u.SliceContainsString(info.AdditionalArgsAndFlags, autoApproveFlag) {
 		if info.SubCommand == "apply" {
-			return fmt.Errorf("%w: 'terraform apply' requires a user interaction, but no TTY is attached. Use 'terraform apply -auto-approve' or 'terraform deploy' instead",
+			err := fmt.Errorf("%w: `terraform apply` requires user interaction, but no TTY is attached",
 				ErrNoTty,
 			)
+			err = errors.WithHint(err, "Use `terraform apply -auto-approve` to skip confirmation")
+			err = errors.WithHint(err, "Or use `atmos terraform deploy` which applies without confirmation")
+			err = errors.WithHint(err, "Running in CI/CD? Ensure your pipeline provides a TTY or uses `-auto-approve`")
+			return err
 		}
 	}
 

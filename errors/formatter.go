@@ -5,6 +5,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/cockroachdb/errors"
 	"golang.org/x/term"
@@ -13,6 +14,9 @@ import (
 const (
 	// DefaultMaxLineLength is the default maximum line length before wrapping.
 	DefaultMaxLineLength = 80
+
+	// Newline is used for joining wrapped lines.
+	newline = "\n"
 )
 
 // FormatterConfig controls error formatting behavior.
@@ -37,6 +41,8 @@ func DefaultFormatterConfig() FormatterConfig {
 }
 
 // Format formats an error for display with smart chain handling.
+//
+//nolint:gocognit,nestif,revive // Error formatting requires branching logic and length.
 func Format(err error, config FormatterConfig) string {
 	if err == nil {
 		return ""
@@ -75,8 +81,27 @@ func Format(err error, config FormatterConfig) string {
 	if len(hints) > 0 {
 		output.WriteString("\n")
 		for _, hint := range hints {
-			hintLine := "  💡 " + hint
-			output.WriteString(hintStyle.Render(hintLine))
+			hintText := "  💡 " + hint
+			if useColor {
+				// Use glamour to render markdown in hints (supports backticks).
+				renderer, err := glamour.NewTermRenderer(
+					glamour.WithAutoStyle(),
+					glamour.WithWordWrap(0), // No wrapping
+				)
+				if err == nil {
+					// Render the hint as markdown.
+					rendered, err := renderer.Render(hintText)
+					if err == nil {
+						output.WriteString(strings.TrimSpace(rendered))
+						output.WriteString("\n")
+						continue
+					}
+				}
+				// Fallback to styled hint if rendering fails.
+				output.WriteString(hintStyle.Render(hintText))
+			} else {
+				output.WriteString(hintText)
+			}
 			output.WriteString("\n")
 		}
 	}
@@ -142,7 +167,7 @@ func wrapText(text string, width int) string {
 		lines = append(lines, currentLine.String())
 	}
 
-	return strings.Join(lines, "\n")
+	return strings.Join(lines, newline)
 }
 
 // formatStackTrace formats the full error chain with stack traces.
