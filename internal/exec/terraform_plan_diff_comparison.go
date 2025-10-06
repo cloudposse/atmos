@@ -205,7 +205,12 @@ func processRootModuleResources(rootModule map[string]interface{}, result map[st
 			continue
 		}
 
-		if modeVal == "data" {
+		mode, ok := modeVal.(string)
+		if !ok {
+			continue
+		}
+
+		if mode == "data" {
 			continue
 		}
 
