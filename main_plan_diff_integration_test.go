@@ -2,7 +2,7 @@ package main
 
 import (
 	"os"
-	"path"
+	"path/filepath"
 	"runtime"
 	"testing"
 	"time"
@@ -50,15 +50,10 @@ func TestMainTerraformPlanDiffIntegration(t *testing.T) {
 			}
 		}()
 
-		// Handle Windows specially - just wait for exit code
-		if runtime.GOOS == "windows" {
-			return <-exitCodeCh
-		}
-
-		// For non-Windows platforms, use the original logic
+		// Wait for exit code and ensure goroutine completes (all platforms)
 		select {
 		case code := <-exitCodeCh:
-			<-done // Wait for main to finish on non-Windows platforms
+			<-done // Wait for main to finish including all defers
 			return code
 		case <-done:
 			// Main completed without calling OsExit
@@ -88,8 +83,8 @@ func TestMainTerraformPlanDiffIntegration(t *testing.T) {
 	}
 	defer os.RemoveAll(tmpDir)
 
-	origPlanFile := path.Join(tmpDir, "orig.plan")
-	newPlanFile := path.Join(tmpDir, "new.plan")
+	origPlanFile := filepath.Join(tmpDir, "orig.plan")
+	newPlanFile := filepath.Join(tmpDir, "new.plan")
 
 	// Generate the original plan
 	os.Args = []string{"atmos", "terraform", "plan", "component-1", "-s", "nonprod", "-out=" + origPlanFile}
@@ -117,8 +112,17 @@ func TestMainTerraformPlanDiffIntegration(t *testing.T) {
 		t.Fatalf("plan-diff command should have returned exit code 2, got %d", exitCode)
 	}
 
-	// Add a small delay to ensure Windows file operations are complete
-	time.Sleep(500 * time.Millisecond)
+	// Add a delay to ensure Windows file operations are complete and file handles are released
+	if runtime.GOOS == "windows" {
+		time.Sleep(2 * time.Second)
+	} else {
+		time.Sleep(500 * time.Millisecond)
+	}
+
+	// Verify the original plan file still exists before the second invocation
+	if _, err := os.Stat(origPlanFile); err != nil {
+		t.Fatalf("original plan file no longer exists before second plan-diff: %v", err)
+	}
 
 	// Test with generating a new plan on the fly
 	os.Args = []string{"atmos", "terraform", "plan-diff", "component-1", "-s", "nonprod", "--orig=" + origPlanFile, "-var", "foo=new-value"}

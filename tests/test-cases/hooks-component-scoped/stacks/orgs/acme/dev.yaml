@@ -1,0 +1,9 @@
+import:
+  - catalog/vpc
+  - catalog/rds
+  - catalog/lambda
+
+vars:
+  tenant: acme
+  environment: dev
+  stage: test
