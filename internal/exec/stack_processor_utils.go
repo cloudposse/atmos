@@ -1020,6 +1020,7 @@ func ProcessStackConfig(
 						return nil, fmt.Errorf("invalid 'components.terraform.%s.hooks' section in the file '%s'", component, stackName)
 					}
 				}
+
 				componentAuth := map[string]any{}
 				if i, ok := componentMap[cfg.AuthSectionName]; ok {
 					componentAuth, ok = i.(map[string]any)
@@ -1027,6 +1028,7 @@ func ProcessStackConfig(
 						return nil, fmt.Errorf("%w: invalid 'components.terraform.%s.auth' section in the file '%s'", errUtils.ErrInvalidStackConfig, component, stackName)
 					}
 				}
+
 				// Component metadata.
 				// This is per component, not deep-merged and not inherited from base components and globals.
 				componentMetadata := map[string]any{}
