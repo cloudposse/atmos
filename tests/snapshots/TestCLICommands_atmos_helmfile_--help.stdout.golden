@@ -96,6 +96,9 @@ Global Flags:
                                      standard file descriptor (including
                                      /dev/null)
 
+        --verbose                    Show detailed error messages with full
+                                     stack traces (default false)
+
 
 Use atmos helmfile [subcommand] --help for more information about a command.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            
 

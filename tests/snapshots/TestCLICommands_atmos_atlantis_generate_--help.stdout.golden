@@ -81,6 +81,9 @@ Global Flags:
                                      standard file descriptor (including
                                      /dev/null)
 
+        --verbose                    Show detailed error messages with full
+                                     stack traces (default false)
+
         --                           Use double dashes to separate
                                      Atmos-specific options from native
                                      arguments and flags for the command.

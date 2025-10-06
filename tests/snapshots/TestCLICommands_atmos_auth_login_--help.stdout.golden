@@ -81,6 +81,9 @@ Global Flags:
                                      standard file descriptor (including
                                      /dev/null)
 
+        --verbose                    Show detailed error messages with full
+                                     stack traces (default false)
+
 
 Use atmos auth login --help for more information about a command.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       
 
