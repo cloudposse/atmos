@@ -185,7 +185,6 @@ func addExampleAndHintsSection(md *strings.Builder, err error) {
 		for _, hint := range hints {
 			md.WriteString("💡 " + hint + newline)
 		}
-		md.WriteString(newline)
 	}
 }
 

@@ -4,7 +4,10 @@ This information is used to shape Atmos roadmap and prioritize features.
 You can learn more, including how to opt-out if you'd not like to participate in this anonymous program,
 by visiting the following URL: https://atmos.tools/cli/telemetry
 
+
 This command allows you to execute Terraform commands, such as plan, apply, and destroy, using Atmos stack configurations for consistent infrastructure management.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     
+
+
 
 Usage:
 
@@ -113,7 +116,7 @@ Flags:
                                       current branch: atmos terraform
                                        --affected --ref
                                       refs/heads/main. Refer to
-                                      https://git-scm.com/book/en/v2/Git-Internals-Git-References
+                                      https://git-scm.com/book/en/v2/Git-Internals-Git-References https://git-scm.com/book/en/v2/Git-Internals-Git-References
                                       for more details
 
         --repo-path string            Filesystem path to the already cloned
@@ -216,11 +219,18 @@ Global Flags:
                                      standard file descriptor (including
                                      /dev/null)
 
+        --verbose                    Show detailed error messages with full
+                                     stack traces (default false)
+
 
 Examples:
 
+
 – Execute a terraform subcommand                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        
   $ atmos terraform [subcommand] <component-name> -s <stack-name>                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       
+
+
 
 
 Use atmos terraform [subcommand] --help for more information about a command.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           
