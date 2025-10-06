@@ -51,9 +51,11 @@ var logFileHandle *os.File
 
 // RootCmd represents the base command when called without any subcommands.
 var RootCmd = &cobra.Command{
-	Use:   "atmos",
-	Short: "Universal Tool for DevOps and Cloud Automation",
-	Long:  `Atmos is a universal tool for DevOps and cloud automation used for provisioning, managing and orchestrating workflows across various toolchains`,
+	Use:           "atmos",
+	Short:         "Universal Tool for DevOps and Cloud Automation",
+	Long:          `Atmos is a universal tool for DevOps and cloud automation used for provisioning, managing and orchestrating workflows across various toolchains`,
+	SilenceErrors: true,
+	SilenceUsage:  true,
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {
 		// Determine if the command is a help command or if the help flag is set.
 		isHelpCommand := cmd.Name() == "help"
@@ -465,7 +467,7 @@ func Execute() error {
 			command := getInvalidCommandName(err.Error())
 			showUsageAndExit(RootCmd, []string{command})
 		}
-		// Unknown flag errors are already handled by Cobra's default error formatting.
+		// Unknown flag errors are handled by SetFlagErrorFunc (showFlagUsageAndExit).
 		return err
 	}
 

@@ -710,7 +710,10 @@ func showUsageExample(cmd *cobra.Command, details string) {
 		suggestion = exampleContent.Suggestion
 		details += "\n## Usage Examples:\n" + exampleContent.Content
 	}
-	errUtils.CheckErrorPrintAndExit(errors.New(details), "Incorrect Usage", suggestion)
+	// Print error directly since markdown renderer may not be initialized yet (flag parsing errors).
+	fmt.Fprintf(os.Stderr, "Error: %s", details)
+	fmt.Fprintf(os.Stderr, "%s\n", suggestion)
+	errUtils.Exit(1)
 }
 
 func stackFlagCompletion(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
