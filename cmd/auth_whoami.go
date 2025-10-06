@@ -86,12 +86,8 @@ func printWhoamiJSON(whoami *authTypes.WhoamiInfo) error {
 	// Never emit credentials in JSON output.
 	redactedWhoami.Credentials = nil
 	homeDir, _ := homedir.Dir()
-	if whoami.Environment != nil && homeDir != "" {
-		redactedEnv := make(map[string]string, len(whoami.Environment))
-		for k, v := range whoami.Environment {
-			redactedEnv[k] = redactHomeDir(v, homeDir)
-		}
-		redactedWhoami.Environment = redactedEnv
+	if whoami.Environment != nil {
+		redactedWhoami.Environment = sanitizeEnvMap(whoami.Environment, homeDir)
 	}
 	jsonData, err := json.MarshalIndent(redactedWhoami, "", "  ")
 	if err != nil {
@@ -134,6 +130,24 @@ func redactHomeDir(v string, homeDir string) string {
 		return "~"
 	}
 	return v
+}
+
+// sanitizeEnvMap redacts secrets and user paths from environment variables.
+func sanitizeEnvMap(in map[string]string, homeDir string) map[string]string {
+	out := make(map[string]string, len(in))
+	sensitive := []string{"SECRET", "TOKEN", "PASSWORD", "PRIVATE", "ACCESS_KEY", "SESSION"}
+	for k, v := range in {
+		redacted := redactHomeDir(v, homeDir)
+		upperK := strings.ToUpper(k)
+		for _, s := range sensitive {
+			if strings.Contains(upperK, s) {
+				redacted = "***REDACTED***"
+				break
+			}
+		}
+		out[k] = redacted
+	}
+	return out
 }
 
 func init() {

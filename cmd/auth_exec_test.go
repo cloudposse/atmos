@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"bytes"
+	"errors"
 	"os"
 	"runtime"
 	"testing"
@@ -9,6 +10,8 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	errUtils "github.com/cloudposse/atmos/errors"
 )
 
 func TestAuthExecCmd_FlagParsing(t *testing.T) {
@@ -120,6 +123,7 @@ func TestExecuteCommandWithEnv(t *testing.T) {
 		envVars       map[string]string
 		skipOnWindows bool
 		expectedError string
+		expectedCode  int // Expected exit code if error is ExitCodeError
 	}{
 		{
 			name:          "empty args",
@@ -141,6 +145,15 @@ func TestExecuteCommandWithEnv(t *testing.T) {
 			envVars:       map[string]string{},
 			expectedError: "command not found",
 		},
+		{
+			name: "command with non-zero exit code",
+			args: []string{"sh", "-c", "exit 2"},
+			envVars: map[string]string{
+				"TEST_VAR": "test-value",
+			},
+			skipOnWindows: true,
+			expectedCode:  2,
+		},
 	}
 
 	for _, tt := range tests {
@@ -151,12 +164,20 @@ func TestExecuteCommandWithEnv(t *testing.T) {
 
 			err := executeCommandWithEnv(tt.args, tt.envVars)
 
-			if tt.expectedError != "" {
+			switch {
+			case tt.expectedError != "":
 				assert.Error(t, err)
 				if err != nil {
 					assert.Contains(t, err.Error(), tt.expectedError)
 				}
-			} else {
+			case tt.expectedCode != 0:
+				assert.Error(t, err)
+				// Check that it's an ExitCodeError with the correct code
+				var exitCodeErr errUtils.ExitCodeError
+				if assert.True(t, errors.As(err, &exitCodeErr), "error should be ExitCodeError") {
+					assert.Equal(t, tt.expectedCode, exitCodeErr.Code)
+				}
+			default:
 				assert.NoError(t, err)
 			}
 		})

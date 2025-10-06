@@ -2,6 +2,7 @@ package errors
 
 import (
 	"errors"
+	"fmt"
 )
 
 var (
@@ -255,3 +256,13 @@ var (
 	ErrNilTerraformOutput = errors.New("terraform output returned nil")
 	ErrNilStoreValue      = errors.New("cannot store nil value")
 )
+
+// ExitCodeError is a typed error that preserves subcommand exit codes.
+// This allows the root command to exit with the same code as the subcommand.
+type ExitCodeError struct {
+	Code int
+}
+
+func (e ExitCodeError) Error() string {
+	return fmt.Sprintf("subcommand exited with code %d", e.Code)
+}

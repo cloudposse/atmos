@@ -1,13 +1,11 @@
 package cmd
 
 import (
-	"errors"
 	"fmt"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
-	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth/validation"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -45,7 +43,7 @@ func executeAuthValidateCommand(cmd *cobra.Command, args []string) error {
 	if err := validator.ValidateAuthConfig(&atmosConfig.Auth); err != nil {
 		u.PrintfMarkdown("**❌ Authentication configuration validation failed:**\n")
 		u.PrintfMarkdown("%s\n", err.Error())
-		return errors.Join(errUtils.ErrInvalidAuthConfig, err)
+		return err
 	}
 
 	u.PrintfMarkdown("**✅ Authentication configuration is valid**\n")
