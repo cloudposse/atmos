@@ -367,34 +367,76 @@ func TestVersionFlagParsing(t *testing.T) {
 }
 
 func TestVersionFlagExecutionPath(t *testing.T) {
-	// Save original OsExit and restore after test.
-	originalOsExit := utils.OsExit
-	t.Cleanup(func() { utils.OsExit = originalOsExit })
-
-	// Mock OsExit to panic with the exit code so we can test the execution path
-	// without actually exiting the test process.
-	type exitPanic struct {
-		code int
+	tests := []struct {
+		name       string
+		setup      func()
+		cleanup    func()
+		expectExit int
+	}{
+		{
+			name: "version flag triggers successful exit",
+			setup: func() {
+				versionFlag := RootCmd.PersistentFlags().Lookup("version")
+				if versionFlag != nil {
+					versionFlag.Value.Set("false")
+					versionFlag.Changed = false
+				}
+				RootCmd.SetArgs([]string{"--version"})
+			},
+			cleanup:    func() {},
+			expectExit: 0,
+		},
+		{
+			name: "version flag false does not exit",
+			setup: func() {
+				versionFlag := RootCmd.PersistentFlags().Lookup("version")
+				if versionFlag != nil {
+					versionFlag.Value.Set("false")
+					versionFlag.Changed = false
+				}
+				RootCmd.SetArgs([]string{"version"})
+			},
+			cleanup:    func() {},
+			expectExit: -1, // No exit expected
+		},
 	}
-	utils.OsExit = func(code int) {
-		panic(exitPanic{code: code})
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Save original OsExit and restore after test.
+			originalOsExit := utils.OsExit
+			t.Cleanup(func() {
+				utils.OsExit = originalOsExit
+				tt.cleanup()
+			})
+
+			// Mock OsExit to panic with the exit code so we can test the execution path
+			// without actually exiting the test process.
+			type exitPanic struct {
+				code int
+			}
+			utils.OsExit = func(code int) {
+				panic(exitPanic{code: code})
+			}
+
+			// Setup test conditions.
+			tt.setup()
+
+			if tt.expectExit >= 0 {
+				// Execute should call version command and then exit with expected code.
+				// We expect it to panic with our exitPanic struct containing the exit code.
+				// This verifies that the --version flag handler is being executed and
+				// calls os.Exit via utils.OsExit.
+				assert.PanicsWithValue(t, exitPanic{code: tt.expectExit}, func() {
+					_ = Execute()
+				}, "Execute should exit with code %d", tt.expectExit)
+			} else {
+				// No exit expected, just run normally.
+				// This test ensures the version flag check doesn't interfere with normal commands.
+				assert.NotPanics(t, func() {
+					_ = Execute()
+				}, "Execute should not exit when version flag is not set")
+			}
+		})
 	}
-
-	// Reset flag state.
-	versionFlag := RootCmd.PersistentFlags().Lookup("version")
-	if versionFlag != nil {
-		versionFlag.Value.Set("false")
-		versionFlag.Changed = false
-	}
-
-	// Set args to trigger version flag.
-	RootCmd.SetArgs([]string{"--version"})
-
-	// Execute should call version command and then exit with code 0.
-	// We expect it to panic with our exitPanic struct containing exit code 0.
-	// This verifies that the --version flag handler is being executed and
-	// calls os.Exit(0) via utils.OsExit(0).
-	assert.PanicsWithValue(t, exitPanic{code: 0}, func() {
-		_ = Execute()
-	}, "Execute should exit with code 0 when --version is set")
 }
