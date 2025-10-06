@@ -6,13 +6,15 @@ import (
 	"io"
 	"os"
 
-	"github.com/alecthomas/chroma/quick"
 	"github.com/arsham/figurine/figurine"
 	"github.com/charmbracelet/glamour"
-	"github.com/cloudposse/atmos/pkg/schema"
-	mdstyle "github.com/cloudposse/atmos/pkg/ui/markdown"
 	"github.com/jwalton/go-supportscolor"
 	xterm "golang.org/x/term"
+
+	"github.com/alecthomas/chroma/v2/quick"
+
+	"github.com/cloudposse/atmos/pkg/schema"
+	mdstyle "github.com/cloudposse/atmos/pkg/ui/markdown"
 )
 
 // HighlightCode returns a syntax highlighted code for the specified language
