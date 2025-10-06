@@ -5,14 +5,13 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/cloudposse/atmos/pkg/perf"
-
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/filetype"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -522,13 +521,13 @@ func processArgsAndFlags(
 
 		if arg == cfg.IdentityFlag {
 			if len(inputArgsAndFlags) <= (i + 1) {
-				return info, fmt.Errorf(errUtils.ErrStringWrappingFormat, errUtils.ErrInvalidFlag, arg)
+				return info, fmt.Errorf("%w: %s", errUtils.ErrInvalidFlag, arg)
 			}
 			info.Identity = inputArgsAndFlags[i+1]
 		} else if strings.HasPrefix(arg+"=", cfg.IdentityFlag) {
 			parts := strings.Split(arg, "=")
 			if len(parts) != 2 {
-				return info, fmt.Errorf(errUtils.ErrStringWrappingFormat, errUtils.ErrInvalidFlag, arg)
+				return info, fmt.Errorf("%w: %s", errUtils.ErrInvalidFlag, arg)
 			}
 			info.Identity = parts[1]
 		}

@@ -5,10 +5,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/zalando/go-keyring"
 
 	"github.com/cloudposse/atmos/pkg/auth/types"
-	"github.com/stretchr/testify/assert"
 )
 
 // Ensure the keyring uses an in-memory mock backend for tests.

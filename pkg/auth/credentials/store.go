@@ -16,6 +16,9 @@ var ErrCredentialStore = errors.New("credential store")
 // ErrNotSupported indicates an unsupported operation for this backend.
 var ErrNotSupported = errors.New("not supported")
 
+// ErrListNotSupported indicates that listing credentials is not supported with keyring backend.
+var ErrListNotSupported = errors.New("listing credentials is not supported with keyring backend")
+
 const (
 	// KeyringUser is the "account" used to store credentials in the keyring. Here we use atmos-auth to provide a consistent way to search for atmos credentials.
 	KeyringUser = "atmos-auth"
@@ -53,7 +56,7 @@ func (s *keyringStore) Store(alias string, creds types.ICredentials) error {
 		return fmt.Errorf("%w: unsupported credential type %T", ErrCredentialStore, creds)
 	}
 	if err != nil {
-		return errors.Join(fmt.Errorf("failed to marshal credentials: %w", err), ErrCredentialStore)
+		return errors.Join(ErrCredentialStore, err)
 	}
 
 	env := credentialEnvelope{Type: typ, Data: raw}
@@ -63,7 +66,7 @@ func (s *keyringStore) Store(alias string, creds types.ICredentials) error {
 	}
 
 	if err := keyring.Set(alias, KeyringUser, string(data)); err != nil {
-		return errors.Join(fmt.Errorf("failed to store credentials in keyring: %w", err), ErrCredentialStore)
+		return errors.Join(ErrCredentialStore, err)
 	}
 	return nil
 }
@@ -114,7 +117,7 @@ func (s *keyringStore) List() ([]string, error) {
 	// or use a different storage backend for full functionality.
 	// Join both the generic store error and specific not-supported sentinel
 	// so callers can detect either condition with errors.Is.
-	return nil, errors.Join(fmt.Errorf("%w: listing credentials is not supported with keyring backend", ErrCredentialStore), ErrNotSupported)
+	return nil, errors.Join(ErrCredentialStore, ErrNotSupported, ErrListNotSupported)
 }
 
 // IsExpired checks if credentials for the given alias are expired.

@@ -2,16 +2,18 @@ package auth
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
 	"github.com/charmbracelet/huh"
 	"github.com/charmbracelet/lipgloss"
-	log "github.com/charmbracelet/log"
+
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth/factory"
 	"github.com/cloudposse/atmos/pkg/auth/identities/aws"
 	"github.com/cloudposse/atmos/pkg/auth/types"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/telemetry"
 )
@@ -22,6 +24,7 @@ const (
 	buildAuthenticationChain = "buildAuthenticationChain"
 	buildChainRecursive      = "buildChainRecursive"
 	backtickedQuotedFmt      = "`%q`"
+	errFormatWithString      = "%w: %s"
 )
 
 // manager implements the Authmanager interface.
@@ -69,13 +72,13 @@ func NewAuthManager(
 	// Initialize providers.
 	if err := m.initializeProviders(); err != nil {
 		errUtils.CheckErrorAndPrint(errUtils.ErrInitializingProviders, "initializeProviders", "failed to initialize providers")
-		return nil, fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrInitializingProviders, err)
+		return nil, errors.Join(errUtils.ErrInitializingProviders, err)
 	}
 
 	// Initialize identities.
 	if err := m.initializeIdentities(); err != nil {
 		errUtils.CheckErrorAndPrint(errUtils.ErrInitializingIdentities, "initializeIdentities", "failed to initialize identities")
-		return nil, fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrInitializingIdentities, err)
+		return nil, errors.Join(errUtils.ErrInitializingIdentities, err)
 	}
 
 	return m, nil
@@ -91,22 +94,18 @@ func (m *manager) Authenticate(ctx context.Context, identityName string) (*types
 	// We expect the identity name to be provided by the caller.
 	if identityName == "" {
 		errUtils.CheckErrorAndPrint(errUtils.ErrNilParam, identityNameKey, "no identity specified")
-		return nil, fmt.Errorf(errUtils.ErrStringWrappingFormat, errUtils.ErrNilParam, identityNameKey)
+		return nil, fmt.Errorf(errFormatWithString, errUtils.ErrNilParam, identityNameKey)
 	}
 	if _, exists := m.identities[identityName]; !exists {
 		errUtils.CheckErrorAndPrint(errUtils.ErrInvalidAuthConfig, identityNameKey, "Identity specified was not found in the auth config.")
-		return nil, fmt.Errorf(
-			errUtils.ErrStringWrappingFormat,
-			errUtils.ErrIdentityNotFound,
-			fmt.Sprintf(backtickedQuotedFmt, identityName),
-		)
+		return nil, fmt.Errorf(errFormatWithString, errUtils.ErrIdentityNotFound, fmt.Sprintf(backtickedQuotedFmt, identityName))
 	}
 
 	// Build the complete authentication chain.
 	chain, err := m.buildAuthenticationChain(identityName)
 	if err != nil {
 		errUtils.CheckErrorAndPrint(errUtils.ErrInvalidAuthConfig, buildAuthenticationChain, "Check your atmos.yaml.")
-		return nil, fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrInvalidAuthConfig, err)
+		return nil, errors.Join(errUtils.ErrInvalidAuthConfig, err)
 	}
 	// Persist the chain for later retrieval by providers or callers.
 	m.chain = chain
@@ -116,7 +115,7 @@ func (m *manager) Authenticate(ctx context.Context, identityName string) (*types
 	finalCreds, err := m.authenticateHierarchical(ctx, identityName)
 	if err != nil {
 		errUtils.CheckErrorAndPrint(errUtils.ErrAuthenticationFailed, "authenticateHierarchical", "")
-		return nil, fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrAuthenticationFailed, err)
+		return nil, errors.Join(errUtils.ErrAuthenticationFailed, err)
 	}
 
 	// Call post-authentication hook on the identity (now part of Identity interface).
@@ -144,20 +143,20 @@ func (m *manager) GetChain() []string {
 // Whoami returns information about the specified identity's credentials.
 func (m *manager) Whoami(ctx context.Context, identityName string) (*types.WhoamiInfo, error) {
 	if _, exists := m.identities[identityName]; !exists {
-		return nil, fmt.Errorf(errUtils.ErrStringWrappingFormat, errUtils.ErrIdentityNotFound, fmt.Sprintf(backtickedQuotedFmt, identityName))
+		return nil, fmt.Errorf(errFormatWithString, errUtils.ErrIdentityNotFound, fmt.Sprintf(backtickedQuotedFmt, identityName))
 	}
 
 	// Try to retrieve credentials for the resolved identity.
 	creds, err := m.credentialStore.Retrieve(identityName)
 	if err != nil {
-		return nil, fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrNoCredentialsFound, err)
+		return nil, errors.Join(errUtils.ErrNoCredentialsFound, err)
 	}
 
 	// Check if credentials are expired.
 	if expired, err := m.credentialStore.IsExpired(identityName); err != nil {
-		return nil, fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrExpiredCredentials, err)
+		return nil, errors.Join(errUtils.ErrExpiredCredentials, err)
 	} else if expired {
-		return nil, fmt.Errorf(errUtils.ErrStringWrappingFormat, errUtils.ErrExpiredCredentials, fmt.Sprintf(backtickedQuotedFmt, identityName))
+		return nil, fmt.Errorf(errFormatWithString, errUtils.ErrExpiredCredentials, fmt.Sprintf(backtickedQuotedFmt, identityName))
 	}
 
 	return m.buildWhoamiInfo(identityName, creds), nil
@@ -166,7 +165,7 @@ func (m *manager) Whoami(ctx context.Context, identityName string) (*types.Whoam
 // Validate validates the entire auth configuration.
 func (m *manager) Validate() error {
 	if err := m.validator.ValidateAuthConfig(m.config); err != nil {
-		return fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrInvalidAuthConfig, err)
+		return errors.Join(errUtils.ErrInvalidAuthConfig, err)
 	}
 	return nil
 }
@@ -198,7 +197,7 @@ func (m *manager) GetDefaultIdentity() (string, error) {
 	default:
 		// Multiple default identities found.
 		if telemetry.IsCI() {
-			return "", fmt.Errorf(errUtils.ErrStringWrappingFormat, errUtils.ErrMultipleDefaultIdentities, fmt.Sprintf(backtickedQuotedFmt, defaultIdentities))
+			return "", fmt.Errorf(errFormatWithString, errUtils.ErrMultipleDefaultIdentities, fmt.Sprintf(backtickedQuotedFmt, defaultIdentities))
 		}
 		// In interactive mode, prompt user to choose from default identities.
 		return m.promptForIdentity("Multiple default identities found. Please choose one:", defaultIdentities)
@@ -208,7 +207,7 @@ func (m *manager) GetDefaultIdentity() (string, error) {
 // promptForIdentity prompts the user to select an identity from the given list.
 func (m *manager) promptForIdentity(message string, identities []string) (string, error) {
 	if len(identities) == 0 {
-		return "", fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrInvalidAuthConfig, errUtils.ErrNoIdentitiesAvailable)
+		return "", errors.Join(errUtils.ErrInvalidAuthConfig, errUtils.ErrNoIdentitiesAvailable)
 	}
 
 	var selectedIdentity string
@@ -223,7 +222,7 @@ func (m *manager) promptForIdentity(message string, identities []string) (string
 
 	if err := form.Run(); err != nil {
 		errUtils.CheckErrorAndPrint(errUtils.ErrUnsupportedInputType, "promptForIdentity", "")
-		return "", fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrUnsupportedInputType, err)
+		return "", errors.Join(errUtils.ErrUnsupportedInputType, err)
 	}
 
 	return selectedIdentity, nil
@@ -254,7 +253,7 @@ func (m *manager) initializeProviders() error {
 		provider, err := factory.NewProvider(name, &providerConfig)
 		if err != nil {
 			errUtils.CheckErrorAndPrint(errUtils.ErrInvalidProviderConfig, "initializeProviders", "")
-			return fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrInvalidProviderConfig, err)
+			return errors.Join(errUtils.ErrInvalidProviderConfig, err)
 		}
 		m.providers[name] = provider
 	}
@@ -267,7 +266,7 @@ func (m *manager) initializeIdentities() error {
 		identity, err := factory.NewIdentity(name, &identityConfig)
 		if err != nil {
 			errUtils.CheckErrorAndPrint(errUtils.ErrInvalidIdentityConfig, "initializeIdentities", "")
-			return fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrInvalidIdentityConfig, err)
+			return errors.Join(errUtils.ErrInvalidIdentityConfig, err)
 		}
 		m.identities[name] = identity
 	}
@@ -321,12 +320,12 @@ func (m *manager) GetProviderKindForIdentity(identityName string) (string, error
 	chain, err := m.buildAuthenticationChain(identityName)
 	if err != nil {
 		errUtils.CheckErrorAndPrint(errUtils.ErrInvalidAuthConfig, buildAuthenticationChain, "")
-		return "", fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrInvalidAuthConfig, err)
+		return "", errors.Join(errUtils.ErrInvalidAuthConfig, err)
 	}
 
 	if len(chain) == 0 {
 		errUtils.CheckErrorAndPrint(errUtils.ErrInvalidAuthConfig, buildAuthenticationChain, "")
-		return "", fmt.Errorf(errUtils.ErrStringWrappingFormat, errUtils.ErrInvalidAuthConfig, "empty chain")
+		return "", fmt.Errorf("%w: empty chain", errUtils.ErrInvalidAuthConfig)
 	}
 
 	// The first element in the chain is the root provider name.
@@ -342,7 +341,7 @@ func (m *manager) GetProviderKindForIdentity(identityName string) (string, error
 	}
 
 	errUtils.CheckErrorAndPrint(errUtils.ErrInvalidAuthConfig, "GetProviderKindForIdentity", fmt.Sprintf("provider %q not found in configuration", providerName))
-	return "", fmt.Errorf(errUtils.ErrStringWrappingFormat, errUtils.ErrInvalidAuthConfig, fmt.Sprintf("provider %q not found in configuration", providerName))
+	return "", fmt.Errorf("%w: provider %q not found in configuration", errUtils.ErrInvalidAuthConfig, providerName)
 }
 
 // authenticateHierarchical performs hierarchical authentication with bottom-up validation.
@@ -445,7 +444,7 @@ func (m *manager) authenticateProviderChain(ctx context.Context, startIndex int)
 		if provider, exists := m.providers[m.chain[0]]; exists {
 			if err := provider.PreAuthenticate(m); err != nil {
 				errUtils.CheckErrorAndPrint(errUtils.ErrAuthenticationFailed, "PreAuthenticate", "")
-				return nil, fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrAuthenticationFailed, err)
+				return nil, errors.Join(errUtils.ErrAuthenticationFailed, err)
 			}
 		}
 		currentCreds, err = m.authenticateWithProvider(ctx, m.chain[0])
@@ -516,7 +515,7 @@ func (m *manager) authenticateWithProvider(ctx context.Context, providerName str
 	credentials, err := provider.Authenticate(ctx)
 	if err != nil {
 		errUtils.CheckErrorAndPrint(errUtils.ErrAuthenticationFailed, "authenticateWithProvider", "")
-		return nil, fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrAuthenticationFailed, err)
+		return nil, errors.Join(errUtils.ErrAuthenticationFailed, err)
 	}
 
 	// Cache provider credentials.
@@ -560,7 +559,7 @@ func (m *manager) authenticateIdentityChain(ctx context.Context, startIndex int,
 		// Each identity receives credentials from the previous step.
 		nextCreds, err := identity.Authenticate(ctx, currentCreds)
 		if err != nil {
-			return nil, fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrAuthenticationFailed,
+			return nil, errors.Join(errUtils.ErrAuthenticationFailed,
 				fmt.Errorf("identity %q authentication failed at chain step %d: %w", identityStep, i, err))
 		}
 
@@ -589,7 +588,7 @@ func (m *manager) buildAuthenticationChain(identityName string) ([]string, error
 	err := m.buildChainRecursive(identityName, &chain, visited)
 	if err != nil {
 		errUtils.CheckErrorAndPrint(errUtils.ErrInvalidAuthConfig, buildAuthenticationChain, fmt.Sprintf("failed to build authentication chain for identity %q: %v", identityName, err))
-		return nil, fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrInvalidAuthConfig, err)
+		return nil, errors.Join(errUtils.ErrInvalidAuthConfig, err)
 	}
 
 	// Reverse the chain so provider is first, then identities in authentication order.
@@ -606,7 +605,7 @@ func (m *manager) buildChainRecursive(identityName string, chain *[]string, visi
 	// Check for circular dependencies.
 	if visited[identityName] {
 		errUtils.CheckErrorAndPrint(errUtils.ErrCircularDependency, buildChainRecursive, fmt.Sprintf("circular dependency detected in identity chain involving %q", identityName))
-		return fmt.Errorf(errUtils.ErrStringWrappingFormat, errUtils.ErrCircularDependency, fmt.Sprintf("circular dependency detected in identity chain involving %q", identityName))
+		return fmt.Errorf("%w: circular dependency detected in identity chain involving %q", errUtils.ErrCircularDependency, identityName)
 	}
 	visited[identityName] = true
 
@@ -615,7 +614,7 @@ func (m *manager) buildChainRecursive(identityName string, chain *[]string, visi
 
 	if !exists {
 		errUtils.CheckErrorAndPrint(errUtils.ErrInvalidAuthConfig, buildChainRecursive, fmt.Sprintf("identity %q not found", identityName))
-		return fmt.Errorf(errUtils.ErrStringWrappingFormat, errUtils.ErrInvalidAuthConfig, fmt.Sprintf("identity %q not found", identityName))
+		return fmt.Errorf("%w: identity %q not found", errUtils.ErrInvalidAuthConfig, identityName)
 	}
 
 	// AWS User identities don't require via configuration - they are standalone.
@@ -626,7 +625,7 @@ func (m *manager) buildChainRecursive(identityName string, chain *[]string, visi
 			return nil
 		}
 		errUtils.CheckErrorAndPrint(errUtils.ErrInvalidIdentityConfig, buildChainRecursive, fmt.Sprintf("identity %q has no via configuration", identityName))
-		return fmt.Errorf(errUtils.ErrStringWrappingFormat, errUtils.ErrInvalidIdentityConfig, fmt.Sprintf("identity %q has no via configuration", identityName))
+		return fmt.Errorf("%w: identity %q has no via configuration", errUtils.ErrInvalidIdentityConfig, identityName)
 	}
 
 	// Add current identity to chain.
@@ -644,7 +643,7 @@ func (m *manager) buildChainRecursive(identityName string, chain *[]string, visi
 	}
 
 	errUtils.CheckErrorAndPrint(errUtils.ErrInvalidIdentityConfig, buildChainRecursive, fmt.Sprintf("identity %q has invalid via configuration", identityName))
-	return fmt.Errorf(errUtils.ErrStringWrappingFormat, errUtils.ErrInvalidIdentityConfig, fmt.Sprintf("identity %q has invalid via configuration", identityName))
+	return fmt.Errorf("%w: identity %q has invalid via configuration", errUtils.ErrInvalidIdentityConfig, identityName)
 }
 
 // buildWhoamiInfo creates a WhoamiInfo struct from identity and credentials.

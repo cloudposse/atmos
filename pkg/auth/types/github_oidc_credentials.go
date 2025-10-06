@@ -3,7 +3,7 @@ package types
 import (
 	"encoding/base64"
 	"encoding/json"
-	"fmt"
+	"errors"
 	"strings"
 	"time"
 
@@ -37,13 +37,13 @@ func (c *OIDCCredentials) GetExpiration() (*time.Time, error) {
 	}
 	payload, err := base64.RawURLEncoding.DecodeString(parts[1])
 	if err != nil {
-		return nil, fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrAuthOidcDecodeFailed, err)
+		return nil, errors.Join(errUtils.ErrAuthOidcDecodeFailed, err)
 	}
 	var claims struct {
 		Exp int64 `json:"exp"`
 	}
 	if err := json.Unmarshal(payload, &claims); err != nil {
-		return nil, fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrAuthOidcUnmarshalFailed, err)
+		return nil, errors.Join(errUtils.ErrAuthOidcUnmarshalFailed, err)
 	}
 	if claims.Exp == 0 {
 		return nil, nil

@@ -4,14 +4,16 @@ import (
 	"context"
 	"fmt"
 
-	log "github.com/charmbracelet/log"
+	charm "github.com/charmbracelet/log"
+	"github.com/go-viper/mapstructure/v2"
+
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth/credentials"
 	"github.com/cloudposse/atmos/pkg/auth/types"
 	"github.com/cloudposse/atmos/pkg/auth/validation"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/utils"
-	"github.com/go-viper/mapstructure/v2"
 )
 
 type (
@@ -123,20 +125,20 @@ func newAuthManager(authConfig *schema.AuthConfig, stackInfo *schema.ConfigAndSt
 	return authManager, nil
 }
 
-func getConfigLogLevels(atmosConfig *schema.AtmosConfiguration) (log.Level, log.Level) {
+func getConfigLogLevels(atmosConfig *schema.AtmosConfiguration) (charm.Level, charm.Level) {
 	if atmosConfig == nil {
-		return log.InfoLevel, log.InfoLevel
+		return charm.InfoLevel, charm.InfoLevel
 	}
 	atmosLevel := log.GetLevel()
 	if atmosConfig.Logs.Level != "" {
-		if l, err := log.ParseLevel(atmosConfig.Logs.Level); err == nil {
+		if l, err := charm.ParseLevel(atmosConfig.Logs.Level); err == nil {
 			atmosLevel = l
 		}
 	}
 	// Determine auth log level (fallback to atmos level).
 	authLevel := atmosLevel
 	if atmosConfig.Auth.Logs.Level != "" {
-		if l, err := log.ParseLevel(atmosConfig.Auth.Logs.Level); err == nil {
+		if l, err := charm.ParseLevel(atmosConfig.Auth.Logs.Level); err == nil {
 			authLevel = l
 		}
 	}

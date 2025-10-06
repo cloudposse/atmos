@@ -5,10 +5,10 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	ini "gopkg.in/ini.v1"
 
 	"github.com/cloudposse/atmos/pkg/auth/types"
-	"github.com/stretchr/testify/assert"
 )
 
 func TestAWSFileManager_WriteCredentials(t *testing.T) {

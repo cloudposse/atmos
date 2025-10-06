@@ -2,6 +2,7 @@ package aws
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -10,11 +11,12 @@ import (
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
 	"github.com/charmbracelet/huh"
-	log "github.com/charmbracelet/log"
+
 	errUtils "github.com/cloudposse/atmos/errors"
 	awsCloud "github.com/cloudposse/atmos/pkg/auth/cloud/aws"
 	atmosCredentials "github.com/cloudposse/atmos/pkg/auth/credentials"
 	"github.com/cloudposse/atmos/pkg/auth/types"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -140,7 +142,7 @@ func (i *userIdentity) resolveRegion() string {
 func (i *userIdentity) writeAWSFiles(creds *types.AWSCredentials, region string) error {
 	awsFileManager, err := awsCloud.NewAWSFileManager()
 	if err != nil {
-		return fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrAuthAwsFileManagerFailed, err)
+		return errors.Join(errUtils.ErrAuthAwsFileManagerFailed, err)
 	}
 
 	// Write credentials to ~/.aws/atmos/aws-user/credentials.
@@ -182,7 +184,7 @@ func (i *userIdentity) generateSessionToken(ctx context.Context, longLivedCreds 
 
 	result, err := stsClient.GetSessionToken(ctx, input)
 	if err != nil {
-		return nil, fmt.Errorf("%w: failed to get session token: %v", errUtils.ErrAuthenticationFailed, err)
+		return nil, errors.Join(errUtils.ErrAuthenticationFailed, err)
 	}
 
 	// Validate result and safely construct session credentials.
@@ -280,7 +282,7 @@ func (i *userIdentity) Environment() (map[string]string, error) {
 	// Get AWS file environment variables using "aws-user" as mock provider.
 	awsFileManager, err := awsCloud.NewAWSFileManager()
 	if err != nil {
-		return nil, fmt.Errorf(errUtils.ErrStringWrappingFormat, errUtils.ErrAuthAwsFileManagerFailed, err)
+		return nil, errors.Join(errUtils.ErrAuthAwsFileManagerFailed, err)
 	}
 	awsEnvVars := awsFileManager.GetEnvironmentVariables(awsUserProviderName, i.name)
 
@@ -335,10 +337,10 @@ func AuthenticateStandaloneAWSUser(ctx context.Context, identityName string, ide
 func (i *userIdentity) PostAuthenticate(ctx context.Context, stackInfo *schema.ConfigAndStacksInfo, providerName, identityName string, creds types.ICredentials) error {
 	// Setup AWS files using shared AWS cloud package.
 	if err := awsCloud.SetupFiles(providerName, identityName, creds); err != nil {
-		return fmt.Errorf("%w: failed to setup AWS files: %v", errUtils.ErrAwsAuth, err)
+		return errors.Join(errUtils.ErrAwsAuth, err)
 	}
 	if err := awsCloud.SetEnvironmentVariables(stackInfo, providerName, identityName); err != nil {
-		return fmt.Errorf("%w: failed to set environment variables: %v", errUtils.ErrAwsAuth, err)
+		return errors.Join(errUtils.ErrAwsAuth, err)
 	}
 	return nil
 }

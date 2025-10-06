@@ -6,11 +6,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth/types"
 	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 func TestManager_GetDefaultIdentity(t *testing.T) {
@@ -857,4 +858,136 @@ func TestGetProviderKindForIdentity(t *testing.T) {
 
 	_, err = m.GetProviderKindForIdentity("developer")
 	require.ErrorIs(t, err, errUtils.ErrInvalidAuthConfig)
+}
+
+func TestManager_GetConfig(t *testing.T) {
+	stackInfo := &schema.ConfigAndStacksInfo{
+		ComponentSection: map[string]any{"test": "value"},
+	}
+
+	m := &manager{
+		stackInfo: stackInfo,
+	}
+
+	config := m.GetConfig()
+	assert.Equal(t, stackInfo, config)
+}
+
+func TestManager_GetProviderForIdentity(t *testing.T) {
+	authConfig := &schema.AuthConfig{
+		Providers: map[string]schema.Provider{
+			"sso": {Kind: "aws/iam-identity-center"},
+		},
+		Identities: map[string]schema.Identity{
+			"admin": {
+				Kind: "aws/permission-set",
+				Via:  &schema.IdentityVia{Provider: "sso"},
+			},
+			"me": {
+				Kind: "aws/user",
+			},
+		},
+	}
+
+	m := &manager{
+		config:          authConfig,
+		providers:       make(map[string]types.Provider),
+		identities:      make(map[string]types.Identity),
+		credentialStore: &testStore{},
+	}
+
+	// Test with permission set identity.
+	provider := m.GetProviderForIdentity("admin")
+	assert.Equal(t, "sso", provider)
+
+	// Test with aws/user identity (standalone).
+	provider = m.GetProviderForIdentity("me")
+	assert.Equal(t, "aws-user", provider)
+
+	// Test with non-existent identity.
+	provider = m.GetProviderForIdentity("nonexistent")
+	assert.Equal(t, "", provider)
+}
+
+func TestManager_Validate(t *testing.T) {
+	authConfig := &schema.AuthConfig{
+		Providers: map[string]schema.Provider{
+			"sso": {Kind: "aws/iam-identity-center", Region: "us-east-1", StartURL: "https://example.awsapps.com/start"},
+		},
+		Identities: map[string]schema.Identity{
+			"admin": {
+				Kind: "aws/permission-set",
+				Via:  &schema.IdentityVia{Provider: "sso"},
+				Principal: map[string]any{
+					"name": "admin",
+					"account": map[string]any{
+						"id": "123456789012",
+					},
+				},
+			},
+		},
+	}
+
+	m := &manager{
+		config:          authConfig,
+		providers:       make(map[string]types.Provider),
+		identities:      make(map[string]types.Identity),
+		credentialStore: &testStore{},
+		validator:       &testValidator{},
+	}
+
+	err := m.Validate()
+	assert.NoError(t, err)
+}
+
+type testValidator struct {
+	validateErr error
+}
+
+func (v *testValidator) ValidateAuthConfig(config *schema.AuthConfig) error {
+	return v.validateErr
+}
+func (v *testValidator) ValidateLogsConfig(logs *schema.Logs) error { return nil }
+func (v *testValidator) ValidateProvider(name string, provider *schema.Provider) error {
+	return nil
+}
+
+func (v *testValidator) ValidateIdentity(name string, identity *schema.Identity, providers map[string]*schema.Provider) error {
+	return nil
+}
+
+func (v *testValidator) ValidateChains(identities map[string]*schema.Identity, providers map[string]*schema.Provider) error {
+	return nil
+}
+
+func TestManager_fetchCachedCredentials(t *testing.T) {
+	future := time.Now().Add(1 * time.Hour)
+	creds := &testCreds{exp: &future}
+
+	m := &manager{
+		chain: []string{"sso", "admin"},
+		credentialStore: &testStore{
+			data: map[string]any{
+				"admin": creds,
+			},
+		},
+	}
+
+	// Test successful retrieval.
+	retrievedCreds, nextIndex := m.fetchCachedCredentials(1)
+	assert.NotNil(t, retrievedCreds)
+	assert.Equal(t, 2, nextIndex)
+
+	// Test failed retrieval - should return nil and 0.
+	m2 := &manager{
+		chain: []string{"sso", "admin"},
+		credentialStore: &testStore{
+			retrieveErr: map[string]error{
+				"admin": errUtils.ErrNoCredentialsFound,
+			},
+		},
+	}
+	retrievedCreds, nextIndex = m2.fetchCachedCredentials(1)
+	assert.Nil(t, retrievedCreds)
+	assert.Equal(t, 0, nextIndex)
 }

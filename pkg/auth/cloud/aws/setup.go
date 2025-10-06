@@ -1,6 +1,7 @@
 package aws
 
 import (
+	"errors"
 	"fmt"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -19,7 +20,7 @@ func SetupFiles(providerName, identityName string, creds types.ICredentials) err
 	// Create AWS file manager.
 	fileManager, err := NewAWSFileManager()
 	if err != nil {
-		return fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrAuthAwsFileManagerFailed, err)
+		return errors.Join(errUtils.ErrAuthAwsFileManagerFailed, err)
 	}
 
 	// Write credentials file.
@@ -44,7 +45,7 @@ func SetupFiles(providerName, identityName string, creds types.ICredentials) err
 func SetEnvironmentVariables(stackInfo *schema.ConfigAndStacksInfo, providerName, identityName string) error {
 	m, err := NewAWSFileManager()
 	if err != nil {
-		return fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrAuthAwsFileManagerFailed, err)
+		return errors.Join(errUtils.ErrAuthAwsFileManagerFailed, err)
 	}
 	credentialsPath := m.GetCredentialsPath(providerName)
 	configPath := m.GetConfigPath(providerName)

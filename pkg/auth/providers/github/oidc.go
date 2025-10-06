@@ -3,15 +3,16 @@ package github
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"time"
 
-	log "github.com/charmbracelet/log"
 	"github.com/spf13/viper"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth/types"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -134,7 +135,7 @@ func (p *oidcProvider) resolveJWT(ctx context.Context, requestURL, token, aud st
 	}
 	jwtToken, err := p.getOIDCToken(ctx, requestURL, token, aud)
 	if err != nil {
-		return "", fmt.Errorf("%w: failed to get OIDC token: %w", errUtils.ErrAuthenticationFailed, err)
+		return "", errors.Join(errUtils.ErrAuthenticationFailed, err)
 	}
 	return jwtToken, nil
 }
@@ -180,7 +181,7 @@ func (p *oidcProvider) Validate() error {
 		return err
 	}
 	if audience == "" {
-		return fmt.Errorf(errUtils.ErrStringWrappingFormat, errUtils.ErrInvalidProviderConfig, "audience is required in provider spec")
+		return fmt.Errorf("%w: audience is required in provider spec", errUtils.ErrInvalidProviderConfig)
 	}
 	return nil
 }

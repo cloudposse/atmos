@@ -2,6 +2,7 @@ package aws
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -10,10 +11,11 @@ import (
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
-	log "github.com/charmbracelet/log"
+
 	errUtils "github.com/cloudposse/atmos/errors"
 	awsCloud "github.com/cloudposse/atmos/pkg/auth/cloud/aws"
 	"github.com/cloudposse/atmos/pkg/auth/types"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -139,7 +141,7 @@ func (i *assumeRoleIdentity) Authenticate(ctx context.Context, baseCreds types.I
 
 	result, err := stsClient.AssumeRole(ctx, assumeRoleInput)
 	if err != nil {
-		return nil, fmt.Errorf("%w: failed to assume role: %w", errUtils.ErrAuthenticationFailed, err)
+		return nil, errors.Join(errUtils.ErrAuthenticationFailed, err)
 	}
 	return i.toAWSCredentials(result)
 }
@@ -195,10 +197,10 @@ func (i *assumeRoleIdentity) GetProviderName() (string, error) {
 func (i *assumeRoleIdentity) PostAuthenticate(ctx context.Context, stackInfo *schema.ConfigAndStacksInfo, providerName, identityName string, creds types.ICredentials) error {
 	// Setup AWS files using shared AWS cloud package.
 	if err := awsCloud.SetupFiles(providerName, identityName, creds); err != nil {
-		return fmt.Errorf("%w: failed to setup AWS files: %w", errUtils.ErrAwsAuth, err)
+		return errors.Join(errUtils.ErrAwsAuth, err)
 	}
 	if err := awsCloud.SetEnvironmentVariables(stackInfo, providerName, identityName); err != nil {
-		return fmt.Errorf("%w: failed to set environment variables: %w", errUtils.ErrAwsAuth, err)
+		return errors.Join(errUtils.ErrAwsAuth, err)
 	}
 	return nil
 }

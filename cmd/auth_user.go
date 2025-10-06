@@ -1,10 +1,12 @@
 package cmd
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/charmbracelet/huh"
 	log "github.com/charmbracelet/log"
+	"github.com/spf13/cobra"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	uiutils "github.com/cloudposse/atmos/internal/tui/utils"
@@ -12,7 +14,6 @@ import (
 	"github.com/cloudposse/atmos/pkg/auth/types"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/spf13/cobra"
 )
 
 // authUserCmd groups user-related auth commands.
@@ -33,7 +34,7 @@ var authUserConfigureCmd = &cobra.Command{
 		// Load atmos config
 		atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
 		if err != nil {
-			return fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrInvalidAuthConfig, err)
+			return errors.Join(errUtils.ErrInvalidAuthConfig, err)
 		}
 
 		// Gather identities that use a provider of type aws/user.
@@ -104,7 +105,7 @@ var authUserConfigureCmd = &cobra.Command{
 
 		// Store the credentials
 		if err := store.Store(alias, creds); err != nil {
-			return fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrAwsAuth, err)
+			return errors.Join(errUtils.ErrAwsAuth, err)
 		}
 		log.Info("Saved credentials to keyring", "alias", alias)
 		return nil

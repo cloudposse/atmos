@@ -14,9 +14,8 @@ import (
 	stsTypes "github.com/aws/aws-sdk-go-v2/service/sts/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/versent/saml2aws/v2/pkg/creds"
-
 	"github.com/versent/saml2aws/v2"
+	"github.com/versent/saml2aws/v2/pkg/creds"
 
 	"github.com/cloudposse/atmos/pkg/auth/types"
 	"github.com/cloudposse/atmos/pkg/schema"

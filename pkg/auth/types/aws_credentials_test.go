@@ -5,8 +5,9 @@ import (
 	"testing"
 	"time"
 
-	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/stretchr/testify/assert"
+
+	errUtils "github.com/cloudposse/atmos/errors"
 )
 
 func TestAWSCredentials_IsExpired(t *testing.T) {

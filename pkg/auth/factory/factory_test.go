@@ -3,9 +3,10 @@ package factory
 import (
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/stretchr/testify/assert"
 )
 
 func TestNewProvider_Factory(t *testing.T) {

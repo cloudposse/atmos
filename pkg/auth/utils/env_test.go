@@ -3,8 +3,9 @@ package utils
 import (
 	"testing"
 
-	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/stretchr/testify/assert"
+
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 func TestSetEnvironmentVariable_NilSafe(t *testing.T) {
