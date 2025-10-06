@@ -11,7 +11,6 @@ import (
 	"golang.org/x/term"
 
 	"github.com/cloudposse/atmos/pkg/perf"
-	"github.com/cloudposse/atmos/pkg/ui/markdown"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
 
@@ -21,6 +20,9 @@ const (
 
 	// Newline is used for joining wrapped lines.
 	newline = "\n"
+
+	// Space is used for separating words.
+	space = " "
 )
 
 // FormatterConfig controls error formatting behavior.
@@ -44,22 +46,6 @@ func DefaultFormatterConfig() FormatterConfig {
 		Color:         "auto",
 		MaxLineLength: DefaultMaxLineLength,
 	}
-}
-
-// renderHintWithMarkdown renders a hint using the configured Atmos markdown renderer.
-func renderHintWithMarkdown(hint string, renderer *markdown.Renderer) string {
-	// Render hint text with emoji and markdown support.
-	hintText := "💡 " + hint
-	if renderer != nil {
-		rendered, err := renderer.RenderWithoutWordWrap(hintText)
-		if err == nil {
-			// Add 4-space indent after rendering (consistent with Atmos list style).
-			trimmed := strings.TrimRight(rendered, " \n\t")
-			return "    " + trimmed
-		}
-	}
-	// Fallback: 4-space indent with plain text.
-	return "    " + hintText
 }
 
 // formatContextTable creates a styled 2-column table for error context.
@@ -114,7 +100,7 @@ func formatContextTable(err error, useColor bool) string {
 	return "\n" + t.String()
 }
 
-// Format formats an error for display with smart chain handling.
+// Format formats an error for display with structured markdown sections.
 func Format(err error, config FormatterConfig) string {
 	defer perf.Track(nil, "errors.Format")()
 
@@ -122,59 +108,148 @@ func Format(err error, config FormatterConfig) string {
 		return ""
 	}
 
-	// Determine if we should use color.
-	useColor := shouldUseColor(config.Color)
+	// Build structured markdown document with sections.
+	md := buildMarkdownSections(err, config)
 
-	// Define styles.
-	errorStyle := lipgloss.NewStyle()
+	// Render markdown through Glamour.
+	return renderMarkdown(md)
+}
 
-	if useColor {
-		errorStyle = errorStyle.Foreground(lipgloss.Color("#FF0000")) // Red
-	}
+// buildMarkdownSections builds the complete markdown document with all sections.
+func buildMarkdownSections(err error, config FormatterConfig) string {
+	var md strings.Builder
 
-	var output strings.Builder
+	// Section 1: Error header + message.
+	md.WriteString("# Error\n\n")
+	md.WriteString(err.Error() + "\n")
 
-	// Get the main error message.
-	mainMsg := err.Error()
+	// Section 2: Explanation.
+	addExplanationSection(&md, err)
 
-	// Check if message is too long for single line.
-	if len(mainMsg) > config.MaxLineLength && !config.Verbose {
-		// Wrap long messages.
-		wrapped := wrapText(mainMsg, config.MaxLineLength)
-		output.WriteString(errorStyle.Render(wrapped))
-	} else {
-		output.WriteString(errorStyle.Render(mainMsg))
-	}
+	// Section 3 & 4: Examples and Hints.
+	addExampleAndHintsSection(&md, err)
 
-	// Add hints if present.
-	hints := errors.GetAllHints(err)
-	if len(hints) > 0 {
-		output.WriteString("\n")
-		for _, hint := range hints {
-			if useColor {
-				// Use the configured Atmos markdown renderer.
-				rendered := renderHintWithMarkdown(hint, GetMarkdownRenderer())
-				output.WriteString(rendered)
-			} else {
-				// Use 4-space indent for consistency.
-				output.WriteString("    💡 " + hint)
-			}
-			output.WriteString("\n")
-		}
-	}
+	// Section 5: Context.
+	addContextSection(&md, err)
 
-	// In verbose mode, show context table and full stack trace.
+	// Section 6: Stack trace (verbose mode only).
 	if config.Verbose {
-		contextTable := formatContextTable(err, useColor)
-		if contextTable != "" {
-			output.WriteString(contextTable)
-			output.WriteString(newline)
-		}
-		output.WriteString(newline)
-		output.WriteString(formatStackTrace(err, useColor))
+		addStackTraceSection(&md, err)
 	}
 
-	return output.String()
+	return md.String()
+}
+
+// addExplanationSection adds the explanation section if details exist.
+func addExplanationSection(md *strings.Builder, err error) {
+	details := errors.GetAllDetails(err)
+	if len(details) > 0 {
+		md.WriteString("\n## Explanation\n\n")
+		for _, detail := range details {
+			fmt.Fprintf(md, "%s\n", detail)
+		}
+	}
+}
+
+// addExampleAndHintsSection separates hints into examples and regular hints, then adds both sections.
+func addExampleAndHintsSection(md *strings.Builder, err error) {
+	allHints := errors.GetAllHints(err)
+	var examples []string
+	var hints []string
+
+	// Separate hints into examples and regular hints.
+	for _, hint := range allHints {
+		if strings.HasPrefix(hint, "EXAMPLE:") {
+			examples = append(examples, strings.TrimPrefix(hint, "EXAMPLE:"))
+		} else {
+			hints = append(hints, hint)
+		}
+	}
+
+	// Add Example section.
+	if len(examples) > 0 {
+		md.WriteString("\n## Example\n\n")
+		for _, example := range examples {
+			md.WriteString(example)
+			if !strings.HasSuffix(example, "\n") {
+				md.WriteString("\n")
+			}
+		}
+	}
+
+	// Add Hints section.
+	if len(hints) > 0 {
+		md.WriteString("\n## Hints\n\n")
+		for _, hint := range hints {
+			md.WriteString("💡 " + hint + "\n")
+		}
+	}
+}
+
+// addContextSection adds the context section if context exists.
+func addContextSection(md *strings.Builder, err error) {
+	context := formatContextForMarkdown(err)
+	if context != "" {
+		md.WriteString("\n## Context\n\n")
+		md.WriteString(context)
+	}
+}
+
+// addStackTraceSection adds the stack trace section in verbose mode.
+func addStackTraceSection(md *strings.Builder, err error) {
+	md.WriteString("\n## Stack Trace\n\n")
+	md.WriteString("```\n")
+	fmt.Fprintf(md, "%+v", err)
+	md.WriteString("\n```\n")
+}
+
+// renderMarkdown renders markdown string through Glamour or returns plain markdown.
+func renderMarkdown(md string) string {
+	renderer := GetMarkdownRenderer()
+	if renderer != nil {
+		rendered, renderErr := renderer.RenderErrorf(md)
+		if renderErr == nil {
+			return rendered
+		}
+	}
+
+	// Fallback to plain markdown.
+	return md
+}
+
+// formatContextForMarkdown formats context as a markdown table.
+func formatContextForMarkdown(err error) string {
+	details := errors.GetSafeDetails(err)
+	if len(details.SafeDetails) == 0 {
+		return ""
+	}
+
+	// Parse "component=vpc stack=prod" format into key-value pairs.
+	var rows []string
+	for _, detail := range details.SafeDetails {
+		str := fmt.Sprintf("%v", detail)
+		pairs := strings.Split(str, " ")
+		for _, pair := range pairs {
+			if parts := strings.SplitN(pair, "=", 2); len(parts) == 2 {
+				rows = append(rows, fmt.Sprintf("| %s | %s |", parts[0], parts[1]))
+			}
+		}
+	}
+
+	// Return empty if no rows were parsed.
+	if len(rows) == 0 {
+		return ""
+	}
+
+	// Build table with header.
+	var md strings.Builder
+	md.WriteString("| Key | Value |\n")
+	md.WriteString("|-----|-------|\n")
+	for _, row := range rows {
+		md.WriteString(row + "\n")
+	}
+
+	return md.String()
 }
 
 // shouldUseColor determines if color output should be used.
@@ -206,7 +281,7 @@ func wrapText(text string, width int) string {
 		// Check if adding this word would exceed the width.
 		testLine := currentLine.String()
 		if len(testLine) > 0 {
-			testLine += " " + word
+			testLine += space + word
 		} else {
 			testLine = word
 		}
@@ -218,7 +293,7 @@ func wrapText(text string, width int) string {
 			currentLine.WriteString(word)
 		} else {
 			if i > 0 && currentLine.Len() > 0 {
-				currentLine.WriteString(" ")
+				currentLine.WriteString(space)
 			}
 			currentLine.WriteString(word)
 		}

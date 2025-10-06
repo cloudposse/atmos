@@ -238,3 +238,169 @@ func TestErrorBuilder_Err_PreservesErrorChain(t *testing.T) {
 	assert.True(t, errors.Is(err, baseErr))
 	assert.True(t, errors.Is(err, wrappedErr))
 }
+
+func TestErrorBuilder_WithExplanation(t *testing.T) {
+	baseErr := errors.New("test error")
+	err := Build(baseErr).
+		WithExplanation("This is a detailed explanation of the error.").
+		Err()
+
+	assert.NotNil(t, err)
+
+	// Verify explanation is present via GetAllDetails.
+	details := errors.GetAllDetails(err)
+	assert.Len(t, details, 1)
+	assert.Equal(t, "This is a detailed explanation of the error.", details[0])
+}
+
+func TestErrorBuilder_WithExplanationf(t *testing.T) {
+	baseErr := errors.New("test error")
+	err := Build(baseErr).
+		WithExplanationf("The file `%s` does not exist in directory `%s`.", "config.yaml", "/path/to/dir").
+		Err()
+
+	assert.NotNil(t, err)
+
+	details := errors.GetAllDetails(err)
+	assert.Len(t, details, 1)
+	assert.Equal(t, "The file `config.yaml` does not exist in directory `/path/to/dir`.", details[0])
+}
+
+func TestErrorBuilder_WithExample(t *testing.T) {
+	baseErr := errors.New("test error")
+	exampleContent := "component: vpc\nstack: prod"
+	err := Build(baseErr).
+		WithExample(exampleContent).
+		Err()
+
+	assert.NotNil(t, err)
+
+	// Verify example is stored as a hint with EXAMPLE: prefix.
+	hints := errors.GetAllHints(err)
+	assert.Len(t, hints, 1)
+	assert.Equal(t, "EXAMPLE:"+exampleContent, hints[0])
+}
+
+func TestErrorBuilder_WithExampleFile(t *testing.T) {
+	baseErr := errors.New("test error")
+	exampleContent := "```yaml\nworkflows:\n  deploy:\n    steps:\n      - command: terraform apply\n```"
+	err := Build(baseErr).
+		WithExampleFile(exampleContent).
+		Err()
+
+	assert.NotNil(t, err)
+
+	hints := errors.GetAllHints(err)
+	assert.Len(t, hints, 1)
+	assert.Equal(t, "EXAMPLE:"+exampleContent, hints[0])
+}
+
+func TestErrorBuilder_CompleteWithAllSections(t *testing.T) {
+	baseErr := errors.New("invalid workflow manifest")
+	exampleContent := "```yaml\nworkflows:\n  deploy:\n    steps:\n      - command: terraform apply\n```"
+
+	err := Build(baseErr).
+		WithExplanation("The workflow manifest must contain a top-level workflows: key.").
+		WithExampleFile(exampleContent).
+		WithHint("Check the YAML structure").
+		WithHintf("Valid format requires %s", "`workflows:` key").
+		WithContext("file", "/path/to/workflow.yaml").
+		WithContext("line", "1").
+		WithExitCode(2).
+		Err()
+
+	assert.NotNil(t, err)
+
+	// Verify explanation.
+	details := errors.GetAllDetails(err)
+	assert.Len(t, details, 1)
+	assert.Equal(t, "The workflow manifest must contain a top-level workflows: key.", details[0])
+
+	// Verify hints (2 regular hints + 1 example).
+	hints := errors.GetAllHints(err)
+	assert.Len(t, hints, 3)
+
+	// Check regular hints.
+	var regularHints []string
+	var examples []string
+	for _, hint := range hints {
+		if strings.HasPrefix(hint, "EXAMPLE:") {
+			examples = append(examples, strings.TrimPrefix(hint, "EXAMPLE:"))
+		} else {
+			regularHints = append(regularHints, hint)
+		}
+	}
+
+	assert.Len(t, regularHints, 2)
+	assert.Equal(t, "Check the YAML structure", regularHints[0])
+	assert.Equal(t, "Valid format requires `workflows:` key", regularHints[1])
+
+	assert.Len(t, examples, 1)
+	assert.Equal(t, exampleContent, examples[0])
+
+	// Verify context.
+	safeDetails := errors.GetAllSafeDetails(err)
+	assert.NotEmpty(t, safeDetails)
+
+	// Verify exit code.
+	code := GetExitCode(err)
+	assert.Equal(t, 2, code)
+
+	// Verify base error message.
+	assert.Contains(t, err.Error(), "invalid workflow manifest")
+}
+
+func TestErrorBuilder_MultipleExamples(t *testing.T) {
+	baseErr := errors.New("test error")
+	err := Build(baseErr).
+		WithExample("example 1").
+		WithExample("example 2").
+		WithExample("example 3").
+		Err()
+
+	assert.NotNil(t, err)
+
+	hints := errors.GetAllHints(err)
+	assert.Len(t, hints, 3)
+
+	// All should have EXAMPLE: prefix.
+	for _, hint := range hints {
+		assert.True(t, strings.HasPrefix(hint, "EXAMPLE:"))
+		expected := strings.TrimPrefix(hint, "EXAMPLE:")
+		assert.Equal(t, expected, hint[8:]) // Skip "EXAMPLE:" prefix
+		assert.Contains(t, hint, "example")
+	}
+}
+
+func TestErrorBuilder_MixedHintsAndExamples(t *testing.T) {
+	baseErr := errors.New("test error")
+	err := Build(baseErr).
+		WithHint("Regular hint 1").
+		WithExample("Example code").
+		WithHint("Regular hint 2").
+		WithExample("Another example").
+		Err()
+
+	assert.NotNil(t, err)
+
+	hints := errors.GetAllHints(err)
+	assert.Len(t, hints, 4)
+
+	var regularHints []string
+	var examples []string
+	for _, hint := range hints {
+		if strings.HasPrefix(hint, "EXAMPLE:") {
+			examples = append(examples, strings.TrimPrefix(hint, "EXAMPLE:"))
+		} else {
+			regularHints = append(regularHints, hint)
+		}
+	}
+
+	assert.Len(t, regularHints, 2)
+	assert.Equal(t, "Regular hint 1", regularHints[0])
+	assert.Equal(t, "Regular hint 2", regularHints[1])
+
+	assert.Len(t, examples, 2)
+	assert.Equal(t, "Example code", examples[0])
+	assert.Equal(t, "Another example", examples[1])
+}

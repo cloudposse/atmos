@@ -34,6 +34,33 @@ func (b *ErrorBuilder) WithHintf(format string, args ...interface{}) *ErrorBuild
 	return b
 }
 
+// WithExplanation adds a detailed explanation to the error.
+// The explanation provides context about what went wrong and why.
+// It will be displayed in a dedicated "## Explanation" section when formatted.
+func (b *ErrorBuilder) WithExplanation(explanation string) *ErrorBuilder {
+	b.err = errors.WithDetail(b.err, explanation)
+	return b
+}
+
+// WithExplanationf adds a formatted explanation to the error.
+func (b *ErrorBuilder) WithExplanationf(format string, args ...interface{}) *ErrorBuilder {
+	return b.WithExplanation(fmt.Sprintf(format, args...))
+}
+
+// WithExampleFile adds a code/config example from an embedded markdown file.
+// Examples are stored as special hints prefixed with "EXAMPLE:" and displayed
+// in a dedicated "## Example" section when formatted.
+func (b *ErrorBuilder) WithExampleFile(content string) *ErrorBuilder {
+	b.hints = append(b.hints, "EXAMPLE:"+content)
+	return b
+}
+
+// WithExample adds an inline code/config example.
+// For simple cases where creating a separate markdown file is overkill.
+func (b *ErrorBuilder) WithExample(example string) *ErrorBuilder {
+	return b.WithExampleFile(example)
+}
+
 // WithContext adds safe structured context to the error.
 // This is PII-safe and will be included in error reporting.
 // Context is displayed in verbose mode and sent to Sentry.

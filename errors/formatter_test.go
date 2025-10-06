@@ -83,12 +83,10 @@ func TestFormat_LongErrorMessage(t *testing.T) {
 
 	result := Format(err, config)
 
-	// Check that the message is wrapped.
-	lines := strings.Split(result, "\n")
-	for _, line := range lines {
-		// Each line should be at or under max length (allowing for some flexibility).
-		assert.LessOrEqual(t, len(line), config.MaxLineLength+20) // Buffer for words.
-	}
+	// The new formatter uses structured markdown sections.
+	// Wrapping is handled by the Glamour markdown renderer.
+	assert.Contains(t, result, "# Error")
+	assert.Contains(t, result, longMsg)
 }
 
 func TestFormat_VerboseMode(t *testing.T) {
@@ -331,10 +329,286 @@ func TestFormat_NonVerboseWithContext(t *testing.T) {
 	assert.Contains(t, result, "💡")
 	assert.Contains(t, result, "Check the configuration")
 
-	// Should NOT contain context table in non-verbose mode.
-	assert.NotContains(t, result, "Context")
-	assert.NotContains(t, result, "Value")
+	// Context IS shown in non-verbose mode (new structured markdown format).
+	assert.Contains(t, result, "## Context")
+	assert.Contains(t, result, "component")
+	assert.Contains(t, result, "vpc")
 
 	// Should NOT contain stack trace in non-verbose mode.
-	assert.NotContains(t, result, "stack trace")
+	assert.NotContains(t, result, "## Stack Trace")
+}
+
+func TestFormat_WithExplanation(t *testing.T) {
+	err := Build(errors.New("test error")).
+		WithExplanation("This is a detailed explanation of what went wrong.").
+		Err()
+
+	config := DefaultFormatterConfig()
+	config.Color = "never"
+
+	result := Format(err, config)
+
+	// Should contain the Error header.
+	assert.Contains(t, result, "# Error")
+	// Should contain the error message.
+	assert.Contains(t, result, "test error")
+	// Should contain the Explanation section.
+	assert.Contains(t, result, "## Explanation")
+	assert.Contains(t, result, "This is a detailed explanation")
+}
+
+func TestFormat_WithExample(t *testing.T) {
+	exampleContent := "```yaml\nworkflows:\n  deploy:\n    steps:\n      - command: terraform apply\n```"
+	err := Build(errors.New("invalid workflow")).
+		WithExampleFile(exampleContent).
+		Err()
+
+	config := DefaultFormatterConfig()
+	config.Color = "never"
+
+	result := Format(err, config)
+
+	// Should contain the Error header.
+	assert.Contains(t, result, "# Error")
+	// Should contain the Example section.
+	assert.Contains(t, result, "## Example")
+	// Should contain the example content.
+	assert.Contains(t, result, "workflows:")
+	assert.Contains(t, result, "deploy:")
+}
+
+func TestFormat_WithAllSections(t *testing.T) {
+	exampleContent := "```yaml\ntest: example\n```"
+	err := Build(errors.New("test error")).
+		WithExplanation("Detailed explanation of the error.").
+		WithExampleFile(exampleContent).
+		WithHint("First hint").
+		WithHint("Second hint").
+		WithContext("component", "vpc").
+		WithContext("stack", "prod").
+		Err()
+
+	config := DefaultFormatterConfig()
+	config.Color = "never"
+	config.Verbose = true
+
+	result := Format(err, config)
+
+	// Section 1: Error.
+	assert.Contains(t, result, "# Error")
+	assert.Contains(t, result, "test error")
+
+	// Section 2: Explanation.
+	assert.Contains(t, result, "## Explanation")
+	assert.Contains(t, result, "Detailed explanation")
+
+	// Section 3: Example.
+	assert.Contains(t, result, "## Example")
+	assert.Contains(t, result, "test: example")
+
+	// Section 4: Hints.
+	assert.Contains(t, result, "## Hints")
+	assert.Contains(t, result, "💡 First hint")
+	assert.Contains(t, result, "💡 Second hint")
+
+	// Section 5: Context.
+	assert.Contains(t, result, "## Context")
+	assert.Contains(t, result, "component")
+	assert.Contains(t, result, "vpc")
+	assert.Contains(t, result, "stack")
+	assert.Contains(t, result, "prod")
+
+	// Section 6: Stack Trace (verbose mode).
+	assert.Contains(t, result, "## Stack Trace")
+}
+
+func TestFormat_SectionOrder(t *testing.T) {
+	exampleContent := "example code"
+	err := Build(errors.New("test error")).
+		WithExplanation("explanation").
+		WithExampleFile(exampleContent).
+		WithHint("hint").
+		WithContext("key", "value").
+		Err()
+
+	config := DefaultFormatterConfig()
+	config.Color = "never"
+	config.Verbose = true
+
+	result := Format(err, config)
+
+	// Find positions of each section header.
+	errorPos := strings.Index(result, "# Error")
+	explanationPos := strings.Index(result, "## Explanation")
+	examplePos := strings.Index(result, "## Example")
+	hintsPos := strings.Index(result, "## Hints")
+	contextPos := strings.Index(result, "## Context")
+	stackPos := strings.Index(result, "## Stack Trace")
+
+	// Verify correct order.
+	assert.True(t, errorPos < explanationPos, "Error should come before Explanation")
+	assert.True(t, explanationPos < examplePos, "Explanation should come before Example")
+	assert.True(t, examplePos < hintsPos, "Example should come before Hints")
+	assert.True(t, hintsPos < contextPos, "Hints should come before Context")
+	assert.True(t, contextPos < stackPos, "Context should come before Stack Trace")
+}
+
+func TestFormat_ExampleAndHintsSeparation(t *testing.T) {
+	exampleContent := "example code here"
+	err := Build(errors.New("test error")).
+		WithHint("Regular hint 1").
+		WithExampleFile(exampleContent).
+		WithHint("Regular hint 2").
+		Err()
+
+	config := DefaultFormatterConfig()
+	config.Color = "never"
+
+	result := Format(err, config)
+
+	// Should have separate Example and Hints sections.
+	assert.Contains(t, result, "## Example")
+	assert.Contains(t, result, "## Hints")
+
+	// Example section should not have hint emoji.
+	exampleStart := strings.Index(result, "## Example")
+	hintsStart := strings.Index(result, "## Hints")
+	exampleSection := result[exampleStart:hintsStart]
+	assert.NotContains(t, exampleSection, "💡", "Example section should not contain hint emoji")
+
+	// Hints section should only have regular hints.
+	hintsSection := result[hintsStart:]
+	assert.Contains(t, hintsSection, "💡 Regular hint 1")
+	assert.Contains(t, hintsSection, "💡 Regular hint 2")
+	assert.NotContains(t, hintsSection, "EXAMPLE:", "Hints section should not contain EXAMPLE: prefix")
+}
+
+func TestFormat_NoExplanation_NoSection(t *testing.T) {
+	err := Build(errors.New("test error")).
+		WithHint("Just a hint").
+		Err()
+
+	config := DefaultFormatterConfig()
+	config.Color = "never"
+
+	result := Format(err, config)
+
+	// Should NOT have Explanation section if no explanation provided.
+	assert.NotContains(t, result, "## Explanation")
+	// But should have Error header and Hints.
+	assert.Contains(t, result, "# Error")
+	assert.Contains(t, result, "## Hints")
+}
+
+func TestFormat_NoExample_NoSection(t *testing.T) {
+	err := Build(errors.New("test error")).
+		WithHint("Just a hint").
+		Err()
+
+	config := DefaultFormatterConfig()
+	config.Color = "never"
+
+	result := Format(err, config)
+
+	// Should NOT have Example section if no example provided.
+	assert.NotContains(t, result, "## Example")
+}
+
+func TestFormat_NoHints_NoSection(t *testing.T) {
+	err := Build(errors.New("test error")).
+		WithExplanation("Just an explanation").
+		Err()
+
+	config := DefaultFormatterConfig()
+	config.Color = "never"
+
+	result := Format(err, config)
+
+	// Should NOT have Hints section if no hints provided.
+	assert.NotContains(t, result, "## Hints")
+	// But should have Error and Explanation.
+	assert.Contains(t, result, "# Error")
+	assert.Contains(t, result, "## Explanation")
+}
+
+func TestFormat_ContextMarkdownTable(t *testing.T) {
+	err := Build(errors.New("test error")).
+		WithContext("component", "vpc").
+		WithContext("stack", "prod").
+		WithContext("region", "us-east-1").
+		Err()
+
+	config := DefaultFormatterConfig()
+	config.Color = "never"
+	config.Verbose = true
+
+	result := Format(err, config)
+
+	// Should have Context section (Glamour renders markdown tables with box-drawing chars).
+	assert.Contains(t, result, "## Context")
+	// Check for the actual context values (table structure may be rendered differently by Glamour).
+	assert.Contains(t, result, "component")
+	assert.Contains(t, result, "vpc")
+	assert.Contains(t, result, "stack")
+	assert.Contains(t, result, "prod")
+	assert.Contains(t, result, "region")
+	assert.Contains(t, result, "us-east-1")
+}
+
+func TestFormatContextForMarkdown(t *testing.T) {
+	err := Build(errors.New("test error")).
+		WithContext("component", "vpc").
+		WithContext("stack", "prod").
+		Err()
+
+	result := formatContextForMarkdown(err)
+
+	// Should return markdown table format.
+	assert.Contains(t, result, "| Key | Value |")
+	assert.Contains(t, result, "|-----|-------|")
+	assert.Contains(t, result, "| component | vpc |")
+	assert.Contains(t, result, "| stack | prod |")
+}
+
+func TestFormatContextForMarkdown_NoContext(t *testing.T) {
+	err := errors.New("test error")
+
+	result := formatContextForMarkdown(err)
+
+	// Should return empty string when no context.
+	assert.Empty(t, result)
+}
+
+func TestFormat_VerboseStackTrace(t *testing.T) {
+	err := Build(errors.New("test error")).
+		WithHint("A hint").
+		Err()
+
+	config := DefaultFormatterConfig()
+	config.Color = "never"
+	config.Verbose = true
+
+	result := Format(err, config)
+
+	// Should contain Stack Trace section in verbose mode.
+	// Glamour renders code fences as styled blocks, so we just check for section header and content.
+	assert.Contains(t, result, "## Stack Trace")
+	assert.Contains(t, result, "test error")
+	// Stack trace should contain error chain info.
+	assert.Contains(t, result, "stack trace")
+}
+
+func TestFormat_NonVerboseNoStackTrace(t *testing.T) {
+	err := Build(errors.New("test error")).
+		WithHint("A hint").
+		Err()
+
+	config := DefaultFormatterConfig()
+	config.Color = "never"
+	config.Verbose = false
+
+	result := Format(err, config)
+
+	// Should NOT contain Stack Trace section in non-verbose mode.
+	assert.NotContains(t, result, "## Stack Trace")
 }
