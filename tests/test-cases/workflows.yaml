@@ -183,10 +183,10 @@ tests:
     expect:
       diff: []
       stderr:
-        - "Workflow Error"
+        - "# Error"
         - "no workflow found"
         - "## Explanation"
-        - "No workflow exists with the name no-workflow-exists"
+        - "No workflow exists with the name"
         - "### Available workflows:"
         - "fail"
         - "invalid-step-type"
@@ -195,7 +195,9 @@ tests:
         - "shell-command-not-found"
         - "shell-failure"
         - "shell-pass"
-      exit_code: 1
+        - "## Example"
+        - "## Hints"
+      exit_code: 2
 
   - name: atmos workflow invalid manifest
     enabled: true
@@ -211,11 +213,14 @@ tests:
     expect:
       diff: []
       stderr:
-        - "Workflow Error"
+        - "# Error"
         - "invalid workflow manifest"
         - "## Explanation"
-        - "The workflow manifest stacks/workflows/test-invalid.yaml must be a map with the top-level workflows: key."
-      exit_code: 1
+        - "The workflow manifest"
+        - "must be a map with the top-level"
+        - "## Example"
+        - "## Hints"
+      exit_code: 2
 
   - name: atmos workflow file not found
     enabled: true
@@ -231,11 +236,14 @@ tests:
     expect:
       diff: []
       stderr:
-        - "Workflow Error"
+        - "# Error"
         - "workflow file not found"
         - "## Explanation"
-        - "The workflow manifest file stacks/workflows/dne.yaml does not exist."
-      exit_code: 1
+        - "The workflow manifest file"
+        - "does not exist"
+        - "## Example"
+        - "## Hints"
+      exit_code: 2
 
   - name: atmos workflow failure with stack
     enabled: true

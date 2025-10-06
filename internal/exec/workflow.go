@@ -115,7 +115,8 @@ func ExecuteWorkflowCmd(cmd *cobra.Command, args []string) error {
 			WithContext("base_path", atmosConfig.Workflows.BasePath).
 			WithExitCode(2).
 			Err()
-		return err
+		errUtils.CheckErrorPrintAndExit(err, "", "")
+		return ErrWorkflowFileNotFound
 	}
 
 	fileContent, err := os.ReadFile(workflowPath)
