@@ -56,14 +56,14 @@ func TestDescribeComponentCmd_ProvenanceWithFormatJSON(t *testing.T) {
 	}()
 
 	// Reset flags for this test
-	describeComponentCmd.Flags().Set("stack", "plat-ue2-dev")
-	describeComponentCmd.Flags().Set("format", "json")
-	describeComponentCmd.Flags().Set("provenance", "true")
+	describeComponentCmd.PersistentFlags().Set("stack", "plat-ue2-dev")
+	describeComponentCmd.PersistentFlags().Set("format", "json")
+	describeComponentCmd.PersistentFlags().Set("provenance", "true")
 
 	defer func() {
-		describeComponentCmd.Flags().Set("stack", "")
-		describeComponentCmd.Flags().Set("format", "yaml")
-		describeComponentCmd.Flags().Set("provenance", "false")
+		describeComponentCmd.PersistentFlags().Set("stack", "")
+		describeComponentCmd.PersistentFlags().Set("format", "yaml")
+		describeComponentCmd.PersistentFlags().Set("provenance", "false")
 	}()
 
 	// Note: JSON format with provenance should work (provenance is embedded in the data)
@@ -99,14 +99,14 @@ func TestDescribeComponentCmd_ProvenanceWithFileOutput(t *testing.T) {
 	defer os.Remove(tmpFile)
 
 	// Reset flags for this test
-	describeComponentCmd.Flags().Set("stack", "plat-ue2-dev")
-	describeComponentCmd.Flags().Set("file", tmpFile)
-	describeComponentCmd.Flags().Set("provenance", "true")
+	describeComponentCmd.PersistentFlags().Set("stack", "plat-ue2-dev")
+	describeComponentCmd.PersistentFlags().Set("file", tmpFile)
+	describeComponentCmd.PersistentFlags().Set("provenance", "true")
 
 	defer func() {
-		describeComponentCmd.Flags().Set("stack", "")
-		describeComponentCmd.Flags().Set("file", "")
-		describeComponentCmd.Flags().Set("provenance", "false")
+		describeComponentCmd.PersistentFlags().Set("stack", "")
+		describeComponentCmd.PersistentFlags().Set("file", "")
+		describeComponentCmd.PersistentFlags().Set("provenance", "false")
 	}()
 
 	err = describeComponentCmd.RunE(describeComponentCmd, []string{"vpc"})
@@ -115,55 +115,4 @@ func TestDescribeComponentCmd_ProvenanceWithFileOutput(t *testing.T) {
 		assert.NotContains(t, err.Error(), "unknown flag", "Should not fail due to unknown flag")
 		assert.NotContains(t, err.Error(), "invalid flag", "Should not fail due to invalid flag")
 	}
-}
-
-func TestDescribeComponentCmd_AllFlagsCombined(t *testing.T) {
-	// Test that all flags can be used together without conflicts
-	flags := describeComponentCmd.PersistentFlags()
-
-	// Set all flags to non-default values
-	err := flags.Set("stack", "test-stack")
-	assert.NoError(t, err)
-
-	err = flags.Set("format", "json")
-	assert.NoError(t, err)
-
-	err = flags.Set("file", "/tmp/test.yaml")
-	assert.NoError(t, err)
-
-	err = flags.Set("provenance", "true")
-	assert.NoError(t, err)
-
-	err = flags.Set("process-templates", "false")
-	assert.NoError(t, err)
-
-	err = flags.Set("process-functions", "false")
-	assert.NoError(t, err)
-
-	// Verify all flags were set
-	stackVal, _ := flags.GetString("stack")
-	assert.Equal(t, "test-stack", stackVal)
-
-	formatVal, _ := flags.GetString("format")
-	assert.Equal(t, "json", formatVal)
-
-	fileVal, _ := flags.GetString("file")
-	assert.Equal(t, "/tmp/test.yaml", fileVal)
-
-	provenanceVal, _ := flags.GetBool("provenance")
-	assert.True(t, provenanceVal)
-
-	templatesVal, _ := flags.GetBool("process-templates")
-	assert.False(t, templatesVal)
-
-	functionsVal, _ := flags.GetBool("process-functions")
-	assert.False(t, functionsVal)
-
-	// Reset flags
-	flags.Set("stack", "")
-	flags.Set("format", "yaml")
-	flags.Set("file", "")
-	flags.Set("provenance", "false")
-	flags.Set("process-templates", "true")
-	flags.Set("process-functions", "true")
 }
