@@ -190,6 +190,7 @@ func ProcessTmplWithDatasources(
 					WithHint("`delimiters` must be an array with exactly two non-empty strings: [left, right]").
 					WithHint("Example: `delimiters: [\"<{\", \"}>\"]` for custom delimiters").
 					WithHint("Default delimiters are `{{` and `}}` if not specified").
+					WithExitCode(2).
 					Err()
 				return "", err
 			}

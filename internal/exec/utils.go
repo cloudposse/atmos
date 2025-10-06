@@ -49,6 +49,7 @@ func ProcessComponentConfig(
 		err := errUtils.Build(fmt.Errorf("%w", errUtils.ErrMissingStack)).
 			WithHint("Specify stack using `--stack <stack>` (shorthand: `-s`)").
 			WithHint("Use `atmos list stacks` to see available stacks").
+			WithExitCode(2).
 			Err()
 		return err
 	}
@@ -81,6 +82,7 @@ func ProcessComponentConfig(
 			WithContext("component_type", componentType).
 			WithHintf("Use `atmos describe component %s -s %s` to debug configuration", component, stack).
 			WithHintf("Verify the component exists in the `%s` type section", componentType).
+			WithExitCode(2).
 			Err()
 		return err
 	}
