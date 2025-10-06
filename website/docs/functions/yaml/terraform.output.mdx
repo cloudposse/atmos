@@ -162,11 +162,16 @@ This quoting pattern works for every Atmos YAML function that accepts YQ express
 ## Using YQ Expressions to provide a default value
 
 If the component for which you are reading the output has not been provisioned yet, the `!terraform.output` function
-will return the string `<no value>` unless you specify a [default value](https://mikefarah.gitbook.io/yq/operators/alternative-default-value)
+will return `null` unless you specify a [default value](https://mikefarah.gitbook.io/yq/operators/alternative-default-value)
 in the YQ expression, in which case the function will return the default value.
 
 This will allow you to mock outputs when executing `atmos terraform plan` where there are dependencies between components,
 and the dependent components are not provisioned yet.
+
+:::tip
+When an output doesn't exist, the function returns `null` to maintain backward compatibility with existing workflows.
+To explicitly handle missing outputs, use the YQ `//` operator to provide a default value.
+:::
 
 :::note
 To provide a default value, you use the `//` YQ operator.
@@ -472,4 +477,5 @@ vars:
 
  - Be mindful of disaster recovery (DR) implications when using it across regions.
 
- - Consider cold-start scenarios: if the dependent component has not yet been provisioned, `terraform output` will fail.
+ - Consider cold-start scenarios: if the dependent component has not yet been provisioned, the function will return `null`.
+   Use the YQ `//` operator to provide default values for components that may not be provisioned yet.

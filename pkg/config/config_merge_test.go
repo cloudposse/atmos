@@ -1,10 +1,12 @@
 package config
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -217,7 +219,7 @@ settings:
 
 		err := processConfigImportsAndReapply(tempDir, v, content)
 		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "parse main config")
+		assert.True(t, errors.Is(err, errUtils.ErrMergeConfiguration), "Expected ErrMergeConfiguration error")
 	})
 }
 
