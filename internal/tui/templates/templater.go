@@ -7,12 +7,14 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
-	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/cloudposse/atmos/pkg/ui/markdown"
-	"github.com/cloudposse/atmos/pkg/ui/theme"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 	"golang.org/x/term"
+
+	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui/markdown"
+	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
 
 // Templater handles the generation and management of command usage templates.
@@ -209,7 +211,7 @@ func formatCommands(cmds []*cobra.Command, listType string) string {
 // It returns an error if the command is nil.
 func SetCustomUsageFunc(cmd *cobra.Command) error {
 	if cmd == nil {
-		return fmt.Errorf("command cannot be nil")
+		return errUtils.ErrCommandNil
 	}
 	t := &Templater{
 		UsageTemplate: GenerateFromBaseTemplate([]HelpTemplateSections{

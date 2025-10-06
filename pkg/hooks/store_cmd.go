@@ -10,7 +10,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// assert that Command implements Command interface
+// Assert that StoreCommand implements Command interface.
 var _ Command = &StoreCommand{}
 
 type StoreCommand struct {
@@ -49,7 +49,7 @@ func (c *StoreCommand) processStoreCommand(hook *Hook) error {
 	return nil
 }
 
-// getOutputValue gets an output from terraform
+// getOutputValue gets an output from terraform.
 func (c *StoreCommand) getOutputValue(value string) (string, any) {
 	outputKey := strings.TrimPrefix(value, ".")
 	var outputValue any

@@ -81,8 +81,11 @@ var isTermPresent = term.IsTerminal(int(os.Stdout.Fd()))
 func HighlightCodeWithConfig(config *schema.AtmosConfiguration, code string, format ...string) (string, error) {
 	defer perf.Track(config, "utils.HighlightCodeWithConfig")()
 
+	// Check if either stdout or stderr is a terminal (provenance goes to stderr)
+	isTerm := isTermPresent || term.IsTerminal(int(os.Stderr.Fd()))
+
 	// Skip highlighting if not in a terminal or disabled
-	if !isTermPresent || !GetHighlightSettings(config).Enabled {
+	if !isTerm || !GetHighlightSettings(config).Enabled {
 		return code, nil
 	}
 

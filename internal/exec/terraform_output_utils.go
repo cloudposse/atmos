@@ -447,9 +447,11 @@ func GetStaticRemoteStateOutput(
 ) any {
 	defer perf.Track(atmosConfig, "exec.GetStaticRemoteStateOutput")()
 
+	const dotPrefix = "."
+
 	val := output
-	if !strings.HasPrefix(output, ".") {
-		val = "." + val
+	if !strings.HasPrefix(output, dotPrefix) {
+		val = dotPrefix + val
 	}
 
 	res, err := u.EvaluateYqExpression(atmosConfig, remoteStateSection, val)
