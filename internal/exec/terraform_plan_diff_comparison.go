@@ -200,6 +200,15 @@ func processRootModuleResources(rootModule map[string]interface{}, result map[st
 			continue
 		}
 
+		modeVal, ok := resMap["mode"]
+		if !ok {
+			continue
+		}
+
+		if modeVal == "data" {
+			continue
+		}
+
 		address, ok := addressVal.(string)
 		if !ok {
 			continue
@@ -224,6 +233,15 @@ func processResourceChanges(plan map[string]interface{}, result map[string]inter
 
 		addressVal, ok := changeMap["address"]
 		if !ok {
+			continue
+		}
+
+		modeVal, ok := changeMap["mode"]
+		if !ok {
+			continue
+		}
+
+		if modeVal == "data" {
 			continue
 		}
 
