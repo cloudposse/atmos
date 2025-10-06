@@ -31,19 +31,26 @@ return fmt.Errorf("%w: component=%s stack=%s",
 
 ### Error Builder
 
-For complex errors with hints, context, and exit codes:
+For rich errors with explanations, examples, hints, context, and exit codes:
 
 ```go
 import (
+    _ "embed"
     "github.com/cockroachdb/errors"
     errUtils "github.com/cloudposse/atmos/errors"
 )
 
+//go:embed examples/database_connection.md
+var databaseConnectionExample string
+
 err := errUtils.Build(errors.New("database connection failed")).
+    WithExplanation("Failed to establish connection to the database server.").
+    WithExampleFile(databaseConnectionExample).
     WithHint("Check database credentials in atmos.yaml").
     WithHintf("Verify network connectivity to %s", dbHost).
     WithContext("component", "vpc").
     WithContext("stack", "prod").
+    WithContext("host", dbHost).
     WithExitCode(2).
     Err()
 ```
@@ -79,6 +86,60 @@ err := errUtils.Build(baseErr).
     WithHintf("Check the file at %s", filepath).
     Err()
 ```
+
+### WithExplanation(explanation string) *ErrorBuilder
+
+Adds a detailed explanation of what went wrong and why. Explanations are displayed in a dedicated "## Explanation" section in formatted errors.
+
+```go
+err := errUtils.Build(baseErr).
+    WithExplanation("The workflow manifest must contain a top-level workflows: key.").
+    Err()
+```
+
+### WithExplanationf(format string, args ...interface{}) *ErrorBuilder
+
+Adds a formatted explanation:
+
+```go
+err := errUtils.Build(baseErr).
+    WithExplanationf("The workflow manifest file `%s` does not exist.", filepath).
+    Err()
+```
+
+### WithExample(example string) *ErrorBuilder
+
+Adds an inline code or configuration example to help users understand the correct usage. Examples are displayed in a dedicated "## Example" section.
+
+```go
+err := errUtils.Build(baseErr).
+    WithExample("```yaml\nworkflows:\n  deploy:\n    steps:\n      - command: terraform apply\n```").
+    Err()
+```
+
+### WithExampleFile(content string) *ErrorBuilder
+
+Adds a code/config example from an embedded markdown file. This is the preferred method for examples as it keeps them maintainable and separate from code.
+
+```go
+//go:embed examples/workflow_invalid_manifest.md
+var workflowInvalidManifestExample string
+
+err := errUtils.Build(baseErr).
+    WithExampleFile(workflowInvalidManifestExample).
+    Err()
+```
+
+**Example file** (`examples/workflow_invalid_manifest.md`):
+````markdown
+```yaml
+workflows:
+  deploy-vpc:
+    description: Deploy VPC infrastructure
+    steps:
+      - command: terraform apply vpc -s prod
+```
+````
 
 ### WithContext(key string, value interface{}) *ErrorBuilder
 
@@ -134,7 +195,7 @@ if err != nil {
 
 ## Error Formatting
 
-The formatter provides smart error display with TTY detection and color support:
+The formatter provides smart error display with TTY detection, color support, and structured markdown sections:
 
 ```go
 import errUtils "github.com/cloudposse/atmos/errors"
@@ -147,9 +208,60 @@ formatted := errUtils.Format(err, config)
 fmt.Fprint(os.Stderr, formatted)
 ```
 
+### Structured Markdown Output
+
+Errors are formatted as structured markdown with hierarchical sections:
+
+```
+# Error
+
+workflow file not found
+
+## Explanation
+
+The workflow manifest file `stacks/workflows/dne.yaml` does not exist.
+
+## Example
+
+```bash
+# Verify the workflow file exists
+ls -la stacks/workflows/
+
+# Check your atmos.yaml for workflow paths configuration
+cat atmos.yaml | grep -A5 workflows
+```
+
+## Hints
+
+💡 Use `atmos list workflows` to see available workflows
+💡 Verify the workflow file exists at: stacks/workflows/dne.yaml
+💡 Check `workflows.base_path` in `atmos.yaml`: stacks/workflows
+
+## Context
+
+| Key       | Value              |
+|-----------|-------------------|
+| file      | stacks/workflows/dne.yaml |
+| base_path | stacks/workflows   |
+
+## Stack Trace
+
+(shown in verbose mode only)
+```
+
+**Section Order:**
+1. **# Error** - Title and error message
+2. **## Explanation** - Detailed description (from `WithExplanation()`)
+3. **## Example** - Code/config examples (from `WithExample()` or `WithExampleFile()`)
+4. **## Hints** - Actionable suggestions (from `WithHint()`)
+5. **## Context** - Key-value debugging info (from `WithContext()`)
+6. **## Stack Trace** - Full stack trace (verbose mode only)
+
+Sections are conditionally rendered - they only appear if data is available.
+
 ### Configuration Options
 
-- **Verbose**: `false` (default) shows compact errors, `true` shows full stack traces
+- **Verbose**: `false` (default) shows compact errors with context table, `true` shows full stack traces
 - **Color**: `"auto"` (default) uses TTY detection, `"always"` forces color, `"never"` disables color
 - **MaxLineLength**: `80` (default) wraps long error messages
 

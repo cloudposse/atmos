@@ -113,17 +113,23 @@ func (e *exitCoder) ExitCode() int { return e.code }
 
 ### 4. Builder Pattern for Complex Errors
 
-**Decision**: Optional builder for errors with multiple enrichments.
+**Decision**: Optional builder for errors with multiple enrichments including explanations and examples.
 
 **Rationale**:
 - Fluent API for readability
 - No performance impact for simple errors
 - Composable enrichments
 - Nil-safe error handling
+- Support for rich error context (explanations, examples)
 
 **Example**:
 ```go
+//go:embed examples/database_connection.md
+var databaseConnectionExample string
+
 err := Build(baseErr).
+    WithExplanation("Failed to establish connection to the database server.").
+    WithExampleFile(databaseConnectionExample).
     WithHint("Check credentials").
     WithHintf("Verify connectivity to %s", host).
     WithContext("component", "vpc").
@@ -131,21 +137,76 @@ err := Build(baseErr).
     Err()
 ```
 
-### 5. Smart Error Formatting
+**Builder Methods**:
+- `WithExplanation(string)` - Detailed description of what went wrong
+- `WithExplanationf(format, args...)` - Formatted explanation
+- `WithExample(string)` - Inline code/config example
+- `WithExampleFile(string)` - Embedded markdown example (preferred)
+- `WithHint(string)` - User-facing actionable suggestion
+- `WithHintf(format, args...)` - Formatted hint
+- `WithContext(key, value)` - Structured debugging context
+- `WithExitCode(int)` - Custom exit code
+- `Err()` - Returns the enriched error
 
-**Decision**: Automatic error formatting with TTY detection and wrapping.
+### 5. Structured Markdown Error Presentation
+
+**Decision**: Format errors as structured markdown with hierarchical sections rendered through Glamour.
 
 **Rationale**:
-- Adapts to terminal capabilities
-- Wraps long error chains
-- Color output when appropriate
-- Verbose mode for debugging
+- Visual hierarchy improves readability
+- Sections organize different types of information
+- Markdown provides formatting flexibility
+- Conditional rendering keeps output clean
+- Terminal rendering with Glamour adds color and style
+
+**Section Structure**:
+1. **# Error** - Main error title and message
+2. **## Explanation** - Detailed description of what went wrong and why
+3. **## Example** - Code/config examples showing correct usage
+4. **## Hints** - Actionable suggestions for resolving the error
+5. **## Context** - Structured debugging info as markdown table
+6. **## Stack Trace** - Full error chain (verbose mode only)
 
 **Features**:
 - Auto-detect TTY for color
-- Wrap messages at 80 chars
+- Sections only render when data is available
 - Display hints with 💡 emoji
+- Context as clean markdown table
+- Examples from embedded markdown files
 - Collapsed vs verbose modes
+
+**Example Output**:
+```
+# Error
+
+workflow file not found
+
+## Explanation
+
+The workflow manifest file `stacks/workflows/dne.yaml` does not exist.
+
+## Example
+
+```bash
+# Verify the workflow file exists
+ls -la stacks/workflows/
+
+# Check your atmos.yaml configuration
+cat atmos.yaml | grep -A5 workflows
+```
+
+## Hints
+
+💡 Use `atmos list workflows` to see available workflows
+💡 Verify the workflow file exists at: stacks/workflows/dne.yaml
+
+## Context
+
+| Key       | Value                     |
+|-----------|---------------------------|
+| file      | stacks/workflows/dne.yaml |
+| base_path | stacks/workflows          |
+```
 
 ### 6. Sentry Integration with Full Context
 
@@ -247,21 +308,29 @@ Use for:
 
 ### 2. Builder-Enhanced Errors
 
-Use builder for structured context and enrichments:
+Use builder for rich errors with explanations, examples, hints, and context:
 ```go
+//go:embed examples/component_not_found.md
+var componentNotFoundExample string
+
 Build(err).
+    WithExplanation("Component could not be found in the stack configuration.").
+    WithExampleFile(componentNotFoundExample).
+    WithHint("Run 'atmos list components --stack prod' to see available components").
+    WithHintf("Check the component name and stack: %s/%s", component, stack).
     WithContext("component", "vpc").
     WithContext("stack", "prod").
-    WithHint("Check configuration").
     WithExitCode(2).
     Err()
 ```
 
 Use for:
+- User-facing errors requiring detailed explanations
+- Errors that benefit from code/config examples
 - Structured, programmatic context
-- User-facing errors with hints
+- Errors with actionable hints
 - Errors requiring custom exit codes
-- Context displayed in verbose mode
+- Rich error presentation with multiple sections
 
 ### 3. Simple Wrapped Errors
 
@@ -443,6 +512,28 @@ config := &schema.SentryConfig{
 - ✅ Support custom markdown styles for hints
 - ✅ Graceful fallback to plain text when config unavailable
 - ✅ Emoji and markdown formatting in hints
+
+### Phase 6: Structured Markdown Error Formatting ✅ Complete
+
+- ✅ Implement `WithExplanation()` and `WithExplanationf()` methods
+- ✅ Implement `WithExample()` and `WithExampleFile()` methods
+- ✅ Add Go embed pattern for example markdown files
+- ✅ Refactor formatter to build structured markdown sections:
+  - # Error header
+  - ## Explanation section
+  - ## Example section
+  - ## Hints section
+  - ## Context section (markdown table)
+  - ## Stack Trace section (verbose only)
+- ✅ Conditional section rendering (only show sections with data)
+- ✅ Convert workflow errors to use new builder pattern:
+  - ErrWorkflowFileNotFound with explanation and example
+  - ErrInvalidWorkflowManifest with explanation and example
+  - ErrWorkflowNoWorkflow with explanation and example
+- ✅ Update exit code handling in workflow commands
+- ✅ Add 21 comprehensive tests (7 builder + 14 formatter)
+- ✅ Regenerate golden test snapshots
+- ✅ Documentation updates (developer guide and PRD)
 
 ## Performance Considerations
 
