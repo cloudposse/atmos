@@ -7,9 +7,9 @@ import (
 	"strings"
 	"testing"
 
-	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/stretchr/testify/assert"
 
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -311,4 +311,56 @@ func TestSetupLogger_NoColorWithTraceLevel(t *testing.T) {
 
 	assert.Equal(t, log.TraceLevel, log.GetLevel(),
 		"Trace level should be set even with no color")
+}
+
+func TestVersionFlagParsing(t *testing.T) {
+	tests := []struct {
+		name        string
+		args        []string
+		expectValue bool
+	}{
+		{
+			name:        "--version flag is parsed correctly",
+			args:        []string{"--version"},
+			expectValue: true,
+		},
+		{
+			name:        "no --version flag defaults to false",
+			args:        []string{},
+			expectValue: false,
+		},
+		{
+			name:        "--version can be combined with other flags",
+			args:        []string{"--version", "--no-color"},
+			expectValue: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Reset flag states before each test - need to reset both value and Changed state
+			versionFlag := RootCmd.PersistentFlags().Lookup("version")
+			if versionFlag != nil {
+				versionFlag.Value.Set("false")
+				versionFlag.Changed = false
+			}
+
+			// Create a fresh command instance to avoid state pollution
+			cmd := RootCmd
+			cmd.SetArgs(tt.args)
+
+			// Check that the version flag is defined
+			assert.NotNil(t, versionFlag, "version flag should be defined")
+			assert.Equal(t, "Alias for 'atmos version' command", versionFlag.Usage)
+
+			// Parse flags
+			err := cmd.ParseFlags(tt.args)
+			assert.NoError(t, err, "parsing flags should not error")
+
+			// Check if version flag was set to expected value
+			versionSet, err := cmd.Flags().GetBool("version")
+			assert.NoError(t, err)
+			assert.Equal(t, tt.expectValue, versionSet, "version flag should be %v", tt.expectValue)
+		})
+	}
 }

@@ -102,13 +102,15 @@ var RootCmd = &cobra.Command{
 		}
 
 		// Check for --version flag (uses same code path as version command).
-		if versionFlag, err := cmd.Flags().GetBool("version"); err == nil && versionFlag {
-			versionErr := e.NewVersionExec(&tmpConfig).Execute(false, "")
-			if versionErr != nil {
-				errUtils.CheckErrorPrintAndExit(versionErr, "", "")
+		if cmd.Flags().Changed("version") {
+			if versionFlag, err := cmd.Flags().GetBool("version"); err == nil && versionFlag {
+				versionErr := e.NewVersionExec(&tmpConfig).Execute(false, "")
+				if versionErr != nil {
+					errUtils.CheckErrorPrintAndExit(versionErr, "", "")
+				}
+				utils.OsExit(0)
+				return
 			}
-			utils.OsExit(0)
-			return
 		}
 
 		// Enable performance tracking if heatmap flag is set.

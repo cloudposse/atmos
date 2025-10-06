@@ -6,6 +6,7 @@ import (
 	"os"
 	"testing"
 
+	"github.com/spf13/pflag"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -20,6 +21,11 @@ func TestTerraformGenerateBackendCmd(t *testing.T) {
 
 	err = os.Setenv("ATMOS_LOGS_LEVEL", "Debug")
 	assert.NoError(t, err, "Setting 'ATMOS_LOGS_LEVEL' environment variable should execute without error")
+
+	// Reset flag states to prevent pollution from other tests
+	RootCmd.Flags().Visit(func(f *pflag.Flag) {
+		f.Changed = false
+	})
 
 	// Capture stderr
 	oldStderr := os.Stderr
