@@ -359,6 +359,12 @@ func sanitizeOutput(output string) (string, error) {
 	urlRegex := regexp.MustCompile(`(https?:/+[^\s]+)`)
 	result = urlRegex.ReplaceAllStringFunc(result, collapseExtraSlashes)
 
+	// 6b. Redact volatile request IDs to avoid snapshot flakiness.
+	requestIDRegex1 := regexp.MustCompile(`(?i)\bRequestI[Dd]\s*:\s*[A-Za-z0-9-]+`)
+	requestIDRegex2 := regexp.MustCompile(`(?i)\bX-Amzn-RequestId\s*:\s*[A-Za-z0-9-]+`)
+	result = requestIDRegex1.ReplaceAllString(result, "RequestID: <REDACTED>")
+	result = requestIDRegex2.ReplaceAllString(result, "RequestID: <REDACTED>")
+
 	// 7. Remove the random number added to file name like `atmos-import-454656846`
 	filePathRegex := regexp.MustCompile(`file_path=[^ ]+/atmos-import-\d+/atmos-import-\d+\.yaml`)
 	result = filePathRegex.ReplaceAllString(result, "file_path=/atmos-import/atmos-import.yaml")
@@ -597,7 +603,9 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 	if err != nil {
 		t.Fatalf("Failed to create temporary directory: %v", err)
 	}
-	defer os.RemoveAll(tempDir) // Clean up the temporary directory after the test
+	defer func(path string) {
+		_ = os.RemoveAll(path)
+	}(tempDir) // Clean up the temporary directory after the test
 
 	// ALWAYS set XDG_CACHE_HOME to a clean temp directory for test isolation
 	// This ensures every test has its own cache and prevents interference
@@ -783,7 +791,7 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 			// Check if the error is an ExitError
 			if exitErr, ok := err.(*exec.ExitError); ok {
 				// Capture the actual exit code
-				exitCode := exitErr.ExitCode()
+				exitCode = exitErr.ExitCode()
 
 				if exitCode < 0 {
 					// Negative exit code indicates interruption by a signal

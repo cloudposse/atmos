@@ -6,6 +6,9 @@ import (
 	"io"
 	"os"
 
+	"github.com/charmbracelet/huh"
+	"github.com/charmbracelet/lipgloss"
+
 	"github.com/alecthomas/chroma/quick"
 	"github.com/arsham/figurine/figurine"
 	"github.com/charmbracelet/glamour"
@@ -76,4 +79,15 @@ func RenderMarkdown(markdownText string, style string) (string, error) {
 	}
 
 	return out, nil
+}
+
+// NewAtmosHuhTheme returns the Atmos-styled Huh theme for interactive prompts.
+func NewAtmosHuhTheme() *huh.Theme {
+	t := huh.ThemeCharm()
+	cream := lipgloss.AdaptiveColor{Light: "#FFFDF5", Dark: "#FFFDF5"}
+	purple := lipgloss.AdaptiveColor{Light: "#5B00FF", Dark: "#5B00FF"}
+	t.Focused.FocusedButton = t.Focused.FocusedButton.Foreground(cream).Background(purple)
+	t.Focused.SelectSelector = t.Focused.SelectSelector.Foreground(purple)
+	t.Blurred.Title = t.Blurred.Title.Foreground(purple)
+	return t
 }
