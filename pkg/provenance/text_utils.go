@@ -31,13 +31,15 @@ func processRune(r rune, state *wrapState) bool {
 		return false
 	}
 
-	// Regular character - check if we need to wrap
-	if *state.currentWidth >= state.maxWidth && (r == ' ' || r == '\t') {
+	// If we've already filled the line, flush the current buffer first.
+	if *state.currentWidth >= state.maxWidth {
 		*state.wrapped = append(*state.wrapped, state.currentLine.String())
 		state.currentLine.Reset()
 		state.currentPlain.Reset()
 		*state.currentWidth = 0
-		return true
+		if r == ' ' || r == '\t' {
+			return true
+		}
 	}
 
 	state.currentLine.WriteRune(r)
@@ -81,15 +83,43 @@ func wrapLine(line string, maxWidth int) []string {
 		wrapped = append(wrapped, currentLine.String())
 	}
 
-	// If we couldn't wrap nicely, just hard-wrap at maxWidth (rune-safe)
+	// If we couldn't wrap nicely, use fallback hard-wrap
 	if len(wrapped) == 0 && len(plainText) > maxWidth {
-		runes := []rune(line)
-		wrapped = append(wrapped, string(runes[:maxWidth]))
-		if len(runes) > maxWidth {
-			wrapped = append(wrapped, wrapLine(string(runes[maxWidth:]), maxWidth)...)
+		return hardWrapWithANSI(line, maxWidth)
+	}
+
+	return wrapped
+}
+
+// hardWrapWithANSI performs ANSI-aware hard wrapping at maxWidth.
+// It counts only printable runes and keeps ANSI escape sequences with their styled text.
+func hardWrapWithANSI(line string, maxWidth int) []string {
+	runes := []rune(line)
+	printable := 0
+	splitIndex := len(runes)
+	inEscapeSeq := false
+
+	for i, r := range runes {
+		if r == '\x1b' {
+			inEscapeSeq = true
+		}
+		if !inEscapeSeq {
+			printable++
+			if printable >= maxWidth {
+				splitIndex = i + 1
+				break
+			}
+		}
+		if inEscapeSeq && r == 'm' {
+			inEscapeSeq = false
 		}
 	}
 
+	var wrapped []string
+	wrapped = append(wrapped, string(runes[:splitIndex]))
+	if splitIndex < len(runes) {
+		wrapped = append(wrapped, hardWrapWithANSI(string(runes[splitIndex:]), maxWidth)...)
+	}
 	return wrapped
 }
 

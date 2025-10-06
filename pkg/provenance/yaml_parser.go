@@ -5,6 +5,11 @@ import (
 	"strings"
 
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/utils"
+)
+
+const (
+	yamlArrayItemPrefix = "- " // YAML array item prefix
 )
 
 // normalizeProvenancePath removes common prefixes from provenance paths.
@@ -41,8 +46,8 @@ func extractYAMLKey(trimmed string) string {
 	key := strings.TrimSpace(parts[0])
 
 	// Handle array items like "- key:"
-	if strings.HasPrefix(key, "- ") {
-		key = strings.TrimPrefix(key, "- ")
+	if strings.HasPrefix(key, yamlArrayItemPrefix) {
+		key = strings.TrimPrefix(key, yamlArrayItemPrefix)
 		key = strings.TrimSpace(key)
 	}
 
@@ -129,10 +134,76 @@ type handleKeyLineParams struct {
 	lineInfo        map[int]YAMLLineInfo
 }
 
+// arrayElementPathResult holds the result of building an array element path.
+type arrayElementPathResult struct {
+	currentPath     string
+	pathStack       []string
+	arrayIndexStack []int
+}
+
+// buildArrayElementPath builds the path for an array-of-maps element.
+func buildArrayElementPath(key string, pathStack []string, arrayIndexStack []int) arrayElementPathResult {
+	lastElement := pathStack[len(pathStack)-1]
+
+	// Get the array parent by stripping any existing index
+	arrayParent := lastElement
+	if idx := strings.Index(lastElement, "["); idx > 0 {
+		arrayParent = lastElement[:idx]
+	}
+
+	// Get the current array index for this parent
+	var arrayIndex int
+	if len(arrayIndexStack) > 0 {
+		arrayIndex = arrayIndexStack[len(arrayIndexStack)-1]
+	}
+
+	// Build the indexed parent path (e.g., "items[0]" or "items[1]")
+	indexedParent := utils.AppendJSONPathIndex(arrayParent, arrayIndex)
+
+	// Build the full path: grandparent(s) + indexed parent + key
+	var pathComponents []string
+	if len(pathStack) > 1 {
+		pathComponents = append([]string{}, pathStack[:len(pathStack)-1]...)
+	}
+	pathComponents = append(pathComponents, indexedParent, key)
+
+	// Build new path stack with indexed parent
+	newPathStack := append([]string{}, pathStack[:len(pathStack)-1]...)
+	newPathStack = append(newPathStack, indexedParent)
+
+	// Increment array index for next element
+	newArrayIndexStack := make([]int, len(arrayIndexStack))
+	copy(newArrayIndexStack, arrayIndexStack)
+	if len(newArrayIndexStack) > 0 {
+		newArrayIndexStack[len(newArrayIndexStack)-1]++
+	}
+
+	return arrayElementPathResult{
+		currentPath:     strings.Join(pathComponents, pathSeparator),
+		pathStack:       newPathStack,
+		arrayIndexStack: newArrayIndexStack,
+	}
+}
+
 // handleKeyLine processes a key: value line and updates stacks.
 func handleKeyLine(params *handleKeyLineParams) yamlPathState {
+	isArrayElement := strings.HasPrefix(params.trimmed, yamlArrayItemPrefix)
 	key := extractYAMLKey(params.trimmed)
-	currentPath := buildYAMLPath(params.pathStack, key)
+
+	var currentPath string
+	var newPathStack []string
+	var newArrayIndexStack []int
+
+	if isArrayElement && len(params.pathStack) > 0 {
+		result := buildArrayElementPath(key, params.pathStack, params.arrayIndexStack)
+		currentPath = result.currentPath
+		newPathStack = result.pathStack
+		newArrayIndexStack = result.arrayIndexStack
+	} else {
+		currentPath = buildYAMLPath(params.pathStack, key)
+		newPathStack = params.pathStack
+		newArrayIndexStack = params.arrayIndexStack
+	}
 
 	// Determine value type
 	value := ""
@@ -151,9 +222,9 @@ func handleKeyLine(params *handleKeyLineParams) yamlPathState {
 	}
 
 	state := yamlPathState{
-		pathStack:       params.pathStack,
+		pathStack:       newPathStack,
 		indentStack:     params.indentStack,
-		arrayIndexStack: params.arrayIndexStack,
+		arrayIndexStack: newArrayIndexStack,
 		multilineStart:  isMultilineStart,
 		multilinePath:   currentPath,
 	}
@@ -216,7 +287,7 @@ func processYAMLLine(
 	)
 
 	// Handle simple array items
-	if strings.HasPrefix(trimmed, "- ") && !strings.Contains(trimmed, yamlKeySep) {
+	if strings.HasPrefix(trimmed, yamlArrayItemPrefix) && !strings.Contains(trimmed, yamlKeySep) {
 		state.arrayIndexStack = handleArrayItemLine(lineNum, state.pathStack, state.arrayIndexStack, lineInfo)
 		return
 	}

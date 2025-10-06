@@ -64,21 +64,28 @@ Atmos had two mechanisms for tracking configuration origins:
 ### Symbol and Color Scheme
 
 **Symbols**:
-- `●` (U+25CF BLACK CIRCLE) - Defined in parent stack `[0]`
-- `○` (U+25CB WHITE CIRCLE) - Inherited/imported `[N]` levels deep
+- `●` (U+25CF BLACK CIRCLE) - Defined in parent stack `[1]`
+- `○` (U+25CB WHITE CIRCLE) - Inherited/imported `[N]` (N=2+ levels deep)
 - `∴` (U+2234 THEREFORE) - Computed/templated
 
 **Depth Indicators**:
-- `[0]` indicates defined in parent stack (the stack being described)
-- `[N]` indicates inherited from N levels deep in the import chain
+- `[1]` indicates defined in parent stack (the stack being described)
+- `[N]` (N=2+) indicates inherited from N levels deep in the import chain
 
-**Colors**: All symbols use `ColorDarkGray` (#626262) for subtle, non-distracting display
+**Colors**:
+- Symbols: `●` (cyan), `○` (cyan), `∴` (orange)
+- Depth indicators by level:
+  - Depth 1 (parent stack): Cyan (#00FFFF)
+  - Depth 2 (first import): Green (#00FF00)
+  - Depth 3 (second import): Orange (#FFA500)
+  - Depth 4+ (deeper imports): Red (#FF0000)
+- Legend and comments: Dark Gray (#626262) for subtle display
 
 **Legend**: Always displayed at top of provenance output:
 ```text
 # Provenance Legend:
-#   ● [0] Defined in parent stack
-#   ○ [N] Inherited/imported (N levels deep)
+#   ● [1] Defined in parent stack
+#   ○ [N] Inherited/imported (N=2+ levels deep)
 #   ∴ Computed/templated
 ```
 
@@ -401,16 +408,16 @@ Uses JSONPath format to address any value in the configuration:
 $ atmos describe component vpc -s prod-ue2 --provenance
 
 # Provenance Legend:
-#   ● [0] Defined in parent stack
-#   ○ [N] Inherited/imported (N levels deep)
+#   ● [1] Defined in parent stack
+#   ○ [N] Inherited/imported (N=2+ levels deep)
 #   ∴ Computed/templated
 
 import:                                           # ○ [2] orgs/acme/_defaults.yaml:2
   - catalog/vpc/defaults                          # ○ [2] orgs/acme/_defaults.yaml:2
-  - mixins/region/us-east-2                       # ● [0] orgs/acme/prod/us-east-2.yaml:3
-  - orgs/acme/_defaults                           # ○ [1] orgs/acme/prod/_defaults.yaml:2
+  - mixins/region/us-east-2                       # ● [1] orgs/acme/prod/us-east-2.yaml:3
+  - orgs/acme/_defaults                           # ○ [2] orgs/acme/prod/_defaults.yaml:2
 vars:                                             # ○ [3] catalog/vpc/defaults.yaml:8
-  cidr: "10.100.0.0/16"                           # ● [0] orgs/acme/prod/us-east-2.yaml:10
+  cidr: "10.100.0.0/16"                           # ● [1] orgs/acme/prod/us-east-2.yaml:10
   name: vpc                                       # ○ [3] catalog/vpc/defaults.yaml:9
   region: us-east-2                               # ○ [2] mixins/region/us-east-2.yaml:2
   namespace: acme                                 # ○ [3] orgs/acme/_defaults.yaml:2
@@ -441,7 +448,7 @@ $ atmos describe stacks --provenance
 ```bash
 $ atmos describe component vpc -s prod-ue2 --provenance | grep cidr
 
-  cidr: "10.100.0.0/16"  # ● [0] orgs/acme/prod/us-east-2.yaml:10
+  cidr: "10.100.0.0/16"  # ● [1] orgs/acme/prod/us-east-2.yaml:10
 ```
 
 **Result**: User immediately sees the value is defined in the parent stack at line 10.
@@ -454,7 +461,7 @@ $ atmos describe component vpc -s prod-ue2 --provenance | grep cidr
 $ atmos describe component app -s staging-uw2 --provenance | grep replicas
 
   replicas: 3  # ○ [2] catalog/app/defaults.yaml:15
-               # ● [0] stacks/staging/app.yaml:22  (override)
+               # ● [1] stacks/staging/app.yaml:22  (override)
 ```
 
 **Result**: Developer sees the value was inherited from defaults but overridden in staging.
@@ -467,9 +474,9 @@ $ atmos describe component app -s staging-uw2 --provenance | grep replicas
 $ atmos describe component bastion -s prod-ue2 --provenance --query .vars.security
 
 security:                                         # ○ [2] catalog/bastion/defaults.yaml:20
-  allowed_cidr_blocks:                            # ● [0] stacks/prod/security.yaml:8
-    - "10.0.0.0/8"                                # ● [0] stacks/prod/security.yaml:9
-    - "172.16.0.0/12"                             # ● [0] stacks/prod/security.yaml:10
+  allowed_cidr_blocks:                            # ● [1] stacks/prod/security.yaml:8
+    - "10.0.0.0/8"                                # ● [1] stacks/prod/security.yaml:9
+    - "172.16.0.0/12"                             # ● [1] stacks/prod/security.yaml:10
 ```
 
 **Result**: Team can verify all security settings come from approved files.

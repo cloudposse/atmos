@@ -94,7 +94,7 @@ atmos describe component vpc -s tenant1-ue2-dev --provenance
   <dd>Query the results of the command using `yq` expressions.<br/><br/>`atmos describe component <c> -s <stack> --query .vars.tags`<br/><br/>For more details, refer to https://mikefarah.gitbook.io/yq.</dd>
 
   <dt>`--provenance` <em>(optional)</em></dt>
-  <dd>Enable provenance tracking to show where configuration values originated.<br/>Displays file path, line number, and column for each value with inline YAML comments.<br/>Output includes inheritance depth indicators:<br/>&nbsp;&nbsp;● `[0]` - Defined in parent stack<br/>&nbsp;&nbsp;○ `[N]` - Inherited/imported (N levels deep)<br/>&nbsp;&nbsp;∴ - Computed/templated<br/><br/>`atmos describe component <c> -s <stack> --provenance`</dd>
+  <dd>Enable provenance tracking to show where configuration values originated.<br/>Displays file path, line number, and column for each value with inline YAML comments.<br/>Output includes inheritance depth indicators:<br/>&nbsp;&nbsp;● `[1]` - Defined in parent stack<br/>&nbsp;&nbsp;○ `[N]` - Inherited/imported (N=2+ levels deep)<br/>&nbsp;&nbsp;∴ - Computed/templated<br/>Depth indicators use color coding: cyan for parent stack, green for depth 2, orange for depth 3, red for depth 4+.<br/><br/>`atmos describe component <c> -s <stack> --provenance`</dd>
 
   <dt>`--pager` <em>(optional)</em></dt>
   <dd>Disable/Enable the paging user experience.</dd>

@@ -210,7 +210,7 @@ func getSymbolColor(symbol string) lipgloss.Color {
 	case SymbolInherited:
 		return lipgloss.Color(theme.ColorCyan)
 	case SymbolComputed:
-		return lipgloss.Color(theme.ColorYellow)
+		return lipgloss.Color(theme.ColorOrange)
 	default:
 		return lipgloss.Color(theme.ColorDarkGray)
 	}
@@ -295,13 +295,13 @@ func formatProvenanceCommentWithStackFile(entry *m.ProvenanceEntry) string {
 	file := shortenFilePath(entry.File)
 
 	// Color code the depth based on inheritance level.
-	// Depth 1-2: green (parent + first import), 3: yellow, 4+: red.
+	// Depth 1-2: green (parent + first import), 3: orange, 4+: red.
 	var depthColor lipgloss.Color
 	switch entry.Depth {
 	case 1, 2:
 		depthColor = lipgloss.Color(theme.ColorGreen)
 	case 3:
-		depthColor = lipgloss.Color(theme.ColorYellow)
+		depthColor = lipgloss.Color(theme.ColorOrange)
 	default: // 4+
 		depthColor = lipgloss.Color(theme.ColorRed)
 	}

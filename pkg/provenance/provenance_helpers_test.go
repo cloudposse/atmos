@@ -87,7 +87,7 @@ func TestProvenanceOutputFormat(t *testing.T) {
 	data := map[string]any{
 		"stage":     "dev",       // depth 1 - parent stack
 		"region":    "us-east-2", // depth 2 - first import (green)
-		"namespace": "acme",      // depth 3 - second import (yellow)
+		"namespace": "acme",      // depth 3 - second import (orange)
 		"tenant":    "plat",      // depth 4 - third import (red)
 	}
 
@@ -113,7 +113,7 @@ func TestProvenanceOutputFormat(t *testing.T) {
 		File:  "orgs/acme/_defaults.yaml",
 		Line:  2,
 		Type:  merge.ProvenanceTypeImport,
-		Depth: 3, // Second import - should show ○ [3] in yellow
+		Depth: 3, // Second import - should show ○ [3] in orange
 	})
 
 	ctx.RecordProvenance("tenant", merge.ProvenanceEntry{

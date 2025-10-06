@@ -9,14 +9,16 @@ import (
 
 // updateImportsProvenance updates provenance paths from "imports" to "import".
 func updateImportsProvenance(ctx *m.MergeContext) {
-	// Update main imports key
+	// Update main imports key - replay entire chain to preserve inheritance history.
 	if ctx.HasProvenance(importsKey) {
 		if entries := ctx.GetProvenance(importsKey); len(entries) > 0 {
-			ctx.RecordProvenance("import", entries[len(entries)-1])
+			for _, entry := range entries {
+				ctx.RecordProvenance("import", entry)
+			}
 		}
 	}
 
-	// Update array element paths
+	// Update array element paths - replay entire chain to preserve inheritance history.
 	for i := 0; ; i++ {
 		oldPath := fmt.Sprintf("%s[%d]", importsKey, i)
 		if !ctx.HasProvenance(oldPath) {
@@ -24,7 +26,9 @@ func updateImportsProvenance(ctx *m.MergeContext) {
 		}
 		if entries := ctx.GetProvenance(oldPath); len(entries) > 0 {
 			newPath := fmt.Sprintf("import[%d]", i)
-			ctx.RecordProvenance(newPath, entries[len(entries)-1])
+			for _, entry := range entries {
+				ctx.RecordProvenance(newPath, entry)
+			}
 		}
 	}
 }
