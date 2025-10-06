@@ -81,6 +81,9 @@ Global Flags:
                                      standard file descriptor (including
                                      /dev/null)
 
+        --version                    Alias for atmos version command (default
+                                     false)
+
 
 Use atmos auth login --help for more information about a command.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       
 
