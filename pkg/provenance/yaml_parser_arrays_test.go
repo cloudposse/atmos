@@ -147,6 +147,8 @@ func TestSimpleArrayDebug(t *testing.T) {
 }
 
 // TestRootLevelArrayOfScalars tests that root-level arrays of scalars get indexed correctly.
+//
+//nolint:dupl // Test structure mirrors TestNestedArrayOfScalars for consistency.
 func TestRootLevelArrayOfScalars(t *testing.T) {
 	yaml := `- item1
 - item2
@@ -242,6 +244,8 @@ func TestRootLevelArrayOfMaps(t *testing.T) {
 // TestNestedArrayOfScalars tests that scalar array items get full path prefixes.
 // This is a regression test for the bug where handleArrayItemLine only used the
 // last stack element, producing "items[0]" instead of "vars.items[0]".
+//
+//nolint:dupl // Test structure mirrors TestRootLevelArrayOfScalars for consistency.
 func TestNestedArrayOfScalars(t *testing.T) {
 	yaml := `vars:
   items:
@@ -282,5 +286,79 @@ func TestNestedArrayOfScalars(t *testing.T) {
 		assert.True(t, info.IsKeyLine, "Should be marked as a key line")
 	} else {
 		t.Fatal("Line 4 not found in path map")
+	}
+}
+
+// TestRootArrayWithNestedMaps tests root-level array elements that contain nested maps.
+// This is a regression test for the bug where arrayIndexStack wasn't popped correctly
+// when exiting nested scopes at root level, causing all siblings to be tagged as [0].
+func TestRootArrayWithNestedMaps(t *testing.T) {
+	yaml := `- metadata:
+    name: first
+    id: 1
+- metadata:
+    name: second
+    id: 2
+- metadata:
+    name: third
+    id: 3`
+
+	lines := strings.Split(yaml, "\n")
+	pathMap := buildYAMLPathMap(lines)
+
+	// Debug: print all paths
+	t.Log("\n=== ROOT ARRAY WITH NESTED MAPS PATH MAP ===")
+	for i := 0; i < len(lines); i++ {
+		if info, ok := pathMap[i]; ok {
+			t.Logf("Line %d: %q -> Path: %q", i, strings.TrimSpace(lines[i]), info.Path)
+		}
+	}
+
+	// Line 0: "- metadata:" should be [0].metadata
+	if info, ok := pathMap[0]; ok {
+		assert.Equal(t, "[0].metadata", info.Path, "First element metadata should be [0].metadata")
+		assert.True(t, info.IsKeyLine, "Should be marked as a key line")
+	} else {
+		t.Fatal("Line 0 not found in path map")
+	}
+
+	// Line 1: "    name: first" should be [0].metadata.name
+	if info, ok := pathMap[1]; ok {
+		assert.Equal(t, "[0].metadata.name", info.Path, "First element name should be [0].metadata.name")
+		assert.True(t, info.IsKeyLine, "Should be marked as a key line")
+	} else {
+		t.Fatal("Line 1 not found in path map")
+	}
+
+	// Line 3: "- metadata:" should be [1].metadata (NOT [0].metadata)
+	if info, ok := pathMap[3]; ok {
+		assert.Equal(t, "[1].metadata", info.Path, "Second element metadata should be [1].metadata")
+		assert.True(t, info.IsKeyLine, "Should be marked as a key line")
+	} else {
+		t.Fatal("Line 3 not found in path map")
+	}
+
+	// Line 4: "    name: second" should be [1].metadata.name
+	if info, ok := pathMap[4]; ok {
+		assert.Equal(t, "[1].metadata.name", info.Path, "Second element name should be [1].metadata.name")
+		assert.True(t, info.IsKeyLine, "Should be marked as a key line")
+	} else {
+		t.Fatal("Line 4 not found in path map")
+	}
+
+	// Line 6: "- metadata:" should be [2].metadata (NOT [0].metadata)
+	if info, ok := pathMap[6]; ok {
+		assert.Equal(t, "[2].metadata", info.Path, "Third element metadata should be [2].metadata")
+		assert.True(t, info.IsKeyLine, "Should be marked as a key line")
+	} else {
+		t.Fatal("Line 6 not found in path map")
+	}
+
+	// Line 7: "    name: third" should be [2].metadata.name
+	if info, ok := pathMap[7]; ok {
+		assert.Equal(t, "[2].metadata.name", info.Path, "Third element name should be [2].metadata.name")
+		assert.True(t, info.IsKeyLine, "Should be marked as a key line")
+	} else {
+		t.Fatal("Line 7 not found in path map")
 	}
 }

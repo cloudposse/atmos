@@ -444,7 +444,8 @@ func TestMergeWithProvenance_HonorsListMergeStrategy(t *testing.T) {
 		assert.Equal(t, "1", merged["id"])
 		assert.Equal(t, "override", merged["name"], "Override value should win")
 		assert.Equal(t, "field", merged["extra"], "New field from override should be present")
-		// Note: "count" from base is NOT preserved with mergo's SliceDeepCopy - it replaces the element
+		// "count" from base IS preserved with mergo's SliceDeepCopy - it deep-merges the map elements.
+		assert.Equal(t, 10, merged["count"], "count field should be preserved from base when not overridden")
 
 		// Verify provenance was still tracked.
 		assert.True(t, ctx.HasProvenance("vars.items"), "Provenance should be tracked for vars.items")

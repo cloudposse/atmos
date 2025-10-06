@@ -106,9 +106,9 @@ func popStacksForIndent(indent int, pathStack []string, indentStack, arrayIndexS
 	for len(indentStack) > 1 && indent <= indentStack[len(indentStack)-1] {
 		pathStack = pathStack[:len(pathStack)-1]
 		indentStack = indentStack[:len(indentStack)-1]
-		// Only pop arrayIndexStack if we're not at root level (indent > 0)
-		// Root-level arrays need to maintain their index counter across siblings
-		if len(arrayIndexStack) > 0 && indent > 0 {
+		// Pop arrayIndexStack when exiting a nested scope, even at root level.
+		// We still keep the root counter when pathStack is empty (between root array siblings).
+		if len(arrayIndexStack) > 0 && (indent > 0 || len(pathStack) > 0) {
 			arrayIndexStack = arrayIndexStack[:len(arrayIndexStack)-1]
 		}
 	}
