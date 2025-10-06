@@ -548,6 +548,73 @@ Use fixtures in `tests/test-cases/` for integration tests. Each test case should
   # 4. Commit changes only after successful build
   ```
 
+### Regenerating Screengrabs (IMPORTANT)
+- **Screengrabs are auto-generated HTML snippets** showing command output with ANSI colors
+- **Located in**: `website/src/components/Screengrabs/*.html`
+- **Used in documentation** via the `<Screengrab>` component:
+  ```mdx
+  import Screengrab from '@site/src/components/Screengrab'
+
+  <Screengrab title="atmos --help" slug="atmos--help" />
+  ```
+
+#### When to Regenerate Screengrabs
+- After modifying CLI command behavior, help text, or output formatting
+- After adding new CLI commands
+- **NOT needed** for documentation-only changes (fixed links, imports, etc.)
+
+#### How to Regenerate (Linux/CI Only)
+Screengrab generation **requires a Linux environment** because the `script` command has different behavior on macOS vs Linux.
+
+**Method 1: Via GitHub Actions (Recommended)**
+1. Trigger the screengrabs workflow:
+   ```bash
+   gh workflow run screengrabs.yaml
+   ```
+2. The workflow will:
+   - Build screengrabs on `ubuntu-latest`
+   - Create a PR with updated screengrabs
+   - Auto-apply the `no-release` label
+
+**Method 2: Locally on Linux**
+```bash
+# Install dependencies (Ubuntu/Debian)
+sudo apt-get install -y aha util-linux make
+
+# Build and install screengrabs
+cd demo/screengrabs
+make all  # Runs build-all.sh and installs to website/
+
+# Commit the changes
+git add website/src/components/Screengrabs/
+git commit -m "chore: update screengrabs"
+```
+
+**Method 3: Using Docker (from macOS)**
+```bash
+# Run screengrab generation in a Linux container
+docker run --rm -v $(pwd):/workspace -w /workspace ubuntu:latest bash -c '
+  apt-get update && apt-get install -y aha util-linux make git
+  cd demo/screengrabs && make all
+'
+
+# Then commit the generated files
+git add website/src/components/Screengrabs/
+git commit -m "chore: update screengrabs"
+```
+
+#### Screengrab Workflow Details
+- **Manifest file**: `demo/screengrabs/demo-stacks.txt` lists all commands to capture
+- **Script**: `demo/screengrabs/build-all.sh` generates ANSI output and converts to HTML using `aha`
+- **Output**: Creates colorized HTML files in `demo/screengrabs/artifacts/`
+- **Install**: Copies artifacts to `website/src/components/Screengrabs/`
+
+**Important Notes**:
+- Screengrabs capture the exact output at generation time
+- They include ANSI color codes converted to HTML
+- The `script` command syntax differs between BSD (macOS) and GNU (Linux)
+- Always regenerate all screengrabs together to maintain consistency
+
 ### Pull Request Requirements (MANDATORY)
 - **Follow the pull request template** in `.github/PULL_REQUEST_TEMPLATE.md`:
   ```markdown
