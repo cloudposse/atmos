@@ -71,14 +71,15 @@ func TestRenderInlineProvenance_WithProvenance(t *testing.T) {
 	assert.Contains(t, result, "name: test")
 	assert.Contains(t, result, "value: 42")
 
-	// Verify provenance comments are present with correct format.
+	// Verify provenance comments are present with correct format (exact format check).
+	// Comments should be on the same line or adjacent line to the field they document.
 	assert.Contains(t, result, "# ● [1] config.yaml:10")
 	assert.Contains(t, result, "# ● [1] config.yaml:11")
 
-	// Verify legend symbols and descriptions.
-	assert.Contains(t, result, "● [1] Defined in parent stack")
-	assert.Contains(t, result, "○ [N] Inherited/imported (N=2+ levels deep)")
-	assert.Contains(t, result, "∴ Computed/templated")
+	// Verify legend symbols and descriptions with exact text.
+	assert.Contains(t, result, "#   ● [1] Defined in parent stack")
+	assert.Contains(t, result, "#   ○ [N] Inherited/imported (N=2+ levels deep)")
+	assert.Contains(t, result, "#   ∴ Computed/templated")
 }
 
 func TestProvenanceOutputFormat(t *testing.T) {
@@ -205,4 +206,223 @@ func TestFormatProvenanceComment(t *testing.T) {
 			assert.Equal(t, tt.expected, result)
 		})
 	}
+}
+
+func TestRenderInlineProvenance_NilAtmosConfig(t *testing.T) {
+	// Test that nil atmosConfig is handled gracefully.
+	data := map[string]any{
+		"name": "test",
+	}
+
+	ctx := merge.NewMergeContext()
+	ctx.EnableProvenance()
+	ctx.RecordProvenance("name", merge.ProvenanceEntry{
+		File:   "config.yaml",
+		Line:   10,
+		Column: 5,
+		Type:   merge.ProvenanceTypeInline,
+		Depth:  1,
+	})
+
+	// Should not panic with nil atmosConfig.
+	result := RenderInlineProvenanceWithStackFile(data, ctx, nil, "config.yaml")
+
+	// Should still render YAML output (may or may not include provenance depending on implementation).
+	assert.Contains(t, result, "name: test")
+}
+
+func TestRenderInlineProvenance_MalformedProvenanceEntries(t *testing.T) {
+	// Test handling of malformed provenance entries.
+	tests := []struct {
+		name  string
+		entry merge.ProvenanceEntry
+		data  map[string]any
+	}{
+		{
+			name: "negative line number",
+			entry: merge.ProvenanceEntry{
+				File:   "config.yaml",
+				Line:   -1,
+				Column: 5,
+				Type:   merge.ProvenanceTypeInline,
+				Depth:  1,
+			},
+			data: map[string]any{"field": "value"},
+		},
+		{
+			name: "empty filename",
+			entry: merge.ProvenanceEntry{
+				File:   "",
+				Line:   10,
+				Column: 5,
+				Type:   merge.ProvenanceTypeInline,
+				Depth:  1,
+			},
+			data: map[string]any{"field": "value"},
+		},
+		{
+			name: "zero line number",
+			entry: merge.ProvenanceEntry{
+				File:   "config.yaml",
+				Line:   0,
+				Column: 5,
+				Type:   merge.ProvenanceTypeInline,
+				Depth:  1,
+			},
+			data: map[string]any{"field": "value"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx := merge.NewMergeContext()
+			ctx.EnableProvenance()
+			ctx.RecordProvenance("field", tt.entry)
+
+			atmosConfig := &schema.AtmosConfiguration{}
+
+			// Should not panic and should return valid YAML.
+			result := RenderInlineProvenanceWithStackFile(tt.data, ctx, atmosConfig, "test.yaml")
+			assert.Contains(t, result, "field: value")
+			// Result may or may not include the malformed provenance comment - implementation decides.
+		})
+	}
+}
+
+func TestRenderInlineProvenance_NullValues(t *testing.T) {
+	// Test that nil/null values are handled correctly with provenance.
+	data := map[string]any{
+		"nullable_field": nil,
+		"normal_field":   "value",
+	}
+
+	ctx := merge.NewMergeContext()
+	ctx.EnableProvenance()
+	ctx.RecordProvenance("nullable_field", merge.ProvenanceEntry{
+		File:   "config.yaml",
+		Line:   10,
+		Column: 5,
+		Type:   merge.ProvenanceTypeInline,
+		Depth:  1,
+	})
+	ctx.RecordProvenance("normal_field", merge.ProvenanceEntry{
+		File:   "config.yaml",
+		Line:   11,
+		Column: 5,
+		Type:   merge.ProvenanceTypeInline,
+		Depth:  1,
+	})
+
+	atmosConfig := &schema.AtmosConfiguration{}
+	result := RenderInlineProvenanceWithStackFile(data, ctx, atmosConfig, "config.yaml")
+
+	// Should contain the null value in YAML format.
+	assert.Contains(t, result, "nullable_field: null")
+	assert.Contains(t, result, "normal_field: value")
+
+	// Should include provenance for both fields.
+	assert.Contains(t, result, "# ● [1] config.yaml:10")
+	assert.Contains(t, result, "# ● [1] config.yaml:11")
+}
+
+func TestRenderInlineProvenance_NestedStructures(t *testing.T) {
+	// Test provenance rendering with nested structures.
+	// Note: Only fields with recorded provenance get inline comments.
+	data := map[string]any{
+		"top_level": "value1",
+		"nested": map[string]any{
+			"level2": "value2",
+			"deeper": map[string]any{
+				"level3": "value3",
+			},
+		},
+	}
+
+	ctx := merge.NewMergeContext()
+	ctx.EnableProvenance()
+	ctx.RecordProvenance("top_level", merge.ProvenanceEntry{
+		File:  "config.yaml",
+		Line:  5,
+		Type:  merge.ProvenanceTypeInline,
+		Depth: 1,
+	})
+	ctx.RecordProvenance("nested.level2", merge.ProvenanceEntry{
+		File:  "config.yaml",
+		Line:  10,
+		Type:  merge.ProvenanceTypeInline,
+		Depth: 1,
+	})
+	ctx.RecordProvenance("nested.deeper.level3", merge.ProvenanceEntry{
+		File:  "imported.yaml",
+		Line:  15,
+		Type:  merge.ProvenanceTypeImport,
+		Depth: 2,
+	})
+
+	atmosConfig := &schema.AtmosConfiguration{}
+	result := RenderInlineProvenanceWithStackFile(data, ctx, atmosConfig, "config.yaml")
+
+	// Should contain top-level field with provenance.
+	assert.Contains(t, result, "top_level: value1")
+	assert.Contains(t, result, "# ● [1] config.yaml:5")
+
+	// The function only renders fields with provenance at the top level.
+	// Nested structures are rendered as full objects without inline comments for nested fields.
+	// This is expected behavior - only top-level scalar fields with provenance get inline comments.
+}
+
+func TestRenderInlineProvenance_DifferentProvenanceTypes(t *testing.T) {
+	// Test different provenance types: inline, import, override, computed.
+	data := map[string]any{
+		"inline_value":   "val1",
+		"import_value":   "val2",
+		"override_value": "val3",
+		"computed_value": "val4",
+	}
+
+	ctx := merge.NewMergeContext()
+	ctx.EnableProvenance()
+
+	ctx.RecordProvenance("inline_value", merge.ProvenanceEntry{
+		File:  "stack.yaml",
+		Line:  10,
+		Type:  merge.ProvenanceTypeInline,
+		Depth: 1,
+	})
+
+	ctx.RecordProvenance("import_value", merge.ProvenanceEntry{
+		File:  "imported.yaml",
+		Line:  20,
+		Type:  merge.ProvenanceTypeImport,
+		Depth: 2,
+	})
+
+	ctx.RecordProvenance("override_value", merge.ProvenanceEntry{
+		File:  "override.yaml",
+		Line:  30,
+		Type:  merge.ProvenanceTypeOverride,
+		Depth: 3,
+	})
+
+	ctx.RecordProvenance("computed_value", merge.ProvenanceEntry{
+		File:  "stack.yaml",
+		Line:  40,
+		Type:  merge.ProvenanceTypeComputed,
+		Depth: 1,
+	})
+
+	atmosConfig := &schema.AtmosConfiguration{}
+	result := RenderInlineProvenanceWithStackFile(data, ctx, atmosConfig, "stack.yaml")
+
+	// Verify inline type uses ●.
+	assert.Contains(t, result, "# ● [1] stack.yaml:10")
+
+	// Verify import type uses ○.
+	assert.Contains(t, result, "# ○ [2] imported.yaml:20")
+
+	// Verify override type uses ○.
+	assert.Contains(t, result, "# ○ [3] override.yaml:30")
+
+	// Verify computed type uses ∴ (with depth indicator).
+	assert.Contains(t, result, "# ∴ [1] stack.yaml:40")
 }

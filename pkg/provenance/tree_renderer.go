@@ -84,6 +84,8 @@ func RenderTree(ctx *m.MergeContext, atmosConfig *schema.AtmosConfiguration, all
 
 // buildFileTree groups provenance entries by file.
 func buildFileTree(ctx *m.MergeContext, allowedPaths map[string]bool) []FileTreeNode {
+	defer perf.Track(nil, "provenance.buildFileTree")()
+
 	// Group provenance entries by file
 	byFile := make(map[string][]ProvenanceItem)
 
@@ -332,7 +334,7 @@ func getCommentColumn() int {
 
 	const defaultColumn = 50
 	const minColumn = 40
-	const commentSpace = 60 // Space needed for comment (# ● file:line)
+	const commentSpace = 60 // Space needed for comment (# ● file:line).
 
 	// Check if stdout is a TTY
 	if !term.IsTerminal(int(os.Stdout.Fd())) {

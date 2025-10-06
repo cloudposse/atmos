@@ -125,7 +125,22 @@ func recordArrayProvenance(params provenanceRecursiveParams, arr []any) {
 }
 
 func recordProvenanceRecursive(params provenanceRecursiveParams) {
-	if params.data == nil || params.ctx == nil || !params.ctx.IsProvenanceEnabled() {
+	if params.ctx == nil || !params.ctx.IsProvenanceEnabled() {
+		return
+	}
+
+	if params.data == nil {
+		if params.currentPath != "" {
+			recordProvenanceEntry(&provenanceEntryParams{
+				path:           params.currentPath,
+				value:          nil,
+				ctx:            params.ctx,
+				positions:      params.positions,
+				currentFile:    params.currentFile,
+				depth:          params.depth,
+				provenanceType: ProvenanceTypeInline,
+			})
+		}
 		return
 	}
 
