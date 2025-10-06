@@ -562,7 +562,6 @@ Use fixtures in `tests/test-cases/` for integration tests. Each test case should
   atmos command subcommand example1
   atmos command subcommand example2 --flag=value
   ```
-  ```
 
 - **File location**: `website/docs/cli/commands/<command>/<subcommand>.mdx`
 - **Link to core concepts** using `/core-concepts/` paths

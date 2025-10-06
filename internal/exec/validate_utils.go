@@ -71,6 +71,7 @@ func ValidateWithJsonSchema(data any, schemaName string, schemaText string) (boo
 				WithHintf("Review the JSON schema: `%s`", schemaName).
 				WithHint("Fix the validation errors listed above in your configuration").
 				WithHint("Use `atmos validate component <component> -s <stack>` to revalidate").
+				WithExitCode(2).
 				Err()
 			return false, err
 		default:
@@ -174,6 +175,7 @@ func ValidateWithOpa(
 			WithHintf("Review the OPA policy in `%s`", schemaPath).
 			WithHint("Fix the violations listed above in your component configuration").
 			WithHint("Use `atmos describe component <component> -s <stack>` to see the full configuration").
+			WithExitCode(2).
 			Err()
 		return false, err
 	}
@@ -273,6 +275,7 @@ func ValidateWithOpaLegacy(
 			WithHintf("Review the OPA policy in `%s`", schemaName).
 			WithHint("Fix the violations listed above in your component configuration").
 			WithHint("See https://atmos.tools/core-concepts/validate for validation documentation").
+			WithExitCode(2).
 			Err()
 		return false, err
 	}
@@ -285,7 +288,7 @@ func ValidateWithOpaLegacy(
 func ValidateWithCue(data any, schemaName string, schemaText string) (bool, error) {
 	defer perf.Track(nil, "exec.ValidateWithCue")()
 
-	return false, errors.New("validation using CUE is not supported yet")
+	return false, errUtils.ErrCUEValidationUnsupported
 }
 
 // isWindowsOPALoadError checks if the error is likely a Windows-specific OPA loading issue.

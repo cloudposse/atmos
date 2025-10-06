@@ -10,6 +10,7 @@ import (
 	"github.com/cockroachdb/errors"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	term "github.com/cloudposse/atmos/internal/tui/templates/term"
 	auth "github.com/cloudposse/atmos/pkg/auth"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	git "github.com/cloudposse/atmos/pkg/git"
@@ -146,6 +147,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 			WithContext("base_path", basePath).
 			WithHint("Use `atmos list components` to see available components").
 			WithHintf("Verify the component path: %s", basePath).
+			WithExitCode(2).
 			Err()
 		return err
 	}
@@ -162,6 +164,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 			WithContext("component_path", filepath.Join(info.ComponentFolderPrefix, info.Component)).
 			WithHint("Abstract components are meant to be inherited, not provisioned directly").
 			WithHintf("Create a concrete component that inherits from `%s`", info.Component).
+			WithExitCode(2).
 			Err()
 		return err
 	}
@@ -181,6 +184,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 				WithContext("component_path", filepath.Join(info.ComponentFolderPrefix, info.Component)).
 				WithHint("Remove `metadata.locked: true` from the component configuration to enable modifications").
 				WithHint("Locked components are read-only to prevent accidental changes").
+				WithExitCode(2).
 				Err()
 			return err
 		}
@@ -388,8 +392,8 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 		if info.SubCommand == "workspace" || atmosConfig.Components.Terraform.InitRunReconfigure {
 			initCommandWithArguments = []string{"init", "-reconfigure"}
 		}
-		// Add `--var-file` if configured in `atmos.yaml
-		// OpenTofu supports passing a varfile to `init` to dynamically configure backends
+		// Add `--var-file` if configured in `atmos.yaml`.
+		// OpenTofu supports passing a varfile to `init` to dynamically configure backends.
 		if atmosConfig.Components.Terraform.Init.PassVars {
 			initCommandWithArguments = append(initCommandWithArguments, []string{varFileFlag, varFile}...)
 		}
@@ -492,8 +496,8 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 		if atmosConfig.Components.Terraform.InitRunReconfigure {
 			allArgsAndFlags = append(allArgsAndFlags, []string{"-reconfigure"}...)
 		}
-		// Add `--var-file` if configured in `atmos.yaml
-		// OpenTofu supports passing a varfile to `init` to dynamically configure backends
+		// Add `--var-file` if configured in `atmos.yaml`.
+		// OpenTofu supports passing a varfile to `init` to dynamically configure backends.
 		if atmosConfig.Components.Terraform.Init.PassVars {
 			allArgsAndFlags = append(allArgsAndFlags, []string{varFileFlag, varFile}...)
 		}
@@ -574,9 +578,9 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 		}
 	}
 
-	// Check if the terraform command requires a user interaction,
-	// but it's running in a scripted environment (where a `tty` is not attached or `stdin` is not attached)
-	if os.Stdin == nil && !u.SliceContainsString(info.AdditionalArgsAndFlags, autoApproveFlag) {
+	// Check if the terraform command requires user interaction but no TTY is attached.
+	noTTY := os.Stdin == nil || !term.IsTTYSupportForStderr()
+	if noTTY && !u.SliceContainsString(info.AdditionalArgsAndFlags, autoApproveFlag) {
 		if info.SubCommand == "apply" {
 			err := errUtils.Build(fmt.Errorf("%w: `terraform apply` requires user interaction, but no TTY is attached",
 				ErrNoTty,
@@ -587,6 +591,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 				WithHint("Use `terraform apply -auto-approve` to skip confirmation").
 				WithHint("Or use `atmos terraform deploy` which applies without confirmation").
 				WithHint("Running in CI/CD? Ensure your pipeline provides a TTY or uses `-auto-approve`").
+				WithExitCode(2).
 				Err()
 			return err
 		}

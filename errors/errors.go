@@ -140,6 +140,7 @@ var (
 	ErrWorkflowDirectoryDoesNotExist = errors.New("workflow directory does not exist")
 	ErrInvalidComponentArgument      = errors.New("invalid arguments. The command requires one argument 'componentName'")
 	ErrValidation                    = errors.New("validation failed")
+	ErrCUEValidationUnsupported      = errors.New("validation using CUE is not supported yet")
 
 	// List package errors.
 	ErrExecuteDescribeStacks     = errors.New("failed to execute describe stacks")
