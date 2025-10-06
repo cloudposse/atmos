@@ -6,8 +6,8 @@ import (
 	"strings"
 
 	"github.com/samber/lo"
-	"golang.org/x/term"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	tuiTerm "github.com/cloudposse/atmos/internal/tui/templates/term"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	log "github.com/cloudposse/atmos/pkg/logger"
@@ -132,20 +132,11 @@ func (d *DescribeComponentExec) ExecuteDescribeComponentCmd(describeComponentPar
 
 	// If provenance is enabled and we have a merge context, render with inline provenance
 	if provenance && mergeContext != nil && mergeContext.IsProvenanceEnabled() {
-		output := p.RenderInlineProvenanceWithStackFile(res, mergeContext, &atmosConfig, stackFile)
-
-		// Write to file if specified
-		err = writeOutputToFile(file, output)
-		if err != nil {
-			return err
+		resMap, ok := res.(map[string]any)
+		if !ok {
+			return fmt.Errorf("%w: provenance rendering requires a map, got %T", errUtils.ErrInvalidComponent, res)
 		}
-
-		// Print to TTY (stderr) for interactive viewing
-		if shouldPrintToTTY(file) {
-			u.PrintfMessageToTUI("%s", output)
-		}
-
-		return nil
+		return d.renderProvenance(resMap, mergeContext, &atmosConfig, stackFile, file)
 	}
 
 	if atmosConfig.Settings.Terminal.IsPagerEnabled() {
@@ -236,12 +227,24 @@ func writeOutputToFile(file string, output string) error {
 	return nil
 }
 
-// shouldPrintToTTY determines if output should be printed to TTY.
-func shouldPrintToTTY(file string) bool {
+// renderProvenance renders component configuration with provenance tracking.
+func (d *DescribeComponentExec) renderProvenance(
+	res map[string]any,
+	mergeContext *m.MergeContext,
+	atmosConfig *schema.AtmosConfiguration,
+	stackFile string,
+	file string,
+) error {
+	output := p.RenderInlineProvenanceWithStackFile(res, mergeContext, atmosConfig, stackFile)
+
+	// Write to file if specified, otherwise print to stdout
 	if file != "" {
-		return false
+		return writeOutputToFile(file, output)
 	}
-	return term.IsTerminal(int(os.Stderr.Fd()))
+
+	// Print to stdout (pipeable)
+	fmt.Print(output)
+	return nil
 }
 
 // extractImportsList converts imports from any type to []string.
