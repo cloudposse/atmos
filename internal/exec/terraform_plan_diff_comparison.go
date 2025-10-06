@@ -241,7 +241,7 @@ func processResourceChanges(plan map[string]interface{}, result map[string]inter
 			continue
 		}
 
-		modeVal, ok := resMap["mode"]
+		modeVal, ok := changeMap["mode"]
 		if !ok {
 			continue
 		}
