@@ -241,15 +241,20 @@ func processResourceChanges(plan map[string]interface{}, result map[string]inter
 			continue
 		}
 
-		modeVal, ok := changeMap["mode"]
+		modeVal, ok := resMap["mode"]
 		if !ok {
 			continue
 		}
 
-		if modeVal == "data" {
+		mode, ok := modeVal.(string)
+		if !ok {
 			continue
 		}
 
+		if mode == "data" {
+			continue
+		}
+		
 		address, ok := addressVal.(string)
 		if !ok {
 			continue
