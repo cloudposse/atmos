@@ -102,6 +102,12 @@ func processTagStoreGet(atmosConfig *schema.AtmosConfiguration, input string, cu
 		return nil
 	}
 
+	// Check if the retrieved value is nil and use default if provided.
+	// This handles the case where nil was stored (e.g., from rate limit failures).
+	if value == nil && retParams.defaultValue != nil {
+		return *retParams.defaultValue
+	}
+
 	// Execute the YQ expression if provided.
 	res := value
 	if retParams.query != "" {
