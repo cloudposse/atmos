@@ -612,6 +612,7 @@ git commit -m "chore: update screengrabs"
 - They include ANSI color codes converted to HTML
 - The `script` command syntax differs between BSD (macOS) and GNU (Linux)
 - Always regenerate all screengrabs together to maintain consistency
+- **Do NOT use pipe indirection** when running the screengrab commands - run them directly
 
 ### Pull Request Requirements (MANDATORY)
 - **Follow the pull request template** in `.github/PULL_REQUEST_TEMPLATE.md`:
