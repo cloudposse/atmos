@@ -3,6 +3,7 @@ package exec
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -14,8 +15,8 @@ import (
 	"github.com/google/go-containerregistry/pkg/v1/remote"
 	"github.com/google/uuid"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
-	"github.com/pkg/errors"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/filesystem"
 	log "github.com/cloudposse/atmos/pkg/logger" // Charmbracelet structured logger
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -39,7 +40,7 @@ func processOciImage(atmosConfig *schema.AtmosConfiguration, imageName string, d
 func processOciImageWithFS(_ *schema.AtmosConfiguration, imageName string, destDir string, fs filesystem.FileSystem) error {
 	tempDir, err := fs.MkdirTemp("", uuid.New().String())
 	if err != nil {
-		return fmt.Errorf("failed to create temp directory: %w", err)
+		return errors.Join(errUtils.ErrCreateTempDirectory, err)
 	}
 	defer func() {
 		if err := fs.RemoveAll(tempDir); err != nil {
@@ -50,18 +51,18 @@ func processOciImageWithFS(_ *schema.AtmosConfiguration, imageName string, destD
 	ref, err := name.ParseReference(imageName)
 	if err != nil {
 		log.Error("Failed to parse OCI image reference", "image", imageName, "error", err)
-		return fmt.Errorf("invalid image reference: %w", err)
+		return errors.Join(errUtils.ErrInvalidImageReference, err)
 	}
 
 	descriptor, err := pullImage(ref)
 	if err != nil {
-		return fmt.Errorf("failed to pull image: %w", err)
+		return errors.Join(errUtils.ErrPullImage, err)
 	}
 
 	img, err := descriptor.Image()
 	if err != nil {
 		log.Error("Failed to get image descriptor", "image", imageName, "error", err)
-		return fmt.Errorf("cannot get a descriptor for the OCI image '%s': %w", imageName, err)
+		return fmt.Errorf("%w '%s': %s", errUtils.ErrGetImageDescriptor, imageName, err)
 	}
 
 	checkArtifactType(descriptor, imageName)
@@ -69,7 +70,7 @@ func processOciImageWithFS(_ *schema.AtmosConfiguration, imageName string, destD
 	layers, err := img.Layers()
 	if err != nil {
 		log.Error("Failed to retrieve layers from OCI image", "image", imageName, "error", err)
-		return fmt.Errorf("failed to get image layers: %w", err)
+		return errors.Join(errUtils.ErrGetImageLayers, err)
 	}
 
 	if len(layers) == 0 {
@@ -79,7 +80,7 @@ func processOciImageWithFS(_ *schema.AtmosConfiguration, imageName string, destD
 
 	for i, layer := range layers {
 		if err := processLayer(layer, i, destDir); err != nil {
-			return fmt.Errorf("failed to process layer %d: %w", i, err)
+			return fmt.Errorf("%w %d: %s", errUtils.ErrProcessLayer, i, err)
 		}
 	}
 
@@ -124,13 +125,13 @@ func processLayer(layer v1.Layer, index int, destDir string) error {
 	uncompressed, err := layer.Uncompressed()
 	if err != nil {
 		log.Error("Layer decompression failed", "index", index, "digest", layerDesc, "error", err)
-		return fmt.Errorf("layer decompression error: %w", err)
+		return errors.Join(errUtils.ErrLayerDecompression, err)
 	}
 	defer uncompressed.Close()
 
 	if err := extractTarball(uncompressed, destDir); err != nil {
 		log.Error("Layer extraction failed", "index", index, "digest", layerDesc, "error", err)
-		return fmt.Errorf("tarball extraction error: %w", err)
+		return errors.Join(errUtils.ErrTarballExtraction, err)
 	}
 
 	return nil

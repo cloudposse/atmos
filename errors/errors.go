@@ -4,12 +4,6 @@ import (
 	"errors"
 )
 
-const (
-	ErrWrappingFormat       = "%w: %w"
-	ErrStringWrappingFormat = "%w: %s"
-	ErrValueWrappingFormat  = "%w: %v"
-)
-
 var (
 	ErrNoGitRepo                             = errors.New("not in a git repository")
 	ErrDownloadPackage                       = errors.New("failed to download package")
@@ -127,16 +121,21 @@ var (
 	ErrAPIResponseError             = errors.New("API response error")
 
 	// Exec package errors.
-	ErrComponentAndStackRequired = errors.New("both '--component' and '--stack' flags must be provided")
-	ErrFailedToCreateAPIClient   = errors.New("failed to create API client")
-	ErrFailedToProcessArgs       = errors.New("failed to process command-line arguments")
-	ErrFailedToInitConfig        = errors.New("failed to initialize Atmos configuration")
-	ErrFailedToCreateLogger      = errors.New("failed to create logger")
-	ErrFailedToGetComponentFlag  = errors.New("failed to get '--component' flag")
-	ErrFailedToGetStackFlag      = errors.New("failed to get '--stack' flag")
-	ErrOPAPolicyViolations       = errors.New("OPA policy violations detected")
-	ErrInvalidOPAPolicy          = errors.New("invalid OPA policy")
-	ErrTerraformEnvCliVarJSON    = errors.New("failed to parse JSON variable from TF_CLI_ARGS environment variable")
+	ErrComponentAndStackRequired     = errors.New("both '--component' and '--stack' flags must be provided")
+	ErrFailedToCreateAPIClient       = errors.New("failed to create API client")
+	ErrFailedToProcessArgs           = errors.New("failed to process command-line arguments")
+	ErrFailedToInitConfig            = errors.New("failed to initialize Atmos configuration")
+	ErrFailedToCreateLogger          = errors.New("failed to create logger")
+	ErrFailedToGetComponentFlag      = errors.New("failed to get '--component' flag")
+	ErrFailedToGetStackFlag          = errors.New("failed to get '--stack' flag")
+	ErrOPAPolicyViolations           = errors.New("OPA policy violations detected")
+	ErrOPATimeout                    = errors.New("timeout evaluating OPA policy")
+	ErrInvalidRegoPolicy             = errors.New("invalid Rego policy")
+	ErrInvalidOPAPolicy              = errors.New("invalid OPA policy")
+	ErrTerraformEnvCliVarJSON        = errors.New("failed to parse JSON variable from TF_CLI_ARGS environment variable")
+	ErrWorkflowBasePathNotConfigured = errors.New("'workflows.base_path' must be configured in 'atmos.yaml'")
+	ErrInvalidComponentArgument      = errors.New("invalid arguments. The command requires one argument 'componentName'")
+	ErrValidation                    = errors.New("validation failed")
 
 	// List package errors.
 	ErrExecuteDescribeStacks     = errors.New("failed to execute describe stacks")
@@ -150,6 +149,46 @@ var (
 	ErrCacheWrite     = errors.New("cache write failed")
 	ErrCacheUnmarshal = errors.New("cache unmarshal failed")
 	ErrCacheMarshal   = errors.New("cache marshal failed")
+
+	// File operation errors.
+	ErrCopyFile            = errors.New("failed to copy file")
+	ErrCreateDirectory     = errors.New("failed to create directory")
+	ErrOpenFile            = errors.New("failed to open file")
+	ErrStatFile            = errors.New("failed to stat file")
+	ErrRemoveDirectory     = errors.New("failed to remove directory")
+	ErrSetPermissions      = errors.New("failed to set permissions")
+	ErrReadDirectory       = errors.New("failed to read directory")
+	ErrComputeRelativePath = errors.New("failed to compute relative path")
+
+	// OCI/Container image errors.
+	ErrCreateTempDirectory   = ErrCreateTempDir // Alias to avoid duplicate sentinels
+	ErrInvalidImageReference = errors.New("invalid image reference")
+	ErrPullImage             = errors.New("failed to pull image")
+	ErrGetImageDescriptor    = errors.New("cannot get a descriptor for the OCI image")
+	ErrGetImageLayers        = errors.New("failed to get image layers")
+	ErrProcessLayer          = errors.New("failed to process layer")
+	ErrLayerDecompression    = errors.New("layer decompression error")
+	ErrTarballExtraction     = errors.New("tarball extraction error")
+
+	// Initialization and configuration errors.
+	ErrInitializeCLIConfig = errors.New("error initializing CLI config")
+	ErrGetHooks            = errors.New("error getting hooks")
+	ErrSetFlag             = errors.New("failed to set flag")
+	ErrVersionMismatch     = errors.New("version mismatch")
+	ErrCommandNil          = errors.New("command cannot be nil")
+
+	// Download and client errors.
+	ErrCreateDownloadClient    = errors.New("failed to create download client")
+	ErrMergeConfiguration      = errors.New("failed to merge configuration")
+	ErrPreprocessYAMLFunctions = errors.New("failed to preprocess YAML functions")
+	ErrMergeEmbeddedConfig     = errors.New("failed to merge embedded config")
+
+	// Template and documentation errors.
+	ErrGenerateTerraformDocs = errors.New("failed to generate terraform docs")
+	ErrMergeInputYAMLs       = errors.New("failed to merge input YAMLs")
+	ErrRenderTemplate        = errors.New("failed to render template with datasources")
+	ErrResolveOutputPath     = errors.New("failed to resolve output path")
+	ErrWriteOutput           = errors.New("failed to write output")
 
 	// Import-related errors.
 	ErrBasePath             = errors.New("base path required to process imports")
@@ -167,6 +206,10 @@ var (
 	ErrProfilerStartCPU        = errors.New("profiler: failed to start CPU profile")
 	ErrProfilerStartTrace      = errors.New("profiler: failed to start trace profile")
 	ErrProfilerCreateFile      = errors.New("profiler: failed to create profile file")
+
+	// Store and hook errors.
+	ErrNilTerraformOutput = errors.New("terraform output returned nil")
+	ErrNilStoreValue      = errors.New("cannot store nil value")
 
 	// AI-related errors.
 	ErrAINotEnabled = errors.New("AI features are not enabled")
