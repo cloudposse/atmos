@@ -122,7 +122,7 @@ func captureCmdString(cmdString string, err error, provider ...TelemetryClientPr
 			Set("arch", runtime.GOARCH).                          // Architecture
 			Set("error", err != nil).                             // Whether an error occurred
 			Set("command", cmdString).                            // The command that was executed
-			Set("ci", isCI()).                                    // Whether running in CI
+			Set("ci", IsCI()).                                    // Whether running in CI
 			Set("ci_provider", ciProvider()).                     // Which CI provider is being used
 			Set("atmos_pro_workspace_id", atmosProWorkspaceID()). // Atmos Pro workspace ID
 			Set("docker", isDocker())                             // Whether running in Docker
@@ -144,7 +144,7 @@ func captureCmd(cmd *cobra.Command, err error, provider ...TelemetryClientProvid
 // the disclosure as shown in the cache and returns the disclosure message.
 func disclosureMessage() string {
 	// Do not show disclosure if running in CI
-	if isCI() {
+	if IsCI() {
 		return ""
 	}
 

@@ -2,6 +2,7 @@ package errors
 
 import (
 	"errors"
+	"fmt"
 )
 
 var (
@@ -91,11 +92,12 @@ var (
 	ErrMissingPackerTemplate = errors.New("packer template is required; it can be specified in the `settings.packer.template` section in the Atmos component manifest, or on the command line via the flag `--template <template>` (shorthand `-t`)")
 	ErrMissingPackerManifest = errors.New("packer manifest is missing")
 
-	ErrAtmosConfigIsNil         = errors.New("atmos config is nil")
-	ErrInvalidListMergeStrategy = errors.New("invalid list merge strategy")
-	ErrMerge                    = errors.New("merge error")
-	ErrInvalidStackManifest     = errors.New("invalid stack manifest")
-	ErrInvalidLogLevel          = errors.New("invalid log level")
+	ErrAtmosConfigIsNil              = errors.New("atmos config is nil")
+	ErrFailedToInitializeAtmosConfig = errors.New("failed to initialize atmos config")
+	ErrInvalidListMergeStrategy      = errors.New("invalid list merge strategy")
+	ErrMerge                         = errors.New("merge error")
+	ErrInvalidStackManifest          = errors.New("invalid stack manifest")
+	ErrInvalidLogLevel               = errors.New("invalid log level")
 
 	// Pro API client errors.
 	ErrFailedToCreateRequest        = errors.New("failed to create request")
@@ -209,7 +211,60 @@ var (
 	ErrProfilerStartTrace      = errors.New("profiler: failed to start trace profile")
 	ErrProfilerCreateFile      = errors.New("profiler: failed to create profile file")
 
+	// Auth package errors.
+	ErrInvalidAuthConfig            = errors.New("invalid auth config")
+	ErrInvalidIdentityKind          = errors.New("invalid identity kind")
+	ErrInvalidIdentityConfig        = errors.New("invalid identity config")
+	ErrInvalidProviderKind          = errors.New("invalid provider kind")
+	ErrInvalidProviderConfig        = errors.New("invalid provider config")
+	ErrAuthenticationFailed         = errors.New("authentication failed")
+	ErrPostAuthenticationHookFailed = errors.New("post authentication hook failed")
+	ErrAuthManager                  = errors.New("auth manager error")
+	ErrDefaultIdentity              = errors.New("default identity error")
+	ErrAwsAuth                      = errors.New("aws auth error")
+	ErrAwsUserNotConfigured         = errors.New("aws user not configured")
+	ErrAwsSAMLDecodeFailed          = errors.New("aws saml decode failed")
+	ErrUnsupportedPlatform          = errors.New("unsupported platform")
+
+	// Auth manager and identity/provider resolution errors (centralized sentinels).
+	ErrFailedToInitializeAuthManager = errors.New("failed to initialize auth manager")
+	ErrNoCredentialsFound            = errors.New("no credentials found for identity")
+	ErrExpiredCredentials            = errors.New("credentials for identity are expired or invalid")
+	ErrNilParam                      = errors.New("parameter cannot be nil")
+	ErrInitializingProviders         = errors.New("failed to initialize providers")
+	ErrInitializingIdentities        = errors.New("failed to initialize identities")
+	ErrInitializingCredentialStore   = errors.New("failed to initialize credential store")
+	ErrCircularDependency            = errors.New("circular dependency detected in identity chain")
+	ErrIdentityNotFound              = errors.New("identity not found")
+	ErrNoDefaultIdentity             = errors.New("no default identity configured for authentication")
+	ErrMultipleDefaultIdentities     = errors.New("multiple default identities found")
+	ErrNoIdentitiesAvailable         = errors.New("no identities available")
+	ErrInvalidStackConfig            = errors.New("invalid stack config")
+	ErrNoCommandSpecified            = errors.New("no command specified")
+	ErrCommandNotFound               = errors.New("command not found")
+
+	ErrInvalidSubcommand = errors.New("invalid subcommand")
+	ErrSubcommandFailed  = errors.New("subcommand failed")
+
+	ErrInvalidArgumentError = errors.New("invalid argument error")
+	ErrMissingInput         = errors.New("missing input")
+
+	ErrAuthAwsFileManagerFailed = errors.New("failed to create AWS file manager")
+
+	ErrAuthOidcDecodeFailed    = errors.New("failed to decode OIDC token")
+	ErrAuthOidcUnmarshalFailed = errors.New("failed to unmarshal oidc claims")
+
 	// Store and hook errors.
 	ErrNilTerraformOutput = errors.New("terraform output returned nil")
 	ErrNilStoreValue      = errors.New("cannot store nil value")
 )
+
+// ExitCodeError is a typed error that preserves subcommand exit codes.
+// This allows the root command to exit with the same code as the subcommand.
+type ExitCodeError struct {
+	Code int
+}
+
+func (e ExitCodeError) Error() string {
+	return fmt.Sprintf("subcommand exited with code %d", e.Code)
+}
