@@ -102,8 +102,7 @@ Flags:
                                      standard file descriptor (including
                                      /dev/null)
 
-        --version                    Alias for atmos version command (default
-                                     false)
+        --version                    Display the Atmos CLI version
 
 
 Use atmos [subcommand] --help for more information about a command.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     

@@ -180,8 +180,7 @@ Global Flags:
                                       or configuration set for deployment in
                                       Atmos CLI.
 
-        --version                     Alias for atmos version command (default
-                                      false)
+        --version                     Display the Atmos CLI version
 
         --                            Use double dashes to separate
                                       Atmos-specific options from native
