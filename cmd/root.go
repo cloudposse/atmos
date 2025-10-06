@@ -31,6 +31,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/telemetry"
 	"github.com/cloudposse/atmos/pkg/ui/heatmap"
 	"github.com/cloudposse/atmos/pkg/utils"
+	"github.com/cloudposse/atmos/pkg/version"
 )
 
 const (
@@ -56,6 +57,13 @@ var RootCmd = &cobra.Command{
 	Long:               `Atmos is a universal tool for DevOps and cloud automation used for provisioning, managing and orchestrating workflows across various toolchains`,
 	FParseErrWhitelist: cobra.FParseErrWhitelist{UnknownFlags: true},
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {
+		// Check for --version flag first (simple version output, no other flags supported).
+		if versionFlag, _ := cmd.Flags().GetBool("version"); versionFlag {
+			fmt.Printf("atmos %s\n", version.Version)
+			utils.OsExit(0)
+			return
+		}
+
 		// Determine if the command is a help command or if the help flag is set.
 		isHelpCommand := cmd.Name() == "help"
 		helpFlag := cmd.Flags().Changed("help")
@@ -515,6 +523,7 @@ func init() {
 
 	RootCmd.PersistentFlags().String("redirect-stderr", "", "File descriptor to redirect `stderr` to. "+
 		"Errors can be redirected to any file or any standard file descriptor (including `/dev/null`)")
+	RootCmd.PersistentFlags().Bool("version", false, "Show version information")
 
 	RootCmd.PersistentFlags().String("logs-level", "Info", "Logs level. Supported log levels are Trace, Debug, Info, Warning, Off. If the log level is set to Off, Atmos will not log any messages")
 	RootCmd.PersistentFlags().String("logs-file", "/dev/stderr", "The file to write Atmos logs to. Logs can be written to any file or any standard file descriptor, including '/dev/stdout', '/dev/stderr' and '/dev/null'")
