@@ -431,4 +431,4 @@ Target:
 - [Error Handling in Go](https://go.dev/blog/error-handling-and-go)
 - [Error Handling Strategy PRD](error-handling-strategy.md)
 - [Developer Guide](../errors.md)
-- [User Guide](../../website/docs/core-concepts/errors.mdx)
+- [User Guide](../../website/docs/cli/errors.mdx)

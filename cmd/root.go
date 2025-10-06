@@ -417,11 +417,14 @@ func Execute() error {
 	utils.InitializeMarkdown(atmosConfig)
 	errUtils.InitializeMarkdown(&atmosConfig)
 
+	// Store config error but don't return it yet - we need to parse flags first
+	// to provide better error messages for invalid flags.
+	var configErr error
 	if initErr != nil && !errors.Is(initErr, cfg.NotFound) {
 		if isVersionCommand() {
 			log.Debug("Warning: CLI configuration 'atmos.yaml' file not found", "error", initErr)
 		} else {
-			return initErr
+			configErr = initErr
 		}
 	}
 
@@ -452,13 +455,23 @@ func Execute() error {
 	}
 
 	telemetry.CaptureCmd(cmd, err)
+
+	// Handle Cobra errors (invalid commands, flags) before config errors.
 	if err != nil {
 		if strings.Contains(err.Error(), "unknown command") {
 			command := getInvalidCommandName(err.Error())
 			showUsageAndExit(RootCmd, []string{command})
 		}
+		// Unknown flag errors are already handled by Cobra's default error formatting.
+		return err
 	}
-	return err
+
+	// Now return config errors if flag parsing succeeded.
+	if configErr != nil {
+		return configErr
+	}
+
+	return nil
 }
 
 // getInvalidCommandName extracts the invalid command name from an error message.

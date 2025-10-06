@@ -451,8 +451,8 @@ docs/
     error-handling-strategy.md           # Updated
 
 website/docs/
-  troubleshoot/
-    errors.mdx           # Updated with error display section
+  cli/
+    errors.mdx           # User-facing error documentation
 
 CLAUDE.md              # Updated with error handling patterns
 ```

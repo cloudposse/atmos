@@ -327,6 +327,46 @@ return fmt.Errorf("%v: additional context", originalErr)
 
 ## Testing Errors
 
+### Test Drive Error Formatting Locally
+
+To see the error formatting in action, run the examples test:
+
+```bash
+# See all error formatting examples
+go test -v ./errors -run TestExampleErrorFormatting
+
+# This will show:
+# - Simple errors
+# - Errors with hints
+# - Error chains (collapsed and verbose)
+# - Builder pattern examples
+# - Color modes (auto, always, never)
+# - Long message wrapping
+```
+
+You can also test error formatting in your code:
+
+```go
+import (
+    "github.com/cockroachdb/errors"
+    errUtils "github.com/cloudposse/atmos/errors"
+)
+
+// Create an error
+err := errUtils.Build(errors.New("test error")).
+    WithHint("This is a helpful hint").
+    Err()
+
+// Format it
+formatted := errUtils.Format(err, errUtils.FormatterConfig{
+    Verbose:       false,  // or true for stack traces
+    Color:         "auto", // or "always", "never"
+    MaxLineLength: 80,
+})
+
+fmt.Fprintf(os.Stderr, "%s\n", formatted)
+```
+
 ### Check Error Messages
 
 ```go
