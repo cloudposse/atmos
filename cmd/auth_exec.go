@@ -26,47 +26,68 @@ var authExecCmd = &cobra.Command{
 	DisableFlagParsing: true,
 
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
-	RunE: func(cmd *cobra.Command, args []string) error {
-		handleHelpRequest(cmd, args)
-		checkAtmosConfig()
-		// Load atmos configuration
-		atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
+	RunE:               executeAuthExecCommand,
+}
+
+// executeAuthExecCommand is the main execution function for auth exec command.
+func executeAuthExecCommand(cmd *cobra.Command, args []string) error {
+	handleHelpRequest(cmd, args)
+	checkAtmosConfig()
+
+	return executeAuthExecCommandCore(cmd, args)
+}
+
+// executeAuthExecCommandCore contains the core business logic for auth exec, separated for testability.
+func executeAuthExecCommandCore(cmd *cobra.Command, args []string) error {
+	// Manually parse flags since DisableFlagParsing is true.
+	if err := cmd.Flags().Parse(args); err != nil {
+		return fmt.Errorf("%w: %v", errUtils.ErrInvalidSubcommand, err)
+	}
+	// Get the non-flag arguments (the actual command to execute).
+	commandArgs := cmd.Flags().Args()
+
+	// Validate command args before attempting authentication.
+	if len(commandArgs) == 0 {
+		return errors.Join(errUtils.ErrNoCommandSpecified, errUtils.ErrInvalidSubcommand)
+	}
+
+	// Load atmos configuration
+	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
+	if err != nil {
+		return errors.Join(errUtils.ErrFailedToInitializeAtmosConfig, err)
+	}
+
+	// Create auth manager
+	authManager, err := createAuthManager(&atmosConfig.Auth)
+	if err != nil {
+		return errors.Join(errUtils.ErrFailedToInitializeAuthManager, err)
+	}
+
+	// Get identity from flag or use default
+	identityName, _ := cmd.Flags().GetString("identity")
+	if identityName == "" {
+		defaultIdentity, err := authManager.GetDefaultIdentity()
 		if err != nil {
-			return errors.Join(errUtils.ErrFailedToInitializeAtmosConfig, err)
+			return errors.Join(errUtils.ErrNoDefaultIdentity, err)
 		}
+		identityName = defaultIdentity
+	}
 
-		// Create auth manager
-		authManager, err := createAuthManager(&atmosConfig.Auth)
-		if err != nil {
-			return errors.Join(errUtils.ErrFailedToInitializeAuthManager, err)
-		}
+	// Authenticate and get environment variables
+	ctx := context.Background()
+	whoami, err := authManager.Authenticate(ctx, identityName)
+	if err != nil {
+		return errors.Join(errUtils.ErrAuthenticationFailed, err)
+	}
 
-		// Get identity from flag or use default
-		identityName, _ := cmd.Flags().GetString("identity")
-		if identityName == "" {
-			defaultIdentity, err := authManager.GetDefaultIdentity()
-			if err != nil {
-				return errors.Join(errUtils.ErrNoDefaultIdentity, err)
-			}
-			identityName = defaultIdentity
-		}
+	// Get environment variables from authentication result
+	envVars := whoami.Environment
+	if envVars == nil {
+		envVars = make(map[string]string)
+	}
 
-		// Authenticate and get environment variables
-		ctx := context.Background()
-		whoami, err := authManager.Authenticate(ctx, identityName)
-		if err != nil {
-			return errors.Join(errUtils.ErrAuthenticationFailed, err)
-		}
-
-		// Get environment variables from authentication result
-		envVars := whoami.Environment
-		if envVars == nil {
-			envVars = make(map[string]string)
-		}
-
-		// Execute the command with authentication environment
-		return executeCommandWithEnv(args, envVars)
-	},
+	// Execute the command with authentication environment
+	return executeCommandWithEnv(commandArgs, envVars)
 }
 
 // executeCommandWithEnv executes a command with additional environment variables.
