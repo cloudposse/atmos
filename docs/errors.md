@@ -99,7 +99,7 @@ err := errUtils.Build(baseErr).
 ```
 
 **Verbose Mode Output:**
-```
+```text
 component not found
 
 ┏━━━━━━━━━━━┳━━━━━━━━━━━┓

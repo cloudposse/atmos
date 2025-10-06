@@ -338,7 +338,7 @@ Use builder's `WithContext()` for structured, programmatic context:
 - **Debug Output**: Included in `%+v` formatting
 
 **Example Verbose Output:**
-```
+```text
 component not found
 
 ┏━━━━━━━━━━━┳━━━━━━━━━━━┓
