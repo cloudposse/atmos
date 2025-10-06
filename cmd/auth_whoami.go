@@ -30,25 +30,25 @@ var authWhoamiCmd = &cobra.Command{
 func executeAuthWhoamiCommand(cmd *cobra.Command, args []string) error {
 	handleHelpRequest(cmd, args)
 
-	// Load atmos config and auth manager
+	// Load atmos config and auth manager.
 	authManager, err := loadAuthManager()
 	if err != nil {
 		return err
 	}
 
-	// Determine identity
+	// Determine identity.
 	identityName, err := identityFromFlagOrDefault(cmd, authManager)
 	if err != nil {
 		return err
 	}
 
-	// Query whoami
+	// Query whoami.
 	whoami, err := authManager.Whoami(context.Background(), identityName)
 	if err != nil {
 		errUtils.CheckErrorPrintAndExit(err, "", "")
 	}
 
-	// Output
+	// Output.
 	if viper.GetString("auth.whoami.output") == "json" {
 		return printWhoamiJSON(whoami)
 	}
@@ -81,7 +81,7 @@ func identityFromFlagOrDefault(cmd *cobra.Command, authManager authTypes.AuthMan
 }
 
 func printWhoamiJSON(whoami *authTypes.WhoamiInfo) error {
-	// Redact home directory in environment variable values before output
+	// Redact home directory in environment variable values before output.
 	redactedWhoami := *whoami
 	// Never emit credentials in JSON output.
 	redactedWhoami.Credentials = nil
@@ -126,7 +126,7 @@ func redactHomeDir(v string, homeDir string) string {
 	if homeDir == "" {
 		return v
 	}
-	// Ensure both have the same path separator
+	// Ensure both have the same path separator.
 	if strings.HasPrefix(v, homeDir+string(os.PathSeparator)) {
 		return "~" + v[len(homeDir):]
 	}
