@@ -5,7 +5,7 @@ import (
 
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
-	l "github.com/charmbracelet/log"
+	log "github.com/charmbracelet/log"
 
 	"github.com/cloudposse/atmos/internal/tui/templates/term"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
@@ -49,9 +49,9 @@ func NewSpinner(message string) *tea.Program {
 
 	var opts []tea.ProgramOption
 	if !term.IsTTYSupportForStdout() {
-		// Workaround for non-TTY environments
+		// Workaround for non-TTY environments.
 		opts = []tea.ProgramOption{tea.WithoutRenderer(), tea.WithInput(nil)}
-		l.Debug("No TTY detected. Falling back to basic output. This can happen when no terminal is attached or when commands are pipelined.")
+		log.Debug("No TTY detected. Falling back to basic output. This can happen when no terminal is attached or when commands are pipelined.")
 		fmt.Println(message)
 	}
 
@@ -68,9 +68,9 @@ func RunSpinner(p *tea.Program, spinnerChan chan struct{}, message string) {
 	go func() {
 		defer close(spinnerChan)
 		if _, err := p.Run(); err != nil {
-			// If there's any error running the spinner, print the message and the error
+			// If there's any error running the spinner, print the message and the error.
 			fmt.Println(message)
-			l.Error("Failed to run spinner:", "error", err)
+			log.Error("Failed to run spinner:", "error", err)
 		}
 	}()
 }

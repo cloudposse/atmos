@@ -6,10 +6,10 @@ import (
 	"strings"
 	"testing"
 
-	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
 
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/pager"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"

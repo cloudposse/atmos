@@ -59,6 +59,7 @@ type AtmosConfiguration struct {
 	CliConfigPath   string              `yaml:"cli_config_path" json:"cli_config_path,omitempty" mapstructure:"cli_config_path"`
 	Import          []string            `yaml:"import" json:"import" mapstructure:"import"`
 	Docs            Docs                `yaml:"docs,omitempty" json:"docs,omitempty" mapstructure:"docs"`
+	Auth            AuthConfig          `yaml:"auth,omitempty" json:"auth,omitempty" mapstructure:"auth"`
 	Profiler        profiler.Config     `yaml:"profiler,omitempty" json:"profiler,omitempty" mapstructure:"profiler"`
 	TrackProvenance bool                `yaml:"track_provenance,omitempty" json:"track_provenance,omitempty" mapstructure:"track_provenance"`
 }
@@ -453,6 +454,7 @@ type ArgsAndFlagsInfo struct {
 	Query                     string
 	Affected                  bool
 	All                       bool
+	Identity                  string
 }
 
 type ConfigAndStacksInfo struct {
@@ -477,6 +479,7 @@ type ConfigAndStacksInfo struct {
 	ComponentProvidersSection     AtmosSectionMapType
 	ComponentHooksSection         AtmosSectionMapType
 	ComponentEnvSection           AtmosSectionMapType
+	ComponentAuthSection          AtmosSectionMapType
 	ComponentEnvList              []string
 	ComponentBackendSection       AtmosSectionMapType
 	ComponentBackendType          string
@@ -532,6 +535,7 @@ type ConfigAndStacksInfo struct {
 	Affected                      bool
 	All                           bool
 	Components                    []string
+	Identity                      string
 }
 
 type BackoffStrategy string
