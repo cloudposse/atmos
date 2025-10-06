@@ -11,6 +11,7 @@ import (
 
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/utils"
 )
 
 func TestNoColorLog(t *testing.T) {
@@ -363,4 +364,39 @@ func TestVersionFlagParsing(t *testing.T) {
 			assert.Equal(t, tt.expectValue, versionSet, "version flag should be %v", tt.expectValue)
 		})
 	}
+}
+
+func TestVersionFlagExecutionPath(t *testing.T) {
+	// Save original OsExit and restore after test
+	originalOsExit := utils.OsExit
+	defer func() {
+		utils.OsExit = originalOsExit
+	}()
+
+	// Mock OsExit to panic with the exit code so we can test the execution path
+	// without actually exiting the test process
+	type exitPanic struct {
+		code int
+	}
+	utils.OsExit = func(code int) {
+		panic(exitPanic{code: code})
+	}
+
+	// Reset flag state
+	versionFlag := RootCmd.PersistentFlags().Lookup("version")
+	if versionFlag != nil {
+		versionFlag.Value.Set("false")
+		versionFlag.Changed = false
+	}
+
+	// Set args to trigger version flag
+	RootCmd.SetArgs([]string{"--version"})
+
+	// Execute should call version command and then exit with code 0
+	// We expect it to panic with our exitPanic struct containing exit code 0
+	// This verifies that the --version flag handler is being executed and
+	// calls os.Exit(0) via utils.OsExit(0)
+	assert.PanicsWithValue(t, exitPanic{code: 0}, func() {
+		_ = Execute()
+	}, "Execute should exit with code 0 when --version is set")
 }
