@@ -382,7 +382,6 @@ components/
 
 The most common workflow is to generate a plan, review it, and then apply it:
 
-<Terminal>
 ```bash
 # Step 1: Generate a plan (automatically creates a planfile)
 $ atmos terraform plan vpc -s dev
@@ -392,7 +391,6 @@ $ atmos terraform plan vpc -s dev
 # Step 2: Apply the exact plan that was generated
 $ atmos terraform apply vpc -s dev --from-plan
 ```
-</Terminal>
 
 ### Custom Planfile Locations
 

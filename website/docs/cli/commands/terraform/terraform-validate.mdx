@@ -4,6 +4,7 @@ sidebar_label: validate
 sidebar_class_name: command
 id: validate
 ---
+import Intro from '@site/src/components/Intro'
 import Screengrab from '@site/src/components/Screengrab'
 import Terminal from '@site/src/components/Terminal'
 
@@ -243,7 +244,7 @@ Add validation to your pre-commit hooks:
 
 Use validation alongside other quality checks. For security scanning with tools like `tfsec`, `checkov`, or `terrascan`, use JSON planfiles generated with `atmos terraform generate planfile` for more accurate analysis.
 
-This integration is best implemented using [Atmos custom commands](/cli/configuration/custom-commands) with embedded shell scripts:
+This integration is best implemented using [Atmos custom commands](/cli/configuration/commands) with embedded shell scripts:
 
 ```yaml
 # atmos.yaml
