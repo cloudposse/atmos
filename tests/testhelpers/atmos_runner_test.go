@@ -11,9 +11,14 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/cloudposse/atmos/tests"
 )
 
 func TestAtmosRunner_Build(t *testing.T) {
+	// Skip long tests in short mode (these tests build atmos binary which takes 15-20s each)
+	tests.SkipIfShort(t)
+
 	t.Run("without coverage", func(t *testing.T) {
 		runner := NewAtmosRunner("")
 		err := runner.Build()
@@ -73,6 +78,9 @@ func TestAtmosRunner_Build(t *testing.T) {
 }
 
 func TestAtmosRunner_Command(t *testing.T) {
+	// Skip long tests in short mode (builds atmos binary ~15-20s)
+	tests.SkipIfShort(t)
+
 	t.Run("without coverage", func(t *testing.T) {
 		runner := NewAtmosRunner("")
 		require.NoError(t, runner.Build())
@@ -112,6 +120,9 @@ func TestAtmosRunner_Command(t *testing.T) {
 }
 
 func TestAtmosRunner_CommandContext(t *testing.T) {
+	// Skip long tests in short mode (builds atmos binary ~15-20s)
+	tests.SkipIfShort(t)
+
 	t.Run("without coverage", func(t *testing.T) {
 		runner := NewAtmosRunner("")
 		require.NoError(t, runner.Build())
@@ -280,6 +291,9 @@ func Test_findRepoRoot(t *testing.T) {
 }
 
 func TestAtmosRunner_buildWithoutCoverage(t *testing.T) {
+	// Skip long tests in short mode (builds atmos binary ~15-20s)
+	tests.SkipIfShort(t)
+
 	t.Run("successful build", func(t *testing.T) {
 		runner := &AtmosRunner{}
 
@@ -323,6 +337,9 @@ func TestAtmosRunner_buildWithoutCoverage(t *testing.T) {
 }
 
 func TestAtmosRunner_buildWithCoverage(t *testing.T) {
+	// Skip long tests in short mode (builds atmos binary with coverage ~15-20s)
+	tests.SkipIfShort(t)
+
 	t.Run("successful build", func(t *testing.T) {
 		runner := &AtmosRunner{
 			coverDir: t.TempDir(),
@@ -370,6 +387,9 @@ func TestAtmosRunner_buildWithCoverage(t *testing.T) {
 }
 
 func TestAtmosRunner_CoverageIntegration(t *testing.T) {
+	// Skip long tests in short mode (integration test that builds and runs atmos ~15-20s)
+	tests.SkipIfShort(t)
+
 	// Integration test that actually runs atmos with coverage.
 	tempDir := t.TempDir()
 	runner := NewAtmosRunner(tempDir)
@@ -418,6 +438,9 @@ func TestAtmosRunner_ErrorPaths(t *testing.T) {
 }
 
 func TestAtmosRunner_ConcurrentBuild(t *testing.T) {
+	// Skip long tests in short mode (builds atmos binary concurrently ~15-20s)
+	tests.SkipIfShort(t)
+
 	// Test that concurrent builds don't interfere with each other.
 	tempDir := t.TempDir()
 	runner := NewAtmosRunner(tempDir)

@@ -85,6 +85,7 @@ type TestCase struct {
 	Snapshot      bool              `yaml:"snapshot"`      // Enable snapshot comparison
 	Clean         bool              `yaml:"clean"`         // Removes untracked files in work directory
 	Sandbox       interface{}       `yaml:"sandbox"`       // bool (true=random) or string (named) or false (no sandbox)
+	Short         *bool             `yaml:"short"`         // If false, skip when -short flag is passed (defaults to true)
 	Preconditions []string          `yaml:"preconditions"` // Required preconditions for test execution
 	Skip          struct {
 		OS MatchPattern `yaml:"os"`
@@ -200,6 +201,12 @@ func loadTestSuite(filePath string) (*TestSuite, error) {
 		}
 		if !testCase.Snapshot {
 			testCase.Snapshot = false
+		}
+
+		// Default short to true if not specified
+		if testCase.Short == nil {
+			defaultShort := true
+			testCase.Short = &defaultShort
 		}
 
 		if testCase.Env == nil {
@@ -577,6 +584,11 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 			t.Fatalf("Failed to change back to the starting directory: %v", err)
 		}
 	}()
+
+	// Skip long tests in short mode
+	if testing.Short() && tc.Short != nil && !*tc.Short {
+		t.Skipf("Skipping long-running test in short mode (use 'go test' without -short to run)")
+	}
 
 	// Check preconditions before running the test
 	checkPreconditions(t, tc.Preconditions)
