@@ -52,6 +52,10 @@ function record() {
 
 postprocess_ansi() {
   local file=$1
+  # Remove terminal escape sequences (OSC, cursor position queries, etc.)
+  $SED -E 's/\^\[\]([0-9]+;[^\^]*)\^G//g' $file
+  $SED -E 's/\^\[(\[[0-9;]+R)//g' $file
+
   # Remove noise and clean up the output
   $SED '/- Finding latest version of/d' $file
   $SED '/- Installed hashicorp/d' $file
