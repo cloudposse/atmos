@@ -16,6 +16,9 @@ import (
 // TestVendorPullBasicExecution tests basic vendor pull command execution.
 // It verifies the command runs without errors using the vendor2 fixture.
 func TestVendorPullBasicExecution(t *testing.T) {
+	// Skip long tests in short mode (this test takes ~4 seconds due to network I/O and Git operations)
+	tests.SkipIfShort(t)
+
 	// Check for GitHub access with rate limit check.
 	rateLimits := tests.RequireGitHubAccess(t)
 	if rateLimits != nil && rateLimits.Remaining < 10 {
@@ -69,6 +72,9 @@ func TestVendorPullConfigFileProcessing(t *testing.T) {
 // TestVendorPullFullWorkflow tests the complete vendor pull workflow including file verification.
 // It verifies that vendor components are correctly pulled from various sources (git, file, OCI).
 func TestVendorPullFullWorkflow(t *testing.T) {
+	// Skip long tests in short mode (this test requires network I/O and OCI pulls)
+	tests.SkipIfShort(t)
+
 	// Check for GitHub access with rate limit check.
 	rateLimits := tests.RequireGitHubAccess(t)
 	if rateLimits != nil && rateLimits.Remaining < 20 {

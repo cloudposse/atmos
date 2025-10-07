@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	_ "embed"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -18,10 +19,18 @@ import (
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/cloudposse/atmos/pkg/telemetry"
 	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/cloudposse/atmos/pkg/version"
 )
+
+//go:embed markdown/getting_started.md
+var gettingStartedMarkdown string
+
+//go:embed markdown/missing_config_default.md
+var missingConfigDefaultMarkdown string
+
+//go:embed markdown/missing_config_found.md
+var missingConfigFoundMarkdown string
 
 // Define a constant for the dot string that appears multiple times.
 const currentDirPath = "."
@@ -499,8 +508,6 @@ func printMessageForMissingAtmosConfig(atmosConfig schema.AtmosConfiguration) {
 	err := tuiUtils.PrintStyledText("ATMOS")
 	errUtils.CheckErrorPrintAndExit(err, "", "")
 
-	telemetry.PrintTelemetryDisclosure()
-
 	// Check if we're in a git repo. Warn if not.
 	verifyInsideGitRepo()
 
@@ -585,7 +592,7 @@ func CheckForAtmosUpdateAndPrintMessage(atmosConfig schema.AtmosConfiguration) {
 
 // Check Atmos is version command.
 func isVersionCommand() bool {
-	return len(os.Args) > 1 && os.Args[1] == "version"
+	return len(os.Args) > 1 && (os.Args[1] == "version" || os.Args[1] == "--version")
 }
 
 // handleHelpRequest shows help content and exits only if the first argument is "help" or "--help" or "-h".
