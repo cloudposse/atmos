@@ -11,6 +11,7 @@ import (
 // ErrorBuilder provides a fluent API for constructing enriched errors.
 type ErrorBuilder struct {
 	err      error
+	title    *string
 	hints    []string
 	context  map[string]interface{}
 	exitCode *int
@@ -72,6 +73,14 @@ func (b *ErrorBuilder) WithContext(key string, value interface{}) *ErrorBuilder 
 	return b
 }
 
+// WithTitle sets a custom error title that will appear as the H1 heading.
+// By default, errors use "Error" as the title.
+// This allows customizing to "Workflow Error", "Terraform Error", etc.
+func (b *ErrorBuilder) WithTitle(title string) *ErrorBuilder {
+	b.title = &title
+	return b
+}
+
 // WithExitCode attaches an exit code to the error.
 func (b *ErrorBuilder) WithExitCode(code int) *ErrorBuilder {
 	b.exitCode = &code
@@ -85,6 +94,11 @@ func (b *ErrorBuilder) Err() error {
 	}
 
 	err := b.err
+
+	// Add custom title if specified.
+	if b.title != nil {
+		err = errors.WithHint(err, "TITLE:"+*b.title)
+	}
 
 	// Add all hints.
 	for _, hint := range b.hints {

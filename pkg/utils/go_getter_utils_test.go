@@ -1,12 +1,11 @@
 package utils
 
 import (
+	"os"
 	"strings"
 	"testing"
 
 	"github.com/hashicorp/go-getter"
-
-	errUtils "github.com/cloudposse/atmos/errors"
 )
 
 var originalDetectors = getter.Detectors

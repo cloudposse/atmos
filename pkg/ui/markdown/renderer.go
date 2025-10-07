@@ -15,7 +15,16 @@ import (
 
 const defaultWidth = 80
 
-// Renderer is a markdown renderer using Glamour
+// trimTrailingSpaces removes trailing spaces and tabs from each line while preserving blank lines.
+func trimTrailingSpaces(s string) string {
+	lines := strings.Split(s, "\n")
+	for i, line := range lines {
+		lines[i] = strings.TrimRight(line, " \t")
+	}
+	return strings.Join(lines, "\n")
+}
+
+// Renderer is a markdown renderer using Glamour.
 type Renderer struct {
 	renderer              *glamour.TermRenderer
 	width                 uint
@@ -115,15 +124,25 @@ func (r *Renderer) RenderWithoutWordWrap(content string) (string, error) {
 		// Fallback to ASCII rendering for non-TTY stdout
 		result, err = r.RenderAsciiWithoutWordWrap(content)
 	}
+	if err == nil {
+		result = trimTrailingSpaces(result)
+	}
 	return result, err
 }
 
 // Render renders markdown content to ANSI styled text.
 func (r *Renderer) Render(content string) (string, error) {
+	var result string
+	var err error
 	if r.isTTYSupportForStdout() {
-		return r.renderer.Render(content)
+		result, err = r.renderer.Render(content)
+	} else {
+		result, err = r.RenderAscii(content)
 	}
-	return r.RenderAscii(content)
+	if err == nil {
+		result = trimTrailingSpaces(result)
+	}
+	return result, err
 }
 
 func (r *Renderer) RenderAsciiWithoutWordWrap(content string) (string, error) {
@@ -136,7 +155,11 @@ func (r *Renderer) RenderAsciiWithoutWordWrap(content string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return renderer.Render(content)
+	result, err := renderer.Render(content)
+	if err == nil {
+		result = trimTrailingSpaces(result)
+	}
+	return result, err
 }
 
 func (r *Renderer) RenderAscii(content string) (string, error) {
@@ -149,7 +172,11 @@ func (r *Renderer) RenderAscii(content string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return renderer.Render(content)
+	result, err := renderer.Render(content)
+	if err == nil {
+		result = trimTrailingSpaces(result)
+	}
+	return result, err
 }
 
 // RenderWorkflow renders workflow documentation with specific styling.
@@ -183,11 +210,16 @@ func (r *Renderer) RenderError(title, details, suggestion string) (string, error
 
 // RenderErrorf renders an error message with specific styling.
 func (r *Renderer) RenderErrorf(content string, args ...interface{}) (string, error) {
+	var result string
+	var err error
 	if r.isTTYSupportForStderr() {
-		return r.Render(content)
+		result, err = r.Render(content)
+	} else {
+		// Fallback to ASCII rendering for non-TTY stderr
+		result, err = r.RenderAscii(content)
 	}
-	// Fallback to ASCII rendering for non-TTY stderr
-	return r.RenderAscii(content)
+	// Note: trimTrailingSpaces already applied in Render() and RenderAscii()
+	return result, err
 }
 
 // RenderSuccess renders a success message with specific styling.

@@ -5,7 +5,7 @@ You can learn more, including how to opt-out if you'd not like to participate in
 by visiting the following URL: https://atmos.tools/cli/telemetry
 
 
-This command runs Helmfile commands to manage Kubernetes deployments using Helmfile.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    
+This command runs Helmfile commands to manage Kubernetes deployments using Helmfile.
 
 
 
@@ -103,6 +103,6 @@ Global Flags:
                                      stack traces (default false)
 
 
-Use atmos helmfile [subcommand] --help for more information about a command.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            
+Use atmos helmfile [subcommand] --help for more information about a command.
 
 

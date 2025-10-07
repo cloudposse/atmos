@@ -481,6 +481,30 @@ go test ./pkg/config -cover
 go test ./tests -run TestCLI
 ```
 
+### Regenerating Test Snapshots
+
+When CLI output changes, regenerate snapshots to match:
+
+```bash
+# Regenerate ALL snapshots
+go test ./tests -v -regenerate-snapshots
+
+# Regenerate specific test snapshot
+go test ./tests -v -run 'TestCLICommands/atmos_workflow_invalid_step_type' -regenerate-snapshots
+
+# Review changes
+git diff tests/snapshots
+
+# Add updated snapshots
+git add tests/snapshots/*
+```
+
+**CRITICAL**: Never use pipe redirection (`2>&1`, `| head`, `| tail`) when running tests. Piping interferes with TTY detection and causes tests to use ASCII fallback mode instead of proper ANSI rendering, resulting in incorrect snapshots.
+
+**Why this matters**: Atmos uses `term.IsTTYSupportForStdout()` to detect terminal capability. Piping breaks this detection:
+- ✅ No pipes → TTY detected → Proper ANSI rendering → Correct snapshots
+- ❌ With pipes → No TTY → ASCII fallback → Wrong snapshots
+
 ### Test Data
 Use fixtures in `tests/test-cases/` for integration tests. Each test case should have:
 - `atmos.yaml` - Configuration

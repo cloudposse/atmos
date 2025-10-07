@@ -283,7 +283,7 @@ func attachTerraformCommands(parentCmd *cobra.Command) {
 	// Flags related to `--affected` (similar to `atmos describe affected`)
 	// These flags are only used then executing `atmos terraform <command> --affected`
 	parentCmd.PersistentFlags().String("repo-path", "", "Filesystem path to the already cloned target repository with which to compare the current branch: atmos terraform <sub-command> --affected --repo-path <path_to_already_cloned_repo>")
-	parentCmd.PersistentFlags().String("ref", "", "Git reference with which to compare the current branch: atmos terraform <sub-command> --affected --ref refs/heads/main. Refer to https://git-scm.com/book/en/v2/Git-Internals-Git-References for more details")
+	parentCmd.PersistentFlags().String("ref", "", "Git reference with which to compare the current branch: atmos terraform <sub-command> --affected --ref refs/heads/main. Refer to [10.3 Git Internals Git References](https://git-scm.com/book/en/v2/Git-Internals-Git-References) for more details")
 	parentCmd.PersistentFlags().String("sha", "", "Git commit SHA with which to compare the current branch: atmos terraform <sub-command> --affected --sha 3a5eafeab90426bd82bf5899896b28cc0bab3073")
 	parentCmd.PersistentFlags().String("ssh-key", "", "Path to PEM-encoded private key to clone private repos using SSH: atmos terraform <sub-command> --affected --ssh-key <path_to_ssh_key>")
 	parentCmd.PersistentFlags().String("ssh-key-password", "", "Encryption password for the PEM-encoded private key if the key contains a password-encrypted PEM block: atmos terraform <sub-command> --affected --ssh-key <path_to_ssh_key> --ssh-key-password <password>")
