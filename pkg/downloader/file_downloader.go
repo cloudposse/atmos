@@ -11,6 +11,8 @@ import (
 	"github.com/google/uuid"
 )
 
+const errMsgDownloadFileFailed = "failed to download file '%s': %w"
+
 // fileDownloader handles downloading files and directories from various sources
 // without exposing the underlying implementation.
 type fileDownloader struct {
@@ -47,7 +49,7 @@ func (fd *fileDownloader) FetchAndAutoParse(src string) (any, error) {
 	defer os.Remove(filePath)
 
 	if err := fd.Fetch(src, filePath, ClientModeFile, 30*time.Second); err != nil {
-		return nil, fmt.Errorf("failed to download file '%s': %w", src, err)
+		return nil, fmt.Errorf(errMsgDownloadFileFailed, src, err)
 	}
 
 	return filetype.DetectFormatAndParseFile(fd.fileReader, filePath)
@@ -59,7 +61,7 @@ func (fd *fileDownloader) FetchAndParseByExtension(src string) (any, error) {
 	defer os.Remove(filePath)
 
 	if err := fd.Fetch(src, filePath, ClientModeFile, 30*time.Second); err != nil {
-		return nil, fmt.Errorf("failed to download file '%s': %w", src, err)
+		return nil, fmt.Errorf(errMsgDownloadFileFailed, src, err)
 	}
 
 	// Create a custom reader that reads the downloaded file but uses the original URL for extension detection
@@ -78,7 +80,7 @@ func (fd *fileDownloader) FetchAndParseRaw(src string) (any, error) {
 	defer os.Remove(filePath)
 
 	if err := fd.Fetch(src, filePath, ClientModeFile, 30*time.Second); err != nil {
-		return nil, fmt.Errorf("failed to download file '%s': %w", src, err)
+		return nil, fmt.Errorf(errMsgDownloadFileFailed, src, err)
 	}
 
 	return filetype.ParseFileRaw(fd.fileReader, filePath)
@@ -90,7 +92,7 @@ func (fd *fileDownloader) FetchData(src string) ([]byte, error) {
 	defer os.Remove(filePath)
 
 	if err := fd.Fetch(src, filePath, ClientModeFile, 30*time.Second); err != nil {
-		return nil, fmt.Errorf("failed to download file '%s': %w", src, err)
+		return nil, fmt.Errorf(errMsgDownloadFileFailed, src, err)
 	}
 
 	return fd.fileReader(filePath)

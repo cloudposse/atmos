@@ -20,7 +20,7 @@ func PrintfMarkdown(format string, a ...interface{}) {
 	defer perf.Track(nil, "utils.PrintfMarkdown")()
 
 	if render == nil {
-		_, err := os.Stdout.WriteString(fmt.Sprintf(format, a...))
+		_, err := fmt.Fprintf(os.Stdout, format, a...)
 		errUtils.CheckErrorAndPrint(err, "", "")
 		return
 	}
@@ -31,7 +31,7 @@ func PrintfMarkdown(format string, a ...interface{}) {
 	if renderErr != nil {
 		errUtils.CheckErrorPrintAndExit(renderErr, "", "")
 	}
-	_, err := os.Stdout.WriteString(fmt.Sprint(md + "\n"))
+	_, err := fmt.Fprint(os.Stdout, md+"\n")
 	errUtils.CheckErrorAndPrint(err, "", "")
 }
 

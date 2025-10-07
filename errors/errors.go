@@ -38,6 +38,7 @@ var (
 	ErrMissingStackNameTemplateAndPattern    = errors.New("'stacks.name_pattern' or 'stacks.name_template' needs to be specified in 'atmos.yaml'")
 	ErrFailedMarshalConfigToYaml             = errors.New("failed to marshal config to YAML")
 	ErrStacksDirectoryDoesNotExist           = errors.New("directory for Atmos stacks does not exist")
+	ErrCommandNil                            = errors.New("command cannot be nil")
 
 	// ErrPlanHasDiff is returned when there are differences between two Terraform plan files.
 	ErrPlanHasDiff = errors.New("plan files have differences")
@@ -87,6 +88,8 @@ var (
 
 	ErrMissingStack                       = errors.New("stack is required; specify it on the command line using the flag `--stack <stack>` (shorthand `-s`)")
 	ErrInvalidComponent                   = errors.New("invalid component")
+	ErrComponentNotFound                  = errors.New("component not found in stack")
+	ErrDuplicateComponent                 = errors.New("duplicate component config found in stack")
 	ErrAbstractComponentCantBeProvisioned = errors.New("abstract component cannot be provisioned")
 	ErrLockedComponentCantBeProvisioned   = errors.New("locked component cannot be provisioned")
 
@@ -181,7 +184,6 @@ var (
 	ErrGetHooks            = errors.New("error getting hooks")
 	ErrSetFlag             = errors.New("failed to set flag")
 	ErrVersionMismatch     = errors.New("version mismatch")
-	ErrCommandNil          = errors.New("command cannot be nil")
 
 	// Download and client errors.
 	ErrCreateDownloadClient    = errors.New("failed to create download client")
