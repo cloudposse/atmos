@@ -106,6 +106,18 @@ var RootCmd = &cobra.Command{
 			}
 		}
 
+		// Check for --version flag (uses same code path as version command).
+		if cmd.Flags().Changed("version") {
+			if versionFlag, err := cmd.Flags().GetBool("version"); err == nil && versionFlag {
+				versionErr := e.NewVersionExec(&tmpConfig).Execute(false, "")
+				if versionErr != nil {
+					errUtils.CheckErrorPrintAndExit(versionErr, "", "")
+				}
+				utils.OsExit(0)
+				return
+			}
+		}
+
 		// Enable performance tracking if heatmap flag is set.
 		// P95 latency tracking via HDR histogram is automatically enabled.
 		if showHeatmap, _ := cmd.Flags().GetBool("heatmap"); showHeatmap {
@@ -538,6 +550,8 @@ func init() {
 
 	RootCmd.PersistentFlags().String("redirect-stderr", "", "File descriptor to redirect `stderr` to. "+
 		"Errors can be redirected to any file or any standard file descriptor (including `/dev/null`)")
+	RootCmd.PersistentFlags().Bool("version", false, "Display the Atmos CLI version")
+	RootCmd.PersistentFlags().Lookup("version").DefValue = ""
 
 	RootCmd.PersistentFlags().String("logs-level", "Info", "Logs level. Supported log levels are Trace, Debug, Info, Warning, Off. If the log level is set to Off, Atmos will not log any messages")
 	RootCmd.PersistentFlags().String("logs-file", "/dev/stderr", "The file to write Atmos logs to. Logs can be written to any file or any standard file descriptor, including '/dev/stdout', '/dev/stderr' and '/dev/null'")
