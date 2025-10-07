@@ -590,11 +590,13 @@ git add website/src/components/Screengrabs/
 git commit -m "chore: update screengrabs"
 ```
 
-**Method 3: Using Docker (from macOS)**
+**Method 3: Using Docker (Cross-Platform, Recommended for macOS)**
 ```bash
-# Run screengrab generation in a Linux container
-# Note: Run this command directly without pipe indirection to avoid issues
-docker run --rm -v $(pwd):/workspace -w /workspace ubuntu:latest bash -c "apt-get update && apt-get install -y aha util-linux make git && cd demo/screengrabs && make all"
+# Generate screengrabs using Docker from project root
+make -C demo/screengrabs docker-build
+
+# Or build and install in one step
+make -C demo/screengrabs docker-all
 
 # Then commit the generated files
 git add website/src/components/Screengrabs/

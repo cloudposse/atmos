@@ -4,6 +4,7 @@ export TERM=xterm-256color
 
 # Ensure that the output is not paginated
 export LESS=-X
+export ATMOS_PAGER=false
 
 # Determine the correct sed syntax based on the operating system
 if [ "$(uname)" = "Darwin" ]; then
