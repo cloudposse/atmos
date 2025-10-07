@@ -14,6 +14,7 @@ build-all:
 docker-build:
 	@echo "Generating screengrabs using Podman (Linux container)..."
 	@podman run --rm -v $$(pwd)/../..:/workspace -w /workspace/demo/screengrabs \
+		-e ATMOS_TELEMETRY=false \
 		ubuntu:22.04 bash -c ' \
 		set -e && \
 		apt-get update -qq && \
