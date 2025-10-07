@@ -118,6 +118,11 @@ var RootCmd = &cobra.Command{
 		if showHeatmap, _ := cmd.Flags().GetBool("heatmap"); showHeatmap {
 			perf.EnableTracking(true)
 		}
+
+		// Print telemetry disclosure if needed (skip for completion commands and when CLI config not found).
+		if !isCompletionCommand(cmd) && err == nil {
+			telemetry.PrintTelemetryDisclosure()
+		}
 	},
 	PersistentPostRun: func(cmd *cobra.Command, args []string) {
 		// Stop profiler after command execution.
@@ -468,6 +473,32 @@ func Execute() error {
 	return err
 }
 
+// isCompletionCommand checks if the current invocation is for shell completion.
+// This includes both user-visible completion commands and Cobra's internal
+// hidden completion commands (__complete, __completeNoDesc).
+// It works with both direct CLI invocations and programmatic SetArgs() calls.
+func isCompletionCommand(cmd *cobra.Command) bool {
+	if cmd == nil {
+		return false
+	}
+
+	// Check the command name directly from the Cobra command
+	// This works for both os.Args and SetArgs() invocations
+	cmdName := cmd.Name()
+	if cmdName == "completion" || cmdName == "__complete" || cmdName == "__completeNoDesc" {
+		return true
+	}
+
+	// Also check for shell completion environment variables
+	// Cobra sets these when generating completions
+	//nolint:forbidigo // These are external shell variables, not Atmos config
+	if os.Getenv("COMP_LINE") != "" || os.Getenv("_ARGCOMPLETE") != "" {
+		return true
+	}
+
+	return false
+}
+
 // getInvalidCommandName extracts the invalid command name from an error message.
 func getInvalidCommandName(input string) string {
 	// Regular expression to match the command name inside quotes.
@@ -601,8 +632,6 @@ func initCobraConfig() {
 				errUtils.CheckErrorPrintAndExit(err, "", "")
 			}
 
-			telemetry.PrintTelemetryDisclosure()
-
 			if err := oldUsageFunc(command); err != nil {
 				errUtils.CheckErrorPrintAndExit(err, "", "")
 			}
@@ -633,7 +662,6 @@ func initCobraConfig() {
 			fmt.Println()
 			err := tuiUtils.PrintStyledText("ATMOS")
 			errUtils.CheckErrorPrintAndExit(err, "", "")
-			telemetry.PrintTelemetryDisclosure()
 
 			b.HelpFunc(command, args)
 			if err := command.Usage(); err != nil {

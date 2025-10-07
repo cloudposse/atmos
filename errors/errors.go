@@ -8,6 +8,11 @@ import (
 var (
 	ErrNoGitRepo                             = errors.New("not in a git repository")
 	ErrDownloadPackage                       = errors.New("failed to download package")
+	ErrDownloadFile                          = errors.New("failed to download file")
+	ErrParseFile                             = errors.New("failed to parse file")
+	ErrParseURL                              = errors.New("failed to parse URL")
+	ErrInvalidURL                            = errors.New("invalid URL")
+	ErrCreateDownloadClient                  = errors.New("failed to create download client")
 	ErrProcessOCIImage                       = errors.New("failed to process OCI image")
 	ErrCopyPackage                           = errors.New("failed to copy package")
 	ErrCreateTempDir                         = errors.New("failed to create temp directory")
@@ -81,8 +86,19 @@ var (
 	// File and URL handling errors.
 	ErrInvalidPagerCommand = errors.New("invalid pager command")
 	ErrEmptyURL            = errors.New("empty URL provided")
-	ErrInvalidURL          = errors.New("invalid URL")
 	ErrFailedToFindImport  = errors.New("failed to find import")
+
+	// Config loading errors.
+	ErrAtmosDirConfigNotFound      = errors.New("atmos config directory not found")
+	ErrReadConfig                  = errors.New("failed to read config")
+	ErrMergeTempConfig             = errors.New("failed to merge temp config")
+	ErrPreprocessYAMLFunctions     = errors.New("failed to preprocess YAML functions")
+	ErrMergeEmbeddedConfig         = errors.New("failed to merge embedded config")
+	ErrExpectedDirOrPattern        = errors.New("--config-path expected directory found file")
+	ErrFileNotFound                = errors.New("file not found")
+	ErrExpectedFile                = errors.New("--config expected file found directory")
+	ErrAtmosArgConfigNotFound      = errors.New("atmos configuration not found")
+	ErrAtmosFilesDirConfigNotFound = errors.New("`atmos.yaml` or `.atmos.yaml` configuration file not found in directory")
 
 	ErrMissingStack                       = errors.New("stack is required; specify it on the command line using the flag `--stack <stack>` (shorthand `-s`)")
 	ErrInvalidComponent                   = errors.New("invalid component")
@@ -96,8 +112,11 @@ var (
 	ErrFailedToInitializeAtmosConfig = errors.New("failed to initialize atmos config")
 	ErrInvalidListMergeStrategy      = errors.New("invalid list merge strategy")
 	ErrMerge                         = errors.New("merge error")
-	ErrInvalidStackManifest          = errors.New("invalid stack manifest")
-	ErrInvalidLogLevel               = errors.New("invalid log level")
+
+	// Stack processing errors.
+	ErrInvalidStackManifest         = errors.New("invalid stack manifest")
+	ErrInvalidHooksSection          = errors.New("invalid 'hooks' section in the file")
+	ErrInvalidTerraformHooksSection = errors.New("invalid 'terraform.hooks' section in the file")
 
 	// Pro API client errors.
 	ErrFailedToCreateRequest        = errors.New("failed to create request")
@@ -145,6 +164,11 @@ var (
 	ErrProcessInstances          = errors.New("failed to process instances")
 	ErrParseFlag                 = errors.New("failed to parse flag value")
 	ErrFailedToFinalizeCSVOutput = errors.New("failed to finalize CSV output")
+	ErrParseStacks               = errors.New("could not parse stacks")
+	ErrParseComponents           = errors.New("could not parse components")
+	ErrNoComponentsFound         = errors.New("no components found")
+	ErrStackNotFound             = errors.New("stack not found")
+	ErrProcessStack              = errors.New("error processing stack")
 
 	// Cache-related errors.
 	ErrCacheLocked    = errors.New("cache file is locked")
@@ -152,6 +176,10 @@ var (
 	ErrCacheWrite     = errors.New("cache write failed")
 	ErrCacheUnmarshal = errors.New("cache unmarshal failed")
 	ErrCacheMarshal   = errors.New("cache marshal failed")
+	ErrCacheDir       = errors.New("cache directory creation failed")
+
+	// Logger errors.
+	ErrInvalidLogLevel = errors.New("invalid log level")
 
 	// File operation errors.
 	ErrCopyFile            = errors.New("failed to copy file")
@@ -180,10 +208,7 @@ var (
 	ErrVersionMismatch     = errors.New("version mismatch")
 
 	// Download and client errors.
-	ErrCreateDownloadClient    = errors.New("failed to create download client")
-	ErrMergeConfiguration      = errors.New("failed to merge configuration")
-	ErrPreprocessYAMLFunctions = errors.New("failed to preprocess YAML functions")
-	ErrMergeEmbeddedConfig     = errors.New("failed to merge embedded config")
+	ErrMergeConfiguration = errors.New("failed to merge configuration")
 
 	// Template and documentation errors.
 	ErrGenerateTerraformDocs = errors.New("failed to generate terraform docs")

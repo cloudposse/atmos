@@ -1,2 +1,0 @@
-CheckTTYSupport: os.Stdout.Fd() = 1, IsTerminal = false
-CheckTTYSupport: os.Stdout.Fd() = 1, IsTerminal = false
