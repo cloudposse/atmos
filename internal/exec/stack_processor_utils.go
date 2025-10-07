@@ -1165,7 +1165,7 @@ func ProcessStackConfig(
 					AtmosConfig:                     atmosConfig,
 				}
 
-				result, err := processComponent(opts)
+				result, err := processComponent(&opts)
 				if err != nil {
 					return nil, err
 				}
@@ -1215,7 +1215,7 @@ func ProcessStackConfig(
 					AtmosConfig:              atmosConfig,
 				}
 
-				result, err := processComponent(opts)
+				result, err := processComponent(&opts)
 				if err != nil {
 					return nil, err
 				}
@@ -1265,7 +1265,7 @@ func ProcessStackConfig(
 					AtmosConfig:              atmosConfig,
 				}
 
-				result, err := processComponent(opts)
+				result, err := processComponent(&opts)
 				if err != nil {
 					return nil, err
 				}

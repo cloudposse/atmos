@@ -286,7 +286,7 @@ func TestProcessComponent(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, err := processComponent(tt.opts)
+			result, err := processComponent(&tt.opts)
 
 			if tt.expectedError != "" {
 				require.Error(t, err)
