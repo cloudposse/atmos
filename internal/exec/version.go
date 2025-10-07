@@ -53,10 +53,9 @@ func (v versionExec) Execute(checkFlag bool, format string) error {
 	}
 	// Print a styled Atmos logo to the terminal
 	v.printMessage("")
-	err := v.printStyledText("ATMOS")
-	if err != nil {
-		//nolint:revive // deep-exit: log.Fatal is appropriate here for version display errors
-		log.Fatal(err)
+	if err := v.printStyledText("ATMOS"); err != nil {
+		log.Debug("Could not display styled logo", "error", err)
+		// Continue - version information displays fine without fancy ASCII art
 	}
 
 	telemetry.PrintTelemetryDisclosure()

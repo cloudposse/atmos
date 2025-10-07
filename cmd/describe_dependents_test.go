@@ -17,7 +17,9 @@ func TestDescribeDependents(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	describeDependentsMock := exec.NewMockDescribeDependentsExec(ctrl)
 	describeDependentsMock.EXPECT().Execute(gomock.Any()).Return(nil)
-	run := getRunnableDescribeDependentsCmd(func(opts ...AtmosValidateOption) {},
+	run := getRunnableDescribeDependentsCmd(func(opts ...AtmosValidateOption) error {
+		return nil
+	},
 		func(componentType string, cmd *cobra.Command, args, additionalArgsAndFlags []string) (schema.ConfigAndStacksInfo, error) {
 			return schema.ConfigAndStacksInfo{}, nil
 		},

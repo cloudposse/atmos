@@ -3,7 +3,6 @@ package cmd
 import (
 	"github.com/spf13/cobra"
 
-	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
 )
 
@@ -17,7 +16,9 @@ var terraformGenerateVarfileCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		handleHelpRequest(cmd, args)
 		// Check Atmos configuration
-		checkAtmosConfig()
+		if err := checkAtmosConfig(); err != nil {
+			return err
+		}
 
 		err := e.ExecuteTerraformGenerateVarfileCmd(cmd, args)
 		return err
@@ -29,9 +30,8 @@ func init() {
 	AddStackCompletion(terraformGenerateVarfileCmd)
 	terraformGenerateVarfileCmd.PersistentFlags().StringP("file", "f", "", "Specify the path to the varfile to generate for the specified Terraform component in the given stack.")
 
-	err := terraformGenerateVarfileCmd.MarkPersistentFlagRequired("stack")
-	if err != nil {
-		errUtils.CheckErrorPrintAndExit(err, "", "")
+	if err := terraformGenerateVarfileCmd.MarkPersistentFlagRequired("stack"); err != nil {
+		panic(err)
 	}
 
 	terraformGenerateCmd.AddCommand(terraformGenerateVarfileCmd)

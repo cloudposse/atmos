@@ -143,7 +143,9 @@ func setEnv(v *viper.Viper) {
 
 func bindEnv(v *viper.Viper, key ...string) {
 	if err := v.BindEnv(key...); err != nil {
-		errUtils.CheckErrorPrintAndExit(err, "", "")
+		// Panic is acceptable here - this is called during config initialization,
+		// and BindEnv only fails with programmer errors (invalid arguments).
+		panic(fmt.Sprintf("failed to bind environment variable %v: %v", key, err))
 	}
 }
 

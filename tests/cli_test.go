@@ -525,7 +525,7 @@ func TestMain(m *testing.M) {
 		atmosRunner.Cleanup()
 	}
 
-	errUtils.Exit(exitCode)
+	os.Exit(exitCode) //nolint:revive // TestMain must call os.Exit to propagate test exit code
 }
 
 // checkPreconditions checks if all required preconditions for a test are met.

@@ -56,7 +56,8 @@ func (m *AWSFileManager) WriteCredentials(providerName, identityName string, cre
 
 	// Ensure directory exists.
 	if err := os.MkdirAll(filepath.Dir(credentialsPath), PermissionRWX); err != nil {
-		errUtils.CheckErrorAndPrint(ErrCreateCredentialsFile, identityName, "failed to create credentials directory")
+		err := errUtils.Build(ErrCreateCredentialsFile).WithHint("failed to create credentials directory").Err()
+		errUtils.HandleError(err)
 		return ErrCreateCredentialsFile
 	}
 
@@ -65,7 +66,8 @@ func (m *AWSFileManager) WriteCredentials(providerName, identityName string, cre
 	if err != nil {
 		// ini.Load returns a wrapped error, check if the file doesn't exist.
 		if !os.IsNotExist(err) {
-			errUtils.CheckErrorAndPrint(ErrLoadCredentialsFile, identityName, "failed to load credentials file")
+			err := errUtils.Build(ErrLoadCredentialsFile).WithHint("failed to load credentials file").Err()
+			errUtils.HandleError(err)
 			return ErrLoadCredentialsFile
 		}
 		cfg = ini.Empty()
@@ -76,7 +78,8 @@ func (m *AWSFileManager) WriteCredentials(providerName, identityName string, cre
 	if err != nil {
 		section, err = cfg.NewSection(identityName)
 		if err != nil {
-			errUtils.CheckErrorAndPrint(ErrProfileSection, identityName, "failed to create profile section")
+			err := errUtils.Build(ErrProfileSection).WithHint("failed to create profile section").Err()
+			errUtils.HandleError(err)
 			return ErrProfileSection
 		}
 	}
@@ -93,13 +96,15 @@ func (m *AWSFileManager) WriteCredentials(providerName, identityName string, cre
 
 	// Save file with proper permissions.
 	if err := cfg.SaveTo(credentialsPath); err != nil {
-		errUtils.CheckErrorAndPrint(ErrWriteCredentialsFile, identityName, "failed to write credentials file")
+		err := errUtils.Build(ErrWriteCredentialsFile).WithHint("failed to write credentials file").Err()
+		errUtils.HandleError(err)
 		return ErrWriteCredentialsFile
 	}
 
 	// Set proper file permissions.
 	if err := os.Chmod(credentialsPath, PermissionRW); err != nil {
-		errUtils.CheckErrorAndPrint(ErrSetCredentialsFilePermissions, identityName, "failed to set credentials file permissions")
+		err := errUtils.Build(ErrSetCredentialsFilePermissions).WithHint("failed to set credentials file permissions").Err()
+		errUtils.HandleError(err)
 		return ErrSetCredentialsFilePermissions
 	}
 
@@ -112,7 +117,8 @@ func (m *AWSFileManager) WriteConfig(providerName, identityName, region, outputF
 
 	// Ensure directory exists.
 	if err := os.MkdirAll(filepath.Dir(configPath), PermissionRWX); err != nil {
-		errUtils.CheckErrorAndPrint(ErrCreateConfigFile, identityName, "failed to create config directory")
+		err := errUtils.Build(ErrCreateConfigFile).WithHint("failed to create config directory").Err()
+		errUtils.HandleError(err)
 		return ErrCreateConfigFile
 	}
 
@@ -120,7 +126,8 @@ func (m *AWSFileManager) WriteConfig(providerName, identityName, region, outputF
 	cfg, err := ini.Load(configPath)
 	if err != nil {
 		if !os.IsNotExist(err) {
-			errUtils.CheckErrorAndPrint(ErrLoadConfigFile, identityName, "failed to load config file")
+			err := errUtils.Build(ErrLoadConfigFile).WithHint("failed to load config file").Err()
+			errUtils.HandleError(err)
 			return ErrLoadConfigFile
 		}
 		cfg = ini.Empty()
@@ -154,13 +161,15 @@ func (m *AWSFileManager) WriteConfig(providerName, identityName, region, outputF
 
 	// Save file with proper permissions.
 	if err := cfg.SaveTo(configPath); err != nil {
-		errUtils.CheckErrorAndPrint(ErrWriteConfigFile, identityName, "failed to write config file")
+		err := errUtils.Build(ErrWriteConfigFile).WithHint("failed to write config file").Err()
+		errUtils.HandleError(err)
 		return ErrWriteConfigFile
 	}
 
 	// Set proper file permissions.
 	if err := os.Chmod(configPath, PermissionRW); err != nil {
-		errUtils.CheckErrorAndPrint(ErrSetConfigFilePermissions, identityName, "failed to set config file permissions")
+		err := errUtils.Build(ErrSetConfigFilePermissions).WithHint("failed to set config file permissions").Err()
+		errUtils.HandleError(err)
 		return ErrSetConfigFilePermissions
 	}
 
@@ -194,7 +203,8 @@ func (m *AWSFileManager) Cleanup(providerName string) error {
 	providerDir := filepath.Join(m.baseDir, providerName)
 
 	if err := os.RemoveAll(providerDir); err != nil {
-		errUtils.CheckErrorAndPrint(ErrCleanupAWSFiles, providerDir, "failed to cleanup AWS files")
+		err := errUtils.Build(ErrCleanupAWSFiles).WithHint("failed to cleanup AWS files").Err()
+		errUtils.HandleError(err)
 		return ErrCleanupAWSFiles
 	}
 

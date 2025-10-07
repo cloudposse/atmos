@@ -361,7 +361,7 @@ func ProcessStacks(
 				configAndStacksInfo.Stack,
 				strings.Join(foundStacks, ", "),
 			)
-			errUtils.CheckErrorPrintAndExit(err, "", "")
+			return configAndStacksInfo, err
 		} else {
 			configAndStacksInfo = foundConfigAndStacksInfo
 		}
@@ -435,8 +435,8 @@ func ProcessStacks(
 			true,
 		)
 		if err != nil {
-			// If any error returned from the template processing, log it and exit
-			errUtils.CheckErrorPrintAndExit(err, "", "")
+			// If any error returned from the template processing, return it
+			return configAndStacksInfo, err
 		}
 
 		componentSectionConverted, err := u.UnmarshalYAML[schema.AtmosSectionMapType](componentSectionProcessed)
@@ -448,7 +448,7 @@ func ProcessStacks(
 					err = errors.Join(err, errors.New(errorMessage))
 				}
 			}
-			errUtils.CheckErrorPrintAndExit(err, "", "")
+			return configAndStacksInfo, err
 		}
 
 		configAndStacksInfo.ComponentSection = componentSectionConverted

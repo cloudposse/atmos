@@ -283,7 +283,7 @@ func ExecuteTerraformGenerateVarfiles(
 							err = errors.Join(err, errors.New(errorMessage))
 						}
 					}
-					errUtils.CheckErrorPrintAndExit(err, "", "")
+					return err
 				}
 
 				componentSectionFinal, err := ProcessCustomYamlTags(atmosConfig, componentSectionConverted, stackName, nil)

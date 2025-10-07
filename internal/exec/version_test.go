@@ -299,3 +299,67 @@ func TestDisplayVersionInFormat(t *testing.T) {
 		})
 	}
 }
+
+func TestVersionExec_Execute_PrintStyledTextError(t *testing.T) {
+	// This test covers the error path at version.go:56-59 where printStyledText
+	// returns an error. The function logs the error but continues execution.
+
+	// Save original version
+	originalVersion := version.Version
+	defer func() { version.Version = originalVersion }()
+
+	tests := []struct {
+		name               string
+		printStyledTextErr error
+		checkFlag          bool
+		expectContinue     bool // Whether execution continues after error
+	}{
+		{
+			name:               "printStyledText error without check flag",
+			printStyledTextErr: errors.New("styled text render failed"),
+			checkFlag:          false,
+			expectContinue:     true, // Function continues despite error
+		},
+		{
+			name:               "printStyledText error with check flag",
+			printStyledTextErr: errors.New("styled text render failed"),
+			checkFlag:          true,
+			expectContinue:     true, // Function continues despite error
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+
+			mockExec := NewMockVersionExecutor(ctrl)
+			version.Version = "v1.0.0"
+
+			// Setup expectations
+			mockExec.EXPECT().PrintStyledText("ATMOS").Return(tt.printStyledTextErr)
+
+			if tt.expectContinue {
+				// Verify function continues after printStyledText error
+				mockExec.EXPECT().PrintMessage(gomock.Any()).Times(3)
+
+				if tt.checkFlag {
+					mockExec.EXPECT().GetLatestGitHubRepoRelease().
+						Return("v1.0.0", nil)
+				}
+			}
+
+			v := versionExec{
+				atmosConfig:                &schema.AtmosConfiguration{},
+				printStyledText:            mockExec.PrintStyledText,
+				printMessage:               mockExec.PrintMessage,
+				getLatestGitHubRepoRelease: mockExec.GetLatestGitHubRepoRelease,
+				printMessageToUpgradeToAtmosLatestRelease: mockExec.PrintMessageToUpgradeToAtmosLatestRelease,
+			}
+
+			// Execute - should not return error even if printStyledText fails
+			err := v.Execute(tt.checkFlag, "")
+			assert.NoError(t, err, "Execute should not return error when printStyledText fails")
+		})
+	}
+}

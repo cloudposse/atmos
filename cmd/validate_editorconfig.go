@@ -34,22 +34,23 @@ var editorConfigCmd *cobra.Command = &cobra.Command{
 	Use:   "editorconfig",
 	Short: "Validate all files against the EditorConfig",
 	Long:  "Validate all files against the project's EditorConfig rules",
-	PersistentPreRun: func(cmd *cobra.Command, args []string) {
-		initializeConfig(cmd)
+	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+		return initializeConfig(cmd)
 	},
 	RunE: func(cmd *cobra.Command, args []string) error {
 		handleHelpRequest(cmd, args)
 		if len(args) > 0 {
 			showUsageAndExit(cmd, args)
 		}
-		runMainLogic()
-		return nil
+		return runMainLogic()
 	},
 }
 
 // initializeConfig breaks the initialization cycle by separating the config setup.
-func initializeConfig(cmd *cobra.Command) {
-	replaceAtmosConfigInConfig(cmd, atmosConfig)
+func initializeConfig(cmd *cobra.Command) error {
+	if err := replaceAtmosConfigInConfig(cmd, atmosConfig); err != nil {
+		return err
+	}
 
 	configPaths := []string{}
 	if cmd.Flags().Changed("config") {
@@ -67,9 +68,8 @@ func initializeConfig(cmd *cobra.Command) {
 	currentConfig = config.NewConfig(configPaths)
 
 	if initEditorConfig {
-		err := currentConfig.Save(version.Version)
-		if err != nil {
-			errUtils.CheckErrorPrintAndExit(err, "", "")
+		if err := currentConfig.Save(version.Version); err != nil {
+			return err
 		}
 	}
 
@@ -80,9 +80,10 @@ func initializeConfig(cmd *cobra.Command) {
 	}
 
 	currentConfig.Merge(cliConfig)
+	return nil
 }
 
-func replaceAtmosConfigInConfig(cmd *cobra.Command, atmosConfig schema.AtmosConfiguration) {
+func replaceAtmosConfigInConfig(cmd *cobra.Command, atmosConfig schema.AtmosConfiguration) error {
 	if !cmd.Flags().Changed("config") && len(atmosConfig.Validate.EditorConfig.ConfigFilePaths) > 0 {
 		configFilePaths = atmosConfig.Validate.EditorConfig.ConfigFilePaths
 	}
@@ -101,13 +102,13 @@ func replaceAtmosConfigInConfig(cmd *cobra.Command, atmosConfig schema.AtmosConf
 	if !cmd.Flags().Changed("format") && atmosConfig.Validate.EditorConfig.Format != "" {
 		format := outputformat.OutputFormat(atmosConfig.Validate.EditorConfig.Format)
 		if ok := format.IsValid(); !ok {
-			errUtils.CheckErrorPrintAndExit(fmt.Errorf("%v is not a valid format choose from the following: %v", atmosConfig.Validate.EditorConfig.Format, outputformat.GetArgumentChoiceText()), "", "")
+			return fmt.Errorf("%v is not a valid format choose from the following: %v", atmosConfig.Validate.EditorConfig.Format, outputformat.GetArgumentChoiceText())
 		}
 		cliConfig.Format = format
 	} else if cmd.Flags().Changed("format") {
 		format := outputformat.OutputFormat(format)
 		if ok := format.IsValid(); !ok {
-			errUtils.CheckErrorPrintAndExit(fmt.Errorf("%v is not a valid format choose from the following: %v", atmosConfig.Validate.EditorConfig.Format, outputformat.GetArgumentChoiceText()), "", "")
+			return fmt.Errorf("%v is not a valid format choose from the following: %v", atmosConfig.Validate.EditorConfig.Format, outputformat.GetArgumentChoiceText())
 		}
 		cliConfig.Format = format
 	}
@@ -147,26 +148,29 @@ func replaceAtmosConfigInConfig(cmd *cobra.Command, atmosConfig schema.AtmosConf
 	if !cmd.Flags().Changed("disable-max-line-length") && atmosConfig.Validate.EditorConfig.DisableMaxLineLength {
 		cliConfig.Disable.MaxLineLength = atmosConfig.Validate.EditorConfig.DisableMaxLineLength
 	}
+	return nil
 }
 
 // runMainLogic contains the main logic.
-func runMainLogic() {
+func runMainLogic() error {
 	config := *currentConfig
 	log.Debug(config.String())
 	log.Debug("Excluding", "regex", config.GetExcludesAsRegularExpression())
 
 	if err := checkVersion(config); err != nil {
-		errUtils.CheckErrorPrintAndExit(err, "", "")
+		return err
 	}
 
 	filePaths, err := files.GetFiles(config)
-	errUtils.CheckErrorPrintAndExit(err, "", "")
+	if err != nil {
+		return err
+	}
 
 	if config.DryRun {
 		for _, file := range filePaths {
 			log.Info(file)
 		}
-		return
+		return nil
 	}
 
 	errors := validation.ProcessValidation(filePaths, config)
@@ -174,9 +178,10 @@ func runMainLogic() {
 	errorCount := er.GetErrorCount(errors)
 	if errorCount != 0 {
 		er.PrintErrors(errors, config)
-		errUtils.Exit(1)
+		return errUtils.WithExitCode(fmt.Errorf("validation failed with %d error(s)", errorCount), 1)
 	}
 	u.PrintMessage("No errors found")
+	return nil
 }
 
 func checkVersion(config config.Config) error {

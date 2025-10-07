@@ -27,14 +27,16 @@ var describeWorkflowsCmd = &cobra.Command{
 }
 
 func getRunnableDescribeWorkflowsCmd(
-	checkAtmosConfig func(opts ...AtmosValidateOption),
+	checkAtmosConfig func(opts ...AtmosValidateOption) error,
 	processCommandLineArgs func(componentType string, cmd *cobra.Command, args []string, additionalArgsAndFlags []string) (schema.ConfigAndStacksInfo, error),
 	initCliConfig func(info schema.ConfigAndStacksInfo, validate bool) (schema.AtmosConfiguration, error),
 	describeWorkflowsExec exec.DescribeWorkflowsExec,
 ) func(cmd *cobra.Command, args []string) error {
 	return func(cmd *cobra.Command, args []string) error {
 		// Check Atmos configuration
-		checkAtmosConfig()
+		if err := checkAtmosConfig(); err != nil {
+			return err
+		}
 
 		info, err := processCommandLineArgs("terraform", cmd, args, nil)
 		if err != nil {

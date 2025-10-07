@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"strings"
 
-	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -18,7 +17,7 @@ func ProcessCustomYamlTags(
 ) (schema.AtmosSectionMapType, error) {
 	defer perf.Track(atmosConfig, "exec.ProcessCustomYamlTags")()
 
-	return processNodes(atmosConfig, input, currentStack, skip), nil
+	return processNodes(atmosConfig, input, currentStack, skip)
 }
 
 func processNodes(
@@ -26,11 +25,11 @@ func processNodes(
 	data map[string]any,
 	currentStack string,
 	skip []string,
-) map[string]any {
+) (map[string]any, error) {
 	newMap := make(map[string]any)
-	var recurse func(any) any
+	var recurse func(any) (any, error)
 
-	recurse = func(node any) any {
+	recurse = func(node any) (any, error) {
 		switch v := node.(type) {
 		case string:
 			return processCustomTags(atmosConfig, v, currentStack, skip)
@@ -38,27 +37,39 @@ func processNodes(
 		case map[string]any:
 			newNestedMap := make(map[string]any)
 			for k, val := range v {
-				newNestedMap[k] = recurse(val)
+				result, err := recurse(val)
+				if err != nil {
+					return nil, err
+				}
+				newNestedMap[k] = result
 			}
-			return newNestedMap
+			return newNestedMap, nil
 
 		case []any:
 			newSlice := make([]any, len(v))
 			for i, val := range v {
-				newSlice[i] = recurse(val)
+				result, err := recurse(val)
+				if err != nil {
+					return nil, err
+				}
+				newSlice[i] = result
 			}
-			return newSlice
+			return newSlice, nil
 
 		default:
-			return v
+			return v, nil
 		}
 	}
 
 	for k, v := range data {
-		newMap[k] = recurse(v)
+		result, err := recurse(v)
+		if err != nil {
+			return nil, err
+		}
+		newMap[k] = result
 	}
 
-	return newMap
+	return newMap, nil
 }
 
 func processCustomTags(
@@ -66,14 +77,12 @@ func processCustomTags(
 	input string,
 	currentStack string,
 	skip []string,
-) any {
+) (any, error) {
 	switch {
 	case strings.HasPrefix(input, u.AtmosYamlFuncTemplate) && !skipFunc(skip, u.AtmosYamlFuncTemplate):
 		return processTagTemplate(input)
 	case strings.HasPrefix(input, u.AtmosYamlFuncExec) && !skipFunc(skip, u.AtmosYamlFuncExec):
-		res, err := u.ProcessTagExec(input)
-		errUtils.CheckErrorPrintAndExit(err, "", "")
-		return res
+		return u.ProcessTagExec(input)
 	case strings.HasPrefix(input, u.AtmosYamlFuncStoreGet) && !skipFunc(skip, u.AtmosYamlFuncStoreGet):
 		return processTagStoreGet(atmosConfig, input, currentStack)
 	case strings.HasPrefix(input, u.AtmosYamlFuncStore) && !skipFunc(skip, u.AtmosYamlFuncStore):
@@ -83,12 +92,10 @@ func processCustomTags(
 	case strings.HasPrefix(input, u.AtmosYamlFuncTerraformState) && !skipFunc(skip, u.AtmosYamlFuncTerraformState):
 		return processTagTerraformState(atmosConfig, input, currentStack)
 	case strings.HasPrefix(input, u.AtmosYamlFuncEnv) && !skipFunc(skip, u.AtmosYamlFuncEnv):
-		res, err := u.ProcessTagEnv(input)
-		errUtils.CheckErrorPrintAndExit(err, "", "")
-		return res
+		return u.ProcessTagEnv(input)
 	default:
 		// If any other YAML explicit tag (not currently supported by Atmos) is used, return it w/o processing
-		return input
+		return input, nil
 	}
 }
 

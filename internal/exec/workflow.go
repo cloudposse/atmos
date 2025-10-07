@@ -115,8 +115,7 @@ func ExecuteWorkflowCmd(cmd *cobra.Command, args []string) error {
 			WithContext("base_path", atmosConfig.Workflows.BasePath).
 			WithExitCode(2).
 			Err()
-		errUtils.CheckErrorPrintAndExit(err, "", "")
-		return ErrWorkflowFileNotFound
+		return err
 	}
 
 	fileContent, err := os.ReadFile(workflowPath)
@@ -142,8 +141,7 @@ func ExecuteWorkflowCmd(cmd *cobra.Command, args []string) error {
 			WithContext("file", workflowPath).
 			WithExitCode(2).
 			Err()
-		errUtils.CheckErrorPrintAndExit(err, "", "")
-		return ErrInvalidWorkflowManifest
+		return err
 	}
 
 	workflowConfig = workflowManifest.Workflows
@@ -170,8 +168,7 @@ func ExecuteWorkflowCmd(cmd *cobra.Command, args []string) error {
 			WithContext("available_count", fmt.Sprintf("%d", len(validWorkflows))).
 			WithExitCode(2).
 			Err()
-		errUtils.CheckErrorPrintAndExit(err, "", "")
-		return ErrWorkflowNoWorkflow
+		return err
 	} else {
 		workflowDefinition = i
 	}

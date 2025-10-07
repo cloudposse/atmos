@@ -6,7 +6,6 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
-	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/internal/exec"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -29,7 +28,7 @@ var describeStacksCmd = &cobra.Command{
 }
 
 type getRunnableDescribeStacksCmdProps struct {
-	checkAtmosConfig       func(opts ...AtmosValidateOption)
+	checkAtmosConfig       func(opts ...AtmosValidateOption) error
 	processCommandLineArgs func(
 		componentType string,
 		cmd *cobra.Command,
@@ -47,7 +46,9 @@ func getRunnableDescribeStacksCmd(
 ) func(cmd *cobra.Command, args []string) error {
 	return func(cmd *cobra.Command, args []string) error {
 		// Check Atmos configuration
-		g.checkAtmosConfig()
+		if err := g.checkAtmosConfig(); err != nil {
+			return err
+		}
 
 		info, err := g.processCommandLineArgs("", cmd, args, nil)
 		if err != nil {
@@ -109,10 +110,11 @@ func setCliArgsForDescribeStackCli(flags *pflag.FlagSet, describe *exec.Describe
 		case *[]string:
 			*v, err = flags.GetStringSlice(k)
 		default:
-			er := fmt.Errorf("unsupported type %T for flag %s", v, k)
-			errUtils.CheckErrorPrintAndExit(er, "", "")
+			return fmt.Errorf("unsupported type %T for flag %s", v, k)
 		}
-		errUtils.CheckErrorPrintAndExit(err, "", "")
+		if err != nil {
+			return err
+		}
 	}
 	return validateFormat(describe)
 }

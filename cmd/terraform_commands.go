@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 
-	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	h "github.com/cloudposse/atmos/pkg/hooks"
 	"github.com/cloudposse/atmos/pkg/version"
@@ -348,9 +347,8 @@ var commandMaps = map[string]func(cmd *cobra.Command){
 	"plan-diff": func(cmd *cobra.Command) {
 		cmd.PersistentFlags().String("orig", "", "Path to the original Terraform plan file (required)")
 		cmd.PersistentFlags().String("new", "", "Path to the new Terraform plan file (optional)")
-		err := cmd.MarkPersistentFlagRequired("orig")
-		if err != nil {
-			errUtils.CheckErrorPrintAndExit(err, "Error marking 'orig' flag as required", "")
+		if err := cmd.MarkPersistentFlagRequired("orig"); err != nil {
+			panic(err)
 		}
 	},
 }

@@ -8,6 +8,7 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/spf13/pflag"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -18,7 +19,8 @@ func TestDescribeAffected(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	describeAffectedMock := exec.NewMockDescribeAffectedExec(ctrl)
 	describeAffectedMock.EXPECT().Execute(gomock.Any()).Return(nil)
-	run := getRunnableDescribeAffectedCmd(func(opts ...AtmosValidateOption) {
+	run := getRunnableDescribeAffectedCmd(func(opts ...AtmosValidateOption) error {
+		return nil
 	}, exec.ParseDescribeAffectedCliArgs, func(atmosConfig *schema.AtmosConfiguration) exec.DescribeAffectedExec {
 		return describeAffectedMock
 	})
@@ -132,7 +134,8 @@ func TestSetFlagValueInCliArgs(t *testing.T) {
 			gotDescribe := &exec.DescribeAffectedCmdArgs{
 				CLIConfig: &schema.AtmosConfiguration{},
 			}
-			exec.SetDescribeAffectedFlagValueInCliArgs(fs, gotDescribe)
+			err := exec.SetDescribeAffectedFlagValueInCliArgs(fs, gotDescribe)
+			require.NoError(t, err)
 			tt.expected.CLIConfig = &schema.AtmosConfiguration{}
 
 			// Assert the describe struct matches the expected values

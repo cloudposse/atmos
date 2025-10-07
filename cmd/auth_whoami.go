@@ -45,7 +45,7 @@ func executeAuthWhoamiCommand(cmd *cobra.Command, args []string) error {
 	// Query whoami.
 	whoami, err := authManager.Whoami(context.Background(), identityName)
 	if err != nil {
-		errUtils.CheckErrorPrintAndExit(err, "", "")
+		return err
 	}
 
 	// Output.
@@ -91,7 +91,7 @@ func printWhoamiJSON(whoami *authTypes.WhoamiInfo) error {
 	}
 	jsonData, err := json.MarshalIndent(redactedWhoami, "", "  ")
 	if err != nil {
-		errUtils.CheckErrorAndPrint(errUtils.ErrInvalidAuthConfig, "Failed to marshal JSON", "")
+		errUtils.HandleError(errUtils.ErrInvalidAuthConfig)
 		return errUtils.ErrInvalidAuthConfig
 	}
 	fmt.Println(string(jsonData))

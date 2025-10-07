@@ -48,13 +48,15 @@ func init() {
 
 // getRunnableDescribeAffectedCmd returns a command to run `atmos describe affected`.
 func getRunnableDescribeAffectedCmd(
-	checkAtmosConfig func(opts ...AtmosValidateOption),
+	checkAtmosConfig func(opts ...AtmosValidateOption) error,
 	parseDescribeAffectedCliArgs func(cmd *cobra.Command, args []string) (exec.DescribeAffectedCmdArgs, error),
 	newDescribeAffectedExec exec.DescribeAffectedExecCreator,
 ) func(cmd *cobra.Command, args []string) error {
 	return func(cmd *cobra.Command, args []string) error {
 		// Check Atmos configuration
-		checkAtmosConfig()
+		if err := checkAtmosConfig(); err != nil {
+			return err
+		}
 
 		props, err := parseDescribeAffectedCliArgs(cmd, args)
 		if err != nil {

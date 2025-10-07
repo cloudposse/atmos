@@ -16,13 +16,15 @@ func processTagTerraformOutput(
 	atmosConfig *schema.AtmosConfiguration,
 	input string,
 	currentStack string,
-) any {
+) (any, error) {
 	defer perf.Track(atmosConfig, "exec.processTagTerraformOutput")()
 
 	log.Debug("Executing Atmos YAML function", "function", input)
 
 	str, err := getStringAfterTag(input, u.AtmosYamlFuncTerraformOutput)
-	errUtils.CheckErrorPrintAndExit(err, "", "")
+	if err != nil {
+		return nil, err
+	}
 
 	var component string
 	var stack string
@@ -32,7 +34,9 @@ func processTagTerraformOutput(
 	// while also ignoring leading and trailing whitespace.
 	// SplitStringByDelimiter splits a string by the delimiter, not splitting inside quotes.
 	parts, err := u.SplitStringByDelimiter(str, ' ')
-	errUtils.CheckErrorPrintAndExit(err, "", "")
+	if err != nil {
+		return nil, err
+	}
 
 	partsLen := len(parts)
 
@@ -50,23 +54,21 @@ func processTagTerraformOutput(
 			"stack", currentStack,
 		)
 	default:
-		er := fmt.Errorf("%w %s", errUtils.ErrYamlFuncInvalidArguments, input)
-		errUtils.CheckErrorPrintAndExit(er, "", "")
+		return nil, fmt.Errorf("%w %s", errUtils.ErrYamlFuncInvalidArguments, input)
 	}
 
 	value, exists, err := GetTerraformOutput(atmosConfig, stack, component, output, false)
 	if err != nil {
-		er := fmt.Errorf("failed to get terraform output for component %s in stack %s, output %s: %w", component, stack, output, err)
-		errUtils.CheckErrorPrintAndExit(er, "", "")
+		return nil, fmt.Errorf("failed to get terraform output for component %s in stack %s, output %s: %w", component, stack, output, err)
 	}
 
 	// If the output doesn't exist, return nil (backward compatible).
 	// This allows YAML functions to reference outputs that don't exist yet.
 	// Use yq fallback syntax (.output // "default") for default values.
 	if !exists {
-		return nil
+		return nil, nil
 	}
 
 	// value may be nil here if the terraform output is legitimately null, which is valid.
-	return value
+	return value, nil
 }

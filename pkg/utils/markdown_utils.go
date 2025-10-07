@@ -21,7 +21,7 @@ func PrintfMarkdown(format string, a ...interface{}) {
 
 	if render == nil {
 		_, err := os.Stdout.WriteString(fmt.Sprintf(format, a...))
-		errUtils.CheckErrorAndPrint(err, "", "")
+		errUtils.HandleError(err)
 		return
 	}
 	message := fmt.Sprintf(format, a...)
@@ -29,10 +29,12 @@ func PrintfMarkdown(format string, a ...interface{}) {
 	var renderErr error
 	md, renderErr = render.Render(message)
 	if renderErr != nil {
-		errUtils.CheckErrorPrintAndExit(renderErr, "", "")
+		// Fall back to plain text output if markdown rendering fails (non-fatal UI error).
+		_, _ = os.Stdout.WriteString(message + "\n")
+		return
 	}
 	_, err := os.Stdout.WriteString(fmt.Sprint(md + "\n"))
-	errUtils.CheckErrorAndPrint(err, "", "")
+	errUtils.HandleError(err)
 }
 
 // InitializeMarkdown initializes a new Markdown renderer.
@@ -42,6 +44,8 @@ func InitializeMarkdown(atmosConfig schema.AtmosConfiguration) {
 	var err error
 	render, err = markdown.NewTerminalMarkdownRenderer(atmosConfig)
 	if err != nil {
-		errUtils.CheckErrorPrintAndExit(fmt.Errorf("failed to initialize markdown renderer: %w", err), "", "")
+		// Initialization failure is non-fatal - PrintfMarkdown will fall back to plain text.
+		// This can happen in unusual terminal environments.
+		render = nil
 	}
 }

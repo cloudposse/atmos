@@ -9,7 +9,6 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
-	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/internal/tui/templates/term"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	log "github.com/cloudposse/atmos/pkg/logger"
@@ -148,7 +147,9 @@ func ParseDescribeAffectedCliArgs(cmd *cobra.Command, args []string) (DescribeAf
 	result := DescribeAffectedCmdArgs{
 		CLIConfig: &atmosConfig,
 	}
-	SetDescribeAffectedFlagValueInCliArgs(flags, &result)
+	if err := SetDescribeAffectedFlagValueInCliArgs(flags, &result); err != nil {
+		return DescribeAffectedCmdArgs{}, err
+	}
 
 	if result.Format != "yaml" && result.Format != "json" {
 		return DescribeAffectedCmdArgs{}, ErrInvalidFormat
@@ -161,7 +162,7 @@ func ParseDescribeAffectedCliArgs(cmd *cobra.Command, args []string) (DescribeAf
 }
 
 // SetDescribeAffectedFlagValueInCliArgs sets the flag values in CLI arguments.
-func SetDescribeAffectedFlagValueInCliArgs(flags *pflag.FlagSet, describe *DescribeAffectedCmdArgs) {
+func SetDescribeAffectedFlagValueInCliArgs(flags *pflag.FlagSet, describe *DescribeAffectedCmdArgs) error {
 	defer perf.Track(nil, "exec.SetDescribeAffectedFlagValueInCliArgs")()
 
 	flagsKeyValue := map[string]any{
@@ -204,10 +205,11 @@ func SetDescribeAffectedFlagValueInCliArgs(flags *pflag.FlagSet, describe *Descr
 		case *[]string:
 			*v, err = flags.GetStringSlice(k)
 		default:
-			er := fmt.Errorf("unsupported type %T for flag %s", v, k)
-			errUtils.CheckErrorPrintAndExit(er, "", "")
+			return fmt.Errorf("unsupported type %T for flag %s", v, k)
 		}
-		errUtils.CheckErrorPrintAndExit(err, "", "")
+		if err != nil {
+			return err
+		}
 	}
 	// When uploading, always include dependents and settings for all affected components
 	if describe.Upload {
@@ -217,6 +219,7 @@ func SetDescribeAffectedFlagValueInCliArgs(flags *pflag.FlagSet, describe *Descr
 	if describe.Format == "" {
 		describe.Format = "json"
 	}
+	return nil
 }
 
 // Execute executes `describe affected` command.

@@ -56,7 +56,9 @@ func processCustomCommands(
 	// Build commands and their hierarchy from the alias map
 	for alias, fullCmd := range atmosConfig.CommandAliases {
 		parts := strings.Fields(fullCmd)
-		addCommandWithAlias(RootCmd, alias, parts)
+		if err := addCommandWithAlias(RootCmd, alias, parts); err != nil {
+			return err
+		}
 	}
 
 	if topLevel {
@@ -79,11 +81,11 @@ func processCustomCommands(
 				Use:   commandConfig.Name,
 				Short: commandConfig.Description,
 				Long:  commandConfig.Description,
-				PreRun: func(cmd *cobra.Command, args []string) {
-					preCustomCommand(cmd, args, parentCommand, commandConfig)
+				PreRunE: func(cmd *cobra.Command, args []string) error {
+					return preCustomCommand(cmd, args, parentCommand, commandConfig)
 				},
-				Run: func(cmd *cobra.Command, args []string) {
-					executeCustomCommand(atmosConfig, cmd, args, parentCommand, commandConfig)
+				RunE: func(cmd *cobra.Command, args []string) error {
+					return executeCustomCommand(atmosConfig, cmd, args, parentCommand, commandConfig)
 				},
 			}
 			customCommand.PersistentFlags().Bool("", false, doubleDashHint)
@@ -128,9 +130,9 @@ func processCustomCommands(
 }
 
 // addCommandWithAlias adds a command hierarchy based on the full command.
-func addCommandWithAlias(parentCmd *cobra.Command, alias string, parts []string) {
+func addCommandWithAlias(parentCmd *cobra.Command, alias string, parts []string) error {
 	if len(parts) == 0 {
-		return
+		return nil
 	}
 
 	// Check if a command with the current part already exists
@@ -144,16 +146,17 @@ func addCommandWithAlias(parentCmd *cobra.Command, alias string, parts []string)
 
 	// If the command doesn't exist, create it
 	if cmd == nil {
-		errUtils.CheckErrorPrintAndExit(fmt.Errorf("subcommand `%s` not found for alias `%s`", parts[0], alias), "", "")
+		return fmt.Errorf("subcommand `%s` not found for alias `%s`", parts[0], alias)
 	}
 
 	// If there are more parts, recurse for the next level
 	if len(parts) > 1 {
-		addCommandWithAlias(cmd, alias, parts[1:])
+		return addCommandWithAlias(cmd, alias, parts[1:])
 	} else if !Contains(cmd.Aliases, alias) {
 		// This is the last part of the command, add the alias
 		cmd.Aliases = append(cmd.Aliases, alias)
 	}
+	return nil
 }
 
 // processCommandAliases processes the command aliases.
@@ -181,13 +184,13 @@ func processCommandAliases(
 				Short:              aliasFor,
 				Long:               aliasFor,
 				FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: true},
-				Run: func(cmd *cobra.Command, args []string) {
-					err := cmd.ParseFlags(args)
-					errUtils.CheckErrorPrintAndExit(err, "", "")
+				RunE: func(cmd *cobra.Command, args []string) error {
+					if err := cmd.ParseFlags(args); err != nil {
+						return err
+					}
 
 					commandToRun := fmt.Sprintf("%s %s %s", os.Args[0], aliasCmd, strings.Join(args, " "))
-					err = e.ExecuteShell(commandToRun, commandToRun, currentDirPath, nil, false)
-					errUtils.CheckErrorPrintAndExit(err, "", "")
+					return e.ExecuteShell(commandToRun, commandToRun, currentDirPath, nil, false)
 				},
 			}
 
@@ -207,7 +210,7 @@ func preCustomCommand(
 	args []string,
 	parentCommand *cobra.Command,
 	commandConfig *schema.Command,
-) {
+) error {
 	var sb strings.Builder
 
 	// checking for zero arguments in config
@@ -223,11 +226,10 @@ func preCustomCommand(
 				)
 			}
 			log.Info(sb.String())
-			errUtils.Exit(1)
+			return errUtils.WithExitCode(errors.New("subcommand required"), 1)
 		} else {
 			// truly invalid, nothing to do
-			er := errors.New(fmt.Sprintf("The `%s` command has no steps or subcommands configured.", cmd.CommandPath()))
-			errUtils.CheckErrorPrintAndExit(er, "Invalid Command", "https://atmos.tools/cli/configuration/commands")
+			return fmt.Errorf("the `%s` command has no steps or subcommands configured", cmd.CommandPath())
 		}
 	}
 
@@ -256,7 +258,7 @@ func preCustomCommand(
 		if len(args) > 0 {
 			sb.WriteString(fmt.Sprintf("\nReceived %d argument(s): %s\n", len(args), strings.Join(args, ", ")))
 		}
-		errUtils.CheckErrorPrintAndExit(errors.New(sb.String()), "", "")
+		return errUtils.WithExitCode(errors.New(sb.String()), 1)
 	}
 
 	// Merge user-supplied arguments with defaults
@@ -271,7 +273,7 @@ func preCustomCommand(
 			} else {
 				// This theoretically shouldn't happen:
 				sb.WriteString(fmt.Sprintf("Missing required argument '%s' with no default!\n", arg.Name))
-				errUtils.CheckErrorPrintAndExit(errors.New(sb.String()), "", "")
+				return errUtils.WithExitCode(errors.New(sb.String()), 1)
 			}
 		}
 	}
@@ -284,8 +286,9 @@ func preCustomCommand(
 	// no "steps" means a sub command should be specified
 	if len(commandConfig.Steps) == 0 {
 		_ = cmd.Help()
-		errUtils.Exit(0)
+		return errUtils.WithExitCode(errors.New("subcommand required after help display"), 0)
 	}
+	return nil
 }
 
 // getTopLevelCommands returns the top-level commands.
@@ -306,7 +309,7 @@ func executeCustomCommand(
 	args []string,
 	parentCommand *cobra.Command,
 	commandConfig *schema.Command,
-) {
+) error {
 	var err error
 	args, trailingArgs := extractTrailingArgs(args, os.Args)
 	if commandConfig.Verbose {
@@ -334,11 +337,15 @@ func executeCustomCommand(
 		for _, fl := range commandConfig.Flags {
 			if fl.Type == "" || fl.Type == "string" {
 				providedFlag, err := flags.GetString(fl.Name)
-				errUtils.CheckErrorPrintAndExit(err, "", "")
+				if err != nil {
+					return err
+				}
 				flagsData[fl.Name] = providedFlag
 			} else if fl.Type == "bool" {
 				boolFlag, err := flags.GetBool(fl.Name)
-				errUtils.CheckErrorPrintAndExit(err, "", "")
+				if err != nil {
+					return err
+				}
 				flagsData[fl.Name] = boolFlag
 			}
 		}
@@ -355,23 +362,29 @@ func executeCustomCommand(
 		if commandConfig.ComponentConfig.Component != "" && commandConfig.ComponentConfig.Stack != "" {
 			// Process Go templates in the command's 'component_config.component'
 			component, err := e.ProcessTmpl(&atmosConfig, fmt.Sprintf("component-config-component-%d", i), commandConfig.ComponentConfig.Component, data, false)
-			errUtils.CheckErrorPrintAndExit(err, "", "")
+			if err != nil {
+				return err
+			}
 			if component == "" || component == "<no value>" {
-				errUtils.CheckErrorPrintAndExit(fmt.Errorf("the command defines an invalid 'component_config.component: %s' in '%s'",
-					commandConfig.ComponentConfig.Component, cfg.CliConfigFileName+u.DefaultStackConfigFileExtension), "", "")
+				return fmt.Errorf("the command defines an invalid 'component_config.component: %s' in '%s'",
+					commandConfig.ComponentConfig.Component, cfg.CliConfigFileName+u.DefaultStackConfigFileExtension)
 			}
 
 			// Process Go templates in the command's 'component_config.stack'
 			stack, err := e.ProcessTmpl(&atmosConfig, fmt.Sprintf("component-config-stack-%d", i), commandConfig.ComponentConfig.Stack, data, false)
-			errUtils.CheckErrorPrintAndExit(err, "", "")
+			if err != nil {
+				return err
+			}
 			if stack == "" || stack == "<no value>" {
-				errUtils.CheckErrorPrintAndExit(fmt.Errorf("the command defines an invalid 'component_config.stack: %s' in '%s'",
-					commandConfig.ComponentConfig.Stack, cfg.CliConfigFileName+u.DefaultStackConfigFileExtension), "", "")
+				return fmt.Errorf("the command defines an invalid 'component_config.stack: %s' in '%s'",
+					commandConfig.ComponentConfig.Stack, cfg.CliConfigFileName+u.DefaultStackConfigFileExtension)
 			}
 
 			// Get the config for the component in the stack
 			componentConfig, err := e.ExecuteDescribeComponent(component, stack, true, true, nil)
-			errUtils.CheckErrorPrintAndExit(err, "", "")
+			if err != nil {
+				return err
+			}
 			data["ComponentConfig"] = componentConfig
 		}
 
@@ -388,19 +401,23 @@ func executeCustomCommand(
 				err = fmt.Errorf("either 'value' or 'valueCommand' can be specified for the ENV var, but not both.\n"+
 					"Custom command '%s %s' defines 'value=%s' and 'valueCommand=%s' for the ENV var '%s'",
 					parentCommand.Name(), commandConfig.Name, value, valCommand, key)
-				errUtils.CheckErrorPrintAndExit(err, "", "")
+				return err
 			}
 
 			// If the command to get the value for the ENV var is provided, execute it
 			if valCommand != "" {
 				valCommandName := fmt.Sprintf("env-var-%s-valcommand", key)
 				res, err := u.ExecuteShellAndReturnOutput(valCommand, valCommandName, currentDirPath, env, false)
-				errUtils.CheckErrorPrintAndExit(err, "", "")
+				if err != nil {
+					return err
+				}
 				value = strings.TrimRight(res, "\r\n")
 			} else {
 				// Process Go templates in the values of the command's ENV vars
 				value, err = e.ProcessTmpl(&atmosConfig, fmt.Sprintf("env-var-%d", i), value, data, false)
-				errUtils.CheckErrorPrintAndExit(err, "", "")
+				if err != nil {
+					return err
+				}
 			}
 
 			// Add or update the environment variable in the env slice
@@ -418,15 +435,20 @@ func executeCustomCommand(
 		// Process Go templates in the command's steps.
 		// Steps support Go templates and have access to {{ .ComponentConfig.xxx.yyy.zzz }} Go template variables
 		commandToRun, err := e.ProcessTmpl(&atmosConfig, fmt.Sprintf("step-%d", i), step, data, false)
-		errUtils.CheckErrorPrintAndExit(err, "", "")
+		if err != nil {
+			return err
+		}
 
 		// Execute the command step
 		commandName := fmt.Sprintf("%s-step-%d", commandConfig.Name, i)
 
 		// Pass the prepared environment with custom variables to the subprocess
 		err = e.ExecuteShell(commandToRun, commandName, currentDirPath, env, false)
-		errUtils.CheckErrorPrintAndExit(err, "", "")
+		if err != nil {
+			return err
+		}
 	}
+	return nil
 }
 
 // Extracts native arguments (everything after "--") signifying the end of Atmos-specific arguments.
@@ -474,7 +496,7 @@ func cloneCommand(orig *schema.Command) (*schema.Command, error) {
 }
 
 // checkAtmosConfig checks Atmos config.
-func checkAtmosConfig(opts ...AtmosValidateOption) {
+func checkAtmosConfig(opts ...AtmosValidateOption) error {
 	vCfg := &ValidateConfig{
 		CheckStack: true, // Default value true to check the stack
 	}
@@ -485,15 +507,18 @@ func checkAtmosConfig(opts ...AtmosValidateOption) {
 	}
 
 	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
-	errUtils.CheckErrorPrintAndExit(err, "", "")
+	if err != nil {
+		return err
+	}
 
 	if vCfg.CheckStack {
 		atmosConfigExists, err := u.IsDirectory(atmosConfig.StacksBaseAbsolutePath)
 		if !atmosConfigExists || err != nil {
 			printMessageForMissingAtmosConfig(atmosConfig)
-			errUtils.Exit(1)
+			return errUtils.WithExitCode(errors.New("atmos config not found"), 1)
 		}
 	}
+	return nil
 }
 
 // printMessageForMissingAtmosConfig prints Atmos logo and instructions on how to configure and start using Atmos.
@@ -503,7 +528,9 @@ func printMessageForMissingAtmosConfig(atmosConfig schema.AtmosConfiguration) {
 
 	fmt.Println()
 	err := tuiUtils.PrintStyledText("ATMOS")
-	errUtils.CheckErrorPrintAndExit(err, "", "")
+	if err != nil {
+		log.Error("Failed to print styled text", "error", err)
+	}
 
 	telemetry.PrintTelemetryDisclosure()
 
@@ -596,23 +623,24 @@ func isVersionCommand() bool {
 }
 
 // handleHelpRequest shows help content and exits only if the first argument is "help" or "--help" or "-h".
-func handleHelpRequest(cmd *cobra.Command, args []string) {
+func handleHelpRequest(cmd *cobra.Command, args []string) error {
 	if (len(args) > 0 && args[0] == "help") || Contains(args, "--help") || Contains(args, "-h") {
 		cmd.Help()
-		errUtils.Exit(0)
+		return errUtils.WithExitCode(nil, 0)
 	}
+	return nil
 }
 
 // showUsageAndExit we display the Markdown usage or fallback to our custom usage.
 // Markdown usage is not compatible with all outputs. We should therefore have fallback option.
-func showUsageAndExit(cmd *cobra.Command, args []string) {
+func showUsageAndExit(cmd *cobra.Command, args []string) error {
 	if len(args) == 0 {
-		showErrorExampleFromMarkdown(cmd, "")
+		return showErrorExampleFromMarkdown(cmd, "")
 	}
 	if len(args) > 0 {
-		showErrorExampleFromMarkdown(cmd, args[0])
+		return showErrorExampleFromMarkdown(cmd, args[0])
 	}
-	errUtils.Exit(1)
+	return errUtils.WithExitCode(errors.New("invalid usage"), 1)
 }
 
 func showFlagUsageAndExit(cmd *cobra.Command, err error) error {
@@ -624,14 +652,15 @@ func showFlagUsageAndExit(cmd *cobra.Command, err error) error {
 	// Verbose mode is controlled by --verbose flag, ATMOS_VERBOSE env var, or config file.
 	formatted := errUtils.Format(flagErr, errUtils.DefaultFormatterConfig())
 	u.PrintfMessageToTUI("%s\n", formatted)
-	errUtils.Exit(1)
-	return nil
+	return errUtils.WithExitCode(flagErr, 1)
 }
 
 // getConfigAndStacksInfo processes the CLI config and stacks.
-func getConfigAndStacksInfo(commandName string, cmd *cobra.Command, args []string) schema.ConfigAndStacksInfo {
+func getConfigAndStacksInfo(commandName string, cmd *cobra.Command, args []string) (schema.ConfigAndStacksInfo, error) {
 	// Check Atmos configuration
-	checkAtmosConfig()
+	if err := checkAtmosConfig(); err != nil {
+		return schema.ConfigAndStacksInfo{}, err
+	}
 
 	var argsAfterDoubleDash []string
 	finalArgs := args
@@ -643,8 +672,10 @@ func getConfigAndStacksInfo(commandName string, cmd *cobra.Command, args []strin
 	}
 
 	info, err := e.ProcessCommandLineArgs(commandName, cmd, finalArgs, argsAfterDoubleDash)
-	errUtils.CheckErrorPrintAndExit(err, "", "")
-	return info
+	if err != nil {
+		return schema.ConfigAndStacksInfo{}, err
+	}
+	return info, nil
 }
 
 // isGitRepository checks if the current directory is within a git repository.
@@ -672,7 +703,7 @@ func verifyInsideGitRepo() bool {
 	return true
 }
 
-func showErrorExampleFromMarkdown(cmd *cobra.Command, arg string) {
+func showErrorExampleFromMarkdown(cmd *cobra.Command, arg string) error {
 	commandPath := cmd.CommandPath()
 	suggestions := []string{}
 	details := fmt.Sprintf("The command `%s` is not valid usage\n", commandPath)
@@ -698,10 +729,10 @@ func showErrorExampleFromMarkdown(cmd *cobra.Command, arg string) {
 			details = details + "* " + subCmd.Name() + "\n"
 		}
 	}
-	showUsageExample(cmd, details)
+	return showUsageExample(cmd, details)
 }
 
-func showUsageExample(cmd *cobra.Command, details string) {
+func showUsageExample(cmd *cobra.Command, details string) error {
 	contentName := strings.ReplaceAll(strings.ReplaceAll(cmd.CommandPath(), " ", "_"), "-", "_")
 	suggestion := fmt.Sprintf("\n\nRun `%s --help` for usage", cmd.CommandPath())
 	if exampleContent, ok := examples[contentName]; ok {
@@ -711,7 +742,7 @@ func showUsageExample(cmd *cobra.Command, details string) {
 	// Print error directly since markdown renderer may not be initialized yet (flag parsing errors).
 	fmt.Fprintf(os.Stderr, "Error: %s", details)
 	fmt.Fprintf(os.Stderr, "%s\n", suggestion)
-	errUtils.Exit(1)
+	return errUtils.WithExitCode(errors.New(details), 1)
 }
 
 func stackFlagCompletion(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {

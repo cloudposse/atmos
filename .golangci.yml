@@ -40,6 +40,10 @@ linters:
           msg: Use `viper.BindEnv` for new environment variables instead of `os.Getenv`
         - pattern: ^path\.Join$
           msg: Use `filepath.Join` for OS-appropriate path separators instead of `path.Join` (which always uses forward slashes)
+        - pattern: os\.Exit
+          msg: Do not call `os.Exit` directly; return errors with exit codes using `errUtils.WithExitCode()` and let main() handle exit
+        - pattern: log\.Fatal
+          msg: Do not use `log.Fatal`; return errors with exit codes using `errUtils.WithExitCode()` and let main() handle exit
       exclude-godoc-examples: false
       analyze-types: false
     funlen:
@@ -149,7 +153,6 @@ linters:
           - funlen
           - gocognit
           - gosec
-          - revive
         path: _test\.go$
       - linters:
           - cyclop

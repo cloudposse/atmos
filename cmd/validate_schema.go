@@ -45,7 +45,9 @@ and are compliant with expected formats, reducing configuration drift and runtim
 	Args:               cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		// Check Atmos configuration
-		checkAtmosConfig()
+		if err := checkAtmosConfig(); err != nil {
+			return err
+		}
 
 		schema := ""
 		key := ""

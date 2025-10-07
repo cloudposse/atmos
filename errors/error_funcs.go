@@ -59,8 +59,8 @@ func GetMarkdownRenderer() *markdown.Renderer {
 	return render
 }
 
-// CheckErrorAndPrint prints an error message.
-func CheckErrorAndPrint(err error, title string, suggestion string) {
+// HandleError captures error to Sentry (if configured) and prints formatted error to stderr.
+func HandleError(err error) {
 	if err == nil {
 		return
 	}
@@ -77,7 +77,7 @@ func CheckErrorAndPrint(err error, title string, suggestion string) {
 	}
 
 	// Fallback to old markdown renderer.
-	printMarkdownError(err, title, suggestion)
+	printMarkdownError(err, "", "")
 }
 
 // printFormattedError prints an error using the new formatter.
@@ -136,28 +136,6 @@ func printMarkdownError(err error, title string, suggestion string) {
 		log.Error(printErr)
 		log.Error(err)
 	}
-}
-
-// CheckErrorPrintAndExit prints an error message and exits with exit code 1.
-func CheckErrorPrintAndExit(err error, title string, suggestion string) {
-	if err == nil {
-		return
-	}
-
-	CheckErrorAndPrint(err, title, suggestion)
-
-	// Close Sentry before exiting.
-	if atmosConfig != nil && atmosConfig.Errors.Sentry.Enabled {
-		CloseSentry()
-	}
-
-	// Get exit code from error (supports custom codes and exec.ExitError).
-	exitCode := GetExitCode(err)
-
-	// TODO: Refactor so that we only call `os.Exit` in `main()` or `init()` functions.
-	// Exiting here makes it difficult to test.
-	// revive:disable-next-line:deep-exit
-	Exit(exitCode)
 }
 
 // Exit exits the program with the specified exit code.

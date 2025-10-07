@@ -69,11 +69,10 @@ func ExecuteWorkflow(
 	steps := workflowDefinition.Steps
 
 	if len(steps) == 0 {
-		errUtils.CheckErrorAndPrint(
-			ErrWorkflowNoSteps,
-			WorkflowErrTitle,
-			fmt.Sprintf("\n## Explanation\nWorkflow `%s` is empty and requires at least one step to execute.", workflow),
-		)
+		err := errUtils.Build(ErrWorkflowNoSteps).
+			WithExplanationf("Workflow `%s` is empty and requires at least one step to execute.", workflow).
+			Err()
+		errUtils.HandleError(err)
 		return ErrWorkflowNoSteps
 	}
 
@@ -97,11 +96,11 @@ func ExecuteWorkflow(
 
 		if len(steps) == 0 {
 			stepNames := lo.Map(workflowDefinition.Steps, func(step schema.WorkflowStep, _ int) string { return step.Name })
-			errUtils.CheckErrorAndPrint(
-				ErrInvalidFromStep,
-				WorkflowErrTitle,
-				fmt.Sprintf("\n## Explanation\nThe `--from-step` flag was set to `%s`, but this step does not exist in workflow `%s`. \n### Available steps:\n%s", fromStep, workflow, FormatList(stepNames)),
-			)
+			err := errUtils.Build(ErrInvalidFromStep).
+				WithExplanationf("The `--from-step` flag was set to `%s`, but this step does not exist in workflow `%s`.", fromStep, workflow).
+				WithHintf("Available steps:\n%s", FormatList(stepNames)).
+				Err()
+			errUtils.HandleError(err)
 			return ErrInvalidFromStep
 		}
 	}
@@ -159,11 +158,11 @@ func ExecuteWorkflow(
 				ExecuteShellCommand,
 				atmosConfig, "atmos", args, ".", []string{}, dryRun, "")
 		} else {
-			errUtils.CheckErrorAndPrint(
-				ErrInvalidWorkflowStepType,
-				WorkflowErrTitle,
-				fmt.Sprintf("\n## Explanation\nStep type `%s` is not supported. Each step must specify a valid type. \n### Available types:\n%s", commandType, FormatList([]string{"atmos", "shell"})),
-			)
+			err := errUtils.Build(ErrInvalidWorkflowStepType).
+				WithExplanationf("Step type `%s` is not supported. Each step must specify a valid type.", commandType).
+				WithHintf("Available types:\n%s", FormatList([]string{"atmos", "shell"})).
+				Err()
+			errUtils.HandleError(err)
 			return ErrInvalidWorkflowStepType
 		}
 
@@ -199,11 +198,11 @@ func ExecuteWorkflow(
 				}
 			}
 
-			errUtils.CheckErrorAndPrint(
-				ErrWorkflowStepFailed,
-				WorkflowErrTitle,
-				fmt.Sprintf("\n## Explanation\nThe following command failed to execute:\n```\n%s\n```\nTo resume the workflow from this step, run:\n```\n%s\n```", failedCmd, resumeCommand),
-			)
+			err := errUtils.Build(ErrWorkflowStepFailed).
+				WithExplanationf("The following command failed to execute:\n```\n%s\n```", failedCmd).
+				WithHintf("To resume the workflow from this step, run:\n```\n%s\n```", resumeCommand).
+				Err()
+			errUtils.HandleError(err)
 			return ErrWorkflowStepFailed
 		}
 	}

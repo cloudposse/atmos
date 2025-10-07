@@ -82,7 +82,9 @@ func TestDescribeWorkflows(t *testing.T) {
 	describeWorkflowsMock := exec.NewMockDescribeWorkflowsExec(ctrl)
 	describeWorkflowsMock.EXPECT().Execute(gomock.Any(), gomock.Any()).Return(nil).Times(1)
 	run := getRunnableDescribeWorkflowsCmd(
-		func(opts ...AtmosValidateOption) {},
+		func(opts ...AtmosValidateOption) error {
+			return nil
+		},
 		func(componentType string, cmd *cobra.Command, args, additionalArgsAndFlags []string) (schema.ConfigAndStacksInfo, error) {
 			return schema.ConfigAndStacksInfo{}, nil
 		},

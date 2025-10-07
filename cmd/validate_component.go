@@ -4,7 +4,6 @@ import (
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/spf13/cobra"
 
-	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
 )
 
@@ -18,7 +17,9 @@ var validateComponentCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		handleHelpRequest(cmd, args)
 		// Check Atmos configuration
-		checkAtmosConfig()
+		if err := checkAtmosConfig(); err != nil {
+			return err
+		}
 
 		component, stack, err := e.ExecuteValidateComponentCmd(cmd, args)
 		if err != nil {
@@ -39,9 +40,8 @@ func init() {
 	validateComponentCmd.PersistentFlags().StringSlice("module-paths", nil, "Specify the paths to OPA policy modules or catalogs used for validating the component configuration in the given stack.")
 	validateComponentCmd.PersistentFlags().Int("timeout", 0, "Validation timeout in seconds")
 
-	err := validateComponentCmd.MarkPersistentFlagRequired("stack")
-	if err != nil {
-		errUtils.CheckErrorPrintAndExit(err, "", "")
+	if err := validateComponentCmd.MarkPersistentFlagRequired("stack"); err != nil {
+		panic(err)
 	}
 
 	validateCmd.AddCommand(validateComponentCmd)

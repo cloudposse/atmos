@@ -292,13 +292,13 @@ func TestProcessCustomYamlTags(t *testing.T) {
 	atmosConfig, err := cfg.InitCliConfig(info, true)
 	assert.NoError(t, err)
 
-	d := processTagTerraformState(&atmosConfig, "!terraform.state component-1 foo", stack)
+	d, err := processTagTerraformState(&atmosConfig, "!terraform.state component-1 foo", stack)
 	assert.Equal(t, "component-1-a", d)
 
-	d = processTagTerraformState(&atmosConfig, "!terraform.state component-1 bar", stack)
+	d, err = processTagTerraformState(&atmosConfig, "!terraform.state component-1 bar", stack)
 	assert.Equal(t, "component-1-b", d)
 
-	d = processTagTerraformState(&atmosConfig, "!terraform.state component-1 nonprod baz", "")
+	d, err = processTagTerraformState(&atmosConfig, "!terraform.state component-1 nonprod baz", "")
 	assert.Equal(t, "component-1-c", d)
 
 	res, err := ExecuteDescribeComponent(
@@ -332,13 +332,13 @@ func TestProcessCustomYamlTags(t *testing.T) {
 		t.Fatalf("Failed to execute 'ExecuteTerraform': %v", err)
 	}
 
-	d = processTagTerraformState(&atmosConfig, "!terraform.state component-2 foo", stack)
+	d, err = processTagTerraformState(&atmosConfig, "!terraform.state component-2 foo", stack)
 	assert.Equal(t, "component-1-a", d)
 
-	d = processTagTerraformState(&atmosConfig, "!terraform.state component-2 nonprod bar", stack)
+	d, err = processTagTerraformState(&atmosConfig, "!terraform.state component-2 nonprod bar", stack)
 	assert.Equal(t, "component-1-b", d)
 
-	d = processTagTerraformState(&atmosConfig, "!terraform.state component-2 nonprod baz", "")
+	d, err = processTagTerraformState(&atmosConfig, "!terraform.state component-2 nonprod baz", "")
 	assert.Equal(t, "component-1-c", d)
 
 	res, err = ExecuteDescribeComponent(
@@ -376,4 +376,177 @@ func TestProcessCustomYamlTags(t *testing.T) {
 	val, err = u.EvaluateYqExpression(&atmosConfig, processed, ".vars.test_val")
 	assert.NoError(t, err)
 	assert.Equal(t, "jdbc:postgresql://component-1-a:5432/events", val)
+}
+
+func TestProcessCustomTags_ErrorPaths(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{
+		BasePath: "/tmp",
+	}
+
+	tests := []struct {
+		name        string
+		input       string
+		expectError bool
+		skipTags    []string
+	}{
+		{
+			name:        "template tag - empty after tag",
+			input:       "!template",
+			expectError: true,
+		},
+		{
+			name:        "exec tag - empty after tag",
+			input:       "!exec",
+			expectError: true,
+		},
+		{
+			name:        "store.get tag - empty after tag",
+			input:       "!store.get",
+			expectError: true,
+		},
+		{
+			name:        "store tag - empty after tag",
+			input:       "!store",
+			expectError: true,
+		},
+		{
+			name:        "terraform.output tag - empty after tag",
+			input:       "!terraform.output",
+			expectError: true,
+		},
+		{
+			name:        "terraform.state tag - empty after tag",
+			input:       "!terraform.state",
+			expectError: true,
+		},
+		{
+			name:        "env tag - empty after tag",
+			input:       "!env",
+			expectError: true,
+		},
+		{
+			name:        "unknown tag - passes through unchanged",
+			input:       "!unknown value",
+			expectError: false,
+		},
+		{
+			name:        "plain string - passes through unchanged",
+			input:       "plain string",
+			expectError: false,
+		},
+		{
+			name:        "template tag - skipped",
+			input:       "!template test.yaml",
+			skipTags:    []string{"template"},
+			expectError: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := processCustomTags(atmosConfig, tt.input, "test-stack", tt.skipTags)
+
+			if tt.expectError {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+				// For skipped or unknown tags, result should equal input
+				if len(tt.skipTags) > 0 || !strings.HasPrefix(tt.input, "!") || strings.HasPrefix(tt.input, "!unknown") {
+					assert.Equal(t, tt.input, result)
+				}
+			}
+		})
+	}
+}
+
+func TestProcessNodes_ErrorPropagation(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{
+		BasePath: "/tmp",
+	}
+
+	tests := []struct {
+		name        string
+		node        map[string]any
+		expectError bool
+	}{
+		{
+			name: "map with error in nested value",
+			node: map[string]any{
+				"outer": map[string]any{
+					"inner": "!template", // Empty - should error
+				},
+			},
+			expectError: true,
+		},
+		{
+			name: "slice with error element",
+			node: map[string]any{
+				"list": []any{
+					"valid-string",
+					"!exec", // Empty - should error
+				},
+			},
+			expectError: true,
+		},
+		{
+			name: "deeply nested error - 4 levels",
+			node: map[string]any{
+				"l1": map[string]any{
+					"l2": []any{
+						map[string]any{
+							"l3": map[string]any{
+								"l4": "!terraform.output", // Empty - should error
+							},
+						},
+					},
+				},
+			},
+			expectError: true,
+		},
+		{
+			name: "valid nested structure",
+			node: map[string]any{
+				"key1": "value1",
+				"key2": map[string]any{
+					"nested": "value2",
+				},
+				"key3": []any{"item1", "item2"},
+			},
+			expectError: false,
+		},
+		{
+			name: "plain string value - no processing",
+			node: map[string]any{
+				"value": "plain string",
+			},
+			expectError: false,
+		},
+		{
+			name: "integer value - no processing",
+			node: map[string]any{
+				"number": 42,
+			},
+			expectError: false,
+		},
+		{
+			name: "boolean value - no processing",
+			node: map[string]any{
+				"flag": true,
+			},
+			expectError: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := processNodes(atmosConfig, tt.node, "test-stack", []string{})
+
+			if tt.expectError {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+				assert.NotNil(t, result)
+			}
+		})
+	}
 }

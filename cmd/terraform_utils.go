@@ -15,7 +15,10 @@ import (
 )
 
 func runHooks(event h.HookEvent, cmd *cobra.Command, args []string) error {
-	info := getConfigAndStacksInfo("terraform", cmd, append([]string{cmd.Name()}, args...))
+	info, err := getConfigAndStacksInfo("terraform", cmd, append([]string{cmd.Name()}, args...))
+	if err != nil {
+		return err
+	}
 
 	// Initialize the CLI config
 	atmosConfig, err := cfg.InitCliConfig(info, true)
@@ -30,9 +33,8 @@ func runHooks(event h.HookEvent, cmd *cobra.Command, args []string) error {
 
 	if hooks != nil && hooks.HasHooks() {
 		log.Info("Running hooks", "event", event)
-		err := hooks.RunAll(event, &atmosConfig, &info, cmd, args)
-		if err != nil {
-			errUtils.CheckErrorPrintAndExit(err, "", "")
+		if err := hooks.RunAll(event, &atmosConfig, &info, cmd, args); err != nil {
+			return err
 		}
 	}
 
@@ -40,30 +42,44 @@ func runHooks(event h.HookEvent, cmd *cobra.Command, args []string) error {
 }
 
 func terraformRun(cmd *cobra.Command, actualCmd *cobra.Command, args []string) error {
-	info := getConfigAndStacksInfo(cfg.TerraformComponentType, cmd, args)
+	info, err := getConfigAndStacksInfo(cfg.TerraformComponentType, cmd, args)
+	if err != nil {
+		return err
+	}
 
 	if info.NeedHelp {
-		err := actualCmd.Usage()
-		errUtils.CheckErrorPrintAndExit(err, "", "")
+		if err := actualCmd.Usage(); err != nil {
+			return err
+		}
 		return nil
 	}
 
 	flags := cmd.Flags()
 
 	processTemplates, err := flags.GetBool("process-templates")
-	errUtils.CheckErrorPrintAndExit(err, "", "")
+	if err != nil {
+		return err
+	}
 
 	processYamlFunctions, err := flags.GetBool("process-functions")
-	errUtils.CheckErrorPrintAndExit(err, "", "")
+	if err != nil {
+		return err
+	}
 
 	skip, err := flags.GetStringSlice("skip")
-	errUtils.CheckErrorPrintAndExit(err, "", "")
+	if err != nil {
+		return err
+	}
 
 	components, err := flags.GetStringSlice("components")
-	errUtils.CheckErrorPrintAndExit(err, "", "")
+	if err != nil {
+		return err
+	}
 
 	dryRun, err := flags.GetBool("dry-run")
-	errUtils.CheckErrorPrintAndExit(err, "", "")
+	if err != nil {
+		return err
+	}
 
 	info.ProcessTemplates = processTemplates
 	info.ProcessFunctions = processYamlFunctions
@@ -72,12 +88,15 @@ func terraformRun(cmd *cobra.Command, actualCmd *cobra.Command, args []string) e
 	info.DryRun = dryRun
 
 	identityFlag, err := flags.GetString("identity")
-	errUtils.CheckErrorPrintAndExit(err, "", "")
+	if err != nil {
+		return err
+	}
 
 	info.Identity = identityFlag
 	// Check Terraform Single-Component and Multi-Component flags
-	err = checkTerraformFlags(&info)
-	errUtils.CheckErrorPrintAndExit(err, "", "")
+	if err := checkTerraformFlags(&info); err != nil {
+		return err
+	}
 
 	// Execute `atmos terraform <sub-command> --affected` or `atmos terraform <sub-command> --affected --stack <stack>`
 	if info.Affected {
@@ -99,8 +118,9 @@ func terraformRun(cmd *cobra.Command, actualCmd *cobra.Command, args []string) e
 		a.Upload = false
 		a.OutputFile = ""
 
-		err = e.ExecuteTerraformAffected(&a, &info)
-		errUtils.CheckErrorPrintAndExit(err, "", "")
+		if err = e.ExecuteTerraformAffected(&a, &info); err != nil {
+			return err
+		}
 		return nil
 	}
 
@@ -110,23 +130,18 @@ func terraformRun(cmd *cobra.Command, actualCmd *cobra.Command, args []string) e
 	// `--query <yq-expression>`
 	// `--stack` (and the `component` argument is not passed)
 	if info.All || len(info.Components) > 0 || info.Query != "" || (info.Stack != "" && info.ComponentFromArg == "") {
-		err = e.ExecuteTerraformQuery(&info)
-		errUtils.CheckErrorPrintAndExit(err, "", "")
+		if err = e.ExecuteTerraformQuery(&info); err != nil {
+			return err
+		}
 		return nil
 	}
 
 	// Execute `atmos terraform <sub-command> <component> --stack <stack>`
 	err = e.ExecuteTerraform(info)
-	// For plan-diff, ExecuteTerraform will call OsExit directly if there are differences
-	// So if we get here, it means there were no differences or there was an error
 	if err != nil {
-		if errors.Is(err, errUtils.ErrPlanHasDiff) {
-			// Print the error message but return the error to be handled by main.go
-			errUtils.CheckErrorAndPrint(err, "", "")
-			return err
-		}
-		// For other errors, continue with existing behavior
-		errUtils.CheckErrorPrintAndExit(err, "", "")
+		// All errors, including ErrPlanHasDiff, should be returned to main.go
+		// main.go will handle exit code extraction via GetExitCode()
+		return err
 	}
 	return nil
 }

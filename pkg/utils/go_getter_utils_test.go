@@ -62,5 +62,5 @@ func TestValidateURI_ErrorPaths(t *testing.T) {
 func TestMain(m *testing.M) {
 	code := m.Run()
 	getter.Detectors = originalDetectors
-	errUtils.Exit(code)
+	os.Exit(code) //nolint:revive // TestMain must call os.Exit to propagate test exit code
 }

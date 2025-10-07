@@ -9,7 +9,6 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 
-	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -50,9 +49,8 @@ func TestExecuteTerraformGeneratePlanfileCmd(t *testing.T) {
 		Short:              "Generate a planfile for a Terraform component",
 		Long:               "This command generates a `planfile` for a specified Atmos Terraform component.",
 		FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
-		Run: func(cmd *cobra.Command, args []string) {
-			err := ExecuteTerraformGeneratePlanfileCmd(cmd, args)
-			errUtils.CheckErrorPrintAndExit(err, "", "")
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return ExecuteTerraformGeneratePlanfileCmd(cmd, args)
 		},
 	}
 

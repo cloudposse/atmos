@@ -3,7 +3,6 @@ package cmd
 import (
 	"github.com/spf13/cobra"
 
-	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
 )
 
@@ -15,9 +14,13 @@ var helmfileGenerateVarfileCmd = &cobra.Command{
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 	ValidArgsFunction:  ComponentsArgCompletion,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		handleHelpRequest(cmd, args)
+		if err := handleHelpRequest(cmd, args); err != nil {
+			return err
+		}
 		// Check Atmos configuration
-		checkAtmosConfig()
+		if err := checkAtmosConfig(); err != nil {
+			return err
+		}
 
 		err := e.ExecuteHelmfileGenerateVarfileCmd(cmd, args)
 		return err
@@ -29,8 +32,9 @@ func init() {
 	AddStackCompletion(helmfileGenerateVarfileCmd)
 	helmfileGenerateVarfileCmd.PersistentFlags().StringP("file", "f", "", "Generate a variables file for the specified Helmfile component in the given stack and write the output to the provided file path.")
 
-	err := helmfileGenerateVarfileCmd.MarkPersistentFlagRequired("stack")
-	errUtils.CheckErrorPrintAndExit(err, "", "")
+	if err := helmfileGenerateVarfileCmd.MarkPersistentFlagRequired("stack"); err != nil {
+		panic(err)
+	}
 
 	helmfileGenerateCmd.AddCommand(helmfileGenerateVarfileCmd)
 }

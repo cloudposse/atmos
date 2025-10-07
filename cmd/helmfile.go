@@ -25,11 +25,16 @@ func init() {
 }
 
 func helmfileRun(cmd *cobra.Command, commandName string, args []string) error {
-	handleHelpRequest(cmd, args)
+	if err := handleHelpRequest(cmd, args); err != nil {
+		return err
+	}
 	diffArgs := []string{commandName}
 	diffArgs = append(diffArgs, args...)
-	info := getConfigAndStacksInfo("helmfile", cmd, diffArgs)
+	info, err := getConfigAndStacksInfo("helmfile", cmd, diffArgs)
+	if err != nil {
+		return err
+	}
 	info.CliArgs = []string{"helmfile", commandName}
-	err := e.ExecuteHelmfile(info)
+	err = e.ExecuteHelmfile(info)
 	return err
 }

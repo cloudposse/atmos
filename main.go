@@ -1,7 +1,6 @@
 package main
 
 import (
-	"errors"
 	"os"
 	"os/signal"
 	"syscall"
@@ -36,16 +35,18 @@ func main() {
 
 	err := cmd.Execute()
 	if err != nil {
-		// Check for typed exit code error first to preserve subcommand exit codes.
-		var exitCodeErr errUtils.ExitCodeError
-		if errors.As(err, &exitCodeErr) {
-			log.Debug("Exiting with subcommand exit code", "code", exitCodeErr.Code)
-			errUtils.Exit(exitCodeErr.Code)
+		// Use GetExitCode() to extract exit code from error chain.
+		// This handles ExitCodeError, exec.ExitError (terraform/helmfile), and WithExitCode errors.
+		exitCode := errUtils.GetExitCode(err)
+
+		// Format and print the error using the error formatter.
+		formatted := errUtils.Format(err, errUtils.DefaultFormatterConfig())
+		if formatted != "" {
+			os.Stderr.WriteString(formatted)
+			os.Stderr.WriteString("\n")
 		}
-		if errors.Is(err, errUtils.ErrPlanHasDiff) {
-			log.Debug("Exiting with code 2 due to plan differences")
-			errUtils.Exit(2)
-		}
-		errUtils.CheckErrorPrintAndExit(err, "", "")
+
+		log.Debug("Exiting with code", "code", exitCode)
+		os.Exit(exitCode) //nolint:revive // main() is allowed to call os.Exit
 	}
 }

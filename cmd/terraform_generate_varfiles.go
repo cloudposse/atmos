@@ -3,7 +3,6 @@ package cmd
 import (
 	"github.com/spf13/cobra"
 
-	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
 )
 
@@ -16,7 +15,9 @@ var terraformGenerateVarfilesCmd = &cobra.Command{
 	Args:               cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		// Check Atmos configuration
-		checkAtmosConfig()
+		if err := checkAtmosConfig(); err != nil {
+			return err
+		}
 
 		err := e.ExecuteTerraformGenerateVarfilesCmd(cmd, args)
 		return err
@@ -40,9 +41,8 @@ func init() {
 
 	terraformGenerateVarfilesCmd.PersistentFlags().String("format", "hcl", "Specify the output format. Supported formats: `hcl`, `json`, `backend-config` (`hcl` is default).")
 
-	err := terraformGenerateVarfilesCmd.MarkPersistentFlagRequired("file-template")
-	if err != nil {
-		errUtils.CheckErrorPrintAndExit(err, "", "")
+	if err := terraformGenerateVarfilesCmd.MarkPersistentFlagRequired("file-template"); err != nil {
+		panic(err)
 	}
 
 	terraformGenerateCmd.AddCommand(terraformGenerateVarfilesCmd)
