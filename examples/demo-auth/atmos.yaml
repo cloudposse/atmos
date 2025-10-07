@@ -1,0 +1,85 @@
+base_path: "./"
+
+schemas:
+  atmos:
+    manifest: "schemas/atmos-manifest.json"
+
+components:
+  terraform:
+    base_path: "components/terraform"
+    apply_auto_approve: false
+    deploy_run_init: true
+    init_run_reconfigure: true
+    auto_generate_backend_file: false
+
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "**/*"
+  excluded_paths:
+    - "**/_defaults.yaml"
+  name_template: "{{.vars.stage}}"
+
+logs:
+  file: "/dev/stderr"
+  level: Info
+
+# Custom CLI commands
+commands:
+  - name: "test"
+    description: "Run all tests"
+    steps:
+      - atmos validate stacks
+      # Test dev stack
+      - atmos terraform plan whoami -s dev --identity oidc
+      - atmos terraform apply whoami -s dev -auto-approve --identity oidc
+      - atmos terraform destroy whoami -s dev -auto-approve --identity oidc
+
+# Auth configuration demo (stub values)
+auth:
+  logs:
+    level: Debug
+  providers:
+    oidc:
+      kind: github/oidc
+      region: us-east-1
+      spec:
+        audience: sts.us-east-1.amazonaws.com
+    idp-acme-saml:
+      kind: aws/saml
+      url: https://mock
+      region: us-east-1
+    idp-acme-sso:
+      kind: aws/iam-identity-center
+      start_url: https://mock
+      region: us-east-1
+
+  identities:
+    # Used in tests
+    oidc:
+      kind: aws/assume-role
+      via:
+        provider: oidc
+      principal:
+        assume_role: arn:aws:iam::111111111111:role/ExampleRole
+
+    # Example identities mapping to providers
+    saml:
+      kind: aws/assume-role
+      via:
+        provider: idp-acme-saml
+      principal:
+        assume_role: arn:aws:iam::111111111111:role/ExampleRole
+
+    sso:
+      kind: aws/assume-role
+      via:
+        provider: idp-acme-sso
+      principal:
+        assume_role: arn:aws:iam::111111111111:role/ExampleRole
+
+    superuser:
+      enabled: false
+      kind: aws/user
+      credentials:
+        region: us-east-1

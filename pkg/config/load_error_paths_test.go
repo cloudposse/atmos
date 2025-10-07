@@ -248,7 +248,7 @@ func TestReadConfigFileContent_ReadError(t *testing.T) {
 	// Try to read a nonexistent file
 	_, err := readConfigFileContent("/nonexistent/path/atmos.yaml")
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "read config file")
+	assert.ErrorIs(t, err, errUtils.ErrReadConfig)
 }
 
 // TestProcessConfigImportsAndReapply_ParseMainConfigError tests error path at load.go:321-323.
@@ -449,7 +449,7 @@ func TestMergeDefaultImports_NotDirectory(t *testing.T) {
 
 	err = mergeDefaultImports(filePath, v)
 	assert.Error(t, err)
-	assert.ErrorIs(t, err, ErrAtmosDIrConfigNotFound)
+	assert.ErrorIs(t, err, errUtils.ErrAtmosDirConfigNotFound)
 }
 
 // TestMergeConfigFile_ReadFileError tests error path at load.go:550-553.

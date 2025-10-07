@@ -101,10 +101,27 @@ var RootCmd = &cobra.Command{
 			}
 		}
 
+		// Check for --version flag (uses same code path as version command).
+		if cmd.Flags().Changed("version") {
+			if versionFlag, err := cmd.Flags().GetBool("version"); err == nil && versionFlag {
+				versionErr := e.NewVersionExec(&tmpConfig).Execute(false, "")
+				if versionErr != nil {
+					errUtils.CheckErrorPrintAndExit(versionErr, "", "")
+				}
+				utils.OsExit(0)
+				return
+			}
+		}
+
 		// Enable performance tracking if heatmap flag is set.
 		// P95 latency tracking via HDR histogram is automatically enabled.
 		if showHeatmap, _ := cmd.Flags().GetBool("heatmap"); showHeatmap {
 			perf.EnableTracking(true)
+		}
+
+		// Print telemetry disclosure if needed (skip for completion commands and when CLI config not found).
+		if !isCompletionCommand(cmd) && err == nil {
+			telemetry.PrintTelemetryDisclosure()
 		}
 	},
 	PersistentPostRun: func(cmd *cobra.Command, args []string) {
@@ -456,6 +473,32 @@ func Execute() error {
 	return err
 }
 
+// isCompletionCommand checks if the current invocation is for shell completion.
+// This includes both user-visible completion commands and Cobra's internal
+// hidden completion commands (__complete, __completeNoDesc).
+// It works with both direct CLI invocations and programmatic SetArgs() calls.
+func isCompletionCommand(cmd *cobra.Command) bool {
+	if cmd == nil {
+		return false
+	}
+
+	// Check the command name directly from the Cobra command
+	// This works for both os.Args and SetArgs() invocations
+	cmdName := cmd.Name()
+	if cmdName == "completion" || cmdName == "__complete" || cmdName == "__completeNoDesc" {
+		return true
+	}
+
+	// Also check for shell completion environment variables
+	// Cobra sets these when generating completions
+	//nolint:forbidigo // These are external shell variables, not Atmos config
+	if os.Getenv("COMP_LINE") != "" || os.Getenv("_ARGCOMPLETE") != "" {
+		return true
+	}
+
+	return false
+}
+
 // getInvalidCommandName extracts the invalid command name from an error message.
 func getInvalidCommandName(input string) string {
 	// Regular expression to match the command name inside quotes.
@@ -515,6 +558,8 @@ func init() {
 
 	RootCmd.PersistentFlags().String("redirect-stderr", "", "File descriptor to redirect `stderr` to. "+
 		"Errors can be redirected to any file or any standard file descriptor (including `/dev/null`)")
+	RootCmd.PersistentFlags().Bool("version", false, "Display the Atmos CLI version")
+	RootCmd.PersistentFlags().Lookup("version").DefValue = ""
 
 	RootCmd.PersistentFlags().String("logs-level", "Info", "Logs level. Supported log levels are Trace, Debug, Info, Warning, Off. If the log level is set to Off, Atmos will not log any messages")
 	RootCmd.PersistentFlags().String("logs-file", "/dev/stderr", "The file to write Atmos logs to. Logs can be written to any file or any standard file descriptor, including '/dev/stdout', '/dev/stderr' and '/dev/null'")
@@ -587,8 +632,6 @@ func initCobraConfig() {
 				errUtils.CheckErrorPrintAndExit(err, "", "")
 			}
 
-			telemetry.PrintTelemetryDisclosure()
-
 			if err := oldUsageFunc(command); err != nil {
 				errUtils.CheckErrorPrintAndExit(err, "", "")
 			}
@@ -619,7 +662,6 @@ func initCobraConfig() {
 			fmt.Println()
 			err := tuiUtils.PrintStyledText("ATMOS")
 			errUtils.CheckErrorPrintAndExit(err, "", "")
-			telemetry.PrintTelemetryDisclosure()
 
 			b.HelpFunc(command, args)
 			if err := command.Usage(); err != nil {
