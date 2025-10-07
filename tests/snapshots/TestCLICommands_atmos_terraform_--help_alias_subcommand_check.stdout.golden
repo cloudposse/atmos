@@ -221,6 +221,8 @@ Global Flags:
                                      standard file descriptor (including
                                      /dev/null)
 
+        --version                    Display the Atmos CLI version
+
 
 Examples:
 
