@@ -33,6 +33,8 @@ var commonFlags = []string{
 	cfg.TerraformDirFlag,
 	cfg.HelmfileCommandFlag,
 	cfg.HelmfileDirFlag,
+	cfg.AnsibleCommandFlag,
+	cfg.AnsibleDirFlag,
 	cfg.CliConfigDirFlag,
 	cfg.StackDirFlag,
 	cfg.BasePathFlag,
@@ -115,6 +117,8 @@ func ProcessCommandLineArgs(
 	configAndStacksInfo.TerraformDir = argsAndFlagsInfo.TerraformDir
 	configAndStacksInfo.HelmfileCommand = argsAndFlagsInfo.HelmfileCommand
 	configAndStacksInfo.HelmfileDir = argsAndFlagsInfo.HelmfileDir
+	configAndStacksInfo.AnsibleCommand = argsAndFlagsInfo.AnsibleCommand
+	configAndStacksInfo.AnsibleDir = argsAndFlagsInfo.AnsibleDir
 	configAndStacksInfo.StacksDir = argsAndFlagsInfo.StacksDir
 	configAndStacksInfo.ConfigDir = argsAndFlagsInfo.ConfigDir
 	configAndStacksInfo.WorkflowsDir = argsAndFlagsInfo.WorkflowsDir
@@ -255,6 +259,32 @@ func processArgsAndFlags(
 				return info, fmt.Errorf(errFlagFormat, errUtils.ErrInvalidFlag, arg)
 			}
 			info.HelmfileDir = helmfileDirFlagParts[1]
+		}
+
+		if arg == cfg.AnsibleCommandFlag {
+			if len(inputArgsAndFlags) <= (i + 1) {
+				return info, fmt.Errorf(errUtils.ErrStringWrappingFormat, errUtils.ErrInvalidFlag, arg)
+			}
+			info.AnsibleCommand = inputArgsAndFlags[i+1]
+		} else if strings.HasPrefix(arg+"=", cfg.AnsibleCommandFlag) {
+			ansibleCommandFlagParts := strings.Split(arg, "=")
+			if len(ansibleCommandFlagParts) != 2 {
+				return info, fmt.Errorf(errUtils.ErrStringWrappingFormat, errUtils.ErrInvalidFlag, arg)
+			}
+			info.AnsibleCommand = ansibleCommandFlagParts[1]
+		}
+
+		if arg == cfg.AnsibleDirFlag {
+			if len(inputArgsAndFlags) <= (i + 1) {
+				return info, fmt.Errorf(errUtils.ErrStringWrappingFormat, errUtils.ErrInvalidFlag, arg)
+			}
+			info.AnsibleDir = inputArgsAndFlags[i+1]
+		} else if strings.HasPrefix(arg+"=", cfg.AnsibleDirFlag) {
+			ansibleDirFlagParts := strings.Split(arg, "=")
+			if len(ansibleDirFlagParts) != 2 {
+				return info, fmt.Errorf(errUtils.ErrStringWrappingFormat, errUtils.ErrInvalidFlag, arg)
+			}
+			info.AnsibleDir = ansibleDirFlagParts[1]
 		}
 
 		if arg == cfg.CliConfigDirFlag {
