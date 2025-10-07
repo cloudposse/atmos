@@ -34,11 +34,11 @@ function record() {
             script -q $output_ansi bash -c "cd $demo_path && ($command)" > /dev/null
         fi
     else
-        # Linux-specific syntax - script needs to write to the ansi file, not /dev/null
+        # Linux-specific syntax
         if [ "${extension}" = "sh" ]; then
-            script -q -e -c "$command" $output_ansi
+            script -q -f -c "$command" $output_ansi < /dev/null
         else
-            script -q -e -c "cd $demo_path && $command" $output_ansi
+            script -q -f -c "cd $demo_path && $command" $output_ansi < /dev/null
         fi
     fi
     postprocess_ansi $output_ansi
