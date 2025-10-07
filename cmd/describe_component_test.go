@@ -12,19 +12,10 @@ import (
 func TestDescribeComponentCmd_Error(t *testing.T) {
 	stacksPath := "../tests/fixtures/scenarios/terraform-apply-affected"
 
-	err := os.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
-	assert.NoError(t, err, "Setting 'ATMOS_CLI_CONFIG_PATH' environment variable should execute without error")
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
+	t.Setenv("ATMOS_BASE_PATH", stacksPath)
 
-	err = os.Setenv("ATMOS_BASE_PATH", stacksPath)
-	assert.NoError(t, err, "Setting 'ATMOS_BASE_PATH' environment variable should execute without error")
-
-	// Unset ENV variables after testing
-	defer func() {
-		os.Unsetenv("ATMOS_CLI_CONFIG_PATH")
-		os.Unsetenv("ATMOS_BASE_PATH")
-	}()
-
-	err = describeComponentCmd.RunE(describeComponentCmd, []string{})
+	err := describeComponentCmd.RunE(describeComponentCmd, []string{})
 	assert.Error(t, err, "describe component command should return an error when called with no parameters")
 }
 
@@ -45,15 +36,8 @@ func TestDescribeComponentCmd_ProvenanceWithFormatJSON(t *testing.T) {
 		t.Skipf("Skipping test: %s directory not found", stacksPath)
 	}
 
-	err := os.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
-	require.NoError(t, err)
-	err = os.Setenv("ATMOS_BASE_PATH", stacksPath)
-	require.NoError(t, err)
-
-	defer func() {
-		os.Unsetenv("ATMOS_CLI_CONFIG_PATH")
-		os.Unsetenv("ATMOS_BASE_PATH")
-	}()
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
+	t.Setenv("ATMOS_BASE_PATH", stacksPath)
 
 	// Reset flags for this test
 	describeComponentCmd.PersistentFlags().Set("stack", "plat-ue2-dev")
@@ -67,7 +51,7 @@ func TestDescribeComponentCmd_ProvenanceWithFormatJSON(t *testing.T) {
 	}()
 
 	// Note: JSON format with provenance should work (provenance is embedded in the data)
-	err = describeComponentCmd.RunE(describeComponentCmd, []string{"vpc"})
+	err := describeComponentCmd.RunE(describeComponentCmd, []string{"vpc"})
 	// The command might fail due to missing files in test environment, but we're testing flag parsing
 	// If it fails, it should be for a reason other than flag parsing
 	if err != nil {
@@ -84,15 +68,8 @@ func TestDescribeComponentCmd_ProvenanceWithFileOutput(t *testing.T) {
 		t.Skipf("Skipping test: %s directory not found", stacksPath)
 	}
 
-	err := os.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
-	require.NoError(t, err)
-	err = os.Setenv("ATMOS_BASE_PATH", stacksPath)
-	require.NoError(t, err)
-
-	defer func() {
-		os.Unsetenv("ATMOS_CLI_CONFIG_PATH")
-		os.Unsetenv("ATMOS_BASE_PATH")
-	}()
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
+	t.Setenv("ATMOS_BASE_PATH", stacksPath)
 
 	// Create a temporary file for output
 	tmpFile := filepath.Join(os.TempDir(), "test-provenance-output.yaml")
@@ -109,7 +86,7 @@ func TestDescribeComponentCmd_ProvenanceWithFileOutput(t *testing.T) {
 		describeComponentCmd.PersistentFlags().Set("provenance", "false")
 	}()
 
-	err = describeComponentCmd.RunE(describeComponentCmd, []string{"vpc"})
+	err := describeComponentCmd.RunE(describeComponentCmd, []string{"vpc"})
 	// The command might fail due to missing files in test environment
 	if err != nil {
 		assert.NotContains(t, err.Error(), "unknown flag", "Should not fail due to unknown flag")
