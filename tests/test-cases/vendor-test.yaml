@@ -13,6 +13,7 @@ tests:
       exit_code: 1
 
   - name: atmos_vendor_pull
+    short: false
     enabled: true
     description: "Ensure atmos vendor pull command executes without errors and files are present."
     workdir: "fixtures/scenarios/vendor"
@@ -44,6 +45,7 @@ tests:
       exit_code: 0
 
   - name: atmos_vendor_pull_oci
+    short: false
     enabled: true
     description: "Ensure 'atmos vendor pull --tags' command executes without errors and files are present."
     workdir: "fixtures/scenarios/vendor"

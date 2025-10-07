@@ -13,6 +13,7 @@ import (
 
 	"github.com/cloudposse/atmos/pkg/auth/types"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/tests"
 )
 
 func TestNewAssumeRoleIdentity(t *testing.T) {
@@ -199,6 +200,9 @@ func TestAssumeRoleIdentity_Validate_SetsRegion(t *testing.T) {
 }
 
 func TestAssumeRoleIdentity_newSTSClient_RegionFallbackAndPersist(t *testing.T) {
+	// This test requires AWS credentials to create an STS client
+	tests.RequireAWSProfile(t, "cplive-core-gbl-identity")
+
 	// If identity.region and base.Region are empty, default to us-east-1 and persist.
 	i := &assumeRoleIdentity{name: "role", config: &schema.Identity{Kind: "aws/assume-role", Principal: map[string]any{"assume_role": "arn:aws:iam::123:role/x"}}}
 	base := &types.AWSCredentials{AccessKeyID: "AKIA", SecretAccessKey: "SECRET"}
