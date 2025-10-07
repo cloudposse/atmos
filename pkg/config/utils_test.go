@@ -308,7 +308,7 @@ func Test_processEnvVars(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			// Set up environment variables for the test case
 			for k, v := range tt.envVars {
-				os.Setenv(k, v)
+				t.Setenv(k, v)
 			}
 
 			// Clean up environment variables after the test
@@ -338,19 +338,8 @@ func Test_processEnvVars(t *testing.T) {
 func TestFindAllStackConfigsInPathsForStack(t *testing.T) {
 	stacksPath := "../../tests/fixtures/scenarios/stack-templates-2"
 
-	err := os.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
-	assert.NoError(t, err, "Setting 'ATMOS_CLI_CONFIG_PATH' environment variable should execute without error")
-
-	err = os.Setenv("ATMOS_BASE_PATH", stacksPath)
-	assert.NoError(t, err, "Setting 'ATMOS_BASE_PATH' environment variable should execute without error")
-
-	// Unset env values after testing
-	defer func() {
-		err := os.Unsetenv("ATMOS_BASE_PATH")
-		assert.NoError(t, err)
-		err = os.Unsetenv("ATMOS_CLI_CONFIG_PATH")
-		assert.NoError(t, err)
-	}()
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
+	t.Setenv("ATMOS_BASE_PATH", stacksPath)
 
 	configAndStacksInfo := schema.ConfigAndStacksInfo{}
 	atmosConfig, err := InitCliConfig(configAndStacksInfo, true)
@@ -369,19 +358,8 @@ func TestFindAllStackConfigsInPathsForStack(t *testing.T) {
 func TestFindAllStackConfigsInPaths(t *testing.T) {
 	stacksPath := "../../tests/fixtures/scenarios/atmos-overrides-section"
 
-	err := os.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
-	assert.NoError(t, err, "Setting 'ATMOS_CLI_CONFIG_PATH' environment variable should execute without error")
-
-	err = os.Setenv("ATMOS_BASE_PATH", stacksPath)
-	assert.NoError(t, err, "Setting 'ATMOS_BASE_PATH' environment variable should execute without error")
-
-	// Unset env values after testing
-	defer func() {
-		err := os.Unsetenv("ATMOS_BASE_PATH")
-		assert.NoError(t, err)
-		err = os.Unsetenv("ATMOS_CLI_CONFIG_PATH")
-		assert.NoError(t, err)
-	}()
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
+	t.Setenv("ATMOS_BASE_PATH", stacksPath)
 
 	configAndStacksInfo := schema.ConfigAndStacksInfo{}
 	atmosConfig, err := InitCliConfig(configAndStacksInfo, true)

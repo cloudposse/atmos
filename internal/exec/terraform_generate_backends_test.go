@@ -37,9 +37,7 @@ func TestExecuteTerraformGenerateBackends(t *testing.T) {
 		}
 
 		// Set ATMOS_LOGS_LEVEL to suppress debug output
-		originalLogLevel := os.Getenv("ATMOS_LOGS_LEVEL")
-		os.Setenv("ATMOS_LOGS_LEVEL", "Error")
-		defer os.Setenv("ATMOS_LOGS_LEVEL", originalLogLevel)
+		t.Setenv("ATMOS_LOGS_LEVEL", "Error")
 
 		// Call the function with empty stacks map (no actual stacks to process)
 		err = ExecuteTerraformGenerateBackends(atmosConfig, "", "hcl", []string{}, []string{})
@@ -146,9 +144,7 @@ func TestBackendTemplateProcessing(t *testing.T) {
 		}
 
 		// Set log level to suppress output
-		originalLogLevel := os.Getenv("ATMOS_LOGS_LEVEL")
-		os.Setenv("ATMOS_LOGS_LEVEL", "Error")
-		defer os.Setenv("ATMOS_LOGS_LEVEL", originalLogLevel)
+		t.Setenv("ATMOS_LOGS_LEVEL", "Error")
 
 		err := ExecuteTerraformGenerateBackends(atmosConfig, "", "hcl", []string{}, []string{})
 		assert.NoError(t, err)

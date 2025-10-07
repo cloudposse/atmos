@@ -17,14 +17,11 @@ func TestTerraformGenerateBackendCmd(t *testing.T) {
 
 	stacksPath := "../tests/fixtures/scenarios/stack-templates"
 
-	err := os.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
-	assert.NoError(t, err, "Setting 'ATMOS_CLI_CONFIG_PATH' environment variable should execute without error")
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
 
-	err = os.Setenv("ATMOS_BASE_PATH", stacksPath)
-	assert.NoError(t, err, "Setting 'ATMOS_BASE_PATH' environment variable should execute without error")
+	t.Setenv("ATMOS_BASE_PATH", stacksPath)
 
-	err = os.Setenv("ATMOS_LOGS_LEVEL", "Debug")
-	assert.NoError(t, err, "Setting 'ATMOS_LOGS_LEVEL' environment variable should execute without error")
+	t.Setenv("ATMOS_LOGS_LEVEL", "Debug")
 
 	// Reset flag states to prevent pollution from other tests.
 	// Only reset flags that were actually changed to avoid issues with complex flag types.
@@ -40,7 +37,7 @@ func TestTerraformGenerateBackendCmd(t *testing.T) {
 
 	// Execute the command
 	RootCmd.SetArgs([]string{"terraform", "generate", "backend", "component-1", "-s", "nonprod"})
-	err = Execute()
+	err := Execute()
 	assert.NoError(t, err, "'TestTerraformGenerateBackendCmd' should execute without error")
 
 	// Close the writer and restore stderr

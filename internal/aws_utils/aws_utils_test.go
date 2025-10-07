@@ -27,8 +27,8 @@ func TestLoadAWSConfig(t *testing.T) {
 			region:  "",
 			roleArn: "",
 			setupEnv: func() {
-				os.Setenv("AWS_ACCESS_KEY_ID", "test-key")
-				os.Setenv("AWS_SECRET_ACCESS_KEY", "test-secret")
+				t.Setenv("AWS_ACCESS_KEY_ID", "test-key")
+				t.Setenv("AWS_SECRET_ACCESS_KEY", "test-secret")
 			},
 			cleanupEnv: func() {
 				os.Unsetenv("AWS_ACCESS_KEY_ID")
@@ -41,8 +41,8 @@ func TestLoadAWSConfig(t *testing.T) {
 			region:  "us-east-2",
 			roleArn: "",
 			setupEnv: func() {
-				os.Setenv("AWS_ACCESS_KEY_ID", "test-key")
-				os.Setenv("AWS_SECRET_ACCESS_KEY", "test-secret")
+				t.Setenv("AWS_ACCESS_KEY_ID", "test-key")
+				t.Setenv("AWS_SECRET_ACCESS_KEY", "test-secret")
 			},
 			cleanupEnv: func() {
 				os.Unsetenv("AWS_ACCESS_KEY_ID")

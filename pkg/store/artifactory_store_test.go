@@ -102,14 +102,13 @@ func TestNewArtifactoryStore(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Temporarily unset environment variables
-			originalArtToken := os.Getenv("ARTIFACTORY_ACCESS_TOKEN")
-			originalJfrogToken := os.Getenv("JFROG_ACCESS_TOKEN")
-			defer func() {
-				_ = os.Setenv("ARTIFACTORY_ACCESS_TOKEN", originalArtToken)
-				_ = os.Setenv("JFROG_ACCESS_TOKEN", originalJfrogToken)
-			}()
 			_ = os.Unsetenv("ARTIFACTORY_ACCESS_TOKEN")
 			_ = os.Unsetenv("JFROG_ACCESS_TOKEN")
+			// t.Cleanup will restore them after the test
+			t.Cleanup(func() {
+				_ = os.Unsetenv("ARTIFACTORY_ACCESS_TOKEN")
+				_ = os.Unsetenv("JFROG_ACCESS_TOKEN")
+			})
 
 			store, err := NewArtifactoryStore(tt.options)
 			if tt.expectError {

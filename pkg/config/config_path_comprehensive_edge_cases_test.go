@@ -499,7 +499,7 @@ func TestEnvironmentVariablePathCombinations(t *testing.T) {
 			oldEnv := os.Getenv("ATMOS_BASE_PATH")
 			defer func() {
 				if oldEnv != "" {
-					os.Setenv("ATMOS_BASE_PATH", oldEnv)
+					t.Setenv("ATMOS_BASE_PATH", oldEnv)
 				} else {
 					os.Unsetenv("ATMOS_BASE_PATH")
 				}
@@ -507,8 +507,7 @@ func TestEnvironmentVariablePathCombinations(t *testing.T) {
 
 			// Set test environment variable.
 			if tt.envBasePathValue != "" {
-				err := os.Setenv("ATMOS_BASE_PATH", tt.envBasePathValue)
-				require.NoError(t, err)
+				t.Setenv("ATMOS_BASE_PATH", tt.envBasePathValue)
 			} else {
 				os.Unsetenv("ATMOS_BASE_PATH")
 			}

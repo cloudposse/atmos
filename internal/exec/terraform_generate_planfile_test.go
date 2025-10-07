@@ -22,14 +22,12 @@ func TestExecuteTerraformGeneratePlanfileCmd(t *testing.T) {
 	component := "component-1"
 	stack := "nonprod"
 
-	err := os.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
-	assert.NoError(t, err, "Setting 'ATMOS_CLI_CONFIG_PATH' environment variable should execute without error")
-
-	err = os.Setenv("ATMOS_BASE_PATH", stacksPath)
-	assert.NoError(t, err, "Setting 'ATMOS_BASE_PATH' environment variable should execute without error")
+	var err error
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
+	t.Setenv("ATMOS_BASE_PATH", stacksPath)
 
 	defer func() {
-		err := os.Unsetenv("ATMOS_BASE_PATH")
+		err = os.Unsetenv("ATMOS_BASE_PATH")
 		assert.NoError(t, err)
 		err = os.Unsetenv("ATMOS_CLI_CONFIG_PATH")
 		assert.NoError(t, err)
@@ -94,14 +92,12 @@ func TestExecuteTerraformGeneratePlanfile(t *testing.T) {
 	stack := "nonprod"
 	info := schema.ConfigAndStacksInfo{}
 
-	err := os.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
-	assert.NoError(t, err, "Setting 'ATMOS_CLI_CONFIG_PATH' environment variable should execute without error")
-
-	err = os.Setenv("ATMOS_BASE_PATH", stacksPath)
-	assert.NoError(t, err, "Setting 'ATMOS_BASE_PATH' environment variable should execute without error")
+	var err error
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
+	t.Setenv("ATMOS_BASE_PATH", stacksPath)
 
 	defer func() {
-		err := os.Unsetenv("ATMOS_BASE_PATH")
+		err = os.Unsetenv("ATMOS_BASE_PATH")
 		assert.NoError(t, err)
 		err = os.Unsetenv("ATMOS_CLI_CONFIG_PATH")
 		assert.NoError(t, err)
@@ -205,18 +201,8 @@ func TestExecuteTerraformGeneratePlanfileErrors(t *testing.T) {
 	stack := "nonprod"
 	info := schema.ConfigAndStacksInfo{}
 
-	err := os.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
-	assert.NoError(t, err, "Setting 'ATMOS_CLI_CONFIG_PATH' environment variable should execute without error")
-
-	err = os.Setenv("ATMOS_BASE_PATH", stacksPath)
-	assert.NoError(t, err, "Setting 'ATMOS_BASE_PATH' environment variable should execute without error")
-
-	defer func() {
-		err := os.Unsetenv("ATMOS_BASE_PATH")
-		assert.NoError(t, err)
-		err = os.Unsetenv("ATMOS_CLI_CONFIG_PATH")
-		assert.NoError(t, err)
-	}()
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
+	t.Setenv("ATMOS_BASE_PATH", stacksPath)
 
 	options := PlanfileOptions{
 		Component:            component,
@@ -228,6 +214,7 @@ func TestExecuteTerraformGeneratePlanfileErrors(t *testing.T) {
 		Skip:                 nil,
 	}
 
+	var err error
 	options.Format = "invalid-format"
 	err = ExecuteTerraformGeneratePlanfile(
 		&options,

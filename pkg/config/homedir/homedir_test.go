@@ -10,7 +10,11 @@ import (
 func patchEnv(key, value string) func() {
 	bck := os.Getenv(key)
 	deferFunc := func() {
-		os.Setenv(key, bck)
+		if bck == "" {
+			os.Unsetenv(key)
+		} else {
+			os.Setenv(key, bck)
+		}
 	}
 
 	if value != "" {

@@ -547,11 +547,10 @@ func mustURL(t *testing.T, s string) *url.URL {
 // withTempPath injects a temporary PATH for the duration of the test.
 func withTempPath(t *testing.T, dirs ...string) func() {
 	t.Helper()
-	orig := os.Getenv("PATH")
 	sep := string(os.PathListSeparator)
 	newPath := strings.Join(dirs, sep)
-	require.NoError(t, os.Setenv("PATH", newPath))
-	return func() { _ = os.Setenv("PATH", orig) }
+	t.Setenv("PATH", newPath)
+	return func() {}
 }
 
 // newGetter returns a CustomGitGetter with a context and zero timeout.

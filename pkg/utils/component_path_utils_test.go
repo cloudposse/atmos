@@ -19,9 +19,9 @@ func TestGetComponentPath(t *testing.T) {
 	originalHelmfilePath := os.Getenv("ATMOS_COMPONENTS_HELMFILE_BASE_PATH")
 	originalPackerPath := os.Getenv("ATMOS_COMPONENTS_PACKER_BASE_PATH")
 	defer func() {
-		os.Setenv("ATMOS_COMPONENTS_TERRAFORM_BASE_PATH", originalTerraformPath)
-		os.Setenv("ATMOS_COMPONENTS_HELMFILE_BASE_PATH", originalHelmfilePath)
-		os.Setenv("ATMOS_COMPONENTS_PACKER_BASE_PATH", originalPackerPath)
+		t.Setenv("ATMOS_COMPONENTS_TERRAFORM_BASE_PATH", originalTerraformPath)
+		t.Setenv("ATMOS_COMPONENTS_HELMFILE_BASE_PATH", originalHelmfilePath)
+		t.Setenv("ATMOS_COMPONENTS_PACKER_BASE_PATH", originalPackerPath)
 	}()
 
 	tests := []struct {
@@ -269,7 +269,7 @@ func TestGetComponentPath(t *testing.T) {
 
 			// Set test env vars.
 			for k, v := range tt.envVars {
-				os.Setenv(k, v)
+				t.Setenv(k, v)
 			}
 
 			cfg := tt.setupConfig()
@@ -424,7 +424,7 @@ func TestGetBasePathForComponentType(t *testing.T) {
 			if v == "" {
 				os.Unsetenv(k)
 			} else {
-				os.Setenv(k, v)
+				t.Setenv(k, v)
 			}
 		}
 	}()
@@ -438,7 +438,7 @@ func TestGetBasePathForComponentType(t *testing.T) {
 
 			// Set test env vars.
 			for k, v := range tt.setupEnv {
-				os.Setenv(k, v)
+				t.Setenv(k, v)
 			}
 
 			cfg := tt.setupConfig()

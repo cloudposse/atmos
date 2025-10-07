@@ -17,12 +17,12 @@ func TestDisplayDocs(t *testing.T) {
 	originalAtmosPager := os.Getenv("ATMOS_PAGER")
 	defer func() {
 		if originalPager != "" {
-			os.Setenv("PAGER", originalPager)
+			t.Setenv("PAGER", originalPager)
 		} else {
 			os.Unsetenv("PAGER")
 		}
 		if originalAtmosPager != "" {
-			os.Setenv("ATMOS_PAGER", originalAtmosPager)
+			t.Setenv("ATMOS_PAGER", originalAtmosPager)
 		} else {
 			os.Unsetenv("ATMOS_PAGER")
 		}
@@ -82,7 +82,7 @@ func TestDisplayDocs(t *testing.T) {
 
 	t.Run("ATMOS_PAGER environment variable", func(t *testing.T) {
 		viper.Reset()
-		os.Setenv("ATMOS_PAGER", "cat")
+		t.Setenv("ATMOS_PAGER", "cat")
 		// Need to rebind env after setting it
 		_ = viper.BindEnv("pager", "ATMOS_PAGER", "PAGER")
 
@@ -92,7 +92,7 @@ func TestDisplayDocs(t *testing.T) {
 
 	t.Run("PAGER environment variable", func(t *testing.T) {
 		viper.Reset()
-		os.Setenv("PAGER", "cat")
+		t.Setenv("PAGER", "cat")
 		os.Unsetenv("ATMOS_PAGER")
 		// Need to rebind env after setting it
 		_ = viper.BindEnv("pager", "ATMOS_PAGER", "PAGER")
@@ -103,8 +103,8 @@ func TestDisplayDocs(t *testing.T) {
 
 	t.Run("ATMOS_PAGER takes precedence over PAGER", func(t *testing.T) {
 		viper.Reset()
-		os.Setenv("ATMOS_PAGER", "cat")
-		os.Setenv("PAGER", "nonexistent-command")
+		t.Setenv("ATMOS_PAGER", "cat")
+		t.Setenv("PAGER", "nonexistent-command")
 		// Need to rebind env after setting it
 		_ = viper.BindEnv("pager", "ATMOS_PAGER", "PAGER")
 

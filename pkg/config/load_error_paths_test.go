@@ -58,12 +58,8 @@ func TestReadSystemConfig_WindowsEmptyAppData(t *testing.T) {
 		t.Skipf("Skipping Windows-specific test on %s", runtime.GOOS)
 	}
 
-	// Save original env var
-	origAppData := os.Getenv(WindowsAppDataEnvVar)
-	defer os.Setenv(WindowsAppDataEnvVar, origAppData)
-
 	// Test with empty LOCALAPPDATA
-	os.Setenv(WindowsAppDataEnvVar, "")
+	t.Setenv(WindowsAppDataEnvVar, "")
 
 	v := viper.New()
 	v.SetConfigType("yaml")
@@ -180,7 +176,7 @@ func TestReadEnvAmosConfigPath_ConfigFileNotFound(t *testing.T) {
 	tempDir := t.TempDir()
 
 	// Set ATMOS_CLI_CONFIG_PATH to temp directory
-	os.Setenv("ATMOS_CLI_CONFIG_PATH", tempDir)
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", tempDir)
 	defer os.Unsetenv("ATMOS_CLI_CONFIG_PATH")
 
 	v := viper.New()

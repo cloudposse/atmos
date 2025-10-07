@@ -18,7 +18,7 @@ func TestNewGitHubClientUnauthenticated(t *testing.T) {
 		originalToken := os.Getenv("GITHUB_TOKEN")
 		defer func() {
 			if originalToken != "" {
-				os.Setenv("GITHUB_TOKEN", originalToken)
+				t.Setenv("GITHUB_TOKEN", originalToken)
 			}
 		}()
 
@@ -39,7 +39,7 @@ func TestNewGitHubClientAuthenticated(t *testing.T) {
 		originalToken := os.Getenv("GITHUB_TOKEN")
 		defer func() {
 			if originalToken != "" {
-				os.Setenv("GITHUB_TOKEN", originalToken)
+				t.Setenv("GITHUB_TOKEN", originalToken)
 			} else {
 				os.Unsetenv("GITHUB_TOKEN")
 			}
@@ -47,7 +47,7 @@ func TestNewGitHubClientAuthenticated(t *testing.T) {
 
 		// Set a test token
 		testToken := "ghp_test_token_1234567890"
-		os.Setenv("GITHUB_TOKEN", testToken)
+		t.Setenv("GITHUB_TOKEN", testToken)
 
 		ctx := context.Background()
 		client := newGitHubClient(ctx)
@@ -157,7 +157,7 @@ func TestGitHubClientCreationWithContext(t *testing.T) {
 		originalToken := os.Getenv("GITHUB_TOKEN")
 		defer func() {
 			if originalToken != "" {
-				os.Setenv("GITHUB_TOKEN", originalToken)
+				t.Setenv("GITHUB_TOKEN", originalToken)
 			} else {
 				os.Unsetenv("GITHUB_TOKEN")
 			}
@@ -176,7 +176,7 @@ func TestGitHubClientCreationWithContext(t *testing.T) {
 		originalToken := os.Getenv("GITHUB_TOKEN")
 		defer func() {
 			if originalToken != "" {
-				os.Setenv("GITHUB_TOKEN", originalToken)
+				t.Setenv("GITHUB_TOKEN", originalToken)
 			} else {
 				os.Unsetenv("GITHUB_TOKEN")
 			}
@@ -200,7 +200,7 @@ func TestGitHubTokenHandling(t *testing.T) {
 		originalToken := os.Getenv("GITHUB_TOKEN")
 		defer func() {
 			if originalToken != "" {
-				os.Setenv("GITHUB_TOKEN", originalToken)
+				t.Setenv("GITHUB_TOKEN", originalToken)
 			} else {
 				os.Unsetenv("GITHUB_TOKEN")
 			}
@@ -208,7 +208,7 @@ func TestGitHubTokenHandling(t *testing.T) {
 
 		// Test with token
 		testToken := "ghp_test_123"
-		os.Setenv("GITHUB_TOKEN", testToken)
+		t.Setenv("GITHUB_TOKEN", testToken)
 
 		// Verify token is read
 		token := os.Getenv("GITHUB_TOKEN")

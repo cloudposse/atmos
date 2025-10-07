@@ -400,13 +400,11 @@ func TestCleanTerraformWorkspace(t *testing.T) {
 			require.NoError(t, err)
 
 			// Setup TF_DATA_DIR if specified.
-			originalTfDataDir := os.Getenv("TF_DATA_DIR")
 			if tt.setupTfDataDir != "" {
-				os.Setenv("TF_DATA_DIR", tt.setupTfDataDir)
+				t.Setenv("TF_DATA_DIR", tt.setupTfDataDir)
 			} else {
 				os.Unsetenv("TF_DATA_DIR")
 			}
-			defer os.Setenv("TF_DATA_DIR", originalTfDataDir)
 
 			// Determine the terraform data directory.
 			tfDataDir := tt.setupTfDataDir
@@ -1280,7 +1278,7 @@ func TestTFCliArgsAndVarsComponentSections(t *testing.T) {
 			originalValue := os.Getenv("TF_CLI_ARGS")
 			defer func() {
 				if originalValue != "" {
-					os.Setenv("TF_CLI_ARGS", originalValue)
+					t.Setenv("TF_CLI_ARGS", originalValue)
 				} else {
 					os.Unsetenv("TF_CLI_ARGS")
 				}
@@ -1288,7 +1286,7 @@ func TestTFCliArgsAndVarsComponentSections(t *testing.T) {
 
 			// Set test environment variable
 			if tt.tfCliArgsEnv != "" {
-				os.Setenv("TF_CLI_ARGS", tt.tfCliArgsEnv)
+				t.Setenv("TF_CLI_ARGS", tt.tfCliArgsEnv)
 			} else {
 				os.Unsetenv("TF_CLI_ARGS")
 			}

@@ -64,9 +64,7 @@ func TestProcessTagGitRoot(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Save and restore original environment
-			originalTestGitRoot := os.Getenv("TEST_GIT_ROOT")
-			defer os.Setenv("TEST_GIT_ROOT", originalTestGitRoot)
+			// Save and restore original environment (cleanup handled by t.Setenv)
 
 			// Save original working directory
 			originalDir, err := os.Getwd()
@@ -75,7 +73,7 @@ func TestProcessTagGitRoot(t *testing.T) {
 
 			// Set TEST_GIT_ROOT if provided
 			if tt.testGitRoot != "" {
-				os.Setenv("TEST_GIT_ROOT", tt.testGitRoot)
+				t.Setenv("TEST_GIT_ROOT", tt.testGitRoot)
 			} else {
 				os.Unsetenv("TEST_GIT_ROOT")
 			}
@@ -115,13 +113,13 @@ func TestProcessTagGitRoot_Integration(t *testing.T) {
 	require.NoError(t, err)
 
 	defer func() {
-		os.Setenv("TEST_GIT_ROOT", originalTestGitRoot)
+		t.Setenv("TEST_GIT_ROOT", originalTestGitRoot)
 		os.Chdir(originalDir)
 	}()
 
 	// Test 1: TEST_GIT_ROOT overrides any Git detection
 	mockRoot := "/mock/override/path"
-	os.Setenv("TEST_GIT_ROOT", mockRoot)
+	t.Setenv("TEST_GIT_ROOT", mockRoot)
 
 	result, err := ProcessTagGitRoot("!repo-root")
 	assert.NoError(t, err)

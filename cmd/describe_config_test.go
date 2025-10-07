@@ -10,11 +10,9 @@ import (
 func TestDescribeConfigCmd_Error(t *testing.T) {
 	stacksPath := "../tests/fixtures/scenarios/terraform-apply-affected"
 
-	err := os.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
-	assert.NoError(t, err, "Setting 'ATMOS_CLI_CONFIG_PATH' environment variable should execute without error")
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
 
-	err = os.Setenv("ATMOS_BASE_PATH", stacksPath)
-	assert.NoError(t, err, "Setting 'ATMOS_BASE_PATH' environment variable should execute without error")
+	t.Setenv("ATMOS_BASE_PATH", stacksPath)
 
 	// Unset ENV variables after testing
 	defer func() {
@@ -22,6 +20,6 @@ func TestDescribeConfigCmd_Error(t *testing.T) {
 		os.Unsetenv("ATMOS_BASE_PATH")
 	}()
 
-	err = describeConfigCmd.RunE(describeConfigCmd, []string{"--invalid-flag"})
+	err := describeConfigCmd.RunE(describeConfigCmd, []string{"--invalid-flag"})
 	assert.Error(t, err, "describe config command should return an error when called with invalid flags")
 }
