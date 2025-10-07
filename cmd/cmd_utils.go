@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -20,7 +19,6 @@ import (
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/telemetry"
-	"github.com/cloudposse/atmos/pkg/ui/theme"
 	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/cloudposse/atmos/pkg/version"
 )
@@ -491,16 +489,12 @@ func checkAtmosConfig(opts ...AtmosValidateOption) {
 		atmosConfigExists, err := u.IsDirectory(atmosConfig.StacksBaseAbsolutePath)
 		if !atmosConfigExists || err != nil {
 			printMessageForMissingAtmosConfig(atmosConfig)
-			errUtils.Exit(1)
 		}
 	}
 }
 
-// printMessageForMissingAtmosConfig prints Atmos logo and instructions on how to configure and start using Atmos.
+// printMessageForMissingAtmosConfig prints an enhanced error when Atmos stacks directory doesn't exist.
 func printMessageForMissingAtmosConfig(atmosConfig schema.AtmosConfiguration) {
-	c1 := theme.Colors.Info
-	c2 := theme.Colors.Success
-
 	fmt.Println()
 	err := tuiUtils.PrintStyledText("ATMOS")
 	errUtils.CheckErrorPrintAndExit(err, "", "")
@@ -510,34 +504,33 @@ func printMessageForMissingAtmosConfig(atmosConfig schema.AtmosConfiguration) {
 	// Check if we're in a git repo. Warn if not.
 	verifyInsideGitRepo()
 
-	if atmosConfig.Default {
-		// If Atmos did not find an `atmos.yaml` config file and is using the default config
-		u.PrintMessageInColor("atmos.yaml", c1)
-		fmt.Println(" CLI config file was not found.")
-		fmt.Print("\nThe default Atmos stacks directory is set to ")
-		u.PrintMessageInColor(filepath.Join(atmosConfig.BasePath, atmosConfig.Stacks.BasePath), c1)
-		fmt.Println(",\nbut the directory does not exist in the current path.")
-	} else {
-		// If Atmos found an `atmos.yaml` config file, but it defines invalid paths to Atmos stacks and components
-		u.PrintMessageInColor("atmos.yaml", c1)
-		fmt.Print(" CLI config file specifies the directory for Atmos stacks as ")
-		u.PrintMessageInColor(filepath.Join(atmosConfig.BasePath, atmosConfig.Stacks.BasePath), c1)
-		fmt.Println(",\nbut the directory does not exist.")
-	}
+	// Create structured error with context and hints
+	stacksErr := errUtils.ErrStacksDirectoryDoesNotExist
 
-	u.PrintMessage("\nTo configure and start using Atmos, refer to the following documents:\n")
+	// Add explanation with resolved path
+	stacksErr = errors.WithDetail(stacksErr, fmt.Sprintf(
+		"The `atmos.yaml` config file specifies the stacks directory as `%s`, "+
+			"but the resolved absolute path does not exist:\n\n    %s",
+		atmosConfig.Stacks.BasePath,
+		atmosConfig.StacksBaseAbsolutePath))
 
-	u.PrintMessageInColor("Atmos CLI Configuration:\n", c2)
-	u.PrintMessage("https://atmos.tools/cli/configuration\n")
+	// Get current directory
+	cwd, _ := os.Getwd()
 
-	u.PrintMessageInColor("Atmos Components:\n", c2)
-	u.PrintMessage("https://atmos.tools/core-concepts/components\n")
+	// Build with context using ErrorBuilder
+	enrichedErr := errUtils.Build(stacksErr).
+		WithContext("config_file", atmosConfig.CliConfigPath).
+		WithContext("base_path", atmosConfig.BasePath).
+		WithContext("stacks_base_path", atmosConfig.Stacks.BasePath).
+		WithContext("current_dir", cwd).
+		WithContext("resolved_path", atmosConfig.StacksBaseAbsolutePath).
+		WithHint("Unset `base_path` in `atmos.yaml` to use auto-detection (recommended)").
+		WithHint("Run Atmos from your Git repository root - it will auto-detect paths").
+		WithHint("Or set `base_path` to the directory containing your `atmos.yaml`").
+		WithExitCode(1).
+		Err()
 
-	u.PrintMessageInColor("Atmos Stacks:\n", c2)
-	u.PrintMessage("https://atmos.tools/core-concepts/stacks\n")
-
-	u.PrintMessageInColor("Quick Start:\n", c2)
-	u.PrintMessage("https://atmos.tools/quick-start\n")
+	errUtils.CheckErrorPrintAndExit(enrichedErr, "", "")
 }
 
 // CheckForAtmosUpdateAndPrintMessage checks if a version update is needed and prints a message if a newer version is found.

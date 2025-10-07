@@ -176,7 +176,7 @@ err := Build(baseErr).
 - Collapsed vs verbose modes
 
 **Example Output**:
-```
+```text
 # Error
 
 workflow file not found
@@ -206,7 +206,8 @@ cat atmos.yaml | grep -A5 workflows
 |-----------|---------------------------|
 | file      | stacks/workflows/dne.yaml |
 | base_path | stacks/workflows          |
-```
+
+```text
 
 ### 6. Sentry Integration with Full Context
 

@@ -1,0 +1,16 @@
+
+# Error
+
+directory for Atmos stacks does not exist
+
+## Explanation
+
+The atmos.yaml config file specifies the stacks directory as stacks, but the resolved absolute path does not exist:
+
+ /absolute/path/to/repo/stacks
+
+## Hints
+
+💡 Unset base_path in atmos.yaml to use auto-detection (recommended) 💡 Run Atmos from your Git repository root - it will auto-detect paths 💡 Or set base_path to the directory containing your atmos.yaml
+
+

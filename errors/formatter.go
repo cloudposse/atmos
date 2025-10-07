@@ -120,7 +120,12 @@ func buildMarkdownSections(err error, config FormatterConfig) string {
 	var md strings.Builder
 
 	// Section 1: Error header + message.
-	md.WriteString("# Error" + newline + newline)
+	// Extract custom title or use default.
+	title := extractCustomTitle(err)
+	if title == "" {
+		title = "Error"
+	}
+	md.WriteString("# " + title + newline + newline)
 	md.WriteString(err.Error() + newline + newline)
 
 	// Section 2: Explanation.
@@ -152,17 +157,32 @@ func addExplanationSection(md *strings.Builder, err error) {
 	}
 }
 
+// extractCustomTitle extracts the custom title from error hints.
+func extractCustomTitle(err error) string {
+	allHints := errors.GetAllHints(err)
+	for _, hint := range allHints {
+		if strings.HasPrefix(hint, "TITLE:") {
+			return strings.TrimPrefix(hint, "TITLE:")
+		}
+	}
+	return ""
+}
+
 // addExampleAndHintsSection separates hints into examples and regular hints, then adds both sections.
 func addExampleAndHintsSection(md *strings.Builder, err error) {
 	allHints := errors.GetAllHints(err)
 	var examples []string
 	var hints []string
 
-	// Separate hints into examples and regular hints.
+	// Separate hints into examples, title, and regular hints.
 	for _, hint := range allHints {
-		if strings.HasPrefix(hint, "EXAMPLE:") {
+		switch {
+		case strings.HasPrefix(hint, "TITLE:"):
+			// Skip title hints - they're extracted separately.
+			continue
+		case strings.HasPrefix(hint, "EXAMPLE:"):
 			examples = append(examples, strings.TrimPrefix(hint, "EXAMPLE:"))
-		} else {
+		default:
 			hints = append(hints, hint)
 		}
 	}

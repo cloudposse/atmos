@@ -5,7 +5,7 @@ You can learn more, including how to opt-out if you'd not like to participate in
 by visiting the following URL: https://atmos.tools/cli/telemetry
 
 
-Validate the authentication configuration in atmos.yaml for syntax and logical errors.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  
+Validate the authentication configuration in atmos.yaml for syntax and logical errors.
 
 
 
@@ -87,6 +87,6 @@ Global Flags:
                                      /dev/null)
 
 
-Use atmos auth validate --help for more information about a command.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    
+Use atmos auth validate --help for more information about a command.
 
 
