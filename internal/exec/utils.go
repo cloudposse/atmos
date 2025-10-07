@@ -55,23 +55,23 @@ func ProcessComponentConfig(
 	}
 
 	if len(component) == 0 {
-		return errors.New("component must be provided and must not be empty")
+		return fmt.Errorf("%w: must not be empty", errUtils.ErrMissingComponent)
 	}
 
 	if len(componentType) == 0 {
-		return errors.New("component type must be provided and must not be empty")
+		return fmt.Errorf("%w: must not be empty", errUtils.ErrMissingComponentType)
 	}
 
 	if stackSection, ok = stacksMap[stack].(map[string]any); !ok {
-		return fmt.Errorf("could not find the stack '%s'", stack)
+		return fmt.Errorf("%w: `%s`", errUtils.ErrStackNotFoundInManifest, stack)
 	}
 
 	if componentsSection, ok = stackSection["components"].(map[string]any); !ok {
-		return fmt.Errorf("'components' section is missing in the stack manifest '%s'", stack)
+		return fmt.Errorf("%w: `%s`", errUtils.ErrMissingComponentsSection, stack)
 	}
 
 	if componentTypeSection, ok = componentsSection[componentType].(map[string]any); !ok {
-		return fmt.Errorf("'components.%s' section is missing in the stack manifest '%s'", componentType, stack)
+		return fmt.Errorf("%w: `components.%s` in stack `%s`", errUtils.ErrMissingComponentTypeSection, componentType, stack)
 	}
 
 	if componentSection, ok = componentTypeSection[component].(map[string]any); !ok {
@@ -88,7 +88,7 @@ func ProcessComponentConfig(
 	}
 
 	if componentVarsSection, ok = componentSection["vars"].(map[string]any); !ok {
-		return fmt.Errorf("missing 'vars' section for the component '%s' in the stack manifest '%s'", component, stack)
+		return fmt.Errorf("%w: component `%s` in stack `%s`", errUtils.ErrMissingVarsSection, component, stack)
 	}
 
 	if componentProvidersSection, ok = componentSection[cfg.ProvidersSectionName].(map[string]any); !ok {
@@ -215,13 +215,13 @@ func ProcessStacks(
 	// Check if stack was provided
 	if checkStack && len(configAndStacksInfo.Stack) < 1 {
 		message := fmt.Sprintf("`stack` is required.\n\nUsage:\n\n`atmos %s <command> <component> -s <stack>`", configAndStacksInfo.ComponentType)
-		return configAndStacksInfo, errors.New(message)
+		return configAndStacksInfo, fmt.Errorf("%w\n\n%s", errUtils.ErrMissingStack, message)
 	}
 
 	// Check if the component was provided.
 	if len(configAndStacksInfo.ComponentFromArg) < 1 {
 		message := fmt.Sprintf("`component` is required.\n\nUsage:\n\n`atmos %s <command> <component> <arguments_and_flags>`", configAndStacksInfo.ComponentType)
-		return configAndStacksInfo, errors.New(message)
+		return configAndStacksInfo, fmt.Errorf("%w\n\n%s", errUtils.ErrMissingComponent, message)
 	}
 
 	configAndStacksInfo.StackFromArg = configAndStacksInfo.Stack
@@ -311,7 +311,7 @@ func ProcessStacks(
 					continue
 				}
 			} else {
-				return configAndStacksInfo, errors.New("'stacks.name_pattern' or 'stacks.name_template' needs to be specified in 'atmos.yaml' CLI config")
+				return configAndStacksInfo, errUtils.ErrMissingStackNameTemplateAndPattern
 			}
 
 			configAndStacksInfo.Context.Component = configAndStacksInfo.ComponentFromArg

@@ -103,6 +103,12 @@ var (
 	ErrAtmosFilesDirConfigNotFound = errors.New("`atmos.yaml` or `.atmos.yaml` configuration file not found in directory")
 
 	ErrMissingStack                       = errors.New("stack is required; specify it on the command line using the flag `--stack <stack>` (shorthand `-s`)")
+	ErrMissingComponent                   = errors.New("component must be provided")
+	ErrMissingComponentType               = errors.New("component type must be provided")
+	ErrStackNotFoundInManifest            = errors.New("stack not found in manifest")
+	ErrMissingComponentsSection           = errors.New("components section missing in stack manifest")
+	ErrMissingComponentTypeSection        = errors.New("component type section missing in stack manifest")
+	ErrMissingVarsSection                 = errors.New("vars section missing for component")
 	ErrInvalidComponent                   = errors.New("invalid component")
 	ErrComponentNotFound                  = errors.New("component not found in stack")
 	ErrDuplicateComponent                 = errors.New("duplicate component config found in stack")
