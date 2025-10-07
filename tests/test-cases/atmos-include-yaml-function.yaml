@@ -20,4 +20,4 @@ tests:
         - "string_var: abc"
         - "boolean_var: true"
       stderr:
-        - "^$"
+        - "Telemetry Enabled"

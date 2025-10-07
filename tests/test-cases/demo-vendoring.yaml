@@ -17,7 +17,7 @@ tests:
       # PTY not supported on windows
       os: !not windows
     expect:
-      stdout:
+      tty:
         - "Pulling"
         - "github/stargazers"
         - "weather"

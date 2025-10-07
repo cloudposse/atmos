@@ -59,13 +59,12 @@ tests:
       ATMOS_INJECT_BITBUCKET_TOKEN: "true"
     expect:
       diff: []
-    stdout:
-      # GitHub case
-      - !not 'supersecret'
-      # GitLab case
-      - !not 'gitlabsecret'
-      # Bitbucket case
-      - !not 'bitbucketsecret'
-      - !not 'bitbucketusername'
-
-    exit_code: 0
+      stdout:
+        # GitHub case
+        - !not 'supersecret'
+        # GitLab case
+        - !not 'gitlabsecret'
+        # Bitbucket case
+        - !not 'bitbucketsecret'
+        - !not 'bitbucketusername'
+      exit_code: 0

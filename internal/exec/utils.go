@@ -347,7 +347,7 @@ func ProcessStacks(
 			}
 
 			return configAndStacksInfo,
-				fmt.Errorf("%w: could not find the component '%s' in the stack '%s'. "+
+				fmt.Errorf("%w: could not find the component `%s` in the stack `%s`. "+
 					"Check that all the context variables are correctly defined in the stack manifests. "+
 					"Are the component and stack names correct? Did you forget an import?%v",
 					errUtils.ErrComponentNotFound,
@@ -355,7 +355,7 @@ func ProcessStacks(
 					configAndStacksInfo.Stack,
 					cliConfigYaml)
 		} else if foundStackCount > 1 {
-			err = fmt.Errorf("%w: found duplicate config for the component '%s' in the stack '%s' in the manifests: %v. "+
+			err = fmt.Errorf("%w: found duplicate config for the component `%s` in the stack `%s` in the manifests: %v. "+
 				"Check that all the context variables are correctly defined in the manifests and not duplicated. "+
 				"Check that all imports are valid",
 				errUtils.ErrDuplicateComponent,
