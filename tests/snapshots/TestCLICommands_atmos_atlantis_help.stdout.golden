@@ -84,6 +84,8 @@ Global Flags:
                                      standard file descriptor (including
                                      /dev/null)
 
+        --version                    Display the Atmos CLI version
+
 
 Use atmos atlantis [subcommand] --help for more information about a command.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            
 

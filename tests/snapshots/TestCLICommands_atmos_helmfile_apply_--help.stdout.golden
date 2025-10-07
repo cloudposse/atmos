@@ -81,6 +81,8 @@ Global Flags:
                                      or configuration set for deployment in
                                      Atmos CLI.
 
+        --version                    Display the Atmos CLI version
+
         --                           Use double dashes to separate
                                      Atmos-specific options from native
                                      arguments and flags for the command.
