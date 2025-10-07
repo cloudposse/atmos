@@ -1134,50 +1134,50 @@ func ProcessStackConfig(
 				return nil, fmt.Errorf("invalid 'components.terraform' section in the file '%s'", stackName)
 			}
 
-		for cmp, v := range allTerraformComponentsMap {
-			component := cmp
+			for cmp, v := range allTerraformComponentsMap {
+				component := cmp
 
-			componentMap, ok := v.(map[string]any)
-			if !ok {
-				return nil, fmt.Errorf("invalid 'components.terraform.%s' section in the file '%s'", component, stackName)
+				componentMap, ok := v.(map[string]any)
+				if !ok {
+					return nil, fmt.Errorf("invalid 'components.terraform.%s' section in the file '%s'", component, stackName)
+				}
+
+				// Process component using helper function.
+				opts := ComponentProcessorOptions{
+					ComponentType:                   cfg.TerraformComponentType,
+					Component:                       component,
+					Stack:                           stack,
+					StackName:                       stackName,
+					ComponentMap:                    componentMap,
+					AllComponentsMap:                allTerraformComponentsMap,
+					ComponentsBasePath:              terraformComponentsBasePath,
+					CheckBaseComponentExists:        checkBaseComponentExists,
+					GlobalVars:                      globalAndTerraformVars,
+					GlobalSettings:                  globalAndTerraformSettings,
+					GlobalEnv:                       globalAndTerraformEnv,
+					GlobalCommand:                   terraformCommand,
+					TerraformProviders:              terraformProviders,
+					GlobalAndTerraformHooks:         globalAndTerraformHooks,
+					GlobalBackendType:               globalBackendType,
+					GlobalBackendSection:            globalBackendSection,
+					GlobalRemoteStateBackendType:    globalRemoteStateBackendType,
+					GlobalRemoteStateBackendSection: globalRemoteStateBackendSection,
+					AtmosConfig:                     atmosConfig,
+				}
+
+				result, err := processComponent(opts)
+				if err != nil {
+					return nil, err
+				}
+
+				// Merge component configurations.
+				comp, err := mergeComponentConfigurations(atmosConfig, opts, result)
+				if err != nil {
+					return nil, err
+				}
+
+				terraformComponents[component] = comp
 			}
-
-			// Process component using helper function.
-			opts := ComponentProcessorOptions{
-				ComponentType:                   cfg.TerraformComponentType,
-				Component:                       component,
-				Stack:                           stack,
-				StackName:                       stackName,
-				ComponentMap:                    componentMap,
-				AllComponentsMap:                allTerraformComponentsMap,
-				ComponentsBasePath:              terraformComponentsBasePath,
-				CheckBaseComponentExists:        checkBaseComponentExists,
-				GlobalVars:                      globalAndTerraformVars,
-				GlobalSettings:                  globalAndTerraformSettings,
-				GlobalEnv:                       globalAndTerraformEnv,
-				GlobalCommand:                   terraformCommand,
-				TerraformProviders:              terraformProviders,
-				GlobalAndTerraformHooks:         globalAndTerraformHooks,
-				GlobalBackendType:               globalBackendType,
-				GlobalBackendSection:            globalBackendSection,
-				GlobalRemoteStateBackendType:    globalRemoteStateBackendType,
-				GlobalRemoteStateBackendSection: globalRemoteStateBackendSection,
-				AtmosConfig:                     atmosConfig,
-			}
-
-			result, err := processComponent(opts)
-			if err != nil {
-				return nil, err
-			}
-
-			// Merge component configurations.
-			comp, err := mergeComponentConfigurations(atmosConfig, opts, result)
-			if err != nil {
-				return nil, err
-			}
-
-			terraformComponents[component] = comp
-		}
 		}
 	}
 
@@ -1190,44 +1190,44 @@ func ProcessStackConfig(
 				return nil, fmt.Errorf("invalid 'components.helmfile' section in the file '%s'", stackName)
 			}
 
-		for cmp, v := range allHelmfileComponentsMap {
-			component := cmp
+			for cmp, v := range allHelmfileComponentsMap {
+				component := cmp
 
-			componentMap, ok := v.(map[string]any)
-			if !ok {
-				return nil, fmt.Errorf("invalid 'components.helmfile.%s' section in the file '%s'", component, stackName)
+				componentMap, ok := v.(map[string]any)
+				if !ok {
+					return nil, fmt.Errorf("invalid 'components.helmfile.%s' section in the file '%s'", component, stackName)
+				}
+
+				// Process component using helper function.
+				opts := ComponentProcessorOptions{
+					ComponentType:            cfg.HelmfileComponentType,
+					Component:                component,
+					Stack:                    stack,
+					StackName:                stackName,
+					ComponentMap:             componentMap,
+					AllComponentsMap:         allHelmfileComponentsMap,
+					ComponentsBasePath:       helmfileComponentsBasePath,
+					CheckBaseComponentExists: checkBaseComponentExists,
+					GlobalVars:               globalAndHelmfileVars,
+					GlobalSettings:           globalAndHelmfileSettings,
+					GlobalEnv:                globalAndHelmfileEnv,
+					GlobalCommand:            helmfileCommand,
+					AtmosConfig:              atmosConfig,
+				}
+
+				result, err := processComponent(opts)
+				if err != nil {
+					return nil, err
+				}
+
+				// Merge component configurations.
+				comp, err := mergeComponentConfigurations(atmosConfig, opts, result)
+				if err != nil {
+					return nil, err
+				}
+
+				helmfileComponents[component] = comp
 			}
-
-			// Process component using helper function.
-			opts := ComponentProcessorOptions{
-				ComponentType:            cfg.HelmfileComponentType,
-				Component:                component,
-				Stack:                    stack,
-				StackName:                stackName,
-				ComponentMap:             componentMap,
-				AllComponentsMap:         allHelmfileComponentsMap,
-				ComponentsBasePath:       helmfileComponentsBasePath,
-				CheckBaseComponentExists: checkBaseComponentExists,
-				GlobalVars:               globalAndHelmfileVars,
-				GlobalSettings:           globalAndHelmfileSettings,
-				GlobalEnv:                globalAndHelmfileEnv,
-				GlobalCommand:            helmfileCommand,
-				AtmosConfig:              atmosConfig,
-			}
-
-			result, err := processComponent(opts)
-			if err != nil {
-				return nil, err
-			}
-
-			// Merge component configurations.
-			comp, err := mergeComponentConfigurations(atmosConfig, opts, result)
-			if err != nil {
-				return nil, err
-			}
-
-			helmfileComponents[component] = comp
-		}
 		}
 	}
 
@@ -1240,45 +1240,45 @@ func ProcessStackConfig(
 				return nil, fmt.Errorf("invalid 'components.packer' section in the file '%s'", stackName)
 			}
 
-		for cmp, v := range allPackerComponentsMap {
-			component := cmp
+			for cmp, v := range allPackerComponentsMap {
+				component := cmp
 
-			componentMap, ok := v.(map[string]any)
-			if !ok {
-				return nil, fmt.Errorf("invalid 'components.packer.%s' section in the file '%s'", component, stackName)
+				componentMap, ok := v.(map[string]any)
+				if !ok {
+					return nil, fmt.Errorf("invalid 'components.packer.%s' section in the file '%s'", component, stackName)
+				}
+
+				// Process component using helper function.
+				opts := ComponentProcessorOptions{
+					ComponentType:            cfg.PackerComponentType,
+					Component:                component,
+					Stack:                    stack,
+					StackName:                stackName,
+					ComponentMap:             componentMap,
+					AllComponentsMap:         allPackerComponentsMap,
+					ComponentsBasePath:       packerComponentsBasePath,
+					CheckBaseComponentExists: checkBaseComponentExists,
+					GlobalVars:               globalAndPackerVars,
+					GlobalSettings:           globalAndPackerSettings,
+					GlobalEnv:                globalAndPackerEnv,
+					GlobalCommand:            packerCommand,
+					AtmosConfig:              atmosConfig,
+				}
+
+				result, err := processComponent(opts)
+				if err != nil {
+					return nil, err
+				}
+
+				// Merge component configurations.
+				comp, err := mergeComponentConfigurations(atmosConfig, opts, result)
+				if err != nil {
+					return nil, err
+				}
+
+				packerComponents[component] = comp
 			}
-
-			// Process component using helper function.
-			opts := ComponentProcessorOptions{
-				ComponentType:            cfg.PackerComponentType,
-				Component:                component,
-				Stack:                    stack,
-				StackName:                stackName,
-				ComponentMap:             componentMap,
-				AllComponentsMap:         allPackerComponentsMap,
-				ComponentsBasePath:       packerComponentsBasePath,
-				CheckBaseComponentExists: checkBaseComponentExists,
-				GlobalVars:               globalAndPackerVars,
-				GlobalSettings:           globalAndPackerSettings,
-				GlobalEnv:                globalAndPackerEnv,
-				GlobalCommand:            packerCommand,
-				AtmosConfig:              atmosConfig,
-			}
-
-			result, err := processComponent(opts)
-			if err != nil {
-				return nil, err
-			}
-
-			// Merge component configurations.
-			comp, err := mergeComponentConfigurations(atmosConfig, opts, result)
-			if err != nil {
-				return nil, err
-			}
-
-			packerComponents[component] = comp
 		}
-	}
 	}
 
 	allComponents[cfg.TerraformComponentType] = terraformComponents

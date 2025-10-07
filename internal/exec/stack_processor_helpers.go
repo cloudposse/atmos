@@ -15,13 +15,13 @@ import (
 
 // ComponentProcessorOptions contains configuration for processing a component.
 type ComponentProcessorOptions struct {
-	ComponentType          string
-	Component              string
-	Stack                  string
-	StackName              string
-	ComponentMap           map[string]any
-	AllComponentsMap       map[string]any
-	ComponentsBasePath     string
+	ComponentType            string
+	Component                string
+	Stack                    string
+	StackName                string
+	ComponentMap             map[string]any
+	AllComponentsMap         map[string]any
+	ComponentsBasePath       string
 	CheckBaseComponentExists bool
 
 	// Global configurations.
@@ -44,39 +44,39 @@ type ComponentProcessorOptions struct {
 
 // ComponentProcessorResult contains the processed component data.
 type ComponentProcessorResult struct {
-	ComponentVars                map[string]any
-	ComponentSettings            map[string]any
-	ComponentEnv                 map[string]any
-	ComponentMetadata            map[string]any
-	ComponentCommand             string
-	ComponentOverrides           map[string]any
-	ComponentOverridesVars       map[string]any
-	ComponentOverridesSettings   map[string]any
-	ComponentOverridesEnv        map[string]any
-	ComponentOverridesCommand    string
-	BaseComponentName            string
-	BaseComponentVars            map[string]any
-	BaseComponentSettings        map[string]any
-	BaseComponentEnv             map[string]any
-	BaseComponentCommand         string
-	ComponentInheritanceChain    []string
-	BaseComponents               []string
+	ComponentVars              map[string]any
+	ComponentSettings          map[string]any
+	ComponentEnv               map[string]any
+	ComponentMetadata          map[string]any
+	ComponentCommand           string
+	ComponentOverrides         map[string]any
+	ComponentOverridesVars     map[string]any
+	ComponentOverridesSettings map[string]any
+	ComponentOverridesEnv      map[string]any
+	ComponentOverridesCommand  string
+	BaseComponentName          string
+	BaseComponentVars          map[string]any
+	BaseComponentSettings      map[string]any
+	BaseComponentEnv           map[string]any
+	BaseComponentCommand       string
+	ComponentInheritanceChain  []string
+	BaseComponents             []string
 
 	// Terraform-specific fields.
-	ComponentProviders              map[string]any
-	ComponentHooks                  map[string]any
-	ComponentAuth                   map[string]any
-	ComponentBackendType            string
-	ComponentBackendSection         map[string]any
-	ComponentRemoteStateBackendType string
-	ComponentRemoteStateBackendSection map[string]any
-	ComponentOverridesProviders     map[string]any
-	ComponentOverridesHooks         map[string]any
-	BaseComponentProviders          map[string]any
-	BaseComponentHooks              map[string]any
-	BaseComponentBackendType        string
-	BaseComponentBackendSection     map[string]any
-	BaseComponentRemoteStateBackendType string
+	ComponentProviders                     map[string]any
+	ComponentHooks                         map[string]any
+	ComponentAuth                          map[string]any
+	ComponentBackendType                   string
+	ComponentBackendSection                map[string]any
+	ComponentRemoteStateBackendType        string
+	ComponentRemoteStateBackendSection     map[string]any
+	ComponentOverridesProviders            map[string]any
+	ComponentOverridesHooks                map[string]any
+	BaseComponentProviders                 map[string]any
+	BaseComponentHooks                     map[string]any
+	BaseComponentBackendType               string
+	BaseComponentBackendSection            map[string]any
+	BaseComponentRemoteStateBackendType    string
 	BaseComponentRemoteStateBackendSection map[string]any
 }
 

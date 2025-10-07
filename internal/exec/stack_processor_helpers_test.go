@@ -57,7 +57,7 @@ func TestProcessComponent(t *testing.T) {
 					cfg.MetadataSectionName: map[string]any{
 						"type": "real",
 					},
-					cfg.CommandSectionName: "tofu",
+					cfg.CommandSectionName:     "tofu",
 					cfg.BackendTypeSectionName: "s3",
 					cfg.BackendSectionName: map[string]any{
 						"s3": map[string]any{
@@ -334,20 +334,20 @@ func TestProcessComponent(t *testing.T) {
 
 func TestProcessTerraformBackend(t *testing.T) {
 	tests := []struct {
-		name                         string
-		component                    string
-		baseComponentName            string
-		globalBackendType            string
-		globalBackendSection         map[string]any
-		baseComponentBackendType     string
-		baseComponentBackendSection  map[string]any
-		componentBackendType         string
-		componentBackendSection      map[string]any
-		expectedBackendType          string
-		expectedBackendConfig        map[string]any
-		expectedWorkspaceKeyPrefix   string // For S3
-		expectedPrefix               string // For GCS
-		expectedKey                  string // For Azure
+		name                        string
+		component                   string
+		baseComponentName           string
+		globalBackendType           string
+		globalBackendSection        map[string]any
+		baseComponentBackendType    string
+		baseComponentBackendSection map[string]any
+		componentBackendType        string
+		componentBackendSection     map[string]any
+		expectedBackendType         string
+		expectedBackendConfig       map[string]any
+		expectedWorkspaceKeyPrefix  string // For S3
+		expectedPrefix              string // For GCS
+		expectedKey                 string // For Azure
 	}{
 		{
 			name:              "s3 backend with default workspace_key_prefix",
@@ -378,7 +378,7 @@ func TestProcessTerraformBackend(t *testing.T) {
 					"bucket": "test-bucket",
 				},
 			},
-			expectedBackendType: "s3",
+			expectedBackendType:        "s3",
 			expectedWorkspaceKeyPrefix: "base-vpc",
 		},
 		{
@@ -454,10 +454,10 @@ func TestProcessTerraformBackend(t *testing.T) {
 			expectedKey:             "global/base-vpc.terraform.tfstate",
 		},
 		{
-			name:              "backend type precedence - component overrides base",
-			component:         "vpc",
-			baseComponentName: "",
-			globalBackendType: "s3",
+			name:                     "backend type precedence - component overrides base",
+			component:                "vpc",
+			baseComponentName:        "",
+			globalBackendType:        "s3",
 			baseComponentBackendType: "gcs",
 			componentBackendType:     "azurerm",
 			componentBackendSection: map[string]any{
@@ -468,10 +468,10 @@ func TestProcessTerraformBackend(t *testing.T) {
 			expectedBackendType: "azurerm",
 		},
 		{
-			name:              "backend type precedence - base overrides global",
-			component:         "vpc",
-			baseComponentName: "",
-			globalBackendType: "s3",
+			name:                     "backend type precedence - base overrides global",
+			component:                "vpc",
+			baseComponentName:        "",
+			globalBackendType:        "s3",
 			baseComponentBackendType: "gcs",
 			globalBackendSection: map[string]any{
 				"gcs": map[string]any{
@@ -481,10 +481,10 @@ func TestProcessTerraformBackend(t *testing.T) {
 			expectedBackendType: "gcs",
 		},
 		{
-			name:                     "component with slashes in name",
-			component:                "path/to/vpc",
-			baseComponentName:        "",
-			globalBackendType:        "s3",
+			name:              "component with slashes in name",
+			component:         "path/to/vpc",
+			baseComponentName: "",
+			globalBackendType: "s3",
 			globalBackendSection: map[string]any{
 				"s3": map[string]any{
 					"bucket": "test-bucket",
@@ -537,18 +537,18 @@ func TestProcessTerraformBackend(t *testing.T) {
 
 func TestProcessTerraformRemoteStateBackend(t *testing.T) {
 	tests := []struct {
-		name                                    string
-		component                               string
-		finalComponentBackendType               string
-		finalComponentBackendSection            map[string]any
-		globalRemoteStateBackendType            string
-		globalRemoteStateBackendSection         map[string]any
-		baseComponentRemoteStateBackendType     string
-		baseComponentRemoteStateBackendSection  map[string]any
-		componentRemoteStateBackendType         string
-		componentRemoteStateBackendSection      map[string]any
-		expectedRemoteStateBackendType          string
-		expectedRemoteStateBackendConfigNotNil  bool
+		name                                   string
+		component                              string
+		finalComponentBackendType              string
+		finalComponentBackendSection           map[string]any
+		globalRemoteStateBackendType           string
+		globalRemoteStateBackendSection        map[string]any
+		baseComponentRemoteStateBackendType    string
+		baseComponentRemoteStateBackendSection map[string]any
+		componentRemoteStateBackendType        string
+		componentRemoteStateBackendSection     map[string]any
+		expectedRemoteStateBackendType         string
+		expectedRemoteStateBackendConfigNotNil bool
 	}{
 		{
 			name:                      "remote state backend inherits from backend type",
@@ -559,7 +559,7 @@ func TestProcessTerraformRemoteStateBackend(t *testing.T) {
 					"bucket": "test-bucket",
 				},
 			},
-			expectedRemoteStateBackendType: "s3",
+			expectedRemoteStateBackendType:         "s3",
 			expectedRemoteStateBackendConfigNotNil: true,
 		},
 		{
@@ -577,7 +577,7 @@ func TestProcessTerraformRemoteStateBackend(t *testing.T) {
 					"bucket": "remote-state-bucket",
 				},
 			},
-			expectedRemoteStateBackendType: "gcs",
+			expectedRemoteStateBackendType:         "gcs",
 			expectedRemoteStateBackendConfigNotNil: true,
 		},
 		{
@@ -589,7 +589,7 @@ func TestProcessTerraformRemoteStateBackend(t *testing.T) {
 					"bucket": "test-bucket",
 				},
 			},
-			globalRemoteStateBackendType: "gcs",
+			globalRemoteStateBackendType:        "gcs",
 			baseComponentRemoteStateBackendType: "azurerm",
 			componentRemoteStateBackendType:     "s3",
 			componentRemoteStateBackendSection: map[string]any{
@@ -597,7 +597,7 @@ func TestProcessTerraformRemoteStateBackend(t *testing.T) {
 					"bucket": "component-remote-state",
 				},
 			},
-			expectedRemoteStateBackendType: "s3",
+			expectedRemoteStateBackendType:         "s3",
 			expectedRemoteStateBackendConfigNotNil: true,
 		},
 		{
@@ -615,7 +615,7 @@ func TestProcessTerraformRemoteStateBackend(t *testing.T) {
 					"bucket": "remote-state-bucket",
 				},
 			},
-			expectedRemoteStateBackendType: "s3",
+			expectedRemoteStateBackendType:         "s3",
 			expectedRemoteStateBackendConfigNotNil: true,
 		},
 	}
@@ -706,13 +706,13 @@ func TestMergeComponentConfigurations(t *testing.T) {
 				ComponentMetadata: map[string]any{
 					"type": "real",
 				},
-				ComponentOverrides:        map[string]any{},
-				ComponentOverridesVars:    map[string]any{},
+				ComponentOverrides:         map[string]any{},
+				ComponentOverridesVars:     map[string]any{},
 				ComponentOverridesSettings: map[string]any{},
-				ComponentOverridesEnv:     map[string]any{},
-				BaseComponentVars:         map[string]any{},
-				BaseComponentSettings:     map[string]any{},
-				BaseComponentEnv:          map[string]any{},
+				ComponentOverridesEnv:      map[string]any{},
+				BaseComponentVars:          map[string]any{},
+				BaseComponentSettings:      map[string]any{},
+				BaseComponentEnv:           map[string]any{},
 				ComponentProviders: map[string]any{
 					"aws": map[string]any{
 						"profile": "test",
@@ -760,7 +760,7 @@ func TestMergeComponentConfigurations(t *testing.T) {
 				GlobalSettings: map[string]any{
 					"enabled": true,
 				},
-				GlobalEnv:   map[string]any{},
+				GlobalEnv: map[string]any{},
 				AtmosConfig: &schema.AtmosConfiguration{
 					Components: schema.Components{
 						Helmfile: schema.Helmfile{
@@ -833,18 +833,18 @@ func TestMergeComponentConfigurations(t *testing.T) {
 				AtmosConfig:    &schema.AtmosConfiguration{},
 			},
 			result: &ComponentProcessorResult{
-				ComponentVars:              map[string]any{},
-				ComponentSettings:          map[string]any{},
-				ComponentEnv:               map[string]any{},
-				ComponentMetadata:          map[string]any{},
-				ComponentOverrides:         map[string]any{},
-				ComponentOverridesVars:     map[string]any{},
-				ComponentOverridesSettings: map[string]any{},
-				ComponentOverridesEnv:      map[string]any{},
-				BaseComponentName:          "base-vpc",
-				BaseComponentVars:          map[string]any{},
-				BaseComponentSettings:      map[string]any{},
-				BaseComponentEnv:           map[string]any{},
+				ComponentVars:                          map[string]any{},
+				ComponentSettings:                      map[string]any{},
+				ComponentEnv:                           map[string]any{},
+				ComponentMetadata:                      map[string]any{},
+				ComponentOverrides:                     map[string]any{},
+				ComponentOverridesVars:                 map[string]any{},
+				ComponentOverridesSettings:             map[string]any{},
+				ComponentOverridesEnv:                  map[string]any{},
+				BaseComponentName:                      "base-vpc",
+				BaseComponentVars:                      map[string]any{},
+				BaseComponentSettings:                  map[string]any{},
+				BaseComponentEnv:                       map[string]any{},
 				ComponentProviders:                     map[string]any{},
 				ComponentHooks:                         map[string]any{},
 				ComponentAuth:                          map[string]any{},
@@ -867,20 +867,20 @@ func TestMergeComponentConfigurations(t *testing.T) {
 		{
 			name: "terraform abstract component removes spacelift workspace_enabled",
 			opts: ComponentProcessorOptions{
-				ComponentType:  cfg.TerraformComponentType,
-				Component:      "abstract-vpc",
-				GlobalVars:     map[string]any{},
-				GlobalSettings: map[string]any{},
-				GlobalEnv:      map[string]any{},
+				ComponentType:     cfg.TerraformComponentType,
+				Component:         "abstract-vpc",
+				GlobalVars:        map[string]any{},
+				GlobalSettings:    map[string]any{},
+				GlobalEnv:         map[string]any{},
 				GlobalBackendType: "s3",
 				GlobalBackendSection: map[string]any{
 					"s3": map[string]any{
 						"bucket": "test",
 					},
 				},
-				TerraformProviders: map[string]any{},
+				TerraformProviders:      map[string]any{},
 				GlobalAndTerraformHooks: map[string]any{},
-				AtmosConfig:    &schema.AtmosConfiguration{},
+				AtmosConfig:             &schema.AtmosConfiguration{},
 			},
 			result: &ComponentProcessorResult{
 				ComponentVars: map[string]any{},
