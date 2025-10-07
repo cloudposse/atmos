@@ -70,7 +70,7 @@ atmos terraform untaint app -s dev module.vpc.aws_subnet.private[0]
         Skip running `terraform init` before executing the command.
 
         ```shell
-        atmos terraform untaint vpc -s dev --skip-init
+        atmos terraform untaint vpc -s dev aws_instance.web --skip-init
         ```
     </dd>
 
@@ -79,7 +79,7 @@ atmos terraform untaint app -s dev module.vpc.aws_subnet.private[0]
         Show what would be executed without actually running the command.
 
         ```shell
-        atmos terraform untaint vpc -s dev --dry-run
+        atmos terraform untaint vpc -s dev aws_instance.web --dry-run
         ```
     </dd>
 </dl>
