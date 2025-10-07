@@ -13,7 +13,7 @@ build-all:
 # Generate screengrabs using Docker (cross-platform, recommended)
 docker-build:
 	@echo "Generating screengrabs using Podman (Linux container)..."
-	@podman run --rm -v $$(pwd)/../..:/workspace -w /workspace/demo/screengrabs \
+	@podman run --rm -t -v $$(pwd)/../..:/workspace -w /workspace/demo/screengrabs \
 		-e ATMOS_TELEMETRY=false \
 		ubuntu:22.04 bash -c ' \
 		set -e && \
