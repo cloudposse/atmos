@@ -91,6 +91,9 @@ func TestIsWorkspacesEnabled(t *testing.T) {
 }
 
 func TestExecuteTerraformAffectedWithDependents(t *testing.T) {
+	// Skip long tests in short mode (this test takes ~26 seconds due to Git operations and Terraform execution)
+	tests.SkipIfShort(t)
+
 	// Check for valid Git remote URL before running test
 	tests.RequireGitRemoteWithValidURL(t)
 

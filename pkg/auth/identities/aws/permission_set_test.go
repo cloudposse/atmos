@@ -14,6 +14,7 @@ import (
 
 	"github.com/cloudposse/atmos/pkg/auth/types"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/tests"
 )
 
 func TestNewPermissionSetIdentity(t *testing.T) {
@@ -135,6 +136,9 @@ func TestPermissionSetIdentity_getPermissionSetName_Error(t *testing.T) {
 }
 
 func TestPermissionSetIdentity_newSSOClient_Success(t *testing.T) {
+	// This test requires AWS credentials to create an SSO client.
+	tests.RequireAWSProfile(t, "cplive-core-gbl-identity")
+
 	i := &permissionSetIdentity{name: "dev"}
 	// AccessKeyID is used as an access token by newSSOClient; no network happens here.
 	base := &types.AWSCredentials{AccessKeyID: "access-token", Region: "us-east-1"}
