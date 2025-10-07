@@ -801,12 +801,12 @@ func TestProcessTopLevelComponentInheritance(t *testing.T) {
 		{
 			name: "no component attribute",
 			opts: ComponentProcessorOptions{
-				ComponentType:  cfg.TerraformComponentType,
-				Component:      "vpc",
-				Stack:          "test-stack",
-				StackName:      "test-stack",
-				ComponentMap:   map[string]any{},
-				AtmosConfig:    &schema.AtmosConfiguration{},
+				ComponentType:    cfg.TerraformComponentType,
+				Component:        "vpc",
+				Stack:            "test-stack",
+				StackName:        "test-stack",
+				ComponentMap:     map[string]any{},
+				AtmosConfig:      &schema.AtmosConfiguration{},
 				AllComponentsMap: map[string]any{},
 			},
 			expectedBaseComps: nil,

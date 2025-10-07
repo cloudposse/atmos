@@ -818,7 +818,6 @@ func ProcessYAMLConfigFileWithContext(
 		nil
 }
 
-
 // processSettingsIntegrationsGithub deep-merges the `settings.integrations.github` section from stack manifests with the `integrations.github` section from `atmos.yaml`.
 func processSettingsIntegrationsGithub(atmosConfig *schema.AtmosConfiguration, settings map[string]any) (map[string]any, error) {
 	defer perf.Track(atmosConfig, "exec.processSettingsIntegrationsGithub")()
