@@ -11,9 +11,12 @@ import (
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
+	"github.com/cloudposse/atmos/tests"
 )
 
 func TestComponentFunc(t *testing.T) {
+	tests.RequireExecutable(t, "terraform", "component function testing")
+
 	log.SetLevel(log.DebugLevel)
 	log.SetOutput(os.Stdout)
 

@@ -579,6 +579,8 @@ func TestExecuteTerraform_TerraformPlanWithSkipPlanfile(t *testing.T) {
 }
 
 func TestExecuteTerraform_DeploymentStatus(t *testing.T) {
+	tests.RequireExecutable(t, "terraform", "deployment status testing")
+
 	startingDir, err := os.Getwd()
 	if err != nil {
 		t.Fatalf("Failed to get the current working directory: %v", err)
@@ -873,6 +875,11 @@ func TestExecuteTerraform_OpaValidationFunctionality(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			// Ensure PATH is set for OPA validation (required by the policy).
+			if os.Getenv("PATH") != "" {
+				t.Setenv("PATH", os.Getenv("PATH"))
+			}
+
 			// Set up environment variables for this test using t.Setenv for automatic cleanup.
 			for key, value := range tt.envVars {
 				t.Setenv(key, value)

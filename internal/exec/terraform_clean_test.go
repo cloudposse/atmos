@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/tests"
 	"github.com/stretchr/testify/require"
 )
 
@@ -34,6 +35,8 @@ func verifyFileDeleted(t *testing.T, files []string) (bool, string) {
 
 // test ExecuteTerraform clean command.
 func TestCLITerraformClean(t *testing.T) {
+	tests.RequireExecutable(t, "terraform", "terraform clean testing")
+
 	err := os.Unsetenv("ATMOS_CLI_CONFIG_PATH")
 	if err != nil {
 		t.Fatalf("Failed to unset 'ATMOS_CLI_CONFIG_PATH': %v", err)

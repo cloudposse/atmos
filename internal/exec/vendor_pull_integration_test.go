@@ -19,6 +19,9 @@ func TestVendorPullBasicExecution(t *testing.T) {
 	// Skip long tests in short mode (this test takes ~4 seconds due to network I/O and Git operations)
 	tests.SkipIfShort(t)
 
+	// Require git to be available for vendoring operations.
+	tests.RequireExecutable(t, "git", "vendoring operations")
+
 	// Check for GitHub access with rate limit check.
 	rateLimits := tests.RequireGitHubAccess(t)
 	if rateLimits != nil && rateLimits.Remaining < 10 {
@@ -169,6 +172,9 @@ func TestVendorPullFullWorkflow(t *testing.T) {
 // TestVendorPullTripleSlashNormalization tests end-to-end triple-slash URI normalization.
 // This complements the unit tests with integration-level verification.
 func TestVendorPullTripleSlashNormalization(t *testing.T) {
+	// Require git to be available for vendoring operations.
+	tests.RequireExecutable(t, "git", "vendoring operations")
+
 	// Check for GitHub access with rate limit check.
 	rateLimits := tests.RequireGitHubAccess(t)
 	if rateLimits != nil && rateLimits.Remaining < 10 {
