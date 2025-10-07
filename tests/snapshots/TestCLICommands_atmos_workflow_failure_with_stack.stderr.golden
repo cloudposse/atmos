@@ -16,8 +16,16 @@ The following command failed to execute:
 
  atmos terraform plan idontexist -s prod
 
-To resume the workflow from this step, run:
+## Hints
+
+💡 To resume the workflow from this step, run:
 
  atmos workflow fail-with-stack -f test --from-step step1 -s prod
+
+
+
+# Error
+
+workflow step execution failed
 
 

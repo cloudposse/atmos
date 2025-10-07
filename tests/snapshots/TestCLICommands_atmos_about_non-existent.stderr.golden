@@ -24,3 +24,9 @@ Valid subcommands are:
 
 
 Run `atmos --help` for usage
+
+# Error
+
+unknown command "non-existent" for "atmos about"
+
+

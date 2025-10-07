@@ -16,8 +16,16 @@ The following command failed to execute:
 
  atmos terraform plan mock -s idontexist
 
-To resume the workflow from this step, run:
+## Hints
+
+💡 To resume the workflow from this step, run:
 
  atmos workflow fail -f subdir/test --from-step step1
+
+
+
+# Error
+
+workflow step execution failed
 
 
