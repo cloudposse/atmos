@@ -34,11 +34,11 @@ function record() {
             script -q $output_ansi bash -c "cd $demo_path && ($command)" > /dev/null
         fi
     else
-        # Linux - capture output directly (colors are preserved)
+        # Linux-specific syntax - script needs to write to the ansi file, not /dev/null
         if [ "${extension}" = "sh" ]; then
-            $command > $output_ansi 2>&1
+            script -q -e -c "$command" $output_ansi
         else
-            (cd $demo_path && $command) > $output_ansi 2>&1
+            script -q -e -c "cd $demo_path && $command" $output_ansi
         fi
     fi
     postprocess_ansi $output_ansi
