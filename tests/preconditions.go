@@ -381,3 +381,13 @@ func RequireGitCommitConfig(t *testing.T) {
 
 	t.Logf("Git commit configuration available")
 }
+
+// SkipIfShort skips the test if running in short mode (go test -short).
+// Use this for tests that take more than 2 seconds (network I/O, heavy processing, Git operations, etc.).
+func SkipIfShort(t *testing.T) {
+	t.Helper()
+
+	if testing.Short() {
+		t.Skipf("Skipping long-running test in short mode (use 'go test' without -short to run)")
+	}
+}

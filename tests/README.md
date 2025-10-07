@@ -7,8 +7,13 @@ Smoke tests are implemented to verify the basic functionality and expected behav
 ## Quick Start
 
 ```bash
-# Run all tests (will skip if preconditions not met)
+# Run quick tests only (skip long-running tests >2s)
+go test -short ./...
+make test-short
+
+# Run all tests including long-running ones (will skip if preconditions not met)
 go test ./...
+make testacc
 
 # Run with verbose output to see skips
 go test -v ./...
@@ -16,9 +21,26 @@ go test -v ./...
 # Bypass all precondition checks
 export ATMOS_TEST_SKIP_PRECONDITION_CHECKS=true
 go test ./...
+```
 
-# Run tests with make
-make test
+## Short Mode
+
+Run quick tests only, skipping tests that take more than 2 seconds:
+
+```bash
+go test -short ./...
+make test-short
+```
+
+Long tests include:
+- Network I/O (vendor pulls, OCI registry)
+- Git operations (cloning, checkouts)
+- Heavy processing (Atlantis config generation)
+
+To run all tests including long ones:
+```bash
+go test ./...
+make testacc
 ```
 
 ## Understanding Test Skips

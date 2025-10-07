@@ -436,8 +436,17 @@ Atmos uses **precondition-based test skipping** to provide a better developer ex
 
 ### Running Tests
 ```bash
-# Run all tests (will skip if preconditions not met)
+# Quick tests only (skip long-running tests >2s)
+make test-short
+go test -short ./...
+
+# All tests including long-running ones
+make testacc
 go test ./...
+
+# With coverage
+make test-short-cover
+make testacc-cover
 
 # Bypass all precondition checks
 export ATMOS_TEST_SKIP_PRECONDITION_CHECKS=true
