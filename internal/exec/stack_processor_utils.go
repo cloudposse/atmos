@@ -1331,28 +1331,6 @@ func processSettingsIntegrationsGithub(atmosConfig *schema.AtmosConfiguration, s
 	return settings, nil
 }
 
-// processAuthConfig merges the component `auth` section with global `auth` from atmos.yaml.
-// Component-level config takes precedence over global config.
-func processAuthConfig(atmosConfig *schema.AtmosConfiguration, authConfig map[string]any) (map[string]any, error) {
-	// Convert the global auth config struct to map[string]any for merging.
-	var globalAuthConfig map[string]any
-	if err := mapstructure.Decode(atmosConfig.Auth, &globalAuthConfig); err != nil {
-		return nil, fmt.Errorf("%w: failed to convert global auth config to map: %v", errUtils.ErrInvalidAuthConfig, err)
-	}
-
-	mergedAuthConfig, err := m.Merge(
-		atmosConfig,
-		[]map[string]any{
-			globalAuthConfig,
-			authConfig,
-		})
-	if err != nil {
-		return nil, fmt.Errorf("%w: merge auth config: %v", errUtils.ErrInvalidAuthConfig, err)
-	}
-
-	return mergedAuthConfig, nil
-}
-
 // FindComponentStacks finds all infrastructure stack manifests where the component or the base component is defined.
 func FindComponentStacks(
 	componentType string,
