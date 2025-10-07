@@ -36,6 +36,7 @@ var (
 	ErrUnsupportedInputType                  = errors.New("unsupported input type")
 	ErrMissingStackNameTemplateAndPattern    = errors.New("'stacks.name_pattern' or 'stacks.name_template' needs to be specified in 'atmos.yaml'")
 	ErrFailedMarshalConfigToYaml             = errors.New("failed to marshal config to YAML")
+	ErrCommandNil                            = errors.New("command cannot be nil")
 
 	// ErrPlanHasDiff is returned when there are differences between two Terraform plan files.
 	ErrPlanHasDiff = errors.New("plan files have differences")
@@ -177,7 +178,6 @@ var (
 	ErrGetHooks            = errors.New("error getting hooks")
 	ErrSetFlag             = errors.New("failed to set flag")
 	ErrVersionMismatch     = errors.New("version mismatch")
-	ErrCommandNil          = errors.New("command cannot be nil")
 
 	// Download and client errors.
 	ErrCreateDownloadClient    = errors.New("failed to create download client")
