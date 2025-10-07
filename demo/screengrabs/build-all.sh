@@ -34,11 +34,11 @@ function record() {
             script -q $output_ansi bash -c "cd $demo_path && ($command)" > /dev/null
         fi
     else
-        # Linux-specific syntax
+        # Linux - capture output directly (colors are preserved)
         if [ "${extension}" = "sh" ]; then
-            timeout 30 script -q -a $output_ansi -c "$command" /dev/null
+            $command > $output_ansi 2>&1
         else
-            timeout 30 script -q -a $output_ansi -c "cd $demo_path && ($command)" /dev/null
+            (cd $demo_path && $command) > $output_ansi 2>&1
         fi
     fi
     postprocess_ansi $output_ansi
