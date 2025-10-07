@@ -875,14 +875,15 @@ func TestExecuteTerraform_OpaValidationFunctionality(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Ensure PATH is set for OPA validation (required by the policy).
-			if os.Getenv("PATH") != "" {
-				t.Setenv("PATH", os.Getenv("PATH"))
-			}
-
 			// Set up environment variables for this test using t.Setenv for automatic cleanup.
 			for key, value := range tt.envVars {
 				t.Setenv(key, value)
+			}
+
+			// Ensure PATH is set for OPA validation (required by the policy).
+			// This must come AFTER other t.Setenv calls to ensure it's preserved.
+			if pathValue := os.Getenv("PATH"); pathValue != "" {
+				t.Setenv("PATH", pathValue)
 			}
 
 			// Test validation directly using ExecuteValidateComponent instead of ExecuteTerraform

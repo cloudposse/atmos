@@ -16,6 +16,9 @@ import (
 // The pattern indicates cloning from the root of a repository (e.g., github.com/repo.git///?ref=v1.0).
 // This pattern was broken after go-getter v1.7.9 due to changes in subdirectory path handling.
 func TestVendorPullWithTripleSlashPattern(t *testing.T) {
+	// Require git to be available for vendoring operations.
+	tests.RequireExecutable(t, "git", "vendoring operations")
+
 	// Check for GitHub access with rate limit check.
 	rateLimits := tests.RequireGitHubAccess(t)
 	if rateLimits != nil && rateLimits.Remaining < 10 {
@@ -104,6 +107,9 @@ func TestVendorPullWithTripleSlashPattern(t *testing.T) {
 // This could be a potential cause of the issue where the vendor process
 // gets confused by multiple configuration files.
 func TestVendorPullWithMultipleVendorFiles(t *testing.T) {
+	// Require git to be available for vendoring operations.
+	tests.RequireExecutable(t, "git", "vendoring operations")
+
 	// Check for GitHub access with rate limit check.
 	rateLimits := tests.RequireGitHubAccess(t)
 	if rateLimits != nil && rateLimits.Remaining < 10 {

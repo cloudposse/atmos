@@ -11,9 +11,12 @@ import (
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
+	"github.com/cloudposse/atmos/tests"
 )
 
 func TestYamlFuncTerraformOutput(t *testing.T) {
+	tests.RequireExecutable(t, "tofu", "terraform output function testing")
+
 	err := os.Unsetenv("ATMOS_CLI_CONFIG_PATH")
 	if err != nil {
 		t.Fatalf("Failed to unset 'ATMOS_CLI_CONFIG_PATH': %v", err)
