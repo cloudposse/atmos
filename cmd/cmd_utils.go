@@ -583,7 +583,7 @@ func CheckForAtmosUpdateAndPrintMessage(atmosConfig schema.AtmosConfiguration) {
 
 // Check Atmos is version command.
 func isVersionCommand() bool {
-	return len(os.Args) > 1 && os.Args[1] == "version"
+	return len(os.Args) > 1 && (os.Args[1] == "version" || os.Args[1] == "--version")
 }
 
 // handleHelpRequest shows help content and exits only if the first argument is "help" or "--help" or "-h".

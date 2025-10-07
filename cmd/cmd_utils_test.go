@@ -167,6 +167,11 @@ func TestIsVersionCommand(t *testing.T) {
 			expected: true,
 		},
 		{
+			name:     "--version flag",
+			args:     []string{"--version"},
+			expected: true,
+		},
+		{
 			name:     "not version command",
 			args:     []string{"help"},
 			expected: false,

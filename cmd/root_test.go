@@ -12,6 +12,7 @@ import (
 
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/utils"
 )
 
 func TestNoColorLog(t *testing.T) {
@@ -365,6 +366,90 @@ func TestIsCompletionCommand(t *testing.T) {
 			name:     "no args",
 			args:     []string{"atmos"},
 			expected: false,
+=======
+func TestVersionFlagParsing(t *testing.T) {
+	tests := []struct {
+		name        string
+		args        []string
+		expectValue bool
+	}{
+		{
+			name:        "--version flag is parsed correctly",
+			args:        []string{"--version"},
+			expectValue: true,
+		},
+		{
+			name:        "no --version flag defaults to false",
+			args:        []string{},
+			expectValue: false,
+		},
+		{
+			name:        "--version can be combined with other flags",
+			args:        []string{"--version", "--no-color"},
+			expectValue: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Reset flag states before each test - need to reset both value and Changed state.
+			versionFlag := RootCmd.PersistentFlags().Lookup("version")
+			if versionFlag != nil {
+				versionFlag.Value.Set("false")
+				versionFlag.Changed = false
+			}
+
+			// Use the global RootCmd; state isolation is handled by flag reset above.
+			RootCmd.SetArgs(tt.args)
+
+			// Check that the version flag is defined.
+			assert.NotNil(t, versionFlag, "version flag should be defined")
+			assert.Contains(t, versionFlag.Usage, "Atmos CLI version", "usage should mention Atmos CLI version")
+
+			// Parse flags.
+			err := RootCmd.ParseFlags(tt.args)
+			assert.NoError(t, err, "parsing flags should not error")
+
+			// Check if version flag was set to expected value.
+			versionSet, err := RootCmd.Flags().GetBool("version")
+			assert.NoError(t, err)
+			assert.Equal(t, tt.expectValue, versionSet, "version flag should be %v", tt.expectValue)
+		})
+	}
+}
+
+func TestVersionFlagExecutionPath(t *testing.T) {
+	tests := []struct {
+		name       string
+		setup      func()
+		cleanup    func()
+		expectExit int
+	}{
+		{
+			name: "version flag triggers successful exit",
+			setup: func() {
+				versionFlag := RootCmd.PersistentFlags().Lookup("version")
+				if versionFlag != nil {
+					versionFlag.Value.Set("false")
+					versionFlag.Changed = false
+				}
+				RootCmd.SetArgs([]string{"--version"})
+			},
+			cleanup:    func() {},
+			expectExit: 0,
+		},
+		{
+			name: "version subcommand bypasses flag handler",
+			setup: func() {
+				versionFlag := RootCmd.PersistentFlags().Lookup("version")
+				if versionFlag != nil {
+					versionFlag.Value.Set("false")
+					versionFlag.Changed = false
+				}
+				RootCmd.SetArgs([]string{"version"})
+			},
+			cleanup:    func() {},
+			expectExit: -1, // No exit expected
 		},
 	}
 
@@ -389,6 +474,40 @@ func TestIsCompletionCommand(t *testing.T) {
 			// Test.
 			result := isCompletionCommand(cmd)
 			assert.Equal(t, tt.expected, result)
+			// Save original OsExit and restore after test.
+			originalOsExit := utils.OsExit
+			t.Cleanup(func() {
+				utils.OsExit = originalOsExit
+				tt.cleanup()
+			})
+
+			// Mock OsExit to panic with the exit code so we can test the execution path
+			// without actually exiting the test process.
+			type exitPanic struct {
+				code int
+			}
+			utils.OsExit = func(code int) {
+				panic(exitPanic{code: code})
+			}
+
+			// Setup test conditions.
+			tt.setup()
+
+			if tt.expectExit >= 0 {
+				// Execute should call version command and then exit with expected code.
+				// We expect it to panic with our exitPanic struct containing the exit code.
+				// This verifies that the --version flag handler is being executed and
+				// calls os.Exit via utils.OsExit.
+				assert.PanicsWithValue(t, exitPanic{code: tt.expectExit}, func() {
+					_ = Execute()
+				}, "Execute should exit with code %d", tt.expectExit)
+			} else {
+				// No exit expected, just run normally.
+				// This test ensures the version flag check doesn't interfere with normal commands.
+				assert.NotPanics(t, func() {
+					_ = Execute()
+				}, "Execute should not exit when version flag is not set")
+			}
 		})
 	}
 }
