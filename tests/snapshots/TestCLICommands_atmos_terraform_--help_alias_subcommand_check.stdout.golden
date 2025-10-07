@@ -113,8 +113,9 @@ Flags:
         --ref string                  Git reference with which to compare the
                                       current branch: atmos terraform
                                        --affected --ref
-                                      refs/heads/main. Refer to
-                                      https://git-scm.com/book/en/v2/Git-Internals-Git-References
+                                      refs/heads/main. Refer to 10.3 Git
+                                      Internals Git
+                                      References https://git-scm.com/book/en/v2/Git-Internals-Git-References
                                       for more details
 
         --repo-path string            Filesystem path to the already cloned
@@ -216,6 +217,9 @@ Global Flags:
                                      Errors can be redirected to any file or any
                                      standard file descriptor (including
                                      /dev/null)
+
+        --verbose                    Show detailed error messages with full
+                                     stack traces (default false)
 
         --version                    Display the Atmos CLI version
 

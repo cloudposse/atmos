@@ -98,6 +98,9 @@ Flags:
                                      standard file descriptor (including
                                      /dev/null)
 
+        --verbose                    Show detailed error messages with full
+                                     stack traces (default false)
+
         --version                    Display the Atmos CLI version
 
 

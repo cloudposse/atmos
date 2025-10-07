@@ -15,6 +15,15 @@ import (
 
 const defaultWidth = 80
 
+// trimTrailingSpaces removes trailing spaces and tabs from each line.
+func trimTrailingSpaces(s string) string {
+	lines := strings.Split(s, "\n")
+	for i, line := range lines {
+		lines[i] = strings.TrimRight(line, " \t")
+	}
+	return strings.Join(lines, "\n")
+}
+
 // Renderer is a markdown renderer using Glamour.
 type Renderer struct {
 	renderer              *glamour.TermRenderer

@@ -32,7 +32,7 @@ tests:
         - "No workflow exists"
         - "test-1"
         - "terraform-plan-all-test-components"
-      exit_code: 1
+      exit_code: 2
   - name: atmos invalidCommand
     enabled: true
     snapshot: true

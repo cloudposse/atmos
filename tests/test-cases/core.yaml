@@ -44,7 +44,7 @@ tests:
       stdout:
         - "^\\s*$"
       stderr:
-        - "atmos.yaml CLI config file specifies the directory for Atmos stacks as stacks, but the directory does not exist."
+        - "directory for Atmos stacks does not exist"
         - "Telemetry Enabled"
       exit_code: 1
 
