@@ -1,0 +1,30 @@
+
+[0m[1mInitializing the backend...[0m
+
+[0m[1mInitializing provider plugins...[0m
+- Reusing previous version of eppo/environment from the dependency lock file
+- Using previously-installed eppo/environment v1.3.8
+
+[0m[1m[32mTerraform has been successfully initialized![0m[32m[0m
+[0m[32mSwitched to workspace "dev".[0m
+[0m[1mdata.environment_variables.required: Reading...[0m[0m
+[0m[1mdata.environment_variables.required: Read complete after 0s [id=0f67525d-40c8-70b7-1070-61307f4c6a9b][0m
+
+[0m[1m[32mNo changes.[0m[1m Your infrastructure matches the configuration.[0m
+
+[0mTerraform has compared your real infrastructure against your configuration
+and found no differences, so no changes are needed.
+[0m[1m[32m
+Apply complete! Resources: 0 added, 0 changed, 0 destroyed.
+[0m[0m[1m[32m
+Outputs:
+
+[0mall_atmos_vars = tomap({
+  "ATMOS_BASE_PATH" = "/absolute/path/to/repo/tests/fixtures/scenarios/env"
+  "ATMOS_CLI_CONFIG_PATH" = "/absolute/path/to/repo/tests/fixtures/scenarios/env"
+  "ATMOS_SHLVL" = "1"
+  "EXAMPLE" = "test"
+})
+atmos_base_path = "/absolute/path/to/repo/tests/fixtures/scenarios/env"
+atmos_cli_config_path = "/absolute/path/to/repo/tests/fixtures/scenarios/env"
+example = "test"
