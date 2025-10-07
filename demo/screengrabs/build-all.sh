@@ -36,9 +36,9 @@ function record() {
     else
         # Linux-specific syntax
         if [ "${extension}" = "sh" ]; then
-            script -q -a $output_ansi -c "$command" > /dev/null
+            timeout 30 script -q -a $output_ansi -c "$command" /dev/null
         else
-            script -q -a $output_ansi -c "cd $demo_path && ($command)" > /dev/null
+            timeout 30 script -q -a $output_ansi -c "cd $demo_path && ($command)" /dev/null
         fi
     fi
     postprocess_ansi $output_ansi
