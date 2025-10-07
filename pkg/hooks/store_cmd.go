@@ -26,7 +26,7 @@ type TerraformOutputGetter func(
 	skipCache bool,
 ) (any, bool, error)
 
-// assert that Command implements Command interface.
+// Assert that StoreCommand implements Command interface.
 var _ Command = &StoreCommand{}
 
 type StoreCommand struct {

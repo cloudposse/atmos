@@ -58,6 +58,8 @@ atmos describe component vpc -s plat-ue2-prod --query .vars.tags
 atmos describe component vpc -s plat-ue2-prod -q .settings
 
 atmos describe component vpc -s plat-ue2-prod --pager=more
+
+atmos describe component vpc -s tenant1-ue2-dev --provenance
 ```
 
 ## Arguments
@@ -90,6 +92,32 @@ atmos describe component vpc -s plat-ue2-prod --pager=more
 
   <dt>`--query` / `-q` <em>(optional)</em></dt>
   <dd>Query the results of the command using `yq` expressions.<br/><br/>`atmos describe component <c> -s <stack> --query .vars.tags`<br/><br/>For more details, refer to https://mikefarah.gitbook.io/yq.</dd>
+
+  <dt>`--provenance` <em>(optional)</em></dt>
+  <dd>
+    Enable provenance tracking to show where configuration values originated.
+    <br/><br/>
+    <strong>YAML format on TTY:</strong>
+    <ul>
+      <li>Inline comments with file path, line number, and column</li>
+      <li>Symbol-based inheritance indicators: ● (defined/overridden), ○ (inherited), ∴ (computed/templated)</li>
+      <li>Depth tracking with <code>[N]</code> notation: <code>[1]</code> for parent stack, <code>[2+]</code> for deeper imports</li>
+      <li>Color-coded depth indicators: cyan (depth 1), green (depth 2), orange (depth 3), red (depth 4+)</li>
+      <li>Two-column side-by-side layout (Configuration │ Provenance)</li>
+    </ul>
+    <strong>YAML format non-TTY (pipes):</strong>
+    <ul>
+      <li>Inline comments without color codes</li>
+      <li>Single-column layout (preserves valid YAML)</li>
+    </ul>
+    <strong>JSON format:</strong>
+    <ul>
+      <li>Provenance embedded as <code>__atmos_provenance</code> metadata fields</li>
+      <li>Structure: <code>{'{"file": "path", "line": N, "column": N, "type": "import|inline|override|computed", "depth": N}'}</code></li>
+      <li>No inline comments (JSON doesn't support comments)</li>
+    </ul>
+    <code>atmos describe component &lt;c&gt; -s &lt;stack&gt; --provenance</code>
+  </dd>
 
   <dt>`--pager` <em>(optional)</em></dt>
   <dd>Disable/Enable the paging user experience.</dd>
