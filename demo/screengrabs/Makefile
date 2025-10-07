@@ -13,12 +13,13 @@ build-all:
 # Generate screengrabs using Docker (cross-platform, recommended)
 docker-build:
 	@echo "Generating screengrabs using Podman (Linux container)..."
-	@podman run --rm -t -v $$(pwd)/../..:/workspace -w /workspace/demo/screengrabs \
+	@podman run --rm -v $$(pwd)/../..:/workspace -w /workspace/demo/screengrabs \
 		-e ATMOS_TELEMETRY=false \
+		-e ATMOS_COLOR=true \
 		ubuntu:22.04 bash -c ' \
 		set -e && \
 		apt-get update -qq && \
-		DEBIAN_FRONTEND=noninteractive apt-get install -y -qq aha util-linux make git curl jq && \
+		DEBIAN_FRONTEND=noninteractive apt-get install -y -qq aha make git curl jq && \
 		echo "Installing latest atmos release..." && \
 		VERSION=$$(curl -s https://api.github.com/repos/cloudposse/atmos/releases/latest | jq -r .tag_name) && \
 		echo "Installing atmos $$VERSION" && \

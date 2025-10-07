@@ -34,11 +34,11 @@ function record() {
             script -q $output_ansi bash -c "cd $demo_path && ($command)" > /dev/null
         fi
     else
-        # Linux-specific syntax
+        # Linux - capture output directly (ATMOS_COLOR=true forces colors without TTY)
         if [ "${extension}" = "sh" ]; then
-            script -q -f -c "$command" $output_ansi < /dev/null
+            $command > $output_ansi 2>&1
         else
-            script -q -f -c "cd $demo_path && $command" $output_ansi < /dev/null
+            (cd $demo_path && $command) > $output_ansi 2>&1
         fi
     fi
     postprocess_ansi $output_ansi
