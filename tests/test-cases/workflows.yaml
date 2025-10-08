@@ -190,7 +190,7 @@ tests:
         - "## Explanation"
         - "No workflow exists with the name"
         - "## Hints"
-        - "Available workflows:"
+        - "💡 Available workflows:"
         - "• fail"
         - "• fail-with-stack"
         - "• invalid-step-type"
