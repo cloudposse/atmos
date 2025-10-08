@@ -15,7 +15,7 @@ import (
 )
 
 func TestComponentFunc(t *testing.T) {
-	tests.RequireExecutable(t, "terraform", "component function testing")
+	tests.RequireTerraform(t)
 
 	log.SetLevel(log.DebugLevel)
 	log.SetOutput(os.Stdout)

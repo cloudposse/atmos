@@ -98,7 +98,7 @@ func TestExecuteTerraformAffectedWithDependents(t *testing.T) {
 	tests.RequireGitRemoteWithValidURL(t)
 
 	// Check if terraform is installed
-	tests.RequireExecutable(t, "terraform", "running Terraform affected tests")
+	tests.RequireTerraform(t)
 	os.Unsetenv("ATMOS_BASE_PATH")
 	os.Unsetenv("ATMOS_CLI_CONFIG_PATH")
 
@@ -159,7 +159,7 @@ func TestExecuteTerraformAffectedWithDependents(t *testing.T) {
 
 func TestExecuteTerraformQuery(t *testing.T) {
 	// Check if terraform is installed
-	tests.RequireExecutable(t, "terraform", "running Terraform query tests")
+	tests.RequireTerraform(t)
 	os.Unsetenv("ATMOS_BASE_PATH")
 	os.Unsetenv("ATMOS_CLI_CONFIG_PATH")
 

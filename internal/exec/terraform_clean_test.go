@@ -35,7 +35,7 @@ func verifyFileDeleted(t *testing.T, files []string) (bool, string) {
 
 // test ExecuteTerraform clean command.
 func TestCLITerraformClean(t *testing.T) {
-	tests.RequireExecutable(t, "terraform", "terraform clean testing")
+	tests.RequireTerraform(t)
 
 	err := os.Unsetenv("ATMOS_CLI_CONFIG_PATH")
 	if err != nil {

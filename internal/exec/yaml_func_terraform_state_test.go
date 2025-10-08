@@ -15,7 +15,7 @@ import (
 )
 
 func TestYamlFuncTerraformState(t *testing.T) {
-	tests.RequireExecutable(t, "terraform", "terraform state function testing")
+	tests.RequireTerraform(t)
 
 	err := os.Unsetenv("ATMOS_CLI_CONFIG_PATH")
 	if err != nil {

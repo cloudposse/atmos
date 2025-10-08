@@ -579,7 +579,7 @@ func TestExecuteTerraform_TerraformPlanWithSkipPlanfile(t *testing.T) {
 }
 
 func TestExecuteTerraform_DeploymentStatus(t *testing.T) {
-	tests.RequireExecutable(t, "terraform", "deployment status testing")
+	tests.RequireTerraform(t)
 
 	startingDir, err := os.Getwd()
 	if err != nil {

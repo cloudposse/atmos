@@ -233,7 +233,7 @@ func TestSkipFunc_EdgeCases(t *testing.T) {
 }
 
 func TestProcessCustomYamlTags(t *testing.T) {
-	tests.RequireExecutable(t, "terraform", "custom YAML tags testing")
+	tests.RequireTerraform(t)
 
 	err := os.Unsetenv("ATMOS_CLI_CONFIG_PATH")
 	if err != nil {
