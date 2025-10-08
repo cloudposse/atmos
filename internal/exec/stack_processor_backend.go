@@ -10,6 +10,13 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
+const (
+	// AzurermBackendName is the Azure RM backend type identifier.
+	azurermBackendName = "azurerm"
+	// BackendKeyName is the key field name in backend configuration.
+	backendKeyName = "key"
+)
+
 // terraformBackendConfig holds configuration for processing Terraform backend.
 type terraformBackendConfig struct {
 	atmosConfig                 *schema.AtmosConfiguration
@@ -63,7 +70,7 @@ func processTerraformBackend(cfg *terraformBackendConfig) (string, map[string]an
 		setS3BackendDefaults(finalComponentBackend, cfg.component, cfg.baseComponentName)
 	case "gcs":
 		setGCSBackendDefaults(finalComponentBackend, cfg.component, cfg.baseComponentName)
-	case "azurerm":
+	case azurermBackendName:
 		err := setAzureBackendKey(finalComponentBackend, cfg.component, cfg.baseComponentName, cfg.componentBackendSection, cfg.globalBackendSection)
 		if err != nil {
 			return "", nil, err
@@ -105,13 +112,18 @@ func setAzureBackendKey(
 ) error {
 	defer perf.Track(nil, "exec.setAzureBackendKey")()
 
-	componentAzurerm, componentAzurermExists := componentBackendSection["azurerm"].(map[string]any)
+	componentAzurerm, componentAzurermExists := componentBackendSection[azurermBackendName].(map[string]any)
 	if !componentAzurermExists {
 		componentAzurerm = map[string]any{}
 	}
 
 	// Check if key already exists in component-specific azurerm section.
-	if _, componentAzurermKeyExists := componentAzurerm["key"].(string); componentAzurermKeyExists {
+	if _, componentAzurermKeyExists := componentAzurerm[backendKeyName].(string); componentAzurermKeyExists {
+		return nil
+	}
+
+	// Check if we should preserve an authored key from inheritance.
+	if shouldPreserveAuthoredKey(finalComponentBackend, globalBackendSection) {
 		return nil
 	}
 
@@ -123,17 +135,43 @@ func setAzureBackendKey(
 
 	// Build the key path.
 	var keyName []string
-	if globalAzurerm, globalAzurermExists := globalBackendSection["azurerm"].(map[string]any); globalAzurermExists {
-		if globalKey, globalAzurermKeyExists := globalAzurerm["key"].(string); globalAzurermKeyExists {
+	if globalAzurerm, globalAzurermExists := globalBackendSection[azurermBackendName].(map[string]any); globalAzurermExists {
+		if globalKey, globalAzurermKeyExists := globalAzurerm[backendKeyName].(string); globalAzurermKeyExists {
 			keyName = append(keyName, globalKey)
 		}
 	}
 
 	componentKeyName := strings.ReplaceAll(azureKeyPrefixComponent, "/", "-")
 	keyName = append(keyName, fmt.Sprintf("%s.terraform.tfstate", componentKeyName))
-	finalComponentBackend["key"] = strings.Join(keyName, "/")
+	finalComponentBackend[backendKeyName] = strings.Join(keyName, "/")
 
 	return nil
+}
+
+// shouldPreserveAuthoredKey checks if an authored key from base/component inheritance should be preserved.
+func shouldPreserveAuthoredKey(finalComponentBackend map[string]any, globalBackendSection map[string]any) bool {
+	defer perf.Track(nil, "exec.shouldPreserveAuthoredKey")()
+
+	existingKey, ok := finalComponentBackend[backendKeyName].(string)
+	if !ok || existingKey == "" {
+		return false
+	}
+
+	globalAzurerm, ok := globalBackendSection[azurermBackendName].(map[string]any)
+	if !ok {
+		// No global azurerm section - preserve the authored key.
+		return true
+	}
+
+	globalKey, ok := globalAzurerm[backendKeyName].(string)
+	if !ok {
+		// No global key - preserve the authored key.
+		return true
+	}
+
+	// If existing key matches global key, treat global as prefix and continue.
+	// Otherwise, preserve the authored key.
+	return globalKey != existingKey
 }
 
 // remoteStateBackendConfig holds configuration for processing remote state backend.

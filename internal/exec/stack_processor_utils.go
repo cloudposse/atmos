@@ -1027,8 +1027,11 @@ func ProcessImportSection(stackMap map[string]any, filePath string) ([]schema.St
 
 	// Check if the `import` section is a list of objects
 	importsList, ok := stackImports.([]any)
-	if !ok || len(importsList) == 0 {
+	if !ok {
 		return nil, fmt.Errorf("%w in the file '%s'", errUtils.ErrInvalidImportSection, filePath)
+	}
+	if len(importsList) == 0 {
+		return nil, nil
 	}
 
 	var result []schema.StackImport

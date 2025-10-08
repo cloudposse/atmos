@@ -170,6 +170,67 @@ func TestProcessTerraformBackend(t *testing.T) {
 			expectedBackendType:        "s3",
 			expectedWorkspaceKeyPrefix: "path-to-vpc",
 		},
+		{
+			name:              "azurerm backend with authored key from base component",
+			component:         "derived-vpc",
+			baseComponentName: "base-vpc",
+			globalBackendType: "azurerm",
+			globalBackendSection: map[string]any{
+				"azurerm": map[string]any{
+					"storage_account_name": "test-account",
+					"container_name":       "tfstate",
+					"key":                  "global",
+				},
+			},
+			baseComponentBackendSection: map[string]any{
+				"azurerm": map[string]any{
+					"key": "custom/authored/state.tfstate",
+				},
+			},
+			componentBackendSection: map[string]any{},
+			expectedBackendType:     "azurerm",
+			expectedKey:             "custom/authored/state.tfstate",
+		},
+		{
+			name:              "azurerm backend with global key treated as prefix",
+			component:         "vpc",
+			baseComponentName: "",
+			globalBackendType: "azurerm",
+			globalBackendSection: map[string]any{
+				"azurerm": map[string]any{
+					"storage_account_name": "test-account",
+					"container_name":       "tfstate",
+					"key":                  "global",
+				},
+			},
+			baseComponentBackendSection: map[string]any{
+				"azurerm": map[string]any{
+					"key": "global",
+				},
+			},
+			componentBackendSection: map[string]any{},
+			expectedBackendType:     "azurerm",
+			expectedKey:             "global/vpc.terraform.tfstate",
+		},
+		{
+			name:              "azurerm backend preserves component-specific key",
+			component:         "vpc",
+			baseComponentName: "",
+			globalBackendType: "azurerm",
+			globalBackendSection: map[string]any{
+				"azurerm": map[string]any{
+					"storage_account_name": "test-account",
+					"container_name":       "tfstate",
+				},
+			},
+			componentBackendSection: map[string]any{
+				"azurerm": map[string]any{
+					"key": "component-specific.tfstate",
+				},
+			},
+			expectedBackendType: "azurerm",
+			expectedKey:         "component-specific.tfstate",
+		},
 	}
 
 	for _, tt := range tests {
