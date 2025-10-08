@@ -39,7 +39,8 @@ func SplitStringByDelimiter(str string, delimiter rune) ([]string, error) {
 
 	parts, err := read(false)
 	if err != nil {
-		if parseErr, ok := err.(*csv.ParseError); ok && errors.Is(parseErr.Err, csv.ErrBareQuote) {
+		var parseErr *csv.ParseError
+		if errors.As(err, &parseErr) && errors.Is(parseErr.Err, csv.ErrBareQuote) {
 			parts, err = read(true)
 		}
 	}

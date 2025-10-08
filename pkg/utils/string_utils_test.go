@@ -94,6 +94,20 @@ func TestSplitStringByDelimiter(t *testing.T) {
 			expected:  nil,
 			expectErr: true,
 		},
+		{
+			name:      "Bare quote triggers LazyQuotes retry",
+			input:     `foo b"ar baz`,
+			delimiter: ' ',
+			expected:  []string{"foo", "b\"ar", "baz"},
+			expectErr: false,
+		},
+		{
+			name:      "Multiple bare quotes with LazyQuotes fallback",
+			input:     `a"b c"d`,
+			delimiter: ' ',
+			expected:  []string{"a\"b", "c\"d"},
+			expectErr: false,
+		},
 	}
 
 	for _, tt := range tests {
@@ -149,11 +163,108 @@ func TestUniqueStrings(t *testing.T) {
 			input:    []string{"a", "a", "a"},
 			expected: []string{"a"},
 		},
+		{
+			name:     "Nil input",
+			input:    nil,
+			expected: []string{},
+		},
+		{
+			name:     "Single element",
+			input:    []string{"single"},
+			expected: []string{"single"},
+		},
+		{
+			name:     "Order preservation - first occurrence kept",
+			input:    []string{"third", "first", "second", "first", "third"},
+			expected: []string{"third", "first", "second"},
+		},
+		{
+			name:     "Empty strings are preserved",
+			input:    []string{"", "a", "", "b"},
+			expected: []string{"", "a", "b"},
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result := UniqueStrings(tt.input)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+// TestTrimMatchingQuotes tests the trimMatchingQuotes function.
+func TestTrimMatchingQuotes(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{
+			name:     "Double quotes removed",
+			input:    `"value"`,
+			expected: "value",
+		},
+		{
+			name:     "Single quotes removed",
+			input:    "'value'",
+			expected: "value",
+		},
+		{
+			name:     "Escaped double quotes normalized",
+			input:    `"val""ue"`,
+			expected: `val"ue`,
+		},
+		{
+			name:     "Escaped single quotes normalized",
+			input:    "'val''ue'",
+			expected: "val'ue",
+		},
+		{
+			name:     "Mismatched quotes preserved",
+			input:    `"value'`,
+			expected: `"value'`,
+		},
+		{
+			name:     "No quotes preserved",
+			input:    "value",
+			expected: "value",
+		},
+		{
+			name:     "Empty string",
+			input:    "",
+			expected: "",
+		},
+		{
+			name:     "Single character",
+			input:    "a",
+			expected: "a",
+		},
+		{
+			name:     "Only quotes",
+			input:    `""`,
+			expected: "",
+		},
+		{
+			name:     "Leading quote only",
+			input:    `"value`,
+			expected: `"value`,
+		},
+		{
+			name:     "Trailing quote only",
+			input:    `value"`,
+			expected: `value"`,
+		},
+		{
+			name:     "Multiple escaped quotes",
+			input:    `"a""b""c"`,
+			expected: `a"b"c`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := trimMatchingQuotes(tt.input)
 			assert.Equal(t, tt.expected, result)
 		})
 	}
@@ -196,6 +307,18 @@ func TestSplitStringAtFirstOccurrence(t *testing.T) {
 			input:     "=value",
 			separator: "=",
 			expected:  [2]string{"", "value"},
+		},
+		{
+			name:      "Separator at end",
+			input:     "key=",
+			separator: "=",
+			expected:  [2]string{"key", ""},
+		},
+		{
+			name:      "Multi-character separator",
+			input:     "key::value::extra",
+			separator: "::",
+			expected:  [2]string{"key", "value::extra"},
 		},
 	}
 
