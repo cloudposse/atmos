@@ -107,7 +107,7 @@ func TestProcessBaseComponentConfig(t *testing.T) {
 			component:     "test",
 			stack:         "test-stack",
 			baseComponent: "base",
-			expectedError: "invalid config for the base component",
+			expectedError: "invalid base component config",
 		},
 	}
 

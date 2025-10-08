@@ -13,7 +13,9 @@ import (
 )
 
 // mergeComponentConfigurations merges component configurations (vars, settings, env, etc.).
-func mergeComponentConfigurations(atmosConfig *schema.AtmosConfiguration, opts ComponentProcessorOptions, result *ComponentProcessorResult) (map[string]any, error) {
+//
+//nolint:gocognit,nestif,revive,cyclop,funlen // Complex configuration merging logic with multiple component types.
+func mergeComponentConfigurations(atmosConfig *schema.AtmosConfiguration, opts *ComponentProcessorOptions, result *ComponentProcessorResult) (map[string]any, error) {
 	defer perf.Track(atmosConfig, "exec.mergeComponentConfigurations")()
 
 	// Merge vars.

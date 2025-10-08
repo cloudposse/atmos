@@ -146,14 +146,20 @@ var (
 	ErrInvalidTerraformRemoteStateBackend     = errors.New("invalid terraform.remote_state_backend section")
 
 	// Global/Stack-level section errors.
-	ErrInvalidVarsSection       = errors.New("invalid vars section")
-	ErrInvalidSettingsSection   = errors.New("invalid settings section")
-	ErrInvalidEnvSection        = errors.New("invalid env section")
-	ErrInvalidTerraformSection  = errors.New("invalid terraform section")
-	ErrInvalidHelmfileSection   = errors.New("invalid helmfile section")
-	ErrInvalidPackerSection     = errors.New("invalid packer section")
-	ErrInvalidComponentsSection = errors.New("invalid components section")
-	ErrInvalidAuthSection       = errors.New("invalid auth section")
+	ErrInvalidVarsSection               = errors.New("invalid vars section")
+	ErrInvalidSettingsSection           = errors.New("invalid settings section")
+	ErrInvalidEnvSection                = errors.New("invalid env section")
+	ErrInvalidTerraformSection          = errors.New("invalid terraform section")
+	ErrInvalidHelmfileSection           = errors.New("invalid helmfile section")
+	ErrInvalidPackerSection             = errors.New("invalid packer section")
+	ErrInvalidComponentsSection         = errors.New("invalid components section")
+	ErrInvalidAuthSection               = errors.New("invalid auth section")
+	ErrInvalidImportSection             = errors.New("invalid import section")
+	ErrInvalidImport                    = errors.New("invalid import")
+	ErrInvalidOverridesSection          = errors.New("invalid overrides section")
+	ErrInvalidTerraformOverridesSection = errors.New("invalid terraform overrides section")
+	ErrInvalidHelmfileOverridesSection  = errors.New("invalid helmfile overrides section")
+	ErrInvalidBaseComponentConfig       = errors.New("invalid base component config")
 
 	// Terraform-specific subsection errors.
 	ErrInvalidTerraformCommand            = errors.New("invalid terraform command")

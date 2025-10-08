@@ -9,6 +9,8 @@ import (
 )
 
 // processComponentOverrides processes component overrides sections.
+//
+//nolint:gocognit,revive,cyclop,funlen // Processes multiple override sections with type-specific validation.
 func processComponentOverrides(opts *ComponentProcessorOptions, result *ComponentProcessorResult) error {
 	defer perf.Track(opts.AtmosConfig, "exec.processComponentOverrides")()
 

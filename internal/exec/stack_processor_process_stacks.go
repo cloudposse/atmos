@@ -20,6 +20,8 @@ const (
 )
 
 // ProcessStackConfig processes a stack configuration.
+//
+//nolint:gocognit,nestif,revive,cyclop,funlen // Core stack processing logic with complex configuration handling.
 func ProcessStackConfig(
 	atmosConfig *schema.AtmosConfiguration,
 	stacksBasePath string,
@@ -412,7 +414,7 @@ func ProcessStackConfig(
 				}
 
 				// Merge component configurations.
-				comp, err := mergeComponentConfigurations(atmosConfig, opts, result)
+				comp, err := mergeComponentConfigurations(atmosConfig, &opts, result)
 				if err != nil {
 					return nil, err
 				}
@@ -463,7 +465,7 @@ func ProcessStackConfig(
 				}
 
 				// Merge component configurations.
-				comp, err := mergeComponentConfigurations(atmosConfig, opts, result)
+				comp, err := mergeComponentConfigurations(atmosConfig, &opts, result)
 				if err != nil {
 					return nil, err
 				}
@@ -514,7 +516,7 @@ func ProcessStackConfig(
 				}
 
 				// Merge component configurations.
-				comp, err := mergeComponentConfigurations(atmosConfig, opts, result)
+				comp, err := mergeComponentConfigurations(atmosConfig, &opts, result)
 				if err != nil {
 					return nil, err
 				}

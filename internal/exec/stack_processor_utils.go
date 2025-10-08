@@ -479,19 +479,19 @@ func ProcessYAMLConfigFileWithContext(
 	// Global overrides in this stack manifest
 	if i, ok := stackConfigMap[cfg.OverridesSectionName]; ok {
 		if globalOverrides, ok = i.(map[string]any); !ok {
-			return nil, nil, nil, nil, nil, nil, nil, fmt.Errorf("invalid 'overrides' section in the stack manifest '%s'", relativeFilePath)
+			return nil, nil, nil, nil, nil, nil, nil, fmt.Errorf("%w in the stack manifest '%s'", errUtils.ErrInvalidOverridesSection, relativeFilePath)
 		}
 	}
 
 	// Terraform overrides in this stack manifest
 	if o, ok := stackConfigMap[cfg.TerraformSectionName]; ok {
 		if globalTerraformSection, ok = o.(map[string]any); !ok {
-			return nil, nil, nil, nil, nil, nil, nil, fmt.Errorf("invalid 'terraform' section in the stack manifest '%s'", relativeFilePath)
+			return nil, nil, nil, nil, nil, nil, nil, fmt.Errorf("%w in the stack manifest '%s'", errUtils.ErrInvalidTerraformSection, relativeFilePath)
 		}
 
 		if i, ok := globalTerraformSection[cfg.OverridesSectionName]; ok {
 			if terraformOverrides, ok = i.(map[string]any); !ok {
-				return nil, nil, nil, nil, nil, nil, nil, fmt.Errorf("invalid 'terraform.overrides' section in the stack manifest '%s'", relativeFilePath)
+				return nil, nil, nil, nil, nil, nil, nil, fmt.Errorf("%w in the stack manifest '%s'", errUtils.ErrInvalidTerraformOverridesSection, relativeFilePath)
 			}
 		}
 	}
@@ -499,12 +499,12 @@ func ProcessYAMLConfigFileWithContext(
 	// Helmfile overrides in this stack manifest
 	if o, ok := stackConfigMap[cfg.HelmfileSectionName]; ok {
 		if globalHelmfileSection, ok = o.(map[string]any); !ok {
-			return nil, nil, nil, nil, nil, nil, nil, fmt.Errorf("invalid 'helmfile' section in the stack manifest '%s'", relativeFilePath)
+			return nil, nil, nil, nil, nil, nil, nil, fmt.Errorf("%w in the stack manifest '%s'", errUtils.ErrInvalidHelmfileSection, relativeFilePath)
 		}
 
 		if i, ok := globalHelmfileSection[cfg.OverridesSectionName]; ok {
 			if helmfileOverrides, ok = i.(map[string]any); !ok {
-				return nil, nil, nil, nil, nil, nil, nil, fmt.Errorf("invalid 'terraform.overrides' section in the stack manifest '%s'", relativeFilePath)
+				return nil, nil, nil, nil, nil, nil, nil, fmt.Errorf("%w in the stack manifest '%s'", errUtils.ErrInvalidHelmfileOverridesSection, relativeFilePath)
 			}
 		}
 	}
@@ -568,7 +568,7 @@ func ProcessYAMLConfigFileWithContext(
 		imp := importStruct.Path
 
 		if imp == "" {
-			return nil, nil, nil, nil, nil, nil, nil, fmt.Errorf("invalid empty import in the manifest '%s'", relativeFilePath)
+			return nil, nil, nil, nil, nil, nil, nil, fmt.Errorf("%w in the manifest '%s'", errUtils.ErrInvalidImport, relativeFilePath)
 		}
 
 		// If the import file is specified without extension, use `.yaml` as default
@@ -826,6 +826,7 @@ func processSettingsIntegrationsGithub(atmosConfig *schema.AtmosConfiguration, s
 	settingsIntegrationsGithubSection := make(map[string]any)
 
 	// Find `settings.integrations.github` section from stack manifests
+	//nolint:nestif // Nested type assertions for settings.integrations.github extraction.
 	if settingsIntegrations, ok := settings[cfg.IntegrationsSectionName]; ok {
 		if settingsIntegrationsMap, ok := settingsIntegrations.(map[string]any); ok {
 			settingsIntegrationsSection = settingsIntegrationsMap
@@ -868,6 +869,7 @@ func FindComponentStacks(
 
 	var stacks []string
 
+	//nolint:nestif // Nested lookups for component and base component stack configurations.
 	if componentStackConfig, componentStackConfigExists := componentStackMap[componentType]; componentStackConfigExists {
 		if componentStacks, componentStacksExist := componentStackConfig[component]; componentStacksExist {
 			stacks = append(stacks, componentStacks...)
@@ -894,6 +896,8 @@ func FindComponentStacks(
 //  3. The imported config file has the cfg.ComponentsSectionName section, which has the component type section, which has the component section.
 //  4. The imported config file has the cfg.ComponentsSectionName section, which has the component type section, which has the base component(s) section,
 //     and the base component section is defined inline (not imported).
+//
+//nolint:gocognit,revive,cyclop,funlen // Complex legacy dependency resolution logic.
 func FindComponentDependenciesLegacy(
 	stack string,
 	componentType string,
@@ -916,7 +920,6 @@ func FindComponentDependenciesLegacy(
 	}
 
 	for stackImportName, stackImportMap := range stackImports {
-
 		if sectionContainsAnyNotEmptySections(stackImportMap, sectionsToCheck) {
 			deps = append(deps, stackImportName)
 			continue
@@ -1022,14 +1025,14 @@ func ProcessImportSection(stackMap map[string]any, filePath string) ([]schema.St
 	// Check if the `import` section is a list of objects
 	importsList, ok := stackImports.([]any)
 	if !ok || len(importsList) == 0 {
-		return nil, fmt.Errorf("invalid 'import' section in the file '%s'", filePath)
+		return nil, fmt.Errorf("%w in the file '%s'", errUtils.ErrInvalidImportSection, filePath)
 	}
 
 	var result []schema.StackImport
 
 	for _, imp := range importsList {
 		if imp == nil {
-			return nil, fmt.Errorf("invalid import in the file '%s'", filePath)
+			return nil, fmt.Errorf("%w in the file '%s'", errUtils.ErrInvalidImport, filePath)
 		}
 
 		// 1. Try to decode the import as the `StackImport` struct
@@ -1044,10 +1047,10 @@ func ProcessImportSection(stackMap map[string]any, filePath string) ([]schema.St
 		// 2. Try to cast the import to a string
 		s, ok := imp.(string)
 		if !ok {
-			return nil, fmt.Errorf("invalid import '%v' in the file '%s'", imp, filePath)
+			return nil, fmt.Errorf("%w '%v' in the file '%s'", errUtils.ErrInvalidImport, imp, filePath)
 		}
 		if s == "" {
-			return nil, fmt.Errorf("invalid empty import in the file '%s'", filePath)
+			return nil, fmt.Errorf("%w (empty) in the file '%s'", errUtils.ErrInvalidImport, filePath)
 		}
 
 		s = u.ResolveRelativePath(s, filePath)
@@ -1134,8 +1137,8 @@ func ProcessBaseComponentConfig(
 			// We try to convert to both
 			baseComponentMapOfStrings, ok := baseComponentSection.(map[string]any)
 			if !ok {
-				return fmt.Errorf("invalid config for the base component '%s' of the component '%s' in the stack '%s'",
-					baseComponent, component, stack)
+				return fmt.Errorf("%w for the base component '%s' of the component '%s' in the stack '%s'",
+					errUtils.ErrInvalidBaseComponentConfig, baseComponent, component, stack)
 			}
 			baseComponentMap = baseComponentMapOfStrings
 		}
@@ -1144,8 +1147,8 @@ func ProcessBaseComponentConfig(
 		if baseComponentOfBaseComponent, baseComponentOfBaseComponentExist := baseComponentMap["component"]; baseComponentOfBaseComponentExist {
 			baseComponentOfBaseComponentString, ok := baseComponentOfBaseComponent.(string)
 			if !ok {
-				return fmt.Errorf("invalid 'component:' section of the component '%s' in the stack '%s'",
-					baseComponent, stack)
+				return fmt.Errorf("%w 'component:' of the component '%s' in the stack '%s'",
+					errUtils.ErrInvalidComponentAttribute, baseComponent, stack)
 			}
 
 			err := ProcessBaseComponentConfig(
@@ -1170,14 +1173,14 @@ func ProcessBaseComponentConfig(
 		if i, ok := baseComponentMap["metadata"]; ok {
 			componentMetadata, ok = i.(map[string]any)
 			if !ok {
-				return fmt.Errorf("invalid '%s.metadata' section in the stack '%s'", component, stack)
+				return fmt.Errorf("%w '%s.metadata' in the stack '%s'", errUtils.ErrInvalidComponentMetadata, component, stack)
 			}
 
 			if inheritList, inheritListExist := componentMetadata[cfg.InheritsSectionName].([]any); inheritListExist {
 				for _, v := range inheritList {
 					baseComponentFromInheritList, ok := v.(string)
 					if !ok {
-						return fmt.Errorf("invalid '%s.metadata.inherits' section in the stack '%s'", component, stack)
+						return fmt.Errorf("%w '%s.metadata.inherits' in the stack '%s'", errUtils.ErrInvalidComponentMetadataInherits, component, stack)
 					}
 
 					if _, ok := allComponentsMap[baseComponentFromInheritList]; !ok {
@@ -1242,14 +1245,14 @@ func ProcessBaseComponentConfig(
 		if baseComponentProvidersSection, baseComponentProvidersSectionExist := baseComponentMap[cfg.ProvidersSectionName]; baseComponentProvidersSectionExist {
 			baseComponentProviders, ok = baseComponentProvidersSection.(map[string]any)
 			if !ok {
-				return fmt.Errorf("invalid '%s.providers' section in the stack '%s'", baseComponent, stack)
+				return fmt.Errorf("%w '%s.providers' in the stack '%s'", errUtils.ErrInvalidComponentProviders, baseComponent, stack)
 			}
 		}
 
 		if baseComponentHooksSection, baseComponentHooksSectionExist := baseComponentMap[cfg.HooksSectionName]; baseComponentHooksSectionExist {
 			baseComponentHooks, ok = baseComponentHooksSection.(map[string]any)
 			if !ok {
-				return fmt.Errorf("invalid '%s.hooks' section in the stack '%s'", baseComponent, stack)
+				return fmt.Errorf("%w '%s.hooks' in the stack '%s'", errUtils.ErrInvalidComponentHooks, baseComponent, stack)
 			}
 		}
 
@@ -1257,14 +1260,14 @@ func ProcessBaseComponentConfig(
 		if i, ok2 := baseComponentMap[cfg.BackendTypeSectionName]; ok2 {
 			baseComponentBackendType, ok = i.(string)
 			if !ok {
-				return fmt.Errorf("invalid '%s.backend_type' section in the stack '%s'", baseComponent, stack)
+				return fmt.Errorf("%w '%s.backend_type' in the stack '%s'", errUtils.ErrInvalidComponentBackendType, baseComponent, stack)
 			}
 		}
 
 		if i, ok2 := baseComponentMap[cfg.BackendSectionName]; ok2 {
 			baseComponentBackendSection, ok = i.(map[string]any)
 			if !ok {
-				return fmt.Errorf("invalid '%s.backend' section in the stack '%s'", baseComponent, stack)
+				return fmt.Errorf("%w '%s.backend' in the stack '%s'", errUtils.ErrInvalidComponentBackend, baseComponent, stack)
 			}
 		}
 
@@ -1272,14 +1275,14 @@ func ProcessBaseComponentConfig(
 		if i, ok2 := baseComponentMap[cfg.RemoteStateBackendTypeSectionName]; ok2 {
 			baseComponentRemoteStateBackendType, ok = i.(string)
 			if !ok {
-				return fmt.Errorf("invalid '%s.remote_state_backend_type' section in the stack '%s'", baseComponent, stack)
+				return fmt.Errorf("%w '%s.remote_state_backend_type' in the stack '%s'", errUtils.ErrInvalidComponentRemoteStateBackendType, baseComponent, stack)
 			}
 		}
 
 		if i, ok2 := baseComponentMap[cfg.RemoteStateBackendSectionName]; ok2 {
 			baseComponentRemoteStateBackendSection, ok = i.(map[string]any)
 			if !ok {
-				return fmt.Errorf("invalid '%s.remote_state_backend' section in the stack '%s'", baseComponent, stack)
+				return fmt.Errorf("%w '%s.remote_state_backend' in the stack '%s'", errUtils.ErrInvalidComponentRemoteStateBackend, baseComponent, stack)
 			}
 		}
 
@@ -1287,7 +1290,7 @@ func ProcessBaseComponentConfig(
 		if baseComponentCommandSection, baseComponentCommandSectionExist := baseComponentMap[cfg.CommandSectionName]; baseComponentCommandSectionExist {
 			baseComponentCommand, ok = baseComponentCommandSection.(string)
 			if !ok {
-				return fmt.Errorf("invalid '%s.command' section in the stack '%s'", baseComponent, stack)
+				return fmt.Errorf("%w '%s.command' in the stack '%s'", errUtils.ErrInvalidComponentCommand, baseComponent, stack)
 			}
 		}
 
@@ -1390,13 +1393,13 @@ func FindComponentsDerivedFromBaseComponents(
 	for component, compSection := range allComponents {
 		componentSection, ok := compSection.(map[string]any)
 		if !ok {
-			return nil, fmt.Errorf("invalid '%s' component section in the file '%s'", component, stack)
+			return nil, fmt.Errorf("%w '%s' in the file '%s'", errUtils.ErrInvalidComponentsSection, component, stack)
 		}
 
 		if base, baseComponentExist := componentSection[cfg.ComponentSectionName]; baseComponentExist {
 			baseComponent, ok := base.(string)
 			if !ok {
-				return nil, fmt.Errorf("invalid 'component' attribute in the component '%s' in the file '%s'", component, stack)
+				return nil, fmt.Errorf("%w 'component' of the component '%s' in the file '%s'", errUtils.ErrInvalidComponentAttribute, component, stack)
 			}
 
 			if baseComponent != "" && u.SliceContainsString(baseComponents, baseComponent) {

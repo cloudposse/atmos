@@ -618,6 +618,7 @@ func TestProcessComponentOverrides(t *testing.T) {
 
 			require.NoError(t, err)
 
+			//nolint:nestif // Test validation with multiple conditional checks.
 			if tt.expectedOverridesExists {
 				require.NotNil(t, result.ComponentOverrides)
 

@@ -9,6 +9,8 @@ import (
 )
 
 // extractComponentSections extracts all component sections (vars, settings, env, etc.).
+//
+//nolint:gocognit,nestif,revive,cyclop,funlen // Extracts multiple configuration sections with type-specific handling.
 func extractComponentSections(opts *ComponentProcessorOptions, result *ComponentProcessorResult) error {
 	defer perf.Track(opts.AtmosConfig, "exec.extractComponentSections")()
 

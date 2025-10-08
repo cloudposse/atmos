@@ -306,7 +306,7 @@ func TestMergeComponentConfigurations(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			comp, err := mergeComponentConfigurations(tt.opts.AtmosConfig, tt.opts, tt.result)
+			comp, err := mergeComponentConfigurations(tt.opts.AtmosConfig, &tt.opts, tt.result)
 
 			require.NoError(t, err)
 			require.NotNil(t, comp)
