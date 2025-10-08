@@ -144,6 +144,47 @@ var (
 	ErrInvalidTerraformBackend                = errors.New("invalid terraform.backend section")
 	ErrInvalidTerraformRemoteStateBackend     = errors.New("invalid terraform.remote_state_backend section")
 
+	// Global/Stack-level section errors.
+	ErrInvalidVarsSection       = errors.New("invalid vars section")
+	ErrInvalidSettingsSection   = errors.New("invalid settings section")
+	ErrInvalidEnvSection        = errors.New("invalid env section")
+	ErrInvalidTerraformSection  = errors.New("invalid terraform section")
+	ErrInvalidHelmfileSection   = errors.New("invalid helmfile section")
+	ErrInvalidPackerSection     = errors.New("invalid packer section")
+	ErrInvalidComponentsSection = errors.New("invalid components section")
+
+	// Terraform-specific subsection errors.
+	ErrInvalidTerraformCommand            = errors.New("invalid terraform command")
+	ErrInvalidTerraformVars               = errors.New("invalid terraform vars section")
+	ErrInvalidTerraformSettings           = errors.New("invalid terraform settings section")
+	ErrInvalidTerraformEnv                = errors.New("invalid terraform env section")
+	ErrInvalidTerraformProviders          = errors.New("invalid terraform providers section")
+	ErrInvalidTerraformBackendType        = errors.New("invalid terraform backend_type")
+	ErrInvalidTerraformRemoteStateType    = errors.New("invalid terraform remote_state_backend_type")
+	ErrInvalidTerraformRemoteStateSection = errors.New("invalid terraform remote_state_backend section")
+
+	// Helmfile-specific subsection errors.
+	ErrInvalidHelmfileCommand  = errors.New("invalid helmfile command")
+	ErrInvalidHelmfileVars     = errors.New("invalid helmfile vars section")
+	ErrInvalidHelmfileSettings = errors.New("invalid helmfile settings section")
+	ErrInvalidHelmfileEnv      = errors.New("invalid helmfile env section")
+
+	// Packer-specific subsection errors.
+	ErrInvalidPackerCommand  = errors.New("invalid packer command")
+	ErrInvalidPackerVars     = errors.New("invalid packer vars section")
+	ErrInvalidPackerSettings = errors.New("invalid packer settings section")
+	ErrInvalidPackerEnv      = errors.New("invalid packer env section")
+
+	// Component type-specific section errors.
+	ErrInvalidComponentsTerraform = errors.New("invalid components.terraform section")
+	ErrInvalidComponentsHelmfile  = errors.New("invalid components.helmfile section")
+	ErrInvalidComponentsPacker    = errors.New("invalid components.packer section")
+
+	// Specific component configuration errors.
+	ErrInvalidSpecificTerraformComponent = errors.New("invalid terraform component configuration")
+	ErrInvalidSpecificHelmfileComponent  = errors.New("invalid helmfile component configuration")
+	ErrInvalidSpecificPackerComponent    = errors.New("invalid packer component configuration")
+
 	// Pro API client errors.
 	ErrFailedToCreateRequest        = errors.New("failed to create request")
 	ErrFailedToMarshalPayload       = errors.New("failed to marshal request body")

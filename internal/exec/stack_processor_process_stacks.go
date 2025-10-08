@@ -14,6 +14,11 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
+const (
+	// ErrFormatWithFile is the error format string for errors with file context.
+	errFormatWithFile = "%w in file '%s'"
+)
+
 // ProcessStackConfig processes a stack configuration.
 func ProcessStackConfig(
 	atmosConfig *schema.AtmosConfiguration,
@@ -74,7 +79,7 @@ func ProcessStackConfig(
 	if i, ok := config[cfg.VarsSectionName]; ok {
 		globalVarsSection, ok = i.(map[string]any)
 		if !ok {
-			return nil, fmt.Errorf("invalid 'vars' section in the file '%s'", stackName)
+			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidVarsSection, stackName)
 		}
 	}
 
@@ -88,42 +93,42 @@ func ProcessStackConfig(
 	if i, ok := config[cfg.SettingsSectionName]; ok {
 		globalSettingsSection, ok = i.(map[string]any)
 		if !ok {
-			return nil, fmt.Errorf("invalid 'settings' section in the file '%s'", stackName)
+			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidSettingsSection, stackName)
 		}
 	}
 
 	if i, ok := config[cfg.EnvSectionName]; ok {
 		globalEnvSection, ok = i.(map[string]any)
 		if !ok {
-			return nil, fmt.Errorf("invalid 'env' section in the file '%s'", stackName)
+			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidEnvSection, stackName)
 		}
 	}
 
 	if i, ok := config[cfg.TerraformSectionName]; ok {
 		globalTerraformSection, ok = i.(map[string]any)
 		if !ok {
-			return nil, fmt.Errorf("invalid 'terraform' section in the file '%s'", stackName)
+			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidTerraformSection, stackName)
 		}
 	}
 
 	if i, ok := config[cfg.HelmfileSectionName]; ok {
 		globalHelmfileSection, ok = i.(map[string]any)
 		if !ok {
-			return nil, fmt.Errorf("invalid 'helmfile' section in the file '%s'", stackName)
+			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidHelmfileSection, stackName)
 		}
 	}
 
 	if i, ok := config[cfg.PackerSectionName]; ok {
 		globalPackerSection, ok = i.(map[string]any)
 		if !ok {
-			return nil, fmt.Errorf("invalid 'packer' section in the file '%s'", stackName)
+			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidPackerSection, stackName)
 		}
 	}
 
 	if i, ok := config[cfg.ComponentsSectionName]; ok {
 		globalComponentsSection, ok = i.(map[string]any)
 		if !ok {
-			return nil, fmt.Errorf("invalid 'components' section in the file '%s'", stackName)
+			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidComponentsSection, stackName)
 		}
 	}
 
@@ -131,15 +136,20 @@ func ProcessStackConfig(
 	if i, ok := globalTerraformSection[cfg.CommandSectionName]; ok {
 		terraformCommand, ok = i.(string)
 		if !ok {
-			return nil, fmt.Errorf("invalid 'terraform.command' section in the file '%s'", stackName)
+			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidTerraformCommand, stackName)
 		}
 	}
 
 	if i, ok := globalTerraformSection[cfg.VarsSectionName]; ok {
 		terraformVars, ok = i.(map[string]any)
 		if !ok {
-			return nil, fmt.Errorf("invalid 'terraform.vars' section in the file '%s'", stackName)
+			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidTerraformVars, stackName)
 		}
+	}
+
+	globalAndTerraformVars, err := m.Merge(atmosConfig, []map[string]any{globalVarsSection, terraformVars})
+	if err != nil {
+		return nil, err
 	}
 
 	if i, ok := globalTerraformSection[cfg.HooksSectionName]; ok {
@@ -147,11 +157,6 @@ func ProcessStackConfig(
 		if !ok {
 			return nil, fmt.Errorf("%w '%s'", errUtils.ErrInvalidTerraformHooksSection, stackName)
 		}
-	}
-
-	globalAndTerraformVars, err := m.Merge(atmosConfig, []map[string]any{globalVarsSection, terraformVars})
-	if err != nil {
-		return nil, err
 	}
 
 	globalAndTerraformHooks, err := m.Merge(atmosConfig, []map[string]any{globalHooksSection, terraformHooks})
@@ -162,7 +167,7 @@ func ProcessStackConfig(
 	if i, ok := globalTerraformSection[cfg.SettingsSectionName]; ok {
 		terraformSettings, ok = i.(map[string]any)
 		if !ok {
-			return nil, fmt.Errorf("invalid 'terraform.settings' section in the file '%s'", stackName)
+			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidTerraformSettings, stackName)
 		}
 	}
 
@@ -174,7 +179,7 @@ func ProcessStackConfig(
 	if i, ok := globalTerraformSection[cfg.EnvSectionName]; ok {
 		terraformEnv, ok = i.(map[string]any)
 		if !ok {
-			return nil, fmt.Errorf("invalid 'terraform.env' section in the file '%s'", stackName)
+			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidTerraformEnv, stackName)
 		}
 	}
 
@@ -186,14 +191,7 @@ func ProcessStackConfig(
 	if i, ok := globalTerraformSection[cfg.ProvidersSectionName]; ok {
 		terraformProviders, ok = i.(map[string]any)
 		if !ok {
-			return nil, fmt.Errorf("invalid 'terraform.providers' section in the file '%s'", stackName)
-		}
-	}
-
-	if i, ok := globalTerraformSection[cfg.HooksSectionName]; ok {
-		terraformHooks, ok = i.(map[string]any)
-		if !ok {
-			return nil, fmt.Errorf("invalid 'terraform.hooks' section in the file '%s'", stackName)
+			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidTerraformProviders, stackName)
 		}
 	}
 
@@ -204,14 +202,14 @@ func ProcessStackConfig(
 	if i, ok := globalTerraformSection[cfg.BackendTypeSectionName]; ok {
 		globalBackendType, ok = i.(string)
 		if !ok {
-			return nil, fmt.Errorf("invalid 'terraform.backend_type' section in the file '%s'", stackName)
+			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidTerraformBackendType, stackName)
 		}
 	}
 
 	if i, ok := globalTerraformSection[cfg.BackendSectionName]; ok {
 		globalBackendSection, ok = i.(map[string]any)
 		if !ok {
-			return nil, fmt.Errorf("invalid 'terraform.backend' section in the file '%s'", stackName)
+			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidTerraformBackend, stackName)
 		}
 	}
 
@@ -222,14 +220,14 @@ func ProcessStackConfig(
 	if i, ok := globalTerraformSection[cfg.RemoteStateBackendTypeSectionName]; ok {
 		globalRemoteStateBackendType, ok = i.(string)
 		if !ok {
-			return nil, fmt.Errorf("invalid 'terraform.remote_state_backend_type' section in the file '%s'", stackName)
+			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidTerraformRemoteStateType, stackName)
 		}
 	}
 
 	if i, ok := globalTerraformSection[cfg.RemoteStateBackendSectionName]; ok {
 		globalRemoteStateBackendSection, ok = i.(map[string]any)
 		if !ok {
-			return nil, fmt.Errorf("invalid 'terraform.remote_state_backend' section in the file '%s'", stackName)
+			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidTerraformRemoteStateSection, stackName)
 		}
 	}
 
@@ -237,14 +235,14 @@ func ProcessStackConfig(
 	if i, ok := globalHelmfileSection[cfg.CommandSectionName]; ok {
 		helmfileCommand, ok = i.(string)
 		if !ok {
-			return nil, fmt.Errorf("invalid 'helmfile.command' section in the file '%s'", stackName)
+			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidHelmfileCommand, stackName)
 		}
 	}
 
 	if i, ok := globalHelmfileSection[cfg.VarsSectionName]; ok {
 		helmfileVars, ok = i.(map[string]any)
 		if !ok {
-			return nil, fmt.Errorf("invalid 'helmfile.vars' section in the file '%s'", stackName)
+			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidHelmfileVars, stackName)
 		}
 	}
 
@@ -256,7 +254,7 @@ func ProcessStackConfig(
 	if i, ok := globalHelmfileSection[cfg.SettingsSectionName]; ok {
 		helmfileSettings, ok = i.(map[string]any)
 		if !ok {
-			return nil, fmt.Errorf("invalid 'helmfile.settings' section in the file '%s'", stackName)
+			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidHelmfileSettings, stackName)
 		}
 	}
 
@@ -268,7 +266,7 @@ func ProcessStackConfig(
 	if i, ok := globalHelmfileSection[cfg.EnvSectionName]; ok {
 		helmfileEnv, ok = i.(map[string]any)
 		if !ok {
-			return nil, fmt.Errorf("invalid 'helmfile.env' section in the file '%s'", stackName)
+			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidHelmfileEnv, stackName)
 		}
 	}
 
@@ -281,14 +279,14 @@ func ProcessStackConfig(
 	if i, ok := globalPackerSection[cfg.CommandSectionName]; ok {
 		packerCommand, ok = i.(string)
 		if !ok {
-			return nil, fmt.Errorf("invalid 'packer.command' section in the file '%s'", stackName)
+			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidPackerCommand, stackName)
 		}
 	}
 
 	if i, ok := globalPackerSection[cfg.VarsSectionName]; ok {
 		packerVars, ok = i.(map[string]any)
 		if !ok {
-			return nil, fmt.Errorf("invalid 'packer.vars' section in the file '%s'", stackName)
+			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidPackerVars, stackName)
 		}
 	}
 
@@ -300,7 +298,7 @@ func ProcessStackConfig(
 	if i, ok := globalPackerSection[cfg.SettingsSectionName]; ok {
 		packerSettings, ok = i.(map[string]any)
 		if !ok {
-			return nil, fmt.Errorf("invalid 'packer.settings' section in the file '%s'", stackName)
+			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidPackerSettings, stackName)
 		}
 	}
 
@@ -312,7 +310,7 @@ func ProcessStackConfig(
 	if i, ok := globalPackerSection[cfg.EnvSectionName]; ok {
 		packerEnv, ok = i.(map[string]any)
 		if !ok {
-			return nil, fmt.Errorf("invalid 'packer.env' section in the file '%s'", stackName)
+			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidPackerEnv, stackName)
 		}
 	}
 
@@ -324,10 +322,9 @@ func ProcessStackConfig(
 	// Process all Terraform components.
 	if componentTypeFilter == "" || componentTypeFilter == cfg.TerraformComponentType {
 		if allTerraformComponents, ok := globalComponentsSection[cfg.TerraformComponentType]; ok {
-
 			allTerraformComponentsMap, ok := allTerraformComponents.(map[string]any)
 			if !ok {
-				return nil, fmt.Errorf("invalid 'components.terraform' section in the file '%s'", stackName)
+				return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidComponentsTerraform, stackName)
 			}
 
 			for cmp, v := range allTerraformComponentsMap {
@@ -335,7 +332,7 @@ func ProcessStackConfig(
 
 				componentMap, ok := v.(map[string]any)
 				if !ok {
-					return nil, fmt.Errorf("invalid 'components.terraform.%s' section in the file '%s'", component, stackName)
+					return nil, fmt.Errorf("%w: component=%s file='%s'", errUtils.ErrInvalidSpecificTerraformComponent, component, stackName)
 				}
 
 				// Process component using helper function.
@@ -378,12 +375,12 @@ func ProcessStackConfig(
 	}
 
 	// Process all Helmfile components.
+	//nolint:dupl // Similar pattern for different component types (Helmfile vs Packer)
 	if componentTypeFilter == "" || componentTypeFilter == cfg.HelmfileComponentType {
 		if allHelmfileComponents, ok := globalComponentsSection[cfg.HelmfileComponentType]; ok {
-
 			allHelmfileComponentsMap, ok := allHelmfileComponents.(map[string]any)
 			if !ok {
-				return nil, fmt.Errorf("invalid 'components.helmfile' section in the file '%s'", stackName)
+				return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidComponentsHelmfile, stackName)
 			}
 
 			for cmp, v := range allHelmfileComponentsMap {
@@ -391,7 +388,7 @@ func ProcessStackConfig(
 
 				componentMap, ok := v.(map[string]any)
 				if !ok {
-					return nil, fmt.Errorf("invalid 'components.helmfile.%s' section in the file '%s'", component, stackName)
+					return nil, fmt.Errorf("%w: component=%s file='%s'", errUtils.ErrInvalidSpecificHelmfileComponent, component, stackName)
 				}
 
 				// Process component using helper function.
@@ -428,12 +425,12 @@ func ProcessStackConfig(
 	}
 
 	// Process all Packer components.
+	//nolint:dupl // Similar pattern for different component types (Helmfile vs Packer)
 	if componentTypeFilter == "" || componentTypeFilter == cfg.PackerComponentType {
 		if allPackerComponents, ok := globalComponentsSection[cfg.PackerComponentType]; ok {
-
 			allPackerComponentsMap, ok := allPackerComponents.(map[string]any)
 			if !ok {
-				return nil, fmt.Errorf("invalid 'components.packer' section in the file '%s'", stackName)
+				return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidComponentsPacker, stackName)
 			}
 
 			for cmp, v := range allPackerComponentsMap {
@@ -441,7 +438,7 @@ func ProcessStackConfig(
 
 				componentMap, ok := v.(map[string]any)
 				if !ok {
-					return nil, fmt.Errorf("invalid 'components.packer.%s' section in the file '%s'", component, stackName)
+					return nil, fmt.Errorf("%w: component=%s file='%s'", errUtils.ErrInvalidSpecificPackerComponent, component, stackName)
 				}
 
 				// Process component using helper function.
