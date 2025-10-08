@@ -875,6 +875,9 @@ func TestExecuteTerraform_OpaValidationFunctionality(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			// Capture PATH before any t.Setenv calls (t.Setenv clears the environment).
+			pathValue := os.Getenv("PATH")
+
 			// Set up environment variables for this test using t.Setenv for automatic cleanup.
 			for key, value := range tt.envVars {
 				t.Setenv(key, value)
@@ -882,7 +885,7 @@ func TestExecuteTerraform_OpaValidationFunctionality(t *testing.T) {
 
 			// Ensure PATH is set for OPA validation (required by the policy).
 			// This must come AFTER other t.Setenv calls to ensure it's preserved.
-			if pathValue := os.Getenv("PATH"); pathValue != "" {
+			if pathValue != "" {
 				t.Setenv("PATH", pathValue)
 			}
 
