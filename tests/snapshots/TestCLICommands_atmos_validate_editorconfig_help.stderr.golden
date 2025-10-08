@@ -1,5 +1,10 @@
+Error: Unknown command `help` for `atmos validate editorconfig`
+
+
+Run `atmos validate editorconfig --help` for usage
 
 # Error
 
-validation failed with 1736 error(s)
+unknown command
+
 

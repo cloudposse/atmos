@@ -154,12 +154,11 @@ func ExecuteWorkflowCmd(cmd *cobra.Command, args []string) error {
 		// sorting so that the output is deterministic.
 		sort.Strings(validWorkflows)
 
-		explanation := fmt.Sprintf("No workflow exists with the name `%s`.\n\n### Available workflows:\n\n%s",
-			workflowName,
-			FormatList(validWorkflows))
+		explanation := fmt.Sprintf("No workflow exists with the name %s.", workflowName)
 
 		err := errUtils.Build(ErrWorkflowNoWorkflow).
 			WithExplanation(explanation).
+			WithHintf("Available workflows:\n\n%s", FormatList(validWorkflows)).
 			WithExampleFile(workflowNotFoundExample).
 			WithHintf("Use `atmos describe workflows` to see detailed workflow definitions").
 			WithHintf("Run a workflow: `atmos workflow <name> -f %s`", workflowPath).

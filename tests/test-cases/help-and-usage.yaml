@@ -441,7 +441,7 @@ tests:
       exit_code: 1
   - name: atmos validate editorconfig help
     enabled: true
-    description: "Treats 'help' as file pattern and validates, finding errors"
+    description: "Shows error for unknown 'help' subcommand"
     snapshot: true
     workdir: "../"
     env:
@@ -458,8 +458,9 @@ tests:
         - "Atmos Releases:"
         - "Install Atmos:"
       stderr:
+        - "Error: Unknown command"
         - "# Error"
-        - "validation failed with"
+        - "unknown command"
       exit_code: 1
   - name: atmos validate editorconfig --help
     enabled: true
