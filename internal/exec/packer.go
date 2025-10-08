@@ -75,7 +75,7 @@ func ExecutePacker(
 
 	componentPathExists, err := u.IsDirectory(componentPath)
 	if err != nil || !componentPathExists {
-		// Get the base path for error message, respecting user's actual config
+		// Get the base path for the error message, respecting the user's actual config.
 		basePath, _ := u.GetComponentBasePath(&atmosConfig, "packer")
 		return fmt.Errorf("%w: Atmos component `%s` points to the Packer component `%s`, but it does not exist in `%s`",
 			errUtils.ErrInvalidComponent,
@@ -94,7 +94,7 @@ func ExecutePacker(
 
 	// Check if the component is locked (`metadata.locked` is set to true).
 	if info.ComponentIsLocked {
-		// Allow read-only commands, block modification commands
+		// Allow read-only commands, block modification commands.
 		switch info.SubCommand {
 		case "build":
 			return fmt.Errorf("%w: component `%s` is locked and cannot be modified (`metadata.locked = true`)",
@@ -116,7 +116,6 @@ func ExecutePacker(
 	if err != nil {
 		return err
 	}
-
 	if !valid {
 		return fmt.Errorf("%w: the component '%s' did not pass the validation policies",
 			errUtils.ErrInvalidComponent,

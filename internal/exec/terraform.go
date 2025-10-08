@@ -223,7 +223,6 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 	if err != nil {
 		return err
 	}
-
 	if !valid {
 		return fmt.Errorf("%w: the component '%s' did not pass the validation policies",
 			errUtils.ErrInvalidComponent,

@@ -184,6 +184,12 @@ var (
 	ErrInvalidHelmfileEnv      = errors.New("invalid helmfile env section")
 	ErrInvalidHelmfileAuth     = errors.New("invalid helmfile auth section")
 
+	// Helmfile configuration errors.
+	ErrMissingHelmfileBasePath           = errors.New("helmfile base path is required")
+	ErrMissingHelmfileKubeconfigPath     = errors.New("helmfile kubeconfig path is required")
+	ErrMissingHelmfileAwsProfilePattern  = errors.New("helmfile AWS profile pattern is required")
+	ErrMissingHelmfileClusterNamePattern = errors.New("helmfile cluster name pattern is required")
+
 	// Packer-specific subsection errors.
 	ErrInvalidPackerCommand  = errors.New("invalid packer command")
 	ErrInvalidPackerVars     = errors.New("invalid packer vars section")
