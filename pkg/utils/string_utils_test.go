@@ -64,7 +64,9 @@ func TestSplitStringByDelimiter(t *testing.T) {
 			expectErr: false,
 		},
 		{
-			name:      "Double quoted value with escaped double quotes",
+			name: "Double quoted value with escaped double quotes",
+			// If the parser sees "" (two consecutive double quotes inside a quoted string), according to CSV/Excel-like
+			// conventions, a "" inside quotes means a literal " character in the final value.
 			input:     "\"foo\"\"bar\" baz",
 			delimiter: ' ',
 			expected:  []string{"foo\"bar", "baz"},
