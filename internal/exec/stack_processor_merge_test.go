@@ -332,6 +332,13 @@ func TestMergeComponentConfigurations(t *testing.T) {
 				assert.Equal(t, tt.expectedCommand, comp[cfg.CommandSectionName])
 			}
 
+			if tt.expectedAuth != nil {
+				actualAuth := comp[cfg.AuthSectionName].(map[string]any)
+				for key, expectedValue := range tt.expectedAuth {
+					assert.Equal(t, expectedValue, actualAuth[key])
+				}
+			}
+
 			if tt.expectedProviders != nil {
 				actualProviders := comp[cfg.ProvidersSectionName].(map[string]any)
 				for key, expectedValue := range tt.expectedProviders {
@@ -493,11 +500,16 @@ func TestProcessAuthConfig(t *testing.T) {
 
 			require.NoError(t, err)
 			require.NotNil(t, result)
-			// Verify that providers section exists if expected
-			if providers, ok := tt.expected["providers"]; ok && providers != nil {
-				resultProviders, ok := result["providers"]
+			// Deep comparison is problematic due to mapstructure adding Kind field.
+			// Verify key fields are present instead.
+			if expectedProviders, ok := tt.expected["providers"].(map[string]any); ok && expectedProviders != nil {
+				resultProviders, ok := result["providers"].(map[string]any)
 				require.True(t, ok, "Expected providers section in result")
 				require.NotNil(t, resultProviders)
+				// Verify each expected provider exists in result.
+				for providerName := range expectedProviders {
+					assert.Contains(t, resultProviders, providerName, "Expected provider %s in result", providerName)
+				}
 			}
 		})
 	}

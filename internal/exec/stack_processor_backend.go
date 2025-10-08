@@ -110,7 +110,7 @@ func setAzureBackendKey(
 		componentAzurerm = map[string]any{}
 	}
 
-	// Check if key already exists.
+	// Check if key already exists in component-specific azurerm section.
 	if _, componentAzurermKeyExists := componentAzurerm["key"].(string); componentAzurermKeyExists {
 		return nil
 	}

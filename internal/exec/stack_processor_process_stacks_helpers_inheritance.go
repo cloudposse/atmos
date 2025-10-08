@@ -94,52 +94,69 @@ func processMetadataInheritance(opts *ComponentProcessorOptions, result *Compone
 		result.BaseComponentName = baseComponentName
 	}
 
-	result.BaseComponents = append(result.BaseComponents, result.BaseComponentName)
+	if result.BaseComponentName != "" {
+		result.BaseComponents = append(result.BaseComponents, result.BaseComponentName)
+	}
 
 	// Process metadata.inherits list.
-	inheritList, inheritListExist := result.ComponentMetadata[cfg.InheritsSectionName].([]any)
-	if !inheritListExist {
+	inheritValue, inheritsKeyExists := result.ComponentMetadata[cfg.InheritsSectionName]
+	if !inheritsKeyExists {
 		return nil
 	}
 
-	for _, v := range inheritList {
-		baseComponentFromInheritList, ok := v.(string)
-		if !ok {
-			return fmt.Errorf("%w: 'components.%s.%s.metadata.inherits' in the file '%s'", errUtils.ErrInvalidComponentMetadataInherits, opts.ComponentType, opts.Component, opts.StackName)
-		}
-
-		if _, ok := opts.AllComponentsMap[baseComponentFromInheritList]; !ok {
-			if opts.CheckBaseComponentExists {
-				return fmt.Errorf("%w: the component '%s' in the stack manifest '%s' inherits from '%s' (using 'metadata.inherits'), but '%s' is not defined in any of the config files for the stack '%s'",
-					errUtils.ErrComponentNotDefined,
-					opts.Component,
-					opts.StackName,
-					baseComponentFromInheritList,
-					baseComponentFromInheritList,
-					opts.StackName,
-				)
-			}
-		}
-
-		// Process the baseComponentFromInheritList components recursively.
-		err := ProcessBaseComponentConfig(
-			opts.AtmosConfig,
-			baseComponentConfig,
-			opts.AllComponentsMap,
-			opts.Component,
-			opts.Stack,
-			baseComponentFromInheritList,
-			opts.ComponentsBasePath,
-			opts.CheckBaseComponentExists,
-			&result.BaseComponents,
-		)
-		if err != nil {
-			return err
-		}
-
-		applyBaseComponentConfig(opts, result, baseComponentConfig, componentInheritanceChain)
+	inheritList, ok := inheritValue.([]any)
+	if !ok {
+		return fmt.Errorf("%w: 'components.%s.%s.metadata.inherits' in the file '%s'", errUtils.ErrInvalidComponentMetadataInherits, opts.ComponentType, opts.Component, opts.StackName)
 	}
 
+	for _, v := range inheritList {
+		if err := processInheritedComponent(opts, result, baseComponentConfig, componentInheritanceChain, v); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// processInheritedComponent processes a single inherited component from metadata.inherits list.
+func processInheritedComponent(opts *ComponentProcessorOptions, result *ComponentProcessorResult, baseComponentConfig *schema.BaseComponentConfig, componentInheritanceChain *[]string, inheritValue any) error {
+	defer perf.Track(opts.AtmosConfig, "exec.processInheritedComponent")()
+
+	baseComponentFromInheritList, ok := inheritValue.(string)
+	if !ok {
+		return fmt.Errorf("%w: 'components.%s.%s.metadata.inherits' in the file '%s'", errUtils.ErrInvalidComponentMetadataInherits, opts.ComponentType, opts.Component, opts.StackName)
+	}
+
+	if _, ok := opts.AllComponentsMap[baseComponentFromInheritList]; !ok {
+		if opts.CheckBaseComponentExists {
+			return fmt.Errorf("%w: the component '%s' in the stack manifest '%s' inherits from '%s' (using 'metadata.inherits'), but '%s' is not defined in any of the config files for the stack '%s'",
+				errUtils.ErrComponentNotDefined,
+				opts.Component,
+				opts.StackName,
+				baseComponentFromInheritList,
+				baseComponentFromInheritList,
+				opts.StackName,
+			)
+		}
+	}
+
+	// Process the baseComponentFromInheritList components recursively.
+	err := ProcessBaseComponentConfig(
+		opts.AtmosConfig,
+		baseComponentConfig,
+		opts.AllComponentsMap,
+		opts.Component,
+		opts.Stack,
+		baseComponentFromInheritList,
+		opts.ComponentsBasePath,
+		opts.CheckBaseComponentExists,
+		&result.BaseComponents,
+	)
+	if err != nil {
+		return err
+	}
+
+	applyBaseComponentConfig(opts, result, baseComponentConfig, componentInheritanceChain)
 	return nil
 }
 

@@ -703,7 +703,7 @@ func TestProcessComponentInheritance(t *testing.T) {
 				CheckBaseComponentExists: false,
 				AtmosConfig:              &schema.AtmosConfiguration{},
 			},
-			expectedBaseComps: []string{"", "mixin1", "mixin2"},
+			expectedBaseComps: []string{"mixin1", "mixin2"}, // Empty string no longer added.
 		},
 		{
 			name: "invalid component attribute type",
@@ -733,7 +733,7 @@ func TestProcessComponentInheritance(t *testing.T) {
 				},
 				AtmosConfig: &schema.AtmosConfiguration{},
 			},
-			expectedError: "", // This will be handled as missing inherits
+			expectedError: "invalid component metadata.inherits section",
 		},
 	}
 
@@ -870,7 +870,7 @@ func TestProcessMetadataInheritance(t *testing.T) {
 				CheckBaseComponentExists: false,
 				AtmosConfig:              &schema.AtmosConfiguration{},
 			},
-			expectedBaseComps: []string{"", "mixin1", "mixin2"},
+			expectedBaseComps: []string{"mixin1", "mixin2"}, // Empty string no longer added.
 		},
 		{
 			name:              "no metadata.inherits",
@@ -879,7 +879,7 @@ func TestProcessMetadataInheritance(t *testing.T) {
 				ComponentType: cfg.TerraformComponentType,
 				AtmosConfig:   &schema.AtmosConfiguration{},
 			},
-			expectedBaseComps: []string{""},
+			expectedBaseComps: []string{}, // No base components when nothing is specified.
 		},
 		{
 			name: "invalid inherits item type",
@@ -976,4 +976,136 @@ func TestApplyBaseComponentConfig(t *testing.T) {
 	assert.Equal(t, "s3", result.BaseComponentRemoteStateBackendType)
 	assert.Equal(t, baseComponentConfig.BaseComponentRemoteStateBackendSection, result.BaseComponentRemoteStateBackendSection)
 	assert.Equal(t, []string{"base-vpc"}, componentInheritanceChain)
+}
+
+func TestProcessInheritedComponent(t *testing.T) {
+	tests := []struct {
+		name              string
+		opts              ComponentProcessorOptions
+		result            ComponentProcessorResult
+		inheritValue      any
+		expectedError     string
+		expectedBaseComps []string
+	}{
+		{
+			name: "valid inherited component",
+			opts: ComponentProcessorOptions{
+				ComponentType: cfg.TerraformComponentType,
+				Component:     "derived-vpc",
+				Stack:         "test-stack",
+				StackName:     "test-stack",
+				AllComponentsMap: map[string]any{
+					"base-vpc": map[string]any{
+						cfg.VarsSectionName: map[string]any{
+							"cidr": "10.0.0.0/16",
+						},
+					},
+				},
+				ComponentsBasePath:       "/test/components",
+				CheckBaseComponentExists: false,
+				AtmosConfig:              &schema.AtmosConfiguration{},
+			},
+			result: ComponentProcessorResult{
+				BaseComponents: []string{},
+			},
+			inheritValue:      "base-vpc",
+			expectedBaseComps: []string{"base-vpc"},
+		},
+		{
+			name: "invalid inherit value type - not a string",
+			opts: ComponentProcessorOptions{
+				ComponentType: cfg.TerraformComponentType,
+				Component:     "derived-vpc",
+				Stack:         "test-stack",
+				StackName:     "test-stack",
+				AtmosConfig:   &schema.AtmosConfiguration{},
+			},
+			result: ComponentProcessorResult{
+				BaseComponents: []string{},
+			},
+			inheritValue:  123, // Invalid: should be string
+			expectedError: "invalid component metadata.inherits section",
+		},
+		{
+			name: "component not found - CheckBaseComponentExists false",
+			opts: ComponentProcessorOptions{
+				ComponentType:            cfg.TerraformComponentType,
+				Component:                "derived-vpc",
+				Stack:                    "test-stack",
+				StackName:                "test-stack",
+				AllComponentsMap:         map[string]any{},
+				ComponentsBasePath:       "/test/components",
+				CheckBaseComponentExists: false,
+				AtmosConfig:              &schema.AtmosConfiguration{},
+			},
+			result: ComponentProcessorResult{
+				BaseComponents: []string{},
+			},
+			inheritValue:      "nonexistent-component",
+			expectedBaseComps: []string{"nonexistent-component"},
+		},
+		{
+			name: "component not found - CheckBaseComponentExists true",
+			opts: ComponentProcessorOptions{
+				ComponentType:            cfg.TerraformComponentType,
+				Component:                "derived-vpc",
+				Stack:                    "test-stack",
+				StackName:                "test-stack",
+				AllComponentsMap:         map[string]any{},
+				ComponentsBasePath:       "/test/components",
+				CheckBaseComponentExists: true,
+				AtmosConfig:              &schema.AtmosConfiguration{},
+			},
+			result: ComponentProcessorResult{
+				BaseComponents: []string{},
+			},
+			inheritValue:  "nonexistent-component",
+			expectedError: "component not defined in any config files",
+		},
+		{
+			name: "multiple inherited components processing",
+			opts: ComponentProcessorOptions{
+				ComponentType: cfg.TerraformComponentType,
+				Component:     "derived-vpc",
+				Stack:         "test-stack",
+				StackName:     "test-stack",
+				AllComponentsMap: map[string]any{
+					"mixin1": map[string]any{
+						cfg.VarsSectionName: map[string]any{
+							"var1": "value1",
+						},
+					},
+				},
+				ComponentsBasePath:       "/test/components",
+				CheckBaseComponentExists: false,
+				AtmosConfig:              &schema.AtmosConfiguration{},
+			},
+			result: ComponentProcessorResult{
+				BaseComponents: []string{"base-vpc"},
+			},
+			inheritValue:      "mixin1",
+			expectedBaseComps: []string{"base-vpc", "mixin1"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			baseComponentConfig := &schema.BaseComponentConfig{}
+			componentInheritanceChain := []string{}
+
+			err := processInheritedComponent(&tt.opts, &tt.result, baseComponentConfig, &componentInheritanceChain, tt.inheritValue)
+
+			if tt.expectedError != "" {
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), tt.expectedError)
+				return
+			}
+
+			require.NoError(t, err)
+
+			if tt.expectedBaseComps != nil {
+				assert.ElementsMatch(t, tt.expectedBaseComps, tt.result.BaseComponents)
+			}
+		})
+	}
 }

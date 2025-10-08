@@ -851,6 +851,9 @@ func processSettingsIntegrationsGithub(atmosConfig *schema.AtmosConfiguration, s
 
 	// Update the `settings.integrations.github` section
 	if len(settingsIntegrationsGithubMerged) > 0 {
+		if settings == nil {
+			settings = make(map[string]any)
+		}
 		settingsIntegrationsSection[cfg.GithubSectionName] = settingsIntegrationsGithubMerged
 		settings[cfg.IntegrationsSectionName] = settingsIntegrationsSection
 	}
