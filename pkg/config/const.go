@@ -90,6 +90,8 @@ const (
 	BackendTypeGCS                    = "gcs"
 	BackendTypeCloud                  = "cloud"
 	ComponentPathSectionName          = "component_path"
+	InheritsSectionName               = "inherits"
+	AbstractSectionName               = "abstract"
 
 	LogsLevelFlag = "--logs-level"
 	LogsFileFlag  = "--logs-file"
