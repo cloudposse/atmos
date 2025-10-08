@@ -1180,6 +1180,16 @@ func TestExecuteTerraformAffectedComponentInDepOrder(t *testing.T) {
 	}
 }
 
+func BenchmarkParseUploadStatusFlag(b *testing.B) {
+	args := []string{"--verbose", "--upload-status=true", "--output=json"}
+	flagName := "upload-status"
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		parseUploadStatusFlag(args, flagName)
+	}
+}
+
 func BenchmarkExecuteTerraformAffectedComponentInDepOrder(b *testing.B) {
 	info := &schema.ConfigAndStacksInfo{
 		SubCommand: "plan",
@@ -1212,6 +1222,137 @@ func BenchmarkExecuteTerraformAffectedComponentInDepOrder(b *testing.B) {
 		if err != nil {
 			b.Fatalf("Unexpected error in benchmark: %v", err)
 		}
+	}
+}
+
+func TestParseUploadStatusFlag(t *testing.T) {
+	tests := []struct {
+		name     string
+		args     []string
+		flagName string
+		expected bool
+	}{
+		{
+			name:     "flag present without value (defaults to true)",
+			args:     []string{"--upload-status"},
+			flagName: "upload-status",
+			expected: true,
+		},
+		{
+			name:     "flag present with =true",
+			args:     []string{"--upload-status=true"},
+			flagName: "upload-status",
+			expected: true,
+		},
+		{
+			name:     "flag present with =false",
+			args:     []string{"--upload-status=false"},
+			flagName: "upload-status",
+			expected: false,
+		},
+		{
+			name:     "flag not present",
+			args:     []string{"--other-flag"},
+			flagName: "upload-status",
+			expected: false,
+		},
+		{
+			name:     "flag present among multiple flags",
+			args:     []string{"--verbose", "--upload-status", "--output=json"},
+			flagName: "upload-status",
+			expected: true,
+		},
+		{
+			name:     "flag present with value among multiple flags",
+			args:     []string{"--verbose", "--upload-status=true", "--output=json"},
+			flagName: "upload-status",
+			expected: true,
+		},
+		{
+			name:     "flag present with false among multiple flags",
+			args:     []string{"--verbose", "--upload-status=false", "--output=json"},
+			flagName: "upload-status",
+			expected: false,
+		},
+		{
+			name:     "empty args",
+			args:     []string{},
+			flagName: "upload-status",
+			expected: false,
+		},
+		{
+			name:     "nil args",
+			args:     nil,
+			flagName: "upload-status",
+			expected: false,
+		},
+		{
+			name:     "similar flag name should not match",
+			args:     []string{"--upload-status-file"},
+			flagName: "upload-status",
+			expected: false,
+		},
+		{
+			name:     "flag with invalid value treated as true",
+			args:     []string{"--upload-status=invalid"},
+			flagName: "upload-status",
+			expected: true,
+		},
+		{
+			name:     "flag with empty value treated as true",
+			args:     []string{"--upload-status="},
+			flagName: "upload-status",
+			expected: true,
+		},
+		{
+			name:     "flag with uppercase TRUE",
+			args:     []string{"--upload-status=TRUE"},
+			flagName: "upload-status",
+			expected: true,
+		},
+		{
+			name:     "flag with uppercase FALSE",
+			args:     []string{"--upload-status=FALSE"},
+			flagName: "upload-status",
+			expected: true, // Only lowercase "false" is recognized.
+		},
+		{
+			name:     "multiple instances of flag (first one wins)",
+			args:     []string{"--upload-status=true", "--upload-status=false"},
+			flagName: "upload-status",
+			expected: true, // First occurrence is true.
+		},
+		{
+			name:     "multiple instances of flag with false first",
+			args:     []string{"--upload-status=false", "--upload-status=true"},
+			flagName: "upload-status",
+			expected: false, // First occurrence is false.
+		},
+		{
+			name:     "flag with spaces in value",
+			args:     []string{"--upload-status= false "},
+			flagName: "upload-status",
+			expected: true, // " false " != "false".
+		},
+		{
+			name:     "different flag name",
+			args:     []string{"--enable-feature"},
+			flagName: "enable-feature",
+			expected: true,
+		},
+		{
+			name:     "different flag name with false",
+			args:     []string{"--enable-feature=false"},
+			flagName: "enable-feature",
+			expected: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := parseUploadStatusFlag(tt.args, tt.flagName)
+			assert.Equal(t, tt.expected, result, "parseUploadStatusFlag(%v, %q) = %v, expected %v", tt.args, tt.flagName, result, tt.expected)
+		})
 	}
 }
 
