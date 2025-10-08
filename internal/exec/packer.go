@@ -85,14 +85,14 @@ func ExecutePacker(
 		)
 	}
 
-	// Check if the component is allowed to be provisioned (`metadata.type` attribute)
+	// Check if the component is allowed to be provisioned (`metadata.type` attribute).
 	if (info.SubCommand == "build") && info.ComponentIsAbstract {
 		return fmt.Errorf("%w: component `%s` is abstract and cannot be provisioned (`metadata.type = abstract`)",
 			errUtils.ErrAbstractComponentCantBeProvisioned,
 			filepath.Join(info.ComponentFolderPrefix, info.Component))
 	}
 
-	// Check if the component is locked (`metadata.locked` is set to true)
+	// Check if the component is locked (`metadata.locked` is set to true).
 	if info.ComponentIsLocked {
 		// Allow read-only commands, block modification commands
 		switch info.SubCommand {
@@ -101,6 +101,27 @@ func ExecutePacker(
 				errUtils.ErrLockedComponentCantBeProvisioned,
 				filepath.Join(info.ComponentFolderPrefix, info.Component))
 		}
+	}
+
+	// Check if the component 'settings.validation' section is specified and validate the component.
+	valid, err := ValidateComponent(
+		&atmosConfig,
+		info.ComponentFromArg,
+		info.ComponentSection,
+		"",
+		"",
+		nil,
+		0,
+	)
+	if err != nil {
+		return err
+	}
+
+	if !valid {
+		return fmt.Errorf("%w: the component '%s' did not pass the validation policies",
+			errUtils.ErrInvalidComponent,
+			info.ComponentFromArg,
+		)
 	}
 
 	// Find Packer template.
@@ -121,10 +142,10 @@ func ExecutePacker(
 		return errUtils.ErrMissingPackerTemplate
 	}
 
-	// Print component variables
+	// Print component variables.
 	log.Debug("Variables for component in stack", "component", info.ComponentFromArg, "stack", info.Stack, "variables", info.ComponentVarsSection)
 
-	// Write variables to a file
+	// Write variables to a file.
 	varFile := constructPackerComponentVarfileName(info)
 	varFilePath := constructPackerComponentVarfilePath(&atmosConfig, info)
 
@@ -156,14 +177,14 @@ func ExecutePacker(
 		"arguments and flags", info.AdditionalArgsAndFlags,
 	)
 
-	// Prepare arguments and flags
+	// Prepare arguments and flags.
 	allArgsAndFlags := []string{}
 	allArgsAndFlags = append(allArgsAndFlags, info.SubCommand)
 	allArgsAndFlags = append(allArgsAndFlags, []string{"-var-file", varFile}...)
 	allArgsAndFlags = append(allArgsAndFlags, info.AdditionalArgsAndFlags...)
 	allArgsAndFlags = append(allArgsAndFlags, template)
 
-	// Prepare ENV vars
+	// Prepare ENV vars.
 	envVars := append(info.ComponentEnvList, fmt.Sprintf("ATMOS_CLI_CONFIG_PATH=%s", atmosConfig.CliConfigPath))
 	basePath, err := filepath.Abs(atmosConfig.BasePath)
 	if err != nil {
@@ -185,7 +206,7 @@ func ExecutePacker(
 		return err
 	}
 
-	// Cleanup
+	// Cleanup.
 	err = os.Remove(varFilePath)
 	if err != nil {
 		log.Warn(err.Error())
