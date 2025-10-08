@@ -391,6 +391,91 @@ func TestProcessAuthConfig(t *testing.T) {
 			expected:    map[string]any{},
 			expectError: false,
 		},
+		{
+			name: "component auth overrides global auth",
+			authConfig: map[string]any{
+				"providers": map[string]any{
+					"aws": map[string]any{
+						"region": "us-west-2",
+					},
+				},
+			},
+			globalAuth: schema.AuthConfig{
+				Providers: map[string]schema.Provider{
+					"aws": {
+						Region: "us-east-1",
+					},
+				},
+			},
+			expected: map[string]any{
+				"providers": map[string]any{
+					"aws": map[string]any{
+						"region": "us-west-2",
+					},
+				},
+			},
+			expectError: false,
+		},
+		{
+			name: "merge multiple providers",
+			authConfig: map[string]any{
+				"providers": map[string]any{
+					"azure": map[string]any{
+						"tenant_id": "test-tenant",
+					},
+				},
+			},
+			globalAuth: schema.AuthConfig{
+				Providers: map[string]schema.Provider{
+					"aws": {
+						Region: "us-east-1",
+					},
+				},
+			},
+			expected: map[string]any{
+				"providers": map[string]any{
+					"aws": map[string]any{
+						"region": "us-east-1",
+					},
+					"azure": map[string]any{
+						"tenant_id": "test-tenant",
+					},
+				},
+			},
+			expectError: false,
+		},
+		{
+			name: "deep merge auth configuration",
+			authConfig: map[string]any{
+				"providers": map[string]any{
+					"aws": map[string]any{
+						"spec": map[string]any{
+							"role_arn": "arn:aws:iam::123:role/MyRole",
+						},
+					},
+				},
+			},
+			globalAuth: schema.AuthConfig{
+				Providers: map[string]schema.Provider{
+					"aws": {
+						Region:       "us-east-1",
+						ProviderType: "aws-sso",
+					},
+				},
+			},
+			expected: map[string]any{
+				"providers": map[string]any{
+					"aws": map[string]any{
+						"region":        "us-east-1",
+						"provider_type": "aws-sso",
+						"spec": map[string]any{
+							"role_arn": "arn:aws:iam::123:role/MyRole",
+						},
+					},
+				},
+			},
+			expectError: false,
+		},
 	}
 
 	for _, tt := range tests {
@@ -408,6 +493,12 @@ func TestProcessAuthConfig(t *testing.T) {
 
 			require.NoError(t, err)
 			require.NotNil(t, result)
+			// Verify that providers section exists if expected
+			if providers, ok := tt.expected["providers"]; ok && providers != nil {
+				resultProviders, ok := result["providers"]
+				require.True(t, ok, "Expected providers section in result")
+				require.NotNil(t, resultProviders)
+			}
 		})
 	}
 }

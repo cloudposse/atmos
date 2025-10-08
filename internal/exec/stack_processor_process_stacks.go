@@ -359,7 +359,7 @@ func ProcessStackConfig(
 	if i, ok := globalPackerSection[cfg.AuthSectionName]; ok {
 		packerAuth, ok = i.(map[string]any)
 		if !ok {
-			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidHelmfileAuth, stackName)
+			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidPackerAuth, stackName)
 		}
 	}
 
