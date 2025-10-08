@@ -1114,6 +1114,7 @@ func ProcessBaseComponentConfig(
 	var baseComponentVars map[string]any
 	var baseComponentSettings map[string]any
 	var baseComponentEnv map[string]any
+	var baseComponentAuth map[string]any
 	var baseComponentProviders map[string]any
 	var baseComponentHooks map[string]any
 	var baseComponentCommand string
@@ -1213,21 +1214,28 @@ func ProcessBaseComponentConfig(
 		if baseComponentVarsSection, baseComponentVarsSectionExist := baseComponentMap[cfg.VarsSectionName]; baseComponentVarsSectionExist {
 			baseComponentVars, ok = baseComponentVarsSection.(map[string]any)
 			if !ok {
-				return fmt.Errorf("invalid '%s.vars' section in the stack '%s'", baseComponent, stack)
+				return fmt.Errorf("%w: '%s.vars' in the stack '%s'", errUtils.ErrInvalidVarsSection, baseComponent, stack)
 			}
 		}
 
 		if baseComponentSettingsSection, baseComponentSettingsSectionExist := baseComponentMap[cfg.SettingsSectionName]; baseComponentSettingsSectionExist {
 			baseComponentSettings, ok = baseComponentSettingsSection.(map[string]any)
 			if !ok {
-				return fmt.Errorf("invalid '%s.settings' section in the stack '%s'", baseComponent, stack)
+				return fmt.Errorf("%w: '%s.settings' in the stack '%s'", errUtils.ErrInvalidSettingsSection, baseComponent, stack)
 			}
 		}
 
 		if baseComponentEnvSection, baseComponentEnvSectionExist := baseComponentMap[cfg.EnvSectionName]; baseComponentEnvSectionExist {
 			baseComponentEnv, ok = baseComponentEnvSection.(map[string]any)
 			if !ok {
-				return fmt.Errorf("invalid '%s.env' section in the stack '%s'", baseComponent, stack)
+				return fmt.Errorf("%w: '%s.env' in the stack '%s'", errUtils.ErrInvalidEnvSection, baseComponent, stack)
+			}
+		}
+
+		if baseComponentAuthSection, baseComponentAuthSectionExist := baseComponentMap[cfg.AuthSectionName]; baseComponentAuthSectionExist {
+			baseComponentAuth, ok = baseComponentAuthSection.(map[string]any)
+			if !ok {
+				return fmt.Errorf("%w: '%s.auth' in the stack '%s'", errUtils.ErrInvalidAuthSection, baseComponent, stack)
 			}
 		}
 
@@ -1307,6 +1315,13 @@ func ProcessBaseComponentConfig(
 			return err
 		}
 		baseComponentConfig.BaseComponentEnv = merged
+
+		// Base component `auth`
+		merged, err = m.Merge(atmosConfig, []map[string]any{baseComponentConfig.BaseComponentAuth, baseComponentAuth})
+		if err != nil {
+			return err
+		}
+		baseComponentConfig.BaseComponentAuth = merged
 
 		// Base component `providers`
 		merged, err = m.Merge(atmosConfig, []map[string]any{baseComponentConfig.BaseComponentProviders, baseComponentProviders})

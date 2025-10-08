@@ -16,6 +16,7 @@ func processComponentOverrides(opts *ComponentProcessorOptions, result *Componen
 	result.ComponentOverridesVars = make(map[string]any)
 	result.ComponentOverridesSettings = make(map[string]any)
 	result.ComponentOverridesEnv = make(map[string]any)
+	result.ComponentOverridesAuth = make(map[string]any)
 	if opts.ComponentType == cfg.TerraformComponentType {
 		result.ComponentOverridesProviders = make(map[string]any)
 		result.ComponentOverridesHooks = make(map[string]any)
@@ -58,6 +59,15 @@ func processComponentOverrides(opts *ComponentProcessorOptions, result *Componen
 			return fmt.Errorf("%w: 'components.%s.%s.overrides.env' in the manifest '%s'", errUtils.ErrInvalidComponentOverridesEnv, opts.ComponentType, opts.Component, opts.StackName)
 		}
 		result.ComponentOverridesEnv = componentOverridesEnv
+	}
+
+	// Extract auth overrides.
+	if i, ok := componentOverrides[cfg.AuthSectionName]; ok {
+		componentOverridesAuth, ok := i.(map[string]any)
+		if !ok {
+			return fmt.Errorf("%w: 'components.%s.%s.overrides.auth' in the manifest '%s'", errUtils.ErrInvalidComponentOverridesAuth, opts.ComponentType, opts.Component, opts.StackName)
+		}
+		result.ComponentOverridesAuth = componentOverridesAuth
 	}
 
 	// Extract command overrides.

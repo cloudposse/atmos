@@ -19,6 +19,7 @@ func processComponentInheritance(opts *ComponentProcessorOptions, result *Compon
 	result.BaseComponentVars = make(map[string]any)
 	result.BaseComponentSettings = make(map[string]any)
 	result.BaseComponentEnv = make(map[string]any)
+	result.BaseComponentAuth = make(map[string]any)
 	if opts.ComponentType == cfg.TerraformComponentType {
 		result.BaseComponentProviders = make(map[string]any)
 		result.BaseComponentHooks = make(map[string]any)
@@ -147,6 +148,7 @@ func applyBaseComponentConfig(opts *ComponentProcessorOptions, result *Component
 	result.BaseComponentVars = baseComponentConfig.BaseComponentVars
 	result.BaseComponentSettings = baseComponentConfig.BaseComponentSettings
 	result.BaseComponentEnv = baseComponentConfig.BaseComponentEnv
+	result.BaseComponentAuth = baseComponentConfig.BaseComponentAuth
 	result.BaseComponentName = baseComponentConfig.FinalBaseComponentName
 	result.BaseComponentCommand = baseComponentConfig.BaseComponentCommand
 	*componentInheritanceChain = baseComponentConfig.ComponentInheritanceChain

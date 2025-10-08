@@ -20,6 +20,7 @@ type ComponentProcessorOptions struct {
 	GlobalVars     map[string]any
 	GlobalSettings map[string]any
 	GlobalEnv      map[string]any
+	GlobalAuth     map[string]any
 	GlobalCommand  string
 
 	// Terraform-specific options.
@@ -45,11 +46,13 @@ type ComponentProcessorResult struct {
 	ComponentOverridesVars     map[string]any
 	ComponentOverridesSettings map[string]any
 	ComponentOverridesEnv      map[string]any
+	ComponentOverridesAuth     map[string]any
 	ComponentOverridesCommand  string
 	BaseComponentName          string
 	BaseComponentVars          map[string]any
 	BaseComponentSettings      map[string]any
 	BaseComponentEnv           map[string]any
+	BaseComponentAuth          map[string]any
 	BaseComponentCommand       string
 	ComponentInheritanceChain  []string
 	BaseComponents             []string

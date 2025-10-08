@@ -133,6 +133,7 @@ var (
 	ErrInvalidComponentOverridesVars          = errors.New("invalid component overrides vars section")
 	ErrInvalidComponentOverridesSettings      = errors.New("invalid component overrides settings section")
 	ErrInvalidComponentOverridesEnv           = errors.New("invalid component overrides env section")
+	ErrInvalidComponentOverridesAuth          = errors.New("invalid component overrides auth section")
 	ErrInvalidComponentOverridesCommand       = errors.New("invalid component overrides command attribute")
 	ErrInvalidComponentOverridesProviders     = errors.New("invalid component overrides providers section")
 	ErrInvalidComponentOverridesHooks         = errors.New("invalid component overrides hooks section")
@@ -152,6 +153,7 @@ var (
 	ErrInvalidHelmfileSection   = errors.New("invalid helmfile section")
 	ErrInvalidPackerSection     = errors.New("invalid packer section")
 	ErrInvalidComponentsSection = errors.New("invalid components section")
+	ErrInvalidAuthSection       = errors.New("invalid auth section")
 
 	// Terraform-specific subsection errors.
 	ErrInvalidTerraformCommand            = errors.New("invalid terraform command")
@@ -162,18 +164,21 @@ var (
 	ErrInvalidTerraformBackendType        = errors.New("invalid terraform backend_type")
 	ErrInvalidTerraformRemoteStateType    = errors.New("invalid terraform remote_state_backend_type")
 	ErrInvalidTerraformRemoteStateSection = errors.New("invalid terraform remote_state_backend section")
+	ErrInvalidTerraformAuth               = errors.New("invalid terraform auth section")
 
 	// Helmfile-specific subsection errors.
 	ErrInvalidHelmfileCommand  = errors.New("invalid helmfile command")
 	ErrInvalidHelmfileVars     = errors.New("invalid helmfile vars section")
 	ErrInvalidHelmfileSettings = errors.New("invalid helmfile settings section")
 	ErrInvalidHelmfileEnv      = errors.New("invalid helmfile env section")
+	ErrInvalidHelmfileAuth     = errors.New("invalid helmfile auth section")
 
 	// Packer-specific subsection errors.
 	ErrInvalidPackerCommand  = errors.New("invalid packer command")
 	ErrInvalidPackerVars     = errors.New("invalid packer vars section")
 	ErrInvalidPackerSettings = errors.New("invalid packer settings section")
 	ErrInvalidPackerEnv      = errors.New("invalid packer env section")
+	ErrInvalidPackerAuth     = errors.New("invalid packer auth section")
 
 	// Component type-specific section errors.
 	ErrInvalidComponentsTerraform = errors.New("invalid components.terraform section")

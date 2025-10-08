@@ -52,6 +52,7 @@ func ProcessStackConfig(
 	globalHelmfileSection := map[string]any{}
 	globalPackerSection := map[string]any{}
 	globalComponentsSection := map[string]any{}
+	globalAuthSection := map[string]any{}
 
 	terraformVars := map[string]any{}
 	terraformSettings := map[string]any{}
@@ -59,16 +60,19 @@ func ProcessStackConfig(
 	terraformCommand := ""
 	terraformProviders := map[string]any{}
 	terraformHooks := map[string]any{}
+	terraformAuth := map[string]any{}
 
 	helmfileVars := map[string]any{}
 	helmfileSettings := map[string]any{}
 	helmfileEnv := map[string]any{}
 	helmfileCommand := ""
+	helmfileAuth := map[string]any{}
 
 	packerVars := map[string]any{}
 	packerSettings := map[string]any{}
 	packerEnv := map[string]any{}
 	packerCommand := ""
+	packerAuth := map[string]any{}
 
 	terraformComponents := map[string]any{}
 	helmfileComponents := map[string]any{}
@@ -129,6 +133,13 @@ func ProcessStackConfig(
 		globalComponentsSection, ok = i.(map[string]any)
 		if !ok {
 			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidComponentsSection, stackName)
+		}
+	}
+
+	if i, ok := config[cfg.AuthSectionName]; ok {
+		globalAuthSection, ok = i.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidAuthSection, stackName)
 		}
 	}
 
@@ -193,6 +204,18 @@ func ProcessStackConfig(
 		if !ok {
 			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidTerraformProviders, stackName)
 		}
+	}
+
+	if i, ok := globalTerraformSection[cfg.AuthSectionName]; ok {
+		terraformAuth, ok = i.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidTerraformAuth, stackName)
+		}
+	}
+
+	globalAndTerraformAuth, err := m.Merge(atmosConfig, []map[string]any{globalAuthSection, terraformAuth})
+	if err != nil {
+		return nil, err
 	}
 
 	// Global backend.
@@ -275,6 +298,18 @@ func ProcessStackConfig(
 		return nil, err
 	}
 
+	if i, ok := globalHelmfileSection[cfg.AuthSectionName]; ok {
+		helmfileAuth, ok = i.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidHelmfileAuth, stackName)
+		}
+	}
+
+	globalAndHelmfileAuth, err := m.Merge(atmosConfig, []map[string]any{globalAuthSection, helmfileAuth})
+	if err != nil {
+		return nil, err
+	}
+
 	// Packer section.
 	if i, ok := globalPackerSection[cfg.CommandSectionName]; ok {
 		packerCommand, ok = i.(string)
@@ -319,6 +354,18 @@ func ProcessStackConfig(
 		return nil, err
 	}
 
+	if i, ok := globalPackerSection[cfg.AuthSectionName]; ok {
+		packerAuth, ok = i.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidHelmfileAuth, stackName)
+		}
+	}
+
+	globalAndPackerAuth, err := m.Merge(atmosConfig, []map[string]any{globalAuthSection, packerAuth})
+	if err != nil {
+		return nil, err
+	}
+
 	// Process all Terraform components.
 	if componentTypeFilter == "" || componentTypeFilter == cfg.TerraformComponentType {
 		if allTerraformComponents, ok := globalComponentsSection[cfg.TerraformComponentType]; ok {
@@ -348,6 +395,7 @@ func ProcessStackConfig(
 					GlobalVars:                      globalAndTerraformVars,
 					GlobalSettings:                  globalAndTerraformSettings,
 					GlobalEnv:                       globalAndTerraformEnv,
+					GlobalAuth:                      globalAndTerraformAuth,
 					GlobalCommand:                   terraformCommand,
 					TerraformProviders:              terraformProviders,
 					GlobalAndTerraformHooks:         globalAndTerraformHooks,
@@ -404,6 +452,7 @@ func ProcessStackConfig(
 					GlobalVars:               globalAndHelmfileVars,
 					GlobalSettings:           globalAndHelmfileSettings,
 					GlobalEnv:                globalAndHelmfileEnv,
+					GlobalAuth:               globalAndHelmfileAuth,
 					GlobalCommand:            helmfileCommand,
 					AtmosConfig:              atmosConfig,
 				}
@@ -454,6 +503,7 @@ func ProcessStackConfig(
 					GlobalVars:               globalAndPackerVars,
 					GlobalSettings:           globalAndPackerSettings,
 					GlobalEnv:                globalAndPackerEnv,
+					GlobalAuth:               globalAndPackerAuth,
 					GlobalCommand:            packerCommand,
 					AtmosConfig:              atmosConfig,
 				}

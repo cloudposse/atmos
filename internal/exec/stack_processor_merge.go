@@ -55,6 +55,19 @@ func mergeComponentConfigurations(atmosConfig *schema.AtmosConfiguration, opts C
 		return nil, err
 	}
 
+	// Merge auth.
+	finalComponentAuth, err := m.Merge(
+		atmosConfig,
+		[]map[string]any{
+			opts.GlobalAuth,
+			result.BaseComponentAuth,
+			result.ComponentAuth,
+			result.ComponentOverridesAuth,
+		})
+	if err != nil {
+		return nil, err
+	}
+
 	// Terraform-specific: merge providers.
 	var finalComponentProviders map[string]any
 	if opts.ComponentType == cfg.TerraformComponentType {
@@ -125,6 +138,7 @@ func mergeComponentConfigurations(atmosConfig *schema.AtmosConfiguration, opts C
 		cfg.VarsSectionName:        finalComponentVars,
 		cfg.SettingsSectionName:    finalSettings,
 		cfg.EnvSectionName:         finalComponentEnv,
+		cfg.AuthSectionName:        finalComponentAuth,
 		cfg.CommandSectionName:     finalComponentCommand,
 		cfg.InheritanceSectionName: result.ComponentInheritanceChain,
 		cfg.MetadataSectionName:    result.ComponentMetadata,
@@ -171,7 +185,7 @@ func mergeComponentConfigurations(atmosConfig *schema.AtmosConfiguration, opts C
 		}
 
 		// Process auth configuration.
-		mergedAuth, err := processAuthConfig(atmosConfig, result.ComponentAuth)
+		mergedAuth, err := processAuthConfig(atmosConfig, finalComponentAuth)
 		if err != nil {
 			return nil, err
 		}
