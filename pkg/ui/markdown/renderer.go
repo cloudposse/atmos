@@ -132,17 +132,43 @@ func (r *Renderer) RenderWithoutWordWrap(content string) (string, error) {
 
 // Render renders markdown content to ANSI styled text.
 func (r *Renderer) Render(content string) (string, error) {
-	var result string
+	var rendered string
 	var err error
 	if r.isTTYSupportForStdout() {
-		result, err = r.renderer.Render(content)
+		rendered, err = r.renderer.Render(content)
 	} else {
-		result, err = r.RenderAscii(content)
+		// Fallback to ASCII rendering for non-TTY stdout.
+		rendered, err = r.RenderAscii(content)
 	}
-	if err == nil {
-		result = trimTrailingSpaces(result)
+	if err != nil {
+		return "", err
 	}
-	return result, err
+	// Post-process the rendered output to handle trailing newlines and command styling.
+	lines := strings.Split(rendered, "\n")
+	var result []string
+
+	// Create a purple style for command examples.
+	purpleStyle := termenv.Style{}.Foreground(r.profile.Color(Purple)).Bold()
+
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "$") && term.IsTTYSupportForStdout() {
+			// Add custom styling for command examples.
+			styled := purpleStyle.Styled(line)
+			result = append(result, " "+styled)
+		} else {
+			// Keep all lines including blank lines for proper markdown paragraph spacing.
+			result = append(result, line)
+		}
+	}
+
+	// Remove only trailing blank lines.
+	for len(result) > 0 && strings.TrimSpace(result[len(result)-1]) == "" {
+		result = result[:len(result)-1]
+	}
+
+	// Add a single newline at the end.
+	return strings.Join(result, "\n"), nil
 }
 
 func (r *Renderer) RenderAsciiWithoutWordWrap(content string) (string, error) {
