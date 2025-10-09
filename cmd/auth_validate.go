@@ -23,7 +23,9 @@ var authValidateCmd = &cobra.Command{
 }
 
 func executeAuthValidateCommand(cmd *cobra.Command, args []string) error {
-	handleHelpRequest(cmd, args)
+	if err := handleHelpRequest(cmd, args); err != nil {
+		return err
+	}
 	// Get verbose flag
 	verbose := viper.GetBool("auth.validate.verbose")
 	if verbose {

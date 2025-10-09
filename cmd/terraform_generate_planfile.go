@@ -14,7 +14,9 @@ var terraformGeneratePlanfileCmd = &cobra.Command{
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 	ValidArgsFunction:  ComponentsArgCompletion,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		handleHelpRequest(cmd, args)
+		if err := handleHelpRequest(cmd, args); err != nil {
+			return err
+		}
 		// Check Atmos configuration
 		if err := checkAtmosConfig(); err != nil {
 			return err

@@ -7,17 +7,6 @@ no workflow found
 
 No workflow exists with the name no-workflow-exists.
 
-### Available workflows:
-
-• fail
-• fail-with-stack
-• invalid-step-type
-• no-steps
-• pass
-• shell-command-not-found
-• shell-failure
-• shell-pass
-
 ## Example
 
  # List all available workflows
@@ -27,6 +16,17 @@ No workflow exists with the name no-workflow-exists.
  atmos workflow deploy-vpc -f stacks/workflows/deploy.yaml
 
 ## Hints
+
+💡 Available workflows:
+
+• fail
+• fail-with-stack
+• invalid-step-type
+• no-steps
+• pass
+• shell-command-not-found
+• shell-failure
+• shell-pass
 
 💡 Use atmos describe workflows to see detailed workflow definitions 💡 Run a workflow: atmos workflow <name> -f stacks/workflows/test.yaml
 

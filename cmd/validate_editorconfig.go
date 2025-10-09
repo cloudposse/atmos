@@ -38,9 +38,11 @@ var editorConfigCmd *cobra.Command = &cobra.Command{
 		return initializeConfig(cmd)
 	},
 	RunE: func(cmd *cobra.Command, args []string) error {
-		handleHelpRequest(cmd, args)
+		if err := handleHelpRequest(cmd, args); err != nil {
+			return err
+		}
 		if len(args) > 0 {
-			showUsageAndExit(cmd, args)
+			return showUsageAndExit(cmd, args)
 		}
 		return runMainLogic()
 	},

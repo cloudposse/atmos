@@ -13,9 +13,11 @@ var atlantisGenerateRepoConfigCmd = &cobra.Command{
 	Long:               "Generate the repository configuration file required for Atlantis to manage Terraform repositories.",
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 	RunE: func(cmd *cobra.Command, args []string) error {
-		handleHelpRequest(cmd, args)
+		if err := handleHelpRequest(cmd, args); err != nil {
+			return err
+		}
 		if len(args) > 0 {
-			showUsageAndExit(cmd, args)
+			return showUsageAndExit(cmd, args)
 		}
 		// Check Atmos configuration
 		if err := checkAtmosConfig(); err != nil {

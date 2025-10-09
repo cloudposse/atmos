@@ -13,7 +13,15 @@ var helmfileCmd = &cobra.Command{
 	Short:              "Manage Helmfile-based Kubernetes deployments",
 	Long:               `This command runs Helmfile commands to manage Kubernetes deployments using Helmfile.`,
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: true},
-	Args:               cobra.NoArgs,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		// Handle "help" subcommand explicitly for parent commands
+		if len(args) > 0 && args[0] == "help" {
+			cmd.Help()
+			return nil
+		}
+		// Show usage error for any other case (no subcommand or invalid subcommand)
+		return showUsageAndExit(cmd, args)
+	},
 }
 
 func init() {

@@ -621,7 +621,7 @@ func isVersionCommand() bool {
 func handleHelpRequest(cmd *cobra.Command, args []string) error {
 	if (len(args) > 0 && args[0] == "help") || Contains(args, "--help") || Contains(args, "-h") {
 		cmd.Help()
-		return errUtils.WithExitCode(nil, 0)
+		return errUtils.WithExitCode(errUtils.ErrHelpOutput, 0)
 	}
 	return nil
 }

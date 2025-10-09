@@ -28,7 +28,9 @@ var authWhoamiCmd = &cobra.Command{
 }
 
 func executeAuthWhoamiCommand(cmd *cobra.Command, args []string) error {
-	handleHelpRequest(cmd, args)
+	if err := handleHelpRequest(cmd, args); err != nil {
+		return err
+	}
 
 	// Load atmos config and auth manager.
 	authManager, err := loadAuthManager()

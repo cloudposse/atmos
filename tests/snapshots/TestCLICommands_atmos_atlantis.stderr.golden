@@ -5,3 +5,13 @@ Valid subcommands are:
 
 
 Run `atmos atlantis --help` for usage
+
+# Error
+
+The command atmos atlantis requires a subcommand
+
+Valid subcommands are:
+
+• generate
+
+

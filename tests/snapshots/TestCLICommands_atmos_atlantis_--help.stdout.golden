@@ -11,6 +11,7 @@ Generate and manage Atlantis configurations that use Atmos under the hood to run
 
 Usage:
 
+  atmos atlantis [flags]
   atmos atlantis [sub-command] [flags]
 
 

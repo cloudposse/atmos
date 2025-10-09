@@ -248,6 +248,11 @@ var (
 	ErrInvalidSubcommand = errors.New("invalid subcommand")
 	ErrSubcommandFailed  = errors.New("subcommand failed")
 
+	// ErrHelpOutput is returned AFTER help has been displayed successfully.
+	// This is a sentinel error that signals help output is complete and
+	// the command should exit with code 0 without further processing.
+	ErrHelpOutput = errors.New("help output")
+
 	ErrInvalidArgumentError = errors.New("invalid argument error")
 	ErrMissingInput         = errors.New("missing input")
 
