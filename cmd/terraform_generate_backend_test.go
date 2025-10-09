@@ -6,10 +6,15 @@ import (
 	"os"
 	"testing"
 
+	"github.com/spf13/pflag"
 	"github.com/stretchr/testify/assert"
+
+	"github.com/cloudposse/atmos/tests"
 )
 
 func TestTerraformGenerateBackendCmd(t *testing.T) {
+	tests.RequireTerraform(t)
+
 	stacksPath := "../tests/fixtures/scenarios/stack-templates"
 
 	err := os.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
@@ -20,6 +25,13 @@ func TestTerraformGenerateBackendCmd(t *testing.T) {
 
 	err = os.Setenv("ATMOS_LOGS_LEVEL", "Debug")
 	assert.NoError(t, err, "Setting 'ATMOS_LOGS_LEVEL' environment variable should execute without error")
+
+	// Reset flag states to prevent pollution from other tests.
+	// Only reset flags that were actually changed to avoid issues with complex flag types.
+	RootCmd.PersistentFlags().Visit(func(f *pflag.Flag) {
+		_ = f.Value.Set(f.DefValue)
+		f.Changed = false
+	})
 
 	// Capture stderr
 	oldStderr := os.Stderr

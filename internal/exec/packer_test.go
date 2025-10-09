@@ -11,9 +11,12 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/tests"
 )
 
 func TestExecutePacker_Validate(t *testing.T) {
+	tests.RequirePacker(t)
+
 	workDir := "../../tests/fixtures/scenarios/packer"
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", workDir)
 	t.Setenv("ATMOS_BASE_PATH", workDir)
@@ -62,6 +65,8 @@ func TestExecutePacker_Validate(t *testing.T) {
 }
 
 func TestExecutePacker_Inspect(t *testing.T) {
+	tests.RequirePacker(t)
+
 	workDir := "../../tests/fixtures/scenarios/packer"
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", workDir)
 	t.Setenv("ATMOS_BASE_PATH", workDir)
@@ -110,6 +115,8 @@ func TestExecutePacker_Inspect(t *testing.T) {
 }
 
 func TestExecutePacker_Version(t *testing.T) {
+	tests.RequirePacker(t)
+
 	workDir := "../../tests/fixtures/scenarios/packer"
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", workDir)
 	t.Setenv("ATMOS_BASE_PATH", workDir)
@@ -152,6 +159,8 @@ func TestExecutePacker_Version(t *testing.T) {
 }
 
 func TestExecutePacker_Init(t *testing.T) {
+	tests.RequirePacker(t)
+
 	workDir := "../../tests/fixtures/scenarios/packer"
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", workDir)
 	t.Setenv("ATMOS_BASE_PATH", workDir)
@@ -176,6 +185,8 @@ func TestExecutePacker_Init(t *testing.T) {
 }
 
 func TestExecutePacker_Errors(t *testing.T) {
+	tests.RequirePacker(t)
+
 	workDir := "../../tests/fixtures/scenarios/packer"
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", workDir)
 	t.Setenv("ATMOS_BASE_PATH", workDir)

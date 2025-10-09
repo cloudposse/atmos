@@ -19,8 +19,8 @@ tests:
       os: !not windows
     expect:
       exit_code: 0
-      # This will output in stdout because of the way our tty simulator works.
-      stdout:
+      tty:
+        - "Telemetry Enabled"
         - "Fetching baz output from component-3 in nonprod"
         - "Fetching foo output from component-1 in nonprod"
         - "Fetching bar output from component-2 in nonprod"
@@ -43,6 +43,7 @@ tests:
     expect:
       exit_code: 0
       stderr:
+        - "Telemetry Enabled"
         - "Fetching baz output from component-3 in nonprod"
         - "Fetching foo output from component-1 in nonprod"
         - "Fetching bar output from component-2 in nonprod"
