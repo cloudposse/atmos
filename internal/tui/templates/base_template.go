@@ -60,7 +60,6 @@ func getSection(section HelpTemplateSections) string {
 
 
 {{HeadingStyle "Examples:"}}
-
 {{renderMarkdown .Example}}{{end}}`
 	case Flags:
 		return `{{if .HasAvailableLocalFlags}}

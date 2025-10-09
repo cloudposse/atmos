@@ -4,7 +4,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// atlantisCmd executes Atlantis commands
+// atlantisCmd executes Atlantis commands.
 var atlantisCmd = &cobra.Command{
 	Use:                "atlantis",
 	Short:              "Generate and manage Atlantis configurations",

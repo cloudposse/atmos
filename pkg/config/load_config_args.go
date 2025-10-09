@@ -1,7 +1,6 @@
 package config
 
 import (
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -9,15 +8,8 @@ import (
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/spf13/viper"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
-)
-
-var (
-	ErrExpectedDirOrPattern        = errors.New("--config-path expected directory found file")
-	ErrFileNotFound                = errors.New("file not found")
-	ErrExpectedFile                = errors.New("--config expected file found directory")
-	ErrAtmosArgConfigNotFound      = errors.New("atmos configuration not found")
-	ErrAtmosFilesDIrConfigNotFound = errors.New("`atmos.yaml` or `.atmos.yaml` configuration  file not found on directory")
 )
 
 // loadConfigFromCLIArgs handles the loading of configurations provided via --config-path and --config.
@@ -50,7 +42,7 @@ func loadConfigFromCLIArgs(v *viper.Viper, configAndStacksInfo *schema.ConfigAnd
 	// Check if any config files were found from command line arguments
 	if len(configPaths) == 0 {
 		log.Debug("no config files found from command line arguments")
-		return ErrAtmosArgConfigNotFound
+		return fmt.Errorf("%w: no config files found from command line arguments (--config or --config-path)", errUtils.ErrAtmosArgConfigNotFound)
 	}
 
 	if err := v.Unmarshal(atmosConfig); err != nil {
@@ -109,7 +101,7 @@ func mergeConfigFromDirectories(v *viper.Viper, dirPaths []string) ([]string, er
 		err = mergeConfig(v, confDirPath, DotCliConfigFileName, true)
 		if err != nil {
 			log.Debug("Failed to found .atmos config", "path", filepath.Join(confDirPath, CliConfigFileName), "error", err)
-			return nil, fmt.Errorf("%w: %s", ErrAtmosFilesDIrConfigNotFound, confDirPath)
+			return nil, fmt.Errorf("%w: %s", errUtils.ErrAtmosFilesDirConfigNotFound, confDirPath)
 		}
 		log.Debug(".atmos config file merged", "path", v.ConfigFileUsed())
 		configPaths = append(configPaths, confDirPath)
@@ -126,7 +118,7 @@ func validatedIsDirs(dirPaths []string) error {
 		}
 		if !stat.IsDir() {
 			log.Debug("--config-path expected directory found file", "path", dirPath)
-			return ErrAtmosDIrConfigNotFound
+			return fmt.Errorf("%w: --config-path requires a directory but found a file at '%s'", errUtils.ErrAtmosDirConfigNotFound, dirPath)
 		}
 	}
 	return nil
@@ -137,11 +129,11 @@ func validatedIsFiles(files []string) error {
 		stat, err := os.Stat(filePath)
 		if err != nil {
 			log.Debug("--config file not found", "path", filePath)
-			return ErrFileNotFound
+			return errUtils.ErrFileNotFound
 		}
 		if stat.IsDir() {
 			log.Debug("--config expected file found directors", "path", filePath)
-			return ErrExpectedFile
+			return errUtils.ErrExpectedFile
 		}
 	}
 	return nil

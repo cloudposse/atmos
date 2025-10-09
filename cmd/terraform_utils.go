@@ -30,7 +30,10 @@ func runHooks(event h.HookEvent, cmd *cobra.Command, args []string) error {
 
 	if hooks != nil && hooks.HasHooks() {
 		log.Info("Running hooks", "event", event)
-		return hooks.RunAll(event, &atmosConfig, &info, cmd, args)
+		err := hooks.RunAll(event, &atmosConfig, &info, cmd, args)
+		if err != nil {
+			errUtils.CheckErrorPrintAndExit(err, "", "")
+		}
 	}
 
 	return nil
@@ -68,6 +71,10 @@ func terraformRun(cmd *cobra.Command, actualCmd *cobra.Command, args []string) e
 	info.Components = components
 	info.DryRun = dryRun
 
+	identityFlag, err := flags.GetString("identity")
+	errUtils.CheckErrorPrintAndExit(err, "", "")
+
+	info.Identity = identityFlag
 	// Check Terraform Single-Component and Multi-Component flags
 	err = checkTerraformFlags(&info)
 	errUtils.CheckErrorPrintAndExit(err, "", "")

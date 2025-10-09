@@ -250,6 +250,15 @@ var (
 - Target >80% coverage, especially for `pkg/` and `internal/exec/`
 - **Comments must end with periods**: All comments should be complete sentences ending with a period (enforced by golangci-lint)
 
+### Test Quality (MANDATORY)
+- **Test behavior, not implementation** - Verify inputs/outputs, not internal state
+- **Never test stub functions** - Either implement the function or remove the test
+- **Avoid tautological tests** - Don't test that hardcoded stubs return hardcoded values
+- **Make code testable** - Use dependency injection to avoid hard dependencies on `os.Exit`, `CheckErrorPrintAndExit`, or external systems
+- **No coverage theater** - Each test must validate real behavior, not inflate metrics
+- **Remove always-skipped tests** - Either fix the underlying issue or delete the test
+- **Table-driven tests need real scenarios** - Use production-like inputs, not contrived data
+
 ### Test Skipping Conventions (MANDATORY)
 - **ALWAYS use `t.Skipf()` instead of `t.Skip()`** - Provide clear reasons for skipped tests
 - **NEVER use `t.Skipf()` without a reason**
@@ -376,8 +385,17 @@ Atmos uses **precondition-based test skipping** to provide a better developer ex
 
 ### Running Tests
 ```bash
-# Run all tests (will skip if preconditions not met)
+# Quick tests only (skip long-running tests >2s)
+make test-short
+go test -short ./...
+
+# All tests including long-running ones
+make testacc
 go test ./...
+
+# With coverage
+make test-short-cover
+make testacc-cover
 
 # Bypass all precondition checks
 export ATMOS_TEST_SKIP_PRECONDITION_CHECKS=true

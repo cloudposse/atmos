@@ -114,7 +114,7 @@ func TestCheckArtifactType(t *testing.T) {
 }
 
 // TestRemoveTempDir tests the removeTempDir function.
-func TestRemoveTempDir(t *testing.T) {
+func TestRemoveTempDir_OCIUtils(t *testing.T) {
 	// Create a temporary directory for testing.
 	tempDir, err := os.MkdirTemp("", "test-remove-")
 	assert.NoError(t, err)
