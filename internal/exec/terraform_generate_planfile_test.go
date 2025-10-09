@@ -10,9 +10,12 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/tests"
 )
 
 func TestExecuteTerraformGeneratePlanfileCmd(t *testing.T) {
+	// Skip if terraform is not installed
+	tests.RequireTerraform(t)
 	stacksPath := "../../tests/fixtures/scenarios/terraform-generate-planfile"
 	componentPath := filepath.Join(stacksPath, "..", "..", "components", "terraform", "mock")
 	component := "component-1"
@@ -81,6 +84,8 @@ func TestExecuteTerraformGeneratePlanfileCmd(t *testing.T) {
 }
 
 func TestExecuteTerraformGeneratePlanfile(t *testing.T) {
+	// Skip if terraform is not installed
+	tests.RequireTerraform(t)
 	stacksPath := "../../tests/fixtures/scenarios/terraform-generate-planfile"
 	componentPath := filepath.Join(stacksPath, "..", "..", "components", "terraform", "mock")
 	component := "component-1"
@@ -191,6 +196,8 @@ func TestExecuteTerraformGeneratePlanfile(t *testing.T) {
 }
 
 func TestExecuteTerraformGeneratePlanfileErrors(t *testing.T) {
+	// Skip if terraform is not installed
+	tests.RequireTerraform(t)
 	stacksPath := "../../tests/fixtures/scenarios/terraform-generate-planfile"
 	component := "component-1"
 	stack := "nonprod"

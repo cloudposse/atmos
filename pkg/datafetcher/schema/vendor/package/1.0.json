@@ -37,6 +37,10 @@
         "type": "object",
         "description": "Specification of the vendoring configuration",
         "properties": {
+          "base_path": {
+            "type": "string",
+            "description": "Path to vendor file or directory, can be relative"
+          },
           "imports": {
             "type": "array",
             "description": "List of imports for the vendoring configuration",

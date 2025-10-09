@@ -3,6 +3,7 @@ package cmd
 import (
 	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"testing"
 
@@ -567,4 +568,20 @@ func TestGetConfigAndStacksInfo(t *testing.T) {
 	// The error paths are tested through checkAtmosConfig which is already tested
 	// Skip this test as it requires extensive integration test setup
 	t.Skip("getConfigAndStacksInfo requires full integration test setup with proper Atmos fixtures and command flags")
+}
+
+// skipIfPackerNotInstalled skips the test if packer is not available in PATH.
+func skipIfPackerNotInstalled(t *testing.T) {
+	t.Helper()
+	if _, err := exec.LookPath("packer"); err != nil {
+		t.Skipf("packer not installed: %v", err)
+	}
+}
+
+// skipIfHelmfileNotInstalled skips the test if helmfile is not available in PATH.
+func skipIfHelmfileNotInstalled(t *testing.T) {
+	t.Helper()
+	if _, err := exec.LookPath("helmfile"); err != nil {
+		t.Skipf("helmfile not installed: %v", err)
+	}
 }

@@ -32,8 +32,6 @@ const (
 	yamlType = "yaml"
 )
 
-var ErrAtmosDIrConfigNotFound = errors.New("atmos config directory not found")
-
 var defaultHomeDirProvider = filesystem.NewOSHomeDirProvider()
 
 // * Embedded atmos.yaml (`atmos/pkg/config/atmos.yaml`)
@@ -306,7 +304,7 @@ func loadConfigFile(path string, fileName string) (*viper.Viper, error) {
 			return nil, err
 		}
 		// Wrap any other error with context
-		return nil, fmt.Errorf("failed to read config %s/%s: %w", path, fileName, err)
+		return nil, errors.Join(errUtils.ErrReadConfig, fmt.Errorf("%s/%s: %w", path, fileName, err))
 	}
 
 	return tempViper, nil
@@ -316,7 +314,7 @@ func loadConfigFile(path string, fileName string) (*viper.Viper, error) {
 func readConfigFileContent(configFilePath string) ([]byte, error) {
 	content, err := os.ReadFile(configFilePath)
 	if err != nil {
-		return nil, fmt.Errorf("read config file %s: %w", configFilePath, err)
+		return nil, errors.Join(errUtils.ErrReadConfig, fmt.Errorf("%s: %w", configFilePath, err))
 	}
 	return content, nil
 }
@@ -503,7 +501,7 @@ func mergeDefaultImports(dirPath string, dst *viper.Viper) error {
 		isDir = true
 	}
 	if !isDir {
-		return ErrAtmosDIrConfigNotFound
+		return errUtils.ErrAtmosDirConfigNotFound
 	}
 
 	// Check if we should exclude .atmos.d from this directory during testing.
@@ -531,7 +529,7 @@ func mergeDefaultImports(dirPath string, dst *viper.Viper) error {
 			log.Debug("error loading config file", "path", filePath, "error", err)
 			continue
 		}
-		log.Debug("atmos merged config", "path", filePath)
+		log.Trace("atmos merged config", "path", filePath)
 	}
 	return nil
 }

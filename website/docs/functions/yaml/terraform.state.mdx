@@ -124,6 +124,10 @@ For more details, review the following docs:
 - [YQ Guide](https://mikefarah.gitbook.io/yq)
 - [YQ Recipes](https://mikefarah.gitbook.io/yq/recipes)
 
+## Handling YQ Expressions with Bracket Notation and Quotes
+
+`!terraform.state` shares the same parser as `!terraform.output`, so the quoting rules are identical. When you need double quotes inside a YQ expression (for example, to reference `["github-dependabot"]`), wrap the entire expression in single quotes. Refer to the [!terraform.output guidance](/functions/yaml/terraform.output#handling-yq-expressions-with-bracket-notation-and-quotes) for detailed examples and escape rules.
+
 ## Using YQ Expressions to provide a default value
 
 If the component for which you are reading the output has not been provisioned yet, the `!terraform.state` function

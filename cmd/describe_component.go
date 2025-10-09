@@ -62,6 +62,11 @@ var describeComponentCmd = &cobra.Command{
 			return err
 		}
 
+		provenance, err := flags.GetBool("provenance")
+		if err != nil {
+			return err
+		}
+
 		component := args[0]
 
 		err = e.NewDescribeComponentExec().ExecuteDescribeComponentCmd(e.DescribeComponentParams{
@@ -73,6 +78,7 @@ var describeComponentCmd = &cobra.Command{
 			Query:                query,
 			Format:               format,
 			File:                 file,
+			Provenance:           provenance,
 		})
 		return err
 	},
@@ -87,6 +93,7 @@ func init() {
 	describeComponentCmd.PersistentFlags().Bool("process-templates", true, "Enable/disable Go template processing in Atmos stack manifests when executing the command")
 	describeComponentCmd.PersistentFlags().Bool("process-functions", true, "Enable/disable YAML functions processing in Atmos stack manifests when executing the command")
 	describeComponentCmd.PersistentFlags().StringSlice("skip", nil, "Skip executing a YAML function in the Atmos stack manifests when executing the command")
+	describeComponentCmd.PersistentFlags().Bool("provenance", false, "Enable provenance tracking to show where configuration values originated")
 
 	if err := describeComponentCmd.MarkPersistentFlagRequired("stack"); err != nil {
 		panic(err)

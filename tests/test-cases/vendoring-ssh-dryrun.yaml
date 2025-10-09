@@ -2,6 +2,7 @@
 
 tests:
   - name: atmos vendor pull using SSH
+    short: false
     enabled: true
     snapshot: true
     tty: false
@@ -20,6 +21,7 @@ tests:
       exit_code: 0
 
   - name: atmos vendor pull component using SSH
+    short: false
     enabled: true
     snapshot: true
     tty: false
@@ -39,6 +41,7 @@ tests:
       exit_code: 0
 
   - name: atmos vendor pull with custom detector and handling credentials leakage
+    short: false
     enabled: true
     snapshot: true
     tty: false
@@ -59,13 +62,12 @@ tests:
       ATMOS_INJECT_BITBUCKET_TOKEN: "true"
     expect:
       diff: []
-    stdout:
-      # GitHub case
-      - !not 'supersecret'
-      # GitLab case
-      - !not 'gitlabsecret'
-      # Bitbucket case
-      - !not 'bitbucketsecret'
-      - !not 'bitbucketusername'
-
-    exit_code: 0
+      stdout:
+        # GitHub case
+        - !not 'supersecret'
+        # GitLab case
+        - !not 'gitlabsecret'
+        # Bitbucket case
+        - !not 'bitbucketsecret'
+        - !not 'bitbucketusername'
+      exit_code: 0

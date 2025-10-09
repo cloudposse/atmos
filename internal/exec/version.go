@@ -12,7 +12,6 @@ import (
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/cloudposse/atmos/pkg/telemetry"
 	u "github.com/cloudposse/atmos/pkg/utils"
 	"gopkg.in/yaml.v2"
 
@@ -57,8 +56,6 @@ func (v versionExec) Execute(checkFlag bool, format string) error {
 		log.Debug("Could not display styled logo", "error", err)
 		// Continue - version information displays fine without fancy ASCII art
 	}
-
-	telemetry.PrintTelemetryDisclosure()
 
 	atmosIcon := "\U0001F47D"
 
