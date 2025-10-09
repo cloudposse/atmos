@@ -1,13 +1,6 @@
 
-Notice: Atmos now collects completely anonymous telemetry regarding usage.
-This information is used to shape Atmos roadmap and prioritize features.
-You can learn more, including how to opt-out if you'd not like to participate in this anonymous program,
-by visiting the following URL: https://atmos.tools/cli/telemetry
-
 
 This command generates configuration files to automate and streamline Terraform workflows with Atlantis.
-
-
 
 Usage:
 
@@ -86,6 +79,8 @@ Global Flags:
 
         --verbose                    Show detailed error messages with full
                                      stack traces (default false)
+
+        --version                    Display the Atmos CLI version
 
         --                           Use double dashes to separate
                                      Atmos-specific options from native
