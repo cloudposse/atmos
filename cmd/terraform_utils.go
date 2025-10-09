@@ -48,10 +48,7 @@ func terraformRun(cmd *cobra.Command, actualCmd *cobra.Command, args []string) e
 	}
 
 	if info.NeedHelp {
-		if err := actualCmd.Usage(); err != nil {
-			return err
-		}
-		return nil
+		return showUsageAndExit(actualCmd, args)
 	}
 
 	flags := cmd.Flags()

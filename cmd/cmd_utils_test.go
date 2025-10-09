@@ -361,9 +361,15 @@ func TestHandleHelpRequest(t *testing.T) {
 			cmd := &cobra.Command{Use: "test"}
 			err := handleHelpRequest(cmd, tt.args)
 
-			// handleHelpRequest returns nil in all cases - it just shows help
-			// The actual error with exit code 0 is returned by the caller
-			assert.NoError(t, err)
+			if tt.expectsHelp {
+				// When help is shown, should return ErrHelpOutput with exit code 0
+				assert.Error(t, err)
+				assert.ErrorIs(t, err, errUtils.ErrHelpOutput)
+				assert.Equal(t, 0, errUtils.GetExitCode(err))
+			} else {
+				// When no help is requested, should return nil
+				assert.NoError(t, err)
+			}
 		})
 	}
 }
