@@ -358,7 +358,7 @@ func TestSanitizeOutput_WindowsDriveLetterInErrorMessages(t *testing.T) {
 resolved_path: D:/a/atmos/atmos/tests/fixtures/stacks`,
 			expected: `## Context
 
-resolved_path: D:/a/atmos/atmos/tests/fixtures/stacks`, // Mid-line path preserved
+resolved_path: D:/a/atmos/atmos/tests/fixtures/stacks`, // Path preserved (not repo root on this machine)
 		},
 	}
 
