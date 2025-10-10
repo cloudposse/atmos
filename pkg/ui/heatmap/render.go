@@ -172,21 +172,21 @@ func (m *model) renderSparklinesFromPerf(snap perf.Snapshot) []string {
 	sparkChars := []rune{'▁', '▂', '▃', '▄', '▅', '▆', '▇', '█'}
 
 	// Find max avg self-time for normalization.
-	maxAvgSelf := snap.Rows[0].AvgSelf
+	maxAvg := snap.Rows[0].Avg
 	for _, r := range snap.Rows {
-		if r.AvgSelf > maxAvgSelf {
-			maxAvgSelf = r.AvgSelf
+		if r.Avg > maxAvg {
+			maxAvg = r.Avg
 		}
 	}
 
-	if maxAvgSelf == 0 {
+	if maxAvg == 0 {
 		return lines
 	}
 
 	for _, r := range snap.Rows {
 		// Create a simple visualization showing min/avg/max relationship.
 		// Since we don't have historical data, we'll show the distribution.
-		ratio := float64(r.AvgSelf) / float64(maxAvgSelf)
+		ratio := float64(r.Avg) / float64(maxAvg)
 		sparkIndex := int(ratio * float64(len(sparkChars)-1))
 		if sparkIndex >= len(sparkChars) {
 			sparkIndex = len(sparkChars) - 1
@@ -212,7 +212,7 @@ func (m *model) renderSparklinesFromPerf(snap perf.Snapshot) []string {
 
 		stats := lipgloss.NewStyle().
 			Foreground(lipgloss.Color("241")).
-			Render(fmt.Sprintf(horizontalSpace+"%s (×%d)", FormatDuration(r.AvgSelf), r.Count))
+			Render(fmt.Sprintf(horizontalSpace+"%s (×%d)", FormatDuration(r.Avg), r.Count))
 
 		lines = append(lines, lipgloss.JoinHorizontal(lipgloss.Left, label, horizontalSpace, spark, stats))
 	}

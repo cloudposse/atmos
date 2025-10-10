@@ -531,7 +531,7 @@ func displayPerformanceHeatmap(cmd *cobra.Command, mode string) error {
 			p95 = heatmap.FormatDuration(r.P95)
 		}
 		utils.PrintfMessageToTUI("%-50s %6d %13s %13s %13s %13s\n",
-			r.Name, r.Count, heatmap.FormatDuration(r.Total), heatmap.FormatDuration(r.AvgSelf), heatmap.FormatDuration(r.Max), p95)
+			r.Name, r.Count, heatmap.FormatDuration(r.Total), heatmap.FormatDuration(r.Avg), heatmap.FormatDuration(r.Max), p95)
 	}
 
 	// Check if we have a TTY for interactive mode.

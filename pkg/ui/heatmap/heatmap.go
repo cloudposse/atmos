@@ -398,7 +398,7 @@ func (m *model) updatePerformanceData() {
 			truncate(r.Name, tableFunctionWidth-2),
 			fmt.Sprintf("%d", r.Count),
 			FormatDuration(r.Total),
-			FormatDuration(r.AvgSelf),
+			FormatDuration(r.Avg),
 			FormatDuration(r.Max),
 			p95,
 		})

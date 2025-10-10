@@ -56,12 +56,12 @@ func TestModel_RenderVisualization(t *testing.T) {
 				initialSnap: perf.Snapshot{
 					Rows: []perf.Row{
 						{
-							Name:    "test.Function",
-							Count:   10,
-							Total:   100 * time.Millisecond,
-							AvgSelf: 10 * time.Millisecond,
-							Max:     20 * time.Millisecond,
-							P95:     15 * time.Millisecond,
+							Name:  "test.Function",
+							Count: 10,
+							Total: 100 * time.Millisecond,
+							Avg:   10 * time.Millisecond,
+							Max:   20 * time.Millisecond,
+							P95:   15 * time.Millisecond,
 						},
 					},
 				},
@@ -79,18 +79,18 @@ func TestModel_RenderBarChart(t *testing.T) {
 		initialSnap: perf.Snapshot{
 			Rows: []perf.Row{
 				{
-					Name:    "pkg.Function1",
-					Count:   10,
-					Total:   100 * time.Millisecond,
-					AvgSelf: 10 * time.Millisecond,
-					Max:     20 * time.Millisecond,
+					Name:  "pkg.Function1",
+					Count: 10,
+					Total: 100 * time.Millisecond,
+					Avg:   10 * time.Millisecond,
+					Max:   20 * time.Millisecond,
 				},
 				{
-					Name:    "pkg.Function2",
-					Count:   5,
-					Total:   50 * time.Millisecond,
-					AvgSelf: 10 * time.Millisecond,
-					Max:     15 * time.Millisecond,
+					Name:  "pkg.Function2",
+					Count: 5,
+					Total: 50 * time.Millisecond,
+					Avg:   10 * time.Millisecond,
+					Max:   15 * time.Millisecond,
 				},
 			},
 		},
@@ -167,10 +167,10 @@ func TestModel_RenderSparklines(t *testing.T) {
 		initialSnap: perf.Snapshot{
 			Rows: []perf.Row{
 				{
-					Name:    "pkg.Function",
-					Count:   10,
-					Total:   100 * time.Millisecond,
-					AvgSelf: 10 * time.Millisecond,
+					Name:  "pkg.Function",
+					Count: 10,
+					Total: 100 * time.Millisecond,
+					Avg:   10 * time.Millisecond,
 				},
 			},
 		},
@@ -202,10 +202,10 @@ func TestModel_RenderSparklinesFromPerf(t *testing.T) {
 	snap := perf.Snapshot{
 		Rows: []perf.Row{
 			{
-				Name:    "test.Function",
-				Count:   10,
-				Total:   100 * time.Millisecond,
-				AvgSelf: 10 * time.Millisecond,
+				Name:  "test.Function",
+				Count: 10,
+				Total: 100 * time.Millisecond,
+				Avg:   10 * time.Millisecond,
 			},
 		},
 	}

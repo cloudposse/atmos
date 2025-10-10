@@ -361,15 +361,15 @@ func TestBuildRows(t *testing.T) {
 	// Verify average self-time calculation.
 	for _, row := range rows {
 		if row.Name == "func1" {
-			expectedAvgSelf := 8 * time.Millisecond // 80ms / 10
-			if row.AvgSelf != expectedAvgSelf {
-				t.Errorf("expected AvgSelf %v, got %v", expectedAvgSelf, row.AvgSelf)
+			expectedAvg := 8 * time.Millisecond // 80ms / 10
+			if row.Avg != expectedAvg {
+				t.Errorf("expected Avg %v, got %v", expectedAvg, row.Avg)
 			}
 		}
 		if row.Name == "func2" {
-			expectedAvgSelf := 8 * time.Millisecond // 40ms / 5
-			if row.AvgSelf != expectedAvgSelf {
-				t.Errorf("expected AvgSelf %v, got %v", expectedAvgSelf, row.AvgSelf)
+			expectedAvg := 8 * time.Millisecond // 40ms / 5
+			if row.Avg != expectedAvg {
+				t.Errorf("expected Avg %v, got %v", expectedAvg, row.Avg)
 			}
 		}
 	}
@@ -377,9 +377,9 @@ func TestBuildRows(t *testing.T) {
 
 func TestSortRows(t *testing.T) {
 	rows := []Row{
-		{Name: "func1", Total: 100 * time.Millisecond, AvgSelf: 10 * time.Millisecond, Max: 20 * time.Millisecond},
-		{Name: "func2", Total: 50 * time.Millisecond, AvgSelf: 25 * time.Millisecond, Max: 30 * time.Millisecond},
-		{Name: "func3", Total: 75 * time.Millisecond, AvgSelf: 15 * time.Millisecond, Max: 25 * time.Millisecond},
+		{Name: "func1", Total: 100 * time.Millisecond, Avg: 10 * time.Millisecond, Max: 20 * time.Millisecond},
+		{Name: "func2", Total: 50 * time.Millisecond, Avg: 25 * time.Millisecond, Max: 30 * time.Millisecond},
+		{Name: "func3", Total: 75 * time.Millisecond, Avg: 15 * time.Millisecond, Max: 25 * time.Millisecond},
 	}
 
 	tests := []struct {
@@ -462,8 +462,8 @@ func TestP95WithHDR(t *testing.T) {
 	}
 
 	// P95 should be greater than or equal to the average self-time.
-	if row.P95 < row.AvgSelf {
-		t.Errorf("P95 (%v) should be >= AvgSelf (%v)", row.P95, row.AvgSelf)
+	if row.P95 < row.Avg {
+		t.Errorf("P95 (%v) should be >= Avg (%v)", row.P95, row.Avg)
 	}
 
 	// P95 may slightly exceed max due to histogram precision/rounding.

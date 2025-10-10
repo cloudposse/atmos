@@ -35,7 +35,7 @@ type Metric struct {
 	Count    int64
 	Total    time.Duration           // Wall-clock time (includes children)
 	SelfTime time.Duration           // Actual work time (excludes children)
-	Max      time.Duration           // Max total time
+	Max      time.Duration           // Max self-time (excludes children)
 	Hist     *hdrhistogram.Histogram // Histogram for self-time percentiles (optional, nil if disabled)
 }
 
@@ -149,11 +149,11 @@ func recordMetrics(name string, totalTime, selfTime time.Duration) {
 	m.Total += totalTime   // Wall-clock time (includes children)
 	m.SelfTime += selfTime // Actual work (excludes children)
 
-	if totalTime > m.Max {
-		m.Max = totalTime
+	if selfTime > m.Max {
+		m.Max = selfTime // Track max self-time (excludes children)
 	}
 
-	// Record self-time in histogram for percentiles (more meaningful than total time).
+	// Record self-time in histogram for percentiles.
 	if m.Hist != nil {
 		_ = m.Hist.RecordValue(selfTime.Microseconds())
 	}
@@ -219,8 +219,8 @@ type Row struct {
 	Count    int64
 	Total    time.Duration // Wall-clock time (includes children)
 	SelfTime time.Duration // Actual work time (excludes children)
-	AvgSelf  time.Duration // Average self-time per call
-	Max      time.Duration // Max total time
+	Avg      time.Duration // Average self-time per call
+	Max      time.Duration // Max self-time (excludes children)
 	P95      time.Duration // 95th percentile of self-time (0 if HDR disabled)
 }
 
@@ -290,7 +290,7 @@ func buildRows() []Row {
 			Max:      m.Max,
 		}
 		if m.Count > 0 {
-			r.AvgSelf = time.Duration(int64(m.SelfTime) / m.Count)
+			r.Avg = time.Duration(int64(m.SelfTime) / m.Count)
 		}
 		if m.Hist != nil && m.Hist.TotalCount() > 0 {
 			r.P95 = time.Duration(m.Hist.ValueAtQuantile(percentile95)) * time.Microsecond
@@ -309,7 +309,7 @@ func sortRows(rows []Row, by string) {
 	case "self":
 		sort.Slice(rows, func(i, j int) bool { return rows[i].SelfTime > rows[j].SelfTime })
 	case "avg":
-		sort.Slice(rows, func(i, j int) bool { return rows[i].AvgSelf > rows[j].AvgSelf })
+		sort.Slice(rows, func(i, j int) bool { return rows[i].Avg > rows[j].Avg })
 	case "max":
 		sort.Slice(rows, func(i, j int) bool { return rows[i].Max > rows[j].Max })
 	default:

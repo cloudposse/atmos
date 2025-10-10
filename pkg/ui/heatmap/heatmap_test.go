@@ -367,12 +367,12 @@ func TestModel_UpdatePerformanceData(t *testing.T) {
 	m.initialSnap = perf.Snapshot{
 		Rows: []perf.Row{
 			{
-				Name:    "test.Function",
-				Count:   10,
-				Total:   100 * time.Millisecond,
-				AvgSelf: 10 * time.Millisecond,
-				Max:     20 * time.Millisecond,
-				P95:     15 * time.Millisecond,
+				Name:  "test.Function",
+				Count: 10,
+				Total: 100 * time.Millisecond,
+				Avg:   10 * time.Millisecond,
+				Max:   20 * time.Millisecond,
+				P95:   15 * time.Millisecond,
 			},
 		},
 	}
@@ -394,10 +394,10 @@ func TestModel_View(t *testing.T) {
 	m.initialSnap = perf.Snapshot{
 		Rows: []perf.Row{
 			{
-				Name:    "test.Function",
-				Count:   5,
-				Total:   50 * time.Millisecond,
-				AvgSelf: 10 * time.Millisecond,
+				Name:  "test.Function",
+				Count: 5,
+				Total: 50 * time.Millisecond,
+				Avg:   10 * time.Millisecond,
 			},
 		},
 		TotalFuncs: 1,
