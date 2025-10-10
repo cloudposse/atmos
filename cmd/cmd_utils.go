@@ -524,7 +524,7 @@ func buildMissingAtmosConfigError(atmosConfig *schema.AtmosConfiguration) error 
 		WithContext("config_file", atmosConfig.CliConfigPath).
 		WithContext("base_path", atmosConfig.BasePath).
 		WithContext("stacks_base_path", atmosConfig.Stacks.BasePath).
-		WithContext("current_dir", cwd).
+		WithContext("cwd", cwd).
 		WithContext("resolved_path", atmosConfig.StacksBaseAbsolutePath).
 		WithHint("Unset `base_path` in `atmos.yaml` to use auto-detection (recommended)").
 		WithHint("Run Atmos from your Git repository root - it will auto-detect paths").
