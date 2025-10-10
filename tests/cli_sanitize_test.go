@@ -294,6 +294,59 @@ func TestSanitizeOutput_PreservesNonRepoPaths(t *testing.T) {
 	}
 }
 
+// TestSanitizeOutput_WindowsDriveLetterInErrorMessages tests that Windows drive letters
+// in error messages are normalized for cross-platform snapshot comparison.
+// This reproduces the Windows CI failure where "D:/stacks" appeared instead of "/stacks".
+func TestSanitizeOutput_WindowsDriveLetterInErrorMessages(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{
+			name: "Windows absolute path in error message",
+			input: `The atmos.yaml config file specifies the stacks directory as stacks, but the resolved absolute path does not exist:
+
+    D:/stacks`,
+			expected: `The atmos.yaml config file specifies the stacks directory as stacks, but the resolved absolute path does not exist:
+
+    /stacks`,
+		},
+		{
+			name:     "Lowercase Windows drive letter",
+			input:    "d:/stacks",
+			expected: "/stacks",
+		},
+		{
+			name:     "Uppercase Windows drive letter",
+			input:    "D:/stacks",
+			expected: "/stacks",
+		},
+		{
+			name:     "Multiple Windows paths in same output",
+			input:    "Path1: D:/stacks, Path2: C:/custom/path",
+			expected: "Path1: /stacks, Path2: /custom/path",
+		},
+		{
+			name: "Windows path in context field",
+			input: `## Context
+
+resolved_path: D:/a/atmos/atmos/tests/fixtures/stacks`,
+			expected: `## Context
+
+resolved_path: /a/atmos/atmos/tests/fixtures/stacks`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := sanitizeOutput(tt.input)
+			require.NoError(t, err)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
 // TestSanitizeOutput_ComplexDebugLog tests a realistic debug log line from the failing CI test.
 func TestSanitizeOutput_ComplexDebugLog(t *testing.T) {
 	repoRoot, err := findGitRepoRoot(startingDir)
