@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
 
 	log "github.com/cloudposse/atmos/pkg/logger"
@@ -23,7 +24,6 @@ var (
 	ErrGettingJsonForPlanfile             = errors.New("error getting JSON for planfile")
 	ErrConvertingJsonToGoType             = errors.New("error converting JSON to Go type")
 	ErrNoComponent                        = errors.New("no component specified")
-	ErrMutuallyExclusiveFlags             = errors.New("--file and --dir flags are mutually exclusive. Use --file to specify a complete file path, or --dir to specify a directory with default naming")
 )
 
 // PlanfileOptions holds the options for generating a Terraform planfile.
@@ -93,7 +93,7 @@ func ExecuteTerraformGeneratePlanfileCmd(cmd *cobra.Command, args []string) erro
 	component := args[0]
 
 	if file != "" && dir != "" {
-		return ErrMutuallyExclusiveFlags
+		return errUtils.ErrMutuallyExclusiveFlags
 	}
 
 	options := PlanfileOptions{
@@ -126,7 +126,7 @@ func ExecuteTerraformGeneratePlanfile(
 	}
 
 	if options.File != "" && options.Dir != "" {
-		return ErrMutuallyExclusiveFlags
+		return errUtils.ErrMutuallyExclusiveFlags
 	}
 
 	info.ComponentFromArg = options.Component

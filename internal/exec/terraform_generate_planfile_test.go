@@ -117,7 +117,28 @@ func TestExecuteTerraformGeneratePlanfileCmd(t *testing.T) {
 		})
 
 		err := conflictingCmd.Execute()
-		assert.ErrorIs(t, err, ErrMutuallyExclusiveFlags)
+		assert.ErrorIs(t, err, errUtils.ErrMutuallyExclusiveFlags)
+	})
+
+	t.Run("cobra enforces mutually exclusive flags before execution", func(t *testing.T) {
+		var executed bool
+		cobraCmd := &cobra.Command{
+			Use: "test",
+			RunE: func(cmd *cobra.Command, args []string) error {
+				executed = true
+				return nil
+			},
+		}
+
+		cobraCmd.PersistentFlags().String("file", "", "Planfile path")
+		cobraCmd.PersistentFlags().String("dir", "", "Planfile directory")
+		cobraCmd.MarkFlagsMutuallyExclusive("file", "dir")
+
+		cobraCmd.SetArgs([]string{"--file", "custom.planfile.json", "--dir", "custom-dir"})
+		err := cobraCmd.Execute()
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "if any flags in the group")
+		assert.False(t, executed, "RunE should not execute when mutually exclusive flags are provided")
 	})
 }
 
@@ -234,6 +255,22 @@ func TestExecuteTerraformGeneratePlanfile(t *testing.T) {
 	filePath = fmt.Sprintf("%s/planfiles/new-planfile.yaml", componentPath)
 	if _, err = os.Stat(filePath); os.IsNotExist(err) {
 		t.Errorf("Generated planfile does not exist: %s", filePath)
+	} else if err != nil {
+		t.Errorf("Error checking file: %v", err)
+	}
+
+	absFileDir := t.TempDir()
+	absFilePath := filepath.Join(absFileDir, fmt.Sprintf("%s-%s.planfile.yaml", stack, component))
+	options.File = absFilePath
+	options.Dir = ""
+	err = ExecuteTerraformGeneratePlanfile(
+		&options,
+		&info,
+	)
+	assert.NoError(t, err)
+
+	if _, err = os.Stat(absFilePath); os.IsNotExist(err) {
+		t.Errorf("Generated planfile does not exist: %s", absFilePath)
 	} else if err != nil {
 		t.Errorf("Error checking file: %v", err)
 	}
@@ -359,7 +396,7 @@ func TestExecuteTerraformGeneratePlanfileErrors(t *testing.T) {
 		&info,
 	)
 	assert.Error(t, err)
-	assert.ErrorIs(t, err, ErrMutuallyExclusiveFlags)
+	assert.ErrorIs(t, err, errUtils.ErrMutuallyExclusiveFlags)
 }
 
 // TestValidatePlanfileFormat tests the validatePlanfileFormat function.
@@ -485,6 +522,7 @@ func TestResolvePlanfilePath(t *testing.T) {
 	defaultYAMLPath := fmt.Sprintf("%s.%s", constructTerraformComponentPlanfilePath(&atmosConfig, &info), "yaml")
 	relativeDir := filepath.Join("plans", "nested")
 	absDir := filepath.Join(tempDir, "absolute-plans")
+	absFile := filepath.Join(tempDir, "absolute-planfile.json")
 
 	testCases := []struct {
 		name     string
@@ -512,6 +550,14 @@ func TestResolvePlanfilePath(t *testing.T) {
 				File:   "custom-planfile.json",
 			},
 			expected: filepath.Join(componentPath, "custom-planfile.json"),
+		},
+		{
+			name: "custom file absolute",
+			options: PlanfileOptions{
+				Format: "json",
+				File:   absFile,
+			},
+			expected: absFile,
 		},
 		{
 			name: "dir relative",
