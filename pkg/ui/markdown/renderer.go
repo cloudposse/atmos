@@ -16,9 +16,18 @@ import (
 const defaultWidth = 80
 
 // trimTrailingSpaces removes trailing spaces and tabs from each line while preserving blank lines.
+// IMPORTANT: This function ONLY removes whitespace at the END of lines (before the \n).
+// It NEVER removes newlines themselves. Newlines must always be preserved.
+// Only trailing spaces and tabs (horizontal whitespace) are removed.
+//
+// Line breaks and spacing should be controlled by:
+//   - Markdown content itself (blank lines between paragraphs, etc.)
+//   - Markdown stylesheets (renderer configuration)
+//   - NOT by post-processing that removes newlines
 func trimTrailingSpaces(s string) string {
 	lines := strings.Split(s, newline)
 	for i, line := range lines {
+		// Only trim trailing spaces and tabs, NOT newlines.
 		lines[i] = strings.TrimRight(line, " \t")
 	}
 	return strings.Join(lines, newline)

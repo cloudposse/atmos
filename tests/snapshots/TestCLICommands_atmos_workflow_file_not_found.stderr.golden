@@ -22,6 +22,10 @@ The workflow manifest file stacks/workflows/dne.yaml does not exist.
 
 ## Hints
 
-💡 Use atmos list workflows to see available workflows 💡 Verify the workflow file exists at: stacks/workflows/dne.yaml 💡 Check workflows.base_path in atmos.yaml: stacks/workflows
+💡 Use atmos list workflows to see available workflows
+
+💡 Verify the workflow file exists at: stacks/workflows/dne.yaml
+
+💡 Check workflows.base_path in atmos.yaml: stacks/workflows
 
 

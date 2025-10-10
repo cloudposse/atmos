@@ -27,6 +27,8 @@ No workflow exists with the name pla.
 
 ## Hints
 
-💡 Use atmos describe workflows to see detailed workflow definitions 💡 Run a workflow: atmos workflow <name> -f stacks/workflows/workflow1.yaml
+💡 Use atmos describe workflows to see detailed workflow definitions
+
+💡 Run a workflow: atmos workflow <name> -f stacks/workflows/workflow1.yaml
 
 
