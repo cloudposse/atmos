@@ -5,8 +5,10 @@ import (
 	"os/exec"
 	"testing"
 
-	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/stretchr/testify/assert"
+
+	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 func TestVerifyInsideGitRepo(t *testing.T) {
@@ -215,50 +217,51 @@ func skipIfHelmfileNotInstalled(t *testing.T) {
 	}
 }
 
-// TestPrintMessageForMissingAtmosConfig tests the printMessageForMissingAtmosConfig function.
-func TestPrintMessageForMissingAtmosConfig(t *testing.T) {
+// TestBuildMissingAtmosConfigError tests the buildMissingAtmosConfigError function.
+func TestBuildMissingAtmosConfigError(t *testing.T) {
 	tests := []struct {
-		name             string
-		atmosConfig      schema.AtmosConfiguration
-		expectedContains []string
+		name        string
+		atmosConfig schema.AtmosConfiguration
 	}{
 		{
 			name: "default config missing",
 			atmosConfig: schema.AtmosConfiguration{
-				BasePath: "/test",
+				BasePath:               "/test",
+				StacksBaseAbsolutePath: "/test/stacks",
+				CliConfigPath:          "/test/atmos.yaml",
 				Stacks: schema.Stacks{
 					BasePath: "stacks",
 				},
 				Default: true,
 			},
-			expectedContains: []string{
-				"stacks", // Should contain the stacks directory path
-			},
 		},
 		{
 			name: "custom config with invalid paths",
 			atmosConfig: schema.AtmosConfiguration{
-				BasePath: "/custom",
+				BasePath:               "/custom",
+				StacksBaseAbsolutePath: "/custom/my-stacks",
+				CliConfigPath:          "/custom/atmos.yaml",
 				Stacks: schema.Stacks{
 					BasePath: "my-stacks",
 				},
 				Default: false,
-			},
-			expectedContains: []string{
-				"my-stacks", // Should contain the custom stacks directory
 			},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// This function writes to both stdout (logo) and stderr (markdown messages)
-			// We'll just verify it doesn't panic and exercises both code paths
-			// The actual markdown rendering is tested in markdown_utils_test.go
-			printMessageForMissingAtmosConfig(tt.atmosConfig)
+			err := buildMissingAtmosConfigError(&tt.atmosConfig)
+			if !assert.Error(t, err) {
+				return
+			}
 
-			// If we get here without panic, both code paths work
-			// (Default=true uses missingConfigDefaultMarkdown, Default=false uses missingConfigFoundMarkdown)
+			// Verify exit code is 2 (usage error)
+			exitCode := errUtils.GetExitCode(err)
+			assert.Equal(t, 2, exitCode, "Exit code should be 2 for usage errors")
+
+			// Verify it's the right base error
+			assert.ErrorIs(t, err, errUtils.ErrStacksDirectoryDoesNotExist)
 		})
 	}
 }

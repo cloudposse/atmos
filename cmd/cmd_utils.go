@@ -504,15 +504,8 @@ func checkAtmosConfig(opts ...AtmosValidateOption) {
 	}
 }
 
-// printMessageForMissingAtmosConfig prints an enhanced error when Atmos stacks directory doesn't exist.
-func printMessageForMissingAtmosConfig(atmosConfig schema.AtmosConfiguration) {
-	fmt.Println()
-	err := tuiUtils.PrintStyledText("ATMOS")
-	errUtils.CheckErrorPrintAndExit(err, "", "")
-
-	// Check if we're in a git repo. Warn if not.
-	verifyInsideGitRepo()
-
+// buildMissingAtmosConfigError builds an enhanced error when Atmos stacks directory doesn't exist.
+func buildMissingAtmosConfigError(atmosConfig *schema.AtmosConfiguration) error {
 	// Create structured error with context and hints
 	stacksErr := errUtils.ErrStacksDirectoryDoesNotExist
 
@@ -527,7 +520,7 @@ func printMessageForMissingAtmosConfig(atmosConfig schema.AtmosConfiguration) {
 	cwd, _ := os.Getwd()
 
 	// Build with context using ErrorBuilder
-	enrichedErr := errUtils.Build(stacksErr).
+	return errUtils.Build(stacksErr).
 		WithContext("config_file", atmosConfig.CliConfigPath).
 		WithContext("base_path", atmosConfig.BasePath).
 		WithContext("stacks_base_path", atmosConfig.Stacks.BasePath).
@@ -538,7 +531,19 @@ func printMessageForMissingAtmosConfig(atmosConfig schema.AtmosConfiguration) {
 		WithHint("Or set `base_path` to the directory containing your `atmos.yaml`").
 		WithExitCode(2).
 		Err()
+}
 
+// printMessageForMissingAtmosConfig prints Atmos logo and error message when stacks directory doesn't exist.
+func printMessageForMissingAtmosConfig(atmosConfig schema.AtmosConfiguration) {
+	fmt.Println()
+	err := tuiUtils.PrintStyledText("ATMOS")
+	errUtils.CheckErrorPrintAndExit(err, "", "")
+
+	// Check if we're in a git repo. Warn if not.
+	verifyInsideGitRepo()
+
+	// Build the error and print it with exit
+	enrichedErr := buildMissingAtmosConfigError(&atmosConfig)
 	errUtils.CheckErrorPrintAndExit(enrichedErr, "", "")
 }
 
