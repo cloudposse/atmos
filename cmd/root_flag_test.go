@@ -4,6 +4,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -33,6 +34,10 @@ stacks:
 
 	// Build the atmos binary for testing.
 	atmosBinary := filepath.Join(tmpDir, "atmos-test")
+	// Add .exe extension on Windows.
+	if runtime.GOOS == "windows" {
+		atmosBinary += ".exe"
+	}
 	buildCmd := exec.Command("go", "build", "-o", atmosBinary, ".")
 	buildCmd.Dir = filepath.Join("..", ".") // Go up to project root
 	output, err := buildCmd.CombinedOutput()
