@@ -1116,6 +1116,33 @@ func ProcessBaseComponentConfig(
 ) error {
 	defer perf.Track(atmosConfig, "exec.ProcessBaseComponentConfig")()
 
+	return processBaseComponentConfigInternal(
+		atmosConfig,
+		baseComponentConfig,
+		allComponentsMap,
+		component,
+		stack,
+		baseComponent,
+		componentBasePath,
+		checkBaseComponentExists,
+		baseComponents,
+	)
+}
+
+// processBaseComponentConfigInternal is the internal recursive implementation.
+//
+//nolint:gocognit,revive,cyclop,funlen
+func processBaseComponentConfigInternal(
+	atmosConfig *schema.AtmosConfiguration,
+	baseComponentConfig *schema.BaseComponentConfig,
+	allComponentsMap map[string]any,
+	component string,
+	stack string,
+	baseComponent string,
+	componentBasePath string,
+	checkBaseComponentExists bool,
+	baseComponents *[]string,
+) error {
 	if component == baseComponent {
 		return nil
 	}
@@ -1157,7 +1184,7 @@ func ProcessBaseComponentConfig(
 					errUtils.ErrInvalidComponentAttribute, baseComponent, stack)
 			}
 
-			err := ProcessBaseComponentConfig(
+			err := processBaseComponentConfigInternal(
 				atmosConfig,
 				baseComponentConfig,
 				allComponentsMap,
@@ -1202,7 +1229,7 @@ func ProcessBaseComponentConfig(
 					}
 
 					// Process the baseComponentFromInheritList components recursively to find `componentInheritanceChain`
-					err := ProcessBaseComponentConfig(
+					err := processBaseComponentConfigInternal(
 						atmosConfig,
 						baseComponentConfig,
 						allComponentsMap,
