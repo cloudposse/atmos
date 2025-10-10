@@ -274,9 +274,9 @@ func TestSanitizeOutput_PreservesNonRepoPaths(t *testing.T) {
 			expected: "/usr/local/bin/terraform",
 		},
 		{
-			name:     "Windows system path",
+			name:     "Windows system path (not indented - preserved)",
 			input:    "C:/Windows/System32/cmd.exe",
-			expected: "/Windows/System32/cmd.exe", // Windows drive letters normalized for cross-platform snapshots
+			expected: "C:/Windows/System32/cmd.exe", // Not indented, preserved
 		},
 		{
 			name:     "Temp directory path",
@@ -313,17 +313,22 @@ func TestSanitizeOutput_WindowsDriveLetterInErrorMessages(t *testing.T) {
     /stacks`,
 		},
 		{
-			name:     "Lowercase Windows drive letter",
+			name:     "Lowercase Windows drive letter (not indented - preserved)",
 			input:    "d:/stacks",
-			expected: "/stacks",
+			expected: "d:/stacks", // No normalization - not indented
 		},
 		{
-			name:     "Uppercase Windows drive letter",
+			name:     "Uppercase Windows drive letter (not indented - preserved)",
 			input:    "D:/stacks",
-			expected: "/stacks",
+			expected: "D:/stacks", // No normalization - not indented
 		},
 		{
-			name:     "Multiple Windows paths on separate lines",
+			name:     "Windows drive letter with 4+ space indent (normalized)",
+			input:    "    D:/stacks",
+			expected: "    /stacks", // Normalized - indented error output
+		},
+		{
+			name:     "Multiple Windows paths with proper indentation",
 			input:    "Path1:\n    D:/stacks\nPath2:\n    C:/custom/path",
 			expected: "Path1:\n    /stacks\nPath2:\n    /custom/path",
 		},

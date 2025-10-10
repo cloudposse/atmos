@@ -382,13 +382,13 @@ func sanitizeOutput(output string) (string, error) {
 	posthogTokenRegex := regexp.MustCompile(`phc_[a-zA-Z0-9_]+`)
 	result = posthogTokenRegex.ReplaceAllString(result, "phc_TEST_TOKEN_PLACEHOLDER")
 
-	// 9. Normalize Windows drive letters in absolute paths to Unix-style paths.
-	// This handles paths like "D:/stacks" or "C:/path" which should become "/stacks" or "/path".
-	// Only match drive letters at the beginning of lines to be conservative and avoid
-	// inadvertent replacements in the middle of text.
-	// Match: start of line (or after whitespace) + drive letter + colon + forward slash
-	// This is case-insensitive to handle both D: and d:.
-	windowsDriveRegex := regexp.MustCompile(`(?im)^(\s*)([A-Z]):/`)
+	// 9. Normalize Windows drive letters ONLY in specific error output contexts.
+	// We need to be very conservative to avoid breaking executable paths or Go error messages.
+	// Only normalize when the path appears as an indented value (4+ spaces) which is how
+	// our error formatter outputs paths.
+	// This handles error output like "    D:/stacks" → "    /stacks"
+	// But preserves executable paths like "C:\Users\..." in Go runtime errors.
+	windowsDriveRegex := regexp.MustCompile(`(?im)^(\s{4,})([A-Z]):/`)
 	result = windowsDriveRegex.ReplaceAllString(result, "${1}/")
 
 	return result, nil
