@@ -299,12 +299,22 @@ func TestSanitizeOutput_PreservesNonRepoPaths(t *testing.T) {
 // This reproduces the Windows CI failure where "D:/stacks" appeared instead of "/stacks".
 func TestSanitizeOutput_WindowsDriveLetterInErrorMessages(t *testing.T) {
 	tests := []struct {
-		name     string
-		input    string
-		expected string
+		name             string
+		input            string
+		expected         string
+		testWithRepoRoot string // Optional: simulate specific repo root (e.g., Windows CI path)
 	}{
 		{
-			name: "Windows absolute path in error message",
+			name: "Windows absolute path in error message (ACTUAL snapshot format - 1 space)",
+			input: `The atmos.yaml config file specifies the stacks directory as stacks, but the resolved absolute path does not exist:
+
+ D:/stacks`,
+			expected: `The atmos.yaml config file specifies the stacks directory as stacks, but the resolved absolute path does not exist:
+
+ /stacks`,
+		},
+		{
+			name: "Windows absolute path in error message (4 spaces)",
 			input: `The atmos.yaml config file specifies the stacks directory as stacks, but the resolved absolute path does not exist:
 
     D:/stacks`,
@@ -323,7 +333,12 @@ func TestSanitizeOutput_WindowsDriveLetterInErrorMessages(t *testing.T) {
 			expected: "D:/stacks", // No normalization - not indented
 		},
 		{
-			name:     "Windows drive letter with 4+ space indent (normalized)",
+			name:     "Windows drive letter with 1 space indent (normalized)",
+			input:    " D:/stacks",
+			expected: " /stacks", // Normalized - indented error output
+		},
+		{
+			name:     "Windows drive letter with 4 space indent (normalized)",
 			input:    "    D:/stacks",
 			expected: "    /stacks", // Normalized - indented error output
 		},
@@ -338,19 +353,30 @@ func TestSanitizeOutput_WindowsDriveLetterInErrorMessages(t *testing.T) {
 			expected: "Path1: D:/stacks, Path2: C:/custom/path", // Mid-line paths preserved
 		},
 		{
-			name: "Windows path in context field (mid-line)",
+			name: "Windows path in context field simulating Windows CI (repo root normalization)",
 			input: `## Context
 
 resolved_path: D:/a/atmos/atmos/tests/fixtures/stacks`,
+			testWithRepoRoot: "D:/a/atmos/atmos", // Simulate Windows CI repo root
 			expected: `## Context
 
-resolved_path: D:/a/atmos/atmos/tests/fixtures/stacks`, // Mid-line path preserved
+resolved_path: /absolute/path/to/repo/tests/fixtures/stacks`, // Repo root gets normalized
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, err := sanitizeOutput(tt.input)
+			var result string
+			var err error
+
+			if tt.testWithRepoRoot != "" {
+				// Use custom repo root to simulate different environments (e.g., Windows CI)
+				result, err = sanitizeOutputWithRepoRoot(tt.input, tt.testWithRepoRoot)
+			} else {
+				// Use actual repo root
+				result, err = sanitizeOutput(tt.input)
+			}
+
 			require.NoError(t, err)
 			assert.Equal(t, tt.expected, result)
 		})

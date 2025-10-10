@@ -312,11 +312,21 @@ func sanitizeOutput(output string) (string, error) {
 		return "", errors.New("failed to determine repository root")
 	}
 
+	return sanitizeOutputWithRepoRoot(output, repoRoot)
+}
+
+// sanitizeOutputWithRepoRoot is the internal implementation that accepts a custom repo root.
+// This allows tests to verify behavior with different repo roots (e.g., Windows CI paths on Mac).
+func sanitizeOutputWithRepoRoot(output string, customRepoRoot string) (string, error) {
+	if customRepoRoot == "" {
+		return "", errors.New("repo root cannot be empty")
+	}
+
 	// 2. Normalize the repository root:
 	//    - Clean the path (which may not collapse all extra slashes after the drive letter, etc.)
 	//    - Convert to forward slashes,
 	//    - And explicitly collapse extra slashes.
-	normalizedRepoRoot := collapseExtraSlashes(filepath.ToSlash(filepath.Clean(repoRoot)))
+	normalizedRepoRoot := collapseExtraSlashes(filepath.ToSlash(filepath.Clean(customRepoRoot)))
 	// Also normalize the output to use forward slashes.
 	// Note: filepath.ToSlash() on Windows converts path separators; on Unix it does nothing.
 	// We also need to handle Windows-style paths that may appear in test output even on Unix (for testing).
@@ -383,11 +393,11 @@ func sanitizeOutput(output string) (string, error) {
 
 	// 9. Normalize Windows drive letters ONLY in specific error output contexts.
 	// We need to be very conservative to avoid breaking executable paths or Go error messages.
-	// Only normalize when the path appears as an indented value (4+ spaces) which is how
+	// Only normalize when the path appears as an indented value (1+ spaces) which is how
 	// our error formatter outputs paths.
-	// This handles error output like "    D:/stacks" → "    /stacks"
-	// But preserves executable paths like "C:\Users\..." in Go runtime errors.
-	windowsDriveRegex := regexp.MustCompile(`(?im)^(\s{4,})([A-Z]):/`)
+	// This handles error output like " D:/stacks" → " /stacks"
+	// But preserves executable paths like "C:\Users\..." which don't start with whitespace.
+	windowsDriveRegex := regexp.MustCompile(`(?im)^(\s+)([A-Z]):/`)
 	result = windowsDriveRegex.ReplaceAllString(result, "${1}/")
 
 	return result, nil

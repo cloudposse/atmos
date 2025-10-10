@@ -392,7 +392,11 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 			initCommandWithArguments = []string{"init", "-reconfigure"}
 		}
 		// Add `--var-file` if configured in `atmos.yaml`.
-		// OpenTofu supports passing a varfile to `init` to dynamically configure backends.
+		// NOTE: This feature is primarily intended for OpenTofu, which supports passing
+		// a varfile to `init` for dynamic backend configuration. HashiCorp Terraform does
+		// not support --var-file for the init command and will fail if this is enabled.
+		// If you are using Terraform (not OpenTofu), do not enable PassVars, or ensure
+		// your terraform command actually points to an OpenTofu binary.
 		if atmosConfig.Components.Terraform.Init.PassVars {
 			initCommandWithArguments = append(initCommandWithArguments, []string{varFileFlag, varFile}...)
 		}
@@ -496,7 +500,11 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 			allArgsAndFlags = append(allArgsAndFlags, []string{"-reconfigure"}...)
 		}
 		// Add `--var-file` if configured in `atmos.yaml`.
-		// OpenTofu supports passing a varfile to `init` to dynamically configure backends.
+		// NOTE: This feature is primarily intended for OpenTofu, which supports passing
+		// a varfile to `init` for dynamic backend configuration. HashiCorp Terraform does
+		// not support --var-file for the init command and will fail if this is enabled.
+		// If you are using Terraform (not OpenTofu), do not enable PassVars, or ensure
+		// your terraform command actually points to an OpenTofu binary.
 		if atmosConfig.Components.Terraform.Init.PassVars {
 			allArgsAndFlags = append(allArgsAndFlags, []string{varFileFlag, varFile}...)
 		}

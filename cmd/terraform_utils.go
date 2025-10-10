@@ -100,7 +100,6 @@ func terraformRun(cmd *cobra.Command, actualCmd *cobra.Command, args []string) e
 		// Add these flags because `atmos describe affected` needs them, but `atmos terraform --affected` does not define them
 		cmd.PersistentFlags().String("file", "", "")
 		cmd.PersistentFlags().String("format", "yaml", "")
-		cmd.PersistentFlags().Bool("verbose", false, "")
 		cmd.PersistentFlags().Bool("include-spacelift-admin-stacks", false, "")
 		cmd.PersistentFlags().Bool("include-settings", false, "")
 		cmd.PersistentFlags().Bool("upload", false, "")
