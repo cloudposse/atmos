@@ -323,18 +323,23 @@ func TestSanitizeOutput_WindowsDriveLetterInErrorMessages(t *testing.T) {
 			expected: "/stacks",
 		},
 		{
-			name:     "Multiple Windows paths in same output",
-			input:    "Path1: D:/stacks, Path2: C:/custom/path",
-			expected: "Path1: /stacks, Path2: /custom/path",
+			name:     "Multiple Windows paths on separate lines",
+			input:    "Path1:\n    D:/stacks\nPath2:\n    C:/custom/path",
+			expected: "Path1:\n    /stacks\nPath2:\n    /custom/path",
 		},
 		{
-			name: "Windows path in context field",
+			name:     "Windows path mid-line should NOT be normalized",
+			input:    "Path1: D:/stacks, Path2: C:/custom/path",
+			expected: "Path1: D:/stacks, Path2: C:/custom/path", // Mid-line paths preserved
+		},
+		{
+			name: "Windows path in context field (mid-line)",
 			input: `## Context
 
 resolved_path: D:/a/atmos/atmos/tests/fixtures/stacks`,
 			expected: `## Context
 
-resolved_path: /a/atmos/atmos/tests/fixtures/stacks`,
+resolved_path: D:/a/atmos/atmos/tests/fixtures/stacks`, // Mid-line path preserved
 		},
 	}
 

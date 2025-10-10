@@ -384,10 +384,12 @@ func sanitizeOutput(output string) (string, error) {
 
 	// 9. Normalize Windows drive letters in absolute paths to Unix-style paths.
 	// This handles paths like "D:/stacks" or "C:/path" which should become "/stacks" or "/path".
-	// Match drive letter followed by colon and forward slash (e.g., D:/, C:/)
+	// Only match drive letters at the beginning of lines to be conservative and avoid
+	// inadvertent replacements in the middle of text.
+	// Match: start of line (or after whitespace) + drive letter + colon + forward slash
 	// This is case-insensitive to handle both D: and d:.
-	windowsDriveRegex := regexp.MustCompile(`(?i)\b[A-Z]:/`)
-	result = windowsDriveRegex.ReplaceAllString(result, "/")
+	windowsDriveRegex := regexp.MustCompile(`(?im)^(\s*)([A-Z]):/`)
+	result = windowsDriveRegex.ReplaceAllString(result, "${1}/")
 
 	return result, nil
 }
