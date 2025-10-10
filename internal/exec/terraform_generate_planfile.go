@@ -23,6 +23,7 @@ var (
 	ErrGettingJsonForPlanfile             = errors.New("error getting JSON for planfile")
 	ErrConvertingJsonToGoType             = errors.New("error converting JSON to Go type")
 	ErrNoComponent                        = errors.New("no component specified")
+	ErrMutuallyExclusiveFlags             = errors.New("--file and --dir flags are mutually exclusive. Use --file to specify a complete file path, or --dir to specify a directory with default naming")
 )
 
 // PlanfileOptions holds the options for generating a Terraform planfile.
@@ -31,6 +32,7 @@ type PlanfileOptions struct {
 	Stack                string
 	Format               string
 	File                 string
+	Dir                  string
 	ProcessTemplates     bool
 	ProcessYamlFunctions bool
 	Skip                 []string
@@ -52,6 +54,11 @@ func ExecuteTerraformGeneratePlanfileCmd(cmd *cobra.Command, args []string) erro
 	}
 
 	file, err := flags.GetString("file")
+	if err != nil {
+		return err
+	}
+
+	dir, err := flags.GetString("dir")
 	if err != nil {
 		return err
 	}
@@ -85,11 +92,16 @@ func ExecuteTerraformGeneratePlanfileCmd(cmd *cobra.Command, args []string) erro
 
 	component := args[0]
 
+	if file != "" && dir != "" {
+		return ErrMutuallyExclusiveFlags
+	}
+
 	options := PlanfileOptions{
 		Component:            component,
 		Stack:                stack,
 		Format:               format,
 		File:                 file,
+		Dir:                  dir,
 		ProcessTemplates:     processTemplates,
 		ProcessYamlFunctions: processYamlFunctions,
 		Skip:                 skip,
@@ -111,6 +123,10 @@ func ExecuteTerraformGeneratePlanfile(
 
 	if err := validateComponent(options.Component); err != nil {
 		return err
+	}
+
+	if options.File != "" && options.Dir != "" {
+		return ErrMutuallyExclusiveFlags
 	}
 
 	info.ComponentFromArg = options.Component
@@ -160,7 +176,7 @@ func ExecuteTerraformGeneratePlanfile(
 	}
 
 	// Resolve the planfile path based on options. If a custom file is specified, use that. Otherwise, use the default path.
-	planFilePath, err := resolvePlanfilePath(componentPath, options.Format, options.File, info, &atmosConfig)
+	planFilePath, err := resolvePlanfilePath(componentPath, options, info, &atmosConfig)
 	if err != nil {
 		return err
 	}
@@ -197,16 +213,25 @@ func validateComponent(component string) error {
 }
 
 // resolvePlanfilePath determines the final path for the planfile based on options.
-func resolvePlanfilePath(componentPath, format string, customFile string, info *schema.ConfigAndStacksInfo, atmosConfig *schema.AtmosConfiguration) (string, error) {
+func resolvePlanfilePath(componentPath string, options *PlanfileOptions, info *schema.ConfigAndStacksInfo, atmosConfig *schema.AtmosConfiguration) (string, error) {
 	var planFilePath string
-	if customFile != "" {
-		if filepath.IsAbs(customFile) {
-			planFilePath = customFile
+	switch {
+	case options.File != "":
+		if filepath.IsAbs(options.File) {
+			planFilePath = options.File
 		} else {
-			planFilePath = filepath.Join(componentPath, customFile)
+			planFilePath = filepath.Join(componentPath, options.File)
 		}
-	} else {
-		planFilePath = fmt.Sprintf("%s.%s", constructTerraformComponentPlanfilePath(atmosConfig, info), format)
+	case options.Dir != "":
+		destinationDir := options.Dir
+		if !filepath.IsAbs(destinationDir) {
+			destinationDir = filepath.Join(componentPath, destinationDir)
+		}
+
+		defaultFileName := fmt.Sprintf("%s.%s", constructTerraformComponentPlanfileName(info), options.Format)
+		planFilePath = filepath.Join(destinationDir, defaultFileName)
+	default:
+		planFilePath = fmt.Sprintf("%s.%s", constructTerraformComponentPlanfilePath(atmosConfig, info), options.Format)
 	}
 
 	err := u.EnsureDir(planFilePath)
