@@ -382,6 +382,13 @@ func sanitizeOutput(output string) (string, error) {
 	posthogTokenRegex := regexp.MustCompile(`phc_[a-zA-Z0-9_]+`)
 	result = posthogTokenRegex.ReplaceAllString(result, "phc_TEST_TOKEN_PLACEHOLDER")
 
+	// 9. Normalize Windows drive letters in absolute paths to Unix-style paths.
+	// This handles paths like "D:/stacks" or "C:/path" which should become "/stacks" or "/path".
+	// Match drive letter followed by colon and forward slash (e.g., D:/, C:/)
+	// This is case-insensitive to handle both D: and d:.
+	windowsDriveRegex := regexp.MustCompile(`(?i)\b[A-Z]:/`)
+	result = windowsDriveRegex.ReplaceAllString(result, "/")
+
 	return result, nil
 }
 

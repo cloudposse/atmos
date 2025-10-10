@@ -260,7 +260,8 @@ func TestSanitizeOutput_EdgeCases(t *testing.T) {
 	}
 }
 
-// TestSanitizeOutput_PreservesNonRepoPaths tests that paths outside the repo are not modified.
+// TestSanitizeOutput_PreservesNonRepoPaths tests that paths outside the repo are not modified,
+// except for Windows drive letters which are normalized for cross-platform snapshot comparison.
 func TestSanitizeOutput_PreservesNonRepoPaths(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -275,7 +276,7 @@ func TestSanitizeOutput_PreservesNonRepoPaths(t *testing.T) {
 		{
 			name:     "Windows system path",
 			input:    "C:/Windows/System32/cmd.exe",
-			expected: "C:/Windows/System32/cmd.exe",
+			expected: "/Windows/System32/cmd.exe", // Windows drive letters normalized for cross-platform snapshots
 		},
 		{
 			name:     "Temp directory path",
