@@ -472,6 +472,7 @@ func TestP95WithHDR(t *testing.T) {
 	}
 }
 
+//nolint:dupl // Similar to TestYAMLConfigProcessingRecursion but tests general pattern.
 func TestRecursiveFunctionTracking(t *testing.T) {
 	// Reset registry for clean test.
 	reg = &registry{
@@ -663,5 +664,225 @@ func TestMultipleRecursiveFunctionsIndependent(t *testing.T) {
 	if metric1.Total <= metric2.Total {
 		t.Errorf("func1 total (%v) should be > func2 total (%v) due to deeper recursion",
 			metric1.Total, metric2.Total)
+	}
+}
+
+//nolint:dupl // Similar to TestRecursiveFunctionTracking but tests YAML-specific scenario.
+func TestYAMLConfigProcessingRecursion(t *testing.T) {
+	// Reset registry for clean test.
+	reg = &registry{
+		data:  make(map[string]*Metric),
+		start: time.Now(),
+	}
+	// Enable tracking for tests.
+	EnableTracking(true)
+
+	// This test simulates the processYAMLConfigFileWithContextInternal pattern.
+	// It verifies that processing deeply nested YAML imports only tracks the
+	// top-level call, not each recursive import processing call.
+	//
+	// Real-world scenario:
+	// - Stack manifest imports several files
+	// - Those files import other files (nested imports)
+	// - Deep import hierarchies can reach 50+ levels
+	// - Before fix: count would be inflated by import depth
+	// - After fix: count = number of ProcessYAMLConfigFileWithContext calls
+
+	functionName := "exec.ProcessYAMLConfigFileWithContext"
+	importDepth := 50  // Simulates deep import hierarchy.
+	topLevelCalls := 2 // Number of stack files processed.
+
+	// Simulate the wrapper pattern used for ProcessYAMLConfigFileWithContext.
+	processYAMLConfigFileWithContext := func(depth int) {
+		// Public wrapper tracks once.
+		done := Track(nil, functionName)
+		defer done()
+
+		// Internal recursive implementation (not tracked).
+		var processYAMLConfigFileWithContextInternal func(int)
+		processYAMLConfigFileWithContextInternal = func(d int) {
+			if d > 0 {
+				time.Sleep(50 * time.Microsecond) // Simulate YAML parsing and merging.
+				// Simulate processing imports recursively (each import calls internal version).
+				processYAMLConfigFileWithContextInternal(d - 1)
+			}
+		}
+
+		processYAMLConfigFileWithContextInternal(depth)
+	}
+
+	// Process multiple stack files.
+	for i := 0; i < topLevelCalls; i++ {
+		processYAMLConfigFileWithContext(importDepth)
+	}
+
+	reg.mu.Lock()
+	metric, exists := reg.data[functionName]
+	reg.mu.Unlock()
+
+	if !exists {
+		t.Fatal("expected metric to exist")
+	}
+
+	// CRITICAL: Count should equal topLevelCalls (number of stack files processed).
+	// NOT topLevelCalls * importDepth (which would indicate inflation).
+	if metric.Count != int64(topLevelCalls) {
+		t.Errorf("expected count %d (top-level calls only), got %d (recursive inflation detected)",
+			topLevelCalls, metric.Count)
+	}
+
+	// Verify timing is reasonable.
+	// Total time should be roughly: topLevelCalls * importDepth * 50µs
+	expectedMinTime := time.Duration(topLevelCalls*importDepth*50) * time.Microsecond
+	if metric.Total < expectedMinTime {
+		t.Errorf("expected total >= %v, got %v", expectedMinTime, metric.Total)
+	}
+
+	// Ensure total isn't massively inflated.
+	if metric.Total > 1*time.Second {
+		t.Errorf("total time suspiciously high: %v", metric.Total)
+	}
+}
+
+func TestYAMLConfigProcessingMultipleImports(t *testing.T) {
+	// Reset registry for clean test.
+	reg = &registry{
+		data:  make(map[string]*Metric),
+		start: time.Now(),
+	}
+	// Enable tracking for tests.
+	EnableTracking(true)
+
+	// This test simulates processing a stack manifest with multiple imports,
+	// where each import may itself have imports (fan-out pattern).
+	//
+	// Real-world scenario:
+	// - Stack manifest imports: mixins/common, mixins/region/us-east-2, orgs/acme
+	// - Each mixin imports more files
+	// - Total recursive calls can be in the hundreds
+	// - Only the top-level ProcessYAMLConfigFileWithContext should be tracked
+
+	functionName := "exec.ProcessYAMLConfigFileWithContext"
+	numImports := 5     // Number of direct imports in the manifest.
+	importsPerFile := 3 // Each import has its own imports.
+	nestedLevels := 2   // Depth of import nesting.
+	totalRecursiveCalls := numImports * importsPerFile * nestedLevels
+
+	// Simulate the wrapper pattern.
+	processYAMLConfigFileWithContext := func() {
+		// Public wrapper tracks once.
+		done := Track(nil, functionName)
+		defer done()
+
+		// Internal recursive implementation.
+		var processYAMLConfigFileWithContextInternal func(int)
+		processYAMLConfigFileWithContextInternal = func(level int) {
+			if level <= 0 {
+				return
+			}
+
+			// Simulate processing multiple imports at this level.
+			for i := 0; i < numImports; i++ {
+				time.Sleep(10 * time.Microsecond) // Simulate work.
+				// Each import may have nested imports.
+				if level > 1 {
+					processYAMLConfigFileWithContextInternal(level - 1)
+				}
+			}
+		}
+
+		processYAMLConfigFileWithContextInternal(nestedLevels)
+	}
+
+	// Process one stack file.
+	processYAMLConfigFileWithContext()
+
+	reg.mu.Lock()
+	metric, exists := reg.data[functionName]
+	reg.mu.Unlock()
+
+	if !exists {
+		t.Fatal("expected metric to exist")
+	}
+
+	// CRITICAL: Count should be 1 (one top-level call to process the stack file).
+	// NOT totalRecursiveCalls (which would be 30 in this test).
+	if metric.Count != 1 {
+		t.Errorf("expected count 1, got %d (recursive inflation: should be 1 not %d)",
+			metric.Count, totalRecursiveCalls)
+	}
+
+	// Verify some work was done.
+	if metric.Total == 0 {
+		t.Error("expected non-zero total time")
+	}
+}
+
+func TestProcessBaseComponentConfigRecursion(t *testing.T) {
+	// Reset registry for clean test.
+	reg = &registry{
+		data:  make(map[string]*Metric),
+		start: time.Now(),
+	}
+	// Enable tracking for tests.
+	EnableTracking(true)
+
+	// This test simulates the processBaseComponentConfigInternal pattern.
+	// It verifies that processing component inheritance chains only tracks
+	// the top-level call, not each recursive base component lookup.
+	//
+	// Real-world scenario:
+	// - Component inherits from base component
+	// - Base component inherits from another base component
+	// - Inheritance chain can be 10+ levels deep
+	// - Before fix: count inflated by chain depth
+	// - After fix: count = number of ProcessBaseComponentConfig calls
+
+	functionName := "exec.ProcessBaseComponentConfig"
+	inheritanceChainDepth := 15 // Simulates deep component inheritance.
+	numComponents := 3          // Number of components processed.
+
+	// Simulate the wrapper pattern.
+	processBaseComponentConfig := func(chainDepth int) {
+		// Public wrapper tracks once.
+		done := Track(nil, functionName)
+		defer done()
+
+		// Internal recursive implementation.
+		var processBaseComponentConfigInternal func(int)
+		processBaseComponentConfigInternal = func(depth int) {
+			if depth > 0 {
+				time.Sleep(25 * time.Microsecond) // Simulate base component lookup and merge.
+				// Recursive call to process base component of this base component.
+				processBaseComponentConfigInternal(depth - 1)
+			}
+		}
+
+		processBaseComponentConfigInternal(chainDepth)
+	}
+
+	// Process multiple components.
+	for i := 0; i < numComponents; i++ {
+		processBaseComponentConfig(inheritanceChainDepth)
+	}
+
+	reg.mu.Lock()
+	metric, exists := reg.data[functionName]
+	reg.mu.Unlock()
+
+	if !exists {
+		t.Fatal("expected metric to exist")
+	}
+
+	// CRITICAL: Count should equal numComponents (number of components processed).
+	// NOT numComponents * inheritanceChainDepth.
+	if metric.Count != int64(numComponents) {
+		t.Errorf("expected count %d, got %d (recursive inflation detected)", numComponents, metric.Count)
+	}
+
+	// Verify timing is reasonable.
+	expectedMinTime := time.Duration(numComponents*inheritanceChainDepth*25) * time.Microsecond
+	if metric.Total < expectedMinTime {
+		t.Errorf("expected total >= %v, got %v", expectedMinTime, metric.Total)
 	}
 }
