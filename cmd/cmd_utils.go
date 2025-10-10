@@ -263,7 +263,8 @@ func preCustomCommand(
 		if len(args) > 0 {
 			sb.WriteString(fmt.Sprintf("\nReceived %d argument(s): %s\n", len(args), strings.Join(args, ", ")))
 		}
-		errUtils.CheckErrorPrintAndExit(errors.New(sb.String()), "", "")
+		err := errUtils.WithExitCode(errors.New(sb.String()), 2)
+		errUtils.CheckErrorPrintAndExit(err, "", "")
 	}
 
 	// Merge user-supplied arguments with defaults
@@ -278,7 +279,8 @@ func preCustomCommand(
 			} else {
 				// This theoretically shouldn't happen:
 				sb.WriteString(fmt.Sprintf("Missing required argument '%s' with no default!\n", arg.Name))
-				errUtils.CheckErrorPrintAndExit(errors.New(sb.String()), "", "")
+				err := errUtils.WithExitCode(errors.New(sb.String()), 2)
+				errUtils.CheckErrorPrintAndExit(err, "", "")
 			}
 		}
 	}
@@ -534,7 +536,7 @@ func printMessageForMissingAtmosConfig(atmosConfig schema.AtmosConfiguration) {
 		WithHint("Unset `base_path` in `atmos.yaml` to use auto-detection (recommended)").
 		WithHint("Run Atmos from your Git repository root - it will auto-detect paths").
 		WithHint("Or set `base_path` to the directory containing your `atmos.yaml`").
-		WithExitCode(1).
+		WithExitCode(2).
 		Err()
 
 	errUtils.CheckErrorPrintAndExit(enrichedErr, "", "")
@@ -624,7 +626,7 @@ func showFlagUsageAndExit(cmd *cobra.Command, err error) error {
 	// Verbose mode is controlled by --verbose flag, ATMOS_VERBOSE env var, or config file.
 	formatted := errUtils.Format(flagErr, errUtils.DefaultFormatterConfig())
 	u.PrintfMessageToTUI("%s\n", formatted)
-	errUtils.Exit(1)
+	errUtils.Exit(2)
 	return nil
 }
 
@@ -711,7 +713,7 @@ func showUsageExample(cmd *cobra.Command, details string) {
 	// Print error directly since markdown renderer may not be initialized yet (flag parsing errors).
 	fmt.Fprintf(os.Stderr, "Error: %s", details)
 	fmt.Fprintf(os.Stderr, "%s\n", suggestion)
-	errUtils.Exit(1)
+	errUtils.Exit(2)
 }
 
 func stackFlagCompletion(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {

@@ -59,7 +59,7 @@ func ExecutePacker(
 	}
 
 	if len(info.Stack) < 1 {
-		return errUtils.ErrMissingStack
+		return errUtils.WithExitCode(errUtils.ErrMissingStack, 2)
 	}
 
 	if !info.ComponentIsEnabled {

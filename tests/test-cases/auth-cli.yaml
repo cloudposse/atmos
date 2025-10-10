@@ -265,7 +265,7 @@ tests:
       stderr:
         - "Unknown command"
         - "--help"
-      exit_code: 1
+      exit_code: 2
 
   - name: atmos auth env --format invalid
     enabled: true

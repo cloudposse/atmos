@@ -110,7 +110,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 		}
 
 		if len(info.Stack) < 1 && shouldCheckStack {
-			return ErrMissingStack
+			return errUtils.WithExitCode(ErrMissingStack, 2)
 		}
 	}
 
