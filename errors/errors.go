@@ -69,6 +69,15 @@ var (
 	ErrGetObjectFromS3  = errors.New("failed to get object from S3")
 	ErrReadS3ObjectBody = errors.New("failed to read S3 object body")
 
+	// Azure Blob Storage specific errors.
+	ErrGetBlobFromAzure       = errors.New("failed to get blob from Azure Blob Storage")
+	ErrReadAzureBlobBody      = errors.New("failed to read Azure blob body")
+	ErrCreateAzureCredential  = errors.New("failed to create Azure credential")
+	ErrCreateAzureClient      = errors.New("failed to create Azure Blob Storage client")
+	ErrAzureContainerRequired = errors.New("container_name is required for azurerm backend")
+	ErrStorageAccountRequired = errors.New("storage_account_name is required for azurerm backend")
+	ErrAzurePermissionDenied  = errors.New("permission denied accessing Azure blob")
+
 	// Git-related errors.
 	ErrGitNotAvailable      = errors.New("git must be available and on the PATH")
 	ErrInvalidGitPort       = errors.New("invalid port number")
