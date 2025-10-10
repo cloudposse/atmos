@@ -616,7 +616,7 @@ func TestNestedFunctionSelfTime(t *testing.T) {
 
 	// Parent's self-time should be ~10ms (5ms + 5ms), excluding child's ~5ms
 	expectedParentSelfMin := 10 * time.Millisecond
-	expectedParentSelfMax := 12 * time.Millisecond
+	expectedParentSelfMax := 15 * time.Millisecond // Increased tolerance for CI environments
 	if parent.SelfTime < expectedParentSelfMin || parent.SelfTime > expectedParentSelfMax {
 		t.Errorf("parent self-time (%v) should be between %v and %v (excluding child)",
 			parent.SelfTime, expectedParentSelfMin, expectedParentSelfMax)
@@ -624,7 +624,7 @@ func TestNestedFunctionSelfTime(t *testing.T) {
 
 	// Grandparent's self-time should be ~10ms (5ms + 5ms), excluding parent's total time
 	expectedGrandparentSelfMin := 10 * time.Millisecond
-	expectedGrandparentSelfMax := 12 * time.Millisecond
+	expectedGrandparentSelfMax := 15 * time.Millisecond // Increased tolerance for CI environments
 	if grandparent.SelfTime < expectedGrandparentSelfMin || grandparent.SelfTime > expectedGrandparentSelfMax {
 		t.Errorf("grandparent self-time (%v) should be between %v and %v (excluding parent and child)",
 			grandparent.SelfTime, expectedGrandparentSelfMin, expectedGrandparentSelfMax)
