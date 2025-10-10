@@ -125,8 +125,11 @@ components:
 
     <dt>`init.pass_vars`</dt>
     <dd>
-        If set to `true`, Atmos automatically passes the generated varfile to the `tofu init` command using the `--var-file` flag.
-        [OpenTofu supports passing a varfile to `init`](https://opentofu.org/docs/cli/commands/init/#general-options) to dynamically configure backends
+        If set to `true`, Atmos automatically passes the generated varfile to the `init` command using the `--var-file` flag.
+        [OpenTofu supports passing a varfile to `init`](https://opentofu.org/docs/cli/commands/init/#general-options) to dynamically configure backends.
+
+        **Important:** This feature is designed for OpenTofu. HashiCorp Terraform does not support `--var-file` for the `init` command and will fail if this option is enabled.
+        Only enable this if you are using OpenTofu, or ensure your `terraform` command actually points to an OpenTofu binary.
     </dd>
 </dl>
 
