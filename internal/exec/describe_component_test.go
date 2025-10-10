@@ -486,6 +486,14 @@ func TestDescribeComponentWithProvenance(t *testing.T) {
 	provenancePaths := result.MergeContext.GetProvenancePaths()
 	assert.NotEmpty(t, provenancePaths, "Provenance paths should not be empty")
 
+	// Debug: Log all provenance paths found
+	t.Logf("Found %d provenance paths:", len(provenancePaths))
+	for i, path := range provenancePaths {
+		if i < 50 { // Only log first 50 to avoid noise
+			t.Logf("  [%d] %s", i, path)
+		}
+	}
+
 	// Verify we have provenance entries for some expected paths
 	foundVarsEnabled := false
 	foundVarsName := false
