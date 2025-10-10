@@ -393,8 +393,16 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 		}
 		// Add `--var-file` if configured in `atmos.yaml`.
 		// OpenTofu supports passing a varfile to `init` to dynamically configure backends.
+		// Terraform does not support --var-file for init, so only add it for OpenTofu.
 		if atmosConfig.Components.Terraform.Init.PassVars {
-			initCommandWithArguments = append(initCommandWithArguments, []string{varFileFlag, varFile}...)
+			switch info.Command {
+			case "tofu", "opentofu":
+				initCommandWithArguments = append(initCommandWithArguments, []string{varFileFlag, varFile}...)
+			case terraformCommand:
+				log.Warn("PassVars is enabled but Terraform does not support --var-file for init command. Skipping --var-file flag.",
+					"command", info.Command,
+					"component", info.ComponentFromArg)
+			}
 		}
 
 		// Before executing `terraform init`, delete the `.terraform/environment` file from the component directory
@@ -497,8 +505,16 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 		}
 		// Add `--var-file` if configured in `atmos.yaml`.
 		// OpenTofu supports passing a varfile to `init` to dynamically configure backends.
+		// Terraform does not support --var-file for init, so only add it for OpenTofu.
 		if atmosConfig.Components.Terraform.Init.PassVars {
-			allArgsAndFlags = append(allArgsAndFlags, []string{varFileFlag, varFile}...)
+			switch info.Command {
+			case "tofu", "opentofu":
+				allArgsAndFlags = append(allArgsAndFlags, []string{varFileFlag, varFile}...)
+			case terraformCommand:
+				log.Warn("PassVars is enabled but Terraform does not support --var-file for init command. Skipping --var-file flag.",
+					"command", info.Command,
+					"component", info.ComponentFromArg)
+			}
 		}
 	case "workspace":
 		if info.SubCommand2 == "list" || info.SubCommand2 == "show" {

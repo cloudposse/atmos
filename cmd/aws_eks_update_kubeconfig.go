@@ -45,7 +45,6 @@ func init() {
 	awsEksCmdUpdateKubeconfigCmd.PersistentFlags().String("kubeconfig", "", "Specify the path to the kubeconfig file to be updated or created for accessing the EKS cluster.")
 	awsEksCmdUpdateKubeconfigCmd.PersistentFlags().String("role-arn", "", "Specify the ARN of the IAM role to assume for authenticating with the EKS cluster.")
 	awsEksCmdUpdateKubeconfigCmd.PersistentFlags().Bool("dry-run", false, "Perform a dry run to simulate updating the kubeconfig without making any changes.")
-	awsEksCmdUpdateKubeconfigCmd.PersistentFlags().Bool("verbose", false, "Enable verbose logging to provide detailed output during the kubeconfig update process.")
 	awsEksCmdUpdateKubeconfigCmd.PersistentFlags().String("alias", "", "Specify an alias to use for the cluster context name in the kubeconfig file.")
 
 	awsEksCmd.AddCommand(awsEksCmdUpdateKubeconfigCmd)
