@@ -1,4 +1,6 @@
 
+**Notice:** Telemetry Enabled - Atmos now collects anonymous telemetry regarding usage. This information is used to shape the Atmos roadmap and prioritize features. You can learn more, including how to opt out if you'd prefer not to participate in this anonymous program, by visiting: https://atmos.tools/cli/telemetry
+
 # Error
 
 directory for Atmos stacks does not exist
@@ -11,6 +13,10 @@ The atmos.yaml config file specifies the stacks directory as stacks, but the res
 
 ## Hints
 
-💡 Unset base_path in atmos.yaml to use auto-detection (recommended) 💡 Run Atmos from your Git repository root - it will auto-detect paths 💡 Or set base_path to the directory containing your atmos.yaml
+💡 Unset base_path in atmos.yaml to use auto-detection (recommended)
+
+💡 Run Atmos from your Git repository root - it will auto-detect paths
+
+💡 Or set base_path to the directory containing your atmos.yaml
 
 

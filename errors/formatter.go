@@ -200,10 +200,19 @@ func addExampleAndHintsSection(md *strings.Builder, err error) {
 	}
 
 	// Add Hints section.
+	// IMPORTANT: Each hint MUST be on its own line with a blank line after it to prevent
+	// markdown renderers from collapsing multiple hints into a single paragraph.
+	// We NEVER delete newlines - only trailing spaces/tabs before newlines are removed.
+	//
+	// Line breaks and spacing should be controlled by:
+	//   - Markdown content itself (blank lines between paragraphs, etc.)
+	//   - Markdown stylesheets (renderer configuration)
+	//   - NOT by post-processing that removes newlines
 	if len(hints) > 0 {
 		md.WriteString(newline + newline + "## Hints" + newline + newline)
 		for _, hint := range hints {
-			md.WriteString("💡 " + hint + newline)
+			// Add blank line after each hint to ensure proper line breaks in markdown rendering.
+			md.WriteString("💡 " + hint + newline + newline)
 		}
 	}
 }
@@ -290,7 +299,16 @@ func shouldUseColor(colorMode string) bool {
 	}
 }
 
-// wrapText wraps text to the specified width.
+// wrapText wraps text to the specified width while preserving intentional line breaks.
+// IMPORTANT: This function should NOT be used on text with intentional newlines,
+// as strings.Fields() splits on ALL whitespace including newlines, which destroys
+// the original line break structure. Only use this for wrapping single paragraphs.
+// NEVER call this on multi-line text that needs to preserve its line break structure.
+//
+// Line breaks and spacing should be controlled by:
+//   - Markdown content itself (blank lines between paragraphs, etc.)
+//   - Markdown stylesheets (renderer configuration)
+//   - NOT by post-processing that removes newlines
 func wrapText(text string, width int) string {
 	if width <= 0 {
 		width = DefaultMaxLineLength
@@ -299,6 +317,9 @@ func wrapText(text string, width int) string {
 	var lines []string
 	var currentLine strings.Builder
 
+	// WARNING: strings.Fields() removes ALL whitespace including newlines.
+	// This destroys intentional line breaks in the input text.
+	// Only use this function on single-paragraph text.
 	words := strings.Fields(text)
 	for i, word := range words {
 		// Check if adding this word would exceed the width.

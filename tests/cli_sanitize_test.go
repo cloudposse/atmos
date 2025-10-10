@@ -260,7 +260,8 @@ func TestSanitizeOutput_EdgeCases(t *testing.T) {
 	}
 }
 
-// TestSanitizeOutput_PreservesNonRepoPaths tests that paths outside the repo are not modified.
+// TestSanitizeOutput_PreservesNonRepoPaths tests that paths outside the repo are not modified,
+// except for Windows drive letters which are normalized for cross-platform snapshot comparison.
 func TestSanitizeOutput_PreservesNonRepoPaths(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -273,14 +274,77 @@ func TestSanitizeOutput_PreservesNonRepoPaths(t *testing.T) {
 			expected: "/usr/local/bin/terraform",
 		},
 		{
-			name:     "Windows system path",
+			name:     "Windows system path (not indented - preserved)",
 			input:    "C:/Windows/System32/cmd.exe",
-			expected: "C:/Windows/System32/cmd.exe",
+			expected: "C:/Windows/System32/cmd.exe", // Not indented, preserved
 		},
 		{
 			name:     "Temp directory path",
 			input:    "/tmp/atmos-test-12345/component",
 			expected: "/tmp/atmos-test-12345/component",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := sanitizeOutput(tt.input)
+			require.NoError(t, err)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+// TestSanitizeOutput_WindowsDriveLetterInErrorMessages tests that Windows drive letters
+// in error messages are normalized for cross-platform snapshot comparison.
+// This reproduces the Windows CI failure where "D:/stacks" appeared instead of "/stacks".
+func TestSanitizeOutput_WindowsDriveLetterInErrorMessages(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{
+			name: "Windows absolute path in error message",
+			input: `The atmos.yaml config file specifies the stacks directory as stacks, but the resolved absolute path does not exist:
+
+    D:/stacks`,
+			expected: `The atmos.yaml config file specifies the stacks directory as stacks, but the resolved absolute path does not exist:
+
+    /stacks`,
+		},
+		{
+			name:     "Lowercase Windows drive letter (not indented - preserved)",
+			input:    "d:/stacks",
+			expected: "d:/stacks", // No normalization - not indented
+		},
+		{
+			name:     "Uppercase Windows drive letter (not indented - preserved)",
+			input:    "D:/stacks",
+			expected: "D:/stacks", // No normalization - not indented
+		},
+		{
+			name:     "Windows drive letter with 4+ space indent (normalized)",
+			input:    "    D:/stacks",
+			expected: "    /stacks", // Normalized - indented error output
+		},
+		{
+			name:     "Multiple Windows paths with proper indentation",
+			input:    "Path1:\n    D:/stacks\nPath2:\n    C:/custom/path",
+			expected: "Path1:\n    /stacks\nPath2:\n    /custom/path",
+		},
+		{
+			name:     "Windows path mid-line should NOT be normalized",
+			input:    "Path1: D:/stacks, Path2: C:/custom/path",
+			expected: "Path1: D:/stacks, Path2: C:/custom/path", // Mid-line paths preserved
+		},
+		{
+			name: "Windows path in context field (mid-line)",
+			input: `## Context
+
+resolved_path: D:/a/atmos/atmos/tests/fixtures/stacks`,
+			expected: `## Context
+
+resolved_path: D:/a/atmos/atmos/tests/fixtures/stacks`, // Mid-line path preserved
 		},
 	}
 

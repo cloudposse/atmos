@@ -16,12 +16,21 @@ import (
 const defaultWidth = 80
 
 // trimTrailingSpaces removes trailing spaces and tabs from each line while preserving blank lines.
+// IMPORTANT: This function ONLY removes whitespace at the END of lines (before the \n).
+// It NEVER removes newlines themselves. Newlines must always be preserved.
+// Only trailing spaces and tabs (horizontal whitespace) are removed.
+//
+// Line breaks and spacing should be controlled by:
+//   - Markdown content itself (blank lines between paragraphs, etc.)
+//   - Markdown stylesheets (renderer configuration)
+//   - NOT by post-processing that removes newlines
 func trimTrailingSpaces(s string) string {
-	lines := strings.Split(s, "\n")
+	lines := strings.Split(s, newline)
 	for i, line := range lines {
+		// Only trim trailing spaces and tabs, NOT newlines.
 		lines[i] = strings.TrimRight(line, " \t")
 	}
-	return strings.Join(lines, "\n")
+	return strings.Join(lines, newline)
 }
 
 // Renderer is a markdown renderer using Glamour.
@@ -132,17 +141,44 @@ func (r *Renderer) RenderWithoutWordWrap(content string) (string, error) {
 
 // Render renders markdown content to ANSI styled text.
 func (r *Renderer) Render(content string) (string, error) {
-	var result string
+	var rendered string
 	var err error
 	if r.isTTYSupportForStdout() {
-		result, err = r.renderer.Render(content)
+		rendered, err = r.renderer.Render(content)
 	} else {
-		result, err = r.RenderAscii(content)
+		// Fallback to ASCII rendering for non-TTY stdout.
+		rendered, err = r.RenderAscii(content)
 	}
-	if err == nil {
-		result = trimTrailingSpaces(result)
+	if err != nil {
+		return "", err
 	}
-	return result, err
+	// Post-process the rendered output to handle trailing newlines and command styling.
+	lines := strings.Split(rendered, newline)
+	var result []string
+
+	// Create a purple style for command examples.
+	purpleStyle := termenv.Style{}.Foreground(r.profile.Color(Purple)).Bold()
+
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "$") && term.IsTTYSupportForStdout() {
+			// Add custom styling for command examples.
+			styled := purpleStyle.Styled(line)
+			result = append(result, " "+styled)
+		} else {
+			// Keep all lines including blank lines for proper markdown paragraph spacing.
+			result = append(result, line)
+		}
+	}
+
+	// Remove only trailing blank lines.
+	for len(result) > 0 && strings.TrimSpace(result[len(result)-1]) == "" {
+		result = result[:len(result)-1]
+	}
+
+	// Join lines and trim trailing spaces from each line.
+	output := strings.Join(result, newline)
+	return trimTrailingSpaces(output), nil
 }
 
 func (r *Renderer) RenderAsciiWithoutWordWrap(content string) (string, error) {
