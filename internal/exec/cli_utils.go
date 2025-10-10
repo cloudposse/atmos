@@ -70,7 +70,6 @@ var commonFlags = []string{
 	cfg.ProfilerTypeFlag,
 	cfg.HeatmapFlag,
 	cfg.HeatmapModeFlag,
-	cfg.ValidateFlag,
 }
 
 // ProcessCommandLineArgs processes command-line args.

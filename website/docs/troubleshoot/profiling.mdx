@@ -140,20 +140,31 @@ Elapsed: 234.56ms  Functions: 12  Calls: 156
     <dd>Name of the tracked function</dd>
 
     <dt>`Count`</dt>
-    <dd>Number of times the function was called</dd>
+    <dd>Number of times the function was called (includes all recursive calls)</dd>
 
     <dt>`Total`</dt>
-    <dd>Total time spent in all calls (where to focus optimization)</dd>
+    <dd>Total wall-clock time spent in all calls, including time spent in child function calls (where to focus optimization)</dd>
 
     <dt>`Avg`</dt>
-    <dd>Average execution time per call (Total ÷ Count)</dd>
+    <dd>Average self-time per call - actual work done in the function, excluding time spent in child function calls (SelfTime ÷ Count). This metric accurately represents the function's own execution time.</dd>
 
     <dt>`Max`</dt>
-    <dd>Maximum execution time for a single call</dd>
+    <dd>Maximum wall-clock execution time for a single call</dd>
 
     <dt>`P95`</dt>
-    <dd>95th percentile latency (consistent performance indicator)</dd>
+    <dd>95th percentile of self-time latency (consistent performance indicator for the function's own work)</dd>
 </dl>
+
+:::tip Understanding Total vs Self-Time
+
+**Total Time (Wall-Clock)**: Includes the entire execution time from function entry to exit, including all time spent in child function calls. This is useful for identifying functions that contribute most to overall execution time.
+
+**Self-Time (Avg & P95)**: Excludes time spent in child functions, showing only the actual work done in the function itself. This is more accurate for understanding where a function's own performance can be optimized.
+
+**Example**: If `ProcessConfig` takes 100ms total but 80ms is spent calling child functions, the Total would be 100ms but the Avg self-time would reflect only the 20ms of actual work in `ProcessConfig` itself.
+
+This separation is particularly important for recursive functions, which now show accurate call counts (e.g., 1,890 calls) with correct timing that doesn't inflate due to recursion depth.
+:::
 
 ### Interactive Controls
 

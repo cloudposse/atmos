@@ -231,16 +231,12 @@ func ConvertToYAML(data any, opts ...YAMLOptions) (string, error) {
 	return buf.String(), nil
 }
 
+//nolint:gocognit,revive
 func processCustomTags(atmosConfig *schema.AtmosConfiguration, node *yaml.Node, file string) error {
 	defer perf.Track(atmosConfig, "utils.processCustomTags")()
 
-	return processCustomTagsInternal(atmosConfig, node, file)
-}
-
-//nolint:gocognit,revive
-func processCustomTagsInternal(atmosConfig *schema.AtmosConfiguration, node *yaml.Node, file string) error {
 	if node.Kind == yaml.DocumentNode && len(node.Content) > 0 {
-		return processCustomTagsInternal(atmosConfig, node.Content[0], file)
+		return processCustomTags(atmosConfig, node.Content[0], file)
 	}
 
 	for _, n := range node.Content {
@@ -272,7 +268,7 @@ func processCustomTagsInternal(atmosConfig *schema.AtmosConfiguration, node *yam
 
 		// Recursively process the child nodes
 		if len(n.Content) > 0 {
-			if err := processCustomTagsInternal(atmosConfig, n, file); err != nil {
+			if err := processCustomTags(atmosConfig, n, file); err != nil {
 				return err
 			}
 		}

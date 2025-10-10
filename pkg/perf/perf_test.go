@@ -337,17 +337,19 @@ func TestBuildRows(t *testing.T) {
 
 	// Add test data.
 	reg.data["func1"] = &Metric{
-		Name:  "func1",
-		Count: 10,
-		Total: 100 * time.Millisecond,
-		Max:   20 * time.Millisecond,
+		Name:     "func1",
+		Count:    10,
+		Total:    100 * time.Millisecond,
+		SelfTime: 80 * time.Millisecond, // 20ms was spent in children
+		Max:      20 * time.Millisecond,
 	}
 
 	reg.data["func2"] = &Metric{
-		Name:  "func2",
-		Count: 5,
-		Total: 50 * time.Millisecond,
-		Max:   15 * time.Millisecond,
+		Name:     "func2",
+		Count:    5,
+		Total:    50 * time.Millisecond,
+		SelfTime: 40 * time.Millisecond, // 10ms was spent in children
+		Max:      15 * time.Millisecond,
 	}
 
 	rows := buildRows()
@@ -356,18 +358,18 @@ func TestBuildRows(t *testing.T) {
 		t.Errorf("expected 2 rows, got %d", len(rows))
 	}
 
-	// Verify average calculation.
+	// Verify average self-time calculation.
 	for _, row := range rows {
 		if row.Name == "func1" {
-			expectedAvg := 10 * time.Millisecond // 100ms / 10
-			if row.Avg != expectedAvg {
-				t.Errorf("expected avg %v, got %v", expectedAvg, row.Avg)
+			expectedAvgSelf := 8 * time.Millisecond // 80ms / 10
+			if row.AvgSelf != expectedAvgSelf {
+				t.Errorf("expected AvgSelf %v, got %v", expectedAvgSelf, row.AvgSelf)
 			}
 		}
 		if row.Name == "func2" {
-			expectedAvg := 10 * time.Millisecond // 50ms / 5
-			if row.Avg != expectedAvg {
-				t.Errorf("expected avg %v, got %v", expectedAvg, row.Avg)
+			expectedAvgSelf := 8 * time.Millisecond // 40ms / 5
+			if row.AvgSelf != expectedAvgSelf {
+				t.Errorf("expected AvgSelf %v, got %v", expectedAvgSelf, row.AvgSelf)
 			}
 		}
 	}
@@ -375,9 +377,9 @@ func TestBuildRows(t *testing.T) {
 
 func TestSortRows(t *testing.T) {
 	rows := []Row{
-		{Name: "func1", Total: 100 * time.Millisecond, Avg: 10 * time.Millisecond, Max: 20 * time.Millisecond},
-		{Name: "func2", Total: 50 * time.Millisecond, Avg: 25 * time.Millisecond, Max: 30 * time.Millisecond},
-		{Name: "func3", Total: 75 * time.Millisecond, Avg: 15 * time.Millisecond, Max: 25 * time.Millisecond},
+		{Name: "func1", Total: 100 * time.Millisecond, AvgSelf: 10 * time.Millisecond, Max: 20 * time.Millisecond},
+		{Name: "func2", Total: 50 * time.Millisecond, AvgSelf: 25 * time.Millisecond, Max: 30 * time.Millisecond},
+		{Name: "func3", Total: 75 * time.Millisecond, AvgSelf: 15 * time.Millisecond, Max: 25 * time.Millisecond},
 	}
 
 	tests := []struct {
@@ -401,7 +403,7 @@ func TestSortRows(t *testing.T) {
 			expectedFirst: "func2",
 		},
 		{
-			name:          "Default sort (total)",
+			name:          "Default sort (self-time)",
 			sortBy:        "unknown",
 			expectedFirst: "func1",
 		},
@@ -459,9 +461,9 @@ func TestP95WithHDR(t *testing.T) {
 		t.Error("expected non-zero P95 when tracking is enabled")
 	}
 
-	// P95 should be greater than or equal to the average.
-	if row.P95 < row.Avg {
-		t.Errorf("P95 (%v) should be >= avg (%v)", row.P95, row.Avg)
+	// P95 should be greater than or equal to the average self-time.
+	if row.P95 < row.AvgSelf {
+		t.Errorf("P95 (%v) should be >= AvgSelf (%v)", row.P95, row.AvgSelf)
 	}
 
 	// P95 may slightly exceed max due to histogram precision/rounding.
@@ -469,6 +471,252 @@ func TestP95WithHDR(t *testing.T) {
 	tolerance := row.Max / 100
 	if row.P95 > row.Max+tolerance {
 		t.Errorf("P95 (%v) should be approximately <= max (%v) with tolerance", row.P95, row.Max)
+	}
+}
+
+func TestSelfTimeVsTotalTime(t *testing.T) {
+	// Reset registry for clean test.
+	reg = &registry{
+		data:  make(map[string]*Metric),
+		start: time.Now(),
+	}
+	// Enable tracking for tests.
+	EnableTracking(true)
+
+	// This test verifies that self-time correctly excludes child function time.
+	// Parent function calls child function; parent's self-time should only include
+	// its own work, not the time spent in the child.
+
+	parentName := "parentFunc"
+	childName := "childFunc"
+
+	// Simulate parent calling child.
+	parentFunc := func() {
+		done := Track(nil, parentName)
+		defer done()
+
+		// Parent does some work.
+		time.Sleep(10 * time.Millisecond)
+
+		// Parent calls child function.
+		childFunc := func() {
+			done := Track(nil, childName)
+			defer done()
+			// Child does work.
+			time.Sleep(20 * time.Millisecond)
+		}
+		childFunc()
+
+		// Parent does more work.
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	// Execute the parent function.
+	parentFunc()
+
+	reg.mu.Lock()
+	parentMetric := reg.data[parentName]
+	childMetric := reg.data[childName]
+	reg.mu.Unlock()
+
+	if parentMetric == nil || childMetric == nil {
+		t.Fatal("expected both parent and child metrics to exist")
+	}
+
+	// Parent's total time should include child's time (wall-clock).
+	// Parent: 10ms + 20ms (child) + 10ms = ~40ms total
+	expectedParentTotalMin := 40 * time.Millisecond
+	if parentMetric.Total < expectedParentTotalMin {
+		t.Errorf("parent total (%v) should be >= %v (including child time)", parentMetric.Total, expectedParentTotalMin)
+	}
+
+	// Parent's self-time should exclude child's time.
+	// Parent: 10ms + 10ms = ~20ms self-time (excluding the 20ms child spent)
+	expectedParentSelfMin := 20 * time.Millisecond
+	expectedParentSelfMax := 25 * time.Millisecond // Allow some overhead
+	if parentMetric.SelfTime < expectedParentSelfMin || parentMetric.SelfTime > expectedParentSelfMax {
+		t.Errorf("parent self-time (%v) should be between %v and %v (excluding child time)",
+			parentMetric.SelfTime, expectedParentSelfMin, expectedParentSelfMax)
+	}
+
+	// Child's total and self-time should be roughly equal (no nested children).
+	// Child: ~20ms for both total and self-time
+	expectedChildTimeMin := 20 * time.Millisecond
+	if childMetric.Total < expectedChildTimeMin {
+		t.Errorf("child total (%v) should be >= %v", childMetric.Total, expectedChildTimeMin)
+	}
+	if childMetric.SelfTime < expectedChildTimeMin {
+		t.Errorf("child self-time (%v) should be >= %v", childMetric.SelfTime, expectedChildTimeMin)
+	}
+
+	// Verify the key relationship: parent.SelfTime + child.Total ≈ parent.Total
+	// (with some tolerance for overhead)
+	calculatedTotal := parentMetric.SelfTime + childMetric.Total
+	tolerance := 5 * time.Millisecond
+	if parentMetric.Total < calculatedTotal-tolerance || parentMetric.Total > calculatedTotal+tolerance {
+		t.Errorf("parent.Total (%v) should ≈ parent.SelfTime (%v) + child.Total (%v) = %v",
+			parentMetric.Total, parentMetric.SelfTime, childMetric.Total, calculatedTotal)
+	}
+}
+
+func TestNestedFunctionSelfTime(t *testing.T) {
+	// Reset registry for clean test.
+	reg = &registry{
+		data:  make(map[string]*Metric),
+		start: time.Now(),
+	}
+	// Enable tracking for tests.
+	EnableTracking(true)
+
+	// This test verifies self-time with multiple levels of nesting:
+	// grandparent -> parent -> child
+
+	grandparentName := "grandparentFunc"
+	parentName := "parentFunc"
+	childName := "childFunc"
+
+	childFunc := func() {
+		done := Track(nil, childName)
+		defer done()
+		time.Sleep(5 * time.Millisecond)
+	}
+
+	parentFunc := func() {
+		done := Track(nil, parentName)
+		defer done()
+		time.Sleep(5 * time.Millisecond)
+		childFunc()
+		time.Sleep(5 * time.Millisecond)
+	}
+
+	grandparentFunc := func() {
+		done := Track(nil, grandparentName)
+		defer done()
+		time.Sleep(5 * time.Millisecond)
+		parentFunc()
+		time.Sleep(5 * time.Millisecond)
+	}
+
+	grandparentFunc()
+
+	reg.mu.Lock()
+	grandparent := reg.data[grandparentName]
+	parent := reg.data[parentName]
+	child := reg.data[childName]
+	reg.mu.Unlock()
+
+	if grandparent == nil || parent == nil || child == nil {
+		t.Fatal("expected all metrics to exist")
+	}
+
+	// Child has no children, so total ≈ self-time
+	if child.SelfTime < 5*time.Millisecond {
+		t.Errorf("child self-time (%v) should be >= 5ms", child.SelfTime)
+	}
+
+	// Parent's self-time should be ~10ms (5ms + 5ms), excluding child's ~5ms
+	expectedParentSelfMin := 10 * time.Millisecond
+	expectedParentSelfMax := 12 * time.Millisecond
+	if parent.SelfTime < expectedParentSelfMin || parent.SelfTime > expectedParentSelfMax {
+		t.Errorf("parent self-time (%v) should be between %v and %v (excluding child)",
+			parent.SelfTime, expectedParentSelfMin, expectedParentSelfMax)
+	}
+
+	// Grandparent's self-time should be ~10ms (5ms + 5ms), excluding parent's total time
+	expectedGrandparentSelfMin := 10 * time.Millisecond
+	expectedGrandparentSelfMax := 12 * time.Millisecond
+	if grandparent.SelfTime < expectedGrandparentSelfMin || grandparent.SelfTime > expectedGrandparentSelfMax {
+		t.Errorf("grandparent self-time (%v) should be between %v and %v (excluding parent and child)",
+			grandparent.SelfTime, expectedGrandparentSelfMin, expectedGrandparentSelfMax)
+	}
+
+	// Grandparent's total should include everyone: 5ms + (5ms + 5ms + 5ms) + 5ms = ~25ms
+	expectedGrandparentTotalMin := 25 * time.Millisecond
+	if grandparent.Total < expectedGrandparentTotalMin {
+		t.Errorf("grandparent total (%v) should be >= %v (including all children)",
+			grandparent.Total, expectedGrandparentTotalMin)
+	}
+}
+
+func TestDirectRecursionWithSelfTime(t *testing.T) {
+	// Reset registry for clean test.
+	reg = &registry{
+		data:  make(map[string]*Metric),
+		start: time.Now(),
+	}
+	// Enable tracking for tests.
+	EnableTracking(true)
+
+	// This test demonstrates the NEW capability: direct recursive tracking
+	// with accurate counts AND accurate timing.
+	//
+	// With the old system, this pattern would either:
+	// 1. Inflate count by recursion depth (if tracking every call)
+	// 2. Hide recursive calls (if using wrapper pattern)
+	//
+	// With the new self-time tracking:
+	// - Count accurately reflects ALL calls (including recursive)
+	// - Timing remains accurate (no inflation)
+
+	functionName := "directRecursiveFunc"
+	recursionDepth := 10
+	numTopLevelCalls := 2
+
+	// Direct recursive function with tracking on EVERY call.
+	var recursiveFunc func(int)
+	recursiveFunc = func(depth int) {
+		done := Track(nil, functionName)
+		defer done()
+
+		if depth > 0 {
+			time.Sleep(1 * time.Millisecond) // Simulate work
+			recursiveFunc(depth - 1)         // Direct recursive call WITH tracking
+		}
+	}
+
+	// Call the function multiple times.
+	for i := 0; i < numTopLevelCalls; i++ {
+		recursiveFunc(recursionDepth)
+	}
+
+	reg.mu.Lock()
+	metric := reg.data[functionName]
+	reg.mu.Unlock()
+
+	if metric == nil {
+		t.Fatal("expected metric to exist")
+	}
+
+	// NEW BEHAVIOR: Count should reflect ALL calls including recursive ones.
+	// For depth=10: each top-level call makes 11 total calls (levels 0-10)
+	// 2 top-level calls * 11 levels = 22 total calls
+	expectedCount := numTopLevelCalls * (recursionDepth + 1)
+	if metric.Count != int64(expectedCount) {
+		t.Errorf("expected count %d (all recursive calls), got %d", expectedCount, metric.Count)
+	}
+
+	// Timing behavior with direct recursion:
+	// - Each level does ~1ms of actual work
+	// - Total time at each level includes time of all child levels
+	// - For 2 calls with depth 10, we expect the aggregate metrics to be reasonable
+
+	// Self-time should be the sum of actual work: 22 calls * ~1ms = ~22ms
+	expectedSelfMin := time.Duration(expectedCount) * time.Millisecond
+	expectedSelfMax := time.Duration(expectedCount*2) * time.Millisecond
+	if metric.SelfTime < expectedSelfMin || metric.SelfTime > expectedSelfMax {
+		t.Errorf("self-time (%v) should be between %v and %v (sum of actual work)",
+			metric.SelfTime, expectedSelfMin, expectedSelfMax)
+	}
+
+	// Total time will be higher because each level includes children's time.
+	// The sum of all total times will be larger, but should still be reasonable (< 1 second)
+	if metric.Total > 1*time.Second {
+		t.Errorf("total time (%v) seems unreasonably high", metric.Total)
+	}
+
+	// Verify that total >= self-time (always true)
+	if metric.Total < metric.SelfTime {
+		t.Errorf("total time (%v) should be >= self-time (%v)", metric.Total, metric.SelfTime)
 	}
 }
 

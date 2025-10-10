@@ -22,7 +22,7 @@ const (
 	// Table dimensions.
 	tableFunctionWidth = 50
 	tableCountWidth    = 8
-	tableDurationWidth = 10
+	tableDurationWidth = 13 // Wider to accommodate durations like "202.367ms" without truncation
 	tableHeight        = 20
 
 	// Display limits.
@@ -223,7 +223,7 @@ func newModel(heatModel *HeatModel, mode string, ctx context.Context) *model {
 		{Title: "Total", Width: tableDurationWidth},
 		{Title: "Avg", Width: tableDurationWidth},
 		{Title: "Max", Width: tableDurationWidth},
-		{Title: "P95", Width: tableCountWidth},
+		{Title: "P95", Width: tableDurationWidth},
 	}
 
 	t := table.New(
@@ -398,7 +398,7 @@ func (m *model) updatePerformanceData() {
 			truncate(r.Name, tableFunctionWidth-2),
 			fmt.Sprintf("%d", r.Count),
 			FormatDuration(r.Total),
-			FormatDuration(r.Avg),
+			FormatDuration(r.AvgSelf),
 			FormatDuration(r.Max),
 			p95,
 		})

@@ -132,7 +132,4 @@ const (
 	ProfilerTypeFlag    = "--profiler-type"
 	HeatmapFlag         = "--heatmap"
 	HeatmapModeFlag     = "--heatmap-mode"
-
-	// Validation flags.
-	ValidateFlag = "--validate"
 )
