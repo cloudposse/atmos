@@ -16,7 +16,4 @@ const (
 
 	// PlanFileMode defines the file permission for plan files.
 	planFileMode = 0o600
-
-	// TerraformCommand is the terraform binary command name.
-	terraformCommand = "terraform"
 )

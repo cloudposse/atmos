@@ -392,17 +392,13 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 			initCommandWithArguments = []string{"init", "-reconfigure"}
 		}
 		// Add `--var-file` if configured in `atmos.yaml`.
-		// OpenTofu supports passing a varfile to `init` to dynamically configure backends.
-		// Terraform does not support --var-file for init, so only add it for OpenTofu.
+		// NOTE: This feature is primarily intended for OpenTofu, which supports passing
+		// a varfile to `init` for dynamic backend configuration. HashiCorp Terraform does
+		// not support --var-file for the init command and will fail if this is enabled.
+		// If you are using Terraform (not OpenTofu), do not enable PassVars, or ensure
+		// your terraform command actually points to an OpenTofu binary.
 		if atmosConfig.Components.Terraform.Init.PassVars {
-			switch info.Command {
-			case "tofu", "opentofu":
-				initCommandWithArguments = append(initCommandWithArguments, []string{varFileFlag, varFile}...)
-			case terraformCommand:
-				log.Warn("PassVars is enabled but Terraform does not support --var-file for init command. Skipping --var-file flag.",
-					"command", info.Command,
-					"component", info.ComponentFromArg)
-			}
+			initCommandWithArguments = append(initCommandWithArguments, []string{varFileFlag, varFile}...)
 		}
 
 		// Before executing `terraform init`, delete the `.terraform/environment` file from the component directory
@@ -504,17 +500,13 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 			allArgsAndFlags = append(allArgsAndFlags, []string{"-reconfigure"}...)
 		}
 		// Add `--var-file` if configured in `atmos.yaml`.
-		// OpenTofu supports passing a varfile to `init` to dynamically configure backends.
-		// Terraform does not support --var-file for init, so only add it for OpenTofu.
+		// NOTE: This feature is primarily intended for OpenTofu, which supports passing
+		// a varfile to `init` for dynamic backend configuration. HashiCorp Terraform does
+		// not support --var-file for the init command and will fail if this is enabled.
+		// If you are using Terraform (not OpenTofu), do not enable PassVars, or ensure
+		// your terraform command actually points to an OpenTofu binary.
 		if atmosConfig.Components.Terraform.Init.PassVars {
-			switch info.Command {
-			case "tofu", "opentofu":
-				allArgsAndFlags = append(allArgsAndFlags, []string{varFileFlag, varFile}...)
-			case terraformCommand:
-				log.Warn("PassVars is enabled but Terraform does not support --var-file for init command. Skipping --var-file flag.",
-					"command", info.Command,
-					"component", info.ComponentFromArg)
-			}
+			allArgsAndFlags = append(allArgsAndFlags, []string{varFileFlag, varFile}...)
 		}
 	case "workspace":
 		if info.SubCommand2 == "list" || info.SubCommand2 == "show" {
