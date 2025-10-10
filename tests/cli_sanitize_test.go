@@ -304,7 +304,16 @@ func TestSanitizeOutput_WindowsDriveLetterInErrorMessages(t *testing.T) {
 		expected string
 	}{
 		{
-			name: "Windows absolute path in error message",
+			name: "Windows absolute path in error message (ACTUAL snapshot format - 1 space)",
+			input: `The atmos.yaml config file specifies the stacks directory as stacks, but the resolved absolute path does not exist:
+
+ D:/stacks`,
+			expected: `The atmos.yaml config file specifies the stacks directory as stacks, but the resolved absolute path does not exist:
+
+ /stacks`,
+		},
+		{
+			name: "Windows absolute path in error message (4 spaces)",
 			input: `The atmos.yaml config file specifies the stacks directory as stacks, but the resolved absolute path does not exist:
 
     D:/stacks`,
@@ -323,7 +332,12 @@ func TestSanitizeOutput_WindowsDriveLetterInErrorMessages(t *testing.T) {
 			expected: "D:/stacks", // No normalization - not indented
 		},
 		{
-			name:     "Windows drive letter with 4+ space indent (normalized)",
+			name:     "Windows drive letter with 1 space indent (normalized)",
+			input:    " D:/stacks",
+			expected: " /stacks", // Normalized - indented error output
+		},
+		{
+			name:     "Windows drive letter with 4 space indent (normalized)",
 			input:    "    D:/stacks",
 			expected: "    /stacks", // Normalized - indented error output
 		},

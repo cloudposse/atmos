@@ -384,11 +384,11 @@ func sanitizeOutput(output string) (string, error) {
 
 	// 9. Normalize Windows drive letters ONLY in specific error output contexts.
 	// We need to be very conservative to avoid breaking executable paths or Go error messages.
-	// Only normalize when the path appears as an indented value (4+ spaces) which is how
+	// Only normalize when the path appears as an indented value (1+ spaces) which is how
 	// our error formatter outputs paths.
-	// This handles error output like "    D:/stacks" → "    /stacks"
-	// But preserves executable paths like "C:\Users\..." in Go runtime errors.
-	windowsDriveRegex := regexp.MustCompile(`(?im)^(\s{4,})([A-Z]):/`)
+	// This handles error output like " D:/stacks" → " /stacks"
+	// But preserves executable paths like "C:\Users\..." which don't start with whitespace.
+	windowsDriveRegex := regexp.MustCompile(`(?im)^(\s+)([A-Z]):/`)
 	result = windowsDriveRegex.ReplaceAllString(result, "${1}/")
 
 	return result, nil
