@@ -23,6 +23,23 @@ func TestExecutePacker_Validate(t *testing.T) {
 	t.Setenv("ATMOS_LOGS_LEVEL", "Warning")
 	log.SetLevel(log.InfoLevel)
 
+	// First run packer init to install required plugins.
+	initInfo := schema.ConfigAndStacksInfo{
+		StackFromArg:     "",
+		Stack:            "nonprod",
+		StackFile:        "",
+		ComponentType:    "packer",
+		ComponentFromArg: "aws/bastion",
+		SubCommand:       "init",
+		ProcessTemplates: true,
+		ProcessFunctions: true,
+	}
+
+	packerFlags := PackerFlags{}
+	err := ExecutePacker(&initInfo, &packerFlags)
+	assert.NoError(t, err)
+
+	// Now run validate.
 	info := schema.ConfigAndStacksInfo{
 		StackFromArg:     "",
 		Stack:            "nonprod",
@@ -39,9 +56,8 @@ func TestExecutePacker_Validate(t *testing.T) {
 	os.Stdout = w
 
 	log.SetOutput(w)
-	packerFlags := PackerFlags{}
 
-	err := ExecutePacker(&info, &packerFlags)
+	err = ExecutePacker(&info, &packerFlags)
 	assert.NoError(t, err)
 
 	// Restore std

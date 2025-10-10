@@ -46,7 +46,7 @@ tests:
     expect:
       stderr:
         - "component is locked: component 'mock' cannot be modified \\(metadata.locked: true\\)"
-      exit_code: 1
+      exit_code: 2
 
   - name: atmos terraform plan locked component
     enabled: true

@@ -17,11 +17,11 @@ const defaultWidth = 80
 
 // trimTrailingSpaces removes trailing spaces and tabs from each line while preserving blank lines.
 func trimTrailingSpaces(s string) string {
-	lines := strings.Split(s, "\n")
+	lines := strings.Split(s, newline)
 	for i, line := range lines {
 		lines[i] = strings.TrimRight(line, " \t")
 	}
-	return strings.Join(lines, "\n")
+	return strings.Join(lines, newline)
 }
 
 // Renderer is a markdown renderer using Glamour.
@@ -144,7 +144,7 @@ func (r *Renderer) Render(content string) (string, error) {
 		return "", err
 	}
 	// Post-process the rendered output to handle trailing newlines and command styling.
-	lines := strings.Split(rendered, "\n")
+	lines := strings.Split(rendered, newline)
 	var result []string
 
 	// Create a purple style for command examples.
@@ -167,8 +167,9 @@ func (r *Renderer) Render(content string) (string, error) {
 		result = result[:len(result)-1]
 	}
 
-	// Add a single newline at the end.
-	return strings.Join(result, "\n"), nil
+	// Join lines and trim trailing spaces from each line.
+	output := strings.Join(result, newline)
+	return trimTrailingSpaces(output), nil
 }
 
 func (r *Renderer) RenderAsciiWithoutWordWrap(content string) (string, error) {
