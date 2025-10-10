@@ -91,9 +91,7 @@ func TestExecuteTerraformGeneratePlanfileCmd(t *testing.T) {
 			Short:              "Generate a planfile for a Terraform component",
 			Long:               "This command generates a `planfile` for a specified Atmos Terraform component.",
 			FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
-			RunE: func(cmd *cobra.Command, args []string) error {
-				return ExecuteTerraformGeneratePlanfileCmd(cmd, args)
-			},
+			RunE:               ExecuteTerraformGeneratePlanfileCmd,
 		}
 
 		conflictingCmd.PersistentFlags().StringP("stack", "s", "", "Atmos stack")

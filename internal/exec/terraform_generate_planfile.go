@@ -213,7 +213,15 @@ func validateComponent(component string) error {
 }
 
 // resolvePlanfilePath determines the final path for the planfile based on options.
+// It resolves paths using three modes:
+// - When options.File is set: uses the specified file path (absolute or relative to componentPath).
+// - When options.Dir is set: constructs the default filename in the specified directory (absolute or relative to componentPath).
+// - When neither is set: uses atmos configuration defaults.
 func resolvePlanfilePath(componentPath string, options *PlanfileOptions, info *schema.ConfigAndStacksInfo, atmosConfig *schema.AtmosConfiguration) (string, error) {
+	if options == nil {
+		return "", errUtils.ErrNilParam
+	}
+
 	var planFilePath string
 	switch {
 	case options.File != "":

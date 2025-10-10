@@ -29,7 +29,12 @@ func init() {
 	AddStackCompletion(terraformGeneratePlanfileCmd)
 
 	terraformGeneratePlanfileCmd.PersistentFlags().StringP("file", "f", "", "Planfile name")
-	terraformGeneratePlanfileCmd.PersistentFlags().StringP("dir", "d", "", "Directory where the planfile will be generated using the default naming convention ({stack}-{component}.planfile.{format})")
+	terraformGeneratePlanfileCmd.PersistentFlags().StringP(
+		"dir",
+		"d",
+		"",
+		"Directory (absolute or relative) where the planfile will be generated using the default naming convention ({stack}-{component}.planfile.{format}). Mutually exclusive with --file.",
+	)
 	terraformGeneratePlanfileCmd.MarkFlagsMutuallyExclusive("file", "dir")
 	terraformGeneratePlanfileCmd.PersistentFlags().String("format", "json", "Output format (`json` or `yaml`, `json` is default)")
 
