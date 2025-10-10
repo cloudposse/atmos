@@ -121,5 +121,18 @@ const (
 	ComponentStr = "component"
 	StackStr     = "stack"
 
+	// Auth flags.
 	IdentityFlag = "--identity"
+
+	// Performance profiling flags.
+	ProfilerEnabledFlag = "--profiler-enabled"
+	ProfilerHostFlag    = "--profiler-host"
+	ProfilerPortFlag    = "--profiler-port"
+	ProfilerFileFlag    = "--profiler-file"
+	ProfilerTypeFlag    = "--profiler-type"
+	HeatmapFlag         = "--heatmap"
+	HeatmapModeFlag     = "--heatmap-mode"
+
+	// Validation flags.
+	ValidateFlag = "--validate"
 )
