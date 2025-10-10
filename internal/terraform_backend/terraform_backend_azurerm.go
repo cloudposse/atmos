@@ -20,12 +20,14 @@ import (
 )
 
 const (
-	// maxRetryCountAzure defines the max attempts to read a state file from Azure Blob Storage.
+	// MaxRetryCountAzure defines the max attempts to read a state file from Azure Blob Storage.
 	maxRetryCountAzure = 2
-	// statusCodeNotFoundAzure represents the HTTP 404 status code.
+	// StatusCodeNotFoundAzure represents the HTTP 404 status code.
 	statusCodeNotFoundAzure = 404
-	// statusCodeForbiddenAzure represents the HTTP 403 status code.
+	// StatusCodeForbiddenAzure represents the HTTP 403 status code.
 	statusCodeForbiddenAzure = 403
+	// Error format for wrapping errors with context.
+	errWrapFormat = "%w: %v"
 )
 
 // AzureBlobAPI defines an interface for interacting with Azure Blob Storage.
@@ -103,12 +105,12 @@ func getCachedAzureBlobClient(backend *map[string]any) (AzureBlobAPI, error) {
 	// 4. Visual Studio Code credentials
 	cred, err := azidentity.NewDefaultAzureCredential(nil)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %v", errUtils.ErrCreateAzureCredential, err)
+		return nil, fmt.Errorf(errWrapFormat, errUtils.ErrCreateAzureCredential, err)
 	}
 
 	client, err := azblob.NewClient(serviceURL, cred, nil)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %v", errUtils.ErrCreateAzureClient, err)
+		return nil, fmt.Errorf(errWrapFormat, errUtils.ErrCreateAzureClient, err)
 	}
 
 	wrappedClient := &azureBlobClientWrapper{client: client}
@@ -134,6 +136,55 @@ func ReadTerraformBackendAzurerm(
 	return ReadTerraformBackendAzurermInternal(azureClient, componentSections, &backend)
 }
 
+// constructAzureBlobPath constructs the blob path based on workspace and key.
+func constructAzureBlobPath(componentSections *map[string]any, backend *map[string]any) string {
+	defer perf.Track(nil, "terraform_backend.constructAzureBlobPath")()
+
+	key := GetBackendAttribute(backend, "key")
+	if key == "" {
+		key = "terraform.tfstate"
+	}
+
+	workspace := GetTerraformWorkspace(componentSections)
+
+	// Azure Blob paths always use forward slashes, so path.Join is appropriate here.
+	//nolint:forbidigo // Azure Blob paths require forward slashes regardless of OS
+	if workspace != "" && workspace != "default" {
+		// Non-default workspace: key is modified to include workspace.
+		// Format: env:/{workspace}/{key}
+		return path.Join("env:", workspace, key)
+	}
+	// Default workspace: use key as-is.
+	return key
+}
+
+// handleAzureDownloadError handles errors from Azure Blob Storage download operations.
+func handleAzureDownloadError(err error, tfStateFilePath, containerName string) error {
+	defer perf.Track(nil, "terraform_backend.handleAzureDownloadError")()
+
+	var respErr *azcore.ResponseError
+	if errors.As(err, &respErr) {
+		switch respErr.StatusCode {
+		case statusCodeNotFoundAzure:
+			log.Debug(
+				"Terraform state file doesn't exist in Azure Blob Storage; returning 'null'",
+				"file", tfStateFilePath,
+				"container", containerName,
+			)
+			return nil
+		case statusCodeForbiddenAzure:
+			return fmt.Errorf(
+				"%w: blob '%s' in container '%s': %v",
+				errUtils.ErrAzurePermissionDenied,
+				tfStateFilePath,
+				containerName,
+				err,
+			)
+		}
+	}
+	return err
+}
+
 // ReadTerraformBackendAzurermInternal accepts an Azure Blob client and reads the Terraform state file from the configured Azure Blob Storage backend.
 func ReadTerraformBackendAzurermInternal(
 	azureClient AzureBlobAPI,
@@ -148,27 +199,7 @@ func ReadTerraformBackendAzurermInternal(
 		return nil, errUtils.ErrAzureContainerRequired
 	}
 
-	// Construct blob path (Azure uses workspace in blob path).
-	// Azure backend: for non-default workspaces, the key becomes env:/{workspace}/{key}.
-	// For default workspace, use key as-is.
-	key := GetBackendAttribute(backend, "key")
-	if key == "" {
-		key = "terraform.tfstate"
-	}
-
-	workspace := GetTerraformWorkspace(componentSections)
-	var tfStateFilePath string
-
-	// Azure Blob paths always use forward slashes, so path.Join is appropriate here.
-	//nolint:forbidigo // Azure Blob paths require forward slashes regardless of OS
-	if workspace != "" && workspace != "default" {
-		// Non-default workspace: key is modified to include workspace.
-		// Format: env:/{workspace}/{key}
-		tfStateFilePath = path.Join("env:", workspace, key)
-	} else {
-		// Default workspace: use key as-is.
-		tfStateFilePath = key
-	}
+	tfStateFilePath := constructAzureBlobPath(componentSections, backend)
 
 	var lastErr error
 	for attempt := 0; attempt <= maxRetryCountAzure; attempt++ {
@@ -178,27 +209,14 @@ func ReadTerraformBackendAzurermInternal(
 
 		downloadResponse, err := azureClient.DownloadStream(ctx, containerName, tfStateFilePath, nil)
 		if err != nil {
-			// Check if the error is because the blob doesn't exist.
-			// If the state file does not exist (the component in the stack has not been provisioned yet), return a `nil` result and no error.
-			var respErr *azcore.ResponseError
-			if errors.As(err, &respErr) {
-				switch respErr.StatusCode {
-				case statusCodeNotFoundAzure:
-					log.Debug(
-						"Terraform state file doesn't exist in Azure Blob Storage; returning 'null'",
-						"file", tfStateFilePath,
-						"container", containerName,
-					)
-					return nil, nil
-				case statusCodeForbiddenAzure:
-					return nil, fmt.Errorf(
-						"%w: blob '%s' in container '%s': %v",
-						errUtils.ErrAzurePermissionDenied,
-						tfStateFilePath,
-						containerName,
-						err,
-					)
-				}
+			handledErr := handleAzureDownloadError(err, tfStateFilePath, containerName)
+			if handledErr == nil {
+				// Blob not found - component not provisioned yet.
+				return nil, nil
+			}
+			if errors.Is(handledErr, errUtils.ErrAzurePermissionDenied) {
+				// Permission denied - return immediately.
+				return nil, handledErr
 			}
 
 			lastErr = err
@@ -213,17 +231,17 @@ func ReadTerraformBackendAzurermInternal(
 				time.Sleep(time.Second * 2) // backoff
 				continue
 			}
-			return nil, fmt.Errorf("%w: %v", errUtils.ErrGetBlobFromAzure, lastErr)
+			return nil, fmt.Errorf(errWrapFormat, errUtils.ErrGetBlobFromAzure, lastErr)
 		}
 
 		body := downloadResponse.GetBody()
 		content, err := io.ReadAll(body)
 		_ = body.Close()
 		if err != nil {
-			return nil, fmt.Errorf("%w: %v", errUtils.ErrReadAzureBlobBody, err)
+			return nil, fmt.Errorf(errWrapFormat, errUtils.ErrReadAzureBlobBody, err)
 		}
 		return content, nil
 	}
 
-	return nil, fmt.Errorf("%w: %v", errUtils.ErrGetBlobFromAzure, lastErr)
+	return nil, fmt.Errorf(errWrapFormat, errUtils.ErrGetBlobFromAzure, lastErr)
 }
