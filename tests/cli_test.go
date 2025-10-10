@@ -313,11 +313,21 @@ func sanitizeOutput(output string) (string, error) {
 		return "", errors.New("failed to determine repository root")
 	}
 
+	return sanitizeOutputWithRepoRoot(output, repoRoot)
+}
+
+// sanitizeOutputWithRepoRoot is the internal implementation that accepts a custom repo root.
+// This allows tests to verify behavior with different repo roots (e.g., Windows CI paths on Mac).
+func sanitizeOutputWithRepoRoot(output string, customRepoRoot string) (string, error) {
+	if customRepoRoot == "" {
+		return "", errors.New("repo root cannot be empty")
+	}
+
 	// 2. Normalize the repository root:
 	//    - Clean the path (which may not collapse all extra slashes after the drive letter, etc.)
 	//    - Convert to forward slashes,
 	//    - And explicitly collapse extra slashes.
-	normalizedRepoRoot := collapseExtraSlashes(filepath.ToSlash(filepath.Clean(repoRoot)))
+	normalizedRepoRoot := collapseExtraSlashes(filepath.ToSlash(filepath.Clean(customRepoRoot)))
 	// Also normalize the output to use forward slashes.
 	// Note: filepath.ToSlash() on Windows converts path separators; on Unix it does nothing.
 	// We also need to handle Windows-style paths that may appear in test output even on Unix (for testing).
