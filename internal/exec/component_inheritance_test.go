@@ -10,7 +10,7 @@ import (
 
 // TestComponentInheritanceWithoutMetadataComponent tests that components with
 // metadata.inherits but no explicit metadata.component work correctly.
-// This is a regression test for https://github.com/cloudposse/atmos/issues/1609.
+// This is a regression test for the bug where metadata.component was not defaulting correctly.
 func TestComponentInheritanceWithoutMetadataComponent(t *testing.T) {
 	workDir := "../../tests/fixtures/scenarios/component-inheritance-without-metadata-component"
 

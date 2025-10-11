@@ -121,7 +121,6 @@ func processMetadataInheritance(opts *ComponentProcessorOptions, result *Compone
 		// applyBaseComponentConfig() overwrites result.BaseComponentName with values from inherited components,
 		// but metadata.component should NOT be inherited - it's per-component and determines the physical
 		// terraform directory path.
-		// See: https://github.com/cloudposse/atmos/issues/1613
 		if metadataComponentExplicitlySet {
 			result.BaseComponentName = explicitBaseComponentName
 		}
@@ -130,7 +129,6 @@ func processMetadataInheritance(opts *ComponentProcessorOptions, result *Compone
 	// If metadata.component was not explicitly set, default to the component name itself.
 	// This should happen regardless of whether metadata.inherits exists or not.
 	// The metadata.component determines the physical terraform directory path.
-	// See: https://github.com/cloudposse/atmos/issues/1609
 	if !metadataComponentExplicitlySet {
 		result.BaseComponentName = opts.Component
 	}
