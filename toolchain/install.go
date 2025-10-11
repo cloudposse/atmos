@@ -205,7 +205,7 @@ func installFromToolVersions(toolVersionsPath string, reinstallFlag bool) error 
 		case "skipped":
 			alreadyInstalledCount++
 		}
-		showProgress(os.Stderr, &spinner, progressBar, i, len(toolList), result, tool, err)
+		showProgress(os.Stderr, &spinner, progressBar, tool, progressState{index: i, total: len(toolList), result: result, err: err})
 	}
 
 	printSummary(os.Stderr, installedCount, failedCount, alreadyInstalledCount, len(toolList))
@@ -248,26 +248,34 @@ func installOrSkipTool(installer *Installer, tool struct {
 	return "installed", nil
 }
 
+type toolInfo struct {
+	tool, version, owner, repo string
+}
+
+type progressState struct {
+	index, total int
+	result       string
+	err          error
+}
+
 func showProgress(
 	stderr *os.File,
 	spinner *bspinner.Model,
 	progressBar progress.Model,
-	index, total int,
-	result string,
-	tool struct{ tool, version, owner, repo string },
-	err error,
+	tool toolInfo,
+	state progressState,
 ) {
 	var msg string
-	switch result {
+	switch state.result {
 	case "skipped":
 		msg = fmt.Sprintf("%s Skipped %s/%s@%s (already installed)", checkMark.Render(), tool.owner, tool.repo, tool.version)
 	case "installed":
 		msg = fmt.Sprintf("%s Installed %s/%s@%s", checkMark.Render(), tool.owner, tool.repo, tool.version)
 	case "failed":
-		msg = fmt.Sprintf("%s Install failed %s/%s@%s: %v", xMark.Render(), tool.owner, tool.repo, tool.version, err)
+		msg = fmt.Sprintf("%s Install failed %s/%s@%s: %v", xMark.Render(), tool.owner, tool.repo, tool.version, state.err)
 	}
 
-	percent := float64(index+1) / float64(total)
+	percent := float64(state.index+1) / float64(state.total)
 	bar := progressBar.ViewAs(percent)
 	resetLine(stderr, term.IsTerminal(int(stderr.Fd())))
 	fmt.Fprintln(stderr, msg)
