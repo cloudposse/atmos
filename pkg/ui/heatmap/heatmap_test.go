@@ -411,6 +411,10 @@ func TestModel_View(t *testing.T) {
 	assert.Contains(t, result, "Bar Mode")
 	assert.Contains(t, result, "Functions: 1")
 	assert.Contains(t, result, "Total Calls: 5")
+	// Verify legend is displayed.
+	assert.Contains(t, result, "Count: # calls")
+	assert.Contains(t, result, "Total: wall-clock")
+	assert.Contains(t, result, "self-time")
 }
 
 func TestModel_View_Initializing(t *testing.T) {

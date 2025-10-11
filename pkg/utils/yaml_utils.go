@@ -231,6 +231,7 @@ func ConvertToYAML(data any, opts ...YAMLOptions) (string, error) {
 	return buf.String(), nil
 }
 
+//nolint:gocognit,revive
 func processCustomTags(atmosConfig *schema.AtmosConfiguration, node *yaml.Node, file string) error {
 	defer perf.Track(atmosConfig, "utils.processCustomTags")()
 
@@ -288,6 +289,8 @@ func UnmarshalYAML[T any](input string) (T, error) {
 
 // UnmarshalYAMLFromFile unmarshals YAML downloaded from a file into a Go type.
 func UnmarshalYAMLFromFile[T any](atmosConfig *schema.AtmosConfiguration, input string, file string) (T, error) {
+	defer perf.Track(atmosConfig, "utils.UnmarshalYAMLFromFile")()
+
 	if atmosConfig == nil {
 		return *new(T), ErrNilAtmosConfig
 	}

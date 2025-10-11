@@ -171,7 +171,7 @@ func (m *model) renderSparklinesFromPerf(snap perf.Snapshot) []string {
 	// Sparkline characters from low to high.
 	sparkChars := []rune{'▁', '▂', '▃', '▄', '▅', '▆', '▇', '█'}
 
-	// Find max avg for normalization.
+	// Find max avg self-time for normalization.
 	maxAvg := snap.Rows[0].Avg
 	for _, r := range snap.Rows {
 		if r.Avg > maxAvg {

@@ -22,7 +22,7 @@ const (
 	// Table dimensions.
 	tableFunctionWidth = 50
 	tableCountWidth    = 8
-	tableDurationWidth = 10
+	tableDurationWidth = 13 // Wider to accommodate durations like "202.367ms" without truncation
 	tableHeight        = 20
 
 	// Display limits.
@@ -223,7 +223,7 @@ func newModel(heatModel *HeatModel, mode string, ctx context.Context) *model {
 		{Title: "Total", Width: tableDurationWidth},
 		{Title: "Avg", Width: tableDurationWidth},
 		{Title: "Max", Width: tableDurationWidth},
-		{Title: "P95", Width: tableCountWidth},
+		{Title: "P95", Width: tableDurationWidth},
 	}
 
 	t := table.New(
@@ -406,6 +406,17 @@ func (m *model) updatePerformanceData() {
 	m.table.SetRows(rows)
 }
 
+func (m *model) renderLegend() string {
+	legendStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("243")).
+		Padding(0, 2)
+
+	legend := legendStyle.Render(
+		"Count: # calls (incl. recursion) | Total: wall-clock (incl. children & recursion) | Avg: avg self-time | Max: max self-time | P95: 95th percentile self-time")
+
+	return legend
+}
+
 func (m *model) View() string {
 	if m.width == 0 {
 		return "Initializing..."
@@ -418,6 +429,10 @@ func (m *model) View() string {
 		fmt.Sprintf("Atmos Performance Results - %s Mode (Press 1-3 to switch modes, q/esc to quit)",
 			toTitle(m.visualMode)))
 	sections = append(sections, header)
+
+	// Legend.
+	legend := m.renderLegend()
+	sections = append(sections, legend)
 
 	// Visualization section.
 	visualization := m.renderVisualization()
