@@ -80,7 +80,13 @@ When implementing strict version pinning in Atmos:
 
 ### 1. Pin Versions Through Vendoring
 
-With strict version pinning, components are vendored at specific versions:
+With strict version pinning, components are vendored at specific versions using Atmos vendor manifests.
+
+:::tip Go Template Variables in Vendor Manifests
+Atmos vendor manifests support [Go template](https://pkg.go.dev/text/template) syntax. The template is executed with the source specification as context, giving you access to fields like `{{.Component}}`, `{{.Version}}`, `{{.Source}}`, etc. This allows you to write DRY configurations where values defined once can be reused in multiple places.
+
+In the example below, `{{.Version}}` references the `version: "v1.12.3"` field, so the source URL becomes `...?ref=v1.12.3` and the target path becomes `components/terraform/vpc/v1.12.3`.
+:::
 
 <File title="vendor.yaml">
 ```yaml
@@ -90,7 +96,7 @@ spec:
   sources:
     - component: vpc
       source: "github.com/acme/terraform-components.git//modules/vpc?ref={{.Version}}"
-      version: "v1.12.3"  # Strict pin for production
+      version: "v1.12.3"  # Strict pin - referenced by {{.Version}} in source and targets
       targets:
         - "components/terraform/vpc/{{.Version}}"
 ```

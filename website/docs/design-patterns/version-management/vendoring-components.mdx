@@ -130,6 +130,12 @@ Atmos provides built-in vendoring support through the `vendor.yaml` manifest and
 
 ### Basic Vendor Configuration
 
+:::tip Go Template Syntax in Vendor Manifests
+Atmos vendor manifests support [Go template](https://pkg.go.dev/text/template) syntax in `source` and `targets` fields. The template is executed with the source specification as the data context, allowing you to reference any field defined in that source entry (like `component`, `version`, `source`, etc.) using `{{.FieldName}}` syntax.
+
+This creates DRY (Don't Repeat Yourself) configurations where you define values once and reference them in multiple places. For example, `{{.Version}}` in the `source` URL will be replaced with the value from the `version` field.
+:::
+
 <File title="vendor.yaml">
 ```yaml
 # Vendor manifest for component management
@@ -145,7 +151,7 @@ spec:
     # Vendor a specific component version
     - component: vpc
       source: "github.com/cloudposse/terraform-aws-vpc.git///?ref={{.Version}}"
-      version: "2.1.0"
+      version: "2.1.0"  # Referenced by {{.Version}} in the source URL
       targets:
         - "components/terraform/vpc"
       included_paths:
