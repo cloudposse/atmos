@@ -192,7 +192,7 @@
     "file_path": "",
     "tools_dir": "",
     "tools_config_file": ""
-   }
+  },
   "auth": {
     "logs": {
       "file": "",
