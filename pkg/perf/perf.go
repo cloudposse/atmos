@@ -34,10 +34,10 @@ const (
 type Metric struct {
 	Name     string
 	Count    int64
-	Total    time.Duration           // Wall-clock time (includes children)
-	SelfTime time.Duration           // Actual work time (excludes children)
-	Max      time.Duration           // Max self-time (excludes children)
-	Hist     *hdrhistogram.Histogram // Histogram for self-time percentiles (optional, nil if disabled)
+	Total    time.Duration           // Wall-clock time (includes children).
+	SelfTime time.Duration           // Actual work time (excludes children).
+	Max      time.Duration           // Max self-time (excludes children).
+	Hist     *hdrhistogram.Histogram // Histogram for self-time percentiles (optional, nil if disabled).
 }
 
 // StackFrame represents a single frame in the call stack for tracking nested calls.
@@ -207,7 +207,7 @@ func (cs *CallStack) isEmpty() bool {
 func getGoroutineID() uint64 {
 	var buf [64]byte
 	n := runtime.Stack(buf[:], false)
-	// Stack trace format: "goroutine 123 [running]:\n..."
+	// Stack trace format: "goroutine 123 [running]:\n...".
 	// Extract the goroutine ID from the first line.
 	idField := bytes.Fields(buf[:n])[1]
 	id, _ := strconv.ParseUint(string(idField), decimalBase, uint64BitSize)
@@ -218,11 +218,11 @@ func getGoroutineID() uint64 {
 type Row struct {
 	Name     string
 	Count    int64
-	Total    time.Duration // Wall-clock time (includes children)
-	SelfTime time.Duration // Actual work time (excludes children)
-	Avg      time.Duration // Average self-time per call
-	Max      time.Duration // Max self-time (excludes children)
-	P95      time.Duration // 95th percentile of self-time (0 if HDR disabled)
+	Total    time.Duration // Wall-clock time (includes children).
+	SelfTime time.Duration // Actual work time (excludes children).
+	Avg      time.Duration // Average self-time per call.
+	Max      time.Duration // Max self-time (excludes children).
+	P95      time.Duration // 95th percentile of self-time (0 if HDR disabled).
 }
 
 type Snapshot struct {
@@ -314,7 +314,7 @@ func sortRows(rows []Row, by string) {
 	case "max":
 		sort.Slice(rows, func(i, j int) bool { return rows[i].Max > rows[j].Max })
 	default:
-		// Default to sorting by self-time (most meaningful for finding bottlenecks)
+		// Default to sorting by self-time (most meaningful for finding bottlenecks).
 		sort.Slice(rows, func(i, j int) bool { return rows[i].SelfTime > rows[j].SelfTime })
 	}
 }

@@ -115,8 +115,8 @@ func executeAffectedComponents(affectedList []schema.Affected, info *schema.Conf
 
 	for i := 0; i < len(affectedList); i++ {
 		affected := &affectedList[i]
-		// If the affected component is included in the dependencies of any other component, don't process it now;
-		// it will be processed in the dependency order.
+		// If the affected component is included in the dependencies of any other component, don't process it now.
+		// It will be processed in the dependency order.
 		if !affected.IncludedInDependents {
 			err = executeTerraformAffectedComponentInDepOrder(
 				info,
