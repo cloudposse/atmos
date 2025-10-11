@@ -103,6 +103,8 @@ var (
 	ErrAtmosFilesDirConfigNotFound = errors.New("`atmos.yaml` or `.atmos.yaml` configuration file not found in directory")
 
 	ErrMissingStack                       = errors.New("stack is required; specify it on the command line using the flag `--stack <stack>` (shorthand `-s`)")
+	ErrMissingComponent                   = errors.New("component is required; specify it on the command line")
+	ErrInvalidArguments                   = errors.New("invalid arguments")
 	ErrInvalidComponent                   = errors.New("invalid component")
 	ErrAbstractComponentCantBeProvisioned = errors.New("abstract component cannot be provisioned")
 	ErrLockedComponentCantBeProvisioned   = errors.New("locked component cannot be provisioned")

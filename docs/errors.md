@@ -212,7 +212,7 @@ fmt.Fprint(os.Stderr, formatted)
 
 Errors are formatted as structured markdown with hierarchical sections:
 
-```
+```text
 # Error
 
 workflow file not found

@@ -263,7 +263,10 @@ func preCustomCommand(
 		if len(args) > 0 {
 			sb.WriteString(fmt.Sprintf("\nReceived %d argument(s): %s\n", len(args), strings.Join(args, ", ")))
 		}
-		err := errUtils.WithExitCode(errors.New(sb.String()), 2)
+		err := errUtils.Build(errUtils.ErrInvalidArguments).
+			WithHint(sb.String()).
+			WithExitCode(2).
+			Err()
 		errUtils.CheckErrorPrintAndExit(err, "", "")
 	}
 
