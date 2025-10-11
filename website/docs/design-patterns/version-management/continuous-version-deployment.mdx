@@ -155,7 +155,15 @@ The key to this pattern is a robust deployment pipeline that validates changes p
 
 ## Decoupling Release from Deployment
 
-A core principle of this pattern is separating deployment (putting code in an environment) from release (making changes available to users). The industry has established that this decoupling increases speed and stability. As [LaunchDarkly emphasizes](https://launchdarkly.com/blog/why-decouple-deployments-from-releases/), "Decoupling deploy from release increases speed and stability when delivering software."
+A core principle of this pattern is separating deployment (putting code in an environment) from release (making changes available to users). The industry has established that this decoupling increases speed and stability.
+
+> Decoupling deploy from release increases speed and stability when delivering software.
+>
+> — [LaunchDarkly](https://launchdarkly.com/blog/why-decouple-deployments-from-releases/)
+
+> More-frequent deployments reduce the risk associated with change, while business stakeholders retain control over when features are released to end users.
+>
+> — [Thoughtworks Technology Radar](https://www.thoughtworks.com/radar/techniques/decoupling-deployment-from-release)
 
 While application teams often achieve this through runtime feature flags (LaunchDarkly, [Thoughtworks Feature Toggles](https://www.thoughtworks.com/radar/techniques/decoupling-deployment-from-release)), infrastructure-as-code benefits from a different approach:
 
@@ -168,6 +176,10 @@ While application teams often achieve this through runtime feature flags (Launch
 **Preview**: See the impact on ALL environments before releasing to ANY
 
 **Atmos's Key Advantage**: Unlike approaches requiring version pinning updates, you see the plan for every environment immediately after merge—dev, staging, AND production—without touching any configuration. This visibility enables informed decisions about release timing.
+
+> Knowing that deploying new code will not automatically trigger a release provides that safety net.
+>
+> — [LaunchDarkly](https://launchdarkly.com/blog/why-decouple-deployments-from-releases/)
 
 This decoupling is achieved through two separation mechanisms:
 

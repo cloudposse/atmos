@@ -237,6 +237,35 @@ components:
 </TabItem>
 </Tabs>
 
+:::tip Alternative: Stack-Level Base Path
+Instead of setting `metadata.component` with the track prefix on every component, you can set the stack-level `base_path` to apply the track prefix automatically to all components in that stack.
+
+<File title="stacks/prod/us-east-1.yaml">
+```yaml
+components:
+  terraform:
+    base_path: "components/terraform/prod"  # Stack-wide track prefix
+
+    vpc:
+      # Resolves to: prod/vpc (no metadata.component needed)
+      settings:
+        workspace_key_prefix: "prod/vpc"
+      vars:
+        name: "prod-use1-vpc"
+        cidr_block: "10.0.0.0/16"
+
+    rds:
+      # Resolves to: prod/rds (no metadata.component needed)
+      settings:
+        workspace_key_prefix: "prod/rds"
+      vars:
+        instance_class: "db.t3.large"
+```
+</File>
+
+**Trade-off**: This approach is more DRY (Don't Repeat Yourself) and keeps stack configurations cleaner, but it's less explicit—you must check the stack-level `base_path` setting to know which track components are using. The explicit `metadata.component` approach shown above makes the track immediately visible in each component configuration.
+:::
+
 ## Choosing Between Approaches
 
 The choice between **Tracks Per Component** and **Track-First Organization** depends on your operational model:
