@@ -238,6 +238,10 @@ func TestGetAffectedComponents(t *testing.T) {
 			if !tt.expectedError && len(result) == 0 && tt.expectedCount > 0 {
 				t.Skip("gomonkey function mocking failed (likely due to compiler optimizations or platform issues)")
 			}
+			// Check inverse case: expecting 0 items but got some (mock did not work, real function was called).
+			if !tt.expectedError && len(result) > 0 && tt.expectedCount == 0 {
+				t.Skipf("gomonkey function mocking failed - expected 0 components but got %d (real function was called)", len(result))
+			}
 
 			if tt.expectedError {
 				assert.Error(t, err)
@@ -724,6 +728,10 @@ func TestExecuteTerraformAffected(t *testing.T) {
 			// Check if gomonkey mocking is working.
 			if tt.skipIfMocked && !tt.expectedError && err != nil {
 				t.Skip("gomonkey function mocking failed (likely due to compiler optimizations or platform issues)")
+			}
+			// Check inverse case: expecting error but got nil (mock did not work, real function returned nil).
+			if tt.skipIfMocked && tt.expectedError && err == nil {
+				t.Skip("gomonkey function mocking failed - expected error but got nil (real function returned nil)")
 			}
 
 			if tt.expectedError {
