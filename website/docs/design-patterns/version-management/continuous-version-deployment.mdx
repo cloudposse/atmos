@@ -155,17 +155,32 @@ The key to this pattern is a robust deployment pipeline that validates changes p
 
 ## Decoupling Release from Deployment
 
-A core principle of this pattern is separating deployment (putting code in production) from release (making features available to users). The industry recognizes the value of deploying frequently while controlling when features become available through gates and configuration.
+A core principle of this pattern is separating deployment (putting code in an environment) from release (making changes available to users). The industry has established that this decoupling increases speed and stability. As [LaunchDarkly emphasizes](https://launchdarkly.com/blog/why-decouple-deployments-from-releases/), "Decoupling deploy from release increases speed and stability when delivering software."
 
-**Atmos's Key Value**: **Preview changes across all environments before committing to any**. When you merge to main, you immediately see the plan output for every environment—dev, staging, and production—without updating any version pins. This visibility enables informed decisions about progressive rollout.
+While application teams often achieve this through runtime feature flags (LaunchDarkly, [Thoughtworks Feature Toggles](https://www.thoughtworks.com/radar/techniques/decoupling-deployment-from-release)), infrastructure-as-code benefits from a different approach:
 
-This decoupling is achieved through two separation mechanisms in Atmos:
+**Atmos decouples through progressive deployment automation** - where CI/CD gates control when environments receive changes, and comprehensive plan previews enable informed release decisions.
+
+### How Atmos Achieves Decoupling
+
+**Deployment**: Merge to main declares intent to deploy everywhere
+**Release**: CI/CD gates control WHEN each environment actually gets the changes
+**Preview**: See the impact on ALL environments before releasing to ANY
+
+**Atmos's Key Advantage**: Unlike approaches requiring version pinning updates, you see the plan for every environment immediately after merge—dev, staging, AND production—without touching any configuration. This visibility enables informed decisions about release timing.
+
+This decoupling is achieved through two separation mechanisms:
 
 1. **Environmental Configuration Separation**: Stack configurations (stacks/dev/, stacks/staging/, stacks/prod/) provide environment-specific variables and settings, allowing the same component to behave differently per environment.
 
 2. **Component Version Separation**: The `metadata.component` path determines which component implementation to use, enabling environments to reference different versions through folder organization.
 
-The **primary mechanism** controlling when deployments are released to each environment is **CI/CD approval gates** (GitHub Actions, GitLab CI, etc.). These gates control the progression of deployments across environments through automated testing, manual approvals, and time-based holds.
+The **primary mechanism** controlling when deployments are released to each environment is **CI/CD approval gates** (GitHub Actions, GitLab CI, etc.). These gates control the progression of deployments across environments through automated testing, manual approvals, and time-based holds—more natural for infrastructure than runtime flags while achieving the same goal.
+
+| Approach | Mechanism | Decoupling Method | Best For |
+|----------|-----------|-------------------|----------|
+| **Feature Flags** (LaunchDarkly) | Runtime switches | Control feature visibility in deployed code | Application features with gradual rollout needs |
+| **Atmos** | CI/CD gates + automation | Control deployment timing across environments | Infrastructure changes with progressive validation |
 
 **Environment-specific configuration** (Terraform variables, Helm values) provides the most natural way to control infrastructure behavior per environment. While runtime feature flags can supplement this, they add complexity in infrastructure-as-code compared to application development, so they're best reserved for specific use cases rather than general practice.
 
