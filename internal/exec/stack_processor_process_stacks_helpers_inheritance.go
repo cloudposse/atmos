@@ -85,6 +85,11 @@ func processTopLevelComponentInheritance(opts *ComponentProcessorOptions, result
 func processMetadataInheritance(opts *ComponentProcessorOptions, result *ComponentProcessorResult, baseComponentConfig *schema.BaseComponentConfig, componentInheritanceChain *[]string) error {
 	defer perf.Track(opts.AtmosConfig, "exec.processMetadataInheritance")()
 
+	// Track whether metadata.component was explicitly set.
+	// metadata.component is a pointer to the physical terraform component directory.
+	// It is NOT inherited from base components - the metadata section is per-component.
+	metadataComponentExplicitlySet := false
+
 	// Check metadata.component.
 	if baseComponentFromMetadata, baseComponentFromMetadataExist := result.ComponentMetadata[cfg.ComponentSectionName]; baseComponentFromMetadataExist {
 		baseComponentName, ok := baseComponentFromMetadata.(string)
@@ -92,27 +97,35 @@ func processMetadataInheritance(opts *ComponentProcessorOptions, result *Compone
 			return fmt.Errorf("%w: 'components.%s.%s.metadata.component' in the file '%s'", errUtils.ErrInvalidComponentMetadataComponent, opts.ComponentType, opts.Component, opts.StackName)
 		}
 		result.BaseComponentName = baseComponentName
+		metadataComponentExplicitlySet = true
+	}
+
+	// Process metadata.inherits list (if it exists).
+	// metadata.inherits specifies which Atmos components to inherit configuration from (vars, settings, env, etc.).
+	inheritValue, inheritsKeyExists := result.ComponentMetadata[cfg.InheritsSectionName]
+	if inheritsKeyExists {
+		inheritList, ok := inheritValue.([]any)
+		if !ok {
+			return fmt.Errorf("%w: 'components.%s.%s.metadata.inherits' in the file '%s'", errUtils.ErrInvalidComponentMetadataInherits, opts.ComponentType, opts.Component, opts.StackName)
+		}
+
+		for _, v := range inheritList {
+			if err := processInheritedComponent(opts, result, baseComponentConfig, componentInheritanceChain, v); err != nil {
+				return err
+			}
+		}
+	}
+
+	// If metadata.component was not explicitly set, default to the component name itself.
+	// This should happen regardless of whether metadata.inherits exists or not.
+	// The metadata.component determines the physical terraform directory path.
+	// See: https://github.com/cloudposse/atmos/issues/1609
+	if !metadataComponentExplicitlySet {
+		result.BaseComponentName = opts.Component
 	}
 
 	if result.BaseComponentName != "" {
 		result.BaseComponents = append(result.BaseComponents, result.BaseComponentName)
-	}
-
-	// Process metadata.inherits list.
-	inheritValue, inheritsKeyExists := result.ComponentMetadata[cfg.InheritsSectionName]
-	if !inheritsKeyExists {
-		return nil
-	}
-
-	inheritList, ok := inheritValue.([]any)
-	if !ok {
-		return fmt.Errorf("%w: 'components.%s.%s.metadata.inherits' in the file '%s'", errUtils.ErrInvalidComponentMetadataInherits, opts.ComponentType, opts.Component, opts.StackName)
-	}
-
-	for _, v := range inheritList {
-		if err := processInheritedComponent(opts, result, baseComponentConfig, componentInheritanceChain, v); err != nil {
-			return err
-		}
 	}
 
 	return nil

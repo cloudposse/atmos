@@ -1,0 +1,57 @@
+package exec
+
+import (
+	"os"
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+// TestComponentInheritanceWithoutMetadataComponent tests that components with
+// metadata.inherits but no explicit metadata.component work correctly.
+// This is a regression test for https://github.com/cloudposse/atmos/issues/1609.
+func TestComponentInheritanceWithoutMetadataComponent(t *testing.T) {
+	workDir := "../../tests/fixtures/scenarios/component-inheritance-without-metadata-component"
+
+	// Save current directory and restore after test.
+	startingDir, err := os.Getwd()
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		_ = os.Chdir(startingDir)
+	})
+
+	// Change to the test directory.
+	err = os.Chdir(workDir)
+	require.NoError(t, err)
+
+	component := "derived-component"
+	stack := "test"
+
+	// Describe the component.
+	componentSection, err := ExecuteDescribeComponent(component, stack, false, false, []string{})
+	require.NoError(t, err, "ExecuteDescribeComponent should not fail for component with metadata.inherits but no metadata.component")
+
+	// Verify that the component section is not nil.
+	require.NotNil(t, componentSection, "Component section should not be nil")
+
+	// Extract key fields from the component section.
+	componentVars, ok := componentSection["vars"].(map[string]any)
+	require.True(t, ok, "Component vars should be a map")
+
+	// Verify that vars from both base and derived component are present.
+	assert.Equal(t, "derived-component", componentVars["name"], "Component name should be from derived component")
+	assert.Equal(t, "base-value", componentVars["base_var"], "Should inherit base_var from base-component")
+	assert.Equal(t, "derived-value", componentVars["derived_var"], "Should have derived_var from derived component")
+
+	// Verify component path is set correctly.
+	// When metadata.component is not set, it should default to the component name itself.
+	componentPath, ok := componentSection["component"].(string)
+	require.True(t, ok, "Component path should be a string")
+	assert.Equal(t, "derived-component", componentPath, "Component path should default to component name when metadata.component is not set")
+
+	// Verify inheritance chain includes the base component.
+	inheritance, ok := componentSection["inheritance"].([]string)
+	require.True(t, ok, "Inheritance should be a string array")
+	assert.Contains(t, inheritance, "base-component", "Inheritance chain should include base-component")
+}
