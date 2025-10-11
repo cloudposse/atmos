@@ -220,12 +220,21 @@ cat atmos.yaml | grep -A5 workflows
 - Context as tags
 - PII-safe reporting
 
+**What Gets Sent to Sentry**:
+
+Atmos only sends **command failures** to Sentry - errors that prevent a command from completing successfully and cause Atmos to exit with an error code.
+
+- **Sent**: Command failures, validation errors that prevent deployment, workflow execution failures, authentication errors, file system errors
+- **NOT sent**: Debug/trace logs, warnings, non-fatal errors that Atmos recovers from, successful commands (exit code 0)
+
 **Mapping**:
 - Error hints → Sentry breadcrumbs (category: "hint")
 - Safe details → Sentry tags (prefix: "error.")
 - Atmos context → Sentry tags (prefix: "atmos.")
 - Exit codes → Sentry tag "atmos.exit_code"
 - Stack traces → Full error chain
+
+This ensures Sentry focuses on actionable failures that affect users, without overwhelming it with internal logging or successful operations.
 
 ## Data Flow
 

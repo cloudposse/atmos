@@ -353,11 +353,29 @@ errUtils.CaptureErrorWithContext(err, context)
 
 ### What Gets Sent to Sentry
 
-1. **Hints** → Sentry breadcrumbs (category: "hint")
-2. **Safe details** → Sentry tags with `error.` prefix
-3. **Atmos context** → Sentry tags with `atmos.` prefix
-4. **Exit codes** → Sentry tag `atmos.exit_code`
-5. **Stack traces** → Full error chain with file/line information
+Atmos only sends **command failures** to Sentry - errors that prevent a command from completing successfully and cause Atmos to exit with an error code.
+
+**Errors sent to Sentry:**
+- Command failures (invalid arguments, missing configuration, component not found)
+- Stack validation errors that prevent deployment
+- Workflow execution failures
+- Authentication/authorization errors
+- File system errors (missing atmos.yaml, unreadable stack files)
+
+**Errors NOT sent to Sentry:**
+- Debug/trace log messages
+- Warnings (e.g., deprecated configuration options)
+- Non-fatal errors that Atmos recovers from
+- Successful commands (exit code 0)
+
+**Information included with each error:**
+1. **Error message and type** - What went wrong
+2. **Hints** → Sentry breadcrumbs to help debug the issue
+3. **Context** → Tags like component name, stack name, region (PII-safe)
+4. **Exit code** → Command exit code for automation
+5. **Stack traces** → Full error chain with file/line information for debugging
+
+This ensures Sentry focuses on actionable failures that affect users, without overwhelming it with internal logging or successful operations.
 
 ## Best Practices
 
