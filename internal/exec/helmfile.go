@@ -188,7 +188,7 @@ func ExecuteHelmfile(info schema.ConfigAndStacksInfo) error {
 	}
 
 	// Print command info.
-	log.Debug("\nCommand info:")
+	log.Debug("Command info:")
 	log.Debug("Helmfile binary: " + info.Command)
 	log.Debug("Helmfile command: " + info.SubCommand)
 
