@@ -545,7 +545,7 @@ func printMessageForMissingAtmosConfig(atmosConfig schema.AtmosConfiguration) {
 	// Check if we're in a git repo. Warn if not.
 	verifyInsideGitRepo()
 
-	// Build the error and print it with exit
+	// Build the error and print it with exit.
 	enrichedErr := buildMissingAtmosConfigError(&atmosConfig)
 	errUtils.CheckErrorPrintAndExit(enrichedErr, "", "")
 }

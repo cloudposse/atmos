@@ -146,7 +146,7 @@ workflows:
 Adds PII-safe structured context for programmatic access and error reporting.
 
 Context is:
-- **Displayed in verbose mode** as a styled table (`--verbose` flag or `ATMOS_LOGS_LEVEL=Debug`)
+- **Displayed in verbose mode** as a styled table (`--verbose` flag or `ATMOS_VERBOSE=1`)
 - **Sent to Sentry** automatically via `BuildSentryReport()`
 - **Programmatically accessible** via `errors.GetSafeDetails(err)`
 - **Included in verbose output** via `%+v` formatting

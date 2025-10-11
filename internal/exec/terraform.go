@@ -10,6 +10,7 @@ import (
 	"github.com/cockroachdb/errors"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/internal/tui/templates/term"
 	auth "github.com/cloudposse/atmos/pkg/auth"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	git "github.com/cloudposse/atmos/pkg/git"
@@ -585,9 +586,9 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 		}
 	}
 
-	// Check if the terraform command requires a user interaction,
-	// but it's running in a scripted environment (where a `tty` is not attached or `stdin` is not attached).
-	if os.Stdin == nil && !u.SliceContainsString(info.AdditionalArgsAndFlags, autoApproveFlag) {
+	// Check if interactive apply has a TTY on stdin; allow CI with -auto-approve.
+	// Terraform interactivity depends on stdin, not stderr.
+	if !term.IsTTYSupportForStdin() && !u.SliceContainsString(info.AdditionalArgsAndFlags, autoApproveFlag) {
 		if info.SubCommand == "apply" {
 			err := errUtils.Build(fmt.Errorf("%w: `terraform apply` requires user interaction, but no TTY is attached",
 				ErrNoTty,

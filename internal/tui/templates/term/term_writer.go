@@ -92,3 +92,12 @@ func IsTTYSupportForStderr() bool {
 	isTerminal := term.IsTerminal(fd)
 	return isTerminal
 }
+
+// IsTTYSupportForStdin checks if stdin supports TTY for interactive input.
+func IsTTYSupportForStdin() bool {
+	if os.Stdin == nil {
+		return false
+	}
+	fd := int(os.Stdin.Fd())
+	return term.IsTerminal(fd)
+}
