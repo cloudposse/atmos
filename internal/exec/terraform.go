@@ -10,7 +10,6 @@ import (
 	"github.com/cockroachdb/errors"
 
 	errUtils "github.com/cloudposse/atmos/errors"
-	"github.com/cloudposse/atmos/internal/tui/templates/term"
 	auth "github.com/cloudposse/atmos/pkg/auth"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	git "github.com/cloudposse/atmos/pkg/git"
@@ -583,25 +582,6 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 					}
 				}
 			}
-		}
-	}
-
-	// Check if interactive apply has a TTY on stdin; allow CI with -auto-approve.
-	// Terraform interactivity depends on stdin, not stderr.
-	if !term.IsTTYSupportForStdin() && !u.SliceContainsString(info.AdditionalArgsAndFlags, autoApproveFlag) {
-		if info.SubCommand == "apply" {
-			err := errUtils.Build(fmt.Errorf("%w: `terraform apply` requires user interaction, but no TTY is attached",
-				ErrNoTty,
-			)).
-				WithContext("component", info.Component).
-				WithContext("stack", info.Stack).
-				WithContext("subcommand", "apply").
-				WithHint("Use `terraform apply -auto-approve` to skip confirmation").
-				WithHint("Or use `atmos terraform deploy` which applies without confirmation").
-				WithHint("Running in CI/CD? Ensure your pipeline provides a TTY or uses `-auto-approve`").
-				WithExitCode(1).
-				Err()
-			return err
 		}
 	}
 
