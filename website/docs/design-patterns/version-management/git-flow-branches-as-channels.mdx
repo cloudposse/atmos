@@ -288,7 +288,7 @@ The pattern has significant trade-offs to consider:
 
 ## Best Practices
 
-- **Use Feature Flags for Long-Running Changes:** Combine branches with feature flags to enable gradual rollout and environment-specific behavior, allowing features to be toggled based on deployment channel without code changes.
+- **Use Configuration for Environment-Specific Behavior:** Use Terraform variables and environment-specific configuration to control behavior per channel. While runtime feature flags can help in application code, they're less natural in infrastructure-as-code and add operational complexity.
 
   <File title="components/terraform/vpc/variables.tf">
   ```hcl

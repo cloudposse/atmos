@@ -42,7 +42,7 @@ Instead of managing different versions per environment through Git branching, yo
 
 1. **Automated testing pipelines** to validate changes before they reach production
 2. **Progressive deployment strategies** to roll out commits incrementally across environments
-3. **Feature flags and configuration** to control behavior per environment
+3. **Environment-specific configuration** to control behavior per environment
 4. **CI/CD automation** to orchestrate the convergence process
 
 This approach aligns with modern DevOps practices and trunk-based development, where the main branch is always deployable and releases are controlled through automation. Environments naturally diverge during the rollout window (while the pipeline executes), then automatically converge once the deployment completes.
@@ -155,17 +155,11 @@ The key to this pattern is a robust deployment pipeline that validates changes p
 
 ## Decoupling Release from Deployment
 
-A core principle of this pattern is separating deployment (putting code in production) from release (making features available to users). As [ThoughtWorks explains](https://www.thoughtworks.com/radar/techniques/decoupling-deployment-from-release), "We can deploy changes to production systems more frequently without releasing features" using techniques like feature toggles and dark launches.
+A core principle of this pattern is separating deployment (putting code in production) from release (making features available to users). The industry recognizes the value of deploying frequently while controlling when features become available through gates and configuration.
 
-[LaunchDarkly emphasizes](https://launchdarkly.com/blog/why-decouple-deployments-from-releases/) that "Decoupling deploy from release increases speed and stability when delivering software." This approach enables:
+**Atmos's Key Value**: **Preview changes across all environments before committing to any**. When you merge to main, you immediately see the plan output for every environment—dev, staging, and production—without updating any version pins. This visibility enables informed decisions about progressive rollout.
 
-**Deployment at Developer Speed**: Code can be deployed to production whenever it's ready, without waiting for business approval to release features.
-
-**Release at Business Speed**: Product teams control when features become visible to users through configuration, independent of deployment cycles.
-
-**Faster Incident Response**: When issues arise, you can disable problematic features via configuration changes and redeploy, which is faster than reverting code. While not instant (redeployment is still required), preparing flag-disabled configurations in advance enables rapid response.
-
-This decoupling is achieved through two distinct separation mechanisms in Atmos:
+This decoupling is achieved through two separation mechanisms in Atmos:
 
 1. **Environmental Configuration Separation**: Stack configurations (stacks/dev/, stacks/staging/, stacks/prod/) provide environment-specific variables and settings, allowing the same component to behave differently per environment.
 
@@ -173,7 +167,7 @@ This decoupling is achieved through two distinct separation mechanisms in Atmos:
 
 The **primary mechanism** controlling when deployments are released to each environment is **CI/CD approval gates** (GitHub Actions, GitLab CI, etc.). These gates control the progression of deployments across environments through automated testing, manual approvals, and time-based holds.
 
-**Feature flags** are an optional supplementary technique for runtime behavior control within the same code, useful for gradual feature rollout or A/B testing within an environment—but they're not the primary mechanism for decoupling release from deployment across environments.
+**Environment-specific configuration** (Terraform variables, Helm values) provides the most natural way to control infrastructure behavior per environment. While runtime feature flags can supplement this, they add complexity in infrastructure-as-code compared to application development, so they're best reserved for specific use cases rather than general practice.
 
 ### Progressive Rollout Across Environments
 
@@ -379,7 +373,7 @@ Set up comprehensive CI/CD pipelines with:
 
 ### Step 3: Implement Safety Controls
 
-Use configuration and feature flags for safety:
+Use environment-specific configuration for safety:
 
 <File title="components/terraform/app/main.tf">
 ```hcl
@@ -767,7 +761,7 @@ Consider alternatives when:
 
 - **Comprehensive Testing:** Invest in thorough testing at each stage including unit tests (component-level), integration tests (cross-component), smoke tests (basic functionality), performance tests (load and scale), security scans (vulnerability assessment), and chaos testing (resilience validation).
 
-- **Rollback Considerations:** Rollbacks without a tracking mechanism to store the last commit for each environment are impractical. Modern DevOps practice favors **roll-forward** over rollback—fixing issues by deploying new code rather than reverting. When rollback is necessary: revert the problematic commit on main and re-run the pipeline to apply the previous state consistently across all environments. Feature flags provide faster incident response: disable the feature via configuration and redeploy (not instant, but faster than code rollback).
+- **Rollback Considerations:** Rollbacks without a tracking mechanism to store the last commit for each environment are impractical. Modern DevOps practice favors **roll-forward** over rollback—fixing issues by deploying new code rather than reverting. When rollback is necessary: revert the problematic commit on main and re-run the pipeline to apply the previous state consistently across all environments. Environment-specific configuration allows you to disable features per environment and redeploy if needed, though redeployment is still required.
 
 - **Environment Parity:** Keep environments as similar as possible by using inheritance for shared configuration and minimizing environment-specific overrides.
 
@@ -813,7 +807,7 @@ Consider alternatives when:
 **Solution**: Increase test coverage and implement better monitoring
 
 **Problem**: Changes break multiple environments
-**Solution**: Add environment-specific validation and use feature flags
+**Solution**: Add environment-specific validation and configuration to control behavior per environment
 
 **Problem**: Rollback is difficult
 **Solution**: Automate rollback procedures and practice them regularly
