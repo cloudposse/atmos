@@ -14,6 +14,9 @@ import (
 )
 
 func TestDescribeAffectedWithTargetRefClone(t *testing.T) {
+	// Skip long tests in short mode (this test takes ~36 seconds due to Git cloning)
+	tests.SkipIfShort(t)
+
 	// Check for Git repository with valid remotes and GitHub access (for cloning)
 	tests.RequireGitRemoteWithValidURL(t)
 	tests.RequireGitHubAccess(t)

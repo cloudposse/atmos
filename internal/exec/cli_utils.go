@@ -5,14 +5,13 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/cloudposse/atmos/pkg/perf"
-
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/filetype"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -63,6 +62,7 @@ var commonFlags = []string{
 	cfg.AllFlag,
 	cfg.InitPassVars,
 	cfg.PlanSkipPlanfile,
+	cfg.IdentityFlag,
 }
 
 // ProcessCommandLineArgs processes command-line args.
@@ -137,6 +137,7 @@ func ProcessCommandLineArgs(
 	configAndStacksInfo.LogsFile = argsAndFlagsInfo.LogsFile
 	configAndStacksInfo.SettingsListMergeStrategy = argsAndFlagsInfo.SettingsListMergeStrategy
 	configAndStacksInfo.Query = argsAndFlagsInfo.Query
+	configAndStacksInfo.Identity = argsAndFlagsInfo.Identity
 	configAndStacksInfo.Affected = argsAndFlagsInfo.Affected
 	configAndStacksInfo.All = argsAndFlagsInfo.All
 	configAndStacksInfo.PackerDir = argsAndFlagsInfo.PackerDir
@@ -516,6 +517,19 @@ func processArgsAndFlags(
 				return info, fmt.Errorf(errFlagFormat, errUtils.ErrInvalidFlag, arg)
 			}
 			info.Query = parts[1]
+		}
+
+		if arg == cfg.IdentityFlag {
+			if len(inputArgsAndFlags) <= (i + 1) {
+				return info, fmt.Errorf("%w: %s", errUtils.ErrInvalidFlag, arg)
+			}
+			info.Identity = inputArgsAndFlags[i+1]
+		} else if strings.HasPrefix(arg+"=", cfg.IdentityFlag) {
+			parts := strings.Split(arg, "=")
+			if len(parts) != 2 {
+				return info, fmt.Errorf("%w: %s", errUtils.ErrInvalidFlag, arg)
+			}
+			info.Identity = parts[1]
 		}
 
 		if arg == cfg.FromPlanFlag {

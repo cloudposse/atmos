@@ -91,9 +91,14 @@ func TestIsWorkspacesEnabled(t *testing.T) {
 }
 
 func TestExecuteTerraformAffectedWithDependents(t *testing.T) {
+	// Skip long tests in short mode (this test takes ~26 seconds due to Git operations and Terraform execution)
+	tests.SkipIfShort(t)
+
 	// Check for valid Git remote URL before running test
 	tests.RequireGitRemoteWithValidURL(t)
 
+	// Check if terraform is installed
+	tests.RequireExecutable(t, "terraform", "running Terraform affected tests")
 	os.Unsetenv("ATMOS_BASE_PATH")
 	os.Unsetenv("ATMOS_CLI_CONFIG_PATH")
 
@@ -147,11 +152,14 @@ func TestExecuteTerraformAffectedWithDependents(t *testing.T) {
 		t.Fatalf("Failed to execute 'ExecuteTerraformAffected': %v", err)
 	}
 
-	w.Close()
+	err = w.Close()
+	assert.NoError(t, err)
 	os.Stderr = oldStd
 }
 
 func TestExecuteTerraformQuery(t *testing.T) {
+	// Check if terraform is installed
+	tests.RequireExecutable(t, "terraform", "running Terraform query tests")
 	os.Unsetenv("ATMOS_BASE_PATH")
 	os.Unsetenv("ATMOS_CLI_CONFIG_PATH")
 
@@ -193,7 +201,8 @@ func TestExecuteTerraformQuery(t *testing.T) {
 		t.Fatalf("Failed to execute 'ExecuteTerraformQuery': %v", err)
 	}
 
-	w.Close()
+	err = w.Close()
+	assert.NoError(t, err)
 	os.Stderr = oldStd
 }
 

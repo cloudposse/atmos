@@ -1,4 +1,6 @@
 DEBU Set logs-level=debug logs-file=/dev/stderr
+
+**Notice:** Telemetry Enabled - Atmos now collects anonymous telemetry regarding usage. This information is used to shape the Atmos roadmap and prioritize features. You can learn more, including how to opt out if you'd prefer not to participate in this anonymous program, by visiting: https://atmos.tools/cli/telemetry
 DEBU Vendor config file not found file=vendor
 DEBU No TTY detected. Falling back to basic output. This can happen when no terminal is attached or when commands are pipelined.
 DEBU CustomGitDetector.Detect called

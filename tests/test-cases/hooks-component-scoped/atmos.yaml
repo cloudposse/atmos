@@ -1,0 +1,30 @@
+base_path: "./"
+
+components:
+  terraform:
+    base_path: "components/terraform"
+
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "**/*"
+  excluded_paths:
+    - "catalog/**"
+  name_pattern: "{tenant}-{environment}-{stage}"
+
+# Stores configuration removed to avoid AWS initialization in test
+# stores:
+#   prod/ssm:
+#     type: aws-ssm-parameter-store
+#     options:
+#       region: us-east-1
+
+schemas: {}
+
+logs:
+  level: Info
+
+settings:
+  terminal:
+    pager:
+      enabled: false

@@ -12,9 +12,13 @@ tests:
     args:
       - "list"
       - "instances"
+    env:
+      # NOTE: TTY mode uses .tty.golden snapshot containing combined stdout+stderr.
+      # Disable telemetry to keep snapshot focused on table output only.
+      ATMOS_TELEMETRY_ENABLED: "false"
     expect:
       exit_code: 0
-      stdout:
+      tty:
         - "Component.*Stack"
         - "mock/disabled.*nonprod"
         - "mock/drift.*nonprod"

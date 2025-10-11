@@ -67,9 +67,9 @@ func isEnvVarTrue(key string) bool {
 	return isEnvVarEquals(key, "true")
 }
 
-// isCI determines if the current environment is a CI/CD environment.
+// IsCI determines if the current environment is a CI/CD environment.
 // Returns true if CI=true or if a specific CI provider is detected.
-func isCI() bool {
+func IsCI() bool {
 	return isEnvVarTrue(ciEnvVar) || ciProvider() != ""
 }
 
@@ -87,15 +87,15 @@ func PreserveCIEnvVars() map[string]string {
 	// Initialize map to store original environment variable values
 	envVars := make(map[string]string)
 
-	// Preserve and unset CI provider variables that are detected by existence
-	for key := range ciProvidersEnvVarsExists {
-		if isEnvVarExists(key) {
-			envVars[key] = os.Getenv(key)
-			os.Unsetenv(key)
+	// Preserve and unset CI provider variables that are detected by existence.
+	for _, envVar := range ciProvidersEnvVarsExists {
+		if isEnvVarExists(envVar) {
+			envVars[envVar] = os.Getenv(envVar) //nolint:forbidigo // Legitimate use for CI env preservation
+			os.Unsetenv(envVar)
 		}
 	}
 
-	// Preserve and unset CI provider variables that are detected by specific values
+	// Preserve and unset CI provider variables that are detected by specific values.
 	for _, values := range ciProvidersEnvVarsEquals {
 		for valueKey := range values {
 			if isEnvVarExists(valueKey) {
@@ -105,7 +105,7 @@ func PreserveCIEnvVars() map[string]string {
 		}
 	}
 
-	// Preserve and unset the general CI environment variable
+	// Preserve and unset the general CI environment variable.
 	if isEnvVarExists(ciEnvVar) {
 		envVars[ciEnvVar] = os.Getenv(ciEnvVar)
 		os.Unsetenv(ciEnvVar)

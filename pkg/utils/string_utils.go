@@ -2,6 +2,7 @@ package utils
 
 import (
 	"encoding/csv"
+	"errors"
 	"strings"
 
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -28,24 +29,63 @@ func UniqueStrings(input []string) []string {
 func SplitStringByDelimiter(str string, delimiter rune) ([]string, error) {
 	defer perf.Track(nil, "utils.SplitStringByDelimiter")()
 
-	r := csv.NewReader(strings.NewReader(str))
-	r.Comma = delimiter
-	r.TrimLeadingSpace = true // Trim leading spaces in fields
+	read := func(lazy bool) ([]string, error) {
+		r := csv.NewReader(strings.NewReader(str))
+		r.Comma = delimiter
+		r.TrimLeadingSpace = true // Trim leading spaces in fields.
+		r.LazyQuotes = lazy
+		return r.Read()
+	}
 
-	parts, err := r.Read()
+	parts, err := read(false)
+	if err != nil {
+		var parseErr *csv.ParseError
+		if errors.As(err, &parseErr) && errors.Is(parseErr.Err, csv.ErrBareQuote) {
+			parts, err = read(true)
+		}
+	}
 	if err != nil {
 		return nil, err
 	}
 
-	// Remove empty strings caused by multiple spaces
+	// Remove empty strings caused by multiple spaces and trim matching quotes.
 	filteredParts := make([]string, 0, len(parts))
 	for _, part := range parts {
-		if part != "" {
-			filteredParts = append(filteredParts, part)
+		trimmed := trimMatchingQuotes(part)
+		if trimmed == "" {
+			continue
 		}
+		filteredParts = append(filteredParts, trimmed)
 	}
 
 	return filteredParts, nil
+}
+
+// trimMatchingQuotes removes matching leading and trailing quote characters and normalizes any escaped quotes within the value.
+func trimMatchingQuotes(value string) string {
+	if len(value) < 2 {
+		return value
+	}
+
+	first := value[0]
+	if first != '\'' && first != '"' {
+		return value
+	}
+
+	if value[len(value)-1] != first {
+		return value
+	}
+
+	inner := value[1 : len(value)-1]
+
+	switch first {
+	case '\'':
+		inner = strings.ReplaceAll(inner, "''", "'")
+	case '"':
+		inner = strings.ReplaceAll(inner, "\"\"", "\"")
+	}
+
+	return inner
 }
 
 // SplitStringAtFirstOccurrence splits a string into two parts at the first occurrence of the separator

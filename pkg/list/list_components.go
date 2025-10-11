@@ -1,36 +1,22 @@
 package list
 
 import (
-	"errors"
 	"fmt"
 	"sort"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/samber/lo"
-)
-
-// Error definitions for component listing.
-var (
-	// ErrParseStacks is returned when stack data cannot be parsed.
-	ErrParseStacks = errors.New("could not parse stacks")
-	// ErrParseComponents is returned when component data cannot be parsed.
-	ErrParseComponents = errors.New("could not parse components")
-	// ErrNoComponentsFound is returned when no components are found.
-	ErrNoComponentsFound = errors.New("no components found")
-	// ErrStackNotFound is returned when a requested stack is not found.
-	ErrStackNotFound = errors.New("stack not found")
-	// ErrProcessStack is returned when there's an error processing a stack.
-	ErrProcessStack = errors.New("error processing stack")
 )
 
 func getStackComponents(stackData any) ([]string, error) {
 	stackMap, ok := stackData.(map[string]any)
 	if !ok {
-		return nil, ErrParseStacks
+		return nil, errUtils.ErrParseStacks
 	}
 
 	componentsMap, ok := stackMap["components"].(map[string]any)
 	if !ok {
-		return nil, ErrParseComponents
+		return nil, errUtils.ErrParseComponents
 	}
 
 	var allComponents []string
@@ -52,7 +38,7 @@ func getStackComponents(stackData any) ([]string, error) {
 
 	// If no components found, return an error
 	if len(allComponents) == 0 {
-		return nil, ErrNoComponentsFound
+		return nil, errUtils.ErrNoComponentsFound
 	}
 
 	return allComponents, nil
@@ -63,13 +49,13 @@ func getComponentsForSpecificStack(stackName string, stacksMap map[string]any) (
 	// Verify stack exists.
 	stackData, ok := stacksMap[stackName]
 	if !ok {
-		return nil, fmt.Errorf("%w: %s", ErrStackNotFound, stackName)
+		return nil, fmt.Errorf("%w: %s", errUtils.ErrStackNotFound, stackName)
 	}
 
 	// Get components for the specific stack.
 	stackComponents, err := getStackComponents(stackData)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %s: %v", ErrProcessStack, stackName, err)
+		return nil, fmt.Errorf("%w: %s: %w", errUtils.ErrProcessStack, stackName, err)
 	}
 
 	return stackComponents, nil
@@ -92,7 +78,7 @@ func processAllStacks(stacksMap map[string]any) []string {
 func FilterAndListComponents(stackFlag string, stacksMap map[string]any) ([]string, error) {
 	var components []string
 	if stacksMap == nil {
-		return nil, fmt.Errorf("%w: %s", ErrStackNotFound, stackFlag)
+		return nil, fmt.Errorf("%w: %s", errUtils.ErrStackNotFound, stackFlag)
 	}
 
 	// Handle specific stack case.

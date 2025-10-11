@@ -54,6 +54,19 @@ func processTagTerraformOutput(
 		errUtils.CheckErrorPrintAndExit(er, "", "")
 	}
 
-	value := GetTerraformOutput(atmosConfig, stack, component, output, false)
+	value, exists, err := GetTerraformOutput(atmosConfig, stack, component, output, false)
+	if err != nil {
+		er := fmt.Errorf("failed to get terraform output for component %s in stack %s, output %s: %w", component, stack, output, err)
+		errUtils.CheckErrorPrintAndExit(er, "", "")
+	}
+
+	// If the output doesn't exist, return nil (backward compatible).
+	// This allows YAML functions to reference outputs that don't exist yet.
+	// Use yq fallback syntax (.output // "default") for default values.
+	if !exists {
+		return nil
+	}
+
+	// value may be nil here if the terraform output is legitimately null, which is valid.
 	return value
 }

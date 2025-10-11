@@ -192,6 +192,14 @@
     "file_path": "",
     "tools_dir": "",
     "tools_config_file": ""
+   }
+  "auth": {
+    "logs": {
+      "file": "",
+      "level": ""
+    },
+    "providers": null,
+    "identities": null
   },
   "profiler": {
     "enabled": false,

@@ -7,8 +7,13 @@ Smoke tests are implemented to verify the basic functionality and expected behav
 ## Quick Start
 
 ```bash
-# Run all tests (will skip if preconditions not met)
+# Run quick tests only (skip long-running tests >2s)
+go test -short ./...
+make test-short
+
+# Run all tests including long-running ones (will skip if preconditions not met)
 go test ./...
+make testacc
 
 # Run with verbose output to see skips
 go test -v ./...
@@ -16,9 +21,26 @@ go test -v ./...
 # Bypass all precondition checks
 export ATMOS_TEST_SKIP_PRECONDITION_CHECKS=true
 go test ./...
+```
 
-# Run tests with make
-make test
+## Short Mode
+
+Run quick tests only, skipping tests that take more than 2 seconds:
+
+```bash
+go test -short ./...
+make test-short
+```
+
+Long tests include:
+- Network I/O (vendor pulls, OCI registry)
+- Git operations (cloning, checkouts)
+- Heavy processing (Atlantis config generation)
+
+To run all tests including long ones:
+```bash
+go test ./...
+make testacc
 ```
 
 ## Understanding Test Skips
@@ -86,8 +108,9 @@ export ATMOS_GITHUB_TOKEN=<your-token>
 │   │   └── relative-paths/                          # Test configurations for relative imports
 │   └── schemas/                                     # Schemas used for JSON validation
 ├── snapshots/                                       # Golden snapshots (what we expect output to look like)
-│   ├── TestCLICommands.stderr.golden
-│   └── TestCLICommands_which_atmos.stdout.golden
+│   ├── TestCLICommands.stderr.golden                # stderr snapshot for non-TTY test
+│   ├── TestCLICommands_which_atmos.stdout.golden    # stdout snapshot for non-TTY test
+│   └── TestCLICommands_atmos_list.tty.golden        # Combined snapshot for TTY test
 └── test-cases/
     ├── complete.yaml
     ├── core.yaml
@@ -189,6 +212,57 @@ See [Testing Strategy PRD](../docs/prd/testing-strategy.md) for the complete des
 
 Our convention is to implement a test-case configuration file per scenario. Then place all smoke tests related to that scenario in the file.
 
+### Snapshot Files
+
+The test framework uses three types of snapshot files to capture expected output:
+
+#### 1. `.stdout.golden` - Standard Output (Non-TTY)
+Used when `tty: false`. Contains only stdout data (results meant for piping, JSON output, CSV data).
+
+**Example**: `TestCLICommands_atmos_list_components.stdout.golden`
+
+#### 2. `.stderr.golden` - Standard Error (Non-TTY)
+Used when `tty: false`. Contains only stderr data (UI messages, warnings, progress indicators).
+
+**Example**: `TestCLICommands_atmos_list_components.stderr.golden`
+
+#### 3. `.tty.golden` - TTY Output (Combined)
+Used when `tty: true`. Contains **both stdout and stderr merged** as they appear in a real terminal.
+
+**Example**: `TestCLICommands_atmos_list_components.tty.golden`
+
+#### Why Different Snapshot Types?
+
+**PTY/TTY Behavior**: When `tty: true`, the test uses a pseudo-terminal (PTY) that **merges stderr and stdout into a single stream**. This mimics how real terminals work - there's no separate "stderr screen" and "stdout screen". Everything appears on the same display.
+
+**Non-TTY Behavior**: When `tty: false`, the test uses standard pipes where stdout and stderr remain separate. This enables proper piping and redirection (e.g., `atmos list components | jq`).
+
+#### Example Test Configuration
+
+```yaml
+tests:
+  # TTY mode: single .tty.golden file
+  - name: atmos list instances
+    tty: true                         # Uses PTY (combines streams)
+    snapshot: true
+    # Creates: TestCLICommands_atmos_list_instances.tty.golden
+    # Contains: telemetry notices (stderr) + table output (stdout)
+
+  # Non-TTY mode: separate .stdout.golden and .stderr.golden files
+  - name: atmos list instances no tty
+    tty: false                        # Uses pipes (keeps streams separate)
+    snapshot: true
+    # Creates: TestCLICommands_atmos_list_instances_no_tty.stdout.golden
+    #          TestCLICommands_atmos_list_instances_no_tty.stderr.golden
+```
+
+#### Important Notes
+
+- **TTY tests** only create `.tty.golden` (no `.stdout.golden` or `.stderr.golden`)
+- **Non-TTY tests** create both `.stdout.golden` and `.stderr.golden` (no `.tty.golden`)
+- The snapshot type is automatically determined by the `tty:` flag in the test case
+- When regenerating snapshots, old files from the wrong type are **not** automatically deleted
+
 ### Environment Variables
 
 The tests will automatically set some environment variables:
@@ -225,6 +299,29 @@ After generating new golden snapshots, don't forget to add them.
 ```shell
 git add tests/snapshots/*
 ```
+
+### Line Ending Normalization
+
+Golden snapshots always use Unix line endings (LF: `\n`) regardless of the platform they're generated on. The test infrastructure automatically normalizes line endings to ensure cross-platform consistency:
+
+- **CRLF (`\r\n`)** is converted to **LF (`\n`)** when writing and comparing snapshots
+- **Standalone CR (`\r`)** characters are preserved for spinner and progress indicator output
+- This ensures developers on Windows, macOS, and Linux see consistent test results
+
+**What gets normalized:**
+- Windows line endings: `"line1\r\nline2\r\n"` → `"line1\nline2\n"`
+- Mixed endings: `"line1\r\nline2\n"` → `"line1\nline2\n"`
+
+**What stays the same:**
+- Unix line endings: `"line1\nline2\n"` → `"line1\nline2\n"` (unchanged)
+- Spinner output: `"Progress\rDone\r"` → `"Progress\rDone\r"` (preserved)
+
+This normalization happens automatically in:
+- `updateSnapshot()` - when writing snapshots
+- `readSnapshot()` - when reading snapshots
+- `verifySnapshot()` - when comparing actual output to snapshots
+
+See `tests/cli_snapshot_test.go` for comprehensive tests of this behavior.
 
 ### Example Configuration
 

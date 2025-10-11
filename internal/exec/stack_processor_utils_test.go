@@ -107,7 +107,7 @@ func TestProcessBaseComponentConfig(t *testing.T) {
 			component:     "test",
 			stack:         "test-stack",
 			baseComponent: "base",
-			expectedError: "invalid config for the base component",
+			expectedError: "invalid base component config",
 		},
 	}
 
@@ -860,4 +860,116 @@ func TestProcessYAMLConfigFiles(t *testing.T) {
 
 	// Verify rawStackConfigs contains the expected stack names
 	assert.Equal(t, len(filePaths), len(rawStackConfigs))
+}
+
+func TestSectionContainsAnyNotEmptySections(t *testing.T) {
+	tests := []struct {
+		name            string
+		section         map[string]any
+		sectionsToCheck []string
+		expected        bool
+	}{
+		{
+			name:            "empty section and empty check list",
+			section:         map[string]any{},
+			sectionsToCheck: []string{},
+			expected:        false,
+		},
+		{
+			name:            "empty section with check list",
+			section:         map[string]any{},
+			sectionsToCheck: []string{"vars", "settings"},
+			expected:        false,
+		},
+		{
+			name: "section with empty map value",
+			section: map[string]any{
+				"vars": map[string]any{},
+			},
+			sectionsToCheck: []string{"vars"},
+			expected:        false,
+		},
+		{
+			name: "section with non-empty map value",
+			section: map[string]any{
+				"vars": map[string]any{
+					"key": "value",
+				},
+			},
+			sectionsToCheck: []string{"vars"},
+			expected:        true,
+		},
+		{
+			name: "section with empty string value",
+			section: map[string]any{
+				"backend_type": "",
+			},
+			sectionsToCheck: []string{"backend_type"},
+			expected:        false,
+		},
+		{
+			name: "section with non-empty string value",
+			section: map[string]any{
+				"backend_type": "s3",
+			},
+			sectionsToCheck: []string{"backend_type"},
+			expected:        true,
+		},
+		{
+			name: "multiple sections - first empty, second has value",
+			section: map[string]any{
+				"vars":     map[string]any{},
+				"settings": map[string]any{"key": "value"},
+			},
+			sectionsToCheck: []string{"vars", "settings"},
+			expected:        true,
+		},
+		{
+			name: "check non-existent section",
+			section: map[string]any{
+				"vars": map[string]any{"key": "value"},
+			},
+			sectionsToCheck: []string{"non_existent"},
+			expected:        false,
+		},
+		{
+			name: "section with nil value",
+			section: map[string]any{
+				"vars": nil,
+			},
+			sectionsToCheck: []string{"vars"},
+			expected:        false,
+		},
+		{
+			name: "section with non-map non-string value",
+			section: map[string]any{
+				"count": 42,
+			},
+			sectionsToCheck: []string{"count"},
+			expected:        false,
+		},
+		{
+			name: "empty string in sectionsToCheck should be ignored",
+			section: map[string]any{
+				"vars": map[string]any{"key": "value"},
+			},
+			sectionsToCheck: []string{"", "vars"},
+			expected:        true,
+		},
+		{
+			name: "only empty strings in sectionsToCheck",
+			section: map[string]any{
+				"vars": map[string]any{"key": "value"},
+			},
+			sectionsToCheck: []string{"", ""},
+			expected:        false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := sectionContainsAnyNotEmptySections(tt.section, tt.sectionsToCheck)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
 }

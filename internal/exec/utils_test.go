@@ -20,6 +20,7 @@ func TestPostProcessTemplatesAndYamlFunctions(t *testing.T) {
 			input: schema.ConfigAndStacksInfo{
 				ComponentSection: map[string]any{
 					cfg.ProvidersSectionName:   map[string]any{"aws": map[string]any{"region": "us-west-2"}},
+					cfg.AuthSectionName:        map[string]interface{}{"providers": map[string]schema.Provider{"aws": {Region: "us-west-2"}}},
 					cfg.VarsSectionName:        map[string]any{"environment": "dev"},
 					cfg.SettingsSectionName:    map[string]any{"enabled": true},
 					cfg.EnvSectionName:         map[string]any{"DB_PASSWORD": "secret"},
@@ -34,6 +35,7 @@ func TestPostProcessTemplatesAndYamlFunctions(t *testing.T) {
 			},
 			expected: schema.ConfigAndStacksInfo{
 				ComponentProvidersSection: map[string]any{"aws": map[string]any{"region": "us-west-2"}},
+				ComponentAuthSection:      schema.AtmosSectionMapType{"providers": map[string]schema.Provider{"aws": {Region: "us-west-2"}}},
 				ComponentVarsSection:      map[string]any{"environment": "dev"},
 				ComponentSettingsSection:  map[string]any{"enabled": true},
 				ComponentEnvSection:       map[string]any{"DB_PASSWORD": "secret"},
@@ -82,6 +84,7 @@ func TestPostProcessTemplatesAndYamlFunctions(t *testing.T) {
 
 			// Compare each expected field individually for better error messages
 			assert.Equal(t, tt.expected.ComponentProvidersSection, input.ComponentProvidersSection, "ComponentProvidersSection mismatch")
+			assert.Equal(t, tt.expected.ComponentAuthSection, input.ComponentAuthSection, "ComponentAuthSection mismatch")
 			assert.Equal(t, tt.expected.ComponentVarsSection, input.ComponentVarsSection, "ComponentVarsSection mismatch")
 			assert.Equal(t, tt.expected.ComponentSettingsSection, input.ComponentSettingsSection, "ComponentSettingsSection mismatch")
 			assert.Equal(t, tt.expected.ComponentEnvSection, input.ComponentEnvSection, "ComponentEnvSection mismatch")
@@ -92,6 +95,258 @@ func TestPostProcessTemplatesAndYamlFunctions(t *testing.T) {
 			assert.Equal(t, tt.expected.Component, input.Component, "Component mismatch")
 			assert.Equal(t, tt.expected.Command, input.Command, "Command mismatch")
 			assert.Equal(t, tt.expected.TerraformWorkspace, input.TerraformWorkspace, "TerraformWorkspace mismatch")
+		})
+	}
+}
+
+func TestGenerateComponentProviderOverrides(t *testing.T) {
+	tests := []struct {
+		name              string
+		providerOverrides map[string]any
+		expected          map[string]any
+	}{
+		{
+			name: "single-provider",
+			providerOverrides: map[string]any{
+				"aws": map[string]any{
+					"region": "us-west-2",
+					"alias":  "west",
+				},
+			},
+			expected: map[string]any{
+				"provider": map[string]any{
+					"aws": map[string]any{
+						"region": "us-west-2",
+						"alias":  "west",
+					},
+				},
+			},
+		},
+		{
+			name: "multiple-providers",
+			providerOverrides: map[string]any{
+				"aws": map[string]any{
+					"region": "us-east-1",
+				},
+				"google": map[string]any{
+					"project": "my-project",
+					"region":  "us-central1",
+				},
+			},
+			expected: map[string]any{
+				"provider": map[string]any{
+					"aws": map[string]any{
+						"region": "us-east-1",
+					},
+					"google": map[string]any{
+						"project": "my-project",
+						"region":  "us-central1",
+					},
+				},
+			},
+		},
+		{
+			name:              "empty-overrides",
+			providerOverrides: map[string]any{},
+			expected: map[string]any{
+				"provider": map[string]any{},
+			},
+		},
+		{
+			name:              "nil-overrides",
+			providerOverrides: nil,
+			expected: map[string]any{
+				"provider": map[string]any(nil),
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := generateComponentProviderOverrides(tt.providerOverrides)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestGenerateComponentBackendConfig(t *testing.T) {
+	tests := []struct {
+		name               string
+		backendType        string
+		backendConfig      map[string]any
+		terraformWorkspace string
+		expected           map[string]any
+		expectError        bool
+	}{
+		{
+			name:        "s3-backend",
+			backendType: "s3",
+			backendConfig: map[string]any{
+				"bucket":  "my-bucket",
+				"key":     "terraform.tfstate",
+				"region":  "us-west-2",
+				"encrypt": true,
+			},
+			terraformWorkspace: "dev",
+			expected: map[string]any{
+				"terraform": map[string]any{
+					"backend": map[string]any{
+						"s3": map[string]any{
+							"bucket":  "my-bucket",
+							"key":     "terraform.tfstate",
+							"region":  "us-west-2",
+							"encrypt": true,
+						},
+					},
+				},
+			},
+		},
+		{
+			name:        "cloud-backend-with-workspace",
+			backendType: "cloud",
+			backendConfig: map[string]any{
+				"organization": "my-org",
+				"workspaces": map[string]any{
+					"name": "{terraform_workspace}-app",
+				},
+			},
+			terraformWorkspace: "staging",
+			expected: map[string]any{
+				"terraform": map[string]any{
+					"cloud": map[string]any{
+						"organization": "my-org",
+						"workspaces": map[string]any{
+							"name": "staging-app",
+						},
+					},
+				},
+			},
+		},
+		{
+			name:        "cloud-backend-without-workspace",
+			backendType: "cloud",
+			backendConfig: map[string]any{
+				"organization": "my-org",
+				"workspaces": map[string]any{
+					"name": "my-workspace",
+				},
+			},
+			terraformWorkspace: "",
+			expected: map[string]any{
+				"terraform": map[string]any{
+					"cloud": map[string]any{
+						"organization": "my-org",
+						"workspaces": map[string]any{
+							"name": "my-workspace",
+						},
+					},
+				},
+			},
+		},
+		{
+			name:               "local-backend",
+			backendType:        "local",
+			backendConfig:      map[string]any{"path": "terraform.tfstate"},
+			terraformWorkspace: "dev",
+			expected: map[string]any{
+				"terraform": map[string]any{
+					"backend": map[string]any{
+						"local": map[string]any{"path": "terraform.tfstate"},
+					},
+				},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := generateComponentBackendConfig(tt.backendType, tt.backendConfig, tt.terraformWorkspace)
+
+			if tt.expectError {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+				assert.Equal(t, tt.expected, result)
+			}
+		})
+	}
+}
+
+func TestFindComponentDependencies(t *testing.T) {
+	tests := []struct {
+		name         string
+		currentStack string
+		sources      schema.ConfigSources
+		expectedDeps []string
+		expectedAll  []string
+	}{
+		{
+			name:         "single-dependency",
+			currentStack: "stack1.yaml",
+			sources: schema.ConfigSources{
+				"vars": map[string]schema.ConfigSourcesItem{
+					"key1": {
+						StackDependencies: schema.ConfigSourcesStackDependencies{
+							{StackFile: "base.yaml"},
+						},
+					},
+				},
+			},
+			expectedDeps: []string{"base.yaml"},
+			expectedAll:  []string{"base.yaml", "stack1.yaml"},
+		},
+		{
+			name:         "multiple-dependencies",
+			currentStack: "prod.yaml",
+			sources: schema.ConfigSources{
+				"vars": map[string]schema.ConfigSourcesItem{
+					"key1": {
+						StackDependencies: schema.ConfigSourcesStackDependencies{
+							{StackFile: "base.yaml"},
+							{StackFile: "network.yaml"},
+						},
+					},
+					"key2": {
+						StackDependencies: schema.ConfigSourcesStackDependencies{
+							{StackFile: "security.yaml"},
+						},
+					},
+				},
+			},
+			expectedDeps: []string{"base.yaml", "security.yaml"},
+			expectedAll:  []string{"base.yaml", "network.yaml", "prod.yaml", "security.yaml"},
+		},
+		{
+			name:         "no-dependencies",
+			currentStack: "standalone.yaml",
+			sources:      schema.ConfigSources{},
+			expectedDeps: []string{},
+			expectedAll:  []string{"standalone.yaml"},
+		},
+		{
+			name:         "empty-stack-file-ignored",
+			currentStack: "test.yaml",
+			sources: schema.ConfigSources{
+				"vars": map[string]schema.ConfigSourcesItem{
+					"key1": {
+						StackDependencies: schema.ConfigSourcesStackDependencies{
+							{StackFile: ""},
+							{StackFile: "valid.yaml"},
+						},
+					},
+				},
+			},
+			expectedDeps: []string{},
+			expectedAll:  []string{"test.yaml", "valid.yaml"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			deps, depsAll, err := FindComponentDependencies(tt.currentStack, tt.sources)
+			assert.NoError(t, err)
+			assert.Equal(t, tt.expectedDeps, deps)
+			assert.Equal(t, tt.expectedAll, depsAll)
 		})
 	}
 }

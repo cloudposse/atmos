@@ -164,27 +164,27 @@ func (g *CustomGitGetter) GetCustom(dst string, u *url.URL) error {
 		// We have an SSH key - decode it.
 		raw, err := base64.StdEncoding.DecodeString(sshKey)
 		if err != nil {
-			return err
+			return fmt.Errorf("%w: failed to decode SSH key: %v", errUtils.ErrSSHKeyUsage, err)
 		}
 
 		// Create a temp file for the key and ensure it is removed.
 		fh, err := os.CreateTemp("", "go-getter")
 		if err != nil {
-			return err
+			return fmt.Errorf("%w: failed to create temp file for SSH key: %v", errUtils.ErrSSHKeyUsage, err)
 		}
 		sshKeyFile = fh.Name()
 		defer func() { _ = os.Remove(sshKeyFile) }()
 
 		// Set the permissions prior to writing the key material.
 		if err := os.Chmod(sshKeyFile, sshKeyFileMode); err != nil {
-			return err
+			return fmt.Errorf("%w: failed to set SSH key file permissions: %v", errUtils.ErrSSHKeyUsage, err)
 		}
 
 		// Write the raw key into the temp file.
 		_, err = fh.Write(raw)
 		_ = fh.Close()
 		if err != nil {
-			return err
+			return fmt.Errorf("%w: failed to write SSH key to temp file: %v", errUtils.ErrSSHKeyUsage, err)
 		}
 	}
 

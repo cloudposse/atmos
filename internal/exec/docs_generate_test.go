@@ -326,7 +326,7 @@ func TestResolvePath(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, err := resolvePath(tt.path, tt.baseDir)
+			result, err := resolvePath(tt.path, tt.baseDir, "")
 
 			// Check error expectation
 			if tt.expectError && err == nil {
@@ -370,7 +370,7 @@ func TestResolvePath_JoinBehavior(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, err := resolvePath(tt.path, tt.baseDir)
+			result, err := resolvePath(tt.path, tt.baseDir, "")
 			if err != nil {
 				t.Fatalf("Unexpected error: %v", err)
 			}

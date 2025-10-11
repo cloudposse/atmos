@@ -1,10 +1,7 @@
 
-Notice: Atmos now collects completely anonymous telemetry regarding usage.
-This information is used to shape Atmos roadmap and prioritize features.
-You can learn more, including how to opt-out if you'd not like to participate in this anonymous program,
-by visiting the following URL: https://atmos.tools/cli/telemetry
 
 This command reconciles the actual state of Helm releases in the cluster with the desired state defined in your configurations by applying the necessary changes.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        
 Example usage: atmos helmfile apply echo-server -s tenant1-ue2-dev atmos helmfile apply echo-server -s tenant1-ue2-dev --redirect-stderr /dev/stdout                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    
 
 Usage:
@@ -80,6 +77,8 @@ Global Flags:
     -s, --stack string               The stack flag specifies the environment
                                      or configuration set for deployment in
                                      Atmos CLI.
+
+        --version                    Display the Atmos CLI version
 
         --                           Use double dashes to separate
                                      Atmos-specific options from native

@@ -15,6 +15,11 @@
               "type": "boolean",
               "description": "Whether the test is enabled or not."
             },
+            "short": {
+              "type": "boolean",
+              "description": "If false, skip this test when running with -short flag. Use for tests taking >2 seconds (network I/O, Git operations, heavy processing). Defaults to true.",
+              "default": true
+            },
             "tty": {
               "type": "boolean",
               "description": "Whether to run the test with a TTY."
@@ -40,8 +45,17 @@
               "default": []
             },
             "sandbox": {
-              "type": "boolean",
-              "description": "Run test in a sandboxed environment with isolated component copies.",
+              "oneOf": [
+                {
+                  "type": "boolean",
+                  "description": "Enable/disable sandboxing."
+                },
+                {
+                  "type": "string",
+                  "description": "Sandbox name for isolated component copies."
+                }
+              ],
+              "description": "Run test in a sandboxed environment. Use boolean to enable/disable or string to specify sandbox name.",
               "default": false
             },
             "expect": {
@@ -61,14 +75,39 @@
                       }
                     ]
                   },
-                  "description": "Expected patterns in stdout."
+                  "description": "Expected patterns in stdout (non-TTY mode)."
                 },
                 "stderr": {
                   "type": "array",
                   "items": {
-                    "type": "string"
+                    "anyOf": [
+                      { "type": "string" },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "not": { "type": "string" }
+                        },
+                        "required": ["not"]
+                      }
+                    ]
                   },
-                  "description": "Expected patterns in stderr."
+                  "description": "Expected patterns in stderr (non-TTY mode)."
+                },
+                "tty": {
+                  "type": "array",
+                  "items": {
+                    "anyOf": [
+                      { "type": "string" },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "not": { "type": "string" }
+                        },
+                        "required": ["not"]
+                      }
+                    ]
+                  },
+                  "description": "Expected patterns in combined TTY output (TTY mode - stdout and stderr merged)."
                 },
                 "exit_code": {
                   "type": "integer",

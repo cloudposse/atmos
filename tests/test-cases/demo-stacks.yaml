@@ -12,6 +12,7 @@ tests:
       diff: []
       stdout:
         - "Available Commands:"
+        - "\\bauth\\b"
         - "\\batlantis\\b"
         - "\\baws\\b"
         - "\\bcompletion\\b"
@@ -20,7 +21,9 @@ tests:
         - "\\bhelmfile\\b"
         - "\\bhelp\\b"
         - "\\blist\\b"
+        - "\\bpacker\\b"
         - "\\bpro\\b"
+        - "\\bsupport\\b"
         - "\\bterraform\\b"
         - "\\bvalidate\\b"
         - "\\bvendor\\b"
@@ -28,8 +31,6 @@ tests:
         - "\\bworkflow\\b"
         - "Flags:"
         - "for more information about a command"
-      stderr:
-        - "^$"
       exit_code: 0
 
   - name: atmos version
@@ -44,7 +45,7 @@ tests:
       stdout:
         - '👽 Atmos (\d+\.\d+\.\d+|test) on [a-z]+/[a-z0-9]+'
       stderr:
-        - "^$"
+        - "Telemetry Enabled"
       exit_code: 0
 
   - name: atmos version --check
@@ -64,7 +65,7 @@ tests:
         - 'Atmos Releases: https://github\.com/cloudposse/atmos/releases'
         - 'Install Atmos: https://atmos\.tools/install'
       stderr:
-        - "^$"
+        - "Telemetry Enabled"
       exit_code: 0
 
 
@@ -83,8 +84,6 @@ tests:
       diff: []
       stdout:
         - "Example Terraform Weather Component"
-      stderr:
-        - "^$"
       exit_code: 0
 
   - name: atmos describe config -f yaml
@@ -107,8 +106,6 @@ tests:
         - "github_token"
       stdout:
         - 'append_user_agent: Atmos/(\d+\.\d+\.\d+|test) \(Cloud Posse; \+https:\/\/atmos\.tools\)'
-      stderr:
-        - "^$"
       exit_code: 0
 
   - name: atmos describe config
@@ -130,8 +127,6 @@ tests:
         - "GithubToken"
       stdout:
         - '"append_user_agent": "Atmos/(\d+\.\d+\.\d+|test) \(Cloud Posse; \+https:\/\/atmos\.tools\)"'
-      stderr:
-        - "^$"
       exit_code: 0
 
   - name: atmos greet with args
@@ -146,7 +141,7 @@ tests:
       stdout:
         - "Hello, Andrey\n"
       stderr:
-        - "^$"
+        - "Telemetry Enabled"
       exit_code: 0
 
   - name: atmos greet without args
@@ -160,5 +155,5 @@ tests:
       stdout:
         - "Hello, John Doe\n"
       stderr:
-        - "^$"
+        - "Telemetry Enabled"
       exit_code: 0

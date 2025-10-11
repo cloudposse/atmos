@@ -853,7 +853,7 @@ func TestExecuteValidateComponent(t *testing.T) {
 			timeoutSeconds: 0,
 			expectedResult: false,
 			expectError:    true,
-			errorContains:  "Could not find the component 'nonexistent-component'",
+			errorContains:  "Could not find the component `nonexistent-component`",
 		},
 		{
 			name:           "invalid stack name",

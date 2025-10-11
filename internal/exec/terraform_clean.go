@@ -7,20 +7,17 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/cloudposse/atmos/pkg/perf"
-
 	"github.com/charmbracelet/huh"
-	"github.com/charmbracelet/lipgloss"
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/internal/tui/utils"
 	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 var (
-	ErrParseStacks               = errors.New("could not parse stacks")
-	ErrParseComponents           = errors.New("could not parse components")
 	ErrParseTerraformComponents  = errors.New("could not parse Terraform components")
 	ErrParseComponentsAttributes = errors.New("could not parse component attributes")
 	ErrDescribeStack             = errors.New("error describe stacks")
@@ -36,6 +33,7 @@ var (
 	ErrRefusingToDeleteDir       = errors.New("refusing to delete root directory")
 	ErrRefusingToDelete          = errors.New("refusing to delete directory containing")
 	ErrRootPath                  = errors.New("root path cannot be empty")
+	ErrUserAborted               = errors.New("mission aborted")
 )
 
 type ObjectInfo struct {
@@ -258,12 +256,7 @@ func getRelativePath(basePath, componentPath string) (string, error) {
 
 func confirmDeleteTerraformLocal(message string) (confirm bool, err error) {
 	confirm = false
-	t := huh.ThemeCharm()
-	cream := lipgloss.AdaptiveColor{Light: "#FFFDF5", Dark: "#FFFDF5"}
-	purple := lipgloss.AdaptiveColor{Light: "#5B00FF", Dark: "#5B00FF"}
-	t.Focused.FocusedButton = t.Focused.FocusedButton.Foreground(cream).Background(purple)
-	t.Focused.SelectSelector = t.Focused.SelectSelector.Foreground(purple)
-	t.Blurred.Title = t.Blurred.Title.Foreground(purple)
+	t := utils.NewAtmosHuhTheme()
 	confirmPrompt := huh.NewConfirm().
 		Title(message).
 		Affirmative("Yes!").
@@ -271,7 +264,7 @@ func confirmDeleteTerraformLocal(message string) (confirm bool, err error) {
 		Value(&confirm).WithTheme(t)
 	if err := confirmPrompt.Run(); err != nil {
 		if err == huh.ErrUserAborted {
-			return confirm, fmt.Errorf("Mission aborted")
+			return confirm, fmt.Errorf("%w", ErrUserAborted)
 		}
 		return confirm, err
 	}
@@ -289,8 +282,7 @@ func DeletePathTerraform(fullPath string, objectName string) error {
 	fileInfo, err := os.Lstat(fullPath)
 	if os.IsNotExist(err) {
 		xMark := theme.Styles.XMark
-		fmt.Printf("%s Cannot delete %s: path does not exist", xMark, normalizedObjectName)
-		fmt.Println()
+		fmt.Fprintf(os.Stderr, "%s Cannot delete %s: path does not exist\n", xMark, normalizedObjectName)
 		return err
 	}
 	if fileInfo.Mode()&os.ModeSymlink != 0 {
@@ -300,13 +292,11 @@ func DeletePathTerraform(fullPath string, objectName string) error {
 	err = os.RemoveAll(fullPath)
 	if err != nil {
 		xMark := theme.Styles.XMark
-		fmt.Printf("%s Error deleting %s", xMark, normalizedObjectName)
-		fmt.Println()
+		fmt.Fprintf(os.Stderr, "%s Error deleting %s\n", xMark, normalizedObjectName)
 		return err
 	}
 	checkMark := theme.Styles.Checkmark
-	fmt.Printf("%s Deleted %s", checkMark, normalizedObjectName)
-	fmt.Println()
+	fmt.Fprintf(os.Stderr, "%s Deleted %s\n", checkMark, normalizedObjectName)
 	return nil
 }
 

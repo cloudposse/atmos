@@ -1,0 +1,18 @@
+vars:
+  stage: component-auth
+import:
+  - catalog/mock
+components:
+  terraform:
+    mycomponent:
+      metadata:
+        component: mock_caller_identity
+      auth:
+        providers:
+          provider-oidc:
+            kind: github/oidc
+            region: us-east-1
+        identities:
+          identity-oidc:
+            via:
+              provider: provider-oidc

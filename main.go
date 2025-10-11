@@ -36,6 +36,12 @@ func main() {
 
 	err := cmd.Execute()
 	if err != nil {
+		// Check for typed exit code error first to preserve subcommand exit codes.
+		var exitCodeErr errUtils.ExitCodeError
+		if errors.As(err, &exitCodeErr) {
+			log.Debug("Exiting with subcommand exit code", "code", exitCodeErr.Code)
+			errUtils.Exit(exitCodeErr.Code)
+		}
 		if errors.Is(err, errUtils.ErrPlanHasDiff) {
 			log.Debug("Exiting with code 2 due to plan differences")
 			errUtils.Exit(2)

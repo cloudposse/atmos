@@ -89,3 +89,7 @@ Use the `--query` flag (shorthand `-q`) to filter the output.
   <dt>`--query` / `-q` <em>(optional)</em></dt>
   <dd>Query the results of the command using `yq` expressions.<br/><br/>`atmos describe stacks --query <yq-expression>`.<br/><br/>For more details, refer to https://mikefarah.gitbook.io/yq.</dd>
 </dl>
+
+:::note Provenance Tracking
+To see provenance information (where configuration values originated with file:line:column details), use `atmos describe component <component> -s <stack> --provenance` for individual components. The `describe stacks` command does not currently support provenance display.
+:::

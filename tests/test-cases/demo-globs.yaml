@@ -1,5 +1,6 @@
 tests:
   - name: atmos_vendor_pull_with_globs
+    short: false
     enabled: true
     description: "Ensure atmos vendor pull command executes without errors and files are present."
     workdir: "fixtures/scenarios/vendor-globs"

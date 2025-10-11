@@ -23,16 +23,78 @@ import (
 )
 
 var (
-	// Error constants.
-	ErrInvalidHooksSection          = errors.New("invalid 'hooks' section in the file")
-	ErrInvalidTerraformHooksSection = errors.New("invalid 'terraform.hooks' section in the file")
-
 	// File content sync map.
 	getFileContentSyncMap = sync.Map{}
 
 	// Mutex to serialize updates of the result map of ProcessYAMLConfigFiles function.
 	processYAMLConfigFilesLock = &sync.Mutex{}
+
+	// The mergeContexts stores MergeContexts keyed by stack file path when provenance tracking is enabled.
+	// This is used to capture provenance data for the describe component command.
+	mergeContexts   = make(map[string]*m.MergeContext)
+	mergeContextsMu sync.RWMutex
+
+	// Deprecated: Use SetMergeContextForStack/GetMergeContextForStack instead.
+	lastMergeContext   *m.MergeContext
+	lastMergeContextMu sync.RWMutex
 )
+
+// SetMergeContextForStack stores the merge context for a specific stack file.
+func SetMergeContextForStack(stackFile string, ctx *m.MergeContext) {
+	defer perf.Track(nil, "exec.SetMergeContextForStack")()
+
+	mergeContextsMu.Lock()
+	defer mergeContextsMu.Unlock()
+	mergeContexts[stackFile] = ctx
+}
+
+// GetMergeContextForStack retrieves the merge context for a specific stack file.
+func GetMergeContextForStack(stackFile string) *m.MergeContext {
+	defer perf.Track(nil, "exec.GetMergeContextForStack")()
+
+	mergeContextsMu.RLock()
+	defer mergeContextsMu.RUnlock()
+	return mergeContexts[stackFile]
+}
+
+// ClearMergeContexts clears all stored merge contexts.
+func ClearMergeContexts() {
+	defer perf.Track(nil, "exec.ClearMergeContexts")()
+
+	mergeContextsMu.Lock()
+	defer mergeContextsMu.Unlock()
+	mergeContexts = make(map[string]*m.MergeContext)
+}
+
+// SetLastMergeContext stores the merge context for later retrieval.
+// Deprecated: Use SetMergeContextForStack instead.
+func SetLastMergeContext(ctx *m.MergeContext) {
+	defer perf.Track(nil, "exec.SetLastMergeContext")()
+
+	lastMergeContextMu.Lock()
+	defer lastMergeContextMu.Unlock()
+	lastMergeContext = ctx
+}
+
+// GetLastMergeContext retrieves the last stored merge context.
+// Deprecated: Use GetMergeContextForStack instead.
+func GetLastMergeContext() *m.MergeContext {
+	defer perf.Track(nil, "exec.GetLastMergeContext")()
+
+	lastMergeContextMu.RLock()
+	defer lastMergeContextMu.RUnlock()
+	return lastMergeContext
+}
+
+// ClearLastMergeContext clears the stored merge context.
+// Deprecated: Use ClearMergeContexts instead.
+func ClearLastMergeContext() {
+	defer perf.Track(nil, "exec.ClearLastMergeContext")()
+
+	lastMergeContextMu.Lock()
+	defer lastMergeContextMu.Unlock()
+	lastMergeContext = nil
+}
 
 // ProcessYAMLConfigFiles takes a list of paths to stack manifests, processes and deep-merges all imports, and returns a list of stack configs.
 func ProcessYAMLConfigFiles(
@@ -58,6 +120,7 @@ func ProcessYAMLConfigFiles(
 	mapResult := map[string]any{}
 	rawStackConfigs := map[string]map[string]any{}
 	var errorResult error
+	var errorLock sync.Mutex
 	var wg sync.WaitGroup
 	wg.Add(count)
 
@@ -77,6 +140,14 @@ func ProcessYAMLConfigFiles(
 				".yml",
 			)
 
+			// Each goroutine gets its own merge context to avoid data races.
+			// For single-file operations (like describe component), use the
+			// SetLastMergeContext/GetLastMergeContext mechanism instead.
+			mergeContext := m.NewMergeContext()
+			if atmosConfig != nil && atmosConfig.TrackProvenance {
+				mergeContext.EnableProvenance()
+			}
+
 			deepMergedStackConfig, importsConfig, stackConfig, _, _, _, _, err := ProcessYAMLConfigFileWithContext(
 				atmosConfig,
 				stackBasePath,
@@ -92,10 +163,12 @@ func ProcessYAMLConfigFiles(
 				map[string]any{},
 				map[string]any{},
 				"",
-				m.NewMergeContext(), // Add merge context for enhanced error reporting
+				mergeContext,
 			)
 			if err != nil {
+				errorLock.Lock()
 				errorResult = err
+				errorLock.Unlock()
 				return
 			}
 
@@ -124,15 +197,26 @@ func ProcessYAMLConfigFiles(
 				importsConfig,
 				true)
 			if err != nil {
+				errorLock.Lock()
 				errorResult = err
+				errorLock.Unlock()
 				return
 			}
 
 			finalConfig["imports"] = uniqueImports
 
+			// Store merge context for this stack file if provenance tracking is enabled.
+			if atmosConfig != nil && atmosConfig.TrackProvenance && mergeContext != nil && mergeContext.IsProvenanceEnabled() {
+				SetMergeContextForStack(stackFileName, mergeContext)
+				// Also set as last merge context for backward compatibility (note: may be overwritten by other goroutines)
+				SetLastMergeContext(mergeContext)
+			}
+
 			yamlConfig, err := u.ConvertToYAML(finalConfig)
 			if err != nil {
+				errorLock.Lock()
 				errorResult = err
+				errorLock.Unlock()
 				return
 			}
 
@@ -187,8 +271,15 @@ func ProcessYAMLConfigFile(
 ) {
 	defer perf.Track(atmosConfig, "exec.ProcessYAMLConfigFile")()
 
-	// Call the context-aware version with a nil context for backward compatibility
-	return ProcessYAMLConfigFileWithContext(
+	// Create merge context for single-file operations
+	var mergeContext *m.MergeContext
+	if atmosConfig != nil && atmosConfig.TrackProvenance {
+		mergeContext = m.NewMergeContext()
+		mergeContext.EnableProvenance()
+	}
+
+	// Call the context-aware version
+	deepMerged, imports, stackConfig, terraformInline, terraformImports, helmfileInline, helmfileImports, err := ProcessYAMLConfigFileWithContext(
 		atmosConfig,
 		basePath,
 		filePath,
@@ -203,8 +294,15 @@ func ProcessYAMLConfigFile(
 		parentHelmfileOverridesInline,
 		parentHelmfileOverridesImports,
 		atmosManifestJsonSchemaFilePath,
-		nil, // mergeContext
+		mergeContext,
 	)
+
+	// Store merge context if provenance tracking is enabled (for single-file operations like describe component)
+	if atmosConfig != nil && atmosConfig.TrackProvenance && mergeContext != nil && mergeContext.IsProvenanceEnabled() {
+		SetLastMergeContext(mergeContext)
+	}
+
+	return deepMerged, imports, stackConfig, terraformInline, terraformImports, helmfileInline, helmfileImports, err
 }
 
 // ProcessYAMLConfigFileWithContext takes a path to a YAML stack manifest,
@@ -243,9 +341,13 @@ func ProcessYAMLConfigFileWithContext(
 	var stackConfigs []map[string]any
 	relativeFilePath := u.TrimBasePathFromPath(basePath+"/", filePath)
 
-	// Initialize or update merge context with current file
+	// Initialize or update merge context with current file.
 	if mergeContext == nil {
 		mergeContext = m.NewMergeContext()
+		// Enable provenance if configured.
+		if atmosConfig != nil && atmosConfig.TrackProvenance {
+			mergeContext.EnableProvenance()
+		}
 	}
 	mergeContext = mergeContext.WithFile(relativeFilePath)
 
@@ -300,7 +402,7 @@ func ProcessYAMLConfigFileWithContext(
 		}
 	}
 
-	stackConfigMap, err := u.UnmarshalYAMLFromFile[schema.AtmosSectionMapType](atmosConfig, stackManifestTemplatesProcessed, filePath)
+	stackConfigMap, positions, err := u.UnmarshalYAMLFromFileWithPositions[schema.AtmosSectionMapType](atmosConfig, stackManifestTemplatesProcessed, filePath)
 	if err != nil {
 		if atmosConfig.Logs.Level == u.LogLevelTrace || atmosConfig.Logs.Level == u.LogLevelDebug {
 			stackManifestTemplatesErrorMessage = fmt.Sprintf("\n\n%s", stackYamlConfig)
@@ -316,6 +418,12 @@ func ProcessYAMLConfigFileWithContext(
 			e := fmt.Errorf("%w: stack manifest '%s'\n%v%s", errUtils.ErrInvalidStackManifest, relativeFilePath, err, stackManifestTemplatesErrorMessage)
 			return nil, nil, nil, nil, nil, nil, nil, e
 		}
+	}
+
+	// Enable provenance tracking in merge context if tracking is enabled
+	if atmosConfig.TrackProvenance && mergeContext != nil && len(positions) > 0 {
+		mergeContext.EnableProvenance()
+		mergeContext.Positions = positions // Store positions for merge operations
 	}
 
 	// If the path to the Atmos manifest JSON Schema is provided, validate the stack manifest against it
@@ -371,19 +479,19 @@ func ProcessYAMLConfigFileWithContext(
 	// Global overrides in this stack manifest
 	if i, ok := stackConfigMap[cfg.OverridesSectionName]; ok {
 		if globalOverrides, ok = i.(map[string]any); !ok {
-			return nil, nil, nil, nil, nil, nil, nil, fmt.Errorf("invalid 'overrides' section in the stack manifest '%s'", relativeFilePath)
+			return nil, nil, nil, nil, nil, nil, nil, fmt.Errorf("%w in the stack manifest '%s'", errUtils.ErrInvalidOverridesSection, relativeFilePath)
 		}
 	}
 
 	// Terraform overrides in this stack manifest
 	if o, ok := stackConfigMap[cfg.TerraformSectionName]; ok {
 		if globalTerraformSection, ok = o.(map[string]any); !ok {
-			return nil, nil, nil, nil, nil, nil, nil, fmt.Errorf("invalid 'terraform' section in the stack manifest '%s'", relativeFilePath)
+			return nil, nil, nil, nil, nil, nil, nil, fmt.Errorf("%w in the stack manifest '%s'", errUtils.ErrInvalidTerraformSection, relativeFilePath)
 		}
 
 		if i, ok := globalTerraformSection[cfg.OverridesSectionName]; ok {
 			if terraformOverrides, ok = i.(map[string]any); !ok {
-				return nil, nil, nil, nil, nil, nil, nil, fmt.Errorf("invalid 'terraform.overrides' section in the stack manifest '%s'", relativeFilePath)
+				return nil, nil, nil, nil, nil, nil, nil, fmt.Errorf("%w in the stack manifest '%s'", errUtils.ErrInvalidTerraformOverridesSection, relativeFilePath)
 			}
 		}
 	}
@@ -391,12 +499,12 @@ func ProcessYAMLConfigFileWithContext(
 	// Helmfile overrides in this stack manifest
 	if o, ok := stackConfigMap[cfg.HelmfileSectionName]; ok {
 		if globalHelmfileSection, ok = o.(map[string]any); !ok {
-			return nil, nil, nil, nil, nil, nil, nil, fmt.Errorf("invalid 'helmfile' section in the stack manifest '%s'", relativeFilePath)
+			return nil, nil, nil, nil, nil, nil, nil, fmt.Errorf("%w in the stack manifest '%s'", errUtils.ErrInvalidHelmfileSection, relativeFilePath)
 		}
 
 		if i, ok := globalHelmfileSection[cfg.OverridesSectionName]; ok {
 			if helmfileOverrides, ok = i.(map[string]any); !ok {
-				return nil, nil, nil, nil, nil, nil, nil, fmt.Errorf("invalid 'terraform.overrides' section in the stack manifest '%s'", relativeFilePath)
+				return nil, nil, nil, nil, nil, nil, nil, fmt.Errorf("%w in the stack manifest '%s'", errUtils.ErrInvalidHelmfileOverridesSection, relativeFilePath)
 			}
 		}
 	}
@@ -425,11 +533,42 @@ func ProcessYAMLConfigFileWithContext(
 		return nil, nil, nil, nil, nil, nil, nil, err
 	}
 
+	// Record provenance for each import if provenance tracking is enabled.
+	// Use the import path as the key so we can look it up later when building the final array.
+	if atmosConfig.TrackProvenance && mergeContext != nil && mergeContext.IsProvenanceEnabled() && len(importStructs) > 0 {
+		for i, importStruct := range importStructs {
+			// Look up position for this import array element.
+			arrayPath := fmt.Sprintf("import[%d]", i)
+			if pos, exists := positions[arrayPath]; exists {
+				// Get depth from merge context using the dedicated method.
+				depth := mergeContext.GetImportDepth()
+
+				entry := m.ProvenanceEntry{
+					File:   relativeFilePath,
+					Line:   pos.Line,
+					Column: pos.Column,
+					Type:   mergeContext.GetProvenanceType(),
+					Depth:  depth,
+				}
+
+				// Store provenance using a special key format that includes the import path.
+				// This allows us to look it up later when building the final flattened array.
+				// Format: "__import__:<import-path>" (e.g., "__import__:mixins/region/us-east-2")
+				importKey := fmt.Sprintf("__import__:%s", importStruct.Path)
+
+				// Only record if not already recorded (first occurrence wins).
+				if !mergeContext.HasProvenance(importKey) {
+					mergeContext.RecordProvenance(importKey, entry)
+				}
+			}
+		}
+	}
+
 	for _, importStruct := range importStructs {
 		imp := importStruct.Path
 
 		if imp == "" {
-			return nil, nil, nil, nil, nil, nil, nil, fmt.Errorf("invalid empty import in the manifest '%s'", relativeFilePath)
+			return nil, nil, nil, nil, nil, nil, nil, fmt.Errorf("%w in the manifest '%s'", errUtils.ErrInvalidImport, relativeFilePath)
 		}
 
 		// If the import file is specified without extension, use `.yaml` as default
@@ -578,6 +717,31 @@ func ProcessYAMLConfigFileWithContext(
 			}
 
 			importRelativePathWithoutExt := strings.TrimSuffix(importRelativePathWithExt, ext2)
+
+			// Record metadata for this import.
+			// We record every time we encounter an import to track all files that import it,
+			// but we use the path as a unique key so only the first entry is kept per import path.
+			if atmosConfig.TrackProvenance && mergeContext != nil && mergeContext.IsProvenanceEnabled() {
+				// Get depth from merge context using the dedicated method.
+				depth := mergeContext.GetImportDepth()
+
+				// Store metadata using special key format: "__import_meta__:<import-path>".
+				// Note: We don't have line number info here since this is during recursive processing,
+				// not YAML parsing. We'll use line 1 as a placeholder.
+				metaKey := fmt.Sprintf("__import_meta__:%s", importRelativePathWithoutExt)
+
+				// Only record if not already recorded (first occurrence wins for the metadata)
+				if !mergeContext.HasProvenance(metaKey) {
+					mergeContext.RecordProvenance(metaKey, m.ProvenanceEntry{
+						File:   mergeContext.CurrentFile, // The file that's importing this file
+						Line:   1,                        // Placeholder - we don't have exact line info here
+						Column: 1,
+						Type:   mergeContext.GetProvenanceType(),
+						Depth:  depth,
+					})
+				}
+			}
+
 			importsConfig[importRelativePathWithoutExt] = yamlConfigRaw
 		}
 	}
@@ -640,6 +804,10 @@ func ProcessYAMLConfigFileWithContext(
 		return nil, nil, nil, nil, nil, nil, nil, err
 	}
 
+	// NOTE: We don't store merge context here because ProcessYAMLConfigFileWithContext
+	// can be called from parallel goroutines in ProcessYAMLConfigFiles, which would create
+	// a race condition. Instead, the caller should store the merge context if needed.
+
 	return stackConfigsDeepMerged,
 		importsConfig,
 		stackConfigMap,
@@ -650,1454 +818,6 @@ func ProcessYAMLConfigFileWithContext(
 		nil
 }
 
-// ProcessStackConfig takes a stack manifest, deep-merges all variables, settings, environments and backends, and returns the final stack configuration for all Terraform/Helmfile/Packer components.
-func ProcessStackConfig(
-	atmosConfig *schema.AtmosConfiguration,
-	stacksBasePath string,
-	terraformComponentsBasePath string,
-	helmfileComponentsBasePath string,
-	packerComponentsBasePath string,
-	stack string,
-	config map[string]any,
-	processStackDeps bool,
-	processComponentDeps bool,
-	componentTypeFilter string,
-	componentStackMap map[string]map[string][]string,
-	importsConfig map[string]map[string]any,
-	checkBaseComponentExists bool,
-) (map[string]any, error) {
-	defer perf.Track(atmosConfig, "exec.ProcessStackConfig")()
-
-	stackName := strings.TrimSuffix(
-		strings.TrimSuffix(
-			u.TrimBasePathFromPath(stacksBasePath+"/", stack),
-			u.DefaultStackConfigFileExtension),
-		".yml",
-	)
-
-	globalVarsSection := map[string]any{}
-	globalHooksSection := map[string]any{}
-	globalSettingsSection := map[string]any{}
-	globalEnvSection := map[string]any{}
-	globalTerraformSection := map[string]any{}
-	globalHelmfileSection := map[string]any{}
-	globalPackerSection := map[string]any{}
-	globalComponentsSection := map[string]any{}
-
-	terraformVars := map[string]any{}
-	terraformSettings := map[string]any{}
-	terraformEnv := map[string]any{}
-	terraformCommand := ""
-	terraformProviders := map[string]any{}
-	terraformHooks := map[string]any{}
-
-	helmfileVars := map[string]any{}
-	helmfileSettings := map[string]any{}
-	helmfileEnv := map[string]any{}
-	helmfileCommand := ""
-
-	packerVars := map[string]any{}
-	packerSettings := map[string]any{}
-	packerEnv := map[string]any{}
-	packerCommand := ""
-
-	terraformComponents := map[string]any{}
-	helmfileComponents := map[string]any{}
-	packerComponents := map[string]any{}
-	allComponents := map[string]any{}
-
-	// Global sections
-	if i, ok := config["vars"]; ok {
-		globalVarsSection, ok = i.(map[string]any)
-		if !ok {
-			return nil, fmt.Errorf("invalid 'vars' section in the file '%s'", stackName)
-		}
-	}
-
-	if i, ok := config["hooks"]; ok {
-		globalHooksSection, ok = i.(map[string]any)
-		if !ok {
-			return nil, errors.Wrapf(ErrInvalidHooksSection, " '%s'", stackName)
-		}
-	}
-
-	if i, ok := config["settings"]; ok {
-		globalSettingsSection, ok = i.(map[string]any)
-		if !ok {
-			return nil, fmt.Errorf("invalid 'settings' section in the file '%s'", stackName)
-		}
-	}
-
-	if i, ok := config["env"]; ok {
-		globalEnvSection, ok = i.(map[string]any)
-		if !ok {
-			return nil, fmt.Errorf("invalid 'env' section in the file '%s'", stackName)
-		}
-	}
-
-	if i, ok := config[cfg.TerraformSectionName]; ok {
-		globalTerraformSection, ok = i.(map[string]any)
-		if !ok {
-			return nil, fmt.Errorf("invalid 'terraform' section in the file '%s'", stackName)
-		}
-	}
-
-	if i, ok := config[cfg.HelmfileSectionName]; ok {
-		globalHelmfileSection, ok = i.(map[string]any)
-		if !ok {
-			return nil, fmt.Errorf("invalid 'helmfile' section in the file '%s'", stackName)
-		}
-	}
-
-	if i, ok := config[cfg.PackerSectionName]; ok {
-		globalPackerSection, ok = i.(map[string]any)
-		if !ok {
-			return nil, fmt.Errorf("invalid 'packer' section in the file '%s'", stackName)
-		}
-	}
-
-	if i, ok := config["components"]; ok {
-		globalComponentsSection, ok = i.(map[string]any)
-		if !ok {
-			return nil, fmt.Errorf("invalid 'components' section in the file '%s'", stackName)
-		}
-	}
-
-	// Terraform section
-	if i, ok := globalTerraformSection[cfg.CommandSectionName]; ok {
-		terraformCommand, ok = i.(string)
-		if !ok {
-			return nil, fmt.Errorf("invalid 'terraform.command' section in the file '%s'", stackName)
-		}
-	}
-
-	if i, ok := globalTerraformSection["vars"]; ok {
-		terraformVars, ok = i.(map[string]any)
-		if !ok {
-			return nil, fmt.Errorf("invalid 'terraform.vars' section in the file '%s'", stackName)
-		}
-	}
-
-	if i, ok := globalTerraformSection["hooks"]; ok {
-		terraformHooks, ok = i.(map[string]any)
-		if !ok {
-			return nil, errors.Wrapf(ErrInvalidTerraformHooksSection, "in file '%s'", stackName)
-		}
-	}
-
-	globalAndTerraformVars, err := m.Merge(atmosConfig, []map[string]any{globalVarsSection, terraformVars})
-	if err != nil {
-		return nil, err
-	}
-
-	globalAndTerraformHooks, err := m.Merge(atmosConfig, []map[string]any{globalHooksSection, terraformHooks})
-	if err != nil {
-		return nil, err
-	}
-
-	if i, ok := globalTerraformSection["settings"]; ok {
-		terraformSettings, ok = i.(map[string]any)
-		if !ok {
-			return nil, fmt.Errorf("invalid 'terraform.settings' section in the file '%s'", stackName)
-		}
-	}
-
-	globalAndTerraformSettings, err := m.Merge(atmosConfig, []map[string]any{globalSettingsSection, terraformSettings})
-	if err != nil {
-		return nil, err
-	}
-
-	if i, ok := globalTerraformSection["env"]; ok {
-		terraformEnv, ok = i.(map[string]any)
-		if !ok {
-			return nil, fmt.Errorf("invalid 'terraform.env' section in the file '%s'", stackName)
-		}
-	}
-
-	globalAndTerraformEnv, err := m.Merge(atmosConfig, []map[string]any{globalEnvSection, terraformEnv})
-	if err != nil {
-		return nil, err
-	}
-
-	if i, ok := globalTerraformSection[cfg.ProvidersSectionName]; ok {
-		terraformProviders, ok = i.(map[string]any)
-		if !ok {
-			return nil, fmt.Errorf("invalid 'terraform.providers' section in the file '%s'", stackName)
-		}
-	}
-
-	if i, ok := globalTerraformSection[cfg.HooksSectionName]; ok {
-		terraformHooks, ok = i.(map[string]any)
-		if !ok {
-			return nil, fmt.Errorf("invalid 'terraform.hooks' section in the file '%s'", stackName)
-		}
-	}
-
-	// Global backend
-	globalBackendType := ""
-	globalBackendSection := map[string]any{}
-
-	if i, ok := globalTerraformSection["backend_type"]; ok {
-		globalBackendType, ok = i.(string)
-		if !ok {
-			return nil, fmt.Errorf("invalid 'terraform.backend_type' section in the file '%s'", stackName)
-		}
-	}
-
-	if i, ok := globalTerraformSection["backend"]; ok {
-		globalBackendSection, ok = i.(map[string]any)
-		if !ok {
-			return nil, fmt.Errorf("invalid 'terraform.backend' section in the file '%s'", stackName)
-		}
-	}
-
-	// Global remote state backend
-	globalRemoteStateBackendType := ""
-	globalRemoteStateBackendSection := map[string]any{}
-
-	if i, ok := globalTerraformSection["remote_state_backend_type"]; ok {
-		globalRemoteStateBackendType, ok = i.(string)
-		if !ok {
-			return nil, fmt.Errorf("invalid 'terraform.remote_state_backend_type' section in the file '%s'", stackName)
-		}
-	}
-
-	if i, ok := globalTerraformSection["remote_state_backend"]; ok {
-		globalRemoteStateBackendSection, ok = i.(map[string]any)
-		if !ok {
-			return nil, fmt.Errorf("invalid 'terraform.remote_state_backend' section in the file '%s'", stackName)
-		}
-	}
-
-	// Helmfile section
-	if i, ok := globalHelmfileSection[cfg.CommandSectionName]; ok {
-		helmfileCommand, ok = i.(string)
-		if !ok {
-			return nil, fmt.Errorf("invalid 'helmfile.command' section in the file '%s'", stackName)
-		}
-	}
-
-	if i, ok := globalHelmfileSection["vars"]; ok {
-		helmfileVars, ok = i.(map[string]any)
-		if !ok {
-			return nil, fmt.Errorf("invalid 'helmfile.vars' section in the file '%s'", stackName)
-		}
-	}
-
-	globalAndHelmfileVars, err := m.Merge(atmosConfig, []map[string]any{globalVarsSection, helmfileVars})
-	if err != nil {
-		return nil, err
-	}
-
-	if i, ok := globalHelmfileSection["settings"]; ok {
-		helmfileSettings, ok = i.(map[string]any)
-		if !ok {
-			return nil, fmt.Errorf("invalid 'helmfile.settings' section in the file '%s'", stackName)
-		}
-	}
-
-	globalAndHelmfileSettings, err := m.Merge(atmosConfig, []map[string]any{globalSettingsSection, helmfileSettings})
-	if err != nil {
-		return nil, err
-	}
-
-	if i, ok := globalHelmfileSection["env"]; ok {
-		helmfileEnv, ok = i.(map[string]any)
-		if !ok {
-			return nil, fmt.Errorf("invalid 'helmfile.env' section in the file '%s'", stackName)
-		}
-	}
-
-	globalAndHelmfileEnv, err := m.Merge(atmosConfig, []map[string]any{globalEnvSection, helmfileEnv})
-	if err != nil {
-		return nil, err
-	}
-
-	// Packer section
-	if i, ok := globalPackerSection[cfg.CommandSectionName]; ok {
-		packerCommand, ok = i.(string)
-		if !ok {
-			return nil, fmt.Errorf("invalid 'packer.command' section in the file '%s'", stackName)
-		}
-	}
-
-	if i, ok := globalPackerSection["vars"]; ok {
-		packerVars, ok = i.(map[string]any)
-		if !ok {
-			return nil, fmt.Errorf("invalid 'packer.vars' section in the file '%s'", stackName)
-		}
-	}
-
-	globalAndPackerVars, err := m.Merge(atmosConfig, []map[string]any{globalVarsSection, packerVars})
-	if err != nil {
-		return nil, err
-	}
-
-	if i, ok := globalPackerSection["settings"]; ok {
-		packerSettings, ok = i.(map[string]any)
-		if !ok {
-			return nil, fmt.Errorf("invalid 'packer.settings' section in the file '%s'", stackName)
-		}
-	}
-
-	globalAndPackerSettings, err := m.Merge(atmosConfig, []map[string]any{globalSettingsSection, packerSettings})
-	if err != nil {
-		return nil, err
-	}
-
-	if i, ok := globalPackerSection["env"]; ok {
-		packerEnv, ok = i.(map[string]any)
-		if !ok {
-			return nil, fmt.Errorf("invalid 'packer.env' section in the file '%s'", stackName)
-		}
-	}
-
-	globalAndPackerEnv, err := m.Merge(atmosConfig, []map[string]any{globalEnvSection, packerEnv})
-	if err != nil {
-		return nil, err
-	}
-
-	// Process all Terraform components
-	if componentTypeFilter == "" || componentTypeFilter == cfg.TerraformComponentType {
-		if allTerraformComponents, ok := globalComponentsSection[cfg.TerraformComponentType]; ok {
-
-			allTerraformComponentsMap, ok := allTerraformComponents.(map[string]any)
-			if !ok {
-				return nil, fmt.Errorf("invalid 'components.terraform' section in the file '%s'", stackName)
-			}
-
-			for cmp, v := range allTerraformComponentsMap {
-				component := cmp
-
-				componentMap, ok := v.(map[string]any)
-				if !ok {
-					return nil, fmt.Errorf("invalid 'components.terraform.%s' section in the file '%s'", component, stackName)
-				}
-
-				componentVars := map[string]any{}
-				if i, ok := componentMap[cfg.VarsSectionName]; ok {
-					componentVars, ok = i.(map[string]any)
-					if !ok {
-						return nil, fmt.Errorf("invalid 'components.terraform.%s.vars' section in the file '%s'", component, stackName)
-					}
-				}
-
-				componentSettings := map[string]any{}
-				if i, ok := componentMap[cfg.SettingsSectionName]; ok {
-					componentSettings, ok = i.(map[string]any)
-					if !ok {
-						return nil, fmt.Errorf("invalid 'components.terraform.%s.settings' section in the file '%s'", component, stackName)
-					}
-
-					if i, ok := componentSettings["spacelift"]; ok {
-						_, ok = i.(map[string]any)
-						if !ok {
-							return nil, fmt.Errorf("invalid 'components.terraform.%s.settings.spacelift' section in the file '%s'", component, stackName)
-						}
-					}
-				}
-
-				componentEnv := map[string]any{}
-				if i, ok := componentMap[cfg.EnvSectionName]; ok {
-					componentEnv, ok = i.(map[string]any)
-					if !ok {
-						return nil, fmt.Errorf("invalid 'components.terraform.%s.env' section in the file '%s'", component, stackName)
-					}
-				}
-
-				componentProviders := map[string]any{}
-				if i, ok := componentMap[cfg.ProvidersSectionName]; ok {
-					componentProviders, ok = i.(map[string]any)
-					if !ok {
-						return nil, fmt.Errorf("invalid 'components.terraform.%s.providers' section in the file '%s'", component, stackName)
-					}
-				}
-
-				componentHooks := map[string]any{}
-				if i, ok := componentMap[cfg.HooksSectionName]; ok {
-					componentHooks, ok = i.(map[string]any)
-					if !ok {
-						return nil, fmt.Errorf("invalid 'components.terraform.%s.hooks' section in the file '%s'", component, stackName)
-					}
-				}
-
-				// Component metadata.
-				// This is per component, not deep-merged and not inherited from base components and globals.
-				componentMetadata := map[string]any{}
-				if i, ok := componentMap[cfg.MetadataSectionName]; ok {
-					componentMetadata, ok = i.(map[string]any)
-					if !ok {
-						return nil, fmt.Errorf("invalid 'components.terraform.%s.metadata' section in the file '%s'", component, stackName)
-					}
-				}
-
-				// Component backend
-				componentBackendType := ""
-				componentBackendSection := map[string]any{}
-
-				if i, ok := componentMap[cfg.BackendTypeSectionName]; ok {
-					componentBackendType, ok = i.(string)
-					if !ok {
-						return nil, fmt.Errorf("invalid 'components.terraform.%s.backend_type' attribute in the file '%s'", component, stackName)
-					}
-				}
-
-				if i, ok := componentMap[cfg.BackendSectionName]; ok {
-					componentBackendSection, ok = i.(map[string]any)
-					if !ok {
-						return nil, fmt.Errorf("invalid 'components.terraform.%s.backend' section in the file '%s'", component, stackName)
-					}
-				}
-
-				// Component remote state backend
-				componentRemoteStateBackendType := ""
-				componentRemoteStateBackendSection := map[string]any{}
-
-				if i, ok := componentMap["remote_state_backend_type"]; ok {
-					componentRemoteStateBackendType, ok = i.(string)
-					if !ok {
-						return nil, fmt.Errorf("invalid 'components.terraform.%s.remote_state_backend_type' attribute in the file '%s'", component, stackName)
-					}
-				}
-
-				if i, ok := componentMap["remote_state_backend"]; ok {
-					componentRemoteStateBackendSection, ok = i.(map[string]any)
-					if !ok {
-						return nil, fmt.Errorf("invalid 'components.terraform.%s.remote_state_backend' section in the file '%s'", component, stackName)
-					}
-				}
-
-				componentTerraformCommand := ""
-				if i, ok := componentMap[cfg.CommandSectionName]; ok {
-					componentTerraformCommand, ok = i.(string)
-					if !ok {
-						return nil, fmt.Errorf("invalid 'components.terraform.%s.command' attribute in the file '%s'", component, stackName)
-					}
-				}
-
-				// Process overrides
-				componentOverrides := map[string]any{}
-				componentOverridesVars := map[string]any{}
-				componentOverridesSettings := map[string]any{}
-				componentOverridesEnv := map[string]any{}
-				componentOverridesProviders := map[string]any{}
-				componentOverridesHooks := map[string]any{}
-				componentOverridesTerraformCommand := ""
-
-				if i, ok := componentMap[cfg.OverridesSectionName]; ok {
-					if componentOverrides, ok = i.(map[string]any); !ok {
-						return nil, fmt.Errorf("invalid 'components.terraform.%s.overrides' in the manifest '%s'", component, stackName)
-					}
-
-					if i, ok = componentOverrides[cfg.VarsSectionName]; ok {
-						if componentOverridesVars, ok = i.(map[string]any); !ok {
-							return nil, fmt.Errorf("invalid 'components.terraform.%s.overrides.vars' in the manifest '%s'", component, stackName)
-						}
-					}
-
-					if i, ok = componentOverrides[cfg.SettingsSectionName]; ok {
-						if componentOverridesSettings, ok = i.(map[string]any); !ok {
-							return nil, fmt.Errorf("invalid 'components.terraform.%s.overrides.settings' in the manifest '%s'", component, stackName)
-						}
-					}
-
-					if i, ok = componentOverrides[cfg.EnvSectionName]; ok {
-						if componentOverridesEnv, ok = i.(map[string]any); !ok {
-							return nil, fmt.Errorf("invalid 'components.terraform.%s.overrides.env' in the manifest '%s'", component, stackName)
-						}
-					}
-
-					if i, ok = componentOverrides[cfg.CommandSectionName]; ok {
-						if componentOverridesTerraformCommand, ok = i.(string); !ok {
-							return nil, fmt.Errorf("invalid 'components.terraform.%s.overrides.command' in the manifest '%s'", component, stackName)
-						}
-					}
-
-					if i, ok = componentOverrides[cfg.ProvidersSectionName]; ok {
-						if componentOverridesProviders, ok = i.(map[string]any); !ok {
-							return nil, fmt.Errorf("invalid 'components.terraform.%s.overrides.providers' in the manifest '%s'", component, stackName)
-						}
-					}
-
-					if i, ok = componentOverrides[cfg.HooksSectionName]; ok {
-						if componentOverridesHooks, ok = i.(map[string]any); !ok {
-							return nil, fmt.Errorf("invalid 'components.terraform.%s.overrides.hooks' in the manifest '%s'", component, stackName)
-						}
-					}
-				}
-
-				// Process base component(s)
-				baseComponentName := ""
-				baseComponentVars := map[string]any{}
-				baseComponentSettings := map[string]any{}
-				baseComponentEnv := map[string]any{}
-				baseComponentProviders := map[string]any{}
-				baseComponentHooks := map[string]any{}
-				baseComponentTerraformCommand := ""
-				baseComponentBackendType := ""
-				baseComponentBackendSection := map[string]any{}
-				baseComponentRemoteStateBackendType := ""
-				baseComponentRemoteStateBackendSection := map[string]any{}
-				var baseComponentConfig schema.BaseComponentConfig
-				var componentInheritanceChain []string
-				var baseComponents []string
-
-				// Inheritance using the top-level `component` attribute
-				if baseComponent, baseComponentExist := componentMap[cfg.ComponentSectionName]; baseComponentExist {
-					baseComponentName, ok = baseComponent.(string)
-					if !ok {
-						return nil, fmt.Errorf("invalid 'components.terraform.%s.component' attribute in the file '%s'", component, stackName)
-					}
-
-					// Process the base components recursively to find `componentInheritanceChain`
-					err = ProcessBaseComponentConfig(
-						atmosConfig,
-						&baseComponentConfig,
-						allTerraformComponentsMap,
-						component,
-						stack,
-						baseComponentName,
-						terraformComponentsBasePath,
-						checkBaseComponentExists,
-						&baseComponents,
-					)
-					if err != nil {
-						return nil, err
-					}
-
-					baseComponentVars = baseComponentConfig.BaseComponentVars
-					baseComponentSettings = baseComponentConfig.BaseComponentSettings
-					baseComponentEnv = baseComponentConfig.BaseComponentEnv
-					baseComponentProviders = baseComponentConfig.BaseComponentProviders
-					baseComponentHooks = baseComponentConfig.BaseComponentHooks
-					baseComponentName = baseComponentConfig.FinalBaseComponentName
-					baseComponentTerraformCommand = baseComponentConfig.BaseComponentCommand
-					baseComponentBackendType = baseComponentConfig.BaseComponentBackendType
-					baseComponentBackendSection = baseComponentConfig.BaseComponentBackendSection
-					baseComponentRemoteStateBackendType = baseComponentConfig.BaseComponentRemoteStateBackendType
-					baseComponentRemoteStateBackendSection = baseComponentConfig.BaseComponentRemoteStateBackendSection
-					componentInheritanceChain = baseComponentConfig.ComponentInheritanceChain
-				}
-
-				// Multiple inheritance (and multiple-inheritance chain) using `metadata.component` and `metadata.inherit`.
-				// `metadata.component` points to the component implementation (e.g. in `components/terraform` folder),
-				// it does not specify inheritance (it overrides the deprecated top-level `component` attribute).
-				// `metadata.inherit` is a list of component names from which the current component inherits.
-				// It uses a method similar to Method Resolution Order (MRO), which is how Python supports multiple inheritance.
-				//
-				// In the case of multiple base components, it is processed left to right, in the order by which it was declared.
-				// For example: `metadata.inherits: [componentA, componentB]`
-				// will deep-merge all the base components of `componentA` (each component overriding its base),
-				// then all the base components of `componentB` (each component overriding its base),
-				// then the two results are deep-merged together (`componentB` inheritance chain will override values from 'componentA' inheritance chain).
-				if baseComponentFromMetadata, baseComponentFromMetadataExist := componentMetadata[cfg.ComponentSectionName]; baseComponentFromMetadataExist {
-					baseComponentName, ok = baseComponentFromMetadata.(string)
-					if !ok {
-						return nil, fmt.Errorf("invalid 'components.terraform.%s.metadata.component' attribute in the file '%s'", component, stackName)
-					}
-				}
-
-				baseComponents = append(baseComponents, baseComponentName)
-
-				if inheritList, inheritListExist := componentMetadata["inherits"].([]any); inheritListExist {
-					for _, v := range inheritList {
-						baseComponentFromInheritList, ok := v.(string)
-						if !ok {
-							return nil, fmt.Errorf("invalid 'components.terraform.%s.metadata.inherits' section in the file '%s'", component, stackName)
-						}
-
-						if _, ok := allTerraformComponentsMap[baseComponentFromInheritList]; !ok {
-							if checkBaseComponentExists {
-								errorMessage := fmt.Sprintf("The component '%[1]s' in the stack manifest '%[2]s' inherits from '%[3]s' "+
-									"(using 'metadata.inherits'), but '%[3]s' is not defined in any of the config files for the stack '%[2]s'",
-									component,
-									stackName,
-									baseComponentFromInheritList,
-								)
-								return nil, errors.New(errorMessage)
-							}
-						}
-
-						// Process the baseComponentFromInheritList components recursively to find `componentInheritanceChain`
-						err = ProcessBaseComponentConfig(
-							atmosConfig,
-							&baseComponentConfig,
-							allTerraformComponentsMap,
-							component,
-							stack,
-							baseComponentFromInheritList,
-							terraformComponentsBasePath,
-							checkBaseComponentExists,
-							&baseComponents,
-						)
-						if err != nil {
-							return nil, err
-						}
-
-						baseComponentVars = baseComponentConfig.BaseComponentVars
-						baseComponentSettings = baseComponentConfig.BaseComponentSettings
-						baseComponentEnv = baseComponentConfig.BaseComponentEnv
-						baseComponentProviders = baseComponentConfig.BaseComponentProviders
-						baseComponentHooks = baseComponentConfig.BaseComponentHooks
-						baseComponentTerraformCommand = baseComponentConfig.BaseComponentCommand
-						baseComponentBackendType = baseComponentConfig.BaseComponentBackendType
-						baseComponentBackendSection = baseComponentConfig.BaseComponentBackendSection
-						baseComponentRemoteStateBackendType = baseComponentConfig.BaseComponentRemoteStateBackendType
-						baseComponentRemoteStateBackendSection = baseComponentConfig.BaseComponentRemoteStateBackendSection
-						componentInheritanceChain = baseComponentConfig.ComponentInheritanceChain
-					}
-				}
-
-				baseComponents = u.UniqueStrings(baseComponents)
-				sort.Strings(baseComponents)
-
-				// Final configs
-				finalComponentVars, err := m.Merge(
-					atmosConfig,
-					[]map[string]any{
-						globalAndTerraformVars,
-						baseComponentVars,
-						componentVars,
-						componentOverridesVars,
-					})
-				if err != nil {
-					return nil, err
-				}
-
-				finalComponentSettings, err := m.Merge(
-					atmosConfig,
-					[]map[string]any{
-						globalAndTerraformSettings,
-						baseComponentSettings,
-						componentSettings,
-						componentOverridesSettings,
-					})
-				if err != nil {
-					return nil, err
-				}
-
-				finalComponentEnv, err := m.Merge(
-					atmosConfig,
-					[]map[string]any{
-						globalAndTerraformEnv,
-						baseComponentEnv,
-						componentEnv,
-						componentOverridesEnv,
-					})
-				if err != nil {
-					return nil, err
-				}
-
-				finalComponentProviders, err := m.Merge(
-					atmosConfig,
-					[]map[string]any{
-						terraformProviders,
-						baseComponentProviders,
-						componentProviders,
-						componentOverridesProviders,
-					})
-				if err != nil {
-					return nil, err
-				}
-
-				finalComponentHooks, err := m.Merge(
-					atmosConfig,
-					[]map[string]any{
-						globalAndTerraformHooks,
-						baseComponentHooks,
-						componentHooks,
-						componentOverridesHooks,
-					})
-				if err != nil {
-					return nil, err
-				}
-
-				// Final backend
-				finalComponentBackendType := globalBackendType
-				if len(baseComponentBackendType) > 0 {
-					finalComponentBackendType = baseComponentBackendType
-				}
-				if len(componentBackendType) > 0 {
-					finalComponentBackendType = componentBackendType
-				}
-
-				finalComponentBackendSection, err := m.Merge(
-					atmosConfig,
-					[]map[string]any{
-						globalBackendSection,
-						baseComponentBackendSection,
-						componentBackendSection,
-					})
-				if err != nil {
-					return nil, err
-				}
-
-				finalComponentBackend := map[string]any{}
-				if i, ok := finalComponentBackendSection[finalComponentBackendType]; ok {
-					finalComponentBackend, ok = i.(map[string]any)
-					if !ok {
-						return nil, fmt.Errorf("invalid 'terraform.backend' section for the component '%s'", component)
-					}
-				}
-
-				// AWS S3 backend
-				// Check if `backend` section has `workspace_key_prefix` for `s3` backend type
-				// If it does not, use the component name instead
-				// It will also be propagated to `remote_state_backend` section of `s3` type
-				if finalComponentBackendType == "s3" {
-					if p, ok := finalComponentBackend["workspace_key_prefix"].(string); !ok || p == "" {
-						workspaceKeyPrefix := component
-						if baseComponentName != "" {
-							workspaceKeyPrefix = baseComponentName
-						}
-						finalComponentBackend["workspace_key_prefix"] = strings.Replace(workspaceKeyPrefix, "/", "-", -1)
-					}
-				}
-
-				// Google GSC backend
-				// Check if `backend` section has `prefix` for `gcs` backend type
-				// If it does not, use the component name instead
-				// https://developer.hashicorp.com/terraform/language/settings/backends/gcs
-				// https://developer.hashicorp.com/terraform/language/settings/backends/gcs#prefix
-				if finalComponentBackendType == "gcs" {
-					if p, ok := finalComponentBackend["prefix"].(string); !ok || p == "" {
-						prefix := component
-						if baseComponentName != "" {
-							prefix = baseComponentName
-						}
-						finalComponentBackend["prefix"] = strings.Replace(prefix, "/", "-", -1)
-					}
-				}
-
-				// Azure backend
-				// Check if component `backend` section has `key` for `azurerm` backend type
-				// If it does not, use the component name instead and format it with the global backend key name to auto generate a unique Terraform state key
-				// The backend state file will be formatted like so: {global key name}/{component name}.terraform.tfstate
-				if finalComponentBackendType == "azurerm" {
-					if componentAzurerm, componentAzurermExists := componentBackendSection["azurerm"].(map[string]any); !componentAzurermExists {
-						if _, componentAzurermKeyExists := componentAzurerm["key"].(string); !componentAzurermKeyExists {
-							azureKeyPrefixComponent := component
-							var keyName []string
-							if baseComponentName != "" {
-								azureKeyPrefixComponent = baseComponentName
-							}
-							if globalAzurerm, globalAzurermExists := globalBackendSection["azurerm"].(map[string]any); globalAzurermExists {
-								if _, globalAzurermKeyExists := globalAzurerm["key"].(string); globalAzurermKeyExists {
-									keyName = append(keyName, globalAzurerm["key"].(string))
-								}
-							}
-							componentKeyName := strings.Replace(azureKeyPrefixComponent, "/", "-", -1)
-							keyName = append(keyName, fmt.Sprintf("%s.terraform.tfstate", componentKeyName))
-							finalComponentBackend["key"] = strings.Join(keyName, "/")
-						}
-					}
-				}
-
-				// Final remote state backend
-				finalComponentRemoteStateBackendType := finalComponentBackendType
-				if len(globalRemoteStateBackendType) > 0 {
-					finalComponentRemoteStateBackendType = globalRemoteStateBackendType
-				}
-				if len(baseComponentRemoteStateBackendType) > 0 {
-					finalComponentRemoteStateBackendType = baseComponentRemoteStateBackendType
-				}
-				if len(componentRemoteStateBackendType) > 0 {
-					finalComponentRemoteStateBackendType = componentRemoteStateBackendType
-				}
-
-				finalComponentRemoteStateBackendSection, err := m.Merge(
-					atmosConfig,
-					[]map[string]any{
-						globalRemoteStateBackendSection,
-						baseComponentRemoteStateBackendSection,
-						componentRemoteStateBackendSection,
-					})
-				if err != nil {
-					return nil, err
-				}
-
-				// Merge `backend` and `remote_state_backend` sections
-				// This will allow keeping `remote_state_backend` section DRY
-				finalComponentRemoteStateBackendSectionMerged, err := m.Merge(
-					atmosConfig,
-					[]map[string]any{
-						finalComponentBackendSection,
-						finalComponentRemoteStateBackendSection,
-					})
-				if err != nil {
-					return nil, err
-				}
-
-				finalComponentRemoteStateBackend := map[string]any{}
-				if i, ok := finalComponentRemoteStateBackendSectionMerged[finalComponentRemoteStateBackendType]; ok {
-					finalComponentRemoteStateBackend, ok = i.(map[string]any)
-					if !ok {
-						return nil, fmt.Errorf("invalid 'terraform.remote_state_backend' section for the component '%s'", component)
-					}
-				}
-
-				// Final binary to execute
-				// Check for the binary in the following order:
-				// - `components.terraform.command` section in `atmos.yaml` CLI config file
-				// - global `terraform.command` section
-				// - base component(s) `command` section
-				// - component `command` section
-				// - `overrides.command` section
-				finalComponentTerraformCommand := "terraform"
-				if atmosConfig.Components.Terraform.Command != "" {
-					finalComponentTerraformCommand = atmosConfig.Components.Terraform.Command
-				}
-				if terraformCommand != "" {
-					finalComponentTerraformCommand = terraformCommand
-				}
-				if baseComponentTerraformCommand != "" {
-					finalComponentTerraformCommand = baseComponentTerraformCommand
-				}
-				if componentTerraformCommand != "" {
-					finalComponentTerraformCommand = componentTerraformCommand
-				}
-				if componentOverridesTerraformCommand != "" {
-					finalComponentTerraformCommand = componentOverridesTerraformCommand
-				}
-
-				// If the component is not deployable (`metadata.type: abstract`), remove `settings.spacelift.workspace_enabled` from the map).
-				// This will prevent the derived components from inheriting `settings.spacelift.workspace_enabled=false` of not-deployable components.
-				// Also, removing `settings.spacelift.workspace_enabled` will effectively make it `false`
-				// and `spacelift_stack_processor` will not create a Spacelift stack for the abstract component
-				// even if `settings.spacelift.workspace_enabled` was set to `true`.
-				// This is per component, not deep-merged and not inherited from base components and globals.
-				componentIsAbstract := false
-				if componentType, componentTypeAttributeExists := componentMetadata["type"].(string); componentTypeAttributeExists {
-					if componentType == "abstract" {
-						componentIsAbstract = true
-					}
-				}
-				if componentIsAbstract {
-					if i, ok := finalComponentSettings["spacelift"]; ok {
-						spaceliftSettings, ok := i.(map[string]any)
-						if !ok {
-							return nil, fmt.Errorf("invalid 'components.terraform.%s.settings.spacelift' section in the file '%s'", component, stackName)
-						}
-						delete(spaceliftSettings, "workspace_enabled")
-					}
-				}
-
-				finalSettings, err := processSettingsIntegrationsGithub(atmosConfig, finalComponentSettings)
-				if err != nil {
-					return nil, err
-				}
-
-				comp := map[string]any{}
-				comp[cfg.VarsSectionName] = finalComponentVars
-				comp[cfg.SettingsSectionName] = finalSettings
-				comp[cfg.EnvSectionName] = finalComponentEnv
-				comp[cfg.BackendTypeSectionName] = finalComponentBackendType
-				comp[cfg.BackendSectionName] = finalComponentBackend
-				comp[cfg.RemoteStateBackendTypeSectionName] = finalComponentRemoteStateBackendType
-				comp[cfg.RemoteStateBackendSectionName] = finalComponentRemoteStateBackend
-				comp[cfg.CommandSectionName] = finalComponentTerraformCommand
-				comp[cfg.InheritanceSectionName] = componentInheritanceChain
-				comp[cfg.MetadataSectionName] = componentMetadata
-				comp[cfg.OverridesSectionName] = componentOverrides
-				comp[cfg.ProvidersSectionName] = finalComponentProviders
-				comp[cfg.HooksSectionName] = finalComponentHooks
-
-				if baseComponentName != "" {
-					comp[cfg.ComponentSectionName] = baseComponentName
-				}
-
-				terraformComponents[component] = comp
-			}
-		}
-	}
-
-	// Process all Helmfile components
-	if componentTypeFilter == "" || componentTypeFilter == cfg.HelmfileComponentType {
-		if allHelmfileComponents, ok := globalComponentsSection[cfg.HelmfileComponentType]; ok {
-
-			allHelmfileComponentsMap, ok := allHelmfileComponents.(map[string]any)
-			if !ok {
-				return nil, fmt.Errorf("invalid 'components.helmfile' section in the file '%s'", stackName)
-			}
-
-			for cmp, v := range allHelmfileComponentsMap {
-				component := cmp
-
-				componentMap, ok := v.(map[string]any)
-				if !ok {
-					return nil, fmt.Errorf("invalid 'components.helmfile.%s' section in the file '%s'", component, stackName)
-				}
-
-				componentVars := map[string]any{}
-				if i2, ok := componentMap[cfg.VarsSectionName]; ok {
-					componentVars, ok = i2.(map[string]any)
-					if !ok {
-						return nil, fmt.Errorf("invalid 'components.helmfile.%s.vars' section in the file '%s'", component, stackName)
-					}
-				}
-
-				componentSettings := map[string]any{}
-				if i, ok := componentMap[cfg.SettingsSectionName]; ok {
-					componentSettings, ok = i.(map[string]any)
-					if !ok {
-						return nil, fmt.Errorf("invalid 'components.helmfile.%s.settings' section in the file '%s'", component, stackName)
-					}
-				}
-
-				componentEnv := map[string]any{}
-				if i, ok := componentMap[cfg.EnvSectionName]; ok {
-					componentEnv, ok = i.(map[string]any)
-					if !ok {
-						return nil, fmt.Errorf("invalid 'components.helmfile.%s.env' section in the file '%s'", component, stackName)
-					}
-				}
-
-				// Component metadata.
-				// This is per component, not deep-merged and not inherited from base components and globals.
-				componentMetadata := map[string]any{}
-				if i, ok := componentMap[cfg.MetadataSectionName]; ok {
-					componentMetadata, ok = i.(map[string]any)
-					if !ok {
-						return nil, fmt.Errorf("invalid 'components.helmfile.%s.metadata' section in the file '%s'", component, stackName)
-					}
-				}
-
-				componentHelmfileCommand := ""
-				if i, ok := componentMap[cfg.CommandSectionName]; ok {
-					componentHelmfileCommand, ok = i.(string)
-					if !ok {
-						return nil, fmt.Errorf("invalid 'components.helmfile.%s.command' attribute in the file '%s'", component, stackName)
-					}
-				}
-
-				// Process overrides
-				componentOverrides := map[string]any{}
-				componentOverridesVars := map[string]any{}
-				componentOverridesSettings := map[string]any{}
-				componentOverridesEnv := map[string]any{}
-				componentOverridesHelmfileCommand := ""
-
-				if i, ok := componentMap[cfg.OverridesSectionName]; ok {
-					if componentOverrides, ok = i.(map[string]any); !ok {
-						return nil, fmt.Errorf("invalid 'components.helmfile.%s.overrides' in the manifest '%s'", component, stackName)
-					}
-
-					if i, ok = componentOverrides[cfg.VarsSectionName]; ok {
-						if componentOverridesVars, ok = i.(map[string]any); !ok {
-							return nil, fmt.Errorf("invalid 'components.helmfile.%s.overrides.vars' in the manifest '%s'", component, stackName)
-						}
-					}
-
-					if i, ok = componentOverrides[cfg.SettingsSectionName]; ok {
-						if componentOverridesSettings, ok = i.(map[string]any); !ok {
-							return nil, fmt.Errorf("invalid 'components.helmfile.%s.overrides.settings' in the manifest '%s'", component, stackName)
-						}
-					}
-
-					if i, ok = componentOverrides[cfg.EnvSectionName]; ok {
-						if componentOverridesEnv, ok = i.(map[string]any); !ok {
-							return nil, fmt.Errorf("invalid 'components.helmfile.%s.overrides.env' in the manifest '%s'", component, stackName)
-						}
-					}
-
-					if i, ok = componentOverrides[cfg.CommandSectionName]; ok {
-						if componentOverridesHelmfileCommand, ok = i.(string); !ok {
-							return nil, fmt.Errorf("invalid 'components.helmfile.%s.overrides.command' in the manifest '%s'", component, stackName)
-						}
-					}
-				}
-
-				// Process base component(s)
-				baseComponentVars := map[string]any{}
-				baseComponentSettings := map[string]any{}
-				baseComponentEnv := map[string]any{}
-				baseComponentName := ""
-				baseComponentHelmfileCommand := ""
-				var baseComponentConfig schema.BaseComponentConfig
-				var componentInheritanceChain []string
-				var baseComponents []string
-
-				// Inheritance using the top-level `component` attribute
-				if baseComponent, baseComponentExist := componentMap[cfg.ComponentSectionName]; baseComponentExist {
-					baseComponentName, ok = baseComponent.(string)
-					if !ok {
-						return nil, fmt.Errorf("invalid 'components.helmfile.%s.component' attribute in the file '%s'", component, stackName)
-					}
-
-					// Process the base components recursively to find `componentInheritanceChain`
-					err = ProcessBaseComponentConfig(
-						atmosConfig,
-						&baseComponentConfig,
-						allHelmfileComponentsMap,
-						component,
-						stack,
-						baseComponentName,
-						helmfileComponentsBasePath,
-						checkBaseComponentExists,
-						&baseComponents,
-					)
-					if err != nil {
-						return nil, err
-					}
-
-					baseComponentVars = baseComponentConfig.BaseComponentVars
-					baseComponentSettings = baseComponentConfig.BaseComponentSettings
-					baseComponentEnv = baseComponentConfig.BaseComponentEnv
-					baseComponentName = baseComponentConfig.FinalBaseComponentName
-					baseComponentHelmfileCommand = baseComponentConfig.BaseComponentCommand
-					componentInheritanceChain = baseComponentConfig.ComponentInheritanceChain
-				}
-
-				// Multiple inheritance (and multiple-inheritance chain) using `metadata.component` and `metadata.inherit`.
-				// `metadata.component` points to the component implementation (e.g. in `components/terraform` folder),
-				// it does not specify inheritance (it overrides the deprecated top-level `component` attribute).
-				// `metadata.inherit` is a list of component names from which the current component inherits.
-				// It uses a method similar to Method Resolution Order (MRO), which is how Python supports multiple inheritance.
-				//
-				// In the case of multiple base components, it is processed left to right, in the order by which it was declared.
-				// For example: `metadata.inherits: [componentA, componentB]`
-				// will deep-merge all the base components of `componentA` (each component overriding its base),
-				// then all the base components of `componentB` (each component overriding its base),
-				// then the two results are deep-merged together (`componentB` inheritance chain will override values from 'componentA' inheritance chain).
-				if baseComponentFromMetadata, baseComponentFromMetadataExist := componentMetadata[cfg.ComponentSectionName]; baseComponentFromMetadataExist {
-					baseComponentName, ok = baseComponentFromMetadata.(string)
-					if !ok {
-						return nil, fmt.Errorf("invalid 'components.helmfile.%s.metadata.component' attribute in the file '%s'", component, stackName)
-					}
-				}
-
-				baseComponents = append(baseComponents, baseComponentName)
-
-				if inheritList, inheritListExist := componentMetadata["inherits"].([]any); inheritListExist {
-					for _, v := range inheritList {
-						baseComponentFromInheritList, ok := v.(string)
-						if !ok {
-							return nil, fmt.Errorf("invalid 'components.helmfile.%s.metadata.inherits' section in the file '%s'", component, stackName)
-						}
-
-						if _, ok := allHelmfileComponentsMap[baseComponentFromInheritList]; !ok {
-							if checkBaseComponentExists {
-								errorMessage := fmt.Sprintf("The component '%[1]s' in the stack manifest '%[2]s' inherits from '%[3]s' "+
-									"(using 'metadata.inherits'), but '%[3]s' is not defined in any of the config files for the stack '%[2]s'",
-									component,
-									stackName,
-									baseComponentFromInheritList,
-								)
-								return nil, errors.New(errorMessage)
-							}
-						}
-
-						// Process the baseComponentFromInheritList components recursively to find `componentInheritanceChain`
-						err = ProcessBaseComponentConfig(
-							atmosConfig,
-							&baseComponentConfig,
-							allHelmfileComponentsMap,
-							component,
-							stack,
-							baseComponentFromInheritList,
-							helmfileComponentsBasePath,
-							checkBaseComponentExists,
-							&baseComponents,
-						)
-						if err != nil {
-							return nil, err
-						}
-
-						baseComponentVars = baseComponentConfig.BaseComponentVars
-						baseComponentSettings = baseComponentConfig.BaseComponentSettings
-						baseComponentEnv = baseComponentConfig.BaseComponentEnv
-						baseComponentName = baseComponentConfig.FinalBaseComponentName
-						baseComponentHelmfileCommand = baseComponentConfig.BaseComponentCommand
-						componentInheritanceChain = baseComponentConfig.ComponentInheritanceChain
-					}
-				}
-
-				baseComponents = u.UniqueStrings(baseComponents)
-				sort.Strings(baseComponents)
-
-				// Final configs
-				finalComponentVars, err := m.Merge(
-					atmosConfig,
-					[]map[string]any{
-						globalAndHelmfileVars,
-						baseComponentVars,
-						componentVars,
-						componentOverridesVars,
-					})
-				if err != nil {
-					return nil, err
-				}
-
-				finalComponentSettings, err := m.Merge(
-					atmosConfig,
-					[]map[string]any{
-						globalAndHelmfileSettings,
-						baseComponentSettings,
-						componentSettings,
-						componentOverridesSettings,
-					})
-				if err != nil {
-					return nil, err
-				}
-
-				finalComponentEnv, err := m.Merge(
-					atmosConfig,
-					[]map[string]any{
-						globalAndHelmfileEnv,
-						baseComponentEnv,
-						componentEnv,
-						componentOverridesEnv,
-					})
-				if err != nil {
-					return nil, err
-				}
-
-				// Final binary to execute
-				// Check for the binary in the following order:
-				// - `components.helmfile.command` section in `atmos.yaml` CLI config file
-				// - global `helmfile.command` section
-				// - base component(s) `command` section
-				// - component `command` section
-				// - `overrides.command` section
-				finalComponentHelmfileCommand := "helmfile"
-				if atmosConfig.Components.Helmfile.Command != "" {
-					finalComponentHelmfileCommand = atmosConfig.Components.Helmfile.Command
-				}
-				if helmfileCommand != "" {
-					finalComponentHelmfileCommand = helmfileCommand
-				}
-				if baseComponentHelmfileCommand != "" {
-					finalComponentHelmfileCommand = baseComponentHelmfileCommand
-				}
-				if componentHelmfileCommand != "" {
-					finalComponentHelmfileCommand = componentHelmfileCommand
-				}
-				if componentOverridesHelmfileCommand != "" {
-					finalComponentHelmfileCommand = componentOverridesHelmfileCommand
-				}
-
-				finalSettings, err := processSettingsIntegrationsGithub(atmosConfig, finalComponentSettings)
-				if err != nil {
-					return nil, err
-				}
-
-				comp := map[string]any{}
-				comp[cfg.VarsSectionName] = finalComponentVars
-				comp[cfg.SettingsSectionName] = finalSettings
-				comp[cfg.EnvSectionName] = finalComponentEnv
-				comp[cfg.CommandSectionName] = finalComponentHelmfileCommand
-				comp["inheritance"] = componentInheritanceChain
-				comp[cfg.MetadataSectionName] = componentMetadata
-				comp[cfg.OverridesSectionName] = componentOverrides
-
-				if baseComponentName != "" {
-					comp[cfg.ComponentSectionName] = baseComponentName
-				}
-
-				helmfileComponents[component] = comp
-			}
-		}
-	}
-
-	// Process all Packer components
-	if componentTypeFilter == "" || componentTypeFilter == cfg.PackerComponentType {
-		if allPackerComponents, ok := globalComponentsSection[cfg.PackerComponentType]; ok {
-
-			allPackerComponentsMap, ok := allPackerComponents.(map[string]any)
-			if !ok {
-				return nil, fmt.Errorf("invalid 'components.packer' section in the file '%s'", stackName)
-			}
-
-			for cmp, v := range allPackerComponentsMap {
-				component := cmp
-
-				componentMap, ok := v.(map[string]any)
-				if !ok {
-					return nil, fmt.Errorf("invalid 'components.packer.%s' section in the file '%s'", component, stackName)
-				}
-
-				componentVars := map[string]any{}
-				if i2, ok := componentMap[cfg.VarsSectionName]; ok {
-					componentVars, ok = i2.(map[string]any)
-					if !ok {
-						return nil, fmt.Errorf("invalid 'components.packer.%s.vars' section in the file '%s'", component, stackName)
-					}
-				}
-
-				componentSettings := map[string]any{}
-				if i, ok := componentMap[cfg.SettingsSectionName]; ok {
-					componentSettings, ok = i.(map[string]any)
-					if !ok {
-						return nil, fmt.Errorf("invalid 'components.packer.%s.settings' section in the file '%s'", component, stackName)
-					}
-				}
-
-				componentEnv := map[string]any{}
-				if i, ok := componentMap[cfg.EnvSectionName]; ok {
-					componentEnv, ok = i.(map[string]any)
-					if !ok {
-						return nil, fmt.Errorf("invalid 'components.packer.%s.env' section in the file '%s'", component, stackName)
-					}
-				}
-
-				// Component metadata.
-				// This is per component, not deep-merged and not inherited from base components and globals.
-				componentMetadata := map[string]any{}
-				if i, ok := componentMap[cfg.MetadataSectionName]; ok {
-					componentMetadata, ok = i.(map[string]any)
-					if !ok {
-						return nil, fmt.Errorf("invalid 'components.packer.%s.metadata' section in the file '%s'", component, stackName)
-					}
-				}
-
-				componentPackerCommand := ""
-				if i, ok := componentMap[cfg.CommandSectionName]; ok {
-					componentPackerCommand, ok = i.(string)
-					if !ok {
-						return nil, fmt.Errorf("invalid 'components.packer.%s.command' attribute in the file '%s'", component, stackName)
-					}
-				}
-
-				// Process overrides
-				componentOverrides := map[string]any{}
-				componentOverridesVars := map[string]any{}
-				componentOverridesSettings := map[string]any{}
-				componentOverridesEnv := map[string]any{}
-				componentOverridesPackerCommand := ""
-
-				if i, ok := componentMap[cfg.OverridesSectionName]; ok {
-					if componentOverrides, ok = i.(map[string]any); !ok {
-						return nil, fmt.Errorf("invalid 'components.packer.%s.overrides' in the manifest '%s'", component, stackName)
-					}
-
-					if i, ok = componentOverrides[cfg.VarsSectionName]; ok {
-						if componentOverridesVars, ok = i.(map[string]any); !ok {
-							return nil, fmt.Errorf("invalid 'components.packer.%s.overrides.vars' in the manifest '%s'", component, stackName)
-						}
-					}
-
-					if i, ok = componentOverrides[cfg.SettingsSectionName]; ok {
-						if componentOverridesSettings, ok = i.(map[string]any); !ok {
-							return nil, fmt.Errorf("invalid 'components.packer.%s.overrides.settings' in the manifest '%s'", component, stackName)
-						}
-					}
-
-					if i, ok = componentOverrides[cfg.EnvSectionName]; ok {
-						if componentOverridesEnv, ok = i.(map[string]any); !ok {
-							return nil, fmt.Errorf("invalid 'components.packer.%s.overrides.env' in the manifest '%s'", component, stackName)
-						}
-					}
-
-					if i, ok = componentOverrides[cfg.CommandSectionName]; ok {
-						if componentOverridesPackerCommand, ok = i.(string); !ok {
-							return nil, fmt.Errorf("invalid 'components.packer.%s.overrides.command' in the manifest '%s'", component, stackName)
-						}
-					}
-				}
-
-				// Process base component(s)
-				baseComponentVars := map[string]any{}
-				baseComponentSettings := map[string]any{}
-				baseComponentEnv := map[string]any{}
-				baseComponentName := ""
-				baseComponentPackerCommand := ""
-				var baseComponentConfig schema.BaseComponentConfig
-				var componentInheritanceChain []string
-				var baseComponents []string
-
-				// Inheritance using the top-level `component` attribute
-				if baseComponent, baseComponentExist := componentMap[cfg.ComponentSectionName]; baseComponentExist {
-					baseComponentName, ok = baseComponent.(string)
-					if !ok {
-						return nil, fmt.Errorf("invalid 'components.packer.%s.component' attribute in the file '%s'", component, stackName)
-					}
-
-					// Process the base components recursively to find `componentInheritanceChain`
-					err = ProcessBaseComponentConfig(
-						atmosConfig,
-						&baseComponentConfig,
-						allPackerComponentsMap,
-						component,
-						stack,
-						baseComponentName,
-						packerComponentsBasePath,
-						checkBaseComponentExists,
-						&baseComponents,
-					)
-					if err != nil {
-						return nil, err
-					}
-
-					baseComponentVars = baseComponentConfig.BaseComponentVars
-					baseComponentSettings = baseComponentConfig.BaseComponentSettings
-					baseComponentEnv = baseComponentConfig.BaseComponentEnv
-					baseComponentName = baseComponentConfig.FinalBaseComponentName
-					baseComponentPackerCommand = baseComponentConfig.BaseComponentCommand
-					componentInheritanceChain = baseComponentConfig.ComponentInheritanceChain
-				}
-
-				// Multiple inheritance (and multiple-inheritance chain) using `metadata.component` and `metadata.inherit`.
-				// `metadata.component` points to the component implementation (e.g. in `components/terraform` folder),
-				// it does not specify inheritance (it overrides the deprecated top-level `component` attribute).
-				// `metadata.inherit` is a list of component names from which the current component inherits.
-				// It uses a method similar to Method Resolution Order (MRO), which is how Python supports multiple inheritance.
-				//
-				// In the case of multiple base components, it is processed left to right, in the order by which it was declared.
-				// For example: `metadata.inherits: [componentA, componentB]`
-				// will deep-merge all the base components of `componentA` (each component overriding its base),
-				// then all the base components of `componentB` (each component overriding its base),
-				// then the two results are deep-merged together (`componentB` inheritance chain will override values from 'componentA' inheritance chain).
-				if baseComponentFromMetadata, baseComponentFromMetadataExist := componentMetadata[cfg.ComponentSectionName]; baseComponentFromMetadataExist {
-					baseComponentName, ok = baseComponentFromMetadata.(string)
-					if !ok {
-						return nil, fmt.Errorf("invalid 'components.packer.%s.metadata.component' attribute in the file '%s'", component, stackName)
-					}
-				}
-
-				baseComponents = append(baseComponents, baseComponentName)
-
-				if inheritList, inheritListExist := componentMetadata["inherits"].([]any); inheritListExist {
-					for _, v := range inheritList {
-						baseComponentFromInheritList, ok := v.(string)
-						if !ok {
-							return nil, fmt.Errorf("invalid 'components.packer.%s.metadata.inherits' section in the file '%s'", component, stackName)
-						}
-
-						if _, ok := allPackerComponentsMap[baseComponentFromInheritList]; !ok {
-							if checkBaseComponentExists {
-								errorMessage := fmt.Sprintf("The component '%[1]s' in the stack manifest '%[2]s' inherits from '%[3]s' "+
-									"(using 'metadata.inherits'), but '%[3]s' is not defined in any of the config files for the stack '%[2]s'",
-									component,
-									stackName,
-									baseComponentFromInheritList,
-								)
-								return nil, errors.New(errorMessage)
-							}
-						}
-
-						// Process the baseComponentFromInheritList components recursively to find `componentInheritanceChain`
-						err = ProcessBaseComponentConfig(
-							atmosConfig,
-							&baseComponentConfig,
-							allPackerComponentsMap,
-							component,
-							stack,
-							baseComponentFromInheritList,
-							packerComponentsBasePath,
-							checkBaseComponentExists,
-							&baseComponents,
-						)
-						if err != nil {
-							return nil, err
-						}
-
-						baseComponentVars = baseComponentConfig.BaseComponentVars
-						baseComponentSettings = baseComponentConfig.BaseComponentSettings
-						baseComponentEnv = baseComponentConfig.BaseComponentEnv
-						baseComponentName = baseComponentConfig.FinalBaseComponentName
-						baseComponentPackerCommand = baseComponentConfig.BaseComponentCommand
-						componentInheritanceChain = baseComponentConfig.ComponentInheritanceChain
-					}
-				}
-
-				baseComponents = u.UniqueStrings(baseComponents)
-				sort.Strings(baseComponents)
-
-				// Final configs
-				finalComponentVars, err := m.Merge(
-					atmosConfig,
-					[]map[string]any{
-						globalAndPackerVars,
-						baseComponentVars,
-						componentVars,
-						componentOverridesVars,
-					})
-				if err != nil {
-					return nil, err
-				}
-
-				finalComponentSettings, err := m.Merge(
-					atmosConfig,
-					[]map[string]any{
-						globalAndPackerSettings,
-						baseComponentSettings,
-						componentSettings,
-						componentOverridesSettings,
-					})
-				if err != nil {
-					return nil, err
-				}
-
-				finalComponentEnv, err := m.Merge(
-					atmosConfig,
-					[]map[string]any{
-						globalAndPackerEnv,
-						baseComponentEnv,
-						componentEnv,
-						componentOverridesEnv,
-					})
-				if err != nil {
-					return nil, err
-				}
-
-				// Final binary to execute
-				// Check for the binary in the following order:
-				// - `components.packer.command` section in `atmos.yaml` CLI config file
-				// - global `packer.command` section
-				// - base component(s) `command` section
-				// - component `command` section
-				// - `overrides.command` section
-				finalComponentPackerCommand := cfg.PackerComponentType
-				if atmosConfig.Components.Packer.Command != "" {
-					finalComponentPackerCommand = atmosConfig.Components.Packer.Command
-				}
-				if packerCommand != "" {
-					finalComponentPackerCommand = packerCommand
-				}
-				if baseComponentPackerCommand != "" {
-					finalComponentPackerCommand = baseComponentPackerCommand
-				}
-				if componentPackerCommand != "" {
-					finalComponentPackerCommand = componentPackerCommand
-				}
-				if componentOverridesPackerCommand != "" {
-					finalComponentPackerCommand = componentOverridesPackerCommand
-				}
-
-				finalSettings, err := processSettingsIntegrationsGithub(atmosConfig, finalComponentSettings)
-				if err != nil {
-					return nil, err
-				}
-
-				comp := map[string]any{}
-				comp[cfg.VarsSectionName] = finalComponentVars
-				comp[cfg.SettingsSectionName] = finalSettings
-				comp[cfg.EnvSectionName] = finalComponentEnv
-				comp[cfg.CommandSectionName] = finalComponentPackerCommand
-				comp["inheritance"] = componentInheritanceChain
-				comp[cfg.MetadataSectionName] = componentMetadata
-				comp[cfg.OverridesSectionName] = componentOverrides
-
-				if baseComponentName != "" {
-					comp[cfg.ComponentSectionName] = baseComponentName
-				}
-
-				packerComponents[component] = comp
-			}
-		}
-	}
-
-	allComponents[cfg.TerraformComponentType] = terraformComponents
-	allComponents[cfg.HelmfileComponentType] = helmfileComponents
-	allComponents[cfg.PackerComponentType] = packerComponents
-
-	result := map[string]any{
-		cfg.ComponentsSectionName: allComponents,
-	}
-
-	return result, nil
-}
-
 // processSettingsIntegrationsGithub deep-merges the `settings.integrations.github` section from stack manifests with the `integrations.github` section from `atmos.yaml`.
 func processSettingsIntegrationsGithub(atmosConfig *schema.AtmosConfiguration, settings map[string]any) (map[string]any, error) {
 	defer perf.Track(atmosConfig, "exec.processSettingsIntegrationsGithub")()
@@ -2106,6 +826,7 @@ func processSettingsIntegrationsGithub(atmosConfig *schema.AtmosConfiguration, s
 	settingsIntegrationsGithubSection := make(map[string]any)
 
 	// Find `settings.integrations.github` section from stack manifests
+	//nolint:nestif // Nested type assertions for settings.integrations.github extraction.
 	if settingsIntegrations, ok := settings[cfg.IntegrationsSectionName]; ok {
 		if settingsIntegrationsMap, ok := settingsIntegrations.(map[string]any); ok {
 			settingsIntegrationsSection = settingsIntegrationsMap
@@ -2130,6 +851,9 @@ func processSettingsIntegrationsGithub(atmosConfig *schema.AtmosConfiguration, s
 
 	// Update the `settings.integrations.github` section
 	if len(settingsIntegrationsGithubMerged) > 0 {
+		if settings == nil {
+			settings = make(map[string]any)
+		}
 		settingsIntegrationsSection[cfg.GithubSectionName] = settingsIntegrationsGithubMerged
 		settings[cfg.IntegrationsSectionName] = settingsIntegrationsSection
 	}
@@ -2148,6 +872,7 @@ func FindComponentStacks(
 
 	var stacks []string
 
+	//nolint:nestif // Nested lookups for component and base component stack configurations.
 	if componentStackConfig, componentStackConfigExists := componentStackMap[componentType]; componentStackConfigExists {
 		if componentStacks, componentStacksExist := componentStackConfig[component]; componentStacksExist {
 			stacks = append(stacks, componentStacks...)
@@ -2171,9 +896,11 @@ func FindComponentStacks(
 //     `settings` or `vars` sections which are not empty.
 //  2. The imported config file has the component type section, which has any of the `backend`, `backend_type`, `env`, `remote_state_backend`,
 //     `remote_state_backend_type`, `settings` or `vars` sections which are not empty.
-//  3. The imported config file has the "components" section, which has the component type section, which has the component section.
-//  4. The imported config file has the "components" section, which has the component type section, which has the base component(s) section,
+//  3. The imported config file has the cfg.ComponentsSectionName section, which has the component type section, which has the component section.
+//  4. The imported config file has the cfg.ComponentsSectionName section, which has the component type section, which has the base component(s) section,
 //     and the base component section is defined inline (not imported).
+//
+//nolint:gocognit,revive,cyclop,funlen // Complex legacy dependency resolution logic.
 func FindComponentDependenciesLegacy(
 	stack string,
 	componentType string,
@@ -2186,17 +913,16 @@ func FindComponentDependenciesLegacy(
 	var deps []string
 
 	sectionsToCheck := []string{
-		"backend",
-		"backend_type",
-		"env",
-		"remote_state_backend",
-		"remote_state_backend_type",
-		"settings",
-		"vars",
+		cfg.BackendSectionName,
+		cfg.BackendTypeSectionName,
+		cfg.EnvSectionName,
+		cfg.RemoteStateBackendSectionName,
+		cfg.RemoteStateBackendTypeSectionName,
+		cfg.SettingsSectionName,
+		cfg.VarsSectionName,
 	}
 
 	for stackImportName, stackImportMap := range stackImports {
-
 		if sectionContainsAnyNotEmptySections(stackImportMap, sectionsToCheck) {
 			deps = append(deps, stackImportName)
 			continue
@@ -2209,7 +935,7 @@ func FindComponentDependenciesLegacy(
 			}
 		}
 
-		stackImportMapComponentsSection, ok := stackImportMap["components"].(map[string]any)
+		stackImportMapComponentsSection, ok := stackImportMap[cfg.ComponentsSectionName].(map[string]any)
 		if !ok {
 			continue
 		}
@@ -2255,7 +981,7 @@ func FindComponentDependenciesLegacy(
 					continue
 				}
 
-				importOfStackImportComponentsSection, ok := importOfStackImportMap["components"].(map[string]any)
+				importOfStackImportComponentsSection, ok := importOfStackImportMap[cfg.ComponentsSectionName].(map[string]any)
 				if !ok {
 					continue
 				}
@@ -2301,15 +1027,18 @@ func ProcessImportSection(stackMap map[string]any, filePath string) ([]schema.St
 
 	// Check if the `import` section is a list of objects
 	importsList, ok := stackImports.([]any)
-	if !ok || len(importsList) == 0 {
-		return nil, fmt.Errorf("invalid 'import' section in the file '%s'", filePath)
+	if !ok {
+		return nil, fmt.Errorf("%w in the file '%s'", errUtils.ErrInvalidImportSection, filePath)
+	}
+	if len(importsList) == 0 {
+		return nil, nil
 	}
 
 	var result []schema.StackImport
 
 	for _, imp := range importsList {
 		if imp == nil {
-			return nil, fmt.Errorf("invalid import in the file '%s'", filePath)
+			return nil, fmt.Errorf("%w in the file '%s'", errUtils.ErrInvalidImport, filePath)
 		}
 
 		// 1. Try to decode the import as the `StackImport` struct
@@ -2324,10 +1053,10 @@ func ProcessImportSection(stackMap map[string]any, filePath string) ([]schema.St
 		// 2. Try to cast the import to a string
 		s, ok := imp.(string)
 		if !ok {
-			return nil, fmt.Errorf("invalid import '%v' in the file '%s'", imp, filePath)
+			return nil, fmt.Errorf("%w '%v' in the file '%s'", errUtils.ErrInvalidImport, imp, filePath)
 		}
 		if s == "" {
-			return nil, fmt.Errorf("invalid empty import in the file '%s'", filePath)
+			return nil, fmt.Errorf("%w (empty) in the file '%s'", errUtils.ErrInvalidImport, filePath)
 		}
 
 		s = u.ResolveRelativePath(s, filePath)
@@ -2394,6 +1123,7 @@ func ProcessBaseComponentConfig(
 	var baseComponentVars map[string]any
 	var baseComponentSettings map[string]any
 	var baseComponentEnv map[string]any
+	var baseComponentAuth map[string]any
 	var baseComponentProviders map[string]any
 	var baseComponentHooks map[string]any
 	var baseComponentCommand string
@@ -2413,8 +1143,8 @@ func ProcessBaseComponentConfig(
 			// We try to convert to both
 			baseComponentMapOfStrings, ok := baseComponentSection.(map[string]any)
 			if !ok {
-				return fmt.Errorf("invalid config for the base component '%s' of the component '%s' in the stack '%s'",
-					baseComponent, component, stack)
+				return fmt.Errorf("%w for the base component '%s' of the component '%s' in the stack '%s'",
+					errUtils.ErrInvalidBaseComponentConfig, baseComponent, component, stack)
 			}
 			baseComponentMap = baseComponentMapOfStrings
 		}
@@ -2423,8 +1153,8 @@ func ProcessBaseComponentConfig(
 		if baseComponentOfBaseComponent, baseComponentOfBaseComponentExist := baseComponentMap["component"]; baseComponentOfBaseComponentExist {
 			baseComponentOfBaseComponentString, ok := baseComponentOfBaseComponent.(string)
 			if !ok {
-				return fmt.Errorf("invalid 'component:' section of the component '%s' in the stack '%s'",
-					baseComponent, stack)
+				return fmt.Errorf("%w 'component:' of the component '%s' in the stack '%s'",
+					errUtils.ErrInvalidComponentAttribute, baseComponent, stack)
 			}
 
 			err := ProcessBaseComponentConfig(
@@ -2449,14 +1179,14 @@ func ProcessBaseComponentConfig(
 		if i, ok := baseComponentMap["metadata"]; ok {
 			componentMetadata, ok = i.(map[string]any)
 			if !ok {
-				return fmt.Errorf("invalid '%s.metadata' section in the stack '%s'", component, stack)
+				return fmt.Errorf("%w '%s.metadata' in the stack '%s'", errUtils.ErrInvalidComponentMetadata, component, stack)
 			}
 
-			if inheritList, inheritListExist := componentMetadata["inherits"].([]any); inheritListExist {
+			if inheritList, inheritListExist := componentMetadata[cfg.InheritsSectionName].([]any); inheritListExist {
 				for _, v := range inheritList {
 					baseComponentFromInheritList, ok := v.(string)
 					if !ok {
-						return fmt.Errorf("invalid '%s.metadata.inherits' section in the stack '%s'", component, stack)
+						return fmt.Errorf("%w '%s.metadata.inherits' in the stack '%s'", errUtils.ErrInvalidComponentMetadataInherits, component, stack)
 					}
 
 					if _, ok := allComponentsMap[baseComponentFromInheritList]; !ok {
@@ -2490,68 +1220,75 @@ func ProcessBaseComponentConfig(
 			}
 		}
 
-		if baseComponentVarsSection, baseComponentVarsSectionExist := baseComponentMap["vars"]; baseComponentVarsSectionExist {
+		if baseComponentVarsSection, baseComponentVarsSectionExist := baseComponentMap[cfg.VarsSectionName]; baseComponentVarsSectionExist {
 			baseComponentVars, ok = baseComponentVarsSection.(map[string]any)
 			if !ok {
-				return fmt.Errorf("invalid '%s.vars' section in the stack '%s'", baseComponent, stack)
+				return fmt.Errorf("%w: '%s.vars' in the stack '%s'", errUtils.ErrInvalidVarsSection, baseComponent, stack)
 			}
 		}
 
-		if baseComponentSettingsSection, baseComponentSettingsSectionExist := baseComponentMap["settings"]; baseComponentSettingsSectionExist {
+		if baseComponentSettingsSection, baseComponentSettingsSectionExist := baseComponentMap[cfg.SettingsSectionName]; baseComponentSettingsSectionExist {
 			baseComponentSettings, ok = baseComponentSettingsSection.(map[string]any)
 			if !ok {
-				return fmt.Errorf("invalid '%s.settings' section in the stack '%s'", baseComponent, stack)
+				return fmt.Errorf("%w: '%s.settings' in the stack '%s'", errUtils.ErrInvalidSettingsSection, baseComponent, stack)
 			}
 		}
 
-		if baseComponentEnvSection, baseComponentEnvSectionExist := baseComponentMap["env"]; baseComponentEnvSectionExist {
+		if baseComponentEnvSection, baseComponentEnvSectionExist := baseComponentMap[cfg.EnvSectionName]; baseComponentEnvSectionExist {
 			baseComponentEnv, ok = baseComponentEnvSection.(map[string]any)
 			if !ok {
-				return fmt.Errorf("invalid '%s.env' section in the stack '%s'", baseComponent, stack)
+				return fmt.Errorf("%w: '%s.env' in the stack '%s'", errUtils.ErrInvalidEnvSection, baseComponent, stack)
+			}
+		}
+
+		if baseComponentAuthSection, baseComponentAuthSectionExist := baseComponentMap[cfg.AuthSectionName]; baseComponentAuthSectionExist {
+			baseComponentAuth, ok = baseComponentAuthSection.(map[string]any)
+			if !ok {
+				return fmt.Errorf("%w: '%s.auth' in the stack '%s'", errUtils.ErrInvalidAuthSection, baseComponent, stack)
 			}
 		}
 
 		if baseComponentProvidersSection, baseComponentProvidersSectionExist := baseComponentMap[cfg.ProvidersSectionName]; baseComponentProvidersSectionExist {
 			baseComponentProviders, ok = baseComponentProvidersSection.(map[string]any)
 			if !ok {
-				return fmt.Errorf("invalid '%s.providers' section in the stack '%s'", baseComponent, stack)
+				return fmt.Errorf("%w '%s.providers' in the stack '%s'", errUtils.ErrInvalidComponentProviders, baseComponent, stack)
 			}
 		}
 
 		if baseComponentHooksSection, baseComponentHooksSectionExist := baseComponentMap[cfg.HooksSectionName]; baseComponentHooksSectionExist {
 			baseComponentHooks, ok = baseComponentHooksSection.(map[string]any)
 			if !ok {
-				return fmt.Errorf("invalid '%s.hooks' section in the stack '%s'", baseComponent, stack)
+				return fmt.Errorf("%w '%s.hooks' in the stack '%s'", errUtils.ErrInvalidComponentHooks, baseComponent, stack)
 			}
 		}
 
 		// Base component backend
-		if i, ok2 := baseComponentMap["backend_type"]; ok2 {
+		if i, ok2 := baseComponentMap[cfg.BackendTypeSectionName]; ok2 {
 			baseComponentBackendType, ok = i.(string)
 			if !ok {
-				return fmt.Errorf("invalid '%s.backend_type' section in the stack '%s'", baseComponent, stack)
+				return fmt.Errorf("%w '%s.backend_type' in the stack '%s'", errUtils.ErrInvalidComponentBackendType, baseComponent, stack)
 			}
 		}
 
-		if i, ok2 := baseComponentMap["backend"]; ok2 {
+		if i, ok2 := baseComponentMap[cfg.BackendSectionName]; ok2 {
 			baseComponentBackendSection, ok = i.(map[string]any)
 			if !ok {
-				return fmt.Errorf("invalid '%s.backend' section in the stack '%s'", baseComponent, stack)
+				return fmt.Errorf("%w '%s.backend' in the stack '%s'", errUtils.ErrInvalidComponentBackend, baseComponent, stack)
 			}
 		}
 
 		// Base component remote state backend
-		if i, ok2 := baseComponentMap["remote_state_backend_type"]; ok2 {
+		if i, ok2 := baseComponentMap[cfg.RemoteStateBackendTypeSectionName]; ok2 {
 			baseComponentRemoteStateBackendType, ok = i.(string)
 			if !ok {
-				return fmt.Errorf("invalid '%s.remote_state_backend_type' section in the stack '%s'", baseComponent, stack)
+				return fmt.Errorf("%w '%s.remote_state_backend_type' in the stack '%s'", errUtils.ErrInvalidComponentRemoteStateBackendType, baseComponent, stack)
 			}
 		}
 
-		if i, ok2 := baseComponentMap["remote_state_backend"]; ok2 {
+		if i, ok2 := baseComponentMap[cfg.RemoteStateBackendSectionName]; ok2 {
 			baseComponentRemoteStateBackendSection, ok = i.(map[string]any)
 			if !ok {
-				return fmt.Errorf("invalid '%s.remote_state_backend' section in the stack '%s'", baseComponent, stack)
+				return fmt.Errorf("%w '%s.remote_state_backend' in the stack '%s'", errUtils.ErrInvalidComponentRemoteStateBackend, baseComponent, stack)
 			}
 		}
 
@@ -2559,7 +1296,7 @@ func ProcessBaseComponentConfig(
 		if baseComponentCommandSection, baseComponentCommandSectionExist := baseComponentMap[cfg.CommandSectionName]; baseComponentCommandSectionExist {
 			baseComponentCommand, ok = baseComponentCommandSection.(string)
 			if !ok {
-				return fmt.Errorf("invalid '%s.command' section in the stack '%s'", baseComponent, stack)
+				return fmt.Errorf("%w '%s.command' in the stack '%s'", errUtils.ErrInvalidComponentCommand, baseComponent, stack)
 			}
 		}
 
@@ -2587,6 +1324,13 @@ func ProcessBaseComponentConfig(
 			return err
 		}
 		baseComponentConfig.BaseComponentEnv = merged
+
+		// Base component `auth`
+		merged, err = m.Merge(atmosConfig, []map[string]any{baseComponentConfig.BaseComponentAuth, baseComponentAuth})
+		if err != nil {
+			return err
+		}
+		baseComponentConfig.BaseComponentAuth = merged
 
 		// Base component `providers`
 		merged, err = m.Merge(atmosConfig, []map[string]any{baseComponentConfig.BaseComponentProviders, baseComponentProviders})
@@ -2655,13 +1399,13 @@ func FindComponentsDerivedFromBaseComponents(
 	for component, compSection := range allComponents {
 		componentSection, ok := compSection.(map[string]any)
 		if !ok {
-			return nil, fmt.Errorf("invalid '%s' component section in the file '%s'", component, stack)
+			return nil, fmt.Errorf("%w '%s' in the file '%s'", errUtils.ErrInvalidComponentsSection, component, stack)
 		}
 
 		if base, baseComponentExist := componentSection[cfg.ComponentSectionName]; baseComponentExist {
 			baseComponent, ok := base.(string)
 			if !ok {
-				return nil, fmt.Errorf("invalid 'component' attribute in the component '%s' in the file '%s'", component, stack)
+				return nil, fmt.Errorf("%w 'component' of the component '%s' in the file '%s'", errUtils.ErrInvalidComponentAttribute, component, stack)
 			}
 
 			if baseComponent != "" && u.SliceContainsString(baseComponents, baseComponent) {

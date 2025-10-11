@@ -98,6 +98,17 @@ These flags are available for every Atmos command:
         - Can redirect to any file path or standard file descriptor
         - Example: `--redirect-stderr=/dev/null` to suppress error output
     </dd>
+
+    <dt>`--version`</dt>
+    <dd>
+        Print a minimal single-line Atmos CLI version and exit.
+        - Outputs a simple `atmos &lt;version&gt;` format without styling or additional information
+        - Does not perform update checks or support `--check`/`--format` flags
+        - Available as a persistent flag on all commands
+        - Always displays the **Atmos version**, not the version of underlying tools (Terraform, Helmfile, etc.)
+        - For richer output and additional flags, use the [`atmos version`](/cli/commands/version) command
+        - Example: `atmos --version`
+    </dd>
 </dl>
 
 ## Command-Specific Flags

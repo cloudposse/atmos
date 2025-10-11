@@ -68,4 +68,14 @@ testacc-coverage: testacc-cover
 	go tool cover -html=coverage.out -o coverage.html
 	@echo "Coverage report generated: coverage.html"
 
-.PHONY: lint get build version build-linux build-windows build-macos deps version-linux version-windows version-macos testacc testacc-cover testacc-coverage
+# Run quick tests only (skip long-running tests >2 seconds)
+test-short: get
+	@echo "Running quick tests (skipping long-running tests)"
+	go test -short $(TEST) $(TESTARGS) -timeout 5m
+
+# Run quick tests with coverage
+test-short-cover: get
+	@echo "Running quick tests with coverage (skipping long-running tests)"
+	@GOCOVERDIR=coverage go test -short -cover $(TEST) $(TESTARGS) -timeout 5m
+
+.PHONY: lint get build version build-linux build-windows build-macos deps version-linux version-windows version-macos testacc testacc-cover testacc-coverage test-short test-short-cover
