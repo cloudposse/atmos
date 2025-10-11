@@ -553,7 +553,7 @@ func (i *Installer) extractZip(zipPath, binaryPath string, tool *Tool) error {
 // Unzip extracts a zip archive to a destination directory.
 // Works on Windows, macOS, and Linux.
 func Unzip(src, dest string) error {
-	const maxDecompressedSize = 100 * 1024 * 1024 // 100MB limit per file
+	const maxDecompressedSize = 3000 * 1024 * 1024 // 1000MB limit per file
 
 	r, err := zip.OpenReader(src)
 	if err != nil {
