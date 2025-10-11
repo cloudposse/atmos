@@ -34,7 +34,7 @@ require (
 	github.com/charmbracelet/lipgloss v1.1.1-0.20250404203927-76690c660834
 	github.com/charmbracelet/log v0.4.2
 	github.com/creack/pty v1.1.24
-	github.com/editorconfig-checker/editorconfig-checker/v3 v3.4.0
+	github.com/editorconfig-checker/editorconfig-checker/v3 v3.4.1
 	github.com/elewis787/boa v0.1.3
 	github.com/fatih/color v1.18.0
 	github.com/go-git/go-git/v5 v5.16.3
@@ -74,7 +74,7 @@ require (
 	github.com/opencontainers/image-spec v1.1.1
 	github.com/otiai10/copy v1.14.1
 	github.com/pkg/errors v0.9.1
-	github.com/posthog/posthog-go v1.6.10
+	github.com/posthog/posthog-go v1.6.11
 	github.com/redis/go-redis/v9 v9.12.1
 	github.com/samber/lo v1.52.0
 	github.com/santhosh-tekuri/jsonschema/v5 v5.3.1
@@ -208,7 +208,7 @@ require (
 	github.com/felixge/httpsnoop v1.0.4 // indirect
 	github.com/forPelevin/gomoji v1.3.0 // indirect
 	github.com/fsnotify/fsnotify v1.9.0 // indirect
-	github.com/gabriel-vasile/mimetype v1.4.9 // indirect
+	github.com/gabriel-vasile/mimetype v1.4.10 // indirect
 	github.com/go-git/gcfg v1.5.1-0.20230307220236-3a3c6141e376 // indirect
 	github.com/go-git/go-billy/v5 v5.6.2 // indirect
 	github.com/go-ini/ini v1.67.0 // indirect
