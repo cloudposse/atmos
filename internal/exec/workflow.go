@@ -116,7 +116,7 @@ func ExecuteWorkflowCmd(cmd *cobra.Command, args []string) error {
 			WithExitCode(2).
 			Err()
 		errUtils.CheckErrorAndPrint(err, "", "")
-		return ErrWorkflowFileNotFound
+		return err
 	}
 
 	fileContent, err := os.ReadFile(workflowPath)
@@ -143,7 +143,7 @@ func ExecuteWorkflowCmd(cmd *cobra.Command, args []string) error {
 			WithExitCode(2).
 			Err()
 		errUtils.CheckErrorAndPrint(err, "", "")
-		return ErrInvalidWorkflowManifest
+		return err
 	}
 
 	workflowConfig = workflowManifest.Workflows
@@ -171,7 +171,7 @@ func ExecuteWorkflowCmd(cmd *cobra.Command, args []string) error {
 			WithExitCode(2).
 			Err()
 		errUtils.CheckErrorAndPrint(err, "", "")
-		return ErrWorkflowNoWorkflow
+		return err
 	} else {
 		workflowDefinition = i
 	}
