@@ -7,6 +7,7 @@ import (
 
 	"github.com/HdrHistogram/hdrhistogram-go"
 
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -79,7 +80,9 @@ func Track(atmosConfig *schema.AtmosConfiguration, name string) func() {
 			m.Max = d
 		}
 		if m.Hist != nil {
-			_ = m.Hist.RecordValue(d.Microseconds())
+			if err := m.Hist.RecordValue(d.Microseconds()); err != nil {
+				log.Trace("Failed to record histogram value", "error", err, "metric", name)
+			}
 		}
 		reg.mu.Unlock()
 	}

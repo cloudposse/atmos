@@ -126,12 +126,14 @@ issues:
 - ✅ Use `fmt.Errorf` with `%w` when adding string context
 - ✅ Preserve error chains for `errors.Is()` and `errors.As()`
 - ✅ Add meaningful context that aids debugging
+- ✅ Log squelched errors at Trace level (see Squelched Error Handling below)
 
 ### Don'ts
 - ❌ Never use multiple `%w` verbs in a single `fmt.Errorf`
 - ❌ Avoid creating dynamic errors with `errors.New()` (except for static definitions)
 - ❌ Don't use `fmt.Errorf` without `%w` unless converting a string to an error
 - ❌ Don't lose error context by converting errors to strings unnecessarily
+- ❌ Never squelch errors silently with `_ = ...` - always log at Trace level
 
 ## Migration Strategy
 
@@ -151,6 +153,101 @@ issues:
 ### Phase 4: Documentation and Education
 - Update CLAUDE.md with error handling guidelines
 - Ensure all developers understand the patterns
+
+## Squelched Error Handling
+
+### Definition
+
+Squelched errors are errors that are intentionally ignored because they don't affect the critical execution path. However, they **must always be logged at Trace level** to maintain complete error visibility.
+
+### When to Squelch Errors
+
+Errors should only be squelched when:
+1. **Non-critical cleanup** - Removing temporary files, closing file handles
+2. **Best-effort operations** - Optional configuration binding, UI rendering
+3. **Defer statements** - Resource cleanup where error handling would be complex
+4. **Recovery is impossible** - Already in error path or cleanup code
+
+### The Golden Rule
+
+**Never squelch errors silently.** Every squelched error must be logged at Trace level.
+
+### Pattern: Squelched Error Logging
+
+```go
+// ❌ WRONG: Silent error squelching
+_ = os.Remove(tempFile)
+_ = file.Close()
+_ = viper.BindEnv("VAR", "ENV_VAR")
+
+// ✅ CORRECT: Log squelched errors at Trace level
+if err := os.Remove(tempFile); err != nil && !os.IsNotExist(err) {
+    log.Trace("Failed to remove temporary file during cleanup", "error", err, "file", tempFile)
+}
+
+if err := file.Close(); err != nil {
+    log.Trace("Failed to close file", "error", err, "file", file.Name())
+}
+
+if err := viper.BindEnv("VAR", "ENV_VAR"); err != nil {
+    log.Trace("Failed to bind environment variable", "error", err, "var", "VAR")
+}
+```
+
+### Special Cases
+
+#### Defer Statements
+Capture errors in a closure for logging:
+
+```go
+defer func() {
+    if err := lock.Unlock(); err != nil {
+        log.Trace("Failed to unlock", "error", err, "path", lockPath)
+    }
+}()
+```
+
+#### File Removal
+Check for `os.IsNotExist` to avoid logging expected conditions:
+
+```go
+if err := os.Remove(tempFile); err != nil && !os.IsNotExist(err) {
+    log.Trace("Failed to remove file", "error", err, "file", tempFile)
+}
+```
+
+#### Log File Cleanup
+Use stderr to avoid logger recursion:
+
+```go
+func cleanupLogFile() {
+    if logFileHandle != nil {
+        if err := logFileHandle.Sync(); err != nil {
+            // Don't use logger here as we're cleaning up the log file
+            fmt.Fprintf(os.Stderr, "Warning: failed to sync log file: %v\n", err)
+        }
+    }
+}
+```
+
+### Benefits
+
+1. **Complete Error Visibility**: No errors are truly lost, even if intentionally ignored
+2. **Debugging Support**: Trace logs provide full context when investigating issues
+3. **Pattern Detection**: Aggregated trace logs can reveal systemic problems
+4. **Auditing**: Complete error trail for compliance and security reviews
+
+### Common Squelched Error Categories
+
+| Operation Type | Examples | Trace Logging Pattern |
+|---------------|----------|---------------------|
+| File cleanup | `os.Remove()`, `os.RemoveAll()` | Check `os.IsNotExist()` |
+| Resource closing | `file.Close()`, `client.Close()` | Log all errors |
+| Lock operations | `lock.Unlock()` | Capture in defer closure |
+| Config binding | `viper.BindEnv()`, `viper.BindPFlag()` | Log all errors |
+| UI operations | `fmt.Fprint()`, `cmd.Help()` | Log all errors |
+
+---
 
 ## Examples
 
@@ -193,6 +290,40 @@ if len(errs) > 0 {
 }
 ```
 
+### Example 4: Squelched Error Handling
+```go
+// File cleanup with proper trace logging:
+func processComponent(component string) error {
+    tempFile, err := os.CreateTemp("", "atmos-*")
+    if err != nil {
+        return fmt.Errorf("%w: %v", errUtils.ErrCreateTempFile, err)
+    }
+    defer func() {
+        if err := os.Remove(tempFile.Name()); err != nil && !os.IsNotExist(err) {
+            log.Trace("Failed to remove temporary file during cleanup", "error", err, "file", tempFile.Name())
+        }
+    }()
+    defer func() {
+        if err := tempFile.Close(); err != nil {
+            log.Trace("Failed to close temporary file", "error", err, "file", tempFile.Name())
+        }
+    }()
+
+    // Process component...
+    return nil
+}
+
+// Configuration binding with proper trace logging:
+func init() {
+    if err := viper.BindEnv("component_path", "ATMOS_COMPONENT_PATH"); err != nil {
+        log.Trace("Failed to bind component_path environment variable", "error", err)
+    }
+    if err := viper.BindPFlag("stack", cmd.Flags().Lookup("stack")); err != nil {
+        log.Trace("Failed to bind stack flag", "error", err)
+    }
+}
+```
+
 ## Testing Requirements
 
 1. **Error Chain Preservation**: Tests must verify that `errors.Is()` works correctly
@@ -221,3 +352,4 @@ if len(errs) > 0 {
 |---------|------|--------|---------|
 | 1.0 | 2025-09-28 | System | Initial PRD documenting error handling strategy |
 | 1.1 | 2025-09-28 | System | Updated Pattern 3 to prefer fmt.Errorf over errors.Join for string context to satisfy err113 linter |
+| 1.2 | 2025-10-11 | System | Added Squelched Error Handling section with patterns and examples for logging intentionally ignored errors at Trace level |
