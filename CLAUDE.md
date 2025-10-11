@@ -309,6 +309,7 @@ errUtils.CaptureErrorWithContext(err, context)
 - **No coverage theater** - Each test must validate real behavior, not inflate metrics
 - **Remove always-skipped tests** - Either fix the underlying issue or delete the test
 - **Table-driven tests need real scenarios** - Use production-like inputs, not contrived data
+- **Use `errors.Is()` for error checking** - Use `assert.ErrorIs(err, ErrSentinel)` for our errors and stdlib errors (e.g., `fs.ErrNotExist`, `exec.ErrNotFound`). String matching is only OK for third-party errors or testing specific message formatting
 
 ### Test Skipping Conventions (MANDATORY)
 - **ALWAYS use `t.Skipf()` instead of `t.Skip()`** - Provide clear reasons for skipped tests
