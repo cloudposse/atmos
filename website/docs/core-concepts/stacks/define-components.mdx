@@ -5,6 +5,8 @@ sidebar_label: Configure Components
 id: define-components
 ---
 import Intro from '@site/src/components/Intro'
+import Tabs from '@theme/Tabs'
+import TabItem from '@theme/TabItem'
 
 <Intro>
 Stacks are used to compose multiple components together and provide their configuration. The schema is the same for all stacks, but the configuration can be different. Use a combination of [imports](/core-concepts/stacks/imports), [inheritance](/core-concepts/stacks/inheritance), and [catalogs](/core-concepts/stacks/catalogs) for a template-free way to reuse configuration and [override](/core-concepts/stacks/overrides) values when needed.
@@ -268,9 +270,6 @@ By default, if `metadata.component` is not specified, Atmos uses the component's
 #### Continuous Version Deployment
 
 All environments point to the same component folder and converge to the same version. Versions are rolled out to each environment with release controls like approval gates in your deployment pipeline, decoupling release from deployment. This is the recommended default approach.
-
-import Tabs from '@theme/Tabs'
-import TabItem from '@theme/TabItem'
 
 <Tabs>
 <TabItem value="dev" label="Development">

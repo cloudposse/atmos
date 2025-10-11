@@ -130,29 +130,39 @@ Repository Structure:
 
 ### Component Vendoring from Branches
 
-With Git Flow, components are vendored from specific branches using `vendor.yaml`. Each environment vendors components from its corresponding channel branch:
+With Git Flow, components are vendored from specific branches using `vendor.yaml`. **Each channel must be vendored to a distinct path** so that different environments can reference different versions of the component:
 
 <File title="vendor.yaml">
 ```yaml
 spec:
   sources:
-    # Vendor VPC from production channel
-    - component: vpc
+    # Vendor VPC from dev channel to dev-specific path
+    - component: vpc-dev
+      source: "git::https://github.com/acme/infrastructure.git//components/terraform/vpc?ref=channels/dev"
+      targets:
+        - "components/terraform/channels/dev/vpc"
+
+    # Vendor VPC from staging channel to staging-specific path
+    - component: vpc-staging
+      source: "git::https://github.com/acme/infrastructure.git//components/terraform/vpc?ref=channels/staging"
+      targets:
+        - "components/terraform/channels/staging/vpc"
+
+    # Vendor VPC from production channel to prod-specific path
+    - component: vpc-prod
       source: "git::https://github.com/acme/infrastructure.git//components/terraform/vpc?ref=channels/prod"
       targets:
-        - "components/terraform/vpc"
-
-    # Vendor EKS from staging for testing
-    - component: eks
-      source: "git::https://github.com/acme/infrastructure.git//components/terraform/eks?ref=channels/staging"
-      targets:
-        - "components/terraform/eks"
+        - "components/terraform/channels/prod/vpc"
 ```
 </File>
 
+:::warning Critical: Distinct Vendoring Paths Required
+Each channel **must** be vendored to a unique path. If all channels vendor to the same path (e.g., `components/terraform/vpc`), the last vendored channel will overwrite the others, and all environments will end up using the same code regardless of stack configuration.
+:::
+
 ### Stack Configuration
 
-After vendoring components from the appropriate branches, stacks reference the local vendored components:
+After vendoring components from the appropriate branches to distinct paths, stacks use `metadata.component` to reference the correct channel-specific path:
 
 <Tabs>
 <TabItem value="dev" label="Development" default>
@@ -162,9 +172,8 @@ components:
   terraform:
     vpc:
       metadata:
-        component: vpc
-        # Track development channel
-        channel: dev
+        # Point to the dev channel vendored path
+        component: channels/dev/vpc
       settings:
         workspace_key_prefix: "dev/vpc"
       vars:
@@ -181,9 +190,8 @@ components:
   terraform:
     vpc:
       metadata:
-        component: vpc
-        # Track staging channel
-        channel: staging
+        # Point to the staging channel vendored path
+        component: channels/staging/vpc
       settings:
         workspace_key_prefix: "staging/vpc"
       vars:
@@ -200,9 +208,8 @@ components:
   terraform:
     vpc:
       metadata:
-        component: vpc
-        # Track production channel
-        channel: prod
+        # Point to the production channel vendored path
+        component: channels/prod/vpc
       settings:
         workspace_key_prefix: "prod/vpc"
       vars:

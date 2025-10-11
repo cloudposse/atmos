@@ -580,10 +580,23 @@ components:
   terraform:
     critical-service:
       metadata:
-        # Pin to specific commit during regulatory audit
-        component: critical-service
-      settings:
-        version: "abc123def456"  # Frozen during audit
+        # Pin to specific commit by pointing to a vendored version-specific path
+        # The component must be vendored to this path with the specific commit/tag
+        component: critical-service-v1.2.3
+      # Or use a vendored path that includes the commit SHA:
+      # component: critical-service-abc123d
+```
+</File>
+
+<File title="vendor.yaml (for pinned version)">
+```yaml
+spec:
+  sources:
+    # Vendor the specific commit to a version-specific path
+    - component: critical-service-v1.2.3
+      source: "git::https://github.com/acme/components.git//components/terraform/critical-service?ref=v1.2.3"
+      targets:
+        - "components/terraform/critical-service-v1.2.3"
 ```
 </File>
 
