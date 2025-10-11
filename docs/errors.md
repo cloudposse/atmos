@@ -19,7 +19,11 @@ Atmos uses [cockroachdb/errors](https://github.com/cockroachdb/errors) as the fo
 Use static errors from `errors/errors.go`:
 
 ```go
-import errUtils "github.com/cloudposse/atmos/errors"
+import (
+    "fmt"
+
+    errUtils "github.com/cloudposse/atmos/errors"
+)
 
 // Simple error
 return errUtils.ErrInvalidComponent

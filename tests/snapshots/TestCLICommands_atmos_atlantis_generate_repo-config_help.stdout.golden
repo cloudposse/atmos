@@ -160,9 +160,9 @@ Examples:
 
   $ atmos atlantis generate repo-config --affected-only --sha 3a5eafeab90426bd82bf5899896b28cc0bab3073
 
-• Print more detailed output when cloning and checking out the Git repository
+• Show detailed error messages with full stack traces
 
-  $  atmos atlantis generate repo-config --affected-only --verbose
+  $ atmos atlantis generate repo-config --affected-only --verbose
 
 • Path to PEM-encoded private key to clone private repos using SSH
 

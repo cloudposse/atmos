@@ -124,10 +124,14 @@ func (e *exitCoder) ExitCode() int { return e.code }
 
 **Example**:
 ```go
+import (
+    errUtils "github.com/cloudposse/atmos/errors"
+)
+
 //go:embed examples/database_connection.md
 var databaseConnectionExample string
 
-err := Build(baseErr).
+err := errUtils.Build(baseErr).
     WithExplanation("Failed to establish connection to the database server.").
     WithExampleFile(databaseConnectionExample).
     WithHint("Check credentials").
