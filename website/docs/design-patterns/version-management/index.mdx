@@ -236,6 +236,106 @@ Whatever pattern you choose, regularly test the full promotion path from develop
 ### 4. Monitor Divergence
 Set up monitoring to track version divergence across environments. Alert when environments drift beyond acceptable thresholds.
 
+## Anti-Patterns to Avoid
+
+While Atmos is flexible, certain patterns create operational problems. Avoid these common anti-patterns:
+
+### ❌ Vendoring Multiple Versions to the Same Path
+
+**Problem**: When you vendor multiple versions/channels to the same component path, the last one vendored overwrites all previous ones.
+
+```yaml
+# WRONG: All channels overwrite each other
+spec:
+  sources:
+    - component: vpc-dev
+      source: "git::...?ref=channels/dev"
+      targets:
+        - "components/terraform/vpc"  # ← Same path for all
+    - component: vpc-prod
+      source: "git::...?ref=channels/prod"
+      targets:
+        - "components/terraform/vpc"  # ← Overwrites dev!
+```
+
+**Solution**: Vendor to distinct paths per version/channel:
+
+```yaml
+# CORRECT: Each channel has its own path
+spec:
+  sources:
+    - component: vpc-dev
+      targets:
+        - "components/terraform/channels/dev/vpc"
+    - component: vpc-prod
+      targets:
+        - "components/terraform/channels/prod/vpc"
+```
+
+### ❌ Including Version/Environment in `workspace_key_prefix`
+
+**Problem**: Breaks Terraform state continuity during version migrations or promotions.
+
+```yaml
+# WRONG: Version in workspace key
+settings:
+  workspace_key_prefix: "prod/vpc/v2"  # State lives at different path per version
+```
+
+**Solution**: Keep workspace keys version-agnostic:
+
+```yaml
+# CORRECT: Stable workspace key
+settings:
+  workspace_key_prefix: "prod/vpc"  # State path stays same across versions
+```
+
+### ❌ Using Git Branches for Long-Lived Divergence Without Vendoring
+
+**Problem**: Creates merge conflicts, makes promotion difficult, and couples deployment to Git workflow.
+
+**Solution**: If using Git Flow, vendor branches to distinct local paths rather than deploying directly from branches.
+
+### ❌ Mixing Trunk-Based and Git Flow Patterns
+
+**Problem**: Team confusion about promotion paths, unclear source of truth, competing workflows.
+
+**Solution**: Choose one deployment strategy (Continuous Version Deployment or Git Flow) and stick with it organization-wide.
+
+### ❌ Over-Pinning Environments
+
+**Problem**: Every environment pinned to explicit versions creates:
+- High operational overhead (constant version updates)
+- Weak feedback loops (lower environments don't reveal production issues)
+- Requires lockstep promotions (all intermediate versions must be applied in order)
+
+**Solution**: Use convergence patterns (Continuous Version Deployment) unless you have specific compliance or rollback requirements that justify pinning.
+
+### ❌ Inconsistent Path Conventions
+
+**Problem**: Mixing `{track}/{component}` with `{component}/{track}` makes reasoning about structure difficult.
+
+```yaml
+# WRONG: Inconsistent conventions
+component: prod/vpc      # Track-first
+component: eks/staging   # Component-first
+component: beta/rds      # Track-first again
+```
+
+**Solution**: Choose one convention and apply it consistently:
+
+```yaml
+# CORRECT: Consistent track-first
+component: prod/vpc
+component: prod/eks
+component: beta/rds
+
+# OR: Consistent component-first
+component: vpc/prod
+component: eks/prod
+component: rds/beta
+```
+
 ## Versioning Schemes
 
 Different patterns work best with specific [versioning schemes](/design-patterns/version-management/versioning-schemes)—naming conventions for identifying component versions:

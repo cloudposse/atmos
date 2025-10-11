@@ -177,6 +177,43 @@ spec:
 ```
 </File>
 
+### Template Variables in Vendor Manifests
+
+Atmos vendor manifests support Go template syntax in `source` and `targets` paths. The template is executed with the vendor source specification as the data context, providing access to all fields defined in that source entry.
+
+**Available Template Variables:**
+
+| Variable | Description | Example Value |
+|----------|-------------|---------------|
+| `{{.Component}}` | Component name from the `component:` field | `vpc`, `eks`, `rds` |
+| `{{.Version}}` | Version from the `version:` field | `2.1.0`, `main`, `v3.5.0` |
+| `{{.Source}}` | Full source URL before template expansion | `github.com/cloudposse/...` |
+| `{{.File}}` | File path if specified | `component.yaml` |
+
+**Using `{{.Component}}` for DRY Configuration:**
+
+The `{{.Component}}` variable creates programmatically consistent configurations where the component name drives both source and target paths:
+
+<File title="vendor.yaml">
+```yaml
+spec:
+  sources:
+    - component: vpc
+      source: "github.com/cloudposse/terraform-aws-{{.Component}}.git///?ref={{.Version}}"
+      version: "2.1.0"
+      targets:
+        - "components/terraform/{{.Component}}"
+
+    - component: eks-cluster
+      source: "github.com/cloudposse/terraform-aws-{{.Component}}.git///?ref={{.Version}}"
+      version: "4.0.0"
+      targets:
+        - "components/terraform/{{.Component}}"
+```
+</File>
+
+This pattern eliminates duplication and makes bulk operations easier. When you need to change a naming convention or base path, you update it once in the template rather than in every source entry.
+
 ### Advanced Vendor Configuration
 
 <File title="vendor.yaml">

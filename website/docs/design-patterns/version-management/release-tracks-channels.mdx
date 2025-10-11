@@ -250,6 +250,16 @@ The choice between **Tracks Per Component** and **Track-First Organization** dep
 | **Complexity** | Higher (many tracks to manage) | Lower (fewer tracks to manage) |
 | **Flexibility** | Maximum | Limited but consistent |
 
+:::tip Choose Your Convention and Be Consistent
+The examples above demonstrate both path conventions:
+- **Component-first** (`vpc/prod`, `rds/beta`) - Read as "VPC's production version" or "RDS's beta version"
+- **Track-first** (`prod/vpc`, `beta/rds`) - Read as "Production track of VPC" or "Beta track of RDS"
+
+**Both conventions work equally well.** The key is to **choose one and apply it consistently** throughout your infrastructure. Mixing conventions makes component paths harder to reason about and increases cognitive load on your team.
+
+In this documentation, we show both to illustrate the options—your organization should pick one based on whether you think primarily in terms of **components** (component-first) or **deployment stages** (track-first).
+:::
+
 ## Naming Strategy Considerations
 
 The choice of track names is a key design decision that shapes how teams think about promotion:
