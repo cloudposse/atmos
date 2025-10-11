@@ -209,8 +209,14 @@ func getGoroutineID() uint64 {
 	n := runtime.Stack(buf[:], false)
 	// Stack trace format: "goroutine 123 [running]:\n...".
 	// Extract the goroutine ID from the first line.
-	idField := bytes.Fields(buf[:n])[1]
-	id, _ := strconv.ParseUint(string(idField), decimalBase, uint64BitSize)
+	fields := bytes.Fields(buf[:n])
+	if len(fields) < 2 {
+		return 0 // Fallback for unexpected format.
+	}
+	id, err := strconv.ParseUint(string(fields[1]), decimalBase, uint64BitSize)
+	if err != nil {
+		return 0 // Fallback if parsing fails.
+	}
 	return id
 }
 
