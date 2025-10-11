@@ -89,6 +89,7 @@ func processMetadataInheritance(opts *ComponentProcessorOptions, result *Compone
 	// metadata.component is a pointer to the physical terraform component directory.
 	// It is NOT inherited from base components - the metadata section is per-component.
 	metadataComponentExplicitlySet := false
+	explicitBaseComponentName := ""
 
 	// Check metadata.component.
 	if baseComponentFromMetadata, baseComponentFromMetadataExist := result.ComponentMetadata[cfg.ComponentSectionName]; baseComponentFromMetadataExist {
@@ -97,6 +98,7 @@ func processMetadataInheritance(opts *ComponentProcessorOptions, result *Compone
 			return fmt.Errorf("%w: 'components.%s.%s.metadata.component' in the file '%s'", errUtils.ErrInvalidComponentMetadataComponent, opts.ComponentType, opts.Component, opts.StackName)
 		}
 		result.BaseComponentName = baseComponentName
+		explicitBaseComponentName = baseComponentName
 		metadataComponentExplicitlySet = true
 	}
 
@@ -113,6 +115,15 @@ func processMetadataInheritance(opts *ComponentProcessorOptions, result *Compone
 			if err := processInheritedComponent(opts, result, baseComponentConfig, componentInheritanceChain, v); err != nil {
 				return err
 			}
+		}
+
+		// IMPORTANT: Restore the explicitly-set metadata.component after processing inherits.
+		// applyBaseComponentConfig() overwrites result.BaseComponentName with values from inherited components,
+		// but metadata.component should NOT be inherited - it's per-component and determines the physical
+		// terraform directory path.
+		// See: https://github.com/cloudposse/atmos/issues/1613
+		if metadataComponentExplicitlySet {
+			result.BaseComponentName = explicitBaseComponentName
 		}
 	}
 
