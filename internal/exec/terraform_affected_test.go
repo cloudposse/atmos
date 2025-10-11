@@ -735,7 +735,7 @@ func TestExecuteTerraformAffected(t *testing.T) {
 	}
 }
 
-// Benchmark tests for the new functions.
+// Benchmark tests.
 func BenchmarkGetAffectedComponents(b *testing.B) {
 	args := &DescribeAffectedCmdArgs{
 		CLIConfig: &schema.AtmosConfiguration{},
