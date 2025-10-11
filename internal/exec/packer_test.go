@@ -357,7 +357,7 @@ func TestExecutePacker_Errors(t *testing.T) {
 
 		err := ExecutePacker(&info, &packerFlags)
 		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "`component` is required")
+		assert.Contains(t, err.Error(), "component is required")
 	})
 
 	t.Run("invalid packer template syntax", func(t *testing.T) {
