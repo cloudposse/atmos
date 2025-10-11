@@ -1,7 +1,6 @@
 package exec
 
 import (
-	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -151,7 +150,7 @@ func TestCheckHelmfileConfig(t *testing.T) {
 				assert.NoError(t, err)
 			} else {
 				assert.Error(t, err)
-				assert.True(t, errors.Is(err, tt.expectedError), "expected error %v, got %v", tt.expectedError, err)
+				assert.ErrorIs(t, err, tt.expectedError)
 			}
 		})
 	}
@@ -171,6 +170,7 @@ func BenchmarkCheckHelmfileConfig(b *testing.B) {
 	}
 
 	b.ResetTimer()
+	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {
 		_ = checkHelmfileConfig(&atmosConfig)
 	}

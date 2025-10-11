@@ -200,8 +200,7 @@ func ProcessStacks(
 
 	// Check if stack was provided
 	if checkStack && len(configAndStacksInfo.Stack) < 1 {
-		message := fmt.Sprintf("`stack` is required.\n\nUsage:\n\n`atmos %s <command> <component> -s <stack>`", configAndStacksInfo.ComponentType)
-		return configAndStacksInfo, errors.New(message)
+		return configAndStacksInfo, errUtils.ErrMissingStack
 	}
 
 	// Check if the component was provided.

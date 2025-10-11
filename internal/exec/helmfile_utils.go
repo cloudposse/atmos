@@ -10,7 +10,7 @@ import (
 
 // checkHelmfileConfig validates the helmfile configuration.
 func checkHelmfileConfig(atmosConfig *schema.AtmosConfiguration) error {
-	defer perf.Track(nil, "exec.checkHelmfileConfig")()
+	defer perf.Track(atmosConfig, "exec.checkHelmfileConfig")()
 
 	if len(atmosConfig.Components.Helmfile.BasePath) < 1 {
 		return fmt.Errorf("%w: must be provided in 'components.helmfile.base_path' config or 'ATMOS_COMPONENTS_HELMFILE_BASE_PATH' ENV variable",

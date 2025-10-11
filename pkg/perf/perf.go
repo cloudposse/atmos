@@ -6,6 +6,7 @@ import (
 	"sort"
 	"strconv"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/HdrHistogram/hdrhistogram-go"
@@ -67,17 +68,17 @@ var (
 	// Map goroutine ID -> call stack for goroutine-local tracking.
 	callStacks sync.Map // map[uint64]*CallStack
 
-	trackingEnabled bool
+	trackingEnabled atomic.Bool
 )
 
 // EnableTracking enables performance tracking globally.
 // HDR histogram for P95 latency is automatically enabled when tracking is enabled.
 func EnableTracking(enabled bool) {
-	trackingEnabled = enabled
+	trackingEnabled.Store(enabled)
 }
 
 func isTrackingEnabled() bool {
-	return trackingEnabled
+	return trackingEnabled.Load()
 }
 
 // Track returns a func you should defer to record duration for a Go function.

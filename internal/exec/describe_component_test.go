@@ -486,14 +486,14 @@ func TestDescribeComponentWithProvenance(t *testing.T) {
 	provenancePaths := result.MergeContext.GetProvenancePaths()
 	assert.NotEmpty(t, provenancePaths, "Provenance paths should not be empty")
 
-	// Verify we have provenance entries for vars fields
-	// Check for any vars-related paths rather than specific ones to avoid platform-specific issues
+	// Verify we have provenance entries for vars fields.
+	// Check for any vars-related paths rather than specific ones to avoid platform-specific issues.
 	foundVarsPath := false
 	varsPathsFound := []string{}
 	for _, path := range provenancePaths {
 		entries := result.MergeContext.GetProvenance(path)
 		if len(entries) > 0 {
-			// Check for any vars.* path
+			// Check for any vars.* path.
 			if strings.Contains(path, "vars.") {
 				foundVarsPath = true
 				varsPathsFound = append(varsPathsFound, path)
@@ -504,7 +504,7 @@ func TestDescribeComponentWithProvenance(t *testing.T) {
 		}
 	}
 
-	// At least one vars path should be found
+	// At least one vars path should be found.
 	if !foundVarsPath {
 		t.Logf("No vars.* paths found in provenance. Available paths: %v", provenancePaths)
 	}

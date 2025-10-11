@@ -6,6 +6,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/tests"
 )
@@ -64,7 +65,7 @@ func TestExecuteHelmfile_MissingStack(t *testing.T) {
 
 	err = ExecuteHelmfile(info)
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "`stack` is required")
+	assert.ErrorIs(t, err, errUtils.ErrMissingStack)
 }
 
 func TestExecuteHelmfile_ComponentNotFound(t *testing.T) {

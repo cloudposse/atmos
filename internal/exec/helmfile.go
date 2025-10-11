@@ -7,7 +7,6 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -61,10 +60,6 @@ func ExecuteHelmfile(info schema.ConfigAndStacksInfo) error {
 	info, err = ProcessStacks(&atmosConfig, info, true, true, true, nil)
 	if err != nil {
 		return err
-	}
-
-	if len(info.Stack) < 1 {
-		return errors.New("stack must be specified")
 	}
 
 	if !info.ComponentIsEnabled {
