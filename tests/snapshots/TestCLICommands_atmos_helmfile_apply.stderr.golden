@@ -3,10 +3,10 @@
 
 # Error
 
-stack is required.
+stack is required; specify it on the command line using the flag --stack <stack> (shorthand -s)
 
-Usage:
+## Hints
 
-atmos helmfile <command> <component> -s <stack>
+💡 Usage: atmos helmfile   -s
 
 
