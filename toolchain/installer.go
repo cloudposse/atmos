@@ -562,70 +562,75 @@ func Unzip(src, dest string) error {
 	defer r.Close()
 
 	for _, f := range r.File {
-		// Ensure correct path handling across OS
-		fpath := filepath.Join(dest, f.Name)
-
-		// Prevent ZipSlip (directory traversal)
-		if !strings.HasPrefix(fpath, filepath.Clean(dest)+string(os.PathSeparator)) {
-			return fmt.Errorf("illegal file path: %s", fpath)
-		}
-
-		if f.FileInfo().IsDir() {
-			// Create folder
-			if err := os.MkdirAll(fpath, os.ModePerm); err != nil {
-				return err
-			}
-			continue
-		}
-
-		// Create parent directories if needed
-		if err := os.MkdirAll(filepath.Dir(fpath), os.ModePerm); err != nil {
+		if err := extractZipFile(f, dest, maxDecompressedSize); err != nil {
 			return err
 		}
+	}
+	return nil
+}
 
-		// Open file inside zip
-		rc, err := f.Open()
-		if err != nil {
-			return err
+func extractZipFile(f *zip.File, dest string, maxSize int64) error {
+	fpath, err := validatePath(f.Name, dest)
+	if err != nil {
+		return err
+	}
+
+	if f.FileInfo().IsDir() {
+		return os.MkdirAll(fpath, os.ModePerm)
+	}
+
+	if err := os.MkdirAll(filepath.Dir(fpath), os.ModePerm); err != nil {
+		return err
+	}
+
+	return copyFileContents(f, fpath, maxSize)
+}
+
+func validatePath(name, dest string) (string, error) {
+	fpath := filepath.Join(dest, name)
+	if !strings.HasPrefix(fpath, filepath.Clean(dest)+string(os.PathSeparator)) {
+		return "", fmt.Errorf("illegal file path: %s", name)
+	}
+	return fpath, nil
+}
+
+func copyFileContents(f *zip.File, fpath string, maxSize int64) error {
+	rc, err := f.Open()
+	if err != nil {
+		return err
+	}
+	defer rc.Close()
+
+	outFile, err := os.OpenFile(fpath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, f.Mode())
+	if err != nil {
+		return err
+	}
+	defer outFile.Close()
+
+	return copyWithLimit(rc, outFile, f.Name, maxSize)
+}
+
+func copyWithLimit(src io.Reader, dst io.Writer, name string, maxSize int64) error {
+	var totalBytes int64
+	buf := make([]byte, 32*1024)
+
+	for {
+		n, err := src.Read(buf)
+		totalBytes += int64(n)
+
+		if totalBytes > maxSize {
+			return fmt.Errorf("decompressed size of %s exceeds limit: %d > %d", name, totalBytes, maxSize)
 		}
 
-		// Create destination file
-		outFile, err := os.OpenFile(fpath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, f.Mode())
-		if err != nil {
-			rc.Close()
-			return err
-		}
-
-		// Copy contents with size limit
-		var totalBytes int64
-		buf := make([]byte, 32*1024) // 32KB buffer
-		for {
-			n, err := rc.Read(buf)
-			if err != nil && err != io.EOF {
-				outFile.Close()
-				rc.Close()
+		if n > 0 {
+			if _, err := dst.Write(buf[:n]); err != nil {
 				return err
 			}
-			totalBytes += int64(n)
-			if totalBytes > maxDecompressedSize {
-				outFile.Close()
-				rc.Close()
-				return fmt.Errorf("decompressed size of %s exceeds limit: %d > %d", f.Name, totalBytes, maxDecompressedSize)
-			}
-			if n == 0 {
-				break // EOF
-			}
-			if _, err := outFile.Write(buf[:n]); err != nil {
-				outFile.Close()
-				rc.Close()
-				return err
-			}
 		}
 
-		// Close files
-		outFile.Close()
-		rc.Close()
-
+		if err == io.EOF {
+			break
+		}
 		if err != nil {
 			return err
 		}
