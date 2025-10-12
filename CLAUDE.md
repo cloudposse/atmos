@@ -99,8 +99,11 @@ atmos vendor pull
 ## Code Patterns & Conventions
 
 ### Comment Style (MANDATORY)
-- **All comments must end with periods** - Comments should be complete sentences
-- This is enforced by golangci-lint's `godot` linter
+- **All comments must end with periods** - Comments should be complete sentences ending with a period
+- This is enforced by golangci-lint's `godot` linter and will cause build failures if not followed
+- Applies to all comments: single-line, multi-line, inline, and documentation comments
+- This rule ensures consistency and readability across the codebase
+- Always treat comments as complete sentences rather than sentence fragments
 - Examples:
   ```go
   // CORRECT: This function processes the input data.
@@ -204,33 +207,44 @@ viper.SetEnvPrefix("ATMOS")
 
 ### Error Handling (MANDATORY)
 - **All errors MUST be wrapped using static errors defined in `errors/errors.go`**
-- **NEVER use dynamic errors directly** - this will trigger linting warnings:
-  ```go
-  // WRONG: Dynamic error (will trigger linting warning)
-  return fmt.Errorf("processing component %s: %w", component, err)
+- **Use `errors.Join` for combining multiple errors** - preserves all error chains
+- **Use `fmt.Errorf` with `%w` for adding string context** - when you need formatted strings
+- **Use `errors.Is()` for error checking** - robust against wrapping
+- **NEVER use dynamic errors directly** - triggers linting warnings
+- **See `docs/prd/error-handling-strategy.md`** for complete guidelines
 
-  // CORRECT: Use static error from errors package
-  import errUtils "github.com/cloudposse/atmos/errors"
+#### Error Handling Patterns
 
-  return fmt.Errorf("%w: Atmos component `%s` is invalid",
-      errUtils.ErrInvalidComponent,
-      component,
-  )
-  ```
-- **Define static errors in `errors/errors.go`**:
-  ```go
-  var (
-      ErrInvalidComponent = errors.New("invalid component")
-      ErrInvalidStack     = errors.New("invalid stack")
-      ErrInvalidConfig    = errors.New("invalid configuration")
-  )
-  ```
-- **Error wrapping pattern**:
-  - Always wrap with static error first: `fmt.Errorf("%w: details", errUtils.ErrStaticError, ...)`
-  - Add context-specific details after the static error
-  - Use `%w` verb to preserve error chain for `errors.Is()` and `errors.As()`
-- Provide actionable error messages with troubleshooting hints
-- Log detailed errors for debugging, user-friendly messages for CLI
+**Combining Multiple Errors:**
+```go
+// ✅ CORRECT: Use errors.Join (unlimited errors, no formatting)
+return errors.Join(errUtils.ErrFailedToProcess, underlyingErr)
+
+// Note: Go 1.20+ supports fmt.Errorf("%w: %w", ...) but errors.Join is preferred
+```
+
+**Adding String Context:**
+```go
+return fmt.Errorf("%w: component=%s stack=%s", errUtils.ErrInvalidComponent, component, stack)
+```
+
+**Checking Errors:**
+```go
+// ✅ CORRECT: Works with wrapped errors
+if errors.Is(err, context.DeadlineExceeded) { ... }
+
+// ❌ WRONG: Breaks with wrapping
+if err.Error() == "context deadline exceeded" { ... }
+```
+
+**Static Error Definitions:**
+```go
+// Define in errors/errors.go
+var (
+    ErrInvalidComponent = errors.New("invalid component")
+    ErrInvalidStack     = errors.New("invalid stack")
+)
+```
 
 ### Testing Strategy
 - **Unit tests**: Focus on pure functions, use table-driven tests
@@ -238,6 +252,15 @@ viper.SetEnvPrefix("ATMOS")
 - **Mock interfaces**: Use generated mocks for external dependencies
 - Target >80% coverage, especially for `pkg/` and `internal/exec/`
 - **Comments must end with periods**: All comments should be complete sentences ending with a period (enforced by golangci-lint)
+
+### Test Quality (MANDATORY)
+- **Test behavior, not implementation** - Verify inputs/outputs, not internal state
+- **Never test stub functions** - Either implement the function or remove the test
+- **Avoid tautological tests** - Don't test that hardcoded stubs return hardcoded values
+- **Make code testable** - Use dependency injection to avoid hard dependencies on `os.Exit`, `CheckErrorPrintAndExit`, or external systems
+- **No coverage theater** - Each test must validate real behavior, not inflate metrics
+- **Remove always-skipped tests** - Either fix the underlying issue or delete the test
+- **Table-driven tests need real scenarios** - Use production-like inputs, not contrived data
 
 ### Test Skipping Conventions (MANDATORY)
 - **ALWAYS use `t.Skipf()` instead of `t.Skip()`** - Provide clear reasons for skipped tests
@@ -365,8 +388,17 @@ Atmos uses **precondition-based test skipping** to provide a better developer ex
 
 ### Running Tests
 ```bash
-# Run all tests (will skip if preconditions not met)
+# Quick tests only (skip long-running tests >2s)
+make test-short
+go test -short ./...
+
+# All tests including long-running ones
+make testacc
 go test ./...
+
+# With coverage
+make test-short-cover
+make testacc-cover
 
 # Bypass all precondition checks
 export ATMOS_TEST_SKIP_PRECONDITION_CHECKS=true

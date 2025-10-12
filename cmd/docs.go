@@ -3,9 +3,7 @@ package cmd
 import (
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"runtime"
 
 	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/lipgloss"
@@ -120,28 +118,12 @@ var docsCmd = &cobra.Command{
 		}
 
 		// Opens atmos.tools docs if no component argument is provided
-		var err error
-
-		if os.Getenv("GO_TEST") == "1" {
-			log.Debug("Skipping browser launch in test environment")
-		} else {
-			switch runtime.GOOS {
-			case "linux":
-				err = exec.Command("xdg-open", atmosDocsURL).Start()
-			case "windows":
-				err = exec.Command("rundll32", "url.dll,FileProtocolHandler", atmosDocsURL).Start()
-			case "darwin":
-				err = exec.Command("open", atmosDocsURL).Start()
-			default:
-				err = fmt.Errorf("unsupported platform: %s", runtime.GOOS)
-			}
-
-			if err != nil {
-				return err
-			}
+		if err := u.OpenUrl(atmosDocsURL); err != nil {
+			return fmt.Errorf("open Atmos docs: %w", err)
 		}
 
-		fmt.Printf("Opening default browser to '%v'.\n", atmosDocsURL)
+		// UI messages should go to stderr; stdout is for data/results.
+		fmt.Fprintf(os.Stderr, "Opening default browser to '%v'.\n", atmosDocsURL)
 		return nil
 	},
 }

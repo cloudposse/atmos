@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	_ "embed"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -9,7 +10,6 @@ import (
 	"strings"
 	"time"
 
-	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/go-git/go-git/v5"
 	"github.com/samber/lo"
 	"github.com/spf13/cobra"
@@ -18,12 +18,21 @@ import (
 	e "github.com/cloudposse/atmos/internal/exec"
 	tuiUtils "github.com/cloudposse/atmos/internal/tui/utils"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/cloudposse/atmos/pkg/telemetry"
-	"github.com/cloudposse/atmos/pkg/ui/theme"
 	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/cloudposse/atmos/pkg/version"
 )
+
+//go:embed markdown/getting_started.md
+var gettingStartedMarkdown string
+
+//go:embed markdown/missing_config_default.md
+var missingConfigDefaultMarkdown string
+
+//go:embed markdown/missing_config_found.md
+var missingConfigFoundMarkdown string
 
 // Define a constant for the dot string that appears multiple times.
 const currentDirPath = "."
@@ -43,7 +52,7 @@ func WithStackValidation(check bool) AtmosValidateOption {
 	}
 }
 
-// processCustomCommands processes and executes custom commands
+// processCustomCommands processes and executes custom commands.
 func processCustomCommands(
 	atmosConfig schema.AtmosConfiguration,
 	commands []schema.Command,
@@ -127,7 +136,7 @@ func processCustomCommands(
 	return nil
 }
 
-// addCommandWithAlias adds a command hierarchy based on the full command
+// addCommandWithAlias adds a command hierarchy based on the full command.
 func addCommandWithAlias(parentCmd *cobra.Command, alias string, parts []string) {
 	if len(parts) == 0 {
 		return
@@ -156,7 +165,7 @@ func addCommandWithAlias(parentCmd *cobra.Command, alias string, parts []string)
 	}
 }
 
-// processCommandAliases processes the command aliases
+// processCommandAliases processes the command aliases.
 func processCommandAliases(
 	atmosConfig schema.AtmosConfiguration,
 	aliases schema.CommandAliases,
@@ -201,7 +210,7 @@ func processCommandAliases(
 	return nil
 }
 
-// preCustomCommand is run before a custom command is executed
+// preCustomCommand is run before a custom command is executed.
 func preCustomCommand(
 	cmd *cobra.Command,
 	args []string,
@@ -288,7 +297,7 @@ func preCustomCommand(
 	}
 }
 
-// getTopLevelCommands returns the top-level commands
+// getTopLevelCommands returns the top-level commands.
 func getTopLevelCommands() map[string]*cobra.Command {
 	existingTopLevelCommands := make(map[string]*cobra.Command)
 
@@ -299,7 +308,7 @@ func getTopLevelCommands() map[string]*cobra.Command {
 	return existingTopLevelCommands
 }
 
-// executeCustomCommand executes a custom command
+// executeCustomCommand executes a custom command.
 func executeCustomCommand(
 	atmosConfig schema.AtmosConfiguration,
 	cmd *cobra.Command,
@@ -458,7 +467,7 @@ func extractTrailingArgs(args []string, osArgs []string) ([]string, string) {
 	return mainArgs, trailingArgs
 }
 
-// cloneCommand clones a custom command config into a new struct
+// cloneCommand clones a custom command config into a new struct.
 func cloneCommand(orig *schema.Command) (*schema.Command, error) {
 	origJSON, err := json.Marshal(orig)
 	if err != nil {
@@ -473,7 +482,7 @@ func cloneCommand(orig *schema.Command) (*schema.Command, error) {
 	return &clone, nil
 }
 
-// checkAtmosConfig checks Atmos config
+// checkAtmosConfig checks Atmos config.
 func checkAtmosConfig(opts ...AtmosValidateOption) {
 	vCfg := &ValidateConfig{
 		CheckStack: true, // Default value true to check the stack
@@ -496,48 +505,31 @@ func checkAtmosConfig(opts ...AtmosValidateOption) {
 	}
 }
 
-// printMessageForMissingAtmosConfig prints Atmos logo and instructions on how to configure and start using Atmos
+// printMessageForMissingAtmosConfig prints Atmos logo and instructions on how to configure and start using Atmos.
 func printMessageForMissingAtmosConfig(atmosConfig schema.AtmosConfiguration) {
-	c1 := theme.Colors.Info
-	c2 := theme.Colors.Success
-
 	fmt.Println()
 	err := tuiUtils.PrintStyledText("ATMOS")
 	errUtils.CheckErrorPrintAndExit(err, "", "")
 
-	telemetry.PrintTelemetryDisclosure()
-
 	// Check if we're in a git repo. Warn if not.
 	verifyInsideGitRepo()
 
+	stacksDir := filepath.Join(atmosConfig.BasePath, atmosConfig.Stacks.BasePath)
+
+	u.PrintfMarkdownToTUI("\n")
+
 	if atmosConfig.Default {
-		// If Atmos did not find an `atmos.yaml` config file and is using the default config
-		u.PrintMessageInColor("atmos.yaml", c1)
-		fmt.Println(" CLI config file was not found.")
-		fmt.Print("\nThe default Atmos stacks directory is set to ")
-		u.PrintMessageInColor(filepath.Join(atmosConfig.BasePath, atmosConfig.Stacks.BasePath), c1)
-		fmt.Println(",\nbut the directory does not exist in the current path.")
+		// If Atmos did not find an `atmos.yaml` config file and is using the default config.
+		u.PrintfMarkdownToTUI(missingConfigDefaultMarkdown, stacksDir)
 	} else {
-		// If Atmos found an `atmos.yaml` config file, but it defines invalid paths to Atmos stacks and components
-		u.PrintMessageInColor("atmos.yaml", c1)
-		fmt.Print(" CLI config file specifies the directory for Atmos stacks as ")
-		u.PrintMessageInColor(filepath.Join(atmosConfig.BasePath, atmosConfig.Stacks.BasePath), c1)
-		fmt.Println(",\nbut the directory does not exist.")
+		// If Atmos found an `atmos.yaml` config file, but it defines invalid paths to Atmos stacks and components.
+		u.PrintfMarkdownToTUI(missingConfigFoundMarkdown, stacksDir)
 	}
 
-	u.PrintMessage("\nTo configure and start using Atmos, refer to the following documents:\n")
+	u.PrintfMarkdownToTUI("\n")
 
-	u.PrintMessageInColor("Atmos CLI Configuration:\n", c2)
-	u.PrintMessage("https://atmos.tools/cli/configuration\n")
-
-	u.PrintMessageInColor("Atmos Components:\n", c2)
-	u.PrintMessage("https://atmos.tools/core-concepts/components\n")
-
-	u.PrintMessageInColor("Atmos Stacks:\n", c2)
-	u.PrintMessage("https://atmos.tools/core-concepts/stacks\n")
-
-	u.PrintMessageInColor("Quick Start:\n", c2)
-	u.PrintMessage("https://atmos.tools/quick-start\n")
+	// Use markdown formatting for consistent output to stderr.
+	u.PrintfMarkdownToTUI("%s", gettingStartedMarkdown)
 }
 
 // CheckForAtmosUpdateAndPrintMessage checks if a version update is needed and prints a message if a newer version is found.
@@ -590,12 +582,12 @@ func CheckForAtmosUpdateAndPrintMessage(atmosConfig schema.AtmosConfiguration) {
 	}
 }
 
-// Check Atmos is version command
+// Check Atmos is version command.
 func isVersionCommand() bool {
-	return len(os.Args) > 1 && os.Args[1] == "version"
+	return len(os.Args) > 1 && (os.Args[1] == "version" || os.Args[1] == "--version")
 }
 
-// handleHelpRequest shows help content and exits only if the first argument is "help" or "--help" or "-h"
+// handleHelpRequest shows help content and exits only if the first argument is "help" or "--help" or "-h".
 func handleHelpRequest(cmd *cobra.Command, args []string) {
 	if (len(args) > 0 && args[0] == "help") || Contains(args, "--help") || Contains(args, "-h") {
 		cmd.Help()
@@ -630,7 +622,7 @@ func showFlagUsageAndExit(cmd *cobra.Command, err error) error {
 	return nil
 }
 
-// getConfigAndStacksInfo processes the CLI config and stacks
+// getConfigAndStacksInfo processes the CLI config and stacks.
 func getConfigAndStacksInfo(commandName string, cmd *cobra.Command, args []string) schema.ConfigAndStacksInfo {
 	// Check Atmos configuration
 	checkAtmosConfig()
@@ -647,6 +639,19 @@ func getConfigAndStacksInfo(commandName string, cmd *cobra.Command, args []strin
 	info, err := e.ProcessCommandLineArgs(commandName, cmd, finalArgs, argsAfterDoubleDash)
 	errUtils.CheckErrorPrintAndExit(err, "", "")
 	return info
+}
+
+// enableHeatmapIfRequested checks os.Args for --heatmap and --heatmap-mode flags.
+// This is needed for commands with DisableFlagParsing=true (terraform, helmfile, packer)
+// where Cobra doesn't parse the flags, so PersistentPreRun can't detect them.
+// We only enable tracking if --heatmap is present; --heatmap-mode is only relevant when --heatmap is set.
+func enableHeatmapIfRequested() {
+	for _, arg := range os.Args {
+		if arg == "--heatmap" {
+			perf.EnableTracking(true)
+			return
+		}
+	}
 }
 
 // isGitRepository checks if the current directory is within a git repository.

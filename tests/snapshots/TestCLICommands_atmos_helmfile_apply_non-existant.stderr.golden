@@ -1,0 +1,18 @@
+
+## Missing Configuration
+
+The atmos.yaml CLI config file specifies the directory for Atmos stacks as stacks, but the directory does not exist.
+
+
+## Getting Started
+
+To configure and start using Atmos, refer to the following documents:
+
+**Atmos CLI Configuration:** https://atmos.tools/cli/configuration
+
+**Atmos Components:** https://atmos.tools/core-concepts/components
+
+**Atmos Stacks:** https://atmos.tools/core-concepts/stacks
+
+**Quick Start:** https://atmos.tools/quick-start
+

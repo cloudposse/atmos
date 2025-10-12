@@ -125,14 +125,53 @@ For more details, review the following docs:
 - [YQ Guide](https://mikefarah.gitbook.io/yq)
 - [YQ Recipes](https://mikefarah.gitbook.io/yq/recipes)
 
+## Handling YQ Expressions with Bracket Notation and Quotes
+
+When you access map keys that contain special characters (such as hyphens) by using YQ bracket notation, you must wrap the key in double quotes like `["github-dependabot"]`. This often clashes with the surrounding quotes that protect the entire expression in YAML.
+
+To avoid conflicting quotes, wrap the entire YQ expression in single quotes while keeping the double quotes inside the brackets:
+
+```yaml
+# Use single quotes around the expression to allow double quotes inside brackets
+access_key_id: !terraform.output security '.security.users["github-dependabot"].access.key.id'
+```
+
+Additional examples:
+
+```yaml
+# Access map keys with special characters
+api_key: !terraform.output config '.api_keys["service-account-1"].key'
+
+# Access nested maps with special characters in multiple levels
+endpoint: !terraform.output services '.endpoints["my-service"]["production"].url'
+
+# Combine with stack templating
+token: !terraform.output identity {{ .stack }} '.tokens["github-actions"].value'
+```
+
+**Quote escaping rules**
+
+- Wrap the entire YQ expression in single quotes when it contains double quotes.
+- Use double quotes inside brackets for string keys in YQ expressions.
+- If you need single quotes inside the expression, escape them by doubling: `''`.
+
+:::tip
+This quoting pattern works for every Atmos YAML function that accepts YQ expressions, including [!terraform.state](/functions/yaml/terraform.state) and [!include](/functions/yaml/include).
+:::
+
 ## Using YQ Expressions to provide a default value
 
 If the component for which you are reading the output has not been provisioned yet, the `!terraform.output` function
-will return the string `<no value>` unless you specify a [default value](https://mikefarah.gitbook.io/yq/operators/alternative-default-value)
+will return `null` unless you specify a [default value](https://mikefarah.gitbook.io/yq/operators/alternative-default-value)
 in the YQ expression, in which case the function will return the default value.
 
 This will allow you to mock outputs when executing `atmos terraform plan` where there are dependencies between components,
 and the dependent components are not provisioned yet.
+
+:::tip
+When an output doesn't exist, the function returns `null` to maintain backward compatibility with existing workflows.
+To explicitly handle missing outputs, use the YQ `//` operator to provide a default value.
+:::
 
 :::note
 To provide a default value, you use the `//` YQ operator.
@@ -438,4 +477,5 @@ vars:
 
  - Be mindful of disaster recovery (DR) implications when using it across regions.
 
- - Consider cold-start scenarios: if the dependent component has not yet been provisioned, `terraform output` will fail.
+ - Consider cold-start scenarios: if the dependent component has not yet been provisioned, the function will return `null`.
+   Use the YQ `//` operator to provide default values for components that may not be provisioned yet.

@@ -325,7 +325,7 @@ func TestIsCI(t *testing.T) {
 				}
 			}()
 
-			result := isCI()
+			result := IsCI()
 			assert.Equal(t, tc.expectedResult, result)
 		})
 	}

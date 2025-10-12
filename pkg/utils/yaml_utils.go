@@ -6,7 +6,7 @@ import (
 	"os"
 	"strings"
 
-	"gopkg.in/yaml.v3"
+	yaml "gopkg.in/yaml.v3"
 
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -162,6 +162,57 @@ type YAMLOptions struct {
 	Indent int
 }
 
+// LongString is a string type that encodes as a YAML folded scalar (>).
+// This is used to wrap long strings across multiple lines for better readability.
+type LongString string
+
+// MarshalYAML implements yaml.Marshaler to encode as a folded scalar.
+func (s LongString) MarshalYAML() (interface{}, error) {
+	node := &yaml.Node{
+		Kind:  yaml.ScalarNode,
+		Style: yaml.FoldedStyle, // Use > style for folded scalar
+		Value: string(s),
+	}
+	return node, nil
+}
+
+// WrapLongStrings walks a data structure and converts strings longer than maxLength
+// to LongString type, which will be encoded as YAML folded scalars (>) for better readability.
+func WrapLongStrings(data any, maxLength int) any {
+	defer perf.Track(nil, "utils.WrapLongStrings")()
+
+	if maxLength <= 0 {
+		return data
+	}
+
+	switch v := data.(type) {
+	case map[string]any:
+		result := make(map[string]any, len(v))
+		for key, value := range v {
+			result[key] = WrapLongStrings(value, maxLength)
+		}
+		return result
+
+	case []any:
+		result := make([]any, len(v))
+		for i, value := range v {
+			result[i] = WrapLongStrings(value, maxLength)
+		}
+		return result
+
+	case string:
+		// Convert long single-line strings to LongString
+		if len(v) > maxLength && !strings.Contains(v, "\n") {
+			return LongString(v)
+		}
+		return v
+
+	default:
+		// For all other types (int, bool, etc.), return as-is
+		return data
+	}
+}
+
 func ConvertToYAML(data any, opts ...YAMLOptions) (string, error) {
 	defer perf.Track(nil, "utils.ConvertToYAML")()
 
@@ -180,6 +231,7 @@ func ConvertToYAML(data any, opts ...YAMLOptions) (string, error) {
 	return buf.String(), nil
 }
 
+//nolint:gocognit,revive
 func processCustomTags(atmosConfig *schema.AtmosConfiguration, node *yaml.Node, file string) error {
 	defer perf.Track(atmosConfig, "utils.processCustomTags")()
 
@@ -237,6 +289,8 @@ func UnmarshalYAML[T any](input string) (T, error) {
 
 // UnmarshalYAMLFromFile unmarshals YAML downloaded from a file into a Go type.
 func UnmarshalYAMLFromFile[T any](atmosConfig *schema.AtmosConfiguration, input string, file string) (T, error) {
+	defer perf.Track(atmosConfig, "utils.UnmarshalYAMLFromFile")()
+
 	if atmosConfig == nil {
 		return *new(T), ErrNilAtmosConfig
 	}
@@ -261,4 +315,42 @@ func UnmarshalYAMLFromFile[T any](atmosConfig *schema.AtmosConfiguration, input 
 	}
 
 	return data, nil
+}
+
+// UnmarshalYAMLFromFileWithPositions unmarshals YAML and returns position information.
+// The positions map contains line/column information for each value in the YAML.
+// If atmosConfig.TrackProvenance is false, returns an empty position map.
+func UnmarshalYAMLFromFileWithPositions[T any](atmosConfig *schema.AtmosConfiguration, input string, file string) (T, PositionMap, error) {
+	defer perf.Track(atmosConfig, "utils.UnmarshalYAMLFromFileWithPositions")()
+
+	if atmosConfig == nil {
+		return *new(T), nil, ErrNilAtmosConfig
+	}
+
+	var zeroValue T
+	var node yaml.Node
+	b := []byte(input)
+
+	// Unmarshal into yaml.Node
+	if err := yaml.Unmarshal(b, &node); err != nil {
+		return zeroValue, nil, err
+	}
+
+	// Extract positions if provenance tracking is enabled
+	var positions PositionMap
+	if atmosConfig.TrackProvenance {
+		positions = ExtractYAMLPositions(&node, true)
+	}
+
+	if err := processCustomTags(atmosConfig, &node, file); err != nil {
+		return zeroValue, nil, err
+	}
+
+	// Decode the yaml.Node into the desired type T
+	var data T
+	if err := node.Decode(&data); err != nil {
+		return zeroValue, nil, err
+	}
+
+	return data, positions, nil
 }

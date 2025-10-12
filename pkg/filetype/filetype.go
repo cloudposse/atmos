@@ -9,7 +9,7 @@ import (
 	"github.com/hashicorp/hcl"
 	"github.com/hashicorp/hcl/v2/hclparse"
 	"github.com/zclconf/go-cty/cty"
-	"gopkg.in/yaml.v3"
+	"go.yaml.in/yaml/v3"
 )
 
 var ErrFailedToProcessHclFile = errors.New("failed to process HCL file")

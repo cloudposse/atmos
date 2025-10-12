@@ -10,12 +10,14 @@ import (
 	"strings"
 	"time"
 
+	"github.com/hashicorp/go-getter"
+	"github.com/spf13/viper"
+
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/filesystem"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
-	"github.com/hashicorp/go-getter"
-	"github.com/spf13/viper"
 )
 
 // sanitizeImport redacts credentials and query values from URLs while leaving paths intact.
@@ -57,6 +59,8 @@ const (
 	REMOTE importTypes = 1
 )
 
+var defaultFileSystem = filesystem.NewOSFileSystem()
+
 // import Resolved Paths.
 type ResolvedPaths struct {
 	filePath    string
@@ -67,6 +71,11 @@ type ResolvedPaths struct {
 // processConfigImports It reads the import paths from the source configuration.
 // It processes imports from the source configuration and merges them into the destination configuration.
 func processConfigImports(source *schema.AtmosConfiguration, dst *viper.Viper) error {
+	return processConfigImportsWithFS(source, dst, defaultFileSystem)
+}
+
+// processConfigImportsWithFS processes imports using a FileSystem implementation.
+func processConfigImportsWithFS(source *schema.AtmosConfiguration, dst *viper.Viper, fs filesystem.FileSystem) error {
 	if source == nil || dst == nil {
 		return errUtils.ErrSourceDestination
 	}
@@ -78,11 +87,15 @@ func processConfigImports(source *schema.AtmosConfiguration, dst *viper.Viper) e
 	if err != nil {
 		return err
 	}
-	tempDir, err := os.MkdirTemp("", "atmos-import-*")
+	tempDir, err := fs.MkdirTemp("", "atmos-import-*")
 	if err != nil {
 		return err
 	}
-	defer os.RemoveAll(tempDir)
+	defer func() {
+		if err := fs.RemoveAll(tempDir); err != nil {
+			log.Debug("Failed to remove temp directory", "path", tempDir, "error", err)
+		}
+	}()
 	resolvedPaths, err := processImports(basePath, importPaths, tempDir, 1, MaximumImportLvL)
 	if err != nil {
 		return err
@@ -91,14 +104,14 @@ func processConfigImports(source *schema.AtmosConfiguration, dst *viper.Viper) e
 	log.Debug("processConfigImports resolved paths", "count", len(resolvedPaths))
 
 	for _, resolvedPath := range resolvedPaths {
-		// Debug: log what we're about to merge (sanitized).
-		log.Debug("attempting to merge import", "import", sanitizeImport(resolvedPath.importPaths), "file_path", resolvedPath.filePath)
+		// Trace: log what we're about to merge (sanitized).
+		log.Trace("attempting to merge import", "import", sanitizeImport(resolvedPath.importPaths), "file_path", resolvedPath.filePath)
 		err := mergeConfigFile(resolvedPath.filePath, dst)
 		if err != nil {
-			log.Debug("error loading config file", "import", sanitizeImport(resolvedPath.importPaths), "file_path", resolvedPath.filePath, "error", err)
+			log.Trace("error loading config file", "import", sanitizeImport(resolvedPath.importPaths), "file_path", resolvedPath.filePath, "error", err)
 			continue
 		}
-		log.Debug("successfully merged config from import", "import", sanitizeImport(resolvedPath.importPaths), "file_path", resolvedPath.filePath)
+		log.Trace("successfully merged config from import", "import", sanitizeImport(resolvedPath.importPaths), "file_path", resolvedPath.filePath)
 	}
 
 	return nil
