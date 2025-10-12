@@ -35,7 +35,7 @@ func processComponentInheritance(opts *ComponentProcessorOptions, result *Compon
 		return err
 	}
 
-	// Process multiple inheritance using metadata.component and metadata.inherits.
+	// Process multiple inheritance using `metadata.inherits`.
 	if err := processMetadataInheritance(opts, result, &baseComponentConfig, &componentInheritanceChain); err != nil {
 		return err
 	}
@@ -85,20 +85,20 @@ func processTopLevelComponentInheritance(opts *ComponentProcessorOptions, result
 func processMetadataInheritance(opts *ComponentProcessorOptions, result *ComponentProcessorResult, baseComponentConfig *schema.BaseComponentConfig, componentInheritanceChain *[]string) error {
 	defer perf.Track(opts.AtmosConfig, "exec.processMetadataInheritance")()
 
-	// Track whether metadata.component was explicitly set.
-	// metadata.component is a pointer to the physical terraform component directory.
-	// It is NOT inherited from base components - the metadata section is per-component.
+	// Track whether `metadata.component` was explicitly set.
+	// `metadata.component` is a pointer to the physical terraform component directory.
+	// It is NOT inherited from base components - the `metadata` section is per-component.
 	metadataComponentExplicitlySet := false
 	explicitBaseComponentName := ""
 
 	// Save the BaseComponentName from top-level component inheritance (if any).
-	// Processing metadata.inherits calls applyBaseComponentConfig() which inadvertently overwrites
+	// Processing `metadata.inherits` calls applyBaseComponentConfig() which inadvertently overwrites.
 	// BaseComponentName. We save it here so we can restore it after processing, distinguishing:
-	// 1. BaseComponentName set by top-level component: attribute (preserve this value)
-	// 2. BaseComponentName inadvertently overwritten during configuration inheritance (restore saved value or default)
+	// 1. BaseComponentName set by the top-level `component` attribute (preserve this value).
+	// 2. BaseComponentName overwritten during configuration inheritance (restore saved value or default).
 	baseComponentNameFromTopLevel := result.BaseComponentName
 
-	// Check metadata.component.
+	// Check `metadata.component`.
 	if baseComponentFromMetadata, baseComponentFromMetadataExist := result.ComponentMetadata[cfg.ComponentSectionName]; baseComponentFromMetadataExist {
 		baseComponentName, ok := baseComponentFromMetadata.(string)
 		if !ok {
@@ -109,8 +109,8 @@ func processMetadataInheritance(opts *ComponentProcessorOptions, result *Compone
 		metadataComponentExplicitlySet = true
 	}
 
-	// Process metadata.inherits list (if it exists).
-	// metadata.inherits specifies which Atmos components to inherit configuration from (vars, settings, env, etc.).
+	// Process the `metadata.inherits` list (if it exists).
+	// `metadata.inherits` specifies which Atmos components to inherit configuration from (vars, settings, env, etc.).
 	inheritValue, inheritsKeyExists := result.ComponentMetadata[cfg.InheritsSectionName]
 	if inheritsKeyExists {
 		inheritList, ok := inheritValue.([]any)
@@ -124,27 +124,22 @@ func processMetadataInheritance(opts *ComponentProcessorOptions, result *Compone
 			}
 		}
 
-		// IMPORTANT: Restore the explicitly-set metadata.component after processing inherits.
-		// applyBaseComponentConfig() overwrites result.BaseComponentName with values from inherited components,
-		// but metadata.component should NOT be inherited - it's per-component and determines the physical
-		// terraform directory path.
+		// Restore the explicitly set `metadata.component` after processing inherits.
 		if metadataComponentExplicitlySet {
 			result.BaseComponentName = explicitBaseComponentName
 		}
 	}
 
-	// If metadata.component was not explicitly set, determine the default.
+	// If `metadata.component` was not explicitly set, determine the default.
 	// This logic is completely independent of metadata.inherits - metadata.inherits only affects
 	// configuration inheritance (vars, settings, backend, etc.) and has nothing to do with component paths.
 	if !metadataComponentExplicitlySet {
 		if baseComponentNameFromTopLevel != "" {
 			// Top-level component: attribute was set, restore it.
-			// This handles cases like: component: "test/test-component".
+			// This handles cases like: `component: "component-1"`.
 			result.BaseComponentName = baseComponentNameFromTopLevel
 		} else {
-			// No top-level component: attribute, no metadata.component - default to Atmos component name.
-			// The metadata.component determines the physical terraform directory path.
-			// This default is independent of whether metadata.inherits is present or not.
+			// No top-level `component` attribute, and no `metadata.component` - default to Atmos component name.
 			result.BaseComponentName = opts.Component
 		}
 	}

@@ -11,7 +11,6 @@ import (
 // TestAbstractComponentBackendGeneration tests that backend configuration
 // for components inheriting from abstract components uses the correct
 // workspace_key_prefix based on metadata.component, not the abstract component name.
-// This is a regression test for the bug where metadata.component was being overwritten by inherited values.
 func TestAbstractComponentBackendGeneration(t *testing.T) {
 	workDir := "../../tests/fixtures/scenarios/abstract-component-backend"
 
