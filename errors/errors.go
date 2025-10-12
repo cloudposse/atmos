@@ -109,6 +109,11 @@ var (
 	ErrAbstractComponentCantBeProvisioned = errors.New("abstract component cannot be provisioned")
 	ErrLockedComponentCantBeProvisioned   = errors.New("locked component cannot be provisioned")
 
+	// Terraform-specific errors.
+	ErrHTTPBackendWorkspaces     = errors.New("workspaces are not supported for the HTTP backend")
+	ErrInvalidTerraformComponent = errors.New("invalid Terraform component")
+	ErrNoTty                     = errors.New("no TTY attached")
+
 	ErrMissingPackerTemplate = errors.New("packer template is required; it can be specified in the `settings.packer.template` section in the Atmos component manifest, or on the command line via the flag `--template <template>` (shorthand `-t`)")
 	ErrMissingPackerManifest = errors.New("packer manifest is missing")
 
@@ -182,6 +187,12 @@ var (
 	ErrInvalidHelmfileSettings = errors.New("invalid helmfile settings section")
 	ErrInvalidHelmfileEnv      = errors.New("invalid helmfile env section")
 	ErrInvalidHelmfileAuth     = errors.New("invalid helmfile auth section")
+
+	// Helmfile configuration errors.
+	ErrMissingHelmfileBasePath           = errors.New("helmfile base path is required")
+	ErrMissingHelmfileKubeconfigPath     = errors.New("helmfile kubeconfig path is required")
+	ErrMissingHelmfileAwsProfilePattern  = errors.New("helmfile AWS profile pattern is required")
+	ErrMissingHelmfileClusterNamePattern = errors.New("helmfile cluster name pattern is required")
 
 	// Packer-specific subsection errors.
 	ErrInvalidPackerCommand  = errors.New("invalid packer command")

@@ -11,4 +11,3 @@ component is locked: component 'mock' cannot be modified (metadata.locked: true)
 
 💡 Locked components are read-only to prevent accidental changes
 
-

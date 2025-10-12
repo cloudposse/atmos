@@ -31,29 +31,6 @@ const (
 	detailedExitCodeFlag      = "--detailed-exitcode"
 )
 
-// parseUploadStatusFlag parses the upload status flag from the arguments.
-// It supports --flag, --flag=true, and --flag=false forms.
-// Returns true if the flag is present and not explicitly set to false.
-func parseUploadStatusFlag(args []string, flagName string) bool {
-	flagPrefix := "--" + flagName + "="
-
-	// Check for --flag (without value, defaults to true)
-	if u.SliceContainsString(args, "--"+flagName) {
-		return true
-	}
-
-	// Check for --flag=value forms
-	for _, arg := range args {
-		if strings.HasPrefix(arg, flagPrefix) {
-			value := strings.TrimPrefix(arg, flagPrefix)
-			// Parse boolean value, default to true if not a valid boolean
-			return value != "false"
-		}
-	}
-
-	return false
-}
-
 // ErrHTTPBackendWorkspaces is returned when attempting to use workspace commands with an HTTP backend.
 var (
 	ErrHTTPBackendWorkspaces     = errors.New("workspaces are not supported for the HTTP backend")

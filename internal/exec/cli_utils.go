@@ -21,7 +21,7 @@ const (
 	errFlagFormat = "%w: flag: %s"
 )
 
-// `commonFlags` are a list of flags that Atmos understands, but the underlying tools do not (e.g., Terraform/OpenTofu, Helmfile, etc.).
+// `commonFlags` are a list of flags that Atmos understands, but the underlying tools do not (e.g., Terraform/OpenTofu, Helmfile, Packer, etc.).
 // These flags get removed from the arg list after Atmos uses them, so the underlying tool does not get passed a flag it doesn't accept.
 var commonFlags = []string{
 	"--stack",
@@ -63,6 +63,13 @@ var commonFlags = []string{
 	cfg.InitPassVars,
 	cfg.PlanSkipPlanfile,
 	cfg.IdentityFlag,
+	cfg.ProfilerEnabledFlag,
+	cfg.ProfilerHostFlag,
+	cfg.ProfilerPortFlag,
+	cfg.ProfilerFileFlag,
+	cfg.ProfilerTypeFlag,
+	cfg.HeatmapFlag,
+	cfg.HeatmapModeFlag,
 }
 
 // ProcessCommandLineArgs processes command-line args.
