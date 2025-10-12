@@ -283,7 +283,10 @@ func preCustomCommand(
 			} else {
 				// This theoretically shouldn't happen:
 				sb.WriteString(fmt.Sprintf("Missing required argument '%s' with no default!\n", arg.Name))
-				err := errUtils.WithExitCode(errors.New(sb.String()), 2)
+				err := errUtils.Build(errUtils.ErrInvalidArguments).
+					WithHint(sb.String()).
+					WithExitCode(2).
+					Err()
 				errUtils.CheckErrorPrintAndExit(err, "", "")
 			}
 		}
