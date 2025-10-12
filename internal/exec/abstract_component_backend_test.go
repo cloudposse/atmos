@@ -65,4 +65,33 @@ func TestAbstractComponentBackendGeneration(t *testing.T) {
 	inheritance, ok := componentSection["inheritance"].([]string)
 	require.True(t, ok, "Inheritance should be a string array")
 	assert.Contains(t, inheritance, "eks/service/defaults", "Inheritance chain should include abstract component")
+
+	// Verify that vars are inherited correctly.
+	componentVars, ok := componentSection["vars"].(map[string]any)
+	require.True(t, ok, "Component vars should be a map")
+
+	// Verify vars from both abstract and concrete component.
+	assert.Equal(t, "app1", componentVars["name"], "Component name should be from concrete component")
+	assert.Equal(t, "acme", componentVars["namespace"], "Should inherit namespace from abstract component")
+	assert.Equal(t, true, componentVars["enabled"], "Should inherit enabled flag from abstract component")
+
+	// Verify metadata.component is preserved (not overwritten by abstract component).
+	metadata, ok := componentSection["metadata"].(map[string]any)
+	require.True(t, ok, "Metadata should be a map")
+
+	metadataComponent, ok := metadata["component"].(string)
+	require.True(t, ok, "metadata.component should be a string")
+	assert.Equal(t, "eks-service", metadataComponent, "metadata.component should be eks-service, not eks-service-defaults")
+
+	// Verify metadata.inherits is present.
+	inherits, ok := metadata["inherits"].([]any)
+	require.True(t, ok, "metadata.inherits should be present")
+	assert.Contains(t, inherits, "eks/service/defaults", "Should inherit from abstract component")
+
+	// Verify component_info has correct path.
+	componentInfo, ok := componentSection["component_info"].(map[string]any)
+	require.True(t, ok, "component_info should be a map")
+	componentInfoPath, ok := componentInfo["component_path"].(string)
+	require.True(t, ok, "component_path should be a string")
+	assert.Contains(t, componentInfoPath, "eks-service", "Component path should point to eks-service directory")
 }

@@ -54,4 +54,22 @@ func TestComponentInheritanceWithoutMetadataComponent(t *testing.T) {
 	inheritance, ok := componentSection["inheritance"].([]string)
 	require.True(t, ok, "Inheritance should be a string array")
 	assert.Contains(t, inheritance, "base-component", "Inheritance chain should include base-component")
+
+	// Verify that the component metadata does not contain inherited metadata.
+	// The metadata section is per-component and should not be inherited.
+	metadata, ok := componentSection["metadata"].(map[string]any)
+	require.True(t, ok, "Metadata should be a map")
+
+	// Verify metadata.inherits is present (from the derived component).
+	inherits, ok := metadata["inherits"].([]any)
+	require.True(t, ok, "metadata.inherits should be present")
+	assert.Len(t, inherits, 1, "Should have one inheritance entry")
+	assert.Equal(t, "base-component", inherits[0], "Should inherit from base-component")
+
+	// Verify component_info section is present and correct.
+	componentInfo, ok := componentSection["component_info"].(map[string]any)
+	require.True(t, ok, "component_info should be a map")
+	componentInfoPath, ok := componentInfo["component_path"].(string)
+	require.True(t, ok, "component_path should be a string")
+	assert.Contains(t, componentInfoPath, "derived-component", "Component path should point to derived-component directory")
 }
