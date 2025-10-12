@@ -248,16 +248,12 @@ components:
 
     vpc:
       # Resolves to: prod/vpc (no metadata.component needed)
-      settings:
-        workspace_key_prefix: "prod/vpc"
       vars:
         name: "prod-use1-vpc"
         cidr_block: "10.0.0.0/16"
 
     rds:
       # Resolves to: prod/rds (no metadata.component needed)
-      settings:
-        workspace_key_prefix: "prod/rds"
       vars:
         instance_class: "db.t3.large"
 ```
