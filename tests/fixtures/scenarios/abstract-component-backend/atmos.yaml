@@ -5,7 +5,7 @@ stacks:
   included_paths:
     - "**/*"
   excluded_paths: []
-  name_pattern: "{tenant}-{environment}-{stage}"
+  name_template: "{{ .vars.tenant }}-{{ .vars.environment }}-{{ .vars.stage }}"
 
 components:
   terraform:
