@@ -13,20 +13,19 @@ build-all:
 # Generate screengrabs using Docker (cross-platform, recommended)
 docker-build:
 	@echo "Generating screengrabs using Podman (Linux container)..."
-	@podman run --rm -t -v $$(pwd)/../..:/workspace -w /workspace/demo/screengrabs \
+	@podman run --rm -v $$(pwd)/../..:/workspace -w /workspace/demo/screengrabs \
 		-e ATMOS_TELEMETRY=false \
-		-e ATMOS_COLOR=true \
+		-e ATMOS_FORCE_COLOR=true \
+		-e FORCE_COLOR=1 \
 		ubuntu:22.04 bash -c ' \
 		set -e && \
 		apt-get update -qq && \
-		DEBIAN_FRONTEND=noninteractive apt-get install -y -qq aha util-linux make git curl jq && \
-		echo "Installing latest atmos release..." && \
-		VERSION=$$(curl -s https://api.github.com/repos/cloudposse/atmos/releases/latest | jq -r .tag_name) && \
-		echo "Installing atmos $$VERSION" && \
-		ARCH=$$(uname -m | sed "s/aarch64/arm64/;s/x86_64/amd64/") && \
-		curl -sSL -o /usr/local/bin/atmos "https://github.com/cloudposse/atmos/releases/download/$$VERSION/atmos_$${VERSION#v}_linux_$$ARCH" && \
-		chmod +x /usr/local/bin/atmos && \
+		DEBIAN_FRONTEND=noninteractive apt-get install -y -qq aha make golang-go && \
+		echo "Building atmos from source..." && \
+		cd /workspace && \
+		go build -o /usr/local/bin/atmos . && \
 		atmos version && \
+		cd /workspace/demo/screengrabs && \
 		make build-all && \
 		echo "Validating screengrabs..." && \
 		! grep -r "atmos: not found" artifacts/ && \

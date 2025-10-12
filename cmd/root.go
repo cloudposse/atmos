@@ -15,6 +15,7 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/elewis787/boa"
+	"github.com/muesli/termenv"
 	"github.com/spf13/cobra"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -223,6 +224,17 @@ func setupLogger(atmosConfig *schema.AtmosConfiguration) {
 		errUtils.CheckErrorPrintAndExit(err, "", "")
 	}
 	log.Debug("Set", "logs-level", log.GetLevelString(), "logs-file", atmosConfig.Logs.File)
+}
+
+// setupColorProfile configures the global lipgloss color profile based on Atmos configuration.
+func setupColorProfile(atmosConfig *schema.AtmosConfiguration) {
+	// Force TrueColor profile when ATMOS_FORCE_COLOR is enabled.
+	// This bypasses terminal detection and always outputs ANSI color codes.
+	if atmosConfig.Settings.Terminal.ForceColor {
+		lipgloss.SetColorProfile(termenv.TrueColor)
+		log.SetColorProfile(termenv.TrueColor)
+		log.Debug("Forced TrueColor profile", "force_color", true)
+	}
 }
 
 // cleanupLogFile closes the log file handle if it was opened.
@@ -439,6 +451,9 @@ func Execute() error {
 
 	// Set the log level for the charmbracelet/log package based on the atmosConfig.
 	setupLogger(&atmosConfig)
+
+	// Setup color profile for lipgloss/termenv based rendering.
+	setupColorProfile(&atmosConfig)
 
 	var err error
 	// If CLI configuration was found, process its custom commands and command aliases.

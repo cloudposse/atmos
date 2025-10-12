@@ -28,9 +28,10 @@ func HighlightCode(code string, language string, syntaxTheme string) (string, er
 	return buf.String(), nil
 }
 
-// PrintStyledText prints a styled text to the terminal
+// PrintStyledText prints a styled text to the terminal.
 func PrintStyledText(text string) error {
-	// Check if the terminal supports colors
+	// Check if the terminal supports colors.
+	// supportscolor automatically detects FORCE_COLOR, NO_COLOR, and other standard environment variables.
 	if supportscolor.Stdout().SupportsColor {
 		return figurine.Write(os.Stdout, text, "ANSI Regular.flf")
 	}

@@ -2,6 +2,10 @@
 set -e
 export TERM=xterm-256color
 
+# Force color output for screengrabs
+export ATMOS_FORCE_COLOR=true
+export FORCE_COLOR=1
+
 # Ensure that the output is not paginated
 export LESS=-X
 export ATMOS_PAGER=false
@@ -26,21 +30,14 @@ function record() {
     echo "Screengrabbing $command → $output_html"
     mkdir -p "$output_dir"
     rm -f $output_ansi
-    if [ "$(uname)" = "Darwin" ]; then
-        # macOS-specific syntax
-        if [ "${extension}" == "sh" ]; then
-            script -q $output_ansi command $command > /dev/null
-        else
-            script -q $output_ansi bash -c "cd $demo_path && ($command)" > /dev/null
-        fi
+
+    # Direct command execution with ATMOS_FORCE_COLOR (no need for script command)
+    if [ "${extension}" = "sh" ]; then
+        $command > $output_ansi 2>&1
     else
-        # Linux - use script with forced flush and closed stdin
-        if [ "${extension}" = "sh" ]; then
-            script -qfc "$command" $output_ansi < /dev/null
-        else
-            script -qfc "cd $demo_path && $command" $output_ansi < /dev/null
-        fi
+        (cd $demo_path && $command > "$OLDPWD/$output_ansi" 2>&1)
     fi
+
     postprocess_ansi $output_ansi
     aha --no-header < $output_ansi > $output_html
     postprocess_html $output_html
