@@ -20,6 +20,7 @@ build-all:
 docker-build:
 	@echo "Generating screengrabs using Podman (Linux container)..."
 	@podman run --rm -v $$(pwd)/../..:/workspace -w /workspace/demo/screengrabs \
+		--memory=4g \
 		-e ATMOS_TELEMETRY=false \
 		-e ATMOS_FORCE_COLOR=true \
 		-e FORCE_COLOR=1 \
@@ -27,14 +28,14 @@ docker-build:
 		set -e && \
 		apt-get update -qq && \
 		DEBIAN_FRONTEND=noninteractive apt-get install -y -qq aha make wget tar && \
-		echo "Installing Go 1.23..." && \
-		wget -q https://go.dev/dl/go1.23.0.linux-arm64.tar.gz && \
-		tar -C /usr/local -xzf go1.23.0.linux-arm64.tar.gz && \
+		echo "Installing Go 1.25..." && \
+		wget -q https://go.dev/dl/go1.25.0.linux-arm64.tar.gz && \
+		tar -C /usr/local -xzf go1.25.0.linux-arm64.tar.gz && \
 		export PATH=/usr/local/go/bin:$$PATH && \
 		go version && \
 		echo "Building atmos from source..." && \
 		cd /workspace && \
-		go build -o /usr/local/bin/atmos . && \
+		GOMEMLIMIT=3GiB go build -p 2 -o /usr/local/bin/atmos . && \
 		atmos version && \
 		cd /workspace/demo/screengrabs && \
 		make build-all && \
