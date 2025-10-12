@@ -566,7 +566,7 @@ Use fixtures in `tests/test-cases/` for integration tests. Each test case should
 #### How to Regenerate (Linux/CI Only)
 Screengrab generation **requires a Linux environment** because the `script` command has different behavior on macOS vs Linux.
 
-**Method 1: Via GitHub Actions (Recommended)**
+##### Method 1: Via GitHub Actions (Recommended)
 1. Trigger the screengrabs workflow:
    ```bash
    gh workflow run screengrabs.yaml
@@ -576,7 +576,7 @@ Screengrab generation **requires a Linux environment** because the `script` comm
    - Create a PR with updated screengrabs
    - Auto-apply the `no-release` label
 
-**Method 2: Locally on Linux**
+##### Method 2: Locally on Linux
 ```bash
 # Install dependencies (Ubuntu/Debian)
 sudo apt-get install -y aha util-linux make
@@ -590,7 +590,7 @@ git add website/src/components/Screengrabs/
 git commit -m "chore: update screengrabs"
 ```
 
-**Method 3: Using Docker (Cross-Platform, Recommended for macOS)**
+##### Method 3: Using Docker (Cross-Platform, Recommended for macOS)
 ```bash
 # Generate screengrabs using Docker from project root
 make -C demo/screengrabs docker-build

@@ -43,7 +43,7 @@ function record() {
     postprocess_html $output_html
     rm -f $output_ansi
     if [ -n "$CI" ]; then
-        sed -i -e '1,1d' -e '$d' $output_html
+        $SED -e '1,1d' -e '$d' $output_html
     fi
 }
 
