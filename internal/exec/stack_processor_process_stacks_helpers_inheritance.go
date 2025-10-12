@@ -91,6 +91,12 @@ func processMetadataInheritance(opts *ComponentProcessorOptions, result *Compone
 	metadataComponentExplicitlySet := false
 	explicitBaseComponentName := ""
 
+	// Save the BaseComponentName from top-level component inheritance (if any).
+	// This allows us to distinguish between:
+	// 1. BaseComponentName set by top-level component: attribute (should preserve)
+	// 2. BaseComponentName set by metadata.inherits processing (should override with component name).
+	baseComponentNameFromTopLevel := result.BaseComponentName
+
 	// Check metadata.component.
 	if baseComponentFromMetadata, baseComponentFromMetadataExist := result.ComponentMetadata[cfg.ComponentSectionName]; baseComponentFromMetadataExist {
 		baseComponentName, ok := baseComponentFromMetadata.(string)
@@ -126,13 +132,18 @@ func processMetadataInheritance(opts *ComponentProcessorOptions, result *Compone
 		}
 	}
 
-	// If metadata.component was not explicitly set, default to the component name itself.
-	// This should happen regardless of whether metadata.inherits exists or not.
-	// The metadata.component determines the physical terraform directory path.
-	// NOTE: We do NOT add this to BaseComponents list - that list is only for components we inherit FROM.
-	// IMPORTANT: Only set the default if BaseComponentName is not already set by top-level component inheritance.
-	if !metadataComponentExplicitlySet && result.BaseComponentName == "" {
-		result.BaseComponentName = opts.Component
+	// If metadata.component was not explicitly set, determine the default.
+	if !metadataComponentExplicitlySet {
+		if baseComponentNameFromTopLevel != "" {
+			// Top-level component: attribute was set, restore it.
+			// This handles cases like: component: "test/test-component".
+			result.BaseComponentName = baseComponentNameFromTopLevel
+		} else {
+			// No top-level component, no metadata.component - default to component name itself.
+			// This handles cases where only metadata.inherits is specified.
+			// The metadata.component determines the physical terraform directory path.
+			result.BaseComponentName = opts.Component
+		}
 	}
 
 	return nil
