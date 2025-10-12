@@ -6,6 +6,7 @@ import (
 	"compress/gzip"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -705,7 +706,16 @@ func extractFile(tr *tar.Reader, path string, header *tar.Header) error {
 	if err := os.MkdirAll(filepath.Dir(path), defaultMkdirPermissions); err != nil {
 		return fmt.Errorf("failed to create parent directory: %w", err)
 	}
-	outFile, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, os.FileMode(header.Mode))
+	var outFile *os.File
+	var err error
+	if header.Mode >= 0 && header.Mode <= math.MaxUint32 {
+		outFile, err = os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, os.FileMode(header.Mode))
+		if err != nil {
+			return fmt.Errorf("failed to create file: %w", err)
+		}
+	} else {
+		return fmt.Errorf("header.Mode out of uint32 range: %d", header.Mode)
+	}
 	if err != nil {
 		return fmt.Errorf("failed to create file: %w", err)
 	}
