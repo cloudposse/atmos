@@ -234,8 +234,13 @@ func setupLogger(atmosConfig *schema.AtmosConfiguration) {
 func cleanupLogFile() {
 	if logFileHandle != nil {
 		// Flush any remaining log data before closing.
-		_ = logFileHandle.Sync()
-		_ = logFileHandle.Close()
+		if err := logFileHandle.Sync(); err != nil {
+			// Don't use logger here as we're cleaning up the log file
+			fmt.Fprintf(os.Stderr, "Warning: failed to sync log file: %v\n", err)
+		}
+		if err := logFileHandle.Close(); err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: failed to close log file: %v\n", err)
+		}
 		logFileHandle = nil
 	}
 }

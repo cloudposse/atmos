@@ -11,6 +11,7 @@ import (
 
 	"github.com/HdrHistogram/hdrhistogram-go"
 
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -156,7 +157,9 @@ func recordMetrics(name string, totalTime, selfTime time.Duration) {
 
 	// Record self-time in histogram for percentiles.
 	if m.Hist != nil {
-		_ = m.Hist.RecordValue(selfTime.Microseconds())
+		if err := m.Hist.RecordValue(selfTime.Microseconds()); err != nil {
+			log.Trace("Failed to record histogram value", "error", err, "metric", name)
+		}
 	}
 }
 

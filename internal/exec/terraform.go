@@ -595,12 +595,16 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 	// Clean up.
 	if info.SubCommand != "plan" && info.SubCommand != "show" && info.PlanFile == "" {
 		planFilePath := constructTerraformComponentPlanfilePath(&atmosConfig, &info)
-		_ = os.Remove(planFilePath)
+		if err := os.Remove(planFilePath); err != nil && !os.IsNotExist(err) {
+			log.Trace("Failed to remove plan file during cleanup", "error", err, "file", planFilePath)
+		}
 	}
 
 	if info.SubCommand == "apply" {
 		varFilePath := constructTerraformComponentVarfilePath(&atmosConfig, &info)
-		_ = os.Remove(varFilePath)
+		if err := os.Remove(varFilePath); err != nil && !os.IsNotExist(err) {
+			log.Trace("Failed to remove var file during cleanup", "error", err, "file", varFilePath)
+		}
 	}
 
 	return nil
