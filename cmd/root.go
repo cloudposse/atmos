@@ -17,6 +17,7 @@ import (
 	"github.com/elewis787/boa"
 	"github.com/muesli/termenv"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
@@ -234,6 +235,19 @@ func setupColorProfile(atmosConfig *schema.AtmosConfiguration) {
 		lipgloss.SetColorProfile(termenv.TrueColor)
 		log.SetColorProfile(termenv.TrueColor)
 		log.Debug("Forced TrueColor profile", "force_color", true)
+	}
+}
+
+// setupColorProfileFromEnv checks ATMOS_FORCE_COLOR environment variable early.
+// This is called during init() before Boa styles are created, ensuring Cobra help
+// text rendering respects the forced color profile.
+func setupColorProfileFromEnv() {
+	// Use viper to check environment variable to satisfy linter requirements.
+	v := viper.New()
+	v.SetEnvPrefix("ATMOS")
+	v.AutomaticEnv()
+	if v.GetBool("FORCE_COLOR") {
+		lipgloss.SetColorProfile(termenv.TrueColor)
 	}
 }
 
@@ -562,6 +576,11 @@ func init() {
 			"Options: cpu, heap, allocs, goroutine, block, mutex, threadcreate, trace")
 	RootCmd.PersistentFlags().Bool("heatmap", false, "Show performance heatmap visualization after command execution (includes P95 latency)")
 	RootCmd.PersistentFlags().String("heatmap-mode", "bar", "Heatmap visualization mode: bar, sparkline, table (press 1-3 to switch in TUI)")
+
+	// Setup color profile early for Cobra/Boa styling.
+	// This must happen before initCobraConfig() creates Boa styles.
+	setupColorProfileFromEnv()
+
 	// Set custom usage template.
 	err := templates.SetCustomUsageFunc(RootCmd)
 	if err != nil {
