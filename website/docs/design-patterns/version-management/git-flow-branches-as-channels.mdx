@@ -427,7 +427,7 @@ rulesets:
             - "terraform-plan"
             - "security-scan"
             - "policy-check"
-      - non_fast_forward: false  # Prevent force pushes
+      - non_fast_forward: true  # Prevent force pushes
 
   - name: "Staging Channel Protection"
     target: branch
