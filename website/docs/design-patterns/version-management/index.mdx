@@ -159,17 +159,31 @@ Use environment-specific configuration and deployment automation to control roll
 Within Continuous Version Deployment, choose how to organize your component folders:
 
 ##### 1. [Folder-Based Versioning](/design-patterns/version-management/folder-based-versioning)
-The foundational approach—organize components in simple folders (`vpc/`, `eks/`, `rds/`). What you see is what you get, with no magic. Explicit folder structure makes divergence visible and patching any version straightforward. All subsequent approaches build on this foundation.
+
+   The foundational approach—organize components in simple folders (`vpc/`, `eks/`, `rds/`). What you see is what you get, with no magic. Explicit folder structure makes divergence visible and patching any version straightforward. All subsequent approaches build on this foundation.
 
 ##### 2. [Release Tracks/Channels](/design-patterns/version-management/release-tracks-channels)
-Extends folder-based versioning with named release channels (`alpha/vpc`, `beta/vpc`, `prod/vpc`). Environments subscribe to moving tracks; you promote tracks, not individual environment pins.
+
+   Extends folder-based versioning with named release channels (`alpha/vpc`, `beta/vpc`, `prod/vpc`). Environments subscribe to moving tracks; you promote tracks, not individual environment pins.
 
 ##### 3. [Strict Version Pinning](/design-patterns/version-management/strict-version-pinning)
-Creates explicit component versions following SemVer (`vpc/1.2.3`, `vpc/2.0.0`). Works well when vendoring from external sources or managing shared component libraries within your organization.
+
+   Creates explicit component versions following SemVer (`vpc/1.2.3`, `vpc/2.0.0`). Works well when vendoring from external sources or managing shared component libraries within your organization.
 
 ### Alternative Strategy: [Git Flow: Branches as Channels](/design-patterns/version-management/git-flow-branches-as-channels)
 
 **The branch-based alternative** where long-lived branches map to release channels. Environments track branches; promotions happen via merges between branches. Uses simple folder-based versioning since branches serve as the versioning mechanism.
+
+**When to use Git Flow over trunk-based:**
+
+Use Git Flow when you need version control to represent **current state versus desired state**. The trunk-based approach assumes all environments should converge to the same version. Git Flow is better when you want to optimize for:
+
+- **Prolonged divergence**: Environments may remain on different versions for extended periods by design
+- **Explicit promotion**: Cherry-picking and merging specific changes between release tracks
+- **Established workflows**: Your organization already practices Git Flow branch management
+- **Branch-based mental model**: Teams are comfortable with long-lived branches and merge strategies
+
+**Remember**: The best approach is what your engineering organization already follows. If your team has established Git Flow practices, extending them to infrastructure management keeps the mental model consistent. This isn't about one approach being universally better—it's about alignment with your team's workflows and culture.
 
 ### Complementary Technique: [Vendoring Component Versions](/design-patterns/version-management/vendoring-components)
 
