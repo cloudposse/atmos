@@ -26,7 +26,12 @@ docker-build:
 		ubuntu:22.04 bash -c ' \
 		set -e && \
 		apt-get update -qq && \
-		DEBIAN_FRONTEND=noninteractive apt-get install -y -qq aha make golang-go && \
+		DEBIAN_FRONTEND=noninteractive apt-get install -y -qq aha make wget tar && \
+		echo "Installing Go 1.23..." && \
+		wget -q https://go.dev/dl/go1.23.0.linux-arm64.tar.gz && \
+		tar -C /usr/local -xzf go1.23.0.linux-arm64.tar.gz && \
+		export PATH=/usr/local/go/bin:$$PATH && \
+		go version && \
 		echo "Building atmos from source..." && \
 		cd /workspace && \
 		go build -o /usr/local/bin/atmos . && \
