@@ -323,22 +323,22 @@ With folder-based tracks, versions are managed by vendoring components into trac
 spec:
   sources:
     # Alpha track - latest version
-    - component: vpc-alpha
+    - component: alpha
       source: "git::https://github.com/acme/terraform-components.git//modules/vpc?ref=v1.14.0"
       targets:
-        - "components/terraform/alpha/vpc"
+        - "components/terraform/{{.Component}}/vpc"
 
     # Beta track - stable version
-    - component: vpc-beta
+    - component: beta
       source: "git::https://github.com/acme/terraform-components.git//modules/vpc?ref=v1.13.2"
       targets:
-        - "components/terraform/beta/vpc"
+        - "components/terraform/{{.Component}}/vpc"
 
     # Production track - proven version
-    - component: vpc-prod
+    - component: prod
       source: "git::https://github.com/acme/terraform-components.git//modules/vpc?ref=v1.12.8"
       targets:
-        - "components/terraform/prod/vpc"
+        - "components/terraform/{{.Component}}/vpc"
 ```
 </File>
 
