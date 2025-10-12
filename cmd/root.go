@@ -124,8 +124,8 @@ var RootCmd = &cobra.Command{
 			perf.EnableTracking(true)
 		}
 
-		// Print telemetry disclosure if needed (skip for completion commands and when CLI config not found).
-		if !isCompletionCommand(cmd) && err == nil {
+		// Print telemetry disclosure if needed (skip for completion commands, help commands, and when CLI config not found).
+		if !isCompletionCommand(cmd) && !isHelpRequested && err == nil {
 			telemetry.PrintTelemetryDisclosure()
 		}
 	},
