@@ -436,7 +436,7 @@ func Execute() error {
 	var initErr error
 	atmosConfig, initErr = cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
 
-	utils.InitializeMarkdown(&atmosConfig)
+	utils.InitializeMarkdown(atmosConfig)
 	errUtils.InitializeMarkdown(&atmosConfig)
 
 	// Store config error but don't return it yet - we need to parse flags first
