@@ -31,29 +31,6 @@ const (
 	detailedExitCodeFlag      = "--detailed-exitcode"
 )
 
-// parseUploadStatusFlag parses the upload status flag from the arguments.
-// It supports --flag, --flag=true, and --flag=false forms.
-// Returns true if the flag is present and not explicitly set to false.
-func parseUploadStatusFlag(args []string, flagName string) bool {
-	flagPrefix := "--" + flagName + "="
-
-	// Check for --flag (without value, defaults to true)
-	if u.SliceContainsString(args, "--"+flagName) {
-		return true
-	}
-
-	// Check for --flag=value forms
-	for _, arg := range args {
-		if strings.HasPrefix(arg, flagPrefix) {
-			value := strings.TrimPrefix(arg, flagPrefix)
-			// Parse boolean value, default to true if not a valid boolean
-			return value != "false"
-		}
-	}
-
-	return false
-}
-
 // ErrHTTPBackendWorkspaces is returned when attempting to use workspace commands with an HTTP backend.
 var (
 	ErrHTTPBackendWorkspaces     = errors.New("workspaces are not supported for the HTTP backend")
@@ -582,25 +559,6 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 					}
 				}
 			}
-		}
-	}
-
-	// Check if the terraform command requires a user interaction,
-	// but it's running in a scripted environment (where a `tty` is not attached or `stdin` is not attached).
-	if os.Stdin == nil && !u.SliceContainsString(info.AdditionalArgsAndFlags, autoApproveFlag) {
-		if info.SubCommand == "apply" {
-			err := errUtils.Build(fmt.Errorf("%w: `terraform apply` requires user interaction, but no TTY is attached",
-				ErrNoTty,
-			)).
-				WithContext("component", info.Component).
-				WithContext("stack", info.Stack).
-				WithContext("subcommand", "apply").
-				WithHint("Use `terraform apply -auto-approve` to skip confirmation").
-				WithHint("Or use `atmos terraform deploy` which applies without confirmation").
-				WithHint("Running in CI/CD? Ensure your pipeline provides a TTY or uses `-auto-approve`").
-				WithExitCode(1).
-				Err()
-			return err
 		}
 	}
 

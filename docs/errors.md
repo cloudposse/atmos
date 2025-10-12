@@ -19,7 +19,11 @@ Atmos uses [cockroachdb/errors](https://github.com/cockroachdb/errors) as the fo
 Use static errors from `errors/errors.go`:
 
 ```go
-import errUtils "github.com/cloudposse/atmos/errors"
+import (
+    "fmt"
+
+    errUtils "github.com/cloudposse/atmos/errors"
+)
 
 // Simple error
 return errUtils.ErrInvalidComponent
@@ -146,7 +150,7 @@ workflows:
 Adds PII-safe structured context for programmatic access and error reporting.
 
 Context is:
-- **Displayed in verbose mode** as a styled table (`--verbose` flag or `ATMOS_LOGS_LEVEL=Debug`)
+- **Displayed in verbose mode** as a styled table (`--verbose` flag or `ATMOS_VERBOSE=1`)
 - **Sent to Sentry** automatically via `BuildSentryReport()`
 - **Programmatically accessible** via `errors.GetSafeDetails(err)`
 - **Included in verbose output** via `%+v` formatting
@@ -212,7 +216,7 @@ fmt.Fprint(os.Stderr, formatted)
 
 Errors are formatted as structured markdown with hierarchical sections:
 
-```
+```text
 # Error
 
 workflow file not found
@@ -353,11 +357,29 @@ errUtils.CaptureErrorWithContext(err, context)
 
 ### What Gets Sent to Sentry
 
-1. **Hints** → Sentry breadcrumbs (category: "hint")
-2. **Safe details** → Sentry tags with `error.` prefix
-3. **Atmos context** → Sentry tags with `atmos.` prefix
-4. **Exit codes** → Sentry tag `atmos.exit_code`
-5. **Stack traces** → Full error chain with file/line information
+Atmos only sends **command failures** to Sentry - errors that prevent a command from completing successfully and cause Atmos to exit with an error code.
+
+**Errors sent to Sentry:**
+- Command failures (invalid arguments, missing configuration, component not found)
+- Stack validation errors that prevent deployment
+- Workflow execution failures
+- Authentication/authorization errors
+- File system errors (missing atmos.yaml, unreadable stack files)
+
+**Errors NOT sent to Sentry:**
+- Debug/trace log messages
+- Warnings (e.g., deprecated configuration options)
+- Non-fatal errors that Atmos recovers from
+- Successful commands (exit code 0)
+
+**Information included with each error:**
+1. **Error message and type** - What went wrong
+2. **Hints** → Sentry breadcrumbs to help debug the issue
+3. **Context** → Tags like component name, stack name, region (PII-safe)
+4. **Exit code** → Command exit code for automation
+5. **Stack traces** → Full error chain with file/line information for debugging
+
+This ensures Sentry focuses on actionable failures that affect users, without overwhelming it with internal logging or successful operations.
 
 ## Best Practices
 

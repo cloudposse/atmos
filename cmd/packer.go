@@ -31,6 +31,9 @@ func packerRun(cmd *cobra.Command, commandName string, args []string) error {
 	if err := handleHelpRequest(cmd, args); err != nil {
 		return err
 	}
+	// Enable heatmap tracking if --heatmap flag is present in os.Args
+	// (needed because flag parsing is disabled for packer commands).
+	enableHeatmapIfRequested()
 	diffArgs := []string{commandName}
 	diffArgs = append(diffArgs, args...)
 	info, err := getConfigAndStacksInfo("packer", cmd, diffArgs)

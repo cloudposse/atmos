@@ -99,8 +99,11 @@ atmos vendor pull
 ## Code Patterns & Conventions
 
 ### Comment Style (MANDATORY)
-- **All comments must end with periods** - Comments should be complete sentences
-- This is enforced by golangci-lint's `godot` linter
+- **All comments must end with periods** - Comments should be complete sentences ending with a period
+- This is enforced by golangci-lint's `godot` linter and will cause build failures if not followed
+- Applies to all comments: single-line, multi-line, inline, and documentation comments
+- This rule ensures consistency and readability across the codebase
+- Always treat comments as complete sentences rather than sentence fragments
 - Examples:
   ```go
   // CORRECT: This function processes the input data.
@@ -309,6 +312,7 @@ errUtils.CaptureErrorWithContext(err, context)
 - **No coverage theater** - Each test must validate real behavior, not inflate metrics
 - **Remove always-skipped tests** - Either fix the underlying issue or delete the test
 - **Table-driven tests need real scenarios** - Use production-like inputs, not contrived data
+- **Use `errors.Is()` for error checking** - Use `assert.ErrorIs(err, ErrSentinel)` for our errors and stdlib errors (e.g., `fs.ErrNotExist`, `exec.ErrNotFound`). String matching is only OK for third-party errors or testing specific message formatting
 
 ### Test Skipping Conventions (MANDATORY)
 - **ALWAYS use `t.Skipf()` instead of `t.Skip()`** - Provide clear reasons for skipped tests

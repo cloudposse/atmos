@@ -276,7 +276,7 @@ func TestSanitizeOutput_PreservesNonRepoPaths(t *testing.T) {
 		{
 			name:     "Windows system path (not indented - preserved)",
 			input:    "C:/Windows/System32/cmd.exe",
-			expected: "C:/Windows/System32/cmd.exe", // Not indented, preserved
+			expected: "C:/Windows/System32/cmd.exe", // Not indented, preserved.
 		},
 		{
 			name:     "Temp directory path",
@@ -325,12 +325,12 @@ func TestSanitizeOutput_WindowsDriveLetterInErrorMessages(t *testing.T) {
 		{
 			name:     "Lowercase Windows drive letter (not indented - preserved)",
 			input:    "d:/stacks",
-			expected: "d:/stacks", // No normalization - not indented
+			expected: "d:/stacks", // No normalization - not indented.
 		},
 		{
 			name:     "Uppercase Windows drive letter (not indented - preserved)",
 			input:    "D:/stacks",
-			expected: "D:/stacks", // No normalization - not indented
+			expected: "D:/stacks", // No normalization - not indented.
 		},
 		{
 			name:     "Windows drive letter with 1 space indent (normalized)",

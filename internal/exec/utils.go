@@ -214,14 +214,20 @@ func ProcessStacks(
 
 	// Check if stack was provided
 	if checkStack && len(configAndStacksInfo.Stack) < 1 {
-		message := fmt.Sprintf("`stack` is required.\n\nUsage:\n\n`atmos %s <command> <component> -s <stack>`", configAndStacksInfo.ComponentType)
-		return configAndStacksInfo, errUtils.WithExitCode(errors.New(message), 2)
+		err := errUtils.Build(errUtils.ErrMissingStack).
+			WithHintf("Usage: atmos %s <command> <component> -s <stack>", configAndStacksInfo.ComponentType).
+			WithExitCode(2).
+			Err()
+		return configAndStacksInfo, err
 	}
 
 	// Check if the component was provided.
 	if len(configAndStacksInfo.ComponentFromArg) < 1 {
-		message := fmt.Sprintf("`component` is required.\n\nUsage:\n\n`atmos %s <command> <component> <arguments_and_flags>`", configAndStacksInfo.ComponentType)
-		return configAndStacksInfo, errUtils.WithExitCode(errors.New(message), 2)
+		err := errUtils.Build(errUtils.ErrMissingComponent).
+			WithHintf("Usage: atmos %s <command> <component> <arguments_and_flags>", configAndStacksInfo.ComponentType).
+			WithExitCode(2).
+			Err()
+		return configAndStacksInfo, err
 	}
 
 	configAndStacksInfo.StackFromArg = configAndStacksInfo.Stack

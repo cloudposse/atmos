@@ -306,6 +306,9 @@ func attachTerraformCommands(parentCmd *cobra.Command) {
 			if err := handleHelpRequest(cmd, args); err != nil {
 				return err
 			}
+			// Enable heatmap tracking if --heatmap flag is present in os.Args
+			// (needed because flag parsing is disabled for terraform commands).
+			enableHeatmapIfRequested()
 			if len(os.Args) > 2 {
 				args = os.Args[2:]
 			}
