@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 
@@ -1426,21 +1425,22 @@ func (c *RealGitHubClient) FetchVersions(owner, repo string) ([]versionItem, err
 
 	var items []versionItem
 	for _, release := range releases {
-		if !release.Prerelease {
-			version := strings.TrimPrefix(release.TagName, versionPrefix)
-			title := release.Name
-			if title == "" {
-				title = release.TagName
-			}
-			releaseNotes := formatReleaseNotes(release.Name, release.TagName, release.Body, release.PublishedAt)
-
-			items = append(items, versionItem{
-				version:      version,
-				title:        title,
-				desc:         fmt.Sprintf("Version %s", version),
-				releaseNotes: releaseNotes,
-			})
+		if release.Prerelease {
+			continue
 		}
+		version := strings.TrimPrefix(release.TagName, versionPrefix)
+		title := release.Name
+		if title == "" {
+			title = release.TagName
+		}
+		releaseNotes := formatReleaseNotes(release.Name, release.TagName, release.Body, release.PublishedAt)
+
+		items = append(items, versionItem{
+			version:      version,
+			title:        title,
+			desc:         fmt.Sprintf("Version %s", version),
+			releaseNotes: releaseNotes,
+		})
 	}
 
 	if len(items) == 0 {
@@ -1711,18 +1711,6 @@ func (m *testListModel) Items() []list.Item {
 		items[i] = versionItem{version: fmt.Sprintf("v%d.0.0", i+1)}
 	}
 	return items
-}
-
-// Integration test helper.
-func setupTestVersionsFile(t *testing.T) string {
-	tmpDir := t.TempDir()
-	testVersionsFile := filepath.Join(tmpDir, "versions.yaml")
-
-	// Create empty versions file
-	err := os.WriteFile(testVersionsFile, []byte("tools: {}\n"), defaultFileWritePermissions)
-	require.NoError(t, err)
-
-	return testVersionsFile
 }
 
 // Example of how you might test the original function by wrapping it.
