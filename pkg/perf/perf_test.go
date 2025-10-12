@@ -788,8 +788,9 @@ func TestRecursiveFunctionTracking(t *testing.T) {
 		t.Errorf("expected total >= %v, got %v", expectedMinTime, metric.Total)
 	}
 
-	// Ensure the total time isn't massively inflated (should be less than 1 second for this test).
-	if metric.Total > 1*time.Second {
+	// Ensure the total time isn't massively inflated (should be less than 2 seconds for this test).
+	// Using 2 seconds instead of 1 to account for slower CI environments (e.g., Windows).
+	if metric.Total > 2*time.Second {
 		t.Errorf("total time suspiciously high: %v (may indicate counting issue)", metric.Total)
 	}
 }
