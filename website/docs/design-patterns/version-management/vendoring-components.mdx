@@ -171,15 +171,12 @@ spec:
       targets:
         - "components/terraform/eks"
 
-    # Vendor from private repository
+    # Vendor from private repository (uses SSH key from ~/.ssh/)
     - component: rds
       source: "git::ssh://git@github.com/acme/terraform-modules.git//modules/rds?ref={{.Version}}"
       version: "v3.5.0"
       targets:
         - "components/terraform/rds"
-      auth:
-        type: ssh
-        key_path: "~/.ssh/id_rsa"
 ```
 </File>
 
