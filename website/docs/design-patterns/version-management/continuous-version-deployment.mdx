@@ -238,6 +238,8 @@ components:
     vpc:
       metadata:
         component: vpc-experiment  # Pin dev to experiment
+      settings:
+        workspace_key_prefix: "dev/vpc"  # Keep stable across experiments
       vars:
         name: "dev-vpc-experiment"
 ```
@@ -547,6 +549,8 @@ components:
     database:
       metadata:
         component: database/v2  # Testing new version
+      settings:
+        workspace_key_prefix: "dev/database"  # Stable across versions
       vars:
         engine: "postgres"
         engine_version: "15.4"
@@ -568,6 +572,8 @@ components:
     database:
       metadata:
         component: database/v1  # Stable on old version
+      settings:
+        workspace_key_prefix: "prod/database"  # Stable across versions
       vars:
         engine: "postgres"
         engine_version: "13.11"
@@ -708,6 +714,8 @@ components:
       metadata:
         # Temporarily use a different component version
         component: vpc-hotfix
+      settings:
+        workspace_key_prefix: "prod/vpc"  # Keep stable during hotfix
       vars:
         # Emergency configuration
 ```
