@@ -99,8 +99,11 @@ atmos vendor pull
 ## Code Patterns & Conventions
 
 ### Comment Style (MANDATORY)
-- **All comments must end with periods** - Comments should be complete sentences
-- This is enforced by golangci-lint's `godot` linter
+- **All comments must end with periods** - Comments should be complete sentences ending with a period
+- This is enforced by golangci-lint's `godot` linter and will cause build failures if not followed
+- Applies to all comments: single-line, multi-line, inline, and documentation comments
+- This rule ensures consistency and readability across the codebase
+- Always treat comments as complete sentences rather than sentence fragments
 - Examples:
   ```go
   // CORRECT: This function processes the input data.

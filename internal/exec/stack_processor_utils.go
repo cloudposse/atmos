@@ -308,8 +308,6 @@ func ProcessYAMLConfigFile(
 // ProcessYAMLConfigFileWithContext takes a path to a YAML stack manifest,
 // recursively processes and deep-merges all the imports with context tracking,
 // and returns the final stack config.
-//
-//nolint:gocognit,revive,cyclop,funlen
 func ProcessYAMLConfigFileWithContext(
 	atmosConfig *schema.AtmosConfiguration,
 	basePath string,
@@ -338,6 +336,54 @@ func ProcessYAMLConfigFileWithContext(
 ) {
 	defer perf.Track(atmosConfig, "exec.ProcessYAMLConfigFileWithContext")()
 
+	return processYAMLConfigFileWithContextInternal(
+		atmosConfig,
+		basePath,
+		filePath,
+		importsConfig,
+		context,
+		ignoreMissingFiles,
+		skipTemplatesProcessingInImports,
+		ignoreMissingTemplateValues,
+		skipIfMissing,
+		parentTerraformOverridesInline,
+		parentTerraformOverridesImports,
+		parentHelmfileOverridesInline,
+		parentHelmfileOverridesImports,
+		atmosManifestJsonSchemaFilePath,
+		mergeContext,
+	)
+}
+
+// processYAMLConfigFileWithContextInternal is the internal recursive implementation.
+//
+//nolint:gocognit,revive,cyclop,funlen
+func processYAMLConfigFileWithContextInternal(
+	atmosConfig *schema.AtmosConfiguration,
+	basePath string,
+	filePath string,
+	importsConfig map[string]map[string]any,
+	context map[string]any,
+	ignoreMissingFiles bool,
+	skipTemplatesProcessingInImports bool,
+	ignoreMissingTemplateValues bool,
+	skipIfMissing bool,
+	parentTerraformOverridesInline map[string]any,
+	parentTerraformOverridesImports map[string]any,
+	parentHelmfileOverridesInline map[string]any,
+	parentHelmfileOverridesImports map[string]any,
+	atmosManifestJsonSchemaFilePath string,
+	mergeContext *m.MergeContext,
+) (
+	map[string]any,
+	map[string]map[string]any,
+	map[string]any,
+	map[string]any,
+	map[string]any,
+	map[string]any,
+	map[string]any,
+	error,
+) {
 	var stackConfigs []map[string]any
 	relativeFilePath := u.TrimBasePathFromPath(basePath+"/", filePath)
 
@@ -665,7 +711,7 @@ func ProcessYAMLConfigFileWithContext(
 				terraformOverridesInline,
 				terraformOverridesImports,
 				helmfileOverridesInline,
-				helmfileOverridesImports, err2 := ProcessYAMLConfigFileWithContext(
+				helmfileOverridesImports, err2 := processYAMLConfigFileWithContextInternal(
 				atmosConfig,
 				basePath,
 				importFile,
@@ -1116,6 +1162,33 @@ func ProcessBaseComponentConfig(
 ) error {
 	defer perf.Track(atmosConfig, "exec.ProcessBaseComponentConfig")()
 
+	return processBaseComponentConfigInternal(
+		atmosConfig,
+		baseComponentConfig,
+		allComponentsMap,
+		component,
+		stack,
+		baseComponent,
+		componentBasePath,
+		checkBaseComponentExists,
+		baseComponents,
+	)
+}
+
+// processBaseComponentConfigInternal is the internal recursive implementation.
+//
+//nolint:gocognit,revive,cyclop,funlen
+func processBaseComponentConfigInternal(
+	atmosConfig *schema.AtmosConfiguration,
+	baseComponentConfig *schema.BaseComponentConfig,
+	allComponentsMap map[string]any,
+	component string,
+	stack string,
+	baseComponent string,
+	componentBasePath string,
+	checkBaseComponentExists bool,
+	baseComponents *[]string,
+) error {
 	if component == baseComponent {
 		return nil
 	}
@@ -1157,7 +1230,7 @@ func ProcessBaseComponentConfig(
 					errUtils.ErrInvalidComponentAttribute, baseComponent, stack)
 			}
 
-			err := ProcessBaseComponentConfig(
+			err := processBaseComponentConfigInternal(
 				atmosConfig,
 				baseComponentConfig,
 				allComponentsMap,
@@ -1202,7 +1275,7 @@ func ProcessBaseComponentConfig(
 					}
 
 					// Process the baseComponentFromInheritList components recursively to find `componentInheritanceChain`
-					err := ProcessBaseComponentConfig(
+					err := processBaseComponentConfigInternal(
 						atmosConfig,
 						baseComponentConfig,
 						allComponentsMap,

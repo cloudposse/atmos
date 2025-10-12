@@ -8,6 +8,7 @@ import (
 	"time"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/gofrs/flock"
 	"github.com/spf13/viper"
 )
@@ -47,7 +48,9 @@ func withCacheFileLockUnix(cacheFile string, fn func() error) error {
 	}
 
 	defer func() {
-		_ = lock.Unlock()
+		if err := lock.Unlock(); err != nil {
+			log.Trace("Failed to unlock cache file", "error", err, "path", lockPath)
+		}
 	}()
 	return fn()
 }
@@ -70,7 +73,9 @@ func loadCacheWithReadLockUnix(cacheFile string) (CacheConfig, error) {
 		return cfg, nil
 	}
 	defer func() {
-		_ = lock.Unlock()
+		if err := lock.Unlock(); err != nil {
+			log.Trace("Failed to unlock cache file during read", "error", err, "path", lockPath)
+		}
 	}()
 
 	v := viper.New()

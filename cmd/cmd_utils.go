@@ -19,6 +19,7 @@ import (
 	tuiUtils "github.com/cloudposse/atmos/internal/tui/utils"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/cloudposse/atmos/pkg/version"
@@ -291,7 +292,9 @@ func preCustomCommand(
 
 	// no "steps" means a sub command should be specified
 	if len(commandConfig.Steps) == 0 {
-		_ = cmd.Help()
+		if err := cmd.Help(); err != nil {
+			log.Trace("Failed to display command help", "error", err, "command", cmd.Name())
+		}
 		errUtils.Exit(0)
 	}
 }
@@ -638,6 +641,19 @@ func getConfigAndStacksInfo(commandName string, cmd *cobra.Command, args []strin
 	info, err := e.ProcessCommandLineArgs(commandName, cmd, finalArgs, argsAfterDoubleDash)
 	errUtils.CheckErrorPrintAndExit(err, "", "")
 	return info
+}
+
+// enableHeatmapIfRequested checks os.Args for --heatmap and --heatmap-mode flags.
+// This is needed for commands with DisableFlagParsing=true (terraform, helmfile, packer)
+// where Cobra doesn't parse the flags, so PersistentPreRun can't detect them.
+// We only enable tracking if --heatmap is present; --heatmap-mode is only relevant when --heatmap is set.
+func enableHeatmapIfRequested() {
+	for _, arg := range os.Args {
+		if arg == "--heatmap" {
+			perf.EnableTracking(true)
+			return
+		}
+	}
 }
 
 // isGitRepository checks if the current directory is within a git repository.

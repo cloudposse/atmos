@@ -234,8 +234,13 @@ func setupLogger(atmosConfig *schema.AtmosConfiguration) {
 func cleanupLogFile() {
 	if logFileHandle != nil {
 		// Flush any remaining log data before closing.
-		_ = logFileHandle.Sync()
-		_ = logFileHandle.Close()
+		if err := logFileHandle.Sync(); err != nil {
+			// Don't use logger here as we're cleaning up the log file
+			fmt.Fprintf(os.Stderr, "Warning: failed to sync log file: %v\n", err)
+		}
+		if err := logFileHandle.Close(); err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: failed to close log file: %v\n", err)
+		}
 		logFileHandle = nil
 	}
 }
@@ -524,13 +529,13 @@ func displayPerformanceHeatmap(cmd *cobra.Command, mode string) error {
 	snap := perf.SnapshotTopFiltered("total", defaultTopFunctionsMax)
 	utils.PrintfMessageToTUI("\n=== Atmos Performance Summary ===\n")
 	utils.PrintfMessageToTUI("Elapsed: %s  Functions: %d  Calls: %d\n", snap.Elapsed, snap.TotalFuncs, snap.TotalCalls)
-	utils.PrintfMessageToTUI("%-50s %6s %10s %10s %10s %8s\n", "Function", "Count", "Total", "Avg", "Max", "P95")
+	utils.PrintfMessageToTUI("%-50s %6s %13s %13s %13s %13s\n", "Function", "Count", "Total", "Avg", "Max", "P95")
 	for _, r := range snap.Rows {
 		p95 := "-"
 		if r.P95 > 0 {
 			p95 = heatmap.FormatDuration(r.P95)
 		}
-		utils.PrintfMessageToTUI("%-50s %6d %10s %10s %10s %8s\n",
+		utils.PrintfMessageToTUI("%-50s %6d %13s %13s %13s %13s\n",
 			r.Name, r.Count, heatmap.FormatDuration(r.Total), heatmap.FormatDuration(r.Avg), heatmap.FormatDuration(r.Max), p95)
 	}
 
