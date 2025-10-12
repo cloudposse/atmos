@@ -92,9 +92,10 @@ func processMetadataInheritance(opts *ComponentProcessorOptions, result *Compone
 	explicitBaseComponentName := ""
 
 	// Save the BaseComponentName from top-level component inheritance (if any).
-	// This allows us to distinguish between:
-	// 1. BaseComponentName set by top-level component: attribute (should preserve)
-	// 2. BaseComponentName set by metadata.inherits processing (should override with component name).
+	// Processing metadata.inherits calls applyBaseComponentConfig() which inadvertently overwrites
+	// BaseComponentName. We save it here so we can restore it after processing, distinguishing:
+	// 1. BaseComponentName set by top-level component: attribute (preserve this value)
+	// 2. BaseComponentName inadvertently overwritten during configuration inheritance (restore saved value or default)
 	baseComponentNameFromTopLevel := result.BaseComponentName
 
 	// Check metadata.component.
@@ -133,15 +134,17 @@ func processMetadataInheritance(opts *ComponentProcessorOptions, result *Compone
 	}
 
 	// If metadata.component was not explicitly set, determine the default.
+	// This logic is completely independent of metadata.inherits - metadata.inherits only affects
+	// configuration inheritance (vars, settings, backend, etc.) and has nothing to do with component paths.
 	if !metadataComponentExplicitlySet {
 		if baseComponentNameFromTopLevel != "" {
 			// Top-level component: attribute was set, restore it.
 			// This handles cases like: component: "test/test-component".
 			result.BaseComponentName = baseComponentNameFromTopLevel
 		} else {
-			// No top-level component, no metadata.component - default to component name itself.
-			// This handles cases where only metadata.inherits is specified.
+			// No top-level component: attribute, no metadata.component - default to Atmos component name.
 			// The metadata.component determines the physical terraform directory path.
+			// This default is independent of whether metadata.inherits is present or not.
 			result.BaseComponentName = opts.Component
 		}
 	}
