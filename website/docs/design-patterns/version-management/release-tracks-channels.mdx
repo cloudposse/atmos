@@ -79,18 +79,6 @@ Atmos supports multiple ways to implement release tracks. The two primary approa
 
 ### Component-Centric Organization
 
-Each component has its own track folders, making it easy to see all tracks for a specific component.
-
-**Benefits:**
-- **Independent Component Evolution**: Each component can move through tracks at its own pace without affecting others
-- **Clear Version History**: Easy to trace how a specific component evolved through alpha, beta, and production stages
-- **Granular Control**: Teams can adopt cutting-edge versions of specific components while keeping others stable
-
-**Drawbacks:**
-- **Complex Dependency Management**: Components with interdependencies may require coordinated track updates
-- **Increased Cognitive Load**: Teams must understand the state of multiple components across different tracks
-- **Potential for Incompatibility**: Independent tracking can lead to version combinations that weren't tested together
-
 <File title="Directory Structure">
 ```text
 components/
@@ -144,6 +132,18 @@ components:
 ```
 </File>
 
+Each component has its own track folders, making it easy to see all tracks for a specific component.
+
+**Benefits:**
+- **Independent Component Evolution**: Each component can move through tracks at its own pace without affecting others
+- **Clear Version History**: Easy to trace how a specific component evolved through alpha, beta, and production stages
+- **Granular Control**: Teams can adopt cutting-edge versions of specific components while keeping others stable
+
+**Drawbacks:**
+- **Complex Dependency Management**: Components with interdependencies may require coordinated track updates
+- **Increased Cognitive Load**: Teams must understand the state of multiple components across different tracks
+- **Potential for Incompatibility**: Independent tracking can lead to version combinations that weren't tested together
+
 **Use This Approach When:**
 - Components have independent release cycles
 - Different teams own different components
@@ -153,18 +153,6 @@ components:
 <TabItem value="track-first" label="Track-First Organization">
 
 ### Track-Centric Organization
-
-All components for a track are grouped together, making it easy to see what's available in each release track.
-
-**Benefits:**
-- **Component Visibility**: Immediately see which components are available in each track - as components are deprecated, they can be removed from tracks
-- **Cohesive Promotion**: All components in a track are tested and promoted together, ensuring compatibility
-- **Simplified Mental Model**: Teams only need to understand track states rather than individual component versions
-
-**Drawbacks:**
-- **Reduced Flexibility**: All components in a track must move together, even if only one needs updating
-- **Potential for Blocking**: A problem with one component can hold back the entire track
-- **Larger Blast Radius**: Issues affect all components in the track, not just the problematic one
 
 <File title="Directory Structure">
 ```text
@@ -228,6 +216,18 @@ components:
         instance_class: "db.t3.large"
 ```
 </File>
+
+All components for a track are grouped together, making it easy to see what's available in each release track.
+
+**Benefits:**
+- **Component Visibility**: Immediately see which components are available in each track - as components are deprecated, they can be removed from tracks
+- **Cohesive Promotion**: All components in a track are tested and promoted together, ensuring compatibility
+- **Simplified Mental Model**: Teams only need to understand track states rather than individual component versions
+
+**Drawbacks:**
+- **Reduced Flexibility**: All components in a track must move together, even if only one needs updating
+- **Potential for Blocking**: A problem with one component can hold back the entire track
+- **Larger Blast Radius**: Issues affect all components in the track, not just the problematic one
 
 **Use This Approach When:**
 - You want strong consistency across components
