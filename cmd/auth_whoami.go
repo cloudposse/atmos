@@ -93,7 +93,6 @@ func printWhoamiJSON(whoami *authTypes.WhoamiInfo) error {
 	}
 	jsonData, err := json.MarshalIndent(redactedWhoami, "", "  ")
 	if err != nil {
-		errUtils.HandleError(errUtils.ErrInvalidAuthConfig)
 		return errUtils.ErrInvalidAuthConfig
 	}
 	fmt.Println(string(jsonData))

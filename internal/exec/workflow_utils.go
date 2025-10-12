@@ -73,8 +73,7 @@ func ExecuteWorkflow(
 			WithTitle(WorkflowErrTitle).
 			WithExplanationf("Workflow `%s` is empty and requires at least one step to execute.", workflow).
 			Err()
-		errUtils.HandleError(err)
-		return ErrWorkflowNoSteps
+		return err
 	}
 
 	// Check if the workflow steps have the `name` attribute
@@ -102,8 +101,7 @@ func ExecuteWorkflow(
 				WithExplanationf("The `--from-step` flag was set to `%s`, but this step does not exist in workflow `%s`.", fromStep, workflow).
 				WithHintf("Available steps:\n%s", FormatList(stepNames)).
 				Err()
-			errUtils.HandleError(err)
-			return ErrInvalidFromStep
+			return err
 		}
 	}
 
@@ -165,8 +163,7 @@ func ExecuteWorkflow(
 				WithExplanationf("Step type `%s` is not supported. Each step must specify a valid type.", commandType).
 				WithHintf("Available types:\n%s", FormatList([]string{"atmos", "shell"})).
 				Err()
-			errUtils.HandleError(err)
-			return ErrInvalidWorkflowStepType
+			return err
 		}
 
 		if err != nil {
@@ -206,8 +203,7 @@ func ExecuteWorkflow(
 				WithExplanationf("The following command failed to execute:\n```\n%s\n```", failedCmd).
 				WithHintf("To resume the workflow from this step, run:\n```\n%s\n```", resumeCommand).
 				Err()
-			errUtils.HandleError(stepErr)
-			return ErrWorkflowStepFailed
+			return stepErr
 		}
 	}
 
