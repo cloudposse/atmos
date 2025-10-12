@@ -243,40 +243,32 @@ spec:
         - path: "vpc/latest"
           version: "2.2.0"
 
-    # Use mixins for configuration
+    # Vendor with tags for organization
     - component: rds
       source: "github.com/cloudposse/terraform-aws-rds.git///?ref={{.Version}}"
       version: "1.2.0"
       targets:
         - "rds"
-      mixins:
-        - "mixins/rds-defaults.yaml"
-        - "mixins/rds-security.yaml"
+      tags:
+        - database
+        - production
 
-    # Vendor with transformations
     - component: s3-bucket
       source: "github.com/cloudposse/terraform-aws-s3-bucket.git///?ref={{.Version}}"
       version: "3.0.0"
       targets:
         - "s3"
-      transforms:
-        # Rename files during vendoring
-        - from: "main.tf"
-          to: "s3-main.tf"
-        - from: "variables.tf"
-          to: "s3-variables.tf"
+      tags:
+        - storage
 
-    # Conditional vendoring based on tags
     - component: lambda
       source: "github.com/acme/lambda-functions.git///?ref={{.Version}}"
       version: "v1.0.0"
       targets:
         - "lambda"
       tags:
-        - production
+        - serverless
         - critical
-      # Only vendor if tags match
-      condition: "production"
 ```
 </File>
 
