@@ -129,12 +129,10 @@ func processMetadataInheritance(opts *ComponentProcessorOptions, result *Compone
 	// If metadata.component was not explicitly set, default to the component name itself.
 	// This should happen regardless of whether metadata.inherits exists or not.
 	// The metadata.component determines the physical terraform directory path.
-	if !metadataComponentExplicitlySet {
+	// NOTE: We do NOT add this to BaseComponents list - that list is only for components we inherit FROM.
+	// IMPORTANT: Only set the default if BaseComponentName is not already set by top-level component inheritance.
+	if !metadataComponentExplicitlySet && result.BaseComponentName == "" {
 		result.BaseComponentName = opts.Component
-	}
-
-	if result.BaseComponentName != "" {
-		result.BaseComponents = append(result.BaseComponents, result.BaseComponentName)
 	}
 
 	return nil
