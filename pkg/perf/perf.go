@@ -176,8 +176,8 @@ func claimSimpleStackOwnership(owner uint64) uint64 {
 			if simpleOwnerGID.CompareAndSwap(0, gid) {
 				return gid
 			}
-			// Someone else claimed concurrently; return current owner to let caller detect mismatch.
-			return simpleOwnerGID.Load()
+			// Someone else claimed concurrently; return this goroutine's ID so caller can compare to current owner.
+			return gid
 		}
 	}
 	// Otherwise, get current goroutine ID for mismatch detection.
