@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"io"
 	"os"
+	"runtime"
 	"testing"
 
 	"github.com/spf13/pflag"
@@ -14,6 +15,10 @@ import (
 
 func TestTerraformGenerateBackendCmd(t *testing.T) {
 	tests.RequireTerraform(t)
+
+	if runtime.GOOS == "windows" {
+		t.Skipf("Skipping on Windows: test hangs due to pipe/stderr interaction with background goroutines")
+	}
 
 	stacksPath := "../tests/fixtures/scenarios/stack-templates"
 
