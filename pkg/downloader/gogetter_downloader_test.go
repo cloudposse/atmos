@@ -4,9 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
-	"runtime"
 	"testing"
-	"time"
 
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/hashicorp/go-getter"
@@ -145,37 +143,5 @@ func TestDownloadDetectFormatAndParseFile(t *testing.T) {
 	}
 }
 
-func TestGoGetterGet_File(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skipf("Skipping file copying test on Windows: file system differences may cause issues")
-	}
-	srcDir, err := os.MkdirTemp("", "src")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.RemoveAll(srcDir)
-	srcFile := filepath.Join(srcDir, "test.txt")
-	content := []byte("hello world")
-	if err := os.WriteFile(srcFile, content, 0o600); err != nil {
-		t.Fatal(err)
-	}
-	destDir, err := os.MkdirTemp("", "dest")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.RemoveAll(destDir)
-	destFile := filepath.Join(destDir, "downloaded.txt")
-	srcURL := "file://" + srcFile
-	config := fakeAtmosConfig()
-	err = NewGoGetterDownloader(&config).Fetch(srcURL, destFile, ClientModeFile, 5*time.Second)
-	if err != nil {
-		t.Errorf("GoGetterGet failed: %v", err)
-	}
-	data, err := os.ReadFile(destFile)
-	if err != nil {
-		t.Errorf("Error reading downloaded file: %v", err)
-	}
-	if string(data) != string(content) {
-		t.Errorf("Expected file content %s, got %s", content, data)
-	}
-}
+// Unix-specific test moved to gogetter_downloader_unix_test.go:
+// - TestGoGetterGet_File

@@ -518,24 +518,8 @@ func TestCheckGitVersion_CommandError(t *testing.T) {
 	}
 }
 
-func TestCheckGitVersion_WindowsSuffix_Stripped(t *testing.T) {
-	if runtime.GOOS != "windows" {
-		t.Skipf("Skipping test: Windows-specific git behavior differs from Unix systems")
-	}
-	// On Windows, version string may contain ".windows." and should be stripped
-	writeFakeGit(t, "git version 2.20.1.windows.1", 0)
-
-	// With suffix removed, this compares as 2.20.1
-	err := checkGitVersion(context.Background(), "2.18.0")
-	if err != nil {
-		t.Fatalf("expected no error after stripping .windows. suffix, got %v", err)
-	}
-
-	err = checkGitVersion(context.Background(), "2.30.0")
-	if err == nil {
-		t.Fatalf("expected error: 2.20.1 < 2.30.0")
-	}
-}
+// Windows-specific test moved to get_git_windows_test.go:
+// - TestCheckGitVersion_WindowsSuffix_Stripped
 
 func mustURL(t *testing.T, s string) *url.URL {
 	t.Helper()
@@ -945,9 +929,14 @@ func TestGetCustom_WithTimeout(t *testing.T) {
 	dst := t.TempDir()
 	u := mustURL(t, "https://example.com/repo.git")
 
-	// This might timeout or succeed very quickly.
-	// We're mainly testing that the timeout path doesn't panic.
-	_ = g.GetCustom(dst, u)
+	// This might timeout or succeed very quickly depending on system load.
+	// We verify the function executes without panic and returns (error or nil).
+	err := g.GetCustom(dst, u)
+
+	// The function should either succeed very quickly or timeout.
+	// Either outcome is acceptable - we're testing that timeout doesn't cause panic.
+	// Most likely it will error due to fake git setup.
+	_ = err // Error is expected in this test environment
 }
 
 // Test GetCustom full integration - clone path.

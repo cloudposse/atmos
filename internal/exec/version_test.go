@@ -107,8 +107,12 @@ func TestVersionExec_Execute(t *testing.T) {
 				printMessageToUpgradeToAtmosLatestRelease: mockExec.PrintMessageToUpgradeToAtmosLatestRelease,
 			}
 
-			// Execute the function
-			v.Execute(tt.checkFlag, "")
+			// Execute the function and verify it completes without errors.
+			err := v.Execute(tt.checkFlag, "")
+
+			// Verify no errors occurred. The mock expectations verify that
+			// the correct functions were called with the right parameters.
+			assert.NoError(t, err, "Execute should not return an error")
 		})
 	}
 }

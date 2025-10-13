@@ -402,3 +402,45 @@ func TestJoinPath_UnixPathNormalization(t *testing.T) {
 		})
 	}
 }
+
+// TestJoinPath_UnixAbsolutePaths specifically tests Unix absolute path scenarios.
+func TestJoinPath_UnixAbsolutePaths(t *testing.T) {
+	tests := []struct {
+		name         string
+		basePath     string
+		providedPath string
+		expected     string
+	}{
+		{
+			name:         "GitHub Actions Unix path - components absolute",
+			basePath:     "/home/runner/_work/infrastructure/infrastructure",
+			providedPath: "/home/runner/_work/infrastructure/infrastructure/atmos/components/terraform",
+			expected:     "/home/runner/_work/infrastructure/infrastructure/atmos/components/terraform",
+		},
+		{
+			name:         "GitHub Actions Unix path - components relative",
+			basePath:     "/home/runner/_work/infrastructure/infrastructure",
+			providedPath: "atmos/components/terraform",
+			expected:     "/home/runner/_work/infrastructure/infrastructure/atmos/components/terraform",
+		},
+		{
+			name:         "Root path joining",
+			basePath:     "/",
+			providedPath: "usr/local/bin",
+			expected:     "/usr/local/bin",
+		},
+		{
+			name:         "Home directory path",
+			basePath:     "/home/user",
+			providedPath: ".config/atmos",
+			expected:     "/home/user/.config/atmos",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := JoinPath(tt.basePath, tt.providedPath)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}

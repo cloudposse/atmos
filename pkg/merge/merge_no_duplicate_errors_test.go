@@ -205,20 +205,3 @@ func TestMultipleMergeCallsNoDuplicates(t *testing.T) {
 		t.Logf("Got %d errors (as expected for testing)", len(errors))
 	}
 }
-
-// TestOriginalBehaviorWouldPrint documents what the original code was doing wrong..
-func TestOriginalBehaviorWouldPrint(t *testing.T) {
-	t.Skipf("This test documents the original problematic behavior - skip in normal runs")
-
-	// The original code had lines like:
-	// _, _ = theme.Colors.Error.Fprintln(color.Error, err.Error()+"\n")
-	//
-	// This would print the error directly to stderr BEFORE returning it,
-	// causing duplicate error messages like:
-	//
-	// cannot override two slices with different type ([]interface {}, string)
-	// cannot override two slices with different type ([]interface {}, string)
-	// cannot override two slices with different type ([]interface {}, string)
-	//
-	// Now we only return the error and let the caller decide how to handle it
-}
