@@ -220,7 +220,7 @@ func newModel(heatModel *HeatModel, mode string, ctx context.Context) *model {
 	columns := []table.Column{
 		{Title: "Function", Width: tableFunctionWidth},
 		{Title: "Count", Width: tableCountWidth},
-		{Title: "Total", Width: tableDurationWidth},
+		{Title: "CPU Time", Width: tableDurationWidth},
 		{Title: "Avg", Width: tableDurationWidth},
 		{Title: "Max", Width: tableDurationWidth},
 		{Title: "P95", Width: tableDurationWidth},
@@ -411,8 +411,20 @@ func (m *model) renderLegend() string {
 		Foreground(lipgloss.Color("243")).
 		Padding(0, 2)
 
+	// Calculate total CPU time and parallelism.
+	var totalCPUTime time.Duration
+	for _, r := range m.initialSnap.Rows {
+		totalCPUTime += r.Total
+	}
+	parallelism := float64(totalCPUTime) / float64(m.initialSnap.Elapsed)
+
 	legend := legendStyle.Render(
-		"Count: # calls (incl. recursion) | Total: wall-clock (incl. children & recursion) | Avg: avg self-time | Max: max self-time | P95: 95th percentile self-time")
+		fmt.Sprintf("Parallelism: ~%.1fx | Elapsed: %s | CPU Time: %s\n",
+			parallelism,
+			m.initialSnap.Elapsed.Truncate(time.Microsecond),
+			totalCPUTime.Truncate(time.Microsecond)) +
+			"Count: # calls (incl. recursion) | CPU Time: sum of self-time (excludes children)\n" +
+			"Avg: avg self-time | Max: max self-time | P95: 95th percentile self-time")
 
 	return legend
 }

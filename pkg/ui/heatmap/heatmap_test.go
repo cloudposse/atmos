@@ -413,7 +413,7 @@ func TestModel_View(t *testing.T) {
 	assert.Contains(t, result, "Total Calls: 5")
 	// Verify legend is displayed.
 	assert.Contains(t, result, "Count: # calls")
-	assert.Contains(t, result, "Total: wall-clock")
+	assert.Contains(t, result, "CPU Time: sum of self-time")
 	assert.Contains(t, result, "self-time")
 }
 

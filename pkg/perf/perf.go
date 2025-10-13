@@ -30,13 +30,14 @@ const (
 )
 
 // Metric tracks performance data for a function.
-// Total includes time spent in child function calls (wall-clock time).
-// SelfTime excludes time spent in child calls (actual work done in the function).
+// Total includes time spent in child function calls (wall-clock time) - used for internal tracking.
+// SelfTime excludes time spent in child calls (actual work done in the function) - used for display.
+// Display uses SelfTime to avoid double-counting time in nested/recursive calls.
 type Metric struct {
 	Name     string
 	Count    int64
-	Total    time.Duration           // Wall-clock time (includes children).
-	SelfTime time.Duration           // Actual work time (excludes children).
+	Total    time.Duration           // Wall-clock time (includes children) - internal use only.
+	SelfTime time.Duration           // Actual work time (excludes children) - used for all display metrics.
 	Max      time.Duration           // Max self-time (excludes children).
 	Hist     *hdrhistogram.Histogram // Histogram for self-time percentiles (optional, nil if disabled).
 }
@@ -282,8 +283,8 @@ func getGoroutineID() uint64 {
 type Row struct {
 	Name     string
 	Count    int64
-	Total    time.Duration // Wall-clock time (includes children).
-	SelfTime time.Duration // Actual work time (excludes children).
+	Total    time.Duration // Sum of self-time across all calls (excludes children to avoid double-counting).
+	SelfTime time.Duration // Actual work time (excludes children) - same as Total for display purposes.
 	Avg      time.Duration // Average self-time per call.
 	Max      time.Duration // Max self-time (excludes children).
 	P95      time.Duration // 95th percentile of self-time (0 if HDR disabled).
@@ -350,7 +351,7 @@ func buildRows() []Row {
 		r := Row{
 			Name:     m.Name,
 			Count:    m.Count,
-			Total:    m.Total,
+			Total:    m.SelfTime, // Use sum of self-times to avoid double-counting in nested calls.
 			SelfTime: m.SelfTime,
 			Max:      m.Max,
 		}

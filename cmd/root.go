@@ -12,6 +12,7 @@ import (
 	"regexp"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/elewis787/boa"
@@ -531,9 +532,21 @@ func displayPerformanceHeatmap(cmd *cobra.Command, mode string) error {
 	// Print performance summary to console.
 	// Filter out functions with zero total time for cleaner output.
 	snap := perf.SnapshotTopFiltered("total", defaultTopFunctionsMax)
+
+	// Calculate total CPU time (sum of all self-times) and parallelism.
+	var totalCPUTime time.Duration
+	for _, r := range snap.Rows {
+		totalCPUTime += r.Total
+	}
+	parallelism := float64(totalCPUTime) / float64(snap.Elapsed)
+
 	utils.PrintfMessageToTUI("\n=== Atmos Performance Summary ===\n")
-	utils.PrintfMessageToTUI("Elapsed: %s  Functions: %d  Calls: %d\n", snap.Elapsed, snap.TotalFuncs, snap.TotalCalls)
-	utils.PrintfMessageToTUI("%-50s %6s %13s %13s %13s %13s\n", "Function", "Count", "Total", "Avg", "Max", "P95")
+	utils.PrintfMessageToTUI("Elapsed: %s | CPU Time: %s | Parallelism: ~%.1fx\n",
+		snap.Elapsed.Truncate(time.Microsecond),
+		totalCPUTime.Truncate(time.Microsecond),
+		parallelism)
+	utils.PrintfMessageToTUI("Functions: %d | Total Calls: %d\n\n", snap.TotalFuncs, snap.TotalCalls)
+	utils.PrintfMessageToTUI("%-50s %6s %13s %13s %13s %13s\n", "Function", "Count", "CPU Time", "Avg", "Max", "P95")
 	for _, r := range snap.Rows {
 		p95 := "-"
 		if r.P95 > 0 {
