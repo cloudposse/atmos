@@ -138,26 +138,37 @@ func Track(atmosConfig *schema.AtmosConfiguration, name string) func() {
 }
 
 // trackWithSimpleStack uses the global simple stack for single-goroutine scenarios.
-// If a different goroutine is detected, it automatically falls back to goroutine-local tracking.
+// If a different goroutine is detected, it automatically falls back to goroutine-local tracking
+// and disables simple mode globally to avoid future expensive checks.
 func trackWithSimpleStack(name string, start time.Time) func() {
 	// Perform goroutine ID check when the simple stack is empty to claim ownership.
-	// Also check if we're not the owner when stack is non-empty to prevent corruption.
+	// Also check ownership when stack is shallow (depth <= 1) to catch early cross-goroutine access.
+	// For deep stacks, trust ownership to avoid expensive checks on every nested call.
 	owner := simpleOwnerGID.Load()
-	if simpleStack.isEmpty() {
+	depth := simpleStack.depth()
+
+	if depth == 0 {
+		// Stack empty: claim ownership.
 		gid := claimSimpleStackOwnership(owner)
 		// Re-read current owner to avoid decisions based on stale 'owner'.
 		curOwner := simpleOwnerGID.Load()
 		// If a different goroutine is detected, fall back to goroutine-local tracking.
 		if gid != 0 && curOwner != 0 && gid != curOwner {
+			// Disable simple mode globally to avoid expensive checks on every call.
+			useSimpleStack.Store(false)
 			return trackWithGoroutineLocalStack(name, start)
 		}
-	} else if owner != 0 {
-		// Stack is non-empty; verify we're the owner goroutine.
+	} else if depth == 1 && owner != 0 {
+		// Stack shallow (1 frame): verify ownership once to catch cross-goroutine access early.
+		// After this check, deeper calls trust ownership for performance.
 		gid := getGoroutineID()
 		if gid != 0 && gid != owner {
+			// Disable simple mode globally - we've detected multi-goroutine usage.
+			useSimpleStack.Store(false)
 			return trackWithGoroutineLocalStack(name, start)
 		}
 	}
+	// For depth > 1: trust ownership, skip expensive check for performance.
 
 	// Proceed with simple stack (single-goroutine fast path).
 	frame := &StackFrame{
@@ -329,6 +340,13 @@ func (cs *CallStack) isEmpty() bool {
 	cs.mu.Lock()
 	defer cs.mu.Unlock()
 	return len(cs.frames) == 0
+}
+
+// depth returns the number of frames in the call stack.
+func (cs *CallStack) depth() int {
+	cs.mu.Lock()
+	defer cs.mu.Unlock()
+	return len(cs.frames)
 }
 
 // getGoroutineID extracts the goroutine ID from the stack trace.
