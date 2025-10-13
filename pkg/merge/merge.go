@@ -127,14 +127,34 @@ func MergeWithOptions(
 ) (map[string]any, error) {
 	defer perf.Track(atmosConfig, "merge.MergeWithOptions")()
 
+	// Fast-path: empty inputs.
+	if len(inputs) == 0 {
+		return map[string]any{}, nil
+	}
+
+	// Fast-path: filter out empty maps and check for trivial cases.
+	nonEmptyInputs := make([]map[string]any, 0, len(inputs))
+	for _, input := range inputs {
+		if len(input) > 0 {
+			nonEmptyInputs = append(nonEmptyInputs, input)
+		}
+	}
+
+	// Fast-path: all inputs were empty.
+	if len(nonEmptyInputs) == 0 {
+		return map[string]any{}, nil
+	}
+
+	// Fast-path: only one non-empty input, return a deep copy to maintain immutability.
+	if len(nonEmptyInputs) == 1 {
+		return deepCopyMap(nonEmptyInputs[0])
+	}
+
+	// Standard merge path for multiple non-empty inputs.
 	merged := map[string]any{}
 
-	for index := range inputs {
-		current := inputs[index]
-
-		if len(current) == 0 {
-			continue
-		}
+	for index := range nonEmptyInputs {
+		current := nonEmptyInputs[index]
 
 		// Due to a bug in `mergo.Merge`
 		// (Note: in the `for` loop, it DOES modify the source of the previous loop iteration if it's a complex map and `mergo` gets a pointer to it,
@@ -271,21 +291,46 @@ func MergeWithOptionsAndContext(
 ) (map[string]any, error) {
 	defer perf.Track(atmosConfig, "merge.MergeWithOptionsAndContext")()
 
-	// Remove verbose merge operation logging - it creates too much noise
-	// Users can use ATMOS_LOGS_LEVEL=Trace if they need detailed merge debugging
+	// Fast-path: empty inputs.
+	if len(inputs) == 0 {
+		return map[string]any{}, nil
+	}
 
+	// Fast-path: filter out empty maps and check for trivial cases.
+	nonEmptyInputs := make([]map[string]any, 0, len(inputs))
+	for _, input := range inputs {
+		if len(input) > 0 {
+			nonEmptyInputs = append(nonEmptyInputs, input)
+		}
+	}
+
+	// Fast-path: all inputs were empty.
+	if len(nonEmptyInputs) == 0 {
+		return map[string]any{}, nil
+	}
+
+	// Fast-path: only one non-empty input, return a deep copy to maintain immutability.
+	if len(nonEmptyInputs) == 1 {
+		result, err := deepCopyMap(nonEmptyInputs[0])
+		if err != nil && context != nil {
+			return nil, context.FormatError(err)
+		}
+		return result, err
+	}
+
+	// Standard merge path for multiple non-empty inputs.
 	var result map[string]any
 	var err error
 
-	// Use MergeWithProvenance when provenance tracking is enabled and positions are available
+	// Use MergeWithProvenance when provenance tracking is enabled and positions are available.
 	if atmosConfig != nil && atmosConfig.TrackProvenance &&
 		context != nil && context.IsProvenanceEnabled() &&
 		context.Positions != nil && len(context.Positions) > 0 {
-		// Perform provenance-aware merge
-		result, err = MergeWithProvenance(atmosConfig, inputs, context, context.Positions)
+		// Perform provenance-aware merge.
+		result, err = MergeWithProvenance(atmosConfig, nonEmptyInputs, context, context.Positions)
 	} else {
-		// Standard merge without provenance
-		result, err = MergeWithOptions(atmosConfig, inputs, appendSlice, sliceDeepCopy)
+		// Standard merge without provenance.
+		result, err = MergeWithOptions(atmosConfig, nonEmptyInputs, appendSlice, sliceDeepCopy)
 	}
 
 	if err != nil {
