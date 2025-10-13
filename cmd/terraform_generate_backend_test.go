@@ -38,15 +38,13 @@ func TestTerraformGenerateBackendCmd(t *testing.T) {
 
 	os.Stderr = w
 
-	// Ensure stderr is always restored, even if test fails.
-	defer func() {
-		os.Stderr = oldStderr
-	}()
-
 	// Execute the command.
 	RootCmd.SetArgs([]string{"terraform", "generate", "backend", "component-1", "-s", "nonprod"})
 	err = Execute()
 	assert.NoError(t, err, "'TestTerraformGenerateBackendCmd' should execute without error")
+
+	// Restore stderr immediately after command execution to prevent any goroutines from blocking.
+	os.Stderr = oldStderr
 
 	// Close the writer to signal end of output.
 	err = w.Close()
