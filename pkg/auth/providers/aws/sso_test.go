@@ -206,7 +206,7 @@ func TestSSOProvider_promptDeviceAuth_NonCI_OpensURL(t *testing.T) {
 }
 
 func TestSSOProvider_WithCustomResolver(t *testing.T) {
-	// Test SSO provider with custom resolver configuration
+	// Test SSO provider with custom resolver configuration.
 	config := &schema.Provider{
 		Kind:     "aws/iam-identity-center",
 		Region:   "us-east-1",
@@ -236,7 +236,7 @@ func TestSSOProvider_WithCustomResolver(t *testing.T) {
 }
 
 func TestSSOProvider_WithoutCustomResolver(t *testing.T) {
-	// Test SSO provider without custom resolver configuration
+	// Test SSO provider without custom resolver configuration.
 	config := &schema.Provider{
 		Kind:     "aws/iam-identity-center",
 		Region:   "us-east-1",
