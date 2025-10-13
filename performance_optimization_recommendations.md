@@ -448,7 +448,7 @@ func hasCustomTags(node *yaml.Node) bool {
 - **Expected benefit**: 5-10s improvement for affected detection with 50%+ cache hit rate eliminating 1M+ redundant calls
 
 #### P6.1: Parallel Import Processing with Sequential Merge (Completed)
-- **Commit**: [pending]
+- **Commit**: ddf81a9b
 - **Impact**: Process import files in parallel while preserving Atmos inheritance order through sequential merging
 - **Implementation**:
   - Each import's file matches (from glob) processed in parallel goroutines
@@ -458,6 +458,17 @@ func hasCustomTags(node *yaml.Node) bool {
 - **Key design decision**: Outer loop (iterating through importStructs) remains sequential to preserve import order from the manifest; inner loop (processing glob matches) parallelized for I/O concurrency
 - **Result**: Maintains Atmos inheritance semantics (import order preserved) while improving performance through concurrent I/O and parsing
 - **Expected benefit**: Performance improvement scales with number of import files per manifest and I/O latency; most beneficial for stacks with many imports
+
+#### P7.1: Skip Syntax Highlighting for Non-TTY Output (Completed)
+- **Commit**: [pending]
+- **Impact**: Skip expensive syntax highlighting when output is piped or redirected (non-TTY)
+- **Implementation**:
+  - Use existing `IsTTYSupportForStdout()` and `IsTTYSupportForStderr()` helper functions from `internal/tui/templates/term/term_writer.go`
+  - Replace direct `term.IsTerminal()` calls in `HighlightCodeWithConfig` with helper functions
+  - Remove global `isTermPresent` variable, use helper functions dynamically
+- **Context**: Syntax highlighting (3.3s for HighlightCodeWithConfig + 2.8s for PrintAsYAML = 6.1s total) only benefits interactive terminal users
+- **Result**: Zero overhead when piping output (e.g., `atmos describe stacks | jq`) or in CI/CD pipelines
+- **Expected benefit**: 3-6 second improvement for non-TTY output scenarios; no change for interactive terminal use
 
 **Measured Performance Improvement**:
 - Setup 1: 12 min → 8.4 min (30% improvement with P1.1 + P1.2)
