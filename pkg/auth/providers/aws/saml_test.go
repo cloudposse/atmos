@@ -491,3 +491,58 @@ func TestSAMLProvider_selectRole_PartialMatch(t *testing.T) {
 	require.NotNil(t, sel)
 	assert.Equal(t, "arn:aws:iam::123:role/Development", sel.RoleARN)
 }
+
+func TestSAMLProvider_WithCustomResolver(t *testing.T) {
+	// Test SAML provider with custom resolver configuration
+	config := &schema.Provider{
+		Kind:   "aws/saml",
+		Region: "us-east-1",
+		URL:    "https://idp.example.com/saml",
+		Spec: map[string]interface{}{
+			"aws": map[string]interface{}{
+				"resolver": map[string]interface{}{
+					"url": "http://localhost:4566",
+				},
+			},
+		},
+	}
+
+	p, err := NewSAMLProvider("saml-localstack", config)
+	require.NoError(t, err)
+	assert.NotNil(t, p)
+	
+	// Cast to concrete type to access internal fields
+	sp, ok := p.(*samlProvider)
+	require.True(t, ok)
+	assert.Equal(t, "saml-localstack", sp.name)
+	assert.Equal(t, "us-east-1", sp.region)
+	assert.Equal(t, "https://idp.example.com/saml", sp.url)
+
+	// Verify the provider has the config with resolver
+	assert.NotNil(t, sp.config)
+	assert.NotNil(t, sp.config.Spec)
+	awsSpec, exists := sp.config.Spec["aws"]
+	assert.True(t, exists)
+	assert.NotNil(t, awsSpec)
+}
+
+func TestSAMLProvider_WithoutCustomResolver(t *testing.T) {
+	// Test SAML provider without custom resolver configuration
+	config := &schema.Provider{
+		Kind:   "aws/saml",
+		Region: "us-east-1",
+		URL:    "https://idp.example.com/saml",
+	}
+
+	p, err := NewSAMLProvider("saml-standard", config)
+	require.NoError(t, err)
+	assert.NotNil(t, p)
+	
+	// Cast to concrete type
+	sp, ok := p.(*samlProvider)
+	require.True(t, ok)
+	assert.Equal(t, "saml-standard", sp.name)
+
+	// Verify the provider works without resolver config
+	assert.NoError(t, p.Validate())
+}
