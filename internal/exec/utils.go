@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"sync"
 
 	"github.com/hashicorp/terraform-config-inspect/tfconfig"
 	"github.com/mitchellh/mapstructure"
@@ -160,7 +161,39 @@ func ProcessComponentConfig(
 	return nil
 }
 
+var (
+	// FindStacksMapCache stores the results of FindStacksMap to avoid re-processing
+	// all YAML files multiple times within the same command execution.
+	// Cache key: JSON-serialized atmosConfig key fields + ignoreMissingFiles flag.
+	findStacksMapCache   map[string]*findStacksMapCacheEntry
+	findStacksMapCacheMu sync.RWMutex
+)
+
+func init() {
+	findStacksMapCache = make(map[string]*findStacksMapCacheEntry)
+}
+
+// findStacksMapCacheEntry stores the cached result of FindStacksMap.
+type findStacksMapCacheEntry struct {
+	stacksMap       map[string]any
+	rawStackConfigs map[string]map[string]any
+}
+
+// getFindStacksMapCacheKey generates a cache key from atmosConfig and parameters.
+func getFindStacksMapCacheKey(atmosConfig *schema.AtmosConfiguration, ignoreMissingFiles bool) string {
+	// Create a simple cache key from the most relevant config fields.
+	// We use paths that identify the stack configuration uniquely.
+	return fmt.Sprintf("%s|%s|%v|%d",
+		atmosConfig.StacksBaseAbsolutePath,
+		atmosConfig.TerraformDirAbsolutePath,
+		ignoreMissingFiles,
+		len(atmosConfig.StackConfigFilesAbsolutePaths),
+	)
+}
+
 // FindStacksMap processes stack config and returns a map of all stacks.
+// Results are cached to avoid re-processing the same YAML files multiple times
+// within the same command execution (e.g., when ValidateStacks is called before ExecuteDescribeStacks).
 func FindStacksMap(atmosConfig *schema.AtmosConfiguration, ignoreMissingFiles bool) (
 	map[string]any,
 	map[string]map[string]any,
@@ -168,7 +201,19 @@ func FindStacksMap(atmosConfig *schema.AtmosConfiguration, ignoreMissingFiles bo
 ) {
 	defer perf.Track(atmosConfig, "exec.FindStacksMap")()
 
-	// Process stack config file(s).
+	// Generate cache key.
+	cacheKey := getFindStacksMapCacheKey(atmosConfig, ignoreMissingFiles)
+
+	// Check cache first.
+	findStacksMapCacheMu.RLock()
+	cached, found := findStacksMapCache[cacheKey]
+	findStacksMapCacheMu.RUnlock()
+
+	if found {
+		return cached.stacksMap, cached.rawStackConfigs, nil
+	}
+
+	// Cache miss - process stack config file(s).
 	_, stacksMap, rawStackConfigs, err := ProcessYAMLConfigFiles(
 		atmosConfig,
 		atmosConfig.StacksBaseAbsolutePath,
@@ -183,6 +228,14 @@ func FindStacksMap(atmosConfig *schema.AtmosConfiguration, ignoreMissingFiles bo
 	if err != nil {
 		return nil, nil, err
 	}
+
+	// Cache the result.
+	findStacksMapCacheMu.Lock()
+	findStacksMapCache[cacheKey] = &findStacksMapCacheEntry{
+		stacksMap:       stacksMap,
+		rawStackConfigs: rawStackConfigs,
+	}
+	findStacksMapCacheMu.Unlock()
 
 	return stacksMap, rawStackConfigs, nil
 }
