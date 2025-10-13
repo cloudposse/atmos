@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"strings"
+	"sync"
 
 	yaml "gopkg.in/yaml.v3"
 
@@ -53,12 +54,66 @@ var (
 		AtmosYamlFuncEnv:             true,
 	}
 
+	// ParsedYAMLCache stores parsed yaml.Node objects and their position information
+	// to avoid re-parsing the same files multiple times.
+	// Cache key: file path + content hash.
+	parsedYAMLCache   = make(map[string]*parsedYAMLCacheEntry)
+	parsedYAMLCacheMu sync.RWMutex
+
 	ErrIncludeYamlFunctionInvalidArguments    = errors.New("invalid number of arguments in the !include function")
 	ErrIncludeYamlFunctionInvalidFile         = errors.New("the !include function references a file that does not exist")
 	ErrIncludeYamlFunctionInvalidAbsPath      = errors.New("failed to convert the file path to an absolute path in the !include function")
 	ErrIncludeYamlFunctionFailedStackManifest = errors.New("failed to process the stack manifest with the !include function")
 	ErrNilAtmosConfig                         = errors.New("atmosConfig cannot be nil")
 )
+
+// parsedYAMLCacheEntry stores a parsed YAML node and its position information.
+type parsedYAMLCacheEntry struct {
+	node      yaml.Node
+	positions PositionMap
+}
+
+// getCachedParsedYAML retrieves a cached parsed YAML node if it exists.
+// Returns a copy of the node to prevent external mutations.
+func getCachedParsedYAML(file string) (*yaml.Node, PositionMap, bool) {
+	defer perf.Track(nil, "utils.getCachedParsedYAML")()
+
+	if file == "" {
+		return nil, nil, false
+	}
+
+	parsedYAMLCacheMu.RLock()
+	defer parsedYAMLCacheMu.RUnlock()
+
+	entry, found := parsedYAMLCache[file]
+	if !found {
+		return nil, nil, false
+	}
+
+	// Return a copy of the node to prevent mutations affecting the cache.
+	nodeCopy := entry.node
+	return &nodeCopy, entry.positions, true
+}
+
+// cacheParsedYAML stores a parsed YAML node in the cache.
+// Stores a copy to prevent external mutations from affecting the cache.
+func cacheParsedYAML(file string, node *yaml.Node, positions PositionMap) {
+	defer perf.Track(nil, "utils.cacheParsedYAML")()
+
+	if file == "" || node == nil {
+		return
+	}
+
+	parsedYAMLCacheMu.Lock()
+	defer parsedYAMLCacheMu.Unlock()
+
+	// Store a copy to prevent external mutations from affecting the cache.
+	nodeCopy := *node
+	parsedYAMLCache[file] = &parsedYAMLCacheEntry{
+		node:      nodeCopy,
+		positions: positions,
+	}
+}
 
 // PrintAsYAML prints the provided value as YAML document to the console
 func PrintAsYAML(atmosConfig *schema.AtmosConfiguration, data any) error {
@@ -367,6 +422,7 @@ func UnmarshalYAMLFromFile[T any](atmosConfig *schema.AtmosConfiguration, input 
 // UnmarshalYAMLFromFileWithPositions unmarshals YAML and returns position information.
 // The positions map contains line/column information for each value in the YAML.
 // If atmosConfig.TrackProvenance is false, returns an empty position map.
+// Uses caching to avoid re-parsing the same files multiple times.
 func UnmarshalYAMLFromFileWithPositions[T any](atmosConfig *schema.AtmosConfiguration, input string, file string) (T, PositionMap, error) {
 	defer perf.Track(atmosConfig, "utils.UnmarshalYAMLFromFileWithPositions")()
 
@@ -375,25 +431,35 @@ func UnmarshalYAMLFromFileWithPositions[T any](atmosConfig *schema.AtmosConfigur
 	}
 
 	var zeroValue T
-	var node yaml.Node
-	b := []byte(input)
 
-	// Unmarshal into yaml.Node
-	if err := yaml.Unmarshal(b, &node); err != nil {
-		return zeroValue, nil, err
+	// Try to get cached parsed YAML first.
+	node, positions, found := getCachedParsedYAML(file)
+	if !found {
+		// Cache miss - parse the YAML.
+		var parsedNode yaml.Node
+		b := []byte(input)
+
+		// Unmarshal into yaml.Node.
+		if err := yaml.Unmarshal(b, &parsedNode); err != nil {
+			return zeroValue, nil, err
+		}
+
+		// Extract positions if provenance tracking is enabled.
+		if atmosConfig.TrackProvenance {
+			positions = ExtractYAMLPositions(&parsedNode, true)
+		}
+
+		// Process custom tags.
+		if err := processCustomTags(atmosConfig, &parsedNode, file); err != nil {
+			return zeroValue, nil, err
+		}
+
+		// Cache the parsed and processed node.
+		cacheParsedYAML(file, &parsedNode, positions)
+		node = &parsedNode
 	}
 
-	// Extract positions if provenance tracking is enabled
-	var positions PositionMap
-	if atmosConfig.TrackProvenance {
-		positions = ExtractYAMLPositions(&node, true)
-	}
-
-	if err := processCustomTags(atmosConfig, &node, file); err != nil {
-		return zeroValue, nil, err
-	}
-
-	// Decode the yaml.Node into the desired type T
+	// Decode the yaml.Node into the desired type T.
 	var data T
 	if err := node.Decode(&data); err != nil {
 		return zeroValue, nil, err
