@@ -416,7 +416,13 @@ func (m *model) renderLegend() string {
 	for _, r := range m.initialSnap.Rows {
 		totalCPUTime += r.Total
 	}
-	parallelism := float64(totalCPUTime) / float64(m.initialSnap.Elapsed)
+	elapsed := m.initialSnap.Elapsed
+	var parallelism float64
+	if elapsed > 0 {
+		parallelism = float64(totalCPUTime) / float64(elapsed)
+	} else {
+		parallelism = 0
+	}
 
 	legend := legendStyle.Render(
 		fmt.Sprintf("Parallelism: ~%.1fx | Elapsed: %s | CPU Time: %s\n",

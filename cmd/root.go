@@ -538,7 +538,13 @@ func displayPerformanceHeatmap(cmd *cobra.Command, mode string) error {
 	for _, r := range snap.Rows {
 		totalCPUTime += r.Total
 	}
-	parallelism := float64(totalCPUTime) / float64(snap.Elapsed)
+	elapsed := snap.Elapsed
+	var parallelism float64
+	if elapsed > 0 {
+		parallelism = float64(totalCPUTime) / float64(elapsed)
+	} else {
+		parallelism = 0
+	}
 
 	utils.PrintfMessageToTUI("\n=== Atmos Performance Summary ===\n")
 	utils.PrintfMessageToTUI("Elapsed: %s | CPU Time: %s | Parallelism: ~%.1fx\n",
