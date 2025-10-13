@@ -57,8 +57,7 @@ func GetGlobMatches(pattern string) ([]string, error) {
 // assumes that both `pattern` and `name` are using the system's path
 // separator. If you can't be sure of that, use filepath.ToSlash() on both
 // `pattern` and `name`, and then use the Match() function instead.
+// Note: perf.Track() removed from this hot path to reduce overhead (called 2M+ times).
 func PathMatch(pattern, name string) (bool, error) {
-	defer perf.Track(nil, "utils.PathMatch")()
-
 	return doublestar.PathMatch(pattern, name)
 }
