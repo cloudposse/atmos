@@ -40,6 +40,19 @@ var (
 		AtmosYamlFuncEnv,
 	}
 
+	// AtmosYamlTagsMap provides O(1) lookup for custom tag checking.
+	// This optimization replaces the O(n) SliceContainsString calls that were previously
+	// called 75M+ times, causing significant performance overhead.
+	atmosYamlTagsMap = map[string]bool{
+		AtmosYamlFuncExec:            true,
+		AtmosYamlFuncStore:           true,
+		AtmosYamlFuncStoreGet:        true,
+		AtmosYamlFuncTemplate:        true,
+		AtmosYamlFuncTerraformOutput: true,
+		AtmosYamlFuncTerraformState:  true,
+		AtmosYamlFuncEnv:             true,
+	}
+
 	ErrIncludeYamlFunctionInvalidArguments    = errors.New("invalid number of arguments in the !include function")
 	ErrIncludeYamlFunctionInvalidFile         = errors.New("the !include function references a file that does not exist")
 	ErrIncludeYamlFunctionInvalidAbsPath      = errors.New("failed to convert the file path to an absolute path in the !include function")
@@ -243,7 +256,9 @@ func processCustomTags(atmosConfig *schema.AtmosConfiguration, node *yaml.Node, 
 		tag := strings.TrimSpace(n.Tag)
 		val := strings.TrimSpace(n.Value)
 
-		if SliceContainsString(AtmosYamlTags, tag) {
+		// Use O(1) map lookup instead of O(n) slice search for performance.
+		// This optimization reduces 75M+ linear searches to constant-time lookups.
+		if atmosYamlTagsMap[tag] {
 			n.Value = getValueWithTag(n)
 			// Clear the custom tag to prevent the YAML decoder from processing it again.
 			// We keep the value as is since it will be processed later by processCustomTags.
