@@ -510,7 +510,7 @@ func TestSAMLProvider_WithCustomResolver(t *testing.T) {
 	p, err := NewSAMLProvider("saml-localstack", config)
 	require.NoError(t, err)
 	assert.NotNil(t, p)
-	
+
 	// Cast to concrete type to access internal fields
 	sp, ok := p.(*samlProvider)
 	require.True(t, ok)
@@ -537,7 +537,7 @@ func TestSAMLProvider_WithoutCustomResolver(t *testing.T) {
 	p, err := NewSAMLProvider("saml-standard", config)
 	require.NoError(t, err)
 	assert.NotNil(t, p)
-	
+
 	// Cast to concrete type
 	sp, ok := p.(*samlProvider)
 	require.True(t, ok)
