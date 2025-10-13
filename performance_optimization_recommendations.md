@@ -460,7 +460,7 @@ func hasCustomTags(node *yaml.Node) bool {
 - **Expected benefit**: Performance improvement scales with number of import files per manifest and I/O latency; most beneficial for stacks with many imports
 
 #### P7.1: Skip Syntax Highlighting for Non-TTY Output (Completed)
-- **Commit**: [pending]
+- **Commit**: 5a3f3bc7
 - **Impact**: Skip expensive syntax highlighting when output is piped or redirected (non-TTY)
 - **Implementation**:
   - Use existing `IsTTYSupportForStdout()` and `IsTTYSupportForStderr()` helper functions from `internal/tui/templates/term/term_writer.go`
