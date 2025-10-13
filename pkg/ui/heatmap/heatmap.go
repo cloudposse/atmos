@@ -263,9 +263,10 @@ func (m *model) getLimitedSnapshot() perf.Snapshot {
 }
 
 func (m *model) Init() tea.Cmd {
-	// Capture snapshot at TUI start to freeze elapsed time.
-	// Filter out functions with zero total time.
-	m.initialSnap = perf.SnapshotTopFiltered("total", topFunctionsLimit)
+	// Capture unbounded snapshot at TUI start to freeze elapsed time and include all functions.
+	// Filter out functions with zero total time for cleaner display.
+	// topN=0 means no limit, capturing all tracked functions for accurate CPU time calculation.
+	m.initialSnap = perf.SnapshotTopFiltered("total", 0)
 
 	// Load initial performance data.
 	m.updatePerformanceData()
@@ -387,9 +388,15 @@ func (m *model) handleTickMsg(msg tickMsg) tea.Cmd {
 func (m *model) updatePerformanceData() {
 	// Update table with frozen snapshot from TUI start.
 	// The snapshot is already filtered to exclude zero-time functions.
+	// Limit table display to top N functions for readability.
 	rows := []table.Row{}
 
-	for _, r := range m.initialSnap.Rows {
+	displayRows := m.initialSnap.Rows
+	if len(displayRows) > topFunctionsLimit {
+		displayRows = displayRows[:topFunctionsLimit]
+	}
+
+	for _, r := range displayRows {
 		p95 := "-"
 		if r.P95 > 0 {
 			p95 = FormatDuration(r.P95)
@@ -411,13 +418,13 @@ func (m *model) renderLegend() string {
 		Foreground(lipgloss.Color("243")).
 		Padding(0, 2)
 
-	// Calculate total CPU time and parallelism from all tracked functions.
-	fullSnap := perf.SnapshotTopFiltered("total", 0) // 0 => no top-N limit
+	// Calculate total CPU time and parallelism from frozen snapshot (all tracked functions).
+	// Using m.initialSnap ensures elapsed time doesn't keep increasing in the TUI.
 	var totalCPUTime time.Duration
-	for _, r := range fullSnap.Rows {
+	for _, r := range m.initialSnap.Rows {
 		totalCPUTime += r.Total
 	}
-	elapsed := fullSnap.Elapsed
+	elapsed := m.initialSnap.Elapsed
 	var parallelism float64
 	if elapsed > 0 {
 		parallelism = float64(totalCPUTime) / float64(elapsed)
