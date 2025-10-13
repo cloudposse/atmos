@@ -140,13 +140,17 @@ func Track(atmosConfig *schema.AtmosConfiguration, name string) func() {
 // trackWithSimpleStack uses the global simple stack for single-goroutine scenarios.
 // If a different goroutine is detected, it automatically falls back to goroutine-local tracking.
 func trackWithSimpleStack(name string, start time.Time) func() {
-	// Check ownership of simple stack.
-	owner := simpleOwnerGID.Load()
-	gid := claimSimpleStackOwnership(owner)
-
-	// If a different goroutine is detected, fall back to goroutine-local tracking.
-	if gid != 0 && owner != 0 && gid != owner {
-		return trackWithGoroutineLocalStack(name, start)
+	// Only perform goroutine ID check when the simple stack is empty.
+	// This avoids per-call runtime.Stack() cost in the common case.
+	if simpleStack.isEmpty() {
+		owner := simpleOwnerGID.Load()
+		gid := claimSimpleStackOwnership(owner)
+		// Re-read current owner to avoid decisions based on stale 'owner'.
+		curOwner := simpleOwnerGID.Load()
+		// If a different goroutine is detected, fall back to goroutine-local tracking.
+		if gid != 0 && curOwner != 0 && gid != curOwner {
+			return trackWithGoroutineLocalStack(name, start)
+		}
 	}
 
 	// Proceed with simple stack (single-goroutine fast path).
@@ -163,16 +167,20 @@ func trackWithSimpleStack(name string, start time.Time) func() {
 }
 
 // claimSimpleStackOwnership claims the simple stack for the current goroutine if unclaimed.
+// Uses CompareAndSwap for atomic ownership claim to prevent race conditions.
 // Returns the current goroutine ID.
 func claimSimpleStackOwnership(owner uint64) uint64 {
+	// If unclaimed, atomically claim for this goroutine.
 	if owner == 0 {
-		// Simple stack is unclaimed; claim it for this goroutine.
 		if gid := getGoroutineID(); gid != 0 {
-			simpleOwnerGID.Store(gid)
-			return gid
+			if simpleOwnerGID.CompareAndSwap(0, gid) {
+				return gid
+			}
+			// Someone else claimed concurrently; return current owner to let caller detect mismatch.
+			return simpleOwnerGID.Load()
 		}
 	}
-	// Simple stack is already owned or we couldn't get goroutine ID.
+	// Otherwise, get current goroutine ID for mismatch detection.
 	return getGoroutineID()
 }
 

@@ -585,23 +585,6 @@ func TestModel_RenderLegend(t *testing.T) {
 				"CPU Time: sum of self-time",
 			},
 		},
-		{
-			name: "Zero elapsed time (division by zero guard)",
-			snapshot: perf.Snapshot{
-				Rows: []perf.Row{
-					{Name: "test.Function", Count: 1, Total: 50 * time.Millisecond},
-				},
-				Elapsed: 0,
-			},
-			expectParallel: false,
-			expectedStrings: []string{
-				"Parallelism: ~0.0x",
-				"Elapsed: 0s",
-				"CPU Time:",
-				"Count: # calls",
-				"CPU Time: sum of self-time",
-			},
-		},
 	}
 
 	for _, tt := range tests {

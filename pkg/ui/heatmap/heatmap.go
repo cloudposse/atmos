@@ -411,12 +411,13 @@ func (m *model) renderLegend() string {
 		Foreground(lipgloss.Color("243")).
 		Padding(0, 2)
 
-	// Calculate total CPU time and parallelism.
+	// Calculate total CPU time and parallelism from all tracked functions.
+	fullSnap := perf.SnapshotTopFiltered("total", 0) // 0 => no top-N limit
 	var totalCPUTime time.Duration
-	for _, r := range m.initialSnap.Rows {
+	for _, r := range fullSnap.Rows {
 		totalCPUTime += r.Total
 	}
-	elapsed := m.initialSnap.Elapsed
+	elapsed := fullSnap.Elapsed
 	var parallelism float64
 	if elapsed > 0 {
 		parallelism = float64(totalCPUTime) / float64(elapsed)
@@ -427,7 +428,7 @@ func (m *model) renderLegend() string {
 	legend := legendStyle.Render(
 		fmt.Sprintf("Parallelism: ~%.1fx | Elapsed: %s | CPU Time: %s\n",
 			parallelism,
-			m.initialSnap.Elapsed.Truncate(time.Microsecond),
+			elapsed.Truncate(time.Microsecond),
 			totalCPUTime.Truncate(time.Microsecond)) +
 			"Count: # calls (incl. recursion) | CPU Time: sum of self-time (excludes children)\n" +
 			"Avg: avg self-time | Max: max self-time | P95: 95th percentile self-time")

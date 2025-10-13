@@ -530,15 +530,17 @@ func getInvalidCommandName(input string) string {
 //nolint:unparam // cmd parameter reserved for future use
 func displayPerformanceHeatmap(cmd *cobra.Command, mode string) error {
 	// Print performance summary to console.
-	// Filter out functions with zero total time for cleaner output.
+	// Filter out functions with zero total time for cleaner output (for table).
 	snap := perf.SnapshotTopFiltered("total", defaultTopFunctionsMax)
+	// Unbounded snapshot for accurate summary metrics.
+	fullSnap := perf.SnapshotTopFiltered("total", 0)
 
-	// Calculate total CPU time (sum of all self-times) and parallelism.
+	// Calculate total CPU time (sum of all self-times) and parallelism from all tracked functions.
 	var totalCPUTime time.Duration
-	for _, r := range snap.Rows {
+	for _, r := range fullSnap.Rows {
 		totalCPUTime += r.Total
 	}
-	elapsed := snap.Elapsed
+	elapsed := fullSnap.Elapsed
 	var parallelism float64
 	if elapsed > 0 {
 		parallelism = float64(totalCPUTime) / float64(elapsed)
@@ -548,7 +550,7 @@ func displayPerformanceHeatmap(cmd *cobra.Command, mode string) error {
 
 	utils.PrintfMessageToTUI("\n=== Atmos Performance Summary ===\n")
 	utils.PrintfMessageToTUI("Elapsed: %s | CPU Time: %s | Parallelism: ~%.1fx\n",
-		snap.Elapsed.Truncate(time.Microsecond),
+		elapsed.Truncate(time.Microsecond),
 		totalCPUTime.Truncate(time.Microsecond),
 		parallelism)
 	utils.PrintfMessageToTUI("Functions: %d | Total Calls: %d\n\n", snap.TotalFuncs, snap.TotalCalls)
