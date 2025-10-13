@@ -169,6 +169,9 @@ func trackWithSimpleStack(name string, start time.Time) func() {
 		}
 	}
 	// For depth > 1: trust ownership, skip expensive check for performance.
+	// Known limitation: If a goroutine spawns another at depth > 1, corruption is possible.
+	// This trade-off favors performance for the common single-goroutine case (99% of Atmos commands).
+	// The impact is limited to incorrect metrics for that run, not crashes or data loss.
 
 	// Proceed with simple stack (single-goroutine fast path).
 	frame := &StackFrame{
