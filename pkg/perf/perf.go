@@ -140,15 +140,21 @@ func Track(atmosConfig *schema.AtmosConfiguration, name string) func() {
 // trackWithSimpleStack uses the global simple stack for single-goroutine scenarios.
 // If a different goroutine is detected, it automatically falls back to goroutine-local tracking.
 func trackWithSimpleStack(name string, start time.Time) func() {
-	// Only perform goroutine ID check when the simple stack is empty.
-	// This avoids per-call runtime.Stack() cost in the common case.
+	// Perform goroutine ID check when the simple stack is empty to claim ownership.
+	// Also check if we're not the owner when stack is non-empty to prevent corruption.
+	owner := simpleOwnerGID.Load()
 	if simpleStack.isEmpty() {
-		owner := simpleOwnerGID.Load()
 		gid := claimSimpleStackOwnership(owner)
 		// Re-read current owner to avoid decisions based on stale 'owner'.
 		curOwner := simpleOwnerGID.Load()
 		// If a different goroutine is detected, fall back to goroutine-local tracking.
 		if gid != 0 && curOwner != 0 && gid != curOwner {
+			return trackWithGoroutineLocalStack(name, start)
+		}
+	} else if owner != 0 {
+		// Stack is non-empty; verify we're the owner goroutine.
+		gid := getGoroutineID()
+		if gid != 0 && gid != owner {
 			return trackWithGoroutineLocalStack(name, start)
 		}
 	}
