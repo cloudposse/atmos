@@ -37,6 +37,12 @@ var (
 	// Deprecated: Use SetMergeContextForStack/GetMergeContextForStack instead.
 	lastMergeContext   *m.MergeContext
 	lastMergeContextMu sync.RWMutex
+
+	// Base component inheritance cache to avoid re-processing the same inheritance chains.
+	// Cache key: "stack:component:baseComponent" -> BaseComponentConfig.
+	// No cache invalidation needed - configuration is immutable per command execution.
+	baseComponentConfigCache   = make(map[string]*schema.BaseComponentConfig)
+	baseComponentConfigCacheMu sync.RWMutex
 )
 
 // SetMergeContextForStack stores the merge context for a specific stack file.
@@ -94,6 +100,40 @@ func ClearLastMergeContext() {
 	lastMergeContextMu.Lock()
 	defer lastMergeContextMu.Unlock()
 	lastMergeContext = nil
+}
+
+// getCachedBaseComponentConfig retrieves a cached base component config if it exists.
+// Returns a deep copy to prevent mutations affecting the cache.
+func getCachedBaseComponentConfig(cacheKey string) (*schema.BaseComponentConfig, *[]string, bool) {
+	defer perf.Track(nil, "exec.getCachedBaseComponentConfig")()
+
+	baseComponentConfigCacheMu.RLock()
+	defer baseComponentConfigCacheMu.RUnlock()
+
+	cached, found := baseComponentConfigCache[cacheKey]
+	if !found {
+		return nil, nil, false
+	}
+
+	// Deep copy to prevent external mutations from affecting the cache.
+	copyConfig := *cached
+	copyBaseComponents := make([]string, len(cached.ComponentInheritanceChain))
+	copy(copyBaseComponents, cached.ComponentInheritanceChain)
+
+	return &copyConfig, &copyBaseComponents, true
+}
+
+// cacheBaseComponentConfig stores a base component config in the cache.
+// Stores a copy to prevent external mutations from affecting the cache.
+func cacheBaseComponentConfig(cacheKey string, config *schema.BaseComponentConfig) {
+	defer perf.Track(nil, "exec.cacheBaseComponentConfig")()
+
+	baseComponentConfigCacheMu.Lock()
+	defer baseComponentConfigCacheMu.Unlock()
+
+	// Store a copy to prevent external mutations from affecting the cache.
+	copyConfig := *config
+	baseComponentConfigCache[cacheKey] = &copyConfig
 }
 
 // ProcessYAMLConfigFiles takes a list of paths to stack manifests, processes and deep-merges all imports, and returns a list of stack configs.
@@ -1162,7 +1202,18 @@ func ProcessBaseComponentConfig(
 ) error {
 	defer perf.Track(atmosConfig, "exec.ProcessBaseComponentConfig")()
 
-	return processBaseComponentConfigInternal(
+	// Create cache key from stack + component + baseComponent.
+	cacheKey := fmt.Sprintf("%s:%s:%s", stack, component, baseComponent)
+
+	// Check cache first.
+	if cachedConfig, cachedBaseComponents, found := getCachedBaseComponentConfig(cacheKey); found {
+		*baseComponentConfig = *cachedConfig
+		*baseComponents = *cachedBaseComponents
+		return nil
+	}
+
+	// Process normally if not cached.
+	err := processBaseComponentConfigInternal(
 		atmosConfig,
 		baseComponentConfig,
 		allComponentsMap,
@@ -1173,6 +1224,13 @@ func ProcessBaseComponentConfig(
 		checkBaseComponentExists,
 		baseComponents,
 	)
+	if err != nil {
+		return err
+	}
+
+	// Store result in cache after processing.
+	cacheBaseComponentConfig(cacheKey, baseComponentConfig)
+	return nil
 }
 
 // processBaseComponentConfigInternal is the internal recursive implementation.
