@@ -133,9 +133,13 @@ var RootCmd = &cobra.Command{
 		}
 
 		// Show performance heatmap if enabled.
-		showHeatmap, _ := cmd.Flags().GetBool("heatmap")
-		if showHeatmap {
+		// Use IsTrackingEnabled() to support commands with DisableFlagParsing.
+		if perf.IsTrackingEnabled() {
 			heatmapMode, _ := cmd.Flags().GetString("heatmap-mode")
+			// Default to "bar" mode if empty (happens with DisableFlagParsing).
+			if heatmapMode == "" {
+				heatmapMode = "bar"
+			}
 			if err := displayPerformanceHeatmap(cmd, heatmapMode); err != nil {
 				log.Error("Failed to display performance heatmap", "error", err)
 			}

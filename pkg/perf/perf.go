@@ -69,13 +69,38 @@ var (
 	// Map goroutine ID -> call stack for goroutine-local tracking.
 	callStacks sync.Map // map[uint64]*CallStack
 
+	// Simple mode uses a single global call stack (faster, no goroutine ID lookups).
+	// This is sufficient for single-goroutine execution (most Atmos commands).
+	simpleStack    CallStack
+	useSimpleStack atomic.Bool
+
 	trackingEnabled atomic.Bool
 )
 
 // EnableTracking enables performance tracking globally.
 // HDR histogram for P95 latency is automatically enabled when tracking is enabled.
+// By default, uses simple tracking mode (single global call stack) which is faster.
+// This is sufficient for most Atmos commands which run in a single goroutine.
 func EnableTracking(enabled bool) {
 	trackingEnabled.Store(enabled)
+	if enabled {
+		// Enable simple stack mode by default for better Docker performance.
+		// This avoids expensive runtime.Stack() calls on every tracked function.
+		useSimpleStack.Store(true)
+	}
+}
+
+// IsTrackingEnabled returns true if performance tracking is currently enabled.
+// This is used to check if the heatmap should be displayed after command execution.
+func IsTrackingEnabled() bool {
+	return trackingEnabled.Load()
+}
+
+// UseSimpleTracking enables or disables simple tracking mode.
+// Simple mode uses a single global call stack (faster, no goroutine ID lookups).
+// Use false for multi-goroutine scenarios to ensure accurate per-goroutine tracking.
+func UseSimpleTracking(enabled bool) {
+	useSimpleStack.Store(enabled)
 }
 
 func isTrackingEnabled() bool {
@@ -99,6 +124,36 @@ func Track(atmosConfig *schema.AtmosConfiguration, name string) func() {
 	}
 
 	start := time.Now()
+
+	// Use simple tracking mode if enabled (faster, avoids expensive goroutine ID lookups).
+	// This is the default mode for better Docker performance.
+	if useSimpleStack.Load() {
+		// Push frame onto the global simple stack.
+		frame := &StackFrame{
+			functionName: name,
+			startTime:    start,
+			childTime:    0,
+		}
+		simpleStack.push(frame)
+
+		return func() {
+			totalTime := time.Since(start)
+			selfTime := totalTime - frame.childTime
+
+			// Pop frame from call stack.
+			simpleStack.pop()
+
+			// If there's a parent frame, add our total time to its child time accumulator.
+			if parent := simpleStack.peek(); parent != nil {
+				parent.childTime += totalTime
+			}
+
+			// Record metrics with both total and self time.
+			recordMetrics(name, totalTime, selfTime)
+		}
+	}
+
+	// Fall back to goroutine-local tracking (slower but supports multi-goroutine execution).
 	gid := getGoroutineID()
 
 	// Get or create call stack for this goroutine.

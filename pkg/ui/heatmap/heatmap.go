@@ -464,7 +464,10 @@ func FormatDuration(d time.Duration) string {
 // StartBubbleTeaUI starts the Bubble Tea interface.
 func StartBubbleTeaUI(ctx context.Context, heatModel *HeatModel, mode string) error {
 	m := newModel(heatModel, mode, ctx)
-	p := tea.NewProgram(m, tea.WithAltScreen(), tea.WithOutput(os.Stderr))
+	p := tea.NewProgram(m,
+		tea.WithAltScreen(),
+		tea.WithOutput(os.Stderr),
+		tea.WithContext(ctx)) // Pass context for proper cancellation
 
 	if _, err := p.Run(); err != nil {
 		return fmt.Errorf("%w: failed to run performance heatmap TUI: %v", errUtils.ErrTUIRun, err)
