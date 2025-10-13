@@ -61,7 +61,8 @@ func TestTerraformGenerateVarfileCmd(t *testing.T) {
 	assert.NoError(t, err, "Reading from pipe should not error")
 
 	// Close the reader.
-	_ = r.Close()
+	err = r.Close()
+	assert.NoError(t, err, "Closing pipe reader should not error")
 
 	outputStr := output.String()
 
