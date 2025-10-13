@@ -3,13 +3,14 @@ package merge
 import (
 	"errors"
 	"fmt"
+	"reflect"
 
 	"dario.cat/mergo"
+	"github.com/mitchellh/copystructure"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
-	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 const (
@@ -17,6 +18,104 @@ const (
 	ListMergeStrategyAppend  = "append"
 	ListMergeStrategyMerge   = "merge"
 )
+
+// deepCopyMap performs a deep copy of a map using mitchellh/copystructure library,
+// then normalizes typed slices to []any for mergo compatibility.
+// This preserves numeric types (unlike JSON which converts all numbers to float64) and is faster than
+// YAML serialization while avoiding processCustomTags. The data is already in Go map format
+// with custom tags already processed, so we only need structural copying to work around
+// mergo's pointer mutation bug.
+func deepCopyMap(m map[string]any) (map[string]any, error) {
+	defer perf.Track(nil, "merge.deepCopyMap")()
+
+	if m == nil {
+		return nil, nil
+	}
+
+	// Use mitchellh/copystructure for reliable deep copying.
+	copied, err := copystructure.Copy(m)
+	if err != nil {
+		return nil, err
+	}
+
+	// Type assertion to map[string]any.
+	result, ok := copied.(map[string]any)
+	if !ok {
+		return nil, fmt.Errorf("%w: %T", errUtils.ErrDeepCopyUnexpectedType, copied)
+	}
+
+	// Normalize typed slices/maps to []any/map[string]any for mergo compatibility.
+	normalizeTypes(result)
+
+	return result, nil
+}
+
+// normalizeTypes walks a map and normalizes typed slices to []any and typed maps to map[string]any.
+// This is needed because mergo expects []any and map[string]any, but copystructure preserves exact types.
+func normalizeTypes(m map[string]any) {
+	for key, value := range m {
+		m[key] = normalizeValue(value)
+	}
+}
+
+// normalizeValue normalizes a value by converting typed slices/maps to []any/map[string]any.
+func normalizeValue(value any) any {
+	switch v := value.(type) {
+	case map[string]any:
+		// Recursively normalize nested maps.
+		normalizeTypes(v)
+		return v
+	case []any:
+		// Recursively normalize slice elements.
+		for i, item := range v {
+			v[i] = normalizeValue(item)
+		}
+		return v
+	default:
+		// Handle other types using reflection.
+		return normalizeValueReflect(value)
+	}
+}
+
+// normalizeValueReflect uses reflection to normalize typed slices and maps.
+func normalizeValueReflect(value any) any {
+	rv := reflect.ValueOf(value)
+	switch rv.Kind() {
+	case reflect.Slice:
+		// Convert any typed slice to []any.
+		result := make([]any, rv.Len())
+		for i := 0; i < rv.Len(); i++ {
+			result[i] = normalizeValue(rv.Index(i).Interface())
+		}
+		return result
+	case reflect.Map:
+		// Convert any typed map with string keys to map[string]any.
+		if rv.Len() == 0 {
+			return make(map[string]any)
+		}
+
+		// Check if keys are strings.
+		iter := rv.MapRange()
+		if !iter.Next() {
+			return make(map[string]any)
+		}
+		if iter.Key().Kind() == reflect.String {
+			result := make(map[string]any, rv.Len())
+			// Process first key-value pair.
+			result[iter.Key().String()] = normalizeValue(iter.Value().Interface())
+			// Process remaining pairs.
+			for iter.Next() {
+				result[iter.Key().String()] = normalizeValue(iter.Value().Interface())
+			}
+			return result
+		}
+		// Non-string keys - return as-is.
+		return value
+	default:
+		// Primitives and other types - return as-is.
+		return value
+	}
+}
 
 // MergeWithOptions takes a list of maps and options as input, deep-merges the items in the order they are defined in the list,
 // and returns a single map with the merged contents.
@@ -40,16 +139,12 @@ func MergeWithOptions(
 		// Due to a bug in `mergo.Merge`
 		// (Note: in the `for` loop, it DOES modify the source of the previous loop iteration if it's a complex map and `mergo` gets a pointer to it,
 		// not only the destination of the current loop iteration),
-		// we don't give it our maps directly; we convert them to YAML strings and then back to `Go` maps,
-		// so `mergo` does not have access to the original pointers
-		yamlCurrent, err := u.ConvertToYAML(current)
+		// we don't give it our maps directly; we deep copy them using copystructure (faster than YAML serialization),
+		// so `mergo` does not have access to the original pointers.
+		// Deep copy preserves types and is sufficient because the data is already in Go map format with custom tags already processed.
+		dataCurrent, err := deepCopyMap(current)
 		if err != nil {
-			return nil, fmt.Errorf("%w: failed to convert to YAML: %v", errUtils.ErrMerge, err)
-		}
-
-		dataCurrent, err := u.UnmarshalYAML[any](yamlCurrent)
-		if err != nil {
-			return nil, fmt.Errorf("%w: failed to unmarshal YAML: %v", errUtils.ErrMerge, err)
+			return nil, fmt.Errorf("%w: failed to deep copy map: %v", errUtils.ErrMerge, err)
 		}
 
 		var opts []func(*mergo.Config)
@@ -66,8 +161,8 @@ func MergeWithOptions(
 			opts = append(opts, mergo.WithAppendSlice)
 		}
 
-		if err = mergo.Merge(&merged, dataCurrent, opts...); err != nil {
-			// Return the error without debug logging
+		if err := mergo.Merge(&merged, dataCurrent, opts...); err != nil {
+			// Return the error without debug logging.
 			return nil, fmt.Errorf("%w: mergo merge failed: %v", errUtils.ErrMerge, err)
 		}
 	}
