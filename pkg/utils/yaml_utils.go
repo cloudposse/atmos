@@ -75,9 +75,8 @@ type parsedYAMLCacheEntry struct {
 
 // getCachedParsedYAML retrieves a cached parsed YAML node if it exists.
 // Returns a copy of the node to prevent external mutations.
+// Note: perf.Track() removed from this hot path to reduce overhead.
 func getCachedParsedYAML(file string) (*yaml.Node, PositionMap, bool) {
-	defer perf.Track(nil, "utils.getCachedParsedYAML")()
-
 	if file == "" {
 		return nil, nil, false
 	}
@@ -97,9 +96,8 @@ func getCachedParsedYAML(file string) (*yaml.Node, PositionMap, bool) {
 
 // cacheParsedYAML stores a parsed YAML node in the cache.
 // Stores a copy to prevent external mutations from affecting the cache.
+// Note: perf.Track() removed from this hot path to reduce overhead.
 func cacheParsedYAML(file string, node *yaml.Node, positions PositionMap) {
-	defer perf.Track(nil, "utils.cacheParsedYAML")()
-
 	if file == "" || node == nil {
 		return
 	}
