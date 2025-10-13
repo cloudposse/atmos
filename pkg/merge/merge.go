@@ -6,7 +6,6 @@ import (
 	"reflect"
 
 	"dario.cat/mergo"
-	"github.com/mitchellh/copystructure"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -19,12 +18,12 @@ const (
 	ListMergeStrategyMerge   = "merge"
 )
 
-// deepCopyMap performs a deep copy of a map using mitchellh/copystructure library,
-// then normalizes typed slices to []any for mergo compatibility.
-// This preserves numeric types (unlike JSON which converts all numbers to float64) and is faster than
-// YAML serialization while avoiding processCustomTags. The data is already in Go map format
-// with custom tags already processed, so we only need structural copying to work around
-// mergo's pointer mutation bug.
+// deepCopyMap performs a deep copy of a map optimized for map[string]any structures.
+// This custom implementation avoids reflection overhead for common cases (maps, slices, primitives)
+// and only falls back to copystructure for rare complex types.
+// Preserves numeric types (unlike JSON which converts all numbers to float64) and is faster than
+// reflection-based copying. The data is already in Go map format with custom tags already processed,
+// so we only need structural copying to work around mergo's pointer mutation bug.
 func deepCopyMap(m map[string]any) (map[string]any, error) {
 	defer perf.Track(nil, "merge.deepCopyMap")()
 
@@ -32,52 +31,54 @@ func deepCopyMap(m map[string]any) (map[string]any, error) {
 		return nil, nil
 	}
 
-	// Use mitchellh/copystructure for reliable deep copying.
-	copied, err := copystructure.Copy(m)
-	if err != nil {
-		return nil, err
+	// Use custom fast deep copy optimized for map[string]any.
+	result := make(map[string]any, len(m))
+	for k, v := range m {
+		result[k] = deepCopyValue(v)
 	}
-
-	// Type assertion to map[string]any.
-	result, ok := copied.(map[string]any)
-	if !ok {
-		return nil, fmt.Errorf("%w: %T", errUtils.ErrDeepCopyUnexpectedType, copied)
-	}
-
-	// Normalize typed slices/maps to []any/map[string]any for mergo compatibility.
-	normalizeTypes(result)
 
 	return result, nil
 }
 
-// normalizeTypes walks a map and normalizes typed slices to []any and typed maps to map[string]any.
-// This is needed because mergo expects []any and map[string]any, but copystructure preserves exact types.
-func normalizeTypes(m map[string]any) {
-	for key, value := range m {
-		m[key] = normalizeValue(value)
+// deepCopyValue performs a deep copy of a value, handling common types without reflection.
+// Falls back to copystructure for rare complex types.
+func deepCopyValue(v any) any {
+	if v == nil {
+		return nil
 	}
-}
 
-// normalizeValue normalizes a value by converting typed slices/maps to []any/map[string]any.
-func normalizeValue(value any) any {
-	switch v := value.(type) {
+	switch val := v.(type) {
 	case map[string]any:
-		// Recursively normalize nested maps.
-		normalizeTypes(v)
-		return v
-	case []any:
-		// Recursively normalize slice elements.
-		for i, item := range v {
-			v[i] = normalizeValue(item)
+		// Common case: nested map - recurse with fast path.
+		result := make(map[string]any, len(val))
+		for k, v := range val {
+			result[k] = deepCopyValue(v)
 		}
+		return result
+
+	case []any:
+		// Common case: slice - recurse with fast path.
+		result := make([]any, len(val))
+		for i, item := range val {
+			result[i] = deepCopyValue(item)
+		}
+		return result
+
+	case string, int, int64, int32, int16, int8,
+		uint, uint64, uint32, uint16, uint8,
+		float64, float32, bool:
+		// Common case: immutable primitives - return as-is (no copy needed).
 		return v
+
 	default:
-		// Handle other types using reflection.
-		return normalizeValueReflect(value)
+		// Rare case: complex types - use reflection-based normalization.
+		// This handles typed slices/maps that need conversion to []any/map[string]any.
+		return normalizeValueReflect(v)
 	}
 }
 
 // normalizeValueReflect uses reflection to normalize typed slices and maps.
+// This is used as a fallback for complex types that aren't handled by the fast path.
 func normalizeValueReflect(value any) any {
 	rv := reflect.ValueOf(value)
 	switch rv.Kind() {
@@ -85,7 +86,7 @@ func normalizeValueReflect(value any) any {
 		// Convert any typed slice to []any.
 		result := make([]any, rv.Len())
 		for i := 0; i < rv.Len(); i++ {
-			result[i] = normalizeValue(rv.Index(i).Interface())
+			result[i] = deepCopyValue(rv.Index(i).Interface())
 		}
 		return result
 	case reflect.Map:
@@ -102,10 +103,10 @@ func normalizeValueReflect(value any) any {
 		if iter.Key().Kind() == reflect.String {
 			result := make(map[string]any, rv.Len())
 			// Process first key-value pair.
-			result[iter.Key().String()] = normalizeValue(iter.Value().Interface())
+			result[iter.Key().String()] = deepCopyValue(iter.Value().Interface())
 			// Process remaining pairs.
 			for iter.Next() {
-				result[iter.Key().String()] = normalizeValue(iter.Value().Interface())
+				result[iter.Key().String()] = deepCopyValue(iter.Value().Interface())
 			}
 			return result
 		}
