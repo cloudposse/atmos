@@ -400,47 +400,53 @@ func hasCustomTags(node *yaml.Node) bool {
 - **Result**: 66% hit rate (5,102 calls, 1,756 misses), ~1.5s savings
 
 #### P3.1: Fast-Path Merge Checks (Completed)
-- **Commit**: (current)
+- **Commit**: 854ce157
 - **Impact**: Skip merge operations for empty/single-input trivial cases
-- **Result**: Expected 10-20s improvement from reduced mergo calls
+- **Result**: MergeWithOptions calls reduced from 327K → 157K (52% reduction)
+
+#### P3.2: Custom deepCopyMap (Completed)
+- **Commit**: 4c66e395
+- **Impact**: Replaced reflection-based copystructure with optimized implementation for map[string]any
+- **Result**: deepCopyMap improved from 38µs → 17µs per call (2.2x faster), total runtime 14.5s → 7.4s (49% faster)
+
+#### P3.3: YAML Node Caching (Completed)
+- **Commit**: 185575c7
+- **Impact**: Cache parsed yaml.Node + positions after custom tag processing
+- **Result**: 96% cache hit rate (876 misses, 22,287 hits), processCustomTags calls reduced 75% (62,602 → 15,863), runtime 7.4s → 6.8s (57% total improvement from baseline)
+
+#### P3.4: FindStacksMap Caching (Completed)
+- **Commit**: c8f90e71
+- **Impact**: Cache FindStacksMap results to eliminate duplicate ProcessYAMLConfigFiles calls
+- **Result**: ProcessYAMLConfigFiles calls reduced from 2 → 1 (50% reduction), ~317ms savings per describe stacks command
+- **Context**: ValidateStacks (called before ExecuteDescribeStacks) was calling FindStacksMap, causing duplicate processing of all YAML files
 
 **Measured Performance Improvement**:
 - Setup 1: 12 min → 8.4 min (30% improvement with P1.1 + P1.2)
 - Setup 2: 23 sec → 15 sec (35% improvement with P1.1 + P1.2 + P2.2)
 - Setup 3: 15.8s (with P1.1 + P1.2 + P2.1 + P2.2)
+- Setup 4: 6.8s (with P1.1 + P1.2 + P2.1 + P2.2 + P3.1 + P3.2 + P3.3)
 
-### 🔄 Additional Priority 3 Recommendations (Based on 15.8s Profile)
+### 🔄 Future Optimization Opportunities
 
-New performance analysis revealed merge operations consuming 28% of total CPU time:
-- MergeWithContext: 30.6s (180,825 calls)
-- Merge: 19.5s (147,156 calls)
-- MergeWithOptions: 18.5s (327,981 calls)
-- deepCopyMap: 7.1s (174,385 calls)
+**Status**: All P1, P2, and P3.1-P3.4 optimizations completed. Current performance: 6.8s (57% improvement from 15.8s baseline)
 
-**Total merge overhead: ~87s CPU time**
+**Potential further optimizations** (if sub-5s performance is required):
 
-#### P3.2: Optimize deepCopyMap Implementation
-**Expected Impact**: 3-5 second improvement
-**Effort**: 1-2 hours
-**Status**: Recommended
-
-Replace reflection-based copystructure with custom deep copy optimized for map[string]any.
-
-#### P3.3: Cache Parsed YAML
-**Expected Impact**: 2-4 second improvement
-**Effort**: 1 hour
-**Status**: Recommended
-
-Cache yaml.Node parsing results to avoid re-parsing same files multiple times.
-
-#### P3.4: Iterative processCustomTags
+#### P4.1: Iterative processCustomTags
 **Expected Impact**: 1-2 second improvement
 **Effort**: 2-3 hours
-**Status**: Recommended
+**Risk**: Medium (complexity)
 
-Replace recursive traversal with iterative stack-based approach for shallow structures.
+Replace recursive traversal with iterative stack-based approach for shallow structures to reduce function call overhead.
 
-**Total additional potential**: 6-11 seconds (from 15.8s → potentially sub-10s)
+#### P4.2: Parallel Component Processing
+**Expected Impact**: 1-2 second improvement
+**Effort**: 3-4 hours
+**Risk**: High (race conditions, complexity)
+
+Process independent components in parallel during describe stacks operations.
+
+**Note**: With 57% performance improvement already achieved (15.8s → 6.8s), further optimizations should be evaluated based on actual user requirements and diminishing returns.
 
 ---
 
