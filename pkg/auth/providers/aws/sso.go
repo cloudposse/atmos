@@ -77,12 +77,12 @@ func (p *ssoProvider) Authenticate(ctx context.Context) (authTypes.ICredentials,
 	// Note: SSO provider no longer caches credentials directly.
 	// Caching is handled at the manager level to prevent duplicates.
 
-	// Build config options
+	// Build config options.
 	configOpts := []func(*config.LoadOptions) error{
 		config.WithRegion(p.region),
 	}
 
-	// Add custom endpoint resolver if configured
+	// Add custom endpoint resolver if configured.
 	if resolverOpt := awsCloud.GetResolverConfigOption(nil, p.config); resolverOpt != nil {
 		configOpts = append(configOpts, resolverOpt)
 	}

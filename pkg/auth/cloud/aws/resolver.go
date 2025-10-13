@@ -1,10 +1,10 @@
 package aws
 
 import (
-	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/mitchellh/mapstructure"
 
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -23,6 +23,8 @@ type ResolverConfig struct {
 // Identity resolver takes precedence over provider resolver.
 // AWS config is extracted from the Credentials map for identities and Spec map for providers.
 func GetResolverConfigOption(identity *schema.Identity, provider *schema.Provider) config.LoadOptionsFunc {
+	defer perf.Track(nil, "aws.GetResolverConfigOption")()
+
 	// Check identity first (takes precedence)
 	// Look for aws.resolver in identity.Credentials map
 	if identity != nil {
@@ -66,14 +68,8 @@ func extractAWSConfig(m map[string]interface{}) *AWSConfig {
 	return &awsConfig
 }
 
-// createResolverOption creates an AWS config option with a custom endpoint resolver.
+// createResolverOption creates an AWS config option with a custom endpoint.
+// Uses the newer config.WithBaseEndpoint instead of the deprecated WithEndpointResolverWithOptions.
 func createResolverOption(url string) config.LoadOptionsFunc {
-	resolver := aws.EndpointResolverWithOptionsFunc(func(service, region string, options ...interface{}) (aws.Endpoint, error) {
-		return aws.Endpoint{
-			URL:               url,
-			HostnameImmutable: true, // prevent SDK from rewriting the host
-		}, nil
-	})
-
-	return config.WithEndpointResolverWithOptions(resolver)
+	return config.WithBaseEndpoint(url)
 }

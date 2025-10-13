@@ -64,15 +64,10 @@ For a complete LocalStack example, see:
 
 ### Implementation Details
 
-The resolver is implemented using AWS SDK v2's `EndpointResolverWithOptions`:
+The resolver is implemented using AWS SDK v2's `config.WithBaseEndpoint`:
 
 ```go
-resolver := aws.EndpointResolverWithOptionsFunc(func(service, region string, options ...interface{}) (aws.Endpoint, error) {
-    return aws.Endpoint{
-        URL:               url,
-        HostnameImmutable: true, // prevent SDK from rewriting the host
-    }, nil
-})
+return config.WithBaseEndpoint(url)
 ```
 
-This ensures all AWS services (STS, SSO, etc.) use the custom endpoint.
+This ensures all AWS services (STS, SSO, etc.) use the custom endpoint. The base endpoint approach is the recommended method in AWS SDK v2 for setting custom endpoints.
