@@ -650,6 +650,20 @@ func processYAMLConfigFileWithContextInternal(
 		}
 	}
 
+	// importFileResult holds the result of processing a single import file in parallel.
+	type importFileResult struct {
+		index                        int
+		importFile                   string
+		yamlConfig                   map[string]any
+		yamlConfigRaw                map[string]any
+		terraformOverridesInline     map[string]any
+		terraformOverridesImports    map[string]any
+		helmfileOverridesInline      map[string]any
+		helmfileOverridesImports     map[string]any
+		importRelativePathWithoutExt string
+		err                          error
+	}
+
 	for _, importStruct := range importStructs {
 		imp := importStruct.Path
 
@@ -743,40 +757,84 @@ func processYAMLConfigFileWithContextInternal(
 			return nil, nil, nil, nil, nil, nil, nil, err
 		}
 
-		// Process the imports in the current manifest
-		for _, importFile := range importMatches {
-			yamlConfig,
-				_,
-				yamlConfigRaw,
-				terraformOverridesInline,
-				terraformOverridesImports,
-				helmfileOverridesInline,
-				helmfileOverridesImports, err2 := processYAMLConfigFileWithContextInternal(
-				atmosConfig,
-				basePath,
-				importFile,
-				importsConfig,
-				mergedContext,
-				ignoreMissingFiles,
-				importStruct.SkipTemplatesProcessing,
-				true, // importStruct.IgnoreMissingTemplateValues,
-				importStruct.SkipIfMissing,
-				parentTerraformOverridesInline,
-				parentTerraformOverridesImports,
-				parentHelmfileOverridesInline,
-				parentHelmfileOverridesImports,
-				"",
-				mergeContext,
-			)
-			if err2 != nil {
-				return nil, nil, nil, nil, nil, nil, nil, err2
+		// Process the imports in the current manifest in parallel.
+		// While the file I/O, parsing, and recursive import processing can be done in parallel,
+		// the merge operations must be sequential to preserve Atmos inheritance order.
+		results := make([]importFileResult, len(importMatches))
+		var wg sync.WaitGroup
+
+		for i, importFile := range importMatches {
+			wg.Add(1)
+			go func(index int, file string) {
+				defer wg.Done()
+
+				// Process the import file (expensive I/O + parsing + recursive imports).
+				yamlConfig,
+					_,
+					yamlConfigRaw,
+					terraformOverridesInline,
+					terraformOverridesImports,
+					helmfileOverridesInline,
+					helmfileOverridesImports, processErr := processYAMLConfigFileWithContextInternal(
+					atmosConfig,
+					basePath,
+					file,
+					importsConfig,
+					mergedContext,
+					ignoreMissingFiles,
+					importStruct.SkipTemplatesProcessing,
+					true, // importStruct.IgnoreMissingTemplateValues,
+					importStruct.SkipIfMissing,
+					parentTerraformOverridesInline,
+					parentTerraformOverridesImports,
+					parentHelmfileOverridesInline,
+					parentHelmfileOverridesImports,
+					"",
+					mergeContext,
+				)
+				if processErr != nil {
+					results[index] = importFileResult{index: index, err: processErr}
+					return
+				}
+
+				// Calculate import relative path.
+				importRelativePathWithExt := strings.Replace(filepath.ToSlash(file), filepath.ToSlash(basePath)+"/", "", 1)
+				ext2 := filepath.Ext(importRelativePathWithExt)
+				if ext2 == "" {
+					ext2 = u.DefaultStackConfigFileExtension
+				}
+				importRelativePathWithoutExt := strings.TrimSuffix(importRelativePathWithExt, ext2)
+
+				// Store result with all necessary data for sequential merging.
+				results[index] = importFileResult{
+					index:                        index,
+					importFile:                   file,
+					yamlConfig:                   yamlConfig,
+					yamlConfigRaw:                yamlConfigRaw,
+					terraformOverridesInline:     terraformOverridesInline,
+					terraformOverridesImports:    terraformOverridesImports,
+					helmfileOverridesInline:      helmfileOverridesInline,
+					helmfileOverridesImports:     helmfileOverridesImports,
+					importRelativePathWithoutExt: importRelativePathWithoutExt,
+					err:                          nil,
+				}
+			}(i, importFile)
+		}
+
+		// Wait for all parallel processing to complete.
+		wg.Wait()
+
+		// Sequentially merge results in the original import order to preserve Atmos inheritance.
+		for _, result := range results {
+			if result.err != nil {
+				return nil, nil, nil, nil, nil, nil, nil, result.err
 			}
 
 			// From the imported manifest, get the `overrides` sections and merge them with the parent `overrides` section.
 			// The inline `overrides` section takes precedence over the imported `overrides` section inside the imported manifest.
 			parentTerraformOverridesImports, err = m.MergeWithContext(
 				atmosConfig,
-				[]map[string]any{parentTerraformOverridesImports, terraformOverridesImports, terraformOverridesInline},
+				[]map[string]any{parentTerraformOverridesImports, result.terraformOverridesImports, result.terraformOverridesInline},
 				mergeContext,
 			)
 			if err != nil {
@@ -787,22 +845,15 @@ func processYAMLConfigFileWithContextInternal(
 			// The inline `overrides` section takes precedence over the imported `overrides` section inside the imported manifest.
 			parentHelmfileOverridesImports, err = m.MergeWithContext(
 				atmosConfig,
-				[]map[string]any{parentHelmfileOverridesImports, helmfileOverridesImports, helmfileOverridesInline},
+				[]map[string]any{parentHelmfileOverridesImports, result.helmfileOverridesImports, result.helmfileOverridesInline},
 				mergeContext,
 			)
 			if err != nil {
 				return nil, nil, nil, nil, nil, nil, nil, err
 			}
 
-			stackConfigs = append(stackConfigs, yamlConfig)
-
-			importRelativePathWithExt := strings.Replace(filepath.ToSlash(importFile), filepath.ToSlash(basePath)+"/", "", 1)
-			ext2 := filepath.Ext(importRelativePathWithExt)
-			if ext2 == "" {
-				ext2 = u.DefaultStackConfigFileExtension
-			}
-
-			importRelativePathWithoutExt := strings.TrimSuffix(importRelativePathWithExt, ext2)
+			// Append to stackConfigs in order.
+			stackConfigs = append(stackConfigs, result.yamlConfig)
 
 			// Record metadata for this import.
 			// We record every time we encounter an import to track all files that import it,
@@ -814,7 +865,7 @@ func processYAMLConfigFileWithContextInternal(
 				// Store metadata using special key format: "__import_meta__:<import-path>".
 				// Note: We don't have line number info here since this is during recursive processing,
 				// not YAML parsing. We'll use line 1 as a placeholder.
-				metaKey := fmt.Sprintf("__import_meta__:%s", importRelativePathWithoutExt)
+				metaKey := fmt.Sprintf("__import_meta__:%s", result.importRelativePathWithoutExt)
 
 				// Only record if not already recorded (first occurrence wins for the metadata)
 				if !mergeContext.HasProvenance(metaKey) {
@@ -828,7 +879,7 @@ func processYAMLConfigFileWithContextInternal(
 				}
 			}
 
-			importsConfig[importRelativePathWithoutExt] = yamlConfigRaw
+			importsConfig[result.importRelativePathWithoutExt] = result.yamlConfigRaw
 		}
 	}
 

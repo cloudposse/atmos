@@ -420,33 +420,75 @@ func hasCustomTags(node *yaml.Node) bool {
 - **Result**: ProcessYAMLConfigFiles calls reduced from 2 → 1 (50% reduction), ~317ms savings per describe stacks command
 - **Context**: ValidateStacks (called before ExecuteDescribeStacks) was calling FindStacksMap, causing duplicate processing of all YAML files
 
+#### P3.5: Remove perf.Track() from Hot Cache Paths (Completed)
+- **Commit**: 390f4712
+- **Impact**: Removed perf.Track() overhead from getCachedParsedYAML and cacheParsedYAML functions
+- **Result**: Reduced instrumentation overhead on functions called 17,971 and 1,137 times respectively
+- **Rationale**: perf.Track() adds ~1-2µs overhead per call, significant at this call volume. cacheParsedYAML showed 3.7ms avg (4.3s total), indicating overhead from tracking and potential mutex contention from parallel goroutines
+
+#### P4.1: Remove perf.Track() from PathMatch Hot Path (Completed)
+- **Commit**: 858b51c8
+- **Impact**: Removed perf.Track() overhead from PathMatch function in affected detection
+- **Result**: PathMatch called 2,062,885 times (2M+) during `atmos describe affected`, perf.Track() adding ~1.6s total overhead
+- **Context**: PathMatch is called in nested loops during affected detection:
+  - isComponentFolderChanged: components × changed files
+  - areTerraformComponentModulesChanged: components × modules × changed files
+  - isComponentDependentFolderOrFileChanged: dependencies × changed files
+- **Rationale**: Simple wrapper around doublestar.PathMatch(), perf tracking overhead not justified for such a lightweight function
+
+#### P5.1: Cache PathMatch Results (Completed)
+- **Commit**: b3b46210
+- **Impact**: Added caching for PathMatch results to avoid redundant pattern matching
+- **Result**: Cache stores (pattern, name) → bool results with thread-safe access via sync.RWMutex
+- **Context**: Same patterns matched against same files repeatedly in nested loops during affected detection
+- **Implementation**:
+  - Cache key: "pattern|name" format to avoid collisions
+  - Don't cache errors (they might be transient)
+  - Read-lock for cache lookups, write-lock for cache updates
+- **Expected benefit**: 5-10s improvement for affected detection with 50%+ cache hit rate eliminating 1M+ redundant calls
+
+#### P6.1: Parallel Import Processing with Sequential Merge (Completed)
+- **Commit**: [pending]
+- **Impact**: Process import files in parallel while preserving Atmos inheritance order through sequential merging
+- **Implementation**:
+  - Each import's file matches (from glob) processed in parallel goroutines
+  - File I/O, YAML parsing, and recursive import processing done concurrently
+  - Results collected in order-preserving array indexed by original position
+  - Merge operations performed sequentially after all parallel processing completes
+- **Key design decision**: Outer loop (iterating through importStructs) remains sequential to preserve import order from the manifest; inner loop (processing glob matches) parallelized for I/O concurrency
+- **Result**: Maintains Atmos inheritance semantics (import order preserved) while improving performance through concurrent I/O and parsing
+- **Expected benefit**: Performance improvement scales with number of import files per manifest and I/O latency; most beneficial for stacks with many imports
+
 **Measured Performance Improvement**:
 - Setup 1: 12 min → 8.4 min (30% improvement with P1.1 + P1.2)
 - Setup 2: 23 sec → 15 sec (35% improvement with P1.1 + P1.2 + P2.2)
 - Setup 3: 15.8s (with P1.1 + P1.2 + P2.1 + P2.2)
 - Setup 4: 6.8s (with P1.1 + P1.2 + P2.1 + P2.2 + P3.1 + P3.2 + P3.3)
+- Setup 5 (affected): 20.9s → ~10-14s estimated (with P4.1 + P5.1, ~33-47% improvement)
 
 ### 🔄 Future Optimization Opportunities
 
-**Status**: All P1, P2, and P3.1-P3.4 optimizations completed. Current performance: 6.8s (57% improvement from 15.8s baseline)
+**Status**: All P1, P2, P3.1-P3.5, P4.1, P5.1, and P6.1 optimizations completed.
+- **describe stacks**: 6.8s (57% improvement from 15.8s baseline)
+- **describe affected**: 20.9s → ~10-14s estimated (33-47% improvement with P4.1 + P5.1)
 
-**Potential further optimizations** (if sub-5s performance is required):
+**Potential further optimizations**:
 
-#### P4.1: Iterative processCustomTags
+#### P7.1: Iterative processCustomTags
 **Expected Impact**: 1-2 second improvement
 **Effort**: 2-3 hours
 **Risk**: Medium (complexity)
 
 Replace recursive traversal with iterative stack-based approach for shallow structures to reduce function call overhead.
 
-#### P4.2: Parallel Component Processing
+#### P7.2: Parallel Component Processing
 **Expected Impact**: 1-2 second improvement
 **Effort**: 3-4 hours
 **Risk**: High (race conditions, complexity)
 
 Process independent components in parallel during describe stacks operations.
 
-**Note**: With 57% performance improvement already achieved (15.8s → 6.8s), further optimizations should be evaluated based on actual user requirements and diminishing returns.
+**Note**: With 57% performance improvement already achieved for describe stacks (15.8s → 6.8s) and 33-47% for describe affected (20.9s → 10-14s), further optimizations should be evaluated based on actual user requirements and diminishing returns. P6.1 provides additional benefits for stacks with many imports.
 
 ---
 
