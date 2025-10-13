@@ -7,10 +7,12 @@ import (
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/ssooidc"
 	"github.com/aws/aws-sdk-go-v2/service/ssooidc/types"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	awsCloud "github.com/cloudposse/atmos/pkg/auth/cloud/aws"
 	authTypes "github.com/cloudposse/atmos/pkg/auth/types"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -75,9 +77,20 @@ func (p *ssoProvider) Authenticate(ctx context.Context) (authTypes.ICredentials,
 	// Note: SSO provider no longer caches credentials directly.
 	// Caching is handled at the manager level to prevent duplicates.
 
+	// Build config options
+	configOpts := []func(*config.LoadOptions) error{
+		config.WithRegion(p.region),
+	}
+
+	// Add custom endpoint resolver if configured
+	if resolverOpt := awsCloud.GetResolverConfigOption(nil, p.config); resolverOpt != nil {
+		configOpts = append(configOpts, resolverOpt)
+	}
+
 	// Initialize AWS config for the SSO region.
-	cfg := aws.Config{
-		Region: p.region,
+	cfg, err := config.LoadDefaultConfig(ctx, configOpts...)
+	if err != nil {
+		return nil, fmt.Errorf("%w: failed to load AWS config: %v", errUtils.ErrAuthenticationFailed, err)
 	}
 
 	// Create OIDC client for device authorization.
