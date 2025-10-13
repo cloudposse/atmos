@@ -30,13 +30,14 @@ const (
 )
 
 // Metric tracks performance data for a function.
-// Total includes time spent in child function calls (wall-clock time).
-// SelfTime excludes time spent in child calls (actual work done in the function).
+// Total includes time spent in child function calls (wall-clock time) - used for internal tracking.
+// SelfTime excludes time spent in child calls (actual work done in the function) - used for display.
+// Display uses SelfTime to avoid double-counting time in nested/recursive calls.
 type Metric struct {
 	Name     string
 	Count    int64
-	Total    time.Duration           // Wall-clock time (includes children).
-	SelfTime time.Duration           // Actual work time (excludes children).
+	Total    time.Duration           // Wall-clock time (includes children) - internal use only.
+	SelfTime time.Duration           // Actual work time (excludes children) - used for all display metrics.
 	Max      time.Duration           // Max self-time (excludes children).
 	Hist     *hdrhistogram.Histogram // Histogram for self-time percentiles (optional, nil if disabled).
 }
@@ -69,13 +70,39 @@ var (
 	// Map goroutine ID -> call stack for goroutine-local tracking.
 	callStacks sync.Map // map[uint64]*CallStack
 
+	// Simple mode uses a single global call stack (faster, no goroutine ID lookups).
+	// This is sufficient for single-goroutine execution (most Atmos commands).
+	simpleStack    CallStack
+	useSimpleStack atomic.Bool
+	simpleOwnerGID atomic.Uint64 // Owner goroutine ID for simple stack; 0 means unclaimed.
+
 	trackingEnabled atomic.Bool
 )
 
 // EnableTracking enables performance tracking globally.
 // HDR histogram for P95 latency is automatically enabled when tracking is enabled.
+// By default, uses simple tracking mode (single global call stack) which is faster.
+// This is sufficient for most Atmos commands which run in a single goroutine.
 func EnableTracking(enabled bool) {
 	trackingEnabled.Store(enabled)
+	if enabled {
+		// Enable simple stack mode by default for better Docker performance.
+		// This avoids expensive runtime.Stack() calls on every tracked function.
+		useSimpleStack.Store(true)
+	}
+}
+
+// IsTrackingEnabled returns true if performance tracking is currently enabled.
+// This is used to check if the heatmap should be displayed after command execution.
+func IsTrackingEnabled() bool {
+	return trackingEnabled.Load()
+}
+
+// UseSimpleTracking enables or disables simple tracking mode.
+// Simple mode uses a single global call stack (faster, no goroutine ID lookups).
+// Use false for multi-goroutine scenarios to ensure accurate per-goroutine tracking.
+func UseSimpleTracking(enabled bool) {
+	useSimpleStack.Store(enabled)
 }
 
 func isTrackingEnabled() bool {
@@ -99,6 +126,111 @@ func Track(atmosConfig *schema.AtmosConfiguration, name string) func() {
 	}
 
 	start := time.Now()
+
+	// Use simple tracking mode if enabled (faster, avoids expensive goroutine ID lookups).
+	// This is the default mode for better Docker performance.
+	if useSimpleStack.Load() {
+		return trackWithSimpleStack(name, start)
+	}
+
+	// Fall back to goroutine-local tracking (slower but supports multi-goroutine execution).
+	return trackWithGoroutineLocalStack(name, start)
+}
+
+// trackWithSimpleStack uses the global simple stack for single-goroutine scenarios.
+// If a different goroutine is detected, it automatically falls back to goroutine-local tracking
+// and disables simple mode globally to avoid future expensive checks.
+func trackWithSimpleStack(name string, start time.Time) func() {
+	// Perform goroutine ID check when the simple stack is empty to claim ownership.
+	// Also check ownership when stack is shallow (depth <= 1) to catch early cross-goroutine access.
+	// For deep stacks, trust ownership to avoid expensive checks on every nested call.
+	owner := simpleOwnerGID.Load()
+	depth := simpleStack.depth()
+
+	if depth == 0 {
+		// Stack empty: claim ownership.
+		gid := claimSimpleStackOwnership(owner)
+		// Re-read current owner to avoid decisions based on stale 'owner'.
+		curOwner := simpleOwnerGID.Load()
+		// If a different goroutine is detected, fall back to goroutine-local tracking.
+		if gid != 0 && curOwner != 0 && gid != curOwner {
+			// Disable simple mode globally to avoid expensive checks on every call.
+			useSimpleStack.Store(false)
+			return trackWithGoroutineLocalStack(name, start)
+		}
+	} else if depth == 1 && owner != 0 {
+		// Stack shallow (1 frame): verify ownership once to catch cross-goroutine access early.
+		// After this check, deeper calls trust ownership for performance.
+		gid := getGoroutineID()
+		if gid != 0 && gid != owner {
+			// Disable simple mode globally - we've detected multi-goroutine usage.
+			useSimpleStack.Store(false)
+			return trackWithGoroutineLocalStack(name, start)
+		}
+	}
+	// For depth > 1: trust ownership, skip expensive check for performance.
+	// Known limitation: If a goroutine spawns another at depth > 1, corruption is possible.
+	// This trade-off favors performance for the common single-goroutine case (99% of Atmos commands).
+	// The impact is limited to incorrect metrics for that run, not crashes or data loss.
+
+	// Proceed with simple stack (single-goroutine fast path).
+	frame := &StackFrame{
+		functionName: name,
+		startTime:    start,
+		childTime:    0,
+	}
+	simpleStack.push(frame)
+
+	return func() {
+		finishSimpleStackTracking(frame, start, name)
+	}
+}
+
+// claimSimpleStackOwnership claims the simple stack for the current goroutine if unclaimed.
+// Uses CompareAndSwap for atomic ownership claim to prevent race conditions.
+// Returns the current goroutine ID.
+func claimSimpleStackOwnership(owner uint64) uint64 {
+	// If unclaimed, atomically claim for this goroutine.
+	if owner == 0 {
+		if gid := getGoroutineID(); gid != 0 {
+			if simpleOwnerGID.CompareAndSwap(0, gid) {
+				return gid
+			}
+			// Someone else claimed concurrently; return this goroutine's ID so caller can compare to current owner.
+			return gid
+		}
+	}
+	// Otherwise, get current goroutine ID for mismatch detection.
+	return getGoroutineID()
+}
+
+// finishSimpleStackTracking completes tracking for a simple stack frame.
+func finishSimpleStackTracking(frame *StackFrame, start time.Time, name string) {
+	totalTime := time.Since(start)
+	selfTime := totalTime - frame.childTime
+	if selfTime < 0 {
+		selfTime = 0
+	}
+
+	// Pop frame from call stack.
+	simpleStack.pop()
+
+	// If there's a parent frame, add our total time to its child time accumulator.
+	if parent := simpleStack.peek(); parent != nil {
+		parent.childTime += totalTime
+	}
+
+	// Clear ownership when stack becomes empty.
+	if simpleStack.isEmpty() {
+		simpleOwnerGID.Store(0)
+	}
+
+	// Record metrics with both total and self time.
+	recordMetrics(name, totalTime, selfTime)
+}
+
+// trackWithGoroutineLocalStack uses goroutine-local stacks for multi-goroutine scenarios.
+func trackWithGoroutineLocalStack(name string, start time.Time) func() {
 	gid := getGoroutineID()
 
 	// Get or create call stack for this goroutine.
@@ -113,25 +245,33 @@ func Track(atmosConfig *schema.AtmosConfiguration, name string) func() {
 	stack.push(frame)
 
 	return func() {
-		totalTime := time.Since(start)
-		selfTime := totalTime - frame.childTime
-
-		// Pop frame from call stack.
-		stack.pop()
-
-		// If there's a parent frame, add our total time to its child time accumulator.
-		if parent := stack.peek(); parent != nil {
-			parent.childTime += totalTime
-		}
-
-		// Clean up call stack if empty to prevent memory leaks.
-		if stack.isEmpty() {
-			callStacks.Delete(gid)
-		}
-
-		// Record metrics with both total and self time.
-		recordMetrics(name, totalTime, selfTime)
+		finishGoroutineLocalTracking(frame, start, name, gid, stack)
 	}
+}
+
+// finishGoroutineLocalTracking completes tracking for a goroutine-local stack frame.
+func finishGoroutineLocalTracking(frame *StackFrame, start time.Time, name string, gid uint64, stack *CallStack) {
+	totalTime := time.Since(start)
+	selfTime := totalTime - frame.childTime
+	if selfTime < 0 {
+		selfTime = 0
+	}
+
+	// Pop frame from call stack.
+	stack.pop()
+
+	// If there's a parent frame, add our total time to its child time accumulator.
+	if parent := stack.peek(); parent != nil {
+		parent.childTime += totalTime
+	}
+
+	// Clean up call stack if empty to prevent memory leaks.
+	if stack.isEmpty() {
+		callStacks.Delete(gid)
+	}
+
+	// Record metrics with both total and self time.
+	recordMetrics(name, totalTime, selfTime)
 }
 
 // recordMetrics records both total time (wall-clock) and self-time (actual work).
@@ -205,6 +345,13 @@ func (cs *CallStack) isEmpty() bool {
 	return len(cs.frames) == 0
 }
 
+// depth returns the number of frames in the call stack.
+func (cs *CallStack) depth() int {
+	cs.mu.Lock()
+	defer cs.mu.Unlock()
+	return len(cs.frames)
+}
+
 // getGoroutineID extracts the goroutine ID from the stack trace.
 // This is used to maintain goroutine-local call stacks for accurate self-time calculation.
 func getGoroutineID() uint64 {
@@ -227,8 +374,8 @@ func getGoroutineID() uint64 {
 type Row struct {
 	Name     string
 	Count    int64
-	Total    time.Duration // Wall-clock time (includes children).
-	SelfTime time.Duration // Actual work time (excludes children).
+	Total    time.Duration // Sum of self-time across all calls (excludes children to avoid double-counting).
+	SelfTime time.Duration // Actual work time (excludes children) - same as Total for display purposes.
 	Avg      time.Duration // Average self-time per call.
 	Max      time.Duration // Max self-time (excludes children).
 	P95      time.Duration // 95th percentile of self-time (0 if HDR disabled).
@@ -295,7 +442,7 @@ func buildRows() []Row {
 		r := Row{
 			Name:     m.Name,
 			Count:    m.Count,
-			Total:    m.Total,
+			Total:    m.SelfTime, // Use sum of self-times to avoid double-counting in nested calls.
 			SelfTime: m.SelfTime,
 			Max:      m.Max,
 		}

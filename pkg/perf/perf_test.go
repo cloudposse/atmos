@@ -1134,3 +1134,271 @@ func TestProcessBaseComponentConfigRecursion(t *testing.T) {
 		t.Errorf("expected total >= %v, got %v", expectedMinTime, metric.Total)
 	}
 }
+
+// TestSimpleTrackingMode tests the new simple tracking mode functionality.
+func TestSimpleTrackingMode(t *testing.T) {
+	t.Run("Simple mode enabled by default", func(t *testing.T) {
+		// Reset and enable tracking.
+		reg = &registry{
+			data:  make(map[string]*Metric),
+			start: time.Now(),
+		}
+		EnableTracking(true)
+
+		// Simple mode should be enabled by default.
+		if !useSimpleStack.Load() {
+			t.Error("expected simple mode to be enabled by default")
+		}
+	})
+
+	t.Run("Simple mode with nested calls", func(t *testing.T) {
+		// Reset registry.
+		reg = &registry{
+			data:  make(map[string]*Metric),
+			start: time.Now(),
+		}
+		EnableTracking(true)
+		UseSimpleTracking(true)
+
+		parentName := "simpleParent"
+		childName := "simpleChild"
+
+		// Nested function calls with simple mode.
+		parentFunc := func() {
+			done := Track(nil, parentName)
+			defer done()
+
+			time.Sleep(5 * time.Millisecond)
+
+			childFunc := func() {
+				done := Track(nil, childName)
+				defer done()
+				time.Sleep(10 * time.Millisecond)
+			}
+			childFunc()
+
+			time.Sleep(5 * time.Millisecond)
+		}
+
+		parentFunc()
+
+		reg.mu.Lock()
+		parentMetric := reg.data[parentName]
+		childMetric := reg.data[childName]
+		reg.mu.Unlock()
+
+		if parentMetric == nil || childMetric == nil {
+			t.Fatal("expected both parent and child metrics to exist")
+		}
+
+		// Parent's total should include child time.
+		expectedParentTotalMin := 20 * time.Millisecond
+		if parentMetric.Total < expectedParentTotalMin {
+			t.Errorf("parent total (%v) should be >= %v", parentMetric.Total, expectedParentTotalMin)
+		}
+
+		// Parent's self-time should exclude child time.
+		expectedParentSelfMin := 10 * time.Millisecond
+		if parentMetric.SelfTime < expectedParentSelfMin {
+			t.Errorf("parent self-time (%v) should be >= %v", parentMetric.SelfTime, expectedParentSelfMin)
+		}
+
+		// Child's total and self-time should be roughly equal.
+		expectedChildTimeMin := 10 * time.Millisecond
+		if childMetric.Total < expectedChildTimeMin {
+			t.Errorf("child total (%v) should be >= %v", childMetric.Total, expectedChildTimeMin)
+		}
+		if childMetric.SelfTime < expectedChildTimeMin {
+			t.Errorf("child self-time (%v) should be >= %v", childMetric.SelfTime, expectedChildTimeMin)
+		}
+	})
+
+	t.Run("Simple mode with direct recursion", func(t *testing.T) {
+		// Reset registry.
+		reg = &registry{
+			data:  make(map[string]*Metric),
+			start: time.Now(),
+		}
+		EnableTracking(true)
+		UseSimpleTracking(true)
+
+		functionName := "simpleRecursive"
+		depth := 5
+
+		var recursiveFunc func(int)
+		recursiveFunc = func(d int) {
+			done := Track(nil, functionName)
+			defer done()
+
+			if d > 0 {
+				time.Sleep(1 * time.Millisecond)
+				recursiveFunc(d - 1)
+			}
+		}
+
+		recursiveFunc(depth)
+
+		reg.mu.Lock()
+		metric := reg.data[functionName]
+		reg.mu.Unlock()
+
+		if metric == nil {
+			t.Fatal("expected metric to exist")
+		}
+
+		// Count should reflect all recursive calls.
+		expectedCount := depth + 1
+		if metric.Count != int64(expectedCount) {
+			t.Errorf("expected count %d, got %d", expectedCount, metric.Count)
+		}
+
+		// Verify timing is reasonable.
+		if metric.Total == 0 {
+			t.Error("expected non-zero total time")
+		}
+		if metric.SelfTime == 0 {
+			t.Error("expected non-zero self-time")
+		}
+	})
+}
+
+// TestGoroutineLocalTracking tests that goroutine-local tracking can be explicitly enabled.
+func TestGoroutineLocalTracking(t *testing.T) {
+	t.Run("Disable simple mode for concurrent execution", func(t *testing.T) {
+		// Reset registry.
+		reg = &registry{
+			data:  make(map[string]*Metric),
+			start: time.Now(),
+		}
+		EnableTracking(true)
+		UseSimpleTracking(false) // Explicitly disable simple mode for concurrent test.
+
+		functionName := "concurrentGoroutineLocal"
+		numGoroutines := 50
+
+		var wg sync.WaitGroup
+		wg.Add(numGoroutines)
+
+		for i := 0; i < numGoroutines; i++ {
+			go func() {
+				defer wg.Done()
+				done := Track(nil, functionName)
+				time.Sleep(1 * time.Millisecond)
+				done()
+			}()
+		}
+
+		wg.Wait()
+
+		reg.mu.Lock()
+		metric, exists := reg.data[functionName]
+		reg.mu.Unlock()
+
+		if !exists {
+			t.Fatal("expected metric to exist")
+		}
+
+		if metric.Count != int64(numGoroutines) {
+			t.Errorf("expected count %d, got %d", numGoroutines, metric.Count)
+		}
+	})
+
+	t.Run("Goroutine-local tracking with nested calls", func(t *testing.T) {
+		// Reset registry.
+		reg = &registry{
+			data:  make(map[string]*Metric),
+			start: time.Now(),
+		}
+		EnableTracking(true)
+		UseSimpleTracking(false) // Use goroutine-local tracking.
+
+		parentName := "goroutineParent"
+		childName := "goroutineChild"
+
+		parentFunc := func() {
+			done := Track(nil, parentName)
+			defer done()
+
+			time.Sleep(5 * time.Millisecond)
+
+			childFunc := func() {
+				done := Track(nil, childName)
+				defer done()
+				time.Sleep(10 * time.Millisecond)
+			}
+			childFunc()
+
+			time.Sleep(5 * time.Millisecond)
+		}
+
+		parentFunc()
+
+		reg.mu.Lock()
+		parentMetric := reg.data[parentName]
+		childMetric := reg.data[childName]
+		reg.mu.Unlock()
+
+		if parentMetric == nil || childMetric == nil {
+			t.Fatal("expected both parent and child metrics to exist")
+		}
+
+		// Verify timing is reasonable.
+		expectedParentTotalMin := 20 * time.Millisecond
+		if parentMetric.Total < expectedParentTotalMin {
+			t.Errorf("parent total (%v) should be >= %v", parentMetric.Total, expectedParentTotalMin)
+		}
+
+		expectedParentSelfMin := 10 * time.Millisecond
+		if parentMetric.SelfTime < expectedParentSelfMin {
+			t.Errorf("parent self-time (%v) should be >= %v", parentMetric.SelfTime, expectedParentSelfMin)
+		}
+	})
+}
+
+// TestSimpleVsGoroutineLocalPerformance demonstrates the performance difference.
+func TestSimpleVsGoroutineLocalPerformance(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping performance comparison in short mode")
+	}
+
+	functionName := "perfTestFunc"
+	numCalls := 1000
+
+	// Test with simple mode (fast path).
+	t.Run("Simple mode performance", func(t *testing.T) {
+		reg = &registry{
+			data:  make(map[string]*Metric),
+			start: time.Now(),
+		}
+		EnableTracking(true)
+		UseSimpleTracking(true)
+
+		start := time.Now()
+		for i := 0; i < numCalls; i++ {
+			done := Track(nil, functionName)
+			done()
+		}
+		simpleModeDuration := time.Since(start)
+
+		t.Logf("Simple mode: %d calls in %v", numCalls, simpleModeDuration)
+	})
+
+	// Test with goroutine-local mode (slow path with getGoroutineID).
+	t.Run("Goroutine-local mode performance", func(t *testing.T) {
+		reg = &registry{
+			data:  make(map[string]*Metric),
+			start: time.Now(),
+		}
+		EnableTracking(true)
+		UseSimpleTracking(false)
+
+		start := time.Now()
+		for i := 0; i < numCalls; i++ {
+			done := Track(nil, functionName)
+			done()
+		}
+		goroutineLocalDuration := time.Since(start)
+
+		t.Logf("Goroutine-local mode: %d calls in %v", numCalls, goroutineLocalDuration)
+	})
+}
