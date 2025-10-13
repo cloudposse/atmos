@@ -252,6 +252,14 @@ func processCustomTags(atmosConfig *schema.AtmosConfiguration, node *yaml.Node, 
 		return processCustomTags(atmosConfig, node.Content[0], file)
 	}
 
+	// Early exit: skip processing if this subtree has no custom tags.
+	// This avoids expensive recursive processing for YAML subtrees that don't use custom tags.
+	// Most YAML content doesn't use custom tags, so this optimization significantly reduces
+	// unnecessary recursion and tag checking.
+	if !hasCustomTags(node) {
+		return nil
+	}
+
 	for _, n := range node.Content {
 		tag := strings.TrimSpace(n.Tag)
 		val := strings.TrimSpace(n.Value)
@@ -295,6 +303,30 @@ func getValueWithTag(n *yaml.Node) string {
 	tag := strings.TrimSpace(n.Tag)
 	val := strings.TrimSpace(n.Value)
 	return strings.TrimSpace(tag + " " + val)
+}
+
+// hasCustomTags performs a fast scan to check if a node or any of its children contain custom Atmos tags.
+// This enables early exit optimization in processCustomTags, avoiding expensive recursive processing
+// for YAML subtrees that don't use custom tags (which is the majority of YAML content).
+func hasCustomTags(node *yaml.Node) bool {
+	if node == nil {
+		return false
+	}
+
+	// Check if this node has a custom tag.
+	tag := strings.TrimSpace(node.Tag)
+	if atmosYamlTagsMap[tag] || tag == AtmosYamlFuncInclude || tag == AtmosYamlFuncIncludeRaw {
+		return true
+	}
+
+	// Recursively check children.
+	for _, child := range node.Content {
+		if hasCustomTags(child) {
+			return true
+		}
+	}
+
+	return false
 }
 
 // UnmarshalYAML unmarshals YAML into a Go type.
