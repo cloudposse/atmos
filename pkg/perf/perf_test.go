@@ -868,6 +868,9 @@ func TestMultipleRecursiveFunctionsIndependent(t *testing.T) {
 		done := Track(nil, func1Name)
 		defer done()
 
+		// Add minimal sleep to ensure measurable duration on all platforms.
+		time.Sleep(1 * time.Millisecond)
+
 		var internal func(int)
 		internal = func(d int) {
 			if d > 0 {
@@ -880,6 +883,9 @@ func TestMultipleRecursiveFunctionsIndependent(t *testing.T) {
 	recursiveFunc2 := func(depth int) {
 		done := Track(nil, func2Name)
 		defer done()
+
+		// Add minimal sleep to ensure measurable duration on all platforms.
+		time.Sleep(1 * time.Millisecond)
 
 		var internal func(int)
 		internal = func(d int) {
@@ -914,9 +920,14 @@ func TestMultipleRecursiveFunctionsIndependent(t *testing.T) {
 		t.Errorf("expected 2 functions in registry, got %d", len(reg.data))
 	}
 
-	// Note: We don't verify duration because on some platforms (especially Windows)
-	// the recursion can be so fast that the measured duration is zero.
-	// The important behavior is that both functions are tracked independently.
+	// Verify duration tracking works (both functions have non-zero duration).
+	if metric1.Total == 0 {
+		t.Errorf("func1: expected non-zero duration, got %v", metric1.Total)
+	}
+
+	if metric2.Total == 0 {
+		t.Errorf("func2: expected non-zero duration, got %v", metric2.Total)
+	}
 }
 
 //nolint:dupl // Similar to TestRecursiveFunctionTracking but tests YAML-specific scenario.
