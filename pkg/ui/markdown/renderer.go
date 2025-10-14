@@ -10,6 +10,7 @@ import (
 	"github.com/muesli/termenv"
 
 	"github.com/cloudposse/atmos/internal/tui/templates/term"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -80,6 +81,8 @@ func NewRenderer(atmosConfig schema.AtmosConfiguration, opts ...Option) (*Render
 // NewHelpRenderer creates a new Markdown renderer specifically for command help text.
 // This uses the Cloud Posse color scheme (grayscale + purple) with transparent backgrounds.
 func NewHelpRenderer(atmosConfig schema.AtmosConfiguration, opts ...Option) (*Renderer, error) {
+	defer perf.Track(&atmosConfig, "markdown.NewHelpRenderer")()
+
 	r := &Renderer{
 		width:                 defaultWidth,           // default width
 		profile:               termenv.ColorProfile(), // default color profile

@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 
 	"github.com/charmbracelet/glamour/ansi"
+
+	"github.com/cloudposse/atmos/pkg/perf"
 )
 
 // Note: Cloud Posse color constants (CPLightGray, CPMidGray, CPDarkGray, CPPurple)
@@ -12,6 +14,8 @@ import (
 // GetHelpStyle returns a markdown style configuration optimized for command help text.
 // This uses the Cloud Posse color scheme (grayscale + purple accent) with transparent backgrounds.
 func GetHelpStyle() ([]byte, error) {
+	defer perf.Track(nil, "markdown.GetHelpStyle")()
+
 	style := ansi.StyleConfig{
 		Document: ansi.StyleBlock{
 			StylePrimitive: ansi.StylePrimitive{
