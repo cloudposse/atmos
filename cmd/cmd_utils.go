@@ -528,6 +528,7 @@ func buildMissingAtmosConfigError(atmosConfig *schema.AtmosConfiguration) error 
 
 	// Build with context using ErrorBuilder
 	return errUtils.Build(stacksErr).
+		WithTitle("Missing Configuration").
 		WithContext("config_file", atmosConfig.CliConfigPath).
 		WithContext("base_path", atmosConfig.BasePath).
 		WithContext("stacks_base_path", atmosConfig.Stacks.BasePath).
@@ -730,15 +731,27 @@ func showErrorExampleFromMarkdown(cmd *cobra.Command, arg string) {
 
 func showUsageExample(cmd *cobra.Command, details string) {
 	contentName := strings.ReplaceAll(strings.ReplaceAll(cmd.CommandPath(), " ", "_"), "-", "_")
-	suggestion := fmt.Sprintf("\n\nRun `%s --help` for usage", cmd.CommandPath())
+
+	// Create base error with the details message
+	baseErr := fmt.Errorf("%w: %s", errUtils.ErrInvalidArguments, strings.TrimSpace(details))
+
+	// Build error with proper formatting
+	err := errUtils.Build(baseErr).
+		WithTitle("Incorrect Usage").
+		WithExitCode(2)
+
+	// Add usage examples if available
 	if exampleContent, ok := examples[contentName]; ok {
-		suggestion = exampleContent.Suggestion
-		details += "\n## Usage Examples:\n" + exampleContent.Content
+		err = err.WithExample(exampleContent.Content)
+		if exampleContent.Suggestion != "" {
+			err = err.WithHint(exampleContent.Suggestion)
+		}
+	} else {
+		err = err.WithHintf("Run `%s --help` for usage", cmd.CommandPath())
 	}
-	// Print error directly since markdown renderer may not be initialized yet (flag parsing errors).
-	fmt.Fprintf(os.Stderr, "Error: %s", details)
-	fmt.Fprintf(os.Stderr, "%s\n", suggestion)
-	errUtils.Exit(2)
+
+	// Use CheckErrorPrintAndExit which will use the formatter
+	errUtils.CheckErrorPrintAndExit(err.Err(), "", "")
 }
 
 func stackFlagCompletion(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {

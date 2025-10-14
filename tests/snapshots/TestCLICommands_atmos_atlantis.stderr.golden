@@ -1,7 +1,14 @@
-Error: The command `atmos atlantis` requires a subcommand
+
+# Incorrect Usage
+
+invalid arguments: The command atmos atlantis requires a subcommand
 
 Valid subcommands are:
-* generate
+
+• generate
+
+## Hints
+
+💡 Run atmos atlantis --help for usage
 
 
-Run `atmos atlantis --help` for usage

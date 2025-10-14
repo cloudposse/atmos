@@ -1,26 +1,33 @@
-Error: Unknown command `non-existent` for `atmos`
+
+# Incorrect Usage
+
+invalid arguments: Unknown command non-existent for atmos
 
 Valid subcommands are:
-* about
-* atlantis
-* auth
-* aws
-* completion
-* describe
-* docs
-* helmfile
-* help
-* list
-* packer
-* pro
-* show
-* support
-* terraform
-* tf
-* validate
-* vendor
-* version
-* workflow
+
+• about
+• atlantis
+• auth
+• aws
+• completion
+• describe
+• docs
+• helmfile
+• help
+• list
+• packer
+• pro
+• show
+• support
+• terraform
+• tf
+• validate
+• vendor
+• version
+• workflow
+
+## Hints
+
+💡 Run atmos --help for usage
 
 
-Run `atmos --help` for usage
