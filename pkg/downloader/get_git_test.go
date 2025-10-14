@@ -566,8 +566,7 @@ func newGetter() *CustomGitGetter {
 }
 
 func TestGetCustom_ErrorWhenGitMissing(t *testing.T) {
-	t.Parallel()
-
+	// Note: Cannot use t.Parallel() with t.Setenv (used in withTempPath)
 	restore := withTempPath(t /* empty PATH to force failure */)
 	defer restore()
 

@@ -1,7 +1,6 @@
 package component
 
 import (
-	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -220,10 +219,6 @@ func TestComponentProcessor_StackNameTemplate_Errors(t *testing.T) {
 	assert.ErrorContains(t, err, "'environment' requires 'tenant' and 'namespace'")
 
 	t.Setenv("ATMOS_STACKS_NAME_TEMPLATE", "{{ .invalid }}")
-	assert.NoError(t, err, "Setting 'ATMOS_STACKS_NAME_TEMPLATE' environment variable should execute without error")
-	defer func() {
-		os.Unsetenv("ATMOS_STACKS_NAME_TEMPLATE")
-	}()
 
 	_, err = ProcessComponentFromContext(component, namespace, tenant, environment, stage, stacksPath, stacksPath)
 	assert.ErrorContains(t, err, "map has no entry for key \"invalid\"")
