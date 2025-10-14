@@ -235,7 +235,11 @@ func preCustomCommand(
 		} else {
 			// truly invalid, nothing to do
 			er := errors.New(fmt.Sprintf("The `%s` command has no steps or subcommands configured.", cmd.CommandPath()))
-			errUtils.CheckErrorPrintAndExit(er, "Invalid Command", "https://atmos.tools/cli/configuration/commands")
+			er = errUtils.Build(er).
+				WithTitle("Invalid Command").
+				WithHint("For more information, refer to the docs at https://atmos.tools/cli/configuration/commands").
+				Err()
+			errUtils.CheckErrorPrintAndExit(er, "", "")
 		}
 	}
 
@@ -747,7 +751,12 @@ func showUsageExample(cmd *cobra.Command, details string) {
 			errBuilder = errBuilder.WithExample(exampleContent.Content)
 		}
 		if exampleContent.Suggestion != "" {
-			errBuilder = errBuilder.WithHint(exampleContent.Suggestion)
+			// If suggestion is a URL, add "For more information" prefix
+			suggestion := exampleContent.Suggestion
+			if strings.HasPrefix(suggestion, "http://") || strings.HasPrefix(suggestion, "https://") {
+				suggestion = fmt.Sprintf("For more information, refer to the docs at %s", suggestion)
+			}
+			errBuilder = errBuilder.WithHint(suggestion)
 		}
 	} else {
 		errBuilder = errBuilder.WithHintf("Run `%s --help` for usage", cmd.CommandPath())
