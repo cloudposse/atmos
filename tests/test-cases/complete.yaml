@@ -29,7 +29,7 @@ tests:
     expect:
       diff: []
       stderr:
-        - "No workflow exists"
+        - "does not exist"
         - "test-1"
         - "terraform-plan-all-test-components"
       exit_code: 2
