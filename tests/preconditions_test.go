@@ -46,6 +46,17 @@ func TestShouldCheckPreconditions(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			if tt.envValue != "" {
 				t.Setenv("ATMOS_TEST_SKIP_PRECONDITION_CHECKS", tt.envValue)
+			} else {
+				// Explicitly unset the env var for this test
+				// t.Setenv doesn't support unsetting, so we use os.Unsetenv
+				// and manually restore after the test
+				orig := os.Getenv("ATMOS_TEST_SKIP_PRECONDITION_CHECKS")
+				os.Unsetenv("ATMOS_TEST_SKIP_PRECONDITION_CHECKS")
+				t.Cleanup(func() {
+					if orig != "" {
+						os.Setenv("ATMOS_TEST_SKIP_PRECONDITION_CHECKS", orig)
+					}
+				})
 			}
 
 			got := ShouldCheckPreconditions()
