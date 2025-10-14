@@ -15,7 +15,7 @@ func TestMainHooksAndStoreIntegration(t *testing.T) {
 	defer s.Close()
 
 	redisUrl := fmt.Sprintf("redis://%s", s.Addr())
-	os.Setenv("ATMOS_REDIS_URL", redisUrl)
+	t.Setenv("ATMOS_REDIS_URL", redisUrl)
 
 	origDir, err := os.Getwd()
 	if err != nil {
