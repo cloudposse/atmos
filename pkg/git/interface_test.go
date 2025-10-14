@@ -2,6 +2,7 @@ package git
 
 import (
 	"os"
+	"path/filepath"
 	"testing"
 
 	git "github.com/go-git/go-git/v5"
@@ -20,11 +21,11 @@ func TestDefaultRepositoryOperations_GetLocalRepo(t *testing.T) {
 	// Find the git repo root by walking up from current directory.
 	wd := originalWd
 	for {
-		if _, err := os.Stat(wd + "/.git"); err == nil {
+		if _, err := os.Stat(filepath.Join(wd, ".git")); err == nil {
 			break
 		}
-		parent := wd + "/.."
-		if parent == wd {
+		parent := filepath.Dir(wd)
+		if parent == wd || parent == "/" || parent == "." {
 			t.Skipf("Not in a git repository, skipping test")
 		}
 		wd = parent

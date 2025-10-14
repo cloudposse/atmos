@@ -258,9 +258,6 @@ func TestPrintMessageForMissingAtmosConfig(t *testing.T) {
 			}()
 
 			printMessageForMissingAtmosConfig(tt.atmosConfig)
-
-			// If we get here without panic, the function executed successfully.
-			assert.True(t, true, "Function executed without panic")
 		})
 	}
 }
