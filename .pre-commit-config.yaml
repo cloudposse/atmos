@@ -39,7 +39,7 @@ repos:
       - id: lintroller
         name: lintroller
         description: Run Atmos custom linter (t.Setenv/os.Setenv rules)
-        entry: bash -c 'cd tools/lintroller && go build -o ../../.lintroller . && cd ../.. && ./.lintroller ./...'
+        entry: make lint-lintroller
         language: system
         types: [go]
         pass_filenames: false

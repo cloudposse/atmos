@@ -72,3 +72,4 @@ tests.test
 **/llms-full.txt
 /lintroller
 /.lintroller
+tools/lintroller/.lintroller

@@ -27,15 +27,14 @@ lint: get lint-lintroller
 	golangci-lint run --new-from-rev=origin/main
 
 # Custom linter for Atmos-specific rules (t.Setenv misuse, os.Setenv in tests).
-lint-lintroller:
+.PHONY: lint-lintroller
+lint-lintroller: tools/lintroller/.lintroller
 	@echo "Running lintroller (Atmos custom rules)..."
-	@if [ -f ./lintroller ]; then \
-		./lintroller ./... 2>&1 | grep -v "^#" || true; \
-	else \
-		echo "Building lintroller linter..."; \
-		cd tools/lintroller && go build -o ../../lintroller . && cd ../..; \
-		./lintroller ./... 2>&1 | grep -v "^#" || true; \
-	fi
+	@tools/lintroller/.lintroller ./... 2>&1 | grep -v "^#" || true
+
+tools/lintroller/.lintroller: tools/lintroller/*.go
+	@echo "Building lintroller..."
+	@cd tools/lintroller && go build -o .lintroller .
 
 build-linux: GOOS=linux
 build-linux: build-default
