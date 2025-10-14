@@ -102,10 +102,15 @@ func TestManager_GetDefaultIdentity(t *testing.T) {
 			if tt.isCI {
 				t.Setenv("CI", "true")
 			} else {
+				orig := os.Getenv("CI")
 				os.Unsetenv("CI")
+				t.Cleanup(func() {
+					if orig != "" {
+						os.Setenv("CI", orig)
+					}
+				})
 			}
 
-			// Create manager with test identities.
 			manager := &manager{
 				config: &schema.AuthConfig{
 					Identities: tt.identities,

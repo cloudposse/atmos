@@ -2,7 +2,6 @@ package exec
 
 import (
 	"fmt"
-	"os"
 	"testing"
 
 	"github.com/alicebob/miniredis/v2"
@@ -126,16 +125,7 @@ func TestComponentConfigWithStoreTemplateFunc(t *testing.T) {
 	stacksPath := "../../tests/fixtures/scenarios/stack-templates-4"
 
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
-	assert.NoError(t, err, "Setting 'ATMOS_CLI_CONFIG_PATH' environment variable should execute without error")
-
 	t.Setenv("ATMOS_BASE_PATH", stacksPath)
-	assert.NoError(t, err, "Setting 'ATMOS_BASE_PATH' environment variable should execute without error")
-
-	// Unset env values after testing
-	defer func() {
-		os.Unsetenv("ATMOS_BASE_PATH")
-		os.Unsetenv("ATMOS_CLI_CONFIG_PATH")
-	}()
 
 	res, err := ExecuteDescribeComponent(
 		"component-1",

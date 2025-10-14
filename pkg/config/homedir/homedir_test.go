@@ -7,14 +7,18 @@ import (
 	"testing"
 )
 
-func patchEnv(t *testing.T, key, value string) func() {
+func patchEnv(key, value string) func() {
 	bck := os.Getenv(key)
 	deferFunc := func() {
-		t.Setenv(key, bck)
+		if bck != "" {
+			os.Setenv(key, bck)
+		} else {
+			os.Unsetenv(key)
+		}
 	}
 
 	if value != "" {
-		t.Setenv(key, value)
+		os.Setenv(key, value)
 	} else {
 		os.Unsetenv(key)
 	}
@@ -51,7 +55,7 @@ func TestDir(t *testing.T) {
 
 	DisableCache = true
 	defer func() { DisableCache = false }()
-	defer patchEnv(t, "HOME", "")()
+	defer patchEnv("HOME", "")()
 	dir, err = Dir()
 	if err != nil {
 		t.Fatalf("err: %s", err)
@@ -117,7 +121,7 @@ func TestExpand(t *testing.T) {
 
 	DisableCache = true
 	defer func() { DisableCache = false }()
-	defer patchEnv(t, "HOME", "/custom/path/")()
+	defer patchEnv("HOME", "/custom/path/")()
 	expected := filepath.Join(string(filepath.Separator), "custom", "path", "foo", string(filepath.Separator), "bar")
 	actual, err := Expand("~/foo/bar")
 

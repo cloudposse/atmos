@@ -495,21 +495,17 @@ func TestEnvironmentVariablePathCombinations(t *testing.T) {
 				t.Skipf("Skipping Unix-specific test on Windows")
 			}
 
-			// Save and restore environment variable.
-			oldEnv := os.Getenv("ATMOS_BASE_PATH")
-			defer func() {
-				if oldEnv != "" {
-					t.Setenv("ATMOS_BASE_PATH", oldEnv)
-				} else {
-					os.Unsetenv("ATMOS_BASE_PATH")
-				}
-			}()
-
 			// Set test environment variable.
 			if tt.envBasePathValue != "" {
 				t.Setenv("ATMOS_BASE_PATH", tt.envBasePathValue)
 			} else {
+				orig := os.Getenv("ATMOS_BASE_PATH")
 				os.Unsetenv("ATMOS_BASE_PATH")
+				t.Cleanup(func() {
+					if orig != "" {
+						os.Setenv("ATMOS_BASE_PATH", orig)
+					}
+				})
 			}
 
 			// Simulate path joining with env variable.

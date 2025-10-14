@@ -84,7 +84,6 @@ components:
 			// Set up environment variables
 			for k, v := range tt.setupEnv {
 				t.Setenv(k, v)
-				defer os.Unsetenv(k)
 			}
 
 			// Create test config file
@@ -143,7 +142,6 @@ func TestLoadConfigFromDifferentSources(t *testing.T) {
 			// Setup environment
 			for k, v := range tt.envVars {
 				t.Setenv(k, v)
-				defer os.Unsetenv(k)
 			}
 
 			config, err := LoadConfig(&schema.ConfigAndStacksInfo{})
@@ -184,7 +182,6 @@ func TestSetEnv(t *testing.T) {
 			// Set environment variables
 			for k, val := range tt.envVars {
 				t.Setenv(k, val)
-				defer os.Unsetenv(k)
 			}
 
 			setEnv(v)
@@ -304,7 +301,6 @@ func TestMergeDefaultImports_ExclusionLogic(t *testing.T) {
 					t.Setenv("TEST_EXCLUDE_ATMOS_D", joinedPaths)
 				}
 			}
-			defer os.Unsetenv("TEST_EXCLUDE_ATMOS_D")
 
 			// Adjust dirPath for the test
 			actualDirPath := tt.dirPath
@@ -368,7 +364,6 @@ func TestMergeDefaultImports_PathCanonicalization(t *testing.T) {
 
 			// Set the exclude environment variable using table input directly
 			t.Setenv("TEST_EXCLUDE_ATMOS_D", tt.excludePath)
-			defer os.Unsetenv("TEST_EXCLUDE_ATMOS_D")
 
 			// Call the function with table input directly
 			v := viper.New()
@@ -413,7 +408,6 @@ func TestMergeDefaultImports_EmptyAndInvalidPaths(t *testing.T) {
 			if tt.excludePaths != "" {
 				t.Setenv("TEST_EXCLUDE_ATMOS_D", tt.excludePaths)
 			}
-			defer os.Unsetenv("TEST_EXCLUDE_ATMOS_D")
 
 			// Call the function - should not panic or error on empty/invalid paths
 			v := viper.New()
@@ -524,7 +518,6 @@ func TestShouldExcludePathForTesting(t *testing.T) {
 			if tt.envValue != "" {
 				t.Setenv("TEST_EXCLUDE_ATMOS_D", tt.envValue)
 			}
-			defer os.Unsetenv("TEST_EXCLUDE_ATMOS_D")
 
 			// Call the function
 			result := shouldExcludePathForTesting(tt.dirPath)
@@ -571,7 +564,6 @@ func TestShouldExcludePathForTesting_WindowsCaseInsensitive(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Setenv("TEST_EXCLUDE_ATMOS_D", tt.envValue)
-			defer os.Unsetenv("TEST_EXCLUDE_ATMOS_D")
 
 			result := shouldExcludePathForTesting(tt.dirPath)
 			assert.Equal(t, tt.expected, result, "Windows should match paths case-insensitively")
@@ -623,7 +615,6 @@ func TestShouldExcludePathForTesting_PathCanonicalization(t *testing.T) {
 			}
 
 			t.Setenv("TEST_EXCLUDE_ATMOS_D", tt.envValue)
-			defer os.Unsetenv("TEST_EXCLUDE_ATMOS_D")
 
 			result := shouldExcludePathForTesting(tt.dirPath)
 			assert.Equal(t, tt.expected, result, "Paths should be canonicalized before comparison")
@@ -645,7 +636,6 @@ func TestMergeDefaultImports_WindowsCaseInsensitive(t *testing.T) {
 
 	// Set the environment variable with lowercase path
 	t.Setenv("TEST_EXCLUDE_ATMOS_D", lowerCasePath)
-	defer os.Unsetenv("TEST_EXCLUDE_ATMOS_D")
 
 	// Call the function with the path in uppercase
 	v := viper.New()
