@@ -15,16 +15,16 @@ func TestMergeEnvVars(t *testing.T) {
 		for _, env := range originalEnv {
 			parts := strings.SplitN(env, "=", 2)
 			if len(parts) == 2 {
-				t.Setenv(parts[0], parts[1])
+				os.Setenv(parts[0], parts[1])
 			}
 		}
 	}()
 
 	// Set the initial system environment
 	os.Clearenv()
-	t.Setenv("PATH", "/usr/bin")
-	t.Setenv("TF_CLI_ARGS_plan", "-lock=false")
-	t.Setenv("HOME", "/home/test")
+	os.Setenv("PATH", "/usr/bin")
+	os.Setenv("TF_CLI_ARGS_plan", "-lock=false")
+	os.Setenv("HOME", "/home/test")
 
 	// Atmos environment variables to merge
 	componentEnv := []string{

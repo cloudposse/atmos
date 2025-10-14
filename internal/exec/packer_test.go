@@ -197,7 +197,7 @@ func TestExecutePacker_Errors(t *testing.T) {
 	originalPath := os.Getenv("PATH")
 	t.Cleanup(func() {
 		// Restore original PATH after test
-		t.Setenv("PATH", originalPath)
+		os.Setenv("PATH", originalPath)
 	})
 
 	t.Run("missing stack", func(t *testing.T) {
@@ -369,7 +369,7 @@ func TestExecutePacker_Errors(t *testing.T) {
 
 	t.Run("missing packer binary", func(t *testing.T) {
 		// Temporarily modify PATH to ensure packer is not found
-		t.Setenv("PATH", "/nonexistent/path")
+		os.Setenv("PATH", "/nonexistent/path")
 
 		info := schema.ConfigAndStacksInfo{
 			Stack:            "nonprod",
@@ -384,7 +384,7 @@ func TestExecutePacker_Errors(t *testing.T) {
 		assert.Contains(t, err.Error(), "executable file not found")
 
 		// Restore PATH
-		t.Setenv("PATH", originalPath)
+		os.Setenv("PATH", originalPath)
 	})
 
 	t.Run("invalid command arguments", func(t *testing.T) {

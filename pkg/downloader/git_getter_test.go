@@ -267,8 +267,8 @@ func TestCustomGitGetter_Get_GetCustomError(t *testing.T) {
 
 	// Use an empty PATH to make git unavailable.
 	orig := os.Getenv("PATH")
-	t.Setenv("PATH", "")
-	t.Cleanup(func() { t.Setenv("PATH", orig) })
+	require.NoError(t, os.Setenv("PATH", ""))
+	t.Cleanup(func() { _ = os.Setenv("PATH", orig) })
 
 	tempDir := t.TempDir()
 	testURL, err := url.Parse("https://example.com/repo.git")
