@@ -344,7 +344,7 @@ func TestAssumeRoleIdentity_Authenticate_ValidationErrors(t *testing.T) {
 }
 
 func TestAssumeRoleIdentity_WithCustomResolver(t *testing.T) {
-	// Test assume role identity with custom resolver configuration
+	// Test assume role identity with custom resolver configuration.
 	config := &schema.Identity{
 		Kind: "aws/assume-role",
 		Via:  &schema.IdentityVia{Provider: "test-provider"},
@@ -365,21 +365,21 @@ func TestAssumeRoleIdentity_WithCustomResolver(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotNil(t, identity)
 
-	// Cast to concrete type to verify internal state
+	// Cast to concrete type to verify internal state.
 	ari, ok := identity.(*assumeRoleIdentity)
 	require.True(t, ok)
 	assert.Equal(t, "test-role", ari.name)
 	assert.NotNil(t, ari.config)
 	assert.NotNil(t, ari.config.Credentials)
 
-	// Verify resolver config exists
+	// Verify resolver config exists.
 	awsCreds, ok := ari.config.Credentials["aws"]
 	assert.True(t, ok)
 	assert.NotNil(t, awsCreds)
 }
 
 func TestAssumeRoleIdentity_WithoutCustomResolver(t *testing.T) {
-	// Test assume role identity without custom resolver configuration
+	// Test assume role identity without custom resolver configuration.
 	config := &schema.Identity{
 		Kind: "aws/assume-role",
 		Via:  &schema.IdentityVia{Provider: "test-provider"},
@@ -393,12 +393,12 @@ func TestAssumeRoleIdentity_WithoutCustomResolver(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotNil(t, identity)
 
-	// Verify it works without resolver config
+	// Verify it works without resolver config.
 	assert.NoError(t, identity.Validate())
 }
 
 func TestAssumeRoleIdentity_newSTSClient_WithResolver(t *testing.T) {
-	// Test newSTSClient with custom resolver
+	// Test newSTSClient with custom resolver.
 	config := &schema.Identity{
 		Kind: "aws/assume-role",
 		Via:  &schema.IdentityVia{Provider: "test-provider"},
@@ -421,7 +421,7 @@ func TestAssumeRoleIdentity_newSTSClient_WithResolver(t *testing.T) {
 	ari, ok := identity.(*assumeRoleIdentity)
 	require.True(t, ok)
 
-	// Create base credentials
+	// Create base credentials.
 	baseCreds := &types.AWSCredentials{
 		AccessKeyID:     "AKIAEXAMPLE",
 		SecretAccessKey: "secret",
@@ -429,14 +429,14 @@ func TestAssumeRoleIdentity_newSTSClient_WithResolver(t *testing.T) {
 		Region:          "us-east-1",
 	}
 
-	// Call newSTSClient - this should not error even with custom resolver
+	// Call newSTSClient - this should not error even with custom resolver.
 	client, err := ari.newSTSClient(context.Background(), baseCreds)
 	assert.NoError(t, err)
 	assert.NotNil(t, client)
 }
 
 func TestAssumeRoleIdentity_newSTSClient_WithoutResolver(t *testing.T) {
-	// Test newSTSClient without custom resolver
+	// Test newSTSClient without custom resolver.
 	config := &schema.Identity{
 		Kind: "aws/assume-role",
 		Via:  &schema.IdentityVia{Provider: "test-provider"},
@@ -452,7 +452,7 @@ func TestAssumeRoleIdentity_newSTSClient_WithoutResolver(t *testing.T) {
 	ari, ok := identity.(*assumeRoleIdentity)
 	require.True(t, ok)
 
-	// Create base credentials
+	// Create base credentials.
 	baseCreds := &types.AWSCredentials{
 		AccessKeyID:     "AKIAEXAMPLE",
 		SecretAccessKey: "secret",
@@ -460,7 +460,7 @@ func TestAssumeRoleIdentity_newSTSClient_WithoutResolver(t *testing.T) {
 		Region:          "us-east-1",
 	}
 
-	// Call newSTSClient - should work without resolver
+	// Call newSTSClient - should work without resolver.
 	client, err := ari.newSTSClient(context.Background(), baseCreds)
 	assert.NoError(t, err)
 	assert.NotNil(t, client)
@@ -513,7 +513,7 @@ func TestAssumeRoleIdentity_newSTSClient_RegionResolution(t *testing.T) {
 			ari, ok := identity.(*assumeRoleIdentity)
 			require.True(t, ok)
 
-			// Validate to extract region from principal
+			// Validate to extract region from principal.
 			err = ari.Validate()
 			require.NoError(t, err)
 
@@ -527,7 +527,7 @@ func TestAssumeRoleIdentity_newSTSClient_RegionResolution(t *testing.T) {
 			client, err := ari.newSTSClient(context.Background(), baseCreds)
 			assert.NoError(t, err)
 			assert.NotNil(t, client)
-			// Verify region was persisted
+			// Verify region was persisted.
 			assert.Equal(t, tt.expectedRegion, ari.region)
 		})
 	}

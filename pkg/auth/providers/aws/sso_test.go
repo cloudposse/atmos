@@ -227,7 +227,7 @@ func TestSSOProvider_WithCustomResolver(t *testing.T) {
 	assert.Equal(t, "us-east-1", p.region)
 	assert.Equal(t, "https://company.awsapps.com/start", p.startURL)
 
-	// Verify the provider has the config with resolver
+	// Verify the provider has the config with resolver.
 	assert.NotNil(t, p.config)
 	assert.NotNil(t, p.config.Spec)
 	awsSpec, ok := p.config.Spec["aws"]
@@ -248,6 +248,6 @@ func TestSSOProvider_WithoutCustomResolver(t *testing.T) {
 	assert.NotNil(t, p)
 	assert.Equal(t, "sso-standard", p.Name())
 
-	// Verify the provider works without resolver config
+	// Verify the provider works without resolver config.
 	assert.NoError(t, p.Validate())
 }
