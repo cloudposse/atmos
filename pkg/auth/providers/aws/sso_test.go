@@ -204,3 +204,50 @@ func TestSSOProvider_promptDeviceAuth_NonCI_OpensURL(t *testing.T) {
 	url := "https://company.awsapps.com/start/#/device?user_code=ABCD"
 	p.promptDeviceAuth(&ssooidc.StartDeviceAuthorizationOutput{VerificationUriComplete: &url})
 }
+
+func TestSSOProvider_WithCustomResolver(t *testing.T) {
+	// Test SSO provider with custom resolver configuration.
+	config := &schema.Provider{
+		Kind:     "aws/iam-identity-center",
+		Region:   "us-east-1",
+		StartURL: "https://company.awsapps.com/start",
+		Spec: map[string]interface{}{
+			"aws": map[string]interface{}{
+				"resolver": map[string]interface{}{
+					"url": "http://localhost:4566",
+				},
+			},
+		},
+	}
+
+	p, err := NewSSOProvider("sso-localstack", config)
+	require.NoError(t, err)
+	assert.NotNil(t, p)
+	assert.Equal(t, "sso-localstack", p.Name())
+	assert.Equal(t, "us-east-1", p.region)
+	assert.Equal(t, "https://company.awsapps.com/start", p.startURL)
+
+	// Verify the provider has the config with resolver.
+	assert.NotNil(t, p.config)
+	assert.NotNil(t, p.config.Spec)
+	awsSpec, ok := p.config.Spec["aws"]
+	assert.True(t, ok)
+	assert.NotNil(t, awsSpec)
+}
+
+func TestSSOProvider_WithoutCustomResolver(t *testing.T) {
+	// Test SSO provider without custom resolver configuration.
+	config := &schema.Provider{
+		Kind:     "aws/iam-identity-center",
+		Region:   "us-east-1",
+		StartURL: "https://company.awsapps.com/start",
+	}
+
+	p, err := NewSSOProvider("sso-standard", config)
+	require.NoError(t, err)
+	assert.NotNil(t, p)
+	assert.Equal(t, "sso-standard", p.Name())
+
+	// Verify the provider works without resolver config.
+	assert.NoError(t, p.Validate())
+}
