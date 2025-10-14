@@ -36,6 +36,15 @@ repos:
         require_serial: true
         exclude: ^(vendor/|tests/test-cases/|tests/testdata/|tests/snapshots/)
 
+      - id: tsetenvcheck
+        name: tsetenvcheck
+        description: Check for t.Setenv misuse in defer/cleanup blocks
+        entry: bash -c 'cd tools/tsetenvcheck && go build -o ../../.tsetenvcheck . && cd ../.. && ./.tsetenvcheck ./...'
+        language: system
+        types: [go]
+        pass_filenames: false
+        exclude: ^(vendor/|tests/test-cases/|tests/testdata/|tests/snapshots/|tools/tsetenvcheck/testdata/)
+
   # General file hygiene
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v4.5.0

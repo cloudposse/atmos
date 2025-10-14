@@ -70,3 +70,5 @@ tests.test
 
 **/llms.txt
 **/llms-full.txt
+/tsetenvcheck
+/.tsetenvcheck

@@ -41,7 +41,7 @@ func TestNewAtmosProAPIClientFromEnv(t *testing.T) {
 	defer func() {
 		for k, v := range originalEnvVars {
 			if v != "" {
-				t.Setenv(k, v)
+				os.Setenv(k, v)
 			} else {
 				os.Unsetenv(k)
 			}

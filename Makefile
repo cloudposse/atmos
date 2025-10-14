@@ -23,8 +23,19 @@ version: version-default
 
 # The following will lint only files in git. `golangci-lint run --new-from-rev=HEAD` should do it,
 # but it's still including files not in git.
-lint: get
+lint: get lint-tsetenv
 	golangci-lint run --new-from-rev=origin/main
+
+# Custom linter to check for t.Setenv misuse in defer/cleanup blocks.
+lint-tsetenv:
+	@echo "Checking for t.Setenv misuse in defer/cleanup blocks..."
+	@if [ -f ./tsetenvcheck ]; then \
+		./tsetenvcheck ./... 2>&1 | grep -v "^#" || true; \
+	else \
+		echo "Building tsetenvcheck linter..."; \
+		cd tools/tsetenvcheck && go build -o ../../tsetenvcheck . && cd ../..; \
+		./tsetenvcheck ./... 2>&1 | grep -v "^#" || true; \
+	fi
 
 build-linux: GOOS=linux
 build-linux: build-default
