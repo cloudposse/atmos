@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"os"
 	"testing"
 
 	"github.com/golang/mock/gomock"
@@ -101,12 +100,6 @@ func TestDescribeWorkflowsCmd_Error(t *testing.T) {
 
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
 	t.Setenv("ATMOS_BASE_PATH", stacksPath)
-
-	// Unset ENV variables after testing
-	defer func() {
-		os.Unsetenv("ATMOS_CLI_CONFIG_PATH")
-		os.Unsetenv("ATMOS_BASE_PATH")
-	}()
 
 	err := describeWorkflowsCmd.RunE(describeWorkflowsCmd, []string{"--invalid-flag"})
 	assert.Error(t, err, "describe workflows command should return an error when called with invalid flags")

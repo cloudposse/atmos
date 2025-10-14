@@ -21,12 +21,6 @@ func TestTerraformRun1(t *testing.T) {
 		t.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
 		t.Setenv("ATMOS_BASE_PATH", stacksPath)
 
-		// Unset env values after testing
-		defer func() {
-			os.Unsetenv("ATMOS_BASE_PATH")
-			os.Unsetenv("ATMOS_CLI_CONFIG_PATH")
-		}()
-
 		cmd := &cobra.Command{
 			Use:   "test",
 			Short: "test",
@@ -56,12 +50,6 @@ func TestTerraformRun2(t *testing.T) {
 
 		t.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
 		t.Setenv("ATMOS_BASE_PATH", stacksPath)
-
-		// Unset env values after testing
-		defer func() {
-			os.Unsetenv("ATMOS_BASE_PATH")
-			os.Unsetenv("ATMOS_CLI_CONFIG_PATH")
-		}()
 
 		cmd := &cobra.Command{
 			Use:   "test",
@@ -94,12 +82,6 @@ func TestTerraformRun3(t *testing.T) {
 
 		t.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
 		t.Setenv("ATMOS_BASE_PATH", stacksPath)
-
-		// Unset env values after testing
-		defer func() {
-			os.Unsetenv("ATMOS_BASE_PATH")
-			os.Unsetenv("ATMOS_CLI_CONFIG_PATH")
-		}()
 
 		cmd := &cobra.Command{
 			Use:   "test",

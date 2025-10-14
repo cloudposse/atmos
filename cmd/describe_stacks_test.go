@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"fmt"
-	"os"
 	"testing"
 
 	"github.com/golang/mock/gomock"
@@ -153,12 +152,6 @@ func TestDescribeStacksCmd_Error(t *testing.T) {
 
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
 	t.Setenv("ATMOS_BASE_PATH", stacksPath)
-
-	// Unset ENV variables after testing
-	defer func() {
-		os.Unsetenv("ATMOS_CLI_CONFIG_PATH")
-		os.Unsetenv("ATMOS_BASE_PATH")
-	}()
 
 	err := describeStacksCmd.RunE(describeStacksCmd, []string{"--invalid-flag"})
 	assert.Error(t, err, "describe stacks command should return an error when called with invalid flags")

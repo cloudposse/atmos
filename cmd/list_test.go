@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"os"
 	"testing"
 
 	"github.com/spf13/cobra"
@@ -184,12 +183,6 @@ func TestListCmds_Error(t *testing.T) {
 
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
 	t.Setenv("ATMOS_BASE_PATH", stacksPath)
-
-	// Unset ENV variables after testing
-	defer func() {
-		os.Unsetenv("ATMOS_CLI_CONFIG_PATH")
-		os.Unsetenv("ATMOS_BASE_PATH")
-	}()
 
 	err := listComponentsCmd.RunE(listComponentsCmd, []string{"--invalid-flag"})
 	assert.Error(t, err, "list components command should return an error when called with invalid flags")

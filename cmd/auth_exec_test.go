@@ -3,7 +3,6 @@ package cmd
 import (
 	"bytes"
 	"errors"
-	"os"
 	"runtime"
 	"testing"
 
@@ -19,13 +18,7 @@ func TestAuthExecCmd_FlagParsing(t *testing.T) {
 	testDir := "../tests/fixtures/scenarios/atmos-auth"
 
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", testDir)
-
 	t.Setenv("ATMOS_BASE_PATH", testDir)
-
-	defer func() {
-		os.Unsetenv("ATMOS_CLI_CONFIG_PATH")
-		os.Unsetenv("ATMOS_BASE_PATH")
-	}()
 
 	tests := []struct {
 		name          string

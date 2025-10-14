@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -13,12 +12,6 @@ func TestHelmfileCommands_Error(t *testing.T) {
 
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
 	t.Setenv("ATMOS_BASE_PATH", stacksPath)
-
-	// Unset ENV variables after testing
-	defer func() {
-		os.Unsetenv("ATMOS_CLI_CONFIG_PATH")
-		os.Unsetenv("ATMOS_BASE_PATH")
-	}()
 
 	err := helmfileApplyCmd.RunE(helmfileApplyCmd, []string{})
 	assert.Error(t, err, "helmfile apply command should return an error when called with no parameters")

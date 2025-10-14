@@ -23,17 +23,11 @@ func TestExecuteTerraformGeneratePlanfileCmd(t *testing.T) {
 	stack := "nonprod"
 
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
-
 	t.Setenv("ATMOS_BASE_PATH", stacksPath)
 
 	defer func() {
-		err := os.Unsetenv("ATMOS_BASE_PATH")
-		assert.NoError(t, err)
-		err = os.Unsetenv("ATMOS_CLI_CONFIG_PATH")
-		assert.NoError(t, err)
-
 		// Delete the generated files and folders after the test
-		err = os.RemoveAll(filepath.Join(componentPath, ".terraform"))
+		err := os.RemoveAll(filepath.Join(componentPath, ".terraform"))
 		assert.NoError(t, err)
 
 		err = os.RemoveAll(filepath.Join(componentPath, "terraform.tfstate.d"))
@@ -93,17 +87,11 @@ func TestExecuteTerraformGeneratePlanfile(t *testing.T) {
 	info := schema.ConfigAndStacksInfo{}
 
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
-
 	t.Setenv("ATMOS_BASE_PATH", stacksPath)
 
 	defer func() {
-		err := os.Unsetenv("ATMOS_BASE_PATH")
-		assert.NoError(t, err)
-		err = os.Unsetenv("ATMOS_CLI_CONFIG_PATH")
-		assert.NoError(t, err)
-
 		// Delete the generated files and folders after the test
-		err = os.RemoveAll(filepath.Join(componentPath, ".terraform"))
+		err := os.RemoveAll(filepath.Join(componentPath, ".terraform"))
 		assert.NoError(t, err)
 
 		err = os.RemoveAll(filepath.Join(componentPath, "terraform.tfstate.d"))
@@ -202,15 +190,7 @@ func TestExecuteTerraformGeneratePlanfileErrors(t *testing.T) {
 	info := schema.ConfigAndStacksInfo{}
 
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
-
 	t.Setenv("ATMOS_BASE_PATH", stacksPath)
-
-	defer func() {
-		err := os.Unsetenv("ATMOS_BASE_PATH")
-		assert.NoError(t, err)
-		err = os.Unsetenv("ATMOS_CLI_CONFIG_PATH")
-		assert.NoError(t, err)
-	}()
 
 	options := PlanfileOptions{
 		Component:            component,

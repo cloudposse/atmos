@@ -22,13 +22,6 @@ func TestNoColorLog(t *testing.T) {
 	t.Setenv("ATMOS_BASE_PATH", stacksPath)
 	t.Setenv("ATMOS_LOGS_LEVEL", "Warning")
 
-	// Unset ENV variables after testing
-	defer func() {
-		os.Unsetenv("ATMOS_CLI_CONFIG_PATH")
-		os.Unsetenv("ATMOS_BASE_PATH")
-		os.Unsetenv("ATMOS_LOGS_LEVEL")
-	}()
-
 	// Set the environment variable to disable color
 	// t.Setenv("NO_COLOR", "1")
 	t.Setenv("ATMOS_LOGS_LEVEL", "Debug")

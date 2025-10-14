@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"os"
 	"testing"
 
 	"github.com/golang/mock/gomock"
@@ -92,14 +91,7 @@ func TestDescribeDependentsCmd_Error(t *testing.T) {
 	stacksPath := "../tests/fixtures/scenarios/terraform-apply-affected"
 
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
-
 	t.Setenv("ATMOS_BASE_PATH", stacksPath)
-
-	// Unset ENV variables after testing
-	defer func() {
-		os.Unsetenv("ATMOS_CLI_CONFIG_PATH")
-		os.Unsetenv("ATMOS_BASE_PATH")
-	}()
 
 	err := describeDependentsCmd.RunE(describeDependentsCmd, []string{"invalid-component"})
 	assert.Error(t, err, "describe dependents command should return an error when called with invalid component")

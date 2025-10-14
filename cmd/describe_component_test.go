@@ -13,14 +13,7 @@ func TestDescribeComponentCmd_Error(t *testing.T) {
 	stacksPath := "../tests/fixtures/scenarios/terraform-apply-affected"
 
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
-
 	t.Setenv("ATMOS_BASE_PATH", stacksPath)
-
-	// Unset ENV variables after testing
-	defer func() {
-		os.Unsetenv("ATMOS_CLI_CONFIG_PATH")
-		os.Unsetenv("ATMOS_BASE_PATH")
-	}()
 
 	err := describeComponentCmd.RunE(describeComponentCmd, []string{})
 	assert.Error(t, err, "describe component command should return an error when called with no parameters")
@@ -45,11 +38,6 @@ func TestDescribeComponentCmd_ProvenanceWithFormatJSON(t *testing.T) {
 
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
 	t.Setenv("ATMOS_BASE_PATH", stacksPath)
-
-	defer func() {
-		os.Unsetenv("ATMOS_CLI_CONFIG_PATH")
-		os.Unsetenv("ATMOS_BASE_PATH")
-	}()
 
 	// Reset flags for this test
 	describeComponentCmd.PersistentFlags().Set("stack", "plat-ue2-dev")
@@ -82,11 +70,6 @@ func TestDescribeComponentCmd_ProvenanceWithFileOutput(t *testing.T) {
 
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
 	t.Setenv("ATMOS_BASE_PATH", stacksPath)
-
-	defer func() {
-		os.Unsetenv("ATMOS_CLI_CONFIG_PATH")
-		os.Unsetenv("ATMOS_BASE_PATH")
-	}()
 
 	// Create a temporary file for output
 	tmpFile := filepath.Join(os.TempDir(), "test-provenance-output.yaml")

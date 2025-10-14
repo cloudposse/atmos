@@ -225,30 +225,10 @@ func TestCiProvider(t *testing.T) {
 			currentEnvVars := PreserveCIEnvVars()
 			defer RestoreCIEnvVars(currentEnvVars)
 
-			// Save original environment variables.
-			originalEnv := make(map[string]string)
-			for key := range tc.envVars {
-				if val := os.Getenv(key); val != "" {
-					originalEnv[key] = val
-				}
-			}
-
 			// Set test environment variables.
 			for key, value := range tc.envVars {
 				t.Setenv(key, value)
 			}
-
-			// Clean up environment variables after test.
-			defer func() {
-				// Clear test environment variables.
-				for key := range tc.envVars {
-					os.Unsetenv(key)
-				}
-				// Restore original environment variables.
-				for key, value := range originalEnv {
-					t.Setenv(key, value)
-				}
-			}()
 
 			result := ciProvider()
 			assert.Equal(t, tc.expectedResult, result)
@@ -295,14 +275,6 @@ func TestIsCI(t *testing.T) {
 			currentEnvVars := PreserveCIEnvVars()
 			defer RestoreCIEnvVars(currentEnvVars)
 
-			// Save original environment variables.
-			originalEnv := make(map[string]string)
-			for key := range tc.envVars {
-				if val := os.Getenv(key); val != "" {
-					originalEnv[key] = val
-				}
-			}
-
 			var envVarsOrdered []string
 			for key := range tc.envVars {
 				envVarsOrdered = append(envVarsOrdered, key)
@@ -312,18 +284,6 @@ func TestIsCI(t *testing.T) {
 			for _, key := range envVarsOrdered {
 				t.Setenv(key, tc.envVars[key])
 			}
-
-			// Clean up environment variables after test.
-			defer func() {
-				// Clear test environment variables.
-				for key := range tc.envVars {
-					os.Unsetenv(key)
-				}
-				// Restore original environment variables
-				for key, value := range originalEnv {
-					t.Setenv(key, value)
-				}
-			}()
 
 			result := IsCI()
 			assert.Equal(t, tc.expectedResult, result)
@@ -335,7 +295,6 @@ func TestHelperFunctions(t *testing.T) {
 	t.Run("notEmpty", func(t *testing.T) {
 		// Test with existing environment variable.
 		t.Setenv("TEST_VAR", "value")
-		defer os.Unsetenv("TEST_VAR")
 
 		assert.True(t, isEnvVarExists("TEST_VAR"))
 		assert.False(t, isEnvVarExists("NON_EXISTENT_VAR"))
@@ -344,7 +303,6 @@ func TestHelperFunctions(t *testing.T) {
 	t.Run("isTrue", func(t *testing.T) {
 		// Test with "true" value.
 		t.Setenv("TRUE_VAR", "true")
-		defer os.Unsetenv("TRUE_VAR")
 
 		assert.True(t, isEnvVarTrue("TRUE_VAR"))
 		assert.False(t, isEnvVarTrue("FALSE_VAR"))
@@ -352,7 +310,6 @@ func TestHelperFunctions(t *testing.T) {
 
 		// Test with "false" value.
 		t.Setenv("FALSE_VAR", "false")
-		defer os.Unsetenv("FALSE_VAR")
 
 		assert.True(t, isEnvVarTrue("TRUE_VAR"))
 		assert.False(t, isEnvVarTrue("FALSE_VAR"))
