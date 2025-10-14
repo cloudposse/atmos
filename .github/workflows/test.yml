@@ -21,7 +21,7 @@ env:
   TERRAFORM_VERSION: "1.9.7"
   OPEN_TOFU_VERSION: "1.9.1"
   HELMFILE_VERSION: "v1.1.0"
-  PACKER_VERSION: "1.14.1"
+  PACKER_VERSION: "1.14.2"
 
 jobs:
   # ensure the code builds...

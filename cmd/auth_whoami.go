@@ -14,6 +14,7 @@ import (
 	authTypes "github.com/cloudposse/atmos/pkg/auth/types"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/config/homedir"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -152,7 +153,11 @@ func sanitizeEnvMap(in map[string]string, homeDir string) map[string]string {
 
 func init() {
 	authWhoamiCmd.Flags().StringP("output", "o", "", "Output format (json)")
-	_ = viper.BindPFlag("auth.whoami.output", authWhoamiCmd.Flags().Lookup("output"))
-	_ = viper.BindEnv("auth.whoami.output", "ATMOS_AUTH_WHOAMI_OUTPUT")
+	if err := viper.BindPFlag("auth.whoami.output", authWhoamiCmd.Flags().Lookup("output")); err != nil {
+		log.Trace("Failed to bind auth.whoami.output flag", "error", err)
+	}
+	if err := viper.BindEnv("auth.whoami.output", "ATMOS_AUTH_WHOAMI_OUTPUT"); err != nil {
+		log.Trace("Failed to bind auth.whoami.output environment variable", "error", err)
+	}
 	authCmd.AddCommand(authWhoamiCmd)
 }

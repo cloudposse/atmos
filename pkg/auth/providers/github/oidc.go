@@ -96,19 +96,25 @@ func (p *oidcProvider) Authenticate(ctx context.Context) (types.ICredentials, er
 
 // isGitHubActions checks if we're running in GitHub Actions environment.
 func (p *oidcProvider) isGitHubActions() bool {
-	_ = viper.BindEnv("github.actions", "GITHUB_ACTIONS")
+	if err := viper.BindEnv("github.actions", "GITHUB_ACTIONS"); err != nil {
+		log.Trace("Failed to bind github.actions environment variable", "error", err)
+	}
 	return viper.GetString("github.actions") == "true"
 }
 
 // requestParams loads the request URL and token from the GitHub Actions environment.
 func (p *oidcProvider) requestParams() (string, string, error) {
-	_ = viper.BindEnv("github.oidc.request_token", "ACTIONS_ID_TOKEN_REQUEST_TOKEN")
+	if err := viper.BindEnv("github.oidc.request_token", "ACTIONS_ID_TOKEN_REQUEST_TOKEN"); err != nil {
+		log.Trace("Failed to bind github.oidc.request_token environment variable", "error", err)
+	}
 	token := viper.GetString("github.oidc.request_token")
 	if token == "" {
 		return "", "", fmt.Errorf("%w: ACTIONS_ID_TOKEN_REQUEST_TOKEN not found - ensure job has 'id-token: write' permission", errUtils.ErrAuthenticationFailed)
 	}
 
-	_ = viper.BindEnv("github.oidc.request_url", "ACTIONS_ID_TOKEN_REQUEST_URL")
+	if err := viper.BindEnv("github.oidc.request_url", "ACTIONS_ID_TOKEN_REQUEST_URL"); err != nil {
+		log.Trace("Failed to bind github.oidc.request_url environment variable", "error", err)
+	}
 	requestURL := viper.GetString("github.oidc.request_url")
 	if requestURL == "" {
 		return "", "", fmt.Errorf("%w: ACTIONS_ID_TOKEN_REQUEST_URL not found - ensure job has 'id-token: write' permission", errUtils.ErrAuthenticationFailed)
@@ -129,7 +135,9 @@ func (p *oidcProvider) audience() (string, error) {
 
 // resolveJWT returns an ACTIONS_ID_TOKEN if present, otherwise fetches a token from the endpoint.
 func (p *oidcProvider) resolveJWT(ctx context.Context, requestURL, token, aud string) (string, error) {
-	_ = viper.BindEnv("github.oidc.id_token", "ACTIONS_ID_TOKEN")
+	if err := viper.BindEnv("github.oidc.id_token", "ACTIONS_ID_TOKEN"); err != nil {
+		log.Trace("Failed to bind github.oidc.id_token environment variable", "error", err)
+	}
 	if jwt := viper.GetString("github.oidc.id_token"); jwt != "" {
 		return jwt, nil
 	}

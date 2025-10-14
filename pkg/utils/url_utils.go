@@ -5,13 +5,15 @@ import (
 	"os/exec"
 	"runtime"
 
-	log "github.com/charmbracelet/log"
 	errUtils "github.com/cloudposse/atmos/errors"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/spf13/viper"
 )
 
 func OpenUrl(urlStr string) error {
-	_ = viper.BindEnv("go.test", "GO_TEST")
+	if err := viper.BindEnv("go.test", "GO_TEST"); err != nil {
+		log.Trace("Failed to bind go.test environment variable", "error", err)
+	}
 	if viper.GetString("go.test") == "1" {
 		log.Debug("Skipping browser launch in test environment")
 		return nil

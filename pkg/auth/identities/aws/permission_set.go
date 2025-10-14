@@ -2,6 +2,7 @@ package aws
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -134,6 +135,24 @@ func (i *permissionSetIdentity) Validate() error {
 // Environment returns environment variables for this identity.
 func (i *permissionSetIdentity) Environment() (map[string]string, error) {
 	env := make(map[string]string)
+
+	// Get provider name for AWS file paths.
+	providerName, err := i.GetProviderName()
+	if err != nil {
+		return nil, err
+	}
+
+	// Get AWS file environment variables.
+	awsFileManager, err := awsCloud.NewAWSFileManager()
+	if err != nil {
+		return nil, errors.Join(errUtils.ErrAuthAwsFileManagerFailed, err)
+	}
+	awsEnvVars := awsFileManager.GetEnvironmentVariables(providerName, i.name)
+
+	// Convert to map format.
+	for _, envVar := range awsEnvVars {
+		env[envVar.Key] = envVar.Value
+	}
 
 	// Add environment variables from identity config.
 	for _, envVar := range i.config.Env {

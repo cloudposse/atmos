@@ -69,10 +69,17 @@ func TestAssumeRoleIdentity_Environment(t *testing.T) {
 		Kind:      "aws/assume-role",
 		Principal: map[string]any{"assume_role": "arn:aws:iam::123:role/x"},
 		Env:       []schema.EnvironmentVariable{{Key: "FOO", Value: "BAR"}},
+		Via:       &schema.IdentityVia{Provider: "test-provider"},
 	}}
 	env, err := i.Environment()
 	assert.NoError(t, err)
+	// Should include custom env vars from config.
 	assert.Equal(t, "BAR", env["FOO"])
+	// Should include AWS file environment variables.
+	assert.NotEmpty(t, env["AWS_SHARED_CREDENTIALS_FILE"])
+	assert.NotEmpty(t, env["AWS_CONFIG_FILE"])
+	assert.NotEmpty(t, env["AWS_PROFILE"])
+	assert.Equal(t, "role", env["AWS_PROFILE"])
 }
 
 func TestAssumeRoleIdentity_BuildAssumeRoleInput(t *testing.T) {

@@ -12,6 +12,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -121,13 +122,21 @@ func outputEnvAsDotenv(envVars map[string]string) error {
 
 func init() {
 	authEnvCmd.Flags().StringP("format", "f", "bash", "Output format: bash, json, dotenv.")
-	_ = viper.BindEnv("auth_env_format", "ATMOS_AUTH_ENV_FORMAT")
-	_ = viper.BindPFlag("auth_env_format", authEnvCmd.Flags().Lookup("format"))
-	_ = authEnvCmd.RegisterFlagCompletionFunc("format", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+	if err := viper.BindEnv("auth_env_format", "ATMOS_AUTH_ENV_FORMAT"); err != nil {
+		log.Trace("Failed to bind auth_env_format environment variable", "error", err)
+	}
+	if err := viper.BindPFlag("auth_env_format", authEnvCmd.Flags().Lookup("format")); err != nil {
+		log.Trace("Failed to bind auth_env_format flag", "error", err)
+	}
+	if err := authEnvCmd.RegisterFlagCompletionFunc("format", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
 		return SupportedFormats, cobra.ShellCompDirectiveNoFileComp
-	})
+	}); err != nil {
+		log.Trace("Failed to register format flag completion", "error", err)
+	}
 
-	_ = viper.BindPFlag("identity", authCmd.PersistentFlags().Lookup("identity"))
+	if err := viper.BindPFlag("identity", authCmd.PersistentFlags().Lookup("identity")); err != nil {
+		log.Trace("Failed to bind identity flag", "error", err)
+	}
 	viper.MustBindEnv("identity", "ATMOS_IDENTITY")
 	authCmd.AddCommand(authEnvCmd)
 }

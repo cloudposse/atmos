@@ -148,7 +148,9 @@ func ReadTerraformBackendS3Internal(
 		}
 
 		content, err := io.ReadAll(output.Body)
-		_ = output.Body.Close()
+		if closeErr := output.Body.Close(); closeErr != nil {
+			log.Trace("Failed to close S3 object body", "error", closeErr, "file", tfStateFilePath, "s3_bucket", bucket)
+		}
 		if err != nil {
 			return nil, fmt.Errorf("%w: %v", errUtils.ErrReadS3ObjectBody, err)
 		}

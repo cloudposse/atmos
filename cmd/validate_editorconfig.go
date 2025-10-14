@@ -73,7 +73,9 @@ func initializeConfig(cmd *cobra.Command) {
 		}
 	}
 
-	_ = currentConfig.Parse()
+	if err := currentConfig.Parse(); err != nil {
+		log.Trace("Failed to parse EditorConfig configuration", "error", err, "paths", configPaths)
+	}
 
 	if tmpExclude != "" {
 		currentConfig.Exclude = append(currentConfig.Exclude, tmpExclude)
