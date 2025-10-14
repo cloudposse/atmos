@@ -21,11 +21,6 @@ func TestAuthCLIIntegrationWithCloudProvider(t *testing.T) {
 		t.Skipf("Skipping integration tests in CI environment.")
 	}
 
-	// Create a temporary directory for test files
-	tempDir, err := os.MkdirTemp("", "atmos-auth-test")
-	require.NoError(t, err)
-	defer os.RemoveAll(tempDir)
-
 	// Create test auth configuration
 	authConfig := &schema.AuthConfig{
 		Providers: map[string]schema.Provider{

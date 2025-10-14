@@ -13,26 +13,15 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-// Test helper to create a temporary directory.
-func createTempDir(t *testing.T) string {
-	dir, err := os.MkdirTemp("", "test")
-	if err != nil {
-		t.Fatalf("failed to create temp dir: %v", err)
-	}
-	return dir
-}
-
 func TestGoGetterClient_Get(t *testing.T) {
 	// Setup test file
-	srcDir := createTempDir(t)
-	defer os.RemoveAll(srcDir)
+	srcDir := t.TempDir()
 
 	testFile := filepath.Join(srcDir, "test.txt")
 	err := os.WriteFile(testFile, []byte("test content"), 0o644)
 	assert.NoError(t, err)
 
-	dstDir := createTempDir(t)
-	defer os.RemoveAll(dstDir)
+	dstDir := t.TempDir()
 
 	// Create real go-getter client
 	client := &getter.Client{
@@ -122,11 +111,7 @@ func TestRegisterCustomDetectors(t *testing.T) {
 }
 
 func TestDownloadDetectFormatAndParseFile(t *testing.T) {
-	tempDir, err := os.MkdirTemp("", "detectparse")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.RemoveAll(tempDir)
+	tempDir := t.TempDir()
 	testFile := filepath.Join(tempDir, "test.json")
 	jsonContent := []byte(`{"key": "value"}`)
 	if err := os.WriteFile(testFile, jsonContent, 0o600); err != nil {
@@ -149,25 +134,17 @@ func TestGoGetterGet_File(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skipf("Skipping file copying test on Windows: file system differences may cause issues")
 	}
-	srcDir, err := os.MkdirTemp("", "src")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.RemoveAll(srcDir)
+	srcDir := t.TempDir()
 	srcFile := filepath.Join(srcDir, "test.txt")
 	content := []byte("hello world")
 	if err := os.WriteFile(srcFile, content, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	destDir, err := os.MkdirTemp("", "dest")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.RemoveAll(destDir)
+	destDir := t.TempDir()
 	destFile := filepath.Join(destDir, "downloaded.txt")
 	srcURL := "file://" + srcFile
 	config := fakeAtmosConfig()
-	err = NewGoGetterDownloader(&config).Fetch(srcURL, destFile, ClientModeFile, 5*time.Second)
+	err := NewGoGetterDownloader(&config).Fetch(srcURL, destFile, ClientModeFile, 5*time.Second)
 	if err != nil {
 		t.Errorf("GoGetterGet failed: %v", err)
 	}

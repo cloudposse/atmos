@@ -145,11 +145,7 @@ func TestRemoveSymlinks(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skipf("Skipping symlink tests on Windows: symlinks require special privileges")
 	}
-	tempDir, err := os.MkdirTemp("", "symlinktest")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.RemoveAll(tempDir)
+	tempDir := t.TempDir()
 	filePath := filepath.Join(tempDir, "file.txt")
 	if err := os.WriteFile(filePath, []byte("data"), 0o600); err != nil {
 		t.Fatal(err)
