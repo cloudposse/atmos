@@ -891,8 +891,8 @@ func TestMultipleRecursiveFunctionsIndependent(t *testing.T) {
 	}
 
 	// Call each function with different parameters.
-	recursiveFunc1(50) // 50 levels of recursion.
-	recursiveFunc2(25) // 25 levels of recursion.
+	recursiveFunc1(100) // 100 levels of recursion.
+	recursiveFunc2(20)  // 20 levels of recursion.
 
 	reg.mu.Lock()
 	metric1 := reg.data[func1Name]
@@ -908,10 +908,13 @@ func TestMultipleRecursiveFunctionsIndependent(t *testing.T) {
 		t.Errorf("func2: expected count 1, got %d", metric2.Count)
 	}
 
-	// func1 should have taken more time (deeper recursion).
-	if metric1.Total <= metric2.Total {
-		t.Errorf("func1 total (%v) should be > func2 total (%v) due to deeper recursion",
-			metric1.Total, metric2.Total)
+	// func1 should have taken significantly more time (5x deeper recursion).
+	// We allow up to 20% variance due to scheduling and timing jitter.
+	// Expected: func1 ~= 5ms (100*50µs), func2 ~= 1ms (20*50µs), ratio ~= 5.0.
+	ratio := float64(metric1.Total) / float64(metric2.Total)
+	if ratio < 2.0 {
+		t.Errorf("func1 total (%v) should be significantly > func2 total (%v) due to 5x deeper recursion (ratio: %.2f, expected > 2.0)",
+			metric1.Total, metric2.Total, ratio)
 	}
 }
 
