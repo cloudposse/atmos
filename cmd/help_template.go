@@ -64,22 +64,50 @@ type helpStyles struct {
 	darkGray   lipgloss.Style
 }
 
+// parseBoolLikeForceColor parses a FORCE_COLOR-style environment variable value.
+// Returns (isTruthy, isFalsy) to distinguish between truthy and falsy values.
+// Truthy values: "1", "true", "2", "3", "yes", "on", "always".
+// Falsy values: "0", "false", "no", "off".
+func parseBoolLikeForceColor(val string) (isTruthy bool, isFalsy bool) {
+	if val == "" {
+		return false, false
+	}
+
+	v := strings.ToLower(strings.TrimSpace(val))
+	if v == "" {
+		return false, false
+	}
+
+	// Check truthy values
+	truthyValues := []string{"1", "true", "2", "3", "yes", "on", "always"}
+	for _, truthy := range truthyValues {
+		if v == truthy {
+			return true, false
+		}
+	}
+
+	// Check falsy values
+	falsyValues := []string{"0", "false", "no", "off"}
+	for _, falsy := range falsyValues {
+		if v == falsy {
+			return false, true
+		}
+	}
+
+	// Value is set but not recognized - treat as neither truthy nor falsy
+	return false, false
+}
+
 // isTruthy checks if a string represents a truthy value.
 func isTruthy(val string) bool {
-	if val == "" {
-		return false
-	}
-	v := strings.ToLower(strings.TrimSpace(val))
-	return v == valueOne || v == valueTrue
+	truthy, _ := parseBoolLikeForceColor(val)
+	return truthy
 }
 
 // isFalsy checks if a string represents a falsy value.
 func isFalsy(val string) bool {
-	if val == "" {
-		return false
-	}
-	v := strings.ToLower(strings.TrimSpace(val))
-	return v == valueZero || v == valueFalse
+	_, falsy := parseBoolLikeForceColor(val)
+	return falsy
 }
 
 // detectColorConfig detects and configures color settings based on environment variables.

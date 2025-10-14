@@ -9,7 +9,7 @@ import (
 //go:embed markdown/atmos_terraform_differences.md
 var terraformDifferencesMarkdown string
 
-// terraformCmd represents the base command for all terraform sub-commands
+// terraformCmd represents the base command for all terraform sub-commands.
 var terraformCmd = &cobra.Command{
 	Use:     "terraform",
 	Aliases: []string{"tf"},

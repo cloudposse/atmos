@@ -6,7 +6,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-//nolint:dupl // Test functions for truthy/falsy are intentionally similar with opposite logic.
 func TestIsTruthy(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -39,6 +38,36 @@ func TestIsTruthy(t *testing.T) {
 			expected: true,
 		},
 		{
+			name:     "String 2",
+			input:    "2",
+			expected: true,
+		},
+		{
+			name:     "String 3",
+			input:    "3",
+			expected: true,
+		},
+		{
+			name:     "Lowercase yes",
+			input:    "yes",
+			expected: true,
+		},
+		{
+			name:     "Uppercase YES",
+			input:    "YES",
+			expected: true,
+		},
+		{
+			name:     "Lowercase on",
+			input:    "on",
+			expected: true,
+		},
+		{
+			name:     "Lowercase always",
+			input:    "always",
+			expected: true,
+		},
+		{
 			name:     "String 0 is not truthy",
 			input:    "0",
 			expected: false,
@@ -50,7 +79,7 @@ func TestIsTruthy(t *testing.T) {
 		},
 		{
 			name:     "Random string is not truthy",
-			input:    "yes",
+			input:    "random",
 			expected: false,
 		},
 		{
@@ -80,7 +109,6 @@ func TestIsTruthy(t *testing.T) {
 	}
 }
 
-//nolint:dupl // Test functions for truthy/falsy are intentionally similar with opposite logic.
 func TestIsFalsy(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -113,6 +141,26 @@ func TestIsFalsy(t *testing.T) {
 			expected: true,
 		},
 		{
+			name:     "Lowercase no",
+			input:    "no",
+			expected: true,
+		},
+		{
+			name:     "Uppercase NO",
+			input:    "NO",
+			expected: true,
+		},
+		{
+			name:     "Lowercase off",
+			input:    "off",
+			expected: true,
+		},
+		{
+			name:     "Uppercase OFF",
+			input:    "OFF",
+			expected: true,
+		},
+		{
 			name:     "String 1 is not falsy",
 			input:    "1",
 			expected: false,
@@ -124,7 +172,7 @@ func TestIsFalsy(t *testing.T) {
 		},
 		{
 			name:     "Random string is not falsy",
-			input:    "no",
+			input:    "random",
 			expected: false,
 		},
 		{

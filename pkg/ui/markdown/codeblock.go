@@ -11,15 +11,15 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
-// Cloud Posse color constants for code blocks.
+// Default color constants for code blocks.
 const (
-	CPLightGray      = "#e7e5e4" // Light gray for primary text
-	CPMidGray        = "#57534e" // Mid gray for secondary text
-	CPDarkGray       = "#030014" // Very dark gray (not used for backgrounds)
-	CPCodeBackground = "#2F2E36" // Medium gray for code block backgrounds (from Fang) - RGB(47,46,54)
-	CPCodeBgANSI256  = "236"     // ANSI256 color 236 = RGB(48,48,48) - closest to #2F2E36
-	CPPurple         = "#9B51E0" // Purple accent (existing Atmos purple)
-	CPWhite          = "#FFFFFF" // White for emphasis
+	DefaultLightGray      = "#e7e5e4" // Light gray for primary text.
+	DefaultMidGray        = "#57534e" // Mid gray for secondary text.
+	DefaultDarkGray       = "#030014" // Very dark gray (not used for backgrounds).
+	DefaultCodeBackground = "#2F2E36" // Medium gray for code block backgrounds (from Fang) - RGB(47,46,54).
+	DefaultCodeBgANSI256  = "236"     // ANSI256 color 236 = RGB(48,48,48) - closest to #2F2E36.
+	DefaultPurple         = "#9B51E0" // Purple accent (existing Atmos purple).
+	DefaultWhite          = "#FFFFFF" // White for emphasis.
 )
 
 // CodeblockStyle defines the styling for code blocks in help text.
@@ -48,10 +48,10 @@ func NewCodeblockStyle(renderer *lipgloss.Renderer) CodeblockStyle {
 	}
 
 	// Use AdaptiveColor with hex values. Setting both Light and Dark to the same ensures consistency.
-	bgColor := lipgloss.AdaptiveColor{Light: CPCodeBackground, Dark: CPCodeBackground}
-	lightGray := lipgloss.AdaptiveColor{Light: CPLightGray, Dark: CPLightGray}
-	midGray := lipgloss.AdaptiveColor{Light: CPMidGray, Dark: CPMidGray}
-	purple := lipgloss.AdaptiveColor{Light: CPPurple, Dark: CPPurple}
+	bgColor := lipgloss.AdaptiveColor{Light: DefaultCodeBackground, Dark: DefaultCodeBackground}
+	lightGray := lipgloss.AdaptiveColor{Light: DefaultLightGray, Dark: DefaultLightGray}
+	midGray := lipgloss.AdaptiveColor{Light: DefaultMidGray, Dark: DefaultMidGray}
+	purple := lipgloss.AdaptiveColor{Light: DefaultPurple, Dark: DefaultPurple}
 
 	return CodeblockStyle{
 		Base: renderer.NewStyle().

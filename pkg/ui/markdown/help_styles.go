@@ -8,7 +8,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
-// Note: Cloud Posse color constants (CPLightGray, CPMidGray, CPDarkGray, CPPurple)
+// Note: Default color constants (DefaultLightGray, DefaultMidGray, DefaultDarkGray, DefaultPurple)
 // are defined in codeblock.go to avoid duplication.
 
 // GetHelpStyle returns a markdown style configuration optimized for command help text.
@@ -21,13 +21,13 @@ func GetHelpStyle() ([]byte, error) {
 			StylePrimitive: ansi.StylePrimitive{
 				BlockPrefix: "",
 				BlockSuffix: "\n",
-				Color:       stringPtr(CPLightGray),
+				Color:       stringPtr(DefaultLightGray),
 			},
 			Margin: uintPtr(0),
 		},
 		BlockQuote: ansi.StyleBlock{
 			StylePrimitive: ansi.StylePrimitive{
-				Color: stringPtr(CPMidGray),
+				Color: stringPtr(DefaultMidGray),
 			},
 			Indent:      uintPtr(1),
 			IndentToken: stringPtr("│ "),
@@ -36,7 +36,7 @@ func GetHelpStyle() ([]byte, error) {
 			StylePrimitive: ansi.StylePrimitive{
 				BlockPrefix: "",
 				BlockSuffix: "",
-				Color:       stringPtr(CPLightGray),
+				Color:       stringPtr(DefaultLightGray),
 			},
 		},
 		List: ansi.StyleList{
@@ -46,7 +46,7 @@ func GetHelpStyle() ([]byte, error) {
 			StylePrimitive: ansi.StylePrimitive{
 				BlockPrefix: "",
 				BlockSuffix: "\n",
-				Color:       stringPtr(CPPurple),
+				Color:       stringPtr(DefaultPurple),
 				Bold:        boolPtr(true),
 			},
 			Margin: uintPtr(0),
@@ -54,7 +54,7 @@ func GetHelpStyle() ([]byte, error) {
 		H1: ansi.StyleBlock{
 			StylePrimitive: ansi.StylePrimitive{
 				Prefix: "",
-				Color:  stringPtr(CPPurple),
+				Color:  stringPtr(DefaultPurple),
 				Bold:   boolPtr(true),
 			},
 			Margin: uintPtr(1),
@@ -62,7 +62,7 @@ func GetHelpStyle() ([]byte, error) {
 		H2: ansi.StyleBlock{
 			StylePrimitive: ansi.StylePrimitive{
 				Prefix: "## ",
-				Color:  stringPtr(CPPurple),
+				Color:  stringPtr(DefaultPurple),
 				Bold:   boolPtr(true),
 			},
 			Margin: uintPtr(1),
@@ -70,44 +70,44 @@ func GetHelpStyle() ([]byte, error) {
 		H3: ansi.StyleBlock{
 			StylePrimitive: ansi.StylePrimitive{
 				Prefix: "### ",
-				Color:  stringPtr(CPPurple),
+				Color:  stringPtr(DefaultPurple),
 				Bold:   boolPtr(false),
 			},
 		},
 		H4: ansi.StyleBlock{
 			StylePrimitive: ansi.StylePrimitive{
 				Prefix: "#### ",
-				Color:  stringPtr(CPMidGray),
+				Color:  stringPtr(DefaultMidGray),
 				Bold:   boolPtr(false),
 			},
 		},
 		H5: ansi.StyleBlock{
 			StylePrimitive: ansi.StylePrimitive{
 				Prefix: "##### ",
-				Color:  stringPtr(CPMidGray),
+				Color:  stringPtr(DefaultMidGray),
 				Bold:   boolPtr(false),
 			},
 		},
 		H6: ansi.StyleBlock{
 			StylePrimitive: ansi.StylePrimitive{
 				Prefix: "###### ",
-				Color:  stringPtr(CPMidGray),
+				Color:  stringPtr(DefaultMidGray),
 				Bold:   boolPtr(false),
 			},
 		},
 		Text: ansi.StylePrimitive{
-			Color: stringPtr(CPLightGray),
+			Color: stringPtr(DefaultLightGray),
 		},
 		Strong: ansi.StylePrimitive{
-			Color: stringPtr(CPWhite),
+			Color: stringPtr(DefaultWhite),
 			Bold:  boolPtr(true),
 		},
 		Emph: ansi.StylePrimitive{
-			Color:  stringPtr(CPPurple),
+			Color:  stringPtr(DefaultPurple),
 			Italic: boolPtr(true),
 		},
 		HorizontalRule: ansi.StylePrimitive{
-			Color:  stringPtr(CPMidGray),
+			Color:  stringPtr(DefaultMidGray),
 			Format: "\n--------\n",
 		},
 		Item: ansi.StylePrimitive{
@@ -119,7 +119,7 @@ func GetHelpStyle() ([]byte, error) {
 		// Inline code - no background, just purple
 		Code: ansi.StyleBlock{
 			StylePrimitive: ansi.StylePrimitive{
-				Color:  stringPtr(CPPurple),
+				Color:  stringPtr(DefaultPurple),
 				Prefix: "`",
 				Suffix: "`",
 			},
@@ -130,7 +130,7 @@ func GetHelpStyle() ([]byte, error) {
 		CodeBlock: ansi.StyleCodeBlock{
 			StyleBlock: ansi.StyleBlock{
 				StylePrimitive: ansi.StylePrimitive{
-					Color:           stringPtr(CPLightGray),
+					Color:           stringPtr(DefaultLightGray),
 					BackgroundColor: stringPtr(""), // Explicitly no background
 				},
 				Margin: uintPtr(0),
@@ -151,11 +151,11 @@ func GetHelpStyle() ([]byte, error) {
 		HTMLBlock: ansi.StyleBlock{},
 		HTMLSpan:  ansi.StyleBlock{},
 		Link: ansi.StylePrimitive{
-			Color:     stringPtr(CPPurple),
+			Color:     stringPtr(DefaultPurple),
 			Underline: boolPtr(true),
 		},
 		LinkText: ansi.StylePrimitive{
-			Color: stringPtr(CPPurple),
+			Color: stringPtr(DefaultPurple),
 			Bold:  boolPtr(true),
 		},
 	}
