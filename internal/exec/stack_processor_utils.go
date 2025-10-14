@@ -33,10 +33,6 @@ var (
 	// This is used to capture provenance data for the describe component command.
 	mergeContexts   = make(map[string]*m.MergeContext)
 	mergeContextsMu sync.RWMutex
-
-	// Deprecated: Use SetMergeContextForStack/GetMergeContextForStack instead.
-	lastMergeContext   *m.MergeContext
-	lastMergeContextMu sync.RWMutex
 )
 
 // SetMergeContextForStack stores the merge context for a specific stack file.
@@ -64,36 +60,6 @@ func ClearMergeContexts() {
 	mergeContextsMu.Lock()
 	defer mergeContextsMu.Unlock()
 	mergeContexts = make(map[string]*m.MergeContext)
-}
-
-// SetLastMergeContext stores the merge context for later retrieval.
-// Deprecated: Use SetMergeContextForStack instead.
-func SetLastMergeContext(ctx *m.MergeContext) {
-	defer perf.Track(nil, "exec.SetLastMergeContext")()
-
-	lastMergeContextMu.Lock()
-	defer lastMergeContextMu.Unlock()
-	lastMergeContext = ctx
-}
-
-// GetLastMergeContext retrieves the last stored merge context.
-// Deprecated: Use GetMergeContextForStack instead.
-func GetLastMergeContext() *m.MergeContext {
-	defer perf.Track(nil, "exec.GetLastMergeContext")()
-
-	lastMergeContextMu.RLock()
-	defer lastMergeContextMu.RUnlock()
-	return lastMergeContext
-}
-
-// ClearLastMergeContext clears the stored merge context.
-// Deprecated: Use ClearMergeContexts instead.
-func ClearLastMergeContext() {
-	defer perf.Track(nil, "exec.ClearLastMergeContext")()
-
-	lastMergeContextMu.Lock()
-	defer lastMergeContextMu.Unlock()
-	lastMergeContext = nil
 }
 
 // ProcessYAMLConfigFiles takes a list of paths to stack manifests, processes and deep-merges all imports, and returns a list of stack configs.
@@ -141,8 +107,7 @@ func ProcessYAMLConfigFiles(
 			)
 
 			// Each goroutine gets its own merge context to avoid data races.
-			// For single-file operations (like describe component), use the
-			// SetLastMergeContext/GetLastMergeContext mechanism instead.
+			// The merge context is stored per stack file using SetMergeContextForStack.
 			mergeContext := m.NewMergeContext()
 			if atmosConfig != nil && atmosConfig.TrackProvenance {
 				mergeContext.EnableProvenance()
@@ -208,8 +173,6 @@ func ProcessYAMLConfigFiles(
 			// Store merge context for this stack file if provenance tracking is enabled.
 			if atmosConfig != nil && atmosConfig.TrackProvenance && mergeContext != nil && mergeContext.IsProvenanceEnabled() {
 				SetMergeContextForStack(stackFileName, mergeContext)
-				// Also set as last merge context for backward compatibility (note: may be overwritten by other goroutines)
-				SetLastMergeContext(mergeContext)
 			}
 
 			yamlConfig, err := u.ConvertToYAML(finalConfig)
@@ -297,9 +260,16 @@ func ProcessYAMLConfigFile(
 		mergeContext,
 	)
 
-	// Store merge context if provenance tracking is enabled (for single-file operations like describe component)
+	// Store merge context if provenance tracking is enabled (for single-file operations)
+	// Use the filePath as the key since this is a single-file operation
 	if atmosConfig != nil && atmosConfig.TrackProvenance && mergeContext != nil && mergeContext.IsProvenanceEnabled() {
-		SetLastMergeContext(mergeContext)
+		stackFileName := strings.TrimSuffix(
+			strings.TrimSuffix(
+				u.TrimBasePathFromPath(basePath+"/", filePath),
+				u.DefaultStackConfigFileExtension),
+			".yml",
+		)
+		SetMergeContextForStack(stackFileName, mergeContext)
 	}
 
 	return deepMerged, imports, stackConfig, terraformInline, terraformImports, helmfileInline, helmfileImports, err
