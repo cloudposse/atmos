@@ -224,6 +224,8 @@ func setupLogger(atmosConfig *schema.AtmosConfiguration) {
 
 // setupColorProfile configures the global lipgloss color profile based on Atmos configuration.
 func setupColorProfile(atmosConfig *schema.AtmosConfiguration) {
+	defer perf.Track(atmosConfig, "root.setupColorProfile")()
+
 	// Force TrueColor profile when ATMOS_FORCE_COLOR is enabled.
 	// This bypasses terminal detection and always outputs ANSI color codes.
 	if atmosConfig.Settings.Terminal.ForceColor {

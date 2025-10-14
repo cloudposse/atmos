@@ -32,30 +32,30 @@
 
 - Git reference with which to compare the current branch
 
-```bash
- $ atmos atlantis generate repo-config --affected-only --ref refs/heads/main
 ```shell
+ $ atmos atlantis generate repo-config --affected-only --ref refs/heads/main
+```
 
 - Git commit SHA with which to compare the current branch
 
-```bash
+```shell
  $ atmos atlantis generate repo-config --affected-only --sha 3a5eafeab90426bd82bf5899896b28cc0bab3073
 ```
 
 - Print more detailed output when cloning and checking out the Git repository
 
-```bash
- $  atmos atlantis generate repo-config --affected-only --verbose
 ```shell
+ $  atmos atlantis generate repo-config --affected-only --verbose
+```
 
 - Path to PEM-encoded private key to clone private repos using SSH
 
-```bash
+```shell
  $ atmos atlantis generate repo-config --affected-only --ssh-key <path_to_ssh_key>
 ```
 
 - Encryption password for the PEM-encoded private key if the key contains a password-encrypted PEM block
 
-```bash
- $  atmos atlantis generate repo-config --affected-only --ssh-key <path_to_ssh_key> --ssh-key-password <password>
 ```shell
+ $  atmos atlantis generate repo-config --affected-only --ssh-key <path_to_ssh_key> --ssh-key-password <password>
+```
