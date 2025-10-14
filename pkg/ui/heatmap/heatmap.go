@@ -220,7 +220,7 @@ func newModel(heatModel *HeatModel, mode string, ctx context.Context) *model {
 	columns := []table.Column{
 		{Title: "Function", Width: tableFunctionWidth},
 		{Title: "Count", Width: tableCountWidth},
-		{Title: "Total", Width: tableDurationWidth},
+		{Title: "CPU Time", Width: tableDurationWidth},
 		{Title: "Avg", Width: tableDurationWidth},
 		{Title: "Max", Width: tableDurationWidth},
 		{Title: "P95", Width: tableDurationWidth},
@@ -263,9 +263,10 @@ func (m *model) getLimitedSnapshot() perf.Snapshot {
 }
 
 func (m *model) Init() tea.Cmd {
-	// Capture snapshot at TUI start to freeze elapsed time.
-	// Filter out functions with zero total time.
-	m.initialSnap = perf.SnapshotTopFiltered("total", topFunctionsLimit)
+	// Capture unbounded snapshot at TUI start to freeze elapsed time and include all functions.
+	// Filter out functions with zero total time for cleaner display.
+	// topN=0 means no limit, capturing all tracked functions for accurate CPU time calculation.
+	m.initialSnap = perf.SnapshotTopFiltered("total", 0)
 
 	// Load initial performance data.
 	m.updatePerformanceData()
@@ -387,9 +388,15 @@ func (m *model) handleTickMsg(msg tickMsg) tea.Cmd {
 func (m *model) updatePerformanceData() {
 	// Update table with frozen snapshot from TUI start.
 	// The snapshot is already filtered to exclude zero-time functions.
+	// Limit table display to top N functions for readability.
 	rows := []table.Row{}
 
-	for _, r := range m.initialSnap.Rows {
+	displayRows := m.initialSnap.Rows
+	if len(displayRows) > topFunctionsLimit {
+		displayRows = displayRows[:topFunctionsLimit]
+	}
+
+	for _, r := range displayRows {
 		p95 := "-"
 		if r.P95 > 0 {
 			p95 = FormatDuration(r.P95)
@@ -411,8 +418,27 @@ func (m *model) renderLegend() string {
 		Foreground(lipgloss.Color("243")).
 		Padding(0, 2)
 
+	// Calculate total CPU time and parallelism from frozen snapshot (all tracked functions).
+	// Using m.initialSnap ensures elapsed time doesn't keep increasing in the TUI.
+	var totalCPUTime time.Duration
+	for _, r := range m.initialSnap.Rows {
+		totalCPUTime += r.Total
+	}
+	elapsed := m.initialSnap.Elapsed
+	var parallelism float64
+	if elapsed > 0 {
+		parallelism = float64(totalCPUTime) / float64(elapsed)
+	} else {
+		parallelism = 0
+	}
+
 	legend := legendStyle.Render(
-		"Count: # calls (incl. recursion) | Total: wall-clock (incl. children & recursion) | Avg: avg self-time | Max: max self-time | P95: 95th percentile self-time")
+		fmt.Sprintf("Parallelism: ~%.1fx | Elapsed: %s | CPU Time: %s\n",
+			parallelism,
+			elapsed.Truncate(time.Microsecond),
+			totalCPUTime.Truncate(time.Microsecond)) +
+			"Count: # calls (incl. recursion) | CPU Time: sum of self-time (excludes children)\n" +
+			"Avg: avg self-time | Max: max self-time | P95: 95th percentile self-time")
 
 	return legend
 }
@@ -464,7 +490,10 @@ func FormatDuration(d time.Duration) string {
 // StartBubbleTeaUI starts the Bubble Tea interface.
 func StartBubbleTeaUI(ctx context.Context, heatModel *HeatModel, mode string) error {
 	m := newModel(heatModel, mode, ctx)
-	p := tea.NewProgram(m, tea.WithAltScreen(), tea.WithOutput(os.Stderr))
+	p := tea.NewProgram(m,
+		tea.WithAltScreen(),
+		tea.WithOutput(os.Stderr),
+		tea.WithContext(ctx)) // Pass context for proper cancellation
 
 	if _, err := p.Run(); err != nil {
 		return fmt.Errorf("%w: failed to run performance heatmap TUI: %v", errUtils.ErrTUIRun, err)

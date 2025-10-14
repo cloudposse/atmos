@@ -1,0 +1,14 @@
+components:
+  terraform:
+    # Abstract component that defines defaults
+    eks/service/defaults:
+      metadata:
+        type: abstract
+        component: eks-service
+      backend_type: s3
+      backend:
+        s3:
+          workspace_key_prefix: eks-service
+      vars:
+        namespace: acme
+        enabled: true
