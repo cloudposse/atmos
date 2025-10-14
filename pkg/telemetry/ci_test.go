@@ -1,7 +1,6 @@
 package telemetry
 
 import (
-	"os"
 	"sort"
 	"testing"
 
@@ -319,7 +318,6 @@ func TestHelperFunctions(t *testing.T) {
 	t.Run("isEquals", func(t *testing.T) {
 		// Test with matching value.
 		t.Setenv("MATCH_VAR", "expected")
-		defer os.Unsetenv("MATCH_VAR")
 
 		assert.True(t, isEnvVarEquals("MATCH_VAR", "expected"))
 		assert.False(t, isEnvVarEquals("MATCH_VAR", "unexpected"))
