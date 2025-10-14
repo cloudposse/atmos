@@ -245,8 +245,8 @@ func ExecuteDescribeWorkflows(
 	isDirectory, err := u.IsDirectory(workflowsDir)
 	if err != nil || !isDirectory {
 		err := fmt.Errorf("%w: the workflow directory '%s' does not exist", errUtils.ErrWorkflowDirectoryDoesNotExist, workflowsDir)
-		err = errors.WithHint(err, fmt.Sprintf("Create the directory: mkdir -p %s", workflowsDir))
-		err = errors.WithHint(err, fmt.Sprintf("Or update `workflows.base_path` in `atmos.yaml` (currently: %s)", atmosConfig.Workflows.BasePath))
+		err = errors.WithHintf(err, "Create the directory: mkdir -p %s", workflowsDir)
+		err = errors.WithHintf(err, "Or update `workflows.base_path` in `atmos.yaml` (currently: %s)", atmosConfig.Workflows.BasePath)
 		err = errors.WithHint(err, "See https://atmos.tools/core-concepts/workflows for workflow configuration")
 		return nil, nil, nil, err
 	}

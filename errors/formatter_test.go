@@ -612,3 +612,150 @@ func TestFormat_NonVerboseNoStackTrace(t *testing.T) {
 	// Should NOT contain Stack Trace section in non-verbose mode.
 	assert.NotContains(t, result, "## Stack Trace")
 }
+
+func TestFormat_CustomTitle_SingleH1(t *testing.T) {
+	err := Build(errors.New("test error")).
+		WithTitle("Configuration Error").
+		WithHint("Check your atmos.yaml").
+		Err()
+
+	config := DefaultFormatterConfig()
+	config.Color = "never"
+
+	result := Format(err, config)
+
+	// Should contain custom title.
+	assert.Contains(t, result, "# Configuration Error")
+
+	// Should have exactly one H1 header.
+	h1Count := strings.Count(result, "\n# ")
+	if strings.HasPrefix(result, "# ") {
+		h1Count++ // Count H1 at start of output.
+	}
+	assert.Equal(t, 1, h1Count, "Should have exactly one H1 header")
+
+	// Should NOT contain default "# Error" header.
+	assert.NotContains(t, result, "# Error\n")
+}
+
+func TestFormat_NoCustomTitle_DefaultH1(t *testing.T) {
+	err := Build(errors.New("test error")).
+		WithHint("A hint").
+		Err()
+
+	config := DefaultFormatterConfig()
+	config.Color = "never"
+
+	result := Format(err, config)
+
+	// Should contain default title.
+	assert.Contains(t, result, "# Error")
+
+	// Should have exactly one H1 header.
+	h1Count := strings.Count(result, "\n# ")
+	if strings.HasPrefix(result, "# ") {
+		h1Count++ // Count H1 at start of output.
+	}
+	assert.Equal(t, 1, h1Count, "Should have exactly one H1 header")
+}
+
+func TestFormat_HintsInSection_NotInErrorMessage(t *testing.T) {
+	err := Build(errors.New("component not found")).
+		WithTitle("Component Error").
+		WithHint("Check that all the context variables are correctly defined in the stack manifests").
+		WithHint("Are the component and stack names correct? Did you forget an import?").
+		WithContext("component", "vpc").
+		WithContext("stack", "prod").
+		Err()
+
+	config := DefaultFormatterConfig()
+	config.Color = "never"
+
+	result := Format(err, config)
+
+	// Should have single H1.
+	assert.Contains(t, result, "# Component Error")
+
+	// Should have Hints section.
+	assert.Contains(t, result, "## Hints")
+
+	// Hints should be in Hints section, not in error message.
+	errorHeaderIdx := strings.Index(result, "# Component Error")
+	hintsHeaderIdx := strings.Index(result, "## Hints")
+	assert.Greater(t, hintsHeaderIdx, errorHeaderIdx, "Hints section should come after error header")
+
+	// Extract the section between error header and hints header.
+	errorSection := result[errorHeaderIdx:hintsHeaderIdx]
+
+	// Error section should NOT contain hint text (hints should only be in Hints section).
+	assert.NotContains(t, errorSection, "Check that all the context variables")
+	assert.NotContains(t, errorSection, "Are the component and stack names correct")
+
+	// But hints section should contain them.
+	hintsSection := result[hintsHeaderIdx:]
+	assert.Contains(t, hintsSection, "💡")
+	assert.Contains(t, hintsSection, "Check that all the context variables")
+	assert.Contains(t, hintsSection, "Are the component and stack names correct")
+}
+
+func TestFormat_MultipleErrors_NoH1Duplication(t *testing.T) {
+	// Create two separate errors as they might appear in workflow output.
+	err1 := Build(errors.New("component not found")).
+		WithTitle("Component Error").
+		WithHint("Check component name").
+		Err()
+
+	err2 := Build(errors.New("workflow step failed")).
+		WithTitle("Workflow Error").
+		WithHint("Check workflow configuration").
+		Err()
+
+	config := DefaultFormatterConfig()
+	config.Color = "never"
+
+	result1 := Format(err1, config)
+	result2 := Format(err2, config)
+
+	// Each error should have exactly one H1.
+	h1Count1 := strings.Count(result1, "\n# ")
+	if strings.HasPrefix(result1, "# ") {
+		h1Count1++
+	}
+	assert.Equal(t, 1, h1Count1, "First error should have exactly one H1")
+
+	h1Count2 := strings.Count(result2, "\n# ")
+	if strings.HasPrefix(result2, "# ") {
+		h1Count2++
+	}
+	assert.Equal(t, 1, h1Count2, "Second error should have exactly one H1")
+
+	// Combined output should have two H1s (one per error).
+	combined := result1 + "\n" + result2
+	h1CountTotal := strings.Count(combined, "\n# ")
+	if strings.HasPrefix(combined, "# ") {
+		h1CountTotal++
+	}
+	assert.Equal(t, 2, h1CountTotal, "Combined errors should have exactly two H1s")
+}
+
+func TestFormat_WithTitle_OverridesDefault(t *testing.T) {
+	err := Build(errors.New("database connection failed")).
+		WithTitle("Database Error").
+		WithExplanation("The database server is unreachable").
+		Err()
+
+	config := DefaultFormatterConfig()
+	config.Color = "never"
+
+	result := Format(err, config)
+
+	// Should use custom title.
+	assert.Contains(t, result, "# Database Error")
+
+	// Should NOT use default title.
+	assert.NotContains(t, result, "# Error\n")
+
+	// Should still have explanation section.
+	assert.Contains(t, result, "## Explanation")
+	assert.Contains(t, result, "database server is unreachable")
+}

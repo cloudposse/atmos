@@ -633,7 +633,7 @@ func showUsageAndExit(cmd *cobra.Command, args []string) {
 func showFlagUsageAndExit(cmd *cobra.Command, err error) error {
 	// Build error message with hint using cockroachdb/errors.
 	flagErr := fmt.Errorf("%w: %s", errUtils.ErrInvalidFlag, err.Error())
-	flagErr = errors.WithHint(flagErr, fmt.Sprintf("Run `%s --help` for usage", cmd.CommandPath()))
+	flagErr = errors.WithHintf(flagErr, "Run `%s --help` for usage", cmd.CommandPath())
 
 	// Use error formatter with markdown support (works even if atmosConfig is nil).
 	// Verbose mode is controlled by --verbose flag, ATMOS_VERBOSE env var, or config file.
