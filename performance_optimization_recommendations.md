@@ -471,7 +471,7 @@ func hasCustomTags(node *yaml.Node) bool {
 - **Expected benefit**: 3-6 second improvement for non-TTY output scenarios; no change for interactive terminal use
 
 #### P8.1: Content-Aware YAML Cache Keys (Completed)
-- **Commit**: [pending]
+- **Commit**: ddaef3dd
 - **Impact**: Fix cache key bug where template-processed files with different contexts incorrectly shared cache entries
 - **Problem**: `parsedYAMLCache` was keyed only by file path, but when files are processed with Go templates and different contexts, the same cached node was incorrectly returned to all stacks
 - **Example**: `catalog/vpc.yaml` with `{{ .env }}` template imported with `context: {env: "dev"}` and `context: {env: "prod"}` would both get the first cached result
