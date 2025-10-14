@@ -909,19 +909,14 @@ func TestMultipleRecursiveFunctionsIndependent(t *testing.T) {
 		t.Errorf("func2: expected count 1, got %d", metric2.Count)
 	}
 
-	// Verify metrics exist and have some duration (non-zero).
-	if metric1.Total == 0 {
-		t.Errorf("func1: expected non-zero duration, got %v", metric1.Total)
-	}
-
-	if metric2.Total == 0 {
-		t.Errorf("func2: expected non-zero duration, got %v", metric2.Total)
-	}
-
 	// Verify both functions were tracked separately in the registry.
 	if len(reg.data) != 2 {
 		t.Errorf("expected 2 functions in registry, got %d", len(reg.data))
 	}
+
+	// Note: We don't verify duration because on some platforms (especially Windows)
+	// the recursion can be so fast that the measured duration is zero.
+	// The important behavior is that both functions are tracked independently.
 }
 
 //nolint:dupl // Similar to TestRecursiveFunctionTracking but tests YAML-specific scenario.
