@@ -565,8 +565,9 @@ func TestGetCustom_ErrorWhenGitMissing(t *testing.T) {
 	require.Contains(t, err.Error(), "git must be available")
 }
 
-func TestGetCustom_Succeeds_ClonePath_NoRefNoSSHKey(t *testing.T) {
-	// Provide a fake git that always succeeds; this lets clone/checkout/submodules pass.
+func TestGetCustom_ErrorClonePath_NoRefNoSSHKey(t *testing.T) {
+	// Provide a fake git that succeeds but doesn't create a real repository.
+	// This tests that GetCustom handles the clone path but fails when repository validation occurs.
 	writeFakeGit(t, "", 0)
 
 	g := newGetter()
