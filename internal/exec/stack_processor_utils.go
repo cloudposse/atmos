@@ -2,6 +2,7 @@ package exec
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -11,7 +12,6 @@ import (
 	"sync"
 
 	"github.com/mitchellh/mapstructure"
-	"github.com/pkg/errors"
 	"github.com/santhosh-tekuri/jsonschema/v5"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -418,9 +418,31 @@ func processYAMLConfigFileWithContextInternal(
 	if err != nil {
 		if ignoreMissingFiles || skipIfMissing {
 			return map[string]any{}, map[string]map[string]any{}, map[string]any{}, map[string]any{}, map[string]any{}, map[string]any{}, map[string]any{}, nil
-		} else {
-			return nil, nil, nil, nil, nil, nil, nil, err
 		}
+
+		// Check if this is a file not found error.
+		if os.IsNotExist(err) {
+			// Build a helpful error with context and hints.
+			wrappedErr := errUtils.Build(errUtils.ErrStackManifestFileNotFound).
+				WithTitle("Configuration Error").
+				WithHintf("Stack manifest file not found at path: %s", filePath).
+				WithHintf("This path is based on the 'stacks.base_path' setting in your 'atmos.yaml' configuration").
+				WithHintf("Verify the file exists or update 'stacks.base_path' in your 'atmos.yaml' to point to the correct directory").
+				WithContext("file", relativeFilePath).
+				WithContext("absolute_path", filePath).
+				Err()
+
+			if atmosConfig != nil && atmosConfig.Stacks.BasePath != "" {
+				wrappedErr = errUtils.Build(wrappedErr).
+					WithContext("stacks.base_path", atmosConfig.Stacks.BasePath).
+					Err()
+			}
+
+			return nil, nil, nil, nil, nil, nil, nil, wrappedErr
+		}
+
+		// For other errors (permissions, I/O errors, etc.), wrap with generic read error.
+		return nil, nil, nil, nil, nil, nil, nil, errors.Join(errUtils.ErrReadFile, err)
 	}
 	if stackYamlConfig == "" {
 		return map[string]any{}, map[string]map[string]any{}, map[string]any{}, map[string]any{}, map[string]any{}, map[string]any{}, map[string]any{}, nil
@@ -488,22 +510,20 @@ func processYAMLConfigFileWithContextInternal(
 
 		compiler := jsonschema.NewCompiler()
 
-		atmosManifestJsonSchemaValidationErrorFormat := "Atmos manifest JSON Schema validation error in the file '%s':\n%v"
-
 		atmosManifestJsonSchemaFileReader, err := os.Open(atmosManifestJsonSchemaFilePath)
 		if err != nil {
-			return nil, nil, nil, nil, nil, nil, nil, errors.Errorf(atmosManifestJsonSchemaValidationErrorFormat, relativeFilePath, err)
+			return nil, nil, nil, nil, nil, nil, nil, fmt.Errorf("%w: file '%s': %v", errUtils.ErrStackManifestSchemaValidation, relativeFilePath, err)
 		}
 
 		if err := compiler.AddResource(atmosManifestJsonSchemaFilePath, atmosManifestJsonSchemaFileReader); err != nil {
-			return nil, nil, nil, nil, nil, nil, nil, errors.Errorf(atmosManifestJsonSchemaValidationErrorFormat, relativeFilePath, err)
+			return nil, nil, nil, nil, nil, nil, nil, fmt.Errorf("%w: file '%s': %v", errUtils.ErrStackManifestSchemaValidation, relativeFilePath, err)
 		}
 
 		compiler.Draft = jsonschema.Draft2020
 
 		compiledSchema, err := compiler.Compile(atmosManifestJsonSchemaFilePath)
 		if err != nil {
-			return nil, nil, nil, nil, nil, nil, nil, errors.Errorf(atmosManifestJsonSchemaValidationErrorFormat, relativeFilePath, err)
+			return nil, nil, nil, nil, nil, nil, nil, fmt.Errorf("%w: file '%s': %v", errUtils.ErrStackManifestSchemaValidation, relativeFilePath, err)
 		}
 
 		if err = compiledSchema.Validate(dataFromJson); err != nil {
@@ -511,11 +531,11 @@ func processYAMLConfigFileWithContextInternal(
 			case *jsonschema.ValidationError:
 				b, err2 := json.MarshalIndent(e.BasicOutput(), "", "  ")
 				if err2 != nil {
-					return nil, nil, nil, nil, nil, nil, nil, errors.Errorf(atmosManifestJsonSchemaValidationErrorFormat, relativeFilePath, err2)
+					return nil, nil, nil, nil, nil, nil, nil, fmt.Errorf("%w: file '%s': %v", errUtils.ErrStackManifestSchemaValidation, relativeFilePath, err2)
 				}
-				return nil, nil, nil, nil, nil, nil, nil, errors.Errorf(atmosManifestJsonSchemaValidationErrorFormat, relativeFilePath, string(b))
+				return nil, nil, nil, nil, nil, nil, nil, fmt.Errorf("%w: file '%s':\n%s", errUtils.ErrStackManifestSchemaValidation, relativeFilePath, string(b))
 			default:
-				return nil, nil, nil, nil, nil, nil, nil, errors.Errorf(atmosManifestJsonSchemaValidationErrorFormat, relativeFilePath, err)
+				return nil, nil, nil, nil, nil, nil, nil, fmt.Errorf("%w: file '%s': %v", errUtils.ErrStackManifestSchemaValidation, relativeFilePath, err)
 			}
 		}
 	}

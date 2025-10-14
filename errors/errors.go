@@ -123,7 +123,9 @@ var (
 	ErrMerge                         = errors.New("merge error")
 
 	// Stack processing errors.
+	ErrStackManifestFileNotFound              = errors.New("stack manifest file not found")
 	ErrInvalidStackManifest                   = errors.New("invalid stack manifest")
+	ErrStackManifestSchemaValidation          = errors.New("stack manifest schema validation failed")
 	ErrInvalidHooksSection                    = errors.New("invalid 'hooks' section in the file")
 	ErrInvalidTerraformHooksSection           = errors.New("invalid 'terraform.hooks' section in the file")
 	ErrInvalidComponentVars                   = errors.New("invalid component vars section")
