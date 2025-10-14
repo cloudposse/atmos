@@ -42,10 +42,10 @@ tests:
     expect:
       diff: []
       stdout:
-        - "atmos.yaml CLI config file specifies the directory for Atmos stacks as stacks,"
-        - "but the directory does not exist."
+        - "^\\s*$"
       stderr:
-        - "^$"
+        - "atmos.yaml CLI config file specifies the directory for Atmos stacks as stacks, but the directory does not exist."
+        - "Telemetry Enabled"
       exit_code: 1
 
   - name: atmos docs

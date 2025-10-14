@@ -1,16 +1,20 @@
 package exec
 
 import (
-	"bytes"
 	"os"
-	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/tests"
 )
 
 func TestExecuteHelmfile_Version(t *testing.T) {
-	tests := []struct {
+	tests.RequireHelmfile(t)
+
+	testCases := []struct {
 		name           string
 		workDir        string
 		expectedOutput string
@@ -22,56 +26,73 @@ func TestExecuteHelmfile_Version(t *testing.T) {
 		},
 	}
 
-	for _, tt := range tests {
+	for _, tt := range testCases {
 		t.Run(tt.name, func(t *testing.T) {
-			// Capture the starting working directory
-			startingDir, err := os.Getwd()
-			if err != nil {
-				t.Fatalf("Failed to get the current working directory: %v", err)
-			}
-
-			defer func() {
-				// Change back to the original working directory after the test
-				if err := os.Chdir(startingDir); err != nil {
-					t.Fatalf("Failed to change back to the starting directory: %v", err)
-				}
-			}()
-
-			// Define the work directory and change to it
-			if err := os.Chdir(tt.workDir); err != nil {
-				t.Fatalf("Failed to change directory to %q: %v", tt.workDir, err)
-			}
-
-			// set info for ExecuteTerraform
+			// Set info for ExecuteHelmfile.
 			info := schema.ConfigAndStacksInfo{
 				SubCommand: "version",
 			}
 
-			// Create a pipe to capture stdout
-			oldStdout := os.Stdout
-			r, w, _ := os.Pipe()
-			os.Stdout = w
-
-			err = ExecuteHelmfile(info)
-			if err != nil {
-				t.Fatalf("Failed to execute 'ExecuteHelmfile': %v", err)
-			}
-
-			// Restore stdout
-			w.Close()
-			os.Stdout = oldStdout
-
-			// Read the captured output
-			var buf bytes.Buffer
-			_, err = buf.ReadFrom(r)
-			if err != nil {
-				t.Fatalf("Failed to read from pipe: %v", err)
-			}
-			output := buf.String()
-
-			if !strings.Contains(output, tt.expectedOutput) {
-				t.Errorf("%s not found in the output", tt.expectedOutput)
-			}
+			testCaptureCommandOutput(t, tt.workDir, func() error {
+				return ExecuteHelmfile(info)
+			}, tt.expectedOutput)
 		})
 	}
+}
+
+func TestExecuteHelmfile_MissingStack(t *testing.T) {
+	startingDir, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Failed to get current working directory: %v", err)
+	}
+
+	defer func() {
+		if err := os.Chdir(startingDir); err != nil {
+			t.Fatalf("Failed to change back to starting directory: %v", err)
+		}
+	}()
+
+	workDir := "../../tests/fixtures/scenarios/complete"
+	if err := os.Chdir(workDir); err != nil {
+		t.Fatalf("Failed to change directory to %q: %v", workDir, err)
+	}
+
+	info := schema.ConfigAndStacksInfo{
+		ComponentFromArg: "echo-server",
+		Stack:            "",
+		SubCommand:       "diff",
+	}
+
+	err = ExecuteHelmfile(info)
+	assert.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrMissingStack)
+}
+
+func TestExecuteHelmfile_ComponentNotFound(t *testing.T) {
+	startingDir, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Failed to get current working directory: %v", err)
+	}
+
+	defer func() {
+		if err := os.Chdir(startingDir); err != nil {
+			t.Fatalf("Failed to change back to starting directory: %v", err)
+		}
+	}()
+
+	workDir := "../../tests/fixtures/scenarios/complete"
+	if err := os.Chdir(workDir); err != nil {
+		t.Fatalf("Failed to change directory to %q: %v", workDir, err)
+	}
+
+	info := schema.ConfigAndStacksInfo{
+		ComponentFromArg: "non-existent-component",
+		Stack:            "tenant1-ue2-dev",
+		SubCommand:       "diff",
+	}
+
+	err = ExecuteHelmfile(info)
+	assert.Error(t, err)
+	// ExecuteHelmfile calls ProcessStacks which will fail to find the component.
+	assert.Contains(t, err.Error(), "Could not find the component")
 }

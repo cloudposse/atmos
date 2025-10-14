@@ -352,7 +352,7 @@ func TestGetCacheFilePathWithDirectoryCreationError(t *testing.T) {
 	_, err = GetCacheFilePath()
 	assert.Error(t, err)
 	if err != nil {
-		assert.ErrorIs(t, err, errUtils.ErrCacheWrite)
+		assert.ErrorIs(t, err, errUtils.ErrCacheDir)
 	}
 }
 

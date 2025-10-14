@@ -486,10 +486,17 @@ func applyColoredHelpTemplate(cmd *cobra.Command) {
 		return v == "0" || v == "false"
 	}
 
-	// Check ATMOS_FORCE_COLOR first, then fallback to standard env vars
-	atmosForceColor := os.Getenv("ATMOS_FORCE_COLOR")
-	cliColorForce := os.Getenv("CLICOLOR_FORCE")
-	forceColorEnv := os.Getenv("FORCE_COLOR")
+	// Bind environment variables for color control.
+	_ = viper.BindEnv("ATMOS_FORCE_COLOR")
+	_ = viper.BindEnv("CLICOLOR_FORCE")
+	_ = viper.BindEnv("FORCE_COLOR")
+	_ = viper.BindEnv("NO_COLOR")
+	_ = viper.BindEnv("ATMOS_DEBUG_COLORS")
+
+	// Check ATMOS_FORCE_COLOR first, then fallback to standard env vars.
+	atmosForceColor := viper.GetString("ATMOS_FORCE_COLOR")
+	cliColorForce := viper.GetString("CLICOLOR_FORCE")
+	forceColorEnv := viper.GetString("FORCE_COLOR")
 
 	// Determine final forceColor value:
 	// - If any variant is explicitly false, disable colors
@@ -512,12 +519,12 @@ func applyColoredHelpTemplate(cmd *cobra.Command) {
 		os.Setenv("FORCE_COLOR", "0")
 		os.Setenv("CLICOLOR_FORCE", "0")
 	} else if forceColor {
-		// Remove NO_COLOR if present, then set force color vars
+		// Remove NO_COLOR if present, then set force color vars.
 		os.Unsetenv("NO_COLOR")
-		if os.Getenv("FORCE_COLOR") == "" {
+		if viper.GetString("FORCE_COLOR") == "" {
 			os.Setenv("FORCE_COLOR", "1")
 		}
-		if os.Getenv("CLICOLOR_FORCE") == "" {
+		if viper.GetString("CLICOLOR_FORCE") == "" {
 			os.Setenv("CLICOLOR_FORCE", "1")
 		}
 	}
@@ -526,17 +533,17 @@ func applyColoredHelpTemplate(cmd *cobra.Command) {
 	// cmd.OutOrStdout() may be wrapped/buffered by Cobra, breaking TTY detection.
 	profileDetector := colorprofile.NewWriter(os.Stdout, os.Environ())
 
-	// Debug: Log detected profile information
-	debugColors := os.Getenv("ATMOS_DEBUG_COLORS") != ""
+	// Debug: Log detected profile information.
+	debugColors := viper.GetString("ATMOS_DEBUG_COLORS") != ""
 	if debugColors {
 		fmt.Fprintf(os.Stderr, "\n[DEBUG] Color Detection:\n")
 		fmt.Fprintf(os.Stderr, "  Detected Profile: %v\n", profileDetector.Profile)
-		fmt.Fprintf(os.Stderr, "  ATMOS_FORCE_COLOR: %s\n", os.Getenv("ATMOS_FORCE_COLOR"))
-		fmt.Fprintf(os.Stderr, "  FORCE_COLOR: %s\n", os.Getenv("FORCE_COLOR"))
-		fmt.Fprintf(os.Stderr, "  CLICOLOR_FORCE: %s\n", os.Getenv("CLICOLOR_FORCE"))
-		fmt.Fprintf(os.Stderr, "  NO_COLOR: %s\n", os.Getenv("NO_COLOR"))
-		fmt.Fprintf(os.Stderr, "  TERM: %s\n", os.Getenv("TERM"))
-		fmt.Fprintf(os.Stderr, "  COLORTERM: %s\n", os.Getenv("COLORTERM"))
+		fmt.Fprintf(os.Stderr, "  ATMOS_FORCE_COLOR: %s\n", viper.GetString("ATMOS_FORCE_COLOR"))
+		fmt.Fprintf(os.Stderr, "  FORCE_COLOR: %s\n", viper.GetString("FORCE_COLOR"))
+		fmt.Fprintf(os.Stderr, "  CLICOLOR_FORCE: %s\n", viper.GetString("CLICOLOR_FORCE"))
+		fmt.Fprintf(os.Stderr, "  NO_COLOR: %s\n", viper.GetString("NO_COLOR"))
+		fmt.Fprintf(os.Stderr, "  TERM: %s\n", viper.GetString("TERM"))
+		fmt.Fprintf(os.Stderr, "  COLORTERM: %s\n", viper.GetString("COLORTERM"))
 		fmt.Fprintf(os.Stderr, "  forceColor: %v\n", forceColor)
 		fmt.Fprintf(os.Stderr, "  explicitlyDisabled: %v\n", explicitlyDisabled)
 	}

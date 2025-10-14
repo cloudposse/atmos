@@ -13,6 +13,7 @@ import (
 	"github.com/charmbracelet/huh"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/jwalton/go-supportscolor"
+	"github.com/spf13/viper"
 	xterm "golang.org/x/term"
 
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -60,11 +61,17 @@ func PrintStyledTextToSpecifiedOutput(out io.Writer, text string) error {
 		return v == "0" || v == "false"
 	}
 
-	// Check if colors are explicitly disabled
-	atmosForceColor := os.Getenv("ATMOS_FORCE_COLOR")
-	cliColorForce := os.Getenv("CLICOLOR_FORCE")
-	forceColorEnv := os.Getenv("FORCE_COLOR")
-	noColor := os.Getenv("NO_COLOR")
+	// Bind environment variables for color control.
+	_ = viper.BindEnv("ATMOS_FORCE_COLOR")
+	_ = viper.BindEnv("CLICOLOR_FORCE")
+	_ = viper.BindEnv("FORCE_COLOR")
+	_ = viper.BindEnv("NO_COLOR")
+
+	// Check if colors are explicitly disabled.
+	atmosForceColor := viper.GetString("ATMOS_FORCE_COLOR")
+	cliColorForce := viper.GetString("CLICOLOR_FORCE")
+	forceColorEnv := viper.GetString("FORCE_COLOR")
+	noColor := viper.GetString("NO_COLOR")
 
 	// If explicitly disabled, return early without printing
 	if isFalsy(atmosForceColor) || isFalsy(cliColorForce) || isFalsy(forceColorEnv) || noColor != "" {

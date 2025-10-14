@@ -252,7 +252,6 @@ func ProcessTmplWithDatasources(
 // IsGolangTemplate checks if the provided string is a Go template.
 func IsGolangTemplate(atmosConfig *schema.AtmosConfiguration, str string) (bool, error) {
 	defer perf.Track(atmosConfig, "exec.IsGolangTemplate")()
-
 	t, err := template.New(str).Parse(str)
 	if err != nil {
 		return false, err

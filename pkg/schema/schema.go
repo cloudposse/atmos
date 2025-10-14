@@ -636,6 +636,7 @@ type BaseComponentConfig struct {
 	BaseComponentVars                      AtmosSectionMapType
 	BaseComponentSettings                  AtmosSectionMapType
 	BaseComponentEnv                       AtmosSectionMapType
+	BaseComponentAuth                      AtmosSectionMapType
 	BaseComponentProviders                 AtmosSectionMapType
 	BaseComponentHooks                     AtmosSectionMapType
 	FinalBaseComponentName                 string

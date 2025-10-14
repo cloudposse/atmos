@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/spf13/viper"
 )
 
 // Cloud Posse color constants for code blocks.
@@ -33,8 +34,11 @@ type CodeblockStyle struct {
 // Uses the provided renderer to ensure correct color profile.
 // Following Fang's approach: ALL styles have the SAME background to avoid nested backgrounds.
 func NewCodeblockStyle(renderer *lipgloss.Renderer) CodeblockStyle {
-	// Debug: Check renderer profile
-	debugColors := os.Getenv("ATMOS_DEBUG_COLORS") != ""
+	// Bind environment variable for debug logging.
+	_ = viper.BindEnv("ATMOS_DEBUG_COLORS")
+
+	// Debug: Check renderer profile.
+	debugColors := viper.GetString("ATMOS_DEBUG_COLORS") != ""
 	if debugColors {
 		fmt.Fprintf(os.Stderr, "[DEBUG] NewCodeblockStyle - Renderer Profile: %v\n", renderer.ColorProfile())
 	}

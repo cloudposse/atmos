@@ -18,8 +18,6 @@ import (
 )
 
 var (
-	ErrParseStacks               = errors.New("could not parse stacks")
-	ErrParseComponents           = errors.New("could not parse components")
 	ErrParseTerraformComponents  = errors.New("could not parse Terraform components")
 	ErrParseComponentsAttributes = errors.New("could not parse component attributes")
 	ErrDescribeStack             = errors.New("error describe stacks")

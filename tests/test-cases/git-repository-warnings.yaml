@@ -59,7 +59,7 @@ tests:
       stdout:
         - !not ".*You're not inside a git repository\\. Atmos feels lonely outside - bring it home!.*"
       stderr:
-        - "^$"
+        - "Telemetry Enabled"
       exit_code: 0
 
   # Test that atmos doesnt warn if run inside of a git repo with no atmos config

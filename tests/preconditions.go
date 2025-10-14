@@ -311,6 +311,27 @@ func LogPreconditionOverride(t *testing.T) {
 	}
 }
 
+// RequireTerraform checks if terraform is installed and available in PATH.
+// This is a convenience function that uses RequireExecutable specifically for terraform.
+func RequireTerraform(t *testing.T) {
+	t.Helper()
+	RequireExecutable(t, "terraform", "terraform operations")
+}
+
+// RequirePacker checks if packer is installed and available in PATH.
+// This is a convenience function that uses RequireExecutable specifically for packer.
+func RequirePacker(t *testing.T) {
+	t.Helper()
+	RequireExecutable(t, "packer", "packer operations")
+}
+
+// RequireHelmfile checks if helmfile is installed and available in PATH.
+// This is a convenience function that uses RequireExecutable specifically for helmfile.
+func RequireHelmfile(t *testing.T) {
+	t.Helper()
+	RequireExecutable(t, "helmfile", "helmfile operations")
+}
+
 // RequireOCIAuthentication checks if authentication is configured for GitHub API access.
 // This is required for pulling OCI images from ghcr.io, cloning from github.com, and avoiding GitHub API rate limits.
 // This is typically provided by GITHUB_TOKEN or ATMOS_GITHUB_TOKEN environment variables.
@@ -359,4 +380,14 @@ func RequireGitCommitConfig(t *testing.T) {
 	}
 
 	t.Logf("Git commit configuration available")
+}
+
+// SkipIfShort skips the test if running in short mode (go test -short).
+// Use this for tests that take more than 2 seconds (network I/O, heavy processing, Git operations, etc.).
+func SkipIfShort(t *testing.T) {
+	t.Helper()
+
+	if testing.Short() {
+		t.Skipf("Skipping long-running test in short mode (use 'go test' without -short to run)")
+	}
 }

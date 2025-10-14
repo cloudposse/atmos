@@ -8,6 +8,7 @@ import (
 )
 
 func TestHelmfileCommands_Error(t *testing.T) {
+	skipIfHelmfileNotInstalled(t)
 	stacksPath := "../tests/fixtures/scenarios/stack-templates"
 
 	err := os.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)

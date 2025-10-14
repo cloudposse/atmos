@@ -15,7 +15,7 @@ import (
 
 const defaultWidth = 80
 
-// Renderer is a markdown renderer using Glamour
+// Renderer is a markdown renderer using Glamour.
 type Renderer struct {
 	renderer              *glamour.TermRenderer
 	width                 uint
@@ -197,9 +197,15 @@ func (r *Renderer) Render(content string) (string, error) {
 			// Add custom styling for command examples
 			styled := purpleStyle.Styled(line)
 			result = append(result, " "+styled)
-		} else if trimmed != "" {
+		} else {
+			// Keep all lines including blank lines for proper markdown paragraph spacing.
 			result = append(result, line)
 		}
+	}
+
+	// Remove only trailing blank lines
+	for len(result) > 0 && strings.TrimSpace(result[len(result)-1]) == "" {
+		result = result[:len(result)-1]
 	}
 
 	// Add a single newline at the end plus extra spacing

@@ -4,7 +4,7 @@ import (
 	"strings"
 )
 
-// SplitMarkdownContent splits markdown content into details and suggestion parts
+// SplitMarkdownContent splits markdown content into details and suggestion parts.
 func SplitMarkdownContent(content string) []string {
 	parts := strings.Split(content, "\n\n")
 	var result []string

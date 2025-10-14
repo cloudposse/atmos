@@ -8,6 +8,11 @@ import (
 var (
 	ErrNoGitRepo                             = errors.New("not in a git repository")
 	ErrDownloadPackage                       = errors.New("failed to download package")
+	ErrDownloadFile                          = errors.New("failed to download file")
+	ErrParseFile                             = errors.New("failed to parse file")
+	ErrParseURL                              = errors.New("failed to parse URL")
+	ErrInvalidURL                            = errors.New("invalid URL")
+	ErrCreateDownloadClient                  = errors.New("failed to create download client")
 	ErrProcessOCIImage                       = errors.New("failed to process OCI image")
 	ErrCopyPackage                           = errors.New("failed to copy package")
 	ErrCreateTempDir                         = errors.New("failed to create temp directory")
@@ -81,13 +86,29 @@ var (
 	// File and URL handling errors.
 	ErrInvalidPagerCommand = errors.New("invalid pager command")
 	ErrEmptyURL            = errors.New("empty URL provided")
-	ErrInvalidURL          = errors.New("invalid URL")
 	ErrFailedToFindImport  = errors.New("failed to find import")
+
+	// Config loading errors.
+	ErrAtmosDirConfigNotFound      = errors.New("atmos config directory not found")
+	ErrReadConfig                  = errors.New("failed to read config")
+	ErrMergeTempConfig             = errors.New("failed to merge temp config")
+	ErrPreprocessYAMLFunctions     = errors.New("failed to preprocess YAML functions")
+	ErrMergeEmbeddedConfig         = errors.New("failed to merge embedded config")
+	ErrExpectedDirOrPattern        = errors.New("--config-path expected directory found file")
+	ErrFileNotFound                = errors.New("file not found")
+	ErrExpectedFile                = errors.New("--config expected file found directory")
+	ErrAtmosArgConfigNotFound      = errors.New("atmos configuration not found")
+	ErrAtmosFilesDirConfigNotFound = errors.New("`atmos.yaml` or `.atmos.yaml` configuration file not found in directory")
 
 	ErrMissingStack                       = errors.New("stack is required; specify it on the command line using the flag `--stack <stack>` (shorthand `-s`)")
 	ErrInvalidComponent                   = errors.New("invalid component")
 	ErrAbstractComponentCantBeProvisioned = errors.New("abstract component cannot be provisioned")
 	ErrLockedComponentCantBeProvisioned   = errors.New("locked component cannot be provisioned")
+
+	// Terraform-specific errors.
+	ErrHTTPBackendWorkspaces     = errors.New("workspaces are not supported for the HTTP backend")
+	ErrInvalidTerraformComponent = errors.New("invalid Terraform component")
+	ErrNoTty                     = errors.New("no TTY attached")
 
 	ErrMissingPackerTemplate = errors.New("packer template is required; it can be specified in the `settings.packer.template` section in the Atmos component manifest, or on the command line via the flag `--template <template>` (shorthand `-t`)")
 	ErrMissingPackerManifest = errors.New("packer manifest is missing")
@@ -96,8 +117,95 @@ var (
 	ErrFailedToInitializeAtmosConfig = errors.New("failed to initialize atmos config")
 	ErrInvalidListMergeStrategy      = errors.New("invalid list merge strategy")
 	ErrMerge                         = errors.New("merge error")
-	ErrInvalidStackManifest          = errors.New("invalid stack manifest")
-	ErrInvalidLogLevel               = errors.New("invalid log level")
+
+	// Stack processing errors.
+	ErrInvalidStackManifest                   = errors.New("invalid stack manifest")
+	ErrInvalidHooksSection                    = errors.New("invalid 'hooks' section in the file")
+	ErrInvalidTerraformHooksSection           = errors.New("invalid 'terraform.hooks' section in the file")
+	ErrInvalidComponentVars                   = errors.New("invalid component vars section")
+	ErrInvalidComponentSettings               = errors.New("invalid component settings section")
+	ErrInvalidComponentEnv                    = errors.New("invalid component env section")
+	ErrInvalidComponentProviders              = errors.New("invalid component providers section")
+	ErrInvalidComponentHooks                  = errors.New("invalid component hooks section")
+	ErrInvalidComponentAuth                   = errors.New("invalid component auth section")
+	ErrInvalidComponentMetadata               = errors.New("invalid component metadata section")
+	ErrInvalidComponentBackendType            = errors.New("invalid component backend_type attribute")
+	ErrInvalidComponentBackend                = errors.New("invalid component backend section")
+	ErrInvalidComponentRemoteStateBackendType = errors.New("invalid component remote_state_backend_type attribute")
+	ErrInvalidComponentRemoteStateBackend     = errors.New("invalid component remote_state_backend section")
+	ErrInvalidComponentCommand                = errors.New("invalid component command attribute")
+	ErrInvalidComponentOverrides              = errors.New("invalid component overrides section")
+	ErrInvalidComponentOverridesVars          = errors.New("invalid component overrides vars section")
+	ErrInvalidComponentOverridesSettings      = errors.New("invalid component overrides settings section")
+	ErrInvalidComponentOverridesEnv           = errors.New("invalid component overrides env section")
+	ErrInvalidComponentOverridesAuth          = errors.New("invalid component overrides auth section")
+	ErrInvalidComponentOverridesCommand       = errors.New("invalid component overrides command attribute")
+	ErrInvalidComponentOverridesProviders     = errors.New("invalid component overrides providers section")
+	ErrInvalidComponentOverridesHooks         = errors.New("invalid component overrides hooks section")
+	ErrInvalidComponentAttribute              = errors.New("invalid component attribute")
+	ErrInvalidComponentMetadataComponent      = errors.New("invalid component metadata.component attribute")
+	ErrInvalidSpaceLiftSettings               = errors.New("invalid spacelift settings section")
+	ErrInvalidComponentMetadataInherits       = errors.New("invalid component metadata.inherits section")
+	ErrComponentNotDefined                    = errors.New("component not defined in any config files")
+	ErrInvalidTerraformBackend                = errors.New("invalid terraform.backend section")
+	ErrInvalidTerraformRemoteStateBackend     = errors.New("invalid terraform.remote_state_backend section")
+
+	// Global/Stack-level section errors.
+	ErrInvalidVarsSection               = errors.New("invalid vars section")
+	ErrInvalidSettingsSection           = errors.New("invalid settings section")
+	ErrInvalidEnvSection                = errors.New("invalid env section")
+	ErrInvalidTerraformSection          = errors.New("invalid terraform section")
+	ErrInvalidHelmfileSection           = errors.New("invalid helmfile section")
+	ErrInvalidPackerSection             = errors.New("invalid packer section")
+	ErrInvalidComponentsSection         = errors.New("invalid components section")
+	ErrInvalidAuthSection               = errors.New("invalid auth section")
+	ErrInvalidImportSection             = errors.New("invalid import section")
+	ErrInvalidImport                    = errors.New("invalid import")
+	ErrInvalidOverridesSection          = errors.New("invalid overrides section")
+	ErrInvalidTerraformOverridesSection = errors.New("invalid terraform overrides section")
+	ErrInvalidHelmfileOverridesSection  = errors.New("invalid helmfile overrides section")
+	ErrInvalidBaseComponentConfig       = errors.New("invalid base component config")
+
+	// Terraform-specific subsection errors.
+	ErrInvalidTerraformCommand            = errors.New("invalid terraform command")
+	ErrInvalidTerraformVars               = errors.New("invalid terraform vars section")
+	ErrInvalidTerraformSettings           = errors.New("invalid terraform settings section")
+	ErrInvalidTerraformEnv                = errors.New("invalid terraform env section")
+	ErrInvalidTerraformProviders          = errors.New("invalid terraform providers section")
+	ErrInvalidTerraformBackendType        = errors.New("invalid terraform backend_type")
+	ErrInvalidTerraformRemoteStateType    = errors.New("invalid terraform remote_state_backend_type")
+	ErrInvalidTerraformRemoteStateSection = errors.New("invalid terraform remote_state_backend section")
+	ErrInvalidTerraformAuth               = errors.New("invalid terraform auth section")
+
+	// Helmfile-specific subsection errors.
+	ErrInvalidHelmfileCommand  = errors.New("invalid helmfile command")
+	ErrInvalidHelmfileVars     = errors.New("invalid helmfile vars section")
+	ErrInvalidHelmfileSettings = errors.New("invalid helmfile settings section")
+	ErrInvalidHelmfileEnv      = errors.New("invalid helmfile env section")
+	ErrInvalidHelmfileAuth     = errors.New("invalid helmfile auth section")
+
+	// Helmfile configuration errors.
+	ErrMissingHelmfileBasePath           = errors.New("helmfile base path is required")
+	ErrMissingHelmfileKubeconfigPath     = errors.New("helmfile kubeconfig path is required")
+	ErrMissingHelmfileAwsProfilePattern  = errors.New("helmfile AWS profile pattern is required")
+	ErrMissingHelmfileClusterNamePattern = errors.New("helmfile cluster name pattern is required")
+
+	// Packer-specific subsection errors.
+	ErrInvalidPackerCommand  = errors.New("invalid packer command")
+	ErrInvalidPackerVars     = errors.New("invalid packer vars section")
+	ErrInvalidPackerSettings = errors.New("invalid packer settings section")
+	ErrInvalidPackerEnv      = errors.New("invalid packer env section")
+	ErrInvalidPackerAuth     = errors.New("invalid packer auth section")
+
+	// Component type-specific section errors.
+	ErrInvalidComponentsTerraform = errors.New("invalid components.terraform section")
+	ErrInvalidComponentsHelmfile  = errors.New("invalid components.helmfile section")
+	ErrInvalidComponentsPacker    = errors.New("invalid components.packer section")
+
+	// Specific component configuration errors.
+	ErrInvalidSpecificTerraformComponent = errors.New("invalid terraform component configuration")
+	ErrInvalidSpecificHelmfileComponent  = errors.New("invalid helmfile component configuration")
+	ErrInvalidSpecificPackerComponent    = errors.New("invalid packer component configuration")
 
 	// Pro API client errors.
 	ErrFailedToCreateRequest        = errors.New("failed to create request")
@@ -145,6 +253,11 @@ var (
 	ErrProcessInstances          = errors.New("failed to process instances")
 	ErrParseFlag                 = errors.New("failed to parse flag value")
 	ErrFailedToFinalizeCSVOutput = errors.New("failed to finalize CSV output")
+	ErrParseStacks               = errors.New("could not parse stacks")
+	ErrParseComponents           = errors.New("could not parse components")
+	ErrNoComponentsFound         = errors.New("no components found")
+	ErrStackNotFound             = errors.New("stack not found")
+	ErrProcessStack              = errors.New("error processing stack")
 
 	// Cache-related errors.
 	ErrCacheLocked    = errors.New("cache file is locked")
@@ -152,6 +265,10 @@ var (
 	ErrCacheWrite     = errors.New("cache write failed")
 	ErrCacheUnmarshal = errors.New("cache unmarshal failed")
 	ErrCacheMarshal   = errors.New("cache marshal failed")
+	ErrCacheDir       = errors.New("cache directory creation failed")
+
+	// Logger errors.
+	ErrInvalidLogLevel = errors.New("invalid log level")
 
 	// File operation errors.
 	ErrCopyFile            = errors.New("failed to copy file")
@@ -180,10 +297,7 @@ var (
 	ErrVersionMismatch     = errors.New("version mismatch")
 
 	// Download and client errors.
-	ErrCreateDownloadClient    = errors.New("failed to create download client")
-	ErrMergeConfiguration      = errors.New("failed to merge configuration")
-	ErrPreprocessYAMLFunctions = errors.New("failed to preprocess YAML functions")
-	ErrMergeEmbeddedConfig     = errors.New("failed to merge embedded config")
+	ErrMergeConfiguration = errors.New("failed to merge configuration")
 
 	// Template and documentation errors.
 	ErrGenerateTerraformDocs = errors.New("failed to generate terraform docs")
