@@ -36,14 +36,15 @@ repos:
         require_serial: true
         exclude: ^(vendor/|tests/test-cases/|tests/testdata/|tests/snapshots/)
 
-      - id: tsetenvcheck
-        name: tsetenvcheck
-        description: Check for t.Setenv misuse in defer/cleanup blocks
-        entry: bash -c 'cd tools/tsetenvcheck && go build -o ../../.tsetenvcheck . && cd ../.. && ./.tsetenvcheck ./...'
+      - id: lintroller
+        name: lintroller
+        description: Run Atmos custom linter (t.Setenv/os.Setenv rules)
+        entry: bash -c 'cd tools/lintroller && go build -o ../../.lintroller . && cd ../.. && ./.lintroller ./...'
         language: system
         types: [go]
         pass_filenames: false
-        exclude: ^(vendor/|tests/test-cases/|tests/testdata/|tests/snapshots/|tools/tsetenvcheck/testdata/)
+        exclude: ^(vendor/|tests/test-cases/|tests/testdata/|tests/snapshots/|tools/lintroller/testdata/)
+
 
   # General file hygiene
   - repo: https://github.com/pre-commit/pre-commit-hooks

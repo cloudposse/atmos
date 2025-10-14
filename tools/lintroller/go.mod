@@ -1,4 +1,4 @@
-module github.com/cloudposse/atmos/tools/tsetenvcheck
+module github.com/cloudposse/atmos/tools/lintroller
 
 go 1.24
 
