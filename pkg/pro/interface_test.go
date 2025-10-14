@@ -1,7 +1,6 @@
 package pro
 
 import (
-	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -50,18 +49,8 @@ func TestDefaultClientFactory_NewClient_MissingToken(t *testing.T) {
 	}
 
 	// Clear GitHub OIDC env vars to ensure we don't use OIDC flow.
-	originalToken := os.Getenv("ACTIONS_ID_TOKEN_REQUEST_TOKEN")
-	originalURL := os.Getenv("ACTIONS_ID_TOKEN_REQUEST_URL")
-	defer func() {
-		if originalToken != "" {
-			os.Setenv("ACTIONS_ID_TOKEN_REQUEST_TOKEN", originalToken)
-		}
-		if originalURL != "" {
-			os.Setenv("ACTIONS_ID_TOKEN_REQUEST_URL", originalURL)
-		}
-	}()
-	os.Unsetenv("ACTIONS_ID_TOKEN_REQUEST_TOKEN")
-	os.Unsetenv("ACTIONS_ID_TOKEN_REQUEST_URL")
+	t.Setenv("ACTIONS_ID_TOKEN_REQUEST_TOKEN", "")
+	t.Setenv("ACTIONS_ID_TOKEN_REQUEST_URL", "")
 
 	// Call NewClient without token.
 	client, err := factory.NewClient(atmosConfig)

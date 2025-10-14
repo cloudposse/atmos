@@ -4,7 +4,6 @@
 package config
 
 import (
-	"os"
 	"strings"
 	"testing"
 
@@ -44,8 +43,7 @@ func TestShouldExcludePathForTesting_WindowsCaseInsensitive(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			os.Setenv("TEST_EXCLUDE_ATMOS_D", tt.envValue)
-			defer os.Unsetenv("TEST_EXCLUDE_ATMOS_D")
+			t.Setenv("TEST_EXCLUDE_ATMOS_D", tt.envValue)
 
 			result := shouldExcludePathForTesting(tt.dirPath)
 			assert.Equal(t, tt.expected, result, "Windows should match paths case-insensitively")
@@ -63,8 +61,7 @@ func TestMergeDefaultImports_WindowsCaseInsensitive(t *testing.T) {
 	lowerCasePath := strings.ToLower(tempDir)
 
 	// Set the environment variable with lowercase path.
-	os.Setenv("TEST_EXCLUDE_ATMOS_D", lowerCasePath)
-	defer os.Unsetenv("TEST_EXCLUDE_ATMOS_D")
+	t.Setenv("TEST_EXCLUDE_ATMOS_D", lowerCasePath)
 
 	// Call the function with the path in uppercase.
 	v := viper.New()
