@@ -8,15 +8,15 @@ import (
 	"sort"
 	"strings"
 
-	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/spf13/cobra"
-	"golang.org/x/term"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
+	term "github.com/cloudposse/atmos/internal/tui/templates/term"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/git"
 	"github.com/cloudposse/atmos/pkg/list/format"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/pro"
 	"github.com/cloudposse/atmos/pkg/pro/dtos"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -170,7 +170,7 @@ func sortInstances(instances []schema.Instance) []schema.Instance {
 // formatInstances formats the instances for output.
 func formatInstances(instances []schema.Instance) string {
 	formatOpts := format.FormatOptions{
-		TTY:           term.IsTerminal(int(os.Stdout.Fd())),
+		TTY:           term.IsTTYSupportForStdout(),
 		CustomHeaders: []string{componentHeader, stackHeader},
 	}
 
