@@ -849,7 +849,7 @@ func TestRecursiveFunctionWrongPattern(t *testing.T) {
 	// - With correct pattern, they would see count=1 instead of count=1,890.
 }
 
-func TestMultipleRecursiveFunctionsIndependent(t *testing.T) {
+func TestMultipleFunctionsTrackIndependently(t *testing.T) {
 	// Reset registry for clean test.
 	reg = &registry{
 		data:  make(map[string]*Metric),
@@ -858,47 +858,31 @@ func TestMultipleRecursiveFunctionsIndependent(t *testing.T) {
 	// Enable tracking for tests.
 	EnableTracking(true)
 
-	// Test that multiple recursive functions track independently.
+	// Test that multiple functions track independently.
 	// This verifies that calling different functions with Track() doesn't
 	// interfere with each other's metrics.
-	func1Name := "recursiveFunc1"
-	func2Name := "recursiveFunc2"
+	func1Name := "func1"
+	func2Name := "func2"
 
-	recursiveFunc1 := func(depth int) {
+	func1 := func() {
 		done := Track(nil, func1Name)
 		defer done()
 
-		// Add minimal sleep to ensure measurable duration on all platforms.
+		// Simple work to ensure some measurable time.
 		time.Sleep(1 * time.Millisecond)
-
-		var internal func(int)
-		internal = func(d int) {
-			if d > 0 {
-				internal(d - 1)
-			}
-		}
-		internal(depth)
 	}
 
-	recursiveFunc2 := func(depth int) {
+	func2 := func() {
 		done := Track(nil, func2Name)
 		defer done()
 
-		// Add minimal sleep to ensure measurable duration on all platforms.
+		// Simple work to ensure some measurable time.
 		time.Sleep(1 * time.Millisecond)
-
-		var internal func(int)
-		internal = func(d int) {
-			if d > 0 {
-				internal(d - 1)
-			}
-		}
-		internal(depth)
 	}
 
-	// Call each function with different parameters.
-	recursiveFunc1(50)
-	recursiveFunc2(10)
+	// Call each function.
+	func1()
+	func2()
 
 	reg.mu.Lock()
 	metric1 := reg.data[func1Name]
