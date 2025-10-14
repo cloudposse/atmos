@@ -405,9 +405,14 @@ func TestCleanTerraformWorkspace(t *testing.T) {
 			if tt.setupTfDataDir != "" {
 				t.Setenv("TF_DATA_DIR", tt.setupTfDataDir)
 			} else {
+				orig := os.Getenv("TF_DATA_DIR")
 				os.Unsetenv("TF_DATA_DIR")
+				t.Cleanup(func() {
+					if orig != "" {
+						os.Setenv("TF_DATA_DIR", orig)
+					}
+				})
 			}
-
 			// Determine the terraform data directory.
 			tfDataDir := tt.setupTfDataDir
 			if tfDataDir == "" {
@@ -1426,7 +1431,13 @@ func TestTFCliArgsAndVarsComponentSections(t *testing.T) {
 			if tt.tfCliArgsEnv != "" {
 				t.Setenv("TF_CLI_ARGS", tt.tfCliArgsEnv)
 			} else {
+				orig := os.Getenv("TF_CLI_ARGS")
 				os.Unsetenv("TF_CLI_ARGS")
+				t.Cleanup(func() {
+					if orig != "" {
+						os.Setenv("TF_CLI_ARGS", orig)
+					}
+				})
 			}
 
 			// Create a component section to simulate what ProcessStacks does
