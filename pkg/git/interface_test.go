@@ -58,8 +58,16 @@ func TestDefaultRepositoryOperations_GetRepoInfo(t *testing.T) {
 	// GetRepoInfo should handle a repo without remotes gracefully.
 	info, err := ops.GetRepoInfo(repo)
 
-	// Without remotes, we expect either an error or empty info.
-	// The important thing is that the delegation works.
-	_ = info
-	_ = err
+	// Should succeed even without remotes.
+	assert.NoError(t, err)
+
+	// Without remotes, GetRepoInfo returns an empty RepoInfo struct.
+	// This verifies the function handles the edge case without panicking.
+	assert.Empty(t, info.RepoUrl)
+	assert.Empty(t, info.RepoOwner)
+	assert.Empty(t, info.RepoName)
+	assert.Empty(t, info.RepoHost)
+	assert.Empty(t, info.LocalRepoPath)
+	assert.Empty(t, info.LocalWorktreePath)
+	assert.Nil(t, info.LocalWorktree)
 }
