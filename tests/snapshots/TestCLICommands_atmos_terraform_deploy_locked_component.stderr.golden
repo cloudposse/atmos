@@ -1,7 +1,7 @@
 
 # Error
 
-component is locked: component 'mock' cannot be modified (metadata.locked: true)
+**Error:** component is locked: component 'mock' cannot be modified (metadata.locked: true)
 
 ## Hints
 

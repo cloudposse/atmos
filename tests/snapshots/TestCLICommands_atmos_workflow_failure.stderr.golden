@@ -4,7 +4,7 @@ Executing command: `atmos terraform plan mock -s idontexist`
 
 # Component Error
 
-invalid component: Could not find the component mock in the stack idontexist
+**Error:** invalid component: Could not find the component mock in the stack idontexist
 
 ## Hints
 
@@ -23,7 +23,7 @@ invalid component: Could not find the component mock in the stack idontexist
 
 # Workflow Error
 
-workflow step execution failed
+**Error:** workflow step execution failed
 
 ## Explanation
 

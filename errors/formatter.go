@@ -131,7 +131,7 @@ func buildMarkdownSections(err error, config FormatterConfig) string {
 		title = "Error"
 	}
 	md.WriteString("# " + title + newline + newline)
-	md.WriteString(err.Error() + newline + newline)
+	md.WriteString("**Error:** " + err.Error() + newline + newline)
 
 	// Section 2: Explanation.
 	addExplanationSection(&md, err)

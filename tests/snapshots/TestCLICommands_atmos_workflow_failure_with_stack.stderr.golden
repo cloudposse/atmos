@@ -4,7 +4,7 @@ Executing command: `atmos terraform plan idontexist`
 
 # Component Error
 
-invalid component: Could not find the component idontexist in the stack prod
+**Error:** invalid component: Could not find the component idontexist in the stack prod
 
 ## Hints
 
@@ -23,7 +23,7 @@ invalid component: Could not find the component idontexist in the stack prod
 
 # Workflow Error
 
-workflow step execution failed
+**Error:** workflow step execution failed
 
 ## Explanation
 

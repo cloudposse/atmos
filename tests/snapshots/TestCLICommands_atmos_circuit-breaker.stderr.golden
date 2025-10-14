@@ -3,66 +3,66 @@
 
 # Error
 
-ATMOS_SHLVL exceeds maximum allowed depth. Infinite recursion? current=11, max=10
+**Error:** ATMOS_SHLVL exceeds maximum allowed depth. Infinite recursion? current=11, max=10
 
 
 
 # Error
 
-exit status 1
+**Error:** exit status 1
 
 
 
 # Error
 
-exit status 1
+**Error:** exit status 1
 
 
 
 # Error
 
-exit status 1
+**Error:** exit status 1
 
 
 
 # Error
 
-exit status 1
+**Error:** exit status 1
 
 
 
 # Error
 
-exit status 1
+**Error:** exit status 1
 
 
 
 # Error
 
-exit status 1
+**Error:** exit status 1
 
 
 
 # Error
 
-exit status 1
+**Error:** exit status 1
 
 
 
 # Error
 
-exit status 1
+**Error:** exit status 1
 
 
 
 # Error
 
-exit status 1
+**Error:** exit status 1
 
 
 
 # Error
 
-exit status 1
+**Error:** exit status 1
 
 

@@ -1,7 +1,7 @@
 
 # Incorrect Usage
 
-invalid arguments
+**Error:** invalid arguments
 
 The command atmos terraform requires a subcommand
 

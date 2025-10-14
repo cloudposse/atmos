@@ -3,6 +3,6 @@
 
 # Error
 
-invalid auth config: provider "invalid-provider" validation failed: invalid provider kind: unsupported provider kind: invalid/provider
+**Error:** invalid auth config: provider "invalid-provider" validation failed: invalid provider kind: unsupported provider kind: invalid/provider
 
 

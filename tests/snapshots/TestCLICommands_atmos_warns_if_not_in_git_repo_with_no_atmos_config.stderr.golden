@@ -4,7 +4,7 @@ WARN You're not inside a git repository. Atmos feels lonely outside - bring it h
 
 # Missing Configuration
 
-directory for Atmos stacks does not exist
+**Error:** directory for Atmos stacks does not exist
 
 ## Explanation
 
