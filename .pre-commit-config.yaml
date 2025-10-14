@@ -39,7 +39,7 @@ repos:
       - id: lintroller
         name: lintroller
         description: Run Atmos custom linter (t.Setenv/os.Setenv rules)
-        entry: make lint-lintroller
+        entry: make lintroller
         language: system
         types: [go]
         pass_filenames: false
