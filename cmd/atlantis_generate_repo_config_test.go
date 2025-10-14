@@ -10,11 +10,9 @@ import (
 func TestAtlantisGenerateRepoConfigCmd_Error(t *testing.T) {
 	stacksPath := "../tests/fixtures/scenarios/atlantis-generate-repo-config"
 
-	err := os.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
-	assert.NoError(t, err, "Setting 'ATMOS_CLI_CONFIG_PATH' environment variable should execute without error")
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
 
-	err = os.Setenv("ATMOS_BASE_PATH", stacksPath)
-	assert.NoError(t, err, "Setting 'ATMOS_BASE_PATH' environment variable should execute without error")
+	t.Setenv("ATMOS_BASE_PATH", stacksPath)
 
 	// Unset ENV variables after testing
 	defer func() {
@@ -22,6 +20,6 @@ func TestAtlantisGenerateRepoConfigCmd_Error(t *testing.T) {
 		os.Unsetenv("ATMOS_BASE_PATH")
 	}()
 
-	err = atlantisGenerateRepoConfigCmd.RunE(atlantisGenerateRepoConfigCmd, []string{})
+	err := atlantisGenerateRepoConfigCmd.RunE(atlantisGenerateRepoConfigCmd, []string{})
 	assert.Error(t, err, "atlantis generate repo-config command should return an error when called with no parameters")
 }

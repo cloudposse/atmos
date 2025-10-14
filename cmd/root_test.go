@@ -18,14 +18,9 @@ import (
 func TestNoColorLog(t *testing.T) {
 	stacksPath := "../tests/fixtures/scenarios/stack-templates"
 
-	err := os.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
-	assert.NoError(t, err, "Setting 'ATMOS_CLI_CONFIG_PATH' environment variable should execute without error")
-
-	err = os.Setenv("ATMOS_BASE_PATH", stacksPath)
-	assert.NoError(t, err, "Setting 'ATMOS_BASE_PATH' environment variable should execute without error")
-
-	err = os.Setenv("ATMOS_LOGS_LEVEL", "Warning")
-	assert.NoError(t, err, "Setting 'ATMOS_LOGS_LEVEL' environment variable should execute without error")
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
+	t.Setenv("ATMOS_BASE_PATH", stacksPath)
+	t.Setenv("ATMOS_LOGS_LEVEL", "Warning")
 
 	// Unset ENV variables after testing
 	defer func() {
@@ -71,7 +66,7 @@ func TestInitFunction(t *testing.T) {
 			if v == "" {
 				os.Unsetenv(k)
 			} else {
-				os.Setenv(k, v)
+				t.Setenv(k, v)
 			}
 		}
 	}()
@@ -261,12 +256,12 @@ func TestSetupLogger_TraceLevelFromEnvironment(t *testing.T) {
 		if originalEnv == "" {
 			os.Unsetenv("ATMOS_LOGS_LEVEL")
 		} else {
-			os.Setenv("ATMOS_LOGS_LEVEL", originalEnv)
+			t.Setenv("ATMOS_LOGS_LEVEL", originalEnv)
 		}
 	}()
 
 	// Test that ATMOS_LOGS_LEVEL=Trace works.
-	os.Setenv("ATMOS_LOGS_LEVEL", "Trace")
+	t.Setenv("ATMOS_LOGS_LEVEL", "Trace")
 
 	// Simulate loading config from environment.
 	cfg := &schema.AtmosConfiguration{

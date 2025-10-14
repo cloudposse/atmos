@@ -18,11 +18,9 @@ func TestAuthExecCmd_FlagParsing(t *testing.T) {
 	// Set up test fixture with auth configuration.
 	testDir := "../tests/fixtures/scenarios/atmos-auth"
 
-	err := os.Setenv("ATMOS_CLI_CONFIG_PATH", testDir)
-	require.NoError(t, err)
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", testDir)
 
-	err = os.Setenv("ATMOS_BASE_PATH", testDir)
-	require.NoError(t, err)
+	t.Setenv("ATMOS_BASE_PATH", testDir)
 
 	defer func() {
 		os.Unsetenv("ATMOS_CLI_CONFIG_PATH")

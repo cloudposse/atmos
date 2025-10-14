@@ -11,11 +11,8 @@ import (
 func TestValidateCommands_Error(t *testing.T) {
 	stacksPath := "../tests/fixtures/scenarios/terraform-apply-affected"
 
-	err := os.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
-	assert.NoError(t, err, "Setting 'ATMOS_CLI_CONFIG_PATH' environment variable should execute without error")
-
-	err = os.Setenv("ATMOS_BASE_PATH", stacksPath)
-	assert.NoError(t, err, "Setting 'ATMOS_BASE_PATH' environment variable should execute without error")
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
+	t.Setenv("ATMOS_BASE_PATH", stacksPath)
 
 	// Unset ENV variables after testing
 	defer func() {
@@ -23,7 +20,7 @@ func TestValidateCommands_Error(t *testing.T) {
 		os.Unsetenv("ATMOS_BASE_PATH")
 	}()
 
-	err = ValidateStacksCmd.RunE(ValidateStacksCmd, []string{"--invalid-flag"})
+	err := ValidateStacksCmd.RunE(ValidateStacksCmd, []string{"--invalid-flag"})
 	assert.Error(t, err, "validate stacks command should return an error when called with invalid flags")
 
 	err = validateComponentCmd.RunE(validateComponentCmd, []string{"--invalid-flag"})

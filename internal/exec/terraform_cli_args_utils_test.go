@@ -58,14 +58,14 @@ func TestGetTerraformEnvCliArgs(t *testing.T) {
 			originalValue := os.Getenv("TF_CLI_ARGS")
 			defer func() {
 				if originalValue != "" {
-					os.Setenv("TF_CLI_ARGS", originalValue)
+					t.Setenv("TF_CLI_ARGS", originalValue)
 				} else {
 					os.Unsetenv("TF_CLI_ARGS")
 				}
 			}()
 
 			// Set test environment variable.
-			os.Setenv("TF_CLI_ARGS", tt.envValue)
+			t.Setenv("TF_CLI_ARGS", tt.envValue)
 
 			// Test the function
 			result := GetTerraformEnvCliArgs()
@@ -197,14 +197,14 @@ func TestGetTerraformEnvCliVars(t *testing.T) {
 			originalValue := os.Getenv("TF_CLI_ARGS")
 			defer func() {
 				if originalValue != "" {
-					os.Setenv("TF_CLI_ARGS", originalValue)
+					t.Setenv("TF_CLI_ARGS", originalValue)
 				} else {
 					os.Unsetenv("TF_CLI_ARGS")
 				}
 			}()
 
 			// Set test environment variable
-			os.Setenv("TF_CLI_ARGS", tt.envValue)
+			t.Setenv("TF_CLI_ARGS", tt.envValue)
 
 			// Test the function
 			result, err := GetTerraformEnvCliVars()
@@ -227,7 +227,7 @@ func TestGetTerraformEnvCliVars_NoEnvironmentVariable(t *testing.T) {
 	os.Unsetenv("TF_CLI_ARGS")
 	defer func() {
 		if originalValue != "" {
-			os.Setenv("TF_CLI_ARGS", originalValue)
+			t.Setenv("TF_CLI_ARGS", originalValue)
 		}
 	}()
 
@@ -247,10 +247,10 @@ func BenchmarkGetTerraformEnvCliArgs(b *testing.B) {
 	}
 
 	originalValue := os.Getenv("TF_CLI_ARGS")
-	os.Setenv("TF_CLI_ARGS", largeTFCliArgs)
+	_ = os.Setenv("TF_CLI_ARGS", largeTFCliArgs)
 	defer func() {
 		if originalValue != "" {
-			os.Setenv("TF_CLI_ARGS", originalValue)
+			_ = os.Setenv("TF_CLI_ARGS", originalValue)
 		} else {
 			os.Unsetenv("TF_CLI_ARGS")
 		}
@@ -270,10 +270,10 @@ func BenchmarkGetTerraformEnvCliVars(b *testing.B) {
 	}
 
 	originalValue := os.Getenv("TF_CLI_ARGS")
-	os.Setenv("TF_CLI_ARGS", largeTFCliArgs)
+	_ = os.Setenv("TF_CLI_ARGS", largeTFCliArgs)
 	defer func() {
 		if originalValue != "" {
-			os.Setenv("TF_CLI_ARGS", originalValue)
+			_ = os.Setenv("TF_CLI_ARGS", originalValue)
 		} else {
 			os.Unsetenv("TF_CLI_ARGS")
 		}

@@ -17,8 +17,8 @@ func TestGetGitHubOIDCToken_Success(t *testing.T) {
 	originalURL := os.Getenv("ACTIONS_ID_TOKEN_REQUEST_URL")
 	originalToken := os.Getenv("ACTIONS_ID_TOKEN_REQUEST_TOKEN")
 	defer func() {
-		os.Setenv("ACTIONS_ID_TOKEN_REQUEST_URL", originalURL)
-		os.Setenv("ACTIONS_ID_TOKEN_REQUEST_TOKEN", originalToken)
+		t.Setenv("ACTIONS_ID_TOKEN_REQUEST_URL", originalURL)
+		t.Setenv("ACTIONS_ID_TOKEN_REQUEST_TOKEN", originalToken)
 	}()
 
 	// Set up test server
@@ -49,8 +49,8 @@ func TestGetGitHubOIDCToken_MissingEnvironmentVariables(t *testing.T) {
 	originalURL := os.Getenv("ACTIONS_ID_TOKEN_REQUEST_URL")
 	originalToken := os.Getenv("ACTIONS_ID_TOKEN_REQUEST_TOKEN")
 	defer func() {
-		os.Setenv("ACTIONS_ID_TOKEN_REQUEST_URL", originalURL)
-		os.Setenv("ACTIONS_ID_TOKEN_REQUEST_TOKEN", originalToken)
+		t.Setenv("ACTIONS_ID_TOKEN_REQUEST_URL", originalURL)
+		t.Setenv("ACTIONS_ID_TOKEN_REQUEST_TOKEN", originalToken)
 	}()
 
 	testCases := []struct {
@@ -95,8 +95,8 @@ func TestGetGitHubOIDCToken_HTTPErrors(t *testing.T) {
 	originalURL := os.Getenv("ACTIONS_ID_TOKEN_REQUEST_URL")
 	originalToken := os.Getenv("ACTIONS_ID_TOKEN_REQUEST_TOKEN")
 	defer func() {
-		os.Setenv("ACTIONS_ID_TOKEN_REQUEST_URL", originalURL)
-		os.Setenv("ACTIONS_ID_TOKEN_REQUEST_TOKEN", originalToken)
+		t.Setenv("ACTIONS_ID_TOKEN_REQUEST_URL", originalURL)
+		t.Setenv("ACTIONS_ID_TOKEN_REQUEST_TOKEN", originalToken)
 	}()
 
 	// Set up test server that returns an error

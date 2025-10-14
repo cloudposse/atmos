@@ -83,7 +83,7 @@ components:
 
 			// Set up environment variables
 			for k, v := range tt.setupEnv {
-				os.Setenv(k, v)
+				t.Setenv(k, v)
 				defer os.Unsetenv(k)
 			}
 
@@ -142,7 +142,7 @@ func TestLoadConfigFromDifferentSources(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			// Setup environment
 			for k, v := range tt.envVars {
-				os.Setenv(k, v)
+				t.Setenv(k, v)
 				defer os.Unsetenv(k)
 			}
 
@@ -183,7 +183,7 @@ func TestSetEnv(t *testing.T) {
 
 			// Set environment variables
 			for k, val := range tt.envVars {
-				os.Setenv(k, val)
+				t.Setenv(k, val)
 				defer os.Unsetenv(k)
 			}
 
@@ -301,7 +301,7 @@ func TestMergeDefaultImports_ExclusionLogic(t *testing.T) {
 					for i := 1; i < len(absoluteExcludePaths); i++ {
 						joinedPaths = joinedPaths + string(os.PathListSeparator) + absoluteExcludePaths[i]
 					}
-					os.Setenv("TEST_EXCLUDE_ATMOS_D", joinedPaths)
+					t.Setenv("TEST_EXCLUDE_ATMOS_D", joinedPaths)
 				}
 			}
 			defer os.Unsetenv("TEST_EXCLUDE_ATMOS_D")
@@ -367,7 +367,7 @@ func TestMergeDefaultImports_PathCanonicalization(t *testing.T) {
 			assert.NoError(t, err)
 
 			// Set the exclude environment variable using table input directly
-			os.Setenv("TEST_EXCLUDE_ATMOS_D", tt.excludePath)
+			t.Setenv("TEST_EXCLUDE_ATMOS_D", tt.excludePath)
 			defer os.Unsetenv("TEST_EXCLUDE_ATMOS_D")
 
 			// Call the function with table input directly
@@ -411,7 +411,7 @@ func TestMergeDefaultImports_EmptyAndInvalidPaths(t *testing.T) {
 
 			// Set the exclude environment variable
 			if tt.excludePaths != "" {
-				os.Setenv("TEST_EXCLUDE_ATMOS_D", tt.excludePaths)
+				t.Setenv("TEST_EXCLUDE_ATMOS_D", tt.excludePaths)
 			}
 			defer os.Unsetenv("TEST_EXCLUDE_ATMOS_D")
 
@@ -522,7 +522,7 @@ func TestShouldExcludePathForTesting(t *testing.T) {
 
 			// Set the environment variable
 			if tt.envValue != "" {
-				os.Setenv("TEST_EXCLUDE_ATMOS_D", tt.envValue)
+				t.Setenv("TEST_EXCLUDE_ATMOS_D", tt.envValue)
 			}
 			defer os.Unsetenv("TEST_EXCLUDE_ATMOS_D")
 
@@ -570,7 +570,7 @@ func TestShouldExcludePathForTesting_WindowsCaseInsensitive(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			os.Setenv("TEST_EXCLUDE_ATMOS_D", tt.envValue)
+			t.Setenv("TEST_EXCLUDE_ATMOS_D", tt.envValue)
 			defer os.Unsetenv("TEST_EXCLUDE_ATMOS_D")
 
 			result := shouldExcludePathForTesting(tt.dirPath)
@@ -622,7 +622,7 @@ func TestShouldExcludePathForTesting_PathCanonicalization(t *testing.T) {
 				tt.setup()
 			}
 
-			os.Setenv("TEST_EXCLUDE_ATMOS_D", tt.envValue)
+			t.Setenv("TEST_EXCLUDE_ATMOS_D", tt.envValue)
 			defer os.Unsetenv("TEST_EXCLUDE_ATMOS_D")
 
 			result := shouldExcludePathForTesting(tt.dirPath)
@@ -644,7 +644,7 @@ func TestMergeDefaultImports_WindowsCaseInsensitive(t *testing.T) {
 	lowerCasePath := strings.ToLower(tempDir)
 
 	// Set the environment variable with lowercase path
-	os.Setenv("TEST_EXCLUDE_ATMOS_D", lowerCasePath)
+	t.Setenv("TEST_EXCLUDE_ATMOS_D", lowerCasePath)
 	defer os.Unsetenv("TEST_EXCLUDE_ATMOS_D")
 
 	// Call the function with the path in uppercase

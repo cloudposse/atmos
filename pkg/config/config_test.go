@@ -167,7 +167,7 @@ terraform:
 			configFileName: "atmos.yaml",
 			configContent:  `base_path: !env TEST_ATMOS_BASE_PATH`,
 			envSetup: func(t *testing.T) func() {
-				os.Setenv("TEST_ATMOS_BASE_PATH", "env/test/path")
+				t.Setenv("TEST_ATMOS_BASE_PATH", "env/test/path")
 				return func() { os.Unsetenv("TEST_ATMOS_BASE_PATH") }
 			},
 			setup: func(t *testing.T, dir string, tc testCase) {
@@ -814,13 +814,13 @@ func TestEnvironmentVariableHandling(t *testing.T) {
 					os.Unsetenv(envVar)
 				}
 				for envVar, val := range originalEnvVars {
-					os.Setenv(envVar, val)
+					t.Setenv(envVar, val)
 				}
 			}()
 
 			// Set test environment variables
 			for envVar, val := range tt.envVars {
-				os.Setenv(envVar, val)
+				t.Setenv(envVar, val)
 			}
 
 			// Set test args

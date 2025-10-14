@@ -102,13 +102,13 @@ func TestManager_GetDefaultIdentity(t *testing.T) {
 			// Set up CI environment variable.
 			originalCI := os.Getenv("CI")
 			if tt.isCI {
-				os.Setenv("CI", "true")
+				t.Setenv("CI", "true")
 			} else {
 				os.Unsetenv("CI")
 			}
 			defer func() {
 				if originalCI != "" {
-					os.Setenv("CI", originalCI)
+					t.Setenv("CI", originalCI)
 				} else {
 					os.Unsetenv("CI")
 				}
@@ -148,10 +148,10 @@ func TestManager_GetDefaultIdentity_MultipleDefaultsOrder(t *testing.T) {
 
 	// Set CI mode to get deterministic error message.
 	origCI, hadCI := os.LookupEnv("CI")
-	os.Setenv("CI", "true")
+	t.Setenv("CI", "true")
 	defer func() {
 		if hadCI {
-			os.Setenv("CI", origCI)
+			t.Setenv("CI", origCI)
 		} else {
 			os.Unsetenv("CI")
 		}

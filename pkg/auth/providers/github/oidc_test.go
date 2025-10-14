@@ -204,7 +204,7 @@ func TestOIDCProvider_isGitHubActions(t *testing.T) {
 		{
 			name: "GitHub Actions environment",
 			setupEnv: func() {
-				os.Setenv("GITHUB_ACTIONS", "true")
+				t.Setenv("GITHUB_ACTIONS", "true")
 			},
 			cleanup: func() {
 				os.Unsetenv("GITHUB_ACTIONS")
@@ -222,7 +222,7 @@ func TestOIDCProvider_isGitHubActions(t *testing.T) {
 		{
 			name: "GitHub Actions set to false",
 			setupEnv: func() {
-				os.Setenv("GITHUB_ACTIONS", "false")
+				t.Setenv("GITHUB_ACTIONS", "false")
 			},
 			cleanup: func() {
 				os.Unsetenv("GITHUB_ACTIONS")

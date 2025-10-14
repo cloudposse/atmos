@@ -41,7 +41,7 @@ func TestNewAtmosProAPIClientFromEnv(t *testing.T) {
 	defer func() {
 		for k, v := range originalEnvVars {
 			if v != "" {
-				os.Setenv(k, v)
+				t.Setenv(k, v)
 			} else {
 				os.Unsetenv(k)
 			}
@@ -50,9 +50,9 @@ func TestNewAtmosProAPIClientFromEnv(t *testing.T) {
 	}()
 
 	t.Run("api token set - skip OIDC", func(t *testing.T) {
-		os.Setenv("ATMOS_PRO_BASE_URL", "https://api.atmos.example.com")
-		os.Setenv("ATMOS_PRO_ENDPOINT", "v1")
-		os.Setenv("ATMOS_PRO_TOKEN", "direct-api-token")
+		t.Setenv("ATMOS_PRO_BASE_URL", "https://api.atmos.example.com")
+		t.Setenv("ATMOS_PRO_ENDPOINT", "v1")
+		t.Setenv("ATMOS_PRO_TOKEN", "direct-api-token")
 		os.Unsetenv("ACTIONS_ID_TOKEN_REQUEST_URL")
 		os.Unsetenv("ACTIONS_ID_TOKEN_REQUEST_TOKEN")
 		os.Unsetenv("ATMOS_PRO_WORKSPACE_ID")
@@ -89,7 +89,7 @@ func TestNewAtmosProAPIClientFromEnv(t *testing.T) {
 	})
 
 	t.Run("api token set with defaults", func(t *testing.T) {
-		os.Setenv("ATMOS_PRO_TOKEN", "direct-api-token")
+		t.Setenv("ATMOS_PRO_TOKEN", "direct-api-token")
 		// Unset custom URLs to test defaults
 		os.Unsetenv("ATMOS_PRO_BASE_URL")
 		os.Unsetenv("ATMOS_PRO_ENDPOINT")
@@ -147,10 +147,10 @@ func TestNewAtmosProAPIClientFromEnv(t *testing.T) {
 
 		// Unset API token to force OIDC flow
 		os.Unsetenv("ATMOS_PRO_TOKEN")
-		os.Setenv("ACTIONS_ID_TOKEN_REQUEST_URL", oidcServer.URL+"?token=dummy")
-		os.Setenv("ACTIONS_ID_TOKEN_REQUEST_TOKEN", "test-request-token")
-		os.Setenv("ATMOS_PRO_WORKSPACE_ID", "test-workspace")
-		os.Setenv("ATMOS_PRO_BASE_URL", exchangeServer.URL)
+		t.Setenv("ACTIONS_ID_TOKEN_REQUEST_URL", oidcServer.URL+"?token=dummy")
+		t.Setenv("ACTIONS_ID_TOKEN_REQUEST_TOKEN", "test-request-token")
+		t.Setenv("ATMOS_PRO_WORKSPACE_ID", "test-workspace")
+		t.Setenv("ATMOS_PRO_BASE_URL", exchangeServer.URL)
 
 		viper.Reset()
 		// Bind environment variables like the main application does
@@ -192,8 +192,8 @@ func TestNewAtmosProAPIClientFromEnv(t *testing.T) {
 		// Unset API token and workspace ID to trigger error
 		os.Unsetenv("ATMOS_PRO_TOKEN")
 		os.Unsetenv("ATMOS_PRO_WORKSPACE_ID")
-		os.Setenv("ACTIONS_ID_TOKEN_REQUEST_URL", oidcServer.URL+"?token=dummy")
-		os.Setenv("ACTIONS_ID_TOKEN_REQUEST_TOKEN", "test-request-token")
+		t.Setenv("ACTIONS_ID_TOKEN_REQUEST_URL", oidcServer.URL+"?token=dummy")
+		t.Setenv("ACTIONS_ID_TOKEN_REQUEST_TOKEN", "test-request-token")
 
 		viper.Reset()
 		// Bind environment variables like the main application does
@@ -277,10 +277,10 @@ func TestNewAtmosProAPIClientFromEnv(t *testing.T) {
 
 		// Unset API token to force OIDC flow
 		os.Unsetenv("ATMOS_PRO_TOKEN")
-		os.Setenv("ACTIONS_ID_TOKEN_REQUEST_URL", oidcServer.URL+"?token=dummy")
-		os.Setenv("ACTIONS_ID_TOKEN_REQUEST_TOKEN", "test-request-token")
-		os.Setenv("ATMOS_PRO_WORKSPACE_ID", "test-workspace")
-		os.Setenv("ATMOS_PRO_BASE_URL", exchangeServer.URL)
+		t.Setenv("ACTIONS_ID_TOKEN_REQUEST_URL", oidcServer.URL+"?token=dummy")
+		t.Setenv("ACTIONS_ID_TOKEN_REQUEST_TOKEN", "test-request-token")
+		t.Setenv("ATMOS_PRO_WORKSPACE_ID", "test-workspace")
+		t.Setenv("ATMOS_PRO_BASE_URL", exchangeServer.URL)
 
 		viper.Reset()
 		// Bind environment variables like the main application does

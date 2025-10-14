@@ -219,7 +219,7 @@ func TestComponentProcessor_StackNameTemplate_Errors(t *testing.T) {
 	_, err = ProcessComponentFromContext(component, namespace, tenant, environment, stage, stacksPath, stacksPath)
 	assert.ErrorContains(t, err, "'environment' requires 'tenant' and 'namespace'")
 
-	err = os.Setenv("ATMOS_STACKS_NAME_TEMPLATE", "{{ .invalid }}")
+	t.Setenv("ATMOS_STACKS_NAME_TEMPLATE", "{{ .invalid }}")
 	assert.NoError(t, err, "Setting 'ATMOS_STACKS_NAME_TEMPLATE' environment variable should execute without error")
 	defer func() {
 		os.Unsetenv("ATMOS_STACKS_NAME_TEMPLATE")

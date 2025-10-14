@@ -18,11 +18,8 @@ func TestTerraformRun1(t *testing.T) {
 	if os.Getenv("TEST_EXIT") == "1" {
 		stacksPath := "../tests/fixtures/scenarios/stack-templates-2"
 
-		err := os.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
-		assert.NoError(t, err, "Setting 'ATMOS_CLI_CONFIG_PATH' environment variable should execute without error")
-
-		err = os.Setenv("ATMOS_BASE_PATH", stacksPath)
-		assert.NoError(t, err, "Setting 'ATMOS_BASE_PATH' environment variable should execute without error")
+		t.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
+		t.Setenv("ATMOS_BASE_PATH", stacksPath)
 
 		// Unset env values after testing
 		defer func() {
@@ -57,11 +54,8 @@ func TestTerraformRun2(t *testing.T) {
 	if os.Getenv("TEST_EXIT") == "1" {
 		stacksPath := "../tests/fixtures/scenarios/stack-templates-2"
 
-		err := os.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
-		assert.NoError(t, err, "Setting 'ATMOS_CLI_CONFIG_PATH' environment variable should execute without error")
-
-		err = os.Setenv("ATMOS_BASE_PATH", stacksPath)
-		assert.NoError(t, err, "Setting 'ATMOS_BASE_PATH' environment variable should execute without error")
+		t.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
+		t.Setenv("ATMOS_BASE_PATH", stacksPath)
 
 		// Unset env values after testing
 		defer func() {
@@ -98,11 +92,8 @@ func TestTerraformRun3(t *testing.T) {
 	if os.Getenv("TEST_EXIT") == "1" {
 		stacksPath := "../tests/fixtures/scenarios/stack-templates-2"
 
-		err := os.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
-		assert.NoError(t, err, "Setting 'ATMOS_CLI_CONFIG_PATH' environment variable should execute without error")
-
-		err = os.Setenv("ATMOS_BASE_PATH", stacksPath)
-		assert.NoError(t, err, "Setting 'ATMOS_BASE_PATH' environment variable should execute without error")
+		t.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
+		t.Setenv("ATMOS_BASE_PATH", stacksPath)
 
 		// Unset env values after testing
 		defer func() {

@@ -235,7 +235,7 @@ func TestCiProvider(t *testing.T) {
 
 			// Set test environment variables.
 			for key, value := range tc.envVars {
-				os.Setenv(key, value)
+				t.Setenv(key, value)
 			}
 
 			// Clean up environment variables after test.
@@ -246,7 +246,7 @@ func TestCiProvider(t *testing.T) {
 				}
 				// Restore original environment variables.
 				for key, value := range originalEnv {
-					os.Setenv(key, value)
+					t.Setenv(key, value)
 				}
 			}()
 
@@ -310,7 +310,7 @@ func TestIsCI(t *testing.T) {
 			sort.Strings(envVarsOrdered)
 			// Set test environment variables.
 			for _, key := range envVarsOrdered {
-				os.Setenv(key, tc.envVars[key])
+				t.Setenv(key, tc.envVars[key])
 			}
 
 			// Clean up environment variables after test.
@@ -321,7 +321,7 @@ func TestIsCI(t *testing.T) {
 				}
 				// Restore original environment variables
 				for key, value := range originalEnv {
-					os.Setenv(key, value)
+					t.Setenv(key, value)
 				}
 			}()
 
@@ -334,7 +334,7 @@ func TestIsCI(t *testing.T) {
 func TestHelperFunctions(t *testing.T) {
 	t.Run("notEmpty", func(t *testing.T) {
 		// Test with existing environment variable.
-		os.Setenv("TEST_VAR", "value")
+		t.Setenv("TEST_VAR", "value")
 		defer os.Unsetenv("TEST_VAR")
 
 		assert.True(t, isEnvVarExists("TEST_VAR"))
@@ -343,7 +343,7 @@ func TestHelperFunctions(t *testing.T) {
 
 	t.Run("isTrue", func(t *testing.T) {
 		// Test with "true" value.
-		os.Setenv("TRUE_VAR", "true")
+		t.Setenv("TRUE_VAR", "true")
 		defer os.Unsetenv("TRUE_VAR")
 
 		assert.True(t, isEnvVarTrue("TRUE_VAR"))
@@ -351,7 +351,7 @@ func TestHelperFunctions(t *testing.T) {
 		assert.False(t, isEnvVarTrue("NON_EXISTENT_VAR"))
 
 		// Test with "false" value.
-		os.Setenv("FALSE_VAR", "false")
+		t.Setenv("FALSE_VAR", "false")
 		defer os.Unsetenv("FALSE_VAR")
 
 		assert.True(t, isEnvVarTrue("TRUE_VAR"))
@@ -361,7 +361,7 @@ func TestHelperFunctions(t *testing.T) {
 
 	t.Run("isEquals", func(t *testing.T) {
 		// Test with matching value.
-		os.Setenv("MATCH_VAR", "expected")
+		t.Setenv("MATCH_VAR", "expected")
 		defer os.Unsetenv("MATCH_VAR")
 
 		assert.True(t, isEnvVarEquals("MATCH_VAR", "expected"))
