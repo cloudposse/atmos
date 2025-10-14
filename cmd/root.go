@@ -32,6 +32,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/telemetry"
 	"github.com/cloudposse/atmos/pkg/ui/heatmap"
 	"github.com/cloudposse/atmos/pkg/utils"
+	"github.com/cloudposse/atmos/toolchain"
 )
 
 const (
@@ -440,7 +441,7 @@ func Execute() error {
 	// Here we need the custom commands from the config.
 	var initErr error
 	atmosConfig, initErr = cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
-
+	toolchain.SetAtmosConfig(&atmosConfig)
 	utils.InitializeMarkdown(atmosConfig)
 	errUtils.InitializeMarkdown(atmosConfig)
 
@@ -597,6 +598,8 @@ func init() {
 	RootCmd.PersistentFlags().StringSlice("config", []string{}, "Paths to configuration files (comma-separated or repeated flag)")
 	RootCmd.PersistentFlags().StringSlice("config-path", []string{}, "Paths to configuration directories (comma-separated or repeated flag)")
 	RootCmd.PersistentFlags().Bool("no-color", false, "Disable color output")
+
+	RootCmd.AddCommand(ToolChainCmd)
 	RootCmd.PersistentFlags().String("pager", "", "Enable pager for output (--pager or --pager=true to enable, --pager=false to disable, --pager=less to use specific pager)")
 	// Set NoOptDefVal so --pager without value means "true".
 	RootCmd.PersistentFlags().Lookup("pager").NoOptDefVal = "true"
