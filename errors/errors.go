@@ -104,6 +104,7 @@ var (
 
 	ErrMissingStack                       = errors.New("stack is required; specify it on the command line using the flag `--stack <stack>` (shorthand `-s`)")
 	ErrMissingComponent                   = errors.New("component is required; specify it on the command line")
+	ErrMissingComponentType               = errors.New("component type is required")
 	ErrInvalidArguments                   = errors.New("invalid arguments")
 	ErrInvalidComponent                   = errors.New("invalid component")
 	ErrAbstractComponentCantBeProvisioned = errors.New("abstract component cannot be provisioned")

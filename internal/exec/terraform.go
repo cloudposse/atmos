@@ -267,10 +267,15 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 	}
 
 	if !valid {
-		return fmt.Errorf("%w: the component '%s' did not pass the validation policies",
+		return errUtils.Build(fmt.Errorf("%w: component '%s' did not pass validation policies",
 			ErrComponentNotValid,
 			info.ComponentFromArg,
-		)
+		)).
+			WithContext("component", info.ComponentFromArg).
+			WithContext("stack", info.Stack).
+			WithHint("Check the validation policies defined in the component's settings.validation section").
+			WithExitCode(2).
+			Err()
 	}
 
 	err = auth.TerraformPreHook(&atmosConfig, &info)

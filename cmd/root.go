@@ -57,6 +57,15 @@ var RootCmd = &cobra.Command{
 	SilenceErrors: true,
 	SilenceUsage:  true,
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {
+		// Set verbose flag for error formatting before any command execution or fatal exits.
+		if cmd.Flags().Changed("verbose") {
+			verbose, flagErr := cmd.Flags().GetBool("verbose")
+			if flagErr != nil {
+				errUtils.CheckErrorPrintAndExit(flagErr, "", "")
+			}
+			errUtils.SetVerboseFlag(verbose)
+		}
+
 		// Determine if the command is a help command or if the help flag is set.
 		isHelpCommand := cmd.Name() == "help"
 		helpFlag := cmd.Flags().Changed("help")
@@ -471,18 +480,13 @@ func Execute() error {
 	RootCmd.SilenceErrors = true
 	cmd, err := RootCmd.ExecuteC()
 
-	// Set verbose flag for error formatting.
-	if verbose, flagErr := cmd.Flags().GetBool("verbose"); flagErr == nil && verbose {
-		errUtils.SetVerboseFlag(true)
-	}
-
 	telemetry.CaptureCmd(cmd, err)
 
 	// Handle Cobra errors (invalid commands, flags) before config errors.
 	if err != nil {
 		if strings.Contains(err.Error(), "unknown command") {
 			command := getInvalidCommandName(err.Error())
-			showUsageAndExit(RootCmd, []string{command})
+			showUsageAndExit(cmd, []string{command})
 		}
 		// Unknown flag errors are handled by SetFlagErrorFunc (showFlagUsageAndExit).
 		return err

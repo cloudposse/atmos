@@ -19,7 +19,7 @@ var (
 	ErrValidateComponentFlag      = errors.New("either '--component' or '--tags' flag can be provided, but not both")
 	ErrValidateComponentStackFlag = errors.New("either '--component' or '--stack' flag can be provided, but not both")
 	ErrValidateEverythingFlag     = errors.New("'--everything' flag cannot be combined with '--component', '--stack', or '--tags' flags")
-	ErrMissingComponent           = errors.New("to vendor a component, the '--component' (shorthand '-c') flag needs to be specified.\n" +
+	ErrMissingVendorComponent     = errors.New("to vendor a component, the '--component' (shorthand '-c') flag needs to be specified.\n" +
 		"Example: atmos vendor pull -c <component>")
 )
 
@@ -174,12 +174,12 @@ func handleVendorConfig(atmosConfig *schema.AtmosConfiguration, flg *VendorFlags
 	}
 
 	if len(args) > 0 {
-		err := fmt.Errorf("%w", ErrMissingComponent)
+		err := fmt.Errorf("%w", ErrMissingVendorComponent)
 		err = errors.WithHintf(err, "Did you mean `atmos vendor pull -c %s`?", args[0])
 		err = errors.WithHint(err, "Component name should be specified with `--component` (shorthand: `-c`) flag")
 		return err
 	}
-	err = fmt.Errorf("%w", ErrMissingComponent)
+	err = fmt.Errorf("%w", ErrMissingVendorComponent)
 	err = errors.WithHint(err, "Use `--component` flag to vendor a specific component: `atmos vendor pull -c <component>`")
 	err = errors.WithHint(err, "Or use `--everything` flag to vendor all components defined in `vendor.yaml`")
 	return err

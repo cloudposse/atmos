@@ -44,8 +44,6 @@ type FormatterConfig struct {
 
 // DefaultFormatterConfig returns default formatting configuration.
 func DefaultFormatterConfig() FormatterConfig {
-	defer perf.Track(nil, "errors.DefaultFormatterConfig")()
-
 	return FormatterConfig{
 		Verbose:       false,
 		Color:         "auto",

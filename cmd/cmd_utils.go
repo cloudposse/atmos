@@ -234,8 +234,8 @@ func preCustomCommand(
 			errUtils.Exit(1)
 		} else {
 			// truly invalid, nothing to do
-			er := errors.New(fmt.Sprintf("The `%s` command has no steps or subcommands configured.", cmd.CommandPath()))
-			er = errUtils.Build(er).
+			baseErr := fmt.Errorf("%w: The `%s` command has no steps or subcommands configured", errUtils.ErrInvalidArguments, cmd.CommandPath())
+			er := errUtils.Build(baseErr).
 				WithTitle("Invalid Command").
 				WithHint("For more information, refer to the docs at https://atmos.tools/cli/configuration/commands").
 				Err()
@@ -724,10 +724,13 @@ func showErrorExampleFromMarkdown(cmd *cobra.Command, arg string) {
 	} else {
 		if len(cmd.Commands()) > 0 {
 			details += "\nValid subcommands are:\n"
-		}
-		// Retrieve valid subcommands dynamically
-		for _, subCmd := range cmd.Commands() {
-			details = details + "* " + subCmd.Name() + "\n"
+			// Retrieve valid subcommands dynamically
+			for _, subCmd := range cmd.Commands() {
+				details = details + "* " + subCmd.Name() + "\n"
+			}
+		} else {
+			// No subcommands available for this command
+			details += "\nThis command does not accept subcommands.\n"
 		}
 	}
 	showUsageExample(cmd, details)
@@ -757,8 +760,12 @@ func showUsageExample(cmd *cobra.Command, details string) {
 				suggestion = fmt.Sprintf("For more information, refer to the docs at %s", suggestion)
 			}
 			errBuilder = errBuilder.WithHint(suggestion)
+		} else {
+			// No suggestion provided, add default help hint using current command
+			errBuilder = errBuilder.WithHintf("Run `%s --help` for usage", cmd.CommandPath())
 		}
 	} else {
+		// No example found, add default help hint using current command
 		errBuilder = errBuilder.WithHintf("Run `%s --help` for usage", cmd.CommandPath())
 	}
 

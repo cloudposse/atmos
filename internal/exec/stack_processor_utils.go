@@ -260,8 +260,8 @@ func ProcessYAMLConfigFile(
 		mergeContext,
 	)
 
-	// Store merge context if provenance tracking is enabled (for single-file operations)
-	// Use the filePath as the key since this is a single-file operation
+	// Store merge context if provenance tracking is enabled (for single-file operations).
+	// Use the filePath as the key since this is a single-file operation.
 	if atmosConfig != nil && atmosConfig.TrackProvenance && mergeContext != nil && mergeContext.IsProvenanceEnabled() {
 		stackFileName := strings.TrimSuffix(
 			strings.TrimSuffix(
@@ -449,11 +449,15 @@ func processYAMLConfigFileWithContextInternal(
 		if mergeContext != nil {
 			// Wrap the error with the sentinel first to preserve it
 			wrappedErr := fmt.Errorf("%w: %v", errUtils.ErrInvalidStackManifest, err)
+			// Join with original error to preserve filesystem errors like os.ErrNotExist
+			wrappedErr = errors.Join(wrappedErr, err)
 			// Then format it with context information
 			e := mergeContext.FormatError(wrappedErr, fmt.Sprintf("stack manifest '%s'%s", relativeFilePath, stackManifestTemplatesErrorMessage))
 			return nil, nil, nil, nil, nil, nil, nil, e
 		} else {
 			e := fmt.Errorf("%w: stack manifest '%s'\n%v%s", errUtils.ErrInvalidStackManifest, relativeFilePath, err, stackManifestTemplatesErrorMessage)
+			// Join with original error to preserve filesystem errors like os.ErrNotExist
+			e = errors.Join(e, err)
 			return nil, nil, nil, nil, nil, nil, nil, e
 		}
 	}

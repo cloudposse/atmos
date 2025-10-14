@@ -55,11 +55,17 @@ func ProcessComponentConfig(
 	}
 
 	if len(component) == 0 {
-		return errors.New("component must be provided and must not be empty")
+		return errUtils.Build(errUtils.ErrMissingComponent).
+			WithHint("Component name is required").
+			WithExitCode(2).
+			Err()
 	}
 
 	if len(componentType) == 0 {
-		return errors.New("component type must be provided and must not be empty")
+		return errUtils.Build(errUtils.ErrMissingComponentType).
+			WithHint("Valid types: terraform, helmfile, packer").
+			WithExitCode(2).
+			Err()
 	}
 
 	if stackSection, ok = stacksMap[stack].(map[string]any); !ok {
