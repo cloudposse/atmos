@@ -1422,16 +1422,6 @@ func TestTFCliArgsAndVarsComponentSections(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Store original value to restore later
-			originalValue := os.Getenv("TF_CLI_ARGS")
-			defer func() {
-				if originalValue != "" {
-					t.Setenv("TF_CLI_ARGS", originalValue)
-				} else {
-					os.Unsetenv("TF_CLI_ARGS")
-				}
-			}()
-
 			// Set test environment variable
 			if tt.tfCliArgsEnv != "" {
 				t.Setenv("TF_CLI_ARGS", tt.tfCliArgsEnv)

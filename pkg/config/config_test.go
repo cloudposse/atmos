@@ -168,7 +168,7 @@ terraform:
 			configContent:  `base_path: !env TEST_ATMOS_BASE_PATH`,
 			envSetup: func(t *testing.T) func() {
 				t.Setenv("TEST_ATMOS_BASE_PATH", "env/test/path")
-				return func() { os.Unsetenv("TEST_ATMOS_BASE_PATH") }
+				return func() {} // t.Setenv automatically restores the value
 			},
 			setup: func(t *testing.T, dir string, tc testCase) {
 				createConfigFile(t, dir, tc.configFileName, tc.configContent)

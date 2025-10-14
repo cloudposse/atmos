@@ -99,20 +99,11 @@ func TestManager_GetDefaultIdentity(t *testing.T) {
 				t.Skipf("Skipping interactive test - requires user input.")
 			}
 
-			// Set up CI environment variable.
-			originalCI := os.Getenv("CI")
 			if tt.isCI {
 				t.Setenv("CI", "true")
 			} else {
 				os.Unsetenv("CI")
 			}
-			defer func() {
-				if originalCI != "" {
-					t.Setenv("CI", originalCI)
-				} else {
-					os.Unsetenv("CI")
-				}
-			}()
 
 			// Create manager with test identities.
 			manager := &manager{
