@@ -58,8 +58,8 @@ func BenchmarkFilterProEnabledInstances(b *testing.B) {
 	instances := make([]schema.Instance, 100)
 	for i := 0; i < 100; i++ {
 		instance := schema.Instance{
-			Component: "component-" + string(rune('a'+i%26)),
-			Stack:     "stack-" + string(rune('a'+i%10)),
+			Component: fmt.Sprintf("component-%d", i%26),
+			Stack:     fmt.Sprintf("stack-%d", i%10),
 			Settings:  make(map[string]any),
 		}
 

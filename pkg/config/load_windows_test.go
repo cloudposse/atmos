@@ -4,11 +4,14 @@
 package config
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // TestShouldExcludePathForTesting_WindowsCaseInsensitive verifies that Windows path matching is case-insensitive.
@@ -53,8 +56,17 @@ func TestShouldExcludePathForTesting_WindowsCaseInsensitive(t *testing.T) {
 
 // TestMergeDefaultImports_WindowsCaseInsensitive verifies that Windows path matching is case-insensitive for imports.
 func TestMergeDefaultImports_WindowsCaseInsensitive(t *testing.T) {
-	// Create temp directory.
+	// Create temp directory with atmos.d structure.
 	tempDir := t.TempDir()
+	atmosDDir := filepath.Join(tempDir, "atmos.d")
+	err := os.MkdirAll(atmosDDir, 0o755)
+	require.NoError(t, err)
+
+	// Create a test config file that would be loaded if not skipped.
+	testConfigPath := filepath.Join(atmosDDir, "test.yaml")
+	testConfigContent := []byte("test_key: test_value\n")
+	err = os.WriteFile(testConfigPath, testConfigContent, 0o644)
+	require.NoError(t, err)
 
 	// Test case-insensitive matching by setting exclude with different case.
 	upperCasePath := strings.ToUpper(tempDir)
@@ -66,8 +78,11 @@ func TestMergeDefaultImports_WindowsCaseInsensitive(t *testing.T) {
 	// Call the function with the path in uppercase.
 	v := viper.New()
 	v.SetConfigType("yaml") // Set config type as done in production code.
-	err := mergeDefaultImports(upperCasePath, v)
+	err = mergeDefaultImports(upperCasePath, v)
 
 	// Should skip and return nil since paths match case-insensitively on Windows.
 	assert.NoError(t, err, "Should match case-insensitively on Windows")
+
+	// Verify the config was not loaded (confirming the skip occurred).
+	assert.False(t, v.IsSet("test_key"), "Config should not be loaded when path is excluded")
 }
