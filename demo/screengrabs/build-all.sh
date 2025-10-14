@@ -2,12 +2,18 @@
 set -e
 export TERM=xterm-256color
 
+# Force color output for screengrabs
+export ATMOS_FORCE_COLOR=true
+export FORCE_COLOR=1
+export CLICOLOR_FORCE=1
+
 # Ensure that the output is not paginated
 export LESS=-X
+export ATMOS_PAGER=false
 
 # Determine the correct sed syntax based on the operating system
 if [ "$(uname)" = "Darwin" ]; then
-		SED="$SED" # macOS requires '' for in-place editing
+		SED="sed -i ''" # macOS requires '' for in-place editing
 else
 		SED="sed -i"    # Linux does not require ''
 fi
@@ -25,32 +31,29 @@ function record() {
     echo "Screengrabbing $command → $output_html"
     mkdir -p "$output_dir"
     rm -f $output_ansi
-    if [ "$(uname)" = "Darwin" ]; then
-        # macOS-specific syntax
-        if [ "${extension}" == "sh" ]; then
-            script -q $output_ansi command $command > /dev/null
-        else
-            script -q $output_ansi bash -c "cd $demo_path && ($command)" > /dev/null
-        fi
+
+    # Direct command execution with ATMOS_FORCE_COLOR (no need for script command)
+    if [ "${extension}" = "sh" ]; then
+        $command > $output_ansi 2>&1
     else
-        # Linux-specific syntax
-        if [ "${extension}" = "sh" ]; then
-            script -q -a $output_ansi -c "$command" > /dev/null
-        else
-            script -q -a $output_ansi -c "cd $demo_path && ($command)" > /dev/null
-        fi
+        (cd $demo_path && $command > "$OLDPWD/$output_ansi" 2>&1)
     fi
+
     postprocess_ansi $output_ansi
     aha --no-header < $output_ansi > $output_html
     postprocess_html $output_html
     rm -f $output_ansi
     if [ -n "$CI" ]; then
-        sed -i -e '1,1d' -e '$d' $output_html
+        $SED -e '1,1d' -e '$d' $output_html
     fi
 }
 
 postprocess_ansi() {
   local file=$1
+  # Remove terminal escape sequences (OSC, cursor position queries, etc.)
+  $SED -E 's/\^\[\]([0-9]+;[^\^]*)\^G//g' $file
+  $SED -E 's/\^\[(\[[0-9;]+R)//g' $file
+
   # Remove noise and clean up the output
   $SED '/- Finding latest version of/d' $file
   $SED '/- Installed hashicorp/d' $file
@@ -73,8 +76,13 @@ postprocess_ansi() {
 
 postprocess_html() {
   local file=$1
+  # Replace blue colors with Atmos blue.
   $SED 's/color:blue/color:#005f87/g' $file
 	$SED 's/color:#183691/color:#005f87/g' $file
+
+	# Strip all background colors - they cause visibility issues.
+	# aha adds background-color to code blocks which makes text invisible when colors match.
+	$SED 's/background-color:[^;]*;//g' $file
 }
 
 manifest=$1

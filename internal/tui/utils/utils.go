@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 
 	"github.com/alecthomas/chroma/v2/quick"
 	"github.com/arsham/figurine/figurine"
@@ -12,6 +13,7 @@ import (
 	"github.com/charmbracelet/huh"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/jwalton/go-supportscolor"
+	"github.com/spf13/viper"
 	xterm "golang.org/x/term"
 
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -28,9 +30,10 @@ func HighlightCode(code string, language string, syntaxTheme string) (string, er
 	return buf.String(), nil
 }
 
-// PrintStyledText prints a styled text to the terminal
+// PrintStyledText prints a styled text to the terminal.
 func PrintStyledText(text string) error {
-	// Check if the terminal supports colors
+	// Check if the terminal supports colors.
+	// supportscolor automatically detects FORCE_COLOR, NO_COLOR, and other standard environment variables.
 	if supportscolor.Stdout().SupportsColor {
 		return figurine.Write(os.Stdout, text, "ANSI Regular.flf")
 	}
@@ -38,7 +41,50 @@ func PrintStyledText(text string) error {
 }
 
 func PrintStyledTextToSpecifiedOutput(out io.Writer, text string) error {
-	return figurine.Write(out, text, "ANSI Regular.flf")
+	// Helper to check if a value is truthy
+	// Truthy values: "1", "true" (case-insensitive) - standard Go bool values
+	isTruthy := func(val string) bool {
+		if val == "" {
+			return false
+		}
+		v := strings.ToLower(strings.TrimSpace(val))
+		return v == "1" || v == "true"
+	}
+
+	// Helper to check if a value is falsy
+	// Falsy values: "0", "false" (case-insensitive) - standard Go bool values
+	isFalsy := func(val string) bool {
+		if val == "" {
+			return false
+		}
+		v := strings.ToLower(strings.TrimSpace(val))
+		return v == "0" || v == "false"
+	}
+
+	// Bind environment variables for color control.
+	_ = viper.BindEnv("ATMOS_FORCE_COLOR")
+	_ = viper.BindEnv("CLICOLOR_FORCE")
+	_ = viper.BindEnv("FORCE_COLOR")
+	_ = viper.BindEnv("NO_COLOR")
+
+	// Check if colors are explicitly disabled.
+	atmosForceColor := viper.GetString("ATMOS_FORCE_COLOR")
+	cliColorForce := viper.GetString("CLICOLOR_FORCE")
+	forceColorEnv := viper.GetString("FORCE_COLOR")
+	noColor := viper.GetString("NO_COLOR")
+
+	// If explicitly disabled, return early without printing
+	if isFalsy(atmosForceColor) || isFalsy(cliColorForce) || isFalsy(forceColorEnv) || noColor != "" {
+		return nil
+	}
+
+	// Check if colors are supported or forced
+	forceColor := isTruthy(atmosForceColor) || isTruthy(cliColorForce) || isTruthy(forceColorEnv)
+	if supportscolor.Stdout().SupportsColor || forceColor {
+		// Write to the specified output writer, not os.Stdout
+		return figurine.Write(out, text, "ANSI Regular.flf")
+	}
+	return nil
 }
 
 // RenderMarkdown renders markdown text with terminal styling

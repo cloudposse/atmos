@@ -12,17 +12,19 @@ import (
 	"regexp"
 	"strings"
 	"syscall"
-	"time"
 
 	"github.com/charmbracelet/lipgloss"
-	"github.com/elewis787/boa"
+	xterm "github.com/charmbracelet/x/term"
+	"github.com/muesli/reflow/wordwrap"
+	"github.com/muesli/termenv"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
+	"github.com/spf13/viper"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/internal/tui/templates"
 	"github.com/cloudposse/atmos/internal/tui/templates/term"
-	tuiUtils "github.com/cloudposse/atmos/internal/tui/utils"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/pager"
@@ -31,6 +33,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/telemetry"
 	"github.com/cloudposse/atmos/pkg/ui/heatmap"
+	"github.com/cloudposse/atmos/pkg/ui/markdown"
 	"github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -119,11 +122,6 @@ var RootCmd = &cobra.Command{
 		if showHeatmap, _ := cmd.Flags().GetBool("heatmap"); showHeatmap {
 			perf.EnableTracking(true)
 		}
-
-		// Print telemetry disclosure if needed (skip for completion commands and when CLI config not found).
-		if !isCompletionCommand(cmd) && err == nil {
-			telemetry.PrintTelemetryDisclosure()
-		}
 	},
 	PersistentPostRun: func(cmd *cobra.Command, args []string) {
 		// Stop profiler after command execution.
@@ -134,13 +132,9 @@ var RootCmd = &cobra.Command{
 		}
 
 		// Show performance heatmap if enabled.
-		// Use IsTrackingEnabled() to support commands with DisableFlagParsing.
-		if perf.IsTrackingEnabled() {
+		showHeatmap, _ := cmd.Flags().GetBool("heatmap")
+		if showHeatmap {
 			heatmapMode, _ := cmd.Flags().GetString("heatmap-mode")
-			// Default to "bar" mode if empty (happens with DisableFlagParsing).
-			if heatmapMode == "" {
-				heatmapMode = "bar"
-			}
 			if err := displayPerformanceHeatmap(cmd, heatmapMode); err != nil {
 				log.Error("Failed to display performance heatmap", "error", err)
 			}
@@ -150,14 +144,7 @@ var RootCmd = &cobra.Command{
 		// Check Atmos configuration.
 		checkAtmosConfig()
 
-		// Print a styled Atmos logo to the terminal.
-		fmt.Println()
-		err := tuiUtils.PrintStyledText("ATMOS")
-		if err != nil {
-			return err
-		}
-
-		err = e.ExecuteAtmosCmd()
+		err := e.ExecuteAtmosCmd()
 		return err
 	},
 }
@@ -235,17 +222,36 @@ func setupLogger(atmosConfig *schema.AtmosConfiguration) {
 	log.Debug("Set", "logs-level", log.GetLevelString(), "logs-file", atmosConfig.Logs.File)
 }
 
+// setupColorProfile configures the global lipgloss color profile based on Atmos configuration.
+func setupColorProfile(atmosConfig *schema.AtmosConfiguration) {
+	// Force TrueColor profile when ATMOS_FORCE_COLOR is enabled.
+	// This bypasses terminal detection and always outputs ANSI color codes.
+	if atmosConfig.Settings.Terminal.ForceColor {
+		lipgloss.SetColorProfile(termenv.TrueColor)
+		log.SetColorProfile(termenv.TrueColor)
+		log.Debug("Forced TrueColor profile", "force_color", true)
+	}
+}
+
+// setupColorProfileFromEnv checks ATMOS_FORCE_COLOR environment variable early.
+// This is called during init() before Boa styles are created, ensuring Cobra help
+// text rendering respects the forced color profile.
+func setupColorProfileFromEnv() {
+	// Use viper to check environment variable to satisfy linter requirements.
+	v := viper.New()
+	v.SetEnvPrefix("ATMOS")
+	v.AutomaticEnv()
+	if v.GetBool("FORCE_COLOR") {
+		lipgloss.SetColorProfile(termenv.TrueColor)
+	}
+}
+
 // cleanupLogFile closes the log file handle if it was opened.
 func cleanupLogFile() {
 	if logFileHandle != nil {
 		// Flush any remaining log data before closing.
-		if err := logFileHandle.Sync(); err != nil {
-			// Don't use logger here as we're cleaning up the log file
-			fmt.Fprintf(os.Stderr, "Warning: failed to sync log file: %v\n", err)
-		}
-		if err := logFileHandle.Close(); err != nil {
-			fmt.Fprintf(os.Stderr, "Warning: failed to close log file: %v\n", err)
-		}
+		_ = logFileHandle.Sync()
+		_ = logFileHandle.Close()
 		logFileHandle = nil
 	}
 }
@@ -255,6 +261,277 @@ func cleanupLogFile() {
 func Cleanup() {
 	cleanupLogFile()
 }
+
+// RenderFlags renders a flag set with colors and proper text wrapping.
+// Flag names are colored green, flag types are dimmed, descriptions are wrapped to terminal width.
+// Markdown in descriptions is rendered to terminal output.
+
+// flagRenderLayout holds layout constants and dimensions for flag rendering.
+type flagRenderLayout struct {
+	leftPad      int
+	spaceBetween int
+	rightMargin  int
+	minDescWidth int
+	maxFlagWidth int
+	descColStart int
+	descWidth    int
+}
+
+// newFlagRenderLayout creates a new layout configuration for flag rendering.
+func newFlagRenderLayout(termWidth int, maxFlagWidth int) flagRenderLayout {
+	const (
+		leftPad      = 2
+		spaceBetween = 2
+		rightMargin  = 2
+		minDescWidth = 40
+	)
+
+	descColStart := leftPad + maxFlagWidth + spaceBetween
+	descWidth := termWidth - descColStart - rightMargin
+	if descWidth < minDescWidth {
+		descWidth = minDescWidth
+	}
+
+	return flagRenderLayout{
+		leftPad:      leftPad,
+		spaceBetween: spaceBetween,
+		rightMargin:  rightMargin,
+		minDescWidth: minDescWidth,
+		maxFlagWidth: maxFlagWidth,
+		descColStart: descColStart,
+		descWidth:    descWidth,
+	}
+}
+
+// calculateMaxFlagWidth finds the maximum flag name width for alignment.
+func calculateMaxFlagWidth(flags *pflag.FlagSet) int {
+	maxWidth := 0
+	flags.VisitAll(func(f *pflag.Flag) {
+		if f.Hidden {
+			return
+		}
+		flagName := formatFlagName(f)
+		if len(flagName) > maxWidth {
+			maxWidth = len(flagName)
+		}
+	})
+	return maxWidth
+}
+
+// buildFlagDescription creates the flag description with default value if applicable.
+func buildFlagDescription(f *pflag.Flag) string {
+	usage := f.Usage
+	if f.DefValue != "" && f.DefValue != "false" && f.DefValue != "0" && f.DefValue != "[]" && f.Name != "" && f.Name != "help" {
+		usage += fmt.Sprintf(" (default `%s`)", f.DefValue)
+	}
+	return usage
+}
+
+// renderWrappedLines renders wrapped description lines with proper indentation.
+func renderWrappedLines(w io.Writer, lines []string, indent int, descStyle *lipgloss.Style) {
+	if len(lines) == 0 {
+		return
+	}
+
+	// Print first line (already positioned on same line as flag name)
+	fmt.Fprintf(w, "%s\n", descStyle.Render(lines[0]))
+
+	// Print continuation lines with proper indentation
+	indentStr := strings.Repeat(" ", indent)
+	for i := 1; i < len(lines); i++ {
+		fmt.Fprintf(w, "%s%s\n", indentStr, descStyle.Render(lines[i]))
+	}
+}
+
+// flagStyles holds the lipgloss styles for flag rendering.
+type flagStyles struct {
+	flagStyle    lipgloss.Style
+	argTypeStyle lipgloss.Style
+	descStyle    lipgloss.Style
+}
+
+// renderSingleFlag renders one flag with its description.
+func renderSingleFlag(w io.Writer, f *pflag.Flag, layout flagRenderLayout, styles *flagStyles, renderer *markdown.Renderer) {
+	// Get flag name parts and calculate padding
+	flagNamePlain, flagTypePlain := formatFlagNameParts(f)
+	fullPlainLength := len(flagNamePlain)
+	if flagTypePlain != "" {
+		fullPlainLength += 1 + len(flagTypePlain)
+	}
+	padding := layout.maxFlagWidth - fullPlainLength
+
+	const space = " "
+
+	// Render flag name with colors
+	fmt.Fprint(w, strings.Repeat(space, layout.leftPad))
+	fmt.Fprint(w, styles.flagStyle.Render(flagNamePlain))
+	if flagTypePlain != "" {
+		fmt.Fprint(w, space)
+		fmt.Fprint(w, styles.argTypeStyle.Render(flagTypePlain))
+	}
+	fmt.Fprint(w, strings.Repeat(space, padding+layout.spaceBetween))
+
+	// Build and process description
+	usage := buildFlagDescription(f)
+	wrapped := wordwrap.String(usage, layout.descWidth)
+
+	if renderer != nil {
+		rendered, err := renderer.RenderWithoutWordWrap(wrapped)
+		if err == nil {
+			wrapped = strings.TrimSpace(rendered)
+		}
+	}
+
+	lines := strings.Split(wrapped, "\n")
+	renderWrappedLines(w, lines, layout.descColStart, &styles.descStyle)
+
+	fmt.Fprintln(w)
+}
+
+// renderFlags renders all flags with formatting and styling.
+//
+//nolint:revive,gocritic // Function signature required for compatibility with help template system.
+func renderFlags(w io.Writer, flags *pflag.FlagSet, flagStyle, argTypeStyle, descStyle lipgloss.Style, termWidth int, atmosConfig *schema.AtmosConfiguration) {
+	if flags == nil {
+		return
+	}
+
+	maxFlagWidth := calculateMaxFlagWidth(flags)
+	layout := newFlagRenderLayout(termWidth, maxFlagWidth)
+
+	styles := &flagStyles{
+		flagStyle:    flagStyle,
+		argTypeStyle: argTypeStyle,
+		descStyle:    descStyle,
+	}
+
+	renderer, err := markdown.NewTerminalMarkdownRenderer(*atmosConfig)
+	if err != nil {
+		renderer = nil
+	}
+
+	flags.VisitAll(func(f *pflag.Flag) {
+		if f.Hidden {
+			return
+		}
+		renderSingleFlag(w, f, layout, styles, renderer)
+	})
+}
+
+// formatFlagNameParts returns the flag name and type as separate strings for independent styling.
+// Returns (flagName, flagType) where flagType may be empty for bool flags.
+// Aligns all long flags (--name) at the same column regardless of shorthand presence.
+func formatFlagNameParts(f *pflag.Flag) (string, string) {
+	// Get the flag type (e.g., "string", "int", "bool")
+	flagType := f.Value.Type()
+
+	// Build flag name (without type)
+	// Align long flags at column: "  " (leftPad=2) + "-X, " (4 chars for shorthand)
+	// So long-only flags need 4 spaces before "--" to align with shorthand flags
+	var flagName string
+	if f.Shorthand == "" {
+		flagName = fmt.Sprintf("    --%s", f.Name) // 4 spaces to align with "-X, --"
+	} else {
+		flagName = fmt.Sprintf("-%s, --%s", f.Shorthand, f.Name) // "-X, --name"
+	}
+
+	// For bool flags, don't return a type
+	if flagType == "bool" {
+		return flagName, ""
+	}
+
+	// Replace "stringSlice" with "strings" for better readability
+	if flagType == "stringSlice" {
+		flagType = "strings"
+	}
+
+	return flagName, flagType
+}
+
+// formatFlagName formats a flag with its shorthand (if any) and type in Cobra style.
+// This is used for calculating maximum width.
+func formatFlagName(f *pflag.Flag) string {
+	flagName, flagType := formatFlagNameParts(f)
+	if flagType != "" {
+		return flagName + " " + flagType
+	}
+	return flagName
+}
+
+// getTerminalWidth returns the current terminal width, with a fallback default.
+func getTerminalWidth() int {
+	const defaultWidth = 120 // Fang's max width
+	width, _, err := xterm.GetSize(os.Stdout.Fd())
+	if err != nil || width <= 0 {
+		return defaultWidth
+	}
+	if width > defaultWidth {
+		return defaultWidth // Cap at maximum for readability
+	}
+	return width
+}
+
+// findAnsiCodeEnd finds the index where an ANSI escape code ends (at a letter).
+func findAnsiCodeEnd(s string) int {
+	for i := 0; i < len(s); i++ {
+		if (s[i] >= 'A' && s[i] <= 'Z') || (s[i] >= 'a' && s[i] <= 'z') {
+			return i
+		}
+	}
+	return -1
+}
+
+// isBackgroundCode checks if an ANSI code is a background color code (48;...).
+func isBackgroundCode(ansiCode string) bool {
+	return strings.HasPrefix(ansiCode, "48;") || strings.Contains(ansiCode, ";48;")
+}
+
+// processAnsiEscapeSequence processes a single ANSI escape sequence part.
+func processAnsiEscapeSequence(part string) (codeToKeep string, remainder string) {
+	endIdx := findAnsiCodeEnd(part)
+	if endIdx == -1 {
+		// No ending found, keep entire part as-is
+		return "\x1b[" + part, ""
+	}
+
+	ansiCode := part[:endIdx+1]
+	remainder = part[endIdx+1:]
+
+	// Keep non-background codes
+	if !isBackgroundCode(ansiCode) {
+		codeToKeep = "\x1b[" + ansiCode
+	}
+
+	return codeToKeep, remainder
+}
+
+// StripBackgroundCodes removes background ANSI color codes (ESC[48;...) while preserving foreground colors.
+// This allows markdown-rendered content to be displayed on our custom background without conflicts.
+//
+//nolint:godot // Function comment format acceptable despite linter warning.
+func stripBackgroundCodes(s string) string {
+	defer perf.Track(nil, "cmd.stripBackgroundCodes")()
+
+	parts := strings.Split(s, "\x1b[")
+	if len(parts) == 0 {
+		return s
+	}
+
+	// First part has no escape sequence
+	result := parts[0]
+
+	// Process remaining parts (each starts with an ANSI code)
+	for i := 1; i < len(parts); i++ {
+		codeToKeep, remainder := processAnsiEscapeSequence(parts[i])
+		result += codeToKeep + remainder
+	}
+
+	return result
+}
+
+// applyColoredHelpTemplate applies a custom colored help template using colorprofile.Writer and lipgloss.
+// This approach ensures colors work in both interactive terminals and redirected output (screengrabs).
+// Colors are automatically enabled when ATMOS_FORCE_COLOR, CLICOLOR_FORCE, or FORCE_COLOR is set.
 
 // setupProfiler initializes and starts the profiler if enabled.
 func setupProfiler(cmd *cobra.Command, atmosConfig *schema.AtmosConfiguration) error {
@@ -445,15 +722,17 @@ func Execute() error {
 	errUtils.InitializeMarkdown(atmosConfig)
 
 	if initErr != nil && !errors.Is(initErr, cfg.NotFound) {
-		if isVersionCommand() {
-			log.Debug("Warning: CLI configuration 'atmos.yaml' file not found", "error", initErr)
-		} else {
+		if !isVersionCommand() {
 			return initErr
 		}
+		log.Debug("Warning: failed to initialize CLI configuration", "error", initErr)
 	}
 
 	// Set the log level for the charmbracelet/log package based on the atmosConfig.
 	setupLogger(&atmosConfig)
+
+	// Setup color profile for lipgloss/termenv based rendering.
+	setupColorProfile(&atmosConfig)
 
 	var err error
 	// If CLI configuration was found, process its custom commands and command aliases.
@@ -469,6 +748,9 @@ func Execute() error {
 		}
 	}
 
+	// Boa styling is already applied via RootCmd.SetHelpFunc() which is inherited by all subcommands.
+	// No need to recursively set UsageFunc as that would override Boa's handling.
+
 	// Cobra for some reason handles root command in such a way that custom usage and help command don't work as per expectations.
 	RootCmd.SilenceErrors = true
 	cmd, err := RootCmd.ExecuteC()
@@ -481,32 +763,6 @@ func Execute() error {
 		}
 	}
 	return err
-}
-
-// isCompletionCommand checks if the current invocation is for shell completion.
-// This includes both user-visible completion commands and Cobra's internal
-// hidden completion commands (__complete, __completeNoDesc).
-// It works with both direct CLI invocations and programmatic SetArgs() calls.
-func isCompletionCommand(cmd *cobra.Command) bool {
-	if cmd == nil {
-		return false
-	}
-
-	// Check the command name directly from the Cobra command
-	// This works for both os.Args and SetArgs() invocations
-	cmdName := cmd.Name()
-	if cmdName == "completion" || cmdName == "__complete" || cmdName == "__completeNoDesc" {
-		return true
-	}
-
-	// Also check for shell completion environment variables
-	// Cobra sets these when generating completions
-	//nolint:forbidigo // These are external shell variables, not Atmos config
-	if os.Getenv("COMP_LINE") != "" || os.Getenv("_ARGCOMPLETE") != "" {
-		return true
-	}
-
-	return false
 }
 
 // getInvalidCommandName extracts the invalid command name from an error message.
@@ -530,37 +786,17 @@ func getInvalidCommandName(input string) string {
 //nolint:unparam // cmd parameter reserved for future use
 func displayPerformanceHeatmap(cmd *cobra.Command, mode string) error {
 	// Print performance summary to console.
-	// Filter out functions with zero total time for cleaner output (for table).
+	// Filter out functions with zero total time for cleaner output.
 	snap := perf.SnapshotTopFiltered("total", defaultTopFunctionsMax)
-	// Unbounded snapshot for accurate summary metrics.
-	fullSnap := perf.SnapshotTopFiltered("total", 0)
-
-	// Calculate total CPU time (sum of all self-times) and parallelism from all tracked functions.
-	var totalCPUTime time.Duration
-	for _, r := range fullSnap.Rows {
-		totalCPUTime += r.Total
-	}
-	elapsed := fullSnap.Elapsed
-	var parallelism float64
-	if elapsed > 0 {
-		parallelism = float64(totalCPUTime) / float64(elapsed)
-	} else {
-		parallelism = 0
-	}
-
 	utils.PrintfMessageToTUI("\n=== Atmos Performance Summary ===\n")
-	utils.PrintfMessageToTUI("Elapsed: %s | CPU Time: %s | Parallelism: ~%.1fx\n",
-		elapsed.Truncate(time.Microsecond),
-		totalCPUTime.Truncate(time.Microsecond),
-		parallelism)
-	utils.PrintfMessageToTUI("Functions: %d | Total Calls: %d\n\n", snap.TotalFuncs, snap.TotalCalls)
-	utils.PrintfMessageToTUI("%-50s %6s %13s %13s %13s %13s\n", "Function", "Count", "CPU Time", "Avg", "Max", "P95")
+	utils.PrintfMessageToTUI("Elapsed: %s  Functions: %d  Calls: %d\n", snap.Elapsed, snap.TotalFuncs, snap.TotalCalls)
+	utils.PrintfMessageToTUI("%-50s %6s %10s %10s %10s %8s\n", "Function", "Count", "Total", "Avg", "Max", "P95")
 	for _, r := range snap.Rows {
 		p95 := "-"
 		if r.P95 > 0 {
 			p95 = heatmap.FormatDuration(r.P95)
 		}
-		utils.PrintfMessageToTUI("%-50s %6d %13s %13s %13s %13s\n",
+		utils.PrintfMessageToTUI("%-50s %6d %10s %10s %10s %8s\n",
 			r.Name, r.Count, heatmap.FormatDuration(r.Total), heatmap.FormatDuration(r.Avg), heatmap.FormatDuration(r.Max), p95)
 	}
 
@@ -609,6 +845,11 @@ func init() {
 			"Options: cpu, heap, allocs, goroutine, block, mutex, threadcreate, trace")
 	RootCmd.PersistentFlags().Bool("heatmap", false, "Show performance heatmap visualization after command execution (includes P95 latency)")
 	RootCmd.PersistentFlags().String("heatmap-mode", "bar", "Heatmap visualization mode: bar, sparkline, table (press 1-3 to switch in TUI)")
+
+	// Setup color profile early for Cobra/Boa styling.
+	// This must happen before initCobraConfig() creates Boa styles.
+	setupColorProfileFromEnv()
+
 	// Set custom usage template.
 	err := templates.SetCustomUsageFunc(RootCmd)
 	if err != nil {
@@ -621,18 +862,9 @@ func init() {
 // initCobraConfig initializes Cobra command configuration and styling.
 func initCobraConfig() {
 	RootCmd.SetOut(os.Stdout)
-	styles := boa.DefaultStyles()
-	b := boa.New(boa.WithStyles(styles))
-	oldUsageFunc := RootCmd.UsageFunc()
+
 	RootCmd.SetFlagErrorFunc(func(c *cobra.Command, err error) error {
 		return showFlagUsageAndExit(c, err)
-	})
-	RootCmd.SetUsageFunc(func(c *cobra.Command) error {
-		if c.Use == "atmos" {
-			return b.UsageFunc(c)
-		}
-		showUsageAndExit(c, c.Flags().Args())
-		return nil
 	})
 	RootCmd.SetHelpFunc(func(command *cobra.Command, args []string) {
 		contentName := strings.ReplaceAll(strings.ReplaceAll(command.CommandPath(), " ", "_"), "-", "_")
@@ -647,57 +879,73 @@ func initCobraConfig() {
 			}
 			showUsageAndExit(command, arguments)
 		}
-		// Print a styled Atmos logo to the terminal.
-		if command.Use != "atmos" || command.Flags().Changed("help") {
-			var buf bytes.Buffer
-			var err error
-			command.SetOut(&buf)
-			fmt.Println()
-			if term.IsTTYSupportForStdout() {
-				err = tuiUtils.PrintStyledTextToSpecifiedOutput(&buf, "ATMOS")
-			} else {
-				err = tuiUtils.PrintStyledText("ATMOS")
-			}
-			if err != nil {
-				errUtils.CheckErrorPrintAndExit(err, "", "")
-			}
 
-			if err := oldUsageFunc(command); err != nil {
-				errUtils.CheckErrorPrintAndExit(err, "", "")
-			}
+		// Distinguish between interactive 'atmos help' and flag-based '--help':
+		// - 'atmos help' (Contains "help" but NOT "--help" or "-h") → interactive, may use pager
+		// - 'atmos --help' or 'atmos cmd --help' → simple output, NO pager unless --pager explicitly set
+		isInteractiveHelp := Contains(os.Args, "help") && !Contains(os.Args, "--help") && !Contains(os.Args, "-h")
+		isFlagHelp := Contains(os.Args, "--help") || Contains(os.Args, "-h")
 
-			// Check if pager should be enabled based on flag, env var, or config.
-			pagerEnabled := atmosConfig.Settings.Terminal.IsPagerEnabled()
+		// Logo and version are now printed by customRenderAtmosHelp
+		telemetry.PrintTelemetryDisclosure()
 
+		// For flag-based help (--help), render directly to stdout without buffering or pager.
+		// Only use pager if --pager flag is explicitly set.
+		switch {
+		case isFlagHelp:
 			// Check if --pager flag was explicitly set.
+			pagerExplicitlySet := false
+			pagerEnabled := false
 			if pagerFlag, err := command.Flags().GetString("pager"); err == nil && pagerFlag != "" {
-				// Handle --pager flag values using switch for better readability.
+				pagerExplicitlySet = true
 				switch pagerFlag {
 				case "true", "on", "yes", "1":
 					pagerEnabled = true
 				case "false", "off", "no", "0":
 					pagerEnabled = false
 				default:
-					// Assume it's a pager command like "less" or "more"
+					// Assume it's a pager command like "less" or "more".
+					pagerEnabled = true
+				}
+			}
+
+			if pagerExplicitlySet && pagerEnabled {
+				// User explicitly requested pager for flag help.
+				var buf bytes.Buffer
+				command.SetOut(&buf)
+				applyColoredHelpTemplate(command)
+				pager := pager.NewWithAtmosConfig(true)
+				_ = pager.Run("Atmos CLI Help", buf.String())
+			} else {
+				// Default: render help directly to stdout without pager.
+				applyColoredHelpTemplate(command)
+			}
+		case isInteractiveHelp:
+			// Interactive 'atmos help' command - use pager if configured.
+			var buf bytes.Buffer
+			command.SetOut(&buf)
+			applyColoredHelpTemplate(command)
+
+			// Check pager configuration from flag, env, or config.
+			pagerEnabled := atmosConfig.Settings.Terminal.IsPagerEnabled()
+			if pagerFlag, err := command.Flags().GetString("pager"); err == nil && pagerFlag != "" {
+				switch pagerFlag {
+				case "true", "on", "yes", "1":
+					pagerEnabled = true
+				case "false", "off", "no", "0":
+					pagerEnabled = false
+				default:
 					pagerEnabled = true
 				}
 			}
 
 			pager := pager.NewWithAtmosConfig(pagerEnabled)
-			if err := pager.Run("Atmos CLI Help", buf.String()); err != nil {
-				log.Error("Failed to run pager", "error", err)
-				utils.OsExit(1)
-			}
-		} else {
-			fmt.Println()
-			err := tuiUtils.PrintStyledText("ATMOS")
-			errUtils.CheckErrorPrintAndExit(err, "", "")
-
-			b.HelpFunc(command, args)
-			if err := command.Usage(); err != nil {
-				errUtils.CheckErrorPrintAndExit(err, "", "")
-			}
+			_ = pager.Run("Atmos CLI Help", buf.String())
+		default:
+			// Fallback for other cases.
+			applyColoredHelpTemplate(command)
 		}
+
 		CheckForAtmosUpdateAndPrintMessage(atmosConfig)
 	})
 }
