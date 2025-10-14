@@ -4,7 +4,11 @@ Executing command: `atmos terraform plan mock -s idontexist`
 
 # Component Error
 
-**Error:** invalid component: Could not find the component mock in the stack idontexist
+**Error:** invalid component
+
+## Explanation
+
+Could not find the component mock in the stack idontexist
 
 ## Hints
 

@@ -4,7 +4,11 @@ Executing command: `atmos terraform plan idontexist`
 
 # Component Error
 
-**Error:** invalid component: Could not find the component idontexist in the stack prod
+**Error:** invalid component
+
+## Explanation
+
+Could not find the component idontexist in the stack prod
 
 ## Hints
 

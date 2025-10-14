@@ -298,6 +298,6 @@ tests:
     expect:
       diff: []
       stderr:
-        - "identity not found:"
+        - "identity not found"
         - "nonexistent"
       exit_code: 1
