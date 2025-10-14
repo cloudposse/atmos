@@ -147,7 +147,7 @@ func TestManager_GetDefaultIdentity_MultipleDefaultsOrder(t *testing.T) {
 	t.Setenv("CI", "true")
 	defer func() {
 		if hadCI {
-			t.Setenv("CI", origCI)
+			os.Setenv("CI", origCI)
 		} else {
 			os.Unsetenv("CI")
 		}

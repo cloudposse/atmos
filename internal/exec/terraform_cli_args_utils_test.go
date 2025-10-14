@@ -207,7 +207,7 @@ func TestGetTerraformEnvCliVars_NoEnvironmentVariable(t *testing.T) {
 	os.Unsetenv("TF_CLI_ARGS")
 	defer func() {
 		if originalValue != "" {
-			t.Setenv("TF_CLI_ARGS", originalValue)
+			os.Setenv("TF_CLI_ARGS", originalValue)
 		}
 	}()
 

@@ -59,7 +59,7 @@ func TestInitFunction(t *testing.T) {
 			if v == "" {
 				os.Unsetenv(k)
 			} else {
-				t.Setenv(k, v)
+				os.Setenv(k, v)
 			}
 		}
 	}()
@@ -249,7 +249,7 @@ func TestSetupLogger_TraceLevelFromEnvironment(t *testing.T) {
 		if originalEnv == "" {
 			os.Unsetenv("ATMOS_LOGS_LEVEL")
 		} else {
-			t.Setenv("ATMOS_LOGS_LEVEL", originalEnv)
+			os.Setenv("ATMOS_LOGS_LEVEL", originalEnv)
 		}
 	}()
 

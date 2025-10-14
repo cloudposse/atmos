@@ -814,7 +814,7 @@ func TestEnvironmentVariableHandling(t *testing.T) {
 					os.Unsetenv(envVar)
 				}
 				for envVar, val := range originalEnvVars {
-					t.Setenv(envVar, val)
+					os.Setenv(envVar, val)
 				}
 			}()
 
