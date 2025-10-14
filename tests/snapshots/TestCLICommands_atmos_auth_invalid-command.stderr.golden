@@ -1,12 +1,21 @@
-Error: Unknown command `invalid-command` for `atmos auth`
+
+# Incorrect Usage
+
+invalid arguments
+
+Unknown command invalid-command for atmos auth
 
 Valid subcommands are:
-* env
-* exec
-* login
-* user
-* validate
-* whoami
+
+• env
+• exec
+• login
+• user
+• validate
+• whoami
+
+## Hints
+
+💡 Run atmos auth --help for usage
 
 
-Run `atmos auth --help` for usage

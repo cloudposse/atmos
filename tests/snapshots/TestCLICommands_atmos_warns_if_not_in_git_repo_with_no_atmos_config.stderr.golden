@@ -2,7 +2,7 @@
 **Notice:** Telemetry Enabled - Atmos now collects anonymous telemetry regarding usage. This information is used to shape the Atmos roadmap and prioritize features. You can learn more, including how to opt out if you'd prefer not to participate in this anonymous program, by visiting: https://atmos.tools/cli/telemetry
 WARN You're not inside a git repository. Atmos feels lonely outside - bring it home!
 
-# Error
+# Missing Configuration
 
 directory for Atmos stacks does not exist
 

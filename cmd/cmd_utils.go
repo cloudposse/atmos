@@ -732,26 +732,30 @@ func showErrorExampleFromMarkdown(cmd *cobra.Command, arg string) {
 func showUsageExample(cmd *cobra.Command, details string) {
 	contentName := strings.ReplaceAll(strings.ReplaceAll(cmd.CommandPath(), " ", "_"), "-", "_")
 
-	// Create base error with the details message
-	baseErr := fmt.Errorf("%w: %s", errUtils.ErrInvalidArguments, strings.TrimSpace(details))
+	// Build error message - details already contains formatted content
+	// We wrap it to preserve the sentinel error type
+	baseErr := fmt.Errorf("%w\n\n%s", errUtils.ErrInvalidArguments, strings.TrimSpace(details))
 
-	// Build error with proper formatting
-	err := errUtils.Build(baseErr).
+	// Build error with title and exit code
+	errBuilder := errUtils.Build(baseErr).
 		WithTitle("Incorrect Usage").
 		WithExitCode(2)
 
-	// Add usage examples if available
+	// Add usage examples or default help hint
 	if exampleContent, ok := examples[contentName]; ok {
-		err = err.WithExample(exampleContent.Content)
+		if exampleContent.Content != "" {
+			errBuilder = errBuilder.WithExample(exampleContent.Content)
+		}
 		if exampleContent.Suggestion != "" {
-			err = err.WithHint(exampleContent.Suggestion)
+			errBuilder = errBuilder.WithHint(exampleContent.Suggestion)
 		}
 	} else {
-		err = err.WithHintf("Run `%s --help` for usage", cmd.CommandPath())
+		errBuilder = errBuilder.WithHintf("Run `%s --help` for usage", cmd.CommandPath())
 	}
 
-	// Use CheckErrorPrintAndExit which will use the formatter
-	errUtils.CheckErrorPrintAndExit(err.Err(), "", "")
+	// Use CheckErrorPrintAndExit - pass empty strings since we're using error builder
+	err := errBuilder.Err()
+	errUtils.CheckErrorPrintAndExit(err, "", "")
 }
 
 func stackFlagCompletion(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {

@@ -1,7 +1,9 @@
 
 # Incorrect Usage
 
-invalid arguments: Unknown command non-existent for atmos
+invalid arguments
+
+Unknown command non-existent for atmos
 
 Valid subcommands are:
 

@@ -11,12 +11,17 @@ import (
 	"golang.org/x/term"
 
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui/markdown"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
 
 const (
 	// DefaultMaxLineLength is the default maximum line length before wrapping.
 	DefaultMaxLineLength = 80
+
+	// DefaultMarkdownWidth is the default width for markdown rendering when config is not available.
+	DefaultMarkdownWidth = 120
 
 	// Space is used for separating words.
 	space = " "
@@ -235,14 +240,30 @@ func addStackTraceSection(md *strings.Builder, err error) {
 	md.WriteString(newline + "```" + newline)
 }
 
-// renderMarkdown renders markdown string through Glamour or returns plain markdown.
+// renderMarkdown renders markdown string through Glamour or creates a minimal renderer.
 func renderMarkdown(md string) string {
 	renderer := GetMarkdownRenderer()
-	if renderer != nil {
-		rendered, renderErr := renderer.RenderErrorf(md)
-		if renderErr == nil {
-			return rendered
+	if renderer == nil {
+		// Create minimal renderer with default config when global renderer not initialized.
+		// This happens during early errors before atmos config is loaded.
+		defaultConfig := schema.AtmosConfiguration{
+			Settings: schema.AtmosSettings{
+				Docs: schema.Docs{
+					MaxWidth: DefaultMarkdownWidth,
+				},
+			},
 		}
+		var err error
+		renderer, err = markdown.NewTerminalMarkdownRenderer(defaultConfig)
+		if err != nil {
+			// Last resort fallback: return plain markdown.
+			return md
+		}
+	}
+
+	rendered, renderErr := renderer.RenderErrorf(md)
+	if renderErr == nil {
+		return rendered
 	}
 
 	// Fallback to plain markdown.

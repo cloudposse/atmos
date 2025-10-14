@@ -1,7 +1,9 @@
 
 # Incorrect Usage
 
-invalid arguments: The command atmos atlantis requires a subcommand
+invalid arguments
+
+The command atmos atlantis requires a subcommand
 
 Valid subcommands are:
 

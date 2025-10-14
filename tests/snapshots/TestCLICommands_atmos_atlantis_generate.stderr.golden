@@ -1,7 +1,16 @@
-Error: The command `atmos atlantis generate` requires a subcommand
+
+# Incorrect Usage
+
+invalid arguments
+
+The command atmos atlantis generate requires a subcommand
 
 Valid subcommands are:
-* repo-config
+
+• repo-config
+
+## Hints
+
+💡 Run atmos atlantis generate --help for usage
 
 
-Run `atmos atlantis generate --help` for usage
