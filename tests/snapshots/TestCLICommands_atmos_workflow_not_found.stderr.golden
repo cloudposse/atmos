@@ -7,7 +7,9 @@
 
 ## Explanation
 
-The workflow no-workflow-exists does not exist.
+The workflow no-workflow-exists does not exist in stacks/workflows/test.yaml.
+
+This file defines 8 workflows, but no-workflow-exists is not among them.
 
 ## Available workflows:
 

@@ -7,7 +7,9 @@
 
 ## Explanation
 
-The workflow pla does not exist.
+The workflow pla does not exist in stacks/workflows/workflow1.yaml.
+
+This file defines 5 workflows, but pla is not among them.
 
 ## Available workflows:
 
