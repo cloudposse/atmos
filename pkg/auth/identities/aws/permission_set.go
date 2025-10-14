@@ -224,14 +224,22 @@ func (i *permissionSetIdentity) resolveAccountID(ctx context.Context, ssoClient 
 
 // newSSOClient creates an AWS SSO client from base credentials.
 func (i *permissionSetIdentity) newSSOClient(ctx context.Context, awsBase *types.AWSCredentials) (*sso.Client, error) {
-	cfg, err := config.LoadDefaultConfig(ctx,
+	// Build config options
+	configOpts := []func(*config.LoadOptions) error{
 		config.WithRegion(awsBase.Region),
 		config.WithCredentialsProvider(awssdk.CredentialsProviderFunc(func(ctx context.Context) (awssdk.Credentials, error) {
 			return awssdk.Credentials{
 				AccessKeyID: awsBase.AccessKeyID, // This is actually the SSO access token
 			}, nil
 		})),
-	)
+	}
+
+	// Add custom endpoint resolver if configured
+	if resolverOpt := awsCloud.GetResolverConfigOption(i.config, nil); resolverOpt != nil {
+		configOpts = append(configOpts, resolverOpt)
+	}
+
+	cfg, err := config.LoadDefaultConfig(ctx, configOpts...)
 	if err != nil {
 		return nil, fmt.Errorf("%w: failed to load AWS config: %v", errUtils.ErrInvalidIdentityConfig, err)
 	}
