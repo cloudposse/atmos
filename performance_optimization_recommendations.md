@@ -470,6 +470,22 @@ func hasCustomTags(node *yaml.Node) bool {
 - **Result**: Zero overhead when piping output (e.g., `atmos describe stacks | jq`) or in CI/CD pipelines
 - **Expected benefit**: 3-6 second improvement for non-TTY output scenarios; no change for interactive terminal use
 
+#### P8.1: Content-Aware YAML Cache Keys (Completed)
+- **Commit**: [pending]
+- **Impact**: Fix cache key bug where template-processed files with different contexts incorrectly shared cache entries
+- **Problem**: `parsedYAMLCache` was keyed only by file path, but when files are processed with Go templates and different contexts, the same cached node was incorrectly returned to all stacks
+- **Example**: `catalog/vpc.yaml` with `{{ .env }}` template imported with `context: {env: "dev"}` and `context: {env: "prod"}` would both get the first cached result
+- **Implementation**:
+  - Added `generateParsedYAMLCacheKey()` that combines file path + SHA256 content hash
+  - Updated `getCachedParsedYAML()` to accept content and generate content-aware cache key
+  - Updated `cacheParsedYAML()` to accept content and generate content-aware cache key
+  - Cache key format: `"filepath:sha256hash"` ensures correctness for template-processed files
+- **Result**:
+  - Static files (same content): same cache key → cache hit ✅
+  - Template files with same context: same cache key → cache hit ✅
+  - Template files with different contexts: different cache key → correct separate cache entries ✅
+- **Impact**: Fixes correctness bug while maintaining cache performance; no performance regression expected
+
 **Measured Performance Improvement**:
 - Setup 1: 12 min → 8.4 min (30% improvement with P1.1 + P1.2)
 - Setup 2: 23 sec → 15 sec (35% improvement with P1.1 + P1.2 + P2.2)

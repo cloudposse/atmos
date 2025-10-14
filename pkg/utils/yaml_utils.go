@@ -2,6 +2,8 @@ package utils
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"os"
 	"strings"
@@ -73,18 +75,39 @@ type parsedYAMLCacheEntry struct {
 	positions PositionMap
 }
 
+// generateParsedYAMLCacheKey generates a cache key from file path and content.
+// The content hash ensures that template-processed files with different contexts
+// get different cache entries, while static files benefit from path-only caching.
+func generateParsedYAMLCacheKey(file string, content string) string {
+	if file == "" || content == "" {
+		return ""
+	}
+
+	// Compute SHA256 hash of content.
+	hash := sha256.Sum256([]byte(content))
+	contentHash := hex.EncodeToString(hash[:])
+
+	// Cache key format: "filepath:contenthash"
+	// This ensures that:
+	// - Static files (same content): same cache key → cache hit
+	// - Template files with same context: same cache key → cache hit
+	// - Template files with different context: different cache key → cache miss (correct behavior)
+	return file + ":" + contentHash
+}
+
 // getCachedParsedYAML retrieves a cached parsed YAML node if it exists.
 // Returns a copy of the node to prevent external mutations.
 // Note: perf.Track() removed from this hot path to reduce overhead.
-func getCachedParsedYAML(file string) (*yaml.Node, PositionMap, bool) {
-	if file == "" {
+func getCachedParsedYAML(file string, content string) (*yaml.Node, PositionMap, bool) {
+	cacheKey := generateParsedYAMLCacheKey(file, content)
+	if cacheKey == "" {
 		return nil, nil, false
 	}
 
 	parsedYAMLCacheMu.RLock()
 	defer parsedYAMLCacheMu.RUnlock()
 
-	entry, found := parsedYAMLCache[file]
+	entry, found := parsedYAMLCache[cacheKey]
 	if !found {
 		return nil, nil, false
 	}
@@ -97,8 +120,9 @@ func getCachedParsedYAML(file string) (*yaml.Node, PositionMap, bool) {
 // cacheParsedYAML stores a parsed YAML node in the cache.
 // Stores a copy to prevent external mutations from affecting the cache.
 // Note: perf.Track() removed from this hot path to reduce overhead.
-func cacheParsedYAML(file string, node *yaml.Node, positions PositionMap) {
-	if file == "" || node == nil {
+func cacheParsedYAML(file string, content string, node *yaml.Node, positions PositionMap) {
+	cacheKey := generateParsedYAMLCacheKey(file, content)
+	if cacheKey == "" || node == nil {
 		return
 	}
 
@@ -107,7 +131,7 @@ func cacheParsedYAML(file string, node *yaml.Node, positions PositionMap) {
 
 	// Store a copy to prevent external mutations from affecting the cache.
 	nodeCopy := *node
-	parsedYAMLCache[file] = &parsedYAMLCacheEntry{
+	parsedYAMLCache[cacheKey] = &parsedYAMLCacheEntry{
 		node:      nodeCopy,
 		positions: positions,
 	}
@@ -420,7 +444,11 @@ func UnmarshalYAMLFromFile[T any](atmosConfig *schema.AtmosConfiguration, input 
 // UnmarshalYAMLFromFileWithPositions unmarshals YAML and returns position information.
 // The positions map contains line/column information for each value in the YAML.
 // If atmosConfig.TrackProvenance is false, returns an empty position map.
-// Uses caching to avoid re-parsing the same files multiple times.
+// Uses caching with content-aware keys to correctly handle template-processed files.
+// The cache key includes both file path and content hash, ensuring that:
+// - Static files are cached by path (same content = cache hit)
+// - Template files with same context get cache hits
+// - Template files with different contexts get separate cache entries (correct behavior).
 func UnmarshalYAMLFromFileWithPositions[T any](atmosConfig *schema.AtmosConfiguration, input string, file string) (T, PositionMap, error) {
 	defer perf.Track(atmosConfig, "utils.UnmarshalYAMLFromFileWithPositions")()
 
@@ -431,7 +459,8 @@ func UnmarshalYAMLFromFileWithPositions[T any](atmosConfig *schema.AtmosConfigur
 	var zeroValue T
 
 	// Try to get cached parsed YAML first.
-	node, positions, found := getCachedParsedYAML(file)
+	// Pass the input content to generate a cache key that includes content hash.
+	node, positions, found := getCachedParsedYAML(file, input)
 	if !found {
 		// Cache miss - parse the YAML.
 		var parsedNode yaml.Node
@@ -452,8 +481,8 @@ func UnmarshalYAMLFromFileWithPositions[T any](atmosConfig *schema.AtmosConfigur
 			return zeroValue, nil, err
 		}
 
-		// Cache the parsed and processed node.
-		cacheParsedYAML(file, &parsedNode, positions)
+		// Cache the parsed and processed node with content-aware key.
+		cacheParsedYAML(file, input, &parsedNode, positions)
 		node = &parsedNode
 	}
 
