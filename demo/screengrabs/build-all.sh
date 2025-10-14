@@ -76,8 +76,13 @@ postprocess_ansi() {
 
 postprocess_html() {
   local file=$1
+  # Replace blue colors with Atmos blue.
   $SED 's/color:blue/color:#005f87/g' $file
 	$SED 's/color:#183691/color:#005f87/g' $file
+
+	# Strip all background colors - they cause visibility issues.
+	# aha adds background-color to code blocks which makes text invisible when colors match.
+	$SED 's/background-color:[^;]*;//g' $file
 }
 
 manifest=$1

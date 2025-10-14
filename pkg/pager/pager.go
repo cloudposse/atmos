@@ -6,7 +6,9 @@ import (
 
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
+
 	"github.com/cloudposse/atmos/internal/tui/templates/term"
+	log "github.com/cloudposse/atmos/pkg/logger"
 )
 
 //go:generate mockgen -source=$GOFILE -destination=mock_$GOFILE -package=$GOPACKAGE
@@ -19,6 +21,7 @@ type pageCreator struct {
 	newTeaProgram         func(model tea.Model, opts ...tea.ProgramOption) *tea.Program
 	contentFitsTerminal   func(content string) bool
 	isTTYSupportForStdout func() bool
+	isTTYAccessible       func() bool
 }
 
 func NewWithAtmosConfig(enablePager bool) PageCreator {
@@ -33,7 +36,18 @@ func New() PageCreator {
 		newTeaProgram:         tea.NewProgram,
 		contentFitsTerminal:   ContentFitsTerminal,
 		isTTYSupportForStdout: term.IsTTYSupportForStdout,
+		isTTYAccessible:       isTTYAccessible,
 	}
+}
+
+// isTTYAccessible checks if /dev/tty can be opened.
+func isTTYAccessible() bool {
+	tty, err := os.Open("/dev/tty")
+	if err != nil {
+		return false
+	}
+	tty.Close()
+	return true
 }
 
 func (p *pageCreator) Run(title, content string) error {
@@ -46,13 +60,12 @@ func (p *pageCreator) Run(title, content string) error {
 	// Check if /dev/tty is accessible before trying to use alternate screen.
 	// The alternate screen mode requires opening /dev/tty for input, which may not
 	// be available in CI/test environments even if stdout is a TTY.
-	if tty, err := os.Open("/dev/tty"); err != nil {
+	if !p.isTTYAccessible() {
 		// /dev/tty not accessible, print directly without pager.
+		// This is an expected condition in non-interactive environments, not an error.
+		log.Trace("Pager disabled: /dev/tty not accessible")
 		fmt.Print(content)
 		return nil
-	} else {
-		// Close the file descriptor immediately to avoid leaking.
-		tty.Close()
 	}
 
 	// Count visible lines (taking word wrapping into account)
@@ -65,17 +78,19 @@ func (p *pageCreator) Run(title, content string) error {
 	}
 
 	// Content doesn't fit - use the pager with alternate screen.
-	_, err := p.newTeaProgram(
+	_, pagerErr := p.newTeaProgram(
 		&model{
 			title:    title,
 			content:  content,
 			ready:    false,
 			viewport: viewport.New(0, 0),
 		},
-		tea.WithAltScreen(), // use the full size of the terminal in its "alternate screen buffer"
+		tea.WithAltScreen(), // use the full size of the terminal in its "alternate screen buffer".
 	).Run()
-	if err != nil {
+	if pagerErr != nil {
 		// Pager failed, fall back to direct print.
+		// This is a graceful fallback, not a critical error.
+		log.Trace("Pager failed, falling back to direct print", "error", pagerErr)
 		fmt.Print(content)
 		return nil
 	}

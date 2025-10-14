@@ -212,18 +212,19 @@ func tokenize(line string) []string {
 	quoteChar := rune(0)
 
 	for _, ch := range line {
-		if isQuoteStart(ch, inQuote) {
+		switch {
+		case isQuoteStart(ch, inQuote):
 			inQuote, quoteChar = true, ch
 			current.WriteRune(ch)
-		} else if ch == quoteChar && inQuote {
+		case ch == quoteChar && inQuote:
 			inQuote, quoteChar = false, 0
 			current.WriteRune(ch)
-		} else if ch == ' ' && !inQuote {
+		case ch == ' ' && !inQuote:
 			if current.Len() > 0 {
 				tokens = append(tokens, current.String())
 				current.Reset()
 			}
-		} else {
+		default:
 			current.WriteRune(ch)
 		}
 	}

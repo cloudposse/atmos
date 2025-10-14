@@ -262,101 +262,159 @@ func Cleanup() {
 	cleanupLogFile()
 }
 
-// renderFlags renders a flag set with colors and proper text wrapping.
+// RenderFlags renders a flag set with colors and proper text wrapping.
 // Flag names are colored green, flag types are dimmed, descriptions are wrapped to terminal width.
 // Markdown in descriptions is rendered to terminal output.
-func renderFlags(w io.Writer, flags *pflag.FlagSet, flagStyle, argTypeStyle, descStyle lipgloss.Style, termWidth int, atmosConfig *schema.AtmosConfiguration) {
-	if flags == nil {
-		return
-	}
 
+// flagRenderLayout holds layout constants and dimensions for flag rendering.
+type flagRenderLayout struct {
+	leftPad      int
+	spaceBetween int
+	rightMargin  int
+	minDescWidth int
+	maxFlagWidth int
+	descColStart int
+	descWidth    int
+}
+
+// newFlagRenderLayout creates a new layout configuration for flag rendering.
+func newFlagRenderLayout(termWidth int, maxFlagWidth int) flagRenderLayout {
 	const (
-		leftPad      = 2  // Left padding before flag names (matches commands)
-		spaceBetween = 2  // Space between flag name and description
-		rightMargin  = 2  // Right margin to prevent text touching edge
-		minDescWidth = 40 // Minimum width for description column
+		leftPad      = 2
+		spaceBetween = 2
+		rightMargin  = 2
+		minDescWidth = 40
 	)
 
-	// Calculate maximum flag name width
-	maxFlagWidth := 0
+	descColStart := leftPad + maxFlagWidth + spaceBetween
+	descWidth := termWidth - descColStart - rightMargin
+	if descWidth < minDescWidth {
+		descWidth = minDescWidth
+	}
+
+	return flagRenderLayout{
+		leftPad:      leftPad,
+		spaceBetween: spaceBetween,
+		rightMargin:  rightMargin,
+		minDescWidth: minDescWidth,
+		maxFlagWidth: maxFlagWidth,
+		descColStart: descColStart,
+		descWidth:    descWidth,
+	}
+}
+
+// calculateMaxFlagWidth finds the maximum flag name width for alignment.
+func calculateMaxFlagWidth(flags *pflag.FlagSet) int {
+	maxWidth := 0
 	flags.VisitAll(func(f *pflag.Flag) {
 		if f.Hidden {
 			return
 		}
 		flagName := formatFlagName(f)
-		if len(flagName) > maxFlagWidth {
-			maxFlagWidth = len(flagName)
+		if len(flagName) > maxWidth {
+			maxWidth = len(flagName)
 		}
 	})
+	return maxWidth
+}
 
-	// Calculate description column width
-	descColStart := leftPad + maxFlagWidth + spaceBetween
-	descWidth := termWidth - descColStart - rightMargin
-	if descWidth < minDescWidth {
-		descWidth = minDescWidth // Ensure minimum readable width
+// buildFlagDescription creates the flag description with default value if applicable.
+func buildFlagDescription(f *pflag.Flag) string {
+	usage := f.Usage
+	if f.DefValue != "" && f.DefValue != "false" && f.DefValue != "0" && f.DefValue != "[]" && f.Name != "" && f.Name != "help" {
+		usage += fmt.Sprintf(" (default `%s`)", f.DefValue)
+	}
+	return usage
+}
+
+// renderWrappedLines renders wrapped description lines with proper indentation.
+func renderWrappedLines(w io.Writer, lines []string, indent int, descStyle *lipgloss.Style) {
+	if len(lines) == 0 {
+		return
 	}
 
-	// Create markdown renderer for flag descriptions
+	// Print first line (already positioned on same line as flag name)
+	fmt.Fprintf(w, "%s\n", descStyle.Render(lines[0]))
+
+	// Print continuation lines with proper indentation
+	indentStr := strings.Repeat(" ", indent)
+	for i := 1; i < len(lines); i++ {
+		fmt.Fprintf(w, "%s%s\n", indentStr, descStyle.Render(lines[i]))
+	}
+}
+
+// flagStyles holds the lipgloss styles for flag rendering.
+type flagStyles struct {
+	flagStyle    lipgloss.Style
+	argTypeStyle lipgloss.Style
+	descStyle    lipgloss.Style
+}
+
+// renderSingleFlag renders one flag with its description.
+func renderSingleFlag(w io.Writer, f *pflag.Flag, layout flagRenderLayout, styles *flagStyles, renderer *markdown.Renderer) {
+	// Get flag name parts and calculate padding
+	flagNamePlain, flagTypePlain := formatFlagNameParts(f)
+	fullPlainLength := len(flagNamePlain)
+	if flagTypePlain != "" {
+		fullPlainLength += 1 + len(flagTypePlain)
+	}
+	padding := layout.maxFlagWidth - fullPlainLength
+
+	const space = " "
+
+	// Render flag name with colors
+	fmt.Fprint(w, strings.Repeat(space, layout.leftPad))
+	fmt.Fprint(w, styles.flagStyle.Render(flagNamePlain))
+	if flagTypePlain != "" {
+		fmt.Fprint(w, space)
+		fmt.Fprint(w, styles.argTypeStyle.Render(flagTypePlain))
+	}
+	fmt.Fprint(w, strings.Repeat(space, padding+layout.spaceBetween))
+
+	// Build and process description
+	usage := buildFlagDescription(f)
+	wrapped := wordwrap.String(usage, layout.descWidth)
+
+	if renderer != nil {
+		rendered, err := renderer.RenderWithoutWordWrap(wrapped)
+		if err == nil {
+			wrapped = strings.TrimSpace(rendered)
+		}
+	}
+
+	lines := strings.Split(wrapped, "\n")
+	renderWrappedLines(w, lines, layout.descColStart, &styles.descStyle)
+
+	fmt.Fprintln(w)
+}
+
+// renderFlags renders all flags with formatting and styling.
+//
+//nolint:revive,gocritic // Function signature required for compatibility with help template system.
+func renderFlags(w io.Writer, flags *pflag.FlagSet, flagStyle, argTypeStyle, descStyle lipgloss.Style, termWidth int, atmosConfig *schema.AtmosConfiguration) {
+	if flags == nil {
+		return
+	}
+
+	maxFlagWidth := calculateMaxFlagWidth(flags)
+	layout := newFlagRenderLayout(termWidth, maxFlagWidth)
+
+	styles := &flagStyles{
+		flagStyle:    flagStyle,
+		argTypeStyle: argTypeStyle,
+		descStyle:    descStyle,
+	}
+
 	renderer, err := markdown.NewTerminalMarkdownRenderer(*atmosConfig)
 	if err != nil {
-		renderer = nil // Fall back to plain text
+		renderer = nil
 	}
 
-	// Render each flag
 	flags.VisitAll(func(f *pflag.Flag) {
 		if f.Hidden {
 			return
 		}
-
-		// Get flag name parts (without type) and the plain text length
-		flagNamePlain, flagTypePlain := formatFlagNameParts(f)
-		fullPlainLength := len(flagNamePlain)
-		if flagTypePlain != "" {
-			fullPlainLength += 1 + len(flagTypePlain) // +1 for space between name and type
-		}
-		padding := maxFlagWidth - fullPlainLength
-
-		// Render flag name with colors (name in green, type in dimmed gray)
-		fmt.Fprint(w, strings.Repeat(" ", leftPad))
-		fmt.Fprint(w, flagStyle.Render(flagNamePlain))
-		if flagTypePlain != "" {
-			fmt.Fprint(w, " ")
-			fmt.Fprint(w, argTypeStyle.Render(flagTypePlain))
-		}
-		fmt.Fprint(w, strings.Repeat(" ", padding+spaceBetween))
-
-		// Build description with default value
-		usage := f.Usage
-		if f.DefValue != "" && f.DefValue != "false" && f.DefValue != "0" && f.DefValue != "[]" && f.Name != "" && f.Name != "help" {
-			usage += fmt.Sprintf(" (default `%s`)", f.DefValue)
-		}
-
-		// Word wrap the description first
-		wrapped := wordwrap.String(usage, descWidth)
-
-		// Render markdown if available
-		if renderer != nil {
-			rendered, renderErr := renderer.RenderWithoutWordWrap(wrapped)
-			if renderErr == nil {
-				wrapped = strings.TrimSpace(rendered)
-			}
-		}
-
-		lines := strings.Split(wrapped, "\n")
-
-		// Print first line on the same line as flag name
-		if len(lines) > 0 {
-			fmt.Fprintf(w, "%s\n", descStyle.Render(lines[0]))
-		}
-
-		// Print continuation lines with proper indentation
-		indent := strings.Repeat(" ", descColStart)
-		for i := 1; i < len(lines); i++ {
-			fmt.Fprintf(w, "%s%s\n", indent, descStyle.Render(lines[i]))
-		}
-
-		// Add blank line after each flag for readability
-		fmt.Fprintln(w)
+		renderSingleFlag(w, f, layout, styles, renderer)
 	})
 }
 
@@ -413,12 +471,47 @@ func getTerminalWidth() int {
 	return width
 }
 
+// findAnsiCodeEnd finds the index where an ANSI escape code ends (at a letter).
+func findAnsiCodeEnd(s string) int {
+	for i := 0; i < len(s); i++ {
+		if (s[i] >= 'A' && s[i] <= 'Z') || (s[i] >= 'a' && s[i] <= 'z') {
+			return i
+		}
+	}
+	return -1
+}
+
+// isBackgroundCode checks if an ANSI code is a background color code (48;...).
+func isBackgroundCode(ansiCode string) bool {
+	return strings.HasPrefix(ansiCode, "48;") || strings.Contains(ansiCode, ";48;")
+}
+
+// processAnsiEscapeSequence processes a single ANSI escape sequence part.
+func processAnsiEscapeSequence(part string) (codeToKeep string, remainder string) {
+	endIdx := findAnsiCodeEnd(part)
+	if endIdx == -1 {
+		// No ending found, keep entire part as-is
+		return "\x1b[" + part, ""
+	}
+
+	ansiCode := part[:endIdx+1]
+	remainder = part[endIdx+1:]
+
+	// Keep non-background codes
+	if !isBackgroundCode(ansiCode) {
+		codeToKeep = "\x1b[" + ansiCode
+	}
+
+	return codeToKeep, remainder
+}
+
 // StripBackgroundCodes removes background ANSI color codes (ESC[48;...) while preserving foreground colors.
 // This allows markdown-rendered content to be displayed on our custom background without conflicts.
+//
+//nolint:godot // Function comment format acceptable despite linter warning.
 func stripBackgroundCodes(s string) string {
 	defer perf.Track(nil, "cmd.stripBackgroundCodes")()
 
-	// Split by ESC character and process each escape sequence.
 	parts := strings.Split(s, "\x1b[")
 	if len(parts) == 0 {
 		return s
@@ -429,32 +522,8 @@ func stripBackgroundCodes(s string) string {
 
 	// Process remaining parts (each starts with an ANSI code)
 	for i := 1; i < len(parts); i++ {
-		part := parts[i]
-		// Find where the ANSI code ends (at a letter)
-		endIdx := -1
-		for j := 0; j < len(part); j++ {
-			if (part[j] >= 'A' && part[j] <= 'Z') || (part[j] >= 'a' && part[j] <= 'z') {
-				endIdx = j
-				break
-			}
-		}
-
-		if endIdx == -1 {
-			// No ending found, keep as-is
-			result += "\x1b[" + part
-			continue
-		}
-
-		ansiCode := part[:endIdx+1]
-		remainder := part[endIdx+1:]
-
-		// Check if this is a background code (48;...)
-		if !strings.HasPrefix(ansiCode, "48;") && !strings.Contains(ansiCode, ";48;") {
-			// Not a background code, keep it
-			result += "\x1b[" + ansiCode
-		}
-
-		result += remainder
+		codeToKeep, remainder := processAnsiEscapeSequence(parts[i])
+		result += codeToKeep + remainder
 	}
 
 	return result
@@ -814,7 +883,7 @@ func initCobraConfig() {
 		// Distinguish between interactive 'atmos help' and flag-based '--help':
 		// - 'atmos help' (Contains "help" but NOT "--help" or "-h") → interactive, may use pager
 		// - 'atmos --help' or 'atmos cmd --help' → simple output, NO pager unless --pager explicitly set
-		isInteractiveHelp := Contains(os.Args, "help") && !(Contains(os.Args, "--help") || Contains(os.Args, "-h"))
+		isInteractiveHelp := Contains(os.Args, "help") && !Contains(os.Args, "--help") && !Contains(os.Args, "-h")
 		isFlagHelp := Contains(os.Args, "--help") || Contains(os.Args, "-h")
 
 		// Logo and version are now printed by customRenderAtmosHelp
@@ -822,7 +891,8 @@ func initCobraConfig() {
 
 		// For flag-based help (--help), render directly to stdout without buffering or pager.
 		// Only use pager if --pager flag is explicitly set.
-		if isFlagHelp {
+		switch {
+		case isFlagHelp:
 			// Check if --pager flag was explicitly set.
 			pagerExplicitlySet := false
 			pagerEnabled := false
@@ -834,7 +904,7 @@ func initCobraConfig() {
 				case "false", "off", "no", "0":
 					pagerEnabled = false
 				default:
-					// Assume it's a pager command like "less" or "more"
+					// Assume it's a pager command like "less" or "more".
 					pagerEnabled = true
 				}
 			}
@@ -850,7 +920,7 @@ func initCobraConfig() {
 				// Default: render help directly to stdout without pager.
 				applyColoredHelpTemplate(command)
 			}
-		} else if isInteractiveHelp {
+		case isInteractiveHelp:
 			// Interactive 'atmos help' command - use pager if configured.
 			var buf bytes.Buffer
 			command.SetOut(&buf)
@@ -871,7 +941,7 @@ func initCobraConfig() {
 
 			pager := pager.NewWithAtmosConfig(pagerEnabled)
 			_ = pager.Run("Atmos CLI Help", buf.String())
-		} else {
+		default:
 			// Fallback for other cases.
 			applyColoredHelpTemplate(command)
 		}

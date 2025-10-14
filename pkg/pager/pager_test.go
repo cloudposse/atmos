@@ -78,6 +78,9 @@ func TestPageCreator_Run(t *testing.T) {
 				isTTYSupportForStdout: func() bool {
 					return tt.isTTYSupported
 				},
+				isTTYAccessible: func() bool {
+					return true // Mock /dev/tty as accessible
+				},
 			}
 
 			// Execute the test
@@ -133,6 +136,10 @@ func TestPageCreator_Run_WithError(t *testing.T) {
 		isTTYSupportForStdout: func() bool {
 			return true
 		},
+		isTTYAccessible: func() bool {
+			return true // Mock /dev/tty as accessible
+		},
+		enablePager: true,
 	}
 
 	err := pc.Run("Test", "Content")
@@ -209,6 +216,9 @@ func TestPageCreator_Run_ModelCreation(t *testing.T) {
 		isTTYSupportForStdout: func() bool {
 			return true
 		},
+		isTTYAccessible: func() bool {
+			return true // Mock /dev/tty as accessible
+		},
 		enablePager: true,
 	}
 
@@ -272,6 +282,9 @@ func TestPageCreator_Run_WithoutPager(t *testing.T) {
 				},
 				isTTYSupportForStdout: func() bool {
 					return tc.ttySupported
+				},
+				isTTYAccessible: func() bool {
+					return true // Mock /dev/tty as accessible
 				},
 			}
 

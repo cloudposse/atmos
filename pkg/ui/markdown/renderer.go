@@ -80,15 +80,15 @@ func NewRenderer(atmosConfig schema.AtmosConfiguration, opts ...Option) (*Render
 
 // NewHelpRenderer creates a new Markdown renderer specifically for command help text.
 // This uses the Cloud Posse color scheme (grayscale + purple) with transparent backgrounds.
-func NewHelpRenderer(atmosConfig schema.AtmosConfiguration, opts ...Option) (*Renderer, error) {
-	defer perf.Track(&atmosConfig, "markdown.NewHelpRenderer")()
+func NewHelpRenderer(atmosConfig *schema.AtmosConfiguration, opts ...Option) (*Renderer, error) {
+	defer perf.Track(atmosConfig, "markdown.NewHelpRenderer")()
 
 	r := &Renderer{
 		width:                 defaultWidth,           // default width
 		profile:               termenv.ColorProfile(), // default color profile
 		isTTYSupportForStdout: term.IsTTYSupportForStdout,
 		isTTYSupportForStderr: term.IsTTYSupportForStderr,
-		atmosConfig:           &atmosConfig,
+		atmosConfig:           atmosConfig,
 	}
 
 	// Apply options
@@ -96,10 +96,18 @@ func NewHelpRenderer(atmosConfig schema.AtmosConfiguration, opts ...Option) (*Re
 		opt(r)
 	}
 
+	// Convert width safely from uint to int.
+	width := r.width
+	maxInt := ^uint(0) >> 1
+	if width > maxInt {
+		width = maxInt
+	}
+	wordWrap := int(width) // #nosec G115 -- width is validated above
+
 	if atmosConfig.Settings.Terminal.NoColor {
 		renderer, err := glamour.NewTermRenderer(
 			glamour.WithStandardStyle(styles.AsciiStyle),
-			glamour.WithWordWrap(int(r.width)),
+			glamour.WithWordWrap(wordWrap),
 			glamour.WithColorProfile(r.profile),
 			glamour.WithEmoji(),
 		)
@@ -111,16 +119,16 @@ func NewHelpRenderer(atmosConfig schema.AtmosConfiguration, opts ...Option) (*Re
 		return r, nil
 	}
 
-	// Get help-specific style
+	// Get help-specific style.
 	style, err := GetHelpStyle()
 	if err != nil {
 		return nil, err
 	}
 
-	// Initialize glamour renderer with help style
-	// Note: Do NOT use WithAutoStyle() as it overrides our custom styles
+	// Initialize glamour renderer with help style.
+	// Note: Do NOT use WithAutoStyle() as it overrides our custom styles.
 	renderer, err := glamour.NewTermRenderer(
-		glamour.WithWordWrap(int(r.width)),
+		glamour.WithWordWrap(wordWrap),
 		glamour.WithStylesFromJSONBytes(style),
 		glamour.WithColorProfile(r.profile),
 		glamour.WithEmoji(),

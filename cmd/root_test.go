@@ -519,3 +519,161 @@ func TestPagerDoesNotRunWithoutTTY(t *testing.T) {
 		}
 	})
 }
+
+func TestFindAnsiCodeEnd(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected int
+	}{
+		{
+			name:     "simple code ending with m",
+			input:    "0m",
+			expected: 1, // Returns index of 'm'
+		},
+		{
+			name:     "color code ending with m",
+			input:    "38;5;123mtext",
+			expected: 8, // Returns index of 'm'
+		},
+		{
+			name:     "no ending letter",
+			input:    "123;456;",
+			expected: -1,
+		},
+		{
+			name:     "uppercase ending",
+			input:    "1A",
+			expected: 1, // Returns index of 'A'
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := findAnsiCodeEnd(tt.input)
+			if result != tt.expected {
+				t.Errorf("findAnsiCodeEnd(%q) = %d, want %d", tt.input, result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestIsBackgroundCode(t *testing.T) {
+	tests := []struct {
+		name     string
+		ansiCode string
+		expected bool
+	}{
+		{
+			name:     "foreground color code",
+			ansiCode: "38;5;123m",
+			expected: false,
+		},
+		{
+			name:     "background code with prefix",
+			ansiCode: "48;5;123m",
+			expected: true,
+		},
+		{
+			name:     "background code in middle",
+			ansiCode: "0;48;5;123m",
+			expected: true,
+		},
+		{
+			name:     "reset code",
+			ansiCode: "0m",
+			expected: false,
+		},
+		{
+			name:     "bold code",
+			ansiCode: "1m",
+			expected: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := isBackgroundCode(tt.ansiCode)
+			if result != tt.expected {
+				t.Errorf("isBackgroundCode(%q) = %v, want %v", tt.ansiCode, result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestStripBackgroundCodes(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{
+			name:     "plain text no codes",
+			input:    "hello world",
+			expected: "hello world",
+		},
+		{
+			name:     "foreground only",
+			input:    "\x1b[38;5;123mcolored text\x1b[0m",
+			expected: "\x1b[38;5;123mcolored text\x1b[0m",
+		},
+		{
+			name:     "background only",
+			input:    "\x1b[48;5;123mbackground\x1b[0m",
+			expected: "background\x1b[0m",
+		},
+		{
+			name:     "foreground and background mixed",
+			input:    "\x1b[38;5;123m\x1b[48;5;200mtext\x1b[0m",
+			expected: "\x1b[38;5;123mtext\x1b[0m",
+		},
+		{
+			name:     "empty string",
+			input:    "",
+			expected: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := stripBackgroundCodes(tt.input)
+			if result != tt.expected {
+				t.Errorf("stripBackgroundCodes(%q) = %q, want %q", tt.input, result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestNewFlagRenderLayout(t *testing.T) {
+	tests := []struct {
+		name          string
+		termWidth     int
+		maxFlagWidth  int
+		wantDescWidth int
+	}{
+		{
+			name:          "normal terminal width",
+			termWidth:     120,
+			maxFlagWidth:  20,
+			wantDescWidth: 94, // Calculated as: termWidth minus leftPad minus maxFlag minus spaceBetween minus rightMargin.
+		},
+		{
+			name:          "narrow terminal forces minimum",
+			termWidth:     50,
+			maxFlagWidth:  20,
+			wantDescWidth: 40, // Minimum enforced
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			layout := newFlagRenderLayout(tt.termWidth, tt.maxFlagWidth)
+			if layout.descWidth != tt.wantDescWidth {
+				t.Errorf("newFlagRenderLayout() descWidth = %d, want %d", layout.descWidth, tt.wantDescWidth)
+			}
+			if layout.maxFlagWidth != tt.maxFlagWidth {
+				t.Errorf("newFlagRenderLayout() maxFlagWidth = %d, want %d", layout.maxFlagWidth, tt.maxFlagWidth)
+			}
+		})
+	}
+}

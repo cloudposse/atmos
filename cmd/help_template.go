@@ -21,6 +21,25 @@ import (
 	"github.com/cloudposse/atmos/pkg/version"
 )
 
+// Environment variable names for color control.
+const (
+	envAtmosForceColor = "ATMOS_FORCE_COLOR"
+	envForceColor      = "FORCE_COLOR"
+	envCliColorForce   = "CLICOLOR_FORCE"
+	envNoColor         = "NO_COLOR"
+	envAtmosDebugColor = "ATMOS_DEBUG_COLORS"
+	envTerm            = "TERM"
+	envColorTerm       = "COLORTERM"
+)
+
+// String constants for environment variable values.
+const (
+	valueTrue  = "true"
+	valueFalse = "false"
+	valueOne   = "1"
+	valueZero  = "0"
+)
+
 // colorConfig holds the color detection and environment variable configuration.
 type colorConfig struct {
 	forceColor         bool
@@ -51,7 +70,7 @@ func isTruthy(val string) bool {
 		return false
 	}
 	v := strings.ToLower(strings.TrimSpace(val))
-	return v == "1" || v == "true"
+	return v == valueOne || v == valueTrue
 }
 
 // isFalsy checks if a string represents a falsy value.
@@ -60,7 +79,7 @@ func isFalsy(val string) bool {
 		return false
 	}
 	v := strings.ToLower(strings.TrimSpace(val))
-	return v == "0" || v == "false"
+	return v == valueZero || v == valueFalse
 }
 
 // detectColorConfig detects and configures color settings based on environment variables.
@@ -68,16 +87,16 @@ func detectColorConfig() colorConfig {
 	defer perf.Track(nil, "cmd.detectColorConfig")()
 
 	// Bind environment variables for color control.
-	_ = viper.BindEnv("ATMOS_FORCE_COLOR")
-	_ = viper.BindEnv("CLICOLOR_FORCE")
-	_ = viper.BindEnv("FORCE_COLOR")
-	_ = viper.BindEnv("NO_COLOR")
-	_ = viper.BindEnv("ATMOS_DEBUG_COLORS")
+	_ = viper.BindEnv(envAtmosForceColor)
+	_ = viper.BindEnv(envCliColorForce)
+	_ = viper.BindEnv(envForceColor)
+	_ = viper.BindEnv(envNoColor)
+	_ = viper.BindEnv(envAtmosDebugColor)
 
 	// Check ATMOS_FORCE_COLOR first, then fallback to standard env vars.
-	atmosForceColor := viper.GetString("ATMOS_FORCE_COLOR")
-	cliColorForce := viper.GetString("CLICOLOR_FORCE")
-	forceColorEnv := viper.GetString("FORCE_COLOR")
+	atmosForceColor := viper.GetString(envAtmosForceColor)
+	cliColorForce := viper.GetString(envCliColorForce)
+	forceColorEnv := viper.GetString(envForceColor)
 
 	// Determine final forceColor value.
 	explicitlyDisabled := isFalsy(atmosForceColor) || isFalsy(cliColorForce) || isFalsy(forceColorEnv)
@@ -88,26 +107,115 @@ func detectColorConfig() colorConfig {
 
 	// Ensure standard env vars are set for ALL color libraries.
 	if explicitlyDisabled {
-		os.Setenv("NO_COLOR", "1")
-		os.Setenv("FORCE_COLOR", "0")
-		os.Setenv("CLICOLOR_FORCE", "0")
+		os.Setenv(envNoColor, valueOne)
+		os.Setenv(envForceColor, valueZero)
+		os.Setenv(envCliColorForce, valueZero)
 	} else if forceColor {
-		os.Unsetenv("NO_COLOR")
-		if viper.GetString("FORCE_COLOR") == "" {
-			os.Setenv("FORCE_COLOR", "1")
+		os.Unsetenv(envNoColor)
+		if viper.GetString(envForceColor) == "" {
+			os.Setenv(envForceColor, valueOne)
 		}
-		if viper.GetString("CLICOLOR_FORCE") == "" {
-			os.Setenv("CLICOLOR_FORCE", "1")
+		if viper.GetString(envCliColorForce) == "" {
+			os.Setenv(envCliColorForce, valueOne)
 		}
 	}
 
-	debugColors := viper.GetString("ATMOS_DEBUG_COLORS") != ""
+	debugColors := viper.GetString(envAtmosDebugColor) != ""
 
 	return colorConfig{
 		forceColor:         forceColor,
 		explicitlyDisabled: explicitlyDisabled,
 		debugColors:        debugColors,
 	}
+}
+
+// printColorDebugInfo prints debug information about color detection.
+func printColorDebugInfo(profileDetector *colorprofile.Writer, config colorConfig) {
+	fmt.Fprintf(os.Stderr, "\n[DEBUG] Color Detection:\n")
+	fmt.Fprintf(os.Stderr, "  Detected Profile: %v\n", profileDetector.Profile)
+	fmt.Fprintf(os.Stderr, "  ATMOS_FORCE_COLOR: %s\n", viper.GetString(envAtmosForceColor))
+	fmt.Fprintf(os.Stderr, "  FORCE_COLOR: %s\n", viper.GetString(envForceColor))
+	fmt.Fprintf(os.Stderr, "  CLICOLOR_FORCE: %s\n", viper.GetString(envCliColorForce))
+	fmt.Fprintf(os.Stderr, "  NO_COLOR: %s\n", viper.GetString(envNoColor))
+	fmt.Fprintf(os.Stderr, "  TERM: %s\n", viper.GetString(envTerm))
+	fmt.Fprintf(os.Stderr, "  COLORTERM: %s\n", viper.GetString(envColorTerm))
+	fmt.Fprintf(os.Stderr, "  forceColor: %v\n", config.forceColor)
+	fmt.Fprintf(os.Stderr, "  explicitlyDisabled: %v\n", config.explicitlyDisabled)
+}
+
+// configureDisabledColorWriter creates a writer with colors explicitly disabled.
+func configureDisabledColorWriter(out io.Writer, debugColors bool) (io.Writer, colorprofile.Profile, *lipgloss.Renderer) {
+	colorW := colorprofile.NewWriter(out, os.Environ())
+	colorW.Profile = colorprofile.Ascii
+	renderer := lipgloss.NewRenderer(colorW)
+	renderer.SetColorProfile(termenv.Ascii)
+
+	if debugColors {
+		fmt.Fprintf(os.Stderr, "  Mode: Explicitly Disabled\n")
+		fmt.Fprintf(os.Stderr, "  Final Profile: Ascii\n")
+	}
+
+	return colorW, colorprofile.Ascii, renderer
+}
+
+// configureForcedColorWriter creates a writer with colors forced on.
+func configureForcedColorWriter(out io.Writer, debugColors bool) (io.Writer, colorprofile.Profile, *lipgloss.Renderer) {
+	profile := colorprofile.ANSI256
+	termOut := termenv.NewOutput(out, termenv.WithProfile(termenv.ANSI256))
+	termenv.SetDefaultOutput(termOut)
+	renderer := lipgloss.NewRenderer(termOut, termenv.WithProfile(termenv.ANSI256))
+
+	if debugColors {
+		fmt.Fprintf(os.Stderr, "  Mode: Force Color (pipe-safe)\n")
+		fmt.Fprintf(os.Stderr, "  Final Profile: ANSI256 (forced)\n")
+		fmt.Fprintf(os.Stderr, "  Renderer: Created with termenv.Output ANSI256 as writer\n")
+		fmt.Fprintf(os.Stderr, "  Renderer ColorProfile: %v\n", renderer.ColorProfile())
+		fmt.Fprintf(os.Stderr, "  Global termenv DefaultOutput profile: %v\n", termenv.DefaultOutput().ColorProfile())
+	}
+
+	return out, profile, renderer
+}
+
+// setRendererProfileForAutoDetect configures the renderer based on the detected color profile.
+func setRendererProfileForAutoDetect(renderer *lipgloss.Renderer, profile colorprofile.Profile, debugColors bool) {
+	switch profile {
+	case colorprofile.TrueColor:
+		renderer.SetColorProfile(termenv.TrueColor)
+		if debugColors {
+			fmt.Fprintf(os.Stderr, "  Renderer: Auto-detect, set to TrueColor\n")
+		}
+	case colorprofile.ANSI256:
+		renderer.SetColorProfile(termenv.ANSI256)
+		if debugColors {
+			fmt.Fprintf(os.Stderr, "  Renderer: Auto-detect, set to ANSI256\n")
+		}
+	case colorprofile.ANSI:
+		renderer.SetColorProfile(termenv.ANSI)
+		if debugColors {
+			fmt.Fprintf(os.Stderr, "  Renderer: Auto-detect, set to ANSI\n")
+		}
+	case colorprofile.Ascii:
+		renderer.SetColorProfile(termenv.Ascii)
+		if debugColors {
+			fmt.Fprintf(os.Stderr, "  Renderer: Auto-detect, set to Ascii\n")
+		}
+	}
+}
+
+// configureAutoDetectColorWriter creates a writer with auto-detected color support.
+func configureAutoDetectColorWriter(out io.Writer, detectedProfile colorprofile.Profile, debugColors bool) (io.Writer, colorprofile.Profile, *lipgloss.Renderer) {
+	colorW := colorprofile.NewWriter(out, os.Environ())
+	colorW.Profile = detectedProfile
+	renderer := lipgloss.NewRenderer(colorW)
+
+	setRendererProfileForAutoDetect(renderer, colorW.Profile, debugColors)
+
+	if debugColors {
+		fmt.Fprintf(os.Stderr, "  Mode: Auto-detect\n")
+		fmt.Fprintf(os.Stderr, "  Final Profile: %v\n", colorW.Profile)
+	}
+
+	return colorW, colorW.Profile, renderer
 }
 
 // configureWriter creates and configures the writer and renderer based on color settings.
@@ -117,80 +225,20 @@ func configureWriter(cmd *cobra.Command, config colorConfig) writerConfig {
 	profileDetector := colorprofile.NewWriter(os.Stdout, os.Environ())
 
 	if config.debugColors {
-		fmt.Fprintf(os.Stderr, "\n[DEBUG] Color Detection:\n")
-		fmt.Fprintf(os.Stderr, "  Detected Profile: %v\n", profileDetector.Profile)
-		fmt.Fprintf(os.Stderr, "  ATMOS_FORCE_COLOR: %s\n", viper.GetString("ATMOS_FORCE_COLOR"))
-		fmt.Fprintf(os.Stderr, "  FORCE_COLOR: %s\n", viper.GetString("FORCE_COLOR"))
-		fmt.Fprintf(os.Stderr, "  CLICOLOR_FORCE: %s\n", viper.GetString("CLICOLOR_FORCE"))
-		fmt.Fprintf(os.Stderr, "  NO_COLOR: %s\n", viper.GetString("NO_COLOR"))
-		fmt.Fprintf(os.Stderr, "  TERM: %s\n", viper.GetString("TERM"))
-		fmt.Fprintf(os.Stderr, "  COLORTERM: %s\n", viper.GetString("COLORTERM"))
-		fmt.Fprintf(os.Stderr, "  forceColor: %v\n", config.forceColor)
-		fmt.Fprintf(os.Stderr, "  explicitlyDisabled: %v\n", config.explicitlyDisabled)
+		printColorDebugInfo(profileDetector, config)
 	}
 
 	var w io.Writer
 	var profile colorprofile.Profile
 	var renderer *lipgloss.Renderer
 
-	if config.explicitlyDisabled {
-		colorW := colorprofile.NewWriter(cmd.OutOrStdout(), os.Environ())
-		colorW.Profile = colorprofile.Ascii
-		w = colorW
-		profile = colorprofile.Ascii
-		renderer = lipgloss.NewRenderer(w)
-		renderer.SetColorProfile(termenv.Ascii)
-		if config.debugColors {
-			fmt.Fprintf(os.Stderr, "  Mode: Explicitly Disabled\n")
-			fmt.Fprintf(os.Stderr, "  Final Profile: Ascii\n")
-		}
-	} else if config.forceColor {
-		w = cmd.OutOrStdout()
-		profile = colorprofile.ANSI256
-		termOut := termenv.NewOutput(w, termenv.WithProfile(termenv.ANSI256))
-		termenv.SetDefaultOutput(termOut)
-		renderer = lipgloss.NewRenderer(termOut, termenv.WithProfile(termenv.ANSI256))
-		if config.debugColors {
-			fmt.Fprintf(os.Stderr, "  Mode: Force Color (pipe-safe)\n")
-			fmt.Fprintf(os.Stderr, "  Final Profile: ANSI256 (forced)\n")
-			fmt.Fprintf(os.Stderr, "  Renderer: Created with termenv.Output ANSI256 as writer\n")
-			fmt.Fprintf(os.Stderr, "  Renderer ColorProfile: %v\n", renderer.ColorProfile())
-			fmt.Fprintf(os.Stderr, "  Global termenv DefaultOutput profile: %v\n", termenv.DefaultOutput().ColorProfile())
-		}
-	} else {
-		colorW := colorprofile.NewWriter(cmd.OutOrStdout(), os.Environ())
-		colorW.Profile = profileDetector.Profile
-		w = colorW
-		profile = colorW.Profile
-		renderer = lipgloss.NewRenderer(w)
-
-		switch profile {
-		case colorprofile.TrueColor:
-			renderer.SetColorProfile(termenv.TrueColor)
-			if config.debugColors {
-				fmt.Fprintf(os.Stderr, "  Renderer: Auto-detect, set to TrueColor\n")
-			}
-		case colorprofile.ANSI256:
-			renderer.SetColorProfile(termenv.ANSI256)
-			if config.debugColors {
-				fmt.Fprintf(os.Stderr, "  Renderer: Auto-detect, set to ANSI256\n")
-			}
-		case colorprofile.ANSI:
-			renderer.SetColorProfile(termenv.ANSI)
-			if config.debugColors {
-				fmt.Fprintf(os.Stderr, "  Renderer: Auto-detect, set to ANSI\n")
-			}
-		case colorprofile.Ascii:
-			renderer.SetColorProfile(termenv.Ascii)
-			if config.debugColors {
-				fmt.Fprintf(os.Stderr, "  Renderer: Auto-detect, set to Ascii\n")
-			}
-		}
-
-		if config.debugColors {
-			fmt.Fprintf(os.Stderr, "  Mode: Auto-detect\n")
-			fmt.Fprintf(os.Stderr, "  Final Profile: %v\n", profile)
-		}
+	switch {
+	case config.explicitlyDisabled:
+		w, profile, renderer = configureDisabledColorWriter(cmd.OutOrStdout(), config.debugColors)
+	case config.forceColor:
+		w, profile, renderer = configureForcedColorWriter(cmd.OutOrStdout(), config.debugColors)
+	default:
+		w, profile, renderer = configureAutoDetectColorWriter(cmd.OutOrStdout(), profileDetector.Profile, config.debugColors)
 	}
 
 	if config.debugColors {
@@ -222,7 +270,7 @@ func createHelpStyles(renderer *lipgloss.Renderer) helpStyles {
 }
 
 // printLogoAndVersion prints the Atmos logo and version information.
-func printLogoAndVersion(w io.Writer, styles helpStyles) {
+func printLogoAndVersion(w io.Writer, styles *helpStyles) {
 	defer perf.Track(nil, "cmd.printLogoAndVersion")()
 
 	fmt.Fprintln(w)
@@ -236,7 +284,7 @@ func printLogoAndVersion(w io.Writer, styles helpStyles) {
 }
 
 // printDescription prints the command description.
-func printDescription(w io.Writer, cmd *cobra.Command, styles helpStyles) {
+func printDescription(w io.Writer, cmd *cobra.Command, styles *helpStyles) {
 	defer perf.Track(nil, "cmd.printDescription")()
 
 	if cmd.Long != "" {
@@ -249,7 +297,7 @@ func printDescription(w io.Writer, cmd *cobra.Command, styles helpStyles) {
 }
 
 // printUsageSection prints the usage section.
-func printUsageSection(w io.Writer, cmd *cobra.Command, renderer *lipgloss.Renderer, styles helpStyles) {
+func printUsageSection(w io.Writer, cmd *cobra.Command, renderer *lipgloss.Renderer, styles *helpStyles) {
 	defer perf.Track(nil, "cmd.printUsageSection")()
 
 	fmt.Fprintln(w, styles.cyan.Render("USAGE"))
@@ -271,7 +319,7 @@ func printUsageSection(w io.Writer, cmd *cobra.Command, renderer *lipgloss.Rende
 }
 
 // printAliases prints command aliases.
-func printAliases(w io.Writer, cmd *cobra.Command, styles helpStyles) {
+func printAliases(w io.Writer, cmd *cobra.Command, styles *helpStyles) {
 	defer perf.Track(nil, "cmd.printAliases")()
 
 	if len(cmd.Aliases) > 0 {
@@ -283,7 +331,7 @@ func printAliases(w io.Writer, cmd *cobra.Command, styles helpStyles) {
 }
 
 // printSubcommandAliases prints subcommand aliases.
-func printSubcommandAliases(w io.Writer, cmd *cobra.Command, styles helpStyles) {
+func printSubcommandAliases(w io.Writer, cmd *cobra.Command, styles *helpStyles) {
 	defer perf.Track(nil, "cmd.printSubcommandAliases")()
 
 	hasAliases := false
@@ -311,7 +359,7 @@ func printSubcommandAliases(w io.Writer, cmd *cobra.Command, styles helpStyles) 
 }
 
 // printExamples prints command examples.
-func printExamples(w io.Writer, cmd *cobra.Command, renderer *lipgloss.Renderer, styles helpStyles) {
+func printExamples(w io.Writer, cmd *cobra.Command, renderer *lipgloss.Renderer, styles *helpStyles) {
 	defer perf.Track(nil, "cmd.printExamples")()
 
 	if cmd.Example == "" {
@@ -332,8 +380,56 @@ func printExamples(w io.Writer, cmd *cobra.Command, renderer *lipgloss.Renderer,
 	fmt.Fprintln(w)
 }
 
+// isCommandAvailable checks if a command should be shown in help output.
+func isCommandAvailable(cmd *cobra.Command) bool {
+	return cmd.IsAvailableCommand() || cmd.Name() == "help"
+}
+
+// calculateCommandWidth calculates the display width of a command name including type suffix.
+func calculateCommandWidth(cmd *cobra.Command) int {
+	width := len(cmd.Name())
+	if cmd.HasAvailableSubCommands() {
+		width += len(" [command]")
+	}
+	return width
+}
+
+// calculateMaxCommandWidth finds the maximum command name width for alignment.
+func calculateMaxCommandWidth(commands []*cobra.Command) int {
+	maxWidth := 0
+	for _, c := range commands {
+		if !isCommandAvailable(c) {
+			continue
+		}
+		width := calculateCommandWidth(c)
+		if width > maxWidth {
+			maxWidth = width
+		}
+	}
+	return maxWidth
+}
+
+// formatCommandLine formats a single command line with proper padding and styling.
+func formatCommandLine(w io.Writer, cmd *cobra.Command, maxWidth int, styles *helpStyles) {
+	cmdName := cmd.Name()
+	cmdTypePlain := ""
+	cmdTypeStyled := ""
+	if cmd.HasAvailableSubCommands() {
+		cmdTypePlain = " [command]"
+		cmdTypeStyled = " " + styles.dimmedGray.Render("[command]")
+	}
+
+	padding := maxWidth - len(cmdName) - len(cmdTypePlain)
+
+	fmt.Fprint(w, "      ")
+	fmt.Fprint(w, styles.green.Render(cmdName))
+	fmt.Fprint(w, cmdTypeStyled)
+	fmt.Fprint(w, strings.Repeat(" ", padding))
+	fmt.Fprintf(w, "  %s\n", styles.gray.Render(cmd.Short))
+}
+
 // printAvailableCommands prints the list of available subcommands.
-func printAvailableCommands(w io.Writer, cmd *cobra.Command, styles helpStyles) {
+func printAvailableCommands(w io.Writer, cmd *cobra.Command, styles *helpStyles) {
 	defer perf.Track(nil, "cmd.printAvailableCommands")()
 
 	if !cmd.HasAvailableSubCommands() {
@@ -343,46 +439,19 @@ func printAvailableCommands(w io.Writer, cmd *cobra.Command, styles helpStyles) 
 	fmt.Fprintln(w, styles.cyan.Render("AVAILABLE COMMANDS"))
 	fmt.Fprintln(w)
 
-	// Calculate maximum command name width.
-	maxCmdWidth := 0
-	for _, c := range cmd.Commands() {
-		if !c.IsAvailableCommand() && c.Name() != "help" {
-			continue
-		}
-		cmdWidth := len(c.Name())
-		if c.HasAvailableSubCommands() {
-			cmdWidth += len(" [command]")
-		}
-		if cmdWidth > maxCmdWidth {
-			maxCmdWidth = cmdWidth
-		}
-	}
+	maxCmdWidth := calculateMaxCommandWidth(cmd.Commands())
 
 	for _, c := range cmd.Commands() {
-		if !c.IsAvailableCommand() && c.Name() != "help" {
+		if !isCommandAvailable(c) {
 			continue
 		}
-		cmdName := c.Name()
-		cmdTypePlain := ""
-		cmdTypeStyled := ""
-		if c.HasAvailableSubCommands() {
-			cmdTypePlain = " [command]"
-			cmdTypeStyled = " " + styles.dimmedGray.Render("[command]")
-		}
-
-		padding := maxCmdWidth - len(cmdName) - len(cmdTypePlain)
-
-		fmt.Fprint(w, "      ")
-		fmt.Fprint(w, styles.green.Render(cmdName))
-		fmt.Fprint(w, cmdTypeStyled)
-		fmt.Fprint(w, strings.Repeat(" ", padding))
-		fmt.Fprintf(w, "  %s\n", styles.gray.Render(c.Short))
+		formatCommandLine(w, c, maxCmdWidth, styles)
 	}
 	fmt.Fprintln(w)
 }
 
 // printFlags prints command flags.
-func printFlags(w io.Writer, cmd *cobra.Command, atmosConfig *schema.AtmosConfiguration, styles helpStyles) {
+func printFlags(w io.Writer, cmd *cobra.Command, atmosConfig *schema.AtmosConfiguration, styles *helpStyles) {
 	defer perf.Track(nil, "cmd.printFlags")()
 
 	termWidth := getTerminalWidth()
@@ -422,20 +491,20 @@ func applyColoredHelpTemplate(cmd *cobra.Command) {
 
 	// Set custom help function.
 	cmd.SetHelpFunc(func(c *cobra.Command, args []string) {
-		printLogoAndVersion(writerConf.writer, styles)
-		printDescription(writerConf.writer, c, styles)
-		printUsageSection(writerConf.writer, c, writerConf.renderer, styles)
-		printAliases(writerConf.writer, c, styles)
-		printSubcommandAliases(writerConf.writer, c, styles)
-		printExamples(writerConf.writer, c, writerConf.renderer, styles)
-		printAvailableCommands(writerConf.writer, c, styles)
-		printFlags(writerConf.writer, c, &atmosConfig, styles)
-		printFooter(writerConf.writer, c, &atmosConfig, styles)
+		printLogoAndVersion(writerConf.writer, &styles)
+		printDescription(writerConf.writer, c, &styles)
+		printUsageSection(writerConf.writer, c, writerConf.renderer, &styles)
+		printAliases(writerConf.writer, c, &styles)
+		printSubcommandAliases(writerConf.writer, c, &styles)
+		printExamples(writerConf.writer, c, writerConf.renderer, &styles)
+		printAvailableCommands(writerConf.writer, c, &styles)
+		printFlags(writerConf.writer, c, &atmosConfig, &styles)
+		printFooter(writerConf.writer, c, &atmosConfig, &styles)
 	})
 }
 
 // printFooter prints the help footer message.
-func printFooter(w io.Writer, cmd *cobra.Command, atmosConfig *schema.AtmosConfiguration, styles helpStyles) {
+func printFooter(w io.Writer, cmd *cobra.Command, atmosConfig *schema.AtmosConfiguration, styles *helpStyles) {
 	defer perf.Track(nil, "cmd.printFooter")()
 
 	if !cmd.HasAvailableSubCommands() {
