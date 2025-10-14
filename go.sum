@@ -367,8 +367,6 @@ github.com/editorconfig/editorconfig-core-go/v2 v2.6.3 h1:XVUp6qW3BIkmM3/1EkrHpa
 github.com/editorconfig/editorconfig-core-go/v2 v2.6.3/go.mod h1:ThHVc+hqbUsmE1wmK/MASpQEhCleWu1JDJDNhUOMy0c=
 github.com/elazarl/goproxy v1.7.2 h1:Y2o6urb7Eule09PjlhQRGNsqRfPmYI3KKQLFpCAV3+o=
 github.com/elazarl/goproxy v1.7.2/go.mod h1:82vkLNir0ALaW14Rc399OTTjyNREgmdL2cVoIbS6XaE=
-github.com/elewis787/boa v0.1.3 h1:K3m2rX5gSZ4ORkXotoUJvYM4XyCsfC/re1+5eG28o9w=
-github.com/elewis787/boa v0.1.3/go.mod h1:MrZw9hX9eq9AGa1kAfePETOAfTW1VBKRJmfufeaoQGg=
 github.com/elliotchance/orderedmap v1.8.0 h1:TrOREecvh3JbS+NCgwposXG5ZTFHtEsQiCGOhPElnMw=
 github.com/elliotchance/orderedmap v1.8.0/go.mod h1:wsDwEaX5jEoyhbs7x93zk2H/qv0zwuhg4inXhDkYqys=
 github.com/emicklei/proto v1.14.0 h1:WYxC0OrBuuC+FUCTZvb8+fzEHdZMwLEF+OnVfZA3LXU=

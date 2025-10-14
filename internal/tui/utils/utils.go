@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 
 	"github.com/alecthomas/chroma/v2/quick"
 	"github.com/arsham/figurine/figurine"
@@ -39,7 +40,44 @@ func PrintStyledText(text string) error {
 }
 
 func PrintStyledTextToSpecifiedOutput(out io.Writer, text string) error {
-	return figurine.Write(out, text, "ANSI Regular.flf")
+	// Helper to check if a value is truthy
+	// Truthy values: "1", "true" (case-insensitive) - standard Go bool values
+	isTruthy := func(val string) bool {
+		if val == "" {
+			return false
+		}
+		v := strings.ToLower(strings.TrimSpace(val))
+		return v == "1" || v == "true"
+	}
+
+	// Helper to check if a value is falsy
+	// Falsy values: "0", "false" (case-insensitive) - standard Go bool values
+	isFalsy := func(val string) bool {
+		if val == "" {
+			return false
+		}
+		v := strings.ToLower(strings.TrimSpace(val))
+		return v == "0" || v == "false"
+	}
+
+	// Check if colors are explicitly disabled
+	atmosForceColor := os.Getenv("ATMOS_FORCE_COLOR")
+	cliColorForce := os.Getenv("CLICOLOR_FORCE")
+	forceColorEnv := os.Getenv("FORCE_COLOR")
+	noColor := os.Getenv("NO_COLOR")
+
+	// If explicitly disabled, return early without printing
+	if isFalsy(atmosForceColor) || isFalsy(cliColorForce) || isFalsy(forceColorEnv) || noColor != "" {
+		return nil
+	}
+
+	// Check if colors are supported or forced
+	forceColor := isTruthy(atmosForceColor) || isTruthy(cliColorForce) || isTruthy(forceColorEnv)
+	if supportscolor.Stdout().SupportsColor || forceColor {
+		// Write to the specified output writer, not os.Stdout
+		return figurine.Write(out, text, "ANSI Regular.flf")
+	}
+	return nil
 }
 
 // RenderMarkdown renders markdown text with terminal styling

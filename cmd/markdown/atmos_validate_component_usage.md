@@ -2,7 +2,7 @@
 
 ```bash
  $ atmos validate component <component> -s <stack> --schema-path <schema_path> --schema-type <jsonschema|opa>
-```
+```shell
 
 - Validate the specified component configuration in the given stack using the provided schema file path and schema type (`jsonschema` or `opa`).
 
@@ -14,7 +14,7 @@
 
 ```bash
  $ atmos validate component <component> -s <stack> --schema-path <schema_path> --schema-type opa --module-paths catalog
-```
+```shell
 
 - Specify validation timeout in seconds
 

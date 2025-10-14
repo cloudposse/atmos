@@ -159,7 +159,7 @@ func setDefaultConfiguration(v *viper.Viper) {
 
 	v.SetDefault("settings.terminal.color", true)
 	v.SetDefault("settings.terminal.no_color", false)
-	v.SetDefault("settings.terminal.pager", true)
+	v.SetDefault("settings.terminal.pager", "false") // String value to match the field type
 	// Note: force_color is ENV-only (ATMOS_FORCE_COLOR), no config default
 	v.SetDefault("docs.generate.readme.output", "./README.md")
 

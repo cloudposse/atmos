@@ -439,3 +439,83 @@ func TestVersionFlagExecutionPath(t *testing.T) {
 		})
 	}
 }
+
+func TestPagerDoesNotRunWithoutTTY(t *testing.T) {
+	// This test verifies that the pager doesn't try to use the alternate screen buffer
+	// when there's no TTY available. This is important for scripted/CI environments
+	// where stdin/stdout/stderr are not connected to a terminal.
+
+	t.Run("help should not error when ATMOS_PAGER=false and no TTY", func(t *testing.T) {
+		// Save original environment.
+		originalPager := os.Getenv("ATMOS_PAGER")
+		originalArgs := os.Args
+		originalCliConfigPath := os.Getenv("ATMOS_CLI_CONFIG_PATH")
+		defer func() {
+			if originalPager == "" {
+				os.Unsetenv("ATMOS_PAGER")
+			} else {
+				os.Setenv("ATMOS_PAGER", originalPager)
+			}
+			if originalCliConfigPath == "" {
+				os.Unsetenv("ATMOS_CLI_CONFIG_PATH")
+			} else {
+				os.Setenv("ATMOS_CLI_CONFIG_PATH", originalCliConfigPath)
+			}
+			os.Args = originalArgs
+		}()
+
+		// Set ATMOS_CLI_CONFIG_PATH to a test directory to avoid loading real config.
+		os.Setenv("ATMOS_CLI_CONFIG_PATH", "testdata/pager")
+
+		// Set ATMOS_PAGER=false to explicitly disable the pager.
+		os.Setenv("ATMOS_PAGER", "false")
+
+		// Set os.Args so our custom Execute() function can parse them.
+		// This is required because Execute() needs to initialize atmosConfig from environment variables.
+		os.Args = []string{"atmos", "--help"}
+
+		// Execute should not error even without a TTY.
+		// The pager should be disabled via ATMOS_PAGER=false, so no TTY error should occur.
+		// We call Execute() (not RootCmd.Execute()) to ensure atmosConfig is initialized.
+		err := Execute()
+		// Note: Cobra --help returns ErrHelp which is not actually an error in the normal sense.
+		// We expect the command to run without TTY-related errors.
+		// We're primarily checking that there's no "could not open a new TTY" panic/error.
+		if err != nil {
+			// Allow Cobra's ErrHelp (flag.ErrHelp) since that's expected behavior for --help.
+			assert.Contains(t, err.Error(), "flag: help requested", "Only flag.ErrHelp should be returned")
+		}
+	})
+
+	t.Run("help should not error when ATMOS_PAGER=true but no TTY", func(t *testing.T) {
+		// Save original environment.
+		originalPager := os.Getenv("ATMOS_PAGER")
+		originalArgs := os.Args
+		defer func() {
+			if originalPager == "" {
+				os.Unsetenv("ATMOS_PAGER")
+			} else {
+				os.Setenv("ATMOS_PAGER", originalPager)
+			}
+			os.Args = originalArgs
+		}()
+
+		// Set ATMOS_PAGER=true to try to enable pager, but there's no TTY.
+		// The pager should detect no TTY and fall back to direct output.
+		os.Setenv("ATMOS_PAGER", "true")
+
+		// Set os.Args so our custom Execute() function can parse them.
+		os.Args = []string{"atmos", "--help"}
+
+		// Execute should not error even without a TTY.
+		// The pager should detect the lack of TTY and fall back to printing directly.
+		// We call Execute() (not RootCmd.Execute()) to ensure atmosConfig is initialized.
+		err := Execute()
+		// We expect the command to run without TTY-related errors.
+		// The pager package already has TTY detection logic in pageCreator.Run().
+		if err != nil {
+			// Allow Cobra's ErrHelp since that's expected behavior for --help.
+			assert.Contains(t, err.Error(), "flag: help requested", "Only flag.ErrHelp should be returned")
+		}
+	})
+}

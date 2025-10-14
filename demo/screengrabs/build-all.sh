@@ -5,6 +5,7 @@ export TERM=xterm-256color
 # Force color output for screengrabs
 export ATMOS_FORCE_COLOR=true
 export FORCE_COLOR=1
+export CLICOLOR_FORCE=1
 
 # Ensure that the output is not paginated
 export LESS=-X
