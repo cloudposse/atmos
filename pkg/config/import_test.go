@@ -33,7 +33,6 @@ func TestProcessImports(t *testing.T) {
 
 	// Step 2: Create temporary base directory and files
 	baseDir := t.TempDir()
-	defer os.Remove(baseDir)
 	// Step 2.1: Create a directory for recursive imports
 	configDir := filepath.Join(baseDir, "configs.d")
 	err = os.MkdirAll(configDir, 0o755)
