@@ -19,11 +19,11 @@ Leapp is a standalone credential management application with a graphical interfa
 
 In Leapp, authentication consists of:
 
-- **Provider**: SSO integration (e.g., "CPLive") connecting to AWS IAM Identity Center
-- **Session**: Individual AWS access configuration (account + permission set + provider)
-- **Identity**: Permission set name (e.g., "IdentityManagersTeamAccess")
-- **Named Profile**: Profile name used in AWS CLI
-- **Region**: AWS region for the session
+1. **Provider**: SSO integration (e.g., "acme") connecting to AWS IAM Identity Center
+2. **Session**: Individual AWS access configuration (account + permission set + provider)
+3. **Identity**: Permission set name (e.g., "IdentityManagersTeamAccess")
+4. **Named Profile**: Profile name used in AWS CLI
+5. **Region**: AWS region for the session
 
 ## Quick Migration Example
 
@@ -32,10 +32,10 @@ In Leapp, authentication consists of:
 ![Leapp Session Example](/img/leapp-example.png)
 
 A typical Leapp session shows:
-- **Provider**: CPLive (in sidebar under "Integrations")
+- **Provider**: acme (in sidebar under "Integrations")
 - **Session**: core-identity
 - **Identity**: IdentityManagersTeamAccess
-- **Named Profile**: cplive-identity
+- **Named Profile**: acme-identity
 - **Region**: US-EAST-1
 
 ### Equivalent `atmos auth` Configuration
@@ -43,32 +43,32 @@ A typical Leapp session shows:
 ```yaml
 auth:
   providers:
-    cplive-sso:
+    acme-sso: # (1)
       kind: aws/iam-identity-center
-      region: us-east-2
-      start_url: https://acme.awsapps.com/start/
+      region: us-east-2 # (5)
+      start_url: https://acme.awsapps.com/start/ # (1.a)
 
   identities:
-    core-identity/managers-team-access:
+    acme-identity: # (4)
       kind: aws/permission-set
       via:
-        provider: cplive-sso
+        provider: acme-sso
       principal:
-        name: "IdentityManagersTeamAccess"
+        name: "IdentityManagersTeamAccess" # (3)
         account:
-          name: "core-identity"
+          name: "core-identity" # (2)
 ```
 
 ## Field Mapping Reference
 
 | Leapp Field | `atmos auth` Location | Notes |
 |-------------|----------------------|-------|
-| Provider name | `providers.<name>` | Use a descriptive name (e.g., `cplive-sso`) |
-| Start URL | `providers.<name>.start_url` | Found in AWS IAM Identity Center portal |
-| Region | `providers.<name>.region` | From Leapp session's Region column |
-| Session (account) | `identities.<name>.principal.account.name` | AWS account name |
-| Identity (permission set) | `identities.<name>.principal.name` | Exact permission set name |
-| Named Profile | `identities.<name>` (key) | Use descriptive naming: `account/role` |
+| (1) Provider name | `providers.<name>` | Use a descriptive name (e.g., `acme-sso`) |
+| (1.a) Start URL | `providers.<name>.start_url` | Found in AWS IAM Identity Center portal |
+| (5) Region | `providers.<name>.region` | From Leapp session's Region column |
+| (2) Session (account) | `identities.<name>.principal.account.name` | AWS account name |
+| (3) Identity (permission set) | `identities.<name>.principal.name` | Exact permission set name |
+| (4) Named Profile | `identities.<name>` (key) | Use descriptive naming: `account/role` |
 
 ## Step-by-Step Migration
 
@@ -91,7 +91,7 @@ auth:
 ```yaml
 auth:
   providers:
-    cplive-sso:
+    acme-sso:
       kind: aws/iam-identity-center
       region: us-east-2
       start_url: https://acme.awsapps.com/start/
@@ -99,7 +99,7 @@ auth:
 
 ### 2. Convert Each Session to an Identity
 
-For each session in Leapp, create an identity configuration:
+For each session in Leapp you use, create an identity configuration:
 
 ```yaml
 auth:
@@ -118,10 +118,10 @@ auth:
 ```yaml
 auth:
   identities:
-    core-identity/managers-team-access:
+    acme-identity:
       kind: aws/permission-set
       via:
-        provider: cplive-sso
+        provider: acme-sso
       principal:
         name: "IdentityManagersTeamAccess"
         account:
@@ -135,11 +135,11 @@ Mark one identity as default for convenience:
 ```yaml
 auth:
   identities:
-    core-identity/managers-team-access:
+    acme-identity:
       default: true
       kind: aws/permission-set
       via:
-        provider: cplive-sso
+        provider: acme-sso
       principal:
         name: "IdentityManagersTeamAccess"
         account:
@@ -174,7 +174,7 @@ Add the following environment variables to your Geodesic Dockerfile:
 # Default AWS_PROFILE
 # This identity must exist in the atmos config file.
 ARG DEFAULT_ATMOS_PROVIDER="acme-sso"
-ARG DEFAULT_ATMOS_IDENTITY="core-identity"
+ARG DEFAULT_ATMOS_IDENTITY="acme-identity"
 
 ENV AWS_SHARED_CREDENTIALS_FILE=$HOME/.aws/atmos/${DEFAULT_ATMOS_PROVIDER}/credentials
 ENV AWS_CONFIG_FILE=$HOME/.aws/atmos/${DEFAULT_ATMOS_PROVIDER}/config
@@ -214,13 +214,13 @@ In order for `assume-role` and other Geodesic utilities to work, you'll need to 
 **Solution**: Ensure the provider name matches exactly:
 ```yaml
 providers:
-  cplive-sso:  # ← This name
+  acme-sso:  # ← This name
     kind: aws/iam-identity-center
 
 identities:
   my-identity:
     via:
-      provider: cplive-sso  # ← Must match exactly
+      provider: acme-sso  # ← Must match exactly
 ```
 
 ### Issue: "Permission set not found"
