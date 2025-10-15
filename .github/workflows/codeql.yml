@@ -139,7 +139,7 @@ jobs:
       - name: Run golangci-lint with lintroller plugin
         uses: golangci/golangci-lint-action@v8
         with:
-          version: latest
+          version: v2.5.0  # Match the version we built above
           install-mode: none  # Use the custom binary we built above
           only-new-issues: true
           args: >

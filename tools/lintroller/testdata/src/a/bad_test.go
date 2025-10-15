@@ -34,7 +34,7 @@ func TestBadOsSetenv(t *testing.T) {
 func TestGoodOsSetenvInDefer(t *testing.T) {
 	orig := os.Getenv("PATH")
 	defer func() {
-		os.Setenv("PATH", orig) // OK: os.Setenv is allowed in defer blocks
+		os.Setenv("PATH", orig) // OK: os.Setenv is allowed in defer blocks.
 	}()
 }
 
@@ -49,11 +49,11 @@ func TestBadMkdirTemp(t *testing.T) {
 
 // Test os.MkdirTemp allowed in benchmark.
 func BenchmarkGoodMkdirTemp(b *testing.B) {
-	tempDir, _ := os.MkdirTemp("", "bench-*") // OK: os.MkdirTemp is allowed in benchmarks
+	tempDir, _ := os.MkdirTemp("", "bench-*") // OK: os.MkdirTemp is allowed in benchmarks.
 	defer os.RemoveAll(tempDir)
 }
 
 // Test os.Setenv allowed in benchmark.
 func BenchmarkGoodOsSetenv(b *testing.B) {
-	os.Setenv("PATH", "/bench/path") // OK: os.Setenv is allowed in benchmarks
+	os.Setenv("PATH", "/bench/path") // OK: os.Setenv is allowed in benchmarks.
 }
