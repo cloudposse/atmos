@@ -310,8 +310,14 @@ func MergeWithOptionsAndContext(
 		return map[string]any{}, nil
 	}
 
+	// Check if provenance tracking is enabled.
+	provenanceEnabled := atmosConfig != nil && atmosConfig.TrackProvenance &&
+		context != nil && context.IsProvenanceEnabled() &&
+		context.Positions != nil && len(context.Positions) > 0
+
 	// Fast-path: only one non-empty input, return a deep copy to maintain immutability.
-	if len(nonEmptyInputs) == 1 {
+	// Skip this fast-path when provenance tracking is enabled to ensure position tracking.
+	if len(nonEmptyInputs) == 1 && !provenanceEnabled {
 		result, err := deepCopyMap(nonEmptyInputs[0])
 		if err != nil && context != nil {
 			return nil, context.FormatError(err)
@@ -319,14 +325,12 @@ func MergeWithOptionsAndContext(
 		return result, err
 	}
 
-	// Standard merge path for multiple non-empty inputs.
+	// Standard merge path for multiple non-empty inputs (or single input with provenance).
 	var result map[string]any
 	var err error
 
 	// Use MergeWithProvenance when provenance tracking is enabled and positions are available.
-	if atmosConfig != nil && atmosConfig.TrackProvenance &&
-		context != nil && context.IsProvenanceEnabled() &&
-		context.Positions != nil && len(context.Positions) > 0 {
+	if provenanceEnabled {
 		// Perform provenance-aware merge.
 		result, err = MergeWithProvenance(atmosConfig, nonEmptyInputs, context, context.Positions)
 	} else {
