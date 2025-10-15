@@ -12,12 +12,7 @@ import (
 // TestProcessTagExec_CustomBinary tests the ProcessTagExec function using a custom bash binary.
 func TestProcessTagExec_CustomBinary(t *testing.T) {
 	// Create a temporary directory for our custom binary
-	tempDir, err := os.MkdirTemp("", "atmos-exec-test")
-	assert.NoError(t, err)
-	defer func() {
-		err := os.RemoveAll(tempDir)
-		assert.NoError(t, err)
-	}()
+	tempDir := t.TempDir()
 
 	// Create a custom bash script that outputs predictable content
 	customBinaryPath := filepath.Join(tempDir, "test-bash")
@@ -51,7 +46,7 @@ esac
 `
 	}
 
-	err = os.WriteFile(customBinaryPath, []byte(scriptContent), 0o755)
+	err := os.WriteFile(customBinaryPath, []byte(scriptContent), 0o755)
 	assert.NoError(t, err)
 
 	// Save original PATH and modify it to include our temp directory
@@ -138,12 +133,7 @@ func TestProcessTagExec_MalformedTag(t *testing.T) {
 // TestProcessTagExec_ComplexJSON tests parsing of complex JSON output.
 func TestProcessTagExec_ComplexJSON(t *testing.T) {
 	// Create a temporary directory for our custom binary
-	tempDir, err := os.MkdirTemp("", "atmos-exec-test")
-	assert.NoError(t, err)
-	defer func() {
-		err := os.RemoveAll(tempDir)
-		assert.NoError(t, err)
-	}()
+	tempDir := t.TempDir()
 
 	// Create a custom bash script that outputs complex JSON
 	customBinaryPath := filepath.Join(tempDir, "test-bash")
@@ -163,7 +153,7 @@ echo '{"nested": {"key": "value"}, "array": [1, 2, 3], "bool": true, "null": nul
 `
 	}
 
-	err = os.WriteFile(customBinaryPath, []byte(scriptContent), 0o755)
+	err := os.WriteFile(customBinaryPath, []byte(scriptContent), 0o755)
 	assert.NoError(t, err)
 
 	// Save original PATH and modify it to include our temp directory
@@ -193,12 +183,7 @@ echo '{"nested": {"key": "value"}, "array": [1, 2, 3], "bool": true, "null": nul
 // TestProcessTagExec_InvalidJSON tests handling of invalid JSON that should be returned as string.
 func TestProcessTagExec_InvalidJSON(t *testing.T) {
 	// Create a temporary directory for our custom binary
-	tempDir, err := os.MkdirTemp("", "atmos-exec-test")
-	assert.NoError(t, err)
-	defer func() {
-		err := os.RemoveAll(tempDir)
-		assert.NoError(t, err)
-	}()
+	tempDir := t.TempDir()
 
 	// Create a custom bash script that outputs invalid JSON
 	customBinaryPath := filepath.Join(tempDir, "test-bash")
@@ -218,7 +203,7 @@ echo "invalid json {"
 `
 	}
 
-	err = os.WriteFile(customBinaryPath, []byte(scriptContent), 0o755)
+	err := os.WriteFile(customBinaryPath, []byte(scriptContent), 0o755)
 	assert.NoError(t, err)
 
 	// Save original PATH and modify it to include our temp directory
