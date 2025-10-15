@@ -828,17 +828,9 @@ func TestCopyFile_FailCreate(t *testing.T) {
 		t.Skipf("Skipping on Windows: directory permissions don't prevent file creation the same way as Unix")
 	}
 
-	srcDir, err := os.MkdirTemp("", "copyfile-src")
-	if err != nil {
-		t.Fatalf("Failed to create source dir: %v", err)
-	}
-	defer os.RemoveAll(srcDir)
+	srcDir := t.TempDir()
 
-	dstDir, err := os.MkdirTemp("", "copyfile-dst")
-	if err != nil {
-		t.Fatalf("Failed to create dst dir: %v", err)
-	}
-	defer os.RemoveAll(dstDir)
+	dstDir := t.TempDir()
 
 	// Create source file.
 	srcFile := filepath.Join(srcDir, "test.txt")
@@ -853,7 +845,7 @@ func TestCopyFile_FailCreate(t *testing.T) {
 	defer os.Chmod(dstDir, 0o700) // Restore for cleanup
 
 	dstFile := filepath.Join(dstDir, "test.txt")
-	err = copyFile(srcFile, dstFile)
+	err := copyFile(srcFile, dstFile)
 	if err == nil {
 		t.Errorf("Expected error when creating destination file, got nil")
 	}
@@ -882,11 +874,8 @@ func TestShouldIncludePath_NoPatterns(t *testing.T) {
 
 // TestShouldIncludePath_Directory tests that directories are always included.
 func TestShouldIncludePath_Directory(t *testing.T) {
-	tmpDir, err := os.MkdirTemp("", "testdir")
-	if err != nil {
-		t.Fatalf("Failed to create temp dir: %v", err)
-	}
-	defer os.RemoveAll(tmpDir)
+	tmpDir := t.TempDir()
+
 	info, err := os.Stat(tmpDir)
 	if err != nil {
 		t.Fatalf("Failed to stat dir: %v", err)
@@ -918,11 +907,8 @@ func TestShouldIncludePath_NoMatch(t *testing.T) {
 
 // TestShouldSkipPrefixEntry_DirectoryWithTrailingSlash tests directory exclusion in prefix mode.
 func TestShouldSkipPrefixEntry_DirectoryWithTrailingSlash(t *testing.T) {
-	tmpDir, err := os.MkdirTemp("", "prefixdir")
-	if err != nil {
-		t.Fatalf("Failed to create temp dir: %v", err)
-	}
-	defer os.RemoveAll(tmpDir)
+	tmpDir := t.TempDir()
+
 	info, err := os.Stat(tmpDir)
 	if err != nil {
 		t.Fatalf("Failed to stat dir: %v", err)
@@ -995,17 +981,9 @@ func TestGetMatchesForPattern_RecursiveNoMatch(t *testing.T) {
 
 // TestGetLocalFinalTarget_Directory tests target is a directory without extension.
 func TestGetLocalFinalTarget_Directory(t *testing.T) {
-	srcDir, err := os.MkdirTemp("", "source")
-	if err != nil {
-		t.Fatalf("Failed to create src dir: %v", err)
-	}
-	defer os.RemoveAll(srcDir)
+	srcDir := t.TempDir()
 
-	targetPath, err := os.MkdirTemp("", "target")
-	if err != nil {
-		t.Fatalf("Failed to create target dir: %v", err)
-	}
-	defer os.RemoveAll(targetPath)
+	targetPath := t.TempDir()
 
 	finalTarget, err := getLocalFinalTarget(srcDir, targetPath)
 	if err != nil {
@@ -1019,17 +997,9 @@ func TestGetLocalFinalTarget_Directory(t *testing.T) {
 
 // TestGetLocalFinalTarget_FileExtension tests target with file extension.
 func TestGetLocalFinalTarget_FileExtension(t *testing.T) {
-	srcDir, err := os.MkdirTemp("", "source")
-	if err != nil {
-		t.Fatalf("Failed to create src dir: %v", err)
-	}
-	defer os.RemoveAll(srcDir)
+	srcDir := t.TempDir()
 
-	tmpDir, err := os.MkdirTemp("", "parent")
-	if err != nil {
-		t.Fatalf("Failed to create parent dir: %v", err)
-	}
-	defer os.RemoveAll(tmpDir)
+	tmpDir := t.TempDir()
 
 	targetPath := filepath.Join(tmpDir, "output.txt")
 	finalTarget, err := getLocalFinalTarget(srcDir, targetPath)
@@ -1043,11 +1013,7 @@ func TestGetLocalFinalTarget_FileExtension(t *testing.T) {
 
 // TestGetNonLocalFinalTarget tests non-local file target creation.
 func TestGetNonLocalFinalTarget(t *testing.T) {
-	tmpDir, err := os.MkdirTemp("", "nonlocal")
-	if err != nil {
-		t.Fatalf("Failed to create temp dir: %v", err)
-	}
-	defer os.RemoveAll(tmpDir)
+	tmpDir := t.TempDir()
 
 	targetPath := filepath.Join(tmpDir, "newdir")
 	finalTarget, err := getNonLocalFinalTarget(targetPath)
@@ -1064,17 +1030,9 @@ func TestGetNonLocalFinalTarget(t *testing.T) {
 
 // TestComponentOrMixinsCopy_FileToFile tests file-to-file copy with existing directory at dest.
 func TestComponentOrMixinsCopy_FileToFile_ExistingDir(t *testing.T) {
-	srcDir, err := os.MkdirTemp("", "src")
-	if err != nil {
-		t.Fatalf("Failed to create src dir: %v", err)
-	}
-	defer os.RemoveAll(srcDir)
+	srcDir := t.TempDir()
 
-	dstDir, err := os.MkdirTemp("", "dst")
-	if err != nil {
-		t.Fatalf("Failed to create dst dir: %v", err)
-	}
-	defer os.RemoveAll(dstDir)
+	dstDir := t.TempDir()
 
 	// Create source file.
 	srcFile := filepath.Join(srcDir, "source.txt")
@@ -1105,17 +1063,9 @@ func TestComponentOrMixinsCopy_FileToFile_ExistingDir(t *testing.T) {
 
 // TestCopyToTargetWithPatterns_InclusionOnly tests copy with only inclusion patterns.
 func TestCopyToTargetWithPatterns_InclusionOnly(t *testing.T) {
-	srcDir, err := os.MkdirTemp("", "inconly-src")
-	if err != nil {
-		t.Fatalf("Failed to create src dir: %v", err)
-	}
-	defer os.RemoveAll(srcDir)
+	srcDir := t.TempDir()
 
-	dstDir, err := os.MkdirTemp("", "inconly-dst")
-	if err != nil {
-		t.Fatalf("Failed to create dst dir: %v", err)
-	}
-	defer os.RemoveAll(dstDir)
+	dstDir := t.TempDir()
 
 	// Create test files.
 	if err := os.WriteFile(filepath.Join(srcDir, "match.md"), []byte("md"), 0o600); err != nil {
