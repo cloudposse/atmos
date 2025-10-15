@@ -143,7 +143,7 @@ jobs:
           install-mode: none  # Use the custom binary we built above
           only-new-issues: true
           args: >
-            --out-format=sarif:golangci-lint.sarif
+            --output.sarif.path=golangci-lint.sarif
             --issues-exit-code=0
 
       - name: Upload filtered SARIF results
