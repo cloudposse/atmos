@@ -55,7 +55,7 @@ func ParseLogLevel(logLevel string) (LogLevel, error) {
 		}
 	}
 
-	return "", fmt.Errorf("%w: '%s'", ErrInvalidLogLevel, logLevel)
+	return "", fmt.Errorf("%w: received '%s' which is not a recognized log level", ErrInvalidLogLevel, logLevel)
 }
 
 // ConvertLogLevel converts a string LogLevel to a charm Level.
