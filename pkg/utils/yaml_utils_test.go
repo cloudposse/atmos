@@ -484,3 +484,268 @@ func TestPrintAsYAMLSimple(t *testing.T) {
 		})
 	}
 }
+
+// TestConvertToYAML_Consistency tests that ConvertToYAML produces consistent output.
+// This validates P7.8 optimization: buffer pooling doesn't affect output consistency.
+func TestConvertToYAML_Consistency(t *testing.T) {
+	data := map[string]any{
+		"string": "value",
+		"number": 42,
+		"nested": map[string]any{
+			"array": []string{"one", "two", "three"},
+			"bool":  true,
+		},
+	}
+
+	// Multiple calls should produce identical output
+	result1, err1 := ConvertToYAML(data)
+	require.NoError(t, err1)
+
+	result2, err2 := ConvertToYAML(data)
+	require.NoError(t, err2)
+
+	result3, err3 := ConvertToYAML(data)
+	require.NoError(t, err3)
+
+	// All results should be identical
+	assert.Equal(t, result1, result2, "First and second call should produce identical output")
+	assert.Equal(t, result2, result3, "Second and third call should produce identical output")
+
+	// Verify output is valid
+	assert.Contains(t, result1, "string: value")
+	assert.Contains(t, result1, "number: 42")
+	assert.Contains(t, result1, "bool: true")
+}
+
+// TestConvertToYAML_DifferentSizes tests buffer pooling with various data sizes.
+// This validates P7.8 optimization: buffer pool handles different sizes correctly.
+func TestConvertToYAML_DifferentSizes(t *testing.T) {
+	testCases := []struct {
+		name string
+		data any
+	}{
+		{
+			name: "small data",
+			data: map[string]any{"key": "value"},
+		},
+		{
+			name: "medium data",
+			data: map[string]any{
+				"key1": "value1",
+				"key2": 123,
+				"nested": map[string]any{
+					"inner1": "value",
+					"inner2": []string{"a", "b", "c"},
+				},
+			},
+		},
+		{
+			name: "large nested structure",
+			data: generateLargeNestedMap(5, 10),
+		},
+		{
+			name: "array with many elements",
+			data: map[string]any{
+				"items": generateLargeArray(100),
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			result, err := ConvertToYAML(tc.data)
+			require.NoError(t, err)
+			require.NotEmpty(t, result)
+
+			// Verify output can be parsed back
+			_, err = UnmarshalYAML[map[string]any](result)
+			assert.NoError(t, err, "Output should be valid YAML")
+		})
+	}
+}
+
+// TestConvertToYAML_Concurrent tests concurrent YAML conversion with buffer pooling.
+// This validates P7.8 optimization: sync.Pool is thread-safe for concurrent access.
+func TestConvertToYAML_Concurrent(t *testing.T) {
+	data := map[string]any{
+		"foo": "bar",
+		"num": 123,
+		"nested": map[string]any{
+			"key": "value",
+		},
+	}
+
+	const numGoroutines = 100
+	results := make(chan string, numGoroutines)
+	errors := make(chan error, numGoroutines)
+	start := make(chan struct{})
+
+	for i := 0; i < numGoroutines; i++ {
+		go func() {
+			<-start
+
+			result, err := ConvertToYAML(data)
+			if err != nil {
+				errors <- err
+				return
+			}
+
+			results <- result
+		}()
+	}
+
+	// Release all goroutines
+	close(start)
+
+	// Collect results
+	var collectedResults []string
+	var collectedErrors []error
+
+	for i := 0; i < numGoroutines; i++ {
+		select {
+		case result := <-results:
+			collectedResults = append(collectedResults, result)
+		case err := <-errors:
+			collectedErrors = append(collectedErrors, err)
+		}
+	}
+
+	// Validate no errors
+	assert.Empty(t, collectedErrors, "No errors should occur during concurrent conversion")
+	assert.Len(t, collectedResults, numGoroutines, "All goroutines should complete")
+
+	// All results should be identical
+	firstResult := collectedResults[0]
+	for i, result := range collectedResults {
+		assert.Equal(t, firstResult, result, "Result %d should match first result", i)
+	}
+}
+
+// TestConvertToYAML_ConcurrentDifferentData tests concurrent YAML conversion
+// with different data to stress test buffer pooling.
+func TestConvertToYAML_ConcurrentDifferentData(t *testing.T) {
+	// Create different data sets
+	dataSets := []map[string]any{
+		{"key1": "value1", "num": 1},
+		{"key2": "value2", "num": 2},
+		{"key3": "value3", "num": 3},
+		{"key4": "value4", "num": 4},
+		{"key5": "value5", "num": 5},
+	}
+
+	const goroutinesPerDataSet = 20
+	totalGoroutines := len(dataSets) * goroutinesPerDataSet
+
+	results := make(chan string, totalGoroutines)
+	errors := make(chan error, totalGoroutines)
+	start := make(chan struct{})
+
+	// Spawn multiple goroutines per data set
+	for _, data := range dataSets {
+		for i := 0; i < goroutinesPerDataSet; i++ {
+			go func(d map[string]any) {
+				<-start
+
+				result, err := ConvertToYAML(d)
+				if err != nil {
+					errors <- err
+					return
+				}
+
+				results <- result
+			}(data)
+		}
+	}
+
+	// Release all goroutines
+	close(start)
+
+	// Collect results
+	successCount := 0
+	errorCount := 0
+
+	for i := 0; i < totalGoroutines; i++ {
+		select {
+		case result := <-results:
+			assert.NotEmpty(t, result)
+			successCount++
+		case <-errors:
+			errorCount++
+		}
+	}
+
+	assert.Equal(t, totalGoroutines, successCount, "All concurrent conversions should succeed")
+	assert.Equal(t, 0, errorCount, "No errors should occur")
+}
+
+// BenchmarkConvertToYAML benchmarks YAML conversion with buffer pooling (P7.8).
+func BenchmarkConvertToYAML(b *testing.B) {
+	data := map[string]any{
+		"string": "value",
+		"number": 42,
+		"nested": map[string]any{
+			"array": []string{"one", "two", "three"},
+		},
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, _ = ConvertToYAML(data)
+	}
+}
+
+// BenchmarkConvertToYAML_Large benchmarks YAML conversion with large data.
+// This demonstrates P7.8 buffer pooling benefit on larger data structures.
+func BenchmarkConvertToYAML_Large(b *testing.B) {
+	data := generateLargeNestedMap(10, 20)
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, _ = ConvertToYAML(data)
+	}
+}
+
+// BenchmarkConvertToYAML_Parallel benchmarks concurrent YAML conversion.
+// This demonstrates P7.8 buffer pooling efficiency under concurrent load.
+func BenchmarkConvertToYAML_Parallel(b *testing.B) {
+	data := map[string]any{
+		"key":    "value",
+		"number": 123,
+		"nested": map[string]any{
+			"inner": []string{"a", "b", "c"},
+		},
+	}
+
+	b.RunParallel(func(pb *testing.PB) {
+		for pb.Next() {
+			_, _ = ConvertToYAML(data)
+		}
+	})
+}
+
+// Helper function to generate large nested map for testing.
+func generateLargeNestedMap(depth, breadth int) map[string]any {
+	if depth == 0 {
+		return map[string]any{"leaf": "value"}
+	}
+
+	result := make(map[string]any, breadth)
+	for i := 0; i < breadth; i++ {
+		key := "key" + string(rune('0'+i%10))
+		if i%2 == 0 {
+			result[key] = generateLargeNestedMap(depth-1, breadth)
+		} else {
+			result[key] = "value" + string(rune('0'+i%10))
+		}
+	}
+	return result
+}
+
+// Helper function to generate large array for testing.
+func generateLargeArray(size int) []string {
+	result := make([]string, size)
+	for i := 0; i < size; i++ {
+		result[i] = "item" + string(rune('0'+i%10))
+	}
+	return result
+}

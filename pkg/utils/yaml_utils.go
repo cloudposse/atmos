@@ -90,6 +90,16 @@ var (
 	ErrIncludeYamlFunctionInvalidAbsPath      = errors.New("failed to convert the file path to an absolute path in the !include function")
 	ErrIncludeYamlFunctionFailedStackManifest = errors.New("failed to process the stack manifest with the !include function")
 	ErrNilAtmosConfig                         = errors.New("atmosConfig cannot be nil")
+
+	// Buffer pool that reuses bytes.Buffer objects to reduce allocations in YAML encoding.
+	// Buffer pooling significantly reduces memory allocations and GC pressure when
+	// converting large data structures to YAML, which happens frequently during
+	// stack processing and output generation.
+	yamlBufferPool = sync.Pool{
+		New: func() interface{} {
+			return new(bytes.Buffer)
+		},
+	}
 )
 
 // parsedYAMLCacheEntry stores a parsed YAML node and its position information.
@@ -481,8 +491,17 @@ func WrapLongStrings(data any, maxLength int) any {
 func ConvertToYAML(data any, opts ...YAMLOptions) (string, error) {
 	defer perf.Track(nil, "utils.ConvertToYAML")()
 
-	var buf bytes.Buffer
-	encoder := yaml.NewEncoder(&buf)
+	// Get a buffer from the pool to reduce allocations.
+	buf := yamlBufferPool.Get().(*bytes.Buffer)
+	buf.Reset() // Ensure buffer is clean.
+
+	// Return buffer to pool when done.
+	defer func() {
+		buf.Reset()
+		yamlBufferPool.Put(buf)
+	}()
+
+	encoder := yaml.NewEncoder(buf)
 
 	indent := DefaultYAMLIndent
 	if len(opts) > 0 && opts[0].Indent > 0 {
