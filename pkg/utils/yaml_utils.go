@@ -367,7 +367,7 @@ func GetHighlightedYAML(atmosConfig *schema.AtmosConfiguration, data any) (strin
 	return highlighted, nil
 }
 
-// PrintAsYAMLToFileDescriptor prints the provided value as YAML document to a file descriptor
+// PrintAsYAMLToFileDescriptor prints the provided value as YAML document to a file descriptor.
 func PrintAsYAMLToFileDescriptor(atmosConfig *schema.AtmosConfiguration, data any) error {
 	defer perf.Track(atmosConfig, "utils.PrintAsYAMLToFileDescriptor")()
 
@@ -385,7 +385,7 @@ func PrintAsYAMLToFileDescriptor(atmosConfig *schema.AtmosConfiguration, data an
 	return nil
 }
 
-// WriteToFileAsYAML converts the provided value to YAML and writes it to the specified file
+// WriteToFileAsYAML converts the provided value to YAML and writes it to the specified file.
 func WriteToFileAsYAML(filePath string, data any, fileMode os.FileMode) error {
 	defer perf.Track(nil, "utils.WriteToFileAsYAML")()
 
@@ -666,5 +666,49 @@ func UnmarshalYAMLFromFileWithPositions[T any](atmosConfig *schema.AtmosConfigur
 		return zeroValue, nil, err
 	}
 
+	// Apply string interning for map[string]any types to reduce memory usage.
+	// String interning deduplicates common strings across YAML files:
+	// - Common keys: "vars", "settings", "metadata", "env", "backend", etc.
+	// - Common values: region names, "true", "false", component/stack names, etc.
+	// This can save significant memory when loading many similar configs.
+	// Only intern non-nil, non-empty maps to preserve original nil/empty semantics.
+	if m, ok := any(data).(map[string]any); ok && m != nil && len(m) > 0 {
+		interned := InternStringsInMap(atmosConfig, m)
+		data = interned.(T)
+	}
+
 	return data, positions, nil
+}
+
+// InternStringsInMap recursively interns all string keys and string values in a map[string]any.
+// This reduces memory usage by deduplicating common strings across YAML files.
+// Common interned values: component names, stack names, "true"/"false", region names, etc.
+// Note: perf.Track removed from this critical path function as it's called recursively many times.
+func InternStringsInMap(atmosConfig *schema.AtmosConfiguration, data any) any {
+	switch v := data.(type) {
+	case map[string]any:
+		result := make(map[string]any, len(v))
+		for k, val := range v {
+			// Intern the key (common keys: vars, settings, metadata, env, backend, etc.)
+			internedKey := Intern(atmosConfig, k)
+			// Recursively process the value
+			result[internedKey] = InternStringsInMap(atmosConfig, val)
+		}
+		return result
+
+	case []any:
+		result := make([]any, len(v))
+		for i, val := range v {
+			result[i] = InternStringsInMap(atmosConfig, val)
+		}
+		return result
+
+	case string:
+		// Intern string values
+		return Intern(atmosConfig, v)
+
+	default:
+		// For all other types (int, bool, float, etc.), return as-is
+		return data
+	}
 }
