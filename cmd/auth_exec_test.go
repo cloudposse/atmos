@@ -3,7 +3,6 @@ package cmd
 import (
 	"bytes"
 	"errors"
-	"os"
 	"runtime"
 	"testing"
 
@@ -18,16 +17,8 @@ func TestAuthExecCmd_FlagParsing(t *testing.T) {
 	// Set up test fixture with auth configuration.
 	testDir := "../tests/fixtures/scenarios/atmos-auth"
 
-	err := os.Setenv("ATMOS_CLI_CONFIG_PATH", testDir)
-	require.NoError(t, err)
-
-	err = os.Setenv("ATMOS_BASE_PATH", testDir)
-	require.NoError(t, err)
-
-	defer func() {
-		os.Unsetenv("ATMOS_CLI_CONFIG_PATH")
-		os.Unsetenv("ATMOS_BASE_PATH")
-	}()
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", testDir)
+	t.Setenv("ATMOS_BASE_PATH", testDir)
 
 	tests := []struct {
 		name          string

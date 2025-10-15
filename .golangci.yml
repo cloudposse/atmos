@@ -43,7 +43,7 @@ linters:
         - pattern: ^path\.Join$
           msg: Use `filepath.Join` for OS-appropriate path separators instead of `path.Join` (which always uses forward slashes)
       exclude-godoc-examples: false
-      analyze-types: false
+      analyze-types: true
     funlen:
       lines: 60
       statements: 40

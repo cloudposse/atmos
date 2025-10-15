@@ -14,15 +14,7 @@ import (
 )
 
 func TestGetComponentPath(t *testing.T) {
-	// Save original env vars to restore later.
-	originalTerraformPath := os.Getenv("ATMOS_COMPONENTS_TERRAFORM_BASE_PATH")
-	originalHelmfilePath := os.Getenv("ATMOS_COMPONENTS_HELMFILE_BASE_PATH")
-	originalPackerPath := os.Getenv("ATMOS_COMPONENTS_PACKER_BASE_PATH")
-	defer func() {
-		os.Setenv("ATMOS_COMPONENTS_TERRAFORM_BASE_PATH", originalTerraformPath)
-		os.Setenv("ATMOS_COMPONENTS_HELMFILE_BASE_PATH", originalHelmfilePath)
-		os.Setenv("ATMOS_COMPONENTS_PACKER_BASE_PATH", originalPackerPath)
-	}()
+	// Note: We don't need to save/restore env vars as t.Setenv in subtests handles cleanup
 
 	tests := []struct {
 		name               string
@@ -262,14 +254,9 @@ func TestGetComponentPath(t *testing.T) {
 				t.Skipf("Skipping test on Windows")
 			}
 
-			// Clear env vars.
-			os.Unsetenv("ATMOS_COMPONENTS_TERRAFORM_BASE_PATH")
-			os.Unsetenv("ATMOS_COMPONENTS_HELMFILE_BASE_PATH")
-			os.Unsetenv("ATMOS_COMPONENTS_PACKER_BASE_PATH")
-
-			// Set test env vars.
+			// Set test env vars (t.Setenv handles cleanup automatically).
 			for k, v := range tt.envVars {
-				os.Setenv(k, v)
+				t.Setenv(k, v)
 			}
 
 			cfg := tt.setupConfig()
@@ -413,32 +400,11 @@ func TestGetBasePathForComponentType(t *testing.T) {
 		},
 	}
 
-	// Save original env vars.
-	originalVars := map[string]string{
-		"ATMOS_COMPONENTS_TERRAFORM_BASE_PATH": os.Getenv("ATMOS_COMPONENTS_TERRAFORM_BASE_PATH"),
-		"ATMOS_COMPONENTS_HELMFILE_BASE_PATH":  os.Getenv("ATMOS_COMPONENTS_HELMFILE_BASE_PATH"),
-		"ATMOS_COMPONENTS_PACKER_BASE_PATH":    os.Getenv("ATMOS_COMPONENTS_PACKER_BASE_PATH"),
-	}
-	defer func() {
-		for k, v := range originalVars {
-			if v == "" {
-				os.Unsetenv(k)
-			} else {
-				os.Setenv(k, v)
-			}
-		}
-	}()
-
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Clear env vars.
-			for k := range originalVars {
-				os.Unsetenv(k)
-			}
-
-			// Set test env vars.
+			// Set test env vars (t.Setenv handles cleanup automatically).
 			for k, v := range tt.setupEnv {
-				os.Setenv(k, v)
+				t.Setenv(k, v)
 			}
 
 			cfg := tt.setupConfig()

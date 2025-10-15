@@ -44,20 +44,19 @@ func TestShouldCheckPreconditions(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Save original value
-			orig := os.Getenv("ATMOS_TEST_SKIP_PRECONDITION_CHECKS")
-			defer func() {
-				if orig != "" {
-					os.Setenv("ATMOS_TEST_SKIP_PRECONDITION_CHECKS", orig)
-				} else {
-					os.Unsetenv("ATMOS_TEST_SKIP_PRECONDITION_CHECKS")
-				}
-			}()
-
 			if tt.envValue != "" {
-				os.Setenv("ATMOS_TEST_SKIP_PRECONDITION_CHECKS", tt.envValue)
+				t.Setenv("ATMOS_TEST_SKIP_PRECONDITION_CHECKS", tt.envValue)
 			} else {
+				// Explicitly unset the env var for this test
+				// t.Setenv doesn't support unsetting, so we use os.Unsetenv
+				// and manually restore after the test
+				orig := os.Getenv("ATMOS_TEST_SKIP_PRECONDITION_CHECKS")
 				os.Unsetenv("ATMOS_TEST_SKIP_PRECONDITION_CHECKS")
+				t.Cleanup(func() {
+					if orig != "" {
+						os.Setenv("ATMOS_TEST_SKIP_PRECONDITION_CHECKS", orig)
+					}
+				})
 			}
 
 			got := ShouldCheckPreconditions()
@@ -69,8 +68,7 @@ func TestShouldCheckPreconditions(t *testing.T) {
 // TestRequireAWSProfile_WithBypass tests RequireAWSProfile with bypass.
 func TestRequireAWSProfile_WithBypass(t *testing.T) {
 	// Set bypass
-	os.Setenv("ATMOS_TEST_SKIP_PRECONDITION_CHECKS", "true")
-	defer os.Unsetenv("ATMOS_TEST_SKIP_PRECONDITION_CHECKS")
+	t.Setenv("ATMOS_TEST_SKIP_PRECONDITION_CHECKS", "true")
 
 	// Should not skip when bypass is set
 	RequireAWSProfile(t, "non-existent-profile-that-does-not-exist-12345")
@@ -79,8 +77,7 @@ func TestRequireAWSProfile_WithBypass(t *testing.T) {
 
 // TestRequireGitRepository_WithBypass tests RequireGitRepository with bypass.
 func TestRequireGitRepository_WithBypass(t *testing.T) {
-	os.Setenv("ATMOS_TEST_SKIP_PRECONDITION_CHECKS", "true")
-	defer os.Unsetenv("ATMOS_TEST_SKIP_PRECONDITION_CHECKS")
+	t.Setenv("ATMOS_TEST_SKIP_PRECONDITION_CHECKS", "true")
 
 	repo := RequireGitRepository(t)
 	assert.Nil(t, repo) // Should return nil when bypassed
@@ -88,8 +85,7 @@ func TestRequireGitRepository_WithBypass(t *testing.T) {
 
 // TestRequireGitRemoteWithValidURL_WithBypass tests RequireGitRemoteWithValidURL with bypass.
 func TestRequireGitRemoteWithValidURL_WithBypass(t *testing.T) {
-	os.Setenv("ATMOS_TEST_SKIP_PRECONDITION_CHECKS", "true")
-	defer os.Unsetenv("ATMOS_TEST_SKIP_PRECONDITION_CHECKS")
+	t.Setenv("ATMOS_TEST_SKIP_PRECONDITION_CHECKS", "true")
 
 	url := RequireGitRemoteWithValidURL(t)
 	assert.Empty(t, url) // Should return empty when bypassed
@@ -97,8 +93,7 @@ func TestRequireGitRemoteWithValidURL_WithBypass(t *testing.T) {
 
 // TestRequireNetworkAccess_WithBypass tests RequireNetworkAccess with bypass.
 func TestRequireNetworkAccess_WithBypass(t *testing.T) {
-	os.Setenv("ATMOS_TEST_SKIP_PRECONDITION_CHECKS", "true")
-	defer os.Unsetenv("ATMOS_TEST_SKIP_PRECONDITION_CHECKS")
+	t.Setenv("ATMOS_TEST_SKIP_PRECONDITION_CHECKS", "true")
 
 	// Should not skip when bypass is set
 	RequireNetworkAccess(t, "http://invalid-domain-that-does-not-exist-12345.example.com")
@@ -106,72 +101,53 @@ func TestRequireNetworkAccess_WithBypass(t *testing.T) {
 
 // TestRequireExecutable_WithBypass tests RequireExecutable with bypass.
 func TestRequireExecutable_WithBypass(t *testing.T) {
-	os.Setenv("ATMOS_TEST_SKIP_PRECONDITION_CHECKS", "true")
-	defer os.Unsetenv("ATMOS_TEST_SKIP_PRECONDITION_CHECKS")
+	t.Setenv("ATMOS_TEST_SKIP_PRECONDITION_CHECKS", "true")
 
 	RequireExecutable(t, "non-existent-binary-that-does-not-exist-12345", "testing")
 }
 
 // TestRequireEnvVar_WithBypass tests RequireEnvVar with bypass.
 func TestRequireEnvVar_WithBypass(t *testing.T) {
-	os.Setenv("ATMOS_TEST_SKIP_PRECONDITION_CHECKS", "true")
-	defer os.Unsetenv("ATMOS_TEST_SKIP_PRECONDITION_CHECKS")
+	t.Setenv("ATMOS_TEST_SKIP_PRECONDITION_CHECKS", "true")
 
 	RequireEnvVar(t, "NON_EXISTENT_VAR_THAT_DOES_NOT_EXIST_12345", "testing")
 }
 
 // TestRequireFilePath_WithBypass tests RequireFilePath with bypass.
 func TestRequireFilePath_WithBypass(t *testing.T) {
-	os.Setenv("ATMOS_TEST_SKIP_PRECONDITION_CHECKS", "true")
-	defer os.Unsetenv("ATMOS_TEST_SKIP_PRECONDITION_CHECKS")
+	t.Setenv("ATMOS_TEST_SKIP_PRECONDITION_CHECKS", "true")
 
 	RequireFilePath(t, "/non/existent/path/that/does/not/exist/12345", "testing")
 }
 
 // TestRequireOCIAuthentication_WithBypass tests RequireOCIAuthentication with bypass.
 func TestRequireOCIAuthentication_WithBypass(t *testing.T) {
-	os.Setenv("ATMOS_TEST_SKIP_PRECONDITION_CHECKS", "true")
-	defer os.Unsetenv("ATMOS_TEST_SKIP_PRECONDITION_CHECKS")
+	t.Setenv("ATMOS_TEST_SKIP_PRECONDITION_CHECKS", "true")
 
-	// Ensure no token is set
-	origGH := os.Getenv("GITHUB_TOKEN")
-	origAtmos := os.Getenv("ATMOS_GITHUB_TOKEN")
-	defer func() {
-		if origGH != "" {
-			os.Setenv("GITHUB_TOKEN", origGH)
-		} else {
-			os.Unsetenv("GITHUB_TOKEN")
-		}
-		if origAtmos != "" {
-			os.Setenv("ATMOS_GITHUB_TOKEN", origAtmos)
-		} else {
-			os.Unsetenv("ATMOS_GITHUB_TOKEN")
-		}
-	}()
-	os.Unsetenv("GITHUB_TOKEN")
-	os.Unsetenv("ATMOS_GITHUB_TOKEN")
+	// Ensure no token is set (t.Setenv with empty string unsets)
+	t.Setenv("GITHUB_TOKEN", "")
+	t.Setenv("ATMOS_GITHUB_TOKEN", "")
 
 	RequireOCIAuthentication(t)
 }
 
 // TestLogPreconditionOverride tests the LogPreconditionOverride function.
 func TestLogPreconditionOverride(t *testing.T) {
-	// Test with bypass enabled
-	os.Setenv("ATMOS_TEST_SKIP_PRECONDITION_CHECKS", "true")
-	defer os.Unsetenv("ATMOS_TEST_SKIP_PRECONDITION_CHECKS")
+	t.Run("with bypass enabled", func(t *testing.T) {
+		t.Setenv("ATMOS_TEST_SKIP_PRECONDITION_CHECKS", "true")
+		// Should log a message (we can't easily test the log output, but ensure no panic)
+		LogPreconditionOverride(t)
+	})
 
-	// Should log a message (we can't easily test the log output, but ensure no panic)
-	LogPreconditionOverride(t)
-
-	// Test without bypass
-	os.Unsetenv("ATMOS_TEST_SKIP_PRECONDITION_CHECKS")
-	LogPreconditionOverride(t)
+	t.Run("without bypass", func(t *testing.T) {
+		// Don't set env var - it will be unset
+		LogPreconditionOverride(t)
+	})
 }
 
 // TestRequireGitHubAccess_WithBypass tests RequireGitHubAccess with bypass.
 func TestRequireGitHubAccess_WithBypass(t *testing.T) {
-	os.Setenv("ATMOS_TEST_SKIP_PRECONDITION_CHECKS", "true")
-	defer os.Unsetenv("ATMOS_TEST_SKIP_PRECONDITION_CHECKS")
+	t.Setenv("ATMOS_TEST_SKIP_PRECONDITION_CHECKS", "true")
 
 	info := RequireGitHubAccess(t)
 	assert.Nil(t, info) // Should return nil when bypassed
@@ -208,8 +184,7 @@ func TestPreconditionSkipping(t *testing.T) {
 // TestRequireEnvVar_WithExistingVar tests RequireEnvVar with existing variable.
 func TestRequireEnvVar_WithExistingVar(t *testing.T) {
 	// Set a test env var
-	os.Setenv("TEST_VAR_FOR_TESTING", "some_value")
-	defer os.Unsetenv("TEST_VAR_FOR_TESTING")
+	t.Setenv("TEST_VAR_FOR_TESTING", "some_value")
 
 	RequireEnvVar(t, "TEST_VAR_FOR_TESTING", "testing")
 
@@ -229,8 +204,7 @@ func TestRequireExecutable_WithExistingBinary(t *testing.T) {
 // TestRequireOCIAuthentication_WithToken tests RequireOCIAuthentication with token set.
 func TestRequireOCIAuthentication_WithToken(t *testing.T) {
 	// Set a GitHub token
-	os.Setenv("GITHUB_TOKEN", "test-token")
-	defer os.Unsetenv("GITHUB_TOKEN")
+	t.Setenv("GITHUB_TOKEN", "test-token")
 
 	RequireOCIAuthentication(t)
 
@@ -241,17 +215,10 @@ func TestRequireOCIAuthentication_WithToken(t *testing.T) {
 // TestRequireOCIAuthentication_WithAtmosToken tests RequireOCIAuthentication with ATMOS_GITHUB_TOKEN.
 func TestRequireOCIAuthentication_WithAtmosToken(t *testing.T) {
 	// Ensure GITHUB_TOKEN is not set
-	origGH := os.Getenv("GITHUB_TOKEN")
-	os.Unsetenv("GITHUB_TOKEN")
-	defer func() {
-		if origGH != "" {
-			os.Setenv("GITHUB_TOKEN", origGH)
-		}
-	}()
+	t.Setenv("GITHUB_TOKEN", "")
 
 	// Set ATMOS_GITHUB_TOKEN
-	os.Setenv("ATMOS_GITHUB_TOKEN", "test-atmos-token")
-	defer os.Unsetenv("ATMOS_GITHUB_TOKEN")
+	t.Setenv("ATMOS_GITHUB_TOKEN", "test-atmos-token")
 
 	RequireOCIAuthentication(t)
 
@@ -262,18 +229,8 @@ func TestRequireOCIAuthentication_WithAtmosToken(t *testing.T) {
 // TestRequireOCIAuthentication_WithoutToken tests RequireOCIAuthentication without token.
 func TestRequireOCIAuthentication_WithoutToken(t *testing.T) {
 	// Ensure no tokens are set
-	origGH := os.Getenv("GITHUB_TOKEN")
-	origAtmos := os.Getenv("ATMOS_GITHUB_TOKEN")
-	os.Unsetenv("GITHUB_TOKEN")
-	os.Unsetenv("ATMOS_GITHUB_TOKEN")
-	defer func() {
-		if origGH != "" {
-			os.Setenv("GITHUB_TOKEN", origGH)
-		}
-		if origAtmos != "" {
-			os.Setenv("ATMOS_GITHUB_TOKEN", origAtmos)
-		}
-	}()
+	t.Setenv("GITHUB_TOKEN", "")
+	t.Setenv("ATMOS_GITHUB_TOKEN", "")
 
 	RequireOCIAuthentication(t)
 
@@ -292,8 +249,7 @@ func TestRequireFilePath_WithExistingPath(t *testing.T) {
 
 // TestRequireNetworkAccess_InvalidURLWithBypass tests RequireNetworkAccess with bypass and invalid URL.
 func TestRequireNetworkAccess_InvalidURLWithBypass(t *testing.T) {
-	os.Setenv("ATMOS_TEST_SKIP_PRECONDITION_CHECKS", "true")
-	defer os.Unsetenv("ATMOS_TEST_SKIP_PRECONDITION_CHECKS")
+	t.Setenv("ATMOS_TEST_SKIP_PRECONDITION_CHECKS", "true")
 
 	// Should not panic with invalid URL when bypass is set
 	RequireNetworkAccess(t, "not-a-valid-url")
@@ -301,14 +257,14 @@ func TestRequireNetworkAccess_InvalidURLWithBypass(t *testing.T) {
 
 // TestLogPreconditionOverride_Variations tests LogPreconditionOverride variations.
 func TestLogPreconditionOverride_Variations(t *testing.T) {
-	// Test without bypass first
-	os.Unsetenv("ATMOS_TEST_SKIP_PRECONDITION_CHECKS")
-	LogPreconditionOverride(t)
+	t.Run("without bypass", func(t *testing.T) {
+		LogPreconditionOverride(t)
+	})
 
-	// Test with bypass
-	os.Setenv("ATMOS_TEST_SKIP_PRECONDITION_CHECKS", "true")
-	defer os.Unsetenv("ATMOS_TEST_SKIP_PRECONDITION_CHECKS")
-	LogPreconditionOverride(t)
+	t.Run("with bypass", func(t *testing.T) {
+		t.Setenv("ATMOS_TEST_SKIP_PRECONDITION_CHECKS", "true")
+		LogPreconditionOverride(t)
+	})
 }
 
 // TestRequireAWSProfile_NonExistent tests RequireAWSProfile with non-existent profile (will skip).
@@ -371,22 +327,9 @@ func TestRequireGitRemoteWithValidURL_WithRemote(t *testing.T) {
 
 // TestRequireGitHubAccess_NoToken tests RequireGitHubAccess without token (will likely skip or rate limit).
 func TestRequireGitHubAccess_NoToken(t *testing.T) {
-	// Ensure precondition checks are enabled
-	os.Unsetenv("ATMOS_TEST_SKIP_PRECONDITION_CHECKS")
-
 	// Clear any GitHub tokens
-	origGH := os.Getenv("GITHUB_TOKEN")
-	origAtmos := os.Getenv("ATMOS_GITHUB_TOKEN")
-	os.Unsetenv("GITHUB_TOKEN")
-	os.Unsetenv("ATMOS_GITHUB_TOKEN")
-	defer func() {
-		if origGH != "" {
-			os.Setenv("GITHUB_TOKEN", origGH)
-		}
-		if origAtmos != "" {
-			os.Setenv("ATMOS_GITHUB_TOKEN", origAtmos)
-		}
-	}()
+	t.Setenv("GITHUB_TOKEN", "")
+	t.Setenv("ATMOS_GITHUB_TOKEN", "")
 
 	// This will either skip or return rate limit info
 	info := RequireGitHubAccess(t)
@@ -518,16 +461,6 @@ func TestRequireGitRemoteWithValidURL_NoRemotes(t *testing.T) {
 
 // TestSetAWSProfileEnv tests the setAWSProfileEnv helper function.
 func TestSetAWSProfileEnv(t *testing.T) {
-	// Save original profile
-	origProfile := os.Getenv("AWS_PROFILE")
-	defer func() {
-		if origProfile != "" {
-			os.Setenv("AWS_PROFILE", origProfile)
-		} else {
-			os.Unsetenv("AWS_PROFILE")
-		}
-	}()
-
 	t.Run("Empty profile returns no-op cleanup", func(t *testing.T) {
 		cleanup := setAWSProfileEnv("")
 		cleanup()
@@ -535,14 +468,14 @@ func TestSetAWSProfileEnv(t *testing.T) {
 	})
 
 	t.Run("Same profile returns no-op cleanup", func(t *testing.T) {
-		os.Setenv("AWS_PROFILE", "test-profile")
+		t.Setenv("AWS_PROFILE", "test-profile")
 		cleanup := setAWSProfileEnv("test-profile")
 		cleanup()
 		assert.Equal(t, "test-profile", os.Getenv("AWS_PROFILE"))
 	})
 
 	t.Run("New profile sets and cleanup restores", func(t *testing.T) {
-		os.Setenv("AWS_PROFILE", "original-profile")
+		t.Setenv("AWS_PROFILE", "original-profile")
 		cleanup := setAWSProfileEnv("new-profile")
 		assert.Equal(t, "new-profile", os.Getenv("AWS_PROFILE"))
 		cleanup()
@@ -550,7 +483,7 @@ func TestSetAWSProfileEnv(t *testing.T) {
 	})
 
 	t.Run("Profile set when none existed", func(t *testing.T) {
-		os.Unsetenv("AWS_PROFILE")
+		// Don't set AWS_PROFILE - it will be unset by default in subtest
 		cleanup := setAWSProfileEnv("test-profile")
 		assert.Equal(t, "test-profile", os.Getenv("AWS_PROFILE"))
 		cleanup()
@@ -560,8 +493,7 @@ func TestSetAWSProfileEnv(t *testing.T) {
 
 // TestRequireGitCommitConfig_WithBypass tests RequireGitCommitConfig with bypass enabled.
 func TestRequireGitCommitConfig_WithBypass(t *testing.T) {
-	os.Setenv("ATMOS_TEST_SKIP_PRECONDITION_CHECKS", "true")
-	defer os.Unsetenv("ATMOS_TEST_SKIP_PRECONDITION_CHECKS")
+	t.Setenv("ATMOS_TEST_SKIP_PRECONDITION_CHECKS", "true")
 
 	// Should not skip when bypass is set, even without git config
 	RequireGitCommitConfig(t)
