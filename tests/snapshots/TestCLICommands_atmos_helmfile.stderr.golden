@@ -1,17 +1,7 @@
-Error: The command `atmos helmfile` requires a subcommand
 
-Valid subcommands are:
-* apply
-* destroy
-* diff
-* generate
-* sync
-* version
+# Incorrect Usage
 
-
-Run `atmos helmfile --help` for usage
-
-# Error
+**Error:** invalid arguments
 
 The command atmos helmfile requires a subcommand
 
@@ -23,5 +13,9 @@ Valid subcommands are:
 • generate
 • sync
 • version
+
+## Hints
+
+💡 Run atmos helmfile --help for usage
 
 

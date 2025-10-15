@@ -1,43 +1,53 @@
-Error: The command `atmos terraform` requires a subcommand
+
+# Incorrect Usage
+
+**Error:** invalid arguments
+
+The command atmos terraform requires a subcommand
 
 Valid subcommands are:
-* apply
-* clean
-* console
-* deploy
-* destroy
-* fmt
-* force-unlock
-* generate
-* get
-* graph
-* import
-* init
-* login
-* logout
-* metadata
-* modules
-* output
-* plan
-* plan-diff
-* providers
-* refresh
-* shell
-* show
-* state
-* taint
-* test
-* untaint
-* validate
-* varfile
-* version
-* workspace
-* write
 
-## Usage Examples:
+• apply
+• clean
+• console
+• deploy
+• destroy
+• fmt
+• force-unlock
+• generate
+• get
+• graph
+• import
+• init
+• login
+• logout
+• metadata
+• modules
+• output
+• plan
+• plan-diff
+• providers
+• refresh
+• shell
+• show
+• state
+• taint
+• test
+• untaint
+• validate
+• varfile
+• version
+• workspace
+• write
+
+## Example
+
 – Execute a terraform subcommand
 
-```
- $ atmos terraform [subcommand] <component-name> -s <stack-name>
-```
-https://atmos.tools/cli/commands/terraform/usage
+  $ atmos terraform [subcommand] <component-name> -s <stack-name>
+
+## Hints
+
+💡 For more information, refer to the docs at https://atmos.tools/cli/commands/terraform/usage
+
+

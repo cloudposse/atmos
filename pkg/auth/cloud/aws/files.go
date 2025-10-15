@@ -6,10 +6,10 @@ import (
 	"os"
 	"path/filepath"
 
+	homedir "github.com/mitchellh/go-homedir"
 	ini "gopkg.in/ini.v1"
 
 	"github.com/cloudposse/atmos/pkg/auth/types"
-	"github.com/cloudposse/atmos/pkg/config/homedir"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
 )

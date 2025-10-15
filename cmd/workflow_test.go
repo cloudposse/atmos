@@ -12,11 +12,8 @@ import (
 func TestWorkflowCmd(t *testing.T) {
 	stacksPath := "../tests/fixtures/scenarios/atmos-overrides-section"
 
-	err := os.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
-	assert.NoError(t, err, "Setting 'ATMOS_CLI_CONFIG_PATH' environment variable should execute without error")
-
-	err = os.Setenv("ATMOS_BASE_PATH", stacksPath)
-	assert.NoError(t, err, "Setting 'ATMOS_BASE_PATH' environment variable should execute without error")
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
+	t.Setenv("ATMOS_BASE_PATH", stacksPath)
 
 	// Capture stdout
 	oldStdout := os.Stdout
@@ -32,7 +29,7 @@ atmos describe component c1 -s test
 
 	// Execute the command
 	RootCmd.SetArgs([]string{"workflow", "--file", "workflows", "show-all-describe-component-commands"})
-	err = RootCmd.Execute()
+	err := RootCmd.Execute()
 	assert.NoError(t, err, "'atmos workflow' command should execute without error")
 
 	// Close the writer and restore stdout

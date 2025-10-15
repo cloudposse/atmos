@@ -43,8 +43,8 @@ func TestDescribeComponent_NestedImportProvenance(t *testing.T) {
 	// Enable provenance tracking
 	atmosConfig.TrackProvenance = true
 
-	// Clear any previous merge context
-	ClearLastMergeContext()
+	// Clear any previous merge contexts.
+	ClearMergeContexts()
 
 	// Execute describe component with context to get provenance
 	result, err := ExecuteDescribeComponentWithContext(DescribeComponentContextParams{
@@ -207,8 +207,8 @@ func TestDescribeComponent_DirectImportProvenance(t *testing.T) {
 	// Enable provenance tracking
 	atmosConfig.TrackProvenance = true
 
-	// Clear any previous merge context
-	ClearLastMergeContext()
+	// Clear any previous merge contexts.
+	ClearMergeContexts()
 
 	// Execute describe component with context to get provenance
 	result, err := ExecuteDescribeComponentWithContext(DescribeComponentContextParams{

@@ -1,11 +1,26 @@
 
+**Notice:** Telemetry Enabled - Atmos now collects anonymous telemetry regarding usage. This information is used to shape the Atmos roadmap and prioritize features. You can learn more, including how to opt out if you'd prefer not to participate in this anonymous program, by visiting: https://atmos.tools/cli/telemetry
+
 # Error
 
-no workflow found
+**Error:** no workflow found
 
 ## Explanation
 
-No workflow exists with the name no-workflow-exists.
+The workflow no-workflow-exists does not exist in stacks/workflows/test.yaml.
+
+This file defines 8 workflows, but no-workflow-exists is not among them.
+
+## Available workflows:
+
+• fail
+• fail-with-stack
+• invalid-step-type
+• no-steps
+• pass
+• shell-command-not-found
+• shell-failure
+• shell-pass
 
 ## Example
 
@@ -17,17 +32,8 @@ No workflow exists with the name no-workflow-exists.
 
 ## Hints
 
-💡 Available workflows:
+💡 Use atmos describe workflows to see detailed workflow definitions
 
-• fail
-• fail-with-stack
-• invalid-step-type
-• no-steps
-• pass
-• shell-command-not-found
-• shell-failure
-• shell-pass
-
-💡 Use atmos describe workflows to see detailed workflow definitions 💡 Run a workflow: atmos workflow <name> -f stacks/workflows/test.yaml
+💡 Run a workflow: atmos workflow <name> -f stacks/workflows/test.yaml
 
 

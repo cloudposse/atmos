@@ -104,6 +104,7 @@ var (
 
 	ErrMissingStack                       = errors.New("stack is required; specify it on the command line using the flag `--stack <stack>` (shorthand `-s`)")
 	ErrMissingComponent                   = errors.New("component is required; specify it on the command line")
+	ErrMissingComponentType               = errors.New("component type is required")
 	ErrInvalidArguments                   = errors.New("invalid arguments")
 	ErrInvalidComponent                   = errors.New("invalid component")
 	ErrAbstractComponentCantBeProvisioned = errors.New("abstract component cannot be provisioned")
@@ -123,7 +124,9 @@ var (
 	ErrMerge                         = errors.New("merge error")
 
 	// Stack processing errors.
+	ErrStackManifestFileNotFound              = errors.New("stack manifest file not found")
 	ErrInvalidStackManifest                   = errors.New("invalid stack manifest")
+	ErrStackManifestSchemaValidation          = errors.New("stack manifest schema validation failed")
 	ErrInvalidHooksSection                    = errors.New("invalid 'hooks' section in the file")
 	ErrInvalidTerraformHooksSection           = errors.New("invalid 'terraform.hooks' section in the file")
 	ErrInvalidComponentVars                   = errors.New("invalid component vars section")

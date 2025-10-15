@@ -3,13 +3,15 @@
 
 # Error
 
-no workflow found
+**Error:** no workflow found
 
 ## Explanation
 
-No workflow exists with the name pla.
+The workflow pla does not exist in stacks/workflows/workflow1.yaml.
 
-### Available workflows:
+This file defines 5 workflows, but pla is not among them.
+
+## Available workflows:
 
 • terraform-plan-all-tenant1-ue2-dev
 • terraform-plan-all-test-components

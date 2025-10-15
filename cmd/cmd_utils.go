@@ -649,7 +649,7 @@ func showUsageAndExit(cmd *cobra.Command, args []string) error {
 func showFlagUsageAndExit(cmd *cobra.Command, err error) error {
 	// Build error message with hint using cockroachdb/errors.
 	flagErr := fmt.Errorf("%w: %s", errUtils.ErrInvalidFlag, err.Error())
-	flagErr = errors.WithHint(flagErr, fmt.Sprintf("Run `%s --help` for usage", cmd.CommandPath()))
+	flagErr = errors.WithHintf(flagErr, "Run `%s --help` for usage", cmd.CommandPath())
 
 	// Use error formatter with markdown support (works even if atmosConfig is nil).
 	// Verbose mode is controlled by --verbose flag, ATMOS_VERBOSE env var, or config file.
@@ -739,10 +739,13 @@ func showErrorExampleFromMarkdown(cmd *cobra.Command, arg string) error {
 	} else {
 		if len(cmd.Commands()) > 0 {
 			details += "\nValid subcommands are:\n"
-		}
-		// Retrieve valid subcommands dynamically
-		for _, subCmd := range cmd.Commands() {
-			details = details + "* " + subCmd.Name() + "\n"
+			// Retrieve valid subcommands dynamically
+			for _, subCmd := range cmd.Commands() {
+				details = details + "* " + subCmd.Name() + "\n"
+			}
+		} else {
+			// No subcommands available for this command
+			details += "\nThis command does not accept subcommands.\n"
 		}
 	}
 	return showUsageExample(cmd, details)
@@ -750,15 +753,38 @@ func showErrorExampleFromMarkdown(cmd *cobra.Command, arg string) error {
 
 func showUsageExample(cmd *cobra.Command, details string) error {
 	contentName := strings.ReplaceAll(strings.ReplaceAll(cmd.CommandPath(), " ", "_"), "-", "_")
-	suggestion := fmt.Sprintf("\n\nRun `%s --help` for usage", cmd.CommandPath())
+
+	// Build error message - details already contains formatted content
+	// We wrap it to preserve the sentinel error type
+	baseErr := fmt.Errorf("%w\n\n%s", errUtils.ErrInvalidArguments, strings.TrimSpace(details))
+
+	// Build error with title and exit code
+	errBuilder := errUtils.Build(baseErr).
+		WithTitle("Incorrect Usage").
+		WithExitCode(2)
+
+	// Add usage examples or default help hint
 	if exampleContent, ok := examples[contentName]; ok {
-		suggestion = exampleContent.Suggestion
-		details += "\n## Usage Examples:\n" + exampleContent.Content
+		if exampleContent.Content != "" {
+			errBuilder = errBuilder.WithExample(exampleContent.Content)
+		}
+		if exampleContent.Suggestion != "" {
+			// If suggestion is a URL, add "For more information" prefix
+			suggestion := exampleContent.Suggestion
+			if strings.HasPrefix(suggestion, "http://") || strings.HasPrefix(suggestion, "https://") {
+				suggestion = fmt.Sprintf("For more information, refer to the docs at %s", suggestion)
+			}
+			errBuilder = errBuilder.WithHint(suggestion)
+		} else {
+			// No suggestion provided, add default help hint using current command
+			errBuilder = errBuilder.WithHintf("Run `%s --help` for usage", cmd.CommandPath())
+		}
+	} else {
+		// No example found, add default help hint using current command
+		errBuilder = errBuilder.WithHintf("Run `%s --help` for usage", cmd.CommandPath())
 	}
-	// Print error directly since markdown renderer may not be initialized yet (flag parsing errors).
-	fmt.Fprintf(os.Stderr, "Error: %s", details)
-	fmt.Fprintf(os.Stderr, "%s\n", suggestion)
-	return errUtils.WithExitCode(errors.New(details), 1)
+
+	return errBuilder.Err()
 }
 
 func stackFlagCompletion(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {

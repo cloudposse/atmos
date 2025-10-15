@@ -154,7 +154,13 @@ func ExecuteWorkflowCmd(cmd *cobra.Command, args []string) error {
 		// sorting so that the output is deterministic.
 		sort.Strings(validWorkflows)
 
-		explanation := fmt.Sprintf("No workflow exists with the name %s.", workflowName)
+		explanation := fmt.Sprintf("The workflow `%s` does not exist in `%s`.\n\nThis file defines %d workflow%s, but `%s` is not among them.\n\n## Available workflows:\n\n%s",
+			workflowName,
+			workflowPath,
+			len(validWorkflows),
+			map[bool]string{true: "", false: "s"}[len(validWorkflows) == 1],
+			workflowName,
+			FormatList(validWorkflows))
 
 		err := errUtils.Build(ErrWorkflowNoWorkflow).
 			WithExplanation(explanation).

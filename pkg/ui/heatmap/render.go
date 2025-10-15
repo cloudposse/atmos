@@ -105,9 +105,10 @@ func (m *model) renderBarsFromPerf(snap perf.Snapshot) []string {
 			Align(lipgloss.Left).
 			Render(funcName)
 
+		// Show average per call (more intuitive) with call count.
 		value := lipgloss.NewStyle().
 			Foreground(lipgloss.Color("241")).
-			Render(fmt.Sprintf(horizontalSpace+"%s (×%d)", FormatDuration(r.Total), r.Count))
+			Render(fmt.Sprintf(horizontalSpace+"avg: %s | calls: %d", FormatDuration(r.Avg), r.Count))
 
 		bars = append(bars, lipgloss.JoinHorizontal(lipgloss.Left, label, horizontalSpace, coloredBar, value))
 	}
@@ -210,9 +211,10 @@ func (m *model) renderSparklinesFromPerf(snap perf.Snapshot) []string {
 			Foreground(lipgloss.Color("39")).
 			Render(sparkLine)
 
+		// Show average per call with call count for consistency with bar chart.
 		stats := lipgloss.NewStyle().
 			Foreground(lipgloss.Color("241")).
-			Render(fmt.Sprintf(horizontalSpace+"%s (×%d)", FormatDuration(r.Avg), r.Count))
+			Render(fmt.Sprintf(horizontalSpace+"avg: %s | calls: %d", FormatDuration(r.Avg), r.Count))
 
 		lines = append(lines, lipgloss.JoinHorizontal(lipgloss.Left, label, horizontalSpace, spark, stats))
 	}

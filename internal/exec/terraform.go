@@ -109,9 +109,12 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 
 	componentPathExists, err := u.IsDirectory(componentPath)
 	if err != nil || !componentPathExists {
-		// Get the base path for error message, respecting user's actual config
-		basePath, _ := u.GetComponentBasePath(&atmosConfig, "terraform")
-		err := errUtils.Build(fmt.Errorf("%w: '%s' points to the Terraform component '%s', but it does not exist in '%s'",
+		// Get the base path for error message, respecting user's actual config.
+		basePath, err := u.GetComponentBasePath(&atmosConfig, "terraform")
+		if err != nil {
+			return fmt.Errorf("getting component base path for terraform: %w", err)
+		}
+		err = errUtils.Build(fmt.Errorf("%w: '%s' points to the Terraform component '%s', but it does not exist in '%s'",
 			ErrInvalidTerraformComponent,
 			info.ComponentFromArg,
 			info.FinalComponent,
@@ -147,7 +150,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 
 	// Check if the component is locked (`metadata.locked` is set to true).
 	if info.ComponentIsLocked {
-		// Allow read-only commands, block modification commands
+		// Allow read-only commands, block modification commands.
 		switch info.SubCommand {
 		case "apply", "deploy", "destroy", "import", "state", "taint", "untaint":
 			err := errUtils.Build(fmt.Errorf("%w: component '%s' cannot be modified (metadata.locked: true)",
@@ -183,7 +186,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 	varFile := constructTerraformComponentVarfileName(&info)
 	planFile := constructTerraformComponentPlanfileName(&info)
 
-	// Print component variables and write to file
+	// Print component variables and write to file.
 	// Don't process variables when executing `terraform workspace` commands.
 	if info.SubCommand != "workspace" {
 		log.Debug("Variables for the component in the stack", logFieldComponent, info.ComponentFromArg, "stack", info.Stack)
@@ -194,11 +197,11 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 			}
 		}
 
-		// Write variables to a file (only if we are not using the previously generated terraform plan)
+		// Write variables to a file (only if we are not using the previously generated terraform plan).
 		if !info.UseTerraformPlan {
 			var varFilePath, varFileNameFromArg string
 
-			// Handle `terraform varfile` and `terraform write varfile` legacy commands
+			// Handle `terraform varfile` and `terraform write varfile` legacy commands.
 			if info.SubCommand == "varfile" || (info.SubCommand == "write" && info.SubCommand2 == "varfile") {
 				if len(info.AdditionalArgsAndFlags) == 2 {
 					fileFlag := info.AdditionalArgsAndFlags[0]
@@ -244,12 +247,12 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 		}
 	}
 
-	// Handle `terraform varfile` and `terraform write varfile` legacy commands
+	// Handle `terraform varfile` and `terraform write varfile` legacy commands.
 	if info.SubCommand == "varfile" || (info.SubCommand == "write" && info.SubCommand2 == "varfile") {
 		return nil
 	}
 
-	// Check if the component 'settings.validation' section is specified and validate the component
+	// Check if the component 'settings.validation' section is specified and validate the component.
 	valid, err := ValidateComponent(
 		&atmosConfig,
 		info.ComponentFromArg,
@@ -264,10 +267,15 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 	}
 
 	if !valid {
-		return fmt.Errorf("%w: the component '%s' did not pass the validation policies",
+		return errUtils.Build(fmt.Errorf("%w: component '%s' did not pass validation policies",
 			ErrComponentNotValid,
 			info.ComponentFromArg,
-		)
+		)).
+			WithContext("component", info.ComponentFromArg).
+			WithContext("stack", info.Stack).
+			WithHint("Check the validation policies defined in the component's settings.validation section").
+			WithExitCode(2).
+			Err()
 	}
 
 	err = auth.TerraformPreHook(&atmosConfig, &info)
@@ -275,7 +283,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 		log.Error("Error executing 'atmos auth terraform pre-hook'", logFieldComponent, info.ComponentFromArg, "error", err)
 	}
 
-	// Component working directory
+	// Component working directory.
 	workingDir := constructTerraformComponentWorkingDir(&atmosConfig, &info)
 
 	err = generateBackendConfig(&atmosConfig, &info, workingDir)
@@ -288,7 +296,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 		return err
 	}
 
-	// Check for specific Terraform environment variables that might conflict with Atmos
+	// Check for specific Terraform environment variables that might conflict with Atmos.
 	warnOnExactVars := []string{
 		"TF_CLI_ARGS",
 		"TF_WORKSPACE",
@@ -303,11 +311,11 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 
 	for _, envVar := range os.Environ() {
 		if parts := strings.SplitN(envVar, "=", 2); len(parts) == 2 {
-			// Check for exact matches
+			// Check for exact matches.
 			if u.SliceContainsString(warnOnExactVars, parts[0]) {
 				problematicVars = append(problematicVars, parts[0])
 			}
-			// Check for prefix matches
+			// Check for prefix matches.
 			for _, prefix := range warnOnPrefixVars {
 				if strings.HasPrefix(parts[0], prefix) {
 					problematicVars = append(problematicVars, parts[0])
@@ -328,12 +336,12 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 		return err
 	}
 	info.ComponentEnvList = append(info.ComponentEnvList, fmt.Sprintf("ATMOS_BASE_PATH=%s", basePath))
-	// Set `TF_IN_AUTOMATION` ENV var to `true` to suppress verbose instructions after terraform commands
+	// Set `TF_IN_AUTOMATION` ENV var to `true` to suppress verbose instructions after terraform commands.
 	// https://developer.hashicorp.com/terraform/cli/config/environment-variables#tf_in_automation
 	info.ComponentEnvList = append(info.ComponentEnvList, "TF_IN_AUTOMATION=true")
 
-	// Set 'TF_APPEND_USER_AGENT' ENV var based on precedence
-	// Precedence: Environment Variable > atmos.yaml > Default
+	// Set 'TF_APPEND_USER_AGENT' ENV var based on precedence.
+	// Precedence: Environment Variable > atmos.yaml > Default.
 	appendUserAgent := atmosConfig.Components.Terraform.AppendUserAgent
 	if envUA, exists := os.LookupEnv("TF_APPEND_USER_AGENT"); exists && envUA != "" {
 		appendUserAgent = envUA
@@ -342,7 +350,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 		info.ComponentEnvList = append(info.ComponentEnvList, fmt.Sprintf("TF_APPEND_USER_AGENT=%s", appendUserAgent))
 	}
 
-	// Print ENV vars if they are found in the component's stack config
+	// Print ENV vars if they are found in the component's stack config.
 	if len(info.ComponentEnvList) > 0 {
 		log.Debug("Using ENV vars:")
 		for _, v := range info.ComponentEnvList {
@@ -350,7 +358,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 		}
 	}
 
-	// Run `terraform init` before running other commands
+	// Run `terraform init` before running other commands.
 	runTerraformInit := true
 	if info.SubCommand == "init" ||
 		info.SubCommand == "clean" ||
@@ -395,7 +403,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 		}
 	}
 
-	// Handle `terraform deploy` custom command
+	// Handle `terraform deploy` custom command.
 	if info.SubCommand == "deploy" {
 		info.SubCommand = "apply"
 		if !info.UseTerraformPlan && !u.SliceContainsString(info.AdditionalArgsAndFlags, autoApproveFlag) {
@@ -403,7 +411,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 		}
 	}
 
-	// Handle atmosConfig.Components.Terraform.ApplyAutoApprove flag
+	// Handle atmosConfig.Components.Terraform.ApplyAutoApprove flag.
 	if info.SubCommand == "apply" && atmosConfig.Components.Terraform.ApplyAutoApprove && !info.UseTerraformPlan {
 		if !u.SliceContainsString(info.AdditionalArgsAndFlags, autoApproveFlag) {
 			info.AdditionalArgsAndFlags = append(info.AdditionalArgsAndFlags, autoApproveFlag)
@@ -434,15 +442,15 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 		"working directory", workingDir,
 	)
 
-	// Prepare the terraform command
+	// Prepare the terraform command.
 	allArgsAndFlags := strings.Fields(info.SubCommand)
 	uploadStatusFlag := false
 
 	switch info.SubCommand {
 	case "plan":
-		// Add varfile
+		// Add varfile.
 		allArgsAndFlags = append(allArgsAndFlags, []string{varFileFlag, varFile}...)
-		// Add planfile
+		// Add planfile.
 		if !u.SliceContainsString(info.AdditionalArgsAndFlags, outFlag) &&
 			!u.SliceContainsStringHasPrefix(info.AdditionalArgsAndFlags, outFlag+"=") &&
 			!atmosConfig.Components.Terraform.Plan.SkipPlanfile {
@@ -451,7 +459,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 		// Check if the upload flag is present and parse its value (supports --flag, --flag=true, --flag=false forms).
 		uploadStatusFlag = parseUploadStatusFlag(info.AdditionalArgsAndFlags, cfg.UploadStatusFlag)
 
-		// Always remove the flag from AdditionalArgsAndFlags since it's only used internally by atmos
+		// Always remove the flag from AdditionalArgsAndFlags since it's only used internally by atmos.
 		info.AdditionalArgsAndFlags = u.SliceRemoveFlag(info.AdditionalArgsAndFlags, cfg.UploadStatusFlag)
 
 		if uploadStatusFlag {
@@ -500,23 +508,23 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 	// specified in AdditionalArgsAndFlags.
 	if info.SubCommand == "apply" && info.UseTerraformPlan {
 		if info.PlanFile != "" {
-			// If the planfile name was passed on the command line, use it
+			// If the planfile name was passed on the command line, use it.
 			allArgsAndFlags = append(allArgsAndFlags, []string{info.PlanFile}...)
 		} else {
-			// Otherwise, use the planfile name what is autogenerated by Atmos
+			// Otherwise, use the planfile name what is autogenerated by Atmos.
 			allArgsAndFlags = append(allArgsAndFlags, []string{planFile}...)
 		}
 	}
 
-	// Handle the plan-diff command
+	// Handle the plan-diff command.
 	if info.SubCommand == "plan-diff" {
 		return TerraformPlanDiff(&atmosConfig, &info)
 	}
 
-	// Run `terraform workspace` before executing other terraform commands
-	// only if the `TF_WORKSPACE` environment variable is not set by the caller
+	// Run `terraform workspace` before executing other terraform commands.
+	// only if the `TF_WORKSPACE` environment variable is not set by the caller.
 	if info.SubCommand != "init" && !(info.SubCommand == "workspace" && info.SubCommand2 != "") {
-		// Don't use workspace commands in http backend
+		// Don't use workspace commands in http backend.
 		if info.ComponentBackendType != "http" {
 
 			tfWorkspaceEnvVar := os.Getenv("TF_WORKSPACE")
@@ -524,7 +532,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 			if tfWorkspaceEnvVar == "" {
 				workspaceSelectRedirectStdErr := "/dev/stdout"
 
-				// If `--redirect-stderr` flag is not passed, always redirect `stderr` to `stdout` for `terraform workspace select` command
+				// If `--redirect-stderr` flag is not passed, always redirect `stderr` to `stdout` for `terraform workspace select` command.
 				if info.RedirectStdErr != "" {
 					workspaceSelectRedirectStdErr = info.RedirectStdErr
 				}
@@ -542,7 +550,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 					var osErr *osexec.ExitError
 					ok := errors.As(err, &osErr)
 					if !ok || osErr.ExitCode() != 1 {
-						// err is not a non-zero exit code or err is not exit code 1, which we are expecting
+						// err is not a non-zero exit code or err is not exit code 1, which we are expecting.
 						return err
 					}
 					err = ExecuteShellCommand(
@@ -562,14 +570,14 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 		}
 	}
 
-	// Check `region` for `terraform import`
+	// Check `region` for `terraform import`.
 	if info.SubCommand == "import" {
 		if region, regionExist := info.ComponentVarsSection["region"].(string); regionExist {
 			info.ComponentEnvList = append(info.ComponentEnvList, fmt.Sprintf("AWS_REGION=%s", region))
 		}
 	}
 
-	// Execute `terraform shell` command
+	// Execute `terraform shell` command.
 	if info.SubCommand == "shell" {
 		err = execTerraformShellCommand(
 			&atmosConfig,
@@ -587,7 +595,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 		return nil
 	}
 
-	// Execute the provided command (except for `terraform workspace` which was executed above)
+	// Execute the provided command (except for `terraform workspace` which was executed above).
 	if !(info.SubCommand == "workspace" && info.SubCommand2 == "") {
 		err = ExecuteShellCommand(
 			atmosConfig,
@@ -632,15 +640,19 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 		}
 	}
 
-	// Clean up
+	// Clean up.
 	if info.SubCommand != "plan" && info.SubCommand != "show" && info.PlanFile == "" {
 		planFilePath := constructTerraformComponentPlanfilePath(&atmosConfig, &info)
-		_ = os.Remove(planFilePath)
+		if err := os.Remove(planFilePath); err != nil && !os.IsNotExist(err) {
+			log.Trace("Failed to remove plan file during cleanup", "error", err, "file", planFilePath)
+		}
 	}
 
 	if info.SubCommand == "apply" {
 		varFilePath := constructTerraformComponentVarfilePath(&atmosConfig, &info)
-		_ = os.Remove(varFilePath)
+		if err := os.Remove(varFilePath); err != nil && !os.IsNotExist(err) {
+			log.Trace("Failed to remove var file during cleanup", "error", err, "file", varFilePath)
+		}
 	}
 
 	return nil

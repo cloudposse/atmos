@@ -140,10 +140,9 @@ tests:
         - "invalid workflow step type"
         - "## Explanation"
         - "Step type invalid is not supported. Each step must specify a valid type."
-        - "## Hints"
-        - "💡 Available types:"
-        - "• atmos"
-        - "• shell"
+        - "### Available types:"
+        - "atmos"
+        - "shell"
       exit_code: 1
 
   - name: atmos workflow invalid from step
@@ -166,9 +165,8 @@ tests:
         - "invalid from-step flag"
         - "## Explanation"
         - "The --from-step flag was set to dne, but this step does not exist in workflow pass."
-        - "## Hints"
-        - "💡 Available steps:"
-        - "• step1"
+        - "### Available steps:"
+        - "step1"
       exit_code: 1
 
   - name: atmos workflow not found
@@ -188,18 +186,18 @@ tests:
         - "# Error"
         - "no workflow found"
         - "## Explanation"
-        - "No workflow exists with the name"
-        - "## Hints"
-        - "💡 Available workflows:"
-        - "• fail"
-        - "• fail-with-stack"
-        - "• invalid-step-type"
-        - "• no-steps"
-        - "• pass"
-        - "• shell-command-not-found"
-        - "• shell-failure"
-        - "• shell-pass"
+        - "The workflow"
+        - "does not exist"
+        - "## Available workflows:"
+        - "fail"
+        - "invalid-step-type"
+        - "no-steps"
+        - "pass"
+        - "shell-command-not-found"
+        - "shell-failure"
+        - "shell-pass"
         - "## Example"
+        - "## Hints"
       exit_code: 2
 
   - name: atmos workflow invalid manifest

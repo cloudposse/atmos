@@ -55,11 +55,17 @@ func ProcessComponentConfig(
 	}
 
 	if len(component) == 0 {
-		return errors.New("component must be provided and must not be empty")
+		return errUtils.Build(errUtils.ErrMissingComponent).
+			WithHint("Component name is required").
+			WithExitCode(2).
+			Err()
 	}
 
 	if len(componentType) == 0 {
-		return errors.New("component type must be provided and must not be empty")
+		return errUtils.Build(errUtils.ErrMissingComponentType).
+			WithHint("Valid types: terraform, helmfile, packer").
+			WithExitCode(2).
+			Err()
 	}
 
 	if stackSection, ok = stacksMap[stack].(map[string]any); !ok {
@@ -345,30 +351,44 @@ func ProcessStacks(
 		}
 
 		if foundStackCount == 0 {
-			cliConfigYaml := ""
-
-			if atmosConfig.Logs.Level == u.LogLevelTrace {
-				y, _ := u.ConvertToYAML(atmosConfig)
-				cliConfigYaml = fmt.Sprintf("\n\n\nCLI config: %v\n", y)
-			}
-
-			return configAndStacksInfo,
-				fmt.Errorf("%w: Could not find the component `%s` in the stack `%s`.\n"+
-					"Check that all the context variables are correctly defined in the stack manifests.\n"+
-					"Are the component and stack names correct? Did you forget an import?%v",
-					errUtils.ErrInvalidComponent,
-					configAndStacksInfo.ComponentFromArg,
-					configAndStacksInfo.Stack,
-					cliConfigYaml)
-		} else if foundStackCount > 1 {
-			err = fmt.Errorf("%w: Found duplicate config for the component `%s` in the stack `%s` in the manifests: %v\n"+
-				"Check that all the context variables are correctly defined in the manifests and not duplicated\n"+
-				"Check that all imports are valid",
+			// Build error with proper structure using builder pattern.
+			baseErr := fmt.Errorf("%w: Could not find the component `%s` in the stack `%s`",
 				errUtils.ErrInvalidComponent,
 				configAndStacksInfo.ComponentFromArg,
 				configAndStacksInfo.Stack,
-				strings.Join(foundStacks, ", "),
 			)
+
+			errBuilder := errUtils.Build(baseErr).
+				WithTitle("Component Error").
+				WithHint("Check that all the context variables are correctly defined in the stack manifests").
+				WithHint("Are the component and stack names correct? Did you forget an import?").
+				WithContext("component", configAndStacksInfo.ComponentFromArg).
+				WithContext("stack", configAndStacksInfo.Stack)
+
+			// Add CLI config in trace mode.
+			if atmosConfig.Logs.Level == u.LogLevelTrace {
+				y, _ := u.ConvertToYAML(atmosConfig)
+				errBuilder = errBuilder.WithContext("cli_config", y)
+			}
+
+			return configAndStacksInfo, errBuilder.Err()
+		} else if foundStackCount > 1 {
+			// Build error with proper structure using builder pattern.
+			baseErr := fmt.Errorf("%w: Found duplicate config for the component `%s` in the stack `%s`",
+				errUtils.ErrInvalidComponent,
+				configAndStacksInfo.ComponentFromArg,
+				configAndStacksInfo.Stack,
+			)
+
+			err = errUtils.Build(baseErr).
+				WithTitle("Component Error").
+				WithHint("Check that all the context variables are correctly defined in the manifests and not duplicated").
+				WithHint("Check that all imports are valid").
+				WithContext("component", configAndStacksInfo.ComponentFromArg).
+				WithContext("stack", configAndStacksInfo.Stack).
+				WithContext("found_in_manifests", strings.Join(foundStacks, ", ")).
+				Err()
+
 			return configAndStacksInfo, err
 		} else {
 			configAndStacksInfo = foundConfigAndStacksInfo

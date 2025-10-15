@@ -31,7 +31,6 @@ errors/
   - Network-portable errors
   - PII-safe context (`WithSafeDetails`)
   - User-facing hints (`WithHint`)
-  - Built-in Sentry integration
 
 - **getsentry/sentry-go**: Error reporting SDK
   - Event capture with context

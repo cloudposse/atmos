@@ -412,8 +412,9 @@ func TestModel_View(t *testing.T) {
 	assert.Contains(t, result, "Functions: 1")
 	assert.Contains(t, result, "Total Calls: 5")
 	// Verify legend is displayed.
+	assert.Contains(t, result, "Parallelism:")
 	assert.Contains(t, result, "Count: # calls")
-	assert.Contains(t, result, "Total: wall-clock")
+	assert.Contains(t, result, "CPU Time: sum of self-time")
 	assert.Contains(t, result, "self-time")
 }
 
@@ -536,4 +537,69 @@ func TestModel_HandleKeyMsg_Navigation(t *testing.T) {
 	// Test up navigation.
 	msg = tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("k")}
 	m.Update(msg)
+}
+
+func TestModel_RenderLegend(t *testing.T) {
+	hm := NewHeatModel()
+	m := newModel(hm, "bar", context.Background())
+
+	tests := []struct {
+		name            string
+		snapshot        perf.Snapshot
+		expectParallel  bool
+		expectedStrings []string
+	}{
+		{
+			name: "Single threaded execution",
+			snapshot: perf.Snapshot{
+				Rows: []perf.Row{
+					{Name: "test.Function", Count: 1, Total: 50 * time.Millisecond},
+				},
+				Elapsed: 100 * time.Millisecond,
+			},
+			expectParallel: false,
+			expectedStrings: []string{
+				"Parallelism:",
+				"Elapsed:",
+				"CPU Time:",
+				"Count: # calls",
+				"CPU Time: sum of self-time",
+			},
+		},
+		{
+			name: "Parallel execution with multiple functions",
+			snapshot: perf.Snapshot{
+				Rows: []perf.Row{
+					{Name: "test.Function1", Count: 10, Total: 100 * time.Millisecond},
+					{Name: "test.Function2", Count: 20, Total: 200 * time.Millisecond},
+					{Name: "test.Function3", Count: 30, Total: 300 * time.Millisecond},
+				},
+				Elapsed: 200 * time.Millisecond,
+			},
+			expectParallel: true,
+			expectedStrings: []string{
+				"Parallelism:",
+				"Elapsed:",
+				"CPU Time:",
+				"Count: # calls",
+				"CPU Time: sum of self-time",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m.initialSnap = tt.snapshot
+
+			result := m.renderLegend()
+
+			// Verify all expected strings are present.
+			for _, expected := range tt.expectedStrings {
+				assert.Contains(t, result, expected)
+			}
+
+			// Verify parallelism is calculated (value greater than 0).
+			assert.Contains(t, result, "~")
+		})
+	}
 }

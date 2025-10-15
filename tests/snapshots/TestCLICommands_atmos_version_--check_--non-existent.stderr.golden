@@ -1,7 +1,11 @@
 
 # Error
 
-invalid flag: unknown flag: --non-existent
+**Error:** invalid flag
+
+## Explanation
+
+unknown flag: --non-existent
 
 ## Hints
 

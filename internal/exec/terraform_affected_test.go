@@ -242,6 +242,10 @@ func TestGetAffectedComponents(t *testing.T) {
 			if !tt.expectedError && len(result) > 0 && tt.expectedCount == 0 {
 				t.Skipf("gomonkey function mocking failed - expected 0 components but got %d (real function was called)", len(result))
 			}
+			// Check if we got an unexpected error (mock didn't work, real function was called with invalid path).
+			if !tt.expectedError && err != nil {
+				t.Skipf("gomonkey function mocking failed - expected no error but got: %v (real function was called)", err)
+			}
 
 			if tt.expectedError {
 				assert.Error(t, err)

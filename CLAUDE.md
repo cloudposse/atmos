@@ -231,8 +231,12 @@ return fmt.Errorf("%w: component=%s stack=%s", errUtils.ErrInvalidComponent, com
 
 **Error Builder for Complex Errors:**
 ```go
-// Use builder for errors with hints, context, and exit codes
-err := errUtils.Build(errors.New("database connection failed")).
+import (
+    errUtils "github.com/cloudposse/atmos/errors"
+)
+
+// Use builder for errors with hints, context, and exit codes.
+err := errUtils.Build(errUtils.ErrLoadAwsConfig).
     WithHint("Check database credentials in atmos.yaml").
     WithHintf("Verify network connectivity to %s", dbHost).
     WithContext("component", "vpc").

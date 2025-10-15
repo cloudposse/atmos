@@ -47,7 +47,8 @@ func TestInitializeMarkdown(t *testing.T) {
 // TestPrintfMarkdownToTUI tests that markdown output goes to stderr.
 func TestPrintfMarkdownToTUI(t *testing.T) {
 	// Initialize the renderer
-	InitializeMarkdown(schema.AtmosConfiguration{})
+	atmosConfig := schema.AtmosConfiguration{}
+	InitializeMarkdown(atmosConfig)
 
 	// Capture stderr
 	oldStderr := os.Stderr
@@ -119,7 +120,8 @@ func TestMarkdownRendering(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Initialize renderer
-			InitializeMarkdown(schema.AtmosConfiguration{})
+			atmosConfig := schema.AtmosConfiguration{}
+			InitializeMarkdown(atmosConfig)
 
 			// Capture stdout
 			oldStdout := os.Stdout
@@ -200,7 +202,8 @@ func TestMarkdownWithoutRenderer(t *testing.T) {
 // TestTelemetryDisclosureMarkdown tests the telemetry disclosure message formatting.
 func TestTelemetryDisclosureMarkdown(t *testing.T) {
 	// Initialize renderer
-	InitializeMarkdown(schema.AtmosConfiguration{})
+	atmosConfig := schema.AtmosConfiguration{}
+	InitializeMarkdown(atmosConfig)
 
 	// Capture stderr (where TUI output goes)
 	oldStderr := os.Stderr
@@ -258,7 +261,8 @@ func TestMarkdownFormatting(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Initialize renderer
-			InitializeMarkdown(schema.AtmosConfiguration{})
+			atmosConfig := schema.AtmosConfiguration{}
+			InitializeMarkdown(atmosConfig)
 
 			// Capture stdout
 			oldStdout := os.Stdout
@@ -441,7 +445,8 @@ func TestPrintfMarkdownToEnsuresTrailingNewline(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Initialize renderer
-			InitializeMarkdown(schema.AtmosConfiguration{})
+			atmosConfig := schema.AtmosConfiguration{}
+			InitializeMarkdown(atmosConfig)
 
 			// Capture output to stderr (where PrintfMarkdownToTUI writes)
 			oldStderr := os.Stderr

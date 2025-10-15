@@ -461,10 +461,6 @@ func ExecuteDescribeComponentWithContext(params DescribeComponentContextParams) 
 	if configAndStacksInfo.StackFile != "" {
 		mergeContext = GetMergeContextForStack(configAndStacksInfo.StackFile)
 	}
-	// Fall back to the old method if the stack file is not set
-	if mergeContext == nil {
-		mergeContext = GetLastMergeContext()
-	}
 
 	// Record provenance for imports array if tracking is enabled.
 	if atmosConfig.TrackProvenance && mergeContext != nil && mergeContext.IsProvenanceEnabled() {

@@ -11,12 +11,17 @@ import (
 	"golang.org/x/term"
 
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui/markdown"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
 
 const (
 	// DefaultMaxLineLength is the default maximum line length before wrapping.
 	DefaultMaxLineLength = 80
+
+	// DefaultMarkdownWidth is the default width for markdown rendering when config is not available.
+	DefaultMarkdownWidth = 120
 
 	// Space is used for separating words.
 	space = " "
@@ -39,8 +44,6 @@ type FormatterConfig struct {
 
 // DefaultFormatterConfig returns default formatting configuration.
 func DefaultFormatterConfig() FormatterConfig {
-	defer perf.Track(nil, "errors.DefaultFormatterConfig")()
-
 	return FormatterConfig{
 		Verbose:       false,
 		Color:         "auto",
@@ -126,10 +129,13 @@ func buildMarkdownSections(err error, config FormatterConfig) string {
 		title = "Error"
 	}
 	md.WriteString("# " + title + newline + newline)
-	md.WriteString(err.Error() + newline + newline)
+
+	// Extract sentinel error and wrapped message.
+	sentinelMsg, wrappedMsg := extractSentinelAndWrappedMessage(err)
+	md.WriteString("**Error:** " + sentinelMsg + newline + newline)
 
 	// Section 2: Explanation.
-	addExplanationSection(&md, err)
+	addExplanationSection(&md, err, wrappedMsg)
 
 	// Section 3 & 4: Examples and Hints.
 	addExampleAndHintsSection(&md, err)
@@ -145,15 +151,63 @@ func buildMarkdownSections(err error, config FormatterConfig) string {
 	return md.String()
 }
 
-// addExplanationSection adds the explanation section if details exist.
-func addExplanationSection(md *strings.Builder, err error) {
+// extractSentinelAndWrappedMessage extracts the root sentinel error message
+// and any wrapped context message from the error chain.
+// For example, given: fmt.Errorf("%w: The command has no steps", ErrInvalidArguments)
+// Returns: ("invalid arguments", "The command has no steps").
+func extractSentinelAndWrappedMessage(err error) (sentinelMsg string, wrappedMsg string) {
+	if err == nil {
+		return "", ""
+	}
+
+	// Get the full error message.
+	fullMsg := err.Error()
+
+	// Unwrap to find the root sentinel error.
+	current := err
+	for {
+		unwrapped := errors.Unwrap(current)
+		if unwrapped == nil {
+			// Reached the root error (sentinel).
+			sentinelMsg = current.Error()
+			break
+		}
+		current = unwrapped
+	}
+
+	// Extract the wrapped message by removing the sentinel prefix.
+	// The format from fmt.Errorf("%w: message", sentinel) is "sentinel: message".
+	if strings.HasPrefix(fullMsg, sentinelMsg+": ") {
+		wrappedMsg = strings.TrimPrefix(fullMsg, sentinelMsg+": ")
+	} else {
+		// If no wrapped message, just use sentinel.
+		sentinelMsg = fullMsg
+	}
+
+	return sentinelMsg, wrappedMsg
+}
+
+// addExplanationSection adds the explanation section if details or wrapped message exist.
+func addExplanationSection(md *strings.Builder, err error, wrappedMsg string) {
 	details := errors.GetAllDetails(err)
-	if len(details) > 0 {
+	hasContent := len(details) > 0 || wrappedMsg != ""
+
+	if hasContent {
 		md.WriteString(newline + newline + "## Explanation" + newline + newline)
+
+		// Add wrapped message first if present.
+		if wrappedMsg != "" {
+			md.WriteString(wrappedMsg + newline + newline)
+		}
+
+		// Add details from error chain.
 		for _, detail := range details {
 			fmt.Fprintf(md, "%s"+newline, detail)
 		}
-		md.WriteString(newline)
+
+		if len(details) > 0 {
+			md.WriteString(newline)
+		}
 	}
 }
 
@@ -235,14 +289,30 @@ func addStackTraceSection(md *strings.Builder, err error) {
 	md.WriteString(newline + "```" + newline)
 }
 
-// renderMarkdown renders markdown string through Glamour or returns plain markdown.
+// renderMarkdown renders markdown string through Glamour or creates a minimal renderer.
 func renderMarkdown(md string) string {
 	renderer := GetMarkdownRenderer()
-	if renderer != nil {
-		rendered, renderErr := renderer.RenderErrorf(md)
-		if renderErr == nil {
-			return rendered
+	if renderer == nil {
+		// Create minimal renderer with default config when global renderer not initialized.
+		// This happens during early errors before atmos config is loaded.
+		defaultConfig := schema.AtmosConfiguration{
+			Settings: schema.AtmosSettings{
+				Docs: schema.Docs{
+					MaxWidth: DefaultMarkdownWidth,
+				},
+			},
 		}
+		var err error
+		renderer, err = markdown.NewTerminalMarkdownRenderer(defaultConfig)
+		if err != nil {
+			// Last resort fallback: return plain markdown.
+			return md
+		}
+	}
+
+	rendered, renderErr := renderer.RenderErrorf(md)
+	if renderErr == nil {
+		return rendered
 	}
 
 	// Fallback to plain markdown.

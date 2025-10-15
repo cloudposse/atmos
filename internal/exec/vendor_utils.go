@@ -180,7 +180,7 @@ func mergeVendorConfigFiles(configFiles []string) (schema.AtmosVendorConfig, err
 			if source.Component != "" {
 				if sourceMap[source.Component] {
 					err := fmt.Errorf("%w '%s' found in config file '%s'", ErrDuplicateComponentsFound, source.Component, configFile)
-					err = errors.WithHint(err, fmt.Sprintf("Remove duplicate definition of component `%s` from `%s`", source.Component, configFile))
+					err = errors.WithHintf(err, "Remove duplicate definition of component `%s` from `%s`", source.Component, configFile)
 					err = errors.WithHint(err, "Each component can only be defined once in vendor configuration")
 					return vendorConfig, err
 				}
@@ -273,7 +273,7 @@ func validateTagsAndComponents(
 	if duplicates := lo.FindDuplicates(components); len(duplicates) > 0 {
 		err := fmt.Errorf("%w %v in the vendor config file '%s' and the imports",
 			ErrDuplicateComponents, duplicates, vendorConfigFileName)
-		err = errors.WithHint(err, fmt.Sprintf("Remove duplicate component definitions: %v", duplicates))
+		err = errors.WithHintf(err, "Remove duplicate component definitions: %v", duplicates)
 		err = errors.WithHint(err, "Check both the main vendor config and any imported vendor configs")
 		err = errors.WithHint(err, "Each component must be defined only once across all vendor configs")
 		return err
