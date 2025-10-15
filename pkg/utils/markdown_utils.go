@@ -25,6 +25,7 @@ const (
 var render *markdown.Renderer
 
 // isWriterTerminal checks if the writer is a terminal.
+// This function checks arbitrary io.Writer, not just stdout/stderr, so it uses term.IsTerminal directly.
 func isWriterTerminal(w io.Writer) bool {
 	if file, ok := w.(*os.File); ok {
 		return term.IsTerminal(int(file.Fd()))
