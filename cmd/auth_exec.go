@@ -137,5 +137,6 @@ func executeCommandWithEnv(args []string, envVars map[string]string) error {
 
 func init() {
 	authExecCmd.Flags().StringP("identity", "i", "", "Specify the identity to use for authentication")
+	AddIdentityCompletion(authExecCmd)
 	authCmd.AddCommand(authExecCmd)
 }

@@ -735,6 +735,30 @@ func AddStackCompletion(cmd *cobra.Command) {
 	cmd.RegisterFlagCompletionFunc("stack", stackFlagCompletion)
 }
 
+func identityFlagCompletion(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+	if err != nil {
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+
+	var identities []string
+	if atmosConfig.Auth.Identities != nil {
+		for name := range atmosConfig.Auth.Identities {
+			identities = append(identities, name)
+		}
+	}
+
+	return identities, cobra.ShellCompDirectiveNoFileComp
+}
+
+func AddIdentityCompletion(cmd *cobra.Command) {
+	if cmd.Flag("identity") != nil {
+		if err := cmd.RegisterFlagCompletionFunc("identity", identityFlagCompletion); err != nil {
+			log.Trace("Failed to register identity flag completion", "error", err)
+		}
+	}
+}
+
 func ComponentsArgCompletion(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
 	if len(args) == 0 {
 		output, err := listComponents(cmd)
