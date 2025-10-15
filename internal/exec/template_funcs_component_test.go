@@ -2,6 +2,7 @@ package exec
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"testing"
 
@@ -14,6 +15,11 @@ import (
 )
 
 func TestComponentFunc(t *testing.T) {
+	// Skip if terraform is not installed
+	if _, err := exec.LookPath("terraform"); err != nil {
+		t.Skip("Terraform not found in PATH, skipping test")
+	}
+
 	log.SetLevel(log.DebugLevel)
 	log.SetOutput(os.Stdout)
 

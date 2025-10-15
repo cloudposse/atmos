@@ -14,16 +14,8 @@ import (
 // TestNewGitHubClientUnauthenticated tests creating an unauthenticated GitHub client.
 func TestNewGitHubClientUnauthenticated(t *testing.T) {
 	t.Run("creates unauthenticated client when no token present", func(t *testing.T) {
-		// Save original token
-		originalToken := os.Getenv("GITHUB_TOKEN")
-		defer func() {
-			if originalToken != "" {
-				os.Setenv("GITHUB_TOKEN", originalToken)
-			}
-		}()
-
 		// Ensure no token is set
-		os.Unsetenv("GITHUB_TOKEN")
+		t.Setenv("GITHUB_TOKEN", "")
 
 		ctx := context.Background()
 		client := newGitHubClient(ctx)
@@ -35,19 +27,9 @@ func TestNewGitHubClientUnauthenticated(t *testing.T) {
 // TestNewGitHubClientAuthenticated tests creating an authenticated GitHub client.
 func TestNewGitHubClientAuthenticated(t *testing.T) {
 	t.Run("creates authenticated client when token present", func(t *testing.T) {
-		// Save original token
-		originalToken := os.Getenv("GITHUB_TOKEN")
-		defer func() {
-			if originalToken != "" {
-				os.Setenv("GITHUB_TOKEN", originalToken)
-			} else {
-				os.Unsetenv("GITHUB_TOKEN")
-			}
-		}()
-
 		// Set a test token
 		testToken := "ghp_test_token_1234567890"
-		os.Setenv("GITHUB_TOKEN", testToken)
+		t.Setenv("GITHUB_TOKEN", testToken)
 
 		ctx := context.Background()
 		client := newGitHubClient(ctx)
@@ -153,17 +135,7 @@ func TestGetLatestGitHubRepoReleaseWithAuthentication(t *testing.T) {
 // TestGitHubClientCreationWithContext tests client creation with different contexts.
 func TestGitHubClientCreationWithContext(t *testing.T) {
 	t.Run("creates client with background context", func(t *testing.T) {
-		// Save original token
-		originalToken := os.Getenv("GITHUB_TOKEN")
-		defer func() {
-			if originalToken != "" {
-				os.Setenv("GITHUB_TOKEN", originalToken)
-			} else {
-				os.Unsetenv("GITHUB_TOKEN")
-			}
-		}()
-
-		os.Unsetenv("GITHUB_TOKEN")
+		t.Setenv("GITHUB_TOKEN", "")
 
 		ctx := context.Background()
 		client := newGitHubClient(ctx)
@@ -172,17 +144,7 @@ func TestGitHubClientCreationWithContext(t *testing.T) {
 	})
 
 	t.Run("creates client with custom context", func(t *testing.T) {
-		// Save original token
-		originalToken := os.Getenv("GITHUB_TOKEN")
-		defer func() {
-			if originalToken != "" {
-				os.Setenv("GITHUB_TOKEN", originalToken)
-			} else {
-				os.Unsetenv("GITHUB_TOKEN")
-			}
-		}()
-
-		os.Unsetenv("GITHUB_TOKEN")
+		t.Setenv("GITHUB_TOKEN", "")
 
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
@@ -196,27 +158,19 @@ func TestGitHubClientCreationWithContext(t *testing.T) {
 // TestGitHubTokenHandling tests token handling from environment.
 func TestGitHubTokenHandling(t *testing.T) {
 	t.Run("reads token from GITHUB_TOKEN env var", func(t *testing.T) {
-		// Save original token
-		originalToken := os.Getenv("GITHUB_TOKEN")
-		defer func() {
-			if originalToken != "" {
-				os.Setenv("GITHUB_TOKEN", originalToken)
-			} else {
-				os.Unsetenv("GITHUB_TOKEN")
-			}
-		}()
-
 		// Test with token
 		testToken := "ghp_test_123"
-		os.Setenv("GITHUB_TOKEN", testToken)
+		t.Setenv("GITHUB_TOKEN", testToken)
 
 		// Verify token is read
 		token := os.Getenv("GITHUB_TOKEN")
 		assert.Equal(t, testToken, token)
+	})
 
+	t.Run("handles empty token", func(t *testing.T) {
 		// Test without token
-		os.Unsetenv("GITHUB_TOKEN")
-		token = os.Getenv("GITHUB_TOKEN")
+		t.Setenv("GITHUB_TOKEN", "")
+		token := os.Getenv("GITHUB_TOKEN")
 		assert.Empty(t, token)
 	})
 }

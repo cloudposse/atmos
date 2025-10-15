@@ -54,18 +54,8 @@ func TestGetTerraformEnvCliArgs(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Store the original value to restore later.
-			originalValue := os.Getenv("TF_CLI_ARGS")
-			defer func() {
-				if originalValue != "" {
-					os.Setenv("TF_CLI_ARGS", originalValue)
-				} else {
-					os.Unsetenv("TF_CLI_ARGS")
-				}
-			}()
-
 			// Set test environment variable.
-			os.Setenv("TF_CLI_ARGS", tt.envValue)
+			t.Setenv("TF_CLI_ARGS", tt.envValue)
 
 			// Test the function
 			result := GetTerraformEnvCliArgs()
@@ -193,18 +183,8 @@ func TestGetTerraformEnvCliVars(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Store original value to restore later.
-			originalValue := os.Getenv("TF_CLI_ARGS")
-			defer func() {
-				if originalValue != "" {
-					os.Setenv("TF_CLI_ARGS", originalValue)
-				} else {
-					os.Unsetenv("TF_CLI_ARGS")
-				}
-			}()
-
 			// Set test environment variable
-			os.Setenv("TF_CLI_ARGS", tt.envValue)
+			t.Setenv("TF_CLI_ARGS", tt.envValue)
 
 			// Test the function
 			result, err := GetTerraformEnvCliVars()
@@ -247,10 +227,10 @@ func BenchmarkGetTerraformEnvCliArgs(b *testing.B) {
 	}
 
 	originalValue := os.Getenv("TF_CLI_ARGS")
-	os.Setenv("TF_CLI_ARGS", largeTFCliArgs)
+	_ = os.Setenv("TF_CLI_ARGS", largeTFCliArgs)
 	defer func() {
 		if originalValue != "" {
-			os.Setenv("TF_CLI_ARGS", originalValue)
+			_ = os.Setenv("TF_CLI_ARGS", originalValue)
 		} else {
 			os.Unsetenv("TF_CLI_ARGS")
 		}
@@ -270,10 +250,10 @@ func BenchmarkGetTerraformEnvCliVars(b *testing.B) {
 	}
 
 	originalValue := os.Getenv("TF_CLI_ARGS")
-	os.Setenv("TF_CLI_ARGS", largeTFCliArgs)
+	_ = os.Setenv("TF_CLI_ARGS", largeTFCliArgs)
 	defer func() {
 		if originalValue != "" {
-			os.Setenv("TF_CLI_ARGS", originalValue)
+			_ = os.Setenv("TF_CLI_ARGS", originalValue)
 		} else {
 			os.Unsetenv("TF_CLI_ARGS")
 		}
