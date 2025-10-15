@@ -91,13 +91,34 @@ func TestProcessInstances(t *testing.T) {
 	_ = err
 }
 
-// TestExecuteListInstancesCmd tests the main command entry point.
+// TestExecuteListInstancesCmd tests the main command entry point with real fixtures.
 func TestExecuteListInstancesCmd(t *testing.T) {
+	// Use actual test fixture for integration test.
+	fixturePath := "../../tests/fixtures/scenarios/complete"
+	tests.RequireFilePath(t, fixturePath, "test fixture directory")
+
 	// Create command with flags.
 	cmd := &cobra.Command{}
 	cmd.Flags().Bool("upload", false, "Upload instances to Atmos Pro")
 
-	// Use invalid config to trigger error path (still achieves coverage).
+	info := &schema.ConfigAndStacksInfo{
+		BasePath: fixturePath,
+	}
+
+	// Execute command - should successfully list instances.
+	err := ExecuteListInstancesCmd(info, cmd, []string{})
+
+	// Should succeed with valid fixture.
+	assert.NoError(t, err)
+}
+
+// TestExecuteListInstancesCmd_InvalidConfig tests error handling for invalid config.
+func TestExecuteListInstancesCmd_InvalidConfig(t *testing.T) {
+	// Create command with flags.
+	cmd := &cobra.Command{}
+	cmd.Flags().Bool("upload", false, "Upload instances to Atmos Pro")
+
+	// Use invalid config to trigger error path.
 	info := &schema.ConfigAndStacksInfo{
 		BasePath: "/nonexistent/path",
 	}
@@ -123,23 +144,5 @@ func TestExecuteListInstancesCmd_UploadPath(t *testing.T) {
 	err := ExecuteListInstancesCmd(info, cmd, []string{})
 
 	// Error is expected (config load will fail).
-	assert.Error(t, err)
-}
-
-// TestExecuteListInstancesCmd_InvalidConfig tests error handling for invalid config.
-func TestExecuteListInstancesCmd_InvalidConfig(t *testing.T) {
-	// Create command with flags.
-	cmd := &cobra.Command{}
-	cmd.Flags().Bool("upload", false, "Upload instances to Atmos Pro")
-
-	// Use invalid config path.
-	info := &schema.ConfigAndStacksInfo{
-		BasePath: "/nonexistent/path",
-	}
-
-	// Execute command with invalid config.
-	err := ExecuteListInstancesCmd(info, cmd, []string{})
-
-	// Should return error for invalid config.
 	assert.Error(t, err)
 }
