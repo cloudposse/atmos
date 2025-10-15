@@ -247,6 +247,11 @@ func setupLogger(atmosConfig *schema.AtmosConfiguration) {
 		log.SetOutput(output)
 	}
 	if _, err := log.ParseLogLevel(atmosConfig.Logs.Level); err != nil {
+		validLevels := log.GetValidLogLevels()
+		err = errUtils.Build(err).
+			WithHintf("Valid options are: %v", validLevels).
+			WithExitCode(1).
+			Err()
 		errUtils.CheckErrorPrintAndExit(err, "", "")
 	}
 	log.Debug("Set", "logs-level", log.GetLevelString(), "logs-file", atmosConfig.Logs.File)

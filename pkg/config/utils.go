@@ -423,7 +423,7 @@ func checkConfig(atmosConfig schema.AtmosConfiguration, isProcessStack bool) err
 
 	if len(atmosConfig.Logs.Level) > 0 {
 		if _, err := log.ParseLogLevel(atmosConfig.Logs.Level); err != nil {
-			return err
+			return fmt.Errorf("%w. Valid options are: %v", err, log.GetValidLogLevels())
 		}
 	}
 
@@ -591,7 +591,7 @@ func setSchemaDirs(atmosConfig *schema.AtmosConfiguration, configAndStacksInfo *
 func setLoggingConfig(atmosConfig *schema.AtmosConfiguration, configAndStacksInfo *schema.ConfigAndStacksInfo) error {
 	if len(configAndStacksInfo.LogsLevel) > 0 {
 		if _, err := log.ParseLogLevel(configAndStacksInfo.LogsLevel); err != nil {
-			return err
+			return fmt.Errorf("%w. Valid options are: %v", err, log.GetValidLogLevels())
 		}
 		// Only set the log level if validation passes
 		atmosConfig.Logs.Level = configAndStacksInfo.LogsLevel

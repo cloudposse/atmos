@@ -5,6 +5,10 @@
 
 ## Explanation
 
-invalid log level 'XTrace'. Valid options are: [Trace Debug Info Warning Error Off]
+'XTrace'
+
+## Hints
+
+💡 Valid options are: [Trace Debug Info Warning Error Off]
 
 

@@ -28,6 +28,11 @@ const (
 // ErrInvalidLogLevel is returned when an invalid log level is provided.
 var ErrInvalidLogLevel = errors.New("invalid log level")
 
+// GetValidLogLevels returns a slice of all valid log levels.
+func GetValidLogLevels() []LogLevel {
+	return []LogLevel{LogLevelTrace, LogLevelDebug, LogLevelInfo, LogLevelWarning, LogLevelError, LogLevelOff}
+}
+
 // ParseLogLevel parses a string log level and returns a LogLevel.
 func ParseLogLevel(logLevel string) (LogLevel, error) {
 	logLevel = strings.TrimSpace(logLevel)
@@ -35,22 +40,22 @@ func ParseLogLevel(logLevel string) (LogLevel, error) {
 		return LogLevelInfo, nil
 	}
 
-	// Make case-insensitive comparison
+	// Make case-insensitive comparison.
 	logLevelLower := strings.ToLower(logLevel)
 
-	// Handle warn as alias for warning
+	// Handle warn as alias for warning.
 	if logLevelLower == "warn" {
 		return LogLevelWarning, nil
 	}
 
-	validLevels := []LogLevel{LogLevelTrace, LogLevelDebug, LogLevelInfo, LogLevelWarning, LogLevelError, LogLevelOff}
+	validLevels := GetValidLogLevels()
 	for _, level := range validLevels {
 		if strings.ToLower(string(level)) == logLevelLower {
 			return level, nil
 		}
 	}
 
-	return "", fmt.Errorf("%w: invalid log level '%s'. Valid options are: %v", ErrInvalidLogLevel, logLevel, validLevels)
+	return "", fmt.Errorf("%w: '%s'", ErrInvalidLogLevel, logLevel)
 }
 
 // ConvertLogLevel converts a string LogLevel to a charm Level.
