@@ -1,7 +1,6 @@
 package utils
 
 import (
-	"os"
 	"path/filepath"
 	"runtime"
 	"testing"
@@ -194,19 +193,8 @@ func TestGetComponentPath_EnvironmentVariableOverride(t *testing.T) {
 				t.Skipf("Skipping Unix path test on Windows")
 			}
 
-			// Save and restore environment variable
-			oldEnv := os.Getenv("ATMOS_COMPONENTS_TERRAFORM_BASE_PATH")
-			defer func() {
-				if oldEnv != "" {
-					os.Setenv("ATMOS_COMPONENTS_TERRAFORM_BASE_PATH", oldEnv)
-				} else {
-					os.Unsetenv("ATMOS_COMPONENTS_TERRAFORM_BASE_PATH")
-				}
-			}()
-
 			// Set the test environment variable
-			err := os.Setenv("ATMOS_COMPONENTS_TERRAFORM_BASE_PATH", tt.envVarValue)
-			require.NoError(t, err)
+			t.Setenv("ATMOS_COMPONENTS_TERRAFORM_BASE_PATH", tt.envVarValue)
 
 			atmosConfig := &schema.AtmosConfiguration{
 				BasePath:                 tt.basePath,

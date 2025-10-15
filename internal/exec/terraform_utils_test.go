@@ -402,14 +402,17 @@ func TestCleanTerraformWorkspace(t *testing.T) {
 			require.NoError(t, err)
 
 			// Setup TF_DATA_DIR if specified.
-			originalTfDataDir := os.Getenv("TF_DATA_DIR")
 			if tt.setupTfDataDir != "" {
-				os.Setenv("TF_DATA_DIR", tt.setupTfDataDir)
+				t.Setenv("TF_DATA_DIR", tt.setupTfDataDir)
 			} else {
+				orig := os.Getenv("TF_DATA_DIR")
 				os.Unsetenv("TF_DATA_DIR")
+				t.Cleanup(func() {
+					if orig != "" {
+						os.Setenv("TF_DATA_DIR", orig)
+					}
+				})
 			}
-			defer os.Setenv("TF_DATA_DIR", originalTfDataDir)
-
 			// Determine the terraform data directory.
 			tfDataDir := tt.setupTfDataDir
 			if tfDataDir == "" {
@@ -1424,21 +1427,17 @@ func TestTFCliArgsAndVarsComponentSections(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Store original value to restore later
-			originalValue := os.Getenv("TF_CLI_ARGS")
-			defer func() {
-				if originalValue != "" {
-					os.Setenv("TF_CLI_ARGS", originalValue)
-				} else {
-					os.Unsetenv("TF_CLI_ARGS")
-				}
-			}()
-
 			// Set test environment variable
 			if tt.tfCliArgsEnv != "" {
-				os.Setenv("TF_CLI_ARGS", tt.tfCliArgsEnv)
+				t.Setenv("TF_CLI_ARGS", tt.tfCliArgsEnv)
 			} else {
+				orig := os.Getenv("TF_CLI_ARGS")
 				os.Unsetenv("TF_CLI_ARGS")
+				t.Cleanup(func() {
+					if orig != "" {
+						os.Setenv("TF_CLI_ARGS", orig)
+					}
+				})
 			}
 
 			// Create a component section to simulate what ProcessStacks does

@@ -162,7 +162,7 @@ func TestReadEnvAmosConfigPath_ConfigFileNotFound(t *testing.T) {
 	tempDir := t.TempDir()
 
 	// Set ATMOS_CLI_CONFIG_PATH to temp directory
-	os.Setenv("ATMOS_CLI_CONFIG_PATH", tempDir)
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", tempDir)
 	defer os.Unsetenv("ATMOS_CLI_CONFIG_PATH")
 
 	v := viper.New()
