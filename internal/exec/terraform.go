@@ -31,17 +31,6 @@ const (
 	detailedExitCodeFlag      = "--detailed-exitcode"
 )
 
-// ErrHTTPBackendWorkspaces is returned when attempting to use workspace commands with an HTTP backend.
-var (
-	ErrHTTPBackendWorkspaces     = errors.New("workspaces are not supported for the HTTP backend")
-	ErrMissingStack              = errors.New("stack must be specified")
-	ErrInvalidTerraformComponent = errors.New("invalid Terraform component")
-	ErrAbstractComponent         = errors.New("component is abstract")
-	ErrLockedComponent           = errors.New("component is locked")
-	ErrComponentNotValid         = errors.New("component is invalid")
-	ErrNoTty                     = errors.New("no TTY attached")
-)
-
 // ExecuteTerraform executes terraform commands.
 func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 	defer perf.Track(nil, "exec.ExecuteTerraform")()
@@ -87,7 +76,12 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 		}
 
 		if len(info.Stack) < 1 && shouldCheckStack {
-			return errUtils.WithExitCode(ErrMissingStack, 2)
+			err := errUtils.Build(errUtils.ErrMissingStack).
+				WithContext("command", info.SubCommand).
+				WithHint("Specify the stack using --stack <stack> or -s <stack>").
+				WithExitCode(2).
+				Err()
+			return err
 		}
 	}
 
@@ -115,7 +109,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 			return fmt.Errorf("getting component base path for terraform: %w", err)
 		}
 		err = errUtils.Build(fmt.Errorf("%w: '%s' points to the Terraform component '%s', but it does not exist in '%s'",
-			ErrInvalidTerraformComponent,
+			errUtils.ErrInvalidTerraformComponent,
 			info.ComponentFromArg,
 			info.FinalComponent,
 			basePath,
@@ -134,7 +128,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 	// Check if the component is allowed to be provisioned (the `metadata.type` attribute is not set to `abstract`).
 	if (info.SubCommand == "plan" || info.SubCommand == "apply" || info.SubCommand == "deploy" || info.SubCommand == "workspace") && info.ComponentIsAbstract {
 		err := errUtils.Build(fmt.Errorf("%w: the component '%s' cannot be provisioned because it's marked as abstract (metadata.type: abstract)",
-			ErrAbstractComponent,
+			errUtils.ErrAbstractComponentCantBeProvisioned,
 			filepath.Join(info.ComponentFolderPrefix,
 				info.Component,
 			))).
@@ -154,7 +148,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 		switch info.SubCommand {
 		case "apply", "deploy", "destroy", "import", "state", "taint", "untaint":
 			err := errUtils.Build(fmt.Errorf("%w: component '%s' cannot be modified (metadata.locked: true)",
-				ErrLockedComponent,
+				errUtils.ErrLockedComponentCantBeProvisioned,
 				filepath.Join(info.ComponentFolderPrefix, info.Component),
 			)).
 				WithContext("component", info.Component).
@@ -171,7 +165,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 
 	// Check if trying to use `workspace` commands with HTTP backend.
 	if info.SubCommand == "workspace" && info.ComponentBackendType == "http" {
-		return ErrHTTPBackendWorkspaces
+		return errUtils.ErrHTTPBackendWorkspaces
 	}
 
 	if info.SubCommand == "clean" {
@@ -268,7 +262,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 
 	if !valid {
 		return errUtils.Build(fmt.Errorf("%w: component '%s' did not pass validation policies",
-			ErrComponentNotValid,
+			errUtils.ErrInvalidTerraformComponent,
 			info.ComponentFromArg,
 		)).
 			WithContext("component", info.ComponentFromArg).
