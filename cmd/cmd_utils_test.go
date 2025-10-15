@@ -13,11 +13,7 @@ import (
 
 func TestVerifyInsideGitRepo(t *testing.T) {
 	// Create a temporary directory for testing
-	tmpDir, err := os.MkdirTemp("", "git-repo-verify-test-*")
-	if err != nil {
-		t.Fatalf("Failed to create temp directory: %v", err)
-	}
-	defer os.RemoveAll(tmpDir)
+	tmpDir := t.TempDir()
 
 	// Save the current working directory
 	currentDir, err := os.Getwd()

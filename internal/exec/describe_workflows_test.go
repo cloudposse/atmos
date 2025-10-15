@@ -13,13 +13,12 @@ import (
 )
 
 // setupTestWorkflowEnvironment creates a temporary test environment with the necessary directory structure and configuration files.
-// It returns the temporary directory path and a cleanup function.
-func setupTestWorkflowEnvironment(t *testing.T) (string, func()) {
-	tmpDir, err := os.MkdirTemp("", "workflow_test")
-	require.NoError(t, err)
+// It returns the temporary directory path.
+func setupTestWorkflowEnvironment(t *testing.T) string {
+	tmpDir := t.TempDir()
 
 	workflowsDir := filepath.Join(tmpDir, "stacks", "workflows")
-	err = os.MkdirAll(workflowsDir, 0o755)
+	err := os.MkdirAll(workflowsDir, 0o755)
 	require.NoError(t, err)
 
 	atmosConfig := `
@@ -34,10 +33,7 @@ workflows:
 	err = os.WriteFile(filepath.Join(tmpDir, "atmos.yaml"), []byte(atmosConfig), 0o644)
 	require.NoError(t, err)
 
-	cleanup := func() {
-		os.RemoveAll(tmpDir)
-	}
-	return tmpDir, cleanup
+	return tmpDir
 }
 
 // createTestWorkflowFile creates a workflow file in the specified directory with the given content.
@@ -56,8 +52,7 @@ func initTestConfig(t *testing.T) schema.AtmosConfiguration {
 
 func TestExecuteDescribeWorkflows(t *testing.T) {
 	// Setup test environment
-	tmpDir, cleanup := setupTestWorkflowEnvironment(t)
-	defer cleanup()
+	tmpDir := setupTestWorkflowEnvironment(t)
 
 	workflowsDir := filepath.Join(tmpDir, "stacks", "workflows")
 

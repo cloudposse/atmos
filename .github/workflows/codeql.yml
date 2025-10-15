@@ -81,6 +81,15 @@ jobs:
         with:
           fetch-depth: 0
 
+      # golangci-lint-action@v4.0.0+ requires explicit Go setup
+      # Without this step, the action may fail intermittently with
+      # "could not load export data" errors due to cache corruption
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
       - name: Run golangci-lint
         uses: golangci/golangci-lint-action@v8
         id: golangci

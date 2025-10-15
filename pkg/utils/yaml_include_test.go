@@ -13,9 +13,7 @@ import (
 // TestIncludeWithHashCharacter verifies that strings starting with '#' are properly handled with !include.
 func TestIncludeWithHashCharacter(t *testing.T) {
 	// Create a temporary directory for test files
-	tempDir, err := os.MkdirTemp("", "atmos-include-test")
-	assert.NoError(t, err)
-	defer os.RemoveAll(tempDir)
+	tempDir := t.TempDir()
 
 	// Create a test file with values including strings starting with '#'
 	testValuesFile := filepath.Join(tempDir, "test_values.yaml")
@@ -28,7 +26,7 @@ hash_in_middle: 'value#with#hash'
 comment_at_end: 'value' # with comment
 comment_at_end_no_quotes: value # with comment
 `
-	err = os.WriteFile(testValuesFile, []byte(testValuesContent), 0o644)
+	err := os.WriteFile(testValuesFile, []byte(testValuesContent), 0o644)
 	assert.NoError(t, err)
 
 	// Create a test file that includes values from the first file

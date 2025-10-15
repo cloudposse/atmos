@@ -63,11 +63,7 @@ func TestMatchFiles(t *testing.T) {
 	}
 
 	// Create a temporary directory for testing
-	tempDir, err := os.MkdirTemp("", "matchfiles_test")
-	if err != nil {
-		t.Fatalf("failed to create temp dir: %v", err)
-	}
-	defer os.RemoveAll(tempDir)
+	tempDir := t.TempDir()
 	os.Chdir(tempDir)
 	defer os.Chdir(originalDir)
 	// Set up the test directory structure

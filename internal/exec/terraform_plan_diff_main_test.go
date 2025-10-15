@@ -90,13 +90,11 @@ func TestParsePlanDiffFlags(t *testing.T) {
 
 func TestValidateOriginalPlanFile(t *testing.T) {
 	// Create a temporary directory for test files
-	tmpDir, err := os.MkdirTemp("", "atmos-test-*")
-	require.NoError(t, err)
-	defer os.RemoveAll(tmpDir)
+	tmpDir := t.TempDir()
 
 	// Create component path
 	componentPath := filepath.Join(tmpDir, "component")
-	err = os.MkdirAll(componentPath, 0o755)
+	err := os.MkdirAll(componentPath, 0o755)
 	require.NoError(t, err)
 
 	// Create a plan file in the component directory
