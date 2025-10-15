@@ -189,7 +189,7 @@ type Rule interface {
 Each rule is implemented in its own file:
 - `rule_tsetenv_in_defer.go` - t.Setenv in defer/cleanup detection
 - `rule_os_setenv.go` - os.Setenv in test files detection
-- `rule_os_mkdirtemp.go` - os.MkdirTemp in test files detection
+- `rule_os_mkdirtemp.go` - os.MkdirTemp in test files detection.
 
 ### Dual-Mode Support
 

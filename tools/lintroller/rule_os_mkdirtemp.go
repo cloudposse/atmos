@@ -31,7 +31,7 @@ func (r *OsMkdirTempInTestRule) Check(pass *analysis.Pass, file *ast.File) error
 	ast.Inspect(file, func(n ast.Node) bool {
 		// Skip if we're inside a benchmark function.
 		for benchmark := range benchmarks {
-			if isInsideMkdirTemp(n, benchmark.Body) {
+			if isInside(n, benchmark.Body) {
 				return true
 			}
 		}
@@ -68,14 +68,6 @@ func findBenchmarksForMkdirTemp(file *ast.File) map[*ast.FuncDecl]bool {
 		return true
 	})
 	return benchmarks
-}
-
-// isInsideMkdirTemp checks if node is inside parent.
-func isInsideMkdirTemp(node, parent ast.Node) bool {
-	if node == nil || parent == nil {
-		return false
-	}
-	return node.Pos() >= parent.Pos() && node.End() <= parent.End()
 }
 
 // isOsMkdirTempCall checks if a call expression is os.MkdirTemp.
