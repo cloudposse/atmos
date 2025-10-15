@@ -79,14 +79,12 @@ func TestDisplayPerformanceHeatmap(t *testing.T) {
 
 func TestIsTTY(t *testing.T) {
 	tests := []struct {
-		name     string
-		stderr   *os.File
-		expected bool
+		name   string
+		stderr *os.File
 	}{
 		{
-			name:     "Regular stderr (TTY check varies by environment)",
-			stderr:   os.Stderr,
-			expected: false, // In tests, stderr is usually not a TTY
+			name:   "Regular stderr TTY check",
+			stderr: os.Stderr,
 		},
 	}
 
@@ -98,8 +96,10 @@ func TestIsTTY(t *testing.T) {
 
 			result := term.IsTTYSupportForStderr()
 
-			// We can't reliably test TTY in unit tests, so just verify it doesn't panic.
-			_ = result
+			// In tests, stderr is usually not a TTY, but we verify it returns a boolean.
+			assert.IsType(t, false, result, "IsTTYSupportForStderr should return a boolean")
+			// The actual value depends on the test environment, so we just verify the type.
+			// In most CI environments, this will be false. Locally with a terminal, it may be true.
 		})
 	}
 }

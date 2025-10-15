@@ -9,6 +9,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"golang.org/x/term"
 
+	termUtils "github.com/cloudposse/atmos/internal/tui/templates/term"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	m "github.com/cloudposse/atmos/pkg/merge"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -346,7 +347,7 @@ func getCommentColumn() int {
 	const commentSpace = 60 // Space needed for comment (# ● file:line).
 
 	// Check if stdout is a TTY
-	if !term.IsTerminal(int(os.Stdout.Fd())) {
+	if !termUtils.IsTTYSupportForStdout() {
 		return defaultColumn
 	}
 

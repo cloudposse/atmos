@@ -234,7 +234,7 @@ func TestBuildMissingAtmosConfigError(t *testing.T) {
 				Stacks: schema.Stacks{
 					BasePath: "stacks",
 				},
-				Default: true, // Tests the code path when atmos.yaml was not found and default config is used
+				Default: true, // Tests the code path when atmos.yaml was not found and default config is used.
 			},
 		},
 		{
@@ -246,7 +246,7 @@ func TestBuildMissingAtmosConfigError(t *testing.T) {
 				Stacks: schema.Stacks{
 					BasePath: "my-stacks",
 				},
-				Default: false, // Tests the code path when atmos.yaml was found but has invalid paths
+				Default: false, // Tests the code path when atmos.yaml was found but has invalid paths.
 			},
 		},
 	}
@@ -258,11 +258,11 @@ func TestBuildMissingAtmosConfigError(t *testing.T) {
 				return
 			}
 
-			// Verify exit code is 2 (usage error)
+			// Verify exit code is 2 (usage error).
 			exitCode := errUtils.GetExitCode(err)
 			assert.Equal(t, 2, exitCode, "Exit code should be 2 for usage errors")
 
-			// Verify it's the right base error so callers can use errors.Is() checks
+			// Verify it's the right base error so callers can use errors.Is() checks.
 			assert.ErrorIs(t, err, errUtils.ErrStacksDirectoryDoesNotExist)
 		})
 	}

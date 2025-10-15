@@ -78,57 +78,11 @@ func TestSanitizeOutput(t *testing.T) {
 	}
 }
 
-// TestSanitizeOutput_WindowsDriveLetter tests Windows-specific drive letter handling.
-// This test simulates the Windows CI environment where drive letters may have different casing.
-func TestSanitizeOutput_WindowsDriveLetter(t *testing.T) {
-	// Skip if not on Windows or in CI.
-	// Note: We test this scenario even on non-Windows platforms by simulating Windows paths.
-
-	tests := []struct {
-		name     string
-		repoRoot string // Simulated repo root
-		input    string
-		expected string
-	}{
-		{
-			name:     "Lowercase drive letter matches uppercase repo root",
-			repoRoot: "D:/a/atmos/atmos",
-			input:    "DEBU attempting to merge import import=d:/a/atmos/atmos/configs.d/**/* file_path=d:/a/atmos/atmos/configs.d/commands.yaml",
-			expected: "DEBU attempting to merge import import=/absolute/path/to/repo/configs.d/**/* file_path=/absolute/path/to/repo/configs.d/commands.yaml",
-		},
-		{
-			name:     "Uppercase drive letter matches lowercase repo root",
-			repoRoot: "d:/a/atmos/atmos",
-			input:    "DEBU attempting to merge import import=D:/a/atmos/atmos/configs.d/**/* file_path=D:/a/atmos/atmos/configs.d/commands.yaml",
-			expected: "DEBU attempting to merge import import=/absolute/path/to/repo/configs.d/**/* file_path=/absolute/path/to/repo/configs.d/commands.yaml",
-		},
-		{
-			name:     "Mixed case in path segments",
-			repoRoot: "C:/Users/Runner/work/atmos/atmos",
-			input:    "Processing c:/users/runner/work/Atmos/Atmos/examples/demo.yaml",
-			expected: "Processing /absolute/path/to/repo/examples/demo.yaml",
-		},
-		{
-			name:     "Windows path with backslashes",
-			repoRoot: "C:/Program Files/atmos",
-			input:    "Loading C:\\Program Files\\atmos\\config\\atmos.yaml",
-			expected: "Loading /absolute/path/to/repo/config/atmos.yaml",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			// This test would need modification to sanitizeOutput to accept a custom repo root.
-			// For now, we document the expected behavior.
-			t.Skip("Test requires modification to sanitizeOutput to accept custom repo root parameter")
-
-			// Expected implementation:
-			// result, err := sanitizeOutputWithRepoRoot(tt.input, tt.repoRoot)
-			// require.NoError(t, err)
-			// assert.Equal(t, tt.expected, result)
-		})
-	}
-}
+// Note: Windows-specific drive letter handling is tested in the cross-platform
+// TestSanitizeOutput_CrossPlatform test above, which covers Windows paths on all platforms.
+// Custom repo root support is not currently implemented in sanitizeOutput(), but could be
+// added in the future if needed. The function uses git.GetRepoRoot() to determine the actual
+// repository root, which is sufficient for production use.
 
 // TestCollapseExtraSlashes tests the collapseExtraSlashes helper function.
 func TestCollapseExtraSlashes(t *testing.T) {

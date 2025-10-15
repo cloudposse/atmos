@@ -44,6 +44,8 @@ linters:
           msg: Use `filepath.Join` for OS-appropriate path separators instead of `path.Join` (which always uses forward slashes)
         - pattern: 'WithHint\((?:[^()]*|\([^)]*\))*,\s*fmt\.Sprintf'
           msg: Use `WithHintf()` instead of `WithHint(err, fmt.Sprintf(...))` for formatted hint messages
+        - pattern: term\.IsTerminal\(
+          msg: Use `term.IsTTYSupportForStdout()` or `term.IsTTYSupportForStderr()` instead of `term.IsTerminal()` for consistent and mockable TTY detection
       exclude-godoc-examples: false
       analyze-types: true
     funlen:
