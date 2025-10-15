@@ -70,3 +70,7 @@ tests.test
 
 **/llms.txt
 **/llms-full.txt
+/lintroller
+/.lintroller
+tools/lintroller/.lintroller
+/custom-gcl

@@ -23,8 +23,18 @@ version: version-default
 
 # The following will lint only files in git. `golangci-lint run --new-from-rev=HEAD` should do it,
 # but it's still including files not in git.
-lint: get
+lint: get lintroller
 	golangci-lint run --new-from-rev=origin/main
+
+# Custom linter for Atmos-specific rules (t.Setenv misuse, os.Setenv in tests).
+.PHONY: lintroller
+lintroller: tools/lintroller/.lintroller
+	@echo "Running lintroller (Atmos custom rules)..."
+	@tools/lintroller/.lintroller ./... 2>&1 | grep -v "^#" || true
+
+tools/lintroller/.lintroller: tools/lintroller/*.go
+	@echo "Building lintroller..."
+	@cd tools/lintroller && go build -o .lintroller .
 
 build-linux: GOOS=linux
 build-linux: build-default
@@ -78,4 +88,4 @@ test-short-cover: get
 	@echo "Running quick tests with coverage (skipping long-running tests)"
 	@GOCOVERDIR=coverage go test -short -cover $(TEST) $(TESTARGS) -timeout 5m
 
-.PHONY: lint get build version build-linux build-windows build-macos deps version-linux version-windows version-macos testacc testacc-cover testacc-coverage test-short test-short-cover
+.PHONY: lint lintroller get build version build-linux build-windows build-macos deps version-linux version-windows version-macos testacc testacc-cover testacc-coverage test-short test-short-cover

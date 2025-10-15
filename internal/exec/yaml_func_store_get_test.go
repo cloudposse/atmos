@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os"
 	"testing"
 
 	"github.com/alicebob/miniredis/v2"
@@ -22,9 +21,7 @@ func TestProcessTagStoreGet(t *testing.T) {
 
 	// Setup the Redis ENV variable
 	redisUrl := fmt.Sprintf("redis://%s", s.Addr())
-	origRedisUrl := os.Getenv("ATMOS_REDIS_URL")
-	os.Setenv("ATMOS_REDIS_URL", redisUrl)
-	defer os.Setenv("ATMOS_REDIS_URL", origRedisUrl)
+	t.Setenv("ATMOS_REDIS_URL", redisUrl)
 
 	// Create a new Redis store
 	redisStore, err := store.NewRedisStore(store.RedisStoreOptions{

@@ -212,8 +212,9 @@ github.com/aymerick/douceur v0.2.0 h1:Mv+mAeH1Q+n9Fr+oyamOlAkUNPWPlA8PPGR0QAaYuP
 github.com/aymerick/douceur v0.2.0/go.mod h1:wlT5vV2O3h55X9m7iVYN0TBM0NH/MmbLnd30/FjWUq4=
 github.com/baulk/chardet v0.1.0 h1:6/r5nPMikB9OG1Njs10VfVHZTDMFH6BdybHPISpfUVA=
 github.com/baulk/chardet v0.1.0/go.mod h1:0ibN6068qswel5Hv54U7GNJUU57njfzPJrLIq7Y8xas=
-github.com/bearsh/hid v1.3.0 h1:GLNa8hvEzJxzQEEpheDUr2SivvH7iwTrJrDhFKutfX8=
 github.com/bearsh/hid v1.3.0/go.mod h1:KbQByg8WfPr92v7aaKAHTtZUEVG7e2XRpcF8+TopQv8=
+github.com/bearsh/hid v1.6.0 h1:eOBSuF2pg+SCytKGuGjOzZx73xQ72gevJ5IlFvzgfGE=
+github.com/bearsh/hid v1.6.0/go.mod h1:7JhM3r/tm4ALu4WWFqshda+Q6aIcnGRpUR08sx/dHdc=
 github.com/beevik/etree v1.4.1 h1:PmQJDDYahBGNKDcpdX8uPy1xRCwoCGVUiW669MEirVI=
 github.com/beevik/etree v1.4.1/go.mod h1:gPNJNaBGVZ9AwsidazFZyygnd+0pAU38N4D+WemwKNs=
 github.com/beorn7/perks v0.0.0-20180321164747-3a771d992973/go.mod h1:Dwedo/Wpr24TaqPxmxbtue+5NUziq4I4S80YR8gNf3Q=

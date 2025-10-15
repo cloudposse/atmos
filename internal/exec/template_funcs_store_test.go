@@ -2,7 +2,6 @@ package exec
 
 import (
 	"fmt"
-	"os"
 	"testing"
 
 	"github.com/alicebob/miniredis/v2"
@@ -21,9 +20,7 @@ func TestStoreTemplateFunc(t *testing.T) {
 
 	// Setup the Redis ENV variable
 	redisUrl := fmt.Sprintf("redis://%s", s.Addr())
-	origRedisUrl := os.Getenv("ATMOS_REDIS_URL")
-	os.Setenv("ATMOS_REDIS_URL", redisUrl)
-	defer os.Setenv("ATMOS_REDIS_URL", origRedisUrl)
+	t.Setenv("ATMOS_REDIS_URL", redisUrl)
 
 	// Create a new Redis store
 	redisStore, err := store.NewRedisStore(store.RedisStoreOptions{
@@ -106,9 +103,7 @@ func TestComponentConfigWithStoreTemplateFunc(t *testing.T) {
 
 	// Setup the Redis ENV variable
 	redisUrl := fmt.Sprintf("redis://%s", s.Addr())
-	origRedisUrl := os.Getenv("ATMOS_REDIS_URL")
-	os.Setenv("ATMOS_REDIS_URL", redisUrl)
-	defer os.Setenv("ATMOS_REDIS_URL", origRedisUrl)
+	t.Setenv("ATMOS_REDIS_URL", redisUrl)
 
 	// Create a new Redis store
 	redisStore, err := store.NewRedisStore(store.RedisStoreOptions{
@@ -129,17 +124,8 @@ func TestComponentConfigWithStoreTemplateFunc(t *testing.T) {
 
 	stacksPath := "../../tests/fixtures/scenarios/stack-templates-4"
 
-	err = os.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
-	assert.NoError(t, err, "Setting 'ATMOS_CLI_CONFIG_PATH' environment variable should execute without error")
-
-	err = os.Setenv("ATMOS_BASE_PATH", stacksPath)
-	assert.NoError(t, err, "Setting 'ATMOS_BASE_PATH' environment variable should execute without error")
-
-	// Unset env values after testing
-	defer func() {
-		os.Unsetenv("ATMOS_BASE_PATH")
-		os.Unsetenv("ATMOS_CLI_CONFIG_PATH")
-	}()
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
+	t.Setenv("ATMOS_BASE_PATH", stacksPath)
 
 	res, err := ExecuteDescribeComponent(
 		"component-1",

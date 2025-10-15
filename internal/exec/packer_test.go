@@ -193,13 +193,6 @@ func TestExecutePacker_Errors(t *testing.T) {
 	t.Setenv("ATMOS_LOGS_LEVEL", "Warning")
 	log.SetLevel(log.InfoLevel)
 
-	// Store original PATH and modify it to ensure packer is not found in PATH
-	originalPath := os.Getenv("PATH")
-	t.Cleanup(func() {
-		// Restore original PATH after test
-		os.Setenv("PATH", originalPath)
-	})
-
 	t.Run("missing stack", func(t *testing.T) {
 		info := schema.ConfigAndStacksInfo{
 			ComponentType:    "packer",
@@ -369,7 +362,7 @@ func TestExecutePacker_Errors(t *testing.T) {
 
 	t.Run("missing packer binary", func(t *testing.T) {
 		// Temporarily modify PATH to ensure packer is not found
-		os.Setenv("PATH", "/nonexistent/path")
+		t.Setenv("PATH", "/nonexistent/path")
 
 		info := schema.ConfigAndStacksInfo{
 			Stack:            "nonprod",
@@ -382,9 +375,6 @@ func TestExecutePacker_Errors(t *testing.T) {
 		err := ExecutePacker(&info, &packerFlags)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "executable file not found")
-
-		// Restore PATH
-		os.Setenv("PATH", originalPath)
 	})
 
 	t.Run("invalid command arguments", func(t *testing.T) {
