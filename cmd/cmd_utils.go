@@ -152,7 +152,11 @@ func addCommandWithAlias(parentCmd *cobra.Command, alias string, parts []string)
 
 	// If the command doesn't exist, create it
 	if cmd == nil {
-		errUtils.CheckErrorPrintAndExit(fmt.Errorf("subcommand `%s` not found for alias `%s`", parts[0], alias), "", "")
+		err := errUtils.Build(errUtils.ErrInvalidArguments).
+			WithHintf("Subcommand `%s` not found for alias `%s`.", parts[0], alias).
+			WithExitCode(2).
+			Err()
+		errUtils.CheckErrorPrintAndExit(err, "", "")
 	}
 
 	// If there are more parts, recurse for the next level
@@ -379,16 +383,22 @@ func executeCustomCommand(
 			component, err := e.ProcessTmpl(&atmosConfig, fmt.Sprintf("component-config-component-%d", i), commandConfig.ComponentConfig.Component, data, false)
 			errUtils.CheckErrorPrintAndExit(err, "", "")
 			if component == "" || component == "<no value>" {
-				errUtils.CheckErrorPrintAndExit(fmt.Errorf("the command defines an invalid 'component_config.component: %s' in '%s'",
-					commandConfig.ComponentConfig.Component, cfg.CliConfigFileName+u.DefaultStackConfigFileExtension), "", "")
+				err := errUtils.Build(errUtils.ErrInvalidArguments).
+					WithHintf("Invalid `component_config.component`: %s in %s.", commandConfig.ComponentConfig.Component, cfg.CliConfigFileName+u.DefaultStackConfigFileExtension).
+					WithExitCode(2).
+					Err()
+				errUtils.CheckErrorPrintAndExit(err, "", "")
 			}
 
 			// Process Go templates in the command's 'component_config.stack'
 			stack, err := e.ProcessTmpl(&atmosConfig, fmt.Sprintf("component-config-stack-%d", i), commandConfig.ComponentConfig.Stack, data, false)
 			errUtils.CheckErrorPrintAndExit(err, "", "")
 			if stack == "" || stack == "<no value>" {
-				errUtils.CheckErrorPrintAndExit(fmt.Errorf("the command defines an invalid 'component_config.stack: %s' in '%s'",
-					commandConfig.ComponentConfig.Stack, cfg.CliConfigFileName+u.DefaultStackConfigFileExtension), "", "")
+				err := errUtils.Build(errUtils.ErrInvalidArguments).
+					WithHintf("Invalid `component_config.stack`: %s in %s.", commandConfig.ComponentConfig.Stack, cfg.CliConfigFileName+u.DefaultStackConfigFileExtension).
+					WithExitCode(2).
+					Err()
+				errUtils.CheckErrorPrintAndExit(err, "", "")
 			}
 
 			// Get the config for the component in the stack
