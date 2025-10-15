@@ -52,21 +52,7 @@ components:
 	assert.True(t, filepath.IsAbs(config.CliConfigPath))
 }
 
-// TestReadSystemConfig_WindowsEmptyAppData tests Windows path handling at load.go:194-197.
-func TestReadSystemConfig_WindowsEmptyAppData(t *testing.T) {
-	if runtime.GOOS != "windows" {
-		t.Skipf("Skipping Windows-specific test on %s", runtime.GOOS)
-	}
-
-	// Test with empty LOCALAPPDATA
-	t.Setenv(WindowsAppDataEnvVar, "")
-
-	v := viper.New()
-	v.SetConfigType("yaml")
-
-	err := readSystemConfig(v)
-	assert.NoError(t, err) // Should not error, just skip
-}
+// TestReadSystemConfig_WindowsEmptyAppData moved to load_error_paths_windows_test.go.
 
 // TestReadSystemConfig_NonExistentPath tests ConfigFileNotFoundError handling at load.go:204-209.
 func TestReadSystemConfig_NonExistentPath(t *testing.T) {
@@ -293,12 +279,19 @@ components:
 	}
 }
 
-// TestProcessConfigImportsAndReapply_ReapplyMainConfigError tests error path at load.go:354-356.
+// TestProcessConfigImportsAndReapply_ReapplyMainConfigError documents error path at load.go:354-356.
+// This error path is difficult to trigger without modifying viper internals.
+// The error handling code exists and is documented, but creating a test that
+// triggers it would require mocking viper's internal merge logic.
 func TestProcessConfigImportsAndReapply_ReapplyMainConfigError(t *testing.T) {
-	// This error path is difficult to trigger without modifying viper internals
-	// We document that the error handling exists at lines 354-356
-	// The actual merge error would need specific viper internal state
-	// This test documents the error path structure
+	t.Skip("Error path requires viper internal state manipulation - documented for completeness")
+
+	// The error path being documented is:
+	// if err := reapplyMainConfig(vipers); err != nil {
+	//     return nil, err
+	// }
+	// This would require specific viper merge conflicts that are not
+	// reproducible without extensive mocking of viper internals.
 }
 
 // TestMarshalViperToYAML_MarshalError tests error path at load.go:388-390.
@@ -475,40 +468,10 @@ func TestMergeConfigFile_ReadConfigError(t *testing.T) {
 	assert.Error(t, err)
 }
 
-// TestMergeConfigFile_MergeConfigError tests error path at load.go:570-573.
-func TestMergeConfigFile_MergeConfigError(t *testing.T) {
-	t.Skip("Skipping: test has inconsistent behavior")
-	tempDir := t.TempDir()
-
-	// Create file with content that fails to merge
-	invalidContent := []byte(`
-base_path: /test
-components:
-  terraform:
-    - invalid
-    - structure
-`)
-	configPath := filepath.Join(tempDir, "invalid.yaml")
-	err := os.WriteFile(configPath, invalidContent, 0o644)
-	assert.NoError(t, err)
-
-	v := viper.New()
-	v.SetConfigType("yaml")
-
-	err = mergeConfigFile(configPath, v)
-	assert.Error(t, err)
-}
-
-// TestLoadEmbeddedConfig_MergeError tests error path at load.go:652-654.
-func TestLoadEmbeddedConfig_MergeError(t *testing.T) {
-	t.Skip("Skipping: test has inconsistent behavior")
-	v := viper.New()
-	// Don't set config type - this might cause merge to fail
-	// Actually embedded config should always work, but we test the error path
-
-	// Since embedded config is valid, we can't easily trigger an error
-	// This test documents the error path exists
-	err := loadEmbeddedConfig(v)
-	// Should succeed with valid embedded config
-	assert.NoError(t, err)
-}
+// Note: Previously there were tests for additional merge error paths (load.go:570-573, load.go:652-654)
+// but they exhibited inconsistent behavior and couldn't reliably trigger the error conditions.
+// The error paths exist for defensive programming, but are difficult to reach in practice since:
+// 1. mergeConfigFile errors are already tested above with various failure scenarios
+// 2. loadEmbeddedConfig uses hardcoded valid YAML that shouldn't fail to merge
+// If these error paths need explicit coverage, the functions would need refactoring to accept
+// injectable dependencies (e.g., a ConfigMerger interface) to allow controlled failure simulation.

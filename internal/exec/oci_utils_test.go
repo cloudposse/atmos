@@ -8,11 +8,14 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/golang/mock/gomock"
 	v1 "github.com/google/go-containerregistry/pkg/v1"
+	"github.com/google/go-containerregistry/pkg/v1/remote"
 	"github.com/google/go-containerregistry/pkg/v1/types"
 	"github.com/stretchr/testify/assert"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/filesystem"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -63,13 +66,6 @@ func TestProcessOciImage_InvalidReference(t *testing.T) {
 	assert.Contains(t, err.Error(), "invalid image reference")
 }
 
-// TestProcessOciImage_TempDirCreationFailure tests error handling when temp directory creation fails.
-func TestProcessOciImage_TempDirCreationFailure(t *testing.T) {
-	// This test would require mocking os.MkdirTemp which is challenging without dependency injection.
-	// We'll skip this test as it requires complex mocking.
-	t.Skip("Requires complex mocking of os.MkdirTemp")
-}
-
 // TestProcessLayer_DecompressionError tests error handling when layer decompression fails.
 func TestProcessLayer_DecompressionError(t *testing.T) {
 	mockLayer := &MockLayer{
@@ -85,30 +81,79 @@ func TestProcessLayer_DecompressionError(t *testing.T) {
 	assert.Contains(t, err.Error(), "layer decompression")
 }
 
+// TestProcessOciImageWithFS_TempDirCreationFailure tests error handling when temp directory creation fails.
+func TestProcessOciImageWithFS_TempDirCreationFailure(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockFS := filesystem.NewMockFileSystem(ctrl)
+
+	// Mock MkdirTemp to return an error.
+	expectedErr := fmt.Errorf("permission denied")
+	mockFS.EXPECT().
+		MkdirTemp(gomock.Any(), gomock.Any()).
+		Return("", expectedErr)
+
+	atmosConfig := &schema.AtmosConfiguration{}
+	err := processOciImageWithFS(atmosConfig, "test/image:latest", "/tmp/dest", mockFS)
+
+	assert.Error(t, err)
+	assert.True(t, errors.Is(err, errUtils.ErrCreateTempDirectory), "Expected ErrCreateTempDirectory, got: %v", err)
+	assert.ErrorContains(t, err, "permission denied")
+}
+
 // TestCheckArtifactType tests the checkArtifactType function with various media types.
 func TestCheckArtifactType(t *testing.T) {
 	tests := []struct {
 		name      string
 		mediaType types.MediaType
 		imageName string
+		expectLog bool // Whether we expect a warning log.
 	}{
 		{
-			name:      "Docker image",
+			name:      "Docker manifest schema 2",
 			mediaType: types.DockerManifestSchema2,
 			imageName: "test/image:latest",
+			expectLog: false,
 		},
 		{
-			name:      "OCI image",
+			name:      "OCI manifest schema 1",
 			mediaType: types.OCIManifestSchema1,
 			imageName: "oci/image:v1",
+			expectLog: false,
+		},
+		{
+			name:      "Docker manifest list",
+			mediaType: types.DockerManifestList,
+			imageName: "multi/arch:v1",
+			expectLog: true, // Unsupported, expect warning.
+		},
+		{
+			name:      "OCI image index",
+			mediaType: types.OCIImageIndex,
+			imageName: "index/image:v1",
+			expectLog: true, // Unsupported, expect warning.
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Since checkArtifactType requires a remote.Descriptor,
-			// and we can't easily create one for testing, we'll skip this test.
-			t.Skipf("checkArtifactType requires remote.Descriptor which is hard to mock")
+			// Create a mock descriptor with embedded v1.Descriptor.
+			mockDescriptor := &remote.Descriptor{
+				Descriptor: v1.Descriptor{
+					MediaType: tt.mediaType,
+				},
+			}
+
+			// Call checkArtifactType - it logs warnings but doesn't return errors.
+			// We verify it doesn't panic and handles all media types gracefully.
+			assert.NotPanics(t, func() {
+				checkArtifactType(mockDescriptor, tt.imageName)
+			})
+
+			// The function logs warnings for unsupported types but continues execution.
+			// This is correct behavior - we can't easily verify log output in unit tests
+			// without complex log capture, so we just verify no panic occurs.
 		})
 	}
 }
@@ -133,9 +178,18 @@ func TestRemoveTempDir_OCIUtils(t *testing.T) {
 
 // TestRemoveTempDir_NonExistent tests removeTempDir with non-existent directory.
 func TestRemoveTempDir_NonExistent(t *testing.T) {
-	// This should not panic, just log an error.
+	// This should not panic when removing a non-existent directory.
+	// Use defer/recover to verify no panic occurs.
+	defer func() {
+		if r := recover(); r != nil {
+			t.Errorf("removeTempDir panicked on non-existent directory: %v", r)
+		}
+	}()
+
 	removeTempDir("/nonexistent/directory/path")
+
 	// Test passes if no panic occurs.
+	assert.True(t, true, "Function executed without panic on non-existent directory")
 }
 
 // TestParseOCIManifest tests the parseOCIManifest function.

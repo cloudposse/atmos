@@ -78,8 +78,11 @@ func TestSetFlagInDescribeWorkflow(t *testing.T) {
 
 func TestDescribeWorkflows(t *testing.T) {
 	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
 	describeWorkflowsMock := exec.NewMockDescribeWorkflowsExec(ctrl)
 	describeWorkflowsMock.EXPECT().Execute(gomock.Any(), gomock.Any()).Return(nil).Times(1)
+
 	run := getRunnableDescribeWorkflowsCmd(
 		func(opts ...AtmosValidateOption) {},
 		func(componentType string, cmd *cobra.Command, args, additionalArgsAndFlags []string) (schema.ConfigAndStacksInfo, error) {
@@ -90,9 +93,14 @@ func TestDescribeWorkflows(t *testing.T) {
 		},
 		describeWorkflowsMock,
 	)
+
 	describeWorkflowsCmd.Flags().StringP("pager", "p", "", "Specify a pager to use for output (e.g., `less`, `more`)")
-	run(describeWorkflowsCmd, []string{})
-	ctrl.Finish()
+
+	err := run(describeWorkflowsCmd, []string{})
+
+	// Verify command executed without errors. The mock expectations verify
+	// that Execute() was called with the correct arguments.
+	assert.NoError(t, err, "describeWorkflowsCmd should execute without error")
 }
 
 func TestDescribeWorkflowsCmd_Error(t *testing.T) {
