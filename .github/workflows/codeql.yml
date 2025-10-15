@@ -90,18 +90,20 @@ jobs:
           go-version-file: go.mod
           cache: true
 
-      - name: Run golangci-lint
-        uses: golangci/golangci-lint-action@v8
-        id: golangci
-        with:
-          version: v2.4.0
-          only-new-issues: true # Shows only issues introduced in the PR
-          # Not all line numbers in diff may match the linter's line outputs
-          # See: https://github.com/golangci/golangci-lint/issues/4376#issuecomment-1938874827
+      - name: Install golangci-lint v2 for custom build
+        run: |
+          go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.5.0
+
+      - name: Build custom golangci-lint with lintroller plugin
+        run: |
+          golangci-lint custom
+          chmod +x ./custom-gcl
+
+      - name: Run custom golangci-lint with lintroller
+        run: |
+          # Run custom-gcl with SARIF output for CodeQL integration
           # Always exit 0 so we upload the sarif file to CodeQL
-          args: >
-            --output.sarif.path=golangci-lint.sarif
-            --issues-exit-code=0
+          ./custom-gcl run --new-from-rev=origin/${{ github.base_ref }} --out-format=sarif:golangci-lint.sarif --issues-exit-code=0 || true
 
       - name: Upload filtered SARIF results
         uses: github/codeql-action/upload-sarif@v3

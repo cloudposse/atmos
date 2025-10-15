@@ -15,6 +15,7 @@ linters:
     - godot
     - gosec
     - importas
+    - lintroller
     - loggercheck
     - misspell
     - nestif
@@ -75,6 +76,14 @@ linters:
           alias: log
       no-unaliased: true
       no-extra-aliases: false
+    custom:
+      lintroller:
+        type: "module"
+        description: "Atmos project-specific linting rules (t.Setenv/os.Setenv/t.TempDir checks)"
+        settings:
+          tsetenv-in-defer: true
+          os-setenv-in-test: true
+          os-mkdirtemp-in-test: true
     lll:
       line-length: 120
       tab-width: 4
