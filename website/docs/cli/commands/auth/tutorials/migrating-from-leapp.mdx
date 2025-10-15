@@ -7,6 +7,8 @@ description: Guide for migrating from Leapp to Atmos Auth for AWS IAM Identity C
 ---
 > **Note**: This guide currently covers AWS IAM Identity Center (SSO) migrations only. Support for other authentication methods will be added in future updates.
 
+> **Note**: `atmos auth` requires minimum Atmos version `v1.194.1`
+
 This guide helps you migrate from Leapp to the native `atmos auth` authentication system.
 
 ## Overview
@@ -160,78 +162,48 @@ atmos auth whoami
 atmos terraform plan <component> -s <stack>
 ```
 
-## Complete Migration Example
+## Integration with Geodesic
 
-### Multiple Leapp Sessions
+If you're using [Geodesic](https://github.com/cloudposse/geodesic) as your DevOps toolbox, you'll need to update your Dockerfile to configure the default AWS authentication settings for Atmos.
 
-If you have multiple sessions in Leapp:
+### Updating Your Geodesic Dockerfile
 
-```
-Session 1: core-identity / IdentityManagersTeamAccess
-Session 2: core-identity / BillingAdministratorAccess
-Session 3: sandbox / AdministratorAccess
-```
+Add the following environment variables to your Geodesic Dockerfile:
 
-### Equivalent `atmos.yaml` Configuration
+```dockerfile
+# Default AWS_PROFILE
+# This identity must exist in the atmos config file.
+ARG DEFAULT_ATMOS_PROVIDER="acme-sso"
+ARG DEFAULT_ATMOS_IDENTITY="core-identity"
 
-```yaml
-auth:
-  providers:
-    cplive-sso:
-      kind: aws/iam-identity-center
-      region: us-east-2
-      start_url: https://acme.awsapps.com/start/
+ENV AWS_SHARED_CREDENTIALS_FILE=$HOME/.aws/atmos/${DEFAULT_ATMOS_PROVIDER}/credentials
+ENV AWS_CONFIG_FILE=$HOME/.aws/atmos/${DEFAULT_ATMOS_PROVIDER}/config
+ENV AWS_PROFILE=${DEFAULT_ATMOS_IDENTITY}
 
-  identities:
-    core-identity/managers:
-      default: true  # Your most-used identity
-      kind: aws/permission-set
-      via:
-        provider: cplive-sso
-      principal:
-        name: "IdentityManagersTeamAccess"
-        account:
-          name: "core-identity"
-
-    core-identity/billing:
-      kind: aws/permission-set
-      via:
-        provider: cplive-sso
-      principal:
-        name: "BillingAdministratorAccess"
-        account:
-          name: "core-identity"
-
-    sandbox/admin:
-      kind: aws/permission-set
-      via:
-        provider: cplive-sso
-      principal:
-        name: "AdministratorAccess"
-        account:
-          name: "sandbox"
+# This sets the default AWS_CONFIG to be used after signing into AWS with Atmos.
+# Once logged in, this config file gives you access to all the other teams
+# and roles (if you are authorized for access).
+ENV AWS_CONFIG_FILE=/etc/aws-config/aws-config-teams
+ENV ASSUME_ROLE_INTERACTIVE_QUERY=${NAMESPACE}${TENANT:+-$TENANT}-gbl-
 ```
 
-## Key Differences
+### Update `Makefile`
 
-| Aspect | Leapp | Atmos Auth |
-|--------|-------|------------|
-| **Interface** | GUI application | CLI + YAML config |
-| **Configuration** | Stored in app | Version-controlled in `atmos.yaml` |
-| **Session Switching** | Click in GUI | CLI flags or component config |
-| **Credential Storage** | System keychain | System keychain (same) |
-| **AWS Files** | `~/.aws/config` | `~/.aws/atmos/<provider>/` |
-| **Team Sharing** | Manual setup per person | Shared config in repository |
-| **CI/CD** | Not designed for automation | Built for automation |
+We need the following snippet in our `Makefile`:
 
-## Advantages of Atmos Auth
+```makefile
+login:
+	@atmos auth login --identity core-identity
 
-✅ **Configuration as Code**: Authentication settings are versioned with infrastructure
-✅ **Component-Level Control**: Different components can use different identities
-✅ **No Separate App**: Authentication integrated into Atmos workflow
-✅ **Team Consistency**: Everyone uses the same authentication configuration
-✅ **Automation-Ready**: Works seamlessly in CI/CD pipelines
-✅ **Non-Destructive**: Doesn't modify your existing `~/.aws/config` files
+...
+
+## Start the geodesic shell by calling wrapper script
+run: login
+	@$(APP_NAME)
+```
+### Update Source Profile
+
+In order for `assume-role` and other Geodesic utilities to work, you'll need to update your `source_profile` in your `{Repo Root}/etc/aws-config/aws-config-teams` file to match the identity name from your `atmos.yaml` auth configuration.
 
 ## Troubleshooting
 
@@ -270,8 +242,8 @@ principal:
 ## Next Steps
 
 - Read the [User Guide](/cli/commands/auth/usage) for detailed usage instructions
-- Review the [auth commands](/cli/commands/auth) reference
-- Explore [component-level authentication](/core-concepts/components/component-configuration) options
+- Review the [auth commands](/cli/commands/auth/auth-login) reference
+- Explore [component-level authentication](/cli/commands/auth/usage#component-level-configuration) options
 
 ## Getting Help
 
