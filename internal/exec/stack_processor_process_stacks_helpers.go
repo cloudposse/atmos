@@ -17,11 +17,12 @@ type ComponentProcessorOptions struct {
 	CheckBaseComponentExists bool
 
 	// Global configurations.
-	GlobalVars     map[string]any
-	GlobalSettings map[string]any
-	GlobalEnv      map[string]any
-	GlobalAuth     map[string]any
-	GlobalCommand  string
+	GlobalVars         map[string]any
+	GlobalSettings     map[string]any
+	GlobalEnv          map[string]any
+	GlobalAuth         map[string]any
+	GlobalCommand      string
+	AtmosGlobalAuthMap map[string]any // Pre-converted atmosConfig.Auth to prevent race conditions
 
 	// Terraform-specific options.
 	TerraformProviders              map[string]any

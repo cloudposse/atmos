@@ -102,6 +102,7 @@ var (
 
 	ErrMissingStack                       = errors.New("stack is required; specify it on the command line using the flag `--stack <stack>` (shorthand `-s`)")
 	ErrInvalidComponent                   = errors.New("invalid component")
+	ErrInvalidComponentMapType            = errors.New("invalid component map type")
 	ErrAbstractComponentCantBeProvisioned = errors.New("abstract component cannot be provisioned")
 	ErrLockedComponentCantBeProvisioned   = errors.New("locked component cannot be provisioned")
 
