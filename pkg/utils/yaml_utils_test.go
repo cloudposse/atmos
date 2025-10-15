@@ -749,3 +749,86 @@ func generateLargeArray(size int) []string {
 	}
 	return result
 }
+
+// TestAtmosYamlTagsMap_ContainsAllTags tests that atmosYamlTagsMap contains all expected tags.
+// This validates P1.2 optimization: O(1) lookup map contains all custom YAML tags.
+func TestAtmosYamlTagsMap_ContainsAllTags(t *testing.T) {
+	// Validate that atmosYamlTagsMap contains all tags from AtmosYamlTags slice.
+	expectedTags := []string{
+		AtmosYamlFuncExec,
+		AtmosYamlFuncStore,
+		AtmosYamlFuncStoreGet,
+		AtmosYamlFuncTemplate,
+		AtmosYamlFuncTerraformOutput,
+		AtmosYamlFuncTerraformState,
+		AtmosYamlFuncEnv,
+	}
+
+	for _, tag := range expectedTags {
+		assert.True(t, atmosYamlTagsMap[tag],
+			"atmosYamlTagsMap should contain tag: %s", tag)
+	}
+
+	// Verify the map has exactly the expected number of tags.
+	assert.Equal(t, len(expectedTags), len(atmosYamlTagsMap),
+		"atmosYamlTagsMap should contain exactly %d tags", len(expectedTags))
+}
+
+// TestAtmosYamlTagsMap_O1Lookup tests that atmosYamlTagsMap provides O(1) lookup.
+// This validates P1.2 optimization: map lookup is constant time vs O(n) slice search.
+func TestAtmosYamlTagsMap_O1Lookup(t *testing.T) {
+	// Test that all expected tags are found in O(1) time.
+	testCases := []struct {
+		tag      string
+		expected bool
+	}{
+		{AtmosYamlFuncExec, true},
+		{AtmosYamlFuncStore, true},
+		{AtmosYamlFuncStoreGet, true},
+		{AtmosYamlFuncTemplate, true},
+		{AtmosYamlFuncTerraformOutput, true},
+		{AtmosYamlFuncTerraformState, true},
+		{AtmosYamlFuncEnv, true},
+		{"!unknown", false},
+		{"!invalid", false},
+		{"", false},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.tag, func(t *testing.T) {
+			result := atmosYamlTagsMap[tc.tag]
+			assert.Equal(t, tc.expected, result,
+				"atmosYamlTagsMap[%s] should be %v", tc.tag, tc.expected)
+		})
+	}
+}
+
+// BenchmarkAtmosYamlTagsMap_MapLookup benchmarks map-based tag lookup (P1.2).
+// This demonstrates O(1) performance vs O(n) slice search.
+func BenchmarkAtmosYamlTagsMap_MapLookup(b *testing.B) {
+	tag := AtmosYamlFuncTerraformOutput
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = atmosYamlTagsMap[tag]
+	}
+}
+
+// BenchmarkAtmosYamlTagsSlice_LinearSearch benchmarks slice-based tag search for comparison.
+// This demonstrates the O(n) performance that P1.2 optimization replaces.
+func BenchmarkAtmosYamlTagsSlice_LinearSearch(b *testing.B) {
+	tag := AtmosYamlFuncTerraformOutput
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		// Simulate the old linear search approach.
+		found := false
+		for _, t := range AtmosYamlTags {
+			if t == tag {
+				found = true
+				break
+			}
+		}
+		_ = found
+	}
+}

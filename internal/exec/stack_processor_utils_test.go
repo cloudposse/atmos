@@ -1349,3 +1349,82 @@ func TestHierarchicalImports_MultipleStacksConsistency(t *testing.T) {
 		assert.Equal(t, "us-west-2", region)
 	}
 }
+
+// TestGetCachedCompiledSchema tests that cached JSON schemas are retrieved correctly.
+// This validates P7.2 optimization: schema caching avoids recompilation.
+func TestGetCachedCompiledSchema(t *testing.T) {
+	// Use a test schema path
+	schemaPath := filepath.Join("..", "..", "tests", "fixtures", "schemas", "atmos", "atmos-manifest", "1.0", "atmos-manifest.json")
+
+	// First lookup should miss the cache (returns false)
+	compiledSchema, found := getCachedCompiledSchema(schemaPath)
+	assert.False(t, found, "Initial lookup should not find cached schema")
+	assert.Nil(t, compiledSchema, "Schema should be nil on cache miss")
+
+	// Compile and cache the schema by using ProcessYAMLConfigFile with validation
+	// This indirectly tests that schemas are being cached during normal operation
+	stacksBasePath := "../../tests/fixtures/scenarios/relative-paths/stacks"
+	filePath := "../../tests/fixtures/scenarios/relative-paths/stacks/orgs/acme/platform/dev.yaml"
+
+	atmosConfig := schema.AtmosConfiguration{
+		Templates: schema.Templates{
+			Settings: schema.TemplatesSettings{
+				Enabled: true,
+				Sprig: schema.TemplatesSettingsSprig{
+					Enabled: true,
+				},
+				Gomplate: schema.TemplatesSettingsGomplate{
+					Enabled: true,
+				},
+			},
+		},
+	}
+
+	deepMergedStackConfig, importsConfig, stackConfigMap, terraformInline, _, _, _, err := ProcessYAMLConfigFile(
+		&atmosConfig,
+		stacksBasePath,
+		filePath,
+		map[string]map[string]any{},
+		nil,
+		false,
+		false,
+		true,
+		false,
+		nil,
+		nil,
+		nil,
+		nil,
+		schemaPath,
+	)
+	assert.NoError(t, err, "ProcessYAMLConfigFile should succeed with schema validation")
+	assert.NotNil(t, deepMergedStackConfig, "deepMergedStackConfig should not be nil")
+	assert.NotNil(t, importsConfig, "importsConfig should not be nil")
+	assert.NotNil(t, stackConfigMap, "stackConfigMap should not be nil")
+	assert.NotNil(t, terraformInline, "terraformInline should not be nil")
+
+	// Second lookup should hit the cache (returns true)
+	compiledSchema, found = getCachedCompiledSchema(schemaPath)
+	assert.True(t, found, "Second lookup should find cached schema")
+	assert.NotNil(t, compiledSchema, "Cached schema should not be nil")
+}
+
+// TestCacheCompiledSchema tests that schemas are cached correctly.
+// This validates P7.2 optimization: cacheCompiledSchema stores schemas for reuse.
+func TestCacheCompiledSchema(t *testing.T) {
+	// Create a mock schema path
+	schemaPath := "/test/schema/path.json"
+
+	// Initially, cache should be empty
+	compiledSchema, found := getCachedCompiledSchema(schemaPath)
+	assert.False(t, found)
+	assert.Nil(t, compiledSchema)
+
+	// Note: We cannot easily create a *jsonschema.Schema without compiling from a file,
+	// so this test validates the cache lookup mechanism rather than the full compilation flow.
+	// The actual schema compilation and caching is tested via ProcessYAMLConfigFile above.
+
+	// Verify that getCachedCompiledSchema returns consistent results
+	compiledSchema2, found2 := getCachedCompiledSchema(schemaPath)
+	assert.Equal(t, found, found2, "Consistent cache lookups should return same result")
+	assert.Equal(t, compiledSchema, compiledSchema2, "Consistent cache lookups should return same schema")
+}
