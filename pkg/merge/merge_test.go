@@ -252,3 +252,254 @@ func TestMergeHandlesNilConfigWithoutPanic(t *testing.T) {
 	assert.Contains(t, err.Error(), "atmos config is nil")
 	assert.True(t, errors.Is(err, errUtils.ErrMerge))
 }
+
+// TestDeepCopyMap_PoolingCorrectness validates that object pooling doesn't affect correctness.
+// This validates P7.9 optimization: pooled maps/slices produce identical results.
+func TestDeepCopyMap_PoolingCorrectness(t *testing.T) {
+	testData := map[string]any{
+		"string": "value",
+		"number": 42,
+		"nested": map[string]any{
+			"deep": map[string]any{
+				"value": "nested value",
+				"array": []any{"a", "b", "c"},
+			},
+			"array": []any{1, 2, 3},
+		},
+		"slice": []any{"x", "y", "z"},
+	}
+
+	// Copy the same data multiple times to exercise the pool.
+	var copies []map[string]any
+	for i := 0; i < 10; i++ {
+		copy, err := deepCopyMap(testData)
+		assert.Nil(t, err)
+		assert.NotNil(t, copy)
+		copies = append(copies, copy)
+	}
+
+	// All copies should be identical to the original.
+	for i, copy := range copies {
+		assert.Equal(t, testData["string"], copy["string"], "Copy %d string mismatch", i)
+		assert.Equal(t, testData["number"], copy["number"], "Copy %d number mismatch", i)
+
+		nested := copy["nested"].(map[string]any)
+		originalNested := testData["nested"].(map[string]any)
+		assert.Equal(t, originalNested["deep"], nested["deep"], "Copy %d nested.deep mismatch", i)
+		assert.Equal(t, originalNested["array"], nested["array"], "Copy %d nested.array mismatch", i)
+
+		assert.Equal(t, testData["slice"], copy["slice"], "Copy %d slice mismatch", i)
+	}
+
+	// Verify copies are independent (modifying one doesn't affect others).
+	copies[0]["string"] = "modified"
+	assert.Equal(t, "value", testData["string"], "Original should not be modified")
+	assert.Equal(t, "value", copies[1]["string"], "Copy 1 should not be affected by copy 0 modification")
+}
+
+// TestDeepCopyMap_Concurrent validates thread safety of pooling.
+// This validates P7.9 optimization: sync.Pool handles concurrent access correctly.
+func TestDeepCopyMap_Concurrent(t *testing.T) {
+	testData := map[string]any{
+		"key1": "value1",
+		"key2": 123,
+		"nested": map[string]any{
+			"array": []any{1, 2, 3},
+		},
+	}
+
+	const numGoroutines = 100
+
+	results := make(chan map[string]any, numGoroutines)
+	errors := make(chan error, numGoroutines)
+	start := make(chan struct{})
+
+	for i := 0; i < numGoroutines; i++ {
+		go func() {
+			<-start
+
+			copy, err := deepCopyMap(testData)
+			if err != nil {
+				errors <- err
+				return
+			}
+
+			results <- copy
+		}()
+	}
+
+	// Release all goroutines at once.
+	close(start)
+
+	// Collect all results.
+	successCount := 0
+	errorCount := 0
+
+	for i := 0; i < numGoroutines; i++ {
+		select {
+		case copy := <-results:
+			assert.NotNil(t, copy)
+			assert.Equal(t, testData["key1"], copy["key1"])
+			assert.Equal(t, testData["key2"], copy["key2"])
+			successCount++
+		case err := <-errors:
+			t.Errorf("Concurrent copy failed: %v", err)
+			errorCount++
+		}
+	}
+
+	assert.Equal(t, numGoroutines, successCount, "All goroutines should succeed")
+	assert.Equal(t, 0, errorCount, "No goroutines should encounter errors")
+}
+
+// TestDeepCopyMap_DifferentSizes tests pooling with various data sizes.
+// This validates that the pool works correctly with different map/slice sizes.
+func TestDeepCopyMap_DifferentSizes(t *testing.T) {
+	testCases := []struct {
+		name string
+		data map[string]any
+	}{
+		{
+			name: "empty map",
+			data: map[string]any{},
+		},
+		{
+			name: "small map",
+			data: map[string]any{"key": "value"},
+		},
+		{
+			name: "medium map",
+			data: map[string]any{
+				"key1": "value1",
+				"key2": "value2",
+				"key3": map[string]any{
+					"nested1": "value",
+					"nested2": []any{1, 2, 3, 4, 5},
+				},
+			},
+		},
+		{
+			name: "large nested structure",
+			data: generateLargeMap(5, 10),
+		},
+		{
+			name: "large array",
+			data: map[string]any{
+				"array": generateLargeSlice(100),
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			copy, err := deepCopyMap(tc.data)
+			assert.Nil(t, err)
+			assert.NotNil(t, copy)
+
+			// Verify structure is copied correctly.
+			assert.Equal(t, len(tc.data), len(copy))
+		})
+	}
+}
+
+// generateLargeMap generates a nested map for testing.
+func generateLargeMap(depth, breadth int) map[string]any {
+	if depth == 0 {
+		return map[string]any{"leaf": "value"}
+	}
+
+	result := make(map[string]any, breadth)
+	for i := 0; i < breadth; i++ {
+		key := "key" + string(rune('0'+i%10))
+		if i%2 == 0 {
+			result[key] = generateLargeMap(depth-1, breadth)
+		} else {
+			result[key] = "value" + string(rune('0'+i%10))
+		}
+	}
+	return result
+}
+
+// generateLargeSlice generates a large slice for testing.
+func generateLargeSlice(size int) []any {
+	result := make([]any, size)
+	for i := 0; i < size; i++ {
+		result[i] = "item" + string(rune('0'+i%10))
+	}
+	return result
+}
+
+// BenchmarkDeepCopyMap benchmarks the deep copy performance with pooling.
+// This demonstrates P7.9 optimization: object pooling reduces allocations.
+func BenchmarkDeepCopyMap(b *testing.B) {
+	testData := map[string]any{
+		"string": "value",
+		"number": 42,
+		"nested": map[string]any{
+			"deep": map[string]any{
+				"value": "nested value",
+				"array": []any{"a", "b", "c"},
+			},
+			"array": []any{1, 2, 3},
+		},
+		"slice": []any{"x", "y", "z"},
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, _ = deepCopyMap(testData)
+	}
+}
+
+// BenchmarkDeepCopyMap_Large benchmarks deep copy with large nested structures.
+func BenchmarkDeepCopyMap_Large(b *testing.B) {
+	testData := generateLargeMap(5, 10)
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, _ = deepCopyMap(testData)
+	}
+}
+
+// BenchmarkMerge_WithPooling benchmarks merge operations with pooling.
+// This measures the cumulative benefit of P7.9: pooling reduces allocations during merges.
+func BenchmarkMerge_WithPooling(b *testing.B) {
+	atmosConfig := &schema.AtmosConfiguration{
+		Settings: schema.AtmosSettings{
+			ListMergeStrategy: ListMergeStrategyReplace,
+		},
+	}
+
+	map1 := map[string]any{
+		"component": "vpc",
+		"vars": map[string]any{
+			"region":     "us-east-1",
+			"cidr_block": "10.0.0.0/16",
+			"enable_dns": true,
+			"tags":       []any{"prod", "network"},
+		},
+	}
+
+	map2 := map[string]any{
+		"component": "vpc",
+		"vars": map[string]any{
+			"region":             "us-west-2",
+			"availability_zones": []any{"us-west-2a", "us-west-2b"},
+			"tags":               []any{"dev", "network", "shared"},
+		},
+	}
+
+	map3 := map[string]any{
+		"metadata": map[string]any{
+			"name": "test-stack",
+			"type": "terraform",
+		},
+	}
+
+	inputs := []map[string]any{map1, map2, map3}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, _ = Merge(atmosConfig, inputs)
+	}
+}
