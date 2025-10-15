@@ -141,30 +141,17 @@ Provenance adapts to your environment:
 
 ## How It Works
 
-Under the hood, provenance tracking:
+Provenance tracking follows your configuration through its entire journey:
 
-1. **Captures YAML positions** during parsing using `gopkg.in/yaml.v3`'s Node API
-2. **Records every merge operation** during stack processing with file/line/column
-3. **Builds inheritance chains** showing the complete merge history
-4. **Renders inline** as YAML comments or JSON metadata
+As Atmos processes your stacks, it reads each YAML file and tracks every value it encounters. When it reads a line like `cidr: "10.100.0.0/16"` from `orgs/acme/prod/us-east-2.yaml`, it records: "I saw this value at line 10, column 3 in this file."
 
-The system uses a `ProvenanceTracker` interface, making it extensible to other configuration types in the future (`atmos.yaml`, vendor manifests, workflows).
+When Atmos imports another file, it remembers where it came from and how deep in the import chain it is. If `_defaults.yaml` imports `mixins/region.yaml`, and that defines `region: us-east-2`, Atmos tracks that this value came from two levels deep in the import chain.
+
+As configurations merge together—when a child stack overrides a parent's value, or when imports stack on top of each other—Atmos remembers each step. It knows which file provided the final value, but also which files were overridden along the way.
+
+Finally, when you run `atmos describe component --provenance`, it annotates the output with all this information: which file, which line, how deep in the import chain, and whether the value was defined directly, inherited, or computed from a template.
 
 Performance overhead is minimal—less than 10% when provenance tracking is enabled, and zero overhead when disabled (the default).
-
-## Comparison with `sources`
-
-The existing `sources` output continues to work and isn't going away. However, provenance offers several advantages:
-
-| Feature | `sources` | `--provenance` |
-|---------|-----------|----------------|
-| Line numbers | ✗ | ✓ File:line:column |
-| Nested values | ✗ Top-level only | ✓ All values |
-| Array elements | ✗ | ✓ |
-| Map entries | ✗ | ✓ |
-| Valid YAML output | ✗ | ✓ Pipe-able |
-| Inheritance depth | ✗ | ✓ With `[N]` indicators |
-| Visual symbols | ✗ | ✓ ●/○/∴ |
 
 ## Get Started
 
