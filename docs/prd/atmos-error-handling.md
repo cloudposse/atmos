@@ -22,7 +22,7 @@ errors/
 ├── builder.go            # Fluent API for rich errors
 ├── formatter.go          # TTY-aware error display
 └── sentry.go            # Sentry integration
-```
+```text
 
 ### Dependencies
 
@@ -87,7 +87,7 @@ var (
 
 // Usage
 return fmt.Errorf("%w: component=%s", errUtils.ErrInvalidComponent, component)
-```
+```text
 
 ### 3. Exit Code Wrapper Pattern
 
@@ -138,7 +138,7 @@ err := errUtils.Build(baseErr).
     WithContext("component", "vpc").
     WithExitCode(2).
     Err()
-```
+```text
 
 **Builder Methods**:
 - `WithExplanation(string)` - Detailed description of what went wrong
@@ -252,7 +252,7 @@ This ensures Sentry focuses on actionable failures that affect users, without ov
    - Add exit code
    ↓
 3. Return enriched error
-```
+```text
 
 ### Error Display
 
@@ -285,7 +285,7 @@ This ensures Sentry focuses on actionable failures that affect users, without ov
 3. Create Sentry event
    ↓
 4. Send to Sentry (async)
-```
+```text
 
 ## Configuration Schema
 
@@ -312,7 +312,7 @@ errors:
 Defined in `errors/errors.go`:
 ```go
 var ErrInvalidComponent = errors.New("invalid component")
-```
+```text
 
 Use for:
 - Domain errors
@@ -350,7 +350,7 @@ Use for:
 Add descriptive text to errors (when structured context not needed):
 ```go
 fmt.Errorf("%w: failed to process configuration", ErrInvalidComponent)
-```
+```text
 
 Use for:
 - Simple error descriptions
@@ -411,7 +411,7 @@ Use builder's `WithContext()` for structured, programmatic context:
 .WithContext("password", userPassword)
 .WithContext("api_key", apiKey)
 .WithContext("email", userEmail)
-```
+```text
 
 **Context Usage:**
 - **Verbose Mode**: Displayed as styled 2-column table
@@ -445,7 +445,7 @@ Hints should be:
 
 // ❌ Bad
 .WithHint("Failed with password: " + password)
-```
+```text
 
 ## Testing Strategy
 

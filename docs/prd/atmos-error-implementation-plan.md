@@ -42,7 +42,7 @@ Creating `AtmosError` struct would:
 ## Visual Error Formatting Examples
 
 ### Simple Error (TTY)
-```
+```text
 [RED BOLD]Error:[/] [RED]Component 'vpc' not found in stack 'prod/us-east-1'[/]
 
 [CYAN]💡 Use 'atmos list components --stack prod/us-east-1' to see available components[/]
@@ -53,14 +53,14 @@ Creating `AtmosError` struct would:
 ```
 
 ### Wrapped Error Chain - Short (Collapsed, Default)
-```
+```text
 Error: component 'vpc' not found
 
 💡 Use 'atmos list components'
 ```
 
 ### Wrapped Error Chain - Long (Collapsed, Smart Wrapping)
-```
+```text
 Error: failed to initialize component vpc
   caused by: failed to connect to database
   caused by: connection refused
@@ -76,7 +76,7 @@ Context:
 ```
 
 ### Wrapped Error Chain (Verbose Mode)
-```
+```text
 Error: failed to initialize component vpc
 
 Error Chain:
@@ -110,7 +110,7 @@ Context:
 ```
 
 ### Fatal Error with Sentry
-```
+```text
 [RED BOLD]Error:[/] [RED]Authentication failed[/]
 
 [CYAN]💡 Check your AWS credentials[/]
@@ -124,7 +124,7 @@ Context:
 ```
 
 ### Non-TTY Output (Plain Text)
-```
+```text
 Error: Component 'vpc' not found in stack 'prod/us-east-1'
 
 💡 Use 'atmos list components --stack prod/us-east-1' to see available components
@@ -172,7 +172,7 @@ errors:
 logs:
   level: info
   file: /var/log/atmos.log
-```
+```text
 
 ### Schema Structure
 
@@ -224,7 +224,7 @@ type Logs struct {
 ### What Gets Sent to Sentry
 
 **1. Stack Context (Sentry Tags):**
-```
+```text
 atmos.stack: prod/us-east-1
 atmos.component: vpc
 atmos.namespace: cp
@@ -235,20 +235,20 @@ atmos.workspace: prod-use1
 ```
 
 **2. Error Safe Details (Sentry Tags):**
-```
+```text
 error.component: vpc
 error.config_file: stacks/prod/us-east-1.yaml
 error.operation: terraform plan
 ```
 
 **3. Hints (Sentry Breadcrumbs):**
-```
+```text
 [INFO] hint: Check database connectivity
 [INFO] hint: Verify database credentials
 ```
 
 **4. Custom Tags (from config):**
-```
+```text
 team: platform
 service: atmos
 datacenter: us-east-1
@@ -327,7 +327,7 @@ func ReportError(err error, stackContext *schema.Context) string {
 
     return eventID
 }
-```
+```text
 
 ## Implementation Phases
 
@@ -455,7 +455,7 @@ website/docs/
     errors.mdx           # User-facing error documentation
 
 CLAUDE.md              # Updated with error handling patterns
-```
+```text
 
 ## Error Usage Patterns
 
@@ -472,7 +472,7 @@ err := errors.WithSafeDetails(ErrInvalidComponent,
     errors.Safe(component),
     errors.Safe(stack),
 )
-```
+```text
 
 ### Complex Error (Builder)
 ```go
@@ -490,7 +490,7 @@ return Build(ErrInvalidComponent).
 if err != nil {
     return errors.Wrapf(err, "failed to load %s", path)
 }
-```
+```text
 
 ### Logger Integration
 ```go
@@ -570,7 +570,7 @@ ATMOS_ERRORS_SENTRY_ENABLED=true
 ATMOS_ERRORS_SENTRY_DSN="https://..."
 ATMOS_ERRORS_SENTRY_ENVIRONMENT=staging
 ATMOS_ERRORS_SENTRY_CAPTURE_STACK_CONTEXT=true
-```
+```text
 
 ## References
 

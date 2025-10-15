@@ -42,7 +42,7 @@ linters:
           msg: Use `t.Skipf("<reason>")` with a descriptive reason; do not use `t.Skip`/`t.SkipNow`
         - pattern: ^path\.Join$
           msg: Use `filepath.Join` for OS-appropriate path separators instead of `path.Join` (which always uses forward slashes)
-        - pattern: 'WithHint\((?:[^()]*|\([^)]*\))*,\s*fmt\.Sprintf'
+        - pattern: 'WithHint\((?:[^()]|\((?:[^()]|\([^()]*\))*\))*?,\s*fmt\.Sprintf'
           msg: Use `WithHintf()` instead of `WithHint(err, fmt.Sprintf(...))` for formatted hint messages
         - pattern: term\.IsTerminal\(
           msg: Use `term.IsTTYSupportForStdout()` or `term.IsTTYSupportForStderr()` instead of `term.IsTerminal()` for consistent and mockable TTY detection
