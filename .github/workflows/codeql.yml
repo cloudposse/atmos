@@ -90,17 +90,52 @@ jobs:
           go-version-file: go.mod
           cache: true
 
+      # Install the golangci-lint v2 CLI tool (not the linters themselves).
+      # This tool is needed to run `golangci-lint custom` which builds a custom binary
+      # that includes both standard linters AND our custom module plugins.
       - name: Install golangci-lint v2 for custom build
         run: |
           go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.5.0
 
+      # Build a custom golangci-lint binary with our lintroller plugin compiled in.
+      #
+      # How this works:
+      # 1. `golangci-lint custom` reads .custom-gcl.yml
+      # 2. Clones golangci-lint repo and adds blank imports for each plugin
+      # 3. Builds a single binary (custom-gcl) containing:
+      #    - All standard golangci-lint linters (bodyclose, cyclop, etc.)
+      #    - All custom plugin linters (lintroller, etc.)
+      # 4. We copy it to /usr/local/bin/golangci-lint so the action uses it
+      #
+      # This approach allows multiple custom linters - just add them to .custom-gcl.yml
+      # and they'll all be compiled into the same custom-gcl binary.
       - name: Build custom golangci-lint with lintroller plugin
         run: |
           golangci-lint custom
-          # Replace golangci-lint in PATH with our custom binary
+          # Replace the standard golangci-lint binary with our custom one
+          # The action will use this when install-mode is set to 'none'
           sudo cp ./custom-gcl /usr/local/bin/golangci-lint
           golangci-lint --version
 
+      # Run the golangci-lint action using our custom binary with plugins.
+      #
+      # Key settings:
+      # - install-mode: none - Tells the action to use the binary already in PATH
+      #                        (our custom-gcl that we just installed)
+      # - only-new-issues: true - Only report issues in changed code
+      # - SARIF output - For GitHub Advanced Security / CodeQL integration
+      # - issues-exit-code: 0 - Always succeed so SARIF upload happens
+      #
+      # The action provides:
+      # - Inline PR annotations for linting issues
+      # - Caching for faster runs
+      # - GitHub UI integration
+      #
+      # Our custom binary includes lintroller, so violations of:
+      # - os.MkdirTemp in tests (should use t.TempDir)
+      # - os.Setenv in tests (should use t.Setenv)
+      # - t.Setenv in defer blocks (should use os.Setenv)
+      # will appear in the SARIF output and GitHub Security tab.
       - name: Run golangci-lint with lintroller plugin
         uses: golangci/golangci-lint-action@v8
         with:
