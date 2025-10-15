@@ -34,7 +34,7 @@ lintroller: tools/lintroller/.lintroller
 
 tools/lintroller/.lintroller: tools/lintroller/*.go
 	@echo "Building lintroller..."
-	@cd tools/lintroller && go build -o .lintroller .
+	@cd tools/lintroller && go build -o .lintroller . && chmod +x .lintroller
 
 build-linux: GOOS=linux
 build-linux: build-default
