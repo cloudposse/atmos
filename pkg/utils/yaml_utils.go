@@ -30,6 +30,10 @@ const (
 	AtmosYamlFuncGitRoot         = "!repo-root"
 
 	DefaultYAMLIndent = 2
+
+	// Cache statistics constants.
+	cacheStatsPercentageMultiplier = 100
+	cacheStatsTopFilesCount        = 10
 )
 
 var (
@@ -61,6 +65,25 @@ var (
 	// Cache key: file path + content hash.
 	parsedYAMLCache   = make(map[string]*parsedYAMLCacheEntry)
 	parsedYAMLCacheMu sync.RWMutex
+
+	// Per-key locks to prevent race conditions when multiple goroutines
+	// try to parse the same file simultaneously. This prevents 156+ goroutines
+	// from all parsing the same file when they could share the result.
+	parsedYAMLLocks   = make(map[string]*sync.Mutex)
+	parsedYAMLLocksMu sync.Mutex
+
+	// Cache statistics for debugging and optimization.
+	parsedYAMLCacheStats = struct {
+		sync.RWMutex
+		hits         int64
+		misses       int64
+		totalCalls   int64
+		uniqueFiles  map[string]int // file path -> call count
+		uniqueHashes map[string]int // content hash -> call count
+	}{
+		uniqueFiles:  make(map[string]int),
+		uniqueHashes: make(map[string]int),
+	}
 
 	ErrIncludeYamlFunctionInvalidArguments    = errors.New("invalid number of arguments in the !include function")
 	ErrIncludeYamlFunctionInvalidFile         = errors.New("the !include function references a file that does not exist")
@@ -95,8 +118,24 @@ func generateParsedYAMLCacheKey(file string, content string) string {
 	return file + ":" + contentHash
 }
 
+// getOrCreateCacheLock returns a mutex for the given cache key.
+// This implements per-key locking to prevent race conditions when multiple
+// goroutines try to parse the same file simultaneously.
+func getOrCreateCacheLock(cacheKey string) *sync.Mutex {
+	parsedYAMLLocksMu.Lock()
+	defer parsedYAMLLocksMu.Unlock()
+
+	mu, exists := parsedYAMLLocks[cacheKey]
+	if !exists {
+		mu = &sync.Mutex{}
+		parsedYAMLLocks[cacheKey] = mu
+	}
+	return mu
+}
+
 // getCachedParsedYAML retrieves a cached parsed YAML node if it exists.
 // Returns a copy of the node to prevent external mutations.
+// Note: Statistics tracking is done by the caller to avoid double-counting.
 // Note: perf.Track() removed from this hot path to reduce overhead.
 func getCachedParsedYAML(file string, content string) (*yaml.Node, PositionMap, bool) {
 	cacheKey := generateParsedYAMLCacheKey(file, content)
@@ -134,6 +173,122 @@ func cacheParsedYAML(file string, content string, node *yaml.Node, positions Pos
 	parsedYAMLCache[cacheKey] = &parsedYAMLCacheEntry{
 		node:      nodeCopy,
 		positions: positions,
+	}
+}
+
+// parseAndCacheYAML parses YAML content and caches the result.
+// This is extracted to reduce nesting complexity in UnmarshalYAMLFromFileWithPositions.
+func parseAndCacheYAML(atmosConfig *schema.AtmosConfiguration, input string, file string) (*yaml.Node, PositionMap, error) {
+	// Parse the YAML.
+	var parsedNode yaml.Node
+	b := []byte(input)
+
+	// Unmarshal into yaml.Node.
+	if err := yaml.Unmarshal(b, &parsedNode); err != nil {
+		return nil, nil, err
+	}
+
+	// Extract positions if provenance tracking is enabled.
+	var positions PositionMap
+	if atmosConfig.TrackProvenance {
+		positions = ExtractYAMLPositions(&parsedNode, true)
+	}
+
+	// Process custom tags.
+	if err := processCustomTags(atmosConfig, &parsedNode, file); err != nil {
+		return nil, nil, err
+	}
+
+	// Cache the parsed and processed node with content-aware key.
+	cacheParsedYAML(file, input, &parsedNode, positions)
+
+	return &parsedNode, positions, nil
+}
+
+// handleCacheMiss handles the cache miss case with per-key locking and double-checked locking.
+// This prevents multiple goroutines from parsing the same file simultaneously.
+func handleCacheMiss(atmosConfig *schema.AtmosConfiguration, file string, input string) (*yaml.Node, PositionMap, error) {
+	cacheKey := generateParsedYAMLCacheKey(file, input)
+	mu := getOrCreateCacheLock(cacheKey)
+	mu.Lock()
+	defer mu.Unlock()
+
+	// Double-check: another goroutine may have cached it while we waited for the lock.
+	node, positions, found := getCachedParsedYAML(file, input)
+	if found {
+		// Another goroutine cached it while we waited - cache hit!
+		parsedYAMLCacheStats.Lock()
+		parsedYAMLCacheStats.hits++
+		parsedYAMLCacheStats.Unlock()
+		return node, positions, nil
+	}
+
+	// Still not in cache - we're the first goroutine to parse this file.
+	// Track cache miss.
+	parsedYAMLCacheStats.Lock()
+	parsedYAMLCacheStats.misses++
+	parsedYAMLCacheStats.Unlock()
+
+	// Parse and cache the YAML.
+	node, positions, err := parseAndCacheYAML(atmosConfig, input, file)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return node, positions, nil
+}
+
+// PrintParsedYAMLCacheStats prints cache statistics for debugging.
+// This helps identify cache effectiveness and opportunities for optimization.
+func PrintParsedYAMLCacheStats() {
+	parsedYAMLCacheStats.RLock()
+	defer parsedYAMLCacheStats.RUnlock()
+
+	totalCalls := parsedYAMLCacheStats.totalCalls
+	hits := parsedYAMLCacheStats.hits
+	misses := parsedYAMLCacheStats.misses
+	uniqueFiles := len(parsedYAMLCacheStats.uniqueFiles)
+	uniqueHashes := len(parsedYAMLCacheStats.uniqueHashes)
+
+	var hitRate float64
+	if totalCalls > 0 {
+		hitRate = float64(hits) / float64(totalCalls) * cacheStatsPercentageMultiplier
+	}
+
+	log.Info("YAML Cache Statistics",
+		"totalCalls", totalCalls,
+		"cacheHits", hits,
+		"cacheMisses", misses,
+		"hitRate", hitRate,
+		"uniqueFiles", uniqueFiles,
+		"uniqueHashes", uniqueHashes,
+		"callsPerFile", float64(totalCalls)/float64(uniqueFiles),
+		"callsPerHash", float64(totalCalls)/float64(uniqueHashes),
+	)
+
+	// Print top files by call count.
+	type fileCount struct {
+		file  string
+		count int
+	}
+	var fileCounts []fileCount
+	for file, count := range parsedYAMLCacheStats.uniqueFiles {
+		fileCounts = append(fileCounts, fileCount{file, count})
+	}
+
+	// Sort by count descending.
+	for i := 0; i < len(fileCounts); i++ {
+		for j := i + 1; j < len(fileCounts); j++ {
+			if fileCounts[j].count > fileCounts[i].count {
+				fileCounts[i], fileCounts[j] = fileCounts[j], fileCounts[i]
+			}
+		}
+	}
+
+	// Print top most-called files.
+	log.Info("Top 10 most-called files:")
+	for i := 0; i < cacheStatsTopFilesCount && i < len(fileCounts); i++ {
+		log.Info("  ", "file", fileCounts[i].file, "calls", fileCounts[i].count)
 	}
 }
 
@@ -478,32 +633,31 @@ func UnmarshalYAMLFromFileWithPositions[T any](atmosConfig *schema.AtmosConfigur
 
 	var zeroValue T
 
-	// Try to get cached parsed YAML first.
-	// Pass the input content to generate a cache key that includes content hash.
+	// Track total calls and unique files/hashes.
+	parsedYAMLCacheStats.Lock()
+	parsedYAMLCacheStats.totalCalls++
+	parsedYAMLCacheStats.uniqueFiles[file]++
+	// Extract content hash for tracking.
+	hash := sha256.Sum256([]byte(input))
+	contentHash := hex.EncodeToString(hash[:])
+	parsedYAMLCacheStats.uniqueHashes[contentHash]++
+	parsedYAMLCacheStats.Unlock()
+
+	// Try to get cached parsed YAML first (fast path with read lock).
 	node, positions, found := getCachedParsedYAML(file, input)
-	if !found {
-		// Cache miss - parse the YAML.
-		var parsedNode yaml.Node
-		b := []byte(input)
-
-		// Unmarshal into yaml.Node.
-		if err := yaml.Unmarshal(b, &parsedNode); err != nil {
+	if found {
+		// Cache hit on first check.
+		parsedYAMLCacheStats.Lock()
+		parsedYAMLCacheStats.hits++
+		parsedYAMLCacheStats.Unlock()
+	} else {
+		// Cache miss - use per-key locking to prevent multiple goroutines
+		// from parsing the same file simultaneously.
+		var err error
+		node, positions, err = handleCacheMiss(atmosConfig, file, input)
+		if err != nil {
 			return zeroValue, nil, err
 		}
-
-		// Extract positions if provenance tracking is enabled.
-		if atmosConfig.TrackProvenance {
-			positions = ExtractYAMLPositions(&parsedNode, true)
-		}
-
-		// Process custom tags.
-		if err := processCustomTags(atmosConfig, &parsedNode, file); err != nil {
-			return zeroValue, nil, err
-		}
-
-		// Cache the parsed and processed node with content-aware key.
-		cacheParsedYAML(file, input, &parsedNode, positions)
-		node = &parsedNode
 	}
 
 	// Decode the yaml.Node into the desired type T.
