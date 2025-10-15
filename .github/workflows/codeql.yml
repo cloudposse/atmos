@@ -97,13 +97,19 @@ jobs:
       - name: Build custom golangci-lint with lintroller plugin
         run: |
           golangci-lint custom
-          chmod +x ./custom-gcl
+          # Replace golangci-lint in PATH with our custom binary
+          sudo cp ./custom-gcl /usr/local/bin/golangci-lint
+          golangci-lint --version
 
-      - name: Run custom golangci-lint with lintroller
-        run: |
-          # Run custom-gcl with SARIF output for CodeQL integration
-          # Always exit 0 so we upload the sarif file to CodeQL
-          ./custom-gcl run --new-from-rev=origin/${{ github.base_ref }} --out-format=sarif:golangci-lint.sarif --issues-exit-code=0 || true
+      - name: Run golangci-lint with lintroller plugin
+        uses: golangci/golangci-lint-action@v8
+        with:
+          version: latest
+          install-mode: none  # Use the custom binary we built above
+          only-new-issues: true
+          args: >
+            --out-format=sarif:golangci-lint.sarif
+            --issues-exit-code=0
 
       - name: Upload filtered SARIF results
         uses: github/codeql-action/upload-sarif@v3
