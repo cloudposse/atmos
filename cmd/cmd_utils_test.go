@@ -3,6 +3,7 @@ package cmd
 import (
 	"os"
 	"os/exec"
+	"sort"
 	"testing"
 
 	"github.com/spf13/cobra"
@@ -435,6 +436,83 @@ func TestIdentityFlagCompletionPartialMatch(t *testing.T) {
 	assert.NotEmpty(t, completions)
 	assert.Contains(t, completions, "sso")
 	assert.Equal(t, 4, int(directive)) // ShellCompDirectiveNoFileComp
+}
+
+// TestIdentityFlagCompletionSorting tests that identities are returned in sorted order.
+func TestIdentityFlagCompletionSorting(t *testing.T) {
+	// Save current directory.
+	origDir, err := os.Getwd()
+	require.NoError(t, err)
+	defer func() {
+		err := os.Chdir(origDir)
+		require.NoError(t, err)
+	}()
+
+	// Change to demo-auth directory.
+	err = os.Chdir("../examples/demo-auth")
+	require.NoError(t, err)
+
+	// Call completion function.
+	completions, _ := identityFlagCompletion(nil, []string{}, "")
+
+	// Verify completions are in sorted order.
+	assert.NotEmpty(t, completions)
+	sortedCompletions := make([]string, len(completions))
+	copy(sortedCompletions, completions)
+	sort.Strings(sortedCompletions)
+	assert.Equal(t, sortedCompletions, completions, "Completions should be sorted alphabetically")
+}
+
+// TestIdentityFlagCompletionErrorPath tests error handling when config loading fails.
+func TestIdentityFlagCompletionErrorPath(t *testing.T) {
+	// Save current directory.
+	origDir, err := os.Getwd()
+	require.NoError(t, err)
+	defer func() {
+		err := os.Chdir(origDir)
+		require.NoError(t, err)
+	}()
+
+	// Create a temp directory with invalid atmos.yaml.
+	tmpDir := t.TempDir()
+	err = os.Chdir(tmpDir)
+	require.NoError(t, err)
+
+	// Create invalid YAML that will cause InitCliConfig to fail.
+	invalidYaml := `invalid: yaml: content:
+  - this is: [broken
+`
+	err = os.WriteFile("atmos.yaml", []byte(invalidYaml), 0o644)
+	require.NoError(t, err)
+
+	// Call completion function - should handle error gracefully.
+	completions, directive := identityFlagCompletion(nil, []string{}, "")
+
+	// Should return empty results with NoFileComp directive on error.
+	assert.Empty(t, completions)
+	assert.Equal(t, 4, int(directive)) // ShellCompDirectiveNoFileComp
+}
+
+// TestAddIdentityCompletionErrorHandling tests error handling in registration.
+func TestAddIdentityCompletionErrorHandling(t *testing.T) {
+	// Create a command with identity flag.
+	cmd := &cobra.Command{
+		Use:   "test",
+		Short: "Test command",
+	}
+	cmd.Flags().StringP("identity", "i", "", "Test identity flag")
+
+	// Register completion twice to test error path.
+	AddIdentityCompletion(cmd)
+
+	// Call again - should handle error gracefully (already registered).
+	// This tests the error logging path.
+	AddIdentityCompletion(cmd)
+
+	// Verify completion is still registered.
+	completionFunc, exists := cmd.GetFlagCompletionFunc("identity")
+	assert.True(t, exists)
+	assert.NotNil(t, completionFunc)
 }
 
 // TestStackFlagCompletion tests the stackFlagCompletion function.
