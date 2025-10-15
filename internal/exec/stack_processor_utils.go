@@ -26,9 +26,6 @@ var (
 	// File content sync map.
 	getFileContentSyncMap = sync.Map{}
 
-	// Mutex to serialize updates of the result map of ProcessYAMLConfigFiles function.
-	processYAMLConfigFilesLock = &sync.Mutex{}
-
 	// Mutex to serialize writes to importsConfig maps during parallel import processing.
 	importsConfigLock = &sync.Mutex{}
 
@@ -139,6 +136,19 @@ func cacheBaseComponentConfig(cacheKey string, config *schema.BaseComponentConfi
 	baseComponentConfigCache[cacheKey] = &copyConfig
 }
 
+// stackProcessResult holds the result of processing a single stack in parallel.
+type stackProcessResult struct {
+	index         int
+	stackFileName string
+	yamlConfig    string
+	finalConfig   map[string]any
+	stackConfig   map[string]any
+	importsConfig map[string]map[string]any
+	uniqueImports []string
+	mergeContext  *m.MergeContext
+	err           error
+}
+
 // ProcessYAMLConfigFiles takes a list of paths to stack manifests, processes and deep-merges all imports, and returns a list of stack configs.
 func ProcessYAMLConfigFiles(
 	atmosConfig *schema.AtmosConfiguration,
@@ -160,10 +170,11 @@ func ProcessYAMLConfigFiles(
 
 	count := len(filePaths)
 	listResult := make([]string, count)
-	mapResult := map[string]any{}
-	rawStackConfigs := map[string]map[string]any{}
-	var errorResult error
-	var errorLock sync.Mutex
+	mapResult := make(map[string]any, count)
+	rawStackConfigs := make(map[string]map[string]any, count)
+
+	// Create channel for results - no locks needed with channels.
+	results := make(chan stackProcessResult, count)
 	var wg sync.WaitGroup
 	wg.Add(count)
 
@@ -209,9 +220,7 @@ func ProcessYAMLConfigFiles(
 				mergeContext,
 			)
 			if err != nil {
-				errorLock.Lock()
-				errorResult = err
-				errorLock.Unlock()
+				results <- stackProcessResult{index: i, err: err}
 				return
 			}
 
@@ -240,45 +249,59 @@ func ProcessYAMLConfigFiles(
 				importsConfig,
 				true)
 			if err != nil {
-				errorLock.Lock()
-				errorResult = err
-				errorLock.Unlock()
+				results <- stackProcessResult{index: i, err: err}
 				return
 			}
 
 			finalConfig["imports"] = uniqueImports
 
-			// Store merge context for this stack file if provenance tracking is enabled.
-			if atmosConfig != nil && atmosConfig.TrackProvenance && mergeContext != nil && mergeContext.IsProvenanceEnabled() {
-				SetMergeContextForStack(stackFileName, mergeContext)
-				// Also set as last merge context for backward compatibility (note: may be overwritten by other goroutines)
-				SetLastMergeContext(mergeContext)
-			}
-
 			yamlConfig, err := u.ConvertToYAML(finalConfig)
 			if err != nil {
-				errorLock.Lock()
-				errorResult = err
-				errorLock.Unlock()
+				results <- stackProcessResult{index: i, err: err}
 				return
 			}
 
-			processYAMLConfigFilesLock.Lock()
-			defer processYAMLConfigFilesLock.Unlock()
-
-			listResult[i] = yamlConfig
-			mapResult[stackFileName] = finalConfig
-			rawStackConfigs[stackFileName] = map[string]any{}
-			rawStackConfigs[stackFileName]["stack"] = stackConfig
-			rawStackConfigs[stackFileName]["imports"] = importsConfig
-			rawStackConfigs[stackFileName]["import_files"] = uniqueImports
+			// Send result via channel (lock-free).
+			results <- stackProcessResult{
+				index:         i,
+				stackFileName: stackFileName,
+				yamlConfig:    yamlConfig,
+				finalConfig:   finalConfig,
+				stackConfig:   stackConfig,
+				importsConfig: importsConfig,
+				uniqueImports: uniqueImports,
+				mergeContext:  mergeContext,
+				err:           nil,
+			}
 		}(i, filePath)
 	}
 
-	wg.Wait()
+	// Close results channel when all goroutines complete.
+	go func() {
+		wg.Wait()
+		close(results)
+	}()
 
-	if errorResult != nil {
-		return nil, nil, nil, errorResult
+	// Collect all results from channel (no lock contention).
+	for result := range results {
+		if result.err != nil {
+			return nil, nil, nil, result.err
+		}
+
+		// Store merge context for this stack file if provenance tracking is enabled.
+		if atmosConfig != nil && atmosConfig.TrackProvenance && result.mergeContext != nil && result.mergeContext.IsProvenanceEnabled() {
+			SetMergeContextForStack(result.stackFileName, result.mergeContext)
+			// Also set as last merge context for backward compatibility (note: may be overwritten by other results)
+			SetLastMergeContext(result.mergeContext)
+		}
+
+		listResult[result.index] = result.yamlConfig
+		mapResult[result.stackFileName] = result.finalConfig
+		rawStackConfigs[result.stackFileName] = map[string]any{
+			"stack":        result.stackConfig,
+			"imports":      result.importsConfig,
+			"import_files": result.uniqueImports,
+		}
 	}
 
 	return listResult, mapResult, rawStackConfigs, nil

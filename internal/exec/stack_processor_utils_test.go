@@ -988,7 +988,7 @@ func TestHierarchicalImports_ImportOrderPreservation(t *testing.T) {
 	}
 
 	// Process the stack manifest with all hierarchical imports
-	deepMergedConfig, importsConfig, stackConfigMap, _, _, _, helmOverridesImports, err := ProcessYAMLConfigFile(
+	deepMergedConfig, importsConfig, stackConfigMap, terraformInline, terraformImports, helmfileInline, helmOverridesImports, err := ProcessYAMLConfigFile(
 		&atmosConfig,
 		stacksBasePath,
 		filePath,
@@ -1006,6 +1006,9 @@ func TestHierarchicalImports_ImportOrderPreservation(t *testing.T) {
 	)
 	_ = importsConfig
 	_ = stackConfigMap
+	_ = terraformInline
+	_ = terraformImports
+	_ = helmfileInline
 	_ = helmOverridesImports
 
 	require.NoError(t, err)
@@ -1076,7 +1079,7 @@ func TestHierarchicalImports_GlobPatternOrdering(t *testing.T) {
 		},
 	}
 
-	deepMergedConfig, importsConfig, stackConfigMap, _, _, _, helmOverridesImports, err := ProcessYAMLConfigFile(
+	deepMergedConfig, importsConfig, stackConfigMap, terraformInline, terraformImports, helmfileInline, helmOverridesImports, err := ProcessYAMLConfigFile(
 		&atmosConfig,
 		stacksBasePath,
 		filePath,
@@ -1094,6 +1097,9 @@ func TestHierarchicalImports_GlobPatternOrdering(t *testing.T) {
 	)
 	_ = importsConfig
 	_ = stackConfigMap
+	_ = terraformInline
+	_ = terraformImports
+	_ = helmfileInline
 	_ = helmOverridesImports
 
 	require.NoError(t, err)
@@ -1136,7 +1142,7 @@ func TestHierarchicalImports_ProdStack(t *testing.T) {
 		},
 	}
 
-	deepMergedConfig, importsConfig, stackConfigMap, _, _, _, helmOverridesImports, err := ProcessYAMLConfigFile(
+	deepMergedConfig, importsConfig, stackConfigMap, terraformInline, terraformImports, helmfileInline, helmOverridesImports, err := ProcessYAMLConfigFile(
 		&atmosConfig,
 		stacksBasePath,
 		filePath,
@@ -1154,6 +1160,9 @@ func TestHierarchicalImports_ProdStack(t *testing.T) {
 	)
 	_ = importsConfig
 	_ = stackConfigMap
+	_ = terraformInline
+	_ = terraformImports
+	_ = helmfileInline
 	_ = helmOverridesImports
 
 	require.NoError(t, err)
@@ -1201,7 +1210,7 @@ func TestHierarchicalImports_ComponentConfiguration(t *testing.T) {
 		},
 	}
 
-	deepMergedConfig, importsConfig, stackConfigMap, _, _, _, helmOverridesImports, err := ProcessYAMLConfigFile(
+	deepMergedConfig, importsConfig, stackConfigMap, terraformInline, terraformImports, helmfileInline, helmOverridesImports, err := ProcessYAMLConfigFile(
 		&atmosConfig,
 		stacksBasePath,
 		filePath,
@@ -1219,6 +1228,9 @@ func TestHierarchicalImports_ComponentConfiguration(t *testing.T) {
 	)
 	_ = importsConfig
 	_ = stackConfigMap
+	_ = terraformInline
+	_ = terraformImports
+	_ = helmfileInline
 	_ = helmOverridesImports
 
 	require.NoError(t, err)
