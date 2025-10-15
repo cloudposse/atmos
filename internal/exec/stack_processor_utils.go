@@ -43,6 +43,12 @@ var (
 	// No cache invalidation needed - configuration is immutable per command execution.
 	baseComponentConfigCache   = make(map[string]*schema.BaseComponentConfig)
 	baseComponentConfigCacheMu sync.RWMutex
+
+	// JSON schema compilation cache to avoid re-compiling the same schema for every stack file.
+	// Cache key: absolute file path to schema file -> compiled schema.
+	// No cache invalidation needed - schemas are immutable per command execution.
+	jsonSchemaCache   = make(map[string]*jsonschema.Schema)
+	jsonSchemaCacheMu sync.RWMutex
 )
 
 // SetMergeContextForStack stores the merge context for a specific stack file.
@@ -134,6 +140,29 @@ func cacheBaseComponentConfig(cacheKey string, config *schema.BaseComponentConfi
 	// Store a copy to prevent external mutations from affecting the cache.
 	copyConfig := *config
 	baseComponentConfigCache[cacheKey] = &copyConfig
+}
+
+// getCachedCompiledSchema retrieves a cached compiled JSON schema if it exists.
+// The compiled schema is thread-safe for concurrent validation operations.
+func getCachedCompiledSchema(schemaPath string) (*jsonschema.Schema, bool) {
+	defer perf.Track(nil, "exec.getCachedCompiledSchema")()
+
+	jsonSchemaCacheMu.RLock()
+	defer jsonSchemaCacheMu.RUnlock()
+
+	schema, found := jsonSchemaCache[schemaPath]
+	return schema, found
+}
+
+// cacheCompiledSchema stores a compiled JSON schema in the cache.
+// The compiled schema is thread-safe and can be safely shared across goroutines.
+func cacheCompiledSchema(schemaPath string, schema *jsonschema.Schema) {
+	defer perf.Track(nil, "exec.cacheCompiledSchema")()
+
+	jsonSchemaCacheMu.Lock()
+	defer jsonSchemaCacheMu.Unlock()
+
+	jsonSchemaCache[schemaPath] = schema
 }
 
 // stackProcessResult holds the result of processing a single stack in parallel.
@@ -552,26 +581,36 @@ func processYAMLConfigFileWithContextInternal(
 			return nil, nil, nil, nil, nil, nil, nil, err
 		}
 
-		compiler := jsonschema.NewCompiler()
-
 		atmosManifestJsonSchemaValidationErrorFormat := "Atmos manifest JSON Schema validation error in the file '%s':\n%v"
 
-		atmosManifestJsonSchemaFileReader, err := os.Open(atmosManifestJsonSchemaFilePath)
-		if err != nil {
-			return nil, nil, nil, nil, nil, nil, nil, errors.Errorf(atmosManifestJsonSchemaValidationErrorFormat, relativeFilePath, err)
+		// Check cache first to avoid re-compiling the same schema for every stack file.
+		compiledSchema, found := getCachedCompiledSchema(atmosManifestJsonSchemaFilePath)
+
+		if !found {
+			// Schema not in cache - compile it and cache the result.
+			compiler := jsonschema.NewCompiler()
+
+			atmosManifestJsonSchemaFileReader, err := os.Open(atmosManifestJsonSchemaFilePath)
+			if err != nil {
+				return nil, nil, nil, nil, nil, nil, nil, errors.Errorf(atmosManifestJsonSchemaValidationErrorFormat, relativeFilePath, err)
+			}
+
+			if err := compiler.AddResource(atmosManifestJsonSchemaFilePath, atmosManifestJsonSchemaFileReader); err != nil {
+				return nil, nil, nil, nil, nil, nil, nil, errors.Errorf(atmosManifestJsonSchemaValidationErrorFormat, relativeFilePath, err)
+			}
+
+			compiler.Draft = jsonschema.Draft2020
+
+			compiledSchema, err = compiler.Compile(atmosManifestJsonSchemaFilePath)
+			if err != nil {
+				return nil, nil, nil, nil, nil, nil, nil, errors.Errorf(atmosManifestJsonSchemaValidationErrorFormat, relativeFilePath, err)
+			}
+
+			// Store compiled schema in cache for reuse.
+			cacheCompiledSchema(atmosManifestJsonSchemaFilePath, compiledSchema)
 		}
 
-		if err := compiler.AddResource(atmosManifestJsonSchemaFilePath, atmosManifestJsonSchemaFileReader); err != nil {
-			return nil, nil, nil, nil, nil, nil, nil, errors.Errorf(atmosManifestJsonSchemaValidationErrorFormat, relativeFilePath, err)
-		}
-
-		compiler.Draft = jsonschema.Draft2020
-
-		compiledSchema, err := compiler.Compile(atmosManifestJsonSchemaFilePath)
-		if err != nil {
-			return nil, nil, nil, nil, nil, nil, nil, errors.Errorf(atmosManifestJsonSchemaValidationErrorFormat, relativeFilePath, err)
-		}
-
+		// Validate using the compiled schema (whether cached or newly compiled).
 		if err = compiledSchema.Validate(dataFromJson); err != nil {
 			switch e := err.(type) {
 			case *jsonschema.ValidationError:
