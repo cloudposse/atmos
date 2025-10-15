@@ -26,11 +26,11 @@ version: version-default
 lint: get lintroller
 	golangci-lint run --new-from-rev=origin/main
 
-# Custom linter for Atmos-specific rules (t.Setenv misuse, os.Setenv in tests).
+# Custom linter for Atmos-specific rules (t.Setenv misuse, os.Setenv in tests, os.MkdirTemp in tests).
 .PHONY: lintroller
 lintroller: tools/lintroller/.lintroller
 	@echo "Running lintroller (Atmos custom rules)..."
-	@tools/lintroller/.lintroller ./... 2>&1 | grep -v "^#" || true
+	@tools/lintroller/.lintroller ./...
 
 tools/lintroller/.lintroller: tools/lintroller/*.go
 	@echo "Building lintroller..."
