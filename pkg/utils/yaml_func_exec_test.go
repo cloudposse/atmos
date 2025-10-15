@@ -12,16 +12,16 @@ import (
 
 // TestProcessTagExec_CustomBinary tests the ProcessTagExec function using a custom bash binary.
 func TestProcessTagExec_CustomBinary(t *testing.T) {
-	// Create a temporary directory for our custom binary
+	// Create a temporary directory for our custom binary.
 	tempDir := t.TempDir()
 
-	// Create a custom bash script that outputs predictable content
+	// Create a custom bash script that outputs predictable content.
 	customBinaryPath := filepath.Join(tempDir, "test-bash")
 	if runtime.GOOS == "windows" {
 		customBinaryPath += ".bat"
 	}
 
-	// Script content based on OS
+	// Script content based on OS.
 	var scriptContent string
 	if runtime.GOOS == "windows" {
 		scriptContent = `@echo off
@@ -50,7 +50,7 @@ esac
 	err := os.WriteFile(customBinaryPath, []byte(scriptContent), 0o755)
 	assert.NoError(t, err)
 
-	// Save original PATH and modify it to include our temp directory
+	// Save original PATH and modify it to include our temp directory.
 	originalPath := os.Getenv("PATH")
 	defer func() {
 		err := os.Setenv("PATH", originalPath)
@@ -108,9 +108,9 @@ esac
 
 			assert.NoError(t, err)
 
-			// Normalize line endings for cross-platform compatibility
+			// Normalize line endings for cross-platform compatibility.
 			if resultStr, ok := result.(string); ok {
-				// Remove trailing whitespace and normalize line endings
+				// Remove trailing whitespace and normalize line endings.
 				resultStr = strings.TrimSpace(resultStr)
 				assert.Equal(t, tt.expected, resultStr)
 			} else {
@@ -134,23 +134,23 @@ func TestProcessTagExec_MalformedTag(t *testing.T) {
 	input := "!exec"
 	result, err := ProcessTagExec(input)
 
-	// This should handle the case where there's no command after !exec
+	// This should handle the case where there's no command after !exec.
 	assert.Error(t, err)
 	assert.Nil(t, result)
 }
 
 // TestProcessTagExec_ComplexJSON tests parsing of complex JSON output.
 func TestProcessTagExec_ComplexJSON(t *testing.T) {
-	// Create a temporary directory for our custom binary
+	// Create a temporary directory for our custom binary.
 	tempDir := t.TempDir()
 
-	// Create a custom bash script that outputs complex JSON
+	// Create a custom bash script that outputs complex JSON.
 	customBinaryPath := filepath.Join(tempDir, "test-bash")
 	if runtime.GOOS == "windows" {
 		customBinaryPath += ".bat"
 	}
 
-	// Script content based on OS
+	// Script content based on OS.
 	var scriptContent string
 	if runtime.GOOS == "windows" {
 		scriptContent = `@echo off
@@ -165,7 +165,7 @@ echo '{"nested": {"key": "value"}, "array": [1, 2, 3], "bool": true, "null": nul
 	err := os.WriteFile(customBinaryPath, []byte(scriptContent), 0o755)
 	assert.NoError(t, err)
 
-	// Save original PATH and modify it to include our temp directory
+	// Save original PATH and modify it to include our temp directory.
 	originalPath := os.Getenv("PATH")
 	defer func() {
 		err := os.Setenv("PATH", originalPath)
@@ -191,16 +191,16 @@ echo '{"nested": {"key": "value"}, "array": [1, 2, 3], "bool": true, "null": nul
 
 // TestProcessTagExec_InvalidJSON tests handling of invalid JSON that should be returned as string.
 func TestProcessTagExec_InvalidJSON(t *testing.T) {
-	// Create a temporary directory for our custom binary
+	// Create a temporary directory for our custom binary.
 	tempDir := t.TempDir()
 
-	// Create a custom bash script that outputs invalid JSON
+	// Create a custom bash script that outputs invalid JSON.
 	customBinaryPath := filepath.Join(tempDir, "test-bash")
 	if runtime.GOOS == "windows" {
 		customBinaryPath += ".bat"
 	}
 
-	// Script content based on OS
+	// Script content based on OS.
 	var scriptContent string
 	if runtime.GOOS == "windows" {
 		scriptContent = `@echo off
@@ -215,7 +215,7 @@ echo "invalid json {"
 	err := os.WriteFile(customBinaryPath, []byte(scriptContent), 0o755)
 	assert.NoError(t, err)
 
-	// Save original PATH and modify it to include our temp directory
+	// Save original PATH and modify it to include our temp directory.
 	originalPath := os.Getenv("PATH")
 	defer func() {
 		err := os.Setenv("PATH", originalPath)
@@ -228,8 +228,8 @@ echo "invalid json {"
 	result, err := ProcessTagExec(input)
 
 	assert.NoError(t, err)
-	// Should return as string when JSON parsing fails
-	// Normalize line endings for cross-platform compatibility
+	// Should return as string when JSON parsing fails.
+	// Normalize line endings for cross-platform compatibility.
 	resultStr := strings.TrimSpace(result.(string))
 	assert.Equal(t, "invalid json {", resultStr)
 }
