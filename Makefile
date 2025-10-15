@@ -30,11 +30,14 @@ lint: get lintroller
 .PHONY: lintroller
 lintroller: tools/lintroller/.lintroller
 	@echo "Running lintroller (Atmos custom rules)..."
+	@test -x tools/lintroller/.lintroller || (echo "Error: lintroller binary not executable" && exit 1)
 	@tools/lintroller/.lintroller ./...
 
-tools/lintroller/.lintroller: tools/lintroller/*.go
+tools/lintroller/.lintroller: tools/lintroller/*.go tools/lintroller/cmd/lintroller/*.go
 	@echo "Building lintroller..."
-	@cd tools/lintroller && go build -o .lintroller . && chmod +x .lintroller
+	@cd tools/lintroller && go build -o .lintroller ./cmd/lintroller
+	@chmod +x tools/lintroller/.lintroller
+	@test -x tools/lintroller/.lintroller || (echo "Error: Failed to make lintroller executable" && exit 1)
 
 build-linux: GOOS=linux
 build-linux: build-default
