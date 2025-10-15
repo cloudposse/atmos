@@ -137,8 +137,3 @@ func printMarkdownError(err error, title string, suggestion string) {
 		log.Error(err)
 	}
 }
-
-// Exit exits the program with the specified exit code.
-func Exit(exitCode int) {
-	os.Exit(exitCode)
-}
