@@ -214,9 +214,8 @@ func skipIfHelmfileNotInstalled(t *testing.T) {
 // TestPrintMessageForMissingAtmosConfig tests the printMessageForMissingAtmosConfig function.
 func TestPrintMessageForMissingAtmosConfig(t *testing.T) {
 	tests := []struct {
-		name             string
-		atmosConfig      schema.AtmosConfiguration
-		expectedContains []string
+		name        string
+		atmosConfig schema.AtmosConfiguration
 	}{
 		{
 			name: "default config missing",
@@ -226,9 +225,6 @@ func TestPrintMessageForMissingAtmosConfig(t *testing.T) {
 					BasePath: "stacks",
 				},
 				Default: true,
-			},
-			expectedContains: []string{
-				"stacks", // Should contain the stacks directory path
 			},
 		},
 		{
@@ -240,21 +236,24 @@ func TestPrintMessageForMissingAtmosConfig(t *testing.T) {
 				},
 				Default: false,
 			},
-			expectedContains: []string{
-				"my-stacks", // Should contain the custom stacks directory
-			},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// This function writes to both stdout (logo) and stderr (markdown messages)
-			// We'll just verify it doesn't panic and exercises both code paths
-			// The actual markdown rendering is tested in markdown_utils_test.go
-			printMessageForMissingAtmosConfig(tt.atmosConfig)
-
-			// If we get here without panic, both code paths work
+			// This function writes to both stdout (logo) and stderr (markdown messages).
+			// We verify it executes without panic. The actual content is tested via
+			// markdown rendering tests. This verifies both code paths execute:
 			// (Default=true uses missingConfigDefaultMarkdown, Default=false uses missingConfigFoundMarkdown)
+
+			// Use defer/recover to catch any panics.
+			defer func() {
+				if r := recover(); r != nil {
+					t.Errorf("printMessageForMissingAtmosConfig panicked: %v", r)
+				}
+			}()
+
+			printMessageForMissingAtmosConfig(tt.atmosConfig)
 		})
 	}
 }

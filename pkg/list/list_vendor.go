@@ -9,9 +9,9 @@ import (
 
 	"github.com/pkg/errors"
 	"go.yaml.in/yaml/v3"
-	"golang.org/x/term"
 
 	"github.com/cloudposse/atmos/internal/exec"
+	term "github.com/cloudposse/atmos/internal/tui/templates/term"
 	"github.com/cloudposse/atmos/pkg/filetype"
 	"github.com/cloudposse/atmos/pkg/list/format"
 	log "github.com/cloudposse/atmos/pkg/logger"
@@ -74,7 +74,7 @@ func formatVendorOutput(rows []map[string]interface{}, customHeaders []string, o
 	formatOpts := format.FormatOptions{
 		Format:        format.Format(options.FormatStr),
 		Delimiter:     options.Delimiter,
-		TTY:           term.IsTerminal(int(os.Stdout.Fd())),
+		TTY:           term.IsTTYSupportForStdout(),
 		CustomHeaders: customHeaders,
 		MaxColumns:    0,
 	}

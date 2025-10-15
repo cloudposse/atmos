@@ -16,8 +16,10 @@ import (
 func TestDescribeStacksRunnable(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
+
 	mockExec := exec.NewMockDescribeStacksExec(ctrl)
 	mockExec.EXPECT().Execute(gomock.Any(), gomock.Any()).Return(nil).Times(1)
+
 	run := getRunnableDescribeStacksCmd(getRunnableDescribeStacksCmdProps{
 		func(opts ...AtmosValidateOption) {},
 		func(componentType string, cmd *cobra.Command, args, additionalArgsAndFlags []string) (schema.ConfigAndStacksInfo, error) {
@@ -34,7 +36,12 @@ func TestDescribeStacksRunnable(t *testing.T) {
 		},
 		mockExec,
 	})
-	run(describeStacksCmd, []string{})
+
+	err := run(describeStacksCmd, []string{})
+
+	// Verify command executed without errors. The mock expectations verify
+	// that Execute() was called with the correct arguments.
+	assert.NoError(t, err, "describeStacksCmd should execute without error")
 }
 
 func TestSetFlagValueInDescribeStacksCliArgs(t *testing.T) {

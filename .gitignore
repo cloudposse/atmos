@@ -70,6 +70,13 @@ tests.test
 
 **/llms.txt
 **/llms-full.txt
+
+# Test quality documentation (local tracking only)
+FUTURE_IMPROVEMENTS.md
+PHASE_4_*.md
+TEST_QUALITY_*.md
+
+# Lintroller
 /lintroller
 /.lintroller
 tools/lintroller/.lintroller

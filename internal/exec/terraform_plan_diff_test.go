@@ -741,6 +741,10 @@ func TestDebugFormatMapDiff(t *testing.T) {
 	result := formatMapDiff(map1, map2)
 	t.Logf("Simple map diff result: %q", result)
 
+	// Verify the result is not empty and contains expected markers.
+	assert.NotEmpty(t, result, "formatMapDiff should return non-empty string for different maps")
+	assert.Contains(t, result, "key2", "Result should contain changed key")
+
 	// Nested map diff
 	nestedMap1 := map[string]interface{}{
 		"key1": "value1",
@@ -761,6 +765,10 @@ func TestDebugFormatMapDiff(t *testing.T) {
 
 	result = formatMapDiff(nestedMap1, nestedMap2)
 	t.Logf("Nested map diff result: %q", result)
+
+	// Verify nested diffs are captured.
+	assert.NotEmpty(t, result, "formatMapDiff should return non-empty string for nested diffs")
+	assert.Contains(t, result, "inner2", "Result should contain changed nested key")
 
 	// Small map diff
 	smallMap1 := map[string]interface{}{

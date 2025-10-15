@@ -14,8 +14,11 @@ import (
 
 func TestDescribeDependents(t *testing.T) {
 	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
 	describeDependentsMock := exec.NewMockDescribeDependentsExec(ctrl)
 	describeDependentsMock.EXPECT().Execute(gomock.Any()).Return(nil)
+
 	run := getRunnableDescribeDependentsCmd(func(opts ...AtmosValidateOption) {},
 		func(componentType string, cmd *cobra.Command, args, additionalArgsAndFlags []string) (schema.ConfigAndStacksInfo, error) {
 			return schema.ConfigAndStacksInfo{}, nil
@@ -26,7 +29,12 @@ func TestDescribeDependents(t *testing.T) {
 		func(atmosConfig *schema.AtmosConfiguration) exec.DescribeDependentsExec {
 			return describeDependentsMock
 		})
-	run(describeDependentsCmd, []string{"component"})
+
+	err := run(describeDependentsCmd, []string{"component"})
+
+	// Verify command executed without errors. The mock expectations verify
+	// that Execute() was called with the correct arguments.
+	assert.NoError(t, err, "describeDependentsCmd should execute without error")
 }
 
 func TestSetFlagInDescribeDependents(t *testing.T) {
