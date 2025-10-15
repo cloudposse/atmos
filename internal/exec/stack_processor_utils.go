@@ -29,6 +29,9 @@ var (
 	// Mutex to serialize updates of the result map of ProcessYAMLConfigFiles function.
 	processYAMLConfigFilesLock = &sync.Mutex{}
 
+	// Mutex to serialize writes to importsConfig maps during parallel import processing.
+	importsConfigLock = &sync.Mutex{}
+
 	// The mergeContexts stores MergeContexts keyed by stack file path when provenance tracking is enabled.
 	// This is used to capture provenance data for the describe component command.
 	mergeContexts   = make(map[string]*m.MergeContext)
@@ -879,7 +882,12 @@ func processYAMLConfigFileWithContextInternal(
 				}
 			}
 
+			// Protect concurrent writes to importsConfig map.
+			// When processing imports in parallel at nested levels, multiple goroutines
+			// may reach this point simultaneously for different imports.
+			importsConfigLock.Lock()
 			importsConfig[result.importRelativePathWithoutExt] = result.yamlConfigRaw
+			importsConfigLock.Unlock()
 		}
 	}
 
