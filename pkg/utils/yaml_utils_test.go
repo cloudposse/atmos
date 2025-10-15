@@ -235,6 +235,171 @@ func TestUnmarshalYAMLFromFile_NilConfig(t *testing.T) {
 	assert.Contains(t, err.Error(), "atmosConfig cannot be nil")
 }
 
+// TestUnmarshalYAMLFromFileWithPositions_ConcurrentAccess tests that multiple goroutines
+// parsing the same file simultaneously don't cause race conditions or duplicate parsing.
+// This validates the P3.3.1 per-key locking implementation.
+func TestUnmarshalYAMLFromFileWithPositions_ConcurrentAccess(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{}
+
+	input := `
+foo: bar
+number: 42
+nested:
+  key: value
+  list:
+    - item1
+    - item2
+`
+
+	// Simulate concurrent access by spawning multiple goroutines
+	// that all try to parse the same file with the same content.
+	const numGoroutines = 50
+	results := make(chan map[string]any, numGoroutines)
+	errors := make(chan error, numGoroutines)
+
+	// Use a channel to synchronize goroutine start times
+	// This ensures they all hit the cache at approximately the same time
+	start := make(chan struct{})
+
+	for i := 0; i < numGoroutines; i++ {
+		go func() {
+			// Wait for start signal to maximize concurrency
+			<-start
+
+			// All goroutines parse the same file with the same content
+			result, _, err := UnmarshalYAMLFromFileWithPositions[map[string]any](
+				atmosConfig, input, "concurrent-test.yaml")
+			if err != nil {
+				errors <- err
+				return
+			}
+
+			results <- result
+		}()
+	}
+
+	// Release all goroutines at once to maximize race condition likelihood
+	close(start)
+
+	// Collect all results
+	var collectedResults []map[string]any
+	var collectedErrors []error
+
+	for i := 0; i < numGoroutines; i++ {
+		select {
+		case result := <-results:
+			collectedResults = append(collectedResults, result)
+		case err := <-errors:
+			collectedErrors = append(collectedErrors, err)
+		}
+	}
+
+	// Validate no errors occurred
+	assert.Empty(t, collectedErrors, "Expected no errors from concurrent parsing")
+
+	// Validate all goroutines got results
+	assert.Len(t, collectedResults, numGoroutines, "Expected all goroutines to return results")
+
+	// Validate all results are identical and correct
+	expectedValue := "bar"
+	expectedNumber := 42
+
+	for i, result := range collectedResults {
+		assert.Equal(t, expectedValue, result["foo"],
+			"Goroutine %d got incorrect value for 'foo'", i)
+		assert.Equal(t, expectedNumber, result["number"],
+			"Goroutine %d got incorrect value for 'number'", i)
+
+		// Validate nested structure
+		nested, ok := result["nested"].(map[string]any)
+		assert.True(t, ok, "Goroutine %d: 'nested' should be a map", i)
+		if ok {
+			assert.Equal(t, "value", nested["key"],
+				"Goroutine %d got incorrect nested value", i)
+		}
+	}
+}
+
+// TestUnmarshalYAMLFromFileWithPositions_ConcurrentAccessDifferentFiles tests
+// concurrent parsing of different files to ensure per-key locking doesn't block
+// unrelated files.
+func TestUnmarshalYAMLFromFileWithPositions_ConcurrentAccessDifferentFiles(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{}
+
+	// Create multiple different file contents
+	files := []struct {
+		name    string
+		content string
+		key     string
+		value   string
+	}{
+		{"file1.yaml", "key1: value1", "key1", "value1"},
+		{"file2.yaml", "key2: value2", "key2", "value2"},
+		{"file3.yaml", "key3: value3", "key3", "value3"},
+		{"file4.yaml", "key4: value4", "key4", "value4"},
+		{"file5.yaml", "key5: value5", "key5", "value5"},
+	}
+
+	const goroutinesPerFile = 10
+	totalGoroutines := len(files) * goroutinesPerFile
+
+	results := make(chan map[string]any, totalGoroutines)
+	errors := make(chan error, totalGoroutines)
+	start := make(chan struct{})
+
+	// Spawn multiple goroutines per file
+	for _, file := range files {
+		for i := 0; i < goroutinesPerFile; i++ {
+			go func(name, content string) {
+				<-start
+
+				result, _, err := UnmarshalYAMLFromFileWithPositions[map[string]any](
+					atmosConfig, content, name)
+				if err != nil {
+					errors <- err
+					return
+				}
+
+				results <- result
+			}(file.name, file.content)
+		}
+	}
+
+	// Release all goroutines
+	close(start)
+
+	// Collect results
+	collectedResults := make(map[string][]map[string]any)
+	var collectedErrors []error
+
+	for i := 0; i < totalGoroutines; i++ {
+		select {
+		case result := <-results:
+			// Group results by their key to validate later
+			for k := range result {
+				collectedResults[k] = append(collectedResults[k], result)
+			}
+		case err := <-errors:
+			collectedErrors = append(collectedErrors, err)
+		}
+	}
+
+	// Validate no errors
+	assert.Empty(t, collectedErrors, "Expected no errors from concurrent parsing of different files")
+
+	// Validate each file was parsed correctly by all its goroutines
+	for _, file := range files {
+		fileResults := collectedResults[file.key]
+		assert.Len(t, fileResults, goroutinesPerFile,
+			"Expected %d results for %s", goroutinesPerFile, file.name)
+
+		for i, result := range fileResults {
+			assert.Equal(t, file.value, result[file.key],
+				"Goroutine %d for %s got incorrect value", i, file.name)
+		}
+	}
+}
+
 // TestPrintAsYAMLSimple tests the fast-path YAML printing without syntax highlighting.
 func TestPrintAsYAMLSimple(t *testing.T) {
 	tests := []struct {
