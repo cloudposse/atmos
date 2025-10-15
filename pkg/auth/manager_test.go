@@ -99,22 +99,18 @@ func TestManager_GetDefaultIdentity(t *testing.T) {
 				t.Skipf("Skipping interactive test - requires user input.")
 			}
 
-			// Set up CI environment variable.
-			originalCI := os.Getenv("CI")
 			if tt.isCI {
-				os.Setenv("CI", "true")
+				t.Setenv("CI", "true")
 			} else {
+				orig := os.Getenv("CI")
 				os.Unsetenv("CI")
+				t.Cleanup(func() {
+					if orig != "" {
+						os.Setenv("CI", orig)
+					}
+				})
 			}
-			defer func() {
-				if originalCI != "" {
-					os.Setenv("CI", originalCI)
-				} else {
-					os.Unsetenv("CI")
-				}
-			}()
 
-			// Create manager with test identities.
 			manager := &manager{
 				config: &schema.AuthConfig{
 					Identities: tt.identities,
@@ -148,7 +144,7 @@ func TestManager_GetDefaultIdentity_MultipleDefaultsOrder(t *testing.T) {
 
 	// Set CI mode to get deterministic error message.
 	origCI, hadCI := os.LookupEnv("CI")
-	os.Setenv("CI", "true")
+	t.Setenv("CI", "true")
 	defer func() {
 		if hadCI {
 			os.Setenv("CI", origCI)

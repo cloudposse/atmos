@@ -303,7 +303,9 @@ func preCustomCommand(
 
 	// no "steps" means a sub command should be specified
 	if len(commandConfig.Steps) == 0 {
-		_ = cmd.Help()
+		if err := cmd.Help(); err != nil {
+			log.Trace("Failed to display command help", "error", err, "command", cmd.Name())
+		}
 		errUtils.Exit(0)
 	}
 }

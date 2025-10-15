@@ -81,9 +81,13 @@ func LoadCache() (CacheConfig, error) {
 		v := viper.New()
 		v.SetConfigFile(cacheFile)
 		// Ignore read errors on Windows - cache is non-critical.
-		_ = v.ReadInConfig()
+		if err := v.ReadInConfig(); err != nil {
+			log.Trace("Failed to read cache file on Windows (non-critical)", "error", err, "file", cacheFile)
+		}
 		// Ignore unmarshal errors on Windows - cache is non-critical.
-		_ = v.Unmarshal(&cfg)
+		if err := v.Unmarshal(&cfg); err != nil {
+			log.Trace("Failed to unmarshal cache on Windows (non-critical)", "error", err, "file", cacheFile)
+		}
 		return cfg, nil
 	}
 

@@ -12,6 +12,7 @@ import (
 	"regexp"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/elewis787/boa"
@@ -147,9 +148,13 @@ var RootCmd = &cobra.Command{
 		}
 
 		// Show performance heatmap if enabled.
-		showHeatmap, _ := cmd.Flags().GetBool("heatmap")
-		if showHeatmap {
+		// Use IsTrackingEnabled() to support commands with DisableFlagParsing.
+		if perf.IsTrackingEnabled() {
 			heatmapMode, _ := cmd.Flags().GetString("heatmap-mode")
+			// Default to "bar" mode if empty (happens with DisableFlagParsing).
+			if heatmapMode == "" {
+				heatmapMode = "bar"
+			}
 			if err := displayPerformanceHeatmap(cmd, heatmapMode); err != nil {
 				log.Error("Failed to display performance heatmap", "error", err)
 			}
@@ -248,8 +253,13 @@ func setupLogger(atmosConfig *schema.AtmosConfiguration) {
 func cleanupLogFile() {
 	if logFileHandle != nil {
 		// Flush any remaining log data before closing.
-		_ = logFileHandle.Sync()
-		_ = logFileHandle.Close()
+		if err := logFileHandle.Sync(); err != nil {
+			// Don't use logger here as we're cleaning up the log file
+			fmt.Fprintf(os.Stderr, "Warning: failed to sync log file: %v\n", err)
+		}
+		if err := logFileHandle.Close(); err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: failed to close log file: %v\n", err)
+		}
 		logFileHandle = nil
 	}
 }
@@ -547,11 +557,31 @@ func getInvalidCommandName(input string) string {
 //nolint:unparam // cmd parameter reserved for future use
 func displayPerformanceHeatmap(cmd *cobra.Command, mode string) error {
 	// Print performance summary to console.
-	// Filter out functions with zero total time for cleaner output.
+	// Filter out functions with zero total time for cleaner output (for table).
 	snap := perf.SnapshotTopFiltered("total", defaultTopFunctionsMax)
+	// Unbounded snapshot for accurate summary metrics.
+	fullSnap := perf.SnapshotTopFiltered("total", 0)
+
+	// Calculate total CPU time (sum of all self-times) and parallelism from all tracked functions.
+	var totalCPUTime time.Duration
+	for _, r := range fullSnap.Rows {
+		totalCPUTime += r.Total
+	}
+	elapsed := fullSnap.Elapsed
+	var parallelism float64
+	if elapsed > 0 {
+		parallelism = float64(totalCPUTime) / float64(elapsed)
+	} else {
+		parallelism = 0
+	}
+
 	utils.PrintfMessageToTUI("\n=== Atmos Performance Summary ===\n")
-	utils.PrintfMessageToTUI("Elapsed: %s  Functions: %d  Calls: %d\n", snap.Elapsed, snap.TotalFuncs, snap.TotalCalls)
-	utils.PrintfMessageToTUI("%-50s %6s %13s %13s %13s %13s\n", "Function", "Count", "Total", "Avg", "Max", "P95")
+	utils.PrintfMessageToTUI("Elapsed: %s | CPU Time: %s | Parallelism: ~%.1fx\n",
+		elapsed.Truncate(time.Microsecond),
+		totalCPUTime.Truncate(time.Microsecond),
+		parallelism)
+	utils.PrintfMessageToTUI("Functions: %d | Total Calls: %d\n\n", snap.TotalFuncs, snap.TotalCalls)
+	utils.PrintfMessageToTUI("%-50s %6s %13s %13s %13s %13s\n", "Function", "Count", "CPU Time", "Avg", "Max", "P95")
 	for _, r := range snap.Rows {
 		p95 := "-"
 		if r.P95 > 0 {

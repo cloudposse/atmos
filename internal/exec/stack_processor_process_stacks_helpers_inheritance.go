@@ -35,7 +35,7 @@ func processComponentInheritance(opts *ComponentProcessorOptions, result *Compon
 		return err
 	}
 
-	// Process multiple inheritance using metadata.component and metadata.inherits.
+	// Process multiple inheritance using `metadata.inherits`.
 	if err := processMetadataInheritance(opts, result, &baseComponentConfig, &componentInheritanceChain); err != nil {
 		return err
 	}
@@ -85,33 +85,62 @@ func processTopLevelComponentInheritance(opts *ComponentProcessorOptions, result
 func processMetadataInheritance(opts *ComponentProcessorOptions, result *ComponentProcessorResult, baseComponentConfig *schema.BaseComponentConfig, componentInheritanceChain *[]string) error {
 	defer perf.Track(opts.AtmosConfig, "exec.processMetadataInheritance")()
 
-	// Check metadata.component.
+	// Track whether `metadata.component` was explicitly set.
+	// `metadata.component` is a pointer to the physical terraform component directory.
+	// It is NOT inherited from base components - the `metadata` section is per-component.
+	metadataComponentExplicitlySet := false
+	explicitBaseComponentName := ""
+
+	// Save the BaseComponentName from top-level component inheritance (if any).
+	// Processing `metadata.inherits` calls applyBaseComponentConfig() which inadvertently overwrites.
+	// BaseComponentName. We save it here so we can restore it after processing, distinguishing:
+	// 1. BaseComponentName set by the top-level `component` attribute (preserve this value).
+	// 2. BaseComponentName overwritten during configuration inheritance (restore saved value or default).
+	baseComponentNameFromTopLevel := result.BaseComponentName
+
+	// Check `metadata.component`.
 	if baseComponentFromMetadata, baseComponentFromMetadataExist := result.ComponentMetadata[cfg.ComponentSectionName]; baseComponentFromMetadataExist {
 		baseComponentName, ok := baseComponentFromMetadata.(string)
 		if !ok {
 			return fmt.Errorf("%w: 'components.%s.%s.metadata.component' in the file '%s'", errUtils.ErrInvalidComponentMetadataComponent, opts.ComponentType, opts.Component, opts.StackName)
 		}
 		result.BaseComponentName = baseComponentName
+		explicitBaseComponentName = baseComponentName
+		metadataComponentExplicitlySet = true
 	}
 
-	if result.BaseComponentName != "" {
-		result.BaseComponents = append(result.BaseComponents, result.BaseComponentName)
-	}
-
-	// Process metadata.inherits list.
+	// Process the `metadata.inherits` list (if it exists).
+	// `metadata.inherits` specifies which Atmos components to inherit configuration from (vars, settings, env, etc.).
 	inheritValue, inheritsKeyExists := result.ComponentMetadata[cfg.InheritsSectionName]
-	if !inheritsKeyExists {
-		return nil
+	if inheritsKeyExists {
+		inheritList, ok := inheritValue.([]any)
+		if !ok {
+			return fmt.Errorf("%w: 'components.%s.%s.metadata.inherits' in the file '%s'", errUtils.ErrInvalidComponentMetadataInherits, opts.ComponentType, opts.Component, opts.StackName)
+		}
+
+		for _, v := range inheritList {
+			if err := processInheritedComponent(opts, result, baseComponentConfig, componentInheritanceChain, v); err != nil {
+				return err
+			}
+		}
+
+		// Restore the explicitly set `metadata.component` after processing inherits.
+		if metadataComponentExplicitlySet {
+			result.BaseComponentName = explicitBaseComponentName
+		}
 	}
 
-	inheritList, ok := inheritValue.([]any)
-	if !ok {
-		return fmt.Errorf("%w: 'components.%s.%s.metadata.inherits' in the file '%s'", errUtils.ErrInvalidComponentMetadataInherits, opts.ComponentType, opts.Component, opts.StackName)
-	}
-
-	for _, v := range inheritList {
-		if err := processInheritedComponent(opts, result, baseComponentConfig, componentInheritanceChain, v); err != nil {
-			return err
+	// If `metadata.component` was not explicitly set, determine the default.
+	// This logic is completely independent of metadata.inherits - metadata.inherits only affects
+	// configuration inheritance (vars, settings, backend, etc.) and has nothing to do with component paths.
+	if !metadataComponentExplicitlySet {
+		if baseComponentNameFromTopLevel != "" {
+			// Top-level component: attribute was set, restore it.
+			// This handles cases like: `component: "component-1"`.
+			result.BaseComponentName = baseComponentNameFromTopLevel
+		} else {
+			// No top-level `component` attribute, and no `metadata.component` - default to Atmos component name.
+			result.BaseComponentName = opts.Component
 		}
 	}
 

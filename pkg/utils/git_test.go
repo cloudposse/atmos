@@ -64,10 +64,6 @@ func TestProcessTagGitRoot(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Save and restore original environment
-			originalTestGitRoot := os.Getenv("TEST_GIT_ROOT")
-			defer os.Setenv("TEST_GIT_ROOT", originalTestGitRoot)
-
 			// Save original working directory
 			originalDir, err := os.Getwd()
 			require.NoError(t, err)
@@ -75,9 +71,7 @@ func TestProcessTagGitRoot(t *testing.T) {
 
 			// Set TEST_GIT_ROOT if provided
 			if tt.testGitRoot != "" {
-				os.Setenv("TEST_GIT_ROOT", tt.testGitRoot)
-			} else {
-				os.Unsetenv("TEST_GIT_ROOT")
+				t.Setenv("TEST_GIT_ROOT", tt.testGitRoot)
 			}
 
 			// Run setup function if provided
@@ -109,38 +103,37 @@ func TestProcessTagGitRoot(t *testing.T) {
 func TestProcessTagGitRoot_Integration(t *testing.T) {
 	// This test verifies that TEST_GIT_ROOT properly overrides Git detection
 
-	// Save original environment and directory
-	originalTestGitRoot := os.Getenv("TEST_GIT_ROOT")
+	// Save original directory
 	originalDir, err := os.Getwd()
 	require.NoError(t, err)
+	defer os.Chdir(originalDir)
 
-	defer func() {
-		os.Setenv("TEST_GIT_ROOT", originalTestGitRoot)
-		os.Chdir(originalDir)
-	}()
+	t.Run("TEST_GIT_ROOT overrides Git detection", func(t *testing.T) {
+		// Test 1: TEST_GIT_ROOT overrides any Git detection
+		mockRoot := "/mock/override/path"
+		t.Setenv("TEST_GIT_ROOT", mockRoot)
 
-	// Test 1: TEST_GIT_ROOT overrides any Git detection
-	mockRoot := "/mock/override/path"
-	os.Setenv("TEST_GIT_ROOT", mockRoot)
+		result, err := ProcessTagGitRoot("!repo-root")
+		assert.NoError(t, err)
+		assert.Equal(t, mockRoot, result)
 
-	result, err := ProcessTagGitRoot("!repo-root")
-	assert.NoError(t, err)
-	assert.Equal(t, mockRoot, result)
+		// Test 2: TEST_GIT_ROOT works with a path suffix
+		result, err = ProcessTagGitRoot("!repo-root /some/path")
+		assert.NoError(t, err)
+		assert.Equal(t, mockRoot, result, "TEST_GIT_ROOT should override even when input has a suffix")
+	})
 
-	// Test 2: TEST_GIT_ROOT works with a path suffix
-	result, err = ProcessTagGitRoot("!repo-root /some/path")
-	assert.NoError(t, err)
-	assert.Equal(t, mockRoot, result, "TEST_GIT_ROOT should override even when input has a suffix")
+	t.Run("Empty TEST_GIT_ROOT falls back to default value", func(t *testing.T) {
+		// Don't set TEST_GIT_ROOT - it will be unset
 
-	// Test 3: Empty TEST_GIT_ROOT falls back to default value
-	os.Unsetenv("TEST_GIT_ROOT")
+		// Create a temp directory without a Git repo
+		tmpDir := t.TempDir()
+		err := os.Chdir(tmpDir)
+		require.NoError(t, err)
+		defer os.Chdir(originalDir)
 
-	// Create a temp directory without a Git repo
-	tmpDir := t.TempDir()
-	err = os.Chdir(tmpDir)
-	require.NoError(t, err)
-
-	result, err = ProcessTagGitRoot("!repo-root /default/path")
-	assert.NoError(t, err)
-	assert.Equal(t, "/default/path", result, "Should return default value when not in Git repo and no TEST_GIT_ROOT")
+		result, err := ProcessTagGitRoot("!repo-root /default/path")
+		assert.NoError(t, err)
+		assert.Equal(t, "/default/path", result, "Should return default value when not in Git repo and no TEST_GIT_ROOT")
+	})
 }

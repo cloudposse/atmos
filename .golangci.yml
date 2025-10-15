@@ -45,7 +45,7 @@ linters:
         - pattern: 'WithHint\((?:[^()]*|\([^)]*\))*,\s*fmt\.Sprintf'
           msg: Use `WithHintf()` instead of `WithHint(err, fmt.Sprintf(...))` for formatted hint messages
       exclude-godoc-examples: false
-      analyze-types: false
+      analyze-types: true
     funlen:
       lines: 60
       statements: 40
