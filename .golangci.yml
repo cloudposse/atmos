@@ -44,6 +44,8 @@ linters:
           msg: Use `filepath.Join` for OS-appropriate path separators instead of `path.Join` (which always uses forward slashes)
         - pattern: term\.IsTerminal\(
           msg: Use `term.IsTTYSupportForStdout()` or `term.IsTTYSupportForStderr()` instead of `term.IsTerminal()` for consistent and mockable TTY detection
+        - pattern: os\.Chdir\(
+          msg: Use `t.Chdir()` in test files for automatic cleanup instead of `os.Chdir()` (introduced in Go 1.24)
       exclude-godoc-examples: false
       analyze-types: true
     funlen:

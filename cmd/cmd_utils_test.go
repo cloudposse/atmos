@@ -22,24 +22,17 @@ func TestVerifyInsideGitRepo(t *testing.T) {
 	// Test cases
 	tests := []struct {
 		name     string
-		setup    func() error
+		dir      string
 		expected bool
 	}{
 		{
-			name: "outside git repository",
-			setup: func() error {
-				return os.Chdir(tmpDir)
-			},
+			name:     "outside git repository",
+			dir:      tmpDir,
 			expected: false,
 		},
 		{
-			name: "inside git repository",
-			setup: func() error {
-				if err := os.Chdir(currentDir); err != nil {
-					return err
-				}
-				return nil
-			},
+			name:     "inside git repository",
+			dir:      currentDir,
 			expected: true,
 		},
 	}
@@ -47,9 +40,7 @@ func TestVerifyInsideGitRepo(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Setup test environment
-			if err := tt.setup(); err != nil {
-				t.Fatalf("Failed to setup test: %v", err)
-			}
+			t.Chdir(tt.dir)
 
 			// Run test
 			result := verifyInsideGitRepo()
@@ -57,11 +48,6 @@ func TestVerifyInsideGitRepo(t *testing.T) {
 			// Assert result
 			assert.Equal(t, tt.expected, result)
 		})
-	}
-
-	// Restore the original working directory
-	if err := os.Chdir(currentDir); err != nil {
-		t.Fatalf("Failed to restore working directory: %v", err)
 	}
 }
 
