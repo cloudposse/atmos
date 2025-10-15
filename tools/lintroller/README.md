@@ -159,18 +159,116 @@ The standalone binary runs all rules by default. No configuration needed.
 
 ### golangci-lint Integration
 
-When using `golangci-lint custom`, you can configure Lint Roller in `.golangci.yml`:
+Lintroller integrates with golangci-lint as a **module plugin**. This allows it to run alongside all standard golangci-lint linters with unified output, SARIF support for GitHub Advanced Security, and inline PR annotations.
 
+#### How Module Plugins Work
+
+Module plugins in golangci-lint v2 work differently than traditional Go plugins:
+
+1. **Single Custom Binary**: All plugins are compiled into one custom golangci-lint binary
+2. **Not Dynamic Loading**: Plugins are not loaded at runtime as `.so` files
+3. **Build-Time Integration**: `golangci-lint custom` compiles everything together
+
+**Build Process:**
+```bash
+# Step 1: golangci-lint reads .custom-gcl.yml and finds plugin definitions
+# Step 2: Clones golangci-lint repo and adds blank imports for each plugin
+# Step 3: Builds single binary containing ALL standard linters + ALL plugins
+# Step 4: Outputs ./custom-gcl binary
+
+golangci-lint custom  # Reads .custom-gcl.yml
+./custom-gcl run      # Runs with lintroller + all standard linters
+```
+
+#### Configuration Files
+
+**`.custom-gcl.yml`** - Defines which plugins to compile into the binary:
 ```yaml
-linters-settings:
-  custom:
-    lintroller:
-      tsetenv-in-defer: true       # Enable/disable tsetenv-in-defer rule
-      os-setenv-in-test: true      # Enable/disable os-setenv-in-test rule
-      os-mkdirtemp-in-test: true   # Enable/disable os-mkdirtemp-in-test rule
+version: v2.5.0
+plugins:
+  - module: 'github.com/cloudposse/atmos/tools/lintroller'
+    import: 'github.com/cloudposse/atmos/tools/lintroller'
+    path: './tools/lintroller'
+  # Add more plugins here - all compile into the same custom-gcl binary
+```
+
+**`.golangci.yml`** - Enables and configures the linters:
+```yaml
+linters:
+  enable:
+    - lintroller  # Enable the custom linter
+    - bodyclose   # Standard linters also available
+  settings:
+    custom:
+      lintroller:
+        type: "module"  # Required for module plugins
+        description: "Atmos-specific test rules"
+        settings:
+          tsetenv-in-defer: true       # Enable/disable tsetenv-in-defer rule
+          os-setenv-in-test: true      # Enable/disable os-setenv-in-test rule
+          os-mkdirtemp-in-test: true   # Enable/disable os-mkdirtemp-in-test rule
 ```
 
 All rules are enabled by default.
+
+#### Multiple Custom Linters
+
+To add another custom linter:
+
+1. **Add plugin to `.custom-gcl.yml`**:
+   ```yaml
+   plugins:
+     - module: 'github.com/cloudposse/atmos/tools/lintroller'
+       path: './tools/lintroller'
+     - module: 'github.com/cloudposse/atmos/tools/another-linter'
+       path: './tools/another-linter'
+   ```
+
+2. **Enable in `.golangci.yml`**:
+   ```yaml
+   linters:
+     enable:
+       - lintroller
+       - another-linter
+   ```
+
+3. **Configure in `.golangci.yml`**:
+   ```yaml
+   settings:
+     custom:
+       another-linter:
+         type: "module"
+         settings:
+           some-rule: true
+   ```
+
+4. **Rebuild**: `golangci-lint custom` creates one binary with both plugins
+
+#### CI/CD Integration
+
+The custom binary integrates with GitHub Actions via `golangci-lint-action`:
+
+```yaml
+- name: Install golangci-lint v2
+  run: go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.5.0
+
+- name: Build custom golangci-lint with plugins
+  run: |
+    golangci-lint custom
+    sudo cp ./custom-gcl /usr/local/bin/golangci-lint
+
+- name: Run golangci-lint with plugins
+  uses: golangci/golangci-lint-action@v8
+  with:
+    install-mode: none  # Use our custom binary instead of action's binary
+    args: --out-format=sarif:golangci-lint.sarif
+```
+
+Benefits:
+- ✅ Lintroller findings appear in GitHub Security tab via SARIF
+- ✅ Inline PR annotations for violations
+- ✅ Unified linting output (standard + custom linters)
+- ✅ Supports `//nolint:lintroller` comments
 
 ## Architecture
 
