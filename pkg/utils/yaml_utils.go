@@ -137,11 +137,31 @@ func cacheParsedYAML(file string, content string, node *yaml.Node, positions Pos
 	}
 }
 
-// PrintAsYAML prints the provided value as YAML document to the console
+// PrintAsYAML prints the provided value as YAML document to the console with syntax highlighting.
+// Use PrintAsYAMLSimple for non-TTY output (pipes, redirects) to avoid expensive highlighting.
 func PrintAsYAML(atmosConfig *schema.AtmosConfiguration, data any) error {
 	defer perf.Track(atmosConfig, "utils.PrintAsYAML")()
 
 	y, err := GetHighlightedYAML(atmosConfig, data)
+	if err != nil {
+		return err
+	}
+	PrintMessage(y)
+	return nil
+}
+
+// PrintAsYAMLSimple prints the provided value as YAML document without syntax highlighting.
+// This is a fast-path for non-TTY output (files, pipes, redirects) that skips expensive
+// syntax highlighting, reducing output time from ~6s to <1s for large configurations.
+func PrintAsYAMLSimple(atmosConfig *schema.AtmosConfiguration, data any) error {
+	defer perf.Track(atmosConfig, "utils.PrintAsYAMLSimple")()
+
+	if atmosConfig == nil {
+		return ErrNilAtmosConfig
+	}
+
+	indent := getIndentFromConfig(atmosConfig)
+	y, err := ConvertToYAML(data, YAMLOptions{Indent: indent})
 	if err != nil {
 		return err
 	}

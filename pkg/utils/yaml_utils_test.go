@@ -234,3 +234,88 @@ func TestUnmarshalYAMLFromFile_NilConfig(t *testing.T) {
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "atmosConfig cannot be nil")
 }
+
+// TestPrintAsYAMLSimple tests the fast-path YAML printing without syntax highlighting.
+func TestPrintAsYAMLSimple(t *testing.T) {
+	tests := []struct {
+		name        string
+		atmosConfig *schema.AtmosConfiguration
+		data        any
+		wantErr     bool
+	}{
+		{
+			name: "simple map data",
+			atmosConfig: &schema.AtmosConfiguration{
+				Settings: schema.AtmosSettings{
+					Terminal: schema.Terminal{
+						TabWidth: 2,
+					},
+				},
+			},
+			data: map[string]any{
+				"key": "value",
+			},
+			wantErr: false,
+		},
+		{
+			name: "nested data structure",
+			atmosConfig: &schema.AtmosConfiguration{
+				Settings: schema.AtmosSettings{
+					Terminal: schema.Terminal{
+						TabWidth: 4,
+					},
+				},
+			},
+			data: map[string]any{
+				"string": "value",
+				"number": 42,
+				"nested": map[string]any{
+					"array": []string{"one", "two", "three"},
+					"bool":  true,
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "nil data",
+			atmosConfig: &schema.AtmosConfiguration{
+				Settings: schema.AtmosSettings{},
+			},
+			data:    nil,
+			wantErr: false,
+		},
+		{
+			name:        "nil config should error",
+			atmosConfig: nil,
+			data: map[string]any{
+				"key": "value",
+			},
+			wantErr: true,
+		},
+		{
+			name: "default tab width when TabWidth is 0",
+			atmosConfig: &schema.AtmosConfiguration{
+				Settings: schema.AtmosSettings{
+					Terminal: schema.Terminal{
+						TabWidth: 0, // Should use default
+					},
+				},
+			},
+			data: map[string]any{
+				"key": "value",
+			},
+			wantErr: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := PrintAsYAMLSimple(tt.atmosConfig, tt.data)
+			if tt.wantErr {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
