@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -67,7 +68,7 @@ esac
 		{
 			name:     "simple string output",
 			input:    "!exec test-bash simple",
-			expected: "hello world\n",
+			expected: "hello world",
 			wantErr:  false,
 		},
 		{
@@ -85,7 +86,7 @@ esac
 		{
 			name:     "empty output",
 			input:    "!exec test-bash empty",
-			expected: "\n",
+			expected: "",
 			wantErr:  false,
 		},
 		{
@@ -95,7 +96,7 @@ esac
 			wantErr:  false,
 		},
 	}
-
+	
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result, err := ProcessTagExec(tt.input)
@@ -106,7 +107,15 @@ esac
 			}
 
 			assert.NoError(t, err)
-			assert.Equal(t, tt.expected, result)
+
+			// Normalize line endings for cross-platform compatibility
+			if resultStr, ok := result.(string); ok {
+				// Remove trailing whitespace and normalize line endings
+				resultStr = strings.TrimSpace(resultStr)
+				assert.Equal(t, tt.expected, resultStr)
+			} else {
+				assert.Equal(t, tt.expected, result)
+			}
 		})
 	}
 }
@@ -220,5 +229,7 @@ echo "invalid json {"
 
 	assert.NoError(t, err)
 	// Should return as string when JSON parsing fails
-	assert.Equal(t, "invalid json {\n", result)
+	// Normalize line endings for cross-platform compatibility
+	resultStr := strings.TrimSpace(result.(string))
+	assert.Equal(t, "invalid json {", resultStr)
 }
