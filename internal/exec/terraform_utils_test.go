@@ -364,9 +364,7 @@ func TestCheckTerraformConfig(t *testing.T) {
 
 func TestCleanTerraformWorkspace(t *testing.T) {
 	// Create a temporary directory for testing.
-	tempDir, err := os.MkdirTemp("", "terraform_test")
-	require.NoError(t, err)
-	defer os.RemoveAll(tempDir)
+	tempDir := t.TempDir()
 
 	tests := []struct {
 		name               string
@@ -527,9 +525,7 @@ func TestShouldProcessStacks(t *testing.T) {
 
 func TestGenerateBackendConfig(t *testing.T) {
 	// Create a temporary directory for testing.
-	tempDir, err := os.MkdirTemp("", "backend_test")
-	require.NoError(t, err)
-	defer os.RemoveAll(tempDir)
+	tempDir := t.TempDir()
 
 	tests := []struct {
 		name               string
@@ -620,9 +616,7 @@ func TestGenerateBackendConfig(t *testing.T) {
 
 func TestGenerateProviderOverrides(t *testing.T) {
 	// Create a temporary directory for testing.
-	tempDir, err := os.MkdirTemp("", "provider_test")
-	require.NoError(t, err)
-	defer os.RemoveAll(tempDir)
+	tempDir := t.TempDir()
 
 	tests := []struct {
 		name               string
