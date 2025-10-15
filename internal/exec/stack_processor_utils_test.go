@@ -13,6 +13,9 @@ import (
 )
 
 func TestProcessBaseComponentConfig(t *testing.T) {
+	// Clear cache before tests to ensure fresh processing.
+	ClearBaseComponentConfigCache()
+
 	tests := []struct {
 		name                string
 		baseComponentConfig *schema.BaseComponentConfig
@@ -113,6 +116,9 @@ func TestProcessBaseComponentConfig(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			// Clear cache before each test case to ensure isolation.
+			ClearBaseComponentConfigCache()
+
 			atmosConfig := &schema.AtmosConfiguration{}
 			baseComponents := []string{}
 

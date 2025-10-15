@@ -165,6 +165,25 @@ func cacheCompiledSchema(schemaPath string, schema *jsonschema.Schema) {
 	jsonSchemaCache[schemaPath] = schema
 }
 
+// ClearBaseComponentConfigCache clears the base component config cache.
+// This should be called between independent operations (like tests) to ensure fresh processing.
+func ClearBaseComponentConfigCache() {
+	baseComponentConfigCacheMu.Lock()
+	defer baseComponentConfigCacheMu.Unlock()
+	baseComponentConfigCache = make(map[string]*schema.BaseComponentConfig)
+}
+
+// ClearFileContentCache clears the file content cache.
+// This should be called between independent operations (like tests) to ensure fresh processing.
+func ClearFileContentCache() {
+	defer perf.Track(nil, "exec.ClearFileContentCache")()
+
+	getFileContentSyncMap.Range(func(key, value interface{}) bool {
+		getFileContentSyncMap.Delete(key)
+		return true
+	})
+}
+
 // stackProcessResult holds the result of processing a single stack in parallel.
 type stackProcessResult struct {
 	index         int
@@ -500,7 +519,14 @@ func processYAMLConfigFileWithContextInternal(
 	finalTerraformOverrides := map[string]any{}
 	finalHelmfileOverrides := map[string]any{}
 
-	stackYamlConfig, err := GetFileContent(filePath)
+	// Use uncached file reads when provenance tracking is enabled to ensure YAML position tracking works correctly.
+	var stackYamlConfig string
+	var err error
+	if atmosConfig != nil && atmosConfig.TrackProvenance {
+		stackYamlConfig, err = GetFileContentWithoutCache(filePath)
+	} else {
+		stackYamlConfig, err = GetFileContent(filePath)
+	}
 	// If the file does not exist (`err != nil`), and `ignoreMissingFiles = true`, don't return the error.
 	//
 	// `ignoreMissingFiles = true` is used when executing `atmos describe affected` command.
@@ -1309,6 +1335,19 @@ func GetFileContent(filePath string) (string, error) {
 	return string(content), nil
 }
 
+// GetFileContentWithoutCache reads file content without using the cache.
+// Used when provenance tracking is enabled to ensure fresh reads with position tracking.
+func GetFileContentWithoutCache(filePath string) (string, error) {
+	defer perf.Track(nil, "exec.GetFileContentWithoutCache")()
+
+	content, err := os.ReadFile(filePath)
+	if err != nil {
+		return "", err
+	}
+
+	return string(content), nil
+}
+
 // ProcessBaseComponentConfig processes base component(s) config.
 func ProcessBaseComponentConfig(
 	atmosConfig *schema.AtmosConfiguration,
@@ -1326,11 +1365,14 @@ func ProcessBaseComponentConfig(
 	// Create cache key from stack + component + baseComponent.
 	cacheKey := fmt.Sprintf("%s:%s:%s", stack, component, baseComponent)
 
-	// Check cache first.
-	if cachedConfig, cachedBaseComponents, found := getCachedBaseComponentConfig(cacheKey); found {
-		*baseComponentConfig = *cachedConfig
-		*baseComponents = *cachedBaseComponents
-		return nil
+	// Skip cache when provenance tracking is enabled, as we need to record provenance entries during processing.
+	if !atmosConfig.TrackProvenance {
+		// Check cache first.
+		if cachedConfig, cachedBaseComponents, found := getCachedBaseComponentConfig(cacheKey); found {
+			*baseComponentConfig = *cachedConfig
+			*baseComponents = *cachedBaseComponents
+			return nil
+		}
 	}
 
 	// Process normally if not cached.
