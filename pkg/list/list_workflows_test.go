@@ -67,13 +67,11 @@ func TestValidateFormat(t *testing.T) {
 
 func TestListWorkflows(t *testing.T) {
 	// Create a temporary directory for test files
-	tmpDir, err := os.MkdirTemp("", "workflow_test")
-	require.NoError(t, err)
-	defer os.RemoveAll(tmpDir)
+	tmpDir := t.TempDir()
 
 	// Create workflow directory structure
 	workflowsDir := filepath.Join(tmpDir, "stacks", "workflows")
-	err = os.MkdirAll(workflowsDir, 0o755)
+	err := os.MkdirAll(workflowsDir, 0o755)
 	require.NoError(t, err)
 
 	// Create atmos.yaml with workflow configuration
@@ -288,9 +286,7 @@ workflows:
 
 func TestListWorkflowsWithFile(t *testing.T) {
 	// Create a temporary directory for test files
-	tmpDir, err := os.MkdirTemp("", "workflow_test")
-	require.NoError(t, err)
-	defer os.RemoveAll(tmpDir)
+	tmpDir := t.TempDir()
 
 	// Create a test workflow file
 	testWorkflowFile := filepath.Join(tmpDir, "test.yaml")

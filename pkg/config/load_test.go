@@ -11,15 +11,9 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-func setupTestFiles(t *testing.T) (string, func()) {
-	tempDir, err := os.MkdirTemp("", "atmos-test-*")
-	assert.NoError(t, err)
-
-	cleanup := func() {
-		os.RemoveAll(tempDir)
-	}
-
-	return tempDir, cleanup
+func setupTestFiles(t *testing.T) string {
+	tempDir := t.TempDir()
+	return tempDir
 }
 
 func createTestConfig(t *testing.T, dir string, content string) string {
@@ -76,8 +70,7 @@ components:
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Setup test environment
-			tempDir, cleanup := setupTestFiles(t)
-			defer cleanup()
+			tempDir := setupTestFiles(t)
 
 			// Set up environment variables
 			for k, v := range tt.setupEnv {

@@ -398,9 +398,7 @@ func TestPlanDiffCommandFlags(t *testing.T) {
 
 func TestTerraformPlanDiffWithNonExistentFile(t *testing.T) {
 	// Create a temporary directory for test files
-	tmpDir, err := os.MkdirTemp("", "atmos-test")
-	require.NoError(t, err)
-	defer os.RemoveAll(tmpDir)
+	tmpDir := t.TempDir()
 
 	// Create a test atmosConfig
 	atmosConfig := schema.AtmosConfiguration{
@@ -409,7 +407,7 @@ func TestTerraformPlanDiffWithNonExistentFile(t *testing.T) {
 
 	// Create a component directory
 	componentDir := filepath.Join(tmpDir, "test-component")
-	err = os.MkdirAll(componentDir, 0o755)
+	err := os.MkdirAll(componentDir, 0o755)
 	require.NoError(t, err)
 
 	// Test with non-existent original plan file using a relative path
@@ -453,9 +451,7 @@ func TestTerraformPlanDiffWithNonExistentFile(t *testing.T) {
 // different scenarios.
 func TestTerraformPlanDiffErrorHandling(t *testing.T) {
 	// Create a temporary directory for test files
-	tmpDir, err := os.MkdirTemp("", "atmos-test")
-	require.NoError(t, err)
-	defer os.RemoveAll(tmpDir)
+	tmpDir := t.TempDir()
 
 	// Create a test atmosConfig
 	atmosConfig := schema.AtmosConfiguration{
@@ -464,7 +460,7 @@ func TestTerraformPlanDiffErrorHandling(t *testing.T) {
 
 	// Create a component directory
 	componentDir := filepath.Join(tmpDir, "test-component")
-	err = os.MkdirAll(componentDir, 0o755)
+	err := os.MkdirAll(componentDir, 0o755)
 	require.NoError(t, err)
 
 	// Create test plan files

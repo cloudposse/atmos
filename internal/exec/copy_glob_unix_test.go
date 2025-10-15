@@ -91,17 +91,9 @@ func TestGetMatchesForPattern_ShallowNoMatch(t *testing.T) {
 
 // TestCopyFile_FailCreate tests error when creating destination file fails on Unix.
 func TestCopyFile_FailCreate(t *testing.T) {
-	srcDir, err := os.MkdirTemp("", "copyfile-src")
-	if err != nil {
-		t.Fatalf("Failed to create source dir: %v", err)
-	}
-	defer os.RemoveAll(srcDir)
+	srcDir := t.TempDir()
 
-	dstDir, err := os.MkdirTemp("", "copyfile-dst")
-	if err != nil {
-		t.Fatalf("Failed to create dst dir: %v", err)
-	}
-	defer os.RemoveAll(dstDir)
+	dstDir := t.TempDir()
 
 	// Create source file.
 	srcFile := filepath.Join(srcDir, "test.txt")
@@ -116,7 +108,7 @@ func TestCopyFile_FailCreate(t *testing.T) {
 	defer os.Chmod(dstDir, 0o700) // Restore for cleanup.
 
 	dstFile := filepath.Join(dstDir, "test.txt")
-	err = copyFile(srcFile, dstFile)
+	err := copyFile(srcFile, dstFile)
 	if err == nil {
 		t.Errorf("Expected error when creating destination file, got nil")
 	}

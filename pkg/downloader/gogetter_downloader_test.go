@@ -11,26 +11,15 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-// Test helper to create a temporary directory.
-func createTempDir(t *testing.T) string {
-	dir, err := os.MkdirTemp("", "test")
-	if err != nil {
-		t.Fatalf("failed to create temp dir: %v", err)
-	}
-	return dir
-}
-
 func TestGoGetterClient_Get(t *testing.T) {
 	// Setup test file
-	srcDir := createTempDir(t)
-	defer os.RemoveAll(srcDir)
+	srcDir := t.TempDir()
 
 	testFile := filepath.Join(srcDir, "test.txt")
 	err := os.WriteFile(testFile, []byte("test content"), 0o644)
 	assert.NoError(t, err)
 
-	dstDir := createTempDir(t)
-	defer os.RemoveAll(dstDir)
+	dstDir := t.TempDir()
 
 	// Create real go-getter client
 	client := &getter.Client{
@@ -120,11 +109,7 @@ func TestRegisterCustomDetectors(t *testing.T) {
 }
 
 func TestDownloadDetectFormatAndParseFile(t *testing.T) {
-	tempDir, err := os.MkdirTemp("", "detectparse")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.RemoveAll(tempDir)
+	tempDir := t.TempDir()
 	testFile := filepath.Join(tempDir, "test.json")
 	jsonContent := []byte(`{"key": "value"}`)
 	if err := os.WriteFile(testFile, jsonContent, 0o600); err != nil {

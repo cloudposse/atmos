@@ -77,11 +77,7 @@ func TestMainTerraformPlanDiffIntegration(t *testing.T) {
 	defer func() { os.Args = origArgs }()
 
 	// Create a temporary directory for plan files
-	tmpDir, err := os.MkdirTemp("", "atmos-plan-diff-test")
-	if err != nil {
-		t.Fatalf("failed to create temporary directory: %v", err)
-	}
-	defer os.RemoveAll(tmpDir)
+	tmpDir := t.TempDir()
 
 	origPlanFile := filepath.Join(tmpDir, "orig.plan")
 	newPlanFile := filepath.Join(tmpDir, "new.plan")
