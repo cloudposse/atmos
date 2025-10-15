@@ -76,11 +76,12 @@ func formatContextTable(err error, useColor bool) string {
 		return ""
 	}
 
-	// Create styled table.
+	// Create styled table with width constraint.
 	t := table.New().
 		Border(lipgloss.ThickBorder()).
 		Headers("Context", "Value").
-		Rows(rows...)
+		Rows(rows...).
+		Width(DefaultMarkdownWidth)
 
 	if useColor {
 		t = t.

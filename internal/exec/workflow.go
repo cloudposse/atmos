@@ -109,8 +109,8 @@ func ExecuteWorkflowCmd(cmd *cobra.Command, args []string) error {
 			WithExplanationf("The workflow manifest file `%s` does not exist.", filepath.ToSlash(workflowPath)).
 			WithExampleFile(workflowFileNotFoundExample).
 			WithHint("Use `atmos list workflows` to see available workflows").
-			WithHintf("Verify the workflow file exists at: %s", workflowPath).
-			WithHintf("Check `workflows.base_path` in `atmos.yaml`: %s", atmosConfig.Workflows.BasePath).
+			WithHintf("Verify the workflow file exists at: %s", filepath.ToSlash(workflowPath)).
+			WithHintf("Check `workflows.base_path` in `atmos.yaml`: %s", filepath.ToSlash(atmosConfig.Workflows.BasePath)).
 			WithContext("file", workflowPath).
 			WithContext("base_path", atmosConfig.Workflows.BasePath).
 			WithExitCode(2).

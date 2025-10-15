@@ -17,6 +17,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/elewis787/boa"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
@@ -39,6 +40,8 @@ const (
 	logFileMode = 0o644
 	// DefaultTopFunctionsMax is the default number of top functions to display in performance summary.
 	defaultTopFunctionsMax = 50
+	// VerboseFlagName is the name of the verbose flag.
+	verboseFlagName = "verbose"
 )
 
 // atmosConfig This is initialized before everything in the Execute function. So we can directly use this.
@@ -59,8 +62,8 @@ var RootCmd = &cobra.Command{
 	SilenceUsage:  true,
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {
 		// Set verbose flag for error formatting before any command execution or fatal exits.
-		if cmd.Flags().Changed("verbose") {
-			verbose, flagErr := cmd.Flags().GetBool("verbose")
+		if cmd.Flags().Changed(verboseFlagName) {
+			verbose, flagErr := cmd.Flags().GetBool(verboseFlagName)
 			if flagErr != nil {
 				errUtils.CheckErrorPrintAndExit(flagErr, "", "")
 			}
@@ -624,7 +627,10 @@ func init() {
 	RootCmd.PersistentFlags().StringSlice("config", []string{}, "Paths to configuration files (comma-separated or repeated flag)")
 	RootCmd.PersistentFlags().StringSlice("config-path", []string{}, "Paths to configuration directories (comma-separated or repeated flag)")
 	RootCmd.PersistentFlags().Bool("no-color", false, "Disable color output")
-	RootCmd.PersistentFlags().Bool("verbose", false, "Show detailed error messages with full stack traces")
+	RootCmd.PersistentFlags().Bool(verboseFlagName, false, "Show detailed error messages with full stack traces")
+	_ = viper.BindPFlag(verboseFlagName, RootCmd.PersistentFlags().Lookup(verboseFlagName))
+	viper.SetEnvPrefix("ATMOS")
+	_ = viper.BindEnv(verboseFlagName, "ATMOS_VERBOSE")
 	RootCmd.PersistentFlags().String("pager", "", "Enable pager for output (--pager or --pager=true to enable, --pager=false to disable, --pager=less to use specific pager)")
 	// Set NoOptDefVal so --pager without value means "true".
 	RootCmd.PersistentFlags().Lookup("pager").NoOptDefVal = "true"
