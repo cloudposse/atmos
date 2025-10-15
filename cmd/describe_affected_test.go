@@ -15,13 +15,21 @@ import (
 func TestDescribeAffected(t *testing.T) {
 	t.Chdir("../tests/fixtures/scenarios/basic")
 	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
 	describeAffectedMock := exec.NewMockDescribeAffectedExec(ctrl)
 	describeAffectedMock.EXPECT().Execute(gomock.Any()).Return(nil)
+
 	run := getRunnableDescribeAffectedCmd(func(opts ...AtmosValidateOption) {
 	}, exec.ParseDescribeAffectedCliArgs, func(atmosConfig *schema.AtmosConfiguration) exec.DescribeAffectedExec {
 		return describeAffectedMock
 	})
-	run(describeAffectedCmd, []string{})
+
+	err := run(describeAffectedCmd, []string{})
+
+	// Verify command executed without errors. The mock expectations verify
+	// that Execute() was called with the correct arguments.
+	assert.NoError(t, err, "describeAffectedCmd should execute without error")
 }
 
 func TestSetFlagValueInCliArgs(t *testing.T) {

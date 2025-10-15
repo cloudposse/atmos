@@ -13,7 +13,7 @@ import (
 	"github.com/alecthomas/chroma/v2/styles"
 
 	"github.com/cloudposse/atmos/internal/tui/templates"
-	termWriter "github.com/cloudposse/atmos/internal/tui/templates/term"
+	termUtils "github.com/cloudposse/atmos/internal/tui/templates/term"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -63,7 +63,7 @@ func GetHighlightSettings(config *schema.AtmosConfiguration) *schema.SyntaxHighl
 func HighlightCode(code string, lexerName string, theme string) (string, error) {
 	defer perf.Track(nil, "utils.HighlightCode")()
 
-	if !termWriter.IsTTYSupportForStdout() {
+	if !termUtils.IsTTYSupportForStdout() {
 		return code, nil
 	}
 	var buf bytes.Buffer
@@ -74,12 +74,14 @@ func HighlightCode(code string, lexerName string, theme string) (string, error) 
 	return buf.String(), nil
 }
 
+var isTermPresent = termUtils.IsTTYSupportForStdout()
+
 // HighlightCodeWithConfig highlights the given code using the provided configuration.
 func HighlightCodeWithConfig(config *schema.AtmosConfiguration, code string, format ...string) (string, error) {
 	defer perf.Track(config, "utils.HighlightCodeWithConfig")()
 
 	// Check if either stdout or stderr is a terminal (provenance goes to stderr)
-	isTerm := termWriter.IsTTYSupportForStdout() || termWriter.IsTTYSupportForStderr()
+	isTerm := isTermPresent || termUtils.IsTTYSupportForStderr()
 
 	// Skip highlighting if not in a terminal or disabled
 	if !isTerm || !GetHighlightSettings(config).Enabled {
