@@ -4,7 +4,7 @@ Custom Go static analysis linter for Atmos-specific rules.
 
 ## Overview
 
-Lintroller is a custom linter that enforces Atmos coding conventions around test environment variable handling. It prevents common mistakes when using Go's testing utilities and ensures tests follow best practices.
+Lintroller is a custom linter that enforces Atmos coding conventions around test environment variable handling and temporary directory management. It prevents common mistakes when using Go's testing utilities and ensures tests follow best practices.
 
 ## Rules
 
@@ -64,6 +64,41 @@ func TestExample(t *testing.T) {
 func BenchmarkExample(b *testing.B) {
     os.Setenv("PATH", "/test/path")  // ✅ Allowed in benchmarks (b.Setenv doesn't exist)
     defer func() { os.Setenv("PATH", originalPath) }()
+    // Benchmark code...
+}
+```
+
+### 3. `os-mkdirtemp-in-test`
+
+**Prevents `os.MkdirTemp` calls in test files (except in benchmarks).**
+
+In test files, `t.TempDir()` should be used instead of `os.MkdirTemp` because it provides automatic cleanup and prevents resource leaks.
+
+**Exceptions:**
+- `os.MkdirTemp` IS allowed inside benchmark functions (since `b.TempDir()` doesn't exist)
+
+**Bad:**
+```go
+func TestExample(t *testing.T) {
+    tempDir, err := os.MkdirTemp("", "test-*")  // ❌ Use t.TempDir instead
+    if err != nil {
+        t.Fatal(err)
+    }
+    defer os.RemoveAll(tempDir)
+    // Test code...
+}
+```
+
+**Good:**
+```go
+func TestExample(t *testing.T) {
+    tempDir := t.TempDir()  // ✅ Automatically cleaned up
+    // Test code...
+}
+
+func BenchmarkExample(b *testing.B) {
+    tempDir, _ := os.MkdirTemp("", "bench-*")  // ✅ Allowed in benchmarks (b.TempDir doesn't exist)
+    defer os.RemoveAll(tempDir)
     // Benchmark code...
 }
 ```
@@ -130,11 +165,12 @@ When using `golangci-lint custom`, you can configure lintroller in `.golangci.ym
 linters-settings:
   custom:
     lintroller:
-      tsetenv-in-defer: true  # Enable/disable tsetenv-in-defer rule
-      os-setenv-in-test: true # Enable/disable os-setenv-in-test rule
+      tsetenv-in-defer: true       # Enable/disable tsetenv-in-defer rule
+      os-setenv-in-test: true      # Enable/disable os-setenv-in-test rule
+      os-mkdirtemp-in-test: true   # Enable/disable os-mkdirtemp-in-test rule
 ```
 
-Both rules are enabled by default.
+All rules are enabled by default.
 
 ## Architecture
 
@@ -153,6 +189,7 @@ type Rule interface {
 Each rule is implemented in its own file:
 - `rule_tsetenv_in_defer.go` - t.Setenv in defer/cleanup detection
 - `rule_os_setenv.go` - os.Setenv in test files detection
+- `rule_os_mkdirtemp.go` - os.MkdirTemp in test files detection
 
 ### Dual-Mode Support
 
@@ -225,6 +262,7 @@ Add to Settings struct and plugin run method for golangci-lint mode.
 - `rule.go` - Rule interface definition
 - `rule_tsetenv_in_defer.go` - t.Setenv in defer rule
 - `rule_os_setenv.go` - os.Setenv in test files rule
+- `rule_os_mkdirtemp.go` - os.MkdirTemp in test files rule
 - `cmd/lintroller/main.go` - Standalone CLI entry point
 - `lintroller_test.go` - Test suite
 - `testdata/` - Test fixtures
