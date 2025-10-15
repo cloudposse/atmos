@@ -173,6 +173,14 @@ func ClearBaseComponentConfigCache() {
 	baseComponentConfigCache = make(map[string]*schema.BaseComponentConfig)
 }
 
+// ClearJsonSchemaCache clears the JSON schema cache.
+// This should be called between independent operations (like tests) to ensure fresh processing.
+func ClearJsonSchemaCache() {
+	jsonSchemaCacheMu.Lock()
+	defer jsonSchemaCacheMu.Unlock()
+	jsonSchemaCache = make(map[string]*jsonschema.Schema)
+}
+
 // ClearFileContentCache clears the file content cache.
 // This should be called between independent operations (like tests) to ensure fresh processing.
 func ClearFileContentCache() {

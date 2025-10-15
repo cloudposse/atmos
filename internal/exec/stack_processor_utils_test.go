@@ -1353,6 +1353,9 @@ func TestHierarchicalImports_MultipleStacksConsistency(t *testing.T) {
 // TestGetCachedCompiledSchema tests that cached JSON schemas are retrieved correctly.
 // This validates P7.2 optimization: schema caching avoids recompilation.
 func TestGetCachedCompiledSchema(t *testing.T) {
+	// Clear the JSON schema cache before the test to ensure cache isolation.
+	ClearJsonSchemaCache()
+
 	// Use a test schema path
 	schemaPath := filepath.Join("..", "..", "tests", "fixtures", "schemas", "atmos", "atmos-manifest", "1.0", "atmos-manifest.json")
 
