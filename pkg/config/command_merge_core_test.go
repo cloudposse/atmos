@@ -193,9 +193,7 @@ commands:
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Setup
-			tempDir, err := os.MkdirTemp("", "atmos-final-*")
-			require.NoError(t, err)
-			defer os.RemoveAll(tempDir)
+			tempDir := t.TempDir()
 
 			for path, content := range tt.setupFiles {
 				fullPath := filepath.Join(tempDir, path)

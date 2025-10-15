@@ -12,16 +12,17 @@ func init() {
 // Analyzer is a standalone analyzer for CLI usage.
 var Analyzer = &analysis.Analyzer{
 	Name: "lintroller",
-	Doc:  "Atmos project-specific linting rules (t.Setenv/os.Setenv checks)",
+	Doc:  "Atmos project-specific linting rules (t.Setenv/os.Setenv/t.TempDir checks)",
 	Run:  standaloneRun,
 }
 
 // standaloneRun runs all rules for the standalone CLI tool.
 func standaloneRun(pass *analysis.Pass) (interface{}, error) {
-	// Run all rules (both enabled by default).
+	// Run all rules (all enabled by default).
 	rules := []Rule{
 		&TSetenvInDeferRule{},
 		&OsSetenvInTestRule{},
+		&OsMkdirTempInTestRule{},
 	}
 
 	for _, file := range pass.Files {
@@ -37,8 +38,9 @@ func standaloneRun(pass *analysis.Pass) (interface{}, error) {
 
 // Settings for the lintroller plugin.
 type Settings struct {
-	TSetenvInDefer bool `json:"tsetenv-in-defer" yaml:"tsetenv-in-defer"`
-	OsSetenvInTest bool `json:"os-setenv-in-test" yaml:"os-setenv-in-test"`
+	TSetenvInDefer    bool `json:"tsetenv-in-defer" yaml:"tsetenv-in-defer"`
+	OsSetenvInTest    bool `json:"os-setenv-in-test" yaml:"os-setenv-in-test"`
+	OsMkdirTempInTest bool `json:"os-mkdirtemp-in-test" yaml:"os-mkdirtemp-in-test"`
 }
 
 // LintrollerPlugin implements the register.LinterPlugin interface.
@@ -54,9 +56,10 @@ func New(settings any) (register.LinterPlugin, error) {
 	}
 
 	// Default to enabling all rules if no settings provided.
-	if !s.TSetenvInDefer && !s.OsSetenvInTest {
+	if !s.TSetenvInDefer && !s.OsSetenvInTest && !s.OsMkdirTempInTest {
 		s.TSetenvInDefer = true
 		s.OsSetenvInTest = true
+		s.OsMkdirTempInTest = true
 	}
 
 	return &LintrollerPlugin{settings: s}, nil
@@ -67,7 +70,7 @@ func (p *LintrollerPlugin) BuildAnalyzers() ([]*analysis.Analyzer, error) {
 	return []*analysis.Analyzer{
 		{
 			Name: "lintroller",
-			Doc:  "Atmos project-specific linting rules (t.Setenv/os.Setenv checks)",
+			Doc:  "Atmos project-specific linting rules (t.Setenv/os.Setenv/t.TempDir checks)",
 			Run:  p.run,
 		},
 	}, nil
@@ -87,6 +90,9 @@ func (p *LintrollerPlugin) run(pass *analysis.Pass) (interface{}, error) {
 	}
 	if p.settings.OsSetenvInTest {
 		rules = append(rules, &OsSetenvInTestRule{})
+	}
+	if p.settings.OsMkdirTempInTest {
+		rules = append(rules, &OsMkdirTempInTestRule{})
 	}
 
 	// Run all enabled rules.

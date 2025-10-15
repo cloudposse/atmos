@@ -287,9 +287,7 @@ commands:
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Create temp directory.
-			tempDir, err := os.MkdirTemp("", "atmos-merge-behavior-*")
-			require.NoError(t, err)
-			defer os.RemoveAll(tempDir)
+			tempDir := t.TempDir()
 
 			// Create test files.
 			for path, content := range tt.setupFiles {
@@ -327,9 +325,7 @@ commands:
 // TestCommandStructurePreservation verifies that complex command structures are preserved through merging.
 func TestCommandStructurePreservation(t *testing.T) {
 	// Create temp directory.
-	tempDir, err := os.MkdirTemp("", "atmos-structure-*")
-	require.NoError(t, err)
-	defer os.RemoveAll(tempDir)
+	tempDir := t.TempDir()
 
 	// Create a file with a complex command structure.
 	complexYAML := `
@@ -361,7 +357,7 @@ commands:
     verbose: true
 `
 
-	err = os.WriteFile(filepath.Join(tempDir, "atmos.yaml"), []byte(complexYAML), 0o644)
+	err := os.WriteFile(filepath.Join(tempDir, "atmos.yaml"), []byte(complexYAML), 0o644)
 	require.NoError(t, err)
 
 	// Load and verify.
