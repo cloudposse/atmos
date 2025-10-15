@@ -45,7 +45,7 @@ tests:
       - "prod"
     expect:
       stderr:
-        - "component is locked"
+        - "locked component cannot be provisioned"
         - "component 'mock' cannot be modified"
       exit_code: 2
 
