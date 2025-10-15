@@ -29,7 +29,9 @@ var authWhoamiCmd = &cobra.Command{
 }
 
 func executeAuthWhoamiCommand(cmd *cobra.Command, args []string) error {
-	handleHelpRequest(cmd, args)
+	if err := handleHelpRequest(cmd, args); err != nil {
+		return err
+	}
 
 	// Load atmos config and auth manager.
 	authManager, err := loadAuthManager()
@@ -46,7 +48,7 @@ func executeAuthWhoamiCommand(cmd *cobra.Command, args []string) error {
 	// Query whoami.
 	whoami, err := authManager.Whoami(context.Background(), identityName)
 	if err != nil {
-		errUtils.CheckErrorPrintAndExit(err, "", "")
+		return err
 	}
 
 	// Output.
@@ -92,7 +94,6 @@ func printWhoamiJSON(whoami *authTypes.WhoamiInfo) error {
 	}
 	jsonData, err := json.MarshalIndent(redactedWhoami, "", "  ")
 	if err != nil {
-		errUtils.CheckErrorAndPrint(errUtils.ErrInvalidAuthConfig, "Failed to marshal JSON", "")
 		return errUtils.ErrInvalidAuthConfig
 	}
 	fmt.Println(string(jsonData))

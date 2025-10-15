@@ -4,7 +4,6 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
-	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/internal/exec"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -29,14 +28,16 @@ var describeDependentsCmd = &cobra.Command{
 }
 
 func getRunnableDescribeDependentsCmd(
-	checkAtmosConfig func(opts ...AtmosValidateOption),
+	checkAtmosConfig func(opts ...AtmosValidateOption) error,
 	processCommandLineArgs func(componentType string, cmd *cobra.Command, args []string, additionalArgsAndFlags []string) (schema.ConfigAndStacksInfo, error),
 	initCliConfig func(info schema.ConfigAndStacksInfo, validate bool) (schema.AtmosConfiguration, error),
 	newDescribeDependentsExec describeDependentExecCreator,
 ) func(cmd *cobra.Command, args []string) error {
 	return func(cmd *cobra.Command, args []string) error {
 		// Check Atmos configuration
-		checkAtmosConfig()
+		if err := checkAtmosConfig(); err != nil {
+			return err
+		}
 
 		info, err := processCommandLineArgs("terraform", cmd, args, nil)
 		if err != nil {
@@ -124,8 +125,9 @@ func init() {
 	describeDependentsCmd.PersistentFlags().Bool("process-functions", true, "Enable/disable YAML functions processing in Atmos stack manifests when executing the command")
 	describeDependentsCmd.PersistentFlags().StringSlice("skip", nil, "Skip executing a YAML function when processing Atmos stack manifests")
 
-	err := describeDependentsCmd.MarkPersistentFlagRequired("stack")
-	errUtils.CheckErrorPrintAndExit(err, "", "")
+	if err := describeDependentsCmd.MarkPersistentFlagRequired("stack"); err != nil {
+		panic(err)
+	}
 
 	describeCmd.AddCommand(describeDependentsCmd)
 }

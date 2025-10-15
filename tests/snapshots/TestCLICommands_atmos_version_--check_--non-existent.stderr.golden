@@ -12,3 +12,15 @@ unknown flag: --non-existent
 💡 Run atmos version --help for usage
 
 
+# Error
+
+invalid flag: unknown flag: --non-existent
+
+## Hints
+
+💡 Run atmos version --help for usage
+
+
+
+
+

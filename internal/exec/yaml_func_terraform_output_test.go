@@ -74,13 +74,13 @@ func TestYamlFuncTerraformOutput(t *testing.T) {
 	atmosConfig, err := cfg.InitCliConfig(info, true)
 	assert.NoError(t, err)
 
-	d := processTagTerraformOutput(&atmosConfig, "!terraform.output component-1 foo", stack)
+	d, err := processTagTerraformOutput(&atmosConfig, "!terraform.output component-1 foo", stack)
 	assert.Equal(t, "component-1-a", d)
 
-	d = processTagTerraformOutput(&atmosConfig, "!terraform.output component-1 bar", stack)
+	d, err = processTagTerraformOutput(&atmosConfig, "!terraform.output component-1 bar", stack)
 	assert.Equal(t, "component-1-b", d)
 
-	d = processTagTerraformOutput(&atmosConfig, "!terraform.output component-1 nonprod baz", "")
+	d, err = processTagTerraformOutput(&atmosConfig, "!terraform.output component-1 nonprod baz", "")
 	assert.Equal(t, "component-1-c", d)
 
 	res, err := ExecuteDescribeComponent(
@@ -114,13 +114,13 @@ func TestYamlFuncTerraformOutput(t *testing.T) {
 		t.Fatalf("Failed to execute 'ExecuteTerraform': %v", err)
 	}
 
-	d = processTagTerraformOutput(&atmosConfig, "!terraform.output component-2 foo", stack)
+	d, err = processTagTerraformOutput(&atmosConfig, "!terraform.output component-2 foo", stack)
 	assert.Equal(t, "component-1-a", d)
 
-	d = processTagTerraformOutput(&atmosConfig, "!terraform.output component-2 nonprod bar", stack)
+	d, err = processTagTerraformOutput(&atmosConfig, "!terraform.output component-2 nonprod bar", stack)
 	assert.Equal(t, "component-1-b", d)
 
-	d = processTagTerraformOutput(&atmosConfig, "!terraform.output component-2 nonprod baz", "")
+	d, err = processTagTerraformOutput(&atmosConfig, "!terraform.output component-2 nonprod baz", "")
 	assert.Equal(t, "component-1-c", d)
 
 	res, err = ExecuteDescribeComponent(
@@ -143,4 +143,71 @@ func TestYamlFuncTerraformOutput(t *testing.T) {
 	assert.Contains(t, y, `test_map:
     key1: value1
     key2: value2`)
+}
+
+func TestProcessTagTerraformOutput_ErrorPaths(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{
+		BasePath: "/tmp/test",
+	}
+
+	tests := []struct {
+		name          string
+		input         string
+		currentStack  string
+		expectError   bool
+		errorContains string
+	}{
+		{
+			name:          "empty after tag",
+			input:         "!terraform.output",
+			currentStack:  "dev",
+			expectError:   true,
+			errorContains: "invalid Atmos YAML function",
+		},
+		{
+			name:          "insufficient parameters - 1 param",
+			input:         "!terraform.output component-1",
+			currentStack:  "dev",
+			expectError:   true,
+			errorContains: "invalid number of arguments",
+		},
+		{
+			name:          "insufficient parameters - 0 params",
+			input:         "!terraform.output ",
+			currentStack:  "dev",
+			expectError:   true,
+			errorContains: "invalid Atmos YAML function",
+		},
+		{
+			name:          "too many parameters - 4 params",
+			input:         "!terraform.output component-1 dev output extra",
+			currentStack:  "dev",
+			expectError:   true,
+			errorContains: "invalid number of arguments",
+		},
+		{
+			name:          "invalid parameter format - quoted string not closed",
+			input:         "!terraform.output component-1 \"unclosed",
+			currentStack:  "dev",
+			expectError:   true,
+			errorContains: "", // SplitStringByDelimiter error varies
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := processTagTerraformOutput(atmosConfig, tt.input, tt.currentStack)
+
+			if tt.expectError {
+				assert.Error(t, err)
+				if tt.errorContains != "" {
+					assert.Contains(t, err.Error(), tt.errorContains)
+				}
+				// For error cases, result should be nil
+				assert.Nil(t, result)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
 }

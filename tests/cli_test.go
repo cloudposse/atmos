@@ -33,7 +33,6 @@ import (
 	"golang.org/x/term"
 
 	"github.com/adrg/xdg"
-	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/config"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/telemetry"
@@ -564,7 +563,7 @@ func TestMain(m *testing.M) {
 		atmosRunner.Cleanup()
 	}
 
-	errUtils.Exit(exitCode)
+	os.Exit(exitCode) //nolint:revive // TestMain must call os.Exit to propagate test exit code
 }
 
 // checkPreconditions checks if all required preconditions for a test are met.

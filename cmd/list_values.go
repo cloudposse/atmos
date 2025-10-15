@@ -59,7 +59,9 @@ var listValuesCmd = &cobra.Command{
 		}
 
 		// Check Atmos configuration
-		checkAtmosConfig()
+		if err := checkAtmosConfig(); err != nil {
+			return err
+		}
 
 		output, err := listValues(cmd, args)
 		if err != nil {
@@ -85,7 +87,9 @@ var listVarsCmd = &cobra.Command{
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		// Check Atmos configuration
-		checkAtmosConfig()
+		if err := checkAtmosConfig(); err != nil {
+			return err
+		}
 
 		// Set the query flag to .vars
 		if err := cmd.Flags().Set("query", ".vars"); err != nil {

@@ -10,7 +10,15 @@ var atlantisCmd = &cobra.Command{
 	Short:              "Generate and manage Atlantis configurations",
 	Long:               `Generate and manage Atlantis configurations that use Atmos under the hood to run Terraform workflows, bringing the power of Atmos to Atlantis for streamlined infrastructure automation.`,
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
-	Args:               cobra.NoArgs,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		// Handle "help" subcommand explicitly for parent commands
+		if len(args) > 0 && args[0] == "help" {
+			cmd.Help()
+			return nil
+		}
+		// Show usage error for any other case (no subcommand or invalid subcommand)
+		return showUsageAndExit(cmd, args)
+	},
 }
 
 func init() {

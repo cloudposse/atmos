@@ -42,10 +42,12 @@ linters:
           msg: Use `t.Skipf("<reason>")` with a descriptive reason; do not use `t.Skip`/`t.SkipNow`
         - pattern: ^path\.Join$
           msg: Use `filepath.Join` for OS-appropriate path separators instead of `path.Join` (which always uses forward slashes)
-        - pattern: 'WithHint\((?:[^()]*|\([^)]*\))*,\s*fmt\.Sprintf'
-          msg: Use `WithHintf()` instead of `WithHint(err, fmt.Sprintf(...))` for formatted hint messages
+        - pattern: os\.Exit
+          msg: Do not call `os.Exit` directly; return errors with exit codes using `errUtils.WithExitCode()` and let main() handle exit
+        - pattern: log\.Fatal
+          msg: Do not use `log.Fatal`; return errors with exit codes using `errUtils.WithExitCode()` and let main() handle exit
       exclude-godoc-examples: false
-      analyze-types: true
+      analyze-types: false
     funlen:
       lines: 60
       statements: 40
@@ -153,7 +155,6 @@ linters:
           - funlen
           - gocognit
           - gosec
-          - revive
         path: _test\.go$
       - linters:
           - cyclop

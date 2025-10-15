@@ -16,13 +16,15 @@ func processTagTerraformState(
 	atmosConfig *schema.AtmosConfiguration,
 	input string,
 	currentStack string,
-) any {
+) (any, error) {
 	defer perf.Track(atmosConfig, "exec.processTagTerraformState")()
 
 	log.Debug("Executing Atmos YAML function", "function", input)
 
 	str, err := getStringAfterTag(input, u.AtmosYamlFuncTerraformState)
-	errUtils.CheckErrorPrintAndExit(err, "", "")
+	if err != nil {
+		return nil, err
+	}
 
 	var component string
 	var stack string
@@ -32,7 +34,9 @@ func processTagTerraformState(
 	// while also ignoring leading and trailing whitespace.
 	// SplitStringByDelimiter splits a string by the delimiter, not splitting inside quotes.
 	parts, err := u.SplitStringByDelimiter(str, ' ')
-	errUtils.CheckErrorPrintAndExit(err, "", "")
+	if err != nil {
+		return nil, err
+	}
 
 	partsLen := len(parts)
 
@@ -50,11 +54,12 @@ func processTagTerraformState(
 			"stack", currentStack,
 		)
 	default:
-		er := fmt.Errorf("%w %s", errUtils.ErrYamlFuncInvalidArguments, input)
-		errUtils.CheckErrorPrintAndExit(er, "", "")
+		return nil, fmt.Errorf("%w %s", errUtils.ErrYamlFuncInvalidArguments, input)
 	}
 
 	value, err := GetTerraformState(atmosConfig, input, stack, component, output, false)
-	errUtils.CheckErrorPrintAndExit(err, "", "")
-	return value
+	if err != nil {
+		return nil, err
+	}
+	return value, nil
 }

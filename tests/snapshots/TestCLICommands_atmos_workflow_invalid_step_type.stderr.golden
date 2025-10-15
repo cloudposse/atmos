@@ -9,9 +9,17 @@
 
 Step type invalid is not supported. Each step must specify a valid type.
 
-### Available types:
+## Hints
+
+💡 Available types:
 
 • atmos
 • shell
+
+
+
+# Error
+
+invalid workflow step type
 
 

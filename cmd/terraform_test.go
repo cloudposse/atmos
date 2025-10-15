@@ -9,12 +9,10 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 
-	"github.com/cloudposse/atmos/tests"
+	errUtils "github.com/cloudposse/atmos/errors"
 )
 
 func TestTerraformRun1(t *testing.T) {
-	tests.RequireTerraform(t)
-
 	if os.Getenv("TEST_EXIT") == "1" {
 		stacksPath := "../tests/fixtures/scenarios/stack-templates-2"
 
@@ -26,7 +24,11 @@ func TestTerraformRun1(t *testing.T) {
 			Short: "test",
 		}
 
-		terraformRun(cmd, cmd, []string{})
+		err := terraformRun(cmd, cmd, []string{})
+		if err != nil {
+			exitCode := errUtils.GetExitCode(err)
+			os.Exit(exitCode)
+		}
 		return
 	}
 	execPath, err := exec.LookPath(os.Args[0])
@@ -43,8 +45,6 @@ func TestTerraformRun1(t *testing.T) {
 }
 
 func TestTerraformRun2(t *testing.T) {
-	tests.RequireTerraform(t)
-
 	if os.Getenv("TEST_EXIT") == "1" {
 		stacksPath := "../tests/fixtures/scenarios/stack-templates-2"
 
@@ -58,7 +58,11 @@ func TestTerraformRun2(t *testing.T) {
 
 		cmd.PersistentFlags().Bool("process-templates", true, "Enable/disable Go template processing in Atmos stack manifests when executing terraform commands")
 
-		terraformRun(cmd, cmd, []string{})
+		err := terraformRun(cmd, cmd, []string{})
+		if err != nil {
+			exitCode := errUtils.GetExitCode(err)
+			os.Exit(exitCode)
+		}
 		return
 	}
 	execPath, err := exec.LookPath(os.Args[0])
@@ -75,8 +79,6 @@ func TestTerraformRun2(t *testing.T) {
 }
 
 func TestTerraformRun3(t *testing.T) {
-	tests.RequireTerraform(t)
-
 	if os.Getenv("TEST_EXIT") == "1" {
 		stacksPath := "../tests/fixtures/scenarios/stack-templates-2"
 
@@ -91,7 +93,11 @@ func TestTerraformRun3(t *testing.T) {
 		cmd.PersistentFlags().Bool("process-templates", true, "Enable/disable Go template processing in Atmos stack manifests when executing terraform commands")
 		cmd.PersistentFlags().Bool("process-functions", true, "Enable/disable YAML functions processing in Atmos stack manifests when executing terraform commands")
 
-		terraformRun(cmd, cmd, []string{})
+		err := terraformRun(cmd, cmd, []string{})
+		if err != nil {
+			exitCode := errUtils.GetExitCode(err)
+			os.Exit(exitCode)
+		}
 		return
 	}
 	execPath, err := exec.LookPath(os.Args[0])

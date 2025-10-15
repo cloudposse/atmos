@@ -115,7 +115,6 @@ func ExecuteWorkflowCmd(cmd *cobra.Command, args []string) error {
 			WithContext("base_path", atmosConfig.Workflows.BasePath).
 			WithExitCode(2).
 			Err()
-		errUtils.CheckErrorAndPrint(err, "", "")
 		return err
 	}
 
@@ -142,7 +141,6 @@ func ExecuteWorkflowCmd(cmd *cobra.Command, args []string) error {
 			WithContext("file", workflowPath).
 			WithExitCode(2).
 			Err()
-		errUtils.CheckErrorAndPrint(err, "", "")
 		return err
 	}
 
@@ -166,6 +164,7 @@ func ExecuteWorkflowCmd(cmd *cobra.Command, args []string) error {
 
 		err := errUtils.Build(ErrWorkflowNoWorkflow).
 			WithExplanation(explanation).
+			WithHintf("Available workflows:\n\n%s", FormatList(validWorkflows)).
 			WithExampleFile(workflowNotFoundExample).
 			WithHintf("Use `atmos describe workflows` to see detailed workflow definitions").
 			WithHintf("Run a workflow: `atmos workflow <name> -f %s`", workflowPath).
@@ -174,7 +173,6 @@ func ExecuteWorkflowCmd(cmd *cobra.Command, args []string) error {
 			WithContext("available_count", fmt.Sprintf("%d", len(validWorkflows))).
 			WithExitCode(2).
 			Err()
-		errUtils.CheckErrorAndPrint(err, "", "")
 		return err
 	} else {
 		workflowDefinition = i

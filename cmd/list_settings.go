@@ -30,7 +30,9 @@ var listSettingsCmd = &cobra.Command{
 		"atmos list settings --stack 'prod-*'",
 	Args: cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		checkAtmosConfig()
+		if err := checkAtmosConfig(); err != nil {
+			return err
+		}
 
 		output, err := listSettings(cmd, args)
 		if err != nil {

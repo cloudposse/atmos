@@ -23,7 +23,9 @@ var listStacksCmd = &cobra.Command{
 	Args:               cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		// Check Atmos configuration
-		checkAtmosConfig()
+		if err := checkAtmosConfig(); err != nil {
+			return err
+		}
 
 		output, err := listStacks(cmd)
 		if err != nil {

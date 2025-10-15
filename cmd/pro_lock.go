@@ -16,7 +16,9 @@ var proLockCmd = &cobra.Command{
 	ValidArgsFunction:  ComponentsArgCompletion,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		// Check Atmos configuration
-		checkAtmosConfig()
+		if err := checkAtmosConfig(); err != nil {
+			return err
+		}
 
 		err := e.ExecuteProLockCommand(cmd, args)
 		return err

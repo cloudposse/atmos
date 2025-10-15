@@ -3,7 +3,6 @@ package cmd
 import (
 	"github.com/spf13/cobra"
 
-	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
 )
 
@@ -15,7 +14,9 @@ var workflowCmd = &cobra.Command{
 
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 	RunE: func(cmd *cobra.Command, args []string) error {
-		handleHelpRequest(cmd, args)
+		if err := handleHelpRequest(cmd, args); err != nil {
+			return err
+		}
 		// If no arguments are provided, start the workflow UI
 		if len(args) == 0 {
 			err := e.ExecuteWorkflowCmd(cmd, args)
@@ -38,12 +39,7 @@ var workflowCmd = &cobra.Command{
 		// Execute the workflow command
 		err := e.ExecuteWorkflowCmd(cmd, args)
 		if err != nil {
-			// Check if it's a known error that's already printed in ExecuteWorkflowCmd.
-			// If it is, we don't need to print it again, but we do need to exit with the proper exit code.
-			if e.IsKnownWorkflowError(err) {
-				exitCode := errUtils.GetExitCode(err)
-				errUtils.Exit(exitCode)
-			}
+			// Return the error with its exit code - main.go will handle the exit
 			return err
 		}
 

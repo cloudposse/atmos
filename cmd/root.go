@@ -57,12 +57,12 @@ var RootCmd = &cobra.Command{
 	Long:          `Atmos is a universal tool for DevOps and cloud automation used for provisioning, managing and orchestrating workflows across various toolchains`,
 	SilenceErrors: true,
 	SilenceUsage:  true,
-	PersistentPreRun: func(cmd *cobra.Command, args []string) {
-		// Set verbose flag for error formatting before any command execution or fatal exits.
+	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+		// Set verbose flag for error formatting before any command execution.
 		if cmd.Flags().Changed("verbose") {
 			verbose, flagErr := cmd.Flags().GetBool("verbose")
 			if flagErr != nil {
-				errUtils.CheckErrorPrintAndExit(flagErr, "", "")
+				return flagErr
 			}
 			errUtils.SetVerboseFlag(verbose)
 		}
@@ -104,7 +104,7 @@ var RootCmd = &cobra.Command{
 				// Only exit on config errors if this is not the version command.
 				// Version command should work even with invalid config.
 				if !isVersionCommand() {
-					errUtils.CheckErrorPrintAndExit(err, "", "")
+					return err
 				}
 			}
 		}
@@ -112,7 +112,7 @@ var RootCmd = &cobra.Command{
 		// Setup profiler before command execution (but skip for help commands).
 		if !isHelpRequested {
 			if setupErr := setupProfiler(cmd, &tmpConfig); setupErr != nil {
-				errUtils.CheckErrorPrintAndExit(setupErr, "Failed to setup profiler", "")
+				return setupErr
 			}
 		}
 
@@ -121,10 +121,9 @@ var RootCmd = &cobra.Command{
 			if versionFlag, err := cmd.Flags().GetBool("version"); err == nil && versionFlag {
 				versionErr := e.NewVersionExec(&tmpConfig).Execute(false, "")
 				if versionErr != nil {
-					errUtils.CheckErrorPrintAndExit(versionErr, "", "")
+					return versionErr
 				}
-				utils.OsExit(0)
-				return
+				return errUtils.ErrHelpOutput
 			}
 		}
 
@@ -138,6 +137,8 @@ var RootCmd = &cobra.Command{
 		if !isCompletionCommand(cmd) && !isHelpRequested && err == nil {
 			telemetry.PrintTelemetryDisclosure()
 		}
+
+		return nil
 	},
 	PersistentPostRun: func(cmd *cobra.Command, args []string) {
 		// Stop profiler after command execution.
@@ -177,7 +178,7 @@ var RootCmd = &cobra.Command{
 }
 
 // setupLogger configures the global logger based on the provided Atmos configuration.
-func setupLogger(atmosConfig *schema.AtmosConfiguration) {
+func setupLogger(atmosConfig *schema.AtmosConfiguration) error {
 	switch atmosConfig.Logs.Level {
 	case "Trace":
 		log.SetLevel(log.TraceLevel)
@@ -235,7 +236,9 @@ func setupLogger(atmosConfig *schema.AtmosConfiguration) {
 			output = io.Discard // More efficient than opening os.DevNull
 		default:
 			logFile, err := os.OpenFile(atmosConfig.Logs.File, os.O_CREATE|os.O_WRONLY|os.O_APPEND, logFileMode)
-			errUtils.CheckErrorPrintAndExit(err, "Failed to open log file", "")
+			if err != nil {
+				return fmt.Errorf("failed to open log file: %w", err)
+			}
 			// Store the file handle for later cleanup instead of deferring close.
 			logFileHandle = logFile
 			output = logFile
@@ -244,9 +247,10 @@ func setupLogger(atmosConfig *schema.AtmosConfiguration) {
 		log.SetOutput(output)
 	}
 	if _, err := log.ParseLogLevel(atmosConfig.Logs.Level); err != nil {
-		errUtils.CheckErrorPrintAndExit(err, "", "")
+		return err
 	}
 	log.Debug("Set", "logs-level", log.GetLevelString(), "logs-file", atmosConfig.Logs.File)
+	return nil
 }
 
 // cleanupLogFile closes the log file handle if it was opened.
@@ -470,7 +474,9 @@ func Execute() error {
 	}
 
 	// Set the log level for the charmbracelet/log package based on the atmosConfig.
-	setupLogger(&atmosConfig)
+	if err := setupLogger(&atmosConfig); err != nil {
+		return err
+	}
 
 	var err error
 	// If CLI configuration was found, process its custom commands and command aliases.
@@ -638,9 +644,8 @@ func init() {
 	RootCmd.PersistentFlags().Bool("heatmap", false, "Show performance heatmap visualization after command execution (includes P95 latency)")
 	RootCmd.PersistentFlags().String("heatmap-mode", "bar", "Heatmap visualization mode: bar, sparkline, table (press 1-3 to switch in TUI)")
 	// Set custom usage template.
-	err := templates.SetCustomUsageFunc(RootCmd)
-	if err != nil {
-		errUtils.CheckErrorPrintAndExit(err, "", "")
+	if err := templates.SetCustomUsageFunc(RootCmd); err != nil {
+		panic(err)
 	}
 
 	initCobraConfig()
@@ -687,11 +692,11 @@ func initCobraConfig() {
 				err = tuiUtils.PrintStyledText("ATMOS")
 			}
 			if err != nil {
-				errUtils.CheckErrorPrintAndExit(err, "", "")
+				log.Error("Failed to print styled text", "error", err)
 			}
 
 			if err := oldUsageFunc(command); err != nil {
-				errUtils.CheckErrorPrintAndExit(err, "", "")
+				log.Error("Failed to display usage", "error", err)
 			}
 
 			// Check if pager should be enabled based on flag, env var, or config.
@@ -714,16 +719,18 @@ func initCobraConfig() {
 			pager := pager.NewWithAtmosConfig(pagerEnabled)
 			if err := pager.Run("Atmos CLI Help", buf.String()); err != nil {
 				log.Error("Failed to run pager", "error", err)
-				utils.OsExit(1)
+				// Fallback to direct output if pager fails.
+				fmt.Print(buf.String())
 			}
 		} else {
 			fmt.Println()
-			err := tuiUtils.PrintStyledText("ATMOS")
-			errUtils.CheckErrorPrintAndExit(err, "", "")
+			if err := tuiUtils.PrintStyledText("ATMOS"); err != nil {
+				log.Error("Failed to print styled text", "error", err)
+			}
 
 			b.HelpFunc(command, args)
 			if err := command.Usage(); err != nil {
-				errUtils.CheckErrorPrintAndExit(err, "", "")
+				log.Error("Failed to display usage", "error", err)
 			}
 		}
 		CheckForAtmosUpdateAndPrintMessage(atmosConfig)

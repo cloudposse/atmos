@@ -3,7 +3,6 @@ package cmd
 import (
 	"github.com/spf13/cobra"
 
-	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
 )
 
@@ -15,9 +14,13 @@ var terraformGenerateBackendCmd = &cobra.Command{
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 	ValidArgsFunction:  ComponentsArgCompletion,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		handleHelpRequest(cmd, args)
+		if err := handleHelpRequest(cmd, args); err != nil {
+			return err
+		}
 		// Check Atmos configuration
-		checkAtmosConfig()
+		if err := checkAtmosConfig(); err != nil {
+			return err
+		}
 
 		err := e.ExecuteTerraformGenerateBackendCmd(cmd, args)
 		return err
@@ -27,9 +30,8 @@ var terraformGenerateBackendCmd = &cobra.Command{
 func init() {
 	terraformGenerateBackendCmd.DisableFlagParsing = false
 	AddStackCompletion(terraformGenerateBackendCmd)
-	err := terraformGenerateBackendCmd.MarkPersistentFlagRequired("stack")
-	if err != nil {
-		errUtils.CheckErrorPrintAndExit(err, "", "")
+	if err := terraformGenerateBackendCmd.MarkPersistentFlagRequired("stack"); err != nil {
+		panic(err)
 	}
 
 	terraformGenerateCmd.AddCommand(terraformGenerateBackendCmd)

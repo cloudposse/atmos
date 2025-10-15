@@ -4,6 +4,7 @@ This command generates configuration files to automate and streamline Terraform 
 
 Usage:
 
+  atmos atlantis generate [flags]
   atmos atlantis generate [sub-command] [flags]
 
 

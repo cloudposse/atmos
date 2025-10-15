@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"strings"
 
-	errUtils "github.com/cloudposse/atmos/errors"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -41,7 +40,7 @@ func extractPipeParams(parts []string, input string) (defaultValue *string, quer
 	return defaultValue, query, nil
 }
 
-func processTagStoreGet(atmosConfig *schema.AtmosConfiguration, input string, currentStack string) any {
+func processTagStoreGet(atmosConfig *schema.AtmosConfiguration, input string, currentStack string) (any, error) {
 	defer perf.Track(atmosConfig, "exec.processTagStoreGet")()
 
 	log.Debug("Executing Atmos YAML function", "function", input)
@@ -49,8 +48,7 @@ func processTagStoreGet(atmosConfig *schema.AtmosConfiguration, input string, cu
 
 	str, err := getStringAfterTag(input, u.AtmosYamlFuncStoreGet)
 	if err != nil {
-		errUtils.CheckErrorPrintAndExit(err, "", "")
-		return nil
+		return nil, err
 	}
 	log.Debug("After getStringAfterTag", "str", str)
 
@@ -64,7 +62,7 @@ func processTagStoreGet(atmosConfig *schema.AtmosConfiguration, input string, cu
 	if len(parts) > 1 {
 		defaultValue, query, err = extractPipeParams(parts, input)
 		if err != nil {
-			return err.Error()
+			return nil, err
 		}
 	}
 
@@ -72,8 +70,7 @@ func processTagStoreGet(atmosConfig *schema.AtmosConfiguration, input string, cu
 	storeParts := strings.Fields(storePart)
 	partsLength := len(storeParts)
 	if partsLength != 2 {
-		log.Error(invalidYamlFuncMsg, function, input, "invalid number of parameters", partsLength)
-		return fmt.Sprintf("%s: %s", invalidYamlFuncMsg, input)
+		return nil, fmt.Errorf("%s: %s - invalid number of parameters: %d", invalidYamlFuncMsg, input, partsLength)
 	}
 
 	retParams := getKeyParams{
@@ -86,26 +83,22 @@ func processTagStoreGet(atmosConfig *schema.AtmosConfiguration, input string, cu
 	// Retrieve the store from atmosConfig.
 	store := atmosConfig.Stores[retParams.storeName]
 	if store == nil {
-		er := fmt.Errorf("failed to execute YAML function %s. %w: %s", input, ErrStoreNotFound, retParams.storeName)
-		errUtils.CheckErrorPrintAndExit(er, "", "")
-		return nil
+		return nil, fmt.Errorf("failed to execute YAML function %s. %w: %s", input, ErrStoreNotFound, retParams.storeName)
 	}
 
 	// Retrieve the value from the store using the arbitrary key.
 	value, err := store.GetKey(retParams.key)
 	if err != nil {
 		if retParams.defaultValue != nil {
-			return *retParams.defaultValue
+			return *retParams.defaultValue, nil
 		}
-		er := fmt.Errorf("%w: failed to execute YAML function %s for key %s: %s", ErrGetKeyFailed, input, retParams.key, err)
-		errUtils.CheckErrorPrintAndExit(er, "", "")
-		return nil
+		return nil, fmt.Errorf("%w: failed to execute YAML function %s for key %s: %s", ErrGetKeyFailed, input, retParams.key, err)
 	}
 
 	// Check if the retrieved value is nil and use default if provided.
 	// This handles the case where nil was stored (e.g., from rate limit failures).
 	if value == nil && retParams.defaultValue != nil {
-		return *retParams.defaultValue
+		return *retParams.defaultValue, nil
 	}
 
 	// Execute the YQ expression if provided.
@@ -113,10 +106,9 @@ func processTagStoreGet(atmosConfig *schema.AtmosConfiguration, input string, cu
 	if retParams.query != "" {
 		res, err = u.EvaluateYqExpression(atmosConfig, value, retParams.query)
 		if err != nil {
-			errUtils.CheckErrorPrintAndExit(err, "", "")
-			return nil
+			return nil, err
 		}
 	}
 
-	return res
+	return res, nil
 }

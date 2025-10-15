@@ -54,7 +54,6 @@ func TerraformPreHook(atmosConfig *schema.AtmosConfiguration, stackInfo *schema.
 
 	authManager, err := newAuthManager(&authConfig, stackInfo)
 	if err != nil {
-		errUtils.CheckErrorAndPrint(errUtils.ErrAuthManager, hookOpTerraformPreHook, "failed to create auth manager")
 		return errUtils.ErrAuthManager
 	}
 
@@ -72,7 +71,6 @@ func TerraformPreHook(atmosConfig *schema.AtmosConfiguration, stackInfo *schema.
 func decodeAuthConfigFromStack(stackInfo *schema.ConfigAndStacksInfo) (schema.AuthConfig, error) {
 	var authConfig schema.AuthConfig
 	if err := mapstructure.Decode(stackInfo.ComponentAuthSection, &authConfig); err != nil {
-		errUtils.CheckErrorAndPrint(errUtils.ErrInvalidAuthConfig, hookOpTerraformPreHook, "failed to decode component auth config - check atmos.yaml or component auth section")
 		return schema.AuthConfig{}, errUtils.ErrInvalidAuthConfig
 	}
 	return authConfig, nil
@@ -84,11 +82,9 @@ func resolveTargetIdentityName(stackInfo *schema.ConfigAndStacksInfo, authManage
 	}
 	name, err := authManager.GetDefaultIdentity()
 	if err != nil {
-		errUtils.CheckErrorAndPrint(errUtils.ErrDefaultIdentity, hookOpTerraformPreHook, "failed to get default identity")
 		return "", errUtils.ErrDefaultIdentity
 	}
 	if name == "" {
-		errUtils.CheckErrorAndPrint(errUtils.ErrNoDefaultIdentity, hookOpTerraformPreHook, "Use the identity flag or specify an identity as default.")
 		return "", errUtils.ErrNoDefaultIdentity
 	}
 	return name, nil

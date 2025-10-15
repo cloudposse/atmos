@@ -73,8 +73,7 @@ func ExecuteWorkflow(
 			WithTitle(WorkflowErrTitle).
 			WithExplanationf("Workflow `%s` is empty and requires at least one step to execute.", workflow).
 			Err()
-		errUtils.CheckErrorAndPrint(err, "", "")
-		return ErrWorkflowNoSteps
+		return err
 	}
 
 	// Check if the workflow steps have the `name` attribute
@@ -99,10 +98,10 @@ func ExecuteWorkflow(
 			stepNames := lo.Map(workflowDefinition.Steps, func(step schema.WorkflowStep, _ int) string { return step.Name })
 			err := errUtils.Build(ErrInvalidFromStep).
 				WithTitle(WorkflowErrTitle).
-				WithExplanationf("The `--from-step` flag was set to `%s`, but this step does not exist in workflow `%s`.\n\n### Available steps:\n%s", fromStep, workflow, FormatList(stepNames)).
+				WithExplanationf("The `--from-step` flag was set to `%s`, but this step does not exist in workflow `%s`.", fromStep, workflow).
+				WithHintf("Available steps:\n%s", FormatList(stepNames)).
 				Err()
-			errUtils.CheckErrorAndPrint(err, "", "")
-			return ErrInvalidFromStep
+			return err
 		}
 	}
 
@@ -161,9 +160,9 @@ func ExecuteWorkflow(
 		} else {
 			err := errUtils.Build(ErrInvalidWorkflowStepType).
 				WithTitle(WorkflowErrTitle).
-				WithExplanationf("Step type `%s` is not supported. Each step must specify a valid type.\n\n### Available types:\n%s", commandType, FormatList([]string{"atmos", "shell"})).
+				WithExplanationf("Step type `%s` is not supported. Each step must specify a valid type.", commandType).
+				WithHintf("Available types:\n%s", FormatList([]string{"atmos", "shell"})).
 				Err()
-			errUtils.CheckErrorAndPrint(err, "", "")
 			return err
 		}
 
@@ -201,9 +200,9 @@ func ExecuteWorkflow(
 
 			stepErr := errUtils.Build(ErrWorkflowStepFailed).
 				WithTitle(WorkflowErrTitle).
-				WithExplanationf("The following command failed to execute:\n```\n%s\n```\n\nTo resume the workflow from this step, run:\n```\n%s\n```", failedCmd, resumeCommand).
+				WithExplanationf("The following command failed to execute:\n```\n%s\n```", failedCmd).
+				WithHintf("To resume the workflow from this step, run:\n```\n%s\n```", resumeCommand).
 				Err()
-			errUtils.CheckErrorAndPrint(stepErr, "", "")
 			return stepErr
 		}
 	}

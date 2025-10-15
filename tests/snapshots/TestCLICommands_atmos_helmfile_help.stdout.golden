@@ -4,6 +4,7 @@ This command runs Helmfile commands to manage Kubernetes deployments using Helmf
 
 Usage:
 
+  atmos helmfile [flags]
   atmos helmfile [sub-command] [flags]
 
 Aliases:

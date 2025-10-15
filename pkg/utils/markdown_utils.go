@@ -51,7 +51,7 @@ func trimRenderedMarkdown(md string, isTerminal bool) string {
 func printfMarkdownTo(w io.Writer, format string, a ...interface{}) {
 	if render == nil {
 		_, err := fmt.Fprintf(w, format, a...)
-		errUtils.CheckErrorAndPrint(err, "", "")
+		errUtils.HandleError(err)
 		return
 	}
 	message := fmt.Sprintf(format, a...)
@@ -59,7 +59,9 @@ func printfMarkdownTo(w io.Writer, format string, a ...interface{}) {
 	var renderErr error
 	md, renderErr = render.Render(message)
 	if renderErr != nil {
-		errUtils.CheckErrorPrintAndExit(renderErr, "", "")
+		// Fall back to plain text output if markdown rendering fails (non-fatal UI error).
+		_, _ = fmt.Fprint(w, message+"\n")
+		return
 	}
 
 	isTerminal := isWriterTerminal(w)
@@ -72,7 +74,7 @@ func printfMarkdownTo(w io.Writer, format string, a ...interface{}) {
 	}
 
 	_, err := fmt.Fprint(w, md)
-	errUtils.CheckErrorAndPrint(err, "", "")
+	errUtils.HandleError(err)
 }
 
 // PrintfMarkdown prints a message in Markdown format.
@@ -98,6 +100,7 @@ func InitializeMarkdown(atmosConfig schema.AtmosConfiguration) {
 	var err error
 	render, err = markdown.NewTerminalMarkdownRenderer(atmosConfig)
 	if err != nil {
-		errUtils.CheckErrorPrintAndExit(fmt.Errorf("failed to initialize markdown renderer: %w", err), "", "")
+		// Fall back to nil renderer - markdown functions will output plain text (non-fatal UI error).
+		render = nil
 	}
 }

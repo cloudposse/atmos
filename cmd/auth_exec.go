@@ -31,8 +31,12 @@ var authExecCmd = &cobra.Command{
 
 // executeAuthExecCommand is the main execution function for auth exec command.
 func executeAuthExecCommand(cmd *cobra.Command, args []string) error {
-	handleHelpRequest(cmd, args)
-	checkAtmosConfig()
+	if err := handleHelpRequest(cmd, args); err != nil {
+		return err
+	}
+	if err := checkAtmosConfig(); err != nil {
+		return err
+	}
 
 	return executeAuthExecCommandCore(cmd, args)
 }

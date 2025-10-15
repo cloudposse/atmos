@@ -5,7 +5,6 @@ import (
 
 	"github.com/spf13/cobra"
 
-	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
 )
 
@@ -18,7 +17,9 @@ var describeComponentCmd = &cobra.Command{
 	Args:               cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		// Check Atmos configuration
-		checkAtmosConfig()
+		if err := checkAtmosConfig(); err != nil {
+			return err
+		}
 
 		if len(args) != 1 {
 			return errors.New("invalid arguments. The command requires one argument `component`")
@@ -94,9 +95,8 @@ func init() {
 	describeComponentCmd.PersistentFlags().StringSlice("skip", nil, "Skip executing a YAML function in the Atmos stack manifests when executing the command")
 	describeComponentCmd.PersistentFlags().Bool("provenance", false, "Enable provenance tracking to show where configuration values originated")
 
-	err := describeComponentCmd.MarkPersistentFlagRequired("stack")
-	if err != nil {
-		errUtils.CheckErrorPrintAndExit(err, "", "")
+	if err := describeComponentCmd.MarkPersistentFlagRequired("stack"); err != nil {
+		panic(err)
 	}
 
 	describeCmd.AddCommand(describeComponentCmd)

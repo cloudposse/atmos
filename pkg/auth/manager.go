@@ -49,15 +49,12 @@ func NewAuthManager(
 	stackInfo *schema.ConfigAndStacksInfo,
 ) (types.AuthManager, error) {
 	if config == nil {
-		errUtils.CheckErrorAndPrint(errUtils.ErrNilParam, "config", "auth config cannot be nil")
 		return nil, errUtils.ErrNilParam
 	}
 	if credentialStore == nil {
-		errUtils.CheckErrorAndPrint(errUtils.ErrNilParam, "credentialStore", "credential store cannot be nil")
 		return nil, errUtils.ErrNilParam
 	}
 	if validator == nil {
-		errUtils.CheckErrorAndPrint(errUtils.ErrNilParam, "validator", "validator cannot be nil")
 		return nil, errUtils.ErrNilParam
 	}
 
@@ -72,13 +69,11 @@ func NewAuthManager(
 
 	// Initialize providers.
 	if err := m.initializeProviders(); err != nil {
-		errUtils.CheckErrorAndPrint(errUtils.ErrInitializingProviders, "initializeProviders", "failed to initialize providers")
 		return nil, errors.Join(errUtils.ErrInitializingProviders, err)
 	}
 
 	// Initialize identities.
 	if err := m.initializeIdentities(); err != nil {
-		errUtils.CheckErrorAndPrint(errUtils.ErrInitializingIdentities, "initializeIdentities", "failed to initialize identities")
 		return nil, errors.Join(errUtils.ErrInitializingIdentities, err)
 	}
 
@@ -98,18 +93,15 @@ func (m *manager) Authenticate(ctx context.Context, identityName string) (*types
 
 	// We expect the identity name to be provided by the caller.
 	if identityName == "" {
-		errUtils.CheckErrorAndPrint(errUtils.ErrNilParam, identityNameKey, "no identity specified")
 		return nil, fmt.Errorf(errFormatWithString, errUtils.ErrNilParam, identityNameKey)
 	}
 	if _, exists := m.identities[identityName]; !exists {
-		errUtils.CheckErrorAndPrint(errUtils.ErrInvalidAuthConfig, identityNameKey, "Identity specified was not found in the auth config.")
 		return nil, fmt.Errorf(errFormatWithString, errUtils.ErrIdentityNotFound, fmt.Sprintf(backtickedQuotedFmt, identityName))
 	}
 
 	// Build the complete authentication chain.
 	chain, err := m.buildAuthenticationChain(identityName)
 	if err != nil {
-		errUtils.CheckErrorAndPrint(errUtils.ErrInvalidAuthConfig, buildAuthenticationChain, "Check your atmos.yaml.")
 		return nil, errors.Join(errUtils.ErrInvalidAuthConfig, err)
 	}
 	// Persist the chain for later retrieval by providers or callers.
@@ -119,7 +111,6 @@ func (m *manager) Authenticate(ctx context.Context, identityName string) (*types
 	// Perform hierarchical credential validation (bottom-up).
 	finalCreds, err := m.authenticateHierarchical(ctx, identityName)
 	if err != nil {
-		errUtils.CheckErrorAndPrint(errUtils.ErrAuthenticationFailed, "authenticateHierarchical", "")
 		return nil, errors.Join(errUtils.ErrAuthenticationFailed, err)
 	}
 
@@ -127,11 +118,9 @@ func (m *manager) Authenticate(ctx context.Context, identityName string) (*types
 	if identity, exists := m.identities[identityName]; exists {
 		providerName, perr := identity.GetProviderName()
 		if perr != nil {
-			errUtils.CheckErrorAndPrint(errUtils.ErrInvalidAuthConfig, "GetProviderName", "")
 			return nil, errUtils.ErrInvalidAuthConfig
 		}
 		if err := identity.PostAuthenticate(ctx, m.stackInfo, providerName, identityName, finalCreds); err != nil {
-			errUtils.CheckErrorAndPrint(errUtils.ErrAuthenticationFailed, "PostAuthenticate", "")
 			return nil, errUtils.ErrAuthenticationFailed
 		}
 	}
@@ -232,7 +221,6 @@ func (m *manager) promptForIdentity(message string, identities []string) (string
 	)
 
 	if err := form.Run(); err != nil {
-		errUtils.CheckErrorAndPrint(errUtils.ErrUnsupportedInputType, "promptForIdentity", "")
 		return "", errors.Join(errUtils.ErrUnsupportedInputType, err)
 	}
 
@@ -267,7 +255,6 @@ func (m *manager) initializeProviders() error {
 	for name, providerConfig := range m.config.Providers {
 		provider, err := factory.NewProvider(name, &providerConfig)
 		if err != nil {
-			errUtils.CheckErrorAndPrint(errUtils.ErrInvalidProviderConfig, "initializeProviders", "")
 			return errors.Join(errUtils.ErrInvalidProviderConfig, err)
 		}
 		m.providers[name] = provider
@@ -280,7 +267,6 @@ func (m *manager) initializeIdentities() error {
 	for name, identityConfig := range m.config.Identities {
 		identity, err := factory.NewIdentity(name, &identityConfig)
 		if err != nil {
-			errUtils.CheckErrorAndPrint(errUtils.ErrInvalidIdentityConfig, "initializeIdentities", "")
 			return errors.Join(errUtils.ErrInvalidIdentityConfig, err)
 		}
 		m.identities[name] = identity
@@ -338,12 +324,10 @@ func (m *manager) GetProviderKindForIdentity(identityName string) (string, error
 	// Build the complete authentication chain.
 	chain, err := m.buildAuthenticationChain(identityName)
 	if err != nil {
-		errUtils.CheckErrorAndPrint(errUtils.ErrInvalidAuthConfig, buildAuthenticationChain, "")
 		return "", errors.Join(errUtils.ErrInvalidAuthConfig, err)
 	}
 
 	if len(chain) == 0 {
-		errUtils.CheckErrorAndPrint(errUtils.ErrInvalidAuthConfig, buildAuthenticationChain, "")
 		return "", fmt.Errorf("%w: empty chain", errUtils.ErrInvalidAuthConfig)
 	}
 
@@ -359,7 +343,6 @@ func (m *manager) GetProviderKindForIdentity(identityName string) (string, error
 		return identity.Kind, nil
 	}
 
-	errUtils.CheckErrorAndPrint(errUtils.ErrInvalidAuthConfig, "GetProviderKindForIdentity", fmt.Sprintf("provider %q not found in configuration", providerName))
 	return "", fmt.Errorf("%w: provider %q not found in configuration", errUtils.ErrInvalidAuthConfig, providerName)
 }
 
@@ -462,7 +445,6 @@ func (m *manager) authenticateProviderChain(ctx context.Context, startIndex int)
 		// Allow provider to inspect the chain and prepare pre-auth preferences.
 		if provider, exists := m.providers[m.chain[0]]; exists {
 			if err := provider.PreAuthenticate(m); err != nil {
-				errUtils.CheckErrorAndPrint(errUtils.ErrAuthenticationFailed, "PreAuthenticate", "")
 				return nil, errors.Join(errUtils.ErrAuthenticationFailed, err)
 			}
 		}
@@ -526,14 +508,12 @@ func (m *manager) retrieveCachedCredentials(chain []string, startIndex int) (typ
 func (m *manager) authenticateWithProvider(ctx context.Context, providerName string) (types.ICredentials, error) {
 	provider, exists := m.providers[providerName]
 	if !exists {
-		errUtils.CheckErrorAndPrint(errUtils.ErrInvalidAuthConfig, "authenticateWithProvider", "")
 		return nil, errUtils.ErrInvalidAuthConfig
 	}
 
 	log.Debug("Authenticating with provider", "provider", providerName)
 	credentials, err := provider.Authenticate(ctx)
 	if err != nil {
-		errUtils.CheckErrorAndPrint(errUtils.ErrAuthenticationFailed, "authenticateWithProvider", "")
 		return nil, errors.Join(errUtils.ErrAuthenticationFailed, err)
 	}
 
@@ -569,7 +549,6 @@ func (m *manager) authenticateIdentityChain(ctx context.Context, startIndex int,
 		identityStep := m.chain[i]
 		identity, exists := m.identities[identityStep]
 		if !exists {
-			errUtils.CheckErrorAndPrint(errUtils.ErrInvalidAuthConfig, "authenticateIdentityChain", fmt.Sprintf("identity %q not found in chain step %d", identityStep, i))
 			return nil, errUtils.ErrInvalidAuthConfig
 		}
 
@@ -606,7 +585,6 @@ func (m *manager) buildAuthenticationChain(identityName string) ([]string, error
 	// Recursively build the chain.
 	err := m.buildChainRecursive(identityName, &chain, visited)
 	if err != nil {
-		errUtils.CheckErrorAndPrint(errUtils.ErrInvalidAuthConfig, buildAuthenticationChain, fmt.Sprintf("failed to build authentication chain for identity %q: %v", identityName, err))
 		return nil, errors.Join(errUtils.ErrInvalidAuthConfig, err)
 	}
 
@@ -623,7 +601,6 @@ func (m *manager) buildAuthenticationChain(identityName string) ([]string, error
 func (m *manager) buildChainRecursive(identityName string, chain *[]string, visited map[string]bool) error {
 	// Check for circular dependencies.
 	if visited[identityName] {
-		errUtils.CheckErrorAndPrint(errUtils.ErrCircularDependency, buildChainRecursive, fmt.Sprintf("circular dependency detected in identity chain involving %q", identityName))
 		return fmt.Errorf("%w: circular dependency detected in identity chain involving %q", errUtils.ErrCircularDependency, identityName)
 	}
 	visited[identityName] = true
@@ -632,7 +609,6 @@ func (m *manager) buildChainRecursive(identityName string, chain *[]string, visi
 	identity, exists := m.config.Identities[identityName]
 
 	if !exists {
-		errUtils.CheckErrorAndPrint(errUtils.ErrInvalidAuthConfig, buildChainRecursive, fmt.Sprintf("identity %q not found", identityName))
 		return fmt.Errorf("%w: identity %q not found", errUtils.ErrInvalidAuthConfig, identityName)
 	}
 
@@ -643,7 +619,6 @@ func (m *manager) buildChainRecursive(identityName string, chain *[]string, visi
 			*chain = append(*chain, identityName)
 			return nil
 		}
-		errUtils.CheckErrorAndPrint(errUtils.ErrInvalidIdentityConfig, buildChainRecursive, fmt.Sprintf("identity %q has no via configuration", identityName))
 		return fmt.Errorf("%w: identity %q has no via configuration", errUtils.ErrInvalidIdentityConfig, identityName)
 	}
 
@@ -661,7 +636,6 @@ func (m *manager) buildChainRecursive(identityName string, chain *[]string, visi
 		return m.buildChainRecursive(identity.Via.Identity, chain, visited)
 	}
 
-	errUtils.CheckErrorAndPrint(errUtils.ErrInvalidIdentityConfig, buildChainRecursive, fmt.Sprintf("identity %q has invalid via configuration", identityName))
 	return fmt.Errorf("%w: identity %q has invalid via configuration", errUtils.ErrInvalidIdentityConfig, identityName)
 }
 
