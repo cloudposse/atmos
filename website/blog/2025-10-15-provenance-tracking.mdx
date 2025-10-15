@@ -87,10 +87,10 @@ Instantly see that the CIDR is defined in the parent stack at line 10. No more g
 
 ### 2. Understanding Inheritance Chains
 
-For complex configurations with multiple inheritance levels, provenance shows the complete picture:
+For complex configurations with multiple inheritance levels, provenance shows the complete picture. Use `grep` to find specific values:
 
 ```bash
-$ atmos describe component app -s staging-uw2 --provenance --query .vars.replicas
+$ atmos describe component app -s staging-uw2 --provenance | grep replicas
 
   replicas: 3  # ○ [2] catalog/app/defaults.yaml:15
 ```
@@ -102,7 +102,7 @@ You can see that `replicas` is inherited from a catalog default at depth 2.
 For compliance and security audits, verify where sensitive configurations originated:
 
 ```bash
-$ atmos describe component bastion -s prod-ue2 --provenance --query .vars.security
+$ atmos describe component bastion -s prod-ue2 --provenance | grep -A5 security
 
 security:                                         # ○ [2] catalog/bastion/defaults.yaml:20
   allowed_cidr_blocks:                            # ● [1] stacks/prod/security.yaml:8
@@ -122,29 +122,6 @@ $ atmos describe component vpc -s prod-ue2 --provenance | yq '.vars.cidr'
 ```
 
 Comments are preserved for human review while the data remains machine-parseable.
-
-## JSON Format Support
-
-When using `--format json`, provenance is embedded as `__atmos_provenance` metadata fields:
-
-```json
-{
-  "vars": {
-    "cidr": "10.100.0.0/16",
-    "__atmos_provenance": {
-      "cidr": {
-        "file": "orgs/acme/prod/us-east-2.yaml",
-        "line": 10,
-        "column": 3,
-        "type": "inline",
-        "depth": 1
-      }
-    }
-  }
-}
-```
-
-This structured format is ideal for programmatic analysis.
 
 ## Terminal vs Non-Terminal Output
 
@@ -200,8 +177,8 @@ atmos describe component <component> -s <stack> --provenance
 # Save to file
 atmos describe component vpc -s prod --provenance --file vpc-config.yaml
 
-# Query specific paths
-atmos describe component app -s staging --provenance --query .vars.replicas
+# Find specific values with grep
+atmos describe component vpc -s prod --provenance | grep cidr
 
 # JSON format
 atmos describe component vpc -s prod --provenance --format json
