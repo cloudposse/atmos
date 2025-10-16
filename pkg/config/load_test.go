@@ -3,8 +3,6 @@ package config
 import (
 	"os"
 	"path/filepath"
-	"runtime"
-	"strings"
 	"testing"
 
 	"github.com/spf13/viper"
