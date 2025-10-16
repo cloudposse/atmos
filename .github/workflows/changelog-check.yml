@@ -56,15 +56,16 @@ jobs:
           EXISTING_COMMENT=$(gh pr view $PR_NUMBER --json comments --jq '.comments[] | select(.body | contains("<!-- changelog-check -->")) | .id' | head -1)
 
           COMMENT_BODY="<!-- changelog-check -->
-          ## ⚠️ Changelog Entry Required
-
-          This PR is labeled \`minor\` or \`major\` but doesn't include a changelog entry.
-
-          **Action needed:** Add a new blog post in \`website/blog/\` to announce this change.
-
-          Example filename: \`website/blog/$(date +%Y-%m-%d)-feature-name.mdx\`
-
-          **Alternatively:** If this change doesn't require a changelog entry, remove the \`minor\` or \`major\` label."
+          > [!WARNING]
+          > #### Changelog Entry Required
+          >
+          > This PR is labeled \`minor\` or \`major\` but doesn't include a changelog entry.
+          >
+          > **Action needed:** Add a new blog post in \`website/blog/\` to announce this change.
+          >
+          > Example filename: \`website/blog/$(date +%Y-%m-%d)-feature-name.mdx\`
+          >
+          > **Alternatively:** If this change doesn't require a changelog entry, remove the \`minor\` or \`major\` label."
 
           if [ -n "$EXISTING_COMMENT" ]; then
             echo "Updating existing comment..."
