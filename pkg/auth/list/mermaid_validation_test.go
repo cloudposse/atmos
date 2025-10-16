@@ -12,22 +12,22 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-// Mermaid Validation Strategy
+// Mermaid Validation Strategy.
 //
 // This file provides multi-layered validation for Mermaid diagram syntax:
 //
 // 1. Structural Validation (validateMermaidStructure):
-//    - Parse-based validation that checks Mermaid syntax structure
-//    - Validates graph declarations, node definitions, edges, and class usage
-//    - Detects common errors: undefined nodes, missing classes, chained syntax
-//    - No external dependencies required
-//    - Fast and reliable for CI/CD
+//    - Parse-based validation that checks Mermaid syntax structure.
+//    - Validates graph declarations, node definitions, edges, and class usage.
+//    - Detects common errors: undefined nodes, missing classes, chained syntax.
+//    - No external dependencies required.
+//    - Fast and reliable for CI/CD.
 //
 // 2. Mermaid CLI Validation (validateWithMermaidCLI):
-//    - Uses official @mermaid-js/mermaid-cli tool if available
-//    - Most accurate validation against actual Mermaid parser
-//    - Optional - gracefully skips if not installed
-//    - Install with: npm install -g @mermaid-js/mermaid-cli
+//    - Uses official @mermaid-js/mermaid-cli tool if available.
+//    - Most accurate validation against actual Mermaid parser.
+//    - Optional - gracefully skips if not installed.
+//    - Install with: npm install -g @mermaid-js/mermaid-cli.
 //
 // Both validators are used in tests to ensure generated Mermaid is syntactically
 // correct and will render properly in GitHub, GitLab, Confluence, etc.
