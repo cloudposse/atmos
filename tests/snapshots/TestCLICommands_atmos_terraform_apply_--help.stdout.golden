@@ -34,6 +34,9 @@ Global Flags:
 
         --base-path string            Base path for Atmos project
 
+    -C, --chdir string                Change to directory before executing
+                                      command
+
         --clone-target-ref            Clone the target reference with which to
                                       compare the current branch: atmos
                                       terraform  --affected

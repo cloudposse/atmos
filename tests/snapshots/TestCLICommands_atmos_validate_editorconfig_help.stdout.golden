@@ -52,6 +52,9 @@ Global Flags:
 
         --base-path string           Base path for Atmos project
 
+    -C, --chdir string               Change to directory before executing
+                                     command
+
         --config stringSlice         Paths to configuration files
                                      (comma-separated or repeated flag) (default
                                      [])
