@@ -41,19 +41,11 @@ atmos auth shell --identity prod-admin
 
 And you're immediately in a shell session with all your cloud credentials ready to use. Your shell prompt will reflect that you're in an authenticated Atmos shell, and you can run as many commands as you need without worrying about authentication.
 
-## Why This Matters: Identity-Based Authentication
+## Why This Matters
 
-The key feature of `atmos auth shell` is **seamless identity-based authentication**. Easily switch between different cloud identities, roles, and accounts without manually managing credentials:
+The primary use case is simple: **launch a shell with active cloud credentials so you can go about your work**. No more juggling environment variables or re-authenticating between commands—just authenticate once and work naturally.
 
-```shell
-# Work with development credentials
-atmos auth shell --identity dev-user
-
-# In another terminal, work with production
-atmos auth shell --identity prod-admin
-```
-
-The command also supports custom shells (`--shell`), custom arguments (`--`), shell nesting tracking (`ATMOS_SHLVL`), and works cross-platform.
+The command supports multiple identities, custom shells (`--shell`), custom arguments (`--`), shell nesting tracking (`ATMOS_SHLVL`), and works cross-platform.
 
 ## Real-World Use Cases
 
