@@ -254,29 +254,60 @@ var (
 - **Comments must end with periods**: All comments should be complete sentences ending with a period (enforced by golangci-lint)
 
 ### Test Isolation (MANDATORY)
-- **ALWAYS use `CleanupRootCmd(t)`** for tests that use RootCmd - prevents test pollution
+- **ALWAYS use `CleanupRootCmd(t)` as the FIRST line in EVERY test that touches RootCmd**
 - **Pattern similar to `t.Setenv()`** - single line, automatic cleanup via `t.Cleanup()`
+- **Required for ALL tests that**:
+  - Call `RootCmd.Execute()` or `Execute()`
+  - Call `RootCmd.SetArgs()` or modify `RootCmd` flags
+  - Call any command that internally uses `RootCmd`
+  - When in doubt, add it - it's safe and lightweight
+
 - **Example usage**:
   ```go
   func TestMyCommand(t *testing.T) {
-      CleanupRootCmd(t) // Single line - snapshots and restores RootCmd state
+      CleanupRootCmd(t) // FIRST line - snapshots and restores RootCmd state
 
-      // Modify RootCmd as needed.
+      // Rest of test...
       RootCmd.SetArgs([]string{"terraform", "plan"})
       RootCmd.PersistentFlags().Set("chdir", "/tmp")
 
       // State automatically restored when test completes.
   }
   ```
+
+- **For table-driven tests with subtests**:
+  ```go
+  func TestTableDriven(t *testing.T) {
+      CleanupRootCmd(t) // Parent test needs cleanup
+
+      tests := []struct{...}{...}
+      for _, tt := range tests {
+          t.Run(tt.name, func(t *testing.T) {
+              CleanupRootCmd(t) // Each subtest ALSO needs cleanup
+
+              // Test code...
+          })
+      }
+  }
+  ```
+
 - **Why this is critical**:
   - RootCmd is global state shared across all tests
   - Flag values persist between tests causing mysterious failures
   - StringSlice flags (config, config-path) are especially problematic
   - Without cleanup, tests pass in isolation but fail when run together
+  - We use reflection to properly reset StringSlice flags which append instead of replace
+
 - **Alternative pattern** (for specific cases):
   ```go
   defer WithRootCmdSnapshot(t)()  // Defer pattern if you need explicit control
   ```
+
+- **Implementation notes**:
+  - `CleanupRootCmd(t)` snapshots ALL flag values and their Changed state
+  - Uses `t.Cleanup()` for automatic LIFO restoration
+  - Handles StringSlice/StringArray flags specially (they require reflection to reset)
+  - No performance penalty - snapshot is fast and only done once per test
 
 ### Test Quality (MANDATORY)
 - **Test behavior, not implementation** - Verify inputs/outputs, not internal state

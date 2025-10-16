@@ -11,6 +11,8 @@ import (
 )
 
 func TestPackerInspectCmd(t *testing.T) {
+	CleanupRootCmd(t)
+
 	skipIfPackerNotInstalled(t)
 
 	workDir := "../tests/fixtures/scenarios/packer"

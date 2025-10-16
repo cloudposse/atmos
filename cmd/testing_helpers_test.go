@@ -133,10 +133,10 @@ func WithRootCmdSnapshot(t *testing.T) func() {
 // This provides an ergonomic API that automatically snapshots and restores RootCmd state
 // when the test completes.
 //
-// Usage (automatic cleanup, similar to t.Setenv):
+// USAGE - Call this at the START of EVERY test that uses RootCmd:
 //
 //	func TestExample(t *testing.T) {
-//	    CleanupRootCmd(t) // Single line - no defer needed!
+//	    CleanupRootCmd(t) // Single line at the start - no defer needed!
 //
 //	    // Modify RootCmd state as needed.
 //	    RootCmd.SetArgs([]string{"terraform", "plan"})
@@ -145,8 +145,19 @@ func WithRootCmdSnapshot(t *testing.T) func() {
 //	    // State automatically restored when test completes.
 //	}
 //
-// This is the recommended pattern for new tests. It's more ergonomic than the defer pattern
-// and follows Go's testing conventions (similar to t.Setenv, t.Chdir, etc).
+// WHY THIS IS REQUIRED:
+//   - RootCmd is global state shared across all tests
+//   - Without cleanup, flag values persist causing mysterious test failures
+//   - Tests pass in isolation but fail when run together
+//   - StringSlice flags (config, config-path) are especially problematic
+//
+// WHEN TO USE:
+//   - ANY test that calls RootCmd.Execute(), RootCmd.SetArgs(), or modifies RootCmd flags
+//   - ANY test that calls commands which internally use RootCmd
+//   - When in doubt, add it - it's safe and prevents hard-to-debug issues
+//
+// This is the RECOMMENDED pattern for all cmd/ tests. It's more ergonomic than the defer
+// pattern and follows Go's testing conventions (similar to t.Setenv, t.Chdir, etc).
 func CleanupRootCmd(t *testing.T) {
 	t.Helper()
 	snapshot := snapshotRootCmdState()

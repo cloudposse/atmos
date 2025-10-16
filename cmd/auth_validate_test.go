@@ -11,6 +11,8 @@ import (
 )
 
 func TestAuthValidateCmd(t *testing.T) {
+	CleanupRootCmd(t)
+
 	tests := []struct {
 		name           string
 		setupConfig    func() *schema.AtmosConfiguration
@@ -158,6 +160,8 @@ func TestAuthValidateCmd(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			CleanupRootCmd(t)
+
 			// Create a mock command for testing
 			cmd := &cobra.Command{
 				Use: "validate",
@@ -238,6 +242,8 @@ func mockValidateAuthConfig(config *schema.AuthConfig) error {
 }
 
 func TestAuthValidateCmdIntegration(t *testing.T) {
+	CleanupRootCmd(t)
+
 	// Create a mock command to test structure
 	cmd := &cobra.Command{
 		Use:   "validate",
