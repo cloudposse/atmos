@@ -584,7 +584,7 @@ Use fixtures in `tests/test-cases/` for integration tests. Each test case should
   - Explain what the feature does, why it's useful, and provide examples
   - Link to relevant documentation using `/cli/commands/` or `/core-concepts/` paths
   - The CI workflow will fail and comment on the PR if this is missing
-- **Use "no-release" label" for documentation-only changes
+- **Use `no-release` label for documentation-only changes**
 - **Ensure all CI checks pass** before requesting review
 
 ### Checking PR Security Alerts and CI Status
