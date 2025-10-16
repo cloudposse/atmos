@@ -31,7 +31,7 @@ lint: get lintroller
 lintroller: tools/lintroller/.lintroller
 	@echo "Running lintroller (Atmos custom rules)..."
 	@test -x tools/lintroller/.lintroller || (echo "Error: lintroller binary not executable" && exit 1)
-	@tools/lintroller/.lintroller ./...
+	@tools/lintroller/.lintroller $(shell go list ./... | grep -v '/testdata')
 
 tools/lintroller/.lintroller: tools/lintroller/*.go tools/lintroller/cmd/lintroller/*.go
 	@echo "Building lintroller..."
