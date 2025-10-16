@@ -457,16 +457,58 @@ Use fixtures in `tests/test-cases/` for integration tests. Each test case should
 ## Common Development Tasks
 
 ### Adding New CLI Command
-1. Create `cmd/new_command.go` with Cobra command definition
-2. **Create embedded markdown examples** in `cmd/markdown/atmos_command_subcommand_usage.md`
-3. **Use `//go:embed` and `utils.PrintfMarkdown()`** for example rendering
-4. **Register in `cmd/markdown_help.go`** examples map with suggestion URL
-5. **Use markdown formatting** in Short/Long descriptions (supports **bold**, `code`, etc.)
-6. Add business logic in appropriate `pkg/` or `internal/exec/` package
-7. **Create Docusaurus documentation** in `website/docs/cli/commands/<command>/<subcommand>.mdx`
-8. Add tests with fixtures
-9. Add integration test in `tests/`
-10. **Create pull request following template format**
+
+**Atmos uses the command registry pattern** for organizing built-in commands. Follow these steps:
+
+1. **Create command package directory**: `cmd/[command]/`
+2. **Implement CommandProvider interface**:
+   ```go
+   // cmd/mycommand/mycommand.go
+   package mycommand
+
+   import (
+       "github.com/spf13/cobra"
+       "github.com/cloudposse/atmos/cmd/internal"
+       e "github.com/cloudposse/atmos/internal/exec"
+   )
+
+   var mycommandCmd = &cobra.Command{
+       Use:   "mycommand",
+       Short: "Brief description",
+       Long:  `Detailed description.`,
+       RunE: func(cmd *cobra.Command, args []string) error {
+           return e.ExecuteMyCommand(cmd, args)
+       },
+   }
+
+   func init() {
+       internal.Register(&MyCommandProvider{})
+   }
+
+   type MyCommandProvider struct{}
+
+   func (m *MyCommandProvider) GetCommand() *cobra.Command {
+       return mycommandCmd
+   }
+
+   func (m *MyCommandProvider) GetName() string {
+       return "mycommand"
+   }
+
+   func (m *MyCommandProvider) GetGroup() string {
+       return "Other Commands" // See docs/developing-atmos-commands.md
+   }
+   ```
+3. **Add blank import to `cmd/root.go`**: `_ "github.com/cloudposse/atmos/cmd/mycommand"`
+4. **Implement business logic** in `internal/exec/mycommand.go`
+5. **Add tests** in `cmd/mycommand/mycommand_test.go`
+6. **Create Docusaurus documentation** in `website/docs/cli/commands/<command>/<subcommand>.mdx`
+7. **Build website to verify**: `cd website && npm run build`
+8. **Create pull request following template format**
+
+**See:**
+- **[docs/developing-atmos-commands.md](docs/developing-atmos-commands.md)** - Complete guide with patterns and examples
+- **[docs/prd/command-registry-pattern.md](docs/prd/command-registry-pattern.md)** - Architecture and design decisions
 
 ### Documentation Requirements (MANDATORY)
 - **All new commands/flags/parameters MUST have Docusaurus documentation**
@@ -576,14 +618,98 @@ Use fixtures in `tests/test-cases/` for integration tests. Each test case should
   - Link to supporting GitHub issues or documentation
   - Use `closes #123` if PR closes an issue
   ```
-- **Add changelog entry for feature releases**:
+- **Add changelog blog post for feature releases**:
   - PRs labeled `minor` or `major` MUST include a blog post in `website/blog/`
-  - Create a new file: `website/blog/YYYY-MM-DD-feature-name.mdx`
-  - Follow the format of existing blog posts (frontmatter with slug, title, authors, tags)
+  - Create a new file: `website/blog/YYYY-MM-DD-feature-name.md`
+  - Follow the format of existing blog posts (see template below)
   - Include `<!--truncate-->` marker after the introduction paragraph
-  - Explain what the feature does, why it's useful, and provide examples
-  - Link to relevant documentation using `/cli/commands/` or `/core-concepts/` paths
   - The CI workflow will fail and comment on the PR if this is missing
+
+### Blog Post Guidelines (MANDATORY)
+
+Blog posts serve different audiences and must be tagged appropriately:
+
+#### Audience Types
+
+**1. User-Facing Posts** (Features, Improvements, Bug Fixes)
+- **Audience**: Teams using Atmos to manage infrastructure
+- **Focus**: How the change benefits users, usage examples, migration guides
+- **Required tags**: Choose one or more:
+  - `feature` - New user-facing capabilities
+  - `enhancement` - Improvements to existing features
+  - `bugfix` - Important bug fixes that affect users
+- **Example tags**: `[feature, terraform, workflows]`
+
+**2. Contributor-Facing Posts** (Refactoring, Internal Changes, Developer Tools)
+- **Audience**: Atmos contributors and core developers
+- **Focus**: Internal code structure, refactoring, developer experience
+- **Required tag**: `contributors`
+- **Additional tags**: Describe the technical area
+- **Example tags**: `[contributors, atmos-core, refactoring]`
+
+#### Blog Post Template
+
+```markdown
+---
+slug: descriptive-slug
+title: "Clear, Descriptive Title"
+authors: [atmos]
+tags: [primary-tag, secondary-tag, ...]  # See audience types above
+---
+
+Brief introduction paragraph explaining what changed and why it matters.
+
+<!--truncate-->
+
+## What Changed
+
+Describe the change with code examples or visuals.
+
+## Why This Matters / Impact on Users
+
+Explain the benefits or reasoning.
+
+## [For User Posts] How to Use It
+
+Provide practical examples and usage instructions.
+
+## [For Contributor Posts] For Atmos Contributors
+
+Clarify this is internal with zero user impact, link to technical docs.
+
+## Get Involved
+
+- Link to relevant documentation
+- Encourage discussion/contributions
+```
+
+#### Tag Reference
+
+**Primary Audience Tags:**
+- `feature` - New user-facing feature
+- `enhancement` - Improvement to existing feature
+- `bugfix` - Important bug fix
+- `contributors` - For Atmos core contributors (internal changes)
+
+**Secondary Technical Tags (for contributor posts):**
+- `atmos-core` - Changes to Atmos codebase/internals
+- `refactoring` - Code refactoring and restructuring
+- `testing` - Test infrastructure improvements
+- `ci-cd` - CI/CD pipeline changes
+- `developer-experience` - Developer tooling improvements
+
+**Secondary Technical Tags (for user posts):**
+- `terraform` - Terraform-specific features
+- `helmfile` - Helmfile-specific features
+- `workflows` - Workflow features
+- `validation` - Validation features
+- `performance` - Performance improvements
+- `cloud-architecture` - Cloud architecture patterns (user-facing)
+
+**General Tags:**
+- `announcements` - Major announcements
+- `breaking-changes` - Breaking changes requiring migration
+
 - **Use `no-release` label for documentation-only changes**
 - **Ensure all CI checks pass** before requesting review
 
