@@ -119,7 +119,7 @@ func renderMermaidProviders(output *strings.Builder, providers map[string]schema
 	return defaultProviders
 }
 
-// renderMermaidIdentities renders identity nodes with edges and returns default identity IDs.
+// renderMermaidIdentities renders identity nodes and returns default identity IDs.
 func renderMermaidIdentities(output *strings.Builder, identities map[string]schema.Identity) []string {
 	var defaultIdentities []string
 	identityNames := getSortedIdentityNames(identities)
@@ -131,6 +131,16 @@ func renderMermaidIdentities(output *strings.Builder, identities map[string]sche
 		if identity.Default {
 			defaultIdentities = append(defaultIdentities, nodeID)
 		}
+	}
+	return defaultIdentities
+}
+
+// renderMermaidEdges renders edges for identity relationships.
+func renderMermaidEdges(output *strings.Builder, identities map[string]schema.Identity) {
+	identityNames := getSortedIdentityNames(identities)
+	for _, name := range identityNames {
+		identity := identities[name]
+		nodeID := sanitizeMermaidID(name)
 
 		// Add edges for via relationships.
 		if identity.Via != nil {
@@ -142,7 +152,6 @@ func renderMermaidIdentities(output *strings.Builder, identities map[string]sche
 			}
 		}
 	}
-	return defaultIdentities
 }
 
 // applyMermaidClasses applies class directives to nodes.
@@ -188,9 +197,12 @@ func RenderMermaid(
 
 	output.WriteString("graph LR\n")
 
-	// Render nodes and track defaults.
+	// Render all nodes first and track defaults.
 	defaultProviders := renderMermaidProviders(&output, providers)
 	defaultIdentities := renderMermaidIdentities(&output, identities)
+
+	// Then render all edges.
+	renderMermaidEdges(&output, identities)
 
 	// Add class definitions.
 	output.WriteString(newline)
@@ -199,6 +211,7 @@ func RenderMermaid(
 	output.WriteString("  classDef default stroke:#ff9800,stroke-width:3px\n")
 
 	// Apply classes to nodes.
+	output.WriteString(newline)
 	applyMermaidClasses(&output, providers, identities, defaultProviders, defaultIdentities)
 
 	return output.String(), nil

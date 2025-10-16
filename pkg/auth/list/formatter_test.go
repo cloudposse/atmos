@@ -264,3 +264,64 @@ func TestAddMapToTree_MaxDepth(t *testing.T) {
 	assert.Contains(t, output, "level2")
 	assert.Contains(t, output, "level3")
 }
+
+func TestRenderMermaid_Syntax(t *testing.T) {
+	// Test that RenderMermaid produces valid Mermaid syntax.
+	providers := map[string]schema.Provider{
+		"aws-sso": {
+			Kind:    "aws-sso",
+			Default: true,
+		},
+		"okta": {
+			Kind: "okta",
+		},
+	}
+
+	identities := map[string]schema.Identity{
+		"admin": {
+			Kind:    "aws/assume-role",
+			Default: true,
+			Via: &schema.IdentityVia{
+				Provider: "aws-sso",
+			},
+		},
+		"developer": {
+			Kind: "aws/assume-role",
+			Via: &schema.IdentityVia{
+				Provider: "aws-sso",
+			},
+		},
+	}
+
+	output, err := RenderMermaid(nil, providers, identities)
+	require.NoError(t, err)
+
+	// Verify basic structure.
+	assert.Contains(t, output, "graph LR")
+	assert.Contains(t, output, "classDef provider")
+	assert.Contains(t, output, "classDef identity")
+	assert.Contains(t, output, "classDef default")
+
+	// Verify nodes are declared without chained class syntax.
+	assert.Contains(t, output, "aws_sso[")
+	assert.Contains(t, output, "admin[")
+	assert.Contains(t, output, "developer[")
+	assert.NotContains(t, output, ":::provider:::default")
+	assert.NotContains(t, output, ":::identity:::default")
+	assert.NotContains(t, output, ":::provider")
+	assert.NotContains(t, output, ":::identity")
+
+	// Verify separate class directives exist.
+	assert.Contains(t, output, "class aws_sso provider")
+	assert.Contains(t, output, "class aws_sso default")
+	assert.Contains(t, output, "class admin identity")
+	assert.Contains(t, output, "class admin default")
+	assert.Contains(t, output, "class developer identity")
+
+	// Verify edges.
+	assert.Contains(t, output, "aws_sso --> admin")
+	assert.Contains(t, output, "aws_sso --> developer")
+
+	// Print output for manual verification.
+	t.Logf("Generated Mermaid:\n%s", output)
+}
