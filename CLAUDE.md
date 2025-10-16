@@ -457,16 +457,58 @@ Use fixtures in `tests/test-cases/` for integration tests. Each test case should
 ## Common Development Tasks
 
 ### Adding New CLI Command
-1. Create `cmd/new_command.go` with Cobra command definition
-2. **Create embedded markdown examples** in `cmd/markdown/atmos_command_subcommand_usage.md`
-3. **Use `//go:embed` and `utils.PrintfMarkdown()`** for example rendering
-4. **Register in `cmd/markdown_help.go`** examples map with suggestion URL
-5. **Use markdown formatting** in Short/Long descriptions (supports **bold**, `code`, etc.)
-6. Add business logic in appropriate `pkg/` or `internal/exec/` package
-7. **Create Docusaurus documentation** in `website/docs/cli/commands/<command>/<subcommand>.mdx`
-8. Add tests with fixtures
-9. Add integration test in `tests/`
-10. **Create pull request following template format**
+
+**Atmos uses the command registry pattern** for organizing built-in commands. Follow these steps:
+
+1. **Create command package directory**: `cmd/[command]/`
+2. **Implement CommandProvider interface**:
+   ```go
+   // cmd/mycommand/mycommand.go
+   package mycommand
+
+   import (
+       "github.com/spf13/cobra"
+       "github.com/cloudposse/atmos/cmd/internal"
+       e "github.com/cloudposse/atmos/internal/exec"
+   )
+
+   var mycommandCmd = &cobra.Command{
+       Use:   "mycommand",
+       Short: "Brief description",
+       Long:  `Detailed description.`,
+       RunE: func(cmd *cobra.Command, args []string) error {
+           return e.ExecuteMyCommand(cmd, args)
+       },
+   }
+
+   func init() {
+       internal.Register(&MyCommandProvider{})
+   }
+
+   type MyCommandProvider struct{}
+
+   func (m *MyCommandProvider) GetCommand() *cobra.Command {
+       return mycommandCmd
+   }
+
+   func (m *MyCommandProvider) GetName() string {
+       return "mycommand"
+   }
+
+   func (m *MyCommandProvider) GetGroup() string {
+       return "Other Commands" // See docs/developing-atmos-commands.md
+   }
+   ```
+3. **Add blank import to `cmd/root.go`**: `_ "github.com/cloudposse/atmos/cmd/mycommand"`
+4. **Implement business logic** in `internal/exec/mycommand.go`
+5. **Add tests** in `cmd/mycommand/mycommand_test.go`
+6. **Create Docusaurus documentation** in `website/docs/cli/commands/<command>/<subcommand>.mdx`
+7. **Build website to verify**: `cd website && npm run build`
+8. **Create pull request following template format**
+
+**See:**
+- **[docs/developing-atmos-commands.md](docs/developing-atmos-commands.md)** - Complete guide with patterns and examples
+- **[docs/prd/command-registry-pattern.md](docs/prd/command-registry-pattern.md)** - Architecture and design decisions
 
 ### Documentation Requirements (MANDATORY)
 - **All new commands/flags/parameters MUST have Docusaurus documentation**

@@ -1,28 +1,10 @@
 package cmd
 
-import (
-	_ "embed"
-
-	"github.com/spf13/cobra"
-
-	"github.com/cloudposse/atmos/pkg/utils"
-)
-
-//go:embed markdown/about.md
-var aboutMarkdown string
-
-// aboutCmd represents the about command.
-var aboutCmd = &cobra.Command{
-	Use:   "about",
-	Short: "Learn about Atmos",
-	Long:  `Display information about Atmos, its features, and benefits.`,
-	Args:  cobra.NoArgs,
-	RunE: func(cmd *cobra.Command, args []string) error {
-		utils.PrintfMarkdown("%s", aboutMarkdown)
-		return nil
-	},
-}
-
-func init() {
-	RootCmd.AddCommand(aboutCmd)
-}
+// This file is deprecated and kept for backward compatibility during migration.
+// The about command has been migrated to cmd/about/about.go and uses the
+// command registry pattern.
+//
+// This file will be removed once the migration is complete and all commands
+// use the registry pattern.
+//
+// Deprecated: Use github.com/cloudposse/atmos/cmd/about instead.
