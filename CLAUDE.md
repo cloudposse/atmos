@@ -334,6 +334,16 @@ $ atmos example <component> -s <stack> --file output.yaml
 
 ### File Organization (MANDATORY)
 - **Prefer many small files over few large files** - follow Go idiom of focused, single-purpose files
+- **NEVER use `//revive:disable:file-length-limit`** - split large files instead
+  - Default limit: 600 lines (enforced by golangci-lint)
+  - For new code: ALWAYS split into focused files if approaching limit
+  - Example split pattern:
+    ```go
+    // formatter.go (733 lines) → Split into:
+    formatter_table.go  // Table rendering (236 lines)
+    formatter_tree.go   // Tree rendering (451 lines)
+    formatter_utils.go  // Shared utilities (68 lines)
+    ```
 - **One command per file** in `cmd/`
 - **One implementation per file** for interfaces:
   ```go
