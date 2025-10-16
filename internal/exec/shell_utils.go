@@ -25,6 +25,7 @@ const (
 	atmosShellLevelEnvVar = "ATMOS_SHLVL"
 	envVarSeparator       = "="
 	logFieldCommand       = "command"
+	osWindows             = "windows"
 )
 
 // ExecuteShellCommand prints and executes the provided command with args and flags.
@@ -307,6 +308,17 @@ func ExecAuthShellCommand(
 
 // executeShellProcess starts a shell process and waits for it to exit, propagating the exit code.
 func executeShellProcess(shellCommand string, shellArgs []string, env []string) error {
+	// Resolve shell command to absolute path if necessary.
+	// os.StartProcess doesn't search PATH, so we need to resolve relative commands.
+	resolvedCommand := shellCommand
+	if !filepath.IsAbs(resolvedCommand) {
+		lookup, err := exec.LookPath(resolvedCommand)
+		if err != nil {
+			return errors.Join(errUtils.ErrNoSuitableShell, fmt.Errorf("failed to resolve shell %q", resolvedCommand))
+		}
+		resolvedCommand = lookup
+	}
+
 	// Build full args array: [shellCommand, arg1, arg2, ...].
 	fullArgs := append([]string{shellCommand}, shellArgs...)
 
@@ -317,7 +329,7 @@ func executeShellProcess(shellCommand string, shellArgs []string, env []string) 
 		Env:   env,
 	}
 
-	proc, err := os.StartProcess(shellCommand, fullArgs, &pa)
+	proc, err := os.StartProcess(resolvedCommand, fullArgs, &pa)
 	if err != nil {
 		return err
 	}
@@ -380,21 +392,22 @@ func convertEnvMapToSlice(envMap map[string]string) []string {
 
 // determineShell determines which shell to use and what arguments to pass.
 func determineShell(shellOverride string, shellArgs []string) (string, []string) {
-	if runtime.GOOS == "windows" {
-		return "cmd.exe", shellArgs
-	}
-
+	// Determine shell command from override, environment, or fallback.
 	shellCommand := shellOverride
 	if shellCommand == "" {
 		shellCommand = viper.GetString("shell")
 	}
 	if shellCommand == "" {
-		shellCommand = findAvailableShell()
+		if runtime.GOOS == osWindows {
+			shellCommand = "cmd.exe"
+		} else {
+			shellCommand = findAvailableShell()
+		}
 	}
 
-	// If no custom shell args provided, use login shell by default.
+	// If no custom shell args provided, use login shell by default (Unix only).
 	shellCommandArgs := shellArgs
-	if len(shellCommandArgs) == 0 {
+	if len(shellCommandArgs) == 0 && runtime.GOOS != osWindows {
 		shellCommandArgs = []string{"-l"}
 	}
 
