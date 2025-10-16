@@ -49,6 +49,7 @@ func TestNoColorLog(t *testing.T) {
 
 	// Reset RootCmd state explicitly before Execute.
 	// Previous tests may have called RootCmd.SetArgs() which persists on the global instance.
+	resetRootCmdForTesting(t)
 	RootCmd.SetArgs([]string{"about"})
 
 	// Execute the command
