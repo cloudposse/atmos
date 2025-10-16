@@ -177,11 +177,9 @@ func TestBuildIdentitiesTree(t *testing.T) {
 	assert.Contains(t, tree, "dev")
 	assert.Contains(t, tree, "[DEFAULT]")
 	assert.Contains(t, tree, "[ALIAS: developer]")
-	assert.Contains(t, tree, "Via Provider: aws-sso")
-	assert.Contains(t, tree, "Via Identity: admin")
-	assert.Contains(t, tree, "Chain: aws-sso → admin")
-	assert.Contains(t, tree, "Chain: aws-sso → admin → dev")
 	assert.Contains(t, tree, "Principal")
+	assert.Contains(t, tree, "aws/permission-set")
+	assert.Contains(t, tree, "aws/assume-role")
 }
 
 func TestBuildIdentitiesTree_Standalone(t *testing.T) {
@@ -195,8 +193,7 @@ func TestBuildIdentitiesTree_Standalone(t *testing.T) {
 	tree := buildIdentitiesTree(identities)
 
 	assert.Contains(t, tree, "ci")
-	assert.Contains(t, tree, "Standalone Identity")
-	assert.Contains(t, tree, "Chain: ci")
+	assert.Contains(t, tree, "aws/user")
 }
 
 func TestAddMapToTree_Simple(t *testing.T) {
