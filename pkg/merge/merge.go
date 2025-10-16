@@ -45,9 +45,9 @@ var (
 
 // DeepCopyMap performs a deep copy of a map optimized for map[string]any structures.
 // This custom implementation avoids reflection overhead for common cases (maps, slices, primitives)
-// and only falls back to copystructure for rare complex types.
+// and uses reflection-based normalization for rare complex types (typed slices/maps).
 // Preserves numeric types (unlike JSON which converts all numbers to float64) and is faster than
-// reflection-based copying. The data is already in Go map format with custom tags already processed,
+// generic reflection-based copying. The data is already in Go map format with custom tags already processed,
 // so we only need structural copying to work around mergo's pointer mutation bug.
 // Uses object pooling to reduce allocations and GC pressure during high-volume operations.
 func DeepCopyMap(m map[string]any) (map[string]any, error) {
@@ -247,7 +247,7 @@ func MergeWithOptions(
 		// Due to a bug in `mergo.Merge`
 		// (Note: in the `for` loop, it DOES modify the source of the previous loop iteration if it's a complex map and `mergo` gets a pointer to it,
 		// not only the destination of the current loop iteration),
-		// we don't give it our maps directly; we deep copy them using copystructure (faster than YAML serialization),
+		// we don't give it our maps directly; we deep copy them using our custom DeepCopyMap (faster than YAML serialization),
 		// so `mergo` does not have access to the original pointers.
 		// Deep copy preserves types and is sufficient because the data is already in Go map format with custom tags already processed.
 		dataCurrent, err := DeepCopyMap(current)

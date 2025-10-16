@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"os"
 	"sort"
 	"strings"
 	"sync"
@@ -182,8 +183,8 @@ type findStacksMapCacheEntry struct {
 }
 
 // getFindStacksMapCacheKey generates a content-aware cache key from atmosConfig and parameters.
-// The cache key includes all paths and file lists that affect stack processing,
-// ensuring proper cache invalidation when configuration changes.
+// The cache key includes all paths, file lists, and modification times that affect stack processing,
+// ensuring proper cache invalidation when configuration or file content changes.
 func getFindStacksMapCacheKey(atmosConfig *schema.AtmosConfiguration, ignoreMissingFiles bool) string {
 	const cacheKeyDelimiter = "|"
 
@@ -201,15 +202,26 @@ func getFindStacksMapCacheKey(atmosConfig *schema.AtmosConfiguration, ignoreMiss
 	keyBuilder.WriteString(fmt.Sprintf("%v", ignoreMissingFiles))
 	keyBuilder.WriteString(cacheKeyDelimiter)
 
-	// Include the actual file paths, not just the count.
+	// Include the actual file paths and their modification times.
 	// Sort the paths for consistent hashing.
 	sortedPaths := make([]string, len(atmosConfig.StackConfigFilesAbsolutePaths))
 	copy(sortedPaths, atmosConfig.StackConfigFilesAbsolutePaths)
 	sort.Strings(sortedPaths)
 
-	// Add all file paths to the key.
+	// Add all file paths and mtimes to the key.
+	// This ensures cache invalidation when files are modified.
 	for _, path := range sortedPaths {
 		keyBuilder.WriteString(path)
+		keyBuilder.WriteString(cacheKeyDelimiter)
+
+		// Include file modification time for cache invalidation.
+		// If stat fails (file doesn't exist, permission denied, etc.),
+		// use "0" to ensure consistent behavior.
+		if info, err := os.Stat(path); err == nil {
+			keyBuilder.WriteString(fmt.Sprintf("%d", info.ModTime().Unix()))
+		} else {
+			keyBuilder.WriteString("0")
+		}
 		keyBuilder.WriteString(cacheKeyDelimiter)
 	}
 
