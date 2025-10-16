@@ -610,31 +610,35 @@ func TestChangedFilesIndex_GetRelevantFiles(t *testing.T) {
 		filepath.Join(tempDir, "components/helmfile/app/helmfile.yaml"),
 		filepath.Join(tempDir, "components/packer/image/packer.json"),
 		filepath.Join(tempDir, "stacks/dev.yaml"),
-		filepath.Join(tempDir, "other/file.txt"), // Unmatched files added to all paths as fallback
+		filepath.Join(tempDir, "other/file.txt"), // Outside all base paths, NOT indexed
 	}
 
 	index := newChangedFilesIndex(atmosConfig, changedFiles)
 
 	t.Run("get terraform files", func(t *testing.T) {
 		files := index.getRelevantFiles(cfg.TerraformComponentType, atmosConfig)
-		// Should include terraform files + unmatched files (fallback safety).
-		assert.GreaterOrEqual(t, len(files), 2)
+		// Should include ONLY terraform files (files in terraform base path).
+		assert.Len(t, files, 2)
 		assert.Contains(t, files, filepath.Join(tempDir, "components/terraform/vpc/main.tf"))
 		assert.Contains(t, files, filepath.Join(tempDir, "components/terraform/eks/main.tf"))
+		// Files outside base paths are NOT included.
+		assert.NotContains(t, files, filepath.Join(tempDir, "other/file.txt"))
 	})
 
 	t.Run("get helmfile files", func(t *testing.T) {
 		files := index.getRelevantFiles(cfg.HelmfileComponentType, atmosConfig)
-		// Should include helmfile files + unmatched files (fallback safety).
-		assert.GreaterOrEqual(t, len(files), 1)
+		// Should include ONLY helmfile files (files in helmfile base path).
+		assert.Len(t, files, 1)
 		assert.Contains(t, files, filepath.Join(tempDir, "components/helmfile/app/helmfile.yaml"))
+		assert.NotContains(t, files, filepath.Join(tempDir, "other/file.txt"))
 	})
 
 	t.Run("get packer files", func(t *testing.T) {
 		files := index.getRelevantFiles(cfg.PackerComponentType, atmosConfig)
-		// Should include packer files + unmatched files (fallback safety).
-		assert.GreaterOrEqual(t, len(files), 1)
+		// Should include ONLY packer files (files in packer base path).
+		assert.Len(t, files, 1)
 		assert.Contains(t, files, filepath.Join(tempDir, "components/packer/image/packer.json"))
+		assert.NotContains(t, files, filepath.Join(tempDir, "other/file.txt"))
 	})
 
 	t.Run("get all files", func(t *testing.T) {
@@ -698,9 +702,14 @@ func TestChangedFilesIndex_PathCollisionPrevention(t *testing.T) {
 	})
 
 	t.Run("sibling path with shared prefix does not incorrectly match", func(t *testing.T) {
-		// This tests the bug fix: with HasPrefix, "components/terraform-modules" would match
-		// "components/terraform" and be incorrectly assigned. With filepath.Rel path boundary
-		// checking, it correctly goes to fallback (all paths).
+		// This tests the bug fix: with HasPrefix, "components/terraform-backup" would incorrectly
+		// match "components/terraform" and be assigned to the wrong base path.
+		// With filepath.Rel path boundary checking, it correctly does NOT match any base path.
+		//
+		// Files outside configured base paths are NOT indexed for component folder checking.
+		// They will still be checked via:
+		// - Module pattern cache (if referenced as Terraform modules)
+		// - Dependency checking (if specified in component dependencies)
 		changedFiles := []string{
 			filepath.Join(tempDir, "components/terraform/vpc/main.tf"),        // Matches terraform
 			filepath.Join(tempDir, "components/terraform-backup/old/data.tf"), // Sibling, should NOT match
@@ -711,33 +720,34 @@ func TestChangedFilesIndex_PathCollisionPrevention(t *testing.T) {
 		tfFiles := index.getRelevantFiles(cfg.TerraformComponentType, atmosConfig)
 		helmFiles := index.getRelevantFiles(cfg.HelmfileComponentType, atmosConfig)
 
-		// Terraform files should include the terraform file.
+		// Terraform files should include ONLY the terraform file.
 		assert.Contains(t, tfFiles, filepath.Join(tempDir, "components/terraform/vpc/main.tf"))
+		assert.Len(t, tfFiles, 1, "terraform files should only contain files in terraform base path")
 
-		// The terraform-backup file should be in the terraform list (via fallback).
-		assert.Contains(t, tfFiles, filepath.Join(tempDir, "components/terraform-backup/old/data.tf"))
+		// The terraform-backup file should NOT be in the terraform list (it's outside the base path).
+		assert.NotContains(t, tfFiles, filepath.Join(tempDir, "components/terraform-backup/old/data.tf"))
 
-		// Helmfile files should include the helmfile file.
+		// Helmfile files should include ONLY the helmfile file.
 		assert.Contains(t, helmFiles, filepath.Join(tempDir, "components/helmfile/app/helmfile.yaml"))
+		assert.Len(t, helmFiles, 1, "helmfile files should only contain files in helmfile base path")
 
-		// The terraform-backup file should also be in helmfile list (via fallback).
-		assert.Contains(t, helmFiles, filepath.Join(tempDir, "components/terraform-backup/old/data.tf"))
-
-		// Key assertion: both lists should contain the sibling file via fallback, NOT via incorrect matching.
-		// If the bug existed (using HasPrefix), terraform-backup would only be in terraform list.
+		// The terraform-backup file should NOT be in the helmfile list either.
+		assert.NotContains(t, helmFiles, filepath.Join(tempDir, "components/terraform-backup/old/data.tf"))
 	})
 
 	t.Run("parent path does not match child path", func(t *testing.T) {
 		// File in parent directory should not be considered part of subdirectory.
+		// Files outside configured base paths are NOT indexed.
 		changedFiles := []string{
-			filepath.Join(tempDir, "components/file.tf"), // Parent of terraform/helmfile, should go to fallback
+			filepath.Join(tempDir, "components/file.tf"), // Parent of terraform/helmfile, doesn't match any base path
 		}
 		index := newChangedFilesIndex(atmosConfig, changedFiles)
 
 		tfFiles := index.getRelevantFiles(cfg.TerraformComponentType, atmosConfig)
 
-		// File should be in the list via fallback (since it doesn't match any specific base path).
-		assert.Contains(t, tfFiles, filepath.Join(tempDir, "components/file.tf"))
+		// File should NOT be in the list (it's outside all configured base paths).
+		assert.NotContains(t, tfFiles, filepath.Join(tempDir, "components/file.tf"))
+		assert.Len(t, tfFiles, 0, "no files should match when changed file is outside all base paths")
 	})
 }
 

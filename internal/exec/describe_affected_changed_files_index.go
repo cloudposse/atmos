@@ -72,7 +72,8 @@ func buildNormalizedBasePaths(atmosConfig *schema.AtmosConfiguration) []string {
 }
 
 // indexChangedFile indexes a single changed file by finding its matching base path.
-// If no match is found, the file is added to all base paths as a fallback.
+// Files that don't match any base path are not indexed (they may still be checked via
+// module patterns or dependency paths, which are independent mechanisms).
 func indexChangedFile(index *changedFilesIndex, changedFile string, normalizedBasePaths []string) {
 	absFile, err := filepath.Abs(changedFile)
 	if err != nil {
@@ -86,13 +87,13 @@ func indexChangedFile(index *changedFilesIndex, changedFile string, normalizedBa
 	// from colliding due to shared prefixes.
 	if matchedPath := findMatchingBasePath(absFile, normalizedBasePaths); matchedPath != "" {
 		index.filesByBasePath[matchedPath] = append(index.filesByBasePath[matchedPath], absFile)
-		return
 	}
 
-	// If file doesn't match any base path, add to all paths (fallback).
-	for _, basePath := range normalizedBasePaths {
-		index.filesByBasePath[basePath] = append(index.filesByBasePath[basePath], absFile)
-	}
+	// Files that don't match any base path are NOT indexed for base path checking.
+	// They will still be checked via:
+	// - Module pattern cache (if referenced as Terraform modules)
+	// - Dependency checking (if specified in component dependencies)
+	// This maintains independence between component folder checks, module checks, and dependency checks.
 }
 
 // findMatchingBasePath returns the base path that contains the given file, or empty string if none match.
