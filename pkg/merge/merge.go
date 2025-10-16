@@ -85,6 +85,60 @@ func deepCopyValue(v any) any {
 	}
 }
 
+// deepCopyTypedValue performs a deep copy of a typed value using reflection.
+// This handles slices and maps with proper type preservation for non-interface element types.
+//
+//nolint:revive // Cyclomatic complexity is inherent to reflection-based type handling.
+func deepCopyTypedValue(rv reflect.Value) reflect.Value {
+	switch rv.Kind() {
+	case reflect.Slice:
+		// Deep copy typed slice.
+		if rv.IsNil() {
+			return rv
+		}
+		sliceLen := rv.Len()
+		newSlice := reflect.MakeSlice(rv.Type(), sliceLen, sliceLen)
+		for i := 0; i < sliceLen; i++ {
+			elem := deepCopyTypedValue(rv.Index(i))
+			newSlice.Index(i).Set(elem)
+		}
+		return newSlice
+
+	case reflect.Map:
+		// Deep copy typed map.
+		if rv.IsNil() {
+			return rv
+		}
+		newMap := reflect.MakeMapWithSize(rv.Type(), rv.Len())
+		iter := rv.MapRange()
+		for iter.Next() {
+			key := iter.Key()
+			val := deepCopyTypedValue(iter.Value())
+			newMap.SetMapIndex(key, val)
+		}
+		return newMap
+
+	case reflect.Ptr:
+		// For pointers, don't deep copy through them - aliasing pointers is usually intentional.
+		return rv
+
+	case reflect.Interface:
+		// Unwrap interface and deep copy the underlying value.
+		if rv.IsNil() {
+			return rv
+		}
+		elem := rv.Elem()
+		copiedElem := deepCopyTypedValue(elem)
+		newVal := reflect.New(rv.Type()).Elem()
+		newVal.Set(copiedElem)
+		return newVal
+
+	default:
+		// Primitives, strings, functions, channels - return as-is.
+		return rv
+	}
+}
+
 // normalizeSliceReflect converts a typed slice to []any using reflection.
 func normalizeSliceReflect(rv reflect.Value) []any {
 	sliceLen := rv.Len()
@@ -123,9 +177,8 @@ func normalizeMapReflect(rv reflect.Value) any {
 				// Safe to store any deep-copied shape.
 				val = reflect.ValueOf(deepCopyValue(iter.Value().Interface()))
 			} else {
-				// Preserve original typed value to avoid SetMapIndex panics.
-				// (Full typed deep copy can be added later if needed.)
-				val = iter.Value()
+				// Full typed deep copy to avoid aliasing for non-interface element types.
+				val = deepCopyTypedValue(iter.Value())
 			}
 			copyMap.SetMapIndex(iter.Key(), val)
 		}

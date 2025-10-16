@@ -524,6 +524,23 @@ func TestDeepCopyMap_TypedMaps(t *testing.T) {
 				assert.Equal(t, []any{"a", "b"}, slice)
 			},
 		},
+		{
+			name: "typed map with non-interface slice values (no aliasing)",
+			input: map[string]any{
+				"typed_map": map[int][]string{
+					1: {"a", "b", "c"},
+					2: {"x", "y", "z"},
+				},
+			},
+			validate: func(t *testing.T, result map[string]any) {
+				val, ok := result["typed_map"]
+				assert.True(t, ok, "typed_map should exist")
+				typedMap, isTyped := val.(map[int][]string)
+				assert.True(t, isTyped, "Should be map[int][]string")
+				assert.Equal(t, []string{"a", "b", "c"}, typedMap[1])
+				assert.Equal(t, []string{"x", "y", "z"}, typedMap[2])
+			},
+		},
 	}
 
 	for _, tc := range testCases {
@@ -539,6 +556,47 @@ func TestDeepCopyMap_TypedMaps(t *testing.T) {
 			assert.NotNil(t, tc.input, "Original should not be affected")
 		})
 	}
+}
+
+// TestDeepCopyMap_NoAliasingTypedSlices verifies that typed slices in typed maps
+// are properly deep copied without aliasing. This is the critical test for the
+// type-safety bug fix where map[int][]string values were preserved as-is.
+func TestDeepCopyMap_NoAliasingTypedSlices(t *testing.T) {
+	// Create a map with typed non-interface slice values.
+	original := map[string]any{
+		"config": map[int][]string{
+			1: {"original", "value", "one"},
+			2: {"original", "value", "two"},
+		},
+	}
+
+	// Deep copy the map.
+	copied, err := DeepCopyMap(original)
+	assert.Nil(t, err)
+	assert.NotNil(t, copied)
+
+	// Get the typed maps from both original and copy.
+	originalTypedMap, ok1 := original["config"].(map[int][]string)
+	copiedTypedMap, ok2 := copied["config"].(map[int][]string)
+	assert.True(t, ok1, "Original should be map[int][]string")
+	assert.True(t, ok2, "Copy should be map[int][]string")
+
+	// Verify initial values are identical.
+	assert.Equal(t, originalTypedMap[1], copiedTypedMap[1])
+	assert.Equal(t, originalTypedMap[2], copiedTypedMap[2])
+
+	// Modify the copy's slice.
+	copiedTypedMap[1][0] = "modified"
+	copiedTypedMap[1] = append(copiedTypedMap[1], "appended")
+
+	// Verify the original was NOT affected (no aliasing).
+	assert.Equal(t, "original", originalTypedMap[1][0], "Original should not be modified")
+	assert.Equal(t, 3, len(originalTypedMap[1]), "Original slice length should not change")
+	assert.Equal(t, []string{"original", "value", "one"}, originalTypedMap[1], "Original values unchanged")
+
+	// Verify the copy was modified.
+	assert.Equal(t, "modified", copiedTypedMap[1][0], "Copy should be modified")
+	assert.Equal(t, 4, len(copiedTypedMap[1]), "Copy slice should have appended element")
 }
 
 // BenchmarkMerge benchmarks merge operations with properly-sized allocations.

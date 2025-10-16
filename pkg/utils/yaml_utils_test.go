@@ -832,3 +832,152 @@ func BenchmarkAtmosYamlTagsSlice_LinearSearch(b *testing.B) {
 		_ = found
 	}
 }
+
+// TestDeepCopyYAMLNode_NoAliasing verifies that deepCopyYAMLNode creates independent copies.
+// This test validates the fix for yaml.Node shallow copy aliasing where Content slice
+// and Alias pointer were shared between cached and returned nodes, causing mutations
+// in one to affect the other.
+func TestDeepCopyYAMLNode_NoAliasing(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{}
+
+	input := `
+list:
+  - item1
+  - item2
+nested:
+  key: value
+`
+
+	// First call - caches the result
+	result1, _, err := UnmarshalYAMLFromFileWithPositions[map[string]any](atmosConfig, input, "test-aliasing.yaml")
+	require.NoError(t, err)
+	require.NotNil(t, result1)
+
+	// Verify initial values
+	list1, ok := result1["list"].([]any)
+	require.True(t, ok, "list should be []any")
+	require.Len(t, list1, 2, "list should have 2 items")
+	assert.Equal(t, "item1", list1[0])
+	assert.Equal(t, "item2", list1[1])
+
+	nested1, ok := result1["nested"].(map[string]any)
+	require.True(t, ok, "nested should be map[string]any")
+	assert.Equal(t, "value", nested1["key"])
+
+	// Modify result1 to test aliasing
+	list1[0] = "MODIFIED"
+	nested1["key"] = "MODIFIED"
+	result1["new_key"] = "ADDED"
+
+	// Second call with same content - should get from cache but with deep copy
+	result2, _, err := UnmarshalYAMLFromFileWithPositions[map[string]any](atmosConfig, input, "test-aliasing.yaml")
+	require.NoError(t, err)
+	require.NotNil(t, result2)
+
+	// Verify that result2 is NOT affected by modifications to result1 (no aliasing)
+	list2, ok := result2["list"].([]any)
+	require.True(t, ok, "list should be []any")
+	require.Len(t, list2, 2, "list should have 2 items")
+	assert.Equal(t, "item1", list2[0], "First item should still be 'item1', not affected by result1 modification")
+	assert.Equal(t, "item2", list2[1], "Second item should still be 'item2'")
+
+	nested2, ok := result2["nested"].(map[string]any)
+	require.True(t, ok, "nested should be map[string]any")
+	assert.Equal(t, "value", nested2["key"], "Nested key should still be 'value', not affected by result1 modification")
+
+	_, hasNewKey := result2["new_key"]
+	assert.False(t, hasNewKey, "result2 should not have the key added to result1")
+}
+
+// TestDeepCopyYAMLNode_NilNode tests that deepCopyYAMLNode handles nil input.
+func TestDeepCopyYAMLNode_NilNode(t *testing.T) {
+	result := deepCopyYAMLNode(nil)
+	assert.Nil(t, result, "Copying nil node should return nil")
+}
+
+// TestDeepCopyYAMLNode_ComplexStructure tests deep copying of complex YAML structures.
+// This validates that all nested Content slices and Alias pointers are properly copied.
+func TestDeepCopyYAMLNode_ComplexStructure(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{}
+
+	// Complex YAML with multiple levels of nesting
+	input := `
+root:
+  level1:
+    level2:
+      level3:
+        deep: value
+        list:
+          - nested1
+          - nested2
+          - nested3
+  array:
+    - item1
+    - item2
+    - item3
+`
+
+	// Parse twice to ensure cached deep copy works
+	result1, _, err1 := UnmarshalYAMLFromFileWithPositions[map[string]any](atmosConfig, input, "test-complex.yaml")
+	require.NoError(t, err1)
+
+	result2, _, err2 := UnmarshalYAMLFromFileWithPositions[map[string]any](atmosConfig, input, "test-complex.yaml")
+	require.NoError(t, err2)
+
+	// Both should have same structure
+	root1 := result1["root"].(map[string]any)
+	root2 := result2["root"].(map[string]any)
+
+	level1_1 := root1["level1"].(map[string]any)
+	level1_2 := root2["level1"].(map[string]any)
+
+	level2_1 := level1_1["level2"].(map[string]any)
+	level2_2 := level1_2["level2"].(map[string]any)
+
+	level3_1 := level2_1["level3"].(map[string]any)
+	level3_2 := level2_2["level3"].(map[string]any)
+
+	// Initial values should match
+	assert.Equal(t, "value", level3_1["deep"])
+	assert.Equal(t, "value", level3_2["deep"])
+
+	// Modify deep nested value in result1
+	level3_1["deep"] = "MODIFIED"
+
+	// result2 should NOT be affected (no aliasing)
+	assert.Equal(t, "value", level3_2["deep"], "Deep nested value should not be affected by modification")
+}
+
+// TestPrintParsedYAMLCacheStats_NoDivideByZero tests that PrintParsedYAMLCacheStats
+// doesn't panic with divide-by-zero when uniqueFiles or uniqueHashes is 0.
+func TestPrintParsedYAMLCacheStats_NoDivideByZero(t *testing.T) {
+	// Save current stats
+	parsedYAMLCacheStats.Lock()
+	savedHits := parsedYAMLCacheStats.hits
+	savedMisses := parsedYAMLCacheStats.misses
+	savedTotalCalls := parsedYAMLCacheStats.totalCalls
+	savedFiles := parsedYAMLCacheStats.uniqueFiles
+	savedHashes := parsedYAMLCacheStats.uniqueHashes
+
+	// Reset stats to zero to trigger divide-by-zero scenario
+	parsedYAMLCacheStats.hits = 0
+	parsedYAMLCacheStats.misses = 0
+	parsedYAMLCacheStats.totalCalls = 0
+	parsedYAMLCacheStats.uniqueFiles = make(map[string]int)
+	parsedYAMLCacheStats.uniqueHashes = make(map[string]int)
+	parsedYAMLCacheStats.Unlock()
+
+	// This should not panic with divide-by-zero
+	assert.NotPanics(t, func() {
+		PrintParsedYAMLCacheStats()
+	}, "PrintParsedYAMLCacheStats should not panic with zero uniqueFiles/uniqueHashes")
+
+	// Restore stats
+	parsedYAMLCacheStats.Lock()
+	parsedYAMLCacheStats.hits = savedHits
+	parsedYAMLCacheStats.misses = savedMisses
+	parsedYAMLCacheStats.totalCalls = savedTotalCalls
+	parsedYAMLCacheStats.uniqueFiles = savedFiles
+	parsedYAMLCacheStats.uniqueHashes = savedHashes
+	parsedYAMLCacheStats.Unlock()
+}

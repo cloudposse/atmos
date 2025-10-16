@@ -143,6 +143,34 @@ func getOrCreateCacheLock(cacheKey string) *sync.Mutex {
 	return mu
 }
 
+// deepCopyYAMLNode recursively deep-copies a yaml.Node tree.
+// This is required because copying a yaml.Node struct only copies the slice header,
+// leaving Content and Alias fields aliased to the original.
+// Without deep copying, mutations to cached nodes would affect all consumers.
+func deepCopyYAMLNode(n *yaml.Node) *yaml.Node {
+	if n == nil {
+		return nil
+	}
+
+	// Copy the struct fields.
+	cp := *n
+
+	// Deep copy the Content slice.
+	if n.Content != nil {
+		cp.Content = make([]*yaml.Node, len(n.Content))
+		for i, c := range n.Content {
+			cp.Content[i] = deepCopyYAMLNode(c)
+		}
+	}
+
+	// Deep copy the Alias pointer.
+	if n.Alias != nil {
+		cp.Alias = deepCopyYAMLNode(n.Alias)
+	}
+
+	return &cp
+}
+
 // getCachedParsedYAML retrieves a cached parsed YAML node if it exists.
 // Returns a copy of the node to prevent external mutations.
 // Note: Statistics tracking is done by the caller to avoid double-counting.
@@ -161,9 +189,9 @@ func getCachedParsedYAML(file string, content string) (*yaml.Node, PositionMap, 
 		return nil, nil, false
 	}
 
-	// Return a copy of the node to prevent mutations affecting the cache.
-	nodeCopy := entry.node
-	return &nodeCopy, entry.positions, true
+	// Return a deep copy to prevent mutations affecting the cache.
+	nodeCopy := deepCopyYAMLNode(&entry.node)
+	return nodeCopy, entry.positions, true
 }
 
 // cacheParsedYAML stores a parsed YAML node in the cache.
@@ -178,10 +206,10 @@ func cacheParsedYAML(file string, content string, node *yaml.Node, positions Pos
 	parsedYAMLCacheMu.Lock()
 	defer parsedYAMLCacheMu.Unlock()
 
-	// Store a copy to prevent external mutations from affecting the cache.
-	nodeCopy := *node
+	// Store a deep copy to prevent external mutations from affecting the cache.
+	nodeCopy := deepCopyYAMLNode(node)
 	parsedYAMLCache[cacheKey] = &parsedYAMLCacheEntry{
-		node:      nodeCopy,
+		node:      *nodeCopy,
 		positions: positions,
 	}
 }
@@ -265,6 +293,14 @@ func PrintParsedYAMLCacheStats() {
 		hitRate = float64(hits) / float64(totalCalls) * cacheStatsPercentageMultiplier
 	}
 
+	var callsPerFile, callsPerHash float64
+	if uniqueFiles > 0 {
+		callsPerFile = float64(totalCalls) / float64(uniqueFiles)
+	}
+	if uniqueHashes > 0 {
+		callsPerHash = float64(totalCalls) / float64(uniqueHashes)
+	}
+
 	log.Info("YAML Cache Statistics",
 		"totalCalls", totalCalls,
 		"cacheHits", hits,
@@ -272,8 +308,8 @@ func PrintParsedYAMLCacheStats() {
 		"hitRate", hitRate,
 		"uniqueFiles", uniqueFiles,
 		"uniqueHashes", uniqueHashes,
-		"callsPerFile", float64(totalCalls)/float64(uniqueFiles),
-		"callsPerHash", float64(totalCalls)/float64(uniqueHashes),
+		"callsPerFile", callsPerFile,
+		"callsPerHash", callsPerHash,
 	)
 
 	// Print top files by call count.
@@ -731,3 +767,5 @@ func InternStringsInMap(atmosConfig *schema.AtmosConfiguration, data any) any {
 		return data
 	}
 }
+
+//nolint:revive // File length justified by cohesive YAML processing functionality and recent critical bug fixes.
