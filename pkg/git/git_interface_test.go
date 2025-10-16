@@ -1,7 +1,6 @@
 package git
 
 import (
-	"os"
 	"path/filepath"
 	"testing"
 
@@ -30,15 +29,8 @@ func TestDefaultGitRepo_GetLocalRepoInfo(t *testing.T) {
 			name: "successful get local repo info with remote",
 			setup: func(t *testing.T) string {
 				tempDir := t.TempDir()
-				oldDir, err := os.Getwd()
-				require.NoError(t, err)
-				t.Cleanup(func() {
-					_ = os.Chdir(oldDir)
-				})
-
 				// Initialize git repo
-				err = os.Chdir(tempDir)
-				require.NoError(t, err)
+				t.Chdir(tempDir)
 
 				repo, err := git.PlainInit(tempDir, false)
 				require.NoError(t, err)
@@ -70,14 +62,7 @@ func TestDefaultGitRepo_GetLocalRepoInfo(t *testing.T) {
 			name: "error when not in git repository",
 			setup: func(t *testing.T) string {
 				tempDir := t.TempDir()
-				oldDir, err := os.Getwd()
-				require.NoError(t, err)
-				t.Cleanup(func() {
-					_ = os.Chdir(oldDir)
-				})
-
-				err = os.Chdir(tempDir)
-				require.NoError(t, err)
+				t.Chdir(tempDir)
 
 				return tempDir
 			},
@@ -206,14 +191,7 @@ func TestDefaultGitRepo_GetCurrentCommitSHA(t *testing.T) {
 			name: "successful get commit SHA",
 			setup: func(t *testing.T) {
 				tempDir := t.TempDir()
-				oldDir, err := os.Getwd()
-				require.NoError(t, err)
-				t.Cleanup(func() {
-					_ = os.Chdir(oldDir)
-				})
-
-				err = os.Chdir(tempDir)
-				require.NoError(t, err)
+				t.Chdir(tempDir)
 
 				repo, err := git.PlainInit(tempDir, false)
 				require.NoError(t, err)
@@ -231,14 +209,7 @@ func TestDefaultGitRepo_GetCurrentCommitSHA(t *testing.T) {
 			name: "error when not in git repository",
 			setup: func(t *testing.T) {
 				tempDir := t.TempDir()
-				oldDir, err := os.Getwd()
-				require.NoError(t, err)
-				t.Cleanup(func() {
-					_ = os.Chdir(oldDir)
-				})
-
-				err = os.Chdir(tempDir)
-				require.NoError(t, err)
+				t.Chdir(tempDir)
 			},
 			expectError: true,
 			validate: func(t *testing.T, sha string, err error) {
@@ -250,16 +221,9 @@ func TestDefaultGitRepo_GetCurrentCommitSHA(t *testing.T) {
 			name: "error when no commits exist",
 			setup: func(t *testing.T) {
 				tempDir := t.TempDir()
-				oldDir, err := os.Getwd()
-				require.NoError(t, err)
-				t.Cleanup(func() {
-					_ = os.Chdir(oldDir)
-				})
+				t.Chdir(tempDir)
 
-				err = os.Chdir(tempDir)
-				require.NoError(t, err)
-
-				_, err = git.PlainInit(tempDir, false)
+				_, err := git.PlainInit(tempDir, false)
 				require.NoError(t, err)
 				// No commits created
 			},

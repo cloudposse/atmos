@@ -17,9 +17,7 @@ func ExecuteCommand(args []string) error {
 
 func TestDescribeComponentJSON(t *testing.T) {
 	// Set up the environment variables
-	currentWd, _ := os.Getwd()
-	defer os.Chdir(currentWd)
-	os.Chdir("./fixtures/scenarios/atmos-providers-section")
+	t.Chdir("./fixtures/scenarios/atmos-providers-section")
 
 	t.Setenv("ATMOS_PAGER", "more")
 
@@ -33,9 +31,7 @@ func TestDescribeComponentJSON(t *testing.T) {
 
 func TestDescribeComponentYAML(t *testing.T) {
 	// Set up the environment variables
-	currentWd, _ := os.Getwd()
-	defer os.Chdir(currentWd)
-	os.Chdir("./fixtures/scenarios/atmos-providers-section")
+	t.Chdir("./fixtures/scenarios/atmos-providers-section")
 
 	t.Setenv("ATMOS_PAGER", "more")
 
