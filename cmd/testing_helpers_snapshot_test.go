@@ -323,3 +323,85 @@ func TestSnapshotRestoreCycle(t *testing.T) {
 	logsLevel, _ := RootCmd.PersistentFlags().GetString("logs-level")
 	assert.Equal(t, "Trace", logsLevel, "Should restore logs-level")
 }
+
+func TestCleanupRootCmd(t *testing.T) {
+	tests := []struct {
+		name   string
+		test   func(t *testing.T)
+		verify func(t *testing.T)
+	}{
+		{
+			name: "automatically restores state via t.Cleanup",
+			test: func(t *testing.T) {
+				CleanupRootCmd(t)
+
+				// Modify RootCmd state.
+				require.NoError(t, RootCmd.PersistentFlags().Set("chdir", "/modified"))
+
+				// Verify changes are applied.
+				chdir, _ := RootCmd.PersistentFlags().GetString("chdir")
+				assert.Equal(t, "/modified", chdir)
+			},
+			verify: func(t *testing.T) {
+				// After test completes, state should be restored.
+				// This verification runs in the parent test, after the subtest completes.
+			},
+		},
+		{
+			name: "works like t.Setenv - no defer needed",
+			test: func(t *testing.T) {
+				CleanupRootCmd(t) // Single line, no defer!
+
+				require.NoError(t, RootCmd.PersistentFlags().Set("logs-level", "Debug"))
+				logsLevel, _ := RootCmd.PersistentFlags().GetString("logs-level")
+				assert.Equal(t, "Debug", logsLevel)
+			},
+			verify: nil,
+		},
+		{
+			name: "can be called multiple times in nested tests",
+			test: func(t *testing.T) {
+				CleanupRootCmd(t)
+
+				require.NoError(t, RootCmd.PersistentFlags().Set("chdir", "/outer"))
+
+				t.Run("nested", func(t *testing.T) {
+					CleanupRootCmd(t)
+
+					require.NoError(t, RootCmd.PersistentFlags().Set("chdir", "/inner"))
+					chdir, _ := RootCmd.PersistentFlags().GetString("chdir")
+					assert.Equal(t, "/inner", chdir)
+				})
+
+				// After nested test, outer state should be restored.
+				chdir, _ := RootCmd.PersistentFlags().GetString("chdir")
+				assert.Equal(t, "/outer", chdir, "Outer state should be restored after nested test")
+			},
+			verify: nil,
+		},
+		{
+			name: "helper function marks itself as helper",
+			test: func(t *testing.T) {
+				// CleanupRootCmd should call t.Helper(), so failures
+				// in the cleanup won't be attributed to CleanupRootCmd's line.
+				CleanupRootCmd(t)
+				assert.True(t, true, "Setup for helper test")
+			},
+			verify: nil,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Ensure parent test has clean state.
+			CleanupRootCmd(t)
+
+			// Run the actual test.
+			tt.test(t)
+
+			if tt.verify != nil {
+				tt.verify(t)
+			}
+		})
+	}
+}

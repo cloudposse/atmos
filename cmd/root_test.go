@@ -17,7 +17,7 @@ import (
 
 func TestNoColorLog(t *testing.T) {
 	// Snapshot RootCmd state to prevent test pollution.
-	defer WithRootCmdSnapshot(t)()
+	CleanupRootCmd(t)
 
 	// Save and restore working directory - previous tests may have changed it.
 	originalWd, err := os.Getwd()

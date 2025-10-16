@@ -253,6 +253,31 @@ var (
 - Target >80% coverage, especially for `pkg/` and `internal/exec/`
 - **Comments must end with periods**: All comments should be complete sentences ending with a period (enforced by golangci-lint)
 
+### Test Isolation (MANDATORY)
+- **ALWAYS use `CleanupRootCmd(t)`** for tests that use RootCmd - prevents test pollution
+- **Pattern similar to `t.Setenv()`** - single line, automatic cleanup via `t.Cleanup()`
+- **Example usage**:
+  ```go
+  func TestMyCommand(t *testing.T) {
+      CleanupRootCmd(t) // Single line - snapshots and restores RootCmd state
+
+      // Modify RootCmd as needed.
+      RootCmd.SetArgs([]string{"terraform", "plan"})
+      RootCmd.PersistentFlags().Set("chdir", "/tmp")
+
+      // State automatically restored when test completes.
+  }
+  ```
+- **Why this is critical**:
+  - RootCmd is global state shared across all tests
+  - Flag values persist between tests causing mysterious failures
+  - StringSlice flags (config, config-path) are especially problematic
+  - Without cleanup, tests pass in isolation but fail when run together
+- **Alternative pattern** (for specific cases):
+  ```go
+  defer WithRootCmdSnapshot(t)()  // Defer pattern if you need explicit control
+  ```
+
 ### Test Quality (MANDATORY)
 - **Test behavior, not implementation** - Verify inputs/outputs, not internal state
 - **Never test stub functions** - Either implement the function or remove the test
