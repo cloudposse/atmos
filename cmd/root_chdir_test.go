@@ -92,10 +92,7 @@ func TestChdirFlag(t *testing.T) {
 				tmpDir := t.TempDir()
 				return tmpDir
 			},
-			args: func() []string {
-				tmpDir := ""
-				return []string{"--chdir", tmpDir}
-			}(),
+			args:        []string{}, // Set in switch statement below.
 			expectError: false,
 		},
 		{
@@ -104,10 +101,7 @@ func TestChdirFlag(t *testing.T) {
 				tmpDir := t.TempDir()
 				return tmpDir
 			},
-			args: func() []string {
-				tmpDir := ""
-				return []string{"-C", tmpDir}
-			}(),
+			args:        []string{}, // Set in switch statement below.
 			expectError: false,
 		},
 		{
@@ -193,7 +187,6 @@ func TestChdirFlag(t *testing.T) {
 
 			// Special handling for specific test cases.
 			args := tt.args
-			envVar := tt.envVar
 
 			switch tt.name {
 			case "absolute path via --chdir flag":
@@ -235,8 +228,8 @@ func TestChdirFlag(t *testing.T) {
 				chdir, err := testCmd.Flags().GetString("chdir")
 				require.NoError(t, err)
 
-				// Check environment variable if flag is empty.
-				if chdir == "" && envVar != "" {
+				// If flag empty, fall back to environment variable.
+				if chdir == "" {
 					chdir = os.Getenv("ATMOS_CHDIR")
 				}
 

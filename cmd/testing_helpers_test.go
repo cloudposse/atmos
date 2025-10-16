@@ -28,7 +28,8 @@ func resetRootCmdForTesting(t *testing.T) {
 	flags := []string{
 		"chdir",
 		"base-path",
-		"config-dir",
+		"config-path",
+		"config",
 		"stacks-dir",
 		"components-dir",
 		"workflows-dir",
@@ -37,9 +38,15 @@ func resetRootCmdForTesting(t *testing.T) {
 	}
 
 	for _, flag := range flags {
-		// Check if flag exists before trying to set it (some flags may be optional).
-		if f := RootCmd.Flags().Lookup(flag); f != nil {
-			_ = RootCmd.Flags().Set(flag, f.DefValue)
+		// Lookup in both local and persistent flag sets.
+		f := RootCmd.Flags().Lookup(flag)
+		if f == nil {
+			f = RootCmd.PersistentFlags().Lookup(flag)
+		}
+		if f != nil {
+			// Reset to default and clear Changed.
+			_ = f.Value.Set(f.DefValue)
+			f.Changed = false
 		}
 	}
 }

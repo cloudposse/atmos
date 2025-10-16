@@ -94,6 +94,21 @@ func TestProcessChdirFlag(t *testing.T) {
 			flagValue:   "subdir",
 			expectError: false,
 		},
+		{
+			name: "directory with no permissions",
+			setup: func(t *testing.T) string {
+				tmpDir := t.TempDir()
+				noPermDir := filepath.Join(tmpDir, "noperm")
+				require.NoError(t, os.Mkdir(noPermDir, 0o000))
+				t.Cleanup(func() {
+					// Restore permissions so cleanup can remove it.
+					_ = os.Chmod(noPermDir, 0o755)
+				})
+				return noPermDir
+			},
+			expectError: true,
+			errorMsg:    "failed to change directory",
+		},
 	}
 
 	for _, tt := range tests {
