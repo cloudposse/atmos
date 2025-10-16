@@ -232,7 +232,14 @@ func deepEqualValues(a, b any) bool {
 }
 
 // deepEqualSlices compares two slices recursively.
+// Correctly distinguishes between nil and empty slices to match reflect.DeepEqual behavior.
 func deepEqualSlices(a, b []any) bool {
+	// Check if exactly one is nil (XOR).
+	// This preserves reflect.DeepEqual behavior where nil != empty slice.
+	if (a == nil) != (b == nil) {
+		return false
+	}
+
 	if len(a) != len(b) {
 		return false
 	}

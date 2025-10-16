@@ -34,6 +34,23 @@ func newChangedFilesIndex(atmosConfig *schema.AtmosConfiguration, changedFiles [
 	}
 
 	// Pre-compute absolute base paths for each component type.
+	normalizedBasePaths := buildNormalizedBasePaths(atmosConfig)
+
+	// Initialize empty slices for each base path.
+	for _, absPath := range normalizedBasePaths {
+		index.filesByBasePath[absPath] = make([]string, 0)
+	}
+
+	// Index each changed file by its base path.
+	for _, changedFile := range changedFiles {
+		indexChangedFile(index, changedFile, normalizedBasePaths)
+	}
+
+	return index
+}
+
+// buildNormalizedBasePaths constructs absolute base paths for all component types.
+func buildNormalizedBasePaths(atmosConfig *schema.AtmosConfiguration) []string {
 	basePaths := []string{
 		filepath.Join(atmosConfig.BasePath, atmosConfig.Components.Terraform.BasePath),
 		filepath.Join(atmosConfig.BasePath, atmosConfig.Components.Helmfile.BasePath),
@@ -41,7 +58,6 @@ func newChangedFilesIndex(atmosConfig *schema.AtmosConfiguration, changedFiles [
 		filepath.Join(atmosConfig.BasePath, atmosConfig.Stacks.BasePath),
 	}
 
-	// Convert to absolute paths and normalize.
 	normalizedBasePaths := make([]string, 0, len(basePaths))
 	for _, basePath := range basePaths {
 		absPath, err := filepath.Abs(basePath)
@@ -50,37 +66,56 @@ func newChangedFilesIndex(atmosConfig *schema.AtmosConfiguration, changedFiles [
 			absPath = basePath
 		}
 		normalizedBasePaths = append(normalizedBasePaths, absPath)
-		// Initialize empty slice for this base path.
-		index.filesByBasePath[absPath] = make([]string, 0)
 	}
 
-	// Index each changed file by its base path.
-	for _, changedFile := range changedFiles {
-		absFile, err := filepath.Abs(changedFile)
-		if err != nil {
-			// If conversion fails, try using original path.
-			absFile = changedFile
-		}
+	return normalizedBasePaths
+}
 
-		// Find which base path this file belongs to.
-		matched := false
-		for _, basePath := range normalizedBasePaths {
-			if strings.HasPrefix(absFile, basePath) {
-				index.filesByBasePath[basePath] = append(index.filesByBasePath[basePath], absFile)
-				matched = true
-				break
-			}
-		}
-
-		// If file doesn't match any base path, add to all paths (fallback).
-		if !matched {
-			for _, basePath := range normalizedBasePaths {
-				index.filesByBasePath[basePath] = append(index.filesByBasePath[basePath], absFile)
-			}
-		}
+// indexChangedFile indexes a single changed file by finding its matching base path.
+// If no match is found, the file is added to all base paths as a fallback.
+func indexChangedFile(index *changedFilesIndex, changedFile string, normalizedBasePaths []string) {
+	absFile, err := filepath.Abs(changedFile)
+	if err != nil {
+		// If conversion fails, try using original path.
+		absFile = changedFile
 	}
 
-	return index
+	// Find which base path this file belongs to.
+	// Use filepath.Rel to properly check path boundaries, not just string prefixes.
+	// This prevents sibling paths like "components/terraform" and "components/terraform-modules"
+	// from colliding due to shared prefixes.
+	if matchedPath := findMatchingBasePath(absFile, normalizedBasePaths); matchedPath != "" {
+		index.filesByBasePath[matchedPath] = append(index.filesByBasePath[matchedPath], absFile)
+		return
+	}
+
+	// If file doesn't match any base path, add to all paths (fallback).
+	for _, basePath := range normalizedBasePaths {
+		index.filesByBasePath[basePath] = append(index.filesByBasePath[basePath], absFile)
+	}
+}
+
+// findMatchingBasePath returns the base path that contains the given file, or empty string if none match.
+func findMatchingBasePath(absFile string, normalizedBasePaths []string) string {
+	for _, basePath := range normalizedBasePaths {
+		if isFileInBasePath(absFile, basePath) {
+			return basePath
+		}
+	}
+	return ""
+}
+
+// isFileInBasePath checks if a file is within a base path using proper path boundary checking.
+func isFileInBasePath(absFile, basePath string) bool {
+	rel, err := filepath.Rel(basePath, absFile)
+	if err != nil {
+		return false
+	}
+
+	// File is inside basePath if:
+	// - rel is "." (file is directly at basePath), OR
+	// - rel doesn't start with ".." (file is within basePath, not outside or in a sibling)
+	return rel == "." || (rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)))
 }
 
 // getRelevantFiles returns changed files relevant to a specific component.

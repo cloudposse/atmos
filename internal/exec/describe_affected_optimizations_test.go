@@ -332,6 +332,37 @@ func TestDeepEqualSlices(t *testing.T) {
 		b := []any{[]any{1, 2}, []any{3, 5}}
 		assert.False(t, deepEqualSlices(a, b))
 	})
+
+	// Nil vs empty slice tests - critical for correct affected detection.
+	t.Run("both nil slices are equal", func(t *testing.T) {
+		var a []any
+		var b []any
+		assert.True(t, deepEqualSlices(a, b))
+	})
+
+	t.Run("nil slice vs empty slice are different", func(t *testing.T) {
+		var a []any // nil
+		b := []any{}
+		assert.False(t, deepEqualSlices(a, b))
+	})
+
+	t.Run("empty slice vs nil slice are different", func(t *testing.T) {
+		a := []any{}
+		var b []any // nil
+		assert.False(t, deepEqualSlices(a, b))
+	})
+
+	t.Run("nil slice vs non-empty slice are different", func(t *testing.T) {
+		var a []any // nil
+		b := []any{"value"}
+		assert.False(t, deepEqualSlices(a, b))
+	})
+
+	t.Run("non-empty slice vs nil slice are different", func(t *testing.T) {
+		a := []any{"value"}
+		var b []any // nil
+		assert.False(t, deepEqualSlices(a, b))
+	})
 }
 
 func TestIsEqual_CustomComparison(t *testing.T) {
@@ -626,6 +657,87 @@ func TestChangedFilesIndex_GetRelevantFiles(t *testing.T) {
 		helmFiles := matchedIndex.getRelevantFiles(cfg.HelmfileComponentType, atmosConfig)
 		assert.Len(t, helmFiles, 1)
 		assert.Contains(t, helmFiles, filepath.Join(tempDir, "components/helmfile/app/helmfile.yaml"))
+	})
+}
+
+// TestChangedFilesIndex_PathCollisionPrevention tests that sibling paths with shared prefixes
+// don't collide when indexing files. This is a critical bug fix to prevent files from being
+// assigned to the wrong base path (e.g., "components/terraform-modules" incorrectly matching
+// "components/terraform" with HasPrefix).
+func TestChangedFilesIndex_PathCollisionPrevention(t *testing.T) {
+	tempDir := t.TempDir()
+
+	atmosConfig := &schema.AtmosConfiguration{
+		BasePath: tempDir,
+		Components: schema.Components{
+			Terraform: schema.Terraform{
+				BasePath: "components/terraform",
+			},
+			Helmfile: schema.Helmfile{
+				BasePath: "components/helmfile",
+			},
+			Packer: schema.Packer{
+				BasePath: "components/packer",
+			},
+		},
+		Stacks: schema.Stacks{
+			BasePath: "stacks",
+		},
+	}
+
+	t.Run("files in terraform subdirectory are correctly indexed", func(t *testing.T) {
+		// File deep within terraform path should be correctly assigned.
+		changedFiles := []string{
+			filepath.Join(tempDir, "components/terraform/vpc/main.tf"),
+		}
+		index := newChangedFilesIndex(atmosConfig, changedFiles)
+
+		tfFiles := index.getRelevantFiles(cfg.TerraformComponentType, atmosConfig)
+		assert.Contains(t, tfFiles, filepath.Join(tempDir, "components/terraform/vpc/main.tf"))
+		assert.Len(t, tfFiles, 1)
+	})
+
+	t.Run("sibling path with shared prefix does not incorrectly match", func(t *testing.T) {
+		// This tests the bug fix: with HasPrefix, "components/terraform-modules" would match
+		// "components/terraform" and be incorrectly assigned. With filepath.Rel path boundary
+		// checking, it correctly goes to fallback (all paths).
+		changedFiles := []string{
+			filepath.Join(tempDir, "components/terraform/vpc/main.tf"),        // Matches terraform
+			filepath.Join(tempDir, "components/terraform-backup/old/data.tf"), // Sibling, should NOT match
+			filepath.Join(tempDir, "components/helmfile/app/helmfile.yaml"),   // Matches helmfile
+		}
+		index := newChangedFilesIndex(atmosConfig, changedFiles)
+
+		tfFiles := index.getRelevantFiles(cfg.TerraformComponentType, atmosConfig)
+		helmFiles := index.getRelevantFiles(cfg.HelmfileComponentType, atmosConfig)
+
+		// Terraform files should include the terraform file.
+		assert.Contains(t, tfFiles, filepath.Join(tempDir, "components/terraform/vpc/main.tf"))
+
+		// The terraform-backup file should be in the terraform list (via fallback).
+		assert.Contains(t, tfFiles, filepath.Join(tempDir, "components/terraform-backup/old/data.tf"))
+
+		// Helmfile files should include the helmfile file.
+		assert.Contains(t, helmFiles, filepath.Join(tempDir, "components/helmfile/app/helmfile.yaml"))
+
+		// The terraform-backup file should also be in helmfile list (via fallback).
+		assert.Contains(t, helmFiles, filepath.Join(tempDir, "components/terraform-backup/old/data.tf"))
+
+		// Key assertion: both lists should contain the sibling file via fallback, NOT via incorrect matching.
+		// If the bug existed (using HasPrefix), terraform-backup would only be in terraform list.
+	})
+
+	t.Run("parent path does not match child path", func(t *testing.T) {
+		// File in parent directory should not be considered part of subdirectory.
+		changedFiles := []string{
+			filepath.Join(tempDir, "components/file.tf"), // Parent of terraform/helmfile, should go to fallback
+		}
+		index := newChangedFilesIndex(atmosConfig, changedFiles)
+
+		tfFiles := index.getRelevantFiles(cfg.TerraformComponentType, atmosConfig)
+
+		// File should be in the list via fallback (since it doesn't match any specific base path).
+		assert.Contains(t, tfFiles, filepath.Join(tempDir, "components/file.tf"))
 	})
 }
 
