@@ -84,16 +84,14 @@ func areTerraformComponentModulesChangedIndexed(
 // isComponentDependentFolderOrFileChangedIndexed checks dependencies using indexed files.
 // This is an optimized version that reduces file iterations.
 //
-//nolint:gocognit,revive // Dependency checking requires nested loops and multiple return values for complete status
+//nolint:revive // Dependency checking requires nested loops and multiple return values for complete status
 func isComponentDependentFolderOrFileChangedIndexed(
 	filesIndex *changedFilesIndex,
 	deps schema.DependsOn,
 ) (bool, string, string, error) {
-	hasDependencies := false
 	isChanged := false
 	changedType := ""
 	changedFileOrFolder := ""
-	pathPatternSuffix := ""
 
 	// Get all files once (dependencies can span multiple component types).
 	allChangedFiles := filesIndex.getAllFiles()
@@ -103,37 +101,39 @@ func isComponentDependentFolderOrFileChangedIndexed(
 			break
 		}
 
-		if dep.File != "" {
+		// Determine dependency type and set variables accordingly.
+		var pathPatternSuffix string
+		switch {
+		case dep.File != "":
 			changedType = "file"
 			changedFileOrFolder = dep.File
 			pathPatternSuffix = ""
-			hasDependencies = true
-		} else if dep.Folder != "" {
+		case dep.Folder != "":
 			changedType = "folder"
 			changedFileOrFolder = dep.Folder
 			pathPatternSuffix = "/**"
-			hasDependencies = true
+		default:
+			// Skip dependencies with neither File nor Folder.
+			continue
 		}
 
-		if hasDependencies {
-			changedFileOrFolderAbs, err := filepath.Abs(changedFileOrFolder)
+		changedFileOrFolderAbs, err := filepath.Abs(changedFileOrFolder)
+		if err != nil {
+			return false, "", "", err
+		}
+
+		pathPattern := changedFileOrFolderAbs + pathPatternSuffix
+
+		for _, changedFile := range allChangedFiles {
+			// Files are already absolute from index.
+			match, err := u.PathMatch(pathPattern, changedFile)
 			if err != nil {
 				return false, "", "", err
 			}
 
-			pathPattern := changedFileOrFolderAbs + pathPatternSuffix
-
-			for _, changedFile := range allChangedFiles {
-				// Files are already absolute from index.
-				match, err := u.PathMatch(pathPattern, changedFile)
-				if err != nil {
-					return false, "", "", err
-				}
-
-				if match {
-					isChanged = true
-					break
-				}
+			if match {
+				isChanged = true
+				break
 			}
 		}
 	}

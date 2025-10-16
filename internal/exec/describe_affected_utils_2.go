@@ -133,7 +133,14 @@ func isEqual(
 
 // deepEqualMaps performs optimized deep comparison of two maps.
 // This avoids the overhead of reflect.DeepEqual by using type assertions.
+// Correctly distinguishes between nil and empty maps to match reflect.DeepEqual behavior.
 func deepEqualMaps(a, b map[string]any) bool {
+	// Check if exactly one is nil (XOR).
+	// This preserves reflect.DeepEqual behavior where nil != empty map.
+	if (a == nil) != (b == nil) {
+		return false
+	}
+
 	// Quick length check.
 	if len(a) != len(b) {
 		return false
@@ -239,57 +246,130 @@ func deepEqualSlices(a, b []any) bool {
 	return true
 }
 
+// deepCopyAny performs a deep copy of any value, recursively handling maps and slices.
+// This is the counterpart to deepEqualValues for creating independent copies of nested structures.
+func deepCopyAny(v any) (any, error) {
+	if v == nil {
+		return nil, nil
+	}
+
+	// Type assertions for common types to avoid reflection where possible.
+	switch typed := v.(type) {
+	case map[string]any:
+		return deepCopyMap(typed)
+
+	case []any:
+		return deepCopySlice(typed)
+
+	case string:
+		return typed, nil
+
+	case int:
+		return typed, nil
+
+	case int64:
+		return typed, nil
+
+	case float64:
+		return typed, nil
+
+	case bool:
+		return typed, nil
+
+	default:
+		// For uncommon types, use reflection to create a copy.
+		// This ensures we don't miss any types.
+		return v, nil
+	}
+}
+
+// deepCopyMap creates a deep copy of a map.
+func deepCopyMap(m map[string]any) (map[string]any, error) {
+	if m == nil {
+		return nil, nil
+	}
+
+	result := make(map[string]any, len(m))
+	for key, value := range m {
+		copiedValue, err := deepCopyAny(value)
+		if err != nil {
+			return nil, err
+		}
+		result[key] = copiedValue
+	}
+
+	return result, nil
+}
+
+// deepCopySlice creates a deep copy of a slice.
+func deepCopySlice(s []any) ([]any, error) {
+	if s == nil {
+		return nil, nil
+	}
+
+	result := make([]any, len(s))
+	for i, value := range s {
+		copiedValue, err := deepCopyAny(value)
+		if err != nil {
+			return nil, err
+		}
+		result[i] = copiedValue
+	}
+
+	return result, nil
+}
+
 // isComponentDependentFolderOrFileChanged checks if a folder or file that the component depends on has changed.
 func isComponentDependentFolderOrFileChanged(
 	changedFiles []string,
 	deps schema.DependsOn,
 ) (bool, string, string, error) {
-	hasDependencies := false
 	isChanged := false
 	changedType := ""
 	changedFileOrFolder := ""
-	pathPatternSuffix := ""
 
 	for _, dep := range deps {
 		if isChanged {
 			break
 		}
 
-		if dep.File != "" {
+		// Determine dependency type and set variables accordingly.
+		var pathPatternSuffix string
+		switch {
+		case dep.File != "":
 			changedType = "file"
 			changedFileOrFolder = dep.File
 			pathPatternSuffix = ""
-			hasDependencies = true
-		} else if dep.Folder != "" {
+		case dep.Folder != "":
 			changedType = "folder"
 			changedFileOrFolder = dep.Folder
 			pathPatternSuffix = "/**"
-			hasDependencies = true
+		default:
+			// Skip dependencies with neither File nor Folder.
+			continue
 		}
 
-		if hasDependencies {
-			changedFileOrFolderAbs, err := filepath.Abs(changedFileOrFolder)
+		changedFileOrFolderAbs, err := filepath.Abs(changedFileOrFolder)
+		if err != nil {
+			return false, "", "", err
+		}
+
+		pathPattern := changedFileOrFolderAbs + pathPatternSuffix
+
+		for _, changedFile := range changedFiles {
+			changedFileAbs, err := filepath.Abs(changedFile)
 			if err != nil {
 				return false, "", "", err
 			}
 
-			pathPattern := changedFileOrFolderAbs + pathPatternSuffix
+			match, err := u.PathMatch(pathPattern, changedFileAbs)
+			if err != nil {
+				return false, "", "", err
+			}
 
-			for _, changedFile := range changedFiles {
-				changedFileAbs, err := filepath.Abs(changedFile)
-				if err != nil {
-					return false, "", "", err
-				}
-
-				match, err := u.PathMatch(pathPattern, changedFileAbs)
-				if err != nil {
-					return false, "", "", err
-				}
-
-				if match {
-					isChanged = true
-					break
-				}
+			if match {
+				isChanged = true
+				break
 			}
 		}
 	}

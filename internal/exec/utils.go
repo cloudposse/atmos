@@ -214,13 +214,15 @@ func getFindStacksMapCacheKey(atmosConfig *schema.AtmosConfiguration, ignoreMiss
 		keyBuilder.WriteString(path)
 		keyBuilder.WriteString(cacheKeyDelimiter)
 
-		// Include file modification time for cache invalidation.
+		// Include file modification time and size for cache invalidation.
+		// Use nanosecond precision to detect changes within the same second.
+		// Include file size to detect content changes that preserve mtime.
 		// If stat fails (file doesn't exist, permission denied, etc.),
-		// use "0" to ensure consistent behavior.
+		// use "missing:-1" sentinel to ensure consistent behavior.
 		if info, err := os.Stat(path); err == nil {
-			keyBuilder.WriteString(fmt.Sprintf("%d", info.ModTime().Unix()))
+			keyBuilder.WriteString(fmt.Sprintf("%d:%d", info.ModTime().UnixNano(), info.Size()))
 		} else {
-			keyBuilder.WriteString("0")
+			keyBuilder.WriteString("missing:-1")
 		}
 		keyBuilder.WriteString(cacheKeyDelimiter)
 	}
