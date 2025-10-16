@@ -806,13 +806,8 @@ func hasValidationSettings(componentSection map[string]any) bool {
 
 func TestExecuteValidateComponent(t *testing.T) {
 	// Change to the test fixtures directory for stack processing.
-	originalDir, err := os.Getwd()
-	require.NoError(t, err)
-	defer os.Chdir(originalDir)
-
 	fixturesDir := "../../tests/fixtures/scenarios/complete"
-	err = os.Chdir(fixturesDir)
-	require.NoError(t, err)
+	t.Chdir(fixturesDir)
 
 	tests := []struct {
 		name           string
@@ -934,13 +929,8 @@ func TestExecuteValidateComponent_ComponentTypeDetection(t *testing.T) {
 	// Test that the function correctly tries different component types in order.
 
 	// Change to the test fixtures directory.
-	originalDir, err := os.Getwd()
-	require.NoError(t, err)
-	defer os.Chdir(originalDir)
-
 	fixturesDir := "../../tests/fixtures/scenarios/complete"
-	err = os.Chdir(fixturesDir)
-	require.NoError(t, err)
+	t.Chdir(fixturesDir)
 
 	tests := []struct {
 		name          string
@@ -993,13 +983,8 @@ func TestExecuteValidateComponent_WithComponentValidationSettings(t *testing.T) 
 	// Test validation using component settings rather than direct parameters.
 
 	// Change to the test fixtures directory.
-	originalDir, err := os.Getwd()
-	require.NoError(t, err)
-	defer os.Chdir(originalDir)
-
 	fixturesDir := "../../tests/fixtures/scenarios/complete"
-	err = os.Chdir(fixturesDir)
-	require.NoError(t, err)
+	t.Chdir(fixturesDir)
 
 	info := schema.ConfigAndStacksInfo{}
 	atmosConfig, err := cfg.InitCliConfig(info, true)

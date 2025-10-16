@@ -83,11 +83,7 @@ components:
 	assert.NoError(t, err)
 
 	// Change to temp directory
-	originalDir, err := os.Getwd()
-	assert.NoError(t, err)
-	err = os.Chdir(tempDir)
-	assert.NoError(t, err)
-	defer os.Chdir(originalDir)
+	t.Chdir(tempDir)
 
 	// Read and parse the manifest
 	yamlFileContent, err := os.ReadFile("test_manifest.yaml")
@@ -200,11 +196,7 @@ components:
 	assert.NoError(t, err)
 
 	// Change to temp directory
-	originalDir, err := os.Getwd()
-	assert.NoError(t, err)
-	err = os.Chdir(tempDir)
-	assert.NoError(t, err)
-	defer os.Chdir(originalDir)
+	t.Chdir(tempDir)
 
 	// Read and parse the manifest
 	yamlFileContent, err := os.ReadFile("test_raw_manifest.yaml")
@@ -269,11 +261,7 @@ components:
 	assert.NoError(t, err)
 
 	// Change to temp directory
-	originalDir, err := os.Getwd()
-	assert.NoError(t, err)
-	err = os.Chdir(tempDir)
-	assert.NoError(t, err)
-	defer os.Chdir(originalDir)
+	t.Chdir(tempDir)
 
 	// Read and parse the manifest
 	yamlFileContent, err := os.ReadFile("test_noext_manifest.yaml")
@@ -337,11 +325,7 @@ components:
 	assert.NoError(t, err)
 
 	// Change to temp directory
-	originalDir, err := os.Getwd()
-	assert.NoError(t, err)
-	err = os.Chdir(tempDir)
-	assert.NoError(t, err)
-	defer os.Chdir(originalDir)
+	t.Chdir(tempDir)
 
 	// Read and parse the manifest
 	yamlFileContent, err := os.ReadFile("test_mixed_manifest.yaml")

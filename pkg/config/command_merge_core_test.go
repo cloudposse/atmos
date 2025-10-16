@@ -201,11 +201,7 @@ commands:
 				require.NoError(t, err)
 			}
 
-			oldDir, err := os.Getwd()
-			require.NoError(t, err)
-			err = os.Chdir(tempDir)
-			require.NoError(t, err)
-			defer os.Chdir(oldDir)
+			t.Chdir(tempDir)
 
 			// Load config
 			configInfo := schema.ConfigAndStacksInfo{
