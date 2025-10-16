@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"reflect"
 	"testing"
 
 	"github.com/spf13/pflag"
@@ -46,6 +47,33 @@ func snapshotRootCmdState() *cmdStateSnapshot {
 	return snapshot
 }
 
+// restoreStringSliceFlag handles restoration of StringSlice/StringArray flags.
+// These flag types have Set() methods that append rather than replace, so we need
+// to use reflection to clear the underlying slice first.
+func restoreStringSliceFlag(f *pflag.Flag, snap flagSnapshot) {
+	// Use reflection to access the underlying slice and clear it.
+	v := reflect.ValueOf(f.Value)
+	if v.Kind() == reflect.Ptr {
+		v = v.Elem()
+	}
+	// Look for a field that holds the slice (usually "value").
+	if v.Kind() == reflect.Struct {
+		valueField := v.FieldByName("value")
+		if valueField.IsValid() && valueField.CanSet() {
+			// Reset to empty slice to prevent append behavior.
+			valueField.Set(reflect.MakeSlice(valueField.Type(), 0, 0))
+		}
+	}
+	// Reset Changed state before setting value.
+	f.Changed = false
+	// Set the snapshot value if not default.
+	if snap.value != "[]" && snap.value != "" {
+		_ = f.Value.Set(snap.value)
+	}
+	// Restore Changed state.
+	f.Changed = snap.changed
+}
+
 // restoreRootCmdState restores RootCmd to a previously captured state.
 func restoreRootCmdState(snapshot *cmdStateSnapshot) {
 	// Clear command args.
@@ -55,6 +83,12 @@ func restoreRootCmdState(snapshot *cmdStateSnapshot) {
 	restoreFlags := func(flagSet *pflag.FlagSet) {
 		flagSet.VisitAll(func(f *pflag.Flag) {
 			if snap, ok := snapshot.flags[f.Name]; ok {
+				// StringSlice/StringArray flags need special handling due to append behavior.
+				if f.Value.Type() == "stringSlice" || f.Value.Type() == "stringArray" {
+					restoreStringSliceFlag(f, snap)
+					return
+				}
+				// For other flag types, direct Set() works fine.
 				_ = f.Value.Set(snap.value)
 				f.Changed = snap.changed
 			}
