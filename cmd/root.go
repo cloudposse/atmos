@@ -32,6 +32,11 @@ import (
 	"github.com/cloudposse/atmos/pkg/telemetry"
 	"github.com/cloudposse/atmos/pkg/ui/heatmap"
 	"github.com/cloudposse/atmos/pkg/utils"
+
+	// Import built-in command packages for side-effect registration.
+	// The init() function in each package registers the command with the registry.
+	_ "github.com/cloudposse/atmos/cmd/about"
+	"github.com/cloudposse/atmos/cmd/internal"
 )
 
 const (
@@ -583,6 +588,14 @@ func displayPerformanceHeatmap(cmd *cobra.Command, mode string) error {
 }
 
 func init() {
+	// Register built-in commands from the registry.
+	// This must happen BEFORE custom commands are processed in Execute().
+	// Commands register themselves via init() functions when their packages
+	// are imported with blank imports (e.g., _ "github.com/cloudposse/atmos/cmd/about").
+	if err := internal.RegisterAll(RootCmd); err != nil {
+		log.Error("Failed to register built-in commands", "error", err)
+	}
+
 	// Add the template function for wrapped flag usages.
 	cobra.AddTemplateFunc("wrappedFlagUsages", templates.WrappedFlagUsages)
 
