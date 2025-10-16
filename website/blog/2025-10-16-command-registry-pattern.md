@@ -85,13 +85,16 @@ The registry pattern provides:
 - ✅ **Thread-safe operation** - Concurrent registration support
 - ✅ **Custom command compatibility** - Works seamlessly with existing `atmos.yaml` custom commands
 
-## Backward Compatibility
+## Impact on Users
 
-This is a **100% backward-compatible change**. Custom commands defined in `atmos.yaml` continue to work exactly as before. In fact, they can now:
+This is a **100% backward-compatible change** with zero impact on Atmos users. All existing functionality remains identical:
 
-1. **Replace built-in commands** - Override default behavior
-2. **Extend built-in commands** - Add subcommands to registry commands
-3. **Add new commands** - Create entirely new functionality
+- Custom commands in `atmos.yaml` work exactly as before
+- Command behavior is unchanged
+- No configuration updates required
+- All existing workflows continue to work
+
+For context: The registry pattern actually enhances custom command capabilities by allowing them to extend built-in commands with subcommands, but this is an existing feature that continues to work—nothing new from a user perspective.
 
 ## The Road Ahead
 
@@ -112,22 +115,24 @@ Once all commands use the registry pattern, we'll enable:
 - **Plugin packaging** - Distribute commands as standalone binaries
 - **Plugin marketplace** - Share and discover community commands
 
-## Try It Today
+## For Atmos Contributors
 
-The Command Registry Pattern is available in the latest Atmos release. The `about` command has been migrated as a proof-of-concept, demonstrating the pattern works in production.
+This change is **internal to Atmos development** and has no impact on Atmos users. End users won't notice any difference in behavior—this is purely an architectural improvement for maintainability and future extensibility.
 
-Developers interested in migrating additional commands can reference:
+**If you're an Atmos contributor** interested in migrating commands or building plugins:
 - **[PRD: Command Registry Pattern](https://github.com/cloudposse/atmos/blob/main/docs/prd/command-registry-pattern.md)** - Complete architecture documentation
 - **[Developer Guide: Developing Atmos Commands](https://github.com/cloudposse/atmos/blob/main/docs/developing-atmos-commands.md)** - Step-by-step implementation guide
 
+The `about` command has been migrated as a proof-of-concept in this PR, demonstrating the pattern works in production.
+
 ## Get Involved
 
-We're building this in the open and welcome community feedback:
+We're building this in the open and welcome contributions from the community:
 - 💬 **Discuss** - Share your thoughts in [GitHub Discussions](https://github.com/cloudposse/atmos/discussions)
 - 🐛 **Report Issues** - Found a bug? [Open an issue](https://github.com/cloudposse/atmos/issues)
 - 🚀 **Contribute** - Help migrate commands in future PRs
 
-This is just the beginning. We're excited to see what the community builds with pluggable commands!
+This is the foundation for a more modular, extensible Atmos architecture.
 
 ---
 
