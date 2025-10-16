@@ -21,6 +21,13 @@ func TestNoColorLog(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to get current working directory: %v", err)
 	}
+
+	// Change back to original directory IMMEDIATELY to ensure paths work.
+	// Previous tests may have left us in a temp directory.
+	if err := os.Chdir(originalWd); err != nil {
+		t.Fatalf("Failed to restore working directory: %v", err)
+	}
+
 	t.Cleanup(func() {
 		_ = os.Chdir(originalWd)
 	})

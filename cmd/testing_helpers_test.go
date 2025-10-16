@@ -25,11 +25,12 @@ func resetRootCmdForTesting(t *testing.T) {
 
 	// Clear all persistent flag values that might have been set by previous tests.
 	// We must explicitly reset flag values because SetArgs() alone doesn't clear them.
+	// NOTE: We only reset flags that tests commonly set for chdir functionality.
+	// We explicitly DO NOT reset config-related flags (config, config-path) as
+	// resetting them to empty values breaks config loading in subsequent tests.
 	flags := []string{
 		"chdir",
 		"base-path",
-		"config-path",
-		"config",
 		"stacks-dir",
 		"components-dir",
 		"workflows-dir",
