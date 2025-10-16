@@ -111,6 +111,9 @@ jobs:
       # and they'll all be compiled into the same custom-gcl binary.
       - name: Build custom golangci-lint with lintroller plugin
         run: |
+          # Ensure lintroller module is ready
+          cd tools/lintroller && go mod tidy && cd ../..
+          # Build custom golangci-lint with plugins
           golangci-lint custom
           # Replace the standard golangci-lint binary with our custom one
           # The action will use this when install-mode is set to 'none'
