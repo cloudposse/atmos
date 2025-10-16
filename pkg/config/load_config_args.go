@@ -111,6 +111,9 @@ func mergeConfigFromDirectories(v *viper.Viper, dirPaths []string) ([]string, er
 
 func validatedIsDirs(dirPaths []string) error {
 	for _, dirPath := range dirPaths {
+		if dirPath == "" {
+			return fmt.Errorf("%w: --config-path requires a non-empty directory path", errUtils.ErrEmptyConfigPath)
+		}
 		stat, err := os.Stat(dirPath)
 		if err != nil {
 			log.Debug("--config-path directory not found", "path", dirPath)
@@ -126,13 +129,16 @@ func validatedIsDirs(dirPaths []string) error {
 
 func validatedIsFiles(files []string) error {
 	for _, filePath := range files {
+		if filePath == "" {
+			return fmt.Errorf("%w: --config requires a non-empty file path", errUtils.ErrEmptyConfigFile)
+		}
 		stat, err := os.Stat(filePath)
 		if err != nil {
 			log.Debug("--config file not found", "path", filePath)
 			return errUtils.ErrFileNotFound
 		}
 		if stat.IsDir() {
-			log.Debug("--config expected file found directors", "path", filePath)
+			log.Debug("--config expected file found directory", "path", filePath)
 			return errUtils.ErrExpectedFile
 		}
 	}
