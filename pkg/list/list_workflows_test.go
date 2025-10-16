@@ -135,11 +135,7 @@ workflows:
 	require.NoError(t, err)
 
 	// Change to the temporary directory for testing
-	currentDir, err := os.Getwd()
-	require.NoError(t, err)
-	err = os.Chdir(tmpDir)
-	require.NoError(t, err)
-	defer os.Chdir(currentDir)
+	t.Chdir(tmpDir)
 
 	tests := []struct {
 		name        string

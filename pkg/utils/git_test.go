@@ -1,11 +1,9 @@
 package utils
 
 import (
-	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 func TestProcessTagGitRoot(t *testing.T) {
@@ -39,8 +37,7 @@ func TestProcessTagGitRoot(t *testing.T) {
 				// Change to a directory without a Git repo
 				// The function should return the default value
 				tmpDir := t.TempDir()
-				err := os.Chdir(tmpDir)
-				require.NoError(t, err)
+				t.Chdir(tmpDir)
 				return "/default/fallback"
 			},
 			expected:    "/default/fallback",
@@ -53,8 +50,7 @@ func TestProcessTagGitRoot(t *testing.T) {
 			setupFunc: func(t *testing.T) string {
 				// Change to a directory without .git
 				tmpDir := t.TempDir()
-				err := os.Chdir(tmpDir)
-				require.NoError(t, err)
+				t.Chdir(tmpDir)
 				return ""
 			},
 			expected:    "/fallback/value",
@@ -64,11 +60,6 @@ func TestProcessTagGitRoot(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Save original working directory
-			originalDir, err := os.Getwd()
-			require.NoError(t, err)
-			defer os.Chdir(originalDir)
-
 			// Set TEST_GIT_ROOT if provided
 			if tt.testGitRoot != "" {
 				t.Setenv("TEST_GIT_ROOT", tt.testGitRoot)
@@ -103,11 +94,6 @@ func TestProcessTagGitRoot(t *testing.T) {
 func TestProcessTagGitRoot_Integration(t *testing.T) {
 	// This test verifies that TEST_GIT_ROOT properly overrides Git detection
 
-	// Save original directory
-	originalDir, err := os.Getwd()
-	require.NoError(t, err)
-	defer os.Chdir(originalDir)
-
 	t.Run("TEST_GIT_ROOT overrides Git detection", func(t *testing.T) {
 		// Test 1: TEST_GIT_ROOT overrides any Git detection
 		mockRoot := "/mock/override/path"
@@ -128,9 +114,7 @@ func TestProcessTagGitRoot_Integration(t *testing.T) {
 
 		// Create a temp directory without a Git repo
 		tmpDir := t.TempDir()
-		err := os.Chdir(tmpDir)
-		require.NoError(t, err)
-		defer os.Chdir(originalDir)
+		t.Chdir(tmpDir)
 
 		result, err := ProcessTagGitRoot("!repo-root /default/path")
 		assert.NoError(t, err)

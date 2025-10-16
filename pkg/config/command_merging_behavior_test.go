@@ -297,11 +297,7 @@ commands:
 			}
 
 			// Change to test directory.
-			oldDir, err := os.Getwd()
-			require.NoError(t, err)
-			err = os.Chdir(tempDir)
-			require.NoError(t, err)
-			defer os.Chdir(oldDir)
+			t.Chdir(tempDir)
 
 			// Load configuration.
 			configInfo := schema.ConfigAndStacksInfo{
@@ -361,11 +357,7 @@ commands:
 	require.NoError(t, err)
 
 	// Load and verify.
-	oldDir, err := os.Getwd()
-	require.NoError(t, err)
-	err = os.Chdir(tempDir)
-	require.NoError(t, err)
-	defer os.Chdir(oldDir)
+	t.Chdir(tempDir)
 
 	configInfo := schema.ConfigAndStacksInfo{
 		AtmosBasePath:      tempDir,

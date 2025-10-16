@@ -11,14 +11,12 @@ import (
 
 // TestDefaultRepositoryOperations_GetLocalRepo verifies that DefaultRepositoryOperations delegates to GetLocalRepo.
 func TestDefaultRepositoryOperations_GetLocalRepo(t *testing.T) {
-	// Save and restore working directory.
+	// Find the git repo root by walking up from current directory.
 	originalWd, err := os.Getwd()
 	if err != nil {
 		t.Fatalf("Failed to get working directory: %v", err)
 	}
-	defer os.Chdir(originalWd)
 
-	// Find the git repo root by walking up from current directory.
 	wd := originalWd
 	for {
 		if _, err := os.Stat(filepath.Join(wd, ".git")); err == nil {
@@ -32,9 +30,7 @@ func TestDefaultRepositoryOperations_GetLocalRepo(t *testing.T) {
 	}
 
 	// Change to repo root.
-	if err := os.Chdir(wd); err != nil {
-		t.Fatalf("Failed to change to repo root: %v", err)
-	}
+	t.Chdir(wd)
 
 	ops := &DefaultRepositoryOperations{}
 
