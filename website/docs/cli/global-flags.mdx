@@ -22,32 +22,70 @@ These flags are available for every Atmos command:
 <dl>
     <dt>`--chdir` / `-C`</dt>
     <dd>
-        Change to the specified directory before executing any command.
-        - Executes **before** all other operations, including configuration loading and `--base-path` resolution
+        Change the shell's working directory before Atmos processes configuration. Atmos runs as if it was started from this directory.
+
+        **What it does:**
+        - Changes the working directory **before** configuration processing begins
+        - Affects all file operations: configuration loading, path resolution, and component execution
+        - Makes Atmos behave as if you had run `cd <directory> && atmos <command>`
+        - Processes **before** `--base-path` and all other flags
+
+        **How it differs from `--base-path`:**
+        - `--chdir`: Changes the **working directory** (like `cd`)
+        - `--base-path`: Overrides the **Atmos project root** within the working directory
+        - `--chdir` is applied first, then `--base-path` is resolved relative to the new working directory
+
+        **Path resolution:**
         - Supports both absolute and relative paths
-        - Relative paths are resolved from the current working directory
+        - Relative paths are resolved from your **current shell directory** before changing
         - Can also use `ATMOS_CHDIR` environment variable
-        - Useful for operating on infrastructure in different directories without changing your shell's working directory
 
         **Use Cases:**
-        - **Development workflow**: Point development builds at other infrastructure repos
-        - **CI/CD**: Run atmos from a build directory while operating on infrastructure elsewhere
-        - **Multi-repo operations**: Execute commands across multiple repos without manual directory changes
-        - **Scripting**: Simplify scripts that need to run atmos against different directories
+        - **Development workflow**: Test local Atmos builds against different infrastructure repos
+        - **CI/CD**: Run Atmos from a build directory while operating on infrastructure elsewhere
+        - **Multi-repo operations**: Execute commands across multiple repos without changing your shell
+        - **Scripting**: Simplify scripts that operate on different directories
 
         **Examples:**
-        - `atmos -C /path/to/infra terraform plan vpc -s prod`
-        - `atmos --chdir=../other-repo describe stacks`
-        - `ATMOS_CHDIR=/infrastructure atmos list components`
+        ```bash
+        # Run as if you were in /path/to/infra
+        atmos -C /path/to/infra terraform plan vpc -s prod
+
+        # Combine with --base-path to override project root
+        atmos --chdir=/infra --base-path=./custom terraform apply
+
+        # Use environment variable
+        ATMOS_CHDIR=/infrastructure atmos list components
+        ```
     </dd>
 
     <dt>`--base-path`</dt>
     <dd>
-        Base path for the Atmos project. This is the root directory where Atmos will look for configuration files,
-        stacks, and components.
-        - Can also use `ATMOS_BASE_PATH` environment variable
+        Override the Atmos project root directory. This tells Atmos where to find `atmos.yaml`, stacks, and components.
+
+        **What it does:**
+        - Overrides the project root (where `atmos.yaml` lives)
+        - Does **not** change the working directory
+        - Affects where Atmos looks for configuration, stacks, and components
+
+        **How it differs from `--chdir`:**
+        - `--base-path`: Overrides the **Atmos project root** (where `atmos.yaml` is located)
+        - `--chdir`: Changes the **working directory** before any processing
+        - `--base-path` is resolved **after** `--chdir` if both are specified
+
+        **Path resolution:**
         - Supports both absolute and relative paths
-        - Resolved **after** `--chdir` is processed (if specified)
+        - Relative paths are resolved from the current working directory (or from `--chdir` if specified)
+        - Can also use `ATMOS_BASE_PATH` environment variable
+
+        **Examples:**
+        ```bash
+        # Look for atmos.yaml in /custom/path instead of current directory
+        atmos --base-path=/custom/path terraform plan vpc -s prod
+
+        # Combine: change to /infra, then use ./custom as project root
+        atmos --chdir=/infra --base-path=./custom describe stacks
+        ```
     </dd>
 
     <dt>`--config`</dt>

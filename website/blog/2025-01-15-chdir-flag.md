@@ -94,18 +94,46 @@ atmos describe stacks
 atmos -C /other-infra describe stacks
 ```
 
-## Interaction with Other Flags
+## How It Works with --base-path
 
-The `--chdir` flag is processed **before** all other operations:
+It's important to understand the difference between `--chdir` and `--base-path`:
+
+- **`--chdir`**: Changes the **working directory** (like running `cd` first)
+- **`--base-path`**: Overrides the **Atmos project root** (where `atmos.yaml` lives)
+
+### Processing Order
+
+1. `--chdir` executes first, changing the working directory
+2. `--base-path` is then resolved relative to the new working directory
+3. All other configuration loading and operations proceed
+
+### Example
 
 ```bash
-# chdir happens first, then base-path is resolved relative to new location
+# Change to /infra directory, then look for atmos.yaml in ./config subdirectory
 atmos -C /infra --base-path=./config terraform plan vpc -s dev
 
-# This allows base-path to be relative to the chdir location
+# This is equivalent to:
+# cd /infra
+# atmos --base-path=./config terraform plan vpc -s dev
 ```
 
-This ordering makes it natural to combine with other Atmos flags while maintaining predictable behavior.
+### When to Use Each
+
+- Use `--chdir` when you want Atmos to run as if you had changed directories first
+- Use `--base-path` when your Atmos project root is in a non-standard location
+- Combine them when your working directory and Atmos project root are in different places
+
+```bash
+# Just change working directory (atmos.yaml is in the root)
+atmos -C /path/to/infra terraform plan vpc -s prod
+
+# Just override project root (stay in current directory)
+atmos --base-path=/custom/location terraform plan vpc -s prod
+
+# Both: change directory AND override project root
+atmos -C /infra --base-path=./custom terraform plan vpc -s prod
+```
 
 ## Real-World Examples
 

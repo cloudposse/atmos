@@ -648,7 +648,7 @@ func init() {
 	// Add the template function for wrapped flag usages.
 	cobra.AddTemplateFunc("wrappedFlagUsages", templates.WrappedFlagUsages)
 
-	RootCmd.PersistentFlags().StringP("chdir", "C", "", "Change to directory before executing command")
+	RootCmd.PersistentFlags().StringP("chdir", "C", "", "Change working directory before processing (run as if Atmos started in this directory)")
 	RootCmd.PersistentFlags().String("redirect-stderr", "", "File descriptor to redirect `stderr` to. "+
 		"Errors can be redirected to any file or any standard file descriptor (including `/dev/null`)")
 	RootCmd.PersistentFlags().Bool("version", false, "Display the Atmos CLI version")
