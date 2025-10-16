@@ -13,6 +13,8 @@
 
 The `atmos auth list` command provides users with a comprehensive view of all configured authentication providers and identities in their Atmos configuration. It supports multiple output formats (table, tree, JSON, YAML, Graphviz, Mermaid, Markdown) and flexible filtering options to help users understand their authentication infrastructure, visualize complex identity chains, and troubleshoot authentication issues. The command includes comprehensive graph visualization capabilities for documentation and diagram generation.
 
+**Availability**: `atmos auth list` is available in Atmos `v1.195.0` and later.
+
 ## Problem Statement
 
 ### Current State
@@ -1364,6 +1366,56 @@ auth:
     ci:
       kind: aws/user
 ```
+
+## Getting Started
+
+`atmos auth list` is available in Atmos `v1.195.0` and later. To get started:
+
+### Installation
+
+Ensure you have Atmos v1.195.0 or later installed:
+
+```bash
+atmos version
+```
+
+If you need to upgrade, follow the installation instructions at https://atmos.tools/install
+
+### Basic Usage
+
+```bash
+# List all providers and identities (table format)
+atmos auth list
+
+# List in tree format to see hierarchical relationships
+atmos auth list --format tree
+
+# List only providers
+atmos auth list --providers
+
+# List only identities
+atmos auth list --identities
+
+# Filter to specific provider(s)
+atmos auth list --providers aws-sso
+
+# Generate Mermaid diagram for documentation
+atmos auth list --format mermaid > auth-diagram.mmd
+
+# Generate Graphviz DOT format
+atmos auth list --format graphviz > auth-graph.dot
+```
+
+### Requirements
+
+- Atmos v1.195.0 or later
+- Authentication configuration in `atmos.yaml` (see Configuration Example above)
+
+### Next Steps
+
+- See full documentation: https://atmos.tools/cli/commands/auth/list
+- Configure authentication: https://atmos.tools/cli/commands/auth/
+- Learn about authentication providers: https://atmos.tools/core-concepts/auth-providers
 
 ---
 
