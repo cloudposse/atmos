@@ -32,9 +32,13 @@ jobs:
       - name: Check for new blog post
         if: steps.check-labels.outputs.requires_changelog == 'true'
         id: check-blog
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          # Check if any new .md or .mdx files were added in website/blog/
-          NEW_BLOG_FILES=$(git diff --name-only --diff-filter=A origin/${{ github.base_ref }}...HEAD | grep -E '^website/blog/.*\.(md|mdx)$' || true)
+          PR_NUMBER="${{ github.event.pull_request.number }}"
+
+          # Get all files added in this PR (not just the latest commit)
+          NEW_BLOG_FILES=$(gh pr diff $PR_NUMBER --name-only | grep -E '^website/blog/.*\.(md|mdx)$' | grep -v 'tags.yml' || true)
 
           if [ -z "$NEW_BLOG_FILES" ]; then
             echo "has_changelog=false" >> $GITHUB_OUTPUT
