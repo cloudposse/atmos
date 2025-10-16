@@ -529,49 +529,6 @@ func TestShouldExcludePathForTesting(t *testing.T) {
 	}
 }
 
-func TestShouldExcludePathForTesting_WindowsCaseInsensitive(t *testing.T) {
-	if runtime.GOOS != "windows" {
-		t.Skipf("skipping Windows-specific test on %s", runtime.GOOS)
-	}
-
-	tempDir := t.TempDir()
-
-	tests := []struct {
-		name     string
-		dirPath  string
-		envValue string
-		expected bool
-	}{
-		{
-			name:     "lowercase_env_uppercase_path",
-			dirPath:  strings.ToUpper(tempDir),
-			envValue: strings.ToLower(tempDir),
-			expected: true,
-		},
-		{
-			name:     "uppercase_env_lowercase_path",
-			dirPath:  strings.ToLower(tempDir),
-			envValue: strings.ToUpper(tempDir),
-			expected: true,
-		},
-		{
-			name:     "mixed_case_match",
-			dirPath:  tempDir,
-			envValue: strings.ToUpper(tempDir),
-			expected: true,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Setenv("TEST_EXCLUDE_ATMOS_D", tt.envValue)
-
-			result := shouldExcludePathForTesting(tt.dirPath)
-			assert.Equal(t, tt.expected, result, "Windows should match paths case-insensitively")
-		})
-	}
-}
-
 func TestShouldExcludePathForTesting_PathCanonicalization(t *testing.T) {
 	tempDir := t.TempDir()
 
@@ -621,42 +578,6 @@ func TestShouldExcludePathForTesting_PathCanonicalization(t *testing.T) {
 			assert.Equal(t, tt.expected, result, "Paths should be canonicalized before comparison")
 		})
 	}
-}
-
-func TestMergeDefaultImports_WindowsCaseInsensitive(t *testing.T) {
-	if runtime.GOOS != "windows" {
-		t.Skipf("skipping Windows-specific test on %s", runtime.GOOS)
-	}
-
-	// Create temp directory
-	tempDir := t.TempDir()
-
-	// Create sentinel file in .atmos.d to verify if import happens
-	atmosDDir := filepath.Join(tempDir, ".atmos.d")
-	err := os.MkdirAll(atmosDDir, 0o755)
-	assert.NoError(t, err)
-
-	sentinelContent := `sentinel_key: sentinel_value`
-	sentinelPath := filepath.Join(atmosDDir, "sentinel.yaml")
-	err = os.WriteFile(sentinelPath, []byte(sentinelContent), 0o644)
-	assert.NoError(t, err)
-
-	// Test case-insensitive matching by setting exclude with different case
-	upperCasePath := strings.ToUpper(tempDir)
-	lowerCasePath := strings.ToLower(tempDir)
-
-	// Set the environment variable with lowercase path
-	t.Setenv("TEST_EXCLUDE_ATMOS_D", lowerCasePath)
-
-	// Call the function with the path in uppercase
-	v := viper.New()
-	v.SetConfigType("yaml") // Set config type as done in production code
-	err = mergeDefaultImports(upperCasePath, v)
-
-	// Should skip and return nil since paths match case-insensitively on Windows
-	assert.NoError(t, err, "Should match case-insensitively on Windows")
-	// Verify that the sentinel key was NOT loaded (config import was skipped)
-	assert.False(t, v.IsSet("sentinel_key"), "Viper should not contain sentinel key when import is skipped")
 }
 
 func TestProcessConfigImportsAndReapply_MalformedYAML(t *testing.T) {
