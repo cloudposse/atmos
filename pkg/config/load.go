@@ -156,7 +156,7 @@ func setDefaultConfiguration(v *viper.Viper) {
 
 	v.SetDefault("settings.terminal.color", true)
 	v.SetDefault("settings.terminal.no_color", false)
-	v.SetDefault("settings.terminal.pager", true)
+	v.SetDefault("settings.terminal.pager", false)
 	v.SetDefault("docs.generate.readme.output", "./README.md")
 
 	// Atmos Pro defaults
