@@ -26,6 +26,11 @@ func TestNoColorLog(t *testing.T) {
 	// t.Setenv("NO_COLOR", "1")
 	t.Setenv("ATMOS_LOGS_LEVEL", "Debug")
 	t.Setenv("NO_COLOR", "1")
+	// Ensure ATMOS_CHDIR is not set (previous tests may have set it).
+	// We can't use t.Setenv here because previous tests may have set it,
+	// and t.Setenv only restores to the ORIGINAL value before the test package loaded.
+	os.Unsetenv("ATMOS_CHDIR")
+	defer os.Unsetenv("ATMOS_CHDIR") // Clean up after test.
 	// Create a buffer to capture the output
 	var buf bytes.Buffer
 	log.SetOutput(&buf)
@@ -36,6 +41,10 @@ func TestNoColorLog(t *testing.T) {
 	}()
 	// Set the arguments for the command
 	os.Args = []string{"atmos", "about"}
+
+	// Reset buffer to ensure clean state (previous tests may have written to logger).
+	buf.Reset()
+
 	// Execute the command
 	if err := Execute(); err != nil {
 		t.Fatalf("Failed to execute command: %v", err)

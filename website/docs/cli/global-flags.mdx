@@ -20,12 +20,34 @@ import Note from '@site/src/components/Note';
 These flags are available for every Atmos command:
 
 <dl>
+    <dt>`--chdir` / `-C`</dt>
+    <dd>
+        Change to the specified directory before executing any command.
+        - Executes **before** all other operations, including configuration loading and `--base-path` resolution
+        - Supports both absolute and relative paths
+        - Relative paths are resolved from the current working directory
+        - Can also use `ATMOS_CHDIR` environment variable
+        - Useful for operating on infrastructure in different directories without changing your shell's working directory
+
+        **Use Cases:**
+        - **Development workflow**: Point development builds at other infrastructure repos
+        - **CI/CD**: Run atmos from a build directory while operating on infrastructure elsewhere
+        - **Multi-repo operations**: Execute commands across multiple repos without manual directory changes
+        - **Scripting**: Simplify scripts that need to run atmos against different directories
+
+        **Examples:**
+        - `atmos -C /path/to/infra terraform plan vpc -s prod`
+        - `atmos --chdir=../other-repo describe stacks`
+        - `ATMOS_CHDIR=/infrastructure atmos list components`
+    </dd>
+
     <dt>`--base-path`</dt>
     <dd>
         Base path for the Atmos project. This is the root directory where Atmos will look for configuration files,
         stacks, and components.
         - Can also use `ATMOS_BASE_PATH` environment variable
         - Supports both absolute and relative paths
+        - Resolved **after** `--chdir` is processed (if specified)
     </dd>
 
     <dt>`--config`</dt>
@@ -248,6 +270,14 @@ All global flags can be set using environment variables. The precedence order is
 ### Core Environment Variables
 
 <dl>
+    <dt>`ATMOS_CHDIR`</dt>
+    <dd>
+        Change to the specified directory before executing any command.
+        - Equivalent to the `--chdir` / `-C` flag
+        - CLI flag takes precedence over this environment variable
+        - Useful for CI/CD pipelines and scripting
+    </dd>
+
     <dt>`ATMOS_BASE_PATH`</dt>
     <dd>Sets the base path for the Atmos project</dd>
 
@@ -322,6 +352,33 @@ atmos --base-path=/infrastructure \
       --config=base.yaml \
       --config=override.yaml \
       terraform plan vpc -s prod
+```
+
+### Directory Change Examples
+
+```bash
+# Change to infrastructure directory before running command
+atmos --chdir=/path/to/infrastructure describe stacks
+
+# Use short form (-C) for brevity
+atmos -C /infra terraform plan vpc -s prod
+
+# Relative path from current directory
+atmos --chdir=../other-repo list components
+
+# Use with other flags - chdir processes first
+atmos -C /infra --base-path=./config describe component vpc -s dev
+
+# Environment variable for scripting
+export ATMOS_CHDIR=/infrastructure
+atmos terraform apply vpc -s prod
+
+# Development workflow - point dev binary at different repo
+./build/atmos -C ~/projects/my-infrastructure describe stacks
+
+# CI/CD pipeline example
+cd /build
+atmos --chdir=/infrastructure terraform plan vpc -s prod
 ```
 
 ### Pager Control Examples

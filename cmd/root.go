@@ -9,6 +9,7 @@ import (
 	"math"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"syscall"
@@ -76,6 +77,58 @@ var RootCmd = &cobra.Command{
 			cmd.SilenceUsage = true
 			cmd.SilenceErrors = true
 		}
+
+		// Process --chdir flag before any other operations (including config loading).
+		// This allows atmos to operate on a different directory without changing the shell's working directory.
+		// Precedence: --chdir flag > ATMOS_CHDIR environment variable.
+		if !isHelpRequested {
+			chdir, _ := cmd.Flags().GetString("chdir")
+			// If flag is not set, check environment variable.
+			if chdir == "" {
+				//nolint:forbidigo // ATMOS_CHDIR is an Atmos-specific environment variable.
+				chdir = os.Getenv("ATMOS_CHDIR")
+			}
+
+			if chdir != "" {
+				// Clean and make absolute to handle both relative and absolute paths.
+				absPath, err := filepath.Abs(chdir)
+				if err != nil {
+					errUtils.CheckErrorPrintAndExit(
+						fmt.Errorf("%w: invalid chdir path: %s", errUtils.ErrPathResolution, chdir),
+						"", "",
+					)
+				}
+
+				// Verify the directory exists before attempting to change to it.
+				if stat, err := os.Stat(absPath); err != nil {
+					if os.IsNotExist(err) {
+						errUtils.CheckErrorPrintAndExit(
+							fmt.Errorf("%w: directory does not exist: %s", errUtils.ErrWorkdirNotExist, absPath),
+							"", "",
+						)
+					} else {
+						errUtils.CheckErrorPrintAndExit(
+							fmt.Errorf("%w: failed to access directory: %s", errUtils.ErrStatFile, absPath),
+							"", "",
+						)
+					}
+				} else if !stat.IsDir() {
+					errUtils.CheckErrorPrintAndExit(
+						fmt.Errorf("%w: not a directory: %s", errUtils.ErrWorkdirNotExist, absPath),
+						"", "",
+					)
+				}
+
+				// Change to the specified directory.
+				if err := os.Chdir(absPath); err != nil {
+					errUtils.CheckErrorPrintAndExit(
+						fmt.Errorf("%w: failed to change directory to %s", errUtils.ErrPathResolution, absPath),
+						"", "",
+					)
+				}
+			}
+		}
+
 		configAndStacksInfo := schema.ConfigAndStacksInfo{}
 		// Honor CLI overrides for resolving atmos.yaml and its imports.
 		if bp, _ := cmd.Flags().GetString("base-path"); bp != "" {
@@ -599,6 +652,7 @@ func init() {
 	// Add the template function for wrapped flag usages.
 	cobra.AddTemplateFunc("wrappedFlagUsages", templates.WrappedFlagUsages)
 
+	RootCmd.PersistentFlags().StringP("chdir", "C", "", "Change to directory before executing command")
 	RootCmd.PersistentFlags().String("redirect-stderr", "", "File descriptor to redirect `stderr` to. "+
 		"Errors can be redirected to any file or any standard file descriptor (including `/dev/null`)")
 	RootCmd.PersistentFlags().Bool("version", false, "Display the Atmos CLI version")
