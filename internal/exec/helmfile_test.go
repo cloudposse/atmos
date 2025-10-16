@@ -1,7 +1,6 @@
 package exec
 
 import (
-	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -41,21 +40,8 @@ func TestExecuteHelmfile_Version(t *testing.T) {
 }
 
 func TestExecuteHelmfile_MissingStack(t *testing.T) {
-	startingDir, err := os.Getwd()
-	if err != nil {
-		t.Fatalf("Failed to get current working directory: %v", err)
-	}
-
-	defer func() {
-		if err := os.Chdir(startingDir); err != nil {
-			t.Fatalf("Failed to change back to starting directory: %v", err)
-		}
-	}()
-
 	workDir := "../../tests/fixtures/scenarios/complete"
-	if err := os.Chdir(workDir); err != nil {
-		t.Fatalf("Failed to change directory to %q: %v", workDir, err)
-	}
+	t.Chdir(workDir)
 
 	info := schema.ConfigAndStacksInfo{
 		ComponentFromArg: "echo-server",
@@ -63,27 +49,14 @@ func TestExecuteHelmfile_MissingStack(t *testing.T) {
 		SubCommand:       "diff",
 	}
 
-	err = ExecuteHelmfile(info)
+	err := ExecuteHelmfile(info)
 	assert.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrMissingStack)
 }
 
 func TestExecuteHelmfile_ComponentNotFound(t *testing.T) {
-	startingDir, err := os.Getwd()
-	if err != nil {
-		t.Fatalf("Failed to get current working directory: %v", err)
-	}
-
-	defer func() {
-		if err := os.Chdir(startingDir); err != nil {
-			t.Fatalf("Failed to change back to starting directory: %v", err)
-		}
-	}()
-
 	workDir := "../../tests/fixtures/scenarios/complete"
-	if err := os.Chdir(workDir); err != nil {
-		t.Fatalf("Failed to change directory to %q: %v", workDir, err)
-	}
+	t.Chdir(workDir)
 
 	info := schema.ConfigAndStacksInfo{
 		ComponentFromArg: "non-existent-component",
@@ -91,7 +64,7 @@ func TestExecuteHelmfile_ComponentNotFound(t *testing.T) {
 		SubCommand:       "diff",
 	}
 
-	err = ExecuteHelmfile(info)
+	err := ExecuteHelmfile(info)
 	assert.Error(t, err)
 	// ExecuteHelmfile calls ProcessStacks which will fail to find the component.
 	assert.Contains(t, err.Error(), "Could not find the component")

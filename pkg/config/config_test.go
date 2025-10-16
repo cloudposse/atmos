@@ -476,16 +476,7 @@ func createConfigFile(t *testing.T, dir string, fileName string, content string)
 }
 
 func changeWorkingDir(t *testing.T, dir string) {
-	cwd, err := os.Getwd()
-	require.NoError(t, err, "Failed to get current directory")
-
-	t.Cleanup(func() {
-		err := os.Chdir(cwd)
-		require.NoError(t, err, "Failed to restore working directory")
-	})
-
-	err = os.Chdir(dir)
-	require.NoError(t, err, "Failed to change working directory")
+	t.Chdir(dir)
 }
 
 func TestParseFlagsForPager(t *testing.T) {
