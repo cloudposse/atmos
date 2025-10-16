@@ -123,6 +123,10 @@ $ atmos describe component vpc -s prod-ue2 --provenance | yq '.vars.cidr'
 
 Comments are preserved for human review while the data remains machine-parseable.
 
+:::note
+The `--query` flag is not supported with `--provenance`. To filter provenance output, pipe it through tools like `grep`, `yq`, or `jq`.
+:::
+
 ## Terminal vs Non-Terminal Output
 
 Provenance adapts to your environment:
