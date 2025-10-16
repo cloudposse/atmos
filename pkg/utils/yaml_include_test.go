@@ -50,11 +50,7 @@ components:
 	assert.NoError(t, err)
 
 	// Change to the temp directory to make relative paths work
-	originalDir, err := os.Getwd()
-	assert.NoError(t, err)
-	err = os.Chdir(tempDir)
-	assert.NoError(t, err)
-	defer os.Chdir(originalDir)
+	t.Chdir(tempDir)
 
 	// Read the include file
 	yamlFileContent, err := os.ReadFile("test_include.yaml")

@@ -5,9 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
-	"runtime"
 	"sort"
-	"strings"
 	"testing"
 
 	log "github.com/cloudposse/atmos/pkg/logger"
@@ -57,17 +55,11 @@ func setupTestFixtures(baseDir string) error {
 }
 
 func TestMatchFiles(t *testing.T) {
-	originalDir, err := os.Getwd()
-	if err != nil {
-		t.Fatalf("failed to get original working directory: %v", err)
-	}
-
 	// Create a temporary directory for testing
 	tempDir := t.TempDir()
-	os.Chdir(tempDir)
-	defer os.Chdir(originalDir)
+	t.Chdir(tempDir)
 	// Set up the test directory structure
-	err = setupTestFixtures(tempDir)
+	err := setupTestFixtures(tempDir)
 	if err != nil {
 		t.Fatalf("failed to set up fixtures: %v", err)
 	}
@@ -165,14 +157,6 @@ func TestMatchFiles(t *testing.T) {
 			}
 			if tt.wantErr {
 				return
-			}
-			if runtime.GOOS == "darwin" &&
-				// We use this because when we pass absolute path the matcher does not try to find the absolute path which would have introduce
-				// `/private` at the start of the directory.
-				!strings.Contains(tt.name, "absolute") {
-				for i := range tt.want {
-					tt.want[i] = "/" + filepath.Join("private", tt.want[i])
-				}
 			}
 			sort.Strings(got)
 			sort.Strings(tt.want)
