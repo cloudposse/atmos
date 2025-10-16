@@ -159,16 +159,6 @@ These chains can be arbitrarily long, supporting even the most complex enterpris
 
 Together, these commands provide a complete authentication workflow from discovery to usage.
 
-## Technical Highlights
-
-For those interested in the implementation:
-
-- **Built with charmbracelet**: Uses the excellent [Bubble Tea](https://github.com/charmbracelet/bubbletea) ecosystem for beautiful terminal output
-- **Recursive chain resolution**: Handles arbitrarily deep authentication chains with circular dependency detection
-- **Theme integration**: Respects Atmos color scheme for consistent CLI experience
-- **Comprehensive testing**: 70%+ test coverage with unit and integration tests
-- **Performance instrumentation**: Built-in performance tracking like all Atmos commands
-
 ## Get Started
 
 `atmos auth list` is available in Atmos `v1.x.x` and later. To get started:
