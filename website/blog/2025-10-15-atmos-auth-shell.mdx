@@ -1,0 +1,209 @@
+---
+slug: introducing-atmos-auth-shell
+title: "Introducing atmos auth shell: Seamlessly Authenticate and Execute"
+authors: [atmos]
+tags: [atmos, authentication, shell, aws, cloud]
+---
+
+We're excited to announce a new command in Atmos that streamlines your cloud authentication workflow: `atmos auth shell`. This powerful new feature launches an interactive shell session with your cloud credentials pre-configured, eliminating the need to repeatedly authenticate or export environment variables.
+
+<!-- truncate -->
+
+## The Problem
+
+When working with cloud infrastructure, you often need to:
+
+1. Authenticate with your cloud provider (AWS, Azure, GCP, etc.)
+2. Export credentials as environment variables
+3. Run multiple commands using those credentials
+4. Re-authenticate when credentials expire
+
+This workflow becomes tedious when switching between different identities, roles, or accounts throughout the day. You might find yourself running commands like:
+
+```shell
+# Traditional workflow
+eval $(atmos auth env --identity prod-admin --format bash)
+terraform plan
+terraform apply
+aws s3 ls
+# ... many more commands ...
+```
+
+Every time you need to switch identities or your session expires, you have to repeat the authentication and export steps.
+
+## The Solution: `atmos auth shell`
+
+The new `atmos auth shell` command solves this by launching an interactive shell with your authentication environment pre-configured. Simply run:
+
+```shell
+atmos auth shell --identity prod-admin
+```
+
+And you're immediately in a shell session with all your cloud credentials ready to use. Your shell prompt will reflect that you're in an authenticated Atmos shell, and you can run as many commands as you need without worrying about authentication.
+
+## Key Features
+
+### 🔐 **Automatic Authentication**
+
+Your credentials are automatically configured when the shell starts. No need to manually export environment variables or run additional setup commands.
+
+### 🐚 **Bring Your Own Shell**
+
+Use your preferred shell by specifying the `--shell` flag or setting the `SHELL` environment variable:
+
+```shell
+# Use bash
+atmos auth shell --identity dev-user --shell bash
+
+# Use zsh
+atmos auth shell --identity dev-user --shell zsh
+
+# Use PowerShell on Windows
+atmos auth shell --identity dev-user --shell pwsh
+```
+
+If not specified, Atmos automatically detects and uses your system's default shell.
+
+### 🪆 **Shell Nesting Awareness**
+
+Atmos tracks shell nesting with the `ATMOS_SHLVL` environment variable, incrementing it each time you nest an auth shell. This helps you keep track of how many layers deep you are and prevents confusion when working with multiple nested sessions.
+
+### 🎯 **Custom Shell Arguments**
+
+Pass custom arguments to your shell using the `--` separator:
+
+```shell
+# Launch bash with specific options
+atmos auth shell --identity prod-admin -- -c "terraform plan"
+
+# Start a login shell
+atmos auth shell --identity dev-user -- -l
+```
+
+### 🌍 **Cross-Platform Support**
+
+Works seamlessly on Linux, macOS, and Windows. On Windows, it defaults to `cmd.exe` but respects your `--shell` override if you prefer PowerShell or another shell.
+
+### 🔑 **Multiple Identity Support**
+
+Easily switch between different identities without re-configuring your environment:
+
+```shell
+# Work with development credentials
+atmos auth shell --identity dev-user
+
+# In another terminal, work with production
+atmos auth shell --identity prod-admin
+```
+
+## Real-World Use Cases
+
+### Interactive Terraform Workflows
+
+```shell
+atmos auth shell --identity prod-admin
+# Now in authenticated shell
+terraform workspace select production
+terraform plan
+terraform apply
+aws s3 sync ./assets s3://prod-bucket/
+exit
+```
+
+### Debugging Cloud Resources
+
+```shell
+atmos auth shell --identity dev-debug
+# Now you can freely use AWS CLI, kubectl, or other tools
+aws logs tail /aws/lambda/my-function --follow
+kubectl get pods -n production
+exit
+```
+
+### Long-Running Operations
+
+```shell
+atmos auth shell --identity migration-role
+# Run multiple migration steps without re-authenticating
+./migrate-database.sh
+./update-dns-records.sh
+./verify-migration.sh
+exit
+```
+
+## How It Works
+
+Under the hood, `atmos auth shell`:
+
+1. **Authenticates** with your configured identity provider
+2. **Retrieves** temporary credentials from your cloud provider
+3. **Exports** credentials as environment variables (e.g., `AWS_ACCESS_KEY_ID`, `AZURE_TENANT_ID`, etc.)
+4. **Sets** `ATMOS_IDENTITY` to track which identity is active
+5. **Launches** your preferred shell with all environment variables configured
+6. **Propagates** the shell's exit code back to Atmos when you exit
+
+## Environment Variables
+
+When you're in an `atmos auth shell` session, you'll have access to:
+
+- **`ATMOS_IDENTITY`**: The name of the active identity
+- **`ATMOS_SHLVL`**: Shell nesting level (increments for nested shells)
+- **Cloud provider credentials**: Platform-specific variables like `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_SESSION_TOKEN`, etc.
+
+## Getting Started
+
+The `atmos auth shell` command is available now in the latest version of Atmos. To start using it:
+
+1. **Configure your identity** in `atmos.yaml`:
+
+```yaml
+auth:
+  providers:
+    - type: aws
+      name: aws-sso
+      config:
+        sso_start_url: https://your-org.awsapps.com/start
+        sso_region: us-east-1
+
+  identities:
+    - name: dev-user
+      provider: aws-sso
+      config:
+        account_id: "123456789012"
+        role_name: DeveloperRole
+
+    - name: prod-admin
+      provider: aws-sso
+      config:
+        account_id: "987654321098"
+        role_name: AdminRole
+```
+
+2. **Launch your authenticated shell**:
+
+```shell
+atmos auth shell --identity dev-user
+```
+
+3. **Start working** with your cloud resources!
+
+## Learn More
+
+- [Command Documentation](/cli/commands/auth/auth-shell)
+- [Authentication Guide](/core-concepts/authentication)
+- [PR #1640](https://github.com/cloudposse/atmos/pull/1640)
+
+## What's Next?
+
+We're continuously improving Atmos authentication capabilities. Future enhancements may include:
+
+- Session duration customization
+- Automatic credential refresh
+- Multi-cloud authentication in a single shell
+- Integration with external secret managers
+
+Have feedback or suggestions? [Open an issue](https://github.com/cloudposse/atmos/issues) or join the discussion in our community!
+
+---
+
+Happy authenticating! 🚀
