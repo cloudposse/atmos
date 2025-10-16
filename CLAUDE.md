@@ -254,22 +254,23 @@ var (
 - **Comments must end with periods**: All comments should be complete sentences ending with a period (enforced by golangci-lint)
 
 ### Test Isolation (MANDATORY)
-- **ALWAYS use `CleanupRootCmd(t)` as the FIRST line in EVERY test that touches RootCmd**
-- **Pattern similar to `t.Setenv()`** - single line, automatic cleanup via `t.Cleanup()`
+- **ALWAYS use `cmd.NewTestKit(t)` for ALL cmd package tests**
+- **TestKit pattern follows Go 1.15+ testing.TB interface idiom**
+- **Provides automatic RootCmd state cleanup similar to `t.Setenv()` and `t.Chdir()`**
 - **Required for ALL tests that**:
   - Call `RootCmd.Execute()` or `Execute()`
   - Call `RootCmd.SetArgs()` or modify `RootCmd` flags
   - Call any command that internally uses `RootCmd`
-  - When in doubt, add it - it's safe and lightweight
+  - When in doubt, use it - it's safe and lightweight
 
-- **Example usage**:
+- **Basic usage**:
   ```go
   func TestMyCommand(t *testing.T) {
-      CleanupRootCmd(t) // FIRST line - snapshots and restores RootCmd state
+      t := cmd.NewTestKit(t) // Wraps testing.TB with automatic cleanup
 
-      // Rest of test...
+      // Rest of test - all testing.TB methods available
       RootCmd.SetArgs([]string{"terraform", "plan"})
-      RootCmd.PersistentFlags().Set("chdir", "/tmp")
+      require.NoError(t, RootCmd.PersistentFlags().Set("chdir", "/tmp"))
 
       // State automatically restored when test completes.
   }
@@ -278,12 +279,12 @@ var (
 - **For table-driven tests with subtests**:
   ```go
   func TestTableDriven(t *testing.T) {
-      CleanupRootCmd(t) // Parent test needs cleanup
+      _ = cmd.NewTestKit(t) // Parent test gets cleanup
 
       tests := []struct{...}{...}
       for _, tt := range tests {
           t.Run(tt.name, func(t *testing.T) {
-              CleanupRootCmd(t) // Each subtest ALSO needs cleanup
+              t := cmd.NewTestKit(t) // Each subtest gets its own cleanup
 
               // Test code...
           })
@@ -298,15 +299,17 @@ var (
   - Without cleanup, tests pass in isolation but fail when run together
   - We use reflection to properly reset StringSlice flags which append instead of replace
 
-- **Alternative pattern** (for specific cases):
+- **Legacy pattern** (deprecated, use TestKit instead):
   ```go
-  defer WithRootCmdSnapshot(t)()  // Defer pattern if you need explicit control
+  CleanupRootCmd(t) // Old pattern - TestKit is preferred
   ```
 
 - **Implementation notes**:
-  - `CleanupRootCmd(t)` snapshots ALL flag values and their Changed state
+  - TestKit wraps `testing.TB` and adds automatic RootCmd cleanup
+  - Snapshots ALL flag values and their Changed state when created
   - Uses `t.Cleanup()` for automatic LIFO restoration
   - Handles StringSlice/StringArray flags specially (they require reflection to reset)
+  - All `testing.TB` methods work: `Helper()`, `Log()`, `Setenv()`, `Cleanup()`, etc.
   - No performance penalty - snapshot is fast and only done once per test
 
 ### Test Quality (MANDATORY)
