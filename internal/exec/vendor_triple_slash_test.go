@@ -22,13 +22,6 @@ func TestVendorPullWithTripleSlashPattern(t *testing.T) {
 		t.Skipf("Insufficient GitHub API requests remaining (%d). Test may require ~10 requests", rateLimits.Remaining)
 	}
 
-	// Capture the starting working directory and register cleanup.
-	startingDir, err := os.Getwd()
-	require.NoError(t, err, "Failed to get the current working directory")
-	t.Cleanup(func() {
-		require.NoError(t, os.Chdir(startingDir))
-	})
-
 	// Set environment variables using t.Setenv (automatically restores on cleanup).
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", "./atmos.yaml")
 	t.Setenv("ATMOS_BASE_PATH", ".")
@@ -38,8 +31,7 @@ func TestVendorPullWithTripleSlashPattern(t *testing.T) {
 	testDir := "../../tests/fixtures/scenarios/vendor-triple-slash"
 
 	// Change to the test directory.
-	err = os.Chdir(testDir)
-	require.NoError(t, err, "Failed to change to test directory")
+	t.Chdir(testDir)
 
 	// Set up the command.
 	cmd := &cobra.Command{}
@@ -55,7 +47,7 @@ func TestVendorPullWithTripleSlashPattern(t *testing.T) {
 	flags.Bool("everything", false, "")
 
 	// Execute vendor pull command.
-	err = ExecuteVendorPullCommand(cmd, []string{})
+	err := ExecuteVendorPullCommand(cmd, []string{})
 	require.NoError(t, err, "Vendor pull command should execute without error")
 
 	// Check that the target directory was created.
@@ -110,13 +102,6 @@ func TestVendorPullWithMultipleVendorFiles(t *testing.T) {
 		t.Skipf("Insufficient GitHub API requests remaining (%d). Test may require ~10 requests", rateLimits.Remaining)
 	}
 
-	// Capture the starting working directory and register cleanup.
-	startingDir, err := os.Getwd()
-	require.NoError(t, err, "Failed to get the current working directory")
-	t.Cleanup(func() {
-		require.NoError(t, os.Chdir(startingDir))
-	})
-
 	// Set environment variables using t.Setenv (automatically restores on cleanup).
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", "./atmos.yaml")
 	t.Setenv("ATMOS_BASE_PATH", ".")
@@ -126,8 +111,7 @@ func TestVendorPullWithMultipleVendorFiles(t *testing.T) {
 	testDir := "../../tests/fixtures/scenarios/vendor-triple-slash"
 
 	// Change to the test directory.
-	err = os.Chdir(testDir)
-	require.NoError(t, err, "Failed to change to test directory")
+	t.Chdir(testDir)
 
 	// Verify that multiple vendor files exist in the directory.
 	vendorFiles := []string{"vendor.yaml", "vendor-test.yaml"}
@@ -149,7 +133,7 @@ func TestVendorPullWithMultipleVendorFiles(t *testing.T) {
 	flags.Bool("everything", false, "")
 
 	// Execute vendor pull command with tags filter.
-	err = ExecuteVendorPullCommand(cmd, []string{})
+	err := ExecuteVendorPullCommand(cmd, []string{})
 	require.NoError(t, err, "Vendor pull command should execute without error even with multiple vendor files")
 
 	// Check that the s3-bucket component was pulled (it has the 'aws' tag).

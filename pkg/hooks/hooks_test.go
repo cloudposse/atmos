@@ -2,7 +2,6 @@ package hooks
 
 import (
 	"errors"
-	"os"
 	"path/filepath"
 	"testing"
 
@@ -136,12 +135,7 @@ func TestGetHooks_WithRealComponent(t *testing.T) {
 	require.NoError(t, err)
 
 	// Change to test directory so atmos finds the config
-	originalDir, err := os.Getwd()
-	require.NoError(t, err)
-	defer os.Chdir(originalDir)
-
-	err = os.Chdir(absTestDir)
-	require.NoError(t, err)
+	t.Chdir(absTestDir)
 
 	atmosConfig := &schema.AtmosConfiguration{}
 	info := &schema.ConfigAndStacksInfo{

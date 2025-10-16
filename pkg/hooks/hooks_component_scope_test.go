@@ -1,7 +1,6 @@
 package hooks
 
 import (
-	"os"
 	"path/filepath"
 	"testing"
 
@@ -25,12 +24,7 @@ func TestHooksAreComponentScoped(t *testing.T) {
 	require.NoError(t, err)
 
 	// Change to test directory so atmos finds the config
-	originalDir, err := os.Getwd()
-	require.NoError(t, err)
-	defer os.Chdir(originalDir)
-
-	err = os.Chdir(absTestDir)
-	require.NoError(t, err)
+	t.Chdir(absTestDir)
 
 	// Test VPC component
 	vpcComponent, err := e.ExecuteDescribeComponent("vpc", "acme-dev-test", true, true, []string{})
@@ -93,12 +87,7 @@ func TestHooksWithDRYPattern(t *testing.T) {
 	require.NoError(t, err)
 
 	// Change to test directory so atmos finds the config
-	originalDir, err := os.Getwd()
-	require.NoError(t, err)
-	defer os.Chdir(originalDir)
-
-	err = os.Chdir(absTestDir)
-	require.NoError(t, err)
+	t.Chdir(absTestDir)
 
 	// Test VPC component using DRY pattern
 	vpcComponent, err := e.ExecuteDescribeComponent("vpc-dry", "acme-dev-dry", true, true, []string{})
