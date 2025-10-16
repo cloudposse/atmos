@@ -9,6 +9,23 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
+// escapeGraphvizLabel escapes special characters for Graphviz labels.
+func escapeGraphvizLabel(s string) string {
+	// Escape backslashes first.
+	s = strings.ReplaceAll(s, "\\", "\\\\")
+	// Escape quotes.
+	s = strings.ReplaceAll(s, "\"", "\\\"")
+	// Escape newlines.
+	s = strings.ReplaceAll(s, "\n", "\\n")
+	return s
+}
+
+// escapeGraphvizID escapes special characters for Graphviz node IDs.
+func escapeGraphvizID(s string) string {
+	// For node IDs, we just escape quotes since they're wrapped in quotes.
+	return strings.ReplaceAll(s, "\"", "\\\"")
+}
+
 // RenderGraphviz renders providers and identities as Graphviz DOT format.
 func RenderGraphviz(
 	authManager authTypes.AuthManager,
@@ -16,6 +33,9 @@ func RenderGraphviz(
 	identities map[string]schema.Identity,
 ) (string, error) {
 	defer perf.Track(nil, "list.RenderGraphviz")()
+
+	// Avoid unused-parameter compile error; pass config to perf if available.
+	_ = authManager
 
 	var output strings.Builder
 
@@ -33,11 +53,12 @@ func RenderGraphviz(
 	providerNames := getSortedProviderNames(providers)
 	for _, name := range providerNames {
 		provider := providers[name]
-		label := fmt.Sprintf("%s\\n(%s)", name, provider.Kind)
+		escapedName := escapeGraphvizID(name)
+		label := fmt.Sprintf("%s\\n(%s)", escapeGraphvizLabel(name), escapeGraphvizLabel(provider.Kind))
 		if provider.Default {
-			output.WriteString(fmt.Sprintf("  \"%s\" [label=\"%s\", style=\"rounded,filled\", fillcolor=lightblue];\n", name, label))
+			output.WriteString(fmt.Sprintf("  \"%s\" [label=\"%s\", style=\"rounded,filled\", fillcolor=lightblue];\n", escapedName, label))
 		} else {
-			output.WriteString(fmt.Sprintf("  \"%s\" [label=\"%s\"];\n", name, label))
+			output.WriteString(fmt.Sprintf("  \"%s\" [label=\"%s\"];\n", escapedName, label))
 		}
 	}
 
@@ -47,26 +68,39 @@ func RenderGraphviz(
 	identityNames := getSortedIdentityNames(identities)
 	for _, name := range identityNames {
 		identity := identities[name]
-		label := fmt.Sprintf("%s\\n(%s)", name, identity.Kind)
+		escapedName := escapeGraphvizID(name)
+		label := fmt.Sprintf("%s\\n(%s)", escapeGraphvizLabel(name), escapeGraphvizLabel(identity.Kind))
 		if identity.Default {
-			output.WriteString(fmt.Sprintf("  \"%s\" [label=\"%s\", style=\"rounded,filled\", fillcolor=lightgreen];\n", name, label))
+			output.WriteString(fmt.Sprintf("  \"%s\" [label=\"%s\", style=\"rounded,filled\", fillcolor=lightgreen];\n", escapedName, label))
 		} else {
-			output.WriteString(fmt.Sprintf("  \"%s\" [label=\"%s\"];\n", name, label))
+			output.WriteString(fmt.Sprintf("  \"%s\" [label=\"%s\"];\n", escapedName, label))
 		}
 
 		// Add edges for via relationships.
 		if identity.Via != nil {
 			if identity.Via.Provider != "" {
-				output.WriteString(fmt.Sprintf("  \"%s\" -> \"%s\";\n", identity.Via.Provider, name))
+				escapedProvider := escapeGraphvizID(identity.Via.Provider)
+				output.WriteString(fmt.Sprintf("  \"%s\" -> \"%s\";\n", escapedProvider, escapedName))
 			}
 			if identity.Via.Identity != "" {
-				output.WriteString(fmt.Sprintf("  \"%s\" -> \"%s\";\n", identity.Via.Identity, name))
+				escapedViaIdentity := escapeGraphvizID(identity.Via.Identity)
+				output.WriteString(fmt.Sprintf("  \"%s\" -> \"%s\";\n", escapedViaIdentity, escapedName))
 			}
 		}
 	}
 
 	output.WriteString("}\n")
 	return output.String(), nil
+}
+
+// escapeMermaidLabel escapes special characters for Mermaid labels.
+func escapeMermaidLabel(s string) string {
+	// Escape quotes for Mermaid labels.
+	s = strings.ReplaceAll(s, "\"", "&quot;")
+	// Escape angle brackets.
+	s = strings.ReplaceAll(s, "<", "&lt;")
+	s = strings.ReplaceAll(s, ">", "&gt;")
+	return s
 }
 
 // RenderMermaid renders providers and identities as Mermaid diagram.
@@ -76,6 +110,9 @@ func RenderMermaid(
 	identities map[string]schema.Identity,
 ) (string, error) {
 	defer perf.Track(nil, "list.RenderMermaid")()
+
+	// Avoid unused-parameter compile error; pass config to perf if available.
+	_ = authManager
 
 	var output strings.Builder
 
@@ -92,7 +129,7 @@ func RenderMermaid(
 	providerNames := getSortedProviderNames(providers)
 	for _, name := range providerNames {
 		provider := providers[name]
-		label := fmt.Sprintf("%s<br/>%s", name, provider.Kind)
+		label := fmt.Sprintf("%s<br/>%s", escapeMermaidLabel(name), escapeMermaidLabel(provider.Kind))
 		if provider.Default {
 			output.WriteString(fmt.Sprintf("  %s[\"%s\"]:::provider:::default\n", sanitizeMermaidID(name), label))
 		} else {
@@ -104,7 +141,7 @@ func RenderMermaid(
 	identityNames := getSortedIdentityNames(identities)
 	for _, name := range identityNames {
 		identity := identities[name]
-		label := fmt.Sprintf("%s<br/>%s", name, identity.Kind)
+		label := fmt.Sprintf("%s<br/>%s", escapeMermaidLabel(name), escapeMermaidLabel(identity.Kind))
 		if identity.Default {
 			output.WriteString(fmt.Sprintf("  %s[\"%s\"]:::identity:::default\n", sanitizeMermaidID(name), label))
 		} else {
@@ -152,7 +189,7 @@ func RenderMarkdown(
 	output.WriteString("```mermaid\n")
 	mermaid, err := RenderMermaid(authManager, providers, identities)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("list.RenderMarkdown: mermaid rendering failed: %w", err)
 	}
 	output.WriteString(mermaid)
 	output.WriteString("```\n")

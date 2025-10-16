@@ -34,7 +34,6 @@ const (
 	// Formatting.
 	defaultMarker = "✓"
 	emptyMarker   = "-"
-	chainArrow    = " → "
 	maxURLDisplay = 32
 	newline       = "\n"
 
@@ -51,6 +50,9 @@ func RenderTable(
 	identities map[string]schema.Identity,
 ) (string, error) {
 	defer perf.Track(nil, "list.RenderTable")()
+
+	// Avoid unused-parameter compile error; pass config to perf if available.
+	_ = authManager
 
 	var output strings.Builder
 
@@ -270,6 +272,9 @@ func RenderTree(
 	identities map[string]schema.Identity,
 ) (string, error) {
 	defer perf.Track(nil, "list.RenderTree")()
+
+	// Avoid unused-parameter compile error; pass config to perf if available.
+	_ = authManager
 
 	var output strings.Builder
 
@@ -633,11 +638,9 @@ func addIdentityMetadata(node *tree.Tree, identity *schema.Identity) {
 		node.Child(principalNode)
 	}
 
-	// Add credentials if present (but not sensitive data).
+	// Add credentials if present (redact sensitive values).
 	if len(identity.Credentials) > 0 {
-		credsNode := tree.New().Root("Credentials")
-		addMapToTree(credsNode, identity.Credentials, 0)
-		node.Child(credsNode)
+		node.Child("Credentials: [redacted]")
 	}
 }
 

@@ -313,12 +313,12 @@ func loadAuthManagerForList() (authTypes.AuthManager, error) {
 
 	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
 	if err != nil {
-		return nil, fmt.Errorf("%w: failed to load atmos config: %v", errUtils.ErrInvalidAuthConfig, err)
+		return nil, errors.Join(errUtils.ErrInvalidAuthConfig, fmt.Errorf("failed to load atmos config: %w", err))
 	}
 
 	manager, err := createAuthManager(&atmosConfig.Auth)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %v", errUtils.ErrInvalidAuthConfig, err)
+		return nil, errors.Join(errUtils.ErrInvalidAuthConfig, fmt.Errorf("failed to create auth manager: %w", err))
 	}
 
 	return manager, nil

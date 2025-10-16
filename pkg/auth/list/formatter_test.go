@@ -1,9 +1,9 @@
 package list
 
 import (
-	"strings"
 	"testing"
 
+	tree "github.com/charmbracelet/lipgloss/tree"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -197,42 +197,57 @@ func TestBuildIdentitiesTree_Standalone(t *testing.T) {
 }
 
 func TestAddMapToTree_Simple(t *testing.T) {
-	// This is tested indirectly through buildIdentitiesTree.
-	// Just a basic sanity check.
-	_ = map[string]interface{}{
+	// Test simple flat map structure.
+	m := map[string]interface{}{
 		"key1": "value1",
 		"key2": 123,
+		"key3": true,
 	}
 
-	// We can't easily test tree output directly, but we can verify it doesn't panic.
-	require.NotPanics(t, func() {
-		// Create a dummy tree node.
-		node := strings.Builder{}
-		_ = node.String()
-	})
+	node := tree.New().Root("Test")
+	addMapToTree(node, m, 0)
+
+	output := node.String()
+	assert.Contains(t, output, "key1")
+	assert.Contains(t, output, "value1")
+	assert.Contains(t, output, "key2")
+	assert.Contains(t, output, "123")
+	assert.Contains(t, output, "key3")
+	assert.Contains(t, output, "true")
 }
 
 func TestAddMapToTree_Nested(t *testing.T) {
-	_ = map[string]interface{}{
+	// Test nested map structure.
+	m := map[string]interface{}{
 		"outer": map[string]interface{}{
-			"inner": "value",
+			"inner1": "value1",
+			"inner2": 42,
 		},
+		"simple": "test",
 	}
 
-	require.NotPanics(t, func() {
-		// Verify nested maps don't cause issues (tested indirectly).
-	})
+	node := tree.New().Root("Test")
+	addMapToTree(node, m, 0)
+
+	output := node.String()
+	assert.Contains(t, output, "outer")
+	assert.Contains(t, output, "inner1")
+	assert.Contains(t, output, "value1")
+	assert.Contains(t, output, "inner2")
+	assert.Contains(t, output, "42")
+	assert.Contains(t, output, "simple")
+	assert.Contains(t, output, "test")
 }
 
 func TestAddMapToTree_MaxDepth(t *testing.T) {
-	// Create deeply nested structure.
-	_ = map[string]interface{}{
+	// Test deeply nested structure to ensure depth limit works.
+	m := map[string]interface{}{
 		"level1": map[string]interface{}{
 			"level2": map[string]interface{}{
 				"level3": map[string]interface{}{
 					"level4": map[string]interface{}{
 						"level5": map[string]interface{}{
-							"level6": "too deep",
+							"level6": "deep value",
 						},
 					},
 				},
@@ -240,8 +255,12 @@ func TestAddMapToTree_MaxDepth(t *testing.T) {
 		},
 	}
 
-	// Should handle deep nesting without panic (tested indirectly).
-	require.NotPanics(t, func() {
-		// Nothing to test directly without full tree integration.
-	})
+	node := tree.New().Root("Test")
+	addMapToTree(node, m, 0)
+
+	output := node.String()
+	// Verify at least some levels are rendered.
+	assert.Contains(t, output, "level1")
+	assert.Contains(t, output, "level2")
+	assert.Contains(t, output, "level3")
 }
