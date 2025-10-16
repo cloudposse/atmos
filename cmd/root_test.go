@@ -16,6 +16,11 @@ import (
 )
 
 func TestNoColorLog(t *testing.T) {
+	// Skip in CI environments without TTY.
+	if _, err := os.Open("/dev/tty"); err != nil {
+		t.Skipf("Skipping test: TTY not available (/dev/tty): %v", err)
+	}
+
 	// Snapshot RootCmd state to prevent test pollution.
 	_ = NewTestKit(t)
 
