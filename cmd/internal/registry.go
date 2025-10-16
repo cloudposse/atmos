@@ -5,6 +5,8 @@ import (
 	"sync"
 
 	"github.com/spf13/cobra"
+
+	errUtils "github.com/cloudposse/atmos/errors"
 )
 
 // registry is the global command registry instance.
@@ -74,7 +76,7 @@ func RegisterAll(root *cobra.Command) error {
 	for name, provider := range registry.providers {
 		cmd := provider.GetCommand()
 		if cmd == nil {
-			return fmt.Errorf("command provider %s returned nil command", name)
+			return fmt.Errorf("%w: provider %s", errUtils.ErrCommandNil, name)
 		}
 
 		root.AddCommand(cmd)

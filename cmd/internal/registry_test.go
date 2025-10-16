@@ -1,12 +1,15 @@
 package internal
 
 import (
+	"errors"
 	"fmt"
 	"testing"
 
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	errUtils "github.com/cloudposse/atmos/errors"
 )
 
 // mockCommandProvider is a test implementation of CommandProvider.
@@ -154,7 +157,8 @@ func TestRegisterAllNilCommand(t *testing.T) {
 
 	err := RegisterAll(rootCmd)
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "nil command")
+	assert.True(t, errors.Is(err, errUtils.ErrCommandNil), "error should wrap ErrCommandNil")
+	assert.Contains(t, err.Error(), "test", "error message should include provider name")
 }
 
 func TestGetProviderNotFound(t *testing.T) {
