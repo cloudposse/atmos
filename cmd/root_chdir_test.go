@@ -14,6 +14,14 @@ import (
 func testChdirError(t *testing.T, args []string) {
 	t.Helper()
 
+	// Ensure RootCmd args and flags are reset after this helper finishes.
+	// SetArgs/ParseFlags persists state on the global RootCmd instance across tests.
+	t.Cleanup(func() {
+		RootCmd.SetArgs([]string{})
+		// Must explicitly reset flag values, SetArgs() alone doesn't clear them.
+		_ = RootCmd.Flags().Set("chdir", "")
+	})
+
 	// Test the actual PersistentPreRun logic.
 	RootCmd.SetArgs(args)
 	err := RootCmd.ParseFlags(args)
@@ -66,6 +74,12 @@ func TestChdirFlag(t *testing.T) {
 	t.Cleanup(func() {
 		// Restore original working directory.
 		_ = os.Chdir(originalWd)
+		// Explicitly unset ATMOS_CHDIR to prevent pollution to other tests.
+		os.Unsetenv("ATMOS_CHDIR")
+		// Reset RootCmd args and flags to prevent pollution to other tests.
+		// SetArgs/ParseFlags persists state on the global RootCmd instance.
+		RootCmd.SetArgs([]string{})
+		_ = RootCmd.Flags().Set("chdir", "")
 	})
 
 	tests := []struct {

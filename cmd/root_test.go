@@ -16,6 +16,13 @@ import (
 )
 
 func TestNoColorLog(t *testing.T) {
+	// Ensure ATMOS_CHDIR is not set BEFORE anything else.
+	// Previous tests may have set it, and we need to clear it before RootCmd.Execute().
+	// We can't use t.Setenv here because previous tests may have set it,
+	// and t.Setenv only restores to the ORIGINAL value before the test package loaded.
+	os.Unsetenv("ATMOS_CHDIR")
+	defer os.Unsetenv("ATMOS_CHDIR") // Clean up after test.
+
 	stacksPath := "../tests/fixtures/scenarios/stack-templates"
 
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
@@ -26,11 +33,6 @@ func TestNoColorLog(t *testing.T) {
 	// t.Setenv("NO_COLOR", "1")
 	t.Setenv("ATMOS_LOGS_LEVEL", "Debug")
 	t.Setenv("NO_COLOR", "1")
-	// Ensure ATMOS_CHDIR is not set (previous tests may have set it).
-	// We can't use t.Setenv here because previous tests may have set it,
-	// and t.Setenv only restores to the ORIGINAL value before the test package loaded.
-	os.Unsetenv("ATMOS_CHDIR")
-	defer os.Unsetenv("ATMOS_CHDIR") // Clean up after test.
 	// Create a buffer to capture the output
 	var buf bytes.Buffer
 	log.SetOutput(&buf)
@@ -44,6 +46,10 @@ func TestNoColorLog(t *testing.T) {
 
 	// Reset buffer to ensure clean state (previous tests may have written to logger).
 	buf.Reset()
+
+	// Reset RootCmd state explicitly before Execute.
+	// Previous tests may have called RootCmd.SetArgs() which persists on the global instance.
+	RootCmd.SetArgs([]string{"about"})
 
 	// Execute the command
 	if err := Execute(); err != nil {
