@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"strings"
 
 	"dario.cat/mergo"
 
@@ -203,10 +204,72 @@ func normalizeValueReflect(value any) any {
 		return normalizeSliceReflect(rv)
 	case reflect.Map:
 		return normalizeMapReflect(rv)
+	case reflect.Struct:
+		return structToMapReflect(rv)
+	case reflect.Ptr:
+		if rv.IsNil() {
+			return nil
+		}
+		return normalizeValueReflect(rv.Elem().Interface())
 	default:
 		// Primitives and other types - return as-is.
 		return value
 	}
+}
+
+// structToMapReflect converts a struct to map[string]any using reflection.
+// Preserves numeric types (unlike JSON marshaling which converts all numbers to float64).
+// Uses mapstructure tags if available, otherwise uses field names.
+//
+//nolint:revive // Cyclomatic complexity is inherent to reflection-based struct-to-map conversion with tag handling.
+func structToMapReflect(rv reflect.Value) map[string]any {
+	if rv.Kind() == reflect.Ptr {
+		if rv.IsNil() {
+			return nil
+		}
+		rv = rv.Elem()
+	}
+
+	if rv.Kind() != reflect.Struct {
+		return nil
+	}
+
+	result := make(map[string]any)
+	t := rv.Type()
+
+	for i := 0; i < rv.NumField(); i++ {
+		field := t.Field(i)
+		value := rv.Field(i)
+
+		// Skip unexported fields.
+		if !field.IsExported() {
+			continue
+		}
+
+		// Get field name from mapstructure tag, fallback to JSON tag, then field name.
+		fieldName := field.Tag.Get("mapstructure")
+		if fieldName == "" || fieldName == "-" {
+			fieldName = field.Tag.Get("json")
+		}
+		if fieldName == "" || fieldName == "-" {
+			fieldName = field.Name
+		}
+
+		// Remove omitempty and other tag options.
+		if idx := strings.Index(fieldName, ","); idx != -1 {
+			fieldName = fieldName[:idx]
+		}
+
+		// Skip fields with "-" tag.
+		if fieldName == "-" {
+			continue
+		}
+
+		// Recursively convert the value, preserving types.
+		result[fieldName] = deepCopyValue(value.Interface())
+	}
+
+	return result
 }
 
 // MergeWithOptions takes a list of maps and options as input, deep-merges the items in the order they are defined in the list,
