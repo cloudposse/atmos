@@ -16,6 +16,15 @@ import (
 )
 
 func TestNoColorLog(t *testing.T) {
+	// Save and restore working directory - previous tests may have changed it.
+	originalWd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Failed to get current working directory: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = os.Chdir(originalWd)
+	})
+
 	// Ensure ATMOS_CHDIR is not set BEFORE anything else.
 	// Previous tests may have set it, and we need to clear it before RootCmd.Execute().
 	// We can't use t.Setenv here because previous tests may have set it,
@@ -46,11 +55,6 @@ func TestNoColorLog(t *testing.T) {
 
 	// Reset buffer to ensure clean state (previous tests may have written to logger).
 	buf.Reset()
-
-	// Reset RootCmd state explicitly before Execute.
-	// Previous tests may have called RootCmd.SetArgs() which persists on the global instance.
-	resetRootCmdForTesting(t)
-	RootCmd.SetArgs([]string{"about"})
 
 	// Execute the command
 	if err := Execute(); err != nil {

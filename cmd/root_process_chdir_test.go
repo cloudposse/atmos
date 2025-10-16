@@ -3,6 +3,7 @@ package cmd
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/spf13/cobra"
@@ -48,8 +49,10 @@ func TestProcessChdirFlag(t *testing.T) {
 			name: "valid absolute path via env var",
 			setup: func(t *testing.T) string {
 				tmpDir := t.TempDir()
+				t.Setenv("ATMOS_CHDIR", tmpDir)
 				return tmpDir
 			},
+			flagValue:   "", // Explicitly no flag - use env var.
 			expectError: false,
 		},
 		{
@@ -97,6 +100,9 @@ func TestProcessChdirFlag(t *testing.T) {
 		{
 			name: "directory with no permissions",
 			setup: func(t *testing.T) string {
+				if runtime.GOOS == "windows" {
+					t.Skip("Skipping permission-based test on Windows")
+				}
 				tmpDir := t.TempDir()
 				noPermDir := filepath.Join(tmpDir, "noperm")
 				require.NoError(t, os.Mkdir(noPermDir, 0o000))
@@ -134,8 +140,11 @@ func TestProcessChdirFlag(t *testing.T) {
 			testCmd.PersistentFlags().StringP("chdir", "C", "", "")
 
 			// Set flag value if provided, otherwise use setup result.
+			// Skip for tests that explicitly test env var without flag.
 			flagValue := tt.flagValue
-			if flagValue == "" && expectedDir != "" && tt.name != "no chdir flag or env var" {
+			if flagValue == "" && expectedDir != "" &&
+				tt.name != "no chdir flag or env var" &&
+				tt.name != "valid absolute path via env var" {
 				flagValue = expectedDir
 			}
 
