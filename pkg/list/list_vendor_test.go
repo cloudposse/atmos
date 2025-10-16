@@ -18,10 +18,17 @@ import (
 // TestFilterAndListVendor tests the vendor listing functionality
 
 func TestFilterAndListVendor(t *testing.T) {
-	tempDir := t.TempDir()
+	// Create tempdir with a subdirectory containing "atmos-test-vendor"
+	// to trigger test mode in getVendorInfos.
+	baseTemp := t.TempDir()
+	tempDir := filepath.Join(baseTemp, "atmos-test-vendor")
+	err := os.Mkdir(tempDir, 0o755)
+	if err != nil {
+		t.Fatalf("Error creating test dir: %v", err)
+	}
 
 	vendorDir := filepath.Join(tempDir, "vendor.d")
-	err := os.Mkdir(vendorDir, 0o755)
+	err = os.Mkdir(vendorDir, 0o755)
 	if err != nil {
 		t.Fatalf("Error creating vendor dir: %v", err)
 	}
