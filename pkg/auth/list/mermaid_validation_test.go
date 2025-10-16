@@ -8,6 +8,8 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 // Mermaid Validation Strategy
@@ -232,6 +234,242 @@ func TestMermaidStructureValidator(t *testing.T) {
 			if !strings.Contains(err.Error(), tt.errorMsg) {
 				t.Errorf("expected error containing %q, got %q", tt.errorMsg, err.Error())
 			}
+		})
+	}
+}
+
+// TestRenderMermaid_ComplexScenarios tests Mermaid generation with realistic complex auth scenarios.
+func TestRenderMermaid_ComplexScenarios(t *testing.T) {
+	tests := []struct {
+		name       string
+		providers  map[string]schema.Provider
+		identities map[string]schema.Identity
+		wantNodes  []string // Node IDs that must exist.
+		wantEdges  []string // Edges that must exist.
+	}{
+		{
+			name: "deeply nested identity chain",
+			providers: map[string]schema.Provider{
+				"aws-sso": {
+					Kind:    "aws-sso",
+					Default: true,
+				},
+			},
+			identities: map[string]schema.Identity{
+				"base-role": {
+					Kind: "aws/assume-role",
+					Via: &schema.IdentityVia{
+						Provider: "aws-sso",
+					},
+				},
+				"admin-role": {
+					Kind: "aws/assume-role",
+					Via: &schema.IdentityVia{
+						Identity: "base-role",
+					},
+				},
+				"super-admin": {
+					Kind:    "aws/assume-role",
+					Default: true,
+					Via: &schema.IdentityVia{
+						Identity: "admin-role",
+					},
+				},
+			},
+			wantNodes: []string{"aws_sso", "base_role", "admin_role", "super_admin"},
+			wantEdges: []string{
+				"aws_sso --> base_role",
+				"base_role --> admin_role",
+				"admin_role --> super_admin",
+			},
+		},
+		{
+			name: "multiple providers with cross-provider chaining",
+			providers: map[string]schema.Provider{
+				"aws-sso": {
+					Kind: "aws-sso",
+				},
+				"okta": {
+					Kind:    "okta",
+					Default: true,
+				},
+				"azure-ad": {
+					Kind: "azure-ad",
+				},
+			},
+			identities: map[string]schema.Identity{
+				"okta-admin": {
+					Kind: "okta/user",
+					Via: &schema.IdentityVia{
+						Provider: "okta",
+					},
+				},
+				"aws-admin": {
+					Kind: "aws/assume-role",
+					Via: &schema.IdentityVia{
+						Provider: "aws-sso",
+					},
+				},
+				"azure-admin": {
+					Kind: "azure/user",
+					Via: &schema.IdentityVia{
+						Provider: "azure-ad",
+					},
+				},
+			},
+			wantNodes: []string{"aws_sso", "okta", "azure_ad", "okta_admin", "aws_admin", "azure_admin"},
+			wantEdges: []string{
+				"okta --> okta_admin",
+				"aws_sso --> aws_admin",
+				"azure_ad --> azure_admin",
+			},
+		},
+		{
+			name: "mixed provider and identity chaining",
+			providers: map[string]schema.Provider{
+				"aws-sso": {
+					Kind: "aws-sso",
+				},
+				"okta": {
+					Kind: "okta",
+				},
+			},
+			identities: map[string]schema.Identity{
+				"okta-user": {
+					Kind: "okta/user",
+					Via: &schema.IdentityVia{
+						Provider: "okta",
+					},
+				},
+				"aws-via-okta": {
+					Kind: "aws/assume-role",
+					Via: &schema.IdentityVia{
+						Provider: "aws-sso",
+					},
+				},
+				"dev-role": {
+					Kind: "aws/assume-role",
+					Via: &schema.IdentityVia{
+						Identity: "aws-via-okta",
+					},
+				},
+				"prod-role": {
+					Kind: "aws/assume-role",
+					Via: &schema.IdentityVia{
+						Identity: "dev-role",
+					},
+				},
+			},
+			wantNodes: []string{"okta", "aws_sso", "okta_user", "aws_via_okta", "dev_role", "prod_role"},
+			wantEdges: []string{
+				"okta --> okta_user",
+				"aws_sso --> aws_via_okta",
+				"aws_via_okta --> dev_role",
+				"dev_role --> prod_role",
+			},
+		},
+		{
+			name: "special characters and escaping",
+			providers: map[string]schema.Provider{
+				"aws-sso-prod": {
+					Kind: "aws-sso",
+				},
+			},
+			identities: map[string]schema.Identity{
+				"role-with-dashes": {
+					Kind: "aws/assume-role",
+					Via: &schema.IdentityVia{
+						Provider: "aws-sso-prod",
+					},
+				},
+				"role_with_underscores": {
+					Kind: "aws/assume-role",
+					Via: &schema.IdentityVia{
+						Provider: "aws-sso-prod",
+					},
+				},
+			},
+			wantNodes: []string{"aws_sso_prod", "role_with_dashes", "role_with_underscores"},
+			wantEdges: []string{
+				"aws_sso_prod --> role_with_dashes",
+				"aws_sso_prod --> role_with_underscores",
+			},
+		},
+		{
+			name: "diamond dependency pattern",
+			providers: map[string]schema.Provider{
+				"root-sso": {
+					Kind: "aws-sso",
+				},
+			},
+			identities: map[string]schema.Identity{
+				"base": {
+					Kind: "aws/assume-role",
+					Via: &schema.IdentityVia{
+						Provider: "root-sso",
+					},
+				},
+				"branch-a": {
+					Kind: "aws/assume-role",
+					Via: &schema.IdentityVia{
+						Identity: "base",
+					},
+				},
+				"branch-b": {
+					Kind: "aws/assume-role",
+					Via: &schema.IdentityVia{
+						Identity: "base",
+					},
+				},
+				"merged": {
+					Kind: "aws/assume-role",
+					Via: &schema.IdentityVia{
+						Identity: "branch-a",
+					},
+				},
+			},
+			wantNodes: []string{"root_sso", "base", "branch_a", "branch_b", "merged"},
+			wantEdges: []string{
+				"root_sso --> base",
+				"base --> branch_a",
+				"base --> branch_b",
+				"branch_a --> merged",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			output, err := RenderMermaid(nil, tt.providers, tt.identities)
+			if err != nil {
+				t.Fatalf("RenderMermaid failed: %v", err)
+			}
+
+			// Validate structure.
+			if err := validateMermaidStructure(output); err != nil {
+				t.Errorf("Mermaid structure validation failed: %v\nOutput:\n%s", err, output)
+			}
+
+			// Verify expected nodes exist.
+			for _, nodeID := range tt.wantNodes {
+				if !strings.Contains(output, nodeID+"[") {
+					t.Errorf("missing node %q in output", nodeID)
+				}
+			}
+
+			// Verify expected edges exist.
+			for _, edge := range tt.wantEdges {
+				if !strings.Contains(output, edge) {
+					t.Errorf("missing edge %q in output", edge)
+				}
+			}
+
+			// Try CLI validation if available.
+			if err := validateWithMermaidCLI(t, output); err != nil {
+				t.Logf("Mermaid CLI validation skipped: %v", err)
+			}
+
+			t.Logf("Generated Mermaid for %q:\n%s", tt.name, output)
 		})
 	}
 }
