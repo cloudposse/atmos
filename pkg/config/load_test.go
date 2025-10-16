@@ -83,9 +83,7 @@ components:
 
 			// Set up environment variables
 			for k, v := range tt.setupEnv {
-
 				t.Setenv(k, v)
-
 			}
 
 			// Create test config file
@@ -143,9 +141,7 @@ func TestLoadConfigFromDifferentSources(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			// Setup environment
 			for k, v := range tt.envVars {
-
 				t.Setenv(k, v)
-
 			}
 
 			config, err := LoadConfig(&schema.ConfigAndStacksInfo{})
@@ -304,9 +300,9 @@ func TestMergeDefaultImports_ExclusionLogic(t *testing.T) {
 					}
 					t.Setenv("TEST_EXCLUDE_ATMOS_D", joinedPaths)
 
-						}
+				}
 
-					}
+			}
 
 			// Adjust dirPath for the test
 			actualDirPath := tt.dirPath
@@ -412,9 +408,7 @@ func TestMergeDefaultImports_EmptyAndInvalidPaths(t *testing.T) {
 
 			// Set the exclude environment variable
 			if tt.excludePaths != "" {
-
 				t.Setenv("TEST_EXCLUDE_ATMOS_D", tt.excludePaths)
-
 			}
 
 			// Call the function - should not panic or error on empty/invalid paths
@@ -524,9 +518,7 @@ func TestShouldExcludePathForTesting(t *testing.T) {
 
 			// Set the environment variable
 			if tt.envValue != "" {
-
 				t.Setenv("TEST_EXCLUDE_ATMOS_D", tt.envValue)
-
 			}
 
 			// Call the function
