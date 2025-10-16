@@ -640,12 +640,12 @@ Blog posts serve different audiences and must be tagged appropriately:
   - `bugfix` - Important bug fixes that affect users
 - **Example tags**: `[feature, terraform, workflows]`
 
-**2. Contributor-Facing Posts** (Architecture, Refactoring, Developer Tools)
+**2. Contributor-Facing Posts** (Refactoring, Internal Changes, Developer Tools)
 - **Audience**: Atmos contributors and core developers
-- **Focus**: Internal architecture, code organization, developer experience
+- **Focus**: Internal code structure, refactoring, developer experience
 - **Required tag**: `contributors`
 - **Additional tags**: Describe the technical area
-- **Example tags**: `[contributors, architecture, extensibility]`
+- **Example tags**: `[contributors, atmos-core, refactoring]`
 
 #### Blog Post Template
 
@@ -691,14 +691,20 @@ Clarify this is internal with zero user impact, link to technical docs.
 - `bugfix` - Important bug fix
 - `contributors` - For Atmos core contributors (internal changes)
 
-**Secondary Technical Tags:**
-- `architecture` - Architectural changes
-- `terraform` - Terraform-specific
-- `helmfile` - Helmfile-specific
+**Secondary Technical Tags (for contributor posts):**
+- `atmos-core` - Changes to Atmos codebase/internals
+- `refactoring` - Code refactoring and restructuring
+- `testing` - Test infrastructure improvements
+- `ci-cd` - CI/CD pipeline changes
+- `developer-experience` - Developer tooling improvements
+
+**Secondary Technical Tags (for user posts):**
+- `terraform` - Terraform-specific features
+- `helmfile` - Helmfile-specific features
 - `workflows` - Workflow features
 - `validation` - Validation features
 - `performance` - Performance improvements
-- `extensibility` - Plugin/extension capabilities
+- `cloud-architecture` - Cloud architecture patterns (user-facing)
 
 **General Tags:**
 - `announcements` - Major announcements
