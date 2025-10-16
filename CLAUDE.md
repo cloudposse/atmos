@@ -618,14 +618,92 @@ Use fixtures in `tests/test-cases/` for integration tests. Each test case should
   - Link to supporting GitHub issues or documentation
   - Use `closes #123` if PR closes an issue
   ```
-- **Add changelog entry for feature releases**:
+- **Add changelog blog post for feature releases**:
   - PRs labeled `minor` or `major` MUST include a blog post in `website/blog/`
-  - Create a new file: `website/blog/YYYY-MM-DD-feature-name.mdx`
-  - Follow the format of existing blog posts (frontmatter with slug, title, authors, tags)
+  - Create a new file: `website/blog/YYYY-MM-DD-feature-name.md`
+  - Follow the format of existing blog posts (see template below)
   - Include `<!--truncate-->` marker after the introduction paragraph
-  - Explain what the feature does, why it's useful, and provide examples
-  - Link to relevant documentation using `/cli/commands/` or `/core-concepts/` paths
   - The CI workflow will fail and comment on the PR if this is missing
+
+### Blog Post Guidelines (MANDATORY)
+
+Blog posts serve different audiences and must be tagged appropriately:
+
+#### Audience Types
+
+**1. User-Facing Posts** (Features, Improvements, Bug Fixes)
+- **Audience**: Teams using Atmos to manage infrastructure
+- **Focus**: How the change benefits users, usage examples, migration guides
+- **Required tags**: Choose one or more:
+  - `feature` - New user-facing capabilities
+  - `enhancement` - Improvements to existing features
+  - `bugfix` - Important bug fixes that affect users
+- **Example tags**: `[feature, terraform, workflows]`
+
+**2. Contributor-Facing Posts** (Architecture, Refactoring, Developer Tools)
+- **Audience**: Atmos contributors and core developers
+- **Focus**: Internal architecture, code organization, developer experience
+- **Required tag**: `contributors`
+- **Additional tags**: Describe the technical area
+- **Example tags**: `[contributors, architecture, extensibility]`
+
+#### Blog Post Template
+
+```markdown
+---
+slug: descriptive-slug
+title: "Clear, Descriptive Title"
+authors: [atmos]
+tags: [primary-tag, secondary-tag, ...]  # See audience types above
+---
+
+Brief introduction paragraph explaining what changed and why it matters.
+
+<!--truncate-->
+
+## What Changed
+
+Describe the change with code examples or visuals.
+
+## Why This Matters / Impact on Users
+
+Explain the benefits or reasoning.
+
+## [For User Posts] How to Use It
+
+Provide practical examples and usage instructions.
+
+## [For Contributor Posts] For Atmos Contributors
+
+Clarify this is internal with zero user impact, link to technical docs.
+
+## Get Involved
+
+- Link to relevant documentation
+- Encourage discussion/contributions
+```
+
+#### Tag Reference
+
+**Primary Audience Tags:**
+- `feature` - New user-facing feature
+- `enhancement` - Improvement to existing feature
+- `bugfix` - Important bug fix
+- `contributors` - For Atmos core contributors (internal changes)
+
+**Secondary Technical Tags:**
+- `architecture` - Architectural changes
+- `terraform` - Terraform-specific
+- `helmfile` - Helmfile-specific
+- `workflows` - Workflow features
+- `validation` - Validation features
+- `performance` - Performance improvements
+- `extensibility` - Plugin/extension capabilities
+
+**General Tags:**
+- `announcements` - Major announcements
+- `breaking-changes` - Breaking changes requiring migration
+
 - **Use `no-release` label for documentation-only changes**
 - **Ensure all CI checks pass** before requesting review
 
