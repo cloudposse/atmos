@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
-	"sync"
 
 	"dario.cat/mergo"
 
@@ -17,30 +16,6 @@ const (
 	ListMergeStrategyReplace = "replace"
 	ListMergeStrategyAppend  = "append"
 	ListMergeStrategyMerge   = "merge"
-
-	// Initial capacity for pooled maps and slices.
-	// This is a reasonable default based on typical component configuration sizes.
-	initialMapCapacity   = 16
-	initialSliceCapacity = 8
-)
-
-var (
-	// MapPool provides reusable map[string]any objects to reduce allocations during deep copy operations.
-	// Maps from the pool are cleared and resized before use, then returned to the caller.
-	// This reduces GC pressure during high-volume merge operations (118k+ calls per run).
-	mapPool = sync.Pool{
-		New: func() interface{} {
-			return make(map[string]any, initialMapCapacity)
-		},
-	}
-
-	// SlicePool provides reusable []any slices to reduce allocations during deep copy operations.
-	// Slices from the pool are cleared and resized before use, then returned to the caller.
-	slicePool = sync.Pool{
-		New: func() interface{} {
-			return make([]any, 0, initialSliceCapacity)
-		},
-	}
 )
 
 // DeepCopyMap performs a deep copy of a map optimized for map[string]any structures.
@@ -49,7 +24,7 @@ var (
 // Preserves numeric types (unlike JSON which converts all numbers to float64) and is faster than
 // generic reflection-based copying. The data is already in Go map format with custom tags already processed,
 // so we only need structural copying to work around mergo's pointer mutation bug.
-// Uses object pooling to reduce allocations and GC pressure during high-volume operations.
+// Uses properly-sized allocations to reduce GC pressure during high-volume operations (118k+ calls per run).
 func DeepCopyMap(m map[string]any) (map[string]any, error) {
 	defer perf.Track(nil, "merge.DeepCopyMap")()
 
@@ -57,13 +32,8 @@ func DeepCopyMap(m map[string]any) (map[string]any, error) {
 		return nil, nil
 	}
 
-	// Get a map from the pool to reduce allocations.
-	result := mapPool.Get().(map[string]any)
-
-	// Clear the map in case it has leftover data from previous use.
-	for k := range result {
-		delete(result, k)
-	}
+	// Allocate map with exact size to avoid resizing.
+	result := make(map[string]any, len(m))
 
 	// Copy all key-value pairs.
 	for k, v := range m {
@@ -75,7 +45,7 @@ func DeepCopyMap(m map[string]any) (map[string]any, error) {
 
 // deepCopyValue performs a deep copy of a value, handling common types without reflection.
 // Uses reflection-based normalization for rare complex types (typed slices/maps).
-// Uses object pooling for maps and slices to reduce allocations.
+// Allocates maps and slices with proper sizing to reduce allocations.
 func deepCopyValue(v any) any {
 	if v == nil {
 		return nil
@@ -83,13 +53,8 @@ func deepCopyValue(v any) any {
 
 	switch val := v.(type) {
 	case map[string]any:
-		// Common case: nested map - use pool and recurse with fast path.
-		result := mapPool.Get().(map[string]any)
-
-		// Clear the map in case it has leftover data from previous use.
-		for k := range result {
-			delete(result, k)
-		}
+		// Common case: nested map - allocate with exact size and recurse.
+		result := make(map[string]any, len(val))
 
 		// Copy all key-value pairs.
 		for k, v := range val {
@@ -98,18 +63,8 @@ func deepCopyValue(v any) any {
 		return result
 
 	case []any:
-		// Common case: slice - use pool and recurse with fast path.
-		result := slicePool.Get().([]any)
-
-		// Clear and resize the slice.
-		result = result[:0]
-		if cap(result) < len(val) {
-			// Need more capacity, allocate new slice.
-			result = make([]any, len(val))
-		} else {
-			// Reuse existing capacity.
-			result = result[:len(val)]
-		}
+		// Common case: slice - allocate with exact size and recurse.
+		result := make([]any, len(val))
 
 		// Copy all elements.
 		for i, item := range val {
@@ -130,28 +85,10 @@ func deepCopyValue(v any) any {
 	}
 }
 
-// getEmptyPooledMap returns an empty map from the pool, clearing any leftover data.
-func getEmptyPooledMap() map[string]any {
-	result := mapPool.Get().(map[string]any)
-	for k := range result {
-		delete(result, k)
-	}
-	return result
-}
-
-// normalizeSliceReflect converts a typed slice to []any using reflection and pooling.
+// normalizeSliceReflect converts a typed slice to []any using reflection.
 func normalizeSliceReflect(rv reflect.Value) []any {
-	result := slicePool.Get().([]any)
-	result = result[:0]
-
 	sliceLen := rv.Len()
-	if cap(result) < sliceLen {
-		// Need more capacity, allocate new slice.
-		result = make([]any, sliceLen)
-	} else {
-		// Reuse existing capacity.
-		result = result[:sliceLen]
-	}
+	result := make([]any, sliceLen)
 
 	for i := 0; i < sliceLen; i++ {
 		result[i] = deepCopyValue(rv.Index(i).Interface())
@@ -161,41 +98,42 @@ func normalizeSliceReflect(rv reflect.Value) []any {
 
 // normalizeMapReflect converts a typed map to map[string]any (for string keys) or deep copies it (for non-string keys).
 func normalizeMapReflect(rv reflect.Value) any {
-	// Empty map - return empty pooled map.
+	keyKind := rv.Type().Key().Kind()
+
+	// Empty map - return properly typed empty map.
 	if rv.Len() == 0 {
-		return getEmptyPooledMap()
-	}
-
-	// Check if keys are strings.
-	iter := rv.MapRange()
-	if !iter.Next() {
-		return getEmptyPooledMap()
-	}
-
-	// Non-string keys - deep copy to same type to avoid aliasing.
-	if iter.Key().Kind() != reflect.String {
-		// Create a new map of the same type with preallocated size.
-		copyMap := reflect.MakeMapWithSize(rv.Type(), rv.Len())
-
-		// Set first key-value pair.
-		copiedValue := deepCopyValue(iter.Value().Interface())
-		copyMap.SetMapIndex(iter.Key(), reflect.ValueOf(copiedValue))
-
-		// Set remaining pairs.
-		for iter.Next() {
-			copiedValue = deepCopyValue(iter.Value().Interface())
-			copyMap.SetMapIndex(iter.Key(), reflect.ValueOf(copiedValue))
+		if keyKind != reflect.String {
+			return reflect.MakeMapWithSize(rv.Type(), 0).Interface()
 		}
+		return make(map[string]any, 0)
+	}
 
+	iter := rv.MapRange()
+	_ = iter // We'll iterate below using Next().
+
+	// Non-string keys: copy to same type, ensuring value type matches Elem().
+	if keyKind != reflect.String {
+		dstType := rv.Type()
+		elemType := dstType.Elem()
+		copyMap := reflect.MakeMapWithSize(dstType, rv.Len())
+
+		for iter.Next() {
+			var val reflect.Value
+			if elemType.Kind() == reflect.Interface {
+				// Safe to store any deep-copied shape.
+				val = reflect.ValueOf(deepCopyValue(iter.Value().Interface()))
+			} else {
+				// Preserve original typed value to avoid SetMapIndex panics.
+				// (Full typed deep copy can be added later if needed.)
+				val = iter.Value()
+			}
+			copyMap.SetMapIndex(iter.Key(), val)
+		}
 		return copyMap.Interface()
 	}
 
-	// String keys - convert to map[string]any using pooling.
-	result := getEmptyPooledMap()
-
-	// Process first key-value pair.
-	result[iter.Key().String()] = deepCopyValue(iter.Value().Interface())
-	// Process remaining pairs.
+	// String keys: convert to map[string]any.
+	result := make(map[string]any, rv.Len())
 	for iter.Next() {
 		result[iter.Key().String()] = deepCopyValue(iter.Value().Interface())
 	}
@@ -204,7 +142,7 @@ func normalizeMapReflect(rv reflect.Value) any {
 
 // normalizeValueReflect uses reflection to normalize typed slices and maps.
 // This is used as a fallback for complex types that aren't handled by the fast path.
-// Uses object pooling for the resulting maps and slices.
+// Allocates maps and slices with proper sizing.
 func normalizeValueReflect(value any) any {
 	rv := reflect.ValueOf(value)
 	switch rv.Kind() {

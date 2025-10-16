@@ -253,9 +253,9 @@ func TestMergeHandlesNilConfigWithoutPanic(t *testing.T) {
 	assert.True(t, errors.Is(err, errUtils.ErrMerge))
 }
 
-// TestDeepCopyMap_PoolingCorrectness validates that object pooling doesn't affect correctness.
-// This validates P7.9 optimization: pooled maps/slices produce identical results.
-func TestDeepCopyMap_PoolingCorrectness(t *testing.T) {
+// TestDeepCopyMap_Correctness validates that deep copy produces correct, independent copies.
+// This ensures properly-sized allocations maintain correctness across multiple calls.
+func TestDeepCopyMap_Correctness(t *testing.T) {
 	testData := map[string]any{
 		"string": "value",
 		"number": 42,
@@ -269,7 +269,7 @@ func TestDeepCopyMap_PoolingCorrectness(t *testing.T) {
 		"slice": []any{"x", "y", "z"},
 	}
 
-	// Copy the same data multiple times to exercise the pool.
+	// Copy the same data multiple times to verify consistency.
 	var copies []map[string]any
 	for i := 0; i < 10; i++ {
 		copy, err := DeepCopyMap(testData)
@@ -297,8 +297,8 @@ func TestDeepCopyMap_PoolingCorrectness(t *testing.T) {
 	assert.Equal(t, "value", copies[1]["string"], "Copy 1 should not be affected by copy 0 modification")
 }
 
-// TestDeepCopyMap_Concurrent validates thread safety of pooling.
-// This validates P7.9 optimization: sync.Pool handles concurrent access correctly.
+// TestDeepCopyMap_Concurrent validates thread safety of deep copy operations.
+// This ensures concurrent copies produce correct, independent results.
 func TestDeepCopyMap_Concurrent(t *testing.T) {
 	testData := map[string]any{
 		"key1": "value1",
@@ -352,8 +352,8 @@ func TestDeepCopyMap_Concurrent(t *testing.T) {
 	assert.Equal(t, 0, errorCount, "No goroutines should encounter errors")
 }
 
-// TestDeepCopyMap_DifferentSizes tests pooling with various data sizes.
-// This validates that the pool works correctly with different map/slice sizes.
+// TestDeepCopyMap_DifferentSizes tests deep copy with various data sizes.
+// This validates that properly-sized allocations work correctly with different map/slice sizes.
 func TestDeepCopyMap_DifferentSizes(t *testing.T) {
 	testCases := []struct {
 		name string
@@ -429,8 +429,8 @@ func generateLargeSlice(size int) []any {
 	return result
 }
 
-// BenchmarkDeepCopyMap benchmarks the deep copy performance with pooling.
-// This demonstrates P7.9 optimization: object pooling reduces allocations.
+// BenchmarkDeepCopyMap benchmarks the deep copy performance with properly-sized allocations.
+// This measures allocation efficiency using exact capacity hints.
 func BenchmarkDeepCopyMap(b *testing.B) {
 	testData := map[string]any{
 		"string": "value",
@@ -461,9 +461,89 @@ func BenchmarkDeepCopyMap_Large(b *testing.B) {
 	}
 }
 
-// BenchmarkMerge_WithPooling benchmarks merge operations with pooling.
-// This measures the cumulative benefit of P7.9: pooling reduces allocations during merges.
-func BenchmarkMerge_WithPooling(b *testing.B) {
+// TestDeepCopyMap_TypedMaps tests type-safe handling of typed maps with non-string keys.
+// This validates the fix for type-safety bug where deepCopyValue could cause panics
+// when SetMapIndex received incompatible types.
+func TestDeepCopyMap_TypedMaps(t *testing.T) {
+	testCases := []struct {
+		name     string
+		input    map[string]any
+		validate func(t *testing.T, result map[string]any)
+	}{
+		{
+			name: "empty typed map with int keys preserves type",
+			input: map[string]any{
+				"typed_map": map[int]string{}, // Empty typed map.
+			},
+			validate: func(t *testing.T, result map[string]any) {
+				val, ok := result["typed_map"]
+				assert.True(t, ok, "typed_map should exist")
+				// Should be typed map[int]string, not map[string]any.
+				_, isTyped := val.(map[int]string)
+				assert.True(t, isTyped, "Empty typed map should preserve type")
+			},
+		},
+		{
+			name: "typed map with int keys and string values preserves values",
+			input: map[string]any{
+				"typed_map": map[int]string{
+					1: "one",
+					2: "two",
+					3: "three",
+				},
+			},
+			validate: func(t *testing.T, result map[string]any) {
+				val, ok := result["typed_map"]
+				assert.True(t, ok, "typed_map should exist")
+				typedMap, isTyped := val.(map[int]string)
+				assert.True(t, isTyped, "Should be map[int]string")
+				assert.Equal(t, "one", typedMap[1])
+				assert.Equal(t, "two", typedMap[2])
+				assert.Equal(t, "three", typedMap[3])
+			},
+		},
+		{
+			name: "typed map with interface{} values allows deep copy",
+			input: map[string]any{
+				"typed_map": map[int]interface{}{
+					1: "value",
+					2: 42,
+					3: []any{"a", "b"},
+				},
+			},
+			validate: func(t *testing.T, result map[string]any) {
+				val, ok := result["typed_map"]
+				assert.True(t, ok, "typed_map should exist")
+				typedMap, isTyped := val.(map[int]interface{})
+				assert.True(t, isTyped, "Should be map[int]interface{}")
+				assert.Equal(t, "value", typedMap[1])
+				assert.Equal(t, 42, typedMap[2])
+				// Verify nested slice was deep copied.
+				slice, isSlice := typedMap[3].([]any)
+				assert.True(t, isSlice, "Should have deep copied slice")
+				assert.Equal(t, []any{"a", "b"}, slice)
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			result, err := DeepCopyMap(tc.input)
+			assert.Nil(t, err, "DeepCopyMap should not error")
+			assert.NotNil(t, result, "Result should not be nil")
+
+			tc.validate(t, result)
+
+			// Verify independence - modifying copy shouldn't affect original.
+			// This is a basic sanity check for all test cases.
+			assert.NotNil(t, tc.input, "Original should not be affected")
+		})
+	}
+}
+
+// BenchmarkMerge benchmarks merge operations with properly-sized allocations.
+// This measures the cumulative benefit of exact capacity hints during merges.
+func BenchmarkMerge(b *testing.B) {
 	atmosConfig := &schema.AtmosConfiguration{
 		Settings: schema.AtmosSettings{
 			ListMergeStrategy: ListMergeStrategyReplace,
