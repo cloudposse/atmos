@@ -14,11 +14,10 @@ import (
 )
 
 func setupTestFiles(t *testing.T) (string, func()) {
-	tempDir, err := os.MkdirTemp("", "atmos-test-*")
-	assert.NoError(t, err)
+	tempDir := t.TempDir()
 
 	cleanup := func() {
-		os.RemoveAll(tempDir)
+		// t.TempDir() handles cleanup automatically
 	}
 
 	return tempDir, cleanup

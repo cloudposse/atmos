@@ -124,7 +124,8 @@ jobs:
       #                        (our custom-gcl that we just installed)
       # - only-new-issues: true - Only report issues in changed code
       # - SARIF output - For GitHub Advanced Security / CodeQL integration
-      # - issues-exit-code: 0 - Always succeed so SARIF upload happens
+      # - issues-exit-code: 1 - Fail if linting issues found (proper enforcement)
+      # - continue-on-error: true - Continue to upload SARIF even if linting fails
       #
       # The action provides:
       # - Inline PR annotations for linting issues
@@ -137,6 +138,7 @@ jobs:
       # - t.Setenv in defer blocks (should use os.Setenv)
       # will appear in the SARIF output and GitHub Security tab.
       - name: Run golangci-lint with lintroller plugin
+        continue-on-error: true
         uses: golangci/golangci-lint-action@v8
         with:
           version: v2.5.0  # Match the version we built above
@@ -144,9 +146,10 @@ jobs:
           only-new-issues: true
           args: >
             --output.sarif.path=golangci-lint.sarif
-            --issues-exit-code=0
+            --issues-exit-code=1
 
       - name: Upload filtered SARIF results
+        if: always()
         uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: golangci-lint.sarif

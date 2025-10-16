@@ -21,7 +21,7 @@ func TestFilterAndListVendor(t *testing.T) {
 	tempDir := t.TempDir()
 
 	vendorDir := filepath.Join(tempDir, "vendor.d")
-	err = os.Mkdir(vendorDir, 0o755)
+	err := os.Mkdir(vendorDir, 0o755)
 	if err != nil {
 		t.Fatalf("Error creating vendor dir: %v", err)
 	}
