@@ -10,7 +10,7 @@ import (
 )
 
 func TestWorkflowCmd(t *testing.T) {
-	CleanupRootCmd(t)
+	_ = NewTestKit(t)
 
 	stacksPath := "../tests/fixtures/scenarios/atmos-overrides-section"
 

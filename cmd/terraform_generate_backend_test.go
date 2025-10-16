@@ -14,7 +14,7 @@ import (
 )
 
 func TestTerraformGenerateBackendCmd(t *testing.T) {
-	CleanupRootCmd(t)
+	_ = NewTestKit(t)
 
 	tests.RequireTerraform(t)
 

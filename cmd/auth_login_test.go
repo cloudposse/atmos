@@ -14,7 +14,7 @@ import (
 )
 
 func TestAuthLoginCmd(t *testing.T) {
-	CleanupRootCmd(t)
+	_ = NewTestKit(t)
 
 	tests := []struct {
 		name           string
@@ -125,7 +125,7 @@ func TestAuthLoginCmd(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			CleanupRootCmd(t)
+			_ = NewTestKit(t)
 
 			// Setup test environment
 			originalArgs := os.Args
@@ -194,7 +194,7 @@ func TestAuthLoginCmd(t *testing.T) {
 }
 
 func TestAuthLoginCmdFlags(t *testing.T) {
-	CleanupRootCmd(t)
+	_ = NewTestKit(t)
 
 	// Create a mock command to test flag structure
 	cmd := &cobra.Command{
@@ -210,7 +210,7 @@ func TestAuthLoginCmdFlags(t *testing.T) {
 }
 
 func TestCreateAuthManager(t *testing.T) {
-	CleanupRootCmd(t)
+	_ = NewTestKit(t)
 
 	authConfig := &schema.AuthConfig{
 		Providers: map[string]schema.Provider{

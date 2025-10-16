@@ -11,7 +11,7 @@ import (
 )
 
 func TestPackerValidateCmd(t *testing.T) {
-	CleanupRootCmd(t)
+	_ = NewTestKit(t)
 
 	skipIfPackerNotInstalled(t)
 

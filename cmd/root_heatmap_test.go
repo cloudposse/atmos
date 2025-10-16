@@ -14,7 +14,7 @@ import (
 )
 
 func TestDisplayPerformanceHeatmap(t *testing.T) {
-	CleanupRootCmd(t)
+	_ = NewTestKit(t)
 
 	tests := []struct {
 		name           string
@@ -44,7 +44,7 @@ func TestDisplayPerformanceHeatmap(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			CleanupRootCmd(t)
+			_ = NewTestKit(t)
 
 			// Reset perf registry and enable tracking (P95 is automatically enabled).
 			perf.EnableTracking(true)
@@ -82,7 +82,7 @@ func TestDisplayPerformanceHeatmap(t *testing.T) {
 }
 
 func TestIsTTY(t *testing.T) {
-	CleanupRootCmd(t)
+	_ = NewTestKit(t)
 
 	tests := []struct {
 		name   string
@@ -96,7 +96,7 @@ func TestIsTTY(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			CleanupRootCmd(t)
+			_ = NewTestKit(t)
 
 			oldStderr := os.Stderr
 			os.Stderr = tt.stderr
@@ -113,11 +113,11 @@ func TestIsTTY(t *testing.T) {
 }
 
 func TestHeatmapFlags(t *testing.T) {
-	CleanupRootCmd(t)
+	_ = NewTestKit(t)
 
 	// Test that heatmap flags are properly registered.
 	t.Run("Heatmap flag exists", func(t *testing.T) {
-		CleanupRootCmd(t)
+		_ = NewTestKit(t)
 
 		flag := RootCmd.PersistentFlags().Lookup("heatmap")
 		assert.NotNil(t, flag, "--heatmap flag should be registered")
@@ -125,7 +125,7 @@ func TestHeatmapFlags(t *testing.T) {
 	})
 
 	t.Run("Heatmap mode flag exists", func(t *testing.T) {
-		CleanupRootCmd(t)
+		_ = NewTestKit(t)
 
 		flag := RootCmd.PersistentFlags().Lookup("heatmap-mode")
 		assert.NotNil(t, flag, "--heatmap-mode flag should be registered")
@@ -134,7 +134,7 @@ func TestHeatmapFlags(t *testing.T) {
 }
 
 func TestHeatmapNonTTYOutput(t *testing.T) {
-	CleanupRootCmd(t)
+	_ = NewTestKit(t)
 
 	// Reset perf registry and enable tracking.
 	perf.EnableTracking(true)

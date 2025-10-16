@@ -15,7 +15,7 @@ func testChdirError(t *testing.T, args []string) {
 	t.Helper()
 
 	// Ensure RootCmd state is restored after this helper finishes.
-	CleanupRootCmd(t)
+	_ = NewTestKit(t)
 
 	// Test the actual PersistentPreRun logic.
 	RootCmd.SetArgs(args)
@@ -67,7 +67,7 @@ func TestChdirFlag(t *testing.T) {
 	originalWd, err := os.Getwd()
 	require.NoError(t, err, "Failed to get current working directory")
 	// Restore RootCmd state after test.
-	CleanupRootCmd(t)
+	_ = NewTestKit(t)
 
 	t.Cleanup(func() {
 		// Restore original working directory.

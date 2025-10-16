@@ -13,7 +13,7 @@ import (
 )
 
 func TestSetFlagInDescribeWorkflow(t *testing.T) {
-	CleanupRootCmd(t)
+	_ = NewTestKit(t)
 
 	// Initialize test cases
 	tests := []struct {
@@ -61,7 +61,7 @@ func TestSetFlagInDescribeWorkflow(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			CleanupRootCmd(t)
+			_ = NewTestKit(t)
 
 			fs := pflag.NewFlagSet("test", pflag.ContinueOnError)
 			fs.StringP("format", "f", "yaml", "Specify the output format (`yaml` is default)")
@@ -81,7 +81,7 @@ func TestSetFlagInDescribeWorkflow(t *testing.T) {
 }
 
 func TestDescribeWorkflows(t *testing.T) {
-	CleanupRootCmd(t)
+	_ = NewTestKit(t)
 
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -110,7 +110,7 @@ func TestDescribeWorkflows(t *testing.T) {
 }
 
 func TestDescribeWorkflowsCmd_Error(t *testing.T) {
-	CleanupRootCmd(t)
+	_ = NewTestKit(t)
 
 	stacksPath := "../tests/fixtures/scenarios/terraform-apply-affected"
 

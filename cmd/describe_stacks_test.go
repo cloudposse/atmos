@@ -14,7 +14,7 @@ import (
 )
 
 func TestDescribeStacksRunnable(t *testing.T) {
-	CleanupRootCmd(t)
+	_ = NewTestKit(t)
 
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -47,7 +47,7 @@ func TestDescribeStacksRunnable(t *testing.T) {
 }
 
 func TestSetFlagValueInDescribeStacksCliArgs(t *testing.T) {
-	CleanupRootCmd(t)
+	_ = NewTestKit(t)
 
 	// Initialize test cases
 	tests := []struct {
@@ -103,7 +103,7 @@ func TestSetFlagValueInDescribeStacksCliArgs(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			CleanupRootCmd(t)
+			_ = NewTestKit(t)
 
 			// Create a new flag set
 			fs := pflag.NewFlagSet("test", pflag.ContinueOnError)
@@ -146,7 +146,7 @@ func TestSetFlagValueInDescribeStacksCliArgs(t *testing.T) {
 }
 
 func TestSetCliArgs_ComponentTypes_StringSlice(t *testing.T) {
-	CleanupRootCmd(t)
+	_ = NewTestKit(t)
 
 	fs := pflag.NewFlagSet("test", pflag.ContinueOnError)
 	// Define only the flags we plan to change
@@ -163,7 +163,7 @@ func TestSetCliArgs_ComponentTypes_StringSlice(t *testing.T) {
 }
 
 func TestDescribeStacksCmd_Error(t *testing.T) {
-	CleanupRootCmd(t)
+	_ = NewTestKit(t)
 
 	stacksPath := "../tests/fixtures/scenarios/terraform-apply-affected"
 

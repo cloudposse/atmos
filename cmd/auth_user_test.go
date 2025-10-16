@@ -13,7 +13,7 @@ import (
 )
 
 func TestAuthUserConfigureCmd(t *testing.T) {
-	CleanupRootCmd(t)
+	_ = NewTestKit(t)
 
 	tests := []struct {
 		name           string
@@ -168,7 +168,7 @@ func TestAuthUserConfigureCmd(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			CleanupRootCmd(t)
+			_ = NewTestKit(t)
 
 			// Create a mock command for testing
 			cmd := &cobra.Command{
@@ -261,7 +261,7 @@ func maskAccessKey(accessKey string) string {
 }
 
 func TestAuthUserCmdStructure(t *testing.T) {
-	CleanupRootCmd(t)
+	_ = NewTestKit(t)
 
 	// Create a mock command to test structure
 	cmd := &cobra.Command{
@@ -288,7 +288,7 @@ func TestAuthUserCmdStructure(t *testing.T) {
 }
 
 func TestAuthUserConfigureCmdStructure(t *testing.T) {
-	CleanupRootCmd(t)
+	_ = NewTestKit(t)
 
 	// Create a mock configure command
 	configureCmd := &cobra.Command{
@@ -303,7 +303,7 @@ func TestAuthUserConfigureCmdStructure(t *testing.T) {
 }
 
 func TestCredentialValidation(t *testing.T) {
-	CleanupRootCmd(t)
+	_ = NewTestKit(t)
 
 	tests := []struct {
 		name        string
@@ -357,7 +357,7 @@ func TestCredentialValidation(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			CleanupRootCmd(t)
+			_ = NewTestKit(t)
 
 			// Mock credential validation
 			hasError := tt.accessKey == "" || tt.secretKey == ""
@@ -372,7 +372,7 @@ func TestCredentialValidation(t *testing.T) {
 }
 
 func TestMaskAccessKey(t *testing.T) {
-	CleanupRootCmd(t)
+	_ = NewTestKit(t)
 
 	tests := []struct {
 		input    string
@@ -398,7 +398,7 @@ func TestMaskAccessKey(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.input, func(t *testing.T) {
-			CleanupRootCmd(t)
+			_ = NewTestKit(t)
 
 			result := maskAccessKey(tt.input)
 			assert.Equal(t, tt.expected, result)

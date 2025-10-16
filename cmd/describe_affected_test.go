@@ -13,7 +13,7 @@ import (
 )
 
 func TestDescribeAffected(t *testing.T) {
-	CleanupRootCmd(t)
+	_ = NewTestKit(t)
 
 	t.Chdir("../tests/fixtures/scenarios/basic")
 	ctrl := gomock.NewController(t)
@@ -35,7 +35,7 @@ func TestDescribeAffected(t *testing.T) {
 }
 
 func TestSetFlagValueInCliArgs(t *testing.T) {
-	CleanupRootCmd(t)
+	_ = NewTestKit(t)
 
 	// Initialize test cases
 	tests := []struct {
@@ -102,7 +102,7 @@ func TestSetFlagValueInCliArgs(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			CleanupRootCmd(t)
+			_ = NewTestKit(t)
 
 			// Create a new flag set
 			fs := pflag.NewFlagSet("test", pflag.ContinueOnError)
@@ -155,7 +155,7 @@ func TestSetFlagValueInCliArgs(t *testing.T) {
 }
 
 func TestDescribeAffectedCmd_Error(t *testing.T) {
-	CleanupRootCmd(t)
+	_ = NewTestKit(t)
 
 	stacksPath := "../tests/fixtures/scenarios/terraform-apply-affected"
 

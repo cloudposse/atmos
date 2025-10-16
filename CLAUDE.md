@@ -299,11 +299,6 @@ var (
   - Without cleanup, tests pass in isolation but fail when run together
   - We use reflection to properly reset StringSlice flags which append instead of replace
 
-- **Legacy pattern** (deprecated, use TestKit instead):
-  ```go
-  CleanupRootCmd(t) // Old pattern - TestKit is preferred
-  ```
-
 - **Implementation notes**:
   - TestKit wraps `testing.TB` and adds automatic RootCmd cleanup
   - Snapshots ALL flag values and their Changed state when created

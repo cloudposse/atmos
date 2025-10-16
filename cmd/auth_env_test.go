@@ -16,7 +16,7 @@ import (
 )
 
 func TestAuthEnvCmd(t *testing.T) {
-	CleanupRootCmd(t)
+	_ = NewTestKit(t)
 
 	tests := []struct {
 		name           string
@@ -168,7 +168,7 @@ func TestAuthEnvCmd(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			CleanupRootCmd(t)
+			_ = NewTestKit(t)
 
 			// Create a mock command for testing
 			cmd := &cobra.Command{
@@ -278,7 +278,7 @@ func TestAuthEnvCmd(t *testing.T) {
 }
 
 func TestAuthEnvCmdFlags(t *testing.T) {
-	CleanupRootCmd(t)
+	_ = NewTestKit(t)
 
 	// Create a mock command to test flag structure
 	cmd := &cobra.Command{
@@ -299,7 +299,7 @@ func TestAuthEnvCmdFlags(t *testing.T) {
 }
 
 func TestFormatEnvironmentVariables(t *testing.T) {
-	CleanupRootCmd(t)
+	_ = NewTestKit(t)
 
 	envVars := []schema.EnvironmentVariable{
 		{Key: "AWS_PROFILE", Value: "test-profile"},
@@ -335,7 +335,7 @@ func TestFormatEnvironmentVariables(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.format, func(t *testing.T) {
-			CleanupRootCmd(t)
+			_ = NewTestKit(t)
 
 			var output strings.Builder
 
