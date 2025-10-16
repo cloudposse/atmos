@@ -40,5 +40,8 @@ func init() {
 		log.Trace("Failed to bind identity flag", "error", err)
 	}
 
+	// Add completion for identity flag.
+	AddIdentityCompletion(authCmd)
+
 	RootCmd.AddCommand(authCmd)
 }
