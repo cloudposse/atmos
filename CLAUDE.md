@@ -576,7 +576,15 @@ Use fixtures in `tests/test-cases/` for integration tests. Each test case should
   - Link to supporting GitHub issues or documentation
   - Use `closes #123` if PR closes an issue
   ```
-- **Use "no-release" label** for documentation-only changes
+- **Add changelog entry for feature releases**:
+  - PRs labeled `minor` or `major` MUST include a blog post in `website/blog/`
+  - Create a new file: `website/blog/YYYY-MM-DD-feature-name.mdx`
+  - Follow the format of existing blog posts (frontmatter with slug, title, authors, tags)
+  - Include `<!--truncate-->` marker after the introduction paragraph
+  - Explain what the feature does, why it's useful, and provide examples
+  - Link to relevant documentation using `/cli/commands/` or `/core-concepts/` paths
+  - The CI workflow will fail and comment on the PR if this is missing
+- **Use "no-release" label" for documentation-only changes
 - **Ensure all CI checks pass** before requesting review
 
 ### Checking PR Security Alerts and CI Status
