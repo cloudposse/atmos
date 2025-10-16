@@ -202,6 +202,10 @@ func TestWalkTerraformComponents(t *testing.T) {
 
 // TestProcessTerraformComponent exercises the filtering logic of processTerraformComponent.
 func TestProcessTerraformComponent(t *testing.T) {
+	// gomonkey causes SIGBUS crashes on ARM64 macOS due to memory protection.
+	// Skip this test entirely on darwin/arm64.
+	tests.SkipOnDarwinARM64(t, "gomonkey causes fatal SIGBUS errors on ARM64 macOS")
+
 	atmosConfig := schema.AtmosConfiguration{}
 	logFunc := func(msg interface{}, keyvals ...interface{}) {}
 	stack := "s1"
@@ -217,13 +221,6 @@ func TestProcessTerraformComponent(t *testing.T) {
 	}
 
 	t.Run("abstract", func(t *testing.T) {
-		// Catch panics from gomonkey on ARM64 platforms.
-		defer func() {
-			if r := recover(); r != nil {
-				t.Skipf("gomonkey function mocking failed (likely due to ARM64 platform issues): %v", r)
-			}
-		}()
-
 		section := newSection(map[string]any{"type": "abstract"})
 		called := false
 		patch := gomonkey.ApplyFunc(ExecuteTerraform, func(i schema.ConfigAndStacksInfo) error {
@@ -239,13 +236,6 @@ func TestProcessTerraformComponent(t *testing.T) {
 	})
 
 	t.Run("disabled", func(t *testing.T) {
-		// Catch panics from gomonkey on ARM64 platforms.
-		defer func() {
-			if r := recover(); r != nil {
-				t.Skipf("gomonkey function mocking failed (likely due to ARM64 platform issues): %v", r)
-			}
-		}()
-
 		section := newSection(map[string]any{"enabled": false})
 		called := false
 		patch := gomonkey.ApplyFunc(ExecuteTerraform, func(i schema.ConfigAndStacksInfo) error {
@@ -261,13 +251,6 @@ func TestProcessTerraformComponent(t *testing.T) {
 	})
 
 	t.Run("query not satisfied", func(t *testing.T) {
-		// Catch panics from gomonkey on ARM64 platforms.
-		defer func() {
-			if r := recover(); r != nil {
-				t.Skipf("gomonkey function mocking failed (likely due to ARM64 platform issues): %v", r)
-			}
-		}()
-
 		section := newSection(map[string]any{"enabled": true})
 		called := false
 		patch := gomonkey.ApplyFunc(ExecuteTerraform, func(i schema.ConfigAndStacksInfo) error {
@@ -283,13 +266,6 @@ func TestProcessTerraformComponent(t *testing.T) {
 	})
 
 	t.Run("execute", func(t *testing.T) {
-		// Catch panics from gomonkey on ARM64 platforms.
-		defer func() {
-			if r := recover(); r != nil {
-				t.Skipf("gomonkey function mocking failed (likely due to ARM64 platform issues): %v", r)
-			}
-		}()
-
 		section := newSection(map[string]any{"enabled": true})
 		called := false
 		patch := gomonkey.ApplyFunc(ExecuteTerraform, func(i schema.ConfigAndStacksInfo) error {
