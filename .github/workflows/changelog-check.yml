@@ -13,17 +13,25 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Check if PR has minor or major label
+      - name: Check if PR has minor or major label and targets main
         id: check-labels
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           PR_NUMBER="${{ github.event.pull_request.number }}"
+          BASE_REF="${{ github.event.pull_request.base.ref }}"
           LABELS=$(gh pr view $PR_NUMBER --json labels --jq '.labels[].name')
+
+          # Only require changelog for PRs targeting main branch
+          if [ "$BASE_REF" != "main" ]; then
+            echo "requires_changelog=false" >> $GITHUB_OUTPUT
+            echo "✅ PR does not target main branch - changelog entry not required"
+            exit 0
+          fi
 
           if echo "$LABELS" | grep -qE '^(minor|major)$'; then
             echo "requires_changelog=true" >> $GITHUB_OUTPUT
-            echo "PR has minor or major label - changelog entry required"
+            echo "PR targets main and has minor or major label - changelog entry required"
           else
             echo "requires_changelog=false" >> $GITHUB_OUTPUT
             echo "PR does not have minor or major label - changelog entry not required"
