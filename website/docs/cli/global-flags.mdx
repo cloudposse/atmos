@@ -22,49 +22,7 @@ These flags are available for every Atmos command:
 <dl>
     <dt>`--chdir` / `-C`</dt>
     <dd>
-        Change the process working directory before Atmos does anything. Equivalent to running `cd <directory>` before `atmos`.
-
-        **What it actually does:**
-        - Calls `os.Chdir()` to change the process's current working directory
-        - Happens **before** any configuration loading or path resolution
-        - ALL subsequent file operations use the new directory as the base
-        - Changes where relative paths are resolved from
-
-        **How it differs from `--base-path`:**
-        - `--chdir`: Changes the **process working directory** (like running `cd` first)
-        - `--base-path`: Provides a **path prefix** for Atmos configuration paths, without changing the working directory
-        - When both are used: `--chdir` changes the directory first, then `--base-path` paths are resolved from that new directory
-
-        **Example to show the difference:**
-        ```bash
-        # Without any flags (current directory: /home/user)
-        atmos terraform plan
-        # Looks for atmos.yaml in: /home/user/atmos.yaml
-        # Resolves components from: /home/user/components/terraform/
-
-        # With --chdir (changes working directory to /infra)
-        atmos --chdir=/infra terraform plan
-        # Looks for atmos.yaml in: /infra/atmos.yaml
-        # Resolves components from: /infra/components/terraform/
-        # ALL paths resolved relative to /infra
-
-        # With --base-path (working directory stays /home/user)
-        atmos --base-path=/infra terraform plan
-        # Looks for atmos.yaml using: /infra (joined with config paths)
-        # Resolves components from: /infra/components/terraform/
-        # But relative paths in config still resolve from /home/user
-
-        # With both (changes directory THEN applies prefix)
-        atmos --chdir=/home/user --base-path=/infra terraform plan
-        # Working directory: /home/user
-        # Base path prefix: /infra
-        # Paths joined: /home/user working dir + /infra base path
-        ```
-
-        **Path resolution:**
-        - Supports both absolute and relative paths
-        - Relative paths are resolved from your **current shell directory** before changing
-        - Can also use `ATMOS_CHDIR` environment variable
+        Change the working directory before Atmos runs. Equivalent to running `cd <directory>` before executing `atmos`.
 
         **Use Cases:**
         - **Development workflow**: Test local Atmos builds against different infrastructure repos
@@ -72,7 +30,7 @@ These flags are available for every Atmos command:
         - **Multi-repo operations**: Execute commands across multiple repos without changing your shell
         - **Scripting**: Simplify scripts that operate on different directories
 
-        **Examples:**
+        **Basic Usage:**
         ```bash
         # Run as if you did: cd /path/to/infra && atmos terraform plan
         atmos -C /path/to/infra terraform plan vpc -s prod
@@ -80,43 +38,84 @@ These flags are available for every Atmos command:
         # Use environment variable
         ATMOS_CHDIR=/infrastructure atmos list components
         ```
+
+        <details>
+        <summary><strong>How it differs from <code>--base-path</code></strong></summary>
+
+        **`--chdir`**: Changes the **process working directory** (calls `os.Chdir()`)
+        - Like running `cd` before `atmos`
+        - ALL file operations use the new directory
+        - Happens **before** any configuration loading
+
+        **`--base-path`**: Provides a **path prefix** for configuration (just a string)
+        - Does **not** change the working directory
+        - Used when joining paths: `filepath.Join(basePath, componentPath)`
+        - Processed **after** `--chdir`
+
+        **Examples showing the difference:**
+        ```bash
+        # Without any flags (current directory: /home/user)
+        atmos terraform plan
+        # Looks for atmos.yaml in: /home/user/atmos.yaml
+        # Resolves components from: /home/user/components/terraform/
+
+        # With --chdir (changes working directory)
+        atmos --chdir=/infra terraform plan
+        # Working directory changed to: /infra
+        # Looks for atmos.yaml in: /infra/atmos.yaml
+        # Resolves components from: /infra/components/terraform/
+
+        # With --base-path (working directory unchanged)
+        atmos --base-path=/infra terraform plan
+        # Working directory still: /home/user
+        # Base path prefix: /infra
+        # Looks for atmos.yaml using: /infra prefix
+        # Relative paths in config resolve from: /home/user
+
+        # With both flags
+        atmos --chdir=/home/user --base-path=/infra terraform plan
+        # First: changes working directory to /home/user
+        # Then: uses /infra as base path prefix
+        # Result: paths like /infra are resolved relative to /home/user
+        ```
+        </details>
     </dd>
 
     <dt>`--base-path`</dt>
     <dd>
-        Specify a path prefix for Atmos configuration lookups without changing the working directory.
-
-        **What it actually does:**
-        - Sets `atmosConfig.BasePath` which is used as a prefix when joining paths
-        - Does **not** call `os.Chdir()` or change the working directory
-        - Used when constructing paths to: stacks, terraform components, helmfile components, packer components
-        - The value is joined with component paths: `filepath.Join(basePath, componentPath)`
-
-        **How it differs from `--chdir`:**
-        - `--base-path`: A **configuration value** used as a path prefix (doesn't change working directory)
-        - `--chdir`: Actually **changes the working directory** of the process
-        - See examples above under `--chdir` for detailed comparison
+        Specify the Atmos project root directory. Use this when your `atmos.yaml` and components are in a non-standard location.
 
         **When to use it:**
-        - Your `atmos.yaml` and components are in a subdirectory, but you want to run Atmos from a parent directory
-        - You're using Atmos programmatically (like the Terraform provider) and need to override the base path
-        - You have a non-standard project layout where the Atmos project root isn't the current directory
+        - Your `atmos.yaml` and components are in a subdirectory
+        - Using Atmos programmatically (like the Terraform provider)
+        - Non-standard project layout where the Atmos root isn't the current directory
 
-        **Path resolution:**
-        - Supports both absolute and relative paths
-        - Relative paths are resolved using `filepath.Abs()` from the current working directory
-        - If `--chdir` was used, relative paths resolve from the NEW working directory
-        - Can also use `ATMOS_BASE_PATH` environment variable
-
-        **Examples:**
+        **Basic Usage:**
         ```bash
         # Look for atmos.yaml and components using /custom/path as the base
         atmos --base-path=/custom/path terraform plan vpc -s prod
 
-        # Combine with --chdir: first change to /infra, then use ./custom as base path
+        # Combine with --chdir
         atmos --chdir=/infra --base-path=./custom describe stacks
-        # This changes working dir to /infra, then uses /infra/custom as the base path
         ```
+
+        <details>
+        <summary><strong>Technical details</strong></summary>
+
+        **What it does internally:**
+        - Sets `atmosConfig.BasePath` (a configuration value, not a directory change)
+        - Used as a prefix when joining paths: `filepath.Join(basePath, componentPath)`
+        - Constructs paths to: stacks, terraform components, helmfile components, packer components
+        - Does **not** call `os.Chdir()` or change the working directory
+
+        **Path resolution:**
+        - Supports both absolute and relative paths
+        - Relative paths resolved using `filepath.Abs()` from current working directory
+        - If `--chdir` was used, relative paths resolve from the NEW working directory
+        - Can also use `ATMOS_BASE_PATH` environment variable
+
+        See `--chdir` section above for detailed comparison of how these flags interact.
+        </details>
     </dd>
 
     <dt>`--config`</dt>
