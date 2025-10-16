@@ -51,8 +51,8 @@ esac
 	assert.NoError(t, err)
 
 	// Save original PATH and modify it to include our temp directory.
+	originalPath := os.Getenv("PATH")
 	t.Setenv("PATH", tempDir+string(os.PathListSeparator)+originalPath)
-	assert.NoError(t, err)
 
 	tests := []struct {
 		name     string
@@ -161,8 +161,8 @@ echo '{"nested": {"key": "value"}, "array": [1, 2, 3], "bool": true, "null": nul
 	assert.NoError(t, err)
 
 	// Save original PATH and modify it to include our temp directory.
+	originalPath := os.Getenv("PATH")
 	t.Setenv("PATH", tempDir+string(os.PathListSeparator)+originalPath)
-	assert.NoError(t, err)
 
 	input := "!exec test-bash"
 	result, err := ProcessTagExec(input)
@@ -206,8 +206,8 @@ echo "invalid json {"
 	assert.NoError(t, err)
 
 	// Save original PATH and modify it to include our temp directory.
+	originalPath := os.Getenv("PATH")
 	t.Setenv("PATH", tempDir+string(os.PathListSeparator)+originalPath)
-	assert.NoError(t, err)
 
 	input := "!exec test-bash"
 	result, err := ProcessTagExec(input)
