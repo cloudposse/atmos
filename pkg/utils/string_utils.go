@@ -129,7 +129,7 @@ var (
 //
 // Thread-safe for concurrent use.
 // Note: perf.Track removed from this critical path function as it's called millions of times.
-func Intern(atmosConfig *schema.AtmosConfiguration, s string) string {
+func Intern(_ *schema.AtmosConfiguration, s string) string {
 	// Empty strings are not interned.
 	if s == "" {
 		return s
