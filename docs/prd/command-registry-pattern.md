@@ -286,7 +286,60 @@ func (a *AboutCommandProvider) GetGroup() string {
 }
 ```
 
-### 4. Updated Root Command
+### 4. Markdown Content Management
+
+All markdown content is centralized in `cmd/markdown/` and accessed through the `cmd/markdown` package.
+
+**Why This Pattern?**
+
+Go's `//go:embed` directive cannot reference parent directories using `..` when used from subpackages. To maintain a single source of truth for markdown content while supporting the package-per-command structure, we:
+
+1. Store all markdown files in `cmd/markdown/`
+2. Export them via `cmd/markdown/content.go`
+3. Import them in command packages
+
+**Example:**
+
+```go
+// cmd/markdown/content.go
+package markdown
+
+import _ "embed"
+
+// AboutMarkdown contains the content for the about command.
+//
+//go:embed about.md
+var AboutMarkdown string
+```
+
+```go
+// cmd/about/about.go
+package about
+
+import (
+    "github.com/spf13/cobra"
+    "github.com/cloudposse/atmos/cmd/markdown"
+    "github.com/cloudposse/atmos/pkg/utils"
+)
+
+var aboutCmd = &cobra.Command{
+    Use:   "about",
+    Short: "Learn about Atmos",
+    RunE: func(cmd *cobra.Command, args []string) error {
+        utils.PrintfMarkdown("%s", markdown.AboutMarkdown)
+        return nil
+    },
+}
+```
+
+**Benefits:**
+
+- ✅ Single source of truth for all markdown content
+- ✅ No duplicate files across command packages
+- ✅ Compatible with Go's embed restrictions
+- ✅ Easy to maintain and update content
+
+### 5. Updated Root Command
 
 ```go
 // cmd/root.go

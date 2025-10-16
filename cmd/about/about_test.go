@@ -7,6 +7,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+
+	"github.com/cloudposse/atmos/cmd/markdown"
 )
 
 func TestAboutCmd(t *testing.T) {
@@ -31,7 +33,7 @@ func TestAboutCmd(t *testing.T) {
 	assert.NoError(t, err, "'atmos about' command should execute without error")
 
 	// Check if the output contains expected markdown content.
-	assert.Contains(t, output.String(), aboutMarkdown, "'atmos about' output should contain information about Atmos")
+	assert.Contains(t, output.String(), markdown.AboutMarkdown, "'atmos about' output should contain information about Atmos")
 }
 
 func TestAboutCommandProvider(t *testing.T) {

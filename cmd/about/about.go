@@ -1,16 +1,12 @@
 package about
 
 import (
-	_ "embed"
-
 	"github.com/spf13/cobra"
 
 	"github.com/cloudposse/atmos/cmd/internal"
+	"github.com/cloudposse/atmos/cmd/markdown"
 	"github.com/cloudposse/atmos/pkg/utils"
 )
-
-//go:embed markdown_about.md
-var aboutMarkdown string
 
 // aboutCmd represents the about command.
 var aboutCmd = &cobra.Command{
@@ -19,7 +15,7 @@ var aboutCmd = &cobra.Command{
 	Long:  `Display information about Atmos, its features, and benefits.`,
 	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		utils.PrintfMarkdown("%s", aboutMarkdown)
+		utils.PrintfMarkdown("%s", markdown.AboutMarkdown)
 		return nil
 	},
 }

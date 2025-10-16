@@ -493,28 +493,61 @@ Use these standard groups for `GetGroup()`:
 
 ---
 
-## Embedding Markdown
+## Using Markdown Content
 
-For complex examples or help text, use embedded markdown:
+Atmos maintains all markdown content in the centralized `cmd/markdown/` directory. Command packages access this content through the `cmd/markdown` package.
+
+**Step 1: Add your markdown file**
+
+Create your markdown file in `cmd/markdown/`:
+
+```bash
+# cmd/markdown/mycommand_description.md
+# My Command
+
+Detailed description of what your command does...
+```
+
+**Step 2: Export the markdown in `cmd/markdown/content.go`**
+
+```go
+// cmd/markdown/content.go
+package markdown
+
+import _ "embed"
+
+//go:embed mycommand_description.md
+var MyCommandDescription string
+```
+
+**Step 3: Use it in your command**
 
 ```go
 // cmd/mycommand/mycommand.go
 package mycommand
 
 import (
-    _ "embed"
     "github.com/spf13/cobra"
+    "github.com/cloudposse/atmos/cmd/markdown"
+    "github.com/cloudposse/atmos/pkg/utils"
 )
 
-//go:embed ../markdown/mycommand_usage.md
-var usageMarkdown string
-
 var mycommandCmd = &cobra.Command{
-    Use:     "mycommand",
-    Example: usageMarkdown,
-    // ...
+    Use:   "mycommand",
+    Short: "Brief description",
+    RunE: func(cmd *cobra.Command, args []string) error {
+        utils.PrintfMarkdown("%s", markdown.MyCommandDescription)
+        return nil
+    },
 }
 ```
+
+**Why This Pattern?**
+
+- ✅ **Single source of truth** - All markdown in one location
+- ✅ **No duplicate files** - Avoids copying markdown into each package
+- ✅ **Works with Go embed** - Subpackages can't use `..` in embed paths
+- ✅ **Easy to maintain** - Update markdown in one place
 
 ---
 
