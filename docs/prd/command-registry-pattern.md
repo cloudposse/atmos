@@ -429,7 +429,7 @@ func Execute() error {
 
 ### Custom Command Override Behavior
 
-**Scenario 1: Custom command with same name as built-in**
+**Scenario 1: Custom command with same name as built-in (top-level command)**
 
 ```yaml
 # atmos.yaml
@@ -442,9 +442,25 @@ commands:
       - terraform {{ .arguments.subcommand }}
 ```
 
-**Result:** Custom `terraform` command **replaces** the built-in `terraform` command.
+**Result:** Custom `terraform` command **reuses** the built-in `terraform` command and **replaces its behavior**.
 
-**Scenario 2: Custom command with new name**
+**Scenario 2: Custom command extending built-in with subcommands**
+
+```yaml
+# atmos.yaml
+commands:
+  - name: terraform  # Same name as built-in command
+    commands:  # Add subcommands
+      - name: custom-plan
+        description: Custom plan with extra validation
+        steps:
+          - echo "Running custom validation..."
+          - terraform plan
+```
+
+**Result:** Custom `custom-plan` subcommand is **added** to the built-in `terraform` command. The built-in command still works, but now has additional subcommands.
+
+**Scenario 3: Custom command with new name**
 
 ```yaml
 # atmos.yaml
@@ -460,27 +476,46 @@ commands:
 
 ### Why This Works
 
-The existing `processCustomCommands()` function (in `cmd/cmd_utils.go`) uses Cobra's `AddCommand()`:
+The existing `processCustomCommands()` function (in `cmd/cmd_utils.go`) handles command extension:
 
 ```go
-// From cmd/cmd_utils.go
+// From cmd/cmd_utils.go (simplified)
 func processCustomCommands(
     atmosConfig schema.AtmosConfiguration,
     commands []schema.Command,
     parentCommand *cobra.Command,
     topLevel bool,
 ) error {
-    // ... code that creates cobra.Command from custom command config ...
+    existingTopLevelCommands := make(map[string]*cobra.Command)
 
-    // If custom command has same name as built-in,
-    // Cobra's AddCommand() will replace the existing command
-    parentCommand.AddCommand(customCommand)
+    if topLevel {
+        // Get all existing commands registered by the registry
+        existingTopLevelCommands = getTopLevelCommands()
+    }
+
+    for _, commandCfg := range commands {
+        var command *cobra.Command
+
+        // Check if command already exists (from registry)
+        if _, exist := existingTopLevelCommands[commandCfg.Name]; exist && topLevel {
+            // REUSE the existing command - this allows extending it
+            command = existingTopLevelCommands[commandCfg.Name]
+        } else {
+            // CREATE new custom command
+            command = &cobra.Command{ /* ... */ }
+            parentCommand.AddCommand(command)
+        }
+
+        // Recursively process nested commands (subcommands)
+        processCustomCommands(atmosConfig, commandCfg.Commands, command, false)
+    }
 }
 ```
 
-Cobra naturally handles the override behavior:
-- If command exists → replaces it
-- If command doesn't exist → adds it
+**Key behaviors:**
+- **Top-level custom command with existing name** → reuses registry command, can replace behavior or add subcommands
+- **Top-level custom command with new name** → creates new command
+- **Nested custom commands** → always added as subcommands to parent
 
 **No changes needed to custom command processing** - the registry pattern coexists perfectly.
 

@@ -325,3 +325,46 @@ func TestConcurrency(t *testing.T) {
 
 	assert.Equal(t, 10, Count())
 }
+
+func TestCustomCommandCanExtendRegistryCommand(t *testing.T) {
+	Reset()
+
+	// Simulate a registry command (e.g., "terraform")
+	registryCmd := &cobra.Command{
+		Use:   "terraform",
+		Short: "Built-in terraform command",
+	}
+
+	provider := &mockCommandProvider{
+		name:  "terraform",
+		group: "Core Stack Commands",
+		cmd:   registryCmd,
+	}
+
+	Register(provider)
+
+	// Register with root
+	rootCmd := &cobra.Command{Use: "root"}
+	err := RegisterAll(rootCmd)
+	require.NoError(t, err)
+
+	// Verify command is registered
+	tfCmd, _, err := rootCmd.Find([]string{"terraform"})
+	require.NoError(t, err)
+	assert.Equal(t, "terraform", tfCmd.Use)
+	assert.False(t, tfCmd.HasSubCommands(), "should have no subcommands initially")
+
+	// Simulate custom command extending it by adding a subcommand
+	// This is what processCustomCommands() would do in cmd/cmd_utils.go
+	customSubCmd := &cobra.Command{
+		Use:   "custom-plan",
+		Short: "Custom terraform plan with extra validation",
+	}
+	tfCmd.AddCommand(customSubCmd)
+
+	// Verify the registry command now has the custom subcommand
+	assert.True(t, tfCmd.HasSubCommands(), "should have subcommands after extension")
+	customCmd, _, err := tfCmd.Find([]string{"custom-plan"})
+	require.NoError(t, err)
+	assert.Equal(t, "custom-plan", customCmd.Use)
+}
