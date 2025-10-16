@@ -631,6 +631,16 @@ func TestMergeDefaultImports_WindowsCaseInsensitive(t *testing.T) {
 	// Create temp directory
 	tempDir := t.TempDir()
 
+	// Create sentinel file in .atmos.d to verify if import happens
+	atmosDDir := filepath.Join(tempDir, ".atmos.d")
+	err := os.MkdirAll(atmosDDir, 0o755)
+	assert.NoError(t, err)
+
+	sentinelContent := `sentinel_key: sentinel_value`
+	sentinelPath := filepath.Join(atmosDDir, "sentinel.yaml")
+	err = os.WriteFile(sentinelPath, []byte(sentinelContent), 0o644)
+	assert.NoError(t, err)
+
 	// Test case-insensitive matching by setting exclude with different case
 	upperCasePath := strings.ToUpper(tempDir)
 	lowerCasePath := strings.ToLower(tempDir)
@@ -641,10 +651,12 @@ func TestMergeDefaultImports_WindowsCaseInsensitive(t *testing.T) {
 	// Call the function with the path in uppercase
 	v := viper.New()
 	v.SetConfigType("yaml") // Set config type as done in production code
-	err := mergeDefaultImports(upperCasePath, v)
+	err = mergeDefaultImports(upperCasePath, v)
 
 	// Should skip and return nil since paths match case-insensitively on Windows
 	assert.NoError(t, err, "Should match case-insensitively on Windows")
+	// Verify that the sentinel key was NOT loaded (config import was skipped)
+	assert.False(t, v.IsSet("sentinel_key"), "Viper should not contain sentinel key when import is skipped")
 }
 
 func TestProcessConfigImportsAndReapply_MalformedYAML(t *testing.T) {
