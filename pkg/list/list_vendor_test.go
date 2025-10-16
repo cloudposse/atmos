@@ -18,11 +18,7 @@ import (
 // TestFilterAndListVendor tests the vendor listing functionality
 
 func TestFilterAndListVendor(t *testing.T) {
-	tempDir, err := os.MkdirTemp("", "atmos-test-vendor")
-	if err != nil {
-		t.Fatalf("Error creating temp dir: %v", err)
-	}
-	defer os.RemoveAll(tempDir)
+	tempDir := t.TempDir()
 
 	vendorDir := filepath.Join(tempDir, "vendor.d")
 	err = os.Mkdir(vendorDir, 0o755)
