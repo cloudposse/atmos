@@ -13,14 +13,21 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
+// pathMatchKey is a composite key for PathMatch cache to avoid collisions.
+// Using a struct prevents issues when pattern or name contains delimiter characters.
+type pathMatchKey struct {
+	pattern string
+	name    string
+}
+
 var (
 	getGlobMatchesSyncMap = sync.Map{}
 
 	// PathMatchCache stores PathMatch results to avoid redundant pattern matching.
-	// Cache key: "pattern|name" -> match result (bool).
+	// Cache key: pathMatchKey{pattern, name} -> match result (bool).
 	// This cache is particularly effective during affected detection where the same
 	// patterns are matched against the same files repeatedly in nested loops.
-	pathMatchCache   = make(map[string]bool)
+	pathMatchCache   = make(map[pathMatchKey]bool)
 	pathMatchCacheMu sync.RWMutex
 )
 
@@ -71,7 +78,7 @@ func GetGlobMatches(pattern string) ([]string, error) {
 // Results are cached to avoid redundant pattern matching during affected detection.
 func PathMatch(pattern, name string) (bool, error) {
 	// Try cache first (read lock).
-	cacheKey := pattern + "|" + name
+	cacheKey := pathMatchKey{pattern: pattern, name: name}
 	pathMatchCacheMu.RLock()
 	result, found := pathMatchCache[cacheKey]
 	pathMatchCacheMu.RUnlock()

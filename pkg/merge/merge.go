@@ -159,8 +159,8 @@ func normalizeSliceReflect(rv reflect.Value) []any {
 	return result
 }
 
-// normalizeMapReflect converts a typed map with string keys to map[string]any using reflection and pooling.
-func normalizeMapReflect(rv reflect.Value, value any) any {
+// normalizeMapReflect converts a typed map to map[string]any (for string keys) or deep copies it (for non-string keys).
+func normalizeMapReflect(rv reflect.Value) any {
 	// Empty map - return empty pooled map.
 	if rv.Len() == 0 {
 		return getEmptyPooledMap()
@@ -172,12 +172,25 @@ func normalizeMapReflect(rv reflect.Value, value any) any {
 		return getEmptyPooledMap()
 	}
 
-	// Non-string keys - return as-is.
+	// Non-string keys - deep copy to same type to avoid aliasing.
 	if iter.Key().Kind() != reflect.String {
-		return value
+		// Create a new map of the same type with preallocated size.
+		copyMap := reflect.MakeMapWithSize(rv.Type(), rv.Len())
+
+		// Set first key-value pair.
+		copiedValue := deepCopyValue(iter.Value().Interface())
+		copyMap.SetMapIndex(iter.Key(), reflect.ValueOf(copiedValue))
+
+		// Set remaining pairs.
+		for iter.Next() {
+			copiedValue = deepCopyValue(iter.Value().Interface())
+			copyMap.SetMapIndex(iter.Key(), reflect.ValueOf(copiedValue))
+		}
+
+		return copyMap.Interface()
 	}
 
-	// Convert to map[string]any.
+	// String keys - convert to map[string]any using pooling.
 	result := getEmptyPooledMap()
 
 	// Process first key-value pair.
@@ -198,7 +211,7 @@ func normalizeValueReflect(value any) any {
 	case reflect.Slice:
 		return normalizeSliceReflect(rv)
 	case reflect.Map:
-		return normalizeMapReflect(rv, value)
+		return normalizeMapReflect(rv)
 	default:
 		// Primitives and other types - return as-is.
 		return value
