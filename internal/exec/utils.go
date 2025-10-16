@@ -1,6 +1,8 @@
 package exec
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"sort"
@@ -179,16 +181,42 @@ type findStacksMapCacheEntry struct {
 	rawStackConfigs map[string]map[string]any
 }
 
-// getFindStacksMapCacheKey generates a cache key from atmosConfig and parameters.
+// getFindStacksMapCacheKey generates a content-aware cache key from atmosConfig and parameters.
+// The cache key includes all paths and file lists that affect stack processing,
+// ensuring proper cache invalidation when configuration changes.
 func getFindStacksMapCacheKey(atmosConfig *schema.AtmosConfiguration, ignoreMissingFiles bool) string {
-	// Create a simple cache key from the most relevant config fields.
-	// We use paths that identify the stack configuration uniquely.
-	return fmt.Sprintf("%s|%s|%v|%d",
-		atmosConfig.StacksBaseAbsolutePath,
-		atmosConfig.TerraformDirAbsolutePath,
-		ignoreMissingFiles,
-		len(atmosConfig.StackConfigFilesAbsolutePaths),
-	)
+	const cacheKeyDelimiter = "|"
+
+	// Build a string containing all cache-relevant configuration.
+	// Include all component directories that affect stack processing.
+	var keyBuilder strings.Builder
+	keyBuilder.WriteString(atmosConfig.StacksBaseAbsolutePath)
+	keyBuilder.WriteString(cacheKeyDelimiter)
+	keyBuilder.WriteString(atmosConfig.TerraformDirAbsolutePath)
+	keyBuilder.WriteString(cacheKeyDelimiter)
+	keyBuilder.WriteString(atmosConfig.HelmfileDirAbsolutePath)
+	keyBuilder.WriteString(cacheKeyDelimiter)
+	keyBuilder.WriteString(atmosConfig.PackerDirAbsolutePath)
+	keyBuilder.WriteString(cacheKeyDelimiter)
+	keyBuilder.WriteString(fmt.Sprintf("%v", ignoreMissingFiles))
+	keyBuilder.WriteString(cacheKeyDelimiter)
+
+	// Include the actual file paths, not just the count.
+	// Sort the paths for consistent hashing.
+	sortedPaths := make([]string, len(atmosConfig.StackConfigFilesAbsolutePaths))
+	copy(sortedPaths, atmosConfig.StackConfigFilesAbsolutePaths)
+	sort.Strings(sortedPaths)
+
+	// Add all file paths to the key.
+	for _, path := range sortedPaths {
+		keyBuilder.WriteString(path)
+		keyBuilder.WriteString(cacheKeyDelimiter)
+	}
+
+	// Use SHA-256 hash to create a fixed-length cache key.
+	// This prevents cache key explosion with large numbers of files.
+	hash := sha256.Sum256([]byte(keyBuilder.String()))
+	return hex.EncodeToString(hash[:])
 }
 
 // FindStacksMap processes stack config and returns a map of all stacks.

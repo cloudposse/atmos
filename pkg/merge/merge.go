@@ -43,15 +43,15 @@ var (
 	}
 )
 
-// deepCopyMap performs a deep copy of a map optimized for map[string]any structures.
+// DeepCopyMap performs a deep copy of a map optimized for map[string]any structures.
 // This custom implementation avoids reflection overhead for common cases (maps, slices, primitives)
 // and only falls back to copystructure for rare complex types.
 // Preserves numeric types (unlike JSON which converts all numbers to float64) and is faster than
 // reflection-based copying. The data is already in Go map format with custom tags already processed,
 // so we only need structural copying to work around mergo's pointer mutation bug.
 // Uses object pooling to reduce allocations and GC pressure during high-volume operations.
-func deepCopyMap(m map[string]any) (map[string]any, error) {
-	defer perf.Track(nil, "merge.deepCopyMap")()
+func DeepCopyMap(m map[string]any) (map[string]any, error) {
+	defer perf.Track(nil, "merge.DeepCopyMap")()
 
 	if m == nil {
 		return nil, nil
@@ -74,7 +74,7 @@ func deepCopyMap(m map[string]any) (map[string]any, error) {
 }
 
 // deepCopyValue performs a deep copy of a value, handling common types without reflection.
-// Falls back to copystructure for rare complex types.
+// Uses reflection-based normalization for rare complex types (typed slices/maps).
 // Uses object pooling for maps and slices to reduce allocations.
 func deepCopyValue(v any) any {
 	if v == nil {
@@ -235,7 +235,7 @@ func MergeWithOptions(
 
 	// Fast-path: only one non-empty input, return a deep copy to maintain immutability.
 	if len(nonEmptyInputs) == 1 {
-		return deepCopyMap(nonEmptyInputs[0])
+		return DeepCopyMap(nonEmptyInputs[0])
 	}
 
 	// Standard merge path for multiple non-empty inputs.
@@ -250,7 +250,7 @@ func MergeWithOptions(
 		// we don't give it our maps directly; we deep copy them using copystructure (faster than YAML serialization),
 		// so `mergo` does not have access to the original pointers.
 		// Deep copy preserves types and is sufficient because the data is already in Go map format with custom tags already processed.
-		dataCurrent, err := deepCopyMap(current)
+		dataCurrent, err := DeepCopyMap(current)
 		if err != nil {
 			return nil, fmt.Errorf("%w: failed to deep copy map: %v", errUtils.ErrMerge, err)
 		}
@@ -405,7 +405,7 @@ func MergeWithOptionsAndContext(
 	// Fast-path: only one non-empty input, return a deep copy to maintain immutability.
 	// Skip this fast-path when provenance tracking is enabled to ensure position tracking.
 	if len(nonEmptyInputs) == 1 && !provenanceEnabled {
-		result, err := deepCopyMap(nonEmptyInputs[0])
+		result, err := DeepCopyMap(nonEmptyInputs[0])
 		if err != nil && context != nil {
 			return nil, context.FormatError(err)
 		}

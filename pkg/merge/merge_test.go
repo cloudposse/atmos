@@ -272,7 +272,7 @@ func TestDeepCopyMap_PoolingCorrectness(t *testing.T) {
 	// Copy the same data multiple times to exercise the pool.
 	var copies []map[string]any
 	for i := 0; i < 10; i++ {
-		copy, err := deepCopyMap(testData)
+		copy, err := DeepCopyMap(testData)
 		assert.Nil(t, err)
 		assert.NotNil(t, copy)
 		copies = append(copies, copy)
@@ -318,7 +318,7 @@ func TestDeepCopyMap_Concurrent(t *testing.T) {
 		go func() {
 			<-start
 
-			copy, err := deepCopyMap(testData)
+			copy, err := DeepCopyMap(testData)
 			if err != nil {
 				errors <- err
 				return
@@ -392,7 +392,7 @@ func TestDeepCopyMap_DifferentSizes(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			copy, err := deepCopyMap(tc.data)
+			copy, err := DeepCopyMap(tc.data)
 			assert.Nil(t, err)
 			assert.NotNil(t, copy)
 
@@ -447,7 +447,7 @@ func BenchmarkDeepCopyMap(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, _ = deepCopyMap(testData)
+		_, _ = DeepCopyMap(testData)
 	}
 }
 
@@ -457,7 +457,7 @@ func BenchmarkDeepCopyMap_Large(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, _ = deepCopyMap(testData)
+		_, _ = DeepCopyMap(testData)
 	}
 }
 

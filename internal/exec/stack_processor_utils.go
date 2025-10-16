@@ -122,23 +122,100 @@ func getCachedBaseComponentConfig(cacheKey string) (*schema.BaseComponentConfig,
 	}
 
 	// Deep copy to prevent external mutations from affecting the cache.
-	copyConfig := *cached
+	// All map fields must be deep copied since they are mutable.
+	copyConfig := schema.BaseComponentConfig{
+		FinalBaseComponentName:              cached.FinalBaseComponentName,
+		BaseComponentCommand:                cached.BaseComponentCommand,
+		BaseComponentBackendType:            cached.BaseComponentBackendType,
+		BaseComponentRemoteStateBackendType: cached.BaseComponentRemoteStateBackendType,
+	}
+
+	// Deep copy all map fields.
+	var err error
+	if copyConfig.BaseComponentVars, err = m.DeepCopyMap(cached.BaseComponentVars); err != nil {
+		// If deep copy fails, return not found to force reprocessing.
+		return nil, nil, false
+	}
+	if copyConfig.BaseComponentSettings, err = m.DeepCopyMap(cached.BaseComponentSettings); err != nil {
+		return nil, nil, false
+	}
+	if copyConfig.BaseComponentEnv, err = m.DeepCopyMap(cached.BaseComponentEnv); err != nil {
+		return nil, nil, false
+	}
+	if copyConfig.BaseComponentAuth, err = m.DeepCopyMap(cached.BaseComponentAuth); err != nil {
+		return nil, nil, false
+	}
+	if copyConfig.BaseComponentProviders, err = m.DeepCopyMap(cached.BaseComponentProviders); err != nil {
+		return nil, nil, false
+	}
+	if copyConfig.BaseComponentHooks, err = m.DeepCopyMap(cached.BaseComponentHooks); err != nil {
+		return nil, nil, false
+	}
+	if copyConfig.BaseComponentBackendSection, err = m.DeepCopyMap(cached.BaseComponentBackendSection); err != nil {
+		return nil, nil, false
+	}
+	if copyConfig.BaseComponentRemoteStateBackendSection, err = m.DeepCopyMap(cached.BaseComponentRemoteStateBackendSection); err != nil {
+		return nil, nil, false
+	}
+
+	// Deep copy the slice.
 	copyBaseComponents := make([]string, len(cached.ComponentInheritanceChain))
 	copy(copyBaseComponents, cached.ComponentInheritanceChain)
+	copyConfig.ComponentInheritanceChain = copyBaseComponents
 
 	return &copyConfig, &copyBaseComponents, true
 }
 
 // cacheBaseComponentConfig stores a base component config in the cache.
-// Stores a copy to prevent external mutations from affecting the cache.
+// Stores a deep copy to prevent external mutations from affecting the cache.
 func cacheBaseComponentConfig(cacheKey string, config *schema.BaseComponentConfig) {
 	defer perf.Track(nil, "exec.cacheBaseComponentConfig")()
 
 	baseComponentConfigCacheMu.Lock()
 	defer baseComponentConfigCacheMu.Unlock()
 
-	// Store a copy to prevent external mutations from affecting the cache.
-	copyConfig := *config
+	// Deep copy to prevent external mutations from affecting the cache.
+	// All map fields must be deep copied since they are mutable.
+	copyConfig := schema.BaseComponentConfig{
+		FinalBaseComponentName:              config.FinalBaseComponentName,
+		BaseComponentCommand:                config.BaseComponentCommand,
+		BaseComponentBackendType:            config.BaseComponentBackendType,
+		BaseComponentRemoteStateBackendType: config.BaseComponentRemoteStateBackendType,
+	}
+
+	// Deep copy all map fields.
+	var err error
+	if copyConfig.BaseComponentVars, err = m.DeepCopyMap(config.BaseComponentVars); err != nil {
+		// If deep copy fails, don't cache - log and return.
+		return
+	}
+	if copyConfig.BaseComponentSettings, err = m.DeepCopyMap(config.BaseComponentSettings); err != nil {
+		return
+	}
+	if copyConfig.BaseComponentEnv, err = m.DeepCopyMap(config.BaseComponentEnv); err != nil {
+		return
+	}
+	if copyConfig.BaseComponentAuth, err = m.DeepCopyMap(config.BaseComponentAuth); err != nil {
+		return
+	}
+	if copyConfig.BaseComponentProviders, err = m.DeepCopyMap(config.BaseComponentProviders); err != nil {
+		return
+	}
+	if copyConfig.BaseComponentHooks, err = m.DeepCopyMap(config.BaseComponentHooks); err != nil {
+		return
+	}
+	if copyConfig.BaseComponentBackendSection, err = m.DeepCopyMap(config.BaseComponentBackendSection); err != nil {
+		return
+	}
+	if copyConfig.BaseComponentRemoteStateBackendSection, err = m.DeepCopyMap(config.BaseComponentRemoteStateBackendSection); err != nil {
+		return
+	}
+
+	// Deep copy the slice.
+	copyBaseComponents := make([]string, len(config.ComponentInheritanceChain))
+	copy(copyBaseComponents, config.ComponentInheritanceChain)
+	copyConfig.ComponentInheritanceChain = copyBaseComponents
+
 	baseComponentConfigCache[cacheKey] = &copyConfig
 }
 
@@ -628,6 +705,9 @@ func processYAMLConfigFileWithContextInternal(
 			if err != nil {
 				return nil, nil, nil, nil, nil, nil, nil, errors.Errorf(atmosManifestJsonSchemaValidationErrorFormat, relativeFilePath, err)
 			}
+			defer func() {
+				_ = atmosManifestJsonSchemaFileReader.Close()
+			}()
 
 			if err := compiler.AddResource(atmosManifestJsonSchemaFilePath, atmosManifestJsonSchemaFileReader); err != nil {
 				return nil, nil, nil, nil, nil, nil, nil, errors.Errorf(atmosManifestJsonSchemaValidationErrorFormat, relativeFilePath, err)
@@ -856,6 +936,13 @@ func processYAMLConfigFileWithContextInternal(
 			return nil, nil, nil, nil, nil, nil, nil, err
 		}
 
+		// Initialize provenance storage before parallel processing to avoid data races.
+		// All goroutines will share the same ProvenanceStorage (which is thread-safe).
+		// This prevents multiple goroutines from racing to initialize the Provenance pointer.
+		if atmosConfig != nil && atmosConfig.TrackProvenance && mergeContext != nil {
+			mergeContext.EnableProvenance()
+		}
+
 		// Process the imports in the current manifest in parallel.
 		// While the file I/O, parsing, and recursive import processing can be done in parallel,
 		// the merge operations must be sequential to preserve Atmos inheritance order.
@@ -882,7 +969,7 @@ func processYAMLConfigFileWithContextInternal(
 					mergedContext,
 					ignoreMissingFiles,
 					importStruct.SkipTemplatesProcessing,
-					true, // importStruct.IgnoreMissingTemplateValues,
+					importStruct.IgnoreMissingTemplateValues,
 					importStruct.SkipIfMissing,
 					parentTerraformOverridesInline,
 					parentTerraformOverridesImports,

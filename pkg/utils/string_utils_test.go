@@ -347,8 +347,8 @@ func TestIntern_BasicFunctionality(t *testing.T) {
 	s2 := Intern(atmosConfig, "test-string")
 	assert.Equal(t, "test-string", s2)
 
-	// Verify they're the same underlying string (pointer comparison).
-	// In Go, interned strings should share the same memory address.
+	// Verify they compare equal by value. Implementation may deduplicate storage,
+	// but this test asserts logical equality only.
 	assert.Equal(t, s1, s2)
 
 	// Different string should be different.
