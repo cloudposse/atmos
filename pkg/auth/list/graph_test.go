@@ -1,6 +1,7 @@
 package list
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -435,4 +436,193 @@ func TestGetSortedIdentityNames(t *testing.T) {
 	assert.Equal(t, "admin", names[0])
 	assert.Equal(t, "ci", names[1])
 	assert.Equal(t, "dev", names[2])
+}
+
+// Error condition and edge case tests.
+
+func TestRenderGraphviz_InvalidViaReference(t *testing.T) {
+	// Test that referencing non-existent providers doesn't cause errors.
+	identities := map[string]schema.Identity{
+		"admin": {
+			Kind: "aws/permission-set",
+			Via:  &schema.IdentityVia{Provider: "nonexistent"},
+		},
+	}
+
+	output, err := RenderGraphviz(nil, nil, identities)
+	require.NoError(t, err)
+
+	// Should still generate valid DOT output with edge to nonexistent provider.
+	assert.Contains(t, output, "digraph AuthConfig")
+	assert.Contains(t, output, "admin")
+	assert.Contains(t, output, "nonexistent\" -> \"admin")
+}
+
+func TestRenderGraphviz_CircularIdentityChain(t *testing.T) {
+	// Test circular references (identity A -> identity B -> identity A).
+	identities := map[string]schema.Identity{
+		"identity-a": {
+			Kind: "aws/assume-role",
+			Via:  &schema.IdentityVia{Identity: "identity-b"},
+		},
+		"identity-b": {
+			Kind: "aws/assume-role",
+			Via:  &schema.IdentityVia{Identity: "identity-a"},
+		},
+	}
+
+	output, err := RenderGraphviz(nil, nil, identities)
+	require.NoError(t, err)
+
+	// Should generate valid DOT with circular edges.
+	assert.Contains(t, output, "identity-a")
+	assert.Contains(t, output, "identity-b")
+	assert.Contains(t, output, "identity-b\" -> \"identity-a")
+	assert.Contains(t, output, "identity-a\" -> \"identity-b")
+}
+
+func TestRenderGraphviz_NilVia(t *testing.T) {
+	// Test identity with nil Via.
+	identities := map[string]schema.Identity{
+		"standalone": {
+			Kind: "aws/user",
+			Via:  nil,
+		},
+	}
+
+	output, err := RenderGraphviz(nil, nil, identities)
+	require.NoError(t, err)
+
+	assert.Contains(t, output, "standalone")
+	assert.Contains(t, output, "aws/user")
+}
+
+func TestRenderGraphviz_EmptyStringsInVia(t *testing.T) {
+	// Test Via with empty string fields.
+	identities := map[string]schema.Identity{
+		"identity": {
+			Kind: "aws/assume-role",
+			Via:  &schema.IdentityVia{Provider: "", Identity: ""},
+		},
+	}
+
+	output, err := RenderGraphviz(nil, nil, identities)
+	require.NoError(t, err)
+
+	assert.Contains(t, output, "identity")
+	// Should not create edges for empty strings.
+	assert.NotContains(t, output, "\"\" ->")
+}
+
+func TestRenderMermaid_InvalidViaReference(t *testing.T) {
+	// Test that referencing non-existent providers doesn't cause errors.
+	identities := map[string]schema.Identity{
+		"admin": {
+			Kind: "aws/permission-set",
+			Via:  &schema.IdentityVia{Provider: "nonexistent"},
+		},
+	}
+
+	output, err := RenderMermaid(nil, nil, identities)
+	require.NoError(t, err)
+
+	// Should still generate valid Mermaid with edge to nonexistent provider.
+	assert.Contains(t, output, "graph LR")
+	assert.Contains(t, output, "admin[")
+	assert.Contains(t, output, "nonexistent --> admin")
+}
+
+func TestRenderMermaid_CircularIdentityChain(t *testing.T) {
+	// Test circular references (identity A -> identity B -> identity A).
+	identities := map[string]schema.Identity{
+		"identity-a": {
+			Kind: "aws/assume-role",
+			Via:  &schema.IdentityVia{Identity: "identity-b"},
+		},
+		"identity-b": {
+			Kind: "aws/assume-role",
+			Via:  &schema.IdentityVia{Identity: "identity-a"},
+		},
+	}
+
+	output, err := RenderMermaid(nil, nil, identities)
+	require.NoError(t, err)
+
+	// Should generate valid Mermaid with circular edges.
+	assert.Contains(t, output, "identity_a[")
+	assert.Contains(t, output, "identity_b[")
+	assert.Contains(t, output, "identity_b --> identity_a")
+	assert.Contains(t, output, "identity_a --> identity_b")
+}
+
+func TestRenderMermaid_NilVia(t *testing.T) {
+	// Test identity with nil Via.
+	identities := map[string]schema.Identity{
+		"standalone": {
+			Kind: "aws/user",
+			Via:  nil,
+		},
+	}
+
+	output, err := RenderMermaid(nil, nil, identities)
+	require.NoError(t, err)
+
+	assert.Contains(t, output, "standalone[")
+	assert.Contains(t, output, "aws/user")
+}
+
+func TestRenderMermaid_EmptyStringsInVia(t *testing.T) {
+	// Test Via with empty string fields.
+	identities := map[string]schema.Identity{
+		"identity": {
+			Kind: "aws/assume-role",
+			Via:  &schema.IdentityVia{Provider: "", Identity: ""},
+		},
+	}
+
+	output, err := RenderMermaid(nil, nil, identities)
+	require.NoError(t, err)
+
+	assert.Contains(t, output, "identity[")
+	// Should not create edges for empty strings.
+	lines := strings.Split(output, "\n")
+	for _, line := range lines {
+		assert.NotContains(t, line, " --> identity")
+	}
+}
+
+func TestRenderMermaid_MalformedProviderData(t *testing.T) {
+	// Test with missing required fields.
+	providers := map[string]schema.Provider{
+		"provider-no-kind": {
+			Kind: "", // Empty kind.
+		},
+	}
+
+	output, err := RenderMermaid(nil, providers, nil)
+	require.NoError(t, err)
+
+	// Should still generate valid Mermaid.
+	assert.Contains(t, output, "graph LR")
+	assert.Contains(t, output, "provider_no_kind[")
+}
+
+func TestRenderMarkdown_ErrorFromMermaid(t *testing.T) {
+	// RenderMarkdown calls RenderMermaid internally.
+	// Test that it handles all inputs gracefully.
+	providers := map[string]schema.Provider{
+		"provider": {Kind: "test"},
+	}
+	identities := map[string]schema.Identity{
+		"identity": {Kind: "test"},
+	}
+
+	output, err := RenderMarkdown(nil, providers, identities)
+	require.NoError(t, err)
+
+	// Should contain valid markdown with mermaid block.
+	assert.Contains(t, output, "# Authentication Configuration")
+	assert.Contains(t, output, "```mermaid")
+	assert.Contains(t, output, "graph LR")
+	assert.Contains(t, output, "```")
 }

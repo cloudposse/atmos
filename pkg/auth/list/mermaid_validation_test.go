@@ -209,6 +209,15 @@ func TestMermaidStructureValidator(t *testing.T) {
 			wantError: true,
 			errorMsg:  "applied but not defined",
 		},
+		{
+			name: "multiple graph declarations",
+			mermaid: `graph LR
+  A["Node A"]
+graph TD
+  B["Node B"]`,
+			wantError: true,
+			errorMsg:  "multiple graph declarations",
+		},
 	}
 
 	for _, tt := range tests {
