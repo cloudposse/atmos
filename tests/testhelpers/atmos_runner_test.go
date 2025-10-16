@@ -260,11 +260,6 @@ func TestAtmosRunner_Cleanup(t *testing.T) {
 }
 
 func Test_findRepoRoot(t *testing.T) {
-	// Save current directory and restore after test.
-	oldWd, err := os.Getwd()
-	require.NoError(t, err)
-	defer os.Chdir(oldWd)
-
 	// Test from current directory.
 	root, err := findRepoRoot()
 
@@ -283,7 +278,7 @@ func Test_findRepoRoot(t *testing.T) {
 
 	// Test from a temp directory (should fail).
 	tempDir := t.TempDir()
-	os.Chdir(tempDir)
+	t.Chdir(tempDir)
 
 	_, err = findRepoRoot()
 	assert.Error(t, err)
@@ -324,9 +319,7 @@ func TestAtmosRunner_buildWithoutCoverage(t *testing.T) {
 	t.Run("handles missing repo root", func(t *testing.T) {
 		// Change to directory without git repo.
 		tempDir := t.TempDir()
-		oldWd, _ := os.Getwd()
-		defer os.Chdir(oldWd)
-		os.Chdir(tempDir)
+		t.Chdir(tempDir)
 
 		runner := &AtmosRunner{}
 
@@ -372,9 +365,7 @@ func TestAtmosRunner_buildWithCoverage(t *testing.T) {
 	t.Run("handles missing repo root", func(t *testing.T) {
 		// Change to directory without git repo.
 		tempDir := t.TempDir()
-		oldWd, _ := os.Getwd()
-		defer os.Chdir(oldWd)
-		os.Chdir(tempDir)
+		t.Chdir(tempDir)
 
 		runner := &AtmosRunner{
 			coverDir: t.TempDir(),
@@ -427,9 +418,7 @@ func TestAtmosRunner_ErrorPaths(t *testing.T) {
 		}
 
 		// Change to a directory without go.mod.
-		oldWd, _ := os.Getwd()
-		os.Chdir(t.TempDir())
-		defer os.Chdir(oldWd)
+		t.Chdir(t.TempDir())
 
 		// Should fail to build.
 		err := runner.buildWithCoverage()

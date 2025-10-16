@@ -286,16 +286,13 @@ func TestRequireGitRepository_NotInRepo(t *testing.T) {
 
 	// Change to temp directory that's not a git repo
 	tmpDir := t.TempDir()
-	origDir, _ := os.Getwd()
-	defer os.Chdir(origDir)
+	t.Chdir(tmpDir)
 
-	if err := os.Chdir(tmpDir); err == nil {
-		// This should skip the test
-		RequireGitRepository(t)
+	// This should skip the test
+	RequireGitRepository(t)
 
-		// Should not reach here
-		t.Error("Should have skipped when not in git repo")
-	}
+	// Should not reach here
+	t.Error("Should have skipped when not in git repo")
 }
 
 // TestRequireGitRepository_InRepo tests RequireGitRepository in actual repo.
@@ -368,13 +365,7 @@ func TestRequireGitRemoteWithValidURL_InRealRepo(t *testing.T) {
 
 	// Create a temporary git repo with a remote
 	tmpDir := t.TempDir()
-	origDir, _ := os.Getwd()
-	defer os.Chdir(origDir)
-
-	// Initialize git repo
-	if err := os.Chdir(tmpDir); err != nil {
-		t.Skipf("Cannot change to temp directory: %v", err)
-	}
+	t.Chdir(tmpDir)
 
 	// Run git init
 	cmd := exec.Command("git", "init")
@@ -400,13 +391,7 @@ func TestRequireGitRemoteWithValidURL_InvalidRemote(t *testing.T) {
 
 	// Create a temporary git repo with invalid remote
 	tmpDir := t.TempDir()
-	origDir, _ := os.Getwd()
-	defer os.Chdir(origDir)
-
-	// Initialize git repo
-	if err := os.Chdir(tmpDir); err != nil {
-		t.Skipf("Cannot change to temp directory: %v", err)
-	}
+	t.Chdir(tmpDir)
 
 	// Run git init
 	cmd := exec.Command("git", "init")
@@ -436,13 +421,7 @@ func TestRequireGitRemoteWithValidURL_NoRemotes(t *testing.T) {
 
 	// Create a temporary git repo without remotes
 	tmpDir := t.TempDir()
-	origDir, _ := os.Getwd()
-	defer os.Chdir(origDir)
-
-	// Initialize git repo
-	if err := os.Chdir(tmpDir); err != nil {
-		t.Skipf("Cannot change to temp directory: %v", err)
-	}
+	t.Chdir(tmpDir)
 
 	// Run git init
 	cmd := exec.Command("git", "init")

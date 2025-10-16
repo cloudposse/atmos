@@ -190,12 +190,6 @@ func TestDescribeComponentWithOverridesSection(t *testing.T) {
 	log.SetLevel(log.InfoLevel)
 	log.SetOutput(os.Stdout)
 
-	// Capture the starting working directory
-	startingDir, err := os.Getwd()
-	if err != nil {
-		t.Fatalf("Failed to get the current working directory: %v", err)
-	}
-
 	defer func() {
 		// Delete the generated files and folders after the test
 		err := os.RemoveAll(filepath.Join("..", "..", "components", "terraform", "mock", ".terraform"))
@@ -203,18 +197,11 @@ func TestDescribeComponentWithOverridesSection(t *testing.T) {
 
 		err = os.RemoveAll(filepath.Join("..", "..", "components", "terraform", "mock", "terraform.tfstate.d"))
 		assert.NoError(t, err)
-
-		// Change back to the original working directory after the test
-		if err = os.Chdir(startingDir); err != nil {
-			t.Fatalf("Failed to change back to the starting directory: %v", err)
-		}
 	}()
 
 	// Define the working directory
 	workDir := "../../tests/fixtures/scenarios/atmos-overrides-section"
-	if err := os.Chdir(workDir); err != nil {
-		t.Fatalf("Failed to change directory to %q: %v", workDir, err)
-	}
+	t.Chdir(workDir)
 
 	component := "c1"
 
@@ -352,24 +339,9 @@ func TestDescribeComponent_Packer(t *testing.T) {
 	log.SetLevel(log.InfoLevel)
 	log.SetOutput(os.Stdout)
 
-	// Capture the starting working directory
-	startingDir, err := os.Getwd()
-	if err != nil {
-		t.Fatalf("Failed to get the current working directory: %v", err)
-	}
-
-	defer func() {
-		// Change back to the original working directory after the test
-		if err = os.Chdir(startingDir); err != nil {
-			t.Fatalf("Failed to change back to the starting directory: %v", err)
-		}
-	}()
-
 	// Define the working directory
 	workDir := "../../tests/fixtures/scenarios/packer"
-	if err := os.Chdir(workDir); err != nil {
-		t.Fatalf("Failed to change directory to %q: %v", workDir, err)
-	}
+	t.Chdir(workDir)
 
 	atmosConfig := schema.AtmosConfiguration{
 		Logs: schema.Logs{
@@ -421,24 +393,9 @@ func TestDescribeComponentWithProvenance(t *testing.T) {
 	log.SetLevel(log.InfoLevel)
 	log.SetOutput(os.Stdout)
 
-	// Capture the starting working directory
-	startingDir, err := os.Getwd()
-	if err != nil {
-		t.Fatalf("Failed to get the current working directory: %v", err)
-	}
-
-	defer func() {
-		// Change back to the original working directory after the test
-		if err = os.Chdir(startingDir); err != nil {
-			t.Fatalf("Failed to change back to the starting directory: %v", err)
-		}
-	}()
-
 	// Define the working directory - using quick-start-advanced as it has a good mix of configs
 	workDir := "../../examples/quick-start-advanced"
-	if err := os.Chdir(workDir); err != nil {
-		t.Fatalf("Failed to change directory to %q: %v", workDir, err)
-	}
+	t.Chdir(workDir)
 
 	component := "vpc-flow-logs-bucket"
 	stack := "plat-ue2-dev"

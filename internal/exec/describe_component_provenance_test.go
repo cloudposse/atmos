@@ -27,15 +27,7 @@ func TestDescribeComponent_NestedImportProvenance(t *testing.T) {
 	}
 
 	// Change to the quick-start-advanced directory
-	originalDir, err := os.Getwd()
-	require.NoError(t, err)
-	defer func() {
-		err := os.Chdir(originalDir)
-		require.NoError(t, err)
-	}()
-
-	err = os.Chdir(examplesPath)
-	require.NoError(t, err)
+	t.Chdir(examplesPath)
 
 	// Initialize config
 	var configAndStacksInfo schema.ConfigAndStacksInfo
@@ -200,15 +192,7 @@ func TestDescribeComponent_DirectImportProvenance(t *testing.T) {
 	}
 
 	// Change to the quick-start-advanced directory
-	originalDir, err := os.Getwd()
-	require.NoError(t, err)
-	defer func() {
-		err := os.Chdir(originalDir)
-		require.NoError(t, err)
-	}()
-
-	err = os.Chdir(examplesPath)
-	require.NoError(t, err)
+	t.Chdir(examplesPath)
 
 	// Initialize config
 	var configAndStacksInfo schema.ConfigAndStacksInfo
