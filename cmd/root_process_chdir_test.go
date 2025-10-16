@@ -154,6 +154,10 @@ func TestProcessChdirFlag(t *testing.T) {
 					assert.Equal(t, expectedResolved, currentResolved)
 				}
 			}
+
+			// IMPORTANT: Change back to original directory BEFORE test ends.
+			// On Windows, temp dir cleanup fails if we're still inside it.
+			_ = os.Chdir(originalWd)
 		})
 	}
 }
@@ -182,6 +186,10 @@ func TestProcessChdirFlagWithEnvVar(t *testing.T) {
 	expectedResolved, _ := filepath.EvalSymlinks(tmpDir)
 	currentResolved, _ := filepath.EvalSymlinks(currentWd)
 	assert.Equal(t, expectedResolved, currentResolved)
+
+	// IMPORTANT: Change back to original directory BEFORE test ends.
+	// On Windows, temp dir cleanup fails if we're still inside it.
+	_ = os.Chdir(originalWd)
 }
 
 // TestProcessChdirFlagPrecedence tests that flag takes precedence over env var.
@@ -213,4 +221,8 @@ func TestProcessChdirFlagPrecedence(t *testing.T) {
 	expectedResolved, _ := filepath.EvalSymlinks(flagDir)
 	currentResolved, _ := filepath.EvalSymlinks(currentWd)
 	assert.Equal(t, expectedResolved, currentResolved)
+
+	// IMPORTANT: Change back to original directory BEFORE test ends.
+	// On Windows, temp dir cleanup fails if we're still inside it.
+	_ = os.Chdir(originalWd)
 }

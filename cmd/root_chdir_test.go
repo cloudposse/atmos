@@ -174,6 +174,8 @@ func TestChdirFlag(t *testing.T) {
 			require.NoError(t, os.Chdir(originalWd))
 
 			// Ensure working directory is restored after this sub-test.
+			// IMPORTANT: Register this BEFORE calling setup() which may create temp dirs.
+			// Cleanup runs in LIFO order, so this ensures we chdir out before temp dir removal.
 			t.Cleanup(func() {
 				_ = os.Chdir(originalWd)
 			})
@@ -261,6 +263,10 @@ func TestChdirFlag(t *testing.T) {
 					assert.Equal(t, expectedResolved, currentResolved, "Should be in the expected directory")
 				}
 			}
+
+			// IMPORTANT: Change back to original directory BEFORE test ends.
+			// On Windows, temp dir cleanup fails if we're still inside it.
+			_ = os.Chdir(originalWd)
 		})
 	}
 }
@@ -461,6 +467,10 @@ func TestChdirFlagEdgeCases(t *testing.T) {
 				// Should succeed for non-error cases.
 				assert.NoError(t, err, "Should change directory successfully")
 			}
+
+			// IMPORTANT: Change back to original directory BEFORE test ends.
+			// On Windows, temp dir cleanup fails if we're still inside it.
+			_ = os.Chdir(originalWd)
 		})
 	}
 }
