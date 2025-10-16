@@ -116,8 +116,12 @@ func validatedIsDirs(dirPaths []string) error {
 		}
 		stat, err := os.Stat(dirPath)
 		if err != nil {
-			log.Debug("--config-path directory not found", "path", dirPath)
-			return err
+			if os.IsNotExist(err) {
+				log.Debug("--config-path directory not found", "path", dirPath)
+				return fmt.Errorf("%w: --config-path directory '%s' does not exist", errUtils.ErrAtmosDirConfigNotFound, dirPath)
+			}
+			// Other stat errors (permission denied, etc.)
+			return fmt.Errorf("cannot access --config-path directory '%s': %w", dirPath, err)
 		}
 		if !stat.IsDir() {
 			log.Debug("--config-path expected directory found file", "path", dirPath)
@@ -134,8 +138,12 @@ func validatedIsFiles(files []string) error {
 		}
 		stat, err := os.Stat(filePath)
 		if err != nil {
-			log.Debug("--config file not found", "path", filePath)
-			return errUtils.ErrFileNotFound
+			if os.IsNotExist(err) {
+				log.Debug("--config file not found", "path", filePath)
+				return fmt.Errorf("%w: --config file '%s' does not exist", errUtils.ErrFileNotFound, filePath)
+			}
+			// Other stat errors (permission denied, etc.)
+			return fmt.Errorf("%w: cannot access --config file '%s': %v", errUtils.ErrFileNotFound, filePath, err)
 		}
 		if stat.IsDir() {
 			log.Debug("--config expected file found directory", "path", filePath)
