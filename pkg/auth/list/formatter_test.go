@@ -322,6 +322,14 @@ func TestRenderMermaid_Syntax(t *testing.T) {
 	assert.Contains(t, output, "aws_sso --> admin")
 	assert.Contains(t, output, "aws_sso --> developer")
 
+	// Validate structure using parser.
+	err = validateMermaidStructure(output)
+	require.NoError(t, err, "Mermaid structure validation failed")
+
+	// Try to validate with mermaid-cli if available.
+	if err := validateWithMermaidCLI(t, output); err != nil {
+		t.Logf("Mermaid CLI validation skipped: %v", err)
+	}
 	// Print output for manual verification.
 	t.Logf("Generated Mermaid:\n%s", output)
 }
