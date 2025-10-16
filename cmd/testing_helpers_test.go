@@ -65,57 +65,13 @@ func restoreRootCmdState(snapshot *cmdStateSnapshot) {
 	restoreFlags(RootCmd.PersistentFlags())
 }
 
-// resetRootCmdForTesting resets the global RootCmd state to prevent test pollution.
-//
-// Deprecated: Use WithRootCmdSnapshot instead for automatic state management.
-//
-// IMPORTANT: RootCmd is a global package variable. When tests call RootCmd.SetArgs()
-// and RootCmd.ParseFlags(), the flag values persist across tests. Simply calling
-// RootCmd.SetArgs([]string{}) does NOT clear already-parsed flag values!
-//
-// This function must be called in test cleanup to ensure proper test isolation:
-//
-//	t.Cleanup(func() {
-//	    resetRootCmdForTesting(t)
-//	})
-func resetRootCmdForTesting(t *testing.T) {
-	t.Helper()
-
-	// Clear command args.
-	RootCmd.SetArgs([]string{})
-
-	// Clear all persistent flag values that might have been set by previous tests.
-	// We must explicitly reset flag values because SetArgs() alone doesn't clear them.
-	// NOTE: We only reset flags that tests commonly set for chdir functionality.
-	// We explicitly DO NOT reset config-related flags (config, config-path) as
-	// resetting them to empty values breaks config loading in subsequent tests.
-	flags := []string{
-		"chdir",
-		"base-path",
-		"stacks-dir",
-		"components-dir",
-		"workflows-dir",
-		"logs-file",
-		"logs-level",
-	}
-
-	for _, flag := range flags {
-		// Lookup in both local and persistent flag sets.
-		f := RootCmd.Flags().Lookup(flag)
-		if f == nil {
-			f = RootCmd.PersistentFlags().Lookup(flag)
-		}
-		if f != nil {
-			// Reset to default and clear Changed.
-			_ = f.Value.Set(f.DefValue)
-			f.Changed = false
-		}
-	}
-}
-
 // WithRootCmdSnapshot ensures RootCmd state is captured before the test
 // and restored in cleanup, providing complete test isolation without maintaining
 // a hardcoded list of flags to reset.
+//
+// This snapshots ALL flag values and their Changed state, then restores them
+// exactly in cleanup. This prevents test pollution without needing to know
+// which flags exist or what their defaults are.
 //
 // Usage:
 //
@@ -125,6 +81,12 @@ func resetRootCmdForTesting(t *testing.T) {
 //	    // Your test code here - any RootCmd state changes will be
 //	    // automatically reverted when the test completes.
 //	}
+//
+// Why this approach:
+//   - No hardcoded flag lists to maintain
+//   - Works for any flags (current and future)
+//   - Restores exact state, not just defaults
+//   - Eliminates entire class of test pollution problems
 func WithRootCmdSnapshot(t *testing.T) func() {
 	t.Helper()
 	snapshot := snapshotRootCmdState()
