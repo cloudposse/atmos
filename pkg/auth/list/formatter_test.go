@@ -265,6 +265,308 @@ func TestAddMapToTree_MaxDepth(t *testing.T) {
 	assert.Contains(t, output, "level3")
 }
 
+func TestRenderTable_BothProvidersAndIdentities(t *testing.T) {
+	providers := map[string]schema.Provider{
+		"aws-sso": {
+			Kind:     "aws/iam-identity-center",
+			Region:   "us-east-1",
+			StartURL: "https://d-abc123.awsapps.com/start",
+			Default:  true,
+		},
+	}
+
+	identities := map[string]schema.Identity{
+		"admin": {
+			Kind:    "aws/permission-set",
+			Default: true,
+			Via:     &schema.IdentityVia{Provider: "aws-sso"},
+		},
+	}
+
+	output, err := RenderTable(nil, providers, identities)
+	require.NoError(t, err)
+
+	assert.Contains(t, output, "PROVIDERS")
+	assert.Contains(t, output, "IDENTITIES")
+}
+
+func TestRenderTable_ProvidersOnly(t *testing.T) {
+	providers := map[string]schema.Provider{
+		"aws-sso": {
+			Kind:     "aws/iam-identity-center",
+			Region:   "us-east-1",
+			StartURL: "https://d-abc123.awsapps.com/start",
+			Default:  true,
+		},
+	}
+
+	output, err := RenderTable(nil, providers, nil)
+	require.NoError(t, err)
+
+	assert.Contains(t, output, "PROVIDERS")
+	assert.NotContains(t, output, "IDENTITIES")
+}
+
+func TestRenderTable_IdentitiesOnly(t *testing.T) {
+	identities := map[string]schema.Identity{
+		"admin": {
+			Kind:    "aws/permission-set",
+			Default: true,
+			Via:     &schema.IdentityVia{Provider: "aws-sso"},
+		},
+	}
+
+	output, err := RenderTable(nil, nil, identities)
+	require.NoError(t, err)
+
+	assert.NotContains(t, output, "PROVIDERS")
+	assert.Contains(t, output, "IDENTITIES")
+}
+
+func TestRenderTable_Empty(t *testing.T) {
+	output, err := RenderTable(nil, nil, nil)
+	require.NoError(t, err)
+
+	assert.Contains(t, output, "No providers or identities configured")
+}
+
+func TestRenderTree_BothProvidersAndIdentities(t *testing.T) {
+	providers := map[string]schema.Provider{
+		"aws-sso": {
+			Kind:     "aws/iam-identity-center",
+			Region:   "us-east-1",
+			StartURL: "https://d-abc123.awsapps.com/start",
+			Default:  true,
+		},
+	}
+
+	identities := map[string]schema.Identity{
+		"admin": {
+			Kind:    "aws/permission-set",
+			Default: true,
+			Via:     &schema.IdentityVia{Provider: "aws-sso"},
+		},
+	}
+
+	output, err := RenderTree(nil, providers, identities)
+	require.NoError(t, err)
+
+	assert.Contains(t, output, "Authentication Configuration")
+	assert.Contains(t, output, "aws-sso")
+	assert.Contains(t, output, "admin")
+}
+
+func TestRenderTree_ProvidersOnly(t *testing.T) {
+	providers := map[string]schema.Provider{
+		"aws-sso": {
+			Kind:     "aws/iam-identity-center",
+			Region:   "us-east-1",
+			StartURL: "https://d-abc123.awsapps.com/start",
+			Default:  true,
+		},
+	}
+
+	output, err := RenderTree(nil, providers, nil)
+	require.NoError(t, err)
+
+	assert.Contains(t, output, "Authentication Configuration")
+	assert.Contains(t, output, "aws-sso")
+}
+
+func TestRenderTree_IdentitiesOnly(t *testing.T) {
+	identities := map[string]schema.Identity{
+		"ci": {
+			Kind: "aws/user",
+		},
+	}
+
+	output, err := RenderTree(nil, nil, identities)
+	require.NoError(t, err)
+
+	assert.Contains(t, output, "Authentication Configuration")
+	assert.Contains(t, output, "Standalone Identities")
+	assert.Contains(t, output, "ci")
+}
+
+func TestRenderTree_Empty(t *testing.T) {
+	output, err := RenderTree(nil, nil, nil)
+	require.NoError(t, err)
+
+	assert.Contains(t, output, "No providers or identities configured")
+}
+
+func TestBuildProviderRows_WithStartURL(t *testing.T) {
+	providers := map[string]schema.Provider{
+		"aws-sso": {
+			Kind:     "aws/iam-identity-center",
+			StartURL: "https://d-abc123.awsapps.com/start",
+			Default:  true,
+		},
+	}
+
+	rows := buildProviderRows(providers)
+
+	require.Len(t, rows, 1)
+	assert.Equal(t, "aws-sso", rows[0][0])
+	assert.Contains(t, rows[0][3], "d-abc123")
+	assert.Equal(t, "✓", rows[0][4])
+}
+
+func TestBuildProviderRows_WithURL(t *testing.T) {
+	providers := map[string]schema.Provider{
+		"okta": {
+			Kind: "okta",
+			URL:  "https://company.okta.com/app",
+		},
+	}
+
+	rows := buildProviderRows(providers)
+
+	require.Len(t, rows, 1)
+	assert.Equal(t, "okta", rows[0][0])
+	assert.Contains(t, rows[0][3], "company.okta.com")
+}
+
+func TestBuildProviderRows_WithRegion(t *testing.T) {
+	providers := map[string]schema.Provider{
+		"aws-sso": {
+			Kind:   "aws/iam-identity-center",
+			Region: "us-west-2",
+		},
+	}
+
+	rows := buildProviderRows(providers)
+
+	require.Len(t, rows, 1)
+	assert.Equal(t, "us-west-2", rows[0][2])
+}
+
+func TestBuildProviderRows_NoRegion(t *testing.T) {
+	providers := map[string]schema.Provider{
+		"okta": {
+			Kind: "okta",
+		},
+	}
+
+	rows := buildProviderRows(providers)
+
+	require.Len(t, rows, 1)
+	assert.Equal(t, "-", rows[0][2])
+}
+
+func TestBuildProviderRows_NoURL(t *testing.T) {
+	providers := map[string]schema.Provider{
+		"aws-sso": {
+			Kind: "aws/iam-identity-center",
+		},
+	}
+
+	rows := buildProviderRows(providers)
+
+	require.Len(t, rows, 1)
+	assert.Equal(t, "-", rows[0][3])
+}
+
+func TestBuildIdentityTableRow_WithViaProvider(t *testing.T) {
+	identity := schema.Identity{
+		Kind:    "aws/permission-set",
+		Default: true,
+		Via:     &schema.IdentityVia{Provider: "aws-sso"},
+	}
+
+	row := buildIdentityTableRow(&identity, "admin")
+
+	assert.Equal(t, "admin", row[0])
+	assert.Equal(t, "aws/permission-set", row[1])
+	assert.Equal(t, "aws-sso", row[2])
+	assert.Equal(t, "-", row[3])
+	assert.Equal(t, "✓", row[4])
+}
+
+func TestBuildIdentityTableRow_WithViaIdentity(t *testing.T) {
+	identity := schema.Identity{
+		Kind: "aws/assume-role",
+		Via:  &schema.IdentityVia{Identity: "admin"},
+	}
+
+	row := buildIdentityTableRow(&identity, "dev")
+
+	assert.Equal(t, "dev", row[0])
+	assert.Equal(t, "-", row[2])
+	assert.Equal(t, "admin", row[3])
+}
+
+func TestBuildIdentityTableRow_AWSUser(t *testing.T) {
+	identity := schema.Identity{
+		Kind: "aws/user",
+	}
+
+	row := buildIdentityTableRow(&identity, "ci")
+
+	assert.Equal(t, "ci", row[0])
+	assert.Equal(t, "aws/user", row[1])
+	assert.Equal(t, "aws-user", row[2])
+	assert.Equal(t, "-", row[3])
+}
+
+func TestBuildIdentityTableRow_WithAlias(t *testing.T) {
+	identity := schema.Identity{
+		Kind:  "aws/assume-role",
+		Alias: "developer",
+		Via:   &schema.IdentityVia{Provider: "aws-sso"},
+	}
+
+	row := buildIdentityTableRow(&identity, "dev")
+
+	assert.Equal(t, "dev", row[0])
+	assert.Equal(t, "developer", row[5])
+}
+
+func TestBuildIdentityTableRow_NoAlias(t *testing.T) {
+	identity := schema.Identity{
+		Kind: "aws/assume-role",
+		Via:  &schema.IdentityVia{Provider: "aws-sso"},
+	}
+
+	row := buildIdentityTableRow(&identity, "admin")
+
+	assert.Equal(t, "-", row[5])
+}
+
+func TestBuildIdentitiesTree_WithCredentials(t *testing.T) {
+	identities := map[string]schema.Identity{
+		"admin": {
+			Kind:    "aws/permission-set",
+			Default: true,
+			Via:     &schema.IdentityVia{Provider: "aws-sso"},
+			Credentials: map[string]interface{}{
+				"access_key_id":     "AKIAIOSFODNN7EXAMPLE",
+				"secret_access_key": "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
+			},
+		},
+	}
+
+	tree := buildIdentitiesTree(identities)
+
+	assert.Contains(t, tree, "admin")
+	assert.Contains(t, tree, "Credentials: [redacted]")
+}
+
+func TestAddMapToTree_WithSlice(t *testing.T) {
+	m := map[string]interface{}{
+		"items": []interface{}{"item1", "item2", "item3"},
+	}
+
+	node := tree.New().Root("Test")
+	addMapToTree(node, m, 0)
+
+	output := node.String()
+	assert.Contains(t, output, "items")
+	assert.Contains(t, output, "item1")
+	assert.Contains(t, output, "item2")
+	assert.Contains(t, output, "item3")
+}
+
 func TestRenderMermaid_Syntax(t *testing.T) {
 	// Test that RenderMermaid produces valid Mermaid syntax.
 	providers := map[string]schema.Provider{

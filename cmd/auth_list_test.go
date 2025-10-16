@@ -345,3 +345,51 @@ func TestRenderYAML_Both(t *testing.T) {
 	assert.Contains(t, output, "providers:")
 	assert.Contains(t, output, "identities:")
 }
+
+func TestApplyFilters_MultipleProviders(t *testing.T) {
+	providers := map[string]schema.Provider{
+		"aws-sso": {Kind: "aws/iam-identity-center"},
+		"okta":    {Kind: "aws/saml"},
+		"azure":   {Kind: "azure-ad"},
+	}
+	identities := map[string]schema.Identity{
+		"admin": {Kind: "aws/permission-set"},
+	}
+	filters := &filterConfig{
+		showProvidersOnly: true,
+		providerNames:     []string{"aws-sso", "okta"},
+	}
+
+	filteredProviders, filteredIdentities, err := applyFilters(providers, identities, filters)
+
+	require.NoError(t, err)
+	assert.Len(t, filteredProviders, 2)
+	assert.Contains(t, filteredProviders, "aws-sso")
+	assert.Contains(t, filteredProviders, "okta")
+	assert.NotContains(t, filteredProviders, "azure")
+	assert.Empty(t, filteredIdentities)
+}
+
+func TestApplyFilters_MultipleIdentities(t *testing.T) {
+	providers := map[string]schema.Provider{
+		"aws-sso": {Kind: "aws/iam-identity-center"},
+	}
+	identities := map[string]schema.Identity{
+		"admin": {Kind: "aws/permission-set"},
+		"dev":   {Kind: "aws/permission-set"},
+		"prod":  {Kind: "aws/permission-set"},
+	}
+	filters := &filterConfig{
+		showIdentitiesOnly: true,
+		identityNames:      []string{"admin", "prod"},
+	}
+
+	filteredProviders, filteredIdentities, err := applyFilters(providers, identities, filters)
+
+	require.NoError(t, err)
+	assert.Empty(t, filteredProviders)
+	assert.Len(t, filteredIdentities, 2)
+	assert.Contains(t, filteredIdentities, "admin")
+	assert.Contains(t, filteredIdentities, "prod")
+	assert.NotContains(t, filteredIdentities, "dev")
+}
