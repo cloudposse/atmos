@@ -1,0 +1,7 @@
+components:
+  terraform:
+    base-component:
+      vars:
+        enabled: true
+        name: "base-component"
+        base_var: "base-value"

@@ -983,6 +983,17 @@ identities:
 
 #### AWS Permission Set
 
+AWS Permission Set identities assume roles via AWS IAM Identity Center (SSO). The `account` field specifies which AWS account contains the permission set.
+
+**Account Specification Options:**
+
+You can specify the account using either:
+
+- `account.name` - Account name/alias (resolved via SSO ListAccounts API)
+- `account.id` - Numeric account ID (used directly, no lookup required)
+
+**Example with Account Name (Recommended):**
+
 ```yaml
 identities:
   dev-access:
@@ -992,11 +1003,19 @@ identities:
       name: DeveloperAccess
       account:
         name: dev
-    env:
-      - key: AWS_PROFILE
-        value: dev-access
-      - key: ENVIRONMENT
-        value: development
+```
+
+**Example with Account ID:**
+
+```yaml
+identities:
+  dev-access:
+    kind: aws/permission-set
+    via: { provider: aws-sso }
+    principal:
+      name: DeveloperAccess
+      account:
+        id: "123456789012"
 ```
 
 #### AWS Assume Role
@@ -1210,6 +1229,7 @@ auth:
         name: IdentityManagersTeamAccess
         account:
           name: core-identity
+
 
       # AWS files automatically managed:
       # ~/.aws/atmos/cplive-sso/credentials

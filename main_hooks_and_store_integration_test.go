@@ -15,18 +15,15 @@ func TestMainHooksAndStoreIntegration(t *testing.T) {
 	defer s.Close()
 
 	redisUrl := fmt.Sprintf("redis://%s", s.Addr())
-	os.Setenv("ATMOS_REDIS_URL", redisUrl)
+	t.Setenv("ATMOS_REDIS_URL", redisUrl)
 
 	origDir, err := os.Getwd()
 	if err != nil {
 		t.Fatalf("failed to get current working directory: %v", err)
 	}
 	defer os.RemoveAll(filepath.Join(origDir, "tests", "fixtures", "scenarios", "hooks-test", ".terraform"))
-	defer os.Chdir(origDir)
 
-	if err := os.Chdir("tests/fixtures/scenarios/hooks-test"); err != nil {
-		t.Fatalf("failed to change directory: %v", err)
-	}
+	t.Chdir("tests/fixtures/scenarios/hooks-test")
 
 	// Capture the original arguments
 	origArgs := os.Args

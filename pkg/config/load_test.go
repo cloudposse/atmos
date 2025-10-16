@@ -3,8 +3,6 @@ package config
 import (
 	"os"
 	"path/filepath"
-	"runtime"
-	"strings"
 	"testing"
 
 	"github.com/spf13/viper"
@@ -13,15 +11,9 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-func setupTestFiles(t *testing.T) (string, func()) {
-	tempDir, err := os.MkdirTemp("", "atmos-test-*")
-	assert.NoError(t, err)
-
-	cleanup := func() {
-		os.RemoveAll(tempDir)
-	}
-
-	return tempDir, cleanup
+func setupTestFiles(t *testing.T) string {
+	tempDir := t.TempDir()
+	return tempDir
 }
 
 func createTestConfig(t *testing.T, dir string, content string) string {
@@ -78,8 +70,7 @@ components:
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Setup test environment
-			tempDir, cleanup := setupTestFiles(t)
-			defer cleanup()
+			tempDir := setupTestFiles(t)
 
 			// Set up environment variables
 			for k, v := range tt.setupEnv {
@@ -356,15 +347,9 @@ func TestMergeDefaultImports_PathCanonicalization(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Save current directory
-			origDir, err := os.Getwd()
-			assert.NoError(t, err)
-			defer os.Chdir(origDir)
-
 			// Create and change to temp directory
 			tempDir := t.TempDir()
-			err = os.Chdir(tempDir)
-			assert.NoError(t, err)
+			t.Chdir(tempDir)
 
 			// Set the exclude environment variable using table input directly
 			os.Setenv("TEST_EXCLUDE_ATMOS_D", tt.excludePath)
@@ -373,7 +358,7 @@ func TestMergeDefaultImports_PathCanonicalization(t *testing.T) {
 			// Call the function with table input directly
 			v := viper.New()
 			v.SetConfigType("yaml") // Set config type as done in production code
-			err = mergeDefaultImports(tt.dirPath, v)
+			err := mergeDefaultImports(tt.dirPath, v)
 
 			// Check the result - should skip and return nil when shouldSkip is true
 			assert.NoError(t, err, tt.description)
@@ -508,16 +493,10 @@ func TestShouldExcludePathForTesting(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Save current directory for relative path tests
-			origDir, err := os.Getwd()
-			assert.NoError(t, err)
-			defer os.Chdir(origDir)
-
 			// For relative path tests, create and change to a temp directory
 			if tt.dirPath == "." || tt.envValue == "." {
 				tempDir := t.TempDir()
-				err = os.Chdir(tempDir)
-				assert.NoError(t, err)
+				t.Chdir(tempDir)
 			}
 
 			// Set the environment variable
@@ -535,49 +514,8 @@ func TestShouldExcludePathForTesting(t *testing.T) {
 	}
 }
 
-func TestShouldExcludePathForTesting_WindowsCaseInsensitive(t *testing.T) {
-	if runtime.GOOS != "windows" {
-		t.Skipf("skipping Windows-specific test on %s", runtime.GOOS)
-	}
-
-	tempDir := t.TempDir()
-
-	tests := []struct {
-		name     string
-		dirPath  string
-		envValue string
-		expected bool
-	}{
-		{
-			name:     "lowercase_env_uppercase_path",
-			dirPath:  strings.ToUpper(tempDir),
-			envValue: strings.ToLower(tempDir),
-			expected: true,
-		},
-		{
-			name:     "uppercase_env_lowercase_path",
-			dirPath:  strings.ToLower(tempDir),
-			envValue: strings.ToUpper(tempDir),
-			expected: true,
-		},
-		{
-			name:     "mixed_case_match",
-			dirPath:  tempDir,
-			envValue: strings.ToUpper(tempDir),
-			expected: true,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			os.Setenv("TEST_EXCLUDE_ATMOS_D", tt.envValue)
-			defer os.Unsetenv("TEST_EXCLUDE_ATMOS_D")
-
-			result := shouldExcludePathForTesting(tt.dirPath)
-			assert.Equal(t, tt.expected, result, "Windows should match paths case-insensitively")
-		})
-	}
-}
+// Windows-specific test moved to load_windows_test.go:
+// - TestShouldExcludePathForTesting_WindowsCaseInsensitive
 
 func TestShouldExcludePathForTesting_PathCanonicalization(t *testing.T) {
 	tempDir := t.TempDir()
@@ -631,30 +569,8 @@ func TestShouldExcludePathForTesting_PathCanonicalization(t *testing.T) {
 	}
 }
 
-func TestMergeDefaultImports_WindowsCaseInsensitive(t *testing.T) {
-	if runtime.GOOS != "windows" {
-		t.Skipf("skipping Windows-specific test on %s", runtime.GOOS)
-	}
-
-	// Create temp directory
-	tempDir := t.TempDir()
-
-	// Test case-insensitive matching by setting exclude with different case
-	upperCasePath := strings.ToUpper(tempDir)
-	lowerCasePath := strings.ToLower(tempDir)
-
-	// Set the environment variable with lowercase path
-	os.Setenv("TEST_EXCLUDE_ATMOS_D", lowerCasePath)
-	defer os.Unsetenv("TEST_EXCLUDE_ATMOS_D")
-
-	// Call the function with the path in uppercase
-	v := viper.New()
-	v.SetConfigType("yaml") // Set config type as done in production code
-	err := mergeDefaultImports(upperCasePath, v)
-
-	// Should skip and return nil since paths match case-insensitively on Windows
-	assert.NoError(t, err, "Should match case-insensitively on Windows")
-}
+// Windows-specific test moved to load_windows_test.go:
+// - TestMergeDefaultImports_WindowsCaseInsensitive
 
 func TestProcessConfigImportsAndReapply_MalformedYAML(t *testing.T) {
 	tests := []struct {

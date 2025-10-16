@@ -61,27 +61,15 @@ func TestMainTerraformPlanDiffIntegration(t *testing.T) {
 		}
 	}
 
-	origDir, err := os.Getwd()
-	if err != nil {
-		t.Fatalf("failed to get current working directory: %v", err)
-	}
-	defer os.Chdir(origDir)
-
 	// Change to the tests/fixtures/scenarios/plan-diff directory
-	if err := os.Chdir("tests/fixtures/scenarios/plan-diff"); err != nil {
-		t.Fatalf("failed to change to tests/fixtures/scenarios/plan-diff directory: %v", err)
-	}
+	t.Chdir("tests/fixtures/scenarios/plan-diff")
 
 	// Capture the original arguments
 	origArgs := os.Args
 	defer func() { os.Args = origArgs }()
 
 	// Create a temporary directory for plan files
-	tmpDir, err := os.MkdirTemp("", "atmos-plan-diff-test")
-	if err != nil {
-		t.Fatalf("failed to create temporary directory: %v", err)
-	}
-	defer os.RemoveAll(tmpDir)
+	tmpDir := t.TempDir()
 
 	origPlanFile := filepath.Join(tmpDir, "orig.plan")
 	newPlanFile := filepath.Join(tmpDir, "new.plan")

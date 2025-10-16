@@ -19,7 +19,7 @@ Atmos provides `utils.PrintfMessageToTUI` for writing TextUI messages. It always
 
 ### Trace
 
-**Purpose**: Execution flow tracing and detailed debugging.
+**Purpose**: Execution flow tracing, detailed debugging, and squelched error logging.
 
 #### When to Use
 
@@ -29,6 +29,7 @@ Atmos provides `utils.PrintfMessageToTUI` for writing TextUI messages. It always
 - Loop iterations in complex algorithms.
 - Template expansion steps.
 - Detailed state at each step of multi-stage operations.
+- **Squelched errors** - errors that are intentionally ignored but should be recorded.
 
 #### Characteristics
 
@@ -43,6 +44,9 @@ Atmos provides `utils.PrintfMessageToTUI` for writing TextUI messages. It always
 - "Entering ProcessStackConfig with stack=dev, component=vpc"
 - "Template evaluation: input={...}, context={...}, output={...}"
 - "Cache lookup: key=stack-dev-vpc, found=true, age=2.3s"
+- "Failed to close temporary file during cleanup" (squelched error)
+- "Failed to remove temporary directory during cleanup" (squelched error)
+- "Failed to bind environment variable" (squelched error)
 
 ---
 
@@ -180,6 +184,111 @@ Even these examples are borderline - they could arguably be Debug or Warning dep
 
 - "Critical failure: Unable to load required configuration. Exiting."
 - "Fatal: Cannot establish database connection after 10 attempts"
+
+---
+
+## Squelched Errors
+
+### What Are Squelched Errors?
+
+Squelched errors are errors that are intentionally ignored because they don't affect the critical path of execution. Common examples include:
+- Cleanup operations (removing temporary files, closing file handles)
+- Non-critical configuration binding (environment variables, flags)
+- Resource unlocking in defer statements
+- UI rendering errors
+
+### When to Squelch Errors
+
+Errors should only be squelched when:
+1. **The error is non-critical** - failure doesn't prevent the operation from succeeding
+2. **Recovery is impossible** - we're in cleanup/defer code where we can't do anything about the error
+3. **The operation is best-effort** - like optional environment variable binding
+
+### The Golden Rule: Always Log Squelched Errors
+
+Even when errors are intentionally ignored, they **must** be logged at Trace level. This ensures errors are never truly lost and can be investigated during debugging.
+
+### Pattern: Squelched Error Logging
+
+**Wrong**: Silent error squelching
+```go
+// ❌ WRONG: Error is completely lost
+_ = os.Remove(tempFile)
+_ = file.Close()
+_ = viper.BindEnv("OPTIONAL_VAR", "VAR")
+```
+
+**Right**: Log squelched errors at Trace level
+```go
+// ✅ CORRECT: Cleanup with trace logging
+if err := os.Remove(tempFile); err != nil && !os.IsNotExist(err) {
+    log.Trace("Failed to remove temporary file during cleanup", "error", err, "file", tempFile)
+}
+
+// ✅ CORRECT: Resource closing with trace logging
+if err := file.Close(); err != nil {
+    log.Trace("Failed to close file", "error", err, "file", file.Name())
+}
+
+// ✅ CORRECT: Non-critical configuration with trace logging
+if err := viper.BindEnv("OPTIONAL_VAR", "VAR"); err != nil {
+    log.Trace("Failed to bind environment variable", "error", err, "var", "OPTIONAL_VAR")
+}
+```
+
+### Special Cases
+
+#### Defer Statements
+When squelching errors in defer statements, capture them in a closure:
+
+```go
+defer func() {
+    if err := lock.Unlock(); err != nil {
+        log.Trace("Failed to unlock", "error", err, "path", lockPath)
+    }
+}()
+```
+
+#### File Existence Checks
+When removing files, check for `os.IsNotExist` to avoid logging expected conditions:
+
+```go
+if err := os.Remove(tempFile); err != nil && !os.IsNotExist(err) {
+    log.Trace("Failed to remove file", "error", err, "file", tempFile)
+}
+```
+
+#### Log File Cleanup
+When cleaning up log files, use stderr instead of the logger to avoid recursion:
+
+```go
+func cleanupLogFile() {
+    if logFileHandle != nil {
+        if err := logFileHandle.Sync(); err != nil {
+            // Don't use logger here as we're cleaning up the log file
+            fmt.Fprintf(os.Stderr, "Warning: failed to sync log file: %v\n", err)
+        }
+    }
+}
+```
+
+### Why This Matters
+
+1. **Debugging**: When investigating issues, trace logs reveal the full story, including non-critical failures
+2. **Metrics**: Aggregate trace logs to identify patterns (e.g., frequent cleanup failures might indicate disk issues)
+3. **Auditing**: Complete error trail for compliance and security reviews
+4. **Transparency**: No hidden errors - everything is recorded somewhere
+
+### Common Squelched Error Categories
+
+| Category | Examples | Trace Logging Required |
+|----------|----------|----------------------|
+| File cleanup | `os.Remove()`, `os.RemoveAll()` | ✅ Yes |
+| Resource closing | `file.Close()`, `client.Close()` | ✅ Yes |
+| Lock operations | `lock.Unlock()` | ✅ Yes |
+| Config binding | `viper.BindEnv()`, `viper.BindPFlag()` | ✅ Yes |
+| UI rendering | `fmt.Fprint()` to UI buffers | ✅ Yes |
+| Command help | `cmd.Help()` | ✅ Yes |
 
 ---
 

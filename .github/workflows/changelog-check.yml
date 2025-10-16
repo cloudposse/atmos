@@ -1,0 +1,92 @@
+name: Changelog Check
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+
+jobs:
+  check-changelog:
+    name: Check for changelog entry
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check if PR has minor or major label
+        id: check-labels
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          PR_NUMBER="${{ github.event.pull_request.number }}"
+          LABELS=$(gh pr view $PR_NUMBER --json labels --jq '.labels[].name')
+
+          if echo "$LABELS" | grep -qE '^(minor|major)$'; then
+            echo "requires_changelog=true" >> $GITHUB_OUTPUT
+            echo "PR has minor or major label - changelog entry required"
+          else
+            echo "requires_changelog=false" >> $GITHUB_OUTPUT
+            echo "PR does not have minor or major label - changelog entry not required"
+          fi
+
+      - name: Check for new blog post
+        if: steps.check-labels.outputs.requires_changelog == 'true'
+        id: check-blog
+        run: |
+          # Check if any new .md or .mdx files were added in website/blog/
+          NEW_BLOG_FILES=$(git diff --name-only --diff-filter=A origin/${{ github.base_ref }}...HEAD | grep -E '^website/blog/.*\.(md|mdx)$' || true)
+
+          if [ -z "$NEW_BLOG_FILES" ]; then
+            echo "has_changelog=false" >> $GITHUB_OUTPUT
+            echo "❌ No changelog entry found"
+          else
+            echo "has_changelog=true" >> $GITHUB_OUTPUT
+            echo "✅ Changelog entry found:"
+            echo "$NEW_BLOG_FILES"
+          fi
+
+      - name: Comment on PR if changelog missing
+        if: steps.check-labels.outputs.requires_changelog == 'true' && steps.check-blog.outputs.has_changelog == 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          PR_NUMBER="${{ github.event.pull_request.number }}"
+
+          # Check if comment already exists
+          EXISTING_COMMENT=$(gh pr view $PR_NUMBER --json comments --jq '.comments[] | select(.body | contains("<!-- changelog-check -->")) | .id' | head -1)
+
+          COMMENT_BODY="<!-- changelog-check -->
+          > [!WARNING]
+          > #### Changelog Entry Required
+          >
+          > This PR is labeled \`minor\` or \`major\` but doesn't include a changelog entry.
+          >
+          > **Action needed:** Add a new blog post in \`website/blog/\` to announce this change.
+          >
+          > Example filename: \`website/blog/$(date +%Y-%m-%d)-feature-name.mdx\`
+          >
+          > **Alternatively:** If this change doesn't require a changelog entry, remove the \`minor\` or \`major\` label."
+
+          if [ -n "$EXISTING_COMMENT" ]; then
+            echo "Updating existing comment..."
+            gh pr comment $PR_NUMBER --edit-last --body "$COMMENT_BODY"
+          else
+            echo "Creating new comment..."
+            gh pr comment $PR_NUMBER --body "$COMMENT_BODY"
+          fi
+
+      - name: Fail if changelog missing
+        if: steps.check-labels.outputs.requires_changelog == 'true' && steps.check-blog.outputs.has_changelog == 'false'
+        run: |
+          echo "❌ ERROR: PR is labeled 'minor' or 'major' but no changelog entry was found."
+          echo ""
+          echo "Please add a new blog post file in website/blog/ to announce this change."
+          echo "Example: website/blog/YYYY-MM-DD-feature-name.mdx"
+          echo ""
+          echo "If this change should not require a changelog entry, please remove the 'minor' or 'major' label."
+          exit 1
+
+      - name: Success
+        if: steps.check-labels.outputs.requires_changelog == 'false'
+        run: |
+          echo "✅ No changelog entry required for this PR"

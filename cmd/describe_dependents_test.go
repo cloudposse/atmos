@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"os"
 	"testing"
 
 	"github.com/golang/mock/gomock"
@@ -15,8 +14,11 @@ import (
 
 func TestDescribeDependents(t *testing.T) {
 	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
 	describeDependentsMock := exec.NewMockDescribeDependentsExec(ctrl)
 	describeDependentsMock.EXPECT().Execute(gomock.Any()).Return(nil)
+
 	run := getRunnableDescribeDependentsCmd(func(opts ...AtmosValidateOption) {},
 		func(componentType string, cmd *cobra.Command, args, additionalArgsAndFlags []string) (schema.ConfigAndStacksInfo, error) {
 			return schema.ConfigAndStacksInfo{}, nil
@@ -27,7 +29,12 @@ func TestDescribeDependents(t *testing.T) {
 		func(atmosConfig *schema.AtmosConfiguration) exec.DescribeDependentsExec {
 			return describeDependentsMock
 		})
-	run(describeDependentsCmd, []string{"component"})
+
+	err := run(describeDependentsCmd, []string{"component"})
+
+	// Verify command executed without errors. The mock expectations verify
+	// that Execute() was called with the correct arguments.
+	assert.NoError(t, err, "describeDependentsCmd should execute without error")
 }
 
 func TestSetFlagInDescribeDependents(t *testing.T) {
@@ -91,18 +98,9 @@ func TestSetFlagInDescribeDependents(t *testing.T) {
 func TestDescribeDependentsCmd_Error(t *testing.T) {
 	stacksPath := "../tests/fixtures/scenarios/terraform-apply-affected"
 
-	err := os.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
-	assert.NoError(t, err, "Setting 'ATMOS_CLI_CONFIG_PATH' environment variable should execute without error")
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
+	t.Setenv("ATMOS_BASE_PATH", stacksPath)
 
-	err = os.Setenv("ATMOS_BASE_PATH", stacksPath)
-	assert.NoError(t, err, "Setting 'ATMOS_BASE_PATH' environment variable should execute without error")
-
-	// Unset ENV variables after testing
-	defer func() {
-		os.Unsetenv("ATMOS_CLI_CONFIG_PATH")
-		os.Unsetenv("ATMOS_BASE_PATH")
-	}()
-
-	err = describeDependentsCmd.RunE(describeDependentsCmd, []string{"invalid-component"})
+	err := describeDependentsCmd.RunE(describeDependentsCmd, []string{"invalid-component"})
 	assert.Error(t, err, "describe dependents command should return an error when called with invalid component")
 }

@@ -33,7 +33,6 @@ func TestProcessImports(t *testing.T) {
 
 	// Step 2: Create temporary base directory and files
 	baseDir := t.TempDir()
-	defer os.Remove(baseDir)
 	// Step 2.1: Create a directory for recursive imports
 	configDir := filepath.Join(baseDir, "configs.d")
 	err = os.MkdirAll(configDir, 0o755)
@@ -103,9 +102,7 @@ func TestProcessImportNested(t *testing.T) {
 	assert.NoError(t, err, "Unset 'ATMOS_BASE_PATH' environment variable should execute without error")
 	err = os.Unsetenv("ATMOS_LOGS_LEVEL")
 	assert.NoError(t, err, "Unset 'ATMOS_LOGS_LEVEL' environment variable should execute without error")
-	baseDir, err := os.MkdirTemp("", "config-test")
-	assert.NoError(t, err)
-	defer os.RemoveAll(baseDir)
+	baseDir := t.TempDir()
 
 	// Setting up test files
 	_, err = setupTestFile(`
@@ -136,9 +133,7 @@ import:
 	defer server.Close()
 
 	t.Run("Test remote import processing", func(t *testing.T) {
-		tempDir, err := os.MkdirTemp("", "config-test")
-		assert.NoError(t, err)
-		defer os.RemoveAll(tempDir)
+		tempDir := t.TempDir()
 		importPaths := []string{server.URL + "/config.yaml"}
 		resolved, err := processImports(baseDir, importPaths, tempDir, 1, 5)
 		assert.NoError(t, err)
@@ -146,9 +141,7 @@ import:
 	})
 
 	t.Run("Test local import processing", func(t *testing.T) {
-		tempDir, err := os.MkdirTemp("", "config-test")
-		assert.NoError(t, err)
-		defer os.RemoveAll(tempDir)
+		tempDir := t.TempDir()
 		importPaths := []string{"local.yaml"}
 		imported, err := processImports(baseDir, importPaths, tempDir, 1, 5)
 		assert.NoError(t, err)
@@ -160,9 +153,7 @@ import:
 	})
 
 	t.Run("Test mixed imports with depth limit", func(t *testing.T) {
-		tempDir, err := os.MkdirTemp("", "config-test")
-		assert.NoError(t, err)
-		defer os.RemoveAll(tempDir)
+		tempDir := t.TempDir()
 		importPaths := []string{
 			"local.yaml",
 			server.URL + "/config.yaml",

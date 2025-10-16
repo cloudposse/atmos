@@ -578,13 +578,6 @@ func prepareAtmosCommand(t *testing.T, ctx context.Context, args ...string) *exe
 }
 
 func runCLICommandTest(t *testing.T, tc TestCase) {
-	defer func() {
-		// Change back to the original working directory after the test
-		if err := os.Chdir(startingDir); err != nil {
-			t.Fatalf("Failed to change back to the starting directory: %v", err)
-		}
-	}()
-
 	// Skip long tests in short mode
 	if testing.Short() && tc.Short != nil && !*tc.Short {
 		t.Skipf("Skipping long-running test in short mode (use 'go test' without -short to run)")
@@ -624,13 +617,7 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 
 	// Create a temporary HOME directory for the test case that's clean
 	// Otherwise a test may pass/fail due to existing files in the user's HOME directory
-	tempDir, err := os.MkdirTemp("", "test_home")
-	if err != nil {
-		t.Fatalf("Failed to create temporary directory: %v", err)
-	}
-	defer func(path string) {
-		_ = os.RemoveAll(path)
-	}(tempDir) // Clean up the temporary directory after the test
+	tempDir := t.TempDir()
 
 	// ALWAYS set XDG_CACHE_HOME to a clean temp directory for test isolation
 	// This ensures every test has its own cache and prevents interference
@@ -672,10 +659,7 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 		if err != nil {
 			t.Fatalf("failed to resolve absolute path of workdir %q: %v", tc.Workdir, err)
 		}
-		err = os.Chdir(absoluteWorkdir)
-		if err != nil {
-			t.Fatalf("Failed to change directory to %q: %v", tc.Workdir, err)
-		}
+		t.Chdir(absoluteWorkdir)
 
 		// Setup sandbox environment if enabled
 		var sandboxEnv *testhelpers.SandboxEnvironment
@@ -738,7 +722,7 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 
 	// Remove the cache file before running the test.
 	// This is to ensure that the test is not affected by the cache file.
-	err = removeCacheFile()
+	err := removeCacheFile()
 	assert.NoError(t, err, "failed to remove cache file")
 
 	// Preserve the CI environment variables.

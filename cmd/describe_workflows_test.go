@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"os"
 	"testing"
 
 	"github.com/golang/mock/gomock"
@@ -79,8 +78,11 @@ func TestSetFlagInDescribeWorkflow(t *testing.T) {
 
 func TestDescribeWorkflows(t *testing.T) {
 	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
 	describeWorkflowsMock := exec.NewMockDescribeWorkflowsExec(ctrl)
 	describeWorkflowsMock.EXPECT().Execute(gomock.Any(), gomock.Any()).Return(nil).Times(1)
+
 	run := getRunnableDescribeWorkflowsCmd(
 		func(opts ...AtmosValidateOption) {},
 		func(componentType string, cmd *cobra.Command, args, additionalArgsAndFlags []string) (schema.ConfigAndStacksInfo, error) {
@@ -91,26 +93,22 @@ func TestDescribeWorkflows(t *testing.T) {
 		},
 		describeWorkflowsMock,
 	)
+
 	describeWorkflowsCmd.Flags().StringP("pager", "p", "", "Specify a pager to use for output (e.g., `less`, `more`)")
-	run(describeWorkflowsCmd, []string{})
-	ctrl.Finish()
+
+	err := run(describeWorkflowsCmd, []string{})
+
+	// Verify command executed without errors. The mock expectations verify
+	// that Execute() was called with the correct arguments.
+	assert.NoError(t, err, "describeWorkflowsCmd should execute without error")
 }
 
 func TestDescribeWorkflowsCmd_Error(t *testing.T) {
 	stacksPath := "../tests/fixtures/scenarios/terraform-apply-affected"
 
-	err := os.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
-	assert.NoError(t, err, "Setting 'ATMOS_CLI_CONFIG_PATH' environment variable should execute without error")
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
+	t.Setenv("ATMOS_BASE_PATH", stacksPath)
 
-	err = os.Setenv("ATMOS_BASE_PATH", stacksPath)
-	assert.NoError(t, err, "Setting 'ATMOS_BASE_PATH' environment variable should execute without error")
-
-	// Unset ENV variables after testing
-	defer func() {
-		os.Unsetenv("ATMOS_CLI_CONFIG_PATH")
-		os.Unsetenv("ATMOS_BASE_PATH")
-	}()
-
-	err = describeWorkflowsCmd.RunE(describeWorkflowsCmd, []string{"--invalid-flag"})
+	err := describeWorkflowsCmd.RunE(describeWorkflowsCmd, []string{"--invalid-flag"})
 	assert.Error(t, err, "describe workflows command should return an error when called with invalid flags")
 }

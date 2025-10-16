@@ -1,26 +1,10 @@
 package homedir
 
 import (
-	"os"
 	"os/user"
 	"path/filepath"
 	"testing"
 )
-
-func patchEnv(key, value string) func() {
-	bck := os.Getenv(key)
-	deferFunc := func() {
-		os.Setenv(key, bck)
-	}
-
-	if value != "" {
-		os.Setenv(key, value)
-	} else {
-		os.Unsetenv(key)
-	}
-
-	return deferFunc
-}
 
 func BenchmarkDir(b *testing.B) {
 	// We do this for any "warmups"
@@ -51,7 +35,7 @@ func TestDir(t *testing.T) {
 
 	DisableCache = true
 	defer func() { DisableCache = false }()
-	defer patchEnv("HOME", "")()
+	t.Setenv("HOME", "")
 	dir, err = Dir()
 	if err != nil {
 		t.Fatalf("err: %s", err)
@@ -117,7 +101,7 @@ func TestExpand(t *testing.T) {
 
 	DisableCache = true
 	defer func() { DisableCache = false }()
-	defer patchEnv("HOME", "/custom/path/")()
+	t.Setenv("HOME", "/custom/path/")
 	expected := filepath.Join(string(filepath.Separator), "custom", "path", "foo", string(filepath.Separator), "bar")
 	actual, err := Expand("~/foo/bar")
 

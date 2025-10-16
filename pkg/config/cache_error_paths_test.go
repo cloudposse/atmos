@@ -42,62 +42,9 @@ func TestLoadCache_FileDoesNotExist(t *testing.T) {
 	assert.Equal(t, false, cfg.TelemetryDisclosureShown)
 }
 
-// TestLoadCache_WindowsReadError tests Windows read path at cache.go:64-74.
-func TestLoadCache_WindowsReadError(t *testing.T) {
-	if runtime.GOOS != "windows" {
-		t.Skipf("Skipping Windows-specific test on %s", runtime.GOOS)
-	}
-
-	// Create temp directory for cache.
-	tempDir := t.TempDir()
-	cleanup := withTestXDGHome(t, tempDir)
-	t.Cleanup(cleanup)
-
-	// Create cache directory.
-	cacheDir := filepath.Join(tempDir, "atmos")
-	err := os.MkdirAll(cacheDir, 0o755)
-	assert.NoError(t, err)
-
-	// Create invalid YAML file.
-	cacheFile := filepath.Join(cacheDir, "cache.yaml")
-	invalidYAML := `invalid: [yaml: content`
-	err = os.WriteFile(cacheFile, []byte(invalidYAML), 0o644)
-	assert.NoError(t, err)
-
-	// On Windows, errors are ignored and empty config is returned.
-	cfg, err := LoadCache()
-	assert.NoError(t, err)
-	// Should return empty config despite invalid YAML.
-	_ = cfg
-}
-
-// TestLoadCache_UnixReadLockError tests Unix read lock path at cache.go:76-80.
-func TestLoadCache_UnixReadLockError(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skipf("Skipping Unix-specific test on Windows")
-	}
-
-	// Create temp directory for cache.
-	tempDir := t.TempDir()
-	cleanup := withTestXDGHome(t, tempDir)
-	t.Cleanup(cleanup)
-
-	// Create cache directory.
-	cacheDir := filepath.Join(tempDir, "atmos")
-	err := os.MkdirAll(cacheDir, 0o755)
-	assert.NoError(t, err)
-
-	// Create invalid YAML file.
-	cacheFile := filepath.Join(cacheDir, "cache.yaml")
-	invalidYAML := `invalid: [yaml: content`
-	err = os.WriteFile(cacheFile, []byte(invalidYAML), 0o644)
-	assert.NoError(t, err)
-
-	// LoadCache should handle the error.
-	_, err = LoadCache()
-	// May error or may return empty config depending on implementation.
-	_ = err
-}
+// Platform-specific tests moved to separate files:
+// - cache_error_paths_windows_test.go: TestLoadCache_WindowsReadError
+// - cache_error_paths_unix_test.go: TestLoadCache_UnixReadLockError
 
 // TestSaveCache_GetCacheFilePath tests cache file path check at cache.go:91-94.
 func TestSaveCache_GetCacheFilePath(t *testing.T) {

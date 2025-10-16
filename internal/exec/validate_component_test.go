@@ -157,14 +157,12 @@ func TestValidateComponentInternal(t *testing.T) {
 
 func TestValidateComponentInternal_ProcessEnvSection(t *testing.T) {
 	// Create temporary directory structure for testing.
-	tempDir, err := os.MkdirTemp("", "atmos_test")
-	require.NoError(t, err)
-	defer os.RemoveAll(tempDir)
+	tempDir := t.TempDir()
 
 	// Create test schema files.
 	jsonSchemaDir := filepath.Join(tempDir, "schemas", "jsonschema")
 	opaSchemaDir := filepath.Join(tempDir, "schemas", "opa")
-	err = os.MkdirAll(jsonSchemaDir, 0o755)
+	err := os.MkdirAll(jsonSchemaDir, 0o755)
 	require.NoError(t, err)
 	err = os.MkdirAll(opaSchemaDir, 0o755)
 	require.NoError(t, err)
@@ -290,13 +288,11 @@ func TestValidateComponentInternal_ProcessEnvSectionContent(t *testing.T) {
 	// Test specifically that the process environment section contains expected content.
 
 	// Create a temporary directory for testing.
-	tempDir, err := os.MkdirTemp("", "atmos_test")
-	require.NoError(t, err)
-	defer os.RemoveAll(tempDir)
+	tempDir := t.TempDir()
 
 	// Create a minimal JSON schema that will pass validation.
 	jsonSchemaDir := filepath.Join(tempDir, "schemas", "jsonschema")
-	err = os.MkdirAll(jsonSchemaDir, 0o755)
+	err := os.MkdirAll(jsonSchemaDir, 0o755)
 	require.NoError(t, err)
 
 	jsonSchemaFile := filepath.Join(jsonSchemaDir, "minimal.json")
@@ -387,14 +383,12 @@ func TestValidateComponentInternal_ProcessEnvSectionContent(t *testing.T) {
 
 func TestValidateComponent(t *testing.T) {
 	// Create temporary directory structure for testing.
-	tempDir, err := os.MkdirTemp("", "atmos_test")
-	require.NoError(t, err)
-	defer os.RemoveAll(tempDir)
+	tempDir := t.TempDir()
 
 	// Create test schema files.
 	jsonSchemaDir := filepath.Join(tempDir, "schemas", "jsonschema")
 	opaSchemaDir := filepath.Join(tempDir, "schemas", "opa")
-	err = os.MkdirAll(jsonSchemaDir, 0o755)
+	err := os.MkdirAll(jsonSchemaDir, 0o755)
 	require.NoError(t, err)
 	err = os.MkdirAll(opaSchemaDir, 0o755)
 	require.NoError(t, err)
@@ -812,13 +806,8 @@ func hasValidationSettings(componentSection map[string]any) bool {
 
 func TestExecuteValidateComponent(t *testing.T) {
 	// Change to the test fixtures directory for stack processing.
-	originalDir, err := os.Getwd()
-	require.NoError(t, err)
-	defer os.Chdir(originalDir)
-
 	fixturesDir := "../../tests/fixtures/scenarios/complete"
-	err = os.Chdir(fixturesDir)
-	require.NoError(t, err)
+	t.Chdir(fixturesDir)
 
 	tests := []struct {
 		name           string
@@ -940,13 +929,8 @@ func TestExecuteValidateComponent_ComponentTypeDetection(t *testing.T) {
 	// Test that the function correctly tries different component types in order.
 
 	// Change to the test fixtures directory.
-	originalDir, err := os.Getwd()
-	require.NoError(t, err)
-	defer os.Chdir(originalDir)
-
 	fixturesDir := "../../tests/fixtures/scenarios/complete"
-	err = os.Chdir(fixturesDir)
-	require.NoError(t, err)
+	t.Chdir(fixturesDir)
 
 	tests := []struct {
 		name          string
@@ -999,13 +983,8 @@ func TestExecuteValidateComponent_WithComponentValidationSettings(t *testing.T) 
 	// Test validation using component settings rather than direct parameters.
 
 	// Change to the test fixtures directory.
-	originalDir, err := os.Getwd()
-	require.NoError(t, err)
-	defer os.Chdir(originalDir)
-
 	fixturesDir := "../../tests/fixtures/scenarios/complete"
-	err = os.Chdir(fixturesDir)
-	require.NoError(t, err)
+	t.Chdir(fixturesDir)
 
 	info := schema.ConfigAndStacksInfo{}
 	atmosConfig, err := cfg.InitCliConfig(info, true)

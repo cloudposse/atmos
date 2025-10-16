@@ -8,6 +8,35 @@ import (
 	"golang.org/x/term"
 )
 
+//go:generate mockgen -source=term_writer.go -destination=mock_term_writer.go -package=term
+
+// TTYDetector provides an interface for detecting TTY support.
+// This allows for testing by injecting mock implementations.
+type TTYDetector interface {
+	// IsTTYForStdout checks if stdout supports TTY.
+	IsTTYForStdout() bool
+	// IsTTYForStderr checks if stderr supports TTY.
+	IsTTYForStderr() bool
+}
+
+// DefaultTTYDetector implements TTYDetector using the actual terminal checks.
+type DefaultTTYDetector struct{}
+
+// IsTTYForStdout checks if stdout supports TTY.
+func (d *DefaultTTYDetector) IsTTYForStdout() bool {
+	fd := int(os.Stdout.Fd())
+	return term.IsTerminal(fd)
+}
+
+// IsTTYForStderr checks if stderr supports TTY.
+func (d *DefaultTTYDetector) IsTTYForStderr() bool {
+	fd := int(os.Stderr.Fd())
+	return term.IsTerminal(fd)
+}
+
+// defaultDetector is the global instance used by package-level functions.
+var defaultDetector TTYDetector = &DefaultTTYDetector{}
+
 // TerminalWriter wraps an io.Writer and provides automatic line wrapping based on terminal width
 // It ensures that output text is formatted to fit within the terminal's dimensions.
 type TerminalWriter struct {
@@ -79,16 +108,14 @@ func (w *TerminalWriter) GetWidth() uint {
 	return w.width
 }
 
-// CheckTTYSupportStdout checks if stdout supports TTY for displaying the progress UI.
+// IsTTYSupportForStdout checks if stdout supports TTY for displaying the progress UI.
+// This is a convenience function that uses the default TTY detector.
 func IsTTYSupportForStdout() bool {
-	fd := int(os.Stdout.Fd())
-	isTerminal := term.IsTerminal(fd)
-	return isTerminal
+	return defaultDetector.IsTTYForStdout()
 }
 
-// CheckTTYSupportStderr checks if stderr supports TTY for displaying the progress UI.
+// IsTTYSupportForStderr checks if stderr supports TTY for displaying the progress UI.
+// This is a convenience function that uses the default TTY detector.
 func IsTTYSupportForStderr() bool {
-	fd := int(os.Stderr.Fd())
-	isTerminal := term.IsTerminal(fd)
-	return isTerminal
+	return defaultDetector.IsTTYForStderr()
 }

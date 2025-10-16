@@ -1,8 +1,10 @@
+//go:build !windows
+// +build !windows
+
 package config
 
 import (
 	"os"
-	"runtime"
 	"sync"
 	"testing"
 
@@ -10,12 +12,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestAtomicFileWrites verifies that cache writes are atomic.
+// TestAtomicFileWrites verifies that cache writes are atomic on Unix-like systems.
 func TestAtomicFileWrites(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("Skipping concurrent cache test on Windows: file locking is disabled")
-	}
-
 	// Create a temporary cache directory and set up XDG with proper synchronization.
 	testDir := t.TempDir()
 	cleanup := withTestXDGHome(t, testDir)

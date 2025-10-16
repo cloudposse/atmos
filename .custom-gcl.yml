@@ -1,0 +1,5 @@
+version: v2.5.0
+plugins:
+  - module: 'github.com/cloudposse/atmos/tools/lintroller'
+    import: 'github.com/cloudposse/atmos/tools/lintroller'
+    path: './tools/lintroller'

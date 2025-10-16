@@ -2,6 +2,7 @@ package utils
 
 import (
 	"encoding/json"
+	"os"
 
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -18,7 +19,7 @@ func ProcessTagExec(
 		return nil, err
 	}
 
-	res, err := ExecuteShellAndReturnOutput(str, input, ".", nil, false)
+	res, err := ExecuteShellAndReturnOutput(str, input, ".", os.Environ(), false)
 	if err != nil {
 		return nil, err
 	}
