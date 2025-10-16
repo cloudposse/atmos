@@ -28,11 +28,9 @@ lint: get lintroller custom-gcl
 
 # Build custom golangci-lint binary with lintroller plugin.
 .PHONY: custom-gcl
-custom-gcl: tools/lintroller/.lintroller
-	@if [ ! -f ./custom-gcl ]; then \
-		echo "Building custom golangci-lint binary with lintroller plugin..."; \
-		golangci-lint custom; \
-	fi
+custom-gcl: tools/lintroller/.lintroller .custom-gcl.yml
+	@echo "Building custom golangci-lint binary with lintroller plugin..."
+	@golangci-lint custom
 
 # Custom linter for Atmos-specific rules (t.Setenv misuse, os.Setenv in tests, os.MkdirTemp in tests).
 .PHONY: lintroller

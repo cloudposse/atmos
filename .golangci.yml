@@ -110,7 +110,7 @@ linters:
     custom:
       lintroller:
         type: "module"  # Required: indicates this is a module plugin (not Go .so plugin)
-        description: "Atmos project-specific linting rules (t.Setenv/os.Setenv/t.TempDir checks)"
+        description: "Atmos project-specific linting rules (t.Setenv/os.Setenv/os.MkdirTemp checks)"
         settings:
           # These settings are passed to the plugin's Settings struct (see tools/lintroller/plugin.go)
           # Each rule can be independently enabled/disabled
