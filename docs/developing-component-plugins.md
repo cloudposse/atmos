@@ -83,7 +83,7 @@ type ExecutionContext struct {
 
 Create a new package for your component provider:
 
-```
+```text
 pkg/component/
 ├── yourtype/
 │   ├── config.go      # Configuration structure
