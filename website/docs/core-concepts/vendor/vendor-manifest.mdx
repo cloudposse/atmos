@@ -191,12 +191,103 @@ The `vendor.yaml` vendoring manifest supports Kubernetes-style YAML config to de
     source: "github.com/cloudposse-terraform-components/aws-vpc-flow-logs-bucket.git?ref={{.Version}}"
     ```
 
-    For private Git repositories, prepend the URI with `git::` and use the following format to pass a environment variable with the GitHub token:
+    ### Authenticating to Private Git Repositories
+
+    Atmos provides **automatic token injection** for private repositories on GitHub, GitLab, and Bitbucket. This is the recommended approach for most users.
+
+    :::tip Automatic Token Injection (Recommended)
+    The easiest and most secure way to authenticate to private Git repositories is to use Atmos's automatic token injection.
+
+    **Step 1:** Set the authentication token as an environment variable:
+    ```bash
+    export GITHUB_TOKEN="your-personal-access-token"
+    # or
+    export ATMOS_GITHUB_TOKEN="your-personal-access-token"
+    ```
+
+    **Step 2:** Use simple URLs in your `vendor.yaml` (no manual credentials):
+    ```yaml
+    sources:
+      - component: "vpc"
+        source: "github.com/your-org/private-repo.git//terraform/vpc?ref={{.Version}}"
+        version: "1.0.0"
+        targets:
+          - "components/terraform/vpc"
+    ```
+
+    **Step 3:** Atmos automatically injects the token when downloading.
+
+    Supported environment variables:
+    - **GitHub:** `ATMOS_GITHUB_TOKEN` or `GITHUB_TOKEN`
+    - **GitLab:** `ATMOS_GITLAB_TOKEN` or `GITLAB_TOKEN`
+    - **Bitbucket:** `ATMOS_BITBUCKET_TOKEN` or `BITBUCKET_TOKEN`
+
+    **Token injection settings in `atmos.yaml`:**
+    - `inject_github_token: true` (default: **true**) - Enables automatic GitHub token injection
+    - `inject_gitlab_token: true` (default: **false**) - Enables automatic GitLab token injection
+    - `inject_bitbucket_token: true` (default: **false**) - Enables automatic Bitbucket token injection
+
+    GitHub token injection is enabled by default. To disable it:
+    ```yaml
+    settings:
+      inject_github_token: false
+    ```
+
+    To enable GitLab or Bitbucket token injection:
+    ```yaml
+    settings:
+      inject_gitlab_token: true
+      inject_bitbucket_token: true
+    ```
+    :::
+
+    :::note GitHub Actions Token Scope
+    The `GITHUB_TOKEN` provided by GitHub Actions is only valid for the current repository, or repositories marked as `internal` within GitHub Enterprise organizations. For cross-repository access, provision a [fine grained personal access token](https://docs.github.com/en/rest/authentication/permissions-required-for-fine-grained-personal-access-tokens?apiVersion=2022-11-28) with the necessary permissions.
+    :::
+
+    <details>
+    <summary><strong>Advanced: Manual Token Injection with Templates</strong></summary>
+
+    For custom Git hosts or advanced scenarios not covered by automatic token injection, you can manually inject credentials using Go templates:
 
     ```yaml
-    source: "git::https://{{env "GITHUB_TOKEN"}}@github.com/some-org/some-private-repo/terraform/vpc.git?ref={{.Version}}"
+    sources:
+      - component: "vpc"
+        source: 'git::https://{{getenv "CUSTOM_GIT_TOKEN"}}@custom-git-host.com/org/repo.git?ref={{.Version}}'
+        version: "1.0.0"
+        targets:
+          - "components/terraform/vpc"
     ```
-    Note, that `GITHUB_TOKEN` provided by GitHub Actions are only valid for the current repository, or repositories marked as `internal` within GitHub Enterprise organizations. For cross-repository access, make sure you provision a [fine grained token](https://docs.github.com/en/rest/authentication/permissions-required-for-fine-grained-personal-access-tokens?apiVersion=2022-11-28) with the necessary permissions.
+
+    :::important YAML Quoting with Template Functions
+    When using Go template functions like `{{getenv "TOKEN"}}` that contain double quotes, you have **two options** to avoid YAML parsing errors:
+
+    **Option 1: Single-quoted YAML string (recommended)**
+    ```yaml
+    source: 'git::https://{{getenv "TOKEN"}}@custom-host.com/org/repo.git?ref={{.Version}}'
+    ```
+
+    **Option 2: YAML folded scalar**
+    ```yaml
+    source: >-
+      git::https://{{getenv "TOKEN"}}@custom-host.com/org/repo.git?ref={{.Version}}
+    ```
+
+    **What doesn't work:**
+    ```yaml
+    source: "git::https://{{getenv "TOKEN"}}@custom-host.com/org/repo.git?ref={{.Version}}"
+    ```
+
+    This is because YAML parsers interpret nested double quotes as string terminators. Template processing happens **after** YAML parsing, so the YAML must be valid before templates are evaluated.
+    :::
+
+    **Why manual injection is rarely needed:**
+    - Automatic injection works for GitHub, GitLab, and Bitbucket
+    - Manual injection requires careful YAML quoting
+    - Credentials in URLs are harder to audit and rotate
+    - Environment variables are more secure and easier to manage
+
+    </details>
 
     <dl>
       <dt>`ref`</dt>
@@ -231,6 +322,15 @@ The `vendor.yaml` vendoring manifest supports Kubernetes-style YAML config to de
   <dt>`source` and `targets` templates</dt>
   <dd>
   The `source` and `targets` attributes support [Go templates](https://pkg.go.dev/text/template) and [Sprig Functions](http://masterminds.github.io/sprig/). This can be used to templatise the `source` and `targets` paths with the component name specified in the `component` attribute and artifact versions specified in the `version` attribute.
+
+    :::note Template Evaluation Order
+    Templates in `source` and `targets` are evaluated **after** YAML parsing. This means:
+    - The `vendor.yaml` file itself must be valid YAML before template processing
+    - Only the **values** of `source` and `targets` fields are processed as templates
+    - The file structure is **not** a template - it's parsed as standard YAML first
+
+    When using template functions that require double quotes (like `{{getenv "VAR"}}`), wrap the entire YAML string value in single quotes to avoid nested double quote issues.
+    :::
 
     Here's an advanced example showcasing how templates and Sprig functions can be used together with `targets`:
 
@@ -310,12 +410,7 @@ targets:
   - "components/terraform/{{ .Component }}/{{ (first 2 (splitList \".\" .Version)) | join \".\" }}"
 ```
 
-Or to access an environment variable in the `source` attribute, use the following template:
-
-```yaml
-source: "git::https://{{env "GITHUB_TOKEN"}}@github.com/some-org/some-private-repo/terraform/{{ .Component }}/{{ .Version }}.git?ref={{.Version}}"
-```
-This will enable vendoring to download the component into a versioned folder from a private repository, by reading the GitHub token from the `GITHUB_TOKEN` environment variable.
+For accessing environment variables in templates, the most common use case is authentication to private Git repositories. **We strongly recommend using Atmos's automatic token injection** (see [Authenticating to Private Git Repositories](#authenticating-to-private-git-repositories) above) instead of manually injecting credentials with `{{getenv}}`. Automatic injection is simpler, more secure, and works without YAML quoting complications.
 
 
 ## Hierarchical Imports in Vendoring Manifests

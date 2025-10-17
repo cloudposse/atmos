@@ -349,11 +349,28 @@ sources:
 
 Atmos automatically injects tokens for supported platforms:
 
-| Platform | Environment Variables | Username |
-|----------|----------------------|----------|
-| GitHub | `ATMOS_GITHUB_TOKEN` or `GITHUB_TOKEN` | `x-access-token` |
-| GitLab | `ATMOS_GITLAB_TOKEN` or `GITLAB_TOKEN` | `oauth2` |
-| Bitbucket | `ATMOS_BITBUCKET_TOKEN` or `BITBUCKET_TOKEN` | `x-token-auth` |
+| Platform | Environment Variables | Username | Enabled by Default |
+|----------|----------------------|----------|--------------------|
+| GitHub | `ATMOS_GITHUB_TOKEN` or `GITHUB_TOKEN` | `x-access-token` | ✅ Yes |
+| GitLab | `ATMOS_GITLAB_TOKEN` or `GITLAB_TOKEN` | `oauth2` | ❌ No |
+| Bitbucket | `ATMOS_BITBUCKET_TOKEN` or `BITBUCKET_TOKEN` | `x-token-auth` | ❌ No |
+
+**Configuration in `atmos.yaml`:**
+
+GitHub token injection is enabled by default. To disable it:
+```yaml
+settings:
+  inject_github_token: false
+```
+
+To enable GitLab or Bitbucket token injection:
+```yaml
+settings:
+  inject_gitlab_token: true
+  inject_bitbucket_token: true
+```
+
+See the [CLI Configuration](/cli/configuration) documentation for more details on these settings.
 
 ### SSH Keys
 

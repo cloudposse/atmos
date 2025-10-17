@@ -175,20 +175,24 @@ func (d *CustomGitDetector) injectToken(parsedURL *url.URL, host string) {
 }
 
 // resolveToken returns the token and its source based on the host.
+// It prefers ATMOS_* prefixed tokens but falls back to standard tokens if not set.
 func (d *CustomGitDetector) resolveToken(host string) (string, string) {
 	switch host {
 	case hostGitHub:
-		if d.atmosConfig.Settings.InjectGithubToken {
+		// Try ATMOS_GITHUB_TOKEN first, fall back to GITHUB_TOKEN
+		if d.atmosConfig.Settings.AtmosGithubToken != "" {
 			return d.atmosConfig.Settings.AtmosGithubToken, "ATMOS_GITHUB_TOKEN"
 		}
 		return d.atmosConfig.Settings.GithubToken, "GITHUB_TOKEN"
 	case hostBitbucket:
-		if d.atmosConfig.Settings.InjectBitbucketToken {
+		// Try ATMOS_BITBUCKET_TOKEN first, fall back to BITBUCKET_TOKEN
+		if d.atmosConfig.Settings.AtmosBitbucketToken != "" {
 			return d.atmosConfig.Settings.AtmosBitbucketToken, "ATMOS_BITBUCKET_TOKEN"
 		}
 		return d.atmosConfig.Settings.BitbucketToken, "BITBUCKET_TOKEN"
 	case hostGitLab:
-		if d.atmosConfig.Settings.InjectGitlabToken {
+		// Try ATMOS_GITLAB_TOKEN first, fall back to GITLAB_TOKEN
+		if d.atmosConfig.Settings.AtmosGitlabToken != "" {
 			return d.atmosConfig.Settings.AtmosGitlabToken, "ATMOS_GITLAB_TOKEN"
 		}
 		return d.atmosConfig.Settings.GitlabToken, "GITLAB_TOKEN"
