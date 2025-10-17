@@ -382,10 +382,6 @@ func sanitizeOutput(output string) (string, error) {
 	posthogTokenRegex := regexp.MustCompile(`phc_[a-zA-Z0-9_]+`)
 	result = posthogTokenRegex.ReplaceAllString(result, "phc_TEST_TOKEN_PLACEHOLDER")
 
-	// 9. Normalize credential masking in URLs to use a consistent placeholder.
-	// Replace REDACTED (our code's masking) with *** for snapshot consistency.
-	result = strings.ReplaceAll(result, "REDACTED", "***")
-
 	return result, nil
 }
 
