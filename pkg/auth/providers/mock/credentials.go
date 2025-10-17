@@ -26,13 +26,31 @@ func (c *Credentials) GetExpiration() (*time.Time, error) {
 }
 
 // BuildWhoamiInfo populates WhoamiInfo with mock credential information.
+// Sensitive credentials are stored in info.Credentials (non-serializable).
+// Only non-sensitive environment variables are placed in info.Environment.
 func (c *Credentials) BuildWhoamiInfo(info *types.WhoamiInfo) {
-	info.Environment = map[string]string{
-		"AWS_ACCESS_KEY_ID":     c.AccessKeyID,
-		"AWS_SECRET_ACCESS_KEY": c.SecretAccessKey,
-		"AWS_SESSION_TOKEN":     c.SessionToken,
-		"AWS_REGION":            c.Region,
-		"AWS_DEFAULT_REGION":    c.Region,
+	// Nil-check the incoming info pointer.
+	if info == nil {
+		return
 	}
-	info.Expiration = &c.Expiration
+
+	// Store raw credentials in non-serializable field.
+	info.Credentials = c
+
+	// Only populate non-sensitive environment variables.
+	// Credentials like AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, and AWS_SESSION_TOKEN
+	// are NOT exposed in Environment to prevent serialization leaks.
+	if info.Environment == nil {
+		info.Environment = make(map[string]string)
+	}
+	info.Environment["AWS_REGION"] = c.Region
+	info.Environment["AWS_DEFAULT_REGION"] = c.Region
+
+	// Set expiration only if non-zero.
+	if !c.Expiration.IsZero() {
+		info.Expiration = &c.Expiration
+	}
+
+	// Set region at top level.
+	info.Region = c.Region
 }
