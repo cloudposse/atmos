@@ -33,6 +33,8 @@ func maskBasicAuth(rawURL string) (string, error) {
 
 	// Post-process: Replace REDACTED with *** for cleaner output.
 	// This avoids URL encoding issues while providing traditional credential masking.
+	// Since this is purely for display/logging purposes, we don't need to worry about
+	// URL encoding - the replacement happens after URL stringification.
 	result = strings.ReplaceAll(result, "REDACTED:REDACTED", "***")
 	result = strings.ReplaceAll(result, "REDACTED", "***")
 
