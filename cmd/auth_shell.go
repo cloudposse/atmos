@@ -108,5 +108,8 @@ func init() {
 		log.Trace("Failed to bind shell flag", "error", err)
 	}
 
+	// Add shell completion for identity flag.
+	AddIdentityCompletion(authShellCmd)
+
 	authCmd.AddCommand(authShellCmd)
 }
