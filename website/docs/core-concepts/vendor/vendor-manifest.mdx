@@ -290,6 +290,8 @@ The `vendor.yaml` vendoring manifest supports Kubernetes-style YAML config to de
     ```
 
     This is because YAML parsers interpret nested double quotes as string terminators. Template processing happens **after** YAML parsing, so the YAML must be valid before templates are evaluated.
+
+    **Note:** Atmos v1.194.0+ upgraded the YAML parser from v3.0.1 to v3.0.4, which enforces YAML spec compliance more strictly. Configurations with nested double quotes that may have worked in earlier versions (v1.193.x and below) will now fail YAML validation. Use single quotes or folded scalars as shown above.
     :::
 
     :::note GitHub Authentication Format
