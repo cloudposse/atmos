@@ -149,6 +149,17 @@ var (
 	ErrInvalidSpaceLiftSettings               = errors.New("invalid spacelift settings section")
 	ErrInvalidComponentMetadataInherits       = errors.New("invalid component metadata.inherits section")
 	ErrComponentNotDefined                    = errors.New("component not defined in any config files")
+
+	// Component registry errors.
+	ErrComponentProviderNotFound     = errors.New("component provider not found")
+	ErrComponentProviderNil          = errors.New("component provider cannot be nil")
+	ErrComponentTypeEmpty            = errors.New("component type cannot be empty")
+	ErrComponentConfigInvalid        = errors.New("component configuration invalid")
+	ErrComponentListFailed           = errors.New("failed to list components")
+	ErrComponentValidationFailed     = errors.New("component validation failed")
+	ErrComponentExecutionFailed      = errors.New("component execution failed")
+	ErrComponentArtifactGeneration   = errors.New("component artifact generation failed")
+	ErrComponentProviderRegistration = errors.New("failed to register component provider")
 	ErrInvalidTerraformBackend                = errors.New("invalid terraform.backend section")
 	ErrInvalidTerraformRemoteStateBackend     = errors.New("invalid terraform.remote_state_backend section")
 	ErrUnsupportedComponentType               = errors.New("unsupported component type. Valid types are 'terraform', 'helmfile', 'packer'")
