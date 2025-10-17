@@ -43,6 +43,8 @@ var (
 	ErrFailedMarshalConfigToYaml             = errors.New("failed to marshal config to YAML")
 	ErrCommandNil                            = errors.New("command cannot be nil")
 	ErrGitHubRateLimitExceeded               = errors.New("GitHub API rate limit exceeded")
+	ErrInvalidLimit                          = errors.New("limit must be between 1 and 100")
+	ErrUnsupportedOutputFormat               = errors.New("unsupported output format")
 
 	// ErrPlanHasDiff is returned when there are differences between two Terraform plan files.
 	ErrPlanHasDiff = errors.New("plan files have differences")
