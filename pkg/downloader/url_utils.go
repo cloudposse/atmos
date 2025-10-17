@@ -7,7 +7,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 )
 
-const MaskedSecret = "xxx"
+const MaskedSecret = "REDACTED"
 
 func maskBasicAuth(rawURL string) (string, error) {
 	parsedURL, err := url.Parse(rawURL)
