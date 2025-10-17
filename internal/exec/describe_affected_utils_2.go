@@ -3,6 +3,8 @@ package exec
 import (
 	"errors"
 	"fmt"
+	"io/fs"
+	"os"
 	"path/filepath"
 	"reflect"
 	"strings"
@@ -315,16 +317,24 @@ func areTerraformComponentModulesChanged(
 
 	terraformConfiguration, diags := tfconfig.LoadModule(componentPathAbs)
 	if diags.HasErrors() {
-		errMsg := diags.Err().Error()
-		// If the directory doesn't exist, treat as no modules (component may be deleted or not yet created).
-		// This is valid in affected detection when tracking changes over time.
+		diagErr := diags.Err()
+
+		// Try structured error detection first (most robust).
+		if errors.Is(diagErr, os.ErrNotExist) || errors.Is(diagErr, fs.ErrNotExist) {
+			return false, nil
+		}
+
+		// Fallback to error message inspection for cases where tfconfig doesn't wrap errors properly.
+		// This handles missing subdirectory modules (e.g., ./modules/security-group referenced in main.tf
+		// but the directory doesn't exist). Such missing paths are valid in affected detection—components
+		// or their modules may be deleted or not yet created when tracking changes over time.
+		errMsg := diagErr.Error()
 		if strings.Contains(errMsg, "does not exist") || strings.Contains(errMsg, "Failed to read directory") {
 			return false, nil
 		}
 
 		// For other errors (syntax errors, permission issues, etc.), return error.
-		// This prevents false negatives from ignoring actionable failures.
-		return false, fmt.Errorf("%w at %s: %v", errUtils.ErrFailedToLoadTerraformModule, componentPathAbs, diags.Err())
+		return false, errors.Join(errUtils.ErrFailedToLoadTerraformModule, diagErr)
 	}
 
 	// If no configuration, there are no modules to check.

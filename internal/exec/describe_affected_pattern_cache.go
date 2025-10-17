@@ -1,7 +1,10 @@
 package exec
 
 import (
+	"errors"
 	"fmt"
+	"io/fs"
+	"os"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -77,8 +80,6 @@ func (c *componentPathPatternCache) getComponentPathPattern(
 
 // getTerraformModulePatterns returns cached module patterns for a terraform component.
 // This caches the expensive tfconfig.LoadModule() result and pattern computation.
-//
-//nolint:revive // Error handling for missing directories requires additional lines
 func (c *componentPathPatternCache) getTerraformModulePatterns(
 	component string,
 	atmosConfig *schema.AtmosConfiguration,
@@ -101,30 +102,54 @@ func (c *componentPathPatternCache) getTerraformModulePatterns(
 	// Load Terraform configuration (expensive operation).
 	terraformConfiguration, diags := tfconfig.LoadModule(componentPathAbs)
 	if diags.HasErrors() {
-		errMsg := diags.Err().Error()
-		// If the directory doesn't exist, treat as empty (component may be deleted or not yet created).
-		// This is valid in affected detection when tracking changes over time.
-		if strings.Contains(errMsg, "does not exist") || strings.Contains(errMsg, "Failed to read directory") {
-			c.mu.Lock()
-			c.modulePatterns[component] = []string{}
-			c.mu.Unlock()
+		if shouldCacheEmptyPatterns(diags.Err()) {
+			c.cacheEmptyPatterns(component)
 			return []string{}, nil
 		}
-
-		// For other errors (syntax errors, permission issues, etc.), return error.
-		// This prevents false negatives from caching incorrect empty results.
-		return nil, fmt.Errorf("%w at %s: %v", errUtils.ErrFailedToLoadTerraformModule, componentPathAbs, diags.Err())
+		return nil, errors.Join(errUtils.ErrFailedToLoadTerraformModule, diags.Err())
 	}
 
 	if terraformConfiguration == nil {
 		// No modules found (successful load with no modules), cache empty slice.
-		c.mu.Lock()
-		c.modulePatterns[component] = []string{}
-		c.mu.Unlock()
+		c.cacheEmptyPatterns(component)
 		return []string{}, nil
 	}
 
 	// Pre-compute ALL module patterns ONCE.
+	patterns := computeModulePatternsFromConfig(terraformConfiguration)
+
+	// Store in cache with write lock.
+	c.mu.Lock()
+	c.modulePatterns[component] = patterns
+	c.mu.Unlock()
+
+	return patterns, nil
+}
+
+// shouldCacheEmptyPatterns determines if the error indicates a missing directory that should cache empty patterns.
+func shouldCacheEmptyPatterns(diagErr error) bool {
+	// Try structured error detection first (most robust).
+	if errors.Is(diagErr, os.ErrNotExist) || errors.Is(diagErr, fs.ErrNotExist) {
+		return true
+	}
+
+	// Fallback to error message inspection for cases where tfconfig doesn't wrap errors properly.
+	// This handles missing subdirectory modules (e.g., ./modules/security-group referenced in main.tf
+	// but the directory doesn't exist). Such missing paths are valid in affected detection—components
+	// or their modules may be deleted or not yet created when tracking changes over time.
+	errMsg := diagErr.Error()
+	return strings.Contains(errMsg, "does not exist") || strings.Contains(errMsg, "Failed to read directory")
+}
+
+// cacheEmptyPatterns caches an empty pattern slice for a component.
+func (c *componentPathPatternCache) cacheEmptyPatterns(component string) {
+	c.mu.Lock()
+	c.modulePatterns[component] = []string{}
+	c.mu.Unlock()
+}
+
+// computeModulePatternsFromConfig computes module patterns from a terraform configuration.
+func computeModulePatternsFromConfig(terraformConfiguration *tfconfig.Module) []string {
 	patterns := make([]string, 0, len(terraformConfiguration.ModuleCalls))
 	for _, moduleConfig := range terraformConfiguration.ModuleCalls {
 		// Skip remote modules (from terraform registry).
@@ -140,13 +165,7 @@ func (c *componentPathPatternCache) getTerraformModulePatterns(
 
 		patterns = append(patterns, modulePathAbs+"/**")
 	}
-
-	// Store in cache with write lock.
-	c.mu.Lock()
-	c.modulePatterns[component] = patterns
-	c.mu.Unlock()
-
-	return patterns, nil
+	return patterns
 }
 
 // Clear clears the cache (useful for testing).

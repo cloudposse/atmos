@@ -92,6 +92,20 @@ func deepCopyValue(v any) any {
 //nolint:revive // Cyclomatic complexity is inherent to reflection-based type handling.
 func deepCopyTypedValue(rv reflect.Value) reflect.Value {
 	switch rv.Kind() {
+	case reflect.Struct:
+		// Deep copy exported fields of struct values.
+		// This prevents aliasing of nested slices/maps inside struct values in typed maps.
+		t := rv.Type()
+		dst := reflect.New(t).Elem()
+		for i := 0; i < rv.NumField(); i++ {
+			if !dst.Field(i).CanSet() {
+				// Unexported field - skip (can't set).
+				continue
+			}
+			dst.Field(i).Set(deepCopyTypedValue(rv.Field(i)))
+		}
+		return dst
+
 	case reflect.Slice:
 		// Deep copy typed slice.
 		if rv.IsNil() {
