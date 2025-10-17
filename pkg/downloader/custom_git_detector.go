@@ -162,7 +162,15 @@ func (d *CustomGitDetector) normalizePath(parsedURL *url.URL) {
 }
 
 // injectToken injects a token into the URL if available.
+// User-specified credentials in the URL always take precedence over automatic injection.
 func (d *CustomGitDetector) injectToken(parsedURL *url.URL, host string) {
+	// If URL already has user credentials, respect them and skip injection.
+	if parsedURL.User != nil {
+		maskedURL, _ := maskBasicAuth(parsedURL.String())
+		log.Debug("Skipping token injection: URL already has user credentials", keyURL, maskedURL)
+		return
+	}
+
 	token, tokenSource := d.resolveToken(host)
 	if token != "" {
 		defaultUsername := d.getDefaultUsername(host)

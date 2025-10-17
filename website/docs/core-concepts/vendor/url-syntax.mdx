@@ -345,15 +345,29 @@ sources:
 
 ## Authentication
 
-### Token Injection
+### Credential Precedence Order
 
-Atmos automatically injects tokens for supported platforms:
+Atmos uses the following precedence order for credentials when accessing Git repositories:
+
+1. **User-specified credentials in URL** (highest precedence) - If you specify credentials directly in the `source` URL, they are always used
+2. **Automatic token injection** - If no credentials are in the URL, Atmos injects tokens from environment variables
+3. **No authentication** - If no credentials are provided and no tokens are available
+
+:::tip User Credentials Always Win
+If your `source` URL includes credentials (e.g., `https://myuser:mytoken@github.com/repo.git`), Atmos will **never** overwrite them with automatic token injection. This allows you to use specific credentials per repository when needed.
+:::
+
+### Automatic Token Injection
+
+Atmos automatically injects tokens for supported platforms when **no user credentials are in the URL**:
 
 | Platform | Environment Variables | Username | Enabled by Default |
 |----------|----------------------|----------|--------------------|
 | GitHub | `ATMOS_GITHUB_TOKEN` or `GITHUB_TOKEN` | `x-access-token` | ✅ Yes |
 | GitLab | `ATMOS_GITLAB_TOKEN` or `GITLAB_TOKEN` | `oauth2` | ❌ No |
 | Bitbucket | `ATMOS_BITBUCKET_TOKEN` or `BITBUCKET_TOKEN` | `x-token-auth` | ❌ No |
+
+**Token Resolution:** For each platform, Atmos first tries the `ATMOS_*` prefixed token, then falls back to the standard token if not set.
 
 **Configuration in `atmos.yaml`:**
 

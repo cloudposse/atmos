@@ -307,6 +307,89 @@ func TestInjectToken_NoToken(t *testing.T) {
 	assert.Nil(t, parsedURL.User, "User should be nil when no token is available")
 }
 
+// TestInjectToken_UserSpecifiedCredentials tests that user-specified credentials take precedence over automatic injection.
+func TestInjectToken_UserSpecifiedCredentials(t *testing.T) {
+	tests := []struct {
+		name             string
+		urlString        string
+		host             string
+		expectedUsername string
+		expectedPassword string
+		tokenAvailable   bool
+	}{
+		{
+			name:             "User-specified username and password take precedence over GitHub token",
+			urlString:        "https://myuser:mypass@github.com/user/repo.git",
+			host:             hostGitHub,
+			expectedUsername: "myuser",
+			expectedPassword: "mypass",
+			tokenAvailable:   true,
+		},
+		{
+			name:             "User-specified username only (no password) takes precedence",
+			urlString:        "https://myuser@github.com/user/repo.git",
+			host:             hostGitHub,
+			expectedUsername: "myuser",
+			expectedPassword: "",
+			tokenAvailable:   true,
+		},
+		{
+			name:             "User-specified token format takes precedence over automatic injection",
+			urlString:        "https://x-access-token:ghp_usertoken@github.com/user/repo.git",
+			host:             hostGitHub,
+			expectedUsername: "x-access-token",
+			expectedPassword: "ghp_usertoken",
+			tokenAvailable:   true,
+		},
+		{
+			name:             "GitLab user-specified credentials take precedence",
+			urlString:        "https://myuser:glpat-usertoken@gitlab.com/user/repo.git",
+			host:             hostGitLab,
+			expectedUsername: "myuser",
+			expectedPassword: "glpat-usertoken",
+			tokenAvailable:   true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			parsedURL, err := url.Parse(tt.urlString)
+			assert.NoError(t, err)
+
+			// Store original user info for comparison
+			originalUser := parsedURL.User
+
+			detector := &CustomGitDetector{
+				atmosConfig: &schema.AtmosConfiguration{
+					Settings: schema.AtmosSettings{
+						InjectGithubToken: tt.tokenAvailable && tt.host == hostGitHub,
+						AtmosGithubToken:  "should-not-be-used",
+						InjectGitlabToken: tt.tokenAvailable && tt.host == hostGitLab,
+						AtmosGitlabToken:  "should-not-be-used",
+					},
+				},
+			}
+
+			detector.injectToken(parsedURL, tt.host)
+
+			// Verify user credentials were NOT overwritten
+			assert.NotNil(t, parsedURL.User, "User should not be nil when URL has pre-existing credentials")
+			assert.Equal(t, originalUser, parsedURL.User, "User credentials should not be modified")
+
+			username := parsedURL.User.Username()
+			password, hasPassword := parsedURL.User.Password()
+
+			assert.Equal(t, tt.expectedUsername, username, "Username should match original")
+			if tt.expectedPassword != "" {
+				assert.True(t, hasPassword, "Password should be present")
+				assert.Equal(t, tt.expectedPassword, password, "Password should match original")
+			} else {
+				assert.False(t, hasPassword, "Password should not be present")
+			}
+		})
+	}
+}
+
 // TestInjectToken_UnknownHost tests injectToken with an unknown host.
 func TestInjectToken_UnknownHost(t *testing.T) {
 	parsedURL, err := url.Parse("https://example.com/user/repo.git")

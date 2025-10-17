@@ -1,6 +1,7 @@
 package downloader
 
 import (
+	"net/url"
 	"strings"
 	"testing"
 
@@ -160,4 +161,90 @@ func TestCustomGitDetector_EndToEnd_NonGitHubHost(t *testing.T) {
 	// For non-GitHub/GitLab/Bitbucket hosts, detection returns false
 	assert.False(t, detected, "Should not detect non-supported host")
 	assert.Empty(t, finalURL, "Should not return a URL for unsupported host")
+}
+
+// TestCustomGitDetector_EndToEnd_UserSpecifiedCredentials tests that user-specified credentials in the URL are preserved.
+func TestCustomGitDetector_EndToEnd_UserSpecifiedCredentials(t *testing.T) {
+	tests := []struct {
+		name             string
+		sourceURL        string
+		githubToken      string
+		expectedUsername string
+		expectedPassword string
+		shouldHaveUser   bool
+	}{
+		{
+			name:             "User-specified credentials preserved, automatic injection skipped",
+			sourceURL:        "https://myuser:mypass@github.com/test-org/test-repo.git?ref=main",
+			githubToken:      "ghp_should_not_be_used",
+			expectedUsername: "myuser",
+			expectedPassword: "mypass",
+			shouldHaveUser:   true,
+		},
+		{
+			name:             "User-specified token format preserved",
+			sourceURL:        "https://x-access-token:ghp_usertoken@github.com/test-org/test-repo.git?ref=main",
+			githubToken:      "ghp_should_not_be_used",
+			expectedUsername: "x-access-token",
+			expectedPassword: "ghp_usertoken",
+			shouldHaveUser:   true,
+		},
+		{
+			name:             "User-specified username only preserved",
+			sourceURL:        "https://myuser@github.com/test-org/test-repo.git?ref=main",
+			githubToken:      "ghp_should_not_be_used",
+			expectedUsername: "myuser",
+			expectedPassword: "",
+			shouldHaveUser:   true,
+		},
+		{
+			name:             "No user credentials and no token - no injection",
+			sourceURL:        "https://github.com/test-org/test-repo.git?ref=main",
+			githubToken:      "",
+			expectedUsername: "",
+			expectedPassword: "",
+			shouldHaveUser:   false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			atmosConfig := &schema.AtmosConfiguration{
+				Settings: schema.AtmosSettings{
+					InjectGithubToken: true,
+					GithubToken:       tt.githubToken,
+				},
+			}
+
+			detector := NewCustomGitDetector(atmosConfig, tt.sourceURL)
+			result, detected, err := detector.Detect(tt.sourceURL, "")
+
+			assert.NoError(t, err)
+			assert.True(t, detected)
+			assert.NotEmpty(t, result)
+
+			// Parse the resulting URL to verify credentials
+			resultURL := strings.TrimPrefix(result, "git::")
+			parsedResult, err := url.Parse(resultURL)
+			assert.NoError(t, err)
+
+			if tt.shouldHaveUser {
+				assert.NotNil(t, parsedResult.User, "URL should have user credentials")
+				username := parsedResult.User.Username()
+				password, hasPassword := parsedResult.User.Password()
+
+				assert.Equal(t, tt.expectedUsername, username, "Username should match expected")
+				if tt.expectedPassword != "" {
+					assert.True(t, hasPassword, "Password should be present")
+					assert.Equal(t, tt.expectedPassword, password, "Password should match expected")
+				}
+			} else {
+				assert.Nil(t, parsedResult.User, "URL should not have user credentials when none specified and no token available")
+			}
+
+			// Verify URL structure is preserved
+			assert.Equal(t, "github.com", parsedResult.Host)
+			assert.Contains(t, parsedResult.Path, "/test-org/test-repo.git")
+		})
+	}
 }
