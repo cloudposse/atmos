@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"regexp"
+	"strings"
 	"time"
 
 	"github.com/google/go-github/v59/github"
@@ -126,6 +128,49 @@ func outputYAML(releases []*github.RepositoryRelease) error {
 	return encoder.Encode(output)
 }
 
+// extractFirstHeading extracts the first meaningful heading from markdown text.
+// It looks for <summary> tags first, then H1/H2 headings.
+func extractFirstHeading(markdown string) string {
+	// Try to extract from <summary> tag first (common in GitHub releases).
+	summaryRe := regexp.MustCompile(`<summary>(.+?)</summary>`)
+	if matches := summaryRe.FindStringSubmatch(markdown); len(matches) > 1 {
+		// Clean up the summary text (remove markdown, whitespace, etc.).
+		summary := strings.TrimSpace(matches[1])
+		// Remove any trailing author/PR references like "@user (#123)".
+		summary = regexp.MustCompile(`\s+@\S+\s+\(#\d+\)$`).ReplaceAllString(summary, "")
+		if summary != "" {
+			return summary
+		}
+	}
+
+	// Fall back to first H1 or H2 heading.
+	headingRe := regexp.MustCompile(`(?m)^#{1,2}\s+(.+)$`)
+	if matches := headingRe.FindStringSubmatch(markdown); len(matches) > 1 {
+		return strings.TrimSpace(matches[1])
+	}
+
+	return ""
+}
+
+// getReleaseTitle returns a meaningful title for the release.
+// If the title matches the tag, it extracts the first heading from release notes.
+func getReleaseTitle(release *github.RepositoryRelease) string {
+	title := release.GetName()
+	tag := release.GetTagName()
+
+	// If title is the same as tag (or empty), try to extract from release notes.
+	if title == tag || title == "" {
+		if body := release.GetBody(); body != "" {
+			if heading := extractFirstHeading(body); heading != "" {
+				return heading
+			}
+		}
+		return tag
+	}
+
+	return title
+}
+
 func outputText(releases []*github.RepositoryRelease) {
 	if len(releases) == 0 {
 		fmt.Println("No releases found")
@@ -140,7 +185,7 @@ func outputText(releases []*github.RepositoryRelease) {
 		fmt.Printf("%s - %s - %s%s\n",
 			release.GetTagName(),
 			release.GetPublishedAt().Format("2006-01-02"),
-			release.GetName(),
+			getReleaseTitle(release),
 			prerelease,
 		)
 	}
