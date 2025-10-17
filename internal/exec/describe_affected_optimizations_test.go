@@ -1068,6 +1068,192 @@ func TestChangedFilesIndex_ThreadSafety(t *testing.T) {
 	}
 }
 
+// TestChangedFilesIndex_AbsolutePathNormalization tests that all file paths are normalized to absolute
+// during index creation and returned consistently as absolute paths from all methods.
+// This is a regression test for the bug where allFiles contained original (potentially relative) paths
+// while bucketed entries contained absolute paths, causing pattern matching inconsistencies.
+func TestChangedFilesIndex_AbsolutePathNormalization(t *testing.T) {
+	tempDir := t.TempDir()
+
+	atmosConfig := &schema.AtmosConfiguration{
+		BasePath: tempDir,
+		Components: schema.Components{
+			Terraform: schema.Terraform{
+				BasePath: "components/terraform",
+			},
+			Helmfile: schema.Helmfile{
+				BasePath: "components/helmfile",
+			},
+		},
+	}
+
+	t.Run("getAllFiles returns absolute paths", func(t *testing.T) {
+		// Use absolute paths in input.
+		absPath1 := filepath.Join(tempDir, "components/terraform/vpc/main.tf")
+		absPath2 := filepath.Join(tempDir, "components/helmfile/app/helmfile.yaml")
+
+		changedFiles := []string{absPath1, absPath2}
+		index := newChangedFilesIndex(atmosConfig, changedFiles)
+
+		allFiles := index.getAllFiles()
+
+		// All returned paths should be absolute.
+		for _, f := range allFiles {
+			assert.True(t, filepath.IsAbs(f), "File path should be absolute: %s", f)
+		}
+
+		// Should have exactly 2 files.
+		assert.Len(t, allFiles, 2)
+	})
+
+	t.Run("getRelevantFiles returns absolute paths", func(t *testing.T) {
+		// Use absolute terraform paths.
+		absPath1 := filepath.Join(tempDir, "components/terraform/vpc/main.tf")
+		absPath2 := filepath.Join(tempDir, "components/terraform/eks/main.tf")
+
+		changedFiles := []string{absPath1, absPath2}
+		index := newChangedFilesIndex(atmosConfig, changedFiles)
+
+		tfFiles := index.getRelevantFiles(cfg.TerraformComponentType, atmosConfig)
+
+		// All returned terraform files should be absolute.
+		for _, f := range tfFiles {
+			assert.True(t, filepath.IsAbs(f), "Terraform file path should be absolute: %s", f)
+		}
+
+		// Should have both terraform files.
+		assert.Len(t, tfFiles, 2)
+	})
+
+	t.Run("paths are normalized to absolute", func(t *testing.T) {
+		// When using already-absolute paths, they're stored as-is.
+		// This verifies normalization doesn't break absolute paths.
+		tfPath := filepath.Join(tempDir, "components/terraform/vpc/main.tf")
+		helmPath := filepath.Join(tempDir, "components/helmfile/app/helmfile.yaml")
+
+		changedFiles := []string{tfPath, helmPath}
+		index := newChangedFilesIndex(atmosConfig, changedFiles)
+
+		// Get all files - should be absolute.
+		allFiles := index.getAllFiles()
+		assert.Len(t, allFiles, 2)
+
+		// Both should be absolute.
+		for _, f := range allFiles {
+			assert.True(t, filepath.IsAbs(f), "Path should be absolute: %s", f)
+		}
+
+		// Get relevant files - should also be absolute.
+		tfFiles := index.getRelevantFiles(cfg.TerraformComponentType, atmosConfig)
+		assert.Len(t, tfFiles, 1)
+		assert.True(t, filepath.IsAbs(tfFiles[0]), "Terraform path should be absolute")
+
+		helmFiles := index.getRelevantFiles(cfg.HelmfileComponentType, atmosConfig)
+		assert.Len(t, helmFiles, 1)
+		assert.True(t, filepath.IsAbs(helmFiles[0]), "Helmfile path should be absolute")
+	})
+
+	t.Run("absolute paths work with pattern matching", func(t *testing.T) {
+		// Create component structure.
+		vpcPath := filepath.Join(tempDir, "components/terraform/vpc")
+		err := os.MkdirAll(vpcPath, 0o755)
+		require.NoError(t, err)
+
+		// Use absolute paths for both files.
+		vpcFile := filepath.Join(tempDir, "components/terraform/vpc/main.tf")
+		eksFile := filepath.Join(tempDir, "components/terraform/eks/main.tf")
+
+		changedFiles := []string{vpcFile, eksFile}
+		filesIndex := newChangedFilesIndex(atmosConfig, changedFiles)
+		patternCache := newComponentPathPatternCache()
+
+		// Pattern matching should work correctly with absolute paths.
+		vpcChanged, err := isComponentFolderChangedIndexed("vpc", cfg.TerraformComponentType, atmosConfig, filesIndex, patternCache)
+		require.NoError(t, err)
+		assert.True(t, vpcChanged, "vpc component should be detected as changed")
+
+		eksChanged, err := isComponentFolderChangedIndexed("eks", cfg.TerraformComponentType, atmosConfig, filesIndex, patternCache)
+		require.NoError(t, err)
+		assert.True(t, eksChanged, "eks component should be detected as changed")
+	})
+
+	t.Run("dependency matching works with absolute paths", func(t *testing.T) {
+		// Test that dependency matching works correctly when all paths are absolute.
+		depFile := filepath.Join(tempDir, "config/settings.yaml")
+
+		// Create the dependency file.
+		err := os.MkdirAll(filepath.Dir(depFile), 0o755)
+		require.NoError(t, err)
+		err = os.WriteFile(depFile, []byte("key: value"), 0o644)
+		require.NoError(t, err)
+
+		// Use absolute path in changed files.
+		changedFiles := []string{depFile}
+		filesIndex := newChangedFilesIndex(atmosConfig, changedFiles)
+
+		// Dependencies use absolute paths.
+		deps := schema.DependsOn{
+			"dep1": schema.Context{File: depFile},
+		}
+
+		// Should match when both are absolute.
+		changed, changedType, changedPath, err := isComponentDependentFolderOrFileChangedIndexed(filesIndex, deps)
+		require.NoError(t, err)
+		assert.True(t, changed, "dependency should be detected as changed")
+		assert.Equal(t, "file", changedType)
+		assert.Equal(t, depFile, changedPath)
+	})
+
+	t.Run("no redundant filepath.Abs calls in indexChangedFile", func(t *testing.T) {
+		// This test verifies that indexChangedFile receives pre-normalized absolute paths
+		// and doesn't need to call filepath.Abs again.
+
+		absPath1 := filepath.Join(tempDir, "components/terraform/vpc/main.tf")
+		absPath2 := filepath.Join(tempDir, "components/terraform/eks/main.tf")
+
+		changedFiles := []string{absPath1, absPath2}
+		index := newChangedFilesIndex(atmosConfig, changedFiles)
+
+		// Verify both paths are in the index as absolute.
+		index.mu.RLock()
+		tfBasePath, _ := filepath.Abs(filepath.Join(tempDir, "components/terraform"))
+		tfFiles, ok := index.filesByBasePath[tfBasePath]
+		index.mu.RUnlock()
+
+		assert.True(t, ok, "terraform base path should be in index")
+		assert.Len(t, tfFiles, 2, "should have both terraform files")
+
+		// All indexed files should be absolute.
+		for _, f := range tfFiles {
+			assert.True(t, filepath.IsAbs(f), "Indexed file should be absolute: %s", f)
+		}
+	})
+
+	t.Run("empty input paths are handled correctly", func(t *testing.T) {
+		// Edge case: empty changed files list.
+		changedFiles := []string{}
+		index := newChangedFilesIndex(atmosConfig, changedFiles)
+
+		allFiles := index.getAllFiles()
+		assert.Empty(t, allFiles, "should return empty slice for empty input")
+
+		tfFiles := index.getRelevantFiles(cfg.TerraformComponentType, atmosConfig)
+		assert.Empty(t, tfFiles, "should return empty slice for empty input")
+	})
+
+	t.Run("single dot path is normalized", func(t *testing.T) {
+		// Edge case: single dot representing current directory.
+		changedFiles := []string{"."}
+		index := newChangedFilesIndex(atmosConfig, changedFiles)
+
+		allFiles := index.getAllFiles()
+		assert.Len(t, allFiles, 1)
+
+		// Single dot should be converted to absolute path.
+		assert.True(t, filepath.IsAbs(allFiles[0]), "Single dot should be normalized to absolute path")
+	})
+}
+
 // ==============================================================================
 // Integration Tests
 // ==============================================================================

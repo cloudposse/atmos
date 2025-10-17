@@ -28,7 +28,7 @@ func isComponentFolderChangedIndexed(
 	relevantFiles := filesIndex.getRelevantFiles(componentType, atmosConfig)
 
 	for _, changedFile := range relevantFiles {
-		// Files are already absolute paths from the index.
+		// Files are already absolute paths (normalized by changedFilesIndex during creation).
 		match, err := u.PathMatch(componentPathPattern, changedFile)
 		if err != nil {
 			return false, err
@@ -125,7 +125,7 @@ func isComponentDependentFolderOrFileChangedIndexed(
 		pathPattern := changedFileOrFolderAbs + pathPatternSuffix
 
 		for _, changedFile := range allChangedFiles {
-			// Files are already absolute from index.
+			// Files are already absolute paths (normalized by changedFilesIndex during creation).
 			match, err := u.PathMatch(pathPattern, changedFile)
 			if err != nil {
 				return false, "", "", err
