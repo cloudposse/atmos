@@ -14,6 +14,7 @@ import (
 	authList "github.com/cloudposse/atmos/pkg/auth/list"
 	authTypes "github.com/cloudposse/atmos/pkg/auth/types"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -55,7 +56,59 @@ func init() {
 	authListCmd.Flags().String("providers", "", "Show only providers (optionally filter by name: --providers=aws-sso,okta)")
 	authListCmd.Flags().String("identities", "", "Show only identities (optionally filter by name: --identities=admin,dev)")
 
+	// Register flag completion functions.
+	if err := authListCmd.RegisterFlagCompletionFunc("format", formatFlagCompletion); err != nil {
+		log.Trace("Failed to register format flag completion", "error", err)
+	}
+
+	if err := authListCmd.RegisterFlagCompletionFunc("providers", providersFlagCompletion); err != nil {
+		log.Trace("Failed to register providers flag completion", "error", err)
+	}
+
+	if err := authListCmd.RegisterFlagCompletionFunc("identities", identitiesFlagCompletion); err != nil {
+		log.Trace("Failed to register identities flag completion", "error", err)
+	}
+
 	authCmd.AddCommand(authListCmd)
+}
+
+// formatFlagCompletion provides shell completion for the format flag.
+func formatFlagCompletion(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+	return []string{"table", "tree", "json", "yaml", "graphviz", "mermaid", "markdown"}, cobra.ShellCompDirectiveNoFileComp
+}
+
+// providersFlagCompletion provides shell completion for the providers flag.
+func providersFlagCompletion(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+	if err != nil {
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+
+	var providers []string
+	if atmosConfig.Auth.Providers != nil {
+		for name := range atmosConfig.Auth.Providers {
+			providers = append(providers, name)
+		}
+	}
+
+	return providers, cobra.ShellCompDirectiveNoFileComp
+}
+
+// identitiesFlagCompletion provides shell completion for the identities flag.
+func identitiesFlagCompletion(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+	if err != nil {
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+
+	var identities []string
+	if atmosConfig.Auth.Identities != nil {
+		for name := range atmosConfig.Auth.Identities {
+			identities = append(identities, name)
+		}
+	}
+
+	return identities, cobra.ShellCompDirectiveNoFileComp
 }
 
 // filterConfig holds parsed filter configuration.
