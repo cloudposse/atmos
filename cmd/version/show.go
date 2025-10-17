@@ -1,6 +1,7 @@
 package version
 
 import (
+	_ "embed"
 	"fmt"
 	"os"
 	"strings"
@@ -13,6 +14,9 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 )
+
+//go:embed markdown/atmos_version_show_usage.md
+var showUsageMarkdown string
 
 var showFormat string
 
@@ -116,20 +120,17 @@ func fetchReleaseWithSpinner(client GitHubClient, versionArg string) (*github.Re
 }
 
 var showCmd = &cobra.Command{
-	Use:   "show <version>",
-	Short: "Show details for a specific Atmos release",
-	Long:  `Display detailed information about a specific Atmos release including release notes and download links.`,
-	Example: `  # Show details for a specific version
-  atmos version show v1.95.0
-
-  # Show details for the latest release
-  atmos version show latest
-
-  # Output as JSON
-  atmos version show v1.95.0 --format json`,
-	Args: cobra.ExactArgs(1),
+	Use:     "show [version]",
+	Short:   "Show details for a specific Atmos release",
+	Long:    `Display detailed information about a specific Atmos release including release notes and download links.`,
+	Example: showUsageMarkdown,
+	Args:    cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		versionArg := args[0]
+		// Default to latest if no version specified.
+		versionArg := ""
+		if len(args) > 0 {
+			versionArg = args[0]
+		}
 
 		// Create GitHub client.
 		client := &RealGitHubClient{}

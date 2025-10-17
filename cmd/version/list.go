@@ -1,6 +1,7 @@
 package version
 
 import (
+	_ "embed"
 	"fmt"
 	"os"
 	"strings"
@@ -14,6 +15,9 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 )
+
+//go:embed markdown/atmos_version_list_usage.md
+var listUsageMarkdown string
 
 const (
 	listDefaultLimit = 10
@@ -110,26 +114,10 @@ func fetchReleasesWithSpinner(client GitHubClient, opts ReleaseOptions) ([]*gith
 }
 
 var listCmd = &cobra.Command{
-	Use:   "list",
-	Short: "List Atmos releases",
-	Long:  `List available Atmos releases from GitHub with pagination and filtering options.`,
-	Example: `  # List the last 10 releases (default)
-  atmos version list
-
-  # List the last 20 releases
-  atmos version list --limit 20
-
-  # List releases starting from offset 10
-  atmos version list --offset 10
-
-  # Include pre-releases
-  atmos version list --include-prereleases
-
-  # List releases since a specific date
-  atmos version list --since 2025-01-01
-
-  # Output as JSON
-  atmos version list --format json`,
+	Use:     "list",
+	Short:   "List Atmos releases",
+	Long:    `List available Atmos releases from GitHub with pagination and filtering options.`,
+	Example: listUsageMarkdown,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		// Validate limit.
 		if listLimit < 1 || listLimit > listMaxLimit {
