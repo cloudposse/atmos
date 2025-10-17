@@ -63,7 +63,7 @@ func processChdirFlag(cmd *cobra.Command) error {
 	chdir, _ := cmd.Flags().GetString("chdir")
 	// If flag is not set, check environment variable.
 	if chdir == "" {
-		//nolint:forbidigo // ATMOS_CHDIR is an Atmos-specific environment variable.
+		//nolint:forbidigo // Must use os.Getenv: chdir is processed before Viper configuration loads.
 		chdir = os.Getenv("ATMOS_CHDIR")
 	}
 
