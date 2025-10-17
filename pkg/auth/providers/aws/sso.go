@@ -236,7 +236,10 @@ func (p *ssoProvider) pollForAccessToken(ctx context.Context, oidcClient *ssooid
 
 // Logout removes provider-specific credential storage.
 func (p *ssoProvider) Logout(ctx context.Context) error {
-	fileManager, err := awsCloud.NewAWSFileManager()
+	// Get base_path from provider spec if configured.
+	basePath := awsCloud.GetFilesBasePath(p.config)
+
+	fileManager, err := awsCloud.NewAWSFileManager(basePath)
 	if err != nil {
 		return errors.Join(errUtils.ErrLogoutFailed, err)
 	}

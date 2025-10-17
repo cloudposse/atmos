@@ -5,8 +5,10 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	homedir "github.com/mitchellh/go-homedir"
+	"github.com/spf13/viper"
 	ini "gopkg.in/ini.v1"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -40,13 +42,36 @@ type AWSFileManager struct {
 }
 
 // NewAWSFileManager creates a new AWS file manager instance.
-func NewAWSFileManager() (*AWSFileManager, error) {
-	homeDir, err := homedir.Dir()
-	if err != nil {
-		return nil, ErrGetHomeDir
+// basePath is optional and can be empty to use defaults.
+// Precedence: 1) basePath parameter, 2) ATMOS_AWS_FILES_BASE_PATH env var, 3) default ~/.aws/atmos.
+func NewAWSFileManager(basePath string) (*AWSFileManager, error) {
+	var baseDir string
+
+	if basePath != "" {
+		// Use configured path from provider spec.
+		expanded, err := homedir.Expand(basePath)
+		if err != nil {
+			return nil, fmt.Errorf("%w: invalid base_path %q: %w", ErrGetHomeDir, basePath, err)
+		}
+		baseDir = expanded
+	} else if envPath := viper.GetString("ATMOS_AWS_FILES_BASE_PATH"); envPath != "" {
+		// Use environment variable override.
+		expanded, err := homedir.Expand(envPath)
+		if err != nil {
+			return nil, fmt.Errorf("%w: invalid ATMOS_AWS_FILES_BASE_PATH %q: %w", ErrGetHomeDir, envPath, err)
+		}
+		baseDir = expanded
+	} else {
+		// Default: ~/.aws/atmos
+		homeDir, err := homedir.Dir()
+		if err != nil {
+			return nil, ErrGetHomeDir
+		}
+		baseDir = filepath.Join(homeDir, ".aws", "atmos")
 	}
+
 	return &AWSFileManager{
-		baseDir: filepath.Join(homeDir, ".aws", "atmos"),
+		baseDir: baseDir,
 	}, nil
 }
 
@@ -167,6 +192,20 @@ func (m *AWSFileManager) WriteConfig(providerName, identityName, region, outputF
 	return nil
 }
 
+// GetBaseDir returns the base directory path.
+func (m *AWSFileManager) GetBaseDir() string {
+	return m.baseDir
+}
+
+// GetDisplayPath returns a user-friendly display path (with ~ if under home directory).
+func (m *AWSFileManager) GetDisplayPath() string {
+	homeDir, err := homedir.Dir()
+	if err == nil && homeDir != "" && strings.HasPrefix(m.baseDir, homeDir) {
+		return strings.Replace(m.baseDir, homeDir, "~", 1)
+	}
+	return m.baseDir
+}
+
 // GetCredentialsPath returns the path to the credentials file for the provider.
 func (m *AWSFileManager) GetCredentialsPath(providerName string) string {
 	return filepath.Join(m.baseDir, providerName, "credentials")
@@ -205,7 +244,7 @@ func (m *AWSFileManager) Cleanup(providerName string) error {
 	return nil
 }
 
-// CleanupAll removes entire ~/.aws/atmos directory.
+// CleanupAll removes entire base directory (all providers).
 func (m *AWSFileManager) CleanupAll() error {
 	if err := os.RemoveAll(m.baseDir); err != nil {
 		// If directory doesn't exist, that's not an error (already cleaned up).

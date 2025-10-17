@@ -327,6 +327,20 @@ func (mr *MockAuthManagerMockRecorder) GetDefaultIdentity() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetDefaultIdentity", reflect.TypeOf((*MockAuthManager)(nil).GetDefaultIdentity))
 }
 
+// GetFilesDisplayPath mocks base method.
+func (m *MockAuthManager) GetFilesDisplayPath(providerName string) string {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetFilesDisplayPath", providerName)
+	ret0, _ := ret[0].(string)
+	return ret0
+}
+
+// GetFilesDisplayPath indicates an expected call of GetFilesDisplayPath.
+func (mr *MockAuthManagerMockRecorder) GetFilesDisplayPath(providerName interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetFilesDisplayPath", reflect.TypeOf((*MockAuthManager)(nil).GetFilesDisplayPath), providerName)
+}
+
 // GetIdentities mocks base method.
 func (m *MockAuthManager) GetIdentities() map[string]schema.Identity {
 	m.ctrl.T.Helper()

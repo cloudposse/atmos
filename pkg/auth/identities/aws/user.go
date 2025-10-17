@@ -140,7 +140,7 @@ func (i *userIdentity) resolveRegion() string {
 
 // writeAWSFiles writes credentials to AWS config files using "aws-user" as mock provider.
 func (i *userIdentity) writeAWSFiles(creds *types.AWSCredentials, region string) error {
-	awsFileManager, err := awsCloud.NewAWSFileManager()
+	awsFileManager, err := awsCloud.NewAWSFileManager("")
 	if err != nil {
 		return errors.Join(errUtils.ErrAuthAwsFileManagerFailed, err)
 	}
@@ -288,7 +288,7 @@ func (i *userIdentity) Environment() (map[string]string, error) {
 	env := make(map[string]string)
 
 	// Get AWS file environment variables using "aws-user" as mock provider.
-	awsFileManager, err := awsCloud.NewAWSFileManager()
+	awsFileManager, err := awsCloud.NewAWSFileManager("")
 	if err != nil {
 		return nil, errors.Join(errUtils.ErrAuthAwsFileManagerFailed, err)
 	}
@@ -357,7 +357,7 @@ func (i *userIdentity) PostAuthenticate(ctx context.Context, stackInfo *schema.C
 func (i *userIdentity) Logout(ctx context.Context) error {
 	// AWS user identities use "aws-user" as their provider name.
 	// Clean up files under ~/.aws/atmos/aws-user/.
-	fileManager, err := awsCloud.NewAWSFileManager()
+	fileManager, err := awsCloud.NewAWSFileManager("")
 	if err != nil {
 		return errors.Join(errUtils.ErrLogoutFailed, err)
 	}

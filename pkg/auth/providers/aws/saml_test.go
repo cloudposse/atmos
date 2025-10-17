@@ -102,6 +102,7 @@ func (s stubSamlMgr) Validate() error                                           
 func (s stubSamlMgr) GetDefaultIdentity() (string, error)                       { return "", nil }
 func (s stubSamlMgr) ListIdentities() []string                                  { return nil }
 func (s stubSamlMgr) GetProviderForIdentity(string) string                      { return "" }
+func (s stubSamlMgr) GetFilesDisplayPath(string) string                         { return "~/.aws/atmos" }
 func (s stubSamlMgr) GetProviderKindForIdentity(string) (string, error)         { return "", nil }
 func (s stubSamlMgr) GetChain() []string                                        { return s.chain }
 func (s stubSamlMgr) GetStackInfo() *schema.ConfigAndStacksInfo                 { return nil }

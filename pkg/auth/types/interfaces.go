@@ -84,6 +84,10 @@ type AuthManager interface {
 	// Recursively resolves through identity chains to find the root provider.
 	GetProviderForIdentity(identityName string) string
 
+	// GetFilesDisplayPath returns the display path for AWS files for a provider.
+	// Returns the configured path if set, otherwise default ~/.aws/atmos.
+	GetFilesDisplayPath(providerName string) string
+
 	// GetProviderKindForIdentity returns the provider kind for the given identity.
 	GetProviderKindForIdentity(identityName string) (string, error)
 
