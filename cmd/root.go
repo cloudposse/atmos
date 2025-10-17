@@ -37,6 +37,7 @@ import (
 	// The init() function in each package registers the command with the registry.
 	_ "github.com/cloudposse/atmos/cmd/about"
 	"github.com/cloudposse/atmos/cmd/internal"
+	"github.com/cloudposse/atmos/cmd/version"
 )
 
 const (
@@ -445,6 +446,9 @@ func Execute() error {
 	// Here we need the custom commands from the config.
 	var initErr error
 	atmosConfig, initErr = cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+
+	// Set atmosConfig for version command (needs access to config).
+	version.SetAtmosConfig(&atmosConfig)
 
 	utils.InitializeMarkdown(atmosConfig)
 	errUtils.InitializeMarkdown(atmosConfig)
