@@ -1,4 +1,4 @@
-package utils
+package github
 
 import (
 	"context"
@@ -38,8 +38,8 @@ func TestNewGitHubClientAuthenticated(t *testing.T) {
 	})
 }
 
-// TestGetLatestGitHubRepoRelease tests fetching the latest release from GitHub.
-func TestGetLatestGitHubRepoRelease(t *testing.T) {
+// TestGetLatestRelease tests fetching the latest release from GitHub.
+func TestGetLatestRelease(t *testing.T) {
 	t.Run("fetches latest release from public repo", func(t *testing.T) {
 		// Check GitHub access and rate limits
 		rateLimits := tests.RequireGitHubAccess(t)
@@ -51,7 +51,7 @@ func TestGetLatestGitHubRepoRelease(t *testing.T) {
 		owner := "cloudposse"
 		repo := "atmos"
 
-		tag, err := GetLatestGitHubRepoRelease(owner, repo)
+		tag, err := GetLatestRelease(owner, repo)
 
 		require.NoError(t, err)
 		assert.NotEmpty(t, tag, "Expected a release tag to be returned")
@@ -70,7 +70,7 @@ func TestGetLatestGitHubRepoRelease(t *testing.T) {
 		owner := "cloudposse"
 		repo := "test-harness-this-repo-should-not-exist"
 
-		tag, err := GetLatestGitHubRepoRelease(owner, repo)
+		tag, err := GetLatestRelease(owner, repo)
 		// Should get an error for non-existent repo.
 		require.Error(t, err)
 		assert.Empty(t, tag)
@@ -86,7 +86,7 @@ func TestGetLatestGitHubRepoRelease(t *testing.T) {
 		owner := "this-owner-definitely-does-not-exist-12345"
 		repo := "test-repo"
 
-		tag, err := GetLatestGitHubRepoRelease(owner, repo)
+		tag, err := GetLatestRelease(owner, repo)
 
 		// Should return error for invalid owner
 		assert.Error(t, err)
@@ -103,7 +103,7 @@ func TestGetLatestGitHubRepoRelease(t *testing.T) {
 		owner := "cloudposse"
 		repo := "this-repo-definitely-does-not-exist-12345"
 
-		tag, err := GetLatestGitHubRepoRelease(owner, repo)
+		tag, err := GetLatestRelease(owner, repo)
 
 		// Should return error for invalid repo
 		assert.Error(t, err)
@@ -111,8 +111,8 @@ func TestGetLatestGitHubRepoRelease(t *testing.T) {
 	})
 }
 
-// TestGetLatestGitHubRepoReleaseWithAuthentication tests authenticated GitHub API access.
-func TestGetLatestGitHubRepoReleaseWithAuthentication(t *testing.T) {
+// TestGetLatestReleaseWithAuthentication tests authenticated GitHub API access.
+func TestGetLatestReleaseWithAuthentication(t *testing.T) {
 	t.Run("uses authentication when token available", func(t *testing.T) {
 		// Check GitHub access and rate limits
 		rateLimits := tests.RequireGitHubAccess(t)
@@ -125,7 +125,7 @@ func TestGetLatestGitHubRepoReleaseWithAuthentication(t *testing.T) {
 		owner := "cloudposse"
 		repo := "atmos"
 
-		tag, err := GetLatestGitHubRepoRelease(owner, repo)
+		tag, err := GetLatestRelease(owner, repo)
 
 		require.NoError(t, err)
 		assert.NotEmpty(t, tag)
@@ -200,7 +200,7 @@ func TestGitHubReleaseTagFormat(t *testing.T) {
 
 		for _, tc := range testCases {
 			t.Run(tc.owner+"/"+tc.repo, func(t *testing.T) {
-				tag, err := GetLatestGitHubRepoRelease(tc.owner, tc.repo)
+				tag, err := GetLatestRelease(tc.owner, tc.repo)
 				if err != nil {
 					t.Skipf("Skipping test due to GitHub API error: %v", err)
 					return
@@ -236,7 +236,7 @@ func TestGitHubAPIRateLimit(t *testing.T) {
 		owner := "cloudposse"
 		repo := "atmos"
 
-		_, err := GetLatestGitHubRepoRelease(owner, repo)
+		_, err := GetLatestRelease(owner, repo)
 		// Should either succeed or fail with a clear error
 		if err != nil {
 			// Log the error but don't fail - could be rate limited
@@ -279,7 +279,7 @@ func TestConcurrentGitHubAPICalls(t *testing.T) {
 
 		for _, r := range repos {
 			go func(owner, repo string) {
-				_, err := GetLatestGitHubRepoRelease(owner, repo)
+				_, err := GetLatestRelease(owner, repo)
 				// Don't assert on error - could be rate limited.
 				_ = err
 				done <- true
@@ -293,15 +293,15 @@ func TestConcurrentGitHubAPICalls(t *testing.T) {
 	})
 }
 
-// TestGetGitHubRepoReleases tests fetching multiple releases with pagination.
-func TestGetGitHubRepoReleases(t *testing.T) {
+// TestGetReleases tests fetching multiple releases with pagination.
+func TestGetReleases(t *testing.T) {
 	t.Run("fetches releases with default options", func(t *testing.T) {
 		rateLimits := tests.RequireGitHubAccess(t)
 		if rateLimits != nil && rateLimits.Remaining < 5 {
 			t.Skipf("Need at least 5 GitHub API requests, only %d remaining", rateLimits.Remaining)
 		}
 
-		opts := GitHubReleasesOptions{
+		opts := ReleasesOptions{
 			Owner:              "cloudposse",
 			Repo:               "atmos",
 			Limit:              5,
@@ -309,7 +309,7 @@ func TestGetGitHubRepoReleases(t *testing.T) {
 			IncludePrereleases: false,
 		}
 
-		releases, err := GetGitHubRepoReleases(opts)
+		releases, err := GetReleases(opts)
 		require.NoError(t, err)
 		assert.LessOrEqual(t, len(releases), 5)
 		for _, release := range releases {
@@ -323,7 +323,7 @@ func TestGetGitHubRepoReleases(t *testing.T) {
 			t.Skipf("Need at least 5 GitHub API requests, only %d remaining", rateLimits.Remaining)
 		}
 
-		opts := GitHubReleasesOptions{
+		opts := ReleasesOptions{
 			Owner:              "cloudposse",
 			Repo:               "atmos",
 			Limit:              10,
@@ -331,7 +331,7 @@ func TestGetGitHubRepoReleases(t *testing.T) {
 			IncludePrereleases: true,
 		}
 
-		releases, err := GetGitHubRepoReleases(opts)
+		releases, err := GetReleases(opts)
 		require.NoError(t, err)
 		assert.LessOrEqual(t, len(releases), 10)
 		// We can't guarantee prereleases exist, just that we don't filter them.
@@ -344,25 +344,25 @@ func TestGetGitHubRepoReleases(t *testing.T) {
 		}
 
 		// Get first page.
-		opts1 := GitHubReleasesOptions{
+		opts1 := ReleasesOptions{
 			Owner:              "cloudposse",
 			Repo:               "atmos",
 			Limit:              5,
 			Offset:             0,
 			IncludePrereleases: false,
 		}
-		releases1, err := GetGitHubRepoReleases(opts1)
+		releases1, err := GetReleases(opts1)
 		require.NoError(t, err)
 
 		// Get second page.
-		opts2 := GitHubReleasesOptions{
+		opts2 := ReleasesOptions{
 			Owner:              "cloudposse",
 			Repo:               "atmos",
 			Limit:              5,
 			Offset:             5,
 			IncludePrereleases: false,
 		}
-		releases2, err := GetGitHubRepoReleases(opts2)
+		releases2, err := GetReleases(opts2)
 		require.NoError(t, err)
 
 		// Ensure different releases (if enough exist).
@@ -377,7 +377,7 @@ func TestGetGitHubRepoReleases(t *testing.T) {
 			t.Skipf("Need at least 5 GitHub API requests, only %d remaining", rateLimits.Remaining)
 		}
 
-		opts := GitHubReleasesOptions{
+		opts := ReleasesOptions{
 			Owner:              "cloudposse",
 			Repo:               "atmos",
 			Limit:              5,
@@ -385,15 +385,15 @@ func TestGetGitHubRepoReleases(t *testing.T) {
 			IncludePrereleases: false,
 		}
 
-		releases, err := GetGitHubRepoReleases(opts)
+		releases, err := GetReleases(opts)
 		require.NoError(t, err)
 		// Should either be empty or have fewer than requested if offset is near the end.
 		assert.LessOrEqual(t, len(releases), 5)
 	})
 }
 
-// TestGetGitHubReleaseByTag tests fetching a specific release by tag.
-func TestGetGitHubReleaseByTag(t *testing.T) {
+// TestGetReleaseByTag tests fetching a specific release by tag.
+func TestGetReleaseByTag(t *testing.T) {
 	t.Run("fetches specific release by tag", func(t *testing.T) {
 		rateLimits := tests.RequireGitHubAccess(t)
 		if rateLimits != nil && rateLimits.Remaining < 5 {
@@ -401,7 +401,7 @@ func TestGetGitHubReleaseByTag(t *testing.T) {
 		}
 
 		// Use a known release tag.
-		release, err := GetGitHubReleaseByTag("cloudposse", "atmos", "v1.50.0")
+		release, err := GetReleaseByTag("cloudposse", "atmos", "v1.50.0")
 		require.NoError(t, err)
 		assert.NotNil(t, release)
 		assert.Equal(t, "v1.50.0", release.GetTagName())
@@ -413,20 +413,20 @@ func TestGetGitHubReleaseByTag(t *testing.T) {
 			t.Skipf("Need at least 5 GitHub API requests, only %d remaining", rateLimits.Remaining)
 		}
 
-		_, err := GetGitHubReleaseByTag("cloudposse", "atmos", "v999.999.999")
+		_, err := GetReleaseByTag("cloudposse", "atmos", "v999.999.999")
 		assert.Error(t, err)
 	})
 }
 
-// TestGetGitHubLatestRelease tests fetching the latest stable release.
-func TestGetGitHubLatestRelease(t *testing.T) {
+// TestGetLatestReleaseInfo tests fetching the latest stable release.
+func TestGetLatestReleaseInfo(t *testing.T) {
 	t.Run("fetches latest stable release", func(t *testing.T) {
 		rateLimits := tests.RequireGitHubAccess(t)
 		if rateLimits != nil && rateLimits.Remaining < 5 {
 			t.Skipf("Need at least 5 GitHub API requests, only %d remaining", rateLimits.Remaining)
 		}
 
-		release, err := GetGitHubLatestRelease("cloudposse", "atmos")
+		release, err := GetLatestReleaseInfo("cloudposse", "atmos")
 		require.NoError(t, err)
 		assert.NotNil(t, release)
 		assert.NotEmpty(t, release.GetTagName())

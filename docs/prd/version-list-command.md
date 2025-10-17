@@ -1,8 +1,8 @@
-# Version List Command
+# Version List and Show Commands
 
 ## Overview
 
-This document describes the design and implementation of `atmos version list`, a new subcommand that queries the GitHub API to display recent Atmos releases in an interactive terminal UI with pagination support. Users can browse releases, view detailed release notes with markdown rendering, and inspect release artifacts.
+This document describes the implementation of `atmos version list` and `atmos version show`, new subcommands that query the GitHub API to display Atmos releases with formatted output including markdown-rendered titles, platform-specific assets, and multiple output formats.
 
 ## Problem Statement
 
@@ -43,12 +43,7 @@ $ atmos version --check
 - Verify release artifacts before downloading
 - Automate version discovery in deployment workflows
 
-**As a contributor**, I want to:
-- Quickly see recent releases without leaving terminal
-- Verify a release was published successfully
-- Check artifact sizes and names
-
-## Solution: `atmos version list`
+## Solution: `atmos version list` and `atmos version show`
 
 ### Command Design
 
@@ -60,66 +55,51 @@ atmos version list
 atmos version list --limit 20 --offset 10
 
 # Include prerelease versions (beta, alpha, rc, etc.)
-# By default, only stable releases are shown
 atmos version list --include-prereleases
 
 # Filter releases by date
 atmos version list --since 2025-01-01
-atmos version list --since 30d
-atmos version list --since 1w
 
 # Output in machine-readable format
 atmos version list --format json
 atmos version list --format yaml
 
+# View details for the latest release
+atmos version show
+
 # View details for a specific release
 atmos version show v1.95.0
-atmos version show latest
-
-# Search release notes for specific content
-atmos version search "template functions"
-atmos version search "terraform validation"
+atmos version show 1.95.0  # Also works without 'v' prefix
 ```
 
-### Interactive TUI Features
+### Output Features
 
-The default TUI view provides:
+The commands provide:
 
-1. **List View**
-   - Version number (e.g., `v1.95.0`)
-   - Release title (markdown-rendered inline)
-   - Publication date (relative: "2 days ago")
-   - Status indicators:
-     - `[Current]` badge for installed version
-     - `[Prerelease]` badge for pre-releases
-     - `[Draft]` badge for draft releases
-     - `⬆ Update Available` indicator
-   - Pagination info: "Showing 1-10 of 156 releases"
+1. **List View** (text format - default)
+   - Borderless table with header separator
+   - Version number with green bullet (●) for current installed version
+   - Publication date (YYYY-MM-DD format)
+   - Release title with markdown rendering (preserves backticks, bold, etc.)
+   - Prerelease indicator for beta/alpha releases
+   - Terminal width detection (minimum 40 chars)
+   - Automatic word wrapping for long titles
 
-2. **Detail View** (press Enter on release)
-   - Full release notes (markdown-rendered with glamour)
-   - Release metadata:
-     - Version
-     - Published date
-     - Author
-     - GitHub URL
-   - Artifact list:
+2. **Detail View** (`atmos version show`)
+   - Full release notes (markdown-rendered with colors preserved)
+   - Release metadata (version, published date, title)
+   - Artifact list filtered by current OS and architecture:
      - File names
-     - File sizes
-     - Download counts
-     - Checksums (SHA256)
+     - File sizes (in MB)
+     - Download URLs styled as links (blue, underlined)
 
-3. **Navigation**
-   - `j/k` or `↑/↓`: Navigate list
-   - `Enter`: View release details
-   - `Esc`: Back to list
-   - `n/p`: Next/previous page
-   - `o`: Open release in browser
-   - `d`: Download artifact (prompt for selection)
-   - `q` or `Ctrl+C`: Quit
-   - `?`: Show help
+3. **Spinner Feedback**
+   - Shows spinner animation during GitHub API calls (when TTY detected)
+   - Provides visual feedback for network operations
 
 ### Flags
+
+#### `atmos version list`
 
 <dl>
   <dt><code>--limit</code>, <code>-l</code></dt>
@@ -129,16 +109,23 @@ The default TUI view provides:
   <dd>Number of releases to skip for pagination (default: 0)</dd>
 
   <dt><code>--since</code>, <code>-s</code></dt>
-  <dd>Filter releases published on or after this date. Supports ISO 8601 dates (YYYY-MM-DD) or relative dates (30d, 1w, 6m)</dd>
+  <dd>Filter releases published on or after this date (ISO 8601: YYYY-MM-DD)</dd>
 
   <dt><code>--include-prereleases</code></dt>
   <dd>Include prerelease versions in results (default: false)</dd>
 
   <dt><code>--format</code>, <code>-f</code></dt>
-  <dd>Output format: <code>tui</code>, <code>json</code>, <code>yaml</code>, <code>text</code> (default: tui)</dd>
+  <dd>Output format: <code>text</code>, <code>json</code>, <code>yaml</code> (default: text)</dd>
+</dl>
 
-  <dt><code>--no-cache</code></dt>
-  <dd>Bypass cache and fetch fresh data from GitHub (default: false)</dd>
+#### `atmos version show`
+
+<dl>
+  <dt><code>[version]</code></dt>
+  <dd>Version to show details for (optional, defaults to latest release)</dd>
+
+  <dt><code>--format</code>, <code>-f</code></dt>
+  <dd>Output format: <code>text</code>, <code>json</code>, <code>yaml</code> (default: text)</dd>
 </dl>
 
 ### Environment Variables
@@ -146,13 +133,13 @@ The default TUI view provides:
 - `ATMOS_GITHUB_TOKEN` / `GITHUB_TOKEN`: GitHub personal access token for increased API rate limits
   - Unauthenticated: 60 requests/hour
   - Authenticated: 5,000 requests/hour
-  - Required for private repositories
+  - Get token: `gh auth token` (if using GitHub CLI) or create at GitHub settings
 
 ### Architecture
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                    atmos version list                            │
+│                 atmos version list/show                          │
 └────────────────────────┬────────────────────────────────────────┘
                          │
                          ▼
@@ -168,64 +155,71 @@ The default TUI view provides:
 │  │ list.go - List subcommand                                 │  │
 │  │ - Parse flags (--limit, --offset, --format)               │  │
 │  │ - Validate inputs                                          │  │
-│  │ - Call exec layer                                          │  │
+│  │ - Fetch releases with spinner                              │  │
+│  │ - Format output                                            │  │
 │  └───────────────────────────────────────────────────────────┘  │
 │  ┌───────────────────────────────────────────────────────────┐  │
 │  │ show.go - Show subcommand                                 │  │
 │  │ - Parse version argument                                   │  │
-│  │ - Handle "latest" keyword                                  │  │
-│  │ - Call exec layer                                          │  │
+│  │ - Handle optional argument (defaults to latest)            │  │
+│  │ - Fetch release with spinner                               │  │
+│  │ - Format output                                            │  │
+│  └───────────────────────────────────────────────────────────┘  │
+│  ┌───────────────────────────────────────────────────────────┐  │
+│  │ formatters.go - Output formatting                         │  │
+│  │ - Table rendering with lipgloss                            │  │
+│  │ - Markdown rendering with glamour                          │  │
+│  │ - JSON/YAML formatting                                     │  │
+│  │ - Platform-specific asset filtering                        │  │
+│  └───────────────────────────────────────────────────────────┘  │
+│  ┌───────────────────────────────────────────────────────────┐  │
+│  │ github.go - GitHub client interface                       │  │
+│  │ - GitHubClient interface for testability                  │  │
+│  │ - RealGitHubClient implementation                          │  │
+│  │ - MockGitHubClient for testing                             │  │
+│  └───────────────────────────────────────────────────────────┘  │
+│  ┌───────────────────────────────────────────────────────────┐  │
+│  │ markdown/ - Embedded usage examples                       │  │
+│  │ - atmos_version_list_usage.md                             │  │
+│  │ - atmos_version_show_usage.md                             │  │
 │  └───────────────────────────────────────────────────────────┘  │
 └────────────────────────┬────────────────────────────────────────┘
                          │
                          ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│         internal/exec/ (Business Logic)                          │
-│  - version_list.go (list functionality)                          │
-│  - version_show.go (show functionality)                          │
-│  - Fetch releases from GitHub API                                │
-│  - Filter drafts/prereleases                                     │
-│  - Compare with current version                                  │
-│  - Format output (JSON/YAML/Text)                                │
-│  - Launch TUI if interactive                                     │
-└────────────────────────┬────────────────────────────────────────┘
-                         │
-            ┌────────────┴────────────┐
-            ▼                         ▼
-┌──────────────────────┐   ┌──────────────────────────────────────┐
-│ pkg/utils/           │   │ internal/tui/version/                 │
-│ github_utils.go      │   │ - model.go (bubbletea model)          │
-│                      │   │ - view.go (rendering)                 │
-│ - GetGitHubReleases()│   │ - keys.go (keybindings)               │
-│ - GetReleaseDetails()│   │ - list_item.go (custom delegate)      │
-│ - Authentication     │   │                                        │
-│ - Rate limiting      │   │ Features:                              │
-└──────────────────────┘   │ - List view with releases              │
-                           │ - Detail view with markdown notes      │
-                           │ - Artifact browser                     │
-                           │ - Pagination controls                  │
-                           └────────────────────────────────────────┘
+│         pkg/utils/github_utils.go (GitHub API)                   │
+│  - GetGitHubRepoReleases() with pagination                       │
+│  - GetGitHubReleaseByTag() for specific version                  │
+│  - GetGitHubLatestRelease() for latest                           │
+│  - OAuth2 authentication with ATMOS_GITHUB_TOKEN/GITHUB_TOKEN   │
+│  - Rate limit checking and handling                              │
+│  - Filter out draft releases                                     │
+│  - Optional prerelease filtering                                 │
+└─────────────────────────────────────────────────────────────────┘
 ```
 
 ### Command Registry Pattern Integration
 
-The `version` command will be refactored to use Atmos's **Command Registry Pattern** (introduced in PR #1643). This provides:
+The `version` command uses Atmos's **Command Registry Pattern** for modular, self-contained organization:
 
 - ✅ **Self-registering commands** - Package init() auto-registers with registry
 - ✅ **Modular organization** - Each command family in its own package
 - ✅ **Type-safe interfaces** - CommandProvider interface ensures consistency
 - ✅ **Custom command compatibility** - Works seamlessly with atmos.yaml commands
+- ✅ **Embedded usage examples** - Markdown files embedded via go:embed
 
 **Package Structure:**
 
 ```
 cmd/version/
-├── version.go          # Parent command + VersionCommandProvider
-├── version_test.go     # Tests for provider
-├── list.go             # List subcommand
-├── list_test.go        # List tests
-├── show.go             # Show subcommand
-└── show_test.go        # Show tests
+├── version.go                      # Parent command + VersionCommandProvider
+├── list.go                         # List subcommand with spinner
+├── show.go                         # Show subcommand with spinner
+├── formatters.go                   # All output formatting logic
+├── github.go                       # GitHubClient interface
+└── markdown/
+    ├── atmos_version_list_usage.md
+    └── atmos_version_show_usage.md
 ```
 
 **Registration in cmd/root.go:**
@@ -237,13 +231,26 @@ import (
 )
 ```
 
-The `version` command package registers itself during initialization, and `internal.RegisterAll()` adds it to RootCmd.
-
 ### Output Formats
 
-#### TUI (Default)
+#### Text (Default)
 
-Interactive terminal UI with list and detail views (described above).
+```
+  VERSION    DATE        TITLE
+──────────────────────────────────────────────────────────────
+● vtest      2025-10-17  vtest
+  v1.194.1   2025-10-13  Fix and Improve Performance Heatmap
+  v1.194.0   2025-10-08  Improve Atmos Auth
+  v1.193.0   2025-10-03  Add Performance Profiling Heatmap
+                         Visualization to Atmos CLI
+```
+
+Features:
+- Green bullet (●) for current installed version
+- Markdown-rendered titles with ANSI colors preserved
+- Automatic word wrapping based on terminal width
+- Borderless table with header separator only
+- Muted gray dates
 
 #### JSON
 
@@ -256,22 +263,9 @@ Interactive terminal UI with list and detail views (described above).
       "published_at": "2025-04-15T10:30:00Z",
       "url": "https://github.com/cloudposse/atmos/releases/tag/v1.95.0",
       "prerelease": false,
-      "current": true,
-      "artifacts": [
-        {
-          "name": "atmos_1.95.0_darwin_amd64.tar.gz",
-          "size": 15728640,
-          "download_count": 1523,
-          "url": "https://github.com/..."
-        }
-      ]
+      "current": true
     }
-  ],
-  "pagination": {
-    "limit": 10,
-    "offset": 0,
-    "total": 156
-  }
+  ]
 }
 ```
 
@@ -285,90 +279,52 @@ releases:
     url: https://github.com/cloudposse/atmos/releases/tag/v1.95.0
     prerelease: false
     current: true
-    artifacts:
-      - name: atmos_1.95.0_darwin_amd64.tar.gz
-        size: 15728640
-        download_count: 1523
-        url: https://github.com/...
-pagination:
-  limit: 10
-  offset: 0
-  total: 156
-```
-
-#### Text
-
-```
-v1.95.0  [Current]  Enhanced Vendoring and Bug Fixes  (Apr 15, 2025)
-v1.94.0             Performance Improvements          (Apr 8, 2025)
-v1.93.0             New Template Functions            (Apr 1, 2025)
 ```
 
 ### Release Details View (`atmos version show`)
 
-Additional subcommand for viewing a single release:
-
 ```bash
 $ atmos version show v1.95.0
 
-╭─────────────────────────────────────────────────────────────╮
-│ Atmos v1.95.0                                               │
-│ Published: April 15, 2025 (2 days ago)                     │
-│ Author: @osterman                                           │
-│ URL: https://github.com/cloudposse/atmos/releases/tag/...  │
-╰─────────────────────────────────────────────────────────────╯
+Version: v1.95.0
+Published: April 15, 2025
+Title: Enhanced Vendoring and Bug Fixes
 
 Release Notes
-─────────────
+─────────────────────────────────────────────────────────────────
 
 ## What Changed
 
 Enhanced vendoring capabilities with support for...
 
-## Artifacts (8 files)
-
-atmos_1.95.0_darwin_amd64.tar.gz        15.0 MB  1,523 downloads
-atmos_1.95.0_darwin_arm64.tar.gz        14.8 MB    987 downloads
-atmos_1.95.0_linux_amd64.tar.gz         15.2 MB  2,341 downloads
-...
-
-[o] Open in browser  [d] Download artifact  [q] Quit
+Assets for darwin/arm64:
+  atmos_1.95.0_darwin_arm64 (14.8 MB)
+  https://github.com/cloudposse/atmos/releases/download/...
 ```
 
-### Caching Strategy
-
-To minimize API calls and respect rate limits:
-
-1. **Cache location**: `~/.atmos/cache/releases.json`
-2. **Cache TTL**: 1 hour (configurable via `ATMOS_RELEASE_CACHE_TTL`)
-3. **Cache key**: `releases:{owner}:{repo}:{limit}:{offset}:{include_prereleases}`
-4. **Invalidation**: `--no-cache` flag or expired TTL
-5. **Cache format**: JSON with metadata
-
-```json
-{
-  "cached_at": "2025-04-17T14:30:00Z",
-  "expires_at": "2025-04-17T15:30:00Z",
-  "query": {
-    "limit": 10,
-    "offset": 0,
-    "include_prereleases": false
-  },
-  "data": [...]
-}
-```
+Features:
+- Full markdown-rendered release notes
+- Platform-specific asset filtering (current OS/arch only)
+- Muted gray file sizes
+- Blue underlined download URLs
 
 ### Error Handling
 
 **Rate Limit Exceeded:**
 ```
-Error: GitHub API rate limit exceeded (60 requests/hour for unauthenticated requests)
+Error: GitHub API rate limit exceeded: only 5 requests remaining,
+resets at 2025-04-17T15:30:00Z (in 28m)
 
 To increase your rate limit:
 1. Set ATMOS_GITHUB_TOKEN or GITHUB_TOKEN environment variable
-2. Create a token at https://github.com/settings/tokens
+2. Get your token: gh auth token
 
 Authenticated requests get 5,000 requests/hour.
+```
+
+**Terminal Too Narrow:**
+```
+Error: terminal too narrow: detected 35 chars, minimum required 40 chars
 ```
 
 **Network Error:**
@@ -376,15 +332,6 @@ Authenticated requests get 5,000 requests/hour.
 Error: Failed to connect to GitHub API
 
 Please check your internet connection and try again.
-Use --no-cache to bypass cache if outdated.
-```
-
-**Invalid Token:**
-```
-Error: GitHub authentication failed
-
-Your ATMOS_GITHUB_TOKEN appears to be invalid or expired.
-Generate a new token at https://github.com/settings/tokens
 ```
 
 ### GitHub API Integration
@@ -402,252 +349,91 @@ Generate a new token at https://github.com/settings/tokens
 
 3. **Get Latest Release**
    - `GET /repos/cloudposse/atmos/releases/latest`
-   - Special handling for `atmos version show latest`
+   - For `atmos version show` without arguments
 
 **Authentication:**
 - Optional OAuth2 token via `ATMOS_GITHUB_TOKEN` or `GITHUB_TOKEN`
 - Graceful degradation to unauthenticated mode
 - Clear error messages on rate limit
-
-**Response Parsing:**
-- Parse GitHub API JSON responses
-- Extract: tag_name, name, body, published_at, prerelease, draft, assets
-- Transform to internal schema
+- Proactive rate limit checking before requests
 
 **Filtering Logic:**
 - **Drafts**: Always excluded (not published releases)
-- **Prereleases**: Excluded by default, included with `--include-prereleases` flag
-- **Stable releases**: Always included
-- Filter applied after fetching from GitHub API to preserve pagination accuracy
+- **Prereleases**: Excluded by default, included with `--include-prereleases`
+- **Current version**: Synthetically added to list if not present
+- **Platform assets**: Filtered to match current OS and architecture
 
 ### Testing Strategy
 
-#### Unit Tests (Target: 85%+ coverage)
+#### Unit Tests
 
-1. **GitHub API Client** (`pkg/utils/github_utils_test.go`)
-   - Mock GitHub API responses
-   - Test pagination logic
-   - Test authentication (with/without token)
-   - Test rate limit handling
-   - Test error scenarios
-   - Test filtering (drafts, prereleases)
+The implementation includes mocking support via the `GitHubClient` interface:
 
-2. **Business Logic** (`internal/exec/version_list_test.go`)
-   - Test output formatting (JSON, YAML, text)
-   - Test version comparison logic
-   - Test current version detection
-   - Test artifact parsing
-   - Mock GitHub client
+```go
+type GitHubClient interface {
+    GetReleases(owner, repo string, opts ReleaseOptions) ([]*github.RepositoryRelease, error)
+    GetRelease(owner, repo, tag string) (*github.RepositoryRelease, error)
+    GetLatestRelease(owner, repo string) (*github.RepositoryRelease, error)
+}
 
-3. **CLI Command** (`cmd/version_list_test.go`)
-   - Test flag parsing
-   - Test validation (limit range, offset >= 0)
-   - Test command registration
-   - Mock exec layer
+type MockGitHubClient struct {
+    Releases []*github.RepositoryRelease
+    Release  *github.RepositoryRelease
+    Err      error
+}
+```
 
-4. **TUI Components** (`internal/tui/version/*_test.go`)
-   - Test model state transitions
-   - Test keybindings
-   - Test pagination logic
-   - Test list item rendering
-   - Mock bubbletea infrastructure
+This enables testing without actual GitHub API calls.
 
-#### Integration Tests
+### Implementation Details
 
-1. **Real GitHub API** (`tests/version_list_integration_test.go`)
-   - Use `tests.RequireGitHubAccess()` precondition
-   - Test actual API calls with token
-   - Test pagination with real data
-   - Skip if rate limits low
+**Key Features Implemented:**
 
-2. **End-to-End CLI** (`tests/version_list_cli_test.go`)
-   - Build atmos binary
-   - Execute `atmos version list --format json`
-   - Parse and validate output
-   - Test all flags
-
-### Implementation Phases
-
-#### Phase 0: Refactor Version Command to Use Registry Pattern (2-3 hours)
-
-**Critical first step:** Migrate existing `cmd/version.go` to command registry pattern.
-
-**Steps:**
-1. Create `cmd/version/` package directory
-2. Move `cmd/version.go` → `cmd/version/version.go`
-3. Implement `VersionCommandProvider` struct
-4. Add provider methods: `GetCommand()`, `GetName()`, `GetGroup()`
-5. Register in `init()` via `internal.Register()`
-6. Add blank import to `cmd/root.go`: `_ "github.com/cloudposse/atmos/cmd/version"`
-7. Migrate existing flags (`--check`, `--format`)
-8. Move `internal/exec/version.go` logic (no changes needed)
-9. Create `cmd/version/version_test.go` for provider tests
-10. Verify existing functionality: `atmos version`, `atmos version --check`
-
-**Files created/modified:**
-- `cmd/version/version.go` (new - migrated from cmd/version.go)
-- `cmd/version/version_test.go` (new - provider tests)
-- `cmd/root.go` (modify - add blank import)
-- `cmd/version.go` (delete - replaced by package)
-
-#### Phase 1: GitHub API Integration (2-3 hours)
-- Extend `pkg/utils/github_utils.go`
-- Add `GetGitHubRepoReleases()` with pagination
-  - `includePrereleases` parameter (default: false)
-  - Always filter out drafts
-  - Return stable releases by default
-- Add `GetGitHubReleaseByTag()` for details
-- Add `GetGitHubLatestRelease()` for "latest" keyword (stable releases only)
-- Environment variable binding (viper): `ATMOS_GITHUB_TOKEN` / `GITHUB_TOKEN`
-- Rate limit handling with descriptive errors
-- Unit tests with mocked GitHub client
-  - Test prerelease filtering (included/excluded)
-  - Test draft exclusion (always)
-
-#### Phase 2: Caching Layer (1-1.5 hours)
-- Create `pkg/cache/release_cache.go`
-- Implement cache with TTL (default: 1 hour)
-- Cache location: `~/.atmos/cache/releases/`
-- Support `--no-cache` flag
-- Unit tests for cache operations
-
-#### Phase 3: TUI Implementation (4-5 hours)
-- Create `internal/tui/version/` package
-- Implement bubbletea model with state machine
-- List view with custom delegate
-- Detail view with markdown rendering (glamour)
-- Artifact browser view
-- Pagination controls
-- Keybindings (j/k, n/p, o, d, q)
-- Use theme colors from `pkg/ui/theme/colors.go`
-- Unit tests for state management
-
-#### Phase 4: Business Logic - List Command (2-3 hours)
-- Implement `internal/exec/version_list.go`
-- Fetch releases with caching support
-- Filter drafts/prereleases based on flags
-- **Date filtering implementation (`--since`)**
-  - Parse ISO 8601 dates (YYYY-MM-DD)
-  - Parse relative dates (30d, 1w, 6m)
-  - Filter releases by publishedAt date
-- Output formatters (JSON, YAML, text, TUI)
-- Version comparison logic
-- Launch TUI for interactive mode
-- Unit tests with mocked dependencies
-
-#### Phase 5: Business Logic - Show Command (1.5-2 hours)
-- Implement `internal/exec/version_show.go`
-- Fetch single release details
-- Handle "latest" keyword special case
-- Reuse TUI detail view
-- Support all output formats
-- Unit tests
-
-#### Phase 6: Business Logic - Search Command (2-2.5 hours)
-- Implement `internal/exec/version_search.go`
-- Fetch all releases (with caching)
-- Full-text search across release notes and titles
-- Case-insensitive search by default
-- Optional case-sensitive flag
-- Context lines around matches
-- Highlight matches in TUI
-- Support all output formats
-- Unit tests with mock data
-
-#### Phase 7: CLI Commands (3-3.5 hours)
-- Create `cmd/version/list.go` (subcommand)
-  - Flags: `--limit`, `--offset`, `--since`, `--include-prereleases`, `--format`, `--no-cache`
-  - Validation: limit 1-100, offset >= 0, date parsing
-  - Attach to version parent command
-- Create `cmd/version/show.go` (subcommand)
-  - Argument: version string or "latest"
-  - Flag: `--format`
-  - Attach to version parent command
-- Create `cmd/version/search.go` (subcommand)
-  - Argument: search query
-  - Flags: `--case-sensitive`, `--context`, `--format`
-  - Attach to version parent command
-- Unit tests for all three subcommands
-
-#### Phase 8: Documentation (2.5-3 hours)
-- Create `website/docs/cli/commands/version/list.mdx`
-- Create `website/docs/cli/commands/version/show.mdx`
-- Create `website/docs/cli/commands/version/search.mdx`
-- Update `website/docs/cli/commands/version.mdx` (add subcommand links)
-- Add usage examples and screenshots
-- Build website: `cd website && npm run build`
-- Fix any broken links or errors
-
-#### Phase 9: Integration & Testing (3-4 hours)
-- Create integration tests in `tests/`
-  - `version_list_integration_test.go` (with real GitHub API)
-  - `version_list_cli_test.go` (CLI execution tests)
-  - Use `tests.RequireGitHubAccess()` precondition
-- Manual testing checklist (all formats, pagination, caching)
-- Test with/without GitHub token
-- Verify rate limit handling
-- Run full test suite: `make testacc-cover`
-- Verify 80%+ coverage on new/changed lines
-
-**Total Estimated Time: 22-30 hours**
+1. ✅ Self-contained cmd/version package following command registry pattern
+2. ✅ Borderless table with lipgloss (header separator only)
+3. ✅ Markdown rendering for titles with Glamour (ANSI colors preserved)
+4. ✅ Terminal width detection with minimum validation (40 chars)
+5. ✅ Spinner during GitHub API calls (TTY-aware using bubbletea)
+6. ✅ Platform-specific asset filtering (runtime.GOOS/GOARCH matching)
+7. ✅ Multiple output formats (text, JSON, YAML)
+8. ✅ Current version indicator (green bullet ●)
+9. ✅ GitHubClient interface for testability
+10. ✅ Environment variable binding (ATMOS_GITHUB_TOKEN/GITHUB_TOKEN fallback)
+11. ✅ Embedded usage markdown files (go:embed)
+12. ✅ Debug logging for terminal width detection
+13. ✅ Static error definitions (ErrTerminalTooNarrow, etc.)
 
 ### Success Criteria
 
-- ✅ Version command migrated to command registry pattern
-- ✅ `atmos version list` displays releases in TUI
+- ✅ `atmos version list` displays releases in formatted table
 - ✅ `--limit` and `--offset` pagination works correctly
-- ✅ `--since` date filtering works (ISO 8601 and relative dates)
+- ✅ `--since` date filtering works (ISO 8601 dates)
 - ✅ `--include-prereleases` flag excludes/includes prereleases
-- ✅ Release notes render with markdown formatting
-- ✅ Artifacts displayed with sizes and download counts
+- ✅ Release titles render with markdown formatting and colors
+- ✅ Current installed version marked with green bullet
 - ✅ `atmos version show <version>` displays single release
-- ✅ `atmos version search <query>` searches release notes
-- ✅ Search highlights matches in TUI
-- ✅ All output formats work (tui, json, yaml, text)
-- ✅ GitHub token authentication works
-- ✅ Rate limiting handled gracefully
-- ✅ Caching reduces API calls
-- ✅ 80-90% test coverage achieved
-- ✅ Documentation complete and builds successfully
+- ✅ `atmos version show` (no args) displays latest release
+- ✅ Assets filtered to current platform only
+- ✅ All output formats work (text, json, yaml)
+- ✅ GitHub token authentication works with fallback
+- ✅ Rate limiting handled gracefully with helpful errors
+- ✅ Terminal width detection prevents broken tables
+- ✅ Spinner shows during network operations (when TTY)
+- ✅ Documentation includes embedded usage examples
 - ✅ All linting passes
 - ✅ Follows all MANDATORY conventions from CLAUDE.md
 
 ### Future Enhancements
 
 #### `atmos version diff` (Future PR)
-Compare changes between two releases:
-
-```bash
-# Compare two specific versions
-$ atmos version diff v1.94.0 v1.95.0
-
-# Compare with current version
-$ atmos version diff v1.95.0
-
-# Show in TUI or output formats
-$ atmos version diff v1.94.0 v1.95.0 --format json
-```
-
-**Features:**
-- Side-by-side comparison of release notes
-- Highlight breaking changes, features, bug fixes
-- Compare artifact changes (added/removed files)
-- Show commit count between versions
-- Visual diff in TUI with color-coded sections
-
-#### Toolchain-Managed Features (Separate PRs)
-These features will be handled by the Atmos toolchain:
-
-- **`atmos version download`** - Download and verify release artifacts
-- **`atmos version upgrade`** - Interactive upgrade wizard with rollback support
+Compare changes between two releases with side-by-side comparison.
 
 ### Security Considerations
 
 1. **Token Storage**: Never log or display GitHub tokens
-2. **Cache Permissions**: Restrict cache file to user-only (0600)
-3. **URL Validation**: Validate GitHub URLs before opening browser
-4. **Download Verification**: Verify checksums when downloading artifacts
-5. **Rate Limit Protection**: Respect GitHub rate limits, don't spam API
+2. **URL Validation**: Only show official GitHub download URLs
+3. **Rate Limit Protection**: Proactive checking before requests
+4. **Error Handling**: Clear, actionable error messages
 
 ### Backward Compatibility
 
@@ -656,27 +442,10 @@ These features will be handled by the Atmos toolchain:
 - ✅ No breaking changes to existing commands
 - ✅ New subcommands are additive only
 
-### Open Questions
-
-1. **Should we support private repositories?**
-   - Yes, if ATMOS_GITHUB_TOKEN is set and has access
-   - Error clearly if token lacks permissions
-
-2. **Should we cache artifact metadata?**
-   - Yes, include in release cache
-   - Separate cache key for artifact details
-
-3. **Should we auto-download on select in TUI?**
-   - No, require explicit action (press 'd')
-   - Show download progress bar
-
-4. **Should we support filtering by semantic version range?**
-   - Not in v1, add as future enhancement
-   - Example: `atmos version list --range ">=1.90.0 <2.0.0"`
-
 ### References
 
 - [GitHub REST API: Releases](https://docs.github.com/en/rest/releases/releases)
 - [Charmbracelet Bubbletea](https://github.com/charmbracelet/bubbletea)
+- [Charmbracelet Lipgloss](https://github.com/charmbracelet/lipgloss)
 - [Charmbracelet Glamour](https://github.com/charmbracelet/glamour)
 - [Atmos Version Checking](https://atmos.tools/cli/commands/version)
