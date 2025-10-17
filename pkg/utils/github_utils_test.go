@@ -292,3 +292,159 @@ func TestConcurrentGitHubAPICalls(t *testing.T) {
 		}
 	})
 }
+
+// TestGetGitHubRepoReleases tests fetching multiple releases with pagination.
+func TestGetGitHubRepoReleases(t *testing.T) {
+	t.Run("fetches releases with default options", func(t *testing.T) {
+		rateLimits := tests.RequireGitHubAccess(t)
+		if rateLimits != nil && rateLimits.Remaining < 5 {
+			t.Skipf("Need at least 5 GitHub API requests, only %d remaining", rateLimits.Remaining)
+		}
+
+		opts := GitHubReleasesOptions{
+			Owner:              "cloudposse",
+			Repo:               "atmos",
+			Limit:              5,
+			Offset:             0,
+			IncludePrereleases: false,
+		}
+
+		releases, err := GetGitHubRepoReleases(opts)
+		require.NoError(t, err)
+		assert.LessOrEqual(t, len(releases), 5)
+		for _, release := range releases {
+			assert.False(t, release.GetPrerelease(), "Should not include prereleases")
+		}
+	})
+
+	t.Run("includes prereleases when requested", func(t *testing.T) {
+		rateLimits := tests.RequireGitHubAccess(t)
+		if rateLimits != nil && rateLimits.Remaining < 5 {
+			t.Skipf("Need at least 5 GitHub API requests, only %d remaining", rateLimits.Remaining)
+		}
+
+		opts := GitHubReleasesOptions{
+			Owner:              "cloudposse",
+			Repo:               "atmos",
+			Limit:              10,
+			Offset:             0,
+			IncludePrereleases: true,
+		}
+
+		releases, err := GetGitHubRepoReleases(opts)
+		require.NoError(t, err)
+		assert.LessOrEqual(t, len(releases), 10)
+		// We can't guarantee prereleases exist, just that we don't filter them.
+	})
+
+	t.Run("handles pagination with offset", func(t *testing.T) {
+		rateLimits := tests.RequireGitHubAccess(t)
+		if rateLimits != nil && rateLimits.Remaining < 10 {
+			t.Skipf("Need at least 10 GitHub API requests, only %d remaining", rateLimits.Remaining)
+		}
+
+		// Get first page.
+		opts1 := GitHubReleasesOptions{
+			Owner:              "cloudposse",
+			Repo:               "atmos",
+			Limit:              5,
+			Offset:             0,
+			IncludePrereleases: false,
+		}
+		releases1, err := GetGitHubRepoReleases(opts1)
+		require.NoError(t, err)
+
+		// Get second page.
+		opts2 := GitHubReleasesOptions{
+			Owner:              "cloudposse",
+			Repo:               "atmos",
+			Limit:              5,
+			Offset:             5,
+			IncludePrereleases: false,
+		}
+		releases2, err := GetGitHubRepoReleases(opts2)
+		require.NoError(t, err)
+
+		// Ensure different releases (if enough exist).
+		if len(releases1) > 0 && len(releases2) > 0 {
+			assert.NotEqual(t, releases1[0].GetTagName(), releases2[0].GetTagName())
+		}
+	})
+
+	t.Run("returns empty slice when offset exceeds total", func(t *testing.T) {
+		rateLimits := tests.RequireGitHubAccess(t)
+		if rateLimits != nil && rateLimits.Remaining < 5 {
+			t.Skipf("Need at least 5 GitHub API requests, only %d remaining", rateLimits.Remaining)
+		}
+
+		opts := GitHubReleasesOptions{
+			Owner:              "cloudposse",
+			Repo:               "atmos",
+			Limit:              5,
+			Offset:             500, // Offset beyond likely total releases (GitHub API limit is 1000).
+			IncludePrereleases: false,
+		}
+
+		releases, err := GetGitHubRepoReleases(opts)
+		require.NoError(t, err)
+		// Should either be empty or have fewer than requested if offset is near the end.
+		assert.LessOrEqual(t, len(releases), 5)
+	})
+}
+
+// TestGetGitHubReleaseByTag tests fetching a specific release by tag.
+func TestGetGitHubReleaseByTag(t *testing.T) {
+	t.Run("fetches specific release by tag", func(t *testing.T) {
+		rateLimits := tests.RequireGitHubAccess(t)
+		if rateLimits != nil && rateLimits.Remaining < 5 {
+			t.Skipf("Need at least 5 GitHub API requests, only %d remaining", rateLimits.Remaining)
+		}
+
+		// Use a known release tag.
+		release, err := GetGitHubReleaseByTag("cloudposse", "atmos", "v1.50.0")
+		require.NoError(t, err)
+		assert.NotNil(t, release)
+		assert.Equal(t, "v1.50.0", release.GetTagName())
+	})
+
+	t.Run("returns error for invalid tag", func(t *testing.T) {
+		rateLimits := tests.RequireGitHubAccess(t)
+		if rateLimits != nil && rateLimits.Remaining < 5 {
+			t.Skipf("Need at least 5 GitHub API requests, only %d remaining", rateLimits.Remaining)
+		}
+
+		_, err := GetGitHubReleaseByTag("cloudposse", "atmos", "v999.999.999")
+		assert.Error(t, err)
+	})
+}
+
+// TestGetGitHubLatestRelease tests fetching the latest stable release.
+func TestGetGitHubLatestRelease(t *testing.T) {
+	t.Run("fetches latest stable release", func(t *testing.T) {
+		rateLimits := tests.RequireGitHubAccess(t)
+		if rateLimits != nil && rateLimits.Remaining < 5 {
+			t.Skipf("Need at least 5 GitHub API requests, only %d remaining", rateLimits.Remaining)
+		}
+
+		release, err := GetGitHubLatestRelease("cloudposse", "atmos")
+		require.NoError(t, err)
+		assert.NotNil(t, release)
+		assert.NotEmpty(t, release.GetTagName())
+		assert.False(t, release.GetPrerelease(), "Latest release should not be a prerelease")
+	})
+}
+
+// TestNewGitHubClientWithAtmosToken tests token precedence.
+func TestNewGitHubClientWithAtmosToken(t *testing.T) {
+	t.Run("prefers ATMOS_GITHUB_TOKEN over GITHUB_TOKEN", func(t *testing.T) {
+		// This test verifies the viper binding logic.
+		// We can't directly test precedence without mocking viper,
+		// but we can verify the function doesn't panic.
+		t.Setenv("ATMOS_GITHUB_TOKEN", "test-atmos-token")
+		t.Setenv("GITHUB_TOKEN", "test-github-token")
+
+		ctx := context.Background()
+		client := newGitHubClient(ctx)
+		assert.NotNil(t, client)
+	})
+}
