@@ -818,6 +818,34 @@ func TestValidateStack_ReturnsErrorForInvalidFormat(t *testing.T) {
 
 ## Critical Development Requirements
 
+### Git and Version Control (MANDATORY)
+
+**DO NOT Commit These File Types (They Are Not Deliverables):**
+- **Todo lists** or task tracking files you create
+- **Research documents** created to help you understand a problem (e.g., `component-architecture-research.md`)
+- **Scratch files** for working through problems (e.g., `scratch-*.md`, `notes-*.txt`)
+- **Investigation outputs** that aren't part of the final deliverable
+
+**DO Commit These File Types (These Are Deliverables):**
+- ✅ **Implementation code** (`.go` files, new packages, etc.)
+- ✅ **Tests** for the implementation
+- ✅ **PRDs and design docs** the user asked you to create
+- ✅ **Developer guides** the user requested
+- ✅ **Documentation** that's part of the deliverable
+- ✅ **Configuration files** needed for the implementation
+- ✅ **Schema updates** required for the feature
+
+**When Uncertain:**
+- **If you created a file as part of solving the task (deliverable)**: Commit it
+- **If you created a file to help yourself think through the problem (process artifact)**: Don't commit it
+- **If unsure**: Ask the user "Should I commit [filename]?"
+
+**`.gitignore` Rules:**
+- **DO NOT automatically add files to `.gitignore`** when user asks not to commit them
+- **Only update `.gitignore` for patterns/classes of files**, never specific filenames
+- Examples of appropriate patterns: `*.log`, `node_modules/`, `*-research.md`, `temp-*`
+- Examples of inappropriate entries: `component-architecture-research.md`, `my-specific-file.txt`
+
 ### Test Coverage (MANDATORY)
 - **80% minimum coverage** on new/changed lines (enforced by CodeCov)
 - ALL new features MUST include comprehensive unit tests
