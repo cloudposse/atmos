@@ -1,7 +1,6 @@
 package exec
 
 import (
-	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -13,16 +12,8 @@ import (
 func TestComponentInheritanceWithoutMetadataComponent(t *testing.T) {
 	workDir := "../../tests/fixtures/scenarios/component-inheritance-without-metadata-component"
 
-	// Save the current directory and restore after the test.
-	startingDir, err := os.Getwd()
-	require.NoError(t, err)
-	t.Cleanup(func() {
-		_ = os.Chdir(startingDir)
-	})
-
 	// Change to the test directory.
-	err = os.Chdir(workDir)
-	require.NoError(t, err)
+	t.Chdir(workDir)
 
 	component := "derived-component"
 	stack := "test"

@@ -100,7 +100,7 @@ identities:
     principal:
       name: AdminAccess
       account:
-        name: "123456789012"
+        name: "production"
 
   # Cross-account role using base permissions
   prod-admin:
@@ -133,7 +133,9 @@ auth:
       principal:
         name: AdminAccess
         account:
-          name: "123456789012"
+          name: "development"
+          # OR use account ID directly:
+          # id: "123456789012"
 
     prod-readonly:
       kind: aws/permission-set
@@ -142,7 +144,9 @@ auth:
       principal:
         name: ReadOnlyAccess
         account:
-          name: "999999999999"
+          name: "production"
+          # OR use account ID directly:
+          # id: "999999999999"
 ```
 
 ### AWS SAML Authentication

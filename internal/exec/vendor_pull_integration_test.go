@@ -84,17 +84,9 @@ func TestVendorPullFullWorkflow(t *testing.T) {
 	// Check for OCI authentication (GitHub token) for pulling images from ghcr.io.
 	tests.RequireOCIAuthentication(t)
 
-	// Save and restore current directory.
-	startingDir, err := os.Getwd()
-	require.NoError(t, err, "Failed to get the current working directory")
-	t.Cleanup(func() {
-		require.NoError(t, os.Chdir(startingDir), "Failed to change back to the starting directory")
-	})
-
 	// Change to test fixture directory.
 	workDir := "../../tests/fixtures/scenarios/vendor"
-	err = os.Chdir(workDir)
-	require.NoError(t, err, "Failed to change directory to %q", workDir)
+	t.Chdir(workDir)
 
 	// Set up vendor pull command.
 	cmd := &cobra.Command{}
@@ -110,7 +102,7 @@ func TestVendorPullFullWorkflow(t *testing.T) {
 	flags.Bool("everything", false, "")
 
 	// Test 1: Execute vendor pull and verify files are created.
-	err = ExecuteVendorPullCommand(cmd, []string{})
+	err := ExecuteVendorPullCommand(cmd, []string{})
 	require.NoError(t, err, "Failed to execute vendor pull command")
 
 	expectedFiles := []string{
@@ -175,20 +167,12 @@ func TestVendorPullTripleSlashNormalization(t *testing.T) {
 		t.Skipf("Insufficient GitHub API requests remaining (%d). Test may require ~10 requests.", rateLimits.Remaining)
 	}
 
-	// Save and restore current directory.
-	startingDir, err := os.Getwd()
-	require.NoError(t, err, "Failed to get the current working directory")
-	t.Cleanup(func() {
-		require.NoError(t, os.Chdir(startingDir), "Failed to change back to the starting directory")
-	})
-
 	// Use t.Setenv for automatic cleanup.
 	t.Setenv("ATMOS_LOGS_LEVEL", "Debug")
 
 	// Change to test directory.
 	testDir := "../../tests/fixtures/scenarios/vendor-triple-slash"
-	err = os.Chdir(testDir)
-	require.NoError(t, err, "Failed to change to test directory")
+	t.Chdir(testDir)
 
 	// Set up command.
 	cmd := &cobra.Command{}
@@ -204,7 +188,7 @@ func TestVendorPullTripleSlashNormalization(t *testing.T) {
 	flags.Bool("everything", false, "")
 
 	// Execute vendor pull command.
-	err = ExecuteVendorPullCommand(cmd, []string{})
+	err := ExecuteVendorPullCommand(cmd, []string{})
 	require.NoError(t, err, "Vendor pull command with triple-slash URI should execute without error")
 
 	// Verify target directory was created.
