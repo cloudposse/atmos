@@ -65,7 +65,14 @@ The shell session will have the following environment variables set:
 
 - **`ATMOS_IDENTITY`** - The name of the authenticated identity
 - **`ATMOS_SHLVL`** - Shell nesting level (increments for nested Atmos shells)
-- Cloud provider credentials (e.g., `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_SESSION_TOKEN`)
+- **AWS configuration paths** (for AWS identities):
+  - `AWS_SHARED_CREDENTIALS_FILE` - Path to Atmos-managed credentials file
+  - `AWS_CONFIG_FILE` - Path to Atmos-managed config file
+  - `AWS_PROFILE` - Profile name corresponding to your identity
+
+:::info Secure Credential Handling
+Atmos never exposes sensitive credentials directly in environment variables. Instead, it writes credentials to managed configuration files (typically in `~/.aws/atmos/`) and sets environment variables pointing to these files. This approach follows AWS SDK best practices and works seamlessly with any tool that uses the AWS SDK, including Terraform, AWS CLI, kubectl with AWS authentication, and more.
+:::
 
 ## Notes
 
