@@ -1,11 +1,11 @@
 ---
-slug: version-list-show-search-commands
-title: "Browse, Search, and Explore Atmos Releases from Your Terminal"
+slug: version-list-show-commands
+title: "Browse and Explore Atmos Releases from Your Terminal"
 authors: [atmos]
 tags: [feature, atmos-core]
 ---
 
-We're introducing three powerful new commands for exploring Atmos releases: `atmos version list`, `atmos version show`, and `atmos version search`. Browse release history with date filtering, search through release notes, inspect artifacts, and keep your infrastructure tooling up-to-date—all from a beautiful interactive terminal interface.
+We're introducing two new commands for exploring Atmos releases: `atmos version list` and `atmos version show`. Browse release history with date filtering, inspect artifacts, and keep your infrastructure tooling up-to-date—all from your terminal with beautiful formatted output.
 
 <!--truncate-->
 
@@ -13,21 +13,20 @@ We're introducing three powerful new commands for exploring Atmos releases: `atm
 
 ### `atmos version list`: Browse All Releases
 
-The new `atmos version list` command displays recent Atmos releases in an interactive terminal UI powered by [Charmbracelet](https://charm.sh/):
+The new `atmos version list` command displays recent Atmos releases in a clean, formatted table:
 
 ```bash
 $ atmos version list
 ```
 
-![Atmos Version List TUI](./img/version-list-tui.png)
-
 **Features:**
-- 📋 **Interactive list view** - Navigate with keyboard or mouse
-- 📖 **Markdown-rendered titles** - Release titles displayed with proper formatting
-- 📅 **Date filtering** - Filter releases with `--since` (ISO dates or relative like "30d")
-- 📄 **Pagination support** - Browse through extensive release history
-- ✨ **Status indicators** - Clearly see current version, prereleases, and updates
-- 🔍 **Release details** - Press Enter to view full release notes and artifacts
+- 📋 **Clean table view** - Borderless table with header separator
+- 📖 **Markdown-rendered titles** - Release titles displayed with proper formatting and colors
+- 📅 **Date filtering** - Filter releases with `--since` (ISO 8601 dates)
+- 📄 **Pagination support** - Browse through extensive release history with `--limit` and `--offset`
+- ✨ **Current version indicator** - Green bullet (●) marks your installed version
+- 🔄 **Spinner feedback** - Visual feedback during GitHub API calls
+- 📱 **Terminal width detection** - Automatically adapts to your terminal size
 
 ### `atmos version show`: Dive into Release Details
 
@@ -38,43 +37,20 @@ $ atmos version show v1.95.0
 ```
 
 This displays:
-- **Full release notes** rendered in beautiful markdown
-- **Release metadata** (author, publication date, GitHub URL)
-- **Artifact list** with file sizes and download counts
-- **Quick actions** to open in browser or download artifacts
+- **Full release notes** rendered in markdown with colors preserved
+- **Release metadata** (version, publication date, title)
+- **Platform-specific artifacts** - Only shows assets matching your OS and architecture
+- **File sizes and download URLs** - Styled links for easy access
 
 ```bash
 # View the latest release
-$ atmos version show latest
+$ atmos version show
 
 # View a specific version
 $ atmos version show v1.95.0
-```
 
-### `atmos version search`: Find Releases by Content
-
-Need to find when a specific feature was added or bug was fixed? Search through all release notes:
-
-```bash
-$ atmos version search "template functions"
-```
-
-**Features:**
-- 🔍 **Full-text search** - Search across all release notes and titles
-- 💡 **Highlighted matches** - See matches highlighted in TUI
-- 📝 **Context display** - View surrounding text around matches
-- ⚙️ **Case control** - Case-insensitive by default, optional `--case-sensitive`
-- 📊 **Multiple formats** - Output as JSON, YAML, or interactive TUI
-
-```bash
-# Find releases mentioning Terraform
-$ atmos version search "terraform validation"
-
-# Case-sensitive search
-$ atmos version search "AWS" --case-sensitive
-
-# Show context around matches
-$ atmos version search "bug fix" --context 3
+# Works without 'v' prefix too
+$ atmos version show 1.95.0
 ```
 
 ## Why This Matters
@@ -98,9 +74,8 @@ Now, everything stays in your terminal:
 ```bash
 # New workflow
 $ atmos version list
-# Interactive TUI opens
-# Navigate with j/k, press Enter for details
-# Read release notes, see artifacts
+# View releases in a formatted table
+# Read release notes with 'atmos version show'
 # All without leaving your terminal
 ```
 
@@ -131,9 +106,8 @@ atmos version show latest
 # Check that your release published correctly
 atmos version show v1.95.0
 
-# Inspect release artifacts
+# Inspect release artifacts and download URLs
 atmos version show v1.95.0
-# Press 'd' to download an artifact
 ```
 
 ## How to Use It
@@ -159,14 +133,8 @@ $ atmos version list --limit 10 --offset 10
 Filter by date:
 
 ```bash
-# Show releases from last 30 days
-$ atmos version list --since 30d
-
-# Show releases since specific date
+# Show releases since specific date (ISO 8601 format)
 $ atmos version list --since 2025-01-01
-
-# Show releases from last week
-$ atmos version list --since 1w
 ```
 
 Include prerelease versions (beta, alpha, rc):
@@ -177,19 +145,9 @@ Include prerelease versions (beta, alpha, rc):
 $ atmos version list --include-prereleases
 ```
 
-Search release notes:
-
-```bash
-# Find releases mentioning specific features
-$ atmos version search "template functions"
-
-# Search with context
-$ atmos version search "bug fix" --context 3
-```
-
 ### Machine-Readable Output
 
-Perfect for scripting and CI/CD:
+Perfect for scripting:
 
 ```bash
 # JSON output
@@ -197,9 +155,6 @@ $ atmos version list --format json
 
 # YAML output
 $ atmos version list --format yaml
-
-# Plain text (one per line)
-$ atmos version list --format text
 ```
 
 **Example JSON output:**
@@ -213,54 +168,13 @@ $ atmos version list --format text
       "published_at": "2025-04-15T10:30:00Z",
       "url": "https://github.com/cloudposse/atmos/releases/tag/v1.95.0",
       "prerelease": false,
-      "current": true,
-      "artifacts": [
-        {
-          "name": "atmos_1.95.0_darwin_amd64.tar.gz",
-          "size": 15728640,
-          "download_count": 1523
-        }
-      ]
+      "current": true
     }
-  ],
-  "pagination": {
-    "limit": 10,
-    "offset": 0,
-    "total": 156
-  }
+  ]
 }
 ```
 
-### Interactive TUI Navigation
-
-The interactive terminal UI supports:
-
-| Key | Action |
-|-----|--------|
-| `↑/↓` or `j/k` | Navigate list |
-| `Enter` | View release details |
-| `Esc` | Back to list |
-| `n/p` | Next/previous page |
-| `o` | Open release in browser |
-| `d` | Download artifact |
-| `q` or `Ctrl+C` | Quit |
-| `?` | Show help |
-
 ## Performance & Rate Limits
-
-### Caching
-
-To minimize GitHub API calls, release data is cached for 1 hour:
-
-```bash
-# Use cached data
-$ atmos version list
-
-# Force fresh data
-$ atmos version list --no-cache
-```
-
-Cache location: `~/.atmos/cache/releases.json`
 
 ### GitHub API Rate Limits
 
@@ -270,12 +184,14 @@ Cache location: `~/.atmos/cache/releases.json`
 To increase your rate limit, set a GitHub token:
 
 ```bash
-export ATMOS_GITHUB_TOKEN="ghp_xxxxxxxxxxxx"
-# or
+# Get your token from GitHub CLI
+export ATMOS_GITHUB_TOKEN=$(gh auth token)
+
+# Or set GITHUB_TOKEN directly
 export GITHUB_TOKEN="ghp_xxxxxxxxxxxx"
 ```
 
-[Generate a token at GitHub](https://github.com/settings/tokens) (no special scopes needed for public repositories).
+No special scopes are needed for public repositories.
 
 ## Examples
 
@@ -286,7 +202,7 @@ export GITHUB_TOKEN="ghp_xxxxxxxxxxxx"
 $ atmos version list --limit 5
 
 # View details on the latest
-$ atmos version show latest
+$ atmos version show
 ```
 
 ### Audit Release History for Compliance
@@ -303,63 +219,23 @@ $ atmos version list --format json | \
 ### Check Release Artifacts Before Downloading
 
 ```bash
-# View release details
+# View release details with platform-specific artifacts
 $ atmos version show v1.95.0
 
-# See artifact sizes and download counts
-# Press 'd' to download interactively
+# See artifact sizes and download URLs
 ```
-
-### CI/CD Integration
-
-```bash
-# Get latest version in CI pipeline
-LATEST_VERSION=$(atmos version list --format json | \
-  jq -r '.releases[0].version')
-
-echo "Latest Atmos version: $LATEST_VERSION"
-
-# Check if update available
-CURRENT_VERSION=$(atmos version --format json | jq -r '.version')
-if [ "$CURRENT_VERSION" != "$LATEST_VERSION" ]; then
-  echo "Update available: $CURRENT_VERSION -> $LATEST_VERSION"
-fi
-```
-
-## What's Coming Next
-
-### Release Comparison (Future PR)
-
-We're planning to add `atmos version diff` to compare changes between releases:
-
-```bash
-# Compare two specific versions
-$ atmos version diff v1.94.0 v1.95.0
-
-# Compare with current version
-$ atmos version diff v1.95.0
-```
-
-Side-by-side comparison with highlighted breaking changes, new features, and bug fixes.
-
-### Toolchain Features (Separate PRs)
-
-Version management features will be handled by the Atmos toolchain:
-
-- **`atmos version download`** - Download and verify release artifacts with checksum validation
-- **`atmos version upgrade`** - Interactive upgrade wizard with rollback support
-
-Want to see something else? [Share your ideas in GitHub Discussions](https://github.com/cloudposse/atmos/discussions)!
 
 ## Technical Details
 
 ### Implementation Highlights
 
-- **Interactive TUI** built with [Charmbracelet Bubbletea](https://github.com/charmbracelet/bubbletea)
-- **Markdown rendering** powered by [Glamour](https://github.com/charmbracelet/glamour)
-- **GitHub API integration** using [go-github](https://github.com/google/go-github)
-- **Smart caching** to respect API rate limits
-- **Full test coverage** (85%+) with unit and integration tests
+- **Formatted table output** using [Charmbracelet lipgloss/table](https://github.com/charmbracelet/lipgloss) with automatic word wrapping
+- **Markdown rendering** powered by [Glamour](https://github.com/charmbracelet/glamour) preserving ANSI colors
+- **Loading spinner** built with [Charmbracelet Bubbletea](https://github.com/charmbracelet/bubbletea) for TTY detection
+- **GitHub API integration** using [go-github](https://github.com/google/go-github) with OAuth2 authentication
+- **Platform-specific filtering** matches assets to runtime.GOOS and runtime.GOARCH
+- **Terminal width detection** using Atmos's existing utilities
+- **Command registry pattern** for modular organization
 
 ### For Developers
 
@@ -379,7 +255,7 @@ atmos version
 atmos version list
 
 # View details on latest
-atmos version show latest
+atmos version show
 ```
 
 ## Get Involved
