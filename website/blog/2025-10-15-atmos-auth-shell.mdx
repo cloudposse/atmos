@@ -39,7 +39,16 @@ The new `atmos auth shell` command solves this by launching an interactive shell
 atmos auth shell --identity prod-admin
 ```
 
-And you're immediately in a shell session with all your cloud credentials ready to use. Your shell prompt will reflect that you're in an authenticated Atmos shell, and you can run as many commands as you need without worrying about authentication.
+And you're immediately in a shell session with all your cloud credentials ready to use. The session exposes environment variables like `ATMOS_IDENTITY` (the active identity name) and `ATMOS_SHLVL` (shell nesting level) that you can run as many commands as you need without worrying about authentication.
+
+:::tip Customize Your Prompt
+Want to see which identity is active in your prompt? You can customize your shell prompt by adding `ATMOS_IDENTITY` or `ATMOS_SHLVL` to your `PS1` (bash) or equivalent prompt variable in your shell configuration file (e.g., `.bashrc`, `.zshrc`).
+
+Example for bash:
+```bash
+export PS1='[\u@\h \W${ATMOS_IDENTITY:+ ($ATMOS_IDENTITY)}]\$ '
+```
+:::
 
 ## Why This Matters
 
