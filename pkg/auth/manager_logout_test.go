@@ -52,15 +52,15 @@ func TestManager_Logout(t *testing.T) {
 				// Expect identity logout.
 				identity.EXPECT().Logout(gomock.Any()).Return(nil)
 			},
-			wantErr:     false,
-			checkCalls:  true,
+			wantErr:       false,
+			checkCalls:    true,
 			expectedCalls: 2, // Two keyring deletions
 		},
 		{
 			name:         "logout non-existent identity",
 			identityName: "non-existent",
 			config: &schema.AuthConfig{
-				Providers: map[string]schema.Provider{},
+				Providers:  map[string]schema.Provider{},
 				Identities: map[string]schema.Identity{},
 			},
 			setupMocks: func(store *types.MockCredentialStore, provider *types.MockProvider, identity *types.MockIdentity) {
