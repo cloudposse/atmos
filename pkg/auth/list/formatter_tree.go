@@ -61,13 +61,26 @@ func buildUnifiedTree(
 ) string {
 	defer perf.Track(nil, "list.buildUnifiedTree")()
 
-	// Create tree styles.
 	branchStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(treeBranchColor))
+	root := tree.New().EnumeratorStyle(branchStyle)
 
-	root := tree.New().
-		EnumeratorStyle(branchStyle)
+	// Group identities by provider or standalone.
+	identitiesByProvider, standaloneIdentities := groupIdentities(identities)
 
-	// Group identities by their direct provider.
+	// Render provider nodes.
+	renderedProviders := renderProviderNodes(root, providers, identitiesByProvider, identities)
+
+	// Render filtered provider placeholders.
+	renderFilteredProviders(root, identitiesByProvider, renderedProviders, identities)
+
+	// Render standalone identities.
+	renderStandaloneIdentities(root, standaloneIdentities, identities, &branchStyle)
+
+	return root.String()
+}
+
+// groupIdentities groups identities by their direct provider or as standalone.
+func groupIdentities(identities map[string]schema.Identity) (map[string][]string, []string) {
 	identitiesByProvider := make(map[string][]string)
 	standaloneIdentities := make([]string, 0)
 
@@ -77,40 +90,92 @@ func buildUnifiedTree(
 			providerName := identity.Via.Provider
 			identitiesByProvider[providerName] = append(identitiesByProvider[providerName], name)
 		case identity.Via != nil && identity.Via.Identity != "":
-			// This identity uses another identity - will be handled recursively.
-			continue
+			// Check if parent identity exists in filtered set.
+			if _, ok := identities[identity.Via.Identity]; ok {
+				// Parent present - will be handled recursively.
+				continue
+			}
+			// Parent filtered out, treat as standalone.
+			standaloneIdentities = append(standaloneIdentities, name)
 		default:
 			// Standalone identity (e.g., aws/user).
 			standaloneIdentities = append(standaloneIdentities, name)
 		}
 	}
 
-	// Sort provider names.
-	providerNames := getSortedProviderNames(providers)
+	return identitiesByProvider, standaloneIdentities
+}
 
-	// Build provider nodes with their direct identities as children.
+// renderProviderNodes renders provider nodes with their identities.
+func renderProviderNodes(
+	root *tree.Tree,
+	providers map[string]schema.Provider,
+	identitiesByProvider map[string][]string,
+	allIdentities map[string]schema.Identity,
+) map[string]struct{} {
+	providerNames := getSortedProviderNames(providers)
+	renderedProviders := make(map[string]struct{}, len(providerNames))
+
 	for _, providerName := range providerNames {
 		provider := providers[providerName]
-		providerNode := buildProviderNodeWithIdentities(&provider, providerName, identitiesByProvider[providerName], identities)
+		providerNode := buildProviderNodeWithIdentities(&provider, providerName, identitiesByProvider[providerName], allIdentities)
+		root.Child(providerNode)
+		renderedProviders[providerName] = struct{}{}
+	}
+
+	return renderedProviders
+}
+
+// renderFilteredProviders renders placeholder nodes for filtered providers.
+func renderFilteredProviders(
+	root *tree.Tree,
+	identitiesByProvider map[string][]string,
+	renderedProviders map[string]struct{},
+	allIdentities map[string]schema.Identity,
+) {
+	if len(renderedProviders) == len(identitiesByProvider) {
+		return
+	}
+
+	missingProviders := make([]string, 0, len(identitiesByProvider))
+	for providerName := range identitiesByProvider {
+		if _, ok := renderedProviders[providerName]; !ok {
+			missingProviders = append(missingProviders, providerName)
+		}
+	}
+
+	sort.Strings(missingProviders)
+	for _, providerName := range missingProviders {
+		placeholder := schema.Provider{Kind: "filtered"}
+		providerNode := buildProviderNodeWithIdentities(&placeholder, providerName, identitiesByProvider[providerName], allIdentities)
 		root.Child(providerNode)
 	}
+}
 
-	// Add standalone identities (if any).
-	if len(standaloneIdentities) > 0 {
-		sort.Strings(standaloneIdentities)
-		boldStyle := lipgloss.NewStyle().Bold(true)
-		standaloneNode := tree.New().
-			Root(boldStyle.Render("Standalone Identities")).
-			EnumeratorStyle(branchStyle)
-		for _, name := range standaloneIdentities {
-			identity := identities[name]
-			identityNode := buildIdentityNode(&identity, name)
-			standaloneNode.Child(identityNode)
-		}
-		root.Child(standaloneNode)
+// renderStandaloneIdentities renders standalone identities node.
+func renderStandaloneIdentities(
+	root *tree.Tree,
+	standaloneIdentities []string,
+	allIdentities map[string]schema.Identity,
+	branchStyle *lipgloss.Style,
+) {
+	if len(standaloneIdentities) == 0 {
+		return
 	}
 
-	return root.String()
+	sort.Strings(standaloneIdentities)
+	boldStyle := lipgloss.NewStyle().Bold(true)
+	standaloneNode := tree.New().
+		Root(boldStyle.Render("Standalone Identities")).
+		EnumeratorStyle(*branchStyle)
+
+	for _, name := range standaloneIdentities {
+		identity := allIdentities[name]
+		identityNode := buildIdentityNode(&identity, name)
+		standaloneNode.Child(identityNode)
+	}
+
+	root.Child(standaloneNode)
 }
 
 // formatKeyValue formats a key-value pair with styled key and value.

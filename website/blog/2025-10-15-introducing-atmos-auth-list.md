@@ -52,6 +52,15 @@ atmos auth list --format json | jq '.identities'
 atmos auth list --format yaml > auth-config.yml
 ```
 
+**Graph Visualization**
+Generate diagrams for documentation:
+
+```shell
+atmos auth list --format graphviz > auth-chain.dot
+atmos auth list --format mermaid > auth-chain.mmd
+atmos auth list --format markdown > docs/auth-config.md
+```
+
 ### 🔍 Smart Filtering
 
 Filter by providers or identities to focus on what matters:
@@ -71,7 +80,7 @@ atmos auth list --providers
 
 Understand complex authentication flows at a glance. Chains show the complete path from provider to target identity:
 
-```
+```text
 aws-sso → base-role → admin-role → prod-account
 ```
 
@@ -82,7 +91,8 @@ This makes it immediately clear:
 
 ### 🎯 Real-World Examples
 
-**Quick Overview**
+#### Quick Overview
+
 ```shell
 $ atmos auth list
 
@@ -98,7 +108,8 @@ developer  aws/assume-role   aws-sso                              dev
 ops        aws/assume-role   aws-sso       admin                  ops-admin
 ```
 
-**Detailed Tree View**
+#### Detailed Tree View
+
 ```shell
 $ atmos auth list --format tree
 
@@ -120,7 +131,8 @@ Authentication Configuration
    └─ URL: https://example.okta.com
 ```
 
-**Automation Integration**
+#### Automation Integration
+
 ```shell
 # Export to JSON for CI/CD validation
 atmos auth list --format json | jq -r '.providers | keys[]'
