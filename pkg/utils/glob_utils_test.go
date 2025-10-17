@@ -337,15 +337,15 @@ func TestPathMatch_CaseSensitivity(t *testing.T) {
 
 // TestGetGlobMatches_Basic tests basic glob matching functionality.
 func TestGetGlobMatches_Basic(t *testing.T) {
-	// This test requires actual files to exist, so we'll test with a pattern that should work
-	// in the Atmos repository structure
+	// This test requires actual files to exist, so we'll test with a pattern that should work.
+	// In the Atmos repository structure.
 	pattern := "*.go"
 
 	matches, err := GetGlobMatches(pattern)
 	require.NoError(t, err)
 	assert.NotNil(t, matches)
-	// We can't assert exact matches since it depends on the directory contents
-	// but we can verify the function completes without error
+	// We can't assert exact matches since it depends on the directory contents.
+	// But we can verify the function completes without error.
 }
 
 // TestGetGlobMatches_ConsistentResults tests that multiple calls return consistent results.

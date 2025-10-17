@@ -172,8 +172,25 @@ func deepCopyYAMLNode(n *yaml.Node) *yaml.Node {
 	return &cp
 }
 
+// clonePositions creates a copy of a PositionMap to prevent aliasing.
+// This is required because maps are reference types in Go - returning or storing
+// the same map reference would allow mutations to affect the cache and other consumers.
+func clonePositions(positions PositionMap) PositionMap {
+	if positions == nil {
+		return nil
+	}
+
+	// Create new map with same capacity.
+	clone := make(PositionMap, len(positions))
+	for k, v := range positions {
+		// Position is a simple struct with int fields, so value copy is sufficient.
+		clone[k] = v
+	}
+	return clone
+}
+
 // getCachedParsedYAML retrieves a cached parsed YAML node if it exists.
-// Returns a copy of the node to prevent external mutations.
+// Returns a copy of the node and positions to prevent external mutations.
 // Note: Statistics tracking is done by the caller to avoid double-counting.
 // Note: perf.Track() removed from this hot path to reduce overhead.
 func getCachedParsedYAML(file string, content string) (*yaml.Node, PositionMap, bool) {
@@ -190,13 +207,14 @@ func getCachedParsedYAML(file string, content string) (*yaml.Node, PositionMap, 
 		return nil, nil, false
 	}
 
-	// Return a deep copy to prevent mutations affecting the cache.
+	// Return copies to prevent mutations affecting the cache.
 	nodeCopy := deepCopyYAMLNode(&entry.node)
-	return nodeCopy, entry.positions, true
+	positionsCopy := clonePositions(entry.positions)
+	return nodeCopy, positionsCopy, true
 }
 
 // cacheParsedYAML stores a parsed YAML node in the cache.
-// Stores a copy to prevent external mutations from affecting the cache.
+// Stores copies to prevent external mutations from affecting the cache.
 // Note: perf.Track() removed from this hot path to reduce overhead.
 func cacheParsedYAML(file string, content string, node *yaml.Node, positions PositionMap) {
 	cacheKey := generateParsedYAMLCacheKey(file, content)
@@ -207,11 +225,12 @@ func cacheParsedYAML(file string, content string, node *yaml.Node, positions Pos
 	parsedYAMLCacheMu.Lock()
 	defer parsedYAMLCacheMu.Unlock()
 
-	// Store a deep copy to prevent external mutations from affecting the cache.
+	// Store copies to prevent external mutations from affecting the cache.
 	nodeCopy := deepCopyYAMLNode(node)
+	positionsCopy := clonePositions(positions)
 	parsedYAMLCache[cacheKey] = &parsedYAMLCacheEntry{
 		node:      *nodeCopy,
-		positions: positions,
+		positions: positionsCopy,
 	}
 }
 
@@ -756,11 +775,11 @@ func InternStringsInMap(atmosConfig *schema.AtmosConfiguration, data any) any {
 		return result
 
 	case string:
-		// Intern string values
+		// Intern string values.
 		return Intern(atmosConfig, v)
 
 	default:
-		// For all other types (int, bool, float, etc.), return as-is
+		// For all other types (int, bool, float, etc.), return as-is.
 		return data
 	}
 }

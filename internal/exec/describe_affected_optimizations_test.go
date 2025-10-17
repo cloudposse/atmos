@@ -1780,6 +1780,170 @@ func TestIsComponentFolderChangedCoverage(t *testing.T) {
 	})
 }
 
+// ==============================================================================
+// Tests for areTerraformComponentModulesChanged (Non-Optimized Version)
+// ==============================================================================
+
+func TestAreTerraformComponentModulesChanged(t *testing.T) {
+	tempDir := t.TempDir()
+
+	atmosConfig := &schema.AtmosConfiguration{
+		BasePath: tempDir,
+		Components: schema.Components{
+			Terraform: schema.Terraform{
+				BasePath: "components/terraform",
+			},
+		},
+	}
+
+	t.Run("component with changed module", func(t *testing.T) {
+		// Create component with local module.
+		componentPath := filepath.Join(tempDir, "components/terraform/vpc")
+		modulePath := filepath.Join(componentPath, "modules/subnets")
+		err := os.MkdirAll(modulePath, 0o755)
+		require.NoError(t, err)
+
+		mainTf := `
+module "subnets" {
+  source = "./modules/subnets"
+}
+`
+		err = os.WriteFile(filepath.Join(componentPath, "main.tf"), []byte(mainTf), 0o644)
+		require.NoError(t, err)
+		err = os.WriteFile(filepath.Join(modulePath, "main.tf"), []byte("# module"), 0o644)
+		require.NoError(t, err)
+
+		changedFiles := []string{
+			filepath.Join(modulePath, "main.tf"),
+		}
+
+		changed, err := areTerraformComponentModulesChanged("vpc", atmosConfig, changedFiles)
+		require.NoError(t, err)
+		assert.True(t, changed)
+	})
+
+	t.Run("component with unchanged module", func(t *testing.T) {
+		// Create component with local module.
+		componentPath := filepath.Join(tempDir, "components/terraform/eks")
+		modulePath := filepath.Join(componentPath, "modules/nodegroups")
+		err := os.MkdirAll(modulePath, 0o755)
+		require.NoError(t, err)
+
+		mainTf := `
+module "nodegroups" {
+  source = "./modules/nodegroups"
+}
+`
+		err = os.WriteFile(filepath.Join(componentPath, "main.tf"), []byte(mainTf), 0o644)
+		require.NoError(t, err)
+		err = os.WriteFile(filepath.Join(modulePath, "main.tf"), []byte("# module"), 0o644)
+		require.NoError(t, err)
+
+		// Changed file is NOT in the module.
+		changedFiles := []string{
+			filepath.Join(tempDir, "other/file.txt"),
+		}
+
+		changed, err := areTerraformComponentModulesChanged("eks", atmosConfig, changedFiles)
+		require.NoError(t, err)
+		assert.False(t, changed)
+	})
+
+	t.Run("component directory does not exist returns false without error", func(t *testing.T) {
+		// Component doesn't exist - this is valid in affected detection.
+		changedFiles := []string{
+			filepath.Join(tempDir, "some/file.txt"),
+		}
+
+		changed, err := areTerraformComponentModulesChanged("nonexistent", atmosConfig, changedFiles)
+		require.NoError(t, err)
+		assert.False(t, changed, "non-existent component should return false (not an error)")
+	})
+
+	t.Run("component with no modules returns false", func(t *testing.T) {
+		// Create component without modules.
+		componentPath := filepath.Join(tempDir, "components/terraform/simple")
+		err := os.MkdirAll(componentPath, 0o755)
+		require.NoError(t, err)
+
+		mainTf := `
+resource "aws_vpc" "main" {
+  cidr_block = "10.0.0.0/16"
+}
+`
+		err = os.WriteFile(filepath.Join(componentPath, "main.tf"), []byte(mainTf), 0o644)
+		require.NoError(t, err)
+
+		changedFiles := []string{
+			filepath.Join(componentPath, "main.tf"),
+		}
+
+		changed, err := areTerraformComponentModulesChanged("simple", atmosConfig, changedFiles)
+		require.NoError(t, err)
+		assert.False(t, changed)
+	})
+
+	t.Run("component with only remote modules returns false", func(t *testing.T) {
+		// Create component with only remote modules (no local modules).
+		componentPath := filepath.Join(tempDir, "components/terraform/remote")
+		err := os.MkdirAll(componentPath, 0o755)
+		require.NoError(t, err)
+
+		mainTf := `
+module "vpc" {
+  source  = "terraform-aws-modules/vpc/aws"
+  version = "5.0.0"
+}
+`
+		err = os.WriteFile(filepath.Join(componentPath, "main.tf"), []byte(mainTf), 0o644)
+		require.NoError(t, err)
+
+		changedFiles := []string{
+			filepath.Join(tempDir, "some/other/file.txt"),
+		}
+
+		changed, err := areTerraformComponentModulesChanged("remote", atmosConfig, changedFiles)
+		require.NoError(t, err)
+		assert.False(t, changed, "component with only remote modules should return false")
+	})
+
+	t.Run("component with multiple local modules, one changed", func(t *testing.T) {
+		// Create component with multiple local modules.
+		componentPath := filepath.Join(tempDir, "components/terraform/multi")
+		module1Path := filepath.Join(componentPath, "modules/networking")
+		module2Path := filepath.Join(componentPath, "modules/security")
+		err := os.MkdirAll(module1Path, 0o755)
+		require.NoError(t, err)
+		err = os.MkdirAll(module2Path, 0o755)
+		require.NoError(t, err)
+
+		mainTf := `
+module "networking" {
+  source = "./modules/networking"
+}
+
+module "security" {
+  source = "./modules/security"
+}
+`
+		err = os.WriteFile(filepath.Join(componentPath, "main.tf"), []byte(mainTf), 0o644)
+		require.NoError(t, err)
+		err = os.WriteFile(filepath.Join(module1Path, "main.tf"), []byte("# networking"), 0o644)
+		require.NoError(t, err)
+		err = os.WriteFile(filepath.Join(module2Path, "main.tf"), []byte("# security"), 0o644)
+		require.NoError(t, err)
+
+		// Only one module changed.
+		changedFiles := []string{
+			filepath.Join(module2Path, "main.tf"),
+		}
+
+		changed, err := areTerraformComponentModulesChanged("multi", atmosConfig, changedFiles)
+		require.NoError(t, err)
+		assert.True(t, changed)
+	})
+}
+
 func TestChangedFilesIndex_GetRelevantFiles_EdgeCases(t *testing.T) {
 	tempDir := t.TempDir()
 

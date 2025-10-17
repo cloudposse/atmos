@@ -121,9 +121,9 @@ var (
 // This reduces memory usage by deduplicating common strings across YAML files.
 //
 // Common interned strings in Atmos:
-//   - YAML keys: "vars", "settings", "metadata", "env", "backend", "terraform", "helmfile"
-//   - Stack names, component names, file paths
-//   - Common values: "true", "false", "default", region names
+//   - YAML keys: "vars", "settings", "metadata", "env", "backend", "terraform", "helmfile".
+//   - Stack names, component names, file paths.
+//   - Common values: "true", "false", "default", region names.
 //
 // Thread-safe for concurrent use.
 // Note: perf.Track removed from this critical path function as it's called millions of times.

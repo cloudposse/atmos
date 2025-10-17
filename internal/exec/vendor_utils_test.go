@@ -1,10 +1,161 @@
 package exec
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/schema"
 )
+
+func TestReadAndProcessComponentVendorConfigFile(t *testing.T) {
+	// Create a temporary directory for test fixtures.
+	tempDir := t.TempDir()
+
+	// Set up test component directories and config files.
+	componentTypes := []struct {
+		name     string
+		basePath string
+	}{
+		{cfg.TerraformComponentType, "components/terraform"},
+		{cfg.HelmfileComponentType, "components/helmfile"},
+		{cfg.PackerComponentType, "components/packer"},
+	}
+
+	// Create component directories and component.yaml files.
+	for _, ct := range componentTypes {
+		componentDir := filepath.Join(tempDir, ct.basePath, "test-component")
+		err := os.MkdirAll(componentDir, 0o755)
+		require.NoError(t, err, "Failed to create directory for %s", ct.name)
+
+		// Create a valid component.yaml file.
+		componentConfig := `kind: ComponentVendorConfig
+apiVersion: atmos/v1
+metadata:
+  name: test-component
+  description: Test component for unit testing
+spec:
+  source:
+    uri: github.com/cloudposse/terraform-aws-components.git//modules/vpc?ref=1.0.0
+`
+		configFile := filepath.Join(componentDir, "component.yaml")
+		err = os.WriteFile(configFile, []byte(componentConfig), 0o644)
+		require.NoError(t, err, "Failed to write component.yaml for %s", ct.name)
+	}
+
+	// Create AtmosConfiguration.
+	atmosConfig := &schema.AtmosConfiguration{
+		BasePath: tempDir,
+		Components: schema.Components{
+			Terraform: schema.Terraform{
+				BasePath: "components/terraform",
+			},
+			Helmfile: schema.Helmfile{
+				BasePath: "components/helmfile",
+			},
+			Packer: schema.Packer{
+				BasePath: "components/packer",
+			},
+		},
+	}
+
+	tests := []struct {
+		name          string
+		componentType string
+		component     string
+		expectError   bool
+		expectedPath  string
+	}{
+		{
+			name:          "terraform component type",
+			componentType: cfg.TerraformComponentType,
+			component:     "test-component",
+			expectError:   false,
+			expectedPath:  filepath.Join(tempDir, "components", "terraform", "test-component"),
+		},
+		{
+			name:          "helmfile component type",
+			componentType: cfg.HelmfileComponentType,
+			component:     "test-component",
+			expectError:   false,
+			expectedPath:  filepath.Join(tempDir, "components", "helmfile", "test-component"),
+		},
+		{
+			name:          "packer component type",
+			componentType: cfg.PackerComponentType,
+			component:     "test-component",
+			expectError:   false,
+			expectedPath:  filepath.Join(tempDir, "components", "packer", "test-component"),
+		},
+		{
+			name:          "unsupported component type",
+			componentType: "unsupported",
+			component:     "test-component",
+			expectError:   true,
+			expectedPath:  "",
+		},
+		{
+			name:          "non-existent component",
+			componentType: cfg.TerraformComponentType,
+			component:     "non-existent",
+			expectError:   true,
+			expectedPath:  "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			config, path, err := ReadAndProcessComponentVendorConfigFile(
+				atmosConfig,
+				tt.component,
+				tt.componentType,
+			)
+
+			if tt.expectError {
+				assert.Error(t, err, "Expected an error for %s", tt.name)
+				assert.Empty(t, path, "Path should be empty on error")
+			} else {
+				assert.NoError(t, err, "Should not return error for %s", tt.name)
+				assert.Equal(t, tt.expectedPath, path, "Component path mismatch")
+				assert.Equal(t, "ComponentVendorConfig", config.Kind, "Config kind should match")
+				assert.Equal(t, "test-component", config.Metadata.Name, "Component name should match")
+				assert.Contains(t, config.Spec.Source.Uri, "github.com/cloudposse", "Source URI should be populated")
+			}
+		})
+	}
+}
+
+func TestReadAndProcessComponentVendorConfigFile_PackerIntegration(t *testing.T) {
+	// Integration test using the real Packer test fixture.
+	// This complements the unit test with a real-world scenario.
+
+	basePath := "../../tests/fixtures/scenarios/packer"
+	atmosConfig := &schema.AtmosConfiguration{
+		BasePath: basePath,
+		Components: schema.Components{
+			Packer: schema.Packer{
+				BasePath: "components/packer",
+			},
+		},
+	}
+
+	// Test reading the Packer component vendor config.
+	config, path, err := ReadAndProcessComponentVendorConfigFile(
+		atmosConfig,
+		"aws/consul",
+		cfg.PackerComponentType,
+	)
+
+	require.NoError(t, err, "Should successfully read Packer component vendor config")
+	assert.Equal(t, "ComponentVendorConfig", config.Kind, "Config kind should be ComponentVendorConfig")
+	assert.Equal(t, "consul", config.Metadata.Name, "Component name should match")
+	assert.Contains(t, config.Spec.Source.Uri, "github.com/hashicorp", "Source URI should be from hashicorp")
+	assert.Contains(t, path, "components/packer/aws/consul", "Path should point to Packer component")
+}
 
 func TestNormalizeVendorURI(t *testing.T) {
 	tests := []struct {

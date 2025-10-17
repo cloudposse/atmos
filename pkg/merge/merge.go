@@ -151,6 +151,36 @@ func normalizeSliceReflect(rv reflect.Value) []any {
 	return result
 }
 
+// copyNonStringKeyMap deep copies a map with non-string keys, preserving the type.
+func copyNonStringKeyMap(rv reflect.Value, iter *reflect.MapIter) any {
+	dstType := rv.Type()
+	elemType := dstType.Elem()
+	copyMap := reflect.MakeMapWithSize(dstType, rv.Len())
+
+	for iter.Next() {
+		val := copyMapValue(iter.Value(), elemType)
+		copyMap.SetMapIndex(iter.Key(), val)
+	}
+	return copyMap.Interface()
+}
+
+// copyMapValue deep copies a map value, handling both interface and typed elements.
+func copyMapValue(value reflect.Value, elemType reflect.Type) reflect.Value {
+	if elemType.Kind() == reflect.Interface {
+		// Safe to store any deep-copied shape.
+		return reflect.ValueOf(deepCopyValue(value.Interface()))
+	}
+
+	// Full typed deep copy to avoid aliasing for non-interface element types.
+	val := deepCopyTypedValue(value)
+	// Check assignability to prevent panics with incompatible types.
+	if !val.Type().AssignableTo(elemType) {
+		// Fallback to interface{} conversion for incompatible types.
+		return reflect.ValueOf(deepCopyValue(value.Interface()))
+	}
+	return val
+}
+
 // normalizeMapReflect converts a typed map to map[string]any (for string keys) or deep copies it (for non-string keys).
 func normalizeMapReflect(rv reflect.Value) any {
 	keyKind := rv.Type().Key().Kind()
@@ -168,22 +198,7 @@ func normalizeMapReflect(rv reflect.Value) any {
 
 	// Non-string keys: copy to same type, ensuring value type matches Elem().
 	if keyKind != reflect.String {
-		dstType := rv.Type()
-		elemType := dstType.Elem()
-		copyMap := reflect.MakeMapWithSize(dstType, rv.Len())
-
-		for iter.Next() {
-			var val reflect.Value
-			if elemType.Kind() == reflect.Interface {
-				// Safe to store any deep-copied shape.
-				val = reflect.ValueOf(deepCopyValue(iter.Value().Interface()))
-			} else {
-				// Full typed deep copy to avoid aliasing for non-interface element types.
-				val = deepCopyTypedValue(iter.Value())
-			}
-			copyMap.SetMapIndex(iter.Key(), val)
-		}
-		return copyMap.Interface()
+		return copyNonStringKeyMap(rv, iter)
 	}
 
 	// String keys: convert to map[string]any.
@@ -362,7 +377,7 @@ func Merge(
 		return nil, errors.Join(errUtils.ErrMerge, errUtils.ErrAtmosConfigIsNil)
 	}
 
-	// Default to replace strategy if strategy is empty
+	// Default to replace strategy if strategy is empty.
 	strategy := ListMergeStrategyReplace
 	if atmosConfig.Settings.ListMergeStrategy != "" {
 		strategy = atmosConfig.Settings.ListMergeStrategy
@@ -399,7 +414,7 @@ func MergeWithContext(
 ) (map[string]any, error) {
 	defer perf.Track(atmosConfig, "merge.MergeWithContext")()
 
-	// Check for nil config to prevent panic
+	// Check for nil config to prevent panic.
 	if atmosConfig == nil {
 		err := fmt.Errorf("%w: %s", errUtils.ErrMerge, errUtils.ErrAtmosConfigIsNil)
 		if context != nil {
@@ -408,7 +423,7 @@ func MergeWithContext(
 		return nil, err
 	}
 
-	// Default to replace strategy if strategy is empty
+	// Default to replace strategy if strategy is empty.
 	strategy := ListMergeStrategyReplace
 	if atmosConfig.Settings.ListMergeStrategy != "" {
 		strategy = atmosConfig.Settings.ListMergeStrategy
@@ -498,10 +513,10 @@ func MergeWithOptionsAndContext(
 	}
 
 	if err != nil {
-		// Remove verbose merge failure logging
-		// The error context will be shown in the formatted error message
+		// Remove verbose merge failure logging.
+		// The error context will be shown in the formatted error message.
 
-		// Add context information to the error
+		// Add context information to the error.
 		if context != nil {
 			return nil, context.FormatError(err)
 		}
