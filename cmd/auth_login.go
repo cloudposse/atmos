@@ -2,10 +2,11 @@ package cmd
 
 import (
 	"context"
-	"fmt"
+	"errors"
 
 	"github.com/spf13/cobra"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth"
 	"github.com/cloudposse/atmos/pkg/auth/credentials"
 	"github.com/cloudposse/atmos/pkg/auth/validation"
@@ -28,37 +29,37 @@ var authLoginCmd = &cobra.Command{
 func executeAuthLoginCommand(cmd *cobra.Command, args []string) error {
 	handleHelpRequest(cmd, args)
 
-	// Load atmos config
+	// Load atmos config.
 	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
 	if err != nil {
-		return fmt.Errorf("failed to load atmos config: %w", err)
+		return errors.Join(errUtils.ErrFailedToInitConfig, err)
 	}
 
-	// Create auth manager
+	// Create auth manager.
 	authManager, err := createAuthManager(&atmosConfig.Auth)
 	if err != nil {
-		return fmt.Errorf("failed to create auth manager: %w", err)
+		return errors.Join(errUtils.ErrFailedToInitializeAuthManager, err)
 	}
 
-	// Get identity from flag or use default
+	// Get identity from flag or use default.
 	identityName, _ := cmd.Flags().GetString("identity")
 
-	// If no identity specified, get the default identity (which prompts if needed)
+	// If no identity specified, get the default identity (which prompts if needed).
 	if identityName == "" {
 		identityName, err = authManager.GetDefaultIdentity()
 		if err != nil {
-			return fmt.Errorf("failed to get identity: %w", err)
+			return errors.Join(errUtils.ErrDefaultIdentity, err)
 		}
 	}
 
-	// Perform authentication
+	// Perform authentication.
 	ctx := context.Background()
 	whoami, err := authManager.Authenticate(ctx, identityName)
 	if err != nil {
-		return fmt.Errorf("authentication failed: %w", err)
+		return errors.Join(errUtils.ErrAuthenticationFailed, err)
 	}
 
-	// Display success message
+	// Display success message.
 	u.PrintfMessageToTUI("**Authentication successful!**\n")
 	u.PrintfMessageToTUI("Provider: %s\n", whoami.Provider)
 	u.PrintfMessageToTUI("Identity: %s\n", whoami.Identity)
