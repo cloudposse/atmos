@@ -113,8 +113,8 @@ func TestCustomGitDetector_EndToEnd_GitHubTokenFallback(t *testing.T) {
 }
 
 // TestCustomGitDetector_EndToEnd_PreExistingCredentials tests that when
-// credentials are already in the URL (from template processing), automatic
-// injection should preserve them or handle them correctly.
+// credentials are already in the URL (from template processing), user-provided
+// credentials take precedence and automatic injection is skipped.
 func TestCustomGitDetector_EndToEnd_PreExistingCredentials(t *testing.T) {
 	// This test verifies behavior when template processing has already added credentials
 	sourceWithCreds := "https://manual_token@github.com/test-org/test-repo.git?ref=main"
@@ -133,12 +133,12 @@ func TestCustomGitDetector_EndToEnd_PreExistingCredentials(t *testing.T) {
 	require.NoError(t, err, "Detect should not error")
 	require.True(t, detected, "Should detect GitHub URL")
 
-	// With the fixed logic, automatic injection should use the configured token
-	// (the one from atmosConfig) rather than what was in the URL
-	assert.Contains(t, finalURL, "x-access-token:", "Should use x-access-token as username")
-	assert.Contains(t, finalURL, "ghp_automatic_token", "Should inject configured token")
+	// User-provided credentials in the URL take precedence over automatic injection.
+	// The manual_token should be preserved, not replaced with the configured token.
+	assert.Contains(t, finalURL, "manual_token", "Should preserve user-provided credentials")
+	assert.NotContains(t, finalURL, "ghp_automatic_token", "Should not inject automatic token when credentials exist")
 
-	t.Logf("URL with pre-existing creds was transformed correctly")
+	t.Logf("URL with pre-existing creds was preserved correctly")
 }
 
 // TestCustomGitDetector_EndToEnd_NonGitHubHost verifies that token injection
