@@ -42,21 +42,21 @@ func TestComponentPathPatternCache_GetComponentPathPattern(t *testing.T) {
 	t.Run("terraform component pattern", func(t *testing.T) {
 		pattern, err := cache.getComponentPathPattern("vpc", cfg.TerraformComponentType, atmosConfig)
 		require.NoError(t, err)
-		assert.Contains(t, pattern, "components/terraform/vpc")
+		assert.Contains(t, filepath.ToSlash(pattern), "components/terraform/vpc")
 		assert.Contains(t, pattern, "/**")
 	})
 
 	t.Run("helmfile component pattern", func(t *testing.T) {
 		pattern, err := cache.getComponentPathPattern("app", cfg.HelmfileComponentType, atmosConfig)
 		require.NoError(t, err)
-		assert.Contains(t, pattern, "components/helmfile/app")
+		assert.Contains(t, filepath.ToSlash(pattern), "components/helmfile/app")
 		assert.Contains(t, pattern, "/**")
 	})
 
 	t.Run("packer component pattern", func(t *testing.T) {
 		pattern, err := cache.getComponentPathPattern("image", cfg.PackerComponentType, atmosConfig)
 		require.NoError(t, err)
-		assert.Contains(t, pattern, "components/packer/image")
+		assert.Contains(t, filepath.ToSlash(pattern), "components/packer/image")
 		assert.Contains(t, pattern, "/**")
 	})
 
@@ -520,7 +520,7 @@ module "remote_module" {
 
 		// Should have one pattern for local module (remote module excluded).
 		assert.NotEmpty(t, patterns)
-		assert.Contains(t, patterns[0], "modules/subnets")
+		assert.Contains(t, filepath.ToSlash(patterns[0]), "modules/subnets")
 		assert.Contains(t, patterns[0], "/**")
 	})
 
@@ -2057,7 +2057,7 @@ module "remote" {
 		require.NoError(t, err)
 		// Should have only the local module pattern.
 		assert.Len(t, patterns, 1)
-		assert.Contains(t, patterns[0], "modules/local")
+		assert.Contains(t, filepath.ToSlash(patterns[0]), "modules/local")
 	})
 
 	t.Run("component with multiple local modules", func(t *testing.T) {
