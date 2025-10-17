@@ -25,25 +25,39 @@ type changedFilesIndex struct {
 
 // newChangedFilesIndex creates an index of changed files organized by base path.
 // This enables efficient filtering of relevant files for each component type.
+// All file paths are normalized to absolute paths to ensure consistent matching with absolute patterns.
 func newChangedFilesIndex(atmosConfig *schema.AtmosConfiguration, changedFiles []string) *changedFilesIndex {
 	defer perf.Track(atmosConfig, "exec.newChangedFilesIndex")()
 
 	index := &changedFilesIndex{
 		filesByBasePath: make(map[string][]string),
-		allFiles:        changedFiles,
+		allFiles:        nil, // Set after normalization.
 	}
 
 	// Pre-compute absolute base paths for each component type.
 	normalizedBasePaths := buildNormalizedBasePaths(atmosConfig)
+
+	// Normalize all changed files to absolute paths once.
+	// This ensures allFiles is consistent with bucketed entries and eliminates redundant conversions.
+	absAllFiles := make([]string, 0, len(changedFiles))
+	for _, f := range changedFiles {
+		absF, err := filepath.Abs(f)
+		if err != nil {
+			// If conversion fails, use original path.
+			absF = f
+		}
+		absAllFiles = append(absAllFiles, absF)
+	}
+	index.allFiles = absAllFiles
 
 	// Initialize empty slices for each base path.
 	for _, absPath := range normalizedBasePaths {
 		index.filesByBasePath[absPath] = make([]string, 0)
 	}
 
-	// Index each changed file by its base path.
-	for _, changedFile := range changedFiles {
-		indexChangedFile(index, changedFile, normalizedBasePaths)
+	// Index each absolute file by its base path.
+	for _, absFile := range absAllFiles {
+		indexChangedFile(index, absFile, normalizedBasePaths)
 	}
 
 	return index
@@ -89,15 +103,10 @@ func buildNormalizedBasePaths(atmosConfig *schema.AtmosConfiguration) []string {
 }
 
 // indexChangedFile indexes a single changed file by finding its matching base path.
+// The input file path must already be absolute (normalized in newChangedFilesIndex).
 // Files that don't match any base path are not indexed (they may still be checked via
 // module patterns or dependency paths, which are independent mechanisms).
-func indexChangedFile(index *changedFilesIndex, changedFile string, normalizedBasePaths []string) {
-	absFile, err := filepath.Abs(changedFile)
-	if err != nil {
-		// If conversion fails, try using original path.
-		absFile = changedFile
-	}
-
+func indexChangedFile(index *changedFilesIndex, absFile string, normalizedBasePaths []string) {
 	// Find which base path this file belongs to.
 	// Use filepath.Rel to properly check path boundaries, not just string prefixes.
 	// This prevents sibling paths like "components/terraform" and "components/terraform-modules"
@@ -136,7 +145,7 @@ func isFileInBasePath(absFile, basePath string) bool {
 	return rel == "." || (rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)))
 }
 
-// getRelevantFiles returns changed files relevant to a specific component.
+// getRelevantFiles returns changed files relevant to a specific component as absolute paths.
 // This significantly reduces the number of PathMatch operations needed.
 func (idx *changedFilesIndex) getRelevantFiles(componentType string, atmosConfig *schema.AtmosConfiguration) []string {
 	idx.mu.RLock()
@@ -170,7 +179,8 @@ func (idx *changedFilesIndex) getRelevantFiles(componentType string, atmosConfig
 	return idx.allFiles
 }
 
-// getAllFiles returns all changed files (for operations that need to check everything).
+// getAllFiles returns all changed files as absolute paths (for operations that need to check everything).
+// All paths are normalized to absolute during index creation for consistent pattern matching.
 func (idx *changedFilesIndex) getAllFiles() []string {
 	idx.mu.RLock()
 	defer idx.mu.RUnlock()
