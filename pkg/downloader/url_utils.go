@@ -9,9 +9,9 @@ import (
 )
 
 // MaskedSecret is used internally for credential masking.
-// We use "REDACTED" instead of "***" because url.UserPassword() would URL-encode
-// "***" as "%2A%2A%2A", making URLs harder to read. We post-process the output
-// to replace "REDACTED" with "***" for traditional credential masking appearance.
+// We use "REDACTED" instead of "***" because url.UserPassword() would URL-encode.
+// "***" as "%2A%2A%2A", making URLs harder to read.
+// We post-process the output to replace "REDACTED" with "***" for traditional credential masking appearance.
 const MaskedSecret = "REDACTED"
 
 func maskBasicAuth(rawURL string) (string, error) {
@@ -33,8 +33,8 @@ func maskBasicAuth(rawURL string) (string, error) {
 
 	// Post-process: Replace REDACTED with *** for cleaner output.
 	// This avoids URL encoding issues while providing traditional credential masking.
-	// Since this is purely for display/logging purposes, we don't need to worry about
-	// URL encoding - the replacement happens after URL stringification.
+	// Since this is purely for display/logging purposes, we don't need to worry about URL encoding.
+	// The replacement happens after URL stringification.
 	result = strings.ReplaceAll(result, "REDACTED:REDACTED", "***")
 	result = strings.ReplaceAll(result, "REDACTED", "***")
 
