@@ -87,7 +87,6 @@ func TestDescribeStacks_NoColorFlag(t *testing.T) {
 	}
 }
 
-
 // containsANSIColors checks if a string contains ANSI escape codes.
 func containsANSIColors(s string) bool {
 	// ANSI escape codes start with ESC[ which is \x1b[

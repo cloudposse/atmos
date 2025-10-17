@@ -13,11 +13,11 @@ import (
 // respects the NoColor flag in the configuration.
 func TestHighlightCodeWithConfig_RespectsNoColorFlag(t *testing.T) {
 	tests := []struct {
-		name           string
-		config         *schema.AtmosConfiguration
-		code           string
-		expectColor    bool
-		description    string
+		name        string
+		config      *schema.AtmosConfiguration
+		code        string
+		expectColor bool
+		description string
 	}{
 		{
 			name: "NoColor flag set to true should disable colors",
@@ -110,8 +110,8 @@ func TestHighlightCodeWithConfig_RespectsNoColorFlag(t *testing.T) {
 				// We should NEVER have colors when NoColor is true or Color is false
 				assert.False(t, hasColor,
 					"Output should not contain ANSI escape codes when NoColor=true or Color=false.\n"+
-					"Got: %q\n"+
-					"Description: %s", result, tt.description)
+						"Got: %q\n"+
+						"Description: %s", result, tt.description)
 			}
 		})
 	}
@@ -133,7 +133,7 @@ func TestPrintAsYAML_RespectsNoColorFlag(t *testing.T) {
 	}
 
 	data := map[string]any{
-		"test": "value",
+		"test":   "value",
 		"number": 123,
 	}
 
@@ -145,7 +145,7 @@ func TestPrintAsYAML_RespectsNoColorFlag(t *testing.T) {
 	hasColor := strings.Contains(result, "\x1b[")
 	assert.False(t, hasColor,
 		"YAML output should not contain ANSI escape codes when NoColor=true.\n"+
-		"Got: %q", result)
+			"Got: %q", result)
 }
 
 // TestPrintAsJSON_RespectsNoColorFlag tests that PrintAsJSON respects the NoColor flag.
@@ -164,7 +164,7 @@ func TestPrintAsJSON_RespectsNoColorFlag(t *testing.T) {
 	}
 
 	data := map[string]any{
-		"test": "value",
+		"test":   "value",
 		"number": 123,
 	}
 
@@ -176,5 +176,5 @@ func TestPrintAsJSON_RespectsNoColorFlag(t *testing.T) {
 	hasColor := strings.Contains(result, "\x1b[")
 	assert.False(t, hasColor,
 		"JSON output should not contain ANSI escape codes when NoColor=true.\n"+
-		"Got: %q", result)
+			"Got: %q", result)
 }
