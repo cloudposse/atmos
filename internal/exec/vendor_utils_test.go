@@ -241,7 +241,7 @@ spec:
 			tempDir := t.TempDir()
 			vendorFile := filepath.Join(tempDir, "vendor.yaml")
 
-			err := os.WriteFile(vendorFile, []byte(tt.vendorContent), 0644)
+			err := os.WriteFile(vendorFile, []byte(tt.vendorContent), 0o644)
 			require.NoError(t, err)
 
 			atmosConfig := &schema.AtmosConfiguration{
@@ -291,7 +291,7 @@ spec:
         - "./"
 `
 
-	err := os.WriteFile(vendorFile, []byte(vendorContent), 0644)
+	err := os.WriteFile(vendorFile, []byte(vendorContent), 0o644)
 	require.NoError(t, err)
 
 	// Initialize Atmos config
@@ -349,7 +349,7 @@ spec:
         - "./"
 `
 
-	err := os.WriteFile(vendorFile, []byte(vendorContent), 0644)
+	err := os.WriteFile(vendorFile, []byte(vendorContent), 0o644)
 	require.NoError(t, err)
 
 	// Initialize Atmos config
@@ -437,7 +437,7 @@ spec:
 			tempDir := t.TempDir()
 			vendorFile := filepath.Join(tempDir, "vendor.yaml")
 
-			err := os.WriteFile(vendorFile, []byte(tt.vendorContent), 0644)
+			err := os.WriteFile(vendorFile, []byte(tt.vendorContent), 0o644)
 			require.NoError(t, err, "Should write vendor file successfully")
 
 			// Initialize Atmos config
