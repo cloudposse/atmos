@@ -26,13 +26,13 @@ func TestWithIsolatedAWSEnv_ClearsProblematicVariables(t *testing.T) {
 	err := WithIsolatedAWSEnv(func() error {
 		// Capture environment during execution.
 		envDuringExecution = map[string]string{
-			"AWS_PROFILE":                   os.Getenv("AWS_PROFILE"),
-			"AWS_ACCESS_KEY_ID":             os.Getenv("AWS_ACCESS_KEY_ID"),
-			"AWS_SECRET_ACCESS_KEY":         os.Getenv("AWS_SECRET_ACCESS_KEY"),
-			"AWS_SESSION_TOKEN":             os.Getenv("AWS_SESSION_TOKEN"),
-			"AWS_CONFIG_FILE":               os.Getenv("AWS_CONFIG_FILE"),
-			"AWS_SHARED_CREDENTIALS_FILE":   os.Getenv("AWS_SHARED_CREDENTIALS_FILE"),
-			"AWS_REGION":                    os.Getenv("AWS_REGION"),
+			"AWS_PROFILE":                 os.Getenv("AWS_PROFILE"),
+			"AWS_ACCESS_KEY_ID":           os.Getenv("AWS_ACCESS_KEY_ID"),
+			"AWS_SECRET_ACCESS_KEY":       os.Getenv("AWS_SECRET_ACCESS_KEY"),
+			"AWS_SESSION_TOKEN":           os.Getenv("AWS_SESSION_TOKEN"),
+			"AWS_CONFIG_FILE":             os.Getenv("AWS_CONFIG_FILE"),
+			"AWS_SHARED_CREDENTIALS_FILE": os.Getenv("AWS_SHARED_CREDENTIALS_FILE"),
+			"AWS_REGION":                  os.Getenv("AWS_REGION"),
 		}
 		return nil
 	})
@@ -114,8 +114,8 @@ func TestWithIsolatedAWSEnv_PartiallySetVariables(t *testing.T) {
 
 	err := WithIsolatedAWSEnv(func() error {
 		envDuringExecution = map[string]string{
-			"AWS_PROFILE":         os.Getenv("AWS_PROFILE"),
-			"AWS_ACCESS_KEY_ID":   os.Getenv("AWS_ACCESS_KEY_ID"),
+			"AWS_PROFILE":           os.Getenv("AWS_PROFILE"),
+			"AWS_ACCESS_KEY_ID":     os.Getenv("AWS_ACCESS_KEY_ID"),
 			"AWS_SECRET_ACCESS_KEY": os.Getenv("AWS_SECRET_ACCESS_KEY"),
 		}
 		return nil
