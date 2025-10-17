@@ -11,54 +11,24 @@ import (
 )
 
 // testChdirError is a helper function to test error cases for the chdir flag.
+// It tests the actual production processChdirFlag() function.
 func testChdirError(t *testing.T, args []string) {
 	t.Helper()
 
 	// Ensure RootCmd state is restored after this helper finishes.
 	_ = NewTestKit(t)
 
-	// Test the actual PersistentPreRun logic.
+	// Set up RootCmd with test args.
 	RootCmd.SetArgs(args)
 	err := RootCmd.ParseFlags(args)
 	if err != nil {
-		return // Parse error is expected for some cases.
-	}
-
-	// Manually invoke the chdir logic to test error handling.
-	chdir, _ := RootCmd.Flags().GetString("chdir")
-	if chdir == "" {
-		chdir = os.Getenv("ATMOS_CHDIR")
-	}
-
-	if chdir == "" {
-		return // No chdir specified.
-	}
-
-	absPath, pathErr := filepath.Abs(chdir)
-	if pathErr != nil {
-		// Path resolution error - this is expected.
-		assert.Error(t, pathErr, "Expected path resolution error")
+		// Parse error is acceptable for invalid flag syntax.
 		return
 	}
 
-	stat, statErr := os.Stat(absPath)
-	if statErr != nil {
-		// File doesn't exist - expected error.
-		assert.Error(t, statErr, "Expected error for non-existent path")
-		return
-	}
-
-	if !stat.IsDir() {
-		// Not a directory - this is the expected error case.
-		// os.Chdir will fail on a file path.
-		err = os.Chdir(absPath)
-		assert.Error(t, err, "Expected error when chdir to a file")
-		return
-	}
-
-	// Try to change directory - should fail for invalid paths.
-	err = os.Chdir(absPath)
-	assert.Error(t, err, "Expected error for invalid chdir")
+	// Call the actual production code to test error handling.
+	err = processChdirFlag(RootCmd)
+	assert.Error(t, err, "Expected processChdirFlag to return error for invalid input")
 }
 
 // TestChdirFlag tests the --chdir/-C flag functionality.
