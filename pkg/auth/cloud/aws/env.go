@@ -2,11 +2,13 @@ package aws
 
 import (
 	"context"
+	"fmt"
 	"os"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	log "github.com/cloudposse/atmos/pkg/logger"
 )
 
@@ -97,8 +99,12 @@ func LoadIsolatedAWSConfig(ctx context.Context, optFns ...func(*config.LoadOptio
 	})
 
 	if isolateErr != nil {
-		return aws.Config{}, isolateErr
+		return aws.Config{}, fmt.Errorf("%w: %v", errUtils.ErrLoadAwsConfig, isolateErr)
 	}
 
-	return cfg, err
+	if err != nil {
+		return aws.Config{}, fmt.Errorf("%w: %v", errUtils.ErrLoadAwsConfig, err)
+	}
+
+	return cfg, nil
 }
