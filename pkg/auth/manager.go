@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/charmbracelet/huh"
-	"github.com/charmbracelet/lipgloss"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth/factory"
@@ -558,8 +557,6 @@ func (m *manager) getChainStepName(index int) string {
 
 // authenticateIdentityChain performs sequential authentication through an identity chain.
 func (m *manager) authenticateIdentityChain(ctx context.Context, startIndex int, initialCreds types.ICredentials) (types.ICredentials, error) {
-	bold := lipgloss.NewStyle().Bold(true)
-
 	log.Debug("Authenticating identity chain", "chainLength", len(m.chain), "startIndex", startIndex, "chain", m.chain)
 
 	currentCreds := initialCreds
@@ -591,7 +588,7 @@ func (m *manager) authenticateIdentityChain(ctx context.Context, startIndex int,
 			log.Debug("Cached credentials", "identityStep", identityStep)
 		}
 
-		log.Info("Chained identity", "from", bold.Render(m.getChainStepName(i-1)), "to", bold.Render(identityStep))
+		log.Info("Chained identity", "from", m.getChainStepName(i-1), "to", identityStep)
 	}
 
 	return currentCreds, nil
