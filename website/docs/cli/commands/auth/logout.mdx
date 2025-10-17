@@ -172,8 +172,10 @@ Credentials are securely stored in your operating system's keyring:
 
 Some providers (like AWS) also write credential files for compatibility with other tools:
 
-- **AWS credentials**: `~/.aws/atmos/<provider>/credentials`
-- **AWS config**: `~/.aws/atmos/<provider>/config`
+- **AWS credentials**: `<base_path>/<provider>/credentials`
+- **AWS config**: `<base_path>/<provider>/config`
+
+The default base path is `~/.aws/atmos`, but this can be customized (see [Custom File Paths](#custom-file-paths)).
 
 The logout command removes both keyring entries and file storage.
 
@@ -340,6 +342,71 @@ auth:
 ```
 
 Running `atmos auth logout dev-admin` removes credentials for `dev-admin` and its authentication chain.
+
+## Advanced Configuration
+
+### Custom File Paths
+
+AWS providers support configurable file storage locations via `spec.files.base_path`. This is useful for:
+
+- **Custom directories**: Store credentials in non-standard locations
+- **Container environments**: Use volume mounts at custom paths
+- **Multi-user systems**: Isolate credentials per user or project
+
+#### Configuration
+
+In your `atmos.yaml`, add `spec.files.base_path` to your AWS provider:
+
+```yaml
+auth:
+  providers:
+    aws-sso:
+      kind: aws/iam-identity-center
+      region: us-east-1
+      start_url: https://mycompany.awsapps.com/start
+      spec:
+        files:
+          base_path: ~/.custom/aws/credentials  # Custom path
+```
+
+#### Precedence
+
+The file path is resolved using this precedence order:
+
+1. **Provider configuration** (`spec.files.base_path` in `atmos.yaml`)
+2. **Environment variable** (`ATMOS_AWS_FILES_BASE_PATH`)
+3. **Default** (`~/.aws/atmos`)
+
+#### Example with Environment Variable
+
+```shell
+export ATMOS_AWS_FILES_BASE_PATH=/opt/atmos/credentials
+atmos auth logout dev-admin
+```
+
+This removes files from `/opt/atmos/credentials/aws-sso/` instead of `~/.aws/atmos/aws-sso/`.
+
+#### Path Expansion
+
+Paths support tilde (`~`) expansion for user home directories:
+
+```yaml
+spec:
+  files:
+    base_path: ~/custom/path  # Expands to /Users/username/custom/path
+```
+
+#### Validation
+
+The path is validated during `atmos auth validate`:
+
+- Must not be empty or whitespace-only
+- Must not contain null bytes, carriage returns, or newlines
+- Tilde expansion must succeed
+
+```shell
+atmos auth validate
+```
 
 ## Best Practices
 

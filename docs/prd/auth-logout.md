@@ -64,8 +64,9 @@ The `atmos auth logout` command provides secure, comprehensive cleanup of locall
 - **Description**: Remove all credential storage locations
 - **Acceptance Criteria**:
   - Delete entries from system keyring using `go-keyring`
-  - Remove AWS credential files: `~/.aws/atmos/<provider>/credentials`
-  - Remove AWS config files: `~/.aws/atmos/<provider>/config`
+  - Remove AWS credential files: `<base_path>/<provider>/credentials`
+  - Remove AWS config files: `<base_path>/<provider>/config`
+  - Support configurable base path via `spec.files.base_path` (default: `~/.aws/atmos`)
   - Remove empty provider directories after cleanup
   - Use native Go file operations (`os.RemoveAll`, not shell commands)
   - Continue cleanup even if individual steps fail
@@ -260,7 +261,42 @@ Run 'atmos auth logout' without arguments for interactive selection.
 
 ## 4. Technical Design
 
-### 4.1 Interface Extensions
+### 4.1 Configuration
+
+#### AWS Files Base Path
+
+AWS providers support configurable file storage paths via `spec.files.base_path`:
+
+```yaml
+# atmos.yaml
+auth:
+  providers:
+    aws-sso:
+      kind: aws/iam-identity-center
+      start_url: https://example.awsapps.com/start
+      region: us-east-1
+      spec:
+        files:
+          base_path: ~/.custom/aws/credentials  # Optional, defaults to ~/.aws/atmos
+```
+
+**Configuration Precedence**:
+1. `spec.files.base_path` in provider configuration
+2. `ATMOS_AWS_FILES_BASE_PATH` environment variable
+3. Default: `~/.aws/atmos`
+
+**Validation**:
+- Path must not be empty or whitespace-only
+- Path must not contain null bytes, carriage returns, or newlines
+- Tilde (`~`) expansion is supported via `go-homedir`
+- Validation occurs during `atmos auth validate`
+
+**Use Cases**:
+- **Custom Directories**: Store credentials in non-standard locations
+- **Container Environments**: Use volume mounts at custom paths
+- **Multi-User Systems**: Isolate credentials per user/project
+
+### 4.2 Interface Extensions
 
 #### Provider Interface
 
