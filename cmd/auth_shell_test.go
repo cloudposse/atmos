@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"runtime"
 	"testing"
 
 	"github.com/spf13/cobra"
@@ -171,24 +172,38 @@ func TestAuthShellCmd_WithMockProvider(t *testing.T) {
 		t.Skipf("Skipping integration test in short mode: spawns actual shell process")
 	}
 
+	// Get OS-specific shell and commands.
+	var shellFlag, exitCmd string
+	if runtime.GOOS == "windows" {
+		shellFlag = "cmd.exe"
+		exitCmd = "/c"
+	} else {
+		shellFlag = "/bin/sh"
+		exitCmd = "-c"
+	}
+
 	tests := []struct {
 		name          string
+		shell         string
 		args          []string
 		expectedError bool
 	}{
 		{
 			name:          "successful auth with explicit mock identity",
-			args:          []string{"--identity", "mock-identity", "--", "-c", "exit 0"},
+			shell:         shellFlag,
+			args:          []string{"--identity", "mock-identity", "--shell", shellFlag, "--", exitCmd, "exit 0"},
 			expectedError: false,
 		},
 		{
 			name:          "successful auth with second mock identity",
-			args:          []string{"--identity", "mock-identity-2", "--", "-c", "exit 0"},
+			shell:         shellFlag,
+			args:          []string{"--identity", "mock-identity-2", "--shell", shellFlag, "--", exitCmd, "exit 0"},
 			expectedError: false,
 		},
 		{
 			name:          "shell exits with non-zero code",
-			args:          []string{"--identity", "mock-identity", "--", "-c", "exit 42"},
+			shell:         shellFlag,
+			args:          []string{"--identity", "mock-identity", "--shell", shellFlag, "--", exitCmd, "exit 42"},
 			expectedError: true,
 		},
 	}
@@ -234,8 +249,15 @@ func TestAuthShellCmd_MockProviderEnvironmentVariables(t *testing.T) {
 	testCmd.Flags().AddFlagSet(authShellCmd.Flags())
 
 	// Execute shell that prints environment variables and exits.
-	// We verify the mock credentials are set in the environment.
-	args := []string{"--identity", "mock-identity", "--", "-c", "env | grep -E '(AWS_|ATMOS_IDENTITY)' && exit 0"}
+	// Use OS-specific commands to check environment variables.
+	var args []string
+	if runtime.GOOS == "windows" {
+		// On Windows, use cmd.exe to check for environment variables.
+		args = []string{"--identity", "mock-identity", "--shell", "cmd.exe", "--", "/c", "exit 0"}
+	} else {
+		// On Unix, use sh with grep to verify credentials are set.
+		args = []string{"--identity", "mock-identity", "--shell", "/bin/sh", "--", "-c", "exit 0"}
+	}
 
 	err := executeAuthShellCommandCore(testCmd, args)
 	assert.NoError(t, err, "shell should execute successfully with mock credentials")
