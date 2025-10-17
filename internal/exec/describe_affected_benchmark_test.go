@@ -147,11 +147,7 @@ func setupBenchmarkData(b *testing.B) (*schema.AtmosConfiguration, map[string]an
 	// This ensures the benchmark properly tests drift detection paths.
 	remoteStacks := make(map[string]any)
 	for k, v := range currentStacks {
-		clone, err := deepCopyAny(v)
-		if err != nil {
-			b.Fatal(err)
-		}
-		remoteStacks[k] = clone
+		remoteStacks[k] = deepCopyAny(v)
 	}
 
 	// Modify a few stacks to create some affected components.

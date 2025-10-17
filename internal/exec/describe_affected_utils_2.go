@@ -254,64 +254,6 @@ func deepEqualSlices(a, b []any) bool {
 	return true
 }
 
-// isComponentDependentFolderOrFileChanged checks if a folder or file that the component depends on has changed.
-func isComponentDependentFolderOrFileChanged(
-	changedFiles []string,
-	deps schema.DependsOn,
-) (bool, string, string, error) {
-	isChanged := false
-	changedType := ""
-	changedFileOrFolder := ""
-
-	for _, dep := range deps {
-		if isChanged {
-			break
-		}
-
-		// Determine dependency type and set variables accordingly.
-		var pathPatternSuffix string
-		switch {
-		case dep.File != "":
-			changedType = "file"
-			changedFileOrFolder = dep.File
-			pathPatternSuffix = ""
-		case dep.Folder != "":
-			changedType = "folder"
-			changedFileOrFolder = dep.Folder
-			pathPatternSuffix = "/**"
-		default:
-			// Skip dependencies with neither File nor Folder.
-			continue
-		}
-
-		changedFileOrFolderAbs, err := filepath.Abs(changedFileOrFolder)
-		if err != nil {
-			return false, "", "", err
-		}
-
-		pathPattern := changedFileOrFolderAbs + pathPatternSuffix
-
-		for _, changedFile := range changedFiles {
-			changedFileAbs, err := filepath.Abs(changedFile)
-			if err != nil {
-				return false, "", "", err
-			}
-
-			match, err := u.PathMatch(pathPattern, changedFileAbs)
-			if err != nil {
-				return false, "", "", err
-			}
-
-			if match {
-				isChanged = true
-				break
-			}
-		}
-	}
-
-	return isChanged, changedType, changedFileOrFolder, nil
-}
-
 // isComponentFolderChanged checks if the component folder changed (has changed files in the folder or its subfolders).
 func isComponentFolderChanged(
 	component string,
@@ -337,7 +279,7 @@ func isComponentFolderChanged(
 		return false, err
 	}
 
-	componentPathPattern := componentPathAbs + "/**"
+	componentPathPattern := filepath.Join(componentPathAbs, "**")
 
 	for _, changedFile := range changedFiles {
 		changedFileAbs, err := filepath.Abs(changedFile)
@@ -409,7 +351,7 @@ func areTerraformComponentModulesChanged(
 				return false, err
 			}
 
-			modulePathPattern := modulePathAbs + "/**"
+			modulePathPattern := filepath.Join(modulePathAbs, "**")
 
 			match, err := u.PathMatch(modulePathPattern, changedFileAbs)
 			if err != nil {

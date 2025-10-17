@@ -91,6 +91,8 @@ func TestComponentPathPatternCache_ThreadSafety(t *testing.T) {
 
 	// Run concurrent reads and writes.
 	var wg sync.WaitGroup
+	var mu sync.Mutex
+	var errors []error
 	concurrency := 10
 
 	for i := 0; i < concurrency; i++ {
@@ -99,11 +101,18 @@ func TestComponentPathPatternCache_ThreadSafety(t *testing.T) {
 			defer wg.Done()
 			component := "vpc"
 			_, err := cache.getComponentPathPattern(component, cfg.TerraformComponentType, atmosConfig)
-			assert.NoError(t, err)
+			if err != nil {
+				mu.Lock()
+				errors = append(errors, err)
+				mu.Unlock()
+			}
 		}()
 	}
 
 	wg.Wait()
+
+	// Assert no errors occurred in goroutines.
+	assert.Empty(t, errors, "No errors should occur during concurrent operations")
 
 	// Verify cache has the pattern.
 	pattern, err := cache.getComponentPathPattern("vpc", cfg.TerraformComponentType, atmosConfig)
@@ -554,6 +563,8 @@ func TestComponentPathPatternCache_ModulePatternsThreadSafety(t *testing.T) {
 
 	// Run concurrent reads and writes.
 	var wg sync.WaitGroup
+	var mu sync.Mutex
+	var errors []error
 	concurrency := 10
 
 	for i := 0; i < concurrency; i++ {
@@ -561,11 +572,18 @@ func TestComponentPathPatternCache_ModulePatternsThreadSafety(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			_, err := cache.getTerraformModulePatterns("vpc", atmosConfig)
-			assert.NoError(t, err)
+			if err != nil {
+				mu.Lock()
+				errors = append(errors, err)
+				mu.Unlock()
+			}
 		}()
 	}
 
 	wg.Wait()
+
+	// Assert no errors occurred in goroutines.
+	assert.Empty(t, errors, "No errors should occur during concurrent operations")
 }
 
 // TestChangedFilesIndex_EmptyBasePaths is a regression test for the bug where empty component
@@ -1027,6 +1045,8 @@ func TestChangedFilesIndex_ThreadSafety(t *testing.T) {
 
 	// Run concurrent reads.
 	var wg sync.WaitGroup
+	var mu sync.Mutex
+	var nilResults []bool
 	concurrency := 10
 
 	for i := 0; i < concurrency; i++ {
@@ -1034,11 +1054,18 @@ func TestChangedFilesIndex_ThreadSafety(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			files := index.getRelevantFiles(cfg.TerraformComponentType, atmosConfig)
-			assert.NotNil(t, files)
+			mu.Lock()
+			nilResults = append(nilResults, files == nil)
+			mu.Unlock()
 		}()
 	}
 
 	wg.Wait()
+
+	// Assert no nil results occurred in goroutines.
+	for i, isNil := range nilResults {
+		assert.False(t, isNil, "Result %d should not be nil", i)
+	}
 }
 
 // ==============================================================================
