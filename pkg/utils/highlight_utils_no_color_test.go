@@ -178,3 +178,19 @@ func TestPrintAsJSON_RespectsNoColorFlag(t *testing.T) {
 		"JSON output should not contain ANSI escape codes when NoColor=true.\n"+
 			"Got: %q", result)
 }
+
+// TestHighlightCodeWithConfig_NilConfig tests that nil config is handled gracefully.
+func TestHighlightCodeWithConfig_NilConfig(t *testing.T) {
+	code := `{"test": "value"}`
+
+	// Should not panic with nil config
+	result, err := HighlightCodeWithConfig(nil, code, "json")
+	assert.NoError(t, err, "HighlightCodeWithConfig should not error with nil config")
+
+	// Should return plain code without highlighting
+	assert.Equal(t, code, result, "Should return plain code when config is nil")
+
+	// Should not contain ANSI escape codes
+	hasColor := strings.Contains(result, "\x1b[")
+	assert.False(t, hasColor, "Output should not contain ANSI escape codes when config is nil")
+}

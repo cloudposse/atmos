@@ -80,6 +80,11 @@ var isTermPresent = termUtils.IsTTYSupportForStdout()
 func HighlightCodeWithConfig(config *schema.AtmosConfiguration, code string, format ...string) (string, error) {
 	defer perf.Track(config, "utils.HighlightCodeWithConfig")()
 
+	// Return plain code if config is nil
+	if config == nil {
+		return code, nil
+	}
+
 	// Check if either stdout or stderr is a terminal (provenance goes to stderr)
 	isTerm := isTermPresent || termUtils.IsTTYSupportForStderr()
 
