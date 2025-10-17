@@ -50,4 +50,4 @@ No changes required! This enhancement is fully backward compatible:
 
 The interactive selector uses arrow keys for navigation and Enter to confirm selection. It's available in terminal environments and provides a better experience when working with multiple identities.
 
-For more details, see the [auth login documentation](/cli/commands/auth/auth-login).
+For more details, see the [auth login documentation](/cli/commands/auth/login).
