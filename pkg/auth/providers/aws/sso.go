@@ -4,12 +4,18 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
+	"strings"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/ssooidc"
 	"github.com/aws/aws-sdk-go-v2/service/ssooidc/types"
+	"github.com/charmbracelet/bubbles/spinner"
+	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
+	"github.com/mattn/go-isatty"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	awsCloud "github.com/cloudposse/atmos/pkg/auth/cloud/aws"
@@ -116,8 +122,9 @@ func (p *ssoProvider) Authenticate(ctx context.Context) (authTypes.ICredentials,
 	}
 
 	p.promptDeviceAuth(authResp)
-	// Poll for token using helper to keep function size small.
-	accessToken, tokenExpiresAt, err := p.pollForAccessToken(ctx, oidcClient, registerResp, authResp)
+
+	// Poll for token with a spinner (if TTY).
+	accessToken, tokenExpiresAt, err := p.pollForAccessTokenWithSpinner(ctx, oidcClient, registerResp, authResp)
 	if err != nil {
 		return nil, err
 	}
@@ -143,14 +150,97 @@ func (p *ssoProvider) promptDeviceAuth(authResp *ssooidc.StartDeviceAuthorizatio
 	if authResp.UserCode != nil {
 		code = *authResp.UserCode
 	}
-	if !telemetry.IsCI() {
-		if authResp.VerificationUriComplete != nil && *authResp.VerificationUriComplete != "" {
-			if err := utils.OpenUrl(*authResp.VerificationUriComplete); err != nil {
-				log.Debug(err)
-				utils.PrintfMessageToTUI("🔐 Please visit %s and enter code: %s.", *authResp.VerificationUriComplete, code)
-			}
+
+	verificationURL := ""
+	if authResp.VerificationUriComplete != nil && *authResp.VerificationUriComplete != "" {
+		verificationURL = *authResp.VerificationUriComplete
+	} else if authResp.VerificationUri != nil {
+		verificationURL = *authResp.VerificationUri
+	}
+
+	// Check if we have a TTY for fancy output.
+	if isTTY() && !telemetry.IsCI() {
+		displayVerificationDialog(code, verificationURL)
+	} else {
+		// Fallback to simple text output for non-TTY or CI environments.
+		displayVerificationPlainText(code, verificationURL)
+	}
+
+	// Open browser if not in CI.
+	if !telemetry.IsCI() && authResp.VerificationUriComplete != nil && *authResp.VerificationUriComplete != "" {
+		if err := utils.OpenUrl(*authResp.VerificationUriComplete); err != nil {
+			log.Debug(err)
 		}
 	}
+}
+
+// isTTY checks if stderr is a terminal.
+func isTTY() bool {
+	return isatty.IsTerminal(os.Stderr.Fd()) || isatty.IsCygwinTerminal(os.Stderr.Fd())
+}
+
+// displayVerificationDialog shows a styled dialog with the verification code.
+func displayVerificationDialog(code, url string) {
+	// Styles.
+	titleStyle := lipgloss.NewStyle().
+		Bold(true).
+		Foreground(lipgloss.Color("#00FFFF")). // Cyan
+		PaddingLeft(1).
+		PaddingRight(1)
+
+	codeStyle := lipgloss.NewStyle().
+		Bold(true).
+		Foreground(lipgloss.Color("#00FF00")). // Green
+		Background(lipgloss.Color("#1a1a1a")).
+		Padding(0, 1)
+
+	urlStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("#5F5FD7")). // Muted purple
+		Italic(true)
+
+	instructionStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("#888888")) // Gray
+
+	boxStyle := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(lipgloss.Color("#5F5FD7")).
+		Padding(1, 2).
+		MarginTop(1).
+		MarginBottom(1)
+
+	// Build the content.
+	var content strings.Builder
+	content.WriteString(titleStyle.Render("🔐 AWS SSO Authentication Required"))
+	content.WriteString("\n\n")
+	content.WriteString("Verification Code: ")
+	content.WriteString(codeStyle.Render(code))
+	content.WriteString("\n\n")
+
+	if url != "" {
+		content.WriteString(urlStyle.Render(url))
+		content.WriteString("\n\n")
+		content.WriteString(instructionStyle.Render("Opening browser... If it doesn't open, visit the URL above."))
+	}
+
+	// Render the box and display it.
+	fmt.Fprintf(os.Stderr, "%s\n", boxStyle.Render(content.String()))
+}
+
+// displayVerificationPlainText shows verification code in plain text (for non-TTY/CI).
+func displayVerificationPlainText(code, url string) {
+	utils.PrintfMessageToTUI("🔐 **AWS SSO Authentication Required**\n")
+	utils.PrintfMessageToTUI("Verification Code: **%s**\n", code)
+
+	if url != "" {
+		if !telemetry.IsCI() {
+			utils.PrintfMessageToTUI("Opening browser to: %s\n", url)
+			utils.PrintfMessageToTUI("If the browser does not open, visit the URL above and enter the code.\n")
+		} else {
+			utils.PrintfMessageToTUI("Verification URL: %s\n", url)
+		}
+	}
+
+	utils.PrintfMessageToTUI("Waiting for authentication...\n")
 }
 
 // Validate validates the provider configuration.
@@ -182,6 +272,117 @@ func (p *ssoProvider) getSessionDuration() int {
 		}
 	}
 	return ssoDefaultSessionMinutes // Default to 60 minutes
+}
+
+// pollForAccessTokenWithSpinner wraps pollForAccessToken with a spinner for TTY environments.
+func (p *ssoProvider) pollForAccessTokenWithSpinner(ctx context.Context, oidcClient *ssooidc.Client, registerResp *ssooidc.RegisterClientOutput, authResp *ssooidc.StartDeviceAuthorizationOutput) (string, time.Time, error) {
+	// If not a TTY or in CI, use simple polling without spinner.
+	if !isTTY() || telemetry.IsCI() {
+		return p.pollForAccessToken(ctx, oidcClient, registerResp, authResp)
+	}
+
+	// Create a channel to receive the result.
+	resultChan := make(chan pollResult, 1)
+
+	// Start polling in a goroutine.
+	go func() {
+		token, expiresAt, err := p.pollForAccessToken(ctx, oidcClient, registerResp, authResp)
+		resultChan <- pollResult{token, expiresAt, err}
+	}()
+
+	// Create and run the spinner.
+	s := spinner.New()
+	s.Spinner = spinner.Dot
+	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("#00FFFF")) // Cyan
+
+	model := spinnerModel{
+		spinner:   s,
+		message:   "Waiting for authentication",
+		done:      false,
+		resultChan: resultChan,
+	}
+
+	// Run the spinner until authentication completes.
+	prog := tea.NewProgram(model, tea.WithOutput(os.Stderr))
+	finalModel, err := prog.Run()
+	if err != nil {
+		// If spinner fails, fall back to the result from polling.
+		res := <-resultChan
+		return res.token, res.expiresAt, res.err
+	}
+
+	// Get the result from the final model.
+	finalSpinner := finalModel.(spinnerModel)
+	if finalSpinner.err != nil {
+		return "", time.Time{}, finalSpinner.err
+	}
+	return finalSpinner.token, finalSpinner.expiresAt, nil
+}
+
+// pollResult holds the result of polling for an access token.
+type pollResult struct {
+	token     string
+	expiresAt time.Time
+	err       error
+}
+
+// spinnerModel is a bubbletea model for the authentication spinner.
+type spinnerModel struct {
+	spinner    spinner.Model
+	message    string
+	done       bool
+	resultChan chan pollResult
+	token      string
+	expiresAt  time.Time
+	err        error
+}
+
+func (m spinnerModel) Init() tea.Cmd {
+	return tea.Batch(m.spinner.Tick, m.checkResult())
+}
+
+func (m spinnerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case tea.KeyMsg:
+		if msg.String() == "ctrl+c" {
+			m.done = true
+			m.err = fmt.Errorf("%w: authentication cancelled", errUtils.ErrAuthenticationFailed)
+			return m, tea.Quit
+		}
+	case spinner.TickMsg:
+		var cmd tea.Cmd
+		m.spinner, cmd = m.spinner.Update(msg)
+		return m, cmd
+	case pollResult:
+		m.done = true
+		m.token = msg.token
+		m.expiresAt = msg.expiresAt
+		m.err = msg.err
+		return m, tea.Quit
+	}
+	return m, nil
+}
+
+func (m spinnerModel) View() string {
+	if m.done {
+		if m.err != nil {
+			return lipgloss.NewStyle().Foreground(lipgloss.Color("#FF0000")).Render("✗ Authentication failed\n")
+		}
+		return lipgloss.NewStyle().Foreground(lipgloss.Color("#00FF00")).Render("✓ Authentication successful!\n")
+	}
+	return fmt.Sprintf("%s %s...", m.spinner.View(), m.message)
+}
+
+func (m spinnerModel) checkResult() tea.Cmd {
+	return func() tea.Msg {
+		select {
+		case res := <-m.resultChan:
+			return res
+		case <-time.After(100 * time.Millisecond):
+			// Check again after a short delay.
+			return m.checkResult()()
+		}
+	}
 }
 
 // pollForAccessToken polls the device authorization endpoint until an access token is available or times out.
