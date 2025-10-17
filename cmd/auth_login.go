@@ -43,6 +43,14 @@ func executeAuthLoginCommand(cmd *cobra.Command, args []string) error {
 	// Get identity from flag or use default
 	identityName, _ := cmd.Flags().GetString("identity")
 
+	// If no identity specified, get the default identity (which prompts if needed)
+	if identityName == "" {
+		identityName, err = authManager.GetDefaultIdentity()
+		if err != nil {
+			return fmt.Errorf("failed to get identity: %w", err)
+		}
+	}
+
 	// Perform authentication
 	ctx := context.Background()
 	whoami, err := authManager.Authenticate(ctx, identityName)

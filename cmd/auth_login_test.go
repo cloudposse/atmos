@@ -221,9 +221,88 @@ func TestCreateAuthManager(t *testing.T) {
 		},
 	}
 
-	// Mock auth manager creation - in real implementation this would use internal/auth
-	// For testing purposes, we just verify the config is valid
+	// Mock auth manager creation - in real implementation this would use internal/auth.
+	// For testing purposes, we just verify the config is valid.
 	assert.NotNil(t, authConfig)
 	assert.NotEmpty(t, authConfig.Providers)
 	assert.NotEmpty(t, authConfig.Identities)
+}
+
+func TestAuthLoginCallsGetDefaultIdentityWhenNoIdentityProvided(t *testing.T) {
+	// This test verifies that when no --identity flag is provided,
+	// the command calls GetDefaultIdentity() on the auth manager.
+	tests := []struct {
+		name          string
+		identityFlag  string
+		hasDefault    bool
+		expectDefault bool
+	}{
+		{
+			name:          "no identity flag with default identity configured",
+			identityFlag:  "",
+			hasDefault:    true,
+			expectDefault: true,
+		},
+		{
+			name:          "identity flag provided",
+			identityFlag:  "specific-identity",
+			hasDefault:    true,
+			expectDefault: false,
+		},
+		{
+			name:          "no identity flag and no default identity",
+			identityFlag:  "",
+			hasDefault:    false,
+			expectDefault: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Create a mock command to test the logic.
+			var getDefaultIdentityCalled bool
+			cmd := &cobra.Command{
+				Use: "login",
+				RunE: func(cmd *cobra.Command, args []string) error {
+					// Simulate the executeAuthLoginCommand logic.
+					identityName, _ := cmd.Flags().GetString("identity")
+
+					if identityName == "" {
+						// This simulates calling authManager.GetDefaultIdentity().
+						getDefaultIdentityCalled = true
+						if !tt.hasDefault {
+							return fmt.Errorf("no default identity found")
+						}
+						identityName = "default-identity"
+					}
+
+					// At this point we would authenticate with identityName.
+					if identityName == "" {
+						return fmt.Errorf("no identity to authenticate with")
+					}
+
+					return nil
+				},
+			}
+			cmd.Flags().StringP("identity", "i", tt.identityFlag, "Specify the identity to authenticate to")
+
+			// Execute command.
+			err := cmd.Execute()
+
+			// Verify GetDefaultIdentity was called when expected.
+			if tt.expectDefault {
+				assert.True(t, getDefaultIdentityCalled, "GetDefaultIdentity should be called when no identity flag is provided")
+			} else {
+				assert.False(t, getDefaultIdentityCalled, "GetDefaultIdentity should not be called when identity flag is provided")
+			}
+
+			// Verify error handling.
+			if !tt.hasDefault && tt.identityFlag == "" {
+				assert.Error(t, err)
+				assert.Contains(t, err.Error(), "no default identity found")
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
 }

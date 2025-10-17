@@ -23,11 +23,14 @@ atmos auth login [--identity <name>]
 ## Examples
 
 ```shell
-# Use default identity
+# Use default identity (prompts if no default is configured)
 atmos auth login
 
 # Use specific identity
 atmos auth login --identity admin
+
+# Use short form of identity flag
+atmos auth login -i admin
 ```
 
 ## Arguments
@@ -41,9 +44,28 @@ atmos auth login --identity admin
 
 <dl>
   <dt>`--identity` <em>(alias `-i`)</em></dt>
-  <dd>Specify the identity to authenticate. If omitted, the default identity is used.</dd>
+  <dd>
+    Specify the identity to authenticate. If omitted, Atmos will:
+
+    - Use the default identity if exactly one is configured
+    - Show an interactive selector if no default identity is configured
+    - Show an interactive selector if multiple default identities are configured
+    - In CI environments (non-interactive), return an error if no default identity is found
+  </dd>
 </dl>
+
+## Interactive Identity Selection
+
+When no `--identity` flag is provided and no default identity is configured, Atmos presents an interactive selector with all available identities. This allows you to quickly choose an identity without remembering exact names or using command-line flags.
+
+The interactive selector is available in terminal environments and will display all configured identities for selection. In CI/CD pipelines or non-interactive environments, you must either:
+
+- Configure a default identity in your `atmos.yaml`
+- Explicitly specify the identity using the `--identity` flag
+- Set the `ATMOS_IDENTITY` environment variable
 
 ## Notes
 
 - Prints provider, identity, account, region, and expiration when successful.
+- Credentials are cached to avoid repeated logins until expiration.
+- The interactive selector uses arrow keys for navigation and Enter to confirm selection.
