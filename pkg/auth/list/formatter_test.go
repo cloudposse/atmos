@@ -676,3 +676,47 @@ func TestBuildIdentityNodeForProvider_IdentityCycle(t *testing.T) {
 		t.Fatal("buildIdentityNodeForProvider hung on identity cycle (infinite recursion)")
 	}
 }
+
+// TestBuildIdentityNodeForProvider_SharedNode tests that shared nodes are not flagged as cycles.
+func TestBuildIdentityNodeForProvider_SharedNode(t *testing.T) {
+	// Create a diamond pattern: base → [branch-a, branch-b] → merged.
+	// This has a shared node "merged" but is NOT a cycle.
+	identities := map[string]schema.Identity{
+		"base": {
+			Kind: "aws/assume-role",
+		},
+		"branch-a": {
+			Kind: "aws/assume-role",
+			Via: &schema.IdentityVia{
+				Identity: "base",
+			},
+		},
+		"branch-b": {
+			Kind: "aws/assume-role",
+			Via: &schema.IdentityVia{
+				Identity: "base",
+			},
+		},
+		"merged": {
+			Kind: "aws/assume-role",
+			Via: &schema.IdentityVia{
+				Identity: "branch-a",
+			},
+		},
+	}
+
+	// Build tree starting from base.
+	baseIdentity := identities["base"]
+	visited := make(map[string]struct{})
+	node := buildIdentityNodeForProvider(&baseIdentity, "base", identities, visited)
+	output := node.String()
+
+	// Should NOT contain "cycle detected".
+	assert.NotContains(t, output, "cycle", "Shared nodes should not be flagged as cycles")
+
+	// Should contain all identity names.
+	assert.Contains(t, output, "base")
+	assert.Contains(t, output, "branch-a")
+	assert.Contains(t, output, "branch-b")
+	assert.Contains(t, output, "merged")
+}

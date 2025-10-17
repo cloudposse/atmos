@@ -221,10 +221,10 @@ func buildProviderNodeWithIdentities(
 			Root(boldStyle.Render("Identities")).
 			EnumeratorStyle(branchStyle)
 
-		// Create a shared visited map for cycle detection across all identities in this provider.
-		visited := make(map[string]struct{})
+		// Create a fresh visited map for each top-level identity to track cycles per-path.
 		for _, identityName := range identityNames {
 			identity := allIdentities[identityName]
+			visited := make(map[string]struct{})
 			identityNode := buildIdentityNodeForProvider(&identity, identityName, allIdentities, visited)
 			identitiesNode.Child(identityNode)
 		}
@@ -243,7 +243,7 @@ func buildIdentityNodeForProvider(
 ) *tree.Tree {
 	defer perf.Track(nil, "list.buildIdentityNodeForProvider")()
 
-	// Detect cycles.
+	// Detect cycles (this node already in current path).
 	if _, ok := visited[name]; ok {
 		cycleNode := tree.New().Root(name + " (cycle detected)")
 		return cycleNode
@@ -253,7 +253,10 @@ func buildIdentityNodeForProvider(
 	if visited == nil {
 		visited = make(map[string]struct{}, 4)
 	}
+
+	// Mark this node as visited for this path.
 	visited[name] = struct{}{}
+	defer delete(visited, name) // Unmark when backtracking to allow shared nodes.
 
 	// Create branch style.
 	branchStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(treeBranchColor))
