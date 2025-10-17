@@ -248,8 +248,19 @@ The `vendor.yaml` vendoring manifest supports Kubernetes-style YAML config to de
     <details>
     <summary><strong>Advanced: Manual Token Injection with Templates</strong></summary>
 
-    For custom Git hosts or advanced scenarios not covered by automatic token injection, you can manually inject credentials using Go templates:
+    For custom Git hosts or scenarios where you need explicit control over authentication, you can manually inject credentials using Go templates.
 
+    **For GitHub (use correct authentication format):**
+    ```yaml
+    sources:
+      - component: "vpc"
+        source: 'git::https://x-access-token:{{getenv "GITHUB_TOKEN"}}@github.com/org/private-repo.git?ref={{.Version}}'
+        version: "1.0.0"
+        targets:
+          - "components/terraform/vpc"
+    ```
+
+    **For custom Git hosts:**
     ```yaml
     sources:
       - component: "vpc"
@@ -264,28 +275,38 @@ The `vendor.yaml` vendoring manifest supports Kubernetes-style YAML config to de
 
     **Option 1: Single-quoted YAML string (recommended)**
     ```yaml
-    source: 'git::https://{{getenv "TOKEN"}}@custom-host.com/org/repo.git?ref={{.Version}}'
+    source: 'git::https://x-access-token:{{getenv "GITHUB_TOKEN"}}@github.com/org/repo.git?ref={{.Version}}'
     ```
 
     **Option 2: YAML folded scalar**
     ```yaml
     source: >-
-      git::https://{{getenv "TOKEN"}}@custom-host.com/org/repo.git?ref={{.Version}}
+      git::https://x-access-token:{{getenv "GITHUB_TOKEN"}}@github.com/org/repo.git?ref={{.Version}}
     ```
 
     **What doesn't work:**
     ```yaml
-    source: "git::https://{{getenv "TOKEN"}}@custom-host.com/org/repo.git?ref={{.Version}}"
+    source: "git::https://x-access-token:{{getenv "GITHUB_TOKEN"}}@github.com/org/repo.git?ref={{.Version}}"
     ```
 
     This is because YAML parsers interpret nested double quotes as string terminators. Template processing happens **after** YAML parsing, so the YAML must be valid before templates are evaluated.
     :::
 
-    **Why manual injection is rarely needed:**
-    - Automatic injection works for GitHub, GitLab, and Bitbucket
-    - Manual injection requires careful YAML quoting
-    - Credentials in URLs are harder to audit and rotate
-    - Environment variables are more secure and easier to manage
+    :::note GitHub Authentication Format
+    GitHub requires the username to be `x-access-token` and the token to be the password:
+    ```
+    https://x-access-token:YOUR_TOKEN@github.com/...
+    ```
+
+    While `https://YOUR_TOKEN@github.com/...` (token as username) may work with Git, using the documented format ensures compatibility.
+    :::
+
+    **Why automatic injection is recommended:**
+    - No need to manually specify `x-access-token:` username format
+    - Works automatically for GitHub, GitLab, and Bitbucket
+    - No YAML quoting complications
+    - Credentials are managed centrally via environment variables
+    - Easier to audit and rotate tokens
 
     </details>
 

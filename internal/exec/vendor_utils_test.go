@@ -398,13 +398,30 @@ func TestVendorYAMLQuotingVariations(t *testing.T) {
 		name          string
 		vendorContent string
 		description   string
+		expectedURI   string
 	}{
 		{
-			name: "single-quoted YAML with double-quoted template",
+			name: "single-quoted YAML with correct GitHub auth format (RECOMMENDED)",
 			vendorContent: `apiVersion: atmos/v1
 kind: AtmosVendorConfig
 metadata:
-  name: test single quotes
+  name: test correct format
+spec:
+  sources:
+    - component: "test"
+      source: 'git::https://x-access-token:{{getenv "GITHUB_TOKEN"}}@github.com/org/repo.git?ref={{.Version}}'
+      version: "v1.0.0"
+      targets: ["./"]
+`,
+			description: "Correct GitHub authentication format with x-access-token username",
+			expectedURI: "git::https://x-access-token:" + testToken + "@github.com/org/repo.git?ref=v1.0.0",
+		},
+		{
+			name: "single-quoted YAML with token as username (WORKS)",
+			vendorContent: `apiVersion: atmos/v1
+kind: AtmosVendorConfig
+metadata:
+  name: test legacy format
 spec:
   sources:
     - component: "test"
@@ -412,10 +429,11 @@ spec:
       version: "v1.0.0"
       targets: ["./"]
 `,
-			description: "Single-quoted YAML string allows double quotes in templates",
+			description: "Token as username - works with Git",
+			expectedURI: "git::https://" + testToken + "@github.com/org/repo.git?ref=v1.0.0",
 		},
 		{
-			name: "YAML folded scalar with double-quoted template",
+			name: "YAML folded scalar with correct GitHub auth format",
 			vendorContent: `apiVersion: atmos/v1
 kind: AtmosVendorConfig
 metadata:
@@ -424,11 +442,12 @@ spec:
   sources:
     - component: "test"
       source: >-
-        git::https://{{getenv "GITHUB_TOKEN"}}@github.com/org/repo.git?ref={{.Version}}
+        git::https://x-access-token:{{getenv "GITHUB_TOKEN"}}@github.com/org/repo.git?ref={{.Version}}
       version: "v1.0.0"
       targets: ["./"]
 `,
-			description: "Folded scalar (>-) allows double quotes in templates",
+			description: "Folded scalar (>-) with correct GitHub auth format",
+			expectedURI: "git::https://x-access-token:" + testToken + "@github.com/org/repo.git?ref=v1.0.0",
 		},
 	}
 
@@ -465,9 +484,8 @@ spec:
 			processedURI, err := ProcessTmpl(&atmosConfig, "test-source", source.Source, tmplData, false)
 			require.NoError(t, err, "Template processing should succeed")
 
-			// Verify all quoting styles produce the same result
-			expectedURI := "git::https://" + testToken + "@github.com/org/repo.git?ref=v1.0.0"
-			assert.Equal(t, expectedURI, processedURI, "All quoting styles should produce identical output")
+			// Verify the expected URI format
+			assert.Equal(t, tt.expectedURI, processedURI, tt.description)
 			assert.Contains(t, processedURI, testToken, "Should contain GitHub token")
 			assert.Contains(t, processedURI, "v1.0.0", "Should contain version")
 			assert.NotContains(t, processedURI, "{{", "Should not have unprocessed templates")
