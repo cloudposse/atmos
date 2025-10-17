@@ -167,13 +167,91 @@ func TestAuthShellCmd_ShellEnvironmentBinding(t *testing.T) {
 	})
 }
 
+func TestAuthShellCmd_WithMockProvider(t *testing.T) {
+	if testing.Short() {
+		t.Skipf("Skipping integration test in short mode: spawns actual shell process")
+	}
+
+	tests := []struct {
+		name          string
+		args          []string
+		expectedError bool
+	}{
+		{
+			name:          "successful auth with default mock identity and immediate exit",
+			args:          []string{"--", "-c", "exit 0"},
+			expectedError: false,
+		},
+		{
+			name:          "successful auth with explicit mock identity",
+			args:          []string{"--identity", "mock-identity", "--", "-c", "exit 0"},
+			expectedError: false,
+		},
+		{
+			name:          "successful auth with second mock identity",
+			args:          []string{"--identity", "mock-identity-2", "--", "-c", "exit 0"},
+			expectedError: false,
+		},
+		{
+			name:          "shell exits with non-zero code",
+			args:          []string{"--identity", "mock-identity", "--", "-c", "exit 42"},
+			expectedError: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Set up mock auth provider fixture for each subtest.
+			testDir := "../tests/fixtures/scenarios/atmos-auth-mock"
+			t.Setenv("ATMOS_CLI_CONFIG_PATH", testDir)
+			t.Setenv("ATMOS_BASE_PATH", testDir)
+
+			testCmd := &cobra.Command{
+				Use:                "shell",
+				DisableFlagParsing: true,
+			}
+			testCmd.Flags().AddFlagSet(authShellCmd.Flags())
+
+			err := executeAuthShellCommandCore(testCmd, tt.args)
+
+			if tt.expectedError {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
+func TestAuthShellCmd_MockProviderEnvironmentVariables(t *testing.T) {
+	if testing.Short() {
+		t.Skipf("Skipping integration test in short mode: spawns actual shell process")
+	}
+
+	// Use mock auth provider fixture.
+	testDir := "../tests/fixtures/scenarios/atmos-auth-mock"
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", testDir)
+	t.Setenv("ATMOS_BASE_PATH", testDir)
+
+	testCmd := &cobra.Command{
+		Use:                "shell",
+		DisableFlagParsing: true,
+	}
+	testCmd.Flags().AddFlagSet(authShellCmd.Flags())
+
+	// Execute shell that prints environment variables and exits.
+	// We verify the mock credentials are set in the environment.
+	args := []string{"--identity", "mock-identity", "--", "-c", "env | grep -E '(AWS_|ATMOS_IDENTITY)' && exit 0"}
+
+	err := executeAuthShellCommandCore(testCmd, args)
+	assert.NoError(t, err, "shell should execute successfully with mock credentials")
+}
+
 // Note on test coverage:
-// The following code paths are difficult to test in unit tests without extensive mocking:
-// 1. Successful authentication flow (requires real cloud credentials or complex mocking)
-// 2. Successful shell execution (tested in internal/exec/shell_utils_test.go)
-// 3. init() function viper bindings (tested indirectly above, runs at package load)
+// The mock provider enables testing of:
+// 1. ✅ Successful authentication flow (using mock credentials)
+// 2. ✅ Environment variable propagation to shell
+// 3. ✅ Shell execution with authenticated context
+// 4. ✅ Exit code propagation
 //
-// These paths are better tested via:
-// - Integration tests with real credentials (would need to skip on CI)
-// - Manual testing during development
-// - The shell_utils_test.go tests which cover the execution logic
+// The shell_utils_test.go also tests shell execution mechanics separately.
