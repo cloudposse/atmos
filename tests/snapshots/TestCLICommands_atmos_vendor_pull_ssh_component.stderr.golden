@@ -8,8 +8,8 @@ DEBU Entering dry-run flow for component vendoring component=ipinfo
 DEBU CustomGitDetector.Detect called
 DEBU Rewriting SCP-style SSH URL old_url="github.com:cloudposse/atmos.git//examples/demo-library/ipinfo?ref=main" new_url="ssh://github.com/cloudposse/atmos.git//examples/demo-library/ipinfo?ref=main"
 DEBU Reading config param InjectGithubToken=true
-DEBU Injected token env=GITHUB_TOKEN url="ssh://REDACTED:REDACTED@github.com/cloudposse/atmos.git//examples/demo-library/ipinfo?ref=main"
-DEBU Final URL final_url="git::ssh://REDACTED:REDACTED@github.com/cloudposse/atmos.git//examples/demo-library/ipinfo?depth=1&ref=main"
+DEBU Injected token env=GITHUB_TOKEN url="ssh://***:***@github.com/cloudposse/atmos.git//examples/demo-library/ipinfo?ref=main"
+DEBU Final URL final_url="git::ssh://***:***@github.com/cloudposse/atmos.git//examples/demo-library/ipinfo?depth=1&ref=main"
 INFO ✓ ipinfo (main)
 INFO Done! Dry run completed. No components vendored.
 

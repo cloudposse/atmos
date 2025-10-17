@@ -3,6 +3,7 @@ package downloader
 import (
 	"fmt"
 	"net/url"
+	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 )
@@ -24,5 +25,11 @@ func maskBasicAuth(rawURL string) (string, error) {
 		}
 	}
 
-	return parsedURL.String(), nil
+	result := parsedURL.String()
+
+	// Post-process: Replace REDACTED:REDACTED with *** for cleaner output
+	result = strings.ReplaceAll(result, "REDACTED:REDACTED", "***")
+	result = strings.ReplaceAll(result, "REDACTED", "***")
+
+	return result, nil
 }

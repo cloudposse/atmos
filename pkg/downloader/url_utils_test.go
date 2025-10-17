@@ -6,7 +6,7 @@ import (
 
 func TestMaskBasicAuth_WithUsernameAndPassword(t *testing.T) {
 	input := "https://user:secret@github.com/path?query=1"
-	expected := "https://REDACTED:REDACTED@github.com/path?query=1"
+	expected := "https://***@github.com/path?query=1"
 	masked, err := maskBasicAuth(input)
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
@@ -18,7 +18,7 @@ func TestMaskBasicAuth_WithUsernameAndPassword(t *testing.T) {
 
 func TestMaskBasicAuth_WithUsernameOnly(t *testing.T) {
 	input := "https://user@github.com/path"
-	expected := "https://REDACTED@github.com/path"
+	expected := "https://***@github.com/path"
 	masked, err := maskBasicAuth(input)
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
