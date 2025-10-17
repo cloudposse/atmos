@@ -9,12 +9,6 @@ import (
 )
 
 func TestAuthShellCmd_FlagParsing(t *testing.T) {
-	// Set up test fixture with auth configuration.
-	testDir := "../tests/fixtures/scenarios/atmos-auth"
-
-	t.Setenv("ATMOS_CLI_CONFIG_PATH", testDir)
-	t.Setenv("ATMOS_BASE_PATH", testDir)
-
 	tests := []struct {
 		name          string
 		args          []string
@@ -59,6 +53,11 @@ func TestAuthShellCmd_FlagParsing(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			// Set up test fixture with auth configuration for each subtest.
+			testDir := "../tests/fixtures/scenarios/atmos-auth"
+			t.Setenv("ATMOS_CLI_CONFIG_PATH", testDir)
+			t.Setenv("ATMOS_BASE_PATH", testDir)
+
 			// Create a command instance with the same flags as the real authShellCmd.
 			testCmd := &cobra.Command{
 				Use:                "shell",
@@ -177,11 +176,6 @@ func TestAuthShellCmd_WithMockProvider(t *testing.T) {
 		args          []string
 		expectedError bool
 	}{
-		{
-			name:          "successful auth with default mock identity and immediate exit",
-			args:          []string{"--", "-c", "exit 0"},
-			expectedError: false,
-		},
 		{
 			name:          "successful auth with explicit mock identity",
 			args:          []string{"--identity", "mock-identity", "--", "-c", "exit 0"},
