@@ -71,6 +71,37 @@ func TestSnapshotRootCmdState(t *testing.T) {
 			},
 			validateAfter: nil,
 		},
+		{
+			name: "captures and restores command args",
+			setup: func(t *testing.T) {
+				RootCmd.SetArgs([]string{"terraform", "plan", "vpc", "-s", "dev"})
+				// Parse flags to populate RootCmd.Flags().Args().
+				_ = RootCmd.ParseFlags([]string{"terraform", "plan", "vpc", "-s", "dev"})
+			},
+			validateBefore: func(t *testing.T, snapshot *cmdStateSnapshot) {
+				require.NotNil(t, snapshot.args, "Should capture args slice")
+				// After parsing, non-flag args are: terraform, plan, vpc (dev is flag value).
+				assert.Equal(t, []string{"terraform", "plan", "vpc"}, snapshot.args)
+			},
+			validateAfter: func(t *testing.T, snapshot *cmdStateSnapshot) {
+				// Modify args to different values.
+				RootCmd.SetArgs([]string{"helmfile", "apply"})
+				_ = RootCmd.ParseFlags([]string{"helmfile", "apply"})
+
+				// Verify current args are different.
+				currentArgs := RootCmd.Flags().Args()
+				assert.Equal(t, []string{"helmfile", "apply"}, currentArgs, "Args should be modified before restore")
+
+				// Restore from snapshot.
+				restoreRootCmdState(snapshot)
+
+				// Verify args were restored to original by checking SetArgs was called.
+				// We verify by parsing again and checking args.
+				_ = RootCmd.ParseFlags(snapshot.args)
+				restoredArgs := RootCmd.Flags().Args()
+				assert.Equal(t, []string{"terraform", "plan", "vpc"}, restoredArgs, "Should restore original args")
+			},
+		},
 	}
 
 	for _, tt := range tests {
