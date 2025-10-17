@@ -25,9 +25,9 @@ func TestMockComponentProvider_GetBasePath(t *testing.T) {
 	provider := &MockComponentProvider{}
 
 	tests := []struct {
-		name           string
-		atmosConfig    *schema.AtmosConfiguration
-		expectedPath   string
+		name         string
+		atmosConfig  *schema.AtmosConfiguration
+		expectedPath string
 	}{
 		{
 			name: "with configured base_path",
@@ -87,10 +87,10 @@ func TestMockComponentProvider_ListComponents(t *testing.T) {
 	provider := &MockComponentProvider{}
 
 	tests := []struct {
-		name           string
-		stackConfig    map[string]any
-		expectedComps  []string
-		expectedErr    bool
+		name          string
+		stackConfig   map[string]any
+		expectedComps []string
+		expectedErr   bool
 	}{
 		{
 			name: "with mock components",

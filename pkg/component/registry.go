@@ -8,12 +8,10 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 )
 
-var (
-	// Global registry instance.
-	registry = &ComponentRegistry{
-		providers: make(map[string]ComponentProvider),
-	}
-)
+// Global registry instance.
+var registry = &ComponentRegistry{
+	providers: make(map[string]ComponentProvider),
+}
 
 // ComponentRegistry manages component provider registration.
 // It is thread-safe and supports concurrent registration and access.
