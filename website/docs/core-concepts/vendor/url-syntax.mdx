@@ -268,8 +268,23 @@ source: "oci://public.ecr.aws/cloudposse/components/terraform/stable/aws/vpc:lat
 source: "oci://docker.io/library/nginx:alpine"
 ```
 
-:::info OCI Authentication
-OCI registries use standard container registry authentication. Ensure you're logged in with `docker login` or equivalent.
+:::info OCI Authentication Precedence
+Atmos uses the following precedence order for OCI registry authentication:
+
+1. **Docker credentials** (highest precedence) - Credentials from `docker login` stored in `~/.docker/config.json`
+2. **Environment variables** - `ATMOS_GITHUB_TOKEN` or `GITHUB_TOKEN` for GitHub Container Registry (ghcr.io)
+3. **Anonymous** - Fallback for public images
+
+**Examples:**
+```bash
+# Authenticate with Docker for any registry
+docker login ghcr.io
+
+# Or use environment variable for GitHub Container Registry
+export GITHUB_TOKEN=ghp_your_token
+```
+
+User Docker credentials always take precedence over environment variable tokens.
 :::
 
   </TabItem>
