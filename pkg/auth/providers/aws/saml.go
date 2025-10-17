@@ -338,6 +338,11 @@ func (p *samlProvider) Validate() error {
 		return fmt.Errorf("%w: invalid URL format: %v", errUtils.ErrInvalidProviderConfig, err)
 	}
 
+	// Validate spec.files.base_path if provided.
+	if err := awsCloud.ValidateFilesBasePath(p.config); err != nil {
+		return err
+	}
+
 	return nil
 }
 

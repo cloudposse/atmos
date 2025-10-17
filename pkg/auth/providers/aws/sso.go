@@ -161,6 +161,12 @@ func (p *ssoProvider) Validate() error {
 	if p.region == "" {
 		return fmt.Errorf("%w: region is required", errUtils.ErrInvalidProviderConfig)
 	}
+
+	// Validate spec.files.base_path if provided.
+	if err := awsCloud.ValidateFilesBasePath(p.config); err != nil {
+		return err
+	}
+
 	return nil
 }
 
