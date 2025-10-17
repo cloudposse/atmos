@@ -159,5 +159,10 @@ func init() {
 	if err := viper.BindEnv("auth.whoami.output", "ATMOS_AUTH_WHOAMI_OUTPUT"); err != nil {
 		log.Trace("Failed to bind auth.whoami.output environment variable", "error", err)
 	}
+	if err := authWhoamiCmd.RegisterFlagCompletionFunc("output", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+		return []string{"json"}, cobra.ShellCompDirectiveNoFileComp
+	}); err != nil {
+		log.Trace("Failed to register output flag completion", "error", err)
+	}
 	authCmd.AddCommand(authWhoamiCmd)
 }

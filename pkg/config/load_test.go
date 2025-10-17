@@ -351,15 +351,9 @@ func TestMergeDefaultImports_PathCanonicalization(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Save current directory
-			origDir, err := os.Getwd()
-			assert.NoError(t, err)
-			defer os.Chdir(origDir)
-
 			// Create and change to temp directory
 			tempDir := t.TempDir()
-			err = os.Chdir(tempDir)
-			assert.NoError(t, err)
+			t.Chdir(tempDir)
 
 			// Set the exclude environment variable using table input directly
 			t.Setenv("TEST_EXCLUDE_ATMOS_D", tt.excludePath)
@@ -367,7 +361,7 @@ func TestMergeDefaultImports_PathCanonicalization(t *testing.T) {
 			// Call the function with table input directly
 			v := viper.New()
 			v.SetConfigType("yaml") // Set config type as done in production code
-			err = mergeDefaultImports(tt.dirPath, v)
+			err := mergeDefaultImports(tt.dirPath, v)
 
 			// Check the result - should skip and return nil when shouldSkip is true
 			assert.NoError(t, err, tt.description)
@@ -501,16 +495,10 @@ func TestShouldExcludePathForTesting(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Save current directory for relative path tests
-			origDir, err := os.Getwd()
-			assert.NoError(t, err)
-			defer os.Chdir(origDir)
-
 			// For relative path tests, create and change to a temp directory
 			if tt.dirPath == "." || tt.envValue == "." {
 				tempDir := t.TempDir()
-				err = os.Chdir(tempDir)
-				assert.NoError(t, err)
+				t.Chdir(tempDir)
 			}
 
 			// Set the environment variable

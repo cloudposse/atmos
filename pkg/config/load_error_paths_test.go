@@ -32,14 +32,8 @@ components:
 	err := os.WriteFile(configPath, []byte(configContent), 0o644)
 	assert.NoError(t, err)
 
-	// Save current directory
-	origDir, err := os.Getwd()
-	assert.NoError(t, err)
-	defer os.Chdir(origDir)
-
 	// Change to temp directory
-	err = os.Chdir(tempDir)
-	assert.NoError(t, err)
+	t.Chdir(tempDir)
 
 	// Load config which should succeed (relative path handling)
 	configInfo := &schema.ConfigAndStacksInfo{
@@ -97,19 +91,13 @@ func TestReadHomeConfig_ConfigFileNotFound(t *testing.T) {
 
 // TestReadWorkDirConfig_GetwdError tests os.Getwd() error path at load.go:236-239.
 func TestReadWorkDirConfig_GetwdError(t *testing.T) {
-	// Save current directory
-	origDir, err := os.Getwd()
-	assert.NoError(t, err)
-	defer os.Chdir(origDir)
-
 	// Create and change to a temp directory
 	tempDir := t.TempDir()
-	err = os.Chdir(tempDir)
-	assert.NoError(t, err)
+	t.Chdir(tempDir)
 
 	// Remove the directory while we're in it (Unix-specific behavior)
 	if runtime.GOOS != "windows" {
-		err = os.Remove(tempDir)
+		err := os.Remove(tempDir)
 		if err == nil {
 			// Only test if we successfully removed the directory
 			v := viper.New()
@@ -128,19 +116,13 @@ func TestReadWorkDirConfig_ConfigFileNotFound(t *testing.T) {
 	// Create temp directory without atmos.yaml
 	tempDir := t.TempDir()
 
-	// Save current directory
-	origDir, err := os.Getwd()
-	assert.NoError(t, err)
-	defer os.Chdir(origDir)
-
 	// Change to temp directory
-	err = os.Chdir(tempDir)
-	assert.NoError(t, err)
+	t.Chdir(tempDir)
 
 	v := viper.New()
 	v.SetConfigType("yaml")
 
-	err = readWorkDirConfig(v)
+	err := readWorkDirConfig(v)
 	assert.NoError(t, err) // Should not error on ConfigFileNotFoundError
 }
 

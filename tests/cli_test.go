@@ -578,13 +578,6 @@ func prepareAtmosCommand(t *testing.T, ctx context.Context, args ...string) *exe
 }
 
 func runCLICommandTest(t *testing.T, tc TestCase) {
-	defer func() {
-		// Change back to the original working directory after the test
-		if err := os.Chdir(startingDir); err != nil {
-			t.Fatalf("Failed to change back to the starting directory: %v", err)
-		}
-	}()
-
 	// Skip long tests in short mode
 	if testing.Short() && tc.Short != nil && !*tc.Short {
 		t.Skipf("Skipping long-running test in short mode (use 'go test' without -short to run)")
@@ -666,10 +659,7 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 		if err != nil {
 			t.Fatalf("failed to resolve absolute path of workdir %q: %v", tc.Workdir, err)
 		}
-		err = os.Chdir(absoluteWorkdir)
-		if err != nil {
-			t.Fatalf("Failed to change directory to %q: %v", tc.Workdir, err)
-		}
+		t.Chdir(absoluteWorkdir)
 
 		// Setup sandbox environment if enabled
 		var sandboxEnv *testhelpers.SandboxEnvironment
