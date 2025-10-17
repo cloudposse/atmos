@@ -626,8 +626,20 @@ func ProcessStacks(
 	case cfg.TerraformComponentType:
 		componentPath := constructTerraformComponentWorkingDir(atmosConfig, &configAndStacksInfo)
 		componentInfo[cfg.ComponentPathSectionName] = componentPath
-		terraformConfiguration, _ := tfconfig.LoadModule(componentPath)
-		componentInfo["terraform_config"] = terraformConfiguration
+		terraformConfiguration, diags := tfconfig.LoadModule(componentPath)
+		if diags.HasErrors() {
+			errMsg := diags.Err().Error()
+			// If the directory doesn't exist, treat as no configuration (component may be deleted or not yet created).
+			// This is valid in stack processing when tracking changes over time.
+			if !strings.Contains(errMsg, "does not exist") && !strings.Contains(errMsg, "Failed to read directory") {
+				// For other errors (syntax errors, permission issues, etc.), return error.
+				// This prevents false negatives from ignoring actionable failures.
+				return configAndStacksInfo, fmt.Errorf("%w at %s: %v", errUtils.ErrFailedToLoadTerraformModule, componentPath, diags.Err())
+			}
+			componentInfo["terraform_config"] = nil
+		} else {
+			componentInfo["terraform_config"] = terraformConfiguration
+		}
 	case cfg.HelmfileComponentType:
 		componentInfo[cfg.ComponentPathSectionName] = constructHelmfileComponentWorkingDir(atmosConfig, &configAndStacksInfo)
 	case cfg.PackerComponentType:

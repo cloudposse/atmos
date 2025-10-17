@@ -10,6 +10,7 @@ import (
 	"github.com/hashicorp/terraform-config-inspect/tfconfig"
 	"github.com/mitchellh/mapstructure"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -253,79 +254,6 @@ func deepEqualSlices(a, b []any) bool {
 	return true
 }
 
-// deepCopyAny performs a deep copy of any value, recursively handling maps and slices.
-// This is the counterpart to deepEqualValues for creating independent copies of nested structures.
-func deepCopyAny(v any) (any, error) {
-	if v == nil {
-		return nil, nil
-	}
-
-	// Type assertions for common types to avoid reflection where possible.
-	switch typed := v.(type) {
-	case map[string]any:
-		return deepCopyMap(typed)
-
-	case []any:
-		return deepCopySlice(typed)
-
-	case string:
-		return typed, nil
-
-	case int:
-		return typed, nil
-
-	case int64:
-		return typed, nil
-
-	case float64:
-		return typed, nil
-
-	case bool:
-		return typed, nil
-
-	default:
-		// For uncommon types, use reflection to create a copy.
-		// This ensures we don't miss any types.
-		return v, nil
-	}
-}
-
-// deepCopyMap creates a deep copy of a map.
-func deepCopyMap(m map[string]any) (map[string]any, error) {
-	if m == nil {
-		return nil, nil
-	}
-
-	result := make(map[string]any, len(m))
-	for key, value := range m {
-		copiedValue, err := deepCopyAny(value)
-		if err != nil {
-			return nil, err
-		}
-		result[key] = copiedValue
-	}
-
-	return result, nil
-}
-
-// deepCopySlice creates a deep copy of a slice.
-func deepCopySlice(s []any) ([]any, error) {
-	if s == nil {
-		return nil, nil
-	}
-
-	result := make([]any, len(s))
-	for i, value := range s {
-		copiedValue, err := deepCopyAny(value)
-		if err != nil {
-			return nil, err
-		}
-		result[i] = copiedValue
-	}
-
-	return result, nil
-}
-
 // isComponentDependentFolderOrFileChanged checks if a folder or file that the component depends on has changed.
 func isComponentDependentFolderOrFileChanged(
 	changedFiles []string,
@@ -401,7 +329,7 @@ func isComponentFolderChanged(
 	case cfg.PackerComponentType:
 		componentPath = filepath.Join(atmosConfig.BasePath, atmosConfig.Components.Packer.BasePath, component)
 	default:
-		return false, fmt.Errorf("%s: %w", componentType, ErrUnsupportedComponentType)
+		return false, fmt.Errorf("%w: %s", errUtils.ErrUnsupportedComponentType, componentType)
 	}
 
 	componentPathAbs, err := filepath.Abs(componentPath)
@@ -443,7 +371,24 @@ func areTerraformComponentModulesChanged(
 		return false, err
 	}
 
-	terraformConfiguration, _ := tfconfig.LoadModule(componentPathAbs)
+	terraformConfiguration, diags := tfconfig.LoadModule(componentPathAbs)
+	if diags.HasErrors() {
+		errMsg := diags.Err().Error()
+		// If the directory doesn't exist, treat as no modules (component may be deleted or not yet created).
+		// This is valid in affected detection when tracking changes over time.
+		if strings.Contains(errMsg, "does not exist") || strings.Contains(errMsg, "Failed to read directory") {
+			return false, nil
+		}
+
+		// For other errors (syntax errors, permission issues, etc.), return error.
+		// This prevents false negatives from ignoring actionable failures.
+		return false, fmt.Errorf("%w at %s: %v", errUtils.ErrFailedToLoadTerraformModule, componentPathAbs, diags.Err())
+	}
+
+	// If no configuration, there are no modules to check.
+	if terraformConfiguration == nil {
+		return false, nil
+	}
 
 	for _, changedFile := range changedFiles {
 		changedFileAbs, err := filepath.Abs(changedFile)

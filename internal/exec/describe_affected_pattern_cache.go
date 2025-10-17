@@ -1,11 +1,14 @@
 package exec
 
 import (
+	"fmt"
 	"path/filepath"
+	"strings"
 	"sync"
 
 	"github.com/hashicorp/terraform-config-inspect/tfconfig"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -54,7 +57,7 @@ func (c *componentPathPatternCache) getComponentPathPattern(
 		componentPath = filepath.Join(atmosConfig.BasePath, atmosConfig.Components.Packer.BasePath, component)
 	default:
 		// Unknown component type - return pattern without caching.
-		return "", ErrUnsupportedComponentType
+		return "", fmt.Errorf("%w: %s", errUtils.ErrUnsupportedComponentType, componentType)
 	}
 
 	componentPathAbs, err := filepath.Abs(componentPath)
@@ -74,6 +77,8 @@ func (c *componentPathPatternCache) getComponentPathPattern(
 
 // getTerraformModulePatterns returns cached module patterns for a terraform component.
 // This caches the expensive tfconfig.LoadModule() result and pattern computation.
+//
+//nolint:revive // Error handling for missing directories requires additional lines
 func (c *componentPathPatternCache) getTerraformModulePatterns(
 	component string,
 	atmosConfig *schema.AtmosConfiguration,
@@ -94,9 +99,25 @@ func (c *componentPathPatternCache) getTerraformModulePatterns(
 	}
 
 	// Load Terraform configuration (expensive operation).
-	terraformConfiguration, _ := tfconfig.LoadModule(componentPathAbs)
+	terraformConfiguration, diags := tfconfig.LoadModule(componentPathAbs)
+	if diags.HasErrors() {
+		errMsg := diags.Err().Error()
+		// If the directory doesn't exist, treat as empty (component may be deleted or not yet created).
+		// This is valid in affected detection when tracking changes over time.
+		if strings.Contains(errMsg, "does not exist") || strings.Contains(errMsg, "Failed to read directory") {
+			c.mu.Lock()
+			c.modulePatterns[component] = []string{}
+			c.mu.Unlock()
+			return []string{}, nil
+		}
+
+		// For other errors (syntax errors, permission issues, etc.), return error.
+		// This prevents false negatives from caching incorrect empty results.
+		return nil, fmt.Errorf("%w at %s: %v", errUtils.ErrFailedToLoadTerraformModule, componentPathAbs, diags.Err())
+	}
+
 	if terraformConfiguration == nil {
-		// No modules found, cache empty slice.
+		// No modules found (successful load with no modules), cache empty slice.
 		c.mu.Lock()
 		c.modulePatterns[component] = []string{}
 		c.mu.Unlock()

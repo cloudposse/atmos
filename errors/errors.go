@@ -107,9 +107,10 @@ var (
 	ErrLockedComponentCantBeProvisioned   = errors.New("locked component cannot be provisioned")
 
 	// Terraform-specific errors.
-	ErrHTTPBackendWorkspaces     = errors.New("workspaces are not supported for the HTTP backend")
-	ErrInvalidTerraformComponent = errors.New("invalid Terraform component")
-	ErrNoTty                     = errors.New("no TTY attached")
+	ErrHTTPBackendWorkspaces       = errors.New("workspaces are not supported for the HTTP backend")
+	ErrInvalidTerraformComponent   = errors.New("invalid Terraform component")
+	ErrNoTty                       = errors.New("no TTY attached")
+	ErrFailedToLoadTerraformModule = errors.New("failed to load terraform module")
 
 	ErrMissingPackerTemplate = errors.New("packer template is required; it can be specified in the `settings.packer.template` section in the Atmos component manifest, or on the command line via the flag `--template <template>` (shorthand `-t`)")
 	ErrMissingPackerManifest = errors.New("packer manifest is missing")
@@ -150,6 +151,7 @@ var (
 	ErrComponentNotDefined                    = errors.New("component not defined in any config files")
 	ErrInvalidTerraformBackend                = errors.New("invalid terraform.backend section")
 	ErrInvalidTerraformRemoteStateBackend     = errors.New("invalid terraform.remote_state_backend section")
+	ErrUnsupportedComponentType               = errors.New("unsupported component type. Valid types are 'terraform', 'helmfile', 'packer'")
 
 	// Global/Stack-level section errors.
 	ErrInvalidVarsSection               = errors.New("invalid vars section")

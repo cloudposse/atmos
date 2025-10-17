@@ -212,7 +212,7 @@ func TestPathMatch_AtmosStackPatterns(t *testing.T) {
 }
 
 // TestPathMatch_ConsistentResults tests that multiple calls with same inputs return consistent results.
-// This indirectly validates that caching (P5.1 optimization) doesn't break behavior.
+// This indirectly validates that caching doesn't break behavior.
 func TestPathMatch_ConsistentResults(t *testing.T) {
 	pattern := "stacks/**/*.yaml"
 	path := "stacks/catalog/vpc.yaml"

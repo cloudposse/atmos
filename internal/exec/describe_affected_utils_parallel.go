@@ -31,12 +31,12 @@ func findAffectedParallel(
 ) ([]schema.Affected, error) {
 	defer perf.Track(atmosConfig, "exec.findAffectedParallel")()
 
-	// Create index of changed files for efficient lookup (P9.4 optimization).
+	// Create an index of changed files for efficient lookup.
 	// This reduces PathMatch operations by 60-80%.
 	filesIndex := newChangedFilesIndex(atmosConfig, changedFiles)
 
-	// Create pattern cache for component paths (P9.2 optimization).
-	// This eliminates repeated pattern construction for 10-15% additional improvement.
+	// Create pattern cache for component paths.
+	// This eliminates repeated pattern construction.
 	patternCache := newComponentPathPatternCache()
 
 	// Create buffered channel for results.

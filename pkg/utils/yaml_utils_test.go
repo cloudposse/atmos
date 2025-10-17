@@ -37,7 +37,7 @@ list:
 }
 
 // TestUnmarshalYAMLFromFileWithPositions_WithDifferentContent tests that different content produces different results.
-// This indirectly validates the cache key includes content hash (P8.1 optimization).
+// This indirectly validates the cache key includes content hash.
 func TestUnmarshalYAMLFromFileWithPositions_WithDifferentContent(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{}
 

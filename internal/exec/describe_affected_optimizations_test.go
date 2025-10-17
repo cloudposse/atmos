@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -62,7 +63,7 @@ func TestComponentPathPatternCache_GetComponentPathPattern(t *testing.T) {
 	t.Run("unsupported component type", func(t *testing.T) {
 		_, err := cache.getComponentPathPattern("test", "unknown", atmosConfig)
 		assert.Error(t, err)
-		assert.ErrorIs(t, err, ErrUnsupportedComponentType)
+		assert.ErrorIs(t, err, errUtils.ErrUnsupportedComponentType)
 	})
 
 	t.Run("cache stores patterns", func(t *testing.T) {
@@ -1760,7 +1761,7 @@ func TestIsComponentFolderChangedCoverage(t *testing.T) {
 
 		_, err := isComponentFolderChanged("test", "unknown", atmosConfig, changedFiles)
 		assert.Error(t, err)
-		assert.ErrorIs(t, err, ErrUnsupportedComponentType)
+		assert.ErrorIs(t, err, errUtils.ErrUnsupportedComponentType)
 	})
 
 	t.Run("subdirectory file changed", func(t *testing.T) {

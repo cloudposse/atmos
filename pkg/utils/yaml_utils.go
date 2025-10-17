@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"os"
+	"sort"
 	"strings"
 	"sync"
 
@@ -323,13 +324,9 @@ func PrintParsedYAMLCacheStats() {
 	}
 
 	// Sort by count descending.
-	for i := 0; i < len(fileCounts); i++ {
-		for j := i + 1; j < len(fileCounts); j++ {
-			if fileCounts[j].count > fileCounts[i].count {
-				fileCounts[i], fileCounts[j] = fileCounts[j], fileCounts[i]
-			}
-		}
-	}
+	sort.Slice(fileCounts, func(i, j int) bool {
+		return fileCounts[i].count > fileCounts[j].count
+	})
 
 	// Print top most-called files.
 	log.Info("Top 10 most-called files:")

@@ -9,28 +9,6 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-// BenchmarkFindAffectedSequential benchmarks the original sequential implementation.
-func BenchmarkFindAffectedSequential(b *testing.B) {
-	atmosConfig, currentStacks, remoteStacks, changedFiles := setupBenchmarkData(b)
-
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		_, err := findAffectedSequential(
-			&currentStacks,
-			&remoteStacks,
-			atmosConfig,
-			changedFiles,
-			false, // includeSpaceliftAdminStacks
-			false, // includeSettings
-			"",    // stackToFilter
-			false, // excludeLocked
-		)
-		if err != nil {
-			b.Fatal(err)
-		}
-	}
-}
-
 // BenchmarkFindAffectedParallel benchmarks the parallel implementation with indexing.
 func BenchmarkFindAffectedParallel(b *testing.B) {
 	atmosConfig, currentStacks, remoteStacks, changedFiles := setupBenchmarkData(b)
@@ -197,45 +175,4 @@ func setupBenchmarkData(b *testing.B) (*schema.AtmosConfiguration, map[string]an
 	}
 
 	return atmosConfig, currentStacks, remoteStacks, changedFiles
-}
-
-// BenchmarkCompareSequentialVsParallel runs a comparison benchmark.
-func BenchmarkCompareSequentialVsParallel(b *testing.B) {
-	atmosConfig, currentStacks, remoteStacks, changedFiles := setupBenchmarkData(b)
-
-	b.Run("Sequential", func(b *testing.B) {
-		for i := 0; i < b.N; i++ {
-			_, err := findAffectedSequential(
-				&currentStacks,
-				&remoteStacks,
-				atmosConfig,
-				changedFiles,
-				false,
-				false,
-				"",
-				false,
-			)
-			if err != nil {
-				b.Fatal(err)
-			}
-		}
-	})
-
-	b.Run("Parallel", func(b *testing.B) {
-		for i := 0; i < b.N; i++ {
-			_, err := findAffectedParallel(
-				&currentStacks,
-				&remoteStacks,
-				atmosConfig,
-				changedFiles,
-				false,
-				false,
-				"",
-				false,
-			)
-			if err != nil {
-				b.Fatal(err)
-			}
-		}
-	})
 }
