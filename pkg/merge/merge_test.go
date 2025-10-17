@@ -2,6 +2,7 @@ package merge
 
 import (
 	"errors"
+	"reflect"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -597,6 +598,100 @@ func TestDeepCopyMap_NoAliasingTypedSlices(t *testing.T) {
 	// Verify the copy was modified.
 	assert.Equal(t, "modified", copiedTypedMap[1][0], "Copy should be modified")
 	assert.Equal(t, 4, len(copiedTypedMap[1]), "Copy slice should have appended element")
+}
+
+// TestStructToMapReflect_MapstructureSkipTag verifies that mapstructure:"-" fields are properly skipped.
+// This is a regression test for the bug where mapstructure:"-" fields were incorrectly included
+// by falling back to JSON tags or field names.
+func TestStructToMapReflect_MapstructureSkipTag(t *testing.T) {
+	type TestStruct struct {
+		// Normal field - should be included with mapstructure tag.
+		PublicField string `mapstructure:"public_field"`
+
+		// Field with mapstructure:"-" should be skipped entirely.
+		SkippedByMapstructure string `mapstructure:"-" json:"skipped_json"`
+
+		// Field with JSON tag only - should use JSON tag.
+		JSONTagOnly string `json:"json_only"`
+
+		// Field with both tags, mapstructure takes precedence.
+		BothTags string `mapstructure:"map_name" json:"json_name"`
+
+		// Field with mapstructure:"-" and valid JSON should still be skipped.
+		MapstructureSkipWithJSON string `mapstructure:"-" json:"valid_json"`
+
+		// Field with JSON:"-" and no mapstructure - should use field name.
+		JSONSkipNoMapstructure string `json:"-"`
+
+		// Field with both skip tags - should be skipped.
+		BothSkipTags string `mapstructure:"-" json:"-"`
+
+		// Unexported field - should always be skipped.
+		unexportedField string `mapstructure:"unexported"`
+
+		// No tags - should use field name.
+		NoTags string
+	}
+
+	testStruct := TestStruct{
+		PublicField:              "public",
+		SkippedByMapstructure:    "should_not_appear",
+		JSONTagOnly:              "json_value",
+		BothTags:                 "both_value",
+		MapstructureSkipWithJSON: "should_not_appear_either",
+		JSONSkipNoMapstructure:   "json_skip_value",
+		BothSkipTags:             "should_not_appear_three",
+		unexportedField:          "never_exported",
+		NoTags:                   "no_tags_value",
+	}
+
+	result := structToMapReflect(reflect.ValueOf(testStruct))
+
+	// Verify included fields.
+	assert.Equal(t, "public", result["public_field"], "PublicField should be included")
+	assert.Equal(t, "json_value", result["json_only"], "JSONTagOnly should use json tag")
+	assert.Equal(t, "both_value", result["map_name"], "BothTags should use mapstructure tag, not json tag")
+	assert.Equal(t, "json_skip_value", result["JSONSkipNoMapstructure"], "Field with json:- and no mapstructure should use field name")
+	assert.Equal(t, "no_tags_value", result["NoTags"], "NoTags should use field name")
+
+	// Verify skipped fields are NOT in the result.
+	assert.NotContains(t, result, "skipped_json", "mapstructure:- should skip field even with valid json tag")
+	assert.NotContains(t, result, "SkippedByMapstructure", "mapstructure:- field should not fall back to field name")
+	assert.NotContains(t, result, "valid_json", "mapstructure:- should skip even with valid json tag")
+	assert.NotContains(t, result, "MapstructureSkipWithJSON", "mapstructure:- field should not fall back to field name")
+	assert.NotContains(t, result, "BothSkipTags", "Both skip tags should be skipped")
+	assert.NotContains(t, result, "unexported", "Unexported fields should never appear")
+	assert.NotContains(t, result, "unexportedField", "Unexported fields should never appear")
+
+	// Verify the result only has the expected number of fields.
+	expectedFields := 5 // public_field, json_only, map_name, JSONSkipNoMapstructure, NoTags
+	assert.Equal(t, expectedFields, len(result), "Result should only contain %d fields", expectedFields)
+}
+
+// TestStructToMapReflect_TagOptions verifies that tag options like omitempty are properly removed.
+func TestStructToMapReflect_TagOptions(t *testing.T) {
+	type TestStruct struct {
+		WithOmitEmpty    string `mapstructure:"with_omit,omitempty"`
+		WithMultiOptions string `mapstructure:"multi,omitempty,squash"`
+		JustComma        string `mapstructure:"comma,"`
+	}
+
+	testStruct := TestStruct{
+		WithOmitEmpty:    "value1",
+		WithMultiOptions: "value2",
+		JustComma:        "value3",
+	}
+
+	result := structToMapReflect(reflect.ValueOf(testStruct))
+
+	// Verify options are stripped and only the field name is used.
+	assert.Equal(t, "value1", result["with_omit"], "Options should be stripped from tag")
+	assert.Equal(t, "value2", result["multi"], "Multiple options should be stripped")
+	assert.Equal(t, "value3", result["comma"], "Trailing comma should be handled")
+
+	// Verify incorrect keys are not present.
+	assert.NotContains(t, result, "with_omit,omitempty")
+	assert.NotContains(t, result, "multi,omitempty,squash")
 }
 
 // BenchmarkMerge benchmarks merge operations with properly-sized allocations.

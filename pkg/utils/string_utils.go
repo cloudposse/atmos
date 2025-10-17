@@ -5,6 +5,7 @@ import (
 	"errors"
 	"strings"
 	"sync"
+	"sync/atomic"
 
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -104,17 +105,14 @@ func SplitStringAtFirstOccurrence(s string, sep string) [2]string {
 // String interning pool for deduplicating common strings.
 // This saves memory by ensuring duplicate strings share the same underlying storage.
 var (
-	// InternPool stores interned strings using sync.Map for thread-safe concurrent access.
+	// The internPool stores interned strings using sync.Map for thread-safe concurrent access.
 	internPool sync.Map
 
-	// InternStats tracks string interning statistics for debugging.
-	internStats = struct {
-		sync.RWMutex
-		requests int64 // Total intern requests.
-		hits     int64 // Cache hits (string already interned).
-		misses   int64 // Cache misses (new string added).
-		savedMem int64 // Estimated memory saved (bytes).
-	}{}
+	// Atomic counters for string interning statistics (lock-free for high performance).
+	internStatsRequests atomic.Int64 // Total intern requests.
+	internStatsHits     atomic.Int64 // Cache hits (string already interned).
+	internStatsMisses   atomic.Int64 // Cache misses (new string added).
+	internStatsSavedMem atomic.Int64 // Estimated memory saved (bytes).
 )
 
 // Intern returns a canonical representation of the string.
@@ -129,23 +127,20 @@ var (
 //
 // Thread-safe for concurrent use.
 // Note: perf.Track removed from this critical path function as it's called millions of times.
+// Statistics use atomic operations instead of locks to avoid contention in the hot path.
 func Intern(_ *schema.AtmosConfiguration, s string) string {
 	// Empty strings are not interned.
 	if s == "" {
 		return s
 	}
 
-	internStats.Lock()
-	internStats.requests++
-	internStats.Unlock()
+	internStatsRequests.Add(1)
 
 	// Fast path: check if string is already interned.
 	if existing, ok := internPool.Load(s); ok {
-		internStats.Lock()
-		internStats.hits++
-		// Track memory saved (approximate: string header overhead).
-		internStats.savedMem += int64(len(s))
-		internStats.Unlock()
+		internStatsHits.Add(1)
+		// Track memory saved (approximate: deduplicated string data length).
+		internStatsSavedMem.Add(int64(len(s)))
 		return existing.(string)
 	}
 
@@ -154,16 +149,15 @@ func Intern(_ *schema.AtmosConfiguration, s string) string {
 	// might have interned the same string while we were checking.
 	actual, loaded := internPool.LoadOrStore(s, s)
 
-	internStats.Lock()
 	if loaded {
 		// Another goroutine beat us to it.
-		internStats.hits++
-		internStats.savedMem += int64(len(s))
+		internStatsHits.Add(1)
+		// Track memory saved (approximate: deduplicated string data length).
+		internStatsSavedMem.Add(int64(len(s)))
 	} else {
 		// We successfully added a new string.
-		internStats.misses++
+		internStatsMisses.Add(1)
 	}
-	internStats.Unlock()
 
 	return actual.(string)
 }
@@ -209,26 +203,24 @@ type InternStats struct {
 
 // GetInternStats returns current interning statistics.
 // Useful for debugging and performance analysis.
+// Uses atomic loads for lock-free access.
 func GetInternStats() InternStats {
-	internStats.RLock()
-	defer internStats.RUnlock()
 	return InternStats{
-		Requests:   internStats.requests,
-		Hits:       internStats.hits,
-		Misses:     internStats.misses,
-		SavedBytes: internStats.savedMem,
+		Requests:   internStatsRequests.Load(),
+		Hits:       internStatsHits.Load(),
+		Misses:     internStatsMisses.Load(),
+		SavedBytes: internStatsSavedMem.Load(),
 	}
 }
 
 // ResetInternStats resets interning statistics.
 // Primarily for testing.
+// Uses atomic stores for lock-free access.
 func ResetInternStats() {
-	internStats.Lock()
-	defer internStats.Unlock()
-	internStats.requests = 0
-	internStats.hits = 0
-	internStats.misses = 0
-	internStats.savedMem = 0
+	internStatsRequests.Store(0)
+	internStatsHits.Store(0)
+	internStatsMisses.Store(0)
+	internStatsSavedMem.Store(0)
 }
 
 // ClearInternPool clears the intern pool.

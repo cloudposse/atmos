@@ -247,8 +247,13 @@ func structToMapReflect(rv reflect.Value) map[string]any {
 		}
 
 		// Get field name from mapstructure tag, fallback to JSON tag, then field name.
-		fieldName := field.Tag.Get("mapstructure")
-		if fieldName == "" || fieldName == "-" {
+		mapTag := field.Tag.Get("mapstructure")
+		if mapTag == "-" {
+			continue
+		}
+
+		fieldName := mapTag
+		if fieldName == "" {
 			fieldName = field.Tag.Get("json")
 		}
 		if fieldName == "" || fieldName == "-" {

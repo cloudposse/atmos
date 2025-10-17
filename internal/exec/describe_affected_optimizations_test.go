@@ -583,6 +583,277 @@ func TestComponentPathPatternCache_ModulePatternsThreadSafety(t *testing.T) {
 // P9.4: Changed Files Index Tests
 // ==============================================================================
 
+// TestChangedFilesIndex_EmptyBasePaths is a regression test for the bug where empty component
+// base paths would cause files to be incorrectly indexed under the root basePath.
+// This test verifies that buildNormalizedBasePaths correctly filters out empty base paths,
+// preventing file indexing collisions.
+func TestChangedFilesIndex_EmptyBasePaths(t *testing.T) {
+	tempDir := t.TempDir()
+
+	t.Run("empty packer and stacks base paths are filtered out", func(t *testing.T) {
+		// This reproduces the original bug: Packer.BasePath and Stacks.BasePath are empty,
+		// which would cause filepath.Join(basePath, "") to return just basePath,
+		// creating duplicate entries in the normalized paths.
+		atmosConfig := &schema.AtmosConfiguration{
+			BasePath: tempDir,
+			Components: schema.Components{
+				Terraform: schema.Terraform{
+					BasePath: "components/terraform",
+				},
+				Helmfile: schema.Helmfile{
+					BasePath: "components/helmfile",
+				},
+				Packer: schema.Packer{
+					BasePath: "", // Empty - should be filtered out
+				},
+			},
+			Stacks: schema.Stacks{
+				BasePath: "", // Empty - should be filtered out
+			},
+		}
+
+		// Create test files in configured component paths.
+		helmfilePath := filepath.Join(tempDir, "components/helmfile/app")
+		err := os.MkdirAll(helmfilePath, 0o755)
+		require.NoError(t, err)
+		helmfileFile := filepath.Join(helmfilePath, "helmfile.yaml")
+		err = os.WriteFile(helmfileFile, []byte("releases: []"), 0o644)
+		require.NoError(t, err)
+
+		changedFiles := []string{helmfileFile}
+		index := newChangedFilesIndex(atmosConfig, changedFiles)
+
+		// Verify the file is correctly indexed under the helmfile base path,
+		// NOT under the root basePath.
+		helmFiles := index.getRelevantFiles(cfg.HelmfileComponentType, atmosConfig)
+		assert.Len(t, helmFiles, 1, "helmfile file should be indexed")
+		assert.Contains(t, helmFiles, helmfileFile)
+
+		// Verify the index doesn't have the root basePath as a key.
+		index.mu.RLock()
+		rootBasePath, _ := filepath.Abs(tempDir)
+		_, hasRootPath := index.filesByBasePath[rootBasePath]
+		index.mu.RUnlock()
+		assert.False(t, hasRootPath, "root basePath should NOT be in index (empty component paths should be filtered)")
+	})
+
+	t.Run("file detection works with empty base paths", func(t *testing.T) {
+		// Verify that file-only changes are detected even when some component types
+		// have empty base paths.
+		atmosConfig := &schema.AtmosConfiguration{
+			BasePath: tempDir,
+			Components: schema.Components{
+				Terraform: schema.Terraform{
+					BasePath: "", // Empty
+				},
+				Helmfile: schema.Helmfile{
+					BasePath: "components/helmfile",
+				},
+				Packer: schema.Packer{
+					BasePath: "", // Empty
+				},
+			},
+			Stacks: schema.Stacks{
+				BasePath: "", // Empty
+			},
+		}
+
+		// Create helmfile component.
+		helmfilePath := filepath.Join(tempDir, "components/helmfile/app")
+		err := os.MkdirAll(helmfilePath, 0o755)
+		require.NoError(t, err)
+		helmfileFile := filepath.Join(helmfilePath, "helmfile.yaml")
+		err = os.WriteFile(helmfileFile, []byte("releases: []"), 0o644)
+		require.NoError(t, err)
+
+		changedFiles := []string{helmfileFile}
+		filesIndex := newChangedFilesIndex(atmosConfig, changedFiles)
+		patternCache := newComponentPathPatternCache()
+
+		// Test that component folder change detection works.
+		changed, err := isComponentFolderChangedIndexed("app", cfg.HelmfileComponentType, atmosConfig, filesIndex, patternCache)
+		require.NoError(t, err)
+		assert.True(t, changed, "file change should be detected for component with configured base path")
+	})
+
+	t.Run("all base paths empty returns empty index", func(t *testing.T) {
+		// Edge case: all component types have empty base paths.
+		atmosConfig := &schema.AtmosConfiguration{
+			BasePath: tempDir,
+			Components: schema.Components{
+				Terraform: schema.Terraform{
+					BasePath: "",
+				},
+				Helmfile: schema.Helmfile{
+					BasePath: "",
+				},
+				Packer: schema.Packer{
+					BasePath: "",
+				},
+			},
+			Stacks: schema.Stacks{
+				BasePath: "",
+			},
+		}
+
+		changedFiles := []string{
+			filepath.Join(tempDir, "some/file.txt"),
+		}
+
+		index := newChangedFilesIndex(atmosConfig, changedFiles)
+
+		// Verify no base paths were indexed.
+		index.mu.RLock()
+		indexSize := len(index.filesByBasePath)
+		index.mu.RUnlock()
+
+		assert.Equal(t, 0, indexSize, "index should be empty when all base paths are empty")
+
+		// getAllFiles should still work (fallback behavior).
+		allFiles := index.getAllFiles()
+		assert.Equal(t, changedFiles, allFiles)
+	})
+}
+
+// TestBuildNormalizedBasePaths tests the buildNormalizedBasePaths function directly.
+func TestBuildNormalizedBasePaths(t *testing.T) {
+	tempDir := t.TempDir()
+
+	t.Run("filters out empty base paths", func(t *testing.T) {
+		atmosConfig := &schema.AtmosConfiguration{
+			BasePath: tempDir,
+			Components: schema.Components{
+				Terraform: schema.Terraform{
+					BasePath: "components/terraform",
+				},
+				Helmfile: schema.Helmfile{
+					BasePath: "", // Empty - should be filtered
+				},
+				Packer: schema.Packer{
+					BasePath: "components/packer",
+				},
+			},
+			Stacks: schema.Stacks{
+				BasePath: "", // Empty - should be filtered
+			},
+		}
+
+		paths := buildNormalizedBasePaths(atmosConfig)
+
+		// Should only have 2 paths (terraform and packer).
+		assert.Len(t, paths, 2, "should only include non-empty base paths")
+
+		// Convert to set for easier checking.
+		pathSet := make(map[string]bool)
+		for _, p := range paths {
+			pathSet[p] = true
+		}
+
+		// Check that configured paths are present.
+		tfPath, _ := filepath.Abs(filepath.Join(tempDir, "components/terraform"))
+		packerPath, _ := filepath.Abs(filepath.Join(tempDir, "components/packer"))
+
+		assert.True(t, pathSet[tfPath], "terraform path should be included")
+		assert.True(t, pathSet[packerPath], "packer path should be included")
+
+		// Check that root basePath is NOT included.
+		rootPath, _ := filepath.Abs(tempDir)
+		assert.False(t, pathSet[rootPath], "root basePath should NOT be included")
+	})
+
+	t.Run("all base paths configured", func(t *testing.T) {
+		atmosConfig := &schema.AtmosConfiguration{
+			BasePath: tempDir,
+			Components: schema.Components{
+				Terraform: schema.Terraform{
+					BasePath: "components/terraform",
+				},
+				Helmfile: schema.Helmfile{
+					BasePath: "components/helmfile",
+				},
+				Packer: schema.Packer{
+					BasePath: "components/packer",
+				},
+			},
+			Stacks: schema.Stacks{
+				BasePath: "stacks",
+			},
+		}
+
+		paths := buildNormalizedBasePaths(atmosConfig)
+
+		// Should have all 4 paths.
+		assert.Len(t, paths, 4, "should include all configured base paths")
+	})
+
+	t.Run("no base paths configured", func(t *testing.T) {
+		atmosConfig := &schema.AtmosConfiguration{
+			BasePath: tempDir,
+			Components: schema.Components{
+				Terraform: schema.Terraform{
+					BasePath: "",
+				},
+				Helmfile: schema.Helmfile{
+					BasePath: "",
+				},
+				Packer: schema.Packer{
+					BasePath: "",
+				},
+			},
+			Stacks: schema.Stacks{
+				BasePath: "",
+			},
+		}
+
+		paths := buildNormalizedBasePaths(atmosConfig)
+
+		// Should be empty.
+		assert.Len(t, paths, 0, "should be empty when all base paths are empty")
+	})
+
+	t.Run("paths are absolute", func(t *testing.T) {
+		atmosConfig := &schema.AtmosConfiguration{
+			BasePath: tempDir,
+			Components: schema.Components{
+				Terraform: schema.Terraform{
+					BasePath: "components/terraform",
+				},
+			},
+		}
+
+		paths := buildNormalizedBasePaths(atmosConfig)
+
+		require.Len(t, paths, 1)
+		assert.True(t, filepath.IsAbs(paths[0]), "returned paths should be absolute")
+	})
+
+	t.Run("no duplicates", func(t *testing.T) {
+		atmosConfig := &schema.AtmosConfiguration{
+			BasePath: tempDir,
+			Components: schema.Components{
+				Terraform: schema.Terraform{
+					BasePath: "components/terraform",
+				},
+				Helmfile: schema.Helmfile{
+					BasePath: "components/helmfile",
+				},
+			},
+			Stacks: schema.Stacks{
+				BasePath: "stacks",
+			},
+		}
+
+		paths := buildNormalizedBasePaths(atmosConfig)
+
+		// Check for duplicates.
+		seen := make(map[string]bool)
+		for _, path := range paths {
+			assert.False(t, seen[path], "path %s should not be duplicated", path)
+			seen[path] = true
+		}
+	})
+}
+
 func TestChangedFilesIndex_GetRelevantFiles(t *testing.T) {
 	tempDir := t.TempDir()
 
@@ -1165,11 +1436,10 @@ func TestProcessHelmfileComponentsIndexed(t *testing.T) {
 		)
 
 		require.NoError(t, err)
-		_ = affected // TODO: Investigate why file-only changes aren't detected when metadata/vars are identical.
-		// May be expected optimization behavior.
-		// assert.Len(t, affected, 1)
-		// assert.Equal(t, "app", affected[0].Component)
-		// assert.Equal(t, "component", affected[0].Affected)
+		// File changes SHOULD be detected independently of stack config changes.
+		assert.Len(t, affected, 1, "component file changed, should be detected")
+		assert.Equal(t, "app", affected[0].Component)
+		assert.Equal(t, "component", affected[0].Affected)
 	})
 
 	t.Run("vars changed", func(t *testing.T) {
@@ -1363,11 +1633,10 @@ func TestProcessPackerComponentsIndexed(t *testing.T) {
 		)
 
 		require.NoError(t, err)
-		_ = affected // TODO: Investigate why file-only changes aren't detected when metadata/vars/env are identical.
-		// May be expected optimization behavior.
-		// assert.Len(t, affected, 1)
-		// assert.Equal(t, "image", affected[0].Component)
-		// assert.Equal(t, "component", affected[0].Affected)
+		// File changes SHOULD be detected independently of stack config changes.
+		assert.Len(t, affected, 1, "component file changed, should be detected")
+		assert.Equal(t, "image", affected[0].Component)
+		assert.Equal(t, "component", affected[0].Affected)
 	})
 
 	t.Run("skip abstract component", func(t *testing.T) {
@@ -1509,10 +1778,6 @@ func TestIsComponentFolderChangedCoverage(t *testing.T) {
 		assert.True(t, changed)
 	})
 }
-
-// ==============================================================================
-// Edge Case Tests for Coverage > 80%
-// ==============================================================================
 
 func TestChangedFilesIndex_GetRelevantFiles_EdgeCases(t *testing.T) {
 	tempDir := t.TempDir()

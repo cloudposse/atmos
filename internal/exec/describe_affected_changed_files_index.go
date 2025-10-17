@@ -50,12 +50,29 @@ func newChangedFilesIndex(atmosConfig *schema.AtmosConfiguration, changedFiles [
 }
 
 // buildNormalizedBasePaths constructs absolute base paths for all component types.
+// Only includes non-empty component base paths to avoid indexing files under the root basePath.
 func buildNormalizedBasePaths(atmosConfig *schema.AtmosConfiguration) []string {
-	basePaths := []string{
-		filepath.Join(atmosConfig.BasePath, atmosConfig.Components.Terraform.BasePath),
-		filepath.Join(atmosConfig.BasePath, atmosConfig.Components.Helmfile.BasePath),
-		filepath.Join(atmosConfig.BasePath, atmosConfig.Components.Packer.BasePath),
-		filepath.Join(atmosConfig.BasePath, atmosConfig.Stacks.BasePath),
+	// Collect base paths, skipping empty ones to prevent root basePath collisions.
+	basePaths := make([]string, 0, 4)
+
+	// Add terraform base path if configured.
+	if atmosConfig.Components.Terraform.BasePath != "" {
+		basePaths = append(basePaths, filepath.Join(atmosConfig.BasePath, atmosConfig.Components.Terraform.BasePath))
+	}
+
+	// Add helmfile base path if configured.
+	if atmosConfig.Components.Helmfile.BasePath != "" {
+		basePaths = append(basePaths, filepath.Join(atmosConfig.BasePath, atmosConfig.Components.Helmfile.BasePath))
+	}
+
+	// Add packer base path if configured.
+	if atmosConfig.Components.Packer.BasePath != "" {
+		basePaths = append(basePaths, filepath.Join(atmosConfig.BasePath, atmosConfig.Components.Packer.BasePath))
+	}
+
+	// Add stacks base path if configured.
+	if atmosConfig.Stacks.BasePath != "" {
+		basePaths = append(basePaths, filepath.Join(atmosConfig.BasePath, atmosConfig.Stacks.BasePath))
 	}
 
 	normalizedBasePaths := make([]string, 0, len(basePaths))
