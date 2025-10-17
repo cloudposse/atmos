@@ -18,10 +18,6 @@ import (
 //
 // This test addresses DEV-3706: https://linear.app/cloudposse/issue/DEV-3706
 func TestAuthenticationIgnoresExternalAWSEnvVars(t *testing.T) {
-	if testing.Short() {
-		t.Skip("Skipping integration test that requires AWS SDK initialization")
-	}
-
 	// Set problematic AWS environment variables that should be ignored.
 	t.Setenv("AWS_PROFILE", "conflicting-profile")
 	t.Setenv("AWS_ACCESS_KEY_ID", "AKIAIOSFODNN7EXAMPLE")
@@ -147,54 +143,4 @@ func TestAuthManagerCreationWithConflictingEnvVars(t *testing.T) {
 	assert.Equal(t, "fake-profile", os.Getenv("AWS_PROFILE"))
 	assert.Equal(t, "AKIAEXAMPLE", os.Getenv("AWS_ACCESS_KEY_ID"))
 	assert.Equal(t, "secretEXAMPLE", os.Getenv("AWS_SECRET_ACCESS_KEY"))
-}
-
-// TestIdentityCreationIgnoresEnvVars documents that identity creation
-// should work even when conflicting AWS environment variables are present.
-// This is a documentation test that verifies the expected behavior without
-// requiring complex mocking of the factory pattern.
-func TestIdentityCreationIgnoresEnvVars(t *testing.T) {
-	// Set conflicting environment variables.
-	t.Setenv("AWS_PROFILE", "wrong-profile")
-	t.Setenv("AWS_ACCESS_KEY_ID", "WRONGKEY")
-
-	// This test documents the expected behavior:
-	// When identities are created through the factory pattern, they should succeed
-	// even when external AWS environment variables are set, because:
-	// 1. Identity creation doesn't load AWS SDK config
-	// 2. Authentication (which does load AWS SDK config) uses LoadIsolatedAWSConfig
-	// 3. LoadIsolatedAWSConfig clears these variables temporarily
-
-	t.Log("Identity creation should succeed despite conflicting AWS env vars")
-	t.Log("AWS SDK config loading only happens during authentication")
-	t.Log("Authentication uses LoadIsolatedAWSConfig which isolates environment")
-
-	// Verify environment variables are still present after identity would be created.
-	assert.Equal(t, "wrong-profile", os.Getenv("AWS_PROFILE"))
-	assert.Equal(t, "WRONGKEY", os.Getenv("AWS_ACCESS_KEY_ID"))
-}
-
-// TestAuthenticateWithIdentityFlagClearsEnvVars is a documentation test that
-// demonstrates the expected behavior when using --identity flag.
-func TestAuthenticateWithIdentityFlagClearsEnvVars(t *testing.T) {
-	// This test documents the expected behavior:
-	// When a user runs: atmos terraform plan mycomponent -s mystack --identity myidentity
-	// And they have these environment variables set:
-	//   AWS_PROFILE=wrong-profile
-	//   AWS_ACCESS_KEY_ID=WRONGKEY
-	//   AWS_SECRET_ACCESS_KEY=WRONGSECRET
-	//
-	// Atmos should:
-	// 1. Temporarily clear these variables during authentication
-	// 2. Authenticate using the specified identity
-	// 3. Set NEW environment variables based on the authenticated identity
-	// 4. Execute terraform with the correct credentials
-	//
-	// The user's original environment variables should not interfere with authentication.
-
-	t.Log("This test documents the expected behavior of environment variable isolation")
-	t.Log("See DEV-3706: https://linear.app/cloudposse/issue/DEV-3706")
-	t.Log("")
-	t.Log("When --identity is used, external AWS environment variables are temporarily")
-	t.Log("cleared during authentication to prevent conflicts with Atmos-managed credentials.")
 }

@@ -5,8 +5,11 @@ import (
 	"os"
 	"testing"
 
+	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	errUtils "github.com/cloudposse/atmos/errors"
 )
 
 func TestWithIsolatedAWSEnv_ClearsProblematicVariables(t *testing.T) {
@@ -135,10 +138,6 @@ func TestWithIsolatedAWSEnv_PartiallySetVariables(t *testing.T) {
 }
 
 func TestLoadIsolatedAWSConfig_ClearsEnvironment(t *testing.T) {
-	if testing.Short() {
-		t.Skip("Skipping test that requires AWS SDK initialization")
-	}
-
 	// Set conflicting environment variables.
 	t.Setenv("AWS_PROFILE", "nonexistent-profile")
 	t.Setenv("AWS_ACCESS_KEY_ID", "fake-key")
@@ -229,15 +228,19 @@ func TestWithIsolatedAWSEnv_NoLogWhenNoVariablesSet(t *testing.T) {
 }
 
 func TestLoadIsolatedAWSConfig_WrapsSentinelErrors(t *testing.T) {
-	// This test verifies that LoadIsolatedAWSConfig properly wraps errors
-	// with the ErrLoadAwsConfig sentinel error for error checking.
-	//
-	// Note: We can't easily trigger a real AWS SDK config error in unit tests
-	// without complex mocking, so this test documents the expected behavior.
-	// The actual error wrapping is tested by the integration of this function
-	// in the auth flow.
+	// Force an error by providing an invalid config option.
+	ctx := context.Background()
 
-	t.Log("LoadIsolatedAWSConfig wraps all AWS SDK errors with ErrLoadAwsConfig")
-	t.Log("Error wrapping uses sentinel error pattern for proper error checking")
-	t.Log("This enables error checking with errors.Is")
+	invalidOption := func(opts *config.LoadOptions) error {
+		return assert.AnError
+	}
+
+	_, err := LoadIsolatedAWSConfig(ctx, invalidOption)
+
+	// Verify error is wrapped with sentinel error.
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrLoadAwsConfig, "Error should be wrapped with ErrLoadAwsConfig sentinel")
+
+	// The original error message should be included (but not in the chain due to %v formatting).
+	assert.Contains(t, err.Error(), assert.AnError.Error(), "Error message should include original error")
 }
