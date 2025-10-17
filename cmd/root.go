@@ -62,6 +62,7 @@ var logFileHandle *os.File
 func processChdirFlag(cmd *cobra.Command) error {
 	chdir, _ := cmd.Flags().GetString("chdir")
 	// If flag is not set, check environment variable.
+	// Note: chdir is not supported in atmos.yaml since it must be processed before atmos.yaml is loaded.
 	if chdir == "" {
 		//nolint:forbidigo // Must use os.Getenv: chdir is processed before Viper configuration loads.
 		chdir = os.Getenv("ATMOS_CHDIR")
