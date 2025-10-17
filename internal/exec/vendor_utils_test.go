@@ -154,7 +154,7 @@ func TestReadAndProcessComponentVendorConfigFile_PackerIntegration(t *testing.T)
 	assert.Equal(t, "ComponentVendorConfig", config.Kind, "Config kind should be ComponentVendorConfig")
 	assert.Equal(t, "consul", config.Metadata.Name, "Component name should match")
 	assert.Contains(t, config.Spec.Source.Uri, "github.com/hashicorp", "Source URI should be from hashicorp")
-	assert.Contains(t, path, "components/packer/aws/consul", "Path should point to Packer component")
+	assert.Contains(t, filepath.ToSlash(path), "components/packer/aws/consul", "Path should point to Packer component")
 }
 
 func TestNormalizeVendorURI(t *testing.T) {

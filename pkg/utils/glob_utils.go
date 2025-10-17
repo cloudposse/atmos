@@ -66,14 +66,16 @@ func GetGlobMatches(pattern string) ([]string, error) {
 
 // PathMatch returns true if `name` matches the file name `pattern`.
 // PathMatch normalizes both pattern and name to use forward slashes for cross-platform
-// compatibility. This ensures patterns work consistently on Windows, Linux, and macOS.
+// compatibility, then uses doublestar.Match (not PathMatch) which expects Unix-style paths.
+// This ensures patterns work consistently on Windows, Linux, and macOS.
 //
 // Note: perf.Track() removed from this hot path to reduce overhead (called 2M+ times).
 // Results are cached to avoid redundant pattern matching during affected detection.
 func PathMatch(pattern, name string) (bool, error) {
 	// Normalize both pattern and name to forward slashes for cross-platform compatibility.
 	// Glob patterns universally use forward slashes, but Windows file paths use backslashes.
-	// Converting both to forward slashes ensures patterns match correctly on all platforms.
+	// Converting both to forward slashes and using doublestar.Match (which expects Unix-style
+	// paths) ensures patterns match correctly on all platforms.
 	normalizedPattern := filepath.ToSlash(pattern)
 	normalizedName := filepath.ToSlash(name)
 
@@ -88,7 +90,8 @@ func PathMatch(pattern, name string) (bool, error) {
 	}
 
 	// Cache miss - compute the result using normalized paths.
-	match, err := doublestar.PathMatch(normalizedPattern, normalizedName)
+	// Use doublestar.Match (not PathMatch) since we've already normalized to Unix-style paths.
+	match, err := doublestar.Match(normalizedPattern, normalizedName)
 	if err != nil {
 		// Don't cache errors - they might be transient.
 		return false, err
