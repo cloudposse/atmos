@@ -98,7 +98,9 @@ func performIdentityLogout(ctx context.Context, authManager auth.AuthManager, id
 		u.PrintfMessageToTUI("  • Keyring entry: %s\n", identityName)
 		if providerName != "" {
 			u.PrintfMessageToTUI("  • Keyring entry: %s (provider)\n", providerName)
-			u.PrintfMessageToTUI("  • Files: ~/.aws/atmos/%s/\n", providerName)
+			// Get actual configured path for this provider.
+			basePath := authManager.GetFilesDisplayPath(providerName)
+			u.PrintfMessageToTUI("  • Files: %s/%s/\n", basePath, providerName)
 		}
 		u.PrintfMessageToTUI("\n")
 		return nil
@@ -147,7 +149,9 @@ func performProviderLogout(ctx context.Context, authManager auth.AuthManager, pr
 		u.PrintfMessageToTUI("**Would remove:**\n")
 		u.PrintfMessageToTUI("  • All identities using provider %s\n", providerName)
 		u.PrintfMessageToTUI("  • Provider keyring entry\n")
-		u.PrintfMessageToTUI("  • Files: ~/.aws/atmos/%s/\n", providerName)
+		// Get actual configured path for this provider.
+		basePath := authManager.GetFilesDisplayPath(providerName)
+		u.PrintfMessageToTUI("  • Files: %s/%s/\n", basePath, providerName)
 		u.PrintfMessageToTUI("\n")
 		return nil
 	}
@@ -253,7 +257,16 @@ func performLogoutAll(ctx context.Context, authManager auth.AuthManager, dryRun 
 		u.PrintfMessageToTUI("**Would remove:**\n")
 		u.PrintfMessageToTUI("  • All identity keyring entries\n")
 		u.PrintfMessageToTUI("  • All provider keyring entries\n")
-		u.PrintfMessageToTUI("  • All files: ~/.aws/atmos/\n")
+
+		// Show file paths for each provider.
+		providers := authManager.GetProviders()
+		if len(providers) > 0 {
+			u.PrintfMessageToTUI("  • Files:\n")
+			for providerName := range providers {
+				basePath := authManager.GetFilesDisplayPath(providerName)
+				u.PrintfMessageToTUI("    - %s/%s/\n", basePath, providerName)
+			}
+		}
 		u.PrintfMessageToTUI("\n")
 		return nil
 	}
