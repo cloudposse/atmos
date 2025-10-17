@@ -103,6 +103,103 @@ func BenchmarkExample(b *testing.B) {
 }
 ```
 
+### 4. `os-chdir-in-test`
+
+**Prevents `os.Chdir` calls in test files (except in benchmarks).**
+
+In test files, `t.Chdir()` should be used instead of `os.Chdir` because it provides automatic cleanup and prevents directory pollution between tests.
+
+**Exceptions:**
+- `os.Chdir` IS allowed inside benchmark functions (since `b.Chdir()` doesn't exist)
+
+**Bad:**
+```go
+func TestExample(t *testing.T) {
+    originalDir, _ := os.Getwd()
+    os.Chdir("/tmp/test")  // ❌ Use t.Chdir instead
+    defer os.Chdir(originalDir)
+    // Test code...
+}
+```
+
+**Good:**
+```go
+func TestExample(t *testing.T) {
+    t.Chdir("/tmp/test")  // ✅ Automatically restored
+    // Test code...
+}
+
+func BenchmarkExample(b *testing.B) {
+    originalDir, _ := os.Getwd()
+    os.Chdir("/tmp/bench")  // ✅ Allowed in benchmarks (b.Chdir doesn't exist)
+    defer os.Chdir(originalDir)
+    // Benchmark code...
+}
+```
+
+### 5. `test-no-assertions`
+
+**Prevents test functions that contain only `t.Log()` calls with no assertions, or that unconditionally skip.**
+
+Tests without assertions or that always skip provide no coverage value and won't catch regressions. They are essentially documentation disguised as tests and should either be removed or have actual assertions added.
+
+**Bad - Documentation Only:**
+```go
+func TestDocumentationOnly(t *testing.T) {
+    // ❌ Only logging, no assertions
+    t.Log("This test documents the expected behavior")
+    t.Log("When a user does X, the system should do Y")
+    t.Logf("Some value: %s", "test")
+}
+```
+
+**Bad - Unconditional Skip:**
+```go
+func TestAlwaysSkips(t *testing.T) {
+    // ❌ Always skips, provides no coverage
+    t.Skipf("This test is not implemented")
+}
+
+func TestAlwaysSkipsWithTrue(t *testing.T) {
+    // ❌ if (true) is unconditional
+    if true {
+        t.Skipf("This also always skips")
+    }
+}
+```
+
+**Good:**
+```go
+func TestActualBehavior(t *testing.T) {
+    // ✅ Has assertions to verify behavior
+    t.Log("Testing the actual behavior")
+    result := DoSomething()
+    if result != expected {
+        t.Errorf("Expected %v, got %v", expected, result)
+    }
+}
+
+func TestWithError(t *testing.T) {
+    // ✅ Uses t.Error/t.Fatal for assertions
+    t.Log("Checking condition")
+    if condition {
+        t.Error("Expected condition to be false")
+    }
+}
+
+func TestConditionalSkip(t *testing.T) {
+    // ✅ Conditionally skips based on runtime condition
+    if runtime.GOOS == "windows" {
+        t.Skipf("Skipping: not supported on Windows")
+    }
+    // Test continues if not skipped
+    result := DoSomething()
+    if result != expected {
+        t.Error("Test failed")
+    }
+}
+```
+
 ## Usage
 
 ### Standalone Binary
@@ -207,6 +304,8 @@ linters:
           tsetenv-in-defer: true       # Enable/disable tsetenv-in-defer rule
           os-setenv-in-test: true      # Enable/disable os-setenv-in-test rule
           os-mkdirtemp-in-test: true   # Enable/disable os-mkdirtemp-in-test rule
+          os-chdir-in-test: true       # Enable/disable os-chdir-in-test rule
+          test-no-assertions: true     # Enable/disable test-no-assertions rule
 ```
 
 All rules are enabled by default.
@@ -287,7 +386,9 @@ type Rule interface {
 Each rule is implemented in its own file:
 - `rule_tsetenv_in_defer.go` - t.Setenv in defer/cleanup detection
 - `rule_os_setenv.go` - os.Setenv in test files detection
-- `rule_os_mkdirtemp.go` - os.MkdirTemp in test files detection.
+- `rule_os_mkdirtemp.go` - os.MkdirTemp in test files detection
+- `rule_os_chdir.go` - os.Chdir in test files detection
+- `rule_test_no_assertions.go` - Test functions with only logging detection.
 
 ### Dual-Mode Support
 
@@ -361,6 +462,8 @@ Add to Settings struct and plugin run method for golangci-lint mode.
 - `rule_tsetenv_in_defer.go` - t.Setenv in defer rule
 - `rule_os_setenv.go` - os.Setenv in test files rule
 - `rule_os_mkdirtemp.go` - os.MkdirTemp in test files rule
+- `rule_os_chdir.go` - os.Chdir in test files rule
+- `rule_test_no_assertions.go` - Test functions without assertions rule
 - `cmd/lintroller/main.go` - Standalone CLI entry point
 - `lintroller_test.go` - Test suite
 - `testdata/` - Test fixtures
