@@ -233,3 +233,19 @@ func (p *ssoProvider) pollForAccessToken(ctx context.Context, oidcClient *ssooid
 	}
 	return accessToken, tokenExpiresAt, nil
 }
+
+// Logout removes provider-specific credential storage.
+func (p *ssoProvider) Logout(ctx context.Context) error {
+	fileManager, err := awsCloud.NewAWSFileManager()
+	if err != nil {
+		return errors.Join(errUtils.ErrLogoutFailed, err)
+	}
+
+	if err := fileManager.Cleanup(p.name); err != nil {
+		log.Debug("Failed to cleanup AWS files for SSO provider", "provider", p.name, "error", err)
+		return errors.Join(errUtils.ErrLogoutFailed, err)
+	}
+
+	log.Debug("Cleaned up AWS files for SSO provider", "provider", p.name)
+	return nil
+}

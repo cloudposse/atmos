@@ -108,6 +108,9 @@ func (s stubSamlMgr) GetStackInfo() *schema.ConfigAndStacksInfo                 
 func (s stubSamlMgr) ListProviders() []string                                   { return nil }
 func (s stubSamlMgr) GetIdentities() map[string]schema.Identity                 { return s.idmap }
 func (s stubSamlMgr) GetProviders() map[string]schema.Provider                  { return nil }
+func (s stubSamlMgr) Logout(context.Context, string) error                      { return nil }
+func (s stubSamlMgr) LogoutProvider(context.Context, string) error              { return nil }
+func (s stubSamlMgr) LogoutAll(context.Context) error                           { return nil }
 
 func TestSAMLProvider_PreAuthenticate(t *testing.T) {
 	p, err := NewSAMLProvider("p", &schema.Provider{Kind: "aws/saml", URL: "https://idp.example.com/saml", Region: "us-east-1"})

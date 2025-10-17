@@ -352,3 +352,21 @@ func (i *userIdentity) PostAuthenticate(ctx context.Context, stackInfo *schema.C
 	}
 	return nil
 }
+
+// Logout removes identity-specific credential storage.
+func (i *userIdentity) Logout(ctx context.Context) error {
+	// AWS user identities use "aws-user" as their provider name.
+	// Clean up files under ~/.aws/atmos/aws-user/.
+	fileManager, err := awsCloud.NewAWSFileManager()
+	if err != nil {
+		return errors.Join(errUtils.ErrLogoutFailed, err)
+	}
+
+	if err := fileManager.Cleanup("aws-user"); err != nil {
+		log.Debug("Failed to cleanup AWS files for user identity", "identity", i.name, "error", err)
+		return errors.Join(errUtils.ErrLogoutFailed, err)
+	}
+
+	log.Debug("Cleaned up AWS files for user identity", "identity", i.name)
+	return nil
+}

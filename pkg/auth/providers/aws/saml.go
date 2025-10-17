@@ -3,6 +3,7 @@ package aws
 import (
 	"context"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"net/url"
 	"os"
@@ -367,4 +368,20 @@ func (p *samlProvider) setupBrowserAutomation() {
 	if strings.Contains(p.url, "accounts.google.com") {
 		log.Debug("Detected Google Apps SAML, using Browser provider")
 	}
+}
+
+// Logout removes provider-specific credential storage.
+func (p *samlProvider) Logout(ctx context.Context) error {
+	fileManager, err := awsCloud.NewAWSFileManager()
+	if err != nil {
+		return errors.Join(errUtils.ErrLogoutFailed, err)
+	}
+
+	if err := fileManager.Cleanup(p.name); err != nil {
+		log.Debug("Failed to cleanup AWS files for SAML provider", "provider", p.name, "error", err)
+		return errors.Join(errUtils.ErrLogoutFailed, err)
+	}
+
+	log.Debug("Cleaned up AWS files for SAML provider", "provider", p.name)
+	return nil
 }

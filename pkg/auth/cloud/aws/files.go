@@ -194,7 +194,25 @@ func (m *AWSFileManager) Cleanup(providerName string) error {
 	providerDir := filepath.Join(m.baseDir, providerName)
 
 	if err := os.RemoveAll(providerDir); err != nil {
+		// If directory doesn't exist, that's not an error (already cleaned up).
+		if os.IsNotExist(err) {
+			return nil
+		}
 		errUtils.CheckErrorAndPrint(ErrCleanupAWSFiles, providerDir, "failed to cleanup AWS files")
+		return ErrCleanupAWSFiles
+	}
+
+	return nil
+}
+
+// CleanupAll removes entire ~/.aws/atmos directory.
+func (m *AWSFileManager) CleanupAll() error {
+	if err := os.RemoveAll(m.baseDir); err != nil {
+		// If directory doesn't exist, that's not an error (already cleaned up).
+		if os.IsNotExist(err) {
+			return nil
+		}
+		errUtils.CheckErrorAndPrint(ErrCleanupAWSFiles, m.baseDir, "failed to cleanup all AWS files")
 		return ErrCleanupAWSFiles
 	}
 

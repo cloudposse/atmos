@@ -274,3 +274,12 @@ func sanitizeRoleSessionNameLengthAndTrim(name string) string {
 	}
 	return name
 }
+
+// Logout removes identity-specific credential storage.
+func (i *assumeRoleIdentity) Logout(ctx context.Context) error {
+	// AWS assume-role identities don't have identity-specific storage.
+	// File cleanup is handled by the provider's Logout method.
+	// Keyring cleanup is handled by AuthManager.
+	log.Debug("Logout called for assume-role identity (no identity-specific cleanup)", "identity", i.name)
+	return nil
+}

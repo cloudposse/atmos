@@ -200,3 +200,11 @@ func (p *oidcProvider) Environment() (map[string]string, error) {
 	// The OIDC token is passed to downstream identities via credentials.
 	return map[string]string{}, nil
 }
+
+// Logout removes provider-specific credential storage.
+func (p *oidcProvider) Logout(ctx context.Context) error {
+	// GitHub OIDC provider has no local files to clean up.
+	// Credentials are only stored in keyring (handled by AuthManager).
+	log.Debug("Logout called for GitHub OIDC provider (no files to clean up)", "provider", p.name)
+	return nil
+}

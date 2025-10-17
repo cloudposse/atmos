@@ -76,6 +76,7 @@ func (s stubUser) Environment() (map[string]string, error) { return map[string]s
 func (s stubUser) PostAuthenticate(_ context.Context, _ *schema.ConfigAndStacksInfo, _ string, _ string, _ types.ICredentials) error {
 	return nil
 }
+func (s stubUser) Logout(_ context.Context) error { return nil }
 
 func TestAuthenticateStandaloneAWSUser(t *testing.T) {
 	// Not found -> error.

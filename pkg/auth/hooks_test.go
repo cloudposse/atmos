@@ -47,6 +47,18 @@ func (s *stubAuthManager) GetProviders() map[string]schema.Provider {
 	return map[string]schema.Provider{}
 }
 
+func (s *stubAuthManager) Logout(ctx context.Context, identityName string) error {
+	return nil
+}
+
+func (s *stubAuthManager) LogoutProvider(ctx context.Context, providerName string) error {
+	return nil
+}
+
+func (s *stubAuthManager) LogoutAll(ctx context.Context) error {
+	return nil
+}
+
 func TestGetConfigLogLevels(t *testing.T) {
 	// Nil config falls back to Info.
 	atmos, auth := getConfigLogLevels(nil)

@@ -263,3 +263,12 @@ func (i *permissionSetIdentity) buildCredsFromRole(resp *sso.GetRoleCredentialsO
 		Expiration:      expiration,
 	}, nil
 }
+
+// Logout removes identity-specific credential storage.
+func (i *permissionSetIdentity) Logout(ctx context.Context) error {
+	// AWS permission-set identities don't have identity-specific storage.
+	// File cleanup is handled by the provider's Logout method.
+	// Keyring cleanup is handled by AuthManager.
+	log.Debug("Logout called for permission-set identity (no identity-specific cleanup)", "identity", i.name)
+	return nil
+}

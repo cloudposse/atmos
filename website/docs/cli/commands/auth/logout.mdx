@@ -1,0 +1,392 @@
+---
+title: atmos auth logout
+sidebar_label: logout
+sidebar_class_name: command
+id: logout
+description: Remove locally cached credentials and session data
+---
+
+import Screengrab from '@site/src/components/Screengrab'
+import Terminal from '@site/src/components/Terminal'
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Use this command to securely remove locally cached authentication credentials from the system keyring and credential files. This is useful when switching identities, ending work sessions, or troubleshooting authentication issues.
+</Intro>
+
+:::warning Local Credentials Only
+This command only removes **credentials stored on your local filesystem and system keychain**. It does **not** log you out of any web-based sessions with your identity provider (AWS SSO, Okta, etc.). Your browser sessions will remain active until you explicitly sign out from the identity provider's website.
+:::
+
+<Screengrab title="atmos auth logout --help" slug="atmos-auth-logout--help" />
+
+## Usage
+
+```shell
+atmos auth logout [identity] [options]
+```
+
+## Examples
+
+### Logout from Specific Identity
+
+```shell
+atmos auth logout dev-admin
+```
+
+This removes credentials for the `dev-admin` identity and all identities in its authentication chain.
+
+**Example output:**
+
+```
+Logging out from identity: dev-admin
+
+Building authentication chain...
+  ✓ Chain: aws-sso → dev-org-admin → dev-admin
+
+Removing credentials...
+  ✓ Keyring: aws-sso
+  ✓ Keyring: dev-org-admin
+  ✓ Keyring: dev-admin
+  ✓ Files: ~/.aws/atmos/aws-sso/
+
+Successfully logged out from 3 identities
+
+⚠️  Note: This only removes local credentials. Your browser session
+   may still be active. Visit your identity provider to end your
+   browser session.
+```
+
+### Logout from Specific Provider
+
+```shell
+atmos auth logout --provider aws-sso
+```
+
+This removes all credentials associated with the `aws-sso` provider, including all identities that authenticate through it.
+
+**Example output:**
+
+```
+Logging out from provider: aws-sso
+
+Removing all credentials for provider...
+  ✓ Keyring: aws-sso
+  ✓ Keyring: dev-org-admin (via aws-sso)
+  ✓ Keyring: dev-admin (via aws-sso)
+  ✓ Keyring: prod-admin (via aws-sso)
+  ✓ Files: ~/.aws/atmos/aws-sso/
+
+Successfully logged out from 4 identities
+```
+
+### Interactive Mode
+
+```shell
+atmos auth logout
+```
+
+When run without arguments, presents an interactive menu to choose what to logout from:
+
+```
+? Choose what to logout from:
+  ❯ Identity: dev-admin
+    Identity: prod-admin
+    Identity: dev-readonly
+    Provider: aws-sso (removes all identities)
+    All identities (complete logout)
+```
+
+### Dry Run Mode
+
+```shell
+atmos auth logout dev-admin --dry-run
+```
+
+Preview what would be removed without actually deleting anything:
+
+```
+Dry run mode: No credentials will be removed
+
+Would remove from identity: dev-admin
+  • Keyring: aws-sso
+  • Keyring: dev-org-admin
+  • Keyring: dev-admin
+  • Files: ~/.aws/atmos/aws-sso/credentials
+  • Files: ~/.aws/atmos/aws-sso/config
+
+3 identities would be logged out
+```
+
+## Arguments
+
+<dl>
+  <dt>`identity`</dt>
+  <dd>Name of the identity to logout from. Must match an identity defined in `atmos.yaml`. If omitted, enters interactive mode.</dd>
+</dl>
+
+## Flags
+
+<dl>
+  <dt>`--provider`</dt>
+  <dd>Logout from a specific provider instead of an identity. Removes all identities that authenticate through this provider.</dd>
+
+  <dt>`--dry-run`</dt>
+  <dd>Preview what would be removed without actually deleting credentials. Useful for understanding the scope of logout.</dd>
+</dl>
+
+## How It Works
+
+### Authentication Chain Resolution
+
+Atmos builds the complete authentication chain for the specified identity and removes credentials at each step:
+
+```
+Provider → Identity 1 → Identity 2 → Target Identity
+   ↓           ↓            ↓              ↓
+ Removed    Removed      Removed        Removed
+```
+
+**Example:** For identity `dev-admin` with chain `aws-sso → dev-org-admin → dev-admin`:
+
+1. Removes keyring entry for `aws-sso` (provider credentials)
+2. Removes keyring entry for `dev-org-admin` (intermediate identity)
+3. Removes keyring entry for `dev-admin` (target identity)
+4. Removes AWS credential files in `~/.aws/atmos/aws-sso/`
+
+### Credential Storage Locations
+
+Atmos stores credentials in two locations:
+
+#### 1. System Keyring
+
+Credentials are securely stored in your operating system's keyring:
+
+- **macOS**: Keychain Access
+- **Linux**: Secret Service API (GNOME Keyring, KWallet)
+- **Windows**: Windows Credential Manager
+
+**Keyring entries** use the identity or provider name as the key with user `atmos-auth`.
+
+#### 2. Provider-Specific Files
+
+Some providers (like AWS) also write credential files for compatibility with other tools:
+
+- **AWS credentials**: `~/.aws/atmos/<provider>/credentials`
+- **AWS config**: `~/.aws/atmos/<provider>/config`
+
+The logout command removes both keyring entries and file storage.
+
+### Error Handling
+
+The logout command uses **best-effort cleanup**: it continues even if individual steps fail and reports all errors at the end.
+
+**Example with missing credentials:**
+
+```shell
+$ atmos auth logout dev-admin
+
+Logging out from identity: dev-admin
+
+Building authentication chain...
+  ✓ Chain: aws-sso → dev-admin
+
+Removing credentials...
+  ✓ Keyring: aws-sso
+  ✗ Keyring: dev-admin (not found - already logged out)
+  ✓ Files: ~/.aws/atmos/aws-sso/
+
+Logged out with warnings (2/3 successful)
+
+Errors encountered:
+  • dev-admin: credential not found in keyring
+```
+
+The command succeeds (exit code 0) as long as at least one credential was removed.
+
+## Security Considerations
+
+### Browser Sessions Remain Active
+
+:::danger Web Sessions Not Affected
+**Important**: The `atmos auth logout` command only removes **locally cached credentials from your filesystem and keychain**.
+
+**Your browser session with the identity provider (AWS SSO, Okta, etc.) remains active and logged in.** Anyone with access to your browser can still access authenticated resources through your active web session.
+:::
+
+To completely end your session and fully logout:
+
+1. Run `atmos auth logout` to remove local credentials
+2. Visit your identity provider's website (e.g., `https://mycompany.awsapps.com/start`)
+3. **Explicitly sign out** from the browser session
+4. Close all browser windows
+
+**Why this matters**: If you only run `atmos auth logout` without signing out of your browser, someone using your computer could potentially access your authenticated session through the browser.
+
+### What Gets Removed
+
+Logout removes:
+
+- ✅ Credentials stored in system keyring
+- ✅ AWS credential files (`~/.aws/atmos/<provider>/credentials`)
+- ✅ AWS config files (`~/.aws/atmos/<provider>/config`)
+- ✅ Empty provider directories
+
+Logout does NOT remove:
+
+- ❌ Browser session cookies
+- ❌ Identity provider sessions
+- ❌ Credentials stored outside Atmos (e.g., `~/.aws/credentials`)
+- ❌ Configuration files (e.g., `atmos.yaml`)
+
+### Audit Trail
+
+All logout operations are logged for security auditing:
+
+```
+2025-10-17T10:15:30Z DEBUG Starting logout identity=dev-admin
+2025-10-17T10:15:30Z DEBUG Authentication chain built chain=[aws-sso dev-org-admin dev-admin]
+2025-10-17T10:15:30Z DEBUG Removing keyring entry alias=aws-sso
+2025-10-17T10:15:30Z DEBUG Removing keyring entry alias=dev-org-admin
+2025-10-17T10:15:30Z DEBUG Removing keyring entry alias=dev-admin
+2025-10-17T10:15:30Z INFO Logout completed identity=dev-admin removed=3
+```
+
+Enable debug logging with `ATMOS_LOGS_LEVEL=Debug` to see detailed audit information.
+
+## Troubleshooting
+
+### Identity Not Found
+
+```
+Error: identity "myidentity" not found in configuration
+
+Available identities:
+  • dev-admin
+  • prod-admin
+  • dev-readonly
+
+Run 'atmos auth logout' without arguments for interactive selection.
+```
+
+**Solution**: Check your `atmos.yaml` configuration and ensure the identity name is spelled correctly.
+
+### Already Logged Out
+
+```
+Identity 'dev-admin' is already logged out.
+No credentials found in keyring or file storage.
+```
+
+This is informational, not an error. The identity has no cached credentials to remove.
+
+### Permission Denied
+
+```
+Error: failed to delete credentials from keyring: access denied
+```
+
+**Solution**: The system keyring requires authentication. On macOS, you may need to grant Atmos permission in **System Preferences → Security & Privacy → Privacy → Accessibility**.
+
+### Files Not Removed
+
+```
+✗ Files: ~/.aws/atmos/aws-sso/ (permission denied)
+```
+
+**Solution**: Ensure you have write permissions to the `~/.aws/atmos/` directory. Check file ownership and permissions:
+
+```shell
+ls -la ~/.aws/atmos/
+```
+
+## Related Commands
+
+- [`atmos auth login`](/cli/commands/auth/login) - Authenticate with an identity
+- [`atmos auth whoami`](/cli/commands/auth/whoami) - Show current authentication status
+- [`atmos auth validate`](/cli/commands/auth/validate) - Validate authentication configuration
+- [`atmos auth env`](/cli/commands/auth/env) - Export authentication environment variables
+
+## Configuration
+
+Logout works with identities and providers defined in your `atmos.yaml`:
+
+```yaml
+auth:
+  providers:
+    aws-sso:
+      kind: aws/iam-identity-center
+      region: us-east-1
+      start_url: https://mycompany.awsapps.com/start
+
+  identities:
+    dev-admin:
+      kind: aws/permission-set
+      via:
+        provider: aws-sso
+      principal:
+        name: AdminAccess
+        account:
+          name: "dev-account"
+
+    prod-admin:
+      kind: aws/permission-set
+      via:
+        provider: aws-sso
+      principal:
+        name: AdminAccess
+        account:
+          name: "prod-account"
+```
+
+Running `atmos auth logout dev-admin` removes credentials for `dev-admin` and its authentication chain.
+
+## Best Practices
+
+### 1. Logout When Switching Contexts
+
+When switching between different identities or environments, logout first to ensure clean state:
+
+```shell
+atmos auth logout dev-admin
+atmos auth login prod-admin
+```
+
+### 2. Logout at End of Work Session
+
+Remove credentials when ending your work session for security:
+
+```shell
+atmos auth logout --provider aws-sso
+```
+
+### 3. Use Dry Run for Verification
+
+Preview what will be removed before executing:
+
+```shell
+atmos auth logout dev-admin --dry-run
+atmos auth logout dev-admin  # Proceed after verification
+```
+
+### 4. End Browser Sessions
+
+Always sign out of browser sessions after local logout:
+
+```shell
+atmos auth logout
+# Then visit your identity provider and sign out
+```
+
+### 5. Regular Credential Cleanup
+
+Periodically clean up unused credentials:
+
+```shell
+atmos auth logout  # Interactive mode to review and remove
+```
+
+## See Also
+
+- [Atmos Authentication Overview](/cli/commands/auth/usage)
+- [AWS IAM Identity Center Configuration](https://docs.aws.amazon.com/singlesignon/latest/userguide/what-is.html)
