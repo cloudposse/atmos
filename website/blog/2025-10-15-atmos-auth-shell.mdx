@@ -97,10 +97,11 @@ Under the hood, `atmos auth shell`:
 
 1. **Authenticates** with your configured identity provider
 2. **Retrieves** temporary credentials from your cloud provider
-3. **Exports** credentials as environment variables (e.g., `AWS_ACCESS_KEY_ID`, `AZURE_TENANT_ID`, etc.)
-4. **Sets** `ATMOS_IDENTITY` to track which identity is active
-5. **Launches** your preferred shell with all environment variables configured
-6. **Propagates** the shell's exit code back to Atmos when you exit
+3. **Writes** credentials to Atmos-managed configuration files
+4. **Sets** environment variables pointing to these config files (e.g., `AWS_SHARED_CREDENTIALS_FILE`, `AWS_CONFIG_FILE`, `AWS_PROFILE`)
+5. **Sets** `ATMOS_IDENTITY` to track which identity is active
+6. **Launches** your preferred shell with all environment variables configured
+7. **Propagates** the shell's exit code back to Atmos when you exit
 
 ## Environment Variables
 
@@ -108,7 +109,12 @@ When you're in an `atmos auth shell` session, you'll have access to:
 
 - **`ATMOS_IDENTITY`**: The name of the active identity
 - **`ATMOS_SHLVL`**: Shell nesting level (increments for nested shells)
-- **Cloud provider credentials**: Platform-specific variables like `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_SESSION_TOKEN`, etc.
+- **AWS configuration paths** (for AWS identities):
+  - `AWS_SHARED_CREDENTIALS_FILE`: Path to Atmos-managed credentials file
+  - `AWS_CONFIG_FILE`: Path to Atmos-managed config file
+  - `AWS_PROFILE`: Profile name corresponding to your identity
+
+These environment variables work seamlessly with any tool that uses the AWS SDK, such as Terraform, the AWS CLI, kubectl with AWS authentication, and more. Credentials are never exposed directly in environment variables—only secure file paths are set.
 
 ## Getting Started
 
