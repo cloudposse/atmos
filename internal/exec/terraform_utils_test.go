@@ -202,10 +202,6 @@ func TestWalkTerraformComponents(t *testing.T) {
 
 // TestProcessTerraformComponent exercises the filtering logic of processTerraformComponent.
 func TestProcessTerraformComponent(t *testing.T) {
-	// gomonkey causes SIGBUS crashes on ARM64 macOS due to memory protection.
-	// Skip this test entirely on darwin/arm64.
-	tests.SkipOnDarwinARM64(t, "gomonkey causes fatal SIGBUS errors on ARM64 macOS")
-
 	atmosConfig := schema.AtmosConfiguration{}
 	logFunc := func(msg interface{}, keyvals ...interface{}) {}
 	stack := "s1"
