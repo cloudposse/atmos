@@ -65,20 +65,20 @@ func GetGlobMatches(pattern string) ([]string, error) {
 }
 
 // PathMatch returns true if `name` matches the file name `pattern`.
-// PathMatch will automatically
-// use your system's path separator to split `name` and `pattern`. On systems
-// where the path separator is `'\'`, escaping will be disabled.
-//
-// Note: this is meant as a drop-in replacement for filepath.Match(). It
-// assumes that both `pattern` and `name` are using the system's path
-// separator. If you can't be sure of that, use filepath.ToSlash() on both
-// `pattern` and `name`, and then use the Match() function instead.
+// PathMatch normalizes both pattern and name to use forward slashes for cross-platform
+// compatibility. This ensures patterns work consistently on Windows, Linux, and macOS.
 //
 // Note: perf.Track() removed from this hot path to reduce overhead (called 2M+ times).
 // Results are cached to avoid redundant pattern matching during affected detection.
 func PathMatch(pattern, name string) (bool, error) {
-	// Try cache first (read lock).
-	cacheKey := pathMatchKey{pattern: pattern, name: name}
+	// Normalize both pattern and name to forward slashes for cross-platform compatibility.
+	// Glob patterns universally use forward slashes, but Windows file paths use backslashes.
+	// Converting both to forward slashes ensures patterns match correctly on all platforms.
+	normalizedPattern := filepath.ToSlash(pattern)
+	normalizedName := filepath.ToSlash(name)
+
+	// Try cache first (read lock) - use normalized values for cache key.
+	cacheKey := pathMatchKey{pattern: normalizedPattern, name: normalizedName}
 	pathMatchCacheMu.RLock()
 	result, found := pathMatchCache[cacheKey]
 	pathMatchCacheMu.RUnlock()
@@ -87,8 +87,8 @@ func PathMatch(pattern, name string) (bool, error) {
 		return result, nil
 	}
 
-	// Cache miss - compute the result.
-	match, err := doublestar.PathMatch(pattern, name)
+	// Cache miss - compute the result using normalized paths.
+	match, err := doublestar.PathMatch(normalizedPattern, normalizedName)
 	if err != nil {
 		// Don't cache errors - they might be transient.
 		return false, err

@@ -1,4 +1,4 @@
-//nolint:gocritic // Test file uses filepath.Join with path separators for cross-platform compatibility
+//nolint:gocritic // Test file uses filepath.Join with path separators for cross-platform compatibility.
 package exec
 
 import (
@@ -14,10 +14,6 @@ import (
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
-
-// ==============================================================================
-// P9.2: Pattern Cache Tests
-// ==============================================================================
 
 func TestComponentPathPatternCache_GetComponentPathPattern(t *testing.T) {
 	tempDir := t.TempDir()
@@ -142,10 +138,6 @@ func TestComponentPathPatternCache_Clear(t *testing.T) {
 	assert.Equal(t, 0, len(cache.modulePatterns))
 	cache.mu.RUnlock()
 }
-
-// ==============================================================================
-// P9.5: Custom Deep Comparison Tests
-// ==============================================================================
 
 func TestDeepEqualMaps(t *testing.T) {
 	t.Run("equal empty maps", func(t *testing.T) {
@@ -470,10 +462,6 @@ func TestIsEqual_CustomComparison(t *testing.T) {
 	})
 }
 
-// ==============================================================================
-// P9.7: Terraform Module Pattern Caching Tests
-// ==============================================================================
-
 func TestComponentPathPatternCache_GetTerraformModulePatterns(t *testing.T) {
 	tempDir := t.TempDir()
 
@@ -579,10 +567,6 @@ func TestComponentPathPatternCache_ModulePatternsThreadSafety(t *testing.T) {
 
 	wg.Wait()
 }
-
-// ==============================================================================
-// P9.4: Changed Files Index Tests
-// ==============================================================================
 
 // TestChangedFilesIndex_EmptyBasePaths is a regression test for the bug where empty component
 // base paths would cause files to be incorrectly indexed under the root basePath.
@@ -1153,10 +1137,6 @@ module "subnets" {
 		assert.False(t, changed)
 	})
 }
-
-// ==============================================================================
-// Additional Integration Tests for Coverage
-// ==============================================================================
 
 func TestIsComponentDependentFolderOrFileChangedIndexed(t *testing.T) {
 	tempDir := t.TempDir()
@@ -1779,10 +1759,6 @@ func TestIsComponentFolderChangedCoverage(t *testing.T) {
 		assert.True(t, changed)
 	})
 }
-
-// ==============================================================================
-// Tests for areTerraformComponentModulesChanged (Non-Optimized Version)
-// ==============================================================================
 
 func TestAreTerraformComponentModulesChanged(t *testing.T) {
 	tempDir := t.TempDir()
