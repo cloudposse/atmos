@@ -1,7 +1,9 @@
 package list
 
 import (
+	"strings"
 	"testing"
+	"time"
 
 	tree "github.com/charmbracelet/lipgloss/tree"
 	"github.com/stretchr/testify/assert"
@@ -634,4 +636,43 @@ func TestRenderMermaid_Syntax(t *testing.T) {
 	}
 	// Print output for manual verification.
 	t.Logf("Generated Mermaid:\n%s", output)
+}
+
+// TestBuildIdentityNodeForProvider_IdentityCycle tests that identity cycles are detected.
+func TestBuildIdentityNodeForProvider_IdentityCycle(t *testing.T) {
+	// Create a circular identity chain: admin → dev → admin.
+	identities := map[string]schema.Identity{
+		"admin": {
+			Via: &schema.IdentityVia{
+				Identity: "dev",
+			},
+		},
+		"dev": {
+			Via: &schema.IdentityVia{
+				Identity: "admin",
+			},
+		},
+	}
+
+	// This should complete within 1 second, not hang forever.
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		adminIdentity := identities["admin"]
+		visited := make(map[string]struct{})
+		node := buildIdentityNodeForProvider(&adminIdentity, "admin", identities, visited)
+		output := node.String()
+
+		// Should contain cycle detection message.
+		if !strings.Contains(output, "cycle") {
+			t.Errorf("Expected cycle detection message in output, got: %s", output)
+		}
+	}()
+
+	select {
+	case <-done:
+		// Test completed successfully.
+	case <-time.After(1 * time.Second):
+		t.Fatal("buildIdentityNodeForProvider hung on identity cycle (infinite recursion)")
+	}
 }
