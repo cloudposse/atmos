@@ -96,6 +96,7 @@ var (
 	ErrMergeEmbeddedConfig         = errors.New("failed to merge embedded config")
 	ErrExpectedDirOrPattern        = errors.New("--config-path expected directory found file")
 	ErrFileNotFound                = errors.New("file not found")
+	ErrFileAccessDenied            = errors.New("file access denied")
 	ErrExpectedFile                = errors.New("--config expected file found directory")
 	ErrAtmosArgConfigNotFound      = errors.New("atmos configuration not found")
 	ErrEmptyConfigPath             = errors.New("config path cannot be empty")

@@ -284,7 +284,7 @@ var (
       tests := []struct{...}{...}
       for _, tt := range tests {
           t.Run(tt.name, func(t *testing.T) {
-              t := cmd.NewTestKit(t) // Each subtest gets its own cleanup
+              _ = cmd.NewTestKit(t) // Each subtest gets its own cleanup
 
               // Test code...
           })

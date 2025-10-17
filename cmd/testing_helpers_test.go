@@ -75,8 +75,8 @@ func restoreStringSliceFlag(f *pflag.Flag, snap flagSnapshot) {
 
 // restoreRootCmdState restores RootCmd to a previously captured state.
 func restoreRootCmdState(snapshot *cmdStateSnapshot) {
-	// Clear command args.
-	RootCmd.SetArgs([]string{})
+	// Restore command args.
+	RootCmd.SetArgs(snapshot.args)
 
 	// Restore all flags to their snapshotted values.
 	restoreFlags := func(flagSet *pflag.FlagSet) {

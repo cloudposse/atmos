@@ -143,7 +143,7 @@ func validatedIsFiles(files []string) error {
 				return fmt.Errorf("%w: --config file '%s' does not exist", errUtils.ErrFileNotFound, filePath)
 			}
 			// Other stat errors (permission denied, etc.)
-			return fmt.Errorf("%w: cannot access --config file '%s': %v", errUtils.ErrFileNotFound, filePath, err)
+			return fmt.Errorf("%w: cannot access --config file '%s': %v", errUtils.ErrFileAccessDenied, filePath, err)
 		}
 		if stat.IsDir() {
 			log.Debug("--config expected file found directory", "path", filePath)
