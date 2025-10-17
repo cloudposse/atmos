@@ -296,9 +296,9 @@ func (p *ssoProvider) pollForAccessTokenWithSpinner(ctx context.Context, oidcCli
 	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("#00FFFF")) // Cyan
 
 	model := spinnerModel{
-		spinner:   s,
-		message:   "Waiting for authentication",
-		done:      false,
+		spinner:    s,
+		message:    "Waiting for authentication",
+		done:       false,
 		resultChan: resultChan,
 	}
 

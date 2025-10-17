@@ -207,12 +207,12 @@ func TestSSOProvider_promptDeviceAuth_NonCI_OpensURL(t *testing.T) {
 
 func TestSSOProvider_promptDeviceAuth_DisplaysVerificationCode(t *testing.T) {
 	tests := []struct {
-		name               string
-		userCode           string
-		verificationURI    string
+		name                    string
+		userCode                string
+		verificationURI         string
 		verificationURIComplete string
-		isCI               bool
-		expectedInOutput   []string
+		isCI                    bool
+		expectedInOutput        []string
 	}{
 		{
 			name:                    "displays verification code with complete URI in non-CI",
@@ -227,10 +227,10 @@ func TestSSOProvider_promptDeviceAuth_DisplaysVerificationCode(t *testing.T) {
 			},
 		},
 		{
-			name:               "displays verification code with base URI in non-CI",
-			userCode:           "ABCD-5678",
-			verificationURI:    "https://device.sso.us-east-1.amazonaws.com/",
-			isCI:               false,
+			name:            "displays verification code with base URI in non-CI",
+			userCode:        "ABCD-5678",
+			verificationURI: "https://device.sso.us-east-1.amazonaws.com/",
+			isCI:            false,
 			expectedInOutput: []string{
 				"AWS SSO Authentication Required",
 				"Verification Code: **ABCD-5678**",
@@ -251,9 +251,9 @@ func TestSSOProvider_promptDeviceAuth_DisplaysVerificationCode(t *testing.T) {
 			},
 		},
 		{
-			name:             "handles nil user code gracefully",
-			userCode:         "",
-			isCI:             true,
+			name:     "handles nil user code gracefully",
+			userCode: "",
+			isCI:     true,
 			expectedInOutput: []string{
 				"AWS SSO Authentication Required",
 				"Verification Code: ****",
