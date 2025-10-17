@@ -166,19 +166,22 @@ func copyNonStringKeyMap(rv reflect.Value, iter *reflect.MapIter) any {
 
 // copyMapValue deep copies a map value, handling both interface and typed elements.
 func copyMapValue(value reflect.Value, elemType reflect.Type) reflect.Value {
-	if elemType.Kind() == reflect.Interface {
-		// Safe to store any deep-copied shape.
-		return reflect.ValueOf(deepCopyValue(value.Interface()))
-	}
-
-	// Full typed deep copy to avoid aliasing for non-interface element types.
+	// Prefer a typed deep copy. If not assignable to Elem(), fall back to original typed value
+	// (handles non-empty interface element types safely).
 	val := deepCopyTypedValue(value)
-	// Check assignability to prevent panics with incompatible types.
-	if !val.Type().AssignableTo(elemType) {
-		// Fallback to interface{} conversion for incompatible types.
+	if val.Type().AssignableTo(elemType) {
+		return val
+	}
+	// If original is assignable, keep it to avoid SetMapIndex panic.
+	if value.Type().AssignableTo(elemType) {
+		return value
+	}
+	// As a last resort, if Elem() is empty interface, any deep-copied shape is fine.
+	if elemType.Kind() == reflect.Interface && elemType.NumMethod() == 0 {
 		return reflect.ValueOf(deepCopyValue(value.Interface()))
 	}
-	return val
+	// Otherwise, retain the original typed value.
+	return value
 }
 
 // normalizeMapReflect converts a typed map to map[string]any (for string keys) or deep copies it (for non-string keys).
@@ -339,7 +342,7 @@ func MergeWithOptions(
 		// Deep copy preserves types and is sufficient because the data is already in Go map format with custom tags already processed.
 		dataCurrent, err := DeepCopyMap(current)
 		if err != nil {
-			return nil, fmt.Errorf("%w: failed to deep copy map: %v", errUtils.ErrMerge, err)
+			return nil, fmt.Errorf("%w: failed to deep copy map: %w", errUtils.ErrMerge, err)
 		}
 
 		var opts []func(*mergo.Config)
@@ -358,7 +361,7 @@ func MergeWithOptions(
 
 		if err := mergo.Merge(&merged, dataCurrent, opts...); err != nil {
 			// Return the error without debug logging.
-			return nil, fmt.Errorf("%w: mergo merge failed: %v", errUtils.ErrMerge, err)
+			return nil, fmt.Errorf("%w: mergo merge failed: %w", errUtils.ErrMerge, err)
 		}
 	}
 
