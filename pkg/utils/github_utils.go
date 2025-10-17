@@ -66,6 +66,8 @@ const (
 	githubAPIMaxPerPage = 100
 	// GithubAPIStatus422 is the HTTP status code returned when pagination exceeds limits.
 	githubAPIStatus422 = 422
+	// GithubAPIMinRateLimitThreshold is the minimum number of remaining requests before warning.
+	githubAPIMinRateLimitThreshold = 5
 	// Logging field name constants.
 	logFieldOwner = "owner"
 	logFieldRepo  = "repo"
@@ -95,6 +97,30 @@ func GetGitHubRepoReleases(opts GitHubReleasesOptions) ([]*github.RepositoryRele
 
 	ctx := context.Background()
 	client := newGitHubClient(ctx)
+
+	// Check rate limits before making requests.
+	rateLimits, _, err := client.RateLimit.Get(ctx)
+	if err == nil && rateLimits != nil && rateLimits.Core != nil {
+		remaining := rateLimits.Core.Remaining
+		limit := rateLimits.Core.Limit
+
+		log.Debug("GitHub API rate limits",
+			"remaining", remaining,
+			"limit", limit,
+			"resetAt", rateLimits.Core.Reset.Time,
+		)
+
+		if remaining < githubAPIMinRateLimitThreshold {
+			resetTime := rateLimits.Core.Reset.Time
+			waitDuration := time.Until(resetTime)
+			return nil, fmt.Errorf("%w: only %d requests remaining, resets at %s (in %s). Consider setting ATMOS_GITHUB_TOKEN or GITHUB_TOKEN for higher limits",
+				errUtils.ErrGitHubRateLimitExceeded,
+				remaining,
+				resetTime.Format(time.RFC3339),
+				waitDuration.Round(time.Second),
+			)
+		}
+	}
 
 	// Fetch releases from GitHub API with pagination.
 	allReleases, err := fetchAllReleases(ctx, client, opts)

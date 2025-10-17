@@ -45,6 +45,7 @@ var (
 	ErrGitHubRateLimitExceeded               = errors.New("GitHub API rate limit exceeded")
 	ErrInvalidLimit                          = errors.New("limit must be between 1 and 100")
 	ErrUnsupportedOutputFormat               = errors.New("unsupported output format")
+	ErrTerminalTooNarrow                     = errors.New("terminal too narrow")
 
 	// ErrPlanHasDiff is returned when there are differences between two Terraform plan files.
 	ErrPlanHasDiff = errors.New("plan files have differences")

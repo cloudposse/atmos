@@ -630,11 +630,8 @@ func init() {
 
 	// Bind environment variables for GitHub authentication.
 	// ATMOS_GITHUB_TOKEN takes precedence over GITHUB_TOKEN.
-	if err := viper.BindEnv("ATMOS_GITHUB_TOKEN"); err != nil {
+	if err := viper.BindEnv("ATMOS_GITHUB_TOKEN", "GITHUB_TOKEN"); err != nil {
 		log.Error("Failed to bind ATMOS_GITHUB_TOKEN environment variable", "error", err)
-	}
-	if err := viper.BindEnv("GITHUB_TOKEN"); err != nil {
-		log.Error("Failed to bind GITHUB_TOKEN environment variable", "error", err)
 	}
 
 	// Set custom usage template.
