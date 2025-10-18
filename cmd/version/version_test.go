@@ -34,3 +34,15 @@ func TestVersionCommand_BasicProperties(t *testing.T) {
 	assert.Equal(t, "atmos version", cmd.Example)
 	assert.NotNil(t, cmd.RunE)
 }
+
+func TestSetAtmosConfig(t *testing.T) {
+	// Test that SetAtmosConfig accepts a nil pointer without panic.
+	SetAtmosConfig(nil)
+
+	// SetAtmosConfig should complete without error.
+	// Note: We can't easily test the side effect without refactoring,
+	// but we verify it doesn't panic.
+	assert.NotPanics(t, func() {
+		SetAtmosConfig(nil)
+	})
+}
