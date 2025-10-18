@@ -281,11 +281,13 @@ func (p *ssoProvider) pollForAccessTokenWithSpinner(ctx context.Context, oidcCli
 		return p.pollForAccessToken(ctx, oidcClient, registerResp, authResp)
 	}
 
-	// Create a channel to receive the result.
+	// Derive a cancellable context and a channel to receive the result.
+	ctx, cancel := context.WithCancel(ctx)
 	resultChan := make(chan pollResult, 1)
 
 	// Start polling in a goroutine.
 	go func() {
+		defer close(resultChan)
 		token, expiresAt, err := p.pollForAccessToken(ctx, oidcClient, registerResp, authResp)
 		resultChan <- pollResult{token, expiresAt, err}
 	}()
@@ -300,13 +302,15 @@ func (p *ssoProvider) pollForAccessTokenWithSpinner(ctx context.Context, oidcCli
 		message:    "Waiting for authentication",
 		done:       false,
 		resultChan: resultChan,
+		cancel:     cancel,
 	}
 
 	// Run the spinner until authentication completes.
 	prog := tea.NewProgram(model, tea.WithOutput(os.Stderr))
 	finalModel, err := prog.Run()
 	if err != nil {
-		// If spinner fails, fall back to the result from polling.
+		// Cancel poll on UI failure, then read best-effort result (if any).
+		cancel()
 		res := <-resultChan
 		return res.token, res.expiresAt, res.err
 	}
@@ -332,6 +336,7 @@ type spinnerModel struct {
 	message    string
 	done       bool
 	resultChan chan pollResult
+	cancel     context.CancelFunc
 	token      string
 	expiresAt  time.Time
 	err        error
@@ -347,6 +352,9 @@ func (m spinnerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.String() == "ctrl+c" {
 			m.done = true
 			m.err = fmt.Errorf("%w: authentication cancelled", errUtils.ErrAuthenticationFailed)
+			if m.cancel != nil {
+				m.cancel()
+			}
 			return m, tea.Quit
 		}
 	case spinner.TickMsg:
@@ -358,6 +366,9 @@ func (m spinnerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.token = msg.token
 		m.expiresAt = msg.expiresAt
 		m.err = msg.err
+		if m.cancel != nil {
+			m.cancel()
+		}
 		return m, tea.Quit
 	}
 	return m, nil
