@@ -12,13 +12,26 @@ This guide explains how to configure [Geodesic](https://github.com/cloudposse/ge
 
 ## Overview
 
-Geodesic is Cloud Posse's DevOps toolbox - a containerized environment with pre-installed cloud tools. When using `atmos auth`, you need to configure Geodesic to use the Atmos-managed AWS credentials and config files instead of traditional credential management.
+Geodesic is Cloud Posse's DevOps toolbox - a containerized environment with pre-installed cloud tools. When using `atmos auth`, you authenticate on your **host machine** (laptop/workstation) before starting Geodesic, then mount the Atmos-managed credentials into the container.
+
+### How Authentication Works
+
+1. **Authentication happens on the host** - You run `atmos auth login` on your laptop before starting Geodesic
+2. **Browser-based SSO flow** - Opens your browser for IAM Identity Center authentication
+3. **Credentials stored on host** - Atmos saves credentials to `~/.aws/atmos/` on your laptop
+4. **Geodesic mounts credentials** - The container accesses credentials via volume mounts
+5. **Keychain integration** - On macOS, Atmos can optionally store refresh tokens in Keychain (host-only, not available inside containers)
 
 ## Prerequisites
 
 - Geodesic toolbox set up for your infrastructure
 - `atmos.yaml` configured with auth providers and identities
 - Understanding of Geodesic's Dockerfile and Makefile structure
+- Atmos installed on your **host machine** (laptop/workstation) for authentication
+
+:::note Keychain Integration
+Atmos can optionally store refresh tokens in your operating system's keyring (macOS Keychain, Linux Secret Service, Windows Credential Manager) using `atmos auth user configure`. However, this keyring integration is **only available on the host machine**. Inside the Geodesic container, Atmos will use file-based credential storage in `~/.aws/atmos/`. See [Credential Storage](/cli/commands/auth/usage#credential-storage) for details.
+:::
 
 ## Configuration Steps
 
@@ -171,12 +184,18 @@ region = us-east-1
 
 Once configured, the typical workflow is:
 
-1. **Start Geodesic**: Run `make run` (or your equivalent command)
-2. **Authenticate**: Atmos prompts for authentication via browser
-3. **Work in Shell**: Use AWS CLI, Terraform, and other tools normally
-4. **Assume Roles**: Use `assume-role dev-admin` to switch to other roles
+1. **Start Geodesic** (on your laptop): Run `make run`
+2. **Authenticate** (on your laptop): Atmos runs `atmos auth login` on your host machine, opens your browser for SSO
+3. **Credentials mounted**: Once authenticated, Geodesic starts with credentials mounted from `~/.aws/atmos/`
+4. **Work in Shell** (inside Geodesic): Use AWS CLI, Terraform, and other tools normally
+5. **Assume Roles** (inside Geodesic): Use `assume-role dev-admin` to switch to other roles
 
-The authentication persists for the session duration configured in IAM Identity Center.
+### Important Notes
+
+- **Authentication is host-based**: You cannot run `atmos auth login` inside the Geodesic container - it requires browser access on your laptop
+- **Credentials are mounted**: The `~/.aws/atmos/` directory from your laptop is mounted into Geodesic
+- **Keychain not available in container**: macOS Keychain integration works only on the host, not inside Geodesic
+- **Session duration**: Authentication persists for the duration configured in IAM Identity Center (typically 1-12 hours)
 
 ## Troubleshooting
 
@@ -184,7 +203,7 @@ The authentication persists for the session duration configured in IAM Identity 
 
 **Cause**: Atmos hasn't authenticated yet, or credentials have expired.
 
-**Solution**: Run `atmos auth login` to re-authenticate.
+**Solution**: Exit Geodesic and run `atmos auth login` on your host machine to re-authenticate. Remember, authentication must happen on your laptop, not inside the container.
 
 ### Issue: `assume-role` not finding source profile
 
