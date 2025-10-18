@@ -302,7 +302,11 @@ func ProcessStacks(
 
 	// Check if stack was provided.
 	if checkStack && len(configAndStacksInfo.Stack) < 1 {
-		return configAndStacksInfo, errUtils.ErrMissingStack
+		err := errUtils.Build(errUtils.ErrMissingStack).
+			WithHint("Specify the stack using --stack <stack> or -s <stack>").
+			WithExitCode(2).
+			Err()
+		return configAndStacksInfo, err
 	}
 
 	// Check if the component was provided.
