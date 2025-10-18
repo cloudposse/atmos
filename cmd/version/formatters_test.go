@@ -222,14 +222,14 @@ func TestFormatReleaseListText(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			oldStdout := os.Stdout
+			oldStderr := os.Stderr
 			r, w, _ := os.Pipe()
-			os.Stdout = w
+			os.Stderr = w
 
 			err := formatReleaseListText(tt.releases)
 
 			w.Close()
-			os.Stdout = oldStdout
+			os.Stderr = oldStderr
 
 			var buf bytes.Buffer
 			_, _ = io.Copy(&buf, r)
@@ -319,14 +319,14 @@ func TestFormatReleaseDetailText(t *testing.T) {
 		},
 	}
 
-	oldStdout := os.Stdout
+	oldStderr := os.Stderr
 	r, w, _ := os.Pipe()
-	os.Stdout = w
+	os.Stderr = w
 
 	formatReleaseDetailText(release)
 
 	w.Close()
-	os.Stdout = oldStdout
+	os.Stderr = oldStderr
 
 	var buf bytes.Buffer
 	_, _ = io.Copy(&buf, r)

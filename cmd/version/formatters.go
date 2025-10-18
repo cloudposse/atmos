@@ -248,7 +248,7 @@ func formatReleaseListText(releases []*github.RepositoryRelease) error {
 	releases = addCurrentVersionIfMissing(releases)
 
 	if len(releases) == 0 {
-		fmt.Println("No releases found")
+		fmt.Fprintln(os.Stderr, "No releases found")
 		return nil
 	}
 
@@ -280,7 +280,7 @@ func formatReleaseListText(releases []*github.RepositoryRelease) error {
 	if err != nil {
 		return err
 	}
-	fmt.Println(t)
+	fmt.Fprintln(os.Stderr, t)
 	return nil
 }
 
@@ -351,50 +351,50 @@ func formatReleaseListYAML(releases []*github.RepositoryRelease) error {
 
 // formatReleaseDetailText outputs a single release in text format.
 func formatReleaseDetailText(release *github.RepositoryRelease) {
-	fmt.Printf("Version: %s\n", release.GetTagName())
-	fmt.Printf("Name: %s\n", release.GetName())
-	fmt.Printf("Published: %s\n", release.GetPublishedAt().Format("2006-01-02 15:04:05 MST"))
+	fmt.Fprintf(os.Stderr, "Version: %s\n", release.GetTagName())
+	fmt.Fprintf(os.Stderr, "Name: %s\n", release.GetName())
+	fmt.Fprintf(os.Stderr, "Published: %s\n", release.GetPublishedAt().Format("2006-01-02 15:04:05 MST"))
 
 	if release.GetPrerelease() {
-		fmt.Println("Type: Pre-release")
+		fmt.Fprintln(os.Stderr, "Type: Pre-release")
 	} else {
-		fmt.Println("Type: Stable")
+		fmt.Fprintln(os.Stderr, "Type: Stable")
 	}
 
 	if isCurrentVersion(release.GetTagName()) {
-		fmt.Println(currentVersionStyle.Render("Current: ● Yes (installed)"))
+		fmt.Fprintln(os.Stderr, currentVersionStyle.Render("Current: ● Yes (installed)"))
 	}
 
-	fmt.Printf("URL: %s\n", release.GetHTMLURL())
-	fmt.Println()
+	fmt.Fprintf(os.Stderr, "URL: %s\n", release.GetHTMLURL())
+	fmt.Fprintln(os.Stderr)
 
 	// Release notes (rendered as markdown).
 	if body := release.GetBody(); body != "" {
-		fmt.Println("Release Notes:")
-		fmt.Println("─────────────────────────────────────────────────────────────────")
-		u.PrintfMarkdown("%s", body)
-		fmt.Println("─────────────────────────────────────────────────────────────────")
-		fmt.Println()
+		fmt.Fprintln(os.Stderr, "Release Notes:")
+		fmt.Fprintln(os.Stderr, "─────────────────────────────────────────────────────────────────")
+		u.PrintfMarkdownToTUI("%s", body)
+		fmt.Fprintln(os.Stderr, "─────────────────────────────────────────────────────────────────")
+		fmt.Fprintln(os.Stderr)
 	}
 
 	// Assets (filtered by current OS and architecture).
 	filteredAssets := filterAssetsByPlatform(release.Assets)
 	if len(filteredAssets) > 0 {
-		fmt.Printf("\nAssets for %s/%s:\n", runtime.GOOS, runtime.GOARCH)
+		fmt.Fprintf(os.Stderr, "\nAssets for %s/%s:\n", runtime.GOOS, runtime.GOARCH)
 		for _, asset := range filteredAssets {
 			sizeMB := float64(asset.GetSize()) / float64(bytesPerMB)
 			// Style the filename without the size, then show size in muted color.
 			filename := asset.GetName()
 			sizeText := fmt.Sprintf("(%.2f MB)", sizeMB)
 
-			fmt.Printf("  %s %s\n", filename, lipgloss.NewStyle().Foreground(lipgloss.Color("8")).Render(sizeText))
+			fmt.Fprintf(os.Stderr, "  %s %s\n", filename, lipgloss.NewStyle().Foreground(lipgloss.Color("8")).Render(sizeText))
 
 			// Render the URL as a link.
 			linkStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("12")).Underline(true)
-			fmt.Printf("  %s\n", linkStyle.Render(asset.GetBrowserDownloadURL()))
+			fmt.Fprintf(os.Stderr, "  %s\n", linkStyle.Render(asset.GetBrowserDownloadURL()))
 		}
 	} else if len(release.Assets) > 0 {
-		fmt.Printf("\nNo assets found for %s/%s\n", runtime.GOOS, runtime.GOARCH)
+		fmt.Fprintf(os.Stderr, "\nNo assets found for %s/%s\n", runtime.GOOS, runtime.GOARCH)
 	}
 }
 

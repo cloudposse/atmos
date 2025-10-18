@@ -2,13 +2,14 @@ package github
 
 import (
 	"context"
+	"errors"
 	"os"
-	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/tests"
 )
 
@@ -17,8 +18,7 @@ func isRateLimitError(err error) bool {
 	if err == nil {
 		return false
 	}
-	return strings.Contains(err.Error(), "rate limit exceeded") ||
-		strings.Contains(err.Error(), "API rate limit")
+	return errors.Is(err, errUtils.ErrGitHubRateLimitExceeded)
 }
 
 // TestNewGitHubClientUnauthenticated tests creating an unauthenticated GitHub client.

@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestRealGitHubClient_GetReleases(t *testing.T) {
+func TestMockGitHubClient_GetReleases(t *testing.T) {
 	publishedAt := time.Date(2025, 1, 15, 10, 30, 0, 0, time.UTC)
 
 	mockReleases := []*github.RepositoryRelease{
@@ -36,7 +36,7 @@ func TestRealGitHubClient_GetReleases(t *testing.T) {
 	assert.Equal(t, "v1.0.0", *releases[0].TagName)
 }
 
-func TestRealGitHubClient_GetRelease(t *testing.T) {
+func TestMockGitHubClient_GetRelease(t *testing.T) {
 	publishedAt := time.Date(2025, 1, 15, 10, 30, 0, 0, time.UTC)
 
 	mockRelease := &github.RepositoryRelease{
@@ -54,7 +54,7 @@ func TestRealGitHubClient_GetRelease(t *testing.T) {
 	assert.Equal(t, "v1.2.3", *release.TagName)
 }
 
-func TestRealGitHubClient_GetLatestRelease(t *testing.T) {
+func TestMockGitHubClient_GetLatestRelease(t *testing.T) {
 	publishedAt := time.Date(2025, 1, 15, 10, 30, 0, 0, time.UTC)
 
 	mockRelease := &github.RepositoryRelease{

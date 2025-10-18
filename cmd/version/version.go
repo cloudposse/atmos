@@ -30,7 +30,7 @@ var versionCmd = &cobra.Command{
 	Example: "atmos version",
 	Args:    cobra.NoArgs,
 	RunE: func(c *cobra.Command, args []string) error {
-		defer perf.Track(nil, "version.RunE")()
+		defer perf.Track(atmosConfigPtr, "version.RunE")()
 
 		return exec.NewVersionExec(atmosConfigPtr).Execute(checkFlag, versionFormat)
 	},
