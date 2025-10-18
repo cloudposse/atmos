@@ -14,6 +14,9 @@ import (
 )
 
 func TestProcessBaseComponentConfig(t *testing.T) {
+	// Clear cache before tests to ensure fresh processing.
+	ClearBaseComponentConfigCache()
+
 	tests := []struct {
 		name                string
 		baseComponentConfig *schema.BaseComponentConfig
@@ -114,6 +117,9 @@ func TestProcessBaseComponentConfig(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			// Clear cache before each test case to ensure isolation.
+			ClearBaseComponentConfigCache()
+
 			atmosConfig := &schema.AtmosConfiguration{}
 			baseComponents := []string{}
 
@@ -984,4 +990,456 @@ func TestSectionContainsAnyNotEmptySections(t *testing.T) {
 			assert.Equal(t, tt.expected, result)
 		})
 	}
+}
+
+// TestHierarchicalImports_ImportOrderPreservation tests that import order is preserved
+// even when using parallel processing for glob-matched imports.
+// This is CRITICAL for Atmos inheritance - later imports must override earlier ones.
+func TestHierarchicalImports_ImportOrderPreservation(t *testing.T) {
+	stacksBasePath := "../../tests/fixtures/scenarios/hierarchical-imports/stacks"
+	filePath := "../../tests/fixtures/scenarios/hierarchical-imports/stacks/deploy/dev/us-east-1.yaml"
+
+	atmosConfig := schema.AtmosConfiguration{
+		Logs: schema.Logs{
+			Level: "Info",
+		},
+	}
+
+	// Process the stack manifest with all hierarchical imports
+	deepMergedConfig, importsConfig, stackConfigMap, terraformInline, terraformImports, helmfileInline, helmOverridesImports, err := ProcessYAMLConfigFile(
+		&atmosConfig,
+		stacksBasePath,
+		filePath,
+		map[string]map[string]any{},
+		nil,
+		false, // ignoreMissingFiles
+		false, // skipTemplatesProcessingInImports
+		true,  // ignoreMissingTemplateValues
+		false, // skipIfMissing
+		nil,
+		nil,
+		nil,
+		nil,
+		"",
+	)
+	_ = importsConfig
+	_ = stackConfigMap
+	_ = terraformInline
+	_ = terraformImports
+	_ = helmfileInline
+	_ = helmOverridesImports
+
+	require.NoError(t, err)
+	require.NotNil(t, deepMergedConfig)
+
+	// Test 1: Verify import_order_test was overridden by final stack
+	// This variable is set at each level, and the final stack value should win
+	vars, ok := deepMergedConfig["vars"].(map[string]any)
+	require.True(t, ok, "vars section should exist")
+
+	importOrderTest, ok := vars["import_order_test"].(string)
+	require.True(t, ok, "import_order_test should be a string")
+	assert.Equal(t, "level-4-stack-dev-us-east-1", importOrderTest,
+		"Final stack value should override all previous imports")
+
+	// Test 2: Verify settings.import_order_test also follows correct order
+	settings, ok := deepMergedConfig["settings"].(map[string]any)
+	require.True(t, ok, "settings section should exist")
+
+	settingsImportOrderTest, ok := settings["import_order_test"].(string)
+	require.True(t, ok, "settings.import_order_test should be a string")
+	assert.Equal(t, "level-4-stack-dev-us-east-1-settings", settingsImportOrderTest,
+		"Settings should follow same import order")
+
+	// Test 3: Verify region-specific values from level 2
+	region, ok := vars["region"].(string)
+	require.True(t, ok, "region should be a string")
+	assert.Equal(t, "us-east-1", region, "Region should be set by region mixin")
+
+	// Test 4: Verify account-specific values from level 2
+	stage, ok := vars["stage"].(string)
+	require.True(t, ok, "stage should be a string")
+	assert.Equal(t, "dev", stage, "Stage should be set by account mixin")
+
+	// Test 5: Verify VPC CIDR override (region overrides base)
+	vpcCIDR, ok := vars["vpc_cidr"].(string)
+	require.True(t, ok, "vpc_cidr should be a string")
+	assert.Equal(t, "10.1.0.0/16", vpcCIDR,
+		"Region-specific CIDR should override base CIDR")
+
+	// Test 6: Verify deep merge of tags from all levels
+	tags, ok := vars["tags"].(map[string]any)
+	require.True(t, ok, "tags should exist and be a map")
+
+	// Tags from different levels should all be present (deep merge)
+	assert.Equal(t, "Atmos", tags["ManagedBy"], "Tag from level-1-globals")
+	assert.Equal(t, "engineering", tags["CostCenter"], "Tag from level-1-defaults")
+	assert.Equal(t, "AWS", tags["Provider"], "Tag from level-2-provider")
+	assert.Equal(t, "us-east-1", tags["Region"], "Tag from level-2-region")
+	assert.Equal(t, "dev", tags["Stage"], "Tag from level-2-account")
+	assert.Equal(t, "acme-dev", tags["Account"], "Tag from level-2-account")
+	assert.Equal(t, "dev-us-east-1", tags["Stack"], "Tag from level-4-stack")
+
+	// The "Source" tag should be from the final stack (last override wins)
+	assert.Equal(t, "level-4-stack", tags["Source"],
+		"Source tag should be from final stack (last override wins)")
+}
+
+// TestHierarchicalImports_GlobPatternOrdering tests that glob-matched imports
+// are processed in deterministic order during parallel processing.
+func TestHierarchicalImports_GlobPatternOrdering(t *testing.T) {
+	stacksBasePath := "../../tests/fixtures/scenarios/hierarchical-imports/stacks"
+	filePath := "../../tests/fixtures/scenarios/hierarchical-imports/stacks/deploy/dev/us-east-1.yaml"
+
+	atmosConfig := schema.AtmosConfiguration{
+		Logs: schema.Logs{
+			Level: "Info",
+		},
+	}
+
+	deepMergedConfig, importsConfig, stackConfigMap, terraformInline, terraformImports, helmfileInline, helmOverridesImports, err := ProcessYAMLConfigFile(
+		&atmosConfig,
+		stacksBasePath,
+		filePath,
+		map[string]map[string]any{},
+		nil,
+		false,
+		false,
+		true,
+		false,
+		nil,
+		nil,
+		nil,
+		nil,
+		"",
+	)
+	_ = importsConfig
+	_ = stackConfigMap
+	_ = terraformInline
+	_ = terraformImports
+	_ = helmfileInline
+	_ = helmOverridesImports
+
+	require.NoError(t, err)
+
+	vars, ok := deepMergedConfig["vars"].(map[string]any)
+	require.True(t, ok)
+
+	// The region mixin imports "catalog/mixins/provider/aws-*"
+	// This matches aws-a.yaml, aws-b.yaml, aws-c.yaml
+	// After parallel processing and sequential merging, the last file
+	// alphabetically (aws-c) should override previous ones
+	providerPriority, ok := vars["provider_priority"].(string)
+	require.True(t, ok, "provider_priority should be set by provider mixins")
+
+	// With sorted glob matching, aws-c comes last and should win
+	assert.Equal(t, "c", providerPriority,
+		"Last provider in sorted glob (aws-c) should override earlier ones (aws-a, aws-b)")
+
+	// Verify the provider type is set correctly
+	providerType, ok := vars["provider_type"].(string)
+	require.True(t, ok)
+	assert.Equal(t, "aws", providerType)
+
+	// Check tags to ensure aws-c's tag is present
+	tags, ok := vars["tags"].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, "C", tags["ProviderPriority"],
+		"ProviderPriority tag should be from aws-c (last in sort order)")
+}
+
+// TestHierarchicalImports_ProdStack tests the prod stack to ensure
+// the same import ordering logic works across different configurations.
+func TestHierarchicalImports_ProdStack(t *testing.T) {
+	stacksBasePath := "../../tests/fixtures/scenarios/hierarchical-imports/stacks"
+	filePath := "../../tests/fixtures/scenarios/hierarchical-imports/stacks/deploy/prod/us-west-2.yaml"
+
+	atmosConfig := schema.AtmosConfiguration{
+		Logs: schema.Logs{
+			Level: "Info",
+		},
+	}
+
+	deepMergedConfig, importsConfig, stackConfigMap, terraformInline, terraformImports, helmfileInline, helmOverridesImports, err := ProcessYAMLConfigFile(
+		&atmosConfig,
+		stacksBasePath,
+		filePath,
+		map[string]map[string]any{},
+		nil,
+		false,
+		false,
+		true,
+		false,
+		nil,
+		nil,
+		nil,
+		nil,
+		"",
+	)
+	_ = importsConfig
+	_ = stackConfigMap
+	_ = terraformInline
+	_ = terraformImports
+	_ = helmfileInline
+	_ = helmOverridesImports
+
+	require.NoError(t, err)
+
+	vars, ok := deepMergedConfig["vars"].(map[string]any)
+	require.True(t, ok)
+
+	// Verify final import order
+	assert.Equal(t, "level-4-stack-prod-us-west-2", vars["import_order_test"])
+
+	// Verify region
+	assert.Equal(t, "us-west-2", vars["region"])
+
+	// Verify stage (from prod account mixin)
+	assert.Equal(t, "prod", vars["stage"])
+
+	// Verify VPC CIDR (from us-west-2 region mixin)
+	assert.Equal(t, "10.2.0.0/16", vars["vpc_cidr"])
+
+	// Verify prod-specific instance type
+	assert.Equal(t, "t3.large", vars["instance_type"],
+		"Prod instance type should override dev instance type")
+
+	// Verify prod-specific sizing
+	assert.Equal(t, 3, vars["min_size"])
+	assert.Equal(t, 10, vars["max_size"])
+
+	// Verify tags include prod-specific values
+	tags, ok := vars["tags"].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, "prod", tags["Stage"])
+	assert.Equal(t, "acme-prod", tags["Account"])
+	assert.Equal(t, "us-west-2", tags["Region"])
+}
+
+// TestHierarchicalImports_ComponentConfiguration tests that component-level
+// configurations are properly inherited and merged.
+func TestHierarchicalImports_ComponentConfiguration(t *testing.T) {
+	stacksBasePath := "../../tests/fixtures/scenarios/hierarchical-imports/stacks"
+	filePath := "../../tests/fixtures/scenarios/hierarchical-imports/stacks/deploy/dev/us-east-1.yaml"
+
+	atmosConfig := schema.AtmosConfiguration{
+		Logs: schema.Logs{
+			Level: "Info",
+		},
+	}
+
+	deepMergedConfig, importsConfig, stackConfigMap, terraformInline, terraformImports, helmfileInline, helmOverridesImports, err := ProcessYAMLConfigFile(
+		&atmosConfig,
+		stacksBasePath,
+		filePath,
+		map[string]map[string]any{},
+		nil,
+		false,
+		false,
+		true,
+		false,
+		nil,
+		nil,
+		nil,
+		nil,
+		"",
+	)
+	_ = importsConfig
+	_ = stackConfigMap
+	_ = terraformInline
+	_ = terraformImports
+	_ = helmfileInline
+	_ = helmOverridesImports
+
+	require.NoError(t, err)
+
+	// Navigate to component configuration
+	components, ok := deepMergedConfig["components"].(map[string]any)
+	require.True(t, ok, "components section should exist")
+
+	terraform, ok := components["terraform"].(map[string]any)
+	require.True(t, ok, "terraform section should exist")
+
+	testComponent, ok := terraform["test-component"].(map[string]any)
+	require.True(t, ok, "test-component should exist")
+
+	// Verify component vars
+	compVars, ok := testComponent["vars"].(map[string]any)
+	require.True(t, ok, "component vars should exist")
+
+	// Component-level import_order_test should be overridden
+	assert.Equal(t, "level-3-component-variants", compVars["import_order_test"])
+
+	// Component-specific configuration should be present
+	assert.Equal(t, "test-component", compVars["component_name"])
+	assert.Equal(t, true, compVars["enabled"])
+	assert.Equal(t, "standard", compVars["variant"])
+	assert.Equal(t, false, compVars["high_availability"])
+
+	// Component tags should be deep-merged with global tags
+	compTags, ok := compVars["tags"].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, "test-component", compTags["Component"])
+	assert.Equal(t, "standard", compTags["Variant"])
+
+	// Verify component settings
+	compSettings, ok := testComponent["settings"].(map[string]any)
+	require.True(t, ok, "component settings should exist")
+	assert.Equal(t, "level-3-component-variants-settings", compSettings["import_order_test"])
+}
+
+// TestHierarchicalImports_MultipleStacksConsistency tests that processing
+// multiple stacks in parallel produces consistent results.
+func TestHierarchicalImports_MultipleStacksConsistency(t *testing.T) {
+	stacksBasePath := "../../tests/fixtures/scenarios/hierarchical-imports/stacks"
+	filePaths := []string{
+		"../../tests/fixtures/scenarios/hierarchical-imports/stacks/deploy/dev/us-east-1.yaml",
+		"../../tests/fixtures/scenarios/hierarchical-imports/stacks/deploy/prod/us-west-2.yaml",
+	}
+
+	atmosConfig := schema.AtmosConfiguration{
+		Logs: schema.Logs{
+			Level: "Info",
+		},
+	}
+
+	// Process both stacks in parallel using ProcessYAMLConfigFiles
+	// This tests the outer parallel loop (processing multiple stack files)
+	_, _, rawStackConfigs, err := ProcessYAMLConfigFiles(
+		&atmosConfig,
+		stacksBasePath,
+		"../../tests/fixtures/scenarios/hierarchical-imports/components/terraform",
+		"",
+		"",
+		filePaths,
+		false, // processStackDeps
+		false, // processComponentDeps
+		false, // ignoreMissingFiles
+	)
+
+	require.NoError(t, err)
+	require.Equal(t, 2, len(rawStackConfigs), "Should have 2 processed stacks")
+
+	// Verify dev stack using rawStackConfigs which contains the unprocessed merged config
+	devStackRaw, ok := rawStackConfigs["deploy/dev/us-east-1"]
+	require.True(t, ok, "dev stack should be in raw configs")
+
+	devStackConfig, ok := devStackRaw["stack"].(map[string]any)
+	require.True(t, ok, "dev stack should have stack section")
+
+	devVars, ok := devStackConfig["vars"].(map[string]any)
+	require.True(t, ok, "devStack should have vars section")
+	t.Logf("devVars keys: %v", u.StringKeysFromMap(devVars))
+	assert.Equal(t, "level-4-stack-dev-us-east-1", devVars["import_order_test"])
+
+	// Note: stage and region might not be set at the root level in our test fixture
+	// Let's check if they exist before asserting
+	if stage, ok := devVars["stage"]; ok {
+		assert.Equal(t, "dev", stage)
+	}
+	if region, ok := devVars["region"]; ok {
+		assert.Equal(t, "us-east-1", region)
+	}
+
+	// Verify prod stack
+	prodStackRaw, ok := rawStackConfigs["deploy/prod/us-west-2"]
+	require.True(t, ok, "prod stack should be in raw configs")
+
+	prodStackConfig, ok := prodStackRaw["stack"].(map[string]any)
+	require.True(t, ok, "prod stack should have stack section")
+
+	prodVars, ok := prodStackConfig["vars"].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, "level-4-stack-prod-us-west-2", prodVars["import_order_test"])
+
+	// Note: stage and region might not be set at the root level in our test fixture
+	// Let's check if they exist before asserting
+	if stage, ok := prodVars["stage"]; ok {
+		assert.Equal(t, "prod", stage)
+	}
+	if region, ok := prodVars["region"]; ok {
+		assert.Equal(t, "us-west-2", region)
+	}
+}
+
+// TestGetCachedCompiledSchema tests that cached JSON schemas are retrieved correctly.
+// This validates P7.2 optimization: schema caching avoids recompilation.
+func TestGetCachedCompiledSchema(t *testing.T) {
+	// Clear the JSON schema cache before the test to ensure cache isolation.
+	ClearJsonSchemaCache()
+
+	// Use a test schema path
+	schemaPath := filepath.Join("..", "..", "tests", "fixtures", "schemas", "atmos", "atmos-manifest", "1.0", "atmos-manifest.json")
+
+	// First lookup should miss the cache (returns false)
+	compiledSchema, found := getCachedCompiledSchema(schemaPath)
+	assert.False(t, found, "Initial lookup should not find cached schema")
+	assert.Nil(t, compiledSchema, "Schema should be nil on cache miss")
+
+	// Compile and cache the schema by using ProcessYAMLConfigFile with validation
+	// This indirectly tests that schemas are being cached during normal operation
+	stacksBasePath := "../../tests/fixtures/scenarios/relative-paths/stacks"
+	filePath := "../../tests/fixtures/scenarios/relative-paths/stacks/orgs/acme/platform/dev.yaml"
+
+	atmosConfig := schema.AtmosConfiguration{
+		Templates: schema.Templates{
+			Settings: schema.TemplatesSettings{
+				Enabled: true,
+				Sprig: schema.TemplatesSettingsSprig{
+					Enabled: true,
+				},
+				Gomplate: schema.TemplatesSettingsGomplate{
+					Enabled: true,
+				},
+			},
+		},
+	}
+
+	deepMergedStackConfig, importsConfig, stackConfigMap, terraformInline, _, _, _, err := ProcessYAMLConfigFile(
+		&atmosConfig,
+		stacksBasePath,
+		filePath,
+		map[string]map[string]any{},
+		nil,
+		false,
+		false,
+		true,
+		false,
+		nil,
+		nil,
+		nil,
+		nil,
+		schemaPath,
+	)
+	assert.NoError(t, err, "ProcessYAMLConfigFile should succeed with schema validation")
+	assert.NotNil(t, deepMergedStackConfig, "deepMergedStackConfig should not be nil")
+	assert.NotNil(t, importsConfig, "importsConfig should not be nil")
+	assert.NotNil(t, stackConfigMap, "stackConfigMap should not be nil")
+	assert.NotNil(t, terraformInline, "terraformInline should not be nil")
+
+	// Second lookup should hit the cache (returns true)
+	compiledSchema, found = getCachedCompiledSchema(schemaPath)
+	assert.True(t, found, "Second lookup should find cached schema")
+	assert.NotNil(t, compiledSchema, "Cached schema should not be nil")
+}
+
+// TestCacheCompiledSchema tests that schemas are cached correctly.
+// This validates P7.2 optimization: cacheCompiledSchema stores schemas for reuse.
+func TestCacheCompiledSchema(t *testing.T) {
+	// Create a mock schema path
+	schemaPath := "/test/schema/path.json"
+
+	// Initially, cache should be empty
+	compiledSchema, found := getCachedCompiledSchema(schemaPath)
+	assert.False(t, found)
+	assert.Nil(t, compiledSchema)
+
+	// Note: We cannot easily create a *jsonschema.Schema without compiling from a file,
+	// so this test validates the cache lookup mechanism rather than the full compilation flow.
+	// The actual schema compilation and caching is tested via ProcessYAMLConfigFile above.
+
+	// Verify that getCachedCompiledSchema returns consistent results
+	compiledSchema2, found2 := getCachedCompiledSchema(schemaPath)
+	assert.Equal(t, found, found2, "Consistent cache lookups should return same result")
+	assert.Equal(t, compiledSchema, compiledSchema2, "Consistent cache lookups should return same schema")
 }

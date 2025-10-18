@@ -54,9 +54,6 @@ Global Flags:
                                      disable, --pager=less to use specific
                                      pager)
 
-        --profile string             Specify the profile to use for
-                                     authentication.
-
         --profile-file string        Write profiling data to file instead of
                                      starting server
 

@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"runtime"
 	"testing"
 	"time"
 
@@ -389,5 +390,21 @@ func SkipIfShort(t *testing.T) {
 
 	if testing.Short() {
 		t.Skipf("Skipping long-running test in short mode (use 'go test' without -short to run)")
+	}
+}
+
+// SkipOnDarwinARM64 skips the test if running on darwin/arm64 (macOS ARM).
+// Use this for tests that are incompatible with ARM64 macOS, such as tests using gomonkey
+// which causes fatal SIGBUS errors due to memory protection on ARM64.
+func SkipOnDarwinARM64(t *testing.T, reason string) {
+	t.Helper()
+
+	if !ShouldCheckPreconditions() {
+		return
+	}
+
+	// Check if we're on darwin/arm64
+	if runtime.GOOS == "darwin" && runtime.GOARCH == "arm64" {
+		t.Skipf("Skipping on darwin/arm64: %s. Set ATMOS_TEST_SKIP_PRECONDITION_CHECKS=true to override", reason)
 	}
 }

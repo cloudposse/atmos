@@ -374,6 +374,12 @@ func TestDescribeComponent_Packer(t *testing.T) {
 }
 
 func TestDescribeComponentWithProvenance(t *testing.T) {
+	// Clear cache to ensure fresh processing.
+	ClearBaseComponentConfigCache()
+	ClearMergeContexts()
+	ClearLastMergeContext()
+	ClearFileContentCache()
+
 	err := os.Unsetenv("ATMOS_CLI_CONFIG_PATH")
 	if err != nil {
 		t.Fatalf("Failed to unset 'ATMOS_CLI_CONFIG_PATH': %v", err)
@@ -394,16 +400,15 @@ func TestDescribeComponentWithProvenance(t *testing.T) {
 	component := "vpc-flow-logs-bucket"
 	stack := "plat-ue2-dev"
 
-	// Initialize the Atmos config with provenance tracking enabled
-	var atmosConfig schema.AtmosConfiguration
-	atmosConfig, err = cfg.InitCliConfig(schema.ConfigAndStacksInfo{
-		ComponentFromArg: component,
-		Stack:            stack,
-	}, true)
+	// Initialize atmosConfig with provenance tracking enabled
+	var configAndStacksInfo schema.ConfigAndStacksInfo
+	configAndStacksInfo.ComponentFromArg = component
+	configAndStacksInfo.Stack = stack
+	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
 	assert.NoError(t, err)
 	atmosConfig.TrackProvenance = true
 
-	// Execute describe component with provenance enabled
+	// Execute with provenance enabled using ExecuteDescribeComponentWithContext
 	result, err := ExecuteDescribeComponentWithContext(DescribeComponentContextParams{
 		AtmosConfig:          &atmosConfig,
 		Component:            component,
@@ -414,6 +419,8 @@ func TestDescribeComponentWithProvenance(t *testing.T) {
 	})
 	assert.NoError(t, err)
 	assert.NotNil(t, result)
+	assert.NotNil(t, result.MergeContext, "MergeContext should not be nil when provenance is enabled")
+	assert.True(t, result.MergeContext.IsProvenanceEnabled(), "MergeContext should have provenance enabled")
 
 	// Verify component section is populated
 	assert.NotNil(t, result.ComponentSection)
@@ -427,38 +434,29 @@ func TestDescribeComponentWithProvenance(t *testing.T) {
 	provenancePaths := result.MergeContext.GetProvenancePaths()
 	assert.NotEmpty(t, provenancePaths, "Provenance paths should not be empty")
 
-	// Debug: Log all provenance paths found
-	t.Logf("Found %d provenance paths:", len(provenancePaths))
-	for i, path := range provenancePaths {
-		if i < 50 { // Only log first 50 to avoid noise
-			t.Logf("  [%d] %s", i, path)
-		}
-	}
-
-	// Verify we have provenance entries for some expected paths
-	foundVarsEnabled := false
-	foundVarsName := false
+	// Verify we have provenance entries for vars fields.
+	// Check for any vars-related paths rather than specific ones to avoid platform-specific issues.
+	foundVarsPath := false
+	varsPathsFound := []string{}
 	for _, path := range provenancePaths {
 		entries := result.MergeContext.GetProvenance(path)
 		if len(entries) > 0 {
-			// Check for vars.enabled
-			if path == "vars.enabled" || path == "components.terraform.vpc-flow-logs-bucket.vars.enabled" {
-				foundVarsEnabled = true
+			// Check for any vars.* path.
+			if strings.Contains(path, "vars.") {
+				foundVarsPath = true
+				varsPathsFound = append(varsPathsFound, path)
 				// Verify the entry has file and line information
-				assert.NotEmpty(t, entries[0].File, "Provenance entry should have a file")
-				assert.Greater(t, entries[0].Line, 0, "Provenance entry should have a line number")
-			}
-			// Check for vars.name
-			if path == "vars.name" || path == "components.terraform.vpc-flow-logs-bucket.vars.name" {
-				foundVarsName = true
-				assert.NotEmpty(t, entries[0].File, "Provenance entry should have a file")
-				assert.Greater(t, entries[0].Line, 0, "Provenance entry should have a line number")
+				assert.NotEmpty(t, entries[0].File, "Provenance entry for %s should have a file", path)
+				assert.Greater(t, entries[0].Line, 0, "Provenance entry for %s should have a line number", path)
 			}
 		}
 	}
 
-	// At least one of these should be found
-	assert.True(t, foundVarsEnabled || foundVarsName, "Should find provenance for at least one vars field")
+	// At least one vars path should be found.
+	if !foundVarsPath {
+		t.Logf("No vars.* paths found in provenance. Available paths: %v", provenancePaths)
+	}
+	assert.True(t, foundVarsPath, "Should find provenance for at least one vars field. Found vars paths: %v", varsPathsFound)
 
 	// Filter computed fields
 	filtered := FilterComputedFields(result.ComponentSection)

@@ -1,3 +1,22 @@
+# golangci-lint v2 configuration
+# This config is used by both standard golangci-lint and custom builds with plugins.
+#
+# Custom Linters (Module Plugins):
+# - Custom linters are defined in .custom-gcl.yml and built into a custom binary
+# - The custom binary (custom-gcl) contains ALL standard linters + custom plugins
+# - Enable custom linters here in the 'enable' list (e.g., 'lintroller')
+# - Configure custom linters in 'settings.custom.<linter-name>' section below
+#
+# To add a new custom linter:
+# 1. Add plugin to .custom-gcl.yml
+# 2. Run `golangci-lint custom` to build custom-gcl binary
+# 3. Enable the linter in the 'enable' list below
+# 4. Configure it in 'settings.custom.<linter-name>' section
+#
+# References:
+# - Configuration docs: https://golangci-lint.run/docs/linters/configuration/
+# - Module plugins: https://golangci-lint.run/docs/plugins/module-plugins/
+
 version: "2"
 run:
   tests: true
@@ -15,6 +34,7 @@ linters:
     - godot
     - gosec
     - importas
+    - lintroller  # Custom plugin: Atmos-specific test rules (see settings.custom.lintroller)
     - loggercheck
     - misspell
     - nestif
@@ -81,6 +101,35 @@ linters:
           alias: log
       no-unaliased: true
       no-extra-aliases: false
+    # Custom linter configurations (module plugins)
+    # These settings only apply when using the custom-gcl binary built via `golangci-lint custom`.
+    # Standard golangci-lint binary will not have these linters available.
+    #
+    # Each custom linter must:
+    # - Be listed in .custom-gcl.yml plugins section
+    # - Be enabled in the linters.enable list above
+    # - Have type: "module" specified here
+    # - Implement the golangci-lint plugin interface
+    #
+    # To add a new custom linter configuration:
+    # Add a new section here with your linter's name and settings.
+    custom:
+      lintroller:
+        type: "module"  # Required: indicates this is a module plugin (not Go .so plugin)
+        description: "Atmos project-specific linting rules (t.Setenv/os.Setenv/os.MkdirTemp checks)"
+        settings:
+          # These settings are passed to the plugin's Settings struct (see tools/lintroller/plugin.go)
+          # Each rule can be independently enabled/disabled
+          tsetenv-in-defer: true      # Detects t.Setenv called inside defer blocks (use os.Setenv in defer instead)
+          os-setenv-in-test: true     # Detects os.Setenv in test files (use t.Setenv instead for auto cleanup)
+          os-mkdirtemp-in-test: true  # Detects os.MkdirTemp in test files (use t.TempDir instead for auto cleanup)
+
+      # Example: Add another custom linter configuration
+      # another-linter:
+      #   type: "module"
+      #   description: "Another custom linter"
+      #   settings:
+      #     some-rule: true
     lll:
       line-length: 120
       tab-width: 4

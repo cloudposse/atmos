@@ -2,7 +2,6 @@ package exec
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -12,6 +11,7 @@ import (
 	"sync"
 
 	"github.com/mitchellh/mapstructure"
+	"github.com/pkg/errors"
 	"github.com/santhosh-tekuri/jsonschema/v5"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -26,13 +26,29 @@ var (
 	// File content sync map.
 	getFileContentSyncMap = sync.Map{}
 
-	// Mutex to serialize updates of the result map of ProcessYAMLConfigFiles function.
-	processYAMLConfigFilesLock = &sync.Mutex{}
+	// Mutex to serialize writes to importsConfig maps during parallel import processing.
+	importsConfigLock = &sync.Mutex{}
 
 	// The mergeContexts stores MergeContexts keyed by stack file path when provenance tracking is enabled.
 	// This is used to capture provenance data for the describe component command.
 	mergeContexts   = make(map[string]*m.MergeContext)
 	mergeContextsMu sync.RWMutex
+
+	// Deprecated: Use SetMergeContextForStack/GetMergeContextForStack instead.
+	lastMergeContext   *m.MergeContext
+	lastMergeContextMu sync.RWMutex
+
+	// Base component inheritance cache to avoid re-processing the same inheritance chains.
+	// Cache key: "stack:component:baseComponent" -> BaseComponentConfig.
+	// No cache invalidation needed - configuration is immutable per command execution.
+	baseComponentConfigCache   = make(map[string]*schema.BaseComponentConfig)
+	baseComponentConfigCacheMu sync.RWMutex
+
+	// JSON schema compilation cache to avoid re-compiling the same schema for every stack file.
+	// Cache key: absolute file path to schema file -> compiled schema.
+	// No cache invalidation needed - schemas are immutable per command execution.
+	jsonSchemaCache   = make(map[string]*jsonschema.Schema)
+	jsonSchemaCacheMu sync.RWMutex
 )
 
 // SetMergeContextForStack stores the merge context for a specific stack file.
@@ -62,6 +78,210 @@ func ClearMergeContexts() {
 	mergeContexts = make(map[string]*m.MergeContext)
 }
 
+// SetLastMergeContext stores the merge context for later retrieval.
+// Deprecated: Use SetMergeContextForStack instead.
+func SetLastMergeContext(ctx *m.MergeContext) {
+	defer perf.Track(nil, "exec.SetLastMergeContext")()
+
+	lastMergeContextMu.Lock()
+	defer lastMergeContextMu.Unlock()
+	lastMergeContext = ctx
+}
+
+// GetLastMergeContext retrieves the last stored merge context.
+// Deprecated: Use GetMergeContextForStack instead.
+func GetLastMergeContext() *m.MergeContext {
+	defer perf.Track(nil, "exec.GetLastMergeContext")()
+
+	lastMergeContextMu.RLock()
+	defer lastMergeContextMu.RUnlock()
+	return lastMergeContext
+}
+
+// ClearLastMergeContext clears the stored merge context.
+// Deprecated: Use ClearMergeContexts instead.
+func ClearLastMergeContext() {
+	defer perf.Track(nil, "exec.ClearLastMergeContext")()
+
+	lastMergeContextMu.Lock()
+	defer lastMergeContextMu.Unlock()
+	lastMergeContext = nil
+}
+
+// getCachedBaseComponentConfig retrieves a cached base component config if it exists.
+// Returns a deep copy to prevent mutations affecting the cache.
+func getCachedBaseComponentConfig(cacheKey string) (*schema.BaseComponentConfig, *[]string, bool) {
+	defer perf.Track(nil, "exec.getCachedBaseComponentConfig")()
+
+	baseComponentConfigCacheMu.RLock()
+	defer baseComponentConfigCacheMu.RUnlock()
+
+	cached, found := baseComponentConfigCache[cacheKey]
+	if !found {
+		return nil, nil, false
+	}
+
+	// Deep copy to prevent external mutations from affecting the cache.
+	// All map fields must be deep copied since they are mutable.
+	copyConfig := schema.BaseComponentConfig{
+		FinalBaseComponentName:              cached.FinalBaseComponentName,
+		BaseComponentCommand:                cached.BaseComponentCommand,
+		BaseComponentBackendType:            cached.BaseComponentBackendType,
+		BaseComponentRemoteStateBackendType: cached.BaseComponentRemoteStateBackendType,
+	}
+
+	// Deep copy all map fields.
+	var err error
+	if copyConfig.BaseComponentVars, err = m.DeepCopyMap(cached.BaseComponentVars); err != nil {
+		// If deep copy fails, return not found to force reprocessing.
+		return nil, nil, false
+	}
+	if copyConfig.BaseComponentSettings, err = m.DeepCopyMap(cached.BaseComponentSettings); err != nil {
+		return nil, nil, false
+	}
+	if copyConfig.BaseComponentEnv, err = m.DeepCopyMap(cached.BaseComponentEnv); err != nil {
+		return nil, nil, false
+	}
+	if copyConfig.BaseComponentAuth, err = m.DeepCopyMap(cached.BaseComponentAuth); err != nil {
+		return nil, nil, false
+	}
+	if copyConfig.BaseComponentProviders, err = m.DeepCopyMap(cached.BaseComponentProviders); err != nil {
+		return nil, nil, false
+	}
+	if copyConfig.BaseComponentHooks, err = m.DeepCopyMap(cached.BaseComponentHooks); err != nil {
+		return nil, nil, false
+	}
+	if copyConfig.BaseComponentBackendSection, err = m.DeepCopyMap(cached.BaseComponentBackendSection); err != nil {
+		return nil, nil, false
+	}
+	if copyConfig.BaseComponentRemoteStateBackendSection, err = m.DeepCopyMap(cached.BaseComponentRemoteStateBackendSection); err != nil {
+		return nil, nil, false
+	}
+
+	// Deep copy the slice.
+	copyBaseComponents := make([]string, len(cached.ComponentInheritanceChain))
+	copy(copyBaseComponents, cached.ComponentInheritanceChain)
+	copyConfig.ComponentInheritanceChain = copyBaseComponents
+
+	return &copyConfig, &copyBaseComponents, true
+}
+
+// cacheBaseComponentConfig stores a base component config in the cache.
+// Stores a deep copy to prevent external mutations from affecting the cache.
+func cacheBaseComponentConfig(cacheKey string, config *schema.BaseComponentConfig) {
+	defer perf.Track(nil, "exec.cacheBaseComponentConfig")()
+
+	baseComponentConfigCacheMu.Lock()
+	defer baseComponentConfigCacheMu.Unlock()
+
+	// Deep copy to prevent external mutations from affecting the cache.
+	// All map fields must be deep copied since they are mutable.
+	copyConfig := schema.BaseComponentConfig{
+		FinalBaseComponentName:              config.FinalBaseComponentName,
+		BaseComponentCommand:                config.BaseComponentCommand,
+		BaseComponentBackendType:            config.BaseComponentBackendType,
+		BaseComponentRemoteStateBackendType: config.BaseComponentRemoteStateBackendType,
+	}
+
+	// Deep copy all map fields.
+	var err error
+	if copyConfig.BaseComponentVars, err = m.DeepCopyMap(config.BaseComponentVars); err != nil {
+		// If deep copy fails, don't cache - log and return.
+		return
+	}
+	if copyConfig.BaseComponentSettings, err = m.DeepCopyMap(config.BaseComponentSettings); err != nil {
+		return
+	}
+	if copyConfig.BaseComponentEnv, err = m.DeepCopyMap(config.BaseComponentEnv); err != nil {
+		return
+	}
+	if copyConfig.BaseComponentAuth, err = m.DeepCopyMap(config.BaseComponentAuth); err != nil {
+		return
+	}
+	if copyConfig.BaseComponentProviders, err = m.DeepCopyMap(config.BaseComponentProviders); err != nil {
+		return
+	}
+	if copyConfig.BaseComponentHooks, err = m.DeepCopyMap(config.BaseComponentHooks); err != nil {
+		return
+	}
+	if copyConfig.BaseComponentBackendSection, err = m.DeepCopyMap(config.BaseComponentBackendSection); err != nil {
+		return
+	}
+	if copyConfig.BaseComponentRemoteStateBackendSection, err = m.DeepCopyMap(config.BaseComponentRemoteStateBackendSection); err != nil {
+		return
+	}
+
+	// Deep copy the slice.
+	copyBaseComponents := make([]string, len(config.ComponentInheritanceChain))
+	copy(copyBaseComponents, config.ComponentInheritanceChain)
+	copyConfig.ComponentInheritanceChain = copyBaseComponents
+
+	baseComponentConfigCache[cacheKey] = &copyConfig
+}
+
+// getCachedCompiledSchema retrieves a cached compiled JSON schema if it exists.
+// The compiled schema is thread-safe for concurrent validation operations.
+func getCachedCompiledSchema(schemaPath string) (*jsonschema.Schema, bool) {
+	defer perf.Track(nil, "exec.getCachedCompiledSchema")()
+
+	jsonSchemaCacheMu.RLock()
+	defer jsonSchemaCacheMu.RUnlock()
+
+	schema, found := jsonSchemaCache[schemaPath]
+	return schema, found
+}
+
+// cacheCompiledSchema stores a compiled JSON schema in the cache.
+// The compiled schema is thread-safe and can be safely shared across goroutines.
+func cacheCompiledSchema(schemaPath string, schema *jsonschema.Schema) {
+	defer perf.Track(nil, "exec.cacheCompiledSchema")()
+
+	jsonSchemaCacheMu.Lock()
+	defer jsonSchemaCacheMu.Unlock()
+
+	jsonSchemaCache[schemaPath] = schema
+}
+
+// ClearBaseComponentConfigCache clears the base component config cache.
+// This should be called between independent operations (like tests) to ensure fresh processing.
+func ClearBaseComponentConfigCache() {
+	baseComponentConfigCacheMu.Lock()
+	defer baseComponentConfigCacheMu.Unlock()
+	baseComponentConfigCache = make(map[string]*schema.BaseComponentConfig)
+}
+
+// ClearJsonSchemaCache clears the JSON schema cache.
+// This should be called between independent operations (like tests) to ensure fresh processing.
+func ClearJsonSchemaCache() {
+	jsonSchemaCacheMu.Lock()
+	defer jsonSchemaCacheMu.Unlock()
+	jsonSchemaCache = make(map[string]*jsonschema.Schema)
+}
+
+// ClearFileContentCache clears the file content cache.
+// This should be called between independent operations (like tests) to ensure fresh processing.
+func ClearFileContentCache() {
+	defer perf.Track(nil, "exec.ClearFileContentCache")()
+
+	getFileContentSyncMap.Range(func(key, value interface{}) bool {
+		getFileContentSyncMap.Delete(key)
+		return true
+	})
+}
+
+// stackProcessResult holds the result of processing a single stack in parallel.
+type stackProcessResult struct {
+	index         int
+	stackFileName string
+	yamlConfig    string
+	finalConfig   map[string]any
+	stackConfig   map[string]any
+	importsConfig map[string]map[string]any
+	uniqueImports []string
+	mergeContext  *m.MergeContext
+	err           error
+}
+
 // ProcessYAMLConfigFiles takes a list of paths to stack manifests, processes and deep-merges all imports, and returns a list of stack configs.
 func ProcessYAMLConfigFiles(
 	atmosConfig *schema.AtmosConfiguration,
@@ -83,10 +303,11 @@ func ProcessYAMLConfigFiles(
 
 	count := len(filePaths)
 	listResult := make([]string, count)
-	mapResult := map[string]any{}
-	rawStackConfigs := map[string]map[string]any{}
-	var errorResult error
-	var errorLock sync.Mutex
+	mapResult := make(map[string]any, count)
+	rawStackConfigs := make(map[string]map[string]any, count)
+
+	// Create channel for results - no locks needed with channels.
+	results := make(chan stackProcessResult, count)
 	var wg sync.WaitGroup
 	wg.Add(count)
 
@@ -107,7 +328,8 @@ func ProcessYAMLConfigFiles(
 			)
 
 			// Each goroutine gets its own merge context to avoid data races.
-			// The merge context is stored per stack file using SetMergeContextForStack.
+			// For single-file operations (like describe component), use the
+			// SetLastMergeContext/GetLastMergeContext mechanism instead.
 			mergeContext := m.NewMergeContext()
 			if atmosConfig != nil && atmosConfig.TrackProvenance {
 				mergeContext.EnableProvenance()
@@ -131,9 +353,7 @@ func ProcessYAMLConfigFiles(
 				mergeContext,
 			)
 			if err != nil {
-				errorLock.Lock()
-				errorResult = err
-				errorLock.Unlock()
+				results <- stackProcessResult{index: i, err: err}
 				return
 			}
 
@@ -162,43 +382,59 @@ func ProcessYAMLConfigFiles(
 				importsConfig,
 				true)
 			if err != nil {
-				errorLock.Lock()
-				errorResult = err
-				errorLock.Unlock()
+				results <- stackProcessResult{index: i, err: err}
 				return
 			}
 
 			finalConfig["imports"] = uniqueImports
 
-			// Store merge context for this stack file if provenance tracking is enabled.
-			if atmosConfig != nil && atmosConfig.TrackProvenance && mergeContext != nil && mergeContext.IsProvenanceEnabled() {
-				SetMergeContextForStack(stackFileName, mergeContext)
-			}
-
 			yamlConfig, err := u.ConvertToYAML(finalConfig)
 			if err != nil {
-				errorLock.Lock()
-				errorResult = err
-				errorLock.Unlock()
+				results <- stackProcessResult{index: i, err: err}
 				return
 			}
 
-			processYAMLConfigFilesLock.Lock()
-			defer processYAMLConfigFilesLock.Unlock()
-
-			listResult[i] = yamlConfig
-			mapResult[stackFileName] = finalConfig
-			rawStackConfigs[stackFileName] = map[string]any{}
-			rawStackConfigs[stackFileName]["stack"] = stackConfig
-			rawStackConfigs[stackFileName]["imports"] = importsConfig
-			rawStackConfigs[stackFileName]["import_files"] = uniqueImports
+			// Send result via channel (lock-free).
+			results <- stackProcessResult{
+				index:         i,
+				stackFileName: stackFileName,
+				yamlConfig:    yamlConfig,
+				finalConfig:   finalConfig,
+				stackConfig:   stackConfig,
+				importsConfig: importsConfig,
+				uniqueImports: uniqueImports,
+				mergeContext:  mergeContext,
+				err:           nil,
+			}
 		}(i, filePath)
 	}
 
-	wg.Wait()
+	// Close results channel when all goroutines complete.
+	go func() {
+		wg.Wait()
+		close(results)
+	}()
 
-	if errorResult != nil {
-		return nil, nil, nil, errorResult
+	// Collect all results from channel (no lock contention).
+	for result := range results {
+		if result.err != nil {
+			return nil, nil, nil, result.err
+		}
+
+		// Store merge context for this stack file if provenance tracking is enabled.
+		if atmosConfig != nil && atmosConfig.TrackProvenance && result.mergeContext != nil && result.mergeContext.IsProvenanceEnabled() {
+			SetMergeContextForStack(result.stackFileName, result.mergeContext)
+			// Also set as last merge context for backward compatibility (note: may be overwritten by other results)
+			SetLastMergeContext(result.mergeContext)
+		}
+
+		listResult[result.index] = result.yamlConfig
+		mapResult[result.stackFileName] = result.finalConfig
+		rawStackConfigs[result.stackFileName] = map[string]any{
+			"stack":        result.stackConfig,
+			"imports":      result.importsConfig,
+			"import_files": result.uniqueImports,
+		}
 	}
 
 	return listResult, mapResult, rawStackConfigs, nil
@@ -260,16 +496,9 @@ func ProcessYAMLConfigFile(
 		mergeContext,
 	)
 
-	// Store merge context if provenance tracking is enabled (for single-file operations).
-	// Use the filePath as the key since this is a single-file operation.
+	// Store merge context if provenance tracking is enabled (for single-file operations like describe component)
 	if atmosConfig != nil && atmosConfig.TrackProvenance && mergeContext != nil && mergeContext.IsProvenanceEnabled() {
-		stackFileName := strings.TrimSuffix(
-			strings.TrimSuffix(
-				u.TrimBasePathFromPath(basePath+"/", filePath),
-				u.DefaultStackConfigFileExtension),
-			".yml",
-		)
-		SetMergeContextForStack(stackFileName, mergeContext)
+		SetLastMergeContext(mergeContext)
 	}
 
 	return deepMerged, imports, stackConfig, terraformInline, terraformImports, helmfileInline, helmfileImports, err
@@ -375,7 +604,14 @@ func processYAMLConfigFileWithContextInternal(
 	finalTerraformOverrides := map[string]any{}
 	finalHelmfileOverrides := map[string]any{}
 
-	stackYamlConfig, err := GetFileContent(filePath)
+	// Use uncached file reads when provenance tracking is enabled to ensure YAML position tracking works correctly.
+	var stackYamlConfig string
+	var err error
+	if atmosConfig != nil && atmosConfig.TrackProvenance {
+		stackYamlConfig, err = GetFileContentWithoutCache(filePath)
+	} else {
+		stackYamlConfig, err = GetFileContent(filePath)
+	}
 	// If the file does not exist (`err != nil`), and `ignoreMissingFiles = true`, don't return the error.
 	//
 	// `ignoreMissingFiles = true` is used when executing `atmos describe affected` command.
@@ -388,31 +624,9 @@ func processYAMLConfigFileWithContextInternal(
 	if err != nil {
 		if ignoreMissingFiles || skipIfMissing {
 			return map[string]any{}, map[string]map[string]any{}, map[string]any{}, map[string]any{}, map[string]any{}, map[string]any{}, map[string]any{}, nil
+		} else {
+			return nil, nil, nil, nil, nil, nil, nil, err
 		}
-
-		// Check if this is a file not found error.
-		if os.IsNotExist(err) {
-			// Build a helpful error with context and hints.
-			wrappedErr := errUtils.Build(errUtils.ErrStackManifestFileNotFound).
-				WithTitle("Configuration Error").
-				WithHintf("Stack manifest file not found at path: %s", filePath).
-				WithHintf("This path is based on the 'stacks.base_path' setting in your 'atmos.yaml' configuration").
-				WithHintf("Verify the file exists or update 'stacks.base_path' in your 'atmos.yaml' to point to the correct directory").
-				WithContext("file", relativeFilePath).
-				WithContext("absolute_path", filePath).
-				Err()
-
-			if atmosConfig != nil && atmosConfig.Stacks.BasePath != "" {
-				wrappedErr = errUtils.Build(wrappedErr).
-					WithContext("stacks.base_path", atmosConfig.Stacks.BasePath).
-					Err()
-			}
-
-			return nil, nil, nil, nil, nil, nil, nil, wrappedErr
-		}
-
-		// For other errors (permissions, I/O errors, etc.), wrap with generic read error.
-		return nil, nil, nil, nil, nil, nil, nil, errors.Join(errUtils.ErrReadFile, err)
 	}
 	if stackYamlConfig == "" {
 		return map[string]any{}, map[string]map[string]any{}, map[string]any{}, map[string]any{}, map[string]any{}, map[string]any{}, map[string]any{}, nil
@@ -449,15 +663,11 @@ func processYAMLConfigFileWithContextInternal(
 		if mergeContext != nil {
 			// Wrap the error with the sentinel first to preserve it
 			wrappedErr := fmt.Errorf("%w: %v", errUtils.ErrInvalidStackManifest, err)
-			// Join with original error to preserve filesystem errors like os.ErrNotExist
-			wrappedErr = errors.Join(wrappedErr, err)
 			// Then format it with context information
 			e := mergeContext.FormatError(wrappedErr, fmt.Sprintf("stack manifest '%s'%s", relativeFilePath, stackManifestTemplatesErrorMessage))
 			return nil, nil, nil, nil, nil, nil, nil, e
 		} else {
 			e := fmt.Errorf("%w: stack manifest '%s'\n%v%s", errUtils.ErrInvalidStackManifest, relativeFilePath, err, stackManifestTemplatesErrorMessage)
-			// Join with original error to preserve filesystem errors like os.ErrNotExist
-			e = errors.Join(e, err)
 			return nil, nil, nil, nil, nil, nil, nil, e
 		}
 	}
@@ -482,34 +692,49 @@ func processYAMLConfigFileWithContextInternal(
 			return nil, nil, nil, nil, nil, nil, nil, err
 		}
 
-		compiler := jsonschema.NewCompiler()
+		atmosManifestJsonSchemaValidationErrorFormat := "Atmos manifest JSON Schema validation error in the file '%s':\n%v"
 
-		atmosManifestJsonSchemaFileReader, err := os.Open(atmosManifestJsonSchemaFilePath)
-		if err != nil {
-			return nil, nil, nil, nil, nil, nil, nil, fmt.Errorf("%w: file '%s': %v", errUtils.ErrStackManifestSchemaValidation, relativeFilePath, err)
+		// Check cache first to avoid re-compiling the same schema for every stack file.
+		compiledSchema, found := getCachedCompiledSchema(atmosManifestJsonSchemaFilePath)
+
+		if !found {
+			// Schema not in cache - compile it and cache the result.
+			compiler := jsonschema.NewCompiler()
+
+			atmosManifestJsonSchemaFileReader, err := os.Open(atmosManifestJsonSchemaFilePath)
+			if err != nil {
+				return nil, nil, nil, nil, nil, nil, nil, errors.Errorf(atmosManifestJsonSchemaValidationErrorFormat, relativeFilePath, err)
+			}
+			defer func() {
+				_ = atmosManifestJsonSchemaFileReader.Close()
+			}()
+
+			if err := compiler.AddResource(atmosManifestJsonSchemaFilePath, atmosManifestJsonSchemaFileReader); err != nil {
+				return nil, nil, nil, nil, nil, nil, nil, errors.Errorf(atmosManifestJsonSchemaValidationErrorFormat, relativeFilePath, err)
+			}
+
+			compiler.Draft = jsonschema.Draft2020
+
+			compiledSchema, err = compiler.Compile(atmosManifestJsonSchemaFilePath)
+			if err != nil {
+				return nil, nil, nil, nil, nil, nil, nil, errors.Errorf(atmosManifestJsonSchemaValidationErrorFormat, relativeFilePath, err)
+			}
+
+			// Store compiled schema in cache for reuse.
+			cacheCompiledSchema(atmosManifestJsonSchemaFilePath, compiledSchema)
 		}
 
-		if err := compiler.AddResource(atmosManifestJsonSchemaFilePath, atmosManifestJsonSchemaFileReader); err != nil {
-			return nil, nil, nil, nil, nil, nil, nil, fmt.Errorf("%w: file '%s': %v", errUtils.ErrStackManifestSchemaValidation, relativeFilePath, err)
-		}
-
-		compiler.Draft = jsonschema.Draft2020
-
-		compiledSchema, err := compiler.Compile(atmosManifestJsonSchemaFilePath)
-		if err != nil {
-			return nil, nil, nil, nil, nil, nil, nil, fmt.Errorf("%w: file '%s': %v", errUtils.ErrStackManifestSchemaValidation, relativeFilePath, err)
-		}
-
+		// Validate using the compiled schema (whether cached or newly compiled).
 		if err = compiledSchema.Validate(dataFromJson); err != nil {
 			switch e := err.(type) {
 			case *jsonschema.ValidationError:
 				b, err2 := json.MarshalIndent(e.BasicOutput(), "", "  ")
 				if err2 != nil {
-					return nil, nil, nil, nil, nil, nil, nil, fmt.Errorf("%w: file '%s': %v", errUtils.ErrStackManifestSchemaValidation, relativeFilePath, err2)
+					return nil, nil, nil, nil, nil, nil, nil, errors.Errorf(atmosManifestJsonSchemaValidationErrorFormat, relativeFilePath, err2)
 				}
-				return nil, nil, nil, nil, nil, nil, nil, fmt.Errorf("%w: file '%s':\n%s", errUtils.ErrStackManifestSchemaValidation, relativeFilePath, string(b))
+				return nil, nil, nil, nil, nil, nil, nil, errors.Errorf(atmosManifestJsonSchemaValidationErrorFormat, relativeFilePath, string(b))
 			default:
-				return nil, nil, nil, nil, nil, nil, nil, fmt.Errorf("%w: file '%s': %v", errUtils.ErrStackManifestSchemaValidation, relativeFilePath, err)
+				return nil, nil, nil, nil, nil, nil, nil, errors.Errorf(atmosManifestJsonSchemaValidationErrorFormat, relativeFilePath, err)
 			}
 		}
 	}
@@ -602,6 +827,20 @@ func processYAMLConfigFileWithContextInternal(
 				}
 			}
 		}
+	}
+
+	// importFileResult holds the result of processing a single import file in parallel.
+	type importFileResult struct {
+		index                        int
+		importFile                   string
+		yamlConfig                   map[string]any
+		yamlConfigRaw                map[string]any
+		terraformOverridesInline     map[string]any
+		terraformOverridesImports    map[string]any
+		helmfileOverridesInline      map[string]any
+		helmfileOverridesImports     map[string]any
+		importRelativePathWithoutExt string
+		err                          error
 	}
 
 	for _, importStruct := range importStructs {
@@ -697,40 +936,91 @@ func processYAMLConfigFileWithContextInternal(
 			return nil, nil, nil, nil, nil, nil, nil, err
 		}
 
-		// Process the imports in the current manifest
-		for _, importFile := range importMatches {
-			yamlConfig,
-				_,
-				yamlConfigRaw,
-				terraformOverridesInline,
-				terraformOverridesImports,
-				helmfileOverridesInline,
-				helmfileOverridesImports, err2 := processYAMLConfigFileWithContextInternal(
-				atmosConfig,
-				basePath,
-				importFile,
-				importsConfig,
-				mergedContext,
-				ignoreMissingFiles,
-				importStruct.SkipTemplatesProcessing,
-				true, // importStruct.IgnoreMissingTemplateValues,
-				importStruct.SkipIfMissing,
-				parentTerraformOverridesInline,
-				parentTerraformOverridesImports,
-				parentHelmfileOverridesInline,
-				parentHelmfileOverridesImports,
-				"",
-				mergeContext,
-			)
-			if err2 != nil {
-				return nil, nil, nil, nil, nil, nil, nil, err2
+		// Initialize provenance storage before parallel processing to avoid data races.
+		// All goroutines will share the same ProvenanceStorage (which is thread-safe).
+		// This prevents multiple goroutines from racing to initialize the Provenance pointer.
+		if atmosConfig != nil && atmosConfig.TrackProvenance && mergeContext != nil {
+			mergeContext.EnableProvenance()
+		}
+
+		// Process the imports in the current manifest in parallel.
+		// While the file I/O, parsing, and recursive import processing can be done in parallel,
+		// the merge operations must be sequential to preserve Atmos inheritance order.
+		results := make([]importFileResult, len(importMatches))
+		var wg sync.WaitGroup
+
+		for i, importFile := range importMatches {
+			wg.Add(1)
+			go func(index int, file string) {
+				defer wg.Done()
+
+				// Process the import file (expensive I/O + parsing + recursive imports).
+				yamlConfig,
+					_,
+					yamlConfigRaw,
+					terraformOverridesInline,
+					terraformOverridesImports,
+					helmfileOverridesInline,
+					helmfileOverridesImports, processErr := processYAMLConfigFileWithContextInternal(
+					atmosConfig,
+					basePath,
+					file,
+					importsConfig,
+					mergedContext,
+					ignoreMissingFiles,
+					importStruct.SkipTemplatesProcessing,
+					importStruct.IgnoreMissingTemplateValues,
+					importStruct.SkipIfMissing,
+					parentTerraformOverridesInline,
+					parentTerraformOverridesImports,
+					parentHelmfileOverridesInline,
+					parentHelmfileOverridesImports,
+					"",
+					mergeContext,
+				)
+				if processErr != nil {
+					results[index] = importFileResult{index: index, err: processErr}
+					return
+				}
+
+				// Calculate import relative path.
+				importRelativePathWithExt := strings.Replace(filepath.ToSlash(file), filepath.ToSlash(basePath)+"/", "", 1)
+				ext2 := filepath.Ext(importRelativePathWithExt)
+				if ext2 == "" {
+					ext2 = u.DefaultStackConfigFileExtension
+				}
+				importRelativePathWithoutExt := strings.TrimSuffix(importRelativePathWithExt, ext2)
+
+				// Store result with all necessary data for sequential merging.
+				results[index] = importFileResult{
+					index:                        index,
+					importFile:                   file,
+					yamlConfig:                   yamlConfig,
+					yamlConfigRaw:                yamlConfigRaw,
+					terraformOverridesInline:     terraformOverridesInline,
+					terraformOverridesImports:    terraformOverridesImports,
+					helmfileOverridesInline:      helmfileOverridesInline,
+					helmfileOverridesImports:     helmfileOverridesImports,
+					importRelativePathWithoutExt: importRelativePathWithoutExt,
+					err:                          nil,
+				}
+			}(i, importFile)
+		}
+
+		// Wait for all parallel processing to complete.
+		wg.Wait()
+
+		// Sequentially merge results in the original import order to preserve Atmos inheritance.
+		for _, result := range results {
+			if result.err != nil {
+				return nil, nil, nil, nil, nil, nil, nil, result.err
 			}
 
 			// From the imported manifest, get the `overrides` sections and merge them with the parent `overrides` section.
 			// The inline `overrides` section takes precedence over the imported `overrides` section inside the imported manifest.
 			parentTerraformOverridesImports, err = m.MergeWithContext(
 				atmosConfig,
-				[]map[string]any{parentTerraformOverridesImports, terraformOverridesImports, terraformOverridesInline},
+				[]map[string]any{parentTerraformOverridesImports, result.terraformOverridesImports, result.terraformOverridesInline},
 				mergeContext,
 			)
 			if err != nil {
@@ -741,22 +1031,15 @@ func processYAMLConfigFileWithContextInternal(
 			// The inline `overrides` section takes precedence over the imported `overrides` section inside the imported manifest.
 			parentHelmfileOverridesImports, err = m.MergeWithContext(
 				atmosConfig,
-				[]map[string]any{parentHelmfileOverridesImports, helmfileOverridesImports, helmfileOverridesInline},
+				[]map[string]any{parentHelmfileOverridesImports, result.helmfileOverridesImports, result.helmfileOverridesInline},
 				mergeContext,
 			)
 			if err != nil {
 				return nil, nil, nil, nil, nil, nil, nil, err
 			}
 
-			stackConfigs = append(stackConfigs, yamlConfig)
-
-			importRelativePathWithExt := strings.Replace(filepath.ToSlash(importFile), filepath.ToSlash(basePath)+"/", "", 1)
-			ext2 := filepath.Ext(importRelativePathWithExt)
-			if ext2 == "" {
-				ext2 = u.DefaultStackConfigFileExtension
-			}
-
-			importRelativePathWithoutExt := strings.TrimSuffix(importRelativePathWithExt, ext2)
+			// Append to stackConfigs in order.
+			stackConfigs = append(stackConfigs, result.yamlConfig)
 
 			// Record metadata for this import.
 			// We record every time we encounter an import to track all files that import it,
@@ -768,7 +1051,7 @@ func processYAMLConfigFileWithContextInternal(
 				// Store metadata using special key format: "__import_meta__:<import-path>".
 				// Note: We don't have line number info here since this is during recursive processing,
 				// not YAML parsing. We'll use line 1 as a placeholder.
-				metaKey := fmt.Sprintf("__import_meta__:%s", importRelativePathWithoutExt)
+				metaKey := fmt.Sprintf("__import_meta__:%s", result.importRelativePathWithoutExt)
 
 				// Only record if not already recorded (first occurrence wins for the metadata)
 				if !mergeContext.HasProvenance(metaKey) {
@@ -782,7 +1065,12 @@ func processYAMLConfigFileWithContextInternal(
 				}
 			}
 
-			importsConfig[importRelativePathWithoutExt] = yamlConfigRaw
+			// Protect concurrent writes to importsConfig map.
+			// When processing imports in parallel at nested levels, multiple goroutines
+			// may reach this point simultaneously for different imports.
+			importsConfigLock.Lock()
+			importsConfig[result.importRelativePathWithoutExt] = result.yamlConfigRaw
+			importsConfigLock.Unlock()
 		}
 	}
 
@@ -1142,6 +1430,19 @@ func GetFileContent(filePath string) (string, error) {
 	return string(content), nil
 }
 
+// GetFileContentWithoutCache reads file content without using the cache.
+// Used when provenance tracking is enabled to ensure fresh reads with position tracking.
+func GetFileContentWithoutCache(filePath string) (string, error) {
+	defer perf.Track(nil, "exec.GetFileContentWithoutCache")()
+
+	content, err := os.ReadFile(filePath)
+	if err != nil {
+		return "", err
+	}
+
+	return string(content), nil
+}
+
 // ProcessBaseComponentConfig processes base component(s) config.
 func ProcessBaseComponentConfig(
 	atmosConfig *schema.AtmosConfiguration,
@@ -1156,7 +1457,21 @@ func ProcessBaseComponentConfig(
 ) error {
 	defer perf.Track(atmosConfig, "exec.ProcessBaseComponentConfig")()
 
-	return processBaseComponentConfigInternal(
+	// Create cache key from stack + component + baseComponent.
+	cacheKey := fmt.Sprintf("%s:%s:%s", stack, component, baseComponent)
+
+	// Skip cache when provenance tracking is enabled, as we need to record provenance entries during processing.
+	if !atmosConfig.TrackProvenance {
+		// Check cache first.
+		if cachedConfig, cachedBaseComponents, found := getCachedBaseComponentConfig(cacheKey); found {
+			*baseComponentConfig = *cachedConfig
+			*baseComponents = *cachedBaseComponents
+			return nil
+		}
+	}
+
+	// Process normally if not cached.
+	err := processBaseComponentConfigInternal(
 		atmosConfig,
 		baseComponentConfig,
 		allComponentsMap,
@@ -1167,6 +1482,13 @@ func ProcessBaseComponentConfig(
 		checkBaseComponentExists,
 		baseComponents,
 	)
+	if err != nil {
+		return err
+	}
+
+	// Store result in cache after processing.
+	cacheBaseComponentConfig(cacheKey, baseComponentConfig)
+	return nil
 }
 
 // processBaseComponentConfigInternal is the internal recursive implementation.
