@@ -113,6 +113,8 @@ require (
 	cloud.google.com/go/monitoring v1.24.2 // indirect
 	cloud.google.com/go/storage v1.51.0 // indirect
 	cuelang.org/go v0.13.2 // indirect
+	github.com/99designs/go-keychain v0.0.0-20191008050251-8e49817e8af4 // indirect
+	github.com/99designs/keyring v1.2.2 // indirect
 	github.com/AlecAivazis/survey/v2 v2.3.7 // indirect
 	github.com/Azure/azure-sdk-for-go/sdk/internal v1.11.2 // indirect
 	github.com/Azure/azure-sdk-for-go/sdk/security/keyvault/internal v1.2.0 // indirect
@@ -200,6 +202,7 @@ require (
 	github.com/dsnet/compress v0.0.1 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/dustin/gojson v0.0.0-20160307161227-2e71ec9dd5ad // indirect
+	github.com/dvsekhvalnov/jose2go v1.6.0 // indirect
 	github.com/editorconfig/editorconfig-core-go/v2 v2.6.3 // indirect
 	github.com/elliotchance/orderedmap v1.8.0 // indirect
 	github.com/emirpasic/gods v1.18.1 // indirect
@@ -220,6 +223,7 @@ require (
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/go-stack/stack v1.8.1 // indirect
 	github.com/goccy/go-json v0.10.5 // indirect
+	github.com/godbus/dbus v0.0.0-20190726142602-4481cbc300e2 // indirect
 	github.com/godbus/dbus/v5 v5.1.0 // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
 	github.com/golang-jwt/jwt/v4 v4.5.2 // indirect
@@ -234,6 +238,7 @@ require (
 	github.com/gorilla/css v1.0.1 // indirect
 	github.com/gosimple/slug v1.15.0 // indirect
 	github.com/gosimple/unidecode v1.0.1 // indirect
+	github.com/gsterjov/go-libsecret v0.0.0-20161001094733-a6f4afe4910c // indirect
 	github.com/hack-pad/hackpadfs v0.2.4 // indirect
 	github.com/hairyhenderson/go-fsimpl v0.3.1 // indirect
 	github.com/hairyhenderson/toml v0.4.2-0.20210923231440-40456b8e66cf // indirect
@@ -305,6 +310,7 @@ require (
 	github.com/moby/locker v1.0.1 // indirect
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
 	github.com/modern-go/reflect2 v1.0.2 // indirect
+	github.com/mtibben/percent v0.2.1 // indirect
 	github.com/muesli/cancelreader v0.2.2 // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
 	github.com/nwaples/rardecode v1.1.3 // indirect

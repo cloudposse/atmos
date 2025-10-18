@@ -112,8 +112,9 @@ func TestIsExpired(t *testing.T) {
 }
 
 func TestGetAnySetAny(t *testing.T) {
-	// Use the concrete keyring store to access helper methods.
-	s := NewKeyringAuthStore()
+	// Use the concrete system keyring store to access helper methods.
+	s, err := newSystemKeyringStore()
+	assert.NoError(t, err)
 	type demo struct {
 		A string
 		B int

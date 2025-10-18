@@ -3,8 +3,15 @@ package schema
 // AuthConfig defines the authentication configuration structure.
 type AuthConfig struct {
 	Logs       Logs                `yaml:"logs,omitempty" json:"logs,omitempty" mapstructure:"logs"`
+	Keyring    KeyringConfig       `yaml:"keyring,omitempty" json:"keyring,omitempty" mapstructure:"keyring"`
 	Providers  map[string]Provider `yaml:"providers" json:"providers" mapstructure:"providers"`
 	Identities map[string]Identity `yaml:"identities" json:"identities" mapstructure:"identities"`
+}
+
+// KeyringConfig defines keyring backend configuration for credential storage.
+type KeyringConfig struct {
+	Type string                 `yaml:"type,omitempty" json:"type,omitempty" mapstructure:"type"` // "system", "file", or "memory"
+	Spec map[string]interface{} `yaml:"spec,omitempty" json:"spec,omitempty" mapstructure:"spec"` // Type-specific configuration
 }
 
 // Provider defines an authentication provider configuration.
