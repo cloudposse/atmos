@@ -552,12 +552,13 @@ components:
   packer:
     base_path: "components/packer"
 
-  # Your plugin type
-  yourtype:
-    base_path: "components/yourtype"
-    executable_path: "/usr/local/bin/yourtool"
-    default_version: "1.2.3"
-    timeout: 600
+  # Plugin types go under 'plugins'
+  plugins:
+    yourtype:
+      base_path: "components/yourtype"
+      executable_path: "/usr/local/bin/yourtool"
+      default_version: "1.2.3"
+      timeout: 600
 ```
 
 ### Stack Configuration
