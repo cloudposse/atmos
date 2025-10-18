@@ -171,7 +171,9 @@ func renderStandaloneIdentities(
 
 	for _, name := range standaloneIdentities {
 		identity := allIdentities[name]
-		identityNode := buildIdentityNode(&identity, name)
+		// Create fresh visited map for each standalone identity to track cycles per-path.
+		visited := make(map[string]struct{})
+		identityNode := buildIdentityNodeForProvider(&identity, name, allIdentities, visited)
 		standaloneNode.Child(identityNode)
 	}
 
