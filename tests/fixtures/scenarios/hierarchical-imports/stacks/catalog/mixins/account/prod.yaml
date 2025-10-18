@@ -1,0 +1,28 @@
+# Level 2: Account mixin for prod
+
+import:
+  - catalog/base/defaults
+
+vars:
+  import_order_test: "level-2-account-prod"
+
+  stage: "prod"
+  account_name: "acme-prod"
+  account_id: "222222222222"
+
+  # Production-specific settings
+  instance_type: "t3.large"
+  min_size: 3
+  max_size: 10
+
+  tags:
+    Stage: "prod"
+    Account: "acme-prod"
+    Source: "level-2-account-prod"
+
+settings:
+  import_order_test: "level-2-account-prod-settings"
+  account:
+    name: "acme-prod"
+    id: "222222222222"
+    stage: "prod"

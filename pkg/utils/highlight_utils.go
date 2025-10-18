@@ -80,11 +80,20 @@ var isTermPresent = termUtils.IsTTYSupportForStdout()
 func HighlightCodeWithConfig(config *schema.AtmosConfiguration, code string, format ...string) (string, error) {
 	defer perf.Track(config, "utils.HighlightCodeWithConfig")()
 
+	// Return plain code if config is nil
+	if config == nil {
+		return code, nil
+	}
+
 	// Check if either stdout or stderr is a terminal (provenance goes to stderr)
 	isTerm := isTermPresent || termUtils.IsTTYSupportForStderr()
 
-	// Skip highlighting if not in a terminal or disabled
-	if !isTerm || !GetHighlightSettings(config).Enabled {
+	// Check if color is explicitly disabled via NoColor flag or Color setting.
+	// NoColor takes precedence (when true, always disable colors).
+	colorDisabled := config.Settings.Terminal.NoColor || !config.Settings.Terminal.Color
+
+	// Skip highlighting if not in a terminal, disabled, or colors are disabled
+	if !isTerm || !GetHighlightSettings(config).Enabled || colorDisabled {
 		return code, nil
 	}
 

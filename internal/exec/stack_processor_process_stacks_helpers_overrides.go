@@ -14,19 +14,19 @@ import (
 func processComponentOverrides(opts *ComponentProcessorOptions, result *ComponentProcessorResult) error {
 	defer perf.Track(opts.AtmosConfig, "exec.processComponentOverrides")()
 
-	// Initialize overrides.
-	result.ComponentOverridesVars = make(map[string]any)
-	result.ComponentOverridesSettings = make(map[string]any)
-	result.ComponentOverridesEnv = make(map[string]any)
-	result.ComponentOverridesAuth = make(map[string]any)
+	// Initialize overrides with small capacity hints (overrides are typically sparse).
+	result.ComponentOverridesVars = make(map[string]any, componentOverridesCapacity)
+	result.ComponentOverridesSettings = make(map[string]any, componentOverridesCapacity)
+	result.ComponentOverridesEnv = make(map[string]any, componentOverridesCapacity)
+	result.ComponentOverridesAuth = make(map[string]any, componentOverridesCapacity)
 	if opts.ComponentType == cfg.TerraformComponentType {
-		result.ComponentOverridesProviders = make(map[string]any)
-		result.ComponentOverridesHooks = make(map[string]any)
+		result.ComponentOverridesProviders = make(map[string]any, componentOverridesCapacity)
+		result.ComponentOverridesHooks = make(map[string]any, componentOverridesCapacity)
 	}
 
 	i, ok := opts.ComponentMap[cfg.OverridesSectionName]
 	if !ok {
-		result.ComponentOverrides = make(map[string]any)
+		result.ComponentOverrides = make(map[string]any, componentOverridesCapacity)
 		return nil
 	}
 

@@ -275,28 +275,13 @@ func TestIdentityFlagCompletion(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Save current directory.
-			origDir, err := os.Getwd()
-			if err != nil {
-				t.Fatalf("Failed to get current directory: %v", err)
-			}
-			defer func() {
-				if err := os.Chdir(origDir); err != nil {
-					t.Errorf("Failed to restore directory: %v", err)
-				}
-			}()
-
-			// Change to test directory if specified.
+			// Change to test directory if specified (automatically reverted after test).
 			if tt.setupConfigDir != "" {
-				if err := os.Chdir(tt.setupConfigDir); err != nil {
-					t.Fatalf("Failed to change to test directory: %v", err)
-				}
+				t.Chdir(tt.setupConfigDir)
 			} else {
 				// Use a temp directory with no atmos.yaml.
 				tmpDir := t.TempDir()
-				if err := os.Chdir(tmpDir); err != nil {
-					t.Fatalf("Failed to change to temp directory: %v", err)
-				}
+				t.Chdir(tmpDir)
 			}
 
 			// Call the completion function.
@@ -372,25 +357,16 @@ func TestAddIdentityCompletion(t *testing.T) {
 
 // TestIdentityFlagCompletionWithNoAuthConfig tests edge case with nil auth config.
 func TestIdentityFlagCompletionWithNoAuthConfig(t *testing.T) {
-	// Save current directory.
-	origDir, err := os.Getwd()
-	require.NoError(t, err)
-	defer func() {
-		err := os.Chdir(origDir)
-		require.NoError(t, err)
-	}()
-
-	// Create a temp directory with an atmos.yaml that has no auth section.
+	// Create a temp directory with an atmos.yaml that has no auth section (automatically reverted after test).
 	tmpDir := t.TempDir()
-	err = os.Chdir(tmpDir)
-	require.NoError(t, err)
+	t.Chdir(tmpDir)
 
 	// Create minimal atmos.yaml without auth section.
 	atmosYaml := `base_path: .
 stacks:
   base_path: stacks
 `
-	err = os.WriteFile("atmos.yaml", []byte(atmosYaml), 0o644)
+	err := os.WriteFile("atmos.yaml", []byte(atmosYaml), 0o644)
 	require.NoError(t, err)
 
 	// Call completion function.
@@ -403,17 +379,8 @@ stacks:
 
 // TestIdentityFlagCompletionPartialMatch tests completion with partial input.
 func TestIdentityFlagCompletionPartialMatch(t *testing.T) {
-	// Save current directory.
-	origDir, err := os.Getwd()
-	require.NoError(t, err)
-	defer func() {
-		err := os.Chdir(origDir)
-		require.NoError(t, err)
-	}()
-
-	// Change to demo-auth directory.
-	err = os.Chdir("../examples/demo-auth")
-	require.NoError(t, err)
+	// Change to demo-auth directory (automatically reverted after test).
+	t.Chdir("../examples/demo-auth")
 
 	// Call completion with partial input.
 	completions, directive := identityFlagCompletion(nil, []string{}, "ss")
@@ -426,17 +393,8 @@ func TestIdentityFlagCompletionPartialMatch(t *testing.T) {
 
 // TestIdentityFlagCompletionSorting tests that identities are returned in sorted order.
 func TestIdentityFlagCompletionSorting(t *testing.T) {
-	// Save current directory.
-	origDir, err := os.Getwd()
-	require.NoError(t, err)
-	defer func() {
-		err := os.Chdir(origDir)
-		require.NoError(t, err)
-	}()
-
-	// Change to demo-auth directory.
-	err = os.Chdir("../examples/demo-auth")
-	require.NoError(t, err)
+	// Change to demo-auth directory (automatically reverted after test).
+	t.Chdir("../examples/demo-auth")
 
 	// Call completion function.
 	completions, _ := identityFlagCompletion(nil, []string{}, "")
@@ -451,24 +409,15 @@ func TestIdentityFlagCompletionSorting(t *testing.T) {
 
 // TestIdentityFlagCompletionErrorPath tests error handling when config loading fails.
 func TestIdentityFlagCompletionErrorPath(t *testing.T) {
-	// Save current directory.
-	origDir, err := os.Getwd()
-	require.NoError(t, err)
-	defer func() {
-		err := os.Chdir(origDir)
-		require.NoError(t, err)
-	}()
-
-	// Create a temp directory with invalid atmos.yaml.
+	// Create a temp directory with invalid atmos.yaml (automatically reverted after test).
 	tmpDir := t.TempDir()
-	err = os.Chdir(tmpDir)
-	require.NoError(t, err)
+	t.Chdir(tmpDir)
 
 	// Create invalid YAML that will cause InitCliConfig to fail.
 	invalidYaml := `invalid: yaml: content:
   - this is: [broken
 `
-	err = os.WriteFile("atmos.yaml", []byte(invalidYaml), 0o644)
+	err := os.WriteFile("atmos.yaml", []byte(invalidYaml), 0o644)
 	require.NoError(t, err)
 
 	// Call completion function - should handle error gracefully.
@@ -503,22 +452,9 @@ func TestAddIdentityCompletionErrorHandling(t *testing.T) {
 
 // TestStackFlagCompletion tests the stackFlagCompletion function.
 func TestStackFlagCompletion(t *testing.T) {
-	// Save current directory.
-	origDir, err := os.Getwd()
-	if err != nil {
-		t.Fatalf("Failed to get current directory: %v", err)
-	}
-	defer func() {
-		if err := os.Chdir(origDir); err != nil {
-			t.Errorf("Failed to restore directory: %v", err)
-		}
-	}()
-
-	// Change to a directory with valid stacks configuration.
-	testDir := "../../examples/quick-start-advanced"
-	if err := os.Chdir(testDir); err != nil {
-		t.Skipf("Skipping test: test directory not available: %v", err)
-	}
+	// Change to a directory with valid stacks configuration (automatically reverted after test).
+	testDir := "../examples/quick-start-advanced"
+	t.Chdir(testDir)
 
 	// Create a test command.
 	cmd := &cobra.Command{
