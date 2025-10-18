@@ -9,6 +9,7 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
 
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/pager"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -373,6 +374,12 @@ func TestDescribeComponent_Packer(t *testing.T) {
 }
 
 func TestDescribeComponentWithProvenance(t *testing.T) {
+	// Clear cache to ensure fresh processing.
+	ClearBaseComponentConfigCache()
+	ClearMergeContexts()
+	ClearLastMergeContext()
+	ClearFileContentCache()
+
 	err := os.Unsetenv("ATMOS_CLI_CONFIG_PATH")
 	if err != nil {
 		t.Fatalf("Failed to unset 'ATMOS_CLI_CONFIG_PATH': %v", err)
@@ -393,43 +400,27 @@ func TestDescribeComponentWithProvenance(t *testing.T) {
 	component := "vpc-flow-logs-bucket"
 	stack := "plat-ue2-dev"
 
-	// Execute describe component WITHOUT provenance first to get a baseline
-	componentSection, err := ExecuteDescribeComponent(
-		component,
-		stack,
-		true, // processTemplates
-		true, // processYamlFunctions
-		nil,  // skip
-	)
+	// Initialize atmosConfig with provenance tracking enabled
+	var configAndStacksInfo schema.ConfigAndStacksInfo
+	configAndStacksInfo.ComponentFromArg = component
+	configAndStacksInfo.Stack = stack
+	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
 	assert.NoError(t, err)
-	assert.NotNil(t, componentSection)
+	atmosConfig.TrackProvenance = true
 
-	// Now execute with provenance by passing nil atmosConfig
-	// This will initialize it properly, but we need to set provenance tracking
-	// We'll use the DescribeComponentExec with the Provenance flag set
-	exec := NewDescribeComponentExec()
-
-	// Execute with provenance enabled
-	err = exec.ExecuteDescribeComponentCmd(DescribeComponentParams{
+	// Execute with provenance enabled using ExecuteDescribeComponentWithContext
+	result, err := ExecuteDescribeComponentWithContext(DescribeComponentContextParams{
+		AtmosConfig:          &atmosConfig,
 		Component:            component,
 		Stack:                stack,
 		ProcessTemplates:     true,
 		ProcessYamlFunctions: true,
-		Provenance:           true,
+		Skip:                 nil,
 	})
 	assert.NoError(t, err)
-
-	// Get the last merge context that was stored
-	mergeContext := GetLastMergeContext()
-	assert.NotNil(t, mergeContext, "MergeContext should not be nil when provenance is enabled")
-	assert.True(t, mergeContext.IsProvenanceEnabled(), "MergeContext should have provenance enabled")
-
-	// Use the baseline component section for further checks
-	result := &DescribeComponentResult{
-		ComponentSection: componentSection,
-		MergeContext:     mergeContext,
-	}
 	assert.NotNil(t, result)
+	assert.NotNil(t, result.MergeContext, "MergeContext should not be nil when provenance is enabled")
+	assert.True(t, result.MergeContext.IsProvenanceEnabled(), "MergeContext should have provenance enabled")
 
 	// Verify component section is populated
 	assert.NotNil(t, result.ComponentSection)
