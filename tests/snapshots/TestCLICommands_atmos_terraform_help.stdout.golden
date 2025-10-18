@@ -1,8 +1,4 @@
 
-Notice: Atmos now collects completely anonymous telemetry regarding usage.
-This information is used to shape Atmos roadmap and prioritize features.
-You can learn more, including how to opt-out if you'd not like to participate in this anonymous program,
-by visiting the following URL: https://atmos.tools/cli/telemetry
 
 This command allows you to execute Terraform commands, such as plan, apply, and destroy, using Atmos stack configurations for consistent infrastructure management.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     
 
@@ -81,6 +77,9 @@ Flags:
                                       changes (default false)
 
     -h, --help                        help for terraform
+
+    -i, --identity string             Specify the identity to authenticate to
+                                      before running Terraform commands
 
         --include-dependents          For each affected component, detect the
                                       dependent components and process them in
@@ -213,10 +212,13 @@ Global Flags:
                                      standard file descriptor (including
                                      /dev/null)
 
+        --version                    Display the Atmos CLI version
+
 
 Examples:
 
 – Execute a terraform subcommand                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        
   $ atmos terraform [subcommand] <component-name> -s <stack-name>                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       
 
 

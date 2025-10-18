@@ -1,0 +1,189 @@
+---
+slug: provenance-tracking
+title: "Configuration Provenance Tracking: Know Where Every Value Comes From"
+authors: [atmos]
+tags: [atmos, configuration, debugging, inheritance]
+---
+
+import Terminal from '@site/src/components/Terminal'
+
+We've shipped a feature that developers working with complex infrastructure configurations have been asking for: **provenance tracking**. With the new `--provenance` flag in `atmos describe component`, you can now see exactly where every configuration value originated—down to the file, line number, and column.
+
+<!--truncate-->
+
+## The Problem: Configuration Archaeology
+
+If you've worked with Atmos's hierarchical stack configurations, you know the power of inheritance and deep merging. But that power comes with a challenge: when you see a configuration value, where did it actually come from?
+
+Previously, if you saw an unexpected value like `cidr: "10.100.0.0/16"`, you'd have to:
+- Mentally trace through import chains
+- Open multiple YAML files
+- Grep through your stack configurations
+- Reconstruct the merge order in your head
+
+The existing `sources` system showed top-level keys, but couldn't tell you about nested values, array elements, or map entries. And it didn't include line numbers—just file paths.
+
+## The Solution: Line-Level Provenance
+
+The new provenance tracking system records the exact source of **every value** in your component configuration. Not just top-level keys—every nested field, every array element, every map entry.
+
+### Basic Usage
+
+```bash
+atmos describe component vpc -s prod-ue2 --provenance
+```
+
+This displays your component configuration with inline comments showing where each value originated:
+
+<Terminal title="atmos describe component vpc -s prod-ue2 --provenance">
+```yaml
+# Provenance Legend:
+#   ● [1] Defined in parent stack
+#   ○ [N] Inherited/imported (N=2+ levels deep)
+#   ∴ Computed/templated
+
+import:                                           # ○ [2] orgs/acme/_defaults.yaml:2
+  - catalog/vpc/defaults                          # ○ [2] orgs/acme/_defaults.yaml:2
+  - mixins/region/us-east-2                       # ● [1] orgs/acme/prod/us-east-2.yaml:3
+  - orgs/acme/_defaults                           # ○ [2] orgs/acme/prod/_defaults.yaml:2
+vars:                                             # ○ [3] catalog/vpc/defaults.yaml:8
+  cidr: "10.100.0.0/16"                           # ● [1] orgs/acme/prod/us-east-2.yaml:10
+  name: vpc                                       # ○ [3] catalog/vpc/defaults.yaml:9
+  region: us-east-2                               # ○ [2] mixins/region/us-east-2.yaml:2
+  namespace: acme                                 # ○ [3] orgs/acme/_defaults.yaml:2
+```
+</Terminal>
+
+### Understanding the Symbols
+
+Provenance uses three symbols to show how values were defined:
+
+- **● (black circle)** - Defined in the parent stack `[1]`
+- **○ (white circle)** - Inherited/imported `[N]` where N indicates depth in the import chain
+- **∴ (therefore)** - Computed/templated value
+
+The depth indicator `[N]` tells you how many levels deep in the import chain a value came from:
+- `[1]` - Defined directly in the stack you're describing
+- `[2]` - Inherited from a first-level import
+- `[3+]` - Inherited from deeper in the import chain
+
+When displayed on a TTY, the depth indicators are color-coded:
+- Cyan for depth 1 (parent stack)
+- Green for depth 2 (first import)
+- Orange for depth 3 (second import)
+- Red for depth 4+ (deeper imports)
+
+## Real-World Use Cases
+
+### 1. Debugging Unexpected Values
+
+```bash
+$ atmos describe component vpc -s prod-ue2 --provenance | grep cidr
+
+  cidr: "10.100.0.0/16"  # ● [1] orgs/acme/prod/us-east-2.yaml:10
+```
+
+Instantly see that the CIDR is defined in the parent stack at line 10. No more guessing.
+
+### 2. Understanding Inheritance Chains
+
+For complex configurations with multiple inheritance levels, provenance shows the complete picture. Use `grep` to find specific values:
+
+```bash
+$ atmos describe component app -s staging-uw2 --provenance | grep replicas
+
+  replicas: 3  # ○ [2] catalog/app/defaults.yaml:15
+```
+
+You can see that `replicas` is inherited from a catalog default at depth 2.
+
+### 3. Auditing Security Settings
+
+For compliance and security audits, verify where sensitive configurations originated:
+
+```bash
+$ atmos describe component bastion -s prod-ue2 --provenance | grep -A5 security
+
+security:                                         # ○ [2] catalog/bastion/defaults.yaml:20
+  allowed_cidr_blocks:                            # ● [1] stacks/prod/security.yaml:8
+    - "10.0.0.0/8"                                # ● [1] stacks/prod/security.yaml:9
+    - "172.16.0.0/12"                             # ● [1] stacks/prod/security.yaml:10
+```
+
+Confirm all security settings come from approved configuration files.
+
+### 4. Pipe-able Output for Automation
+
+The YAML output with provenance is still valid YAML, so it works with standard tools:
+
+```bash
+$ atmos describe component vpc -s prod-ue2 --provenance | yq '.vars.cidr'
+10.100.0.0/16
+```
+
+Comments are preserved for human review while the data remains machine-parseable.
+
+:::note
+The `--query` flag is not supported with `--provenance`. To filter provenance output, pipe it through tools like `grep`, `yq`, or `jq`.
+:::
+
+## Terminal vs Non-Terminal Output
+
+Provenance adapts to your environment:
+
+**On TTY (interactive terminal):**
+- Two-column side-by-side layout (Configuration │ Provenance)
+- Color-coded depth indicators
+- Syntax highlighting
+- Visual symbols
+
+**Non-TTY (pipes, CI/CD):**
+- Single-column layout (preserves valid YAML)
+- Inline comments without color codes
+- Plain text symbols
+- Optimized for scripting
+
+## How It Works
+
+Provenance tracking follows your configuration through its entire journey:
+
+As Atmos processes your stacks, it reads each YAML file and tracks every value it encounters. When it reads a line like `cidr: "10.100.0.0/16"` from `orgs/acme/prod/us-east-2.yaml`, it records: "I saw this value at line 10, column 3 in this file."
+
+When Atmos imports another file, it remembers where it came from and how deep in the import chain it is. If `_defaults.yaml` imports `mixins/region.yaml`, and that defines `region: us-east-2`, Atmos tracks that this value came from two levels deep in the import chain.
+
+As configurations merge together—when a child stack overrides a parent's value, or when imports stack on top of each other—Atmos remembers each step. It knows which file provided the final value, but also which files were overridden along the way.
+
+Finally, when you run `atmos describe component --provenance`, it annotates the output with all this information: which file, which line, how deep in the import chain, and whether the value was defined directly, inherited, or computed from a template.
+
+Performance overhead is minimal—less than 10% when provenance tracking is enabled, and zero overhead when disabled (the default).
+
+## Get Started
+
+Provenance tracking is available now in Atmos. To try it:
+
+```bash
+# View provenance for any component
+atmos describe component <component> -s <stack> --provenance
+
+# Save to file
+atmos describe component vpc -s prod --provenance --file vpc-config.yaml
+
+# Find specific values with grep
+atmos describe component vpc -s prod --provenance | grep cidr
+
+# JSON format
+atmos describe component vpc -s prod --provenance --format json
+```
+
+For complete documentation, see [atmos describe component](/cli/commands/describe/component).
+
+## Future Enhancements
+
+The provenance system is built on an extensible interface that will enable:
+- **atmos.yaml provenance** - Track where Atmos configuration settings come from
+- **Vendor provenance** - Show origins of vendored components
+- **Workflow provenance** - Track workflow step origins
+- **IDE integration** - Hover-to-see-provenance in editors
+- **Diff mode** - Show provenance changes between versions
+
+We'd love to hear how you're using provenance tracking. Share your use cases in [GitHub Discussions](https://github.com/cloudposse/atmos/discussions) or open an issue if you find any bugs.

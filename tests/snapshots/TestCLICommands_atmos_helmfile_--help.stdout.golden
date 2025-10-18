@@ -1,8 +1,4 @@
 
-Notice: Atmos now collects completely anonymous telemetry regarding usage.
-This information is used to shape Atmos roadmap and prioritize features.
-You can learn more, including how to opt-out if you'd not like to participate in this anonymous program,
-by visiting the following URL: https://atmos.tools/cli/telemetry
 
 This command runs Helmfile commands to manage Kubernetes deployments using Helmfile.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    
 
@@ -95,6 +91,8 @@ Global Flags:
                                      Errors can be redirected to any file or any
                                      standard file descriptor (including
                                      /dev/null)
+
+        --version                    Display the Atmos CLI version
 
 
 Use atmos helmfile [subcommand] --help for more information about a command.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            

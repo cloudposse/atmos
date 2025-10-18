@@ -36,11 +36,7 @@ func TestIsRemoteSource(t *testing.T) {
 // TestGetTerraformSource tests getTerraformSource in valid, invalid, and empty cases.
 func TestGetTerraformSource(t *testing.T) {
 	// Create a temporary base directory.
-	baseDir, err := os.MkdirTemp("", "test-getTerraformSource")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.RemoveAll(baseDir)
+	baseDir := t.TempDir()
 
 	// Create a valid subdirectory.
 	validDir := filepath.Join(baseDir, "valid")
@@ -191,11 +187,7 @@ func (s mockRenderer) Render(tmplName, tmplValue string, mergedData map[string]i
 
 func TestGenerateDocument_WithInjectedRenderer(t *testing.T) {
 	// Create a temporary target directory.
-	targetDir, err := os.MkdirTemp("", "test-generateDocument")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.RemoveAll(targetDir)
+	targetDir := t.TempDir()
 
 	// Create a temporary YAML file to act as docs input.
 	tmpYAML, err := os.CreateTemp("", "test-docs-input")
@@ -326,7 +318,7 @@ func TestResolvePath(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, err := resolvePath(tt.path, tt.baseDir)
+			result, err := resolvePath(tt.path, tt.baseDir, "")
 
 			// Check error expectation
 			if tt.expectError && err == nil {
@@ -370,7 +362,7 @@ func TestResolvePath_JoinBehavior(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, err := resolvePath(tt.path, tt.baseDir)
+			result, err := resolvePath(tt.path, tt.baseDir, "")
 			if err != nil {
 				t.Fatalf("Unexpected error: %v", err)
 			}

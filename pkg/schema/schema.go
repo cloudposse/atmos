@@ -55,11 +55,13 @@ type AtmosConfiguration struct {
 	// Stores is never read from yaml, it is populated in processStoreConfig and it's used to pass to the populated store
 	// registry through to the yaml parsing functions when !store is run and to pass the registry to the hooks
 	// functions to be able to call stores from within hooks.
-	Stores        store.StoreRegistry `yaml:"stores_registry,omitempty" json:"stores_registry,omitempty" mapstructure:"stores_registry"`
-	CliConfigPath string              `yaml:"cli_config_path" json:"cli_config_path,omitempty" mapstructure:"cli_config_path"`
-	Import        []string            `yaml:"import" json:"import" mapstructure:"import"`
-	Docs          Docs                `yaml:"docs,omitempty" json:"docs,omitempty" mapstructure:"docs"`
-	Profiler      profiler.Config     `yaml:"profiler,omitempty" json:"profiler,omitempty" mapstructure:"profiler"`
+	Stores          store.StoreRegistry `yaml:"stores_registry,omitempty" json:"stores_registry,omitempty" mapstructure:"stores_registry"`
+	CliConfigPath   string              `yaml:"cli_config_path" json:"cli_config_path,omitempty" mapstructure:"cli_config_path"`
+	Import          []string            `yaml:"import" json:"import" mapstructure:"import"`
+	Docs            Docs                `yaml:"docs,omitempty" json:"docs,omitempty" mapstructure:"docs"`
+	Auth            AuthConfig          `yaml:"auth,omitempty" json:"auth,omitempty" mapstructure:"auth"`
+	Profiler        profiler.Config     `yaml:"profiler,omitempty" json:"profiler,omitempty" mapstructure:"profiler"`
+	TrackProvenance bool                `yaml:"track_provenance,omitempty" json:"track_provenance,omitempty" mapstructure:"track_provenance"`
 }
 
 func (m *AtmosConfiguration) GetSchemaRegistry(key string) SchemaRegistry {
@@ -466,6 +468,7 @@ type ArgsAndFlagsInfo struct {
 	Query                     string
 	Affected                  bool
 	All                       bool
+	Identity                  string
 }
 
 type ConfigAndStacksInfo struct {
@@ -490,6 +493,7 @@ type ConfigAndStacksInfo struct {
 	ComponentProvidersSection     AtmosSectionMapType
 	ComponentHooksSection         AtmosSectionMapType
 	ComponentEnvSection           AtmosSectionMapType
+	ComponentAuthSection          AtmosSectionMapType
 	ComponentEnvList              []string
 	ComponentBackendSection       AtmosSectionMapType
 	ComponentBackendType          string
@@ -545,6 +549,7 @@ type ConfigAndStacksInfo struct {
 	Affected                      bool
 	All                           bool
 	Components                    []string
+	Identity                      string
 }
 
 type BackoffStrategy string
@@ -644,6 +649,7 @@ type BaseComponentConfig struct {
 	BaseComponentVars                      AtmosSectionMapType
 	BaseComponentSettings                  AtmosSectionMapType
 	BaseComponentEnv                       AtmosSectionMapType
+	BaseComponentAuth                      AtmosSectionMapType
 	BaseComponentProviders                 AtmosSectionMapType
 	BaseComponentHooks                     AtmosSectionMapType
 	FinalBaseComponentName                 string

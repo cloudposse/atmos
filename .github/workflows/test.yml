@@ -1,7 +1,7 @@
 name: Tests
 on:
   pull_request:
-    types: [ opened, synchronize, reopened ]
+    types: [opened, synchronize, reopened]
     paths-ignore:
       - "README.md"
 
@@ -21,7 +21,7 @@ env:
   TERRAFORM_VERSION: "1.9.7"
   OPEN_TOFU_VERSION: "1.9.1"
   HELMFILE_VERSION: "v1.1.0"
-  PACKER_VERSION: "1.14.1"
+  PACKER_VERSION: "1.14.2"
 
 jobs:
   # ensure the code builds...
@@ -158,7 +158,7 @@ jobs:
           helmfile-auto-init: "false"
 
       - name: Check atmos.exe integrity
-        if: matrix.flavor.flavor.target == 'windows' && ! github.event.pull_request.draft
+        if: matrix.flavor.target == 'windows' && ! github.event.pull_request.draft
         shell: pwsh
         run: |
           Write-Output "PATH=$Env:PATH"
@@ -427,6 +427,7 @@ jobs:
 
       - name: Add build artifacts directory to PATH for windows
         if: matrix.flavor.target == 'windows' && ! github.event.pull_request.draft
+        shell: pwsh
         run: |
           echo "${{ github.workspace }}" >> $Env:GITHUB_PATH
 
@@ -532,7 +533,7 @@ jobs:
       - name: Lint examples/${{ matrix.demo-folder }}/components/terraform
         uses: reviewdog/action-tflint@v1
         with:
-          github_token: ${{ secrets.github_token }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
           working_directory: examples/${{ matrix.demo-folder }}/components/terraform
           flags: >-
             --enable-rule=terraform_unused_declarations
@@ -575,9 +576,8 @@ jobs:
               ]
             }
 
-
   release:
-    needs: [ test, lint, mock, k3s, localstack, docker, validate ]
+    needs: [test, lint, mock, k3s, localstack, docker, validate]
     if: github.event_name == 'push'
     uses: cloudposse/.github/.github/workflows/shared-go-auto-release.yml@main
     with:

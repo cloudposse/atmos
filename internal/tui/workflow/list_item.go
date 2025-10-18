@@ -8,6 +8,8 @@ import (
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
 
@@ -52,5 +54,7 @@ func (d listItemDelegate) Render(w io.Writer, m list.Model, index int, item list
 	}
 
 	str := fmt.Sprintf("%s", itemName)
-	_, _ = fmt.Fprint(w, fn(str))
+	if _, err := fmt.Fprint(w, fn(str)); err != nil {
+		log.Trace("Failed to write to TUI output buffer", "error", err, "item", itemName)
+	}
 }

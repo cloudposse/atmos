@@ -1,12 +1,12 @@
 package telemetry
 
 import (
+	_ "embed"
 	"runtime"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/cloudposse/atmos/pkg/ui/theme"
 	"github.com/cloudposse/atmos/pkg/utils"
 	"github.com/cloudposse/atmos/pkg/version"
 	"github.com/google/uuid"
@@ -15,19 +15,10 @@ import (
 )
 
 // CommandEventName is the standard event name used for command telemetry.
-const (
-	CommandEventName = "command"
+const CommandEventName = "command"
 
-	// DisclosureMessage contains the standard telemetry disclosure message shown to users
-	// when telemetry is first enabled. It explains that Atmos collects anonymous
-	// usage data and provides a link for users to learn more or opt out.
-	DisclosureMessage = `Notice: Atmos now collects completely anonymous telemetry regarding usage.
-This information is used to shape Atmos roadmap and prioritize features.
-You can learn more, including how to opt-out if you'd not like to participate in this anonymous program,
-by visiting the following URL: https://atmos.tools/cli/telemetry
-
-`
-)
+//go:embed markdown/telemetry_notice.md
+var telemetryNoticeMarkdown string
 
 // CaptureCmdString is the public API for capturing command string telemetry.
 // It accepts an optional error parameter and handles the case where no error is provided.
@@ -50,11 +41,11 @@ func CaptureCmd(cmd *cobra.Command, err ...error) {
 }
 
 // PrintTelemetryDisclosure displays the telemetry disclosure message if one is available.
-// It calls disclosureMessage() to get the message and prints as markdown
-// if a message is returned.
+// It calls disclosureMessage() to get the message and prints to stderr with markdown
+// formatting if a message is returned.
 func PrintTelemetryDisclosure() {
 	if message := disclosureMessage(); message != "" {
-		utils.PrintMessageInColor(message, theme.Colors.Default)
+		utils.PrintfMarkdownToTUI("%s", message)
 	}
 }
 
@@ -122,7 +113,7 @@ func captureCmdString(cmdString string, err error, provider ...TelemetryClientPr
 			Set("arch", runtime.GOARCH).                          // Architecture
 			Set("error", err != nil).                             // Whether an error occurred
 			Set("command", cmdString).                            // The command that was executed
-			Set("ci", isCI()).                                    // Whether running in CI
+			Set("ci", IsCI()).                                    // Whether running in CI
 			Set("ci_provider", ciProvider()).                     // Which CI provider is being used
 			Set("atmos_pro_workspace_id", atmosProWorkspaceID()). // Atmos Pro workspace ID
 			Set("docker", isDocker())                             // Whether running in Docker
@@ -144,7 +135,7 @@ func captureCmd(cmd *cobra.Command, err error, provider ...TelemetryClientProvid
 // the disclosure as shown in the cache and returns the disclosure message.
 func disclosureMessage() string {
 	// Do not show disclosure if running in CI
-	if isCI() {
+	if IsCI() {
 		return ""
 	}
 
@@ -168,7 +159,7 @@ func disclosureMessage() string {
 	if TelemetryDisclosureShown {
 		return ""
 	}
-	return DisclosureMessage
+	return telemetryNoticeMarkdown
 }
 
 // getOrInitializeCacheValue retrieves a value from cache or initializes it with a default value if not present.

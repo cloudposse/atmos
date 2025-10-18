@@ -1,0 +1,27 @@
+cli:
+  colors: false
+
+logs:
+  verbose: false
+  colors: false
+
+auth:
+  providers:
+    invalid-provider:
+      kind: invalid/provider
+      region: us-east-1
+
+  identities:
+    invalid-identity:
+      kind: invalid/identity
+      via:
+        provider: invalid-provider
+
+components:
+  terraform:
+    base_path: "components/terraform"
+
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "**/*"

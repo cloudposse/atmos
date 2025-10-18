@@ -10,8 +10,8 @@ import (
 	"strings"
 
 	"github.com/mikefarah/yq/v4/pkg/yqlib"
-	"go.yaml.in/yaml/v3"
 	"gopkg.in/op/go-logging.v1"
+	yaml "gopkg.in/yaml.v3"
 
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"

@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"fmt"
-	"os"
 	"testing"
 
 	"github.com/golang/mock/gomock"
@@ -16,13 +15,21 @@ import (
 func TestDescribeAffected(t *testing.T) {
 	t.Chdir("../tests/fixtures/scenarios/basic")
 	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
 	describeAffectedMock := exec.NewMockDescribeAffectedExec(ctrl)
 	describeAffectedMock.EXPECT().Execute(gomock.Any()).Return(nil)
+
 	run := getRunnableDescribeAffectedCmd(func(opts ...AtmosValidateOption) {
 	}, exec.ParseDescribeAffectedCliArgs, func(atmosConfig *schema.AtmosConfiguration) exec.DescribeAffectedExec {
 		return describeAffectedMock
 	})
-	run(describeAffectedCmd, []string{})
+
+	err := run(describeAffectedCmd, []string{})
+
+	// Verify command executed without errors. The mock expectations verify
+	// that Execute() was called with the correct arguments.
+	assert.NoError(t, err, "describeAffectedCmd should execute without error")
 }
 
 func TestSetFlagValueInCliArgs(t *testing.T) {
@@ -144,18 +151,9 @@ func TestSetFlagValueInCliArgs(t *testing.T) {
 func TestDescribeAffectedCmd_Error(t *testing.T) {
 	stacksPath := "../tests/fixtures/scenarios/terraform-apply-affected"
 
-	err := os.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
-	assert.NoError(t, err, "Setting 'ATMOS_CLI_CONFIG_PATH' environment variable should execute without error")
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
+	t.Setenv("ATMOS_BASE_PATH", stacksPath)
 
-	err = os.Setenv("ATMOS_BASE_PATH", stacksPath)
-	assert.NoError(t, err, "Setting 'ATMOS_BASE_PATH' environment variable should execute without error")
-
-	// Unset ENV variables after testing
-	defer func() {
-		os.Unsetenv("ATMOS_CLI_CONFIG_PATH")
-		os.Unsetenv("ATMOS_BASE_PATH")
-	}()
-
-	err = describeAffectedCmd.RunE(describeAffectedCmd, []string{"--invalid-flag"})
+	err := describeAffectedCmd.RunE(describeAffectedCmd, []string{"--invalid-flag"})
 	assert.Error(t, err, "describe affected command should return an error when called with invalid flags")
 }

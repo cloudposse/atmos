@@ -5,14 +5,13 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/cloudposse/atmos/pkg/perf"
-
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/filetype"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -22,7 +21,7 @@ const (
 	errFlagFormat = "%w: flag: %s"
 )
 
-// `commonFlags` are a list of flags that Atmos understands, but the underlying tools do not (e.g., Terraform/OpenTofu, Helmfile, etc.).
+// `commonFlags` are a list of flags that Atmos understands, but the underlying tools do not (e.g., Terraform/OpenTofu, Helmfile, Packer, etc.).
 // These flags get removed from the arg list after Atmos uses them, so the underlying tool does not get passed a flag it doesn't accept.
 var commonFlags = []string{
 	"--stack",
@@ -63,6 +62,14 @@ var commonFlags = []string{
 	cfg.AllFlag,
 	cfg.InitPassVars,
 	cfg.PlanSkipPlanfile,
+	cfg.IdentityFlag,
+	cfg.ProfilerEnabledFlag,
+	cfg.ProfilerHostFlag,
+	cfg.ProfilerPortFlag,
+	cfg.ProfilerFileFlag,
+	cfg.ProfilerTypeFlag,
+	cfg.HeatmapFlag,
+	cfg.HeatmapModeFlag,
 }
 
 // ProcessCommandLineArgs processes command-line args.
@@ -137,6 +144,7 @@ func ProcessCommandLineArgs(
 	configAndStacksInfo.LogsFile = argsAndFlagsInfo.LogsFile
 	configAndStacksInfo.SettingsListMergeStrategy = argsAndFlagsInfo.SettingsListMergeStrategy
 	configAndStacksInfo.Query = argsAndFlagsInfo.Query
+	configAndStacksInfo.Identity = argsAndFlagsInfo.Identity
 	configAndStacksInfo.Affected = argsAndFlagsInfo.Affected
 	configAndStacksInfo.All = argsAndFlagsInfo.All
 	configAndStacksInfo.PackerDir = argsAndFlagsInfo.PackerDir
@@ -516,6 +524,19 @@ func processArgsAndFlags(
 				return info, fmt.Errorf(errFlagFormat, errUtils.ErrInvalidFlag, arg)
 			}
 			info.Query = parts[1]
+		}
+
+		if arg == cfg.IdentityFlag {
+			if len(inputArgsAndFlags) <= (i + 1) {
+				return info, fmt.Errorf("%w: %s", errUtils.ErrInvalidFlag, arg)
+			}
+			info.Identity = inputArgsAndFlags[i+1]
+		} else if strings.HasPrefix(arg+"=", cfg.IdentityFlag) {
+			parts := strings.Split(arg, "=")
+			if len(parts) != 2 {
+				return info, fmt.Errorf("%w: %s", errUtils.ErrInvalidFlag, arg)
+			}
+			info.Identity = parts[1]
 		}
 
 		if arg == cfg.FromPlanFlag {

@@ -61,8 +61,9 @@ var (
 var logger *log.AtmosLogger
 
 type Expectation struct {
-	Stdout        []MatchPattern            `yaml:"stdout"`          // Expected stdout output
-	Stderr        []MatchPattern            `yaml:"stderr"`          // Expected stderr output
+	Stdout        []MatchPattern            `yaml:"stdout"`          // Expected stdout output (non-TTY mode)
+	Stderr        []MatchPattern            `yaml:"stderr"`          // Expected stderr output (non-TTY mode)
+	Tty           []MatchPattern            `yaml:"tty"`             // Expected TTY output (TTY mode - combined stdout+stderr)
 	ExitCode      int                       `yaml:"exit_code"`       // Expected exit code
 	FileExists    []string                  `yaml:"file_exists"`     // Files to validate
 	FileNotExists []string                  `yaml:"file_not_exists"` // Files that should not exist
@@ -84,6 +85,7 @@ type TestCase struct {
 	Snapshot      bool              `yaml:"snapshot"`      // Enable snapshot comparison
 	Clean         bool              `yaml:"clean"`         // Removes untracked files in work directory
 	Sandbox       interface{}       `yaml:"sandbox"`       // bool (true=random) or string (named) or false (no sandbox)
+	Short         *bool             `yaml:"short"`         // If false, skip when -short flag is passed (defaults to true)
 	Preconditions []string          `yaml:"preconditions"` // Required preconditions for test execution
 	Skip          struct {
 		OS MatchPattern `yaml:"os"`
@@ -199,6 +201,12 @@ func loadTestSuite(filePath string) (*TestSuite, error) {
 		}
 		if !testCase.Snapshot {
 			testCase.Snapshot = false
+		}
+
+		// Default short to true if not specified
+		if testCase.Short == nil {
+			defaultShort := true
+			testCase.Short = &defaultShort
 		}
 
 		if testCase.Env == nil {
@@ -359,6 +367,12 @@ func sanitizeOutput(output string) (string, error) {
 	urlRegex := regexp.MustCompile(`(https?:/+[^\s]+)`)
 	result = urlRegex.ReplaceAllStringFunc(result, collapseExtraSlashes)
 
+	// 6b. Redact volatile request IDs to avoid snapshot flakiness.
+	requestIDRegex1 := regexp.MustCompile(`(?i)\bRequestI[Dd]\s*:\s*[A-Za-z0-9-]+`)
+	requestIDRegex2 := regexp.MustCompile(`(?i)\bX-Amzn-RequestId\s*:\s*[A-Za-z0-9-]+`)
+	result = requestIDRegex1.ReplaceAllString(result, "RequestID: <REDACTED>")
+	result = requestIDRegex2.ReplaceAllString(result, "RequestID: <REDACTED>")
+
 	// 7. Remove the random number added to file name like `atmos-import-454656846`
 	filePathRegex := regexp.MustCompile(`file_path=[^ ]+/atmos-import-\d+/atmos-import-\d+\.yaml`)
 	result = filePathRegex.ReplaceAllString(result, "file_path=/atmos-import/atmos-import.yaml")
@@ -408,7 +422,18 @@ func applyIgnorePatterns(input string, patterns []string) string {
 	return strings.Join(filteredLines, "\n") // Join the filtered lines back into a string
 }
 
-// Simulate TTY command execution with optional stdin and proper stdout redirection.
+// simulateTtyCommand executes a command in a pseudo-terminal (PTY) environment.
+//
+// IMPORTANT: PTY behavior merges stderr and stdout into a single stream!
+// This is not a bug - it's how terminals work. A terminal display shows all output
+// in one place; there's no separate "stderr screen" and "stdout screen".
+//
+// This means:
+// - All output (stdout + stderr) will be captured together.
+// - The returned string contains both streams merged.
+// - This matches real terminal behavior where users see everything in one stream.
+//
+// For tests that need separate stderr/stdout streams, use non-TTY execution instead.
 func simulateTtyCommand(t *testing.T, cmd *exec.Cmd, input string) (string, error) {
 	ptmx, err := pty.Start(cmd)
 	if err != nil {
@@ -428,6 +453,7 @@ func simulateTtyCommand(t *testing.T, cmd *exec.Cmd, input string) (string, erro
 	var buffer bytes.Buffer
 	done := make(chan error, 1)
 	go func() {
+		// Use ReadFrom which properly handles EOF.
 		_, err := buffer.ReadFrom(ptmx)
 		done <- ptyError(err) // Wrap the error handling
 	}()
@@ -552,12 +578,10 @@ func prepareAtmosCommand(t *testing.T, ctx context.Context, args ...string) *exe
 }
 
 func runCLICommandTest(t *testing.T, tc TestCase) {
-	defer func() {
-		// Change back to the original working directory after the test
-		if err := os.Chdir(startingDir); err != nil {
-			t.Fatalf("Failed to change back to the starting directory: %v", err)
-		}
-	}()
+	// Skip long tests in short mode
+	if testing.Short() && tc.Short != nil && !*tc.Short {
+		t.Skipf("Skipping long-running test in short mode (use 'go test' without -short to run)")
+	}
 
 	// Check preconditions before running the test
 	checkPreconditions(t, tc.Preconditions)
@@ -593,11 +617,7 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 
 	// Create a temporary HOME directory for the test case that's clean
 	// Otherwise a test may pass/fail due to existing files in the user's HOME directory
-	tempDir, err := os.MkdirTemp("", "test_home")
-	if err != nil {
-		t.Fatalf("Failed to create temporary directory: %v", err)
-	}
-	defer os.RemoveAll(tempDir) // Clean up the temporary directory after the test
+	tempDir := t.TempDir()
 
 	// ALWAYS set XDG_CACHE_HOME to a clean temp directory for test isolation
 	// This ensures every test has its own cache and prevents interference
@@ -639,10 +659,7 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 		if err != nil {
 			t.Fatalf("failed to resolve absolute path of workdir %q: %v", tc.Workdir, err)
 		}
-		err = os.Chdir(absoluteWorkdir)
-		if err != nil {
-			t.Fatalf("Failed to change directory to %q: %v", tc.Workdir, err)
-		}
+		t.Chdir(absoluteWorkdir)
 
 		// Setup sandbox environment if enabled
 		var sandboxEnv *testhelpers.SandboxEnvironment
@@ -650,7 +667,7 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 		case bool:
 			if v {
 				// Boolean true = isolated sandbox for this test only
-				logger.Info("Setting up isolated sandbox", "workdir", absoluteWorkdir)
+				logger.Info("Setting up isolated sandbox", "test", tc.Name, "workdir", absoluteWorkdir)
 				sandboxEnv = createIsolatedSandbox(t, absoluteWorkdir)
 				// Clean up immediately after test
 				defer func() {
@@ -661,7 +678,7 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 		case string:
 			if v != "" {
 				// Named sandbox = shared across related tests
-				logger.Info("Using named sandbox", "name", v, "workdir", absoluteWorkdir)
+				logger.Info("Using named sandbox", "test", tc.Name, "name", v, "workdir", absoluteWorkdir)
 				sandboxEnv = getOrCreateNamedSandbox(t, v, absoluteWorkdir)
 				// Cleanup handled by TestMain
 			}
@@ -705,7 +722,7 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 
 	// Remove the cache file before running the test.
 	// This is to ensure that the test is not affected by the cache file.
-	err = removeCacheFile()
+	err := removeCacheFile()
 	assert.NoError(t, err, "failed to remove cache file")
 
 	// Preserve the CI environment variables.
@@ -713,7 +730,15 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 	currentEnvVars := telemetry.PreserveCIEnvVars()
 	defer telemetry.RestoreCIEnvVars(currentEnvVars)
 
-	// Set any environment variables defined in the test case using t.Setenv for proper isolation
+	// Force consistent color/terminal environment for reproducible ANSI codes across platforms.
+	// Test cases can still override these by explicitly setting them.
+	if _, exists := tc.Env["TERM"]; !exists {
+		tc.Env["TERM"] = "xterm-256color"
+	}
+	if _, exists := tc.Env["COLORTERM"]; !exists {
+		tc.Env["COLORTERM"] = "" // Explicitly empty to prevent truecolor (force 256-color)
+	}
+	// Set any environment variables defined in the test case using t.Setenv for proper isolation.
 	for key, value := range tc.Env {
 		t.Setenv(key, value)
 	}
@@ -762,6 +787,17 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 		}
 		envVars = append(envVars, fmt.Sprintf("%s=%s", key, value))
 	}
+
+	// Ensure NO_COLOR is not inherited unless test explicitly sets it (presence disables color).
+	if _, exists := tc.Env["NO_COLOR"]; !exists {
+		for i, env := range envVars {
+			if strings.HasPrefix(env, "NO_COLOR=") {
+				envVars = append(envVars[:i], envVars[i+1:]...)
+				break
+			}
+		}
+	}
+
 	cmd.Env = envVars
 
 	var stdout, stderr bytes.Buffer
@@ -783,7 +819,7 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 			// Check if the error is an ExitError
 			if exitErr, ok := err.(*exec.ExitError); ok {
 				// Capture the actual exit code
-				exitCode := exitErr.ExitCode()
+				exitCode = exitErr.ExitCode()
 
 				if exitCode < 0 {
 					// Negative exit code indicates interruption by a signal
@@ -836,15 +872,8 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 		t.Errorf("Description: %s", tc.Description)
 	}
 
-	// Validate stdout
-	if !verifyOutput(t, "stdout", stdout.String(), tc.Expect.Stdout) {
-		t.Errorf("Stdout mismatch for test: %s", tc.Name)
-	}
-
-	// Validate stderr
-	if !verifyOutput(t, "stderr", stderr.String(), tc.Expect.Stderr) {
-		t.Errorf("Stderr mismatch for test: %s", tc.Name)
-	}
+	// Validate output based on TTY mode
+	verifyTestOutputs(t, &tc, stdout.String(), stderr.String())
 
 	// Validate format (YAML/JSON)
 	if len(tc.Expect.Valid) > 0 {
@@ -1116,7 +1145,10 @@ func updateSnapshot(fullPath, output string) {
 	if err != nil {
 		panic(fmt.Sprintf("Failed to create snapshot directory: %v", err))
 	}
-	err = os.WriteFile(fullPath, []byte(output), 0o644) // Write snapshot
+	// Normalize line endings to LF for cross-platform consistency.
+	// This ensures snapshots work reliably across Windows, macOS, and Linux.
+	normalized := normalizeLineEndings(output)
+	err = os.WriteFile(fullPath, []byte(normalized), 0o644) // Write snapshot
 	if err != nil {
 		panic(fmt.Sprintf("Failed to write snapshot file: %v", err))
 	}
@@ -1127,7 +1159,25 @@ func readSnapshot(t *testing.T, fullPath string) string {
 	if err != nil {
 		t.Fatalf("Error reading snapshot file %q: %v", fullPath, err)
 	}
-	return string(data)
+	// Normalize line endings when reading to gracefully handle any existing
+	// snapshots that were committed with CRLF line endings.
+	return normalizeLineEndings(string(data))
+}
+
+// normalizeLineEndings converts CRLF line endings to LF for cross-platform consistency.
+// This ensures snapshots work reliably across Windows, macOS, and Linux development.
+//
+// Important: Only CRLF sequences (\r\n) are converted to LF (\n).
+// Standalone CR (\r) characters are preserved, as they're used by spinners and
+// progress indicators to overwrite terminal lines.
+//
+// Examples:
+//   - "line1\r\nline2\r\n" → "line1\nline2\n" (CRLF normalized)
+//   - "line1\nline2\n" → "line1\nline2\n" (LF unchanged)
+//   - "Progress\r" → "Progress\r" (spinner CR preserved)
+func normalizeLineEndings(s string) string {
+	// Only replace CRLF with LF, preserve standalone CR for spinners.
+	return strings.ReplaceAll(s, "\r\n", "\n")
 }
 
 // Generate a unified diff using gotextdiff.
@@ -1191,6 +1241,69 @@ func colorizeDiffWithThreshold(actual, expected string, threshold int) string {
 	return sb.String()
 }
 
+// getSnapshotFilenames returns the appropriate snapshot filenames based on whether TTY mode is enabled.
+// When isTty is true, returns only the .tty.golden filename.
+// When isTty is false, returns .stdout.golden and .stderr.golden filenames.
+func getSnapshotFilenames(testName string, isTty bool) (stdout, stderr, tty string) {
+	sanitized := sanitizeTestName(testName)
+	if isTty {
+		return "", "", filepath.Join(snapshotBaseDir, sanitized+".tty.golden")
+	}
+	return filepath.Join(snapshotBaseDir, sanitized+".stdout.golden"),
+		filepath.Join(snapshotBaseDir, sanitized+".stderr.golden"),
+		""
+}
+
+// verifyTTYSnapshot handles snapshot verification for TTY mode tests.
+func verifyTTYSnapshot(t *testing.T, tc *TestCase, ttyPath, combinedOutput string, regenerate bool) bool {
+	if regenerate {
+		t.Logf("Updating TTY snapshot at %q", ttyPath)
+		updateSnapshot(ttyPath, combinedOutput)
+		return true
+	}
+
+	if _, err := os.Stat(ttyPath); errors.Is(err, os.ErrNotExist) {
+		t.Fatalf(`TTY snapshot file not found: %q
+Run the following command to create it:
+$ go test ./tests -run %q -regenerate-snapshots`, ttyPath, t.Name())
+	}
+
+	filteredActual := applyIgnorePatterns(combinedOutput, tc.Expect.Diff)
+	filteredExpected := applyIgnorePatterns(readSnapshot(t, ttyPath), tc.Expect.Diff)
+
+	if filteredExpected != filteredActual {
+		var diff string
+		if isCIEnvironment() || !term.IsTerminal(int(os.Stdout.Fd())) {
+			diff = generateUnifiedDiff(filteredActual, filteredExpected)
+		} else {
+			diff = colorizeDiffWithThreshold(filteredActual, filteredExpected, 10)
+		}
+		t.Errorf("TTY output mismatch for %q:\n%s", ttyPath, diff)
+	}
+
+	return true
+}
+
+// verifyTestOutputs validates test outputs based on TTY mode.
+func verifyTestOutputs(t *testing.T, tc *TestCase, stdout, stderr string) {
+	if tc.Tty {
+		// TTY mode: validate combined output against tty expectations
+		if !verifyOutput(t, "tty", stdout, tc.Expect.Tty) {
+			t.Errorf("TTY output mismatch for test: %s", tc.Name)
+		}
+		return
+	}
+
+	// Non-TTY mode: validate stdout and stderr separately
+	if !verifyOutput(t, "stdout", stdout, tc.Expect.Stdout) {
+		t.Errorf("Stdout mismatch for test: %s", tc.Name)
+	}
+
+	if !verifyOutput(t, "stderr", stderr, tc.Expect.Stderr) {
+		t.Errorf("Stderr mismatch for test: %s", tc.Name)
+	}
+}
+
 func verifySnapshot(t *testing.T, tc TestCase, stdoutOutput, stderrOutput string, regenerate bool) bool {
 	if !tc.Snapshot {
 		return true
@@ -1207,13 +1320,20 @@ func verifySnapshot(t *testing.T, tc TestCase, stdoutOutput, stderrOutput string
 		t.Fatalf("failed to sanitize stderr output: %v", err)
 	}
 
-	testName := sanitizeTestName(t.Name())
-	stdoutFileName := fmt.Sprintf("%s.stdout.golden", testName)
-	stderrFileName := fmt.Sprintf("%s.stderr.golden", testName)
-	stdoutPath := filepath.Join(snapshotBaseDir, stdoutFileName)
-	stderrPath := filepath.Join(snapshotBaseDir, stderrFileName)
+	// Normalize line endings in actual output for cross-platform consistency.
+	// This handles cases where CLI might output CRLF on Windows but snapshots use LF.
+	stdoutOutput = normalizeLineEndings(stdoutOutput)
+	stderrOutput = normalizeLineEndings(stderrOutput)
 
-	// Regenerate snapshots if the flag is set
+	stdoutPath, stderrPath, ttyPath := getSnapshotFilenames(t.Name(), tc.Tty)
+
+	// TTY mode: combined output in single .tty.golden file
+	if tc.Tty {
+		// In TTY mode, stdout contains the combined output (from PTY)
+		return verifyTTYSnapshot(t, &tc, ttyPath, stdoutOutput, regenerate)
+	}
+
+	// Non-TTY mode: separate stdout and stderr snapshots
 	if regenerate {
 		t.Logf("Updating stdout snapshot at %q", stdoutPath)
 		updateSnapshot(stdoutPath, stdoutOutput)

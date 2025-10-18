@@ -2,11 +2,17 @@ package errors
 
 import (
 	"errors"
+	"fmt"
 )
 
 var (
 	ErrNoGitRepo                             = errors.New("not in a git repository")
 	ErrDownloadPackage                       = errors.New("failed to download package")
+	ErrDownloadFile                          = errors.New("failed to download file")
+	ErrParseFile                             = errors.New("failed to parse file")
+	ErrParseURL                              = errors.New("failed to parse URL")
+	ErrInvalidURL                            = errors.New("invalid URL")
+	ErrCreateDownloadClient                  = errors.New("failed to create download client")
 	ErrProcessOCIImage                       = errors.New("failed to process OCI image")
 	ErrCopyPackage                           = errors.New("failed to copy package")
 	ErrCreateTempDir                         = errors.New("failed to create temp directory")
@@ -35,6 +41,7 @@ var (
 	ErrUnsupportedInputType                  = errors.New("unsupported input type")
 	ErrMissingStackNameTemplateAndPattern    = errors.New("'stacks.name_pattern' or 'stacks.name_template' needs to be specified in 'atmos.yaml'")
 	ErrFailedMarshalConfigToYaml             = errors.New("failed to marshal config to YAML")
+	ErrCommandNil                            = errors.New("command cannot be nil")
 
 	// ErrPlanHasDiff is returned when there are differences between two Terraform plan files.
 	ErrPlanHasDiff = errors.New("plan files have differences")
@@ -79,22 +86,129 @@ var (
 	// File and URL handling errors.
 	ErrInvalidPagerCommand = errors.New("invalid pager command")
 	ErrEmptyURL            = errors.New("empty URL provided")
-	ErrInvalidURL          = errors.New("invalid URL")
 	ErrFailedToFindImport  = errors.New("failed to find import")
+
+	// Config loading errors.
+	ErrAtmosDirConfigNotFound      = errors.New("atmos config directory not found")
+	ErrReadConfig                  = errors.New("failed to read config")
+	ErrMergeTempConfig             = errors.New("failed to merge temp config")
+	ErrPreprocessYAMLFunctions     = errors.New("failed to preprocess YAML functions")
+	ErrMergeEmbeddedConfig         = errors.New("failed to merge embedded config")
+	ErrExpectedDirOrPattern        = errors.New("--config-path expected directory found file")
+	ErrFileNotFound                = errors.New("file not found")
+	ErrExpectedFile                = errors.New("--config expected file found directory")
+	ErrAtmosArgConfigNotFound      = errors.New("atmos configuration not found")
+	ErrAtmosFilesDirConfigNotFound = errors.New("`atmos.yaml` or `.atmos.yaml` configuration file not found in directory")
 
 	ErrMissingStack                       = errors.New("stack is required; specify it on the command line using the flag `--stack <stack>` (shorthand `-s`)")
 	ErrInvalidComponent                   = errors.New("invalid component")
+	ErrInvalidComponentMapType            = errors.New("invalid component map type")
 	ErrAbstractComponentCantBeProvisioned = errors.New("abstract component cannot be provisioned")
 	ErrLockedComponentCantBeProvisioned   = errors.New("locked component cannot be provisioned")
+
+	// Terraform-specific errors.
+	ErrHTTPBackendWorkspaces       = errors.New("workspaces are not supported for the HTTP backend")
+	ErrInvalidTerraformComponent   = errors.New("invalid Terraform component")
+	ErrNoTty                       = errors.New("no TTY attached")
+	ErrFailedToLoadTerraformModule = errors.New("failed to load terraform module")
 
 	ErrMissingPackerTemplate = errors.New("packer template is required; it can be specified in the `settings.packer.template` section in the Atmos component manifest, or on the command line via the flag `--template <template>` (shorthand `-t`)")
 	ErrMissingPackerManifest = errors.New("packer manifest is missing")
 
-	ErrAtmosConfigIsNil         = errors.New("atmos config is nil")
-	ErrInvalidListMergeStrategy = errors.New("invalid list merge strategy")
-	ErrMerge                    = errors.New("merge error")
-	ErrInvalidStackManifest     = errors.New("invalid stack manifest")
-	ErrInvalidLogLevel          = errors.New("invalid log level")
+	ErrAtmosConfigIsNil              = errors.New("atmos config is nil")
+	ErrFailedToInitializeAtmosConfig = errors.New("failed to initialize atmos config")
+	ErrInvalidListMergeStrategy      = errors.New("invalid list merge strategy")
+	ErrMerge                         = errors.New("merge error")
+
+	// Stack processing errors.
+	ErrInvalidStackManifest                   = errors.New("invalid stack manifest")
+	ErrInvalidHooksSection                    = errors.New("invalid 'hooks' section in the file")
+	ErrInvalidTerraformHooksSection           = errors.New("invalid 'terraform.hooks' section in the file")
+	ErrInvalidComponentVars                   = errors.New("invalid component vars section")
+	ErrInvalidComponentSettings               = errors.New("invalid component settings section")
+	ErrInvalidComponentEnv                    = errors.New("invalid component env section")
+	ErrInvalidComponentProviders              = errors.New("invalid component providers section")
+	ErrInvalidComponentHooks                  = errors.New("invalid component hooks section")
+	ErrInvalidComponentAuth                   = errors.New("invalid component auth section")
+	ErrInvalidComponentMetadata               = errors.New("invalid component metadata section")
+	ErrInvalidComponentBackendType            = errors.New("invalid component backend_type attribute")
+	ErrInvalidComponentBackend                = errors.New("invalid component backend section")
+	ErrInvalidComponentRemoteStateBackendType = errors.New("invalid component remote_state_backend_type attribute")
+	ErrInvalidComponentRemoteStateBackend     = errors.New("invalid component remote_state_backend section")
+	ErrInvalidComponentCommand                = errors.New("invalid component command attribute")
+	ErrInvalidComponentOverrides              = errors.New("invalid component overrides section")
+	ErrInvalidComponentOverridesVars          = errors.New("invalid component overrides vars section")
+	ErrInvalidComponentOverridesSettings      = errors.New("invalid component overrides settings section")
+	ErrInvalidComponentOverridesEnv           = errors.New("invalid component overrides env section")
+	ErrInvalidComponentOverridesAuth          = errors.New("invalid component overrides auth section")
+	ErrInvalidComponentOverridesCommand       = errors.New("invalid component overrides command attribute")
+	ErrInvalidComponentOverridesProviders     = errors.New("invalid component overrides providers section")
+	ErrInvalidComponentOverridesHooks         = errors.New("invalid component overrides hooks section")
+	ErrInvalidComponentAttribute              = errors.New("invalid component attribute")
+	ErrInvalidComponentMetadataComponent      = errors.New("invalid component metadata.component attribute")
+	ErrInvalidSpaceLiftSettings               = errors.New("invalid spacelift settings section")
+	ErrInvalidComponentMetadataInherits       = errors.New("invalid component metadata.inherits section")
+	ErrComponentNotDefined                    = errors.New("component not defined in any config files")
+	ErrInvalidTerraformBackend                = errors.New("invalid terraform.backend section")
+	ErrInvalidTerraformRemoteStateBackend     = errors.New("invalid terraform.remote_state_backend section")
+	ErrUnsupportedComponentType               = errors.New("unsupported component type. Valid types are 'terraform', 'helmfile', 'packer'")
+
+	// Global/Stack-level section errors.
+	ErrInvalidVarsSection               = errors.New("invalid vars section")
+	ErrInvalidSettingsSection           = errors.New("invalid settings section")
+	ErrInvalidEnvSection                = errors.New("invalid env section")
+	ErrInvalidTerraformSection          = errors.New("invalid terraform section")
+	ErrInvalidHelmfileSection           = errors.New("invalid helmfile section")
+	ErrInvalidPackerSection             = errors.New("invalid packer section")
+	ErrInvalidComponentsSection         = errors.New("invalid components section")
+	ErrInvalidAuthSection               = errors.New("invalid auth section")
+	ErrInvalidImportSection             = errors.New("invalid import section")
+	ErrInvalidImport                    = errors.New("invalid import")
+	ErrInvalidOverridesSection          = errors.New("invalid overrides section")
+	ErrInvalidTerraformOverridesSection = errors.New("invalid terraform overrides section")
+	ErrInvalidHelmfileOverridesSection  = errors.New("invalid helmfile overrides section")
+	ErrInvalidBaseComponentConfig       = errors.New("invalid base component config")
+
+	// Terraform-specific subsection errors.
+	ErrInvalidTerraformCommand            = errors.New("invalid terraform command")
+	ErrInvalidTerraformVars               = errors.New("invalid terraform vars section")
+	ErrInvalidTerraformSettings           = errors.New("invalid terraform settings section")
+	ErrInvalidTerraformEnv                = errors.New("invalid terraform env section")
+	ErrInvalidTerraformProviders          = errors.New("invalid terraform providers section")
+	ErrInvalidTerraformBackendType        = errors.New("invalid terraform backend_type")
+	ErrInvalidTerraformRemoteStateType    = errors.New("invalid terraform remote_state_backend_type")
+	ErrInvalidTerraformRemoteStateSection = errors.New("invalid terraform remote_state_backend section")
+	ErrInvalidTerraformAuth               = errors.New("invalid terraform auth section")
+
+	// Helmfile-specific subsection errors.
+	ErrInvalidHelmfileCommand  = errors.New("invalid helmfile command")
+	ErrInvalidHelmfileVars     = errors.New("invalid helmfile vars section")
+	ErrInvalidHelmfileSettings = errors.New("invalid helmfile settings section")
+	ErrInvalidHelmfileEnv      = errors.New("invalid helmfile env section")
+	ErrInvalidHelmfileAuth     = errors.New("invalid helmfile auth section")
+
+	// Helmfile configuration errors.
+	ErrMissingHelmfileBasePath           = errors.New("helmfile base path is required")
+	ErrMissingHelmfileKubeconfigPath     = errors.New("helmfile kubeconfig path is required")
+	ErrMissingHelmfileAwsProfilePattern  = errors.New("helmfile AWS profile pattern is required")
+	ErrMissingHelmfileClusterNamePattern = errors.New("helmfile cluster name pattern is required")
+
+	// Packer-specific subsection errors.
+	ErrInvalidPackerCommand  = errors.New("invalid packer command")
+	ErrInvalidPackerVars     = errors.New("invalid packer vars section")
+	ErrInvalidPackerSettings = errors.New("invalid packer settings section")
+	ErrInvalidPackerEnv      = errors.New("invalid packer env section")
+	ErrInvalidPackerAuth     = errors.New("invalid packer auth section")
+
+	// Component type-specific section errors.
+	ErrInvalidComponentsTerraform = errors.New("invalid components.terraform section")
+	ErrInvalidComponentsHelmfile  = errors.New("invalid components.helmfile section")
+	ErrInvalidComponentsPacker    = errors.New("invalid components.packer section")
+
+	// Specific component configuration errors.
+	ErrInvalidSpecificTerraformComponent = errors.New("invalid terraform component configuration")
+	ErrInvalidSpecificHelmfileComponent  = errors.New("invalid helmfile component configuration")
+	ErrInvalidSpecificPackerComponent    = errors.New("invalid packer component configuration")
 
 	// Pro API client errors.
 	ErrFailedToCreateRequest        = errors.New("failed to create request")
@@ -142,6 +256,11 @@ var (
 	ErrProcessInstances          = errors.New("failed to process instances")
 	ErrParseFlag                 = errors.New("failed to parse flag value")
 	ErrFailedToFinalizeCSVOutput = errors.New("failed to finalize CSV output")
+	ErrParseStacks               = errors.New("could not parse stacks")
+	ErrParseComponents           = errors.New("could not parse components")
+	ErrNoComponentsFound         = errors.New("no components found")
+	ErrStackNotFound             = errors.New("stack not found")
+	ErrProcessStack              = errors.New("error processing stack")
 
 	// Cache-related errors.
 	ErrCacheLocked    = errors.New("cache file is locked")
@@ -149,6 +268,10 @@ var (
 	ErrCacheWrite     = errors.New("cache write failed")
 	ErrCacheUnmarshal = errors.New("cache unmarshal failed")
 	ErrCacheMarshal   = errors.New("cache marshal failed")
+	ErrCacheDir       = errors.New("cache directory creation failed")
+
+	// Logger errors.
+	ErrInvalidLogLevel = errors.New("invalid log level")
 
 	// File operation errors.
 	ErrCopyFile            = errors.New("failed to copy file")
@@ -175,13 +298,9 @@ var (
 	ErrGetHooks            = errors.New("error getting hooks")
 	ErrSetFlag             = errors.New("failed to set flag")
 	ErrVersionMismatch     = errors.New("version mismatch")
-	ErrCommandNil          = errors.New("command cannot be nil")
 
 	// Download and client errors.
-	ErrCreateDownloadClient    = errors.New("failed to create download client")
-	ErrMergeConfiguration      = errors.New("failed to merge configuration")
-	ErrPreprocessYAMLFunctions = errors.New("failed to preprocess YAML functions")
-	ErrMergeEmbeddedConfig     = errors.New("failed to merge embedded config")
+	ErrMergeConfiguration = errors.New("failed to merge configuration")
 
 	// Template and documentation errors.
 	ErrGenerateTerraformDocs = errors.New("failed to generate terraform docs")
@@ -207,6 +326,49 @@ var (
 	ErrProfilerStartTrace      = errors.New("profiler: failed to start trace profile")
 	ErrProfilerCreateFile      = errors.New("profiler: failed to create profile file")
 
+	// Auth package errors.
+	ErrInvalidAuthConfig            = errors.New("invalid auth config")
+	ErrInvalidIdentityKind          = errors.New("invalid identity kind")
+	ErrInvalidIdentityConfig        = errors.New("invalid identity config")
+	ErrInvalidProviderKind          = errors.New("invalid provider kind")
+	ErrInvalidProviderConfig        = errors.New("invalid provider config")
+	ErrAuthenticationFailed         = errors.New("authentication failed")
+	ErrPostAuthenticationHookFailed = errors.New("post authentication hook failed")
+	ErrAuthManager                  = errors.New("auth manager error")
+	ErrDefaultIdentity              = errors.New("default identity error")
+	ErrAwsAuth                      = errors.New("aws auth error")
+	ErrAwsUserNotConfigured         = errors.New("aws user not configured")
+	ErrAwsSAMLDecodeFailed          = errors.New("aws saml decode failed")
+	ErrUnsupportedPlatform          = errors.New("unsupported platform")
+
+	// Auth manager and identity/provider resolution errors (centralized sentinels).
+	ErrFailedToInitializeAuthManager = errors.New("failed to initialize auth manager")
+	ErrNoCredentialsFound            = errors.New("no credentials found for identity")
+	ErrExpiredCredentials            = errors.New("credentials for identity are expired or invalid")
+	ErrNilParam                      = errors.New("parameter cannot be nil")
+	ErrInitializingProviders         = errors.New("failed to initialize providers")
+	ErrInitializingIdentities        = errors.New("failed to initialize identities")
+	ErrInitializingCredentialStore   = errors.New("failed to initialize credential store")
+	ErrCircularDependency            = errors.New("circular dependency detected in identity chain")
+	ErrIdentityNotFound              = errors.New("identity not found")
+	ErrNoDefaultIdentity             = errors.New("no default identity configured for authentication")
+	ErrMultipleDefaultIdentities     = errors.New("multiple default identities found")
+	ErrNoIdentitiesAvailable         = errors.New("no identities available")
+	ErrInvalidStackConfig            = errors.New("invalid stack config")
+	ErrNoCommandSpecified            = errors.New("no command specified")
+	ErrCommandNotFound               = errors.New("command not found")
+
+	ErrInvalidSubcommand = errors.New("invalid subcommand")
+	ErrSubcommandFailed  = errors.New("subcommand failed")
+
+	ErrInvalidArgumentError = errors.New("invalid argument error")
+	ErrMissingInput         = errors.New("missing input")
+
+	ErrAuthAwsFileManagerFailed = errors.New("failed to create AWS file manager")
+
+	ErrAuthOidcDecodeFailed    = errors.New("failed to decode OIDC token")
+	ErrAuthOidcUnmarshalFailed = errors.New("failed to unmarshal oidc claims")
+
 	// Store and hook errors.
 	ErrNilTerraformOutput = errors.New("terraform output returned nil")
 	ErrNilStoreValue      = errors.New("cannot store nil value")
@@ -214,3 +376,13 @@ var (
 	// AI-related errors.
 	ErrAINotEnabled = errors.New("AI features are not enabled")
 )
+
+// ExitCodeError is a typed error that preserves subcommand exit codes.
+// This allows the root command to exit with the same code as the subcommand.
+type ExitCodeError struct {
+	Code int
+}
+
+func (e ExitCodeError) Error() string {
+	return fmt.Sprintf("subcommand exited with code %d", e.Code)
+}

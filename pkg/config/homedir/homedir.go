@@ -178,6 +178,9 @@ func getUnixHomeDir() (string, error) {
 	}
 
 	// username:password:uid:gid:gecos:home:shell
+	// lgtm[go/clear-text-logging]
+	// The password field in modern /etc/passwd is 'x', not the actual password.
+	// We only extract the home directory field and do not log sensitive data.
 	passwdParts := strings.SplitN(passwd, ":", passwdFieldCount)
 	if len(passwdParts) > passwdHomeDirIndex {
 		return passwdParts[passwdHomeDirIndex], nil

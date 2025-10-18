@@ -7,13 +7,15 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
-	errUtils "github.com/cloudposse/atmos/errors"
-	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/cloudposse/atmos/pkg/ui/markdown"
-	"github.com/cloudposse/atmos/pkg/ui/theme"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 	"golang.org/x/term"
+
+	errUtils "github.com/cloudposse/atmos/errors"
+	termUtils "github.com/cloudposse/atmos/internal/tui/templates/term"
+	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui/markdown"
+	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
 
 // Templater handles the generation and management of command usage templates.
@@ -85,7 +87,7 @@ func renderHelpMarkdown(cmd *cobra.Command) string {
 	}
 	help := fmt.Sprintf("Use `%s --help` for more information about a command.", commandPath)
 	var data string
-	if term.IsTerminal(int(os.Stdout.Fd())) {
+	if termUtils.IsTTYSupportForStdout() {
 		data, err = render.Render(help)
 	} else {
 		data, err = render.RenderAscii(help)
@@ -245,7 +247,7 @@ func GetTerminalWidth() int {
 	screenWidth := defaultWidth
 
 	// Detect terminal width and use it by default if available
-	if term.IsTerminal(int(os.Stdout.Fd())) {
+	if termUtils.IsTTYSupportForStdout() {
 		termWidth, _, err := term.GetSize(int(os.Stdout.Fd()))
 		if err == nil && termWidth > 0 {
 			screenWidth = termWidth - 2

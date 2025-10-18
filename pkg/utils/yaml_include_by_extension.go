@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	"github.com/hashicorp/go-getter"
-	"go.yaml.in/yaml/v3"
+	yaml "gopkg.in/yaml.v3"
 
 	"github.com/cloudposse/atmos/pkg/downloader"
 	"github.com/cloudposse/atmos/pkg/filetype"

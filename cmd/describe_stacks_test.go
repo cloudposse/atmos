@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"fmt"
-	"os"
 	"testing"
 
 	"github.com/golang/mock/gomock"
@@ -17,8 +16,10 @@ import (
 func TestDescribeStacksRunnable(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
+
 	mockExec := exec.NewMockDescribeStacksExec(ctrl)
 	mockExec.EXPECT().Execute(gomock.Any(), gomock.Any()).Return(nil).Times(1)
+
 	run := getRunnableDescribeStacksCmd(getRunnableDescribeStacksCmdProps{
 		func(opts ...AtmosValidateOption) {},
 		func(componentType string, cmd *cobra.Command, args, additionalArgsAndFlags []string) (schema.ConfigAndStacksInfo, error) {
@@ -35,7 +36,12 @@ func TestDescribeStacksRunnable(t *testing.T) {
 		},
 		mockExec,
 	})
-	run(describeStacksCmd, []string{})
+
+	err := run(describeStacksCmd, []string{})
+
+	// Verify command executed without errors. The mock expectations verify
+	// that Execute() was called with the correct arguments.
+	assert.NoError(t, err, "describeStacksCmd should execute without error")
 }
 
 func TestSetFlagValueInDescribeStacksCliArgs(t *testing.T) {
@@ -151,18 +157,9 @@ func TestSetCliArgs_ComponentTypes_StringSlice(t *testing.T) {
 func TestDescribeStacksCmd_Error(t *testing.T) {
 	stacksPath := "../tests/fixtures/scenarios/terraform-apply-affected"
 
-	err := os.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
-	assert.NoError(t, err, "Setting 'ATMOS_CLI_CONFIG_PATH' environment variable should execute without error")
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
+	t.Setenv("ATMOS_BASE_PATH", stacksPath)
 
-	err = os.Setenv("ATMOS_BASE_PATH", stacksPath)
-	assert.NoError(t, err, "Setting 'ATMOS_BASE_PATH' environment variable should execute without error")
-
-	// Unset ENV variables after testing
-	defer func() {
-		os.Unsetenv("ATMOS_CLI_CONFIG_PATH")
-		os.Unsetenv("ATMOS_BASE_PATH")
-	}()
-
-	err = describeStacksCmd.RunE(describeStacksCmd, []string{"--invalid-flag"})
+	err := describeStacksCmd.RunE(describeStacksCmd, []string{"--invalid-flag"})
 	assert.Error(t, err, "describe stacks command should return an error when called with invalid flags")
 }

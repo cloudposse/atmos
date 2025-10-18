@@ -1,11 +1,13 @@
 package cmd
 
 import (
+	_ "embed"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -18,12 +20,20 @@ import (
 	tuiUtils "github.com/cloudposse/atmos/internal/tui/utils"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/cloudposse/atmos/pkg/telemetry"
-	"github.com/cloudposse/atmos/pkg/ui/theme"
 	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/cloudposse/atmos/pkg/version"
 )
+
+//go:embed markdown/getting_started.md
+var gettingStartedMarkdown string
+
+//go:embed markdown/missing_config_default.md
+var missingConfigDefaultMarkdown string
+
+//go:embed markdown/missing_config_found.md
+var missingConfigFoundMarkdown string
 
 // Define a constant for the dot string that appears multiple times.
 const currentDirPath = "."
@@ -283,7 +293,9 @@ func preCustomCommand(
 
 	// no "steps" means a sub command should be specified
 	if len(commandConfig.Steps) == 0 {
-		_ = cmd.Help()
+		if err := cmd.Help(); err != nil {
+			log.Trace("Failed to display command help", "error", err, "command", cmd.Name())
+		}
 		errUtils.Exit(0)
 	}
 }
@@ -498,46 +510,29 @@ func checkAtmosConfig(opts ...AtmosValidateOption) {
 
 // printMessageForMissingAtmosConfig prints Atmos logo and instructions on how to configure and start using Atmos.
 func printMessageForMissingAtmosConfig(atmosConfig schema.AtmosConfiguration) {
-	c1 := theme.Colors.Info
-	c2 := theme.Colors.Success
-
 	fmt.Println()
 	err := tuiUtils.PrintStyledText("ATMOS")
 	errUtils.CheckErrorPrintAndExit(err, "", "")
 
-	telemetry.PrintTelemetryDisclosure()
-
 	// Check if we're in a git repo. Warn if not.
 	verifyInsideGitRepo()
 
+	stacksDir := filepath.Join(atmosConfig.BasePath, atmosConfig.Stacks.BasePath)
+
+	u.PrintfMarkdownToTUI("\n")
+
 	if atmosConfig.Default {
-		// If Atmos did not find an `atmos.yaml` config file and is using the default config
-		u.PrintMessageInColor("atmos.yaml", c1)
-		fmt.Println(" CLI config file was not found.")
-		fmt.Print("\nThe default Atmos stacks directory is set to ")
-		u.PrintMessageInColor(filepath.Join(atmosConfig.BasePath, atmosConfig.Stacks.BasePath), c1)
-		fmt.Println(",\nbut the directory does not exist in the current path.")
+		// If Atmos did not find an `atmos.yaml` config file and is using the default config.
+		u.PrintfMarkdownToTUI(missingConfigDefaultMarkdown, stacksDir)
 	} else {
-		// If Atmos found an `atmos.yaml` config file, but it defines invalid paths to Atmos stacks and components
-		u.PrintMessageInColor("atmos.yaml", c1)
-		fmt.Print(" CLI config file specifies the directory for Atmos stacks as ")
-		u.PrintMessageInColor(filepath.Join(atmosConfig.BasePath, atmosConfig.Stacks.BasePath), c1)
-		fmt.Println(",\nbut the directory does not exist.")
+		// If Atmos found an `atmos.yaml` config file, but it defines invalid paths to Atmos stacks and components.
+		u.PrintfMarkdownToTUI(missingConfigFoundMarkdown, stacksDir)
 	}
 
-	u.PrintMessage("\nTo configure and start using Atmos, refer to the following documents:\n")
+	u.PrintfMarkdownToTUI("\n")
 
-	u.PrintMessageInColor("Atmos CLI Configuration:\n", c2)
-	u.PrintMessage("https://atmos.tools/cli/configuration\n")
-
-	u.PrintMessageInColor("Atmos Components:\n", c2)
-	u.PrintMessage("https://atmos.tools/core-concepts/components\n")
-
-	u.PrintMessageInColor("Atmos Stacks:\n", c2)
-	u.PrintMessage("https://atmos.tools/core-concepts/stacks\n")
-
-	u.PrintMessageInColor("Quick Start:\n", c2)
-	u.PrintMessage("https://atmos.tools/quick-start\n")
+	// Use markdown formatting for consistent output to stderr.
+	u.PrintfMarkdownToTUI("%s", gettingStartedMarkdown)
 }
 
 // CheckForAtmosUpdateAndPrintMessage checks if a version update is needed and prints a message if a newer version is found.
@@ -592,7 +587,7 @@ func CheckForAtmosUpdateAndPrintMessage(atmosConfig schema.AtmosConfiguration) {
 
 // Check Atmos is version command.
 func isVersionCommand() bool {
-	return len(os.Args) > 1 && os.Args[1] == "version"
+	return len(os.Args) > 1 && (os.Args[1] == "version" || os.Args[1] == "--version")
 }
 
 // handleHelpRequest shows help content and exits only if the first argument is "help" or "--help" or "-h".
@@ -647,6 +642,19 @@ func getConfigAndStacksInfo(commandName string, cmd *cobra.Command, args []strin
 	info, err := e.ProcessCommandLineArgs(commandName, cmd, finalArgs, argsAfterDoubleDash)
 	errUtils.CheckErrorPrintAndExit(err, "", "")
 	return info
+}
+
+// enableHeatmapIfRequested checks os.Args for --heatmap and --heatmap-mode flags.
+// This is needed for commands with DisableFlagParsing=true (terraform, helmfile, packer)
+// where Cobra doesn't parse the flags, so PersistentPreRun can't detect them.
+// We only enable tracking if --heatmap is present; --heatmap-mode is only relevant when --heatmap is set.
+func enableHeatmapIfRequested() {
+	for _, arg := range os.Args {
+		if arg == "--heatmap" {
+			perf.EnableTracking(true)
+			return
+		}
+	}
 }
 
 // isGitRepository checks if the current directory is within a git repository.
@@ -726,6 +734,35 @@ func AddStackCompletion(cmd *cobra.Command) {
 		cmd.PersistentFlags().StringP("stack", "s", "", stackHint)
 	}
 	cmd.RegisterFlagCompletionFunc("stack", stackFlagCompletion)
+}
+
+// identityFlagCompletion provides shell completion for identity flags by fetching
+// available identities from the Atmos configuration.
+func identityFlagCompletion(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+	if err != nil {
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+
+	var identities []string
+	if atmosConfig.Auth.Identities != nil {
+		for name := range atmosConfig.Auth.Identities {
+			identities = append(identities, name)
+		}
+	}
+
+	sort.Strings(identities)
+
+	return identities, cobra.ShellCompDirectiveNoFileComp
+}
+
+// AddIdentityCompletion registers shell completion for the identity flag if present on the command.
+func AddIdentityCompletion(cmd *cobra.Command) {
+	if cmd.Flag("identity") != nil {
+		if err := cmd.RegisterFlagCompletionFunc("identity", identityFlagCompletion); err != nil {
+			log.Trace("Failed to register identity flag completion", "error", err)
+		}
+	}
 }
 
 func ComponentsArgCompletion(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {

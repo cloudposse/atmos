@@ -153,7 +153,7 @@ func TestReadConfigFileContent(t *testing.T) {
 		content, err := readConfigFileContent("/nonexistent/path/file.yaml")
 		assert.Error(t, err)
 		assert.Nil(t, content)
-		assert.Contains(t, err.Error(), "read config file")
+		assert.Contains(t, err.Error(), "failed to read config")
 	})
 
 	t.Run("empty file", func(t *testing.T) {

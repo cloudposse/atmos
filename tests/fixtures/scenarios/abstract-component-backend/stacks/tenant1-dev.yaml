@@ -1,0 +1,18 @@
+import:
+  - catalog/eks-service-defaults
+
+vars:
+  tenant: tenant1
+  environment: ue2
+  stage: dev
+
+components:
+  terraform:
+    # Concrete instance inheriting from abstract component
+    eks/service/app1:
+      metadata:
+        component: eks-service
+        inherits:
+          - eks/service/defaults
+      vars:
+        name: app1

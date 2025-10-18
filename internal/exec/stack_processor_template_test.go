@@ -235,6 +235,14 @@ func TestProcessImportSectionWithTemplates(t *testing.T) {
 			},
 			expectedContext: []bool{false, false},
 		},
+		{
+			name: "empty import array - allows clearing inherited imports",
+			stackMap: map[string]any{
+				"import": []any{},
+			},
+			expectedImports: []string{},
+			expectedContext: []bool{},
+		},
 	}
 
 	for _, tc := range testCases {

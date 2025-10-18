@@ -6,7 +6,7 @@ import (
 	e "github.com/cloudposse/atmos/internal/exec"
 )
 
-// awsEksCmdUpdateKubeconfigCmd executes 'aws eks update-kubeconfig' command
+// awsEksCmdUpdateKubeconfigCmd executes 'aws eks update-kubeconfig' command.
 var awsEksCmdUpdateKubeconfigCmd = &cobra.Command{
 	Use:   "update-kubeconfig",
 	Short: "Update `kubeconfig` for an EKS cluster using AWS CLI",

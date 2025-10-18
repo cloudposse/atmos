@@ -167,8 +167,8 @@ terraform:
 			configFileName: "atmos.yaml",
 			configContent:  `base_path: !env TEST_ATMOS_BASE_PATH`,
 			envSetup: func(t *testing.T) func() {
-				os.Setenv("TEST_ATMOS_BASE_PATH", "env/test/path")
-				return func() { os.Unsetenv("TEST_ATMOS_BASE_PATH") }
+				t.Setenv("TEST_ATMOS_BASE_PATH", "env/test/path")
+				return func() {} // t.Setenv automatically restores the value
 			},
 			setup: func(t *testing.T, dir string, tc testCase) {
 				createConfigFile(t, dir, tc.configFileName, tc.configContent)
@@ -476,16 +476,7 @@ func createConfigFile(t *testing.T, dir string, fileName string, content string)
 }
 
 func changeWorkingDir(t *testing.T, dir string) {
-	cwd, err := os.Getwd()
-	require.NoError(t, err, "Failed to get current directory")
-
-	t.Cleanup(func() {
-		err := os.Chdir(cwd)
-		require.NoError(t, err, "Failed to restore working directory")
-	})
-
-	err = os.Chdir(dir)
-	require.NoError(t, err, "Failed to change working directory")
+	t.Chdir(dir)
 }
 
 func TestParseFlagsForPager(t *testing.T) {
@@ -820,7 +811,7 @@ func TestEnvironmentVariableHandling(t *testing.T) {
 
 			// Set test environment variables
 			for envVar, val := range tt.envVars {
-				os.Setenv(envVar, val)
+				t.Setenv(envVar, val)
 			}
 
 			// Set test args

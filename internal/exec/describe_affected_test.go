@@ -19,6 +19,90 @@ import (
 	"github.com/cloudposse/atmos/tests"
 )
 
+// createExpectedAffectedResults creates the expected affected results for testing.
+// When templatesProcessed is true, returns results with unprocessed template strings.
+func createExpectedAffectedResults(componentPath string, templatesProcessed bool) []schema.Affected {
+	tgwCrossRegionStack := "ue1-network"
+	tgwHubStack := "ue1-network"
+	if templatesProcessed {
+		tgwCrossRegionStack = "ue1-{{ .vars.stage }}"
+		tgwHubStack = "{{ .vars.environment }}-{{ .vars.stage }}"
+	}
+
+	return []schema.Affected{
+		{
+			Component:            "vpc",
+			ComponentType:        "terraform",
+			ComponentPath:        componentPath,
+			Stack:                "ue1-network",
+			StackSlug:            "ue1-network-vpc",
+			Affected:             "stack.vars",
+			AffectedAll:          []string{"stack.vars"},
+			File:                 "",
+			Folder:               "",
+			Dependents:           nil,
+			IncludedInDependents: false,
+			Settings:             map[string]any{},
+		},
+		{
+			Component:            "tgw/cross-region-hub-connector",
+			ComponentType:        "terraform",
+			ComponentPath:        componentPath,
+			Stack:                "uw2-network",
+			StackSlug:            "uw2-network-tgw-cross-region-hub-connector",
+			Affected:             "stack.settings",
+			AffectedAll:          []string{"stack.settings"},
+			File:                 "",
+			Folder:               "",
+			Dependents:           nil,
+			IncludedInDependents: false,
+			Settings: map[string]any{
+				"depends_on": map[any]any{
+					1: map[string]any{
+						"component": "tgw/hub",
+						"stack":     tgwCrossRegionStack,
+					},
+				},
+			},
+		},
+		{
+			Component:            "vpc",
+			ComponentType:        "terraform",
+			ComponentPath:        componentPath,
+			Stack:                "uw2-network",
+			StackSlug:            "uw2-network-vpc",
+			Affected:             "stack.vars",
+			AffectedAll:          []string{"stack.vars"},
+			File:                 "",
+			Folder:               "",
+			Dependents:           nil,
+			IncludedInDependents: false,
+			Settings:             map[string]any{},
+		},
+		{
+			Component:            "tgw/hub",
+			ComponentType:        "terraform",
+			ComponentPath:        componentPath,
+			Stack:                "ue1-network",
+			StackSlug:            "ue1-network-tgw-hub",
+			Affected:             "stack.settings",
+			AffectedAll:          []string{"stack.settings"},
+			File:                 "",
+			Folder:               "",
+			Dependents:           nil,
+			IncludedInDependents: false,
+			Settings: map[string]any{
+				"depends_on": map[any]any{
+					1: map[string]any{
+						"component": "vpc",
+						"stack":     tgwHubStack,
+					},
+				},
+			},
+		},
+	}
+}
+
 func TestDescribeAffected(t *testing.T) {
 	d := describeAffectedExec{atmosConfig: &schema.AtmosConfiguration{
 		Settings: schema.AtmosSettings{
@@ -172,12 +256,7 @@ func setupDescribeAffectedTest(t *testing.T) (atmosConfig schema.AtmosConfigurat
 	config, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
 	require.NoError(t, err)
 
-	tempDir, err := os.MkdirTemp("", "")
-	require.NoError(t, err)
-
-	t.Cleanup(func() {
-		removeTempDir(tempDir)
-	})
+	tempDir := t.TempDir()
 
 	copyOptions := cp.Options{
 		PreserveTimes: false,
@@ -224,78 +303,7 @@ func TestDescribeAffectedWithTemplatesAndFunctions(t *testing.T) {
 	atmosConfig, repoPath, componentPath := setupDescribeAffectedTest(t)
 
 	// Test affected with `processTemplates: true`, `processFunctions: true` and `excludeLocked: false`
-	expected := []schema.Affected{
-		{
-			Component:            "vpc",
-			ComponentType:        "terraform",
-			ComponentPath:        componentPath,
-			Stack:                "ue1-network",
-			StackSlug:            "ue1-network-vpc",
-			Affected:             "stack.vars",
-			AffectedAll:          []string{"stack.vars"},
-			File:                 "",
-			Folder:               "",
-			Dependents:           nil, // must be nil to match actual
-			IncludedInDependents: false,
-			Settings:             map[string]any{},
-		},
-		{
-			Component:            "tgw/cross-region-hub-connector",
-			ComponentType:        "terraform",
-			ComponentPath:        componentPath,
-			Stack:                "uw2-network",
-			StackSlug:            "uw2-network-tgw-cross-region-hub-connector",
-			Affected:             "stack.settings",
-			AffectedAll:          []string{"stack.settings"},
-			File:                 "",
-			Folder:               "",
-			Dependents:           nil, // must be nil to match actual
-			IncludedInDependents: false,
-			Settings: map[string]any{
-				"depends_on": map[any]any{ // note: any keys
-					1: map[string]any{
-						"component": "tgw/hub",
-						"stack":     "ue1-network",
-					},
-				},
-			},
-		},
-		{
-			Component:            "vpc",
-			ComponentType:        "terraform",
-			ComponentPath:        componentPath,
-			Stack:                "uw2-network",
-			StackSlug:            "uw2-network-vpc",
-			Affected:             "stack.vars",
-			AffectedAll:          []string{"stack.vars"},
-			File:                 "",
-			Folder:               "",
-			Dependents:           nil, // must be nil to match actual
-			IncludedInDependents: false,
-			Settings:             map[string]any{},
-		},
-		{
-			Component:            "tgw/hub",
-			ComponentType:        "terraform",
-			ComponentPath:        componentPath,
-			Stack:                "ue1-network",
-			StackSlug:            "ue1-network-tgw-hub",
-			Affected:             "stack.settings",
-			AffectedAll:          []string{"stack.settings"},
-			File:                 "",
-			Folder:               "",
-			Dependents:           nil, // must be nil to match actual
-			IncludedInDependents: false,
-			Settings: map[string]any{
-				"depends_on": map[any]any{ // note: any keys
-					1: map[string]any{
-						"component": "vpc",
-						"stack":     "ue1-network",
-					},
-				},
-			},
-		},
-	}
+	expected := createExpectedAffectedResults(componentPath, false)
 	affected, _, _, _, err := ExecuteDescribeAffectedWithTargetRepoPath(
 		&atmosConfig,
 		repoPath,
@@ -317,78 +325,7 @@ func TestDescribeAffectedWithoutTemplatesAndFunctions(t *testing.T) {
 	atmosConfig, repoPath, componentPath := setupDescribeAffectedTest(t)
 
 	// Test affected with `processTemplates: false`, `processFunctions: false` and `excludeLocked: false`
-	expected := []schema.Affected{
-		{
-			Component:            "vpc",
-			ComponentType:        "terraform",
-			ComponentPath:        componentPath,
-			Stack:                "ue1-network",
-			StackSlug:            "ue1-network-vpc",
-			Affected:             "stack.vars",
-			AffectedAll:          []string{"stack.vars"},
-			File:                 "",
-			Folder:               "",
-			Dependents:           nil, // must be nil to match actual
-			IncludedInDependents: false,
-			Settings:             map[string]any{},
-		},
-		{
-			Component:            "tgw/cross-region-hub-connector",
-			ComponentType:        "terraform",
-			ComponentPath:        componentPath,
-			Stack:                "uw2-network",
-			StackSlug:            "uw2-network-tgw-cross-region-hub-connector",
-			Affected:             "stack.settings",
-			AffectedAll:          []string{"stack.settings"},
-			File:                 "",
-			Folder:               "",
-			Dependents:           nil, // must be nil to match actual
-			IncludedInDependents: false,
-			Settings: map[string]any{
-				"depends_on": map[any]any{ // note: any keys
-					1: map[string]any{
-						"component": "tgw/hub",
-						"stack":     "ue1-{{ .vars.stage }}",
-					},
-				},
-			},
-		},
-		{
-			Component:            "vpc",
-			ComponentType:        "terraform",
-			ComponentPath:        componentPath,
-			Stack:                "uw2-network",
-			StackSlug:            "uw2-network-vpc",
-			Affected:             "stack.vars",
-			AffectedAll:          []string{"stack.vars"},
-			File:                 "",
-			Folder:               "",
-			Dependents:           nil, // must be nil to match actual
-			IncludedInDependents: false,
-			Settings:             map[string]any{},
-		},
-		{
-			Component:            "tgw/hub",
-			ComponentType:        "terraform",
-			ComponentPath:        componentPath,
-			Stack:                "ue1-network",
-			StackSlug:            "ue1-network-tgw-hub",
-			Affected:             "stack.settings",
-			AffectedAll:          []string{"stack.settings"},
-			File:                 "",
-			Folder:               "",
-			Dependents:           nil, // must be nil to match actual
-			IncludedInDependents: false,
-			Settings: map[string]any{
-				"depends_on": map[any]any{ // note: any keys
-					1: map[string]any{
-						"component": "vpc",
-						"stack":     "{{ .vars.environment }}-{{ .vars.stage }}",
-					},
-				},
-			},
-		},
-	}
+	expected := createExpectedAffectedResults(componentPath, true)
 	affected, _, _, _, err := ExecuteDescribeAffectedWithTargetRepoPath(
 		&atmosConfig,
 		repoPath,

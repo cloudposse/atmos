@@ -216,9 +216,7 @@ commands:
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Create a temporary directory for test files.
-			tempDir, err := os.MkdirTemp("", "atmos-import-test-*")
-			require.NoError(t, err)
-			defer os.RemoveAll(tempDir)
+			tempDir := t.TempDir()
 
 			// Create test files.
 			for relativePath, content := range tt.setupFiles {
@@ -231,11 +229,7 @@ commands:
 			}
 
 			// Change to test directory.
-			oldDir, err := os.Getwd()
-			require.NoError(t, err)
-			err = os.Chdir(tempDir)
-			require.NoError(t, err)
-			defer os.Chdir(oldDir)
+			t.Chdir(tempDir)
 
 			// Load the configuration.
 			configInfo := schema.ConfigAndStacksInfo{
@@ -348,9 +342,7 @@ commands:
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Create a temporary directory for test files.
-			tempDir, err := os.MkdirTemp("", "atmos-import-edge-test-*")
-			require.NoError(t, err)
-			defer os.RemoveAll(tempDir)
+			tempDir := t.TempDir()
 
 			// Create test files.
 			for relativePath, content := range tt.setupFiles {
@@ -363,11 +355,7 @@ commands:
 			}
 
 			// Change to test directory.
-			oldDir, err := os.Getwd()
-			require.NoError(t, err)
-			err = os.Chdir(tempDir)
-			require.NoError(t, err)
-			defer os.Chdir(oldDir)
+			t.Chdir(tempDir)
 
 			// Load the configuration.
 			configInfo := schema.ConfigAndStacksInfo{

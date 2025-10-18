@@ -1,0 +1,55 @@
+---
+title: atmos auth exec
+sidebar_label: exec
+sidebar_class_name: command
+id: exec
+description: Execute a command with authentication environment variables set for the selected identity.
+---
+import Screengrab from '@site/src/components/Screengrab'
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Run any tool (Terraform, AWS CLI, kubectl, etc.) with the right cloud identity injected automatically into the environment. Use `exec` when you want a one-off command to inherit secure, temporary credentials without polluting your shell session.
+</Intro>
+
+<Screengrab title="atmos auth exec --help" slug="atmos-auth-exec--help" />
+
+## Usage
+
+```shell
+atmos auth exec [--identity <name>] -- <command> [args...]
+```
+
+## Arguments
+
+<dl>
+  <dt>command</dt>
+  <dd>The program to execute with authentication environment variables set.</dd>
+
+  <dt>args...</dt>
+  <dd>Arguments to pass through to the command.</dd>
+</dl>
+
+## Examples
+
+```shell
+# Run terraform with authenticated env
+atmos auth exec -- terraform plan -var-file=env.tfvars
+
+# Use a specific identity
+atmos auth exec --identity prod-admin -- aws sts get-caller-identity
+
+# Inspect env
+atmos auth exec -- env | grep AWS
+```
+
+## Flags
+
+<dl>
+  <dt>`--identity` <em>(alias `-i`)</em></dt>
+  <dd>Specify the identity to use. If omitted, the default identity is used.</dd>
+</dl>
+
+## Notes
+
+- `--` is required to stop Atmos flag parsing; everything after is passed to the subcommand.
