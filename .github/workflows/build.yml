@@ -42,7 +42,7 @@ jobs:
     needs: release
     steps:
       - name: "Checkout source code at current commit"
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: "Docker Build"
         id: build
