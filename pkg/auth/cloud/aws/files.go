@@ -236,6 +236,63 @@ func (m *AWSFileManager) Cleanup(providerName string) error {
 	return nil
 }
 
+// CleanupIdentity removes only the specified identity's sections from AWS INI files.
+// This preserves other identities using the same provider.
+func (m *AWSFileManager) CleanupIdentity(providerName, identityName string) error {
+	var errs []error
+
+	// Remove identity section from credentials file.
+	credentialsPath := m.GetCredentialsPath(providerName)
+	if err := m.removeIniSection(credentialsPath, identityName); err != nil {
+		errs = append(errs, fmt.Errorf("failed to remove credentials section: %w", err))
+	}
+
+	// Remove identity section from config file.
+	configPath := m.GetConfigPath(providerName)
+	if err := m.removeIniSection(configPath, identityName); err != nil {
+		errs = append(errs, fmt.Errorf("failed to remove config section: %w", err))
+	}
+
+	if len(errs) > 0 {
+		return errors.Join(errs...)
+	}
+
+	return nil
+}
+
+// removeIniSection removes a section from an INI file.
+func (m *AWSFileManager) removeIniSection(filePath, sectionName string) error {
+	// Load INI file.
+	cfg, err := ini.Load(filePath)
+	if err != nil {
+		// If file doesn't exist, section is already removed.
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return fmt.Errorf("failed to load INI file: %w", err)
+	}
+
+	// Delete the section.
+	cfg.DeleteSection(sectionName)
+
+	// If no sections remain, remove the file entirely.
+	if len(cfg.Sections()) == 1 && cfg.Sections()[0].Name() == ini.DefaultSection {
+		if err := os.Remove(filePath); err != nil && !os.IsNotExist(err) {
+			return fmt.Errorf("failed to remove empty file: %w", err)
+		}
+		log.Debug("Removed empty INI file", "path", filePath)
+		return nil
+	}
+
+	// Save the updated INI file.
+	if err := cfg.SaveTo(filePath); err != nil {
+		return fmt.Errorf("failed to save INI file: %w", err)
+	}
+
+	log.Debug("Removed INI section", "file", filePath, "section", sectionName)
+	return nil
+}
+
 // CleanupAll removes entire base directory (all providers).
 func (m *AWSFileManager) CleanupAll() error {
 	if err := os.RemoveAll(m.baseDir); err != nil {

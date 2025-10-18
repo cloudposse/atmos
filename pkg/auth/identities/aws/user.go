@@ -362,7 +362,9 @@ func (i *userIdentity) Logout(ctx context.Context) error {
 		return errors.Join(errUtils.ErrLogoutFailed, err)
 	}
 
-	if err := fileManager.Cleanup("aws-user"); err != nil {
+	// Use CleanupIdentity to remove only this identity's sections from shared INI files.
+	// This preserves credentials for other identities using the same provider.
+	if err := fileManager.CleanupIdentity("aws-user", i.name); err != nil {
 		log.Debug("Failed to cleanup AWS files for user identity", "identity", i.name, "error", err)
 		return errors.Join(errUtils.ErrLogoutFailed, err)
 	}
