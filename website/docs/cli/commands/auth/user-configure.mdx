@@ -8,10 +8,11 @@ description: Configure static AWS user credentials and store them securely in yo
 ---
 import Screengrab from '@site/src/components/Screengrab'
 import Note from '@site/src/components/Note'
+import Intro from '@site/src/components/Intro'
 
-:::note Purpose
+<Intro>
 Use this command whenever an identity is backed by a **user** credential source and you need to configure those credentials interactively. The values are stored securely in your OS keychain and can be referenced by other `atmos auth` commands (`login`, `env`, `exec`).
-:::
+</Intro>
 
 <Note>Currently, only **AWS IAM users** (`kind: aws/user`) are supported. In that case, you’ll be prompted for the AWS Access Key ID, Secret Access Key, and an optional MFA ARN, which will be stored securely.</Note>
 

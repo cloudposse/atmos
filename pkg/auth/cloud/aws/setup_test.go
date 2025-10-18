@@ -18,7 +18,7 @@ func TestSetupFiles_WritesCredentialsAndConfig(t *testing.T) {
 	t.Setenv("HOME", tmp)
 
 	creds := &types.AWSCredentials{AccessKeyID: "AKIA123", SecretAccessKey: "secret", SessionToken: "token", Region: "us-east-2"}
-	err := SetupFiles("prov", "dev", creds)
+	err := SetupFiles("prov", "dev", creds, "")
 	require.NoError(t, err)
 
 	credPath := filepath.Join(tmp, ".aws", "atmos", "prov", "credentials")
@@ -48,7 +48,7 @@ func TestSetEnvironmentVariables_SetsStackEnv(t *testing.T) {
 	t.Setenv("HOME", tmp)
 
 	stack := &schema.ConfigAndStacksInfo{}
-	err := SetEnvironmentVariables(stack, "prov", "dev")
+	err := SetEnvironmentVariables(stack, "prov", "dev", "")
 	require.NoError(t, err)
 
 	credPath := filepath.Join(".aws", "atmos", "prov", "credentials")

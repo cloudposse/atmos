@@ -283,6 +283,7 @@ func (p *testProvider) Authenticate(_ context.Context) (types.ICredentials, erro
 }
 func (p *testProvider) Validate() error                         { return nil }
 func (p *testProvider) Environment() (map[string]string, error) { return map[string]string{}, nil }
+func (p *testProvider) Logout(_ context.Context) error          { return nil }
 
 func TestManager_getProviderForIdentity_NameAndAlias(t *testing.T) {
 	m := &manager{
@@ -474,6 +475,7 @@ func (s stubUserID) Environment() (map[string]string, error) { return map[string
 func (s stubUserID) PostAuthenticate(_ context.Context, _ *schema.ConfigAndStacksInfo, _ string, _ string, _ types.ICredentials) error {
 	return nil
 }
+func (s stubUserID) Logout(_ context.Context) error { return nil }
 
 func TestManager_authenticateFromIndex_StandaloneAWSUser(t *testing.T) {
 	creds := &testCreds{}
@@ -545,6 +547,7 @@ func (s stubPSIdentity) PostAuthenticate(_ context.Context, _ *schema.ConfigAndS
 	}
 	return s.postErr
 }
+func (s stubPSIdentity) Logout(_ context.Context) error { return nil }
 
 func TestNewAuthManager_ParamValidation(t *testing.T) {
 	t.Run("nil config", func(t *testing.T) {
@@ -788,6 +791,7 @@ func (s stubIdentity) Environment() (map[string]string, error) { return nil, nil
 func (s stubIdentity) PostAuthenticate(_ context.Context, _ *schema.ConfigAndStacksInfo, _ string, _ string, _ types.ICredentials) error {
 	return nil
 }
+func (s stubIdentity) Logout(_ context.Context) error { return nil }
 
 func TestBuildAuthenticationChain_Basic(t *testing.T) {
 	m := &manager{config: &schema.AuthConfig{

@@ -3,6 +3,7 @@ package aws
 import (
 	"context"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"net/url"
 	"os"
@@ -337,6 +338,11 @@ func (p *samlProvider) Validate() error {
 		return fmt.Errorf("%w: invalid URL format: %v", errUtils.ErrInvalidProviderConfig, err)
 	}
 
+	// Validate spec.files.base_path if provided.
+	if err := awsCloud.ValidateFilesBasePath(p.config); err != nil {
+		return err
+	}
+
 	return nil
 }
 
@@ -367,4 +373,23 @@ func (p *samlProvider) setupBrowserAutomation() {
 	if strings.Contains(p.url, "accounts.google.com") {
 		log.Debug("Detected Google Apps SAML, using Browser provider")
 	}
+}
+
+// Logout removes provider-specific credential storage.
+func (p *samlProvider) Logout(ctx context.Context) error {
+	// Get base_path from provider spec if configured.
+	basePath := awsCloud.GetFilesBasePath(p.config)
+
+	fileManager, err := awsCloud.NewAWSFileManager(basePath)
+	if err != nil {
+		return errors.Join(errUtils.ErrLogoutFailed, err)
+	}
+
+	if err := fileManager.Cleanup(p.name); err != nil {
+		log.Debug("Failed to cleanup AWS files for SAML provider", "provider", p.name, "error", err)
+		return errors.Join(errUtils.ErrLogoutFailed, err)
+	}
+
+	log.Debug("Cleaned up AWS files for SAML provider", "provider", p.name)
+	return nil
 }
