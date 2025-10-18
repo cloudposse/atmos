@@ -453,7 +453,7 @@ func TestAddIdentityCompletionErrorHandling(t *testing.T) {
 // TestStackFlagCompletion tests the stackFlagCompletion function.
 func TestStackFlagCompletion(t *testing.T) {
 	// Change to a directory with valid stacks configuration (automatically reverted after test).
-	testDir := "../../examples/quick-start-advanced"
+	testDir := "../examples/quick-start-advanced"
 	t.Chdir(testDir)
 
 	// Create a test command.
