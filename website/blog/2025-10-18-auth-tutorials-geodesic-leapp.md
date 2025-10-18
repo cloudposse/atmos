@@ -34,7 +34,7 @@ For teams using [Geodesic](https://github.com/cloudposse/geodesic) as their DevO
 - **Source profile configuration** for assume-role utilities
 - **Complete working examples** showing all components together
 
-The guide clarifies that authentication happens on your host machine (not inside the container) and explains keychain integration limitations.
+The guide covers the authentication workflow, explaining that authentication happens on your host machine (not inside the container) and details keychain integration behavior with containers.
 
 ## Key Benefits of Atmos Auth
 
