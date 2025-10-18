@@ -40,14 +40,15 @@ Atmos can optionally store refresh tokens in your operating system's keyring (ma
 Add the following environment variables to your Geodesic Dockerfile to configure AWS authentication settings:
 
 ```dockerfile
-# Default AWS_PROFILE
-# This identity must exist in the atmos config file.
-ARG DEFAULT_ATMOS_PROVIDER="acme-sso"
-ARG DEFAULT_ATMOS_IDENTITY="acme-identity"
+# Atmos auth configuration
+# These values must match your atmos.yaml auth configuration
+ARG ATMOS_AUTH_PROVIDER="acme-sso"
+ARG ATMOS_AUTH_IDENTITY="acme-identity"
 
-ENV AWS_SHARED_CREDENTIALS_FILE=$HOME/.aws/atmos/${DEFAULT_ATMOS_PROVIDER}/credentials
-ENV AWS_CONFIG_FILE=$HOME/.aws/atmos/${DEFAULT_ATMOS_PROVIDER}/config
-ENV AWS_PROFILE=${DEFAULT_ATMOS_IDENTITY}
+ENV AWS_SHARED_CREDENTIALS_FILE=$HOME/.aws/atmos/${ATMOS_AUTH_PROVIDER}/credentials
+ENV AWS_CONFIG_FILE=$HOME/.aws/atmos/${ATMOS_AUTH_PROVIDER}/config
+ENV AWS_PROFILE=${ATMOS_AUTH_IDENTITY}
+ENV ATMOS_IDENTITY=${ATMOS_AUTH_IDENTITY}
 
 # Path to the teams config file for assume-role and other Geodesic utilities.
 # Once logged in with Atmos, this config file gives you access to all the other teams
@@ -58,15 +59,16 @@ ENV ASSUME_ROLE_INTERACTIVE_QUERY=${NAMESPACE}${TENANT:+-$TENANT}-gbl-
 
 **Key Configuration Details:**
 
-- **`DEFAULT_ATMOS_PROVIDER`**: Name of the provider defined in your `atmos.yaml` (e.g., `acme-sso`)
-- **`DEFAULT_ATMOS_IDENTITY`**: Name of the identity to use by default (must match an identity in `atmos.yaml`)
-- **`AWS_SHARED_CREDENTIALS_FILE`**: Points to Atmos-managed credentials
-- **`AWS_CONFIG_FILE`**: Points to Atmos-managed AWS config
-- **`AWS_PROFILE`**: The default profile name to use
+- **`ATMOS_AUTH_PROVIDER`**: Name of the provider defined in your `atmos.yaml` (e.g., `acme-sso`) - used to construct credential file paths
+- **`ATMOS_AUTH_IDENTITY`**: Name of the identity to use by default (must match an identity in `atmos.yaml`)
+- **`AWS_SHARED_CREDENTIALS_FILE`**: Points to Atmos-managed credentials directory
+- **`AWS_CONFIG_FILE`**: Points to Atmos-managed AWS config file
+- **`AWS_PROFILE`**: The AWS profile name (set to match identity)
+- **`ATMOS_IDENTITY`**: Environment variable that Atmos reads to determine default identity
 - **`AWS_CONFIG_TEAMS`**: Separate variable for teams config (avoids clobbering `AWS_CONFIG_FILE`)
 
 :::note
-The `AWS_CONFIG_FILE` environment variable must remain pointed at the Atmos-managed config (`$HOME/.aws/atmos/${DEFAULT_ATMOS_PROVIDER}/config`) for authentication to work correctly. The teams config is stored in the separate `AWS_CONFIG_TEAMS` variable. If your Geodesic utilities reference the teams config, update them to use `AWS_CONFIG_TEAMS` instead of `AWS_CONFIG_FILE`.
+The `AWS_CONFIG_FILE` environment variable must remain pointed at the Atmos-managed config (`$HOME/.aws/atmos/${ATMOS_AUTH_PROVIDER}/config`) for authentication to work correctly. The teams config is stored in the separate `AWS_CONFIG_TEAMS` variable. If your Geodesic utilities reference the teams config, update them to use `AWS_CONFIG_TEAMS` instead of `AWS_CONFIG_FILE`.
 :::
 
 ### 2. Update Your Makefile
@@ -141,12 +143,13 @@ auth:
 FROM cloudposse/geodesic:latest
 
 # Atmos auth configuration
-ARG DEFAULT_ATMOS_PROVIDER="acme-sso"
-ARG DEFAULT_ATMOS_IDENTITY="acme-identity"
+ARG ATMOS_AUTH_PROVIDER="acme-sso"
+ARG ATMOS_AUTH_IDENTITY="acme-identity"
 
-ENV AWS_SHARED_CREDENTIALS_FILE=$HOME/.aws/atmos/${DEFAULT_ATMOS_PROVIDER}/credentials
-ENV AWS_CONFIG_FILE=$HOME/.aws/atmos/${DEFAULT_ATMOS_PROVIDER}/config
-ENV AWS_PROFILE=${DEFAULT_ATMOS_IDENTITY}
+ENV AWS_SHARED_CREDENTIALS_FILE=$HOME/.aws/atmos/${ATMOS_AUTH_PROVIDER}/credentials
+ENV AWS_CONFIG_FILE=$HOME/.aws/atmos/${ATMOS_AUTH_PROVIDER}/config
+ENV AWS_PROFILE=${ATMOS_AUTH_IDENTITY}
+ENV ATMOS_IDENTITY=${ATMOS_AUTH_IDENTITY}
 ENV AWS_CONFIG_TEAMS=/etc/aws-config/aws-config-teams
 ENV ASSUME_ROLE_INTERACTIVE_QUERY=${NAMESPACE}${TENANT:+-$TENANT}-gbl-
 
