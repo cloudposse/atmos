@@ -12,7 +12,7 @@ func init() {
 // Analyzer is a standalone analyzer for CLI usage.
 var Analyzer = &analysis.Analyzer{
 	Name: "lintroller",
-	Doc:  "Atmos project-specific linting rules (t.Setenv/os.Setenv/t.TempDir/t.Chdir checks)",
+	Doc:  "Atmos project-specific linting rules (t.Setenv/os.Setenv/t.TempDir/t.Chdir/test assertions checks)",
 	Run:  standaloneRun,
 }
 
@@ -24,6 +24,7 @@ func standaloneRun(pass *analysis.Pass) (interface{}, error) {
 		&OsSetenvInTestRule{},
 		&OsMkdirTempInTestRule{},
 		&OsChdirInTestRule{},
+		&TestNoAssertionsRule{},
 	}
 
 	for _, file := range pass.Files {
@@ -43,6 +44,7 @@ type Settings struct {
 	OsSetenvInTest    bool `json:"os-setenv-in-test" yaml:"os-setenv-in-test"`
 	OsMkdirTempInTest bool `json:"os-mkdirtemp-in-test" yaml:"os-mkdirtemp-in-test"`
 	OsChdirInTest     bool `json:"os-chdir-in-test" yaml:"os-chdir-in-test"`
+	TestNoAssertions  bool `json:"test-no-assertions" yaml:"test-no-assertions"`
 }
 
 // LintrollerPlugin implements the register.LinterPlugin interface.
@@ -58,11 +60,12 @@ func New(settings any) (register.LinterPlugin, error) {
 	}
 
 	// Default to enabling all rules if no settings provided.
-	if !s.TSetenvInDefer && !s.OsSetenvInTest && !s.OsMkdirTempInTest && !s.OsChdirInTest {
+	if !s.TSetenvInDefer && !s.OsSetenvInTest && !s.OsMkdirTempInTest && !s.OsChdirInTest && !s.TestNoAssertions {
 		s.TSetenvInDefer = true
 		s.OsSetenvInTest = true
 		s.OsMkdirTempInTest = true
 		s.OsChdirInTest = true
+		s.TestNoAssertions = true
 	}
 
 	return &LintrollerPlugin{settings: s}, nil
@@ -73,7 +76,7 @@ func (p *LintrollerPlugin) BuildAnalyzers() ([]*analysis.Analyzer, error) {
 	return []*analysis.Analyzer{
 		{
 			Name: "lintroller",
-			Doc:  "Atmos project-specific linting rules (t.Setenv/os.Setenv/t.TempDir/t.Chdir checks)",
+			Doc:  "Atmos project-specific linting rules (t.Setenv/os.Setenv/t.TempDir/t.Chdir/test assertions checks)",
 			Run:  p.run,
 		},
 	}, nil
@@ -99,6 +102,9 @@ func (p *LintrollerPlugin) run(pass *analysis.Pass) (interface{}, error) {
 	}
 	if p.settings.OsChdirInTest {
 		rules = append(rules, &OsChdirInTestRule{})
+	}
+	if p.settings.TestNoAssertions {
+		rules = append(rules, &TestNoAssertionsRule{})
 	}
 
 	// Run all enabled rules.
