@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -264,6 +265,9 @@ func TestProcessYAMLConfigFileMissingFilesReturnError(t *testing.T) {
 	filePath := "../../tests/fixtures/scenarios/invalid-stacks/stacks/orgs/acme/platform/not-present.yaml"
 
 	atmosConfig := schema.AtmosConfiguration{
+		Stacks: schema.Stacks{
+			BasePath: "stacks",
+		},
 		Templates: schema.Templates{
 			Settings: schema.TemplatesSettings{
 				Enabled: true,
@@ -294,7 +298,15 @@ func TestProcessYAMLConfigFileMissingFilesReturnError(t *testing.T) {
 		"",
 	)
 
+	// Verify error is returned.
 	assert.Error(t, err)
+
+	// Verify it's our specific error type.
+	assert.ErrorIs(t, err, errUtils.ErrStackManifestFileNotFound)
+
+	// Verify error message contains the sentinel error text.
+	errMsg := err.Error()
+	assert.Contains(t, errMsg, "stack manifest file not found")
 }
 
 func TestProcessYAMLConfigFileEmptyManifest(t *testing.T) {

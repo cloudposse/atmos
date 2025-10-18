@@ -654,7 +654,8 @@ func TestPrintTelemetryDisclosure(t *testing.T) {
 	defer os.RemoveAll(cacheDir)
 
 	// Initialize markdown renderer for testing
-	utils.InitializeMarkdown(schema.AtmosConfiguration{})
+	atmosConfig := schema.AtmosConfiguration{}
+	utils.InitializeMarkdown(atmosConfig)
 
 	// Call PrintTelemetryDisclosure
 	PrintTelemetryDisclosure()
@@ -690,7 +691,8 @@ func TestPrintTelemetryDisclosureOnlyOnce(t *testing.T) {
 	defer os.RemoveAll(cacheDir)
 
 	// Initialize markdown renderer for testing
-	utils.InitializeMarkdown(schema.AtmosConfiguration{})
+	atmosConfig := schema.AtmosConfiguration{}
+	utils.InitializeMarkdown(atmosConfig)
 
 	// First call should show the message
 	oldStderr := os.Stderr
@@ -740,7 +742,8 @@ func TestPrintTelemetryDisclosureDisabledInCI(t *testing.T) {
 	defer os.RemoveAll(cacheDir)
 
 	// Initialize markdown renderer for testing
-	utils.InitializeMarkdown(schema.AtmosConfiguration{})
+	atmosConfig := schema.AtmosConfiguration{}
+	utils.InitializeMarkdown(atmosConfig)
 
 	// Capture stderr
 	oldStderr := os.Stderr
@@ -776,7 +779,8 @@ func TestPrintTelemetryDisclosureDisabledByConfig(t *testing.T) {
 	defer os.RemoveAll(cacheDir)
 
 	// Initialize markdown renderer for testing
-	utils.InitializeMarkdown(schema.AtmosConfiguration{})
+	atmosConfig := schema.AtmosConfiguration{}
+	utils.InitializeMarkdown(atmosConfig)
 
 	// Capture stderr
 	oldStderr := os.Stderr

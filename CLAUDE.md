@@ -209,9 +209,10 @@ viper.SetEnvPrefix("ATMOS")
 - **All errors MUST be wrapped using static errors defined in `errors/errors.go`**
 - **Use `errors.Join` for combining multiple errors** - preserves all error chains
 - **Use `fmt.Errorf` with `%w` for adding string context** - when you need formatted strings
+- **Use error builder for complex errors** - adds hints, context, and exit codes
 - **Use `errors.Is()` for error checking** - robust against wrapping
 - **NEVER use dynamic errors directly** - triggers linting warnings
-- **See `docs/prd/error-handling-strategy.md`** for complete guidelines
+- **See `docs/errors.md`** for complete developer guide
 
 #### Error Handling Patterns
 
@@ -226,6 +227,22 @@ return errors.Join(errUtils.ErrFailedToProcess, underlyingErr)
 **Adding String Context:**
 ```go
 return fmt.Errorf("%w: component=%s stack=%s", errUtils.ErrInvalidComponent, component, stack)
+```
+
+**Error Builder for Complex Errors:**
+```go
+import (
+    errUtils "github.com/cloudposse/atmos/errors"
+)
+
+// Use builder for errors with hints, context, and exit codes.
+err := errUtils.Build(errUtils.ErrLoadAwsConfig).
+    WithHint("Check database credentials in atmos.yaml").
+    WithHintf("Verify network connectivity to %s", dbHost).
+    WithContext("component", "vpc").
+    WithContext("stack", "prod").
+    WithExitCode(2).
+    Err()
 ```
 
 **Checking Errors:**
@@ -246,6 +263,44 @@ var (
 )
 ```
 
+**Exit Codes:**
+```go
+// Attach exit code
+err := errUtils.WithExitCode(err, 2)  // Usage error
+
+// Or use builder
+err := errUtils.Build(err).WithExitCode(2).Err()
+
+// Extract exit code
+exitCode := errUtils.GetExitCode(err)
+// Returns: 0 (nil), custom code, exec.ExitError code, or 1 (default)
+```
+
+**Error Formatting:**
+```go
+// Format error for display with hints and color
+config := errUtils.DefaultFormatterConfig()
+config.Verbose = false  // Compact mode
+config.Color = "auto"   // TTY detection
+
+formatted := errUtils.Format(err, config)
+fmt.Fprint(os.Stderr, formatted)
+```
+
+**Sentry Integration:**
+```go
+// Initialize Sentry from config
+err := errUtils.InitializeSentry(&atmosConfig.Errors.Sentry)
+defer errUtils.CloseSentry()
+
+// Capture error with Atmos context
+context := map[string]string{
+    "component": "vpc",
+    "stack":     "prod",
+}
+errUtils.CaptureErrorWithContext(err, context)
+```
+
 ### Testing Strategy
 - **Unit tests**: Focus on pure functions, use table-driven tests
 - **Integration tests**: Test command flows end-to-end using `tests/` fixtures
@@ -261,6 +316,7 @@ var (
 - **No coverage theater** - Each test must validate real behavior, not inflate metrics
 - **Remove always-skipped tests** - Either fix the underlying issue or delete the test
 - **Table-driven tests need real scenarios** - Use production-like inputs, not contrived data
+- **Use `errors.Is()` for error checking** - Use `assert.ErrorIs(err, ErrSentinel)` for our errors and stdlib errors (e.g., `fs.ErrNotExist`, `exec.ErrNotFound`). String matching is only OK for third-party errors or testing specific message formatting
 
 ### Test Skipping Conventions (MANDATORY)
 - **ALWAYS use `t.Skipf()` instead of `t.Skip()`** - Provide clear reasons for skipped tests
@@ -442,6 +498,30 @@ go test ./pkg/config -cover
 go test ./tests -run TestCLI
 ```
 
+### Regenerating Test Snapshots
+
+When CLI output changes, regenerate snapshots to match:
+
+```bash
+# Regenerate ALL snapshots
+go test ./tests -v -regenerate-snapshots
+
+# Regenerate specific test snapshot
+go test ./tests -v -run 'TestCLICommands/atmos_workflow_invalid_step_type' -regenerate-snapshots
+
+# Review changes
+git diff tests/snapshots
+
+# Add updated snapshots
+git add tests/snapshots/*
+```
+
+**CRITICAL**: Never use pipe redirection (`2>&1`, `| head`, `| tail`) when running tests. Piping interferes with TTY detection and causes tests to use ASCII fallback mode instead of proper ANSI rendering, resulting in incorrect snapshots.
+
+**Why this matters**: Atmos uses `term.IsTTYSupportForStdout()` to detect terminal capability. Piping breaks this detection:
+- ✅ No pipes → TTY detected → Proper ANSI rendering → Correct snapshots
+- ❌ With pipes → No TTY → ASCII fallback → Wrong snapshots
+
 ### Test Data
 Use fixtures in `tests/test-cases/` for integration tests. Each test case should have:
 - `atmos.yaml` - Configuration
@@ -564,7 +644,6 @@ Use fixtures in `tests/test-cases/` for integration tests. Each test case should
   ```shell
   atmos command subcommand example1
   atmos command subcommand example2 --flag=value
-  ```
   ```
 
 - **File location**: `website/docs/cli/commands/<command>/<subcommand>.mdx`

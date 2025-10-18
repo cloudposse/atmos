@@ -9,15 +9,14 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/cloudposse/atmos/pkg/perf"
-
-	log "github.com/cloudposse/atmos/pkg/logger"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 	"github.com/samber/lo"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	w "github.com/cloudposse/atmos/internal/tui/workflow"
 	"github.com/cloudposse/atmos/pkg/config"
+	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/retry"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -70,11 +69,11 @@ func ExecuteWorkflow(
 	steps := workflowDefinition.Steps
 
 	if len(steps) == 0 {
-		errUtils.CheckErrorAndPrint(
-			ErrWorkflowNoSteps,
-			WorkflowErrTitle,
-			fmt.Sprintf("\n## Explanation\nWorkflow `%s` is empty and requires at least one step to execute.", workflow),
-		)
+		err := errUtils.Build(ErrWorkflowNoSteps).
+			WithTitle(WorkflowErrTitle).
+			WithExplanationf("Workflow `%s` is empty and requires at least one step to execute.", workflow).
+			Err()
+		errUtils.CheckErrorAndPrint(err, "", "")
 		return ErrWorkflowNoSteps
 	}
 
@@ -98,11 +97,11 @@ func ExecuteWorkflow(
 
 		if len(steps) == 0 {
 			stepNames := lo.Map(workflowDefinition.Steps, func(step schema.WorkflowStep, _ int) string { return step.Name })
-			errUtils.CheckErrorAndPrint(
-				ErrInvalidFromStep,
-				WorkflowErrTitle,
-				fmt.Sprintf("\n## Explanation\nThe `--from-step` flag was set to `%s`, but this step does not exist in workflow `%s`. \n### Available steps:\n%s", fromStep, workflow, FormatList(stepNames)),
-			)
+			err := errUtils.Build(ErrInvalidFromStep).
+				WithTitle(WorkflowErrTitle).
+				WithExplanationf("The `--from-step` flag was set to `%s`, but this step does not exist in workflow `%s`.\n\n### Available steps:\n%s", fromStep, workflow, FormatList(stepNames)).
+				Err()
+			errUtils.CheckErrorAndPrint(err, "", "")
 			return ErrInvalidFromStep
 		}
 	}
@@ -160,12 +159,12 @@ func ExecuteWorkflow(
 				ExecuteShellCommand,
 				atmosConfig, "atmos", args, ".", []string{}, dryRun, "")
 		} else {
-			errUtils.CheckErrorAndPrint(
-				ErrInvalidWorkflowStepType,
-				WorkflowErrTitle,
-				fmt.Sprintf("\n## Explanation\nStep type `%s` is not supported. Each step must specify a valid type. \n### Available types:\n%s", commandType, FormatList([]string{"atmos", "shell"})),
-			)
-			return ErrInvalidWorkflowStepType
+			err := errUtils.Build(ErrInvalidWorkflowStepType).
+				WithTitle(WorkflowErrTitle).
+				WithExplanationf("Step type `%s` is not supported. Each step must specify a valid type.\n\n### Available types:\n%s", commandType, FormatList([]string{"atmos", "shell"})).
+				Err()
+			errUtils.CheckErrorAndPrint(err, "", "")
+			return err
 		}
 
 		if err != nil {
@@ -200,12 +199,12 @@ func ExecuteWorkflow(
 				}
 			}
 
-			errUtils.CheckErrorAndPrint(
-				ErrWorkflowStepFailed,
-				WorkflowErrTitle,
-				fmt.Sprintf("\n## Explanation\nThe following command failed to execute:\n```\n%s\n```\nTo resume the workflow from this step, run:\n```\n%s\n```", failedCmd, resumeCommand),
-			)
-			return ErrWorkflowStepFailed
+			stepErr := errUtils.Build(ErrWorkflowStepFailed).
+				WithTitle(WorkflowErrTitle).
+				WithExplanationf("The following command failed to execute:\n```\n%s\n```\n\nTo resume the workflow from this step, run:\n```\n%s\n```", failedCmd, resumeCommand).
+				Err()
+			errUtils.CheckErrorAndPrint(stepErr, "", "")
+			return stepErr
 		}
 	}
 
@@ -245,7 +244,11 @@ func ExecuteDescribeWorkflows(
 
 	isDirectory, err := u.IsDirectory(workflowsDir)
 	if err != nil || !isDirectory {
-		return nil, nil, nil, fmt.Errorf("the workflow directory '%s' does not exist. Review 'workflows.base_path' in 'atmos.yaml'", workflowsDir)
+		err := fmt.Errorf("%w: the workflow directory '%s' does not exist", errUtils.ErrWorkflowDirectoryDoesNotExist, workflowsDir)
+		err = errors.WithHintf(err, "Create the directory: mkdir -p %s", workflowsDir)
+		err = errors.WithHintf(err, "Or update `workflows.base_path` in `atmos.yaml` (currently: %s)", atmosConfig.Workflows.BasePath)
+		err = errors.WithHint(err, "See https://atmos.tools/core-concepts/workflows for workflow configuration")
+		return nil, nil, nil, err
 	}
 
 	files, err := u.GetAllYamlFilesInDir(workflowsDir)

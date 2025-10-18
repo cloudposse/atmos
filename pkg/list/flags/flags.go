@@ -1,6 +1,7 @@
 package flags
 
 import (
+	"errors"
 	"fmt"
 
 	log "github.com/cloudposse/atmos/pkg/logger"
@@ -14,11 +15,11 @@ const (
 
 // Error constants for flag operations.
 var (
-	ErrFetchingFormat     = fmt.Errorf("error fetching format flag")
-	ErrFetchingMaxColumns = fmt.Errorf("error fetching max-columns flag")
-	ErrFetchingDelimiter  = fmt.Errorf("error fetching delimiter flag")
-	ErrFetchingStack      = fmt.Errorf("error fetching stack flag")
-	ErrFetchingQuery      = fmt.Errorf("error fetching query flag")
+	ErrFetchingFormat     = errors.New("error fetching format flag")
+	ErrFetchingMaxColumns = errors.New("error fetching max-columns flag")
+	ErrFetchingDelimiter  = errors.New("error fetching delimiter flag")
+	ErrFetchingStack      = errors.New("error fetching stack flag")
+	ErrFetchingQuery      = errors.New("error fetching query flag")
 )
 
 // CommonFlags contains common flags for list commands.

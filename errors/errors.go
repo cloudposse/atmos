@@ -35,12 +35,14 @@ var (
 	ErrWorkdirNotExist                       = errors.New("workdir does not exist")
 	ErrPathResolution                        = errors.New("failed to resolve absolute path")
 	ErrInvalidTemplateFunc                   = errors.New("invalid template function")
+	ErrInvalidTemplateSettings               = errors.New("invalid template settings")
 	ErrRefuseDeleteSymbolicLink              = errors.New("refusing to delete symbolic link")
 	ErrNoDocsGenerateEntry                   = errors.New("no docs.generate entry found")
 	ErrMissingDocType                        = errors.New("doc-type argument missing")
 	ErrUnsupportedInputType                  = errors.New("unsupported input type")
 	ErrMissingStackNameTemplateAndPattern    = errors.New("'stacks.name_pattern' or 'stacks.name_template' needs to be specified in 'atmos.yaml'")
 	ErrFailedMarshalConfigToYaml             = errors.New("failed to marshal config to YAML")
+	ErrStacksDirectoryDoesNotExist           = errors.New("directory for Atmos stacks does not exist")
 	ErrCommandNil                            = errors.New("command cannot be nil")
 
 	// ErrPlanHasDiff is returned when there are differences between two Terraform plan files.
@@ -100,11 +102,16 @@ var (
 	ErrAtmosArgConfigNotFound      = errors.New("atmos configuration not found")
 	ErrAtmosFilesDirConfigNotFound = errors.New("`atmos.yaml` or `.atmos.yaml` configuration file not found in directory")
 
-	ErrMissingStack                       = errors.New("stack is required; specify it on the command line using the flag `--stack <stack>` (shorthand `-s`)")
-	ErrInvalidComponent                   = errors.New("invalid component")
-	ErrInvalidComponentMapType            = errors.New("invalid component map type")
-	ErrAbstractComponentCantBeProvisioned = errors.New("abstract component cannot be provisioned")
-	ErrLockedComponentCantBeProvisioned   = errors.New("locked component cannot be provisioned")
+	ErrMissingStack                               = errors.New("stack is required")
+	ErrMissingComponent                           = errors.New("component is required")
+	ErrMissingComponentType                       = errors.New("component type is required")
+	ErrInvalidArguments                           = errors.New("invalid arguments")
+	ErrInvalidComponent                           = errors.New("invalid component")
+	ErrInvalidComponentMapType                    = errors.New("invalid component map type")
+	ErrAbstractComponentCantBeProvisioned         = errors.New("abstract component cannot be provisioned")
+	ErrLockedComponentCantBeProvisioned           = errors.New("locked component cannot be provisioned")
+	ErrSpaceliftAdminStackWorkspaceNotEnabled     = errors.New("spacelift admin stack does not have workspace enabled")
+	ErrSpaceliftAdminStackComponentNotProvisioned = errors.New("spacelift admin stack component cannot be provisioned")
 
 	// Terraform-specific errors.
 	ErrHTTPBackendWorkspaces       = errors.New("workspaces are not supported for the HTTP backend")
@@ -121,7 +128,9 @@ var (
 	ErrMerge                         = errors.New("merge error")
 
 	// Stack processing errors.
+	ErrStackManifestFileNotFound              = errors.New("stack manifest file not found")
 	ErrInvalidStackManifest                   = errors.New("invalid stack manifest")
+	ErrStackManifestSchemaValidation          = errors.New("stack manifest schema validation failed")
 	ErrInvalidHooksSection                    = errors.New("invalid 'hooks' section in the file")
 	ErrInvalidTerraformHooksSection           = errors.New("invalid 'terraform.hooks' section in the file")
 	ErrInvalidComponentVars                   = errors.New("invalid component vars section")
@@ -248,8 +257,10 @@ var (
 	ErrInvalidOPAPolicy              = errors.New("invalid OPA policy")
 	ErrTerraformEnvCliVarJSON        = errors.New("failed to parse JSON variable from TF_CLI_ARGS environment variable")
 	ErrWorkflowBasePathNotConfigured = errors.New("'workflows.base_path' must be configured in 'atmos.yaml'")
+	ErrWorkflowDirectoryDoesNotExist = errors.New("workflow directory does not exist")
 	ErrInvalidComponentArgument      = errors.New("invalid arguments. The command requires one argument 'componentName'")
 	ErrValidation                    = errors.New("validation failed")
+	ErrCUEValidationUnsupported      = errors.New("validation using CUE is not supported yet")
 
 	// List package errors.
 	ErrExecuteDescribeStacks     = errors.New("failed to execute describe stacks")

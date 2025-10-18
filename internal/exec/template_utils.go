@@ -19,6 +19,7 @@ import (
 	"github.com/mitchellh/mapstructure"
 	"github.com/samber/lo"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/merge"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -198,20 +199,20 @@ func ProcessTmplWithDatasources(
 		rightDelimiter := "}}"
 
 		if len(atmosConfig.Templates.Settings.Delimiters) > 0 {
-			delimiterError := fmt.Errorf("invalid 'templates.settings.delimiters' config in 'atmos.yaml': %v\n"+
-				"'delimiters' must be an array with two string items: left and right delimiter\n"+
-				"the left and right delimiters must not be an empty string", atmosConfig.Templates.Settings.Delimiters)
-
-			if len(atmosConfig.Templates.Settings.Delimiters) != 2 {
-				return "", delimiterError
-			}
-
-			if atmosConfig.Templates.Settings.Delimiters[0] == "" {
-				return "", delimiterError
-			}
-
-			if atmosConfig.Templates.Settings.Delimiters[1] == "" {
-				return "", delimiterError
+			if len(atmosConfig.Templates.Settings.Delimiters) != 2 ||
+				atmosConfig.Templates.Settings.Delimiters[0] == "" ||
+				atmosConfig.Templates.Settings.Delimiters[1] == "" {
+				err := errUtils.Build(fmt.Errorf("%w: invalid `templates.settings.delimiters` config in `atmos.yaml`: %v",
+					errUtils.ErrInvalidTemplateSettings,
+					atmosConfig.Templates.Settings.Delimiters)).
+					WithContext("delimiters", fmt.Sprintf("%v", atmosConfig.Templates.Settings.Delimiters)).
+					WithContext("config_file", "atmos.yaml").
+					WithHint("`delimiters` must be an array with exactly two non-empty strings: [left, right]").
+					WithHint("Example: `delimiters: [\"<{\", \"}>\"]` for custom delimiters").
+					WithHint("Default delimiters are `{{` and `}}` if not specified").
+					WithExitCode(2).
+					Err()
+				return "", err
 			}
 
 			leftDelimiter = atmosConfig.Templates.Settings.Delimiters[0]

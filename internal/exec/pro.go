@@ -269,8 +269,8 @@ func shouldUploadStatus(info *schema.ConfigAndStacksInfo) bool {
 		}
 	}
 
-	// Log warning if pro is not enabled
-	log.Warn("Pro is not enabled. Skipping upload of Terraform result.")
+	// Log warning if pro is not enabled (only reaches here if upload was explicitly requested)
+	log.Warn("Atmos Pro is not enabled for this component. Skipping upload of Terraform plan result.", "component", info.Component, "stack", info.Stack)
 
 	return false
 }

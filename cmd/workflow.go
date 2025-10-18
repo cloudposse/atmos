@@ -39,9 +39,10 @@ var workflowCmd = &cobra.Command{
 		err := e.ExecuteWorkflowCmd(cmd, args)
 		if err != nil {
 			// Check if it's a known error that's already printed in ExecuteWorkflowCmd.
-			// If it is, we don't need to print it again, but we do need to exit with a non-zero exit code.
+			// If it is, we don't need to print it again, but we do need to exit with the proper exit code.
 			if e.IsKnownWorkflowError(err) {
-				errUtils.Exit(1)
+				exitCode := errUtils.GetExitCode(err)
+				errUtils.Exit(exitCode)
 			}
 			return err
 		}
