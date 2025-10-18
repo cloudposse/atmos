@@ -282,8 +282,7 @@ auth:
 
 **Configuration Precedence**:
 1. `spec.files.base_path` in provider configuration
-2. `ATMOS_AWS_FILES_BASE_PATH` environment variable
-3. Default: `~/.aws/atmos`
+2. Default: `~/.aws/atmos`
 
 **Validation**:
 - Path must not be empty or whitespace-only

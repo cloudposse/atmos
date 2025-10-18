@@ -374,17 +374,7 @@ auth:
 The file path is resolved using this precedence order:
 
 1. **Provider configuration** (`spec.files.base_path` in `atmos.yaml`)
-2. **Environment variable** (`ATMOS_AWS_FILES_BASE_PATH`)
-3. **Default** (`~/.aws/atmos`)
-
-#### Example with Environment Variable
-
-```shell
-export ATMOS_AWS_FILES_BASE_PATH=/opt/atmos/credentials
-atmos auth logout dev-admin
-```
-
-This removes files from `/opt/atmos/credentials/aws-sso/` instead of `~/.aws/atmos/aws-sso/`.
+2. **Default** (`~/.aws/atmos`)
 
 #### Path Expansion
 

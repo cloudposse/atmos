@@ -373,7 +373,6 @@ var (
 	// Logout errors.
 	ErrLogoutFailed        = errors.New("logout failed")
 	ErrPartialLogout       = errors.New("partial logout")
-	ErrLogoutNotSupported  = errors.New("logout not supported for this provider")
 	ErrKeyringDeletion     = errors.New("keyring deletion failed")
 	ErrProviderLogout      = errors.New("provider logout failed")
 	ErrIdentityLogout      = errors.New("identity logout failed")

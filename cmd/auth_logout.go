@@ -12,6 +12,7 @@ import (
 	uiutils "github.com/cloudposse/atmos/internal/tui/utils"
 	"github.com/cloudposse/atmos/pkg/auth"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -44,6 +45,8 @@ func executeAuthLogoutCommand(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("%w: %w", errUtils.ErrFailedToInitializeAtmosConfig, err)
 	}
+
+	defer perf.Track(&atmosConfig, "cmd.executeAuthLogoutCommand")()
 
 	// Create auth manager.
 	authManager, err := createAuthManager(&atmosConfig.Auth)

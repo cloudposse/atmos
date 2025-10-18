@@ -5,12 +5,15 @@ import (
 	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 // GetFilesBasePath extracts files.base_path from provider spec.
 // Returns empty string if not configured.
 func GetFilesBasePath(provider *schema.Provider) string {
+	defer perf.Track(nil, "aws.GetFilesBasePath")()
+
 	if provider == nil || provider.Spec == nil {
 		return ""
 	}

@@ -8,7 +8,6 @@ import (
 	"strings"
 
 	homedir "github.com/mitchellh/go-homedir"
-	"github.com/spf13/viper"
 	ini "gopkg.in/ini.v1"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -43,7 +42,7 @@ type AWSFileManager struct {
 
 // NewAWSFileManager creates a new AWS file manager instance.
 // basePath is optional and can be empty to use defaults.
-// Precedence: 1) basePath parameter, 2) ATMOS_AWS_FILES_BASE_PATH env var, 3) default ~/.aws/atmos.
+// Precedence: 1) basePath parameter from provider spec, 2) default ~/.aws/atmos.
 func NewAWSFileManager(basePath string) (*AWSFileManager, error) {
 	var baseDir string
 
@@ -52,13 +51,6 @@ func NewAWSFileManager(basePath string) (*AWSFileManager, error) {
 		expanded, err := homedir.Expand(basePath)
 		if err != nil {
 			return nil, fmt.Errorf("%w: invalid base_path %q: %w", ErrGetHomeDir, basePath, err)
-		}
-		baseDir = expanded
-	} else if envPath := viper.GetString("ATMOS_AWS_FILES_BASE_PATH"); envPath != "" {
-		// Use environment variable override.
-		expanded, err := homedir.Expand(envPath)
-		if err != nil {
-			return nil, fmt.Errorf("%w: invalid ATMOS_AWS_FILES_BASE_PATH %q: %w", ErrGetHomeDir, envPath, err)
 		}
 		baseDir = expanded
 	} else {
