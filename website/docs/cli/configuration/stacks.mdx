@@ -14,7 +14,7 @@ The `stacks` section of the `atmos.yaml` defines how Atmos locates and manages y
 </Intro>
 
 :::important
-Do not confuse this configuration with [stack configuration](/core-concepts/stacks).
+Do not confuse this configuration with [stack configuration](/learn/stacks).
 This configuration below is defined in the `atmos.yaml` and instructs atmos where to find
 your stack configurations.
 :::
@@ -74,7 +74,7 @@ stacks:
 
   :::info
   The `_defaults.yaml` stack manifests are not imported into other Atmos manifests automatically.
-  You must explicitly import them using [imports](/core-concepts/stacks/imports). Atmos has no special
+  You must explicitly import them using [imports](/stacks/imports). Atmos has no special
   knowledge of this naming pattern—these files are only excluded from stack discovery because they match
   the `**/_defaults.yaml` pattern in the `excluded_paths` configuration.
 
