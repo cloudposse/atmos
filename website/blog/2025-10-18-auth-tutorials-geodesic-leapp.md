@@ -24,7 +24,7 @@ If your team uses Leapp for credential management, this guide walks you through 
 
 The guide includes practical examples using real Leapp session configurations, making it easy to translate your existing setup.
 
-### 2. [Configuring Geodesic with Atmos Auth](/cli/commands/auth/tutorials/configuring-geodesic-with-atmos-auth)
+### 2. [Configuring Geodesic with Atmos Auth](/cli/commands/auth/tutorials/configuring-geodesic)
 
 For teams using [Geodesic](https://github.com/cloudposse/geodesic) as their DevOps toolbox, this guide explains how to integrate `atmos auth`:
 
@@ -49,7 +49,7 @@ Using `atmos auth` provides several advantages over external credential managers
 
 1. **Read the guides**:
    - [Migrating from Leapp](/cli/commands/auth/tutorials/migrating-from-leapp)
-   - [Configuring Geodesic](/cli/commands/auth/tutorials/configuring-geodesic-with-atmos-auth)
+   - [Configuring Geodesic](/cli/commands/auth/tutorials/configuring-geodesic)
 
 2. **Review the main documentation**:
    - [Authentication User Guide](/cli/commands/auth/usage)
@@ -78,4 +78,4 @@ These guides are designed to be practical and actionable. If you encounter issue
 
 ---
 
-**Ready to migrate?** Start with the [Leapp migration guide](/cli/commands/auth/tutorials/migrating-from-leapp) or jump straight to [Geodesic configuration](/cli/commands/auth/tutorials/configuring-geodesic-with-atmos-auth) if you're already using `atmos auth`.
+**Ready to migrate?** Start with the [Leapp migration guide](/cli/commands/auth/tutorials/migrating-from-leapp) or jump straight to [Geodesic configuration](/cli/commands/auth/tutorials/configuring-geodesic) if you're already using `atmos auth`.
