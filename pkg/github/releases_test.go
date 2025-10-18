@@ -62,6 +62,9 @@ func TestGetLatestRelease(t *testing.T) {
 		repo := "atmos"
 
 		tag, err := GetLatestRelease(owner, repo)
+		if isRateLimitError(err) {
+			t.Skipf("Skipping due to GitHub API rate limit: %v", err)
+		}
 
 		require.NoError(t, err)
 		assert.NotEmpty(t, tag, "Expected a release tag to be returned")
@@ -136,6 +139,9 @@ func TestGetLatestReleaseWithAuthentication(t *testing.T) {
 		repo := "atmos"
 
 		tag, err := GetLatestRelease(owner, repo)
+		if isRateLimitError(err) {
+			t.Skipf("Skipping due to GitHub API rate limit: %v", err)
+		}
 
 		require.NoError(t, err)
 		assert.NotEmpty(t, tag)
@@ -427,6 +433,9 @@ func TestGetReleaseByTag(t *testing.T) {
 
 		// Use a known release tag.
 		release, err := GetReleaseByTag("cloudposse", "atmos", "v1.50.0")
+		if isRateLimitError(err) {
+			t.Skipf("Skipping due to GitHub API rate limit: %v", err)
+		}
 		require.NoError(t, err)
 		assert.NotNil(t, release)
 		assert.Equal(t, "v1.50.0", release.GetTagName())
@@ -452,6 +461,9 @@ func TestGetLatestReleaseInfo(t *testing.T) {
 		}
 
 		release, err := GetLatestReleaseInfo("cloudposse", "atmos")
+		if isRateLimitError(err) {
+			t.Skipf("Skipping due to GitHub API rate limit: %v", err)
+		}
 		require.NoError(t, err)
 		assert.NotNil(t, release)
 		assert.NotEmpty(t, release.GetTagName())
