@@ -13,7 +13,8 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-// PrintAsJSON prints the provided value as a JSON document to the console.
+// PrintAsJSON prints the provided value as a JSON document to the console with syntax highlighting.
+// Use PrintAsJSONSimple for non-TTY output (pipes, redirects) to avoid expensive highlighting.
 func PrintAsJSON(atmosConfig *schema.AtmosConfiguration, data any) error {
 	defer perf.Track(atmosConfig, "utils.PrintAsJSON")()
 
@@ -22,6 +23,26 @@ func PrintAsJSON(atmosConfig *schema.AtmosConfiguration, data any) error {
 		return err
 	}
 	PrintMessage(highlighted)
+	return nil
+}
+
+// PrintAsJSONSimple prints the provided value as JSON document without syntax highlighting.
+// This is a fast-path for non-TTY output (files, pipes, redirects) that skips expensive
+// syntax highlighting, reducing output time significantly for large configurations.
+func PrintAsJSONSimple(atmosConfig *schema.AtmosConfiguration, data any) error {
+	defer perf.Track(atmosConfig, "utils.PrintAsJSONSimple")()
+
+	j, err := ConvertToJSON(data)
+	if err != nil {
+		return err
+	}
+
+	var prettyJSON bytes.Buffer
+	err = json.Indent(&prettyJSON, []byte(j), "", "  ")
+	if err != nil {
+		return err
+	}
+	PrintMessage(prettyJSON.String())
 	return nil
 }
 
