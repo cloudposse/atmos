@@ -47,9 +47,9 @@ atmos auth login -i admin
   <dd>
     Specify the identity to authenticate. If omitted, Atmos will:
 
-    - Use the default identity if exactly one is configured
-    - Show an interactive selector if no default identity is configured
-    - Show an interactive selector if multiple default identities are configured
+    - Use the identity marked as default in configuration, if one is set
+    - If only one identity is configured (and no default is set), use it
+    - If multiple identities are configured and no default is set, show an interactive selector
     - In CI environments (non-interactive), return an error if no default identity is found
   </dd>
 </dl>
