@@ -3,14 +3,17 @@ package cmd
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth"
 	"github.com/cloudposse/atmos/pkg/auth/credentials"
 	"github.com/cloudposse/atmos/pkg/auth/validation"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -34,6 +37,7 @@ func executeAuthLoginCommand(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return errors.Join(errUtils.ErrFailedToInitConfig, err)
 	}
+	defer perf.Track(&atmosConfig, "cmd.executeAuthLoginCommand")()
 
 	// Create auth manager.
 	authManager, err := createAuthManager(&atmosConfig.Auth)
@@ -42,7 +46,7 @@ func executeAuthLoginCommand(cmd *cobra.Command, args []string) error {
 	}
 
 	// Get identity from flag or use default.
-	identityName, _ := cmd.Flags().GetString("identity")
+	identityName := viper.GetString(IdentityFlagName)
 
 	// If no identity specified, get the default identity (which prompts if needed).
 	if identityName == "" {
@@ -56,7 +60,7 @@ func executeAuthLoginCommand(cmd *cobra.Command, args []string) error {
 	ctx := context.Background()
 	whoami, err := authManager.Authenticate(ctx, identityName)
 	if err != nil {
-		return errors.Join(errUtils.ErrAuthenticationFailed, err)
+		return errors.Join(errUtils.ErrAuthenticationFailed, fmt.Errorf("identity=%s: %w", identityName, err))
 	}
 
 	// Display success message.

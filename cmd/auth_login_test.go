@@ -284,7 +284,12 @@ func TestAuthLoginCallsGetDefaultIdentityWhenNoIdentityProvided(t *testing.T) {
 					return nil
 				},
 			}
-			cmd.Flags().StringP("identity", "i", tt.identityFlag, "Specify the identity to authenticate to")
+			cmd.Flags().StringP("identity", "i", "", "Specify the identity to authenticate to")
+
+			// Set command args if identity flag should be provided.
+			if tt.identityFlag != "" {
+				cmd.SetArgs([]string{"--identity", tt.identityFlag})
+			}
 
 			// Execute command.
 			err := cmd.Execute()
