@@ -28,6 +28,14 @@ const (
 	errFormatWithString      = "%w: %s"
 )
 
+// contextKey is a type for context keys to avoid collisions.
+type contextKey string
+
+const (
+	// skipProviderLogoutKey is the context key for skipping provider.Logout calls.
+	skipProviderLogoutKey contextKey = "skipProviderLogout"
+)
+
 // manager implements the AuthManager interface.
 type manager struct {
 	config          *schema.AuthConfig
@@ -760,8 +768,9 @@ func (m *manager) Logout(ctx context.Context, identityName string) error {
 		}
 	}
 
-	// Step 2: Call provider-specific cleanup (files, etc.).
-	if len(chain) > 0 {
+	// Step 2: Call provider-specific cleanup (files, etc.) unless skipped.
+	skipProviderLogout, _ := ctx.Value(skipProviderLogoutKey).(bool)
+	if len(chain) > 0 && !skipProviderLogout {
 		providerName := chain[0]
 		if provider, exists := m.providers[providerName]; exists {
 			if err := provider.Logout(ctx); err != nil {
@@ -889,9 +898,12 @@ func (m *manager) LogoutProvider(ctx context.Context, providerName string) error
 
 	var errs []error
 
-	// Logout each identity.
+	// Set context flag to skip provider.Logout during per-identity cleanup.
+	ctxWithSkip := context.WithValue(ctx, skipProviderLogoutKey, true)
+
+	// Logout each identity (skipping provider-specific cleanup).
 	for _, identityName := range identityNames {
-		if err := m.Logout(ctx, identityName); err != nil {
+		if err := m.Logout(ctxWithSkip, identityName); err != nil {
 			log.Debug("Failed to logout identity", logKeyIdentity, identityName, "error", err)
 			errs = append(errs, fmt.Errorf("%w for identity %q: %w", errUtils.ErrIdentityLogout, identityName, err))
 		}
@@ -903,7 +915,7 @@ func (m *manager) LogoutProvider(ctx context.Context, providerName string) error
 		errs = append(errs, fmt.Errorf("%w for provider %q: %w", errUtils.ErrKeyringDeletion, providerName, err))
 	}
 
-	// Call provider-specific cleanup.
+	// Call provider-specific cleanup once for the entire provider.
 	if provider, exists := m.providers[providerName]; exists {
 		if err := provider.Logout(ctx); err != nil {
 			// ErrLogoutNotSupported is a successful no-op (exit 0).

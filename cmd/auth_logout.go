@@ -161,6 +161,14 @@ func performProviderLogout(ctx context.Context, authManager auth.AuthManager, pr
 
 	// Perform logout.
 	if err := authManager.LogoutProvider(ctx, providerName); err != nil {
+		// ErrPartialLogout is treated as success (exit 0) with warning.
+		if errors.Is(err, errUtils.ErrPartialLogout) {
+			u.PrintfMessageToTUI("⚠ **Provider logout partially succeeded**\n\n")
+			u.PrintfMessageToTUI("Warning: %v\n\n", err)
+			displayBrowserWarning()
+			return nil
+		}
+
 		u.PrintfMessageToTUI("✗ **Provider logout failed**\n\n")
 		u.PrintfMessageToTUI("Error: %v\n\n", err)
 		return err
@@ -276,6 +284,14 @@ func performLogoutAll(ctx context.Context, authManager auth.AuthManager, dryRun 
 
 	// Perform logout.
 	if err := authManager.LogoutAll(ctx); err != nil {
+		// ErrPartialLogout is treated as success (exit 0) with warning.
+		if errors.Is(err, errUtils.ErrPartialLogout) {
+			u.PrintfMessageToTUI("⚠ **Logout all partially succeeded**\n\n")
+			u.PrintfMessageToTUI("Warning: %v\n\n", err)
+			displayBrowserWarning()
+			return nil
+		}
+
 		u.PrintfMessageToTUI("✗ **Logout all failed**\n\n")
 		u.PrintfMessageToTUI("Error: %v\n\n", err)
 		return err
