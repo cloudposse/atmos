@@ -180,12 +180,16 @@ ENV AWS_SHARED_CREDENTIALS_FILE=$HOME/.aws/atmos/${DEFAULT_ATMOS_PROVIDER}/crede
 ENV AWS_CONFIG_FILE=$HOME/.aws/atmos/${DEFAULT_ATMOS_PROVIDER}/config
 ENV AWS_PROFILE=${DEFAULT_ATMOS_IDENTITY}
 
-# This sets the default AWS_CONFIG to be used after signing into AWS with Atmos.
-# Once logged in, this config file gives you access to all the other teams
+# Path to the teams config file for assume-role and other Geodesic utilities.
+# Once logged in with Atmos, this config file gives you access to all the other teams
 # and roles (if you are authorized for access).
-ENV AWS_CONFIG_FILE=/etc/aws-config/aws-config-teams
+ENV AWS_CONFIG_TEAMS=/etc/aws-config/aws-config-teams
 ENV ASSUME_ROLE_INTERACTIVE_QUERY=${NAMESPACE}${TENANT:+-$TENANT}-gbl-
 ```
+
+:::note
+The `AWS_CONFIG_FILE` environment variable must remain pointed at the Atmos-managed config (`$HOME/.aws/atmos/${DEFAULT_ATMOS_PROVIDER}/config`) for authentication to work correctly. The teams config is stored in the separate `AWS_CONFIG_TEAMS` variable. If your Geodesic utilities reference the teams config, update them to use `AWS_CONFIG_TEAMS` instead of `AWS_CONFIG_FILE`.
+:::
 
 ### Update `Makefile`
 
