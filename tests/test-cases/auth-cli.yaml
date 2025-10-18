@@ -301,3 +301,25 @@ tests:
         - "identity not found:"
         - "nonexistent"
       exit_code: 1
+
+  # Mock Provider Tests (enabled with mock authentication)
+  # Note: auth login succeeds with mock provider, but other commands fail
+  # because credentials are not persisted to keyring in the test environment.
+
+  - name: atmos auth login --identity mock-identity
+    enabled: true
+    snapshot: true
+    description: "Test auth login with mock identity (succeeds)"
+    workdir: "fixtures/scenarios/atmos-auth-mock/"
+    command: "atmos"
+    args:
+      - "auth"
+      - "login"
+      - "--identity"
+      - "mock-identity"
+    expect:
+      diff: []
+      stderr:
+        - "Authentication successful"
+        - "mock-identity"
+      exit_code: 0
