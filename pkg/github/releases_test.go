@@ -3,6 +3,7 @@ package github
 import (
 	"context"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -10,6 +11,15 @@ import (
 
 	"github.com/cloudposse/atmos/tests"
 )
+
+// isRateLimitError checks if an error is a GitHub API rate limit error.
+func isRateLimitError(err error) bool {
+	if err == nil {
+		return false
+	}
+	return strings.Contains(err.Error(), "rate limit exceeded") ||
+		strings.Contains(err.Error(), "API rate limit")
+}
 
 // TestNewGitHubClientUnauthenticated tests creating an unauthenticated GitHub client.
 func TestNewGitHubClientUnauthenticated(t *testing.T) {
@@ -310,6 +320,9 @@ func TestGetReleases(t *testing.T) {
 		}
 
 		releases, err := GetReleases(opts)
+		if isRateLimitError(err) {
+			t.Skipf("Skipping due to GitHub API rate limit: %v", err)
+		}
 		require.NoError(t, err)
 		assert.LessOrEqual(t, len(releases), 5)
 		for _, release := range releases {
@@ -332,6 +345,9 @@ func TestGetReleases(t *testing.T) {
 		}
 
 		releases, err := GetReleases(opts)
+		if isRateLimitError(err) {
+			t.Skipf("Skipping due to GitHub API rate limit: %v", err)
+		}
 		require.NoError(t, err)
 		assert.LessOrEqual(t, len(releases), 10)
 		// We can't guarantee prereleases exist, just that we don't filter them.
@@ -352,6 +368,9 @@ func TestGetReleases(t *testing.T) {
 			IncludePrereleases: false,
 		}
 		releases1, err := GetReleases(opts1)
+		if isRateLimitError(err) {
+			t.Skipf("Skipping due to GitHub API rate limit: %v", err)
+		}
 		require.NoError(t, err)
 
 		// Get second page.
@@ -363,6 +382,9 @@ func TestGetReleases(t *testing.T) {
 			IncludePrereleases: false,
 		}
 		releases2, err := GetReleases(opts2)
+		if isRateLimitError(err) {
+			t.Skipf("Skipping due to GitHub API rate limit: %v", err)
+		}
 		require.NoError(t, err)
 
 		// Ensure different releases (if enough exist).
@@ -386,6 +408,9 @@ func TestGetReleases(t *testing.T) {
 		}
 
 		releases, err := GetReleases(opts)
+		if isRateLimitError(err) {
+			t.Skipf("Skipping due to GitHub API rate limit: %v", err)
+		}
 		require.NoError(t, err)
 		// Should either be empty or have fewer than requested if offset is near the end.
 		assert.LessOrEqual(t, len(releases), 5)
