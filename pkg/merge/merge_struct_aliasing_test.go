@@ -187,3 +187,72 @@ func TestDeepCopyMap_StructsWithMaps(t *testing.T) {
 	assert.Equal(t, 16, copiedTypedMap[1].Settings["cpu"], "Copy should be modified")
 	assert.Equal(t, 100, copiedTypedMap[1].Settings["new_setting"], "Copy should have new key")
 }
+
+// TestDeepCopyMap_PreservesUnexportedFields verifies that unexported fields are preserved during deep copy.
+// This is a regression test for the bug where unexported fields were zeroed out instead of being preserved.
+func TestDeepCopyMap_PreservesUnexportedFields(t *testing.T) {
+	type ConfigWithUnexported struct {
+		// Exported fields.
+		PublicName  string
+		PublicTags  []string
+		PublicCount int
+
+		// Unexported fields - should be preserved via shallow copy.
+		internalID    string
+		internalCache map[string]any
+		internalFlags []bool
+	}
+
+	// Helper to create a struct with unexported fields.
+	createConfig := func(name string, id string) ConfigWithUnexported {
+		return ConfigWithUnexported{
+			PublicName:    name,
+			PublicTags:    []string{"tag1", "tag2"},
+			PublicCount:   42,
+			internalID:    id,
+			internalCache: map[string]any{"key": "value"},
+			internalFlags: []bool{true, false},
+		}
+	}
+
+	original := map[string]any{
+		"configs": map[int]ConfigWithUnexported{
+			1: createConfig("config1", "internal-id-1"),
+			2: createConfig("config2", "internal-id-2"),
+		},
+	}
+
+	// Deep copy the map.
+	copied, err := DeepCopyMap(original)
+	assert.Nil(t, err)
+	assert.NotNil(t, copied)
+
+	// Get the typed maps.
+	originalTypedMap := original["configs"].(map[int]ConfigWithUnexported)
+	copiedTypedMap := copied["configs"].(map[int]ConfigWithUnexported)
+
+	// Verify exported fields are equal.
+	assert.Equal(t, originalTypedMap[1].PublicName, copiedTypedMap[1].PublicName)
+	assert.Equal(t, originalTypedMap[1].PublicCount, copiedTypedMap[1].PublicCount)
+
+	// Verify unexported fields are preserved in the copy.
+	assert.Equal(t, "internal-id-1", copiedTypedMap[1].internalID, "Unexported string field should be preserved")
+	assert.NotNil(t, copiedTypedMap[1].internalCache, "Unexported map field should be preserved")
+	assert.NotNil(t, copiedTypedMap[1].internalFlags, "Unexported slice field should be preserved")
+
+	// Verify all unexported field values are preserved.
+	assert.Equal(t, originalTypedMap[1].internalID, copiedTypedMap[1].internalID)
+	assert.Equal(t, originalTypedMap[1].internalCache, copiedTypedMap[1].internalCache)
+	assert.Equal(t, originalTypedMap[1].internalFlags, copiedTypedMap[1].internalFlags)
+
+	// Modify the copy's exported slice to verify deep copy works for exported fields.
+	copiedConfig := copiedTypedMap[1]
+	copiedConfig.PublicTags[0] = "MODIFIED"
+	copiedTypedMap[1] = copiedConfig
+
+	// Verify original's exported fields are NOT affected (deep copied).
+	assert.Equal(t, "tag1", originalTypedMap[1].PublicTags[0], "Original exported slice should not be modified")
+
+	// Verify copy's exported fields ARE modified.
+	assert.Equal(t, "MODIFIED", copiedTypedMap[1].PublicTags[0], "Copy exported slice should be modified")
+}

@@ -89,7 +89,7 @@ func deepCopyValue(v any) any {
 // deepCopyTypedValue performs a deep copy of a typed value using reflection.
 // This handles slices and maps with proper type preservation for non-interface element types.
 //
-//nolint:revive // Cyclomatic complexity is inherent to reflection-based type handling.
+//nolint:revive,funlen // Complexity and length are inherent to reflection-based type handling.
 func deepCopyTypedValue(rv reflect.Value) reflect.Value {
 	switch rv.Kind() {
 	case reflect.Struct:
@@ -97,12 +97,15 @@ func deepCopyTypedValue(rv reflect.Value) reflect.Value {
 		// This prevents aliasing of nested slices/maps inside struct values in typed maps.
 		t := rv.Type()
 		dst := reflect.New(t).Elem()
+		// Preserve unexported fields via shallow copy first.
+		dst.Set(rv)
+		// Now deep-copy exported reference fields to avoid aliasing.
 		for i := 0; i < rv.NumField(); i++ {
-			if !dst.Field(i).CanSet() {
-				// Unexported field - skip (can't set).
+			f := dst.Field(i)
+			if !f.CanSet() {
 				continue
 			}
-			dst.Field(i).Set(deepCopyTypedValue(rv.Field(i)))
+			f.Set(deepCopyTypedValue(rv.Field(i)))
 		}
 		return dst
 
