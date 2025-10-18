@@ -59,6 +59,12 @@ func CheckErrorPrintAndExit(err error, title string, suggestion string) {
 
 	CheckErrorAndPrint(err, title, suggestion)
 
+	// Check for ExitCodeError (from ShellRunner preserving interp.ExitStatus)
+	var exitCodeErr ExitCodeError
+	if errors.As(err, &exitCodeErr) {
+		Exit(exitCodeErr.Code)
+	}
+
 	// Find the executed command's exit code from the error
 	var exitError *exec.ExitError
 	if errors.As(err, &exitError) {
