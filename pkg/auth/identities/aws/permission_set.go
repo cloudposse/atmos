@@ -173,10 +173,10 @@ func (i *permissionSetIdentity) GetProviderName() (string, error) {
 // PostAuthenticate sets up AWS files after authentication.
 func (i *permissionSetIdentity) PostAuthenticate(ctx context.Context, stackInfo *schema.ConfigAndStacksInfo, providerName, identityName string, creds types.ICredentials) error {
 	// Setup AWS files using shared AWS cloud package.
-	if err := awsCloud.SetupFiles(providerName, identityName, creds); err != nil {
+	if err := awsCloud.SetupFiles(providerName, identityName, creds, ""); err != nil {
 		return fmt.Errorf("%w: failed to setup AWS files: %v", errUtils.ErrAwsAuth, err)
 	}
-	if err := awsCloud.SetEnvironmentVariables(stackInfo, providerName, identityName); err != nil {
+	if err := awsCloud.SetEnvironmentVariables(stackInfo, providerName, identityName, ""); err != nil {
 		return fmt.Errorf("%w: failed to set environment variables: %v", errUtils.ErrAwsAuth, err)
 	}
 	return nil

@@ -344,10 +344,10 @@ func AuthenticateStandaloneAWSUser(ctx context.Context, identityName string, ide
 // PostAuthenticate sets up AWS files after authentication.
 func (i *userIdentity) PostAuthenticate(ctx context.Context, stackInfo *schema.ConfigAndStacksInfo, providerName, identityName string, creds types.ICredentials) error {
 	// Setup AWS files using shared AWS cloud package.
-	if err := awsCloud.SetupFiles(providerName, identityName, creds); err != nil {
+	if err := awsCloud.SetupFiles(providerName, identityName, creds, ""); err != nil {
 		return errors.Join(errUtils.ErrAwsAuth, err)
 	}
-	if err := awsCloud.SetEnvironmentVariables(stackInfo, providerName, identityName); err != nil {
+	if err := awsCloud.SetEnvironmentVariables(stackInfo, providerName, identityName, ""); err != nil {
 		return errors.Join(errUtils.ErrAwsAuth, err)
 	}
 	return nil
