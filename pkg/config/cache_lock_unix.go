@@ -23,9 +23,9 @@ func withCacheFileLockUnix(cacheFile string, fn func() error) error {
 	// Use a dedicated lock file to prevent lock loss during atomic rename.
 	lockPath := cacheFile + ".lock"
 	lock := flock.New(lockPath)
-	// Try to acquire lock but don't retry too many times
-	// This prevents hanging tests on systems with different locking semantics.
-	const maxRetries = 3 // Only retry 3 times with 10ms between
+	// Try to acquire lock with reasonable retries for concurrent access.
+	// This allows concurrent operations to succeed while preventing indefinite blocking.
+	const maxRetries = 50 // Retry up to 50 times with 10ms between (500ms total).
 	var locked bool
 	var err error
 
@@ -37,12 +37,12 @@ func withCacheFileLockUnix(cacheFile string, fn func() error) error {
 		if locked {
 			break
 		}
-		// Wait a very short time before retrying.
+		// Wait a short time before retrying.
 		time.Sleep(10 * time.Millisecond)
 	}
 
 	if !locked {
-		// If we can't get lock quickly, skip the cache operation
+		// If we can't get lock after retries, skip the cache operation.
 		// Cache is not critical for functionality.
 		return fmt.Errorf("%w: cache file is locked by another process", errUtils.ErrCacheLocked)
 	}

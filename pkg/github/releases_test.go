@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -18,7 +19,15 @@ func isRateLimitError(err error) bool {
 	if err == nil {
 		return false
 	}
-	return errors.Is(err, errUtils.ErrGitHubRateLimitExceeded)
+	// Check for our wrapped error type first.
+	if errors.Is(err, errUtils.ErrGitHubRateLimitExceeded) {
+		return true
+	}
+	// Fallback to checking error message for GitHub API rate limit errors.
+	// This handles errors from API calls that don't use handleGitHubAPIError.
+	errMsg := err.Error()
+	return strings.Contains(errMsg, "rate limit exceeded") ||
+		strings.Contains(errMsg, "API rate limit")
 }
 
 // TestNewGitHubClientUnauthenticated tests creating an unauthenticated GitHub client.
