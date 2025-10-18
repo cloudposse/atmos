@@ -111,10 +111,17 @@ func mergeConfigFromDirectories(v *viper.Viper, dirPaths []string) ([]string, er
 
 func validatedIsDirs(dirPaths []string) error {
 	for _, dirPath := range dirPaths {
+		if dirPath == "" {
+			return fmt.Errorf("%w: --config-path requires a non-empty directory path", errUtils.ErrEmptyConfigPath)
+		}
 		stat, err := os.Stat(dirPath)
 		if err != nil {
-			log.Debug("--config-path directory not found", "path", dirPath)
-			return err
+			if os.IsNotExist(err) {
+				log.Debug("--config-path directory not found", "path", dirPath)
+				return fmt.Errorf("%w: --config-path directory '%s' does not exist", errUtils.ErrAtmosDirConfigNotFound, dirPath)
+			}
+			// Other stat errors (permission denied, etc.)
+			return fmt.Errorf("cannot access --config-path directory '%s': %w", dirPath, err)
 		}
 		if !stat.IsDir() {
 			log.Debug("--config-path expected directory found file", "path", dirPath)
@@ -126,13 +133,20 @@ func validatedIsDirs(dirPaths []string) error {
 
 func validatedIsFiles(files []string) error {
 	for _, filePath := range files {
+		if filePath == "" {
+			return fmt.Errorf("%w: --config requires a non-empty file path", errUtils.ErrEmptyConfigFile)
+		}
 		stat, err := os.Stat(filePath)
 		if err != nil {
-			log.Debug("--config file not found", "path", filePath)
-			return errUtils.ErrFileNotFound
+			if os.IsNotExist(err) {
+				log.Debug("--config file not found", "path", filePath)
+				return fmt.Errorf("%w: --config file '%s' does not exist", errUtils.ErrFileNotFound, filePath)
+			}
+			// Other stat errors (permission denied, etc.)
+			return fmt.Errorf("%w: cannot access --config file '%s': %v", errUtils.ErrFileAccessDenied, filePath, err)
 		}
 		if stat.IsDir() {
-			log.Debug("--config expected file found directors", "path", filePath)
+			log.Debug("--config expected file found directory", "path", filePath)
 			return errUtils.ErrExpectedFile
 		}
 	}

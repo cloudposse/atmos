@@ -15,6 +15,8 @@ import (
 )
 
 func TestAuthWhoamiCmd(t *testing.T) {
+	_ = NewTestKit(t)
+
 	tests := []struct {
 		name           string
 		args           []string
@@ -119,6 +121,8 @@ func TestAuthWhoamiCmd(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			_ = NewTestKit(t)
+
 			// Create a mock command for testing
 			cmd := &cobra.Command{
 				Use: "whoami",
@@ -201,6 +205,8 @@ func TestAuthWhoamiCmd(t *testing.T) {
 }
 
 func TestAuthWhoamiCmdFlags(t *testing.T) {
+	_ = NewTestKit(t)
+
 	// Create a mock command to test flag structure
 	cmd := &cobra.Command{
 		Use: "whoami",
@@ -215,6 +221,8 @@ func TestAuthWhoamiCmdFlags(t *testing.T) {
 }
 
 func TestWhoamiJSONOutput(t *testing.T) {
+	_ = NewTestKit(t)
+
 	expTime, _ := time.Parse(time.RFC3339, "2024-01-01T12:00:00Z")
 	whoamiInfo := authTypes.WhoamiInfo{
 		Identity:   "test-identity",

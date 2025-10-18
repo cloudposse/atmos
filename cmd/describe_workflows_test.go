@@ -13,6 +13,8 @@ import (
 )
 
 func TestSetFlagInDescribeWorkflow(t *testing.T) {
+	_ = NewTestKit(t)
+
 	// Initialize test cases
 	tests := []struct {
 		name        string
@@ -59,6 +61,8 @@ func TestSetFlagInDescribeWorkflow(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			_ = NewTestKit(t)
+
 			fs := pflag.NewFlagSet("test", pflag.ContinueOnError)
 			fs.StringP("format", "f", "yaml", "Specify the output format (`yaml` is default)")
 			fs.StringP("output", "o", "list", "Specify the output type (`list` is default)")
@@ -77,6 +81,8 @@ func TestSetFlagInDescribeWorkflow(t *testing.T) {
 }
 
 func TestDescribeWorkflows(t *testing.T) {
+	_ = NewTestKit(t)
+
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
@@ -104,6 +110,8 @@ func TestDescribeWorkflows(t *testing.T) {
 }
 
 func TestDescribeWorkflowsCmd_Error(t *testing.T) {
+	_ = NewTestKit(t)
+
 	stacksPath := "../tests/fixtures/scenarios/terraform-apply-affected"
 
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
