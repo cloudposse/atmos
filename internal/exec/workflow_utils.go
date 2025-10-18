@@ -205,7 +205,8 @@ func ExecuteWorkflow(
 				WorkflowErrTitle,
 				fmt.Sprintf("\n## Explanation\nThe following command failed to execute:\n```\n%s\n```\nTo resume the workflow from this step, run:\n```\n%s\n```", failedCmd, resumeCommand),
 			)
-			return ErrWorkflowStepFailed
+			// Return the original error to preserve exit codes
+			return err
 		}
 	}
 

@@ -15,6 +15,7 @@ import (
 	"mvdan.cc/sh/v3/interp"
 	"mvdan.cc/sh/v3/syntax"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
@@ -86,7 +87,16 @@ func ShellRunner(command string, name string, dir string, env []string, out io.W
 		return err
 	}
 
-	return runner.Run(context.TODO(), parser)
+	err = runner.Run(context.TODO(), parser)
+	if err != nil {
+		// Check if the error is an interp.ExitStatus and preserve the exit code
+		if exitErr, ok := interp.IsExitStatus(err); ok {
+			return errUtils.ExitCodeError{Code: int(exitErr)}
+		}
+		return err
+	}
+
+	return nil
 }
 
 // GetNextShellLevel increments the ATMOS_SHLVL and returns the new value or an error if maximum depth is exceeded .
