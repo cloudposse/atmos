@@ -1,8 +1,6 @@
 package utils
 
 import (
-	"encoding/json"
-	"reflect"
 	"regexp"
 	"strconv"
 )
@@ -13,6 +11,9 @@ var arrayIndexPattern = regexp.MustCompile(`^(.+)\[(\d+)\]$`)
 // CleanupArrayIndexKeys removes duplicate indexed keys from maps that also contain arrays.
 // Viper sometimes creates both array entries and indexed map keys (e.g., both "steps" array
 // and "steps[0]", "steps[1]" keys). This function removes the indexed keys when an array exists.
+//
+// This function only processes map[string]interface{} types and preserves all other types as-is.
+// It does NOT convert structs to maps, which would lose YAML features like anchors and tags.
 func CleanupArrayIndexKeys(data interface{}) interface{} {
 	// Handle different data types
 	switch v := data.(type) {
@@ -26,29 +27,9 @@ func CleanupArrayIndexKeys(data interface{}) interface{} {
 		}
 		return cleaned
 	default:
-		// Check if it's a struct that needs conversion to map
-		rv := reflect.ValueOf(data)
-		if rv.Kind() == reflect.Struct || (rv.Kind() == reflect.Ptr && rv.Elem().Kind() == reflect.Struct) {
-			// Convert struct to map first using JSON marshaling
-			// This will preserve the field structure including embedded maps
-			jsonBytes, err := json.Marshal(data)
-			if err != nil {
-				// If we can't convert, return as-is
-				return data
-			}
-
-			// Use interface{} to preserve the structure
-			var mapData interface{}
-			if err := json.Unmarshal(jsonBytes, &mapData); err != nil {
-				// If we can't convert, return as-is
-				return data
-			}
-
-			// Now recursively clean the converted data
-			return CleanupArrayIndexKeys(mapData)
-		}
-		// Return other types as-is
-		return v
+		// Return all other types as-is (including structs)
+		// This preserves the original structure and avoids JSON conversion
+		return data
 	}
 }
 
