@@ -57,7 +57,7 @@ func TestFilterAssetsByPlatform(t *testing.T) {
 		expectedCount int
 	}{
 		{
-			name: "filters darwin arm64 assets",
+			name: "filters to current platform assets",
 			assets: []*github.ReleaseAsset{
 				{Name: github.String("atmos_1.0.0_darwin_arm64.tar.gz")},
 				{Name: github.String("atmos_1.0.0_linux_amd64.tar.gz")},
@@ -65,6 +65,12 @@ func TestFilterAssetsByPlatform(t *testing.T) {
 			},
 			expectedCount: func() int {
 				if runtime.GOOS == "darwin" && runtime.GOARCH == "arm64" {
+					return 1
+				}
+				if runtime.GOOS == "linux" && runtime.GOARCH == "amd64" {
+					return 1
+				}
+				if runtime.GOOS == "windows" && runtime.GOARCH == "amd64" {
 					return 1
 				}
 				return 0
