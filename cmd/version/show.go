@@ -13,6 +13,7 @@ import (
 	"github.com/spf13/cobra"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/perf"
 )
 
 //go:embed markdown/atmos_version_show_usage.md
@@ -59,64 +60,68 @@ func (m *showModel) View() string {
 	return m.spinner.View() + " Fetching release from GitHub..."
 }
 
+// fetchRelease fetches a release from GitHub API.
+func fetchRelease(client GitHubClient, versionArg string) (*github.RepositoryRelease, error) {
+	if strings.ToLower(versionArg) == "latest" {
+		return client.GetLatestRelease("cloudposse", "atmos")
+	}
+	return client.GetRelease("cloudposse", "atmos", versionArg)
+}
+
 // fetchReleaseWithSpinner fetches a release with a spinner if TTY is available.
 func fetchReleaseWithSpinner(client GitHubClient, versionArg string) (*github.RepositoryRelease, error) {
+	defer perf.Track(nil, "version.fetchReleaseWithSpinner")()
+
 	// Check if we have a TTY for the spinner.
-	//nolint:nestif // Spinner logic requires nested conditions for TTY check.
-	if isatty.IsTerminal(os.Stdout.Fd()) || isatty.IsCygwinTerminal(os.Stdout.Fd()) {
-		// Create spinner model.
-		s := spinner.New()
-		s.Spinner = spinner.Dot
-
-		// Fetch release with spinner.
-		m := &showModel{spinner: s}
-		p := tea.NewProgram(m)
-
-		// Fetch release in background.
-		go func() {
-			var release *github.RepositoryRelease
-			var err error
-
-			// Handle "latest" keyword.
-			if strings.ToLower(versionArg) == "latest" {
-				release, err = client.GetLatestRelease("cloudposse", "atmos")
-			} else {
-				release, err = client.GetRelease("cloudposse", "atmos", versionArg)
-			}
-
-			if err != nil {
-				p.Send(err)
-			} else {
-				p.Send(release)
-			}
-		}()
-
-		// Run the spinner.
-		finalModel, err := p.Run()
+	if !isatty.IsTerminal(os.Stderr.Fd()) && !isatty.IsCygwinTerminal(os.Stderr.Fd()) {
+		// No TTY - fetch without spinner.
+		release, err := fetchRelease(client, versionArg)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("failed to fetch release: %w", err)
 		}
-
-		// Get the final model.
-		final := finalModel.(*showModel)
-		if final.err != nil {
-			return nil, final.err
-		}
-
-		return final.release, nil
+		return release, nil
 	}
 
-	// No TTY - fetch without spinner.
-	var release *github.RepositoryRelease
-	var err error
+	// Create spinner model.
+	s := spinner.New()
+	s.Spinner = spinner.Dot
 
-	if strings.ToLower(versionArg) == "latest" {
-		release, err = client.GetLatestRelease("cloudposse", "atmos")
-	} else {
-		release, err = client.GetRelease("cloudposse", "atmos", versionArg)
+	// Fetch release with spinner.
+	m := &showModel{spinner: s}
+	p := tea.NewProgram(m, tea.WithOutput(os.Stderr))
+
+	// Fetch release in background.
+	go func() {
+		release, err := fetchRelease(client, versionArg)
+		if err != nil {
+			p.Send(err)
+		} else {
+			p.Send(release)
+		}
+	}()
+
+	// Run the spinner.
+	finalModel, err := p.Run()
+	if err != nil {
+		return nil, fmt.Errorf("spinner execution failed: %w", err)
 	}
 
-	return release, err
+	// Check for nil model.
+	if finalModel == nil {
+		return nil, errUtils.ErrSpinnerReturnedNilModel
+	}
+
+	// Get the final model with type assertion safety.
+	final, ok := finalModel.(*showModel)
+	if !ok {
+		return nil, fmt.Errorf("%w: got %T", errUtils.ErrSpinnerUnexpectedModelType, finalModel)
+	}
+
+	if final.err != nil {
+		return nil, fmt.Errorf("failed to fetch release: %w", final.err)
+	}
+
+	return final.release, nil
 }
 
 var showCmd = &cobra.Command{

@@ -14,7 +14,7 @@ func TestShowCommand_Flags(t *testing.T) {
 }
 
 func TestShowCommand_BasicProperties(t *testing.T) {
-	assert.Equal(t, "show <version>", showCmd.Use)
+	assert.Equal(t, "show [version]", showCmd.Use)
 	assert.NotEmpty(t, showCmd.Short)
 	assert.NotEmpty(t, showCmd.Long)
 	assert.NotEmpty(t, showCmd.Example)

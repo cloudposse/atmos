@@ -14,6 +14,7 @@ import (
 	"github.com/spf13/cobra"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/perf"
 )
 
 //go:embed markdown/atmos_version_list_usage.md
@@ -75,14 +76,14 @@ func (m *listModel) View() string {
 func fetchReleasesWithSpinner(client GitHubClient, opts ReleaseOptions) ([]*github.RepositoryRelease, error) {
 	// Check if we have a TTY for the spinner.
 	//nolint:nestif // Spinner logic requires nested conditions for TTY check.
-	if isatty.IsTerminal(os.Stdout.Fd()) || isatty.IsCygwinTerminal(os.Stdout.Fd()) {
+	if isatty.IsTerminal(os.Stderr.Fd()) || isatty.IsCygwinTerminal(os.Stderr.Fd()) {
 		// Create spinner model.
 		s := spinner.New()
 		s.Spinner = spinner.Dot
 
 		// Fetch releases with spinner.
 		m := &listModel{spinner: s}
-		p := tea.NewProgram(m)
+		p := tea.NewProgram(m, tea.WithOutput(os.Stderr))
 
 		// Fetch releases in background.
 		go func() {
@@ -97,13 +98,22 @@ func fetchReleasesWithSpinner(client GitHubClient, opts ReleaseOptions) ([]*gith
 		// Run the spinner.
 		finalModel, err := p.Run()
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("spinner execution failed: %w", err)
 		}
 
-		// Get the final model.
-		final := finalModel.(*listModel)
+		// Check for nil model.
+		if finalModel == nil {
+			return nil, errUtils.ErrSpinnerReturnedNilModel
+		}
+
+		// Get the final model with type assertion safety.
+		final, ok := finalModel.(*listModel)
+		if !ok {
+			return nil, fmt.Errorf("%w: got %T", errUtils.ErrSpinnerUnexpectedModelType, finalModel)
+		}
+
 		if final.err != nil {
-			return nil, final.err
+			return nil, fmt.Errorf("failed to fetch releases: %w", final.err)
 		}
 
 		return final.releases, nil
@@ -119,6 +129,8 @@ var listCmd = &cobra.Command{
 	Long:    `List available Atmos releases from GitHub with pagination and filtering options.`,
 	Example: listUsageMarkdown,
 	RunE: func(cmd *cobra.Command, args []string) error {
+		defer perf.Track(nil, "version.list.RunE")()
+
 		// Validate limit.
 		if listLimit < 1 || listLimit > listMaxLimit {
 			return fmt.Errorf("%w: got %d", errUtils.ErrInvalidLimit, listLimit)

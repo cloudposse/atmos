@@ -5,6 +5,7 @@ import (
 
 	"github.com/cloudposse/atmos/cmd/internal"
 	"github.com/cloudposse/atmos/internal/exec"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -29,6 +30,8 @@ var versionCmd = &cobra.Command{
 	Example: "atmos version",
 	Args:    cobra.NoArgs,
 	RunE: func(c *cobra.Command, args []string) error {
+		defer perf.Track(nil, "version.RunE")()
+
 		return exec.NewVersionExec(atmosConfigPtr).Execute(checkFlag, versionFormat)
 	},
 }

@@ -136,7 +136,7 @@ func filterAssetsByPlatform(assets []*github.ReleaseAsset) []*github.ReleaseAsse
 	osPatterns := map[string][]string{
 		"darwin":  {"darwin", "macos", "osx"},
 		"linux":   {"linux"},
-		"windows": {"windows", "win"},
+		"windows": {"windows", "win32", "win64"},
 	}
 
 	archPatterns := map[string][]string{
