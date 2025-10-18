@@ -2,6 +2,7 @@ package exec
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -9,15 +10,13 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/cloudposse/atmos/pkg/perf"
-
-	log "github.com/cloudposse/atmos/pkg/logger"
-	"github.com/pkg/errors"
 	"github.com/samber/lo"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	w "github.com/cloudposse/atmos/internal/tui/workflow"
 	"github.com/cloudposse/atmos/pkg/config"
+	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/retry"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -205,8 +204,8 @@ func ExecuteWorkflow(
 				WorkflowErrTitle,
 				fmt.Sprintf("\n## Explanation\nThe following command failed to execute:\n```\n%s\n```\nTo resume the workflow from this step, run:\n```\n%s\n```", failedCmd, resumeCommand),
 			)
-			// Return the original error to preserve exit codes
-			return err
+			// Join errors to preserve both the workflow context and the exit code
+			return errors.Join(ErrWorkflowStepFailed, err)
 		}
 	}
 
