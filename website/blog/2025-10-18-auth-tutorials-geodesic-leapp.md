@@ -35,15 +35,6 @@ For teams using [Geodesic](https://github.com/cloudposse/geodesic) as their DevO
 
 The guide includes important details about separating Atmos-managed config files from teams config files to avoid conflicts.
 
-## Why These Guides Matter
-
-Authentication is foundational to infrastructure management. These guides help teams:
-
-- **Reduce friction** when adopting `atmos auth` by providing clear migration paths
-- **Avoid common pitfalls** like config file conflicts and credential caching issues
-- **Maintain workflow continuity** when transitioning from external tools
-- **Integrate authentication** seamlessly with existing DevOps tooling
-
 ## Key Benefits of Atmos Auth
 
 Using `atmos auth` provides several advantages over external credential managers:
@@ -76,15 +67,6 @@ Using `atmos auth` provides several advantages over external credential managers
    # Use with Terraform
    atmos terraform plan <component> -s <stack>
    ```
-
-## What's Next
-
-We're continuing to expand authentication capabilities in Atmos. Future enhancements will include:
-
-- **Additional provider types** beyond AWS IAM Identity Center
-- **Enhanced MFA support** for various authentication flows
-- **Credential caching improvements** for better performance
-- **IDE integration** for smoother developer experience
 
 ## Feedback Welcome
 
