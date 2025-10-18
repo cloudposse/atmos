@@ -60,7 +60,7 @@ func extractComponentSections(opts *ComponentProcessorOptions, result *Component
 			}
 			result.ComponentProviders = componentProviders
 		} else {
-			result.ComponentProviders = make(map[string]any)
+			result.ComponentProviders = make(map[string]any, componentSmallMapCapacity)
 		}
 	}
 
@@ -73,7 +73,7 @@ func extractComponentSections(opts *ComponentProcessorOptions, result *Component
 			}
 			result.ComponentHooks = componentHooks
 		} else {
-			result.ComponentHooks = make(map[string]any)
+			result.ComponentHooks = make(map[string]any, componentSmallMapCapacity)
 		}
 	}
 
@@ -85,7 +85,7 @@ func extractComponentSections(opts *ComponentProcessorOptions, result *Component
 		}
 		result.ComponentAuth = componentAuth
 	} else {
-		result.ComponentAuth = make(map[string]any)
+		result.ComponentAuth = make(map[string]any, componentSmallMapCapacity)
 	}
 
 	// Extract metadata section.
@@ -114,7 +114,7 @@ func extractComponentSections(opts *ComponentProcessorOptions, result *Component
 			}
 			result.ComponentBackendSection = componentBackendSection
 		} else {
-			result.ComponentBackendSection = make(map[string]any)
+			result.ComponentBackendSection = make(map[string]any, componentSmallMapCapacity)
 		}
 	}
 
@@ -135,7 +135,7 @@ func extractComponentSections(opts *ComponentProcessorOptions, result *Component
 			}
 			result.ComponentRemoteStateBackendSection = componentRemoteStateBackendSection
 		} else {
-			result.ComponentRemoteStateBackendSection = make(map[string]any)
+			result.ComponentRemoteStateBackendSection = make(map[string]any, componentSmallMapCapacity)
 		}
 	}
 
