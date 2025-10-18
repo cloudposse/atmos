@@ -1,7 +1,7 @@
 package cmd
 
 import (
-	"fmt"
+	"errors"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -12,8 +12,8 @@ import (
 )
 
 var (
-	ErrInvalidOutputType = fmt.Errorf("invalid output type specified. Valid values are 'list', 'map', and 'all'")
-	ErrInvalidFormat     = fmt.Errorf("invalid format specified. Valid values are 'yaml' and 'json'")
+	ErrInvalidOutputType = errors.New("invalid output type specified. Valid values are 'list', 'map', and 'all'")
+	ErrInvalidFormat     = errors.New("invalid format specified. Valid values are 'yaml' and 'json'")
 )
 
 // describeWorkflowsCmd executes 'atmos describe workflows' CLI commands.

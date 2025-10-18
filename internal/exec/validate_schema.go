@@ -1,11 +1,11 @@
 package exec
 
 import (
+	"errors"
 	"fmt"
 
-	"github.com/cloudposse/atmos/pkg/perf"
-
 	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/perf"
 
 	"github.com/cloudposse/atmos/pkg/downloader"
 	"github.com/cloudposse/atmos/pkg/filematch"
@@ -13,7 +13,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/validator"
 )
 
-var ErrInvalidYAML = fmt.Errorf("invalid YAML")
+var ErrInvalidYAML = errors.New("invalid YAML")
 
 type ErrInvalidPattern struct {
 	Pattern string
