@@ -94,7 +94,7 @@ func TestWithIsolatedAWSEnv_HandlesUnsetVariables(t *testing.T) {
 	err := WithIsolatedAWSEnv(func() error {
 		// Verify all problematic variables are still unset.
 		for _, key := range problematicAWSEnvVars {
-			assert.Equal(t, "", os.Getenv(key), "Variable %s should be empty", key)
+			assert.Equalf(t, "", os.Getenv(key), "Variable %s should be empty", key)
 		}
 		return nil
 	})
@@ -103,7 +103,7 @@ func TestWithIsolatedAWSEnv_HandlesUnsetVariables(t *testing.T) {
 
 	// Verify variables remain unset after execution.
 	for _, key := range problematicAWSEnvVars {
-		assert.Equal(t, "", os.Getenv(key), "Variable %s should remain empty", key)
+		assert.Equalf(t, "", os.Getenv(key), "Variable %s should remain empty", key)
 	}
 }
 
@@ -155,8 +155,9 @@ func TestLoadIsolatedAWSConfig_ClearsEnvironment(t *testing.T) {
 	// this may fail - but it should fail gracefully, not because of our env vars.
 	_ = err
 
-	// Verify config was returned (even if credentials aren't available).
-	assert.NotNil(t, cfg)
+	// Verify AWS_REGION was loaded from environment (it should NOT be cleared).
+	// This proves the config was populated and AWS_REGION was preserved.
+	assert.Equal(t, "us-east-1", cfg.Region, "AWS_REGION should be loaded from environment")
 
 	// Verify environment variables were restored after the call.
 	assert.Equal(t, "nonexistent-profile", os.Getenv("AWS_PROFILE"))
