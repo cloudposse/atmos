@@ -115,32 +115,35 @@ func TestRealGitHubClient_Integration(t *testing.T) {
 	// They should successfully call through to pkg/github.
 	client := &RealGitHubClient{}
 
-	// Test GetLatestRelease.
-	release, err := client.GetLatestRelease("cloudposse", "atmos")
-	if err != nil {
-		t.Skipf("Skipping GetLatestRelease test due to API error (rate limit or network): %v", err)
-	}
-	assert.NotNil(t, release)
-	assert.NotEmpty(t, release.TagName)
+	t.Run("GetLatestRelease", func(t *testing.T) {
+		release, err := client.GetLatestRelease("cloudposse", "atmos")
+		if err != nil {
+			t.Skipf("Skipping due to API error (rate limit or network): %v", err)
+		}
+		assert.NotNil(t, release)
+		assert.NotEmpty(t, release.TagName)
+	})
 
-	// Test GetRelease with a known stable version.
-	specificRelease, err := client.GetRelease("cloudposse", "atmos", "v1.63.0")
-	if err != nil {
-		t.Skipf("Skipping GetRelease test due to API error: %v", err)
-	}
-	assert.NotNil(t, specificRelease)
-	assert.Equal(t, "v1.63.0", *specificRelease.TagName)
+	t.Run("GetRelease", func(t *testing.T) {
+		release, err := client.GetRelease("cloudposse", "atmos", "v1.63.0")
+		if err != nil {
+			t.Skipf("Skipping due to API error: %v", err)
+		}
+		assert.NotNil(t, release)
+		assert.Equal(t, "v1.63.0", *release.TagName)
+	})
 
-	// Test GetReleases with small limit.
-	opts := ReleaseOptions{
-		Limit:              5,
-		Offset:             0,
-		IncludePrereleases: false,
-	}
-	releases, err := client.GetReleases("cloudposse", "atmos", opts)
-	if err != nil {
-		t.Skipf("Skipping GetReleases test due to API error: %v", err)
-	}
-	assert.NotNil(t, releases)
-	assert.LessOrEqual(t, len(releases), 5)
+	t.Run("GetReleases", func(t *testing.T) {
+		opts := ReleaseOptions{
+			Limit:              5,
+			Offset:             0,
+			IncludePrereleases: false,
+		}
+		releases, err := client.GetReleases("cloudposse", "atmos", opts)
+		if err != nil {
+			t.Skipf("Skipping due to API error: %v", err)
+		}
+		assert.NotNil(t, releases)
+		assert.LessOrEqual(t, len(releases), 5)
+	})
 }
