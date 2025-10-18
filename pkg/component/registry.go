@@ -6,6 +6,7 @@ import (
 	"sync"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/perf"
 )
 
 // Global registry instance.
