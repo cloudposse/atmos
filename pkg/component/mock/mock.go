@@ -9,6 +9,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/component"
 	"github.com/cloudposse/atmos/pkg/schema"
+	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 // MockComponentProvider is a proof-of-concept component type for testing
@@ -38,6 +39,10 @@ func (m *MockComponentProvider) GetGroup() string {
 
 // GetBasePath returns the base directory path for this component type.
 func (m *MockComponentProvider) GetBasePath(atmosConfig *schema.AtmosConfiguration) string {
+	if atmosConfig == nil {
+		return DefaultConfig().BasePath
+	}
+
 	// Try to get config from Plugins map.
 	rawConfig, ok := atmosConfig.Components.GetComponentConfig("mock")
 	if !ok {
@@ -92,25 +97,25 @@ func (m *MockComponentProvider) ValidateComponent(config map[string]any) error {
 }
 
 // Execute runs a command for this component type.
-func (m *MockComponentProvider) Execute(ctx component.ExecutionContext) error {
+func (m *MockComponentProvider) Execute(ctx *component.ExecutionContext) error {
 	// Mock execution - simulates command execution without external dependencies.
-	fmt.Printf("Mock component execution:\n")
-	fmt.Printf("  Type: %s\n", ctx.ComponentType)
-	fmt.Printf("  Component: %s\n", ctx.Component)
-	fmt.Printf("  Stack: %s\n", ctx.Stack)
-	fmt.Printf("  Command: %s\n", ctx.Command)
+	u.PrintfMessageToTUI("Mock component execution:\n")
+	u.PrintfMessageToTUI("  Type: %s\n", ctx.ComponentType)
+	u.PrintfMessageToTUI("  Component: %s\n", ctx.Component)
+	u.PrintfMessageToTUI("  Stack: %s\n", ctx.Stack)
+	u.PrintfMessageToTUI("  Command: %s\n", ctx.Command)
 
 	if ctx.SubCommand != "" {
-		fmt.Printf("  SubCommand: %s\n", ctx.SubCommand)
+		u.PrintfMessageToTUI("  SubCommand: %s\n", ctx.SubCommand)
 	}
 
 	return nil
 }
 
 // GenerateArtifacts creates necessary files for component execution.
-func (m *MockComponentProvider) GenerateArtifacts(ctx component.ExecutionContext) error {
+func (m *MockComponentProvider) GenerateArtifacts(ctx *component.ExecutionContext) error {
 	// Mock artifact generation - no actual files created.
-	fmt.Printf("Mock artifact generation for %s in stack %s\n", ctx.Component, ctx.Stack)
+	u.PrintfMessageToTUI("Mock artifact generation for %s in stack %s\n", ctx.Component, ctx.Stack)
 	return nil
 }
 

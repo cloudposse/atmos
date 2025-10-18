@@ -33,11 +33,11 @@ type ComponentProvider interface {
 
 	// Execute runs a command for this component type.
 	// Context provides all necessary information for execution.
-	Execute(ctx ExecutionContext) error
+	Execute(ctx *ExecutionContext) error
 
 	// GenerateArtifacts creates necessary files for component execution.
 	// Examples: backend.tf for Terraform, varfile for Helmfile
-	GenerateArtifacts(ctx ExecutionContext) error
+	GenerateArtifacts(ctx *ExecutionContext) error
 
 	// GetAvailableCommands returns list of commands this component type supports.
 	// Example: For terraform: ["plan", "apply", "destroy", "workspace"]

@@ -261,7 +261,7 @@ func TestMockComponentProvider_Execute(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := provider.Execute(tt.ctx)
+			err := provider.Execute(&tt.ctx)
 			assert.NoError(t, err)
 		})
 	}
@@ -275,7 +275,7 @@ func TestMockComponentProvider_GenerateArtifacts(t *testing.T) {
 		Stack:     "test-stack",
 	}
 
-	err := provider.GenerateArtifacts(ctx)
+	err := provider.GenerateArtifacts(&ctx)
 	assert.NoError(t, err)
 }
 
@@ -437,10 +437,10 @@ func TestMockComponentProvider_Integration(t *testing.T) {
 		Command:       "plan",
 	}
 
-	err = provider.Execute(ctx)
+	err = provider.Execute(&ctx)
 	assert.NoError(t, err)
 
 	// Generate artifacts.
-	err = provider.GenerateArtifacts(ctx)
+	err = provider.GenerateArtifacts(&ctx)
 	assert.NoError(t, err)
 }

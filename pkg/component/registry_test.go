@@ -40,11 +40,11 @@ func (t *testProvider) ValidateComponent(config map[string]any) error {
 	return nil
 }
 
-func (t *testProvider) Execute(ctx ExecutionContext) error {
+func (t *testProvider) Execute(ctx *ExecutionContext) error {
 	return nil
 }
 
-func (t *testProvider) GenerateArtifacts(ctx ExecutionContext) error {
+func (t *testProvider) GenerateArtifacts(ctx *ExecutionContext) error {
 	return nil
 }
 
@@ -304,14 +304,16 @@ func TestConcurrentReadWrite(t *testing.T) {
 	var wg sync.WaitGroup
 	numReaders := 50
 	numWriters := 10
+	errCh := make(chan error, numReaders)
 
 	// Concurrent reads.
 	for i := 0; i < numReaders; i++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			_, ok := GetProvider("test")
-			assert.True(t, ok)
+			if _, ok := GetProvider("test"); !ok {
+				errCh <- fmt.Errorf("provider 'test' not found")
+			}
 		}()
 	}
 
@@ -329,6 +331,10 @@ func TestConcurrentReadWrite(t *testing.T) {
 	}
 
 	wg.Wait()
+	close(errCh)
+	for err := range errCh {
+		t.Error(err)
+	}
 
 	// Should have original + 10 new providers.
 	assert.Equal(t, 1+numWriters, Count())

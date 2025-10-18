@@ -28,13 +28,15 @@ type ComponentRegistry struct {
 //
 // Returns an error if the provider is nil or has an empty type.
 func Register(provider ComponentProvider) error {
+	defer perf.Track(nil, "component.Register")()
+
 	if provider == nil {
-		return errUtils.ErrComponentProviderNil
+		return fmt.Errorf("component provider is nil: %w", errUtils.ErrComponentProviderNil)
 	}
 
 	componentType := provider.GetType()
 	if componentType == "" {
-		return errUtils.ErrComponentTypeEmpty
+		return fmt.Errorf("component type empty: %w", errUtils.ErrComponentTypeEmpty)
 	}
 
 	registry.mu.Lock()
@@ -47,6 +49,8 @@ func Register(provider ComponentProvider) error {
 // GetProvider returns a component provider by type.
 // Returns the provider and true if found, nil and false otherwise.
 func GetProvider(componentType string) (ComponentProvider, bool) {
+	defer perf.Track(nil, "component.GetProvider")()
+
 	registry.mu.RLock()
 	defer registry.mu.RUnlock()
 
@@ -57,6 +61,8 @@ func GetProvider(componentType string) (ComponentProvider, bool) {
 // ListProviders returns all registered providers grouped by category.
 // The map key is the group name, and the value is a slice of providers in that group.
 func ListProviders() map[string][]ComponentProvider {
+	defer perf.Track(nil, "component.ListProviders")()
+
 	registry.mu.RLock()
 	defer registry.mu.RUnlock()
 
@@ -71,8 +77,10 @@ func ListProviders() map[string][]ComponentProvider {
 }
 
 // ListTypes returns all registered component types sorted alphabetically.
-// Example: ["helmfile", "mock", "packer", "terraform"]
+// Example: ["helmfile", "mock", "packer", "terraform"].
 func ListTypes() []string {
+	defer perf.Track(nil, "component.ListTypes")()
+
 	registry.mu.RLock()
 	defer registry.mu.RUnlock()
 
@@ -87,6 +95,8 @@ func ListTypes() []string {
 
 // Count returns the number of registered providers.
 func Count() int {
+	defer perf.Track(nil, "component.Count")()
+
 	registry.mu.RLock()
 	defer registry.mu.RUnlock()
 
@@ -96,6 +106,8 @@ func Count() int {
 // GetInfo returns metadata for all registered component providers.
 // Results are sorted by component type for consistent ordering.
 func GetInfo() []ComponentInfo {
+	defer perf.Track(nil, "component.GetInfo")()
+
 	registry.mu.RLock()
 	defer registry.mu.RUnlock()
 
@@ -118,6 +130,8 @@ func GetInfo() []ComponentInfo {
 // Reset clears the registry (for testing only).
 // This should not be used in production code.
 func Reset() {
+	defer perf.Track(nil, "component.Reset")()
+
 	registry.mu.Lock()
 	defer registry.mu.Unlock()
 
@@ -127,6 +141,8 @@ func Reset() {
 // MustGetProvider returns a component provider by type or panics if not found.
 // This is useful in contexts where the component type is known to be registered.
 func MustGetProvider(componentType string) ComponentProvider {
+	defer perf.Track(nil, "component.MustGetProvider")()
+
 	provider, ok := GetProvider(componentType)
 	if !ok {
 		panic(fmt.Errorf("%w: %s", errUtils.ErrComponentProviderNotFound, componentType))

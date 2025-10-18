@@ -712,17 +712,27 @@ type ComponentRegistry struct {
 
 // Register adds a component provider to the registry.
 // This is called during package init() for built-in components.
-func Register(provider ComponentProvider) {
+// Returns an error if the provider is nil, has an empty type, or is already registered.
+// Callers should handle the returned error appropriately.
+func Register(provider ComponentProvider) error {
     registry.mu.Lock()
     defer registry.mu.Unlock()
 
+    if provider == nil {
+        return fmt.Errorf("component provider cannot be nil")
+    }
+
     componentType := provider.GetType()
+    if componentType == "" {
+        return fmt.Errorf("component type cannot be empty")
+    }
+
     if _, exists := registry.providers[componentType]; exists {
-        // Allow re-registration for testing and plugin override
-        // Plugins can override built-in component types
+        return fmt.Errorf("component %s already registered", componentType)
     }
 
     registry.providers[componentType] = provider
+    return nil
 }
 
 // GetProvider returns a component provider by type.
