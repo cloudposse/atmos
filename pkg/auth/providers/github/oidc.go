@@ -203,8 +203,9 @@ func (p *oidcProvider) Environment() (map[string]string, error) {
 
 // Logout removes provider-specific credential storage.
 func (p *oidcProvider) Logout(ctx context.Context) error {
-	// GitHub OIDC provider has no local files to clean up.
+	// GitHub OIDC provider has no logout concept - tokens come from GitHub Actions environment.
 	// Credentials are only stored in keyring (handled by AuthManager).
-	log.Debug("Logout called for GitHub OIDC provider (no files to clean up)", "provider", p.name)
-	return nil
+	// Return ErrLogoutNotSupported to indicate successful no-op (exit 0).
+	log.Debug("Logout not supported for GitHub OIDC provider (no files to clean up)", "provider", p.name)
+	return errUtils.ErrLogoutNotSupported
 }

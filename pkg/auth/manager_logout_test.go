@@ -470,3 +470,175 @@ func TestManager_LogoutAll(t *testing.T) {
 		})
 	}
 }
+
+func TestManager_resolveProviderForIdentity(t *testing.T) {
+	tests := []struct {
+		name         string
+		identityName string
+		config       *schema.AuthConfig
+		want         string
+	}{
+		{
+			name:         "direct provider reference",
+			identityName: "identity1",
+			config: &schema.AuthConfig{
+				Identities: map[string]schema.Identity{
+					"identity1": {
+						Via: &schema.IdentityVia{Provider: "provider1"},
+					},
+				},
+			},
+			want: "provider1",
+		},
+		{
+			name:         "transitive via identity",
+			identityName: "identity2",
+			config: &schema.AuthConfig{
+				Identities: map[string]schema.Identity{
+					"identity1": {Via: &schema.IdentityVia{Provider: "provider1"}},
+					"identity2": {Via: &schema.IdentityVia{Identity: "identity1"}},
+				},
+			},
+			want: "provider1",
+		},
+		{
+			name:         "multi-level transitive chain",
+			identityName: "identity3",
+			config: &schema.AuthConfig{
+				Identities: map[string]schema.Identity{
+					"identity1": {Via: &schema.IdentityVia{Provider: "provider1"}},
+					"identity2": {Via: &schema.IdentityVia{Identity: "identity1"}},
+					"identity3": {Via: &schema.IdentityVia{Identity: "identity2"}},
+				},
+			},
+			want: "provider1",
+		},
+		{
+			name:         "cycle detection",
+			identityName: "identity1",
+			config: &schema.AuthConfig{
+				Identities: map[string]schema.Identity{
+					"identity1": {Via: &schema.IdentityVia{Identity: "identity2"}},
+					"identity2": {Via: &schema.IdentityVia{Identity: "identity1"}},
+				},
+			},
+			want: "",
+		},
+		{
+			name:         "missing identity reference",
+			identityName: "identity1",
+			config: &schema.AuthConfig{
+				Identities: map[string]schema.Identity{
+					"identity1": {Via: &schema.IdentityVia{Identity: "nonexistent"}},
+				},
+			},
+			want: "",
+		},
+		{
+			name:         "no via configuration",
+			identityName: "identity1",
+			config: &schema.AuthConfig{
+				Identities: map[string]schema.Identity{
+					"identity1": {},
+				},
+			},
+			want: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := &manager{
+				config: tt.config,
+			}
+
+			got := m.resolveProviderForIdentity(tt.identityName)
+			if got != tt.want {
+				t.Errorf("resolveProviderForIdentity() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestManager_LogoutProvider_TransitiveChain(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockStore := types.NewMockCredentialStore(ctrl)
+	mockProvider := types.NewMockProvider(ctrl)
+	mockIdentity := types.NewMockIdentity(ctrl)
+
+	// Config with transitive identity chain: identity3 -> identity2 -> identity1 -> provider1.
+	config := &schema.AuthConfig{
+		Providers: map[string]schema.Provider{
+			"provider1": {Kind: "aws/sso"},
+		},
+		Identities: map[string]schema.Identity{
+			"identity1": {Via: &schema.IdentityVia{Provider: "provider1"}},
+			"identity2": {Via: &schema.IdentityVia{Identity: "identity1"}},
+			"identity3": {Via: &schema.IdentityVia{Identity: "identity2"}},
+		},
+	}
+
+	m := &manager{
+		config:          config,
+		credentialStore: mockStore,
+		providers:       map[string]Provider{"provider1": mockProvider},
+		identities:      map[string]Identity{},
+	}
+
+	// Set up flexible mock expectations using AnyTimes.
+	mockStore.EXPECT().Delete(gomock.Any()).Return(nil).AnyTimes()
+	mockProvider.EXPECT().Logout(gomock.Any()).Return(nil).AnyTimes()
+	mockIdentity.EXPECT().Logout(gomock.Any()).Return(nil).AnyTimes()
+
+	// Register identities.
+	for identityName := range config.Identities {
+		m.identities[identityName] = mockIdentity
+	}
+
+	// Execute LogoutProvider - should find all three identities transitively.
+	ctx := context.Background()
+	err := m.LogoutProvider(ctx, "provider1")
+	if err != nil {
+		t.Errorf("LogoutProvider() unexpected error = %v", err)
+	}
+}
+
+func TestManager_Logout_NotSupported(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockStore := types.NewMockCredentialStore(ctrl)
+	mockProvider := types.NewMockProvider(ctrl)
+	mockIdentity := types.NewMockIdentity(ctrl)
+
+	config := &schema.AuthConfig{
+		Providers: map[string]schema.Provider{
+			"github-oidc": {Kind: "github/oidc"},
+		},
+		Identities: map[string]schema.Identity{
+			"github-identity": {Via: &schema.IdentityVia{Provider: "github-oidc"}},
+		},
+	}
+
+	m := &manager{
+		config:          config,
+		credentialStore: mockStore,
+		providers:       map[string]Provider{"github-oidc": mockProvider},
+		identities:      map[string]Identity{"github-identity": mockIdentity},
+	}
+
+	// Mock expectations: Delete keyring, provider returns ErrLogoutNotSupported (treated as success).
+	mockStore.EXPECT().Delete("github-identity").Return(nil)
+	mockStore.EXPECT().Delete("github-oidc").Return(nil)
+	mockProvider.EXPECT().Logout(gomock.Any()).Return(errUtils.ErrLogoutNotSupported)
+	mockIdentity.EXPECT().Logout(gomock.Any()).Return(nil)
+
+	ctx := context.Background()
+	err := m.Logout(ctx, "github-identity")
+	// Should succeed (exit 0) even though provider returned ErrLogoutNotSupported.
+	if err != nil {
+		t.Errorf("Logout() should succeed with ErrLogoutNotSupported, got error = %v", err)
+	}
+}

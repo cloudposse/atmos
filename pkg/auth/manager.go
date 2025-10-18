@@ -747,6 +747,7 @@ func (m *manager) Logout(ctx context.Context, identityName string) error {
 
 	var errs []error
 	removedCount := 0
+	identityLogoutCalled := false
 
 	// Step 1: Delete keyring entries for each step in the chain.
 	for _, alias := range chain {
@@ -764,17 +765,28 @@ func (m *manager) Logout(ctx context.Context, identityName string) error {
 		providerName := chain[0]
 		if provider, exists := m.providers[providerName]; exists {
 			if err := provider.Logout(ctx); err != nil {
-				log.Debug("Provider logout failed", "provider", providerName, "error", err)
-				errs = append(errs, fmt.Errorf("%w for %q: %w", errUtils.ErrProviderLogout, providerName, err))
+				// ErrLogoutNotSupported is a successful no-op (exit 0).
+				if errors.Is(err, errUtils.ErrLogoutNotSupported) {
+					log.Debug("Provider logout not supported (no-op)", "provider", providerName)
+				} else {
+					log.Debug("Provider logout failed", "provider", providerName, "error", err)
+					errs = append(errs, fmt.Errorf("%w for %q: %w", errUtils.ErrProviderLogout, providerName, err))
+				}
 			} else {
 				log.Debug("Provider logout successful", "provider", providerName)
 			}
 		} else {
 			// Check if it's an identity (e.g., aws-user standalone).
 			if identity, exists := m.identities[providerName]; exists {
+				identityLogoutCalled = true
 				if err := identity.Logout(ctx); err != nil {
-					log.Debug("Identity logout failed", "identity", providerName, "error", err)
-					errs = append(errs, fmt.Errorf("%w for %q: %w", errUtils.ErrIdentityLogout, providerName, err))
+					// ErrLogoutNotSupported is a successful no-op (exit 0).
+					if errors.Is(err, errUtils.ErrLogoutNotSupported) {
+						log.Debug("Identity logout not supported (no-op)", "identity", providerName)
+					} else {
+						log.Debug("Identity logout failed", "identity", providerName, "error", err)
+						errs = append(errs, fmt.Errorf("%w for %q: %w", errUtils.ErrIdentityLogout, providerName, err))
+					}
 				} else {
 					log.Debug("Identity logout successful", "identity", providerName)
 				}
@@ -782,11 +794,18 @@ func (m *manager) Logout(ctx context.Context, identityName string) error {
 		}
 	}
 
-	// Step 3: Call identity-specific cleanup.
-	if identity, exists := m.identities[identityName]; exists {
-		if err := identity.Logout(ctx); err != nil {
-			log.Debug("Identity logout failed", logKeyIdentity, identityName, "error", err)
-			errs = append(errs, fmt.Errorf("%w for %q: %w", errUtils.ErrIdentityLogout, identityName, err))
+	// Step 3: Call identity-specific cleanup (only if not already called in Step 2).
+	if !identityLogoutCalled {
+		if identity, exists := m.identities[identityName]; exists {
+			if err := identity.Logout(ctx); err != nil {
+				// ErrLogoutNotSupported is a successful no-op (exit 0).
+				if errors.Is(err, errUtils.ErrLogoutNotSupported) {
+					log.Debug("Identity logout not supported (no-op)", logKeyIdentity, identityName)
+				} else {
+					log.Debug("Identity logout failed", logKeyIdentity, identityName, "error", err)
+					errs = append(errs, fmt.Errorf("%w for %q: %w", errUtils.ErrIdentityLogout, identityName, err))
+				}
+			}
 		}
 	}
 
@@ -803,6 +822,48 @@ func (m *manager) Logout(ctx context.Context, identityName string) error {
 	return nil
 }
 
+// resolveProviderForIdentity follows the Via chain to find the root provider for an identity.
+// Returns empty string if no provider is found or if a cycle is detected.
+func (m *manager) resolveProviderForIdentity(identityName string) string {
+	visited := make(map[string]bool)
+	current := identityName
+
+	for {
+		// Check for cycles.
+		if visited[current] {
+			log.Debug("Cycle detected while resolving provider", "identity", current)
+			return ""
+		}
+		visited[current] = true
+
+		// Get identity configuration.
+		identity, exists := m.config.Identities[current]
+		if !exists {
+			log.Debug("Missing identity reference while resolving provider", "identity", current)
+			return ""
+		}
+
+		// Check if identity has Via configuration.
+		if identity.Via == nil {
+			return ""
+		}
+
+		// Found a direct provider reference.
+		if identity.Via.Provider != "" {
+			return identity.Via.Provider
+		}
+
+		// Follow the identity chain.
+		if identity.Via.Identity != "" {
+			current = identity.Via.Identity
+			continue
+		}
+
+		// No provider or identity reference.
+		return ""
+	}
+}
+
 // LogoutProvider removes all credentials for the specified provider.
 func (m *manager) LogoutProvider(ctx context.Context, providerName string) error {
 	defer perf.Track(nil, "auth.Manager.LogoutProvider")()
@@ -814,10 +875,10 @@ func (m *manager) LogoutProvider(ctx context.Context, providerName string) error
 
 	log.Debug("Logout provider", "provider", providerName)
 
-	// Find all identities that use this provider.
+	// Find all identities that use this provider (directly or transitively).
 	var identityNames []string
-	for name, identity := range m.config.Identities {
-		if identity.Via != nil && identity.Via.Provider == providerName {
+	for name := range m.config.Identities {
+		if m.resolveProviderForIdentity(name) == providerName {
 			identityNames = append(identityNames, name)
 		}
 	}
@@ -845,8 +906,13 @@ func (m *manager) LogoutProvider(ctx context.Context, providerName string) error
 	// Call provider-specific cleanup.
 	if provider, exists := m.providers[providerName]; exists {
 		if err := provider.Logout(ctx); err != nil {
-			log.Debug("Provider logout failed", "provider", providerName, "error", err)
-			errs = append(errs, fmt.Errorf("%w for %q: %w", errUtils.ErrProviderLogout, providerName, err))
+			// ErrLogoutNotSupported is a successful no-op (exit 0).
+			if errors.Is(err, errUtils.ErrLogoutNotSupported) {
+				log.Debug("Provider logout not supported (no-op)", "provider", providerName)
+			} else {
+				log.Debug("Provider logout failed", "provider", providerName, "error", err)
+				errs = append(errs, fmt.Errorf("%w for %q: %w", errUtils.ErrProviderLogout, providerName, err))
+			}
 		}
 	}
 
