@@ -350,7 +350,7 @@ func formatReleaseListYAML(releases []*github.RepositoryRelease) error {
 }
 
 // formatReleaseDetailText outputs a single release in text format.
-func formatReleaseDetailText(release *github.RepositoryRelease) {
+func formatReleaseDetailText(release *github.RepositoryRelease) error {
 	fmt.Fprintf(os.Stderr, "Version: %s\n", release.GetTagName())
 	fmt.Fprintf(os.Stderr, "Name: %s\n", release.GetName())
 	fmt.Fprintf(os.Stderr, "Published: %s\n", release.GetPublishedAt().Format("2006-01-02 15:04:05 MST"))
@@ -396,6 +396,8 @@ func formatReleaseDetailText(release *github.RepositoryRelease) {
 	} else if len(release.Assets) > 0 {
 		fmt.Fprintf(os.Stderr, "\nNo assets found for %s/%s\n", runtime.GOOS, runtime.GOARCH)
 	}
+
+	return nil
 }
 
 // formatReleaseDetailJSON outputs a single release in JSON format.

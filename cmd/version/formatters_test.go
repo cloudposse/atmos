@@ -323,7 +323,7 @@ func TestFormatReleaseDetailText(t *testing.T) {
 	r, w, _ := os.Pipe()
 	os.Stderr = w
 
-	formatReleaseDetailText(release)
+	err := formatReleaseDetailText(release)
 
 	w.Close()
 	os.Stderr = oldStderr
@@ -332,6 +332,7 @@ func TestFormatReleaseDetailText(t *testing.T) {
 	_, _ = io.Copy(&buf, r)
 	output := buf.String()
 
+	assert.NoError(t, err)
 	assert.Contains(t, output, "v1.0.0")
 	assert.Contains(t, output, "Release 1.0.0")
 }

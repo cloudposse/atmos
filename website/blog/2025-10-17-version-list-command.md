@@ -37,7 +37,7 @@ $ atmos version show v1.95.0
 ```
 
 This displays:
-- **Full release notes** rendered in markdown with colors preserved
+- **Full release notes** rendered in Markdown with colors preserved
 - **Release metadata** (version, publication date, title)
 - **Platform-specific artifacts** - Only shows assets matching your OS and architecture
 - **File sizes and download URLs** - Styled links for easy access
@@ -263,7 +263,7 @@ atmos version show
 We're building Atmos in the open and welcome your feedback:
 - 💬 **Discuss** - Share thoughts in [GitHub Discussions](https://github.com/cloudposse/atmos/discussions)
 - 🐛 **Report Issues** - Found a bug? [Open an issue](https://github.com/cloudposse/atmos/issues)
-- 🚀 **Contribute** - Want to add features? Check out our [contribution guide](https://atmos.tools/community/contributing)
+- 🚀 **Contribute** - Want to add features? Review our [contribution guide](https://atmos.tools/community/contributing).
 
 ---
 

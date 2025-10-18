@@ -131,8 +131,10 @@ var showCmd = &cobra.Command{
 	Example: showUsageMarkdown,
 	Args:    cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
+		defer perf.Track(atmosConfigPtr, "version.show.RunE")()
+
 		// Default to latest if no version specified.
-		versionArg := ""
+		versionArg := "latest"
 		if len(args) > 0 {
 			versionArg = args[0]
 		}
@@ -149,7 +151,9 @@ var showCmd = &cobra.Command{
 		// Format output.
 		switch strings.ToLower(showFormat) {
 		case "text":
-			formatReleaseDetailText(release)
+			if err := formatReleaseDetailText(release); err != nil {
+				return err
+			}
 			return nil
 		case "json":
 			return formatReleaseDetailJSON(release)
