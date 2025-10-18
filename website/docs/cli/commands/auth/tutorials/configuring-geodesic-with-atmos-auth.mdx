@@ -1,0 +1,233 @@
+---
+title: Configuring Geodesic with Atmos Auth
+sidebar_label: Configuring Geodesic
+sidebar_position: 10
+id: configuring-geodesic-with-atmos-auth
+description: Guide for configuring Geodesic to work with Atmos Auth for AWS authentication.
+---
+
+> **Note**: `atmos auth` requires minimum Atmos version `v1.194.1`
+
+This guide explains how to configure [Geodesic](https://github.com/cloudposse/geodesic) to work with `atmos auth` for AWS authentication using IAM Identity Center.
+
+## Overview
+
+Geodesic is Cloud Posse's DevOps toolbox - a containerized environment with pre-installed cloud tools. When using `atmos auth`, you need to configure Geodesic to use the Atmos-managed AWS credentials and config files instead of traditional credential management.
+
+## Prerequisites
+
+- Geodesic toolbox set up for your infrastructure
+- `atmos.yaml` configured with auth providers and identities
+- Understanding of Geodesic's Dockerfile and Makefile structure
+
+## Configuration Steps
+
+### 1. Update Your Geodesic Dockerfile
+
+Add the following environment variables to your Geodesic Dockerfile to configure AWS authentication settings:
+
+```dockerfile
+# Default AWS_PROFILE
+# This identity must exist in the atmos config file.
+ARG DEFAULT_ATMOS_PROVIDER="acme-sso"
+ARG DEFAULT_ATMOS_IDENTITY="acme-identity"
+
+ENV AWS_SHARED_CREDENTIALS_FILE=$HOME/.aws/atmos/${DEFAULT_ATMOS_PROVIDER}/credentials
+ENV AWS_CONFIG_FILE=$HOME/.aws/atmos/${DEFAULT_ATMOS_PROVIDER}/config
+ENV AWS_PROFILE=${DEFAULT_ATMOS_IDENTITY}
+
+# Path to the teams config file for assume-role and other Geodesic utilities.
+# Once logged in with Atmos, this config file gives you access to all the other teams
+# and roles (if you are authorized for access).
+ENV AWS_CONFIG_TEAMS=/etc/aws-config/aws-config-teams
+ENV ASSUME_ROLE_INTERACTIVE_QUERY=${NAMESPACE}${TENANT:+-$TENANT}-gbl-
+```
+
+**Key Configuration Details:**
+
+- **`DEFAULT_ATMOS_PROVIDER`**: Name of the provider defined in your `atmos.yaml` (e.g., `acme-sso`)
+- **`DEFAULT_ATMOS_IDENTITY`**: Name of the identity to use by default (must match an identity in `atmos.yaml`)
+- **`AWS_SHARED_CREDENTIALS_FILE`**: Points to Atmos-managed credentials
+- **`AWS_CONFIG_FILE`**: Points to Atmos-managed AWS config
+- **`AWS_PROFILE`**: The default profile name to use
+- **`AWS_CONFIG_TEAMS`**: Separate variable for teams config (avoids clobbering `AWS_CONFIG_FILE`)
+
+:::note
+The `AWS_CONFIG_FILE` environment variable must remain pointed at the Atmos-managed config (`$HOME/.aws/atmos/${DEFAULT_ATMOS_PROVIDER}/config`) for authentication to work correctly. The teams config is stored in the separate `AWS_CONFIG_TEAMS` variable. If your Geodesic utilities reference the teams config, update them to use `AWS_CONFIG_TEAMS` instead of `AWS_CONFIG_FILE`.
+:::
+
+### 2. Update Your Makefile
+
+Add an automatic login step to your Makefile to ensure users are authenticated before starting the Geodesic shell:
+
+```makefile
+login:
+	@atmos auth login --identity acme-identity
+
+...
+
+## Start the geodesic shell by calling wrapper script
+run: login
+	@$(APP_NAME)
+```
+
+This ensures that:
+- Users authenticate with Atmos before the shell starts
+- The specified identity is used for authentication
+- Credentials are fresh when starting work
+
+### 3. Update Source Profile Configuration
+
+For `assume-role` and other Geodesic utilities to work correctly, update your `source_profile` in the `{Repo Root}/etc/aws-config/aws-config-teams` file to match the identity name from your `atmos.yaml` auth configuration.
+
+**Example:**
+
+If your `atmos.yaml` defines:
+```yaml
+auth:
+  identities:
+    acme-identity:
+      kind: aws/permission-set
+      # ...
+```
+
+Then your `aws-config-teams` should reference:
+```ini
+[profile some-role]
+source_profile = acme-identity
+role_arn = arn:aws:iam::123456789012:role/SomeRole
+```
+
+## Complete Example
+
+Here's a complete example showing how all the pieces fit together:
+
+### atmos.yaml
+```yaml
+auth:
+  providers:
+    acme-sso:
+      kind: aws/iam-identity-center
+      region: us-east-1
+      start_url: https://acme.awsapps.com/start/
+
+  identities:
+    acme-identity:
+      default: true
+      kind: aws/permission-set
+      via:
+        provider: acme-sso
+      principal:
+        name: "AdminAccess"
+        account:
+          name: "core-identity"
+```
+
+### Dockerfile (Geodesic)
+```dockerfile
+FROM cloudposse/geodesic:latest
+
+# Atmos auth configuration
+ARG DEFAULT_ATMOS_PROVIDER="acme-sso"
+ARG DEFAULT_ATMOS_IDENTITY="acme-identity"
+
+ENV AWS_SHARED_CREDENTIALS_FILE=$HOME/.aws/atmos/${DEFAULT_ATMOS_PROVIDER}/credentials
+ENV AWS_CONFIG_FILE=$HOME/.aws/atmos/${DEFAULT_ATMOS_PROVIDER}/config
+ENV AWS_PROFILE=${DEFAULT_ATMOS_IDENTITY}
+ENV AWS_CONFIG_TEAMS=/etc/aws-config/aws-config-teams
+ENV ASSUME_ROLE_INTERACTIVE_QUERY=${NAMESPACE}${TENANT:+-$TENANT}-gbl-
+
+# Your other Geodesic configuration...
+```
+
+### Makefile
+```makefile
+APP_NAME := your-geodesic-shell
+
+login:
+	@atmos auth login --identity acme-identity
+
+run: login
+	@$(APP_NAME)
+```
+
+### etc/aws-config/aws-config-teams
+```ini
+[profile acme-identity]
+# This is the base identity managed by Atmos
+
+[profile dev-admin]
+source_profile = acme-identity
+role_arn = arn:aws:iam::111111111111:role/DevAdmin
+region = us-east-1
+
+[profile prod-readonly]
+source_profile = acme-identity
+role_arn = arn:aws:iam::222222222222:role/ProdReadOnly
+region = us-east-1
+```
+
+## Workflow
+
+Once configured, the typical workflow is:
+
+1. **Start Geodesic**: Run `make run` (or your equivalent command)
+2. **Authenticate**: Atmos prompts for authentication via browser
+3. **Work in Shell**: Use AWS CLI, Terraform, and other tools normally
+4. **Assume Roles**: Use `assume-role dev-admin` to switch to other roles
+
+The authentication persists for the session duration configured in IAM Identity Center.
+
+## Troubleshooting
+
+### Issue: "Credentials not found" error
+
+**Cause**: Atmos hasn't authenticated yet, or credentials have expired.
+
+**Solution**: Run `atmos auth login` to re-authenticate.
+
+### Issue: `assume-role` not finding source profile
+
+**Cause**: The `source_profile` in `aws-config-teams` doesn't match the identity name in `atmos.yaml`.
+
+**Solution**: Ensure the profile names match exactly:
+```yaml
+# atmos.yaml
+identities:
+  acme-identity:  # ← This name
+```
+
+```ini
+# aws-config-teams
+[profile some-role]
+source_profile = acme-identity  # ← Must match exactly
+```
+
+### Issue: AWS CLI uses wrong config file
+
+**Cause**: `AWS_CONFIG_FILE` is pointing to the wrong location.
+
+**Solution**: Verify the environment variable is set correctly in your Dockerfile:
+```bash
+echo $AWS_CONFIG_FILE
+# Should output: /home/user/.aws/atmos/acme-sso/config
+```
+
+## Next Steps
+
+- Learn about [authentication workflows](/cli/commands/auth/usage)
+- Explore [component-level authentication](/cli/commands/auth/usage#component-level-configuration)
+- Review the [Leapp migration guide](/cli/commands/auth/tutorials/migrating-from-leapp) if migrating
+
+## Getting Help
+
+If you encounter issues:
+
+1. Run `atmos auth validate --verbose` to check configuration
+2. Check the [User Guide](/cli/commands/auth/usage) for common scenarios
+3. Verify your IAM Identity Center configuration is correct
+4. Review Geodesic logs for authentication errors
+
+---
+
+**Ready to configure?** Start by updating your Dockerfile with the environment variables above, then rebuild your Geodesic container.

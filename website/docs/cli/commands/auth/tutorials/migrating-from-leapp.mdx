@@ -162,52 +162,14 @@ atmos auth whoami
 atmos terraform plan <component> -s <stack>
 ```
 
-## Integration with Geodesic
+## Using with Geodesic
 
-If you're using [Geodesic](https://github.com/cloudposse/geodesic) as your DevOps toolbox, you'll need to update your Dockerfile to configure the default AWS authentication settings for Atmos.
+If you're using [Geodesic](https://github.com/cloudposse/geodesic) as your DevOps toolbox, you'll need to configure it to work with Atmos Auth.
 
-### Updating Your Geodesic Dockerfile
-
-Add the following environment variables to your Geodesic Dockerfile:
-
-```dockerfile
-# Default AWS_PROFILE
-# This identity must exist in the atmos config file.
-ARG DEFAULT_ATMOS_PROVIDER="acme-sso"
-ARG DEFAULT_ATMOS_IDENTITY="acme-identity"
-
-ENV AWS_SHARED_CREDENTIALS_FILE=$HOME/.aws/atmos/${DEFAULT_ATMOS_PROVIDER}/credentials
-ENV AWS_CONFIG_FILE=$HOME/.aws/atmos/${DEFAULT_ATMOS_PROVIDER}/config
-ENV AWS_PROFILE=${DEFAULT_ATMOS_IDENTITY}
-
-# Path to the teams config file for assume-role and other Geodesic utilities.
-# Once logged in with Atmos, this config file gives you access to all the other teams
-# and roles (if you are authorized for access).
-ENV AWS_CONFIG_TEAMS=/etc/aws-config/aws-config-teams
-ENV ASSUME_ROLE_INTERACTIVE_QUERY=${NAMESPACE}${TENANT:+-$TENANT}-gbl-
-```
-
-:::note
-The `AWS_CONFIG_FILE` environment variable must remain pointed at the Atmos-managed config (`$HOME/.aws/atmos/${DEFAULT_ATMOS_PROVIDER}/config`) for authentication to work correctly. The teams config is stored in the separate `AWS_CONFIG_TEAMS` variable. If your Geodesic utilities reference the teams config, update them to use `AWS_CONFIG_TEAMS` instead of `AWS_CONFIG_FILE`.
-:::
-
-### Update `Makefile`
-
-We need the following snippet in our `Makefile`:
-
-```makefile
-login:
-	@atmos auth login --identity acme-identity
-
-...
-
-## Start the geodesic shell by calling wrapper script
-run: login
-	@$(APP_NAME)
-```
-### Update Source Profile
-
-In order for `assume-role` and other Geodesic utilities to work, you'll need to update your `source_profile` in your `{Repo Root}/etc/aws-config/aws-config-teams` file to match the identity name from your `atmos.yaml` auth configuration.
+See the [Configuring Geodesic with Atmos Auth](/cli/commands/auth/tutorials/configuring-geodesic-with-atmos-auth) guide for complete instructions on:
+- Updating your Geodesic Dockerfile with required environment variables
+- Configuring automatic authentication in your Makefile
+- Setting up source profiles for assume-role utilities
 
 ## Troubleshooting
 

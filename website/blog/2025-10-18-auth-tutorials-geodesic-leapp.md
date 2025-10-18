@@ -1,0 +1,99 @@
+---
+slug: auth-tutorials-geodesic-leapp
+title: "New Guides for Atmos Auth: Leapp Migration and Geodesic Integration"
+authors: [atmos]
+tags: [feature, cloud-architecture]
+---
+
+We've published two comprehensive guides to help you adopt and integrate `atmos auth` into your workflows: migrating from Leapp and configuring Geodesic for seamless authentication.
+
+<!--truncate-->
+
+## What's New
+
+The `atmos auth` command (introduced in v1.194.1) provides native AWS IAM Identity Center authentication directly in Atmos, eliminating the need for external credential management tools. To help teams adopt this feature, we've created two detailed tutorials:
+
+### 1. [Migrating from Leapp](/cli/commands/auth/tutorials/migrating-from-leapp)
+
+If your team uses Leapp for credential management, this guide walks you through the migration process step-by-step:
+
+- **Understanding the mapping** between Leapp concepts (providers, sessions, identities) and `atmos auth` configuration
+- **Quick migration examples** showing side-by-side comparisons
+- **Field-by-field reference** for converting Leapp sessions to Atmos identities
+- **Troubleshooting common issues** during migration
+
+The guide includes practical examples using real Leapp session configurations, making it easy to translate your existing setup.
+
+### 2. [Configuring Geodesic with Atmos Auth](/cli/commands/auth/tutorials/configuring-geodesic-with-atmos-auth)
+
+For teams using [Geodesic](https://github.com/cloudposse/geodesic) as their DevOps toolbox, this guide explains how to integrate `atmos auth`:
+
+- **Dockerfile configuration** with required environment variables
+- **Makefile setup** for automatic authentication on shell start
+- **Source profile configuration** for assume-role utilities
+- **Complete working examples** showing all components together
+
+The guide includes important details about separating Atmos-managed config files from teams config files to avoid conflicts.
+
+## Why These Guides Matter
+
+Authentication is foundational to infrastructure management. These guides help teams:
+
+- **Reduce friction** when adopting `atmos auth` by providing clear migration paths
+- **Avoid common pitfalls** like config file conflicts and credential caching issues
+- **Maintain workflow continuity** when transitioning from external tools
+- **Integrate authentication** seamlessly with existing DevOps tooling
+
+## Key Benefits of Atmos Auth
+
+Using `atmos auth` provides several advantages over external credential managers:
+
+- **Configuration as code** - Authentication config lives in `atmos.yaml` alongside your infrastructure
+- **Component-level auth** - Different components can use different AWS identities
+- **Workflow integration** - No separate credential management app to run
+- **Cross-platform** - Works consistently on Linux, macOS, and Windows
+- **Team consistency** - Everyone uses the same authentication approach
+
+## Getting Started
+
+1. **Read the guides**:
+   - [Migrating from Leapp](/cli/commands/auth/tutorials/migrating-from-leapp)
+   - [Configuring Geodesic](/cli/commands/auth/tutorials/configuring-geodesic-with-atmos-auth)
+
+2. **Review the main documentation**:
+   - [Authentication User Guide](/cli/commands/auth/usage)
+   - [Command Reference](/cli/commands/auth/login)
+
+3. **Try it out**:
+   ```bash
+   # Configure providers and identities in atmos.yaml
+   # Then authenticate
+   atmos auth login
+
+   # Verify authentication
+   atmos auth whoami
+
+   # Use with Terraform
+   atmos terraform plan <component> -s <stack>
+   ```
+
+## What's Next
+
+We're continuing to expand authentication capabilities in Atmos. Future enhancements will include:
+
+- **Additional provider types** beyond AWS IAM Identity Center
+- **Enhanced MFA support** for various authentication flows
+- **Credential caching improvements** for better performance
+- **IDE integration** for smoother developer experience
+
+## Feedback Welcome
+
+These guides are designed to be practical and actionable. If you encounter issues, find gaps in the documentation, or have suggestions for improvement:
+
+- Open an issue on [GitHub](https://github.com/cloudposse/atmos/issues)
+- Share your experience in [GitHub Discussions](https://github.com/cloudposse/atmos/discussions)
+- Contribute improvements via pull request
+
+---
+
+**Ready to migrate?** Start with the [Leapp migration guide](/cli/commands/auth/tutorials/migrating-from-leapp) or jump straight to [Geodesic configuration](/cli/commands/auth/tutorials/configuring-geodesic-with-atmos-auth) if you're already using `atmos auth`.
