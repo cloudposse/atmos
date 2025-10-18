@@ -319,7 +319,7 @@ tests:
       - "mock-identity"
     expect:
       diff: []
-      stdout:
+      stderr:
         - "Authentication successful"
         - "mock-identity"
       exit_code: 0

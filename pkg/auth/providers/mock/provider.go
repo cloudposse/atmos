@@ -40,12 +40,16 @@ func (p *Provider) PreAuthenticate(manager types.AuthManager) error {
 
 // Authenticate returns mock credentials.
 func (p *Provider) Authenticate(ctx context.Context) (types.ICredentials, error) {
+	// Use a fixed timestamp for deterministic testing.
+	// Use 2025-10-18 17:00:00 UTC which is 12:00:00 CDT.
+	expiration := time.Date(2025, 10, 18, 17, 0, 0, 0, time.UTC)
+
 	return &Credentials{
 		AccessKeyID:     "MOCK_ACCESS_KEY_ID",
 		SecretAccessKey: "MOCK_SECRET_ACCESS_KEY",
 		SessionToken:    "MOCK_SESSION_TOKEN",
 		Region:          "us-east-1",
-		Expiration:      time.Now().Add(1 * time.Hour),
+		Expiration:      expiration,
 	}, nil
 }
 
