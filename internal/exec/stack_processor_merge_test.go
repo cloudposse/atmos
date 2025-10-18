@@ -1,6 +1,7 @@
 package exec
 
 import (
+	"encoding/json"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -491,7 +492,19 @@ func TestProcessAuthConfig(t *testing.T) {
 				Auth: tt.globalAuth,
 			}
 
-			result, err := processAuthConfig(atmosConfig, tt.authConfig)
+			// Convert the global auth config struct to map[string]any for testing.
+			// Use JSON marshaling for deep conversion of nested structs to maps.
+			var globalAuthConfig map[string]any
+			if atmosConfig.Auth.Providers != nil || atmosConfig.Auth.Identities != nil {
+				jsonBytes, err := json.Marshal(atmosConfig.Auth)
+				require.NoError(t, err)
+				err = json.Unmarshal(jsonBytes, &globalAuthConfig)
+				require.NoError(t, err)
+			} else {
+				globalAuthConfig = map[string]any{}
+			}
+
+			result, err := processAuthConfig(atmosConfig, globalAuthConfig, tt.authConfig)
 
 			if tt.expectError {
 				require.Error(t, err)

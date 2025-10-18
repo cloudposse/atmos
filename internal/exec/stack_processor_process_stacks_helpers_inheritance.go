@@ -15,16 +15,16 @@ import (
 func processComponentInheritance(opts *ComponentProcessorOptions, result *ComponentProcessorResult) error {
 	defer perf.Track(opts.AtmosConfig, "exec.processComponentInheritance")()
 
-	// Initialize base component data.
-	result.BaseComponentVars = make(map[string]any)
-	result.BaseComponentSettings = make(map[string]any)
-	result.BaseComponentEnv = make(map[string]any)
-	result.BaseComponentAuth = make(map[string]any)
+	// Initialize base component data with capacity hints.
+	result.BaseComponentVars = make(map[string]any, componentSmallMapCapacity)
+	result.BaseComponentSettings = make(map[string]any, componentSmallMapCapacity)
+	result.BaseComponentEnv = make(map[string]any, componentSmallMapCapacity)
+	result.BaseComponentAuth = make(map[string]any, componentSmallMapCapacity)
 	if opts.ComponentType == cfg.TerraformComponentType {
-		result.BaseComponentProviders = make(map[string]any)
-		result.BaseComponentHooks = make(map[string]any)
-		result.BaseComponentBackendSection = make(map[string]any)
-		result.BaseComponentRemoteStateBackendSection = make(map[string]any)
+		result.BaseComponentProviders = make(map[string]any, componentSmallMapCapacity)
+		result.BaseComponentHooks = make(map[string]any, componentSmallMapCapacity)
+		result.BaseComponentBackendSection = make(map[string]any, componentSmallMapCapacity)
+		result.BaseComponentRemoteStateBackendSection = make(map[string]any, componentSmallMapCapacity)
 	}
 
 	var baseComponentConfig schema.BaseComponentConfig
