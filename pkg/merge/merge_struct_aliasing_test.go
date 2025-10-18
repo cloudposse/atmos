@@ -10,7 +10,7 @@ import (
 // inside typed maps are properly deep copied without aliasing.
 // This is a regression test for the bug where map[int]SomeStruct values containing slices/maps
 // were not deep copied, causing modifications to the copy to affect the original.
-// Note: Uses map[int]Config (non-string keys) to trigger copyNonStringKeyMap path.
+// Uses map[int]Config (non-string keys) to trigger copyNonStringKeyMap path.
 func TestDeepCopyMap_NoAliasingStructsInTypedMaps(t *testing.T) {
 	// Define a struct with nested slice and map fields.
 	type Config struct {
