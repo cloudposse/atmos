@@ -57,6 +57,9 @@ func LoadAWSConfig(ctx context.Context, region string, roleArn string, assumeRol
 	}
 
 	// Load base config (from env, profile, etc.)
+	// Note: We intentionally use config.LoadDefaultConfig here instead of LoadIsolatedAWSConfig
+	// because this function is used in contexts where we want to honor environment variables
+	// (e.g., Terraform backend configuration). The auth-specific code uses LoadIsolatedAWSConfig.
 	baseCfg, err := config.LoadDefaultConfig(ctx, cfgOpts...)
 	if err != nil {
 		return aws.Config{}, fmt.Errorf("%w: %v", errUtils.ErrLoadAwsConfig, err)
