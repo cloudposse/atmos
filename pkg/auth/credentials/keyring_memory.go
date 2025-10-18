@@ -18,7 +18,6 @@ type memoryKeyringStore struct {
 
 // newMemoryKeyringStore creates a new in-memory keyring store.
 func newMemoryKeyringStore() (*memoryKeyringStore, error) {
-
 	return &memoryKeyringStore{
 		items: make(map[string]string),
 	}, nil

@@ -23,7 +23,6 @@ type fileKeyringStore struct {
 
 // newFileKeyringStore creates a new file-based keyring store with encryption.
 func newFileKeyringStore(authConfig *schema.AuthConfig) (*fileKeyringStore, error) {
-
 	var path string
 	var passwordEnv string
 
@@ -53,7 +52,7 @@ func newFileKeyringStore(authConfig *schema.AuthConfig) (*fileKeyringStore, erro
 
 	// Ensure directory exists with proper permissions.
 	dir := filepath.Dir(path)
-	if err := os.MkdirAll(dir, 0700); err != nil {
+	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return nil, fmt.Errorf("%w: failed to create keyring directory: %v", ErrCredentialStore, err)
 	}
 
@@ -62,15 +61,15 @@ func newFileKeyringStore(authConfig *schema.AuthConfig) (*fileKeyringStore, erro
 
 	// Configure 99designs keyring.
 	cfg := keyring.Config{
-		ServiceName:                     "atmos-auth",
-		FileDir:                         dir,
-		FilePasswordFunc:                passwordFunc,
-		AllowedBackends:                 []keyring.BackendType{keyring.FileBackend},
-		KeychainName:                    "atmos",
-		KeychainPasswordFunc:            passwordFunc,
-		KeychainSynchronizable:          false,
-		KeychainAccessibleWhenUnlocked:  true,
-		KeychainTrustApplication:        false,
+		ServiceName:                    "atmos-auth",
+		FileDir:                        dir,
+		FilePasswordFunc:               passwordFunc,
+		AllowedBackends:                []keyring.BackendType{keyring.FileBackend},
+		KeychainName:                   "atmos",
+		KeychainPasswordFunc:           passwordFunc,
+		KeychainSynchronizable:         false,
+		KeychainAccessibleWhenUnlocked: true,
+		KeychainTrustApplication:       false,
 	}
 
 	// Open keyring.
@@ -87,7 +86,6 @@ func newFileKeyringStore(authConfig *schema.AuthConfig) (*fileKeyringStore, erro
 
 // createPasswordPrompt creates a password prompt function with environment variable fallback.
 func createPasswordPrompt(passwordEnv string) keyring.PromptFunc {
-
 	return func(prompt string) (string, error) {
 		// 1. Check environment variable first (for automation/CI).
 		if password := os.Getenv(passwordEnv); password != "" {
@@ -112,7 +110,6 @@ func createPasswordPrompt(passwordEnv string) keyring.PromptFunc {
 						}),
 				),
 			).Run()
-
 			if err != nil {
 				return "", fmt.Errorf("password prompt failed: %v", err)
 			}
@@ -127,7 +124,6 @@ func createPasswordPrompt(passwordEnv string) keyring.PromptFunc {
 
 // Store stores credentials for the given alias.
 func (s *fileKeyringStore) Store(alias string, creds types.ICredentials) error {
-
 	var (
 		typ string
 		raw []byte
@@ -167,7 +163,6 @@ func (s *fileKeyringStore) Store(alias string, creds types.ICredentials) error {
 
 // Retrieve retrieves credentials for the given alias.
 func (s *fileKeyringStore) Retrieve(alias string) (types.ICredentials, error) {
-
 	item, err := s.ring.Get(alias)
 	if err != nil {
 		return nil, fmt.Errorf("%w: failed to retrieve credentials from file keyring: %v", ErrCredentialStore, err)
@@ -198,7 +193,6 @@ func (s *fileKeyringStore) Retrieve(alias string) (types.ICredentials, error) {
 
 // Delete deletes credentials for the given alias.
 func (s *fileKeyringStore) Delete(alias string) error {
-
 	if err := s.ring.Remove(alias); err != nil {
 		return fmt.Errorf("%w: failed to delete credentials from file keyring: %v", ErrCredentialStore, err)
 	}
@@ -208,7 +202,6 @@ func (s *fileKeyringStore) Delete(alias string) error {
 
 // List returns all stored credential aliases.
 func (s *fileKeyringStore) List() ([]string, error) {
-
 	keys, err := s.ring.Keys()
 	if err != nil {
 		return nil, fmt.Errorf("%w: failed to list credentials from file keyring: %v", ErrCredentialStore, err)
@@ -219,7 +212,6 @@ func (s *fileKeyringStore) List() ([]string, error) {
 
 // IsExpired checks if credentials for the given alias are expired.
 func (s *fileKeyringStore) IsExpired(alias string) (bool, error) {
-
 	creds, err := s.Retrieve(alias)
 	if err != nil {
 		return true, err
@@ -230,7 +222,6 @@ func (s *fileKeyringStore) IsExpired(alias string) (bool, error) {
 
 // GetAny retrieves and unmarshals any type from the file keyring.
 func (s *fileKeyringStore) GetAny(key string, dest interface{}) error {
-
 	item, err := s.ring.Get(key)
 	if err != nil {
 		return fmt.Errorf("%w: failed to retrieve data from file keyring: %v", ErrCredentialStore, err)
@@ -245,7 +236,6 @@ func (s *fileKeyringStore) GetAny(key string, dest interface{}) error {
 
 // SetAny marshals and stores any type in the file keyring.
 func (s *fileKeyringStore) SetAny(key string, value interface{}) error {
-
 	data, err := json.Marshal(value)
 	if err != nil {
 		return fmt.Errorf("%w: failed to marshal data: %v", ErrCredentialStore, err)

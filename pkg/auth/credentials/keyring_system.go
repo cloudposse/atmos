@@ -15,7 +15,6 @@ type systemKeyringStore struct{}
 
 // newSystemKeyringStore creates a new system keyring store.
 func newSystemKeyringStore() (*systemKeyringStore, error) {
-
 	return &systemKeyringStore{}, nil
 }
 

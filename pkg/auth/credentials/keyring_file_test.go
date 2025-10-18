@@ -17,9 +17,9 @@ import (
 // unsupportedCreds is a test type that implements ICredentials but is not supported by the store.
 type unsupportedCreds struct{}
 
-func (u *unsupportedCreds) IsExpired() bool                            { return false }
-func (u *unsupportedCreds) GetExpiration() (*time.Time, error)         { return nil, nil }
-func (u *unsupportedCreds) BuildWhoamiInfo(info *types.WhoamiInfo)     {}
+func (u *unsupportedCreds) IsExpired() bool                        { return false }
+func (u *unsupportedCreds) GetExpiration() (*time.Time, error)     { return nil, nil }
+func (u *unsupportedCreds) BuildWhoamiInfo(info *types.WhoamiInfo) {}
 
 func TestFileKeyring_NewStore(t *testing.T) {
 	tempDir := t.TempDir()

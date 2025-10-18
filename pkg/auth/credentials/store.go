@@ -36,13 +36,11 @@ type credentialEnvelope struct {
 // 2. AuthConfig.Keyring.Type configuration
 // 3. Default to "system" for backward compatibility
 func NewCredentialStore() types.CredentialStore {
-
 	return NewCredentialStoreWithConfig(nil)
 }
 
 // NewCredentialStoreWithConfig creates a credential store with explicit configuration.
 func NewCredentialStoreWithConfig(authConfig *schema.AuthConfig) types.CredentialStore {
-
 	keyringType := "system" // Default for backward compatibility
 
 	// Check environment variable first (for testing and CI)
@@ -81,7 +79,6 @@ func NewCredentialStoreWithConfig(authConfig *schema.AuthConfig) types.Credentia
 // NewKeyringAuthStore creates a new system keyring-based auth store (for backward compatibility).
 // Deprecated: Use NewCredentialStore() instead.
 func NewKeyringAuthStore() types.CredentialStore {
-
 	store, _ := newSystemKeyringStore()
 	return store
 }
