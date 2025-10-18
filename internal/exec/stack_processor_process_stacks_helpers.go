@@ -5,6 +5,14 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
+// Map capacity hints for component processing to reduce reallocation overhead.
+const (
+	componentVarsCapacity      = 32 // Typical component has 10-50 variables.
+	componentSettingsCapacity  = 16 // Typical component has 5-20 settings.
+	componentSmallMapCapacity  = 8  // For env, auth, providers, hooks, backend sections (5-15 items).
+	componentOverridesCapacity = 4  // Overrides are typically sparse (0-10 items).
+)
+
 // ComponentProcessorOptions contains configuration for processing a component.
 type ComponentProcessorOptions struct {
 	ComponentType            string
@@ -17,11 +25,12 @@ type ComponentProcessorOptions struct {
 	CheckBaseComponentExists bool
 
 	// Global configurations.
-	GlobalVars     map[string]any
-	GlobalSettings map[string]any
-	GlobalEnv      map[string]any
-	GlobalAuth     map[string]any
-	GlobalCommand  string
+	GlobalVars         map[string]any
+	GlobalSettings     map[string]any
+	GlobalEnv          map[string]any
+	GlobalAuth         map[string]any
+	GlobalCommand      string
+	AtmosGlobalAuthMap map[string]any // Pre-converted atmosConfig.Auth to prevent race conditions
 
 	// Terraform-specific options.
 	TerraformProviders              map[string]any
@@ -80,10 +89,10 @@ func processComponent(opts *ComponentProcessorOptions) (*ComponentProcessorResul
 	defer perf.Track(opts.AtmosConfig, "exec.processComponent")()
 
 	result := &ComponentProcessorResult{
-		ComponentVars:     make(map[string]any),
-		ComponentSettings: make(map[string]any),
-		ComponentEnv:      make(map[string]any),
-		ComponentMetadata: make(map[string]any),
+		ComponentVars:     make(map[string]any, componentVarsCapacity),
+		ComponentSettings: make(map[string]any, componentSettingsCapacity),
+		ComponentEnv:      make(map[string]any, componentSmallMapCapacity),
+		ComponentMetadata: make(map[string]any, componentSettingsCapacity),
 		BaseComponents:    []string{},
 	}
 

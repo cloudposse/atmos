@@ -28,8 +28,8 @@ repos:
 
       - id: golangci-lint
         name: golangci-lint
-        description: Run golangci-lint on modified Go files
-        entry: golangci-lint run --new-from-rev=origin/main --config=.golangci.yml
+        description: Run golangci-lint on modified Go files (uses custom binary with lintroller)
+        entry: bash -c 'make custom-gcl && ./custom-gcl run --new-from-rev=origin/main --config=.golangci.yml'
         language: system
         types: [go]
         pass_filenames: false
