@@ -28,12 +28,13 @@ The guide includes practical examples using real Leapp session configurations, m
 
 For teams using [Geodesic](https://github.com/cloudposse/geodesic) as their DevOps toolbox, this guide explains how to integrate `atmos auth`:
 
+- **Host-based authentication flow** - How authentication works on your laptop before starting Geodesic
 - **Dockerfile configuration** with required environment variables
-- **Makefile setup** for automatic authentication on shell start
+- **Makefile setup** for automatic authentication before shell start
 - **Source profile configuration** for assume-role utilities
 - **Complete working examples** showing all components together
 
-The guide includes important details about separating Atmos-managed config files from teams config files to avoid conflicts.
+The guide clarifies that authentication happens on your host machine (not inside the container) and explains keychain integration limitations.
 
 ## Key Benefits of Atmos Auth
 
