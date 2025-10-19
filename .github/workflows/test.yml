@@ -32,7 +32,7 @@ jobs:
     steps:
       - name: Configure runners
         run: |
-          config="{\"ubuntu-latest\":\"runs-on=${{github.run_id}}/runner=terraform/tag=atmos/extras=s3-cache/private=false\",\"windows-latest\":\"runs-on=${{github.run_id}}/image=windows22-full-x64/family=m7i\",\"macos-latest\":\"macos-latest\"}"
+          config="{\"ubuntu-latest\":\"runs-on=${{github.run_id}}/runner=terraform/tag=atmos/extras=s3-cache/private=false\",\"windows-latest\":\"runs-on=${{github.run_id}}/runner=terraform/image=windows22-full-x64/family=m7i/tag=atmos/extras=s3-cache/private=false\",\"macos-latest\":\"macos-latest\"}"
           echo "runners-config=${config}" >> $GITHUB_OUTPUT
           echo "runners-config=${config}"
         id: runners-config
