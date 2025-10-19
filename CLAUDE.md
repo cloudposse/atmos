@@ -316,6 +316,45 @@ var (
 - **Remove always-skipped tests** - Either fix the underlying issue or delete the test
 - **Table-driven tests need real scenarios** - Use production-like inputs, not contrived data
 
+### Mock Generation (MANDATORY)
+- **ALWAYS use mockgen for interface mocks** - Never write manual mock implementations
+- **Use `//go:generate mockgen`** directive at the top of test files
+- **Pattern to follow**:
+  ```go
+  //go:generate mockgen -package=yourpkg -destination=mock_interface_test.go github.com/external/package InterfaceName
+  ```
+- **For internal interfaces**, use `-source` flag:
+  ```go
+  //go:generate mockgen -source=$GOFILE -destination=mock_$GOFILE -package=$GOPACKAGE
+  ```
+- **NEVER duplicate interface implementation** - 20+ stub methods is a sign you should use mockgen
+- Examples of mockgen usage: `pkg/git/interface.go`, `pkg/pro/interface.go`, `pkg/filesystem/interface.go`
+
+### Testing Production Code Paths (MANDATORY)
+- **ALWAYS call production code** - Never duplicate production logic in tests
+- **Tests must invoke actual functions** - Not reimplement their logic
+- **Anti-pattern example**:
+  ```go
+  // ❌ WRONG: Test duplicates production logic
+  func TestCalculateTotal(t *testing.T) {
+      items := []int{1, 2, 3}
+      total := 0
+      for _, item := range items {
+          total += item  // Duplicating production code!
+      }
+      assert.Equal(t, 6, total)
+  }
+
+  // ✅ CORRECT: Test calls production code
+  func TestCalculateTotal(t *testing.T) {
+      items := []int{1, 2, 3}
+      total := CalculateTotal(items)  // Calling production function
+      assert.Equal(t, 6, total)
+  }
+  ```
+- **If you find yourself copying production code** - you're doing it wrong
+- **Mocks should use mockgen** - not manual implementations of 20+ interface methods
+
 ### Test Skipping Conventions (MANDATORY)
 - **ALWAYS use `t.Skipf()` instead of `t.Skip()`** - Provide clear reasons for skipped tests
 - **NEVER use `t.Skipf()` without a reason**

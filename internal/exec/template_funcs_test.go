@@ -12,7 +12,30 @@ import (
 )
 
 func TestFuncMap(t *testing.T) {
-	fm := FuncMap(&schema.AtmosConfiguration{}, &schema.ConfigAndStacksInfo{}, context.TODO(), &data.Data{})
+	atmosConfig := &schema.AtmosConfiguration{}
+	configAndStacksInfo := &schema.ConfigAndStacksInfo{}
+	ctx := context.TODO()
+	gomplateData := &data.Data{}
+
+	fm := FuncMap(atmosConfig, configAndStacksInfo, ctx, gomplateData)
+
+	// Verify the function map contains expected keys.
 	keys := u.StringKeysFromMap(fm)
-	assert.Equal(t, "atmos", keys[0])
+	assert.Equal(t, 1, len(keys), "FuncMap should return exactly one key")
+	assert.Equal(t, "atmos", keys[0], "FuncMap should return 'atmos' key")
+
+	// Verify the atmos function is callable and returns AtmosFuncs.
+	atmosFunc, ok := fm["atmos"]
+	assert.True(t, ok, "FuncMap should contain 'atmos' key")
+	assert.NotNil(t, atmosFunc, "atmos function should not be nil")
+
+	// Call the function to verify it returns AtmosFuncs instance.
+	atmosFuncsInterface := atmosFunc.(func() any)()
+	atmosFuncs, ok := atmosFuncsInterface.(*AtmosFuncs)
+	assert.True(t, ok, "atmos function should return *AtmosFuncs")
+	assert.NotNil(t, atmosFuncs, "AtmosFuncs should not be nil")
+
+	// Verify AtmosFuncs has the expected configuration.
+	assert.Equal(t, atmosConfig, atmosFuncs.atmosConfig)
+	assert.Equal(t, configAndStacksInfo, atmosFuncs.configAndStacksInfo)
 }
