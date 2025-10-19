@@ -324,11 +324,12 @@ func TestFormatReleaseDetailText(t *testing.T) {
 	oldStderr := os.Stderr
 	r, w, _ := os.Pipe()
 	os.Stderr = w
+	defer func() { os.Stderr = oldStderr }()
+	defer r.Close()
 
 	err := formatReleaseDetailText(release)
 
-	w.Close()
-	os.Stderr = oldStderr
+	_ = w.Close()
 
 	var buf bytes.Buffer
 	_, _ = io.Copy(&buf, r)
@@ -499,11 +500,12 @@ func TestFormatReleaseListText_EmptyReleases(t *testing.T) {
 	oldStderr := os.Stderr
 	r, w, _ := os.Pipe()
 	os.Stderr = w
+	defer func() { os.Stderr = oldStderr }()
+	defer r.Close()
 
 	err := formatReleaseListText([]*github.RepositoryRelease{})
 
-	w.Close()
-	os.Stderr = oldStderr
+	_ = w.Close()
 
 	var buf bytes.Buffer
 	_, _ = io.Copy(&buf, r)
@@ -562,11 +564,12 @@ func TestFormatReleaseDetailText_NoAssets(t *testing.T) {
 	oldStderr := os.Stderr
 	r, w, _ := os.Pipe()
 	os.Stderr = w
+	defer func() { os.Stderr = oldStderr }()
+	defer r.Close()
 
 	err := formatReleaseDetailText(release)
 
-	w.Close()
-	os.Stderr = oldStderr
+	_ = w.Close()
 
 	var buf bytes.Buffer
 	_, _ = io.Copy(&buf, r)

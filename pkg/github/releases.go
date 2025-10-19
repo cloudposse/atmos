@@ -26,16 +26,16 @@ type ReleasesOptions struct {
 func GetLatestRelease(owner string, repo string) (string, error) {
 	defer perf.Track(nil, "github.GetLatestRelease")()
 
-	log.Debug("Fetching latest release from Github API", logFieldOwner, owner, logFieldRepo, repo)
+	log.Debug("Fetching latest release from GitHub API", logFieldOwner, owner, logFieldRepo, repo)
 
 	// Create a new GitHub client with authentication if available.
 	ctx := context.Background()
 	client := newGitHubClient(ctx)
 
 	// Get the latest release.
-	release, _, err := client.Repositories.GetLatestRelease(ctx, owner, repo)
+	release, resp, err := client.Repositories.GetLatestRelease(ctx, owner, repo)
 	if err != nil {
-		return "", err
+		return "", handleGitHubAPIError(err, resp)
 	}
 
 	if release == nil || release.TagName == nil {
@@ -102,23 +102,15 @@ func GetReleases(opts ReleasesOptions) ([]*github.RepositoryRelease, error) {
 func fetchAllReleases(ctx context.Context, client *github.Client, opts ReleasesOptions) ([]*github.RepositoryRelease, error) {
 	defer perf.Track(nil, "github.fetchAllReleases")()
 
-	// GitHub API uses per_page and page for pagination.
-	// We need to fetch enough pages to satisfy offset + limit.
 	startPage := (opts.Offset / githubAPIMaxPerPage) + 1
-	var allReleases []*github.RepositoryRelease
+	allReleases := make([]*github.RepositoryRelease, 0)
 
-	// Calculate how many pages we might need.
-	estimatedPages := ((opts.Offset + opts.Limit) / githubAPIMaxPerPage) + 2
-
-	for page := startPage; page <= startPage+estimatedPages; page++ {
-		listOpts := &github.ListOptions{
-			Page:    page,
-			PerPage: githubAPIMaxPerPage,
-		}
-
+	page := startPage
+	for {
+		listOpts := &github.ListOptions{Page: page, PerPage: githubAPIMaxPerPage}
 		releases, resp, err := client.Repositories.ListReleases(ctx, opts.Owner, opts.Repo, listOpts)
 		if err != nil {
-			// GitHub API only returns first 1000 results. If we've gone beyond that, return what we have.
+			// GitHub caps to 1000 results; treat 422 as end-of-results.
 			if resp != nil && resp.StatusCode == githubAPIStatus422 {
 				break
 			}
@@ -127,10 +119,14 @@ func fetchAllReleases(ctx context.Context, client *github.Client, opts ReleasesO
 
 		allReleases = append(allReleases, releases...)
 
-		// Stop if we have enough releases or if this is the last page.
-		if len(allReleases) >= opts.Offset+opts.Limit || resp.NextPage == 0 {
+		// Stop early only when a positive limit is satisfied.
+		if opts.Limit > 0 && len(allReleases) >= opts.Offset+opts.Limit {
 			break
 		}
+		if resp.NextPage == 0 {
+			break
+		}
+		page = resp.NextPage
 	}
 
 	return allReleases, nil

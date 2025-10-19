@@ -108,7 +108,7 @@ func fetchReleaseWithSpinner(client GitHubClient, versionArg string) (*github.Re
 
 	// Check for nil model.
 	if finalModel == nil {
-		return nil, errUtils.ErrSpinnerReturnedNilModel
+		return nil, fmt.Errorf("%w: spinner completed but returned nil model during release fetch", errUtils.ErrSpinnerReturnedNilModel)
 	}
 
 	// Get the final model with type assertion safety.
