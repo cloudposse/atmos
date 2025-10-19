@@ -598,3 +598,45 @@ func TestSAMLProvider_Logout(t *testing.T) {
 		})
 	}
 }
+
+func TestSAMLProvider_GetFilesDisplayPath(t *testing.T) {
+	tests := []struct {
+		name     string
+		config   *schema.Provider
+		expected string
+	}{
+		{
+			name: "default path with no base_path",
+			config: &schema.Provider{
+				Kind:   "aws/saml",
+				URL:    "https://idp.example.com/saml",
+				Region: "us-east-1",
+			},
+			expected: "~/.aws/atmos",
+		},
+		{
+			name: "custom base_path",
+			config: &schema.Provider{
+				Kind:   "aws/saml",
+				URL:    "https://idp.example.com/saml",
+				Region: "us-east-1",
+				Spec: map[string]interface{}{
+					"files": map[string]interface{}{
+						"base_path": "/custom/path",
+					},
+				},
+			},
+			expected: "/custom/path",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			provider, err := NewSAMLProvider("test-saml", tt.config)
+			require.NoError(t, err)
+
+			path := provider.GetFilesDisplayPath()
+			assert.Contains(t, path, tt.expected)
+		})
+	}
+}

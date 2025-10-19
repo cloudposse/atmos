@@ -128,3 +128,57 @@ func TestGetAnySetAny(t *testing.T) {
 	assert.NoError(t, s.GetAny(key, &got))
 	assert.Equal(t, demo{A: "x", B: 7}, got)
 }
+
+func TestRetrieve_InvalidJSON(t *testing.T) {
+	s := NewKeyringAuthStore()
+	// Manually store invalid JSON in keyring.
+	err := keyring.Set("invalid", KeyringUser, "not-json")
+	assert.NoError(t, err)
+
+	_, err = s.Retrieve("invalid")
+	assert.Error(t, err)
+	assert.True(t, errors.Is(err, ErrCredentialStore))
+}
+
+func TestRetrieve_UnknownType(t *testing.T) {
+	s := NewKeyringAuthStore()
+	// Store envelope with unknown credential type.
+	err := keyring.Set("unknown", KeyringUser, `{"type":"unknown","data":"{}"}`)
+	assert.NoError(t, err)
+
+	_, err = s.Retrieve("unknown")
+	assert.Error(t, err)
+	assert.True(t, errors.Is(err, ErrCredentialStore))
+	assert.Contains(t, err.Error(), "unknown credential type")
+}
+
+func TestRetrieve_MalformedData(t *testing.T) {
+	s := NewKeyringAuthStore()
+	// Store envelope with type but malformed data.
+	err := keyring.Set("malformed", KeyringUser, `{"type":"aws","data":"not-valid-json"}`)
+	assert.NoError(t, err)
+
+	_, err = s.Retrieve("malformed")
+	assert.Error(t, err)
+	assert.True(t, errors.Is(err, ErrCredentialStore))
+}
+
+func TestGetAny_MissingKey(t *testing.T) {
+	s := NewKeyringAuthStore()
+	var got struct{}
+	err := s.GetAny("non-existent", &got)
+	assert.Error(t, err)
+	assert.True(t, errors.Is(err, ErrCredentialStore))
+}
+
+func TestGetAny_InvalidJSON(t *testing.T) {
+	s := NewKeyringAuthStore()
+	// Store invalid JSON.
+	err := keyring.Set("bad-json", KeyringUser, "not-json")
+	assert.NoError(t, err)
+
+	var got struct{}
+	err = s.GetAny("bad-json", &got)
+	assert.Error(t, err)
+	assert.True(t, errors.Is(err, ErrCredentialStore))
+}

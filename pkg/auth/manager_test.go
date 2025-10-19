@@ -992,3 +992,40 @@ func TestManager_fetchCachedCredentials(t *testing.T) {
 	assert.Nil(t, retrievedCreds)
 	assert.Equal(t, 0, nextIndex)
 }
+
+func TestManager_GetFilesDisplayPath(t *testing.T) {
+	tests := []struct {
+		name         string
+		providerName string
+		provider     types.Provider
+		expected     string
+	}{
+		{
+			name:         "provider exists",
+			providerName: "test-provider",
+			provider:     &testProvider{name: "test-provider"},
+			expected:     "~/.aws/atmos",
+		},
+		{
+			name:         "provider not found",
+			providerName: "non-existent",
+			provider:     nil,
+			expected:     "~/.aws/atmos", // Default fallback
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := &manager{
+				providers: make(map[string]types.Provider),
+			}
+
+			if tt.provider != nil {
+				m.providers[tt.providerName] = tt.provider
+			}
+
+			path := m.GetFilesDisplayPath(tt.providerName)
+			assert.Equal(t, tt.expected, path)
+		})
+	}
+}

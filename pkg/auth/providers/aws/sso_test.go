@@ -299,3 +299,59 @@ func TestSSOProvider_Logout(t *testing.T) {
 		})
 	}
 }
+
+func TestSSOProvider_GetFilesDisplayPath(t *testing.T) {
+	tests := []struct {
+		name     string
+		config   *schema.Provider
+		expected string
+	}{
+		{
+			name: "default path with no base_path",
+			config: &schema.Provider{
+				Kind:     testSSOKind,
+				Region:   testRegion,
+				StartURL: testStartURL,
+			},
+			expected: "~/.aws/atmos",
+		},
+		{
+			name: "custom base_path",
+			config: &schema.Provider{
+				Kind:     testSSOKind,
+				Region:   testRegion,
+				StartURL: testStartURL,
+				Spec: map[string]interface{}{
+					"files": map[string]interface{}{
+						"base_path": "/custom/path",
+					},
+				},
+			},
+			expected: "/custom/path",
+		},
+		{
+			name: "home directory base_path",
+			config: &schema.Provider{
+				Kind:     testSSOKind,
+				Region:   testRegion,
+				StartURL: testStartURL,
+				Spec: map[string]interface{}{
+					"files": map[string]interface{}{
+						"base_path": "~/.custom/aws",
+					},
+				},
+			},
+			expected: "~/.custom/aws",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			provider, err := NewSSOProvider(testProviderName, tt.config)
+			require.NoError(t, err)
+
+			path := provider.GetFilesDisplayPath()
+			assert.Contains(t, path, tt.expected)
+		})
+	}
+}

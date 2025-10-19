@@ -276,3 +276,12 @@ func TestOIDCProvider_Logout(t *testing.T) {
 	// GitHub OIDC provider's Logout returns ErrLogoutNotSupported (exit 0).
 	assert.ErrorIs(t, err, errUtils.ErrLogoutNotSupported)
 }
+
+func TestOIDCProvider_GetFilesDisplayPath(t *testing.T) {
+	p, err := NewOIDCProvider("github-oidc", validOidcSpec())
+	require.NoError(t, err)
+
+	path := p.GetFilesDisplayPath()
+	// GitHub OIDC provider doesn't use file-based credentials.
+	assert.Equal(t, "", path)
+}

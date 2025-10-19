@@ -398,6 +398,9 @@ func TestAssumeRoleIdentity_WithoutCustomResolver(t *testing.T) {
 }
 
 func TestAssumeRoleIdentity_newSTSClient_WithResolver(t *testing.T) {
+	// This test requires AWS credentials to create an STS client.
+	tests.RequireAWSProfile(t, "cplive-core-gbl-identity")
+
 	// Test newSTSClient with custom resolver.
 	config := &schema.Identity{
 		Kind: "aws/assume-role",
@@ -436,6 +439,9 @@ func TestAssumeRoleIdentity_newSTSClient_WithResolver(t *testing.T) {
 }
 
 func TestAssumeRoleIdentity_newSTSClient_WithoutResolver(t *testing.T) {
+	// This test requires AWS credentials to create an STS client.
+	tests.RequireAWSProfile(t, "cplive-core-gbl-identity")
+
 	// Test newSTSClient without custom resolver.
 	config := &schema.Identity{
 		Kind: "aws/assume-role",
@@ -467,7 +473,10 @@ func TestAssumeRoleIdentity_newSTSClient_WithoutResolver(t *testing.T) {
 }
 
 func TestAssumeRoleIdentity_newSTSClient_RegionResolution(t *testing.T) {
-	tests := []struct {
+	// This test requires AWS credentials to create an STS client.
+	tests.RequireAWSProfile(t, "cplive-core-gbl-identity")
+
+	testCases := []struct {
 		name           string
 		identityRegion string
 		baseRegion     string
@@ -493,7 +502,7 @@ func TestAssumeRoleIdentity_newSTSClient_RegionResolution(t *testing.T) {
 		},
 	}
 
-	for _, tt := range tests {
+	for _, tt := range testCases {
 		t.Run(tt.name, func(t *testing.T) {
 			config := &schema.Identity{
 				Kind: "aws/assume-role",
