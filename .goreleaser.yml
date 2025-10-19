@@ -23,6 +23,7 @@ before:
         sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc 2>/dev/null || true
         df -h /
       fi'
+
 builds:
   - env:
       # goreleaser does not work with CGO, it could also complicate

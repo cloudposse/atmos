@@ -25,7 +25,7 @@ const (
 	varFileFlag               = "-var-file"
 	skipTerraformLockFileFlag = "--skip-lock-file"
 	forceFlag                 = "--force"
-	detailedExitCodeFlag      = "--detailed-exitcode"
+	detailedExitCodeFlag      = "-detailed-exitcode"
 	logFieldComponent         = "component"
 )
 
@@ -491,22 +491,21 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 				if err != nil {
 					// Check if it's an ExitCodeError with code 1 (workspace doesn't exist)
 					var exitCodeErr errUtils.ExitCodeError
-					if errors.As(err, &exitCodeErr) && exitCodeErr.Code == 1 {
-						// Workspace doesn't exist, try to create it
-						err = ExecuteShellCommand(
-							atmosConfig,
-							info.Command,
-							[]string{"workspace", "new", info.TerraformWorkspace},
-							componentPath,
-							info.ComponentEnvList,
-							info.DryRun,
-							info.RedirectStdErr,
-						)
-						if err != nil {
-							return err
-						}
-					} else {
+					if !errors.As(err, &exitCodeErr) || exitCodeErr.Code != 1 {
 						// Different error or different exit code
+						return err
+					}
+					// Workspace doesn't exist, try to create it
+					err = ExecuteShellCommand(
+						atmosConfig,
+						info.Command,
+						[]string{"workspace", "new", info.TerraformWorkspace},
+						componentPath,
+						info.ComponentEnvList,
+						info.DryRun,
+						info.RedirectStdErr,
+					)
+					if err != nil {
 						return err
 					}
 				}
@@ -563,11 +562,17 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 		// Compute exitCode for upload, whether or not err is set.
 		var exitCode int
 		if err != nil {
-			var osErr *osexec.ExitError
-			if errors.As(err, &osErr) {
-				exitCode = osErr.ExitCode()
+			// Prefer our typed error to preserve exit codes from subcommands.
+			var ec errUtils.ExitCodeError
+			if errors.As(err, &ec) {
+				exitCode = ec.Code
 			} else {
-				exitCode = 1
+				var osErr *osexec.ExitError
+				if errors.As(err, &osErr) {
+					exitCode = osErr.ExitCode()
+				} else {
+					exitCode = 1
+				}
 			}
 		} else {
 			exitCode = 0

@@ -212,10 +212,11 @@ func ExecuteWorkflow(
 				WorkflowErrTitle,
 				fmt.Sprintf("\n## Explanation\nThe following command failed to execute:\n```\n%s\n```\nTo resume the workflow from this step, run:\n```\n%s\n```", failedCmd, resumeCommand),
 			)
-			// Return the original error to preserve exit code.
-			// We've already printed the workflow context above.
-			// IsKnownWorkflowError now recognizes ExitCodeError as a known error.
-			return err
+			// Return joined error to preserve classification and exit-code unwrapping.
+			// Returning only the underlying err drops ErrWorkflowStepFailed from the error chain,
+			// which can hinder classification and checks. Join both so callers can use
+			// errors.Is(err, ErrWorkflowStepFailed) and still unwrap ExitCodeError for proper exit codes.
+			return errors.Join(ErrWorkflowStepFailed, err)
 		}
 	}
 
