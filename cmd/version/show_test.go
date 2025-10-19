@@ -10,7 +10,7 @@ import (
 )
 
 func TestShowCommand_Flags(t *testing.T) {
-	// Test that show command has required flags.
+	// Test that show command has the format flag.
 	formatFlag := showCmd.Flags().Lookup("format")
 	assert.NotNil(t, formatFlag)
 	assert.Equal(t, "text", formatFlag.DefValue)
