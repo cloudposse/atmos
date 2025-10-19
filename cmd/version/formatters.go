@@ -350,6 +350,8 @@ func formatReleaseListYAML(releases []*github.RepositoryRelease) error {
 }
 
 // formatReleaseDetailText outputs a single release in text format.
+//
+//nolint:unparam // error return kept for API consistency with other format functions
 func formatReleaseDetailText(release *github.RepositoryRelease) error {
 	fmt.Fprintf(os.Stderr, "Version: %s\n", release.GetTagName())
 	fmt.Fprintf(os.Stderr, "Name: %s\n", release.GetName())

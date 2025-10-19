@@ -6,7 +6,9 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/google/go-github/v59/github"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -493,4 +495,197 @@ func TestNewGitHubClientWithAtmosToken(t *testing.T) {
 		client := newGitHubClient(ctx)
 		assert.NotNil(t, client)
 	})
+}
+
+// TestFilterPrereleases tests the filterPrereleases function.
+func TestFilterPrereleases(t *testing.T) {
+	now := time.Now()
+
+	tests := []struct {
+		name        string
+		releases    []*github.RepositoryRelease
+		include     bool
+		expectedLen int
+	}{
+		{
+			name: "filters out prereleases when not included",
+			releases: []*github.RepositoryRelease{
+				{TagName: github.String("v1.0.0"), Prerelease: github.Bool(false), PublishedAt: &github.Timestamp{Time: now}},
+				{TagName: github.String("v2.0.0-beta"), Prerelease: github.Bool(true), PublishedAt: &github.Timestamp{Time: now}},
+				{TagName: github.String("v1.5.0"), Prerelease: github.Bool(false), PublishedAt: &github.Timestamp{Time: now}},
+			},
+			include:     false,
+			expectedLen: 2,
+		},
+		{
+			name: "includes prereleases when requested",
+			releases: []*github.RepositoryRelease{
+				{TagName: github.String("v1.0.0"), Prerelease: github.Bool(false), PublishedAt: &github.Timestamp{Time: now}},
+				{TagName: github.String("v2.0.0-beta"), Prerelease: github.Bool(true), PublishedAt: &github.Timestamp{Time: now}},
+			},
+			include:     true,
+			expectedLen: 2,
+		},
+		{
+			name:        "handles empty slice",
+			releases:    []*github.RepositoryRelease{},
+			include:     false,
+			expectedLen: 0,
+		},
+		{
+			name: "handles all prereleases",
+			releases: []*github.RepositoryRelease{
+				{TagName: github.String("v2.0.0-alpha"), Prerelease: github.Bool(true), PublishedAt: &github.Timestamp{Time: now}},
+				{TagName: github.String("v2.0.0-beta"), Prerelease: github.Bool(true), PublishedAt: &github.Timestamp{Time: now}},
+			},
+			include:     false,
+			expectedLen: 0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := filterPrereleases(tt.releases, tt.include)
+			assert.Len(t, result, tt.expectedLen)
+
+			// Verify no prereleases when not included.
+			if !tt.include {
+				for _, release := range result {
+					assert.False(t, release.GetPrerelease(), "Should not contain prereleases")
+				}
+			}
+		})
+	}
+}
+
+// TestFilterByDate tests the filterByDate function.
+func TestFilterByDate(t *testing.T) {
+	baseTime := time.Date(2025, 1, 15, 0, 0, 0, 0, time.UTC)
+	beforeTime := baseTime.Add(-24 * time.Hour)
+	afterTime := baseTime.Add(24 * time.Hour)
+
+	tests := []struct {
+		name        string
+		releases    []*github.RepositoryRelease
+		since       *time.Time
+		expectedLen int
+	}{
+		{
+			name: "filters releases before since date",
+			releases: []*github.RepositoryRelease{
+				{TagName: github.String("v1.0.0"), PublishedAt: &github.Timestamp{Time: beforeTime}},
+				{TagName: github.String("v2.0.0"), PublishedAt: &github.Timestamp{Time: baseTime}},
+				{TagName: github.String("v3.0.0"), PublishedAt: &github.Timestamp{Time: afterTime}},
+			},
+			since:       &baseTime,
+			expectedLen: 2, // baseTime and afterTime
+		},
+		{
+			name: "includes releases on exact since date",
+			releases: []*github.RepositoryRelease{
+				{TagName: github.String("v1.0.0"), PublishedAt: &github.Timestamp{Time: beforeTime}},
+				{TagName: github.String("v2.0.0"), PublishedAt: &github.Timestamp{Time: baseTime}},
+			},
+			since:       &baseTime,
+			expectedLen: 1, // Only baseTime
+		},
+		{
+			name: "returns all when since is nil",
+			releases: []*github.RepositoryRelease{
+				{TagName: github.String("v1.0.0"), PublishedAt: &github.Timestamp{Time: beforeTime}},
+				{TagName: github.String("v2.0.0"), PublishedAt: &github.Timestamp{Time: afterTime}},
+			},
+			since:       nil,
+			expectedLen: 2,
+		},
+		{
+			name:        "handles empty slice",
+			releases:    []*github.RepositoryRelease{},
+			since:       &baseTime,
+			expectedLen: 0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := filterByDate(tt.releases, tt.since)
+			assert.Len(t, result, tt.expectedLen)
+
+			// Verify all releases are after or equal to since date.
+			if tt.since != nil {
+				for _, release := range result {
+					publishedAt := release.GetPublishedAt().Time
+					assert.True(t, publishedAt.After(*tt.since) || publishedAt.Equal(*tt.since),
+						"Release %s published at %v should be after or equal to %v",
+						release.GetTagName(), publishedAt, *tt.since)
+				}
+			}
+		})
+	}
+}
+
+// TestApplyPagination tests the applyPagination function.
+func TestApplyPagination(t *testing.T) {
+	now := time.Now()
+	releases := []*github.RepositoryRelease{
+		{TagName: github.String("v1.0.0"), PublishedAt: &github.Timestamp{Time: now}},
+		{TagName: github.String("v1.1.0"), PublishedAt: &github.Timestamp{Time: now}},
+		{TagName: github.String("v1.2.0"), PublishedAt: &github.Timestamp{Time: now}},
+		{TagName: github.String("v1.3.0"), PublishedAt: &github.Timestamp{Time: now}},
+		{TagName: github.String("v1.4.0"), PublishedAt: &github.Timestamp{Time: now}},
+	}
+
+	tests := []struct {
+		name        string
+		offset      int
+		limit       int
+		expectedLen int
+		expectedTag string // Tag of first element
+	}{
+		{
+			name:        "normal pagination",
+			offset:      0,
+			limit:       3,
+			expectedLen: 3,
+			expectedTag: "v1.0.0",
+		},
+		{
+			name:        "pagination with offset",
+			offset:      2,
+			limit:       2,
+			expectedLen: 2,
+			expectedTag: "v1.2.0",
+		},
+		{
+			name:        "offset exceeds length",
+			offset:      10,
+			limit:       5,
+			expectedLen: 0,
+			expectedTag: "",
+		},
+		{
+			name:        "limit exceeds remaining items",
+			offset:      3,
+			limit:       10,
+			expectedLen: 2, // Only 2 items left after offset 3
+			expectedTag: "v1.3.0",
+		},
+		{
+			name:        "zero limit",
+			offset:      0,
+			limit:       0,
+			expectedLen: 0,
+			expectedTag: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := applyPagination(releases, tt.offset, tt.limit)
+			assert.Len(t, result, tt.expectedLen)
+			if tt.expectedLen > 0 {
+				assert.Equal(t, tt.expectedTag, result[0].GetTagName())
+			}
+		})
+	}
 }

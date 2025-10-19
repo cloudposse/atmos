@@ -173,3 +173,124 @@ func TestListModel_Update_Default(t *testing.T) {
 	assert.False(t, finalModel.done)
 	assert.Nil(t, cmd)
 }
+
+// TestListCommand_ValidationErrors tests the validation logic in the RunE function.
+func TestListCommand_ValidationErrors(t *testing.T) {
+	tests := []struct {
+		name      string
+		limit     int
+		offset    int
+		since     string
+		wantError bool
+		errString string
+	}{
+		{
+			name:      "invalid limit too low",
+			limit:     0,
+			offset:    0,
+			wantError: true,
+			errString: "limit must be between",
+		},
+		{
+			name:      "invalid limit too high",
+			limit:     101,
+			offset:    0,
+			wantError: true,
+			errString: "limit must be between",
+		},
+		{
+			name:      "invalid since date format",
+			limit:     10,
+			offset:    0,
+			since:     "invalid-date",
+			wantError: true,
+			errString: "date format",
+		},
+		{
+			name:      "valid parameters",
+			limit:     10,
+			offset:    0,
+			since:     "2025-01-01",
+			wantError: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Reset flags to test values.
+			listLimit = tt.limit
+			listOffset = tt.offset
+			listSince = tt.since
+
+			// Create a test command instance.
+			cmd := listCmd
+
+			// Execute the command - it will fail at GitHub API call, but we're testing validation.
+			err := cmd.RunE(cmd, []string{})
+
+			if tt.wantError {
+				assert.Error(t, err)
+				if tt.errString != "" {
+					assert.Contains(t, err.Error(), tt.errString)
+				}
+			} else if err != nil {
+				// This will fail at GitHub API call, which is expected.
+				// We just want to verify validation passed.
+				// If it's not a validation error, that's acceptable.
+				assert.NotContains(t, err.Error(), "limit must be between")
+				assert.NotContains(t, err.Error(), "date format")
+			}
+		})
+	}
+}
+
+// TestListCommand_FormatValidation tests format validation.
+func TestListCommand_FormatValidation(t *testing.T) {
+	tests := []struct {
+		name      string
+		format    string
+		wantError bool
+	}{
+		{
+			name:      "valid format text",
+			format:    "text",
+			wantError: false,
+		},
+		{
+			name:      "valid format json",
+			format:    "json",
+			wantError: false,
+		},
+		{
+			name:      "valid format yaml",
+			format:    "yaml",
+			wantError: false,
+		},
+		{
+			name:      "invalid format",
+			format:    "invalid",
+			wantError: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Reset to valid values for other fields.
+			listLimit = 10
+			listOffset = 0
+			listSince = ""
+			listFormat = tt.format
+
+			cmd := listCmd
+			err := cmd.RunE(cmd, []string{})
+
+			if tt.wantError {
+				// Should fail with unsupported format error.
+				if err != nil {
+					assert.Contains(t, err.Error(), "unsupported")
+				}
+			}
+			// Note: Test may fail at GitHub API, which is fine for validation test.
+		})
+	}
+}

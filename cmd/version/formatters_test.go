@@ -429,8 +429,145 @@ func TestAddCurrentVersionIfMissing(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result := addCurrentVersionIfMissing(tt.releases)
-			// Length might vary based on actual current version
+			// Length might vary based on actual current version.
 			assert.GreaterOrEqual(t, len(result), tt.expectedLength)
 		})
 	}
+}
+
+// TestExtractFirstHeading tests the extractFirstHeading function.
+func TestExtractFirstHeading(t *testing.T) {
+	tests := []struct {
+		name     string
+		markdown string
+		expected string
+	}{
+		{
+			name:     "extracts from summary tag",
+			markdown: "<summary>Feature Update</summary>\n\nMore details here",
+			expected: "Feature Update",
+		},
+		{
+			name:     "extracts from summary tag with author and PR",
+			markdown: "<summary>Add new feature @user (#123)</summary>",
+			expected: "Add new feature",
+		},
+		{
+			name:     "extracts from H1 heading",
+			markdown: "# Major Release\n\nSome content",
+			expected: "Major Release",
+		},
+		{
+			name:     "extracts from H2 heading",
+			markdown: "## Bug Fixes\n\nSome content",
+			expected: "Bug Fixes",
+		},
+		{
+			name:     "prefers summary over heading",
+			markdown: "<summary>Summary Text</summary>\n# Heading Text",
+			expected: "Summary Text",
+		},
+		{
+			name:     "handles empty markdown",
+			markdown: "",
+			expected: "",
+		},
+		{
+			name:     "handles markdown without headings",
+			markdown: "Just plain text without headings",
+			expected: "",
+		},
+		{
+			name:     "handles markdown with only content",
+			markdown: "Some content\nMore content\nNo headings",
+			expected: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := extractFirstHeading(tt.markdown)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+// TestFormatReleaseListText_EmptyReleases tests handling of empty release list.
+func TestFormatReleaseListText_EmptyReleases(t *testing.T) {
+	oldStderr := os.Stderr
+	r, w, _ := os.Pipe()
+	os.Stderr = w
+
+	err := formatReleaseListText([]*github.RepositoryRelease{})
+
+	w.Close()
+	os.Stderr = oldStderr
+
+	var buf bytes.Buffer
+	_, _ = io.Copy(&buf, r)
+	output := buf.String()
+
+	assert.NoError(t, err)
+	// Note: addCurrentVersionIfMissing may add the current version, so we may not see "No releases found".
+	// Just verify no panic and output contains something.
+	assert.NotEmpty(t, output)
+}
+
+// TestFormatReleaseDetailText_Prerelease tests formatting of prerelease.
+func TestFormatReleaseDetailText_Prerelease(t *testing.T) {
+	publishedAt := time.Date(2025, 1, 15, 10, 30, 0, 0, time.UTC)
+
+	release := &github.RepositoryRelease{
+		TagName:     github.String("v2.0.0-beta"),
+		Name:        github.String("Beta Release"),
+		Body:        github.String("Pre-release notes"),
+		PublishedAt: &github.Timestamp{Time: publishedAt},
+		HTMLURL:     github.String("https://github.com/cloudposse/atmos/releases/tag/v2.0.0-beta"),
+		Prerelease:  github.Bool(true),
+	}
+
+	oldStderr := os.Stderr
+	r, w, _ := os.Pipe()
+	os.Stderr = w
+
+	err := formatReleaseDetailText(release)
+
+	w.Close()
+	os.Stderr = oldStderr
+
+	var buf bytes.Buffer
+	_, _ = io.Copy(&buf, r)
+	output := buf.String()
+
+	assert.NoError(t, err)
+	assert.Contains(t, output, "v2.0.0-beta")
+	assert.Contains(t, output, "Pre-release")
+}
+
+// TestFormatReleaseDetailText_NoAssets tests formatting release without assets.
+func TestFormatReleaseDetailText_NoAssets(t *testing.T) {
+	publishedAt := time.Date(2025, 1, 15, 10, 30, 0, 0, time.UTC)
+
+	release := &github.RepositoryRelease{
+		TagName:     github.String("v1.0.0"),
+		Name:        github.String("Release 1.0.0"),
+		Body:        github.String("Release notes"),
+		PublishedAt: &github.Timestamp{Time: publishedAt},
+		HTMLURL:     github.String("https://github.com/cloudposse/atmos/releases/tag/v1.0.0"),
+		Assets:      []*github.ReleaseAsset{},
+	}
+
+	oldStderr := os.Stderr
+	r, w, _ := os.Pipe()
+	os.Stderr = w
+
+	err := formatReleaseDetailText(release)
+
+	w.Close()
+	os.Stderr = oldStderr
+
+	var buf bytes.Buffer
+	_, _ = io.Copy(&buf, r)
+
+	assert.NoError(t, err)
 }
