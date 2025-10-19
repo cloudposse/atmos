@@ -29,7 +29,7 @@ repos:
       - id: golangci-lint
         name: golangci-lint
         description: Run golangci-lint on modified Go files (requires pre-built custom-gcl binary)
-        entry: scripts/check-custom-gcl.sh
+        entry: scripts/run-custom-golangci-lint.sh
         language: system
         types: [go]
         pass_filenames: false

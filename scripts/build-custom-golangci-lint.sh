@@ -1,25 +1,13 @@
 #!/usr/bin/env bash
+# Build custom golangci-lint binary with lintroller plugin.
+# This creates ./custom-gcl binary in the project root.
+
 set -e
 
 echo "Building custom golangci-lint binary with lintroller plugin..."
 
-# Create temporary directory for isolated build
-TMPDIR=$(mktemp -d)
-echo "Using temporary build directory: $TMPDIR"
+# Build directly in project root using golangci-lint custom command.
+# Disable VCS stamping to prevent issues when building.
+GOFLAGS="-buildvcs=false" golangci-lint custom
 
-# Copy required files to temporary directory
-cp .custom-gcl.yml "$TMPDIR/"
-cp -r tools "$TMPDIR/"
-
-# Build in temporary directory
-cd "$TMPDIR"
-golangci-lint custom
-
-# Move binary back to original directory
-mv ./custom-gcl "$OLDPWD/custom-gcl"
-
-# Clean up
-cd "$OLDPWD"
-rm -rf "$TMPDIR"
-
-echo "Custom golangci-lint binary built successfully"
+echo "Custom golangci-lint binary built successfully: ./custom-gcl"
