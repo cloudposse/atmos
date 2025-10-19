@@ -149,6 +149,12 @@ var listCmd = &cobra.Command{
 			return fmt.Errorf("%w: got %d", errUtils.ErrInvalidOffset, listOffset)
 		}
 
+		// Validate format.
+		normalizedFormat := strings.ToLower(listFormat)
+		if normalizedFormat != "text" && normalizedFormat != "json" && normalizedFormat != "yaml" {
+			return fmt.Errorf("%w: %s (supported: text, json, yaml)", errUtils.ErrUnsupportedOutputFormat, listFormat)
+		}
+
 		// Parse since date if provided.
 		var sinceTime *time.Time
 		if listSince != "" {
@@ -174,7 +180,7 @@ var listCmd = &cobra.Command{
 		}
 
 		// Format output.
-		switch strings.ToLower(listFormat) {
+		switch normalizedFormat {
 		case "text":
 			return formatReleaseListText(releases)
 		case "json":
