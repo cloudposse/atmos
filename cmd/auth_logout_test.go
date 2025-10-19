@@ -29,7 +29,7 @@ func TestPerformIdentityLogout(t *testing.T) {
 			dryRun:       false,
 			setupMocks: func(m *types.MockAuthManager) {
 				m.EXPECT().GetIdentities().Return(map[string]schema.Identity{
-					"test-identity": schema.Identity{},
+					"test-identity": {},
 				})
 				m.EXPECT().GetProviderForIdentity("test-identity").Return("test-provider")
 				m.EXPECT().Logout(gomock.Any(), "test-identity").Return(nil)
@@ -42,7 +42,7 @@ func TestPerformIdentityLogout(t *testing.T) {
 			dryRun:       false,
 			setupMocks: func(m *types.MockAuthManager) {
 				m.EXPECT().GetIdentities().Return(map[string]schema.Identity{
-					"other-identity": schema.Identity{},
+					"other-identity": {},
 				})
 			},
 			expectedError: errUtils.ErrIdentityNotInConfig,
@@ -53,7 +53,7 @@ func TestPerformIdentityLogout(t *testing.T) {
 			dryRun:       true,
 			setupMocks: func(m *types.MockAuthManager) {
 				m.EXPECT().GetIdentities().Return(map[string]schema.Identity{
-					"test-identity": schema.Identity{},
+					"test-identity": {},
 				})
 				m.EXPECT().GetProviderForIdentity("test-identity").Return("test-provider")
 				m.EXPECT().GetFilesDisplayPath("test-provider").Return("/home/user/.aws/atmos")
@@ -66,7 +66,7 @@ func TestPerformIdentityLogout(t *testing.T) {
 			dryRun:       false,
 			setupMocks: func(m *types.MockAuthManager) {
 				m.EXPECT().GetIdentities().Return(map[string]schema.Identity{
-					"test-identity": schema.Identity{},
+					"test-identity": {},
 				})
 				m.EXPECT().GetProviderForIdentity("test-identity").Return("test-provider")
 				m.EXPECT().Logout(gomock.Any(), "test-identity").Return(errUtils.ErrPartialLogout)
@@ -79,7 +79,7 @@ func TestPerformIdentityLogout(t *testing.T) {
 			dryRun:       false,
 			setupMocks: func(m *types.MockAuthManager) {
 				m.EXPECT().GetIdentities().Return(map[string]schema.Identity{
-					"test-identity": schema.Identity{},
+					"test-identity": {},
 				})
 				m.EXPECT().GetProviderForIdentity("test-identity").Return("test-provider")
 				m.EXPECT().Logout(gomock.Any(), "test-identity").Return(errUtils.ErrLogoutFailed)
@@ -92,7 +92,7 @@ func TestPerformIdentityLogout(t *testing.T) {
 			dryRun:       true,
 			setupMocks: func(m *types.MockAuthManager) {
 				m.EXPECT().GetIdentities().Return(map[string]schema.Identity{
-					"test-identity": schema.Identity{},
+					"test-identity": {},
 				})
 				m.EXPECT().GetProviderForIdentity("test-identity").Return("")
 			},
@@ -135,7 +135,7 @@ func TestPerformProviderLogout(t *testing.T) {
 			dryRun:       false,
 			setupMocks: func(m *types.MockAuthManager) {
 				m.EXPECT().GetProviders().Return(map[string]schema.Provider{
-					"test-provider": schema.Provider{},
+					"test-provider": {},
 				})
 				m.EXPECT().LogoutProvider(gomock.Any(), "test-provider").Return(nil)
 			},
@@ -147,7 +147,7 @@ func TestPerformProviderLogout(t *testing.T) {
 			dryRun:       false,
 			setupMocks: func(m *types.MockAuthManager) {
 				m.EXPECT().GetProviders().Return(map[string]schema.Provider{
-					"other-provider": schema.Provider{},
+					"other-provider": {},
 				})
 			},
 			expectedError: errUtils.ErrProviderNotInConfig,
@@ -158,7 +158,7 @@ func TestPerformProviderLogout(t *testing.T) {
 			dryRun:       true,
 			setupMocks: func(m *types.MockAuthManager) {
 				m.EXPECT().GetProviders().Return(map[string]schema.Provider{
-					"test-provider": schema.Provider{},
+					"test-provider": {},
 				})
 				m.EXPECT().GetFilesDisplayPath("test-provider").Return("/home/user/.aws/atmos")
 			},
@@ -170,7 +170,7 @@ func TestPerformProviderLogout(t *testing.T) {
 			dryRun:       false,
 			setupMocks: func(m *types.MockAuthManager) {
 				m.EXPECT().GetProviders().Return(map[string]schema.Provider{
-					"test-provider": schema.Provider{},
+					"test-provider": {},
 				})
 				m.EXPECT().LogoutProvider(gomock.Any(), "test-provider").Return(errUtils.ErrPartialLogout)
 			},
@@ -182,7 +182,7 @@ func TestPerformProviderLogout(t *testing.T) {
 			dryRun:       false,
 			setupMocks: func(m *types.MockAuthManager) {
 				m.EXPECT().GetProviders().Return(map[string]schema.Provider{
-					"test-provider": schema.Provider{},
+					"test-provider": {},
 				})
 				m.EXPECT().LogoutProvider(gomock.Any(), "test-provider").Return(errUtils.ErrLogoutFailed)
 			},
@@ -231,8 +231,8 @@ func TestPerformLogoutAll(t *testing.T) {
 			dryRun: true,
 			setupMocks: func(m *types.MockAuthManager) {
 				m.EXPECT().GetProviders().Return(map[string]schema.Provider{
-					"provider1": schema.Provider{},
-					"provider2": schema.Provider{},
+					"provider1": {},
+					"provider2": {},
 				})
 				m.EXPECT().GetFilesDisplayPath("provider1").Return("/home/user/.aws/atmos")
 				m.EXPECT().GetFilesDisplayPath("provider2").Return("/home/user/.aws/atmos")

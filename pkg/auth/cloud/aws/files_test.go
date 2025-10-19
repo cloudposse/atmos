@@ -99,10 +99,10 @@ func TestAWSFileManager_PathsEnvCleanup(t *testing.T) {
 
 func TestAWSFileManager_CleanupIdentity(t *testing.T) {
 	tests := []struct {
-		name              string
-		setupCredentials  func(*AWSFileManager)
-		providerName      string
-		identityName      string
+		name               string
+		setupCredentials   func(*AWSFileManager)
+		providerName       string
+		identityName       string
 		verifyAfterCleanup func(*testing.T, *AWSFileManager)
 	}{
 		{
@@ -310,4 +310,3 @@ func TestAWSFileManager_RemoveIniSection(t *testing.T) {
 		})
 	}
 }
-
