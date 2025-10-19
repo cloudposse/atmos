@@ -71,7 +71,7 @@ atmos auth list --providers
 
 Understand complex authentication flows at a glance. Chains show the complete path from provider to target identity:
 
-```
+```text
 aws-sso → base-role → admin-role → prod-account
 ```
 
@@ -82,7 +82,8 @@ This makes it immediately clear:
 
 ### 🎯 Real-World Examples
 
-**Quick Overview**
+#### Quick Overview
+
 ```shell
 $ atmos auth list
 
@@ -98,7 +99,8 @@ developer  aws/assume-role   aws-sso                              dev
 ops        aws/assume-role   aws-sso       admin                  ops-admin
 ```
 
-**Detailed Tree View**
+#### Detailed Tree View
+
 ```shell
 $ atmos auth list --format tree --identities
 
@@ -120,7 +122,8 @@ Identities
       └─ arn: arn:aws:iam::987654321098:role/OpsRole
 ```
 
-**Automation Integration**
+#### Automation Integration
+
 ```shell
 # Export to JSON for CI/CD validation
 atmos auth list --format json | jq -r '.providers | keys[]'
