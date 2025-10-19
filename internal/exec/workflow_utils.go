@@ -45,7 +45,15 @@ var (
 )
 
 // IsKnownWorkflowError returns true if the error matches any known workflow error.
+// This includes ExitCodeError which indicates a subcommand failure that's already been reported.
 func IsKnownWorkflowError(err error) bool {
+	// Check if it's an ExitCodeError - these are already reported by the subcommand
+	var exitCodeErr errUtils.ExitCodeError
+	if errors.As(err, &exitCodeErr) {
+		return true
+	}
+
+	// Check known workflow errors
 	for _, knownErr := range KnownWorkflowErrors {
 		if errors.Is(err, knownErr) {
 			return true
@@ -204,8 +212,10 @@ func ExecuteWorkflow(
 				WorkflowErrTitle,
 				fmt.Sprintf("\n## Explanation\nThe following command failed to execute:\n```\n%s\n```\nTo resume the workflow from this step, run:\n```\n%s\n```", failedCmd, resumeCommand),
 			)
-			// Join errors to preserve both the workflow context and the exit code
-			return errors.Join(ErrWorkflowStepFailed, err)
+			// Return the original error to preserve exit code.
+			// We've already printed the workflow context above.
+			// IsKnownWorkflowError now recognizes ExitCodeError as a known error.
+			return err
 		}
 	}
 
