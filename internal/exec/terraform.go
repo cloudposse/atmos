@@ -489,22 +489,24 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 					workspaceSelectRedirectStdErr,
 				)
 				if err != nil {
-					var osErr *osexec.ExitError
-					ok := errors.As(err, &osErr)
-					if !ok || osErr.ExitCode() != 1 {
-						// err is not a non-zero exit code or err is not exit code 1, which we are expecting.
-						return err
-					}
-					err = ExecuteShellCommand(
-						atmosConfig,
-						info.Command,
-						[]string{"workspace", "new", info.TerraformWorkspace},
-						componentPath,
-						info.ComponentEnvList,
-						info.DryRun,
-						info.RedirectStdErr,
-					)
-					if err != nil {
+					// Check if it's an ExitCodeError with code 1 (workspace doesn't exist)
+					var exitCodeErr errUtils.ExitCodeError
+					if errors.As(err, &exitCodeErr) && exitCodeErr.Code == 1 {
+						// Workspace doesn't exist, try to create it
+						err = ExecuteShellCommand(
+							atmosConfig,
+							info.Command,
+							[]string{"workspace", "new", info.TerraformWorkspace},
+							componentPath,
+							info.ComponentEnvList,
+							info.DryRun,
+							info.RedirectStdErr,
+						)
+						if err != nil {
+							return err
+						}
+					} else {
+						// Different error or different exit code
 						return err
 					}
 				}
