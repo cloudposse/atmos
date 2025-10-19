@@ -175,7 +175,7 @@ Together, these commands provide a complete authentication workflow from discove
 
 ## Get Started
 
-`atmos auth list` is available in Atmos `v1.x.x` and later. To get started:
+`atmos auth list` is available in Atmos `v1.195.0` and later. To get started:
 
 1. **Upgrade Atmos** to the latest version
 2. **List your configuration**: Run `atmos auth list`
