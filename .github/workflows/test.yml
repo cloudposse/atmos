@@ -50,7 +50,7 @@ jobs:
           - { os: macos-latest, target: macos }
     steps:
       - name: Test
-        run: echo "${{ fromJson(needs.runners-config.outputs.runners-config) }}"
+        run: echo "${{ fromJson(fromJson(needs.runners-config.outputs.runners-config)[matrix.flavor.os]) }}"
 
   # ensure the code builds...
   build:
