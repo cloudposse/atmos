@@ -580,6 +580,12 @@ func TestFileKeyring_CorruptedData(t *testing.T) {
 }
 
 func TestFileKeyring_EmptyConfig(t *testing.T) {
+	// Create temporary directory for hermetic test.
+	tempHome := t.TempDir()
+	t.Setenv("HOME", tempHome)
+	if runtime.GOOS == "windows" {
+		t.Setenv("USERPROFILE", tempHome)
+	}
 	t.Setenv("ATMOS_KEYRING_PASSWORD", "test-password-12345")
 
 	// Create store with nil authConfig (should use defaults).
@@ -587,9 +593,8 @@ func TestFileKeyring_EmptyConfig(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotNil(t, store)
 
-	// Should have default path.
-	homeDir, _ := os.UserHomeDir()
-	expectedPath := filepath.Join(homeDir, ".atmos", "keyring")
+	// Should have default path based on temp home.
+	expectedPath := filepath.Join(tempHome, ".atmos", "keyring")
 	assert.Equal(t, expectedPath, store.path)
 }
 

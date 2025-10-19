@@ -114,7 +114,7 @@ func createPasswordPrompt(passwordEnv string) keyring.PromptFunc {
 				),
 			).Run()
 			if err != nil {
-				return "", fmt.Errorf("password prompt failed: %v", err)
+				return "", fmt.Errorf("password prompt failed: %w", err)
 			}
 
 			return password, nil
