@@ -2,7 +2,6 @@ package errors
 
 import (
 	"errors"
-	"fmt"
 )
 
 var (
@@ -392,5 +391,5 @@ type ExitCodeError struct {
 }
 
 func (e ExitCodeError) Error() string {
-	return fmt.Sprintf("subcommand exited with code %d", e.Code)
+	return "workflow step execution failed"
 }
