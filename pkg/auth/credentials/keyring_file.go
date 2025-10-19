@@ -12,6 +12,7 @@ import (
 	"golang.org/x/term"
 
 	"github.com/cloudposse/atmos/pkg/auth/types"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -23,6 +24,8 @@ type fileKeyringStore struct {
 
 // newFileKeyringStore creates a new file-based keyring store with encryption.
 func newFileKeyringStore(authConfig *schema.AuthConfig) (*fileKeyringStore, error) {
+	defer perf.Track(nil, "credentials.newFileKeyringStore")()
+
 	var path string
 	var passwordEnv string
 
@@ -40,7 +43,7 @@ func newFileKeyringStore(authConfig *schema.AuthConfig) (*fileKeyringStore, erro
 	if path == "" {
 		homeDir, err := os.UserHomeDir()
 		if err != nil {
-			return nil, fmt.Errorf("%w: failed to get user home directory: %v", ErrCredentialStore, err)
+			return nil, errors.Join(ErrCredentialStore, fmt.Errorf("failed to get user home directory: %w", err))
 		}
 		path = filepath.Join(homeDir, ".atmos", "keyring")
 	}
@@ -53,7 +56,7 @@ func newFileKeyringStore(authConfig *schema.AuthConfig) (*fileKeyringStore, erro
 	// Ensure directory exists with proper permissions.
 	dir := filepath.Dir(path)
 	if err := os.MkdirAll(dir, 0o700); err != nil {
-		return nil, fmt.Errorf("%w: failed to create keyring directory: %v", ErrCredentialStore, err)
+		return nil, errors.Join(ErrCredentialStore, fmt.Errorf("failed to create keyring directory: %w", err))
 	}
 
 	// Create password prompt function.
@@ -75,7 +78,7 @@ func newFileKeyringStore(authConfig *schema.AuthConfig) (*fileKeyringStore, erro
 	// Open keyring.
 	ring, err := keyring.Open(cfg)
 	if err != nil {
-		return nil, fmt.Errorf("%w: failed to open file keyring: %v", ErrCredentialStore, err)
+		return nil, errors.Join(ErrCredentialStore, fmt.Errorf("failed to open file keyring: %w", err))
 	}
 
 	return &fileKeyringStore{
@@ -138,16 +141,16 @@ func (s *fileKeyringStore) Store(alias string, creds types.ICredentials) error {
 		typ = "oidc"
 		raw, err = json.Marshal(c)
 	default:
-		return fmt.Errorf("%w: unsupported credential type %T", ErrCredentialStore, creds)
+		return errors.Join(ErrCredentialStore, fmt.Errorf("unsupported credential type %T", creds))
 	}
 	if err != nil {
-		return errors.Join(ErrCredentialStore, err)
+		return errors.Join(ErrCredentialStore, fmt.Errorf("failed to marshal credentials: %w", err))
 	}
 
 	env := credentialEnvelope{Type: typ, Data: raw}
 	data, err := json.Marshal(&env)
 	if err != nil {
-		return fmt.Errorf("%w: failed to marshal credentials: %v", ErrCredentialStore, err)
+		return errors.Join(ErrCredentialStore, fmt.Errorf("failed to marshal credentials: %w", err))
 	}
 
 	// Store in keyring.
@@ -155,7 +158,7 @@ func (s *fileKeyringStore) Store(alias string, creds types.ICredentials) error {
 		Key:  alias,
 		Data: data,
 	}); err != nil {
-		return fmt.Errorf("%w: failed to store credentials in file keyring: %v", ErrCredentialStore, err)
+		return errors.Join(ErrCredentialStore, fmt.Errorf("failed to store credentials in file keyring: %w", err))
 	}
 
 	return nil
@@ -165,36 +168,36 @@ func (s *fileKeyringStore) Store(alias string, creds types.ICredentials) error {
 func (s *fileKeyringStore) Retrieve(alias string) (types.ICredentials, error) {
 	item, err := s.ring.Get(alias)
 	if err != nil {
-		return nil, fmt.Errorf("%w: failed to retrieve credentials from file keyring: %v", ErrCredentialStore, err)
+		return nil, errors.Join(ErrCredentialStore, fmt.Errorf("failed to retrieve credentials from file keyring: %w", err))
 	}
 
 	var env credentialEnvelope
 	if err := json.Unmarshal(item.Data, &env); err != nil {
-		return nil, fmt.Errorf("%w: failed to unmarshal credential envelope: %v", ErrCredentialStore, err)
+		return nil, errors.Join(ErrCredentialStore, fmt.Errorf("failed to unmarshal credential envelope: %w", err))
 	}
 
 	switch env.Type {
 	case "aws":
 		var c types.AWSCredentials
 		if err := json.Unmarshal(env.Data, &c); err != nil {
-			return nil, fmt.Errorf("%w: failed to unmarshal AWS credentials: %v", ErrCredentialStore, err)
+			return nil, errors.Join(ErrCredentialStore, fmt.Errorf("failed to unmarshal AWS credentials: %w", err))
 		}
 		return &c, nil
 	case "oidc":
 		var c types.OIDCCredentials
 		if err := json.Unmarshal(env.Data, &c); err != nil {
-			return nil, fmt.Errorf("%w: failed to unmarshal OIDC credentials: %v", ErrCredentialStore, err)
+			return nil, errors.Join(ErrCredentialStore, fmt.Errorf("failed to unmarshal OIDC credentials: %w", err))
 		}
 		return &c, nil
 	default:
-		return nil, fmt.Errorf("%w: unknown credential type %q", ErrCredentialStore, env.Type)
+		return nil, errors.Join(ErrCredentialStore, fmt.Errorf("unknown credential type %q", env.Type))
 	}
 }
 
 // Delete deletes credentials for the given alias.
 func (s *fileKeyringStore) Delete(alias string) error {
 	if err := s.ring.Remove(alias); err != nil {
-		return fmt.Errorf("%w: failed to delete credentials from file keyring: %v", ErrCredentialStore, err)
+		return errors.Join(ErrCredentialStore, fmt.Errorf("failed to delete credentials from file keyring: %w", err))
 	}
 
 	return nil
@@ -204,7 +207,7 @@ func (s *fileKeyringStore) Delete(alias string) error {
 func (s *fileKeyringStore) List() ([]string, error) {
 	keys, err := s.ring.Keys()
 	if err != nil {
-		return nil, fmt.Errorf("%w: failed to list credentials from file keyring: %v", ErrCredentialStore, err)
+		return nil, errors.Join(ErrCredentialStore, fmt.Errorf("failed to list credentials from file keyring: %w", err))
 	}
 
 	return keys, nil
@@ -224,11 +227,11 @@ func (s *fileKeyringStore) IsExpired(alias string) (bool, error) {
 func (s *fileKeyringStore) GetAny(key string, dest interface{}) error {
 	item, err := s.ring.Get(key)
 	if err != nil {
-		return fmt.Errorf("%w: failed to retrieve data from file keyring: %v", ErrCredentialStore, err)
+		return errors.Join(ErrCredentialStore, fmt.Errorf("failed to retrieve data from file keyring: %w", err))
 	}
 
 	if err := json.Unmarshal(item.Data, dest); err != nil {
-		return fmt.Errorf("%w: failed to unmarshal data: %v", ErrCredentialStore, err)
+		return errors.Join(ErrCredentialStore, fmt.Errorf("failed to unmarshal data: %w", err))
 	}
 
 	return nil
@@ -238,14 +241,14 @@ func (s *fileKeyringStore) GetAny(key string, dest interface{}) error {
 func (s *fileKeyringStore) SetAny(key string, value interface{}) error {
 	data, err := json.Marshal(value)
 	if err != nil {
-		return fmt.Errorf("%w: failed to marshal data: %v", ErrCredentialStore, err)
+		return errors.Join(ErrCredentialStore, fmt.Errorf("failed to marshal data: %w", err))
 	}
 
 	if err := s.ring.Set(keyring.Item{
 		Key:  key,
 		Data: data,
 	}); err != nil {
-		return fmt.Errorf("%w: failed to store data in file keyring: %v", ErrCredentialStore, err)
+		return errors.Join(ErrCredentialStore, fmt.Errorf("failed to store data in file keyring: %w", err))
 	}
 
 	return nil

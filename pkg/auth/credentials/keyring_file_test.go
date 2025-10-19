@@ -3,6 +3,7 @@ package credentials
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 	"time"
 
@@ -48,6 +49,12 @@ func TestFileKeyring_NewStore(t *testing.T) {
 }
 
 func TestFileKeyring_NewStoreDefaultPath(t *testing.T) {
+	// Create temporary directory for hermetic test.
+	tempHome := t.TempDir()
+	t.Setenv("HOME", tempHome)
+	if runtime.GOOS == "windows" {
+		t.Setenv("USERPROFILE", tempHome)
+	}
 	t.Setenv("ATMOS_KEYRING_PASSWORD", "test-password-12345")
 
 	// Create with default path.
@@ -56,9 +63,7 @@ func TestFileKeyring_NewStoreDefaultPath(t *testing.T) {
 	assert.NotNil(t, store)
 
 	// Should use ~/.atmos/keyring.
-	homeDir, err := os.UserHomeDir()
-	require.NoError(t, err)
-	expectedPath := filepath.Join(homeDir, ".atmos", "keyring")
+	expectedPath := filepath.Join(tempHome, ".atmos", "keyring")
 	assert.Equal(t, expectedPath, store.path)
 }
 
@@ -94,12 +99,21 @@ func TestFileKeyring_MissingPassword(t *testing.T) {
 		},
 	}
 
-	// Should fail without password and non-TTY.
-	_, err := newFileKeyringStore(authConfig)
-	// The keyring library will attempt to read/create the file, which requires password.
-	// This might succeed or fail depending on whether the keyring file exists.
-	// The important part is that our password prompt logic is tested elsewhere.
-	_ = err // Expected to potentially error without password
+	// Creating the keyring store succeeds even without password.
+	// The password is only required when actually accessing the keyring.
+	store, err := newFileKeyringStore(authConfig)
+	require.NoError(t, err, "Creating keyring store should succeed")
+	require.NotNil(t, store)
+
+	// But trying to store credentials should fail without password in non-TTY.
+	testCreds := &types.AWSCredentials{
+		AccessKeyID:     "test-key",
+		SecretAccessKey: "test-secret",
+		Region:          "us-east-1",
+	}
+	err = store.Store("test", testCreds)
+	require.Error(t, err, "Expected error when storing without password in non-TTY environment")
+	assert.Contains(t, err.Error(), "keyring password required")
 }
 
 func TestFileKeyring_StoreRetrieve_AWS(t *testing.T) {

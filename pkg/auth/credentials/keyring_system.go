@@ -34,20 +34,20 @@ func (s *systemKeyringStore) Store(alias string, creds types.ICredentials) error
 		typ = "oidc"
 		raw, err = json.Marshal(c)
 	default:
-		return fmt.Errorf("%w: unsupported credential type %T", ErrCredentialStore, creds)
+		return errors.Join(ErrCredentialStore, fmt.Errorf("unsupported credential type %T", creds))
 	}
 	if err != nil {
-		return errors.Join(ErrCredentialStore, err)
+		return errors.Join(ErrCredentialStore, fmt.Errorf("failed to marshal credentials: %w", err))
 	}
 
 	env := credentialEnvelope{Type: typ, Data: raw}
 	data, err := json.Marshal(&env)
 	if err != nil {
-		return fmt.Errorf("%w: failed to marshal credentials: %v", ErrCredentialStore, err)
+		return errors.Join(ErrCredentialStore, fmt.Errorf("failed to marshal credentials: %w", err))
 	}
 
 	if err := keyring.Set(alias, KeyringUser, string(data)); err != nil {
-		return errors.Join(ErrCredentialStore, err)
+		return errors.Join(ErrCredentialStore, fmt.Errorf("failed to store credentials in system keyring: %w", err))
 	}
 	return nil
 }
@@ -56,36 +56,36 @@ func (s *systemKeyringStore) Store(alias string, creds types.ICredentials) error
 func (s *systemKeyringStore) Retrieve(alias string) (types.ICredentials, error) {
 	data, err := keyring.Get(alias, KeyringUser)
 	if err != nil {
-		return nil, fmt.Errorf("%w: failed to retrieve credentials from keyring: %v", ErrCredentialStore, err)
+		return nil, errors.Join(ErrCredentialStore, fmt.Errorf("failed to retrieve credentials from keyring: %w", err))
 	}
 
 	var env credentialEnvelope
 	if err := json.Unmarshal([]byte(data), &env); err != nil {
-		return nil, fmt.Errorf("%w: failed to unmarshal credential envelope: %v", ErrCredentialStore, err)
+		return nil, errors.Join(ErrCredentialStore, fmt.Errorf("failed to unmarshal credential envelope: %w", err))
 	}
 
 	switch env.Type {
 	case "aws":
 		var c types.AWSCredentials
 		if err := json.Unmarshal(env.Data, &c); err != nil {
-			return nil, fmt.Errorf("%w: failed to unmarshal AWS credentials: %v", ErrCredentialStore, err)
+			return nil, errors.Join(ErrCredentialStore, fmt.Errorf("failed to unmarshal AWS credentials: %w", err))
 		}
 		return &c, nil
 	case "oidc":
 		var c types.OIDCCredentials
 		if err := json.Unmarshal(env.Data, &c); err != nil {
-			return nil, fmt.Errorf("%w: failed to unmarshal OIDC credentials: %v", ErrCredentialStore, err)
+			return nil, errors.Join(ErrCredentialStore, fmt.Errorf("failed to unmarshal OIDC credentials: %w", err))
 		}
 		return &c, nil
 	default:
-		return nil, fmt.Errorf("%w: unknown credential type %q", ErrCredentialStore, env.Type)
+		return nil, errors.Join(ErrCredentialStore, fmt.Errorf("unknown credential type %q", env.Type))
 	}
 }
 
 // Delete deletes credentials for the given alias.
 func (s *systemKeyringStore) Delete(alias string) error {
 	if err := keyring.Delete(alias, KeyringUser); err != nil {
-		return fmt.Errorf("%w: failed to delete credentials from keyring: %v", ErrCredentialStore, err)
+		return errors.Join(ErrCredentialStore, fmt.Errorf("failed to delete credentials from keyring: %w", err))
 	}
 
 	return nil
@@ -115,11 +115,11 @@ func (s *systemKeyringStore) IsExpired(alias string) (bool, error) {
 func (s *systemKeyringStore) GetAny(key string, dest interface{}) error {
 	data, err := keyring.Get(key, KeyringUser)
 	if err != nil {
-		return fmt.Errorf("%w: failed to retrieve data from keyring: %v", ErrCredentialStore, err)
+		return errors.Join(ErrCredentialStore, fmt.Errorf("failed to retrieve data from keyring: %w", err))
 	}
 
 	if err := json.Unmarshal([]byte(data), dest); err != nil {
-		return fmt.Errorf("%w: failed to unmarshal data: %v", ErrCredentialStore, err)
+		return errors.Join(ErrCredentialStore, fmt.Errorf("failed to unmarshal data: %w", err))
 	}
 
 	return nil
@@ -129,11 +129,11 @@ func (s *systemKeyringStore) GetAny(key string, dest interface{}) error {
 func (s *systemKeyringStore) SetAny(key string, value interface{}) error {
 	data, err := json.Marshal(value)
 	if err != nil {
-		return fmt.Errorf("%w: failed to marshal data: %v", ErrCredentialStore, err)
+		return errors.Join(ErrCredentialStore, fmt.Errorf("failed to marshal data: %w", err))
 	}
 
 	if err := keyring.Set(key, KeyringUser, string(data)); err != nil {
-		return fmt.Errorf("%w: failed to store data in keyring: %v", ErrCredentialStore, err)
+		return errors.Join(ErrCredentialStore, fmt.Errorf("failed to store data in keyring: %w", err))
 	}
 
 	return nil
