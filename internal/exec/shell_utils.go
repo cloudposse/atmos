@@ -84,7 +84,23 @@ func ExecuteShellCommand(
 		return nil
 	}
 
-	return cmd.Run()
+	err = cmd.Run()
+	if err != nil {
+		// Extract exit code from error to preserve it.
+		// This is critical for commands like `terraform plan -detailed-exitcode`
+		// which use exit code 2 to indicate changes detected.
+		if exitError, ok := err.(*exec.ExitError); ok {
+			exitCode := exitError.ExitCode()
+			log.Debug("Command exited with non-zero code", "code", exitCode)
+
+			// Return a typed error that preserves the exit code.
+			// main.go will check for this type and exit with the correct code.
+			return errUtils.ExitCodeError{Code: exitCode}
+		}
+		// If we can't extract exit code, return the original error.
+		return err
+	}
+	return nil
 }
 
 // ExecuteShell runs a shell script.
