@@ -254,14 +254,14 @@ var (
 - **Comments must end with periods**: All comments should be complete sentences ending with a period (enforced by golangci-lint)
 
 ### Test Isolation (MANDATORY)
-- **ALWAYS use `cmd.NewTestKit(t)` for ALL cmd package tests**
-- **TestKit pattern follows Go 1.15+ testing.TB interface idiom**
-- **Provides automatic RootCmd state cleanup similar to `t.Setenv()` and `t.Chdir()`**
+- **ALWAYS use `cmd.NewTestKit(t)` for ALL cmd package tests**.
+- **TestKit pattern follows Go 1.15+ testing.TB interface idiom**.
+- **Provides automatic RootCmd state cleanup similar to `t.Setenv()` and `t.Chdir()`**.
 - **Required for ALL tests that**:
-  - Call `RootCmd.Execute()` or `Execute()`
-  - Call `RootCmd.SetArgs()` or modify `RootCmd` flags
-  - Call any command that internally uses `RootCmd`
-  - When in doubt, use it - it's safe and lightweight
+  - Call `RootCmd.Execute()` or `Execute()`.
+  - Call `RootCmd.SetArgs()` or modify `RootCmd` flags.
+  - Call any command that internally uses `RootCmd`.
+  - When in doubt, use it - it's safe and lightweight.
 
 - **Basic usage**:
   ```go
@@ -293,19 +293,19 @@ var (
   ```
 
 - **Why this is critical**:
-  - RootCmd is global state shared across all tests
-  - Flag values persist between tests causing mysterious failures
-  - StringSlice flags (config, config-path) are especially problematic
-  - Without cleanup, tests pass in isolation but fail when run together
-  - We use reflection to properly reset StringSlice flags which append instead of replace
+  - RootCmd is global state shared across all tests.
+  - Flag values persist between tests causing mysterious failures.
+  - StringSlice flags (config, config-path) are especially problematic.
+  - Without cleanup, tests pass in isolation but fail when run together.
+  - We use reflection to properly reset StringSlice flags which append instead of replace.
 
 - **Implementation notes**:
-  - TestKit wraps `testing.TB` and adds automatic RootCmd cleanup
-  - Snapshots ALL flag values and their Changed state when created
-  - Uses `t.Cleanup()` for automatic LIFO restoration
-  - Handles StringSlice/StringArray flags specially (they require reflection to reset)
+  - TestKit wraps `testing.TB` and adds automatic RootCmd cleanup.
+  - Snapshots ALL flag values and their Changed state when created.
+  - Uses `t.Cleanup()` for automatic LIFO restoration.
+  - Handles StringSlice/StringArray flags specially (they require reflection to reset).
   - All `testing.TB` methods work: `Helper()`, `Log()`, `Setenv()`, `Cleanup()`, etc.
-  - No performance penalty - snapshot is fast and only done once per test
+  - No performance penalty - snapshot is fast and only done once per test.
 
 ### Test Quality (MANDATORY)
 - **Test behavior, not implementation** - Verify inputs/outputs, not internal state
