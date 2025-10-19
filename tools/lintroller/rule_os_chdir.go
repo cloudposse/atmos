@@ -24,6 +24,11 @@ func (r *OsChdirInTestRule) Check(pass *analysis.Pass, file *ast.File) error {
 		return nil // Only check test files.
 	}
 
+	// Allow os.Chdir in test files that are explicitly testing chdir functionality.
+	if strings.Contains(filename, "chdir_test.go") {
+		return nil
+	}
+
 	// Find benchmark functions to exclude from checks.
 	benchmarks := findBenchmarksForChdir(file)
 

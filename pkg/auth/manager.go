@@ -9,13 +9,13 @@ import (
 	"github.com/charmbracelet/huh"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/internal/tui/templates/term"
 	"github.com/cloudposse/atmos/pkg/auth/factory"
 	"github.com/cloudposse/atmos/pkg/auth/identities/aws"
 	"github.com/cloudposse/atmos/pkg/auth/types"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/cloudposse/atmos/pkg/telemetry"
 )
 
 const (
@@ -34,6 +34,12 @@ const (
 	// skipProviderLogoutKey is the context key for skipping provider.Logout calls.
 	skipProviderLogoutKey contextKey = "skipProviderLogout"
 )
+
+// isInteractive checks if we're running in an interactive terminal (has stdin TTY).
+// This is used to determine if we can prompt the user for input.
+func isInteractive() bool {
+	return term.IsTTYSupportForStdin()
+}
 
 // manager implements the AuthManager interface.
 type manager struct {
@@ -202,7 +208,7 @@ func (m *manager) GetDefaultIdentity() (string, error) {
 	switch len(defaultIdentities) {
 	case 0:
 		// No default identities found.
-		if telemetry.IsCI() {
+		if !isInteractive() {
 			return "", errUtils.ErrNoDefaultIdentity
 		}
 		// In interactive mode, prompt user to choose from all identities.
@@ -214,7 +220,7 @@ func (m *manager) GetDefaultIdentity() (string, error) {
 
 	default:
 		// Multiple default identities found.
-		if telemetry.IsCI() {
+		if !isInteractive() {
 			return "", fmt.Errorf(errFormatWithString, errUtils.ErrMultipleDefaultIdentities, fmt.Sprintf(backtickedQuotedFmt, defaultIdentities))
 		}
 		// In interactive mode, prompt user to choose from default identities.

@@ -51,7 +51,8 @@ func (i *assumeRoleIdentity) newSTSClient(ctx context.Context, awsBase *types.AW
 		configOpts = append(configOpts, resolverOpt)
 	}
 
-	cfg, err := config.LoadDefaultConfig(ctx, configOpts...)
+	// Load config with isolated environment to avoid conflicts with external AWS env vars.
+	cfg, err := awsCloud.LoadIsolatedAWSConfig(ctx, configOpts...)
 	if err != nil {
 		return nil, fmt.Errorf("%w: failed to load AWS config: %w", errUtils.ErrInvalidIdentityConfig, err)
 	}

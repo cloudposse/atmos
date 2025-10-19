@@ -228,7 +228,8 @@ func (p *samlProvider) selectRole(awsRoles []*saml2aws.AWSRole) *saml2aws.AWSRol
 
 // assumeRoleWithSAML assumes an AWS role using SAML assertion.
 func (p *samlProvider) assumeRoleWithSAML(ctx context.Context, samlAssertion string, role *saml2aws.AWSRole) (*types.AWSCredentials, error) {
-	return p.assumeRoleWithSAMLWithDeps(ctx, samlAssertion, role, config.LoadDefaultConfig, func(cfg aws.Config) assumeRoleWithSAMLClient {
+	// Use LoadIsolatedAWSConfig to avoid conflicts with external AWS env vars.
+	return p.assumeRoleWithSAMLWithDeps(ctx, samlAssertion, role, awsCloud.LoadIsolatedAWSConfig, func(cfg aws.Config) assumeRoleWithSAMLClient {
 		return sts.NewFromConfig(cfg)
 	})
 }
