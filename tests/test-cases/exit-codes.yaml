@@ -1,0 +1,84 @@
+tests:
+  # Custom command exit codes
+  - name: custom command preserves exit code 2
+    enabled: true
+    description: "Validate custom commands preserve non-zero exit codes from shell steps"
+    workdir: "fixtures/scenarios/exit-codes"
+    command: "atmos"
+    args:
+      - "test-exit-2"
+    expect:
+      exit_code: 2
+      stderr:
+        - "Telemetry Enabled"
+
+  - name: custom command preserves exit code 42
+    enabled: true
+    description: "Validate custom commands preserve arbitrary exit codes"
+    workdir: "fixtures/scenarios/exit-codes"
+    command: "atmos"
+    args:
+      - "test-exit-42"
+    expect:
+      exit_code: 42
+      stderr:
+        - "Telemetry Enabled"
+
+  - name: custom command exits 0 on success
+    enabled: true
+    description: "Validate custom commands exit with 0 on success"
+    workdir: "fixtures/scenarios/exit-codes"
+    command: "atmos"
+    args:
+      - "test-exit-0"
+    expect:
+      exit_code: 0
+      stderr:
+        - "Telemetry Enabled"
+
+  # Workflow shell step exit codes
+  - name: workflow shell step preserves exit code 2
+    enabled: true
+    description: "Validate workflow shell steps preserve non-zero exit codes"
+    workdir: "fixtures/scenarios/exit-codes"
+    command: "atmos"
+    args:
+      - "workflow"
+      - "test-exit-2"
+      - "-f"
+      - "workflows"
+    expect:
+      exit_code: 2
+      stderr:
+        - "Telemetry Enabled"
+
+  - name: workflow shell step preserves exit code 42
+    enabled: true
+    description: "Validate workflow shell steps preserve arbitrary exit codes"
+    workdir: "fixtures/scenarios/exit-codes"
+    command: "atmos"
+    args:
+      - "workflow"
+      - "test-exit-42"
+      - "-f"
+      - "workflows"
+    expect:
+      exit_code: 42
+      stderr:
+        - "Telemetry Enabled"
+
+  - name: workflow shell step exits 0 on success
+    enabled: true
+    description: "Validate workflow shell steps exit with 0 on success"
+    workdir: "fixtures/scenarios/exit-codes"
+    command: "atmos"
+    args:
+      - "workflow"
+      - "test-exit-0"
+      - "-f"
+      - "workflows"
+    expect:
+      exit_code: 0
+      stderr:
+        - "Telemetry Enabled"
+

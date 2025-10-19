@@ -116,7 +116,7 @@ var RootCmd = &cobra.Command{
 				if versionErr != nil {
 					errUtils.CheckErrorPrintAndExit(versionErr, "", "")
 				}
-				utils.OsExit(0)
+				errUtils.OsExit(0)
 				return
 			}
 		}
@@ -711,7 +711,7 @@ func initCobraConfig() {
 			pager := pager.NewWithAtmosConfig(pagerEnabled)
 			if err := pager.Run("Atmos CLI Help", buf.String()); err != nil {
 				log.Error("Failed to run pager", "error", err)
-				utils.OsExit(1)
+				errUtils.OsExit(1)
 			}
 		} else {
 			fmt.Println()

@@ -1,0 +1,25 @@
+# Level 2: Provider mixin A - part of glob pattern test
+# These files (aws-a, aws-b, aws-c) will be imported via glob and processed in parallel
+
+import:
+  - catalog/base/defaults
+
+vars:
+  # Override import_order_test
+  import_order_test: "level-2-provider-a"
+
+  # Provider-specific configuration
+  provider_type: "aws"
+  provider_priority: "a"
+
+  # Add provider tags
+  tags:
+    Provider: "AWS"
+    ProviderPriority: "A"
+    Source: "level-2-provider-a"
+
+settings:
+  import_order_test: "level-2-provider-a-settings"
+  provider:
+    name: "aws"
+    priority: "a"

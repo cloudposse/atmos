@@ -3,8 +3,6 @@ package exec
 import (
 	"fmt"
 
-	"github.com/mitchellh/mapstructure"
-
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	m "github.com/cloudposse/atmos/pkg/merge"
@@ -187,7 +185,7 @@ func mergeComponentConfigurations(atmosConfig *schema.AtmosConfiguration, opts *
 		}
 
 		// Process auth configuration.
-		mergedAuth, err := processAuthConfig(atmosConfig, finalComponentAuth)
+		mergedAuth, err := processAuthConfig(atmosConfig, opts.AtmosGlobalAuthMap, finalComponentAuth)
 		if err != nil {
 			return nil, err
 		}
@@ -228,13 +226,9 @@ func mergeComponentConfigurations(atmosConfig *schema.AtmosConfiguration, opts *
 }
 
 // processAuthConfig merges global and component-level auth configurations.
-func processAuthConfig(atmosConfig *schema.AtmosConfiguration, authConfig map[string]any) (map[string]any, error) {
-	// Convert the global auth config struct to map[string]any for merging.
-	var globalAuthConfig map[string]any
-	if err := mapstructure.Decode(atmosConfig.Auth, &globalAuthConfig); err != nil {
-		return nil, fmt.Errorf("%w: failed to convert global auth config to map: %v", errUtils.ErrInvalidAuthConfig, err)
-	}
-
+func processAuthConfig(atmosConfig *schema.AtmosConfiguration, globalAuthConfig map[string]any, authConfig map[string]any) (map[string]any, error) {
+	// Use the pre-converted global auth config to avoid race conditions.
+	// The globalAuthConfig parameter is pre-converted from atmosConfig.Auth before parallel processing starts.
 	mergedAuthConfig, err := m.Merge(
 		atmosConfig,
 		[]map[string]any{
