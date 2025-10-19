@@ -10,6 +10,8 @@ import (
 )
 
 func TestWorkflowCmd(t *testing.T) {
+	_ = NewTestKit(t)
+
 	stacksPath := "../tests/fixtures/scenarios/atmos-overrides-section"
 
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
