@@ -2,6 +2,7 @@ package aws
 
 import (
 	"context"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -351,7 +352,9 @@ func TestSSOProvider_GetFilesDisplayPath(t *testing.T) {
 			require.NoError(t, err)
 
 			path := provider.GetFilesDisplayPath()
-			assert.Contains(t, path, tt.expected)
+			// Normalize path separators for cross-platform compatibility.
+			normalizedPath := filepath.ToSlash(path)
+			assert.Contains(t, normalizedPath, tt.expected)
 		})
 	}
 }
