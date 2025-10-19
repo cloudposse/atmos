@@ -1,8 +1,28 @@
 # Visit https://goreleaser.com for documentation on how to customize this behavior.
 
-#before:
-#  hooks:
-#  - 'go mod tidy'
+before:
+  hooks:
+    # Free disk space on GitHub Actions runners before building to prevent "no space left on device" errors.
+    # Building 14 platform binaries (linux, darwin, windows, freebsd × multiple architectures) requires
+    # significant temporary disk space for the Go linker.
+    #
+    # The default ubuntu-latest runner (currently ubuntu-24.04 or ubuntu-22.04) does come preloaded with many development tools that consume disk space:
+    #
+    # Category                    Approx. Size    Notes
+    # System files                ~20 GB          Base Ubuntu OS + required dependencies
+    # Android SDK / NDK           ~12 GB          Installed under /usr/local/lib/android — large but unused for most workflows
+    # .NET SDK                    ~2–3 GB         Installed under /usr/share/dotnet
+    # Haskell (GHC + Cabal)       ~2 GB           Installed under /opt/ghc
+    # CodeQL                      ~6 GB           Installed under /opt/hostedtoolcache/CodeQL — used for GitHub's code scanning
+    # Other languages/tools       ~15–20 GB       Includes Node.js, Python, Ruby, Go, Java, etc.
+    # Free space at job start     ~14 GB          You typically get 13–15 GB of free disk on /
+    - |
+      sh -c 'if [ "$GITHUB_ACTIONS" = "true" ]; then
+        echo "Freeing disk space..."
+        df -h /
+        sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc 2>/dev/null || true
+        df -h /
+      fi'
 builds:
   - env:
       # goreleaser does not work with CGO, it could also complicate
@@ -23,7 +43,14 @@ builds:
     binary: atmos
     ldflags:
       # Set `atmos` version to the GitHub release tag using Go `ldflags`
+      # -s: strip symbol table
+      # -w: strip DWARF debug info
+      # Both reduce binary size and disk usage during linking.
       - '-s -w -X "github.com/cloudposse/atmos/pkg/version.Version={{.Version}}"'
+    flags:
+      # Remove file system paths from compiled executables for reproducible builds and slightly smaller binaries.
+      # This is standard practice for open-source and CI/CD builds (used by Go core team, HashiCorp, Docker, etc.).
+      - -trimpath
 
 archives:
   - format: binary

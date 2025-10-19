@@ -89,8 +89,9 @@ func ShellRunner(command string, name string, dir string, env []string, out io.W
 
 	err = runner.Run(context.TODO(), parser)
 	if err != nil {
-		// Check if the error is an interp.ExitStatus and preserve the exit code
-		if exitErr, ok := interp.IsExitStatus(err); ok {
+		// Check if the error is an interp.ExitStatus and preserve the exit code.
+		var exitErr interp.ExitStatus
+		if errors.As(err, &exitErr) {
 			return errUtils.ExitCodeError{Code: int(exitErr)}
 		}
 		return err
@@ -99,7 +100,7 @@ func ShellRunner(command string, name string, dir string, env []string, out io.W
 	return nil
 }
 
-// GetNextShellLevel increments the ATMOS_SHLVL and returns the new value or an error if maximum depth is exceeded .
+// GetNextShellLevel increments the ATMOS_SHLVL and returns the new value or an error if maximum depth is exceeded.
 func GetNextShellLevel() (int, error) {
 	defer perf.Track(nil, "utils.GetNextShellLevel")()
 
