@@ -733,7 +733,6 @@ func TestManager_Logout_IdentityInChain(t *testing.T) {
 
 	ctx := context.Background()
 	err := m.Logout(ctx, "standalone-identity")
-
 	if err != nil {
 		t.Errorf("Logout() failed: %v", err)
 	}
@@ -771,7 +770,6 @@ func TestManager_Logout_IdentityLogoutNotSupported(t *testing.T) {
 
 	ctx := context.Background()
 	err := m.Logout(ctx, "test-identity")
-
 	// Should succeed (ErrLogoutNotSupported is treated as success).
 	if err != nil {
 		t.Errorf("Logout() should succeed when identity.Logout returns ErrLogoutNotSupported, got: %v", err)

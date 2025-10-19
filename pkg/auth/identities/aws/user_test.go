@@ -303,9 +303,9 @@ func TestUser_buildGetSessionTokenInput_MFAError(t *testing.T) {
 
 func TestUserIdentity_Logout(t *testing.T) {
 	tests := []struct {
-		name        string
+		name         string
 		identityName string
-		expectError bool
+		expectError  bool
 	}{
 		{
 			name:         "successful logout",
