@@ -7,6 +7,8 @@ import (
 
 	"github.com/google/go-github/v59/github"
 	"github.com/stretchr/testify/assert"
+
+	errUtils "github.com/cloudposse/atmos/errors"
 )
 
 // TestHandleGitHubAPIError tests the handleGitHubAPIError function.
@@ -52,7 +54,14 @@ func TestHandleGitHubAPIError(t *testing.T) {
 			err := handleGitHubAPIError(tt.err, tt.resp)
 			if tt.wantErr {
 				assert.Error(t, err)
-				assert.Contains(t, err.Error(), tt.errString)
+				// For rate limit errors, check the wrapped error type.
+				if tt.name == "rate limit exceeded with response" {
+					assert.ErrorIs(t, err, errUtils.ErrGitHubRateLimitExceeded)
+				}
+				// For other errors, verify the error message is preserved.
+				if tt.name != "rate limit exceeded with response" {
+					assert.Contains(t, err.Error(), tt.errString)
+				}
 			} else {
 				assert.NoError(t, err)
 			}
