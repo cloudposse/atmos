@@ -305,28 +305,24 @@ func TestMergeConfigFromDirectories_ConfigFileVariants(t *testing.T) {
 	require.NoError(t, os.Mkdir(emptyDir, 0o755))
 
 	tests := []struct {
-		name         string
-		dirs         []string
-		expectError  bool
-		expectedDirs int
+		name        string
+		dirs        []string
+		expectError bool
 	}{
 		{
-			name:         "finds atmos.yaml",
-			dirs:         []string{dir1},
-			expectError:  false,
-			expectedDirs: 1,
+			name:        "finds atmos.yaml",
+			dirs:        []string{dir1},
+			expectError: false,
 		},
 		{
-			name:         "finds .atmos.yaml",
-			dirs:         []string{dir2},
-			expectError:  false,
-			expectedDirs: 1,
+			name:        "finds .atmos.yaml",
+			dirs:        []string{dir2},
+			expectError: false,
 		},
 		{
-			name:         "finds both variants in different directories",
-			dirs:         []string{dir1, dir2},
-			expectError:  false,
-			expectedDirs: 2,
+			name:        "finds both variants in different directories",
+			dirs:        []string{dir1, dir2},
+			expectError: false,
 		},
 		{
 			name:        "fails for directory without config",
