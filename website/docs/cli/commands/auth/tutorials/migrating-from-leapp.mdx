@@ -15,16 +15,6 @@ This guide helps you migrate from Leapp to the native `atmos auth` authenticatio
 
 Leapp is a standalone credential management application with a graphical interface. Atmos Auth provides similar functionality but integrates authentication directly into your infrastructure workflow with configuration-as-code.
 
-## Understanding Leapp Components
-
-In Leapp, authentication consists of:
-
-1. **Provider**: SSO integration (e.g., "acme") connecting to AWS IAM Identity Center
-2. **Session**: Individual AWS access configuration (account + permission set + provider)
-3. **Identity**: Permission set name (e.g., "IdentityManagersTeamAccess")
-4. **Named Profile**: Profile name used in AWS CLI
-5. **Region**: AWS region for the session
-
 ## Quick Migration Example
 
 ### What You See in Leapp
@@ -59,7 +49,27 @@ auth:
           name: "core-identity" # (2)
 ```
 
-## Field Mapping Reference
+**That's it!** The configuration maps directly from what you see in Leapp to your `atmos.yaml`. Now you can run `atmos auth login` and you're ready to go.
+
+## Step-by-Step Migration
+
+Need more detail? Here's how to migrate each piece of your Leapp configuration:
+
+<details>
+<summary>Understanding Leapp Terminology (Optional)</summary>
+
+In Leapp, authentication consists of:
+
+1. **Provider**: SSO integration (e.g., "acme") connecting to AWS IAM Identity Center
+2. **Session**: Individual AWS access configuration (account + permission set + provider)
+3. **Identity**: Permission set name (e.g., "IdentityManagersTeamAccess")
+4. **Named Profile**: Profile name used in AWS CLI
+5. **Region**: AWS region for the session
+
+</details>
+
+<details>
+<summary>Field Mapping Reference (Quick Lookup)</summary>
 
 | Leapp Field | `atmos auth` Location | Notes |
 |-------------|----------------------|-------|
@@ -70,7 +80,7 @@ auth:
 | (3) Identity (permission set) | `identities.<name>.principal.name` | Exact permission set name |
 | (4) Named Profile | `identities.<name>` (key) | Use descriptive naming: `account/role` |
 
-## Step-by-Step Migration
+</details>
 
 ### 1. Identify Your Provider Configuration
 
@@ -164,12 +174,7 @@ atmos terraform plan <component> -s <stack>
 
 ## Using with Geodesic
 
-If you're using [Geodesic](https://github.com/cloudposse/geodesic) as your DevOps toolbox, you'll need to configure it to work with Atmos Auth.
-
-See the [Configuring Geodesic with Atmos Auth](/cli/commands/auth/tutorials/configuring-geodesic) guide for complete instructions on:
-- Updating your Geodesic Dockerfile with required environment variables
-- Configuring automatic authentication in your Makefile
-- Setting up source profiles for assume-role utilities
+If you're using [Geodesic](https://github.com/cloudposse/geodesic), see the [Configuring Geodesic with Atmos Auth](/cli/commands/auth/tutorials/configuring-geodesic) guide for complete setup instructions.
 
 ## Troubleshooting
 
