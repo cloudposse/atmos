@@ -1,8 +1,10 @@
 package exec
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
+	"sync"
 
 	"github.com/pkg/errors"
 
@@ -368,7 +370,23 @@ func ProcessStackConfig(
 		return nil, err
 	}
 
-	// Process all Terraform components.
+	// Convert atmosConfig.Auth struct to map[string]any once before parallel processing.
+	// This prevents race conditions when processAuthConfig is called from multiple goroutines.
+	// Use JSON marshaling for deep conversion of nested structs to maps.
+	var atmosAuthConfig map[string]any
+	if atmosConfig.Auth.Providers != nil || atmosConfig.Auth.Identities != nil {
+		jsonBytes, err := json.Marshal(atmosConfig.Auth)
+		if err != nil {
+			return nil, fmt.Errorf("%w: failed to marshal global auth config: %v", errUtils.ErrInvalidAuthConfig, err)
+		}
+		if err := json.Unmarshal(jsonBytes, &atmosAuthConfig); err != nil {
+			return nil, fmt.Errorf("%w: failed to unmarshal global auth config: %v", errUtils.ErrInvalidAuthConfig, err)
+		}
+	} else {
+		atmosAuthConfig = map[string]any{}
+	}
+
+	// Process all Terraform components in parallel.
 	if componentTypeFilter == "" || componentTypeFilter == cfg.TerraformComponentType {
 		if allTerraformComponents, ok := globalComponentsSection[cfg.TerraformComponentType]; ok {
 			allTerraformComponentsMap, ok := allTerraformComponents.(map[string]any)
@@ -376,16 +394,9 @@ func ProcessStackConfig(
 				return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidComponentsTerraform, stackName)
 			}
 
-			for cmp, v := range allTerraformComponentsMap {
-				component := cmp
-
-				componentMap, ok := v.(map[string]any)
-				if !ok {
-					return nil, fmt.Errorf("%w: component=%s file='%s'", errUtils.ErrInvalidSpecificTerraformComponent, component, stackName)
-				}
-
-				// Process component using helper function.
-				opts := ComponentProcessorOptions{
+			// Build options for each Terraform component.
+			buildTerraformOpts := func(component string, componentMap map[string]any) (*ComponentProcessorOptions, error) {
+				return &ComponentProcessorOptions{
 					ComponentType:                   cfg.TerraformComponentType,
 					Component:                       component,
 					Stack:                           stack,
@@ -399,6 +410,7 @@ func ProcessStackConfig(
 					GlobalEnv:                       globalAndTerraformEnv,
 					GlobalAuth:                      globalAndTerraformAuth,
 					GlobalCommand:                   terraformCommand,
+					AtmosGlobalAuthMap:              atmosAuthConfig,
 					TerraformProviders:              terraformProviders,
 					GlobalAndTerraformHooks:         globalAndTerraformHooks,
 					GlobalBackendType:               globalBackendType,
@@ -406,26 +418,18 @@ func ProcessStackConfig(
 					GlobalRemoteStateBackendType:    globalRemoteStateBackendType,
 					GlobalRemoteStateBackendSection: globalRemoteStateBackendSection,
 					AtmosConfig:                     atmosConfig,
-				}
+				}, nil
+			}
 
-				result, err := processComponent(&opts)
-				if err != nil {
-					return nil, err
-				}
-
-				// Merge component configurations.
-				comp, err := mergeComponentConfigurations(atmosConfig, &opts, result)
-				if err != nil {
-					return nil, err
-				}
-
-				terraformComponents[component] = comp
+			var err error
+			terraformComponents, err = processComponentsInParallel(atmosConfig, allTerraformComponentsMap, buildTerraformOpts)
+			if err != nil {
+				return nil, err
 			}
 		}
 	}
 
-	// Process all Helmfile components.
-	//nolint:dupl // Similar pattern for different component types (Helmfile vs Packer)
+	// Process all Helmfile components in parallel.
 	if componentTypeFilter == "" || componentTypeFilter == cfg.HelmfileComponentType {
 		if allHelmfileComponents, ok := globalComponentsSection[cfg.HelmfileComponentType]; ok {
 			allHelmfileComponentsMap, ok := allHelmfileComponents.(map[string]any)
@@ -433,16 +437,9 @@ func ProcessStackConfig(
 				return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidComponentsHelmfile, stackName)
 			}
 
-			for cmp, v := range allHelmfileComponentsMap {
-				component := cmp
-
-				componentMap, ok := v.(map[string]any)
-				if !ok {
-					return nil, fmt.Errorf("%w: component=%s file='%s'", errUtils.ErrInvalidSpecificHelmfileComponent, component, stackName)
-				}
-
-				// Process component using helper function.
-				opts := ComponentProcessorOptions{
+			// Build options for each Helmfile component.
+			buildHelmfileOpts := func(component string, componentMap map[string]any) (*ComponentProcessorOptions, error) {
+				return &ComponentProcessorOptions{
 					ComponentType:            cfg.HelmfileComponentType,
 					Component:                component,
 					Stack:                    stack,
@@ -456,27 +453,20 @@ func ProcessStackConfig(
 					GlobalEnv:                globalAndHelmfileEnv,
 					GlobalAuth:               globalAndHelmfileAuth,
 					GlobalCommand:            helmfileCommand,
+					AtmosGlobalAuthMap:       atmosAuthConfig,
 					AtmosConfig:              atmosConfig,
-				}
+				}, nil
+			}
 
-				result, err := processComponent(&opts)
-				if err != nil {
-					return nil, err
-				}
-
-				// Merge component configurations.
-				comp, err := mergeComponentConfigurations(atmosConfig, &opts, result)
-				if err != nil {
-					return nil, err
-				}
-
-				helmfileComponents[component] = comp
+			var err error
+			helmfileComponents, err = processComponentsInParallel(atmosConfig, allHelmfileComponentsMap, buildHelmfileOpts)
+			if err != nil {
+				return nil, err
 			}
 		}
 	}
 
-	// Process all Packer components.
-	//nolint:dupl // Similar pattern for different component types (Helmfile vs Packer)
+	// Process all Packer components in parallel.
 	if componentTypeFilter == "" || componentTypeFilter == cfg.PackerComponentType {
 		if allPackerComponents, ok := globalComponentsSection[cfg.PackerComponentType]; ok {
 			allPackerComponentsMap, ok := allPackerComponents.(map[string]any)
@@ -484,16 +474,9 @@ func ProcessStackConfig(
 				return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidComponentsPacker, stackName)
 			}
 
-			for cmp, v := range allPackerComponentsMap {
-				component := cmp
-
-				componentMap, ok := v.(map[string]any)
-				if !ok {
-					return nil, fmt.Errorf("%w: component=%s file='%s'", errUtils.ErrInvalidSpecificPackerComponent, component, stackName)
-				}
-
-				// Process component using helper function.
-				opts := ComponentProcessorOptions{
+			// Build options for each Packer component.
+			buildPackerOpts := func(component string, componentMap map[string]any) (*ComponentProcessorOptions, error) {
+				return &ComponentProcessorOptions{
 					ComponentType:            cfg.PackerComponentType,
 					Component:                component,
 					Stack:                    stack,
@@ -507,21 +490,15 @@ func ProcessStackConfig(
 					GlobalEnv:                globalAndPackerEnv,
 					GlobalAuth:               globalAndPackerAuth,
 					GlobalCommand:            packerCommand,
+					AtmosGlobalAuthMap:       atmosAuthConfig,
 					AtmosConfig:              atmosConfig,
-				}
+				}, nil
+			}
 
-				result, err := processComponent(&opts)
-				if err != nil {
-					return nil, err
-				}
-
-				// Merge component configurations.
-				comp, err := mergeComponentConfigurations(atmosConfig, &opts, result)
-				if err != nil {
-					return nil, err
-				}
-
-				packerComponents[component] = comp
+			var err error
+			packerComponents, err = processComponentsInParallel(atmosConfig, allPackerComponentsMap, buildPackerOpts)
+			if err != nil {
+				return nil, err
 			}
 		}
 	}
@@ -535,4 +512,108 @@ func ProcessStackConfig(
 	}
 
 	return result, nil
+}
+
+// componentProcessResult holds the result of processing a single component in parallel.
+type componentProcessResult struct {
+	component string
+	comp      map[string]any
+	err       error
+}
+
+// componentWork holds the component name and its processing options.
+type componentWork struct {
+	component string
+	opts      *ComponentProcessorOptions
+}
+
+// buildComponentWork pre-builds all component options before parallel processing.
+// This ensures each goroutine gets isolated copies of global configurations,
+// preventing race conditions in the merge library.
+func buildComponentWork(
+	componentsMap map[string]any,
+	optsBuilder func(component string, componentMap map[string]any) (*ComponentProcessorOptions, error),
+) ([]componentWork, error) {
+	work := make([]componentWork, 0, len(componentsMap))
+
+	for cmp, v := range componentsMap {
+		componentMap, ok := v.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf("%w for component %s", errUtils.ErrInvalidComponentMapType, cmp)
+		}
+
+		opts, err := optsBuilder(cmp, componentMap)
+		if err != nil {
+			return nil, err
+		}
+
+		work = append(work, componentWork{component: cmp, opts: opts})
+	}
+
+	return work, nil
+}
+
+// processComponentsInParallel processes all components of a specific type in parallel.
+// This function parallelizes the expensive component processing work while ensuring
+// all errors are properly captured and returned.
+//
+// IMPORTANT: To avoid race conditions during parallel processing, we must ensure that
+// each goroutine gets its own copy of shared data structures. The optsBuilder function
+// is responsible for creating independent copies of global configuration maps.
+func processComponentsInParallel(
+	atmosConfig *schema.AtmosConfiguration,
+	componentsMap map[string]any,
+	optsBuilder func(component string, componentMap map[string]any) (*ComponentProcessorOptions, error),
+) (map[string]any, error) {
+	defer perf.Track(atmosConfig, "exec.processComponentsInParallel")()
+
+	if len(componentsMap) == 0 {
+		return map[string]any{}, nil
+	}
+
+	// Pre-build all component options before starting parallel processing.
+	work, err := buildComponentWork(componentsMap, optsBuilder)
+	if err != nil {
+		return nil, err
+	}
+
+	// Create channels for results.
+	results := make(chan componentProcessResult, len(work))
+	var wg sync.WaitGroup
+
+	// Process each component in parallel.
+	for _, w := range work {
+		wg.Add(1)
+		go func(component string, opts *ComponentProcessorOptions) {
+			defer wg.Done()
+
+			// Process the component (expensive: inheritance, backend, settings, etc.).
+			result, err := processComponent(opts)
+			if err != nil {
+				results <- componentProcessResult{component: component, err: err}
+				return
+			}
+
+			// Merge component configurations.
+			comp, err := mergeComponentConfigurations(atmosConfig, opts, result)
+			results <- componentProcessResult{component: component, comp: comp, err: err}
+		}(w.component, w.opts)
+	}
+
+	// Close results channel when all goroutines are done.
+	go func() {
+		wg.Wait()
+		close(results)
+	}()
+
+	// Collect results from all goroutines.
+	processedComponents := make(map[string]any, len(work))
+	for result := range results {
+		if result.err != nil {
+			return nil, result.err
+		}
+		processedComponents[result.component] = result.comp
+	}
+
+	return processedComponents, nil
 }
