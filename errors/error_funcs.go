@@ -5,13 +5,16 @@ import (
 	"os"
 	"os/exec"
 
-	log "github.com/cloudposse/atmos/pkg/logger"
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
 
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui/markdown"
 )
+
+// OsExit is a variable for testing, so we can mock os.Exit.
+var OsExit = os.Exit
 
 // render is the global Markdown renderer instance initialized via InitializeMarkdown.
 var render *markdown.Renderer
@@ -79,5 +82,5 @@ func CheckErrorPrintAndExit(err error, title string, suggestion string) {
 
 // Exit exits the program with the specified exit code.
 func Exit(exitCode int) {
-	os.Exit(exitCode)
+	OsExit(exitCode)
 }
