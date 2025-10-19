@@ -2,6 +2,7 @@ package exec
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -9,7 +10,6 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/cockroachdb/errors"
 	"github.com/samber/lo"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -45,7 +45,15 @@ var (
 )
 
 // IsKnownWorkflowError returns true if the error matches any known workflow error.
+// This includes ExitCodeError which indicates a subcommand failure that's already been reported.
 func IsKnownWorkflowError(err error) bool {
+	// Check if it's an ExitCodeError - these are already reported by the subcommand
+	var exitCodeErr errUtils.ExitCodeError
+	if errors.As(err, &exitCodeErr) {
+		return true
+	}
+
+	// Check known workflow errors
 	for _, knownErr := range KnownWorkflowErrors {
 		if errors.Is(err, knownErr) {
 			return true
@@ -244,10 +252,12 @@ func ExecuteDescribeWorkflows(
 
 	isDirectory, err := u.IsDirectory(workflowsDir)
 	if err != nil || !isDirectory {
-		err := fmt.Errorf("%w: the workflow directory '%s' does not exist", errUtils.ErrWorkflowDirectoryDoesNotExist, workflowsDir)
-		err = errors.WithHintf(err, "Create the directory: mkdir -p %s", workflowsDir)
-		err = errors.WithHintf(err, "Or update `workflows.base_path` in `atmos.yaml` (currently: %s)", atmosConfig.Workflows.BasePath)
-		err = errors.WithHint(err, "See https://atmos.tools/core-concepts/workflows for workflow configuration")
+		err := errUtils.Build(errUtils.ErrWorkflowDirectoryDoesNotExist).
+			WithExplanationf("The workflow directory '%s' does not exist", workflowsDir).
+			WithHintf("Create the directory: mkdir -p %s", workflowsDir).
+			WithHintf("Or update `workflows.base_path` in `atmos.yaml` (currently: %s)", atmosConfig.Workflows.BasePath).
+			WithHint("See https://atmos.tools/core-concepts/workflows for workflow configuration").
+			Err()
 		return nil, nil, nil, err
 	}
 

@@ -17,6 +17,9 @@ const (
 	EnvVerbose = "ATMOS_VERBOSE"
 )
 
+// OsExit is a variable for testing, so we can mock os.Exit.
+var OsExit = os.Exit
+
 // render is the global Markdown renderer instance initialized via InitializeMarkdown.
 var render *markdown.Renderer
 
@@ -162,5 +165,5 @@ func CheckErrorPrintAndExit(err error, title string, suggestion string) {
 
 // Exit exits the program with the specified exit code.
 func Exit(exitCode int) {
-	os.Exit(exitCode)
+	OsExit(exitCode)
 }
