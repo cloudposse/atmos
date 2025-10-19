@@ -96,6 +96,12 @@ jobs:
           go-version-file: go.mod
           cache: true
 
+      # Pre-populate module cache to prevent goanalysis_metalinter failures.
+      # Without this, the linter may fail with "could not load export data" errors.
+      # See: https://github.com/golangci/golangci-lint/issues/5437
+      - name: Download modules
+        run: go mod download
+
       # Install the golangci-lint v2 CLI tool (not the linters themselves).
       # This tool is needed to run `golangci-lint custom` which builds a custom binary
       # that includes both standard linters AND our custom module plugins.
