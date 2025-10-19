@@ -184,7 +184,7 @@ func TestProblematicAWSEnvVars_Coverage(t *testing.T) {
 
 	// Check all expected variables are present.
 	for expected := range expectedVars {
-		assert.True(t, actualVars[expected], "Variable %s should be in problematicAWSEnvVars", expected)
+		assert.Truef(t, actualVars[expected], "Variable %s should be in problematicAWSEnvVars", expected)
 	}
 
 	// Verify AWS_REGION is NOT in the list (it should be preserved).
