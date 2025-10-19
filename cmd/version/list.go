@@ -74,6 +74,8 @@ func (m *listModel) View() string {
 
 // fetchReleasesWithSpinner fetches releases with a spinner if TTY is available.
 func fetchReleasesWithSpinner(client GitHubClient, opts ReleaseOptions) ([]*github.RepositoryRelease, error) {
+	defer perf.Track(nil, "version.fetchReleasesWithSpinner")()
+
 	// Check if we have a TTY for the spinner.
 	//nolint:nestif // Spinner logic requires nested conditions for TTY check.
 	if isatty.IsTerminal(os.Stderr.Fd()) || isatty.IsCygwinTerminal(os.Stderr.Fd()) {

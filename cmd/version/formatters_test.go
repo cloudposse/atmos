@@ -11,6 +11,8 @@ import (
 	"github.com/google/go-github/v59/github"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	pkgversion "github.com/cloudposse/atmos/pkg/version"
 )
 
 func TestRenderMarkdownInline(t *testing.T) {
@@ -225,11 +227,12 @@ func TestFormatReleaseListText(t *testing.T) {
 			oldStderr := os.Stderr
 			r, w, _ := os.Pipe()
 			os.Stderr = w
+			defer func() { os.Stderr = oldStderr }()
+			defer r.Close()
 
 			err := formatReleaseListText(tt.releases)
 
-			w.Close()
-			os.Stderr = oldStderr
+			_ = w.Close()
 
 			var buf bytes.Buffer
 			_, _ = io.Copy(&buf, r)
@@ -390,24 +393,31 @@ func TestGetReleaseTitle(t *testing.T) {
 
 func TestIsCurrentVersion(t *testing.T) {
 	tests := []struct {
-		name    string
-		tag     string
-		wantErr bool
+		name string
+		tag  string
+		want bool
 	}{
 		{
-			name: "checks version tag",
-			tag:  "v1.0.0",
+			name: "returns true for current version",
+			tag:  pkgversion.Version,
+			want: true,
 		},
 		{
-			name: "handles non-matching version",
+			name: "returns true for current version with v prefix",
+			tag:  "v" + pkgversion.Version,
+			want: true,
+		},
+		{
+			name: "returns false for non-matching version",
 			tag:  "v999.999.999",
+			want: false,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Just verify the function doesn't panic
-			_ = isCurrentVersion(tt.tag)
+			got := isCurrentVersion(tt.tag)
+			assert.Equal(t, tt.want, got)
 		})
 	}
 }
@@ -533,11 +543,12 @@ func TestFormatReleaseDetailText_Prerelease(t *testing.T) {
 	oldStderr := os.Stderr
 	r, w, _ := os.Pipe()
 	os.Stderr = w
+	defer func() { os.Stderr = oldStderr }()
+	defer r.Close()
 
 	err := formatReleaseDetailText(release)
 
-	w.Close()
-	os.Stderr = oldStderr
+	_ = w.Close()
 
 	var buf bytes.Buffer
 	_, _ = io.Copy(&buf, r)
