@@ -12,6 +12,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/ssooidc/types"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/internal/tui/templates/term"
 	awsCloud "github.com/cloudposse/atmos/pkg/auth/cloud/aws"
 	authTypes "github.com/cloudposse/atmos/pkg/auth/types"
 	log "github.com/cloudposse/atmos/pkg/logger"
@@ -23,6 +24,12 @@ import (
 const (
 	ssoDefaultSessionMinutes = 60
 )
+
+// isInteractive checks if we're running in an interactive terminal (has stdin TTY).
+// This is used to determine if we can prompt the user for browser-based authentication.
+func isInteractive() bool {
+	return term.IsTTYSupportForStdin()
+}
 
 // ssoProvider implements AWS IAM Identity Center authentication.
 type ssoProvider struct {
@@ -76,6 +83,11 @@ func (p *ssoProvider) PreAuthenticate(_ authTypes.AuthManager) error {
 func (p *ssoProvider) Authenticate(ctx context.Context) (authTypes.ICredentials, error) {
 	// Note: SSO provider no longer caches credentials directly.
 	// Caching is handled at the manager level to prevent duplicates.
+
+	// Check if we're in a headless environment - SSO device flow requires user interaction.
+	if !isInteractive() {
+		return nil, fmt.Errorf("%w: SSO device flow requires an interactive terminal (no TTY detected). Use environment credentials or service account authentication in headless environments", errUtils.ErrAuthenticationFailed)
+	}
 
 	// Build config options.
 	configOpts := []func(*config.LoadOptions) error{

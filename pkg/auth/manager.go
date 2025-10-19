@@ -4,13 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
 	"time"
 
 	"github.com/charmbracelet/huh"
-	"golang.org/x/term"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/internal/tui/templates/term"
 	"github.com/cloudposse/atmos/pkg/auth/factory"
 	"github.com/cloudposse/atmos/pkg/auth/identities/aws"
 	"github.com/cloudposse/atmos/pkg/auth/types"
@@ -31,7 +30,7 @@ const (
 // isInteractive checks if we're running in an interactive terminal (has stdin TTY).
 // This is used to determine if we can prompt the user for input.
 func isInteractive() bool {
-	return term.IsTerminal(int(os.Stdin.Fd()))
+	return term.IsTTYSupportForStdin()
 }
 
 // manager implements the AuthManager interface.

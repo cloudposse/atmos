@@ -63,7 +63,7 @@ linters:
         - pattern: ^path\.Join$
           msg: Use `filepath.Join` for OS-appropriate path separators instead of `path.Join` (which always uses forward slashes)
         - pattern: term\.IsTerminal\(
-          msg: Use `term.IsTTYSupportForStdout()` or `term.IsTTYSupportForStderr()` instead of `term.IsTerminal()` for consistent and mockable TTY detection
+          msg: Use `term.IsTTYSupportForStdout()`, `term.IsTTYSupportForStderr()`, or `term.IsTTYSupportForStdin()` instead of `term.IsTerminal()` for consistent and mockable TTY detection
       exclude-godoc-examples: false
       analyze-types: true
     funlen:
