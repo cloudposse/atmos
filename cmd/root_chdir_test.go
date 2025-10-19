@@ -48,29 +48,29 @@ func TestChdirFlag(t *testing.T) {
 
 	tests := []struct {
 		name        string
-		args        []string
-		envVar      string
+		setup       func(t *testing.T) string          // Returns directory/file path if needed.
+		makeArgs    func(testDir string) []string      // Builds args from setup result.
+		setupEnv    func(t *testing.T, testDir string) // Sets up environment variables.
 		expectError bool
-		expectWd    string // Expected working directory (relative to test directory)
-		setup       func(t *testing.T) string
-		cleanup     func(t *testing.T, dir string)
 	}{
 		{
 			name: "absolute path via --chdir flag",
 			setup: func(t *testing.T) string {
-				tmpDir := t.TempDir()
-				return tmpDir
+				return t.TempDir()
 			},
-			args:        []string{}, // Set in switch statement below.
+			makeArgs: func(testDir string) []string {
+				return []string{"--chdir", testDir}
+			},
 			expectError: false,
 		},
 		{
 			name: "absolute path via -C flag (short form)",
 			setup: func(t *testing.T) string {
-				tmpDir := t.TempDir()
-				return tmpDir
+				return t.TempDir()
 			},
-			args:        []string{}, // Set in switch statement below.
+			makeArgs: func(testDir string) []string {
+				return []string{"-C", testDir}
+			},
 			expectError: false,
 		},
 		{
@@ -84,33 +84,44 @@ func TestChdirFlag(t *testing.T) {
 				require.NoError(t, os.Chdir(tmpDir))
 				return subDir
 			},
-			args:        []string{"--chdir", "subdir"},
+			makeArgs: func(testDir string) []string {
+				return []string{"--chdir", "subdir"}
+			},
 			expectError: false,
 		},
 		{
 			name: "ATMOS_CHDIR environment variable",
 			setup: func(t *testing.T) string {
-				tmpDir := t.TempDir()
-				return tmpDir
+				return t.TempDir()
 			},
-			envVar:      "", // Will be set in test execution
+			setupEnv: func(t *testing.T, testDir string) {
+				t.Setenv("ATMOS_CHDIR", testDir)
+			},
+			makeArgs: func(testDir string) []string {
+				return []string{}
+			},
 			expectError: false,
 		},
 		{
 			name: "--chdir flag overrides ATMOS_CHDIR env var",
 			setup: func(t *testing.T) string {
-				tmpDir2 := t.TempDir()
-				// We'll use tmpDir2 as the flag value (which should win).
-				// tmpDir1 will be created in the test execution below.
-				return tmpDir2
+				return t.TempDir() // This will be the flag value (wins).
 			},
-			args:        []string{}, // Will be set in test execution
-			envVar:      "",         // Will be set in test execution
+			setupEnv: func(t *testing.T, testDir string) {
+				envDir := t.TempDir()
+				t.Setenv("ATMOS_CHDIR", envDir) // This should be overridden.
+			},
+			makeArgs: func(testDir string) []string {
+				return []string{"--chdir", testDir}
+			},
 			expectError: false,
 		},
 		{
-			name:        "non-existent directory returns error",
-			args:        []string{"--chdir", "/nonexistent/directory/that/does/not/exist"},
+			name:  "non-existent directory returns error",
+			setup: nil,
+			makeArgs: func(testDir string) []string {
+				return []string{"--chdir", "/nonexistent/directory/that/does/not/exist"}
+			},
 			expectError: true,
 		},
 		{
@@ -121,12 +132,17 @@ func TestChdirFlag(t *testing.T) {
 				require.NoError(t, os.WriteFile(tmpFile, []byte("test"), 0o644))
 				return tmpFile
 			},
-			args:        []string{}, // Will be set in test execution
+			makeArgs: func(testDir string) []string {
+				return []string{"--chdir", testDir}
+			},
 			expectError: true,
 		},
 		{
-			name:        "empty chdir value is ignored",
-			args:        []string{"--chdir", ""},
+			name:  "empty chdir value is ignored",
+			setup: nil,
+			makeArgs: func(testDir string) []string {
+				return []string{"--chdir", ""}
+			},
 			expectError: false,
 		},
 	}
@@ -143,35 +159,19 @@ func TestChdirFlag(t *testing.T) {
 				_ = os.Chdir(originalWd)
 			})
 
+			// Run setup to get test directory if needed.
 			var testDir string
 			if tt.setup != nil {
 				testDir = tt.setup(t)
 			}
 
-			if tt.cleanup != nil {
-				t.Cleanup(func() {
-					tt.cleanup(t, testDir)
-				})
+			// Set up environment variables if needed.
+			if tt.setupEnv != nil {
+				tt.setupEnv(t, testDir)
 			}
 
-			// Special handling for specific test cases.
-			args := tt.args
-
-			switch tt.name {
-			case "absolute path via --chdir flag":
-				args = []string{"--chdir", testDir}
-			case "absolute path via -C flag (short form)":
-				args = []string{"-C", testDir}
-			case "ATMOS_CHDIR environment variable":
-				t.Setenv("ATMOS_CHDIR", testDir)
-				args = []string{}
-			case "--chdir flag overrides ATMOS_CHDIR env var":
-				tmpDir1 := t.TempDir()
-				t.Setenv("ATMOS_CHDIR", tmpDir1)
-				args = []string{"--chdir", testDir}
-			case "chdir to a file (not directory) returns error":
-				args = []string{"--chdir", testDir}
-			}
+			// Build args using the test data.
+			args := tt.makeArgs(testDir)
 
 			// Create a test command.
 			testCmd := &cobra.Command{
