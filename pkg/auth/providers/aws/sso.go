@@ -25,10 +25,11 @@ const (
 	ssoDefaultSessionMinutes = 60
 )
 
-// isInteractive checks if we're running in an interactive terminal (has stdin TTY).
-// This is used to determine if we can prompt the user for browser-based authentication.
+// isInteractive checks if we're running in an interactive terminal.
+// For SSO device flow, we need stderr to be a TTY so the user can see the authentication URL.
+// We check stderr (not stdin) because that's where we output the authentication instructions.
 func isInteractive() bool {
-	return term.IsTTYSupportForStdin()
+	return term.IsTTYSupportForStderr()
 }
 
 // ssoProvider implements AWS IAM Identity Center authentication.

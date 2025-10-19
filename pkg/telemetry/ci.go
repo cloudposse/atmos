@@ -8,7 +8,8 @@ import (
 )
 
 const (
-	ciEnvVar = "CI"
+	ciEnvVar       = "CI"
+	logKeyProvider = "provider"
 )
 
 var (
@@ -82,7 +83,7 @@ func IsCI() bool {
 
 	// Debug logging to understand what's being detected.
 	if ciEnvTrue || provider != "" {
-		log.Debug("CI environment detected", "CI_env_var", ciEnvTrue, "provider", provider)
+		log.Debug("CI environment detected", "CI_env_var", ciEnvTrue, logKeyProvider, provider)
 	}
 
 	return ciEnvTrue || provider != ""
@@ -184,7 +185,7 @@ func ciProvider() string {
 			}
 		}
 		if allExist {
-			log.Debug("CI provider detected by all env vars existing", "provider", key, "envVars", vars)
+			log.Debug("CI provider detected by all env vars existing", logKeyProvider, key, "envVars", vars)
 			return key
 		}
 	}
@@ -195,7 +196,7 @@ func ciProvider() string {
 		// Log which specific env var was detected.
 		if envVar, exists := ciProvidersEnvVarsExists[result]; exists {
 			envValue, _ := os.LookupEnv(envVar)
-			log.Debug("CI provider detected by env var existence", "provider", result, "envVar", envVar, "value", envValue)
+			log.Debug("CI provider detected by env var existence", logKeyProvider, result, "envVar", envVar, "value", envValue)
 		}
 		return result
 	}
@@ -216,7 +217,7 @@ func ciProvider() string {
 		if envVars, exists := ciProvidersEnvVarsEquals[result]; exists {
 			for envName, expectedValue := range envVars {
 				if actualValue, found := os.LookupEnv(envName); found {
-					log.Debug("CI provider detected by env var value", "provider", result, "envVar", envName, "expectedValue", expectedValue, "actualValue", actualValue)
+					log.Debug("CI provider detected by env var value", logKeyProvider, result, "envVar", envName, "expectedValue", expectedValue, "actualValue", actualValue)
 				}
 			}
 		}
