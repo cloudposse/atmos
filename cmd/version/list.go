@@ -38,10 +38,15 @@ type listModel struct {
 	releases []*github.RepositoryRelease
 	err      error
 	done     bool
+	client   GitHubClient
+	opts     ReleaseOptions
 }
 
 func (m *listModel) Init() tea.Cmd {
-	return m.spinner.Tick
+	return tea.Batch(
+		m.spinner.Tick,
+		fetchReleasesCmd(m.client, m.opts),
+	)
 }
 
 func (m *listModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -72,6 +77,17 @@ func (m *listModel) View() string {
 	return m.spinner.View() + " Fetching releases from GitHub..."
 }
 
+// fetchReleasesCmd returns a command that fetches releases from GitHub.
+func fetchReleasesCmd(client GitHubClient, opts ReleaseOptions) tea.Cmd {
+	return func() tea.Msg {
+		releases, err := client.GetReleases("cloudposse", "atmos", opts)
+		if err != nil {
+			return err
+		}
+		return releases
+	}
+}
+
 // fetchReleasesWithSpinner fetches releases with a spinner if TTY is available.
 func fetchReleasesWithSpinner(client GitHubClient, opts ReleaseOptions) ([]*github.RepositoryRelease, error) {
 	defer perf.Track(nil, "version.fetchReleasesWithSpinner")()
@@ -84,18 +100,8 @@ func fetchReleasesWithSpinner(client GitHubClient, opts ReleaseOptions) ([]*gith
 		s.Spinner = spinner.Dot
 
 		// Fetch releases with spinner.
-		m := &listModel{spinner: s}
+		m := &listModel{spinner: s, client: client, opts: opts}
 		p := tea.NewProgram(m, tea.WithOutput(os.Stderr))
-
-		// Fetch releases in background.
-		go func() {
-			releases, err := client.GetReleases("cloudposse", "atmos", opts)
-			if err != nil {
-				p.Send(err)
-			} else {
-				p.Send(releases)
-			}
-		}()
 
 		// Run the spinner.
 		finalModel, err := p.Run()

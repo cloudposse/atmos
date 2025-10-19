@@ -79,11 +79,96 @@ func TestFetchReleasesWithSpinner_Error(t *testing.T) {
 	assert.Nil(t, releases)
 }
 
+// TestFetchReleasesCmd tests the fetchReleasesCmd function returns proper messages.
+func TestFetchReleasesCmd(t *testing.T) {
+	publishedAt := time.Date(2025, 1, 15, 10, 30, 0, 0, time.UTC)
+
+	mockReleases := []*github.RepositoryRelease{
+		{
+			TagName:     github.String("v1.0.0"),
+			Name:        github.String("Release 1.0.0"),
+			PublishedAt: &github.Timestamp{Time: publishedAt},
+		},
+	}
+
+	t.Run("returns releases on success", func(t *testing.T) {
+		client := &MockGitHubClient{
+			Releases: mockReleases,
+		}
+
+		opts := ReleaseOptions{
+			Limit:  10,
+			Offset: 0,
+		}
+
+		cmd := fetchReleasesCmd(client, opts)
+		require.NotNil(t, cmd)
+
+		msg := cmd()
+		require.NotNil(t, msg)
+
+		// Should return the releases slice.
+		releases, ok := msg.([]*github.RepositoryRelease)
+		require.True(t, ok, "Message should be a releases slice")
+		assert.Len(t, releases, 1)
+		assert.Equal(t, "v1.0.0", *releases[0].TagName)
+	})
+
+	t.Run("returns error on failure", func(t *testing.T) {
+		client := &MockGitHubClient{
+			Err: assert.AnError,
+		}
+
+		opts := ReleaseOptions{
+			Limit:  10,
+			Offset: 0,
+		}
+
+		cmd := fetchReleasesCmd(client, opts)
+		require.NotNil(t, cmd)
+
+		msg := cmd()
+		require.NotNil(t, msg)
+
+		// Should return an error.
+		err, ok := msg.(error)
+		require.True(t, ok, "Message should be an error")
+		assert.Error(t, err)
+	})
+}
+
 func TestListModel_Init(t *testing.T) {
-	m := &listModel{}
+	publishedAt := time.Date(2025, 1, 15, 10, 30, 0, 0, time.UTC)
+
+	mockReleases := []*github.RepositoryRelease{
+		{
+			TagName:     github.String("v1.0.0"),
+			Name:        github.String("Release 1.0.0"),
+			PublishedAt: &github.Timestamp{Time: publishedAt},
+		},
+	}
+
+	client := &MockGitHubClient{
+		Releases: mockReleases,
+	}
+
+	opts := ReleaseOptions{
+		Limit:  10,
+		Offset: 0,
+	}
+
+	m := &listModel{
+		client: client,
+		opts:   opts,
+	}
 
 	cmd := m.Init()
-	assert.NotNil(t, cmd)
+	assert.NotNil(t, cmd, "Init should return a non-nil command")
+
+	// Execute the command to verify it works (returns a batch with spinner.Tick and fetchReleasesCmd).
+	// We can't easily test the internal structure of tea.Batch, but we can verify it's callable.
+	msg := cmd()
+	assert.NotNil(t, msg, "Command should return a message")
 }
 
 func TestListModel_View(t *testing.T) {

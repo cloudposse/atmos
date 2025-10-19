@@ -22,14 +22,19 @@ var showUsageMarkdown string
 var showFormat string
 
 type showModel struct {
-	spinner spinner.Model
-	release *github.RepositoryRelease
-	err     error
-	done    bool
+	spinner    spinner.Model
+	release    *github.RepositoryRelease
+	err        error
+	done       bool
+	client     GitHubClient
+	versionArg string
 }
 
 func (m *showModel) Init() tea.Cmd {
-	return m.spinner.Tick
+	return tea.Batch(
+		m.spinner.Tick,
+		fetchReleaseCmd(m.client, m.versionArg),
+	)
 }
 
 func (m *showModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -60,6 +65,17 @@ func (m *showModel) View() string {
 	return m.spinner.View() + " Fetching release from GitHub..."
 }
 
+// fetchReleaseCmd returns a command that fetches a release from GitHub.
+func fetchReleaseCmd(client GitHubClient, versionArg string) tea.Cmd {
+	return func() tea.Msg {
+		release, err := fetchRelease(client, versionArg)
+		if err != nil {
+			return err
+		}
+		return release
+	}
+}
+
 // fetchRelease fetches a release from GitHub API.
 func fetchRelease(client GitHubClient, versionArg string) (*github.RepositoryRelease, error) {
 	if strings.ToLower(versionArg) == "latest" {
@@ -87,18 +103,8 @@ func fetchReleaseWithSpinner(client GitHubClient, versionArg string) (*github.Re
 	s.Spinner = spinner.Dot
 
 	// Fetch release with spinner.
-	m := &showModel{spinner: s}
+	m := &showModel{spinner: s, client: client, versionArg: versionArg}
 	p := tea.NewProgram(m, tea.WithOutput(os.Stderr))
-
-	// Fetch release in background.
-	go func() {
-		release, err := fetchRelease(client, versionArg)
-		if err != nil {
-			p.Send(err)
-		} else {
-			p.Send(release)
-		}
-	}()
 
 	// Run the spinner.
 	finalModel, err := p.Run()

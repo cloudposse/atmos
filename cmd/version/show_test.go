@@ -89,11 +89,76 @@ func TestFetchReleaseWithSpinner_Error(t *testing.T) {
 	assert.Nil(t, release)
 }
 
+// TestFetchReleaseCmd tests the fetchReleaseCmd function returns proper messages.
+func TestFetchReleaseCmd(t *testing.T) {
+	publishedAt := time.Date(2025, 1, 15, 10, 30, 0, 0, time.UTC)
+
+	mockRelease := &github.RepositoryRelease{
+		TagName:     github.String("v1.0.0"),
+		Name:        github.String("Release 1.0.0"),
+		PublishedAt: &github.Timestamp{Time: publishedAt},
+	}
+
+	t.Run("returns release on success", func(t *testing.T) {
+		client := &MockGitHubClient{
+			Release: mockRelease,
+		}
+
+		cmd := fetchReleaseCmd(client, "v1.0.0")
+		require.NotNil(t, cmd)
+
+		msg := cmd()
+		require.NotNil(t, msg)
+
+		// Should return the release.
+		release, ok := msg.(*github.RepositoryRelease)
+		require.True(t, ok, "Message should be a release")
+		assert.Equal(t, "v1.0.0", *release.TagName)
+	})
+
+	t.Run("returns error on failure", func(t *testing.T) {
+		client := &MockGitHubClient{
+			Err: assert.AnError,
+		}
+
+		cmd := fetchReleaseCmd(client, "v1.0.0")
+		require.NotNil(t, cmd)
+
+		msg := cmd()
+		require.NotNil(t, msg)
+
+		// Should return an error.
+		err, ok := msg.(error)
+		require.True(t, ok, "Message should be an error")
+		assert.Error(t, err)
+	})
+}
+
 func TestShowModel_Init(t *testing.T) {
-	m := &showModel{}
+	publishedAt := time.Date(2025, 1, 15, 10, 30, 0, 0, time.UTC)
+
+	mockRelease := &github.RepositoryRelease{
+		TagName:     github.String("v1.0.0"),
+		Name:        github.String("Release 1.0.0"),
+		PublishedAt: &github.Timestamp{Time: publishedAt},
+	}
+
+	client := &MockGitHubClient{
+		Release: mockRelease,
+	}
+
+	m := &showModel{
+		client:     client,
+		versionArg: "v1.0.0",
+	}
 
 	cmd := m.Init()
-	assert.NotNil(t, cmd)
+	assert.NotNil(t, cmd, "Init should return a non-nil command")
+
+	// Execute the command to verify it works (returns a batch with spinner.Tick and fetchReleaseCmd).
+	// We can't easily test the internal structure of tea.Batch, but we can verify it's callable.
+	msg := cmd()
+	assert.NotNil(t, msg, "Command should return a message")
 }
 
 func TestShowModel_View(t *testing.T) {
