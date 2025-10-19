@@ -135,3 +135,86 @@ func TestPrintInvalidUsageErrorAndExit(t *testing.T) {
 		assert.Fail(t, "Expected an exit error with code 1")
 	}
 }
+
+// TestCheckErrorPrintAndExitWithExitCodeError tests that ExitCodeError preserves the custom exit code.
+func TestCheckErrorPrintAndExitWithExitCodeError(t *testing.T) {
+	tests := []struct {
+		name         string
+		exitCode     int
+		envVar       string
+		expectedCode int
+	}{
+		{
+			name:         "exit code 2",
+			exitCode:     2,
+			envVar:       "TEST_EXIT_CODE_2",
+			expectedCode: 2,
+		},
+		{
+			name:         "exit code 42",
+			exitCode:     42,
+			envVar:       "TEST_EXIT_CODE_42",
+			expectedCode: 42,
+		},
+		{
+			name:         "exit code 127",
+			exitCode:     127,
+			envVar:       "TEST_EXIT_CODE_127",
+			expectedCode: 127,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if os.Getenv(tt.envVar) == "1" {
+				// Create an ExitCodeError and call CheckErrorPrintAndExit.
+				err := ExitCodeError{Code: tt.exitCode}
+				CheckErrorPrintAndExit(err, "Test Error", "")
+				return
+			}
+
+			// Run test in subprocess to capture exit code.
+			execPath, err := exec.LookPath(os.Args[0])
+			assert.NoError(t, err)
+
+			cmd := exec.Command(execPath, "-test.run=TestCheckErrorPrintAndExitWithExitCodeError/"+tt.name)
+			cmd.Env = append(os.Environ(), tt.envVar+"=1")
+			err = cmd.Run()
+
+			// Verify the exit code matches the ExitCodeError.Code.
+			var exitError *exec.ExitError
+			if errors.As(err, &exitError) {
+				assert.Equal(t, tt.expectedCode, exitError.ExitCode(), "Exit code should match ExitCodeError.Code")
+			} else {
+				assert.Fail(t, "Expected an exit error with code %d", tt.expectedCode)
+			}
+		})
+	}
+}
+
+// TestCheckErrorPrintAndExitWithExecExitError tests that exec.ExitError preserves the command exit code.
+func TestCheckErrorPrintAndExitWithExecExitError(t *testing.T) {
+	if os.Getenv("TEST_EXEC_EXIT_ERROR") == "1" {
+		// Create a command that exits with code 5.
+		cmd := exec.Command("sh", "-c", "exit 5")
+		err := cmd.Run()
+		CheckErrorPrintAndExit(err, "Command Failed", "")
+		return
+	}
+
+	// Run test in subprocess.
+	execPath, err := exec.LookPath(os.Args[0])
+	assert.NoError(t, err)
+
+	cmd := exec.Command(execPath, "-test.run=TestCheckErrorPrintAndExitWithExecExitError")
+	cmd.Env = append(os.Environ(), "TEST_EXEC_EXIT_ERROR=1")
+	err = cmd.Run()
+
+	// Verify the exit code is preserved from the shell command.
+	var exitError *exec.ExitError
+	if errors.As(err, &exitError) {
+		assert.Equal(t, 5, exitError.ExitCode(), "Exit code should be preserved from exec.ExitError")
+	} else {
+		assert.Fail(t, "Expected an exit error with code 5")
+	}
+}

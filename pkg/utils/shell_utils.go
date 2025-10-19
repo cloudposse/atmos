@@ -87,12 +87,14 @@ func ShellRunner(command string, name string, dir string, env []string, out io.W
 		return err
 	}
 
-	err = runner.Run(context.TODO(), parser)
+	err = runner.Run(context.Background(), parser)
 	if err != nil {
 		// Check if the error is an interp.ExitStatus and preserve the exit code.
+		// Use errors.Join() to preserve both the exit code (extractable via errors.As())
+		// and the original interpreter error context for diagnostics.
 		var exitErr interp.ExitStatus
 		if errors.As(err, &exitErr) {
-			return errUtils.ExitCodeError{Code: int(exitErr)}
+			return errors.Join(errUtils.ExitCodeError{Code: int(exitErr)}, err)
 		}
 		return err
 	}
