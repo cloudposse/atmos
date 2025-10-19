@@ -26,10 +26,14 @@ repos:
         files: ^\.golangci\.yml$
         pass_filenames: false
 
+      # IMPORTANT: Do NOT build custom-gcl automatically in this hook!
+      # Building during pre-commit can cause git corruption in worktrees.
+      # Users should run `make custom-gcl` once before committing.
+      # The run script will provide helpful error if binary is missing.
       - id: golangci-lint
         name: golangci-lint
-        description: Run golangci-lint on modified Go files (uses custom binary with lintroller)
-        entry: sh -c 'make custom-gcl && ./custom-gcl run --new-from-rev=origin/main --config=.golangci.yml'
+        description: Run golangci-lint on modified Go files (requires pre-built custom-gcl binary)
+        entry: scripts/run-custom-golangci-lint.sh
         language: system
         types: [go]
         pass_filenames: false
