@@ -251,3 +251,51 @@ func TestSSOProvider_WithoutCustomResolver(t *testing.T) {
 	// Verify the provider works without resolver config.
 	assert.NoError(t, p.Validate())
 }
+
+func TestSSOProvider_Logout(t *testing.T) {
+	tests := []struct {
+		name        string
+		providerCfg *schema.Provider
+		expectError bool
+	}{
+		{
+			name: "successful logout",
+			providerCfg: &schema.Provider{
+				Kind:     "aws/iam-identity-center",
+				Region:   "us-east-1",
+				StartURL: "https://company.awsapps.com/start",
+			},
+			expectError: false,
+		},
+		{
+			name: "logout with custom base_path",
+			providerCfg: &schema.Provider{
+				Kind:     "aws/iam-identity-center",
+				Region:   "us-east-1",
+				StartURL: "https://company.awsapps.com/start",
+				Spec: map[string]interface{}{
+					"files": map[string]interface{}{
+						"base_path": t.TempDir(),
+					},
+				},
+			},
+			expectError: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p, err := NewSSOProvider("test-sso", tt.providerCfg)
+			require.NoError(t, err)
+
+			ctx := context.Background()
+			err = p.Logout(ctx)
+
+			if tt.expectError {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
