@@ -69,6 +69,9 @@ jobs:
             target: macos
     runs-on: ${{ fromJson(fromJson(needs.runners-config.outputs.runners-config)[matrix.os]) }}
     steps:
+      - uses: runs-on/action@v1
+        if: matrix.target == 'linux'
+
       - name: Build
         if: ${{ ! ( matrix.target == 'windows' && github.event.pull_request.draft ) }}
         run: echo "Building on ${{ matrix.os }}"
@@ -125,6 +128,9 @@ jobs:
     timeout-minutes: 30
     runs-on: ${{ fromJson(fromJson(needs.runners-config.outputs.runners-config)[matrix.flavor.os]) }}
     steps:
+      - uses: runs-on/action@v1
+        if: matrix.flavor.target == 'linux'
+
       - name: Check out code into the Go module directory
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
         uses: actions/checkout@v4
