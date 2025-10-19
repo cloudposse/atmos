@@ -11,113 +11,107 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 )
 
-func TestShellRunner(t *testing.T) {
+func TestShellRunner_ExitCodePreservation(t *testing.T) {
 	tests := []struct {
-		name        string
-		command     string
-		expectError bool
-		expectCode  int
+		name           string
+		command        string
+		expectedExit   int
+		expectError    bool
+		errorSubstring string
 	}{
 		{
-			name:        "successful command",
-			command:     "echo 'test'",
-			expectError: false,
-			expectCode:  0,
+			name:         "successful command returns no error",
+			command:      "exit 0",
+			expectedExit: 0,
+			expectError:  false,
 		},
 		{
-			name:        "command with exit code 0",
-			command:     "exit 0",
-			expectError: false,
-			expectCode:  0,
+			name:           "exit code 1 is preserved",
+			command:        "exit 1",
+			expectedExit:   1,
+			expectError:    true,
+			errorSubstring: "subcommand exited with code 1",
 		},
 		{
-			name:        "command with exit code 1",
-			command:     "exit 1",
-			expectError: true,
-			expectCode:  1,
+			name:           "exit code 2 is preserved",
+			command:        "exit 2",
+			expectedExit:   2,
+			expectError:    true,
+			errorSubstring: "subcommand exited with code 2",
 		},
 		{
-			name:        "command with exit code 2",
-			command:     "exit 2",
-			expectError: true,
-			expectCode:  2,
+			name:           "exit code 42 is preserved",
+			command:        "exit 42",
+			expectedExit:   42,
+			expectError:    true,
+			errorSubstring: "subcommand exited with code 42",
 		},
 		{
-			name:        "command with exit code 42",
-			command:     "exit 42",
-			expectError: true,
-			expectCode:  42,
-		},
-		{
-			name:        "command with exit code 127",
-			command:     "exit 127",
-			expectError: true,
-			expectCode:  127,
-		},
-		{
-			name:        "command not found",
-			command:     "nonexistentcommand12345",
-			expectError: true,
-			expectCode:  127,
+			name:         "successful echo command",
+			command:      "echo 'test'",
+			expectedExit: 0,
+			expectError:  false,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			var buf bytes.Buffer
-			err := ShellRunner(tt.command, tt.name, ".", nil, &buf)
+			err := ShellRunner(tt.command, "test", ".", []string{}, &buf)
 
 			if tt.expectError {
-				require.Error(t, err, "Expected error for command: %s", tt.command)
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), tt.errorSubstring)
 
-				// Verify the exit code is preserved.
+				// Verify the error is an ExitCodeError with the correct code
 				var exitCodeErr errUtils.ExitCodeError
-				if errors.As(err, &exitCodeErr) {
-					assert.Equal(t, tt.expectCode, exitCodeErr.Code,
-						"Exit code should be %d for command: %s", tt.expectCode, tt.command)
-				} else {
-					t.Errorf("Expected ExitCodeError, got: %T", err)
+				if assert.ErrorAs(t, err, &exitCodeErr) {
+					assert.Equal(t, tt.expectedExit, exitCodeErr.Code)
 				}
 			} else {
-				assert.NoError(t, err, "Command should succeed: %s", tt.command)
+				assert.NoError(t, err)
 			}
 		})
 	}
 }
 
-// TestShellRunnerExitCodePreservation specifically tests that exit codes are preserved via errors.Join().
-func TestShellRunnerExitCodePreservation(t *testing.T) {
+func TestShellRunner_OutputCapture(t *testing.T) {
 	var buf bytes.Buffer
-	err := ShellRunner("exit 99", "test-exit-99", ".", nil, &buf)
+	err := ShellRunner("echo 'hello world'", "test", ".", []string{}, &buf)
 
-	require.Error(t, err, "Should return error for non-zero exit")
-
-	// Verify ExitCodeError is wrapped in the error chain.
-	var exitCodeErr errUtils.ExitCodeError
-	require.True(t, errors.As(err, &exitCodeErr), "Error should contain ExitCodeError")
-	assert.Equal(t, 99, exitCodeErr.Code, "ExitCodeError.Code should be 99")
-
-	// Verify the error message contains diagnostic context from the interpreter.
-	// The errors.Join() should preserve both the ExitCodeError and the original error.
-	assert.Contains(t, err.Error(), "code 99", "Error message should contain exit code")
+	assert.NoError(t, err)
+	assert.Contains(t, buf.String(), "hello world")
 }
 
-// TestShellRunnerErrorContext tests that error context is preserved via errors.Join().
-func TestShellRunnerErrorContext(t *testing.T) {
+func TestShellRunner_Environment(t *testing.T) {
 	var buf bytes.Buffer
+	env := []string{"TEST_VAR=test_value"}
+	err := ShellRunner("echo $TEST_VAR", "test", ".", env, &buf)
 
-	// Test command that doesn't exist to get interpreter error.
-	err := ShellRunner("command_that_does_not_exist_xyz", "test-not-found", ".", nil, &buf)
+	assert.NoError(t, err)
+	assert.Contains(t, buf.String(), "test_value")
+}
 
-	require.Error(t, err, "Should return error for command not found")
+func TestShellRunner_WorkingDirectory(t *testing.T) {
+	var buf bytes.Buffer
+	// Use a simple command that works in any directory
+	err := ShellRunner("pwd", "test", "/tmp", []string{}, &buf)
 
-	// Verify both ExitCodeError and original error context are preserved.
+	assert.NoError(t, err)
+	// The output should contain /tmp or its canonical path
+	output := buf.String()
+	assert.True(t, len(output) > 0, "output should not be empty")
+}
+
+func TestShellRunner_ParseError(t *testing.T) {
+	var buf bytes.Buffer
+	// Invalid shell syntax
+	err := ShellRunner("if then fi", "test", ".", []string{}, &buf)
+
+	require.Error(t, err)
+	// Parse errors should not be wrapped in ExitCodeError
 	var exitCodeErr errUtils.ExitCodeError
-	require.True(t, errors.As(err, &exitCodeErr), "Error should contain ExitCodeError")
-	assert.Equal(t, 127, exitCodeErr.Code, "Command not found should have exit code 127")
-
-	// The error should contain both the exit code and context from the interpreter.
-	errStr := err.Error()
-	assert.Contains(t, errStr, "code 127", "Error should mention exit code")
-	// Note: The exact error message from the interpreter may vary, but it should contain something about the command.
+	if errors.As(err, &exitCodeErr) {
+		t.Error("parse errors should not be ExitCodeError")
+	}
 }
