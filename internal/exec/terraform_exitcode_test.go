@@ -11,8 +11,7 @@ import (
 )
 
 // TestExitCodeExtraction tests that exit codes are correctly extracted from different error types.
-// This verifies the fix for properly detecting ExitCodeError before falling back to *exec.ExitError.
-// See: https://github.com/cloudposse/atmos/pull/XXXX for context on the bug fix.
+// This verifies detecting ExitCodeError before falling back to *exec.ExitError.
 func TestExitCodeExtraction(t *testing.T) {
 	testCases := []struct {
 		name         string
