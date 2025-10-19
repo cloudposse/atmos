@@ -26,7 +26,7 @@ env:
 jobs:
   # ensure the code builds...
   build:
-    name: Build ${{ matrix.target }}
+    name: Build (${{ matrix.target }})
     timeout-minutes: 15
     strategy:
       fail-fast: false
@@ -87,7 +87,7 @@ jobs:
 
   # run acceptance tests
   test:
-    name: Acceptance Tests ${{ matrix.flavor.target }}
+    name: Acceptance Tests (${{ matrix.flavor.target }})
     needs: [build]
     strategy:
       fail-fast: false
