@@ -925,8 +925,13 @@ func TestValidateStack_ReturnsErrorForInvalidFormat(t *testing.T) {
   // WRONG: Only binding external env var
   viper.BindEnv("GITHUB_TOKEN")
 
-  // CORRECT: Provide Atmos alternative
+  // WRONG: Only checks GITHUB_TOKEN, not ATMOS_GITHUB_TOKEN
   viper.BindEnv("ATMOS_GITHUB_TOKEN", "GITHUB_TOKEN")
+
+  // CORRECT: Check ATMOS_GITHUB_TOKEN first, then fall back to GITHUB_TOKEN
+  viper.BindEnv("ATMOS_GITHUB_TOKEN", "ATMOS_GITHUB_TOKEN", "GITHUB_TOKEN")
+
+  // CORRECT: Single env var (no fallback needed)
   viper.BindEnv("ATMOS_PRO_TOKEN", "ATMOS_PRO_TOKEN")
   ```
 
