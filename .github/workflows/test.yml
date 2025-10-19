@@ -32,7 +32,7 @@ jobs:
     steps:
       - name: Configure runners
         run: |
-          config="{\"ubuntu-latest\":\"[\\\"runs-on=${{github.run_id}}\\\",\\\"runner=terraform\\\",\\\"tag=${{matrix.stack_slug}}\\\",\\\"extras=s3-cache\\\",\\\"private=false\\\"]\",\"windows-latest\":\"[\\\"windows-latest\\\"]\",\"macos-latest\":\"[\\\"macos-latest\\\"]\"}"
+          config="{\"ubuntu-latest\":\"runs-on=${{github.run_id}}/runner=terraform/tag=atmos/extras=s3-cache/private=false\",\"windows-latest\":\"windows-latest\",\"macos-latest\":\"macos-latest\"}"
           echo "runners-config=${config}" >> $GITHUB_OUTPUT
           echo "runners-config=${config}"
         id: runners-config
@@ -50,7 +50,7 @@ jobs:
           - { os: macos-latest, target: macos }
     steps:
       - name: Test
-        run: echo "${{ fromJson(fromJson(needs.runners-config.outputs.runners-config)[matrix.flavor.os]) }}"
+        run: echo "${{ fromJson(needs.runners-config.outputs.runners-config)[matrix.flavor.os] }}"
 
   # ensure the code builds...
   build:
@@ -67,7 +67,7 @@ jobs:
             target: windows
           - os: macos-latest
             target: macos
-    runs-on: ${{ fromJson(fromJson(needs.runners-config.outputs.runners-config)[matrix.os]) }}
+    runs-on: ${{ fromJson(needs.runners-config.outputs.runners-config)[matrix.os] }}
     steps:
       - uses: runs-on/action@v1
         if: matrix.target == 'linux'
@@ -126,7 +126,7 @@ jobs:
           - { os: windows-latest, target: windows }
           - { os: macos-latest, target: macos }
     timeout-minutes: 30
-    runs-on: ${{ fromJson(fromJson(needs.runners-config.outputs.runners-config)[matrix.flavor.os]) }}
+    runs-on: ${{ fromJson(needs.runners-config.outputs.runners-config)[matrix.os] }}
     steps:
       - uses: runs-on/action@v1
         if: matrix.flavor.target == 'linux'
