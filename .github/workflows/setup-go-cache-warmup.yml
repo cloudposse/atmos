@@ -1,0 +1,60 @@
+name: Setup Go Cache Warmup
+on:
+  workflow_dispatch:
+  schedule:
+  # Run at 00:35 UTC (12:35 AM UTC) daily.
+  # • Pacific Time (PT): 4:35 PM (previous day)
+  # • Mountain Time (MT): 5:35 PM (previous day)
+  # • Central Time (CT): 6:35 PM (previous day)
+  # • Eastern Time (ET): 7:35 PM (previous day)
+    - cron: "35 0 * * *"
+
+jobs:
+  runners-config:
+    name: Runners Configuration
+    runs-on: ubuntu-latest
+    outputs:
+      runners-config: ${{ steps.runners-config.outputs.runners-config }}
+    steps:
+      - name: Configure runners
+        run: |
+          config="{\"ubuntu-latest\":\"runs-on=${{github.run_id}}/runner=terraform/tag=atmos/extras=s3-cache/private=false\",\"windows-latest\":\"windows-latest\",\"macos-latest\":\"macos-latest\"}"
+          echo "runners-config=${config}" >> $GITHUB_OUTPUT
+          echo "runners-config=${config}"
+        id: runners-config
+
+  build:
+    name: Build
+    needs: runners-config
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: linux
+          - os: windows-latest
+            target: windows
+          - os: macos-latest
+            target: macos
+    runs-on: ${{ fromJson(needs.runners-config.outputs.runners-config)[matrix.os] }}
+    steps:
+      - uses: runs-on/action@v1
+        if: matrix.target == 'linux'
+
+      - name: Build
+        if: ${{ ! ( matrix.target == 'windows' && github.event.pull_request.draft ) }}
+        run: echo "Building on ${{ matrix.os }}"
+
+      - name: Add GNU tar to PATH (significantly faster than windows tar)
+        if: matrix.target == 'windows' && ! github.event.pull_request.draft
+        run: echo "C:\Program Files\Git\usr\bin" >> $Env:GITHUB_PATH
+
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: "go.mod"
+        id: go

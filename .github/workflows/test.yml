@@ -37,22 +37,7 @@ jobs:
           echo "runners-config=${config}"
         id: runners-config
 
-  testrunners:
-    name: Test Runners Configuration
-    needs: runners-config
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        flavor:
-          - { os: ubuntu-latest, target: linux }
-          - { os: windows-latest, target: windows }
-          - { os: macos-latest, target: macos }
-    steps:
-      - name: Test
-        run: echo "${{ fromJson(needs.runners-config.outputs.runners-config)[matrix.flavor.os] }}"
-
-  # ensure the code builds...
+        # ensure the code builds...
   build:
     name: Build
     needs: runners-config
