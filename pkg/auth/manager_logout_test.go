@@ -696,3 +696,187 @@ func TestManager_LogoutProvider_WithFailures(t *testing.T) {
 		t.Errorf("LogoutProvider() error should be ErrLogoutFailed, got: %v", err)
 	}
 }
+
+func TestManager_Logout_IdentityInChain(t *testing.T) {
+	// Test the scenario where the first element in chain is an identity, not a provider.
+	// This exercises lines 789-803 in manager.go.
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockStore := types.NewMockCredentialStore(ctrl)
+	mockIdentity := types.NewMockIdentity(ctrl)
+
+	// Create config with standalone identity (no provider).
+	config := &schema.AuthConfig{
+		Providers: map[string]schema.Provider{},
+		Identities: map[string]schema.Identity{
+			"standalone-identity": {
+				Kind: "aws/user",
+			},
+		},
+	}
+
+	identityMap := map[string]types.Identity{
+		"standalone-identity": mockIdentity,
+	}
+
+	m := &manager{
+		config:          config,
+		credentialStore: mockStore,
+		providers:       map[string]types.Provider{},
+		identities:      identityMap,
+	}
+
+	// Mock expectations.
+	mockStore.EXPECT().Delete("standalone-identity").Return(nil)
+	mockIdentity.EXPECT().Logout(gomock.Any()).Return(nil)
+
+	ctx := context.Background()
+	err := m.Logout(ctx, "standalone-identity")
+
+	if err != nil {
+		t.Errorf("Logout() failed: %v", err)
+	}
+}
+
+func TestManager_Logout_IdentityLogoutNotSupported(t *testing.T) {
+	// Test identity.Logout returning ErrLogoutNotSupported (should be treated as success).
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockStore := types.NewMockCredentialStore(ctrl)
+	mockIdentity := types.NewMockIdentity(ctrl)
+
+	config := &schema.AuthConfig{
+		Providers: map[string]schema.Provider{},
+		Identities: map[string]schema.Identity{
+			"test-identity": {
+				Kind: "aws/user",
+			},
+		},
+	}
+
+	m := &manager{
+		config:          config,
+		credentialStore: mockStore,
+		providers:       map[string]types.Provider{},
+		identities: map[string]types.Identity{
+			"test-identity": mockIdentity,
+		},
+	}
+
+	// Mock expectations - identity returns ErrLogoutNotSupported.
+	mockStore.EXPECT().Delete("test-identity").Return(nil)
+	mockIdentity.EXPECT().Logout(gomock.Any()).Return(errUtils.ErrLogoutNotSupported)
+
+	ctx := context.Background()
+	err := m.Logout(ctx, "test-identity")
+
+	// Should succeed (ErrLogoutNotSupported is treated as success).
+	if err != nil {
+		t.Errorf("Logout() should succeed when identity.Logout returns ErrLogoutNotSupported, got: %v", err)
+	}
+}
+
+func TestManager_Logout_IdentityInChainLogoutFails(t *testing.T) {
+	// Test identity in chain returning an error.
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockStore := types.NewMockCredentialStore(ctrl)
+	mockIdentity := types.NewMockIdentity(ctrl)
+
+	config := &schema.AuthConfig{
+		Providers: map[string]schema.Provider{},
+		Identities: map[string]schema.Identity{
+			"standalone-identity": {
+				Kind: "aws/user",
+			},
+		},
+	}
+
+	m := &manager{
+		config:          config,
+		credentialStore: mockStore,
+		providers:       map[string]types.Provider{},
+		identities: map[string]types.Identity{
+			"standalone-identity": mockIdentity,
+		},
+	}
+
+	// Mock expectations - identity logout fails.
+	mockStore.EXPECT().Delete("standalone-identity").Return(nil)
+	mockIdentity.EXPECT().Logout(gomock.Any()).Return(errors.New("identity cleanup failed"))
+
+	ctx := context.Background()
+	err := m.Logout(ctx, "standalone-identity")
+
+	// Should return partial logout (1 keyring deleted, but identity cleanup failed).
+	if err == nil {
+		t.Error("Logout() should return error when identity logout fails")
+	}
+	if !errors.Is(err, errUtils.ErrPartialLogout) {
+		t.Errorf("Logout() should return ErrPartialLogout, got: %v", err)
+	}
+}
+
+func TestManager_LogoutAll_WithErrors(t *testing.T) {
+	// Test LogoutAll with multiple identities and some failures.
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockStore := types.NewMockCredentialStore(ctrl)
+	mockProvider := types.NewMockProvider(ctrl)
+	mockIdentity1 := types.NewMockIdentity(ctrl)
+	mockIdentity2 := types.NewMockIdentity(ctrl)
+
+	config := &schema.AuthConfig{
+		Providers: map[string]schema.Provider{
+			"provider1": {Kind: "aws/iam-identity-center"},
+		},
+		Identities: map[string]schema.Identity{
+			"identity1": {
+				Kind: "aws/permission-set",
+				Via:  &schema.IdentityVia{Provider: "provider1"},
+			},
+			"identity2": {
+				Kind: "aws/user",
+			},
+		},
+	}
+
+	m := &manager{
+		config:          config,
+		credentialStore: mockStore,
+		providers: map[string]types.Provider{
+			"provider1": mockProvider,
+		},
+		identities: map[string]types.Identity{
+			"identity1": mockIdentity1,
+			"identity2": mockIdentity2,
+		},
+	}
+
+	// Mock expectations for identity1.
+	mockStore.EXPECT().Delete("provider1").Return(nil)
+	mockStore.EXPECT().Delete("identity1").Return(nil)
+	mockProvider.EXPECT().Logout(gomock.Any()).Return(nil)
+	mockIdentity1.EXPECT().Logout(gomock.Any()).Return(nil)
+
+	// Mock expectations for identity2 - keyring deletion fails.
+	mockStore.EXPECT().Delete("identity2").Return(errors.New("keyring error"))
+	mockIdentity2.EXPECT().Logout(gomock.Any()).Return(nil)
+
+	ctx := context.Background()
+	err := m.LogoutAll(ctx)
+
+	// Should return error when some deletions fail.
+	// Since identity2 has 0 removed and 1 error, it returns ErrLogoutFailed.
+	// The overall LogoutAll then returns ErrLogoutFailed because at least one identity failed.
+	if err == nil {
+		t.Error("LogoutAll() should return error when some deletions fail")
+	}
+	if !errors.Is(err, errUtils.ErrLogoutFailed) {
+		t.Errorf("LogoutAll() should return ErrLogoutFailed, got: %v", err)
+	}
+}

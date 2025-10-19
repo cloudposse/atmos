@@ -300,3 +300,41 @@ func TestUser_buildGetSessionTokenInput_MFAError(t *testing.T) {
 	assert.Nil(t, in)
 	assert.Error(t, err)
 }
+
+func TestUserIdentity_Logout(t *testing.T) {
+	tests := []struct {
+		name        string
+		identityName string
+		expectError bool
+	}{
+		{
+			name:         "successful logout",
+			identityName: "test-user",
+			expectError:  false,
+		},
+		{
+			name:         "logout with different identity name",
+			identityName: "dev",
+			expectError:  false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			identity, err := NewUserIdentity(tt.identityName, &schema.Identity{
+				Kind: "aws/user",
+			})
+			require.NoError(t, err)
+
+			ctx := context.Background()
+			err = identity.Logout(ctx)
+
+			// Logout should succeed (it creates temp dir for file manager).
+			if tt.expectError {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}

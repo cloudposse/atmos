@@ -532,3 +532,20 @@ func TestAssumeRoleIdentity_newSTSClient_RegionResolution(t *testing.T) {
 		})
 	}
 }
+
+func TestAssumeRoleIdentity_Logout(t *testing.T) {
+	// Test that assume-role identity Logout returns nil (no identity-specific cleanup).
+	identity, err := NewAssumeRoleIdentity("test-role", &schema.Identity{
+		Kind: "aws/assume-role",
+		Principal: map[string]interface{}{
+			"assume_role": "arn:aws:iam::123456789012:role/MyRole",
+		},
+	})
+	require.NoError(t, err)
+
+	ctx := context.Background()
+	err = identity.Logout(ctx)
+
+	// Should always succeed with no cleanup.
+	assert.NoError(t, err)
+}
