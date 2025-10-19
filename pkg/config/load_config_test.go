@@ -14,9 +14,9 @@ import (
 
 // test configuration with flags --config and --config-path with multiple files and directories merge.
 func TestLoadConfigFromCLIArgsMultipleMerge(t *testing.T) {
-	// create tmp folder
+	// Create tmp folder.
 	tmpDir := t.TempDir()
-	// create atmos.yaml file
+	// Create atmos.yaml file.
 	atmosConfigFilePath := filepath.Join(tmpDir, "test-config.yaml")
 	f, err := os.Create(atmosConfigFilePath)
 	if err != nil {
@@ -34,7 +34,7 @@ func TestLoadConfigFromCLIArgsMultipleMerge(t *testing.T) {
 		}
 	}
 	f.Close()
-	// write another config file
+	// Write another config file.
 	tmpDir2 := t.TempDir()
 	atmosConfigFilePath2 := filepath.Join(tmpDir2, "atmos.yaml")
 	f2, err := os.Create(atmosConfigFilePath2)
@@ -68,7 +68,7 @@ func TestLoadConfigFromCLIArgsMultipleMerge(t *testing.T) {
 }
 
 func TestLoadConfigFromCLIArgs(t *testing.T) {
-	// Setup valid configuration for base case
+	// Setup valid configuration for base case.
 	validDir := t.TempDir()
 	validConfig := `
 logs:
@@ -282,7 +282,7 @@ func TestValidatedIsDirs_EdgeCases(t *testing.T) {
 func TestMergeConfigFromDirectories_ConfigFileVariants(t *testing.T) {
 	tmpDir := t.TempDir()
 
-	// Directory with atmos.yaml
+	// Directory with atmos.yaml.
 	dir1 := filepath.Join(tmpDir, "dir1")
 	require.NoError(t, os.Mkdir(dir1, 0o755))
 	require.NoError(t, os.WriteFile(
@@ -291,7 +291,7 @@ func TestMergeConfigFromDirectories_ConfigFileVariants(t *testing.T) {
 		0o644,
 	))
 
-	// Directory with .atmos.yaml
+	// Directory with .atmos.yaml.
 	dir2 := filepath.Join(tmpDir, "dir2")
 	require.NoError(t, os.Mkdir(dir2, 0o755))
 	require.NoError(t, os.WriteFile(
@@ -300,7 +300,7 @@ func TestMergeConfigFromDirectories_ConfigFileVariants(t *testing.T) {
 		0o644,
 	))
 
-	// Directory with no config file
+	// Directory with no config file.
 	emptyDir := filepath.Join(tmpDir, "empty")
 	require.NoError(t, os.Mkdir(emptyDir, 0o755))
 
@@ -356,7 +356,7 @@ func TestMergeConfigFromDirectories_ConfigFileVariants(t *testing.T) {
 func TestLoadConfigFromCLIArgs_ErrorPaths(t *testing.T) {
 	tmpDir := t.TempDir()
 
-	// Create invalid YAML file
+	// Create invalid YAML file.
 	invalidYaml := filepath.Join(tmpDir, "invalid.yaml")
 	require.NoError(t, os.WriteFile(invalidYaml, []byte("invalid: [unclosed"), 0o644))
 
