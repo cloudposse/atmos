@@ -136,13 +136,13 @@ atmos auth list --providers=aws-sso --format json | jq -e '.providers["aws-sso"]
 
 One of the most powerful features is authentication chain visualization. Chains show how identities authenticate through providers or other identities:
 
-- **Simple chain**: `aws-sso → admin`  
+- **Simple chain**: `aws-sso → admin`
   Direct authentication through AWS SSO
 
-- **Multi-step chain**: `aws-sso → base-role → admin-role`  
+- **Multi-step chain**: `aws-sso → base-role → admin-role`
   Authenticate via SSO, assume base role, then assume admin role
 
-- **Complex chain**: `okta → aws-dev → prod-account → admin`  
+- **Complex chain**: `okta → aws-dev → prod-account → admin`
   Authenticate through Okta, assume AWS dev role, switch to prod account, become admin
 
 These chains can be arbitrarily long, supporting even the most complex enterprise authentication scenarios.

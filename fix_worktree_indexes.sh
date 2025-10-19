@@ -21,26 +21,26 @@ current=0
 for worktree_path in $worktree_dirs; do
     current=$((current + 1))
     worktree_name=$(basename "$worktree_path")
-    
+
     echo "[$current/$total_count] Processing worktree: $worktree_name"
-    
+
     if [ ! -d "$worktree_path" ]; then
         echo "  Warning: Directory $worktree_path does not exist, skipping..."
         continue
     fi
-    
+
     cd "$worktree_path"
-    
+
     # Check if git index is corrupted
     if ! git status --porcelain > /dev/null 2>&1; then
         echo "  Git index appears corrupted, attempting to fix..."
-        
+
         # Remove the index file if it exists
         if [ -f ".git/index" ]; then
             echo "    Removing corrupt index file..."
             rm ".git/index"
         fi
-        
+
         # Reset the index
         echo "    Resetting index..."
         git reset --mixed HEAD > /dev/null 2>&1 || {
@@ -50,7 +50,7 @@ for worktree_path in $worktree_dirs; do
                 echo "    Warning: git read-tree also failed"
             }
         }
-        
+
         # Verify the fix worked
         if git status --porcelain > /dev/null 2>&1; then
             echo "    ✓ Index successfully fixed"
@@ -60,7 +60,7 @@ for worktree_path in $worktree_dirs; do
     else
         echo "  ✓ Index appears healthy"
     fi
-    
+
     # Return to main directory
     cd - > /dev/null
 done
