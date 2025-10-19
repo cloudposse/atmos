@@ -69,7 +69,7 @@ func TestPrintInvalidUsageErrorAndExit(t *testing.T) {
 	}
 	execPath, err := exec.LookPath(os.Args[0])
 	assert.Nil(t, err)
-	cmd := exec.Command(execPath, "-test.run=TestPrintErrorMarkdownAndExit")
+	cmd := exec.Command(execPath, "-test.run=TestPrintInvalidUsageErrorAndExit")
 	cmd.Env = append(os.Environ(), "TEST_EXIT=1")
 	err = cmd.Run()
 	var exitError *exec.ExitError
