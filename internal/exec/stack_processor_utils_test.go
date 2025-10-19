@@ -1,6 +1,7 @@
 package exec
 
 import (
+	"io/fs"
 	"path/filepath"
 	"sort"
 	"testing"
@@ -8,7 +9,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -301,12 +301,12 @@ func TestProcessYAMLConfigFileMissingFilesReturnError(t *testing.T) {
 	// Verify error is returned.
 	assert.Error(t, err)
 
-	// Verify it's our specific error type.
-	assert.ErrorIs(t, err, errUtils.ErrStackManifestFileNotFound)
+	// Verify it's a file not found error (from os.ReadFile).
+	assert.ErrorIs(t, err, fs.ErrNotExist)
 
-	// Verify error message contains the sentinel error text.
+	// Verify error message contains file path.
 	errMsg := err.Error()
-	assert.Contains(t, errMsg, "stack manifest file not found")
+	assert.Contains(t, errMsg, "not-present.yaml")
 }
 
 func TestProcessYAMLConfigFileEmptyManifest(t *testing.T) {
