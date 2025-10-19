@@ -3,11 +3,13 @@ package mock
 import (
 	"context"
 	"fmt"
+	"sort"
 
 	"github.com/mitchellh/mapstructure"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/component"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -21,6 +23,8 @@ import (
 type MockComponentProvider struct{}
 
 func init() {
+	defer perf.Track(nil, "mock.init")()
+
 	// Self-register with the component registry.
 	if err := component.Register(&MockComponentProvider{}); err != nil {
 		panic(fmt.Sprintf("failed to register mock component provider: %v", err))
@@ -29,16 +33,22 @@ func init() {
 
 // GetType returns the component type identifier.
 func (m *MockComponentProvider) GetType() string {
+	defer perf.Track(nil, "mock.GetType")()
+
 	return "mock"
 }
 
 // GetGroup returns the component group for categorization.
 func (m *MockComponentProvider) GetGroup() string {
+	defer perf.Track(nil, "mock.GetGroup")()
+
 	return "Testing"
 }
 
 // GetBasePath returns the base directory path for this component type.
 func (m *MockComponentProvider) GetBasePath(atmosConfig *schema.AtmosConfiguration) string {
+	defer perf.Track(atmosConfig, "mock.GetBasePath")()
+
 	if atmosConfig == nil {
 		return DefaultConfig().BasePath
 	}
@@ -64,6 +74,8 @@ func (m *MockComponentProvider) GetBasePath(atmosConfig *schema.AtmosConfigurati
 
 // ListComponents discovers all components of this type in a stack.
 func (m *MockComponentProvider) ListComponents(ctx context.Context, stack string, stackConfig map[string]any) ([]string, error) {
+	defer perf.Track(nil, "mock.ListComponents")()
+
 	componentsSection, ok := stackConfig["components"].(map[string]any)
 	if !ok {
 		return []string{}, nil
@@ -79,11 +91,14 @@ func (m *MockComponentProvider) ListComponents(ctx context.Context, stack string
 		componentNames = append(componentNames, name)
 	}
 
+	sort.Strings(componentNames)
 	return componentNames, nil
 }
 
 // ValidateComponent validates component configuration.
 func (m *MockComponentProvider) ValidateComponent(config map[string]any) error {
+	defer perf.Track(nil, "mock.ValidateComponent")()
+
 	if config == nil {
 		return nil
 	}
@@ -98,6 +113,8 @@ func (m *MockComponentProvider) ValidateComponent(config map[string]any) error {
 
 // Execute runs a command for this component type.
 func (m *MockComponentProvider) Execute(ctx *component.ExecutionContext) error {
+	defer perf.Track(ctx.AtmosConfig, "mock.Execute")()
+
 	// Mock execution - simulates command execution without external dependencies.
 	u.PrintfMessageToTUI("Mock component execution:\n")
 	u.PrintfMessageToTUI("  Type: %s\n", ctx.ComponentType)
@@ -114,6 +131,8 @@ func (m *MockComponentProvider) Execute(ctx *component.ExecutionContext) error {
 
 // GenerateArtifacts creates necessary files for component execution.
 func (m *MockComponentProvider) GenerateArtifacts(ctx *component.ExecutionContext) error {
+	defer perf.Track(ctx.AtmosConfig, "mock.GenerateArtifacts")()
+
 	// Mock artifact generation - no actual files created.
 	u.PrintfMessageToTUI("Mock artifact generation for %s in stack %s\n", ctx.Component, ctx.Stack)
 	return nil
@@ -121,6 +140,8 @@ func (m *MockComponentProvider) GenerateArtifacts(ctx *component.ExecutionContex
 
 // GetAvailableCommands returns list of commands this component type supports.
 func (m *MockComponentProvider) GetAvailableCommands() []string {
+	defer perf.Track(nil, "mock.GetAvailableCommands")()
+
 	return []string{"plan", "apply", "destroy", "validate"}
 }
 

@@ -597,11 +597,12 @@ Example showing inheritance:
 ```yaml
 # atmos.yaml (global)
 components:
-  yourtype:
-    base_path: "components/yourtype"
-    timeout: 300
-    tags:
-      - global
+  plugins:
+    yourtype:
+      base_path: "components/yourtype"
+      timeout: 300
+      tags:
+        - global
 
 # stacks/globals.yaml (stack level)
 yourtype:

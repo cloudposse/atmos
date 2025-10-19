@@ -651,11 +651,11 @@ type ComponentProvider interface {
 
     // Execute runs a command for this component type.
     // Context provides all necessary information for execution.
-    Execute(ctx ExecutionContext) error
+    Execute(ctx *ExecutionContext) error
 
     // GenerateArtifacts creates necessary files for component execution.
     // Examples: backend.tf for Terraform, varfile for Helmfile
-    GenerateArtifacts(ctx ExecutionContext) error
+    GenerateArtifacts(ctx *ExecutionContext) error
 
     // GetAvailableCommands returns list of commands this component type supports.
     // Example: For terraform: ["plan", "apply", "destroy", "workspace"]
@@ -1346,21 +1346,6 @@ func TestEmptyRegistry(t *testing.T) {
     assert.False(t, ok)
 }
 
-func TestNilCommand(t *testing.T) {
-    Reset()
-
-    provider := &mockProvider{
-        name: "test",
-        cmd:  nil, // nil command
-    }
-    Register(provider)
-
-    root := &cobra.Command{Use: "root"}
-    err := RegisterAll(root)
-    assert.Error(t, err)
-    assert.Contains(t, err.Error(), "returned nil command")
-}
-
 func TestDuplicateRegistration(t *testing.T) {
     Reset()
 
@@ -1487,7 +1472,6 @@ go test ./pkg/component/... -cover | grep -E '(registry|mock)' | awk '{if ($5 < 
    - ✅ ListProviders() - grouping by category
    - ✅ Count() - accurate count tracking
    - ✅ Reset() - complete cleanup
-   - ✅ RegisterAll() - success and error cases
 
 2. **Thread Safety:**
    - ✅ Concurrent registration (100+ goroutines)
