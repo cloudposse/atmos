@@ -184,6 +184,17 @@ Together, these commands provide a complete authentication workflow from discove
 
 For full documentation, see the [atmos auth list command reference](/cli/commands/auth/list).
 
+## What's Next?
+
+The `atmos auth list` command is part of our broader authentication management initiative. Coming soon:
+
+- **`atmos auth login`** - Authenticate with configured providers and assume identities
+- **`atmos auth whoami`** - Display your current authentication status and active identity
+- **`atmos auth env`** - Export credentials as environment variables for use in scripts and CI/CD
+- **`atmos auth validate`** - Validate authentication configuration and test connectivity
+
+Together, these commands provide a complete authentication workflow from discovery to validation to usage.
+
 We'd love to hear your feedback! Let us know what you think on [GitHub](https://github.com/cloudposse/atmos) or join our [community Slack](https://slack.cloudposse.com/).
 
 ---
