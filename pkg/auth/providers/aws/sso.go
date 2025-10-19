@@ -15,6 +15,7 @@ import (
 	awsCloud "github.com/cloudposse/atmos/pkg/auth/cloud/aws"
 	authTypes "github.com/cloudposse/atmos/pkg/auth/types"
 	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/telemetry"
 	"github.com/cloudposse/atmos/pkg/utils"
@@ -155,6 +156,8 @@ func (p *ssoProvider) promptDeviceAuth(authResp *ssooidc.StartDeviceAuthorizatio
 
 // Validate validates the provider configuration.
 func (p *ssoProvider) Validate() error {
+	defer perf.Track(nil, "aws.ssoProvider.Validate")()
+
 	if p.startURL == "" {
 		return fmt.Errorf("%w: start_url is required", errUtils.ErrInvalidProviderConfig)
 	}
@@ -242,17 +245,19 @@ func (p *ssoProvider) pollForAccessToken(ctx context.Context, oidcClient *ssooid
 
 // Logout removes provider-specific credential storage.
 func (p *ssoProvider) Logout(ctx context.Context) error {
+	defer perf.Track(nil, "aws.ssoProvider.Logout")()
+
 	// Get base_path from provider spec if configured.
 	basePath := awsCloud.GetFilesBasePath(p.config)
 
 	fileManager, err := awsCloud.NewAWSFileManager(basePath)
 	if err != nil {
-		return errors.Join(errUtils.ErrLogoutFailed, err)
+		return errors.Join(errUtils.ErrProviderLogout, errUtils.ErrLogoutFailed, err)
 	}
 
 	if err := fileManager.Cleanup(p.name); err != nil {
 		log.Debug("Failed to cleanup AWS files for SSO provider", "provider", p.name, "error", err)
-		return errors.Join(errUtils.ErrLogoutFailed, err)
+		return errors.Join(errUtils.ErrProviderLogout, errUtils.ErrLogoutFailed, err)
 	}
 
 	log.Debug("Cleaned up AWS files for SSO provider", "provider", p.name)
@@ -261,6 +266,8 @@ func (p *ssoProvider) Logout(ctx context.Context) error {
 
 // GetFilesDisplayPath returns the display path for AWS credential files.
 func (p *ssoProvider) GetFilesDisplayPath() string {
+	defer perf.Track(nil, "aws.ssoProvider.GetFilesDisplayPath")()
+
 	basePath := awsCloud.GetFilesBasePath(p.config)
 
 	fileManager, err := awsCloud.NewAWSFileManager(basePath)

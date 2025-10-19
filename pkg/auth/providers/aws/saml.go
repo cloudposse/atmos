@@ -21,6 +21,7 @@ import (
 	awsCloud "github.com/cloudposse/atmos/pkg/auth/cloud/aws"
 	"github.com/cloudposse/atmos/pkg/auth/types"
 	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -377,17 +378,19 @@ func (p *samlProvider) setupBrowserAutomation() {
 
 // Logout removes provider-specific credential storage.
 func (p *samlProvider) Logout(ctx context.Context) error {
+	defer perf.Track(nil, "aws.samlProvider.Logout")()
+
 	// Get base_path from provider spec if configured.
 	basePath := awsCloud.GetFilesBasePath(p.config)
 
 	fileManager, err := awsCloud.NewAWSFileManager(basePath)
 	if err != nil {
-		return errors.Join(errUtils.ErrLogoutFailed, err)
+		return errors.Join(errUtils.ErrProviderLogout, errUtils.ErrLogoutFailed, err)
 	}
 
 	if err := fileManager.Cleanup(p.name); err != nil {
 		log.Debug("Failed to cleanup AWS files for SAML provider", "provider", p.name, "error", err)
-		return errors.Join(errUtils.ErrLogoutFailed, err)
+		return errors.Join(errUtils.ErrProviderLogout, errUtils.ErrLogoutFailed, err)
 	}
 
 	log.Debug("Cleaned up AWS files for SAML provider", "provider", p.name)
@@ -396,6 +399,8 @@ func (p *samlProvider) Logout(ctx context.Context) error {
 
 // GetFilesDisplayPath returns the display path for AWS credential files.
 func (p *samlProvider) GetFilesDisplayPath() string {
+	defer perf.Track(nil, "aws.samlProvider.GetFilesDisplayPath")()
+
 	basePath := awsCloud.GetFilesBasePath(p.config)
 
 	fileManager, err := awsCloud.NewAWSFileManager(basePath)
