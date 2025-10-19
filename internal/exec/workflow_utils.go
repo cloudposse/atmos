@@ -212,7 +212,8 @@ func ExecuteWorkflow(
 				WithExplanationf("The following command failed to execute:\n```\n%s\n```\n\nTo resume the workflow from this step, run:\n```\n%s\n```", failedCmd, resumeCommand).
 				Err()
 			errUtils.CheckErrorAndPrint(stepErr, "", "")
-			return stepErr
+			// Return the original error wrapped with stepErr to preserve exit code information
+			return errors.Join(stepErr, err)
 		}
 	}
 
