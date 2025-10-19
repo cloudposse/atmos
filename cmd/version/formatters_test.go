@@ -250,12 +250,14 @@ func captureStdout(t *testing.T, fn func() error) string {
 	oldStdout := os.Stdout
 	r, w, _ := os.Pipe()
 	os.Stdout = w
+	// Ensure stdout is restored and r is closed even if the test fails.
+	defer func() { os.Stdout = oldStdout }()
+	defer r.Close()
 
 	err := fn()
+	// Close writer before assertions and reading to flush the pipe.
+	_ = w.Close()
 	require.NoError(t, err)
-
-	w.Close()
-	os.Stdout = oldStdout
 
 	var buf bytes.Buffer
 	_, _ = io.Copy(&buf, r)

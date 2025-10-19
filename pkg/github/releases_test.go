@@ -674,8 +674,8 @@ func TestApplyPagination(t *testing.T) {
 			name:        "zero limit",
 			offset:      0,
 			limit:       0,
-			expectedLen: 0,
-			expectedTag: "",
+			expectedLen: 5, // limit<=0 returns all items
+			expectedTag: "v1.0.0",
 		},
 	}
 

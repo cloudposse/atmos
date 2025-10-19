@@ -177,16 +177,18 @@ func filterByDate(releases []*github.RepositoryRelease, since *time.Time) []*git
 func applyPagination(releases []*github.RepositoryRelease, offset, limit int) []*github.RepositoryRelease {
 	defer perf.Track(nil, "github.applyPagination")()
 
-	if offset >= len(releases) {
+	n := len(releases)
+	if offset < 0 {
+		offset = 0
+	}
+	if offset >= n {
 		return []*github.RepositoryRelease{}
 	}
-
-	end := offset + limit
-	if end > len(releases) {
-		end = len(releases)
+	// Treat limit<=0 as "no upper bound".
+	if limit <= 0 || offset+limit > n {
+		return releases[offset:]
 	}
-
-	return releases[offset:end]
+	return releases[offset : offset+limit]
 }
 
 // GetReleaseByTag fetches a specific GitHub release by tag name.

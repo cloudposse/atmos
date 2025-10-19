@@ -30,11 +30,8 @@ const (
 func newGitHubClient(ctx context.Context) *github.Client {
 	defer perf.Track(nil, "github.newGitHubClient")()
 
-	// Check for ATMOS_GITHUB_TOKEN first, then fall back to GITHUB_TOKEN.
+	// Get GitHub token (bound to check ATMOS_GITHUB_TOKEN then GITHUB_TOKEN).
 	githubToken := viper.GetString("ATMOS_GITHUB_TOKEN")
-	if githubToken == "" {
-		githubToken = viper.GetString("GITHUB_TOKEN")
-	}
 
 	if githubToken == "" {
 		return github.NewClient(nil)

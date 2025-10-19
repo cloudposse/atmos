@@ -136,6 +136,11 @@ var listCmd = &cobra.Command{
 			return fmt.Errorf("%w: got %d", errUtils.ErrInvalidLimit, listLimit)
 		}
 
+		// Validate offset.
+		if listOffset < 0 {
+			return fmt.Errorf("%w: got %d", errUtils.ErrInvalidOffset, listOffset)
+		}
+
 		// Parse since date if provided.
 		var sinceTime *time.Time
 		if listSince != "" {
