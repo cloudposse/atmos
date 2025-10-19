@@ -34,6 +34,11 @@ type Provider interface {
 	// Returns error only if cleanup fails for critical resources.
 	// Best-effort: continue cleanup even if individual steps fail.
 	Logout(ctx context.Context) error
+
+	// GetFilesDisplayPath returns the display path for credential files.
+	// Returns the configured path if set, otherwise a default path.
+	// For display purposes only (may use ~ for home directory).
+	GetFilesDisplayPath() string
 }
 
 // Identity defines the interface that all authentication identities must implement.

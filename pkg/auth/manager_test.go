@@ -284,6 +284,7 @@ func (p *testProvider) Authenticate(_ context.Context) (types.ICredentials, erro
 func (p *testProvider) Validate() error                         { return nil }
 func (p *testProvider) Environment() (map[string]string, error) { return map[string]string{}, nil }
 func (p *testProvider) Logout(_ context.Context) error          { return nil }
+func (p *testProvider) GetFilesDisplayPath() string             { return "~/.aws/atmos" }
 
 func TestManager_getProviderForIdentity_NameAndAlias(t *testing.T) {
 	m := &manager{

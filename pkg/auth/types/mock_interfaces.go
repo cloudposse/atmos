@@ -66,6 +66,20 @@ func (mr *MockProviderMockRecorder) Environment() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Environment", reflect.TypeOf((*MockProvider)(nil).Environment))
 }
 
+// GetFilesDisplayPath mocks base method.
+func (m *MockProvider) GetFilesDisplayPath() string {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetFilesDisplayPath")
+	ret0, _ := ret[0].(string)
+	return ret0
+}
+
+// GetFilesDisplayPath indicates an expected call of GetFilesDisplayPath.
+func (mr *MockProviderMockRecorder) GetFilesDisplayPath() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetFilesDisplayPath", reflect.TypeOf((*MockProvider)(nil).GetFilesDisplayPath))
+}
+
 // Kind mocks base method.
 func (m *MockProvider) Kind() string {
 	m.ctrl.T.Helper()

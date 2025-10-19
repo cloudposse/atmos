@@ -9,7 +9,6 @@ import (
 	"github.com/charmbracelet/huh"
 
 	errUtils "github.com/cloudposse/atmos/errors"
-	awsCloud "github.com/cloudposse/atmos/pkg/auth/cloud/aws"
 	"github.com/cloudposse/atmos/pkg/auth/factory"
 	"github.com/cloudposse/atmos/pkg/auth/identities/aws"
 	"github.com/cloudposse/atmos/pkg/auth/types"
@@ -339,32 +338,20 @@ func (m *manager) GetProviderForIdentity(identityName string) string {
 	return chain[0]
 }
 
-// GetFilesDisplayPath returns the display path for AWS files for a provider.
-// Returns the configured path if set, otherwise default ~/.aws/atmos.
+// GetFilesDisplayPath returns the display path for credential files for a provider.
+// Returns the configured path if set, otherwise a default path.
 func (m *manager) GetFilesDisplayPath(providerName string) string {
 	defer perf.Track(nil, "auth.Manager.GetFilesDisplayPath")()
 
-	// Get provider config.
-	providerConfig, exists := m.config.Providers[providerName]
+	// Get provider instance.
+	provider, exists := m.providers[providerName]
 	if !exists {
 		// Default path if provider not found.
-		fileManager, err := awsCloud.NewAWSFileManager("")
-		if err != nil {
-			return "~/.aws/atmos"
-		}
-		return fileManager.GetDisplayPath()
-	}
-
-	// Get base_path from provider spec.
-	basePath := awsCloud.GetFilesBasePath(&providerConfig)
-
-	// Create file manager to get display path.
-	fileManager, err := awsCloud.NewAWSFileManager(basePath)
-	if err != nil {
 		return "~/.aws/atmos"
 	}
 
-	return fileManager.GetDisplayPath()
+	// Delegate to provider to get display path.
+	return provider.GetFilesDisplayPath()
 }
 
 // GetProviderKindForIdentity returns the provider kind for the given identity. By building the authentication chain and getting the root provider's kind.

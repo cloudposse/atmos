@@ -209,3 +209,9 @@ func (p *oidcProvider) Logout(ctx context.Context) error {
 	log.Debug("Logout not supported for GitHub OIDC provider (no files to clean up)", "provider", p.name)
 	return errUtils.ErrLogoutNotSupported
 }
+
+// GetFilesDisplayPath returns the display path for credential files.
+// GitHub OIDC provider doesn't use file-based credentials.
+func (p *oidcProvider) GetFilesDisplayPath() string {
+	return "" // No files for GitHub OIDC provider
+}

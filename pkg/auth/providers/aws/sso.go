@@ -258,3 +258,15 @@ func (p *ssoProvider) Logout(ctx context.Context) error {
 	log.Debug("Cleaned up AWS files for SSO provider", "provider", p.name)
 	return nil
 }
+
+// GetFilesDisplayPath returns the display path for AWS credential files.
+func (p *ssoProvider) GetFilesDisplayPath() string {
+	basePath := awsCloud.GetFilesBasePath(p.config)
+
+	fileManager, err := awsCloud.NewAWSFileManager(basePath)
+	if err != nil {
+		return "~/.aws/atmos"
+	}
+
+	return fileManager.GetDisplayPath()
+}
