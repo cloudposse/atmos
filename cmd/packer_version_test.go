@@ -11,6 +11,8 @@ import (
 )
 
 func TestPackerVersionCmd(t *testing.T) {
+	_ = NewTestKit(t)
+
 	skipIfPackerNotInstalled(t)
 
 	workDir := "../tests/fixtures/scenarios/packer"
