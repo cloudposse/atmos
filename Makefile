@@ -15,7 +15,7 @@ readme:
 	@exit 0
 
 get:
-	go get
+	@echo "Skipping 'go get' - use 'make deps' to download dependencies"
 
 build: build-default
 
