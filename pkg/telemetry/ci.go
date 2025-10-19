@@ -3,6 +3,8 @@ package telemetry
 import (
 	"os"
 	"sort"
+
+	log "github.com/cloudposse/atmos/pkg/logger"
 )
 
 const (
@@ -32,12 +34,17 @@ var (
 		"GOOGLE_CLOUD_BUILD": "BUILDER_OUTPUT",
 		"HARNESS":            "HARNESS_BUILD_ID",
 		"HUDSON":             "HUDSON_URL",
-		"JENKINS":            "JENKINS_URL", // "JENKINS_URL" and "BUILD_ID"
 		"PROW":               "PROW_JOB_ID",
 		"SEMAPHORE":          "SEMAPHORE",
 		"TEAMCITY":           "TEAMCITY_VERSION",
 		"TRAVIS":             "TRAVIS",
 		"SPACELIFT":          "TF_VAR_spacelift_run_id",
+	}
+
+	// Map of CI providers that require ALL listed environment variables to exist.
+	// Jenkins requires both JENKINS_URL and BUILD_ID to avoid false positives from build-harness.
+	ciProvidersEnvVarsAllExist = map[string][]string{
+		"JENKINS": {"JENKINS_URL", "BUILD_ID"},
 	}
 
 	// Map of CI providers that can be detected by checking if environment variables equal specific values.
@@ -70,7 +77,15 @@ func isEnvVarTrue(key string) bool {
 // IsCI determines if the current environment is a CI/CD environment.
 // Returns true if CI=true or if a specific CI provider is detected.
 func IsCI() bool {
-	return isEnvVarTrue(ciEnvVar) || ciProvider() != ""
+	ciEnvTrue := isEnvVarTrue(ciEnvVar)
+	provider := ciProvider()
+
+	// Debug logging to understand what's being detected.
+	if ciEnvTrue || provider != "" {
+		log.Debug("CI environment detected", "CI_env_var", ciEnvTrue, "provider", provider)
+	}
+
+	return ciEnvTrue || provider != ""
 }
 
 // PreserveCIEnvVars temporarily removes CI-related environment variables from the current process
@@ -151,9 +166,37 @@ func applyAlphabeticalOrder[V string | map[string]string](table map[string]V, fi
 // ciProvider detects which CI/CD provider is currently running.
 // Returns the name of the detected provider or empty string if none found.
 func ciProvider() string {
-	// First, check providers that can be detected by environment variable existence.
+	// First, check providers that require ALL specified environment variables to exist.
+	// This prevents false positives (e.g., Jenkins from build-harness).
+	// Sort keys alphabetically for consistent ordering.
+	var allExistKeys []string
+	for key := range ciProvidersEnvVarsAllExist {
+		allExistKeys = append(allExistKeys, key)
+	}
+	sort.Strings(allExistKeys)
+	for _, key := range allExistKeys {
+		vars := ciProvidersEnvVarsAllExist[key]
+		allExist := true
+		for _, envVar := range vars {
+			if !isEnvVarExists(envVar) {
+				allExist = false
+				break
+			}
+		}
+		if allExist {
+			log.Debug("CI provider detected by all env vars existing", "provider", key, "envVars", vars)
+			return key
+		}
+	}
+
+	// Then, check providers that can be detected by single environment variable existence.
 	// Process in alphabetical order for consistent results.
 	if result := applyAlphabeticalOrder(ciProvidersEnvVarsExists, isEnvVarExists); result != "" {
+		// Log which specific env var was detected.
+		if envVar, exists := ciProvidersEnvVarsExists[result]; exists {
+			envValue, _ := os.LookupEnv(envVar)
+			log.Debug("CI provider detected by env var existence", "provider", result, "envVar", envVar, "value", envValue)
+		}
 		return result
 	}
 
@@ -167,9 +210,16 @@ func ciProvider() string {
 		return false
 	}
 
-	// Then, check providers that require specific environment variable values.
+	// Finally, check providers that require specific environment variable values.
 	// Process in alphabetical order for consistent results.
 	if result := applyAlphabeticalOrder(ciProvidersEnvVarsEquals, checkEnvVarsEquals); result != "" {
+		if envVars, exists := ciProvidersEnvVarsEquals[result]; exists {
+			for envName, expectedValue := range envVars {
+				if actualValue, found := os.LookupEnv(envName); found {
+					log.Debug("CI provider detected by env var value", "provider", result, "envVar", envName, "expectedValue", expectedValue, "actualValue", actualValue)
+				}
+			}
+		}
 		return result
 	}
 

@@ -80,6 +80,9 @@ func (p *ssoProvider) Authenticate(ctx context.Context) (authTypes.ICredentials,
 	// Build config options.
 	configOpts := []func(*config.LoadOptions) error{
 		config.WithRegion(p.region),
+		// Disable credential providers to avoid hanging on EC2 metadata service or other credential sources.
+		// SSO device flow doesn't require existing credentials.
+		config.WithCredentialsProvider(aws.AnonymousCredentials{}),
 	}
 
 	// Add custom endpoint resolver if configured.
@@ -87,15 +90,18 @@ func (p *ssoProvider) Authenticate(ctx context.Context) (authTypes.ICredentials,
 		configOpts = append(configOpts, resolverOpt)
 	}
 
+	log.Debug("Loading AWS config for SSO authentication", "region", p.region)
 	// Initialize AWS config for the SSO region.
 	cfg, err := config.LoadDefaultConfig(ctx, configOpts...)
 	if err != nil {
 		return nil, fmt.Errorf("%w: failed to load AWS config: %v", errUtils.ErrAuthenticationFailed, err)
 	}
+	log.Debug("AWS config loaded successfully")
 
 	// Create OIDC client for device authorization.
 	oidcClient := ssooidc.NewFromConfig(cfg)
 
+	log.Debug("Registering SSO client")
 	// Register the client.
 	registerResp, err := oidcClient.RegisterClient(ctx, &ssooidc.RegisterClientInput{
 		ClientName: aws.String("atmos-auth"),
@@ -104,7 +110,9 @@ func (p *ssoProvider) Authenticate(ctx context.Context) (authTypes.ICredentials,
 	if err != nil {
 		return nil, fmt.Errorf("%w: failed to register SSO client: %v", errUtils.ErrAuthenticationFailed, err)
 	}
+	log.Debug("SSO client registered successfully")
 
+	log.Debug("Starting device authorization")
 	// Start device authorization.
 	authResp, err := oidcClient.StartDeviceAuthorization(ctx, &ssooidc.StartDeviceAuthorizationInput{
 		ClientId:     registerResp.ClientId,
@@ -114,6 +122,7 @@ func (p *ssoProvider) Authenticate(ctx context.Context) (authTypes.ICredentials,
 	if err != nil {
 		return nil, fmt.Errorf("%w: failed to start device authorization: %v", errUtils.ErrAuthenticationFailed, err)
 	}
+	log.Debug("Device authorization started")
 
 	p.promptDeviceAuth(authResp)
 	// Poll for token using helper to keep function size small.
@@ -137,20 +146,28 @@ func (p *ssoProvider) Authenticate(ctx context.Context) (authTypes.ICredentials,
 	}, nil
 }
 
-// promptDeviceAuth displays user code and verification URI if not in CI.
+// promptDeviceAuth displays user code and verification URI.
+// Shows the prompt unless we're in a non-interactive environment (real CI without TTY).
 func (p *ssoProvider) promptDeviceAuth(authResp *ssooidc.StartDeviceAuthorizationOutput) {
 	code := ""
 	if authResp.UserCode != nil {
 		code = *authResp.UserCode
 	}
-	if !telemetry.IsCI() {
-		if authResp.VerificationUriComplete != nil && *authResp.VerificationUriComplete != "" {
-			if err := utils.OpenUrl(*authResp.VerificationUriComplete); err != nil {
-				log.Debug(err)
-				utils.PrintfMessageToTUI("🔐 Please visit %s and enter code: %s.", *authResp.VerificationUriComplete, code)
-			}
+
+	// Always show the prompt - even if CI env vars are set, the user might be running
+	// make locally. The browser open will work if there's a display available.
+	if authResp.VerificationUriComplete != nil && *authResp.VerificationUriComplete != "" {
+		// Always print the message so users know authentication is required.
+		log.Debug("Displaying authentication prompt", "url", *authResp.VerificationUriComplete, "code", code, "isCI", telemetry.IsCI())
+		utils.PrintfMessageToTUI("🔐 Authenticating via browser. Please visit %s and verify code: %s\n", *authResp.VerificationUriComplete, code)
+
+		if err := utils.OpenUrl(*authResp.VerificationUriComplete); err != nil {
+			log.Debug("Failed to open browser automatically", "error", err)
+		} else {
+			log.Debug("Browser opened successfully")
 		}
 	}
+	log.Debug("Finished promptDeviceAuth, starting polling")
 }
 
 // Validate validates the provider configuration.
