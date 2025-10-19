@@ -49,6 +49,8 @@ auth:
           name: "core-identity" # (2)
 ```
 
+**That's it!** The configuration maps directly from what you see in Leapp to your `atmos.yaml`. Now you can run `atmos auth login` and you're ready to go.
+
 <details>
 <summary>Understanding Leapp Terminology (Optional)</summary>
 
@@ -62,7 +64,12 @@ In Leapp, authentication consists of:
 
 </details>
 
-## Field Mapping Reference
+## Step-by-Step Migration
+
+Need more detail? Here's how to migrate each piece of your Leapp configuration:
+
+<details>
+<summary>Field Mapping Reference (Quick Lookup)</summary>
 
 | Leapp Field | `atmos auth` Location | Notes |
 |-------------|----------------------|-------|
@@ -73,7 +80,7 @@ In Leapp, authentication consists of:
 | (3) Identity (permission set) | `identities.<name>.principal.name` | Exact permission set name |
 | (4) Named Profile | `identities.<name>` (key) | Use descriptive naming: `account/role` |
 
-## Step-by-Step Migration
+</details>
 
 ### 1. Identify Your Provider Configuration
 
