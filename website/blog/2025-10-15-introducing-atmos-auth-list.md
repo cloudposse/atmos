@@ -188,12 +188,12 @@ For full documentation, see the [atmos auth list command reference](/cli/command
 
 The `atmos auth list` command is part of our broader authentication management initiative. Coming soon:
 
-- **`atmos auth login`** - Authenticate with configured providers and assume identities
-- **`atmos auth whoami`** - Display your current authentication status and active identity
-- **`atmos auth env`** - Export credentials as environment variables for use in scripts and CI/CD
-- **`atmos auth validate`** - Validate authentication configuration and test connectivity
+- **`atmos auth logout`** - Cleanly terminate authentication sessions and clear cached credentials
+- **`atmos auth shell`** - Launch an authenticated shell session with credentials automatically configured
+- **Interactive identity selection** - Enhanced `atmos auth login` with improved identity selection and TTY dialogs
+- **AWS SSO improvements** - Better user experience with spinners and interactive prompts for AWS SSO authentication
 
-Together, these commands provide a complete authentication workflow from discovery to validation to usage.
+Together, these enhancements will provide an even more seamless authentication workflow from discovery to usage.
 
 We'd love to hear your feedback! Let us know what you think on [GitHub](https://github.com/cloudposse/atmos) or join our [community Slack](https://slack.cloudposse.com/).
 
