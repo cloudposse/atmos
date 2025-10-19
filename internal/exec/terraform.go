@@ -25,7 +25,7 @@ const (
 	varFileFlag               = "-var-file"
 	skipTerraformLockFileFlag = "--skip-lock-file"
 	forceFlag                 = "--force"
-	detailedExitCodeFlag      = "--detailed-exitcode"
+	detailedExitCodeFlag      = "-detailed-exitcode"
 	logFieldComponent         = "component"
 )
 
@@ -489,12 +489,13 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 					workspaceSelectRedirectStdErr,
 				)
 				if err != nil {
-					var osErr *osexec.ExitError
-					ok := errors.As(err, &osErr)
-					if !ok || osErr.ExitCode() != 1 {
-						// err is not a non-zero exit code or err is not exit code 1, which we are expecting.
+					// Check if it's an ExitCodeError with code 1 (workspace doesn't exist)
+					var exitCodeErr errUtils.ExitCodeError
+					if !errors.As(err, &exitCodeErr) || exitCodeErr.Code != 1 {
+						// Different error or different exit code
 						return err
 					}
+					// Workspace doesn't exist, try to create it
 					err = ExecuteShellCommand(
 						atmosConfig,
 						info.Command,
@@ -561,11 +562,17 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 		// Compute exitCode for upload, whether or not err is set.
 		var exitCode int
 		if err != nil {
-			var osErr *osexec.ExitError
-			if errors.As(err, &osErr) {
-				exitCode = osErr.ExitCode()
+			// Prefer our typed error to preserve exit codes from subcommands.
+			var ec errUtils.ExitCodeError
+			if errors.As(err, &ec) {
+				exitCode = ec.Code
 			} else {
-				exitCode = 1
+				var osErr *osexec.ExitError
+				if errors.As(err, &osErr) {
+					exitCode = osErr.ExitCode()
+				} else {
+					exitCode = 1
+				}
 			}
 		} else {
 			exitCode = 0
@@ -581,9 +588,13 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 			if uerr := uploadStatus(&info, exitCode, client, gitRepo); uerr != nil {
 				return uerr
 			}
-			// Treat 0 and 2 as success for plan uploads.
-			if exitCode == 0 || exitCode == 2 {
+			// Treat 0 and 2 as success for plan uploads, but preserve exit code.
+			if exitCode == 0 {
 				return nil
+			}
+			if exitCode == 2 {
+				// Exit code 2 is success for terraform plan but we must preserve it
+				return errUtils.ExitCodeError{Code: 2}
 			}
 		}
 		// For other commands or failure, return the original error.
