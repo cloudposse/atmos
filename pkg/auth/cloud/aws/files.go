@@ -248,8 +248,13 @@ func (m *AWSFileManager) CleanupIdentity(providerName, identityName string) erro
 	}
 
 	// Remove identity section from config file.
+	// AWS config uses "profile <name>" format, except for "default".
 	configPath := m.GetConfigPath(providerName)
-	if err := m.removeIniSection(configPath, identityName); err != nil {
+	configSectionName := identityName
+	if identityName != "default" {
+		configSectionName = "profile " + identityName
+	}
+	if err := m.removeIniSection(configPath, configSectionName); err != nil {
 		errs = append(errs, fmt.Errorf("failed to remove config section: %w", err))
 	}
 
