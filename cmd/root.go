@@ -9,6 +9,7 @@ import (
 	"math"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"syscall"
@@ -56,6 +57,49 @@ var profilerServer *profiler.Server
 // logFileHandle holds the opened log file for the lifetime of the program.
 var logFileHandle *os.File
 
+// processChdirFlag processes the --chdir flag and ATMOS_CHDIR environment variable,
+// changing the working directory before any other operations.
+// Precedence: --chdir flag > ATMOS_CHDIR environment variable.
+func processChdirFlag(cmd *cobra.Command) error {
+	chdir, _ := cmd.Flags().GetString("chdir")
+	// If flag is not set, check environment variable.
+	// Note: chdir is not supported in atmos.yaml since it must be processed before atmos.yaml is loaded.
+	if chdir == "" {
+		//nolint:forbidigo // Must use os.Getenv: chdir is processed before Viper configuration loads.
+		chdir = os.Getenv("ATMOS_CHDIR")
+	}
+
+	if chdir == "" {
+		return nil // No chdir specified.
+	}
+
+	// Clean and make absolute to handle both relative and absolute paths.
+	absPath, err := filepath.Abs(chdir)
+	if err != nil {
+		return fmt.Errorf("%w: invalid chdir path: %s", errUtils.ErrPathResolution, chdir)
+	}
+
+	// Verify the directory exists before attempting to change to it.
+	stat, err := os.Stat(absPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return fmt.Errorf("%w: directory does not exist: %s", errUtils.ErrWorkdirNotExist, absPath)
+		}
+		return fmt.Errorf("%w: failed to access directory: %s", errUtils.ErrStatFile, absPath)
+	}
+
+	if !stat.IsDir() {
+		return fmt.Errorf("%w: not a directory: %s", errUtils.ErrWorkdirNotExist, absPath)
+	}
+
+	// Change to the specified directory.
+	if err := os.Chdir(absPath); err != nil {
+		return fmt.Errorf("%w: failed to change directory to %s", errUtils.ErrPathResolution, absPath)
+	}
+
+	return nil
+}
+
 // RootCmd represents the base command when called without any subcommands.
 var RootCmd = &cobra.Command{
 	Use:                "atmos",
@@ -77,6 +121,12 @@ var RootCmd = &cobra.Command{
 			cmd.SilenceUsage = true
 			cmd.SilenceErrors = true
 		}
+
+		// Process --chdir flag before any other operations (including config loading).
+		if err := processChdirFlag(cmd); err != nil {
+			errUtils.CheckErrorPrintAndExit(err, "", "")
+		}
+
 		configAndStacksInfo := schema.ConfigAndStacksInfo{}
 		// Honor CLI overrides for resolving atmos.yaml and its imports.
 		if bp, _ := cmd.Flags().GetString("base-path"); bp != "" {
@@ -600,6 +650,7 @@ func init() {
 	// Add the template function for wrapped flag usages.
 	cobra.AddTemplateFunc("wrappedFlagUsages", templates.WrappedFlagUsages)
 
+	RootCmd.PersistentFlags().StringP("chdir", "C", "", "Change working directory before processing (run as if Atmos started in this directory)")
 	RootCmd.PersistentFlags().String("redirect-stderr", "", "File descriptor to redirect `stderr` to. "+
 		"Errors can be redirected to any file or any standard file descriptor (including `/dev/null`)")
 	RootCmd.PersistentFlags().Bool("version", false, "Display the Atmos CLI version")
