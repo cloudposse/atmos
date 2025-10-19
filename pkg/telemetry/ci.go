@@ -3,6 +3,7 @@ package telemetry
 import (
 	"os"
 	"sort"
+	"strings"
 
 	log "github.com/cloudposse/atmos/pkg/logger"
 )
@@ -80,11 +81,6 @@ func isEnvVarTrue(key string) bool {
 func IsCI() bool {
 	ciEnvTrue := isEnvVarTrue(ciEnvVar)
 	provider := ciProvider()
-
-	// Debug logging to understand what's being detected.
-	if ciEnvTrue || provider != "" {
-		log.Debug("CI environment detected", "CI_env_var", ciEnvTrue, logKeyProvider, provider)
-	}
 
 	return ciEnvTrue || provider != ""
 }
@@ -185,7 +181,7 @@ func ciProvider() string {
 			}
 		}
 		if allExist {
-			log.Debug("CI provider detected by all env vars existing", logKeyProvider, key, "envVars", vars)
+			log.Debug("CI provider detected", logKeyProvider, key, "env", strings.Join(vars, ","))
 			return key
 		}
 	}
@@ -195,8 +191,7 @@ func ciProvider() string {
 	if result := applyAlphabeticalOrder(ciProvidersEnvVarsExists, isEnvVarExists); result != "" {
 		// Log which specific env var was detected.
 		if envVar, exists := ciProvidersEnvVarsExists[result]; exists {
-			envValue, _ := os.LookupEnv(envVar)
-			log.Debug("CI provider detected by env var existence", logKeyProvider, result, "envVar", envVar, "value", envValue)
+			log.Debug("CI provider detected", logKeyProvider, result, "env", envVar)
 		}
 		return result
 	}
@@ -215,10 +210,14 @@ func ciProvider() string {
 	// Process in alphabetical order for consistent results.
 	if result := applyAlphabeticalOrder(ciProvidersEnvVarsEquals, checkEnvVarsEquals); result != "" {
 		if envVars, exists := ciProvidersEnvVarsEquals[result]; exists {
-			for envName, expectedValue := range envVars {
-				if actualValue, found := os.LookupEnv(envName); found {
-					log.Debug("CI provider detected by env var value", logKeyProvider, result, "envVar", envName, "expectedValue", expectedValue, "actualValue", actualValue)
+			var detectedVars []string
+			for envName := range envVars {
+				if _, found := os.LookupEnv(envName); found {
+					detectedVars = append(detectedVars, envName)
 				}
+			}
+			if len(detectedVars) > 0 {
+				log.Debug("CI provider detected", logKeyProvider, result, "env", strings.Join(detectedVars, ","))
 			}
 		}
 		return result
