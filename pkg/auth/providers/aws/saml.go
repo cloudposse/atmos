@@ -326,6 +326,8 @@ func (p *samlProvider) getProviderType() string {
 
 // Validate validates the provider configuration.
 func (p *samlProvider) Validate() error {
+	defer perf.Track(nil, "aws.samlProvider.Validate")()
+
 	if p.url == "" {
 		return fmt.Errorf("%w: URL is required for SAML provider", errUtils.ErrInvalidProviderConfig)
 	}
