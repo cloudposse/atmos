@@ -184,16 +184,6 @@ Together, these commands provide a complete authentication workflow from discove
 
 For full documentation, see the [atmos auth list command reference](/cli/commands/auth/list).
 
-## What's Next?
-
-This is just the beginning. We're continuing to improve authentication management in Atmos with:
-
-- Enhanced visualization options
-- Interactive TUI mode for browsing configurations
-- Integration with secret managers
-- Authentication policy validation
-- Audit logging for authentication events
-
 We'd love to hear your feedback! Let us know what you think on [GitHub](https://github.com/cloudposse/atmos) or join our [community Slack](https://slack.cloudposse.com/).
 
 ---
