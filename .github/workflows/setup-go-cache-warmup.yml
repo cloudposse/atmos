@@ -21,10 +21,10 @@ jobs:
             target: windows
           - os: macos-latest
             target: macos
-    runs-on: ${{ fromJson(needs.runners-config.outputs.runners-config)[matrix.os] }}
+    runs-on: ${{ matrix.os }}
     steps:
       - name: Add GNU tar to PATH (significantly faster than windows tar)
-        if: matrix.target == 'windows' && ! github.event.pull_request.draft
+        if: matrix.target == 'windows'
         run: echo "C:\Program Files\Git\usr\bin" >> $Env:GITHUB_PATH
 
       - name: Check out code into the Go module directory
