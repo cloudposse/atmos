@@ -126,7 +126,7 @@ jobs:
           - { os: windows-latest, target: windows }
           - { os: macos-latest, target: macos }
     timeout-minutes: 30
-    runs-on: ${{ fromJson(needs.runners-config.outputs.runners-config)[matrix.os] }}
+    runs-on: ${{ fromJson(needs.runners-config.outputs.runners-config)[matrix.flavor.os] }}
     steps:
       - uses: runs-on/action@v1
         if: matrix.flavor.target == 'linux'
