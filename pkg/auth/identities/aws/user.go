@@ -17,6 +17,7 @@ import (
 	atmosCredentials "github.com/cloudposse/atmos/pkg/auth/credentials"
 	"github.com/cloudposse/atmos/pkg/auth/types"
 	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -356,6 +357,8 @@ func (i *userIdentity) PostAuthenticate(ctx context.Context, stackInfo *schema.C
 
 // Logout removes identity-specific credential storage.
 func (i *userIdentity) Logout(ctx context.Context) error {
+	defer perf.Track(nil, "aws.userIdentity.Logout")()
+
 	// AWS user identities use "aws-user" as their provider name.
 	// Clean up files under ~/.aws/atmos/aws-user/.
 	fileManager, err := awsCloud.NewAWSFileManager("")

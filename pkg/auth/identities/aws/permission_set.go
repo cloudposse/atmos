@@ -14,6 +14,7 @@ import (
 	awsCloud "github.com/cloudposse/atmos/pkg/auth/cloud/aws"
 	"github.com/cloudposse/atmos/pkg/auth/types"
 	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -267,6 +268,8 @@ func (i *permissionSetIdentity) buildCredsFromRole(resp *sso.GetRoleCredentialsO
 
 // Logout removes identity-specific credential storage.
 func (i *permissionSetIdentity) Logout(ctx context.Context) error {
+	defer perf.Track(nil, "aws.permissionSetIdentity.Logout")()
+
 	// AWS permission-set identities don't have identity-specific storage.
 	// File cleanup is handled by the provider's Logout method.
 	// Keyring cleanup is handled by AuthManager.
