@@ -10,12 +10,13 @@ import Intro from '@site/src/components/Intro'
 
 <Intro>
 Run any tool (Terraform, AWS CLI, kubectl, etc.) with the right cloud identity injected automatically into the environment. Use `exec` when you want a one-off command to inherit secure, temporary credentials without polluting your shell session.
-
-**Use `exec` for**: Single commands or scripts (automation, CI/CD, one-off operations).
-**Use [`shell`](/cli/commands/auth/auth-shell) for**: Interactive sessions where you'll run multiple commands (debugging, exploration, manual operations).
 </Intro>
 
 <Screengrab title="atmos auth exec --help" slug="atmos-auth-exec--help" />
+
+:::tip Exec vs Shell
+Use `exec` for single commands or automation. Use [`shell`](/cli/commands/auth/auth-shell) for interactive sessions where you'll run multiple commands.
+:::
 
 ## Usage
 
