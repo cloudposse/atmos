@@ -404,9 +404,9 @@ func (p *samlProvider) hasPlaywrightDriversOrCanDownload() bool {
 
 	// Check common Playwright cache locations.
 	playwrightPaths := []string{
-		filepath.Join(homeDir, ".cache", "ms-playwright"),                  // Linux.
-		filepath.Join(homeDir, "Library", "Caches", "ms-playwright-go"),    // macOS (Go specific).
-		filepath.Join(homeDir, "AppData", "Local", "ms-playwright"),        // Windows.
+		filepath.Join(homeDir, ".cache", "ms-playwright"),               // Linux.
+		filepath.Join(homeDir, "Library", "Caches", "ms-playwright-go"), // macOS (Go specific).
+		filepath.Join(homeDir, "AppData", "Local", "ms-playwright"),     // Windows.
 	}
 
 	for _, path := range playwrightPaths {
@@ -490,9 +490,9 @@ func (p *samlProvider) shouldDownloadBrowser() bool {
 
 	// Check common Playwright cache locations.
 	playwrightPaths := []string{
-		filepath.Join(homeDir, ".cache", "ms-playwright"),                  // Linux.
-		filepath.Join(homeDir, "Library", "Caches", "ms-playwright-go"),    // macOS (Go specific).
-		filepath.Join(homeDir, "AppData", "Local", "ms-playwright"),        // Windows.
+		filepath.Join(homeDir, ".cache", "ms-playwright"),               // Linux.
+		filepath.Join(homeDir, "Library", "Caches", "ms-playwright-go"), // macOS (Go specific).
+		filepath.Join(homeDir, "AppData", "Local", "ms-playwright"),     // Windows.
 	}
 
 	for _, path := range playwrightPaths {
