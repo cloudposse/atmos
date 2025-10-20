@@ -413,9 +413,9 @@ func (m spinnerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m spinnerModel) View() string {
 	if m.done {
 		if m.result != nil && m.result.err != nil {
-			return lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorRed)).Render("✗ Authentication failed\n")
+			return fmt.Sprintf("%s Authentication failed\n", theme.Styles.XMark)
 		}
-		return lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorGreen)).Render("✓ Authentication successful!\n")
+		return fmt.Sprintf("%s Authentication successful!\n", theme.Styles.Checkmark)
 	}
 	return fmt.Sprintf("%s %s...", m.spinner.View(), m.message)
 }
