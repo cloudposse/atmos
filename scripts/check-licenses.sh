@@ -30,7 +30,10 @@ echo ""
 # Run license check - only disallow "forbidden" category
 # We allow "restricted" (LGPL, MPL) as they're acceptable for dynamic linking
 EXIT_CODE=0
-if go-licenses check . --disallowed_types=forbidden 2>&1 | tee /tmp/license-check.log; then
+go-licenses check . --disallowed_types=forbidden 2>&1 | tee /tmp/license-check.log
+LICENSE_CHECK_EXIT=$?
+
+if [ $LICENSE_CHECK_EXIT -eq 0 ]; then
     # Check if there are any truly problematic licenses in the output
     if grep -qi "GPL-[23]\.0\|AGPL" /tmp/license-check.log 2>/dev/null; then
         echo "❌ Found strongly copyleft licenses (GPL/AGPL)!"
