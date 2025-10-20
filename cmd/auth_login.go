@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"time"
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/lipgloss/table"
@@ -68,6 +69,30 @@ func createAuthManager(authConfig *schema.AuthConfig) (auth.AuthManager, error) 
 	return auth.NewAuthManager(authConfig, credStore, validator, nil)
 }
 
+const (
+	secondsPerMinute = 60
+	minutesPerHour   = 60
+)
+
+// formatDuration formats a duration into a human-readable string.
+func formatDuration(d time.Duration) string {
+	if d < 0 {
+		return "expired"
+	}
+
+	hours := int(d.Hours())
+	minutes := int(d.Minutes()) % minutesPerHour
+	seconds := int(d.Seconds()) % secondsPerMinute
+
+	if hours > 0 {
+		return fmt.Sprintf("%dh %dm", hours, minutes)
+	}
+	if minutes > 0 {
+		return fmt.Sprintf("%dm %ds", minutes, seconds)
+	}
+	return fmt.Sprintf("%ds", seconds)
+}
+
 // displayAuthSuccess displays a styled success message with authentication details.
 func displayAuthSuccess(whoami *authTypes.WhoamiInfo) {
 	// Display checkmark with success message.
@@ -89,6 +114,8 @@ func displayAuthSuccess(whoami *authTypes.WhoamiInfo) {
 
 	if whoami.Expiration != nil {
 		expiresStr := whoami.Expiration.Format("2006-01-02 15:04:05 MST")
+		duration := formatDuration(time.Until(*whoami.Expiration))
+		expiresStr = fmt.Sprintf("%s (%s)", expiresStr, duration)
 		rows = append(rows, []string{"Expires", expiresStr})
 	}
 
