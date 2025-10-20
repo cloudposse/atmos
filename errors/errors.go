@@ -95,6 +95,7 @@ var (
 	ErrInvalidPagerCommand = errors.New("invalid pager command")
 	ErrEmptyURL            = errors.New("empty URL provided")
 	ErrFailedToFindImport  = errors.New("failed to find import")
+	ErrHTTPRequestFailed   = errors.New("HTTP request failed")
 
 	// Config loading errors.
 	ErrAtmosDirConfigNotFound      = errors.New("atmos config directory not found")
