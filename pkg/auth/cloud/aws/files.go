@@ -41,7 +41,7 @@ type AWSFileManager struct {
 }
 
 // NewAWSFileManager creates a new AWS file manager instance.
-// basePath is optional and can be empty to use defaults.
+// BasePath is optional and can be empty to use defaults.
 // Precedence: 1) basePath parameter from provider spec, 2) default ~/.aws/atmos.
 func NewAWSFileManager(basePath string) (*AWSFileManager, error) {
 	var baseDir string

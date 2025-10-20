@@ -11,7 +11,7 @@ import (
 )
 
 // SetupFiles sets up AWS credentials and config files for the given identity.
-// basePath specifies the base directory for AWS files (from provider's files.base_path).
+// BasePath specifies the base directory for AWS files (from provider's files.base_path).
 // If empty, uses the default ~/.aws/atmos path.
 func SetupFiles(providerName, identityName string, creds types.ICredentials, basePath string) error {
 	awsCreds, ok := creds.(*types.AWSCredentials)
@@ -44,7 +44,7 @@ func SetupFiles(providerName, identityName string, creds types.ICredentials, bas
 }
 
 // SetEnvironmentVariables sets the AWS_SHARED_CREDENTIALS_FILE and AWS_CONFIG_FILE environment variables.
-// basePath specifies the base directory for AWS files (from provider's files.base_path).
+// BasePath specifies the base directory for AWS files (from provider's files.base_path).
 // If empty, uses the default ~/.aws/atmos path.
 func SetEnvironmentVariables(stackInfo *schema.ConfigAndStacksInfo, providerName, identityName string, basePath string) error {
 	m, err := NewAWSFileManager(basePath)

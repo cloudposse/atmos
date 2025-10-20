@@ -31,7 +31,7 @@ const (
 type contextKey string
 
 const (
-	// skipProviderLogoutKey is the context key for skipping provider.Logout calls.
+	// SkipProviderLogoutKey is the context key for skipping provider.Logout calls.
 	skipProviderLogoutKey contextKey = "skipProviderLogout"
 )
 
