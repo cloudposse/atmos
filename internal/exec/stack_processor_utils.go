@@ -11,7 +11,6 @@ import (
 	"sync"
 
 	"github.com/mitchellh/mapstructure"
-	"github.com/pkg/errors"
 	"github.com/santhosh-tekuri/jsonschema/v5"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -703,21 +702,21 @@ func processYAMLConfigFileWithContextInternal(
 
 			atmosManifestJsonSchemaFileReader, err := os.Open(atmosManifestJsonSchemaFilePath)
 			if err != nil {
-				return nil, nil, nil, nil, nil, nil, nil, errors.Errorf(atmosManifestJsonSchemaValidationErrorFormat, relativeFilePath, err)
+				return nil, nil, nil, nil, nil, nil, nil, fmt.Errorf("%w: "+atmosManifestJsonSchemaValidationErrorFormat, errUtils.ErrStackManifestSchemaValidation, relativeFilePath, err)
 			}
 			defer func() {
 				_ = atmosManifestJsonSchemaFileReader.Close()
 			}()
 
 			if err := compiler.AddResource(atmosManifestJsonSchemaFilePath, atmosManifestJsonSchemaFileReader); err != nil {
-				return nil, nil, nil, nil, nil, nil, nil, errors.Errorf(atmosManifestJsonSchemaValidationErrorFormat, relativeFilePath, err)
+				return nil, nil, nil, nil, nil, nil, nil, fmt.Errorf("%w: "+atmosManifestJsonSchemaValidationErrorFormat, errUtils.ErrStackManifestSchemaValidation, relativeFilePath, err)
 			}
 
 			compiler.Draft = jsonschema.Draft2020
 
 			compiledSchema, err = compiler.Compile(atmosManifestJsonSchemaFilePath)
 			if err != nil {
-				return nil, nil, nil, nil, nil, nil, nil, errors.Errorf(atmosManifestJsonSchemaValidationErrorFormat, relativeFilePath, err)
+				return nil, nil, nil, nil, nil, nil, nil, fmt.Errorf("%w: "+atmosManifestJsonSchemaValidationErrorFormat, errUtils.ErrStackManifestSchemaValidation, relativeFilePath, err)
 			}
 
 			// Store compiled schema in cache for reuse.
@@ -730,11 +729,11 @@ func processYAMLConfigFileWithContextInternal(
 			case *jsonschema.ValidationError:
 				b, err2 := json.MarshalIndent(e.BasicOutput(), "", "  ")
 				if err2 != nil {
-					return nil, nil, nil, nil, nil, nil, nil, errors.Errorf(atmosManifestJsonSchemaValidationErrorFormat, relativeFilePath, err2)
+					return nil, nil, nil, nil, nil, nil, nil, fmt.Errorf("%w: "+atmosManifestJsonSchemaValidationErrorFormat, errUtils.ErrStackManifestSchemaValidation, relativeFilePath, err2)
 				}
-				return nil, nil, nil, nil, nil, nil, nil, errors.Errorf(atmosManifestJsonSchemaValidationErrorFormat, relativeFilePath, string(b))
+				return nil, nil, nil, nil, nil, nil, nil, fmt.Errorf("%w: "+atmosManifestJsonSchemaValidationErrorFormat, errUtils.ErrStackManifestSchemaValidation, relativeFilePath, string(b))
 			default:
-				return nil, nil, nil, nil, nil, nil, nil, errors.Errorf(atmosManifestJsonSchemaValidationErrorFormat, relativeFilePath, err)
+				return nil, nil, nil, nil, nil, nil, nil, fmt.Errorf("%w: "+atmosManifestJsonSchemaValidationErrorFormat, errUtils.ErrStackManifestSchemaValidation, relativeFilePath, err)
 			}
 		}
 	}
@@ -886,10 +885,10 @@ func processYAMLConfigFileWithContextInternal(
 		impWithExtPath := filepath.Join(basePath, impWithExt)
 
 		if impWithExtPath == filePath {
-			errorMessage := fmt.Sprintf("invalid import in the manifest '%s'\nThe file imports itself in '%s'",
+			return nil, nil, nil, nil, nil, nil, nil, fmt.Errorf("%w: invalid import in the manifest '%s'\nThe file imports itself in '%s'",
+				errUtils.ErrStackImportSelf,
 				relativeFilePath,
 				imp)
-			return nil, nil, nil, nil, nil, nil, nil, errors.New(errorMessage)
 		}
 
 		// Find all import matches in the glob
@@ -909,18 +908,16 @@ func processYAMLConfigFileWithContextInternal(
 				// If the import is not a Go template and SkipIfMissing is false, return the error
 				if !isGolangTemplate && !importStruct.SkipIfMissing {
 					if err != nil {
-						errorMessage := fmt.Sprintf("no matches found for the import '%s' in the file '%s'\nError: %s",
+						return nil, nil, nil, nil, nil, nil, nil, fmt.Errorf("%w: no matches found for the import '%s' in the file '%s'\nError: %s",
+							errUtils.ErrStackImportNotFound,
 							imp,
 							relativeFilePath,
-							err,
-						)
-						return nil, nil, nil, nil, nil, nil, nil, errors.New(errorMessage)
+							err)
 					} else if importMatches == nil {
-						errorMessage := fmt.Sprintf("no matches found for the import '%s' in the file '%s'",
+						return nil, nil, nil, nil, nil, nil, nil, fmt.Errorf("%w: no matches found for the import '%s' in the file '%s'",
+							errUtils.ErrStackImportNotFound,
 							imp,
-							relativeFilePath,
-						)
-						return nil, nil, nil, nil, nil, nil, nil, errors.New(errorMessage)
+							relativeFilePath)
 					}
 				}
 			}
@@ -1580,13 +1577,12 @@ func processBaseComponentConfigInternal(
 
 					if _, ok := allComponentsMap[baseComponentFromInheritList]; !ok {
 						if checkBaseComponentExists {
-							errorMessage := fmt.Sprintf("The component '%[1]s' in the stack manifest '%[2]s' inherits from '%[3]s' "+
+							return fmt.Errorf("%w: The component '%[1]s' in the stack manifest '%[2]s' inherits from '%[3]s' "+
 								"(using 'metadata.inherits'), but '%[3]s' is not defined in any of the config files for the stack '%[2]s'",
+								errUtils.ErrInvalidComponent,
 								component,
 								stack,
-								baseComponentFromInheritList,
-							)
-							return errors.New(errorMessage)
+								baseComponentFromInheritList)
 						}
 					}
 
@@ -1766,8 +1762,12 @@ func processBaseComponentConfigInternal(
 			componentPath := filepath.Join(componentBasePath, baseComponent)
 			componentPathExists, err := u.IsDirectory(componentPath)
 			if err != nil || !componentPathExists {
-				return errors.New("The component '" + component + "' inherits from the base component '" +
-					baseComponent + "' (using 'component:' attribute), " + "but `" + baseComponent + "' is not defined in any of the YAML config files for the stack '" + stack + "'")
+				return fmt.Errorf("%w: The component '%s' inherits from the base component '%s' (using 'component:' attribute), but `%s' is not defined in any of the YAML config files for the stack '%s'",
+					errUtils.ErrInvalidComponent,
+					component,
+					baseComponent,
+					baseComponent,
+					stack)
 			}
 		}
 	}

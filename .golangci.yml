@@ -70,6 +70,10 @@ linters:
           msg: "Use static sentinel errors from errors/errors.go instead of dynamic errors; wrap with fmt.Errorf(\"%w: context\", ErrSentinel) if context needed"
         - pattern: 'errors\.New\(fmt\.Sprintf'
           msg: "Use static sentinel errors from errors/errors.go instead of errors.New(fmt.Sprintf(...)); use fmt.Errorf(\"%w: ...\", ErrSentinel) for context"
+        - pattern: 'github\.com/pkg/errors'
+          msg: "Do not use deprecated github.com/pkg/errors; use static sentinel errors from errors/errors.go instead"
+        - pattern: '\bpkgerrors\.'
+          msg: "Do not use deprecated pkg/errors; use static sentinel errors from errors/errors.go instead"
       exclude-godoc-examples: false
       analyze-types: true
     funlen:
