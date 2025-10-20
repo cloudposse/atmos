@@ -102,13 +102,11 @@ jobs:
 
           SUCCESS_COMMENT_BODY="<!-- changelog-check -->
           > [!NOTE]
-          > #### Changelog Entry Found ✅
-          >
-          > This PR includes the required changelog entry:
+          > #### Changelog Added ✅
           >
           > $(echo "$BLOG_FILES" | sed 's/^/> - /')
           >
-          > The changelog check has passed."
+          > Thank you!"
 
           if [ -n "$EXISTING_COMMENT" ]; then
             echo "Updating existing comment with success message..."
