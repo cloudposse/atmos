@@ -9,9 +9,9 @@ import (
 
 	mock_telemetry "github.com/cloudposse/atmos/pkg/telemetry/mock"
 	"github.com/cloudposse/atmos/pkg/version"
-	"go.uber.org/mock/gomock"
 	"github.com/posthog/posthog-go"
 	"github.com/stretchr/testify/assert"
+	"go.uber.org/mock/gomock"
 )
 
 // TestPosthogIntegrationToken is a test token for PostHog integration tests.

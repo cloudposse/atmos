@@ -5,8 +5,8 @@ import (
 	"os"
 	"testing"
 
-	"go.uber.org/mock/gomock"
 	"github.com/stretchr/testify/assert"
+	"go.uber.org/mock/gomock"
 )
 
 // TestNewMockFS verifies that NewMockFS creates a MockFSBuilder.

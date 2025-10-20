@@ -8,9 +8,9 @@ import (
 	"runtime"
 	"testing"
 
-	"go.uber.org/mock/gomock"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
+	"go.uber.org/mock/gomock"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/filesystem"

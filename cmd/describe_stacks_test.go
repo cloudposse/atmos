@@ -4,10 +4,10 @@ import (
 	"fmt"
 	"testing"
 
-	"go.uber.org/mock/gomock"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 	"github.com/stretchr/testify/assert"
+	"go.uber.org/mock/gomock"
 
 	"github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/schema"
