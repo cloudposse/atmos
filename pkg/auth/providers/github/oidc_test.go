@@ -259,7 +259,7 @@ func TestOIDCProvider_isGitHubActions(t *testing.T) {
 }
 
 func TestOIDCProvider_NameAndPreAuthenticate(t *testing.T) {
-	p, err := NewOIDCProvider("github-oidc", &schema.Provider{Kind: "github/oidc", Region: "us-east-1"})
+	p, err := NewOIDCProvider("github-oidc", &schema.Provider{Kind: KindOIDC, Region: "us-east-1"})
 	require.NoError(t, err)
 	require.Equal(t, "github-oidc", p.Name())
 	require.NoError(t, p.PreAuthenticate(nil))

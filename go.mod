@@ -1,6 +1,6 @@
 module github.com/cloudposse/atmos
 
-go 1.24.8
+go 1.25.1
 
 require (
 	cloud.google.com/go/secretmanager v1.15.1
@@ -337,6 +337,7 @@ require (
 	github.com/spiffe/go-spiffe/v2 v2.5.0 // indirect
 	github.com/stretchr/objx v0.5.2 // indirect
 	github.com/subosito/gotenv v1.6.0 // indirect
+	github.com/suzuki-shunsuke/ghtkn v0.2.2 // indirect
 	github.com/tchap/go-patricia/v2 v2.3.3 // indirect
 	github.com/terraform-docs/terraform-config-inspect v0.0.0-20210728164355-9c1f178932fa // indirect
 	github.com/tidwall/gjson v1.18.0 // indirect

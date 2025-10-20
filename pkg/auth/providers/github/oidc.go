@@ -52,7 +52,7 @@ func (p *oidcProvider) PreAuthenticate(_ types.AuthManager) error {
 
 // Kind returns the provider kind.
 func (p *oidcProvider) Kind() string {
-	return "github/oidc"
+	return KindOIDC
 }
 
 // Authenticate performs GitHub OIDC authentication.

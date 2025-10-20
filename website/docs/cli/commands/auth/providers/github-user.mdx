@@ -1,0 +1,373 @@
+---
+title: GitHub User Authentication
+sidebar_label: github/user
+sidebar_class_name: provider
+id: github-user
+description: Authenticate as a GitHub user using OAuth Device Flow for secure CLI authentication
+---
+
+import Mermaid from '@theme/Mermaid'
+
+# GitHub User Authentication
+
+:::note Purpose
+The `github/user` provider authenticates as a GitHub user using **OAuth Device Flow**, enabling secure browser-based authentication for CLI tools without exposing client secrets. Tokens are cached in your OS keychain for seamless re-authentication.
+
+This provider is inspired by the excellent [ghtkn](https://github.com/suzuki-shunsuke/ghtkn) tool.
+:::
+
+## Overview
+
+GitHub User authentication provides:
+
+- **Browser-based OAuth** - Secure Device Flow authentication without storing passwords
+- **OS Keychain Integration** - Tokens stored securely in macOS Keychain, Windows Credential Manager, or Linux Secret Service
+- **Configurable Scopes** - Request only the GitHub permissions you need
+- **Automatic Token Refresh** - Tokens cached for 8 hours by default
+- **Git Credential Helper** - Use with `git` commands automatically
+
+## Authentication Flow
+
+<Mermaid chart={`
+sequenceDiagram
+    participant User
+    participant Atmos
+    participant Keychain as OS Keychain
+    participant GitHub
+    participant Browser
+
+    User->>Atmos: atmos auth login -i github-user
+    Atmos->>Keychain: Check for cached token
+
+    alt Token exists and valid
+        Keychain-->>Atmos: Return cached token
+        Atmos-->>User: ✓ Already authenticated
+    else No token or expired
+        Atmos->>GitHub: Request device code
+        GitHub-->>Atmos: device_code + user_code
+        Atmos-->>User: Visit github.com/login/device<br/>Enter code: ABCD-1234
+
+        User->>Browser: Navigate to URL
+        Browser->>GitHub: Enter user_code
+        GitHub-->>User: Authorize app
+
+        loop Poll for authorization
+            Atmos->>GitHub: Check if user authorized
+            GitHub-->>Atmos: authorization_pending
+        end
+
+        GitHub-->>Atmos: access_token
+        Atmos->>Keychain: Store token (8h lifetime)
+        Atmos-->>User: ✓ Authentication successful
+    end
+`} />
+
+## Configuration
+
+### Provider Configuration
+
+```yaml
+auth:
+  providers:
+    github-user:
+      kind: github/user
+      client_id: "Iv1.abc123def456"  # GitHub OAuth App Client ID
+      scopes:  # Optional
+        - repo
+        - read:org
+        - workflow
+      keychain_service: "atmos-github"  # Optional
+      token_lifetime: 8h  # Optional, default 8h
+```
+
+### Identity Configuration
+
+```yaml
+auth:
+  identities:
+    my-github:
+      kind: github/user
+      via:
+        provider: github-user
+```
+
+## Parameters
+
+<dl>
+  <dt>`client_id`</dt>
+  <dd>GitHub OAuth App Client ID for Device Flow authentication (required)</dd>
+
+  <dt>`scopes`</dt>
+  <dd>Array of GitHub OAuth scopes to request (optional, defaults to minimal read access)</dd>
+
+  <dt>`keychain_service`</dt>
+  <dd>OS keychain service name for storing tokens (optional, default: `atmos-github`)</dd>
+
+  <dt>`token_lifetime`</dt>
+  <dd>Token cache lifetime (optional, default: `8h`)</dd>
+</dl>
+
+## OAuth Scopes
+
+Choose only the scopes your workflows require:
+
+### Repository Access
+- `repo` - Full control of private repositories
+- `public_repo` - Access to public repositories only
+
+### Organization Access
+- `read:org` - Read organization membership
+- `write:org` - Full control of orgs and teams
+- `admin:org` - Full org management
+
+### Workflows & Packages
+- `workflow` - Update GitHub Actions workflow files
+- `write:packages` - Upload packages to GitHub Packages
+- `read:packages` - Download packages
+- `delete:packages` - Delete packages
+
+### User Profile
+- `user` - Update user profile
+- `user:email` - Access user email addresses
+- `user:follow` - Follow/unfollow users
+
+### Other Permissions
+- `gist` - Write access to gists
+- `notifications` - Access notifications
+- `delete_repo` - Delete repositories
+- `project` - Full control of projects
+- `codespace` - Full control of codespaces
+
+See [GitHub's OAuth scopes documentation](https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/scopes-for-oauth-apps) for complete details.
+
+## Usage
+
+### First-Time Authentication
+
+```shell
+atmos auth login -i my-github
+```
+
+**Output:**
+```
+To authenticate with GitHub:
+1. Visit: https://github.com/login/device
+2. Enter code: ABCD-1234
+
+Waiting for authentication...
+✓ Successfully authenticated
+```
+
+### Using with Commands
+
+```shell
+# Use with gh CLI
+atmos auth exec -i my-github -- gh repo list cloudposse
+
+# Use with Terraform
+atmos auth exec -i my-github -- terraform plan
+
+# Use with git operations
+atmos auth exec -i my-github -- git clone https://github.com/private/repo.git
+
+# Export for scripts
+eval "$(atmos auth env -i my-github)"
+gh api user
+```
+
+### Git Credential Helper
+
+Configure Atmos as a Git credential helper to automatically provide authentication for HTTPS git operations:
+
+```shell
+git config --global credential.helper '!atmos auth git-credential'
+```
+
+Now git will automatically use your Atmos GitHub identity:
+
+```shell
+git clone https://github.com/private/repo.git  # Automatically authenticated
+git push origin main                            # No manual token needed
+```
+
+### Check Authentication Status
+
+```shell
+atmos auth whoami -i my-github
+```
+
+**Output:**
+```yaml
+identity: my-github
+provider: github-user
+authenticated: true
+token_expires: 2025-10-20T22:00:00Z
+```
+
+### Logout and Revoke Token
+
+```shell
+atmos auth logout -i my-github
+```
+
+To fully revoke the token, visit: https://github.com/settings/tokens
+
+## Creating a GitHub OAuth App
+
+1. Navigate to **GitHub Settings** → **Developer settings** → **OAuth Apps**
+2. Click **New OAuth App**
+3. Configure:
+   - **Application name**: `Atmos CLI`
+   - **Homepage URL**: `https://atmos.tools`
+   - **Authorization callback URL**: Leave empty (Device Flow doesn't use callbacks)
+4. Click **Register application**
+5. Note your **Client ID** (starts with `Iv1.`)
+6. **Do not generate a client secret** - Device Flow doesn't require it
+
+## Security Considerations
+
+### Token Storage
+
+Tokens are stored in your OS keychain:
+- **macOS**: Keychain Access (`security` command)
+- **Windows**: Credential Manager
+- **Linux**: Secret Service (GNOME Keyring or KWallet)
+
+Tokens are encrypted at rest and never written to disk in plain text.
+
+### Token Lifetime
+
+Tokens expire after 8 hours by default. When expired, Atmos will automatically prompt you to re-authenticate.
+
+### Scope Minimization
+
+Only request scopes your workflows actually need. For example:
+- **Read-only operations**: Use `public_repo`, `read:org`
+- **CI/CD deployments**: Use `repo`, `workflow`
+- **Package publishing**: Add `write:packages`
+
+### Environment Variables
+
+Tokens are exposed as:
+- `GITHUB_TOKEN` - Standard GitHub token variable
+- `GH_TOKEN` - GitHub CLI token variable
+
+These are set automatically by `atmos auth exec` and `atmos auth env`.
+
+## Comparison with ghtkn
+
+Atmos GitHub authentication is inspired by [ghtkn](https://github.com/suzuki-shunsuke/ghtkn), an excellent standalone tool for GitHub token management. Key differences:
+
+| Feature | Atmos | ghtkn |
+|---------|-------|-------|
+| **Integration** | Built into Atmos | Standalone CLI |
+| **Use Case** | Infrastructure workflows | General GitHub operations |
+| **Identity Management** | Multi-identity support | Single token |
+| **OS Keychain** | ✅ Yes | ✅ Yes |
+| **Git Credential Helper** | ✅ Yes | ✅ Yes |
+| **Token Lifecycle** | Integrated with `atmos auth` | Independent |
+
+**Recommendation**: Use ghtkn if you need standalone GitHub token management. Use Atmos `github/user` if you're already using Atmos for infrastructure workflows and want unified authentication.
+
+## Troubleshooting
+
+### "Token not found in keychain"
+
+The token has expired or been deleted. Re-authenticate:
+
+```shell
+atmos auth login -i my-github
+```
+
+### "Failed to store token in keychain"
+
+Keychain access may be denied. On macOS:
+
+```shell
+# Grant terminal access to keychain
+security unlock-keychain ~/Library/Keychains/login.keychain-db
+```
+
+### "Device code expired"
+
+You took too long to authorize. Device codes expire after 15 minutes. Start over:
+
+```shell
+atmos auth login -i my-github
+```
+
+### "Insufficient scope"
+
+Your token doesn't have the required permissions. Update `scopes` in your provider configuration and re-authenticate.
+
+## Examples
+
+### Personal Development
+
+```yaml
+auth:
+  providers:
+    github-personal:
+      kind: github/user
+      client_id: "Iv1.abc123"
+      scopes:
+        - repo
+        - read:org
+
+  identities:
+    dev:
+      kind: github/user
+      default: true
+      via:
+        provider: github-personal
+```
+
+```shell
+# Authenticate once
+atmos auth login -i dev
+
+# Use everywhere
+atmos terraform apply vpc -s prod
+gh repo list
+git push origin main
+```
+
+### CI/CD Pipeline
+
+```yaml
+# .github/workflows/deploy.yml
+name: Deploy Infrastructure
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Atmos
+        uses: cloudposse/github-action-setup-atmos@v2
+
+      - name: Authenticate GitHub
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # GitHub Actions provides GITHUB_TOKEN automatically
+          # Use with Atmos
+          atmos auth login -i ci
+
+      - name: Deploy
+        run: |
+          atmos terraform apply vpc -s prod
+```
+
+## Related
+
+- [GitHub App Authentication](/cli/commands/auth/providers/github-app) - For automation and bots
+- [GitHub OIDC Authentication](/cli/commands/auth/providers/github-oidc) - For GitHub Actions
+- [`atmos auth login`](/cli/commands/auth/auth-login) - Authenticate with providers
+- [`atmos auth exec`](/cli/commands/auth/auth-exec) - Execute commands with identity
+- [`atmos auth logout`](/cli/commands/auth/auth-logout) - Remove cached credentials

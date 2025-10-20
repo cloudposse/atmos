@@ -1,0 +1,451 @@
+---
+title: GitHub App Authentication
+sidebar_label: github/app
+sidebar_class_name: provider
+id: github-app
+description: Authenticate as a GitHub App using JWT signing for automation and CI/CD workflows
+---
+
+import Mermaid from '@theme/Mermaid'
+
+# GitHub App Authentication
+
+:::note Purpose
+The `github/app` provider authenticates as a GitHub App using **JWT signing and installation tokens**, enabling secure automation for CI/CD pipelines, bots, and infrastructure workflows with granular repository permissions.
+:::
+
+## Overview
+
+GitHub App authentication provides:
+
+- **Short-lived Installation Tokens** - 1-hour tokens with automatic regeneration
+- **Granular Permissions** - Fine-grained access control per repository
+- **Rate Limit Benefits** - Higher API rate limits (5,000 req/hr per installation)
+- **Audit Trail** - All actions attributed to the app, not a user
+- **No User Dependency** - Works even if team members leave
+
+## Authentication Flow
+
+<Mermaid chart={`
+sequenceDiagram
+    participant Atmos
+    participant App as GitHub App
+    participant GitHub as GitHub API
+
+    Atmos->>Atmos: Load private key
+    Atmos->>Atmos: Generate JWT (signed with private key)
+
+    Atmos->>GitHub: POST /app/installations/{id}/access_tokens<br/>Authorization: Bearer {JWT}
+    GitHub->>GitHub: Verify JWT signature
+    GitHub-->>Atmos: Installation token (expires in 1h)
+
+    Atmos->>GitHub: API requests with installation token
+    GitHub-->>Atmos: API responses
+`} />
+
+## Configuration
+
+### Provider Configuration
+
+```yaml
+auth:
+  providers:
+    terraform-bot:
+      kind: github/app
+      app_id: "123456"                    # GitHub App ID
+      installation_id: "789012"           # Installation ID
+      private_key_path: "/path/to/app.pem"  # Private key location
+      # OR
+      private_key_env: "GITHUB_APP_PRIVATE_KEY"  # Env var with key
+
+      permissions:  # Optional, defaults to app's granted permissions
+        contents: write
+        pull_requests: write
+        issues: write
+        metadata: read
+
+      repositories:  # Optional, limit to specific repos
+        - "cloudposse/atmos"
+        - "cloudposse/terraform-*"
+```
+
+### Identity Configuration
+
+```yaml
+auth:
+  identities:
+    automation-bot:
+      kind: github/app
+      via:
+        provider: terraform-bot
+```
+
+## Parameters
+
+<dl>
+  <dt>`app_id`</dt>
+  <dd>GitHub App ID (required, found in app settings)</dd>
+
+  <dt>`installation_id`</dt>
+  <dd>Installation ID for the organization or user (required)</dd>
+
+  <dt>`private_key_path`</dt>
+  <dd>Path to GitHub App private key PEM file (required if `private_key_env` not set)</dd>
+
+  <dt>`private_key_env`</dt>
+  <dd>Environment variable containing private key (required if `private_key_path` not set)</dd>
+
+  <dt>`permissions`</dt>
+  <dd>Map of repository permissions to request (optional, defaults to all granted to app)</dd>
+
+  <dt>`repositories`</dt>
+  <dd>Array of repository names to limit access (optional, defaults to all accessible)</dd>
+</dl>
+
+## GitHub App Permissions
+
+GitHub Apps use granular permissions instead of OAuth scopes:
+
+### Repository Permissions
+- `actions` - `read`, `write` - GitHub Actions workflows
+- `checks` - `read`, `write` - Check runs and suites
+- `contents` - `read`, `write` - Repository contents, commits, branches
+- `deployments` - `read`, `write` - Deployments and statuses
+- `environments` - `read`, `write` - Deployment environments
+- `issues` - `read`, `write` - Issues and comments
+- `metadata` - `read` - Repository metadata (always granted)
+- `packages` - `read`, `write` - GitHub Packages
+- `pages` - `read`, `write` - GitHub Pages
+- `pull_requests` - `read`, `write` - Pull requests and reviews
+- `statuses` - `read`, `write` - Commit statuses
+- `workflows` - `write` - Update workflow files
+
+### Organization Permissions
+- `members` - `read`, `write` - Organization members
+- `organization_administration` - `read`, `write` - Org settings
+- `organization_hooks` - `read`, `write` - Organization webhooks
+- `organization_secrets` - `read`, `write` - Organization secrets
+- `team_discussions` - `read`, `write` - Team discussions
+
+See [GitHub's App permissions documentation](https://docs.github.com/en/rest/overview/permissions-required-for-github-apps) for complete details.
+
+## Usage
+
+### Using with Commands
+
+```shell
+# Use with Terraform
+atmos auth exec -i automation-bot -- terraform apply
+
+# Use with gh CLI
+atmos auth exec -i automation-bot -- gh pr create --title "Update infra"
+
+# Use with git operations
+atmos auth exec -i automation-bot -- git push origin main
+
+# Export for scripts
+eval "$(atmos auth env -i automation-bot)"
+terraform plan
+```
+
+### Check Authentication Status
+
+```shell
+atmos auth whoami -i automation-bot
+```
+
+**Output:**
+```yaml
+identity: automation-bot
+provider: terraform-bot
+app_id: "123456"
+installation_id: "789012"
+token_expires: 2025-10-20T15:00:00Z  # 1 hour from generation
+```
+
+## Creating a GitHub App
+
+### 1. Create the App
+
+1. Navigate to **GitHub Settings** → **Developer settings** → **GitHub Apps**
+2. Click **New GitHub App**
+3. Configure basic settings:
+   - **GitHub App name**: `Atmos Terraform Bot`
+   - **Homepage URL**: Your infrastructure docs URL
+   - **Webhook**: Uncheck "Active" (not needed for CLI use)
+
+### 2. Configure Permissions
+
+Select repository permissions based on your needs:
+
+**For Terraform automation:**
+- `contents`: `write` - Update infrastructure code
+- `pull_requests`: `write` - Create/update PRs
+- `issues`: `write` - Report deployment status
+- `metadata`: `read` - Automatically granted
+
+**For CI/CD:**
+- `actions`: `write` - Trigger workflows
+- `workflows`: `write` - Update workflow files
+- `statuses`: `write` - Update commit statuses
+
+### 3. Install the App
+
+1. After creation, click **Install App**
+2. Choose organization or user account
+3. Select repositories (All or Selected)
+4. Note the **Installation ID** from the URL:
+   ```
+   https://github.com/settings/installations/789012
+                                              ^^^^^^ This is your installation_id
+   ```
+
+### 4. Generate Private Key
+
+1. In app settings, scroll to **Private keys**
+2. Click **Generate a private key**
+3. Save the downloaded `.pem` file securely
+4. Store it in a secure location:
+   - **Local development**: `~/.config/atmos/github-app.pem`
+   - **CI/CD**: Environment secret or secret manager
+
+### 5. Find App ID
+
+In app settings, note the **App ID** at the top.
+
+## Private Key Management
+
+### Local Development
+
+```yaml
+auth:
+  providers:
+    bot:
+      kind: github/app
+      app_id: "123456"
+      installation_id: "789012"
+      private_key_path: "~/.config/atmos/github-app.pem"
+```
+
+### CI/CD with Environment Variable
+
+```yaml
+# GitHub Actions
+env:
+  GITHUB_APP_PRIVATE_KEY: ${{ secrets.APP_PRIVATE_KEY }}
+
+# atmos.yaml
+auth:
+  providers:
+    bot:
+      kind: github/app
+      app_id: "123456"
+      installation_id: "789012"
+      private_key_env: "GITHUB_APP_PRIVATE_KEY"
+```
+
+### Never Commit Private Keys
+
+Add to `.gitignore`:
+```
+*.pem
+github-app-*.pem
+.env
+```
+
+## Security Considerations
+
+### Token Lifetime
+
+Installation tokens expire after **1 hour** (GitHub enforced). Atmos automatically:
+- Generates new tokens when expired
+- Handles token refresh transparently
+- Never caches tokens beyond command execution
+
+### Private Key Security
+
+- **Never commit private keys** to version control
+- **Rotate keys periodically** (every 90 days recommended)
+- **Use separate apps** for different environments (dev, staging, prod)
+- **Revoke compromised keys** immediately in app settings
+
+### Permission Minimization
+
+Only grant permissions your automation actually needs:
+
+```yaml
+# ❌ BAD: Requesting excessive permissions
+permissions:
+  contents: write
+  administration: write
+  security_events: write
+
+# ✅ GOOD: Minimal necessary permissions
+permissions:
+  contents: write
+  pull_requests: write
+  metadata: read
+```
+
+### Environment Variables
+
+Installation tokens are exposed as:
+- `GITHUB_TOKEN` - Standard GitHub token variable
+- `GH_TOKEN` - GitHub CLI token variable
+- `GITHUB_APP_ID` - App ID for reference
+- `GITHUB_INSTALLATION_ID` - Installation ID
+
+## Examples
+
+### Terraform Automation
+
+```yaml
+# atmos.yaml
+auth:
+  providers:
+    terraform-bot:
+      kind: github/app
+      app_id: "123456"
+      installation_id: "789012"
+      private_key_env: "GITHUB_APP_PRIVATE_KEY"
+      permissions:
+        contents: write
+        pull_requests: write
+        issues: write
+
+  identities:
+    infra-bot:
+      kind: github/app
+      via:
+        provider: terraform-bot
+```
+
+**Usage:**
+```shell
+# Plan infrastructure changes
+atmos auth exec -i infra-bot -- terraform plan
+
+# Apply and create PR
+atmos auth exec -i infra-bot -- sh -c '
+  terraform apply -auto-approve
+  gh pr create --title "Terraform: Update VPC config"
+'
+```
+
+### CI/CD Pipeline
+
+```yaml
+# .github/workflows/terraform.yml
+name: Terraform Apply
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Atmos
+        uses: cloudposse/github-action-setup-atmos@v2
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+
+      - name: Configure GitHub App
+        env:
+          GITHUB_APP_PRIVATE_KEY: ${{ secrets.TERRAFORM_BOT_KEY }}
+        run: |
+          echo "App configured via environment"
+
+      - name: Terraform Apply
+        run: |
+          atmos auth exec -i infra-bot -- atmos terraform apply vpc -s prod
+```
+
+### Multi-Repository Automation
+
+```yaml
+# Limit app to specific repositories
+auth:
+  providers:
+    limited-bot:
+      kind: github/app
+      app_id: "123456"
+      installation_id: "789012"
+      private_key_path: "/path/to/key.pem"
+      repositories:
+        - "cloudposse/terraform-aws-vpc"
+        - "cloudposse/terraform-aws-eks"
+        - "cloudposse/terraform-aws-rds"
+```
+
+## Troubleshooting
+
+### "Failed to generate JWT"
+
+**Cause**: Invalid private key format
+
+**Solution**: Ensure private key is valid PEM format:
+```shell
+openssl rsa -in key.pem -check
+```
+
+### "Installation token request failed with status 404"
+
+**Cause**: Invalid installation_id or app not installed
+
+**Solution**:
+1. Verify installation ID in GitHub settings
+2. Ensure app is installed for the target org/user
+3. Check app has not been uninstalled
+
+### "Failed to parse private key"
+
+**Cause**: Private key contains invalid characters or wrong format
+
+**Solution**: Regenerate private key in GitHub app settings
+
+### "Insufficient permissions"
+
+**Cause**: App doesn't have required permissions
+
+**Solution**:
+1. Update app permissions in GitHub settings
+2. Users must re-approve the app after permission changes
+3. Update `permissions` in provider config to match
+
+## Rate Limits
+
+GitHub Apps have higher rate limits than OAuth tokens:
+
+| Limit Type | OAuth User | GitHub App |
+|------------|-----------|------------|
+| **API Requests** | 5,000/hour | 5,000/hour per installation |
+| **GraphQL** | 5,000 points/hour | 5,000 points/hour per installation |
+| **Search API** | 30 req/min | 30 req/min per installation |
+
+Multiple installations = multiplied rate limits!
+
+## Comparison: GitHub User vs GitHub App
+
+| Feature | GitHub User | GitHub App |
+|---------|-------------|-----------|
+| **Use Case** | Personal development | Automation, bots, CI/CD |
+| **Authentication** | OAuth Device Flow | JWT + Installation tokens |
+| **Token Lifetime** | 8 hours | 1 hour |
+| **Permissions** | OAuth scopes | Granular app permissions |
+| **Rate Limits** | 5,000/hour | 5,000/hour per installation |
+| **Audit Trail** | Attributed to user | Attributed to app |
+| **Team Independence** | Tied to user account | Independent of users |
+
+**Recommendation**: Use GitHub App for automation and CI/CD. Use GitHub User for personal development.
+
+## Related
+
+- [GitHub User Authentication](/cli/commands/auth/providers/github-user) - For personal development
+- [GitHub OIDC Authentication](/cli/commands/auth/providers/github-oidc) - For GitHub Actions
+- [`atmos auth exec`](/cli/commands/auth/auth-exec) - Execute commands with identity
+- [`atmos auth whoami`](/cli/commands/auth/auth-whoami) - Check authentication status

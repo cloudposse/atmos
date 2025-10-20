@@ -1,0 +1,522 @@
+---
+title: GitHub OIDC Authentication
+sidebar_label: github/oidc
+sidebar_class_name: provider
+id: github-oidc
+description: Authenticate using GitHub Actions OIDC for secure, keyless authentication in CI/CD workflows
+---
+
+import Mermaid from '@theme/Mermaid'
+
+# GitHub OIDC Authentication
+
+:::note Purpose
+The `github/oidc` provider authenticates using **GitHub Actions OIDC tokens**, enabling secure, keyless authentication for CI/CD workflows without storing long-lived credentials. This is the recommended approach for GitHub Actions workflows that need to authenticate with cloud providers.
+:::
+
+## Overview
+
+GitHub OIDC authentication provides:
+
+- **Keyless Authentication** - No secrets or tokens to manage
+- **Short-lived Tokens** - JWT tokens valid only for the workflow run
+- **Automatic Token Provisioning** - GitHub Actions automatically provides OIDC tokens
+- **Configurable Audience** - Restrict token usage to specific audiences
+- **AWS/Azure/GCP Integration** - Works seamlessly with cloud provider OIDC federation
+
+## How It Works
+
+GitHub Actions can generate OIDC tokens that contain claims about the workflow run (repository, branch, environment, etc.). Cloud providers can verify these tokens and grant temporary credentials without requiring stored secrets.
+
+<Mermaid chart={`
+sequenceDiagram
+    participant Workflow as GitHub Actions Workflow
+    participant Atmos
+    participant GitHub as GitHub OIDC Provider
+    participant AWS as AWS IAM OIDC
+
+    Workflow->>Workflow: Configure id-token: write
+    Workflow->>Atmos: atmos auth exec -i github-oidc
+
+    Atmos->>GitHub: Request OIDC token (with audience)
+    GitHub-->>Atmos: JWT token with claims
+
+    Atmos->>AWS: AssumeRoleWithWebIdentity<br/>(OIDC token)
+    AWS->>AWS: Verify token signature
+    AWS->>AWS: Check audience & claims
+    AWS-->>Atmos: Temporary AWS credentials
+
+    Atmos->>Atmos: Execute command with credentials
+`} />
+
+## Configuration
+
+### Provider Configuration
+
+```yaml
+auth:
+  providers:
+    github-actions-oidc:
+      kind: github/oidc
+      audience: "sts.amazonaws.com"  # Required: OIDC audience
+```
+
+### Identity Configuration (AWS Example)
+
+```yaml
+auth:
+  identities:
+    github-aws:
+      kind: aws/assume-role
+      via:
+        provider: github-actions-oidc
+      role_arn: "arn:aws:iam::123456789012:role/GitHubActionsRole"
+      session_name: "github-actions-{{ .Repository }}"
+```
+
+## Parameters
+
+<dl>
+  <dt>`audience`</dt>
+  <dd>
+    OIDC audience claim (required). Common values:
+    <ul>
+      <li>`sts.amazonaws.com` - AWS</li>
+      <li>`api://AzureADTokenExchange` - Azure</li>
+      <li>Custom audience for your identity provider</li>
+    </ul>
+  </dd>
+</dl>
+
+## GitHub Actions Setup
+
+### 1. Enable OIDC Token Permissions
+
+Add `id-token: write` permission to your workflow:
+
+```yaml
+# .github/workflows/deploy.yml
+name: Deploy Infrastructure
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  id-token: write    # Required for OIDC
+  contents: read     # Required for checkout
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure Atmos
+        run: |
+          # Atmos will automatically use OIDC token
+          atmos auth exec -i github-aws -- terraform apply
+```
+
+### 2. Configure Trust Relationship
+
+Your cloud provider must trust GitHub's OIDC provider.
+
+#### AWS IAM Trust Policy
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Principal": {
+        "Federated": "arn:aws:iam::123456789012:oidc-provider/token.actions.githubusercontent.com"
+      },
+      "Action": "sts:AssumeRoleWithWebIdentity",
+      "Condition": {
+        "StringEquals": {
+          "token.actions.githubusercontent.com:aud": "sts.amazonaws.com",
+          "token.actions.githubusercontent.com:sub": "repo:cloudposse/atmos:ref:refs/heads/main"
+        }
+      }
+    }
+  ]
+}
+```
+
+#### Azure Federated Credential
+
+```shell
+az ad app federated-credential create \
+  --id <application-id> \
+  --parameters '{
+    "name": "github-actions",
+    "issuer": "https://token.actions.githubusercontent.com",
+    "subject": "repo:cloudposse/atmos:ref:refs/heads/main",
+    "audiences": ["api://AzureADTokenExchange"]
+  }'
+```
+
+## OIDC Token Claims
+
+GitHub OIDC tokens include the following claims:
+
+| Claim | Description | Example |
+|-------|-------------|---------|
+| `iss` | Issuer | `https://token.actions.githubusercontent.com` |
+| `aud` | Audience | `sts.amazonaws.com` |
+| `sub` | Subject | `repo:cloudposse/atmos:ref:refs/heads/main` |
+| `repository` | Repository | `cloudposse/atmos` |
+| `repository_owner` | Owner | `cloudposse` |
+| `ref` | Git reference | `refs/heads/main` |
+| `sha` | Commit SHA | `abc123...` |
+| `workflow` | Workflow name | `Deploy Infrastructure` |
+| `event_name` | Trigger event | `push`, `pull_request`, etc. |
+| `environment` | Environment | `production`, `staging` |
+| `job_workflow_ref` | Workflow file path | `cloudposse/atmos/.github/workflows/deploy.yml@refs/heads/main` |
+
+### Subject Claim Patterns
+
+The `sub` claim identifies the workflow. Use it to restrict access:
+
+| Pattern | Description |
+|---------|-------------|
+| `repo:org/repo:*` | Any workflow in repository |
+| `repo:org/repo:ref:refs/heads/main` | Only main branch |
+| `repo:org/repo:environment:production` | Only production environment |
+| `repo:org/repo:pull_request` | Only pull requests |
+
+## Usage
+
+### Basic AWS Deployment
+
+```yaml
+# atmos.yaml
+auth:
+  providers:
+    github-oidc:
+      kind: github/oidc
+      audience: "sts.amazonaws.com"
+
+  identities:
+    aws-deployer:
+      kind: aws/assume-role
+      via:
+        provider: github-oidc
+      role_arn: "arn:aws:iam::123456789012:role/GitHubActionsRole"
+```
+
+```yaml
+# .github/workflows/deploy.yml
+name: Deploy
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Deploy with Atmos
+        run: |
+          atmos terraform apply vpc -s prod
+```
+
+### Multi-Environment Deployment
+
+```yaml
+# atmos.yaml
+auth:
+  providers:
+    github-oidc:
+      kind: github/oidc
+      audience: "sts.amazonaws.com"
+
+  identities:
+    aws-dev:
+      kind: aws/assume-role
+      via:
+        provider: github-oidc
+      role_arn: "arn:aws:iam::111111111111:role/GitHubActionsRole-Dev"
+
+    aws-prod:
+      kind: aws/assume-role
+      via:
+        provider: github-oidc
+      role_arn: "arn:aws:iam::222222222222:role/GitHubActionsRole-Prod"
+```
+
+```yaml
+# .github/workflows/deploy.yml
+name: Deploy
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  deploy-dev:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Deploy Dev
+        run: atmos auth exec -i aws-dev -- terraform apply -s dev
+
+  deploy-prod:
+    needs: deploy-dev
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - name: Deploy Prod
+        run: atmos auth exec -i aws-prod -- terraform apply -s prod
+```
+
+### Azure Deployment
+
+```yaml
+# atmos.yaml
+auth:
+  providers:
+    github-oidc-azure:
+      kind: github/oidc
+      audience: "api://AzureADTokenExchange"
+
+  identities:
+    azure-deployer:
+      kind: azure/service-principal  # Hypothetical
+      via:
+        provider: github-oidc-azure
+      tenant_id: "00000000-0000-0000-0000-000000000000"
+      subscription_id: "11111111-1111-1111-1111-111111111111"
+```
+
+## Environment-Based Restrictions
+
+Use GitHub Environments to add additional protection:
+
+```yaml
+# .github/workflows/deploy.yml
+jobs:
+  deploy-production:
+    runs-on: ubuntu-latest
+    environment: production  # Requires manual approval
+    permissions:
+      id-token: write
+    steps:
+      - name: Deploy
+        run: atmos terraform apply -s prod
+```
+
+**IAM Trust Policy for Production Environment:**
+```json
+{
+  "Condition": {
+    "StringEquals": {
+      "token.actions.githubusercontent.com:aud": "sts.amazonaws.com",
+      "token.actions.githubusercontent.com:sub": "repo:cloudposse/atmos:environment:production"
+    }
+  }
+}
+```
+
+## Security Best Practices
+
+### 1. Use Restrictive Subject Claims
+
+```json
+{
+  "Condition": {
+    "StringLike": {
+      "token.actions.githubusercontent.com:sub": [
+        "repo:cloudposse/atmos:ref:refs/heads/main",
+        "repo:cloudposse/atmos:environment:production"
+      ]
+    }
+  }
+}
+```
+
+### 2. Validate Audience
+
+Always specify and validate the `audience` claim:
+
+```yaml
+auth:
+  providers:
+    github-oidc:
+      kind: github/oidc
+      audience: "sts.amazonaws.com"  # Must match IAM trust policy
+```
+
+### 3. Use Least Privilege Roles
+
+Grant only necessary permissions to the assumed role:
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": [
+        "s3:GetObject",
+        "s3:PutObject"
+      ],
+      "Resource": "arn:aws:s3:::my-terraform-state/*"
+    }
+  ]
+}
+```
+
+### 4. Monitor OIDC Usage
+
+Enable CloudTrail to audit AssumeRoleWithWebIdentity calls:
+
+```json
+{
+  "eventName": "AssumeRoleWithWebIdentity",
+  "userIdentity": {
+    "type": "WebIdentityUser",
+    "principalId": "token.actions.githubusercontent.com:repo:cloudposse/atmos:..."
+  }
+}
+```
+
+## Troubleshooting
+
+### "GitHub OIDC authentication is only available in GitHub Actions environment"
+
+**Cause**: Not running in GitHub Actions
+
+**Solution**: This provider only works in GitHub Actions. For local development, use `github/user` or `github/app` providers.
+
+### "ACTIONS_ID_TOKEN_REQUEST_TOKEN not found"
+
+**Cause**: Missing `id-token: write` permission
+
+**Solution**: Add to workflow:
+```yaml
+permissions:
+  id-token: write
+  contents: read
+```
+
+### "Token audience does not match"
+
+**Cause**: Audience mismatch between provider config and IAM trust policy
+
+**Solution**: Ensure they match:
+```yaml
+# atmos.yaml
+audience: "sts.amazonaws.com"
+
+# IAM Trust Policy
+"token.actions.githubusercontent.com:aud": "sts.amazonaws.com"
+```
+
+### "Subject does not match"
+
+**Cause**: Workflow doesn't match subject condition in trust policy
+
+**Solution**: Check subject claim format:
+```shell
+# Decode JWT to see actual subject
+echo $ACTIONS_ID_TOKEN | base64 -d | jq .
+```
+
+### "AssumeRoleWithWebIdentity failed"
+
+**Cause**: IAM role trust policy not configured
+
+**Solution**: Add GitHub OIDC provider to AWS IAM and configure trust relationship.
+
+## Setting Up AWS IAM OIDC Provider
+
+### 1. Create OIDC Provider
+
+```shell
+aws iam create-open-id-connect-provider \
+  --url https://token.actions.githubusercontent.com \
+  --client-id-list sts.amazonaws.com \
+  --thumbprint-list 1b511abead59c6ce207077c0bf0e0043b1382612
+```
+
+### 2. Create IAM Role
+
+```shell
+aws iam create-role \
+  --role-name GitHubActionsRole \
+  --assume-role-policy-document file://trust-policy.json
+```
+
+**trust-policy.json:**
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Principal": {
+        "Federated": "arn:aws:iam::123456789012:oidc-provider/token.actions.githubusercontent.com"
+      },
+      "Action": "sts:AssumeRoleWithWebIdentity",
+      "Condition": {
+        "StringEquals": {
+          "token.actions.githubusercontent.com:aud": "sts.amazonaws.com"
+        },
+        "StringLike": {
+          "token.actions.githubusercontent.com:sub": "repo:cloudposse/*:*"
+        }
+      }
+    }
+  ]
+}
+```
+
+### 3. Attach Permissions Policy
+
+```shell
+aws iam attach-role-policy \
+  --role-name GitHubActionsRole \
+  --policy-arn arn:aws:iam::aws:policy/ReadOnlyAccess
+```
+
+## Benefits Over Static Credentials
+
+| Aspect | Static Credentials | OIDC |
+|--------|-------------------|------|
+| **Secret Management** | Must rotate & store secrets | No secrets needed |
+| **Credential Lifetime** | Long-lived | Per workflow run |
+| **Compromise Risk** | High - credentials can leak | Low - tokens expire quickly |
+| **Rotation** | Manual | Automatic |
+| **Audit Trail** | Generic IAM user | Specific to workflow/repo |
+| **Permissions** | Often over-provisioned | Can be very granular |
+
+## Comparison: OIDC vs User vs App
+
+| Feature | `github/oidc` | `github/user` | `github/app` |
+|---------|---------------|---------------|--------------|
+| **Use Case** | GitHub Actions CI/CD | Personal development | Automation, bots |
+| **Environment** | GitHub Actions only | Local & CI/CD | Local & CI/CD |
+| **Credentials** | Automatic OIDC token | OAuth Device Flow | JWT + Private key |
+| **Token Lifetime** | Workflow run duration | 8 hours | 1 hour |
+| **Secrets Required** | None | None | Private key |
+| **Cloud Provider Trust** | OIDC federation | N/A | N/A |
+
+**Recommendation**:
+- Use `github/oidc` for GitHub Actions workflows
+- Use `github/user` for local development
+- Use `github/app` for automation outside GitHub Actions
+
+## Related
+
+- [GitHub User Authentication](/cli/commands/auth/providers/github-user) - For personal development
+- [GitHub App Authentication](/cli/commands/auth/providers/github-app) - For automation
+- [AWS IAM OIDC Documentation](https://docs.github.com/en/actions/deployment/security-hardening-your-deployments/configuring-openid-connect-in-amazon-web-services)
+- [Azure OIDC Documentation](https://docs.github.com/en/actions/deployment/security-hardening-your-deployments/configuring-openid-connect-in-azure)
+- [Google Cloud OIDC Documentation](https://docs.github.com/en/actions/deployment/security-hardening-your-deployments/configuring-openid-connect-in-google-cloud-platform)

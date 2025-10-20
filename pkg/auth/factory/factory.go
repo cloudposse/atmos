@@ -23,8 +23,12 @@ func NewProvider(name string, config *schema.Provider) (types.Provider, error) {
 		return awsProviders.NewSSOProvider(name, config)
 	case "aws/saml":
 		return awsProviders.NewSAMLProvider(name, config)
-	case "github/oidc":
+	case githubProviders.KindOIDC:
 		return githubProviders.NewOIDCProvider(name, config)
+	case githubProviders.KindUser:
+		return githubProviders.NewUserProvider(name, config)
+	case githubProviders.KindApp:
+		return githubProviders.NewAppProvider(name, config)
 	default:
 		return nil, fmt.Errorf("%w: unsupported provider kind: %s", errUtils.ErrInvalidProviderKind, config.Kind)
 	}
