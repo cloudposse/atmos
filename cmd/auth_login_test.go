@@ -253,6 +253,8 @@ func TestCreateAuthManager(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			_ = NewTestKit(t) // Isolate RootCmd state per subtest.
+
 			manager, err := createAuthManager(tt.config)
 
 			if tt.expectError {
@@ -301,6 +303,8 @@ func TestExecuteAuthLoginCommand(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			_ = NewTestKit(t) // Isolate RootCmd state per subtest.
+
 			// Set environment variables for test.
 			for k, v := range tt.envVars {
 				t.Setenv(k, v)
@@ -334,6 +338,8 @@ func TestExecuteAuthLoginCommand(t *testing.T) {
 }
 
 func TestAuthLoginCallsGetDefaultIdentityWhenNoIdentityProvided(t *testing.T) {
+	_ = NewTestKit(t) // Initialize shared test state.
+
 	// This test verifies that when no --identity flag is provided,
 	// the command calls GetDefaultIdentity() on the auth manager.
 	tests := []struct {
@@ -364,6 +370,8 @@ func TestAuthLoginCallsGetDefaultIdentityWhenNoIdentityProvided(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			_ = NewTestKit(t) // Isolate RootCmd state per subtest.
+
 			// Create a mock command to test the logic.
 			var getDefaultIdentityCalled bool
 			cmd := &cobra.Command{
