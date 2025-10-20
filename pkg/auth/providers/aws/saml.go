@@ -310,25 +310,37 @@ func (p *samlProvider) requestedSessionSeconds() int32 {
 }
 
 // getProviderType returns the SAML provider type based on configuration or URL detection.
+// Priority: Browser (if drivers available) > provider-specific fallbacks (GoogleApps/Okta/ADFS).
 func (p *samlProvider) getProviderType() string {
+	// If user explicitly set provider_type, always respect their choice.
 	if p.config.ProviderType != "" {
+		log.Debug("Using explicitly configured provider type", "provider_type", p.config.ProviderType)
 		return p.config.ProviderType
 	}
 
-	// Auto-detect provider type based on URL.
-	// Provider-specific types (GoogleApps, Okta, ADFS) use API/HTTP calls without browser automation.
+	// Check if Playwright drivers are available or can be auto-downloaded.
+	if p.hasPlaywrightDriversOrCanDownload() {
+		log.Debug("Playwright drivers available, using Browser provider for best compatibility")
+		return "Browser"
+	}
+
+	// Fallback to provider-specific types (use API/HTTP calls without browser automation).
+	// These are less reliable but don't require browser drivers.
 	if strings.Contains(p.url, "accounts.google.com") {
+		log.Debug("Falling back to GoogleApps provider (no drivers available)")
 		return "GoogleApps"
 	}
 	if strings.Contains(p.url, "okta.com") {
+		log.Debug("Falling back to Okta provider (no drivers available)")
 		return "Okta"
 	}
 	if strings.Contains(p.url, "adfs") {
+		log.Debug("Falling back to ADFS provider (no drivers available)")
 		return "ADFS"
 	}
 
-	// Default to Browser for unknown providers.
-	// Browser uses Playwright automation and requires DownloadBrowser: true or pre-installed drivers.
+	// If no drivers and no known provider type, try Browser anyway with auto-download.
+	log.Debug("Unknown provider, defaulting to Browser with auto-download")
 	return "Browser"
 }
 
@@ -365,6 +377,40 @@ func (p *samlProvider) Environment() (map[string]string, error) {
 	}
 
 	return env, nil
+}
+
+// hasPlaywrightDriversOrCanDownload checks if Playwright drivers are available or can be downloaded.
+// Returns true if drivers exist or auto-download is enabled.
+func (p *samlProvider) hasPlaywrightDriversOrCanDownload() bool {
+	// If user explicitly enabled download, drivers will be available.
+	if p.config.DownloadBrowserDriver {
+		log.Debug("Browser driver download explicitly enabled, drivers will be available")
+		return true
+	}
+
+	// Check if drivers are already installed.
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		log.Debug("Cannot determine home directory, assuming drivers unavailable", "error", err)
+		return false
+	}
+
+	// Check common Playwright cache locations.
+	playwrightPaths := []string{
+		homeDir + "/.cache/ms-playwright",            // Linux.
+		homeDir + "/Library/Caches/ms-playwright-go", // macOS (Go specific).
+		homeDir + "/AppData/Local/ms-playwright",     // Windows.
+	}
+
+	for _, path := range playwrightPaths {
+		if _, err := os.Stat(path); err == nil {
+			log.Debug("Found existing Playwright drivers", "path", path)
+			return true
+		}
+	}
+
+	log.Debug("No Playwright drivers found", "checked_paths", playwrightPaths)
+	return false
 }
 
 // shouldDownloadBrowser determines if browser drivers should be auto-downloaded.
