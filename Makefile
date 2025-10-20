@@ -23,18 +23,28 @@ version: version-default
 
 # The following will lint only files in git. `golangci-lint run --new-from-rev=HEAD` should do it,
 # but it's still including files not in git.
-lint: get lintroller
-	golangci-lint run --new-from-rev=origin/main
+lint: get lintroller custom-gcl
+	./custom-gcl run --new-from-rev=origin/main
 
-# Custom linter for Atmos-specific rules (t.Setenv misuse, os.Setenv in tests).
+# Build custom golangci-lint binary with lintroller plugin.
+# Uses a temporary directory to prevent git corruption during pre-commit hooks
+custom-gcl: tools/lintroller/.lintroller .custom-gcl.yml
+	@echo "Building custom golangci-lint binary with lintroller plugin..."
+	@GOFLAGS="-buildvcs=false" golangci-lint custom
+	@echo "Custom golangci-lint binary built successfully: ./custom-gcl"
+
+# Custom linter for Atmos-specific rules (t.Setenv misuse, os.Setenv in tests, os.MkdirTemp in tests).
 .PHONY: lintroller
 lintroller: tools/lintroller/.lintroller
 	@echo "Running lintroller (Atmos custom rules)..."
-	@tools/lintroller/.lintroller ./... 2>&1 | grep -v "^#" || true
+	@test -x tools/lintroller/.lintroller || (echo "Error: lintroller binary not executable" && exit 1)
+	@tools/lintroller/.lintroller $(shell go list ./... | grep -v '/testdata')
 
-tools/lintroller/.lintroller: tools/lintroller/*.go
+tools/lintroller/.lintroller: tools/lintroller/*.go tools/lintroller/cmd/lintroller/*.go
 	@echo "Building lintroller..."
-	@cd tools/lintroller && go build -o .lintroller .
+	@cd tools/lintroller && go build -o .lintroller ./cmd/lintroller
+	@chmod +x tools/lintroller/.lintroller
+	@test -x tools/lintroller/.lintroller || (echo "Error: Failed to make lintroller executable" && exit 1)
 
 build-linux: GOOS=linux
 build-linux: build-default
