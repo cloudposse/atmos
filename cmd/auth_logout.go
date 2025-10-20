@@ -12,6 +12,7 @@ import (
 	uiutils "github.com/cloudposse/atmos/internal/tui/utils"
 	"github.com/cloudposse/atmos/pkg/auth"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -310,7 +311,21 @@ func performLogoutAll(ctx context.Context, authManager auth.AuthManager, dryRun 
 
 // displayBrowserWarning shows a warning about browser sessions.
 func displayBrowserWarning() {
+	// Check if warning has been shown before using cache.
+	cache, err := cfg.LoadCache()
+	if err == nil && cache.BrowserSessionWarningShown {
+		// Warning already shown before, skip it.
+		return
+	}
+
+	// Show the warning.
 	u.PrintfMarkdownToTUI("⚠️  **Note:** This only removes local credentials. Your browser session may still be active. Visit your identity provider to end your browser session.\n\n")
+
+	// Mark warning as shown in cache.
+	cache.BrowserSessionWarningShown = true
+	if err := cfg.SaveCache(cache); err != nil {
+		log.Debug("Failed to save browser warning shown flag to cache", "error", err)
+	}
 }
 
 func init() {
