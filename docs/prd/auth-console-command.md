@@ -18,7 +18,7 @@ AWS Vault's `aws-vault login` command is beloved by developers because it:
 - Supports federated access with temporary session credentials
 - Works seamlessly with MFA and SSO workflows
 
-Atmos Auth should provide similar functionality but in a **provider-agnostic** way that works with AWS, Azure, GCP, and potentially other providers.
+Atmos Auth should provide similar functionality with a **provider-agnostic** interface design. The initial implementation supports AWS, with the architecture designed to accommodate additional providers in the future.
 
 ## Design
 
@@ -46,9 +46,7 @@ type ConsoleAccessProvider interface {
 // ConsoleURLOptions provides configuration for console URL generation.
 type ConsoleURLOptions struct {
     // Destination is the specific console page to navigate to (optional).
-    // For AWS: "https://console.aws.amazon.com/s3" or similar
-    // For Azure: "https://portal.azure.com/#blade/..."
-    // For GCP: "https://console.cloud.google.com/..."
+    // For AWS: "https://console.aws.amazon.com/s3" or service alias like "s3"
     Destination string
 
     // SessionDuration is the requested duration for the console session.
@@ -197,97 +195,13 @@ func (g *AWSConsoleURLGenerator) SupportsConsoleAccess() bool {
 }
 ```
 
-### 3. Azure Implementation (Sketch)
 
-```go
-// pkg/auth/cloud/azure/console.go
+### 3. Future Provider Support
 
-package azure
+The interface design supports additional cloud providers:
+- Azure Portal (planned)
+- GCP Console (planned)
 
-import (
-    "context"
-    "fmt"
-    "net/url"
-    "time"
-
-    "github.com/cloudposse/atmos/pkg/auth/types"
-)
-
-const (
-    // AzurePortalURL is the Azure portal base URL.
-    AzurePortalURL = "https://portal.azure.com"
-)
-
-// AzureConsoleURLGenerator generates Azure portal URLs.
-type AzureConsoleURLGenerator struct{}
-
-// GetConsoleURL generates an Azure portal sign-in URL.
-func (g *AzureConsoleURLGenerator) GetConsoleURL(ctx context.Context, creds types.ICredentials, options types.ConsoleURLOptions) (string, time.Duration, error) {
-    // Azure uses OAuth tokens - portal login is handled via browser OAuth flow.
-    // For Azure, we can:
-    // 1. Use the access token to generate a portal URL with tenant context
-    // 2. Or redirect to Azure CLI-style device code flow
-
-    destination := options.Destination
-    if destination == "" {
-        destination = AzurePortalURL
-    }
-
-    // Azure credentials would include tenant ID, subscription ID, etc.
-    // The implementation would construct a portal URL with appropriate context.
-
-    return destination, 0, nil
-}
-
-// SupportsConsoleAccess returns true for Azure.
-func (g *AzureConsoleURLGenerator) SupportsConsoleAccess() bool {
-    return true
-}
-```
-
-### 4. GCP Implementation (Sketch)
-
-```go
-// pkg/auth/cloud/gcp/console.go
-
-package gcp
-
-import (
-    "context"
-    "fmt"
-    "time"
-
-    "github.com/cloudposse/atmos/pkg/auth/types"
-)
-
-const (
-    // GCPConsoleURL is the GCP console base URL.
-    GCPConsoleURL = "https://console.cloud.google.com"
-)
-
-// GCPConsoleURLGenerator generates GCP console URLs.
-type GCPConsoleURLGenerator struct{}
-
-// GetConsoleURL generates a GCP console sign-in URL.
-func (g *GCPConsoleURLGenerator) GetConsoleURL(ctx context.Context, creds types.ICredentials, options types.ConsoleURLOptions) (string, time.Duration, error) {
-    // GCP uses OAuth tokens - console login is handled via browser OAuth flow.
-    // Similar to Azure, GCP would use OAuth-based authentication.
-
-    destination := options.Destination
-    if destination == "" {
-        destination = GCPConsoleURL
-    }
-
-    return destination, 0, nil
-}
-
-// SupportsConsoleAccess returns true for GCP.
-func (g *GCPConsoleURLGenerator) SupportsConsoleAccess() bool {
-    return true
-}
-```
-
-### 5. CLI Command
 
 Add a new `atmos auth console` command:
 
@@ -330,8 +244,8 @@ var authConsoleCmd = &cobra.Command{
     Long: `Open the cloud provider web console in your default browser using authenticated credentials.
 
 This command generates a temporary console sign-in URL using your authenticated identity's
-credentials and opens it in your default browser. Supports AWS, Azure, GCP, and other providers
-that implement console access.`,
+credentials and opens it in your default browser. Currently supports AWS, with other providers
+planned for future releases.`,
     Example: `
 # Open AWS console with default identity
 atmos auth console
@@ -339,8 +253,8 @@ atmos auth console
 # Open console with specific identity
 atmos auth console --identity prod-admin
 
-# Open console to specific AWS service
-atmos auth console --destination https://console.aws.amazon.com/s3
+# Open console to specific AWS service (using alias)
+atmos auth console --destination s3
 
 # Print URL without opening browser
 atmos auth console --print-only
@@ -446,15 +360,8 @@ func checkConsoleSupport(authManager auth.AuthManager, identityName string) (typ
         // Return AWS console URL generator.
         generator := &aws.AWSConsoleURLGenerator{}
         return generator, true
-    case "azure/oidc":
-        // Return Azure console URL generator.
-        generator := &azure.AzureConsoleURLGenerator{}
-        return generator, true
-    case "gcp/oidc":
-        // Return GCP console URL generator.
-        generator := &gcp.GCPConsoleURLGenerator{}
-        return generator, true
     default:
+        // Other providers not yet supported.
         return nil, false
     }
 }
@@ -549,11 +456,11 @@ atmos auth console
 # Open console with specific identity
 atmos auth console --identity prod-admin
 
-# Open console to specific AWS service
-atmos auth console --destination https://console.aws.amazon.com/s3
+# Open console to specific AWS service using alias
+atmos auth console --destination s3
 
-# Open Azure portal to specific blade
-atmos auth console --identity azure-prod --destination "https://portal.azure.com/#blade/HubsExtension/BrowseResourceGroups"
+# Open console to specific AWS service using full URL
+atmos auth console --destination https://console.aws.amazon.com/ec2
 ```
 
 ### Advanced Usage
@@ -608,12 +515,7 @@ echo "Console: $CONSOLE_URL"
 4. Add browser opening functionality
 5. Create comprehensive tests
 
-### Phase 4: Azure & GCP (Future)
-1. Implement Azure portal URL generation (when Azure auth is added)
-2. Implement GCP console URL generation (when GCP auth is added)
-3. Add provider-specific tests
-
-### Phase 5: Documentation
+### Phase 4: Documentation
 1. Create Docusaurus documentation at `website/docs/cli/commands/auth/console.mdx`
 2. Add examples to blog post or changelog
 3. Update main auth documentation to mention console access
@@ -756,8 +658,8 @@ EXAMPLES
   # Open console with default identity
   atmos auth console
 
-  # Open AWS S3 console
-  atmos auth console --destination https://console.aws.amazon.com/s3
+  # Open AWS S3 console using alias
+  atmos auth console --destination s3
 
   # Print URL only
   atmos auth console --print-only
@@ -770,8 +672,8 @@ EXAMPLES
 
 Create `website/docs/cli/commands/auth/console.mdx` with:
 - Purpose and use cases
-- Provider support matrix
-- Examples for each supported provider
+- Provider support (currently AWS)
+- Usage examples with service aliases
 - Security best practices
 - Troubleshooting guide
 
@@ -796,12 +698,12 @@ Instead of generating URLs, embed a local web server that handles OAuth flows.
 **Decision**: Start with URL generation (simpler), consider web server for future
 
 ### Alternative 2: Provider-Specific Commands
-Create separate commands like `atmos auth console-aws`, `atmos auth console-azure`
+Create separate commands like `atmos auth console-aws`, `atmos auth console-azure`, etc.
 
 **Pros**: More explicit, provider-specific options
 **Cons**: Not scalable, violates DRY principle
 
-**Decision**: Use unified command with provider detection
+**Decision**: Use unified command with provider detection (only AWS implemented currently)
 
 ### Alternative 3: Extend Existing Commands
 Add `--console` flag to `atmos auth login`
@@ -872,8 +774,7 @@ Add `--console` flag to `atmos auth login`
 
 **Provider Support:**
 - ✅ AWS (IAM Identity Center and SAML providers)
-- 🚧 Azure (planned, returns clear error message)
-- 🚧 GCP (planned, returns clear error message)
+- Azure and GCP support planned for future releases
 
 ### Architecture Decisions
 
@@ -896,6 +797,4 @@ Add `--console` flag to `atmos auth login`
 - [AWS Vault Login Documentation](https://github.com/99designs/aws-vault/blob/master/USAGE.md)
 - [AWS Federation Console Access](https://docs.aws.amazon.com/IAM/latest/UserGuide/id_roles_providers_enable-console-custom-url.html)
 - [AWS GetFederationToken API](https://docs.aws.amazon.com/STS/latest/APIReference/API_GetFederationToken.html)
-- [Azure Portal URL Structure](https://portal.azure.com)
-- [GCP Console Authentication](https://console.cloud.google.com)
 - [Charmbracelet Lipgloss](https://github.com/charmbracelet/lipgloss)
