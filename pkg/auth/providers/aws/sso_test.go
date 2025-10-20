@@ -289,14 +289,7 @@ func TestSSOProvider_Logout(t *testing.T) {
 			p, err := NewSSOProvider("test-sso", tt.providerCfg)
 			require.NoError(t, err)
 
-			ctx := context.Background()
-			err = p.Logout(ctx)
-
-			if tt.expectError {
-				assert.Error(t, err)
-			} else {
-				assert.NoError(t, err)
-			}
+			testProviderLogoutWithFilesystemVerification(t, tt.providerCfg, "test-sso", p, tt.expectError)
 		})
 	}
 }

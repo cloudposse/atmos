@@ -588,14 +588,7 @@ func TestSAMLProvider_Logout(t *testing.T) {
 			p, err := NewSAMLProvider("test-saml", tt.providerCfg)
 			require.NoError(t, err)
 
-			ctx := context.Background()
-			err = p.Logout(ctx)
-
-			if tt.expectError {
-				assert.Error(t, err)
-			} else {
-				assert.NoError(t, err)
-			}
+			testProviderLogoutWithFilesystemVerification(t, tt.providerCfg, "test-saml", p, tt.expectError)
 		})
 	}
 }

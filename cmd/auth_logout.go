@@ -15,6 +15,7 @@ import (
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui/theme"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -34,7 +35,7 @@ identity provider (AWS SSO, Okta, etc.) may still be active. To completely
 end your session, visit your identity provider's website and sign out.`,
 
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
-	ValidArgsFunction:  ComponentsArgCompletion,
+	ValidArgsFunction:  identityArgCompletion,
 	RunE:               executeAuthLogoutCommand,
 }
 
@@ -112,16 +113,16 @@ func performIdentityLogout(ctx context.Context, authManager auth.AuthManager, id
 	if err := authManager.Logout(ctx, identityName); err != nil {
 		// Check if it's a partial logout.
 		if errors.Is(err, errUtils.ErrPartialLogout) {
-			u.PrintfMarkdownToTUI("\n✓ Logged out **%s** with warnings\n\n", identityName)
+			u.PrintfMarkdownToTUI("\n%s Logged out **%s** with warnings\n\n", theme.Styles.Checkmark, identityName)
 			u.PrintfMessageToTUI("Some credentials could not be removed:\n")
 			u.PrintfMessageToTUI("  %v\n\n", err)
 		} else {
-			u.PrintfMarkdownToTUI("\n✗ Failed to log out **%s**\n\n", identityName)
+			u.PrintfMarkdownToTUI("\n%s Failed to log out **%s**\n\n", theme.Styles.XMark, identityName)
 			u.PrintfMessageToTUI("Error: %v\n\n", err)
 			return err
 		}
 	} else {
-		u.PrintfMarkdownToTUI("\n✓ Logged out **%s**\n\n", identityName)
+		u.PrintfMarkdownToTUI("\n%s Logged out **%s**\n\n", theme.Styles.Checkmark, identityName)
 	}
 
 	// Display browser session warning.
@@ -175,12 +176,12 @@ func performProviderLogout(ctx context.Context, authManager auth.AuthManager, pr
 			return nil
 		}
 
-		u.PrintfMessageToTUI("✗ Failed to log out provider\n\n")
+		u.PrintfMessageToTUI("%s Failed to log out provider\n\n", theme.Styles.XMark)
 		u.PrintfMessageToTUI("Error: %v\n\n", err)
 		return err
 	}
 
-	u.PrintfMarkdownToTUI("\n✓ Logged out provider **%s** (%d identities)\n\n", providerName, len(identitiesForProvider))
+	u.PrintfMarkdownToTUI("\n%s Logged out provider **%s** (%d identities)\n\n", theme.Styles.Checkmark, providerName, len(identitiesForProvider))
 
 	// Display browser session warning.
 	displayBrowserWarning()
@@ -295,13 +296,13 @@ func performLogoutAll(ctx context.Context, authManager auth.AuthManager, dryRun 
 			return nil
 		}
 
-		u.PrintfMessageToTUI("✗ Failed to log out all identities\n\n")
+		u.PrintfMessageToTUI("%s Failed to log out all identities\n\n", theme.Styles.XMark)
 		u.PrintfMessageToTUI("Error: %v\n\n", err)
 		return err
 	}
 
 	identities := authManager.GetIdentities()
-	u.PrintfMessageToTUI("\n✓ Logged out all %d identities\n\n", len(identities))
+	u.PrintfMessageToTUI("\n%s Logged out all %d identities\n\n", theme.Styles.Checkmark, len(identities))
 
 	// Display browser session warning.
 	displayBrowserWarning()
