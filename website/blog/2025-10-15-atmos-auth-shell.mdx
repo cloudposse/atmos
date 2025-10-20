@@ -50,46 +50,99 @@ export PS1='[\u@\h \W${ATMOS_IDENTITY:+ ($ATMOS_IDENTITY)}]\$ '
 ```
 :::
 
-## Why This Matters
+## Why This Matters: Isolation and Safety
 
-The primary use case is simple: **launch a shell with active cloud credentials so you can go about your work**. No more juggling environment variables or re-authenticating between commands—just authenticate once and work naturally.
+The traditional approach to managing cloud credentials—storing multiple profiles in `~/.aws/credentials` or exporting variables in your main shell—is fundamentally unsafe. When all credentials are accessible simultaneously in a single shell session, it's dangerously easy to accidentally run commands against the wrong environment:
+
+- You think you're in `dev`, but you're actually authenticated to `prod`
+- You modify a staging database when you meant to update a development one
+- You deploy infrastructure changes to the wrong AWS account
+
+**`atmos auth shell` solves this through isolation**. Each shell session is scoped to exactly one identity with one set of credentials. When you run:
+
+```shell
+atmos auth shell --identity prod-admin
+```
+
+You get a dedicated shell where **only** those production credentials are available. When you exit, your parent shell's environment remains completely unchanged—no credential pollution, no confusion about which environment you're operating in.
+
+### The Power of Multiple Concurrent Sessions
+
+This isolation enables a powerful workflow: **run multiple authenticated shells simultaneously, each scoped to a different identity**:
+
+```shell
+# Terminal 1: Production operations
+atmos auth shell --identity prod-admin
+
+# Terminal 2: Staging testing
+atmos auth shell --identity staging-dev
+
+# Terminal 3: Development work
+atmos auth shell --identity dev-sandbox
+```
+
+Each terminal operates in complete isolation. You can't accidentally run a production command in your development shell, and vice versa. Your credentials are **ephemeral and session-scoped**—when you close a terminal, those credentials disappear. No lingering environment variables, no shared credential files with overly broad access.
 
 The command supports multiple identities, custom shells (`--shell`), custom arguments (`--`), shell nesting tracking (`ATMOS_SHLVL`), and works cross-platform.
 
 ## Real-World Use Cases
 
-### Interactive Terraform Workflows
+### Safe Production Operations
 
 ```shell
 atmos auth shell --identity prod-admin
-# Now in authenticated shell
-terraform workspace select production
-terraform plan
-terraform apply
+# Now in authenticated shell, scoped ONLY to production
 aws s3 sync ./assets s3://prod-bucket/
+aws ecs update-service --cluster prod --service api --force-new-deployment
+aws rds describe-db-instances --region us-east-1
 exit
+# Credentials gone—your main shell is still clean
 ```
+
+When you exit, those production credentials are gone. You can't accidentally run a production command after switching contexts.
 
 ### Debugging Cloud Resources
 
 ```shell
 atmos auth shell --identity dev-debug
-# Now you can freely use AWS CLI, kubectl, or other tools
+# Isolated shell with ONLY dev credentials
 aws logs tail /aws/lambda/my-function --follow
-kubectl get pods -n production
+kubectl get pods -n development
+aws dynamodb scan --table-name dev-users
 exit
 ```
 
-### Long-Running Operations
+### Long-Running Operations with Multiple Steps
 
 ```shell
 atmos auth shell --identity migration-role
 # Run multiple migration steps without re-authenticating
 ./migrate-database.sh
 ./update-dns-records.sh
+aws s3 sync ./backups s3://migration-bucket/
 ./verify-migration.sh
 exit
 ```
+
+### Multiple Concurrent Environments
+
+Open multiple terminals, each with different credentials:
+
+```shell
+# Terminal 1: Monitoring production
+atmos auth shell --identity prod-readonly
+watch aws cloudwatch get-metric-statistics ...
+
+# Terminal 2: Testing in staging
+atmos auth shell --identity staging-admin
+terraform apply -target=module.test_feature
+
+# Terminal 3: Development work
+atmos auth shell --identity dev-sandbox
+aws s3 cp ./test-data s3://dev-uploads/
+```
+
+Each terminal has **exactly one set of credentials**. No confusion, no accidents.
 
 ## How It Works
 
