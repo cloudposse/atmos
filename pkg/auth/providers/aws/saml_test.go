@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -548,4 +549,177 @@ func TestSAMLProvider_WithoutCustomResolver(t *testing.T) {
 
 	// Verify the provider works without resolver config
 	assert.NoError(t, p.Validate())
+}
+
+func TestSAMLProvider_shouldDownloadBrowser(t *testing.T) {
+	tests := []struct {
+		name                string
+		config              *schema.Provider
+		driverValue         string
+		playwrightInstalled bool
+		expectedResult      bool
+	}{
+		{
+			name:                "explicit download flag set to true",
+			config:              &schema.Provider{DownloadBrowserDriver: true},
+			driverValue:         "Browser",
+			playwrightInstalled: false,
+			expectedResult:      true,
+		},
+		{
+			name:                "driver is not Browser",
+			config:              &schema.Provider{},
+			driverValue:         "Okta",
+			playwrightInstalled: false,
+			expectedResult:      false,
+		},
+		{
+			name:                "playwright drivers already installed",
+			config:              &schema.Provider{},
+			driverValue:         "Browser",
+			playwrightInstalled: true,
+			expectedResult:      false,
+		},
+		{
+			name:                "no drivers installed, enables auto-download",
+			config:              &schema.Provider{},
+			driverValue:         "Browser",
+			playwrightInstalled: false,
+			expectedResult:      true,
+		},
+	}
+
+	for _, tt := range tests {
+		tc := tt
+		t.Run(tc.name, func(t *testing.T) {
+			sp := &samlProvider{
+				config: tc.config,
+			}
+
+			// Mock driver value.
+			sp.config.Driver = tc.driverValue
+
+			// Mock playwrightDriversInstalled based on test case.
+			if tc.playwrightInstalled {
+				// Create temporary directory with playwright drivers.
+				tmpDir := t.TempDir()
+				homeDir := tmpDir
+				t.Setenv("HOME", homeDir)
+				t.Setenv("USERPROFILE", homeDir)
+
+				// Create a mock playwright driver directory with a file inside to pass validation.
+				playwrightPath := filepath.Join(homeDir, ".cache", "ms-playwright", "chromium-1084")
+				err := os.MkdirAll(playwrightPath, 0o755)
+				require.NoError(t, err)
+
+				// hasValidPlaywrightDrivers checks for files inside version directory.
+				dummyBinary := filepath.Join(playwrightPath, "chrome")
+				err = os.WriteFile(dummyBinary, []byte("dummy"), 0o755)
+				require.NoError(t, err)
+			} else {
+				// Use empty temp directory (no drivers).
+				tmpDir := t.TempDir()
+				t.Setenv("HOME", tmpDir)
+				t.Setenv("USERPROFILE", tmpDir)
+			}
+
+			result := sp.shouldDownloadBrowser()
+			assert.Equal(t, tc.expectedResult, result)
+		})
+	}
+}
+
+func TestSAMLProvider_Validate_URLFormats(t *testing.T) {
+	tests := []struct {
+		name      string
+		url       string
+		expectErr bool
+	}{
+		{
+			name:      "valid https URL",
+			url:       "https://idp.example.com/saml",
+			expectErr: false,
+		},
+		{
+			name:      "valid http URL (not recommended but valid)",
+			url:       "http://idp.example.com/saml",
+			expectErr: false,
+		},
+		{
+			name:      "invalid URL missing scheme",
+			url:       "idp.example.com/saml",
+			expectErr: true,
+		},
+		{
+			name:      "invalid URL malformed",
+			url:       "://bad",
+			expectErr: true,
+		},
+		{
+			name:      "invalid URL with spaces",
+			url:       "https://idp example.com/saml",
+			expectErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		tc := tt
+		t.Run(tc.name, func(t *testing.T) {
+			p, err := NewSAMLProvider("test", &schema.Provider{
+				Kind:   "aws/saml",
+				URL:    tc.url,
+				Region: "us-east-1",
+			})
+			require.NoError(t, err)
+
+			err = p.Validate()
+			if tc.expectErr {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
+func TestSAMLProvider_Environment_AutoDownload(t *testing.T) {
+	tests := []struct {
+		name                    string
+		downloadBrowserDriver   bool
+		expectedAutoDownloadVar string
+	}{
+		{
+			name:                    "download browser driver enabled",
+			downloadBrowserDriver:   true,
+			expectedAutoDownloadVar: "true",
+		},
+		{
+			name:                    "download browser driver disabled",
+			downloadBrowserDriver:   false,
+			expectedAutoDownloadVar: "",
+		},
+	}
+
+	for _, tt := range tests {
+		tc := tt
+		t.Run(tc.name, func(t *testing.T) {
+			p, err := NewSAMLProvider("test", &schema.Provider{
+				Kind:                  "aws/saml",
+				URL:                   "https://idp.example.com/saml",
+				Region:                "us-west-2",
+				DownloadBrowserDriver: tc.downloadBrowserDriver,
+			})
+			require.NoError(t, err)
+
+			env, err := p.Environment()
+			require.NoError(t, err)
+
+			if tc.expectedAutoDownloadVar != "" {
+				assert.Equal(t, tc.expectedAutoDownloadVar, env["SAML2AWS_AUTO_BROWSER_DOWNLOAD"])
+			} else {
+				_, exists := env["SAML2AWS_AUTO_BROWSER_DOWNLOAD"]
+				assert.False(t, exists)
+			}
+		})
+	}
 }
