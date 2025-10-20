@@ -76,8 +76,8 @@ func TestReadTerraformBackendAzurermInternal_Success(t *testing.T) {
 				"key":                  "terraform.tfstate",
 			},
 			mockResponse:     `{"version": 4, "outputs": {"vpc_id": {"value": "vpc-123"}}}`,
-			expectedBlobName: "terraform.tfstateenv:dev",
-			description:      "Non-default workspace uses {key}env:{workspace} format.",
+			expectedBlobName: "env:/dev/terraform.tfstate",
+			description:      "Non-default workspace uses env:/{workspace}/{key} format.",
 		},
 		{
 			name: "successful_read_prod_workspace",
@@ -91,7 +91,7 @@ func TestReadTerraformBackendAzurermInternal_Success(t *testing.T) {
 				"key":                  "prod.tfstate",
 			},
 			mockResponse:     `{"version": 4, "outputs": {"endpoint": {"value": "prod-db.example.com"}}}`,
-			expectedBlobName: "prod.tfstateenv:prod",
+			expectedBlobName: "env:/prod/prod.tfstate",
 			description:      "Production workspace with custom key.",
 		},
 		{
@@ -121,7 +121,7 @@ func TestReadTerraformBackendAzurermInternal_Success(t *testing.T) {
 				// key not specified, should default to terraform.tfstate
 			},
 			mockResponse:     `{"version": 4, "outputs": {"app_url": {"value": "https://staging.example.com"}}}`,
-			expectedBlobName: "terraform.tfstateenv:staging",
+			expectedBlobName: "env:/staging/terraform.tfstate",
 			description:      "Missing key defaults to terraform.tfstate.",
 		},
 	}
@@ -217,7 +217,7 @@ func TestReadTerraformBackendAzurermInternal_PermissionDenied(t *testing.T) {
 	assert.Error(t, err)
 	assert.Nil(t, result)
 	assert.ErrorIs(t, err, errUtils.ErrAzurePermissionDenied)
-	assert.Contains(t, err.Error(), "terraform.tfstateenv:dev")
+	assert.Contains(t, err.Error(), "env:/dev/terraform.tfstate")
 	assert.Contains(t, err.Error(), "restricted-tfstate")
 }
 
