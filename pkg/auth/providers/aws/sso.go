@@ -108,7 +108,7 @@ func (p *ssoProvider) Authenticate(ctx context.Context) (authTypes.ICredentials,
 	// to avoid conflicts with external AWS env vars.
 	cfg, err := awsCloud.LoadIsolatedAWSConfig(ctx, configOpts...)
 	if err != nil {
-		return nil, fmt.Errorf("%w: failed to load AWS config: %v", errUtils.ErrAuthenticationFailed, err)
+		return nil, fmt.Errorf("%w: failed to load AWS config: %w", errUtils.ErrAuthenticationFailed, err)
 	}
 	log.Debug("AWS config loaded successfully")
 
@@ -122,7 +122,7 @@ func (p *ssoProvider) Authenticate(ctx context.Context) (authTypes.ICredentials,
 		ClientType: aws.String("public"),
 	})
 	if err != nil {
-		return nil, fmt.Errorf("%w: failed to register SSO client: %v", errUtils.ErrAuthenticationFailed, err)
+		return nil, fmt.Errorf("%w: failed to register SSO client: %w", errUtils.ErrAuthenticationFailed, err)
 	}
 	log.Debug("SSO client registered successfully")
 
@@ -134,7 +134,7 @@ func (p *ssoProvider) Authenticate(ctx context.Context) (authTypes.ICredentials,
 		StartUrl:     aws.String(p.startURL),
 	})
 	if err != nil {
-		return nil, fmt.Errorf("%w: failed to start device authorization: %v", errUtils.ErrAuthenticationFailed, err)
+		return nil, fmt.Errorf("%w: failed to start device authorization: %w", errUtils.ErrAuthenticationFailed, err)
 	}
 	log.Debug("Device authorization started")
 
@@ -256,7 +256,7 @@ func (p *ssoProvider) pollForAccessToken(ctx context.Context, oidcClient *ssooid
 			continue
 		}
 
-		return "", time.Time{}, fmt.Errorf("%w: failed to create token: %v", errUtils.ErrAuthenticationFailed, err)
+		return "", time.Time{}, fmt.Errorf("%w: failed to create token: %w", errUtils.ErrAuthenticationFailed, err)
 	}
 
 	if accessToken == "" {

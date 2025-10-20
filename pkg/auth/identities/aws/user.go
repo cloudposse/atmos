@@ -147,12 +147,12 @@ func (i *userIdentity) writeAWSFiles(creds *types.AWSCredentials, region string)
 
 	// Write credentials to ~/.aws/atmos/aws-user/credentials.
 	if err := awsFileManager.WriteCredentials(awsUserProviderName, i.name, creds); err != nil {
-		return fmt.Errorf("%w: failed to write AWS credentials: %v", errUtils.ErrAwsAuth, err)
+		return fmt.Errorf("%w: failed to write AWS credentials: %w", errUtils.ErrAwsAuth, err)
 	}
 
 	// Write config to ~/.aws/atmos/aws-user/config.
 	if err := awsFileManager.WriteConfig(awsUserProviderName, i.name, region, ""); err != nil {
-		return fmt.Errorf("%w: failed to write AWS config: %v", errUtils.ErrAwsAuth, err)
+		return fmt.Errorf("%w: failed to write AWS config: %w", errUtils.ErrAwsAuth, err)
 	}
 
 	return nil
@@ -179,7 +179,7 @@ func (i *userIdentity) generateSessionToken(ctx context.Context, longLivedCreds 
 	// Use isolated environment to avoid conflicts with external AWS env vars.
 	cfg, err := awsCloud.LoadIsolatedAWSConfig(ctx, configOpts...)
 	if err != nil {
-		return nil, fmt.Errorf("%w: failed to load AWS config: %v", errUtils.ErrAwsAuth, err)
+		return nil, fmt.Errorf("%w: failed to load AWS config: %w", errUtils.ErrAwsAuth, err)
 	}
 
 	// Create STS client.
@@ -220,7 +220,7 @@ func (i *userIdentity) generateSessionToken(ctx context.Context, longLivedCreds 
 
 	// Write session credentials to AWS files using "aws-user" as mock provider.
 	if err := i.writeAWSFiles(sessionCreds, region); err != nil {
-		return nil, fmt.Errorf("%w: failed to write AWS files: %v", errUtils.ErrAwsAuth, err)
+		return nil, fmt.Errorf("%w: failed to write AWS files: %w", errUtils.ErrAwsAuth, err)
 	}
 
 	// Note: We keep the long-lived credentials in the keystore unchanged.
@@ -235,7 +235,7 @@ var promptMfaTokenFunc = func(longLivedCreds *types.AWSCredentials) (string, err
 	var mfaToken string
 	form := newMfaForm(longLivedCreds, &mfaToken)
 	if err := form.Run(); err != nil {
-		return "", fmt.Errorf("%w: failed to get MFA token: %v", errUtils.ErrAuthenticationFailed, err)
+		return "", fmt.Errorf("%w: failed to get MFA token: %w", errUtils.ErrAuthenticationFailed, err)
 	}
 	return mfaToken, nil
 }
@@ -335,7 +335,7 @@ func AuthenticateStandaloneAWSUser(ctx context.Context, identityName string, ide
 	// AWS user identities authenticate directly without provider credentials.
 	credentials, err := userIdentity.Authenticate(ctx, nil)
 	if err != nil {
-		return nil, fmt.Errorf("%w: AWS user identity %q authentication failed: %v", errUtils.ErrAuthenticationFailed, identityName, err)
+		return nil, fmt.Errorf("%w: AWS user identity %q authentication failed: %w", errUtils.ErrAuthenticationFailed, identityName, err)
 	}
 
 	log.Debug("AWS user identity authenticated successfully", "identity", identityName)

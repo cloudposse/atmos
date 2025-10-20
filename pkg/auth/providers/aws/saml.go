@@ -119,7 +119,7 @@ func (p *samlProvider) Authenticate(ctx context.Context) (types.ICredentials, er
 	// Create the SAML client.
 	samlClient, err := saml2aws.NewSAMLClient(samlConfig)
 	if err != nil {
-		return nil, fmt.Errorf("%w: failed to create SAML client: %v", errUtils.ErrInvalidProviderConfig, err)
+		return nil, fmt.Errorf("%w: failed to create SAML client: %w", errUtils.ErrInvalidProviderConfig, err)
 	}
 
 	// Authenticate and get assertion.
@@ -130,15 +130,15 @@ func (p *samlProvider) Authenticate(ctx context.Context) (types.ICredentials, er
 
 	decodedXML, err := base64.StdEncoding.DecodeString(assertionB64)
 	if err != nil {
-		return nil, fmt.Errorf("%w: failed to decode assertion: %v", errUtils.ErrAwsSAMLDecodeFailed, err)
+		return nil, fmt.Errorf("%w: failed to decode assertion: %w", errUtils.ErrAwsSAMLDecodeFailed, err)
 	}
 	rolesStr, err := saml2aws.ExtractAwsRoles(decodedXML)
 	if err != nil {
-		return nil, fmt.Errorf("%w: extract AWS roles: %v", errUtils.ErrAwsSAMLDecodeFailed, err)
+		return nil, fmt.Errorf("%w: extract AWS roles: %w", errUtils.ErrAwsSAMLDecodeFailed, err)
 	}
 	roles, err := saml2aws.ParseAWSRoles(rolesStr)
 	if err != nil {
-		return nil, fmt.Errorf("%w: parse AWS roles: %v", errUtils.ErrAwsSAMLDecodeFailed, err)
+		return nil, fmt.Errorf("%w: parse AWS roles: %w", errUtils.ErrAwsSAMLDecodeFailed, err)
 	}
 
 	selectedRole := p.selectRole(roles)
@@ -149,7 +149,7 @@ func (p *samlProvider) Authenticate(ctx context.Context) (types.ICredentials, er
 	// Assume role.
 	awsCreds, err := p.assumeRoleWithSAML(ctx, assertionB64, selectedRole)
 	if err != nil {
-		return nil, fmt.Errorf("%w: failed to assume role with SAML: %v", errUtils.ErrAuthenticationFailed, err)
+		return nil, fmt.Errorf("%w: failed to assume role with SAML: %w", errUtils.ErrAuthenticationFailed, err)
 	}
 
 	log.Info("SAML authentication successful", "provider", p.name, logFieldRole, selectedRole.RoleARN)
@@ -194,7 +194,7 @@ func (p *samlProvider) createLoginDetails() *creds.LoginDetails {
 func (p *samlProvider) authenticateAndGetAssertion(samlClient saml2aws.SAMLClient, loginDetails *creds.LoginDetails) (string, error) {
 	samlAssertion, err := samlClient.Authenticate(loginDetails)
 	if err != nil {
-		return "", fmt.Errorf("%w: SAML authentication failed: %v", errUtils.ErrAuthenticationFailed, err)
+		return "", fmt.Errorf("%w: SAML authentication failed: %w", errUtils.ErrAuthenticationFailed, err)
 	}
 
 	if samlAssertion == "" {
@@ -252,7 +252,7 @@ func (p *samlProvider) assumeRoleWithSAMLWithDeps(
 	// Load AWS configuration (v2).
 	cfg, err := loader(ctx, configOpts...)
 	if err != nil {
-		return nil, fmt.Errorf("%w: failed to create AWS config: %v", errUtils.ErrAuthenticationFailed, err)
+		return nil, fmt.Errorf("%w: failed to create AWS config: %w", errUtils.ErrAuthenticationFailed, err)
 	}
 
 	stsClient := factory(cfg)
@@ -267,7 +267,7 @@ func (p *samlProvider) assumeRoleWithSAMLWithDeps(
 
 	result, err := stsClient.AssumeRoleWithSAML(ctx, input)
 	if err != nil {
-		return nil, fmt.Errorf("%w: failed to assume role with SAML: %v", errUtils.ErrAuthenticationFailed, err)
+		return nil, fmt.Errorf("%w: failed to assume role with SAML: %w", errUtils.ErrAuthenticationFailed, err)
 	}
 
 	// Convert to AWSCredentials.
@@ -335,7 +335,7 @@ func (p *samlProvider) Validate() error {
 	// Validate URL format strictly.
 	u, err := url.ParseRequestURI(p.url)
 	if err != nil || u.Scheme == "" || u.Host == "" {
-		return fmt.Errorf("%w: invalid URL format: %v", errUtils.ErrInvalidProviderConfig, err)
+		return fmt.Errorf("%w: invalid URL format: %w", errUtils.ErrInvalidProviderConfig, err)
 	}
 
 	return nil
