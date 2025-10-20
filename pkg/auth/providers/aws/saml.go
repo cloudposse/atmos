@@ -163,7 +163,7 @@ func (p *samlProvider) createSAMLConfig() *cfg.IDPAccount {
 	return &cfg.IDPAccount{
 		URL:                  p.url,
 		Username:             p.config.Username,
-		Provider:             p.getProviderType(), // Defaults to "Browser" (opens user's browser).
+		Provider:             p.getProviderType(),
 		MFA:                  "Auto",
 		SkipVerify:           false,
 		Timeout:              samlTimeoutSeconds, // 30 second timeout.
@@ -171,8 +171,8 @@ func (p *samlProvider) createSAMLConfig() *cfg.IDPAccount {
 		SessionDuration:      samlDefaultSessionSec, // 1 hour default.
 		Profile:              p.name,
 		Region:               p.region,
-		DownloadBrowser:      p.config.DownloadBrowserDriver, // Only used if provider_type requires ChromeDriver/GeckoDriver.
-		Headless:             false,                          // Force non-headless for interactive auth.
+		DownloadBrowser:      p.shouldDownloadBrowser(), // Intelligently enable based on driver availability.
+		Headless:             false,                     // Force non-headless for interactive auth.
 	}
 }
 
@@ -360,11 +360,53 @@ func (p *samlProvider) Environment() (map[string]string, error) {
 	return env, nil
 }
 
+// shouldDownloadBrowser determines if browser drivers should be auto-downloaded.
+// It checks if the user explicitly configured download_browser_driver, otherwise
+// it intelligently enables auto-download for "Browser" provider if drivers aren't found.
+func (p *samlProvider) shouldDownloadBrowser() bool {
+	// If user explicitly set download_browser_driver, respect their choice.
+	if p.config.DownloadBrowserDriver {
+		return true
+	}
+
+	providerType := p.getProviderType()
+
+	// Only auto-download for "Browser" provider (others like GoogleApps, Okta don't need drivers).
+	if providerType != "Browser" {
+		return false
+	}
+
+	// Check if Playwright drivers are already installed.
+	// Common locations: ~/.cache/ms-playwright (Linux), ~/Library/Caches/ms-playwright-go (macOS).
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		log.Debug("Cannot determine home directory, enabling browser auto-download")
+		return true
+	}
+
+	// Check common Playwright cache locations.
+	playwrightPaths := []string{
+		homeDir + "/.cache/ms-playwright",       // Linux.
+		homeDir + "/Library/Caches/ms-playwright-go", // macOS (Go specific).
+		homeDir + "/AppData/Local/ms-playwright", // Windows.
+	}
+
+	for _, path := range playwrightPaths {
+		if _, err := os.Stat(path); err == nil {
+			log.Debug("Found existing Playwright drivers, auto-download disabled", "path", path)
+			return false
+		}
+	}
+
+	// No drivers found, enable auto-download.
+	log.Debug("No Playwright drivers found, enabling auto-download for Browser provider")
+	return true
+}
+
 // setupBrowserAutomation sets up browser automation for SAML authentication.
 func (p *samlProvider) setupBrowserAutomation() {
 	// Set environment variables for browser automation.
-	// Only relevant if user explicitly sets provider_type to a value that requires drivers.
-	if p.config.DownloadBrowserDriver {
+	if p.shouldDownloadBrowser() {
 		os.Setenv("SAML2AWS_AUTO_BROWSER_DOWNLOAD", "true")
 		log.Debug("Browser driver auto-download enabled", "provider_type", p.getProviderType())
 	}
