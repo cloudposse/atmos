@@ -13,7 +13,7 @@ func TestShowCommand_Flags(t *testing.T) {
 	// Test that show command has the format flag.
 	formatFlag := showCmd.Flags().Lookup("format")
 	assert.NotNil(t, formatFlag)
-	assert.Equal(t, "text", formatFlag.DefValue)
+	assert.Equal(t, "table", formatFlag.DefValue)
 }
 
 func TestShowCommand_BasicProperties(t *testing.T) {

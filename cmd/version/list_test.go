@@ -337,8 +337,8 @@ func TestListCommand_FormatValidation(t *testing.T) {
 		wantError bool
 	}{
 		{
-			name:      "valid format text",
-			format:    "text",
+			name:      "valid format table",
+			format:    "table",
 			wantError: false,
 		},
 		{
