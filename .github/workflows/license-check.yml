@@ -40,7 +40,12 @@ jobs:
       - name: Generate CSV report
         if: always()
         run: |
-          go-licenses report . 2>/dev/null | grep -v "^W" | grep -v "^E" > licenses-report.csv || true
+          if go-licenses report . 2>/dev/null | grep -v "^W" | grep -v "^E" > licenses-report.csv; then
+            echo "✅ Generated license report with $(wc -l < licenses-report.csv) dependencies"
+          else
+            echo "⚠️ go-licenses report failed, creating empty CSV"
+            echo "package,license_url,license" > licenses-report.csv
+          fi
 
       - name: Upload license report
         if: always()
