@@ -409,13 +409,55 @@ func (p *samlProvider) hasPlaywrightDriversOrCanDownload() bool {
 	}
 
 	for _, path := range playwrightPaths {
-		if _, err := os.Stat(path); err == nil {
-			log.Debug("Found existing Playwright drivers", "path", path)
+		if p.hasValidPlaywrightDrivers(path) {
+			log.Debug("Found valid Playwright drivers", "path", path)
 			return true
 		}
 	}
 
-	log.Debug("No Playwright drivers found", "checked_paths", playwrightPaths)
+	log.Debug("No valid Playwright drivers found", "checked_paths", playwrightPaths)
+	return false
+}
+
+// hasValidPlaywrightDrivers checks if a path contains actual browser binaries, not just empty directories.
+func (p *samlProvider) hasValidPlaywrightDrivers(path string) bool {
+	// Check if directory exists.
+	info, err := os.Stat(path)
+	if err != nil {
+		return false
+	}
+
+	if !info.IsDir() {
+		return false
+	}
+
+	// Read directory contents to check if it has subdirectories with browsers.
+	entries, err := os.ReadDir(path)
+	if err != nil {
+		log.Debug("Cannot read Playwright directory", "path", path, "error", err)
+		return false
+	}
+
+	// Check if there are any version subdirectories with content.
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+
+		versionPath := path + string(os.PathSeparator) + entry.Name()
+		versionEntries, err := os.ReadDir(versionPath)
+		if err != nil {
+			continue
+		}
+
+		// If version directory has any files/subdirectories, consider it valid.
+		if len(versionEntries) > 0 {
+			log.Debug("Found browser binaries in version directory", "version", entry.Name(), "files", len(versionEntries))
+			return true
+		}
+	}
+
+	log.Debug("Playwright directory exists but contains no browser binaries", "path", path)
 	return false
 }
 
@@ -453,14 +495,14 @@ func (p *samlProvider) shouldDownloadBrowser() bool {
 	}
 
 	for _, path := range playwrightPaths {
-		if _, err := os.Stat(path); err == nil {
-			log.Debug("Found existing Playwright drivers, auto-download disabled", "path", path)
+		if p.hasValidPlaywrightDrivers(path) {
+			log.Debug("Found valid Playwright drivers, auto-download disabled", "path", path)
 			return false
 		}
 	}
 
-	// No drivers found, enable auto-download.
-	log.Debug("No Playwright drivers found, enabling auto-download for Browser provider",
+	// No valid drivers found, enable auto-download.
+	log.Debug("No valid Playwright drivers found, enabling auto-download for Browser driver",
 		"checked_paths", playwrightPaths)
 	return true
 }
