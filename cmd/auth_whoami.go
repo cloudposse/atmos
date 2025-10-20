@@ -127,20 +127,21 @@ func printWhoamiHuman(whoami *authTypes.WhoamiInfo) {
 		rows = append(rows, []string{"Region", whoami.Region})
 	}
 
-	// Track if credentials are expiring soon.
-	var expiringSoon bool
 	if whoami.Expiration != nil {
 		expiresStr := whoami.Expiration.Format("2006-01-02 15:04:05 MST")
 		duration := formatDuration(time.Until(*whoami.Expiration))
 
-		// Check if expiring within threshold.
+		// Check if expiring within threshold and style duration accordingly.
 		timeUntilExpiration := time.Until(*whoami.Expiration)
+		var durationStyle lipgloss.Style
 		if timeUntilExpiration > 0 && timeUntilExpiration < expiringThresholdMinutes*time.Minute {
-			expiringSoon = true
-			expiresStr = fmt.Sprintf("%s (%s)", expiresStr, duration)
+			// Expiring soon - use red for duration.
+			durationStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorRed))
 		} else {
-			expiresStr = fmt.Sprintf("%s (%s)", expiresStr, duration)
+			// Normal - use darker gray for duration.
+			durationStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#808080"))
 		}
+		expiresStr = fmt.Sprintf("%s %s", expiresStr, durationStyle.Render(fmt.Sprintf("(%s)", duration)))
 
 		rows = append(rows, []string{"Expires", expiresStr})
 	}
@@ -163,16 +164,7 @@ func printWhoamiHuman(whoami *authTypes.WhoamiInfo) {
 					Foreground(lipgloss.Color(theme.ColorCyan)).
 					Padding(0, 1, 0, 2)
 			}
-
-			// Value column - check if this is the Expires row and if credentials are expiring.
-			if expiringSoon && row == len(rows)-2 && whoami.Expiration != nil {
-				// Expires row with expiring credentials - use red for duration.
-				return lipgloss.NewStyle().
-					Foreground(lipgloss.Color(theme.ColorRed)).
-					Padding(0, 1)
-			}
-
-			// Default color with padding.
+			// Value column - default color with padding.
 			return lipgloss.NewStyle().Padding(0, 1)
 		})
 

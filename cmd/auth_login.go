@@ -115,7 +115,9 @@ func displayAuthSuccess(whoami *authTypes.WhoamiInfo) {
 	if whoami.Expiration != nil {
 		expiresStr := whoami.Expiration.Format("2006-01-02 15:04:05 MST")
 		duration := formatDuration(time.Until(*whoami.Expiration))
-		expiresStr = fmt.Sprintf("%s (%s)", expiresStr, duration)
+		// Style duration with darker gray.
+		durationStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#808080"))
+		expiresStr = fmt.Sprintf("%s %s", expiresStr, durationStyle.Render(fmt.Sprintf("(%s)", duration)))
 		rows = append(rows, []string{"Expires", expiresStr})
 	}
 
