@@ -104,14 +104,14 @@ func (p *samlProvider) PreAuthenticate(manager types.AuthManager) error {
 
 // Authenticate performs SAML authentication using saml2aws.
 func (p *samlProvider) Authenticate(ctx context.Context) (types.ICredentials, error) {
-	providerType := p.getProviderType()
+	samlDriver := p.getSAMLDriver()
 	downloadBrowser := p.shouldDownloadBrowser()
 
-	log.Info("Starting SAML authentication", "provider", p.name, "url", p.url, "provider_type", providerType)
-	log.Debug("SAML provider configuration",
-		"provider_type", providerType,
+	log.Info("Starting SAML authentication", "provider", p.name, "url", p.url, "saml_driver", samlDriver)
+	log.Debug("SAML configuration",
+		"saml_driver", samlDriver,
 		"download_browser", downloadBrowser,
-		"requires_drivers", providerType == "Browser")
+		"requires_drivers", samlDriver == "Browser")
 
 	if p.RoleToAssumeFromAssertion == "" {
 		return nil, fmt.Errorf("%w: no role to assume for assertion, SAML provider must be part of a chain", errUtils.ErrInvalidAuthConfig)
@@ -170,7 +170,7 @@ func (p *samlProvider) createSAMLConfig() *cfg.IDPAccount {
 	return &cfg.IDPAccount{
 		URL:                  p.url,
 		Username:             p.config.Username,
-		Provider:             p.getProviderType(),
+		Provider:             p.getSAMLDriver(),
 		MFA:                  "Auto",
 		SkipVerify:           false,
 		Timeout:              samlTimeoutSeconds, // 30 second timeout.
@@ -309,12 +309,18 @@ func (p *samlProvider) requestedSessionSeconds() int32 {
 	return sec
 }
 
-// getProviderType returns the SAML provider type based on configuration or URL detection.
+// getSAMLDriver returns the SAML driver type based on configuration or URL detection.
 // Priority: Browser (if drivers available) > provider-specific fallbacks (GoogleApps/Okta/ADFS).
-func (p *samlProvider) getProviderType() string {
-	// If user explicitly set provider_type, always respect their choice.
+func (p *samlProvider) getSAMLDriver() string {
+	// If user explicitly set saml_driver, always respect their choice.
+	if p.config.SAMLDriver != "" {
+		log.Debug("Using explicitly configured SAML driver", "saml_driver", p.config.SAMLDriver)
+		return p.config.SAMLDriver
+	}
+
+	// Backward compatibility: check deprecated provider_type field.
 	if p.config.ProviderType != "" {
-		log.Debug("Using explicitly configured provider type", "provider_type", p.config.ProviderType)
+		log.Debug("Using deprecated provider_type field (use saml_driver instead)", "provider_type", p.config.ProviderType)
 		return p.config.ProviderType
 	}
 
@@ -415,7 +421,7 @@ func (p *samlProvider) hasPlaywrightDriversOrCanDownload() bool {
 
 // shouldDownloadBrowser determines if browser drivers should be auto-downloaded.
 // It checks if the user explicitly configured download_browser_driver, otherwise
-// it intelligently enables auto-download for "Browser" provider if drivers aren't found.
+// it intelligently enables auto-download for "Browser" driver if drivers aren't found.
 func (p *samlProvider) shouldDownloadBrowser() bool {
 	// If user explicitly set download_browser_driver, respect their choice.
 	if p.config.DownloadBrowserDriver {
@@ -423,11 +429,11 @@ func (p *samlProvider) shouldDownloadBrowser() bool {
 		return true
 	}
 
-	providerType := p.getProviderType()
+	samlDriver := p.getSAMLDriver()
 
-	// Only auto-download for "Browser" provider (others like GoogleApps, Okta don't need drivers).
-	if providerType != "Browser" {
-		log.Debug("Provider does not require browser drivers", "provider_type", providerType)
+	// Only auto-download for "Browser" driver (others like GoogleApps, Okta don't need drivers).
+	if samlDriver != "Browser" {
+		log.Debug("SAML driver does not require browser drivers", "saml_driver", samlDriver)
 		return false
 	}
 
@@ -464,6 +470,6 @@ func (p *samlProvider) setupBrowserAutomation() {
 	// Set environment variables for browser automation.
 	if p.shouldDownloadBrowser() {
 		os.Setenv("SAML2AWS_AUTO_BROWSER_DOWNLOAD", "true")
-		log.Debug("Browser driver auto-download enabled", "provider_type", p.getProviderType())
+		log.Debug("Browser driver auto-download enabled", "saml_driver", p.getSAMLDriver())
 	}
 }
