@@ -156,7 +156,7 @@ var showCmd = &cobra.Command{
 
 		// Format output.
 		switch strings.ToLower(showFormat) {
-		case "text":
+		case "table":
 			if err := formatReleaseDetailText(release); err != nil {
 				return err
 			}
@@ -166,12 +166,12 @@ var showCmd = &cobra.Command{
 		case "yaml":
 			return formatReleaseDetailYAML(release)
 		default:
-			return fmt.Errorf("%w: %s (supported: text, json, yaml)", errUtils.ErrUnsupportedOutputFormat, showFormat)
+			return fmt.Errorf("%w: %s (supported: table, json, yaml)", errUtils.ErrUnsupportedOutputFormat, showFormat)
 		}
 	},
 }
 
 func init() {
-	showCmd.Flags().StringVar(&showFormat, "format", "text", "Output format: text, json, yaml")
+	showCmd.Flags().StringVar(&showFormat, "format", "table", "Output format: table, json, yaml")
 	versionCmd.AddCommand(showCmd)
 }
