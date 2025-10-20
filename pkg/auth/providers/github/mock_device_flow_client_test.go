@@ -34,48 +34,19 @@ func (m *MockDeviceFlowClient) EXPECT() *MockDeviceFlowClientMockRecorder {
 	return m.recorder
 }
 
-// DeleteToken mocks base method.
-func (m *MockDeviceFlowClient) DeleteToken(ctx context.Context) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "DeleteToken", ctx)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// DeleteToken indicates an expected call of DeleteToken.
-func (mr *MockDeviceFlowClientMockRecorder) DeleteToken(ctx interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteToken", reflect.TypeOf((*MockDeviceFlowClient)(nil).DeleteToken), ctx)
-}
-
-// GetCachedToken mocks base method.
-func (m *MockDeviceFlowClient) GetCachedToken(ctx context.Context) (string, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetCachedToken", ctx)
-	ret0, _ := ret[0].(string)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// GetCachedToken indicates an expected call of GetCachedToken.
-func (mr *MockDeviceFlowClientMockRecorder) GetCachedToken(ctx interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetCachedToken", reflect.TypeOf((*MockDeviceFlowClient)(nil).GetCachedToken), ctx)
-}
-
 // PollForToken mocks base method.
-func (m *MockDeviceFlowClient) PollForToken(ctx context.Context, deviceCode string) (string, error) {
+func (m *MockDeviceFlowClient) PollForToken(ctx context.Context, deviceCode string, interval int) (string, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "PollForToken", ctx, deviceCode)
+	ret := m.ctrl.Call(m, "PollForToken", ctx, deviceCode, interval)
 	ret0, _ := ret[0].(string)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // PollForToken indicates an expected call of PollForToken.
-func (mr *MockDeviceFlowClientMockRecorder) PollForToken(ctx, deviceCode interface{}) *gomock.Call {
+func (mr *MockDeviceFlowClientMockRecorder) PollForToken(ctx, deviceCode, interval interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PollForToken", reflect.TypeOf((*MockDeviceFlowClient)(nil).PollForToken), ctx, deviceCode)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PollForToken", reflect.TypeOf((*MockDeviceFlowClient)(nil).PollForToken), ctx, deviceCode, interval)
 }
 
 // StartDeviceFlow mocks base method.
@@ -91,18 +62,4 @@ func (m *MockDeviceFlowClient) StartDeviceFlow(ctx context.Context) (*DeviceFlow
 func (mr *MockDeviceFlowClientMockRecorder) StartDeviceFlow(ctx interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StartDeviceFlow", reflect.TypeOf((*MockDeviceFlowClient)(nil).StartDeviceFlow), ctx)
-}
-
-// StoreToken mocks base method.
-func (m *MockDeviceFlowClient) StoreToken(ctx context.Context, token string) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "StoreToken", ctx, token)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// StoreToken indicates an expected call of StoreToken.
-func (mr *MockDeviceFlowClientMockRecorder) StoreToken(ctx, token interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StoreToken", reflect.TypeOf((*MockDeviceFlowClient)(nil).StoreToken), ctx, token)
 }

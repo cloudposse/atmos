@@ -61,14 +61,32 @@ func TestNewUserProvider(t *testing.T) {
 			errorType:   errUtils.ErrInvalidProviderConfig,
 		},
 		{
-			name:     "missing client_id",
+			name:     "uses default client_id when not specified",
 			provName: "github-user",
 			config: &schema.Provider{
 				Kind: KindUser,
 				Spec: map[string]interface{}{},
 			},
-			expectError: true,
-			errorType:   errUtils.ErrInvalidProviderConfig,
+			expectError: false,
+		},
+		{
+			name:     "uses default client_id when spec is nil",
+			provName: "github-user",
+			config: &schema.Provider{
+				Kind: KindUser,
+			},
+			expectError: false,
+		},
+		{
+			name:     "uses custom client_id when specified",
+			provName: "github-user",
+			config: &schema.Provider{
+				Kind: KindUser,
+				Spec: map[string]interface{}{
+					"client_id": "custom-client-id",
+				},
+			},
+			expectError: false,
 		},
 	}
 
@@ -87,49 +105,25 @@ func TestNewUserProvider(t *testing.T) {
 				assert.NotNil(t, provider)
 				assert.Equal(t, tt.provName, provider.Name())
 				assert.Equal(t, KindUser, provider.Kind())
+
+				// Verify client_id defaults or custom value.
+				userProv := provider.(*userProvider)
+				if tt.config.Spec != nil {
+					if customClientID, ok := tt.config.Spec["client_id"].(string); ok && customClientID != "" {
+						assert.Equal(t, customClientID, userProv.clientID)
+					} else {
+						assert.Equal(t, DefaultClientID, userProv.clientID)
+					}
+				} else {
+					assert.Equal(t, DefaultClientID, userProv.clientID)
+				}
 			}
 		})
 	}
 }
 
-func TestUserProvider_Authenticate_WithCachedToken(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	mockClient := NewMockDeviceFlowClient(ctrl)
-
-	config := &schema.Provider{
-		Kind: KindUser,
-		Spec: map[string]interface{}{
-			"client_id": "test-client-id",
-		},
-	}
-
-	provider, err := NewUserProvider("test-provider", config)
-	require.NoError(t, err)
-
-	// Inject mock client.
-	userProv := provider.(*userProvider)
-	userProv.deviceClient = mockClient
-
-	// Setup expectations: cached token exists and is valid.
-	cachedToken := "ghs_cached_token_12345"
-	mockClient.EXPECT().
-		GetCachedToken(gomock.Any()).
-		Return(cachedToken, nil)
-
-	// Authenticate should use cached token.
-	creds, err := provider.Authenticate(context.Background())
-
-	require.NoError(t, err)
-	require.NotNil(t, creds)
-
-	// Verify credentials.
-	githubCreds, ok := creds.(*types.GitHubUserCredentials)
-	require.True(t, ok)
-	assert.Equal(t, cachedToken, githubCreds.Token)
-	assert.Equal(t, "test-provider", githubCreds.Provider)
-}
+// TestUserProvider_Authenticate_WithCachedToken removed - provider no longer caches tokens.
+// Auth manager handles credential storage via credential store.
 
 func TestUserProvider_Authenticate_DeviceFlow(t *testing.T) {
 	ctrl := gomock.NewController(t)
@@ -153,30 +147,25 @@ func TestUserProvider_Authenticate_DeviceFlow(t *testing.T) {
 	deviceCode := "test-device-code"
 	userCode := "ABCD-1234"
 	verificationURI := "https://github.com/login/device"
+	interval := 5
 	newToken := "ghs_new_token_67890"
 
-	// Setup expectations: no cached token, start device flow.
-	mockClient.EXPECT().
-		GetCachedToken(gomock.Any()).
-		Return("", errors.New("token not found"))
+	deviceResp := &DeviceFlowResponse{
+		DeviceCode:      deviceCode,
+		UserCode:        userCode,
+		VerificationURI: verificationURI,
+		Interval:        interval,
+		ExpiresIn:       900,
+	}
 
+	// Setup expectations: start device flow and poll for token.
 	mockClient.EXPECT().
 		StartDeviceFlow(gomock.Any()).
-		Return(&DeviceFlowResponse{
-			DeviceCode:      deviceCode,
-			UserCode:        userCode,
-			VerificationURI: verificationURI,
-			Interval:        5,
-			ExpiresIn:       900,
-		}, nil)
+		Return(deviceResp, nil)
 
 	mockClient.EXPECT().
-		PollForToken(gomock.Any(), deviceCode).
+		PollForToken(gomock.Any(), deviceCode, interval).
 		Return(newToken, nil)
-
-	mockClient.EXPECT().
-		StoreToken(gomock.Any(), newToken).
-		Return(nil)
 
 	// Authenticate should perform device flow.
 	creds, err := provider.Authenticate(context.Background())
@@ -209,10 +198,6 @@ func TestUserProvider_Authenticate_DeviceFlowFailure(t *testing.T) {
 	userProv.deviceClient = mockClient
 
 	// Setup expectations: device flow fails.
-	mockClient.EXPECT().
-		GetCachedToken(gomock.Any()).
-		Return("", errors.New("token not found"))
-
 	deviceFlowErr := errors.New("device code request failed")
 	mockClient.EXPECT().
 		StartDeviceFlow(gomock.Any()).
@@ -226,65 +211,8 @@ func TestUserProvider_Authenticate_DeviceFlowFailure(t *testing.T) {
 	assert.ErrorIs(t, err, errUtils.ErrAuthenticationFailed)
 }
 
-func TestUserProvider_Logout(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	mockClient := NewMockDeviceFlowClient(ctrl)
-
-	config := &schema.Provider{
-		Kind: KindUser,
-		Spec: map[string]interface{}{
-			"client_id": "test-client-id",
-		},
-	}
-
-	provider, err := NewUserProvider("test-provider", config)
-	require.NoError(t, err)
-
-	userProv := provider.(*userProvider)
-	userProv.deviceClient = mockClient
-
-	// Setup expectations: delete token.
-	mockClient.EXPECT().
-		DeleteToken(gomock.Any()).
-		Return(nil)
-
-	// Logout should delete token.
-	err = userProv.Logout(context.Background())
-
-	require.NoError(t, err)
-}
-
-func TestUserProvider_Logout_Failure(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	mockClient := NewMockDeviceFlowClient(ctrl)
-
-	config := &schema.Provider{
-		Kind: KindUser,
-		Spec: map[string]interface{}{
-			"client_id": "test-client-id",
-		},
-	}
-
-	provider, err := NewUserProvider("test-provider", config)
-	require.NoError(t, err)
-
-	userProv := provider.(*userProvider)
-	userProv.deviceClient = mockClient
-
-	deleteErr := errors.New("failed to delete token")
-	mockClient.EXPECT().
-		DeleteToken(gomock.Any()).
-		Return(deleteErr)
-
-	err = userProv.Logout(context.Background())
-
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "failed to delete token")
-}
+// TestUserProvider_Logout and TestUserProvider_Logout_Failure removed.
+// Provider no longer manages logout - auth manager handles credential deletion via credential store.
 
 func TestUserProvider_Validate(t *testing.T) {
 	config := &schema.Provider{
@@ -367,6 +295,7 @@ func TestGitHubUserCredentials_BuildWhoamiInfo(t *testing.T) {
 	assert.Equal(t, "test-token", info.Environment["GITHUB_TOKEN"])
 	assert.Equal(t, "test-token", info.Environment["GH_TOKEN"])
 }
+
 func TestUserProvider_PreAuthenticate(t *testing.T) {
 	config := &schema.Provider{
 		Kind: KindUser,
@@ -383,19 +312,20 @@ func TestUserProvider_PreAuthenticate(t *testing.T) {
 }
 
 func TestUserProvider_Validate_MissingClientID(t *testing.T) {
-	// Create provider with client_id, then clear it to test validation.
+	// Create provider with default client_id, then manually clear it to test validation.
 	config := &schema.Provider{
 		Kind: KindUser,
-		Spec: map[string]interface{}{
-			"client_id": "test-client-id",
-		},
+		Spec: map[string]interface{}{},
 	}
 
 	provider, err := NewUserProvider("test-provider", config)
 	require.NoError(t, err)
 
-	// Manually clear client_id to test validation.
+	// Verify default client_id was set.
 	userProv := provider.(*userProvider)
+	assert.Equal(t, DefaultClientID, userProv.clientID)
+
+	// Manually clear client_id to test validation.
 	userProv.clientID = ""
 
 	err = provider.Validate()

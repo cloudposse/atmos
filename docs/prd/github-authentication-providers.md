@@ -354,7 +354,8 @@ auth:
     github-personal:
       kind: github/user
 
-      # Required: GitHub App Client ID for Device Flow
+      # Optional: GitHub OAuth App Client ID for Device Flow
+      # If not specified, uses official Atmos OAuth App (zero-config)
       client_id: "Iv1.abc123def456"
 
       # Optional: OAuth scopes (defaults to minimal read access)
@@ -454,10 +455,10 @@ auth:
 # atmos.yaml
 auth:
   providers:
-    # Developer authentication
+    # Developer authentication (zero-config)
     github-dev:
       kind: github/user
-      client_id: "Iv1.developer123"
+      # client_id is optional - uses official Atmos OAuth App by default
       scopes: [repo, workflow, read:org]
       keychain_service: "atmos-github-dev"
 
@@ -602,7 +603,7 @@ auth:
   providers:
     github:
       kind: github/user
-      client_id: "Iv1.developer123"
+      # client_id is optional - uses official Atmos OAuth App by default
       scopes: [repo, workflow]
 
   identities:
@@ -774,7 +775,7 @@ auth:
   providers:
     github:
       kind: github/user
-      client_id: "Iv1.xxx"
+      # client_id is optional - uses official Atmos OAuth App by default
       scopes: [repo]
 ```
 

@@ -71,7 +71,8 @@ auth:
   providers:
     github-user:
       kind: github/user
-      client_id: "Iv1.abc123def456"  # GitHub OAuth App Client ID
+      # client_id is optional - uses official Atmos OAuth App by default
+      client_id: "Iv1.abc123def456"  # Optional: Custom GitHub OAuth App Client ID
       scopes:  # Optional
         - repo
         - read:org
@@ -95,7 +96,15 @@ auth:
 
 <dl>
   <dt>`client_id`</dt>
-  <dd>GitHub OAuth App Client ID for Device Flow authentication (required)</dd>
+  <dd>
+    **Optional** - GitHub OAuth App Client ID for Device Flow authentication.
+
+    If not specified, Atmos uses the **GitHub CLI OAuth App** (`178c6fc778ccc68e1d6a`), the same OAuth App used by the official `gh` CLI tool. This provides a zero-configuration setup identical to `gh auth login`.
+
+    Source: [GitHub CLI source code](https://github.com/cli/cli/blob/trunk/internal/authflow/flow.go)
+
+    You can override this with your own OAuth App for custom scopes or organizational requirements.
+  </dd>
 
   <dt>`scopes`</dt>
   <dd>Array of GitHub OAuth scopes to request (optional, defaults to minimal read access)</dd>
@@ -212,17 +221,35 @@ atmos auth logout -i my-github
 
 To fully revoke the token, visit: https://github.com/settings/tokens
 
-## Creating a GitHub OAuth App
+## Creating a Custom GitHub OAuth App (Optional)
+
+:::note Default OAuth App
+Atmos provides a built-in OAuth App for zero-configuration setup. You only need to create a custom OAuth App if you require:
+- Custom scopes beyond the default OAuth App permissions
+- Organization-specific requirements or policies
+- Audit trail under your organization's name
+:::
+
+To create a custom GitHub OAuth App:
 
 1. Navigate to **GitHub Settings** → **Developer settings** → **OAuth Apps**
 2. Click **New OAuth App**
 3. Configure:
-   - **Application name**: `Atmos CLI`
+   - **Application name**: `Atmos CLI (Custom)`
    - **Homepage URL**: `https://atmos.tools`
    - **Authorization callback URL**: Leave empty (Device Flow doesn't use callbacks)
 4. Click **Register application**
-5. Note your **Client ID** (starts with `Iv1.`)
+5. Note your **Client ID** (starts with `Iv1.` or `Iv23.`)
 6. **Do not generate a client secret** - Device Flow doesn't require it
+7. Add the Client ID to your provider configuration:
+
+```yaml
+auth:
+  providers:
+    github-user:
+      kind: github/user
+      client_id: "Iv1.your-custom-client-id"  # Your custom OAuth App
+```
 
 ## Security Considerations
 
@@ -302,14 +329,14 @@ Your token doesn't have the required permissions. Update `scopes` in your provid
 
 ## Examples
 
-### Personal Development
+### Personal Development (Zero-Config)
 
 ```yaml
 auth:
   providers:
     github-personal:
       kind: github/user
-      client_id: "Iv1.abc123"
+      # No client_id needed - uses official Atmos OAuth App
       scopes:
         - repo
         - read:org
@@ -368,6 +395,6 @@ jobs:
 
 - [GitHub App Authentication](/cli/commands/auth/providers/github-app) - For automation and bots
 - [GitHub OIDC Authentication](/cli/commands/auth/providers/github-oidc) - For GitHub Actions
-- [`atmos auth login`](/cli/commands/auth/auth-login) - Authenticate with providers
-- [`atmos auth exec`](/cli/commands/auth/auth-exec) - Execute commands with identity
-- [`atmos auth logout`](/cli/commands/auth/auth-logout) - Remove cached credentials
+- [`atmos auth login`](/cli/commands/auth/login) - Authenticate with providers
+- [`atmos auth exec`](/cli/commands/auth/exec) - Execute commands with identity
+- [`atmos auth whoami`](/cli/commands/auth/whoami) - Check authentication status

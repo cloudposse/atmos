@@ -255,14 +255,14 @@ Atmos supports multiple GitHub authentication methods. See the dedicated provide
 
 #### GitHub User (Personal Development)
 
-For local development with OAuth Device Flow. See [`github/user` provider documentation](/cli/commands/auth/providers/github-user).
+For local development with OAuth Device Flow - **works out of the box with zero configuration**. See [`github/user` provider documentation](/cli/commands/auth/providers/github-user).
 
 ```yaml
 auth:
   providers:
     github-user:
       kind: github/user
-      client_id: "Iv1.abc123def456"
+      # No client_id needed - uses official Atmos OAuth App by default
       scopes: [repo, workflow]
 
   identities:

@@ -3,7 +3,9 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"os"
 
+	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/cobra"
 
 	"github.com/cloudposse/atmos/pkg/auth"
@@ -11,7 +13,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/auth/validation"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
-	u "github.com/cloudposse/atmos/pkg/utils"
+	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
 
 // authLoginCmd logs in using a configured identity.
@@ -50,19 +52,53 @@ func executeAuthLoginCommand(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("authentication failed: %w", err)
 	}
 
-	// Display success message
-	u.PrintfMessageToTUI("**Authentication successful!**\n")
-	u.PrintfMessageToTUI("Provider: %s\n", whoami.Provider)
-	u.PrintfMessageToTUI("Identity: %s\n", whoami.Identity)
+	// Display styled success message
+	successStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color(theme.ColorGreen)).
+		Bold(true)
+
+	boxStyle := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(lipgloss.Color(theme.ColorGreen)).
+		Padding(1, 2).
+		Width(60)
+
+	labelStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color(theme.ColorDarkGray)).
+		Width(12)
+
+	valueStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color(theme.ColorWhite)).
+		Bold(true)
+
+	checkmark := lipgloss.NewStyle().
+		Foreground(lipgloss.Color(theme.ColorCheckmark)).
+		SetString("✓")
+
+	// Build success message content
+	title := checkmark.Render() + " " + successStyle.Render("Authentication Successful!")
+
+	var lines []string
+	lines = append(lines, title)
+	lines = append(lines, "")
+	lines = append(lines, labelStyle.Render("Provider:")+" "+valueStyle.Render(whoami.Provider))
+	lines = append(lines, labelStyle.Render("Identity:")+" "+valueStyle.Render(whoami.Identity))
+
 	if whoami.Account != "" {
-		u.PrintfMessageToTUI("Account: %s\n", whoami.Account)
+		lines = append(lines, labelStyle.Render("Account:")+" "+valueStyle.Render(whoami.Account))
 	}
 	if whoami.Region != "" {
-		u.PrintfMessageToTUI("Region: %s\n", whoami.Region)
+		lines = append(lines, labelStyle.Render("Region:")+" "+valueStyle.Render(whoami.Region))
 	}
 	if whoami.Expiration != nil {
-		u.PrintfMessageToTUI("Expires: %s\n", whoami.Expiration.Format("2006-01-02 15:04:05 MST"))
+		expiresValue := whoami.Expiration.Format("2006-01-02 15:04:05 MST")
+		lines = append(lines, labelStyle.Render("Expires:")+" "+valueStyle.Render(expiresValue))
 	}
+
+	content := lipgloss.JoinVertical(lipgloss.Left, lines...)
+	box := boxStyle.Render(content)
+
+	fmt.Fprintln(os.Stderr, "\n"+box+"\n")
 
 	return nil
 }
