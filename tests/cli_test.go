@@ -382,6 +382,11 @@ func sanitizeOutput(output string) (string, error) {
 	posthogTokenRegex := regexp.MustCompile(`phc_[a-zA-Z0-9_]+`)
 	result = posthogTokenRegex.ReplaceAllString(result, "phc_TEST_TOKEN_PLACEHOLDER")
 
+	// 9. Normalize expiration timestamps to avoid snapshot mismatches.
+	// Match timestamps in formats like "2025-10-20 05:48:27 UTC" or "2025-10-18 12:00:00 CDT"
+	expiresRegex := regexp.MustCompile(`Expires:\s+\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}\s+[A-Z]{3,4}`)
+	result = expiresRegex.ReplaceAllString(result, "Expires: <TIMESTAMP>")
+
 	return result, nil
 }
 
