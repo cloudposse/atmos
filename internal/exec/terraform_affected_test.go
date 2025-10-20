@@ -244,7 +244,12 @@ func TestGetAffectedComponents(t *testing.T) {
 			}
 			// Check if we got an unexpected error (mock didn't work, real function was called with invalid path).
 			if !tt.expectedError && err != nil {
-				t.Skipf("gomonkey function mocking failed - expected no error but got: %v (real function was called)", err)
+				// Safely convert error to string to avoid segfault if err pointer is corrupted.
+				errMsg := "<nil>"
+				if err != nil {
+					errMsg = err.Error()
+				}
+				t.Skipf("gomonkey function mocking failed - expected no error but got: %s (real function was called)", errMsg)
 			}
 
 			if tt.expectedError {
