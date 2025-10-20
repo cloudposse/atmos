@@ -265,7 +265,6 @@ func performInteractiveLogout(ctx context.Context, authManager auth.AuthManager,
 }
 
 func performLogoutAll(ctx context.Context, authManager auth.AuthManager, dryRun bool) error {
-
 	if dryRun {
 		u.PrintfMessageToTUI("**Dry run mode:** No credentials will be removed\n\n")
 		u.PrintfMessageToTUI("**Would remove:**\n")
@@ -299,7 +298,6 @@ func performLogoutAll(ctx context.Context, authManager auth.AuthManager, dryRun 
 		u.PrintfMessageToTUI("Error: %v\n\n", err)
 		return err
 	}
-
 
 	identities := authManager.GetIdentities()
 	u.PrintfMessageToTUI("\n✓ Logged out all %d identities\n\n", len(identities))
