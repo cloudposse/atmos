@@ -321,7 +321,7 @@ func (p *samlProvider) getDriver() string {
 
 	// Backward compatibility: check deprecated provider_type field.
 	if p.config.ProviderType != "" {
-		log.Debug("Using deprecated provider_type field (use driver instead)", "provider_type", p.config.ProviderType)
+		log.Warn("The 'provider_type' field is deprecated. Please use 'driver' instead", "current_value", p.config.ProviderType)
 		return p.config.ProviderType
 	}
 
