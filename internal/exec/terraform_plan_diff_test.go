@@ -9,8 +9,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
-	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 func TestSortMapKeys(t *testing.T) {
@@ -485,12 +485,12 @@ func TestTerraformPlanDiffErrorHandling(t *testing.T) {
 	}
 
 	// Save the original OsExit function and restore it after the test
-	originalOsExit := u.OsExit
-	defer func() { u.OsExit = originalOsExit }()
+	originalOsExit := errUtils.OsExit
+	defer func() { errUtils.OsExit = originalOsExit }()
 
 	// Mock OsExit to prevent the test from exiting
 	exitCalled := false
-	u.OsExit = func(code int) {
+	errUtils.OsExit = func(code int) {
 		exitCalled = true
 		// Don't actually exit
 	}

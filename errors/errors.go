@@ -392,5 +392,5 @@ type ExitCodeError struct {
 }
 
 func (e ExitCodeError) Error() string {
-	return fmt.Sprintf("subcommand exited with code %d", e.Code)
+	return fmt.Sprintf("workflow step execution failed with exit code %d", e.Code)
 }

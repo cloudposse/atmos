@@ -117,7 +117,7 @@ workflows:
 				},
 			},
 			wantErr: true,
-			errMsg:  "the workflow directory 'nonexistent' does not exist",
+			errMsg:  "workflow directory does not exist",
 		},
 	}
 

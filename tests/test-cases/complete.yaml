@@ -13,7 +13,7 @@ tests:
       diff: []
       stderr:
         - 'ATMOS_SHLVL exceeds maximum allowed depth. Infinite recursion\? current=11, max=10'
-        - 'exit status 1'
+        - 'workflow step execution failed with exit code 1'
       exit_code: 1
   - name: atmos workflow pla --file workflow1
     enabled: true

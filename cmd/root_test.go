@@ -10,9 +10,9 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/cloudposse/atmos/pkg/utils"
 )
 
 func TestNoColorLog(t *testing.T) {
@@ -392,9 +392,9 @@ func TestVersionFlagExecutionPath(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Save original OsExit and restore after test.
-			originalOsExit := utils.OsExit
+			originalOsExit := errUtils.OsExit
 			t.Cleanup(func() {
-				utils.OsExit = originalOsExit
+				errUtils.OsExit = originalOsExit
 				tt.cleanup()
 			})
 
@@ -403,7 +403,7 @@ func TestVersionFlagExecutionPath(t *testing.T) {
 			type exitPanic struct {
 				code int
 			}
-			utils.OsExit = func(code int) {
+			errUtils.OsExit = func(code int) {
 				panic(exitPanic{code: code})
 			}
 
@@ -414,7 +414,7 @@ func TestVersionFlagExecutionPath(t *testing.T) {
 				// Execute should call version command and then exit with expected code.
 				// We expect it to panic with our exitPanic struct containing the exit code.
 				// This verifies that the --version flag handler is being executed and
-				// calls os.Exit via utils.OsExit.
+				// calls os.Exit via errUtils.OsExit.
 				assert.PanicsWithValue(t, exitPanic{code: tt.expectExit}, func() {
 					_ = Execute()
 				}, "Execute should exit with code %d", tt.expectExit)
