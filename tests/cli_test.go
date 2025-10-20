@@ -385,7 +385,7 @@ func sanitizeOutput(output string) (string, error) {
 	// 9. Normalize expiration timestamps to avoid snapshot mismatches.
 	// Match timestamps in formats like "2025-10-20 05:48:27 UTC" or "2025-10-18 12:00:00 CDT"
 	expiresRegex := regexp.MustCompile(`Expires:\s+\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}\s+[A-Z]{3,4}`)
-	result = expiresRegex.ReplaceAllString(result, "Expires: <TIMESTAMP>")
+	result = expiresRegex.ReplaceAllString(result, "Expires: 2025-01-01 00:00:00 UTC")
 
 	return result, nil
 }

@@ -1,7 +1,7 @@
- Successfully authenticated
+ Successfully authenticated
 
 Access Key ID: AKIAIOSFODNN7EXAMPLE
 Provider: mock-provider
 Identity: mock-identity
 Region: us-east-1
-Expires: <TIMESTAMP>
+Expires: 2025-01-01 00:00:00 UTC
