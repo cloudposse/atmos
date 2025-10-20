@@ -182,3 +182,66 @@ func TestGetAny_InvalidJSON(t *testing.T) {
 	assert.Error(t, err)
 	assert.True(t, errors.Is(err, ErrCredentialStore))
 }
+
+func TestSetAny_Success(t *testing.T) {
+	s := NewKeyringAuthStore()
+
+	testData := map[string]string{
+		"key1": "value1",
+		"key2": "value2",
+	}
+
+	err := s.SetAny("test-set", testData)
+	assert.NoError(t, err)
+
+	// Verify we can retrieve it.
+	var got map[string]string
+	err = s.GetAny("test-set", &got)
+	assert.NoError(t, err)
+	assert.Equal(t, testData, got)
+}
+
+func TestSetAny_ComplexStruct(t *testing.T) {
+	s := NewKeyringAuthStore()
+
+	type ComplexData struct {
+		Name   string
+		Age    int
+		Active bool
+		Tags   []string
+	}
+
+	testData := ComplexData{
+		Name:   "test",
+		Age:    30,
+		Active: true,
+		Tags:   []string{"tag1", "tag2"},
+	}
+
+	err := s.SetAny("complex-data", testData)
+	assert.NoError(t, err)
+
+	// Verify we can retrieve it.
+	var got ComplexData
+	err = s.GetAny("complex-data", &got)
+	assert.NoError(t, err)
+	assert.Equal(t, testData, got)
+}
+
+func TestSetAny_OverwriteExisting(t *testing.T) {
+	s := NewKeyringAuthStore()
+
+	// Set initial value.
+	err := s.SetAny("overwrite-test", "initial-value")
+	assert.NoError(t, err)
+
+	// Overwrite with new value.
+	err = s.SetAny("overwrite-test", "new-value")
+	assert.NoError(t, err)
+
+	// Verify new value.
+	var got string
+	err = s.GetAny("overwrite-test", &got)
+	assert.NoError(t, err)
+	assert.Equal(t, "new-value", got)
+}

@@ -643,3 +643,42 @@ func TestSAMLProvider_GetFilesDisplayPath(t *testing.T) {
 		})
 	}
 }
+
+func TestSAMLProvider_Logout_ErrorPaths(t *testing.T) {
+	tests := []struct {
+		name        string
+		providerCfg *schema.Provider
+		expectError bool
+	}{
+		{
+			name: "handles invalid base_path gracefully",
+			providerCfg: &schema.Provider{
+				Kind:   "aws/saml",
+				URL:    "https://idp.example.com/saml",
+				Region: "us-east-1",
+				Spec: map[string]interface{}{
+					"files": map[string]interface{}{
+						"base_path": "/invalid/\x00/path", // Invalid path with null character.
+					},
+				},
+			},
+			expectError: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p, err := NewSAMLProvider("test-saml", tt.providerCfg)
+			require.NoError(t, err)
+
+			ctx := context.Background()
+			err = p.Logout(ctx)
+
+			if tt.expectError {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}

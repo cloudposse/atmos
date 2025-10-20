@@ -5,7 +5,9 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/mitchellh/go-homedir"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	ini "gopkg.in/ini.v1"
 
 	"github.com/cloudposse/atmos/pkg/auth/types"
@@ -310,3 +312,65 @@ func TestAWSFileManager_RemoveIniSection(t *testing.T) {
 		})
 	}
 }
+
+func TestAWSFileManager_GetBaseDir(t *testing.T) {
+	tests := []struct {
+		name    string
+		baseDir string
+	}{
+		{
+			name:    "returns configured base directory",
+			baseDir: "/custom/path/aws",
+		},
+		{
+			name:    "returns default base directory",
+			baseDir: "~/.aws/atmos",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := &AWSFileManager{baseDir: tt.baseDir}
+			result := m.GetBaseDir()
+			assert.Equal(t, tt.baseDir, result)
+		})
+	}
+}
+
+func TestAWSFileManager_GetDisplayPath(t *testing.T) {
+	homeDir, err := homedir.Dir()
+	require.NoError(t, err)
+
+	tests := []struct {
+		name     string
+		baseDir  string
+		expected string
+	}{
+		{
+			name:     "replaces home directory with tilde",
+			baseDir:  filepath.Join(homeDir, ".aws", "atmos"),
+			expected: filepath.ToSlash(filepath.Join("~", ".aws", "atmos")),
+		},
+		{
+			name:     "keeps absolute path when not under home",
+			baseDir:  "/opt/aws/atmos",
+			expected: "/opt/aws/atmos",
+		},
+		{
+			name:     "handles root directory",
+			baseDir:  "/",
+			expected: "/",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := &AWSFileManager{baseDir: tt.baseDir}
+			result := m.GetDisplayPath()
+			// Normalize path separators for cross-platform compatibility.
+			normalizedResult := filepath.ToSlash(result)
+			assert.Equal(t, tt.expected, normalizedResult)
+		})
+	}
+}
+

@@ -338,3 +338,16 @@ func TestUserIdentity_Logout(t *testing.T) {
 		})
 	}
 }
+
+
+func TestUserIdentity_Validate(t *testing.T) {
+	identity := &userIdentity{
+		name: "test-user",
+		config: &schema.Identity{
+			Kind: "aws/user",
+		},
+	}
+
+	err := identity.Validate()
+	assert.NoError(t, err, "user identity validation should always succeed")
+}
