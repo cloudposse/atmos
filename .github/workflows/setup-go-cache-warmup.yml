@@ -38,4 +38,3 @@ jobs:
 
       - name: Get deps
         run: make deps
-
