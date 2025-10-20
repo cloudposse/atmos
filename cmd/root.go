@@ -75,20 +75,13 @@ func processChdirFlag(cmd *cobra.Command) error {
 	}
 
 	// Expand tilde to home directory.
-	if strings.HasPrefix(chdir, "~") {
-		homeDir, err := os.UserHomeDir()
-		if err != nil {
-			return fmt.Errorf("%w: failed to get home directory", errUtils.ErrPathResolution)
-		}
-		if chdir == "~" {
-			chdir = homeDir
-		} else if strings.HasPrefix(chdir, "~/") {
-			chdir = filepath.Join(homeDir, chdir[2:])
-		}
+	expandedPath, err := utils.ExpandTilde(chdir)
+	if err != nil {
+		return fmt.Errorf("%w: %s", errUtils.ErrPathResolution, err)
 	}
 
 	// Clean and make absolute to handle both relative and absolute paths.
-	absPath, err := filepath.Abs(chdir)
+	absPath, err := filepath.Abs(expandedPath)
 	if err != nil {
 		return fmt.Errorf("%w: invalid chdir path: %s", errUtils.ErrPathResolution, chdir)
 	}
