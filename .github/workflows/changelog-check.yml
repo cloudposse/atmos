@@ -99,6 +99,7 @@ jobs:
 
           # Find existing comment (warning or success)
           EXISTING_COMMENT=$(gh pr view $PR_NUMBER --json comments --jq '.comments[] | select(.body | contains("<!-- changelog-check -->")) | .id' | head -1)
+          EXISTING_COMMENT_BODY=$(gh pr view $PR_NUMBER --json comments --jq '.comments[] | select(.body | contains("<!-- changelog-check -->")) | .body' | head -1)
 
           SUCCESS_COMMENT_BODY="<!-- changelog-check -->
           > [!NOTE]
@@ -109,12 +110,17 @@ jobs:
           > Thank you!"
 
           if [ -n "$EXISTING_COMMENT" ]; then
-            echo "Updating existing comment with success message..."
-            gh api -X PATCH "/repos/${{ github.repository }}/issues/comments/$EXISTING_COMMENT" \
-              -f body="$SUCCESS_COMMENT_BODY" || {
-              echo "⚠️ Failed to update comment (it may have been deleted)"
-            }
-            echo "✅ Comment updated from warning to success"
+            # Check if comment already shows success
+            if echo "$EXISTING_COMMENT_BODY" | grep -q "Changelog Added ✅"; then
+              echo "ℹ️ Comment already shows success - no update needed"
+            else
+              echo "Updating existing comment with success message..."
+              gh api -X PATCH "/repos/${{ github.repository }}/issues/comments/$EXISTING_COMMENT" \
+                -f body="$SUCCESS_COMMENT_BODY" || {
+                echo "⚠️ Failed to update comment (it may have been deleted)"
+              }
+              echo "✅ Comment updated from warning to success"
+            fi
           else
             echo "ℹ️ No existing comment to update (comment only created when changelog is missing)"
           fi
