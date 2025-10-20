@@ -101,33 +101,6 @@ func IsPathAbsolute(path string) bool {
 	return filepath.IsAbs(path)
 }
 
-// ExpandTilde expands ~ and ~/ in paths to the user's home directory.
-// Returns the expanded path if it starts with ~, otherwise returns the original path.
-func ExpandTilde(path string) (string, error) {
-	defer perf.Track(nil, "utils.ExpandTilde")()
-
-	if !strings.HasPrefix(path, "~") {
-		return path, nil
-	}
-
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		return "", fmt.Errorf("failed to get home directory: %w", err)
-	}
-
-	if path == "~" {
-		return homeDir, nil
-	}
-
-	if strings.HasPrefix(path, "~/") {
-		return filepath.Join(homeDir, path[2:]), nil
-	}
-
-	// Path starts with ~ but not ~/ (e.g., ~user), return as-is.
-	// Go doesn't support ~user expansion.
-	return path, nil
-}
-
 // handleEmptyPaths handles the case when one or both paths are empty.
 func handleEmptyPaths(basePath, providedPath string) (string, bool) {
 	if basePath == "" && providedPath == "" {
