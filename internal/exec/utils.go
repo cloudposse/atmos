@@ -12,7 +12,7 @@ import (
 	"sync"
 
 	"github.com/hashicorp/terraform-config-inspect/tfconfig"
-	"github.com/mitchellh/mapstructure"
+	"github.com/go-viper/mapstructure/v2"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
