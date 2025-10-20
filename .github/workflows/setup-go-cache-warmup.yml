@@ -35,3 +35,7 @@ jobs:
         with:
           go-version-file: "go.mod"
         id: go
+
+      - name: Get deps
+        run: make deps
+
