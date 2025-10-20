@@ -4,14 +4,16 @@ sidebar_label: version
 sidebar_class_name: command
 description: Use this command to get the Atmos CLI version
 ---
+
 import Screengrab from '@site/src/components/Screengrab'
 import Intro from '@site/src/components/Intro'
+import DocCardList from '@theme/DocCardList';
 
 <Intro>
-Use this command to get the Atmos CLI version
+    Use this command to get the Atmos CLI version
 </Intro>
 
-<Screengrab title="atmos help" slug="atmos-version" />
+<Screengrab title="atmos version" slug="atmos-version"/>
 
 ## Usage
 
@@ -60,11 +62,11 @@ To check the version of Terraform, Helmfile, or other tools, use their native co
 ## Flags
 
 <dl>
-  <dt>`--check` <em>(optional)</em></dt>
-  <dd>Force Atmos to check for a new version, irrespective of the configuration settings.</dd>
+    <dt>`--check` <em>(optional)</em></dt>
+    <dd>Force Atmos to check for a new version, irrespective of the configuration settings.</dd>
 
-  <dt>`--format` <em>(optional)</em></dt>
-  <dd>Specify the output format: `yaml` or `json`.</dd>
+    <dt>`--format` <em>(optional)</em></dt>
+    <dd>Specify the output format: `yaml` or `json`.</dd>
 </dl>
 
 :::tip
@@ -76,4 +78,6 @@ When executing the `atmos version` command, Atmos automatically checks for the l
 from the [Atmos releases](https://github.com/cloudposse/atmos/releases) page on GitHub and compares the current
 version with the latest release.
 
-If the installed Atmos version is out of date, the following information is presented to the user:
+## Subcommands
+
+<DocCardList/>
