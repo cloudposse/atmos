@@ -176,7 +176,8 @@ func (i *userIdentity) generateSessionToken(ctx context.Context, longLivedCreds 
 	}
 
 	// Create AWS config with long-lived credentials.
-	cfg, err := config.LoadDefaultConfig(ctx, configOpts...)
+	// Use isolated environment to avoid conflicts with external AWS env vars.
+	cfg, err := awsCloud.LoadIsolatedAWSConfig(ctx, configOpts...)
 	if err != nil {
 		return nil, fmt.Errorf("%w: failed to load AWS config: %v", errUtils.ErrAwsAuth, err)
 	}

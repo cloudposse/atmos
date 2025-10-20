@@ -16,6 +16,30 @@ import (
 )
 
 func TestNoColorLog(t *testing.T) {
+	// Skip in CI environments without TTY.
+	if _, err := os.Open("/dev/tty"); err != nil {
+		t.Skipf("Skipping test: TTY not available (/dev/tty): %v", err)
+	}
+
+	// Snapshot RootCmd state to prevent test pollution.
+	_ = NewTestKit(t)
+
+	// Save and restore working directory - previous tests may have changed it.
+	originalWd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Failed to get current working directory: %v", err)
+	}
+
+	// Change back to original directory and automatically restore when test ends.
+	t.Chdir(originalWd)
+
+	// Ensure ATMOS_CHDIR is not set BEFORE anything else.
+	// Previous tests may have set it, and we need to clear it before RootCmd.Execute().
+	// We can't use t.Setenv here because previous tests may have set it,
+	// and t.Setenv only restores to the ORIGINAL value before the test package loaded.
+	os.Unsetenv("ATMOS_CHDIR")
+	defer os.Unsetenv("ATMOS_CHDIR") // Clean up after test.
+
 	stacksPath := "../tests/fixtures/scenarios/stack-templates"
 
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
@@ -36,6 +60,10 @@ func TestNoColorLog(t *testing.T) {
 	}()
 	// Set the arguments for the command
 	os.Args = []string{"atmos", "about"}
+
+	// Reset buffer to ensure clean state (previous tests may have written to logger).
+	buf.Reset()
+
 	// Execute the command
 	if err := Execute(); err != nil {
 		t.Fatalf("Failed to execute command: %v", err)
