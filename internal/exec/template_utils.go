@@ -13,10 +13,10 @@ import (
 	"time"
 
 	"github.com/Masterminds/sprig/v3"
+	"github.com/go-viper/mapstructure/v2"
 	"github.com/hairyhenderson/gomplate/v3"
 	"github.com/hairyhenderson/gomplate/v3/data"
 	_ "github.com/hairyhenderson/gomplate/v4"
-	"github.com/go-viper/mapstructure/v2"
 	"github.com/samber/lo"
 
 	log "github.com/cloudposse/atmos/pkg/logger"

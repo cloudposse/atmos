@@ -11,8 +11,8 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/hashicorp/terraform-config-inspect/tfconfig"
 	"github.com/go-viper/mapstructure/v2"
+	"github.com/hashicorp/terraform-config-inspect/tfconfig"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
