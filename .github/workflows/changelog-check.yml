@@ -111,7 +111,9 @@ jobs:
           if [ -n "$EXISTING_COMMENT" ]; then
             echo "Updating existing comment with success message..."
             gh api -X PATCH "/repos/${{ github.repository }}/issues/comments/$EXISTING_COMMENT" \
-              -f body="$SUCCESS_COMMENT_BODY"
+              -f body="$SUCCESS_COMMENT_BODY" || {
+              echo "⚠️ Failed to update comment (it may have been deleted)"
+            }
             echo "✅ Comment updated from warning to success"
           else
             echo "ℹ️ No existing comment to update (comment only created when changelog is missing)"
