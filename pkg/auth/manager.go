@@ -127,8 +127,9 @@ func (m *manager) Authenticate(ctx context.Context, identityName string) (*types
 	// Perform hierarchical credential validation (bottom-up).
 	finalCreds, err := m.authenticateHierarchical(ctx, identityName)
 	if err != nil {
-		errUtils.CheckErrorAndPrint(err, "Authenticate Hierarchical", "")
-		return nil, err
+		wrappedErr := fmt.Errorf("%w: failed to authenticate hierarchically for identity %q: %v", errUtils.ErrAuthenticationFailed, identityName, err)
+		errUtils.CheckErrorAndPrint(wrappedErr, "Authenticate Hierarchical", "")
+		return nil, wrappedErr
 	}
 
 	// Call post-authentication hook on the identity (now part of Identity interface).
@@ -353,8 +354,9 @@ func (m *manager) GetProviderKindForIdentity(identityName string) (string, error
 	// Build the complete authentication chain.
 	chain, err := m.buildAuthenticationChain(identityName)
 	if err != nil {
-		errUtils.CheckErrorAndPrint(err, buildAuthenticationChain, "")
-		return "", err
+		wrappedErr := fmt.Errorf("failed to get provider kind for identity %q: %w", identityName, err)
+		errUtils.CheckErrorAndPrint(wrappedErr, buildAuthenticationChain, "")
+		return "", wrappedErr
 	}
 
 	if len(chain) == 0 {
