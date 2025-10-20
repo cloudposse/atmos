@@ -127,7 +127,7 @@ For AWS identities, Atmos uses the [AWS Federation Endpoint](https://docs.aws.am
 1. **Authenticate**: Atmos obtains temporary credentials using your configured identity (AWS SSO, SAML, etc.)
 2. **Federation Token**: Temporary credentials are exchanged for a signin token via AWS's federation endpoint
 3. **Console URL**: A special URL containing the signin token is constructed
-4. **Browser Launch**: The URL opens in your default browser, providing instant console access
+4. **Browser Launch**: The URL opens in your default browser, providing instant console access.
 
 ### Provider-Agnostic Design
 

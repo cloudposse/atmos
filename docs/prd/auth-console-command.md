@@ -637,7 +637,7 @@ func TestAuthConsoleCommand(t *testing.T) {
 
 ### CLI Help Text
 
-```
+```text
 USAGE
   atmos auth console [flags]
 

@@ -51,6 +51,9 @@ var (
 	ErrSpinnerReturnedNilModel               = errors.New("spinner returned nil model")
 	ErrSpinnerUnexpectedModelType            = errors.New("spinner returned unexpected model type")
 
+	// ErrAuthConsole is returned when auth console command operations fail.
+	ErrAuthConsole = errors.New("auth console operation failed")
+
 	// ErrPlanHasDiff is returned when there are differences between two Terraform plan files.
 	ErrPlanHasDiff = errors.New("plan files have differences")
 

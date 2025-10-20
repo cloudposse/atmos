@@ -49,12 +49,12 @@ func Get(ctx context.Context, url string, client Client) ([]byte, error) {
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
-		return nil, fmt.Errorf("%w: failed to create request: %v", errUtils.ErrHTTPRequestFailed, err)
+		return nil, fmt.Errorf("%w: failed to create request: %w", errUtils.ErrHTTPRequestFailed, err)
 	}
 
 	resp, err := client.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("%w: request failed: %v", errUtils.ErrHTTPRequestFailed, err)
+		return nil, fmt.Errorf("%w: request failed: %w", errUtils.ErrHTTPRequestFailed, err)
 	}
 	defer resp.Body.Close()
 
@@ -64,7 +64,7 @@ func Get(ctx context.Context, url string, client Client) ([]byte, error) {
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, fmt.Errorf("%w: failed to read response: %v", errUtils.ErrHTTPRequestFailed, err)
+		return nil, fmt.Errorf("%w: failed to read response: %w", errUtils.ErrHTTPRequestFailed, err)
 	}
 
 	return body, nil

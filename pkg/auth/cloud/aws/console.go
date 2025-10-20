@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/url"
+	"reflect"
 	"time"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -40,7 +41,8 @@ type ConsoleURLGenerator struct {
 func NewConsoleURLGenerator(httpClient http.Client) *ConsoleURLGenerator {
 	defer perf.Track(nil, "aws.NewConsoleURLGenerator")()
 
-	if httpClient == nil {
+	// Check for nil or typed-nil using reflection.
+	if httpClient == nil || (reflect.ValueOf(httpClient).Kind() == reflect.Ptr && reflect.ValueOf(httpClient).IsNil()) {
 		httpClient = http.NewDefaultClient(10 * time.Second)
 	}
 
@@ -162,5 +164,7 @@ func (g *ConsoleURLGenerator) getSigninToken(ctx context.Context, sessionData []
 
 // SupportsConsoleAccess returns true for AWS.
 func (g *ConsoleURLGenerator) SupportsConsoleAccess() bool {
+	defer perf.Track(nil, "aws.ConsoleURLGenerator.SupportsConsoleAccess")()
+
 	return true
 }

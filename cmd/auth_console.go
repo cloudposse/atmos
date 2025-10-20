@@ -10,6 +10,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/cobra"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	awsAuth "github.com/cloudposse/atmos/pkg/auth/cloud/aws"
 	"github.com/cloudposse/atmos/pkg/auth/credentials"
 	"github.com/cloudposse/atmos/pkg/auth/types"
@@ -51,13 +52,13 @@ func executeAuthConsoleCommand(cmd *cobra.Command, args []string) error {
 	// Load atmos config.
 	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
 	if err != nil {
-		return fmt.Errorf("failed to load atmos config: %w", err)
+		return fmt.Errorf("%w: failed to load atmos config: %w", errUtils.ErrAuthConsole, err)
 	}
 
 	// Create auth manager.
 	authManager, err := createAuthManager(&atmosConfig.Auth)
 	if err != nil {
-		return fmt.Errorf("failed to create auth manager: %w", err)
+		return fmt.Errorf("%w: failed to create auth manager: %w", errUtils.ErrAuthConsole, err)
 	}
 
 	// Get identity from flag or use default.
@@ -65,7 +66,10 @@ func executeAuthConsoleCommand(cmd *cobra.Command, args []string) error {
 	if identityName == "" {
 		identityName, err = authManager.GetDefaultIdentity()
 		if err != nil {
-			return fmt.Errorf("failed to get default identity: %w", err)
+			return fmt.Errorf("%w: failed to get default identity: %w", errUtils.ErrAuthConsole, err)
+		}
+		if identityName == "" {
+			return fmt.Errorf("%w: no default identity configured", errUtils.ErrAuthConsole)
 		}
 	}
 
@@ -73,20 +77,27 @@ func executeAuthConsoleCommand(cmd *cobra.Command, args []string) error {
 	ctx := context.Background()
 	whoami, err := authManager.Authenticate(ctx, identityName)
 	if err != nil {
-		return fmt.Errorf("authentication failed: %w", err)
+		return fmt.Errorf("%w: authentication failed: %w", errUtils.ErrAuthConsole, err)
 	}
 
-	// Retrieve credentials from store.
-	credStore := credentials.NewCredentialStore()
-	creds, err := credStore.Retrieve(whoami.Identity)
-	if err != nil {
-		return fmt.Errorf("failed to retrieve credentials: %w", err)
+	// Retrieve credentials: use in-memory first, then retrieve from store.
+	var creds types.ICredentials
+	if whoami.Credentials != nil {
+		creds = whoami.Credentials
+	} else if whoami.CredentialsRef != "" {
+		credStore := credentials.NewCredentialStore()
+		creds, err = credStore.Retrieve(whoami.CredentialsRef)
+		if err != nil {
+			return fmt.Errorf("%w: failed to retrieve credentials from store: %w", errUtils.ErrAuthConsole, err)
+		}
+	} else {
+		return fmt.Errorf("%w: no credentials available", errUtils.ErrAuthConsole)
 	}
 
 	// Check if provider supports console access and get the console URL generator.
 	consoleProvider, err := getConsoleProvider(authManager, whoami.Identity)
 	if err != nil {
-		return err
+		return fmt.Errorf("%w: %w", errUtils.ErrAuthConsole, err)
 	}
 
 	// Generate console URL.
@@ -99,7 +110,7 @@ func executeAuthConsoleCommand(cmd *cobra.Command, args []string) error {
 
 	consoleURL, duration, err := consoleProvider.GetConsoleURL(ctx, creds, options)
 	if err != nil {
-		return fmt.Errorf("failed to generate console URL: %w", err)
+		return fmt.Errorf("%w: failed to generate console URL: %w", errUtils.ErrAuthConsole, err)
 	}
 
 	if consolePrintOnly {
