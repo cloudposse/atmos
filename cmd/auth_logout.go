@@ -90,8 +90,6 @@ func performIdentityLogout(ctx context.Context, authManager auth.AuthManager, id
 		return fmt.Errorf("%w: identity %q", errUtils.ErrIdentityNotInConfig, identityName)
 	}
 
-	u.PrintfMessageToTUI("\n**Logging out from identity:** %s\n\n", identityName)
-
 	// Get authentication chain to show what will be removed.
 	providerName := authManager.GetProviderForIdentity(identityName)
 
@@ -113,16 +111,16 @@ func performIdentityLogout(ctx context.Context, authManager auth.AuthManager, id
 	if err := authManager.Logout(ctx, identityName); err != nil {
 		// Check if it's a partial logout.
 		if errors.Is(err, errUtils.ErrPartialLogout) {
-			u.PrintfMessageToTUI("✓ **Logged out with warnings**\n\n")
+			u.PrintfMessageToTUI("\n✓ Logged out **%s** with warnings\n\n", identityName)
 			u.PrintfMessageToTUI("Some credentials could not be removed:\n")
 			u.PrintfMessageToTUI("  %v\n\n", err)
 		} else {
-			u.PrintfMessageToTUI("✗ **Logout failed**\n\n")
+			u.PrintfMessageToTUI("\n✗ Failed to log out **%s**\n\n", identityName)
 			u.PrintfMessageToTUI("Error: %v\n\n", err)
 			return err
 		}
 	} else {
-		u.PrintfMessageToTUI("✓ **Successfully logged out**\n\n")
+		u.PrintfMessageToTUI("\n✓ Logged out **%s**\n\n", identityName)
 	}
 
 	// Display browser session warning.
@@ -145,7 +143,14 @@ func performProviderLogout(ctx context.Context, authManager auth.AuthManager, pr
 		return fmt.Errorf("%w: provider %q", errUtils.ErrProviderNotInConfig, providerName)
 	}
 
-	u.PrintfMessageToTUI("\n**Logging out from provider:** %s\n\n", providerName)
+	// Find all identities using this provider.
+	identities := authManager.GetIdentities()
+	var identitiesForProvider []string
+	for identityName := range identities {
+		if authManager.GetProviderForIdentity(identityName) == providerName {
+			identitiesForProvider = append(identitiesForProvider, identityName)
+		}
+	}
 
 	if dryRun {
 		u.PrintfMessageToTUI("**Dry run mode:** No credentials will be removed\n\n")
@@ -169,12 +174,12 @@ func performProviderLogout(ctx context.Context, authManager auth.AuthManager, pr
 			return nil
 		}
 
-		u.PrintfMessageToTUI("✗ **Provider logout failed**\n\n")
+		u.PrintfMessageToTUI("✗ Failed to log out provider\n\n")
 		u.PrintfMessageToTUI("Error: %v\n\n", err)
 		return err
 	}
 
-	u.PrintfMessageToTUI("✓ **Successfully logged out from provider**\n\n")
+	u.PrintfMessageToTUI("\n✓ Logged out provider **%s** (%d identities)\n\n", providerName, len(identitiesForProvider))
 
 	// Display browser session warning.
 	displayBrowserWarning()
@@ -259,9 +264,7 @@ func performInteractiveLogout(ctx context.Context, authManager auth.AuthManager,
 	}
 }
 
-// performLogoutAll removes all credentials.
 func performLogoutAll(ctx context.Context, authManager auth.AuthManager, dryRun bool) error {
-	u.PrintfMessageToTUI("\n**Logging out from all identities**\n\n")
 
 	if dryRun {
 		u.PrintfMessageToTUI("**Dry run mode:** No credentials will be removed\n\n")
@@ -292,12 +295,14 @@ func performLogoutAll(ctx context.Context, authManager auth.AuthManager, dryRun 
 			return nil
 		}
 
-		u.PrintfMessageToTUI("✗ **Logout all failed**\n\n")
+		u.PrintfMessageToTUI("✗ Failed to log out all identities\n\n")
 		u.PrintfMessageToTUI("Error: %v\n\n", err)
 		return err
 	}
 
-	u.PrintfMessageToTUI("✓ **Successfully logged out from all identities**\n\n")
+
+	identities := authManager.GetIdentities()
+	u.PrintfMessageToTUI("\n✓ Logged out all %d identities\n\n", len(identities))
 
 	// Display browser session warning.
 	displayBrowserWarning()
