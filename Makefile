@@ -14,8 +14,8 @@ readme:
 	@echo "README.md generation temporarily disabled."
 	@exit 0
 
-get:
-	@echo "Skipping 'go get' - use 'make deps' to download dependencies"
+get: deps
+	@echo "'go get' is deprecated for dependency management - use 'make deps' instead"
 
 build: build-default
 
