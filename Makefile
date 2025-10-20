@@ -27,10 +27,11 @@ lint: get lintroller custom-gcl
 	./custom-gcl run --new-from-rev=origin/main
 
 # Build custom golangci-lint binary with lintroller plugin.
-.PHONY: custom-gcl
+# Uses a temporary directory to prevent git corruption during pre-commit hooks
 custom-gcl: tools/lintroller/.lintroller .custom-gcl.yml
 	@echo "Building custom golangci-lint binary with lintroller plugin..."
-	@golangci-lint custom
+	@GOFLAGS="-buildvcs=false" golangci-lint custom
+	@echo "Custom golangci-lint binary built successfully: ./custom-gcl"
 
 # Custom linter for Atmos-specific rules (t.Setenv misuse, os.Setenv in tests, os.MkdirTemp in tests).
 .PHONY: lintroller

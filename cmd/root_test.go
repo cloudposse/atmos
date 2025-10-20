@@ -10,12 +10,36 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/cloudposse/atmos/pkg/utils"
 )
 
 func TestNoColorLog(t *testing.T) {
+	// Skip in CI environments without TTY.
+	if _, err := os.Open("/dev/tty"); err != nil {
+		t.Skipf("Skipping test: TTY not available (/dev/tty): %v", err)
+	}
+
+	// Snapshot RootCmd state to prevent test pollution.
+	_ = NewTestKit(t)
+
+	// Save and restore working directory - previous tests may have changed it.
+	originalWd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Failed to get current working directory: %v", err)
+	}
+
+	// Change back to original directory and automatically restore when test ends.
+	t.Chdir(originalWd)
+
+	// Ensure ATMOS_CHDIR is not set BEFORE anything else.
+	// Previous tests may have set it, and we need to clear it before RootCmd.Execute().
+	// We can't use t.Setenv here because previous tests may have set it,
+	// and t.Setenv only restores to the ORIGINAL value before the test package loaded.
+	os.Unsetenv("ATMOS_CHDIR")
+	defer os.Unsetenv("ATMOS_CHDIR") // Clean up after test.
+
 	stacksPath := "../tests/fixtures/scenarios/stack-templates"
 
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
@@ -36,6 +60,10 @@ func TestNoColorLog(t *testing.T) {
 	}()
 	// Set the arguments for the command
 	os.Args = []string{"atmos", "about"}
+
+	// Reset buffer to ensure clean state (previous tests may have written to logger).
+	buf.Reset()
+
 	// Execute the command
 	if err := Execute(); err != nil {
 		t.Fatalf("Failed to execute command: %v", err)
@@ -392,9 +420,9 @@ func TestVersionFlagExecutionPath(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Save original OsExit and restore after test.
-			originalOsExit := utils.OsExit
+			originalOsExit := errUtils.OsExit
 			t.Cleanup(func() {
-				utils.OsExit = originalOsExit
+				errUtils.OsExit = originalOsExit
 				tt.cleanup()
 			})
 
@@ -403,7 +431,7 @@ func TestVersionFlagExecutionPath(t *testing.T) {
 			type exitPanic struct {
 				code int
 			}
-			utils.OsExit = func(code int) {
+			errUtils.OsExit = func(code int) {
 				panic(exitPanic{code: code})
 			}
 
@@ -414,7 +442,7 @@ func TestVersionFlagExecutionPath(t *testing.T) {
 				// Execute should call version command and then exit with expected code.
 				// We expect it to panic with our exitPanic struct containing the exit code.
 				// This verifies that the --version flag handler is being executed and
-				// calls os.Exit via utils.OsExit.
+				// calls os.Exit via errUtils.OsExit.
 				assert.PanicsWithValue(t, exitPanic{code: tt.expectExit}, func() {
 					_ = Execute()
 				}, "Execute should exit with code %d", tt.expectExit)
