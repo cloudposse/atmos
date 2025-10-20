@@ -104,7 +104,8 @@ func (p *samlProvider) PreAuthenticate(manager types.AuthManager) error {
 
 // Authenticate performs SAML authentication using saml2aws.
 func (p *samlProvider) Authenticate(ctx context.Context) (types.ICredentials, error) {
-	log.Info("Starting SAML authentication", "provider", p.name, "url", p.url)
+	providerType := p.getProviderType()
+	log.Info("Starting SAML authentication", "provider", p.name, "url", p.url, "provider_type", providerType)
 	if p.RoleToAssumeFromAssertion == "" {
 		return nil, fmt.Errorf("%w: no role to assume for assertion, SAML provider must be part of a chain", errUtils.ErrInvalidAuthConfig)
 	}
@@ -307,10 +308,20 @@ func (p *samlProvider) getProviderType() string {
 		return p.config.ProviderType
 	}
 
-	// Default to Browser for all providers to avoid ChromeDriver/GeckoDriver dependencies.
-	// Browser mode opens the user's default browser for interactive authentication.
-	// Users can override by setting provider_type in their config if they need
-	// provider-specific automation (Okta, ADFS, etc.) and have the drivers installed.
+	// Auto-detect provider type based on URL.
+	// Provider-specific types (GoogleApps, Okta, ADFS) use API/HTTP calls without browser automation.
+	if strings.Contains(p.url, "accounts.google.com") {
+		return "GoogleApps"
+	}
+	if strings.Contains(p.url, "okta.com") {
+		return "Okta"
+	}
+	if strings.Contains(p.url, "adfs") {
+		return "ADFS"
+	}
+
+	// Default to Browser for unknown providers.
+	// Browser uses Playwright automation and requires DownloadBrowser: true or pre-installed drivers.
 	return "Browser"
 }
 
