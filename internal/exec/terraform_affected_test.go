@@ -245,12 +245,15 @@ func TestGetAffectedComponents(t *testing.T) {
 			// Check if we got an unexpected error (mock didn't work, real function was called with invalid path).
 			if !tt.expectedError && err != nil {
 				// Safely convert error to string to avoid segfault if err pointer is corrupted.
-				// On macOS ARM64, gomonkey mocking often fails due to compiler optimizations.
+				// On macOS ARM64, gomonkey mocking often fails due to compiler optimizations and
+				// memory protection restrictions that prevent runtime code patching.
 				// When the mock fails, the real function gets called with invalid test data,
 				// which can return an error with a corrupted memory address.
 				// Using err.Error() instead of %v avoids dereferencing the corrupt pointer.
 				// See: https://github.com/cloudposse/atmos/pull/1677
 				// See: https://github.com/cloudposse/atmos/actions/runs/18656461566/job/53187085704
+				// See: https://github.com/agiledragon/gomonkey/issues/169 (Mac M3/ARM64 failures)
+				// See: https://github.com/agiledragon/gomonkey/issues/122 (macOS Apple Silicon permissions)
 				errMsg := "<nil>"
 				if err != nil {
 					errMsg = err.Error()
