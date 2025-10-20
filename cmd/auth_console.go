@@ -181,13 +181,13 @@ func getConsoleProvider(authManager types.AuthManager, identityName string) (typ
 
 	// Check if provider supports console access based on kind.
 	switch providerKind {
-	case "aws/iam-identity-center", "aws/saml":
+	case types.ProviderKindAWSIAMIdentityCenter, types.ProviderKindAWSSAML:
 		// Return AWS console URL generator with default HTTP client.
 		generator := awsAuth.NewConsoleURLGenerator(nil)
 		return generator, nil
-	case "azure/oidc":
+	case types.ProviderKindAzureOIDC:
 		return nil, fmt.Errorf("Azure console access not yet implemented (coming soon)")
-	case "gcp/oidc":
+	case types.ProviderKindGCPOIDC:
 		return nil, fmt.Errorf("GCP console access not yet implemented (coming soon)")
 	default:
 		return nil, fmt.Errorf("provider %q does not support web console access", providerKind)
