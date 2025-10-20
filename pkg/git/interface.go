@@ -7,7 +7,7 @@ import (
 // RepositoryOperations defines operations for working with git repositories.
 // This interface allows mocking of git operations in tests.
 //
-//go:generate mockgen -source=$GOFILE -destination=mock_$GOFILE -package=$GOPACKAGE
+//go:generate go run go.uber.org/mock/mockgen@latest -source=$GOFILE -destination=mock_$GOFILE -package=$GOPACKAGE
 type RepositoryOperations interface {
 	// GetLocalRepo opens the local git repository.
 	GetLocalRepo() (*git.Repository, error)

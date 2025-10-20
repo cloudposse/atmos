@@ -1,6 +1,6 @@
 package exec
 
-//go:generate mockgen -package=exec -destination=mock_storer_test.go github.com/go-git/go-git/v5/storage Storer
+//go:generate go run go.uber.org/mock/mockgen@latest -package=exec -destination=mock_storer_test.go github.com/go-git/go-git/v5/storage Storer
 
 import (
 	"errors"
@@ -8,7 +8,7 @@ import (
 
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
-	"github.com/golang/mock/gomock"
+	"go.uber.org/mock/gomock"
 	"github.com/stretchr/testify/assert"
 
 	"github.com/cloudposse/atmos/pkg/schema"

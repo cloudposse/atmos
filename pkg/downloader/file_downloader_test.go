@@ -6,7 +6,7 @@ import (
 	"time"
 
 	errUtils "github.com/cloudposse/atmos/errors"
-	"github.com/golang/mock/gomock"
+	"go.uber.org/mock/gomock"
 	"github.com/stretchr/testify/assert"
 )
 

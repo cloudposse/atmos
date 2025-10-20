@@ -48,7 +48,7 @@ type DescribeAffectedCmdArgs struct {
 	ExcludeLocked               bool
 }
 
-//go:generate mockgen -source=$GOFILE -destination=mock_$GOFILE -package=$GOPACKAGE
+//go:generate go run go.uber.org/mock/mockgen@latest -source=$GOFILE -destination=mock_$GOFILE -package=$GOPACKAGE
 type DescribeAffectedExec interface {
 	Execute(*DescribeAffectedCmdArgs) error
 }

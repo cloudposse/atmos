@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	git "github.com/go-git/go-git/v5"
-	"github.com/golang/mock/gomock"
+	"go.uber.org/mock/gomock"
 	"github.com/stretchr/testify/assert"
 
 	errUtils "github.com/cloudposse/atmos/errors"

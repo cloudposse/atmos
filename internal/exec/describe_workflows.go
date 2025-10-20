@@ -14,7 +14,7 @@ type DescribeWorkflowsArgs struct {
 	Query      string
 }
 
-//go:generate mockgen -source=$GOFILE -destination=mock_$GOFILE -package=$GOPACKAGE
+//go:generate go run go.uber.org/mock/mockgen@latest -source=$GOFILE -destination=mock_$GOFILE -package=$GOPACKAGE
 type DescribeWorkflowsExec interface {
 	Execute(*schema.AtmosConfiguration, *DescribeWorkflowsArgs) error
 }

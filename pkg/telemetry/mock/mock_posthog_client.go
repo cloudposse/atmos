@@ -12,7 +12,7 @@ package mock_telemetry
 import (
 	reflect "reflect"
 
-	gomock "github.com/golang/mock/gomock"
+	gomock "go.uber.org/mock/gomock"
 	posthog_go "github.com/posthog/posthog-go"
 )
 

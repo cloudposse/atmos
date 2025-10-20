@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	log "github.com/cloudposse/atmos/pkg/logger"
-	"github.com/golang/mock/gomock"
+	"go.uber.org/mock/gomock"
 	"github.com/stretchr/testify/assert"
 
 	"github.com/cloudposse/atmos/pkg/config"

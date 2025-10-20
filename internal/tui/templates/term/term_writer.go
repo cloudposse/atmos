@@ -8,7 +8,7 @@ import (
 	"golang.org/x/term"
 )
 
-//go:generate mockgen -source=term_writer.go -destination=mock_term_writer.go -package=term
+//go:generate go run go.uber.org/mock/mockgen@latest -source=term_writer.go -destination=mock_term_writer.go -package=term
 
 // TTYDetector provides an interface for detecting TTY support.
 // This allows for testing by injecting mock implementations.

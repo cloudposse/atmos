@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/goccy/go-yaml"
-	gomock "github.com/golang/mock/gomock"
+	gomock "go.uber.org/mock/gomock"
 	"github.com/stretchr/testify/assert"
 
 	"github.com/cloudposse/atmos/pkg/datafetcher"

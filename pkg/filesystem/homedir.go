@@ -6,7 +6,7 @@ import (
 
 // HomeDirProvider defines the interface for resolving home directories.
 //
-//go:generate mockgen -source=$GOFILE -destination=mock_$GOFILE -package=$GOPACKAGE
+//go:generate go run go.uber.org/mock/mockgen@latest -source=$GOFILE -destination=mock_$GOFILE -package=$GOPACKAGE
 type HomeDirProvider interface {
 	Dir() (string, error)
 	Expand(path string) (string, error)
