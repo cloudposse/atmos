@@ -253,6 +253,60 @@ var (
 - Target >80% coverage, especially for `pkg/` and `internal/exec/`
 - **Comments must end with periods**: All comments should be complete sentences ending with a period (enforced by golangci-lint)
 
+### Test Isolation (MANDATORY)
+- **ALWAYS use `cmd.NewTestKit(t)` for ALL cmd package tests**.
+- **TestKit pattern follows Go 1.15+ testing.TB interface idiom**.
+- **Provides automatic RootCmd state cleanup similar to `t.Setenv()` and `t.Chdir()`**.
+- **Required for ALL tests that**:
+  - Call `RootCmd.Execute()` or `Execute()`.
+  - Call `RootCmd.SetArgs()` or modify `RootCmd` flags.
+  - Call any command that internally uses `RootCmd`.
+  - When in doubt, use it - it's safe and lightweight.
+
+- **Basic usage**:
+  ```go
+  func TestMyCommand(t *testing.T) {
+      t := cmd.NewTestKit(t) // Wraps testing.TB with automatic cleanup
+
+      // Rest of test - all testing.TB methods available
+      RootCmd.SetArgs([]string{"terraform", "plan"})
+      require.NoError(t, RootCmd.PersistentFlags().Set("chdir", "/tmp"))
+
+      // State automatically restored when test completes.
+  }
+  ```
+
+- **For table-driven tests with subtests**:
+  ```go
+  func TestTableDriven(t *testing.T) {
+      _ = cmd.NewTestKit(t) // Parent test gets cleanup
+
+      tests := []struct{...}{...}
+      for _, tt := range tests {
+          t.Run(tt.name, func(t *testing.T) {
+              _ = cmd.NewTestKit(t) // Each subtest gets its own cleanup
+
+              // Test code...
+          })
+      }
+  }
+  ```
+
+- **Why this is critical**:
+  - RootCmd is global state shared across all tests.
+  - Flag values persist between tests causing mysterious failures.
+  - StringSlice flags (config, config-path) are especially problematic.
+  - Without cleanup, tests pass in isolation but fail when run together.
+  - We use reflection to properly reset StringSlice flags which append instead of replace.
+
+- **Implementation notes**:
+  - TestKit wraps `testing.TB` and adds automatic RootCmd cleanup.
+  - Snapshots ALL flag values and their Changed state when created.
+  - Uses `t.Cleanup()` for automatic LIFO restoration.
+  - Handles StringSlice/StringArray flags specially (they require reflection to reset).
+  - All `testing.TB` methods work: `Helper()`, `Log()`, `Setenv()`, `Cleanup()`, etc.
+  - No performance penalty - snapshot is fast and only done once per test.
+
 ### Test Quality (MANDATORY)
 - **Test behavior, not implementation** - Verify inputs/outputs, not internal state
 - **Never test stub functions** - Either implement the function or remove the test
@@ -261,6 +315,45 @@ var (
 - **No coverage theater** - Each test must validate real behavior, not inflate metrics
 - **Remove always-skipped tests** - Either fix the underlying issue or delete the test
 - **Table-driven tests need real scenarios** - Use production-like inputs, not contrived data
+
+### Mock Generation (MANDATORY)
+- **ALWAYS use mockgen for interface mocks** - Never write manual mock implementations
+- **Use `//go:generate mockgen`** directive at the top of test files
+- **Pattern to follow**:
+  ```go
+  //go:generate mockgen -package=yourpkg -destination=mock_interface_test.go github.com/external/package InterfaceName
+  ```
+- **For internal interfaces**, use `-source` flag:
+  ```go
+  //go:generate mockgen -source=$GOFILE -destination=mock_$GOFILE -package=$GOPACKAGE
+  ```
+- **NEVER duplicate interface implementation** - 20+ stub methods is a sign you should use mockgen
+- Examples of mockgen usage: `pkg/git/interface.go`, `pkg/pro/interface.go`, `pkg/filesystem/interface.go`
+
+### Testing Production Code Paths (MANDATORY)
+- **ALWAYS call production code** - Never duplicate production logic in tests
+- **Tests must invoke actual functions** - Not reimplement their logic
+- **Anti-pattern example**:
+  ```go
+  // ❌ WRONG: Test duplicates production logic
+  func TestCalculateTotal(t *testing.T) {
+      items := []int{1, 2, 3}
+      total := 0
+      for _, item := range items {
+          total += item  // Duplicating production code!
+      }
+      assert.Equal(t, 6, total)
+  }
+
+  // ✅ CORRECT: Test calls production code
+  func TestCalculateTotal(t *testing.T) {
+      items := []int{1, 2, 3}
+      total := CalculateTotal(items)  // Calling production function
+      assert.Equal(t, 6, total)
+  }
+  ```
+- **If you find yourself copying production code** - you're doing it wrong
+- **Mocks should use mockgen** - not manual implementations of 20+ interface methods
 
 ### Test Skipping Conventions (MANDATORY)
 - **ALWAYS use `t.Skipf()` instead of `t.Skip()`** - Provide clear reasons for skipped tests
@@ -832,8 +925,13 @@ func TestValidateStack_ReturnsErrorForInvalidFormat(t *testing.T) {
   // WRONG: Only binding external env var
   viper.BindEnv("GITHUB_TOKEN")
 
-  // CORRECT: Provide Atmos alternative
+  // WRONG: Only checks GITHUB_TOKEN, not ATMOS_GITHUB_TOKEN
   viper.BindEnv("ATMOS_GITHUB_TOKEN", "GITHUB_TOKEN")
+
+  // CORRECT: Check ATMOS_GITHUB_TOKEN first, then fall back to GITHUB_TOKEN
+  viper.BindEnv("ATMOS_GITHUB_TOKEN", "ATMOS_GITHUB_TOKEN", "GITHUB_TOKEN")
+
+  // CORRECT: Single env var (no fallback needed)
   viper.BindEnv("ATMOS_PRO_TOKEN", "ATMOS_PRO_TOKEN")
   ```
 

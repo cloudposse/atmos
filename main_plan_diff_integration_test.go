@@ -7,19 +7,19 @@ import (
 	"testing"
 	"time"
 
-	u "github.com/cloudposse/atmos/pkg/utils"
+	errUtils "github.com/cloudposse/atmos/errors"
 )
 
 func TestMainTerraformPlanDiffIntegration(t *testing.T) {
 	// We need to intercept calls to os.Exit so the test doesn't fail
-	oldOsExit := u.OsExit
-	defer func() { u.OsExit = oldOsExit }()
+	oldOsExit := errUtils.OsExit
+	defer func() { errUtils.OsExit = oldOsExit }()
 
 	// Create a channel to communicate the exit code
 	exitCodeCh := make(chan int, 1)
 
 	// Mock the OsExit function to capture the exit code
-	u.OsExit = func(code int) {
+	errUtils.OsExit = func(code int) {
 		t.Logf("Exit code set to: %d", code)
 		exitCodeCh <- code
 		// Do not actually exit the process
