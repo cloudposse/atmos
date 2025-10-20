@@ -337,8 +337,8 @@ func TestListCommand_FormatValidation(t *testing.T) {
 		wantError bool
 	}{
 		{
-			name:      "valid format text",
-			format:    "text",
+			name:      "valid format table",
+			format:    "table",
 			wantError: false,
 		},
 		{
@@ -371,11 +371,11 @@ func TestListCommand_FormatValidation(t *testing.T) {
 
 			if tt.wantError {
 				// Should fail with unsupported format error.
-				if err != nil {
-					assert.Contains(t, err.Error(), "unsupported")
-				}
+				require.Error(t, err, "Expected error for invalid format")
+				assert.Contains(t, err.Error(), "unsupported")
 			}
-			// Note: Test may fail at GitHub API, which is fine for validation test.
+			// For valid formats, test passes if no error or if GitHub API fails.
+			// We don't assert NoError here because GitHub API might fail.
 		})
 	}
 }

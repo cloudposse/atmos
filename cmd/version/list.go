@@ -149,6 +149,12 @@ var listCmd = &cobra.Command{
 			return fmt.Errorf("%w: got %d", errUtils.ErrInvalidOffset, listOffset)
 		}
 
+		// Validate format.
+		normalizedFormat := strings.ToLower(listFormat)
+		if normalizedFormat != "table" && normalizedFormat != "json" && normalizedFormat != "yaml" {
+			return fmt.Errorf("%w: %s (supported: table, json, yaml)", errUtils.ErrUnsupportedOutputFormat, listFormat)
+		}
+
 		// Parse since date if provided.
 		var sinceTime *time.Time
 		if listSince != "" {
@@ -174,15 +180,15 @@ var listCmd = &cobra.Command{
 		}
 
 		// Format output.
-		switch strings.ToLower(listFormat) {
-		case "text":
+		switch normalizedFormat {
+		case "table":
 			return formatReleaseListText(releases)
 		case "json":
 			return formatReleaseListJSON(releases)
 		case "yaml":
 			return formatReleaseListYAML(releases)
 		default:
-			return fmt.Errorf("%w: %s (supported: text, json, yaml)", errUtils.ErrUnsupportedOutputFormat, listFormat)
+			return fmt.Errorf("%w: %s (supported: table, json, yaml)", errUtils.ErrUnsupportedOutputFormat, listFormat)
 		}
 	},
 }
@@ -192,7 +198,7 @@ func init() {
 	listCmd.Flags().IntVar(&listOffset, "offset", 0, "Number of releases to skip")
 	listCmd.Flags().StringVar(&listSince, "since", "", "Only show releases published after this date (ISO 8601 format: YYYY-MM-DD)")
 	listCmd.Flags().BoolVar(&listIncludePrereleases, "include-prereleases", false, "Include pre-release versions")
-	listCmd.Flags().StringVar(&listFormat, "format", "text", "Output format: text, json, yaml")
+	listCmd.Flags().StringVar(&listFormat, "format", "table", "Output format: table, json, yaml")
 
 	versionCmd.AddCommand(listCmd)
 }

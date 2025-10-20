@@ -17,6 +17,8 @@ type TTYDetector interface {
 	IsTTYForStdout() bool
 	// IsTTYForStderr checks if stderr supports TTY.
 	IsTTYForStderr() bool
+	// IsTTYForStdin checks if stdin supports TTY (interactive input).
+	IsTTYForStdin() bool
 }
 
 // DefaultTTYDetector implements TTYDetector using the actual terminal checks.
@@ -31,6 +33,12 @@ func (d *DefaultTTYDetector) IsTTYForStdout() bool {
 // IsTTYForStderr checks if stderr supports TTY.
 func (d *DefaultTTYDetector) IsTTYForStderr() bool {
 	fd := int(os.Stderr.Fd())
+	return term.IsTerminal(fd)
+}
+
+// IsTTYForStdin checks if stdin supports TTY (interactive input).
+func (d *DefaultTTYDetector) IsTTYForStdin() bool {
+	fd := int(os.Stdin.Fd())
 	return term.IsTerminal(fd)
 }
 
@@ -118,4 +126,10 @@ func IsTTYSupportForStdout() bool {
 // This is a convenience function that uses the default TTY detector.
 func IsTTYSupportForStderr() bool {
 	return defaultDetector.IsTTYForStderr()
+}
+
+// IsTTYSupportForStdin checks if stdin supports TTY for accepting interactive input.
+// This is a convenience function that uses the default TTY detector.
+func IsTTYSupportForStdin() bool {
+	return defaultDetector.IsTTYForStdin()
 }
