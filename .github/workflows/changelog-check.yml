@@ -111,12 +111,12 @@ jobs:
           > The changelog check has passed."
 
           if [ -n "$EXISTING_COMMENT" ]; then
-            echo "Updating comment with success message..."
+            echo "Updating existing comment with success message..."
             gh api -X PATCH "/repos/${{ github.repository }}/issues/comments/$EXISTING_COMMENT" \
               -f body="$SUCCESS_COMMENT_BODY"
+            echo "✅ Comment updated from warning to success"
           else
-            echo "Creating success comment..."
-            gh pr comment $PR_NUMBER --body "$SUCCESS_COMMENT_BODY"
+            echo "ℹ️ No existing comment to update (comment only created when changelog is missing)"
           fi
 
       - name: Fail if changelog missing
