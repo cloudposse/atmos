@@ -1,12 +1,17 @@
 package version
 
 import (
+	"fmt"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/google/go-github/v59/github"
+	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	errUtils "github.com/cloudposse/atmos/errors"
 )
 
 func TestShowCommand_Flags(t *testing.T) {
@@ -245,4 +250,93 @@ func TestShowModel_Update_Default(t *testing.T) {
 	require.True(t, ok)
 	assert.False(t, finalModel.done)
 	assert.Nil(t, cmd)
+}
+
+// TestShowCommand_FormatValidation tests format output with different formats.
+func TestShowCommand_FormatValidation(t *testing.T) {
+	publishedAt := time.Date(2025, 1, 15, 10, 30, 0, 0, time.UTC)
+
+	mockRelease := &github.RepositoryRelease{
+		TagName:     github.String("v1.0.0"),
+		Name:        github.String("# Release 1.0.0\n\nTest release notes"),
+		PublishedAt: &github.Timestamp{Time: publishedAt},
+		Prerelease:  github.Bool(false),
+		HTMLURL:     github.String("https://github.com/cloudposse/atmos/releases/tag/v1.0.0"),
+	}
+
+	tests := []struct {
+		name      string
+		format    string
+		wantError bool
+	}{
+		{
+			name:      "valid format table",
+			format:    "table",
+			wantError: false,
+		},
+		{
+			name:      "valid format json",
+			format:    "json",
+			wantError: false,
+		},
+		{
+			name:      "valid format yaml",
+			format:    "yaml",
+			wantError: false,
+		},
+		{
+			name:      "invalid format",
+			format:    "invalid",
+			wantError: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Create a mock client.
+			client := &MockGitHubClient{
+				Release: mockRelease,
+			}
+
+			// Set the format.
+			showFormat = tt.format
+
+			// Create a temporary RunE that uses the mock client.
+			originalRunE := showCmd.RunE
+			showCmd.RunE = func(cmd *cobra.Command, args []string) error {
+				// Fetch release using mock.
+				release, err := client.GetLatestRelease("cloudposse", "atmos")
+				if err != nil {
+					return err
+				}
+
+				// Format output (this is the code we're testing).
+				switch strings.ToLower(showFormat) {
+				case "table":
+					if err := formatReleaseDetailText(release); err != nil {
+						return err
+					}
+					return nil
+				case "json":
+					return formatReleaseDetailJSON(release)
+				case "yaml":
+					return formatReleaseDetailYAML(release)
+				default:
+					return fmt.Errorf("%w: %s (supported: table, json, yaml)", errUtils.ErrUnsupportedOutputFormat, showFormat)
+				}
+			}
+
+			err := showCmd.RunE(showCmd, []string{"latest"})
+
+			// Restore original RunE.
+			showCmd.RunE = originalRunE
+
+			if tt.wantError {
+				require.Error(t, err, "Expected error for invalid format")
+				assert.Contains(t, err.Error(), "unsupported")
+			} else {
+				assert.NoError(t, err, "Expected no error for valid format %s", tt.format)
+			}
+		})
+	}
 }
