@@ -53,10 +53,10 @@ type ComponentProvider interface {
     ValidateComponent(config map[string]any) error
 
     // Execute runs a command for a component.
-    Execute(ctx ExecutionContext) error
+    Execute(ctx *ExecutionContext) error
 
     // GenerateArtifacts generates configuration files needed by the component.
-    GenerateArtifacts(ctx ExecutionContext) error
+    GenerateArtifacts(ctx *ExecutionContext) error
 
     // GetAvailableCommands returns the list of commands this component type supports.
     GetAvailableCommands() []string
@@ -227,7 +227,7 @@ func (p *YourTypeProvider) ValidateComponent(config map[string]any) error {
 }
 
 // Execute runs a command for the component.
-func (p *YourTypeProvider) Execute(ctx component.ExecutionContext) error {
+func (p *YourTypeProvider) Execute(ctx *component.ExecutionContext) error {
     // Implement your execution logic here.
     // This is where you would:
     // 1. Parse the component configuration
@@ -239,7 +239,7 @@ func (p *YourTypeProvider) Execute(ctx component.ExecutionContext) error {
 }
 
 // GenerateArtifacts generates configuration files needed by the component.
-func (p *YourTypeProvider) GenerateArtifacts(ctx component.ExecutionContext) error {
+func (p *YourTypeProvider) GenerateArtifacts(ctx *component.ExecutionContext) error {
     // Generate any files your tool needs:
     // - Variable files
     // - Configuration files

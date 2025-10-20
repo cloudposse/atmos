@@ -14,12 +14,9 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
-// MockComponentProvider is a proof-of-concept component type for testing
-// the component registry pattern. It demonstrates the interface implementation
-// without requiring external tools or cloud providers.
-//
-// This component type is NOT documented for end users and is intended only
-// for development and testing purposes.
+// MockComponentProvider is a proof-of-concept component type for testing the component registry pattern.
+// It demonstrates the interface implementation without requiring external tools or cloud providers.
+// This component type is NOT documented for end users and is intended only for development and testing purposes.
 type MockComponentProvider struct{}
 
 func init() {
@@ -154,11 +151,11 @@ func parseConfig(raw any) (Config, error) {
 		TagName: "mapstructure",
 	})
 	if err != nil {
-		return DefaultConfig(), err
+		return DefaultConfig(), fmt.Errorf("%w: failed to create config decoder: %v", errUtils.ErrComponentConfigInvalid, err)
 	}
 
 	if err := decoder.Decode(raw); err != nil {
-		return DefaultConfig(), err
+		return DefaultConfig(), fmt.Errorf("%w: failed to decode mock config: %v", errUtils.ErrComponentConfigInvalid, err)
 	}
 
 	return config, nil

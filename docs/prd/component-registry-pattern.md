@@ -58,7 +58,7 @@ if packerComponents, ok := componentsMap["packer"].(map[string]any); ok {
 
 ### Architecture Overview
 
-```
+```text
 ┌─────────────────────────────────────────────────────────────┐
 │                       Atmos CLI                              │
 ├─────────────────────────────────────────────────────────────┤
@@ -132,19 +132,19 @@ components:
     base_path: "components/packer"
     command: "/usr/local/bin/packer"
 
-  # Mock component type (POC - not for user documentation)
-  # Designed to test inheritance, merging, and cross-component dependencies
-  mock:
-    base_path: "components/mock"
-    enabled: true
-    dry_run: false
-    tags:
-      - test
-      - development
-    metadata:
-      owner: "platform-team"
-      version: "1.0.0"
-    dependencies: []
+  # Plugin types (POC - not for user documentation)
+  plugins:
+    mock:
+      base_path: "components/mock"
+      enabled: true
+      dry_run: false
+      tags:
+        - test
+        - development
+      metadata:
+        owner: "platform-team"
+        version: "1.0.0"
+      dependencies: []
 ```
 
 **Schema in Go:**
@@ -834,8 +834,10 @@ import (
 type MockComponentProvider struct{}
 
 func init() {
-    // Self-register with the component registry
-    component.Register(&MockComponentProvider{})
+    // Self-register with the component registry.
+    if err := component.Register(&MockComponentProvider{}); err != nil {
+        panic(fmt.Sprintf("failed to register mock component provider: %v", err))
+    }
 }
 
 func (m *MockComponentProvider) GetType() string {
@@ -847,9 +849,26 @@ func (m *MockComponentProvider) GetGroup() string {
 }
 
 func (m *MockComponentProvider) GetBasePath(atmosConfig *schema.AtmosConfiguration) string {
-    if atmosConfig.Components.Mock.BasePath != "" {
-        return atmosConfig.Components.Mock.BasePath
+    if atmosConfig == nil {
+        return "components/mock"
     }
+
+    // Try to get config from Plugins map.
+    rawConfig, ok := atmosConfig.Components.GetComponentConfig("mock")
+    if !ok {
+        return "components/mock"
+    }
+
+    // Parse raw config into typed struct.
+    config, err := parseConfig(rawConfig)
+    if err != nil {
+        return "components/mock"
+    }
+
+    if config.BasePath != "" {
+        return config.BasePath
+    }
+
     return "components/mock"
 }
 
