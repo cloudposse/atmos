@@ -24,6 +24,7 @@ import (
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/telemetry"
+	"github.com/cloudposse/atmos/pkg/ui/theme"
 	"github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -211,29 +212,29 @@ func isTTY() bool {
 
 // displayVerificationDialog shows a styled dialog with the verification code.
 func displayVerificationDialog(code, url string) {
-	// Styles.
+	// Styles using Atmos theme colors.
 	titleStyle := lipgloss.NewStyle().
 		Bold(true).
-		Foreground(lipgloss.Color("#00FFFF")). // Cyan
+		Foreground(lipgloss.Color(theme.ColorCyan)).
 		PaddingLeft(1).
 		PaddingRight(1)
 
 	codeStyle := lipgloss.NewStyle().
 		Bold(true).
-		Foreground(lipgloss.Color("#00FF00")). // Green
+		Foreground(lipgloss.Color(theme.ColorGreen)).
 		Background(lipgloss.Color("#1a1a1a")).
 		Padding(0, 1)
 
 	urlStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#5F5FD7")). // Muted purple
+		Foreground(lipgloss.Color(theme.ColorBorder)).
 		Italic(true)
 
 	instructionStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#888888")) // Gray
+		Foreground(lipgloss.Color(theme.ColorDarkGray))
 
 	boxStyle := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color("#5F5FD7")).
+		BorderForeground(lipgloss.Color(theme.ColorBorder)).
 		Padding(1, 2).
 		MarginTop(1).
 		MarginBottom(1)
@@ -325,7 +326,7 @@ func (p *ssoProvider) pollForAccessTokenWithSpinner(ctx context.Context, oidcCli
 	// Create and run the spinner.
 	s := spinner.New()
 	s.Spinner = spinner.Dot
-	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("#00FFFF")) // Cyan
+	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorCyan))
 
 	model := spinnerModel{
 		spinner:    s,
@@ -412,9 +413,9 @@ func (m spinnerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m spinnerModel) View() string {
 	if m.done {
 		if m.result != nil && m.result.err != nil {
-			return lipgloss.NewStyle().Foreground(lipgloss.Color("#FF0000")).Render("✗ Authentication failed\n")
+			return lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorRed)).Render("✗ Authentication failed\n")
 		}
-		return lipgloss.NewStyle().Foreground(lipgloss.Color("#00FF00")).Render("✓ Authentication successful!\n")
+		return lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorGreen)).Render("✓ Authentication successful!\n")
 	}
 	return fmt.Sprintf("%s %s...", m.spinner.View(), m.message)
 }
