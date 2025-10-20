@@ -104,12 +104,12 @@ func (p *samlProvider) PreAuthenticate(manager types.AuthManager) error {
 
 // Authenticate performs SAML authentication using saml2aws.
 func (p *samlProvider) Authenticate(ctx context.Context) (types.ICredentials, error) {
-	samlDriver := p.getSAMLDriver()
+	samlDriver := p.getDriver()
 	downloadBrowser := p.shouldDownloadBrowser()
 
-	log.Info("Starting SAML authentication", "provider", p.name, "url", p.url, "saml_driver", samlDriver)
+	log.Info("Starting SAML authentication", "provider", p.name, "url", p.url, "driver", samlDriver)
 	log.Debug("SAML configuration",
-		"saml_driver", samlDriver,
+		"driver", samlDriver,
 		"download_browser", downloadBrowser,
 		"requires_drivers", samlDriver == "Browser")
 
@@ -170,7 +170,7 @@ func (p *samlProvider) createSAMLConfig() *cfg.IDPAccount {
 	return &cfg.IDPAccount{
 		URL:                  p.url,
 		Username:             p.config.Username,
-		Provider:             p.getSAMLDriver(),
+		Provider:             p.getDriver(),
 		MFA:                  "Auto",
 		SkipVerify:           false,
 		Timeout:              samlTimeoutSeconds, // 30 second timeout.
@@ -309,18 +309,18 @@ func (p *samlProvider) requestedSessionSeconds() int32 {
 	return sec
 }
 
-// getSAMLDriver returns the SAML driver type based on configuration or URL detection.
+// getDriver returns the SAML driver type based on configuration or URL detection.
 // Priority: Browser (if drivers available) > provider-specific fallbacks (GoogleApps/Okta/ADFS).
-func (p *samlProvider) getSAMLDriver() string {
-	// If user explicitly set saml_driver, always respect their choice.
-	if p.config.SAMLDriver != "" {
-		log.Debug("Using explicitly configured SAML driver", "saml_driver", p.config.SAMLDriver)
-		return p.config.SAMLDriver
+func (p *samlProvider) getDriver() string {
+	// If user explicitly set driver, always respect their choice.
+	if p.config.Driver != "" {
+		log.Debug("Using explicitly configured SAML driver", "driver", p.config.Driver)
+		return p.config.Driver
 	}
 
 	// Backward compatibility: check deprecated provider_type field.
 	if p.config.ProviderType != "" {
-		log.Debug("Using deprecated provider_type field (use saml_driver instead)", "provider_type", p.config.ProviderType)
+		log.Debug("Using deprecated provider_type field (use driver instead)", "provider_type", p.config.ProviderType)
 		return p.config.ProviderType
 	}
 
@@ -429,11 +429,11 @@ func (p *samlProvider) shouldDownloadBrowser() bool {
 		return true
 	}
 
-	samlDriver := p.getSAMLDriver()
+	samlDriver := p.getDriver()
 
 	// Only auto-download for "Browser" driver (others like GoogleApps, Okta don't need drivers).
 	if samlDriver != "Browser" {
-		log.Debug("SAML driver does not require browser drivers", "saml_driver", samlDriver)
+		log.Debug("SAML driver does not require browser drivers", "driver", samlDriver)
 		return false
 	}
 
@@ -470,6 +470,6 @@ func (p *samlProvider) setupBrowserAutomation() {
 	// Set environment variables for browser automation.
 	if p.shouldDownloadBrowser() {
 		os.Setenv("SAML2AWS_AUTO_BROWSER_DOWNLOAD", "true")
-		log.Debug("Browser driver auto-download enabled", "saml_driver", p.getSAMLDriver())
+		log.Debug("Browser driver auto-download enabled", "driver", p.getDriver())
 	}
 }

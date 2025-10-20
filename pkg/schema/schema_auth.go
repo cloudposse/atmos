@@ -15,8 +15,8 @@ type Provider struct {
 	Region                string                 `yaml:"region,omitempty" json:"region,omitempty" mapstructure:"region"`
 	Username              string                 `yaml:"username,omitempty" json:"username,omitempty" mapstructure:"username"`
 	Password              string                 `yaml:"password,omitempty" json:"password,omitempty" mapstructure:"password"`
-	SAMLDriver            string                 `yaml:"saml_driver,omitempty" json:"saml_driver,omitempty" mapstructure:"saml_driver"`
-	ProviderType          string                 `yaml:"provider_type,omitempty" json:"provider_type,omitempty" mapstructure:"provider_type"` // Deprecated: use saml_driver.
+	Driver                string                 `yaml:"driver,omitempty" json:"driver,omitempty" mapstructure:"driver"`
+	ProviderType          string                 `yaml:"provider_type,omitempty" json:"provider_type,omitempty" mapstructure:"provider_type"` // Deprecated: use driver.
 	DownloadBrowserDriver bool                   `yaml:"download_browser_driver,omitempty" json:"download_browser_driver,omitempty" mapstructure:"download_browser_driver"`
 	Session               *SessionConfig         `yaml:"session,omitempty" json:"session,omitempty" mapstructure:"session"`
 	Default               bool                   `yaml:"default,omitempty" json:"default,omitempty" mapstructure:"default"`
