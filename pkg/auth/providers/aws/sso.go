@@ -415,7 +415,8 @@ func (m spinnerModel) View() string {
 		if m.result != nil && m.result.err != nil {
 			return fmt.Sprintf("%s Authentication failed\n", theme.Styles.XMark)
 		}
-		return fmt.Sprintf("%s Authentication successful!\n", theme.Styles.Checkmark)
+		// Success - don't print message here, auth login will display detailed table.
+		return ""
 	}
 	return fmt.Sprintf("%s %s...", m.spinner.View(), m.message)
 }

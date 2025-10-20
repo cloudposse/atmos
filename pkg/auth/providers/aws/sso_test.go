@@ -560,16 +560,18 @@ func TestSpinnerModel_Update_PollResult(t *testing.T) {
 
 func TestSpinnerModel_View(t *testing.T) {
 	tests := []struct {
-		name           string
-		done           bool
-		result         *pollResult
-		expectContains string
+		name        string
+		done        bool
+		result      *pollResult
+		expectEmpty bool
+		expectText  string
 	}{
 		{
-			name:           "in progress",
-			done:           false,
-			result:         nil,
-			expectContains: "Testing",
+			name:        "in progress",
+			done:        false,
+			result:      nil,
+			expectEmpty: false,
+			expectText:  "Testing",
 		},
 		{
 			name: "success",
@@ -578,7 +580,8 @@ func TestSpinnerModel_View(t *testing.T) {
 				token: "test",
 				err:   nil,
 			},
-			expectContains: "successful",
+			expectEmpty: true, // Success returns empty string, auth login will show table.
+			expectText:  "",
 		},
 		{
 			name: "failure",
@@ -586,7 +589,8 @@ func TestSpinnerModel_View(t *testing.T) {
 			result: &pollResult{
 				err: assert.AnError,
 			},
-			expectContains: "failed",
+			expectEmpty: false,
+			expectText:  "failed",
 		},
 	}
 
@@ -599,7 +603,11 @@ func TestSpinnerModel_View(t *testing.T) {
 			}
 
 			view := model.View()
-			assert.Contains(t, view, tt.expectContains)
+			if tt.expectEmpty {
+				assert.Empty(t, view)
+			} else {
+				assert.Contains(t, view, tt.expectText)
+			}
 		})
 	}
 }
