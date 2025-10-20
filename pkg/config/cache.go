@@ -20,10 +20,10 @@ import (
 )
 
 type CacheConfig struct {
-	LastChecked                 int64  `mapstructure:"last_checked" yaml:"last_checked"`
-	InstallationId              string `mapstructure:"installation_id" yaml:"installation_id"`
-	TelemetryDisclosureShown    bool   `mapstructure:"telemetry_disclosure_shown" yaml:"telemetry_disclosure_shown"`
-	BrowserSessionWarningShown  bool   `mapstructure:"browser_session_warning_shown" yaml:"browser_session_warning_shown"`
+	LastChecked                int64  `mapstructure:"last_checked" yaml:"last_checked"`
+	InstallationId             string `mapstructure:"installation_id" yaml:"installation_id"`
+	TelemetryDisclosureShown   bool   `mapstructure:"telemetry_disclosure_shown" yaml:"telemetry_disclosure_shown"`
+	BrowserSessionWarningShown bool   `mapstructure:"browser_session_warning_shown" yaml:"browser_session_warning_shown"`
 }
 
 // GetCacheFilePath returns the filesystem path to the Atmos cache file.
