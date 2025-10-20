@@ -223,7 +223,7 @@ require (
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/go-stack/stack v1.8.1 // indirect
 	github.com/goccy/go-json v0.10.5 // indirect
-	github.com/godbus/dbus v0.0.0-20190726142602-4481cbc300e2 // indirect
+	github.com/godbus/dbus v4.1.0+incompatible // indirect
 	github.com/godbus/dbus/v5 v5.1.0 // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
 	github.com/golang-jwt/jwt/v4 v4.5.2 // indirect
@@ -407,3 +407,5 @@ require (
 // Replace deprecated mitchellh/go-homedir with Atmos's vendored copy.
 // External dependencies will now use pkg/config/homedir from this module.
 replace github.com/mitchellh/go-homedir => ./pkg/config/homedir
+
+exclude github.com/godbus/dbus v0.0.0-20190726142602-4481cbc300e2
