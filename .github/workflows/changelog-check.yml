@@ -87,6 +87,24 @@ jobs:
             gh pr comment $PR_NUMBER --body "$COMMENT_BODY"
           fi
 
+      - name: Remove warning comment if changelog added
+        if: steps.check-labels.outputs.requires_changelog == 'true' && steps.check-blog.outputs.has_changelog == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          PR_NUMBER="${{ github.event.pull_request.number }}"
+
+          # Find existing warning comment
+          EXISTING_COMMENT=$(gh pr view $PR_NUMBER --json comments --jq '.comments[] | select(.body | contains("<!-- changelog-check -->")) | .id' | head -1)
+
+          if [ -n "$EXISTING_COMMENT" ]; then
+            echo "Deleting warning comment since changelog was added..."
+            gh api -X DELETE "/repos/${{ github.repository }}/issues/comments/$EXISTING_COMMENT"
+            echo "✅ Warning comment removed"
+          else
+            echo "✅ No warning comment to remove"
+          fi
+
       - name: Fail if changelog missing
         if: steps.check-labels.outputs.requires_changelog == 'true' && steps.check-blog.outputs.has_changelog == 'false'
         run: |
@@ -99,6 +117,10 @@ jobs:
           exit 1
 
       - name: Success
-        if: steps.check-labels.outputs.requires_changelog == 'false'
+        if: steps.check-labels.outputs.requires_changelog == 'false' || steps.check-blog.outputs.has_changelog == 'true'
         run: |
-          echo "✅ No changelog entry required for this PR"
+          if [ "${{ steps.check-labels.outputs.requires_changelog }}" = "false" ]; then
+            echo "✅ No changelog entry required for this PR"
+          else
+            echo "✅ Changelog entry found - check passed"
+          fi
