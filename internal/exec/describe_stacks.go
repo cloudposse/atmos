@@ -184,7 +184,7 @@ func ExecuteDescribeStacks(
 
 		if componentsSection, ok := stackSection.(map[string]any)[cfg.ComponentsSectionName].(map[string]any); ok {
 
-			// Terraform
+			// Terraform.
 			if len(componentTypes) == 0 || u.SliceContainsString(componentTypes, cfg.TerraformSectionName) {
 				if terraformSection, ok := componentsSection[cfg.TerraformSectionName].(map[string]any); ok {
 					for componentName, compSection := range terraformSection {
@@ -274,7 +274,7 @@ func ExecuteDescribeStacks(
 							configAndStacksInfo.ComponentSection[cfg.ComponentSectionName] = componentName
 						}
 
-						// Stack name
+						// Stack name.
 						if atmosConfig.Stacks.NameTemplate != "" {
 							stackName, err = ProcessTmpl(atmosConfig, "describe-stacks-name-template", atmosConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, false)
 							if err != nil {
@@ -319,7 +319,7 @@ func ExecuteDescribeStacks(
 								finalStacksMap[stackName].(map[string]any)["components"].(map[string]any)["terraform"].(map[string]any)[componentName] = make(map[string]any)
 							}
 
-							// Atmos component, stack, and stack manifest file
+							// Atmos component, stack, and stack manifest file.
 							configAndStacksInfo.Stack = stackName
 							componentSection["atmos_component"] = componentName
 							componentSection["atmos_stack"] = stackName
@@ -392,15 +392,14 @@ func ExecuteDescribeStacks(
 							}
 
 							// Check if we should include empty sections
-							includeEmpty := true // Default to true if setting is not provided // pending Erik accept
+							includeEmpty := true // Default to true if `setting` is not provided.
 							if atmosConfig.Describe.Settings.IncludeEmpty != nil {
 								includeEmpty = *atmosConfig.Describe.Settings.IncludeEmpty
 							}
 
-							// Add sections
+							// Add sections.
 							for sectionName, section := range componentSection {
-								// Skip empty sections if includeEmpty is false
-								// pending Erik to check if this should also remove empty strings e.g (vars: format: "")
+								// Skip empty sections if includeEmpty is false.
 								if !includeEmpty {
 									if sectionMap, ok := section.(map[string]any); ok {
 										if len(sectionMap) == 0 {
@@ -418,7 +417,7 @@ func ExecuteDescribeStacks(
 				}
 			}
 
-			// Helmfile
+			// Helmfile.
 			if len(componentTypes) == 0 || u.SliceContainsString(componentTypes, cfg.HelmfileSectionName) {
 				if helmfileSection, ok := componentsSection[cfg.HelmfileSectionName].(map[string]any); ok {
 					for componentName, compSection := range helmfileSection {
@@ -508,7 +507,7 @@ func ExecuteDescribeStacks(
 							configAndStacksInfo.ComponentSection[cfg.ComponentSectionName] = componentName
 						}
 
-						// Stack name
+						// Stack name.
 						if atmosConfig.Stacks.NameTemplate != "" {
 							stackName, err = ProcessTmpl(atmosConfig, "describe-stacks-name-template", atmosConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, false)
 							if err != nil {
@@ -617,7 +616,7 @@ func ExecuteDescribeStacks(
 								componentSection = componentSectionConverted
 							}
 
-							// Add sections
+							// Add sections.
 							for sectionName, section := range componentSection {
 								if len(sections) == 0 || u.SliceContainsString(sections, sectionName) {
 									finalStacksMap[stackName].(map[string]any)["components"].(map[string]any)["helmfile"].(map[string]any)[componentName].(map[string]any)[sectionName] = section
@@ -628,7 +627,7 @@ func ExecuteDescribeStacks(
 				}
 			}
 
-			// Packer
+			// Packer.
 			if len(componentTypes) == 0 || u.SliceContainsString(componentTypes, cfg.PackerSectionName) {
 				if packerSection, ok := componentsSection[cfg.PackerSectionName].(map[string]any); ok {
 					for componentName, compSection := range packerSection {
@@ -718,7 +717,7 @@ func ExecuteDescribeStacks(
 							configAndStacksInfo.ComponentSection[cfg.ComponentSectionName] = componentName
 						}
 
-						// Stack name
+						// Stack name.
 						if atmosConfig.Stacks.NameTemplate != "" {
 							stackName, err = ProcessTmpl(atmosConfig, "describe-stacks-name-template", atmosConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, false)
 							if err != nil {
@@ -827,7 +826,7 @@ func ExecuteDescribeStacks(
 								componentSection = componentSectionConverted
 							}
 
-							// Add sections
+							// Add sections.
 							for sectionName, section := range componentSection {
 								if len(sections) == 0 || u.SliceContainsString(sections, sectionName) {
 									finalStacksMap[stackName].(map[string]any)[cfg.ComponentsSectionName].(map[string]any)[cfg.PackerSectionName].(map[string]any)[componentName].(map[string]any)[sectionName] = section
