@@ -415,11 +415,69 @@ $ atmos auth whoami
 
 ## Credential Storage
 
-Atmos securely stores credentials using your operating system's keyring:
+Atmos supports three keyring backends for storing authentication credentials, selectable via configuration:
+
+### System Keyring (Default)
+
+Uses your operating system's native secure credential storage:
 
 - **macOS**: Keychain
 - **Linux**: Secret Service (GNOME Keyring, KDE Wallet)
 - **Windows**: Windows Credential Manager
+
+```yaml
+# atmos.yaml (optional - this is the default)
+auth:
+  keyring:
+    type: system
+```
+
+**Best for**: Personal workstations with OS-level security integration
+
+### File Keyring
+
+AES-256 encrypted file-based storage with interactive password prompting:
+
+```yaml
+# atmos.yaml
+auth:
+  keyring:
+    type: file
+    spec:
+      path: ~/.atmos/keyring  # Optional: custom path
+      password_env: ATMOS_KEYRING_PASSWORD  # Optional: env var name
+```
+
+**Best for**: Shared environments, servers, or CI/CD pipelines
+
+**Password resolution order**:
+1. Environment variable (`ATMOS_KEYRING_PASSWORD` or custom from `password_env`)
+2. Interactive prompt (if TTY available)
+3. Error if neither available
+
+```bash
+# Interactive mode - prompts for password
+atmos auth login --identity prod-admin
+
+# Automation mode - password from environment
+export ATMOS_KEYRING_PASSWORD="my-secure-password"
+atmos auth login --identity prod-admin
+```
+
+### Memory Keyring
+
+In-memory storage with no persistence (credentials lost on exit):
+
+```yaml
+# atmos.yaml
+auth:
+  keyring:
+    type: memory
+```
+
+**Best for**: Unit tests, integration tests, and temporary credential caching
+
+**Note**: Can also be set via `ATMOS_KEYRING_TYPE` environment variable
 
 ### Credential Expiration
 
