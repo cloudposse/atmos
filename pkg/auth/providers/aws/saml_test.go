@@ -57,19 +57,19 @@ func TestSAMLProvider_RequestedSessionSeconds(t *testing.T) {
 
 func TestSAMLProvider_GetProviderType(t *testing.T) {
 	p := &samlProvider{config: &schema.Provider{ProviderType: "Okta"}, url: "https://idp"}
-	assert.Equal(t, "Okta", p.getProviderType())
+	assert.Equal(t, "Okta", p.getDriver())
 
 	p = &samlProvider{config: &schema.Provider{}, url: "https://accounts.google.com/saml"}
-	assert.Equal(t, "Browser", p.getProviderType())
+	assert.Equal(t, "Browser", p.getDriver())
 
 	p = &samlProvider{config: &schema.Provider{}, url: "https://example.okta.com"}
-	assert.Equal(t, "Okta", p.getProviderType())
+	assert.Equal(t, "Okta", p.getDriver())
 
 	p = &samlProvider{config: &schema.Provider{}, url: "https://corp/adfs/ls"}
-	assert.Equal(t, "ADFS", p.getProviderType())
+	assert.Equal(t, "ADFS", p.getDriver())
 
 	p = &samlProvider{config: &schema.Provider{}, url: "https://idp"}
-	assert.Equal(t, "Browser", p.getProviderType())
+	assert.Equal(t, "Browser", p.getDriver())
 }
 
 func TestSAMLProvider_ValidateAndEnvironment(t *testing.T) {
