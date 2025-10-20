@@ -55,7 +55,7 @@ func executeAuthLoginCommand(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("authentication failed: %w", err)
 	}
 
-	// Display success message using Atmos theme
+	// Display success message using Atmos theme.
 	displayAuthSuccess(whoami)
 
 	return nil
