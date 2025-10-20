@@ -34,8 +34,8 @@ var authListCmd = &cobra.Command{
 	Long: `List all configured authentication providers and identities with their relationships and chains.
 
 Supports multiple output formats:
-- **table** (default): tabular view with provider and identity details
-- **tree**: hierarchical tree visualization showing authentication chains
+- **tree** (default): hierarchical tree visualization showing authentication chains
+- **table**: tabular view with provider and identity details
 - **json**/**yaml**: structured data for programmatic access
 - **graphviz**: DOT format for Graphviz visualization
 - **mermaid**: Mermaid diagram syntax for rendering in compatible tools
@@ -50,7 +50,7 @@ func init() {
 	defer perf.Track(nil, "cmd.init.authListCmd")()
 
 	// Format flag.
-	authListCmd.Flags().StringP("format", "f", "table", "Output format: table, tree, json, yaml, graphviz, mermaid, markdown")
+	authListCmd.Flags().StringP("format", "f", "tree", "Output format: tree, table, json, yaml, graphviz, mermaid, markdown")
 
 	// Filter flags with optional string values.
 	authListCmd.Flags().String("providers", "", "Show only providers (optionally filter by name: --providers=aws-sso,okta)")
@@ -74,7 +74,7 @@ func init() {
 
 // formatFlagCompletion provides shell completion for the format flag.
 func formatFlagCompletion(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
-	return []string{"table", "tree", "json", "yaml", "graphviz", "mermaid", "markdown"}, cobra.ShellCompDirectiveNoFileComp
+	return []string{"tree", "table", "json", "yaml", "graphviz", "mermaid", "markdown"}, cobra.ShellCompDirectiveNoFileComp
 }
 
 // providersFlagCompletion provides shell completion for the providers flag.
