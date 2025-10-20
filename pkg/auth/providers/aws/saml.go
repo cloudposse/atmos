@@ -162,16 +162,16 @@ func (p *samlProvider) createSAMLConfig() *cfg.IDPAccount {
 	return &cfg.IDPAccount{
 		URL:                  p.url,
 		Username:             p.config.Username,
-		Provider:             p.getProviderType(),
+		Provider:             p.getProviderType(), // Defaults to "Browser" (opens user's browser).
 		MFA:                  "Auto",
 		SkipVerify:           false,
-		Timeout:              samlTimeoutSeconds, // 30 second timeout
+		Timeout:              samlTimeoutSeconds, // 30 second timeout.
 		AmazonWebservicesURN: "urn:amazon:webservices",
-		SessionDuration:      samlDefaultSessionSec, // 1 hour default
+		SessionDuration:      samlDefaultSessionSec, // 1 hour default.
 		Profile:              p.name,
 		Region:               p.region,
-		DownloadBrowser:      p.config.DownloadBrowserDriver,
-		Headless:             false, // Force non-headless for interactive auth
+		DownloadBrowser:      p.config.DownloadBrowserDriver, // Only used if provider_type requires ChromeDriver/GeckoDriver.
+		Headless:             false,                          // Force non-headless for interactive auth.
 	}
 }
 
@@ -307,18 +307,10 @@ func (p *samlProvider) getProviderType() string {
 		return p.config.ProviderType
 	}
 
-	// Auto-detect provider type based on URL.
-	if strings.Contains(p.url, "accounts.google.com") {
-		return "Browser" // Use Browser for Google Apps SAML for better compatibility
-	}
-	if strings.Contains(p.url, "okta.com") {
-		return "Okta"
-	}
-	if strings.Contains(p.url, "adfs") {
-		return "ADFS"
-	}
-
-	// Default to Browser for generic SAML.
+	// Default to Browser for all providers to avoid ChromeDriver/GeckoDriver dependencies.
+	// Browser mode opens the user's default browser for interactive authentication.
+	// Users can override by setting provider_type in their config if they need
+	// provider-specific automation (Okta, ADFS, etc.) and have the drivers installed.
 	return "Browser"
 }
 
@@ -360,12 +352,9 @@ func (p *samlProvider) Environment() (map[string]string, error) {
 // setupBrowserAutomation sets up browser automation for SAML authentication.
 func (p *samlProvider) setupBrowserAutomation() {
 	// Set environment variables for browser automation.
+	// Only relevant if user explicitly sets provider_type to a value that requires drivers.
 	if p.config.DownloadBrowserDriver {
 		os.Setenv("SAML2AWS_AUTO_BROWSER_DOWNLOAD", "true")
-	}
-
-	// For Google Apps SAML, we need to use Browser provider type.
-	if strings.Contains(p.url, "accounts.google.com") {
-		log.Debug("Detected Google Apps SAML, using Browser provider")
+		log.Debug("Browser driver auto-download enabled", "provider_type", p.getProviderType())
 	}
 }
