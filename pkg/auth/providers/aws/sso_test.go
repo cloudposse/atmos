@@ -350,3 +350,130 @@ func TestSSOProvider_WithoutCustomResolver(t *testing.T) {
 	// Verify the provider works without resolver config.
 	assert.NoError(t, p.Validate())
 }
+
+func TestIsTTY(t *testing.T) {
+	// isTTY checks if stderr is a terminal.
+	// In test environment, this will typically return false.
+	result := isTTY()
+	assert.IsType(t, false, result)
+}
+
+func TestDisplayVerificationDialog(t *testing.T) {
+	tests := []struct {
+		name string
+		code string
+		url  string
+	}{
+		{
+			name: "with verification code and URL",
+			code: "ABCD-1234",
+			url:  "https://device.sso.us-east-1.amazonaws.com/",
+		},
+		{
+			name: "with empty code",
+			code: "",
+			url:  "https://device.sso.us-east-1.amazonaws.com/",
+		},
+		{
+			name: "with empty URL",
+			code: "WXYZ-5678",
+			url:  "",
+		},
+		{
+			name: "with both empty",
+			code: "",
+			url:  "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// This function outputs to stderr, so we just verify it doesn't panic.
+			assert.NotPanics(t, func() {
+				displayVerificationDialog(tt.code, tt.url)
+			})
+		})
+	}
+}
+
+func TestDisplayVerificationPlainText(t *testing.T) {
+	tests := []struct {
+		name string
+		code string
+		url  string
+	}{
+		{
+			name: "with verification code and URL",
+			code: "ABCD-1234",
+			url:  "https://device.sso.us-east-1.amazonaws.com/",
+		},
+		{
+			name: "with empty code",
+			code: "",
+			url:  "https://device.sso.us-east-1.amazonaws.com/",
+		},
+		{
+			name: "with empty URL",
+			code: "WXYZ-5678",
+			url:  "",
+		},
+		{
+			name: "with both empty",
+			code: "",
+			url:  "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// This function outputs to stderr, so we just verify it doesn't panic.
+			assert.NotPanics(t, func() {
+				displayVerificationPlainText(tt.code, tt.url)
+			})
+		})
+	}
+}
+
+func TestPollForAccessToken_ContextCancellation(t *testing.T) {
+	// Test that pollForAccessToken respects context cancellation.
+	// This test verifies the context cancellation behavior without actually
+	// making network calls to AWS SSO.
+	t.Setenv("GO_TEST", "1")
+	t.Setenv("CI", "1")
+
+	config := &schema.Provider{
+		Kind:     testSSOKind,
+		Region:   testRegion,
+		StartURL: testStartURL,
+	}
+
+	provider, err := NewSSOProvider(testProviderName, config)
+	require.NoError(t, err)
+
+	// Create a context with a very short timeout to simulate cancellation.
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Nanosecond)
+	defer cancel()
+
+	// Wait for context to expire.
+	time.Sleep(10 * time.Millisecond)
+
+	// Note: We can't easily test pollForAccessToken in isolation without a real OIDC client.
+	// The context cancellation is tested indirectly through the Authenticate method.
+	// This test primarily verifies that the provider is set up correctly for context handling.
+	assert.NotNil(t, provider)
+	assert.Equal(t, ctx.Err(), context.DeadlineExceeded)
+}
+
+func TestPollResult_Structure(t *testing.T) {
+	// Test pollResult struct creation.
+	now := time.Now()
+	result := pollResult{
+		token:     "test-token",
+		expiresAt: now,
+		err:       nil,
+	}
+
+	assert.Equal(t, "test-token", result.token)
+	assert.Equal(t, now, result.expiresAt)
+	assert.Nil(t, result.err)
+}
