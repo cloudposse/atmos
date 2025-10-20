@@ -83,7 +83,7 @@ auth:
       principal:
         name: AdminAccess
         account:
-          name: "account-name"
+          name: production
 ```
 
 Notes:
@@ -164,7 +164,7 @@ identities:
     principal:
       name: AdminAccess
       account:
-        name: "123456789012"
+        name: core-identity
 
   # Cross-account role using base permissions
   prod-admin:
@@ -179,6 +179,17 @@ identities:
 ## Configuration Examples
 
 ### AWS SSO with Permission Sets
+
+AWS Permission Set identities assume roles via AWS IAM Identity Center (SSO). The `account` field specifies which AWS account contains the permission set.
+
+**Account Specification Options:**
+
+You can specify the account using either:
+
+- `account.name` - Account name/alias (resolved via SSO ListAccounts API)
+- `account.id` - Numeric account ID (used directly, no lookup required)
+
+**Using account names is recommended** as it's more readable and maintainable. Account names match the account names/aliases configured in AWS Organizations.
 
 ```yaml
 auth:
@@ -197,7 +208,9 @@ auth:
       principal:
         name: AdminAccess
         account:
-          name: "123456789012"
+          name: development
+          # OR use account ID directly:
+          # id: "123456789012"
 
     prod-readonly:
       kind: aws/permission-set
@@ -206,7 +219,7 @@ auth:
       principal:
         name: ReadOnlyAccess
         account:
-          name: "999999999999"
+          name: production
 ```
 
 ### AWS SAML Authentication
@@ -279,7 +292,7 @@ auth:
         region: us-east-1
 ```
 
-Then run `atmos auth user configure` to configure the credentials on the keychain. See [user configure](/cli/commands/auth/user-configure) for details.
+Then run `atmos auth user configure` to configure the credentials on the keychain. See [user configure](/cli/commands/auth/auth-user-configure) for details.
 
 ## CLI Commands
 
