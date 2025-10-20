@@ -87,22 +87,36 @@ jobs:
             gh pr comment $PR_NUMBER --body "$COMMENT_BODY"
           fi
 
-      - name: Remove warning comment if changelog added
+      - name: Update comment with success message if changelog added
         if: steps.check-labels.outputs.requires_changelog == 'true' && steps.check-blog.outputs.has_changelog == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           PR_NUMBER="${{ github.event.pull_request.number }}"
 
-          # Find existing warning comment
+          # Get list of blog files added
+          BLOG_FILES=$(gh pr diff $PR_NUMBER --name-only | grep -E '^website/blog/.*\.(md|mdx)$' | grep -v 'tags.yml' || true)
+
+          # Find existing comment (warning or success)
           EXISTING_COMMENT=$(gh pr view $PR_NUMBER --json comments --jq '.comments[] | select(.body | contains("<!-- changelog-check -->")) | .id' | head -1)
 
+          SUCCESS_COMMENT_BODY="<!-- changelog-check -->
+          > [!NOTE]
+          > #### Changelog Entry Found ✅
+          >
+          > This PR includes the required changelog entry:
+          >
+          > $(echo "$BLOG_FILES" | sed 's/^/> - /')
+          >
+          > The changelog check has passed."
+
           if [ -n "$EXISTING_COMMENT" ]; then
-            echo "Deleting warning comment since changelog was added..."
-            gh api -X DELETE "/repos/${{ github.repository }}/issues/comments/$EXISTING_COMMENT"
-            echo "✅ Warning comment removed"
+            echo "Updating comment with success message..."
+            gh api -X PATCH "/repos/${{ github.repository }}/issues/comments/$EXISTING_COMMENT" \
+              -f body="$SUCCESS_COMMENT_BODY"
           else
-            echo "✅ No warning comment to remove"
+            echo "Creating success comment..."
+            gh pr comment $PR_NUMBER --body "$SUCCESS_COMMENT_BODY"
           fi
 
       - name: Fail if changelog missing
