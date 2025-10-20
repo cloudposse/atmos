@@ -81,8 +81,8 @@ func performIdentityLogout(ctx context.Context, authManager auth.AuthManager, id
 	// Validate identity exists.
 	identities := authManager.GetIdentities()
 	if _, exists := identities[identityName]; !exists {
-		u.PrintfMessageToTUI("**Error:** identity %q not found in configuration\n\n", identityName)
-		u.PrintfMessageToTUI("**Available identities:**\n")
+		u.PrintfMarkdownToTUI("**Error:** identity %q not found in configuration\n\n", identityName)
+		u.PrintfMarkdownToTUI("**Available identities:**\n")
 		for name := range identities {
 			u.PrintfMessageToTUI("  • %s\n", name)
 		}
@@ -94,8 +94,8 @@ func performIdentityLogout(ctx context.Context, authManager auth.AuthManager, id
 	providerName := authManager.GetProviderForIdentity(identityName)
 
 	if dryRun {
-		u.PrintfMessageToTUI("**Dry run mode:** No credentials will be removed\n\n")
-		u.PrintfMessageToTUI("**Would remove:**\n")
+		u.PrintfMarkdownToTUI("**Dry run mode:** No credentials will be removed\n\n")
+		u.PrintfMarkdownToTUI("**Would remove:**\n")
 		u.PrintfMessageToTUI("  • Keyring entry: %s\n", identityName)
 		if providerName != "" {
 			u.PrintfMessageToTUI("  • Keyring entry: %s (provider)\n", providerName)
@@ -111,16 +111,16 @@ func performIdentityLogout(ctx context.Context, authManager auth.AuthManager, id
 	if err := authManager.Logout(ctx, identityName); err != nil {
 		// Check if it's a partial logout.
 		if errors.Is(err, errUtils.ErrPartialLogout) {
-			u.PrintfMessageToTUI("\n✓ Logged out **%s** with warnings\n\n", identityName)
+			u.PrintfMarkdownToTUI("\n✓ Logged out **%s** with warnings\n\n", identityName)
 			u.PrintfMessageToTUI("Some credentials could not be removed:\n")
 			u.PrintfMessageToTUI("  %v\n\n", err)
 		} else {
-			u.PrintfMessageToTUI("\n✗ Failed to log out **%s**\n\n", identityName)
+			u.PrintfMarkdownToTUI("\n✗ Failed to log out **%s**\n\n", identityName)
 			u.PrintfMessageToTUI("Error: %v\n\n", err)
 			return err
 		}
 	} else {
-		u.PrintfMessageToTUI("\n✓ Logged out **%s**\n\n", identityName)
+		u.PrintfMarkdownToTUI("\n✓ Logged out **%s**\n\n", identityName)
 	}
 
 	// Display browser session warning.
@@ -134,8 +134,8 @@ func performProviderLogout(ctx context.Context, authManager auth.AuthManager, pr
 	// Validate provider exists.
 	providers := authManager.GetProviders()
 	if _, exists := providers[providerName]; !exists {
-		u.PrintfMessageToTUI("**Error:** provider %q not found in configuration\n\n", providerName)
-		u.PrintfMessageToTUI("**Available providers:**\n")
+		u.PrintfMarkdownToTUI("**Error:** provider %q not found in configuration\n\n", providerName)
+		u.PrintfMarkdownToTUI("**Available providers:**\n")
 		for name := range providers {
 			u.PrintfMessageToTUI("  • %s\n", name)
 		}
@@ -153,8 +153,8 @@ func performProviderLogout(ctx context.Context, authManager auth.AuthManager, pr
 	}
 
 	if dryRun {
-		u.PrintfMessageToTUI("**Dry run mode:** No credentials will be removed\n\n")
-		u.PrintfMessageToTUI("**Would remove:**\n")
+		u.PrintfMarkdownToTUI("**Dry run mode:** No credentials will be removed\n\n")
+		u.PrintfMarkdownToTUI("**Would remove:**\n")
 		u.PrintfMessageToTUI("  • All identities using provider %s\n", providerName)
 		u.PrintfMessageToTUI("  • Provider keyring entry\n")
 		// Get actual configured path for this provider.
@@ -168,7 +168,7 @@ func performProviderLogout(ctx context.Context, authManager auth.AuthManager, pr
 	if err := authManager.LogoutProvider(ctx, providerName); err != nil {
 		// ErrPartialLogout is treated as success (exit 0) with warning.
 		if errors.Is(err, errUtils.ErrPartialLogout) {
-			u.PrintfMessageToTUI("⚠ **Provider logout partially succeeded**\n\n")
+			u.PrintfMarkdownToTUI("⚠ **Provider logout partially succeeded**\n\n")
 			u.PrintfMessageToTUI("Warning: %v\n\n", err)
 			displayBrowserWarning()
 			return nil
@@ -179,7 +179,7 @@ func performProviderLogout(ctx context.Context, authManager auth.AuthManager, pr
 		return err
 	}
 
-	u.PrintfMessageToTUI("\n✓ Logged out provider **%s** (%d identities)\n\n", providerName, len(identitiesForProvider))
+	u.PrintfMarkdownToTUI("\n✓ Logged out provider **%s** (%d identities)\n\n", providerName, len(identitiesForProvider))
 
 	// Display browser session warning.
 	displayBrowserWarning()
@@ -193,7 +193,7 @@ func performInteractiveLogout(ctx context.Context, authManager auth.AuthManager,
 	providers := authManager.GetProviders()
 
 	if len(identities) == 0 {
-		u.PrintfMessageToTUI("**No identities configured** in atmos.yaml\n")
+		u.PrintfMarkdownToTUI("**No identities configured** in atmos.yaml\n")
 		return nil
 	}
 
@@ -266,8 +266,8 @@ func performInteractiveLogout(ctx context.Context, authManager auth.AuthManager,
 
 func performLogoutAll(ctx context.Context, authManager auth.AuthManager, dryRun bool) error {
 	if dryRun {
-		u.PrintfMessageToTUI("**Dry run mode:** No credentials will be removed\n\n")
-		u.PrintfMessageToTUI("**Would remove:**\n")
+		u.PrintfMarkdownToTUI("**Dry run mode:** No credentials will be removed\n\n")
+		u.PrintfMarkdownToTUI("**Would remove:**\n")
 		u.PrintfMessageToTUI("  • All identity keyring entries\n")
 		u.PrintfMessageToTUI("  • All provider keyring entries\n")
 
@@ -288,7 +288,7 @@ func performLogoutAll(ctx context.Context, authManager auth.AuthManager, dryRun 
 	if err := authManager.LogoutAll(ctx); err != nil {
 		// ErrPartialLogout is treated as success (exit 0) with warning.
 		if errors.Is(err, errUtils.ErrPartialLogout) {
-			u.PrintfMessageToTUI("⚠ **Logout all partially succeeded**\n\n")
+			u.PrintfMarkdownToTUI("⚠ **Logout all partially succeeded**\n\n")
 			u.PrintfMessageToTUI("Warning: %v\n\n", err)
 			displayBrowserWarning()
 			return nil
@@ -310,9 +310,7 @@ func performLogoutAll(ctx context.Context, authManager auth.AuthManager, dryRun 
 
 // displayBrowserWarning shows a warning about browser sessions.
 func displayBrowserWarning() {
-	u.PrintfMessageToTUI("⚠️  **Note:** This only removes local credentials.\n")
-	u.PrintfMessageToTUI("   Your browser session may still be active. Visit your\n")
-	u.PrintfMessageToTUI("   identity provider to end your browser session.\n\n")
+	u.PrintfMarkdownToTUI("⚠️  **Note:** This only removes local credentials. Your browser session may still be active. Visit your identity provider to end your browser session.\n\n")
 }
 
 func init() {
