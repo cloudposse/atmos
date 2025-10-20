@@ -127,7 +127,7 @@ func (m *manager) Authenticate(ctx context.Context, identityName string) (*types
 	// Perform hierarchical credential validation (bottom-up).
 	finalCreds, err := m.authenticateHierarchical(ctx, identityName)
 	if err != nil {
-		wrappedErr := fmt.Errorf("%w: failed to authenticate hierarchically for identity %q: %v", errUtils.ErrAuthenticationFailed, identityName, err)
+		wrappedErr := fmt.Errorf("%w: failed to authenticate hierarchically for identity %q: %w", errUtils.ErrAuthenticationFailed, identityName, err)
 		errUtils.CheckErrorAndPrint(wrappedErr, "Authenticate Hierarchical", "")
 		return nil, wrappedErr
 	}
@@ -136,12 +136,12 @@ func (m *manager) Authenticate(ctx context.Context, identityName string) (*types
 	if identity, exists := m.identities[identityName]; exists {
 		providerName, perr := identity.GetProviderName()
 		if perr != nil {
-			wrappedErr := fmt.Errorf("%w: failed to get provider name: %v", errUtils.ErrInvalidAuthConfig, perr)
+			wrappedErr := fmt.Errorf("%w: failed to get provider name: %w", errUtils.ErrInvalidAuthConfig, perr)
 			errUtils.CheckErrorAndPrint(wrappedErr, "Get Provider Name", "")
 			return nil, wrappedErr
 		}
 		if err := identity.PostAuthenticate(ctx, m.stackInfo, providerName, identityName, finalCreds); err != nil {
-			wrappedErr := fmt.Errorf("%w: post-authentication failed: %v", errUtils.ErrAuthenticationFailed, err)
+			wrappedErr := fmt.Errorf("%w: post-authentication failed: %w", errUtils.ErrAuthenticationFailed, err)
 			errUtils.CheckErrorAndPrint(wrappedErr, "Post Authenticate", "")
 			return nil, wrappedErr
 		}
