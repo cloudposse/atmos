@@ -339,7 +339,6 @@ func TestUserIdentity_Logout(t *testing.T) {
 	}
 }
 
-
 func TestUserIdentity_Validate(t *testing.T) {
 	identity := &userIdentity{
 		name: "test-user",
