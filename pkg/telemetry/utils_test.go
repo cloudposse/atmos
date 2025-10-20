@@ -309,6 +309,7 @@ func TestCaptureCmd(t *testing.T) {
 
 	// Set Jenkins CI environment and test command capture.
 	t.Setenv("JENKINS_URL", "https://jenkins.example.com")
+	t.Setenv("BUILD_ID", "123")
 	captureCmd(cmd, nil, mockClientProvider.NewMockClient)
 }
 

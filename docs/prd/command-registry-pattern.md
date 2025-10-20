@@ -1277,6 +1277,223 @@ func TestDeeplyNestedCommandExecution(t *testing.T) {
 }
 ```
 
+## Business Logic Organization: `internal/exec/` vs `cmd/`
+
+### When to Use `internal/exec/`
+
+The `internal/exec/` package **emerged organically** as Atmos grew, but it is **NOT a Go convention** and should be used sparingly. Understanding when logic belongs in `internal/exec/` versus `cmd/` packages is critical for maintaining a clean architecture.
+
+### Decision Framework
+
+**Use `internal/exec/` for:**
+- ✅ **Cross-command orchestration logic** - Functions used by multiple unrelated commands
+- ✅ **Core Atmos operations** - Stack processing, component resolution, template rendering
+- ✅ **Tool integrations** - Terraform execution, Helmfile execution, OPA validation
+- ✅ **Shared utilities** - Functions that don't fit in `pkg/` but are needed across commands
+
+**Use `cmd/[command]/` for:**
+- ✅ **Command-specific business logic** - Logic used only by one command family
+- ✅ **Command-specific formatters** - Output formatting for a specific command
+- ✅ **Command-specific validation** - Input validation unique to one command
+- ✅ **Command-specific models** - Data structures used only by one command
+
+### Examples
+
+#### ❌ **Bad: Command-Specific Logic in `internal/exec/`**
+
+```go
+// internal/exec/version_list.go - DON'T DO THIS
+package exec
+
+// This function is ONLY used by `atmos version list`
+// It should live in cmd/version/ instead
+func ExecuteVersionList(
+    atmosConfig *schema.AtmosConfiguration,
+    limit int,
+    offset int,
+    since string,
+    includePrereleases bool,
+    format string,
+) error {
+    // Business logic for version list command...
+}
+```
+
+**Problem:** This creates unnecessary coupling between the command layer and execution layer for logic that's only used by one command.
+
+**Solution:** Move to self-contained package:
+```go
+// cmd/version/list.go - CORRECT
+package version
+
+// All logic for version list lives in the version package
+func (cmd *listCmd) RunE(cmd *cobra.Command, args []string) error {
+    // Business logic inline or in helper functions in this package
+}
+```
+
+---
+
+#### ✅ **Good: Shared Orchestration in `internal/exec/`**
+
+```go
+// internal/exec/stack_processor.go - CORRECT
+package exec
+
+// This function is used by describe, terraform, helmfile, validate, etc.
+func ProcessComponentInStack(
+    atmosConfig schema.AtmosConfiguration,
+    component string,
+    stack string,
+) (*schema.ComponentConfig, error) {
+    // Complex stack processing logic used across many commands...
+}
+```
+
+**Why this is correct:** Multiple unrelated commands need this logic (terraform, helmfile, describe, validate), so it belongs in a shared location.
+
+---
+
+#### ✅ **Good: Self-Contained Command Package**
+
+```go
+// cmd/version/github.go - Interface for GitHub API
+package version
+
+type GitHubClient interface {
+    GetReleases(owner, repo string, opts ReleaseOptions) ([]*github.RepositoryRelease, error)
+}
+
+// cmd/version/formatters.go - Formatting logic
+package version
+
+func formatReleaseListText(releases []*github.RepositoryRelease) {
+    // Formatting specific to version command
+}
+
+// cmd/version/list.go - Command implementation
+package version
+
+var listCmd = &cobra.Command{
+    RunE: func(cmd *cobra.Command, args []string) error {
+        // Uses helpers from same package
+        releases, err := fetchReleases(...)
+        formatReleaseListText(releases)
+    },
+}
+```
+
+**Why this is correct:** All version-related logic lives together in one package, making it easy to understand, test, and maintain.
+
+---
+
+### Migration Strategy for Existing `internal/exec/` Functions
+
+When you find command-specific functions in `internal/exec/`:
+
+1. **Identify command-specific functions:**
+   ```bash
+   # Look for functions only called from one command
+   git grep -l "ExecuteVersionList" | grep -v "_test.go"
+   # If only cmd/version/ files import it → move to cmd/version/
+   ```
+
+2. **Move to command package:**
+   ```bash
+   # Move the function to the command package
+   # Update from: internal/exec/version_list.go
+   # To:         cmd/version/list.go
+   ```
+
+3. **Refactor to self-contained:**
+   ```go
+   // Before: Function called from command
+   func ExecuteVersionList(...) error {
+       // Logic
+   }
+
+   // After: Logic in command package
+   func (cmd *listCmd) RunE(cmd *cobra.Command, args []string) error {
+       // Logic inline or in package-private helpers
+   }
+   ```
+
+4. **Delete old `internal/exec/` file:**
+   ```bash
+   rm internal/exec/version_list.go
+   rm internal/exec/version_show.go
+   ```
+
+5. **Keep truly shared functions:**
+   ```go
+   // internal/exec/terraform.go - KEEP THIS
+   // Used by: terraform command, helmfile command, describe affected
+   func ExecuteTerraform(...)
+   ```
+
+### Red Flags: When to Refactor
+
+🚩 **These patterns indicate a function should move to `cmd/`:**
+
+- Function name matches command name: `ExecuteVersionList` → probably cmd/version-specific
+- Function only called from one command package
+- Function has 5+ parameters that are all CLI flags
+- Function exists just to call other functions in the same package
+- Test file only has one test that calls the command
+
+### Benefits of Self-Contained Command Packages
+
+**Before (scattered logic):**
+```
+cmd/version.go           # Cobra command definition
+cmd/version_list.go      # Cobra subcommand
+cmd/version_show.go      # Cobra subcommand
+internal/exec/version.go       # Some logic
+internal/exec/version_list.go  # More logic
+internal/exec/version_show.go  # Even more logic
+```
+
+**After (self-contained):**
+```
+cmd/version/
+├── version.go        # Main command + provider
+├── list.go          # List command + logic
+├── show.go          # Show command + logic
+├── github.go        # GitHub API interface
+├── formatters.go    # Output formatting
+└── *_test.go        # Tests for all of the above
+```
+
+**Advantages:**
+- ✅ All related code in one place
+- ✅ Easier to understand and modify
+- ✅ Better testability with interfaces
+- ✅ Clear ownership and boundaries
+- ✅ Reduced coupling between packages
+- ✅ Follows Go idiom of small, focused packages
+
+### Example: Version Command Migration
+
+The `version` command was successfully migrated from scattered logic to self-contained:
+
+**Before:**
+- `cmd/version.go` - Main command
+- `cmd/version_list.go` - List subcommand (just cobra definition)
+- `cmd/version_show.go` - Show subcommand (just cobra definition)
+- `internal/exec/version_list.go` - Business logic
+- `internal/exec/version_show.go` - Business logic
+
+**After:**
+- `cmd/version/version.go` - Main command + CommandProvider
+- `cmd/version/list.go` - List command + all logic + spinner
+- `cmd/version/show.go` - Show command + all logic + spinner
+- `cmd/version/github.go` - GitHub client interface + mocks
+- `cmd/version/formatters.go` - All formatting logic
+
+**Result:** Self-contained package with 100% of version-related code in one place, fully testable with mocks, no dependencies on `internal/exec/`.
+
+---
+
 ## Future: Plugin Support
 
 The registry pattern provides the foundation for external plugins:
