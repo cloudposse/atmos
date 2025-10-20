@@ -23,9 +23,9 @@ This workflow becomes tedious when switching between different identities, roles
 ```shell
 # Traditional workflow
 eval $(atmos auth env --identity prod-admin --format bash)
-terraform plan
-terraform apply
 aws s3 ls
+aws ecs list-clusters
+kubectl get pods
 # ... many more commands ...
 ```
 

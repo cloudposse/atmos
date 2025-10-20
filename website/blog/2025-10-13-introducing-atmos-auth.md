@@ -155,7 +155,8 @@ eval $(atmos auth env)
 
 # Now use any AWS tool
 aws s3 ls
-terraform plan
+aws ecs list-clusters
+kubectl get pods
 ```
 
 ## What's Next
