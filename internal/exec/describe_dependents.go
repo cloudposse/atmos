@@ -29,7 +29,7 @@ type DescribeDependentsExecProps struct {
 	Skip                 []string
 }
 
-//go:generate go run go.uber.org/mock/mockgen@latest -source=$GOFILE -destination=mock_$GOFILE -package=$GOPACKAGE
+//go:generate go run go.uber.org/mock/mockgen@v0.6.0 -source=$GOFILE -destination=mock_$GOFILE -package=$GOPACKAGE
 type DescribeDependentsExec interface {
 	Execute(describeDependentsExecProps *DescribeDependentsExecProps) error
 }

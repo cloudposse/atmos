@@ -8,7 +8,7 @@ import (
 	"github.com/cloudposse/atmos/internal/tui/templates/term"
 )
 
-//go:generate go run go.uber.org/mock/mockgen@latest -source=$GOFILE -destination=mock_$GOFILE -package=$GOPACKAGE
+//go:generate go run go.uber.org/mock/mockgen@v0.6.0 -source=$GOFILE -destination=mock_$GOFILE -package=$GOPACKAGE
 type PageCreator interface {
 	Run(title, content string) error
 }

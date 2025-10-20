@@ -8,7 +8,7 @@ import (
 // FileDownloader handles downloading files and directories from various sources
 // without exposing the underlying implementation.
 //
-//go:generate go run go.uber.org/mock/mockgen@latest -source=$GOFILE -destination=mock_$GOFILE -package=$GOPACKAGE
+//go:generate go run go.uber.org/mock/mockgen@v0.6.0 -source=$GOFILE -destination=mock_$GOFILE -package=$GOPACKAGE
 type FileDownloader interface {
 	// Fetch fetches content from a given source and saves it to the destination
 	Fetch(src, dest string, mode ClientMode, timeout time.Duration) error
@@ -28,7 +28,7 @@ type FileDownloader interface {
 
 // ClientFactory abstracts the creation of a downloader client for better testability
 //
-//go:generate go run go.uber.org/mock/mockgen@latest -source=$GOFILE -destination=mock_$GOFILE -package=$GOPACKAGE
+//go:generate go run go.uber.org/mock/mockgen@v0.6.0 -source=$GOFILE -destination=mock_$GOFILE -package=$GOPACKAGE
 type ClientFactory interface {
 	NewClient(ctx context.Context, src, dest string, mode ClientMode) (DownloadClient, error)
 }

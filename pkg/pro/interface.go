@@ -8,7 +8,7 @@ import (
 // APIClient defines operations for interacting with Atmos Pro API.
 // This interface allows mocking of API operations in tests.
 //
-//go:generate go run go.uber.org/mock/mockgen@latest -source=$GOFILE -destination=mock_$GOFILE -package=$GOPACKAGE
+//go:generate go run go.uber.org/mock/mockgen@v0.6.0 -source=$GOFILE -destination=mock_$GOFILE -package=$GOPACKAGE
 type APIClient interface {
 	// UploadInstances uploads component instances to Atmos Pro.
 	UploadInstances(req *dtos.InstancesUploadRequest) error

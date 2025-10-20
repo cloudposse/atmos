@@ -198,6 +198,9 @@ linters:
       - std-error-handling
     rules:
       - linters:
+          - godot
+        path: mock_.*\.go$
+      - linters:
           - err113
           - errcheck
           - forbidigo
