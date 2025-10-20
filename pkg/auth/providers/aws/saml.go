@@ -105,7 +105,14 @@ func (p *samlProvider) PreAuthenticate(manager types.AuthManager) error {
 // Authenticate performs SAML authentication using saml2aws.
 func (p *samlProvider) Authenticate(ctx context.Context) (types.ICredentials, error) {
 	providerType := p.getProviderType()
+	downloadBrowser := p.shouldDownloadBrowser()
+
 	log.Info("Starting SAML authentication", "provider", p.name, "url", p.url, "provider_type", providerType)
+	log.Debug("SAML provider configuration",
+		"provider_type", providerType,
+		"download_browser", downloadBrowser,
+		"requires_drivers", providerType == "Browser")
+
 	if p.RoleToAssumeFromAssertion == "" {
 		return nil, fmt.Errorf("%w: no role to assume for assertion, SAML provider must be part of a chain", errUtils.ErrInvalidAuthConfig)
 	}
@@ -366,6 +373,7 @@ func (p *samlProvider) Environment() (map[string]string, error) {
 func (p *samlProvider) shouldDownloadBrowser() bool {
 	// If user explicitly set download_browser_driver, respect their choice.
 	if p.config.DownloadBrowserDriver {
+		log.Debug("Browser driver download explicitly enabled in config")
 		return true
 	}
 
@@ -373,6 +381,7 @@ func (p *samlProvider) shouldDownloadBrowser() bool {
 
 	// Only auto-download for "Browser" provider (others like GoogleApps, Okta don't need drivers).
 	if providerType != "Browser" {
+		log.Debug("Provider does not require browser drivers", "provider_type", providerType)
 		return false
 	}
 
@@ -380,15 +389,15 @@ func (p *samlProvider) shouldDownloadBrowser() bool {
 	// Common locations: ~/.cache/ms-playwright (Linux), ~/Library/Caches/ms-playwright-go (macOS).
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
-		log.Debug("Cannot determine home directory, enabling browser auto-download")
+		log.Debug("Cannot determine home directory, enabling browser auto-download", "error", err)
 		return true
 	}
 
 	// Check common Playwright cache locations.
 	playwrightPaths := []string{
-		homeDir + "/.cache/ms-playwright",       // Linux.
+		homeDir + "/.cache/ms-playwright",            // Linux.
 		homeDir + "/Library/Caches/ms-playwright-go", // macOS (Go specific).
-		homeDir + "/AppData/Local/ms-playwright", // Windows.
+		homeDir + "/AppData/Local/ms-playwright",     // Windows.
 	}
 
 	for _, path := range playwrightPaths {
@@ -399,7 +408,8 @@ func (p *samlProvider) shouldDownloadBrowser() bool {
 	}
 
 	// No drivers found, enable auto-download.
-	log.Debug("No Playwright drivers found, enabling auto-download for Browser provider")
+	log.Debug("No Playwright drivers found, enabling auto-download for Browser provider",
+		"checked_paths", playwrightPaths)
 	return true
 }
 
