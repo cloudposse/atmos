@@ -187,7 +187,8 @@ func NewCredentialStore(authConfig *schema.AuthConfig) (types.CredentialStore, e
     }
 
     // Override with environment variable for testing
-    if envType := os.Getenv("ATMOS_KEYRING_TYPE"); envType != "" {
+    viper.BindEnv("atmos_keyring_type", "ATMOS_KEYRING_TYPE")
+    if envType := viper.GetString("atmos_keyring_type"); envType != "" {
         keyringType = envType
     }
 

@@ -34,7 +34,7 @@ func (s *systemKeyringStore) Store(alias string, creds types.ICredentials) error
 		typ = "oidc"
 		raw, err = json.Marshal(c)
 	default:
-		return errors.Join(ErrCredentialStore, fmt.Errorf("unsupported credential type %T", creds))
+		return fmt.Errorf("%w: %T", errors.Join(ErrCredentialStore, ErrUnsupportedCredentialType), creds)
 	}
 	if err != nil {
 		return errors.Join(ErrCredentialStore, fmt.Errorf("failed to marshal credentials: %w", err))
@@ -78,7 +78,7 @@ func (s *systemKeyringStore) Retrieve(alias string) (types.ICredentials, error) 
 		}
 		return &c, nil
 	default:
-		return nil, errors.Join(ErrCredentialStore, fmt.Errorf("unknown credential type %q", env.Type))
+		return nil, fmt.Errorf("%w: %q", errors.Join(ErrCredentialStore, ErrUnknownCredentialType), env.Type)
 	}
 }
 

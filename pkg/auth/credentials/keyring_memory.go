@@ -42,7 +42,7 @@ func (s *memoryKeyringStore) Store(alias string, creds types.ICredentials) error
 		typ = "oidc"
 		raw, err = json.Marshal(c)
 	default:
-		return errors.Join(ErrCredentialStore, fmt.Errorf("unsupported credential type %T", creds))
+		return fmt.Errorf("%w: %T", errors.Join(ErrCredentialStore, ErrUnsupportedCredentialType), creds)
 	}
 	if err != nil {
 		return errors.Join(ErrCredentialStore, fmt.Errorf("failed to marshal credentials: %w", err))
@@ -65,7 +65,7 @@ func (s *memoryKeyringStore) Retrieve(alias string) (types.ICredentials, error) 
 
 	data, ok := s.items[alias]
 	if !ok {
-		return nil, errors.Join(ErrCredentialStore, fmt.Errorf("credentials not found for alias %q", alias))
+		return nil, fmt.Errorf("%w for alias %q", errors.Join(ErrCredentialStore, ErrCredentialsNotFound), alias)
 	}
 
 	var env credentialEnvelope
@@ -87,7 +87,7 @@ func (s *memoryKeyringStore) Retrieve(alias string) (types.ICredentials, error) 
 		}
 		return &c, nil
 	default:
-		return nil, errors.Join(ErrCredentialStore, fmt.Errorf("unknown credential type %q", env.Type))
+		return nil, fmt.Errorf("%w: %q", errors.Join(ErrCredentialStore, ErrUnknownCredentialType), env.Type)
 	}
 }
 
@@ -97,7 +97,7 @@ func (s *memoryKeyringStore) Delete(alias string) error {
 	defer s.mu.Unlock()
 
 	if _, ok := s.items[alias]; !ok {
-		return errors.Join(ErrCredentialStore, fmt.Errorf("credentials not found for alias %q", alias))
+		return fmt.Errorf("%w for alias %q", errors.Join(ErrCredentialStore, ErrCredentialsNotFound), alias)
 	}
 
 	delete(s.items, alias)
@@ -133,7 +133,7 @@ func (s *memoryKeyringStore) GetAny(key string, dest interface{}) error {
 
 	data, ok := s.items[key]
 	if !ok {
-		return errors.Join(ErrCredentialStore, fmt.Errorf("data not found for key %q", key))
+		return fmt.Errorf("%w for key %q", errors.Join(ErrCredentialStore, ErrDataNotFound), key)
 	}
 
 	if err := json.Unmarshal([]byte(data), dest); err != nil {

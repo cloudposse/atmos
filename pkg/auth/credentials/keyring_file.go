@@ -9,11 +9,32 @@ import (
 
 	"github.com/99designs/keyring"
 	"github.com/charmbracelet/huh"
+	"github.com/spf13/viper"
 	"golang.org/x/term"
 
 	"github.com/cloudposse/atmos/pkg/auth/types"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+)
+
+const (
+	// KeyringDirPermissions is the default permission for keyring directory (read/write/execute for owner only).
+	KeyringDirPermissions = 0o700
+)
+
+var (
+	// ErrPasswordTooShort indicates password does not meet minimum length requirement.
+	ErrPasswordTooShort = errors.New("password must be at least 8 characters")
+	// ErrUnsupportedCredentialType indicates the credential type is not supported.
+	ErrUnsupportedCredentialType = errors.New("unsupported credential type")
+	// ErrUnknownCredentialType indicates an unknown credential type was encountered.
+	ErrUnknownCredentialType = errors.New("unknown credential type")
+	// ErrCredentialsNotFound indicates credentials were not found for the given key.
+	ErrCredentialsNotFound = errors.New("credentials not found")
+	// ErrDataNotFound indicates data was not found for the given key.
+	ErrDataNotFound = errors.New("data not found")
+	// ErrPasswordRequired indicates a password is required but not provided.
+	ErrPasswordRequired = errors.New("keyring password required")
 )
 
 // fileKeyringStore implements the CredentialStore interface using encrypted file storage via 99designs/keyring.
@@ -55,7 +76,7 @@ func newFileKeyringStore(authConfig *schema.AuthConfig) (*fileKeyringStore, erro
 
 	// Ensure directory exists with proper permissions.
 	dir := filepath.Dir(path)
-	if err := os.MkdirAll(dir, 0o700); err != nil {
+	if err := os.MkdirAll(dir, KeyringDirPermissions); err != nil {
 		return nil, errors.Join(ErrCredentialStore, fmt.Errorf("failed to create keyring directory: %w", err))
 	}
 
@@ -91,7 +112,8 @@ func newFileKeyringStore(authConfig *schema.AuthConfig) (*fileKeyringStore, erro
 func createPasswordPrompt(passwordEnv string) keyring.PromptFunc {
 	return func(prompt string) (string, error) {
 		// 1. Check environment variable first (for automation/CI).
-		if password := os.Getenv(passwordEnv); password != "" {
+		_ = viper.BindEnv(passwordEnv)
+		if password := viper.GetString(passwordEnv); password != "" {
 			return password, nil
 		}
 
@@ -107,7 +129,7 @@ func createPasswordPrompt(passwordEnv string) keyring.PromptFunc {
 						Value(&password).
 						Validate(func(s string) error {
 							if len(s) < 8 {
-								return errors.New("password must be at least 8 characters")
+								return ErrPasswordTooShort
 							}
 							return nil
 						}),
@@ -121,7 +143,7 @@ func createPasswordPrompt(passwordEnv string) keyring.PromptFunc {
 		}
 
 		// 3. Error if neither available.
-		return "", fmt.Errorf("keyring password required: set %s environment variable or run in interactive mode", passwordEnv)
+		return "", fmt.Errorf("%w: set %s environment variable or run in interactive mode", ErrPasswordRequired, passwordEnv)
 	}
 }
 
@@ -141,7 +163,7 @@ func (s *fileKeyringStore) Store(alias string, creds types.ICredentials) error {
 		typ = "oidc"
 		raw, err = json.Marshal(c)
 	default:
-		return errors.Join(ErrCredentialStore, fmt.Errorf("unsupported credential type %T", creds))
+		return fmt.Errorf("%w: %T", errors.Join(ErrCredentialStore, ErrUnsupportedCredentialType), creds)
 	}
 	if err != nil {
 		return errors.Join(ErrCredentialStore, fmt.Errorf("failed to marshal credentials: %w", err))
@@ -190,7 +212,7 @@ func (s *fileKeyringStore) Retrieve(alias string) (types.ICredentials, error) {
 		}
 		return &c, nil
 	default:
-		return nil, errors.Join(ErrCredentialStore, fmt.Errorf("unknown credential type %q", env.Type))
+		return nil, fmt.Errorf("%w: %q", errors.Join(ErrCredentialStore, ErrUnknownCredentialType), env.Type)
 	}
 }
 

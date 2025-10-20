@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/spf13/viper"
+
 	"github.com/cloudposse/atmos/pkg/auth/types"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -32,22 +34,25 @@ type credentialEnvelope struct {
 
 // NewCredentialStore creates a new credential store instance based on configuration.
 // It selects the appropriate backend (system, file, or memory) based on:
-// 1. ATMOS_KEYRING_TYPE environment variable (highest priority)
-// 2. AuthConfig.Keyring.Type configuration
-// 3. Default to "system" for backward compatibility
+// 1. ATMOS_KEYRING_TYPE environment variable (highest priority).
+// 2. AuthConfig.Keyring.Type configuration.
+// 3. Default to "system" for backward compatibility.
 func NewCredentialStore() types.CredentialStore {
 	return NewCredentialStoreWithConfig(nil)
 }
 
 // NewCredentialStoreWithConfig creates a credential store with explicit configuration.
 func NewCredentialStoreWithConfig(authConfig *schema.AuthConfig) types.CredentialStore {
-	keyringType := "system" // Default for backward compatibility
+	keyringType := "system" // Default for backward compatibility.
 
-	// Check environment variable first (for testing and CI)
-	if envType := os.Getenv("ATMOS_KEYRING_TYPE"); envType != "" {
+	// Bind environment variable.
+	_ = viper.BindEnv("atmos_keyring_type", "ATMOS_KEYRING_TYPE")
+
+	// Check environment variable first (for testing and CI).
+	if envType := viper.GetString("atmos_keyring_type"); envType != "" {
 		keyringType = envType
 	} else if authConfig != nil && authConfig.Keyring.Type != "" {
-		// Use configuration if provided
+		// Use configuration if provided.
 		keyringType = authConfig.Keyring.Type
 	}
 
