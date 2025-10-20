@@ -347,10 +347,13 @@ func (p *ssoProvider) pollForAccessTokenWithSpinner(ctx context.Context, oidcCli
 
 	// Get the result from the final model.
 	finalSpinner := finalModel.(spinnerModel)
-	if finalSpinner.err != nil {
-		return "", time.Time{}, finalSpinner.err
+	if finalSpinner.result == nil {
+		return "", time.Time{}, fmt.Errorf("%w: no result received", errUtils.ErrAuthenticationFailed)
 	}
-	return finalSpinner.token, finalSpinner.expiresAt, nil
+	if finalSpinner.result.err != nil {
+		return "", time.Time{}, finalSpinner.result.err
+	}
+	return finalSpinner.result.token, finalSpinner.result.expiresAt, nil
 }
 
 // pollResult holds the result of polling for an access token.
@@ -361,29 +364,30 @@ type pollResult struct {
 }
 
 // spinnerModel is a bubbletea model for the authentication spinner.
+// Note: The struct is large (~656 bytes) due to spinner.Model from bubbletea.
+// We must use value receivers (not pointers) as required by the bubbletea framework.
+// The performance impact is minimal since this is only used during UI updates.
 type spinnerModel struct {
 	spinner    spinner.Model
 	message    string
 	done       bool
 	resultChan chan pollResult
 	cancel     context.CancelFunc
-	token      string
-	expiresAt  time.Time
-	err        error
+	result     *pollResult // Store result pointer to keep struct small.
 }
 
-//nolint:gocritic // Bubbletea models must be passed by value, not pointer.
+//nolint:gocritic // Bubbletea framework requires value receivers, not pointer receivers.
 func (m spinnerModel) Init() tea.Cmd {
 	return tea.Batch(m.spinner.Tick, m.checkResult())
 }
 
-//nolint:gocritic // Bubbletea models must be passed by value, not pointer.
+//nolint:gocritic // Bubbletea framework requires value receivers, not pointer receivers.
 func (m spinnerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		if msg.String() == "ctrl+c" {
 			m.done = true
-			m.err = fmt.Errorf("%w: authentication cancelled", errUtils.ErrAuthenticationFailed)
+			m.result = &pollResult{err: fmt.Errorf("%w: authentication cancelled", errUtils.ErrAuthenticationFailed)}
 			if m.cancel != nil {
 				m.cancel()
 			}
@@ -395,9 +399,7 @@ func (m spinnerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, cmd
 	case pollResult:
 		m.done = true
-		m.token = msg.token
-		m.expiresAt = msg.expiresAt
-		m.err = msg.err
+		m.result = &msg
 		if m.cancel != nil {
 			m.cancel()
 		}
@@ -406,10 +408,10 @@ func (m spinnerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-//nolint:gocritic // Bubbletea models must be passed by value, not pointer.
+//nolint:gocritic // Bubbletea framework requires value receivers, not pointer receivers.
 func (m spinnerModel) View() string {
 	if m.done {
-		if m.err != nil {
+		if m.result != nil && m.result.err != nil {
 			return lipgloss.NewStyle().Foreground(lipgloss.Color("#FF0000")).Render("✗ Authentication failed\n")
 		}
 		return lipgloss.NewStyle().Foreground(lipgloss.Color("#00FF00")).Render("✓ Authentication successful!\n")
@@ -417,7 +419,7 @@ func (m spinnerModel) View() string {
 	return fmt.Sprintf("%s %s...", m.spinner.View(), m.message)
 }
 
-//nolint:gocritic // Bubbletea models must be passed by value, not pointer.
+//nolint:gocritic // Bubbletea framework requires value receivers, not pointer receivers.
 func (m spinnerModel) checkResult() tea.Cmd {
 	return func() tea.Msg {
 		select {
