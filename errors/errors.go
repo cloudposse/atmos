@@ -52,7 +52,9 @@ var (
 	ErrSpinnerUnexpectedModelType            = errors.New("spinner returned unexpected model type")
 
 	// ErrAuthConsole is returned when auth console command operations fail.
-	ErrAuthConsole = errors.New("auth console operation failed")
+	ErrAuthConsole                     = errors.New("auth console operation failed")
+	ErrProviderNotSupported            = errors.New("provider does not support this operation")
+	ErrUnknownServiceAlias             = errors.New("unknown service alias")
 
 	// ErrPlanHasDiff is returned when there are differences between two Terraform plan files.
 	ErrPlanHasDiff = errors.New("plan files have differences")

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
@@ -98,7 +99,7 @@ var ServiceDestinations = map[string]string{
 	// Analytics.
 	"athena":         "https://console.aws.amazon.com/athena",
 	"emr":            "https://console.aws.amazon.com/emr",
-	"cloudSearch":    "https://console.aws.amazon.com/cloudsearch",
+	"cloudsearch":    "https://console.aws.amazon.com/cloudsearch",
 	"elasticsearch":  "https://console.aws.amazon.com/aos",
 	"opensearch":     "https://console.aws.amazon.com/aos",
 	"kinesis":        "https://console.aws.amazon.com/kinesis",
@@ -185,7 +186,7 @@ func ResolveDestination(destination string) (string, error) {
 	}
 
 	// If no match found, return an error with suggestions.
-	return "", fmt.Errorf("unknown service alias %q (try 's3', 'ec2', 'cloudformation', etc. or use a full URL)", destination)
+	return "", fmt.Errorf("%w: %q (try 's3', 'ec2', 'cloudformation', etc. or use a full URL)", errUtils.ErrUnknownServiceAlias, destination)
 }
 
 // GetAvailableAliases returns a sorted list of all available service aliases.

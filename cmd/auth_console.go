@@ -16,6 +16,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/auth/types"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -47,6 +48,8 @@ that implement console access.`,
 }
 
 func executeAuthConsoleCommand(cmd *cobra.Command, args []string) error {
+	defer perf.Track(nil, "cmd.executeAuthConsoleCommand")()
+
 	handleHelpRequest(cmd, args)
 
 	// Load atmos config.
@@ -197,11 +200,11 @@ func getConsoleProvider(authManager types.AuthManager, identityName string) (typ
 		generator := awsAuth.NewConsoleURLGenerator(nil)
 		return generator, nil
 	case types.ProviderKindAzureOIDC:
-		return nil, fmt.Errorf("Azure console access not yet implemented (coming soon)")
+		return nil, fmt.Errorf("%w: Azure console access not yet implemented (coming soon)", errUtils.ErrProviderNotSupported)
 	case types.ProviderKindGCPOIDC:
-		return nil, fmt.Errorf("GCP console access not yet implemented (coming soon)")
+		return nil, fmt.Errorf("%w: GCP console access not yet implemented (coming soon)", errUtils.ErrProviderNotSupported)
 	default:
-		return nil, fmt.Errorf("provider %q does not support web console access", providerKind)
+		return nil, fmt.Errorf("%w: provider %q does not support web console access", errUtils.ErrProviderNotSupported, providerKind)
 	}
 }
 

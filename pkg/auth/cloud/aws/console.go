@@ -90,7 +90,7 @@ func (g *ConsoleURLGenerator) GetConsoleURL(ctx context.Context, creds types.ICr
 
 	sessionData, err := json.Marshal(sessionJSON)
 	if err != nil {
-		return "", 0, fmt.Errorf("%w: failed to marshal session data: %v", errUtils.ErrInvalidAuthConfig, err)
+		return "", 0, fmt.Errorf("%v: failed to marshal session data: %w", errUtils.ErrInvalidAuthConfig, err)
 	}
 
 	// Step 5: Resolve destination (supports aliases like "s3", "ec2", etc.).
@@ -142,7 +142,7 @@ func (g *ConsoleURLGenerator) getSigninToken(ctx context.Context, sessionData []
 	// Make HTTP request to federation endpoint.
 	response, err := http.Get(ctx, federationURL, g.httpClient)
 	if err != nil {
-		return "", fmt.Errorf("%w: failed to call federation endpoint: %v", errUtils.ErrHTTPRequestFailed, err)
+		return "", fmt.Errorf("%v: failed to call federation endpoint: %w", errUtils.ErrHTTPRequestFailed, err)
 	}
 
 	// Parse response to extract SigninToken.
@@ -150,7 +150,7 @@ func (g *ConsoleURLGenerator) getSigninToken(ctx context.Context, sessionData []
 		SigninToken string `json:"SigninToken"`
 	}
 	if err := json.Unmarshal(response, &result); err != nil {
-		return "", fmt.Errorf("%w: failed to parse federation response: %v", errUtils.ErrHTTPRequestFailed, err)
+		return "", fmt.Errorf("%v: failed to parse federation response: %w", errUtils.ErrHTTPRequestFailed, err)
 	}
 
 	if result.SigninToken == "" {
