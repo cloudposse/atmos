@@ -7,6 +7,7 @@ import (
 	"sync"
 
 	"github.com/cloudposse/atmos/pkg/auth/types"
+	"github.com/cloudposse/atmos/pkg/perf"
 )
 
 // memoryKeyringStore implements the CredentialStore interface using in-memory storage.
@@ -25,6 +26,8 @@ func newMemoryKeyringStore() (*memoryKeyringStore, error) {
 
 // Store stores credentials for the given alias.
 func (s *memoryKeyringStore) Store(alias string, creds types.ICredentials) error {
+	defer perf.Track(nil, "credentials.memoryKeyringStore.Store")()
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -60,6 +63,8 @@ func (s *memoryKeyringStore) Store(alias string, creds types.ICredentials) error
 
 // Retrieve retrieves credentials for the given alias.
 func (s *memoryKeyringStore) Retrieve(alias string) (types.ICredentials, error) {
+	defer perf.Track(nil, "credentials.memoryKeyringStore.Retrieve")()
+
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -93,6 +98,8 @@ func (s *memoryKeyringStore) Retrieve(alias string) (types.ICredentials, error) 
 
 // Delete deletes credentials for the given alias.
 func (s *memoryKeyringStore) Delete(alias string) error {
+	defer perf.Track(nil, "credentials.memoryKeyringStore.Delete")()
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -106,6 +113,8 @@ func (s *memoryKeyringStore) Delete(alias string) error {
 
 // List returns all stored credential aliases.
 func (s *memoryKeyringStore) List() ([]string, error) {
+	defer perf.Track(nil, "credentials.memoryKeyringStore.List")()
+
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -118,6 +127,8 @@ func (s *memoryKeyringStore) List() ([]string, error) {
 
 // IsExpired checks if credentials for the given alias are expired.
 func (s *memoryKeyringStore) IsExpired(alias string) (bool, error) {
+	defer perf.Track(nil, "credentials.memoryKeyringStore.IsExpired")()
+
 	creds, err := s.Retrieve(alias)
 	if err != nil {
 		return true, err
@@ -128,6 +139,8 @@ func (s *memoryKeyringStore) IsExpired(alias string) (bool, error) {
 
 // GetAny retrieves and unmarshals any type from the memory store.
 func (s *memoryKeyringStore) GetAny(key string, dest interface{}) error {
+	defer perf.Track(nil, "credentials.memoryKeyringStore.GetAny")()
+
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -145,6 +158,8 @@ func (s *memoryKeyringStore) GetAny(key string, dest interface{}) error {
 
 // SetAny marshals and stores any type in the memory store.
 func (s *memoryKeyringStore) SetAny(key string, value interface{}) error {
+	defer perf.Track(nil, "credentials.memoryKeyringStore.SetAny")()
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
 

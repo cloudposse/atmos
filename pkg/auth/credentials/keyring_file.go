@@ -149,6 +149,8 @@ func createPasswordPrompt(passwordEnv string) keyring.PromptFunc {
 
 // Store stores credentials for the given alias.
 func (s *fileKeyringStore) Store(alias string, creds types.ICredentials) error {
+	defer perf.Track(nil, "credentials.fileKeyringStore.Store")()
+
 	var (
 		typ string
 		raw []byte
@@ -188,6 +190,8 @@ func (s *fileKeyringStore) Store(alias string, creds types.ICredentials) error {
 
 // Retrieve retrieves credentials for the given alias.
 func (s *fileKeyringStore) Retrieve(alias string) (types.ICredentials, error) {
+	defer perf.Track(nil, "credentials.fileKeyringStore.Retrieve")()
+
 	item, err := s.ring.Get(alias)
 	if err != nil {
 		return nil, errors.Join(ErrCredentialStore, fmt.Errorf("failed to retrieve credentials from file keyring: %w", err))
@@ -218,6 +222,8 @@ func (s *fileKeyringStore) Retrieve(alias string) (types.ICredentials, error) {
 
 // Delete deletes credentials for the given alias.
 func (s *fileKeyringStore) Delete(alias string) error {
+	defer perf.Track(nil, "credentials.fileKeyringStore.Delete")()
+
 	if err := s.ring.Remove(alias); err != nil {
 		return errors.Join(ErrCredentialStore, fmt.Errorf("failed to delete credentials from file keyring: %w", err))
 	}
@@ -227,6 +233,8 @@ func (s *fileKeyringStore) Delete(alias string) error {
 
 // List returns all stored credential aliases.
 func (s *fileKeyringStore) List() ([]string, error) {
+	defer perf.Track(nil, "credentials.fileKeyringStore.List")()
+
 	keys, err := s.ring.Keys()
 	if err != nil {
 		return nil, errors.Join(ErrCredentialStore, fmt.Errorf("failed to list credentials from file keyring: %w", err))
@@ -237,6 +245,8 @@ func (s *fileKeyringStore) List() ([]string, error) {
 
 // IsExpired checks if credentials for the given alias are expired.
 func (s *fileKeyringStore) IsExpired(alias string) (bool, error) {
+	defer perf.Track(nil, "credentials.fileKeyringStore.IsExpired")()
+
 	creds, err := s.Retrieve(alias)
 	if err != nil {
 		return true, err
@@ -247,6 +257,8 @@ func (s *fileKeyringStore) IsExpired(alias string) (bool, error) {
 
 // GetAny retrieves and unmarshals any type from the file keyring.
 func (s *fileKeyringStore) GetAny(key string, dest interface{}) error {
+	defer perf.Track(nil, "credentials.fileKeyringStore.GetAny")()
+
 	item, err := s.ring.Get(key)
 	if err != nil {
 		return errors.Join(ErrCredentialStore, fmt.Errorf("failed to retrieve data from file keyring: %w", err))
@@ -261,6 +273,8 @@ func (s *fileKeyringStore) GetAny(key string, dest interface{}) error {
 
 // SetAny marshals and stores any type in the file keyring.
 func (s *fileKeyringStore) SetAny(key string, value interface{}) error {
+	defer perf.Track(nil, "credentials.fileKeyringStore.SetAny")()
+
 	data, err := json.Marshal(value)
 	if err != nil {
 		return errors.Join(ErrCredentialStore, fmt.Errorf("failed to marshal data: %w", err))

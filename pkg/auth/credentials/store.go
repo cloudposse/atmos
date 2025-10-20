@@ -9,6 +9,7 @@ import (
 	"github.com/spf13/viper"
 
 	"github.com/cloudposse/atmos/pkg/auth/types"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -38,11 +39,15 @@ type credentialEnvelope struct {
 // 2. AuthConfig.Keyring.Type configuration.
 // 3. Default to "system" for backward compatibility.
 func NewCredentialStore() types.CredentialStore {
+	defer perf.Track(nil, "credentials.NewCredentialStore")()
+
 	return NewCredentialStoreWithConfig(nil)
 }
 
 // NewCredentialStoreWithConfig creates a credential store with explicit configuration.
 func NewCredentialStoreWithConfig(authConfig *schema.AuthConfig) types.CredentialStore {
+	defer perf.Track(nil, "credentials.NewCredentialStoreWithConfig")()
+
 	keyringType := "system" // Default for backward compatibility.
 
 	// Bind environment variable.

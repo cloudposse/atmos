@@ -8,6 +8,7 @@ import (
 	"github.com/zalando/go-keyring"
 
 	"github.com/cloudposse/atmos/pkg/auth/types"
+	"github.com/cloudposse/atmos/pkg/perf"
 )
 
 // systemKeyringStore implements the CredentialStore interface using the system keyring via Zalando go-keyring.
@@ -20,6 +21,8 @@ func newSystemKeyringStore() (*systemKeyringStore, error) {
 
 // Store stores credentials for the given alias.
 func (s *systemKeyringStore) Store(alias string, creds types.ICredentials) error {
+	defer perf.Track(nil, "credentials.systemKeyringStore.Store")()
+
 	var (
 		typ string
 		raw []byte
@@ -54,6 +57,8 @@ func (s *systemKeyringStore) Store(alias string, creds types.ICredentials) error
 
 // Retrieve retrieves credentials for the given alias.
 func (s *systemKeyringStore) Retrieve(alias string) (types.ICredentials, error) {
+	defer perf.Track(nil, "credentials.systemKeyringStore.Retrieve")()
+
 	data, err := keyring.Get(alias, KeyringUser)
 	if err != nil {
 		return nil, errors.Join(ErrCredentialStore, fmt.Errorf("failed to retrieve credentials from keyring: %w", err))
@@ -84,6 +89,8 @@ func (s *systemKeyringStore) Retrieve(alias string) (types.ICredentials, error) 
 
 // Delete deletes credentials for the given alias.
 func (s *systemKeyringStore) Delete(alias string) error {
+	defer perf.Track(nil, "credentials.systemKeyringStore.Delete")()
+
 	if err := keyring.Delete(alias, KeyringUser); err != nil {
 		return errors.Join(ErrCredentialStore, fmt.Errorf("failed to delete credentials from keyring: %w", err))
 	}
@@ -93,6 +100,8 @@ func (s *systemKeyringStore) Delete(alias string) error {
 
 // List returns all stored credential aliases.
 func (s *systemKeyringStore) List() ([]string, error) {
+	defer perf.Track(nil, "credentials.systemKeyringStore.List")()
+
 	// Note: go-keyring doesn't provide a list function.
 	// This is a limitation - we'd need to maintain a separate index.
 	// or use a different storage backend for full functionality.
@@ -103,6 +112,8 @@ func (s *systemKeyringStore) List() ([]string, error) {
 
 // IsExpired checks if credentials for the given alias are expired.
 func (s *systemKeyringStore) IsExpired(alias string) (bool, error) {
+	defer perf.Track(nil, "credentials.systemKeyringStore.IsExpired")()
+
 	creds, err := s.Retrieve(alias)
 	if err != nil {
 		return true, err
@@ -113,6 +124,8 @@ func (s *systemKeyringStore) IsExpired(alias string) (bool, error) {
 
 // GetAny retrieves and unmarshals any type from the keyring.
 func (s *systemKeyringStore) GetAny(key string, dest interface{}) error {
+	defer perf.Track(nil, "credentials.systemKeyringStore.GetAny")()
+
 	data, err := keyring.Get(key, KeyringUser)
 	if err != nil {
 		return errors.Join(ErrCredentialStore, fmt.Errorf("failed to retrieve data from keyring: %w", err))
@@ -127,6 +140,8 @@ func (s *systemKeyringStore) GetAny(key string, dest interface{}) error {
 
 // SetAny marshals and stores any type in the keyring.
 func (s *systemKeyringStore) SetAny(key string, value interface{}) error {
+	defer perf.Track(nil, "credentials.systemKeyringStore.SetAny")()
+
 	data, err := json.Marshal(value)
 	if err != nil {
 		return errors.Join(ErrCredentialStore, fmt.Errorf("failed to marshal data: %w", err))
