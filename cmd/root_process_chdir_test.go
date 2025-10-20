@@ -115,6 +115,26 @@ func TestProcessChdirFlag(t *testing.T) {
 			expectError: true,
 			errorMsg:    "failed to change directory",
 		},
+		{
+			name:      "tilde expansion for home directory",
+			flagValue: "~",
+			setup: func(t *testing.T) string {
+				homeDir, err := os.UserHomeDir()
+				require.NoError(t, err)
+				return homeDir
+			},
+			expectError: false,
+		},
+		{
+			name:      "tilde expansion with path",
+			flagValue: "~/",
+			setup: func(t *testing.T) string {
+				homeDir, err := os.UserHomeDir()
+				require.NoError(t, err)
+				return homeDir
+			},
+			expectError: false,
+		},
 	}
 
 	for _, tt := range tests {
