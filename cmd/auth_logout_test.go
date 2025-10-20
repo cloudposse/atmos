@@ -137,6 +137,10 @@ func TestPerformProviderLogout(t *testing.T) {
 				m.EXPECT().GetProviders().Return(map[string]schema.Provider{
 					"test-provider": {},
 				})
+				m.EXPECT().GetIdentities().Return(map[string]schema.Identity{
+					"identity1": {Kind: "aws/permission-set"},
+				})
+				m.EXPECT().GetProviderForIdentity("identity1").Return("test-provider")
 				m.EXPECT().LogoutProvider(gomock.Any(), "test-provider").Return(nil)
 			},
 			expectedError: nil,
@@ -160,6 +164,10 @@ func TestPerformProviderLogout(t *testing.T) {
 				m.EXPECT().GetProviders().Return(map[string]schema.Provider{
 					"test-provider": {},
 				})
+				m.EXPECT().GetIdentities().Return(map[string]schema.Identity{
+					"identity1": {Kind: "aws/permission-set"},
+				})
+				m.EXPECT().GetProviderForIdentity("identity1").Return("test-provider")
 				m.EXPECT().GetFilesDisplayPath("test-provider").Return("/home/user/.aws/atmos")
 			},
 			expectedError: nil,
@@ -172,6 +180,10 @@ func TestPerformProviderLogout(t *testing.T) {
 				m.EXPECT().GetProviders().Return(map[string]schema.Provider{
 					"test-provider": {},
 				})
+				m.EXPECT().GetIdentities().Return(map[string]schema.Identity{
+					"identity1": {Kind: "aws/permission-set"},
+				})
+				m.EXPECT().GetProviderForIdentity("identity1").Return("test-provider")
 				m.EXPECT().LogoutProvider(gomock.Any(), "test-provider").Return(errUtils.ErrPartialLogout)
 			},
 			expectedError: nil, // Partial logout is treated as success (exit 0).
@@ -184,6 +196,10 @@ func TestPerformProviderLogout(t *testing.T) {
 				m.EXPECT().GetProviders().Return(map[string]schema.Provider{
 					"test-provider": {},
 				})
+				m.EXPECT().GetIdentities().Return(map[string]schema.Identity{
+					"identity1": {Kind: "aws/permission-set"},
+				})
+				m.EXPECT().GetProviderForIdentity("identity1").Return("test-provider")
 				m.EXPECT().LogoutProvider(gomock.Any(), "test-provider").Return(errUtils.ErrLogoutFailed)
 			},
 			expectedError: errUtils.ErrLogoutFailed,
@@ -223,6 +239,10 @@ func TestPerformLogoutAll(t *testing.T) {
 			dryRun: false,
 			setupMocks: func(m *types.MockAuthManager) {
 				m.EXPECT().LogoutAll(gomock.Any()).Return(nil)
+				m.EXPECT().GetIdentities().Return(map[string]schema.Identity{
+					"identity1": {Kind: "aws/permission-set"},
+					"identity2": {Kind: "aws/user"},
+				})
 			},
 			expectedError: nil,
 		},
@@ -252,6 +272,7 @@ func TestPerformLogoutAll(t *testing.T) {
 			dryRun: false,
 			setupMocks: func(m *types.MockAuthManager) {
 				m.EXPECT().LogoutAll(gomock.Any()).Return(errUtils.ErrPartialLogout)
+				// Note: GetIdentities() is NOT called for partial logout because it returns early.
 			},
 			expectedError: nil, // Partial logout is treated as success.
 		},
