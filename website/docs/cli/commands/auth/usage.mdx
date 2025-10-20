@@ -223,6 +223,12 @@ auth:
       region: us-east-1
       url: https://company.okta.com/app/amazon_aws/abc123/sso/saml
       idp_arn: arn:aws:iam::123456789012:saml-provider/okta-saml
+      # Optional: Specify SAML driver (Browser, GoogleApps, Okta, ADFS)
+      # If not specified, Atmos automatically selects the best driver based on:
+      # 1. Browser (if Playwright drivers are installed)
+      # 2. Provider-specific fallback (GoogleApps for Google, Okta for Okta, ADFS for ADFS)
+      # 3. Browser with auto-download
+      driver: Browser
 
   identities:
     saml-admin:
@@ -233,6 +239,22 @@ auth:
       principal:
         assume_role: arn:aws:iam::123456789012:role/AdminRole
 ```
+
+#### SAML Driver Options
+
+The `driver` field controls how Atmos authenticates with your SAML identity provider:
+
+- **`Browser`** (recommended): Opens your system browser for authentication. Requires Playwright drivers to be installed.
+  ```bash
+  # Install Playwright drivers
+  go run github.com/playwright-community/playwright-go/cmd/playwright@latest install
+  ```
+
+- **`GoogleApps`**: Uses Google Apps SAML API (no browser needed)
+- **`Okta`**: Uses Okta SAML API (no browser needed)
+- **`ADFS`**: Uses Active Directory Federation Services API (no browser needed)
+
+If `driver` is not specified, Atmos automatically selects the best option based on your SAML URL and available drivers.
 
 ### GitHub Actions OIDC
 
