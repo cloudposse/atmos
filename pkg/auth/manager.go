@@ -3,6 +3,7 @@ package auth
 import (
 	"context"
 	"fmt"
+	"sort"
 	"time"
 
 	"github.com/charmbracelet/huh"
@@ -225,12 +226,17 @@ func (m *manager) promptForIdentity(message string, identities []string) (string
 		return "", errUtils.ErrNoIdentitiesAvailable
 	}
 
+	// Sort identities alphabetically for consistent ordering.
+	sortedIdentities := make([]string, len(identities))
+	copy(sortedIdentities, identities)
+	sort.Strings(sortedIdentities)
+
 	var selectedIdentity string
 	form := huh.NewForm(
 		huh.NewGroup(
 			huh.NewSelect[string]().
 				Title(message).
-				Options(huh.NewOptions(identities...)...).
+				Options(huh.NewOptions(sortedIdentities...)...).
 				Value(&selectedIdentity),
 		),
 	)
