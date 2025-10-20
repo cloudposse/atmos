@@ -3,10 +3,11 @@ package exec
 import (
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+	gomock "go.uber.org/mock/gomock"
+
 	"github.com/cloudposse/atmos/pkg/pager"
 	"github.com/cloudposse/atmos/pkg/schema"
-	gomock "go.uber.org/mock/gomock"
-	"github.com/stretchr/testify/assert"
 )
 
 func TestErrInvalidFormat_Error(t *testing.T) {
