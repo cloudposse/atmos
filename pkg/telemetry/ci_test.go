@@ -147,6 +147,7 @@ func TestCiProvider(t *testing.T) {
 			name: "JENKINS",
 			envVars: map[string]string{
 				"JENKINS_URL": "http://jenkins.example.com",
+				"BUILD_ID":    "123",
 			},
 			expectedResult: "JENKINS",
 		},

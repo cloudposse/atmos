@@ -64,6 +64,7 @@ require (
 	github.com/jwalton/go-supportscolor v1.2.0
 	github.com/kubescape/go-git-url v0.0.30
 	github.com/lrstanley/bubblezone v1.0.0
+	github.com/mattn/go-isatty v0.0.20
 	github.com/mattn/go-runewidth v0.0.19
 	github.com/mikefarah/yq/v4 v4.48.1
 	github.com/mitchellh/go-homedir v1.1.0
@@ -299,7 +300,6 @@ require (
 	github.com/magiconair/properties v1.8.10 // indirect
 	github.com/marshallbrekka/go-u2fhost v0.0.0-20210111072507-3ccdec8c8105 // indirect
 	github.com/mattn/go-colorable v0.1.14 // indirect
-	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/mattn/go-localereader v0.0.1 // indirect
 	github.com/mgutz/ansi v0.0.0-20170206155736-9520e82c474b // indirect
 	github.com/microcosm-cc/bluemonday v1.0.27 // indirect
