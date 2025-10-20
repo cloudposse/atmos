@@ -95,12 +95,16 @@ The command uses the GitHub API which has rate limits:
 To increase your rate limit, set a GitHub token:
 
 ```shell
-# Using GitHub CLI
+# Using GitHub CLI (recommended)
 export ATMOS_GITHUB_TOKEN=$(gh auth token)
 
 # Or set GITHUB_TOKEN directly
 export GITHUB_TOKEN="ghp_xxxxxxxxxxxx"
 ```
+
+:::note
+`ATMOS_GITHUB_TOKEN` takes precedence over `GITHUB_TOKEN`. This allows you to use a different token for Atmos without affecting other tools that use `GITHUB_TOKEN`.
+:::
 
 No special scopes are needed for accessing public repositories.
 
