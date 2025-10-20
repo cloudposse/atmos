@@ -28,6 +28,7 @@ const (
 	samlTimeoutSeconds    = 30
 	samlDefaultSessionSec = 3600
 	logFieldRole          = "role"
+	logFieldDriver        = "driver"
 	minSTSSeconds         = 900
 	maxSTSSeconds         = 43200
 )
@@ -108,9 +109,9 @@ func (p *samlProvider) Authenticate(ctx context.Context) (types.ICredentials, er
 	samlDriver := p.getDriver()
 	downloadBrowser := p.shouldDownloadBrowser()
 
-	log.Info("Starting SAML authentication", "provider", p.name, "url", p.url, "driver", samlDriver)
+	log.Info("Starting SAML authentication", "provider", p.name, "url", p.url, logFieldDriver, samlDriver)
 	log.Debug("SAML configuration",
-		"driver", samlDriver,
+		logFieldDriver, samlDriver,
 		"download_browser", downloadBrowser,
 		"requires_drivers", samlDriver == "Browser")
 
@@ -315,7 +316,7 @@ func (p *samlProvider) requestedSessionSeconds() int32 {
 func (p *samlProvider) getDriver() string {
 	// If user explicitly set driver, always respect their choice.
 	if p.config.Driver != "" {
-		log.Debug("Using explicitly configured SAML driver", "driver", p.config.Driver)
+		log.Debug("Using explicitly configured SAML driver", logFieldDriver, p.config.Driver)
 		return p.config.Driver
 	}
 
@@ -386,19 +387,12 @@ func (p *samlProvider) Environment() (map[string]string, error) {
 	return env, nil
 }
 
-// hasPlaywrightDriversOrCanDownload checks if Playwright drivers are available or can be downloaded.
-// Returns true if drivers exist or auto-download is enabled.
-func (p *samlProvider) hasPlaywrightDriversOrCanDownload() bool {
-	// If user explicitly enabled download, drivers will be available.
-	if p.config.DownloadBrowserDriver {
-		log.Debug("Browser driver download explicitly enabled, drivers will be available")
-		return true
-	}
-
-	// Check if drivers are already installed.
+// playwrightDriversInstalled checks if valid Playwright drivers are installed in standard locations.
+// Returns true if drivers are found, false if not found or home directory cannot be determined.
+func (p *samlProvider) playwrightDriversInstalled() bool {
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
-		log.Debug("Cannot determine home directory, assuming drivers unavailable", "error", err)
+		log.Debug("Cannot determine home directory for driver detection", "error", err)
 		return false
 	}
 
@@ -418,6 +412,18 @@ func (p *samlProvider) hasPlaywrightDriversOrCanDownload() bool {
 
 	log.Debug("No valid Playwright drivers found", "checked_paths", playwrightPaths)
 	return false
+}
+
+// hasPlaywrightDriversOrCanDownload checks if Playwright drivers are available or can be downloaded.
+// Returns true if drivers exist or auto-download is enabled.
+func (p *samlProvider) hasPlaywrightDriversOrCanDownload() bool {
+	// If user explicitly enabled download, drivers will be available.
+	if p.config.DownloadBrowserDriver {
+		log.Debug("Browser driver download explicitly enabled, drivers will be available")
+		return true
+	}
+
+	return p.playwrightDriversInstalled()
 }
 
 // hasValidPlaywrightDrivers checks if a path contains actual browser binaries, not just empty directories.
@@ -476,35 +482,18 @@ func (p *samlProvider) shouldDownloadBrowser() bool {
 
 	// Only auto-download for "Browser" driver (others like GoogleApps, Okta don't need drivers).
 	if samlDriver != "Browser" {
-		log.Debug("SAML driver does not require browser drivers", "driver", samlDriver)
+		log.Debug("SAML driver does not require browser drivers", logFieldDriver, samlDriver)
 		return false
 	}
 
 	// Check if Playwright drivers are already installed.
-	// Common locations: ~/.cache/ms-playwright (Linux), ~/Library/Caches/ms-playwright-go (macOS).
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		log.Debug("Cannot determine home directory, enabling browser auto-download", "error", err)
-		return true
-	}
-
-	// Check common Playwright cache locations.
-	playwrightPaths := []string{
-		filepath.Join(homeDir, ".cache", "ms-playwright"),               // Linux.
-		filepath.Join(homeDir, "Library", "Caches", "ms-playwright-go"), // macOS (Go specific).
-		filepath.Join(homeDir, "AppData", "Local", "ms-playwright"),     // Windows.
-	}
-
-	for _, path := range playwrightPaths {
-		if p.hasValidPlaywrightDrivers(path) {
-			log.Debug("Found valid Playwright drivers, auto-download disabled", "path", path)
-			return false
-		}
+	if p.playwrightDriversInstalled() {
+		log.Debug("Found valid Playwright drivers, auto-download disabled")
+		return false
 	}
 
 	// No valid drivers found, enable auto-download.
-	log.Debug("No valid Playwright drivers found, enabling auto-download for Browser driver",
-		"checked_paths", playwrightPaths)
+	log.Debug("No valid Playwright drivers found, enabling auto-download for Browser driver")
 	return true
 }
 
@@ -513,6 +502,6 @@ func (p *samlProvider) setupBrowserAutomation() {
 	// Set environment variables for browser automation.
 	if p.shouldDownloadBrowser() {
 		os.Setenv("SAML2AWS_AUTO_BROWSER_DOWNLOAD", "true")
-		log.Debug("Browser driver auto-download enabled", "driver", p.getDriver())
+		log.Debug("Browser driver auto-download enabled", logFieldDriver, p.getDriver())
 	}
 }

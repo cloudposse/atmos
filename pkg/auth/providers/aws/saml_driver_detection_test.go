@@ -189,14 +189,9 @@ func TestHasPlaywrightDriversOrCanDownload(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			homeDir := tt.setup(t)
 
-			// Temporarily override home directory.
-			originalHome := os.Getenv("HOME")
-			t.Setenv("HOME", homeDir)
-			defer func() {
-				if originalHome != "" {
-					os.Setenv("HOME", originalHome)
-				}
-			}()
+			// Override home directory for cross-platform compatibility.
+			t.Setenv("HOME", homeDir)        // Linux/macOS.
+			t.Setenv("USERPROFILE", homeDir) // Windows.
 
 			provider := &samlProvider{
 				config: &schema.Provider{
@@ -284,8 +279,9 @@ func TestGetDriver_WithPlaywrightDrivers(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			homeDir := tt.setup(t)
 
-			// Override home directory.
-			t.Setenv("HOME", homeDir)
+			// Override home directory for cross-platform compatibility.
+			t.Setenv("HOME", homeDir)        // Linux/macOS.
+			t.Setenv("USERPROFILE", homeDir) // Windows.
 
 			provider := &samlProvider{
 				url: tt.url,

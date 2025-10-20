@@ -273,9 +273,9 @@ func TestExecuteAuthLoginCommand(t *testing.T) {
 
 	// Test the actual executeAuthLoginCommand function with various error scenarios.
 	//
-	// Coverage Note:
-	// - Error paths (config init, auth manager creation, GetDefaultIdentity): ~40.7% - COVERED
-	// - Success paths (authentication, display output): ~59.3% - NOT COVERED
+	// Coverage Note.
+	// - Error paths (config init, auth manager creation, GetDefaultIdentity): ~40.7% - COVERED.
+	// - Success paths (authentication, display output): ~59.3% - NOT COVERED.
 	//
 	// The success paths require real authentication with cloud providers and are not
 	// testable in unit tests without complex mocking or integration test infrastructure.
@@ -340,8 +340,7 @@ func TestExecuteAuthLoginCommand(t *testing.T) {
 func TestAuthLoginCallsGetDefaultIdentityWhenNoIdentityProvided(t *testing.T) {
 	_ = NewTestKit(t) // Initialize shared test state.
 
-	// This test verifies that when no --identity flag is provided,
-	// the command calls GetDefaultIdentity() on the auth manager.
+	// This test verifies that when no --identity flag is provided, the command calls GetDefaultIdentity() on the auth manager.
 	tests := []struct {
 		name          string
 		identityFlag  string
