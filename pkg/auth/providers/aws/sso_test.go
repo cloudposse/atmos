@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/service/ssooidc"
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -476,4 +477,289 @@ func TestPollResult_Structure(t *testing.T) {
 	assert.Equal(t, "test-token", result.token)
 	assert.Equal(t, now, result.expiresAt)
 	assert.Nil(t, result.err)
+}
+
+func TestSpinnerModel_Init(t *testing.T) {
+	// Test spinner model initialization.
+	resultChan := make(chan pollResult, 1)
+	defer close(resultChan)
+
+	model := spinnerModel{
+		message:    "Testing",
+		done:       false,
+		resultChan: resultChan,
+	}
+
+	cmd := model.Init()
+	assert.NotNil(t, cmd)
+}
+
+func TestSpinnerModel_Update_KeyPress(t *testing.T) {
+	// Test spinner model handling Ctrl+C.
+	resultChan := make(chan pollResult, 1)
+	defer close(resultChan)
+
+	cancelCalled := false
+	cancelFunc := func() {
+		cancelCalled = true
+	}
+
+	model := spinnerModel{
+		message:    "Testing",
+		done:       false,
+		resultChan: resultChan,
+		cancel:     cancelFunc,
+	}
+
+	// Simulate Ctrl+C key press.
+	newModel, _ := model.Update(tea.KeyMsg{Type: tea.KeyCtrlC})
+	updatedModel := newModel.(spinnerModel)
+
+	assert.True(t, updatedModel.done)
+	assert.NotNil(t, updatedModel.result)
+	assert.Error(t, updatedModel.result.err)
+	assert.Contains(t, updatedModel.result.err.Error(), "cancelled")
+	assert.True(t, cancelCalled)
+}
+
+func TestSpinnerModel_Update_PollResult(t *testing.T) {
+	// Test spinner model handling poll result.
+	resultChan := make(chan pollResult, 1)
+	defer close(resultChan)
+
+	cancelCalled := false
+	cancelFunc := func() {
+		cancelCalled = true
+	}
+
+	model := spinnerModel{
+		message:    "Testing",
+		done:       false,
+		resultChan: resultChan,
+		cancel:     cancelFunc,
+	}
+
+	// Simulate receiving poll result.
+	now := time.Now()
+	pollRes := pollResult{
+		token:     "test-token",
+		expiresAt: now,
+		err:       nil,
+	}
+
+	newModel, _ := model.Update(pollRes)
+	updatedModel := newModel.(spinnerModel)
+
+	assert.True(t, updatedModel.done)
+	assert.NotNil(t, updatedModel.result)
+	assert.Equal(t, "test-token", updatedModel.result.token)
+	assert.Equal(t, now, updatedModel.result.expiresAt)
+	assert.Nil(t, updatedModel.result.err)
+	assert.True(t, cancelCalled)
+}
+
+func TestSpinnerModel_View(t *testing.T) {
+	tests := []struct {
+		name           string
+		done           bool
+		result         *pollResult
+		expectContains string
+	}{
+		{
+			name:           "in progress",
+			done:           false,
+			result:         nil,
+			expectContains: "Testing",
+		},
+		{
+			name: "success",
+			done: true,
+			result: &pollResult{
+				token: "test",
+				err:   nil,
+			},
+			expectContains: "successful",
+		},
+		{
+			name: "failure",
+			done: true,
+			result: &pollResult{
+				err: assert.AnError,
+			},
+			expectContains: "failed",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			model := spinnerModel{
+				message: "Testing",
+				done:    tt.done,
+				result:  tt.result,
+			}
+
+			view := model.View()
+			assert.Contains(t, view, tt.expectContains)
+		})
+	}
+}
+
+func TestSpinnerModel_CheckResult(t *testing.T) {
+	// Test checkResult with immediate result.
+	resultChan := make(chan pollResult, 1)
+	now := time.Now()
+	resultChan <- pollResult{
+		token:     "test-token",
+		expiresAt: now,
+		err:       nil,
+	}
+
+	model := spinnerModel{
+		message:    "Testing",
+		resultChan: resultChan,
+	}
+
+	cmd := model.checkResult()
+	assert.NotNil(t, cmd)
+
+	// Execute the command to get the message.
+	msg := cmd()
+	pollRes, ok := msg.(pollResult)
+	assert.True(t, ok)
+	assert.Equal(t, "test-token", pollRes.token)
+
+	close(resultChan)
+}
+
+func TestDisplayVerificationPlainText_EmptyValues(t *testing.T) {
+	// Test that displayVerificationPlainText handles empty values without panicking.
+	assert.NotPanics(t, func() {
+		displayVerificationPlainText("", "")
+	})
+}
+
+func TestNewSSOProvider_MissingConfig(t *testing.T) {
+	// Test that NewSSOProvider returns error with nil config.
+	provider, err := NewSSOProvider("test", nil)
+	assert.Error(t, err)
+	assert.Nil(t, provider)
+	assert.Contains(t, err.Error(), "provider config is required")
+}
+
+func TestNewSSOProvider_AllFields(t *testing.T) {
+	// Test NewSSOProvider with all fields populated.
+	config := &schema.Provider{
+		Kind:     "aws/iam-identity-center",
+		Region:   "us-west-2",
+		StartURL: "https://company.awsapps.com/start",
+		Session: &schema.SessionConfig{
+			Duration: "30m",
+		},
+		Spec: map[string]interface{}{
+			"aws": map[string]interface{}{
+				"resolver": map[string]interface{}{
+					"url": "http://localhost:4566",
+				},
+			},
+		},
+	}
+
+	provider, err := NewSSOProvider("test-sso", config)
+	assert.NoError(t, err)
+	assert.NotNil(t, provider)
+	assert.Equal(t, "test-sso", provider.Name())
+	assert.Equal(t, "aws/iam-identity-center", provider.Kind())
+	assert.Equal(t, "us-west-2", provider.region)
+	assert.Equal(t, "https://company.awsapps.com/start", provider.startURL)
+	assert.Equal(t, 30, provider.getSessionDuration())
+}
+
+func TestSpinnerModel_Update_OtherMessages(t *testing.T) {
+	// Test that other messages don't change state.
+	resultChan := make(chan pollResult, 1)
+	defer close(resultChan)
+
+	model := spinnerModel{
+		message:    "Testing",
+		done:       false,
+		resultChan: resultChan,
+	}
+
+	// Simulate unknown message type (should be a no-op).
+	newModel, _ := model.Update("unknown message")
+	updatedModel := newModel.(spinnerModel)
+	assert.False(t, updatedModel.done)
+	assert.Nil(t, updatedModel.result)
+}
+
+func TestPromptDeviceAuth_VariousURLFormats(t *testing.T) {
+	tests := []struct {
+		name                    string
+		userCode                *string
+		verificationURI         *string
+		verificationURIComplete *string
+		isCI                    bool
+	}{
+		{
+			name:                    "complete URI only",
+			userCode:                stringPtr("ABCD-1234"),
+			verificationURIComplete: stringPtr("https://device.sso.us-east-1.amazonaws.com/"),
+			isCI:                    false,
+		},
+		{
+			name:            "base URI only",
+			userCode:        stringPtr("EFGH-5678"),
+			verificationURI: stringPtr("https://device.sso.us-east-1.amazonaws.com/"),
+			isCI:            false,
+		},
+		{
+			name:     "CI environment",
+			userCode: stringPtr("TEST-CODE"),
+			isCI:     true,
+		},
+		{
+			name: "nil user code",
+			isCI: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv("GO_TEST", "1")
+			if tt.isCI {
+				t.Setenv("CI", "1")
+			} else {
+				t.Setenv("CI", "")
+			}
+
+			p, err := NewSSOProvider("sso", &schema.Provider{
+				Kind:     "aws/iam-identity-center",
+				Region:   "us-east-1",
+				StartURL: "https://x",
+			})
+			require.NoError(t, err)
+
+			authOutput := &ssooidc.StartDeviceAuthorizationOutput{
+				UserCode:                tt.userCode,
+				VerificationUri:         tt.verificationURI,
+				VerificationUriComplete: tt.verificationURIComplete,
+			}
+
+			assert.NotPanics(t, func() {
+				p.promptDeviceAuth(authOutput)
+			})
+		})
+	}
+}
+
+func TestIsInteractive(t *testing.T) {
+	// Test isInteractive function.
+	result := isInteractive()
+	// In test environment, this typically returns false, but we just verify it doesn't panic.
+	assert.IsType(t, false, result)
+}
+
+// stringPtr is a helper to create string pointers.
+func stringPtr(s string) *string {
+	return &s
 }
