@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"path"
 	"sync"
 	"time"
 
@@ -147,12 +146,11 @@ func constructAzureBlobPath(componentSections *map[string]any, backend *map[stri
 
 	workspace := GetTerraformWorkspace(componentSections)
 
-	// Azure Blob paths always use forward slashes, so path.Join is appropriate here.
-	//nolint:forbidigo // Azure Blob paths require forward slashes regardless of OS
 	if workspace != "" && workspace != "default" {
-		// Non-default workspace: key is modified to include workspace.
-		// Format: env:/{workspace}/{key}
-		return path.Join("env:", workspace, key)
+		// Non-default workspace: Azure appends the workspace as a suffix to the key.
+		// Format: {key}env:{workspace}
+		// Example: apimanagement.terraform.tfstateenv:dev-wus3-apimanagement-be
+		return fmt.Sprintf("%senv:%s", key, workspace)
 	}
 	// Default workspace: use key as-is.
 	return key
