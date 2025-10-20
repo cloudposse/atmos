@@ -3,7 +3,6 @@ package cmd
 import (
 	"bytes"
 	"fmt"
-	"os"
 	"testing"
 
 	"github.com/spf13/cobra"
@@ -126,10 +125,6 @@ func TestAuthLoginCmd(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			_ = NewTestKit(t)
-
-			// Setup test environment
-			originalArgs := os.Args
-			defer func() { os.Args = originalArgs }()
 
 			// Create a new command instance for testing
 			cmd := &cobra.Command{
