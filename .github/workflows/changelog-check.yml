@@ -104,7 +104,7 @@ jobs:
           > [!NOTE]
           > #### Changelog Added ✅
           >
-          > $(echo "$BLOG_FILES" | sed 's/^/> - /')
+          > $(echo "$BLOG_FILES" | sed 's/^/> - `/' | sed 's/$/`/')
           >
           > Thank you!"
 
