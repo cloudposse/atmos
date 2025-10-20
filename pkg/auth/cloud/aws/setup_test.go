@@ -11,11 +11,13 @@ import (
 
 	"github.com/cloudposse/atmos/pkg/auth/types"
 	"github.com/cloudposse/atmos/pkg/schema"
+	homedir "github.com/mitchellh/go-homedir"
 )
 
 func TestSetupFiles_WritesCredentialsAndConfig(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	homedir.Reset() // Clear homedir cache to pick up the test HOME
 
 	creds := &types.AWSCredentials{AccessKeyID: "AKIA123", SecretAccessKey: "secret", SessionToken: "token", Region: "us-east-2"}
 	err := SetupFiles("prov", "dev", creds, "")
@@ -46,6 +48,7 @@ func TestSetupFiles_WritesCredentialsAndConfig(t *testing.T) {
 func TestSetEnvironmentVariables_SetsStackEnv(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	homedir.Reset() // Clear homedir cache to pick up the test HOME
 
 	stack := &schema.ConfigAndStacksInfo{}
 	err := SetEnvironmentVariables(stack, "prov", "dev", "")
