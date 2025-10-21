@@ -11,19 +11,23 @@ We're excited to announce a new authentication command: **`atmos auth logout`**.
 
 ## Why This Matters
 
-When you authenticate with `atmos auth login`, credentials are cached in two locations:
+Most cloud practitioners never log out of their cloud provider identities. Not because they don't want to, but because the tooling doesn't make it easy.
 
-1. **System keyring** - Secure storage for credentials (macOS Keychain, Linux Secret Service, Windows Credential Manager)
-2. **Provider files** - AWS-compatible credential files in `~/.aws/atmos/<provider>/`
+When you authenticate with cloud providers, credentials get scattered across your filesystem:
 
-Until now, there was no built-in way to remove these cached credentials when you're done with them. This created several challenges:
+- **AWS**: `~/.aws/credentials`, `~/.aws/config`, session tokens
+- **Azure**: `~/.azure/` directory with multiple authentication artifacts
+- **Google Cloud**: `~/.config/gcloud/` with various credential files
 
-- 🔒 **Security concerns** - Stale credentials remained on disk and in the keyring
-- 🔄 **Identity switching** - No clean way to switch between identities without conflicts
-- 🐛 **Troubleshooting** - Manual cleanup required when debugging authentication issues
-- 📋 **Compliance** - No audit trail for credential removal
+Most cloud provider tools don't provide a simple, comprehensive logout command. You're left to:
 
-The new `atmos auth logout` command solves all of these problems.
+- Manually hunt down and delete credential files across different locations
+- Navigate through provider-specific web consoles to revoke tokens
+- Hope that session expiration handles cleanup for you
+
+This leads to **credential sprawl**: old, forgotten credentials littering your system, many still valid and exploitable.
+
+The `atmos auth logout` command makes credential cleanup explicit, comprehensive, and easy.
 
 ## What's New
 
