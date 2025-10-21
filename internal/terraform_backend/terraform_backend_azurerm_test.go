@@ -794,7 +794,6 @@ func TestReadTerraformBackendAzurerm_Integration_BlobNotFound(t *testing.T) {
 	}
 
 	result, err := ReadTerraformBackendAzurerm(nil, &componentSections)
-
 	// Should either return nil/nil (blob not found) or error (storage account doesn't exist).
 	// Both are acceptable for this test since we're testing against nonexistent resources.
 	if err != nil {
