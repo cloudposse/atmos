@@ -37,7 +37,7 @@ func LoadToolVersions(filePath string) (*ToolVersions, error) {
 		}
 		parts := strings.Fields(line)
 		if len(parts) < 2 {
-			return nil, fmt.Errorf("invalid format at line %d: '%s' (missing version)", i+1, line)
+			return nil, fmt.Errorf("%w: invalid format at line %d: '%s' (missing version)", ErrInvalidToolSpec, i+1, line)
 		}
 		tool := parts[0]
 		versions := parts[1:]
@@ -50,7 +50,7 @@ func LoadToolVersions(filePath string) (*ToolVersions, error) {
 // SaveToolVersions saves a ToolVersions struct to a .tool-versions file (asdf-compatible).
 func SaveToolVersions(filePath string, toolVersions *ToolVersions) error {
 	if toolVersions == nil || toolVersions.Tools == nil {
-		return fmt.Errorf("toolVersions or toolVersions.Tools is nil")
+		return fmt.Errorf("%w: toolVersions or toolVersions.Tools is nil", ErrInvalidToolSpec)
 	}
 	var lines []string
 
@@ -68,7 +68,7 @@ func SaveToolVersions(filePath string, toolVersions *ToolVersions) error {
 		}
 		for _, v := range versions {
 			if v == "" {
-				return fmt.Errorf("tool '%s' is missing a version", tool)
+				return fmt.Errorf("%w: tool '%s' is missing a version", ErrInvalidToolSpec, tool)
 			}
 		}
 		lines = append(lines, fmt.Sprintf("%s %s", tool, strings.Join(versions, " ")))
@@ -128,7 +128,7 @@ func AddToolToVersionsAsDefault(filePath, tool, version string) error {
 // All other functions should use this to ensure consistent duplicate checking.
 func addToolToVersionsInternal(filePath, tool, version string, asDefault bool) error {
 	if version == "" {
-		return fmt.Errorf("cannot add tool '%s' without a version", tool)
+		return fmt.Errorf("%w: cannot add tool '%s' without a version", ErrInvalidToolSpec, tool)
 	}
 	// Load existing tool versions
 	toolVersions, err := LoadToolVersions(filePath)
@@ -245,23 +245,23 @@ func LookupToolVersionOrLatest(tool string, toolVersions *ToolVersions, resolver
 // Returns tool (or owner/repo), version (may be empty), and error if invalid.
 func ParseToolVersionArg(arg string) (string, string, error) {
 	if arg == "" {
-		return "", "", fmt.Errorf("empty tool argument")
+		return "", "", fmt.Errorf("%w: empty tool argument", ErrInvalidToolSpec)
 	}
 	if strings.Count(arg, "@") > 1 {
-		return "", "", fmt.Errorf("invalid tool specification: %q (multiple @)", arg)
+		return "", "", fmt.Errorf("%w: %q (multiple @)", ErrInvalidToolSpec, arg)
 	}
 	parts := strings.SplitN(arg, "@", 2)
 	if len(parts) == 1 {
 		if parts[0] == "" {
-			return "", "", fmt.Errorf("invalid tool specification: %q (missing tool name)", arg)
+			return "", "", fmt.Errorf("%w: %q (missing tool name)", ErrInvalidToolSpec, arg)
 		}
 		return parts[0], "", nil
 	}
 	if parts[0] == "" {
-		return "", "", fmt.Errorf("invalid tool specification: %q (missing tool name before @)", arg)
+		return "", "", fmt.Errorf("%w: %q (missing tool name before @)", ErrInvalidToolSpec, arg)
 	}
 	if parts[1] == "" {
-		return "", "", fmt.Errorf("invalid tool specification: %q (missing version after @)", arg)
+		return "", "", fmt.Errorf("%w: %q (missing version after @)", ErrInvalidToolSpec, arg)
 	}
 	return parts[0], parts[1], nil
 }

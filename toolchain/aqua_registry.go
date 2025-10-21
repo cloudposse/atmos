@@ -75,7 +75,7 @@ func (ar *AquaRegistry) GetTool(owner, repo string) (*Tool, error) {
 		log.Debug("Not found in registry", "registry", registry, "error", err)
 	}
 
-	return nil, fmt.Errorf("tool %s/%s not found in any registry", owner, repo)
+	return nil, fmt.Errorf("%w: %s/%s not found in any registry", ErrToolNotFound, owner, repo)
 }
 
 // GetToolWithVersion fetches tool metadata and resolves version-specific overrides.
@@ -101,12 +101,12 @@ func (ar *AquaRegistry) resolveVersionOverrides(owner, repo, version string) (*T
 
 	resp, err := ar.client.Get(registryURL)
 	if err != nil {
-		return nil, fmt.Errorf("failed to fetch registry file: %w", err)
+		return nil, fmt.Errorf("%w: failed to fetch registry file: %w", ErrHTTPRequest, err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("HTTP %d: %s", resp.StatusCode, registryURL)
+		return nil, fmt.Errorf("%w: HTTP %d: %s", ErrHTTPRequest, resp.StatusCode, registryURL)
 	}
 
 	data, err := io.ReadAll(resp.Body)
@@ -134,11 +134,11 @@ func (ar *AquaRegistry) resolveVersionOverrides(owner, repo, version string) (*T
 	}
 
 	if err := yaml.Unmarshal(data, &registry); err != nil {
-		return nil, fmt.Errorf("failed to parse registry YAML: %w", err)
+		return nil, fmt.Errorf("%w: failed to parse registry YAML: %w", ErrRegistryParse, err)
 	}
 
 	if len(registry.Packages) == 0 {
-		return nil, fmt.Errorf("no packages found in registry file")
+		return nil, fmt.Errorf("%w: no packages found in registry file", ErrNoPackagesInRegistry)
 	}
 
 	pkgDef := registry.Packages[0]
@@ -191,7 +191,7 @@ const defaultMkdirPermissions = 0o755
 func (ar *AquaRegistry) fetchFromRegistry(registryURL, owner, repo string) (*Tool, error) {
 	// Create cache directory
 	if err := os.MkdirAll(ar.cache.baseDir, defaultMkdirPermissions); err != nil {
-		return nil, fmt.Errorf("failed to create cache directory: %w", err)
+		return nil, fmt.Errorf("%w: failed to create cache directory: %w", ErrFileOperation, err)
 	}
 
 	// Try different possible file paths for Aqua registry structure
@@ -207,7 +207,7 @@ func (ar *AquaRegistry) fetchFromRegistry(registryURL, owner, repo string) (*Too
 		}
 	}
 
-	return nil, fmt.Errorf("tool not found in registry")
+	return nil, fmt.Errorf("%w: tool not found in registry", ErrToolNotFound)
 }
 
 // fetchRegistryFile fetches and parses a registry.yaml file.
@@ -225,12 +225,12 @@ func (ar *AquaRegistry) fetchRegistryFile(url string) (*Tool, error) {
 	// Fetch from remote
 	resp, err := ar.client.Get(url)
 	if err != nil {
-		return nil, fmt.Errorf("failed to fetch %s: %w", url, err)
+		return nil, fmt.Errorf("%w: failed to fetch %s: %w", ErrHTTPRequest, url, err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("HTTP %d: %s", resp.StatusCode, url)
+		return nil, fmt.Errorf("%w: HTTP %d: %s", ErrHTTPRequest, resp.StatusCode, url)
 	}
 
 	// Read response
@@ -276,13 +276,13 @@ func (ar *AquaRegistry) parseRegistryFile(data []byte) (*Tool, error) {
 		return &toolRegistry.Tools[0], nil
 	}
 
-	return nil, fmt.Errorf("no tools or packages found in registry file")
+	return nil, fmt.Errorf("%w: no tools or packages found in registry file", ErrNoPackagesInRegistry)
 }
 
 // BuildAssetURL constructs the download URL for a tool version.
 func (ar *AquaRegistry) BuildAssetURL(tool *Tool, version string) (string, error) {
 	if tool.Asset == "" {
-		return "", fmt.Errorf("no asset template defined for tool")
+		return "", fmt.Errorf("%w: no asset template defined for tool", ErrNoAssetTemplate)
 	}
 
 	// Determine format - use tool format or default to zip
@@ -377,12 +377,12 @@ func (ar *AquaRegistry) GetLatestVersion(owner, repo string) (string, error) {
 
 	resp, err := ar.client.Get(apiURL)
 	if err != nil {
-		return "", fmt.Errorf("failed to fetch releases from GitHub: %w", err)
+		return "", fmt.Errorf("%w: failed to fetch releases from GitHub: %w", ErrHTTPRequest, err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("GitHub API returned status %d", resp.StatusCode)
+		return "", fmt.Errorf("%w: GitHub API returned status %d", ErrHTTPRequest, resp.StatusCode)
 	}
 
 	body, err := io.ReadAll(resp.Body)
@@ -409,7 +409,7 @@ func (ar *AquaRegistry) GetLatestVersion(owner, repo string) (string, error) {
 		}
 	}
 
-	return "", fmt.Errorf("no non-prerelease versions found for %s/%s", owner, repo)
+	return "", fmt.Errorf("%w: no non-prerelease versions found for %s/%s", ErrNoVersionsFound, owner, repo)
 }
 
 // GetAvailableVersions fetches all available versions from GitHub releases.
@@ -419,12 +419,12 @@ func (ar *AquaRegistry) GetAvailableVersions(owner, repo string) ([]string, erro
 
 	resp, err := ar.client.Get(apiURL)
 	if err != nil {
-		return nil, fmt.Errorf("failed to fetch releases from GitHub: %w", err)
+		return nil, fmt.Errorf("%w: failed to fetch releases from GitHub: %w", ErrHTTPRequest, err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("GitHub API returned status %d", resp.StatusCode)
+		return nil, fmt.Errorf("%w: GitHub API returned status %d", ErrHTTPRequest, resp.StatusCode)
 	}
 
 	body, err := io.ReadAll(resp.Body)
@@ -453,7 +453,7 @@ func (ar *AquaRegistry) GetAvailableVersions(owner, repo string) ([]string, erro
 	}
 
 	if len(versions) == 0 {
-		return nil, fmt.Errorf("no non-prerelease versions found for %s/%s", owner, repo)
+		return nil, fmt.Errorf("%w: no non-prerelease versions found for %s/%s", ErrNoVersionsFound, owner, repo)
 	}
 
 	return versions, nil

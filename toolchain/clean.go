@@ -33,7 +33,7 @@ func cleanDir(path string, fatal bool) (int, error) {
 	if err != nil && !os.IsNotExist(err) {
 		msg := fmt.Sprintf("failed to count files in %s: %v", path, err)
 		if fatal {
-			return 0, fmt.Errorf("failed to count files in %s: %v", path, err)
+			return 0, fmt.Errorf("%w: failed to count files in %s: %w", ErrFileOperation, path, err)
 		}
 		fmt.Println("Warning:", msg)
 	}
@@ -42,7 +42,7 @@ func cleanDir(path string, fatal bool) (int, error) {
 	if err != nil && !os.IsNotExist(err) {
 		msg := fmt.Sprintf("failed to delete %s: %v", path, err)
 		if fatal {
-			return count, fmt.Errorf("failed to delete %s: %v", path, err)
+			return count, fmt.Errorf("%w: failed to delete %s: %w", ErrFileOperation, path, err)
 		}
 		fmt.Println("Warning:", msg)
 	}

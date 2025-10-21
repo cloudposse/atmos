@@ -235,7 +235,7 @@ func SetToolVersion(toolName, version string, scrollSpeed int) error {
 		}
 
 		if tool.Type != "github_release" {
-			return fmt.Errorf("interactive version selection is only available for GitHub release type tools")
+			return fmt.Errorf("%w: interactive version selection is only available for GitHub release type tools", ErrInvalidToolSpec)
 		}
 
 		items, err := fetchGitHubVersions(owner, repo)
@@ -243,7 +243,7 @@ func SetToolVersion(toolName, version string, scrollSpeed int) error {
 			return fmt.Errorf("failed to fetch versions from GitHub: %w", err)
 		}
 		if len(items) == 0 {
-			return fmt.Errorf("no versions found for %s/%s", owner, repo)
+			return fmt.Errorf("%w: no versions found for %s/%s", ErrNoVersionsFound, owner, repo)
 		}
 
 		listItems := make([]list.Item, len(items))
@@ -289,7 +289,7 @@ func SetToolVersion(toolName, version string, scrollSpeed int) error {
 
 		finalVersionModel := finalModel.(versionListModel)
 		if finalVersionModel.selected == "" {
-			return fmt.Errorf("no version selected")
+			return fmt.Errorf("%w: no version selected", ErrInvalidToolSpec)
 		}
 
 		version = finalVersionModel.selected
@@ -316,7 +316,7 @@ func fetchGitHubVersions(owner, repo string) ([]versionItem, error) {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("GitHub API returned status %d", resp.StatusCode)
+		return nil, fmt.Errorf("%w: GitHub API returned status %d", ErrHTTPRequest, resp.StatusCode)
 	}
 
 	releases, err := parseReleases(resp.Body)
@@ -326,7 +326,7 @@ func fetchGitHubVersions(owner, repo string) ([]versionItem, error) {
 
 	items := transformReleases(releases)
 	if len(items) == 0 {
-		return nil, fmt.Errorf("no non-prerelease versions found for %s/%s", owner, repo)
+		return nil, fmt.Errorf("%w: no non-prerelease versions found for %s/%s", ErrNoVersionsFound, owner, repo)
 	}
 
 	return items, nil

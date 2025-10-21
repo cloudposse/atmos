@@ -62,7 +62,7 @@ func (g *GitHubAPIClient) FetchReleases(owner, repo string, limit int) ([]string
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("GitHub API returned status %d", resp.StatusCode)
+		return nil, fmt.Errorf("%w: GitHub API returned status %d", ErrHTTPRequest, resp.StatusCode)
 	}
 
 	body, err := io.ReadAll(resp.Body)
@@ -91,7 +91,7 @@ func (g *GitHubAPIClient) FetchReleases(owner, repo string, limit int) ([]string
 	}
 
 	if len(versions) == 0 {
-		return nil, fmt.Errorf("no non-prerelease versions found for %s/%s", owner, repo)
+		return nil, fmt.Errorf("%w: no non-prerelease versions found for %s/%s", ErrNoVersionsFound, owner, repo)
 	}
 
 	return versions, nil

@@ -47,7 +47,7 @@ func (d *DefaultToolResolver) Resolve(toolName string) (string, string, error) {
 	if err == nil {
 		return owner, repo, nil
 	}
-	return "", "", fmt.Errorf("tool '%s' not found in local aliases or Aqua registry", toolName)
+	return "", "", fmt.Errorf("%w: '%s' not found in local aliases or Aqua registry", ErrToolNotFound, toolName)
 }
 
 // Installer handles the installation of CLI binaries.
@@ -149,7 +149,7 @@ func (i *Installer) findTool(owner, repo, version string) (*Tool, error) {
 		}
 	}
 
-	return nil, fmt.Errorf("tool %s/%s@%s not found in any registry", owner, repo, version)
+	return nil, fmt.Errorf("%w: %s/%s@%s not found in any registry", ErrToolNotFound, owner, repo, version)
 }
 
 // searchRegistry searches a specific registry for a tool.
@@ -176,7 +176,7 @@ func (i *Installer) searchRegistry(registry, owner, repo string) (*Tool, error) 
 func (i *Installer) searchLocalRegistry(registryPath, owner, repo string) (*Tool, error) {
 	toolFile := filepath.Join(registryPath, owner, repo+".yaml")
 	if _, err := os.Stat(toolFile); os.IsNotExist(err) {
-		return nil, fmt.Errorf("tool file not found: %s", toolFile)
+		return nil, fmt.Errorf("%w: tool file not found: %s", ErrToolNotFound, toolFile)
 	}
 
 	return i.loadToolFile(toolFile)
@@ -199,7 +199,7 @@ func (i *Installer) loadToolFile(filePath string) (*Tool, error) {
 		return &toolToolRegistry.Tools[0], nil
 	}
 
-	return nil, fmt.Errorf("no tools found in %s", filePath)
+	return nil, fmt.Errorf("%w: no tools found in %s", ErrToolNotFound, filePath)
 }
 
 // parseToolSpec parses a tool specification (owner/repo or just repo).
@@ -210,7 +210,7 @@ func (i *Installer) parseToolSpec(tool string) (string, string, error) {
 	} else if len(parts) == 1 {
 		return i.resolver.Resolve(parts[0])
 	}
-	return "", "", fmt.Errorf("invalid tool specification: %s", tool)
+	return "", "", fmt.Errorf("%w: invalid tool specification: %s", ErrInvalidToolSpec, tool)
 }
 
 // getLocalConfigManager returns a local config manager instance.
@@ -230,7 +230,7 @@ func (i *Installer) buildAssetURL(tool *Tool, version string) (string, error) {
 	case "http":
 		// For HTTP type, the Asset field contains the full URL template
 		if tool.Asset == "" {
-			return "", fmt.Errorf("invalid tool configuration: Asset URL template is required for HTTP type tools")
+			return "", fmt.Errorf("%w: Asset URL template is required for HTTP type tools", ErrInvalidToolSpec)
 		}
 
 		// Remove 'v' prefix from version for asset naming
@@ -285,7 +285,7 @@ func (i *Installer) buildAssetURL(tool *Tool, version string) (string, error) {
 	case "github_release":
 		// For GitHub releases, validate that RepoOwner and RepoName are set
 		if tool.RepoOwner == "" || tool.RepoName == "" {
-			return "", fmt.Errorf("invalid tool configuration: RepoOwner and RepoName must be set for github_release type (got RepoOwner=%q, RepoName=%q)", tool.RepoOwner, tool.RepoName)
+			return "", fmt.Errorf("%w: RepoOwner and RepoName must be set for github_release type (got RepoOwner=%q, RepoName=%q)", ErrInvalidToolSpec, tool.RepoOwner, tool.RepoName)
 		}
 
 		// Use the asset template from the tool
@@ -347,7 +347,7 @@ func (i *Installer) buildAssetURL(tool *Tool, version string) (string, error) {
 		return url, nil
 
 	default:
-		return "", fmt.Errorf("unsupported tool type: %s", tool.Type)
+		return "", fmt.Errorf("%w: unsupported tool type: %s", ErrInvalidToolSpec, tool.Type)
 	}
 }
 
@@ -355,7 +355,7 @@ func (i *Installer) buildAssetURL(tool *Tool, version string) (string, error) {
 func (i *Installer) downloadAsset(url string) (string, error) {
 	// Create cache directory if it doesn't exist
 	if err := os.MkdirAll(i.cacheDir, defaultMkdirPermissions); err != nil {
-		return "", fmt.Errorf("failed to create cache directory: %w", err)
+		return "", fmt.Errorf("%w: failed to create cache directory: %w", ErrFileOperation, err)
 	}
 
 	// Extract filename from URL
@@ -374,25 +374,25 @@ func (i *Installer) downloadAsset(url string) (string, error) {
 	client := NewDefaultHTTPClient()
 	resp, err := client.Get(url)
 	if err != nil {
-		return "", fmt.Errorf("failed to download asset: %w", err)
+		return "", fmt.Errorf("%w: failed to download asset: %w", ErrHTTPRequest, err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("failed to download asset: HTTP %d", resp.StatusCode)
+		return "", fmt.Errorf("%w: failed to download asset: HTTP %d", ErrHTTPRequest, resp.StatusCode)
 	}
 
 	// Create the file
 	file, err := os.Create(cachePath)
 	if err != nil {
-		return "", fmt.Errorf("failed to create cache file: %w", err)
+		return "", fmt.Errorf("%w: failed to create cache file: %w", ErrFileOperation, err)
 	}
 	defer file.Close()
 
 	// Copy the response body to the file
 	_, err = io.Copy(file, resp.Body)
 	if err != nil {
-		return "", fmt.Errorf("failed to write cache file: %w", err)
+		return "", fmt.Errorf("%w: failed to write cache file: %w", ErrFileOperation, err)
 	}
 
 	return cachePath, nil
@@ -439,7 +439,7 @@ func (i *Installer) extractAndInstall(tool *Tool, assetPath, version string) (st
 	// Create version-specific directory
 	versionDir := filepath.Join(i.binDir, tool.RepoOwner, tool.RepoName, version)
 	if err := os.MkdirAll(versionDir, defaultMkdirPermissions); err != nil {
-		return "", fmt.Errorf("failed to create version directory: %w", err)
+		return "", fmt.Errorf("%w: failed to create version directory: %w", ErrFileOperation, err)
 	}
 
 	// Determine the binary name
@@ -534,13 +534,13 @@ func (i *Installer) extractZip(zipPath, binaryPath string, tool *Tool) error {
 		return fmt.Errorf("failed to search extracted files: %w", err)
 	}
 	if found == "" {
-		return fmt.Errorf("binary %s not found in extracted archive", binaryName)
+		return fmt.Errorf("%w: binary %s not found in extracted archive", ErrToolNotFound, binaryName)
 	}
 
 	// Ensure the destination directory exists
 	dir := filepath.Dir(binaryPath)
 	if err := os.MkdirAll(dir, defaultMkdirPermissions); err != nil {
-		return fmt.Errorf("failed to create destination directory: %w", err)
+		return fmt.Errorf("%w: failed to create destination directory: %w", ErrFileOperation, err)
 	}
 
 	// Move the binary into place
@@ -590,7 +590,7 @@ func extractZipFile(f *zip.File, dest string, maxSize int64) error {
 func validatePath(name, dest string) (string, error) {
 	fpath := filepath.Join(dest, name)
 	if !strings.HasPrefix(fpath, filepath.Clean(dest)+string(os.PathSeparator)) {
-		return "", fmt.Errorf("illegal file path: %s", name)
+		return "", fmt.Errorf("%w: illegal file path: %s", ErrFileOperation, name)
 	}
 	return fpath, nil
 }
@@ -620,7 +620,7 @@ func copyWithLimit(src io.Reader, dst io.Writer, name string, maxSize int64) err
 		totalBytes += int64(n)
 
 		if totalBytes > maxSize {
-			return fmt.Errorf("decompressed size of %s exceeds limit: %d > %d", name, totalBytes, maxSize)
+			return fmt.Errorf("%w: decompressed size of %s exceeds limit: %d > %d", ErrFileOperation, name, totalBytes, maxSize)
 		}
 
 		if n > 0 {
@@ -673,7 +673,7 @@ func ExtractTarGz(src, dest string) error {
 func extractEntry(tr *tar.Reader, header *tar.Header, dest string) error {
 	targetPath := filepath.Join(dest, header.Name)
 	if !isSafePath(targetPath, dest) {
-		return fmt.Errorf("illegal file path: %s", header.Name)
+		return fmt.Errorf("%w: illegal file path: %s", ErrFileOperation, header.Name)
 	}
 
 	switch header.Typeflag {
@@ -695,7 +695,7 @@ func isSafePath(path, dest string) bool {
 func extractDir(path string, header *tar.Header) error {
 	// Validate header.Mode
 	if header.Mode < 0 || header.Mode > 0o7777 { // Restrict to typical Unix permissions
-		return fmt.Errorf("invalid mode %d for %s: must be between 0 and 07777", header.Mode, path)
+		return fmt.Errorf("%w: invalid mode %d for %s: must be between 0 and 07777", ErrFileOperation, header.Mode, path)
 	}
 
 	// Safe conversion to os.FileMode
@@ -714,7 +714,7 @@ func extractFile(tr *tar.Reader, path string, header *tar.Header) error {
 			return fmt.Errorf("failed to create file: %w", err)
 		}
 	} else {
-		return fmt.Errorf("header.Mode out of uint32 range: %d", header.Mode)
+		return fmt.Errorf("%w: header.Mode out of uint32 range: %d", ErrFileOperation, header.Mode)
 	}
 	if err != nil {
 		return fmt.Errorf("failed to create file: %w", err)
@@ -762,13 +762,13 @@ func (i *Installer) extractTarGz(tarPath, binaryPath string, tool *Tool) error {
 		return fmt.Errorf("failed to search extracted files: %w", err)
 	}
 	if found == "" {
-		return fmt.Errorf("binary %s not found in extracted archive", binaryName)
+		return fmt.Errorf("%w: binary %s not found in extracted archive", ErrToolNotFound, binaryName)
 	}
 
 	// Ensure the destination directory exists
 	dir := filepath.Dir(binaryPath)
 	if err := os.MkdirAll(dir, defaultMkdirPermissions); err != nil {
-		return fmt.Errorf("failed to create destination directory: %w", err)
+		return fmt.Errorf("%w: failed to create destination directory: %w", ErrFileOperation, err)
 	}
 
 	// Move the binary into place
@@ -895,7 +895,7 @@ func (i *Installer) Uninstall(owner, repo, version string) error {
 	// Try to find the binary by searching
 	binaryPath, err := i.FindBinaryPath(owner, repo, version)
 	if err != nil {
-		return fmt.Errorf("tool %s/%s@%s is not installed", owner, repo, version)
+		return fmt.Errorf("%w: tool %s/%s@%s is not installed", ErrToolNotFound, owner, repo, version)
 	}
 
 	// Get the directory containing the binary
@@ -967,7 +967,7 @@ func (i *Installer) FindBinaryPath(owner, repo, version string) (string, error) 
 	}
 
 	// If neither path exists, return an error
-	return "", fmt.Errorf("binary not found at expected paths: %s or %s", expectedPath, alternativePath)
+	return "", fmt.Errorf("%w: binary not found at expected paths: %s or %s", ErrToolNotFound, expectedPath, alternativePath)
 }
 
 // CreateLatestFile creates a "latest" file that contains a pointer to the actual version.
@@ -975,14 +975,14 @@ func (i *Installer) CreateLatestFile(owner, repo, version string) error {
 	// Create the latest file path
 	latestDir := filepath.Join(i.binDir, owner, repo)
 	if err := os.MkdirAll(latestDir, defaultMkdirPermissions); err != nil {
-		return fmt.Errorf("failed to create latest directory: %w", err)
+		return fmt.Errorf("%w: failed to create latest directory: %w", ErrFileOperation, err)
 	}
 
 	latestFilePath := filepath.Join(latestDir, "latest")
 
 	// Write the version to the latest file
 	if err := os.WriteFile(latestFilePath, []byte(version), defaultFileWritePermissions); err != nil {
-		return fmt.Errorf("failed to write latest file: %w", err)
+		return fmt.Errorf("%w: failed to write latest file: %w", ErrFileOperation, err)
 	}
 
 	log.Debug("Created latest file", "path", latestFilePath, "version", version)
@@ -1000,7 +1000,7 @@ func (i *Installer) ReadLatestFile(owner, repo string) (string, error) {
 
 	version := strings.TrimSpace(string(data))
 	if version == "" {
-		return "", fmt.Errorf("latest file is empty")
+		return "", fmt.Errorf("%w: latest file is empty", ErrFileOperation)
 	}
 
 	return version, nil
@@ -1041,7 +1041,7 @@ func searchRegistryForTool(toolName string) (string, string, error) {
 		}
 	}
 
-	return "", "", fmt.Errorf("tool '%s' not found in registry", toolName)
+	return "", "", fmt.Errorf("%w: '%s' not found in registry", ErrToolNotFound, toolName)
 }
 
 func (i *Installer) GetResolver() ToolResolver {

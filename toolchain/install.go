@@ -84,20 +84,20 @@ func RunInstall(toolSpec string, setAsDefault, reinstallFlag bool) error {
 		installer := NewInstaller()
 		resolvedKey, foundVersion, found, usedLatest := LookupToolVersionOrLatest(tool, toolVersions, installer.resolver)
 		if !found && !usedLatest {
-			return fmt.Errorf("invalid tool specification: %s. Expected format: owner/repo@version or tool@version, and tool not found in .tool-versions or as an alias", toolSpec)
+			return fmt.Errorf("%w: %s. Expected format: owner/repo@version or tool@version, and tool not found in .tool-versions or as an alias", ErrInvalidToolSpec, toolSpec)
 		}
 		tool = resolvedKey
 		version = foundVersion
 	}
 	if tool == "" || version == "" {
-		return fmt.Errorf("invalid tool specification: %s. Expected format: owner/repo@version or tool@version", toolSpec)
+		return fmt.Errorf("%w: %s. Expected format: owner/repo@version or tool@version", ErrInvalidToolSpec, toolSpec)
 	}
 
 	// Use the enhanced parseToolSpec to handle both owner/repo and tool name formats.
 	installer := NewInstaller()
 	owner, repo, err := installer.parseToolSpec(tool)
 	if err != nil {
-		return fmt.Errorf("invalid repository path: %s. Expected format: owner/repo or tool name", tool)
+		return fmt.Errorf("%w: %s. Expected format: owner/repo or tool name", ErrInvalidToolSpec, tool)
 	}
 
 	// Handle "latest" keyword.

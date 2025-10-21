@@ -10,7 +10,7 @@ import (
 // Returns the version removed (empty if all versions were removed).
 func RemoveToolVersion(filePath, tool, version string) error {
 	if tool == "" {
-		return fmt.Errorf("empty tool argument")
+		return fmt.Errorf("%w: empty tool argument", ErrInvalidToolSpec)
 	}
 
 	toolVersions, err := LoadToolVersions(filePath)
@@ -20,7 +20,7 @@ func RemoveToolVersion(filePath, tool, version string) error {
 
 	versions, exists := toolVersions.Tools[tool]
 	if !exists {
-		return fmt.Errorf("tool '%s' not found in %s", tool, filePath)
+		return fmt.Errorf("%w: tool '%s' not found in %s", ErrToolNotFound, tool, filePath)
 	}
 
 	if version == "" {
@@ -43,7 +43,7 @@ func RemoveToolVersion(filePath, tool, version string) error {
 		newVersions = append(newVersions, v)
 	}
 	if !removed {
-		return fmt.Errorf("version '%s' not found for tool '%s' in %s", version, tool, filePath)
+		return fmt.Errorf("%w: version '%s' not found for tool '%s' in %s", ErrNoVersionsFound, version, tool, filePath)
 	}
 
 	if len(newVersions) == 0 {

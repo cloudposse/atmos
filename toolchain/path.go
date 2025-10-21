@@ -15,13 +15,13 @@ func EmitPath(exportFlag, jsonFlag, relativeFlag bool) error {
 	toolVersions, err := LoadToolVersions(GetToolVersionsFilePath())
 	if err != nil {
 		if os.IsNotExist(err) {
-			return fmt.Errorf("no tools configured in tool-versions file")
+			return fmt.Errorf("%w: no tools configured in tool-versions file", ErrToolNotFound)
 		}
 		return fmt.Errorf("error reading tool-versions file: %w", err)
 	}
 
 	if len(toolVersions.Tools) == 0 {
-		return fmt.Errorf("no tools installed from .tool-versions file")
+		return fmt.Errorf("%w: no tools installed from .tool-versions file", ErrToolNotFound)
 	}
 
 	// Build PATH entries for each tool
@@ -70,7 +70,7 @@ func EmitPath(exportFlag, jsonFlag, relativeFlag bool) error {
 	}
 
 	if len(pathEntries) == 0 {
-		return fmt.Errorf("no installed tools found from tool-versions file")
+		return fmt.Errorf("%w: no installed tools found from tool-versions file", ErrToolNotFound)
 	}
 
 	// Sort for consistent output

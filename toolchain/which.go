@@ -34,7 +34,7 @@ func findBinaryPath(toolNameFull string) (string, error) {
 
 	versions, exists := toolVersions.Tools[toolName]
 	if !exists || len(versions) == 0 {
-		return "", fmt.Errorf("tool '%s' not configured in .tool-versions", toolName)
+		return "", fmt.Errorf("%w: tool '%s' not configured in .tool-versions", ErrToolNotFound, toolName)
 	}
 
 	// Use the most recent version
@@ -55,7 +55,7 @@ func findBinaryPath(toolNameFull string) (string, error) {
 
 	// Check if the binary exists
 	if _, err := os.Stat(binaryPath); err != nil {
-		return "", fmt.Errorf("tool '%s' is configured but not installed", toolName)
+		return "", fmt.Errorf("%w: tool '%s' is configured but not installed", ErrToolNotFound, toolName)
 	}
 
 	return binaryPath, nil

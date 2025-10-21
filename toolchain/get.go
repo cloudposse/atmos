@@ -63,11 +63,11 @@ func getVersions(opts *versionOptions) ([]string, string, error) {
 	if !exists {
 		fileVersions, exists = toolVersions.Tools[opts.ToolName]
 		if !exists {
-			return nil, "", fmt.Errorf("tool '%s' not found in %s", opts.ToolName, opts.FilePath)
+			return nil, "", fmt.Errorf("%w: tool '%s' not found in %s", ErrToolNotFound, opts.ToolName, opts.FilePath)
 		}
 	}
 	if len(fileVersions) == 0 {
-		return nil, "", fmt.Errorf("no versions configured for tool '%s' in %s", opts.ToolName, opts.FilePath)
+		return nil, "", fmt.Errorf("%w: no versions configured for tool '%s' in %s", ErrNoVersionsFound, opts.ToolName, opts.FilePath)
 	}
 	return fileVersions, fileVersions[0], nil
 }

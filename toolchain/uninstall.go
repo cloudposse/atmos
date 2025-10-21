@@ -26,7 +26,7 @@ func runUninstallWithInstaller(cmd *cobra.Command, args []string, installer *Ins
 		return err
 	}
 	if tool == "" {
-		return fmt.Errorf("invalid tool specification: %s. Expected format: owner/repo@version or tool@version", toolSpec)
+		return fmt.Errorf("%w: %s. Expected format: owner/repo@version or tool@version", ErrInvalidToolSpec, toolSpec)
 	}
 
 	if installer == nil {
@@ -51,7 +51,7 @@ func runUninstallWithInstaller(cmd *cobra.Command, args []string, installer *Ins
 		actualVersion, err := installer.ReadLatestFile(owner, repo)
 		if err != nil {
 			// If the latest file does not exist, return error (test expects this)
-			return fmt.Errorf("tool %s/%s@latest is not installed (no latest file found)", owner, repo)
+			return fmt.Errorf("%w: tool %s/%s@latest is not installed (no latest file found)", ErrToolNotFound, owner, repo)
 		}
 		version = actualVersion
 		// Check if the versioned binary exists
@@ -92,7 +92,7 @@ func RunUninstall(toolSpec string) error {
 		return err
 	}
 	if tool == "" {
-		return fmt.Errorf("invalid tool specification: %s. Expected format: owner/repo@version or tool@version", toolSpec)
+		return fmt.Errorf("%w: %s. Expected format: owner/repo@version or tool@version", ErrInvalidToolSpec, toolSpec)
 	}
 
 	if installer == nil {
@@ -117,7 +117,7 @@ func RunUninstall(toolSpec string) error {
 		actualVersion, err := installer.ReadLatestFile(owner, repo)
 		if err != nil {
 			// If the latest file does not exist, return error (test expects this)
-			return fmt.Errorf("tool %s/%s@latest is not installed (no latest file found)", owner, repo)
+			return fmt.Errorf("%w: tool %s/%s@latest is not installed (no latest file found)", ErrToolNotFound, owner, repo)
 		}
 		version = actualVersion
 		// Check if the versioned binary exists

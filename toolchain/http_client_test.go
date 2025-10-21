@@ -182,7 +182,10 @@ func TestGitHubAuthenticatedTransport_RoundTrip(t *testing.T) {
 			t.Fatalf("Failed to create request: %v", err)
 		}
 
-		_, err = transport.RoundTrip(req)
+		resp2, err := transport.RoundTrip(req)
+		if resp2 != nil {
+			defer resp2.Body.Close()
+		}
 		if err == nil || !strings.Contains(err.Error(), "GitHub transport roundtrip: mock transport error") {
 			t.Errorf("Expected wrapped error containing %q, got %v", expectedErr, err)
 		}

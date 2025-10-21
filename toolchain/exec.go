@@ -20,7 +20,7 @@ type ToolRunner interface {
 // It does not depend on cobra.Command, only raw args.
 func RunExecCommand(installer ToolRunner, args []string) error {
 	if len(args) == 0 {
-		return fmt.Errorf("no arguments provided. Expected format: tool@version")
+		return fmt.Errorf("%w: no arguments provided. Expected format: tool@version", ErrInvalidToolSpec)
 	}
 
 	toolSpec := args[0]
@@ -30,7 +30,7 @@ func RunExecCommand(installer ToolRunner, args []string) error {
 		return err
 	}
 	if tool == "" {
-		return fmt.Errorf("invalid tool specification: missing tool name")
+		return fmt.Errorf("%w: missing tool name", ErrInvalidToolSpec)
 	}
 
 	_, _, err = installer.GetResolver().Resolve(tool)

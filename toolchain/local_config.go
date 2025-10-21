@@ -145,7 +145,7 @@ func (lcm *LocalConfigManager) ResolveVersionConstraint(tool *LocalTool, version
 func (lcm *LocalConfigManager) GetToolWithVersion(owner, repo, version string) (*Tool, error) {
 	tool, exists := lcm.GetTool(owner, repo)
 	if !exists {
-		return nil, fmt.Errorf("tool %s/%s not found in local config", owner, repo)
+		return nil, fmt.Errorf("%w: tool %s/%s not found in local config", ErrToolNotFound, owner, repo)
 	}
 
 	constraint := lcm.ResolveVersionConstraint(tool, version)
