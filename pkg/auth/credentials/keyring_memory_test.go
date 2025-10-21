@@ -13,8 +13,7 @@ import (
 )
 
 func TestMemoryKeyring_StoreRetrieve(t *testing.T) {
-	store, err := newMemoryKeyringStore()
-	require.NoError(t, err)
+	store := newMemoryKeyringStore()
 
 	alias := "test-aws"
 	exp := time.Now().UTC().Add(1 * time.Hour).Format(time.RFC3339)
@@ -27,7 +26,7 @@ func TestMemoryKeyring_StoreRetrieve(t *testing.T) {
 	}
 
 	// Store credentials.
-	err = store.Store(alias, creds)
+	err := store.Store(alias, creds)
 	require.NoError(t, err)
 
 	// Retrieve credentials.
@@ -42,8 +41,7 @@ func TestMemoryKeyring_StoreRetrieve(t *testing.T) {
 }
 
 func TestMemoryKeyring_Delete(t *testing.T) {
-	store, err := newMemoryKeyringStore()
-	require.NoError(t, err)
+	store := newMemoryKeyringStore()
 
 	alias := "test-delete"
 	creds := &types.OIDCCredentials{Token: "test-token", Provider: "github"}
@@ -53,7 +51,7 @@ func TestMemoryKeyring_Delete(t *testing.T) {
 	require.NoError(t, store.Delete(alias))
 
 	// Verify it's gone.
-	_, err = store.Retrieve(alias)
+	_, err := store.Retrieve(alias)
 	assert.Error(t, err)
 
 	// Delete non-existent should error.
@@ -62,8 +60,7 @@ func TestMemoryKeyring_Delete(t *testing.T) {
 }
 
 func TestMemoryKeyring_List(t *testing.T) {
-	store, err := newMemoryKeyringStore()
-	require.NoError(t, err)
+	store := newMemoryKeyringStore()
 
 	// Initially empty.
 	aliases, err := store.List()
@@ -93,9 +90,9 @@ func TestMemoryKeyring_List(t *testing.T) {
 	assert.NotContains(t, aliases, "alias2")
 }
 
+//nolint:dupl // Test code intentionally duplicates interface behavior testing.
 func TestMemoryKeyring_IsExpired(t *testing.T) {
-	store, err := newMemoryKeyringStore()
-	require.NoError(t, err)
+	store := newMemoryKeyringStore()
 
 	expiredCreds := &types.AWSCredentials{
 		Expiration: time.Now().UTC().Add(-5 * time.Minute).Format(time.RFC3339),
@@ -124,8 +121,7 @@ func TestMemoryKeyring_IsExpired(t *testing.T) {
 }
 
 func TestMemoryKeyring_GetAnySetAny(t *testing.T) {
-	store, err := newMemoryKeyringStore()
-	require.NoError(t, err)
+	store := newMemoryKeyringStore()
 
 	type testData struct {
 		Name  string
@@ -143,13 +139,12 @@ func TestMemoryKeyring_GetAnySetAny(t *testing.T) {
 	assert.Equal(t, data, retrieved)
 
 	// Get non-existent key should error.
-	err = store.GetAny("non-existent", &retrieved)
+	err := store.GetAny("non-existent", &retrieved)
 	assert.Error(t, err)
 }
 
 func TestMemoryKeyring_ConcurrentAccess(t *testing.T) {
-	store, err := newMemoryKeyringStore()
-	require.NoError(t, err)
+	store := newMemoryKeyringStore()
 
 	var wg sync.WaitGroup
 	numGoroutines := 10
@@ -193,18 +188,16 @@ func TestMemoryKeyring_ConcurrentAccess(t *testing.T) {
 
 func TestMemoryKeyring_Isolation(t *testing.T) {
 	// Create two independent memory stores.
-	store1, err := newMemoryKeyringStore()
-	require.NoError(t, err)
+	store1 := newMemoryKeyringStore()
 
-	store2, err := newMemoryKeyringStore()
-	require.NoError(t, err)
+	store2 := newMemoryKeyringStore()
 
 	// Store in store1.
 	creds := &types.OIDCCredentials{Token: "test-token"}
 	require.NoError(t, store1.Store("test-alias", creds))
 
 	// Should exist in store1.
-	_, err = store1.Retrieve("test-alias")
+	_, err := store1.Retrieve("test-alias")
 	require.NoError(t, err)
 
 	// Should NOT exist in store2 (isolated).

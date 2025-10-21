@@ -18,10 +18,10 @@ type memoryKeyringStore struct {
 }
 
 // newMemoryKeyringStore creates a new in-memory keyring store.
-func newMemoryKeyringStore() (*memoryKeyringStore, error) {
+func newMemoryKeyringStore() *memoryKeyringStore {
 	return &memoryKeyringStore{
 		items: make(map[string]string),
-	}, nil
+	}
 }
 
 // Store stores credentials for the given alias.

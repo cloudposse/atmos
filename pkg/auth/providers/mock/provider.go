@@ -9,6 +9,17 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
+const (
+	// MockExpirationYear is the fixed year used for deterministic testing timestamps.
+	MockExpirationYear = 2025
+	// MockExpirationMonth is the fixed month used for deterministic testing timestamps.
+	MockExpirationMonth = 10
+	// MockExpirationDay is the fixed day used for deterministic testing timestamps.
+	MockExpirationDay = 18
+	// MockExpirationHour is the fixed hour used for deterministic testing timestamps.
+	MockExpirationHour = 17
+)
+
 // Provider is a mock authentication provider for testing purposes only.
 // It simulates authentication without requiring real cloud credentials.
 type Provider struct {
@@ -57,7 +68,7 @@ func (p *Provider) Authenticate(ctx context.Context) (types.ICredentials, error)
 
 	// Use a fixed timestamp for deterministic testing.
 	// Use 2025-10-18 17:00:00 UTC which is 12:00:00 CDT.
-	expiration := time.Date(2025, 10, 18, 17, 0, 0, 0, time.UTC)
+	expiration := time.Date(MockExpirationYear, MockExpirationMonth, MockExpirationDay, MockExpirationHour, 0, 0, 0, time.UTC)
 
 	return &Credentials{
 		AccessKeyID:     "MOCK_ACCESS_KEY_ID",

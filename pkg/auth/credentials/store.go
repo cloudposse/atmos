@@ -66,7 +66,7 @@ func NewCredentialStoreWithConfig(authConfig *schema.AuthConfig) types.Credentia
 
 	switch keyringType {
 	case "memory":
-		store, err = newMemoryKeyringStore()
+		store = newMemoryKeyringStore()
 	case "file":
 		store, err = newFileKeyringStore(authConfig)
 	case "system":

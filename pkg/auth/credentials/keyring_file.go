@@ -43,30 +43,45 @@ type fileKeyringStore struct {
 	path string
 }
 
+// parseFileKeyringConfig extracts path and password environment from auth config.
+func parseFileKeyringConfig(authConfig *schema.AuthConfig) (path, passwordEnv string) {
+	if authConfig == nil || authConfig.Keyring.Spec == nil {
+		return "", ""
+	}
+
+	if p, ok := authConfig.Keyring.Spec["path"].(string); ok && p != "" {
+		path = p
+	}
+	if pe, ok := authConfig.Keyring.Spec["password_env"].(string); ok && pe != "" {
+		passwordEnv = pe
+	}
+
+	return path, passwordEnv
+}
+
+// getDefaultKeyringPath returns the default keyring directory path.
+func getDefaultKeyringPath() (string, error) {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("failed to get user home directory: %w", err)
+	}
+	return filepath.Join(homeDir, ".atmos", "keyring"), nil
+}
+
 // newFileKeyringStore creates a new file-based keyring store with encryption.
 func newFileKeyringStore(authConfig *schema.AuthConfig) (*fileKeyringStore, error) {
 	defer perf.Track(nil, "credentials.newFileKeyringStore")()
 
-	var path string
-	var passwordEnv string
-
-	// Parse spec for configuration.
-	if authConfig != nil && authConfig.Keyring.Spec != nil {
-		if p, ok := authConfig.Keyring.Spec["path"].(string); ok && p != "" {
-			path = p
-		}
-		if pe, ok := authConfig.Keyring.Spec["password_env"].(string); ok && pe != "" {
-			passwordEnv = pe
-		}
-	}
+	// Parse configuration.
+	path, passwordEnv := parseFileKeyringConfig(authConfig)
 
 	// Default path if not specified.
 	if path == "" {
-		homeDir, err := os.UserHomeDir()
+		defaultPath, err := getDefaultKeyringPath()
 		if err != nil {
-			return nil, errors.Join(ErrCredentialStore, fmt.Errorf("failed to get user home directory: %w", err))
+			return nil, errors.Join(ErrCredentialStore, err)
 		}
-		path = filepath.Join(homeDir, ".atmos", "keyring")
+		path = defaultPath
 	}
 
 	// Default password environment variable.
@@ -74,9 +89,9 @@ func newFileKeyringStore(authConfig *schema.AuthConfig) (*fileKeyringStore, erro
 		passwordEnv = "ATMOS_KEYRING_PASSWORD"
 	}
 
-	// Ensure directory exists with proper permissions.
-	dir := filepath.Dir(path)
-	if err := os.MkdirAll(dir, KeyringDirPermissions); err != nil {
+	// Ensure the configured path (storage directory) exists with proper permissions.
+	// The path is the directory where keyring files will be stored (e.g., ~/.atmos/keyring or /etc/atmos/keyring).
+	if err := os.MkdirAll(path, KeyringDirPermissions); err != nil {
 		return nil, errors.Join(ErrCredentialStore, fmt.Errorf("failed to create keyring directory: %w", err))
 	}
 
@@ -86,7 +101,7 @@ func newFileKeyringStore(authConfig *schema.AuthConfig) (*fileKeyringStore, erro
 	// Configure 99designs keyring.
 	cfg := keyring.Config{
 		ServiceName:                    "atmos-auth",
-		FileDir:                        dir,
+		FileDir:                        path,
 		FilePasswordFunc:               passwordFunc,
 		AllowedBackends:                []keyring.BackendType{keyring.FileBackend},
 		KeychainName:                   "atmos",
