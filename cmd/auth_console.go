@@ -18,6 +18,7 @@ import (
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/telemetry"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -118,7 +119,7 @@ func executeAuthConsoleCommand(cmd *cobra.Command, args []string) error {
 
 // handleBrowserOpen handles opening the console URL in the browser or displaying it.
 func handleBrowserOpen(consoleURL string) {
-	if !consoleSkipOpen {
+	if !consoleSkipOpen && !telemetry.IsCI() {
 		fmt.Fprintf(os.Stderr, "\n")
 		if err := u.OpenUrl(consoleURL); err != nil {
 			// Show URL on error so user can manually open it.
@@ -131,7 +132,7 @@ func handleBrowserOpen(consoleURL string) {
 			fmt.Fprintf(os.Stderr, "%s\n", successStyle.Render("✓ Opened console in browser"))
 		}
 	} else {
-		// User explicitly skipped opening, so show the URL.
+		// User explicitly skipped opening or running in CI, so show the URL.
 		fmt.Fprintf(os.Stderr, "\n")
 		printConsoleURL(consoleURL)
 	}

@@ -156,6 +156,9 @@ func TestHandleBrowserOpen(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			// Set CI env to prevent browser from opening during tests.
+			t.Setenv("CI", "true")
+
 			// This function doesn't return an error, just verify it doesn't panic.
 			assert.NotPanics(t, func() {
 				handleBrowserOpen(tt.consoleURL)
