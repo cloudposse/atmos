@@ -16,7 +16,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	log "github.com/cloudposse/atmos/pkg/logger"
-	u "github.com/cloudposse/atmos/pkg/utils"
+	"github.com/cloudposse/atmos/pkg/xdg"
 )
 
 const (
@@ -34,7 +34,7 @@ type CacheConfig struct {
 // It respects ATMOS_XDG_CACHE_HOME and XDG_CACHE_HOME environment variables for cache directory location.
 // Returns an error if the cache directory cannot be created or if environment variables cannot be bound.
 func GetCacheFilePath() (string, error) {
-	cacheDir, err := u.GetXDGCacheDir("", CacheDirPermissions)
+	cacheDir, err := xdg.GetXDGCacheDir("", CacheDirPermissions)
 	if err != nil {
 		return "", errors.Join(errUtils.ErrCacheDir, err)
 	}

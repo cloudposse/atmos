@@ -14,7 +14,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/auth/types"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
-	u "github.com/cloudposse/atmos/pkg/utils"
+	"github.com/cloudposse/atmos/pkg/xdg"
 )
 
 const (
@@ -62,7 +62,7 @@ func parseFileKeyringConfig(authConfig *schema.AuthConfig) (path, passwordEnv st
 // getDefaultKeyringPath returns the default keyring directory path following XDG Base Directory Specification.
 // It respects ATMOS_XDG_DATA_HOME and XDG_DATA_HOME environment variables for data directory location.
 func getDefaultKeyringPath() (string, error) {
-	return u.GetXDGDataDir("keyring", KeyringDirPermissions)
+	return xdg.GetXDGDataDir("keyring", KeyringDirPermissions)
 }
 
 // newFileKeyringStore creates a new file-based keyring store with encryption.
