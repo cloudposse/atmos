@@ -123,7 +123,7 @@ tests:
         - "workflow has no steps defined"
         - "## Explanation"
         - "Workflow no-steps is empty and requires at least one step to execute."
-      exit_code: 1
+      exit_code: 2
 
   - name: atmos workflow invalid step type
     enabled: true
