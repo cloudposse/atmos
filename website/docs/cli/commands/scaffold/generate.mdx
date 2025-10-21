@@ -1,0 +1,422 @@
+---
+title: atmos scaffold generate
+sidebar_label: generate
+sidebar_class_name: command
+id: generate
+description: Generate infrastructure code from scaffold templates.
+---
+import Screengrab from '@site/src/components/Screengrab'
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Generate infrastructure code, configurations, and documentation from scaffold templates. Templates can be local directories, Git repositories, or configured in `atmos.yaml`.
+</Intro>
+
+<Screengrab title="atmos scaffold generate --help" slug="atmos-scaffold-generate--help" />
+
+## Usage
+
+```shell
+atmos scaffold generate <template> [target] [flags]
+```
+
+## Examples
+
+### Basic Usage
+
+Generate from a configured template:
+
+```shell
+atmos scaffold generate vpc-component ./components/terraform/vpc
+```
+
+### With Custom Values
+
+Set template variables:
+
+```shell
+atmos scaffold generate vpc-component ./components/terraform/vpc \
+  --set vpc_name=production \
+  --set cidr_block=10.0.0.0/16 \
+  --set enable_nat_gateway=true
+```
+
+### From Local Path
+
+Use a local template directory:
+
+```shell
+atmos scaffold generate ./my-templates/eks ./components/terraform/eks-prod
+```
+
+### From Git Repository
+
+Generate from a remote Git repository:
+
+```shell
+atmos scaffold generate \
+  https://github.com/cloudposse/atmos-scaffolds/vpc.git \
+  ./components/terraform/vpc
+```
+
+### Dry Run
+
+Preview what would be generated:
+
+```shell
+atmos scaffold generate vpc-component ./output --dry-run
+```
+
+### Force Overwrite
+
+Overwrite existing files:
+
+```shell
+atmos scaffold generate vpc-component ./components/terraform/vpc --force
+```
+
+## Arguments
+
+<dl>
+  <dt>`template`</dt>
+  <dd>
+    **Required**. Template to generate from.
+
+    Can be:
+    - Template name from `atmos.yaml`: `vpc-component`
+    - Local filesystem path: `./my-templates/vpc`
+    - Git repository URL: `https://github.com/org/repo.git`
+    - Git repository with path: `github.com/org/repo.git//path/to/template`
+  </dd>
+
+  <dt>`target`</dt>
+  <dd>
+    **Optional**. Target directory where code will be generated.
+
+    - Can be relative (`./components/terraform/vpc`) or absolute
+    - Directory will be created if it doesn't exist
+    - If omitted, you'll be prompted (interactive mode only)
+  </dd>
+</dl>
+
+## Flags
+
+<dl>
+  <dt>`-f, --force`</dt>
+  <dd>
+    Overwrite existing files without prompting.
+
+    **Default**: `false`
+
+    **Warning**: This will replace existing files with the same names.
+  </dd>
+
+  <dt>`--dry-run`</dt>
+  <dd>
+    Preview changes without writing files.
+
+    **Default**: `false`
+
+    Shows what files would be created and their content without actually writing them.
+  </dd>
+
+  <dt>`--set key=value`</dt>
+  <dd>
+    Set template variable values. Can be used multiple times.
+
+    **Example**:
+    ```shell
+    --set vpc_name=prod \
+    --set cidr_block=10.0.0.0/16 \
+    --set availability_zones=us-east-1a,us-east-1b
+    ```
+
+    Values override defaults and skip prompts for those fields.
+  </dd>
+
+  <dt>`-h, --help`</dt>
+  <dd>
+    Display help information for the generate command.
+  </dd>
+</dl>
+
+## Template Sources
+
+### Configured Templates
+
+Templates defined in `atmos.yaml`:
+
+```yaml
+scaffold:
+  templates:
+    vpc-component:
+      source: "./scaffolds/vpc"
+      version: "1.0.0"
+```
+
+Usage:
+```shell
+atmos scaffold generate vpc-component ./output
+```
+
+### Local Templates
+
+Templates in local filesystem:
+
+```shell
+# Relative path
+atmos scaffold generate ./scaffolds/vpc ./output
+
+# Absolute path
+atmos scaffold generate /path/to/templates/vpc ./output
+```
+
+### Git Templates
+
+Templates from Git repositories:
+
+```shell
+# HTTPS URL
+atmos scaffold generate \
+  https://github.com/org/templates/vpc.git \
+  ./output
+
+# SSH URL
+atmos scaffold generate \
+  git@github.com:org/templates/vpc.git \
+  ./output
+
+# With subdirectory
+atmos scaffold generate \
+  https://github.com/org/templates.git//vpc \
+  ./output
+
+# With specific ref
+atmos scaffold generate \
+  https://github.com/org/templates/vpc.git?ref=v1.0.0 \
+  ./output
+```
+
+## Template Processing
+
+### Variable Substitution
+
+Template files use Go template syntax:
+
+```hcl
+# Input template (main.tf)
+module "{{.Config.vpc_name}}" {
+  source  = "cloudposse/vpc/aws"
+  version = "{{.Config.module_version}}"
+
+  cidr_block = "{{.Config.cidr_block}}"
+}
+
+# Generated output
+module "production" {
+  source  = "cloudposse/vpc/aws"
+  version = "2.0.0"
+
+  cidr_block = "10.0.0.0/16"
+}
+```
+
+### Conditional Generation
+
+Use conditionals to generate files/content based on variables:
+
+```hcl
+{{if .Config.enable_monitoring}}
+resource "aws_flow_log" "main" {
+  vpc_id = module.{{.Config.vpc_name}}.vpc_id
+}
+{{end}}
+```
+
+### Dynamic File Paths
+
+Template file paths can include variables:
+
+```
+{{.Config.environment}}/
+├── main.tf
+└── {{.Config.vpc_name}}.yaml
+```
+
+With `environment=prod` and `vpc_name=main`:
+
+```
+prod/
+├── main.tf
+└── main.yaml
+```
+
+## Common Workflows
+
+### Create Multiple Similar Components
+
+Generate multiple VPCs for different environments:
+
+```shell
+# Dev VPC
+atmos scaffold generate vpc-component ./components/terraform/vpc-dev \
+  --set vpc_name=dev \
+  --set cidr_block=10.0.0.0/16
+
+# Staging VPC
+atmos scaffold generate vpc-component ./components/terraform/vpc-staging \
+  --set vpc_name=staging \
+  --set cidr_block=10.1.0.0/16
+
+# Prod VPC
+atmos scaffold generate vpc-component ./components/terraform/vpc-prod \
+  --set vpc_name=prod \
+  --set cidr_block=10.2.0.0/16
+```
+
+### Preview Before Generating
+
+Always dry-run first to preview changes:
+
+```shell
+# Preview
+atmos scaffold generate my-template ./output --dry-run
+
+# If looks good, generate
+atmos scaffold generate my-template ./output
+```
+
+### Generate with Interactive Prompts
+
+Omit `--set` flags to use interactive prompts:
+
+```shell
+atmos scaffold generate vpc-component ./output
+```
+
+You'll be prompted for each template variable.
+
+## Troubleshooting
+
+### Template Not Found
+
+```
+Error: scaffold template 'vpc-component' not found
+```
+
+**Solutions**:
+1. Check template name in `atmos.yaml`
+2. Verify `scaffold.base_path` is correct
+3. List available templates: `atmos scaffold list`
+
+### Permission Denied
+
+```
+Error: failed to write file: permission denied
+```
+
+**Solutions**:
+1. Check target directory permissions
+2. Use a directory where you have write access
+3. Ensure parent directories exist
+
+### Template Syntax Error
+
+```
+Error: template: main.tf:5: unexpected "}" in operand
+```
+
+**Solutions**:
+1. Check template syntax (matching `{{` and `}}`)
+2. Escape literal braces: `{{"{{"}}`
+3. Validate template: `atmos scaffold validate ./template`
+
+### Git Clone Failed
+
+```
+Error: failed to clone repository: authentication required
+```
+
+**Solutions**:
+1. Use HTTPS URL with credentials
+2. Use SSH URL with configured SSH keys
+3. Check repository access permissions
+4. Try public repository URL
+
+## Tips and Best Practices
+
+### Version Control Generated Code
+
+After generating, immediately commit:
+
+```shell
+atmos scaffold generate vpc-component ./components/terraform/vpc
+cd components/terraform/vpc
+git add .
+git commit -m "Generated VPC component from scaffold"
+```
+
+### Use Meaningful Names
+
+Choose descriptive names for generated components:
+
+```shell
+# Good - clear and specific
+atmos scaffold generate vpc-component ./components/terraform/vpc-prod-us-east-1
+
+# Avoid - generic and unclear
+atmos scaffold generate vpc-component ./components/terraform/vpc1
+```
+
+### Customize After Generation
+
+Templates are starting points - customize the generated code:
+
+1. Review generated files
+2. Adjust for your specific requirements
+3. Add additional resources as needed
+4. Update variables and outputs
+
+### Create Team Templates
+
+Build organization-specific templates:
+
+```shell
+# Create custom template
+mkdir -p scaffolds/team-vpc
+cat > scaffolds/team-vpc/scaffold.yaml << EOF
+name: "team-vpc"
+description: "ACME Corp standard VPC"
+author: "Platform Team"
+version: "1.0.0"
+
+prompts:
+  - name: "vpc_name"
+    description: "VPC name"
+    type: "input"
+EOF
+
+# Share with team via Git
+git add scaffolds/
+git commit -m "Add team VPC scaffold template"
+git push
+
+# Configure in atmos.yaml
+scaffold:
+  templates:
+    team-vpc:
+      source: "github.com/acme/atmos-config.git//scaffolds/team-vpc"
+```
+
+## Related Commands
+
+- [`atmos scaffold list`](/cli/commands/scaffold/list) - List available templates
+- [`atmos scaffold validate`](/cli/commands/scaffold/validate) - Validate template configuration
+- [`atmos init`](/cli/commands/init) - Initialize new Atmos projects
+
+## Learn More
+
+- [Creating Custom Scaffold Templates](/core-concepts/scaffold-templates)
+- [Template Variables and Functions](/core-concepts/template-functions)
+- [Go Templates Documentation](https://pkg.go.dev/text/template)
+- [Gomplate Functions](https://docs.gomplate.ca/)

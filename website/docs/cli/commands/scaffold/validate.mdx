@@ -1,0 +1,439 @@
+---
+title: atmos scaffold validate
+sidebar_label: validate
+sidebar_class_name: command
+id: validate
+description: Validate scaffold.yaml files against the Atmos scaffold schema.
+---
+import Screengrab from '@site/src/components/Screengrab'
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Validate `scaffold.yaml` configuration files to ensure they conform to the Atmos scaffold schema. This helps catch configuration errors before using templates.
+</Intro>
+
+<Screengrab title="atmos scaffold validate --help" slug="atmos-scaffold-validate--help" />
+
+## Usage
+
+```shell
+atmos scaffold validate [path]
+```
+
+## Examples
+
+### Validate Current Directory
+
+Validate `scaffold.yaml` in the current directory:
+
+```shell
+$ atmos scaffold validate
+
+✓ scaffold.yaml is valid
+```
+
+### Validate Specific Directory
+
+Validate a scaffold template in a specific directory:
+
+```shell
+$ atmos scaffold validate ./scaffolds/vpc
+
+✓ scaffold.yaml is valid
+```
+
+### Validation Errors
+
+When validation fails, you'll see detailed error messages:
+
+```shell
+$ atmos scaffold validate ./scaffolds/invalid
+
+✗ Validation failed:
+  - Line 5: Missing required field 'name'
+  - Line 12: Invalid prompt type 'checkbox' (must be: input, select, confirm)
+  - Line 18: Field 'default' has wrong type (expected string, got number)
+```
+
+## Arguments
+
+<dl>
+  <dt>`path`</dt>
+  <dd>
+    **Optional**. Path to the scaffold template directory.
+
+    **Default**: `.` (current directory)
+
+    The directory must contain a <code>scaffold.yaml</code> file.
+  </dd>
+</dl>
+
+## scaffold.yaml Schema
+
+A valid `scaffold.yaml` file must include:
+
+### Required Fields
+
+```yaml
+name: "template-name"        # Template identifier
+description: "Description"   # Human-readable description
+author: "Author Name"        # Template author
+version: "1.0.0"            # Semantic version
+```
+
+### Optional Fields
+
+```yaml
+prompts:                    # User input prompts
+  - name: "field_name"      # Prompt identifier
+    description: "Label"    # Prompt label/question
+    type: "input"          # Prompt type: input, select, confirm
+    default: "value"       # Default value
+    required: true         # Whether field is required (default: true)
+
+    # For 'select' type only
+    options:               # Available options
+      - value: "option1"
+        label: "Option 1"
+      - value: "option2"
+        label: "Option 2"
+```
+
+## Prompt Types
+
+### Input
+
+Free-text input field:
+
+```yaml
+prompts:
+  - name: "project_name"
+    description: "Enter project name"
+    type: "input"
+    default: "my-project"
+```
+
+### Select
+
+Single-choice dropdown:
+
+```yaml
+prompts:
+  - name: "aws_region"
+    description: "Select AWS region"
+    type: "select"
+    default: "us-east-1"
+    options:
+      - value: "us-east-1"
+        label: "US East (N. Virginia)"
+      - value: "us-west-2"
+        label: "US West (Oregon)"
+      - value: "eu-west-1"
+        label: "EU (Ireland)"
+```
+
+### Confirm
+
+Boolean yes/no question:
+
+```yaml
+prompts:
+  - name: "enable_monitoring"
+    description: "Enable monitoring?"
+    type: "confirm"
+    default: true
+```
+
+## Validation Rules
+
+The validator checks:
+
+1. **Required Fields**: `name`, `description`, `author`, `version` must be present
+2. **Field Types**: All fields have correct types (string, number, boolean, array, object)
+3. **Version Format**: `version` follows semantic versioning (e.g., `1.0.0`)
+4. **Prompt Types**: Only `input`, `select`, or `confirm` are allowed
+5. **Select Options**: `select` type must have `options` array
+6. **Option Format**: Each option has `value` and `label` fields
+7. **YAML Syntax**: File is valid YAML
+
+## Common Validation Errors
+
+### Missing Required Field
+
+```yaml
+# ❌ Invalid - missing 'name'
+description: "My template"
+author: "Me"
+version: "1.0.0"
+```
+
+```yaml
+# ✓ Valid
+name: "my-template"
+description: "My template"
+author: "Me"
+version: "1.0.0"
+```
+
+### Invalid Version Format
+
+```yaml
+# ❌ Invalid - not semantic version
+version: "1.0"
+version: "v1.0.0"
+version: "latest"
+```
+
+```yaml
+# ✓ Valid
+version: "1.0.0"
+version: "2.1.3"
+version: "0.1.0-beta"
+```
+
+### Invalid Prompt Type
+
+```yaml
+# ❌ Invalid - 'dropdown' is not a valid type
+prompts:
+  - name: "region"
+    type: "dropdown"
+```
+
+```yaml
+# ✓ Valid - use 'select'
+prompts:
+  - name: "region"
+    type: "select"
+    options:
+      - value: "us-east-1"
+        label: "US East 1"
+```
+
+### Missing Options for Select
+
+```yaml
+# ❌ Invalid - select type requires options
+prompts:
+  - name: "region"
+    type: "select"
+    default: "us-east-1"
+```
+
+```yaml
+# ✓ Valid
+prompts:
+  - name: "region"
+    type: "select"
+    default: "us-east-1"
+    options:
+      - value: "us-east-1"
+        label: "US East 1"
+      - value: "us-west-2"
+        label: "US West 2"
+```
+
+## Use Cases
+
+### Pre-Commit Validation
+
+Validate templates before committing:
+
+```shell
+#!/bin/bash
+# .git/hooks/pre-commit
+
+for scaffold in scaffolds/*/scaffold.yaml; do
+  echo "Validating $scaffold..."
+  if ! atmos scaffold validate "$(dirname "$scaffold")"; then
+    echo "Validation failed for $scaffold"
+    exit 1
+  fi
+done
+```
+
+### CI/CD Pipeline
+
+Validate templates in continuous integration:
+
+```yaml
+# .github/workflows/validate-scaffolds.yml
+name: Validate Scaffolds
+
+on: [push, pull_request]
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: cloudposse/atmos@v1
+      - name: Validate all scaffolds
+        run: |
+          for dir in scaffolds/*; do
+            atmos scaffold validate "$dir"
+          done
+```
+
+### Template Development
+
+Validate while creating templates:
+
+```shell
+# Create template
+mkdir -p scaffolds/my-template
+
+# Write scaffold.yaml
+cat > scaffolds/my-template/scaffold.yaml << EOF
+name: "my-template"
+description: "My custom template"
+author: "Platform Team"
+version: "1.0.0"
+
+prompts:
+  - name: "component_name"
+    description: "Component name"
+    type: "input"
+    default: "my-component"
+EOF
+
+# Validate
+atmos scaffold validate scaffolds/my-template
+```
+
+### Debugging Template Issues
+
+When templates fail to generate, validate first:
+
+```shell
+# Template generation fails
+$ atmos scaffold generate my-template ./output
+Error: failed to process template
+
+# Check for configuration errors
+$ atmos scaffold validate ./scaffolds/my-template
+✗ Validation failed: ...
+```
+
+## Tips and Best Practices
+
+### Validate Early and Often
+
+```shell
+# Create template structure
+mkdir -p scaffolds/new-template
+
+# Write minimal scaffold.yaml
+cat > scaffolds/new-template/scaffold.yaml << EOF
+name: "new-template"
+description: "New template"
+author: "Me"
+version: "1.0.0"
+EOF
+
+# Validate immediately
+atmos scaffold validate scaffolds/new-template
+
+# Add prompts incrementally and re-validate
+```
+
+### Use Version Control
+
+```shell
+# Before committing template changes
+atmos scaffold validate ./scaffolds/my-template
+
+git add scaffolds/my-template/
+git commit -m "Update my-template scaffold"
+```
+
+### Document Required Prompts
+
+Add comments to your scaffold.yaml:
+
+```yaml
+name: "vpc-component"
+description: "AWS VPC component"
+author: "Platform Team"
+version: "1.0.0"
+
+prompts:
+  # Required: VPC configuration
+  - name: "vpc_name"
+    description: "VPC name (must be unique per account)"
+    type: "input"
+    default: "main"
+
+  # Optional: Advanced settings
+  - name: "enable_dns_hostnames"
+    description: "Enable DNS hostnames?"
+    type: "confirm"
+    default: true
+```
+
+### Test with Real Generation
+
+After validation passes, test generation:
+
+```shell
+# Validate
+atmos scaffold validate ./scaffolds/my-template
+
+# Test generate with dry-run
+atmos scaffold generate ./scaffolds/my-template ./test-output --dry-run
+
+# If good, generate for real
+atmos scaffold generate ./scaffolds/my-template ./test-output
+```
+
+## Troubleshooting
+
+### scaffold.yaml Not Found
+
+```
+Error: scaffold.yaml not found in directory
+```
+
+**Solution**: Create the file:
+
+```shell
+cd scaffolds/my-template
+touch scaffold.yaml
+# Edit file with required fields
+```
+
+### Invalid YAML Syntax
+
+```
+Error: failed to parse scaffold.yaml: yaml: line 5: ...
+```
+
+**Solutions**:
+1. Check YAML indentation (use spaces, not tabs)
+2. Validate YAML syntax with online validator
+3. Check for special characters that need quoting
+
+### File Permission Issues
+
+```
+Error: permission denied reading scaffold.yaml
+```
+
+**Solution**: Check file permissions:
+
+```shell
+chmod 644 scaffolds/my-template/scaffold.yaml
+```
+
+## Related Commands
+
+- [`atmos scaffold generate`](/cli/commands/scaffold/generate) - Generate code from template
+- [`atmos scaffold list`](/cli/commands/scaffold/list) - List available templates
+- [`atmos validate stacks`](/cli/commands/validate/stacks) - Validate stack configurations
+
+## Learn More
+
+- [Creating Custom Scaffold Templates](/core-concepts/scaffold-templates)
+- [scaffold.yaml Schema Reference](/reference/scaffold-schema)
+- [Semantic Versioning](https://semver.org/)
+- [YAML Syntax](https://yaml.org/)
