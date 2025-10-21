@@ -625,15 +625,27 @@ func shouldColorize(cmd *cobra.Command) bool {
 ```
 
 **Scope:**
-- **Git repositories only** (GitHub, GitLab, Bitbucket, self-hosted)
+- **GitHub repositories only** - leverages GitHub's native compare API
+- For other Git sources (GitLab, Bitbucket, self-hosted), returns "not implemented"
 - Not applicable to OCI registries, local files, or HTTP sources
 - Shows actual code/file changes between Git refs
-- No local clone required - uses Git's ability to diff remote refs
+- No local clone required - uses provider's diff capabilities
 
 **Technical Implementation:**
 ```bash
-# Example git command used internally:
-git diff <remote-url>#<from-ref> <remote-url>#<to-ref> [-- <file-path>]
+# For GitHub sources, uses GitHub Compare API:
+# https://api.github.com/repos/{owner}/{repo}/compare/{from}...{to}
+
+# For non-GitHub Git sources, a temporary bare repository workflow would be used:
+# 1. Create temporary bare repository
+# 2. Fetch both refs into the temporary repo
+# 3. Run git diff between the two refs
+# Example:
+tmpdir=$(mktemp -d)
+git init --bare "$tmpdir"
+git -C "$tmpdir" fetch <remote-url> <from-ref>:<from-ref> <to-ref>:<to-ref>
+git -C "$tmpdir" diff <from-ref> <to-ref> [-- <file-path>]
+rm -rf "$tmpdir"
 ```
 
 **Output Format:**
@@ -1294,7 +1306,7 @@ atmos vendor update --check --outdated
 2. **Templated Versions**: Automatically skipped, no errors
 3. **Import Chains**: Fully supported
 4. **vendor pull**: No changes to existing pull command
-5. **vendor diff**: Command name reserved for future Git diff functionality (not implemented in v1)
+5. **vendor diff**: Implemented for GitHub sources, displays file-level diffs between component versions using GitHub's Compare API; returns "not implemented" for non-GitHub sources
 
 ## Migration Path
 
