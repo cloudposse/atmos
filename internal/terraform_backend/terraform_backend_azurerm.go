@@ -206,17 +206,18 @@ func ReadTerraformBackendAzurermInternal(
 	for attempt := 0; attempt <= maxRetryCountAzure; attempt++ {
 		// 30 sec timeout to read the state file from Azure Blob Storage.
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-		defer cancel()
 
 		downloadResponse, err := azureClient.DownloadStream(ctx, containerName, tfStateFilePath, nil)
 		if err != nil {
 			handledErr := handleAzureDownloadError(err, tfStateFilePath, containerName)
 			if handledErr == nil {
 				// Blob not found - component not provisioned yet.
+				cancel()
 				return nil, nil
 			}
 			if errors.Is(handledErr, errUtils.ErrAzurePermissionDenied) {
 				// Permission denied - return immediately.
+				cancel()
 				return nil, handledErr
 			}
 
@@ -229,9 +230,11 @@ func ReadTerraformBackendAzurermInternal(
 					"container", containerName,
 					"error", err,
 				)
+				cancel()
 				time.Sleep(time.Second * 2) // backoff
 				continue
 			}
+			cancel()
 			return nil, fmt.Errorf(errWrapFormat, errUtils.ErrGetBlobFromAzure, lastErr)
 		}
 
@@ -239,8 +242,10 @@ func ReadTerraformBackendAzurermInternal(
 		content, err := io.ReadAll(body)
 		_ = body.Close()
 		if err != nil {
+			cancel()
 			return nil, fmt.Errorf(errWrapFormat, errUtils.ErrReadAzureBlobBody, err)
 		}
+		cancel()
 		return content, nil
 	}
 
