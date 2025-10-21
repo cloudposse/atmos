@@ -404,8 +404,4 @@ require (
 	sigs.k8s.io/yaml v1.6.0 // indirect
 )
 
-// Replace deprecated mitchellh/go-homedir with Atmos's vendored copy.
-// External dependencies will now use pkg/config/homedir from this module.
-replace github.com/mitchellh/go-homedir => ./pkg/config/homedir
-
 exclude github.com/godbus/dbus v0.0.0-20190726142602-4481cbc300e2
