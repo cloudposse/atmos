@@ -318,16 +318,17 @@ var (
 
 ### Mock Generation (MANDATORY)
 - **ALWAYS use mockgen for interface mocks** - Never write manual mock implementations
-- **Use `//go:generate mockgen`** directive at the top of test files
-- **Pattern to follow**:
+- **Use Uber's mockgen** (`go.uber.org/mock/mockgen`) - golang/mock is archived
+- **Use `//go:generate` directive** at the top of test files:
   ```go
-  //go:generate mockgen -package=yourpkg -destination=mock_interface_test.go github.com/external/package InterfaceName
+  //go:generate go run go.uber.org/mock/mockgen@latest -package=yourpkg -destination=mock_interface_test.go github.com/external/package InterfaceName
   ```
 - **For internal interfaces**, use `-source` flag:
   ```go
-  //go:generate mockgen -source=$GOFILE -destination=mock_$GOFILE -package=$GOPACKAGE
+  //go:generate go run go.uber.org/mock/mockgen@latest -source=$GOFILE -destination=mock_$GOFILE -package=$GOPACKAGE
   ```
 - **NEVER duplicate interface implementation** - 20+ stub methods is a sign you should use mockgen
+- **Import path**: Use `go.uber.org/mock/gomock` (not `github.com/golang/mock/gomock`)
 - Examples of mockgen usage: `pkg/git/interface.go`, `pkg/pro/interface.go`, `pkg/filesystem/interface.go`
 
 ### Testing Production Code Paths (MANDATORY)
@@ -427,6 +428,16 @@ $ atmos example <component> -s <stack> --file output.yaml
 
 ### File Organization (MANDATORY)
 - **Prefer many small files over few large files** - follow Go idiom of focused, single-purpose files
+- **NEVER use `//revive:disable:file-length-limit`** - split large files instead
+  - Default limit: 600 lines (enforced by golangci-lint)
+  - For new code: ALWAYS split into focused files if approaching limit
+  - Example split pattern:
+    ```go
+    // formatter.go (733 lines) → Split into:
+    formatter_table.go  // Table rendering (236 lines)
+    formatter_tree.go   // Tree rendering (451 lines)
+    formatter_utils.go  // Shared utilities (68 lines)
+    ```
 - **One command per file** in `cmd/`
 - **One implementation per file** for interfaces:
   ```go
@@ -911,6 +922,34 @@ func TestValidateStack_ReturnsErrorForInvalidFormat(t *testing.T) {
 
 ## Critical Development Requirements
 
+### Git and Version Control (MANDATORY)
+
+**DO NOT Commit These File Types (They Are Not Deliverables):**
+- **Todo lists** or task tracking files you create
+- **Research documents** created to help you understand a problem (e.g., `component-architecture-research.md`)
+- **Scratch files** for working through problems (e.g., `scratch-*.md`, `notes-*.txt`)
+- **Investigation outputs** that aren't part of the final deliverable
+
+**DO Commit These File Types (These Are Deliverables):**
+- ✅ **Implementation code** (`.go` files, new packages, etc.)
+- ✅ **Tests** for the implementation
+- ✅ **PRDs and design docs** the user asked you to create
+- ✅ **Developer guides** the user requested
+- ✅ **Documentation** that's part of the deliverable
+- ✅ **Configuration files** needed for the implementation
+- ✅ **Schema updates** required for the feature
+
+**When Uncertain:**
+- **If you created a file as part of solving the task (deliverable)**: Commit it
+- **If you created a file to help yourself think through the problem (process artifact)**: Don't commit it
+- **If unsure**: Ask the user "Should I commit [filename]?"
+
+**`.gitignore` Rules:**
+- **DO NOT automatically add files to `.gitignore`** when user asks not to commit them
+- **Only update `.gitignore` for patterns/classes of files**, never specific filenames
+- Examples of appropriate patterns: `*.log`, `node_modules/`, `*-research.md`, `temp-*`
+- Examples of inappropriate entries: `component-architecture-research.md`, `my-specific-file.txt`
+
 ### Test Coverage (MANDATORY)
 - **80% minimum coverage** on new/changed lines (enforced by CodeCov)
 - ALL new features MUST include comprehensive unit tests
@@ -1064,7 +1103,7 @@ func TestValidateStack_ReturnsErrorForInvalidFormat(t *testing.T) {
 
 - **Generate mocks for all interfaces** (no cloud connectivity required for tests):
   ```go
-  //go:generate mockgen -source=secret_store.go -destination=mock_secret_store.go
+  //go:generate go run go.uber.org/mock/mockgen@latest -source=secret_store.go -destination=mock_secret_store.go
 
   func TestSecretProcessing(t *testing.T) {
       mockStore := NewMockSecretStore(ctrl)
