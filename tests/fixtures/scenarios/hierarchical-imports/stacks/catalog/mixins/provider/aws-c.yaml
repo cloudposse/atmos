@@ -1,0 +1,20 @@
+# Level 2: Provider mixin C - part of glob pattern test
+
+import:
+  - catalog/base/defaults
+
+vars:
+  import_order_test: "level-2-provider-c"
+  provider_type: "aws"
+  provider_priority: "c"
+
+  tags:
+    Provider: "AWS"
+    ProviderPriority: "C"
+    Source: "level-2-provider-c"
+
+settings:
+  import_order_test: "level-2-provider-c-settings"
+  provider:
+    name: "aws"
+    priority: "c"

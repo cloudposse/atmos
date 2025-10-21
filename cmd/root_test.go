@@ -7,31 +7,44 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/cloudposse/atmos/pkg/utils"
 )
 
 func TestNoColorLog(t *testing.T) {
+	// Skip in CI environments without TTY.
+	if _, err := os.Open("/dev/tty"); err != nil {
+		t.Skipf("Skipping test: TTY not available (/dev/tty): %v", err)
+	}
+
+	// Snapshot RootCmd state to prevent test pollution.
+	_ = NewTestKit(t)
+
+	// Save and restore working directory - previous tests may have changed it.
+	originalWd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Failed to get current working directory: %v", err)
+	}
+
+	// Change back to original directory and automatically restore when test ends.
+	t.Chdir(originalWd)
+
+	// Ensure ATMOS_CHDIR is not set BEFORE anything else.
+	// Previous tests may have set it, and we need to clear it before RootCmd.Execute().
+	// We can't use t.Setenv here because previous tests may have set it,
+	// and t.Setenv only restores to the ORIGINAL value before the test package loaded.
+	os.Unsetenv("ATMOS_CHDIR")
+	defer os.Unsetenv("ATMOS_CHDIR") // Clean up after test.
+
 	stacksPath := "../tests/fixtures/scenarios/stack-templates"
 
-	err := os.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
-	assert.NoError(t, err, "Setting 'ATMOS_CLI_CONFIG_PATH' environment variable should execute without error")
-
-	err = os.Setenv("ATMOS_BASE_PATH", stacksPath)
-	assert.NoError(t, err, "Setting 'ATMOS_BASE_PATH' environment variable should execute without error")
-
-	err = os.Setenv("ATMOS_LOGS_LEVEL", "Warning")
-	assert.NoError(t, err, "Setting 'ATMOS_LOGS_LEVEL' environment variable should execute without error")
-
-	// Unset ENV variables after testing
-	defer func() {
-		os.Unsetenv("ATMOS_CLI_CONFIG_PATH")
-		os.Unsetenv("ATMOS_BASE_PATH")
-		os.Unsetenv("ATMOS_LOGS_LEVEL")
-	}()
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
+	t.Setenv("ATMOS_BASE_PATH", stacksPath)
+	t.Setenv("ATMOS_LOGS_LEVEL", "Warning")
 
 	// Set the environment variable to disable color
 	// t.Setenv("NO_COLOR", "1")
@@ -41,12 +54,12 @@ func TestNoColorLog(t *testing.T) {
 	var buf bytes.Buffer
 	log.SetOutput(&buf)
 
-	oldArgs := os.Args
-	defer func() {
-		os.Args = oldArgs
-	}()
-	// Set the arguments for the command
-	os.Args = []string{"atmos", "about"}
+	// Use SetArgs - TestKit handles cleanup automatically.
+	RootCmd.SetArgs([]string{"about"})
+
+	// Reset buffer to ensure clean state (previous tests may have written to logger).
+	buf.Reset()
+
 	// Execute the command
 	if err := Execute(); err != nil {
 		t.Fatalf("Failed to execute command: %v", err)
@@ -60,20 +73,7 @@ func TestNoColorLog(t *testing.T) {
 }
 
 func TestInitFunction(t *testing.T) {
-	// Save the original state
-	originalArgs := os.Args
-	originalEnvVars := make(map[string]string)
-	defer func() {
-		// Restore original state
-		os.Args = originalArgs
-		for k, v := range originalEnvVars {
-			if v == "" {
-				os.Unsetenv(k)
-			} else {
-				os.Setenv(k, v)
-			}
-		}
-	}()
+	// Test doesn't modify os.Args, so no need to save/restore.
 
 	// Test cases
 	tests := []struct {
@@ -265,7 +265,7 @@ func TestSetupLogger_TraceLevelFromEnvironment(t *testing.T) {
 	}()
 
 	// Test that ATMOS_LOGS_LEVEL=Trace works.
-	os.Setenv("ATMOS_LOGS_LEVEL", "Trace")
+	t.Setenv("ATMOS_LOGS_LEVEL", "Trace")
 
 	// Simulate loading config from environment.
 	cfg := &schema.AtmosConfiguration{
@@ -403,9 +403,9 @@ func TestVersionFlagExecutionPath(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Save original OsExit and restore after test.
-			originalOsExit := utils.OsExit
+			originalOsExit := errUtils.OsExit
 			t.Cleanup(func() {
-				utils.OsExit = originalOsExit
+				errUtils.OsExit = originalOsExit
 				tt.cleanup()
 			})
 
@@ -414,7 +414,7 @@ func TestVersionFlagExecutionPath(t *testing.T) {
 			type exitPanic struct {
 				code int
 			}
-			utils.OsExit = func(code int) {
+			errUtils.OsExit = func(code int) {
 				panic(exitPanic{code: code})
 			}
 
@@ -425,7 +425,7 @@ func TestVersionFlagExecutionPath(t *testing.T) {
 				// Execute should call version command and then exit with expected code.
 				// We expect it to panic with our exitPanic struct containing the exit code.
 				// This verifies that the --version flag handler is being executed and
-				// calls os.Exit via utils.OsExit.
+				// calls os.Exit via errUtils.OsExit.
 				assert.PanicsWithValue(t, exitPanic{code: tt.expectExit}, func() {
 					_ = Execute()
 				}, "Execute should exit with code %d", tt.expectExit)
@@ -518,6 +518,79 @@ func TestPagerDoesNotRunWithoutTTY(t *testing.T) {
 			assert.Contains(t, err.Error(), "flag: help requested", "Only flag.ErrHelp should be returned")
 		}
 	})
+}
+
+// TestIsCompletionCommand tests the isCompletionCommand function.
+func TestIsCompletionCommand(t *testing.T) {
+	tests := []struct {
+		name     string
+		args     []string
+		compLine string
+		argComp  string
+		expected bool
+	}{
+		{
+			name:     "regular completion command",
+			args:     []string{"atmos", "completion"},
+			expected: true,
+		},
+		{
+			name:     "__complete hidden command",
+			args:     []string{"atmos", "__complete"},
+			expected: true,
+		},
+		{
+			name:     "__completeNoDesc hidden command",
+			args:     []string{"atmos", "__completeNoDesc"},
+			expected: true,
+		},
+		{
+			name:     "COMP_LINE env var set",
+			args:     []string{"atmos", "terraform"},
+			compLine: "atmos terraform ",
+			expected: true,
+		},
+		{
+			name:     "_ARGCOMPLETE env var set",
+			args:     []string{"atmos", "terraform"},
+			argComp:  "1",
+			expected: true,
+		},
+		{
+			name:     "regular command - not completion",
+			args:     []string{"atmos", "version"},
+			expected: false,
+		},
+		{
+			name:     "no args",
+			args:     []string{"atmos"},
+			expected: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Setup environment variables.
+			if tt.compLine != "" {
+				t.Setenv("COMP_LINE", tt.compLine)
+			}
+			if tt.argComp != "" {
+				t.Setenv("_ARGCOMPLETE", tt.argComp)
+			}
+
+			// Create a mock command with the appropriate name based on the test args.
+			var cmd *cobra.Command
+			if len(tt.args) > 1 {
+				cmd = &cobra.Command{
+					Use: tt.args[1],
+				}
+			}
+
+			// Test.
+			result := isCompletionCommand(cmd)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
 }
 
 func TestFindAnsiCodeEnd(t *testing.T) {

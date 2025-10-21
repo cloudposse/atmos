@@ -17,6 +17,7 @@ import (
 	"github.com/versent/saml2aws/v2/pkg/creds"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	awsCloud "github.com/cloudposse/atmos/pkg/auth/cloud/aws"
 	"github.com/cloudposse/atmos/pkg/auth/types"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -225,7 +226,8 @@ func (p *samlProvider) selectRole(awsRoles []*saml2aws.AWSRole) *saml2aws.AWSRol
 
 // assumeRoleWithSAML assumes an AWS role using SAML assertion.
 func (p *samlProvider) assumeRoleWithSAML(ctx context.Context, samlAssertion string, role *saml2aws.AWSRole) (*types.AWSCredentials, error) {
-	return p.assumeRoleWithSAMLWithDeps(ctx, samlAssertion, role, config.LoadDefaultConfig, func(cfg aws.Config) assumeRoleWithSAMLClient {
+	// Use LoadIsolatedAWSConfig to avoid conflicts with external AWS env vars.
+	return p.assumeRoleWithSAMLWithDeps(ctx, samlAssertion, role, awsCloud.LoadIsolatedAWSConfig, func(cfg aws.Config) assumeRoleWithSAMLClient {
 		return sts.NewFromConfig(cfg)
 	})
 }
@@ -237,8 +239,18 @@ func (p *samlProvider) assumeRoleWithSAMLWithDeps(
 	loader func(context.Context, ...func(*config.LoadOptions) error) (aws.Config, error),
 	factory func(aws.Config) assumeRoleWithSAMLClient,
 ) (*types.AWSCredentials, error) {
+	// Build config options
+	configOpts := []func(*config.LoadOptions) error{
+		config.WithRegion(p.region),
+	}
+
+	// Add custom endpoint resolver if configured
+	if resolverOpt := awsCloud.GetResolverConfigOption(nil, p.config); resolverOpt != nil {
+		configOpts = append(configOpts, resolverOpt)
+	}
+
 	// Load AWS configuration (v2).
-	cfg, err := loader(ctx, config.WithRegion(p.region))
+	cfg, err := loader(ctx, configOpts...)
 	if err != nil {
 		return nil, fmt.Errorf("%w: failed to create AWS config: %v", errUtils.ErrAuthenticationFailed, err)
 	}

@@ -160,15 +160,24 @@ func (i *userIdentity) writeAWSFiles(creds *types.AWSCredentials, region string)
 
 // generateSessionToken generates session tokens for AWS User identities (with or without MFA).
 func (i *userIdentity) generateSessionToken(ctx context.Context, longLivedCreds *types.AWSCredentials, region string) (types.ICredentials, error) {
-	// Create AWS config with long-lived credentials.
-	cfg, err := config.LoadDefaultConfig(ctx,
+	// Build config options
+	configOpts := []func(*config.LoadOptions) error{
 		config.WithRegion(region),
 		config.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(
 			longLivedCreds.AccessKeyID,
 			longLivedCreds.SecretAccessKey,
 			"", // no session token for long-lived credentials.
 		)),
-	)
+	}
+
+	// Add custom endpoint resolver if configured
+	if resolverOpt := awsCloud.GetResolverConfigOption(i.config, nil); resolverOpt != nil {
+		configOpts = append(configOpts, resolverOpt)
+	}
+
+	// Create AWS config with long-lived credentials.
+	// Use isolated environment to avoid conflicts with external AWS env vars.
+	cfg, err := awsCloud.LoadIsolatedAWSConfig(ctx, configOpts...)
 	if err != nil {
 		return nil, fmt.Errorf("%w: failed to load AWS config: %v", errUtils.ErrAwsAuth, err)
 	}

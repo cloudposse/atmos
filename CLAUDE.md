@@ -253,6 +253,60 @@ var (
 - Target >80% coverage, especially for `pkg/` and `internal/exec/`
 - **Comments must end with periods**: All comments should be complete sentences ending with a period (enforced by golangci-lint)
 
+### Test Isolation (MANDATORY)
+- **ALWAYS use `cmd.NewTestKit(t)` for ALL cmd package tests**.
+- **TestKit pattern follows Go 1.15+ testing.TB interface idiom**.
+- **Provides automatic RootCmd state cleanup similar to `t.Setenv()` and `t.Chdir()`**.
+- **Required for ALL tests that**:
+  - Call `RootCmd.Execute()` or `Execute()`.
+  - Call `RootCmd.SetArgs()` or modify `RootCmd` flags.
+  - Call any command that internally uses `RootCmd`.
+  - When in doubt, use it - it's safe and lightweight.
+
+- **Basic usage**:
+  ```go
+  func TestMyCommand(t *testing.T) {
+      t := cmd.NewTestKit(t) // Wraps testing.TB with automatic cleanup
+
+      // Rest of test - all testing.TB methods available
+      RootCmd.SetArgs([]string{"terraform", "plan"})
+      require.NoError(t, RootCmd.PersistentFlags().Set("chdir", "/tmp"))
+
+      // State automatically restored when test completes.
+  }
+  ```
+
+- **For table-driven tests with subtests**:
+  ```go
+  func TestTableDriven(t *testing.T) {
+      _ = cmd.NewTestKit(t) // Parent test gets cleanup
+
+      tests := []struct{...}{...}
+      for _, tt := range tests {
+          t.Run(tt.name, func(t *testing.T) {
+              _ = cmd.NewTestKit(t) // Each subtest gets its own cleanup
+
+              // Test code...
+          })
+      }
+  }
+  ```
+
+- **Why this is critical**:
+  - RootCmd is global state shared across all tests.
+  - Flag values persist between tests causing mysterious failures.
+  - StringSlice flags (config, config-path) are especially problematic.
+  - Without cleanup, tests pass in isolation but fail when run together.
+  - We use reflection to properly reset StringSlice flags which append instead of replace.
+
+- **Implementation notes**:
+  - TestKit wraps `testing.TB` and adds automatic RootCmd cleanup.
+  - Snapshots ALL flag values and their Changed state when created.
+  - Uses `t.Cleanup()` for automatic LIFO restoration.
+  - Handles StringSlice/StringArray flags specially (they require reflection to reset).
+  - All `testing.TB` methods work: `Helper()`, `Log()`, `Setenv()`, `Cleanup()`, etc.
+  - No performance penalty - snapshot is fast and only done once per test.
+
 ### Test Quality (MANDATORY)
 - **Test behavior, not implementation** - Verify inputs/outputs, not internal state
 - **Never test stub functions** - Either implement the function or remove the test
@@ -261,6 +315,45 @@ var (
 - **No coverage theater** - Each test must validate real behavior, not inflate metrics
 - **Remove always-skipped tests** - Either fix the underlying issue or delete the test
 - **Table-driven tests need real scenarios** - Use production-like inputs, not contrived data
+
+### Mock Generation (MANDATORY)
+- **ALWAYS use mockgen for interface mocks** - Never write manual mock implementations
+- **Use `//go:generate mockgen`** directive at the top of test files
+- **Pattern to follow**:
+  ```go
+  //go:generate mockgen -package=yourpkg -destination=mock_interface_test.go github.com/external/package InterfaceName
+  ```
+- **For internal interfaces**, use `-source` flag:
+  ```go
+  //go:generate mockgen -source=$GOFILE -destination=mock_$GOFILE -package=$GOPACKAGE
+  ```
+- **NEVER duplicate interface implementation** - 20+ stub methods is a sign you should use mockgen
+- Examples of mockgen usage: `pkg/git/interface.go`, `pkg/pro/interface.go`, `pkg/filesystem/interface.go`
+
+### Testing Production Code Paths (MANDATORY)
+- **ALWAYS call production code** - Never duplicate production logic in tests
+- **Tests must invoke actual functions** - Not reimplement their logic
+- **Anti-pattern example**:
+  ```go
+  // ❌ WRONG: Test duplicates production logic
+  func TestCalculateTotal(t *testing.T) {
+      items := []int{1, 2, 3}
+      total := 0
+      for _, item := range items {
+          total += item  // Duplicating production code!
+      }
+      assert.Equal(t, 6, total)
+  }
+
+  // ✅ CORRECT: Test calls production code
+  func TestCalculateTotal(t *testing.T) {
+      items := []int{1, 2, 3}
+      total := CalculateTotal(items)  // Calling production function
+      assert.Equal(t, 6, total)
+  }
+  ```
+- **If you find yourself copying production code** - you're doing it wrong
+- **Mocks should use mockgen** - not manual implementations of 20+ interface methods
 
 ### Test Skipping Conventions (MANDATORY)
 - **ALWAYS use `t.Skipf()` instead of `t.Skip()`** - Provide clear reasons for skipped tests
@@ -457,16 +550,58 @@ Use fixtures in `tests/test-cases/` for integration tests. Each test case should
 ## Common Development Tasks
 
 ### Adding New CLI Command
-1. Create `cmd/new_command.go` with Cobra command definition
-2. **Create embedded markdown examples** in `cmd/markdown/atmos_command_subcommand_usage.md`
-3. **Use `//go:embed` and `utils.PrintfMarkdown()`** for example rendering
-4. **Register in `cmd/markdown_help.go`** examples map with suggestion URL
-5. **Use markdown formatting** in Short/Long descriptions (supports **bold**, `code`, etc.)
-6. Add business logic in appropriate `pkg/` or `internal/exec/` package
-7. **Create Docusaurus documentation** in `website/docs/cli/commands/<command>/<subcommand>.mdx`
-8. Add tests with fixtures
-9. Add integration test in `tests/`
-10. **Create pull request following template format**
+
+**Atmos uses the command registry pattern** for organizing built-in commands. Follow these steps:
+
+1. **Create command package directory**: `cmd/[command]/`
+2. **Implement CommandProvider interface**:
+   ```go
+   // cmd/mycommand/mycommand.go
+   package mycommand
+
+   import (
+       "github.com/spf13/cobra"
+       "github.com/cloudposse/atmos/cmd/internal"
+       e "github.com/cloudposse/atmos/internal/exec"
+   )
+
+   var mycommandCmd = &cobra.Command{
+       Use:   "mycommand",
+       Short: "Brief description",
+       Long:  `Detailed description.`,
+       RunE: func(cmd *cobra.Command, args []string) error {
+           return e.ExecuteMyCommand(cmd, args)
+       },
+   }
+
+   func init() {
+       internal.Register(&MyCommandProvider{})
+   }
+
+   type MyCommandProvider struct{}
+
+   func (m *MyCommandProvider) GetCommand() *cobra.Command {
+       return mycommandCmd
+   }
+
+   func (m *MyCommandProvider) GetName() string {
+       return "mycommand"
+   }
+
+   func (m *MyCommandProvider) GetGroup() string {
+       return "Other Commands" // See docs/developing-atmos-commands.md
+   }
+   ```
+3. **Add blank import to `cmd/root.go`**: `_ "github.com/cloudposse/atmos/cmd/mycommand"`
+4. **Implement business logic** in `internal/exec/mycommand.go`
+5. **Add tests** in `cmd/mycommand/mycommand_test.go`
+6. **Create Docusaurus documentation** in `website/docs/cli/commands/<command>/<subcommand>.mdx`
+7. **Build website to verify**: `cd website && npm run build`
+8. **Create pull request following template format**
+
+**See:**
+- **[docs/developing-atmos-commands.md](docs/developing-atmos-commands.md)** - Complete guide with patterns and examples
+- **[docs/prd/command-registry-pattern.md](docs/prd/command-registry-pattern.md)** - Architecture and design decisions
 
 ### Documentation Requirements (MANDATORY)
 - **All new commands/flags/parameters MUST have Docusaurus documentation**
@@ -644,7 +779,99 @@ git commit -m "chore: update screengrabs"
   - Link to supporting GitHub issues or documentation
   - Use `closes #123` if PR closes an issue
   ```
-- **Use "no-release" label** for documentation-only changes
+- **Add changelog blog post for feature releases**:
+  - PRs labeled `minor` or `major` MUST include a blog post in `website/blog/`
+  - Create a new file: `website/blog/YYYY-MM-DD-feature-name.md`
+  - Follow the format of existing blog posts (see template below)
+  - Include `<!--truncate-->` marker after the introduction paragraph
+  - The CI workflow will fail and comment on the PR if this is missing
+
+### Blog Post Guidelines (MANDATORY)
+
+Blog posts serve different audiences and must be tagged appropriately:
+
+#### Audience Types
+
+**1. User-Facing Posts** (Features, Improvements, Bug Fixes)
+- **Audience**: Teams using Atmos to manage infrastructure
+- **Focus**: How the change benefits users, usage examples, migration guides
+- **Required tags**: Choose one or more:
+  - `feature` - New user-facing capabilities
+  - `enhancement` - Improvements to existing features
+  - `bugfix` - Important bug fixes that affect users
+- **Example tags**: `[feature, terraform, workflows]`
+
+**2. Contributor-Facing Posts** (Refactoring, Internal Changes, Developer Tools)
+- **Audience**: Atmos contributors and core developers
+- **Focus**: Internal code structure, refactoring, developer experience
+- **Required tag**: `contributors`
+- **Additional tags**: Describe the technical area
+- **Example tags**: `[contributors, atmos-core, refactoring]`
+
+#### Blog Post Template
+
+```markdown
+---
+slug: descriptive-slug
+title: "Clear, Descriptive Title"
+authors: [atmos]
+tags: [primary-tag, secondary-tag, ...]  # See audience types above
+---
+
+Brief introduction paragraph explaining what changed and why it matters.
+
+<!--truncate-->
+
+## What Changed
+
+Describe the change with code examples or visuals.
+
+## Why This Matters / Impact on Users
+
+Explain the benefits or reasoning.
+
+## [For User Posts] How to Use It
+
+Provide practical examples and usage instructions.
+
+## [For Contributor Posts] For Atmos Contributors
+
+Clarify this is internal with zero user impact, link to technical docs.
+
+## Get Involved
+
+- Link to relevant documentation
+- Encourage discussion/contributions
+```
+
+#### Tag Reference
+
+**Primary Audience Tags:**
+- `feature` - New user-facing feature
+- `enhancement` - Improvement to existing feature
+- `bugfix` - Important bug fix
+- `contributors` - For Atmos core contributors (internal changes)
+
+**Secondary Technical Tags (for contributor posts):**
+- `atmos-core` - Changes to Atmos codebase/internals
+- `refactoring` - Code refactoring and restructuring
+- `testing` - Test infrastructure improvements
+- `ci-cd` - CI/CD pipeline changes
+- `developer-experience` - Developer tooling improvements
+
+**Secondary Technical Tags (for user posts):**
+- `terraform` - Terraform-specific features
+- `helmfile` - Helmfile-specific features
+- `workflows` - Workflow features
+- `validation` - Validation features
+- `performance` - Performance improvements
+- `cloud-architecture` - Cloud architecture patterns (user-facing)
+
+**General Tags:**
+- `announcements` - Major announcements
+- `breaking-changes` - Breaking changes requiring migration
+
+- **Use `no-release` label for documentation-only changes**
 - **Ensure all CI checks pass** before requesting review
 
 ### Checking PR Security Alerts and CI Status
@@ -766,8 +993,13 @@ func TestValidateStack_ReturnsErrorForInvalidFormat(t *testing.T) {
   // WRONG: Only binding external env var
   viper.BindEnv("GITHUB_TOKEN")
 
-  // CORRECT: Provide Atmos alternative
+  // WRONG: Only checks GITHUB_TOKEN, not ATMOS_GITHUB_TOKEN
   viper.BindEnv("ATMOS_GITHUB_TOKEN", "GITHUB_TOKEN")
+
+  // CORRECT: Check ATMOS_GITHUB_TOKEN first, then fall back to GITHUB_TOKEN
+  viper.BindEnv("ATMOS_GITHUB_TOKEN", "ATMOS_GITHUB_TOKEN", "GITHUB_TOKEN")
+
+  // CORRECT: Single env var (no fallback needed)
   viper.BindEnv("ATMOS_PRO_TOKEN", "ATMOS_PRO_TOKEN")
   ```
 

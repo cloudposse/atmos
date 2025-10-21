@@ -4,7 +4,6 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -96,22 +95,8 @@ func TestShouldExcludePath(t *testing.T) {
 	}
 }
 
-// TestShouldExcludePath_Directory checks directory exclusion using a trailing slash.
-// Skipped on Windows.
-func TestShouldExcludePath_Directory(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skipf("Skipping directory exclusion test on Windows: path handling differs")
-	}
-	dir := t.TempDir()
-	info, err := os.Stat(dir)
-	if err != nil {
-		t.Fatalf("Failed to stat directory: %v", err)
-	}
-	pattern := "**/" + filepath.Base(dir) + "/"
-	if !shouldExcludePath(info, filepath.Base(dir), []string{pattern}) {
-		t.Errorf("Expected directory %q to be excluded by pattern %q", filepath.Base(dir), pattern)
-	}
-}
+// Unix-specific test moved to copy_glob_unix_test.go:
+// - TestShouldExcludePath_Directory
 
 // TestShouldExcludePath_Error ensures invalid patterns do not exclude files.
 func TestShouldExcludePath_Error(t *testing.T) {
@@ -216,49 +201,8 @@ func TestCopyDirRecursive(t *testing.T) {
 	}
 }
 
-// TestProcessDirEntry_Symlink ensures that symlink entries are skipped.
-func TestProcessDirEntry_Symlink(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skipf("Skipping symlink test on Windows: symlinks require special privileges")
-	}
-	srcDir := t.TempDir()
-	dstDir := t.TempDir()
-	targetFile := filepath.Join(srcDir, "target.txt")
-	if err := os.WriteFile(targetFile, []byte("data"), 0o600); err != nil {
-		t.Fatalf("Failed to write target file: %v", err)
-	}
-	linkPath := filepath.Join(srcDir, "link.txt")
-	if err := os.Symlink(targetFile, linkPath); err != nil {
-		t.Skipf("Cannot create symlink on this system: insufficient privileges or unsupported filesystem")
-	}
-	entries, err := os.ReadDir(srcDir)
-	if err != nil {
-		t.Fatalf("Failed to read src dir: %v", err)
-	}
-	var linkEntry os.DirEntry
-	for _, e := range entries {
-		if e.Name() == "link.txt" {
-			linkEntry = e
-			break
-		}
-	}
-	if linkEntry == nil {
-		t.Fatalf("Symlink entry not found")
-	}
-	ctx := &CopyContext{
-		SrcDir:   srcDir,
-		DstDir:   dstDir,
-		BaseDir:  srcDir,
-		Excluded: []string{},
-		Included: []string{},
-	}
-	if err := processDirEntry(linkEntry, ctx); err != nil {
-		t.Errorf("Expected nil error for symlink, got %v", err)
-	}
-	if _, err := os.Stat(filepath.Join(dstDir, "link.txt")); err == nil {
-		t.Errorf("Expected symlink not to be copied")
-	}
-}
+// Unix-specific test moved to copy_glob_unix_test.go:
+// - TestProcessDirEntry_Symlink
 
 // TestGetMatchesForPattern checks that getMatchesForPattern returns expected matches.
 func TestGetMatchesForPattern(t *testing.T) {
@@ -306,30 +250,8 @@ func TestGetMatchesForPattern_InvalidPattern(t *testing.T) {
 	}
 }
 
-// TestGetMatchesForPattern_ShallowNoMatch tests the shallow branch with no matches.
-func TestGetMatchesForPattern_ShallowNoMatch(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skipf("Skipping shallow no-match test on Windows: glob behavior differs")
-	}
-	oldFn := getGlobMatchesForTest
-	defer func() { getGlobMatchesForTest = oldFn }()
-	getGlobMatchesForTest = func(pattern string) ([]string, error) {
-		normalized := filepath.ToSlash(pattern)
-		if strings.Contains(normalized, "/*") && !strings.Contains(normalized, "/**") {
-			return []string{}, nil
-		}
-		return []string{}, nil
-	}
-	srcDir := t.TempDir()
-	emptyDir := filepath.Join(srcDir, "dir")
-	if err := os.Mkdir(emptyDir, 0o755); err != nil {
-		t.Fatalf("Failed to create empty directory: %v", err)
-	}
-	_, err := getMatchesForPatternForTest(srcDir, "dir/*")
-	if err != nil {
-		t.Fatalf("Expected no error for shallow pattern with no matches, got %v", err)
-	}
-}
+// Unix-specific test moved to copy_glob_unix_test.go:
+// - TestGetMatchesForPattern_ShallowNoMatch
 
 // TestGetMatchesForPattern_RecursiveMatch tests the recursive branch by overriding glob matching.
 func TestGetMatchesForPattern_RecursiveMatch(t *testing.T) {
@@ -822,45 +744,8 @@ func TestProcessMatch_RelPathError(t *testing.T) {
 	}
 }
 
-// TestCopyFile_FailCreate tests error when creating destination file fails.
-func TestCopyFile_FailCreate(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skipf("Skipping on Windows: directory permissions don't prevent file creation the same way as Unix")
-	}
-
-	srcDir, err := os.MkdirTemp("", "copyfile-src")
-	if err != nil {
-		t.Fatalf("Failed to create source dir: %v", err)
-	}
-	defer os.RemoveAll(srcDir)
-
-	dstDir, err := os.MkdirTemp("", "copyfile-dst")
-	if err != nil {
-		t.Fatalf("Failed to create dst dir: %v", err)
-	}
-	defer os.RemoveAll(dstDir)
-
-	// Create source file.
-	srcFile := filepath.Join(srcDir, "test.txt")
-	if err := os.WriteFile(srcFile, []byte("content"), 0o600); err != nil {
-		t.Fatalf("Failed to write source file: %v", err)
-	}
-
-	// Create a read-only destination directory to force os.Create to fail.
-	if err := os.Chmod(dstDir, 0o500); err != nil {
-		t.Fatalf("Failed to change dst dir permissions: %v", err)
-	}
-	defer os.Chmod(dstDir, 0o700) // Restore for cleanup
-
-	dstFile := filepath.Join(dstDir, "test.txt")
-	err = copyFile(srcFile, dstFile)
-	if err == nil {
-		t.Errorf("Expected error when creating destination file, got nil")
-	}
-	if err != nil && !errors.Is(err, errUtils.ErrOpenFile) {
-		t.Errorf("Expected ErrOpenFile, got %v", err)
-	}
-}
+// Unix-specific test moved to copy_glob_unix_test.go:
+// - TestCopyFile_FailCreate
 
 // TestShouldIncludePath_NoPatterns tests that files are included when no patterns specified.
 func TestShouldIncludePath_NoPatterns(t *testing.T) {
@@ -882,11 +767,8 @@ func TestShouldIncludePath_NoPatterns(t *testing.T) {
 
 // TestShouldIncludePath_Directory tests that directories are always included.
 func TestShouldIncludePath_Directory(t *testing.T) {
-	tmpDir, err := os.MkdirTemp("", "testdir")
-	if err != nil {
-		t.Fatalf("Failed to create temp dir: %v", err)
-	}
-	defer os.RemoveAll(tmpDir)
+	tmpDir := t.TempDir()
+
 	info, err := os.Stat(tmpDir)
 	if err != nil {
 		t.Fatalf("Failed to stat dir: %v", err)
@@ -918,11 +800,8 @@ func TestShouldIncludePath_NoMatch(t *testing.T) {
 
 // TestShouldSkipPrefixEntry_DirectoryWithTrailingSlash tests directory exclusion in prefix mode.
 func TestShouldSkipPrefixEntry_DirectoryWithTrailingSlash(t *testing.T) {
-	tmpDir, err := os.MkdirTemp("", "prefixdir")
-	if err != nil {
-		t.Fatalf("Failed to create temp dir: %v", err)
-	}
-	defer os.RemoveAll(tmpDir)
+	tmpDir := t.TempDir()
+
 	info, err := os.Stat(tmpDir)
 	if err != nil {
 		t.Fatalf("Failed to stat dir: %v", err)
@@ -935,27 +814,8 @@ func TestShouldSkipPrefixEntry_DirectoryWithTrailingSlash(t *testing.T) {
 	}
 }
 
-// TestShouldSkipPrefixEntry_File tests file exclusion in prefix mode.
-func TestShouldSkipPrefixEntry_File(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skipf("Skipping on Windows: glob pattern matching differs due to path separator differences")
-	}
-
-	tmpFile, err := os.CreateTemp("", "test.log")
-	if err != nil {
-		t.Fatalf("Failed to create temp file: %v", err)
-	}
-	defer os.Remove(tmpFile.Name())
-	info, err := tmpFile.Stat()
-	if err != nil {
-		t.Fatalf("Failed to stat file: %v", err)
-	}
-
-	// File should be excluded by pattern.
-	if !shouldSkipPrefixEntry(info, "logs/test.log", []string{"**/logs/*.log"}) {
-		t.Errorf("Expected file to be excluded by pattern")
-	}
-}
+// Unix-specific test moved to copy_glob_unix_test.go:
+// - TestShouldSkipPrefixEntry_File
 
 // TestShouldSkipPrefixEntry_NoExclusion tests that files are not excluded without patterns.
 func TestShouldSkipPrefixEntry_NoExclusion(t *testing.T) {
@@ -995,17 +855,9 @@ func TestGetMatchesForPattern_RecursiveNoMatch(t *testing.T) {
 
 // TestGetLocalFinalTarget_Directory tests target is a directory without extension.
 func TestGetLocalFinalTarget_Directory(t *testing.T) {
-	srcDir, err := os.MkdirTemp("", "source")
-	if err != nil {
-		t.Fatalf("Failed to create src dir: %v", err)
-	}
-	defer os.RemoveAll(srcDir)
+	srcDir := t.TempDir()
 
-	targetPath, err := os.MkdirTemp("", "target")
-	if err != nil {
-		t.Fatalf("Failed to create target dir: %v", err)
-	}
-	defer os.RemoveAll(targetPath)
+	targetPath := t.TempDir()
 
 	finalTarget, err := getLocalFinalTarget(srcDir, targetPath)
 	if err != nil {
@@ -1019,17 +871,9 @@ func TestGetLocalFinalTarget_Directory(t *testing.T) {
 
 // TestGetLocalFinalTarget_FileExtension tests target with file extension.
 func TestGetLocalFinalTarget_FileExtension(t *testing.T) {
-	srcDir, err := os.MkdirTemp("", "source")
-	if err != nil {
-		t.Fatalf("Failed to create src dir: %v", err)
-	}
-	defer os.RemoveAll(srcDir)
+	srcDir := t.TempDir()
 
-	tmpDir, err := os.MkdirTemp("", "parent")
-	if err != nil {
-		t.Fatalf("Failed to create parent dir: %v", err)
-	}
-	defer os.RemoveAll(tmpDir)
+	tmpDir := t.TempDir()
 
 	targetPath := filepath.Join(tmpDir, "output.txt")
 	finalTarget, err := getLocalFinalTarget(srcDir, targetPath)
@@ -1043,11 +887,7 @@ func TestGetLocalFinalTarget_FileExtension(t *testing.T) {
 
 // TestGetNonLocalFinalTarget tests non-local file target creation.
 func TestGetNonLocalFinalTarget(t *testing.T) {
-	tmpDir, err := os.MkdirTemp("", "nonlocal")
-	if err != nil {
-		t.Fatalf("Failed to create temp dir: %v", err)
-	}
-	defer os.RemoveAll(tmpDir)
+	tmpDir := t.TempDir()
 
 	targetPath := filepath.Join(tmpDir, "newdir")
 	finalTarget, err := getNonLocalFinalTarget(targetPath)
@@ -1064,17 +904,9 @@ func TestGetNonLocalFinalTarget(t *testing.T) {
 
 // TestComponentOrMixinsCopy_FileToFile tests file-to-file copy with existing directory at dest.
 func TestComponentOrMixinsCopy_FileToFile_ExistingDir(t *testing.T) {
-	srcDir, err := os.MkdirTemp("", "src")
-	if err != nil {
-		t.Fatalf("Failed to create src dir: %v", err)
-	}
-	defer os.RemoveAll(srcDir)
+	srcDir := t.TempDir()
 
-	dstDir, err := os.MkdirTemp("", "dst")
-	if err != nil {
-		t.Fatalf("Failed to create dst dir: %v", err)
-	}
-	defer os.RemoveAll(dstDir)
+	dstDir := t.TempDir()
 
 	// Create source file.
 	srcFile := filepath.Join(srcDir, "source.txt")
@@ -1105,17 +937,9 @@ func TestComponentOrMixinsCopy_FileToFile_ExistingDir(t *testing.T) {
 
 // TestCopyToTargetWithPatterns_InclusionOnly tests copy with only inclusion patterns.
 func TestCopyToTargetWithPatterns_InclusionOnly(t *testing.T) {
-	srcDir, err := os.MkdirTemp("", "inconly-src")
-	if err != nil {
-		t.Fatalf("Failed to create src dir: %v", err)
-	}
-	defer os.RemoveAll(srcDir)
+	srcDir := t.TempDir()
 
-	dstDir, err := os.MkdirTemp("", "inconly-dst")
-	if err != nil {
-		t.Fatalf("Failed to create dst dir: %v", err)
-	}
-	defer os.RemoveAll(dstDir)
+	dstDir := t.TempDir()
 
 	// Create test files.
 	if err := os.WriteFile(filepath.Join(srcDir, "match.md"), []byte("md"), 0o600); err != nil {

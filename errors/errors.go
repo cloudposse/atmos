@@ -42,6 +42,14 @@ var (
 	ErrMissingStackNameTemplateAndPattern    = errors.New("'stacks.name_pattern' or 'stacks.name_template' needs to be specified in 'atmos.yaml'")
 	ErrFailedMarshalConfigToYaml             = errors.New("failed to marshal config to YAML")
 	ErrCommandNil                            = errors.New("command cannot be nil")
+	ErrGitHubRateLimitExceeded               = errors.New("GitHub API rate limit exceeded")
+	ErrInvalidLimit                          = errors.New("limit must be between 1 and 100")
+	ErrInvalidOffset                         = errors.New("offset must be >= 0")
+	ErrInvalidSinceDate                      = errors.New("invalid date format for --since")
+	ErrUnsupportedOutputFormat               = errors.New("unsupported output format")
+	ErrTerminalTooNarrow                     = errors.New("terminal too narrow")
+	ErrSpinnerReturnedNilModel               = errors.New("spinner returned nil model")
+	ErrSpinnerUnexpectedModelType            = errors.New("spinner returned unexpected model type")
 
 	// ErrPlanHasDiff is returned when there are differences between two Terraform plan files.
 	ErrPlanHasDiff = errors.New("plan files have differences")
@@ -96,19 +104,24 @@ var (
 	ErrMergeEmbeddedConfig         = errors.New("failed to merge embedded config")
 	ErrExpectedDirOrPattern        = errors.New("--config-path expected directory found file")
 	ErrFileNotFound                = errors.New("file not found")
+	ErrFileAccessDenied            = errors.New("file access denied")
 	ErrExpectedFile                = errors.New("--config expected file found directory")
 	ErrAtmosArgConfigNotFound      = errors.New("atmos configuration not found")
+	ErrEmptyConfigPath             = errors.New("config path cannot be empty")
+	ErrEmptyConfigFile             = errors.New("config file path cannot be empty")
 	ErrAtmosFilesDirConfigNotFound = errors.New("`atmos.yaml` or `.atmos.yaml` configuration file not found in directory")
 
 	ErrMissingStack                       = errors.New("stack is required; specify it on the command line using the flag `--stack <stack>` (shorthand `-s`)")
 	ErrInvalidComponent                   = errors.New("invalid component")
+	ErrInvalidComponentMapType            = errors.New("invalid component map type")
 	ErrAbstractComponentCantBeProvisioned = errors.New("abstract component cannot be provisioned")
 	ErrLockedComponentCantBeProvisioned   = errors.New("locked component cannot be provisioned")
 
 	// Terraform-specific errors.
-	ErrHTTPBackendWorkspaces     = errors.New("workspaces are not supported for the HTTP backend")
-	ErrInvalidTerraformComponent = errors.New("invalid Terraform component")
-	ErrNoTty                     = errors.New("no TTY attached")
+	ErrHTTPBackendWorkspaces       = errors.New("workspaces are not supported for the HTTP backend")
+	ErrInvalidTerraformComponent   = errors.New("invalid Terraform component")
+	ErrNoTty                       = errors.New("no TTY attached")
+	ErrFailedToLoadTerraformModule = errors.New("failed to load terraform module")
 
 	ErrMissingPackerTemplate = errors.New("packer template is required; it can be specified in the `settings.packer.template` section in the Atmos component manifest, or on the command line via the flag `--template <template>` (shorthand `-t`)")
 	ErrMissingPackerManifest = errors.New("packer manifest is missing")
@@ -149,6 +162,7 @@ var (
 	ErrComponentNotDefined                    = errors.New("component not defined in any config files")
 	ErrInvalidTerraformBackend                = errors.New("invalid terraform.backend section")
 	ErrInvalidTerraformRemoteStateBackend     = errors.New("invalid terraform.remote_state_backend section")
+	ErrUnsupportedComponentType               = errors.New("unsupported component type. Valid types are 'terraform', 'helmfile', 'packer'")
 
 	// Global/Stack-level section errors.
 	ErrInvalidVarsSection               = errors.New("invalid vars section")

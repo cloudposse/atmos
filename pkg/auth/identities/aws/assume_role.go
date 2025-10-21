@@ -40,7 +40,19 @@ func (i *assumeRoleIdentity) newSTSClient(ctx context.Context, awsBase *types.AW
 	}
 	// Persist the resolved region back onto the identity so it is available for serialization.
 	i.region = region
-	cfg, err := config.LoadDefaultConfig(ctx, config.WithRegion(region))
+
+	// Build config options
+	configOpts := []func(*config.LoadOptions) error{
+		config.WithRegion(region),
+	}
+
+	// Add custom endpoint resolver if configured
+	if resolverOpt := awsCloud.GetResolverConfigOption(i.config, nil); resolverOpt != nil {
+		configOpts = append(configOpts, resolverOpt)
+	}
+
+	// Load config with isolated environment to avoid conflicts with external AWS env vars.
+	cfg, err := awsCloud.LoadIsolatedAWSConfig(ctx, configOpts...)
 	if err != nil {
 		return nil, fmt.Errorf("%w: failed to load AWS config: %w", errUtils.ErrInvalidIdentityConfig, err)
 	}

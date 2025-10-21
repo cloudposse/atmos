@@ -256,12 +256,7 @@ func setupDescribeAffectedTest(t *testing.T) (atmosConfig schema.AtmosConfigurat
 	config, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
 	require.NoError(t, err)
 
-	tempDir, err := os.MkdirTemp("", "")
-	require.NoError(t, err)
-
-	t.Cleanup(func() {
-		removeTempDir(tempDir)
-	})
+	tempDir := t.TempDir()
 
 	copyOptions := cp.Options{
 		PreserveTimes: false,
