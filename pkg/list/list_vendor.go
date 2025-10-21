@@ -1,13 +1,13 @@
 package list
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
 
-	"github.com/pkg/errors"
 	"go.yaml.in/yaml/v3"
 
 	"github.com/cloudposse/atmos/internal/exec"

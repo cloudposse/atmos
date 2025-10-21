@@ -2,16 +2,17 @@ package format
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"reflect"
 	"sort"
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/lipgloss/table"
+
 	"github.com/cloudposse/atmos/internal/tui/templates"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 	"github.com/cloudposse/atmos/pkg/utils"
-	"github.com/pkg/errors"
 )
 
 // Constants for table formatting.
@@ -222,8 +223,8 @@ func (f *TableFormatter) Format(data map[string]interface{}, options FormatOptio
 
 	// Check if the table would be too wide
 	if estimatedWidth > terminalWidth {
-		return "", errors.Errorf("%s (width: %d > %d).\n\nSuggestions:\n- Use --stack to select specific stacks (examples: --stack 'plat-ue2-dev')\n- Use --query to select specific settings (example: --query '.vpc.validation')\n- Use --format json or --format yaml for complete data viewing",
-			ErrTableTooWide.Error(), estimatedWidth, terminalWidth)
+		return "", fmt.Errorf("%w (width: %d > %d).\n\nSuggestions:\n- Use --stack to select specific stacks (examples: --stack 'plat-ue2-dev')\n- Use --query to select specific settings (example: --query '.vpc.validation')\n- Use --format json or --format yaml for complete data viewing",
+			ErrTableTooWide, estimatedWidth, terminalWidth)
 	}
 
 	header := createHeader(stackKeys, options.CustomHeaders)
