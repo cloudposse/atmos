@@ -4,7 +4,9 @@ import (
 	"fmt"
 	"sync"
 
-	log "github.com/charmbracelet/log"
+	"github.com/cloudposse/atmos/pkg/perf"
+
+	log "github.com/cloudposse/atmos/pkg/logger"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	tb "github.com/cloudposse/atmos/internal/terraform_backend"
@@ -33,6 +35,8 @@ func GetTerraformState(
 	output string,
 	skipCache bool,
 ) (any, error) {
+	defer perf.Track(atmosConfig, "exec.GetTerraformState")()
+
 	stackSlug := fmt.Sprintf("%s-%s", stack, component)
 
 	// If the result for the component in the stack already exists in the cache, return it.
@@ -68,7 +72,14 @@ func GetTerraformState(
 	if remoteStateBackendStaticTypeOutputs != nil {
 		// Cache the result
 		terraformStateCache.Store(stackSlug, remoteStateBackendStaticTypeOutputs)
-		result := GetStaticRemoteStateOutput(atmosConfig, component, stack, remoteStateBackendStaticTypeOutputs, output)
+		result, exists, err := GetStaticRemoteStateOutput(atmosConfig, component, stack, remoteStateBackendStaticTypeOutputs, output)
+		if err != nil {
+			return nil, fmt.Errorf("%w for component `%s` in stack `%s`\nin YAML function: `%s`\n%v", errUtils.ErrReadTerraformState, component, stack, yamlFunc, err)
+		}
+		if !exists {
+			return nil, fmt.Errorf("%w: output `%s` does not exist for component `%s` in stack `%s`\nin YAML function: `%s`", errUtils.ErrReadTerraformState, output, component, stack, yamlFunc)
+		}
+		// result may be nil if the output is legitimately null
 		return result, nil
 	}
 

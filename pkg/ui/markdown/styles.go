@@ -8,7 +8,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
 
-// applyStyleSafely applies a color to a style primitive safely handling nil pointers
+// applyStyleSafely applies a color to a style primitive safely handling nil pointers.
 func applyStyleSafely(style *ansi.StylePrimitive, color string) {
 	if style == nil {
 		return
@@ -21,7 +21,7 @@ func applyStyleSafely(style *ansi.StylePrimitive, color string) {
 }
 
 // GetDefaultStyle returns the markdown style configuration from atmos.yaml settings
-// or falls back to built-in defaults if not configured
+// or falls back to built-in defaults if not configured.
 func GetDefaultStyle(atmosConfig schema.AtmosConfiguration) ([]byte, error) {
 	// Check if a theme is specified
 	if atmosConfig.Settings.Terminal.Theme != "" {
@@ -121,13 +121,15 @@ func GetDefaultStyle(atmosConfig schema.AtmosConfiguration) ([]byte, error) {
 	return json.Marshal(style)
 }
 
-// this only returns the built-in default style configuration
+const newline = "\n"
+
+// This only returns the built-in default style configuration.
 func getBuiltinDefaultStyle() ([]byte, error) {
 	style := ansi.StyleConfig{
 		Document: ansi.StyleBlock{
 			StylePrimitive: ansi.StylePrimitive{
 				BlockPrefix: "",
-				BlockSuffix: "\n",
+				BlockSuffix: newline,
 				Color:       stringPtr(White),
 			},
 			Margin: uintPtr(0),
@@ -145,6 +147,7 @@ func getBuiltinDefaultStyle() ([]byte, error) {
 				BlockSuffix: "",
 				Color:       stringPtr(White),
 			},
+			Margin: uintPtr(1),
 		},
 		List: ansi.StyleList{
 			LevelIndent: 4,
@@ -152,7 +155,7 @@ func getBuiltinDefaultStyle() ([]byte, error) {
 		Heading: ansi.StyleBlock{
 			StylePrimitive: ansi.StylePrimitive{
 				BlockPrefix: "",
-				BlockSuffix: "\n",
+				BlockSuffix: newline,
 				Color:       stringPtr(Blue),
 				Bold:        boolPtr(true),
 			},

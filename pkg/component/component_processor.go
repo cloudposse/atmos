@@ -1,7 +1,7 @@
 package component
 
 import (
-	log "github.com/charmbracelet/log"
+	log "github.com/cloudposse/atmos/pkg/logger"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
@@ -83,7 +83,7 @@ func ProcessComponentFromContext(
 			},
 		}
 
-		stack, err = e.ProcessTmpl("name-template-from-context", stackNameTemplate, ctx, false)
+		stack, err = e.ProcessTmpl(&atmosConfig, "name-template-from-context", stackNameTemplate, ctx, false)
 		if err != nil {
 			log.Error(err)
 			return nil, err

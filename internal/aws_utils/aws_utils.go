@@ -9,9 +9,10 @@ import (
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/credentials/stscreds"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
-	log "github.com/charmbracelet/log"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/perf"
 )
 
 // LoadAWSConfig loads AWS config.
@@ -46,6 +47,8 @@ import (
 	  Provided programmatically using config.WithCredentialsProvider(...)
 */
 func LoadAWSConfig(ctx context.Context, region string, roleArn string, assumeRoleDuration time.Duration) (aws.Config, error) {
+	defer perf.Track(nil, "aws_utils.LoadAWSConfig")()
+
 	var cfgOpts []func(*config.LoadOptions) error
 
 	// Conditionally set the region
@@ -54,6 +57,9 @@ func LoadAWSConfig(ctx context.Context, region string, roleArn string, assumeRol
 	}
 
 	// Load base config (from env, profile, etc.)
+	// Note: We intentionally use config.LoadDefaultConfig here instead of LoadIsolatedAWSConfig
+	// because this function is used in contexts where we want to honor environment variables
+	// (e.g., Terraform backend configuration). The auth-specific code uses LoadIsolatedAWSConfig.
 	baseCfg, err := config.LoadDefaultConfig(ctx, cfgOpts...)
 	if err != nil {
 		return aws.Config{}, fmt.Errorf("%w: %v", errUtils.ErrLoadAwsConfig, err)

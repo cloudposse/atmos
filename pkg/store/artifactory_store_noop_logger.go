@@ -69,6 +69,12 @@ func (l *noopLogger) Output(a ...interface{}) {
 	_ = a // Use the parameter to ensure coverage
 }
 
+// Verbose logs a verbose message.
+// This implementation does nothing to suppress all logging.
+func (l *noopLogger) Verbose(a ...interface{}) {
+	_ = a // Use the parameter to ensure coverage
+}
+
 // createNoopLogger returns a new noopLogger instance that implements the al.Log interface.
 // For testing purposes, this variable can be replaced to track noopLogger creation.
 var createNoopLogger = func() al.Log {

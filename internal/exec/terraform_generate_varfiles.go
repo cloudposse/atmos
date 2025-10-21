@@ -6,18 +6,21 @@ import (
 	"path/filepath"
 	"strings"
 
-	log "github.com/charmbracelet/log"
-	"github.com/mitchellh/mapstructure"
+	"github.com/go-viper/mapstructure/v2"
 	"github.com/spf13/cobra"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
-// ExecuteTerraformGenerateVarfilesCmd executes `terraform generate varfiles` command
+// ExecuteTerraformGenerateVarfilesCmd executes `terraform generate varfiles` command.
 func ExecuteTerraformGenerateVarfilesCmd(cmd *cobra.Command, args []string) error {
+	defer perf.Track(nil, "exec.ExecuteTerraformGenerateVarfilesCmd")()
+
 	info, err := ProcessCommandLineArgs("terraform", cmd, args, nil)
 	if err != nil {
 		return err
@@ -60,7 +63,7 @@ func ExecuteTerraformGenerateVarfilesCmd(cmd *cobra.Command, args []string) erro
 		return err
 	}
 	if format != "" && format != "yaml" && format != "json" && format != "hcl" {
-		return fmt.Errorf("invalid '--format' argument '%s'. Valid values are 'json' (default), 'yaml' and 'hcl", format)
+		return fmt.Errorf("%w: invalid '--format' argument '%s'. Valid values are 'json' (default), 'yaml' and 'hcl'", errUtils.ErrInvalidFlag, format)
 	}
 	if format == "" {
 		format = "json"
@@ -69,7 +72,7 @@ func ExecuteTerraformGenerateVarfilesCmd(cmd *cobra.Command, args []string) erro
 	return ExecuteTerraformGenerateVarfiles(&atmosConfig, fileTemplate, format, stacks, components)
 }
 
-// ExecuteTerraformGenerateVarfiles generates varfiles for all terraform components in all stacks
+// ExecuteTerraformGenerateVarfiles generates varfiles for all terraform components in all stacks.
 func ExecuteTerraformGenerateVarfiles(
 	atmosConfig *schema.AtmosConfiguration,
 	fileTemplate string,
@@ -77,6 +80,8 @@ func ExecuteTerraformGenerateVarfiles(
 	stacks []string,
 	components []string,
 ) error {
+	defer perf.Track(atmosConfig, "exec.ExecuteTerraformGenerateVarfiles")()
+
 	stacksMap, _, err := FindStacksMap(atmosConfig, false)
 	if err != nil {
 		return err
@@ -91,6 +96,7 @@ func ExecuteTerraformGenerateVarfiles(
 	var settingsSection map[string]any
 	var envSection map[string]any
 	var providersSection map[string]any
+	var authSection map[string]any
 	var overridesSection map[string]any
 	var backendSection map[string]any
 	var backendTypeSection string
@@ -136,6 +142,10 @@ func ExecuteTerraformGenerateVarfiles(
 					envSection = map[string]any{}
 				}
 
+				if authSection, ok = componentSection[cfg.AuthSectionName].(map[string]any); !ok {
+					authSection = map[string]any{}
+				}
+
 				if providersSection, ok = componentSection[cfg.ProvidersSectionName].(map[string]any); !ok {
 					providersSection = map[string]any{}
 				}
@@ -175,6 +185,7 @@ func ExecuteTerraformGenerateVarfiles(
 					ComponentVarsSection:      varsSection,
 					ComponentSettingsSection:  settingsSection,
 					ComponentEnvSection:       envSection,
+					ComponentAuthSection:      authSection,
 					ComponentProvidersSection: providersSection,
 					ComponentOverridesSection: overridesSection,
 					ComponentBackendSection:   backendSection,
@@ -184,6 +195,7 @@ func ExecuteTerraformGenerateVarfiles(
 						cfg.MetadataSectionName:    metadataSection,
 						cfg.SettingsSectionName:    settingsSection,
 						cfg.EnvSectionName:         envSection,
+						cfg.AuthSectionName:        authSection,
 						cfg.ProvidersSectionName:   providersSection,
 						cfg.OverridesSectionName:   overridesSection,
 						cfg.BackendSectionName:     backendSection,
@@ -203,7 +215,7 @@ func ExecuteTerraformGenerateVarfiles(
 				// Stack name
 				var stackName string
 				if atmosConfig.Stacks.NameTemplate != "" {
-					stackName, err = ProcessTmpl("terraform-generate-varfiles-template", atmosConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, false)
+					stackName, err = ProcessTmpl(atmosConfig, "terraform-generate-varfiles-template", atmosConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, false)
 					if err != nil {
 						return err
 					}
@@ -325,7 +337,7 @@ func ExecuteTerraformGenerateVarfiles(
 							return err
 						}
 					} else {
-						return fmt.Errorf("invalid '--format' argument '%s'. Valid values are 'json' (default), 'yaml' and 'hcl", format)
+						return fmt.Errorf("%w: invalid '--format' argument '%s'. Valid values are 'json' (default), 'yaml' and 'hcl'", errUtils.ErrInvalidFlag, format)
 					}
 
 					log.Debug("varfile", fileName)

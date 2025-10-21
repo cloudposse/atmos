@@ -1,0 +1,19 @@
+base_path: "../.."
+
+components:
+  terraform:
+    base_path: "components/terraform"
+
+stacks:
+  base_path: "scenarios/yaml-functions-in-lists/stacks"
+  included_paths:
+    - "**/*"
+  excluded_paths:
+    - "workflows/**/*"
+  name_pattern: "{stage}"
+
+schemas:
+  jsonschema:
+    base_path: "schemas/jsonschema"
+  opa:
+    base_path: "schemas/opa"

@@ -5,16 +5,17 @@ import (
 	"fmt"
 	"strings"
 
-	log "github.com/charmbracelet/log"
-	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/spf13/viper"
-	"gopkg.in/yaml.v3"
+	"go.yaml.in/yaml/v3"
+
+	log "github.com/cloudposse/atmos/pkg/logger"
+	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 const (
 	functionKey       = "function"
 	tagValueFormat    = "%s %s"
-	errorFormat       = "%w %v %v error %v"
+	errorFormat       = "%w: %v %v error %v"
 	failedToProcess   = "failed to process"
 	emptyValueWarning = "execute returned empty value"
 )

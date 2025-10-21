@@ -4,24 +4,24 @@ import (
 	"bytes"
 	"encoding/json"
 	"io"
-	"os"
 	"strings"
 
-	"github.com/alecthomas/chroma"
-	"github.com/alecthomas/chroma/formatters"
-	"github.com/alecthomas/chroma/lexers"
-	"github.com/alecthomas/chroma/quick"
-	"github.com/alecthomas/chroma/styles"
-	"github.com/spf13/viper"
-	"golang.org/x/term"
+	"github.com/alecthomas/chroma/v2"
+	"github.com/alecthomas/chroma/v2/formatters"
+	"github.com/alecthomas/chroma/v2/lexers"
+	"github.com/alecthomas/chroma/v2/quick"
+	"github.com/alecthomas/chroma/v2/styles"
 
 	"github.com/cloudposse/atmos/internal/tui/templates"
+	termUtils "github.com/cloudposse/atmos/internal/tui/templates/term"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
 
-// DefaultHighlightSettings returns the default syntax highlighting settings.
+// DefaultHighlightSettings returns the default syntax highlighting settings
 func DefaultHighlightSettings() *schema.SyntaxHighlighting {
+	defer perf.Track(nil, "utils.DefaultHighlightSettings")()
+
 	return &schema.SyntaxHighlighting{
 		Enabled:     true,
 		Formatter:   "terminal",
@@ -31,83 +31,39 @@ func DefaultHighlightSettings() *schema.SyntaxHighlighting {
 	}
 }
 
-// getThemeAwareChromaTheme returns the appropriate Chroma theme based on the active Atmos theme.
-func getThemeAwareChromaTheme(config *schema.AtmosConfiguration) string {
-	var themeName string
-
-	// First priority: Check Viper for flags/env (includes ATMOS_THEME env var)
-	if viper.IsSet("settings.terminal.theme") {
-		themeName = viper.GetString("settings.terminal.theme")
-	}
-
-	// Second priority: Check config if available and non-nil
-	if themeName == "" && config != nil &&
-		config.Settings.Terminal.Theme != "" {
-		themeName = config.Settings.Terminal.Theme
-	}
-
-	// Final fallback: Use default
-	if themeName == "" {
-		themeName = "default"
-	}
-
-	// Get the color scheme for the theme
-	scheme, err := theme.GetColorSchemeForTheme(themeName)
-	if err != nil || scheme == nil || scheme.ChromaTheme == "" {
-		// Fallback to dracula if we can't get the theme's Chroma theme
-		return "dracula"
-	}
-
-	return scheme.ChromaTheme
-}
-
-// GetHighlightSettings returns the syntax highlighting settings from the config or defaults.
+// GetHighlightSettings returns the syntax highlighting settings from the config or defaults
 func GetHighlightSettings(config *schema.AtmosConfiguration) *schema.SyntaxHighlighting {
+	defer perf.Track(config, "utils.GetHighlightSettings")()
+
 	defaults := DefaultHighlightSettings()
 	if config.Settings.Terminal.SyntaxHighlighting == (schema.SyntaxHighlighting{}) {
-		// Use theme-aware defaults
-		defaults.Theme = getThemeAwareChromaTheme(config)
 		return defaults
 	}
 	settings := &config.Settings.Terminal.SyntaxHighlighting
-
-	// Apply defaults only for truly unset fields
-	// NOTE: For proper tri-state handling, the schema should use *bool pointers
-	// For now, we can't distinguish between explicitly set false and unset
-	// So we only apply defaults for zero values that are likely unintended
-
-	// For Enabled: We assume if the whole struct exists, they want it enabled unless explicitly false
-	// This is the one case where false might be intentional, so we don't override it
-
+	// Apply defaults for any unset fields
+	if !settings.Enabled {
+		settings.Enabled = defaults.Enabled
+	}
 	if settings.Formatter == "" {
 		settings.Formatter = defaults.Formatter
 	}
 	if settings.Theme == "" {
-		// Use theme-aware Chroma theme if not explicitly set
-		settings.Theme = getThemeAwareChromaTheme(config)
+		settings.Theme = defaults.Theme
 	}
-	// For boolean fields, we check if the user explicitly set them using viper
-	// This is a better approach than guessing based on other fields
-	// NOTE: Long-term fix would be to use *bool in the schema for proper tri-state handling
-	// (nil = unset, *true = explicitly true, *false = explicitly false)
-
-	// Check if each boolean field was explicitly set
-	if !settings.Enabled && !viper.IsSet("settings.terminal.syntax_highlighting.enabled") {
-		settings.Enabled = defaults.Enabled
-	}
-	if !settings.LineNumbers && !viper.IsSet("settings.terminal.syntax_highlighting.line_numbers") {
+	if !settings.LineNumbers {
 		settings.LineNumbers = defaults.LineNumbers
 	}
-	if !settings.Wrap && !viper.IsSet("settings.terminal.syntax_highlighting.wrap") {
+	if !settings.Wrap {
 		settings.Wrap = defaults.Wrap
 	}
-
 	return settings
 }
 
-// HighlightCode highlights the given code using chroma with the specified lexer and theme.
+// HighlightCode highlights the given code using chroma with the specified lexer and theme
 func HighlightCode(code string, lexerName string, theme string) (string, error) {
-	if !term.IsTerminal(int(os.Stdout.Fd())) {
+	defer perf.Track(nil, "utils.HighlightCode")()
+
+	if !termUtils.IsTTYSupportForStdout() {
 		return code, nil
 	}
 	var buf bytes.Buffer
@@ -118,12 +74,26 @@ func HighlightCode(code string, lexerName string, theme string) (string, error) 
 	return buf.String(), nil
 }
 
-var isTermPresent = term.IsTerminal(int(os.Stdout.Fd()))
+var isTermPresent = termUtils.IsTTYSupportForStdout()
 
 // HighlightCodeWithConfig highlights the given code using the provided configuration.
 func HighlightCodeWithConfig(config *schema.AtmosConfiguration, code string, format ...string) (string, error) {
-	// Skip highlighting if not in a terminal or disabled
-	if !isTermPresent || !GetHighlightSettings(config).Enabled {
+	defer perf.Track(config, "utils.HighlightCodeWithConfig")()
+
+	// Return plain code if config is nil
+	if config == nil {
+		return code, nil
+	}
+
+	// Check if either stdout or stderr is a terminal (provenance goes to stderr)
+	isTerm := isTermPresent || termUtils.IsTTYSupportForStderr()
+
+	// Check if color is explicitly disabled via NoColor flag or Color setting.
+	// NoColor takes precedence (when true, always disable colors).
+	colorDisabled := config.Settings.Terminal.NoColor || !config.Settings.Terminal.Color
+
+	// Skip highlighting if not in a terminal, disabled, or colors are disabled
+	if !isTerm || !GetHighlightSettings(config).Enabled || colorDisabled {
 		return code, nil
 	}
 
@@ -164,6 +134,8 @@ func HighlightCodeWithConfig(config *schema.AtmosConfiguration, code string, for
 
 // getLexer selects a lexer based on format or code content.
 func getLexer(format []string, code string) chroma.Lexer {
+	defer perf.Track(nil, "utils.getLexer")()
+
 	if len(format) > 0 && format[0] != "" {
 		return lexers.Get(strings.ToLower(format[0]))
 	}
@@ -192,27 +164,26 @@ func getFormatter(settings *schema.SyntaxHighlighting) chroma.Formatter {
 	return formatters.Get(settings.Formatter)
 }
 
-// HighlightWriter returns an io.Writer that highlights code written to it.
+// HighlightWriter returns an io.Writer that highlights code written to it
 type HighlightWriter struct {
 	config schema.AtmosConfiguration
 	writer io.Writer
 	format string
 }
 
-// NewHighlightWriter creates a new HighlightWriter.
-func NewHighlightWriter(w io.Writer, config *schema.AtmosConfiguration, format ...string) *HighlightWriter {
+// NewHighlightWriter creates a new HighlightWriter
+func NewHighlightWriter(w io.Writer, config schema.AtmosConfiguration, format ...string) *HighlightWriter {
+	defer perf.Track(&config, "utils.NewHighlightWriter")()
+
 	var f string
 	if len(format) > 0 {
 		f = format[0]
 	}
-	hw := &HighlightWriter{
+	return &HighlightWriter{
+		config: config,
 		writer: w,
 		format: f,
 	}
-	if config != nil {
-		hw.config = *config
-	}
-	return hw
 }
 
 // Write implements io.Writer

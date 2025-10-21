@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -15,6 +16,8 @@ func ProcessCustomYamlTags(
 	currentStack string,
 	skip []string,
 ) (schema.AtmosSectionMapType, error) {
+	defer perf.Track(atmosConfig, "exec.ProcessCustomYamlTags")()
+
 	return processNodes(atmosConfig, input, currentStack, skip), nil
 }
 

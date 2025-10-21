@@ -33,61 +33,60 @@ func getSection(section HelpTemplateSections) string {
 		return `{{if .HasHelpSubCommands}}
 
 
-{{HeadingStyle "Additional help topics"}}
+{{HeadingStyle "Additional help topics:"}}
 
 {{formatCommands .Commands "additionalHelpTopics"}}{{end}}`
 	case Aliases:
 		return `{{if gt (len .Aliases) 0}}
 
-{{HeadingStyle "Aliases"}}
+{{HeadingStyle "Aliases:"}}
 
   {{.NameAndAliases}}{{end}}`
 	case SubCommandAliases:
 		return `{{if (isAliasesPresent .Commands)}}
 
-{{HeadingStyle "Subcommand Aliases"}}
+{{HeadingStyle "Subcommand Aliases:"}}
 
 {{formatCommands .Commands "subcommandAliases"}}{{end}}`
 	case AvailableCommands:
 		return `{{if .HasAvailableSubCommands}}
 
 
-{{HeadingStyle "Available Commands"}}
+{{HeadingStyle "Available Commands:"}}
 
 {{formatCommands .Commands "availableCommands"}}{{end}}`
 	case Examples:
 		return `{{if .HasExample}}
 
 
-{{HeadingStyle "Examples"}}
-
-{{ExampleBlock (renderMarkdown .Example)}}{{end}}`
+{{HeadingStyle "Examples:"}}
+{{renderMarkdown .Example}}{{end}}`
 	case Flags:
 		return `{{if .HasAvailableLocalFlags}}
 
 
-{{HeadingStyle "Flags"}}
+{{HeadingStyle "Flags:"}}
 
 {{wrappedFlagUsages .LocalFlags | trimTrailingWhitespaces}}{{end}}`
 	case GlobalFlags:
 		return `{{if .HasAvailableInheritedFlags}}
 
 
-{{HeadingStyle "Global Flags"}}
+{{HeadingStyle "Global Flags:"}}
 
 {{wrappedFlagUsages .InheritedFlags | trimTrailingWhitespaces}}{{end}}`
 	case NativeCommands:
 		return `{{if (isNativeCommandsAvailable .Commands)}}
 
-{{HeadingStyle "Native "}}{{HeadingStyle .Use}}{{HeadingStyle " Commands"}}
+{{HeadingStyle "Native "}}{{HeadingStyle .Use}}{{HeadingStyle " Commands:"}}
 
 {{formatCommands .Commands "native"}}{{end}}`
 	case Usage:
 		return `
-{{HeadingStyle "Usage"}}
+{{HeadingStyle "Usage:"}}
 {{if .Runnable}}
-{{UsageBlock .UseLine}}{{end}}{{if .HasAvailableSubCommands}}
-{{UsageBlock (printf "%s [sub-command] [flags]" .CommandPath)}}{{end}}`
+  {{.UseLine}}{{end}}{{if .HasAvailableSubCommands}}
+  {{.CommandPath}} [sub-command] [flags]{{end}}`
 	case Footer:
 		return `
 

@@ -18,6 +18,9 @@
 **/kubeconfig.yaml
 **/*.planfile.json
 
+# Atmos binary
+atmos
+
 # Module directory
 .terraform
 **/.idea
@@ -38,6 +41,9 @@
 .envrc
 .direnv/
 
+# Tool version managers
+.tool-versions
+
 # Ignore cache files
 **/.atmos/cache.yaml
 **/cache.*.txt
@@ -54,10 +60,30 @@ tests/fixtures/scenarios/vendor/components/**
 internal/exec/output.*
 
 # Coverage files
-coverage.out
+**.out
+coverage*.out
 coverage.html
+coverage.*.tmp
+coverage/
+.gocoverdir/
 
 # Test output files
 tests/test_output.log
 test-atmos.yaml
 tests.test
+
+**/llms.txt
+**/llms-full.txt
+
+# Test quality documentation (local tracking only)
+FUTURE_IMPROVEMENTS.md
+PHASE_4_*.md
+TEST_QUALITY_*.md
+
+# Lintroller
+/lintroller
+/.lintroller
+tools/lintroller/.lintroller
+/custom-gcl
+
+performance-optimization/

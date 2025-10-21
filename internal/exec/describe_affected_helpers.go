@@ -6,7 +6,9 @@ import (
 	"os"
 	"strings"
 
-	log "github.com/charmbracelet/log"
+	"github.com/cloudposse/atmos/pkg/perf"
+
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/transport/ssh"
@@ -40,6 +42,8 @@ func ExecuteDescribeAffectedWithTargetRefClone(
 	skip []string,
 	excludeLocked bool,
 ) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error) {
+	defer perf.Track(atmosConfig, "exec.ExecuteDescribeAffectedWithTargetRefClone")()
+
 	localRepo, err := g.GetLocalRepo()
 	if err != nil {
 		return nil, nil, nil, "", err
@@ -193,6 +197,8 @@ func ExecuteDescribeAffectedWithTargetRefCheckout(
 	skip []string,
 	excludeLocked bool,
 ) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error) {
+	defer perf.Track(atmosConfig, "exec.ExecuteDescribeAffectedWithTargetRefCheckout")()
+
 	localRepo, err := g.GetLocalRepo()
 	if err != nil {
 		return nil, nil, nil, "", err
@@ -297,7 +303,7 @@ func ExecuteDescribeAffectedWithTargetRefCheckout(
 
 		err = w.Checkout(&checkoutOptions)
 		if err != nil {
-			if strings.Contains(err.Error(), "reference not found") {
+			if errors.Is(err, plumbing.ErrReferenceNotFound) {
 				errorMessage := fmt.Sprintf("the Git ref '%s' does not exist on the local filesystem"+
 					"\nmake sure it's correct and was cloned by Git from the remote, or use the '--clone-target-ref=true' flag to clone it"+
 					"\nrefer to https://atmos.tools/cli/commands/describe/affected for more details", ref)
@@ -354,6 +360,8 @@ func ExecuteDescribeAffectedWithTargetRepoPath(
 	skip []string,
 	excludeLocked bool,
 ) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error) {
+	defer perf.Track(atmosConfig, "exec.ExecuteDescribeAffectedWithTargetRepoPath")()
+
 	localRepo, err := g.GetLocalRepo()
 	if err != nil {
 		return nil, nil, nil, "", err

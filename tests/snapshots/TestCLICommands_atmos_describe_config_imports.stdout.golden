@@ -41,6 +41,149 @@ logs:
   file: /dev/stderr
   level: Debug
 commands:
+  - name: tf
+    description: Execute 'terraform' commands
+    env: []
+    arguments: []
+    flags: []
+    component_config:
+      component: ""
+      stack: ""
+    steps: []
+    commands:
+      - name: plan
+        description: This command plans terraform components
+        env:
+          - key: ENV_VAR_1
+            value: ENV_VAR_1_value
+            valueCommand: ""
+          - key: ENV_VAR_2
+            value: ""
+            valueCommand: echo ENV_VAR_2_value
+        arguments:
+          - name: component
+            description: Name of the component
+            required: false
+            default: ""
+        flags:
+          - name: stack
+            shorthand: s
+            type: ""
+            description: Name of the stack
+            usage: ""
+            required: true
+        component_config:
+          component: ""
+          stack: ""
+        steps:
+          - atmos terraform plan {{ .Arguments.component }} -s {{ .Flags.stack }}
+        commands: []
+        verbose: false
+    verbose: false
+  - name: terraform
+    description: Execute 'terraform' commands
+    env: []
+    arguments: []
+    flags: []
+    component_config:
+      component: ""
+      stack: ""
+    steps: []
+    commands:
+      - name: provision
+        description: This command provisions terraform components
+        env:
+          - key: ATMOS_COMPONENT
+            value: '{{ .Arguments.component }}'
+            valueCommand: ""
+          - key: ATMOS_STACK
+            value: '{{ .Flags.stack }}'
+            valueCommand: ""
+        arguments:
+          - name: component
+            description: Name of the component
+            required: false
+            default: ""
+        flags:
+          - name: stack
+            shorthand: s
+            type: ""
+            description: Name of the stack
+            usage: ""
+            required: true
+        component_config:
+          component: ""
+          stack: ""
+        steps:
+          - atmos terraform plan $ATMOS_COMPONENT -s $ATMOS_STACK
+          - atmos terraform apply $ATMOS_COMPONENT -s $ATMOS_STACK
+        commands: []
+        verbose: false
+    verbose: false
+  - name: show
+    description: Execute 'show' commands
+    env: []
+    arguments: []
+    flags: []
+    component_config:
+      component: ""
+      stack: ""
+    steps: []
+    commands:
+      - name: component
+        description: Execute 'show component' command
+        env:
+          - key: ATMOS_COMPONENT
+            value: '{{ .Arguments.component }}'
+            valueCommand: ""
+          - key: ATMOS_STACK
+            value: '{{ .Flags.stack }}'
+            valueCommand: ""
+          - key: ATMOS_TENANT
+            value: '{{ .ComponentConfig.vars.tenant }}'
+            valueCommand: ""
+          - key: ATMOS_STAGE
+            value: '{{ .ComponentConfig.vars.stage }}'
+            valueCommand: ""
+          - key: ATMOS_ENVIRONMENT
+            value: '{{ .ComponentConfig.vars.environment }}'
+            valueCommand: ""
+          - key: ATMOS_IS_PROD
+            value: '{{ .ComponentConfig.settings.config.is_prod }}'
+            valueCommand: ""
+        arguments:
+          - name: component
+            description: Name of the component
+            required: false
+            default: ""
+        flags:
+          - name: stack
+            shorthand: s
+            type: ""
+            description: Name of the stack
+            usage: ""
+            required: true
+        component_config:
+          component: '{{ .Arguments.component }}'
+          stack: '{{ .Flags.stack }}'
+        steps:
+          - 'echo Atmos component from argument: "{{ .Arguments.component }}"'
+          - 'echo ATMOS_COMPONENT: "$ATMOS_COMPONENT"'
+          - 'echo Atmos stack: "{{ .Flags.stack }}"'
+          - 'echo Terraform component: "{{ .ComponentConfig.component }}"'
+          - 'echo Backend S3 bucket: "{{ .ComponentConfig.backend.bucket }}"'
+          - 'echo Terraform workspace: "{{ .ComponentConfig.workspace }}"'
+          - 'echo Namespace: "{{ .ComponentConfig.vars.namespace }}"'
+          - 'echo Tenant: "{{ .ComponentConfig.vars.tenant }}"'
+          - 'echo Environment: "{{ .ComponentConfig.vars.environment }}"'
+          - 'echo Stage: "{{ .ComponentConfig.vars.stage }}"'
+          - 'echo settings.spacelift.workspace_enabled: "{{ .ComponentConfig.settings.spacelift.workspace_enabled }}"'
+          - 'echo Dependencies: "{{ .ComponentConfig.deps }}"'
+          - 'echo settings.config.is_prod: "{{ .ComponentConfig.settings.config.is_prod }}"'
+          - 'echo ATMOS_IS_PROD: "$ATMOS_IS_PROD"'
+        commands: []
+        verbose: false
+    verbose: false
   - name: test
     description: Run all tests
     env: []

@@ -1,0 +1,17 @@
+# Lambda component catalog entry
+components:
+  terraform:
+    lambda:
+      metadata:
+        component: lambda
+      vars:
+        name: "lambda"
+      hooks:
+        lambda-store-outputs:
+          events:
+            - after-terraform-apply
+          command: store
+          name: prod/ssm
+          outputs:
+            lambda_function_arn: .lambda_function_arn
+            lambda_function_name: .lambda_function_name

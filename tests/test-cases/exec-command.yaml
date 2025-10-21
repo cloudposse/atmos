@@ -4,7 +4,7 @@ tests:
     description: "Ensure the exit code equals the command exit code for a passing terraform plan (expected to be 2)"
     workdir: "fixtures/scenarios/exitCode"
     clean: true
-    sandbox: true
+    sandbox: "exec-command"
     command: "atmos"
     args:
       - terraform
@@ -22,7 +22,7 @@ tests:
     description: "Ensure the exit code equals the command exit code for a passing terraform apply (expected to be 0)"
     workdir: "fixtures/scenarios/exitCode"
     clean: true
-    sandbox: true
+    sandbox: "exec-command"
     command: "atmos"
     args:
       - terraform
@@ -41,7 +41,7 @@ tests:
     description: "Ensure the exit code equals the command exit code for a failing terraform apply (expected to be 1)"
     workdir: "fixtures/scenarios/exitCode"
     clean: true
-    sandbox: true
+    sandbox: "exec-command"
     command: "atmos"
     args:
       - terraform

@@ -9,12 +9,17 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+
+	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/perf"
 )
 
 var ErrFailedToProcessHclFile = errors.New("failed to process HCL file")
 
-// IsDirectory checks if the path is a directory
+// IsDirectory checks if the path is a directory.
 func IsDirectory(path string) (bool, error) {
+	defer perf.Track(nil, "utils.IsDirectory")()
+
 	fileInfo, err := os.Stat(path)
 	if err != nil {
 		return false, err
@@ -22,8 +27,10 @@ func IsDirectory(path string) (bool, error) {
 	return fileInfo.IsDir(), err
 }
 
-// FileExists checks if the file exists and is not a directory
+// FileExists checks if the file exists and is not a directory.
 func FileExists(filename string) bool {
+	defer perf.Track(nil, "utils.FileExists")()
+
 	fileInfo, err := os.Stat(filename)
 	if os.IsNotExist(err) || err != nil {
 		return false
@@ -31,17 +38,16 @@ func FileExists(filename string) bool {
 	return !fileInfo.IsDir()
 }
 
-// FileOrDirExists checks if the file or directory exists
+// FileOrDirExists checks if the file or directory exists.
 func FileOrDirExists(filename string) bool {
 	_, err := os.Stat(filename)
-	if err != nil {
-		return false
-	}
-	return true
+	return err == nil
 }
 
-// IsYaml checks if the file has YAML extension (does not check file schema, nor validates the file)
+// IsYaml checks if the file has YAML extension (does not check file schema, nor validates the file).
 func IsYaml(file string) bool {
+	defer perf.Track(nil, "utils.IsYaml")()
+
 	yamlExtensions := []string{YamlFileExtension, YmlFileExtension, YamlTemplateExtension, YmlTemplateExtension}
 	ext := filepath.Ext(file)
 	if ext == ".tmpl" {
@@ -52,8 +58,10 @@ func IsYaml(file string) bool {
 	return SliceContainsString(yamlExtensions, ext)
 }
 
-// ConvertPathsToAbsolutePaths converts a slice of paths to a slice of absolute paths
+// ConvertPathsToAbsolutePaths converts a slice of paths to a slice of absolute paths.
 func ConvertPathsToAbsolutePaths(paths []string) ([]string, error) {
+	defer perf.Track(nil, "utils.ConvertPathsToAbsolutePaths")()
+
 	res := []string{}
 
 	for _, dir := range paths {
@@ -67,64 +75,130 @@ func ConvertPathsToAbsolutePaths(paths []string) ([]string, error) {
 	return res, nil
 }
 
-// JoinAbsolutePathWithPaths joins a base path with each item in the path slice and returns a slice of absolute paths
-func JoinAbsolutePathWithPaths(basePath string, paths []string) ([]string, error) {
+// JoinPaths joins a base path with each item in the path slice and returns a slice of joined paths.
+// This is a pure path construction function without filesystem validation.
+func JoinPaths(basePath string, paths []string) ([]string, error) {
+	defer perf.Track(nil, "utils.JoinPaths")()
+
 	res := []string{}
 
 	for _, p := range paths {
-		res = append(res, filepath.Join(basePath, p))
+		res = append(res, JoinPath(basePath, p))
 	}
 
 	return res, nil
 }
 
-// TrimBasePathFromPath trims the base path prefix from the path
+// TrimBasePathFromPath trims the base path prefix from the path.
 func TrimBasePathFromPath(basePath string, path string) string {
 	basePath = filepath.ToSlash(basePath)
 	path = filepath.ToSlash(path)
 	return strings.TrimPrefix(path, basePath)
 }
 
-// IsPathAbsolute checks if the provided file path is absolute
+// IsPathAbsolute checks if the provided file path is absolute.
 func IsPathAbsolute(path string) bool {
 	return filepath.IsAbs(path)
 }
 
-// JoinAbsolutePathWithPath checks if the provided path is absolute. If the provided path is relative, it joins the base path with the path and returns the absolute path
-func JoinAbsolutePathWithPath(basePath string, providedPath string) (string, error) {
+// handleEmptyPaths handles the case when one or both paths are empty.
+func handleEmptyPaths(basePath, providedPath string) (string, bool) {
+	if basePath == "" && providedPath == "" {
+		return "", true
+	}
+	if basePath == "" {
+		return providedPath, true
+	}
+	if providedPath == "" {
+		return basePath, true
+	}
+	return "", false
+}
+
+// isWindowsAbsolutePath checks if a path is absolute on Windows.
+// This handles special Windows cases that filepath.IsAbs might miss:
+// - Paths starting with / (treated as absolute on current drive)
+// - Single backslash paths like \Windows (absolute on current drive)
+// Note: Double backslash (\\) paths are handled by filepath.IsAbs as UNC paths.
+func isWindowsAbsolutePath(path string) bool {
+	if len(path) == 0 {
+		return false
+	}
+	// Only treat single backslash or forward slash at start as absolute
+	// Double backslash (\\) is handled by filepath.IsAbs for UNC paths
+	if path[0] == '/' {
+		return true
+	}
+	if path[0] == '\\' && (len(path) == 1 || path[1] != '\\') {
+		return true
+	}
+	return false
+}
+
+// JoinPath joins two paths handling absolute paths correctly.
+// If the second path is absolute, it returns the second path.
+// Otherwise, it joins the paths using filepath.Join which:
+//   - Normalizes path separators to the OS-specific separator
+//   - Cleans the resulting path (removes . and .. elements)
+//   - Handles empty paths appropriately
+//
+// This function follows standard Go path behavior and does NOT check
+// if the path exists on the filesystem.
+func JoinPath(basePath string, providedPath string) string {
+	defer perf.Track(nil, "utils.JoinPath")()
+
+	// Handle empty paths
+	if result, handled := handleEmptyPaths(basePath, providedPath); handled {
+		return result
+	}
+
 	// If the provided path is an absolute path, return it
 	if filepath.IsAbs(providedPath) {
-		return providedPath, nil
+		return providedPath
 	}
 
-	// Join the base path with the provided path
-	joinedPath := filepath.Join(basePath, providedPath)
+	// On Windows, handle special cases that filepath.IsAbs doesn't catch
+	// (paths starting with \ or / are absolute on Windows)
+	if runtime.GOOS == "windows" && isWindowsAbsolutePath(providedPath) {
+		return providedPath
+	}
 
-	// If the joined path is an absolute path and exists in the file system, return it
-	if filepath.IsAbs(joinedPath) {
-		_, err := os.Stat(joinedPath)
-		if err == nil {
-			return joinedPath, nil
+	// Join the base path with the provided path using standard Go behavior
+	// filepath.Join will:
+	// - Clean the path (remove . and .. elements)
+	// - Normalize separators to OS-specific (\ on Windows, / on Unix)
+	return filepath.Join(basePath, providedPath)
+}
+
+// JoinPathAndValidate joins paths and validates the result exists in filesystem.
+// It builds on JoinPath for path construction and adds filesystem validation.
+func JoinPathAndValidate(basePath string, providedPath string) (string, error) {
+	defer perf.Track(nil, "utils.JoinPathAndValidate")()
+
+	// Step 1: Use pure path construction
+	constructedPath := JoinPath(basePath, providedPath)
+
+	// Step 2: Convert to absolute path if needed
+	if !filepath.IsAbs(constructedPath) {
+		absPath, err := filepath.Abs(constructedPath)
+		if err != nil {
+			return "", err
 		}
+		constructedPath = absPath
 	}
 
-	// Convert the joined path to an absolute path
-	absPath, err := filepath.Abs(joinedPath)
-	if err != nil {
+	// Step 3: Validate existence
+	if _, err := os.Stat(constructedPath); err != nil {
 		return "", err
 	}
 
-	// Check if the final absolute path exists in the file system
-	_, err = os.Stat(absPath)
-	if err != nil {
-		return "", err
-	}
-
-	return absPath, nil
+	return constructedPath, nil
 }
 
 // EnsureDir accepts a file path and creates all the intermediate subdirectories
 func EnsureDir(fileName string) error {
+	defer perf.Track(nil, "utils.EnsureDir")()
+
 	dirName := filepath.Dir(fileName)
 	if _, err := os.Stat(dirName); err != nil {
 		err := os.MkdirAll(dirName, os.ModePerm)
@@ -135,7 +209,7 @@ func EnsureDir(fileName string) error {
 	return nil
 }
 
-// SliceOfPathsContainsPath checks if a slice of file paths contains a path
+// SliceOfPathsContainsPath checks if a slice of file paths contains a path.
 func SliceOfPathsContainsPath(paths []string, checkPath string) bool {
 	for _, v := range paths {
 		dir := filepath.Dir(v)
@@ -146,8 +220,10 @@ func SliceOfPathsContainsPath(paths []string, checkPath string) bool {
 	return false
 }
 
-// GetAllFilesInDir returns all files in the provided directory and all subdirectories
+// GetAllFilesInDir returns all files in the provided directory and all subdirectories.
 func GetAllFilesInDir(dir string) ([]string, error) {
+	defer perf.Track(nil, "utils.GetAllFilesInDir")()
+
 	var files []string
 	err := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
 		if !info.IsDir() {
@@ -158,8 +234,10 @@ func GetAllFilesInDir(dir string) ([]string, error) {
 	return files, err
 }
 
-// GetAllYamlFilesInDir returns all YAML files in the provided directory and all subdirectories
+// GetAllYamlFilesInDir returns all YAML files in the provided directory and all subdirectories.
 func GetAllYamlFilesInDir(dir string) ([]string, error) {
+	defer perf.Track(nil, "utils.GetAllYamlFilesInDir")()
+
 	var res []string
 
 	allFiles, err := GetAllFilesInDir(dir)
@@ -176,7 +254,7 @@ func GetAllYamlFilesInDir(dir string) ([]string, error) {
 	return res, nil
 }
 
-// IsSocket checks if a file is a socket
+// IsSocket checks if a file is a socket.
 func IsSocket(path string) (bool, error) {
 	fileInfo, err := os.Stat(path)
 	if err != nil {
@@ -188,8 +266,10 @@ func IsSocket(path string) (bool, error) {
 
 // SearchConfigFile searches for a config file in the provided path.
 // If the path has a file extension, it checks if the file exists.
-// If the path does not have a file extension, it checks for the existence of the file with the provided path and the possible config file extensions
+// If the path does not have a file extension, it checks for the existence of the file with the provided path and the possible config file extensions.
 func SearchConfigFile(path string) (string, bool) {
+	defer perf.Track(nil, "utils.SearchConfigFile")()
+
 	// Check if the provided path has a file extension and the file exists
 	if filepath.Ext(path) != "" {
 		return path, FileExists(path)
@@ -207,8 +287,10 @@ func SearchConfigFile(path string) (string, bool) {
 	return "", false
 }
 
-// IsURL checks if a string is a URL
+// IsURL checks if a string is a URL.
 func IsURL(s string) bool {
+	defer perf.Track(nil, "utils.IsURL")()
+
 	u, err := url.Parse(s)
 	if err != nil {
 		return false
@@ -226,10 +308,12 @@ func IsURL(s string) bool {
 	return schemeValid
 }
 
-// GetFileNameFromURL extracts the file name from a URL
+// GetFileNameFromURL extracts the file name from a URL.
 func GetFileNameFromURL(rawURL string) (string, error) {
+	defer perf.Track(nil, "utils.GetFileNameFromURL")()
+
 	if rawURL == "" {
-		return "", fmt.Errorf("empty URL provided")
+		return "", errUtils.ErrEmptyURL
 	}
 
 	parsedURL, err := url.Parse(rawURL)
@@ -243,7 +327,7 @@ func GetFileNameFromURL(rawURL string) (string, error) {
 	// Get the base name of the path
 	fileName := filepath.Base(urlPath)
 	if fileName == "/" || fileName == "." {
-		return "", fmt.Errorf("unable to extract filename from URL: %s", rawURL)
+		return "", fmt.Errorf("%w: %s", errUtils.ErrInvalidURL, rawURL)
 	}
 	return fileName, nil
 }
@@ -252,6 +336,8 @@ func GetFileNameFromURL(rawURL string) (string, error) {
 // resolves it relative to the current file's directory. It ensures the resolved path
 // exists within the base path.
 func ResolveRelativePath(path string, basePath string) string {
+	defer perf.Track(nil, "utils.ResolveRelativePath")()
+
 	if path == "" {
 		return path
 	}
@@ -280,7 +366,7 @@ func ResolveRelativePath(path string, basePath string) string {
 	return path
 }
 
-// GetLineEnding returns the appropriate line ending for the current platform
+// GetLineEnding returns the appropriate line ending for the current platform.
 func GetLineEnding() string {
 	if runtime.GOOS == "windows" {
 		return "\r\n"

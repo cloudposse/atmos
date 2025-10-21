@@ -6,7 +6,7 @@ import (
 )
 
 const (
-	// Base colors.
+	// Base colors
 	ColorGray         = "#808080" // Version number
 	ColorGreen        = "#00FF00" // Success, new version
 	ColorCyan         = "#00FFFF" // Links, info
@@ -14,6 +14,8 @@ const (
 	ColorBlue         = "#5F5FFF" // UI elements
 	ColorDarkGray     = "#626262" // Subtle text
 	ColorRed          = "#FF0000" // Errors, x mark
+	ColorYellow       = "#FFFF00" // Available for future use (pure yellow can be hard to read on light terminals)
+	ColorOrange       = "#FFA500" // Warnings, moderate depth (preferred over pure yellow for better readability)
 	ColorCheckmark    = "#00D700" // Checkmark
 	ColorWhite        = "#FFFFFF" // Default text
 	ColorBrightYellow = "#FFFF00" // Bright/Light theme indicator

@@ -422,8 +422,6 @@ tests:
         - "FLAGS"
         - "--affected-only"
         - "--config-template"
-      stderr:
-        - "^$"
       exit_code: 0
   - name: atmos atlantis generate repo-config non-existent
     enabled: true

@@ -60,7 +60,7 @@ configurations.
 
 - The `source` attribute supports all protocols (local files, Git, Mercurial, HTTP, HTTPS, Amazon S3, Google GCP), and all URL and
   archive formats as described in [go-getter](https://github.com/hashicorp/go-getter), and also the `oci://` scheme to download artifacts from
-  [OCI registries](https://opencontainers.org).
+  [OCI registries](https://opencontainers.org). See [Vendor URL Syntax](/core-concepts/vendor/url-syntax) for complete documentation on supported URL formats and authentication.
 
 - The `targets` in the `sources` support absolute paths and relative paths (relative to the `vendor.yaml` file). Note: if the `targets` paths
   are set as relative, and if the `vendor.yaml` file is detected by Atmos using the `base_path` setting in `atmos.yaml`, the `targets` paths

@@ -1,0 +1,10 @@
+vars:
+  stage: no-component-auth
+
+import:
+  - catalog/mock
+components:
+  terraform:
+    mycomponent:
+      metadata:
+        component: mock_caller_identity

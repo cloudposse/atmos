@@ -98,6 +98,9 @@ func TestReadTerraformBackendS3_InvalidConfig(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			// Clear AWS_PROFILE to prevent conflicts with local AWS configuration.
+			t.Setenv("AWS_PROFILE", "")
+
 			atmosConfig := &schema.AtmosConfiguration{}
 
 			result, err := tb.ReadTerraformBackendS3(atmosConfig, &tt.componentData)

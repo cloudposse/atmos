@@ -7,12 +7,15 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 // GetTerraformWorkspace returns the `workspace` section for a component in a stack.
 func GetTerraformWorkspace(sections *map[string]any) string {
+	defer perf.Track(nil, "terraform_backend.GetTerraformWorkspace")()
+
 	if workspace, ok := (*sections)[cfg.WorkspaceSectionName].(string); ok {
 		return workspace
 	}
@@ -21,6 +24,8 @@ func GetTerraformWorkspace(sections *map[string]any) string {
 
 // GetTerraformComponent returns the `component` section for a component in a stack.
 func GetTerraformComponent(sections *map[string]any) string {
+	defer perf.Track(nil, "terraform_backend.GetTerraformComponent")()
+
 	if workspace, ok := (*sections)[cfg.ComponentSectionName].(string); ok {
 		return workspace
 	}
@@ -29,6 +34,8 @@ func GetTerraformComponent(sections *map[string]any) string {
 
 // GetComponentBackend returns the `backend` section for a component in a stack.
 func GetComponentBackend(sections *map[string]any) map[string]any {
+	defer perf.Track(nil, "terraform_backend.GetComponentBackend")()
+
 	if remoteStateBackend, ok := (*sections)[cfg.BackendSectionName].(map[string]any); ok {
 		return remoteStateBackend
 	}
@@ -37,6 +44,8 @@ func GetComponentBackend(sections *map[string]any) map[string]any {
 
 // GetComponentBackendType returns the `backend_type` section for a component in a stack.
 func GetComponentBackendType(sections *map[string]any) string {
+	defer perf.Track(nil, "terraform_backend.GetComponentBackendType")()
+
 	if backendType, ok := (*sections)[cfg.BackendTypeSectionName].(string); ok {
 		return backendType
 	}
@@ -45,6 +54,8 @@ func GetComponentBackendType(sections *map[string]any) string {
 
 // GetBackendAttribute returns an attribute from a section in the backend.
 func GetBackendAttribute(section *map[string]any, attribute string) string {
+	defer perf.Track(nil, "terraform_backend.GetBackendAttribute")()
+
 	if i, ok := (*section)[attribute].(string); ok {
 		return i
 	}
@@ -57,6 +68,8 @@ func GetTerraformBackendVariable(
 	values map[string]any,
 	variable string,
 ) (any, error) {
+	defer perf.Track(atmosConfig, "terraform_backend.GetTerraformBackendVariable")()
+
 	val := variable
 	if !strings.HasPrefix(variable, ".") {
 		val = "." + val
@@ -83,6 +96,8 @@ type RawTerraformState struct {
 
 // ProcessTerraformStateFile processes a Terraform state file.
 func ProcessTerraformStateFile(data []byte) (map[string]any, error) {
+	defer perf.Track(nil, "terraform_backend.ProcessTerraformStateFile")()
+
 	if len(data) == 0 {
 		return nil, nil
 	}
@@ -107,6 +122,8 @@ func GetTerraformBackend(
 	atmosConfig *schema.AtmosConfiguration,
 	componentSections *map[string]any,
 ) (map[string]any, error) {
+	defer perf.Track(atmosConfig, "terraform_backend.GetTerraformBackend")()
+
 	RegisterTerraformBackends()
 
 	backendType := GetComponentBackendType(componentSections)

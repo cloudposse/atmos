@@ -3,17 +3,16 @@ package cmd
 import (
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"runtime"
 
 	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/lipgloss"
-	log "github.com/charmbracelet/log"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 
+	termUtils "github.com/cloudposse/atmos/internal/tui/templates/term"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -52,7 +51,7 @@ var docsCmd = &cobra.Command{
 			screenWidth := defaultWidth
 
 			// Detect terminal width and use it by default if available
-			if term.IsTerminal(int(os.Stdout.Fd())) {
+			if termUtils.IsTTYSupportForStdout() {
 				termWidth, _, err := term.GetSize(int(os.Stdout.Fd()))
 				if err == nil && termWidth > 0 {
 					// Adjusted for subtle padding effect at the terminal boundaries
@@ -120,28 +119,12 @@ var docsCmd = &cobra.Command{
 		}
 
 		// Opens atmos.tools docs if no component argument is provided
-		var err error
-
-		if os.Getenv("GO_TEST") == "1" {
-			log.Debug("Skipping browser launch in test environment")
-		} else {
-			switch runtime.GOOS {
-			case "linux":
-				err = exec.Command("xdg-open", atmosDocsURL).Start()
-			case "windows":
-				err = exec.Command("rundll32", "url.dll,FileProtocolHandler", atmosDocsURL).Start()
-			case "darwin":
-				err = exec.Command("open", atmosDocsURL).Start()
-			default:
-				err = fmt.Errorf("unsupported platform: %s", runtime.GOOS)
-			}
-
-			if err != nil {
-				return err
-			}
+		if err := u.OpenUrl(atmosDocsURL); err != nil {
+			return fmt.Errorf("open Atmos docs: %w", err)
 		}
 
-		fmt.Printf("Opening default browser to '%v'.\n", atmosDocsURL)
+		// UI messages should go to stderr; stdout is for data/results.
+		fmt.Fprintf(os.Stderr, "Opening default browser to '%v'.\n", atmosDocsURL)
 		return nil
 	},
 }

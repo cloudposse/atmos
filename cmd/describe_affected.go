@@ -1,14 +1,14 @@
 package cmd
 
 import (
-	log "github.com/charmbracelet/log"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/spf13/cobra"
 
 	"github.com/cloudposse/atmos/internal/exec"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
-// describeAffectedCmd produces a list of the affected Atmos components and stacks given two Git commits
+// describeAffectedCmd produces a list of the affected Atmos components and stacks given two Git commits.
 var describeAffectedCmd = &cobra.Command{
 	Use:                "affected",
 	Short:              "List Atmos components and stacks affected by two Git commits",

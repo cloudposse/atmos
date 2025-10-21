@@ -8,13 +8,16 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/lipgloss/table"
+	"github.com/samber/lo"
+	"go.yaml.in/yaml/v3"
+
 	"github.com/cloudposse/atmos/internal/tui/templates/term"
 	"github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 	"github.com/cloudposse/atmos/pkg/utils"
-	"github.com/samber/lo"
-	"gopkg.in/yaml.v3"
 )
 
 const (
@@ -200,8 +203,22 @@ func FilterAndListWorkflows(fileFlag string, listConfig schema.ListConfig, forma
 	default:
 		// If format is empty or "table", use table format
 		if format == "" && term.IsTTYSupportForStdout() {
-			// Use the new minimal table style from theme package
-			return theme.CreateMinimalTable(header, rows) + utils.GetLineEnding(), nil
+			// Create a styled table for TTY
+			t := table.New().
+				Border(lipgloss.ThickBorder()).
+				BorderStyle(lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorBorder))).
+				StyleFunc(func(row, col int) lipgloss.Style {
+					style := lipgloss.NewStyle().PaddingLeft(1).PaddingRight(1)
+					if row == 0 {
+						return style.Inherit(theme.Styles.CommandName).Align(lipgloss.Center)
+					}
+					// Use consistent style for all rows
+					return style.Inherit(theme.Styles.Description)
+				}).
+				Headers(header...).
+				Rows(rows...)
+
+			return t.String() + utils.GetLineEnding(), nil
 		}
 
 		// Default to simple tabular format for non-TTY or when format is explicitly "table"

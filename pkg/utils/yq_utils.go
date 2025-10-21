@@ -11,8 +11,9 @@ import (
 
 	"github.com/mikefarah/yq/v4/pkg/yqlib"
 	"gopkg.in/op/go-logging.v1"
-	"gopkg.in/yaml.v3"
+	yaml "gopkg.in/yaml.v3"
 
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -36,6 +37,8 @@ func (n logBackend) IsEnabledFor(level logging.Level, s string) bool {
 // configureYqLogger configures the yq logger based on Atmos configuration.
 // If atmosConfig is nil or log level is not Trace, use a no-op logging backend.
 func configureYqLogger(atmosConfig *schema.AtmosConfiguration) {
+	defer perf.Track(atmosConfig, "utils.configureYqLogger")()
+
 	// Only use the default (chatty) logger when atmosConfig is not nil and log level is Trace
 	// In all other cases, use the no-op logging backend
 	if atmosConfig == nil || atmosConfig.Logs.Level != LogLevelTrace {
@@ -46,6 +49,8 @@ func configureYqLogger(atmosConfig *schema.AtmosConfiguration) {
 }
 
 func EvaluateYqExpression(atmosConfig *schema.AtmosConfiguration, data any, yq string) (any, error) {
+	defer perf.Track(atmosConfig, "utils.EvaluateYqExpression")()
+
 	// Configure the yq logger based on Atmos configuration
 	configureYqLogger(atmosConfig)
 
@@ -102,6 +107,8 @@ func isSimpleStringStartingWithHash(s string) bool {
 }
 
 func processYAMLNode(node *yaml.Node) {
+	defer perf.Track(nil, "utils.processYAMLNode")()
+
 	if node == nil {
 		return
 	}
@@ -116,6 +123,8 @@ func processYAMLNode(node *yaml.Node) {
 }
 
 func EvaluateYqExpressionWithType[T any](atmosConfig *schema.AtmosConfiguration, data T, yq string) (*T, error) {
+	defer perf.Track(atmosConfig, "utils.EvaluateYqExpressionWithType")()
+
 	// Configure the yq logger based on Atmos configuration
 	configureYqLogger(atmosConfig)
 

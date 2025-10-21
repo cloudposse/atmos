@@ -1,16 +1,16 @@
 package cmd
 
 import (
+	_ "embed"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
-	"github.com/charmbracelet/lipgloss"
-	log "github.com/charmbracelet/log"
 	"github.com/go-git/go-git/v5"
 	"github.com/samber/lo"
 	"github.com/spf13/cobra"
@@ -19,12 +19,21 @@ import (
 	e "github.com/cloudposse/atmos/internal/exec"
 	tuiUtils "github.com/cloudposse/atmos/internal/tui/utils"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/cloudposse/atmos/pkg/telemetry"
-	"github.com/cloudposse/atmos/pkg/ui/theme"
 	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/cloudposse/atmos/pkg/version"
 )
+
+//go:embed markdown/getting_started.md
+var gettingStartedMarkdown string
+
+//go:embed markdown/missing_config_default.md
+var missingConfigDefaultMarkdown string
+
+//go:embed markdown/missing_config_found.md
+var missingConfigFoundMarkdown string
 
 // Define a constant for the dot string that appears multiple times.
 const currentDirPath = "."
@@ -284,7 +293,9 @@ func preCustomCommand(
 
 	// no "steps" means a sub command should be specified
 	if len(commandConfig.Steps) == 0 {
-		_ = cmd.Help()
+		if err := cmd.Help(); err != nil {
+			log.Trace("Failed to display command help", "error", err, "command", cmd.Name())
+		}
 		errUtils.Exit(0)
 	}
 }
@@ -355,7 +366,7 @@ func executeCustomCommand(
 		// process the component stack config and expose it in {{ .ComponentConfig.xxx.yyy.zzz }} Go template variables
 		if commandConfig.ComponentConfig.Component != "" && commandConfig.ComponentConfig.Stack != "" {
 			// Process Go templates in the command's 'component_config.component'
-			component, err := e.ProcessTmpl(fmt.Sprintf("component-config-component-%d", i), commandConfig.ComponentConfig.Component, data, false)
+			component, err := e.ProcessTmpl(&atmosConfig, fmt.Sprintf("component-config-component-%d", i), commandConfig.ComponentConfig.Component, data, false)
 			errUtils.CheckErrorPrintAndExit(err, "", "")
 			if component == "" || component == "<no value>" {
 				errUtils.CheckErrorPrintAndExit(fmt.Errorf("the command defines an invalid 'component_config.component: %s' in '%s'",
@@ -363,7 +374,7 @@ func executeCustomCommand(
 			}
 
 			// Process Go templates in the command's 'component_config.stack'
-			stack, err := e.ProcessTmpl(fmt.Sprintf("component-config-stack-%d", i), commandConfig.ComponentConfig.Stack, data, false)
+			stack, err := e.ProcessTmpl(&atmosConfig, fmt.Sprintf("component-config-stack-%d", i), commandConfig.ComponentConfig.Stack, data, false)
 			errUtils.CheckErrorPrintAndExit(err, "", "")
 			if stack == "" || stack == "<no value>" {
 				errUtils.CheckErrorPrintAndExit(fmt.Errorf("the command defines an invalid 'component_config.stack: %s' in '%s'",
@@ -378,7 +389,8 @@ func executeCustomCommand(
 
 		// Prepare ENV vars
 		// ENV var values support Go templates and have access to {{ .ComponentConfig.xxx.yyy.zzz }} Go template variables
-		var envVarsList []string
+		// Start with current environment to inherit PATH and other variables.
+		env := os.Environ()
 		for _, v := range commandConfig.Env {
 			key := strings.TrimSpace(v.Key)
 			value := v.Value
@@ -394,32 +406,37 @@ func executeCustomCommand(
 			// If the command to get the value for the ENV var is provided, execute it
 			if valCommand != "" {
 				valCommandName := fmt.Sprintf("env-var-%s-valcommand", key)
-				res, err := u.ExecuteShellAndReturnOutput(valCommand, valCommandName, currentDirPath, nil, false)
+				res, err := u.ExecuteShellAndReturnOutput(valCommand, valCommandName, currentDirPath, env, false)
 				errUtils.CheckErrorPrintAndExit(err, "", "")
 				value = strings.TrimRight(res, "\r\n")
 			} else {
 				// Process Go templates in the values of the command's ENV vars
-				value, err = e.ProcessTmpl(fmt.Sprintf("env-var-%d", i), value, data, false)
+				value, err = e.ProcessTmpl(&atmosConfig, fmt.Sprintf("env-var-%d", i), value, data, false)
 				errUtils.CheckErrorPrintAndExit(err, "", "")
 			}
 
-			envVarsList = append(envVarsList, fmt.Sprintf("%s=%s", key, value))
-			err = os.Setenv(key, value)
-			errUtils.CheckErrorPrintAndExit(err, "", "")
+			// Add or update the environment variable in the env slice
+			env = u.UpdateEnvVar(env, key, value)
 		}
 
-		if len(envVarsList) > 0 && commandConfig.Verbose {
-			log.Debug("Using ENV vars", "env", envVarsList)
+		if len(commandConfig.Env) > 0 && commandConfig.Verbose {
+			var envVarsList []string
+			for _, v := range commandConfig.Env {
+				envVarsList = append(envVarsList, fmt.Sprintf("%s=%s", strings.TrimSpace(v.Key), "***"))
+			}
+			log.Debug("Using custom ENV vars", "env", envVarsList)
 		}
 
 		// Process Go templates in the command's steps.
 		// Steps support Go templates and have access to {{ .ComponentConfig.xxx.yyy.zzz }} Go template variables
-		commandToRun, err := e.ProcessTmpl(fmt.Sprintf("step-%d", i), step, data, false)
+		commandToRun, err := e.ProcessTmpl(&atmosConfig, fmt.Sprintf("step-%d", i), step, data, false)
 		errUtils.CheckErrorPrintAndExit(err, "", "")
 
 		// Execute the command step
 		commandName := fmt.Sprintf("%s-step-%d", commandConfig.Name, i)
-		err = e.ExecuteShell(commandToRun, commandName, currentDirPath, envVarsList, false)
+
+		// Pass the prepared environment with custom variables to the subprocess
+		err = e.ExecuteShell(commandToRun, commandName, currentDirPath, env, false)
 		errUtils.CheckErrorPrintAndExit(err, "", "")
 	}
 }
@@ -482,13 +499,6 @@ func checkAtmosConfig(opts ...AtmosValidateOption) {
 	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
 	errUtils.CheckErrorPrintAndExit(err, "", "")
 
-	// Validate theme configuration if specified
-	if atmosConfig.Settings.Terminal.Theme != "" {
-		if err := theme.ValidateTheme(atmosConfig.Settings.Terminal.Theme); err != nil {
-			errUtils.CheckErrorPrintAndExit(err, "", "")
-		}
-	}
-
 	if vCfg.CheckStack {
 		atmosConfigExists, err := u.IsDirectory(atmosConfig.StacksBaseAbsolutePath)
 		if !atmosConfigExists || err != nil {
@@ -500,62 +510,29 @@ func checkAtmosConfig(opts ...AtmosValidateOption) {
 
 // printMessageForMissingAtmosConfig prints Atmos logo and instructions on how to configure and start using Atmos.
 func printMessageForMissingAtmosConfig(atmosConfig schema.AtmosConfiguration) {
-	// Get theme-aware styles
-	styles := theme.GetCurrentStyles()
-	var codeStyle, labelStyle lipgloss.Style
-
-	if styles != nil {
-		codeStyle = styles.Help.Code // Use Code style for inline code-like elements
-		labelStyle = styles.Label    // Use Label style for section headers
-	} else {
-		// Fallback to basic styles if theme is not available
-		codeStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#9B51E0"))             // Purple fallback
-		labelStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#00A3E0")).Bold(true) // Blue fallback
-	}
-
 	fmt.Println()
 	err := tuiUtils.PrintStyledText("ATMOS")
 	errUtils.CheckErrorPrintAndExit(err, "", "")
 
-	telemetry.PrintTelemetryDisclosure()
-
 	// Check if we're in a git repo. Warn if not.
 	verifyInsideGitRepo()
 
+	stacksDir := filepath.Join(atmosConfig.BasePath, atmosConfig.Stacks.BasePath)
+
+	u.PrintfMarkdownToTUI("\n")
+
 	if atmosConfig.Default {
-		// If Atmos did not find an `atmos.yaml` config file and is using the default config
-		fmt.Fprint(os.Stdout, codeStyle.Render("atmos.yaml"))
-		fmt.Println(" CLI config file was not found.")
-		fmt.Print("\nThe default Atmos stacks directory is set to ")
-		fmt.Fprint(os.Stdout, codeStyle.Render(filepath.Join(atmosConfig.BasePath, atmosConfig.Stacks.BasePath)))
-		fmt.Println(",\nbut the directory does not exist in the current path.")
+		// If Atmos did not find an `atmos.yaml` config file and is using the default config.
+		u.PrintfMarkdownToTUI(missingConfigDefaultMarkdown, stacksDir)
 	} else {
-		// If Atmos found an `atmos.yaml` config file, but it defines invalid paths to Atmos stacks and components
-		fmt.Fprint(os.Stdout, codeStyle.Render("atmos.yaml"))
-		fmt.Print(" CLI config file specifies the directory for Atmos stacks as ")
-		fmt.Fprint(os.Stdout, codeStyle.Render(filepath.Join(atmosConfig.BasePath, atmosConfig.Stacks.BasePath)))
-		fmt.Println(",\nbut the directory does not exist.")
+		// If Atmos found an `atmos.yaml` config file, but it defines invalid paths to Atmos stacks and components.
+		u.PrintfMarkdownToTUI(missingConfigFoundMarkdown, stacksDir)
 	}
 
-	fmt.Println()
-	fmt.Println("To configure and start using Atmos, refer to the following documents:")
-	fmt.Println()
+	u.PrintfMarkdownToTUI("\n")
 
-	fmt.Println(labelStyle.Render("Atmos CLI Configuration:"))
-	fmt.Println("https://atmos.tools/cli/configuration")
-	fmt.Println()
-
-	fmt.Println(labelStyle.Render("Atmos Components:"))
-	fmt.Println("https://atmos.tools/core-concepts/components")
-	fmt.Println()
-
-	fmt.Println(labelStyle.Render("Atmos Stacks:"))
-	fmt.Println("https://atmos.tools/core-concepts/stacks")
-	fmt.Println()
-
-	fmt.Println(labelStyle.Render("Quick Start:"))
-	fmt.Println("https://atmos.tools/quick-start")
-	fmt.Println()
+	// Use markdown formatting for consistent output to stderr.
+	u.PrintfMarkdownToTUI("%s", gettingStartedMarkdown)
 }
 
 // CheckForAtmosUpdateAndPrintMessage checks if a version update is needed and prints a message if a newer version is found.
@@ -610,7 +587,7 @@ func CheckForAtmosUpdateAndPrintMessage(atmosConfig schema.AtmosConfiguration) {
 
 // Check Atmos is version command.
 func isVersionCommand() bool {
-	return len(os.Args) > 1 && os.Args[1] == "version"
+	return len(os.Args) > 1 && (os.Args[1] == "version" || os.Args[1] == "--version")
 }
 
 // handleHelpRequest shows help content and exits only if the first argument is "help" or "--help" or "-h".
@@ -665,6 +642,19 @@ func getConfigAndStacksInfo(commandName string, cmd *cobra.Command, args []strin
 	info, err := e.ProcessCommandLineArgs(commandName, cmd, finalArgs, argsAfterDoubleDash)
 	errUtils.CheckErrorPrintAndExit(err, "", "")
 	return info
+}
+
+// enableHeatmapIfRequested checks os.Args for --heatmap and --heatmap-mode flags.
+// This is needed for commands with DisableFlagParsing=true (terraform, helmfile, packer)
+// where Cobra doesn't parse the flags, so PersistentPreRun can't detect them.
+// We only enable tracking if --heatmap is present; --heatmap-mode is only relevant when --heatmap is set.
+func enableHeatmapIfRequested() {
+	for _, arg := range os.Args {
+		if arg == "--heatmap" {
+			perf.EnableTracking(true)
+			return
+		}
+	}
 }
 
 // isGitRepository checks if the current directory is within a git repository.
@@ -744,6 +734,35 @@ func AddStackCompletion(cmd *cobra.Command) {
 		cmd.PersistentFlags().StringP("stack", "s", "", stackHint)
 	}
 	cmd.RegisterFlagCompletionFunc("stack", stackFlagCompletion)
+}
+
+// identityFlagCompletion provides shell completion for identity flags by fetching
+// available identities from the Atmos configuration.
+func identityFlagCompletion(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+	if err != nil {
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+
+	var identities []string
+	if atmosConfig.Auth.Identities != nil {
+		for name := range atmosConfig.Auth.Identities {
+			identities = append(identities, name)
+		}
+	}
+
+	sort.Strings(identities)
+
+	return identities, cobra.ShellCompDirectiveNoFileComp
+}
+
+// AddIdentityCompletion registers shell completion for the identity flag if present on the command.
+func AddIdentityCompletion(cmd *cobra.Command) {
+	if cmd.Flag("identity") != nil {
+		if err := cmd.RegisterFlagCompletionFunc("identity", identityFlagCompletion); err != nil {
+			log.Trace("Failed to register identity flag completion", "error", err)
+		}
+	}
 }
 
 func ComponentsArgCompletion(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {

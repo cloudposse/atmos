@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	log "github.com/charmbracelet/log"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/stretchr/testify/assert"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
@@ -29,12 +29,6 @@ func TestYamlFuncTerraformOutput(t *testing.T) {
 
 	stack := "nonprod"
 
-	// Capture the starting working directory
-	startingDir, err := os.Getwd()
-	if err != nil {
-		t.Fatalf("Failed to get the current working directory: %v", err)
-	}
-
 	defer func() {
 		// Delete the generated files and folders after the test
 		err := os.RemoveAll(filepath.Join("..", "..", "components", "terraform", "mock", ".terraform"))
@@ -42,18 +36,11 @@ func TestYamlFuncTerraformOutput(t *testing.T) {
 
 		err = os.RemoveAll(filepath.Join("..", "..", "components", "terraform", "mock", "terraform.tfstate.d"))
 		assert.NoError(t, err)
-
-		// Change back to the original working directory after the test
-		if err = os.Chdir(startingDir); err != nil {
-			t.Fatalf("Failed to change back to the starting directory: %v", err)
-		}
 	}()
 
 	// Define the working directory
 	workDir := "../../tests/fixtures/scenarios/atmos-terraform-output-yaml-function"
-	if err := os.Chdir(workDir); err != nil {
-		t.Fatalf("Failed to change directory to %q: %v", workDir, err)
-	}
+	t.Chdir(workDir)
 
 	info := schema.ConfigAndStacksInfo{
 		StackFromArg:     "",

@@ -1,0 +1,51 @@
+---
+title: atmos auth login
+sidebar_label: login
+sidebar_class_name: command
+sidebar_position: 3
+id: login
+description: Authenticate to cloud providers using an identity defined in atmos.yaml.
+---
+import Screengrab from '@site/src/components/Screengrab'
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Authenticate with a configured identity using SSO, SAML, OIDC, or static credentials. Atmos retrieves and caches short-lived credentials so they can be reused until expiration, avoiding repeated logins for each command.
+</Intro>
+
+<Screengrab title="atmos auth login --help" slug="atmos-auth-login--help" />
+
+## Usage
+
+```shell
+atmos auth login [--identity <name>]
+```
+
+## Examples
+
+```shell
+# Use default identity
+atmos auth login
+
+# Use specific identity
+atmos auth login --identity admin
+```
+
+## Arguments
+
+<dl>
+  <dt>n/a</dt>
+  <dd>No positional arguments.</dd>
+</dl>
+
+## Flags
+
+<dl>
+  <dt>`--identity` <em>(alias `-i`)</em></dt>
+  <dd>Specify the identity to authenticate. If omitted, the default identity is used.</dd>
+</dl>
+
+## Notes
+
+- Prints provider, identity, account, region, and expiration when successful.
+- For AWS SSO (IAM Identity Center), you will see a **verification code** displayed in the terminal. This is a device authorization user code (e.g., "WDDD-HRQV") that AWS generates for the device flow - **this is NOT an MFA token**. The code is displayed so you can visually verify it matches what AWS shows in the browser. Any MFA prompts will appear in the browser during authentication.

@@ -5,10 +5,13 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"testing"
 
+	"go.yaml.in/yaml/v3"
+
 	errUtils "github.com/cloudposse/atmos/errors"
-	"gopkg.in/yaml.v3"
+	"github.com/cloudposse/atmos/pkg/utils"
 )
 
 // SandboxEnvironment holds the state for a sandboxed test.
@@ -16,7 +19,6 @@ type SandboxEnvironment struct {
 	TempDir         string
 	ComponentsPath  string
 	OriginalWorkdir string
-	t               *testing.T
 }
 
 // SetupSandbox creates an isolated test environment with copied components.
@@ -48,7 +50,6 @@ func SetupSandbox(t *testing.T, workdir string) (*SandboxEnvironment, error) {
 		TempDir:         tempDir,
 		ComponentsPath:  sandboxComponentsPath,
 		OriginalWorkdir: absWorkdir,
-		t:               t,
 	}, nil
 }
 
@@ -102,7 +103,7 @@ func copyComponentsToSandbox(absWorkdir, sandboxComponentsPath string, component
 //
 //nolint:nilerr // We intentionally return nil for non-existent components to continue processing other components
 func copySingleComponentType(absWorkdir, sandboxComponentsPath, componentType, relPath string) error {
-	srcPath := filepath.Join(absWorkdir, relPath)
+	srcPath := utils.JoinPath(absWorkdir, relPath)
 	srcAbsPath, err := filepath.Abs(srcPath)
 	if err != nil {
 		// Skip if path doesn't resolve, not a critical error for sandbox setup.
@@ -130,22 +131,28 @@ func copyToSandbox(src, dst string) error {
 		return err
 	}
 
-	// Try rsync first, then cp.
-	if err := tryCopyWithRsync(src, dst); err == nil {
+	// On Windows, use native Go implementation directly since rsync/cp don't exist.
+	if runtime.GOOS == "windows" {
+		return copyDir(src, dst)
+	}
+
+	// On Unix systems, try rsync first (fastest).
+	if err := copyDirWithRsync(src, dst); err == nil {
 		return nil
 	}
 
 	// Fallback to cp.
-	if err := tryCopyWithCp(src, dst); err != nil {
-		return err
+	if err := copyDirWithCp(src, dst); err == nil {
+		// Clean up terraform artifacts after copy.
+		return cleanTerraformArtifacts(dst)
 	}
 
-	// Clean up terraform artifacts after copy.
-	return cleanTerraformArtifacts(dst)
+	// Final fallback to native Go implementation.
+	return copyDir(src, dst)
 }
 
-// tryCopyWithRsync attempts to copy using rsync with exclusions.
-func tryCopyWithRsync(src, dst string) error {
+// copyDirWithRsync attempts to copy using rsync with exclusions.
+func copyDirWithRsync(src, dst string) error {
 	if _, err := exec.LookPath("rsync"); err != nil {
 		return err
 	}
@@ -165,10 +172,81 @@ func tryCopyWithRsync(src, dst string) error {
 	return cmd.Run()
 }
 
-// tryCopyWithCp attempts to copy using cp command.
-func tryCopyWithCp(src, dst string) error {
+// copyDirWithCp attempts to copy using cp command.
+func copyDirWithCp(src, dst string) error {
 	cmd := exec.Command("cp", "-r", src, dst)
 	return cmd.Run()
+}
+
+// copyDir copies a directory recursively using native Go, excluding terraform artifacts.
+func copyDir(src, dst string) error {
+	const dirPerm = 0o755
+	// Create destination directory if it doesn't exist.
+	if err := os.MkdirAll(dst, dirPerm); err != nil {
+		return fmt.Errorf("failed to create destination directory: %w", err)
+	}
+
+	// Read source directory entries.
+	entries, err := os.ReadDir(src)
+	if err != nil {
+		return fmt.Errorf("failed to read source directory: %w", err)
+	}
+
+	for _, entry := range entries {
+		srcPath := filepath.Join(src, entry.Name())
+		dstPath := filepath.Join(dst, entry.Name())
+
+		info, err := entry.Info()
+		if err != nil {
+			continue
+		}
+
+		// Skip terraform artifacts using existing shouldRemoveArtifact function.
+		if shouldRemoveArtifact(info.Name()) {
+			continue
+		}
+
+		if info.IsDir() {
+			// Recursively copy subdirectory.
+			if err := copyDir(srcPath, dstPath); err != nil {
+				return err
+			}
+		} else {
+			// Copy file.
+			if err := copyFile(srcPath, dstPath); err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
+}
+
+// copyFile copies a single file preserving permissions.
+func copyFile(src, dst string) error {
+	// Get source file info using Lstat to detect symlinks.
+	srcInfo, err := os.Lstat(src)
+	if err != nil {
+		return fmt.Errorf("failed to stat source file %q: %w", src, err)
+	}
+
+	// Skip symlinks - they can cause issues especially on Windows.
+	if srcInfo.Mode()&os.ModeSymlink != 0 {
+		return nil
+	}
+
+	// Read source file.
+	data, err := os.ReadFile(src)
+	if err != nil {
+		return fmt.Errorf("failed to read source file %q: %w", src, err)
+	}
+
+	// Write destination file with same permissions.
+	if err := os.WriteFile(dst, data, srcInfo.Mode()); err != nil {
+		return fmt.Errorf("failed to write destination file %q: %w", dst, err)
+	}
+
+	return nil
 }
 
 // cleanTerraformArtifacts removes terraform artifacts from the destination.

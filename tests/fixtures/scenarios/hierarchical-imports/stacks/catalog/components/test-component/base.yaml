@@ -1,0 +1,25 @@
+# Level 3: Component base configuration
+# Note: Does NOT import base/defaults to avoid resetting values from region/account mixins.
+# The deploy stack files import account and region first, which import base/defaults.
+
+components:
+  terraform:
+    test-component:
+      vars:
+        # Override import_order_test at component level
+        import_order_test: "level-3-component-base"
+
+        # Component-specific configuration
+        component_name: "test-component"
+        enabled: true
+
+        # Component tags
+        tags:
+          Component: "test-component"
+          Source: "level-3-component-base"
+
+      settings:
+        import_order_test: "level-3-component-base-settings"
+        component:
+          type: "terraform"
+          category: "networking"

@@ -1,24 +1,23 @@
 package exec
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 
 	"github.com/charmbracelet/huh"
-	"github.com/charmbracelet/lipgloss"
-	log "github.com/charmbracelet/log"
+	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/internal/tui/utils"
+	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 	u "github.com/cloudposse/atmos/pkg/utils"
-	"github.com/pkg/errors"
-	"github.com/spf13/viper"
 )
 
 var (
-	ErrParseStacks               = errors.New("could not parse stacks")
-	ErrParseComponents           = errors.New("could not parse components")
 	ErrParseTerraformComponents  = errors.New("could not parse Terraform components")
 	ErrParseComponentsAttributes = errors.New("could not parse component attributes")
 	ErrDescribeStack             = errors.New("error describe stacks")
@@ -34,6 +33,7 @@ var (
 	ErrRefusingToDeleteDir       = errors.New("refusing to delete root directory")
 	ErrRefusingToDelete          = errors.New("refusing to delete directory containing")
 	ErrRootPath                  = errors.New("root path cannot be empty")
+	ErrUserAborted               = errors.New("mission aborted")
 )
 
 type ObjectInfo struct {
@@ -90,6 +90,8 @@ func findFoldersNamesWithPrefix(root, prefix string) ([]string, error) {
 }
 
 func CollectDirectoryObjects(basePath string, patterns []string) ([]Directory, error) {
+	defer perf.Track(nil, "exec.CollectDirectoryObjects")()
+
 	if basePath == "" {
 		return nil, ErrEmptyPath
 	}
@@ -202,7 +204,7 @@ func CollectDirectoryObjects(basePath string, patterns []string) ([]Directory, e
 	return folders, nil
 }
 
-// get stack terraform state files.
+// get stack terraform state files
 func getStackTerraformStateFolder(componentPath string, stack string) ([]Directory, error) {
 	tfStateFolderPath := filepath.Join(componentPath, "terraform.tfstate.d")
 	tfStateFolderNames, err := findFoldersNamesWithPrefix(tfStateFolderPath, stack)
@@ -254,35 +256,7 @@ func getRelativePath(basePath, componentPath string) (string, error) {
 
 func confirmDeleteTerraformLocal(message string) (confirm bool, err error) {
 	confirm = false
-	t := huh.ThemeCharm()
-
-	// Apply theme colors to huh form
-	themeName := "default"
-	if theme.GetCurrentStyles() != nil {
-		// Get the actual active theme name
-		_ = viper.BindEnv("ATMOS_THEME")
-		themeName = viper.GetString("ATMOS_THEME")
-		if themeName == "" {
-			themeName = "default"
-		}
-	}
-	scheme, err := theme.GetColorSchemeForTheme(themeName)
-	if err == nil && scheme != nil {
-		// Use theme colors for the form
-		primaryColor := lipgloss.Color(scheme.Primary)
-		backgroundColor := lipgloss.Color(scheme.Background)
-		t.Focused.FocusedButton = t.Focused.FocusedButton.Foreground(backgroundColor).Background(primaryColor)
-		t.Focused.SelectSelector = t.Focused.SelectSelector.Foreground(primaryColor)
-		t.Blurred.Title = t.Blurred.Title.Foreground(primaryColor)
-	} else {
-		// Fallback to default colors
-		cream := lipgloss.AdaptiveColor{Light: "#FFFDF5", Dark: "#FFFDF5"}
-		purple := lipgloss.AdaptiveColor{Light: "#5B00FF", Dark: "#5B00FF"}
-		t.Focused.FocusedButton = t.Focused.FocusedButton.Foreground(cream).Background(purple)
-		t.Focused.SelectSelector = t.Focused.SelectSelector.Foreground(purple)
-		t.Blurred.Title = t.Blurred.Title.Foreground(purple)
-	}
-
+	t := utils.NewAtmosHuhTheme()
 	confirmPrompt := huh.NewConfirm().
 		Title(message).
 		Affirmative("Yes!").
@@ -290,7 +264,7 @@ func confirmDeleteTerraformLocal(message string) (confirm bool, err error) {
 		Value(&confirm).WithTheme(t)
 	if err := confirmPrompt.Run(); err != nil {
 		if err == huh.ErrUserAborted {
-			return confirm, fmt.Errorf("Mission aborted")
+			return confirm, fmt.Errorf("%w", ErrUserAborted)
 		}
 		return confirm, err
 	}
@@ -300,39 +274,29 @@ func confirmDeleteTerraformLocal(message string) (confirm bool, err error) {
 
 // DeletePathTerraform deletes the specified file or folder with a checkmark or xmark.
 func DeletePathTerraform(fullPath string, objectName string) error {
+	defer perf.Track(nil, "exec.DeletePathTerraform")()
+
+	// Normalize path separators to forward slashes for consistent output across platforms
+	normalizedObjectName := filepath.ToSlash(objectName)
+
 	fileInfo, err := os.Lstat(fullPath)
 	if os.IsNotExist(err) {
-		styles := theme.GetCurrentStyles()
-		if styles != nil {
-			fmt.Printf("%s Cannot delete %s: path does not exist", styles.XMark, objectName)
-		} else {
-			fmt.Printf("✗ Cannot delete %s: path does not exist", objectName)
-		}
-		fmt.Println()
+		xMark := theme.Styles.XMark
+		fmt.Fprintf(os.Stderr, "%s Cannot delete %s: path does not exist\n", xMark, normalizedObjectName)
 		return err
 	}
 	if fileInfo.Mode()&os.ModeSymlink != 0 {
-		return fmt.Errorf("refusing to delete symbolic link: %s", objectName)
+		return fmt.Errorf("%w: %s", errUtils.ErrRefuseDeleteSymbolicLink, normalizedObjectName)
 	}
 	// Proceed with deletion
 	err = os.RemoveAll(fullPath)
 	if err != nil {
-		styles := theme.GetCurrentStyles()
-		if styles != nil {
-			fmt.Printf("%s Error deleting %s", styles.XMark, objectName)
-		} else {
-			fmt.Printf("✗ Error deleting %s", objectName)
-		}
-		fmt.Println()
+		xMark := theme.Styles.XMark
+		fmt.Fprintf(os.Stderr, "%s Error deleting %s\n", xMark, normalizedObjectName)
 		return err
 	}
-	styles := theme.GetCurrentStyles()
-	if styles != nil {
-		fmt.Printf("%s Deleted %s", styles.Checkmark, objectName)
-	} else {
-		fmt.Printf("✓ Deleted %s", objectName)
-	}
-	fmt.Println()
+	checkMark := theme.Styles.Checkmark
+	fmt.Fprintf(os.Stderr, "%s Deleted %s\n", checkMark, normalizedObjectName)
 	return nil
 }
 
@@ -389,8 +353,7 @@ func deleteFolders(folders []Directory, relativePath string, atmosConfig *schema
 
 // handleTFDataDir handles the deletion of the TF_DATA_DIR if specified.
 func handleTFDataDir(componentPath string, relativePath string) {
-	_ = viper.BindEnv("TF_DATA_DIR")
-	tfDataDir := viper.GetString("TF_DATA_DIR")
+	tfDataDir := os.Getenv("TF_DATA_DIR")
 	if tfDataDir == "" {
 		return
 	}
@@ -427,6 +390,8 @@ func initializeFilesToClear(info schema.ConfigAndStacksInfo, atmosConfig *schema
 }
 
 func IsValidDataDir(tfDataDir string) error {
+	defer perf.Track(nil, "exec.IsValidDataDir")()
+
 	if tfDataDir == "" {
 		return ErrEmptyEnvDir
 	}
@@ -505,8 +470,7 @@ func handleCleanSubCommand(info schema.ConfigAndStacksInfo, componentPath string
 			folders = append(folders, stackFolders...)
 		}
 	}
-	_ = viper.BindEnv("TF_DATA_DIR")
-	tfDataDir := viper.GetString("TF_DATA_DIR")
+	tfDataDir := os.Getenv("TF_DATA_DIR")
 
 	var tfDataDirFolders []Directory
 	if tfDataDir != "" {

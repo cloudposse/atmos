@@ -4,7 +4,7 @@ import (
 	"errors"
 	"fmt"
 
-	log "github.com/charmbracelet/log"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/spf13/cobra"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -20,17 +20,20 @@ func runHooks(event h.HookEvent, cmd *cobra.Command, args []string) error {
 	// Initialize the CLI config
 	atmosConfig, err := cfg.InitCliConfig(info, true)
 	if err != nil {
-		return fmt.Errorf("error initializing CLI config: %w", err)
+		return errors.Join(errUtils.ErrInitializeCLIConfig, err)
 	}
 
 	hooks, err := h.GetHooks(&atmosConfig, &info)
 	if err != nil {
-		return fmt.Errorf("error getting hooks: %w", err)
+		return errors.Join(errUtils.ErrGetHooks, err)
 	}
 
 	if hooks != nil && hooks.HasHooks() {
 		log.Info("Running hooks", "event", event)
-		return hooks.RunAll(event, &atmosConfig, &info, cmd, args)
+		err := hooks.RunAll(event, &atmosConfig, &info, cmd, args)
+		if err != nil {
+			errUtils.CheckErrorPrintAndExit(err, "", "")
+		}
 	}
 
 	return nil
@@ -68,6 +71,10 @@ func terraformRun(cmd *cobra.Command, actualCmd *cobra.Command, args []string) e
 	info.Components = components
 	info.DryRun = dryRun
 
+	identityFlag, err := flags.GetString("identity")
+	errUtils.CheckErrorPrintAndExit(err, "", "")
+
+	info.Identity = identityFlag
 	// Check Terraform Single-Component and Multi-Component flags
 	err = checkTerraformFlags(&info)
 	errUtils.CheckErrorPrintAndExit(err, "", "")

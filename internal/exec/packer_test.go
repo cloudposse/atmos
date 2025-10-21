@@ -7,13 +7,16 @@ import (
 	"strings"
 	"testing"
 
-	log "github.com/charmbracelet/log"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/stretchr/testify/assert"
 
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/tests"
 )
 
 func TestExecutePacker_Validate(t *testing.T) {
+	tests.RequirePacker(t)
+
 	workDir := "../../tests/fixtures/scenarios/packer"
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", workDir)
 	t.Setenv("ATMOS_BASE_PATH", workDir)
@@ -62,6 +65,8 @@ func TestExecutePacker_Validate(t *testing.T) {
 }
 
 func TestExecutePacker_Inspect(t *testing.T) {
+	tests.RequirePacker(t)
+
 	workDir := "../../tests/fixtures/scenarios/packer"
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", workDir)
 	t.Setenv("ATMOS_BASE_PATH", workDir)
@@ -110,6 +115,8 @@ func TestExecutePacker_Inspect(t *testing.T) {
 }
 
 func TestExecutePacker_Version(t *testing.T) {
+	tests.RequirePacker(t)
+
 	workDir := "../../tests/fixtures/scenarios/packer"
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", workDir)
 	t.Setenv("ATMOS_BASE_PATH", workDir)
@@ -152,6 +159,8 @@ func TestExecutePacker_Version(t *testing.T) {
 }
 
 func TestExecutePacker_Init(t *testing.T) {
+	tests.RequirePacker(t)
+
 	workDir := "../../tests/fixtures/scenarios/packer"
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", workDir)
 	t.Setenv("ATMOS_BASE_PATH", workDir)
@@ -176,18 +185,13 @@ func TestExecutePacker_Init(t *testing.T) {
 }
 
 func TestExecutePacker_Errors(t *testing.T) {
+	tests.RequirePacker(t)
+
 	workDir := "../../tests/fixtures/scenarios/packer"
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", workDir)
 	t.Setenv("ATMOS_BASE_PATH", workDir)
 	t.Setenv("ATMOS_LOGS_LEVEL", "Warning")
 	log.SetLevel(log.InfoLevel)
-
-	// Store original PATH and modify it to ensure packer is not found in PATH
-	originalPath := os.Getenv("PATH")
-	t.Cleanup(func() {
-		// Restore original PATH after test
-		os.Setenv("PATH", originalPath)
-	})
 
 	t.Run("missing stack", func(t *testing.T) {
 		info := schema.ConfigAndStacksInfo{
@@ -358,7 +362,7 @@ func TestExecutePacker_Errors(t *testing.T) {
 
 	t.Run("missing packer binary", func(t *testing.T) {
 		// Temporarily modify PATH to ensure packer is not found
-		os.Setenv("PATH", "/nonexistent/path")
+		t.Setenv("PATH", "/nonexistent/path")
 
 		info := schema.ConfigAndStacksInfo{
 			Stack:            "nonprod",
@@ -371,9 +375,6 @@ func TestExecutePacker_Errors(t *testing.T) {
 		err := ExecutePacker(&info, &packerFlags)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "executable file not found")
-
-		// Restore PATH
-		os.Setenv("PATH", originalPath)
 	})
 
 	t.Run("invalid command arguments", func(t *testing.T) {

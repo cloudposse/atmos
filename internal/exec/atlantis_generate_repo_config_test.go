@@ -38,6 +38,9 @@ func TestExecuteAtlantisGenerateRepoConfigWithStackNameTemplate(t *testing.T) {
 }
 
 func TestExecuteAtlantisGenerateRepoConfigAffectedOnly(t *testing.T) {
+	// Skip long tests in short mode (this test takes ~21 seconds due to Git operations)
+	tests.SkipIfShort(t)
+
 	// Check for Git repository with valid remotes precondition
 	tests.RequireGitRemoteWithValidURL(t)
 
