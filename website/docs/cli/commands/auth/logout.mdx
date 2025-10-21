@@ -11,14 +11,32 @@ import Terminal from '@site/src/components/Terminal'
 import Intro from '@site/src/components/Intro'
 
 <Intro>
-Most cloud practitioners never log out of their cloud provider identities—not because they don't want to, but because the tooling doesn't make it easy. Credentials persist in `~/.aws/credentials`, `~/.azure/`, and `~/.config/gcloud/` long after they should have been removed, creating security risks and credential sprawl.
-
-Use this command to securely remove locally cached credentials from the system keyring and credential files. This makes credential cleanup explicit, comprehensive, and easy when switching identities, ending work sessions, or troubleshooting authentication issues.
+Use this command to securely remove locally cached authentication credentials from the system keyring and credential files. This is useful when switching identities, ending work sessions, or troubleshooting authentication issues.
 </Intro>
 
 :::warning Local Credentials Only
 This command only removes **credentials stored on your local filesystem and system keychain**. It does **not** log you out of any web-based sessions with your identity provider (AWS SSO, Okta, etc.). Your browser sessions will remain active until you explicitly sign out from the identity provider's website.
 :::
+
+## The Problem
+
+Most cloud practitioners never log out of their cloud provider identities. Not because they don't want to, but because the tooling doesn't make it easy.
+
+When you authenticate with cloud providers, credentials get scattered across your filesystem:
+
+- **AWS**: `~/.aws/credentials`, `~/.aws/config`, session tokens
+- **Azure**: `~/.azure/` directory with multiple authentication artifacts
+- **Google Cloud**: `~/.config/gcloud/` with various credential files
+
+Most cloud provider tools don't provide a simple, comprehensive logout command. You're left to:
+
+- Manually hunt down and delete credential files across different locations
+- Navigate through provider-specific web consoles to revoke tokens
+- Hope that session expiration handles cleanup for you
+
+This leads to **credential sprawl**: old, forgotten credentials littering your system, many still valid and exploitable.
+
+The `atmos auth logout` command makes credential cleanup explicit, comprehensive, and easy.
 
 <Screengrab title="atmos auth logout --help" slug="atmos-auth-logout--help" />
 
