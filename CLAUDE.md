@@ -57,6 +57,40 @@ func (f *FileSystemLoader) Load(path string) (*Component, error) { ... }
 //go:generate go run go.uber.org/mock/mockgen@latest -source=loader.go -destination=mock_loader_test.go
 ```
 
+### Options Pattern (MANDATORY)
+Avoid functions with many parameters. Use functional options pattern for configuration:
+
+```go
+// Define option type
+type Option func(*Config)
+
+// Provide option builders
+func WithTimeout(d time.Duration) Option {
+    return func(c *Config) { c.Timeout = d }
+}
+
+func WithRetries(n int) Option {
+    return func(c *Config) { c.Retries = n }
+}
+
+// Constructor accepts variadic options
+func NewClient(opts ...Option) *Client {
+    cfg := &Config{/* defaults */}
+    for _, opt := range opts {
+        opt(cfg)
+    }
+    return &Client{config: cfg}
+}
+
+// Usage
+client := NewClient(
+    WithTimeout(30*time.Second),
+    WithRetries(3),
+)
+```
+
+**Benefits:** Avoids parameter drilling, provides defaults, extensible without breaking changes.
+
 ### Package Organization (MANDATORY)
 - **Avoid utils package bloat** - Don't add new functions to `pkg/utils/`
 - **Create purpose-built packages** - New functionality gets its own package in `pkg/`
