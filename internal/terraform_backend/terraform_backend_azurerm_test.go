@@ -353,11 +353,9 @@ func TestReadTerraformBackendAzurerm_EmptyStorageAccount(t *testing.T) {
 		"component": "test-component",
 		"workspace": "dev",
 		"backend": map[string]any{
-			"azurerm": map[string]any{
-				"storage_account_name": "",
-				"container_name":       "tfstate",
-				"key":                  "terraform.tfstate",
-			},
+			"storage_account_name": "",
+			"container_name":       "tfstate",
+			"key":                  "terraform.tfstate",
 		},
 	}
 
@@ -373,10 +371,8 @@ func TestReadTerraformBackendAzurerm_MissingStorageAccount(t *testing.T) {
 		"component": "test-component",
 		"workspace": "dev",
 		"backend": map[string]any{
-			"azurerm": map[string]any{
-				"container_name": "tfstate",
-				"key":            "terraform.tfstate",
-			},
+			"container_name": "tfstate",
+			"key":            "terraform.tfstate",
 		},
 	}
 
@@ -385,6 +381,40 @@ func TestReadTerraformBackendAzurerm_MissingStorageAccount(t *testing.T) {
 	assert.Error(t, err)
 	assert.Nil(t, result)
 	assert.ErrorIs(t, err, errUtils.ErrStorageAccountRequired)
+}
+
+func TestReadTerraformBackendAzurerm_CachedClient(t *testing.T) {
+	// Pre-populate cache with a mock client.
+	cacheKey := "account=cachedaccount;container=cachedcontainer"
+	mockContent := `{"version": 4, "outputs": {"cached": {"value": "from-cache"}}}`
+
+	mockClient := &mockAzureBlobClient{
+		downloadStreamFunc: func(ctx context.Context, containerName string, blobName string, options *azblob.DownloadStreamOptions) (AzureBlobDownloadResponse, error) {
+			assert.Equal(t, "cachedcontainer", containerName)
+			assert.Equal(t, "terraform.tfstate", blobName)
+			return createMockDownloadResponse(mockContent), nil
+		},
+	}
+
+	// Store in cache.
+	azureBlobClientCache.Store(cacheKey, mockClient)
+	defer azureBlobClientCache.Delete(cacheKey) // Clean up after test.
+
+	componentSections := map[string]any{
+		"component": "cached-component",
+		"workspace": "default",
+		"backend": map[string]any{
+			"storage_account_name": "cachedaccount",
+			"container_name":       "cachedcontainer",
+			"key":                  "terraform.tfstate",
+		},
+	}
+
+	result, err := ReadTerraformBackendAzurerm(nil, &componentSections)
+
+	assert.NoError(t, err)
+	assert.NotNil(t, result)
+	assert.Equal(t, mockContent, string(result))
 }
 
 // errorReader is a reader that always returns an error.
