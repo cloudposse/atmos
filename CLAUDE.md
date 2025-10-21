@@ -163,6 +163,9 @@ See `docs/developing-atmos-commands.md` and `docs/prd/command-registry-pattern.m
 ### Documentation (MANDATORY)
 All cmds/flags need Docusaurus docs in `website/docs/cli/commands/`. Use `<dl>` for args/flags. Build: `cd website && npm run build`
 
+### PRD Documentation (MANDATORY)
+All Product Requirement Documents (PRDs) MUST be placed in `docs/prd/`. Use kebab-case filenames. Examples: `command-registry-pattern.md`, `error-handling-strategy.md`, `testing-strategy.md`
+
 ### Pull Requests (MANDATORY)
 Follow template (what/why/references). `minor`/`major` PRs need blog post in `website/blog/` with `<!--truncate-->`. Tag: `feature`/`enhancement`/`bugfix` (users) or `contributors` (internal). Use `no-release` for docs-only.
 
