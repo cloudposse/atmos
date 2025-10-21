@@ -117,9 +117,9 @@ func RequireAzureCredentials(t *testing.T) {
 	}
 
 	// No credentials found, skip the test
-	t.Skipf("Azure credentials not available. Configure via: "+
-		"(1) Environment variables: AZURE_TENANT_ID, AZURE_CLIENT_ID, AZURE_CLIENT_SECRET, "+
-		"(2) Azure CLI: run 'az login', "+
+	t.Skipf("Azure credentials not available. Configure via: " +
+		"(1) Environment variables: AZURE_TENANT_ID, AZURE_CLIENT_ID, AZURE_CLIENT_SECRET, " +
+		"(2) Azure CLI: run 'az login', " +
 		"(3) Set ATMOS_TEST_SKIP_PRECONDITION_CHECKS=true to bypass")
 }
 

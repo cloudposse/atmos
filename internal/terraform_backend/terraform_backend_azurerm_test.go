@@ -812,11 +812,11 @@ func TestReadTerraformBackendAzurerm_Integration_CacheKeyDeterminism(t *testing.
 
 	// Test that cache keys are deterministic and correctly handle different configs.
 	testCases := []struct {
-		name          string
-		backend1      map[string]any
-		backend2      map[string]any
-		shouldBeSame  bool
-		description   string
+		name         string
+		backend1     map[string]any
+		backend2     map[string]any
+		shouldBeSame bool
+		description  string
 	}{
 		{
 			name: "identical backends should use same cache",
