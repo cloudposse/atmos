@@ -52,6 +52,8 @@ atmos auth login -i admin
     - **No default identities** (interactive): Show selector with all available identities
     - **Multiple default identities** (interactive): Show selector with only the default identities
     - **No/multiple defaults** (CI/non-interactive): Return an error
+
+    **Environment variables:** `ATMOS_IDENTITY` or `IDENTITY` (checked in that order)
   </dd>
 </dl>
 
@@ -62,8 +64,7 @@ When no `--identity` flag is provided and no default identity is configured, Atm
 The interactive selector is available in terminal environments and will display all configured identities for selection. In CI/CD pipelines or non-interactive environments, you must either:
 
 - Configure a default identity in your `atmos.yaml`
-- Explicitly specify the identity using the `--identity` flag
-- Set the `ATMOS_IDENTITY` environment variable
+- Explicitly specify the identity using the `--identity` flag or environment variable
 
 ## Notes
 
