@@ -46,7 +46,7 @@ func (m *MockComponentProvider) GetGroup() string {
 func (m *MockComponentProvider) GetBasePath(atmosConfig *schema.AtmosConfiguration) string {
 	defer perf.Track(atmosConfig, "mock.GetBasePath")()
 
-	if atmosConfig == nil {
+	if atmosConfig == nil || atmosConfig.Components == nil {
 		return DefaultConfig().BasePath
 	}
 

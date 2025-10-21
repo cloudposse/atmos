@@ -785,7 +785,7 @@ Implement custom dependency graph logic for complex multi-component workflows.
 Generate tool-specific configuration files (like Terraform `.tfvars` or Helmfile values):
 
 ```go
-func (p *YourTypeProvider) GenerateArtifacts(ctx component.ExecutionContext) error {
+func (p *YourTypeProvider) GenerateArtifacts(ctx *component.ExecutionContext) error {
     // Generate variables file
     varsFile := filepath.Join(ctx.ComponentConfig["base_path"].(string), "vars.auto.json")
 
