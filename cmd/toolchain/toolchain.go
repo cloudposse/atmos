@@ -62,6 +62,20 @@ func init() {
 	// Add tools config file flag.
 	toolchainCmd.PersistentFlags().StringVar(&toolsConfigFile, "tools-config", "tools.yaml", "Path to tools configuration file")
 
+	// Add all subcommands.
+	toolchainCmd.AddCommand(addCmd)
+	toolchainCmd.AddCommand(cleanCmd)
+	toolchainCmd.AddCommand(execCmd)
+	toolchainCmd.AddCommand(getCmd)
+	toolchainCmd.AddCommand(infoCmd)
+	toolchainCmd.AddCommand(installCmd)
+	toolchainCmd.AddCommand(listCmd)
+	toolchainCmd.AddCommand(pathCmd)
+	toolchainCmd.AddCommand(removeCmd)
+	toolchainCmd.AddCommand(setCmd)
+	toolchainCmd.AddCommand(uninstallCmd)
+	toolchainCmd.AddCommand(whichCmd)
+
 	// Register this command with the registry.
 	// This happens during package initialization via blank import in cmd/root.go.
 	internal.Register(&ToolchainCommandProvider{})
