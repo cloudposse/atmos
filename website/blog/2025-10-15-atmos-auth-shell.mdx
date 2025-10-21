@@ -5,11 +5,11 @@ authors: [atmos]
 tags: [feature, atmos-auth, security, workflows]
 ---
 
-We're excited to announce a powerful new command in Atmos that makes working with multiple cloud identities significantly more secure: `atmos auth shell`.
+We're excited to introduce `atmos auth shell`, a new command that makes working with multiple cloud identities more secure.
 
-This feature launches **isolated shell sessions** scoped to specific cloud identities, providing clear session boundaries and preventing credential leakage. Think of it like `aws-vault exec`, but for all your cloud identities managed by Atmos—AWS, Azure, GCP, GitHub, SAML, and more.
+This command launches isolated shell sessions scoped to specific cloud identities. Think of it like `aws-vault exec`, but for all your cloud identities managed by Atmos—AWS, Azure, GCP, GitHub, SAML, and more.
 
-When you exit the shell, credentials are automatically removed. No persistence. No leakage. No confusion about which identity is active.
+When you exit the shell, credentials are automatically removed. It's a simple pattern that helps prevent credential leakage and reduces the risk of running commands against the wrong environment.
 
 <!-- truncate -->
 
@@ -46,7 +46,7 @@ atmos auth shell --identity prod-admin
 
 You get a dedicated shell where **only** those production credentials are available. When you exit, your parent shell's environment remains completely unchanged—no credential pollution, no confusion about which environment you're operating in.
 
-This isolation enables a powerful workflow: **run multiple authenticated shells simultaneously, each scoped to a different identity**:
+This isolation enables a useful workflow: **run multiple authenticated shells simultaneously, each scoped to a different identity**:
 
 ```shell
 # Terminal 1: Production operations
