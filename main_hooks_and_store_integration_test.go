@@ -25,7 +25,9 @@ func TestMainHooksAndStoreIntegration(t *testing.T) {
 
 	t.Chdir("tests/fixtures/scenarios/hooks-test")
 
-	// Capture the original arguments
+	// This integration test calls main() directly which reads os.Args internally.
+	// Using os.Args is necessary for testing the complete main() execution path.
+	// main() has no parameters and must read os.Args to get command-line arguments.
 	origArgs := os.Args
 	defer func() { os.Args = origArgs }()
 
