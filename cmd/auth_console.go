@@ -22,6 +22,13 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
+const (
+	// ConsoleLabelWidth is the width for label styling in console output.
+	consoleLabelWidth = 18
+	// ConsoleOutputFormat is the format string for label-value pairs.
+	consoleOutputFormat = "%s %s\n"
+)
+
 var (
 	consoleDestination string
 	consoleDuration    time.Duration
@@ -52,49 +59,29 @@ func executeAuthConsoleCommand(cmd *cobra.Command, args []string) error {
 
 	handleHelpRequest(cmd, args)
 
-	// Load atmos config.
-	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+	// Initialize auth manager.
+	authManager, err := initializeAuthManager()
 	if err != nil {
-		return fmt.Errorf("%w: failed to load atmos config: %w", errUtils.ErrAuthConsole, err)
+		return err
 	}
 
-	// Create auth manager.
-	authManager, err := createAuthManager(&atmosConfig.Auth)
+	// Get identity name.
+	identityName, err := resolveIdentityName(cmd, authManager)
 	if err != nil {
-		return fmt.Errorf("%w: failed to create auth manager: %w", errUtils.ErrAuthConsole, err)
+		return err
 	}
 
-	// Get identity from flag or use default.
-	identityName, _ := cmd.Flags().GetString(IdentityFlagName)
-	if identityName == "" {
-		identityName, err = authManager.GetDefaultIdentity()
-		if err != nil {
-			return fmt.Errorf("%w: failed to get default identity: %w", errUtils.ErrAuthConsole, err)
-		}
-		if identityName == "" {
-			return fmt.Errorf("%w: no default identity configured", errUtils.ErrAuthConsole)
-		}
-	}
-
-	// Authenticate to get credentials.
+	// Authenticate and get whoami info.
 	ctx := context.Background()
 	whoami, err := authManager.Authenticate(ctx, identityName)
 	if err != nil {
 		return fmt.Errorf("%w: authentication failed: %w", errUtils.ErrAuthConsole, err)
 	}
 
-	// Retrieve credentials: use in-memory first, then retrieve from store.
-	var creds types.ICredentials
-	if whoami.Credentials != nil {
-		creds = whoami.Credentials
-	} else if whoami.CredentialsRef != "" {
-		credStore := credentials.NewCredentialStore()
-		creds, err = credStore.Retrieve(whoami.CredentialsRef)
-		if err != nil {
-			return fmt.Errorf("%w: failed to retrieve credentials from store: %w", errUtils.ErrAuthConsole, err)
-		}
-	} else {
-		return fmt.Errorf("%w: no credentials available", errUtils.ErrAuthConsole)
+	// Retrieve credentials.
+	creds, err := retrieveCredentials(whoami)
+	if err != nil {
+		return err
 	}
 
 	// Check if provider supports console access and get the console URL generator.
@@ -122,10 +109,15 @@ func executeAuthConsoleCommand(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
-	// Print formatted output using lipgloss (without URL unless there's an error).
+	// Print formatted output and handle browser opening.
 	printConsoleInfo(whoami, duration, false, "")
+	handleBrowserOpen(consoleURL)
 
-	// Open in browser unless skipped.
+	return nil
+}
+
+// handleBrowserOpen handles opening the console URL in the browser or displaying it.
+func handleBrowserOpen(consoleURL string) {
 	if !consoleSkipOpen {
 		fmt.Fprintf(os.Stderr, "\n")
 		if err := u.OpenUrl(consoleURL); err != nil {
@@ -143,33 +135,31 @@ func executeAuthConsoleCommand(cmd *cobra.Command, args []string) error {
 		fmt.Fprintf(os.Stderr, "\n")
 		printConsoleURL(consoleURL)
 	}
-
-	return nil
 }
 
 // printConsoleInfo prints formatted console information using lipgloss.
 func printConsoleInfo(whoami *types.WhoamiInfo, duration time.Duration, showURL bool, consoleURL string) {
 	// Define styles.
 	headerStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorCyan)).Bold(true)
-	labelStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorGray)).Width(18)
+	labelStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorGray)).Width(consoleLabelWidth)
 	valueStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorWhite))
 
 	// Print header.
 	fmt.Fprintf(os.Stderr, "\n%s\n\n", headerStyle.Render("Console URL Generated"))
 
 	// Print fields.
-	fmt.Fprintf(os.Stderr, "%s %s\n", labelStyle.Render("Provider:"), valueStyle.Render(whoami.Provider))
-	fmt.Fprintf(os.Stderr, "%s %s\n", labelStyle.Render("Identity:"), valueStyle.Render(whoami.Identity))
+	fmt.Fprintf(os.Stderr, consoleOutputFormat, labelStyle.Render("Provider:"), valueStyle.Render(whoami.Provider))
+	fmt.Fprintf(os.Stderr, consoleOutputFormat, labelStyle.Render("Identity:"), valueStyle.Render(whoami.Identity))
 
 	if whoami.Account != "" {
-		fmt.Fprintf(os.Stderr, "%s %s\n", labelStyle.Render("Account:"), valueStyle.Render(whoami.Account))
+		fmt.Fprintf(os.Stderr, consoleOutputFormat, labelStyle.Render("Account:"), valueStyle.Render(whoami.Account))
 	}
 
 	if duration > 0 {
 		// Calculate expiration time.
 		expiresAt := time.Now().Add(duration)
-		fmt.Fprintf(os.Stderr, "%s %s\n", labelStyle.Render("Session Duration:"), valueStyle.Render(duration.String()))
-		fmt.Fprintf(os.Stderr, "%s %s\n", labelStyle.Render("Session Expires:"), valueStyle.Render(expiresAt.Format("2006-01-02 15:04:05 MST")))
+		fmt.Fprintf(os.Stderr, consoleOutputFormat, labelStyle.Render("Session Duration:"), valueStyle.Render(duration.String()))
+		fmt.Fprintf(os.Stderr, consoleOutputFormat, labelStyle.Render("Session Expires:"), valueStyle.Render(expiresAt.Format("2006-01-02 15:04:05 MST")))
 	}
 
 	// Only print URL if requested (for error cases or --no-open).
@@ -205,6 +195,57 @@ func getConsoleProvider(authManager types.AuthManager, identityName string) (typ
 		return nil, fmt.Errorf("%w: GCP console access not yet implemented (coming soon)", errUtils.ErrProviderNotSupported)
 	default:
 		return nil, fmt.Errorf("%w: provider %q does not support web console access", errUtils.ErrProviderNotSupported, providerKind)
+	}
+}
+
+// initializeAuthManager loads config and creates the auth manager.
+func initializeAuthManager() (types.AuthManager, error) {
+	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+	if err != nil {
+		return nil, fmt.Errorf("%w: failed to load atmos config: %w", errUtils.ErrAuthConsole, err)
+	}
+
+	authManager, err := createAuthManager(&atmosConfig.Auth)
+	if err != nil {
+		return nil, fmt.Errorf("%w: failed to create auth manager: %w", errUtils.ErrAuthConsole, err)
+	}
+
+	return authManager, nil
+}
+
+// resolveIdentityName gets identity from flag or uses default.
+func resolveIdentityName(cmd *cobra.Command, authManager types.AuthManager) (string, error) {
+	identityName, _ := cmd.Flags().GetString(IdentityFlagName)
+	if identityName != "" {
+		return identityName, nil
+	}
+
+	identityName, err := authManager.GetDefaultIdentity()
+	if err != nil {
+		return "", fmt.Errorf("%w: failed to get default identity: %w", errUtils.ErrAuthConsole, err)
+	}
+
+	if identityName == "" {
+		return "", fmt.Errorf("%w: no default identity configured", errUtils.ErrAuthConsole)
+	}
+
+	return identityName, nil
+}
+
+// retrieveCredentials retrieves credentials from whoami info.
+func retrieveCredentials(whoami *types.WhoamiInfo) (types.ICredentials, error) {
+	switch {
+	case whoami.Credentials != nil:
+		return whoami.Credentials, nil
+	case whoami.CredentialsRef != "":
+		credStore := credentials.NewCredentialStore()
+		creds, err := credStore.Retrieve(whoami.CredentialsRef)
+		if err != nil {
+			return nil, fmt.Errorf("%w: failed to retrieve credentials from store: %w", errUtils.ErrAuthConsole, err)
+		}
+		return creds, nil
+	default:
+		return nil, fmt.Errorf("%w: no credentials available", errUtils.ErrAuthConsole)
 	}
 }
 

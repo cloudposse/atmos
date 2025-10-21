@@ -55,60 +55,34 @@ func NewConsoleURLGenerator(httpClient http.Client) *ConsoleURLGenerator {
 func (g *ConsoleURLGenerator) GetConsoleURL(ctx context.Context, creds types.ICredentials, options types.ConsoleURLOptions) (string, time.Duration, error) {
 	defer perf.Track(nil, "aws.ConsoleURLGenerator.GetConsoleURL")()
 
-	// Step 1: Extract AWS credentials from the interface.
-	awsCreds, ok := creds.(*types.AWSCredentials)
-	if !ok {
-		return "", 0, fmt.Errorf("%w: expected AWS credentials, got %T", errUtils.ErrInvalidAuthConfig, creds)
-	}
-
-	// Step 2: Validate credentials have required fields for temporary credentials.
-	if awsCreds.AccessKeyID == "" || awsCreds.SecretAccessKey == "" {
-		return "", 0, fmt.Errorf("%w: temporary credentials required (access key and secret key)", errUtils.ErrInvalidAuthConfig)
-	}
-
-	// Session token is required for federated console access.
-	if awsCreds.SessionToken == "" {
-		return "", 0, fmt.Errorf("%w: session token required for console access (permanent IAM user credentials cannot be used)", errUtils.ErrInvalidAuthConfig)
-	}
-
-	// Step 3: Determine session duration.
-	duration := options.SessionDuration
-	if duration == 0 {
-		duration = AWSDefaultSessionDuration
-	}
-	if duration > AWSMaxSessionDuration {
-		log.Debug("Session duration exceeds AWS maximum, capping at 12 hours", "requested", duration, "max", AWSMaxSessionDuration)
-		duration = AWSMaxSessionDuration
-	}
-
-	// Step 4: Create session JSON for federation endpoint.
-	sessionJSON := map[string]string{
-		"sessionId":    awsCreds.AccessKeyID,
-		"sessionKey":   awsCreds.SecretAccessKey,
-		"sessionToken": awsCreds.SessionToken,
-	}
-
-	sessionData, err := json.Marshal(sessionJSON)
+	// Validate and extract AWS credentials.
+	awsCreds, err := validateAWSCredentials(creds)
 	if err != nil {
-		return "", 0, fmt.Errorf("%v: failed to marshal session data: %w", errUtils.ErrInvalidAuthConfig, err)
+		return "", 0, err
 	}
 
-	// Step 5: Resolve destination (supports aliases like "s3", "ec2", etc.).
-	// Do this before making HTTP requests so we fail fast on invalid destinations.
-	destination, err := ResolveDestination(options.Destination)
+	// Determine session duration.
+	duration := determineSessionDuration(options.SessionDuration)
+
+	// Prepare session data for federation endpoint.
+	sessionData, err := prepareSessionData(awsCreds)
 	if err != nil {
-		return "", 0, fmt.Errorf("failed to resolve destination: %w", err)
-	}
-	if destination == "" {
-		destination = AWSConsoleDestination
+		return "", 0, err
 	}
 
-	// Step 6: Request sign-in token from federation endpoint.
+	// Resolve destination.
+	destination, err := resolveDestinationWithDefault(options.Destination)
+	if err != nil {
+		return "", 0, err
+	}
+
+	// Get signin token from federation endpoint.
 	signinToken, err := g.getSigninToken(ctx, sessionData, duration)
 	if err != nil {
 		return "", 0, fmt.Errorf("failed to get signin token: %w", err)
 	}
 
+	// Build console URL.
 	issuer := options.Issuer
 	if issuer == "" {
 		issuer = "atmos"
@@ -124,6 +98,65 @@ func (g *ConsoleURLGenerator) GetConsoleURL(ctx context.Context, creds types.ICr
 	log.Debug("Generated AWS console URL", "destination", destination, "duration", duration)
 
 	return loginURL, duration, nil
+}
+
+// validateAWSCredentials validates and extracts AWS credentials from the interface.
+func validateAWSCredentials(creds types.ICredentials) (*types.AWSCredentials, error) {
+	awsCreds, ok := creds.(*types.AWSCredentials)
+	if !ok {
+		return nil, fmt.Errorf("%w: expected AWS credentials, got %T", errUtils.ErrInvalidAuthConfig, creds)
+	}
+
+	if awsCreds.AccessKeyID == "" || awsCreds.SecretAccessKey == "" {
+		return nil, fmt.Errorf("%w: temporary credentials required (access key and secret key)", errUtils.ErrInvalidAuthConfig)
+	}
+
+	if awsCreds.SessionToken == "" {
+		return nil, fmt.Errorf("%w: session token required for console access (permanent IAM user credentials cannot be used)", errUtils.ErrInvalidAuthConfig)
+	}
+
+	return awsCreds, nil
+}
+
+// determineSessionDuration determines and validates the session duration.
+func determineSessionDuration(requested time.Duration) time.Duration {
+	duration := requested
+	if duration == 0 {
+		duration = AWSDefaultSessionDuration
+	}
+	if duration > AWSMaxSessionDuration {
+		log.Debug("Session duration exceeds AWS maximum, capping at 12 hours", "requested", duration, "max", AWSMaxSessionDuration)
+		duration = AWSMaxSessionDuration
+	}
+	return duration
+}
+
+// prepareSessionData creates and marshals session JSON for the federation endpoint.
+func prepareSessionData(awsCreds *types.AWSCredentials) ([]byte, error) {
+	sessionJSON := map[string]string{
+		"sessionId":    awsCreds.AccessKeyID,
+		"sessionKey":   awsCreds.SecretAccessKey,
+		"sessionToken": awsCreds.SessionToken,
+	}
+
+	sessionData, err := json.Marshal(sessionJSON)
+	if err != nil {
+		return nil, fmt.Errorf("%v: failed to marshal session data: %w", errUtils.ErrInvalidAuthConfig, err)
+	}
+
+	return sessionData, nil
+}
+
+// resolveDestinationWithDefault resolves the destination and applies default if empty.
+func resolveDestinationWithDefault(dest string) (string, error) {
+	destination, err := ResolveDestination(dest)
+	if err != nil {
+		return "", fmt.Errorf("failed to resolve destination: %w", err)
+	}
+	if destination == "" {
+		destination = AWSConsoleDestination
+	}
+	return destination, nil
 }
 
 // getSigninToken requests a signin token from the AWS federation endpoint.
