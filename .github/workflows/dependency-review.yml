@@ -33,6 +33,9 @@ jobs:
           # Fail on moderate or higher severity vulnerabilities
           fail-on-severity: moderate
 
+          # Require packages to be at least 2 weeks old before allowing
+          min-package-age: 14
+
           # Comment on PR with details
           comment-summary-in-pr: always
 
