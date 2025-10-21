@@ -223,15 +223,18 @@ func ReadTerraformBackendAzurermInternal(
 
 			lastErr = err
 			if attempt < maxRetryCountAzure {
+				// Exponential backoff: 1s, 2s, 4s for attempts 0, 1, 2.
+				backoff := time.Second * time.Duration(1<<attempt)
 				log.Debug(
 					"Failed to read Terraform state file from Azure Blob Storage",
 					"attempt", attempt+1,
 					"file", tfStateFilePath,
 					"container", containerName,
 					"error", err,
+					"backoff", backoff,
 				)
 				cancel()
-				time.Sleep(time.Second * 2) // backoff
+				time.Sleep(backoff)
 				continue
 			}
 			cancel()

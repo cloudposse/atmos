@@ -84,12 +84,11 @@ func RequireAWSProfile(t *testing.T, profileName string) {
 	}
 }
 
-// RequireAzureCredentials checks if Azure credentials are available for authentication.
-// This function verifies that Azure DefaultAzureCredential can be created, which supports:
+// RequireAzureCredentials checks if Azure credentials appear to be configured.
+// This function looks for common Azure credential sources:
 // - Environment variables (AZURE_TENANT_ID, AZURE_CLIENT_ID, AZURE_CLIENT_SECRET)
-// - Managed Identity (when running in Azure)
 // - Azure CLI credentials (az login)
-// - Visual Studio Code credentials
+// Note: This does not validate that credentials are valid, only that they are present.
 func RequireAzureCredentials(t *testing.T) {
 	t.Helper()
 
