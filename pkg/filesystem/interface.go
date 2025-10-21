@@ -6,10 +6,10 @@ import (
 	"path/filepath"
 )
 
+//go:generate go run go.uber.org/mock/mockgen@v0.6.0 -source=$GOFILE -destination=mock_$GOFILE -package=$GOPACKAGE
+
 // FileSystem defines filesystem operations for testability.
 // This interface allows mocking of file I/O operations in tests.
-//
-//go:generate go run go.uber.org/mock/mockgen@v0.6.0 -source=$GOFILE -destination=mock_$GOFILE -package=$GOPACKAGE
 type FileSystem interface {
 	// Open opens a file for reading.
 	Open(name string) (*os.File, error)
@@ -54,8 +54,6 @@ type FileSystem interface {
 }
 
 // GlobMatcher defines glob pattern matching operations.
-//
-//go:generate go run go.uber.org/mock/mockgen@v0.6.0 -source=$GOFILE -destination=mock_$GOFILE -package=$GOPACKAGE
 type GlobMatcher interface {
 	// GetGlobMatches returns all files matching the glob pattern.
 	GetGlobMatches(pattern string) ([]string, error)
@@ -65,8 +63,6 @@ type GlobMatcher interface {
 }
 
 // IOCopier defines I/O copy operations.
-//
-//go:generate go run go.uber.org/mock/mockgen@v0.6.0 -source=$GOFILE -destination=mock_$GOFILE -package=$GOPACKAGE
 type IOCopier interface {
 	// Copy copies from src to dst until EOF or error.
 	Copy(dst io.Writer, src io.Reader) (written int64, err error)
