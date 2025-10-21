@@ -1,11 +1,11 @@
 package cmd
 
 import (
+	"errors"
 	"os"
 	"os/exec"
 	"testing"
 
-	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 
