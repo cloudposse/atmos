@@ -48,6 +48,8 @@ func TestPrintErrorMarkdownAndExit(t *testing.T) {
 		CheckErrorPrintAndExit(er, "Fatal Error", "Check logs.")
 		return
 	}
+	// Use os.Args[0] to get path to test binary for subprocess execution.
+	// This is the correct Go testing pattern for testing os.Exit behavior.
 	execPath, err := exec.LookPath(os.Args[0])
 	assert.Nil(t, err)
 	cmd := exec.Command(execPath, "-test.run=TestPrintErrorMarkdownAndExit")
@@ -67,6 +69,8 @@ func TestPrintInvalidUsageErrorAndExit(t *testing.T) {
 		CheckErrorPrintAndExit(er, "", "Use --help for usage information.")
 		return
 	}
+	// Use os.Args[0] to get path to test binary for subprocess execution.
+	// This is the correct Go testing pattern for testing os.Exit behavior.
 	execPath, err := exec.LookPath(os.Args[0])
 	assert.Nil(t, err)
 	cmd := exec.Command(execPath, "-test.run=TestPrintInvalidUsageErrorAndExit")
@@ -92,6 +96,8 @@ func TestCheckErrorPrintAndExit_ExitCodeError(t *testing.T) {
 		return
 	}
 
+	// Use os.Args[0] to get path to test binary for subprocess execution.
+	// This is the correct Go testing pattern for testing os.Exit behavior.
 	// Test exit code 2
 	execPath, err := exec.LookPath(os.Args[0])
 	assert.Nil(t, err)
@@ -125,6 +131,8 @@ func TestCheckErrorPrintAndExit_ExecExitError(t *testing.T) {
 		return
 	}
 
+	// Use os.Args[0] to get path to test binary for subprocess execution.
+	// This is the correct Go testing pattern for testing os.Exit behavior.
 	execPath, err := exec.LookPath(os.Args[0])
 	assert.Nil(t, err)
 	cmd := exec.Command(execPath, "-test.run=TestCheckErrorPrintAndExit_ExecExitError")
