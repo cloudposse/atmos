@@ -70,6 +70,7 @@ func TestRetrieveCredentials(t *testing.T) {
 		whoami  *types.WhoamiInfo
 		wantErr bool
 		errType error
+		errMsg  string
 	}{
 		{
 			name: "uses in-memory credentials when available",
@@ -90,15 +91,28 @@ func TestRetrieveCredentials(t *testing.T) {
 			},
 			wantErr: true,
 			errType: errUtils.ErrAuthConsole,
+			errMsg:  "no credentials available",
 		},
 		{
-			name: "handles nil whoami",
+			name: "handles OIDC credentials",
 			whoami: &types.WhoamiInfo{
-				Credentials:    nil,
-				CredentialsRef: "",
+				Credentials: &types.OIDCCredentials{
+					Token:    "oidc-token",
+					Provider: "github",
+				},
 			},
-			wantErr: true,
-			errType: errUtils.ErrAuthConsole,
+			wantErr: false,
+		},
+		{
+			name: "handles AWS credentials with different fields",
+			whoami: &types.WhoamiInfo{
+				Credentials: &types.AWSCredentials{
+					AccessKeyID:     "AKIA123",
+					SecretAccessKey: "secret123",
+					SessionToken:    "session123",
+				},
+			},
+			wantErr: false,
 		},
 	}
 
@@ -109,6 +123,9 @@ func TestRetrieveCredentials(t *testing.T) {
 				assert.Error(t, err)
 				if tt.errType != nil {
 					assert.True(t, errors.Is(err, tt.errType), "expected error type %v, got %v", tt.errType, err)
+				}
+				if tt.errMsg != "" {
+					assert.Contains(t, err.Error(), tt.errMsg)
 				}
 			} else {
 				assert.NoError(t, err)
@@ -326,4 +343,95 @@ func TestAuthConsoleCommand_UsageMarkdown(t *testing.T) {
 	t.Run("usage markdown contains examples", func(t *testing.T) {
 		assert.Contains(t, authConsoleUsageMarkdown, "atmos auth console")
 	})
+}
+
+func TestPrintConsoleInfo(t *testing.T) {
+	tests := []struct {
+		name       string
+		whoami     *types.WhoamiInfo
+		duration   time.Duration
+		showURL    bool
+		consoleURL string
+	}{
+		{
+			name: "prints basic info without URL",
+			whoami: &types.WhoamiInfo{
+				Provider: "aws",
+				Identity: "test-user",
+			},
+			duration:   1 * time.Hour,
+			showURL:    false,
+			consoleURL: "",
+		},
+		{
+			name: "prints info with account",
+			whoami: &types.WhoamiInfo{
+				Provider: "aws",
+				Identity: "test-user",
+				Account:  "123456789012",
+			},
+			duration:   2 * time.Hour,
+			showURL:    false,
+			consoleURL: "",
+		},
+		{
+			name: "prints info with URL",
+			whoami: &types.WhoamiInfo{
+				Provider: "aws",
+				Identity: "test-user",
+				Account:  "123456789012",
+			},
+			duration:   1 * time.Hour,
+			showURL:    true,
+			consoleURL: "https://console.aws.amazon.com",
+		},
+		{
+			name: "handles zero duration",
+			whoami: &types.WhoamiInfo{
+				Provider: "azure",
+				Identity: "user@example.com",
+			},
+			duration:   0,
+			showURL:    false,
+			consoleURL: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// This function prints to stderr, just verify it doesn't panic.
+			assert.NotPanics(t, func() {
+				printConsoleInfo(tt.whoami, tt.duration, tt.showURL, tt.consoleURL)
+			})
+		})
+	}
+}
+
+func TestPrintConsoleURL(t *testing.T) {
+	tests := []struct {
+		name       string
+		consoleURL string
+	}{
+		{
+			name:       "prints valid URL",
+			consoleURL: "https://console.aws.amazon.com",
+		},
+		{
+			name:       "prints empty URL",
+			consoleURL: "",
+		},
+		{
+			name:       "prints URL with parameters",
+			consoleURL: "https://console.aws.amazon.com?Action=login&Destination=s3",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// This function prints to stderr, just verify it doesn't panic.
+			assert.NotPanics(t, func() {
+				printConsoleURL(tt.consoleURL)
+			})
+		})
+	}
 }
