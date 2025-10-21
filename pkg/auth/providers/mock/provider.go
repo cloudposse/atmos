@@ -72,8 +72,8 @@ func (p *Provider) Authenticate(ctx context.Context) (types.ICredentials, error)
 	defer perf.Track(nil, "mock.Provider.Authenticate")()
 
 	// Use a fixed timestamp for deterministic testing.
-	// Use 2099-12-31 23:00:00 UTC - a far-future date to avoid expiration-related test failures.
-	expiration := time.Date(MockExpirationYear, MockExpirationMonth, MockExpirationDay, MockExpirationHour, 0, 0, 0, time.UTC)
+	// Use 2099-12-31 23:59:59 UTC - a far-future date to avoid expiration-related test failures.
+	expiration := time.Date(MockExpirationYear, MockExpirationMonth, MockExpirationDay, MockExpirationHour, MockExpirationMinute, MockExpirationSecond, 0, time.UTC)
 
 	return &Credentials{
 		AccessKeyID:     "MOCK_ACCESS_KEY_ID",
