@@ -6,8 +6,6 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/pkg/errors"
-
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	m "github.com/cloudposse/atmos/pkg/merge"
@@ -94,7 +92,7 @@ func ProcessStackConfig(
 	if i, ok := config[cfg.HooksSectionName]; ok {
 		globalHooksSection, ok = i.(map[string]any)
 		if !ok {
-			return nil, errors.Wrapf(errUtils.ErrInvalidHooksSection, " '%s'", stackName)
+			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidHooksSection, stackName)
 		}
 	}
 

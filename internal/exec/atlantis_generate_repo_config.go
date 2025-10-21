@@ -1,12 +1,12 @@
 package exec
 
 import (
+	"fmt"
 	"path/filepath"
 	"reflect"
 	"strings"
 
 	"github.com/mitchellh/mapstructure"
-	"github.com/pkg/errors"
 	"github.com/samber/lo"
 	"github.com/spf13/cobra"
 
@@ -16,6 +16,10 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
+)
+
+const (
+	backtick = "`"
 )
 
 // ExecuteAtlantisGenerateRepoConfigCmd executes 'atlantis generate repo-config' command.
@@ -146,7 +150,7 @@ func ExecuteAtlantisGenerateRepoConfigAffectedOnly(
 	defer perf.Track(atmosConfig, "exec.ExecuteAtlantisGenerateRepoConfigAffectedOnly")()
 
 	if repoPath != "" && (ref != "" || sha != "" || sshKeyPath != "" || sshKeyPassword != "") {
-		return errors.New("if the '--repo-path' flag is specified, the '--ref', '--sha', '--ssh-key' and '--ssh-key-password' flags can't be used")
+		return errUtils.ErrAtlantisInvalidFlags
 	}
 
 	var affected []schema.Affected
@@ -254,7 +258,7 @@ func ExecuteAtlantisGenerateRepoConfig(
 
 	if projectTemplateNameArg != "" {
 		if projectTemplate, ok = atmosConfig.Integrations.Atlantis.ProjectTemplates[projectTemplateNameArg]; !ok {
-			return errors.Errorf("atlantis project template '%s' is not defined in 'integrations.atlantis.project_templates' in 'atmos.yaml'", projectTemplateNameArg)
+			return fmt.Errorf("%w: '%s'", errUtils.ErrAtlantisProjectTemplateNotDef, projectTemplateNameArg)
 		}
 	}
 
@@ -315,12 +319,11 @@ func ExecuteAtlantisGenerateRepoConfig(
 								}
 							} else if settingsAtlantisProjectTemplateName, ok := settingsAtlantisSection["project_template_name"].(string); ok && settingsAtlantisProjectTemplateName != "" {
 								if projectTemplate, ok = atmosConfig.Integrations.Atlantis.ProjectTemplates[settingsAtlantisProjectTemplateName]; !ok {
-									return errors.Errorf(
-										"the component '%s' in the stack config file '%s' "+
+									return fmt.Errorf(
+										"%w: the component '%s' in the stack config file '%s' "+
 											"specifies the atlantis project template name '%s' "+
-											"in the 'settings.atlantis.project_template_name' section, "+
-											"but this atlantis project template is not defined in 'integrations.atlantis.project_templates' in 'atmos.yaml'",
-										componentName, stackConfigFileName, settingsAtlantisProjectTemplateName)
+											"in the 'settings.atlantis.project_template_name' section",
+										errUtils.ErrAtlantisProjectTemplateNotDef, componentName, stackConfigFileName, settingsAtlantisProjectTemplateName)
 								}
 							}
 						}
@@ -329,13 +332,13 @@ func ExecuteAtlantisGenerateRepoConfig(
 
 				// https://www.golinuxcloud.com/golang-check-if-struct-is-empty/
 				if reflect.ValueOf(projectTemplate).IsZero() {
-					return errors.Errorf(
-						"atlantis project template is not specified for the component '%s'. "+
+					return fmt.Errorf(
+						"%w for the component '%s'. "+
 							"It needs to be defined in one of these places: 'settings.atlantis.project_template_name' stack config section, "+
 							"'settings.atlantis.project_template' stack config section, "+
 							"or passed on the command line using the '--project-template' flag to select a project template from the "+
 							"collection of templates defined in the 'integrations.atlantis.project_templates' section in 'atmos.yaml'",
-						componentName)
+						errUtils.ErrAtlantisProjectTemplateNotDef, componentName)
 				}
 
 				// Find the terraform component
@@ -458,33 +461,30 @@ func ExecuteAtlantisGenerateRepoConfig(
 					}
 				} else if settingsAtlantisConfigTemplateName, ok := settingsAtlantisSection["config_template_name"].(string); ok && settingsAtlantisConfigTemplateName != "" {
 					if configTemplate, ok = atmosConfig.Integrations.Atlantis.ConfigTemplates[settingsAtlantisConfigTemplateName]; !ok {
-						return errors.Errorf("# Missing Atlantis Config Template\n\n"+
-							"## Configuration Issue\n\n"+
-							"The Atlantis config template **`%s`** is referenced in `settings.atlantis.config_template_name`, "+
-							"but it is **not defined** in `integrations.atlantis.config_templates` inside `atmos.yaml`. "+
-							"Please update `atmos.yaml` to include the missing template.", settingsAtlantisConfigTemplateName)
+						return fmt.Errorf("%w: '%s' (referenced in settings.atlantis.config_template_name)",
+							errUtils.ErrAtlantisConfigTemplateNotDef, settingsAtlantisConfigTemplateName)
 					}
 				}
 			}
 		}
 	} else {
 		if configTemplate, ok = atmosConfig.Integrations.Atlantis.ConfigTemplates[configTemplateNameArg]; !ok {
-			return errors.Errorf("atlantis config template `%s` is not defined in `integrations.atlantis.config_templates` in `atmos.yaml`", configTemplateNameArg)
+			return fmt.Errorf("%w: '%s'", errUtils.ErrAtlantisConfigTemplateNotDef, configTemplateNameArg)
 		}
 	}
 
 	if reflect.ValueOf(configTemplate).IsZero() {
-		return errors.Errorf(`## Atlantis config template is not specified
+		msg := `
 
 An Atlantis config template must be defined in one of the following places:
 
-1. The ` + "`" + `settings.atlantis.config_template_name` + "`" + ` field in the stack config section.
-2. The ` + "`" + `settings.atlantis.config_template` + "`" + ` field in the stack config section.
-3. Passed on the command line using the ` + "`" + `--config-template` + "`" + ` flag.
+1. The ` + backtick + `settings.atlantis.config_template_name` + backtick + ` field in the stack config section
+2. The ` + backtick + `settings.atlantis.config_template` + backtick + ` field in the stack config section
+3. Passed on the command line using the ` + backtick + `--config-template` + backtick + ` flag
 
 Ensure that the config template is defined or selected from the collection of templates
-specified in the ` + "`" + `integrations.atlantis.config_templates` + "`" + ` section of ` + "`" + `atmos.yaml` + "`" + `.
-`)
+specified in the ` + backtick + `integrations.atlantis.config_templates` + backtick + ` section of ` + backtick + `atmos.yaml`
+		return fmt.Errorf("%w%s", errUtils.ErrAtlantisConfigTemplateNotDef, msg)
 	}
 
 	// Final atlantis config
