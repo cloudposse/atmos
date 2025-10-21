@@ -6,6 +6,7 @@ name: autofix.ci
 on: pull_request
 permissions:
   contents: read
+  actions: write
 jobs:
   autofix:
     runs-on:
@@ -16,6 +17,7 @@ jobs:
       - private=false
     permissions:
       contents: read
+      actions: write
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
