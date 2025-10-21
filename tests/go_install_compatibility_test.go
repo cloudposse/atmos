@@ -7,6 +7,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+
+	"github.com/cloudposse/atmos/tests/testhelpers"
 )
 
 // TestGoModNoReplaceDirectives ensures that go.mod does not contain replace directives.
@@ -22,8 +24,8 @@ import (
 // - Breaking this method creates user friction and support burden.
 // - This test prevents accidental regressions that would break this installation path.
 func TestGoModNoReplaceDirectives(t *testing.T) {
-	// Find the repository root by looking for go.mod
-	repoRoot, err := findRepoRoot()
+	// Find the repository root by looking for .git directory
+	repoRoot, err := testhelpers.FindRepoRoot()
 	require.NoError(t, err, "Failed to find repository root")
 
 	// Read go.mod
@@ -69,27 +71,4 @@ func TestGoModNoReplaceDirectives(t *testing.T) {
 			"This breaks a documented installation method. If you need to replace a dependency,\n"+
 			"consider alternative approaches that don't break go install compatibility.",
 		strings.Join(replaceDirectives, "\n  "))
-}
-
-// findRepoRoot walks up the directory tree to find the repository root.
-// It looks for the directory containing go.mod.
-func findRepoRoot() (string, error) {
-	dir, err := os.Getwd()
-	if err != nil {
-		return "", err
-	}
-
-	for {
-		goModPath := filepath.Join(dir, "go.mod")
-		if _, err := os.Stat(goModPath); err == nil {
-			return dir, nil
-		}
-
-		parent := filepath.Dir(dir)
-		if parent == dir {
-			// Reached filesystem root without finding go.mod
-			return "", os.ErrNotExist
-		}
-		dir = parent
-	}
 }
