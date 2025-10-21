@@ -1,6 +1,9 @@
 package exec
 
+//go:generate mockgen -source=vendor_git_interface.go -destination=mock_vendor_git_interface.go -package=exec
+
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -9,17 +12,20 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 func TestExecuteVendorDiffWithGitOps(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
-		name          string
-		vendorYAML    string
-		flags         *VendorDiffFlags
-		mockSetup     func(*MockGitOperations)
-		expectError   bool
-		expectedError string
+		name        string
+		vendorYAML  string
+		flags       *VendorDiffFlags
+		mockSetup   func(*MockGitOperations)
+		expectError bool
+		expectedErr error
 	}{
 		{
 			name: "successful diff with explicit from/to",
@@ -93,9 +99,9 @@ spec:
 				From:      "v1.0.0",
 				To:        "v1.2.0",
 			},
-			mockSetup:     func(m *MockGitOperations) {},
-			expectError:   true,
-			expectedError: "component not found",
+			mockSetup:   func(m *MockGitOperations) {},
+			expectError: true,
+			expectedErr: errUtils.ErrComponentNotFound,
 		},
 		{
 			name: "unsupported source type",
@@ -114,9 +120,9 @@ spec:
 				From:      "v1.0.0",
 				To:        "v1.2.0",
 			},
-			mockSetup:     func(m *MockGitOperations) {},
-			expectError:   true,
-			expectedError: "unsupported vendor source type",
+			mockSetup:   func(m *MockGitOperations) {},
+			expectError: true,
+			expectedErr: errUtils.ErrUnsupportedVendorSource,
 		},
 		{
 			name: "no tags found error",
@@ -133,49 +139,51 @@ spec:
 			flags: &VendorDiffFlags{
 				Component: "vpc",
 				From:      "v1.0.0",
-				To:        "", // Should try to auto-detect but fail
+				To:        "", // Should try to auto-detect but fail.
 				Context:   3,
 				NoColor:   true,
 			},
 			mockSetup: func(m *MockGitOperations) {
 				m.EXPECT().
 					GetRemoteTags("https://github.com/cloudposse/terraform-aws-components").
-					Return([]string{}, nil) // Empty tags
+					Return([]string{}, nil) // Empty tags.
 			},
-			expectError:   true,
-			expectedError: "no tags found",
+			expectError: true,
+			expectedErr: errUtils.ErrNoTagsFound,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Create temp directory and vendor.yaml
+			t.Parallel()
+
+			// Create temp directory and vendor.yaml.
 			tempDir := t.TempDir()
 			vendorFile := filepath.Join(tempDir, "vendor.yaml")
 			err := os.WriteFile(vendorFile, []byte(tt.vendorYAML), 0o644)
 			require.NoError(t, err)
 
-			// Setup Atmos configuration
+			// Setup Atmos configuration.
 			atmosConfig := &schema.AtmosConfiguration{
 				Vendor: schema.Vendor{
 					BasePath: vendorFile,
 				},
 			}
 
-			// Setup mock
+			// Setup mock.
 			ctrl := gomock.NewController(t)
 			defer ctrl.Finish()
 			mockGit := NewMockGitOperations(ctrl)
 			tt.mockSetup(mockGit)
 
-			// Execute
+			// Execute.
 			err = executeVendorDiffWithGitOps(atmosConfig, tt.flags, mockGit)
 
-			// Assert
+			// Assert.
 			if tt.expectError {
 				assert.Error(t, err)
-				if tt.expectedError != "" {
-					assert.Contains(t, err.Error(), tt.expectedError)
+				if tt.expectedErr != nil {
+					assert.True(t, errors.Is(err, tt.expectedErr))
 				}
 			} else {
 				assert.NoError(t, err)

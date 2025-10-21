@@ -13,6 +13,11 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
+const (
+	// DefaultHTTPTimeout is the default timeout for HTTP requests to GitHub API.
+	defaultHTTPTimeout = 30 * time.Second
+)
+
 // GitHubSourceProvider implements VendorSourceProvider for GitHub repositories.
 type GitHubSourceProvider struct {
 	httpClient *http.Client
@@ -22,7 +27,7 @@ type GitHubSourceProvider struct {
 func NewGitHubSourceProvider() VendorSourceProvider {
 	return &GitHubSourceProvider{
 		httpClient: &http.Client{
-			Timeout: 30 * time.Second,
+			Timeout: defaultHTTPTimeout,
 		},
 	}
 }
@@ -120,10 +125,8 @@ func parseGitHubRepo(source string) (owner, repo string, err error) {
 	source = strings.TrimPrefix(source, "http://")
 	source = strings.TrimPrefix(source, "github.com/")
 
-	// Handle SSH format
-	if strings.HasPrefix(source, "git@github.com:") {
-		source = strings.TrimPrefix(source, "git@github.com:")
-	}
+	// Handle SSH format.
+	source = strings.TrimPrefix(source, "git@github.com:")
 
 	// Remove .git suffix
 	source = strings.TrimSuffix(source, ".git")

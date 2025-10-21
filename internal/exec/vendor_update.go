@@ -2,6 +2,7 @@ package exec
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -163,45 +164,14 @@ func splitAndTrim(s, delimiter string) []string {
 	if s == "" {
 		return nil
 	}
+
 	parts := []string{}
-	for _, part := range splitString(s, delimiter) {
-		trimmed := trimString(part)
+	for _, part := range strings.Split(s, delimiter) {
+		trimmed := strings.TrimSpace(part)
 		if trimmed != "" {
 			parts = append(parts, trimmed)
 		}
 	}
+
 	return parts
-}
-
-func splitString(s, delimiter string) []string {
-	result := []string{}
-	current := ""
-	for _, char := range s {
-		if string(char) == delimiter {
-			result = append(result, current)
-			current = ""
-		} else {
-			current += string(char)
-		}
-	}
-	result = append(result, current)
-	return result
-}
-
-//nolint:revive // Simple string trim implementation.
-func trimString(s string) string {
-	start := 0
-	end := len(s)
-
-	// Trim leading whitespace
-	for start < end && (s[start] == ' ' || s[start] == '\t' || s[start] == '\n' || s[start] == '\r') {
-		start++
-	}
-
-	// Trim trailing whitespace
-	for end > start && (s[end-1] == ' ' || s[end-1] == '\t' || s[end-1] == '\n' || s[end-1] == '\r') {
-		end--
-	}
-
-	return s[start:end]
 }

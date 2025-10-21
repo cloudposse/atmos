@@ -3,6 +3,7 @@ package exec
 //go:generate mockgen -source=$GOFILE -destination=mock_$GOFILE -package=$GOPACKAGE
 
 import (
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -29,11 +30,15 @@ func NewGitOperations() GitOperations {
 
 // GetRemoteTags implements GitOperations.GetRemoteTags.
 func (g *realGitOperations) GetRemoteTags(gitURI string) ([]string, error) {
+	defer perf.Track(nil, "exec.GetRemoteTags")()
+
 	return getGitRemoteTags(gitURI)
 }
 
 // CheckRef implements GitOperations.CheckRef.
 func (g *realGitOperations) CheckRef(gitURI string, ref string) (bool, error) {
+	defer perf.Track(nil, "exec.CheckRef")()
+
 	return checkGitRef(gitURI, ref)
 }
 
@@ -41,5 +46,7 @@ func (g *realGitOperations) CheckRef(gitURI string, ref string) (bool, error) {
 //
 //nolint:revive // Six parameters needed for Git diff configuration.
 func (g *realGitOperations) GetDiffBetweenRefs(atmosConfig *schema.AtmosConfiguration, gitURI string, fromRef string, toRef string, contextLines int, noColor bool) ([]byte, error) {
+	defer perf.Track(atmosConfig, "exec.GetDiffBetweenRefs")()
+
 	return getGitDiffBetweenRefs(atmosConfig, gitURI, fromRef, toRef, contextLines, noColor)
 }
