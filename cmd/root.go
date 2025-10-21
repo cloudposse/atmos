@@ -15,6 +15,7 @@ import (
 	"github.com/elewis787/boa"
 	"github.com/spf13/cobra"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/internal/tui/templates"
@@ -26,6 +27,10 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/telemetry"
 	"github.com/cloudposse/atmos/pkg/utils"
+
+	// Import command packages for registration.
+	_ "github.com/cloudposse/atmos/cmd/init"
+	_ "github.com/cloudposse/atmos/cmd/scaffold"
 )
 
 // atmosConfig This is initialized before everything in the Execute function. So we can directly use this.
@@ -197,6 +202,11 @@ func getInvalidCommandName(input string) string {
 }
 
 func init() {
+	// Register all built-in commands from the registry.
+	if err := internal.RegisterAll(RootCmd); err != nil {
+		log.Error("Failed to register built-in commands", "error", err)
+	}
+
 	// Add the template function for wrapped flag usages
 	cobra.AddTemplateFunc("wrappedFlagUsages", templates.WrappedFlagUsages)
 

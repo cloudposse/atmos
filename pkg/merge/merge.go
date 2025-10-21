@@ -108,3 +108,17 @@ func (m *ThreeWayMerger) resolveConflictBlock(conflictLines []string, fileName s
 	resolved = append(resolved, "")
 	return resolved
 }
+
+// Merge merges multiple maps into a single map.
+// This is a simple implementation that merges maps sequentially.
+func Merge(cfg interface{}, maps []map[string]any) (map[string]any, error) {
+	result := make(map[string]any)
+
+	for _, m := range maps {
+		for k, v := range m {
+			result[k] = v
+		}
+	}
+
+	return result, nil
+}
