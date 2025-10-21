@@ -5,35 +5,13 @@ on:
     types: [opened, synchronize, reopened]
 
 permissions:
-  contents: write  # Needed for go-dependency-submission to write to dependency graph
+  contents: read
   pull-requests: write
 
 jobs:
-  # Submit Go dependencies to GitHub's dependency graph for accurate detection
-  go-dependency-submission:
-    name: Submit Go Dependencies
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version-file: go.mod
-          cache: true
-
-      - name: Submit Go dependencies
-        uses: actions/go-dependency-submission@v2
-        with:
-          go-build-target: ./...
-
-  # Review dependencies for license compliance and vulnerabilities
   dependency-review:
     name: Review Dependency Licenses
     runs-on: ubuntu-latest
-    needs: go-dependency-submission  # Wait for dependencies to be submitted first
 
     steps:
       - name: Checkout code
@@ -42,6 +20,10 @@ jobs:
       - name: Dependency Review
         uses: actions/dependency-review-action@v4
         with:
+          # Allow permissive licenses (MIT, Apache, BSD, ISC, MPL-2.0)
+          # NOTE: GitHub's dependency graph detects Go modules from go.mod automatically
+          # License checking works at the manifest level for go.mod dependencies
+
           # Deny copyleft and restrictive licenses
           deny-licenses: GPL-2.0, GPL-2.0-only, GPL-2.0-or-later, GPL-3.0, GPL-3.0-only, GPL-3.0-or-later, LGPL-2.0, LGPL-2.1, LGPL-3.0, AGPL-3.0, AGPL-3.0-only, AGPL-3.0-or-later
 
