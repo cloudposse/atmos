@@ -59,11 +59,11 @@ You now have a dedicated shell environment with prod-admin credentials. When you
 
 When you run `atmos auth shell`, Atmos:
 
-1. **Authenticates** with your configured identity (AWS SSO, SAML, static credentials, etc.)
-2. **Sets up environment variables** (like `AWS_ACCESS_KEY_ID`, `AWS_PROFILE`, etc.)
-3. **Launches a subshell** with those credentials active
-4. **Shows context** in your prompt so you always know which identity you're using
-5. **Cleans up** when you exit—no credentials persist in your parent shell
+1. **Authenticates** with your configured identity (AWS SSO, SAML, static credentials, etc.).
+2. **Sets up environment variables** (like `AWS_ACCESS_KEY_ID`, `AWS_PROFILE`, etc.).
+3. **Launches a subshell** with those credentials active.
+4. **Shows context** in your prompt so you always know which identity you're using.
+5. **Cleans up** when you exit—no credentials persist in your parent shell.
 
 ## Usage Examples
 
