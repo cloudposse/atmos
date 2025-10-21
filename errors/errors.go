@@ -97,6 +97,8 @@ var (
 	ErrInvalidPagerCommand = errors.New("invalid pager command")
 	ErrEmptyURL            = errors.New("empty URL provided")
 	ErrFailedToFindImport  = errors.New("failed to find import")
+	ErrInvalidFilePath     = errors.New("invalid file path")
+	ErrRelPath             = errors.New("error determining relative path")
 
 	// Config loading errors.
 	ErrAtmosDirConfigNotFound      = errors.New("atmos config directory not found")
@@ -112,6 +114,8 @@ var (
 	ErrEmptyConfigPath             = errors.New("config path cannot be empty")
 	ErrEmptyConfigFile             = errors.New("config file path cannot be empty")
 	ErrAtmosFilesDirConfigNotFound = errors.New("`atmos.yaml` or `.atmos.yaml` configuration file not found in directory")
+	ErrAtmosConfigNotFound         = errors.New("\n'atmos.yaml' CLI config was not found in any of the searched paths: system dir, home dir, current dir, ENV vars." +
+		"\nYou can download a sample config and adapt it to your requirements from https://atmos.tools/cli/configuration")
 
 	ErrMissingStack                               = errors.New("stack is required")
 	ErrMissingComponent                           = errors.New("component is required")
@@ -125,10 +129,15 @@ var (
 	ErrSpaceliftAdminStackComponentNotProvisioned = errors.New("spacelift admin stack component cannot be provisioned")
 
 	// Terraform-specific errors.
-	ErrHTTPBackendWorkspaces       = errors.New("workspaces are not supported for the HTTP backend")
-	ErrInvalidTerraformComponent   = errors.New("invalid Terraform component")
-	ErrNoTty                       = errors.New("no TTY attached")
-	ErrFailedToLoadTerraformModule = errors.New("failed to load terraform module")
+	ErrHTTPBackendWorkspaces            = errors.New("workspaces are not supported for the HTTP backend")
+	ErrInvalidTerraformComponent        = errors.New("invalid Terraform component")
+	ErrNoTty                            = errors.New("no TTY attached")
+	ErrFailedToLoadTerraformModule      = errors.New("failed to load terraform module")
+	ErrNoJSONOutput                     = errors.New("no JSON output found in terraform show output")
+	ErrOriginalPlanFileRequired         = errors.New("original plan file (--orig) is required")
+	ErrOriginalPlanFileNotExist         = errors.New("original plan file does not exist")
+	ErrNewPlanFileNotExist              = errors.New("new plan file does not exist")
+	ErrTerraformGenerateBackendArgument = errors.New("invalid arguments. The command requires one argument `component`")
 
 	ErrMissingPackerTemplate = errors.New("packer template is required; it can be specified in the `settings.packer.template` section in the Atmos component manifest, or on the command line via the flag `--template <template>` (shorthand `-t`)")
 	ErrMissingPackerManifest = errors.New("packer manifest is missing")
@@ -175,6 +184,29 @@ var (
 	ErrInvalidTerraformBackend                = errors.New("invalid terraform.backend section")
 	ErrInvalidTerraformRemoteStateBackend     = errors.New("invalid terraform.remote_state_backend section")
 	ErrUnsupportedComponentType               = errors.New("unsupported component type. Valid types are 'terraform', 'helmfile', 'packer'")
+
+	// List command errors.
+	ErrInvalidStackPattern         = errors.New("invalid stack pattern")
+	ErrEmptyTargetComponentName    = errors.New("target component name cannot be empty")
+	ErrComponentsSectionNotFound   = errors.New("components section not found in stack")
+	ErrComponentNotFoundInSections = errors.New("component not found in terraform or helmfile sections")
+	ErrQueryFailed                 = errors.New("query execution failed")
+	ErrTableTooWide                = errors.New("the table is too wide to display properly")
+	ErrGettingCommonFlags          = errors.New("error getting common flags")
+	ErrGettingAbstractFlag         = errors.New("error getting abstract flag")
+	ErrGettingVarsFlag             = errors.New("error getting vars flag")
+	ErrInitializingCLIConfig       = errors.New("error initializing CLI config")
+	ErrDescribingStacks            = errors.New("error describing stacks")
+	ErrComponentNameRequired       = errors.New("component name is required")
+
+	// Atlantis errors.
+	ErrAtlantisInvalidFlags          = errors.New("if the '--repo-path' flag is specified, the '--ref', '--sha', '--ssh-key' and '--ssh-key-password' flags can't be used")
+	ErrAtlantisProjectTemplateNotDef = errors.New("atlantis project template is not defined in 'integrations.atlantis.project_templates' in 'atmos.yaml'")
+	ErrAtlantisConfigTemplateNotDef  = errors.New("atlantis config template is not defined in `integrations.atlantis.config_templates` in `atmos.yaml`")
+	ErrAtlantisConfigTemplateNotSpec = errors.New("atlantis config template is not specified")
+
+	// Validation errors.
+	ErrValidationFailed = errors.New("validation failed")
 
 	// Global/Stack-level section errors.
 	ErrInvalidVarsSection               = errors.New("invalid vars section")

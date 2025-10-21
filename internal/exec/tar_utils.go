@@ -8,11 +8,9 @@ import (
 	"path/filepath"
 	"strings"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	log "github.com/cloudposse/atmos/pkg/logger" // Charmbracelet structured logger
-	"github.com/pkg/errors"
 )
-
-var ErrInvalidFilePath = errors.New("invalid file path")
 
 // extractTarball extracts the tarball file from an io.Reader into the destination directory .
 func extractTarball(reader io.Reader, extractPath string) error {
@@ -55,7 +53,7 @@ func processTarHeader(header *tar.Header, tarReader *tar.Reader, extractPath str
 	filePath := filepath.Join(cleanExtractPath, cleanHeaderName)
 	// Ensure the target path is within the intended extraction directory.
 	if !strings.HasPrefix(filePath, cleanExtractPath) {
-		return fmt.Errorf("%w: %s", ErrInvalidFilePath, filePath)
+		return fmt.Errorf("%w: %s", errUtils.ErrInvalidFilePath, filePath)
 	}
 	switch header.Typeflag {
 	case tar.TypeDir:

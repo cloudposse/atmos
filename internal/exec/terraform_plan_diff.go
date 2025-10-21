@@ -9,17 +9,9 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/pkg/errors"
-
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
-)
-
-// Static errors.
-var (
-	// ErrNoJSONOutput is returned when no JSON output is found in terraform show output.
-	ErrNoJSONOutput = errors.New("no JSON output found in terraform show output")
 )
 
 // PlanFileOptions contains parameters for plan file operations.
@@ -43,7 +35,7 @@ func TerraformPlanDiff(atmosConfig *schema.AtmosConfiguration, info *schema.Conf
 	// Create a temporary directory for all temporary files
 	tmpDir, err := os.MkdirTemp("", "atmos-terraform-plan-diff")
 	if err != nil {
-		return errors.Wrap(err, "error creating temporary directory")
+		return fmt.Errorf("error creating temporary directory: %w", err)
 	}
 	defer os.RemoveAll(tmpDir)
 
@@ -94,7 +86,7 @@ func parsePlanDiffFlags(args []string) (string, string, error) {
 	}
 
 	if origPlanFile == "" {
-		return "", "", errors.New("original plan file (--orig) is required")
+		return "", "", errUtils.ErrOriginalPlanFileRequired
 	}
 
 	return origPlanFile, newPlanFile, nil
@@ -109,7 +101,7 @@ func validateOriginalPlanFile(origPlanFile, componentPath string) (string, error
 	}
 
 	if _, err := os.Stat(origPlanFile); os.IsNotExist(err) {
-		return "", errors.Errorf("original plan file '%s' does not exist", origPlanFile)
+		return "", fmt.Errorf("%w: '%s'", errUtils.ErrOriginalPlanFileNotExist, origPlanFile)
 	}
 
 	return origPlanFile, nil
@@ -120,25 +112,25 @@ func comparePlansAndGenerateDiff(atmosConfig *schema.AtmosConfiguration, info *s
 	// Get the JSON representation of the original plan
 	origPlanJSON, err := getTerraformPlanJSON(atmosConfig, info, componentPath, origPlanFile)
 	if err != nil {
-		return errors.Wrap(err, "error getting JSON for original plan")
+		return fmt.Errorf("error getting JSON for original plan: %w", err)
 	}
 
 	// Get the JSON representation of the new plan
 	newPlanJSON, err := getTerraformPlanJSON(atmosConfig, info, componentPath, newPlanFile)
 	if err != nil {
-		return errors.Wrap(err, "error getting JSON for new plan")
+		return fmt.Errorf("error getting JSON for new plan: %w", err)
 	}
 
 	// Parse the JSON
 	var origPlan, newPlan map[string]interface{}
 	err = json.Unmarshal([]byte(origPlanJSON), &origPlan)
 	if err != nil {
-		return errors.Wrap(err, "error parsing original plan JSON")
+		return fmt.Errorf("error parsing original plan JSON: %w", err)
 	}
 
 	err = json.Unmarshal([]byte(newPlanJSON), &newPlan)
 	if err != nil {
-		return errors.Wrap(err, "error parsing new plan JSON")
+		return fmt.Errorf("error parsing new plan JSON: %w", err)
 	}
 
 	// Sort maps to ensure consistent ordering
@@ -196,7 +188,7 @@ func extractJSONFromOutput(output string) (string, error) {
 	// Find the beginning of the JSON output (first '{' character)
 	jsonStartIdx := strings.Index(output, "{")
 	if jsonStartIdx == -1 {
-		return "", ErrNoJSONOutput
+		return "", errUtils.ErrNoJSONOutput
 	}
 
 	// Extract just the JSON part

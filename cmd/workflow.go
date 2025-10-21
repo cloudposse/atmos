@@ -1,8 +1,6 @@
 package cmd
 
 import (
-	"errors"
-
 	"github.com/spf13/cobra"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -43,12 +41,9 @@ var workflowCmd = &cobra.Command{
 			// Check if it's a known error that's already printed in ExecuteWorkflowCmd.
 			// If it is, we don't need to print it again, but we do need to exit with the proper exit code.
 			if e.IsKnownWorkflowError(err) {
-				// Check if the error wraps an ExitCodeError to preserve the actual exit code.
-				var exitCodeErr errUtils.ExitCodeError
-				if errors.As(err, &exitCodeErr) {
-					errUtils.Exit(exitCodeErr.Code)
-				}
-				errUtils.Exit(1)
+				// Get the exit code from the error (handles ExitCodeError and exec.ExitError).
+				exitCode := errUtils.GetExitCode(err)
+				errUtils.Exit(exitCode)
 			}
 			return err
 		}

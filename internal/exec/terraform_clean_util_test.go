@@ -304,7 +304,7 @@ func TestCreateFolder(t *testing.T) {
 
 			if tt.expectErr {
 				require.Error(t, err)
-				assert.Contains(t, err.Error(), ErrRelPath.Error())
+				assert.Contains(t, err.Error(), errUtils.ErrRelPath.Error())
 			} else {
 				require.NoError(t, err)
 				assert.NotNil(t, folder)

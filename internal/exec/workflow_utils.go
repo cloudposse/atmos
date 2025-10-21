@@ -80,9 +80,10 @@ func ExecuteWorkflow(
 		err := errUtils.Build(ErrWorkflowNoSteps).
 			WithTitle(WorkflowErrTitle).
 			WithExplanationf("Workflow `%s` is empty and requires at least one step to execute.", workflow).
+			WithExitCode(2).
 			Err()
 		errUtils.CheckErrorAndPrint(err, "", "")
-		return ErrWorkflowNoSteps
+		return err
 	}
 
 	// Check if the workflow steps have the `name` attribute
@@ -258,6 +259,7 @@ func ExecuteDescribeWorkflows(
 			WithHintf("Create the directory: mkdir -p %s", workflowsDir).
 			WithHintf("Or update `workflows.base_path` in `atmos.yaml` (currently: %s)", atmosConfig.Workflows.BasePath).
 			WithHint("See https://atmos.tools/core-concepts/workflows for workflow configuration").
+			WithExitCode(2).
 			Err()
 		return nil, nil, nil, err
 	}
