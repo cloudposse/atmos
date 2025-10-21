@@ -9,8 +9,8 @@ import (
 	"reflect"
 	"strings"
 
+	"github.com/go-viper/mapstructure/v2"
 	"github.com/hashicorp/terraform-config-inspect/tfconfig"
-	"github.com/mitchellh/mapstructure"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
