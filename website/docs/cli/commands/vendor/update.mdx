@@ -1,0 +1,180 @@
+---
+title: atmos vendor update
+sidebar_label: update
+sidebar_class_name: command
+id: update
+description: Check for and update vendored component versions in your vendor configuration files
+---
+
+import Screengrab from '@site/src/components/Screengrab'
+import Terminal from '@site/src/components/Terminal'
+
+:::note Purpose
+Use this command to check for newer versions of vendored components and optionally update the version references in your vendor configuration files while preserving YAML structure, comments, and anchors.
+:::
+
+<Screengrab title="atmos vendor update --help" slug="atmos-vendor-update--help" />
+
+## Usage
+
+```shell
+atmos vendor update [options]
+```
+
+## Examples
+
+### Check for updates without making changes
+
+```shell
+atmos vendor update --check
+```
+
+This will scan your `vendor.yaml` file(s) and report any components with newer versions available, without modifying any files.
+
+### Update all components and pull them
+
+```shell
+atmos vendor update --pull
+```
+
+This will update version references in your vendor configuration files and immediately pull the new versions.
+
+### Check updates for a specific component
+
+```shell
+atmos vendor update --component vpc --check
+```
+
+### Update a specific component by tag
+
+```shell
+atmos vendor update --component vpc --tags networking
+```
+
+### Show only outdated components
+
+```shell
+atmos vendor update --outdated
+```
+
+This will only display components that have newer versions available, hiding components that are already up-to-date.
+
+## Flags
+
+<dl>
+  <dt>`--check`</dt>
+  <dd>Check for updates without modifying vendor configuration files (dry-run mode)</dd>
+
+  <dt>`--pull`</dt>
+  <dd>After updating version references, automatically execute `atmos vendor pull` to download the new versions</dd>
+
+  <dt>`--component` / `-c`</dt>
+  <dd>Check updates for a specific component by name</dd>
+
+  <dt>`--tags`</dt>
+  <dd>Filter components by tags (comma-separated list)</dd>
+
+  <dt>`--type`</dt>
+  <dd>Component type to check: `terraform`, `helmfile`, or `packer` (default: `terraform`)</dd>
+
+  <dt>`--outdated`</dt>
+  <dd>Only show components with available updates</dd>
+</dl>
+
+## How It Works
+
+1. **Scans vendor configuration**: Reads `vendor.yaml` or component-specific `component.yaml` files
+2. **Checks Git repositories**: Uses `git ls-remote` to fetch available tags without cloning
+3. **Compares versions**: Uses semantic versioning to determine if newer versions exist
+4. **Displays results**: Shows current version, latest version, and update type (major/minor/patch)
+5. **Updates YAML**: If not in `--check` mode, updates version fields while preserving:
+   - Comments
+   - YAML anchors and aliases
+   - Merge keys
+   - Original formatting
+6. **Optional pull**: If `--pull` is specified, automatically downloads the updated components
+
+## Version Detection
+
+The command supports various version formats:
+
+- **Semantic versions**: `1.2.3`, `v1.2.3`
+- **Git tags**: Any tag in the repository
+- **Git branches**: `main`, `develop`, etc.
+- **Git commits**: Full or short SHA hashes
+
+Version comparison uses semantic versioning rules to determine:
+- **Major updates**: Breaking changes (e.g., `1.x.x` → `2.0.0`)
+- **Minor updates**: New features (e.g., `1.0.x` → `1.1.0`)
+- **Patch updates**: Bug fixes (e.g., `1.0.0` → `1.0.1`)
+
+## Supported Sources
+
+Currently, `atmos vendor update` only works with **Git-based sources**:
+
+- ✅ GitHub repositories (`github.com/org/repo`)
+- ✅ Git URLs (`git::https://...`, `git@...`)
+- ✅ HTTPS Git URLs
+- ❌ OCI images (not supported)
+- ❌ Local paths (not supported)
+- ❌ HTTP archives (not supported)
+
+## Configuration
+
+The command respects your Atmos configuration and looks for vendor files in these locations:
+
+1. Main vendor configuration: `vendor.yaml` (or path specified in `atmos.yaml`)
+2. Component vendor configs: `components/{type}/{component}/component.yaml`
+
+## Examples with Output
+
+### Checking for updates
+
+```shell
+$ atmos vendor update --check
+
+Checking for updates...
+
+Component: vpc
+  Current: 1.0.0
+  Latest:  1.2.3
+  Update:  minor (1.0.0 → 1.2.3)
+
+Component: eks
+  Current: 2.5.0
+  Latest:  3.0.0
+  Update:  major (2.5.0 → 3.0.0)
+
+Component: rds
+  Current: 1.5.2
+  Latest:  1.5.2
+  Status:  up-to-date
+```
+
+### Updating and pulling
+
+```shell
+$ atmos vendor update --pull
+
+Updating vendor.yaml...
+✓ Updated vpc: 1.0.0 → 1.2.3
+✓ Updated eks: 2.5.0 → 3.0.0
+
+Pulling updated components...
+✓ Pulled vpc@1.2.3
+✓ Pulled eks@3.0.0
+
+Successfully updated 2 components
+```
+
+## Related Commands
+
+- [`atmos vendor pull`](/cli/commands/vendor/pull) - Pull vendored components
+- [`atmos vendor diff`](/cli/commands/vendor/diff) - Show diff between component versions
+- [`atmos describe component`](/cli/commands/describe/component) - Show component configuration
+
+## See Also
+
+- [Vendor Configuration](/core-concepts/vendor) - Learn about vendor configuration format
+- [Component Vendoring](/core-concepts/components/vendoring) - Component vendoring concepts
+- [Semantic Versioning](https://semver.org/) - Version numbering specification
