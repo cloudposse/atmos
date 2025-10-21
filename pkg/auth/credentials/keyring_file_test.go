@@ -772,7 +772,7 @@ func TestFileKeyring_NonexistentRetrieval(t *testing.T) {
 	// Try to retrieve non-existent credentials.
 	_, err = store.Retrieve("nonexistent-alias")
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "failed to retrieve credentials")
+	assert.ErrorIs(t, err, ErrCredentialsNotFound)
 }
 
 func TestFileKeyring_IsExpiredNonexistent(t *testing.T) {

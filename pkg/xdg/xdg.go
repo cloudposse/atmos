@@ -36,19 +36,24 @@ func GetXDGConfigDir(subpath string, perm os.FileMode) (string, error) {
 // 2. XDG_*_HOME environment variable (standard XDG variable).
 // 3. XDG library default (platform-specific defaults from github.com/adrg/xdg).
 func getXDGDir(xdgVar, atmosVar string, defaultDir string, subpath string, perm os.FileMode) (string, error) {
-	// Bind both ATMOS_XDG_*_HOME and XDG_*_HOME to support ATMOS override.
-	// This allows operators to use ATMOS_XDG_*_HOME to override the standard XDG_*_HOME.
+	// Bind ATMOS_XDG_*_HOME and XDG_*_HOME separately to enforce explicit precedence.
 	v := viper.New()
-	if err := v.BindEnv(xdgVar, atmosVar, xdgVar); err != nil {
-		return "", fmt.Errorf("error binding %s environment variables: %w", xdgVar, err)
+	if err := v.BindEnv(atmosVar, atmosVar); err != nil {
+		return "", fmt.Errorf("error binding %s environment variable: %w", atmosVar, err)
+	}
+	if err := v.BindEnv(xdgVar, xdgVar); err != nil {
+		return "", fmt.Errorf("error binding %s environment variable: %w", xdgVar, err)
 	}
 
 	var baseDir string
-	if customHome := v.GetString(xdgVar); customHome != "" {
-		// Use the custom home from either ATMOS_XDG_*_HOME or XDG_*_HOME.
-		baseDir = customHome
+	// Check ATMOS_XDG_*_HOME first (highest priority).
+	if atmosHome := v.GetString(atmosVar); atmosHome != "" {
+		baseDir = atmosHome
+	} else if xdgHome := v.GetString(xdgVar); xdgHome != "" {
+		// Fall back to XDG_*_HOME if ATMOS override not set.
+		baseDir = xdgHome
 	} else {
-		// Fall back to XDG library default behavior.
+		// Fall back to XDG library default.
 		baseDir = defaultDir
 	}
 

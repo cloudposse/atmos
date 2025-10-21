@@ -83,6 +83,9 @@ func TestMemoryKeyring_ConcurrentAccess(t *testing.T) {
 	numGoroutines := 10
 	numOperations := 100
 
+	// Channel to collect errors from goroutines.
+	errChan := make(chan error, numGoroutines*numOperations*2)
+
 	// Concurrent writes.
 	for i := 0; i < numGoroutines; i++ {
 		wg.Add(1)
@@ -91,7 +94,9 @@ func TestMemoryKeyring_ConcurrentAccess(t *testing.T) {
 			for j := 0; j < numOperations; j++ {
 				alias := fmt.Sprintf("alias-%d-%d", id, j)
 				creds := &types.OIDCCredentials{Token: alias}
-				store.Store(alias, creds)
+				if err := store.Store(alias, creds); err != nil {
+					errChan <- fmt.Errorf("store error (id=%d, j=%d): %w", id, j, err)
+				}
 			}
 		}(i)
 	}
@@ -110,13 +115,24 @@ func TestMemoryKeyring_ConcurrentAccess(t *testing.T) {
 			defer wg.Done()
 			for j := 0; j < numOperations; j++ {
 				alias := fmt.Sprintf("alias-%d-%d", id, j)
-				_, err := store.Retrieve(alias)
-				assert.NoError(t, err)
+				if _, err := store.Retrieve(alias); err != nil {
+					errChan <- fmt.Errorf("retrieve error (id=%d, j=%d): %w", id, j, err)
+				}
 			}
 		}(i)
 	}
 
 	wg.Wait()
+	close(errChan)
+
+	// Check for errors from goroutines.
+	var errors []error
+	for err := range errChan {
+		errors = append(errors, err)
+	}
+	if len(errors) > 0 {
+		t.Errorf("goroutine errors: %v", errors)
+	}
 }
 
 func TestMemoryKeyring_Isolation(t *testing.T) {

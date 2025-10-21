@@ -20,6 +20,8 @@ import (
 const (
 	// KeyringDirPermissions is the default permission for keyring directory (read/write/execute for owner only).
 	KeyringDirPermissions = 0o700
+	// MinPasswordLength is the minimum required length for keyring passwords.
+	MinPasswordLength = 8
 )
 
 var (
@@ -126,6 +128,10 @@ func createPasswordPrompt(passwordEnv string) keyring.PromptFunc {
 		// 1. Check environment variable first (for automation/CI).
 		_ = viper.BindEnv(passwordEnv)
 		if password := viper.GetString(passwordEnv); password != "" {
+			// Validate environment password meets minimum length requirement.
+			if len(password) < MinPasswordLength {
+				return "", ErrPasswordTooShort
+			}
 			return password, nil
 		}
 
@@ -140,7 +146,7 @@ func createPasswordPrompt(passwordEnv string) keyring.PromptFunc {
 						EchoMode(huh.EchoModePassword).
 						Value(&password).
 						Validate(func(s string) error {
-							if len(s) < 8 {
+							if len(s) < MinPasswordLength {
 								return ErrPasswordTooShort
 							}
 							return nil
@@ -186,7 +192,7 @@ func (s *fileKeyringStore) Store(alias string, creds types.ICredentials) error {
 	env := credentialEnvelope{Type: typ, Data: raw}
 	data, err := json.Marshal(&env)
 	if err != nil {
-		return errors.Join(ErrCredentialStore, fmt.Errorf("failed to marshal credentials: %w", err))
+		return errors.Join(ErrCredentialStore, fmt.Errorf("failed to marshal credential envelope: %w", err))
 	}
 
 	// Store in keyring.
@@ -206,6 +212,10 @@ func (s *fileKeyringStore) Retrieve(alias string) (types.ICredentials, error) {
 
 	item, err := s.ring.Get(alias)
 	if err != nil {
+		// Map keyring's not-found error to our sentinel error for consistent handling.
+		if errors.Is(err, keyring.ErrKeyNotFound) {
+			return nil, ErrCredentialsNotFound
+		}
 		return nil, errors.Join(ErrCredentialStore, fmt.Errorf("failed to retrieve credentials from file keyring: %w", err))
 	}
 
@@ -273,6 +283,10 @@ func (s *fileKeyringStore) GetAny(key string, dest interface{}) error {
 
 	item, err := s.ring.Get(key)
 	if err != nil {
+		// Map keyring's not-found error to our sentinel error for consistent handling.
+		if errors.Is(err, keyring.ErrKeyNotFound) {
+			return ErrDataNotFound
+		}
 		return errors.Join(ErrCredentialStore, fmt.Errorf("failed to retrieve data from file keyring: %w", err))
 	}
 

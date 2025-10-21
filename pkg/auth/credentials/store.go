@@ -78,9 +78,14 @@ func NewCredentialStoreWithConfig(authConfig *schema.AuthConfig) types.Credentia
 	}
 
 	if err != nil {
-		// Fall back to system keyring on error
-		fmt.Fprintf(os.Stderr, "Warning: failed to create %s keyring (%v), using system keyring\n", keyringType, err)
-		store, _ = newSystemKeyringStore()
+		// Fall back to system keyring on error.
+		fmt.Fprintf(os.Stderr, "Warning: failed to create %s keyring (%v), attempting system keyring\n", keyringType, err)
+		store, err = newSystemKeyringStore()
+		if err != nil {
+			// Final fallback to memory store if system keyring also fails.
+			fmt.Fprintf(os.Stderr, "Warning: system keyring failed (%v), using in-memory keyring (credentials will not persist)\n", err)
+			store = newMemoryKeyringStore()
+		}
 	}
 
 	return store
