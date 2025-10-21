@@ -15,7 +15,7 @@ import (
 // ExecuteTerraformAffectedWithGraph executes terraform commands for affected components using the dependency graph.
 func ExecuteTerraformAffectedWithGraph(args *DescribeAffectedCmdArgs, info *schema.ConfigAndStacksInfo) error {
 	// Get the list of affected components.
-	affectedList, err := getAffectedComponents(args)
+	affectedList, err := getAffectedComponentsList(args)
 	if err != nil {
 		return fmt.Errorf("%w: get affected components: %v", errUtils.ErrDescribeAffected, err)
 	}
@@ -40,8 +40,8 @@ func ExecuteTerraformAffectedWithGraph(args *DescribeAffectedCmdArgs, info *sche
 	return executeAffectedInOrder(filteredGraph, affectedList, args, info)
 }
 
-// getAffectedComponents retrieves the list of affected components based on the provided arguments.
-func getAffectedComponents(args *DescribeAffectedCmdArgs) ([]schema.Affected, error) {
+// getAffectedComponentsList retrieves the list of affected components based on the provided arguments.
+func getAffectedComponentsList(args *DescribeAffectedCmdArgs) ([]schema.Affected, error) {
 	switch {
 	case args.RepoPath != "":
 		return getAffectedWithRepoPath(args)
