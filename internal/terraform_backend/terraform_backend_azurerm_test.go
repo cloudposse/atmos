@@ -3,6 +3,7 @@ package terraform_backend
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"strings"
 	"testing"
@@ -347,6 +348,45 @@ func TestReadTerraformBackendAzurerm_MissingBackend(t *testing.T) {
 	assert.ErrorIs(t, err, errUtils.ErrBackendConfigRequired)
 }
 
+func TestReadTerraformBackendAzurerm_EmptyStorageAccount(t *testing.T) {
+	componentSections := map[string]any{
+		"component": "test-component",
+		"workspace": "dev",
+		"backend": map[string]any{
+			"azurerm": map[string]any{
+				"storage_account_name": "",
+				"container_name":       "tfstate",
+				"key":                  "terraform.tfstate",
+			},
+		},
+	}
+
+	result, err := ReadTerraformBackendAzurerm(nil, &componentSections)
+
+	assert.Error(t, err)
+	assert.Nil(t, result)
+	assert.ErrorIs(t, err, errUtils.ErrStorageAccountRequired)
+}
+
+func TestReadTerraformBackendAzurerm_MissingStorageAccount(t *testing.T) {
+	componentSections := map[string]any{
+		"component": "test-component",
+		"workspace": "dev",
+		"backend": map[string]any{
+			"azurerm": map[string]any{
+				"container_name": "tfstate",
+				"key":            "terraform.tfstate",
+			},
+		},
+	}
+
+	result, err := ReadTerraformBackendAzurerm(nil, &componentSections)
+
+	assert.Error(t, err)
+	assert.Nil(t, result)
+	assert.ErrorIs(t, err, errUtils.ErrStorageAccountRequired)
+}
+
 // errorReader is a reader that always returns an error.
 type errorReader struct{}
 
@@ -489,4 +529,119 @@ func TestReadTerraformBackendAzurermInternal_ContextTimeout(t *testing.T) {
 	assert.Error(t, err)
 	assert.Nil(t, result)
 	assert.ErrorIs(t, err, errUtils.ErrGetBlobFromAzure)
+}
+
+func TestReadTerraformBackendAzurermInternal_MaxRetriesExceeded(t *testing.T) {
+	componentSections := map[string]any{
+		"component": "test-component",
+		"workspace": "default",
+	}
+	backend := map[string]any{
+		"storage_account_name": "testaccount",
+		"container_name":       "tfstate",
+		"key":                  "terraform.tfstate",
+	}
+
+	attemptCount := 0
+	mockClient := &mockAzureBlobClient{
+		downloadStreamFunc: func(ctx context.Context, containerName string, blobName string, options *azblob.DownloadStreamOptions) (AzureBlobDownloadResponse, error) {
+			attemptCount++
+			// Always fail to test retry exhaustion.
+			return nil, errors.New("persistent error")
+		},
+	}
+
+	result, err := ReadTerraformBackendAzurermInternal(mockClient, &componentSections, &backend)
+
+	assert.Error(t, err)
+	assert.Nil(t, result)
+	assert.ErrorIs(t, err, errUtils.ErrGetBlobFromAzure)
+	assert.Equal(t, maxRetryCountAzure+1, attemptCount, "Should exhaust all retries")
+}
+
+func TestReadTerraformBackendAzurermInternal_SuccessWithLargeBlob(t *testing.T) {
+	componentSections := map[string]any{
+		"component": "large-component",
+		"workspace": "prod",
+	}
+	backend := map[string]any{
+		"storage_account_name": "prodaccount",
+		"container_name":       "prod-tfstate",
+		"key":                  "large.tfstate",
+	}
+
+	// Create a large JSON blob (simulating a complex terraform state).
+	largeState := `{"version": 4, "outputs": {`
+	for i := 0; i < 100; i++ {
+		if i > 0 {
+			largeState += ","
+		}
+		largeState += fmt.Sprintf(`"output_%d": {"value": "value_%d"}`, i, i)
+	}
+	largeState += `}}`
+
+	mockClient := &mockAzureBlobClient{
+		downloadStreamFunc: func(ctx context.Context, containerName string, blobName string, options *azblob.DownloadStreamOptions) (AzureBlobDownloadResponse, error) {
+			assert.Equal(t, "prod-tfstate", containerName)
+			assert.Equal(t, "large.tfstateenv:prod", blobName)
+			return createMockDownloadResponse(largeState), nil
+		},
+	}
+
+	result, err := ReadTerraformBackendAzurermInternal(mockClient, &componentSections, &backend)
+
+	require.NoError(t, err)
+	assert.NotNil(t, result)
+	assert.Equal(t, largeState, string(result))
+	assert.Greater(t, len(result), 1000, "Should handle large blobs")
+}
+
+func TestReadTerraformBackendAzurermInternal_EmptyBlobContent(t *testing.T) {
+	componentSections := map[string]any{
+		"component": "empty-component",
+		"workspace": "default",
+	}
+	backend := map[string]any{
+		"storage_account_name": "testaccount",
+		"container_name":       "tfstate",
+		"key":                  "empty.tfstate",
+	}
+
+	mockClient := &mockAzureBlobClient{
+		downloadStreamFunc: func(ctx context.Context, containerName string, blobName string, options *azblob.DownloadStreamOptions) (AzureBlobDownloadResponse, error) {
+			return createMockDownloadResponse(""), nil
+		},
+	}
+
+	result, err := ReadTerraformBackendAzurermInternal(mockClient, &componentSections, &backend)
+
+	assert.NoError(t, err)
+	assert.NotNil(t, result)
+	assert.Equal(t, "", string(result))
+}
+
+func TestReadTerraformBackendAzurermInternal_SpecialCharactersInWorkspace(t *testing.T) {
+	componentSections := map[string]any{
+		"component": "test-component",
+		"workspace": "dev-us-east-1-prod",
+	}
+	backend := map[string]any{
+		"storage_account_name": "testaccount",
+		"container_name":       "tfstate",
+		"key":                  "app.terraform.tfstate",
+	}
+
+	var capturedBlobName string
+	mockClient := &mockAzureBlobClient{
+		downloadStreamFunc: func(ctx context.Context, containerName string, blobName string, options *azblob.DownloadStreamOptions) (AzureBlobDownloadResponse, error) {
+			capturedBlobName = blobName
+			return createMockDownloadResponse(`{"version": 4, "outputs": {}}`), nil
+		},
+	}
+
+	result, err := ReadTerraformBackendAzurermInternal(mockClient, &componentSections, &backend)
+
+	assert.NoError(t, err)
+	assert.NotNil(t, result)
+	assert.Equal(t, "app.terraform.tfstateenv:dev-us-east-1-prod", capturedBlobName)
 }
