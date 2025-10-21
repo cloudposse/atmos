@@ -10,8 +10,8 @@ import (
 	ini "gopkg.in/ini.v1"
 
 	"github.com/cloudposse/atmos/pkg/auth/types"
+	"github.com/cloudposse/atmos/pkg/config/homedir"
 	"github.com/cloudposse/atmos/pkg/schema"
-	homedir "github.com/mitchellh/go-homedir"
 )
 
 func TestSetupFiles_WritesCredentialsAndConfig(t *testing.T) {

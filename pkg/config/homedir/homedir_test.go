@@ -46,6 +46,55 @@ func TestDir(t *testing.T) {
 	}
 }
 
+func TestReset_ClearsCache(t *testing.T) {
+	// First call to populate cache.
+	dir1, err := Dir()
+	if err != nil {
+		t.Fatalf("err: %s", err)
+	}
+
+	// Set a different HOME and reset cache.
+	tmpDir := t.TempDir()
+	t.Setenv("HOME", tmpDir)
+	Reset()
+
+	// Dir() should now return the new HOME from env var.
+	dir2, err := Dir()
+	if err != nil {
+		t.Fatalf("err: %s", err)
+	}
+
+	if dir1 == dir2 {
+		t.Fatalf("Reset() did not clear cache: both calls returned %q", dir1)
+	}
+
+	if dir2 != tmpDir {
+		t.Fatalf("After Reset(), expected Dir() to return %q, got %q", tmpDir, dir2)
+	}
+}
+
+func TestReset_WorksAcrossMultipleTests(t *testing.T) {
+	// This test reproduces the issue where Reset() doesn't work properly
+	// when tests are run multiple times (go test -count=2).
+
+	for i := 0; i < 3; i++ {
+		t.Run("iteration", func(t *testing.T) {
+			tmpDir := t.TempDir()
+			t.Setenv("HOME", tmpDir)
+			Reset()
+
+			dir, err := Dir()
+			if err != nil {
+				t.Fatalf("iteration %d: err: %s", i, err)
+			}
+
+			if dir != tmpDir {
+				t.Fatalf("iteration %d: expected Dir() to return %q, got %q", i, tmpDir, dir)
+			}
+		})
+	}
+}
+
 func TestExpand(t *testing.T) {
 	u, err := user.Current()
 	if err != nil {
