@@ -383,10 +383,10 @@ func sanitizeOutput(output string) (string, error) {
 	result = posthogTokenRegex.ReplaceAllString(result, "phc_TEST_TOKEN_PLACEHOLDER")
 
 	// 9. Normalize expiration timestamps to avoid snapshot mismatches.
-	// Remove the relative duration part (e.g., "(59m 59s)") from expiration timestamps.
-	// This preserves the actual timestamp while removing the time-sensitive duration.
+	// Replace the relative duration part (e.g., "(59m 59s)") with a deterministic placeholder.
+	// This preserves the actual timestamp while normalizing the time-sensitive duration.
 	expiresRegex := regexp.MustCompile(`(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}\s+[A-Z]{3,4})\s+\([^)]+\)`)
-	result = expiresRegex.ReplaceAllString(result, "$1")
+	result = expiresRegex.ReplaceAllString(result, "$1 (in 1h)")
 
 	return result, nil
 }
