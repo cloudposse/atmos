@@ -54,12 +54,8 @@ func TestNoColorLog(t *testing.T) {
 	var buf bytes.Buffer
 	log.SetOutput(&buf)
 
-	oldArgs := os.Args
-	defer func() {
-		os.Args = oldArgs
-	}()
-	// Set the arguments for the command
-	os.Args = []string{"atmos", "about"}
+	// Use SetArgs - TestKit handles cleanup automatically.
+	RootCmd.SetArgs([]string{"about"})
 
 	// Reset buffer to ensure clean state (previous tests may have written to logger).
 	buf.Reset()
@@ -77,20 +73,7 @@ func TestNoColorLog(t *testing.T) {
 }
 
 func TestInitFunction(t *testing.T) {
-	// Save the original state
-	originalArgs := os.Args
-	originalEnvVars := make(map[string]string)
-	defer func() {
-		// Restore original state
-		os.Args = originalArgs
-		for k, v := range originalEnvVars {
-			if v == "" {
-				os.Unsetenv(k)
-			} else {
-				os.Setenv(k, v)
-			}
-		}
-	}()
+	// Test doesn't modify os.Args, so no need to save/restore.
 
 	// Test cases
 	tests := []struct {
@@ -459,12 +442,6 @@ func TestVersionFlagExecutionPath(t *testing.T) {
 
 // TestIsCompletionCommand tests the isCompletionCommand function.
 func TestIsCompletionCommand(t *testing.T) {
-	// Save original args.
-	originalArgs := os.Args
-	defer func() {
-		os.Args = originalArgs
-	}()
-
 	tests := []struct {
 		name     string
 		args     []string
