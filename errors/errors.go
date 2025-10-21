@@ -665,6 +665,23 @@ var (
 	ErrLocalsCircularDep       = errors.New("circular dependency in locals")
 	ErrLocalsDependencyExtract = errors.New("failed to extract dependencies for local")
 	ErrLocalsResolution        = errors.New("failed to resolve local")
+
+	// Vendor update/diff errors.
+	ErrVendorComponentNotFound  = errors.New("component not found in vendor config")
+	ErrComponentFlagRequired    = errors.New("--component flag is required")
+	ErrVendorConfigNotFound     = errors.New("vendor config file not found")
+	ErrGitDiffFailed            = errors.New("failed to execute git diff")
+	ErrInvalidGitRef            = errors.New("invalid git reference")
+	ErrNoUpdatesAvailable       = errors.New("no updates available")
+	ErrUnsupportedVendorSource  = errors.New("unsupported vendor source type")
+	ErrGitLsRemoteFailed        = errors.New("failed to execute git ls-remote")
+	ErrInvalidVersionSpec       = errors.New("invalid version specification")
+	ErrVersionNotFound          = errors.New("specified version not found in repository")
+	ErrYAMLUpdateFailed         = errors.New("failed to update YAML file")
+	ErrYAMLPreservationFailed   = errors.New("failed to preserve YAML structure")
+	ErrMultipleComponentMatches = errors.New("multiple components match the specified name")
+	ErrInvalidSemanticVersion   = errors.New("invalid semantic version")
+	ErrNoTagsFound              = errors.New("no tags found in repository")
 )
 
 // ExitCodeError is a typed error that preserves subcommand exit codes.

@@ -1,0 +1,273 @@
+---
+title: atmos vendor diff
+sidebar_label: diff
+sidebar_class_name: command
+id: diff
+description: Show Git diff between two versions of a vendored component
+---
+
+import Screengrab from '@site/src/components/Screengrab'
+import Terminal from '@site/src/components/Terminal'
+
+:::note Purpose
+Use this command to see what changed between two versions of a vendored component by showing a Git diff directly from the remote repository, without requiring a local clone.
+:::
+
+<Screengrab title="atmos vendor diff --help" slug="atmos-vendor-diff--help" />
+
+## Usage
+
+```shell
+atmos vendor diff --component <component> [options]
+```
+
+## Examples
+
+### Show diff between current version and latest
+
+```shell
+atmos vendor diff --component vpc
+```
+
+This compares the current version in your `vendor.yaml` with the latest version in the repository.
+
+### Show diff between specific versions
+
+```shell
+atmos vendor diff --component vpc --from v1.0.0 --to v1.2.3
+```
+
+### Show diff for a specific file
+
+```shell
+atmos vendor diff --component vpc --file variables.tf
+```
+
+### Show diff with more context lines
+
+```shell
+atmos vendor diff --component vpc --context 10
+```
+
+### Disable color output
+
+```shell
+atmos vendor diff --component vpc --no-color
+```
+
+Useful when piping output to files or other commands.
+
+## Flags
+
+<dl>
+  <dt>`--component` / `-c`</dt>
+  <dd>**Required**. The component to show diff for</dd>
+
+  <dt>`--from`</dt>
+  <dd>Starting version, tag, branch, or commit SHA (default: current version in vendor.yaml)</dd>
+
+  <dt>`--to`</dt>
+  <dd>Ending version, tag, branch, or commit SHA (default: latest version)</dd>
+
+  <dt>`--file`</dt>
+  <dd>Show diff for a specific file within the component (optional)</dd>
+
+  <dt>`--context` / `-C`</dt>
+  <dd>Number of context lines to show around changes (default: 3)</dd>
+
+  <dt>`--unified`</dt>
+  <dd>Use unified diff format (default: true)</dd>
+</dl>
+
+## How It Works
+
+1. **Finds component**: Locates the component in your `vendor.yaml` configuration
+2. **Extracts Git URI**: Parses the component's source to get the Git repository URL
+3. **Resolves versions**: Determines the `from` and `to` refs:
+   - If not specified, `from` defaults to current version in vendor.yaml
+   - If not specified, `to` defaults to latest semantic version tag
+4. **Fetches refs**: Uses shallow Git fetch to retrieve only the specified refs
+5. **Generates diff**: Runs `git diff` between the two refs
+6. **Applies colorization**: Automatically colorizes output if writing to a terminal
+
+## Colorization Behavior
+
+Output is automatically colorized when all of these conditions are met:
+
+- ✅ Output is to a terminal (TTY)
+- ✅ `--no-color` flag is NOT set
+- ✅ `TERM` environment variable is not `dumb` or empty
+- ✅ Output is not being piped to another command
+
+### Force disable colors
+
+```shell
+# Using flag
+atmos vendor diff --component vpc --no-color
+
+# Using environment variable
+TERM=dumb atmos vendor diff --component vpc
+
+# Piping automatically disables colors
+atmos vendor diff --component vpc | less
+```
+
+## Supported Version Formats
+
+The `--from` and `--to` flags accept various Git reference formats:
+
+- **Semantic versions**: `1.2.3`, `v1.2.3`
+- **Git tags**: Any tag name from the repository
+- **Git branches**: `main`, `develop`, `feature/new-feature`
+- **Commit SHAs**: Full (40 chars) or short (7+ chars) commit hashes
+- **Version ranges**: `~1.2.0`, `^1.0.0`, `>= 1.2.0` (resolves to highest matching tag)
+
+## Examples with Output
+
+### Default diff (current → latest)
+
+```shell
+$ atmos vendor diff --component vpc
+
+diff --git a/main.tf b/main.tf
+index a1b2c3d..e4f5g6h 100644
+--- a/main.tf
++++ b/main.tf
+@@ -10,7 +10,7 @@ resource "aws_vpc" "main" {
+   cidr_block           = var.cidr_block
+   enable_dns_hostnames = var.enable_dns_hostnames
+   enable_dns_support   = var.enable_dns_support
+-  instance_tenancy     = "default"
++  instance_tenancy     = var.instance_tenancy
+
+   tags = module.this.tags
+ }
+```
+
+### Diff between specific versions
+
+```shell
+$ atmos vendor diff --component vpc --from v1.0.0 --to v1.2.0
+
+Showing changes between v1.0.0 and v1.2.0...
+
+diff --git a/variables.tf b/variables.tf
+index 1234567..89abcdef 100644
+--- a/variables.tf
++++ b/variables.tf
+@@ -15,6 +15,12 @@ variable "enable_dns_support" {
+   default     = true
+ }
+
++variable "instance_tenancy" {
++  type        = string
++  description = "Tenancy option for instances launched into the VPC"
++  default     = "default"
++}
++
+ variable "tags" {
+   type        = map(string)
+   description = "Additional tags"
+```
+
+### No differences found
+
+```shell
+$ atmos vendor diff --component vpc --from v1.2.3 --to v1.2.3
+
+No differences between v1.2.3 and v1.2.3
+```
+
+## Supported Sources
+
+Currently, `atmos vendor diff` only works with **Git-based sources**:
+
+- ✅ GitHub repositories (`github.com/org/repo`)
+- ✅ Git URLs (`git::https://...`, `git@...`)
+- ✅ HTTPS Git URLs
+- ❌ OCI images (not supported)
+- ❌ Local paths (not supported)
+- ❌ HTTP archives (not supported)
+
+## Use Cases
+
+### Review changes before updating
+
+```shell
+# See what changed in the latest version
+atmos vendor diff --component vpc
+
+# If changes look good, update
+atmos vendor update --component vpc
+```
+
+### Compare two release tags
+
+```shell
+# Compare what changed between two stable releases
+atmos vendor diff --component eks --from v2.0.0 --to v2.1.0
+```
+
+### Check changes in a specific file
+
+```shell
+# Only show changes to variables
+atmos vendor diff --component vpc --file variables.tf
+```
+
+### Review changes after update
+
+```shell
+# Check what actually changed after updating
+atmos vendor diff --component vpc --from 1.0.0 --to 1.2.3
+```
+
+## Troubleshooting
+
+### Error: Component not found
+
+The component name must match exactly as it appears in your `vendor.yaml`:
+
+```yaml
+spec:
+  sources:
+    - component: vpc  # Use this exact name
+      source: github.com/cloudposse/terraform-aws-components
+      version: 1.0.0
+```
+
+### Error: Git reference not found
+
+Verify the version/tag/branch exists in the repository:
+
+```shell
+git ls-remote --tags https://github.com/cloudposse/terraform-aws-components
+```
+
+### Error: Unsupported vendor source
+
+This command only works with Git sources. Check that your component uses a Git-based source:
+
+```yaml
+# ✅ Supported
+source: github.com/cloudposse/terraform-aws-components
+source: git::https://github.com/org/repo
+source: git@github.com:org/repo.git
+
+# ❌ Not supported
+source: oci://registry/image
+source: ./local/path
+source: https://example.com/archive.zip
+```
+
+## Related Commands
+
+- [`atmos vendor update`](/cli/commands/vendor/update) - Update vendored component versions
+- [`atmos vendor pull`](/cli/commands/vendor/pull) - Pull vendored components
+- [`atmos describe component`](/cli/commands/vendor/component) - Show component configuration
+
+## See Also
+
+- [Vendor Configuration](/core-concepts/vendor) - Learn about vendor configuration format
+- [Component Vendoring](/core-concepts/components/vendoring) - Component vendoring concepts
+- [Git Diff Documentation](https://git-scm.com/docs/git-diff) - Understanding Git diffs
