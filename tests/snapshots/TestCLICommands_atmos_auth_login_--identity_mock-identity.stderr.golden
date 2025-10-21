@@ -7,5 +7,5 @@ INFO Chained identity from=mock-provider to=mock-identity
   Provider  mock-provider                         
   Identity  mock-identity                         
   Region    us-east-1                             
-  Expires   2025-01-01 00:00:00 UTC 
+  Expires   2099-12-31 23:59:59 UTC 
 

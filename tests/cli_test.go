@@ -383,10 +383,10 @@ func sanitizeOutput(output string) (string, error) {
 	result = posthogTokenRegex.ReplaceAllString(result, "phc_TEST_TOKEN_PLACEHOLDER")
 
 	// 9. Normalize expiration timestamps to avoid snapshot mismatches.
-	// Match timestamps in formats like "2025-10-20 05:48:27 UTC" or "2025-10-18 12:00:00 CDT"
-	// Also matches the new table format with relative time: "2025-10-21 16:26:57 UTC (59m 59s)"
-	expiresRegex := regexp.MustCompile(`Expires\s+\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}\s+[A-Z]{3,4}(?:\s+\([^)]+\))?`)
-	result = expiresRegex.ReplaceAllString(result, "Expires   2025-01-01 00:00:00 UTC")
+	// Remove the relative duration part (e.g., "(59m 59s)") from expiration timestamps.
+	// This preserves the actual timestamp while removing the time-sensitive duration.
+	expiresRegex := regexp.MustCompile(`(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}\s+[A-Z]{3,4})\s+\([^)]+\)`)
+	result = expiresRegex.ReplaceAllString(result, "$1")
 
 	return result, nil
 }
