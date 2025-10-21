@@ -1,0 +1,134 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://json.schemastore.org/atmos-scaffold.json",
+  "title": "JSON Schema for Atmos Scaffold files. Version 1.0. https://atmos.tools",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "The name of the scaffold template"
+    },
+    "description": {
+      "type": "string",
+      "description": "A description of what this scaffold creates"
+    },
+    "author": {
+      "type": "string",
+      "description": "The author of this scaffold template"
+    },
+    "version": {
+      "type": "string",
+      "description": "The version of this scaffold template"
+    },
+    "prompts": {
+      "type": "array",
+      "description": "Interactive prompts for template variables",
+      "items": {
+        "$ref": "#/definitions/prompt"
+      }
+    },
+    "dependencies": {
+      "type": "array",
+      "description": "List of required dependencies",
+      "items": {
+        "type": "string"
+      }
+    },
+    "hooks": {
+      "type": "object",
+      "description": "Lifecycle hooks to run during scaffolding",
+      "properties": {
+        "before": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "after": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  },
+  "required": [
+    "name"
+  ],
+  "additionalProperties": true,
+  "definitions": {
+    "prompt": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "The variable name for this prompt"
+        },
+        "description": {
+          "type": "string",
+          "description": "Human-readable description of this prompt"
+        },
+        "type": {
+          "type": "string",
+          "enum": ["input", "select", "confirm", "multiselect"],
+          "description": "The type of prompt to display"
+        },
+        "default": {
+          "description": "Default value for this prompt"
+        },
+        "required": {
+          "type": "boolean",
+          "description": "Whether this prompt is required",
+          "default": false
+        },
+        "options": {
+          "type": "array",
+          "description": "Available options for select/multiselect prompts",
+          "items": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "value": {
+                    "type": "string"
+                  },
+                  "label": {
+                    "type": "string"
+                  }
+                },
+                "required": ["value", "label"]
+              }
+            ]
+          }
+        },
+        "validation": {
+          "type": "object",
+          "description": "Validation rules for this prompt",
+          "properties": {
+            "pattern": {
+              "type": "string",
+              "description": "Regular expression pattern to validate against"
+            },
+            "min_length": {
+              "type": "integer",
+              "description": "Minimum length for string inputs"
+            },
+            "max_length": {
+              "type": "integer",
+              "description": "Maximum length for string inputs"
+            }
+          }
+        }
+      },
+      "required": [
+        "name",
+        "type"
+      ],
+      "additionalProperties": false
+    }
+  }
+}
