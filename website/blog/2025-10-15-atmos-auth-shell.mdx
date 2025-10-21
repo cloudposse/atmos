@@ -1,56 +1,19 @@
 ---
 slug: introducing-atmos-auth-shell
-title: "Introducing atmos auth shell: Seamlessly Authenticate and Execute"
+title: "Introducing atmos auth shell: Isolated Shell Sessions for Secure Multi-Identity Workflows"
 authors: [atmos]
-tags: [atmos, authentication, shell, aws, cloud]
+tags: [feature, atmos-auth, security, workflows]
 ---
 
-We're excited to announce a new command in Atmos that streamlines your cloud authentication workflow: `atmos auth shell`. This powerful new feature launches an interactive shell session with your cloud credentials pre-configured, eliminating the need to repeatedly authenticate or export environment variables.
+We're excited to announce a powerful new command in Atmos that makes working with multiple cloud identities significantly more secure: `atmos auth shell`.
+
+This feature launches **isolated shell sessions** scoped to specific cloud identities, providing clear session boundaries and preventing credential leakage. Think of it like `aws-vault exec`, but for all your cloud identities managed by Atmos—AWS, Azure, GCP, GitHub, SAML, and more.
+
+When you exit the shell, credentials are automatically removed. No persistence. No leakage. No confusion about which identity is active.
 
 <!-- truncate -->
 
 ## The Problem
-
-When working with cloud infrastructure, you often need to:
-
-1. Authenticate with your cloud provider (AWS, Azure, GCP, etc.)
-2. Export credentials as environment variables
-3. Run multiple commands using those credentials
-4. Re-authenticate when credentials expire.
-
-This workflow becomes tedious when switching between different identities, roles, or accounts throughout the day. You might find yourself running commands like:
-
-```shell
-# Traditional workflow
-eval $(atmos auth env --identity prod-admin --format bash)
-aws s3 ls
-aws ecs list-clusters
-kubectl get pods
-# ... many more commands ...
-```
-
-Every time you need to switch identities or your session expires, you have to repeat the authentication and export steps.
-
-## The Solution: `atmos auth shell`
-
-The new `atmos auth shell` command solves this by launching an interactive shell with your authentication environment pre-configured. Simply run:
-
-```shell
-atmos auth shell --identity prod-admin
-```
-
-And you're immediately in a shell session with all your cloud credentials ready to use. The session exposes environment variables like `ATMOS_IDENTITY` (the active identity name) and `ATMOS_SHLVL` (shell nesting level) that you can run as many commands as you need without worrying about authentication.
-
-:::tip Customize Your Prompt
-Want to see which identity is active in your prompt? You can customize your shell prompt by adding `ATMOS_IDENTITY` or `ATMOS_SHLVL` to your `PS1` (bash) or equivalent prompt variable in your shell configuration file (e.g., `.bashrc`, `.zshrc`).
-
-Example for bash:
-```bash
-export PS1='[\u@\h \W${ATMOS_IDENTITY:+ ($ATMOS_IDENTITY)}]\$ '
-```
-:::
-
-## Why This Matters: Isolation and Safety
 
 The traditional approach to managing cloud credentials—storing multiple profiles in `~/.aws/credentials` or exporting variables in your main shell—is fundamentally unsafe. When all credentials are accessible simultaneously in a single shell session, it's dangerously easy to accidentally run commands against the wrong environment:
 
@@ -58,15 +21,30 @@ The traditional approach to managing cloud credentials—storing multiple profil
 - You modify a staging database when you meant to update a development one
 - You deploy infrastructure changes to the wrong AWS account
 
-**`atmos auth shell` solves this through isolation**. Each shell session is scoped to exactly one identity with one set of credentials. When you run:
+**Credential leakage is a real problem.** When you export credentials to your shell environment, they persist until you explicitly unset them or close the terminal. This creates dangerous scenarios:
+
+```shell
+# Traditional workflow - credentials persist indefinitely
+eval $(atmos auth env --identity prod-admin --format bash)
+aws s3 ls
+# ... hours later, you forget which identity is active ...
+kubectl delete deployment critical-service  # 😱 Which cluster am I in?!
+```
+
+Without clear session boundaries, you have no built-in protection against:
+- Running commands with the wrong credentials
+- Leaving privileged credentials active in your shell for hours
+- Mixing operations across multiple environments in a single terminal
+
+## The Solution: `atmos auth shell`
+
+The new `atmos auth shell` command solves this through isolation. Each shell session is scoped to exactly one identity with one set of credentials. When you run:
 
 ```shell
 atmos auth shell --identity prod-admin
 ```
 
 You get a dedicated shell where **only** those production credentials are available. When you exit, your parent shell's environment remains completely unchanged—no credential pollution, no confusion about which environment you're operating in.
-
-### The Power of Multiple Concurrent Sessions
 
 This isolation enables a powerful workflow: **run multiple authenticated shells simultaneously, each scoped to a different identity**:
 
@@ -81,9 +59,20 @@ atmos auth shell --identity staging-dev
 atmos auth shell --identity dev-sandbox
 ```
 
-Each terminal operates in complete isolation. You can't accidentally run a production command in your development shell, and vice versa. Your credentials are **ephemeral and session-scoped**—when you close a terminal, those credentials disappear. No lingering environment variables, no shared credential files with overly broad access.
+Each terminal operates in complete isolation. You can't accidentally run a production command in your development shell, and vice versa. Your credentials are **ephemeral and session-scoped**—when you close a terminal, those credentials disappear.
+
+No lingering environment variables, no shared credential files with overly broad access.
 
 The command supports multiple identities, custom shells (`--shell`), custom arguments (`--`), shell nesting tracking (`ATMOS_SHLVL`), and works cross-platform.
+
+:::tip Customize Your Prompt
+Want to see which identity is active in your prompt? You can customize your shell prompt by adding `ATMOS_IDENTITY` or `ATMOS_SHLVL` to your `PS1` (bash) or equivalent prompt variable in your shell configuration file (e.g., `.bashrc`, `.zshrc`).
+
+Example for bash:
+```bash
+export PS1='[\u@\h \W${ATMOS_IDENTITY:+ ($ATMOS_IDENTITY)}]\$ '
+```
+:::
 
 ## Real-World Use Cases
 
@@ -156,6 +145,21 @@ Under the hood, `atmos auth shell`:
 6. **Launches** your preferred shell with all environment variables configured
 7. **Propagates** the shell's exit code back to Atmos when you exit
 
+## Comparison to AWS Vault
+
+If you're familiar with `aws-vault exec`, you'll recognize this pattern. Both tools prioritize **temporary credentials** and **session isolation**:
+
+| Feature | aws-vault exec | atmos auth shell |
+|---------|---------------|------------------|
+| **Temporary credentials** | ✅ Yes | ✅ Yes |
+| **Isolated subshells** | ✅ Yes | ✅ Yes |
+| **Session boundaries** | ✅ Credentials removed on exit | ✅ Credentials removed on exit |
+| **Cloud providers** | AWS only | AWS, Azure, GCP, GitHub, SAML, and more |
+| **Integration** | Standalone tool | Part of Atmos infrastructure workflow |
+| **Identity management** | IAM profiles | Atmos identities (unified across clouds) |
+
+`atmos auth shell` brings the same security-first philosophy to **all your cloud identities**, not just AWS. If you manage infrastructure across multiple cloud providers, you get consistent, isolated authentication for everything—AWS SSO, Azure AD, GCP service accounts, GitHub Apps, and more.
+
 ## Environment Variables
 
 When you're in an `atmos auth shell` session, you'll have access to:
@@ -168,6 +172,25 @@ When you're in an `atmos auth shell` session, you'll have access to:
   - `AWS_PROFILE`: Profile name corresponding to your identity
 
 These environment variables work seamlessly with any tool that uses the AWS SDK, such as Terraform, the AWS CLI, kubectl with AWS authentication, and more. Credentials are never exposed directly in environment variables—only secure file paths are set.
+
+## When to Use `atmos auth shell` vs `atmos auth env`
+
+Both commands serve important but different purposes:
+
+**Use `atmos auth shell` when:**
+- You need **session isolation** for security
+- Working with production or sensitive environments
+- Running multiple concurrent sessions with different identities
+- You want credentials to **automatically expire** when you exit
+- You need clear boundaries between different cloud contexts
+
+**Use `atmos auth env` when:**
+- Integrating with CI/CD pipelines that need to export variables
+- Writing scripts that source environment variables
+- You need credentials in a specific format (bash, fish, etc.)
+- Automating workflows where a subshell isn't appropriate
+
+Think of it this way: `atmos auth shell` is for **interactive work** where safety and isolation matter. `atmos auth env` is for **automation and integration** where you need to export credentials to your existing environment.
 
 ## Getting Started
 
