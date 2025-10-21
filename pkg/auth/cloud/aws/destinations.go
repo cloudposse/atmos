@@ -2,6 +2,7 @@ package aws
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -172,13 +173,16 @@ func ResolveDestination(destination string) (string, error) {
 		return "", nil
 	}
 
+	// Trim whitespace first so URLs with padding are recognized correctly.
+	trimmed := strings.TrimSpace(destination)
+
 	// If destination is already a full URL, return it unchanged.
-	if strings.HasPrefix(destination, "http://") || strings.HasPrefix(destination, "https://") {
-		return destination, nil
+	if strings.HasPrefix(trimmed, "http://") || strings.HasPrefix(trimmed, "https://") {
+		return trimmed, nil
 	}
 
-	// Normalize the alias: lowercase and trim whitespace.
-	alias := strings.ToLower(strings.TrimSpace(destination))
+	// Normalize the alias: lowercase.
+	alias := strings.ToLower(trimmed)
 
 	// Look up the alias in the map.
 	if url, ok := ServiceDestinations[alias]; ok {
@@ -197,6 +201,7 @@ func GetAvailableAliases() []string {
 	for alias := range ServiceDestinations {
 		aliases = append(aliases, alias)
 	}
+	sort.Strings(aliases)
 	return aliases
 }
 
