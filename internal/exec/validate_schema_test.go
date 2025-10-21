@@ -3,13 +3,14 @@ package exec
 import (
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/xeipuuv/gojsonschema"
+	"go.uber.org/mock/gomock"
+
 	"github.com/cloudposse/atmos/pkg/downloader"
 	"github.com/cloudposse/atmos/pkg/filematch"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/validator"
-	"github.com/stretchr/testify/assert"
-	"github.com/xeipuuv/gojsonschema"
-	"go.uber.org/mock/gomock"
 )
 
 type mockResultError struct {

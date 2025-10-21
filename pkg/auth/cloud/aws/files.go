@@ -1,6 +1,7 @@
 package aws
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -13,6 +14,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/auth/types"
 	"github.com/cloudposse/atmos/pkg/config/homedir"
 	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -222,6 +224,8 @@ func (m *AWSFileManager) GetEnvironmentVariables(providerName, identityName stri
 
 // Cleanup removes AWS files for the provider.
 func (m *AWSFileManager) Cleanup(providerName string) error {
+	defer perf.Track(nil, "aws.files.Cleanup")()
+
 	providerDir := filepath.Join(m.baseDir, providerName)
 
 	if err := os.RemoveAll(providerDir); err != nil {
@@ -238,7 +242,9 @@ func (m *AWSFileManager) Cleanup(providerName string) error {
 
 // CleanupIdentity removes only the specified identity's sections from AWS INI files.
 // This preserves other identities using the same provider.
-func (m *AWSFileManager) CleanupIdentity(providerName, identityName string) error {
+func (m *AWSFileManager) CleanupIdentity(ctx context.Context, providerName, identityName string) error {
+	defer perf.Track(nil, "aws.files.CleanupIdentity")()
+
 	var errs []error
 
 	// Remove identity section from credentials file.
@@ -300,6 +306,8 @@ func (m *AWSFileManager) removeIniSection(filePath, sectionName string) error {
 
 // CleanupAll removes entire base directory (all providers).
 func (m *AWSFileManager) CleanupAll() error {
+	defer perf.Track(nil, "aws.files.CleanupAll")()
+
 	if err := os.RemoveAll(m.baseDir); err != nil {
 		// If directory doesn't exist, that's not an error (already cleaned up).
 		if os.IsNotExist(err) {

@@ -1,6 +1,7 @@
 package aws
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
@@ -208,7 +209,7 @@ func TestAWSFileManager_CleanupIdentity(t *testing.T) {
 
 			tt.setupCredentials(m)
 
-			err := m.CleanupIdentity(tt.providerName, tt.identityName)
+			err := m.CleanupIdentity(context.Background(), tt.providerName, tt.identityName)
 			assert.NoError(t, err)
 
 			tt.verifyAfterCleanup(t, m)
