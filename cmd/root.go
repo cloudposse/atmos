@@ -9,6 +9,7 @@ import (
 	"math"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"syscall"
@@ -17,6 +18,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/elewis787/boa"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
@@ -32,6 +34,12 @@ import (
 	"github.com/cloudposse/atmos/pkg/telemetry"
 	"github.com/cloudposse/atmos/pkg/ui/heatmap"
 	"github.com/cloudposse/atmos/pkg/utils"
+
+	// Import built-in command packages for side-effect registration.
+	// The init() function in each package registers the command with the registry.
+	_ "github.com/cloudposse/atmos/cmd/about"
+	"github.com/cloudposse/atmos/cmd/internal"
+	"github.com/cloudposse/atmos/cmd/version"
 )
 
 const (
@@ -49,6 +57,49 @@ var profilerServer *profiler.Server
 
 // logFileHandle holds the opened log file for the lifetime of the program.
 var logFileHandle *os.File
+
+// processChdirFlag processes the --chdir flag and ATMOS_CHDIR environment variable,
+// changing the working directory before any other operations.
+// Precedence: --chdir flag > ATMOS_CHDIR environment variable.
+func processChdirFlag(cmd *cobra.Command) error {
+	chdir, _ := cmd.Flags().GetString("chdir")
+	// If flag is not set, check environment variable.
+	// Note: chdir is not supported in atmos.yaml since it must be processed before atmos.yaml is loaded.
+	if chdir == "" {
+		//nolint:forbidigo // Must use os.Getenv: chdir is processed before Viper configuration loads.
+		chdir = os.Getenv("ATMOS_CHDIR")
+	}
+
+	if chdir == "" {
+		return nil // No chdir specified.
+	}
+
+	// Clean and make absolute to handle both relative and absolute paths.
+	absPath, err := filepath.Abs(chdir)
+	if err != nil {
+		return fmt.Errorf("%w: invalid chdir path: %s", errUtils.ErrPathResolution, chdir)
+	}
+
+	// Verify the directory exists before attempting to change to it.
+	stat, err := os.Stat(absPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return fmt.Errorf("%w: directory does not exist: %s", errUtils.ErrWorkdirNotExist, absPath)
+		}
+		return fmt.Errorf("%w: failed to access directory: %s", errUtils.ErrStatFile, absPath)
+	}
+
+	if !stat.IsDir() {
+		return fmt.Errorf("%w: not a directory: %s", errUtils.ErrWorkdirNotExist, absPath)
+	}
+
+	// Change to the specified directory.
+	if err := os.Chdir(absPath); err != nil {
+		return fmt.Errorf("%w: failed to change directory to %s", errUtils.ErrPathResolution, absPath)
+	}
+
+	return nil
+}
 
 // RootCmd represents the base command when called without any subcommands.
 var RootCmd = &cobra.Command{
@@ -71,6 +122,12 @@ var RootCmd = &cobra.Command{
 			cmd.SilenceUsage = true
 			cmd.SilenceErrors = true
 		}
+
+		// Process --chdir flag before any other operations (including config loading).
+		if err := processChdirFlag(cmd); err != nil {
+			errUtils.CheckErrorPrintAndExit(err, "", "")
+		}
+
 		configAndStacksInfo := schema.ConfigAndStacksInfo{}
 		// Honor CLI overrides for resolving atmos.yaml and its imports.
 		if bp, _ := cmd.Flags().GetString("base-path"); bp != "" {
@@ -109,7 +166,7 @@ var RootCmd = &cobra.Command{
 				if versionErr != nil {
 					errUtils.CheckErrorPrintAndExit(versionErr, "", "")
 				}
-				utils.OsExit(0)
+				errUtils.OsExit(0)
 				return
 			}
 		}
@@ -441,6 +498,9 @@ func Execute() error {
 	var initErr error
 	atmosConfig, initErr = cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
 
+	// Set atmosConfig for version command (needs access to config).
+	version.SetAtmosConfig(&atmosConfig)
+
 	utils.InitializeMarkdown(atmosConfig)
 	errUtils.InitializeMarkdown(atmosConfig)
 
@@ -583,9 +643,18 @@ func displayPerformanceHeatmap(cmd *cobra.Command, mode string) error {
 }
 
 func init() {
+	// Register built-in commands from the registry.
+	// This must happen BEFORE custom commands are processed in Execute().
+	// Commands register themselves via init() functions when their packages
+	// are imported with blank imports (e.g., _ "github.com/cloudposse/atmos/cmd/about").
+	if err := internal.RegisterAll(RootCmd); err != nil {
+		log.Error("Failed to register built-in commands", "error", err)
+	}
+
 	// Add the template function for wrapped flag usages.
 	cobra.AddTemplateFunc("wrappedFlagUsages", templates.WrappedFlagUsages)
 
+	RootCmd.PersistentFlags().StringP("chdir", "C", "", "Change working directory before processing (run as if Atmos started in this directory)")
 	RootCmd.PersistentFlags().String("redirect-stderr", "", "File descriptor to redirect `stderr` to. "+
 		"Errors can be redirected to any file or any standard file descriptor (including `/dev/null`)")
 	RootCmd.PersistentFlags().Bool("version", false, "Display the Atmos CLI version")
@@ -609,6 +678,13 @@ func init() {
 			"Options: cpu, heap, allocs, goroutine, block, mutex, threadcreate, trace")
 	RootCmd.PersistentFlags().Bool("heatmap", false, "Show performance heatmap visualization after command execution (includes P95 latency)")
 	RootCmd.PersistentFlags().String("heatmap-mode", "bar", "Heatmap visualization mode: bar, sparkline, table (press 1-3 to switch in TUI)")
+
+	// Bind environment variables for GitHub authentication.
+	// ATMOS_GITHUB_TOKEN takes precedence over GITHUB_TOKEN.
+	if err := viper.BindEnv("ATMOS_GITHUB_TOKEN", "ATMOS_GITHUB_TOKEN", "GITHUB_TOKEN"); err != nil {
+		log.Error("Failed to bind ATMOS_GITHUB_TOKEN environment variable", "error", err)
+	}
+
 	// Set custom usage template.
 	err := templates.SetCustomUsageFunc(RootCmd)
 	if err != nil {
@@ -686,7 +762,7 @@ func initCobraConfig() {
 			pager := pager.NewWithAtmosConfig(pagerEnabled)
 			if err := pager.Run("Atmos CLI Help", buf.String()); err != nil {
 				log.Error("Failed to run pager", "error", err)
-				utils.OsExit(1)
+				errUtils.OsExit(1)
 			}
 		} else {
 			fmt.Println()

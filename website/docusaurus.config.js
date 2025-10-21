@@ -254,6 +254,11 @@ const config = {
                         position: 'left',
                         to: '/community'
                     },
+                    {
+                        label: 'Changelog',
+                        position: 'left',
+                        to: '/blog'
+                    },
                     // Algolia search configuration
                     {
                         type: 'search',

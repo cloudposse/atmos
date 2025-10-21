@@ -1,13 +1,18 @@
 package exec
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
+	"io/fs"
+	"os"
 	"sort"
 	"strings"
+	"sync"
 
+	"github.com/go-viper/mapstructure/v2"
 	"github.com/hashicorp/terraform-config-inspect/tfconfig"
-	"github.com/mitchellh/mapstructure"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
@@ -160,7 +165,78 @@ func ProcessComponentConfig(
 	return nil
 }
 
+var (
+	// FindStacksMapCache stores the results of FindStacksMap to avoid re-processing
+	// all YAML files multiple times within the same command execution.
+	// Cache key: JSON-serialized atmosConfig key fields + ignoreMissingFiles flag.
+	findStacksMapCache   map[string]*findStacksMapCacheEntry
+	findStacksMapCacheMu sync.RWMutex
+)
+
+func init() {
+	findStacksMapCache = make(map[string]*findStacksMapCacheEntry)
+}
+
+// findStacksMapCacheEntry stores the cached result of FindStacksMap.
+type findStacksMapCacheEntry struct {
+	stacksMap       map[string]any
+	rawStackConfigs map[string]map[string]any
+}
+
+// getFindStacksMapCacheKey generates a content-aware cache key from atmosConfig and parameters.
+// The cache key includes all paths, file lists, and modification times that affect stack processing,
+// ensuring proper cache invalidation when configuration or file content changes.
+func getFindStacksMapCacheKey(atmosConfig *schema.AtmosConfiguration, ignoreMissingFiles bool) string {
+	const cacheKeyDelimiter = "|"
+
+	// Build a string containing all cache-relevant configuration.
+	// Include all component directories that affect stack processing.
+	var keyBuilder strings.Builder
+	keyBuilder.WriteString(atmosConfig.StacksBaseAbsolutePath)
+	keyBuilder.WriteString(cacheKeyDelimiter)
+	keyBuilder.WriteString(atmosConfig.TerraformDirAbsolutePath)
+	keyBuilder.WriteString(cacheKeyDelimiter)
+	keyBuilder.WriteString(atmosConfig.HelmfileDirAbsolutePath)
+	keyBuilder.WriteString(cacheKeyDelimiter)
+	keyBuilder.WriteString(atmosConfig.PackerDirAbsolutePath)
+	keyBuilder.WriteString(cacheKeyDelimiter)
+	keyBuilder.WriteString(fmt.Sprintf("%v", ignoreMissingFiles))
+	keyBuilder.WriteString(cacheKeyDelimiter)
+
+	// Include the actual file paths and their modification times.
+	// Sort the paths for consistent hashing.
+	sortedPaths := make([]string, len(atmosConfig.StackConfigFilesAbsolutePaths))
+	copy(sortedPaths, atmosConfig.StackConfigFilesAbsolutePaths)
+	sort.Strings(sortedPaths)
+
+	// Add all file paths and mtimes to the key.
+	// This ensures cache invalidation when files are modified.
+	for _, path := range sortedPaths {
+		keyBuilder.WriteString(path)
+		keyBuilder.WriteString(cacheKeyDelimiter)
+
+		// Include file modification time and size for cache invalidation.
+		// Use nanosecond precision to detect changes within the same second.
+		// Include file size to detect content changes that preserve mtime.
+		// If stat fails (file doesn't exist, permission denied, etc.),
+		// use "missing:-1" sentinel to ensure consistent behavior.
+		if info, err := os.Stat(path); err == nil {
+			keyBuilder.WriteString(fmt.Sprintf("%d:%d", info.ModTime().UnixNano(), info.Size()))
+		} else {
+			keyBuilder.WriteString("missing:-1")
+		}
+		keyBuilder.WriteString(cacheKeyDelimiter)
+	}
+
+	// Use SHA-256 hash to create a fixed-length cache key.
+	// This prevents cache key explosion with large numbers of files.
+	hash := sha256.Sum256([]byte(keyBuilder.String()))
+	return hex.EncodeToString(hash[:])
+}
+
 // FindStacksMap processes stack config and returns a map of all stacks.
+// Results are cached to avoid re-processing the same YAML files multiple times
+// within the same command execution (e.g., when ValidateStacks is called before ExecuteDescribeStacks).
 func FindStacksMap(atmosConfig *schema.AtmosConfiguration, ignoreMissingFiles bool) (
 	map[string]any,
 	map[string]map[string]any,
@@ -168,7 +244,22 @@ func FindStacksMap(atmosConfig *schema.AtmosConfiguration, ignoreMissingFiles bo
 ) {
 	defer perf.Track(atmosConfig, "exec.FindStacksMap")()
 
-	// Process stack config file(s).
+	// Skip cache when provenance tracking is enabled, as we need to capture merge context and positions during processing.
+	if !atmosConfig.TrackProvenance {
+		// Generate cache key.
+		cacheKey := getFindStacksMapCacheKey(atmosConfig, ignoreMissingFiles)
+
+		// Check cache first.
+		findStacksMapCacheMu.RLock()
+		cached, found := findStacksMapCache[cacheKey]
+		findStacksMapCacheMu.RUnlock()
+
+		if found {
+			return cached.stacksMap, cached.rawStackConfigs, nil
+		}
+	}
+
+	// Cache miss - process stack config file(s).
 	_, stacksMap, rawStackConfigs, err := ProcessYAMLConfigFiles(
 		atmosConfig,
 		atmosConfig.StacksBaseAbsolutePath,
@@ -182,6 +273,17 @@ func FindStacksMap(atmosConfig *schema.AtmosConfiguration, ignoreMissingFiles bo
 	)
 	if err != nil {
 		return nil, nil, err
+	}
+
+	// Cache the result only when provenance tracking is disabled.
+	if !atmosConfig.TrackProvenance {
+		cacheKey := getFindStacksMapCacheKey(atmosConfig, ignoreMissingFiles)
+		findStacksMapCacheMu.Lock()
+		findStacksMapCache[cacheKey] = &findStacksMapCacheEntry{
+			stacksMap:       stacksMap,
+			rawStackConfigs: rawStackConfigs,
+		}
+		findStacksMapCacheMu.Unlock()
 	}
 
 	return stacksMap, rawStackConfigs, nil
@@ -525,8 +627,29 @@ func ProcessStacks(
 	case cfg.TerraformComponentType:
 		componentPath := constructTerraformComponentWorkingDir(atmosConfig, &configAndStacksInfo)
 		componentInfo[cfg.ComponentPathSectionName] = componentPath
-		terraformConfiguration, _ := tfconfig.LoadModule(componentPath)
-		componentInfo["terraform_config"] = terraformConfiguration
+		terraformConfiguration, diags := tfconfig.LoadModule(componentPath)
+		if !diags.HasErrors() {
+			componentInfo["terraform_config"] = terraformConfiguration
+		} else {
+			diagErr := diags.Err()
+
+			// Try structured error detection first (most robust).
+			isNotExist := errors.Is(diagErr, os.ErrNotExist) || errors.Is(diagErr, fs.ErrNotExist)
+
+			// Fallback to error message inspection for cases where tfconfig doesn't wrap errors properly.
+			// This handles missing subdirectory modules (e.g., ./modules/security-group referenced in main.tf
+			// but the directory doesn't exist). Such missing paths are valid in stack processing—components
+			// or their modules may be deleted or not yet created when tracking changes over time.
+			errMsg := diagErr.Error()
+			isNotExistString := strings.Contains(errMsg, "does not exist") || strings.Contains(errMsg, "Failed to read directory")
+
+			if !isNotExist && !isNotExistString {
+				// For other errors (syntax errors, permission issues, etc.), return error.
+				return configAndStacksInfo, errors.Join(errUtils.ErrFailedToLoadTerraformModule, diagErr)
+			}
+
+			componentInfo["terraform_config"] = nil
+		}
 	case cfg.HelmfileComponentType:
 		componentInfo[cfg.ComponentPathSectionName] = constructHelmfileComponentWorkingDir(atmosConfig, &configAndStacksInfo)
 	case cfg.PackerComponentType:

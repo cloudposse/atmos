@@ -58,6 +58,9 @@ atmos validate stacks --help
 atmos vendor --help
 atmos vendor pull --help
 atmos version
+atmos version --help
+atmos version list --help
+atmos version show --help
 atmos workflow --help
 tree
 tree -CAF --gitignore

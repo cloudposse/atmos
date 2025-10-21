@@ -3,7 +3,6 @@ package cmd
 import (
 	"bytes"
 	"fmt"
-	"os"
 	"testing"
 
 	"github.com/spf13/cobra"
@@ -14,6 +13,8 @@ import (
 )
 
 func TestAuthLoginCmd(t *testing.T) {
+	_ = NewTestKit(t)
+
 	tests := []struct {
 		name           string
 		args           []string
@@ -123,9 +124,7 @@ func TestAuthLoginCmd(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Setup test environment
-			originalArgs := os.Args
-			defer func() { os.Args = originalArgs }()
+			_ = NewTestKit(t)
 
 			// Create a new command instance for testing
 			cmd := &cobra.Command{
@@ -190,6 +189,8 @@ func TestAuthLoginCmd(t *testing.T) {
 }
 
 func TestAuthLoginCmdFlags(t *testing.T) {
+	_ = NewTestKit(t)
+
 	// Create a mock command to test flag structure
 	cmd := &cobra.Command{
 		Use: "login",
@@ -204,6 +205,8 @@ func TestAuthLoginCmdFlags(t *testing.T) {
 }
 
 func TestCreateAuthManager(t *testing.T) {
+	_ = NewTestKit(t)
+
 	authConfig := &schema.AuthConfig{
 		Providers: map[string]schema.Provider{
 			"test-provider": {
