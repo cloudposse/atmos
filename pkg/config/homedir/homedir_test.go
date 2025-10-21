@@ -19,6 +19,9 @@ func BenchmarkDir(b *testing.B) {
 }
 
 func TestDir(t *testing.T) {
+	Reset() // Clear cache from any previous tests
+	defer Reset()
+
 	u, err := user.Current()
 	if err != nil {
 		t.Fatalf("err: %s", err)
@@ -96,6 +99,9 @@ func TestReset_WorksAcrossMultipleTests(t *testing.T) {
 }
 
 func TestExpand(t *testing.T) {
+	Reset() // Clear cache from any previous tests
+	defer Reset()
+
 	u, err := user.Current()
 	if err != nil {
 		t.Fatalf("err: %s", err)
@@ -151,7 +157,7 @@ func TestExpand(t *testing.T) {
 	DisableCache = true
 	defer func() { DisableCache = false }()
 	t.Setenv("HOME", "/custom/path/")
-	expected := filepath.Join(string(filepath.Separator), "custom", "path", "foo", string(filepath.Separator), "bar")
+	expected := filepath.Join(string(filepath.Separator), "custom", "path", "foo", "bar")
 	actual, err := Expand("~/foo/bar")
 
 	if err != nil {

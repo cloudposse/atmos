@@ -41,7 +41,7 @@ atmos auth logout dev-admin
 
 This removes credentials for `dev-admin` and all identities in its authentication chain:
 
-```
+```shell
 Logging out from identity: dev-admin
 
 Building authentication chain...
@@ -68,7 +68,7 @@ Run `atmos auth logout` without arguments for an interactive experience:
 atmos auth logout
 ```
 
-```
+```shell
 ? Choose what to logout from:
   ❯ Identity: dev-admin
     Identity: prod-admin
@@ -89,7 +89,7 @@ atmos auth logout --provider aws-sso
 
 This removes the provider credentials and all identities that authenticate through it:
 
-```
+```shell
 Logging out from provider: aws-sso
 
 Removing all credentials for provider...
@@ -110,7 +110,7 @@ Preview what would be removed without actually deleting anything:
 atmos auth logout dev-admin --dry-run
 ```
 
-```
+```shell
 Dry run mode: No credentials will be removed
 
 Would remove from identity: dev-admin
@@ -129,7 +129,7 @@ Would remove from identity: dev-admin
 
 Atmos intelligently resolves the complete authentication chain for your identity and removes credentials at each step:
 
-```
+```shell
 aws-sso → dev-org-admin → dev-admin
    ↓           ↓              ↓
 Removed     Removed        Removed
@@ -150,7 +150,7 @@ The logout command removes credentials from **all storage locations**:
 
 The logout command continues even if individual steps fail, ensuring maximum cleanup:
 
-```
+```shell
 Logging out from identity: dev-admin
 
 Removing credentials...
@@ -179,7 +179,7 @@ To completely end your session:
 1. Run `atmos auth logout` to remove local credentials
 2. Visit your identity provider's website (AWS SSO, Okta, etc.)
 3. Sign out from the browser session
-4. Close all browser windows
+4. Close all browser windows.
 
 The command displays this warning after every logout to ensure you don't forget.
 
@@ -210,7 +210,7 @@ atmos auth login dev-admin             # Fresh login
 
 All logout operations are logged for security auditing:
 
-```
+```shell
 2025-10-17T10:15:30Z DEBUG Starting logout identity=dev-admin
 2025-10-17T10:15:30Z DEBUG Authentication chain built chain=[aws-sso dev-org-admin dev-admin]
 2025-10-17T10:15:30Z DEBUG Removing keyring entry alias=aws-sso
@@ -308,7 +308,7 @@ The logout command uses native Go libraries for maximum compatibility:
 
 - **File operations**: `os.RemoveAll()` for cross-platform directory removal
 - **Keyring access**: `go-keyring` library supporting macOS, Linux, and Windows
-- **Path handling**: `filepath` package for platform-specific path separators
+- **Path handling**: `filepath` package for platform-specific path separators.
 
 ### Error Handling
 
@@ -317,7 +317,7 @@ Following Atmos error handling patterns:
 - Uses static error sentinels from `errors/errors.go`
 - Wraps errors with `errors.Join` for proper error chains
 - Continues cleanup on non-fatal errors
-- Reports all errors at completion
+- Reports all errors at completion.
 
 ### Interface Extensions
 
