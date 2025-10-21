@@ -164,7 +164,7 @@
         },
         {
           "type": "object",
-          "additionalProperties": false,
+          "additionalProperties": true,
           "properties": {
             "terraform": {
               "$ref": "#/definitions/terraform_components"

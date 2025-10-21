@@ -102,14 +102,14 @@ func TestExecuteAtmosValidateSchemaCmd(t *testing.T) {
 		name          string
 		yamlSource    string
 		customSchema  string
-		mockSetup     func(*validator.MockValidator, *downloader.MockFileDownloader, *filematch.MockFileMatcherInterface)
+		mockSetup     func(*validator.MockValidator, *downloader.MockFileDownloader, *filematch.MockFileMatcher)
 		expectedError error
 	}{
 		{
 			name:         "successful validation",
 			yamlSource:   "atmos.yaml",
 			customSchema: "atmos://schema",
-			mockSetup: func(mv *validator.MockValidator, mfd *downloader.MockFileDownloader, fmi *filematch.MockFileMatcherInterface) {
+			mockSetup: func(mv *validator.MockValidator, mfd *downloader.MockFileDownloader, fmi *filematch.MockFileMatcher) {
 				fmi.EXPECT().MatchFiles([]string{"atmos.yaml"}).Return([]string{"atmos.yaml"}, nil)
 				mv.EXPECT().ValidateYAMLSchema("atmos://schema", "atmos.yaml").Return([]gojsonschema.ResultError{}, nil)
 			},
@@ -119,7 +119,7 @@ func TestExecuteAtmosValidateSchemaCmd(t *testing.T) {
 			name:         "validation errors",
 			yamlSource:   "atmos.yaml",
 			customSchema: "atmos://schema",
-			mockSetup: func(mv *validator.MockValidator, mfd *downloader.MockFileDownloader, fmi *filematch.MockFileMatcherInterface) {
+			mockSetup: func(mv *validator.MockValidator, mfd *downloader.MockFileDownloader, fmi *filematch.MockFileMatcher) {
 				fmi.EXPECT().MatchFiles([]string{"atmos.yaml"}).Return([]string{"atmos.yaml"}, nil)
 				mv.EXPECT().ValidateYAMLSchema("atmos://schema", "atmos.yaml").Return([]gojsonschema.ResultError{&mockResultError{}}, nil)
 			},
@@ -131,7 +131,7 @@ func TestExecuteAtmosValidateSchemaCmd(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			mockValidator := validator.NewMockValidator(ctrl)
 			mockFileDownloader := downloader.NewMockFileDownloader(ctrl)
-			mockFileMatcher := filematch.NewMockFileMatcherInterface(ctrl)
+			mockFileMatcher := filematch.NewMockFileMatcher(ctrl)
 			tt.mockSetup(mockValidator, mockFileDownloader, mockFileMatcher)
 
 			av := &atmosValidatorExecutor{
