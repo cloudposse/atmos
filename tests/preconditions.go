@@ -84,6 +84,45 @@ func RequireAWSProfile(t *testing.T, profileName string) {
 	}
 }
 
+// RequireAzureCredentials checks if Azure credentials are available for authentication.
+// This function verifies that Azure DefaultAzureCredential can be created, which supports:
+// - Environment variables (AZURE_TENANT_ID, AZURE_CLIENT_ID, AZURE_CLIENT_SECRET)
+// - Managed Identity (when running in Azure)
+// - Azure CLI credentials (az login)
+// - Visual Studio Code credentials
+func RequireAzureCredentials(t *testing.T) {
+	t.Helper()
+
+	if !ShouldCheckPreconditions() {
+		return
+	}
+
+	// Check for explicit Azure environment variables first
+	tenantID := os.Getenv("AZURE_TENANT_ID")
+	clientID := os.Getenv("AZURE_CLIENT_ID")
+	clientSecret := os.Getenv("AZURE_CLIENT_SECRET")
+
+	// If all three are set, we have service principal credentials
+	if tenantID != "" && clientID != "" && clientSecret != "" {
+		t.Logf("Azure credentials available via environment variables (service principal)")
+		return
+	}
+
+	// Check if Azure CLI is configured
+	cmd := exec.Command("az", "account", "show")
+	output, err := cmd.Output()
+	if err == nil && len(output) > 0 {
+		t.Logf("Azure credentials available via Azure CLI (az login)")
+		return
+	}
+
+	// No credentials found, skip the test
+	t.Skipf("Azure credentials not available. Configure via: "+
+		"(1) Environment variables: AZURE_TENANT_ID, AZURE_CLIENT_ID, AZURE_CLIENT_SECRET, "+
+		"(2) Azure CLI: run 'az login', "+
+		"(3) Set ATMOS_TEST_SKIP_PRECONDITION_CHECKS=true to bypass")
+}
+
 // RequireGitRepository checks if we're in a valid Git repository.
 func RequireGitRepository(t *testing.T) *git.Repository {
 	t.Helper()

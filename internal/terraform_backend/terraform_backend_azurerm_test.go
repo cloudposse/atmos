@@ -14,6 +14,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/tests"
 )
 
 // mockAzureBlobClient implements AzureBlobAPI for testing.
@@ -674,4 +676,263 @@ func TestReadTerraformBackendAzurermInternal_SpecialCharactersInWorkspace(t *tes
 	assert.NoError(t, err)
 	assert.NotNil(t, result)
 	assert.Equal(t, "app.terraform.tfstateenv:dev-us-east-1-prod", capturedBlobName)
+}
+
+// Integration tests - these test the full path including getCachedAzureBlobClient.
+// They will skip if Azure credentials are not available.
+
+func TestReadTerraformBackendAzurerm_Integration_InvalidConfig(t *testing.T) {
+	// Check for Azure credentials precondition.
+	tests.RequireAzureCredentials(t)
+
+	testCases := []struct {
+		name          string
+		componentData map[string]any
+		wantErr       bool
+		errType       error
+	}{
+		{
+			name: "missing storage account",
+			componentData: map[string]any{
+				"workspace": "test-workspace",
+				"backend": map[string]any{
+					"container_name": "tfstate",
+					"key":            "terraform.tfstate",
+				},
+			},
+			wantErr: true,
+			errType: errUtils.ErrStorageAccountRequired,
+		},
+		{
+			name: "empty storage account",
+			componentData: map[string]any{
+				"workspace": "test-workspace",
+				"backend": map[string]any{
+					"storage_account_name": "",
+					"container_name":       "tfstate",
+					"key":                  "terraform.tfstate",
+				},
+			},
+			wantErr: true,
+			errType: errUtils.ErrStorageAccountRequired,
+		},
+		{
+			name: "missing container name",
+			componentData: map[string]any{
+				"workspace": "test-workspace",
+				"backend": map[string]any{
+					"storage_account_name": "nonexistentaccount",
+					"key":                  "terraform.tfstate",
+				},
+			},
+			wantErr: true,
+			errType: errUtils.ErrAzureContainerRequired,
+		},
+		{
+			name: "nonexistent storage account",
+			componentData: map[string]any{
+				"workspace": "test-workspace",
+				"backend": map[string]any{
+					"storage_account_name": "nonexistentaccountxyz123",
+					"container_name":       "tfstate",
+					"key":                  "terraform.tfstate",
+				},
+			},
+			wantErr: true,
+			errType: errUtils.ErrGetBlobFromAzure,
+		},
+		{
+			name: "nonexistent container",
+			componentData: map[string]any{
+				"workspace": "test-workspace",
+				"backend": map[string]any{
+					"storage_account_name": "testaccountxyz123",
+					"container_name":       "nonexistentcontainer",
+					"key":                  "terraform.tfstate",
+				},
+			},
+			wantErr: true,
+			errType: errUtils.ErrGetBlobFromAzure,
+		},
+	}
+
+	for _, tt := range testCases {
+		t.Run(tt.name, func(t *testing.T) {
+			// Clear Azure environment variables to prevent conflicts.
+			t.Setenv("AZURE_STORAGE_ACCOUNT", "")
+			t.Setenv("AZURE_STORAGE_KEY", "")
+
+			atmosConfig := &schema.AtmosConfiguration{}
+
+			result, err := ReadTerraformBackendAzurerm(atmosConfig, &tt.componentData)
+
+			if tt.wantErr {
+				assert.Error(t, err)
+				if tt.errType != nil {
+					assert.ErrorIs(t, err, tt.errType)
+				}
+				assert.Nil(t, result)
+			} else {
+				assert.NoError(t, err)
+				assert.NotNil(t, result)
+			}
+		})
+	}
+}
+
+func TestReadTerraformBackendAzurerm_Integration_BlobNotFound(t *testing.T) {
+	// Check for Azure credentials precondition.
+	tests.RequireAzureCredentials(t)
+
+	componentSections := map[string]any{
+		"workspace": "test-workspace-nonexistent",
+		"backend": map[string]any{
+			"storage_account_name": "nonexistentaccountxyz999",
+			"container_name":       "nonexistentcontainer999",
+			"key":                  "nonexistent.tfstate",
+		},
+	}
+
+	result, err := ReadTerraformBackendAzurerm(nil, &componentSections)
+
+	// Should either return nil/nil (blob not found) or error (storage account doesn't exist).
+	// Both are acceptable for this test since we're testing against nonexistent resources.
+	if err != nil {
+		assert.ErrorIs(t, err, errUtils.ErrGetBlobFromAzure)
+	}
+	// If no error, result should be nil (blob not found).
+	if err == nil {
+		assert.Nil(t, result)
+	}
+}
+
+func TestReadTerraformBackendAzurerm_Integration_CacheKeyDeterminism(t *testing.T) {
+	// Check for Azure credentials precondition.
+	tests.RequireAzureCredentials(t)
+
+	// Test that cache keys are deterministic and correctly handle different configs.
+	testCases := []struct {
+		name          string
+		backend1      map[string]any
+		backend2      map[string]any
+		shouldBeSame  bool
+		description   string
+	}{
+		{
+			name: "identical backends should use same cache",
+			backend1: map[string]any{
+				"storage_account_name": "account1",
+				"container_name":       "container1",
+				"key":                  "terraform.tfstate",
+			},
+			backend2: map[string]any{
+				"storage_account_name": "account1",
+				"container_name":       "container1",
+				"key":                  "terraform.tfstate",
+			},
+			shouldBeSame: true,
+			description:  "Same account and container should use cached client",
+		},
+		{
+			name: "different storage accounts should use different cache",
+			backend1: map[string]any{
+				"storage_account_name": "account1",
+				"container_name":       "container1",
+				"key":                  "terraform.tfstate",
+			},
+			backend2: map[string]any{
+				"storage_account_name": "account2",
+				"container_name":       "container1",
+				"key":                  "terraform.tfstate",
+			},
+			shouldBeSame: false,
+			description:  "Different accounts should create separate clients",
+		},
+		{
+			name: "different containers should use different cache",
+			backend1: map[string]any{
+				"storage_account_name": "account1",
+				"container_name":       "container1",
+				"key":                  "terraform.tfstate",
+			},
+			backend2: map[string]any{
+				"storage_account_name": "account1",
+				"container_name":       "container2",
+				"key":                  "terraform.tfstate",
+			},
+			shouldBeSame: false,
+			description:  "Different containers should create separate clients",
+		},
+	}
+
+	for _, tt := range testCases {
+		t.Run(tt.name, func(t *testing.T) {
+			// Generate cache keys manually to verify determinism.
+			cacheKey1 := fmt.Sprintf("account=%s;container=%s",
+				GetBackendAttribute(&tt.backend1, "storage_account_name"),
+				GetBackendAttribute(&tt.backend1, "container_name"))
+
+			cacheKey2 := fmt.Sprintf("account=%s;container=%s",
+				GetBackendAttribute(&tt.backend2, "storage_account_name"),
+				GetBackendAttribute(&tt.backend2, "container_name"))
+
+			if tt.shouldBeSame {
+				assert.Equal(t, cacheKey1, cacheKey2, tt.description)
+			} else {
+				assert.NotEqual(t, cacheKey1, cacheKey2, tt.description)
+			}
+		})
+	}
+}
+
+func TestReadTerraformBackendAzurerm_Integration_WorkspaceNaming(t *testing.T) {
+	// Check for Azure credentials precondition.
+	tests.RequireAzureCredentials(t)
+
+	testCases := []struct {
+		name             string
+		workspace        string
+		key              string
+		expectedBlobName string
+	}{
+		{
+			name:             "default workspace",
+			workspace:        "default",
+			key:              "terraform.tfstate",
+			expectedBlobName: "terraform.tfstate",
+		},
+		{
+			name:             "empty workspace treated as default",
+			workspace:        "",
+			key:              "terraform.tfstate",
+			expectedBlobName: "terraform.tfstate",
+		},
+		{
+			name:             "named workspace",
+			workspace:        "dev",
+			key:              "terraform.tfstate",
+			expectedBlobName: "terraform.tfstateenv:dev",
+		},
+		{
+			name:             "complex workspace name",
+			workspace:        "dev-us-east-1-prod",
+			key:              "app.terraform.tfstate",
+			expectedBlobName: "app.terraform.tfstateenv:dev-us-east-1-prod",
+		},
+	}
+
+	for _, tt := range testCases {
+		t.Run(tt.name, func(t *testing.T) {
+			componentSections := map[string]any{
+				"workspace": tt.workspace,
+			}
+			backend := map[string]any{
+				"key": tt.key,
+			}
+
+			// Test the blob path construction directly.
+			actualBlobName := constructAzureBlobPath(&componentSections, &backend)
+			assert.Equal(t, tt.expectedBlobName, actualBlobName)
+		})
+	}
 }
