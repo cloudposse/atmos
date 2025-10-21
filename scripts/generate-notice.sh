@@ -129,7 +129,6 @@ listed above or check the dependency's repository.
 
 For more information about Atmos licensing, see:
   https://github.com/cloudposse/atmos
-
 EOF
 
 echo "✅ NOTICE file generated successfully: ${NOTICE_FILE}"
