@@ -6,7 +6,10 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
+	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/lipgloss/table"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
@@ -16,6 +19,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/config/homedir"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
 
 // authWhoamiCmd shows current authentication status.
@@ -100,22 +104,71 @@ func printWhoamiJSON(whoami *authTypes.WhoamiInfo) error {
 }
 
 func printWhoamiHuman(whoami *authTypes.WhoamiInfo) {
+	const (
+		expiringThresholdMinutes = 15
+	)
+
 	fmt.Fprintf(os.Stderr, "Current Authentication Status\n\n")
-	fmt.Fprintf(os.Stderr, "Provider: %s\n", whoami.Provider)
-	fmt.Fprintf(os.Stderr, "Identity: %s\n", whoami.Identity)
+
+	// Build table rows.
+	var rows [][]string
+	rows = append(rows, []string{"Provider", whoami.Provider})
+	rows = append(rows, []string{"Identity", whoami.Identity})
+
 	if whoami.Principal != "" {
-		fmt.Fprintf(os.Stderr, "Principal: %s\n", whoami.Principal)
+		rows = append(rows, []string{"Principal", whoami.Principal})
 	}
+
 	if whoami.Account != "" {
-		fmt.Fprintf(os.Stderr, "Account: %s\n", whoami.Account)
+		rows = append(rows, []string{"Account", whoami.Account})
 	}
+
 	if whoami.Region != "" {
-		fmt.Fprintf(os.Stderr, "Region: %s\n", whoami.Region)
+		rows = append(rows, []string{"Region", whoami.Region})
 	}
+
 	if whoami.Expiration != nil {
-		fmt.Fprintf(os.Stderr, "Expires: %s\n", whoami.Expiration.Format("2006-01-02 15:04:05 MST"))
+		expiresStr := whoami.Expiration.Format("2006-01-02 15:04:05 MST")
+		duration := formatDuration(time.Until(*whoami.Expiration))
+
+		// Check if expiring within threshold and style duration accordingly.
+		timeUntilExpiration := time.Until(*whoami.Expiration)
+		var durationStyle lipgloss.Style
+		if timeUntilExpiration > 0 && timeUntilExpiration < expiringThresholdMinutes*time.Minute {
+			// Expiring soon - use red for duration.
+			durationStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorRed))
+		} else {
+			// Normal - use darker gray for duration.
+			durationStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#808080"))
+		}
+		expiresStr = fmt.Sprintf("%s %s", expiresStr, durationStyle.Render(fmt.Sprintf("(%s)", duration)))
+
+		rows = append(rows, []string{"Expires", expiresStr})
 	}
-	fmt.Fprintf(os.Stderr, "Last Updated: %s\n", whoami.LastUpdated.Format("2006-01-02 15:04:05 MST"))
+
+	rows = append(rows, []string{"Last Updated", whoami.LastUpdated.Format("2006-01-02 15:04:05 MST")})
+
+	// Create minimal charmbracelet table.
+	t := table.New().
+		Rows(rows...).
+		BorderTop(false).
+		BorderBottom(false).
+		BorderLeft(false).
+		BorderRight(false).
+		BorderRow(false).
+		BorderColumn(false).
+		StyleFunc(func(row, col int) lipgloss.Style {
+			if col == 0 {
+				// Key column - use cyan color.
+				return lipgloss.NewStyle().
+					Foreground(lipgloss.Color(theme.ColorCyan)).
+					Padding(0, 1, 0, 2)
+			}
+			// Value column - default color with padding.
+			return lipgloss.NewStyle().Padding(0, 1)
+		})
+
+	fmt.Fprintf(os.Stderr, "%s\n\n", t)
 }
 
 // redactHomeDir replaces occurrences of the homeDir at the start of v with "~" to avoid leaking user paths.
