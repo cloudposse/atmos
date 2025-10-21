@@ -369,10 +369,8 @@ func TestParseFlags(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			oldArgs := os.Args
-			defer func() { os.Args = oldArgs }()
-			os.Args = test.args
-			result := parseFlags()
+			// Use parseFlagsFromArgs to avoid os.Args manipulation.
+			result := parseFlagsFromArgs(test.args)
 			assert.Equal(t, test.expected, result)
 		})
 	}
@@ -417,6 +415,8 @@ func TestSetLogConfig(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
+			// setLogConfig() calls parseFlags() which reads os.Args.
+			// We manipulate os.Args here to test the integration.
 			oldArgs := os.Args
 			defer func() { os.Args = oldArgs }()
 			os.Args = test.args
@@ -532,15 +532,8 @@ func TestParseFlagsForPager(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Save original args
-			originalArgs := os.Args
-			defer func() { os.Args = originalArgs }()
-
-			// Set test args
-			os.Args = tt.args
-
-			// Parse flags
-			flags := parseFlags()
+			// Use parseFlagsFromArgs to avoid os.Args manipulation.
+			flags := parseFlagsFromArgs(tt.args)
 
 			// Check pager flag
 			if tt.expectedPager != "" {
@@ -585,7 +578,8 @@ func TestSetLogConfigWithPager(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Save original state
+			// setLogConfig() calls parseFlags() which reads os.Args.
+			// We manipulate os.Args here to test the integration.
 			originalArgs := os.Args
 			defer func() { os.Args = originalArgs }()
 
@@ -784,7 +778,8 @@ func TestEnvironmentVariableHandling(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Save original state
+			// setLogConfig() calls parseFlags() which reads os.Args.
+			// We manipulate os.Args here to test the integration.
 			originalArgs := os.Args
 			originalEnvVars := make(map[string]string)
 

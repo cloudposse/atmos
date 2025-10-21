@@ -17,11 +17,14 @@ func TestCliValidateSchema(t *testing.T) {
 	workDir := "./fixtures/scenarios/schemas-validation-positive"
 	t.Chdir(workDir)
 
-	// Create a pipe to capture stdout to check if terraform is executed correctly
+	// Create a pipe to capture stderr to check if validation is executed correctly
 	oldStderr := os.Stderr
 	r, w, _ := os.Pipe()
 	os.Stderr = w
-	os.Args = []string{"atmos", "validate", "schema"}
+
+	// Use SetArgs for Cobra command testing.
+	cmd.RootCmd.SetArgs([]string{"validate", "schema"})
+
 	err := cmd.Execute()
 	if err != nil {
 		t.Fatalf("Failed to execute 'ExecuteTerraform': %v", err)
