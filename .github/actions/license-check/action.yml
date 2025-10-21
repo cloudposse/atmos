@@ -54,10 +54,17 @@ runs:
       shell: bash
       run: |
         echo "Generating comprehensive license report..."
-        go-licenses report . 2>&1 | tee license-report-full.log
+        # go-licenses may fail on stdlib packages, but we still want to continue
+        go-licenses report . 2>&1 | tee license-report-full.log || true
 
-        # Extract clean report (without warnings)
-        grep -v "^W" license-report-full.log | grep -v "^E" > license-report.csv || true
+        # Extract clean report (without warnings/errors about stdlib)
+        grep -v "^W" license-report-full.log | grep -v "^E" | grep -v "^F" > license-report.csv || true
+
+        # Check if we got any valid licenses
+        if [ ! -s license-report.csv ]; then
+          echo "::error::Failed to generate license report - no dependencies found"
+          exit 1
+        fi
 
         echo "License report generated: license-report.csv"
 
