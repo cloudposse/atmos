@@ -235,7 +235,15 @@ All cmds/flags need Docusaurus docs in `website/docs/cli/commands/`. Use `<dl>` 
 All Product Requirement Documents (PRDs) MUST be placed in `docs/prd/`. Use kebab-case filenames. Examples: `command-registry-pattern.md`, `error-handling-strategy.md`, `testing-strategy.md`
 
 ### Pull Requests (MANDATORY)
-Follow template (what/why/references). `minor`/`major` PRs need blog post in `website/blog/` with `<!--truncate-->`. Tag: `feature`/`enhancement`/`bugfix` (users) or `contributors` (internal). Use `no-release` for docs-only.
+Follow template (what/why/references).
+
+**Blog Posts (CI Enforced):**
+- PRs labeled `minor` or `major` MUST include blog post in `website/blog/YYYY-MM-DD-feature-name.md`
+- Include `<!--truncate-->` after intro paragraph
+- Tag `feature`/`enhancement`/`bugfix` (user-facing) or `contributors` (internal changes)
+- CI will fail without blog post
+
+Use `no-release` label for docs-only changes.
 
 ### PR Tools
 Check status: `gh pr checks {pr} --repo cloudposse/atmos`
