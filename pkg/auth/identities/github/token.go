@@ -11,11 +11,16 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
+const (
+	// Log key for identity name.
+	logKeyIdentity = "identity"
+)
+
 // tokenIdentity implements GitHub token identity.
 // This identity represents GitHub access tokens, which can be obtained from multiple providers:
-// - github/user provider (OAuth Device Flow)
-// - github/app provider (GitHub App installation token)
-// - github/oidc provider (GitHub Actions OIDC)
+// - github/user provider (OAuth Device Flow).
+// - github/app provider (GitHub App installation token).
+// - github/oidc provider (GitHub Actions OIDC).
 type tokenIdentity struct {
 	name   string
 	config *schema.Identity
@@ -32,7 +37,7 @@ func NewTokenIdentity(name string, config *schema.Identity) (types.Identity, err
 		return nil, fmt.Errorf("%w: invalid identity kind for GitHub token: %s", errUtils.ErrInvalidIdentityKind, config.Kind)
 	}
 
-	log.Debug("Creating GitHub token identity", "identity", name)
+	log.Debug("Creating GitHub token identity", logKeyIdentity, name)
 
 	return &tokenIdentity{
 		name:   name,
@@ -70,13 +75,13 @@ func (i *tokenIdentity) Authenticate(ctx context.Context, providerCreds types.IC
 	// Verify we got GitHub credentials (can be from any GitHub provider).
 	switch creds := providerCreds.(type) {
 	case *types.GitHubUserCredentials:
-		log.Debug("GitHub token identity authenticated via user provider", "identity", i.name, "provider", creds.Provider)
+		log.Debug("GitHub token identity authenticated via user provider", logKeyIdentity, i.name, "provider", creds.Provider)
 		return creds, nil
 	case *types.GitHubAppCredentials:
-		log.Debug("GitHub token identity authenticated via app provider", "identity", i.name, "provider", creds.Provider)
+		log.Debug("GitHub token identity authenticated via app provider", logKeyIdentity, i.name, "provider", creds.Provider)
 		return creds, nil
 	case *types.OIDCCredentials:
-		log.Debug("GitHub token identity authenticated via OIDC provider", "identity", i.name, "provider", creds.Provider)
+		log.Debug("GitHub token identity authenticated via OIDC provider", logKeyIdentity, i.name, "provider", creds.Provider)
 		return creds, nil
 	default:
 		return nil, fmt.Errorf("%w: expected GitHub credentials, got %T", errUtils.ErrAuthenticationFailed, providerCreds)

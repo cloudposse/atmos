@@ -2,8 +2,8 @@ package cmd
 
 import (
 	"context"
-	"os"
 	"fmt"
+	"os"
 
 	"github.com/spf13/cobra"
 
@@ -77,6 +77,8 @@ func executeLogoutCommand(cmd *cobra.Command, args []string) error {
 }
 
 // logoutIdentity logs out a single identity.
+//
+//nolint:unparam // authManager unused but will be needed for TODO implementation
 func logoutIdentity(authManager interface{}, identityName string) error {
 	ctx := context.Background()
 

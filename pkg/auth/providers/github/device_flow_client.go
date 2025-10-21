@@ -16,8 +16,10 @@ import (
 )
 
 const (
-	defaultInterval = 5   // Default polling interval in seconds.
-	maxPollAttempts = 120 // Maximum polling attempts (10 minutes at 5s intervals).
+	defaultInterval             = 5   // Default polling interval in seconds.
+	slowDownDefaultPollInterval = 10  // Default slow-down interval when rate limited.
+	maxPollAttempts             = 120 // Maximum polling attempts (10 minutes at 5s intervals).
+	deviceFlowHTTPTimeout       = 30  // HTTP client timeout in seconds.
 )
 
 var (
@@ -39,7 +41,7 @@ func NewDeviceFlowClient(clientID string, scopes []string) DeviceFlowClient {
 		clientID: clientID,
 		scopes:   scopes,
 		httpClient: &http.Client{
-			Timeout: 30 * time.Second,
+			Timeout: deviceFlowHTTPTimeout * time.Second,
 		},
 	}
 }
@@ -92,6 +94,13 @@ func (c *realDeviceFlowClient) StartDeviceFlow(ctx context.Context) (*DeviceFlow
 	return &result, nil
 }
 
+// pollResult contains the result of a single poll attempt.
+type pollResult struct {
+	token          string
+	shouldContinue bool
+	newInterval    int
+}
+
 // PollForToken polls GitHub for the access token after user authorization.
 func (c *realDeviceFlowClient) PollForToken(ctx context.Context, deviceCode string, interval int) (string, error) {
 	defer perf.Track(nil, "github.realDeviceFlowClient.PollForToken")()
@@ -110,24 +119,69 @@ func (c *realDeviceFlowClient) PollForToken(ctx context.Context, deviceCode stri
 				return "", fmt.Errorf("%w: token polling timeout after %d attempts", errUtils.ErrAuthenticationFailed, maxPollAttempts)
 			}
 
-			token, shouldContinue, newInterval, err := c.pollOnce(ctx, deviceCode)
+			result, err := c.pollOnce(ctx, deviceCode)
 			if err != nil {
 				return "", err
 			}
-			if newInterval > 0 {
+			if result.newInterval > 0 {
 				// slow_down received - increase interval.
-				currentInterval = newInterval
+				currentInterval = result.newInterval
 				fmt.Fprintf(os.Stderr, "DEBUG: Adjusting poll interval to %d seconds\n", currentInterval)
 			}
-			if !shouldContinue {
-				return token, nil
+			if !result.shouldContinue {
+				return result.token, nil
 			}
 		}
 	}
 }
 
+// tokenResponse represents GitHub's access token response.
+type tokenResponse struct {
+	AccessToken string `json:"access_token"`
+	Error       string `json:"error"`
+	ErrorDesc   string `json:"error_description"`
+	Interval    int    `json:"interval"`
+}
+
+// logPollResponse logs the poll response for debugging.
+func logPollResponse(response *tokenResponse, bodyBytes []byte) {
+	switch {
+	case response.Error != "":
+		fmt.Fprintf(os.Stderr, "DEBUG: Poll response - error: %s, description: %s\n", response.Error, response.ErrorDesc)
+	case response.AccessToken != "":
+		fmt.Fprintf(os.Stderr, "DEBUG: Poll response - got access token (length: %d)\n", len(response.AccessToken))
+	default:
+		fmt.Fprintf(os.Stderr, "DEBUG: Poll response - unexpected: %s\n", string(bodyBytes))
+	}
+}
+
+// processPollResponse converts tokenResponse to pollResult.
+func processPollResponse(response *tokenResponse) (pollResult, error) {
+	switch response.Error {
+	case "":
+		if response.AccessToken == "" {
+			return pollResult{}, fmt.Errorf("%w: received empty access token", errUtils.ErrAuthenticationFailed)
+		}
+		return pollResult{token: response.AccessToken}, nil
+	case "authorization_pending":
+		return pollResult{shouldContinue: true}, nil
+	case "slow_down":
+		newInterval := response.Interval
+		if newInterval == 0 {
+			newInterval = slowDownDefaultPollInterval
+		}
+		return pollResult{shouldContinue: true, newInterval: newInterval}, nil
+	case "expired_token":
+		return pollResult{}, fmt.Errorf("%w: device code expired, please try again", errUtils.ErrAuthenticationFailed)
+	case "access_denied":
+		return pollResult{}, fmt.Errorf("%w: user denied authorization", errUtils.ErrAuthenticationFailed)
+	default:
+		return pollResult{}, fmt.Errorf("%w: %s: %s", errUtils.ErrAuthenticationFailed, response.Error, response.ErrorDesc)
+	}
+}
+
 // pollOnce performs a single poll attempt.
-func (c *realDeviceFlowClient) pollOnce(ctx context.Context, deviceCode string) (token string, shouldContinue bool, newInterval int, err error) {
+func (c *realDeviceFlowClient) pollOnce(ctx context.Context, deviceCode string) (pollResult, error) {
 	data := url.Values{}
 	data.Set("client_id", c.clientID)
 	data.Set("device_code", deviceCode)
@@ -135,7 +189,7 @@ func (c *realDeviceFlowClient) pollOnce(ctx context.Context, deviceCode string) 
 
 	req, err := http.NewRequestWithContext(ctx, "POST", accessTokenURL, strings.NewReader(data.Encode()))
 	if err != nil {
-		return "", false, 0, fmt.Errorf("%w: failed to create access token request: %v", errUtils.ErrAuthenticationFailed, err)
+		return pollResult{}, fmt.Errorf("%w: failed to create access token request: %v", errUtils.ErrAuthenticationFailed, err)
 	}
 
 	req.Header.Set("Accept", "application/json")
@@ -143,59 +197,21 @@ func (c *realDeviceFlowClient) pollOnce(ctx context.Context, deviceCode string) 
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return "", false, 0, fmt.Errorf("%w: failed to request access token: %v", errUtils.ErrAuthenticationFailed, err)
+		return pollResult{}, fmt.Errorf("%w: failed to request access token: %v", errUtils.ErrAuthenticationFailed, err)
 	}
 	defer resp.Body.Close()
 
-	// Read the full response body for debugging.
 	bodyBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return "", false, 0, fmt.Errorf("%w: failed to read response body: %v", errUtils.ErrAuthenticationFailed, err)
+		return pollResult{}, fmt.Errorf("%w: failed to read response body: %v", errUtils.ErrAuthenticationFailed, err)
 	}
 
-	var result struct {
-		AccessToken string `json:"access_token"`
-		Error       string `json:"error"`
-		ErrorDesc   string `json:"error_description"`
-		Interval    int    `json:"interval"` // GitHub may return new interval with slow_down.
+	var response tokenResponse
+	if err := json.Unmarshal(bodyBytes, &response); err != nil {
+		return pollResult{}, fmt.Errorf("%w: failed to decode access token response: %v (body: %s)", errUtils.ErrAuthenticationFailed, err, string(bodyBytes))
 	}
 
-	if err := json.Unmarshal(bodyBytes, &result); err != nil {
-		return "", false, 0, fmt.Errorf("%w: failed to decode access token response: %v (body: %s)", errUtils.ErrAuthenticationFailed, err, string(bodyBytes))
-	}
+	logPollResponse(&response, bodyBytes)
 
-	// Debug logging.
-	if result.Error != "" {
-		fmt.Fprintf(os.Stderr, "DEBUG: Poll response - error: %s, description: %s\n", result.Error, result.ErrorDesc)
-	} else if result.AccessToken != "" {
-		fmt.Fprintf(os.Stderr, "DEBUG: Poll response - got access token (length: %d)\n", len(result.AccessToken))
-	} else {
-		fmt.Fprintf(os.Stderr, "DEBUG: Poll response - unexpected: %s\n", string(bodyBytes))
-	}
-
-	// Check for errors.
-	switch result.Error {
-	case "":
-		// Success!
-		if result.AccessToken == "" {
-			return "", false, 0, fmt.Errorf("%w: received empty access token", errUtils.ErrAuthenticationFailed)
-		}
-		return result.AccessToken, false, 0, nil
-	case "authorization_pending":
-		// User hasn't authorized yet, continue polling.
-		return "", true, 0, nil
-	case "slow_down":
-		// We're polling too fast - return new interval (add 5 seconds per RFC 8628).
-		newInterval := result.Interval
-		if newInterval == 0 {
-			newInterval = 10 // Default to 10 seconds if not specified.
-		}
-		return "", true, newInterval, nil
-	case "expired_token":
-		return "", false, 0, fmt.Errorf("%w: device code expired, please try again", errUtils.ErrAuthenticationFailed)
-	case "access_denied":
-		return "", false, 0, fmt.Errorf("%w: user denied authorization", errUtils.ErrAuthenticationFailed)
-	default:
-		return "", false, 0, fmt.Errorf("%w: %s: %s", errUtils.ErrAuthenticationFailed, result.Error, result.ErrorDesc)
-	}
+	return processPollResponse(&response)
 }

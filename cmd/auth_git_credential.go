@@ -70,51 +70,13 @@ func handleGitCredentialGet(cmd *cobra.Command) error {
 
 	// Only provide credentials for github.com.
 	if !strings.Contains(input["host"], "github.com") {
-		// Return empty response for non-GitHub hosts.
-		return nil
+		return nil // Not GitHub, let other helpers try.
 	}
 
-	// Load atmos configuration.
-	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
+	// Get authenticated token.
+	token, err := getGitHubTokenForCredentialHelper(cmd)
 	if err != nil {
-		return fmt.Errorf("failed to load atmos config: %w", err)
-	}
-
-	// Create auth manager.
-	authManager, err := createAuthManager(&atmosConfig.Auth)
-	if err != nil {
-		return fmt.Errorf("failed to create auth manager: %w", err)
-	}
-
-	// Get identity from flag or use default.
-	identityName, _ := cmd.Flags().GetString("identity")
-	if identityName == "" {
-		defaultIdentity, err := authManager.GetDefaultIdentity()
-		if err != nil {
-			// No default identity, return empty (git will try other helpers).
-			return nil
-		}
-		identityName = defaultIdentity
-	}
-
-	// Check if identity is a GitHub provider.
-	providerKind, err := authManager.GetProviderKindForIdentity(identityName)
-	if err != nil || (providerKind != "github/user" && providerKind != "github/app") {
-		// Not a GitHub identity, return empty.
-		return nil
-	}
-
-	// Authenticate and get credentials.
-	ctx := context.Background()
-	whoami, err := authManager.Authenticate(ctx, identityName)
-	if err != nil {
-		return fmt.Errorf("authentication failed: %w", err)
-	}
-
-	// Extract GitHub token from environment variables.
-	token, ok := whoami.Environment["GITHUB_TOKEN"]
-	if !ok || token == "" {
-		return fmt.Errorf("%w: no GITHUB_TOKEN in authentication result", errUtils.ErrAuthenticationFailed)
+		return err
 	}
 
 	// Output credentials in git credential helper format.
@@ -122,6 +84,74 @@ func handleGitCredentialGet(cmd *cobra.Command) error {
 	fmt.Printf("password=%s\n", token)
 
 	return nil
+}
+
+// getGitHubTokenForCredentialHelper authenticates and returns a GitHub token for git credential helper.
+func getGitHubTokenForCredentialHelper(cmd *cobra.Command) (string, error) {
+	// Load atmos configuration.
+	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
+	if err != nil {
+		return "", fmt.Errorf("failed to load atmos config: %w", err)
+	}
+
+	// Create auth manager.
+	authManager, err := createAuthManager(&atmosConfig.Auth)
+	if err != nil {
+		return "", fmt.Errorf("failed to create auth manager: %w", err)
+	}
+
+	// Resolve identity name.
+	identityName, err := resolveGitCredentialIdentity(cmd, authManager)
+	if err != nil {
+		return "", err
+	}
+
+	// Authenticate and get credentials.
+	ctx := context.Background()
+	whoami, err := authManager.Authenticate(ctx, identityName)
+	if err != nil {
+		return "", fmt.Errorf("authentication failed: %w", err)
+	}
+
+	// Extract GitHub token from environment variables.
+	token, ok := whoami.Environment["GITHUB_TOKEN"]
+	if !ok || token == "" {
+		return "", fmt.Errorf("%w: no GITHUB_TOKEN in authentication result", errUtils.ErrAuthenticationFailed)
+	}
+
+	return token, nil
+}
+
+// resolveGitCredentialIdentity determines which identity to use for git credential helper.
+// Returns error=nil in all cases per git credential helper protocol.
+//
+//nolint:unparam // error always nil is intentional - git credential helper protocol requires success
+func resolveGitCredentialIdentity(cmd *cobra.Command, authManager interface {
+	GetDefaultIdentity() (string, error)
+	GetProviderKindForIdentity(string) (string, error)
+},
+) (string, error) {
+	// Get identity from flag or use default.
+	identityName, _ := cmd.Flags().GetString("identity")
+	if identityName == "" {
+		defaultIdentity, err := authManager.GetDefaultIdentity()
+		if err != nil {
+			// No default identity - this is not an error for git credential helpers.
+			// Return nil to let git try other helpers. This is intentional (nolint:nilerr).
+			return "", nil //nolint:nilerr
+		}
+		identityName = defaultIdentity
+	}
+
+	// Check if identity is a GitHub provider.
+	providerKind, err := authManager.GetProviderKindForIdentity(identityName)
+	if err != nil || (providerKind != "github/user" && providerKind != "github/app") {
+		// Not a GitHub identity - this is not an error for git credential helpers.
+		// Return empty string to let git try other helpers. This is intentional (nolint:nilerr).
+		return "", nil //nolint:nilerr
+	}
+
+	return identityName, nil
 }
 
 // readGitCredentialInput reads key=value pairs from stdin (git credential protocol).

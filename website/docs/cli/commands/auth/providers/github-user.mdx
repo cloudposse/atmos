@@ -11,19 +11,20 @@ import Mermaid from '@theme/Mermaid'
 # GitHub User Authentication
 
 :::note Purpose
-The `github/user` provider authenticates as a GitHub user using **OAuth Device Flow**, enabling secure browser-based authentication for CLI tools without exposing client secrets. Tokens are cached in your OS keychain for seamless re-authentication.
+The `github/user` provider authenticates as a GitHub user using **OAuth Device Flow** or **Web Application Flow**, enabling secure browser-based authentication for CLI tools. Tokens are cached in your OS keychain for seamless re-authentication.
 
-This provider is inspired by the excellent [ghtkn](https://github.com/suzuki-shunsuke/ghtkn) tool.
+This provider uses the same OAuth App as the official GitHub CLI (`gh`).
 :::
 
 ## Overview
 
 GitHub User authentication provides:
 
-- **Browser-based OAuth** - Secure Device Flow authentication without storing passwords
+- **Two OAuth Flows** - Choose between Device Flow (default) or Web Application Flow
+- **Browser-based Authentication** - Secure OAuth without storing passwords
 - **OS Keychain Integration** - Tokens stored securely in macOS Keychain, Windows Credential Manager, or Linux Secret Service
 - **Configurable Scopes** - Request only the GitHub permissions you need
-- **Automatic Token Refresh** - Tokens cached for 8 hours by default
+- **Automatic Token Caching** - Tokens cached for 8 hours by default
 - **Git Credential Helper** - Use with `git` commands automatically
 
 ## Authentication Flow
@@ -62,6 +63,54 @@ sequenceDiagram
     end
 `} />
 
+## Choosing Between Device and Web Flow
+
+### Device Flow (Default)
+
+**Best for:**
+- Remote/SSH sessions
+- Headless systems
+- Docker containers
+- CI/CD environments
+- Systems where browser access is limited
+
+**How it works:**
+1. Atmos displays a verification URL and code
+2. User manually visits the URL in any browser
+3. User enters the code to authorize
+4. Atmos polls GitHub until authorized
+
+**Pros:**
+- Works anywhere with network access
+- Browser can be on a different device
+- No local HTTP server required
+- More secure for remote scenarios
+
+### Web Application Flow
+
+**Best for:**
+- Local development workstations
+- Interactive sessions with browser access
+- Faster authentication experience
+
+**How it works:**
+1. Atmos starts a local HTTP server on `http://127.0.0.1:<random-port>`
+2. Browser opens automatically to GitHub authorization page
+3. User authorizes the app
+4. GitHub redirects back to local server with authorization code
+5. Local server exchanges code for token
+
+**Pros:**
+- Automatic browser opening
+- Faster - no manual code entry
+- Seamless user experience
+- One-click authorization
+
+**Cons:**
+- Requires local browser access
+- Won't work in SSH/remote sessions
+- Needs available local port
+
 ## Configuration
 
 ### Provider Configuration
@@ -71,13 +120,14 @@ auth:
   providers:
     github-user:
       kind: github/user
-      # client_id is optional - uses official Atmos OAuth App by default
-      client_id: "Iv1.abc123def456"  # Optional: Custom GitHub OAuth App Client ID
+      flow_type: device  # Optional: "device" (default) or "web"
+      # Client credentials are optional - uses GitHub CLI OAuth App by default
+      client_id: "178c6fc778ccc68e1d6a"  # Optional: Custom GitHub OAuth App Client ID
+      client_secret: "..."  # Optional: Required for web flow if using custom client_id
       scopes:  # Optional
         - repo
         - read:org
         - workflow
-      keychain_service: "atmos-github"  # Optional
       token_lifetime: 8h  # Optional, default 8h
 ```
 
@@ -95,9 +145,19 @@ auth:
 ## Parameters
 
 <dl>
+  <dt>`flow_type`</dt>
+  <dd>
+    **Optional** - OAuth flow type: `device` (default) or `web`.
+
+    - **Device Flow** (`device`): Displays a code for manual browser entry. Works on remote/headless systems.
+    - **Web Application Flow** (`web`): Opens browser automatically with local callback server. More streamlined for local development.
+
+    Default: `device`
+  </dd>
+
   <dt>`client_id`</dt>
   <dd>
-    **Optional** - GitHub OAuth App Client ID for Device Flow authentication.
+    **Optional** - GitHub OAuth App Client ID.
 
     If not specified, Atmos uses the **GitHub CLI OAuth App** (`178c6fc778ccc68e1d6a`), the same OAuth App used by the official `gh` CLI tool. This provides a zero-configuration setup identical to `gh auth login`.
 
@@ -106,11 +166,17 @@ auth:
     You can override this with your own OAuth App for custom scopes or organizational requirements.
   </dd>
 
+  <dt>`client_secret`</dt>
+  <dd>
+    **Optional** - GitHub OAuth App Client Secret (required for Web Application Flow if using custom `client_id`).
+
+    If not specified, Atmos uses the **GitHub CLI OAuth App client secret**, which is publicly available in the GitHub CLI source code. This is safe for native/CLI applications where the redirect URI (`http://127.0.0.1`) provides the security boundary rather than the client secret.
+
+    **Note**: Only required for `web` flow. Device Flow does not use client secrets.
+  </dd>
+
   <dt>`scopes`</dt>
   <dd>Array of GitHub OAuth scopes to request (optional, defaults to minimal read access)</dd>
-
-  <dt>`keychain_service`</dt>
-  <dd>OS keychain service name for storing tokens (optional, default: `atmos-github`)</dd>
 
   <dt>`token_lifetime`</dt>
   <dd>Token cache lifetime (optional, default: `8h`)</dd>

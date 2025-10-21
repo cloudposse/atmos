@@ -20,6 +20,11 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
+const (
+	// HTTP client timeout for GitHub API requests.
+	httpClientTimeout = 30 * time.Second
+)
+
 // appProvider implements GitHub App authentication.
 type appProvider struct {
 	name           string
@@ -67,29 +72,9 @@ func NewAppProvider(name string, config *schema.Provider) (types.Provider, error
 		return nil, fmt.Errorf("%w: %v", errUtils.ErrInvalidProviderConfig, err)
 	}
 
-	// Extract optional permissions.
-	permissions := make(map[string]string)
-	if permsInterface, ok := spec["permissions"]; ok {
-		if permsMap, ok := permsInterface.(map[string]interface{}); ok {
-			for k, v := range permsMap {
-				if vStr, ok := v.(string); ok {
-					permissions[k] = vStr
-				}
-			}
-		}
-	}
-
-	// Extract optional repositories.
-	var repositories []string
-	if reposInterface, ok := spec["repositories"]; ok {
-		if reposList, ok := reposInterface.([]interface{}); ok {
-			for _, repo := range reposList {
-				if repoStr, ok := repo.(string); ok {
-					repositories = append(repositories, repoStr)
-				}
-			}
-		}
-	}
+	// Extract optional permissions and repositories.
+	permissions := extractPermissions(spec)
+	repositories := extractRepositories(spec)
 
 	return &appProvider{
 		name:           name,
@@ -100,57 +85,115 @@ func NewAppProvider(name string, config *schema.Provider) (types.Provider, error
 		permissions:    permissions,
 		repositories:   repositories,
 		httpClient: &http.Client{
-			Timeout: 30 * time.Second,
+			Timeout: httpClientTimeout,
 		},
 	}, nil
 }
 
-// loadPrivateKey loads the GitHub App private key from file or environment variable.
-func loadPrivateKey(spec map[string]interface{}) (*rsa.PrivateKey, error) {
-	defer perf.Track(nil, "github.loadPrivateKey")()
+// extractPermissions extracts GitHub App permissions from the provider spec.
+func extractPermissions(spec map[string]interface{}) map[string]string {
+	permissions := make(map[string]string)
+	permsInterface, ok := spec["permissions"]
+	if !ok {
+		return permissions
+	}
 
-	var pemData []byte
+	permsMap, ok := permsInterface.(map[string]interface{})
+	if !ok {
+		return permissions
+	}
 
+	for k, v := range permsMap {
+		if vStr, ok := v.(string); ok {
+			permissions[k] = vStr
+		}
+	}
+
+	return permissions
+}
+
+// extractRepositories extracts GitHub App repositories from the provider spec.
+func extractRepositories(spec map[string]interface{}) []string {
+	var repositories []string
+	reposInterface, ok := spec["repositories"]
+	if !ok {
+		return repositories
+	}
+
+	reposList, ok := reposInterface.([]interface{})
+	if !ok {
+		return repositories
+	}
+
+	for _, repo := range reposList {
+		if repoStr, ok := repo.(string); ok {
+			repositories = append(repositories, repoStr)
+		}
+	}
+
+	return repositories
+}
+
+// loadPrivateKeyPEM loads PEM data from file or environment variable.
+func loadPrivateKeyPEM(spec map[string]interface{}) ([]byte, error) {
 	// Try private_key_path first.
 	if keyPath, ok := spec["private_key_path"].(string); ok && keyPath != "" {
 		data, err := os.ReadFile(keyPath)
 		if err != nil {
 			return nil, fmt.Errorf("failed to read private key from %s: %w", keyPath, err)
 		}
-		pemData = data
-	} else if keyEnv, ok := spec["private_key_env"].(string); ok && keyEnv != "" {
-		// Try private_key_env.
-		data := os.Getenv(keyEnv)
+		return data, nil
+	}
+
+	// Try private_key_env.
+	if keyEnv, ok := spec["private_key_env"].(string); ok && keyEnv != "" {
+		data := os.Getenv(keyEnv) //nolint:forbidigo // GitHub App private key from environment is expected pattern.
 		if data == "" {
-			return nil, fmt.Errorf("environment variable %s is not set or empty", keyEnv)
+			return nil, fmt.Errorf("%w: %s", errUtils.ErrPrivateKeyEnvNotSet, keyEnv)
 		}
-		pemData = []byte(data)
-	} else {
-		return nil, fmt.Errorf("either private_key_path or private_key_env must be specified")
+		return []byte(data), nil
 	}
 
-	// Parse PEM block.
-	block, _ := pem.Decode(pemData)
-	if block == nil {
-		return nil, fmt.Errorf("failed to parse PEM block containing the private key")
+	return nil, errUtils.ErrPrivateKeyConfigMissing
+}
+
+// parseRSAPrivateKey parses an RSA private key from PEM bytes, trying both PKCS1 and PKCS8 formats.
+func parseRSAPrivateKey(pemBytes []byte) (*rsa.PrivateKey, error) {
+	// Try PKCS1 format first.
+	privateKey, err := x509.ParsePKCS1PrivateKey(pemBytes)
+	if err == nil {
+		return privateKey, nil
 	}
 
-	// Parse RSA private key.
-	privateKey, err := x509.ParsePKCS1PrivateKey(block.Bytes)
+	// Try PKCS8 format.
+	key, err := x509.ParsePKCS8PrivateKey(pemBytes)
 	if err != nil {
-		// Try PKCS8 format.
-		key, err := x509.ParsePKCS8PrivateKey(block.Bytes)
-		if err != nil {
-			return nil, fmt.Errorf("failed to parse private key: %w", err)
-		}
-		var ok bool
-		privateKey, ok = key.(*rsa.PrivateKey)
-		if !ok {
-			return nil, fmt.Errorf("private key is not RSA format")
-		}
+		return nil, fmt.Errorf("failed to parse private key: %w", err)
+	}
+
+	privateKey, ok := key.(*rsa.PrivateKey)
+	if !ok {
+		return nil, errUtils.ErrPrivateKeyNotRSA
 	}
 
 	return privateKey, nil
+}
+
+// loadPrivateKey loads the GitHub App private key from file or environment variable.
+func loadPrivateKey(spec map[string]interface{}) (*rsa.PrivateKey, error) {
+	defer perf.Track(nil, "github.loadPrivateKey")()
+
+	pemData, err := loadPrivateKeyPEM(spec)
+	if err != nil {
+		return nil, err
+	}
+
+	block, _ := pem.Decode(pemData)
+	if block == nil {
+		return nil, errUtils.ErrPEMDecodeFailed
+	}
+
+	return parseRSAPrivateKey(block.Bytes)
 }
 
 // Name returns the provider name.
@@ -254,7 +297,7 @@ func (p *appProvider) getInstallationToken(ctx context.Context, jwtToken string)
 
 	if resp.StatusCode != http.StatusCreated {
 		bodyBytes, _ := io.ReadAll(resp.Body)
-		return "", time.Time{}, fmt.Errorf("installation token request failed with status %d: %s", resp.StatusCode, string(bodyBytes))
+		return "", time.Time{}, fmt.Errorf("%w: status %d: %s", errUtils.ErrInstallationTokenRequest, resp.StatusCode, string(bodyBytes))
 	}
 
 	var result struct {

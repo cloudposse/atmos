@@ -16,6 +16,14 @@ import (
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
 
+const (
+	// Display width for the login success box.
+	loginBoxWidth = 60
+
+	// Display width for field labels.
+	loginLabelWidth = 12
+)
+
 // authLoginCmd logs in using a configured identity.
 var authLoginCmd = &cobra.Command{
 	Use:   "login",
@@ -61,11 +69,11 @@ func executeAuthLoginCommand(cmd *cobra.Command, args []string) error {
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(lipgloss.Color(theme.ColorGreen)).
 		Padding(1, 2).
-		Width(60)
+		Width(loginBoxWidth)
 
 	labelStyle := lipgloss.NewStyle().
 		Foreground(lipgloss.Color(theme.ColorDarkGray)).
-		Width(12)
+		Width(loginLabelWidth)
 
 	valueStyle := lipgloss.NewStyle().
 		Foreground(lipgloss.Color(theme.ColorWhite)).

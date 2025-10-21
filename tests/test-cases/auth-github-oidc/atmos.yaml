@@ -1,0 +1,28 @@
+# Atmos configuration for GitHub OIDC authentication testing
+#
+# This fixture demonstrates how to configure GitHub OIDC authentication for use in GitHub Actions.
+# The OIDC provider automatically uses the ACTIONS_ID_TOKEN_REQUEST_URL and ACTIONS_ID_TOKEN_REQUEST_TOKEN
+# environment variables that GitHub Actions provides.
+
+auth:
+  providers:
+    # GitHub OIDC provider for GitHub Actions workflows
+    github-oidc:
+      kind: github/oidc
+      spec:
+        # Optional: Specify custom audience (defaults to repository URL)
+        # audience: "https://github.com/cloudposse"
+
+  identities:
+    # Identity that uses GitHub Actions OIDC token
+    github-actions:
+      kind: github/token
+      via:
+        provider: github-oidc
+      # This identity can be used in GitHub Actions workflows to authenticate to external services
+      # The token has claims that include repository, workflow, and actor information
+
+# Example stack configuration that uses GitHub OIDC identity
+stacks:
+  name_pattern: "{stage}"
+  base_path: "stacks"

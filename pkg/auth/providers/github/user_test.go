@@ -100,26 +100,35 @@ func TestNewUserProvider(t *testing.T) {
 					assert.ErrorIs(t, err, tt.errorType)
 				}
 				assert.Nil(t, provider)
-			} else {
-				assert.NoError(t, err)
-				assert.NotNil(t, provider)
-				assert.Equal(t, tt.provName, provider.Name())
-				assert.Equal(t, KindUser, provider.Kind())
-
-				// Verify client_id defaults or custom value.
-				userProv := provider.(*userProvider)
-				if tt.config.Spec != nil {
-					if customClientID, ok := tt.config.Spec["client_id"].(string); ok && customClientID != "" {
-						assert.Equal(t, customClientID, userProv.clientID)
-					} else {
-						assert.Equal(t, DefaultClientID, userProv.clientID)
-					}
-				} else {
-					assert.Equal(t, DefaultClientID, userProv.clientID)
-				}
+				return
 			}
+
+			// Happy path assertions.
+			assert.NoError(t, err)
+			assert.NotNil(t, provider)
+			assert.Equal(t, tt.provName, provider.Name())
+			assert.Equal(t, KindUser, provider.Kind())
+
+			// Verify client_id defaults or custom value.
+			userProv := provider.(*userProvider)
+			expectedClientID := getExpectedClientID(tt.config)
+			assert.Equal(t, expectedClientID, userProv.clientID)
 		})
 	}
+}
+
+// getExpectedClientID returns the expected client ID from config or the default.
+func getExpectedClientID(config *schema.Provider) string {
+	if config.Spec == nil {
+		return DefaultClientID
+	}
+
+	customClientID, ok := config.Spec["client_id"].(string)
+	if ok && customClientID != "" {
+		return customClientID
+	}
+
+	return DefaultClientID
 }
 
 // TestUserProvider_Authenticate_WithCachedToken removed - provider no longer caches tokens.
