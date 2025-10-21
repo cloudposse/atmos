@@ -9,13 +9,12 @@ import (
 	"strings"
 
 	"github.com/bmatcuk/doublestar/v4"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	cp "github.com/otiai10/copy"
 	"github.com/pkg/errors"
 	"github.com/samber/lo"
-	"go.yaml.in/yaml/v3"
+	"gopkg.in/yaml.v3"
 
-	log "github.com/cloudposse/atmos/pkg/logger"
-	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -45,7 +44,6 @@ var (
 )
 
 type processTargetsParams struct {
-	AtmosConfig          *schema.AtmosConfiguration
 	IndexSource          int
 	Source               *schema.AtmosVendorSource
 	TemplateData         struct{ Component, Version string }
@@ -63,23 +61,12 @@ type executeVendorOptions struct {
 	dryRun               bool
 }
 
-type vendorSourceParams struct {
-	atmosConfig          *schema.AtmosConfiguration
-	sources              []schema.AtmosVendorSource
-	component            string
-	tags                 []string
-	vendorConfigFileName string
-	vendorConfigFilePath string
-}
-
 // ReadAndProcessVendorConfigFile reads and processes the Atmos vendoring config file `vendor.yaml`.
 func ReadAndProcessVendorConfigFile(
 	atmosConfig *schema.AtmosConfiguration,
 	vendorConfigFile string,
 	checkGlobalConfig bool,
 ) (schema.AtmosVendorConfig, bool, string, error) {
-	defer perf.Track(atmosConfig, "exec.ReadAndProcessVendorConfigFile")()
-
 	var vendorConfig schema.AtmosVendorConfig
 	vendorConfig.Spec.Sources = []schema.AtmosVendorSource{} // Initialize empty sources slice
 
@@ -199,8 +186,6 @@ func mergeVendorConfigFiles(configFiles []string) (schema.AtmosVendorConfig, err
 
 // ExecuteAtmosVendorInternal downloads the artifacts from the sources and writes them to the targets.
 func ExecuteAtmosVendorInternal(params *executeVendorOptions) error {
-	defer perf.Track(nil, "exec.ExecuteAtmosVendorInternal")()
-
 	var err error
 	vendorConfigFilePath := filepath.Dir(params.vendorConfigFileName)
 
@@ -228,15 +213,7 @@ func ExecuteAtmosVendorInternal(params *executeVendorOptions) error {
 		return err
 	}
 
-	sourceParams := &vendorSourceParams{
-		atmosConfig:          params.atmosConfig,
-		sources:              sources,
-		component:            params.component,
-		tags:                 params.tags,
-		vendorConfigFileName: params.vendorConfigFileName,
-		vendorConfigFilePath: vendorConfigFilePath,
-	}
-	packages, err := processAtmosVendorSource(sourceParams)
+	packages, err := processAtmosVendorSource(sources, params.component, params.tags, params.vendorConfigFileName, vendorConfigFilePath)
 	if err != nil {
 		return err
 	}
@@ -280,34 +257,29 @@ func validateTagsAndComponents(
 	return nil
 }
 
-func processAtmosVendorSource(params *vendorSourceParams) ([]pkgAtmosVendor, error) {
+func processAtmosVendorSource(sources []schema.AtmosVendorSource, component string, tags []string, vendorConfigFileName, vendorConfigFilePath string) ([]pkgAtmosVendor, error) {
 	var packages []pkgAtmosVendor
-	for indexSource := range params.sources {
-		if shouldSkipSource(&params.sources[indexSource], params.component, params.tags) {
+	for indexSource := range sources {
+		if shouldSkipSource(&sources[indexSource], component, tags) {
 			continue
 		}
 
-		if err := validateSourceFields(&params.sources[indexSource], params.vendorConfigFileName); err != nil {
+		if err := validateSourceFields(&sources[indexSource], vendorConfigFileName); err != nil {
 			return nil, err
 		}
 
 		tmplData := struct {
 			Component string
 			Version   string
-		}{params.sources[indexSource].Component, params.sources[indexSource].Version}
+		}{sources[indexSource].Component, sources[indexSource].Version}
 
 		// Parse 'source' template
-		uri, err := ProcessTmpl(params.atmosConfig, fmt.Sprintf("source-%d", indexSource), params.sources[indexSource].Source, tmplData, false)
+		uri, err := ProcessTmpl(fmt.Sprintf("source-%d", indexSource), sources[indexSource].Source, tmplData, false)
 		if err != nil {
 			return nil, err
 		}
 
-		// Normalize the URI to handle triple-slash pattern (///), which indicates cloning from
-		// the root of the repository. This pattern broke in go-getter v1.7.9 due to CVE-2025-8959
-		// security fixes.
-		uri = normalizeVendorURI(uri)
-
-		useOciScheme, useLocalFileSystem, sourceIsLocalFile, err := determineSourceType(&uri, params.vendorConfigFilePath)
+		useOciScheme, useLocalFileSystem, sourceIsLocalFile, err := determineSourceType(&uri, vendorConfigFilePath)
 		if err != nil {
 			return nil, err
 		}
@@ -315,9 +287,9 @@ func processAtmosVendorSource(params *vendorSourceParams) ([]pkgAtmosVendor, err
 			err = u.ValidateURI(uri)
 			if err != nil {
 				if strings.Contains(uri, "..") {
-					return nil, fmt.Errorf("invalid URI for component %s: %w: Please ensure the source is a valid local path", params.sources[indexSource].Component, err)
+					return nil, fmt.Errorf("invalid URI for component %s: %w: Please ensure the source is a valid local path", sources[indexSource].Component, err)
 				}
-				return nil, fmt.Errorf("invalid URI for component %s: %w", params.sources[indexSource].Component, err)
+				return nil, fmt.Errorf("invalid URI for component %s: %w", sources[indexSource].Component, err)
 			}
 		}
 
@@ -326,11 +298,10 @@ func processAtmosVendorSource(params *vendorSourceParams) ([]pkgAtmosVendor, err
 
 		// Process each target within the source
 		pkgs, err := processTargets(&processTargetsParams{
-			AtmosConfig:          params.atmosConfig,
 			IndexSource:          indexSource,
-			Source:               &params.sources[indexSource],
+			Source:               &sources[indexSource],
 			TemplateData:         tmplData,
-			VendorConfigFilePath: params.vendorConfigFilePath,
+			VendorConfigFilePath: vendorConfigFilePath,
 			URI:                  uri,
 			PkgType:              pType,
 			SourceIsLocalFile:    sourceIsLocalFile,
@@ -356,7 +327,7 @@ func determinePackageType(useOciScheme, useLocalFileSystem bool) pkgType {
 func processTargets(params *processTargetsParams) ([]pkgAtmosVendor, error) {
 	var packages []pkgAtmosVendor
 	for indexTarget, tgt := range params.Source.Targets {
-		target, err := ProcessTmpl(params.AtmosConfig, fmt.Sprintf("target-%d-%d", params.IndexSource, indexTarget), tgt, params.TemplateData, false)
+		target, err := ProcessTmpl(fmt.Sprintf("target-%d-%d", params.IndexSource, indexTarget), tgt, params.TemplateData, false)
 		if err != nil {
 			return nil, err
 		}
@@ -453,76 +424,8 @@ func validateSourceFields(s *schema.AtmosVendorSource, vendorConfigFileName stri
 func shouldSkipSource(s *schema.AtmosVendorSource, component string, tags []string) bool {
 	// Skip if component or tags do not match
 	// If `--component` is specified, and it's not equal to this component, skip this component
-	// If `--tags` list is specified, and it does not contain any tags defined in this component, skip this component.
+	// If `--tags` list is specified, and it does not contain any tags defined in this component, skip this component
 	return (component != "" && s.Component != component) || (len(tags) > 0 && len(lo.Intersect(tags, s.Tags)) == 0)
-}
-
-// normalizeVendorURI Normalizes vendor source URIs to handle all patterns consistently.
-// It uses go-getter syntax where the double-slash (//) is a delimiter between the repository URL
-// and the subdirectory path within that repository. The dot (.) indicates the current
-// directory (root of the repository).
-//
-// This function handles multiple normalization cases:
-// 1. Converts triple-slash (///) to double-slash-dot (//.) for root directory
-// 2. Adds //. to Git URLs without subdirectory delimiter
-// 3. Preserves existing valid patterns unchanged
-//
-// Examples:
-//   - "github.com/repo.git///?ref=v1.0.0" -> "github.com/repo.git//.?ref=v1.0.0"
-//   - "github.com/repo.git?ref=v1.0.0" -> "github.com/repo.git//.?ref=v1.0.0"
-//   - "github.com/repo.git///some/path?ref=v1.0.0" -> "github.com/repo.git//some/path?ref=v1.0.0"
-//   - "github.com/repo.git//some/path?ref=v1.0.0" -> unchanged
-//
-//nolint:godot // Private function, follows standard Go documentation style.
-func normalizeVendorURI(uri string) string {
-	// Skip normalization for special URI types
-	if isFileURI(uri) || isOCIURI(uri) || isS3URI(uri) || isLocalPath(uri) || isNonGitHTTPURI(uri) {
-		return uri
-	}
-
-	// Handle triple-slash pattern first
-	if containsTripleSlash(uri) {
-		uri = normalizeTripleSlash(uri)
-	}
-
-	// Add //. to Git URLs without subdirectory
-	if needsDoubleSlashDot(uri) {
-		uri = appendDoubleSlashDot(uri)
-		log.Debug("Added //. to Git URL without subdirectory", "normalized", uri)
-	}
-
-	return uri
-}
-
-// normalizeTripleSlash converts triple-slash patterns to appropriate double-slash patterns.
-// Uses go-getter's SourceDirSubdir for robust parsing across all Git platforms.
-func normalizeTripleSlash(uri string) string {
-	// Use go-getter to parse the URI and extract subdirectory
-	// Note: source will include query parameters from the original URI
-	source, subdir := parseSubdirFromTripleSlash(uri)
-
-	// Separate query parameters from source if present
-	var queryParams string
-	if queryPos := strings.Index(source, "?"); queryPos != -1 {
-		queryParams = source[queryPos:]
-		source = source[:queryPos]
-	}
-
-	// Determine the normalized form based on subdirectory
-	var normalized string
-	if subdir == "" {
-		// Root of repository case: convert /// to //.
-		normalized = source + "//." + queryParams
-		log.Debug("Normalized triple-slash to double-slash-dot for repository root",
-			"original", uri, "normalized", normalized)
-	} else {
-		// Path specified after triple slash: convert /// to //
-		normalized = source + "//" + subdir + queryParams
-		log.Debug("Normalized triple-slash to double-slash with path",
-			"original", uri, "normalized", normalized)
-	}
-
-	return normalized
 }
 
 func determineSourceType(uri *string, vendorConfigFilePath string) (bool, bool, bool, error) {
@@ -535,7 +438,7 @@ func determineSourceType(uri *string, vendorConfigFilePath string) (bool, bool, 
 		return useOciScheme, useLocalFileSystem, sourceIsLocalFile, nil
 	}
 
-	absPath, err := u.JoinPathAndValidate(filepath.ToSlash(vendorConfigFilePath), *uri)
+	absPath, err := u.JoinAbsolutePathWithPath(filepath.ToSlash(vendorConfigFilePath), *uri)
 	// if URI contain path traversal is path should be resolved
 	if err != nil && strings.Contains(*uri, "..") && !strings.HasPrefix(*uri, "file://") {
 		return useOciScheme, useLocalFileSystem, sourceIsLocalFile, fmt.Errorf("invalid source path '%s': %w", *uri, err)
@@ -583,7 +486,7 @@ func copyToTarget(tempDir, targetPath string, s *schema.AtmosVendorSource, sourc
 // Based on the vendor source configuration. It uses the provided patterns in ExcludedPaths.
 // And IncludedPaths to filter files during the copy operation.
 //
-// Parameters:
+// Parameters:.
 //   - atmosConfig: The CLI configuration for logging.
 //   - tempDir: The temporary directory containing the files to copy.
 //   - s: The vendor source configuration containing exclusion/inclusion patterns.
@@ -657,4 +560,11 @@ func shouldIncludeFile(src string, includedPaths []string, trimmedSrc string) (b
 		log.Debug("Excluding path since it does not match any pattern from 'included_paths'", "path", trimmedSrc)
 		return true, nil
 	}
+}
+
+// updateVendorConfigFile updates only the version fields in the vendor configuration file.
+func updateVendorConfigFile(updatedVersions map[string]string, vendorConfigFile string) error {
+	// Use the simple YAML updater that preserves formatting and comments
+	updater := NewSimpleYAMLVersionUpdater()
+	return updater.UpdateVersionsInFile(vendorConfigFile, updatedVersions)
 }

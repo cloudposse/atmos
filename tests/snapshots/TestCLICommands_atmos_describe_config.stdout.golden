@@ -67,6 +67,9 @@
         "enabled": false,
         "timeout": 0,
         "datasources": null
+      },
+      "import": {
+        "process_without_context": false
       }
     }
   },
@@ -186,20 +189,5 @@
         "terraform": {}
       }
     }
-  },
-  "auth": {
-    "logs": {
-      "file": "",
-      "level": ""
-    },
-    "providers": null,
-    "identities": null
-  },
-  "profiler": {
-    "enabled": false,
-    "port": 0,
-    "host": "",
-    "file": "",
-    "profile_type": ""
   }
 }
