@@ -30,4 +30,4 @@ indent_size = 4
 
 # Shell scripts
 [*.sh]
-indent_size = 2 
+indent_size = 2
