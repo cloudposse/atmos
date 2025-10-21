@@ -38,4 +38,3 @@ components:
         {{ if .Config.enable_logging }}
         TF_VAR_enable_logging: "{{ .Config.enable_logging }}"
         {{ end }}
-

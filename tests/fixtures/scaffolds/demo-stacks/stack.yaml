@@ -24,4 +24,4 @@ components:
         private_subnets: ["10.0.10.0/24", "10.0.11.0/24", "10.0.12.0/24"]
         tags:
           Environment: "{{ .vars.stage }}"
-          Tenant: "{{ .vars.tenant }}" 
+          Tenant: "{{ .vars.tenant }}"
