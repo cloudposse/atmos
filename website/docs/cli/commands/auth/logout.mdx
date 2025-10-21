@@ -11,7 +11,9 @@ import Terminal from '@site/src/components/Terminal'
 import Intro from '@site/src/components/Intro'
 
 <Intro>
-Use this command to securely remove locally cached authentication credentials from the system keyring and credential files. This is useful when switching identities, ending work sessions, or troubleshooting authentication issues.
+Most cloud practitioners never log out of their cloud provider identities—not because they don't want to, but because the tooling doesn't make it easy. Credentials persist in `~/.aws/credentials`, `~/.azure/`, and `~/.config/gcloud/` long after they should have been removed, creating security risks and credential sprawl.
+
+Use this command to securely remove locally cached credentials from the system keyring and credential files. This makes credential cleanup explicit, comprehensive, and easy when switching identities, ending work sessions, or troubleshooting authentication issues.
 </Intro>
 
 :::warning Local Credentials Only
