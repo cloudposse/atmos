@@ -64,7 +64,9 @@ func TestMainTerraformPlanDiffIntegration(t *testing.T) {
 	// Change to the tests/fixtures/scenarios/plan-diff directory
 	t.Chdir("tests/fixtures/scenarios/plan-diff")
 
-	// Capture the original arguments
+	// This integration test calls main() directly (via runMainWithExitCode) which reads os.Args internally.
+	// Using os.Args is necessary for testing the complete main() execution path.
+	// main() has no parameters and must read os.Args to get command-line arguments.
 	origArgs := os.Args
 	defer func() { os.Args = origArgs }()
 
