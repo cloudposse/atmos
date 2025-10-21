@@ -84,14 +84,14 @@ runs:
 
         # Count dependencies requiring attribution (Apache-2.0, BSD variants)
         ATTRIBUTION_COUNT=$(grep -v "^W" license-report-full.log | grep -v "^E" | grep -v "^F" | \
-          grep -cE "Apache-2.0|BSD-.*Clause" || echo "0")
+          grep -cE "Apache-2.0|BSD-.*Clause" || true)
 
         echo "Attribution-required dependencies: $ATTRIBUTION_COUNT" >> license-summary.md
         echo "count=$ATTRIBUTION_COUNT" >> $GITHUB_OUTPUT
 
         # Count unknown licenses
         UNKNOWN_COUNT=$(grep -v "^W" license-report-full.log | grep -v "^E" | grep -v "^F" | \
-          grep -c "Unknown" || echo "0")
+          grep -c "Unknown" || true)
 
         echo "Unknown-license dependencies: $UNKNOWN_COUNT" >> license-summary.md
         echo "unknown=$UNKNOWN_COUNT" >> $GITHUB_OUTPUT
@@ -111,7 +111,7 @@ runs:
     - name: Check for unknown licenses
       shell: bash
       run: |
-        UNKNOWN=$(grep -v "^W" license-report-full.log | grep -v "^E" | grep -v "^F" | grep -c "Unknown" || echo "0")
+        UNKNOWN=$(grep -v "^W" license-report-full.log | grep -v "^E" | grep -v "^F" | grep -c "Unknown" || true)
 
         if [ "$UNKNOWN" -gt 0 ]; then
           echo "::warning::Found $UNKNOWN dependencies with unknown licenses"
@@ -128,7 +128,7 @@ runs:
       shell: bash
       run: |
         ATTRIBUTION_COUNT=$(grep -v "^W" license-report-full.log | grep -v "^E" | grep -v "^F" | \
-          grep -cE "Apache-2.0|BSD-.*Clause" || echo "0")
+          grep -cE "Apache-2.0|BSD-.*Clause" || true)
 
         if [ ! -f "NOTICE" ]; then
           echo "::error::NOTICE file is missing but $ATTRIBUTION_COUNT dependencies require attribution"
