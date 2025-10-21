@@ -98,15 +98,15 @@ func (s *systemKeyringStore) Delete(alias string) error {
 	return nil
 }
 
-// List returns all stored credential aliases.
+// List is not supported by the system keyring store due to go-keyring library limitations.
+// Returns an error combining ErrCredentialStore, ErrNotSupported, and ErrListNotSupported.
+// Callers should use errors.Is to detect the not-supported condition and treat List as unsupported.
 func (s *systemKeyringStore) List() ([]string, error) {
 	defer perf.Track(nil, "credentials.systemKeyringStore.List")()
 
 	// Note: go-keyring doesn't provide a list function.
-	// This is a limitation - we'd need to maintain a separate index.
+	// This is a limitation - we'd need to maintain a separate index
 	// or use a different storage backend for full functionality.
-	// Join both the generic store error and specific not-supported sentinel
-	// so callers can detect either condition with errors.Is.
 	return nil, errors.Join(ErrCredentialStore, ErrNotSupported, ErrListNotSupported)
 }
 
