@@ -11,13 +11,18 @@ import (
 
 const (
 	// MockExpirationYear is the fixed year used for deterministic testing timestamps.
-	MockExpirationYear = 2025
+	// Using a far-future year ensures tests don't become flaky due to expiration checks.
+	MockExpirationYear = 2099
 	// MockExpirationMonth is the fixed month used for deterministic testing timestamps.
-	MockExpirationMonth = 10
+	MockExpirationMonth = 12
 	// MockExpirationDay is the fixed day used for deterministic testing timestamps.
-	MockExpirationDay = 18
+	MockExpirationDay = 31
 	// MockExpirationHour is the fixed hour used for deterministic testing timestamps.
-	MockExpirationHour = 17
+	MockExpirationHour = 23
+	// MockExpirationMinute is the fixed minute used for deterministic testing timestamps.
+	MockExpirationMinute = 59
+	// MockExpirationSecond is the fixed second used for deterministic testing timestamps.
+	MockExpirationSecond = 59
 )
 
 // Provider is a mock authentication provider for testing purposes only.
@@ -67,7 +72,7 @@ func (p *Provider) Authenticate(ctx context.Context) (types.ICredentials, error)
 	defer perf.Track(nil, "mock.Provider.Authenticate")()
 
 	// Use a fixed timestamp for deterministic testing.
-	// Use 2025-10-18 17:00:00 UTC which is 12:00:00 CDT.
+	// Use 2099-12-31 23:00:00 UTC - a far-future date to avoid expiration-related test failures.
 	expiration := time.Date(MockExpirationYear, MockExpirationMonth, MockExpirationDay, MockExpirationHour, 0, 0, 0, time.UTC)
 
 	return &Credentials{

@@ -40,12 +40,15 @@ func (i *Identity) GetProviderName() (string, error) {
 func (i *Identity) Authenticate(ctx context.Context, baseCreds types.ICredentials) (types.ICredentials, error) {
 	// For mock identities, we just return new mock credentials.
 	// In a real implementation, this would use baseCreds to assume a role or similar.
+	// Use a fixed timestamp far in the future for deterministic testing and snapshot stability.
+	// This ensures tests don't become flaky due to expiration checks.
+	fixedExpiration := time.Date(MockExpirationYear, MockExpirationMonth, MockExpirationDay, MockExpirationHour, MockExpirationMinute, MockExpirationSecond, 0, time.UTC)
 	return &Credentials{
 		AccessKeyID:     fmt.Sprintf("MOCK_KEY_%s", i.name),
 		SecretAccessKey: fmt.Sprintf("MOCK_SECRET_%s", i.name),
 		SessionToken:    fmt.Sprintf("MOCK_TOKEN_%s", i.name),
 		Region:          "us-east-1",
-		Expiration:      time.Now().Add(1 * time.Hour),
+		Expiration:      fixedExpiration,
 	}, nil
 }
 

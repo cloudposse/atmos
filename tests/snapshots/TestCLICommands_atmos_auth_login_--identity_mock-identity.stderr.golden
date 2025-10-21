@@ -4,8 +4,8 @@ INFO Chained identity from=mock-provider to=mock-identity
 
 ✓ Authentication successful!
 
-  Provider  mock-provider
-  Identity  mock-identity
-  Region    us-east-1
-  Expires   2025-01-01 00:00:00 UTC
+  Provider  mock-provider                         
+  Identity  mock-identity                         
+  Region    us-east-1                             
+  Expires   2025-01-01 00:00:00 UTC 
 
