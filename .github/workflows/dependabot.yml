@@ -17,5 +17,6 @@ jobs:
         continue-on-error: true
         with:
           fail-on-severity: moderate
-          # Use comma-separated names to pass list arguments:
-          deny-licenses:  LGPL-2.0, BSD-2-Clause, LGPL-3.0, LGPL-3.0+
+          # Allow only permissive open-source licenses commonly used in Go projects.
+          # This replaces the deprecated deny-licenses option with a more comprehensive allowlist approach.
+          allow-licenses: MIT, Apache-2.0, BSD-3-Clause, ISC, MPL-2.0
