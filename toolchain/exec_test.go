@@ -110,7 +110,7 @@ func TestRunExecCommand_InvalidTool(t *testing.T) {
 func TestRunExecCommand_NoArgs(t *testing.T) {
 	fake := &fakeInstaller{}
 	err := RunExecCommand(fake, []string{})
-	if err == nil || err.Error() != "no arguments provided. Expected format: tool@version" {
+	if err == nil || err.Error() != "invalid tool specification: no arguments provided. Expected format: tool@version" {
 		t.Fatalf("expected missing args error, got %v", err)
 	}
 }
