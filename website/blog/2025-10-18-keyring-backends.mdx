@@ -5,29 +5,27 @@ authors: [atmos]
 tags: [atmos, authentication, security, testing, keyring]
 ---
 
-We're introducing flexible keyring backends for Atmos Auth, giving you control over how authentication credentials are stored. Whether you're running on a personal workstation, a shared server, or in CI/CD, you can now choose the storage backend that fits your environment: **system keyring** (default), **file-based keyring**, or **memory keyring** (for testing).
+Atmos Auth supports flexible keyring backends, giving you control over how authentication credentials are stored. Use your **system keyring** for native OS integration, **file-based keyrings** to share credentials across OS boundaries (like between your Mac and a Docker container), or **memory keyrings** for testing.
 
 <!--truncate-->
 
-## The Problem
+## Why Different Keyring Types Matter
 
-Atmos Auth previously relied exclusively on the operating system's native keyring for credential storage (macOS Keychain, Windows Credential Manager, Linux Secret Service via D-Bus). While this works great for personal workstations, it creates challenges in other environments:
+Different environments have different credential storage needs:
 
-**CI/CD Pipelines**: System keyrings are often unavailable in containerized or headless environments, causing auth tests to fail or be skipped.
+**System keyrings are great for personal workstations**, where OS-native security (macOS Keychain, Windows Credential Manager, Linux Secret Service) provides tight integration with your operating system.
 
-**Shared Servers**: Teams working on shared development servers may not have access to individual system keyrings, or may want centralized credential storage.
+**File-based keyrings solve cross-boundary problems**. When you're working across OS boundaries—like developing on macOS but running commands in a Docker container, or using a Dev Container in VS Code—your system keyring isn't accessible inside the container. A file-based keyring can be mounted into the container, giving you seamless credential access across both environments.
 
-**Testing**: Integration tests that depend on system keyring access can be flaky, environment-dependent, and difficult to isolate.
+**Memory keyrings are perfect for testing and CI/CD**, where you need fast, isolated credential storage without external dependencies or security concerns.
 
-**Cross-Platform Portability**: Different operating systems have different keyring implementations with varying capabilities (e.g., some don't support listing all stored credentials).
-
-## The Solution: Pluggable Keyring Backends
+## Flexible Keyring Backends
 
 Atmos now supports three keyring backends, selectable via configuration or environment variable:
 
 ### 1. **System Keyring** (Default)
 
-The existing OS-native secure credential storage. This remains the default for backward compatibility and requires no configuration changes.
+OS-native secure credential storage using your operating system's built-in keyring. This is the default and requires no configuration.
 
 ```yaml
 # atmos.yaml (optional - this is the default)
@@ -153,9 +151,9 @@ auth:
 
 Your credentials are stored in macOS Keychain, Windows Credential Manager, or Linux Secret Service.
 
-### Shared Development Server
+### Docker / Dev Container Development
 
-Use file keyring for team access with a shared password:
+Use file keyring to share credentials between your host machine and containers:
 
 ```yaml
 # atmos.yaml
@@ -163,11 +161,19 @@ auth:
   keyring:
     type: file
     spec:
-      path: /etc/atmos/keyring
+      path: ~/.atmos/keyring
       password_env: ATMOS_KEYRING_PASSWORD
 ```
 
-The team stores the keyring password in a secure location (e.g., team password manager) and sets it in their environment.
+Mount the keyring into your container:
+
+```yaml
+# docker-compose.yml or devcontainer.json
+volumes:
+  - ~/.atmos/keyring:/root/.atmos/keyring:ro
+```
+
+Now credentials authenticated on your Mac are available inside your Docker container. Your system keyring isn't accessible across the OS boundary, but the file-based keyring is.
 
 ### CI/CD Pipeline
 
@@ -185,11 +191,9 @@ jobs:
       - uses: actions/checkout@v4
       - name: Run Integration Tests
         run: |
-          # Tests use memory keyring automatically
+          # Tests use memory keyring - fast, isolated, no dependencies
           go test ./pkg/auth/...
 ```
-
-Previously, these tests were skipped in CI because the system keyring was unavailable. Now they run reliably!
 
 ### Local Testing
 
@@ -222,17 +226,11 @@ ATMOS_KEYRING_TYPE=file ATMOS_KEYRING_PASSWORD=test atmos auth login --identity 
 - No persistence (ephemeral)
 - Perfect for testing where security is not a concern
 
-## What This Means for You
+## What This Gives You
 
-### For Users
-- **No breaking changes**: Existing configurations continue to use system keyring
-- **More flexibility**: Choose the backend that fits your environment
-- **Better testing**: Run auth tests reliably in CI without system keyring dependencies
-
-### For Contributors
-- **Better test coverage**: Auth integration tests now run in CI (previously skipped)
-- **Faster tests**: Memory keyring is faster than system calls
-- **Easier debugging**: Isolate credential storage from OS keyring issues
+- **Cross-boundary credential access**: Use file-based keyrings to share credentials between your host and Docker/Dev containers
+- **Flexible storage**: Choose the backend that fits your environment—system keyring for personal use, file keyring for portability, memory keyring for testing
+- **CI/CD friendly**: Run auth tests reliably without system keyring dependencies
 
 ## Try It Out
 
