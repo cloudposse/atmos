@@ -6,12 +6,13 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/mitchellh/mapstructure"
+	"github.com/go-viper/mapstructure/v2"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/internal/tui/templates/term"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/pager"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -55,6 +56,8 @@ type describeDependentsExec struct {
 
 // NewDescribeDependentsExec creates a new `describe dependents` executor.
 func NewDescribeDependentsExec(atmosConfig *schema.AtmosConfiguration) DescribeDependentsExec {
+	defer perf.Track(atmosConfig, "exec.NewDescribeDependentsExec")()
+
 	return &describeDependentsExec{
 		executeDescribeDependents: ExecuteDescribeDependents,
 		newPageCreator:            pager.New(),
@@ -65,6 +68,8 @@ func NewDescribeDependentsExec(atmosConfig *schema.AtmosConfiguration) DescribeD
 }
 
 func (d *describeDependentsExec) Execute(describeDependentsExecProps *DescribeDependentsExecProps) error {
+	defer perf.Track(nil, "exec.Execute")()
+
 	dependents, err := d.executeDescribeDependents(
 		d.atmosConfig,
 		describeDependentsExecProps.Component,
@@ -111,6 +116,8 @@ func ExecuteDescribeDependents(
 	processYamlFunctions bool,
 	skip []string,
 ) ([]schema.Dependent, error) {
+	defer perf.Track(atmosConfig, "exec.ExecuteDescribeDependents")()
+
 	if atmosConfig == nil {
 		return nil, errUtils.ErrAtmosConfigIsNil
 	}
@@ -189,12 +196,15 @@ func ExecuteDescribeDependents(
 					continue
 				}
 
-				// Skip abstract components
+				// Skip abstract and disabled components
 				if metadataSection, ok := stackComponentMap["metadata"].(map[string]any); ok {
 					if metadataType, ok := metadataSection["type"].(string); ok {
 						if metadataType == "abstract" {
 							continue
 						}
+					}
+					if !isComponentEnabled(metadataSection, stackComponentName) {
+						continue
 					}
 				}
 

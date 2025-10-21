@@ -6,18 +6,21 @@ import (
 	"path/filepath"
 	"strings"
 
-	log "github.com/charmbracelet/log"
-	"github.com/mitchellh/mapstructure"
+	"github.com/go-viper/mapstructure/v2"
 	"github.com/spf13/cobra"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 // ExecuteTerraformGenerateBackendsCmd executes `terraform generate backends` command.
 func ExecuteTerraformGenerateBackendsCmd(cmd *cobra.Command, args []string) error {
+	defer perf.Track(nil, "exec.ExecuteTerraformGenerateBackendsCmd")()
+
 	info, err := ProcessCommandLineArgs("terraform", cmd, args, nil)
 	if err != nil {
 		return err
@@ -77,6 +80,8 @@ func ExecuteTerraformGenerateBackends(
 	stacks []string,
 	components []string,
 ) error {
+	defer perf.Track(atmosConfig, "exec.ExecuteTerraformGenerateBackends")()
+
 	stacksMap, _, err := FindStacksMap(atmosConfig, false)
 	if err != nil {
 		return err
@@ -91,6 +96,7 @@ func ExecuteTerraformGenerateBackends(
 	var settingsSection map[string]any
 	var envSection map[string]any
 	var providersSection map[string]any
+	var authSection map[string]any
 	var hooksSection map[string]any
 	var overridesSection map[string]any
 	var backendSection map[string]any
@@ -152,6 +158,10 @@ func ExecuteTerraformGenerateBackends(
 					providersSection = map[string]any{}
 				}
 
+				if authSection, ok = componentSection[cfg.AuthSectionName].(map[string]any); !ok {
+					authSection = map[string]any{}
+				}
+
 				if hooksSection, ok = componentSection[cfg.HooksSectionName].(map[string]any); !ok {
 					hooksSection = map[string]any{}
 				}
@@ -181,6 +191,7 @@ func ExecuteTerraformGenerateBackends(
 					ComponentVarsSection:      varsSection,
 					ComponentSettingsSection:  settingsSection,
 					ComponentEnvSection:       envSection,
+					ComponentAuthSection:      authSection,
 					ComponentProvidersSection: providersSection,
 					ComponentHooksSection:     hooksSection,
 					ComponentOverridesSection: overridesSection,
@@ -211,7 +222,7 @@ func ExecuteTerraformGenerateBackends(
 				// Stack name
 				var stackName string
 				if atmosConfig.Stacks.NameTemplate != "" {
-					stackName, err = ProcessTmpl("terraform-generate-backends-template", atmosConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, false)
+					stackName, err = ProcessTmpl(atmosConfig, "terraform-generate-backends-template", atmosConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, false)
 					if err != nil {
 						return err
 					}

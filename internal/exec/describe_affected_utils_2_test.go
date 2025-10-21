@@ -228,16 +228,14 @@ func TestAddAffectedSpaceliftAdminStack_WithValidConfig(t *testing.T) {
 
 func TestIsComponentFolderChanged(t *testing.T) {
 	// Create a temporary directory for testing
-	tempDir, err := os.MkdirTemp("", "atmos-test-*")
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = os.RemoveAll(tempDir) })
+	tempDir := t.TempDir()
 
 	// Create test component directories
 	terraformComponentPath := filepath.Join(tempDir, "terraform", "test-component")
 	helmfileComponentPath := filepath.Join(tempDir, "helmfile", "test-component")
 	packerComponentPath := filepath.Join(tempDir, "packer", "test-component")
 
-	err = os.MkdirAll(terraformComponentPath, 0o755)
+	err := os.MkdirAll(terraformComponentPath, 0o755)
 	require.NoError(t, err)
 	err = os.MkdirAll(helmfileComponentPath, 0o755)
 	require.NoError(t, err)

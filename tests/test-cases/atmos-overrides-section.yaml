@@ -23,7 +23,7 @@ tests:
         - "c: c-prod"
         - "d: d"
       stderr:
-        - "^$"
+        - "Telemetry Enabled"
 
   - name: "Atmos 'overrides' section test for 'staging' stack"
     enabled: true
@@ -49,7 +49,7 @@ tests:
         - "c: c-team1"
         - "d: d"
       stderr:
-        - "^$"
+        - "Telemetry Enabled"
 
   - name: "Atmos 'overrides' section test for 'dev' stack"
     enabled: true
@@ -75,7 +75,7 @@ tests:
         - "c: c-team1"
         - "d: d"
       stderr:
-        - "^$"
+        - "Telemetry Enabled"
 
   - name: "Atmos 'overrides' section test for 'sandbox' stack"
     enabled: true
@@ -101,7 +101,7 @@ tests:
         - "c: c-team1"
         - "d: d"
       stderr:
-        - "^$"
+        - "Telemetry Enabled"
 
   - name: "Atmos 'overrides' section test for 'test' stack"
     enabled: true
@@ -127,4 +127,4 @@ tests:
         - "c: c-team1"
         - "d: d"
       stderr:
-        - "^$"
+        - "Telemetry Enabled"

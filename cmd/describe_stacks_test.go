@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"fmt"
-	"os"
 	"testing"
 
 	"github.com/golang/mock/gomock"
@@ -15,10 +14,14 @@ import (
 )
 
 func TestDescribeStacksRunnable(t *testing.T) {
+	_ = NewTestKit(t)
+
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
+
 	mockExec := exec.NewMockDescribeStacksExec(ctrl)
 	mockExec.EXPECT().Execute(gomock.Any(), gomock.Any()).Return(nil).Times(1)
+
 	run := getRunnableDescribeStacksCmd(getRunnableDescribeStacksCmdProps{
 		func(opts ...AtmosValidateOption) {},
 		func(componentType string, cmd *cobra.Command, args, additionalArgsAndFlags []string) (schema.ConfigAndStacksInfo, error) {
@@ -35,10 +38,17 @@ func TestDescribeStacksRunnable(t *testing.T) {
 		},
 		mockExec,
 	})
-	run(describeStacksCmd, []string{})
+
+	err := run(describeStacksCmd, []string{})
+
+	// Verify command executed without errors. The mock expectations verify
+	// that Execute() was called with the correct arguments.
+	assert.NoError(t, err, "describeStacksCmd should execute without error")
 }
 
 func TestSetFlagValueInDescribeStacksCliArgs(t *testing.T) {
+	_ = NewTestKit(t)
+
 	// Initialize test cases
 	tests := []struct {
 		name          string
@@ -59,9 +69,10 @@ func TestSetFlagValueInDescribeStacksCliArgs(t *testing.T) {
 			},
 			describe: &exec.DescribeStacksArgs{},
 			expected: &exec.DescribeStacksArgs{
-				Format:           "json",
-				ProcessTemplates: true,
-				Skip:             []string{"tests"},
+				Format:               "json",
+				ProcessTemplates:     true,
+				ProcessYamlFunctions: true,
+				Skip:                 []string{"tests"},
 			},
 		},
 		{
@@ -71,7 +82,9 @@ func TestSetFlagValueInDescribeStacksCliArgs(t *testing.T) {
 			},
 			describe: &exec.DescribeStacksArgs{},
 			expected: &exec.DescribeStacksArgs{
-				Format: "yaml",
+				Format:               "yaml",
+				ProcessTemplates:     true,
+				ProcessYamlFunctions: true,
 			},
 		},
 		{
@@ -81,13 +94,17 @@ func TestSetFlagValueInDescribeStacksCliArgs(t *testing.T) {
 			},
 			describe: &exec.DescribeStacksArgs{},
 			expected: &exec.DescribeStacksArgs{
-				Format: "json",
+				Format:               "json",
+				ProcessTemplates:     true,
+				ProcessYamlFunctions: true,
 			},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			_ = NewTestKit(t)
+
 			// Create a new flag set
 			fs := pflag.NewFlagSet("test", pflag.ContinueOnError)
 
@@ -129,6 +146,8 @@ func TestSetFlagValueInDescribeStacksCliArgs(t *testing.T) {
 }
 
 func TestSetCliArgs_ComponentTypes_StringSlice(t *testing.T) {
+	_ = NewTestKit(t)
+
 	fs := pflag.NewFlagSet("test", pflag.ContinueOnError)
 	// Define only the flags we plan to change
 	fs.StringSlice("component-types", nil, "Filter by specific component types")
@@ -144,20 +163,13 @@ func TestSetCliArgs_ComponentTypes_StringSlice(t *testing.T) {
 }
 
 func TestDescribeStacksCmd_Error(t *testing.T) {
+	_ = NewTestKit(t)
+
 	stacksPath := "../tests/fixtures/scenarios/terraform-apply-affected"
 
-	err := os.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
-	assert.NoError(t, err, "Setting 'ATMOS_CLI_CONFIG_PATH' environment variable should execute without error")
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
+	t.Setenv("ATMOS_BASE_PATH", stacksPath)
 
-	err = os.Setenv("ATMOS_BASE_PATH", stacksPath)
-	assert.NoError(t, err, "Setting 'ATMOS_BASE_PATH' environment variable should execute without error")
-
-	// Unset ENV variables after testing
-	defer func() {
-		os.Unsetenv("ATMOS_CLI_CONFIG_PATH")
-		os.Unsetenv("ATMOS_BASE_PATH")
-	}()
-
-	err = describeStacksCmd.RunE(describeStacksCmd, []string{"--invalid-flag"})
+	err := describeStacksCmd.RunE(describeStacksCmd, []string{"--invalid-flag"})
 	assert.Error(t, err, "describe stacks command should return an error when called with invalid flags")
 }

@@ -1,7 +1,7 @@
 name: Tests
 on:
   pull_request:
-    types: [ opened, synchronize, reopened ]
+    types: [opened, synchronize, reopened]
     paths-ignore:
       - "README.md"
 
@@ -21,25 +21,28 @@ env:
   TERRAFORM_VERSION: "1.9.7"
   OPEN_TOFU_VERSION: "1.9.1"
   HELMFILE_VERSION: "v1.1.0"
-  PACKER_VERSION: "1.14.1"
+  PACKER_VERSION: "1.14.2"
 
 jobs:
   # ensure the code builds...
   build:
-    name: Build
+    name: Build (${{ matrix.target }})
     timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
         include:
-          - os: ubuntu-latest
+          - os: "runs-on=${{github.run_id}}/runner=terraform/tag=atmos/extras=s3-cache/private=false"
             target: linux
-          - os: windows-latest
+          - os: "windows-latest"
             target: windows
-          - os: macos-latest
+          - os: "macos-latest"
             target: macos
     runs-on: ${{ matrix.os }}
     steps:
+      - uses: runs-on/action@v1
+        if: matrix.target == 'linux'
+
       - name: Build
         if: ${{ ! ( matrix.target == 'windows' && github.event.pull_request.draft ) }}
         run: echo "Building on ${{ matrix.os }}"
@@ -84,18 +87,21 @@ jobs:
 
   # run acceptance tests
   test:
-    name: Acceptance Tests
-    needs: build
+    name: Acceptance Tests (${{ matrix.flavor.target }})
+    needs: [build]
     strategy:
       fail-fast: false
       matrix:
         flavor:
-          - { os: ubuntu-latest, target: linux }
-          - { os: windows-latest, target: windows }
-          - { os: macos-latest, target: macos }
+          - { os: "runs-on=${{github.run_id}}/runner=terraform/tag=atmos/extras=s3-cache/private=false", target: linux }
+          - { os: "windows-latest", target: windows }
+          - { os: "macos-latest", target: macos }
     timeout-minutes: 30
     runs-on: ${{ matrix.flavor.os }}
     steps:
+      - uses: runs-on/action@v1
+        if: matrix.flavor.target == 'linux'
+
       - name: Check out code into the Go module directory
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
         uses: actions/checkout@v4
@@ -150,7 +156,7 @@ jobs:
 
       # https://github.com/helmfile/helmfile-action
       - name: Install Helmfile
-        uses: helmfile/helmfile-action@v2.0.4
+        uses: helmfile/helmfile-action@v2.0.5
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
         with:
           helmfile-version: ${{ env.HELMFILE_VERSION }}
@@ -158,7 +164,7 @@ jobs:
           helmfile-auto-init: "false"
 
       - name: Check atmos.exe integrity
-        if: matrix.flavor.flavor.target == 'windows' && ! github.event.pull_request.draft
+        if: matrix.flavor.target == 'windows' && ! github.event.pull_request.draft
         shell: pwsh
         run: |
           Write-Output "PATH=$Env:PATH"
@@ -427,6 +433,7 @@ jobs:
 
       - name: Add build artifacts directory to PATH for windows
         if: matrix.flavor.target == 'windows' && ! github.event.pull_request.draft
+        shell: pwsh
         run: |
           echo "${{ github.workspace }}" >> $Env:GITHUB_PATH
 
@@ -532,7 +539,7 @@ jobs:
       - name: Lint examples/${{ matrix.demo-folder }}/components/terraform
         uses: reviewdog/action-tflint@v1
         with:
-          github_token: ${{ secrets.github_token }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
           working_directory: examples/${{ matrix.demo-folder }}/components/terraform
           flags: >-
             --enable-rule=terraform_unused_declarations
@@ -575,9 +582,8 @@ jobs:
               ]
             }
 
-
   release:
-    needs: [ test, lint, mock, k3s, localstack, docker, validate ]
+    needs: [test, lint, mock, k3s, localstack, docker, validate]
     if: github.event_name == 'push'
     uses: cloudposse/.github/.github/workflows/shared-go-auto-release.yml@main
     with:

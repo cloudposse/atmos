@@ -3,12 +3,14 @@ package exec
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
-	log "github.com/charmbracelet/log"
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
 
+	cfg "github.com/cloudposse/atmos/pkg/config"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/pager"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -188,12 +190,6 @@ func TestDescribeComponentWithOverridesSection(t *testing.T) {
 	log.SetLevel(log.InfoLevel)
 	log.SetOutput(os.Stdout)
 
-	// Capture the starting working directory
-	startingDir, err := os.Getwd()
-	if err != nil {
-		t.Fatalf("Failed to get the current working directory: %v", err)
-	}
-
 	defer func() {
 		// Delete the generated files and folders after the test
 		err := os.RemoveAll(filepath.Join("..", "..", "components", "terraform", "mock", ".terraform"))
@@ -201,18 +197,11 @@ func TestDescribeComponentWithOverridesSection(t *testing.T) {
 
 		err = os.RemoveAll(filepath.Join("..", "..", "components", "terraform", "mock", "terraform.tfstate.d"))
 		assert.NoError(t, err)
-
-		// Change back to the original working directory after the test
-		if err = os.Chdir(startingDir); err != nil {
-			t.Fatalf("Failed to change back to the starting directory: %v", err)
-		}
 	}()
 
 	// Define the working directory
 	workDir := "../../tests/fixtures/scenarios/atmos-overrides-section"
-	if err := os.Chdir(workDir); err != nil {
-		t.Fatalf("Failed to change directory to %q: %v", workDir, err)
-	}
+	t.Chdir(workDir)
 
 	component := "c1"
 
@@ -350,24 +339,9 @@ func TestDescribeComponent_Packer(t *testing.T) {
 	log.SetLevel(log.InfoLevel)
 	log.SetOutput(os.Stdout)
 
-	// Capture the starting working directory
-	startingDir, err := os.Getwd()
-	if err != nil {
-		t.Fatalf("Failed to get the current working directory: %v", err)
-	}
-
-	defer func() {
-		// Change back to the original working directory after the test
-		if err = os.Chdir(startingDir); err != nil {
-			t.Fatalf("Failed to change back to the starting directory: %v", err)
-		}
-	}()
-
 	// Define the working directory
 	workDir := "../../tests/fixtures/scenarios/packer"
-	if err := os.Chdir(workDir); err != nil {
-		t.Fatalf("Failed to change directory to %q: %v", workDir, err)
-	}
+	t.Chdir(workDir)
 
 	atmosConfig := schema.AtmosConfiguration{
 		Logs: schema.Logs{
@@ -397,4 +371,217 @@ func TestDescribeComponent_Packer(t *testing.T) {
 	val, err = u.EvaluateYqExpression(&atmosConfig, res, ".vars.assume_role_arn")
 	assert.Nil(t, err)
 	assert.Equal(t, "arn:aws:iam::PROD_ACCOUNT_ID:role/ROLE_NAME", val)
+}
+
+func TestDescribeComponentWithProvenance(t *testing.T) {
+	// Clear cache to ensure fresh processing.
+	ClearBaseComponentConfigCache()
+	ClearMergeContexts()
+	ClearLastMergeContext()
+	ClearFileContentCache()
+
+	err := os.Unsetenv("ATMOS_CLI_CONFIG_PATH")
+	if err != nil {
+		t.Fatalf("Failed to unset 'ATMOS_CLI_CONFIG_PATH': %v", err)
+	}
+
+	err = os.Unsetenv("ATMOS_BASE_PATH")
+	if err != nil {
+		t.Fatalf("Failed to unset 'ATMOS_BASE_PATH': %v", err)
+	}
+
+	log.SetLevel(log.InfoLevel)
+	log.SetOutput(os.Stdout)
+
+	// Define the working directory - using quick-start-advanced as it has a good mix of configs
+	workDir := "../../examples/quick-start-advanced"
+	t.Chdir(workDir)
+
+	component := "vpc-flow-logs-bucket"
+	stack := "plat-ue2-dev"
+
+	// Initialize atmosConfig with provenance tracking enabled
+	var configAndStacksInfo schema.ConfigAndStacksInfo
+	configAndStacksInfo.ComponentFromArg = component
+	configAndStacksInfo.Stack = stack
+	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
+	assert.NoError(t, err)
+	atmosConfig.TrackProvenance = true
+
+	// Execute with provenance enabled using ExecuteDescribeComponentWithContext
+	result, err := ExecuteDescribeComponentWithContext(DescribeComponentContextParams{
+		AtmosConfig:          &atmosConfig,
+		Component:            component,
+		Stack:                stack,
+		ProcessTemplates:     true,
+		ProcessYamlFunctions: true,
+		Skip:                 nil,
+	})
+	assert.NoError(t, err)
+	assert.NotNil(t, result)
+	assert.NotNil(t, result.MergeContext, "MergeContext should not be nil when provenance is enabled")
+	assert.True(t, result.MergeContext.IsProvenanceEnabled(), "MergeContext should have provenance enabled")
+
+	// Verify component section is populated
+	assert.NotNil(t, result.ComponentSection)
+	assert.NotEmpty(t, result.ComponentSection)
+
+	// Verify MergeContext is populated
+	assert.NotNil(t, result.MergeContext, "MergeContext should not be nil when provenance is enabled")
+	assert.True(t, result.MergeContext.IsProvenanceEnabled(), "MergeContext should have provenance enabled")
+
+	// Verify provenance data exists
+	provenancePaths := result.MergeContext.GetProvenancePaths()
+	assert.NotEmpty(t, provenancePaths, "Provenance paths should not be empty")
+
+	// Verify we have provenance entries for vars fields.
+	// Check for any vars-related paths rather than specific ones to avoid platform-specific issues.
+	foundVarsPath := false
+	varsPathsFound := []string{}
+	for _, path := range provenancePaths {
+		entries := result.MergeContext.GetProvenance(path)
+		if len(entries) > 0 {
+			// Check for any vars.* path.
+			if strings.Contains(path, "vars.") {
+				foundVarsPath = true
+				varsPathsFound = append(varsPathsFound, path)
+				// Verify the entry has file and line information
+				assert.NotEmpty(t, entries[0].File, "Provenance entry for %s should have a file", path)
+				assert.Greater(t, entries[0].Line, 0, "Provenance entry for %s should have a line number", path)
+			}
+		}
+	}
+
+	// At least one vars path should be found.
+	if !foundVarsPath {
+		t.Logf("No vars.* paths found in provenance. Available paths: %v", provenancePaths)
+	}
+	assert.True(t, foundVarsPath, "Should find provenance for at least one vars field. Found vars paths: %v", varsPathsFound)
+
+	// Filter computed fields
+	filtered := FilterComputedFields(result.ComponentSection)
+
+	// Verify filtered section only has stack-defined fields
+	allowedFields := []string{"vars", "settings", "env", "backend", "metadata", "overrides", "providers", "imports"}
+	for k := range filtered {
+		assert.Contains(t, allowedFields, k, "Filtered component section should only contain stack-defined fields")
+	}
+
+	// Verify computed fields are removed
+	computedFields := []string{"atmos_component", "atmos_stack", "component_info", "cli_args", "sources", "deps", "workspace"}
+	for _, field := range computedFields {
+		assert.NotContains(t, filtered, field, "Filtered component section should not contain computed field: %s", field)
+	}
+
+	// Verify expected fields exist
+	assert.Contains(t, filtered, "vars", "Should contain vars")
+	assert.Contains(t, filtered, "settings", "Should contain settings")
+
+	// Verify vars content
+	vars, ok := filtered["vars"].(map[string]any)
+	assert.True(t, ok, "vars should be a map")
+	assert.NotEmpty(t, vars, "vars should not be empty")
+	assert.Contains(t, vars, "enabled", "vars should contain 'enabled'")
+	assert.Contains(t, vars, "name", "vars should contain 'name'")
+
+	// Verify we can convert to YAML without errors
+	yamlBytes, err := u.ConvertToYAML(filtered)
+	assert.NoError(t, err)
+	assert.NotEmpty(t, yamlBytes)
+
+	// Verify YAML contains expected content
+	yamlStr := yamlBytes
+	assert.Contains(t, yamlStr, "vars:", "YAML should contain vars")
+	assert.Contains(t, yamlStr, "enabled:", "YAML should contain enabled")
+
+	// Verify YAML structure doesn't have unwanted top-level keys
+	// (We already verified this in the filtered map checks above, but double-check in YAML)
+	lines := strings.Split(yamlStr, "\n")
+	topLevelKeys := make(map[string]bool)
+	for _, line := range lines {
+		// Check for non-indented lines (top-level keys)
+		if len(line) > 0 && !strings.HasPrefix(line, " ") && strings.Contains(line, ":") {
+			key := strings.Split(line, ":")[0]
+			topLevelKeys[key] = true
+		}
+	}
+
+	// Verify computed fields are not top-level keys
+	assert.False(t, topLevelKeys["component_info"], "component_info should not be a top-level key")
+	assert.False(t, topLevelKeys["atmos_cli_config"], "atmos_cli_config should not be a top-level key")
+	assert.False(t, topLevelKeys["sources"], "sources should not be a top-level key")
+	assert.False(t, topLevelKeys["deps"], "deps should not be a top-level key")
+	assert.False(t, topLevelKeys["workspace"], "workspace should not be a top-level key")
+
+	t.Logf("Successfully tested provenance tracking with %d provenance paths", len(provenancePaths))
+}
+
+func TestFilterComputedFields(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    map[string]any
+		expected map[string]any
+	}{
+		{
+			name: "Filters out all computed fields",
+			input: map[string]any{
+				"vars":             map[string]any{"key": "value"},
+				"settings":         map[string]any{"setting": "value"},
+				"atmos_component":  "test-component",
+				"atmos_stack":      "test-stack",
+				"component_info":   map[string]any{"path": "/some/path"},
+				"cli_args":         []string{"arg1"},
+				"sources":          []string{"file1.yaml"},
+				"deps":             []string{"dep1"},
+				"workspace":        "default",
+				"atmos_cli_config": map[string]any{"base_path": "."},
+				"spacelift_stack":  "stack-name",
+				"atlantis_project": "project-name",
+				"atmos_stack_file": "stack.yaml",
+				"atmos_manifest":   "manifest.yaml",
+			},
+			expected: map[string]any{
+				"vars":     map[string]any{"key": "value"},
+				"settings": map[string]any{"setting": "value"},
+			},
+		},
+		{
+			name: "Keeps only allowed fields",
+			input: map[string]any{
+				"vars":      map[string]any{"enabled": true},
+				"env":       map[string]any{"VAR": "value"},
+				"backend":   map[string]any{"type": "s3"},
+				"metadata":  map[string]any{"type": "real"},
+				"overrides": map[string]any{"key": "val"},
+				"providers": map[string]any{"aws": "config"},
+				"settings":  map[string]any{"key": "val"},
+			},
+			expected: map[string]any{
+				"vars":      map[string]any{"enabled": true},
+				"env":       map[string]any{"VAR": "value"},
+				"backend":   map[string]any{"type": "s3"},
+				"metadata":  map[string]any{"type": "real"},
+				"overrides": map[string]any{"key": "val"},
+				"providers": map[string]any{"aws": "config"},
+				"settings":  map[string]any{"key": "val"},
+			},
+		},
+		{
+			name:     "Handles empty input",
+			input:    map[string]any{},
+			expected: map[string]any{},
+		},
+		{
+			name:     "Handles nil input",
+			input:    nil,
+			expected: map[string]any{},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := FilterComputedFields(tt.input)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
 }

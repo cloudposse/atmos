@@ -1,0 +1,33 @@
+# Configuration for building a custom golangci-lint binary with module plugins.
+# This file is used by `golangci-lint custom` to create a custom binary (./custom-gcl)
+# that includes both standard golangci-lint linters AND custom plugin linters.
+#
+# How it works:
+# 1. `golangci-lint custom` reads this file
+# 2. Clones the golangci-lint repository
+# 3. Adds blank imports for each plugin module to cmd/golangci-lint/plugins.go
+# 4. Runs go mod tidy to fetch dependencies
+# 5. Builds a single binary containing all standard linters + all plugin linters
+# 6. Outputs the custom binary as ./custom-gcl
+#
+# To add more custom linters:
+# Just add more entries to the plugins array below. Each plugin will be compiled
+# into the same custom-gcl binary. All plugins must implement the golangci-lint
+# plugin interface (see tools/lintroller/plugin.go for example).
+#
+# References:
+# - Module plugin docs: https://golangci-lint.run/docs/plugins/module-plugins/
+# - Plugin interface: github.com/golangci/plugin-module-register/register
+
+version: v2.5.0
+plugins:
+  # Lintroller: Atmos-specific rules for test files
+  # Detects: os.MkdirTemp (use t.TempDir), os.Setenv (use t.Setenv), t.Setenv in defer
+  - module: 'github.com/cloudposse/atmos/tools/lintroller'
+    import: 'github.com/cloudposse/atmos/tools/lintroller'
+    path: './tools/lintroller'  # Local path to plugin source code
+
+  # To add another custom linter, add it here:
+  # - module: 'github.com/cloudposse/atmos/tools/another-linter'
+  #   import: 'github.com/cloudposse/atmos/tools/another-linter'
+  #   path: './tools/another-linter'

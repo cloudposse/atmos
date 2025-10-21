@@ -8,10 +8,12 @@ import (
 	"strings"
 	"testing"
 
-	log "github.com/charmbracelet/log"
+	cfg "github.com/cloudposse/atmos/pkg/config"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/stretchr/testify/assert"
 
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/tests"
 )
 
 // TestExecuteTerraform_ExportEnvVar check that when executing the terraform apply command.
@@ -19,13 +21,13 @@ import (
 // Env var `ATMOS_BASE_PATH` and `ATMOS_CLI_CONFIG_PATH` should be exported and used in the terraform apply command.
 // Check that `ATMOS_BASE_PATH` and `ATMOS_CLI_CONFIG_PATH` point to a directory.
 func TestExecuteTerraform_ExportEnvVar(t *testing.T) {
-	// Capture the starting working directory
+	// Skip if terraform is not installed
+	tests.RequireTerraform(t)
+	// Clean up any leftover terraform files from previous test runs to avoid conflicts
 	startingDir, err := os.Getwd()
 	if err != nil {
 		t.Fatalf("Failed to get the current working directory: %v", err)
 	}
-
-	// Clean up any leftover terraform files from previous test runs to avoid conflicts
 	componentPath := filepath.Join(startingDir, "..", "..", "tests", "fixtures", "components", "terraform", "env-example")
 	cleanupFiles := []string{
 		filepath.Join(componentPath, ".terraform"),
@@ -54,18 +56,11 @@ func TestExecuteTerraform_ExportEnvVar(t *testing.T) {
 		for _, match := range matches {
 			os.Remove(match)
 		}
-
-		// Change back to the original working directory after the test
-		if err := os.Chdir(startingDir); err != nil {
-			t.Fatalf("Failed to change back to the starting directory: %v", err)
-		}
 	}()
 
 	// Define the work directory and change to it
 	workDir := "../../tests/fixtures/scenarios/env"
-	if err := os.Chdir(workDir); err != nil {
-		t.Fatalf("Failed to change directory to %q: %v", workDir, err)
-	}
+	t.Chdir(workDir)
 
 	// set info for ExecuteTerraform
 	info := schema.ConfigAndStacksInfo{
@@ -86,7 +81,8 @@ func TestExecuteTerraform_ExportEnvVar(t *testing.T) {
 		t.Fatalf("Failed to execute 'ExecuteTerraform': %v", err)
 	}
 	// Restore stdout
-	w.Close()
+	err = w.Close()
+	assert.NoError(t, err)
 	os.Stdout = oldStdout
 
 	// Read the captured output
@@ -138,24 +134,12 @@ func TestExecuteTerraform_ExportEnvVar(t *testing.T) {
 }
 
 func TestExecuteTerraform_TerraformPlanWithProcessingTemplates(t *testing.T) {
-	// Capture the starting working directory
-	startingDir, err := os.Getwd()
-	if err != nil {
-		t.Fatalf("Failed to get the current working directory: %v", err)
-	}
-
-	defer func() {
-		// Change back to the original working directory after the test
-		if err := os.Chdir(startingDir); err != nil {
-			t.Fatalf("Failed to change back to the starting directory: %v", err)
-		}
-	}()
+	// Skip if terraform is not installed
+	tests.RequireTerraform(t)
 
 	// Define the working directory
 	workDir := "../../tests/fixtures/scenarios/stack-templates-2"
-	if err := os.Chdir(workDir); err != nil {
-		t.Fatalf("Failed to change directory to %q: %v", workDir, err)
-	}
+	t.Chdir(workDir)
 
 	info := schema.ConfigAndStacksInfo{
 		StackFromArg:     "",
@@ -172,7 +156,7 @@ func TestExecuteTerraform_TerraformPlanWithProcessingTemplates(t *testing.T) {
 	oldStdout := os.Stdout
 	r, w, _ := os.Pipe()
 	os.Stdout = w
-	err = ExecuteTerraform(info)
+	err := ExecuteTerraform(info)
 	if err != nil {
 		t.Fatalf("Failed to execute 'ExecuteTerraform': %v", err)
 	}
@@ -202,24 +186,12 @@ func TestExecuteTerraform_TerraformPlanWithProcessingTemplates(t *testing.T) {
 }
 
 func TestExecuteTerraform_TerraformPlanWithoutProcessingTemplates(t *testing.T) {
-	// Capture the starting working directory
-	startingDir, err := os.Getwd()
-	if err != nil {
-		t.Fatalf("Failed to get the current working directory: %v", err)
-	}
-
-	defer func() {
-		// Change back to the original working directory after the test
-		if err := os.Chdir(startingDir); err != nil {
-			t.Fatalf("Failed to change back to the starting directory: %v", err)
-		}
-	}()
+	// Skip if terraform is not installed
+	tests.RequireTerraform(t)
 
 	// Define the working directory
 	workDir := "../../tests/fixtures/scenarios/stack-templates-2"
-	if err = os.Chdir(workDir); err != nil {
-		t.Fatalf("Failed to change directory to %q: %v", workDir, err)
-	}
+	t.Chdir(workDir)
 
 	info := schema.ConfigAndStacksInfo{
 		StackFromArg:     "",
@@ -236,7 +208,7 @@ func TestExecuteTerraform_TerraformPlanWithoutProcessingTemplates(t *testing.T) 
 	oldStdout := os.Stdout
 	r, w, _ := os.Pipe()
 	os.Stdout = w
-	err = ExecuteTerraform(info)
+	err := ExecuteTerraform(info)
 	if err != nil {
 		t.Fatalf("Failed to execute 'ExecuteTerraform': %v", err)
 	}
@@ -268,27 +240,13 @@ func TestExecuteTerraform_TerraformPlanWithoutProcessingTemplates(t *testing.T) 
 }
 
 func TestExecuteTerraform_TerraformWorkspace(t *testing.T) {
-	err := os.Setenv("ATMOS_LOGS_LEVEL", "Debug")
-	assert.NoError(t, err, "Setting 'ATMOS_LOGS_LEVEL' environment variable should execute without error")
-
-	// Capture the starting working directory
-	startingDir, err := os.Getwd()
-	if err != nil {
-		t.Fatalf("Failed to get the current working directory: %v", err)
-	}
-
-	defer func() {
-		// Change back to the original working directory after the test
-		if err := os.Chdir(startingDir); err != nil {
-			t.Fatalf("Failed to change back to the starting directory: %v", err)
-		}
-	}()
+	// Skip if terraform is not installed.
+	tests.RequireTerraform(t)
+	t.Setenv("ATMOS_LOGS_LEVEL", "Debug")
 
 	// Define the working directory
 	workDir := "../../tests/fixtures/scenarios/stack-templates-2"
-	if err := os.Chdir(workDir); err != nil {
-		t.Fatalf("Failed to change directory to %q: %v", workDir, err)
-	}
+	t.Chdir(workDir)
 
 	info := schema.ConfigAndStacksInfo{
 		StackFromArg:     "",
@@ -305,7 +263,7 @@ func TestExecuteTerraform_TerraformWorkspace(t *testing.T) {
 	oldStdout := os.Stdout
 	r, w, _ := os.Pipe()
 	os.Stdout = w
-	err = ExecuteTerraform(info)
+	err := ExecuteTerraform(info)
 	if err != nil {
 		t.Fatalf("Failed to execute 'ExecuteTerraform': %v", err)
 	}
@@ -329,24 +287,12 @@ func TestExecuteTerraform_TerraformWorkspace(t *testing.T) {
 }
 
 func TestExecuteTerraform_TerraformPlanWithInvalidTemplates(t *testing.T) {
-	// Capture the starting working directory
-	startingDir, err := os.Getwd()
-	if err != nil {
-		t.Fatalf("Failed to get the current working directory: %v", err)
-	}
-
-	defer func() {
-		// Change back to the original working directory after the test
-		if err := os.Chdir(startingDir); err != nil {
-			t.Fatalf("Failed to change back to the starting directory: %v", err)
-		}
-	}()
+	// Skip if terraform is not installed
+	tests.RequireTerraform(t)
 
 	// Define the working directory
 	workDir := "../../tests/fixtures/scenarios/invalid-stacks"
-	if err := os.Chdir(workDir); err != nil {
-		t.Fatalf("Failed to change directory to %q: %v", workDir, err)
-	}
+	t.Chdir(workDir)
 
 	info := schema.ConfigAndStacksInfo{
 		StackFromArg:     "",
@@ -360,30 +306,18 @@ func TestExecuteTerraform_TerraformPlanWithInvalidTemplates(t *testing.T) {
 		Skip:             []string{"!terraform.output"},
 	}
 
-	err = ExecuteTerraform(info)
+	err := ExecuteTerraform(info)
 	assert.Error(t, err)
 	assert.ErrorContains(t, err, "invalid")
 }
 
 func TestExecuteTerraform_TerraformInitWithVarfile(t *testing.T) {
-	// Capture the starting working directory
-	startingDir, err := os.Getwd()
-	if err != nil {
-		t.Fatalf("Failed to get the current working directory: %v", err)
-	}
-
-	defer func() {
-		// Change back to the original working directory after the test
-		if err := os.Chdir(startingDir); err != nil {
-			t.Fatalf("Failed to change back to the starting directory: %v", err)
-		}
-	}()
+	// Skip if terraform is not installed
+	tests.RequireTerraform(t)
 
 	// Define the working directory
 	workDir := "../../tests/fixtures/scenarios/terraform-init"
-	if err := os.Chdir(workDir); err != nil {
-		t.Fatalf("Failed to change directory to %q: %v", workDir, err)
-	}
+	t.Chdir(workDir)
 
 	info := schema.ConfigAndStacksInfo{
 		StackFromArg:     "",
@@ -403,11 +337,10 @@ func TestExecuteTerraform_TerraformInitWithVarfile(t *testing.T) {
 	log.SetLevel(log.DebugLevel)
 	log.SetOutput(w)
 
-	err = ExecuteTerraform(info)
+	err := ExecuteTerraform(info)
 	if err != nil {
 		t.Fatalf("Failed to execute 'ExecuteTerraform': %v", err)
 	}
-
 	// Restore stderr
 	err = w.Close()
 	assert.NoError(t, err)
@@ -430,24 +363,12 @@ func TestExecuteTerraform_TerraformInitWithVarfile(t *testing.T) {
 }
 
 func TestExecuteTerraform_OpaValidation(t *testing.T) {
-	// Capture the starting working directory
-	startingDir, err := os.Getwd()
-	if err != nil {
-		t.Fatalf("Failed to get the current working directory: %v", err)
-	}
-
-	defer func() {
-		// Change back to the original working directory after the test
-		if err := os.Chdir(startingDir); err != nil {
-			t.Fatalf("Failed to change back to the starting directory: %v", err)
-		}
-	}()
+	// Skip if terraform is not installed
+	tests.RequireTerraform(t)
 
 	// Define the working directory
 	workDir := "../../tests/fixtures/scenarios/atmos-stacks-validation"
-	if err := os.Chdir(workDir); err != nil {
-		t.Fatalf("Failed to change directory to %q: %v", workDir, err)
-	}
+	t.Chdir(workDir)
 
 	// Test `terraform plan`
 	info := schema.ConfigAndStacksInfo{
@@ -460,7 +381,7 @@ func TestExecuteTerraform_OpaValidation(t *testing.T) {
 		ProcessTemplates: true,
 		ProcessFunctions: true,
 	}
-	err = ExecuteTerraform(info)
+	err := ExecuteTerraform(info)
 	assert.NoError(t, err)
 
 	// Test `terraform apply`
@@ -470,6 +391,8 @@ func TestExecuteTerraform_OpaValidation(t *testing.T) {
 }
 
 func TestExecuteTerraform_Version(t *testing.T) {
+	// Skip if terraform is not installed
+	tests.RequireTerraform(t)
 	tests := []struct {
 		name           string
 		workDir        string
@@ -489,59 +412,21 @@ func TestExecuteTerraform_Version(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Capture the starting working directory
-			startingDir, err := os.Getwd()
-			if err != nil {
-				t.Fatalf("Failed to get the current working directory: %v", err)
-			}
-
-			defer func() {
-				// Change back to the original working directory after the test
-				if err := os.Chdir(startingDir); err != nil {
-					t.Fatalf("Failed to change back to the starting directory: %v", err)
-				}
-			}()
-
-			// Define the work directory and change to it
-			if err := os.Chdir(tt.workDir); err != nil {
-				t.Fatalf("Failed to change directory to %q: %v", tt.workDir, err)
-			}
-
-			// set info for ExecuteTerraform
+			// Set info for ExecuteTerraform.
 			info := schema.ConfigAndStacksInfo{
 				SubCommand: "version",
 			}
 
-			// Create a pipe to capture stdout to check if terraform is executed correctly
-			oldStdout := os.Stdout
-			r, w, _ := os.Pipe()
-			os.Stdout = w
-
-			err = ExecuteTerraform(info)
-			if err != nil {
-				t.Fatalf("Failed to execute 'ExecuteTerraform': %v", err)
-			}
-
-			// Restore stdout
-			w.Close()
-			os.Stdout = oldStdout
-
-			// Read the captured output
-			var buf bytes.Buffer
-			_, err = buf.ReadFrom(r)
-			if err != nil {
-				t.Fatalf("Failed to read from pipe: %v", err)
-			}
-			output := buf.String()
-
-			if !strings.Contains(output, tt.expectedOutput) {
-				t.Errorf("%s not found in the output", tt.expectedOutput)
-			}
+			testCaptureCommandOutput(t, tt.workDir, func() error {
+				return ExecuteTerraform(info)
+			}, tt.expectedOutput)
 		})
 	}
 }
 
 func TestExecuteTerraform_TerraformPlanWithSkipPlanfile(t *testing.T) {
+	// Skip if terraform is not installed
+	tests.RequireTerraform(t)
 	workDir := "../../tests/fixtures/scenarios/terraform-cloud"
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", workDir)
 	t.Setenv("ATMOS_BASE_PATH", workDir)
@@ -572,7 +457,6 @@ func TestExecuteTerraform_TerraformPlanWithSkipPlanfile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to execute 'ExecuteTerraform': %v", err)
 	}
-
 	// Restore stderr
 	err = w.Close()
 	assert.NoError(t, err)
@@ -601,24 +485,11 @@ func TestExecuteTerraform_TerraformPlanWithSkipPlanfile(t *testing.T) {
 }
 
 func TestExecuteTerraform_DeploymentStatus(t *testing.T) {
-	startingDir, err := os.Getwd()
-	if err != nil {
-		t.Fatalf("Failed to get the current working directory: %v", err)
-	}
-	defer func() {
-		if err := os.Chdir(startingDir); err != nil {
-			t.Fatalf("Failed to change back to the starting directory: %v", err)
-		}
-	}()
-
 	workDir := "../../tests/fixtures/scenarios/atmos-pro"
-	if err := os.Chdir(workDir); err != nil {
-		t.Fatalf("Failed to change directory to %q: %v", workDir, err)
-	}
+	t.Chdir(workDir)
 
-	// Set up test environment
-	err = os.Setenv("ATMOS_LOGS_LEVEL", "Debug")
-	assert.NoError(t, err, "Setting 'ATMOS_LOGS_LEVEL' environment variable should execute without error")
+	// Set up test environment.
+	t.Setenv("ATMOS_LOGS_LEVEL", "Debug")
 
 	testCases := []struct {
 		name              string
@@ -746,7 +617,8 @@ func TestExecuteTerraform_DeploymentStatus(t *testing.T) {
 
 			// Save original logger and set up test logger
 			originalLogger := log.Default()
-			logger := log.New(w)
+			logger := log.New()
+			logger.SetOutput(w)
 			log.SetDefault(logger)
 			defer log.SetDefault(originalLogger)
 
@@ -760,7 +632,7 @@ func TestExecuteTerraform_DeploymentStatus(t *testing.T) {
 
 			// Read the output
 			var buf bytes.Buffer
-			_, err = buf.ReadFrom(r)
+			_, err := buf.ReadFrom(r)
 			if err != nil {
 				t.Fatalf("Failed to read from pipe: %v", err)
 			}
@@ -818,4 +690,98 @@ func extractKeyValuePairs(input string) map[string]string {
 	}
 
 	return config
+}
+
+// TestExecuteTerraform_OpaValidationFunctionality tests the OPA validation functionality by using validate component directly.
+func TestExecuteTerraform_OpaValidationFunctionality(t *testing.T) {
+	// Define the working directory.
+	workDir := "../../tests/fixtures/scenarios/atmos-stacks-validation"
+	t.Chdir(workDir)
+
+	tests := []struct {
+		name          string
+		component     string
+		stack         string
+		envVars       map[string]string
+		shouldFail    bool
+		expectedError string
+		description   string
+	}{
+		{
+			name:        "test process_env validation - should pass",
+			component:   "component-test-process-env",
+			stack:       "nonprod",
+			envVars:     map[string]string{"ATMOS_TEST_VAR": "test_value"},
+			shouldFail:  false,
+			description: "Test that process_env section is properly populated and validated",
+		},
+		{
+			name:          "test process_env validation - should fail when ATMOS_TEST_VAR missing",
+			component:     "component-test-process-env",
+			stack:         "nonprod",
+			envVars:       map[string]string{},
+			shouldFail:    true,
+			expectedError: "ATMOS_TEST_VAR environment variable is missing from process_env in test mode",
+			description:   "Test that validation fails when required env var is missing",
+		},
+		{
+			name:        "test cli_args validation - should pass",
+			component:   "component-test-cli-args",
+			stack:       "nonprod",
+			shouldFail:  false,
+			description: "Test that cli_args section contains proper terraform command structure",
+		},
+		{
+			name:        "test tf_cli_vars validation with TF_CLI_ARGS variables",
+			component:   "component-test-tf-cli-vars",
+			stack:       "nonprod",
+			envVars:     map[string]string{"TF_CLI_ARGS": "-var test_var=test_value -var count=5"},
+			shouldFail:  false,
+			description: "Test that tf_cli_vars are properly parsed from TF_CLI_ARGS",
+		},
+		{
+			name:          "test tf_cli_vars validation - should fail when test_var missing",
+			component:     "component-test-tf-cli-vars",
+			stack:         "nonprod",
+			envVars:       map[string]string{"TF_CLI_ARGS": "-var other_var=other_value"},
+			shouldFail:    true,
+			expectedError: "test_var is missing from env_tf_cli_vars when test_tf_cli_vars is enabled",
+			description:   "Test that validation fails when expected test_var is missing from TF_CLI_ARGS",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Set up environment variables for this test using t.Setenv for automatic cleanup.
+			for key, value := range tt.envVars {
+				t.Setenv(key, value)
+			}
+
+			// Test validation directly using ExecuteValidateComponent instead of ExecuteTerraform
+			// to avoid TF_CLI_ARGS conflicts with actual terraform execution
+			info := schema.ConfigAndStacksInfo{
+				ComponentFromArg: tt.component,
+				Stack:            tt.stack,
+				ComponentType:    "terraform",
+			}
+
+			// Initialize Atmos config
+			atmosConfig, err := cfg.InitCliConfig(info, true)
+			if err != nil {
+				t.Fatalf("Failed to initialize Atmos config: %v", err)
+			}
+
+			// Execute validation directly
+			_, err = ExecuteValidateComponent(&atmosConfig, info, tt.component, tt.stack, "", "", []string{}, 0)
+
+			if tt.shouldFail {
+				assert.Error(t, err, "Expected test to fail for %s", tt.description)
+				if tt.expectedError != "" {
+					assert.ErrorContains(t, err, tt.expectedError, "Expected specific error message for %s", tt.description)
+				}
+			} else {
+				assert.NoError(t, err, "Expected test to pass for %s", tt.description)
+			}
+		})
+	}
 }

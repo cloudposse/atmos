@@ -14,15 +14,7 @@ import (
 )
 
 func TestGetComponentPath(t *testing.T) {
-	// Save original env vars to restore later.
-	originalTerraformPath := os.Getenv("ATMOS_COMPONENTS_TERRAFORM_BASE_PATH")
-	originalHelmfilePath := os.Getenv("ATMOS_COMPONENTS_HELMFILE_BASE_PATH")
-	originalPackerPath := os.Getenv("ATMOS_COMPONENTS_PACKER_BASE_PATH")
-	defer func() {
-		os.Setenv("ATMOS_COMPONENTS_TERRAFORM_BASE_PATH", originalTerraformPath)
-		os.Setenv("ATMOS_COMPONENTS_HELMFILE_BASE_PATH", originalHelmfilePath)
-		os.Setenv("ATMOS_COMPONENTS_PACKER_BASE_PATH", originalPackerPath)
-	}()
+	// Note: We don't need to save/restore env vars as t.Setenv in subtests handles cleanup
 
 	tests := []struct {
 		name               string
@@ -262,14 +254,9 @@ func TestGetComponentPath(t *testing.T) {
 				t.Skipf("Skipping test on Windows")
 			}
 
-			// Clear env vars.
-			os.Unsetenv("ATMOS_COMPONENTS_TERRAFORM_BASE_PATH")
-			os.Unsetenv("ATMOS_COMPONENTS_HELMFILE_BASE_PATH")
-			os.Unsetenv("ATMOS_COMPONENTS_PACKER_BASE_PATH")
-
-			// Set test env vars.
+			// Set test env vars (t.Setenv handles cleanup automatically).
 			for k, v := range tt.envVars {
-				os.Setenv(k, v)
+				t.Setenv(k, v)
 			}
 
 			cfg := tt.setupConfig()
@@ -283,8 +270,9 @@ func TestGetComponentPath(t *testing.T) {
 			require.NoError(t, err)
 			assert.NotEmpty(t, path)
 
-			// Verify path is absolute.
-			assert.True(t, filepath.IsAbs(path), "Expected absolute path, got: %s", path)
+			// Verify path is absolute (including UNC paths).
+			isAbsolute := filepath.IsAbs(path) || strings.HasPrefix(path, `\\`)
+			assert.True(t, isAbsolute, "Expected absolute path, got: %s", path)
 
 			// Verify path contains expected suffix (handles platform differences).
 			// We check if the path ends with the expected suffix
@@ -340,4 +328,106 @@ func TestGetComponentPathCrossPlatform(t *testing.T) {
 
 	// Path should be clean regardless of platform.
 	assert.Equal(t, filepath.Clean(path), path)
+}
+
+func TestGetBasePathForComponentType(t *testing.T) {
+	tests := []struct {
+		name          string
+		componentType string
+		setupConfig   func() *schema.AtmosConfiguration
+		setupEnv      map[string]string
+		expectedPath  string
+		expectError   bool
+	}{
+		{
+			name:          "terraform_with_env_override",
+			componentType: "terraform",
+			setupConfig: func() *schema.AtmosConfiguration {
+				return &schema.AtmosConfiguration{
+					BasePath: "/workspace",
+					Components: schema.Components{
+						Terraform: schema.Terraform{
+							BasePath: "components/terraform",
+						},
+					},
+				}
+			},
+			setupEnv: map[string]string{
+				"ATMOS_COMPONENTS_TERRAFORM_BASE_PATH": "/custom/terraform",
+			},
+			expectedPath: "/custom/terraform",
+		},
+		{
+			name:          "helmfile_with_resolved_path",
+			componentType: "helmfile",
+			setupConfig: func() *schema.AtmosConfiguration {
+				return &schema.AtmosConfiguration{
+					BasePath: "/workspace",
+					Components: schema.Components{
+						Helmfile: schema.Helmfile{
+							BasePath: "components/helmfile",
+						},
+					},
+					HelmfileDirAbsolutePath: "/resolved/helmfile/path",
+				}
+			},
+			expectedPath: "/resolved/helmfile/path",
+		},
+		{
+			name:          "packer_constructed_path",
+			componentType: "packer",
+			setupConfig: func() *schema.AtmosConfiguration {
+				return &schema.AtmosConfiguration{
+					BasePath: "/workspace",
+					Components: schema.Components{
+						Packer: schema.Packer{
+							BasePath: "components/packer",
+						},
+					},
+				}
+			},
+			expectedPath: "/workspace/components/packer",
+		},
+		{
+			name:          "unknown_component_type",
+			componentType: "unknown",
+			setupConfig: func() *schema.AtmosConfiguration {
+				return &schema.AtmosConfiguration{
+					BasePath: "/workspace",
+				}
+			},
+			expectError: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Set test env vars (t.Setenv handles cleanup automatically).
+			for k, v := range tt.setupEnv {
+				t.Setenv(k, v)
+			}
+
+			cfg := tt.setupConfig()
+			basePath, envVarName, err := getBasePathForComponentType(cfg, tt.componentType)
+
+			if tt.expectError {
+				assert.Error(t, err)
+				return
+			}
+
+			require.NoError(t, err)
+			assert.NotEmpty(t, envVarName)
+
+			if strings.Contains(tt.expectedPath, "/") && !strings.HasPrefix(tt.expectedPath, `\\`) {
+				// For Unix-style paths, normalize for comparison.
+				expectedNormalized := filepath.FromSlash(tt.expectedPath)
+				actualNormalized := filepath.FromSlash(basePath)
+				assert.True(t, strings.HasSuffix(actualNormalized, expectedNormalized) || actualNormalized == expectedNormalized,
+					"Expected path %s to match or end with %s", actualNormalized, expectedNormalized)
+			} else {
+				// For UNC paths or exact matches, compare directly.
+				assert.Equal(t, tt.expectedPath, basePath)
+			}
+		})
+	}
 }

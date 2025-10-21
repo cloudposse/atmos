@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"strings"
 
-	log "github.com/charmbracelet/log"
-
 	errUtils "github.com/cloudposse/atmos/errors"
+	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -42,6 +42,8 @@ func extractPipeParams(parts []string, input string) (defaultValue *string, quer
 }
 
 func processTagStoreGet(atmosConfig *schema.AtmosConfiguration, input string, currentStack string) any {
+	defer perf.Track(atmosConfig, "exec.processTagStoreGet")()
+
 	log.Debug("Executing Atmos YAML function", "function", input)
 	log.Debug("Processing !store.get", "input", input, "tag", u.AtmosYamlFuncStoreGet)
 
@@ -95,9 +97,15 @@ func processTagStoreGet(atmosConfig *schema.AtmosConfiguration, input string, cu
 		if retParams.defaultValue != nil {
 			return *retParams.defaultValue
 		}
-		er := fmt.Errorf("failed to execute YAML function %s. %w %s: %w", input, ErrGetKeyFailed, retParams.key, err)
+		er := fmt.Errorf("%w: failed to execute YAML function %s for key %s: %s", ErrGetKeyFailed, input, retParams.key, err)
 		errUtils.CheckErrorPrintAndExit(er, "", "")
 		return nil
+	}
+
+	// Check if the retrieved value is nil and use default if provided.
+	// This handles the case where nil was stored (e.g., from rate limit failures).
+	if value == nil && retParams.defaultValue != nil {
+		return *retParams.defaultValue
 	}
 
 	// Execute the YQ expression if provided.

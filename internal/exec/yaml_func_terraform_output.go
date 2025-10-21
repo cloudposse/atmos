@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"strings"
 
-	log "github.com/charmbracelet/log"
-
 	errUtils "github.com/cloudposse/atmos/errors"
+	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -17,6 +17,8 @@ func processTagTerraformOutput(
 	input string,
 	currentStack string,
 ) any {
+	defer perf.Track(atmosConfig, "exec.processTagTerraformOutput")()
+
 	log.Debug("Executing Atmos YAML function", "function", input)
 
 	str, err := getStringAfterTag(input, u.AtmosYamlFuncTerraformOutput)
@@ -52,6 +54,19 @@ func processTagTerraformOutput(
 		errUtils.CheckErrorPrintAndExit(er, "", "")
 	}
 
-	value := GetTerraformOutput(atmosConfig, stack, component, output, false)
+	value, exists, err := GetTerraformOutput(atmosConfig, stack, component, output, false)
+	if err != nil {
+		er := fmt.Errorf("failed to get terraform output for component %s in stack %s, output %s: %w", component, stack, output, err)
+		errUtils.CheckErrorPrintAndExit(er, "", "")
+	}
+
+	// If the output doesn't exist, return nil (backward compatible).
+	// This allows YAML functions to reference outputs that don't exist yet.
+	// Use yq fallback syntax (.output // "default") for default values.
+	if !exists {
+		return nil
+	}
+
+	// value may be nil here if the terraform output is legitimately null, which is valid.
 	return value
 }

@@ -72,11 +72,15 @@ const (
 	PackerSectionName                 = "packer"
 	PackerTemplateSectionName         = "template"
 	WorkspaceSectionName              = "workspace"
+	AuthSectionName                   = "auth"
 	InheritanceSectionName            = "inheritance"
 	IntegrationsSectionName           = "integrations"
 	GithubSectionName                 = "github"
-	TerraformCliVarsSectionName       = "tf_cli_vars"
+	ProcessEnvSectionName             = "process_env"
 	CliArgsSectionName                = "cli_args"
+	TerraformCliVarsSectionName       = "tf_cli_vars"
+	TerraformCliArgsEnvSectionName    = "env_tf_cli_args"
+	TerraformCliVarsEnvSectionName    = "env_tf_cli_vars"
 	ComponentTypeSectionName          = "component_type"
 	OutputsSectionName                = "outputs"
 	StaticSectionName                 = "static"
@@ -86,6 +90,8 @@ const (
 	BackendTypeGCS                    = "gcs"
 	BackendTypeCloud                  = "cloud"
 	ComponentPathSectionName          = "component_path"
+	InheritsSectionName               = "inherits"
+	AbstractSectionName               = "abstract"
 
 	LogsLevelFlag = "--logs-level"
 	LogsFileFlag  = "--logs-file"
@@ -114,4 +120,16 @@ const (
 
 	ComponentStr = "component"
 	StackStr     = "stack"
+
+	// Auth flags.
+	IdentityFlag = "--identity"
+
+	// Performance profiling flags.
+	ProfilerEnabledFlag = "--profiler-enabled"
+	ProfilerHostFlag    = "--profiler-host"
+	ProfilerPortFlag    = "--profiler-port"
+	ProfilerFileFlag    = "--profiler-file"
+	ProfilerTypeFlag    = "--profiler-type"
+	HeatmapFlag         = "--heatmap"
+	HeatmapModeFlag     = "--heatmap-mode"
 )

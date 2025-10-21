@@ -19,3 +19,7 @@ stacks:
 logs:
   file: "/dev/stderr"
   level: Info
+
+settings:
+  telemetry:
+    enabled: false

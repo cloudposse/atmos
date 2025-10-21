@@ -36,3 +36,8 @@ templates:
       timeout: 10
       # https://docs.gomplate.ca/datasources
       datasources: {}
+
+profiler:
+  enabled: false
+  host: "localhost"
+  port: 6060

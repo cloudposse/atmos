@@ -1,0 +1,62 @@
+---
+title: atmos auth whoami
+sidebar_label: whoami
+sidebar_class_name: command
+sidebar_position: 8
+id: whoami
+description: Show current authentication status for the selected identity.
+---
+import Screengrab from '@site/src/components/Screengrab'
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Display the current authentication context, including the effective identity and associated credentials. Useful for verifying which account is active and troubleshooting identity or session issues.
+</Intro>
+
+<Screengrab title="atmos auth whoami --help" slug="atmos-auth-whoami--help" />
+
+## Usage
+
+```shell
+atmos auth whoami [--identity <name>] [--output json]
+```
+
+## Examples
+
+```shell
+# Show current identity (human-friendly)
+atmos auth whoami
+
+# Show a specific identity
+atmos auth whoami --identity dev-admin
+
+# JSON output (redacts home directory from paths)
+atmos auth whoami --output json
+```
+
+## Arguments
+
+<dl>
+  <dt>n/a</dt>
+  <dd>No positional arguments.</dd>
+</dl>
+
+## Flags
+
+<dl>
+  <dt>`--identity` <em>(alias `-i`)</em></dt>
+  <dd>Specify the target identity to inspect. If omitted, the default identity is used.</dd>
+
+  <dt>`--output` <em>(alias `-o`)</em></dt>
+  <dd>Output format. Supported: `json`. Default is human-readable.</dd>
+</dl>
+
+## Environment variables
+
+<dl>
+  <dt>`ATMOS_IDENTITY`</dt>
+  <dd>Default identity when `--identity` is not provided.</dd>
+
+  <dt>`ATMOS_AUTH_WHOAMI_OUTPUT`</dt>
+  <dd>Set to `json` for JSON output by default.</dd>
+</dl>

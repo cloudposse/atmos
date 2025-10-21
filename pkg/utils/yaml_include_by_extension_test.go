@@ -13,16 +13,14 @@ import (
 // TestIncludeExtensionBased tests the !include function with extension-based parsing.
 func TestIncludeExtensionBased(t *testing.T) {
 	// Create a temporary directory for test files
-	tempDir, err := os.MkdirTemp("", "atmos-include-ext-test")
-	assert.NoError(t, err)
-	defer os.RemoveAll(tempDir)
+	tempDir := t.TempDir()
 
 	// Create test files with different extensions
 
 	// JSON file - should be parsed
 	jsonFile := filepath.Join(tempDir, "config.json")
 	jsonContent := `{"database": {"host": "localhost", "port": 5432}}`
-	err = os.WriteFile(jsonFile, []byte(jsonContent), 0o644)
+	err := os.WriteFile(jsonFile, []byte(jsonContent), 0o644)
 	assert.NoError(t, err)
 
 	// YAML file - should be parsed
@@ -85,11 +83,7 @@ components:
 	assert.NoError(t, err)
 
 	// Change to temp directory
-	originalDir, err := os.Getwd()
-	assert.NoError(t, err)
-	err = os.Chdir(tempDir)
-	assert.NoError(t, err)
-	defer os.Chdir(originalDir)
+	t.Chdir(tempDir)
 
 	// Read and parse the manifest
 	yamlFileContent, err := os.ReadFile("test_manifest.yaml")
@@ -153,16 +147,14 @@ components:
 // TestIncludeRawFunction tests the !include.raw function.
 func TestIncludeRawFunction(t *testing.T) {
 	// Create a temporary directory for test files
-	tempDir, err := os.MkdirTemp("", "atmos-include-raw-test")
-	assert.NoError(t, err)
-	defer os.RemoveAll(tempDir)
+	tempDir := t.TempDir()
 
 	// Create test files with different extensions
 
 	// JSON file
 	jsonFile := filepath.Join(tempDir, "config.json")
 	jsonContent := `{"type": "json", "parsed": false}`
-	err = os.WriteFile(jsonFile, []byte(jsonContent), 0o644)
+	err := os.WriteFile(jsonFile, []byte(jsonContent), 0o644)
 	assert.NoError(t, err)
 
 	// YAML file
@@ -204,11 +196,7 @@ components:
 	assert.NoError(t, err)
 
 	// Change to temp directory
-	originalDir, err := os.Getwd()
-	assert.NoError(t, err)
-	err = os.Chdir(tempDir)
-	assert.NoError(t, err)
-	defer os.Chdir(originalDir)
+	t.Chdir(tempDir)
 
 	// Read and parse the manifest
 	yamlFileContent, err := os.ReadFile("test_raw_manifest.yaml")
@@ -238,14 +226,12 @@ components:
 // TestIncludeWithNoExtension tests files without extensions.
 func TestIncludeWithNoExtension(t *testing.T) {
 	// Create a temporary directory for test files
-	tempDir, err := os.MkdirTemp("", "atmos-include-noext-test")
-	assert.NoError(t, err)
-	defer os.RemoveAll(tempDir)
+	tempDir := t.TempDir()
 
 	// Create files without extensions
 	readmeFile := filepath.Join(tempDir, "README")
 	readmeContent := `This is a README file without extension`
-	err = os.WriteFile(readmeFile, []byte(readmeContent), 0o644)
+	err := os.WriteFile(readmeFile, []byte(readmeContent), 0o644)
 	assert.NoError(t, err)
 
 	licenseFile := filepath.Join(tempDir, "LICENSE")
@@ -275,11 +261,7 @@ components:
 	assert.NoError(t, err)
 
 	// Change to temp directory
-	originalDir, err := os.Getwd()
-	assert.NoError(t, err)
-	err = os.Chdir(tempDir)
-	assert.NoError(t, err)
-	defer os.Chdir(originalDir)
+	t.Chdir(tempDir)
 
 	// Read and parse the manifest
 	yamlFileContent, err := os.ReadFile("test_noext_manifest.yaml")
@@ -308,14 +290,12 @@ components:
 // TestIncludeMixedScenarios tests various mixed scenarios.
 func TestIncludeMixedScenarios(t *testing.T) {
 	// Create a temporary directory for test files
-	tempDir, err := os.MkdirTemp("", "atmos-include-mixed-test")
-	assert.NoError(t, err)
-	defer os.RemoveAll(tempDir)
+	tempDir := t.TempDir()
 
 	// File with multiple dots
 	multiDotFile := filepath.Join(tempDir, "backup.2024.config.json")
 	multiDotContent := `{"backup": "2024", "type": "config"}`
-	err = os.WriteFile(multiDotFile, []byte(multiDotContent), 0o644)
+	err := os.WriteFile(multiDotFile, []byte(multiDotContent), 0o644)
 	assert.NoError(t, err)
 
 	// Hidden file with extension
@@ -345,11 +325,7 @@ components:
 	assert.NoError(t, err)
 
 	// Change to temp directory
-	originalDir, err := os.Getwd()
-	assert.NoError(t, err)
-	err = os.Chdir(tempDir)
-	assert.NoError(t, err)
-	defer os.Chdir(originalDir)
+	t.Chdir(tempDir)
 
 	// Read and parse the manifest
 	yamlFileContent, err := os.ReadFile("test_mixed_manifest.yaml")

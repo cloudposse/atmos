@@ -11,7 +11,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// getTerraformCommands returns an array of statically defined Terraform commands with flags
+// getTerraformCommands returns an array of statically defined Terraform commands with flags.
 func getTerraformCommands() []*cobra.Command {
 	// List of Terraform commands
 	return []*cobra.Command{
@@ -267,7 +267,7 @@ Arguments:
 	}
 }
 
-// attachTerraformCommands attaches static Terraform commands to a provided parent command
+// attachTerraformCommands attaches static Terraform commands to a provided parent command.
 func attachTerraformCommands(parentCmd *cobra.Command) {
 	parentCmd.PersistentFlags().String("append-user-agent", "", fmt.Sprintf("Sets the TF_APPEND_USER_AGENT environment variable to customize the User-Agent string in Terraform provider requests. Example: `Atmos/%s (Cloud Posse; +https://atmos.tools)`. This flag works with almost all commands.", version.Version))
 	parentCmd.PersistentFlags().Bool("skip-init", false, "Skip running `terraform init` before executing terraform commands")
@@ -275,6 +275,7 @@ func attachTerraformCommands(parentCmd *cobra.Command) {
 	parentCmd.PersistentFlags().Bool("process-templates", true, "Enable/disable Go template processing in Atmos stack manifests when executing terraform commands")
 	parentCmd.PersistentFlags().Bool("process-functions", true, "Enable/disable YAML functions processing in Atmos stack manifests when executing terraform commands")
 	parentCmd.PersistentFlags().StringSlice("skip", nil, "Skip executing specific YAML functions in the Atmos stack manifests when executing terraform commands")
+	parentCmd.PersistentFlags().StringP("identity", "i", "", "Specify the identity to authenticate to before running Terraform commands")
 
 	parentCmd.PersistentFlags().StringP("query", "q", "", "Execute `atmos terraform <command>` on the components filtered by a YQ expression, in all stacks or in a specific stack")
 	parentCmd.PersistentFlags().StringSlice("components", nil, "Filter by specific components")
@@ -304,6 +305,9 @@ func attachTerraformCommands(parentCmd *cobra.Command) {
 		cmd.RunE = func(cmd_ *cobra.Command, args []string) error {
 			// Because we disable flag parsing we require manual handle help Request
 			handleHelpRequest(cmd, args)
+			// Enable heatmap tracking if --heatmap flag is present in os.Args
+			// (needed because flag parsing is disabled for terraform commands).
+			enableHeatmapIfRequested()
 			if len(os.Args) > 2 {
 				args = os.Args[2:]
 			}

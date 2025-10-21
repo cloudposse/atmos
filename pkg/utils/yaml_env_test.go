@@ -1,7 +1,6 @@
 package utils
 
 import (
-	"os"
 	"testing"
 )
 
@@ -42,9 +41,7 @@ func TestGetNextShellLevel(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			// Set up the environment variable
 			if tt.initialEnv != "" {
-				os.Setenv("ATMOS_SHLVL", tt.initialEnv)
-			} else {
-				os.Unsetenv("ATMOS_SHLVL")
+				t.Setenv("ATMOS_SHLVL", tt.initialEnv)
 			}
 
 			// Call the function

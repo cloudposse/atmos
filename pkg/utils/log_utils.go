@@ -5,6 +5,8 @@ import (
 	"os"
 
 	"github.com/fatih/color"
+
+	log "github.com/cloudposse/atmos/pkg/logger"
 )
 
 const (
@@ -22,7 +24,9 @@ func PrintMessage(message string) {
 
 // PrintMessageInColor prints the message to the console using the provided color
 func PrintMessageInColor(message string, messageColor *color.Color) {
-	_, _ = messageColor.Fprint(os.Stdout, message)
+	if _, err := messageColor.Fprint(os.Stdout, message); err != nil {
+		log.Trace("Failed to print colored message to stdout", "error", err)
+	}
 }
 
 // PrintfMessageToTUI prints the message to the stderr.

@@ -3,11 +3,15 @@ package cmd
 import (
 	"testing"
 
-	log "github.com/charmbracelet/log"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/stretchr/testify/assert"
 )
 
 func TestPackerInitCmd(t *testing.T) {
+	_ = NewTestKit(t)
+
+	skipIfPackerNotInstalled(t)
+
 	workDir := "../tests/fixtures/scenarios/packer"
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", workDir)
 	t.Setenv("ATMOS_BASE_PATH", workDir)

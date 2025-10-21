@@ -4,6 +4,8 @@ import (
 	"path/filepath"
 
 	"github.com/bmatcuk/doublestar/v4"
+
+	"github.com/cloudposse/atmos/pkg/perf"
 )
 
 // MatchWildcard checks if a string matches a wildcard pattern.
@@ -15,6 +17,8 @@ import (
 // - '**' matches any number of directories or files recursively.
 // - '{abc,xyz}` matches the string "abc" or "xyz".
 func MatchWildcard(pattern, str string) (bool, error) {
+	defer perf.Track(nil, "utils.MatchWildcard")()
+
 	// Handle empty pattern as match all
 	if pattern == "" {
 		return true, nil

@@ -4,17 +4,21 @@ import (
 	"reflect"
 	"strings"
 
-	"github.com/mitchellh/mapstructure"
+	"github.com/cloudposse/atmos/pkg/perf"
+
+	"github.com/go-viper/mapstructure/v2"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-// BuildAtlantisProjectNameFromComponentConfig builds an Atlantis project name from the component config
+// BuildAtlantisProjectNameFromComponentConfig builds an Atlantis project name from the component config.
 func BuildAtlantisProjectNameFromComponentConfig(
 	atmosConfig *schema.AtmosConfiguration,
 	configAndStacksInfo schema.ConfigAndStacksInfo,
 ) (string, error) {
+	defer perf.Track(atmosConfig, "exec.BuildAtlantisProjectNameFromComponentConfig")()
+
 	var atlantisProjectTemplate schema.AtlantisProjectConfig
 	var atlantisProjectName string
 

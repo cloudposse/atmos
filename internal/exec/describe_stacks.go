@@ -5,12 +5,13 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/mitchellh/mapstructure"
+	"github.com/go-viper/mapstructure/v2"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/internal/tui/templates/term"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/pager"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -64,6 +65,8 @@ func NewDescribeStacksExec() DescribeStacksExec {
 
 // Execute executes `describe stacks` command.
 func (d *describeStacksExec) Execute(atmosConfig *schema.AtmosConfiguration, args *DescribeStacksArgs) error {
+	defer perf.Track(atmosConfig, "exec.DescribeStacksExec.Execute")()
+
 	finalStacksMap, err := d.executeDescribeStacks(
 		atmosConfig,
 		args.FilterByStack,
@@ -125,6 +128,7 @@ func ExecuteDescribeStacks(
 	processedStacks := make(map[string]bool)
 	var varsSection map[string]any
 	var metadataSection map[string]any
+	var authSection map[string]any
 	var settingsSection map[string]any
 	var envSection map[string]any
 	var providersSection map[string]any
@@ -215,6 +219,10 @@ func ExecuteDescribeStacks(
 							envSection = map[string]any{}
 						}
 
+						if authSection, ok = componentSection[cfg.AuthSectionName].(map[string]any); !ok {
+							authSection = map[string]any{}
+						}
+
 						if providersSection, ok = componentSection[cfg.ProvidersSectionName].(map[string]any); !ok {
 							providersSection = map[string]any{}
 						}
@@ -242,6 +250,7 @@ func ExecuteDescribeStacks(
 							ComponentVarsSection:      varsSection,
 							ComponentSettingsSection:  settingsSection,
 							ComponentEnvSection:       envSection,
+							ComponentAuthSection:      authSection,
 							ComponentProvidersSection: providersSection,
 							ComponentHooksSection:     hooksSection,
 							ComponentOverridesSection: overridesSection,
@@ -252,6 +261,7 @@ func ExecuteDescribeStacks(
 								cfg.MetadataSectionName:    metadataSection,
 								cfg.SettingsSectionName:    settingsSection,
 								cfg.EnvSectionName:         envSection,
+								cfg.AuthSectionName:        authSection,
 								cfg.ProvidersSectionName:   providersSection,
 								cfg.HooksSectionName:       hooksSection,
 								cfg.OverridesSectionName:   overridesSection,
@@ -266,7 +276,7 @@ func ExecuteDescribeStacks(
 
 						// Stack name
 						if atmosConfig.Stacks.NameTemplate != "" {
-							stackName, err = ProcessTmpl("describe-stacks-name-template", atmosConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, false)
+							stackName, err = ProcessTmpl(atmosConfig, "describe-stacks-name-template", atmosConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, false)
 							if err != nil {
 								return nil, err
 							}
@@ -409,7 +419,7 @@ func ExecuteDescribeStacks(
 			}
 
 			// Helmfile
-			if len(componentTypes) == 0 || u.SliceContainsString(componentTypes, cfg.PackerSectionName) {
+			if len(componentTypes) == 0 || u.SliceContainsString(componentTypes, cfg.HelmfileSectionName) {
 				if helmfileSection, ok := componentsSection[cfg.HelmfileSectionName].(map[string]any); ok {
 					for componentName, compSection := range helmfileSection {
 						componentSection, ok := compSection.(map[string]any)
@@ -443,6 +453,10 @@ func ExecuteDescribeStacks(
 							envSection = map[string]any{}
 						}
 
+						if authSection, ok = componentSection[cfg.AuthSectionName].(map[string]any); !ok {
+							authSection = map[string]any{}
+						}
+
 						if providersSection, ok = componentSection[cfg.ProvidersSectionName].(map[string]any); !ok {
 							providersSection = map[string]any{}
 						}
@@ -470,6 +484,7 @@ func ExecuteDescribeStacks(
 							ComponentVarsSection:      varsSection,
 							ComponentSettingsSection:  settingsSection,
 							ComponentEnvSection:       envSection,
+							ComponentAuthSection:      authSection,
 							ComponentProvidersSection: providersSection,
 							ComponentHooksSection:     hooksSection,
 							ComponentOverridesSection: overridesSection,
@@ -480,6 +495,7 @@ func ExecuteDescribeStacks(
 								cfg.MetadataSectionName:    metadataSection,
 								cfg.SettingsSectionName:    settingsSection,
 								cfg.EnvSectionName:         envSection,
+								cfg.AuthSectionName:        authSection,
 								cfg.ProvidersSectionName:   providersSection,
 								cfg.HooksSectionName:       hooksSection,
 								cfg.OverridesSectionName:   overridesSection,
@@ -494,7 +510,7 @@ func ExecuteDescribeStacks(
 
 						// Stack name
 						if atmosConfig.Stacks.NameTemplate != "" {
-							stackName, err = ProcessTmpl("describe-stacks-name-template", atmosConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, false)
+							stackName, err = ProcessTmpl(atmosConfig, "describe-stacks-name-template", atmosConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, false)
 							if err != nil {
 								return nil, err
 							}
@@ -647,6 +663,10 @@ func ExecuteDescribeStacks(
 							envSection = map[string]any{}
 						}
 
+						if authSection, ok = componentSection[cfg.AuthSectionName].(map[string]any); !ok {
+							authSection = map[string]any{}
+						}
+
 						if providersSection, ok = componentSection[cfg.ProvidersSectionName].(map[string]any); !ok {
 							providersSection = map[string]any{}
 						}
@@ -674,6 +694,7 @@ func ExecuteDescribeStacks(
 							ComponentVarsSection:      varsSection,
 							ComponentSettingsSection:  settingsSection,
 							ComponentEnvSection:       envSection,
+							ComponentAuthSection:      authSection,
 							ComponentProvidersSection: providersSection,
 							ComponentHooksSection:     hooksSection,
 							ComponentOverridesSection: overridesSection,
@@ -684,6 +705,7 @@ func ExecuteDescribeStacks(
 								cfg.MetadataSectionName:    metadataSection,
 								cfg.SettingsSectionName:    settingsSection,
 								cfg.EnvSectionName:         envSection,
+								cfg.AuthSectionName:        authSection,
 								cfg.ProvidersSectionName:   providersSection,
 								cfg.HooksSectionName:       hooksSection,
 								cfg.OverridesSectionName:   overridesSection,
@@ -698,7 +720,7 @@ func ExecuteDescribeStacks(
 
 						// Stack name
 						if atmosConfig.Stacks.NameTemplate != "" {
-							stackName, err = ProcessTmpl("describe-stacks-name-template", atmosConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, false)
+							stackName, err = ProcessTmpl(atmosConfig, "describe-stacks-name-template", atmosConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, false)
 							if err != nil {
 								return nil, err
 							}

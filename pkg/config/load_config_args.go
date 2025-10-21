@@ -1,23 +1,15 @@
 package config
 
 import (
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 
-	log "github.com/charmbracelet/log"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/spf13/viper"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
-)
-
-var (
-	ErrExpectedDirOrPattern        = errors.New("--config-path expected directory found file")
-	ErrFileNotFound                = errors.New("file not found")
-	ErrExpectedFile                = errors.New("--config expected file found directory")
-	ErrAtmosArgConfigNotFound      = errors.New("atmos configuration not found")
-	ErrAtmosFilesDIrConfigNotFound = errors.New("`atmos.yaml` or `.atmos.yaml` configuration  file not found on directory")
 )
 
 // loadConfigFromCLIArgs handles the loading of configurations provided via --config-path and --config.
@@ -50,7 +42,7 @@ func loadConfigFromCLIArgs(v *viper.Viper, configAndStacksInfo *schema.ConfigAnd
 	// Check if any config files were found from command line arguments
 	if len(configPaths) == 0 {
 		log.Debug("no config files found from command line arguments")
-		return ErrAtmosArgConfigNotFound
+		return fmt.Errorf("%w: no config files found from command line arguments (--config or --config-path)", errUtils.ErrAtmosArgConfigNotFound)
 	}
 
 	if err := v.Unmarshal(atmosConfig); err != nil {
@@ -109,7 +101,7 @@ func mergeConfigFromDirectories(v *viper.Viper, dirPaths []string) ([]string, er
 		err = mergeConfig(v, confDirPath, DotCliConfigFileName, true)
 		if err != nil {
 			log.Debug("Failed to found .atmos config", "path", filepath.Join(confDirPath, CliConfigFileName), "error", err)
-			return nil, fmt.Errorf("%w: %s", ErrAtmosFilesDIrConfigNotFound, confDirPath)
+			return nil, fmt.Errorf("%w: %s", errUtils.ErrAtmosFilesDirConfigNotFound, confDirPath)
 		}
 		log.Debug(".atmos config file merged", "path", v.ConfigFileUsed())
 		configPaths = append(configPaths, confDirPath)
@@ -119,14 +111,21 @@ func mergeConfigFromDirectories(v *viper.Viper, dirPaths []string) ([]string, er
 
 func validatedIsDirs(dirPaths []string) error {
 	for _, dirPath := range dirPaths {
+		if dirPath == "" {
+			return fmt.Errorf("%w: --config-path requires a non-empty directory path", errUtils.ErrEmptyConfigPath)
+		}
 		stat, err := os.Stat(dirPath)
 		if err != nil {
-			log.Debug("--config-path directory not found", "path", dirPath)
-			return err
+			if os.IsNotExist(err) {
+				log.Debug("--config-path directory not found", "path", dirPath)
+				return fmt.Errorf("%w: --config-path directory '%s' does not exist", errUtils.ErrAtmosDirConfigNotFound, dirPath)
+			}
+			// Other stat errors (permission denied, etc.)
+			return fmt.Errorf("cannot access --config-path directory '%s': %w", dirPath, err)
 		}
 		if !stat.IsDir() {
 			log.Debug("--config-path expected directory found file", "path", dirPath)
-			return ErrAtmosDIrConfigNotFound
+			return fmt.Errorf("%w: --config-path requires a directory but found a file at '%s'", errUtils.ErrAtmosDirConfigNotFound, dirPath)
 		}
 	}
 	return nil
@@ -134,14 +133,21 @@ func validatedIsDirs(dirPaths []string) error {
 
 func validatedIsFiles(files []string) error {
 	for _, filePath := range files {
+		if filePath == "" {
+			return fmt.Errorf("%w: --config requires a non-empty file path", errUtils.ErrEmptyConfigFile)
+		}
 		stat, err := os.Stat(filePath)
 		if err != nil {
-			log.Debug("--config file not found", "path", filePath)
-			return ErrFileNotFound
+			if os.IsNotExist(err) {
+				log.Debug("--config file not found", "path", filePath)
+				return fmt.Errorf("%w: --config file '%s' does not exist", errUtils.ErrFileNotFound, filePath)
+			}
+			// Other stat errors (permission denied, etc.)
+			return fmt.Errorf("%w: cannot access --config file '%s': %v", errUtils.ErrFileAccessDenied, filePath, err)
 		}
 		if stat.IsDir() {
-			log.Debug("--config expected file found directors", "path", filePath)
-			return ErrExpectedFile
+			log.Debug("--config expected file found directory", "path", filePath)
+			return errUtils.ErrExpectedFile
 		}
 	}
 	return nil

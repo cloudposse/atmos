@@ -7,7 +7,12 @@ on: pull_request
 permissions: {}
 jobs:
   autofix:
-    runs-on: ubuntu-24.04
+    runs-on:
+      - runs-on=${{github.run_id}}
+      - runner=terraform
+      - tag=atmos
+      - extras=s3-cache
+      - private=false
     permissions: {}
     timeout-minutes: 15
     steps:

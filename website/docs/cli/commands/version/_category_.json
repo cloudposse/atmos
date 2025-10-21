@@ -1,0 +1,11 @@
+{
+  "label": "version",
+  "position": 20,
+  "className": "command",
+  "collapsible": true,
+  "collapsed": true,
+  "link": {
+    "type": "doc",
+    "id": "cli/commands/version/usage"
+  }
+}

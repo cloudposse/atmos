@@ -1,6 +1,6 @@
 package store
 
-import "github.com/mitchellh/mapstructure"
+import "github.com/go-viper/mapstructure/v2"
 
 type StoreConfig struct {
 	Type    string                 `yaml:"type"`

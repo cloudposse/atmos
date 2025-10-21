@@ -1,0 +1,25 @@
+# Level 3: Component variants
+
+import:
+  - catalog/components/test-component/base
+
+components:
+  terraform:
+    test-component:
+      vars:
+        # Override import_order_test
+        import_order_test: "level-3-component-variants"
+
+        # Variant-specific configuration
+        variant: "standard"
+        high_availability: false
+
+        tags:
+          Variant: "standard"
+          Source: "level-3-component-variants"
+
+      settings:
+        import_order_test: "level-3-component-variants-settings"
+        variant:
+          name: "standard"
+          ha_enabled: false

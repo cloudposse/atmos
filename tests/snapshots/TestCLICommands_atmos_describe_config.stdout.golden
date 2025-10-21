@@ -186,5 +186,20 @@
         "terraform": {}
       }
     }
+  },
+  "auth": {
+    "logs": {
+      "file": "",
+      "level": ""
+    },
+    "providers": null,
+    "identities": null
+  },
+  "profiler": {
+    "enabled": false,
+    "port": 0,
+    "host": "",
+    "file": "",
+    "profile_type": ""
   }
 }

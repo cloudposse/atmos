@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/cloudposse/atmos/tests"
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/config"
 	"github.com/go-git/go-git/v5/plumbing/object"
@@ -15,6 +16,9 @@ import (
 // Helper function to create an initial commit in a repository.
 func createInitialCommit(t *testing.T, repo *git.Repository, tempDir string) {
 	t.Helper()
+
+	// Check if git is configured for commits
+	tests.RequireGitCommitConfig(t)
 
 	worktree, err := repo.Worktree()
 	require.NoError(t, err)
@@ -82,16 +86,9 @@ func TestGetLocalRepo(t *testing.T) {
 			setup: func(t *testing.T) string {
 				// Create a temporary directory with a git repository.
 				tempDir := t.TempDir()
-				oldDir, err := os.Getwd()
-				require.NoError(t, err)
-				t.Cleanup(func() {
-					_ = os.Chdir(oldDir)
-				})
+				t.Chdir(tempDir)
 
-				err = os.Chdir(tempDir)
-				require.NoError(t, err)
-
-				_, err = git.PlainInit(tempDir, false)
+				_, err := git.PlainInit(tempDir, false)
 				require.NoError(t, err)
 
 				return tempDir
@@ -106,14 +103,7 @@ func TestGetLocalRepo(t *testing.T) {
 			setup: func(t *testing.T) string {
 				// Create a temporary directory without a git repository.
 				tempDir := t.TempDir()
-				oldDir, err := os.Getwd()
-				require.NoError(t, err)
-				t.Cleanup(func() {
-					_ = os.Chdir(oldDir)
-				})
-
-				err = os.Chdir(tempDir)
-				require.NoError(t, err)
+				t.Chdir(tempDir)
 
 				return tempDir
 			},
@@ -128,21 +118,15 @@ func TestGetLocalRepo(t *testing.T) {
 			setup: func(t *testing.T) string {
 				// Create a git repository with nested directories.
 				tempDir := t.TempDir()
-				oldDir, err := os.Getwd()
-				require.NoError(t, err)
-				t.Cleanup(func() {
-					_ = os.Chdir(oldDir)
-				})
 
-				_, err = git.PlainInit(tempDir, false)
+				_, err := git.PlainInit(tempDir, false)
 				require.NoError(t, err)
 
 				nestedDir := filepath.Join(tempDir, "nested", "deep")
 				err = os.MkdirAll(nestedDir, 0o755)
 				require.NoError(t, err)
 
-				err = os.Chdir(nestedDir)
-				require.NoError(t, err)
+				t.Chdir(nestedDir)
 
 				return tempDir
 			},
@@ -434,17 +418,10 @@ func TestRepoInfoStruct(t *testing.T) {
 func TestIntegration(t *testing.T) {
 	// Create a temporary directory with a git repository.
 	tempDir := t.TempDir()
-	oldDir, err := os.Getwd()
-	require.NoError(t, err)
-	defer func() {
-		_ = os.Chdir(oldDir)
-	}()
-
-	err = os.Chdir(tempDir)
-	require.NoError(t, err)
+	t.Chdir(tempDir)
 
 	// Initialize a git repository.
-	_, err = git.PlainInit(tempDir, false)
+	_, err := git.PlainInit(tempDir, false)
 	require.NoError(t, err)
 
 	// Test GetLocalRepo.
