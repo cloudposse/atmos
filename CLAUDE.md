@@ -91,6 +91,40 @@ client := NewClient(
 
 **Benefits:** Avoids parameter drilling, provides defaults, extensible without breaking changes.
 
+### Context Usage (MANDATORY)
+Use `context.Context` for these specific purposes only:
+- **Cancellation signals** - Propagate cancellation across API boundaries
+- **Deadlines/timeouts** - Set operation time limits
+- **Request-scoped values** - Trace IDs, request IDs (sparingly)
+
+**DO NOT use context for:**
+- Passing configuration (use Options pattern)
+- Passing dependencies (use struct fields or DI)
+- Avoiding proper function parameters
+
+**Correct usage:**
+```go
+// IO operations, network calls, long-running tasks
+func FetchData(ctx context.Context, url string) error {
+    req, _ := http.NewRequestWithContext(ctx, "GET", url, nil)
+    // ... respects cancellation
+}
+
+// Functions that coordinate multiple operations
+func ProcessAll(ctx context.Context, items []Item) error {
+    for _, item := range items {
+        if err := ctx.Err(); err != nil {
+            return err // Stop if cancelled
+        }
+        if err := processItem(ctx, item); err != nil {
+            return err
+        }
+    }
+}
+```
+
+**Context should be first parameter** in functions that accept it.
+
 ### Package Organization (MANDATORY)
 - **Avoid utils package bloat** - Don't add new functions to `pkg/utils/`
 - **Create purpose-built packages** - New functionality gets its own package in `pkg/`
