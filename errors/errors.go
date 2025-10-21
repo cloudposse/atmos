@@ -665,6 +665,16 @@ var (
 	ErrLocalsCircularDep       = errors.New("circular dependency in locals")
 	ErrLocalsDependencyExtract = errors.New("failed to extract dependencies for local")
 	ErrLocalsResolution        = errors.New("failed to resolve local")
+
+	// Init and scaffold errors.
+	ErrScaffoldNotFound        = errors.New("scaffold template not found")
+	ErrScaffoldValidation      = errors.New("scaffold validation failed")
+	ErrScaffoldGeneration      = errors.New("scaffold generation failed")
+	ErrInitialization          = errors.New("initialization failed")
+	ErrTemplateProcessing      = errors.New("template processing failed")
+	ErrInvalidScaffoldConfig   = errors.New("invalid scaffold configuration")
+	ErrTargetDirectoryExists   = errors.New("target directory already exists")
+	ErrTargetDirectoryNotEmpty = errors.New("target directory is not empty")
 )
 
 // ExitCodeError is a typed error that preserves subcommand exit codes.
