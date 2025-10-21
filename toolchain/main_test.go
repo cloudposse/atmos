@@ -19,6 +19,8 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
+// executeCommand is a helper function for testing cobra commands.
+// Currently unused but kept for potential future test expansion.
 func executeCommand(root *cobra.Command, args ...string) (output string, err error) {
 	buf := new(strings.Builder)
 	root.SetOut(buf)

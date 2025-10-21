@@ -212,30 +212,21 @@ func installFromToolVersions(toolVersionsPath string, reinstallFlag bool) error 
 	return nil
 }
 
-func buildToolList(installer *Installer, toolVersions *ToolVersions) []struct {
-	tool, version, owner, repo string
-} {
-	var toolList []struct {
-		tool, version, owner, repo string
-	}
-	for tool, versions := range toolVersions.Tools {
-		owner, repo, err := installer.parseToolSpec(tool)
+func buildToolList(installer *Installer, toolVersions *ToolVersions) []toolInfo {
+	var toolList []toolInfo
+	for toolName, versions := range toolVersions.Tools {
+		owner, repo, err := installer.parseToolSpec(toolName)
 		if err != nil {
 			continue
 		}
 		for _, version := range versions {
-			toolList = append(toolList, struct {
-				tool, version, owner, repo string
-			}{tool, version, owner, repo})
+			toolList = append(toolList, toolInfo{version, owner, repo})
 		}
 	}
 	return toolList
 }
 
-func installOrSkipTool(installer *Installer, tool struct {
-	tool, version, owner, repo string
-}, reinstallFlag bool,
-) (string, error) {
+func installOrSkipTool(installer *Installer, tool toolInfo, reinstallFlag bool) (string, error) {
 	_, err := installer.FindBinaryPath(tool.owner, tool.repo, tool.version)
 	if err == nil && !reinstallFlag {
 		return "skipped", nil
@@ -249,7 +240,7 @@ func installOrSkipTool(installer *Installer, tool struct {
 }
 
 type toolInfo struct {
-	tool, version, owner, repo string
+	version, owner, repo string
 }
 
 type progressState struct {

@@ -254,6 +254,8 @@ type FakeInstaller struct {
 	BinDir                string
 }
 
+// parseToolSpec is a mock method for FakeInstaller.
+// Currently unused but kept for test infrastructure completeness.
 func (f *FakeInstaller) parseToolSpec(tool string) (string, string, error) {
 	f.CalledParseToolSpec = true
 	return f.ParseToolSpecOwner, f.ParseToolSpecRepo, f.ParseToolSpecErr

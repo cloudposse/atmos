@@ -329,27 +329,34 @@ func uninstallFromToolVersions(toolVersionsPath string, installer *Installer) er
 }
 
 // uninstallAllVersionsOfTool uninstalls all versions of a specific tool.
+// getVersionsToUninstall reads the tool directory and returns version directories to uninstall.
+func getVersionsToUninstall(toolDir string) ([]string, error) {
+	entries, err := os.ReadDir(toolDir)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read tool directory %s: %w", toolDir, err)
+	}
+
+	var versions []string
+	for _, entry := range entries {
+		if entry.IsDir() && entry.Name() != "latest" {
+			versions = append(versions, entry.Name())
+		}
+	}
+	return versions, nil
+}
+
 func uninstallAllVersionsOfTool(installer *Installer, owner, repo string) error {
-	// Get the tool directory path
 	toolDir := filepath.Join(installer.binDir, owner, repo)
 
-	// Check if the tool directory exists
+	// Check if the tool directory exists.
 	if _, err := os.Stat(toolDir); os.IsNotExist(err) {
 		fmt.Fprintf(os.Stderr, "%s Tool %s/%s is not installed\n", checkMark.Render(), owner, repo)
 		return nil
 	}
 
-	// Read all version directories
-	entries, err := os.ReadDir(toolDir)
+	versionsToUninstall, err := getVersionsToUninstall(toolDir)
 	if err != nil {
-		return fmt.Errorf("failed to read tool directory %s: %w", toolDir, err)
-	}
-
-	var versionsToUninstall []string
-	for _, entry := range entries {
-		if entry.IsDir() && entry.Name() != "latest" {
-			versionsToUninstall = append(versionsToUninstall, entry.Name())
-		}
+		return err
 	}
 
 	if len(versionsToUninstall) == 0 {
@@ -357,36 +364,30 @@ func uninstallAllVersionsOfTool(installer *Installer, owner, repo string) error 
 		return nil
 	}
 
-	// Only show the "Uninstalling all versions" message if there's more than 1 version
+	// Only show the "Uninstalling all versions" message if there's more than 1 version.
 	if len(versionsToUninstall) > 1 {
 		fmt.Fprintf(os.Stderr, "Uninstalling all versions of %s/%s (%d versions)\n", owner, repo, len(versionsToUninstall))
 	}
 
-	// Uninstall each version
+	// Uninstall each version.
 	for _, version := range versionsToUninstall {
-		err := uninstallSingleTool(installer, owner, repo, version, false)
-		if err != nil {
+		if err := uninstallSingleTool(installer, owner, repo, version, false); err != nil {
 			fmt.Fprintf(os.Stderr, "%s Failed to uninstall %s/%s@%s: %v\n", xMark.Render(), owner, repo, version, err)
 		} else {
-			// For single version, show simple message; for multiple versions, show detailed message
-			if len(versionsToUninstall) == 1 {
-				fmt.Fprintf(os.Stderr, "%s Uninstalled %s/%s@%s\n", checkMark.Render(), owner, repo, version)
-			} else {
-				fmt.Fprintf(os.Stderr, "%s Uninstalled %s/%s@%s\n", checkMark.Render(), owner, repo, version)
-			}
+			fmt.Fprintf(os.Stderr, "%s Uninstalled %s/%s@%s\n", checkMark.Render(), owner, repo, version)
 		}
 	}
 
-	// Remove the latest file if it exists
+	// Remove the latest file if it exists.
 	latestFile := filepath.Join(toolDir, "latest")
 	if _, err := os.Stat(latestFile); err == nil {
 		_ = os.Remove(latestFile)
 	}
 
-	// Try to remove the tool directory (will only succeed if empty)
+	// Try to remove the tool directory (will only succeed if empty).
 	_ = os.Remove(toolDir)
 
-	// Only show summary if there are multiple versions
+	// Only show summary if there are multiple versions.
 	if len(versionsToUninstall) > 1 {
 		fmt.Fprintf(os.Stderr, "%s Uninstalled all versions of %s/%s\n", checkMark.Render(), owner, repo)
 	}

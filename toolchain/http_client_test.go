@@ -160,6 +160,7 @@ func TestGitHubAuthenticatedTransport_RoundTrip(t *testing.T) {
 		if resp == nil {
 			t.Fatal("Expected non-nil response with nil base")
 		}
+		defer resp.Body.Close()
 	})
 
 	// Test error propagation
