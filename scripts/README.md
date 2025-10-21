@@ -35,8 +35,8 @@ Creates or updates `NOTICE` in the repository root with:
 Run this script:
 - After adding new Go dependencies
 - Before major releases
-- When the license check CI/CD fails
 - To update copyright year
+- Periodically to keep NOTICE file current
 
 ### Requirements
 
@@ -67,21 +67,17 @@ Review the NOTICE file and commit it to the repository.
 
 ### Integration with CI/CD
 
-The license check workflow (`.github/workflows/license-check.yml`) verifies the NOTICE file exists but does **not** auto-generate it. This is intentional to allow manual review of license changes.
+License compliance is enforced by GitHub's Dependency Review action (`.github/workflows/dependency-review.yml`) which:
+- Validates licenses on all pull requests
+- Blocks dependencies with copyleft or restrictive licenses
+- Checks for security vulnerabilities
+- Uses GitHub's native license detection (no custom tooling required)
 
-To update NOTICE in CI/CD:
-
-```yaml
-- name: Generate NOTICE file
-  run: ./scripts/generate-notice.sh
-
-- name: Commit NOTICE if changed
-  run: |
-    git config user.name "github-actions[bot]"
-    git config user.email "github-actions[bot]@users.noreply.github.com"
-    git add NOTICE
-    git diff --staged --quiet || git commit -m "chore: update NOTICE file"
-```
+The NOTICE file is **manually generated** and committed to the repository. This is intentional to:
+- Allow human review of license changes
+- Keep the file stable across builds
+- Avoid CI/CD flakiness from external tools
+- Separate compliance validation (automated) from documentation (manual)
 
 ### Customization
 
@@ -107,6 +103,5 @@ Edit the script to:
 
 ### Related Files
 
-- `.github/workflows/license-check.yml` - CI/CD workflow that checks NOTICE
-- `.github/actions/license-check/` - Reusable action for license checking
-- `NOTICE` - Generated attribution file (do not edit manually)
+- `.github/workflows/dependency-review.yml` - GitHub's native license validation workflow
+- `NOTICE` - Generated attribution file (do not edit manually, regenerate with this script)

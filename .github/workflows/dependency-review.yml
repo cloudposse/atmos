@@ -1,0 +1,30 @@
+name: Dependency Review
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  dependency-review:
+    name: Review Dependency Licenses
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Dependency Review
+        uses: actions/dependency-review-action@v4
+        with:
+          # Deny copyleft and restrictive licenses
+          deny-licenses: GPL-2.0, GPL-2.0-only, GPL-2.0-or-later, GPL-3.0, GPL-3.0-only, GPL-3.0-or-later, LGPL-2.0, LGPL-2.1, LGPL-3.0, AGPL-3.0, AGPL-3.0-only, AGPL-3.0-or-later
+
+          # Fail on moderate or higher severity vulnerabilities
+          fail-on-severity: moderate
+
+          # Comment on PR with details
+          comment-summary-in-pr: always
