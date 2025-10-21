@@ -17,6 +17,11 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
       - name: Dependency Review
         uses: actions/dependency-review-action@v4
         with:
@@ -32,3 +37,13 @@ jobs:
 
           # Comment on PR with details
           comment-summary-in-pr: always
+
+      - name: Generate NOTICE file
+        run: ./scripts/generate-notice.sh
+
+      - name: Check if NOTICE is up to date
+        run: |
+          if ! git diff --exit-code NOTICE; then
+            echo "::error::NOTICE file is out of date. Run './scripts/generate-notice.sh' locally and commit the changes."
+            exit 1
+          fi
