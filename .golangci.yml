@@ -64,6 +64,8 @@ linters:
           msg: Use `filepath.Join` for OS-appropriate path separators instead of `path.Join` (which always uses forward slashes)
         - pattern: term\.IsTerminal\(
           msg: Use `term.IsTTYSupportForStdout()`, `term.IsTTYSupportForStderr()`, or `term.IsTTYSupportForStdin()` instead of `term.IsTerminal()` for consistent and mockable TTY detection
+        - pattern: github\.com/golang/mock
+          msg: Use `go.uber.org/mock` instead of archived `github.com/golang/mock`
       exclude-godoc-examples: false
       analyze-types: true
     funlen:
@@ -195,6 +197,9 @@ linters:
       - legacy
       - std-error-handling
     rules:
+      - linters:
+          - godot
+        path: mock_.*\.go$
       - linters:
           - err113
           - errcheck

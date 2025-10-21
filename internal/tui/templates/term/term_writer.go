@@ -8,7 +8,7 @@ import (
 	"golang.org/x/term"
 )
 
-//go:generate mockgen -source=term_writer.go -destination=mock_term_writer.go -package=term
+//go:generate go run go.uber.org/mock/mockgen@v0.6.0 -source=term_writer.go -destination=mock_term_writer.go -package=term
 
 // TTYDetector provides an interface for detecting TTY support.
 // This allows for testing by injecting mock implementations.
@@ -76,7 +76,7 @@ func NewResponsiveWriter(w io.Writer) io.Writer {
 		return w
 	}
 
-	// Use optimal width based on terminal size
+	// Use optimal width based on terminal size.
 	var limit uint
 	switch {
 	case width >= maxWidth:
@@ -101,14 +101,14 @@ func (w *TerminalWriter) Write(p []byte) (int, error) {
 		return w.writer.Write(p)
 	}
 
-	// Preserving the original length for correct return value
+	// Preserving the original length for correct return value.
 	originalLen := len(p)
 	wrapped := wordwrap.WrapString(string(p), w.width)
 	n, err := w.writer.Write([]byte(wrapped))
 	if err != nil {
 		return n, err
 	}
-	// return the original length as per io.Writer contract
+	// Return the original length as per io.Writer contract.
 	return originalLen, nil
 }
 
