@@ -3,14 +3,13 @@ package exec
 import (
 	"testing"
 
-	"github.com/stretchr/testify/assert"
-	"github.com/xeipuuv/gojsonschema"
-	"go.uber.org/mock/gomock"
-
 	"github.com/cloudposse/atmos/pkg/downloader"
 	"github.com/cloudposse/atmos/pkg/filematch"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/validator"
+	"github.com/stretchr/testify/assert"
+	"github.com/xeipuuv/gojsonschema"
+	"go.uber.org/mock/gomock"
 )
 
 type mockResultError struct {
@@ -103,14 +102,14 @@ func TestExecuteAtmosValidateSchemaCmd(t *testing.T) {
 		name          string
 		yamlSource    string
 		customSchema  string
-		mockSetup     func(*validator.MockValidator, *downloader.MockFileDownloader, *filematch.MockFileMatcher)
+		mockSetup     func(*validator.MockValidator, *downloader.MockFileDownloader, *filematch.MockFileMatcherInterface)
 		expectedError error
 	}{
 		{
 			name:         "successful validation",
 			yamlSource:   "atmos.yaml",
 			customSchema: "atmos://schema",
-			mockSetup: func(mv *validator.MockValidator, mfd *downloader.MockFileDownloader, fmi *filematch.MockFileMatcher) {
+			mockSetup: func(mv *validator.MockValidator, mfd *downloader.MockFileDownloader, fmi *filematch.MockFileMatcherInterface) {
 				fmi.EXPECT().MatchFiles([]string{"atmos.yaml"}).Return([]string{"atmos.yaml"}, nil)
 				mv.EXPECT().ValidateYAMLSchema("atmos://schema", "atmos.yaml").Return([]gojsonschema.ResultError{}, nil)
 			},
@@ -120,7 +119,7 @@ func TestExecuteAtmosValidateSchemaCmd(t *testing.T) {
 			name:         "validation errors",
 			yamlSource:   "atmos.yaml",
 			customSchema: "atmos://schema",
-			mockSetup: func(mv *validator.MockValidator, mfd *downloader.MockFileDownloader, fmi *filematch.MockFileMatcher) {
+			mockSetup: func(mv *validator.MockValidator, mfd *downloader.MockFileDownloader, fmi *filematch.MockFileMatcherInterface) {
 				fmi.EXPECT().MatchFiles([]string{"atmos.yaml"}).Return([]string{"atmos.yaml"}, nil)
 				mv.EXPECT().ValidateYAMLSchema("atmos://schema", "atmos.yaml").Return([]gojsonschema.ResultError{&mockResultError{}}, nil)
 			},
@@ -132,7 +131,7 @@ func TestExecuteAtmosValidateSchemaCmd(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			mockValidator := validator.NewMockValidator(ctrl)
 			mockFileDownloader := downloader.NewMockFileDownloader(ctrl)
-			mockFileMatcher := filematch.NewMockFileMatcher(ctrl)
+			mockFileMatcher := filematch.NewMockFileMatcherInterface(ctrl)
 			tt.mockSetup(mockValidator, mockFileDownloader, mockFileMatcher)
 
 			av := &atmosValidatorExecutor{

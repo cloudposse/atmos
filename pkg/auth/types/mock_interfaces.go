@@ -9,8 +9,9 @@ import (
 	reflect "reflect"
 	time "time"
 
+	gomock "go.uber.org/mock/gomock"
+
 	schema "github.com/cloudposse/atmos/pkg/schema"
-	gomock "github.com/golang/mock/gomock"
 )
 
 // MockProvider is a mock of Provider interface.
