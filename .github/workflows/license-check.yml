@@ -2,6 +2,7 @@ name: License Attribution Check
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened]
     paths:
       - 'go.mod'
       - 'go.sum'
@@ -28,6 +29,7 @@ jobs:
   license-check:
     name: Check License Attributions
     runs-on: ubuntu-latest
+    timeout-minutes: 10
 
     steps:
       - name: Checkout code
