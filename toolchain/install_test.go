@@ -14,7 +14,7 @@ import (
 
 func TestInstallResolvesAliasFromToolVersions(t *testing.T) {
 	dir := t.TempDir()
-	os.Setenv("HOME", dir)
+	t.Setenv("HOME", dir)
 	t.Chdir(dir)
 
 	// Write a .tool-versions file with the full alias key
@@ -66,7 +66,7 @@ func TestInstallResolvesAliasFromToolVersions(t *testing.T) {
 
 func TestRunInstallWithNoArgs(t *testing.T) {
 	tempDir := t.TempDir()
-	os.Setenv("HOME", tempDir)
+	t.Setenv("HOME", tempDir)
 
 	// Create a .tool-versions file with some tools
 	toolVersionsPath := filepath.Join(tempDir, DefaultToolVersionsFilePath)

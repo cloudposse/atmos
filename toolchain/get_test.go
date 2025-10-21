@@ -97,8 +97,7 @@ func TestListToolVersions(t *testing.T) {
 			// Set up environment for findBinaryPath if needed
 			if tt.binaryDir != "" {
 				// Assume findBinaryPath checks a path like ~/.tools/owner/repo/version
-				os.Setenv("HOME", tt.binaryDir)
-				defer os.Unsetenv("HOME")
+				t.Setenv("HOME", tt.binaryDir)
 			}
 
 			// Avoid mutating tt.filePath directly; use a local variable.

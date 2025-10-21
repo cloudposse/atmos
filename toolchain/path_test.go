@@ -440,7 +440,6 @@ package toolchain
 // }
 
 import (
-	"os"
 	"path/filepath"
 	"testing"
 
@@ -456,7 +455,7 @@ func TestEmitPath(t *testing.T) {
 		},
 	})
 	tempDir := t.TempDir()
-	os.Setenv("HOME", tempDir)
+	t.Setenv("HOME", tempDir)
 
 	// Create a .tool-versions file with some tools
 	toolVersionsPath := filepath.Join(tempDir, DefaultToolVersionsFilePath)

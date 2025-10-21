@@ -1022,11 +1022,7 @@ packages:
 
 func TestExtractRawBinary(t *testing.T) {
 	// Create a temporary directory for testing
-	tempDir, err := os.MkdirTemp("", "extract-test-")
-	if err != nil {
-		t.Fatalf("failed to create temp dir: %v", err)
-	}
-	defer os.RemoveAll(tempDir)
+	tempDir := t.TempDir()
 
 	installer := NewInstaller()
 
@@ -1041,8 +1037,7 @@ func TestExtractRawBinary(t *testing.T) {
 	destPath := filepath.Join(tempDir, "extracted-binary")
 
 	// Test raw binary extraction (copyFile)
-	err = installer.copyFile(rawBinaryPath, destPath)
-	if err != nil {
+	if err := installer.copyFile(rawBinaryPath, destPath); err != nil {
 		t.Fatalf("copyFile failed: %v", err)
 	}
 
@@ -1063,11 +1058,7 @@ func TestExtractRawBinary(t *testing.T) {
 
 func TestExtractGzippedBinary(t *testing.T) {
 	// Create a temporary directory for testing
-	tempDir, err := os.MkdirTemp("", "extract-test-")
-	if err != nil {
-		t.Fatalf("failed to create temp dir: %v", err)
-	}
-	defer os.RemoveAll(tempDir)
+	tempDir := t.TempDir()
 
 	installer := NewInstaller()
 
@@ -1199,11 +1190,7 @@ func TestExtractAndInstallWithGzippedBinary(t *testing.T) {
 
 func TestFileTypeDetection(t *testing.T) {
 	// Create a temporary directory for testing
-	tempDir, err := os.MkdirTemp("", "filetype-test-")
-	if err != nil {
-		t.Fatalf("failed to create temp dir: %v", err)
-	}
-	defer os.RemoveAll(tempDir)
+	tempDir := t.TempDir()
 
 	installer := NewInstaller()
 

@@ -15,7 +15,7 @@ import (
 func TestUninstallCleansUpLatestFile_Present(t *testing.T) {
 	t.Run("both binary and latest file exist", func(t *testing.T) {
 		tempDir := t.TempDir()
-		os.Setenv("HOME", tempDir)
+		t.Setenv("HOME", tempDir)
 
 		installer := NewInstaller()
 		installer.binDir = tempDir
@@ -57,7 +57,7 @@ func TestUninstallCleansUpLatestFile_Present(t *testing.T) {
 
 	t.Run("only latest file exists", func(t *testing.T) {
 		tempDir := t.TempDir()
-		os.Setenv("HOME", tempDir)
+		t.Setenv("HOME", tempDir)
 
 		installer := NewInstaller()
 		installer.binDir = tempDir
@@ -97,7 +97,7 @@ func TestUninstallCleansUpLatestFile_Present(t *testing.T) {
 
 func TestUninstallCleansUpLatestFile_Missing(t *testing.T) {
 	tempDir := t.TempDir()
-	os.Setenv("HOME", tempDir)
+	t.Setenv("HOME", tempDir)
 
 	installer := NewInstaller()
 	installer.binDir = tempDir
@@ -134,7 +134,7 @@ func TestUninstallCleansUpLatestFile_Missing(t *testing.T) {
 
 func TestUninstallWithNoArgs(t *testing.T) {
 	tempDir := t.TempDir()
-	os.Setenv("HOME", tempDir)
+	t.Setenv("HOME", tempDir)
 
 	// Create a .tool-versions file with some tools
 	toolVersionsPath := filepath.Join(tempDir, DefaultToolVersionsFilePath)
@@ -197,7 +197,7 @@ func TestUninstallWithNoArgs(t *testing.T) {
 
 func TestRunUninstallWithNoArgs(t *testing.T) {
 	tempDir := t.TempDir()
-	os.Setenv("HOME", tempDir)
+	t.Setenv("HOME", tempDir)
 
 	// Create a .tool-versions file with some tools
 	toolVersionsPath := filepath.Join(tempDir, DefaultToolVersionsFilePath)

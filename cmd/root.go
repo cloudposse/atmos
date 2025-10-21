@@ -34,12 +34,12 @@ import (
 	"github.com/cloudposse/atmos/pkg/telemetry"
 	"github.com/cloudposse/atmos/pkg/ui/heatmap"
 	"github.com/cloudposse/atmos/pkg/utils"
-	"github.com/cloudposse/atmos/toolchain"
 
 	// Import built-in command packages for side-effect registration.
 	// The init() function in each package registers the command with the registry.
 	_ "github.com/cloudposse/atmos/cmd/about"
 	"github.com/cloudposse/atmos/cmd/internal"
+	toolchainCmd "github.com/cloudposse/atmos/cmd/toolchain"
 	"github.com/cloudposse/atmos/cmd/version"
 )
 
@@ -498,7 +498,9 @@ func Execute() error {
 	// Here we need the custom commands from the config.
 	var initErr error
 	atmosConfig, initErr = cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
-	toolchain.SetAtmosConfig(&atmosConfig)
+
+	// Set atmosConfig for toolchain command (needs access to config).
+	toolchainCmd.SetAtmosConfig(&atmosConfig)
 
 	// Set atmosConfig for version command (needs access to config).
 	version.SetAtmosConfig(&atmosConfig)
@@ -687,10 +689,10 @@ func init() {
 		log.Error("Failed to bind ATMOS_GITHUB_TOKEN environment variable", "error", err)
 	}
 
-	// Set custom usage template.
+	// Note: Toolchain command is now registered via the command registry pattern.
+	// The blank import of cmd/toolchain automatically registers it.
 
-	RootCmd.AddCommand(ToolChainCmd)
-	// Set custom usage template
+	// Set custom usage template.
 	err := templates.SetCustomUsageFunc(RootCmd)
 	if err != nil {
 		errUtils.CheckErrorPrintAndExit(err, "", "")
