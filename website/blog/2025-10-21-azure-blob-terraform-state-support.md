@@ -99,6 +99,7 @@ Atmos handles this automatically—you don't need to worry about the naming conv
 ### Example
 
 If you have:
+
 - Key: `apimanagement.terraform.tfstate`
 - Workspace: `dev-wus3-apimanagement-be`
 
@@ -297,6 +298,7 @@ atmos describe component vpc -s plat-ue2-dev
 ## Get Involved
 
 We're building Atmos in the open and welcome your feedback:
+
 - 💬 **Discuss** - Share thoughts in [GitHub Discussions](https://github.com/cloudposse/atmos/discussions)
 - 🐛 **Report Issues** - Found a bug? [Open an issue](https://github.com/cloudposse/atmos/issues)
 - 🚀 **Contribute** - Want to add features? Review our [contribution guide](https://atmos.tools/community/contributing)

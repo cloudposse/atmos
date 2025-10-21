@@ -353,3 +353,140 @@ type errorReader struct{}
 func (e *errorReader) Read(p []byte) (n int, err error) {
 	return 0, errors.New("read error")
 }
+
+func TestConstructAzureBlobPath(t *testing.T) {
+	tests := []struct {
+		name              string
+		componentSections map[string]any
+		backend           map[string]any
+		expectedPath      string
+	}{
+		{
+			name: "default_workspace_with_explicit_key",
+			componentSections: map[string]any{
+				"workspace": "default",
+			},
+			backend: map[string]any{
+				"key": "test.tfstate",
+			},
+			expectedPath: "test.tfstate",
+		},
+		{
+			name: "default_workspace_without_key",
+			componentSections: map[string]any{
+				"workspace": "default",
+			},
+			backend:      map[string]any{},
+			expectedPath: "terraform.tfstate",
+		},
+		{
+			name: "empty_workspace_with_key",
+			componentSections: map[string]any{
+				"workspace": "",
+			},
+			backend: map[string]any{
+				"key": "custom.tfstate",
+			},
+			expectedPath: "custom.tfstate",
+		},
+		{
+			name: "non_default_workspace",
+			componentSections: map[string]any{
+				"workspace": "dev",
+			},
+			backend: map[string]any{
+				"key": "app.tfstate",
+			},
+			expectedPath: "app.tfstateenv:dev",
+		},
+		{
+			name: "non_default_workspace_no_key",
+			componentSections: map[string]any{
+				"workspace": "staging",
+			},
+			backend:      map[string]any{},
+			expectedPath: "terraform.tfstateenv:staging",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := constructAzureBlobPath(&tt.componentSections, &tt.backend)
+			assert.Equal(t, tt.expectedPath, result)
+		})
+	}
+}
+
+func TestHandleAzureDownloadError(t *testing.T) {
+	tests := []struct {
+		name            string
+		err             error
+		expectedError   error
+		shouldReturnNil bool
+	}{
+		{
+			name:            "not_found_error",
+			err:             &azcore.ResponseError{StatusCode: statusCodeNotFoundAzure},
+			expectedError:   nil,
+			shouldReturnNil: true,
+		},
+		{
+			name:            "permission_denied_error",
+			err:             &azcore.ResponseError{StatusCode: statusCodeForbiddenAzure},
+			expectedError:   errUtils.ErrAzurePermissionDenied,
+			shouldReturnNil: false,
+		},
+		{
+			name:            "other_response_error",
+			err:             &azcore.ResponseError{StatusCode: 500},
+			expectedError:   nil,
+			shouldReturnNil: false,
+		},
+		{
+			name:            "non_response_error",
+			err:             errors.New("generic error"),
+			expectedError:   nil,
+			shouldReturnNil: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := handleAzureDownloadError(tt.err, "test.tfstate", "test-container")
+
+			if tt.shouldReturnNil {
+				assert.Nil(t, result)
+			} else if tt.expectedError != nil {
+				assert.Error(t, result)
+				assert.ErrorIs(t, result, tt.expectedError)
+			} else {
+				assert.Equal(t, tt.err, result)
+			}
+		})
+	}
+}
+
+func TestReadTerraformBackendAzurermInternal_ContextTimeout(t *testing.T) {
+	componentSections := map[string]any{
+		"component": "test-component",
+		"workspace": "default",
+	}
+	backend := map[string]any{
+		"storage_account_name": "testaccount",
+		"container_name":       "tfstate",
+		"key":                  "terraform.tfstate",
+	}
+
+	// Mock client that simulates context timeout.
+	mockClient := &mockAzureBlobClient{
+		downloadStreamFunc: func(ctx context.Context, containerName string, blobName string, options *azblob.DownloadStreamOptions) (AzureBlobDownloadResponse, error) {
+			return nil, context.DeadlineExceeded
+		},
+	}
+
+	result, err := ReadTerraformBackendAzurermInternal(mockClient, &componentSections, &backend)
+
+	assert.Error(t, err)
+	assert.Nil(t, result)
+	assert.ErrorIs(t, err, errUtils.ErrGetBlobFromAzure)
+}
