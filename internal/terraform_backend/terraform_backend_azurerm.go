@@ -126,6 +126,9 @@ func ReadTerraformBackendAzurerm(
 	defer perf.Track(nil, "terraform_backend.ReadTerraformBackendAzurerm")()
 
 	backend := GetComponentBackend(componentSections)
+	if backend == nil {
+		return nil, errUtils.ErrBackendConfigRequired
+	}
 
 	azureClient, err := getCachedAzureBlobClient(&backend)
 	if err != nil {

@@ -77,6 +77,7 @@ var (
 	ErrAzureContainerRequired = errors.New("container_name is required for azurerm backend")
 	ErrStorageAccountRequired = errors.New("storage_account_name is required for azurerm backend")
 	ErrAzurePermissionDenied  = errors.New("permission denied accessing Azure blob")
+	ErrBackendConfigRequired  = errors.New("backend configuration is required")
 
 	// Git-related errors.
 	ErrGitNotAvailable      = errors.New("git must be available and on the PATH")

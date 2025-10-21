@@ -333,6 +333,20 @@ func TestReadTerraformBackendAzurermInternal_ReadBodyError(t *testing.T) {
 	assert.ErrorIs(t, err, errUtils.ErrReadAzureBlobBody)
 }
 
+func TestReadTerraformBackendAzurerm_MissingBackend(t *testing.T) {
+	componentSections := map[string]any{
+		"component": "test-component",
+		"workspace": "dev",
+		// No backend section
+	}
+
+	result, err := ReadTerraformBackendAzurerm(nil, &componentSections)
+
+	assert.Error(t, err)
+	assert.Nil(t, result)
+	assert.ErrorIs(t, err, errUtils.ErrBackendConfigRequired)
+}
+
 // errorReader is a reader that always returns an error.
 type errorReader struct{}
 
