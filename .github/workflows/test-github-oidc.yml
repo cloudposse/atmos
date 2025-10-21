@@ -1,0 +1,268 @@
+name: Test GitHub OIDC Authentication
+
+# This workflow tests GitHub OIDC authentication in GitHub Actions.
+# It only runs on push to main/release branches and manual triggers.
+#
+# Security Note: This workflow does NOT run on pull requests because there's no
+# safe way to run untrusted code with OIDC tokens. Even pull_request_target poses
+# exfiltration risks when checking out PR code.
+#
+# Testing Strategy:
+# - Unit tests (with mocks) run on all PRs via standard test workflow
+# - Real OIDC integration tests run after merge to main
+# - Manual workflow_dispatch available for testing specific branches
+
+on:
+  push:
+    branches:
+      - main
+      - 'release/**'
+    paths:
+      - 'pkg/auth/providers/github/**'
+      - 'pkg/auth/identities/github/**'
+      - 'tests/test-cases/auth-github-oidc/**'
+      - '.github/workflows/test-github-oidc.yml'
+
+  workflow_dispatch:
+
+# Required for OIDC token generation
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  test-github-oidc:
+    name: Test GitHub OIDC Authentication
+    runs-on: ubuntu-latest
+    environment: screengrabs
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Build Atmos
+        run: make build
+
+      - name: Verify OIDC environment variables are present
+        run: |
+          if [[ -z "${ACTIONS_ID_TOKEN_REQUEST_URL}" ]]; then
+            echo "❌ ACTIONS_ID_TOKEN_REQUEST_URL not set"
+            echo "This workflow requires 'permissions.id-token: write'"
+            exit 1
+          fi
+
+          if [[ -z "${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" ]]; then
+            echo "❌ ACTIONS_ID_TOKEN_REQUEST_TOKEN not set"
+            echo "This workflow requires 'permissions.id-token: write'"
+            exit 1
+          fi
+
+          echo "✅ OIDC environment variables detected"
+          echo "Request URL: ${ACTIONS_ID_TOKEN_REQUEST_URL}"
+
+      - name: Test GitHub OIDC configuration validation
+        working-directory: tests/test-cases/auth-github-oidc
+        run: |
+          echo "::group::Validate auth configuration"
+          ../../../build/atmos auth validate
+          echo "::endgroup::"
+
+          echo "::group::Describe config"
+          ../../../build/atmos describe config
+          echo "::endgroup::"
+
+      - name: Test GitHub OIDC authentication
+        working-directory: tests/test-cases/auth-github-oidc
+        run: |
+          echo "::group::Authenticate with GitHub OIDC"
+          ../../../build/atmos auth login --identity github-actions
+          echo "✅ Authentication successful"
+          echo "::endgroup::"
+
+      - name: Test whoami command
+        working-directory: tests/test-cases/auth-github-oidc
+        run: |
+          echo "::group::Test whoami"
+          ../../../build/atmos auth whoami --identity github-actions
+          echo "::endgroup::"
+
+      - name: Test environment variable export
+        working-directory: tests/test-cases/auth-github-oidc
+        run: |
+          echo "::group::Export environment variables"
+          ../../../build/atmos auth env --identity github-actions > /tmp/github-env
+          cat /tmp/github-env
+          echo "::endgroup::"
+
+          echo "::group::Verify environment variables"
+          source /tmp/github-env
+
+          if [[ -z "${GITHUB_TOKEN}" ]]; then
+            echo "❌ GITHUB_TOKEN not exported"
+            exit 1
+          fi
+
+          if [[ -z "${GH_TOKEN}" ]]; then
+            echo "❌ GH_TOKEN not exported"
+            exit 1
+          fi
+
+          echo "✅ Environment variables exported successfully"
+          echo "GITHUB_TOKEN length: ${#GITHUB_TOKEN}"
+          echo "::endgroup::"
+
+      - name: Test OIDC token works with GitHub API
+        working-directory: tests/test-cases/auth-github-oidc
+        run: |
+          echo "::group::Get GitHub token"
+          source <(../../../build/atmos auth env --identity github-actions)
+          echo "::endgroup::"
+
+          echo "::group::Test GitHub API call"
+          # Test that the token works with GitHub API
+          response=$(curl -s -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+            -H "Accept: application/vnd.github+json" \
+            https://api.github.com/user)
+
+          echo "API Response:"
+          echo "$response" | jq '.'
+
+          # Verify we got a valid response (should show the github-actions[bot] user)
+          if echo "$response" | jq -e '.login' > /dev/null; then
+            echo "✅ Token successfully authenticated with GitHub API"
+          else
+            echo "❌ Failed to authenticate with GitHub API"
+            exit 1
+          fi
+          echo "::endgroup::"
+
+      - name: OIDC Test Summary
+        if: success()
+        run: |
+          echo "## ✅ GitHub OIDC Tests Passed" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ OIDC environment variables detected" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Configuration validation passed" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Authentication successful" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Whoami command works" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Environment variable export works" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Token authenticated with GitHub API" >> $GITHUB_STEP_SUMMARY
+
+  test-github-app:
+    name: Test GitHub App Authentication
+    runs-on: ubuntu-latest
+    environment: screengrabs
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Build Atmos
+        run: make build
+
+      - name: Create GitHub App test fixture
+        run: |
+          mkdir -p /tmp/test-github-app
+          cat > /tmp/test-github-app/atmos.yaml <<EOF
+          auth:
+            providers:
+              github-bot:
+                kind: github/app
+                spec:
+                  app_id: ${{ vars.BOT_GITHUB_APP_ID }}
+                  installation_id: ${{ vars.BOT_GITHUB_APP_INSTALLATION_ID }}
+                  private_key_env: BOT_GITHUB_APP_PRIVATE_KEY
+
+            identities:
+              bot:
+                kind: github/token
+                via:
+                  provider: github-bot
+          EOF
+
+      - name: Test GitHub App authentication
+        working-directory: /tmp/test-github-app
+        env:
+          BOT_GITHUB_APP_PRIVATE_KEY: ${{ secrets.BOT_GITHUB_APP_PRIVATE_KEY }}
+        run: |
+          echo "::group::Authenticate with GitHub App"
+          ${{ github.workspace }}/build/atmos auth login --identity bot
+          echo "✅ GitHub App authentication successful"
+          echo "::endgroup::"
+
+          echo "::group::Test whoami"
+          ${{ github.workspace }}/build/atmos auth whoami --identity bot
+          echo "::endgroup::"
+
+          echo "::group::Test GitHub API with App token"
+          source <(${{ github.workspace }}/build/atmos auth env --identity bot)
+
+          response=$(curl -s -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+            -H "Accept: application/vnd.github+json" \
+            https://api.github.com/user)
+
+          echo "API Response:"
+          echo "$response" | jq '.'
+
+          if echo "$response" | jq -e '.login' > /dev/null; then
+            echo "✅ GitHub App token authenticated with GitHub API"
+          else
+            echo "❌ Failed to authenticate with GitHub API"
+            exit 1
+          fi
+          echo "::endgroup::"
+
+      - name: Summary
+        if: success()
+        run: |
+          echo "## ✅ GitHub App Authentication Tests Passed" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "All GitHub App authentication tests completed successfully:" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Configuration created" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Authentication successful" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Whoami command works" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Token authenticated with GitHub API" >> $GITHUB_STEP_SUMMARY
+
+  summary:
+    name: Test Summary
+    runs-on: ubuntu-latest
+    needs: [test-github-oidc, test-github-app]
+    if: always()
+
+    steps:
+      - name: Check test results
+        run: |
+          echo "## GitHub Authentication Tests Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          if [[ "${{ needs.test-github-oidc.result }}" == "success" ]]; then
+            echo "✅ **GitHub OIDC Authentication**: Passed" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ **GitHub OIDC Authentication**: Failed" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          if [[ "${{ needs.test-github-app.result }}" == "success" ]]; then
+            echo "✅ **GitHub App Authentication**: Passed" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ **GitHub App Authentication**: Failed" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          # Fail the job if any test failed
+          if [[ "${{ needs.test-github-oidc.result }}" != "success" ]] || [[ "${{ needs.test-github-app.result }}" != "success" ]]; then
+            echo "Some tests failed. See job logs for details." >> $GITHUB_STEP_SUMMARY
+            exit 1
+          fi
+
+          echo "All authentication tests passed successfully! 🎉" >> $GITHUB_STEP_SUMMARY

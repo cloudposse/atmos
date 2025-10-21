@@ -5,6 +5,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	awsIdentities "github.com/cloudposse/atmos/pkg/auth/identities/aws"
+	githubIdentities "github.com/cloudposse/atmos/pkg/auth/identities/github"
 	awsProviders "github.com/cloudposse/atmos/pkg/auth/providers/aws"
 	githubProviders "github.com/cloudposse/atmos/pkg/auth/providers/github"
 	"github.com/cloudposse/atmos/pkg/auth/types"
@@ -15,6 +16,7 @@ import (
 // NewProvider creates a new provider instance based on the provider configuration.
 func NewProvider(name string, config *schema.Provider) (types.Provider, error) {
 	defer perf.Track(nil, "factory.NewProvider")()
+
 	if config == nil {
 		return nil, fmt.Errorf("%w: provider config is nil", errUtils.ErrInvalidAuthConfig)
 	}
@@ -23,8 +25,12 @@ func NewProvider(name string, config *schema.Provider) (types.Provider, error) {
 		return awsProviders.NewSSOProvider(name, config)
 	case "aws/saml":
 		return awsProviders.NewSAMLProvider(name, config)
-	case "github/oidc":
+	case githubProviders.KindOIDC:
 		return githubProviders.NewOIDCProvider(name, config)
+	case githubProviders.KindUser:
+		return githubProviders.NewUserProvider(name, config)
+	case githubProviders.KindApp:
+		return githubProviders.NewAppProvider(name, config)
 	default:
 		return nil, fmt.Errorf("%w: unsupported provider kind: %s", errUtils.ErrInvalidProviderKind, config.Kind)
 	}
@@ -33,6 +39,7 @@ func NewProvider(name string, config *schema.Provider) (types.Provider, error) {
 // NewIdentity creates a new identity instance based on the identity configuration.
 func NewIdentity(name string, config *schema.Identity) (types.Identity, error) {
 	defer perf.Track(nil, "factory.NewIdentity")()
+
 	if config == nil {
 		return nil, fmt.Errorf("%w: identity config is nil", errUtils.ErrInvalidAuthConfig)
 	}
@@ -43,6 +50,8 @@ func NewIdentity(name string, config *schema.Identity) (types.Identity, error) {
 		return awsIdentities.NewAssumeRoleIdentity(name, config)
 	case "aws/user":
 		return awsIdentities.NewUserIdentity(name, config)
+	case "github/token":
+		return githubIdentities.NewTokenIdentity(name, config)
 	default:
 		return nil, fmt.Errorf("%w: unsupported identity kind: %s", errUtils.ErrInvalidIdentityKind, config.Kind)
 	}

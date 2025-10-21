@@ -52,6 +52,12 @@ func (s *keyringStore) Store(alias string, creds types.ICredentials) error {
 	case *types.OIDCCredentials:
 		typ = "oidc"
 		raw, err = json.Marshal(c)
+	case *types.GitHubUserCredentials:
+		typ = "github-user"
+		raw, err = json.Marshal(c)
+	case *types.GitHubAppCredentials:
+		typ = "github-app"
+		raw, err = json.Marshal(c)
 	default:
 		return fmt.Errorf("%w: unsupported credential type %T", ErrCredentialStore, creds)
 	}
@@ -94,6 +100,18 @@ func (s *keyringStore) Retrieve(alias string) (types.ICredentials, error) {
 		var c types.OIDCCredentials
 		if err := json.Unmarshal(env.Data, &c); err != nil {
 			return nil, fmt.Errorf("%w: failed to unmarshal OIDC credentials: %v", ErrCredentialStore, err)
+		}
+		return &c, nil
+	case "github-user":
+		var c types.GitHubUserCredentials
+		if err := json.Unmarshal(env.Data, &c); err != nil {
+			return nil, fmt.Errorf("%w: failed to unmarshal GitHub User credentials: %v", ErrCredentialStore, err)
+		}
+		return &c, nil
+	case "github-app":
+		var c types.GitHubAppCredentials
+		if err := json.Unmarshal(env.Data, &c); err != nil {
+			return nil, fmt.Errorf("%w: failed to unmarshal GitHub App credentials: %v", ErrCredentialStore, err)
 		}
 		return &c, nil
 	default:

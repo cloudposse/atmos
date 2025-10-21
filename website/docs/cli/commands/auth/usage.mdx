@@ -86,9 +86,6 @@ auth:
           name: production
 ```
 
-Notes:
-
-- Region is required for the GitHub OIDC provider and is validated at construction time.
 
 ### 2. Validate Configuration
 
@@ -125,9 +122,14 @@ atmos terraform plan mycomponent -s dev
 
 **Providers** are the upstream systems that Atmos Auth uses to obtain initial credentials:
 
-- **AWS SSO**: `aws/iam-identity-center`
-- **AWS SAML**: `aws/saml`
-- **GitHub OIDC**: `github/oidc`
+#### AWS Providers
+- **AWS SSO**: `aws/iam-identity-center` - AWS IAM Identity Center (SSO) authentication
+- **AWS SAML**: `aws/saml` - SAML-based authentication (Okta, Azure AD, etc.)
+
+#### GitHub Providers
+- **GitHub User**: [`github/user`](/cli/commands/auth/providers/github-user) - OAuth Device Flow for personal development
+- **GitHub App**: [`github/app`](/cli/commands/auth/providers/github-app) - JWT-based authentication for automation and bots
+- **GitHub OIDC**: [`github/oidc`](/cli/commands/auth/providers/github-oidc) - Keyless authentication for GitHub Actions
 
 ### Identities
 
@@ -247,21 +249,63 @@ auth:
         assume_role: arn:aws:iam::123456789012:role/AdminRole
 ```
 
-### GitHub Actions OIDC
+### GitHub Authentication
+
+Atmos supports multiple GitHub authentication methods. See the dedicated provider documentation for detailed configuration:
+
+#### GitHub User (Personal Development)
+
+For local development with OAuth Device Flow - **works out of the box with zero configuration**. See [`github/user` provider documentation](/cli/commands/auth/providers/github-user).
+
+```yaml
+auth:
+  providers:
+    github-user:
+      kind: github/user
+      # No client_id needed - uses official Atmos OAuth App by default
+      scopes: [repo, workflow]
+
+  identities:
+    dev:
+      kind: github/user
+      via:
+        provider: github-user
+```
+
+#### GitHub App (Automation)
+
+For bots and CI/CD with JWT signing. See [`github/app` provider documentation](/cli/commands/auth/providers/github-app).
+
+```yaml
+auth:
+  providers:
+    terraform-bot:
+      kind: github/app
+      app_id: "123456"
+      installation_id: "789012"
+      private_key_path: "/path/to/key.pem"
+
+  identities:
+    automation:
+      kind: github/app
+      via:
+        provider: terraform-bot
+```
+
+#### GitHub OIDC (GitHub Actions)
+
+For keyless authentication in GitHub Actions workflows. See [`github/oidc` provider documentation](/cli/commands/auth/providers/github-oidc).
 
 ```yaml
 auth:
   providers:
     github-oidc:
       kind: github/oidc
-      region: us-east-1 # Required
-      spec:
-        audience: sts.us-east-1.amazonaws.com
+      audience: "sts.amazonaws.com"
 
   identities:
     github-deploy:
       kind: aws/assume-role
-      default: true
       via:
         provider: github-oidc
       principal:

@@ -344,13 +344,21 @@ var (
 	ErrInvalidProviderKind          = errors.New("invalid provider kind")
 	ErrInvalidProviderConfig        = errors.New("invalid provider config")
 	ErrAuthenticationFailed         = errors.New("authentication failed")
+	ErrAuthenticationCancelled      = errors.New("authentication cancelled by user")
+	ErrUnsupportedPlatform          = errors.New("unsupported platform")
 	ErrPostAuthenticationHookFailed = errors.New("post authentication hook failed")
 	ErrAuthManager                  = errors.New("auth manager error")
 	ErrDefaultIdentity              = errors.New("default identity error")
 	ErrAwsAuth                      = errors.New("aws auth error")
 	ErrAwsUserNotConfigured         = errors.New("aws user not configured")
-	ErrAwsSAMLDecodeFailed          = errors.New("aws saml decode failed")
-	ErrUnsupportedPlatform          = errors.New("unsupported platform")
+
+	// GitHub App authentication errors.
+	ErrPrivateKeyEnvNotSet      = errors.New("private key environment variable not set or empty")
+	ErrPrivateKeyConfigMissing  = errors.New("either private_key_path or private_key_env must be specified")
+	ErrPEMDecodeFailed          = errors.New("failed to parse PEM block containing the private key")
+	ErrPrivateKeyNotRSA         = errors.New("private key is not RSA format")
+	ErrInstallationTokenRequest = errors.New("installation token request failed")
+	ErrAwsSAMLDecodeFailed      = errors.New("aws saml decode failed")
 
 	// Auth manager and identity/provider resolution errors (centralized sentinels).
 	ErrFailedToInitializeAuthManager = errors.New("failed to initialize auth manager")

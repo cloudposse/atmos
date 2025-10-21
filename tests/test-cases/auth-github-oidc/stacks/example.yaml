@@ -1,0 +1,16 @@
+# Example stack configuration that demonstrates using GitHub OIDC authentication
+#
+# This stack shows how to configure components that need GitHub authentication
+# when running in GitHub Actions workflows.
+
+components:
+  terraform:
+    # Example component that might need GitHub access
+    # (e.g., to access GitHub API, download private modules, etc.)
+    example:
+      vars:
+        # Component variables can reference the GitHub token via environment
+        # After running: atmos auth env --identity github-actions
+        # The GITHUB_TOKEN environment variable will be available
+        enabled: true
+        message: "This component authenticates with GitHub using OIDC"
