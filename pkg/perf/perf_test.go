@@ -709,9 +709,11 @@ func TestDirectRecursionWithSelfTime(t *testing.T) {
 	}
 
 	// Total time will be higher because each level includes children's time.
-	// The sum of all total times will be larger, but should still be reasonable (< 1 second)
-	if metric.Total > 1*time.Second {
-		t.Errorf("total time (%v) seems unreasonably high", metric.Total)
+	// The sum of all total times will be larger, but should still be reasonable.
+	// CI environments can be slow, so we allow up to 5 seconds for this test.
+	maxExpectedTotal := 5 * time.Second
+	if metric.Total > maxExpectedTotal {
+		t.Errorf("total time (%v) exceeds maximum expected %v", metric.Total, maxExpectedTotal)
 	}
 
 	// Verify that total >= self-time (always true)

@@ -81,5 +81,3 @@ TEST_QUALITY_*.md
 /.lintroller
 tools/lintroller/.lintroller
 /custom-gcl
-
-performance-optimization/

@@ -161,9 +161,20 @@ var (
 	ErrInvalidSpaceLiftSettings               = errors.New("invalid spacelift settings section")
 	ErrInvalidComponentMetadataInherits       = errors.New("invalid component metadata.inherits section")
 	ErrComponentNotDefined                    = errors.New("component not defined in any config files")
-	ErrInvalidTerraformBackend                = errors.New("invalid terraform.backend section")
-	ErrInvalidTerraformRemoteStateBackend     = errors.New("invalid terraform.remote_state_backend section")
-	ErrUnsupportedComponentType               = errors.New("unsupported component type. Valid types are 'terraform', 'helmfile', 'packer'")
+
+	// Component registry errors.
+	ErrComponentProviderNotFound          = errors.New("component provider not found")
+	ErrComponentProviderNil               = errors.New("component provider cannot be nil")
+	ErrComponentTypeEmpty                 = errors.New("component type cannot be empty")
+	ErrComponentConfigInvalid             = errors.New("component configuration invalid")
+	ErrComponentListFailed                = errors.New("failed to list components")
+	ErrComponentValidationFailed          = errors.New("component validation failed")
+	ErrComponentExecutionFailed           = errors.New("component execution failed")
+	ErrComponentArtifactGeneration        = errors.New("component artifact generation failed")
+	ErrComponentProviderRegistration      = errors.New("failed to register component provider")
+	ErrInvalidTerraformBackend            = errors.New("invalid terraform.backend section")
+	ErrInvalidTerraformRemoteStateBackend = errors.New("invalid terraform.remote_state_backend section")
+	ErrUnsupportedComponentType           = errors.New("unsupported component type. Valid types are 'terraform', 'helmfile', 'packer'")
 
 	// Global/Stack-level section errors.
 	ErrInvalidVarsSection               = errors.New("invalid vars section")
@@ -363,6 +374,8 @@ var (
 	ErrInitializingCredentialStore   = errors.New("failed to initialize credential store")
 	ErrCircularDependency            = errors.New("circular dependency detected in identity chain")
 	ErrIdentityNotFound              = errors.New("identity not found")
+	ErrProviderNotFound              = errors.New("provider not found")
+	ErrMutuallyExclusiveFlags        = errors.New("mutually exclusive flags provided")
 	ErrNoDefaultIdentity             = errors.New("no default identity configured for authentication")
 	ErrMultipleDefaultIdentities     = errors.New("multiple default identities found")
 	ErrNoIdentitiesAvailable         = errors.New("no identities available")
