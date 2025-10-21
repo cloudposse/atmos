@@ -1,7 +1,7 @@
 package filesystem
 
 import (
-	homedir "github.com/mitchellh/go-homedir"
+	"github.com/cloudposse/atmos/pkg/config/homedir"
 )
 
 // HomeDirProvider defines the interface for resolving home directories.
@@ -12,7 +12,7 @@ type HomeDirProvider interface {
 	Expand(path string) (string, error)
 }
 
-// OSHomeDirProvider is the default implementation using go-homedir (replaced via go.mod with Atmos's local fork).
+// OSHomeDirProvider is the default implementation using Atmos's vendored homedir package.
 type OSHomeDirProvider struct{}
 
 // NewOSHomeDirProvider creates a new OS homedir provider.
