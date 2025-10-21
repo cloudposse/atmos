@@ -28,8 +28,8 @@ make lint                    # golangci-lint on changed files
 
 ## Architectural Patterns (MANDATORY)
 
-### Factory & Registry Pattern (MANDATORY)
-Use factory pattern with registries for extensibility. Existing implementations:
+### Registry Pattern (MANDATORY)
+Use registry pattern for extensibility and plugin-like architecture. Existing implementations:
 - **Command Registry**: `cmd/internal/registry.go` - All commands register via `CommandProvider` interface
 - **Component Registry**: Component discovery and management
 - **Store Registry**: `pkg/store/registry.go` - Multi-provider store implementations
