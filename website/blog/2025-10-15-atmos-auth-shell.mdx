@@ -9,7 +9,7 @@ We're excited to introduce `atmos auth shell`, a new command that makes working 
 
 This command launches isolated shell sessions scoped to specific cloud identities. Think of it like `aws-vault exec`, but for all your cloud identities managed by Atmos—AWS, Azure, GCP, GitHub, SAML, and more.
 
-When you exit the shell, credentials are removed from your environment. It's a simple pattern that helps prevent credential leakage and reduces the risk of running commands against the wrong environment.
+When you exit the shell, you return to your parent shell where those credentials were never present. It's a simple pattern that helps prevent credential leakage and reduces the risk of running commands against the wrong environment.
 
 <!-- truncate -->
 
@@ -59,7 +59,7 @@ atmos auth shell --identity staging-dev
 atmos auth shell --identity dev-sandbox
 ```
 
-Each terminal operates in complete isolation. You can't accidentally run a production command in your development shell, and vice versa. Your credentials are **session-scoped**—when you close a terminal, those credentials are removed from the environment.
+Each terminal operates in complete isolation. You can't accidentally run a production command in your development shell, and vice versa. Your credentials are **session-scoped**—when you close the shell, it's destroyed and you return to your parent shell where those credentials don't exist.
 
 No lingering environment variables, no shared credential files with overly broad access.
 
@@ -85,10 +85,10 @@ aws s3 sync ./assets s3://prod-bucket/
 aws ecs update-service --cluster prod --service api --force-new-deployment
 aws rds describe-db-instances --region us-east-1
 exit
-# Credentials removed from environment—your main shell is still clean
+# Back to parent shell—credentials never existed here
 ```
 
-When you exit, those production credentials are removed from your environment. You can't accidentally run a production command after switching contexts.
+When you exit, you're back in your parent shell where those production credentials don't exist. You can't accidentally run a production command after switching contexts.
 
 ### Debugging Cloud Resources
 
@@ -153,7 +153,7 @@ If you're familiar with `aws-vault exec`, you'll recognize this pattern. Both to
 |---------|---------------|------------------|
 | **Temporary credentials** | ✅ Yes | ✅ Yes |
 | **Isolated subshells** | ✅ Yes | ✅ Yes |
-| **Session boundaries** | ✅ Credentials removed from environment on exit | ✅ Credentials removed from environment on exit |
+| **Session boundaries** | ✅ Return to parent shell on exit | ✅ Return to parent shell on exit |
 | **Cloud providers** | AWS only | AWS, Azure, GCP, GitHub, SAML, and more |
 | **Integration** | Standalone tool | Part of Atmos infrastructure workflow |
 | **Identity management** | IAM profiles | Atmos identities (unified across clouds) |
