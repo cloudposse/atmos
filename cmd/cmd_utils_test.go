@@ -171,7 +171,9 @@ func TestIsVersionCommand(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Save original os.Args
+			// isVersionCommand() reads os.Args directly, so tests must manipulate it.
+			// This is acceptable because isVersionCommand() is called early in init
+			// before Cobra command parsing happens.
 			oldArgs := os.Args
 			defer func() { os.Args = oldArgs }()
 

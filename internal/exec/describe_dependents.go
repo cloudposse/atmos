@@ -6,7 +6,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/mitchellh/mapstructure"
+	"github.com/go-viper/mapstructure/v2"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/internal/tui/templates/term"
@@ -29,7 +29,7 @@ type DescribeDependentsExecProps struct {
 	Skip                 []string
 }
 
-//go:generate mockgen -source=$GOFILE -destination=mock_$GOFILE -package=$GOPACKAGE
+//go:generate go run go.uber.org/mock/mockgen@v0.6.0 -source=$GOFILE -destination=mock_$GOFILE -package=$GOPACKAGE
 type DescribeDependentsExec interface {
 	Execute(describeDependentsExecProps *DescribeDependentsExecProps) error
 }
