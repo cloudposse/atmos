@@ -1,6 +1,7 @@
 package toolchain
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -113,4 +114,273 @@ func TestAddToolToVersionsDuplicateCheckWithMultipleVersions(t *testing.T) {
 	assert.Contains(t, toolVersions.Tools, "opentofu")
 	assert.NotContains(t, toolVersions.Tools, "opentofu/opentofu") // Should not have the full name
 	assert.Equal(t, []string{"1.10.3", "1.10.2"}, toolVersions.Tools["opentofu"])
+}
+
+func TestGetDefaultVersion(t *testing.T) {
+	tests := []struct {
+		name           string
+		toolVersions   *ToolVersions
+		tool           string
+		expectedVer    string
+		expectedExists bool
+	}{
+		{
+			name: "Tool with versions returns first version",
+			toolVersions: &ToolVersions{
+				Tools: map[string][]string{
+					"terraform": {"1.5.7", "1.5.6", "1.5.5"},
+				},
+			},
+			tool:           "terraform",
+			expectedVer:    "1.5.7",
+			expectedExists: true,
+		},
+		{
+			name: "Tool with no versions returns empty and false",
+			toolVersions: &ToolVersions{
+				Tools: map[string][]string{
+					"terraform": {},
+				},
+			},
+			tool:           "terraform",
+			expectedVer:    "",
+			expectedExists: false,
+		},
+		{
+			name: "Non-existent tool returns empty and false",
+			toolVersions: &ToolVersions{
+				Tools: map[string][]string{
+					"terraform": {"1.5.7"},
+				},
+			},
+			tool:           "opentofu",
+			expectedVer:    "",
+			expectedExists: false,
+		},
+		{
+			name: "Empty ToolVersions returns empty and false",
+			toolVersions: &ToolVersions{
+				Tools: map[string][]string{},
+			},
+			tool:           "terraform",
+			expectedVer:    "",
+			expectedExists: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			version, exists := GetDefaultVersion(tt.toolVersions, tt.tool)
+			assert.Equal(t, tt.expectedVer, version)
+			assert.Equal(t, tt.expectedExists, exists)
+		})
+	}
+}
+
+func TestGetAllVersions(t *testing.T) {
+	tests := []struct {
+		name             string
+		toolVersions     *ToolVersions
+		tool             string
+		expectedVersions []string
+	}{
+		{
+			name: "Tool with multiple versions",
+			toolVersions: &ToolVersions{
+				Tools: map[string][]string{
+					"terraform": {"1.5.7", "1.5.6", "1.5.5"},
+				},
+			},
+			tool:             "terraform",
+			expectedVersions: []string{"1.5.7", "1.5.6", "1.5.5"},
+		},
+		{
+			name: "Tool with no versions returns nil slice",
+			toolVersions: &ToolVersions{
+				Tools: map[string][]string{
+					"terraform": {},
+				},
+			},
+			tool:             "terraform",
+			expectedVersions: []string{},
+		},
+		{
+			name: "Non-existent tool returns nil",
+			toolVersions: &ToolVersions{
+				Tools: map[string][]string{
+					"terraform": {"1.5.7"},
+				},
+			},
+			tool:             "opentofu",
+			expectedVersions: nil,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			versions := GetAllVersions(tt.toolVersions, tt.tool)
+			assert.Equal(t, tt.expectedVersions, versions)
+		})
+	}
+}
+
+func TestAddToolToVersionsAsDefault(t *testing.T) {
+	t.Run("Adds tool as default (first position)", func(t *testing.T) {
+		tempDir := t.TempDir()
+		filePath := filepath.Join(tempDir, DefaultToolVersionsFilePath)
+
+		// Add initial versions using internal test helper that bypasses duplicate checking
+		toolVersions := &ToolVersions{Tools: make(map[string][]string)}
+		AddVersionToTool(toolVersions, "terraform", "1.5.5", false)
+		AddVersionToTool(toolVersions, "terraform", "1.5.6", false)
+		err := SaveToolVersions(filePath, toolVersions)
+		require.NoError(t, err)
+
+		// Now test AddToolToVersionsAsDefault which does include duplicate checking
+		// We need to set up environment for installer
+		t.Setenv("HOME", tempDir)
+		t.Setenv("ATMOS_TOOLS_DIR", tempDir)
+
+		// Create minimal tools.yaml to allow installer to initialize
+		toolsConfigPath := filepath.Join(tempDir, "tools.yaml")
+		err = os.WriteFile(toolsConfigPath, []byte("aliases:\n  terraform: hashicorp/terraform\n"), 0644)
+		require.NoError(t, err)
+		t.Setenv("ATMOS_TOOLS_CONFIG_FILE", toolsConfigPath)
+
+		// Add as default
+		err = AddToolToVersionsAsDefault(filePath, "terraform", "1.5.7")
+		require.NoError(t, err)
+
+		// Verify it's first
+		toolVersions, err = LoadToolVersions(filePath)
+		require.NoError(t, err)
+		versions := toolVersions.Tools["terraform"]
+		require.NotEmpty(t, versions)
+		assert.Equal(t, "1.5.7", versions[0], "Default version should be first")
+		assert.Contains(t, versions, "1.5.5")
+		assert.Contains(t, versions, "1.5.6")
+	})
+
+	t.Run("Updates existing tool to default", func(t *testing.T) {
+		tempDir := t.TempDir()
+		filePath := filepath.Join(tempDir, DefaultToolVersionsFilePath)
+
+		// Set up initial versions
+		toolVersions := &ToolVersions{Tools: make(map[string][]string)}
+		AddVersionToTool(toolVersions, "terraform", "1.5.5", false)
+		AddVersionToTool(toolVersions, "terraform", "1.5.6", false)
+		AddVersionToTool(toolVersions, "terraform", "1.5.7", false)
+		err := SaveToolVersions(filePath, toolVersions)
+		require.NoError(t, err)
+
+		// Set up environment for installer
+		t.Setenv("HOME", tempDir)
+		t.Setenv("ATMOS_TOOLS_DIR", tempDir)
+
+		// Create minimal tools.yaml
+		toolsConfigPath := filepath.Join(tempDir, "tools.yaml")
+		err = os.WriteFile(toolsConfigPath, []byte("aliases:\n  terraform: hashicorp/terraform\n"), 0644)
+		require.NoError(t, err)
+		t.Setenv("ATMOS_TOOLS_CONFIG_FILE", toolsConfigPath)
+
+		// Set existing version as default
+		err = AddToolToVersionsAsDefault(filePath, "terraform", "1.5.6")
+		require.NoError(t, err)
+
+		toolVersions, err = LoadToolVersions(filePath)
+		require.NoError(t, err)
+		versions := toolVersions.Tools["terraform"]
+		assert.Equal(t, "1.5.6", versions[0], "1.5.6 should be first")
+	})
+
+	t.Run("Returns error for empty version", func(t *testing.T) {
+		tempDir := t.TempDir()
+		filePath := filepath.Join(tempDir, DefaultToolVersionsFilePath)
+
+		err := AddToolToVersionsAsDefault(filePath, "terraform", "")
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "cannot add tool")
+	})
+}
+
+func TestLookupToolVersionOrLatest(t *testing.T) {
+	tests := []struct {
+		name            string
+		tool            string
+		toolVersions    *ToolVersions
+		mapping         map[string][2]string
+		expectedKey     string
+		expectedVersion string
+		expectedFound   bool
+		expectedLatest  bool
+	}{
+		{
+			name: "Tool found by raw name",
+			tool: "terraform",
+			toolVersions: &ToolVersions{
+				Tools: map[string][]string{
+					"terraform": {"1.5.7", "1.5.6"},
+				},
+			},
+			mapping:         map[string][2]string{},
+			expectedKey:     "terraform",
+			expectedVersion: "1.5.7",
+			expectedFound:   true,
+			expectedLatest:  false,
+		},
+		{
+			name: "Tool found by alias resolution",
+			tool: "terraform",
+			toolVersions: &ToolVersions{
+				Tools: map[string][]string{
+					"hashicorp/terraform": {"1.5.7"},
+				},
+			},
+			mapping: map[string][2]string{
+				"terraform": {"hashicorp", "terraform"},
+			},
+			expectedKey:     "hashicorp/terraform",
+			expectedVersion: "1.5.7",
+			expectedFound:   true,
+			expectedLatest:  false,
+		},
+		{
+			name: "Alias resolves but not in toolVersions returns latest",
+			tool: "terraform",
+			toolVersions: &ToolVersions{
+				Tools: map[string][]string{},
+			},
+			mapping: map[string][2]string{
+				"terraform": {"hashicorp", "terraform"},
+			},
+			expectedKey:     "hashicorp/terraform",
+			expectedVersion: "latest",
+			expectedFound:   false,
+			expectedLatest:  true,
+		},
+		{
+			name: "Tool not found and no alias resolution",
+			tool: "unknowntool",
+			toolVersions: &ToolVersions{
+				Tools: map[string][]string{},
+			},
+			mapping:         map[string][2]string{},
+			expectedKey:     "",
+			expectedVersion: "",
+			expectedFound:   false,
+			expectedLatest:  false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			resolver := &mockToolResolver{mapping: tt.mapping}
+			key, version, found, usedLatest := LookupToolVersionOrLatest(tt.tool, tt.toolVersions, resolver)
+
+			assert.Equal(t, tt.expectedKey, key, "resolvedKey mismatch")
+			assert.Equal(t, tt.expectedVersion, version, "version mismatch")
+			assert.Equal(t, tt.expectedFound, found, "found mismatch")
+			assert.Equal(t, tt.expectedLatest, usedLatest, "usedLatest mismatch")
+		})
+	}
 }

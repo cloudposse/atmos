@@ -6,6 +6,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -123,6 +126,116 @@ func TestListToolVersions(t *testing.T) {
 					t.Errorf("expected error containing %q, got %v", tt.expectedError, err)
 				}
 			}
+		})
+	}
+}
+
+func TestGetDefaultFromFile(t *testing.T) {
+	tests := []struct {
+		name        string
+		fileContent string
+		resolvedKey string
+		toolName    string
+		expected    string
+	}{
+		{
+			name:        "Returns default version for resolved key",
+			fileContent: "hashicorp/terraform 1.5.7 1.5.6\n",
+			resolvedKey: "hashicorp/terraform",
+			toolName:    "terraform",
+			expected:    "1.5.7",
+		},
+		{
+			name:        "Falls back to tool name",
+			fileContent: "terraform 1.5.7 1.5.6\n",
+			resolvedKey: "hashicorp/terraform",
+			toolName:    "terraform",
+			expected:    "1.5.7",
+		},
+		{
+			name:        "Returns empty for non-existent tool",
+			fileContent: "terraform 1.5.7\n",
+			resolvedKey: "hashicorp/vault",
+			toolName:    "vault",
+			expected:    "",
+		},
+		{
+			name:        "Returns empty for non-existent file",
+			fileContent: "",
+			resolvedKey: "hashicorp/terraform",
+			toolName:    "terraform",
+			expected:    "",
+		},
+		{
+			name:        "Returns empty for empty versions",
+			fileContent: "terraform \n",
+			resolvedKey: "hashicorp/terraform",
+			toolName:    "terraform",
+			expected:    "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var filePath string
+			if tt.fileContent != "" {
+				tempDir := t.TempDir()
+				filePath = filepath.Join(tempDir, DefaultToolVersionsFilePath)
+				err := os.WriteFile(filePath, []byte(tt.fileContent), defaultFileWritePermissions)
+				require.NoError(t, err)
+			} else {
+				filePath = "/nonexistent/path/.tool-versions"
+			}
+
+			result := getDefaultFromFile(filePath, tt.resolvedKey, tt.toolName)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestMin(t *testing.T) {
+	tests := []struct {
+		name     string
+		a        int
+		b        int
+		expected int
+	}{
+		{
+			name:     "a is smaller",
+			a:        5,
+			b:        10,
+			expected: 5,
+		},
+		{
+			name:     "b is smaller",
+			a:        10,
+			b:        5,
+			expected: 5,
+		},
+		{
+			name:     "equal values",
+			a:        7,
+			b:        7,
+			expected: 7,
+		},
+		{
+			name:     "negative values",
+			a:        -5,
+			b:        -10,
+			expected: -10,
+		},
+		{
+			name:     "zero values",
+			a:        0,
+			b:        5,
+			expected: 0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := min(tt.a, tt.b)
+			assert.Equal(t, tt.expected, result)
 		})
 	}
 }

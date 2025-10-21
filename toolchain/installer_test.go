@@ -11,8 +11,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 // Add a mock ToolResolver for tests
@@ -1353,5 +1355,129 @@ func TestExtractTarGz(t *testing.T) {
 		if string(data) != expected {
 			t.Errorf("file %s: expected %q, got %q", name, expected, string(data))
 		}
+	}
+}
+
+func TestCopyFile(t *testing.T) {
+	tests := []struct {
+		name        string
+		srcContent  string
+		expectError bool
+	}{
+		{
+			name:        "Copy simple text file",
+			srcContent:  "Hello, World!",
+			expectError: false,
+		},
+		{
+			name:        "Copy empty file",
+			srcContent:  "",
+			expectError: false,
+		},
+		{
+			name:        "Copy binary content",
+			srcContent:  "\x00\x01\x02\xFF\xFE",
+			expectError: false,
+		},
+		{
+			name:        "Copy large file",
+			srcContent:  strings.Repeat("test content ", 10000),
+			expectError: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tempDir := t.TempDir()
+			src := filepath.Join(tempDir, "source.txt")
+			dst := filepath.Join(tempDir, "dest.txt")
+
+			// Create source file
+			err := os.WriteFile(src, []byte(tt.srcContent), defaultFileWritePermissions)
+			require.NoError(t, err)
+
+			// Copy file
+			err = copyFile(src, dst)
+
+			if tt.expectError {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+
+				// Verify destination file exists and has same content
+				dstContent, err := os.ReadFile(dst)
+				require.NoError(t, err)
+				assert.Equal(t, tt.srcContent, string(dstContent))
+			}
+		})
+	}
+
+	t.Run("Error on non-existent source", func(t *testing.T) {
+		tempDir := t.TempDir()
+		src := filepath.Join(tempDir, "nonexistent.txt")
+		dst := filepath.Join(tempDir, "dest.txt")
+
+		err := copyFile(src, dst)
+		assert.Error(t, err)
+	})
+
+	t.Run("Error on invalid destination directory", func(t *testing.T) {
+		tempDir := t.TempDir()
+		src := filepath.Join(tempDir, "source.txt")
+		dst := "/invalid/nonexistent/path/dest.txt"
+
+		// Create source file
+		err := os.WriteFile(src, []byte("test"), defaultFileWritePermissions)
+		require.NoError(t, err)
+
+		err = copyFile(src, dst)
+		assert.Error(t, err)
+	})
+}
+
+func TestCreateLatestFile(t *testing.T) {
+	tests := []struct {
+		name    string
+		owner   string
+		repo    string
+		version string
+	}{
+		{
+			name:    "Create latest file for terraform",
+			owner:   "hashicorp",
+			repo:    "terraform",
+			version: "1.5.7",
+		},
+		{
+			name:    "Create latest file with version prefix",
+			owner:   "kubernetes",
+			repo:    "kubectl",
+			version: "v1.28.0",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tempDir := t.TempDir()
+			t.Setenv("HOME", tempDir)
+			SetAtmosConfig(&schema.AtmosConfiguration{Toolchain: schema.Toolchain{}})
+
+			installer := NewInstaller()
+			installer.binDir = tempDir
+
+			err := installer.CreateLatestFile(tt.owner, tt.repo, tt.version)
+			assert.NoError(t, err)
+
+			// Verify file was created
+			latestFilePath := filepath.Join(tempDir, tt.owner, tt.repo, "latest")
+			data, err := os.ReadFile(latestFilePath)
+			assert.NoError(t, err)
+			assert.Equal(t, tt.version, string(data))
+
+			// Verify ReadLatestFile works
+			readVersion, err := installer.ReadLatestFile(tt.owner, tt.repo)
+			assert.NoError(t, err)
+			assert.Equal(t, tt.version, readVersion)
+		})
 	}
 }

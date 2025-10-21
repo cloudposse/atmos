@@ -7,11 +7,6 @@ import (
 	"strings"
 )
 
-// Define an interface for Resolve for testability
-// This allows both *Installer and *fakeInstaller to be used.
-type toolNameResolver interface {
-	Resolve(toolName string) (string, string, error)
-}
 
 // ToolVersions represents the .tool-versions file format (asdf-compatible: tool -> list of versions, first is default).
 type ToolVersions struct {
@@ -142,8 +137,12 @@ func addToolToVersionsInternal(filePath, tool, version string, asDefault bool) e
 		}
 	}
 
+	// Create an installer to use its resolver
+	installer := NewInstaller()
+	resolver := installer.GetResolver()
+
 	// Check if this would create a duplicate with an aliased version
-	if wouldCreateDuplicate(toolVersions, tool, version) {
+	if wouldCreateDuplicate(toolVersions, tool, version, resolver) {
 		// Skip adding this entry as it would create a duplicate
 		return nil
 	}
@@ -158,12 +157,9 @@ func addToolToVersionsInternal(filePath, tool, version string, asDefault bool) e
 // wouldCreateDuplicate checks if adding a tool/version combination would create a duplicate
 // with an existing aliased version. For example, if "opentofu/opentofu 1.10.3" already exists,
 // adding "opentofu 1.10.3" would create a duplicate.
-func wouldCreateDuplicate(toolVersions *ToolVersions, tool, version string) bool {
-	// Create an installer to use its resolver
-	installer := NewInstaller()
-
+func wouldCreateDuplicate(toolVersions *ToolVersions, tool, version string, resolver ToolResolver) bool {
 	// Check if the tool is an alias (e.g., "opentofu")
-	owner, repo, err := installer.parseToolSpec(tool)
+	owner, repo, err := resolver.Resolve(tool)
 	if err == nil && owner != "" && repo != "" {
 		// This is an alias, check if the full name already exists
 		aliasKey := owner + "/" + repo
@@ -185,7 +181,7 @@ func wouldCreateDuplicate(toolVersions *ToolVersions, tool, version string) bool
 		}
 
 		// Try to resolve the existing tool as an alias
-		existingOwner, existingRepo, err := installer.parseToolSpec(existingTool)
+		existingOwner, existingRepo, err := resolver.Resolve(existingTool)
 		if err == nil && existingOwner != "" && existingRepo != "" {
 			existingAliasKey := existingOwner + "/" + existingRepo
 			if existingAliasKey == tool {
@@ -204,7 +200,7 @@ func wouldCreateDuplicate(toolVersions *ToolVersions, tool, version string) bool
 
 // LookupToolVersion attempts to find the version for a tool, trying both the raw name and its resolved alias.
 // Returns the key found (raw or alias), the version, and whether it was found.
-func LookupToolVersion(tool string, toolVersions *ToolVersions, resolver toolNameResolver) (resolvedKey, version string, found bool) {
+func LookupToolVersion(tool string, toolVersions *ToolVersions, resolver ToolResolver) (resolvedKey, version string, found bool) {
 	// Try raw tool name first
 	if versions, ok := toolVersions.Tools[tool]; ok && len(versions) > 0 {
 		return tool, versions[0], true
@@ -223,7 +219,7 @@ func LookupToolVersion(tool string, toolVersions *ToolVersions, resolver toolNam
 // LookupToolVersionOrLatest attempts to find the version for a tool, trying both the raw name and its resolved alias.
 // If not found, but the alias resolves, returns 'latest' as the version and usedLatest=true.
 // Returns the key found (raw or alias), the version, whether it was found in toolVersions, and whether 'latest' was used as a fallback.
-func LookupToolVersionOrLatest(tool string, toolVersions *ToolVersions, resolver toolNameResolver) (resolvedKey, version string, found bool, usedLatest bool) {
+func LookupToolVersionOrLatest(tool string, toolVersions *ToolVersions, resolver ToolResolver) (resolvedKey, version string, found bool, usedLatest bool) {
 	// Try raw tool name first
 	if versions, ok := toolVersions.Tools[tool]; ok && len(versions) > 0 {
 		return tool, versions[0], true, false

@@ -307,3 +307,157 @@ func TestRunUninstall(t *testing.T) {
 		})
 	}
 }
+
+func TestGetVersionsToUninstall(t *testing.T) {
+	tests := []struct {
+		name             string
+		setupFunc        func(t *testing.T, dir string)
+		expectedVersions []string
+		expectError      bool
+	}{
+		{
+			name: "Multiple version directories",
+			setupFunc: func(t *testing.T, dir string) {
+				require.NoError(t, os.MkdirAll(filepath.Join(dir, "1.0.0"), defaultMkdirPermissions))
+				require.NoError(t, os.MkdirAll(filepath.Join(dir, "1.1.0"), defaultMkdirPermissions))
+				require.NoError(t, os.MkdirAll(filepath.Join(dir, "2.0.0"), defaultMkdirPermissions))
+			},
+			expectedVersions: []string{"1.0.0", "1.1.0", "2.0.0"},
+			expectError:      false,
+		},
+		{
+			name: "Ignores latest symlink",
+			setupFunc: func(t *testing.T, dir string) {
+				require.NoError(t, os.MkdirAll(filepath.Join(dir, "1.0.0"), defaultMkdirPermissions))
+				require.NoError(t, os.MkdirAll(filepath.Join(dir, "latest"), defaultMkdirPermissions))
+			},
+			expectedVersions: []string{"1.0.0"},
+			expectError:      false,
+		},
+		{
+			name: "Empty directory",
+			setupFunc: func(t *testing.T, dir string) {
+				// Directory exists but is empty
+			},
+			expectedVersions: []string{},
+			expectError:      false,
+		},
+		{
+			name: "Non-existent directory",
+			setupFunc: func(t *testing.T, dir string) {
+				// Don't create the directory
+			},
+			expectedVersions: nil,
+			expectError:      true,
+		},
+		{
+			name: "Ignores files, only directories",
+			setupFunc: func(t *testing.T, dir string) {
+				require.NoError(t, os.MkdirAll(filepath.Join(dir, "1.0.0"), defaultMkdirPermissions))
+				require.NoError(t, os.WriteFile(filepath.Join(dir, "README.md"), []byte("test"), defaultFileWritePermissions))
+				require.NoError(t, os.WriteFile(filepath.Join(dir, "1.1.0.txt"), []byte("test"), defaultFileWritePermissions))
+			},
+			expectedVersions: []string{"1.0.0"},
+			expectError:      false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tempDir := t.TempDir()
+			toolDir := filepath.Join(tempDir, "test-tool")
+
+			if tt.name != "Non-existent directory" {
+				require.NoError(t, os.MkdirAll(toolDir, defaultMkdirPermissions))
+			}
+
+			tt.setupFunc(t, toolDir)
+
+			versions, err := getVersionsToUninstall(toolDir)
+
+			if tt.expectError {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+				assert.ElementsMatch(t, tt.expectedVersions, versions)
+			}
+		})
+	}
+}
+
+func TestUninstallAllVersionsOfTool(t *testing.T) {
+	tests := []struct {
+		name        string
+		setupFunc   func(t *testing.T, installer *Installer, owner, repo string)
+		owner       string
+		repo        string
+		expectError bool
+	}{
+		{
+			name: "Tool not installed",
+			setupFunc: func(t *testing.T, installer *Installer, owner, repo string) {
+				// Don't create any files
+			},
+			owner:       "hashicorp",
+			repo:        "terraform",
+			expectError: false,
+		},
+		{
+			name: "Single version installed",
+			setupFunc: func(t *testing.T, installer *Installer, owner, repo string) {
+				toolDir := filepath.Join(installer.binDir, owner, repo)
+				versionDir := filepath.Join(toolDir, "1.0.0")
+				require.NoError(t, os.MkdirAll(versionDir, defaultMkdirPermissions))
+				binaryPath := filepath.Join(versionDir, repo)
+				require.NoError(t, os.WriteFile(binaryPath, []byte("test"), defaultFileWritePermissions))
+			},
+			owner:       "hashicorp",
+			repo:        "terraform",
+			expectError: false,
+		},
+		{
+			name: "Multiple versions installed",
+			setupFunc: func(t *testing.T, installer *Installer, owner, repo string) {
+				toolDir := filepath.Join(installer.binDir, owner, repo)
+				for _, version := range []string{"1.0.0", "1.1.0", "2.0.0"} {
+					versionDir := filepath.Join(toolDir, version)
+					require.NoError(t, os.MkdirAll(versionDir, defaultMkdirPermissions))
+					binaryPath := filepath.Join(versionDir, repo)
+					require.NoError(t, os.WriteFile(binaryPath, []byte("test"), defaultFileWritePermissions))
+				}
+			},
+			owner:       "hashicorp",
+			repo:        "terraform",
+			expectError: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tempDir := t.TempDir()
+			t.Setenv("HOME", tempDir)
+			SetAtmosConfig(&schema.AtmosConfiguration{Toolchain: schema.Toolchain{}})
+
+			installer := NewInstaller()
+			installer.binDir = tempDir
+
+			tt.setupFunc(t, installer, tt.owner, tt.repo)
+
+			err := uninstallAllVersionsOfTool(installer, tt.owner, tt.repo)
+
+			if tt.expectError {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+				// Verify tool directory is removed
+				toolDir := filepath.Join(installer.binDir, tt.owner, tt.repo)
+				_, statErr := os.Stat(toolDir)
+				if !os.IsNotExist(statErr) {
+					// Some versions might remain, but they should all be cleaned up
+					versions, _ := getVersionsToUninstall(toolDir)
+					assert.Empty(t, versions, "All versions should be uninstalled")
+				}
+			}
+		})
+	}
+}
