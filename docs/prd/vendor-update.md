@@ -38,9 +38,9 @@ Currently, maintaining up-to-date versions of vendored components requires:
 8. **GitHub Rate Limit Respect**: Handle rate limits gracefully
 9. **Test Coverage**: Achieve 80-90% test coverage
 10. **Complete Documentation**: CLI docs, blog post, usage examples
+11. **Version Constraints**: Support semver constraints and version exclusions via `constraints` field
 
 ### Non-Goals (Future Scope)
-- Semantic version range support (e.g., `~> 1.2.0`, `^1.0.0`) - requires lock files
 - OCI registry version checking
 - S3/GCS bucket version checking
 - HTTP/HTTPS direct file version checking (not applicable)
@@ -215,6 +215,185 @@ git ls-remote https://github.com/cloudposse/terraform-aws-vpc.git HEAD
 ```yaml
 version: "{{.Version}}"  # Skip - contains template syntax
 version: "{{ atmos.Component }}"  # Skip - contains template syntax
+```
+
+## Version Constraints
+
+### Overview
+
+Version constraints allow users to control which versions are allowed when updating vendored components. This provides:
+- **Safety**: Prevent breaking changes by constraining to compatible version ranges
+- **Security**: Explicitly exclude versions with known vulnerabilities
+- **Flexibility**: Use semver constraints familiar from npm, cargo, composer
+
+### Configuration Schema
+
+Constraints are specified in the vendor configuration using a `constraints` field:
+
+```yaml
+sources:
+  - component: "vpc"
+    source: "github.com/cloudposse/terraform-aws-components"
+    version: "1.323.0"  # Current pinned version
+    constraints:
+      version: "^1.0.0"           # Semver constraint (allow 1.x)
+      excluded_versions:           # Versions to skip
+        - "1.2.3"                  # Has critical bug
+        - "1.5.*"                  # Entire patch series broken
+      no_prereleases: true         # Skip alpha/beta/rc versions
+```
+
+### Constraint Field Definitions
+
+#### `constraints.version` (string, optional)
+
+Semantic version constraint using [Masterminds/semver](https://github.com/Masterminds/semver) syntax:
+
+| Constraint | Meaning | Example |
+|------------|---------|---------|
+| `^1.2.3` | Compatible with 1.2.3 (allows >=1.2.3 <2.0.0) | 1.2.3, 1.5.0, 1.999.0 ✓<br>2.0.0 ✗ |
+| `~1.2.3` | Patch updates only (allows >=1.2.3 <1.3.0) | 1.2.3, 1.2.9 ✓<br>1.3.0 ✗ |
+| `>=1.0.0 <2.0.0` | Range constraint | 1.x.x ✓<br>2.0.0 ✗ |
+| `1.2.x` | Any patch version in 1.2 | 1.2.0, 1.2.99 ✓<br>1.3.0 ✗ |
+| `*` or empty | Any version (no constraint) | All versions ✓ |
+
+If not specified, defaults to no constraint (any version allowed).
+
+#### `constraints.excluded_versions` (list of strings, optional)
+
+List of specific versions to exclude from consideration. Supports:
+- **Exact versions**: `"1.2.3"` - exclude this specific version
+- **Wildcard patterns**: `"1.5.*"` - exclude all 1.5.x versions
+- **Multiple entries**: Can exclude any number of versions
+
+**Use cases:**
+- Known security vulnerabilities (CVEs)
+- Versions with critical bugs
+- Breaking changes or incompatibilities
+- Deprecated/yanked versions
+
+#### `constraints.no_prereleases` (boolean, optional, default: false)
+
+When `true`, exclude pre-release versions (alpha, beta, rc, pre, etc.).
+
+**Examples of excluded versions when `true`:**
+- `1.0.0-alpha`
+- `2.3.0-beta.1`
+- `1.5.0-rc.2`
+- `3.0.0-pre`
+
+**Production use case:** Ensure only stable releases are used in production environments.
+
+### Constraint Resolution Logic
+
+When `atmos vendor update` checks for updates:
+
+1. **Fetch available versions** from Git repository (tags)
+2. **Parse semantic versions** - skip non-semver tags
+3. **Apply `no_prereleases` filter** - remove alpha/beta/rc if enabled
+4. **Apply `excluded_versions` filter** - remove blacklisted versions
+5. **Apply `constraints.version` filter** - keep only versions matching constraint
+6. **Select latest version** from remaining candidates
+7. **Update `version` field** in YAML while preserving structure
+
+### Example Configurations
+
+#### Example 1: Conservative Updates (Patch Only)
+```yaml
+sources:
+  - component: "vpc"
+    source: "github.com/cloudposse/terraform-aws-components"
+    version: "1.323.0"
+    constraints:
+      version: "~1.323.0"  # Only allow 1.323.x patches
+      no_prereleases: true
+```
+
+#### Example 2: Minor Updates with Exclusions
+```yaml
+sources:
+  - component: "eks"
+    source: "github.com/cloudposse/terraform-aws-components"
+    version: "2.1.0"
+    constraints:
+      version: "^2.0.0"       # Allow 2.x minor/patch updates
+      excluded_versions:
+        - "2.3.0"             # Has CVE-2024-12345
+        - "2.5.*"             # Entire 2.5.x series is broken
+      no_prereleases: true
+```
+
+#### Example 3: Production-Safe Range
+```yaml
+sources:
+  - component: "rds"
+    source: "github.com/cloudposse/terraform-aws-components"
+    version: "5.0.0"
+    constraints:
+      version: ">=5.0.0 <6.0.0"  # Allow 5.x only
+      no_prereleases: true         # No beta/rc versions
+```
+
+#### Example 4: No Constraints (Always Latest)
+```yaml
+sources:
+  - component: "test-module"
+    source: "github.com/example/terraform-modules"
+    version: "1.0.0"
+    # No constraints - will update to absolute latest tag
+```
+
+### Schema Changes Required
+
+Update `pkg/schema/schema.go` to add `Constraints` field to `AtmosVendorSource`:
+
+```go
+type AtmosVendorSource struct {
+    Component        string              `yaml:"component,omitempty" json:"component,omitempty"`
+    Source           string              `yaml:"source" json:"source"`
+    Version          string              `yaml:"version,omitempty" json:"version,omitempty"`
+    Constraints      *VendorConstraints  `yaml:"constraints,omitempty" json:"constraints,omitempty"`
+    Targets          []string            `yaml:"targets,omitempty" json:"targets,omitempty"`
+    IncludedPaths    []string            `yaml:"included_paths,omitempty" json:"included_paths,omitempty"`
+    ExcludedPaths    []string            `yaml:"excluded_paths,omitempty" json:"excluded_paths,omitempty"`
+    Tags             []string            `yaml:"tags,omitempty" json:"tags,omitempty"`
+}
+
+type VendorConstraints struct {
+    Version          string   `yaml:"version,omitempty" json:"version,omitempty"`
+    ExcludedVersions []string `yaml:"excluded_versions,omitempty" json:"excluded_versions,omitempty"`
+    NoPrereleases    bool     `yaml:"no_prereleases,omitempty" json:"no_prereleases,omitempty"`
+}
+```
+
+### JSON Schema Update
+
+Update `/pkg/datafetcher/schema/vendor/package/1.0.json` to include constraints:
+
+```json
+{
+  "constraints": {
+    "type": "object",
+    "properties": {
+      "version": {
+        "type": "string",
+        "description": "Semantic version constraint (e.g., ^1.0.0, ~1.2.3)"
+      },
+      "excluded_versions": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        },
+        "description": "List of versions to exclude (supports wildcards)"
+      },
+      "no_prereleases": {
+        "type": "boolean",
+        "default": false,
+        "description": "Exclude pre-release versions (alpha, beta, rc)"
+      }
+    }
+  }
+}
 ```
 
 ## YAML Structure Preservation Requirements
