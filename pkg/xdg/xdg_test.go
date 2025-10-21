@@ -97,3 +97,40 @@ func TestGetXDGDir_NestedSubpath(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, info.IsDir())
 }
+
+func TestGetXDGDir_MkdirError(t *testing.T) {
+	// Create a file where we want to create a directory.
+	// This will cause os.MkdirAll to fail.
+	tempHome := t.TempDir()
+	blockingFile := filepath.Join(tempHome, "atmos")
+
+	// Create a regular file that blocks directory creation.
+	err := os.WriteFile(blockingFile, []byte("blocking"), 0o644)
+	require.NoError(t, err)
+
+	t.Setenv("XDG_CACHE_HOME", tempHome)
+
+	// Should fail because "atmos" exists as a file, not a directory.
+	_, err = GetXDGCacheDir("test", 0o755)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to create directory")
+}
+
+func TestGetXDGDir_DefaultFallback(t *testing.T) {
+	// Unset all XDG environment variables to test default fallback.
+	// The test should use the library default from github.com/adrg/xdg.
+	t.Setenv("XDG_CACHE_HOME", "")
+	t.Setenv("ATMOS_XDG_CACHE_HOME", "")
+
+	// Should not error even without env vars - uses library default.
+	dir, err := GetXDGCacheDir("test", 0o755)
+	require.NoError(t, err)
+
+	// Should contain "atmos/test" in the path.
+	assert.Contains(t, dir, filepath.Join("atmos", "test"))
+
+	// Verify directory was actually created.
+	info, err := os.Stat(dir)
+	require.NoError(t, err)
+	assert.True(t, info.IsDir())
+}
