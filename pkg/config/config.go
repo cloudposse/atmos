@@ -120,7 +120,12 @@ func setLogConfig(atmosConfig *schema.AtmosConfiguration) {
 
 // Function to manually parse flags with double dash "--" like Cobra.
 func parseFlags() map[string]string {
-	args := os.Args
+	return parseFlagsFromArgs(os.Args)
+}
+
+// parseFlagsFromArgs parses flags from the given args slice.
+// This function is exposed for testing purposes.
+func parseFlagsFromArgs(args []string) map[string]string {
 	flags := make(map[string]string)
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
