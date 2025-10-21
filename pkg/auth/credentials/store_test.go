@@ -89,26 +89,13 @@ func TestList_NotSupported(t *testing.T) {
 	assert.True(t, errors.Is(err, ErrCredentialStore))
 }
 
-func TestIsExpired(t *testing.T) {
-	s := NewCredentialStore()
-	expired := &types.AWSCredentials{Expiration: time.Now().UTC().Add(-5 * time.Minute).Format(time.RFC3339)}
-	fresh := &types.AWSCredentials{Expiration: time.Now().UTC().Add(30 * time.Minute).Format(time.RFC3339)}
+// TestDefaultStore_Suite runs the shared test suite against the default credential store.
+func TestDefaultStore_Suite(t *testing.T) {
+	factory := func(t *testing.T) types.CredentialStore {
+		return NewCredentialStore()
+	}
 
-	assert.NoError(t, s.Store("exp", expired))
-	assert.NoError(t, s.Store("fresh", fresh))
-
-	isExp, err := s.IsExpired("exp")
-	assert.NoError(t, err)
-	assert.True(t, isExp)
-
-	isExp, err = s.IsExpired("fresh")
-	assert.NoError(t, err)
-	assert.False(t, isExp)
-
-	// Missing alias -> returns true with error.
-	isExp, err = s.IsExpired("missing")
-	assert.Error(t, err)
-	assert.True(t, isExp)
+	RunCredentialStoreTests(t, factory)
 }
 
 func TestGetAnySetAny(t *testing.T) {
