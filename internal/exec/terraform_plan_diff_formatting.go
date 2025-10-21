@@ -293,5 +293,5 @@ func formatCompactMapDiff(keys []string, origMap, newMap map[string]interface{})
 		return noChangesText
 	}
 
-	return "{" + strings.Join(changes, ", ") + "}" //nolint:revive
+	return fmt.Sprintf("{%s}", strings.Join(changes, ", "))
 }

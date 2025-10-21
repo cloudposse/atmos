@@ -1,0 +1,30 @@
+# Level 4: Final stack configuration for prod/us-west-2
+
+import:
+  # Import in the same order as dev
+  - catalog/mixins/account/prod
+  - catalog/mixins/region/us-west-2
+  - catalog/components/test-component/variants
+
+vars:
+  import_order_test: "level-4-stack-prod-us-west-2"
+  environment: "prod"
+  stack_name: "prod-us-west-2"
+
+  tags:
+    Stack: "prod-us-west-2"
+    Source: "level-4-stack"
+
+settings:
+  import_order_test: "level-4-stack-prod-us-west-2-settings"
+  stack:
+    name: "prod-us-west-2"
+    type: "final"
+
+# Expected final values:
+# - import_order_test: "level-4-stack-prod-us-west-2"
+# - region: "us-west-2"
+# - stage: "prod"
+# - vpc_cidr: "10.2.0.0/16"
+# - provider_priority: "c"
+# - instance_type: "t3.large" (from prod account)

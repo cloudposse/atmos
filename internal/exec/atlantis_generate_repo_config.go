@@ -5,20 +5,23 @@ import (
 	"reflect"
 	"strings"
 
-	log "github.com/charmbracelet/log"
-	"github.com/mitchellh/mapstructure"
+	"github.com/go-viper/mapstructure/v2"
 	"github.com/pkg/errors"
 	"github.com/samber/lo"
 	"github.com/spf13/cobra"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
-// ExecuteAtlantisGenerateRepoConfigCmd executes 'atlantis generate repo-config' command
+// ExecuteAtlantisGenerateRepoConfigCmd executes 'atlantis generate repo-config' command.
 func ExecuteAtlantisGenerateRepoConfigCmd(cmd *cobra.Command, args []string) error {
+	defer perf.Track(nil, "exec.ExecuteAtlantisGenerateRepoConfigCmd")()
+
 	info, err := ProcessCommandLineArgs("", cmd, args, nil)
 	if err != nil {
 		return err
@@ -126,7 +129,7 @@ func ExecuteAtlantisGenerateRepoConfigCmd(cmd *cobra.Command, args []string) err
 	)
 }
 
-// ExecuteAtlantisGenerateRepoConfigAffectedOnly generates repository configuration for Atlantis only for the affected components and stacks
+// ExecuteAtlantisGenerateRepoConfigAffectedOnly generates repository configuration for Atlantis only for the affected components and stacks.
 func ExecuteAtlantisGenerateRepoConfigAffectedOnly(
 	atmosConfig *schema.AtmosConfiguration,
 	outputPath string,
@@ -140,6 +143,8 @@ func ExecuteAtlantisGenerateRepoConfigAffectedOnly(
 	cloneTargetRef bool,
 	stack string,
 ) error {
+	defer perf.Track(atmosConfig, "exec.ExecuteAtlantisGenerateRepoConfigAffectedOnly")()
+
 	if repoPath != "" && (ref != "" || sha != "" || sshKeyPath != "" || sshKeyPassword != "") {
 		return errors.New("if the '--repo-path' flag is specified, the '--ref', '--sha', '--ssh-key' and '--ssh-key-password' flags can't be used")
 	}
@@ -221,7 +226,7 @@ func ExecuteAtlantisGenerateRepoConfigAffectedOnly(
 	)
 }
 
-// ExecuteAtlantisGenerateRepoConfig generates repository configuration for Atlantis
+// ExecuteAtlantisGenerateRepoConfig generates repository configuration for Atlantis.
 func ExecuteAtlantisGenerateRepoConfig(
 	atmosConfig *schema.AtmosConfiguration,
 	outputPath string,
@@ -230,6 +235,8 @@ func ExecuteAtlantisGenerateRepoConfig(
 	stacks []string,
 	components []string,
 ) error {
+	defer perf.Track(atmosConfig, "exec.ExecuteAtlantisGenerateRepoConfig")()
+
 	stacksMap, _, err := FindStacksMap(atmosConfig, false)
 	if err != nil {
 		return err
@@ -385,7 +392,7 @@ func ExecuteAtlantisGenerateRepoConfig(
 
 				switch {
 				case stackNameTemplate != "":
-					stackSlug, err = ProcessTmpl("atlantis-stack-name-template", stackNameTemplate, configAndStacksInfo.ComponentSection, false)
+					stackSlug, err = ProcessTmpl(atmosConfig, "atlantis-stack-name-template", stackNameTemplate, configAndStacksInfo.ComponentSection, false)
 					if err != nil {
 						return err
 					}
@@ -475,7 +482,7 @@ An Atlantis config template must be defined in one of the following places:
 2. The ` + "`" + `settings.atlantis.config_template` + "`" + ` field in the stack config section.
 3. Passed on the command line using the ` + "`" + `--config-template` + "`" + ` flag.
 
-Ensure that the config template is defined or selected from the collection of templates 
+Ensure that the config template is defined or selected from the collection of templates
 specified in the ` + "`" + `integrations.atlantis.config_templates` + "`" + ` section of ` + "`" + `atmos.yaml` + "`" + `.
 `)
 	}

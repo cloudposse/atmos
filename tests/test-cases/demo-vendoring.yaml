@@ -2,6 +2,7 @@
 
 tests:
   - name: atmos vendor pull
+    short: false
     enabled: true
     snapshot: false
     tty: true
@@ -11,11 +12,13 @@ tests:
     args:
       - "vendor"
       - "pull"
+    preconditions:
+      - "github_token"
     skip:
       # PTY not supported on windows
       os: !not windows
     expect:
-      stdout:
+      tty:
         - "Pulling"
         - "github/stargazers"
         - "weather"
@@ -25,6 +28,7 @@ tests:
       exit_code: 0
 
   - name: atmos vendor pull no tty
+    short: false
     enabled: true
     snapshot: false # We can't use snapshots because temp paths will always be different
     tty: false
@@ -34,6 +38,8 @@ tests:
     args:
       - "vendor"
       - "pull"
+    preconditions:
+      - "github_token"
     env:
       ATMOS_LOGS_LEVEL: Debug
     expect:

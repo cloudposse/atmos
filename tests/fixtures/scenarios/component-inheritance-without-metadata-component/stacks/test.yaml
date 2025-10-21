@@ -1,0 +1,17 @@
+import:
+  - base
+
+vars:
+  stage: test
+
+components:
+  terraform:
+    # This component inherits from base-component but does NOT have metadata.component
+    # Expected behavior: should use "derived-component" as the component path
+    derived-component:
+      metadata:
+        inherits:
+          - base-component
+      vars:
+        name: "derived-component"
+        derived_var: "derived-value"

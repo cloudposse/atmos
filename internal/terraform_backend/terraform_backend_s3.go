@@ -13,10 +13,11 @@ import (
 	_ "github.com/aws/aws-sdk-go-v2/feature/s3/manager"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
-	log "github.com/charmbracelet/log"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	awsUtils "github.com/cloudposse/atmos/internal/aws_utils"
+	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -26,6 +27,8 @@ const maxRetryCount = 2
 // GetS3BackendAssumeRoleArn returns the s3 backend role ARN from the S3 backend config.
 // https://developer.hashicorp.com/terraform/language/backend/s3#assume-role-configuration
 func GetS3BackendAssumeRoleArn(backend *map[string]any) string {
+	defer perf.Track(nil, "terraform_backend.GetS3BackendAssumeRoleArn")()
+
 	var roleArn string
 	roleArnAttribute := "role_arn"
 
@@ -85,6 +88,8 @@ func ReadTerraformBackendS3(
 	_ *schema.AtmosConfiguration,
 	componentSections *map[string]any,
 ) ([]byte, error) {
+	defer perf.Track(nil, "terraform_backend.ReadTerraformBackendS3")()
+
 	backend := GetComponentBackend(componentSections)
 
 	s3Client, err := getCachedS3Client(&backend)
@@ -101,7 +106,11 @@ func ReadTerraformBackendS3Internal(
 	componentSections *map[string]any,
 	backend *map[string]any,
 ) ([]byte, error) {
+	defer perf.Track(nil, "terraform_backend.ReadTerraformBackendS3Internal")()
+
 	// Path to the tfstate file in the s3 bucket.
+	// S3 paths always use forward slashes, so path.Join is appropriate here.
+	//nolint:forbidigo // S3 paths require forward slashes regardless of OS
 	tfStateFilePath := path.Join(
 		GetBackendAttribute(backend, "workspace_key_prefix"),
 		GetTerraformWorkspace(componentSections),
@@ -139,7 +148,9 @@ func ReadTerraformBackendS3Internal(
 		}
 
 		content, err := io.ReadAll(output.Body)
-		_ = output.Body.Close()
+		if closeErr := output.Body.Close(); closeErr != nil {
+			log.Trace("Failed to close S3 object body", "error", closeErr, "file", tfStateFilePath, "s3_bucket", bucket)
+		}
 		if err != nil {
 			return nil, fmt.Errorf("%w: %v", errUtils.ErrReadS3ObjectBody, err)
 		}

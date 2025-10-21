@@ -1,0 +1,18 @@
+# Shared network configuration
+# This file defines network settings that get imported
+components:
+  terraform:
+    vpc:
+      vars:
+        # Define subnets as an array initially
+        subnets:
+          - "10.0.1.0/24"
+          - "10.0.2.0/24"
+          - "10.0.3.0/24"
+        network_config:
+          enable_nat_gateway: true
+          enable_vpn_gateway: false
+          availability_zones:
+            - "us-east-1a"
+            - "us-east-1b"
+            - "us-east-1c"

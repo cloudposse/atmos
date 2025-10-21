@@ -10,7 +10,7 @@
  $ atmos validate component <component> -s <stack> --schema-path <schema_path> --schema-type <jsonschema|opa>
 ```
 
-- Specify the paths to OPA policy modules or catalogs used for validating the component configuration in the given stack. 
+- Specify the paths to OPA policy modules or catalogs used for validating the component configuration in the given stack.
 
 ```bash
  $ atmos validate component <component> -s <stack> --schema-path <schema_path> --schema-type opa --module-paths catalog

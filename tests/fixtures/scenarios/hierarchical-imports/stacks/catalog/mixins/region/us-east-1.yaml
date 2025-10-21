@@ -1,0 +1,31 @@
+# Level 2: Region mixin for us-east-1
+
+import:
+  # Import all provider configs via glob - tests parallel processing
+  - catalog/mixins/provider/aws-*
+
+vars:
+  # Override import_order_test - should override all provider values
+  import_order_test: "level-2-region-us-east-1"
+
+  # Region-specific configuration
+  region: "us-east-1"
+  aws_region: "us-east-1"
+  availability_zones:
+    - "us-east-1a"
+    - "us-east-1b"
+    - "us-east-1c"
+
+  # Region-specific CIDR (overrides base)
+  vpc_cidr: "10.1.0.0/16"
+
+  # Add region tags
+  tags:
+    Region: "us-east-1"
+    Source: "level-2-region-us-east-1"
+
+settings:
+  import_order_test: "level-2-region-us-east-1-settings"
+  region:
+    name: "us-east-1"
+    short_name: "use1"

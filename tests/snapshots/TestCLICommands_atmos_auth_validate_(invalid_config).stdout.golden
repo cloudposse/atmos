@@ -1,0 +1,4 @@
+
+**❌ Authentication configuration validation failed:**
+
+invalid auth config: provider "invalid-provider" validation failed: invalid provider kind: unsupported provider kind: invalid/provider

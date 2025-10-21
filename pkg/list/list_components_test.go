@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -53,6 +54,7 @@ func TestListComponentsWithStack(t *testing.T) {
 	assert.NotNil(t, output)
 	assert.Greater(t, len(output), 0)
 	assert.ElementsMatch(t, []string{
+		"aws/bastion", "echo-server", "infra/infra-server", "infra/infra-server-override",
 		"infra/vpc", "mixin/test-1", "mixin/test-2", "test/test-component",
 		"test/test-component-override", "test/test-component-override-2", "test/test-component-override-3",
 		"top-level-component1", "vpc", "vpc/new",
@@ -79,7 +81,7 @@ func TestGetStackComponents(t *testing.T) {
 	t.Run("invalid stack data", func(t *testing.T) {
 		_, err := getStackComponents("not a map")
 		require.Error(t, err)
-		assert.True(t, errors.Is(err, ErrParseStacks))
+		assert.True(t, errors.Is(err, errUtils.ErrParseStacks))
 	})
 
 	t.Run("missing components", func(t *testing.T) {
@@ -87,17 +89,7 @@ func TestGetStackComponents(t *testing.T) {
 			"not-components": map[string]any{},
 		})
 		require.Error(t, err)
-		assert.True(t, errors.Is(err, ErrParseComponents))
-	})
-
-	t.Run("missing terraform components", func(t *testing.T) {
-		_, err := getStackComponents(map[string]any{
-			"components": map[string]any{
-				"not-terraform": map[string]any{},
-			},
-		})
-		require.Error(t, err)
-		assert.True(t, errors.Is(err, ErrParseTerraformComponents))
+		assert.True(t, errors.Is(err, errUtils.ErrParseComponents))
 	})
 }
 
@@ -120,6 +112,13 @@ func TestGetComponentsForSpecificStack(t *testing.T) {
 				},
 			},
 		},
+		"stack3": map[string]any{
+			"components": map[string]any{
+				"packer": map[string]any{
+					"ami": map[string]any{},
+				},
+			},
+		},
 	}
 
 	// Test successful case
@@ -129,11 +128,17 @@ func TestGetComponentsForSpecificStack(t *testing.T) {
 		assert.ElementsMatch(t, []string{"vpc", "infra/vpc"}, components)
 	})
 
+	t.Run("packer stack", func(t *testing.T) {
+		components, err := getComponentsForSpecificStack("stack3", stacksMap)
+		require.NoError(t, err)
+		assert.ElementsMatch(t, []string{"ami"}, components)
+	})
+
 	// Test error cases
 	t.Run("non-existent stack", func(t *testing.T) {
 		_, err := getComponentsForSpecificStack("non-existent-stack", stacksMap)
 		require.Error(t, err)
-		assert.True(t, errors.Is(err, ErrStackNotFound))
+		assert.True(t, errors.Is(err, errUtils.ErrStackNotFound))
 		assert.Contains(t, err.Error(), "non-existent-stack")
 	})
 
@@ -143,7 +148,7 @@ func TestGetComponentsForSpecificStack(t *testing.T) {
 		}
 		_, err := getComponentsForSpecificStack("invalid-stack", invalidStacksMap)
 		require.Error(t, err)
-		assert.True(t, errors.Is(err, ErrProcessStack))
+		assert.True(t, errors.Is(err, errUtils.ErrProcessStack))
 		assert.Contains(t, err.Error(), "invalid-stack")
 	})
 }
@@ -250,21 +255,21 @@ func TestFilterAndListComponents(t *testing.T) {
 	t.Run("non-existent stack", func(t *testing.T) {
 		_, err := FilterAndListComponents("non-existent-stack", stacksMap)
 		require.Error(t, err)
-		assert.True(t, errors.Is(err, ErrStackNotFound))
+		assert.True(t, errors.Is(err, errUtils.ErrStackNotFound))
 	})
 
 	// Test with nil stacks map
 	t.Run("nil stacks map", func(t *testing.T) {
 		_, err := FilterAndListComponents("stack1", nil)
 		require.Error(t, err)
-		assert.True(t, errors.Is(err, ErrStackNotFound))
+		assert.True(t, errors.Is(err, errUtils.ErrStackNotFound))
 	})
 
 	// Test with empty stacks map
 	t.Run("empty stacks map", func(t *testing.T) {
 		_, err := FilterAndListComponents("stack1", map[string]any{})
 		require.Error(t, err)
-		assert.True(t, errors.Is(err, ErrStackNotFound))
+		assert.True(t, errors.Is(err, errUtils.ErrStackNotFound))
 	})
 }
 
@@ -283,7 +288,7 @@ func TestFilterAndListComponentsIntegration(t *testing.T) {
 
 		_, err = FilterAndListComponents("non-existent-stack", stacksMap)
 		require.Error(t, err)
-		assert.True(t, errors.Is(err, ErrStackNotFound))
+		assert.True(t, errors.Is(err, errUtils.ErrStackNotFound))
 		assert.Contains(t, err.Error(), "non-existent-stack")
 	})
 }

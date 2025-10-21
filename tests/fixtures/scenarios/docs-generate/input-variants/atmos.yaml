@@ -27,7 +27,7 @@ docs:
     readme:
       base-dir: .
       input:
-        - "./README-local.yaml"  
+        - "./README-local.yaml"
         - "https://raw.githubusercontent.com/cloudposse/atmos/main/README.yaml"
         - name: "inline map"
           description: "inline override: description"

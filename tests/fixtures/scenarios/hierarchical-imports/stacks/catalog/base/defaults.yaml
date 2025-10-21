@@ -1,0 +1,25 @@
+# Level 1: Base defaults - imported after globals
+# This file overrides some values from globals to test import order
+
+import:
+  - catalog/base/globals
+
+vars:
+  # Override the import_order_test from globals
+  import_order_test: "level-1-defaults"
+
+  # Add new variables
+  organization: "ACME Corporation"
+  cost_center: "engineering"
+
+  # Add more tags (deep merge test)
+  tags:
+    Environment: "default"
+    Source: "level-1-defaults"
+    CostCenter: "engineering"
+
+settings:
+  import_order_test: "level-1-defaults-settings"
+  billing:
+    enabled: true
+    account: "12345678900"

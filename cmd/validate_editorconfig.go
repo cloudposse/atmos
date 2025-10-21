@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"strings"
 
-	log "github.com/charmbracelet/log"
 	"github.com/editorconfig-checker/editorconfig-checker/v3/pkg/config"
 	er "github.com/editorconfig-checker/editorconfig-checker/v3/pkg/error"
 	"github.com/editorconfig-checker/editorconfig-checker/v3/pkg/files"
@@ -14,6 +13,7 @@ import (
 	"github.com/spf13/cobra"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/cloudposse/atmos/pkg/version"
@@ -47,22 +47,24 @@ var editorConfigCmd *cobra.Command = &cobra.Command{
 	},
 }
 
-// initializeConfig breaks the initialization cycle by separating the config setup
+// parseConfigPaths extracts config file paths from command flags.
+// Returns the paths specified via --config flag, or default paths if not specified.
+func parseConfigPaths(cmd *cobra.Command) []string {
+	if cmd.Flags().Changed("config") {
+		configFlag := cmd.Flags().Lookup("config")
+		if configFlag != nil {
+			return strings.Split(configFlag.Value.String(), ",")
+		}
+	}
+	return defaultConfigFileNames
+}
+
+// initializeConfig breaks the initialization cycle by separating the config setup.
 func initializeConfig(cmd *cobra.Command) {
 	replaceAtmosConfigInConfig(cmd, atmosConfig)
 
-	configPaths := []string{}
-	if cmd.Flags().Changed("config") {
-		config := cmd.Flags().Lookup("config")
-		if config != nil {
-			configFilePaths = strings.Split(config.Value.String(), ",")
-		}
-	}
-	if len(configFilePaths) == 0 {
-		configPaths = append(configPaths, defaultConfigFileNames...)
-	} else {
-		configPaths = append(configPaths, configFilePaths...)
-	}
+	configFilePaths = parseConfigPaths(cmd)
+	configPaths := configFilePaths
 
 	currentConfig = config.NewConfig(configPaths)
 
@@ -73,7 +75,9 @@ func initializeConfig(cmd *cobra.Command) {
 		}
 	}
 
-	_ = currentConfig.Parse()
+	if err := currentConfig.Parse(); err != nil {
+		log.Trace("Failed to parse EditorConfig configuration", "error", err, "paths", configPaths)
+	}
 
 	if tmpExclude != "" {
 		currentConfig.Exclude = append(currentConfig.Exclude, tmpExclude)
@@ -111,12 +115,18 @@ func replaceAtmosConfigInConfig(cmd *cobra.Command, atmosConfig schema.AtmosConf
 		}
 		cliConfig.Format = format
 	}
-	if !cmd.Flags().Changed("logs-level") && atmosConfig.Logs.Level == "trace" {
-		cliConfig.Verbose = true
-	} else if cmd.Flags().Changed("logs-level") {
-		if v, err := cmd.Flags().GetString("logs-level"); err == nil && v == "trace" {
-			cliConfig.Verbose = true
+	// Set verbose mode if log level is Trace
+	traceFromConfig := !cmd.Flags().Changed("logs-level") && atmosConfig.Logs.Level == u.LogLevelTrace
+	traceFromFlag := false
+	if cmd.Flags().Changed("logs-level") {
+		if v, err := cmd.Flags().GetString("logs-level"); err == nil {
+			if parsedLevel, parseErr := log.ParseLogLevel(v); parseErr == nil {
+				traceFromFlag = parsedLevel == u.LogLevelTrace
+			}
 		}
+	}
+	if traceFromConfig || traceFromFlag {
+		cliConfig.Verbose = true
 	}
 	if !cmd.Flags().Changed("no-color") && atmosConfig.Settings.Terminal.NoColor {
 		cliConfig.NoColor = atmosConfig.Settings.Terminal.NoColor
@@ -143,7 +153,7 @@ func replaceAtmosConfigInConfig(cmd *cobra.Command, atmosConfig schema.AtmosConf
 	}
 }
 
-// runMainLogic contains the main logic
+// runMainLogic contains the main logic.
 func runMainLogic() {
 	config := *currentConfig
 	log.Debug(config.String())
@@ -185,7 +195,7 @@ func checkVersion(config config.Config) error {
 	return nil
 }
 
-// addPersistentFlags adds flags to the root command
+// addPersistentFlags adds flags to the root command.
 func addPersistentFlags(cmd *cobra.Command) {
 	cmd.PersistentFlags().StringVar(&tmpExclude, "exclude", "", "Regex to exclude files from checking")
 	cmd.PersistentFlags().BoolVar(&initEditorConfig, "init", false, "Create an initial configuration")

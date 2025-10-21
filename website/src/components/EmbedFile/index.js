@@ -7,7 +7,7 @@ import CodeBlock from '@theme/CodeBlock';
 const guessLanguageFromFilePath = (filePath) => {
     if (/\.ya?ml$/i.test(filePath)) {
         return 'yaml';
-    }   
+    }
     if (/\.json$/i.test(filePath)) {
         return 'json';
     }

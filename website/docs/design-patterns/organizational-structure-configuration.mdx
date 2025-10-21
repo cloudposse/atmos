@@ -46,6 +46,24 @@ The **Organizational Structure Configuration** pattern provides the following be
 - After adding new organizations, tenants, accounts or regions, the entire configuration will still remain DRY, reusable and easy to manage thanks to
   using the described folder structure, catalogs, mixins, and hierarchical [imports](/core-concepts/stacks/imports)
 
+## The Role of _defaults.yaml Files
+
+In the organizational structure pattern, `_defaults.yaml` files play a crucial role at each level of the hierarchy. These files:
+
+- **Contain baseline configurations** for their respective level (organization, OU/tenant, account/stage)
+- **Must be explicitly imported** - they are not automatically included (this is by design for explicit control)
+- **Create inheritance chains** by importing parent-level defaults
+- **Are excluded from stack discovery** via the `excluded_paths` configuration
+
+:::info
+The `_defaults.yaml` naming is a convention, not an Atmos feature. The underscore prefix ensures these files:
+- Sort to the top of directory listings (lexicographic ordering)
+- Are visually distinct from actual stack configurations
+- Are excluded from stack discovery (when configured in `excluded_paths`)
+
+See the [_defaults.yaml Design Pattern](/design-patterns/defaults-pattern) for a complete explanation of this convention.
+:::
+
 ## Example
 
 The following example shows the Atmos stack and component configurations to provision the `vpc` and `vpc-flow-logs-bucket` components into

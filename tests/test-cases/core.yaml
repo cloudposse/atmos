@@ -32,22 +32,6 @@ tests:
         - "^$"
       exit_code: 1
 
-  - name: "which atmos"
-    enabled: true
-    snapshot: false
-    description: "Ensure atmos CLI is installed and we're using the one that was built."
-    workdir: "../"
-    command: "which"
-    args:
-      - "atmos"
-    expect:
-      stdout:
-        # build/atmos is local
-        # atmos/atmos is in GitHub Actions
-        - '(build[/\\]atmos|atmos/atmos)'
-      stderr:
-        - "^$"
-      exit_code: 0
 
   - name: "atmos"
     enabled: true
@@ -58,10 +42,10 @@ tests:
     expect:
       diff: []
       stdout:
-        - "atmos.yaml CLI config file specifies the directory for Atmos stacks as stacks,"
-        - "but the directory does not exist."
+        - "^\\s*$"
       stderr:
-        - "^$"
+        - "atmos.yaml CLI config file specifies the directory for Atmos stacks as stacks, but the directory does not exist."
+        - "Telemetry Enabled"
       exit_code: 1
 
   - name: atmos docs
@@ -76,6 +60,6 @@ tests:
       diff: []
       exit_code: 0
       stdout:
-        - "Opening default browser to 'https://atmos.tools'."
-      stderr:
         - "^$"
+      stderr:
+        - "Opening default browser to 'https://atmos.tools'."

@@ -19,4 +19,3 @@ export default function Terminal({ title, command, className, children }) {
         </div>
     );
 };
-

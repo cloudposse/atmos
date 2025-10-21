@@ -10,9 +10,13 @@ import (
 	e "github.com/cloudposse/atmos/internal/exec"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/tests"
 )
 
 func TestVendorComponentPullCommand(t *testing.T) {
+	// Skip long tests in short mode (this test takes ~6 seconds due to network I/O)
+	tests.SkipIfShort(t)
+
 	// Initialize the CLI configuration
 	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
 	assert.Nil(t, err)

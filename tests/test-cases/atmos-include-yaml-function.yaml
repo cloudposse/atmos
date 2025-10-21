@@ -13,9 +13,11 @@ tests:
       - "-s"
       - "nonprod"
     expect:
+      valid:
+        - "yaml"
       exit_code: 0
       stdout:
         - "string_var: abc"
         - "boolean_var: true"
       stderr:
-        - "^$"
+        - "Telemetry Enabled"

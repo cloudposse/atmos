@@ -1,0 +1,83 @@
+---
+title: atmos version
+sidebar_label: version
+sidebar_class_name: command
+description: Use this command to get the Atmos CLI version
+---
+
+import Screengrab from '@site/src/components/Screengrab'
+import Intro from '@site/src/components/Intro'
+import DocCardList from '@theme/DocCardList';
+
+<Intro>
+    Use this command to get the Atmos CLI version
+</Intro>
+
+<Screengrab title="atmos version" slug="atmos-version"/>
+
+## Usage
+
+Execute the `atmos version` command like this:
+
+```shell
+atmos version
+```
+
+For a quick version check, use the `--version` flag:
+
+```shell
+atmos --version
+```
+
+**Note:** The `--version` flag prints a simple `atmos <version>` line and does not perform update checks or support the `--check` or `--format` flags. Use the full `atmos version` command for richer output and additional functionality.
+
+From time to time, Atmos will check for updates. The frequency of these checks is configured in the `atmos.yaml` file.
+
+Atmos supports three ways to specify the update check frequency:
+
+1. As an integer: Specify the number of seconds between checks (for example, 3600 for hourly checks).
+2. As a duration with a suffix: Use a time suffix to indicate the interval (for example, `1m` for one minute, `5h` for five hours, or `2d` for two days).
+3. As one of the predefined keywords: Choose from the following options: minute, hourly, daily, weekly, monthly, and yearly. The default is daily.
+The default is to check `daily`, and if any unsupported values are passed this default will be used.
+
+It is also possible to turn off version checks in `atmos.yaml` by setting `version.check.enabled` to `false`,
+or by setting the `ATMOS_VERSION_CHECK_ENABLED` environment variable to `false`, which overrides
+the `version.check.enabled` settings in `atmos.yaml`.
+
+```shell
+atmos version --check
+```
+
+:::caution Version Disambiguation
+When using `--version` with subcommands, it always displays the **Atmos CLI version**, not the underlying tool version:
+
+```shell
+atmos terraform --version  # Shows Atmos version, NOT Terraform version
+atmos helmfile --version   # Shows Atmos version, NOT Helmfile version
+```
+
+To check the version of Terraform, Helmfile, or other tools, use their native commands directly (e.g., `terraform version`, `helmfile version`).
+:::
+
+## Flags
+
+<dl>
+    <dt>`--check` <em>(optional)</em></dt>
+    <dd>Force Atmos to check for a new version, irrespective of the configuration settings.</dd>
+
+    <dt>`--format` <em>(optional)</em></dt>
+    <dd>Specify the output format: `yaml` or `json`.</dd>
+</dl>
+
+:::tip
+To find the latest version of Atmos, go to the [releases](https://github.com/cloudposse/atmos/releases) page on GitHub.
+For help with installing the latest version of Atmos, check out our [installation](/install) page.
+:::
+
+When executing the `atmos version` command, Atmos automatically checks for the latest release
+from the [Atmos releases](https://github.com/cloudposse/atmos/releases) page on GitHub and compares the current
+version with the latest release.
+
+## Subcommands
+
+<DocCardList/>

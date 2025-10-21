@@ -4,7 +4,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// describeCmd describes configuration for stacks and components
+// describeCmd describes configuration for stacks and components.
 var describeCmd = &cobra.Command{
 	Use:                "describe",
 	Short:              "Show details about Atmos configurations and components",
@@ -15,7 +15,6 @@ var describeCmd = &cobra.Command{
 
 func init() {
 	describeCmd.PersistentFlags().StringP("query", "q", "", "Query the results of an `atmos describe` command using `yq` expressions")
-	describeCmd.PersistentFlags().String("pager", "true", "Disable / Enable the paging user experience")
 
 	RootCmd.AddCommand(describeCmd)
 }

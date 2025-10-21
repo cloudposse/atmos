@@ -21,3 +21,40 @@ components:
         foo: "foo"
         bar: "bar"
         baz: "baz"
+
+    component-test-process-env:
+      metadata:
+        component: mock
+      settings:
+        validation:
+          validate-process-env:
+            schema_type: opa
+            schema_path: "validate-component.rego"
+            description: Test process_env section validation
+      vars:
+        test_mode: true
+
+    component-test-cli-args:
+      metadata:
+        component: mock
+      settings:
+        validation:
+          validate-cli-args:
+            schema_type: opa
+            schema_path: "validate-component.rego"
+            description: Test cli_args section validation
+      vars:
+        test_cli_args: true
+        validate_terraform_commands: true
+
+    component-test-tf-cli-vars:
+      metadata:
+        component: mock
+      settings:
+        validation:
+          validate-tf-cli-vars:
+            schema_type: opa
+            schema_path: "validate-component.rego"
+            description: Test tf_cli_vars section validation
+      vars:
+        test_tf_cli_vars: true

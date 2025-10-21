@@ -1,0 +1,71 @@
+# yaml-language-server: $schema=schema.json
+
+tests:
+  # Validation Tests
+  - name: atmos auth validate (invalid config)
+    enabled: true
+    snapshot: true
+    description: "Test auth validate with invalid configuration"
+    workdir: "fixtures/scenarios/atmos-auth-invalid/"
+    command: "atmos"
+    args:
+      - "auth"
+      - "validate"
+    expect:
+      diff: []
+      stderr:
+        - "invalid auth config"
+      exit_code: 1
+
+  - name: atmos auth validate --verbose
+    enabled: true
+    snapshot: true
+    description: "Test auth validate with verbose output"
+    workdir: "fixtures/scenarios/atmos-auth/"
+    command: "atmos"
+    args:
+      - "auth"
+      - "validate"
+      - "--verbose"
+    expect:
+      diff: []
+      stdout:
+        - "Validating authentication configuration"
+        - "Authentication configuration is valid"
+      exit_code: 0
+
+  # Provider Validation Tests
+  - name: atmos auth validate (missing provider)
+    enabled: true
+    snapshot: true
+    description: "Test validation with identity referencing missing provider"
+    workdir: "fixtures/scenarios/atmos-auth/"
+    command: "atmos"
+    args:
+      - "auth"
+      - "validate"
+    env:
+      ATMOS_AUTH_TEST_MISSING_PROVIDER: "true"
+    expect:
+      diff: []
+      stdout:
+        - "Authentication configuration is valid"
+      exit_code: 0
+
+  # Identity Chain Validation
+  - name: atmos auth validate (circular dependency)
+    enabled: true
+    snapshot: true
+    description: "Test validation with circular identity dependencies"
+    workdir: "fixtures/scenarios/atmos-auth/"
+    command: "atmos"
+    args:
+      - "auth"
+      - "validate"
+    env:
+      ATMOS_AUTH_TEST_CIRCULAR: "true"
+    expect:
+      diff: []
+      stdout:
+        - "Authentication configuration is valid"
+      exit_code: 0

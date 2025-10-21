@@ -9,4 +9,3 @@ export default function CardGroup({ title, className, children }) {
         </div>
     );
 };
-

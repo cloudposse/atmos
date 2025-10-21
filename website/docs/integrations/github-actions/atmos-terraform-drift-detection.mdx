@@ -21,7 +21,7 @@ This GitHub Action incorporates superior GitOps support for Terraform by utilizi
 
 * **Implements Native GitOps** with Atmos and Terraform.
 * **No hardcoded credentials.** Use GitHub OIDC to assume roles.
-* **Compatible with GitHub Cloud & Self-hosted Runners** for maximum flexibility. 
+* **Compatible with GitHub Cloud & Self-hosted Runners** for maximum flexibility.
 * **Beautiful Job Summaries** don't clutter up pull requests with noisy GitHub comments.
 * **Automated Drift Detection** Regularly check and track all resources for drift.
 * **Free Tier GitHub** Use GitHub Issues to track drifted resources.
@@ -31,7 +31,7 @@ This GitHub Action incorporates superior GitOps support for Terraform by utilizi
 
 ```mermaid
 ---
-title: Atmos Terraform Drift Detection 
+title: Atmos Terraform Drift Detection
 ---
 stateDiagram-v2
   direction LR
@@ -46,7 +46,7 @@ stateDiagram-v2
 
     state "Gather every component and stack" as gather
     state "Atmos Terraform Plan" as plan
-    state "Create GitHub Issue" as issue 
+    state "Create GitHub Issue" as issue
   }
 
   state "Atmos Terraform Drift Remediation" as remediate {
@@ -61,7 +61,7 @@ stateDiagram-v2
   }
 ```
 
-Drift Detection with Atmos requires two separate workflows. 
+Drift Detection with Atmos requires two separate workflows.
 
 ### Atmos Terraform Drift Detection
 
@@ -77,7 +77,7 @@ Now we can see the new Issue, including a Terraform Plan summary and metadata fo
 
 :::tip Limiting the number of Issues
 
-Without a limit, the number of Issues for drifted components can quickly get out-of-hand. In order to create a more manageable developer experience, set a limit for the maximum number of Issues created by the "Atmos Terraform Drift Detection" action with `max-opened-issues`. 
+Without a limit, the number of Issues for drifted components can quickly get out-of-hand. In order to create a more manageable developer experience, set a limit for the maximum number of Issues created by the "Atmos Terraform Drift Detection" action with `max-opened-issues`.
 
 The default value is `10`.
 
@@ -91,17 +91,17 @@ We can quickly see a complete list of all drift components in the "Issues" tab i
 
 #### Usage Example
 
-<RemoteFile source="https://raw.githubusercontent.com/cloudposse/docs/master/examples/snippets/.github/workflows/atmos-terraform-drift-detection.yaml" />
+<RemoteFile source="https://raw.githubusercontent.com/cloudposse/docs/refs/heads/master/examples/legacy/snippets/.github/workflows/atmos-terraform-drift-detection.yaml" />
 
 #### 256 Matrix Limitation
 
-:::warning 
+:::warning
 
-GitHub Actions support 256 matrix jobs in a single workflow at most, [ref](https://docs.github.com/en/actions/using-jobs/using-a-matrix-for-your-jobs#using-a-matrix-strategy). 
+GitHub Actions support 256 matrix jobs in a single workflow at most, [ref](https://docs.github.com/en/actions/using-jobs/using-a-matrix-for-your-jobs#using-a-matrix-strategy).
 
 :::
 
-When planning all stacks in an Atmos environment, we frequently plan more than 256 component in the stacks at a time. In order to work around this limitation by GitHub, we can add an additional layer of abstraction using reusable workflows. 
+When planning all stacks in an Atmos environment, we frequently plan more than 256 component in the stacks at a time. In order to work around this limitation by GitHub, we can add an additional layer of abstraction using reusable workflows.
 
 For example, the "Atmos Terraform Plan" workflow can call "Atmos Terraform Plan Matrix" workflow which then calls the "Atmos Terraform Plan" Composite Action.
 
@@ -147,7 +147,7 @@ Once we have an open Issue for a drifted component, we can trigger another workf
 
 #### Usage Example
 
-<RemoteFile source="https://raw.githubusercontent.com/cloudposse/docs/master/examples/snippets/.github/workflows/atmos-terraform-drift-remediation.yaml" />
+<RemoteFile source="https://raw.githubusercontent.com/cloudposse/docs/refs/heads/master/examples/legacy/snippets/.github/workflows/atmos-terraform-drift-remediation.yaml" />
 
 ## Requirements
 

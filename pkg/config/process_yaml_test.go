@@ -21,8 +21,8 @@ func TestPreprocessAtmosYamlFunc(t *testing.T) {
 		{
 			name: "sequence of mappings with same key",
 			setup: func(t *testing.T) (string, func()) {
-				os.Setenv("TEST_SERVER_1_NAME", "a")
-				os.Setenv("TEST_SERVER_2_NAME", "b")
+				t.Setenv("TEST_SERVER_1_NAME", "a")
+				t.Setenv("TEST_SERVER_2_NAME", "b")
 				yamlContent := `
 servers:
   - name: !env TEST_SERVER_1_NAME
@@ -45,7 +45,7 @@ servers:
 key: !env TEST_ENV_VAR
 `,
 			setup: func(t *testing.T) (string, func()) {
-				os.Setenv("TEST_ENV_VAR", "test_value")
+				t.Setenv("TEST_ENV_VAR", "test_value")
 				return `
 key: !env TEST_ENV_VAR
 `, func() { os.Unsetenv("TEST_ENV_VAR") }
@@ -101,7 +101,7 @@ parent:
     - !include %s
 `,
 			setup: func(t *testing.T) (string, func()) {
-				os.Setenv("NESTED_ENV_VAR", "nested_value")
+				t.Setenv("NESTED_ENV_VAR", "nested_value")
 
 				tmpfile, err := os.CreateTemp("", "nested-include-*.yaml")
 				if err != nil {

@@ -3,7 +3,7 @@ title: Stack Catalogs
 sidebar_position: 3
 sidebar_label: Build Configuration Catalogs
 id: catalogs
-description: Organize Stack configurations into catalogs for easy imports. 
+description: Organize Stack configurations into catalogs for easy imports.
 ---
 import Intro from '@site/src/components/Intro'
 
@@ -11,7 +11,7 @@ import Intro from '@site/src/components/Intro'
 As you start splitting your stacks apart into smaller configurations, it often makes to organize those into a catalog of reusable configurations. That way you can take advantage of imports, to reuse configuration in multiple places. Catalogs are how to logically organize all the child [Stack](/core-concepts/stacks) configurations on the filesystem for use by [imports](/core-concepts/stacks/imports).
 </Intro>
 
-There's no "right or wrong" way to do it, and Atmos does not enforce any one convention. 
+There's no "right or wrong" way to do it, and Atmos does not enforce any one convention.
 What we've come to realize is there's no "one way" to organize Stack configurations. The best way to organize them will come down to
 how an organization wants to model its infrastructure.
 
@@ -42,7 +42,7 @@ Here's an example of how Stack imports might be organized on disk.
     │   └── region/
     │       ├── us-east-1.yaml
     │       ├── us-west-2.yaml
-    │       └── eu-west-1.yaml    
+    │       └── eu-west-1.yaml
     │   └── stage/
     ├── teams/
     │   └── frontend/
@@ -151,26 +151,26 @@ Here's what that might look like:
             │   │    └── teams.yaml
             │   └── us-west-2/
             │       ├── networking.yaml
-            │       ├── compliance.yaml                        
+            │       ├── compliance.yaml
             │       ├── backing-services.yaml
             │       └── teams.yaml
             ├── staging/
             │   └── us-west-1/
             │       ├── networking.yaml
-            │       ├── compliance.yaml   
+            │       ├── compliance.yaml
             │       ├── backing-services.yaml
             │       └── teams.yaml
             └── dev/
                 └── us-west-2/
                     ├── networking.yaml
                     ├── backing-services.yaml
-                    └── teams.yaml                  
-                 
+                    └── teams.yaml
+
 ```
 
 In this example, there's a single organization called `acme` with an example of one organizational unit (OU) called `platform`. The OU has 3 stages: `dev`, `staging`, and `prod`. Each stage then operates in a number of regions. Each region then has a `networking` layer, a `backing-services` layer, and a `teams` layer. The `staging` and `prod` accounts have both have a `compliance` layer, which isn't needed in the `dev` stages.
 
-The files like `networking.yaml` and `compliance.yaml` can be named anything you want. It's helpful to think about organizing Components based on their lifecycles or according to a concept of layers that stack on top of each other. 
+The files like `networking.yaml` and `compliance.yaml` can be named anything you want. It's helpful to think about organizing Components based on their lifecycles or according to a concept of layers that stack on top of each other.
 
 ### Everything Else
 

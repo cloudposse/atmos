@@ -70,13 +70,7 @@ func getRunnableDescribeStacksCmd(
 			return err
 		}
 
-		if cmd.Flags().Changed("pager") {
-			// TODO: update this post pr:https://github.com/cloudposse/atmos/pull/1174 is merged
-			atmosConfig.Settings.Terminal.Pager, err = cmd.Flags().GetString("pager")
-			if err != nil {
-				return err
-			}
-		}
+		// Global --pager flag is now handled in cfg.InitCliConfig
 
 		err = g.newDescribeStacksExec.Execute(&atmosConfig, describe)
 		return err
@@ -97,6 +91,10 @@ func setCliArgsForDescribeStackCli(flags *pflag.FlagSet, describe *exec.Describe
 		"query":                &describe.Query,
 		"skip":                 &describe.Skip,
 	}
+
+	// `true` by default.
+	describe.ProcessTemplates = true
+	describe.ProcessYamlFunctions = true
 
 	var err error
 	for k := range flagsKeyValue {
@@ -143,9 +141,9 @@ func init() {
 			"The filter supports names of the top-level stack manifests (including subfolder paths), and `atmos` stack names (derived from the context vars)",
 	)
 	AddStackCompletion(describeStacksCmd)
-	describeStacksCmd.PersistentFlags().String("components", "", "Filter by specific `atmos` components")
+	describeStacksCmd.PersistentFlags().StringSlice("components", nil, "Filter by specific `atmos` components")
 
-	describeStacksCmd.PersistentFlags().String("component-types", "", "Filter by specific component types. Supported component types: terraform, helmfile")
+	describeStacksCmd.PersistentFlags().StringSlice("component-types", nil, "Filter by specific component types. Supported component types: terraform, helmfile")
 
 	describeStacksCmd.PersistentFlags().StringSlice("sections", nil, "Output only the specified component sections. Available component sections: `backend`, `backend_type`, `deps`, `env`, `inheritance`, `metadata`, `remote_state_backend`, `remote_state_backend_type`, `settings`, `vars`")
 

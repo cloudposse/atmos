@@ -6,15 +6,25 @@ import (
 	"path/filepath"
 	"strings"
 
-	log "github.com/charmbracelet/log"
-
 	git "github.com/go-git/go-git/v5"
+
+	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/perf"
 )
 
-// GetGitRoot returns the root directory of the Git repository using go-git.
+// ProcessTagGitRoot returns the root directory of the Git repository using go-git.
 func ProcessTagGitRoot(input string) (string, error) {
+	defer perf.Track(nil, "utils.ProcessTagGitRoot")()
+
 	str := strings.TrimPrefix(input, AtmosYamlFuncGitRoot)
 	defaultValue := strings.TrimSpace(str)
+
+	// Check if we're in test mode and should use a mock Git root
+	//nolint:forbidigo // TEST_GIT_ROOT is specifically for test isolation, not application configuration
+	if testGitRoot := os.Getenv("TEST_GIT_ROOT"); testGitRoot != "" {
+		log.Debug("Using test Git root override", "path", testGitRoot)
+		return testGitRoot, nil
+	}
 
 	startPath, err := os.Getwd()
 	if err != nil {

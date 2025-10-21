@@ -1,0 +1,49 @@
+# Test YAML anchors and aliases with type mismatches during merge
+# YAML anchors create references that can cause complex merge scenarios
+
+# Define anchors
+defaults: &default_network
+  subnets:
+    - "10.0.1.0/24"
+    - "10.0.2.0/24"
+  availability_zones:
+    - "us-east-1a"
+    - "us-east-1b"
+
+production_overrides: &prod_settings
+  subnets: "10.0.100.0/16"  # String instead of array - type mismatch!
+  availability_zones: 
+    us-east-1a: "primary"
+    us-east-1b: "secondary"  # Object instead of array - another mismatch!
+
+import:
+  - path: "base.yaml"
+
+vars:
+  stage: "anchor-test"
+  environment: "validation"
+  
+components:
+  terraform:
+    vpc:
+      vars:
+        # Use anchor - this should inherit the array structure
+        <<: *default_network
+        name: "test-vpc"
+        cidr_block: "10.0.0.0/16"
+        
+    vpc-prod:
+      vars:
+        # Merge with production settings - causes type conflicts
+        <<: [*default_network, *prod_settings]
+        name: "prod-vpc"
+        
+    network-gateway:
+      vars:
+        # Another merge scenario with inline override
+        <<: *default_network
+        subnets:  # Try to override the anchored array with an object
+          public:
+            - "10.0.10.0/24"
+          private:
+            - "10.0.20.0/24"

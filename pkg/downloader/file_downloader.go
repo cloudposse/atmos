@@ -7,9 +7,12 @@ import (
 	"path/filepath"
 	"time"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/filetype"
 	"github.com/google/uuid"
 )
+
+const errDownloadFileFormat = "%w: '%s': %v"
 
 // fileDownloader handles downloading files and directories from various sources
 // without exposing the underlying implementation.
@@ -35,7 +38,7 @@ func (fd *fileDownloader) Fetch(src, dest string, mode ClientMode, timeout time.
 
 	client, err := fd.clientFactory.NewClient(ctx, src, dest, mode)
 	if err != nil {
-		return fmt.Errorf("failed to create download client: %w", err)
+		return fmt.Errorf("%w: %v", errUtils.ErrCreateDownloadClient, err)
 	}
 
 	return client.Get()
@@ -44,20 +47,65 @@ func (fd *fileDownloader) Fetch(src, dest string, mode ClientMode, timeout time.
 // FetchAutoParse downloads a remote file, detects its format, and parses it.
 func (fd *fileDownloader) FetchAndAutoParse(src string) (any, error) {
 	filePath := fd.tempPathGenerator()
+	defer os.Remove(filePath)
 
 	if err := fd.Fetch(src, filePath, ClientModeFile, 30*time.Second); err != nil {
-		return nil, fmt.Errorf("failed to download file '%s': %w", src, err)
+		return nil, fmt.Errorf(errDownloadFileFormat, errUtils.ErrDownloadFile, src, err)
 	}
 
-	return filetype.DetectFormatAndParseFile(fd.fileReader, filePath)
+	v, err := filetype.DetectFormatAndParseFile(fd.fileReader, filePath)
+	if err != nil {
+		return nil, fmt.Errorf("%w: '%s': %v", errUtils.ErrParseFile, src, err)
+	}
+	return v, nil
+}
+
+// FetchAndParseByExtension downloads a remote file and parses it based on its extension.
+func (fd *fileDownloader) FetchAndParseByExtension(src string) (any, error) {
+	filePath := fd.tempPathGenerator()
+	defer os.Remove(filePath)
+
+	if err := fd.Fetch(src, filePath, ClientModeFile, 30*time.Second); err != nil {
+		return nil, fmt.Errorf(errDownloadFileFormat, errUtils.ErrDownloadFile, src, err)
+	}
+
+	// Create a custom reader that reads the downloaded file but uses the original URL for extension detection
+	readFunc := func(filename string) ([]byte, error) {
+		// Read the actual downloaded file, not the URL
+		return fd.fileReader(filePath)
+	}
+
+	// Pass the original source URL for extension detection
+	v, err := filetype.ParseFileByExtension(readFunc, src)
+	if err != nil {
+		return nil, fmt.Errorf("%w: '%s': %v", errUtils.ErrParseFile, src, err)
+	}
+	return v, nil
+}
+
+// FetchAndParseRaw downloads a remote file and always returns it as a raw string.
+func (fd *fileDownloader) FetchAndParseRaw(src string) (any, error) {
+	filePath := fd.tempPathGenerator()
+	defer os.Remove(filePath)
+
+	if err := fd.Fetch(src, filePath, ClientModeFile, 30*time.Second); err != nil {
+		return nil, fmt.Errorf(errDownloadFileFormat, errUtils.ErrDownloadFile, src, err)
+	}
+
+	v, err := filetype.ParseFileRaw(fd.fileReader, filePath)
+	if err != nil {
+		return nil, fmt.Errorf("%w: '%s': %v", errUtils.ErrParseFile, src, err)
+	}
+	return v, nil
 }
 
 // FetchData fetches content from a given source and returns it as a byte slice.
 func (fd *fileDownloader) FetchData(src string) ([]byte, error) {
 	filePath := fd.tempPathGenerator()
+	defer os.Remove(filePath)
 
 	if err := fd.Fetch(src, filePath, ClientModeFile, 30*time.Second); err != nil {
-		return nil, fmt.Errorf("failed to download file '%s': %w", src, err)
+		return nil, fmt.Errorf(errDownloadFileFormat, errUtils.ErrDownloadFile, src, err)
 	}
 
 	return fd.fileReader(filePath)

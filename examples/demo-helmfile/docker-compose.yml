@@ -7,7 +7,7 @@ x-environment: &default-env
 services:
   server:
     image: "rancher/k3s:${K3S_VERSION:-latest}"
-    command: 
+    command:
     - 'server'
     tmpfs:
     - /run

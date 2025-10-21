@@ -29,7 +29,7 @@ This is the most basic example that shows how easy it is to add a command to atm
 Run run the following command:
 
 ```shell
- atmos hello    
+ atmos hello
 ```
 
 ### Check GitHub Status

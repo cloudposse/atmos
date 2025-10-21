@@ -1,0 +1,23 @@
+# Level 1: Base globals - imported first in the hierarchy
+# This file sets base values that should be overridden by subsequent imports
+
+vars:
+  # This variable tests import order - each level overrides it
+  import_order_test: "level-1-globals"
+
+  # These variables are set only at this level
+  namespace: "acme"
+  tenant: "core"
+
+  # Network configuration
+  vpc_cidr: "10.0.0.0/16"
+
+  # Tags that will be deep-merged
+  tags:
+    ManagedBy: "Atmos"
+    Source: "level-1-globals"
+
+settings:
+  import_order_test: "level-1-globals-settings"
+  validation:
+    enabled: true

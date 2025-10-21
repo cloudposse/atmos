@@ -3,11 +3,11 @@ package cmd
 import (
 	"errors"
 
-	log "github.com/charmbracelet/log"
 	"github.com/spf13/cobra"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/internal/exec"
-	u "github.com/cloudposse/atmos/pkg/utils"
+	log "github.com/cloudposse/atmos/pkg/logger"
 )
 
 // ValidateSchemaCmd represents the 'atmos validate schema' command.
@@ -25,7 +25,7 @@ import (
 var ValidateSchemaCmd = &cobra.Command{
 	Use:   "schema",
 	Short: "Validate YAML files against JSON schemas defined in atmos.yaml",
-	Long: `The validate schema command reads the ` + "`" + `schemas` + "`" + ` section of the atmos.yaml file 
+	Long: `The validate schema command reads the ` + "`" + `schemas` + "`" + ` section of the atmos.yaml file
 and validates matching YAML files against their corresponding JSON schemas.
 
 Each entry under ` + "`" + `schemas` + "`" + ` should define:
@@ -38,7 +38,7 @@ For every schema entry:
   - Each matching YAML file is parsed and converted to JSON.
   - The converted YAML is validated against the schema.
 
-This command helps ensure that configuration files follow a defined structure 
+This command helps ensure that configuration files follow a defined structure
 and are compliant with expected formats, reducing configuration drift and runtime errors.
 `,
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
@@ -59,12 +59,12 @@ and are compliant with expected formats, reducing configuration drift and runtim
 
 		if key == "" && schema != "" {
 			log.Error("key not provided for the schema to be used")
-			u.OsExit(1)
+			errUtils.OsExit(1)
 		}
 
 		if err := exec.NewAtmosValidatorExecutor(&atmosConfig).ExecuteAtmosValidateSchemaCmd(key, schema); err != nil {
 			if errors.Is(err, exec.ErrInvalidYAML) {
-				u.OsExit(1)
+				errUtils.OsExit(1)
 			}
 			return err
 		}

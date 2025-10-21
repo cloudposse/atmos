@@ -11,7 +11,16 @@ environments:
       custom_branches:
         - name: "**/*"
           type: branch
-          
+
+  - name: screengrabs
+    deployment_branch_policy:
+      custom_branches:
+        - name: "main"
+          type: branch
+        - name: "**/*"
+          type: branch
+        - name: "*"
+          type: branch
   - name: demo
     deployment_branch_policy:
       custom_branches:
@@ -22,4 +31,9 @@ labels:
   - name: release/feature
     color: '#d73a4a'
     description: Create release from this PR
-
+  - name: dependencies
+    color: '#0366d6'
+    description: Pull requests that update a dependency file
+  - name: go
+    color: '#00add8'
+    description: Pull requests that update Go code

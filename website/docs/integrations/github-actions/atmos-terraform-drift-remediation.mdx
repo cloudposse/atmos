@@ -41,13 +41,13 @@ integrations:
 ```
 
 > [!IMPORTANT]
-> **Please note!** This GitHub Action only works with `atmos >= 1.63.0`. If you are using `atmos < 1.63.0` please use `v1` version of this action.    
+> **Please note!** This GitHub Action only works with `atmos >= 1.63.0`. If you are using `atmos < 1.63.0` please use `v1` version of this action.
 
 ### Workflow example
 
 In this example drift will be remediated when user sets label `apply` to an issue.
 
-<RemoteFile source="https://raw.githubusercontent.com/cloudposse/docs/master/examples/snippets/.github/workflows/atmos-terraform-drift-remediation.yaml" />
+<RemoteFile source="https://raw.githubusercontent.com/cloudposse/docs/refs/heads/master/examples/legacy/snippets/.github/workflows/atmos-terraform-drift-remediation.yaml" />
 
 ## Requirements
 
@@ -75,12 +75,10 @@ This action has the requirements as [Github Actions](/integrations/github-action
 
   <dt>`token`, _optional_</dt>
     <dd>
-    Used to pull node distributions for Atmos from Cloud Posse's GitHub repository. Since there's a default, this is typically not supplied by the user. When running this action on github.com, the default value is sufficient. When running on GHES, you can pass a personal access token for github.com if you are experiencing rate limiting. 
-    Default: 
+    Used to pull node distributions for Atmos from Cloud Posse's GitHub repository. Since there's a default, this is typically not supplied by the user. When running this action on github.com, the default value is sufficient. When running on GHES, you can pass a personal access token for github.com if you are experiencing rate limiting.
+    Default:
     ```
     ${{ github.server\_url == 'https://github.com' && github.token \|\| '' }}
     ```
   </dd>
 </dl>
-
-

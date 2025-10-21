@@ -42,4 +42,3 @@
 ```
 
 - Stack patterns support glob matching (e.g., `*-dev-*`, `prod-*`, `*-{dev,staging}-*`)
-

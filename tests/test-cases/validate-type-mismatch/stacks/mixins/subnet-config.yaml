@@ -1,0 +1,12 @@
+# Mixin file that would be included via a hypothetical !include tag
+# This defines subnets as an array
+subnets:
+  - cidr: "10.0.1.0/24"
+    az: "us-east-1a"
+    type: "public"
+  - cidr: "10.0.2.0/24"
+    az: "us-east-1b"
+    type: "public"
+  - cidr: "10.0.3.0/24"
+    az: "us-east-1c"
+    type: "private"

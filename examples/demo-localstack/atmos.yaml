@@ -11,7 +11,7 @@ components:
     deploy_run_init: true
     init_run_reconfigure: true
     auto_generate_backend_file: false
-  
+
 stacks:
   base_path: "stacks"
   included_paths:
@@ -23,6 +23,20 @@ stacks:
 logs:
   file: "/dev/stderr"
   level: Info
+
+# Authentication configuration with LocalStack support
+auth:
+  identities:
+    localstack-superuser:
+      kind: aws/user
+      credentials:
+        access_key_id: test
+        secret_access_key: test
+        region: us-east-1
+        aws:
+          resolver:
+            url: "http://localhost:4566"
+      default: true
 
 # Custom CLI commands
 
@@ -94,4 +108,3 @@ commands:
       steps:
         - find . -type f -name "*.tfstate" -delete
         - echo "Deleted all state files"
-    

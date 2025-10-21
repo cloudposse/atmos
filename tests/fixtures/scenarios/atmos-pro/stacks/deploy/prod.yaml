@@ -1,0 +1,32 @@
+# yaml-language-server: $schema=https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
+
+vars:
+  stage: prod
+
+import:
+  - ./_defaults
+  - catalog/mock
+
+components:
+  terraform:
+    mock/drift:
+      metadata:
+        component: mock
+        inherits:
+          - mock
+      vars:
+        foo: "foo prod override"
+        bar: "bar prod override"
+
+    mock/nodrift:
+      metadata:
+        component: mock
+        inherits:
+          - mock
+      settings:
+        pro:
+          drift_detection:
+            enabled: false
+      vars:
+        foo: "foo prod override"
+        bar: "bar prod override"

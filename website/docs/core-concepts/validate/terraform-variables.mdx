@@ -78,8 +78,9 @@ tags:
 ```
 </Terminal>
 
-Atmos exposes the Terraform variables passed on the command line in the `tf_cli_vars` section, which can be used in
-OPA policies for validation.
+Atmos exposes the Terraform variables passed on the command line in the `tf_cli_vars` section, and also provides access to
+the variables from the [`TF_CLI_ARGS`](https://developer.hashicorp.com/terraform/cli/config/environment-variables#tf_cli_args-and-tf_cli_args_name)
+environment variable in the `env_tf_cli_vars` section. Both can be used in OPA policies for validation.
 
 ## Terraform Variables Validation using OPA Policies
 
@@ -192,3 +193,131 @@ This command will pass the validation and succeed:
 atmos terraform apply my-component -s plat-ue2-dev
 ```
 </Terminal>
+
+## Environment Variables Validation using OPA Policies
+
+In addition to `tf_cli_vars` (which contains variables passed via `-var` flags on the command line),
+Atmos also provides access to the variables through the `env_tf_cli_vars` section passed via the `TF_CLI_ARGS` environment variable.
+
+### Require a variable to be set via the `TF_CLI_ARGS` environment variable
+
+If you need to enforce that a specific Terraform variable must be set, add the following OPA policy:
+
+<File title="stacks/schemas/opa/my-component/validate-my-component.rego">
+```rego
+package atmos
+
+errors["for the 'my-component' component, 'environment' must be set in the 'TF_CLI_ARGS' environment variable"] {
+    not input.env_tf_cli_vars.environment
+}
+```
+</File>
+
+This policy will fail if the `'environment'` variable is not set in the 'TF_CLI_ARGS' environment variable.
+
+<Terminal>
+```console
+# This will fail validation
+atmos terraform apply my-component -s plat-ue2-dev
+
+# This will pass validation
+TF_CLI_ARGS="-var environment=production" atmos terraform apply my-component -s plat-ue2-dev
+```
+</Terminal>
+
+### Validate environment variable values
+
+You can also validate the actual values of variables passed via `TF_CLI_ARGS`. For example, to ensure that the `environment` variable is set to one of the allowed values:
+
+<File title="stacks/schemas/opa/my-component/validate-my-component.rego">
+```rego
+package atmos
+
+# Define allowed environment values
+allowed_environments := ["development", "staging", "production"]
+
+errors["for the 'my-component' component, 'environment' variable in TF_CLI_ARGS must be one of: development, staging, production"] {
+    input.env_tf_cli_vars.environment
+    not input.env_tf_cli_vars.environment in allowed_environments
+}
+```
+</File>
+
+### Combine command-line and environment variable validation
+
+You can create policies that validate both command-line variables (`tf_cli_vars`) and environment variables (`env_tf_cli_vars`) together:
+
+<File title="stacks/schemas/opa/my-component/validate-my-component.rego">
+```rego
+package atmos
+
+# Ensure that if a variable is set via TF_CLI_ARGS, it cannot be overridden via command line
+errors["for the 'my-component' component, when 'environment' is set in TF_CLI_ARGS, it cannot be overridden with -var"] {
+    input.env_tf_cli_vars.environment
+    input.tf_cli_vars.environment
+}
+
+# Require either TF_CLI_ARGS variable OR command-line variable, but not both
+errors["for the 'my-component' component, 'environment' must be specified either via TF_CLI_ARGS or -var, but not both"] {
+    input.env_tf_cli_vars.environment
+    input.tf_cli_vars.environment
+}
+
+# Require at least one method of setting the environment
+errors["for the 'my-component' component, 'environment' must be specified via either TF_CLI_ARGS or -var flag"] {
+    not input.env_tf_cli_vars.environment
+    not input.tf_cli_vars.environment
+}
+```
+</File>
+
+### Complex validation with type checking
+
+Variables passed via `TF_CLI_ARGS` are automatically parsed and converted to their appropriate types when possible, so you can validate their format and values:
+
+<File title="stacks/schemas/opa/my-component/validate-my-component.rego">
+```rego
+package atmos
+
+import rego.v1
+
+# Validate that instance_count is a valid number
+errors["for the 'my-component' component, 'instance_count' in TF_CLI_ARGS must be a valid positive integer"] {
+    input.env_tf_cli_vars.instance_count
+    input.env_tf_cli_vars.instance_count <= 0
+}
+
+# Validate that tags is a valid object
+errors["for the 'my-component' component, 'tags' in TF_CLI_ARGS must be a valid object"] {
+    input.env_tf_cli_vars.tags
+    not is_object(input.env_tf_cli_vars.tags)
+}
+
+# Validate specific object structure
+errors["for the 'my-component' component, 'tags' in TF_CLI_ARGS must contain 'Environment' key"] {
+    input.env_tf_cli_vars.tags
+    is_object(input.env_tf_cli_vars.tags)
+    not input.env_tf_cli_vars.tags.Environment
+}
+
+errors["for the 'my-component' component, 'tags' in TF_CLI_ARGS must contain 'Team' key"] {
+    input.env_tf_cli_vars.tags
+    is_object(input.env_tf_cli_vars.tags)
+    not input.env_tf_cli_vars.tags.Team
+}
+```
+</File>
+
+:::tip
+Variables in `env_tf_cli_vars` are automatically parsed and converted to their appropriate types when possible. For example:
+- `TF_CLI_ARGS="-var count=5"` becomes `input.env_tf_cli_vars.count` with integer value `5`
+- `TF_CLI_ARGS="-var enabled=true"` becomes `input.env_tf_cli_vars.enabled` with boolean value `true`
+- `TF_CLI_ARGS='-var tags={"env":"prod"}'` becomes `input.env_tf_cli_vars.tags` with object value `{"env":"prod"}`
+
+This makes it easier to write OPA policies that work with the actual data types rather than just strings.
+:::
+
+:::info
+The `env_tf_cli_vars` section provides a way to validate and control variables passed via the `TF_CLI_ARGS` environment variable, complementing the `tf_cli_vars` section which handles command-line variables.
+Together, they give you complete control over how variables are passed to Terraform.
+:::

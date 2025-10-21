@@ -15,9 +15,12 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	tb "github.com/cloudposse/atmos/internal/terraform_backend"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/tests"
 )
 
 func TestReadTerraformBackendS3_InvalidConfig(t *testing.T) {
+	// Check for AWS profile precondition
+	tests.RequireAWSProfile(t, "cplive-core-gbl-identity")
 	tests := []struct {
 		name          string
 		componentData map[string]any
@@ -95,6 +98,9 @@ func TestReadTerraformBackendS3_InvalidConfig(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			// Clear AWS_PROFILE to prevent conflicts with local AWS configuration.
+			t.Setenv("AWS_PROFILE", "")
+
 			atmosConfig := &schema.AtmosConfiguration{}
 
 			result, err := tb.ReadTerraformBackendS3(atmosConfig, &tt.componentData)

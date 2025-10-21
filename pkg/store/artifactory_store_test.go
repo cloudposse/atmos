@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
-	log "github.com/charmbracelet/log"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/jfrog/jfrog-client-go/artifactory"
 	"github.com/jfrog/jfrog-client-go/artifactory/services"
 	al "github.com/jfrog/jfrog-client-go/utils/log"
@@ -105,8 +105,8 @@ func TestNewArtifactoryStore(t *testing.T) {
 			originalArtToken := os.Getenv("ARTIFACTORY_ACCESS_TOKEN")
 			originalJfrogToken := os.Getenv("JFROG_ACCESS_TOKEN")
 			defer func() {
-				_ = os.Setenv("ARTIFACTORY_ACCESS_TOKEN", originalArtToken)
-				_ = os.Setenv("JFROG_ACCESS_TOKEN", originalJfrogToken)
+				os.Setenv("ARTIFACTORY_ACCESS_TOKEN", originalArtToken)
+				os.Setenv("JFROG_ACCESS_TOKEN", originalJfrogToken)
 			}()
 			_ = os.Unsetenv("ARTIFACTORY_ACCESS_TOKEN")
 			_ = os.Unsetenv("JFROG_ACCESS_TOKEN")

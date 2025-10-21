@@ -2,7 +2,6 @@ package exec
 
 import (
 	"errors"
-	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -293,14 +292,8 @@ func TestDescribeDependents_WithStacksNameTemplate(t *testing.T) {
 	t.Setenv("ATMOS_BASE_PATH", "")
 
 	// Working directory isolation
-	startingDir, err := os.Getwd()
-	require.NoError(t, err, "getwd failed")
-	t.Cleanup(func() {
-		_ = os.Chdir(startingDir)
-	})
-
 	workDir := "../../tests/fixtures/scenarios/depends-on-with-stacks-name-template"
-	require.NoErrorf(t, os.Chdir(workDir), "chdir to %q failed", workDir)
+	t.Chdir(workDir)
 
 	// Init Atmos config
 	configInfo := schema.ConfigAndStacksInfo{}
@@ -472,14 +465,8 @@ func TestDescribeDependents_WithStacksNamePattern(t *testing.T) {
 	t.Setenv("ATMOS_BASE_PATH", "")
 
 	// Working directory isolation
-	startingDir, err := os.Getwd()
-	require.NoError(t, err, "getwd failed")
-	t.Cleanup(func() {
-		_ = os.Chdir(startingDir)
-	})
-
 	workDir := "../../tests/fixtures/scenarios/depends-on-with-stacks-name-pattern"
-	require.NoErrorf(t, os.Chdir(workDir), "chdir to %q failed", workDir)
+	t.Chdir(workDir)
 
 	// Init Atmos config
 	configInfo := schema.ConfigAndStacksInfo{}

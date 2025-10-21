@@ -8,11 +8,12 @@ description: This command starts an interactive UI to select an Atmos command, c
 ---
 import Screengrab from '@site/src/components/Screengrab'
 import Terminal from '@site/src/components/Terminal'
+import Intro from '@site/src/components/Intro'
 
-:::note Purpose
+<Intro>
 Use this command to start an interactive UI to run Atmos commands against any component or stack. Press `Enter` to execute the command for the selected
 stack and component
-:::
+</Intro>
 
 ## Usage
 
@@ -21,6 +22,10 @@ Just run the `atmos` command in your terminal to start the interactive UI. Use t
 ```shell
 atmos
 ```
+
+:::tip
+To quickly check the Atmos version, use `atmos --version` or `atmos version`. See the [version command](/cli/commands/version/usage) for more details.
+:::
 
 - Use the `right/left` arrow keys to navigate between the "Commands", "Stacks" and "Components" views
 

@@ -9,21 +9,25 @@ import (
 	"strings"
 	"time"
 
-	log "github.com/charmbracelet/log"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/datafetcher"
 	"github.com/cloudposse/atmos/pkg/downloader"
+	log "github.com/cloudposse/atmos/pkg/logger"
+	m "github.com/cloudposse/atmos/pkg/merge"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 const atmosManifestDefaultFileName = "schemas/atmos/atmos-manifest/1.0/atmos-manifest.json"
 
-// ExecuteValidateStacksCmd executes `validate stacks` command
+// ExecuteValidateStacksCmd executes `validate stacks` command.
 func ExecuteValidateStacksCmd(cmd *cobra.Command, args []string) error {
+	defer perf.Track(nil, "exec.ExecuteValidateStacksCmd")()
+
 	// Initialize spinner
 	message := "Validating Atmos Stacks..."
 	p := NewSpinner(message)
@@ -60,8 +64,10 @@ func ExecuteValidateStacksCmd(cmd *cobra.Command, args []string) error {
 	return err
 }
 
-// ValidateStacks validates Atmos stack configuration
+// ValidateStacks validates Atmos stack configuration.
 func ValidateStacks(atmosConfig *schema.AtmosConfiguration) error {
+	defer perf.Track(atmosConfig, "exec.ValidateStacks")()
+
 	var validationErrorMessages []string
 
 	// 1. Process top-level stack manifests and detect duplicate components in the same stack
@@ -139,7 +145,7 @@ func ValidateStacks(atmosConfig *schema.AtmosConfiguration) error {
 		"**/*.yml.tmpl",
 	}
 
-	includeStackAbsPaths, err := u.JoinAbsolutePathWithPaths(atmosConfig.StacksBaseAbsolutePath, includedPaths)
+	includeStackAbsPaths, err := u.JoinPaths(atmosConfig.StacksBaseAbsolutePath, includedPaths)
 	if err != nil {
 		return err
 	}
@@ -152,8 +158,58 @@ func ValidateStacks(atmosConfig *schema.AtmosConfiguration) error {
 	log.Debug("Validating all YAML files in the folder and all subfolders (excluding template files)",
 		"folder", filepath.Join(atmosConfig.BasePath, atmosConfig.Stacks.BasePath))
 
+	// Track imported files to avoid processing them at the top level
+	// This ensures we see the full import chain in error messages
+	importedFiles := make(map[string]bool)
+	allImportsConfig := make(map[string]map[string]any)
+
+	// First pass: identify all imported files
 	for _, filePath := range stackConfigFilesAbsolutePaths {
-		stackConfig, importsConfig, _, _, _, _, _, err := ProcessYAMLConfigFile(
+		_, importsConfig, _, _, _, _, _, _ := ProcessYAMLConfigFile(
+			atmosConfig,
+			atmosConfig.StacksBaseAbsolutePath,
+			filePath,
+			map[string]map[string]any{},
+			nil,
+			true, // ignoreMissingFiles for first pass
+			false,
+			false,
+			false,
+			map[string]any{},
+			map[string]any{},
+			map[string]any{},
+			map[string]any{},
+			atmosManifestJsonSchemaFilePath,
+		)
+
+		// Track all imported files
+		for importPath := range importsConfig {
+			importedFiles[importPath] = true
+			allImportsConfig[importPath] = importsConfig[importPath]
+		}
+	}
+
+	// Second pass: only process top-level files (not imported by others)
+	for _, filePath := range stackConfigFilesAbsolutePaths {
+		relativeFilePath := u.TrimBasePathFromPath(atmosConfig.StacksBaseAbsolutePath+"/", filePath)
+
+		// Normalize the path to match how imports are stored (without extension)
+		relativeFilePathNoExt := relativeFilePath
+		ext := filepath.Ext(relativeFilePath)
+		if ext != "" {
+			relativeFilePathNoExt = strings.TrimSuffix(relativeFilePath, ext)
+		}
+
+		// Skip if this file is imported by another file
+		if importedFiles[relativeFilePathNoExt] {
+			log.Debug("Skipping imported file (will be processed via parent)", "file", relativeFilePath)
+			continue
+		}
+
+		// Create a new merge context to track import chain for better error messages
+		mergeContext := m.NewMergeContext()
+
+		stackConfig, importsConfig, _, _, _, _, _, err := ProcessYAMLConfigFileWithContext(
 			atmosConfig,
 			atmosConfig.StacksBaseAbsolutePath,
 			filePath,
@@ -168,29 +224,32 @@ func ValidateStacks(atmosConfig *schema.AtmosConfiguration) error {
 			map[string]any{},
 			map[string]any{},
 			atmosManifestJsonSchemaFilePath,
+			mergeContext,
 		)
 		if err != nil {
+			// Collect the error from ProcessYAMLConfigFile
 			validationErrorMessages = append(validationErrorMessages, err.Error())
-		}
-
-		// Process and validate the stack manifest
-		_, err = ProcessStackConfig(
-			atmosConfig,
-			atmosConfig.StacksBaseAbsolutePath,
-			atmosConfig.TerraformDirAbsolutePath,
-			atmosConfig.HelmfileDirAbsolutePath,
-			atmosConfig.PackerDirAbsolutePath,
-			filePath,
-			stackConfig,
-			false,
-			true,
-			"",
-			map[string]map[string][]string{},
-			importsConfig,
-			false,
-		)
-		if err != nil {
-			validationErrorMessages = append(validationErrorMessages, err.Error())
+		} else {
+			// Only process stack config if YAML processing succeeded
+			// This avoids duplicate error reporting for the same issue
+			_, err = ProcessStackConfig(
+				atmosConfig,
+				atmosConfig.StacksBaseAbsolutePath,
+				atmosConfig.TerraformDirAbsolutePath,
+				atmosConfig.HelmfileDirAbsolutePath,
+				atmosConfig.PackerDirAbsolutePath,
+				filePath,
+				stackConfig,
+				false,
+				true,
+				"",
+				map[string]map[string][]string{},
+				importsConfig,
+				false,
+			)
+			if err != nil {
+				validationErrorMessages = append(validationErrorMessages, err.Error())
+			}
 		}
 	}
 
@@ -206,11 +265,14 @@ func createComponentStackMap(
 	stacksMap map[string]any,
 	componentType string,
 ) (map[string]map[string][]string, error) {
+	defer perf.Track(atmosConfig, "exec.createComponentStackMap")()
+
 	var varsSection map[string]any
 	var metadataSection map[string]any
 	var settingsSection map[string]any
 	var envSection map[string]any
 	var providersSection map[string]any
+	var authSection map[string]any
 	var overridesSection map[string]any
 	var backendSection map[string]any
 	var backendTypeSection string
@@ -245,6 +307,10 @@ func createComponentStackMap(
 						envSection = map[string]any{}
 					}
 
+					if authSection, ok = componentSection[cfg.AuthSectionName].(map[string]any); !ok {
+						authSection = map[string]any{}
+					}
+
 					if providersSection, ok = componentSection[cfg.ProvidersSectionName].(map[string]any); !ok {
 						providersSection = map[string]any{}
 					}
@@ -269,6 +335,7 @@ func createComponentStackMap(
 						ComponentSettingsSection:  settingsSection,
 						ComponentEnvSection:       envSection,
 						ComponentProvidersSection: providersSection,
+						ComponentAuthSection:      authSection,
 						ComponentOverridesSection: overridesSection,
 						ComponentBackendSection:   backendSection,
 						ComponentBackendType:      backendTypeSection,
@@ -277,6 +344,7 @@ func createComponentStackMap(
 							cfg.MetadataSectionName:    metadataSection,
 							cfg.SettingsSectionName:    settingsSection,
 							cfg.EnvSectionName:         envSection,
+							cfg.AuthSectionName:        authSection,
 							cfg.ProvidersSectionName:   providersSection,
 							cfg.OverridesSectionName:   overridesSection,
 							cfg.BackendSectionName:     backendSection,
@@ -286,7 +354,7 @@ func createComponentStackMap(
 
 					// Find Atmos stack name
 					if atmosConfig.Stacks.NameTemplate != "" {
-						stackName, err = ProcessTmpl("validate-stacks-name-template", atmosConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, false)
+						stackName, err = ProcessTmpl(atmosConfig, "validate-stacks-name-template", atmosConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, false)
 						if err != nil {
 							return nil, err
 						}
@@ -313,6 +381,8 @@ func createComponentStackMap(
 }
 
 func checkComponentStackMap(componentStackMap map[string]map[string][]string) ([]string, error) {
+	defer perf.Track(nil, "exec.checkComponentStackMap")()
+
 	var res []string
 
 	for componentName, componentSection := range componentStackMap {
@@ -386,6 +456,8 @@ func checkComponentStackMap(componentStackMap map[string]map[string][]string) ([
 
 // downloadSchemaFromURL downloads the Atmos JSON Schema file from the provided URL.
 func downloadSchemaFromURL(atmosConfig *schema.AtmosConfiguration) (string, error) {
+	defer perf.Track(atmosConfig, "exec.downloadSchemaFromURL")()
+
 	manifestSchema := atmosConfig.GetSchemaRegistry("atmos")
 	manifestURL := manifestSchema.Manifest
 	parsedURL, err := url.Parse(manifestURL)
@@ -413,6 +485,8 @@ func downloadSchemaFromURL(atmosConfig *schema.AtmosConfiguration) (string, erro
 }
 
 func getEmbeddedSchemaPath(atmosConfig *schema.AtmosConfiguration) (string, error) {
+	defer perf.Track(atmosConfig, "exec.getEmbeddedSchemaPath")()
+
 	fetcher := datafetcher.NewDataFetcher(atmosConfig)
 	embedded, err := fetcher.GetData("atmos://schema/atmos/manifest/1.0")
 	if err != nil {

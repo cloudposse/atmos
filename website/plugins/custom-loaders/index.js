@@ -15,7 +15,7 @@ module.exports = function (context, options) {
           /*output: {
             filename: 'custom-loaders-webpack.bundle.js',
           },*/
-        
+
           module: {
             rules: [
               // { test: /\.txt$/, use: 'raw-loader' },

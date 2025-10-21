@@ -28,7 +28,7 @@ backend type in the `terraformBackends` registry:
   func RegisterTerraformBackends() {
     terraformBackends[cfg.BackendTypeLocal] = ReadTerraformBackendLocal
     terraformBackends[cfg.BackendTypeS3] = ReadTerraformBackendS3
-    
+
     // Register your new backend implementation here
     terraformBackends[cfg.BackendType<BackendType>] = ReadTerraformBackend<BackendType>
   }
@@ -39,7 +39,7 @@ backend type in the `terraformBackends` registry:
 Update the corresponding documentation at:
 
 ```text
-website/docs/core-concepts/stacks/yaml-functions/terraform.state.mdx
+website/docs/functions/yaml/terraform.state.mdx
 ```
 
 Include usage details and any backend-specific requirements or limitations.

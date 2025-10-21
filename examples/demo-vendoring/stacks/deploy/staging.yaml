@@ -1,6 +1,6 @@
 vars:
   stage: staging
-  
+
 import:
   - catalog/myapp
 

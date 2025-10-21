@@ -8,10 +8,11 @@ description: This command produces a list of Atmos components in Atmos stacks th
 
 import Terminal from '@site/src/components/Terminal'
 import Screengrab from '@site/src/components/Screengrab'
+import Intro from '@site/src/components/Intro'
 
-:::note Purpose
+<Intro>
 Use this command to show a list of Atmos components in Atmos stacks that depend on the provided Atmos component.
-:::
+</Intro>
 
 <Screengrab title="atmos describe dependents --help" slug="atmos-describe-dependents--help"/>
 
@@ -365,6 +366,7 @@ the `settings.atlantis` section in the stack manifest. Refer to [Atlantis Integr
 Abstract Atmos components (`metadata.type` is set to `abstract`) are not included in the output since they serve as blueprints for other
 Atmos components and are not meant to be provisioned.
 
+Disabled components (`metadata.enabled: false`) are also excluded from dependents.
 :::
 
 ## Output Example

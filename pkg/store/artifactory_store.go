@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	log "github.com/charmbracelet/log"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/jfrog/jfrog-client-go/artifactory"
 	"github.com/jfrog/jfrog-client-go/artifactory/auth"
 	"github.com/jfrog/jfrog-client-go/artifactory/services"
@@ -186,7 +186,9 @@ func (s *ArtifactoryStore) Get(stack string, component string, key string) (inte
 		return nil, fmt.Errorf(errWrapFormat, ErrCreateTempDir, err)
 	}
 	defer func() {
-		_ = os.RemoveAll(tempDir)
+		if err := os.RemoveAll(tempDir); err != nil {
+			log.Trace("Failed to remove temporary directory during cleanup", "error", err, "dir", tempDir)
+		}
 	}()
 
 	tempDir = filepath.Clean(tempDir)
@@ -229,6 +231,9 @@ func (s *ArtifactoryStore) Set(stack string, component string, key string, value
 	if key == "" {
 		return ErrEmptyKey
 	}
+	if value == nil {
+		return fmt.Errorf("%w for key %s in stack %s component %s", ErrNilValue, key, stack, component)
+	}
 
 	// Construct the full parameter name using getKey
 	paramName, err := s.getKey(stack, component, key)
@@ -241,10 +246,14 @@ func (s *ArtifactoryStore) Set(stack string, component string, key string, value
 		return fmt.Errorf(errWrapFormat, ErrCreateTempFile, err)
 	}
 	defer func() {
-		_ = os.Remove(tempFile.Name())
+		if err := os.Remove(tempFile.Name()); err != nil && !os.IsNotExist(err) {
+			log.Trace("Failed to remove temporary file during cleanup", "error", err, "file", tempFile.Name())
+		}
 	}()
 	defer func() {
-		_ = tempFile.Close()
+		if err := tempFile.Close(); err != nil {
+			log.Trace("Failed to close temporary file during cleanup", "error", err, "file", tempFile.Name())
+		}
 	}()
 
 	var dataToWrite []byte
@@ -306,7 +315,9 @@ func (s *ArtifactoryStore) GetKey(key string) (interface{}, error) {
 		return nil, fmt.Errorf(errWrapFormat, ErrCreateTempDir, err)
 	}
 	defer func() {
-		_ = os.RemoveAll(tempDir)
+		if err := os.RemoveAll(tempDir); err != nil {
+			log.Trace("Failed to remove temporary directory during cleanup", "error", err, "dir", tempDir)
+		}
 	}()
 
 	// Download the file from Artifactory

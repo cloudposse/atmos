@@ -1,48 +1,35 @@
 package utils
 
 import (
-	"context"
-	"os"
-
-	log "github.com/charmbracelet/log"
 	"github.com/google/go-github/v59/github"
-	"golang.org/x/oauth2"
+
+	gh "github.com/cloudposse/atmos/pkg/github"
 )
 
-// newGitHubClient creates a new GitHub client. If a token is provided, it returns an authenticated client;
-// otherwise, it returns an unauthenticated client.
-func newGitHubClient(ctx context.Context) *github.Client {
-	githubToken := os.Getenv("GITHUB_TOKEN")
-	if githubToken == "" {
-		return github.NewClient(nil)
-	}
-
-	// Token found, create an authenticated client
-	ts := oauth2.StaticTokenSource(
-		&oauth2.Token{AccessToken: githubToken},
-	)
-	tc := oauth2.NewClient(ctx, ts)
-
-	return github.NewClient(tc)
+// GetLatestGitHubRepoRelease returns the latest release tag for a GitHub repository.
+// Deprecated: Use github.GetLatestRelease instead.
+func GetLatestGitHubRepoRelease(owner string, repo string) (string, error) {
+	return gh.GetLatestRelease(owner, repo)
 }
 
-// GetLatestGitHubRepoRelease returns the latest release tag for a GitHub repository.
-func GetLatestGitHubRepoRelease(owner string, repo string) (string, error) {
-	log.Debug("Fetching latest release from Github API", "owner", owner, "repo", repo)
+// GitHubReleasesOptions contains options for fetching GitHub releases.
+// Deprecated: Use github.ReleasesOptions instead.
+type GitHubReleasesOptions = gh.ReleasesOptions
 
-	// Create a new GitHub client with authentication if available
-	ctx := context.Background()
-	client := newGitHubClient(ctx)
+// GetGitHubRepoReleases fetches GitHub releases with pagination, prerelease filtering, and date filtering.
+// Deprecated: Use github.GetReleases instead.
+func GetGitHubRepoReleases(opts GitHubReleasesOptions) ([]*github.RepositoryRelease, error) {
+	return gh.GetReleases(opts)
+}
 
-	// Get the latest release
-	release, _, err := client.Repositories.GetLatestRelease(ctx, owner, repo)
-	if err != nil {
-		return "", err
-	}
+// GetGitHubReleaseByTag fetches a specific GitHub release by tag name.
+// Deprecated: Use github.GetReleaseByTag instead.
+func GetGitHubReleaseByTag(owner, repo, tag string) (*github.RepositoryRelease, error) {
+	return gh.GetReleaseByTag(owner, repo, tag)
+}
 
-	if release == nil || release.TagName == nil {
-		return "", nil
-	}
-
-	return *release.TagName, nil
+// GetGitHubLatestRelease fetches the latest stable release from GitHub.
+// Deprecated: Use github.GetLatestReleaseInfo instead.
+func GetGitHubLatestRelease(owner, repo string) (*github.RepositoryRelease, error) {
+	return gh.GetLatestReleaseInfo(owner, repo)
 }

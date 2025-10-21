@@ -4,7 +4,7 @@ import useGlobalData from '@docusaurus/useGlobalData';
 
 export default function NavbarItem(props) {
   const globalData = useGlobalData();
-  
+
   //console.log('Global Data:', JSON.stringify(globalData['fetch-latest-release']));
 
   const latestRelease = globalData['fetch-latest-release']?.default?.latestRelease || 'v0.0.0';

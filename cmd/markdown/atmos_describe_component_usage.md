@@ -1,7 +1,7 @@
 - The output format
 
 ```
- $ atmos describe component <component> -s <stack> --format=yaml|json 
+ $ atmos describe component <component> -s <stack> --format=yaml|json
 ```
 
 - Write the result to the file

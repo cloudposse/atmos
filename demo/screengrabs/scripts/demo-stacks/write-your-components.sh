@@ -29,4 +29,3 @@ newline 2
 comment "It's a best practice to pin versions, so let's do that."
 prompt
 run cat components/terraform/myapp/versions.tf
-

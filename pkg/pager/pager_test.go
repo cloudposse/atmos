@@ -96,7 +96,7 @@ func TestPageCreator_Run(t *testing.T) {
 
 			if tt.expectTeaProgramCall {
 				assert.NotNil(t, capturedModel)
-				assert.Len(t, capturedOpts, 2, "Should have 2 tea program options")
+				assert.Len(t, capturedOpts, 1, "Should have 1 tea program option (WithAltScreen)")
 			}
 		})
 	}
@@ -170,6 +170,23 @@ func TestNew(t *testing.T) {
 	assert.NotNil(t, concretePC.newTeaProgram)
 	assert.NotNil(t, concretePC.contentFitsTerminal)
 	assert.NotNil(t, concretePC.isTTYSupportForStdout)
+	assert.False(t, concretePC.enablePager, "Pager should be disabled by default")
+}
+
+func TestNewWithAtmosConfig(t *testing.T) {
+	// Test with pager enabled
+	pcEnabled := NewWithAtmosConfig(true)
+	assert.NotNil(t, pcEnabled)
+	concretePC, ok := pcEnabled.(*pageCreator)
+	assert.True(t, ok)
+	assert.True(t, concretePC.enablePager, "Pager should be enabled when true is passed")
+
+	// Test with pager disabled
+	pcDisabled := NewWithAtmosConfig(false)
+	assert.NotNil(t, pcDisabled)
+	concretePC2, ok := pcDisabled.(*pageCreator)
+	assert.True(t, ok)
+	assert.False(t, concretePC2.enablePager, "Pager should be disabled when false is passed")
 }
 
 func TestPageCreator_Run_ModelCreation(t *testing.T) {
@@ -209,23 +226,32 @@ func TestPageCreator_Run_ModelCreation(t *testing.T) {
 	assert.Equal(t, 0, capturedModel.viewport.Height)
 
 	// Verify the program options
-	assert.Len(t, capturedOpts, 2, "Should have 2 tea program options")
+	assert.Len(t, capturedOpts, 1, "Should have 1 tea program option (WithAltScreen)")
 }
 
 func TestPageCreator_Run_WithoutPager(t *testing.T) {
 	// Test scenarios where pager is not used
 	testCases := []struct {
 		name         string
+		enablePager  bool
 		ttySupported bool
 		contentFits  bool
 	}{
 		{
+			name:         "pager disabled",
+			enablePager:  false,
+			ttySupported: true,
+			contentFits:  false,
+		},
+		{
 			name:         "no TTY support",
+			enablePager:  true,
 			ttySupported: false,
-			contentFits:  true,
+			contentFits:  false,
 		},
 		{
 			name:         "TTY supported but content fits",
+			enablePager:  true,
 			ttySupported: true,
 			contentFits:  true,
 		},
@@ -236,7 +262,7 @@ func TestPageCreator_Run_WithoutPager(t *testing.T) {
 			teaProgramCalled := false
 
 			pc := &pageCreator{
-				enablePager: true, // Disable pager to test direct printing
+				enablePager: tc.enablePager,
 				newTeaProgram: func(model tea.Model, opts ...tea.ProgramOption) *tea.Program {
 					teaProgramCalled = true
 					return tea.NewProgram(&simpleTestModel{}, tea.WithInput(nil), tea.WithOutput(nil))

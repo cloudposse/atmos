@@ -3,6 +3,8 @@ package downloader
 import (
 	"fmt"
 	"net/url"
+
+	errUtils "github.com/cloudposse/atmos/errors"
 )
 
 const MaskedSecret = "xxx"
@@ -10,7 +12,7 @@ const MaskedSecret = "xxx"
 func maskBasicAuth(rawURL string) (string, error) {
 	parsedURL, err := url.Parse(rawURL)
 	if err != nil {
-		return "", fmt.Errorf("failed to parse URL: %w", err)
+		return "", fmt.Errorf("%w: %v", errUtils.ErrParseURL, err)
 	}
 
 	if parsedURL.User != nil {

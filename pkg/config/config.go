@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	log "github.com/charmbracelet/log"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/pkg/errors"
 
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -44,7 +44,7 @@ func InitCliConfig(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks
 		return atmosConfig, err
 	}
 
-	err = atmosConfigAbsolutePaths(&atmosConfig)
+	err = AtmosConfigAbsolutePaths(&atmosConfig)
 	if err != nil {
 		return atmosConfig, err
 	}
@@ -77,10 +77,38 @@ func setLogConfig(atmosConfig *schema.AtmosConfiguration) {
 	if v, ok := flagKeyValue["logs-file"]; ok {
 		atmosConfig.Logs.File = v
 	}
-	if flagKeyValue, ok := flagKeyValue["no-color"]; ok || flagKeyValue == "true" {
-		atmosConfig.Settings.Terminal.NoColor = true
-	} else if flagKeyValue == "false" {
-		atmosConfig.Settings.Terminal.NoColor = false
+	if val, ok := flagKeyValue["no-color"]; ok {
+		valLower := strings.ToLower(val)
+		switch valLower {
+		case "true":
+			atmosConfig.Settings.Terminal.NoColor = true
+			atmosConfig.Settings.Terminal.Color = false
+		case "false":
+			atmosConfig.Settings.Terminal.NoColor = false
+			atmosConfig.Settings.Terminal.Color = true
+		}
+		// If value is neither "true" nor "false", leave defaults unchanged
+	}
+
+	// Handle --pager global flag
+	if v, ok := flagKeyValue["pager"]; ok {
+		atmosConfig.Settings.Terminal.Pager = v
+	}
+
+	// Handle NO_PAGER environment variable (standard CLI convention)
+	// Check this after --pager flag so CLI flag takes precedence
+	//nolint:forbidigo // NO_PAGER is a standard CLI convention that requires direct env access.
+	// We intentionally don't use viper.BindEnv() here because:
+	// 1. NO_PAGER uses negative logic (NO_PAGER=true disables pager)
+	// 2. Atmos config convention uses positive boolean names (pager: true enables pager)
+	// 3. We don't want a configurable "no_pager" field that would confuse the config schema
+	// 4. NO_PAGER should remain an environment-only standard, not a config file setting
+	if os.Getenv("NO_PAGER") != "" {
+		// Check if --pager flag was explicitly provided
+		if _, hasPagerFlag := flagKeyValue["pager"]; !hasPagerFlag {
+			// NO_PAGER is set and no explicit --pager flag was provided, disable the pager
+			atmosConfig.Settings.Terminal.Pager = "false"
+		}
 	}
 }
 
@@ -92,7 +120,12 @@ func setLogConfig(atmosConfig *schema.AtmosConfiguration) {
 
 // Function to manually parse flags with double dash "--" like Cobra.
 func parseFlags() map[string]string {
-	args := os.Args
+	return parseFlagsFromArgs(os.Args)
+}
+
+// parseFlagsFromArgs parses flags from the given args slice.
+// This function is exposed for testing purposes.
+func parseFlagsFromArgs(args []string) map[string]string {
 	flags := make(map[string]string)
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
@@ -147,9 +180,12 @@ func processAtmosConfigs(configAndStacksInfo *schema.ConfigAndStacksInfo) (schem
 }
 
 // atmosConfigAbsolutePaths converts paths to absolute paths.
-func atmosConfigAbsolutePaths(atmosConfig *schema.AtmosConfiguration) error {
+// AtmosConfigAbsolutePaths converts all base paths in the configuration to absolute paths.
+// This function sets TerraformDirAbsolutePath, HelmfileDirAbsolutePath, PackerDirAbsolutePath,
+// StacksBaseAbsolutePath, IncludeStackAbsolutePaths, and ExcludeStackAbsolutePaths.
+func AtmosConfigAbsolutePaths(atmosConfig *schema.AtmosConfiguration) error {
 	// Convert stacks base path to an absolute path
-	stacksBasePath := filepath.Join(atmosConfig.BasePath, atmosConfig.Stacks.BasePath)
+	stacksBasePath := u.JoinPath(atmosConfig.BasePath, atmosConfig.Stacks.BasePath)
 	stacksBaseAbsPath, err := filepath.Abs(stacksBasePath)
 	if err != nil {
 		return err
@@ -157,21 +193,21 @@ func atmosConfigAbsolutePaths(atmosConfig *schema.AtmosConfiguration) error {
 	atmosConfig.StacksBaseAbsolutePath = stacksBaseAbsPath
 
 	// Convert the included stack paths to absolute paths
-	includeStackAbsPaths, err := u.JoinAbsolutePathWithPaths(stacksBaseAbsPath, atmosConfig.Stacks.IncludedPaths)
+	includeStackAbsPaths, err := u.JoinPaths(stacksBaseAbsPath, atmosConfig.Stacks.IncludedPaths)
 	if err != nil {
 		return err
 	}
 	atmosConfig.IncludeStackAbsolutePaths = includeStackAbsPaths
 
 	// Convert the excluded stack paths to absolute paths
-	excludeStackAbsPaths, err := u.JoinAbsolutePathWithPaths(stacksBaseAbsPath, atmosConfig.Stacks.ExcludedPaths)
+	excludeStackAbsPaths, err := u.JoinPaths(stacksBaseAbsPath, atmosConfig.Stacks.ExcludedPaths)
 	if err != nil {
 		return err
 	}
 	atmosConfig.ExcludeStackAbsolutePaths = excludeStackAbsPaths
 
 	// Convert Terraform dir to an absolute path.
-	terraformBasePath := filepath.Join(atmosConfig.BasePath, atmosConfig.Components.Terraform.BasePath)
+	terraformBasePath := u.JoinPath(atmosConfig.BasePath, atmosConfig.Components.Terraform.BasePath)
 	terraformDirAbsPath, err := filepath.Abs(terraformBasePath)
 	if err != nil {
 		return err
@@ -179,7 +215,7 @@ func atmosConfigAbsolutePaths(atmosConfig *schema.AtmosConfiguration) error {
 	atmosConfig.TerraformDirAbsolutePath = terraformDirAbsPath
 
 	// Convert Helmfile dir to an absolute path.
-	helmfileBasePath := filepath.Join(atmosConfig.BasePath, atmosConfig.Components.Helmfile.BasePath)
+	helmfileBasePath := u.JoinPath(atmosConfig.BasePath, atmosConfig.Components.Helmfile.BasePath)
 	helmfileDirAbsPath, err := filepath.Abs(helmfileBasePath)
 	if err != nil {
 		return err
@@ -187,7 +223,7 @@ func atmosConfigAbsolutePaths(atmosConfig *schema.AtmosConfiguration) error {
 	atmosConfig.HelmfileDirAbsolutePath = helmfileDirAbsPath
 
 	// Convert Packer dir to an absolute path.
-	packerBasePath := filepath.Join(atmosConfig.BasePath, atmosConfig.Components.Packer.BasePath)
+	packerBasePath := u.JoinPath(atmosConfig.BasePath, atmosConfig.Components.Packer.BasePath)
 	packerDirAbsPath, err := filepath.Abs(packerBasePath)
 	if err != nil {
 		return err

@@ -40,4 +40,3 @@ terraform:
         sns: *localstack_url
         sqs: *localstack_url
         ssm: *localstack_url
-

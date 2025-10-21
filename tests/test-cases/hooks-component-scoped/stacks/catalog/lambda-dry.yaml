@@ -1,0 +1,13 @@
+# Lambda component using DRY pattern - only defines outputs
+components:
+  terraform:
+    lambda-dry:
+      metadata:
+        component: lambda
+      vars:
+        name: "lambda-dry"
+      hooks:
+        store-outputs:
+          outputs:
+            lambda_function_arn: .lambda_function_arn
+            lambda_function_name: .lambda_function_name

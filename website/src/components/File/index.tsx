@@ -35,13 +35,13 @@ const guessTypeFromTitle = (title) => {
     }
     if (/atmos\.ya?ml$/i.test(title)) {
         return 'config';
-    }    
+    }
     if (/.*stack.*\.ya?ml$/i.test(title)) {
         return 'stack';
     }
     if (/\.ya?ml$/i.test(title)) {
         return 'yaml';
-    }   
+    }
     if (/\.json$/i.test(title)) {
         return 'json';
     }
@@ -55,7 +55,7 @@ const guessTypeFromTitle = (title) => {
     return 'file'; // Default to 'file'
   };
 
-  
+
 export default function File({ title, className, type, icon, size = '1x', children }) {
     // Determine the icon to use
     const guessedType = type || guessTypeFromTitle(title);
@@ -72,4 +72,3 @@ export default function File({ title, className, type, icon, size = '1x', childr
         </div>
     );
 };
-
