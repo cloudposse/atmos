@@ -2,20 +2,15 @@ package exec
 
 import (
 	"fmt"
-	"net/url"
-	"os"
 	"path/filepath"
 	"strings"
 	"time"
-
-	"github.com/cloudposse/atmos/pkg/perf"
 
 	"github.com/charmbracelet/bubbles/progress"
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	log "github.com/cloudposse/atmos/pkg/logger"
-	"github.com/hashicorp/go-getter"
 	cp "github.com/otiai10/copy"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -23,7 +18,6 @@ import (
 	"github.com/cloudposse/atmos/pkg/downloader"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
-	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 type pkgType int
@@ -51,8 +45,6 @@ type installedPkgMsg struct {
 }
 
 func (p pkgType) String() string {
-	defer perf.Track(nil, "exec.String")()
-
 	names := [...]string{"remote", "oci", "local"}
 	if p < pkgTypeRemote || p > pkgTypeLocal {
 		return "unknown"
@@ -60,11 +52,20 @@ func (p pkgType) String() string {
 	return names[p]
 }
 
+type pkgVendorDiff struct {
+	name           string
+	currentVersion string
+	latestVersion  string // Add field to store latest version from pre-check
+	source         schema.AtmosVendorSource
+	outdatedOnly   bool
+}
+
 type pkgVendor struct {
 	name             string
 	version          string
 	atmosPackage     *pkgAtmosVendor
 	componentPackage *pkgComponentVendor
+	diffPackage      *pkgVendorDiff // Add diff package type
 }
 
 type pkgAtmosVendor struct {
@@ -103,7 +104,7 @@ type modelVendor struct {
 	isTTY       bool
 }
 
-func executeVendorModel[T pkgComponentVendor | pkgAtmosVendor](
+func executeVendorModel[T pkgComponentVendor | pkgAtmosVendor | pkgVendorDiff](
 	packages []T,
 	dryRun bool,
 	atmosConfig *schema.AtmosConfiguration,
@@ -133,7 +134,7 @@ func executeVendorModel[T pkgComponentVendor | pkgAtmosVendor](
 	return nil
 }
 
-func newModelVendor[T pkgComponentVendor | pkgAtmosVendor](
+func newModelVendor[T pkgComponentVendor | pkgAtmosVendor | pkgVendorDiff](
 	pkgs []T,
 	dryRun bool,
 	atmosConfig *schema.AtmosConfiguration,
@@ -173,6 +174,15 @@ func newModelVendor[T pkgComponentVendor | pkgAtmosVendor](
 				atmosPackage: &ap,
 			}
 		}
+	case pkgVendorDiff:
+		for i := range pkgs {
+			dp := any(pkgs[i]).(pkgVendorDiff)
+			vendorPks[i] = pkgVendor{
+				name:        dp.name,
+				version:     dp.currentVersion,
+				diffPackage: &dp,
+			}
+		}
 	}
 
 	return modelVendor{
@@ -194,8 +204,6 @@ func (m *modelVendor) Init() tea.Cmd {
 }
 
 func (m *modelVendor) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	defer perf.Track(nil, "exec.Update")()
-
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
@@ -253,28 +261,63 @@ func (m *modelVendor) handleInstalledPkgMsg(msg *installedPkgMsg) (tea.Model, te
 	if pkg.version != "" {
 		version = fmt.Sprintf("(%s)", pkg.version)
 	}
+
+	// Skip empty messages (for outdated filtered items)
+	if msg.name == "" {
+		if m.index >= len(m.packages)-1 {
+			m.done = true
+			return m, tea.Quit
+		}
+		m.index++
+		progressCmd := m.progress.SetPercent(float64(m.index) / float64(len(m.packages)))
+		return m, tea.Batch(
+			progressCmd,
+			ExecuteInstall(m.packages[m.index], m.dryRun, m.atmosConfig),
+		)
+	}
+
 	if m.index >= len(m.packages)-1 {
 		// Everything's been installed. We're done!
 		m.done = true
 		m.logNonNTYFinalStatus(pkg, &mark)
+
+		// For diff packages, use the exact message
+		if pkg.diffPackage != nil {
+			return m, tea.Sequence(
+				tea.Printf("%s", msg.name),
+				tea.Quit,
+			)
+		}
+
 		version := grayColor.Render(version)
 		return m, tea.Sequence(
 			tea.Printf("%s %s %s %s", mark, pkg.name, version, errMsg),
 			tea.Quit,
 		)
 	}
+
 	if !m.isTTY {
 		log.Info(mark, "package", pkg.name, "version", version)
 	}
+
 	m.index++
 	// Update progress bar
 	progressCmd := m.progress.SetPercent(float64(m.index) / float64(len(m.packages)))
 
+	// For diff packages, use the exact message
+	if pkg.diffPackage != nil {
+		return m, tea.Batch(
+			progressCmd,
+			tea.Printf("%s", msg.name),
+			ExecuteInstall(m.packages[m.index], m.dryRun, m.atmosConfig),
+		)
+	}
+
 	version = grayColor.Render(version)
 	return m, tea.Batch(
 		progressCmd,
-		tea.Printf("%s %s %s %s", mark, pkg.name, version, errMsg),   // print message above our program
-		ExecuteInstall(m.packages[m.index], m.dryRun, m.atmosConfig), // download the next package
+		tea.Printf("%s %s %s %s", mark, pkg.name, version, errMsg),
+		ExecuteInstall(m.packages[m.index], m.dryRun, m.atmosConfig),
 	)
 }
 
@@ -301,11 +344,32 @@ func (m *modelVendor) logNonNTYFinalStatus(pkg pkgVendor, mark *lipgloss.Style) 
 }
 
 func (m *modelVendor) View() string {
-	defer perf.Track(nil, "exec.View")()
-
 	n := len(m.packages)
 	w := lipgloss.Width(fmt.Sprintf("%d", n))
 	if m.done {
+		// Special handling for diff packages
+		if len(m.packages) > 0 && m.packages[0].diffPackage != nil {
+			// For vendor diff, show more appropriate message
+			updateCount := 0
+			for _, pkg := range m.packages {
+				if pkg.diffPackage != nil && pkg.diffPackage.latestVersion != "" {
+					updateCount++
+				}
+			}
+
+			switch {
+			case updateCount > 0:
+				return doneStyle.Render(fmt.Sprintf("Found %d updates. Use --update flag to update the vendor configuration file.\n", updateCount))
+			case m.packages[0].diffPackage.outdatedOnly:
+				// For --outdated mode with no updates, this shouldn't normally be shown
+				// (pre-filter should have caught it), but just in case
+				return doneStyle.Render("No outdated vendor dependencies found.\n")
+			default:
+				return doneStyle.Render("All vendor dependencies are up to date!\n")
+			}
+		}
+
+		// Standard completion messages for non-diff operations
 		if m.dryRun {
 			return doneStyle.Render("Done! Dry run completed. No components vendored.\n")
 		}
@@ -315,28 +379,32 @@ func (m *modelVendor) View() string {
 		return doneStyle.Render(fmt.Sprintf("Vendored %d components.\n", n))
 	}
 
-	pkgCount := fmt.Sprintf(" %*d/%*d", w, m.index, w, n)
+	pkgCount := fmt.Sprintf(" %*d/%*d", w, m.index+1, w, n)
 	spin := m.spinner.View() + " "
-	prog := m.progress.View()
+
+	// Calculate progress percentage
+	progressPercent := float64(m.index) / float64(n)
+	prog := m.progress.ViewAs(progressPercent)
+
 	cellsAvail := max(0, m.width-lipgloss.Width(spin+prog+pkgCount))
+
 	if m.index >= len(m.packages) {
 		return ""
 	}
 	pkgName := currentPkgNameStyle.Render(m.packages[m.index].name)
 
-	info := lipgloss.NewStyle().MaxWidth(cellsAvail).Render("Pulling " + pkgName)
+	// Determine action text based on package type
+	actionText := "Pulling"
+	if m.packages[m.index].diffPackage != nil {
+		actionText = "Checking"
+	}
+
+	info := lipgloss.NewStyle().MaxWidth(cellsAvail).Render(actionText + " " + pkgName)
 
 	cellsRemaining := max(0, m.width-lipgloss.Width(spin+info+prog+pkgCount))
 	gap := strings.Repeat(" ", cellsRemaining)
 
 	return spin + info + gap + prog + pkgCount
-}
-
-func max(a, b int) int {
-	if a > b {
-		return a
-	}
-	return b
 }
 
 func downloadAndInstall(p *pkgAtmosVendor, dryRun bool, atmosConfig *schema.AtmosConfiguration) tea.Cmd {
@@ -354,7 +422,6 @@ func downloadAndInstall(p *pkgAtmosVendor, dryRun bool, atmosConfig *schema.Atmo
 		if err := p.installer(&tempDir, atmosConfig); err != nil {
 			return newInstallError(err, p.name)
 		}
-
 		if err := copyToTargetWithPatterns(tempDir, p.targetPath, &p.atmosVendorSource, p.sourceIsLocalFile); err != nil {
 			return newInstallError(fmt.Errorf("failed to copy package: %w", err), p.name)
 		}
@@ -369,6 +436,7 @@ func (p *pkgAtmosVendor) installer(tempDir *string, atmosConfig *schema.AtmosCon
 	switch p.pkgType {
 	case pkgTypeRemote:
 		// Use go-getter to download remote packages
+
 		if err := downloader.NewGoGetterDownloader(atmosConfig).Fetch(p.uri, *tempDir, downloader.ClientModeAny, 10*time.Minute); err != nil {
 			return fmt.Errorf("failed to download package: %w", err)
 		}
@@ -396,118 +464,4 @@ func (p *pkgAtmosVendor) installer(tempDir *string, atmosConfig *schema.AtmosCon
 		return fmt.Errorf("%w %s for package %s", errUtils.ErrUnknownPackageType, p.pkgType.String(), p.name)
 	}
 	return nil
-}
-
-func handleDryRunInstall(p *pkgAtmosVendor, atmosConfig *schema.AtmosConfiguration) tea.Msg {
-	log.Debug("Entering dry-run flow for generic (non component/mixin) vendoring ", "package", p.name)
-
-	if needsCustomDetection(p.uri) {
-		log.Debug("Custom detection required for URI", "uri", p.uri)
-		detector := downloader.NewCustomGitDetector(atmosConfig, "")
-		_, _, err := detector.Detect(p.uri, "")
-		if err != nil {
-			return installedPkgMsg{
-				err:  fmt.Errorf("dry-run: detection failed: %w", err),
-				name: p.name,
-			}
-		}
-	} else {
-		log.Debug("Skipping custom detection; URI already supported by go getter", "uri", p.uri)
-	}
-
-	time.Sleep(500 * time.Millisecond)
-	return installedPkgMsg{
-		err:  nil,
-		name: p.name,
-	}
-}
-
-// This is a replica of getForce method from go getter library, had to make it as it is not exported.
-// The idea is to call Detect method in dry run only for those links where go getter does this.
-// Otherwise, Detect is run for every link being vendored which isn't correct.
-func needsCustomDetection(src string) bool {
-	_, getSrc := "", src
-	if idx := strings.Index(src, "::"); idx >= 0 {
-		_, getSrc = src[:idx], src[idx+2:]
-	}
-
-	getSrc, _ = getter.SourceDirSubdir(getSrc)
-
-	if absPath, err := filepath.Abs(getSrc); err == nil {
-		if u.FileExists(absPath) {
-			return false
-		}
-		isDir, err := u.IsDirectory(absPath)
-		if err == nil && isDir {
-			return false
-		}
-	}
-
-	parsed, err := url.Parse(getSrc)
-	if err != nil || parsed.Scheme == "" {
-		return true
-	}
-
-	supportedSchemes := map[string]bool{
-		"http":      true,
-		"https":     true,
-		"git":       true,
-		"hg":        true,
-		"s3":        true,
-		"gcs":       true,
-		"file":      true,
-		"oci":       true,
-		"ssh":       true,
-		"git+ssh":   true,
-		"git+https": true,
-	}
-
-	if _, ok := supportedSchemes[parsed.Scheme]; ok {
-		return false
-	}
-
-	return true
-}
-
-func createTempDir() (string, error) {
-	// Create temp directory
-	tempDir, err := os.MkdirTemp("", "atmos-vendor")
-	if err != nil {
-		return "", err
-	}
-
-	// Ensure directory permissions are restricted
-	if err := os.Chmod(tempDir, tempDirPermissions); err != nil {
-		return "", err
-	}
-
-	return tempDir, nil
-}
-
-func newInstallError(err error, name string) installedPkgMsg {
-	return installedPkgMsg{
-		err:  fmt.Errorf("%s: %w", name, err),
-		name: name,
-	}
-}
-
-func ExecuteInstall(installer pkgVendor, dryRun bool, atmosConfig *schema.AtmosConfiguration) tea.Cmd {
-	defer perf.Track(atmosConfig, "exec.ExecuteInstall")()
-
-	if installer.atmosPackage != nil {
-		return downloadAndInstall(installer.atmosPackage, dryRun, atmosConfig)
-	}
-
-	if installer.componentPackage != nil {
-		return downloadComponentAndInstall(installer.componentPackage, dryRun, atmosConfig)
-	}
-
-	// No valid package provided
-	return func() tea.Msg {
-		err := fmt.Errorf("%w: %s", errUtils.ErrValidPackage, installer.name)
-		return installedPkgMsg{
-			err:  err,
-			name: installer.name,
-		}
-	}
 }
