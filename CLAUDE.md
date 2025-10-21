@@ -318,16 +318,17 @@ var (
 
 ### Mock Generation (MANDATORY)
 - **ALWAYS use mockgen for interface mocks** - Never write manual mock implementations
-- **Use `//go:generate mockgen`** directive at the top of test files
-- **Pattern to follow**:
+- **Use Uber's mockgen** (`go.uber.org/mock/mockgen`) - golang/mock is archived
+- **Use `//go:generate` directive** at the top of test files:
   ```go
-  //go:generate mockgen -package=yourpkg -destination=mock_interface_test.go github.com/external/package InterfaceName
+  //go:generate go run go.uber.org/mock/mockgen@latest -package=yourpkg -destination=mock_interface_test.go github.com/external/package InterfaceName
   ```
 - **For internal interfaces**, use `-source` flag:
   ```go
-  //go:generate mockgen -source=$GOFILE -destination=mock_$GOFILE -package=$GOPACKAGE
+  //go:generate go run go.uber.org/mock/mockgen@latest -source=$GOFILE -destination=mock_$GOFILE -package=$GOPACKAGE
   ```
 - **NEVER duplicate interface implementation** - 20+ stub methods is a sign you should use mockgen
+- **Import path**: Use `go.uber.org/mock/gomock` (not `github.com/golang/mock/gomock`)
 - Examples of mockgen usage: `pkg/git/interface.go`, `pkg/pro/interface.go`, `pkg/filesystem/interface.go`
 
 ### Testing Production Code Paths (MANDATORY)
@@ -427,6 +428,16 @@ $ atmos example <component> -s <stack> --file output.yaml
 
 ### File Organization (MANDATORY)
 - **Prefer many small files over few large files** - follow Go idiom of focused, single-purpose files
+- **NEVER use `//revive:disable:file-length-limit`** - split large files instead
+  - Default limit: 600 lines (enforced by golangci-lint)
+  - For new code: ALWAYS split into focused files if approaching limit
+  - Example split pattern:
+    ```go
+    // formatter.go (733 lines) → Split into:
+    formatter_table.go  // Table rendering (236 lines)
+    formatter_tree.go   // Tree rendering (451 lines)
+    formatter_utils.go  // Shared utilities (68 lines)
+    ```
 - **One command per file** in `cmd/`
 - **One implementation per file** for interfaces:
   ```go
@@ -1092,7 +1103,7 @@ func TestValidateStack_ReturnsErrorForInvalidFormat(t *testing.T) {
 
 - **Generate mocks for all interfaces** (no cloud connectivity required for tests):
   ```go
-  //go:generate mockgen -source=secret_store.go -destination=mock_secret_store.go
+  //go:generate go run go.uber.org/mock/mockgen@latest -source=secret_store.go -destination=mock_secret_store.go
 
   func TestSecretProcessing(t *testing.T) {
       mockStore := NewMockSecretStore(ctrl)

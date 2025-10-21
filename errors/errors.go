@@ -373,6 +373,8 @@ var (
 	ErrInitializingCredentialStore   = errors.New("failed to initialize credential store")
 	ErrCircularDependency            = errors.New("circular dependency detected in identity chain")
 	ErrIdentityNotFound              = errors.New("identity not found")
+	ErrProviderNotFound              = errors.New("provider not found")
+	ErrMutuallyExclusiveFlags        = errors.New("mutually exclusive flags provided")
 	ErrNoDefaultIdentity             = errors.New("no default identity configured for authentication")
 	ErrMultipleDefaultIdentities     = errors.New("multiple default identities found")
 	ErrNoIdentitiesAvailable         = errors.New("no identities available")
