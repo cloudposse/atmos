@@ -2,12 +2,15 @@ package exec
 
 import (
 	"context"
+	"fmt"
 	"os/exec"
 	"regexp"
 	"strings"
 	"time"
 
 	"github.com/Masterminds/semver/v3"
+
+	errUtils "github.com/cloudposse/atmos/errors"
 )
 
 // VersionCheckResult represents the result of checking for version updates.
@@ -28,10 +31,10 @@ func getGitRemoteTags(gitURI string) ([]string, error) {
 	cmd := exec.CommandContext(ctx, "git", "ls-remote", "--tags", "--refs", gitURI)
 	output, err := cmd.Output()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("%w: getGitRemoteTags %s: %s", errUtils.ErrGitLsRemoteFailed, gitURI, err)
 	}
 
-	// Parse output: each line is "commit_hash\trefs/tags/tag_name"
+	// Parse output: each line is "commit_hash\trefs/tags/tag_name".
 	lines := strings.Split(strings.TrimSpace(string(output)), "\n")
 	tags := make([]string, 0, len(lines))
 
@@ -41,7 +44,7 @@ func getGitRemoteTags(gitURI string) ([]string, error) {
 			continue
 		}
 
-		// Extract tag name from "refs/tags/tag_name"
+		// Extract tag name from "refs/tags/tag_name".
 		tagRef := parts[1]
 		if strings.HasPrefix(tagRef, "refs/tags/") {
 			tagName := strings.TrimPrefix(tagRef, "refs/tags/")
@@ -87,24 +90,30 @@ func checkGitRef(gitURI string, ref string) (bool, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	// Try as tag first
+	// Try as tag first.
 	cmd := exec.CommandContext(ctx, "git", "ls-remote", "--tags", gitURI, ref)
 	output, err := cmd.Output()
-	if err == nil && len(strings.TrimSpace(string(output))) > 0 {
+	if err != nil {
+		return false, fmt.Errorf("%w: checkGitRef %s %s (tag): %s", errUtils.ErrGitLsRemoteFailed, gitURI, ref, err)
+	}
+	if len(strings.TrimSpace(string(output))) > 0 {
 		return true, nil
 	}
 
-	// Try as branch
+	// Try as branch.
 	cmd = exec.CommandContext(ctx, "git", "ls-remote", "--heads", gitURI, ref)
 	output, err = cmd.Output()
-	if err == nil && len(strings.TrimSpace(string(output))) > 0 {
+	if err != nil {
+		return false, fmt.Errorf("%w: checkGitRef %s %s (branch): %s", errUtils.ErrGitLsRemoteFailed, gitURI, ref, err)
+	}
+	if len(strings.TrimSpace(string(output))) > 0 {
 		return true, nil
 	}
 
-	// Try as commit SHA (this requires fetching, so we'll just validate format)
+	// Try as commit SHA (this requires fetching, so we'll just validate format).
 	if isValidCommitSHA(ref) {
-		// We assume it exists if it's a valid SHA format
-		// Full validation would require cloning/fetching
+		// We assume it exists if it's a valid SHA format.
+		// Full validation would require cloning/fetching.
 		return true, nil
 	}
 
