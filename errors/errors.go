@@ -42,6 +42,14 @@ var (
 	ErrMissingStackNameTemplateAndPattern    = errors.New("'stacks.name_pattern' or 'stacks.name_template' needs to be specified in 'atmos.yaml'")
 	ErrFailedMarshalConfigToYaml             = errors.New("failed to marshal config to YAML")
 	ErrCommandNil                            = errors.New("command cannot be nil")
+	ErrGitHubRateLimitExceeded               = errors.New("GitHub API rate limit exceeded")
+	ErrInvalidLimit                          = errors.New("limit must be between 1 and 100")
+	ErrInvalidOffset                         = errors.New("offset must be >= 0")
+	ErrInvalidSinceDate                      = errors.New("invalid date format for --since")
+	ErrUnsupportedOutputFormat               = errors.New("unsupported output format")
+	ErrTerminalTooNarrow                     = errors.New("terminal too narrow")
+	ErrSpinnerReturnedNilModel               = errors.New("spinner returned nil model")
+	ErrSpinnerUnexpectedModelType            = errors.New("spinner returned unexpected model type")
 
 	// ErrPlanHasDiff is returned when there are differences between two Terraform plan files.
 	ErrPlanHasDiff = errors.New("plan files have differences")

@@ -1,0 +1,165 @@
+---
+title: atmos version list
+sidebar_label: list
+sidebar_class_name: command
+id: list
+description: List recent Atmos releases with pagination and filtering options
+---
+import Screengrab from '@site/src/components/Screengrab'
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+List recent Atmos releases with pagination and filtering options.
+</Intro>
+
+<Screengrab title="atmos version list --help" slug="atmos-version-list--help" />
+
+## Usage
+
+Execute the `version list` command like this:
+
+```shell
+atmos version list
+```
+
+This command displays recent Atmos releases in a clean, formatted table with support for pagination, date filtering, and multiple output formats.
+
+:::tip
+Run `atmos version list --help` to see all the available options
+:::
+
+## Examples
+
+List the last 10 releases (default):
+
+```shell
+atmos version list
+```
+
+List the last 20 releases:
+
+```shell
+atmos version list --limit 20
+```
+
+List releases starting from offset 10:
+
+```shell
+atmos version list --offset 10
+```
+
+Include pre-release versions:
+
+```shell
+atmos version list --include-prereleases
+```
+
+List releases since a specific date (ISO 8601 format):
+
+```shell
+atmos version list --since 2025-01-01
+```
+
+Output as JSON:
+
+```shell
+atmos version list --format json
+```
+
+Output as YAML:
+
+```shell
+atmos version list --format yaml
+```
+
+Combine multiple options:
+
+```shell
+atmos version list --limit 5 --include-prereleases --format json
+```
+
+## Flags
+
+<dl>
+  <dt>`--limit`</dt>
+  <dd>Maximum number of releases to display (1-100). Default: `10`</dd>
+
+  <dt>`--offset`</dt>
+  <dd>Number of releases to skip for pagination. Default: `0`</dd>
+
+  <dt>`--since`</dt>
+  <dd>Only show releases published after this date. Format: ISO 8601 (`YYYY-MM-DD`)</dd>
+
+  <dt>`--include-prereleases`</dt>
+  <dd>Include pre-release versions (beta, alpha, rc). Default: `false`</dd>
+
+  <dt>`--format`</dt>
+  <dd>Output format: `table`, `json`, or `yaml`. Default: `table`</dd>
+</dl>
+
+## Features
+
+- **Clean table view** - Borderless table with header separator
+- **Markdown-rendered titles** - Release titles displayed with proper formatting and colors
+- **Date filtering** - Filter releases with `--since` for specific time ranges
+- **Pagination support** - Browse through extensive release history with `--limit` and `--offset`
+- **Current version indicator** - Green bullet (●) marks your installed version
+- **Spinner feedback** - Visual feedback during GitHub API calls (when TTY is available)
+- **Terminal width detection** - Automatically adapts to your terminal size
+
+## GitHub API Rate Limits
+
+The command uses the GitHub API which has rate limits:
+
+- **Without authentication**: 60 requests/hour
+- **With authentication**: 5,000 requests/hour
+
+To increase your rate limit, set a GitHub token:
+
+```shell
+# Using GitHub CLI (recommended)
+export ATMOS_GITHUB_TOKEN=$(gh auth token)
+
+# Or set GITHUB_TOKEN directly
+export GITHUB_TOKEN="ghp_xxxxxxxxxxxx"
+```
+
+:::note
+`ATMOS_GITHUB_TOKEN` takes precedence over `GITHUB_TOKEN`. This allows you to use a different token for Atmos without affecting other tools that use `GITHUB_TOKEN`.
+:::
+
+No special scopes are needed for accessing public repositories.
+
+## Use Cases
+
+### Browse Release History
+
+Quickly review recent changes before upgrading:
+
+```shell
+atmos version list --limit 5
+```
+
+### Export Release Data
+
+Export release data for compliance or auditing:
+
+```shell
+atmos version list --format json > releases.json
+```
+
+### Script Version Discovery
+
+Use in CI/CD pipelines to discover versions:
+
+```shell
+VERSION=$(atmos version list --format json | jq -r '.[0].tag')
+```
+
+### Find Specific Releases
+
+Filter by date to find releases in a specific timeframe:
+
+```shell
+atmos version list --since 2025-01-01 --limit 20
+```
