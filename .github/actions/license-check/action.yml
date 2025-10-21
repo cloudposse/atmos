@@ -76,21 +76,21 @@ runs:
         echo "## License Distribution" > license-summary.md
         echo "" >> license-summary.md
 
-        grep -v "^W" license-report-full.log | grep -v "^E" | \
+        grep -v "^W" license-report-full.log | grep -v "^E" | grep -v "^F" | \
           awk -F',' '{print $3}' | sort | uniq -c | sort -rn | \
           awk '{printf "- **%s**: %d\n", $2, $1}' >> license-summary.md || true
 
         echo "" >> license-summary.md
 
         # Count dependencies requiring attribution (Apache-2.0, BSD variants)
-        ATTRIBUTION_COUNT=$(grep -v "^W" license-report-full.log | grep -v "^E" | \
+        ATTRIBUTION_COUNT=$(grep -v "^W" license-report-full.log | grep -v "^E" | grep -v "^F" | \
           grep -cE "Apache-2.0|BSD-.*Clause" || echo "0")
 
         echo "attribution_count=$ATTRIBUTION_COUNT" >> license-summary.md
         echo "count=$ATTRIBUTION_COUNT" >> $GITHUB_OUTPUT
 
         # Count unknown licenses
-        UNKNOWN_COUNT=$(grep -v "^W" license-report-full.log | grep -v "^E" | \
+        UNKNOWN_COUNT=$(grep -v "^W" license-report-full.log | grep -v "^E" | grep -v "^F" | \
           grep -c "Unknown" || echo "0")
 
         echo "unknown_count=$UNKNOWN_COUNT" >> license-summary.md
@@ -101,7 +101,7 @@ runs:
         echo "## Dependencies Requiring Attribution ($ATTRIBUTION_COUNT)" >> license-summary.md
         echo "" >> license-summary.md
 
-        grep -v "^W" license-report-full.log | grep -v "^E" | \
+        grep -v "^W" license-report-full.log | grep -v "^E" | grep -v "^F" | \
           grep -E "Apache-2.0|BSD-.*Clause" | \
           awk -F',' '{printf "- %s (%s)\n", $1, $3}' | \
           sort >> license-summary.md || true
@@ -111,11 +111,11 @@ runs:
     - name: Check for unknown licenses
       shell: bash
       run: |
-        UNKNOWN=$(grep -v "^W" license-report-full.log | grep -v "^E" | grep -c "Unknown" || echo "0")
+        UNKNOWN=$(grep -v "^W" license-report-full.log | grep -v "^E" | grep -v "^F" | grep -c "Unknown" || echo "0")
 
         if [ "$UNKNOWN" -gt 0 ]; then
           echo "::warning::Found $UNKNOWN dependencies with unknown licenses"
-          grep -v "^W" license-report-full.log | grep -v "^E" | grep "Unknown" || true
+          grep -v "^W" license-report-full.log | grep -v "^E" | grep -v "^F" | grep "Unknown" || true
 
           if [ "${{ inputs.fail-on-unknown }}" == "true" ]; then
             echo "::error::Unknown licenses detected. Please verify these dependencies have valid licenses."
@@ -127,7 +127,7 @@ runs:
       id: notice-check
       shell: bash
       run: |
-        ATTRIBUTION_COUNT=$(grep -v "^W" license-report-full.log | grep -v "^E" | \
+        ATTRIBUTION_COUNT=$(grep -v "^W" license-report-full.log | grep -v "^E" | grep -v "^F" | \
           grep -cE "Apache-2.0|BSD-.*Clause" || echo "0")
 
         if [ ! -f "NOTICE" ]; then
@@ -143,7 +143,7 @@ runs:
         fi
 
         # Check for missing attributions by comparing license-report.csv with NOTICE
-        grep -v "^W" license-report-full.log | grep -v "^E" | \
+        grep -v "^W" license-report-full.log | grep -v "^E" | grep -v "^F" | \
           grep -E "Apache-2.0|BSD-.*Clause" | \
           awk -F',' '{print $1}' | sort > required-deps.txt
 
