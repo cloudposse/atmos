@@ -218,7 +218,7 @@ Terraform show output
 			if tc.expectError {
 				assert.Error(t, err)
 				if err != nil {
-					assert.Equal(t, ErrNoJSONOutput, err)
+					assert.Equal(t, errUtils.ErrNoJSONOutput, err)
 				}
 			} else {
 				assert.NoError(t, err)

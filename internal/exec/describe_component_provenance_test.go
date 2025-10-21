@@ -14,12 +14,6 @@ import (
 // TestDescribeComponent_NestedImportProvenance tests that provenance is tracked correctly
 // for imports that come from nested import chains (imports that themselves have imports).
 func TestDescribeComponent_NestedImportProvenance(t *testing.T) {
-	// Clear cache and merge context to ensure fresh processing.
-	ClearBaseComponentConfigCache()
-	ClearMergeContexts()
-	ClearLastMergeContext()
-	ClearFileContentCache()
-
 	// Skip if not in repo root or examples directory doesn't exist
 	examplesPath := "../../examples/quick-start-advanced"
 	if _, err := os.Stat(examplesPath); os.IsNotExist(err) {
@@ -40,6 +34,9 @@ func TestDescribeComponent_NestedImportProvenance(t *testing.T) {
 
 	// Enable provenance tracking
 	atmosConfig.TrackProvenance = true
+
+	// Clear any previous merge contexts.
+	ClearMergeContexts()
 
 	// Execute describe component with context to get provenance
 	result, err := ExecuteDescribeComponentWithContext(DescribeComponentContextParams{
@@ -168,23 +165,11 @@ func TestDescribeComponent_NestedImportProvenance(t *testing.T) {
 		assert.Greater(t, entry.Depth, 0,
 			"catalog/vpc-flow-logs-bucket/defaults is a nested import and should have depth > 0")
 	}
-
-	// Clean up after test to avoid polluting subsequent tests
-	ClearBaseComponentConfigCache()
-	ClearMergeContexts()
-	ClearLastMergeContext()
-	ClearFileContentCache()
 }
 
 // TestDescribeComponent_DirectImportProvenance tests that provenance is tracked correctly
 // for imports that appear directly in the stack file being described (not nested).
 func TestDescribeComponent_DirectImportProvenance(t *testing.T) {
-	// Clear cache and merge context to ensure fresh processing.
-	ClearBaseComponentConfigCache()
-	ClearMergeContexts()
-	ClearLastMergeContext()
-	ClearFileContentCache()
-
 	// Skip if not in repo root or examples directory doesn't exist
 	examplesPath := "../../examples/quick-start-advanced"
 	if _, err := os.Stat(examplesPath); os.IsNotExist(err) {
@@ -205,6 +190,9 @@ func TestDescribeComponent_DirectImportProvenance(t *testing.T) {
 
 	// Enable provenance tracking
 	atmosConfig.TrackProvenance = true
+
+	// Clear any previous merge contexts.
+	ClearMergeContexts()
 
 	// Execute describe component with context to get provenance
 	result, err := ExecuteDescribeComponentWithContext(DescribeComponentContextParams{
@@ -258,10 +246,4 @@ func TestDescribeComponent_DirectImportProvenance(t *testing.T) {
 		assert.True(t, ctx.HasProvenance(metaKey),
 			"Direct import %s should have __import_meta__ entry", importPath)
 	}
-
-	// Clean up after test to avoid polluting subsequent tests
-	ClearBaseComponentConfigCache()
-	ClearMergeContexts()
-	ClearLastMergeContext()
-	ClearFileContentCache()
 }

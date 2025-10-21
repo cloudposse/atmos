@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"path/filepath"
 
-	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -18,7 +18,7 @@ func ExecuteTerraformGenerateBackendCmd(cmd *cobra.Command, args []string) error
 	defer perf.Track(nil, "exec.ExecuteTerraformGenerateBackendCmd")()
 
 	if len(args) != 1 {
-		return errors.New("invalid arguments. The command requires one argument `component`")
+		return errUtils.ErrTerraformGenerateBackendArgument
 	}
 
 	flags := cmd.Flags()

@@ -123,7 +123,7 @@ func TestExecuteWorkflow(t *testing.T) {
 			commandLineStack: "",
 			fromStep:         "",
 			wantErr:          true,
-			errMsg:           "subcommand exited with code 1",
+			errMsg:           "workflow step execution failed with exit code 1",
 		},
 		{
 			name:         "failing atmos command",
@@ -142,7 +142,7 @@ func TestExecuteWorkflow(t *testing.T) {
 			commandLineStack: "",
 			fromStep:         "",
 			wantErr:          true,
-			errMsg:           "subcommand exited with code",
+			errMsg:           "workflow step execution failed with exit code",
 		},
 		{
 			name:         "workflow with stack override",
@@ -181,7 +181,7 @@ func TestExecuteWorkflow(t *testing.T) {
 			commandLineStack: "",
 			fromStep:         "",
 			wantErr:          true,
-			errMsg:           "subcommand exited with code",
+			errMsg:           "workflow step execution failed with exit code",
 		},
 		{
 			name:         "failing atmos command with command line stack override",
@@ -201,7 +201,7 @@ func TestExecuteWorkflow(t *testing.T) {
 			commandLineStack: "dev",
 			fromStep:         "",
 			wantErr:          true,
-			errMsg:           "subcommand exited with code",
+			errMsg:           "workflow step execution failed with exit code",
 		},
 	}
 

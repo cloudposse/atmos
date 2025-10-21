@@ -35,12 +35,14 @@ var (
 	ErrWorkdirNotExist                       = errors.New("workdir does not exist")
 	ErrPathResolution                        = errors.New("failed to resolve absolute path")
 	ErrInvalidTemplateFunc                   = errors.New("invalid template function")
+	ErrInvalidTemplateSettings               = errors.New("invalid template settings")
 	ErrRefuseDeleteSymbolicLink              = errors.New("refusing to delete symbolic link")
 	ErrNoDocsGenerateEntry                   = errors.New("no docs.generate entry found")
 	ErrMissingDocType                        = errors.New("doc-type argument missing")
 	ErrUnsupportedInputType                  = errors.New("unsupported input type")
 	ErrMissingStackNameTemplateAndPattern    = errors.New("'stacks.name_pattern' or 'stacks.name_template' needs to be specified in 'atmos.yaml'")
 	ErrFailedMarshalConfigToYaml             = errors.New("failed to marshal config to YAML")
+	ErrStacksDirectoryDoesNotExist           = errors.New("directory for Atmos stacks does not exist")
 	ErrCommandNil                            = errors.New("command cannot be nil")
 	ErrGitHubRateLimitExceeded               = errors.New("GitHub API rate limit exceeded")
 	ErrInvalidLimit                          = errors.New("limit must be between 1 and 100")
@@ -95,6 +97,8 @@ var (
 	ErrInvalidPagerCommand = errors.New("invalid pager command")
 	ErrEmptyURL            = errors.New("empty URL provided")
 	ErrFailedToFindImport  = errors.New("failed to find import")
+	ErrInvalidFilePath     = errors.New("invalid file path")
+	ErrRelPath             = errors.New("error determining relative path")
 
 	// Config loading errors.
 	ErrAtmosDirConfigNotFound      = errors.New("atmos config directory not found")
@@ -110,18 +114,30 @@ var (
 	ErrEmptyConfigPath             = errors.New("config path cannot be empty")
 	ErrEmptyConfigFile             = errors.New("config file path cannot be empty")
 	ErrAtmosFilesDirConfigNotFound = errors.New("`atmos.yaml` or `.atmos.yaml` configuration file not found in directory")
+	ErrAtmosConfigNotFound         = errors.New("\n'atmos.yaml' CLI config was not found in any of the searched paths: system dir, home dir, current dir, ENV vars." +
+		"\nYou can download a sample config and adapt it to your requirements from https://atmos.tools/cli/configuration")
 
-	ErrMissingStack                       = errors.New("stack is required; specify it on the command line using the flag `--stack <stack>` (shorthand `-s`)")
-	ErrInvalidComponent                   = errors.New("invalid component")
-	ErrInvalidComponentMapType            = errors.New("invalid component map type")
-	ErrAbstractComponentCantBeProvisioned = errors.New("abstract component cannot be provisioned")
-	ErrLockedComponentCantBeProvisioned   = errors.New("locked component cannot be provisioned")
+	ErrMissingStack                               = errors.New("stack is required")
+	ErrMissingComponent                           = errors.New("component is required")
+	ErrMissingComponentType                       = errors.New("component type is required")
+	ErrInvalidArguments                           = errors.New("invalid arguments")
+	ErrInvalidComponent                           = errors.New("invalid component")
+	ErrInvalidComponentMapType                    = errors.New("invalid component map type")
+	ErrAbstractComponentCantBeProvisioned         = errors.New("abstract component cannot be provisioned")
+	ErrLockedComponentCantBeProvisioned           = errors.New("locked component cannot be provisioned")
+	ErrSpaceliftAdminStackWorkspaceNotEnabled     = errors.New("spacelift admin stack does not have workspace enabled")
+	ErrSpaceliftAdminStackComponentNotProvisioned = errors.New("spacelift admin stack component cannot be provisioned")
 
 	// Terraform-specific errors.
-	ErrHTTPBackendWorkspaces       = errors.New("workspaces are not supported for the HTTP backend")
-	ErrInvalidTerraformComponent   = errors.New("invalid Terraform component")
-	ErrNoTty                       = errors.New("no TTY attached")
-	ErrFailedToLoadTerraformModule = errors.New("failed to load terraform module")
+	ErrHTTPBackendWorkspaces            = errors.New("workspaces are not supported for the HTTP backend")
+	ErrInvalidTerraformComponent        = errors.New("invalid Terraform component")
+	ErrNoTty                            = errors.New("no TTY attached")
+	ErrFailedToLoadTerraformModule      = errors.New("failed to load terraform module")
+	ErrNoJSONOutput                     = errors.New("no JSON output found in terraform show output")
+	ErrOriginalPlanFileRequired         = errors.New("original plan file (--orig) is required")
+	ErrOriginalPlanFileNotExist         = errors.New("original plan file does not exist")
+	ErrNewPlanFileNotExist              = errors.New("new plan file does not exist")
+	ErrTerraformGenerateBackendArgument = errors.New("invalid arguments. The command requires one argument `component`")
 
 	ErrMissingPackerTemplate = errors.New("packer template is required; it can be specified in the `settings.packer.template` section in the Atmos component manifest, or on the command line via the flag `--template <template>` (shorthand `-t`)")
 	ErrMissingPackerManifest = errors.New("packer manifest is missing")
@@ -132,7 +148,12 @@ var (
 	ErrMerge                         = errors.New("merge error")
 
 	// Stack processing errors.
+	ErrStackManifestFileNotFound              = errors.New("stack manifest file not found")
 	ErrInvalidStackManifest                   = errors.New("invalid stack manifest")
+	ErrStackManifestSchemaValidation          = errors.New("stack manifest schema validation failed")
+	ErrStackImportSelf                        = errors.New("stack manifest imports itself")
+	ErrStackImportNotFound                    = errors.New("stack import not found")
+	ErrStackCircularInheritance               = errors.New("circular component inheritance detected")
 	ErrInvalidHooksSection                    = errors.New("invalid 'hooks' section in the file")
 	ErrInvalidTerraformHooksSection           = errors.New("invalid 'terraform.hooks' section in the file")
 	ErrInvalidComponentVars                   = errors.New("invalid component vars section")
@@ -163,6 +184,29 @@ var (
 	ErrInvalidTerraformBackend                = errors.New("invalid terraform.backend section")
 	ErrInvalidTerraformRemoteStateBackend     = errors.New("invalid terraform.remote_state_backend section")
 	ErrUnsupportedComponentType               = errors.New("unsupported component type. Valid types are 'terraform', 'helmfile', 'packer'")
+
+	// List command errors.
+	ErrInvalidStackPattern         = errors.New("invalid stack pattern")
+	ErrEmptyTargetComponentName    = errors.New("target component name cannot be empty")
+	ErrComponentsSectionNotFound   = errors.New("components section not found in stack")
+	ErrComponentNotFoundInSections = errors.New("component not found in terraform or helmfile sections")
+	ErrQueryFailed                 = errors.New("query execution failed")
+	ErrTableTooWide                = errors.New("the table is too wide to display properly")
+	ErrGettingCommonFlags          = errors.New("error getting common flags")
+	ErrGettingAbstractFlag         = errors.New("error getting abstract flag")
+	ErrGettingVarsFlag             = errors.New("error getting vars flag")
+	ErrInitializingCLIConfig       = errors.New("error initializing CLI config")
+	ErrDescribingStacks            = errors.New("error describing stacks")
+	ErrComponentNameRequired       = errors.New("component name is required")
+
+	// Atlantis errors.
+	ErrAtlantisInvalidFlags          = errors.New("if the '--repo-path' flag is specified, the '--ref', '--sha', '--ssh-key' and '--ssh-key-password' flags can't be used")
+	ErrAtlantisProjectTemplateNotDef = errors.New("atlantis project template is not defined in 'integrations.atlantis.project_templates' in 'atmos.yaml'")
+	ErrAtlantisConfigTemplateNotDef  = errors.New("atlantis config template is not defined in `integrations.atlantis.config_templates` in `atmos.yaml`")
+	ErrAtlantisConfigTemplateNotSpec = errors.New("atlantis config template is not specified")
+
+	// Validation errors.
+	ErrValidationFailed = errors.New("validation failed")
 
 	// Global/Stack-level section errors.
 	ErrInvalidVarsSection               = errors.New("invalid vars section")
@@ -259,8 +303,10 @@ var (
 	ErrInvalidOPAPolicy              = errors.New("invalid OPA policy")
 	ErrTerraformEnvCliVarJSON        = errors.New("failed to parse JSON variable from TF_CLI_ARGS environment variable")
 	ErrWorkflowBasePathNotConfigured = errors.New("'workflows.base_path' must be configured in 'atmos.yaml'")
+	ErrWorkflowDirectoryDoesNotExist = errors.New("workflow directory does not exist")
 	ErrInvalidComponentArgument      = errors.New("invalid arguments. The command requires one argument 'componentName'")
 	ErrValidation                    = errors.New("validation failed")
+	ErrCUEValidationUnsupported      = errors.New("validation using CUE is not supported yet")
 
 	// List package errors.
 	ErrExecuteDescribeStacks     = errors.New("failed to execute describe stacks")
@@ -392,5 +438,5 @@ type ExitCodeError struct {
 }
 
 func (e ExitCodeError) Error() string {
-	return fmt.Sprintf("subcommand exited with code %d", e.Code)
+	return fmt.Sprintf("workflow step execution failed with exit code %d", e.Code)
 }

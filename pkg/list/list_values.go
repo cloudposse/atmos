@@ -1,6 +1,7 @@
 package list
 
 import (
+	"errors"
 	"fmt"
 	"path/filepath"
 	"sort"
@@ -11,7 +12,6 @@ import (
 	"github.com/cloudposse/atmos/pkg/list/format"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/utils"
-	"github.com/pkg/errors"
 )
 
 // Error variables for list_values package.
@@ -398,7 +398,7 @@ func filterByGlobPatterns(values map[string]interface{}, patterns []string) (map
 			pat = strings.TrimSpace(pat)
 			matched, err := filepath.Match(pat, stackName)
 			if err != nil {
-				return nil, errors.Errorf("invalid stack pattern '%s'", pat)
+				return nil, fmt.Errorf("%w: '%s'", ErrInvalidStackPattern, pat)
 			}
 
 			if matched {

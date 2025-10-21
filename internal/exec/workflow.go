@@ -1,12 +1,13 @@
 package exec
 
 import (
-	"errors"
+	_ "embed"
 	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
 
+	"github.com/cockroachdb/errors"
 	"github.com/spf13/cobra"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -15,6 +16,15 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
+
+//go:embed examples/workflow_invalid_manifest.md
+var workflowInvalidManifestExample string
+
+//go:embed examples/workflow_not_found.md
+var workflowNotFoundExample string
+
+//go:embed examples/workflow_file_not_found.md
+var workflowFileNotFoundExample string
 
 // ExecuteWorkflowCmd executes an Atmos workflow.
 func ExecuteWorkflowCmd(cmd *cobra.Command, args []string) error {
@@ -95,12 +105,18 @@ func ExecuteWorkflowCmd(cmd *cobra.Command, args []string) error {
 	}
 
 	if !u.FileExists(workflowPath) {
-		errUtils.CheckErrorPrintAndExit(
-			ErrWorkflowFileNotFound,
-			WorkflowErrTitle,
-			fmt.Sprintf("\n## Explanation\nThe workflow manifest file `%s` does not exist.", filepath.ToSlash(workflowPath)),
-		)
-		return ErrWorkflowFileNotFound
+		err := errUtils.Build(ErrWorkflowFileNotFound).
+			WithExplanationf("The workflow manifest file `%s` does not exist.", filepath.ToSlash(workflowPath)).
+			WithExampleFile(workflowFileNotFoundExample).
+			WithHint("Use `atmos list workflows` to see available workflows").
+			WithHintf("Verify the workflow file exists at: %s", filepath.ToSlash(workflowPath)).
+			WithHintf("Check `workflows.base_path` in `atmos.yaml`: %s", filepath.ToSlash(atmosConfig.Workflows.BasePath)).
+			WithContext("file", workflowPath).
+			WithContext("base_path", atmosConfig.Workflows.BasePath).
+			WithExitCode(2).
+			Err()
+		errUtils.CheckErrorAndPrint(err, "", "")
+		return err
 	}
 
 	fileContent, err := os.ReadFile(workflowPath)
@@ -118,12 +134,16 @@ func ExecuteWorkflowCmd(cmd *cobra.Command, args []string) error {
 	}
 
 	if workflowManifest.Workflows == nil {
-		errUtils.CheckErrorPrintAndExit(
-			ErrInvalidWorkflowManifest,
-			WorkflowErrTitle,
-			fmt.Sprintf("\n## Explanation\nThe workflow manifest `%s` must be a map with the top-level `workflows:` key.", filepath.ToSlash(workflowPath)),
-		)
-		return ErrInvalidWorkflowManifest
+		err := errUtils.Build(ErrInvalidWorkflowManifest).
+			WithExplanationf("The workflow manifest `%s` must be a map with the top-level `workflows:` key.", filepath.ToSlash(workflowPath)).
+			WithExampleFile(workflowInvalidManifestExample).
+			WithHint("Check the YAML structure of your workflow file").
+			WithHintf("Valid format requires a top-level `workflows:` key containing workflow definitions").
+			WithContext("file", workflowPath).
+			WithExitCode(2).
+			Err()
+		errUtils.CheckErrorAndPrint(err, "", "")
+		return err
 	}
 
 	workflowConfig = workflowManifest.Workflows
@@ -133,14 +153,29 @@ func ExecuteWorkflowCmd(cmd *cobra.Command, args []string) error {
 		for w := range workflowConfig {
 			validWorkflows = append(validWorkflows, w)
 		}
-		// sorting so that the output is deterministic
+		// sorting so that the output is deterministic.
 		sort.Strings(validWorkflows)
-		errUtils.CheckErrorPrintAndExit(
-			ErrWorkflowNoWorkflow,
-			"Workflow Error",
-			fmt.Sprintf("\n## Explanation\nNo workflow exists with the name `%s`\n### Available workflows:\n%s", workflowName, FormatList(validWorkflows)),
-		)
-		return ErrWorkflowNoWorkflow
+
+		explanation := fmt.Sprintf("The workflow `%s` does not exist in `%s`.\n\nThis file defines %d workflow%s, but `%s` is not among them.\n\n## Available workflows:\n\n%s",
+			workflowName,
+			workflowPath,
+			len(validWorkflows),
+			map[bool]string{true: "", false: "s"}[len(validWorkflows) == 1],
+			workflowName,
+			FormatList(validWorkflows))
+
+		err := errUtils.Build(ErrWorkflowNoWorkflow).
+			WithExplanation(explanation).
+			WithExampleFile(workflowNotFoundExample).
+			WithHintf("Use `atmos describe workflows` to see detailed workflow definitions").
+			WithHintf("Run a workflow: `atmos workflow <name> -f %s`", workflowPath).
+			WithContext("requested_workflow", workflowName).
+			WithContext("file", workflowPath).
+			WithContext("available_count", fmt.Sprintf("%d", len(validWorkflows))).
+			WithExitCode(2).
+			Err()
+		errUtils.CheckErrorAndPrint(err, "", "")
+		return err
 	} else {
 		workflowDefinition = i
 	}
