@@ -55,6 +55,8 @@ func TestFileKeyring_NewStoreDefaultPath(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Setenv("USERPROFILE", tempHome)
 	}
+	// Set XDG_DATA_HOME to control the keyring location for testing.
+	t.Setenv("XDG_DATA_HOME", filepath.Join(tempHome, ".local", "share"))
 	t.Setenv("ATMOS_KEYRING_PASSWORD", "test-password-12345")
 
 	// Create with default path.
@@ -62,8 +64,8 @@ func TestFileKeyring_NewStoreDefaultPath(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotNil(t, store)
 
-	// Should use ~/.atmos/keyring.
-	expectedPath := filepath.Join(tempHome, ".atmos", "keyring")
+	// Should use XDG_DATA_HOME/atmos/keyring (typically ~/.local/share/atmos/keyring).
+	expectedPath := filepath.Join(tempHome, ".local", "share", "atmos", "keyring")
 	assert.Equal(t, expectedPath, store.path)
 }
 
@@ -586,6 +588,8 @@ func TestFileKeyring_EmptyConfig(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Setenv("USERPROFILE", tempHome)
 	}
+	// Set XDG_DATA_HOME to control the keyring location for testing.
+	t.Setenv("XDG_DATA_HOME", filepath.Join(tempHome, ".local", "share"))
 	t.Setenv("ATMOS_KEYRING_PASSWORD", "test-password-12345")
 
 	// Create store with nil authConfig (should use defaults).
@@ -593,8 +597,8 @@ func TestFileKeyring_EmptyConfig(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotNil(t, store)
 
-	// Should have default path based on temp home.
-	expectedPath := filepath.Join(tempHome, ".atmos", "keyring")
+	// Should have default path based on XDG_DATA_HOME.
+	expectedPath := filepath.Join(tempHome, ".local", "share", "atmos", "keyring")
 	assert.Equal(t, expectedPath, store.path)
 }
 

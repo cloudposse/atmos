@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 
 	"github.com/99designs/keyring"
+	"github.com/adrg/xdg"
 	"github.com/charmbracelet/huh"
 	"github.com/spf13/viper"
 	"golang.org/x/term"
@@ -59,13 +60,26 @@ func parseFileKeyringConfig(authConfig *schema.AuthConfig) (path, passwordEnv st
 	return path, passwordEnv
 }
 
-// getDefaultKeyringPath returns the default keyring directory path.
+// getDefaultKeyringPath returns the default keyring directory path following XDG Base Directory Specification.
+// It respects ATMOS_XDG_DATA_HOME and XDG_DATA_HOME environment variables for data directory location.
 func getDefaultKeyringPath() (string, error) {
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		return "", fmt.Errorf("failed to get user home directory: %w", err)
+	// Bind both ATMOS_XDG_DATA_HOME and XDG_DATA_HOME to support ATMOS override.
+	// This allows operators to use ATMOS_XDG_DATA_HOME to override the standard XDG_DATA_HOME.
+	v := viper.New()
+	if err := v.BindEnv("XDG_DATA_HOME", "ATMOS_XDG_DATA_HOME", "XDG_DATA_HOME"); err != nil {
+		return "", fmt.Errorf("error binding XDG_DATA_HOME environment variables: %w", err)
 	}
-	return filepath.Join(homeDir, ".atmos", "keyring"), nil
+
+	var dataDir string
+	if customDataHome := v.GetString("XDG_DATA_HOME"); customDataHome != "" {
+		// Use the custom data home from either ATMOS_XDG_DATA_HOME or XDG_DATA_HOME.
+		dataDir = filepath.Join(customDataHome, "atmos", "keyring")
+	} else {
+		// Fall back to XDG library default behavior.
+		dataDir = filepath.Join(xdg.DataHome, "atmos", "keyring")
+	}
+
+	return dataDir, nil
 }
 
 // newFileKeyringStore creates a new file-based keyring store with encryption.
@@ -90,7 +104,8 @@ func newFileKeyringStore(authConfig *schema.AuthConfig) (*fileKeyringStore, erro
 	}
 
 	// Ensure the configured path (storage directory) exists with proper permissions.
-	// The path is the directory where keyring files will be stored (e.g., ~/.atmos/keyring or /etc/atmos/keyring).
+	// The path is the directory where keyring files will be stored.
+	// Default follows XDG Base Directory Specification: $XDG_DATA_HOME/atmos/keyring (typically ~/.local/share/atmos/keyring).
 	if err := os.MkdirAll(path, KeyringDirPermissions); err != nil {
 		return nil, errors.Join(ErrCredentialStore, fmt.Errorf("failed to create keyring directory: %w", err))
 	}
