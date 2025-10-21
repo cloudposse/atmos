@@ -58,17 +58,8 @@ jobs:
           pre-commit run trailing-whitespace --all-files || true
           pre-commit run end-of-file-fixer --all-files || true
 
-      # Generate NOTICE file if go.mod/go.sum changed
-      - name: Check for Go dependency changes
-        id: go-deps-changed
-        uses: tj-actions/changed-files@e7b157b1c4ad44acfc8d9be14b8cd8f5058636e3 # v45.0.6
-        with:
-          use_rest_api: "true"
-          files: |
-            go.mod
-            go.sum
-      - if: steps.go-deps-changed.outputs.any_changed == 'true'
-        name: Generate NOTICE file
+      # Generate NOTICE file on all PRs to ensure it stays up-to-date
+      - name: Generate NOTICE file
         run: ./scripts/generate-notice.sh
 
       - uses: autofix-ci/action@2891949f3779a1cafafae1523058501de3d4e944 # v1.3.1
