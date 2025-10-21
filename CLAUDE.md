@@ -26,6 +26,59 @@ make lint                    # golangci-lint on changed files
 
 **Templates**: Go templates + Gomplate with `atmos.Component()`, `terraform.output()`, store integration
 
+## Architectural Patterns (MANDATORY)
+
+### Factory & Registry Pattern (MANDATORY)
+Use factory pattern with registries for extensibility. Existing implementations:
+- **Command Registry**: `cmd/internal/registry.go` - All commands register via `CommandProvider` interface
+- **Component Registry**: Component discovery and management
+- **Store Registry**: `pkg/store/registry.go` - Multi-provider store implementations
+
+**New commands MUST use command registry pattern.** See `docs/prd/command-registry-pattern.md`
+
+### Interface-Driven Design (MANDATORY)
+- Define interfaces for all major functionality
+- Use dependency injection for testability
+- Generate mocks with `go.uber.org/mock/mockgen`
+- Avoid integration tests by mocking external dependencies
+
+**Example:**
+```go
+// Define interface
+type ComponentLoader interface {
+    Load(path string) (*Component, error)
+}
+
+// Implement
+type FileSystemLoader struct{}
+func (f *FileSystemLoader) Load(path string) (*Component, error) { ... }
+
+// Generate mock
+//go:generate go run go.uber.org/mock/mockgen@latest -source=loader.go -destination=mock_loader_test.go
+```
+
+### Package Organization (MANDATORY)
+- **Avoid utils package bloat** - Don't add new functions to `pkg/utils/`
+- **Create purpose-built packages** - New functionality gets its own package in `pkg/`
+- **Well-tested, focused packages** - Each package has clear responsibility
+- **Examples**: `pkg/store/`, `pkg/git/`, `pkg/pro/`, `pkg/filesystem/`
+
+**Anti-pattern:**
+```go
+// WRONG: Adding to utils
+pkg/utils/new_feature.go
+```
+
+**Correct pattern:**
+```go
+// CORRECT: New focused package
+pkg/newfeature/
+  ├── newfeature.go
+  ├── newfeature_test.go
+  ├── interface.go
+  └── mock_interface_test.go
+```
+
 ## Code Patterns & Conventions
 
 ### Comment Style (MANDATORY)
@@ -52,8 +105,13 @@ Precedence: CLI flags → ENV vars → config files → defaults (use Viper)
 - Check: `errors.Is(err, target)`
 - Never dynamic errors or string comparison
 
-### Testing Strategy
-Unit tests (table-driven), integration tests (`tests/`), mockgen mocks, >80% coverage target
+### Testing Strategy (MANDATORY)
+- **Prefer unit tests with mocks** over integration tests
+- Use interfaces + dependency injection for testability
+- Generate mocks with `go.uber.org/mock/mockgen`
+- Table-driven tests for comprehensive coverage
+- Integration tests in `tests/` only when necessary
+- Target >80% coverage
 
 ### Test Isolation (MANDATORY)
 ALWAYS use `cmd.NewTestKit(t)` for cmd tests. Auto-cleans RootCmd state (flags, args). Required for any test touching RootCmd.
@@ -146,8 +204,14 @@ Search `internal/exec/` and `pkg/` before implementing. Extend, don't duplicate.
 ### Cross-Platform (MANDATORY)
 Linux/macOS/Windows compatible. Use SDKs over binaries. Use `filepath.Join()`, not hardcoded separators.
 
-### Multi-Provider (MANDATORY)
-Define interfaces, implement per provider, generate mocks, use registry pattern. See `pkg/store/`
+### Multi-Provider Registry (MANDATORY)
+Follow registry pattern for extensibility:
+1. Define interface in dedicated package
+2. Implement per provider (separate files)
+3. Register implementations in registry
+4. Generate mocks for testing
+
+**Example**: `pkg/store/` has registry pattern with AWS SSM, Azure Key Vault, Google Secret Manager providers.
 
 ### Telemetry (MANDATORY)
 Auto-enabled via `RootCmd.ExecuteC()`. Non-standard paths use `telemetry.CaptureCmd()`. Never capture user data.
