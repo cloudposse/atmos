@@ -26,20 +26,23 @@ env:
 jobs:
   # ensure the code builds...
   build:
-    name: Build
+    name: Build (${{ matrix.target }})
     timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
         include:
-          - os: ubuntu-latest
+          - os: "runs-on=${{github.run_id}}/runner=terraform/tag=atmos/extras=s3-cache/private=false"
             target: linux
-          - os: windows-latest
+          - os: "windows-latest"
             target: windows
-          - os: macos-latest
+          - os: "macos-latest"
             target: macos
     runs-on: ${{ matrix.os }}
     steps:
+      - uses: runs-on/action@v1
+        if: matrix.target == 'linux'
+
       - name: Build
         if: ${{ ! ( matrix.target == 'windows' && github.event.pull_request.draft ) }}
         run: echo "Building on ${{ matrix.os }}"
@@ -84,18 +87,21 @@ jobs:
 
   # run acceptance tests
   test:
-    name: Acceptance Tests
-    needs: build
+    name: Acceptance Tests (${{ matrix.flavor.target }})
+    needs: [build]
     strategy:
       fail-fast: false
       matrix:
         flavor:
-          - { os: ubuntu-latest, target: linux }
-          - { os: windows-latest, target: windows }
-          - { os: macos-latest, target: macos }
+          - { os: "runs-on=${{github.run_id}}/runner=terraform/tag=atmos/extras=s3-cache/private=false", target: linux }
+          - { os: "windows-latest", target: windows }
+          - { os: "macos-latest", target: macos }
     timeout-minutes: 30
     runs-on: ${{ matrix.flavor.os }}
     steps:
+      - uses: runs-on/action@v1
+        if: matrix.flavor.target == 'linux'
+
       - name: Check out code into the Go module directory
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
         uses: actions/checkout@v4
