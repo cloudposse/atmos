@@ -60,13 +60,13 @@ func GetTerraformState(
 
 	message := fmt.Sprintf("Fetching %s output from %s in %s", output, component, stack)
 
-	if atmosConfig.Logs.Level == u.LogLevelTrace || atmosConfig.Logs.Level == u.LogLevelDebug {
-		// Initialize spinner
+	if atmosConfig != nil && (atmosConfig.Logs.Level == u.LogLevelTrace || atmosConfig.Logs.Level == u.LogLevelDebug) {
+		// Initialize spinner.
 		p := NewSpinner(message)
 		spinnerDone := make(chan struct{})
-		// Run spinner in a goroutine
+		// Run spinner in a goroutine.
 		RunSpinner(p, spinnerDone, message)
-		// Ensure the spinner is stopped before returning
+		// Ensure the spinner is stopped before returning.
 		defer StopSpinner(p, spinnerDone)
 	}
 

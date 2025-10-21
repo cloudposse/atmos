@@ -118,7 +118,7 @@ func TestReadTerraformBackendAzurermInternal_Success(t *testing.T) {
 			backend: map[string]any{
 				"storage_account_name": "testaccount",
 				"container_name":       "tfstate",
-				// key not specified, should default to terraform.tfstate
+				// key not specified, should default to terraform.tfstate.
 			},
 			mockResponse:     `{"version": 4, "outputs": {"app_url": {"value": "https://staging.example.com"}}}`,
 			expectedBlobName: "terraform.tfstateenv:staging",
@@ -288,7 +288,7 @@ func TestReadTerraformBackendAzurermInternal_MissingContainerName(t *testing.T) 
 	}
 	backend := map[string]any{
 		"storage_account_name": "testaccount",
-		// container_name is missing
+		// container_name is missing.
 		"key": "terraform.tfstate",
 	}
 
@@ -337,7 +337,7 @@ func TestReadTerraformBackendAzurerm_MissingBackend(t *testing.T) {
 	componentSections := map[string]any{
 		"component": "test-component",
 		"workspace": "dev",
-		// No backend section
+		// No backend section.
 	}
 
 	result, err := ReadTerraformBackendAzurerm(nil, &componentSections)
