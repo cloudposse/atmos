@@ -51,6 +51,30 @@ func TestMemoryKeyring_List(t *testing.T) {
 	assert.NotContains(t, aliases, "alias2")
 }
 
+// TestMemoryKeyring_GetAnySetAny tests arbitrary data storage (memory-specific helper method).
+func TestMemoryKeyring_GetAnySetAny(t *testing.T) {
+	store := newMemoryKeyringStore()
+
+	type testData struct {
+		Name  string
+		Value int
+	}
+
+	data := testData{Name: "test", Value: 42}
+
+	// Store arbitrary data.
+	require.NoError(t, store.SetAny("test-key", data))
+
+	// Retrieve arbitrary data.
+	var retrieved testData
+	require.NoError(t, store.GetAny("test-key", &retrieved))
+	assert.Equal(t, data, retrieved)
+
+	// Get non-existent key should error.
+	err := store.GetAny("non-existent", &retrieved)
+	assert.Error(t, err)
+}
+
 // TestMemoryKeyring_ConcurrentAccess tests thread-safe concurrent operations (memory-specific).
 func TestMemoryKeyring_ConcurrentAccess(t *testing.T) {
 	store := newMemoryKeyringStore()
