@@ -7,10 +7,10 @@ import (
 	"testing"
 
 	"github.com/go-git/go-git/v5/plumbing"
-	"github.com/golang/mock/gomock"
 	cp "github.com/otiai10/copy"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/pager"
