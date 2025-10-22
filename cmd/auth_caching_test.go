@@ -1,12 +1,16 @@
 package cmd
 
 import (
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/cloudposse/atmos/pkg/auth/credentials"
+	"github.com/cloudposse/atmos/pkg/auth/providers/mock"
 )
 
 // TestAuth_CredentialCaching verifies that credentials are cached after login
@@ -27,6 +31,7 @@ func TestAuth_CredentialCaching(t *testing.T) {
 	tempDir := t.TempDir()
 	tk.Setenv("ATMOS_KEYRING_TYPE", "file")
 	tk.Setenv("ATMOS_KEYRING_FILE_PATH", tempDir+"/keyring.json")
+	tk.Setenv("ATMOS_KEYRING_PASSWORD", "test-password-for-file-keyring")
 
 	// Step 1: Authenticate (this caches credentials).
 	t.Run("initial login caches credentials", func(t *testing.T) {
@@ -220,4 +225,41 @@ func TestAuth_MultipleIdentities(t *testing.T) {
 				"Whoami for %s took too long (%v) - credentials may not be cached", identity, duration)
 		})
 	}
+}
+
+// TestKeyringStoreRetrieve tests basic store and retrieve operations.
+func TestKeyringStoreRetrieve(t *testing.T) {
+	tempDir := t.TempDir()
+	keyringPath := filepath.Join(tempDir, "keyring.json")
+
+	t.Setenv("ATMOS_KEYRING_TYPE", "file")
+	t.Setenv("ATMOS_KEYRING_FILE_PATH", keyringPath)
+	t.Setenv("ATMOS_KEYRING_PASSWORD", "test-password-12345678")
+
+	// Create credential store
+	store := credentials.NewCredentialStore()
+
+	// Create mock credentials
+	creds := &mock.Credentials{
+		AccessKeyID:     "MOCK_KEY",
+		SecretAccessKey: "MOCK_SECRET",
+		SessionToken:    "MOCK_TOKEN",
+		Region:          "us-east-1",
+		Expiration:      time.Date(2099, 12, 31, 23, 59, 59, 0, time.UTC),
+	}
+
+	// Store credentials
+	err := store.Store("test-identity", creds)
+	require.NoError(t, err, "Should store credentials")
+
+	// Retrieve credentials
+	retrieved, err := store.Retrieve("test-identity")
+	require.NoError(t, err, "Should retrieve credentials")
+
+	// Verify type
+	mockRetrieved, ok := retrieved.(*mock.Credentials)
+	require.True(t, ok, "Retrieved credentials should be mock.Credentials, got %T", retrieved)
+
+	// Verify values
+	assert.Equal(t, "MOCK_KEY", mockRetrieved.AccessKeyID)
 }

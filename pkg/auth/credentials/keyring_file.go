@@ -5,12 +5,13 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"github.com/99designs/keyring"
 	"github.com/charmbracelet/huh"
-	"github.com/spf13/viper"
 	"golang.org/x/term"
 
+	"github.com/cloudposse/atmos/pkg/auth/providers/mock"
 	"github.com/cloudposse/atmos/pkg/auth/types"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -46,16 +47,28 @@ type fileKeyringStore struct {
 }
 
 // parseFileKeyringConfig extracts path and password environment from auth config.
+// Priority: ATMOS_KEYRING_FILE_PATH env var > config > default.
 func parseFileKeyringConfig(authConfig *schema.AuthConfig) (path, passwordEnv string) {
-	if authConfig == nil || authConfig.Keyring.Spec == nil {
-		return "", ""
+	// Check environment variable first (for testing and CI).
+	// Use os.Getenv directly to avoid viper caching issues in tests.
+	// nolint:forbidigo // os.Getenv required here to avoid viper singleton caching in tests
+	if envPath := os.Getenv("ATMOS_KEYRING_FILE_PATH"); envPath != "" {
+		path = envPath
+	} else if authConfig != nil && authConfig.Keyring.Spec != nil {
+		// Fall back to config if no environment variable.
+		if p, ok := authConfig.Keyring.Spec["path"].(string); ok && p != "" {
+			path = p
+		}
 	}
 
-	if p, ok := authConfig.Keyring.Spec["path"].(string); ok && p != "" {
-		path = p
-	}
-	if pe, ok := authConfig.Keyring.Spec["password_env"].(string); ok && pe != "" {
-		passwordEnv = pe
+	// Check environment variable for password env var name.
+	// nolint:forbidigo // os.Getenv required here to avoid viper singleton caching in tests
+	if envPasswordEnv := os.Getenv("ATMOS_KEYRING_PASSWORD_ENV"); envPasswordEnv != "" {
+		passwordEnv = envPasswordEnv
+	} else if authConfig != nil && authConfig.Keyring.Spec != nil {
+		if pe, ok := authConfig.Keyring.Spec["password_env"].(string); ok && pe != "" {
+			passwordEnv = pe
+		}
 	}
 
 	return path, passwordEnv
@@ -82,11 +95,23 @@ func newFileKeyringStore(authConfig *schema.AuthConfig) (*fileKeyringStore, erro
 			return nil, errors.Join(ErrCredentialStore, err)
 		}
 		path = defaultPath
-	} else {
-		// Custom path specified - ensure it exists with proper permissions.
-		if err := os.MkdirAll(path, KeyringDirPermissions); err != nil {
-			return nil, errors.Join(ErrCredentialStore, fmt.Errorf("failed to create keyring directory: %w", err))
-		}
+	}
+
+	// Note: keyring.Open() with FileBackend expects FileDir to be a directory path,
+	// not a file path. The keyring library will create a file named "atmos-auth" in that directory.
+	// If user provided a file path (e.g., /tmp/keyring.json), we use its parent directory
+	// and ignore the filename since the keyring library controls the filename.
+
+	// Extract directory from path if it looks like a file path.
+	dir := path
+	if filepath.Ext(path) != "" {
+		// Path has an extension, treat as file path and use parent directory.
+		dir = filepath.Dir(path)
+	}
+
+	// Ensure directory exists.
+	if err := os.MkdirAll(dir, KeyringDirPermissions); err != nil {
+		return nil, errors.Join(ErrCredentialStore, fmt.Errorf("failed to create keyring directory: %w", err))
 	}
 
 	// Default password environment variable.
@@ -100,7 +125,7 @@ func newFileKeyringStore(authConfig *schema.AuthConfig) (*fileKeyringStore, erro
 	// Configure 99designs keyring.
 	cfg := keyring.Config{
 		ServiceName:                    "atmos-auth",
-		FileDir:                        path,
+		FileDir:                        dir,
 		FilePasswordFunc:               passwordFunc,
 		AllowedBackends:                []keyring.BackendType{keyring.FileBackend},
 		KeychainName:                   "atmos",
@@ -118,7 +143,7 @@ func newFileKeyringStore(authConfig *schema.AuthConfig) (*fileKeyringStore, erro
 
 	return &fileKeyringStore{
 		ring: ring,
-		path: path,
+		path: dir,
 	}, nil
 }
 
@@ -126,8 +151,9 @@ func newFileKeyringStore(authConfig *schema.AuthConfig) (*fileKeyringStore, erro
 func createPasswordPrompt(passwordEnv string) keyring.PromptFunc {
 	return func(prompt string) (string, error) {
 		// 1. Check environment variable first (for automation/CI).
-		_ = viper.BindEnv(passwordEnv)
-		if password := viper.GetString(passwordEnv); password != "" {
+		// Use os.Getenv directly to avoid viper caching issues in tests.
+		// nolint:forbidigo // os.Getenv required here to avoid viper singleton caching in tests
+		if password := os.Getenv(passwordEnv); password != "" {
 			// Validate environment password meets minimum length requirement.
 			if len(password) < MinPasswordLength {
 				return "", ErrPasswordTooShort
@@ -182,6 +208,9 @@ func (s *fileKeyringStore) Store(alias string, creds types.ICredentials) error {
 	case *types.OIDCCredentials:
 		typ = "oidc"
 		raw, err = json.Marshal(c)
+	case *mock.Credentials:
+		typ = "mock"
+		raw, err = json.Marshal(c)
 	default:
 		return fmt.Errorf("%w: %T", errors.Join(ErrCredentialStore, ErrUnsupportedCredentialType), creds)
 	}
@@ -235,6 +264,12 @@ func (s *fileKeyringStore) Retrieve(alias string) (types.ICredentials, error) {
 		var c types.OIDCCredentials
 		if err := json.Unmarshal(env.Data, &c); err != nil {
 			return nil, errors.Join(ErrCredentialStore, fmt.Errorf("failed to unmarshal OIDC credentials: %w", err))
+		}
+		return &c, nil
+	case "mock":
+		var c mock.Credentials
+		if err := json.Unmarshal(env.Data, &c); err != nil {
+			return nil, errors.Join(ErrCredentialStore, fmt.Errorf("failed to unmarshal mock credentials: %w", err))
 		}
 		return &c, nil
 	default:
