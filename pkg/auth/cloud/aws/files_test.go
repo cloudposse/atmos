@@ -1,14 +1,17 @@
 package aws
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	ini "gopkg.in/ini.v1"
 
 	"github.com/cloudposse/atmos/pkg/auth/types"
+	"github.com/cloudposse/atmos/pkg/config/homedir"
 )
 
 func TestAWSFileManager_WriteCredentials(t *testing.T) {
@@ -95,4 +98,279 @@ func TestAWSFileManager_PathsEnvCleanup(t *testing.T) {
 	assert.NoError(t, err)
 	_, statErr := os.Stat(filepath.Join(tmp, "prov"))
 	assert.True(t, os.IsNotExist(statErr))
+}
+
+func TestAWSFileManager_CleanupIdentity(t *testing.T) {
+	tests := []struct {
+		name               string
+		setupCredentials   func(*AWSFileManager)
+		providerName       string
+		identityName       string
+		verifyAfterCleanup func(*testing.T, *AWSFileManager)
+	}{
+		{
+			name: "removes single identity section from credentials and config",
+			setupCredentials: func(m *AWSFileManager) {
+				creds := &types.AWSCredentials{AccessKeyID: "AKIA123", SecretAccessKey: "secret"}
+				_ = m.WriteCredentials("test-provider", "identity1", creds)
+				_ = m.WriteConfig("test-provider", "identity1", "us-east-1", "json")
+			},
+			providerName: "test-provider",
+			identityName: "identity1",
+			verifyAfterCleanup: func(t *testing.T, m *AWSFileManager) {
+				// Files should be removed since no sections remain (only DEFAULT section left).
+				_, err := os.Stat(m.GetCredentialsPath("test-provider"))
+				assert.True(t, os.IsNotExist(err), "credentials file should be removed when empty")
+				// Config file should also be removed.
+				_, err = os.Stat(m.GetConfigPath("test-provider"))
+				assert.True(t, os.IsNotExist(err), "config file should be removed when empty")
+			},
+		},
+		{
+			name: "preserves other identities when removing one",
+			setupCredentials: func(m *AWSFileManager) {
+				creds1 := &types.AWSCredentials{AccessKeyID: "AKIA1", SecretAccessKey: "secret1"}
+				creds2 := &types.AWSCredentials{AccessKeyID: "AKIA2", SecretAccessKey: "secret2"}
+				_ = m.WriteCredentials("test-provider", "identity1", creds1)
+				_ = m.WriteCredentials("test-provider", "identity2", creds2)
+				_ = m.WriteConfig("test-provider", "identity1", "us-east-1", "json")
+				_ = m.WriteConfig("test-provider", "identity2", "us-west-2", "yaml")
+			},
+			providerName: "test-provider",
+			identityName: "identity1",
+			verifyAfterCleanup: func(t *testing.T, m *AWSFileManager) {
+				// identity2 should still exist.
+				credsPath := m.GetCredentialsPath("test-provider")
+				cfg, err := ini.Load(credsPath)
+				assert.NoError(t, err)
+				assert.False(t, cfg.HasSection("identity1"), "identity1 should be removed")
+				assert.True(t, cfg.HasSection("identity2"), "identity2 should remain")
+				sec := cfg.Section("identity2")
+				assert.Equal(t, "AKIA2", sec.Key("aws_access_key_id").String())
+
+				// Config should also preserve identity2.
+				configPath := m.GetConfigPath("test-provider")
+				cfg, err = ini.Load(configPath)
+				assert.NoError(t, err)
+				assert.False(t, cfg.HasSection("profile identity1"))
+				assert.True(t, cfg.HasSection("profile identity2"))
+			},
+		},
+		{
+			name: "handles non-existent identity gracefully",
+			setupCredentials: func(m *AWSFileManager) {
+				creds := &types.AWSCredentials{AccessKeyID: "AKIA123", SecretAccessKey: "secret"}
+				_ = m.WriteCredentials("test-provider", "identity1", creds)
+			},
+			providerName: "test-provider",
+			identityName: "nonexistent",
+			verifyAfterCleanup: func(t *testing.T, m *AWSFileManager) {
+				// identity1 should still exist.
+				credsPath := m.GetCredentialsPath("test-provider")
+				cfg, err := ini.Load(credsPath)
+				assert.NoError(t, err)
+				assert.True(t, cfg.HasSection("identity1"))
+			},
+		},
+		{
+			name: "handles non-existent files gracefully",
+			setupCredentials: func(m *AWSFileManager) {
+				// Don't create any files.
+			},
+			providerName: "test-provider",
+			identityName: "identity1",
+			verifyAfterCleanup: func(t *testing.T, m *AWSFileManager) {
+				// No error should occur even though files don't exist.
+			},
+		},
+		{
+			name: "removes default identity using default section name",
+			setupCredentials: func(m *AWSFileManager) {
+				creds := &types.AWSCredentials{AccessKeyID: "AKIA123", SecretAccessKey: "secret"}
+				_ = m.WriteCredentials("test-provider", "default", creds)
+				_ = m.WriteConfig("test-provider", "default", "us-east-1", "json")
+			},
+			providerName: "test-provider",
+			identityName: "default",
+			verifyAfterCleanup: func(t *testing.T, m *AWSFileManager) {
+				// Files should be removed since no sections remain.
+				_, err := os.Stat(m.GetCredentialsPath("test-provider"))
+				assert.True(t, os.IsNotExist(err), "credentials file should be removed")
+				_, err = os.Stat(m.GetConfigPath("test-provider"))
+				assert.True(t, os.IsNotExist(err), "config file should be removed")
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tmp := t.TempDir()
+			m := &AWSFileManager{baseDir: tmp}
+
+			tt.setupCredentials(m)
+
+			err := m.CleanupIdentity(context.Background(), tt.providerName, tt.identityName)
+			assert.NoError(t, err)
+
+			tt.verifyAfterCleanup(t, m)
+		})
+	}
+}
+
+func TestAWSFileManager_RemoveIniSection(t *testing.T) {
+	tests := []struct {
+		name         string
+		setupFile    func(string) string
+		sectionName  string
+		expectError  bool
+		verifyResult func(*testing.T, string)
+	}{
+		{
+			name: "removes section from multi-section file",
+			setupFile: func(tmp string) string {
+				filePath := filepath.Join(tmp, "test.ini")
+				cfg := ini.Empty()
+				sec1, _ := cfg.NewSection("section1")
+				sec1.NewKey("key1", "value1")
+				sec2, _ := cfg.NewSection("section2")
+				sec2.NewKey("key2", "value2")
+				_ = cfg.SaveTo(filePath)
+				return filePath
+			},
+			sectionName: "section1",
+			expectError: false,
+			verifyResult: func(t *testing.T, filePath string) {
+				cfg, err := ini.Load(filePath)
+				assert.NoError(t, err)
+				assert.False(t, cfg.HasSection("section1"))
+				assert.True(t, cfg.HasSection("section2"))
+			},
+		},
+		{
+			name: "removes file when last section is removed",
+			setupFile: func(tmp string) string {
+				filePath := filepath.Join(tmp, "test.ini")
+				cfg := ini.Empty()
+				sec, _ := cfg.NewSection("only-section")
+				sec.NewKey("key", "value")
+				_ = cfg.SaveTo(filePath)
+				return filePath
+			},
+			sectionName: "only-section",
+			expectError: false,
+			verifyResult: func(t *testing.T, filePath string) {
+				_, err := os.Stat(filePath)
+				assert.True(t, os.IsNotExist(err), "file should be removed")
+			},
+		},
+		{
+			name: "handles non-existent file gracefully",
+			setupFile: func(tmp string) string {
+				return filepath.Join(tmp, "nonexistent.ini")
+			},
+			sectionName: "section1",
+			expectError: false,
+			verifyResult: func(t *testing.T, filePath string) {
+				_, err := os.Stat(filePath)
+				assert.True(t, os.IsNotExist(err))
+			},
+		},
+		{
+			name: "handles removing non-existent section",
+			setupFile: func(tmp string) string {
+				filePath := filepath.Join(tmp, "test.ini")
+				cfg := ini.Empty()
+				sec, _ := cfg.NewSection("section1")
+				sec.NewKey("key1", "value1")
+				_ = cfg.SaveTo(filePath)
+				return filePath
+			},
+			sectionName: "nonexistent-section",
+			expectError: false,
+			verifyResult: func(t *testing.T, filePath string) {
+				cfg, err := ini.Load(filePath)
+				assert.NoError(t, err)
+				assert.True(t, cfg.HasSection("section1"), "existing section should remain")
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tmp := t.TempDir()
+			m := &AWSFileManager{baseDir: tmp}
+
+			filePath := tt.setupFile(tmp)
+
+			err := m.removeIniSection(filePath, tt.sectionName)
+			if tt.expectError {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+			}
+
+			tt.verifyResult(t, filePath)
+		})
+	}
+}
+
+func TestAWSFileManager_GetBaseDir(t *testing.T) {
+	tests := []struct {
+		name    string
+		baseDir string
+	}{
+		{
+			name:    "returns configured base directory",
+			baseDir: "/custom/path/aws",
+		},
+		{
+			name:    "returns default base directory",
+			baseDir: "~/.aws/atmos",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := &AWSFileManager{baseDir: tt.baseDir}
+			result := m.GetBaseDir()
+			assert.Equal(t, tt.baseDir, result)
+		})
+	}
+}
+
+func TestAWSFileManager_GetDisplayPath(t *testing.T) {
+	homeDir, err := homedir.Dir()
+	require.NoError(t, err)
+
+	tests := []struct {
+		name     string
+		baseDir  string
+		expected string
+	}{
+		{
+			name:     "replaces home directory with tilde",
+			baseDir:  filepath.Join(homeDir, ".aws", "atmos"),
+			expected: filepath.ToSlash(filepath.Join("~", ".aws", "atmos")),
+		},
+		{
+			name:     "keeps absolute path when not under home",
+			baseDir:  "/opt/aws/atmos",
+			expected: "/opt/aws/atmos",
+		},
+		{
+			name:     "handles root directory",
+			baseDir:  "/",
+			expected: "/",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := &AWSFileManager{baseDir: tt.baseDir}
+			result := m.GetDisplayPath()
+			// Normalize path separators for cross-platform compatibility.
+			normalizedResult := filepath.ToSlash(result)
+			assert.Equal(t, tt.expected, normalizedResult)
+		})
+	}
 }
