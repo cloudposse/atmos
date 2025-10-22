@@ -13,28 +13,28 @@ type PerfTrackRule struct{}
 
 // Packages to exclude from perf.Track() checks (avoid infinite recursion or overhead).
 var excludedPackages = []string{
-	"/logger",      // Avoid infinite recursion.
-	"/profiler",    // Profiling code shouldn't track itself.
-	"/perf",        // Performance tracking shouldn't track itself.
-	"/store",       // Store interfaces have many implementations.
-	"/ui/theme",    // UI theme constants and helpers.
-	"/ui",          // UI/TUI components and models.
-	"/tui",         // Terminal UI components.
+	"/logger",   // Avoid infinite recursion.
+	"/profiler", // Profiling code shouldn't track itself.
+	"/perf",     // Performance tracking shouldn't track itself.
+	"/store",    // Store interfaces have many implementations.
+	"/ui/theme", // UI theme constants and helpers.
+	"/ui",       // UI/TUI components and models.
+	"/tui",      // Terminal UI components.
 }
 
 // Receiver types to exclude from perf.Track() checks.
 var excludedReceivers = []string{
-	"noopLogger",                  // Noop logger implementations.
-	"AtmosLogger",                 // Logger methods would cause infinite recursion.
-	"mockPerf",                    // Test mocks.
-	"Mock",                        // General mocks.
-	"modelSpinner",                // TUI spinner models.
-	"modelVendor",                 // TUI vendor models.
-	"defaultTemplateRenderer",     // Simple template renderer.
-	"realTerraformDocsRunner",     // Simple terraform docs runner.
-	"ErrInvalidPattern",           // Error types.
-	"DescribeConfigFormatError",   // Error types.
-	"DefaultStacksProcessor",      // Processor implementations.
+	"noopLogger",                // Noop logger implementations.
+	"AtmosLogger",               // Logger methods would cause infinite recursion.
+	"mockPerf",                  // Test mocks.
+	"Mock",                      // General mocks.
+	"modelSpinner",              // TUI spinner models.
+	"modelVendor",               // TUI vendor models.
+	"defaultTemplateRenderer",   // Simple template renderer.
+	"realTerraformDocsRunner",   // Simple terraform docs runner.
+	"ErrInvalidPattern",         // Error types.
+	"DescribeConfigFormatError", // Error types.
+	"DefaultStacksProcessor",    // Processor implementations.
 }
 
 func (r *PerfTrackRule) Name() string {
