@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	_ "embed"
 	"errors"
 	"fmt"
 	"os"
@@ -15,14 +16,16 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
+//go:embed markdown/atmos_auth_exec_usage.md
+var authExecUsageMarkdown string
+
 // authExecCmd executes a command with authentication environment variables.
 var authExecCmd = &cobra.Command{
-	Use:   "exec",
-	Short: "Execute a command with authentication environment variables.",
-	Long:  "Execute a command with the authenticated identity's environment variables set. Use `--` to separate Atmos flags from the command's native arguments.",
-	Example: `  # Run terraform with the authenticated identity
-  atmos auth exec -- terraform plan -var-file=env.tfvars`,
-	Args:               cobra.MinimumNArgs(1),
+	Use:     "exec",
+	Short:   "Execute a command with authentication environment variables.",
+	Long:    "Execute a command with the authenticated identity's environment variables set. Use `--` to separate Atmos flags from the command's native arguments.",
+	Example: authExecUsageMarkdown,
+	Args:    cobra.MinimumNArgs(1),
 	DisableFlagParsing: true,
 
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},

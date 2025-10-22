@@ -18,15 +18,14 @@ var Analyzer = &analysis.Analyzer{
 
 // standaloneRun runs all rules for the standalone CLI tool.
 func standaloneRun(pass *analysis.Pass) (interface{}, error) {
-	// Run all rules (all enabled by default except MultilineMarkdownExample).
+	// Run all rules (all enabled by default).
 	rules := []Rule{
 		&TSetenvInDeferRule{},
 		&OsSetenvInTestRule{},
 		&OsMkdirTempInTestRule{},
 		&OsChdirInTestRule{},
 		&OsArgsInTestRule{},
-		// MultilineMarkdownExample is disabled by default until existing violations are fixed.
-		// &MultilineMarkdownExampleRule{},
+		&MultilineMarkdownExampleRule{},
 	}
 
 	for _, file := range pass.Files {
@@ -69,8 +68,7 @@ func New(settings any) (register.LinterPlugin, error) {
 		s.OsMkdirTempInTest = true
 		s.OsChdirInTest = true
 		s.OsArgsInTest = true
-		// MultilineMarkdownExample is disabled by default until existing violations are fixed.
-		// s.MultilineMarkdownExample = true
+		s.MultilineMarkdownExample = true
 	}
 
 	return &LintrollerPlugin{settings: s}, nil
