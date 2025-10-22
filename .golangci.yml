@@ -27,6 +27,7 @@ linters:
     - dogsled
     - dupl
     - err113
+    - errorlint  # Detects %v instead of %w in fmt.Errorf, errors.Is/errors.As usage
     - forbidigo
     - funlen
     - gocognit
@@ -54,6 +55,17 @@ linters:
       max-blank-identifiers: 3
     dupl:
       threshold: 150
+    errorlint:
+      # Check for non-wrapping format verbs (%v) in fmt.Errorf calls.
+      # Enforces using %w to properly wrap errors for errors.Is/errors.As.
+      errorf: true
+      # Check whether fmt.Errorf uses the %w verb for formatting errors.
+      # Note: supports multiple %w verbs per fmt.Errorf call (requires Go 1.20+).
+      errorf-multi: true
+      # Check for plain type assertions and suggest replacing them with errors.As.
+      asserts: true
+      # Check for plain error comparisons and suggest replacing them with errors.Is.
+      comparison: true
     forbidigo:
       forbid:
         - pattern: os\.Getenv
@@ -64,6 +76,10 @@ linters:
           msg: Use `filepath.Join` for OS-appropriate path separators instead of `path.Join` (which always uses forward slashes)
         - pattern: term\.IsTerminal\(
           msg: Use `term.IsTTYSupportForStdout()`, `term.IsTTYSupportForStderr()`, or `term.IsTTYSupportForStdin()` instead of `term.IsTerminal()` for consistent and mockable TTY detection
+        - pattern: github\.com/golang/mock
+          msg: Use `go.uber.org/mock` instead of archived `github.com/golang/mock`
+        - pattern: github\.com/mitchellh/go-homedir
+          msg: Use `github.com/cloudposse/atmos/pkg/config/homedir` (our forked version) instead of `github.com/mitchellh/go-homedir`
       exclude-godoc-examples: false
       analyze-types: true
     funlen:
@@ -195,6 +211,9 @@ linters:
       - legacy
       - std-error-handling
     rules:
+      - linters:
+          - godot
+        path: mock_.*\.go$
       - linters:
           - err113
           - errcheck

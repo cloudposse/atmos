@@ -1,0 +1,47 @@
+name: Dependency Review
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  dependency-review:
+    name: Review Dependency Licenses
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Dependency Review
+        uses: actions/dependency-review-action@v4
+        with:
+          # Allow only permissive licenses
+          # NOTE: GitHub's dependency graph detects Go modules from go.mod automatically
+          # License checking works at the manifest level for go.mod dependencies
+          allow-licenses: MIT, Apache-2.0, BSD-2-Clause, BSD-3-Clause, ISC, MPL-2.0, 0BSD, Unlicense, CC0-1.0
+
+          # Fail on moderate or higher severity vulnerabilities
+          fail-on-severity: moderate
+
+          # Comment on PR with details
+          comment-summary-in-pr: always
+
+      - name: Generate NOTICE file
+        run: ./scripts/generate-notice.sh
+
+      - name: Check if NOTICE is up to date
+        run: |
+          if ! git diff --exit-code NOTICE; then
+            echo "::error::NOTICE file is out of date. Run './scripts/generate-notice.sh' locally and commit the changes."
+            exit 1
+          fi

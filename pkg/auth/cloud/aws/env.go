@@ -88,22 +88,32 @@ func WithIsolatedAWSEnv(fn func() error) error {
 // temporarily cleared to avoid conflicts with Atmos authentication.
 //
 // This function wraps config.LoadDefaultConfig and ensures that external AWS
-// environment variables don't interfere with the configuration loading process.
+// environment variables AND shared config files don't interfere with the configuration loading process.
+//
+// The AWS SDK by default loads from ~/.aws/config and ~/.aws/credentials even when
+// AWS_PROFILE is not set. We disable shared config loading to prevent profile-based
+// configuration from interfering with Atmos auth.
 func LoadIsolatedAWSConfig(ctx context.Context, optFns ...func(*config.LoadOptions) error) (aws.Config, error) {
 	var cfg aws.Config
 	var err error
 
+	// Prepend config.WithSharedConfigProfile("") to disable loading from shared config files.
+	// This prevents the SDK from loading user's ~/.aws/config and ~/.aws/credentials files.
+	isolatedOptFns := make([]func(*config.LoadOptions) error, 0, len(optFns)+1)
+	isolatedOptFns = append(isolatedOptFns, config.WithSharedConfigProfile(""))
+	isolatedOptFns = append(isolatedOptFns, optFns...)
+
 	isolateErr := WithIsolatedAWSEnv(func() error {
-		cfg, err = config.LoadDefaultConfig(ctx, optFns...)
+		cfg, err = config.LoadDefaultConfig(ctx, isolatedOptFns...)
 		return err
 	})
 
 	if isolateErr != nil {
-		return aws.Config{}, fmt.Errorf("%w: %v", errUtils.ErrLoadAwsConfig, isolateErr)
+		return aws.Config{}, fmt.Errorf("%w: %w", errUtils.ErrLoadAwsConfig, isolateErr)
 	}
 
 	if err != nil {
-		return aws.Config{}, fmt.Errorf("%w: %v", errUtils.ErrLoadAwsConfig, err)
+		return aws.Config{}, fmt.Errorf("%w: %w", errUtils.ErrLoadAwsConfig, err)
 	}
 
 	return cfg, nil

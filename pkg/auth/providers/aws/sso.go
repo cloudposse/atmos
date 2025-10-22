@@ -22,6 +22,7 @@ import (
 	awsCloud "github.com/cloudposse/atmos/pkg/auth/cloud/aws"
 	authTypes "github.com/cloudposse/atmos/pkg/auth/types"
 	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/telemetry"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
@@ -115,7 +116,7 @@ func (p *ssoProvider) Authenticate(ctx context.Context) (authTypes.ICredentials,
 	// to avoid conflicts with external AWS env vars.
 	cfg, err := awsCloud.LoadIsolatedAWSConfig(ctx, configOpts...)
 	if err != nil {
-		return nil, fmt.Errorf("%w: failed to load AWS config: %v", errUtils.ErrAuthenticationFailed, err)
+		return nil, fmt.Errorf("%w: failed to load AWS config: %w", errUtils.ErrAuthenticationFailed, err)
 	}
 	log.Debug("AWS config loaded successfully")
 
@@ -129,7 +130,7 @@ func (p *ssoProvider) Authenticate(ctx context.Context) (authTypes.ICredentials,
 		ClientType: aws.String("public"),
 	})
 	if err != nil {
-		return nil, fmt.Errorf("%w: failed to register SSO client: %v", errUtils.ErrAuthenticationFailed, err)
+		return nil, fmt.Errorf("%w: failed to register SSO client: %w", errUtils.ErrAuthenticationFailed, err)
 	}
 	log.Debug("SSO client registered successfully")
 
@@ -141,7 +142,7 @@ func (p *ssoProvider) Authenticate(ctx context.Context) (authTypes.ICredentials,
 		StartUrl:     aws.String(p.startURL),
 	})
 	if err != nil {
-		return nil, fmt.Errorf("%w: failed to start device authorization: %v", errUtils.ErrAuthenticationFailed, err)
+		return nil, fmt.Errorf("%w: failed to start device authorization: %w", errUtils.ErrAuthenticationFailed, err)
 	}
 	log.Debug("Device authorization started")
 
@@ -276,12 +277,20 @@ func displayVerificationPlainText(code, url string) {
 
 // Validate validates the provider configuration.
 func (p *ssoProvider) Validate() error {
+	defer perf.Track(nil, "aws.ssoProvider.Validate")()
+
 	if p.startURL == "" {
 		return fmt.Errorf("%w: start_url is required", errUtils.ErrInvalidProviderConfig)
 	}
 	if p.region == "" {
 		return fmt.Errorf("%w: region is required", errUtils.ErrInvalidProviderConfig)
 	}
+
+	// Validate spec.files.base_path if provided.
+	if err := awsCloud.ValidateFilesBasePath(p.config); err != nil {
+		return err
+	}
+
 	return nil
 }
 
@@ -475,11 +484,46 @@ func (p *ssoProvider) pollForAccessToken(ctx context.Context, oidcClient *ssooid
 			continue
 		}
 
-		return "", time.Time{}, fmt.Errorf("%w: failed to create token: %v", errUtils.ErrAuthenticationFailed, err)
+		return "", time.Time{}, fmt.Errorf("%w: failed to create token: %w", errUtils.ErrAuthenticationFailed, err)
 	}
 
 	if accessToken == "" {
 		return "", time.Time{}, fmt.Errorf("%w: authentication timed out", errUtils.ErrAuthenticationFailed)
 	}
 	return accessToken, tokenExpiresAt, nil
+}
+
+// Logout removes provider-specific credential storage.
+func (p *ssoProvider) Logout(ctx context.Context) error {
+	defer perf.Track(nil, "aws.ssoProvider.Logout")()
+
+	// Get base_path from provider spec if configured.
+	basePath := awsCloud.GetFilesBasePath(p.config)
+
+	fileManager, err := awsCloud.NewAWSFileManager(basePath)
+	if err != nil {
+		return errors.Join(errUtils.ErrProviderLogout, errUtils.ErrLogoutFailed, err)
+	}
+
+	if err := fileManager.Cleanup(p.name); err != nil {
+		log.Debug("Failed to cleanup AWS files for SSO provider", "provider", p.name, "error", err)
+		return errors.Join(errUtils.ErrProviderLogout, errUtils.ErrLogoutFailed, err)
+	}
+
+	log.Debug("Cleaned up AWS files for SSO provider", "provider", p.name)
+	return nil
+}
+
+// GetFilesDisplayPath returns the display path for AWS credential files.
+func (p *ssoProvider) GetFilesDisplayPath() string {
+	defer perf.Track(nil, "aws.ssoProvider.GetFilesDisplayPath")()
+
+	basePath := awsCloud.GetFilesBasePath(p.config)
+
+	fileManager, err := awsCloud.NewAWSFileManager(basePath)
+	if err != nil {
+		return "~/.aws/atmos"
+	}
+
+	return fileManager.GetDisplayPath()
 }

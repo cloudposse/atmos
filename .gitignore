@@ -83,3 +83,7 @@ tools/lintroller/.lintroller
 /custom-gcl
 
 performance-optimization/
+
+# Merge conflict artifacts
+*.orig
+*.rej
