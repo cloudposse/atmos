@@ -126,7 +126,7 @@ linters:
     custom:
       lintroller:
         type: "module"  # Required: indicates this is a module plugin (not Go .so plugin)
-        description: "Atmos project-specific linting rules (t.Setenv/os.Setenv/os.MkdirTemp/log-level checks)"
+        description: "Atmos project-specific linting rules (t.Setenv/os.Setenv/os.MkdirTemp/log-level/perf.Track checks)"
         settings:
           # These settings are passed to the plugin's Settings struct (see tools/lintroller/plugin.go)
           # Each rule can be independently enabled/disabled
@@ -134,6 +134,7 @@ linters:
           os-setenv-in-test: true     # Detects os.Setenv in test files (use t.Setenv instead for auto cleanup)
           os-mkdirtemp-in-test: true  # Detects os.MkdirTemp in test files (use t.TempDir instead for auto cleanup)
           log-level-checks: true      # Detects log level comparisons outside logger package (log levels should not control UI)
+          perf-track: true            # Detects missing defer perf.Track() in public functions per coding guidelines (see excludedPackages/excludedReceivers in rule_perf_track.go)
 
       # Example: Add another custom linter configuration
       # another-linter:
