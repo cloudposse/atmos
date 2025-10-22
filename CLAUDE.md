@@ -170,8 +170,11 @@ Precedence: CLI flags → ENV vars → config files → defaults (use Viper)
 - Wrap with static errors from `errors/errors.go`
 - Combine: `errors.Join(errUtils.ErrFoo, err)`
 - Add context: `fmt.Errorf("%w: msg", errUtils.ErrFoo)`
+- Multiple errors: `fmt.Errorf("%w: context: %w", errUtils.ErrBase, err)` (valid Go 1.20+)
 - Check: `errors.Is(err, target)`
 - Never dynamic errors or string comparison
+
+**Note:** Multiple `%w` verbs in `fmt.Errorf` are valid since Go 1.20 (Atmos uses Go 1.24.8). The returned error implements `Unwrap() []error`. Both `fmt.Errorf` with multiple `%w` and `errors.Join` are acceptable; prefer `errors.Join` for simplicity when no additional context string is needed.
 
 ### Testing Strategy (MANDATORY)
 - **Prefer unit tests with mocks** over integration tests
