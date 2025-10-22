@@ -26,7 +26,15 @@ func TestDescribeDependents(t *testing.T) {
 
 	dependentsYaml, err := u.ConvertToYAML(dependents)
 	assert.Nil(t, err)
-	t.Log(dependentsYaml)
+	t.Cleanup(func() {
+		if t.Failed() {
+			if dependentsYaml != "" {
+				t.Logf("Dependents:\n%s", dependentsYaml)
+			} else {
+				t.Logf("Dependents (raw): %+v", dependents)
+			}
+		}
+	})
 }
 
 func TestDescribeDependents2(t *testing.T) {
@@ -44,5 +52,13 @@ func TestDescribeDependents2(t *testing.T) {
 
 	dependentsYaml, err := u.ConvertToYAML(dependents)
 	assert.Nil(t, err)
-	t.Log(dependentsYaml)
+	t.Cleanup(func() {
+		if t.Failed() {
+			if dependentsYaml != "" {
+				t.Logf("Dependents:\n%s", dependentsYaml)
+			} else {
+				t.Logf("Dependents (raw): %+v", dependents)
+			}
+		}
+	})
 }
