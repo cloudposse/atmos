@@ -214,7 +214,7 @@ Small focused files (<600 lines). One cmd/impl per file. Co-locate tests. Never 
 
 **Fixtures**: `tests/test-cases/` for integration tests
 
-**Golden Snapshots**: NEVER modify `tests/test-cases/` or `tests/testdata/` unless instructed
+**Golden Snapshots**: Regenerate with `go test ./tests -v -run 'TestName' -regenerate-snapshots`. Review with `git diff tests/snapshots/`. See `tests/README.md`
 
 ## Common Development Tasks
 
