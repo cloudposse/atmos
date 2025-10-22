@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -29,6 +30,7 @@ const (
 	samlTimeoutSeconds    = 30
 	samlDefaultSessionSec = 3600
 	logFieldRole          = "role"
+	logFieldDriver        = "driver"
 	minSTSSeconds         = 900
 	maxSTSSeconds         = 43200
 )
@@ -106,7 +108,15 @@ func (p *samlProvider) PreAuthenticate(manager types.AuthManager) error {
 
 // Authenticate performs SAML authentication using saml2aws.
 func (p *samlProvider) Authenticate(ctx context.Context) (types.ICredentials, error) {
-	log.Info("Starting SAML authentication", "provider", p.name, "url", p.url)
+	samlDriver := p.getDriver()
+	downloadBrowser := p.shouldDownloadBrowser()
+
+	log.Info("Starting SAML authentication", "provider", p.name, "url", p.url, logFieldDriver, samlDriver)
+	log.Debug("SAML configuration",
+		logFieldDriver, samlDriver,
+		"download_browser", downloadBrowser,
+		"requires_drivers", samlDriver == "Browser")
+
 	if p.RoleToAssumeFromAssertion == "" {
 		return nil, fmt.Errorf("%w: no role to assume for assertion, SAML provider must be part of a chain", errUtils.ErrInvalidAuthConfig)
 	}
@@ -121,7 +131,7 @@ func (p *samlProvider) Authenticate(ctx context.Context) (types.ICredentials, er
 	// Create the SAML client.
 	samlClient, err := saml2aws.NewSAMLClient(samlConfig)
 	if err != nil {
-		return nil, fmt.Errorf("%w: failed to create SAML client: %v", errUtils.ErrInvalidProviderConfig, err)
+		return nil, fmt.Errorf("%w: failed to create SAML client: %w", errUtils.ErrInvalidProviderConfig, err)
 	}
 
 	// Authenticate and get assertion.
@@ -132,15 +142,15 @@ func (p *samlProvider) Authenticate(ctx context.Context) (types.ICredentials, er
 
 	decodedXML, err := base64.StdEncoding.DecodeString(assertionB64)
 	if err != nil {
-		return nil, fmt.Errorf("%w: failed to decode assertion: %v", errUtils.ErrAwsSAMLDecodeFailed, err)
+		return nil, fmt.Errorf("%w: failed to decode assertion: %w", errUtils.ErrAwsSAMLDecodeFailed, err)
 	}
 	rolesStr, err := saml2aws.ExtractAwsRoles(decodedXML)
 	if err != nil {
-		return nil, fmt.Errorf("%w: extract AWS roles: %v", errUtils.ErrAwsSAMLDecodeFailed, err)
+		return nil, fmt.Errorf("%w: extract AWS roles: %w", errUtils.ErrAwsSAMLDecodeFailed, err)
 	}
 	roles, err := saml2aws.ParseAWSRoles(rolesStr)
 	if err != nil {
-		return nil, fmt.Errorf("%w: parse AWS roles: %v", errUtils.ErrAwsSAMLDecodeFailed, err)
+		return nil, fmt.Errorf("%w: parse AWS roles: %w", errUtils.ErrAwsSAMLDecodeFailed, err)
 	}
 
 	selectedRole := p.selectRole(roles)
@@ -151,7 +161,7 @@ func (p *samlProvider) Authenticate(ctx context.Context) (types.ICredentials, er
 	// Assume role.
 	awsCreds, err := p.assumeRoleWithSAML(ctx, assertionB64, selectedRole)
 	if err != nil {
-		return nil, fmt.Errorf("%w: failed to assume role with SAML: %v", errUtils.ErrAuthenticationFailed, err)
+		return nil, fmt.Errorf("%w: failed to assume role with SAML: %w", errUtils.ErrAuthenticationFailed, err)
 	}
 
 	log.Info("SAML authentication successful", "provider", p.name, logFieldRole, selectedRole.RoleARN)
@@ -164,16 +174,16 @@ func (p *samlProvider) createSAMLConfig() *cfg.IDPAccount {
 	return &cfg.IDPAccount{
 		URL:                  p.url,
 		Username:             p.config.Username,
-		Provider:             p.getProviderType(),
+		Provider:             p.getDriver(),
 		MFA:                  "Auto",
 		SkipVerify:           false,
-		Timeout:              samlTimeoutSeconds, // 30 second timeout
+		Timeout:              samlTimeoutSeconds, // 30 second timeout.
 		AmazonWebservicesURN: "urn:amazon:webservices",
-		SessionDuration:      samlDefaultSessionSec, // 1 hour default
+		SessionDuration:      samlDefaultSessionSec, // 1 hour default.
 		Profile:              p.name,
 		Region:               p.region,
-		DownloadBrowser:      p.config.DownloadBrowserDriver,
-		Headless:             false, // Force non-headless for interactive auth
+		DownloadBrowser:      p.shouldDownloadBrowser(), // Intelligently enable based on driver availability.
+		Headless:             false,                     // Force non-headless for interactive auth.
 	}
 }
 
@@ -196,7 +206,7 @@ func (p *samlProvider) createLoginDetails() *creds.LoginDetails {
 func (p *samlProvider) authenticateAndGetAssertion(samlClient saml2aws.SAMLClient, loginDetails *creds.LoginDetails) (string, error) {
 	samlAssertion, err := samlClient.Authenticate(loginDetails)
 	if err != nil {
-		return "", fmt.Errorf("%w: SAML authentication failed: %v", errUtils.ErrAuthenticationFailed, err)
+		return "", fmt.Errorf("%w: SAML authentication failed: %w", errUtils.ErrAuthenticationFailed, err)
 	}
 
 	if samlAssertion == "" {
@@ -254,7 +264,7 @@ func (p *samlProvider) assumeRoleWithSAMLWithDeps(
 	// Load AWS configuration (v2).
 	cfg, err := loader(ctx, configOpts...)
 	if err != nil {
-		return nil, fmt.Errorf("%w: failed to create AWS config: %v", errUtils.ErrAuthenticationFailed, err)
+		return nil, fmt.Errorf("%w: failed to create AWS config: %w", errUtils.ErrAuthenticationFailed, err)
 	}
 
 	stsClient := factory(cfg)
@@ -269,7 +279,7 @@ func (p *samlProvider) assumeRoleWithSAMLWithDeps(
 
 	result, err := stsClient.AssumeRoleWithSAML(ctx, input)
 	if err != nil {
-		return nil, fmt.Errorf("%w: failed to assume role with SAML: %v", errUtils.ErrAuthenticationFailed, err)
+		return nil, fmt.Errorf("%w: failed to assume role with SAML: %w", errUtils.ErrAuthenticationFailed, err)
 	}
 
 	// Convert to AWSCredentials.
@@ -303,24 +313,44 @@ func (p *samlProvider) requestedSessionSeconds() int32 {
 	return sec
 }
 
-// getProviderType returns the SAML provider type based on configuration or URL detection.
-func (p *samlProvider) getProviderType() string {
+// getDriver returns the SAML driver type based on configuration or URL detection.
+// Priority: Browser (if drivers available) > provider-specific fallbacks (GoogleApps/Okta/ADFS).
+func (p *samlProvider) getDriver() string {
+	// If user explicitly set driver, always respect their choice.
+	if p.config.Driver != "" {
+		log.Debug("Using explicitly configured SAML driver", logFieldDriver, p.config.Driver)
+		return p.config.Driver
+	}
+
+	// Backward compatibility: check deprecated provider_type field.
 	if p.config.ProviderType != "" {
+		log.Warn("The 'provider_type' field is deprecated. Please use 'driver' instead", "current_value", p.config.ProviderType)
 		return p.config.ProviderType
 	}
 
-	// Auto-detect provider type based on URL.
+	// Check if Playwright drivers are available or can be auto-downloaded.
+	if p.hasPlaywrightDriversOrCanDownload() {
+		log.Debug("Playwright drivers available, using Browser provider for best compatibility")
+		return "Browser"
+	}
+
+	// Fallback to provider-specific types (use API/HTTP calls without browser automation).
+	// These are less reliable but don't require browser drivers.
 	if strings.Contains(p.url, "accounts.google.com") {
-		return "Browser" // Use Browser for Google Apps SAML for better compatibility
+		log.Debug("Falling back to GoogleApps provider (no drivers available)")
+		return "GoogleApps"
 	}
 	if strings.Contains(p.url, "okta.com") {
+		log.Debug("Falling back to Okta provider (no drivers available)")
 		return "Okta"
 	}
 	if strings.Contains(p.url, "adfs") {
+		log.Debug("Falling back to ADFS provider (no drivers available)")
 		return "ADFS"
 	}
 
-	// Default to Browser for generic SAML.
+	// If no drivers and no known provider type, try Browser anyway with auto-download.
+	log.Debug("Unknown provider, defaulting to Browser with auto-download")
 	return "Browser"
 }
 
@@ -339,7 +369,7 @@ func (p *samlProvider) Validate() error {
 	// Validate URL format strictly.
 	u, err := url.ParseRequestURI(p.url)
 	if err != nil || u.Scheme == "" || u.Host == "" {
-		return fmt.Errorf("%w: invalid URL format: %v", errUtils.ErrInvalidProviderConfig, err)
+		return fmt.Errorf("%w: invalid URL format: %w", errUtils.ErrInvalidProviderConfig, err)
 	}
 
 	// Validate spec.files.base_path if provided.
@@ -366,16 +396,122 @@ func (p *samlProvider) Environment() (map[string]string, error) {
 	return env, nil
 }
 
+// playwrightDriversInstalled checks if valid Playwright drivers are installed in standard locations.
+// Returns true if drivers are found, false if not found or home directory cannot be determined.
+func (p *samlProvider) playwrightDriversInstalled() bool {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		log.Debug("Cannot determine home directory for driver detection", "error", err)
+		return false
+	}
+
+	// Check common Playwright cache locations.
+	playwrightPaths := []string{
+		filepath.Join(homeDir, ".cache", "ms-playwright"),               // Linux.
+		filepath.Join(homeDir, "Library", "Caches", "ms-playwright-go"), // macOS (Go specific).
+		filepath.Join(homeDir, "AppData", "Local", "ms-playwright"),     // Windows.
+	}
+
+	for _, path := range playwrightPaths {
+		if p.hasValidPlaywrightDrivers(path) {
+			log.Debug("Found valid Playwright drivers", "path", path)
+			return true
+		}
+	}
+
+	log.Debug("No valid Playwright drivers found", "checked_paths", playwrightPaths)
+	return false
+}
+
+// hasPlaywrightDriversOrCanDownload checks if Playwright drivers are available or can be downloaded.
+// Returns true if drivers exist or auto-download is enabled.
+func (p *samlProvider) hasPlaywrightDriversOrCanDownload() bool {
+	// If user explicitly enabled download, drivers will be available.
+	if p.config.DownloadBrowserDriver {
+		log.Debug("Browser driver download explicitly enabled, drivers will be available")
+		return true
+	}
+
+	return p.playwrightDriversInstalled()
+}
+
+// hasValidPlaywrightDrivers checks if a path contains actual browser binaries, not just empty directories.
+func (p *samlProvider) hasValidPlaywrightDrivers(path string) bool {
+	// Check if directory exists.
+	info, err := os.Stat(path)
+	if err != nil {
+		return false
+	}
+
+	if !info.IsDir() {
+		return false
+	}
+
+	// Read directory contents to check if it has subdirectories with browsers.
+	entries, err := os.ReadDir(path)
+	if err != nil {
+		log.Debug("Cannot read Playwright directory", "path", path, "error", err)
+		return false
+	}
+
+	// Check if there are any version subdirectories with content.
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+
+		versionPath := filepath.Join(path, entry.Name())
+		versionEntries, err := os.ReadDir(versionPath)
+		if err != nil {
+			continue
+		}
+
+		// If version directory has any files/subdirectories, consider it valid.
+		if len(versionEntries) > 0 {
+			log.Debug("Found browser binaries in version directory", "version", entry.Name(), "files", len(versionEntries))
+			return true
+		}
+	}
+
+	log.Debug("Playwright directory exists but contains no browser binaries", "path", path)
+	return false
+}
+
+// shouldDownloadBrowser determines if browser drivers should be auto-downloaded.
+// It checks if the user explicitly configured download_browser_driver, otherwise
+// it intelligently enables auto-download for "Browser" driver if drivers aren't found.
+func (p *samlProvider) shouldDownloadBrowser() bool {
+	// If user explicitly set download_browser_driver, respect their choice.
+	if p.config.DownloadBrowserDriver {
+		log.Debug("Browser driver download explicitly enabled in config")
+		return true
+	}
+
+	samlDriver := p.getDriver()
+
+	// Only auto-download for "Browser" driver (others like GoogleApps, Okta don't need drivers).
+	if samlDriver != "Browser" {
+		log.Debug("SAML driver does not require browser drivers", logFieldDriver, samlDriver)
+		return false
+	}
+
+	// Check if Playwright drivers are already installed.
+	if p.playwrightDriversInstalled() {
+		log.Debug("Found valid Playwright drivers, auto-download disabled")
+		return false
+	}
+
+	// No valid drivers found, enable auto-download.
+	log.Debug("No valid Playwright drivers found, enabling auto-download for Browser driver")
+	return true
+}
+
 // setupBrowserAutomation sets up browser automation for SAML authentication.
 func (p *samlProvider) setupBrowserAutomation() {
 	// Set environment variables for browser automation.
-	if p.config.DownloadBrowserDriver {
+	if p.shouldDownloadBrowser() {
 		os.Setenv("SAML2AWS_AUTO_BROWSER_DOWNLOAD", "true")
-	}
-
-	// For Google Apps SAML, we need to use Browser provider type.
-	if strings.Contains(p.url, "accounts.google.com") {
-		log.Debug("Detected Google Apps SAML, using Browser provider")
+		log.Debug("Browser driver auto-download enabled", logFieldDriver, p.getDriver())
 	}
 }
 

@@ -54,7 +54,7 @@ func executeAuthShellCommandCore(cmd *cobra.Command, args []string) error {
 
 	// Manually parse flags since DisableFlagParsing is true.
 	if err := cmd.Flags().Parse(args); err != nil {
-		return fmt.Errorf("%w: %v", errUtils.ErrInvalidSubcommand, err)
+		return fmt.Errorf("%w: %w", errUtils.ErrInvalidSubcommand, err)
 	}
 
 	// Get the non-flag arguments (shell arguments after --).

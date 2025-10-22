@@ -25,12 +25,10 @@ jobs:
       - name: Dependency Review
         uses: actions/dependency-review-action@v4
         with:
-          # Allow permissive licenses (MIT, Apache, BSD, ISC, MPL-2.0)
+          # Allow only permissive licenses
           # NOTE: GitHub's dependency graph detects Go modules from go.mod automatically
           # License checking works at the manifest level for go.mod dependencies
-
-          # Deny copyleft and restrictive licenses
-          deny-licenses: GPL-2.0, GPL-2.0-only, GPL-2.0-or-later, GPL-3.0, GPL-3.0-only, GPL-3.0-or-later, LGPL-2.0, LGPL-2.1, LGPL-3.0, AGPL-3.0, AGPL-3.0-only, AGPL-3.0-or-later
+          allow-licenses: MIT, Apache-2.0, BSD-2-Clause, BSD-3-Clause, ISC, MPL-2.0, 0BSD, Unlicense, CC0-1.0
 
           # Fail on moderate or higher severity vulnerabilities
           fail-on-severity: moderate

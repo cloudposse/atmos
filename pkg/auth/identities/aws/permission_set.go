@@ -88,7 +88,7 @@ func (i *permissionSetIdentity) Authenticate(ctx context.Context, baseCreds type
 		AccessToken: awssdk.String(awsBase.AccessKeyID),
 	})
 	if err != nil {
-		return nil, fmt.Errorf("%w: failed to get role credentials: %v", errUtils.ErrAuthenticationFailed, err)
+		return nil, fmt.Errorf("%w: failed to get role credentials: %w", errUtils.ErrAuthenticationFailed, err)
 	}
 
 	// Convert to our credential format.
@@ -213,7 +213,7 @@ func (i *permissionSetIdentity) resolveAccountID(ctx context.Context, ssoClient 
 
 	accountsResp, err := ssoClient.ListAccounts(ctx, &sso.ListAccountsInput{AccessToken: awssdk.String(accessToken)})
 	if err != nil {
-		return "", fmt.Errorf("%w: failed to list accounts: %v", errUtils.ErrAwsAuth, err)
+		return "", fmt.Errorf("%w: failed to list accounts: %w", errUtils.ErrAwsAuth, err)
 	}
 	for _, account := range accountsResp.AccountList {
 		if awssdk.ToString(account.AccountName) == accountName {
@@ -243,7 +243,7 @@ func (i *permissionSetIdentity) newSSOClient(ctx context.Context, awsBase *types
 	// Load config with isolated environment to avoid conflicts with external AWS env vars.
 	cfg, err := awsCloud.LoadIsolatedAWSConfig(ctx, configOpts...)
 	if err != nil {
-		return nil, fmt.Errorf("%w: failed to load AWS config: %v", errUtils.ErrInvalidIdentityConfig, err)
+		return nil, fmt.Errorf("%w: failed to load AWS config: %w", errUtils.ErrInvalidIdentityConfig, err)
 	}
 	return sso.NewFromConfig(cfg), nil
 }

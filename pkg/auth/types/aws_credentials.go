@@ -37,7 +37,7 @@ func (c *AWSCredentials) GetExpiration() (*time.Time, error) {
 	}
 	expTime, err := time.Parse(time.RFC3339, c.Expiration)
 	if err != nil {
-		return nil, fmt.Errorf("%w: failed parsing AWS credential expiration: %v", errUtils.ErrInvalidAuthConfig, err)
+		return nil, fmt.Errorf("%w: failed parsing AWS credential expiration: %w", errUtils.ErrInvalidAuthConfig, err)
 	}
 	return &expTime, nil
 }

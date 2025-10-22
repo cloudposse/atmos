@@ -109,11 +109,11 @@ func LoadIsolatedAWSConfig(ctx context.Context, optFns ...func(*config.LoadOptio
 	})
 
 	if isolateErr != nil {
-		return aws.Config{}, fmt.Errorf("%w: %v", errUtils.ErrLoadAwsConfig, isolateErr)
+		return aws.Config{}, fmt.Errorf("%w: %w", errUtils.ErrLoadAwsConfig, isolateErr)
 	}
 
 	if err != nil {
-		return aws.Config{}, fmt.Errorf("%w: %v", errUtils.ErrLoadAwsConfig, err)
+		return aws.Config{}, fmt.Errorf("%w: %w", errUtils.ErrLoadAwsConfig, err)
 	}
 
 	return cfg, nil
