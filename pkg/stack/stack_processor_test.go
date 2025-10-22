@@ -194,7 +194,7 @@ func TestStackProcessor(t *testing.T) {
 
 	yamlConfig, err := u.ConvertToYAML(mapConfig1)
 	assert.Nil(t, err)
-	t.Log(string(yamlConfig))
+	t.Log(yamlConfig)
 }
 
 func TestStackProcessorRelativePaths(t *testing.T) {

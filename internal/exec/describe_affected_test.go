@@ -1099,11 +1099,8 @@ func TestDescribeAffectedWithDependentsStackFilterYamlFunctions(t *testing.T) {
 			}
 		case "uw2-network":
 			uw2ComponentCount++
-			if len(a.Dependents) > 0 {
-				// When filtering by ue1-network, uw2-network components should either:
-				// 1. Not be in the affected list at all, OR
-				// 2. Have nil dependents (not processed).
-				t.Logf("POTENTIAL BUG: uw2-network component %s has dependents even though we're filtering by ue1-network", a.Component)
+			if a.Dependents != nil {
+				t.Fatalf("uw2 component %s should not have dependents when filtering by ue1-network", a.Component)
 			}
 		}
 	}

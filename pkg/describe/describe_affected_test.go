@@ -1,7 +1,6 @@
 package describe
 
 import (
-	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -54,7 +53,7 @@ func TestDescribeAffectedWithTargetRefClone(t *testing.T) {
 	affectedYaml, err := u.ConvertToYAML(affected)
 	assert.Nil(t, err)
 
-	t.Log(fmt.Sprintf("\nAffected components and stacks:\n%v", affectedYaml))
+	t.Logf("\nAffected components and stacks:\n%v", affectedYaml)
 }
 
 func TestDescribeAffectedWithTargetRepoPath(t *testing.T) {
@@ -91,5 +90,5 @@ func TestDescribeAffectedWithTargetRepoPath(t *testing.T) {
 	affectedYaml, err := u.ConvertToYAML(affected)
 	assert.Nil(t, err)
 
-	t.Log(fmt.Sprintf("\nAffected components and stacks:\n%v", affectedYaml))
+	t.Logf("\nAffected components and stacks:\n%v", affectedYaml)
 }

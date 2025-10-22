@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"go/ast"
 	"go/token"
+	"path/filepath"
 	"strings"
 
 	"golang.org/x/tools/go/analysis"
@@ -94,10 +95,8 @@ func (r *PerfTrackRule) Check(pass *analysis.Pass, file *ast.File) error {
 	// Skip specific utility files that are not in hot paths.
 	if strings.HasSuffix(filename, "spinner_utils.go") ||
 		strings.HasSuffix(filename, "workflow_utils.go") ||
-		strings.HasSuffix(filename, "stack_processor_utils.go") ||
-		strings.HasSuffix(filename, "copy_glob.go") ||
 		strings.HasSuffix(filename, "describe_config.go") ||
-		strings.HasSuffix(filename, "/vendor.go") ||
+		filepath.Base(filename) == "vendor.go" ||
 		strings.HasSuffix(filename, "helmfile.go") {
 		return nil
 	}
@@ -105,7 +104,9 @@ func (r *PerfTrackRule) Check(pass *analysis.Pass, file *ast.File) error {
 	// Check if package is in exclusion list.
 	pkgPath := pass.Pkg.Path()
 	for _, excluded := range excludedPackages {
-		if strings.Contains(pkgPath, excluded) {
+		// Match only complete path segments to avoid false positives.
+		// e.g., "/errors" should match "pkg/errors" but not "pkg/list/errors".
+		if strings.HasSuffix(pkgPath, excluded) || strings.Contains(pkgPath, excluded+"/") {
 			return nil
 		}
 	}
@@ -139,7 +140,11 @@ func (r *PerfTrackRule) Check(pass *analysis.Pass, file *ast.File) error {
 
 		if !hasPerfTrack {
 			// Skip specific functions that are one-time operations or high-frequency utilities.
-			if funcName == "GetStackNamePattern" || funcName == "FilterComputedFields" {
+			if funcName == "GetStackNamePattern" || funcName == "FilterComputedFields" ||
+				funcName == "NewFileCopier" || // Constructor, one-time initialization.
+				funcName == "ClearBaseComponentConfigCache" || // Test cleanup function.
+				funcName == "ClearJsonSchemaCache" || // Test cleanup function.
+				funcName == "ClearFileContentCache" { // Test cleanup function.
 				return true
 			}
 

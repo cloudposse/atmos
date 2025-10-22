@@ -24,9 +24,8 @@ func (r *OsArgsInTestRule) Check(pass *analysis.Pass, file *ast.File) error {
 		return nil // Only check test files.
 	}
 
-	// Skip integration tests - they test main() which requires os.Args.
-	if strings.HasSuffix(filename, "_integration_test.go") ||
-		strings.Contains(filename, "/main_") && strings.HasSuffix(filename, "_integration_test.go") {
+	// Skip integration tests.
+	if strings.HasSuffix(filename, "_integration_test.go") {
 		return nil
 	}
 
