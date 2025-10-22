@@ -66,6 +66,27 @@
                   "type": "string",
                   "description": "Version of the component to fetch"
                 },
+                "constraints": {
+                  "type": "object",
+                  "description": "Version constraints for vendor updates",
+                  "properties": {
+                    "version": {
+                      "type": "string",
+                      "description": "Semantic version constraint (e.g., ^1.0.0, ~1.2.0, >=1.0.0 <2.0.0)"
+                    },
+                    "excluded_versions": {
+                      "type": "array",
+                      "description": "List of versions to exclude (supports wildcards like 1.5.*)",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "no_prereleases": {
+                      "type": "boolean",
+                      "description": "If true, exclude pre-release versions (alpha, beta, rc)"
+                    }
+                  }
+                },
                 "targets": {
                   "type": "array",
                   "description": "List of target paths where the component will be vendored",

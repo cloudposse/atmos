@@ -8,15 +8,18 @@ import (
 
 // vendorDiffCmd executes 'vendor diff' CLI commands.
 var vendorDiffCmd = &cobra.Command{
-	Use:                "diff",
-	Short:              "Show differences in vendor configurations or dependencies",
-	Long:               "This command compares and displays the differences in vendor-specific configurations or dependencies.",
-	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
-	RunE: func(cmd *cobra.Command, args []string) error {
-		handleHelpRequest(cmd, args)
-		// TODO: There was no documentation here:https://atmos.tools/cli/commands/vendor we need to know what this command requires to check if we should add usage help
+	Use:   "diff",
+	Short: "Show Git diff between two versions of a vendored component",
+	Long: `This command shows the Git diff between two versions of a vendored component from the remote repository.
 
-		// Check Atmos configuration
+The command uses Git to compare two refs (tags, branches, or commits) without requiring a local clone.
+Output is colorized automatically when output is to a terminal.
+
+Use --from and --to to specify versions, or let it default to current version vs latest.`,
+	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
+	Args:               cobra.NoArgs,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		// Vendor diff doesn't require stack validation
 		checkAtmosConfig()
 
 		err := e.ExecuteVendorDiffCmd(cmd, args)
@@ -25,11 +28,12 @@ var vendorDiffCmd = &cobra.Command{
 }
 
 func init() {
-	vendorDiffCmd.PersistentFlags().StringP("component", "c", "", "Compare the differences between the local and vendored versions of the specified component.")
-	AddStackCompletion(vendorDiffCmd)
-	vendorDiffCmd.PersistentFlags().StringP("type", "t", "terraform", "Compare the differences between the local and vendored versions of the specified component, filtering by type (terraform or helmfile).")
-	vendorDiffCmd.PersistentFlags().Bool("dry-run", false, "Simulate the comparison of differences between the local and vendored versions of the specified component without making any changes.")
-
-	// Since this command is not implemented yet, exclude it from `atmos help`
-	// vendorCmd.AddCommand(vendorDiffCmd)
+	vendorDiffCmd.PersistentFlags().StringP("component", "c", "", "Component to diff (required)")
+	_ = vendorDiffCmd.RegisterFlagCompletionFunc("component", ComponentsArgCompletion)
+	vendorDiffCmd.PersistentFlags().String("from", "", "Starting version/tag/commit (defaults to current version in vendor.yaml)")
+	vendorDiffCmd.PersistentFlags().String("to", "", "Ending version/tag/commit (defaults to latest)")
+	vendorDiffCmd.PersistentFlags().String("file", "", "Show diff for specific file within component")
+	vendorDiffCmd.PersistentFlags().IntP("context", "C", 3, "Number of context lines")
+	vendorDiffCmd.PersistentFlags().Bool("unified", true, "Show unified diff format")
+	vendorCmd.AddCommand(vendorDiffCmd)
 }
