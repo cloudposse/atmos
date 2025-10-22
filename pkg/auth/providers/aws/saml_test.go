@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -102,12 +103,16 @@ func (s stubSamlMgr) Validate() error                                           
 func (s stubSamlMgr) GetDefaultIdentity() (string, error)                       { return "", nil }
 func (s stubSamlMgr) ListIdentities() []string                                  { return nil }
 func (s stubSamlMgr) GetProviderForIdentity(string) string                      { return "" }
+func (s stubSamlMgr) GetFilesDisplayPath(string) string                         { return "~/.aws/atmos" }
 func (s stubSamlMgr) GetProviderKindForIdentity(string) (string, error)         { return "", nil }
 func (s stubSamlMgr) GetChain() []string                                        { return s.chain }
 func (s stubSamlMgr) GetStackInfo() *schema.ConfigAndStacksInfo                 { return nil }
 func (s stubSamlMgr) ListProviders() []string                                   { return nil }
 func (s stubSamlMgr) GetIdentities() map[string]schema.Identity                 { return s.idmap }
 func (s stubSamlMgr) GetProviders() map[string]schema.Provider                  { return nil }
+func (s stubSamlMgr) Logout(context.Context, string) error                      { return nil }
+func (s stubSamlMgr) LogoutProvider(context.Context, string) error              { return nil }
+func (s stubSamlMgr) LogoutAll(context.Context) error                           { return nil }
 
 func TestSAMLProvider_PreAuthenticate(t *testing.T) {
 	p, err := NewSAMLProvider("p", &schema.Provider{Kind: "aws/saml", URL: "https://idp.example.com/saml", Region: "us-east-1"})
@@ -545,4 +550,128 @@ func TestSAMLProvider_WithoutCustomResolver(t *testing.T) {
 
 	// Verify the provider works without resolver config
 	assert.NoError(t, p.Validate())
+}
+
+func TestSAMLProvider_Logout(t *testing.T) {
+	tests := []struct {
+		name        string
+		providerCfg *schema.Provider
+		expectError bool
+	}{
+		{
+			name: "successful logout",
+			providerCfg: &schema.Provider{
+				Kind:   "aws/saml",
+				URL:    "https://idp.example.com/saml",
+				Region: "us-east-1",
+			},
+			expectError: false,
+		},
+		{
+			name: "logout with custom base_path",
+			providerCfg: &schema.Provider{
+				Kind:   "aws/saml",
+				URL:    "https://idp.example.com/saml",
+				Region: "us-east-1",
+				Spec: map[string]interface{}{
+					"files": map[string]interface{}{
+						"base_path": t.TempDir(),
+					},
+				},
+			},
+			expectError: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p, err := NewSAMLProvider("test-saml", tt.providerCfg)
+			require.NoError(t, err)
+
+			testProviderLogoutWithFilesystemVerification(t, tt.providerCfg, "test-saml", p, tt.expectError)
+		})
+	}
+}
+
+func TestSAMLProvider_GetFilesDisplayPath(t *testing.T) {
+	tests := []struct {
+		name     string
+		config   *schema.Provider
+		expected string
+	}{
+		{
+			name: "default path with no base_path",
+			config: &schema.Provider{
+				Kind:   "aws/saml",
+				URL:    "https://idp.example.com/saml",
+				Region: "us-east-1",
+			},
+			expected: "~/.aws/atmos",
+		},
+		{
+			name: "custom base_path",
+			config: &schema.Provider{
+				Kind:   "aws/saml",
+				URL:    "https://idp.example.com/saml",
+				Region: "us-east-1",
+				Spec: map[string]interface{}{
+					"files": map[string]interface{}{
+						"base_path": "/custom/path",
+					},
+				},
+			},
+			expected: "/custom/path",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			provider, err := NewSAMLProvider("test-saml", tt.config)
+			require.NoError(t, err)
+
+			path := provider.GetFilesDisplayPath()
+			// Normalize path separators for cross-platform compatibility.
+			normalizedPath := filepath.ToSlash(path)
+			assert.Contains(t, normalizedPath, tt.expected)
+		})
+	}
+}
+
+func TestSAMLProvider_Logout_ErrorPaths(t *testing.T) {
+	tests := []struct {
+		name        string
+		providerCfg *schema.Provider
+		expectError bool
+	}{
+		{
+			name: "handles invalid base_path gracefully",
+			providerCfg: &schema.Provider{
+				Kind:   "aws/saml",
+				URL:    "https://idp.example.com/saml",
+				Region: "us-east-1",
+				Spec: map[string]interface{}{
+					"files": map[string]interface{}{
+						"base_path": "/invalid/\x00/path", // Invalid path with null character.
+					},
+				},
+			},
+			expectError: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p, err := NewSAMLProvider("test-saml", tt.providerCfg)
+			require.NoError(t, err)
+
+			ctx := context.Background()
+			err = p.Logout(ctx)
+
+			if tt.expectError {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
 }

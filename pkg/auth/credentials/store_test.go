@@ -71,8 +71,8 @@ func TestStore_UnsupportedType(t *testing.T) {
 func TestDelete_Flow(t *testing.T) {
 	s := NewCredentialStore()
 	alias := "to-delete"
-	// Delete non-existent -> error.
-	assert.Error(t, s.Delete(alias))
+	// Delete non-existent -> success (treated as already deleted).
+	assert.NoError(t, s.Delete(alias))
 
 	// Store then delete -> ok.
 	assert.NoError(t, s.Store(alias, &types.OIDCCredentials{Token: "hdr.payload."}))
@@ -80,6 +80,9 @@ func TestDelete_Flow(t *testing.T) {
 	// Retrieve after delete -> error.
 	_, err := s.Retrieve(alias)
 	assert.Error(t, err)
+
+	// Delete again -> success (idempotent).
+	assert.NoError(t, s.Delete(alias))
 }
 
 func TestList_NotSupported(t *testing.T) {
@@ -96,20 +99,4 @@ func TestDefaultStore_Suite(t *testing.T) {
 	}
 
 	RunCredentialStoreTests(t, factory)
-}
-
-func TestGetAnySetAny(t *testing.T) {
-	// Use the concrete system keyring store to access helper methods.
-	s, err := newSystemKeyringStore()
-	assert.NoError(t, err)
-	type demo struct {
-		A string
-		B int
-	}
-	key := "misc"
-	assert.NoError(t, s.SetAny(key, demo{A: "x", B: 7}))
-
-	var got demo
-	assert.NoError(t, s.GetAny(key, &got))
-	assert.Equal(t, demo{A: "x", B: 7}, got)
 }

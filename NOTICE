@@ -678,6 +678,10 @@ BSD LICENSED DEPENDENCIES
     License: BSD-2-Clause
     URL: https://github.com/pkg/errors/blob/v0.9.1/LICENSE
 
+  - github.com/pmezard/go-difflib/difflib
+    License: BSD-3-Clause
+    URL: https://github.com/pmezard/go-difflib/blob/5d4384ee4fb2/LICENSE
+
   - github.com/rcrowley/go-metrics
     License: BSD-2-Clause-FreeBSD
     URL: https://github.com/rcrowley/go-metrics/blob/65e299d6c5c9/LICENSE
@@ -1491,6 +1495,10 @@ MIT LICENSED DEPENDENCIES
   - github.com/spf13/viper
     License: MIT
     URL: https://github.com/spf13/viper/blob/v1.21.0/LICENSE
+
+  - github.com/stretchr/testify
+    License: MIT
+    URL: https://github.com/stretchr/testify/blob/v1.11.1/LICENSE
 
   - github.com/subosito/gotenv
     License: MIT

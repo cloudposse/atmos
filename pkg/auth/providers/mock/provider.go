@@ -99,3 +99,17 @@ func (p *Provider) Environment() (map[string]string, error) {
 		"MOCK_PROVIDER": p.name,
 	}, nil
 }
+
+// Logout is a no-op for the mock provider.
+func (p *Provider) Logout(ctx context.Context) error {
+	defer perf.Track(nil, "mock.Provider.Logout")()
+
+	return nil
+}
+
+// GetFilesDisplayPath returns the mock display path.
+func (p *Provider) GetFilesDisplayPath() string {
+	defer perf.Track(nil, "mock.Provider.GetFilesDisplayPath")()
+
+	return "~/.mock/credentials"
+}

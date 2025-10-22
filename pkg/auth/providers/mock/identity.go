@@ -78,3 +78,8 @@ func (i *Identity) Environment() (map[string]string, error) {
 func (i *Identity) PostAuthenticate(ctx context.Context, stackInfo *schema.ConfigAndStacksInfo, providerName, identityName string, creds types.ICredentials) error {
 	return nil
 }
+
+// Logout is a no-op for mock identities.
+func (i *Identity) Logout(ctx context.Context) error {
+	return nil
+}
