@@ -22,9 +22,9 @@ make lint                    # golangci-lint on changed files
 - **`internal/exec/`** - Business logic
 - **`pkg/`** - config, stack, component, utils, validate, workflow, hooks, telemetry
 
-**Stack Pipeline**: Load atmos.yaml → process imports/inheritance → apply overrides → render templates → generate config
+**Stack Pipeline**: Load atmos.yaml → process imports/inheritance → apply overrides → render templates → generate config.
 
-**Templates**: Go templates + Gomplate with `atmos.Component()`, `terraform.output()`, store integration
+**Templates and YAML functions**: Go templates + Gomplate with `atmos.Component()`, `!terraform.state`, `!terraform.output`, store integration.
 
 ## Architectural Patterns (MANDATORY)
 
