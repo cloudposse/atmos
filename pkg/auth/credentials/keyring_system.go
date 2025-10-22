@@ -92,6 +92,10 @@ func (s *systemKeyringStore) Delete(alias string) error {
 	defer perf.Track(nil, "credentials.systemKeyringStore.Delete")()
 
 	if err := keyring.Delete(alias, KeyringUser); err != nil {
+		// Treat "not found" as success - credential already removed.
+		if errors.Is(err, keyring.ErrNotFound) {
+			return nil
+		}
 		return errors.Join(ErrCredentialStore, fmt.Errorf("failed to delete credentials from keyring: %w", err))
 	}
 
