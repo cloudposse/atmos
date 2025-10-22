@@ -71,8 +71,8 @@ func TestStore_UnsupportedType(t *testing.T) {
 func TestDelete_Flow(t *testing.T) {
 	s := NewCredentialStore()
 	alias := "to-delete"
-	// Delete non-existent -> error.
-	assert.Error(t, s.Delete(alias))
+	// Delete non-existent -> success (treated as already deleted).
+	assert.NoError(t, s.Delete(alias))
 
 	// Store then delete -> ok.
 	assert.NoError(t, s.Store(alias, &types.OIDCCredentials{Token: "hdr.payload."}))
@@ -80,6 +80,9 @@ func TestDelete_Flow(t *testing.T) {
 	// Retrieve after delete -> error.
 	_, err := s.Retrieve(alias)
 	assert.Error(t, err)
+
+	// Delete again -> success (idempotent).
+	assert.NoError(t, s.Delete(alias))
 }
 
 func TestList_NotSupported(t *testing.T) {
@@ -124,4 +127,121 @@ func TestGetAnySetAny(t *testing.T) {
 	var got demo
 	assert.NoError(t, s.GetAny(key, &got))
 	assert.Equal(t, demo{A: "x", B: 7}, got)
+}
+
+func TestRetrieve_InvalidJSON(t *testing.T) {
+	s := NewKeyringAuthStore()
+	// Manually store invalid JSON in keyring.
+	err := keyring.Set("invalid", KeyringUser, "not-json")
+	assert.NoError(t, err)
+
+	_, err = s.Retrieve("invalid")
+	assert.Error(t, err)
+	assert.True(t, errors.Is(err, ErrCredentialStore))
+}
+
+func TestRetrieve_UnknownType(t *testing.T) {
+	s := NewKeyringAuthStore()
+	// Store envelope with unknown credential type.
+	err := keyring.Set("unknown", KeyringUser, `{"type":"unknown","data":"{}"}`)
+	assert.NoError(t, err)
+
+	_, err = s.Retrieve("unknown")
+	assert.Error(t, err)
+	assert.True(t, errors.Is(err, ErrCredentialStore))
+	assert.Contains(t, err.Error(), "unknown credential type")
+}
+
+func TestRetrieve_MalformedData(t *testing.T) {
+	s := NewKeyringAuthStore()
+	// Store envelope with type but malformed data.
+	err := keyring.Set("malformed", KeyringUser, `{"type":"aws","data":"not-valid-json"}`)
+	assert.NoError(t, err)
+
+	_, err = s.Retrieve("malformed")
+	assert.Error(t, err)
+	assert.True(t, errors.Is(err, ErrCredentialStore))
+}
+
+func TestGetAny_MissingKey(t *testing.T) {
+	s := NewKeyringAuthStore()
+	var got struct{}
+	err := s.GetAny("non-existent", &got)
+	assert.Error(t, err)
+	assert.True(t, errors.Is(err, ErrCredentialStore))
+}
+
+func TestGetAny_InvalidJSON(t *testing.T) {
+	s := NewKeyringAuthStore()
+	// Store invalid JSON.
+	err := keyring.Set("bad-json", KeyringUser, "not-json")
+	assert.NoError(t, err)
+
+	var got struct{}
+	err = s.GetAny("bad-json", &got)
+	assert.Error(t, err)
+	assert.True(t, errors.Is(err, ErrCredentialStore))
+}
+
+func TestSetAny_Success(t *testing.T) {
+	s := NewKeyringAuthStore()
+
+	testData := map[string]string{
+		"key1": "value1",
+		"key2": "value2",
+	}
+
+	err := s.SetAny("test-set", testData)
+	assert.NoError(t, err)
+
+	// Verify we can retrieve it.
+	var got map[string]string
+	err = s.GetAny("test-set", &got)
+	assert.NoError(t, err)
+	assert.Equal(t, testData, got)
+}
+
+func TestSetAny_ComplexStruct(t *testing.T) {
+	s := NewKeyringAuthStore()
+
+	type ComplexData struct {
+		Name   string
+		Age    int
+		Active bool
+		Tags   []string
+	}
+
+	testData := ComplexData{
+		Name:   "test",
+		Age:    30,
+		Active: true,
+		Tags:   []string{"tag1", "tag2"},
+	}
+
+	err := s.SetAny("complex-data", testData)
+	assert.NoError(t, err)
+
+	// Verify we can retrieve it.
+	var got ComplexData
+	err = s.GetAny("complex-data", &got)
+	assert.NoError(t, err)
+	assert.Equal(t, testData, got)
+}
+
+func TestSetAny_OverwriteExisting(t *testing.T) {
+	s := NewKeyringAuthStore()
+
+	// Set initial value.
+	err := s.SetAny("overwrite-test", "initial-value")
+	assert.NoError(t, err)
+
+	// Overwrite with new value.
+	err = s.SetAny("overwrite-test", "new-value")
+	assert.NoError(t, err)
+
+	// Verify new value.
+	var got string
+	err = s.GetAny("overwrite-test", &got)
+	assert.NoError(t, err)
+	assert.Equal(t, "new-value", got)
 }
