@@ -2,6 +2,7 @@ package linters
 
 import (
 	"go/ast"
+	"go/token"
 	"strings"
 
 	"golang.org/x/tools/go/analysis"
@@ -34,24 +35,38 @@ func (r *LogLevelChecksRule) Check(pass *analysis.Pass, file *ast.File) error {
 		return nil
 	}
 
+	// Track reported positions to avoid duplicate reports.
+	reported := make(map[token.Pos]bool)
+
 	// Check for log level accesses and comparisons.
 	ast.Inspect(file, func(n ast.Node) bool {
 		switch node := n.(type) {
-		case *ast.SelectorExpr:
-			// Check for atmosConfig.Logs.Level access.
-			if r.isLogsLevelAccess(node) {
-				pass.Reportf(node.Pos(),
-					"accessing atmosConfig.Logs.Level outside of logger package is not allowed; "+
-						"log levels are internal implementation details and should not control UI behavior or program logic")
+		case *ast.BinaryExpr:
+			// Check for comparisons with log level constants first (higher priority).
+			if r.isLogLevelComparison(node) {
+				if !reported[node.Pos()] {
+					pass.Reportf(node.Pos(),
+						"comparing log levels outside of logger package is not allowed; "+
+							"log levels are internal implementation details and should not control UI behavior or program logic")
+					reported[node.Pos()] = true
+					// Mark both operands as reported to avoid duplicate messages.
+					if sel, ok := node.X.(*ast.SelectorExpr); ok && r.isLogsLevelAccess(sel) {
+						reported[sel.Pos()] = true
+					}
+					if sel, ok := node.Y.(*ast.SelectorExpr); ok && r.isLogsLevelAccess(sel) {
+						reported[sel.Pos()] = true
+					}
+				}
 				return true
 			}
 
-		case *ast.BinaryExpr:
-			// Check for comparisons with log level constants.
-			if r.isLogLevelComparison(node) {
+		case *ast.SelectorExpr:
+			// Check for atmosConfig.Logs.Level access (only if not already reported).
+			if r.isLogsLevelAccess(node) && !reported[node.Pos()] {
 				pass.Reportf(node.Pos(),
-					"comparing log levels outside of logger package is not allowed; "+
+					"accessing atmosConfig.Logs.Level outside of logger package is not allowed; "+
 						"log levels are internal implementation details and should not control UI behavior or program logic")
+				reported[node.Pos()] = true
 				return true
 			}
 		}
