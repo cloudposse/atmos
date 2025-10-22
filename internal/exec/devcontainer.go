@@ -122,6 +122,9 @@ func ExecuteDevcontainerList(atmosConfig *schema.AtmosConfiguration) error {
 }
 
 // ExecuteDevcontainerStart starts a devcontainer.
+// TODO: Add --identity flag support. When implemented, ENV file paths from identity
+// must be resolved relative to container paths (e.g., /localhost or bind mount location),
+// not host paths, since the container runs in its own filesystem namespace.
 func ExecuteDevcontainerStart(atmosConfig *schema.AtmosConfiguration, name, instance string) error {
 	defer perf.Track(atmosConfig, "exec.ExecuteDevcontainerStart")()
 
@@ -229,6 +232,9 @@ func ExecuteDevcontainerStop(atmosConfig *schema.AtmosConfiguration, name, insta
 }
 
 // ExecuteDevcontainerAttach attaches to a running devcontainer.
+// TODO: Add --identity flag support. When implemented, ENV file paths from identity
+// must be resolved relative to container paths (e.g., /localhost or bind mount location),
+// not host paths, since the container runs in its own filesystem namespace.
 func ExecuteDevcontainerAttach(atmosConfig *schema.AtmosConfiguration, name, instance string) error {
 	defer perf.Track(atmosConfig, "exec.ExecuteDevcontainerAttach")()
 
@@ -308,6 +314,9 @@ func getShellArgs(userEnvProbe string) []string {
 }
 
 // ExecuteDevcontainerExec executes a command in a running devcontainer.
+// TODO: Add --identity flag support. When implemented, ENV file paths from identity
+// must be resolved relative to container paths (e.g., /localhost or bind mount location),
+// not host paths, since the container runs in its own filesystem namespace.
 func ExecuteDevcontainerExec(atmosConfig *schema.AtmosConfiguration, name, instance string, command []string) error {
 	defer perf.Track(atmosConfig, "exec.ExecuteDevcontainerExec")()
 
