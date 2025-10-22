@@ -4,14 +4,14 @@
 #   atmos devcontainer start geodesic     # Start Geodesic container
 #   atmos devcontainer attach geodesic    # Attach to running container
 #   atmos devcontainer stop geodesic      # Stop container
-#   atmos shell                            # Alias for 'devcontainer geodesic'
+#   atmos shell                            # Alias for 'devcontainer start geodesic --attach'
 
 # Base path for components and stacks
 base_path: "."
 
 # Command aliases
 aliases:
-  shell: "devcontainer geodesic"
+  shell: "devcontainer start geodesic --attach"
 
 components:
   terraform:
