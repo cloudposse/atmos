@@ -24,7 +24,7 @@ var excludedPackages = []string{
 	"/tui",           // Terminal UI components.
 	"/schema",        // Schema data structures and simple getters/setters.
 	"/terminal",      // Terminal utilities and TTY detection.
-	"/errors",        // Error handling utilities to avoid overhead.
+	"/atmos/errors",  // Error handling utilities to avoid overhead (root errors package only).
 	"/filetype",      // Simple file type detection utilities.
 	"/cmd/internal",  // Command registry initialization functions.
 	"/pkg/utils",     // Simple utility functions (avoid bloat per CLAUDE.md).
@@ -34,8 +34,7 @@ var excludedPackages = []string{
 	"/telemetry",     // Telemetry code shouldn't track itself.
 	"/xdg",           // XDG directory utilities.
 	"/homedir",       // Home directory utilities.
-	"/cmd/",          // Command providers are just CLI wiring/glue code.
-	"/cmd",           // Root cmd package (CLI wiring/glue code).
+	"/cmd",           // Command providers and root cmd package are just CLI wiring/glue code.
 	"/tests",         // Test packages and helpers.
 	"/pkg/auth",      // Auth runs once per command, not in hot path.
 	"/pkg/config",    // Config loading runs once per command, not in hot path.
@@ -72,6 +71,16 @@ var excludedReceivers = []string{
 	"DescribeConfigFormatError", // Error types.
 	"DefaultStacksProcessor",    // Processor implementations.
 	"AtmosFuncs",                // Template function wrappers (high-frequency).
+}
+
+// Functions to exclude from perf.Track() checks (by name).
+var excludedFunctions = map[string]string{
+	"GetStackNamePattern":           "Simple getter, just returns a field.",
+	"FilterComputedFields":          "Data filtering utility, low overhead.",
+	"NewFileCopier":                 "Constructor, one-time initialization.",
+	"ClearBaseComponentConfigCache": "Test cleanup function.",
+	"ClearJsonSchemaCache":          "Test cleanup function.",
+	"ClearFileContentCache":         "Test cleanup function.",
 }
 
 func (r *PerfTrackRule) Name() string {
@@ -139,12 +148,8 @@ func (r *PerfTrackRule) Check(pass *analysis.Pass, file *ast.File) error {
 		}
 
 		if !hasPerfTrack {
-			// Skip specific functions that are one-time operations or high-frequency utilities.
-			if funcName == "GetStackNamePattern" || funcName == "FilterComputedFields" ||
-				funcName == "NewFileCopier" || // Constructor, one-time initialization.
-				funcName == "ClearBaseComponentConfigCache" || // Test cleanup function.
-				funcName == "ClearJsonSchemaCache" || // Test cleanup function.
-				funcName == "ClearFileContentCache" { // Test cleanup function.
+			// Skip functions that are excluded (getters, constructors, test cleanup).
+			if _, excluded := excludedFunctions[funcName]; excluded {
 				return true
 			}
 

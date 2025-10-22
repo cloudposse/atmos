@@ -215,7 +215,7 @@ func ExecuteDescribeDependents(
 				// Get the stack component `vars`.
 				var stackComponentVarsSection map[string]any
 				if stackComponentVarsSection, ok = stackComponentMap["vars"].(map[string]any); !ok {
-					return dependents, nil
+					continue
 				}
 
 				// Convert the stack component `vars` section to the `Context` structure.

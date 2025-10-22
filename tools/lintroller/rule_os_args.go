@@ -2,6 +2,7 @@ package linters
 
 import (
 	"go/ast"
+	"path/filepath"
 	"strings"
 
 	"golang.org/x/tools/go/analysis"
@@ -20,18 +21,19 @@ func (r *OsArgsInTestRule) Doc() string {
 
 func (r *OsArgsInTestRule) Check(pass *analysis.Pass, file *ast.File) error {
 	filename := pass.Fset.Position(file.Pos()).Filename
+	normalized := filepath.ToSlash(filename)
 	if !strings.HasSuffix(filename, "_test.go") {
 		return nil // Only check test files.
 	}
 
 	// Skip integration tests.
-	if strings.HasSuffix(filename, "_integration_test.go") {
+	if strings.HasSuffix(normalized, "_integration_test.go") {
 		return nil
 	}
 
 	// Skip test helper files - they need to snapshot/restore os.Args for test isolation.
-	if strings.HasSuffix(filename, "testing_helpers_test.go") ||
-		strings.HasSuffix(filename, "testkit_test.go") {
+	if strings.HasSuffix(normalized, "testing_helpers_test.go") ||
+		strings.HasSuffix(normalized, "testkit_test.go") {
 		return nil
 	}
 
@@ -40,10 +42,10 @@ func (r *OsArgsInTestRule) Check(pass *analysis.Pass, file *ast.File) error {
 	// - Subprocess testing using os.Args[0] for executable path
 	// - Testing heatmap flag detection
 	// All these use proper save/restore pattern for test isolation.
-	if strings.HasSuffix(filename, "cmd/cmd_utils_test.go") ||
-		strings.HasSuffix(filename, "cmd/terraform_test.go") ||
-		strings.HasSuffix(filename, "errors/error_funcs_test.go") ||
-		strings.HasSuffix(filename, "pkg/config/config_test.go") {
+	if strings.HasSuffix(normalized, "cmd/cmd_utils_test.go") ||
+		strings.HasSuffix(normalized, "cmd/terraform_test.go") ||
+		strings.HasSuffix(normalized, "errors/error_funcs_test.go") ||
+		strings.HasSuffix(normalized, "pkg/config/config_test.go") {
 		return nil
 	}
 
