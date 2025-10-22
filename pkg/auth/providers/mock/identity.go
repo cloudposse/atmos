@@ -88,7 +88,7 @@ func (i *Identity) Environment() (map[string]string, error) {
 }
 
 // PostAuthenticate is a no-op for mock identities.
-func (i *Identity) PostAuthenticate(ctx context.Context, stackInfo *schema.ConfigAndStacksInfo, providerName, identityName string, creds types.ICredentials) error {
+func (i *Identity) PostAuthenticate(ctx context.Context, params *types.PostAuthenticateParams) error {
 	defer perf.Track(nil, "mock.Identity.PostAuthenticate")()
 
 	return nil

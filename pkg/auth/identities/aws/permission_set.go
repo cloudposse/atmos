@@ -173,13 +173,28 @@ func (i *permissionSetIdentity) GetProviderName() (string, error) {
 
 // PostAuthenticate sets up AWS files and populates auth context after authentication.
 func (i *permissionSetIdentity) PostAuthenticate(ctx context.Context, params *types.PostAuthenticateParams) error {
+	// Guard against nil parameters to avoid panics.
+	if params == nil {
+		return fmt.Errorf("%w: PostAuthenticate parameters cannot be nil", errUtils.ErrInvalidAuthConfig)
+	}
+	if params.Credentials == nil {
+		return fmt.Errorf("%w: credentials are required", errUtils.ErrInvalidAuthConfig)
+	}
+
 	// Setup AWS files using shared AWS cloud package.
 	if err := awsCloud.SetupFiles(params.ProviderName, params.IdentityName, params.Credentials, ""); err != nil {
 		return fmt.Errorf("%w: failed to setup AWS files: %w", errUtils.ErrAwsAuth, err)
 	}
 
 	// Populate auth context (single source of truth for runtime credentials).
-	if err := awsCloud.SetAuthContext(params.AuthContext, params.StackInfo, params.ProviderName, params.IdentityName, params.Credentials); err != nil {
+	if err := awsCloud.SetAuthContext(&awsCloud.SetAuthContextParams{
+		AuthContext:  params.AuthContext,
+		StackInfo:    params.StackInfo,
+		ProviderName: params.ProviderName,
+		IdentityName: params.IdentityName,
+		Credentials:  params.Credentials,
+		BasePath:     "",
+	}); err != nil {
 		return fmt.Errorf("%w: failed to set auth context: %w", errUtils.ErrAwsAuth, err)
 	}
 
