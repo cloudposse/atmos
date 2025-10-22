@@ -16,6 +16,7 @@ import (
 	awsCloud "github.com/cloudposse/atmos/pkg/auth/cloud/aws"
 	"github.com/cloudposse/atmos/pkg/auth/types"
 	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -191,7 +192,7 @@ func (i *assumeRoleIdentity) Environment() (map[string]string, error) {
 	}
 
 	// Get AWS file environment variables.
-	awsFileManager, err := awsCloud.NewAWSFileManager()
+	awsFileManager, err := awsCloud.NewAWSFileManager("")
 	if err != nil {
 		return nil, errors.Join(errUtils.ErrAuthAwsFileManagerFailed, err)
 	}
@@ -226,10 +227,10 @@ func (i *assumeRoleIdentity) GetProviderName() (string, error) {
 // PostAuthenticate sets up AWS files after authentication.
 func (i *assumeRoleIdentity) PostAuthenticate(ctx context.Context, stackInfo *schema.ConfigAndStacksInfo, providerName, identityName string, creds types.ICredentials) error {
 	// Setup AWS files using shared AWS cloud package.
-	if err := awsCloud.SetupFiles(providerName, identityName, creds); err != nil {
+	if err := awsCloud.SetupFiles(providerName, identityName, creds, ""); err != nil {
 		return errors.Join(errUtils.ErrAwsAuth, err)
 	}
-	if err := awsCloud.SetEnvironmentVariables(stackInfo, providerName, identityName); err != nil {
+	if err := awsCloud.SetEnvironmentVariables(stackInfo, providerName, identityName, ""); err != nil {
 		return errors.Join(errUtils.ErrAwsAuth, err)
 	}
 	return nil
@@ -274,4 +275,15 @@ func sanitizeRoleSessionNameLengthAndTrim(name string) string {
 		name = "atmos-session"
 	}
 	return name
+}
+
+// Logout removes identity-specific credential storage.
+func (i *assumeRoleIdentity) Logout(ctx context.Context) error {
+	defer perf.Track(nil, "aws.assumeRoleIdentity.Logout")()
+
+	// AWS assume-role identities don't have identity-specific storage.
+	// File cleanup is handled by the provider's Logout method.
+	// Keyring cleanup is handled by AuthManager.
+	log.Debug("Logout called for assume-role identity (no identity-specific cleanup)", "identity", i.name)
+	return nil
 }

@@ -192,3 +192,21 @@ func TestPermissionSetIdentity_resolveAccountID_ReturnsProvidedID(t *testing.T) 
 	require.NoError(t, err)
 	assert.Equal(t, "123456789012", id)
 }
+
+func TestPermissionSetIdentity_Logout(t *testing.T) {
+	// Test that permission-set identity Logout returns nil (no identity-specific cleanup).
+	identity, err := NewPermissionSetIdentity("test-ps", &schema.Identity{
+		Kind: "aws/permission-set",
+		Principal: map[string]interface{}{
+			"name":    "DevAccess",
+			"account": map[string]interface{}{"id": "123456789012"},
+		},
+	})
+	require.NoError(t, err)
+
+	ctx := context.Background()
+	err = identity.Logout(ctx)
+
+	// Should always succeed with no cleanup.
+	assert.NoError(t, err)
+}
