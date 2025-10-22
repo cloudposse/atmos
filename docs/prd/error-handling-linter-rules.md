@@ -46,60 +46,89 @@ return fmt.Errorf("%w: additional context", errUtils.ErrAwsAuth)
 
 ## Recommended Patterns
 
+### Critical Difference: Chains vs Flat Lists
+
+**Error chains** (single `%w`):
+```go
+err1 := errors.New("base")
+err2 := fmt.Errorf("wrapped: %w", err1)
+errors.Unwrap(err2) // Returns err1 - can unwrap iteratively through call stack
+```
+
+**Flat lists** (`errors.Join` or multiple `%w`):
+```go
+err1 := errors.New("error 1")
+err2 := errors.New("error 2")
+joined := errors.Join(err1, err2)
+errors.Unwrap(joined) // Returns nil - NOT a chain!
+// Must use: joined.(interface{ Unwrap() []error }).Unwrap()
+```
+
 ### When to Use Each Pattern
 
-1. **`errors.Join`** - Multiple independent errors to preserve:
+1. **`fmt.Errorf` with single `%w`** - Build error chain through call stack:
    ```go
-   // Both errors are equally important, no descriptive message needed
-   return errors.Join(errUtils.ErrAwsAuth, err)
-
-   // Multiple unrelated errors
-   return errors.Join(validationErr, configErr, fileErr)
-   ```
-
-2. **`fmt.Errorf` with single `%w`** - Add descriptive context:
-   ```go
-   // Add specific context about what failed
+   // PREFER: Creates chain - errors.Unwrap() works
    return fmt.Errorf("%w: failed to authenticate with role %q", errUtils.ErrAwsAuth, roleArn)
 
-   // Wrap with additional information
+   // Chain builds context: function -> package -> module
    return fmt.Errorf("component %s: %w", component, err)
    ```
+   **Use when:** Error context builds sequentially, need to unwrap through call stack.
 
-3. **`fmt.Errorf` with multiple `%w`** - Chain multiple errors with context:
+2. **`errors.Join`** - Combine independent errors:
    ```go
-   // Valid Go 1.20+ - preserves both errors in chain
+   // Multiple validation failures
+   return errors.Join(validationErr, configErr, fileErr)
+
+   // Parallel operation failures
+   return errors.Join(errUtils.ErrAwsAuth, err)
+   ```
+   **Use when:** Combining independent errors, parallel operations, multiple validations.
+   **Note:** Does NOT create chain - `errors.Unwrap()` returns `nil`.
+
+3. **`fmt.Errorf` with multiple `%w`** - Flat list with format string:
+   ```go
+   // Valid Go 1.20+ - like errors.Join but with format string
    return fmt.Errorf("%w: identity %q: %w", errUtils.ErrAuthenticationFailed, name, err)
    ```
+   **Use when:** Need format string AND multiple errors. Returns `Unwrap() []error`, not chain.
 
 ### Consistency Guidelines
 
-For Atmos codebase consistency, prefer:
+For Atmos codebase consistency:
 
-1. **Simple wrapping without extra context:** Use `errors.Join`
+1. **Default: Use `fmt.Errorf` with single `%w`** (creates chain)
    ```go
-   // PREFER
-   return errors.Join(errUtils.ErrAwsAuth, err)
-
-   // AVOID (redundant "failed to" adds no value)
-   return fmt.Errorf("%w: failed to setup files: %w", errUtils.ErrAwsAuth, err)
-   ```
-
-2. **Wrapping with valuable context:** Use `fmt.Errorf` with single `%w`
-   ```go
-   // GOOD - adds specific context
+   // PREFER - creates proper error chain
+   return fmt.Errorf("%w: failed to setup AWS files", errUtils.ErrAwsAuth)
    return fmt.Errorf("%w: role=%s region=%s", errUtils.ErrAwsAuth, role, region)
-
-   // GOOD - specific operation failed
    return fmt.Errorf("failed to create IAM client: %w", err)
    ```
+   **Why:** Preserves call stack context, allows iterative unwrapping, works with `errors.Unwrap()`.
 
-3. **Multiple error wrapping:** Use `fmt.Errorf` with multiple `%w` sparingly
+2. **Use `errors.Join` only for truly independent errors:**
    ```go
-   // Use only when you need both errors preserved AND context string
-   return fmt.Errorf("%w: authentication failed for %q: %w",
-       errUtils.ErrAuthenticationFailed, identityName, err)
+   // GOOD - combining validation failures
+   return errors.Join(schemaErr, typeErr, formatErr)
+
+   // GOOD - parallel operation failures
+   return errors.Join(writeErr, syncErr, closeErr)
+
+   // QUESTIONABLE - wrapping base + underlying (prefer single %w chain)
+   return errors.Join(errUtils.ErrAwsAuth, err)
    ```
+   **Why:** Use when errors are independent and don't form a call stack chain.
+
+3. **Avoid `fmt.Errorf` with multiple `%w`** unless necessary:
+   ```go
+   // AVOID - prefer single %w chain
+   return fmt.Errorf("%w: failed: %w", errUtils.ErrAwsAuth, err)
+
+   // OK if you specifically need flat list with format string
+   return fmt.Errorf("%w: identity %q: %w", errUtils.ErrBase, name, err)
+   ```
+   **Why:** Creates flat list (not chain), less common pattern, harder to unwrap.
 
 ## Proposed Linter Rules
 

@@ -168,13 +168,16 @@ Precedence: CLI flags → ENV vars → config files → defaults (use Viper)
 
 ### Error Handling (MANDATORY)
 - Wrap with static errors from `errors/errors.go`
-- Combine: `errors.Join(errUtils.ErrFoo, err)`
-- Add context: `fmt.Errorf("%w: msg", errUtils.ErrFoo)`
-- Multiple errors: `fmt.Errorf("%w: context: %w", errUtils.ErrBase, err)` (valid Go 1.20+)
+- Chain errors: `fmt.Errorf("%w: msg", errUtils.ErrFoo)` - creates error chain
+- Join errors: `errors.Join(errUtils.ErrFoo, err)` - combines independent errors
+- Multiple wrapping: `fmt.Errorf("%w: context: %w", errUtils.ErrBase, err)` (valid Go 1.20+)
 - Check: `errors.Is(err, target)`
 - Never dynamic errors or string comparison
 
-**Note:** Multiple `%w` verbs in `fmt.Errorf` are valid since Go 1.20 (Atmos uses Go 1.24.8). The returned error implements `Unwrap() []error`. Both `fmt.Errorf` with multiple `%w` and `errors.Join` are acceptable; prefer `errors.Join` for simplicity when no additional context string is needed.
+**Important distinction:**
+- **`fmt.Errorf` with single `%w`**: Creates error **chain** - `errors.Unwrap()` returns next error. Use when error context builds sequentially through call stack. **Prefer this when error chain matters.**
+- **`errors.Join`**: Creates **flat list** - `errors.Unwrap()` returns `nil`, must use `Unwrap() []error` interface. Use for independent errors (parallel operations, multiple validations).
+- **`fmt.Errorf` with multiple `%w`**: Like `errors.Join` but adds format string. Valid Go 1.20+, returns `Unwrap() []error`.
 
 ### Testing Strategy (MANDATORY)
 - **Prefer unit tests with mocks** over integration tests
