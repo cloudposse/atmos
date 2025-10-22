@@ -1,21 +1,26 @@
 .
-├── atmos.yaml
-├── components
-│   └── terraform
-│       └── myapp
-│           ├── main.tf
-│           ├── outputs.tf
-│           ├── README.md
-│           ├── variables.tf
-│           └── versions.tf
-├── component.yaml
-└── stacks
-    ├── catalog
-    │   └── myapp.yaml
-    └── deploy
-        ├── dev.yaml
-        ├── prod.yaml
-        └── staging.yaml
+|-- atmos.yaml
+|-- component.yaml
+|-- components
+|   `-- terraform
+|       `-- myapp
+|           |-- README.md
+|           |-- cache.dev.txt
+|           |-- cache.prod.txt
+|           |-- cache.staging.txt
+|           |-- main.tf
+|           |-- outputs.tf
+|           |-- terraform.tfstate.d
+|           |   `-- prod
+|           |       `-- terraform.tfstate
+|           |-- variables.tf
+|           `-- versions.tf
+`-- stacks
+    |-- catalog
+    |   `-- myapp.yaml
+    `-- deploy
+        |-- dev.yaml
+        |-- prod.yaml
+        `-- staging.yaml
 
-7 directories, 11 files
-
+8 directories, 15 files

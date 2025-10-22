@@ -156,7 +156,7 @@ If `stack` is specified, the `namespace`, `tenant`, `environment` and `stage` at
 As you can see in the examples above, we can use [Atmos Stack Manifest Templating](/core-concepts/stacks/templates) in the `stack` attribute to dynamically specify the stack.
 
 This is useful when configuring
-[`stacks.name_template` in `atmos.yaml`](/core-concepts/projects/configuration/#stack-names-slugs) to define and refer to stacks.
+[`stacks.name_template` in `atmos.yaml`](/cli/configuration) to define and refer to stacks.
 In this case, you can't use the context variables `namespace`, `tenant`, `environment` and `stage` in `depends_on`.
 
 For example, in `atmos.yaml`, we specify `stacks.name_template` to define Atmos stacks, and enable templating:

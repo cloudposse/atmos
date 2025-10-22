@@ -440,6 +440,86 @@ func TestVersionFlagExecutionPath(t *testing.T) {
 	}
 }
 
+func TestPagerDoesNotRunWithoutTTY(t *testing.T) {
+	// This test verifies that the pager doesn't try to use the alternate screen buffer
+	// when there's no TTY available. This is important for scripted/CI environments
+	// where stdin/stdout/stderr are not connected to a terminal.
+
+	t.Run("help should not error when ATMOS_PAGER=false and no TTY", func(t *testing.T) {
+		// Save original environment.
+		originalPager := os.Getenv("ATMOS_PAGER")
+		originalArgs := os.Args
+		originalCliConfigPath := os.Getenv("ATMOS_CLI_CONFIG_PATH")
+		defer func() {
+			if originalPager == "" {
+				os.Unsetenv("ATMOS_PAGER")
+			} else {
+				os.Setenv("ATMOS_PAGER", originalPager)
+			}
+			if originalCliConfigPath == "" {
+				os.Unsetenv("ATMOS_CLI_CONFIG_PATH")
+			} else {
+				os.Setenv("ATMOS_CLI_CONFIG_PATH", originalCliConfigPath)
+			}
+			os.Args = originalArgs
+		}()
+
+		// Set ATMOS_CLI_CONFIG_PATH to a test directory to avoid loading real config.
+		os.Setenv("ATMOS_CLI_CONFIG_PATH", "testdata/pager")
+
+		// Set ATMOS_PAGER=false to explicitly disable the pager.
+		os.Setenv("ATMOS_PAGER", "false")
+
+		// Set os.Args so our custom Execute() function can parse them.
+		// This is required because Execute() needs to initialize atmosConfig from environment variables.
+		os.Args = []string{"atmos", "--help"}
+
+		// Execute should not error even without a TTY.
+		// The pager should be disabled via ATMOS_PAGER=false, so no TTY error should occur.
+		// We call Execute() (not RootCmd.Execute()) to ensure atmosConfig is initialized.
+		err := Execute()
+		// Note: Cobra --help returns ErrHelp which is not actually an error in the normal sense.
+		// We expect the command to run without TTY-related errors.
+		// We're primarily checking that there's no "could not open a new TTY" panic/error.
+		if err != nil {
+			// Allow Cobra's ErrHelp (flag.ErrHelp) since that's expected behavior for --help.
+			assert.Contains(t, err.Error(), "flag: help requested", "Only flag.ErrHelp should be returned")
+		}
+	})
+
+	t.Run("help should not error when ATMOS_PAGER=true but no TTY", func(t *testing.T) {
+		// Save original environment.
+		originalPager := os.Getenv("ATMOS_PAGER")
+		originalArgs := os.Args
+		defer func() {
+			if originalPager == "" {
+				os.Unsetenv("ATMOS_PAGER")
+			} else {
+				os.Setenv("ATMOS_PAGER", originalPager)
+			}
+			os.Args = originalArgs
+		}()
+
+		// Set ATMOS_PAGER=true to try to enable pager, but there's no TTY.
+		// The pager should detect no TTY and fall back to direct output.
+		os.Setenv("ATMOS_PAGER", "true")
+
+		// Set os.Args so our custom Execute() function can parse them.
+		os.Args = []string{"atmos", "--help"}
+
+		// Execute should not error even without a TTY.
+		// The pager should detect the lack of TTY and fall back to printing directly.
+		// We call Execute() (not RootCmd.Execute()) to ensure atmosConfig is initialized.
+		err := Execute()
+		// We expect the command to run without TTY-related errors.
+		// The pager package already has TTY detection logic in pageCreator.Run().
+		if err != nil {
+			// Allow Cobra's ErrHelp since that's expected behavior for --help.
+			assert.Contains(t, err.Error(), "flag: help requested", "Only flag.ErrHelp should be returned")
+		}
+	})
+}
+
 // TestIsCompletionCommand tests the isCompletionCommand function.
 func TestIsCompletionCommand(t *testing.T) {
 	tests := []struct {
@@ -509,6 +589,164 @@ func TestIsCompletionCommand(t *testing.T) {
 			// Test.
 			result := isCompletionCommand(cmd)
 			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestFindAnsiCodeEnd(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected int
+	}{
+		{
+			name:     "simple code ending with m",
+			input:    "0m",
+			expected: 1, // Returns index of 'm'
+		},
+		{
+			name:     "color code ending with m",
+			input:    "38;5;123mtext",
+			expected: 8, // Returns index of 'm'
+		},
+		{
+			name:     "no ending letter",
+			input:    "123;456;",
+			expected: -1,
+		},
+		{
+			name:     "uppercase ending",
+			input:    "1A",
+			expected: 1, // Returns index of 'A'
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := findAnsiCodeEnd(tt.input)
+			if result != tt.expected {
+				t.Errorf("findAnsiCodeEnd(%q) = %d, want %d", tt.input, result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestIsBackgroundCode(t *testing.T) {
+	tests := []struct {
+		name     string
+		ansiCode string
+		expected bool
+	}{
+		{
+			name:     "foreground color code",
+			ansiCode: "38;5;123m",
+			expected: false,
+		},
+		{
+			name:     "background code with prefix",
+			ansiCode: "48;5;123m",
+			expected: true,
+		},
+		{
+			name:     "background code in middle",
+			ansiCode: "0;48;5;123m",
+			expected: true,
+		},
+		{
+			name:     "reset code",
+			ansiCode: "0m",
+			expected: false,
+		},
+		{
+			name:     "bold code",
+			ansiCode: "1m",
+			expected: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := isBackgroundCode(tt.ansiCode)
+			if result != tt.expected {
+				t.Errorf("isBackgroundCode(%q) = %v, want %v", tt.ansiCode, result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestStripBackgroundCodes(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{
+			name:     "plain text no codes",
+			input:    "hello world",
+			expected: "hello world",
+		},
+		{
+			name:     "foreground only",
+			input:    "\x1b[38;5;123mcolored text\x1b[0m",
+			expected: "\x1b[38;5;123mcolored text\x1b[0m",
+		},
+		{
+			name:     "background only",
+			input:    "\x1b[48;5;123mbackground\x1b[0m",
+			expected: "background\x1b[0m",
+		},
+		{
+			name:     "foreground and background mixed",
+			input:    "\x1b[38;5;123m\x1b[48;5;200mtext\x1b[0m",
+			expected: "\x1b[38;5;123mtext\x1b[0m",
+		},
+		{
+			name:     "empty string",
+			input:    "",
+			expected: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := stripBackgroundCodes(tt.input)
+			if result != tt.expected {
+				t.Errorf("stripBackgroundCodes(%q) = %q, want %q", tt.input, result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestNewFlagRenderLayout(t *testing.T) {
+	tests := []struct {
+		name          string
+		termWidth     int
+		maxFlagWidth  int
+		wantDescWidth int
+	}{
+		{
+			name:          "normal terminal width",
+			termWidth:     120,
+			maxFlagWidth:  20,
+			wantDescWidth: 94, // Calculated as: termWidth minus leftPad minus maxFlag minus spaceBetween minus rightMargin.
+		},
+		{
+			name:          "narrow terminal forces minimum",
+			termWidth:     50,
+			maxFlagWidth:  20,
+			wantDescWidth: 40, // Minimum enforced
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			layout := newFlagRenderLayout(tt.termWidth, tt.maxFlagWidth)
+			if layout.descWidth != tt.wantDescWidth {
+				t.Errorf("newFlagRenderLayout() descWidth = %d, want %d", layout.descWidth, tt.wantDescWidth)
+			}
+			if layout.maxFlagWidth != tt.maxFlagWidth {
+				t.Errorf("newFlagRenderLayout() maxFlagWidth = %d, want %d", layout.maxFlagWidth, tt.maxFlagWidth)
+			}
 		})
 	}
 }

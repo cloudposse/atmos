@@ -1,0 +1,101 @@
+---
+title: atmos terraform get
+sidebar_label: get
+sidebar_class_name: command
+id: get
+---
+import Intro from '@site/src/components/Intro'
+import Screengrab from '@site/src/components/Screengrab'
+import Terminal from '@site/src/components/Terminal'
+
+<Intro>
+Use this command to download and update Terraform modules for an Atmos component. This ensures all module dependencies are available locally.
+</Intro>
+
+<Screengrab title="atmos terraform get --help" slug="atmos-terraform-get--help" />
+
+## Usage
+
+Execute the `terraform get` command like this:
+
+```shell
+atmos terraform get <component> -s <stack> [options]
+```
+
+This command downloads modules referenced in the configuration. It's typically run automatically as part of `terraform init`, but can be run separately to update modules.
+
+:::info Atmos Behavior
+Atmos provides standard setup for this command including automatic `terraform init` and workspace selection. The module download operation is handled by native Terraform.
+:::
+## Examples
+
+### Download Modules
+
+```shell
+# Download/update modules
+atmos terraform get vpc -s dev
+```
+
+### Update Modules
+
+```shell
+# Force update of modules
+atmos terraform get vpc -s dev -update
+```
+
+### Suppress Color Output
+
+```shell
+# Get modules without color in output
+atmos terraform get vpc -s dev -no-color
+```
+
+:::note
+The `-no-color` flag only suppresses color output. It does not affect module downloads. Terraform `get` always downloads modules when needed.
+:::
+
+## Arguments
+
+<dl>
+    <dt>`component` <em>(required)</em></dt>
+    <dd>
+        Atmos component name.
+    </dd>
+</dl>
+
+## Flags
+
+<dl>
+    <dt>`--stack` / `-s` <em>(required)</em></dt>
+    <dd>
+        Atmos stack name where the component is defined.
+    </dd>
+
+    <dt>`--skip-init` <em>(optional)</em></dt>
+    <dd>
+        Skip running `terraform init` before executing the command.
+
+        ```shell
+        atmos terraform get vpc -s dev --skip-init
+        ```
+    </dd>
+
+    <dt>`--dry-run` <em>(optional)</em></dt>
+    <dd>
+        Show what would be executed without actually running the command.
+
+        ```shell
+        atmos terraform get vpc -s dev --dry-run
+        ```
+    </dd>
+</dl>
+
+## Native Terraform Flags
+
+This command supports native `terraform get` flags such as `-update` to update modules to newest versions, `-no-color` to disable color output.
+
+## Related Commands
+
+- [`atmos terraform plan`](/cli/commands/terraform/plan) - Generate execution plan
+- [`atmos terraform apply`](/cli/commands/terraform/apply) - Apply changes
+- [`atmos terraform init`](/cli/commands/terraform/init) - Initialize working directory

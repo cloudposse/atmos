@@ -4,14 +4,13 @@ sidebar_label: clean
 sidebar_class_name: command
 id: clean
 ---
+import Intro from '@site/src/components/Intro'
 import Screengrab from '@site/src/components/Screengrab'
 import Terminal from '@site/src/components/Terminal'
 
-:::note purpose
-Use this command to delete the `.terraform` folder, the folder that `TF_DATA_DIR` ENV var points to, `.terraform.lock.hcl` file, `varfile`
-and `planfile` for a
-component in a stack.
-:::
+<Intro>
+Use this command to clean up Terraform files for an Atmos component in a stack. This removes `.terraform` folder, `.terraform.lock.hcl` file, and Atmos-generated varfiles and planfiles.
+</Intro>
 
 <Screengrab title="atmos terraform clean --help" slug="atmos-terraform-clean--help" />
 
