@@ -27,7 +27,7 @@ func SetupFiles(providerName, identityName string, creds types.ICredentials, bas
 
 	// Write credentials file.
 	if err := fileManager.WriteCredentials(providerName, identityName, awsCreds); err != nil {
-		return fmt.Errorf("%w: failed to write AWS credentials: %w", errUtils.ErrAwsAuth, err)
+		return fmt.Errorf("%s: failed to write AWS credentials: %w", errUtils.ErrAwsAuth.Error(), err)
 	}
 
 	// Write config file with region.
@@ -37,7 +37,7 @@ func SetupFiles(providerName, identityName string, creds types.ICredentials, bas
 	}
 
 	if err := fileManager.WriteConfig(providerName, identityName, region, ""); err != nil {
-		return fmt.Errorf("%w: failed to write AWS config: %w", errUtils.ErrAwsAuth, err)
+		return fmt.Errorf("%s: failed to write AWS config: %w", errUtils.ErrAwsAuth.Error(), err)
 	}
 
 	return nil
