@@ -1,10 +1,12 @@
 package aws
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	ini "gopkg.in/ini.v1"
 
@@ -12,6 +14,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/auth/types"
 	"github.com/cloudposse/atmos/pkg/config/homedir"
 	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -40,13 +43,29 @@ type AWSFileManager struct {
 }
 
 // NewAWSFileManager creates a new AWS file manager instance.
-func NewAWSFileManager() (*AWSFileManager, error) {
-	homeDir, err := homedir.Dir()
-	if err != nil {
-		return nil, ErrGetHomeDir
+// BasePath is optional and can be empty to use defaults.
+// Precedence: 1) basePath parameter from provider spec, 2) default ~/.aws/atmos.
+func NewAWSFileManager(basePath string) (*AWSFileManager, error) {
+	var baseDir string
+
+	if basePath != "" {
+		// Use configured path from provider spec.
+		expanded, err := homedir.Expand(basePath)
+		if err != nil {
+			return nil, fmt.Errorf("%w: invalid base_path %q: %w", ErrGetHomeDir, basePath, err)
+		}
+		baseDir = expanded
+	} else {
+		// Default: ~/.aws/atmos
+		homeDir, err := homedir.Dir()
+		if err != nil {
+			return nil, ErrGetHomeDir
+		}
+		baseDir = filepath.Join(homeDir, ".aws", "atmos")
 	}
+
 	return &AWSFileManager{
-		baseDir: filepath.Join(homeDir, ".aws", "atmos"),
+		baseDir: baseDir,
 	}, nil
 }
 
@@ -167,6 +186,20 @@ func (m *AWSFileManager) WriteConfig(providerName, identityName, region, outputF
 	return nil
 }
 
+// GetBaseDir returns the base directory path.
+func (m *AWSFileManager) GetBaseDir() string {
+	return m.baseDir
+}
+
+// GetDisplayPath returns a user-friendly display path (with ~ if under home directory).
+func (m *AWSFileManager) GetDisplayPath() string {
+	homeDir, err := homedir.Dir()
+	if err == nil && homeDir != "" && strings.HasPrefix(m.baseDir, homeDir) {
+		return strings.Replace(m.baseDir, homeDir, "~", 1)
+	}
+	return m.baseDir
+}
+
 // GetCredentialsPath returns the path to the credentials file for the provider.
 func (m *AWSFileManager) GetCredentialsPath(providerName string) string {
 	return filepath.Join(m.baseDir, providerName, "credentials")
@@ -191,10 +224,96 @@ func (m *AWSFileManager) GetEnvironmentVariables(providerName, identityName stri
 
 // Cleanup removes AWS files for the provider.
 func (m *AWSFileManager) Cleanup(providerName string) error {
+	defer perf.Track(nil, "aws.files.Cleanup")()
+
 	providerDir := filepath.Join(m.baseDir, providerName)
 
 	if err := os.RemoveAll(providerDir); err != nil {
+		// If directory doesn't exist, that's not an error (already cleaned up).
+		if os.IsNotExist(err) {
+			return nil
+		}
 		errUtils.CheckErrorAndPrint(ErrCleanupAWSFiles, providerDir, "failed to cleanup AWS files")
+		return ErrCleanupAWSFiles
+	}
+
+	return nil
+}
+
+// CleanupIdentity removes only the specified identity's sections from AWS INI files.
+// This preserves other identities using the same provider.
+func (m *AWSFileManager) CleanupIdentity(ctx context.Context, providerName, identityName string) error {
+	defer perf.Track(nil, "aws.files.CleanupIdentity")()
+
+	var errs []error
+
+	// Remove identity section from credentials file.
+	credentialsPath := m.GetCredentialsPath(providerName)
+	if err := m.removeIniSection(credentialsPath, identityName); err != nil {
+		errs = append(errs, fmt.Errorf("failed to remove credentials section: %w", err))
+	}
+
+	// Remove identity section from config file.
+	// AWS config uses "profile <name>" format, except for "default".
+	configPath := m.GetConfigPath(providerName)
+	configSectionName := identityName
+	if identityName != "default" {
+		configSectionName = "profile " + identityName
+	}
+	if err := m.removeIniSection(configPath, configSectionName); err != nil {
+		errs = append(errs, fmt.Errorf("failed to remove config section: %w", err))
+	}
+
+	if len(errs) > 0 {
+		return errors.Join(errs...)
+	}
+
+	return nil
+}
+
+// removeIniSection removes a section from an INI file.
+func (m *AWSFileManager) removeIniSection(filePath, sectionName string) error {
+	// Load INI file.
+	cfg, err := ini.Load(filePath)
+	if err != nil {
+		// If file doesn't exist, section is already removed.
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return fmt.Errorf("failed to load INI file: %w", err)
+	}
+
+	// Delete the section.
+	cfg.DeleteSection(sectionName)
+
+	// If no sections remain, remove the file entirely.
+	if len(cfg.Sections()) == 1 && cfg.Sections()[0].Name() == ini.DefaultSection {
+		if err := os.Remove(filePath); err != nil && !os.IsNotExist(err) {
+			return fmt.Errorf("failed to remove empty file: %w", err)
+		}
+		log.Debug("Removed empty INI file", "path", filePath)
+		return nil
+	}
+
+	// Save the updated INI file.
+	if err := cfg.SaveTo(filePath); err != nil {
+		return fmt.Errorf("failed to save INI file: %w", err)
+	}
+
+	log.Debug("Removed INI section", "file", filePath, "section", sectionName)
+	return nil
+}
+
+// CleanupAll removes entire base directory (all providers).
+func (m *AWSFileManager) CleanupAll() error {
+	defer perf.Track(nil, "aws.files.CleanupAll")()
+
+	if err := os.RemoveAll(m.baseDir); err != nil {
+		// If directory doesn't exist, that's not an error (already cleaned up).
+		if os.IsNotExist(err) {
+			return nil
+		}
+		errUtils.CheckErrorAndPrint(ErrCleanupAWSFiles, m.baseDir, "failed to cleanup all AWS files")
 		return ErrCleanupAWSFiles
 	}
 

@@ -730,6 +730,31 @@ func AddIdentityCompletion(cmd *cobra.Command) {
 	}
 }
 
+// identityArgCompletion provides shell completion for identity positional arguments.
+// It returns a list of available identities from the Atmos configuration.
+func identityArgCompletion(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+	// Only complete the first positional argument.
+	if len(args) != 0 {
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+
+	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+	if err != nil {
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+
+	var identities []string
+	if atmosConfig.Auth.Identities != nil {
+		for name := range atmosConfig.Auth.Identities {
+			identities = append(identities, name)
+		}
+	}
+
+	sort.Strings(identities)
+
+	return identities, cobra.ShellCompDirectiveNoFileComp
+}
+
 func ComponentsArgCompletion(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
 	if len(args) == 0 {
 		output, err := listComponents(cmd)

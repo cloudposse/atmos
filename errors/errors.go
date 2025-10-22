@@ -409,6 +409,18 @@ var (
 	ErrDevcontainerNameEmpty     = errors.New("devcontainer name cannot be empty")
 	ErrDevcontainerNameInvalid   = errors.New("devcontainer name contains invalid characters")
 	ErrDevcontainerNameTooLong   = errors.New("devcontainer name is too long")
+
+	// Logout errors.
+	ErrLogoutFailed         = errors.New("logout failed")
+	ErrPartialLogout        = errors.New("partial logout")
+	ErrLogoutNotSupported   = errors.New("logout not supported for this provider")
+	ErrLogoutNotImplemented = errors.New("logout not implemented for this provider")
+	ErrKeyringDeletion      = errors.New("keyring deletion failed")
+	ErrProviderLogout       = errors.New("provider logout failed")
+	ErrIdentityLogout       = errors.New("identity logout failed")
+	ErrIdentityNotInConfig  = errors.New("identity not found in configuration")
+	ErrProviderNotInConfig  = errors.New("provider not found in configuration")
+	ErrInvalidLogoutOption  = errors.New("invalid logout option")
 )
 
 // ExitCodeError is a typed error that preserves subcommand exit codes.
