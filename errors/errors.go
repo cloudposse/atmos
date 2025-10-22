@@ -408,6 +408,9 @@ var (
 	ErrIdentityNotInConfig  = errors.New("identity not found in configuration")
 	ErrProviderNotInConfig  = errors.New("provider not found in configuration")
 	ErrInvalidLogoutOption  = errors.New("invalid logout option")
+
+	// AI-related errors.
+	ErrAINotEnabled = errors.New("AI features are not enabled")
 )
 
 // ExitCodeError is a typed error that preserves subcommand exit codes.
