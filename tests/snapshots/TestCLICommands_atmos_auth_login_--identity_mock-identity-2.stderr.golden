@@ -1,11 +1,11 @@
 
 **Notice:** Telemetry Enabled - Atmos now collects anonymous telemetry regarding usage. This information is used to shape the Atmos roadmap and prioritize features. You can learn more, including how to opt out if you'd prefer not to participate in this anonymous program, by visiting: https://atmos.tools/cli/telemetry
-INFO Chained identity from=mock-provider to=mock-identity
+INFO Chained identity from=mock-provider to=mock-identity-2
 
 ✓ Authentication successful!
 
   Provider  mock-provider                         
-  Identity  mock-identity                         
+  Identity  mock-identity-2                       
   Region    us-east-1                             
   Expires   2099-12-31 23:59:59 UTC (1h 0m) 
 

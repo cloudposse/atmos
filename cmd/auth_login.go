@@ -51,7 +51,11 @@ func executeAuthLoginCommand(cmd *cobra.Command, args []string) error {
 	}
 
 	// Get identity from flag or use default.
-	identityName := viper.GetString(IdentityFlagName)
+	// Read from cobra flags first (more reliable for persistent flags), then fall back to viper.
+	identityName, _ := cmd.Flags().GetString(IdentityFlagName)
+	if identityName == "" {
+		identityName = viper.GetString(IdentityFlagName)
+	}
 
 	// If no identity specified, get the default identity (which prompts if needed).
 	if identityName == "" {

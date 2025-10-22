@@ -194,14 +194,7 @@ func TestAuth_AutoAuthenticationWhenNoCachedCredentials(t *testing.T) {
 
 // TestAuth_MultipleIdentities verifies that credentials for different
 // identities are cached independently.
-//
-// TODO: This test currently fails for mock-identity-2 due to a known bug
-// where the mock provider stores credentials under the default identity name
-// instead of the requested identity. The integration tests don't catch this
-// because they use memory keyring which doesn't persist between invocations.
 func TestAuth_MultipleIdentities(t *testing.T) {
-	t.Skip("Skipping due to known bug: mock-identity-2 credentials stored under wrong identity name")
-
 	tk := NewTestKit(t)
 
 	tk.Chdir("../tests/fixtures/scenarios/atmos-auth-mock")
