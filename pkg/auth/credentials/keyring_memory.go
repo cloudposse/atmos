@@ -103,10 +103,7 @@ func (s *memoryKeyringStore) Delete(alias string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if _, ok := s.items[alias]; !ok {
-		return fmt.Errorf("%w for alias %q", errors.Join(ErrCredentialStore, ErrCredentialsNotFound), alias)
-	}
-
+	// Treat "not found" as success - credential already removed (idempotent).
 	delete(s.items, alias)
 	return nil
 }
