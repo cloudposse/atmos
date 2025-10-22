@@ -52,8 +52,15 @@ func TestDescribeAffectedWithTargetRefClone(t *testing.T) {
 
 	affectedYaml, err := u.ConvertToYAML(affected)
 	assert.Nil(t, err)
-
-	t.Logf("\nAffected components and stacks:\n%v", affectedYaml)
+	t.Cleanup(func() {
+		if t.Failed() {
+			if affectedYaml != "" {
+				t.Logf("Affected components and stacks:\n%s", affectedYaml)
+			} else {
+				t.Logf("Affected components and stacks (raw): %+v", affected)
+			}
+		}
+	})
 }
 
 func TestDescribeAffectedWithTargetRepoPath(t *testing.T) {
@@ -89,6 +96,13 @@ func TestDescribeAffectedWithTargetRepoPath(t *testing.T) {
 
 	affectedYaml, err := u.ConvertToYAML(affected)
 	assert.Nil(t, err)
-
-	t.Logf("\nAffected components and stacks:\n%v", affectedYaml)
+	t.Cleanup(func() {
+		if t.Failed() {
+			if affectedYaml != "" {
+				t.Logf("Affected components and stacks:\n%s", affectedYaml)
+			} else {
+				t.Logf("Affected components and stacks (raw): %+v", affected)
+			}
+		}
+	})
 }
