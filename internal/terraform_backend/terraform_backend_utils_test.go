@@ -177,7 +177,7 @@ func TestGetTerraformBackend(t *testing.T) {
 				TerraformDirAbsolutePath: filepath.Join(tmpDir, "terraform"),
 			}
 
-			outputs, err := tb.GetTerraformBackend(atmosConfig, &tt.componentData)
+			outputs, err := tb.GetTerraformBackend(atmosConfig, &tt.componentData, nil)
 
 			if tt.expectError {
 				assert.Error(t, err)

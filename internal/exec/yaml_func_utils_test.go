@@ -279,13 +279,13 @@ func TestProcessCustomYamlTags(t *testing.T) {
 	atmosConfig, err := cfg.InitCliConfig(info, true)
 	assert.NoError(t, err)
 
-	d := processTagTerraformState(&atmosConfig, "!terraform.state component-1 foo", stack)
+	d := processTagTerraformState(&atmosConfig, "!terraform.state component-1 foo", stack, nil)
 	assert.Equal(t, "component-1-a", d)
 
-	d = processTagTerraformState(&atmosConfig, "!terraform.state component-1 bar", stack)
+	d = processTagTerraformState(&atmosConfig, "!terraform.state component-1 bar", stack, nil)
 	assert.Equal(t, "component-1-b", d)
 
-	d = processTagTerraformState(&atmosConfig, "!terraform.state component-1 nonprod baz", "")
+	d = processTagTerraformState(&atmosConfig, "!terraform.state component-1 nonprod baz", "", nil)
 	assert.Equal(t, "component-1-c", d)
 
 	res, err := ExecuteDescribeComponent(
@@ -319,13 +319,13 @@ func TestProcessCustomYamlTags(t *testing.T) {
 		t.Fatalf("Failed to execute 'ExecuteTerraform': %v", err)
 	}
 
-	d = processTagTerraformState(&atmosConfig, "!terraform.state component-2 foo", stack)
+	d = processTagTerraformState(&atmosConfig, "!terraform.state component-2 foo", stack, nil)
 	assert.Equal(t, "component-1-a", d)
 
-	d = processTagTerraformState(&atmosConfig, "!terraform.state component-2 nonprod bar", stack)
+	d = processTagTerraformState(&atmosConfig, "!terraform.state component-2 nonprod bar", stack, nil)
 	assert.Equal(t, "component-1-b", d)
 
-	d = processTagTerraformState(&atmosConfig, "!terraform.state component-2 nonprod baz", "")
+	d = processTagTerraformState(&atmosConfig, "!terraform.state component-2 nonprod baz", "", nil)
 	assert.Equal(t, "component-1-c", d)
 
 	res, err = ExecuteDescribeComponent(
@@ -337,7 +337,7 @@ func TestProcessCustomYamlTags(t *testing.T) {
 	)
 	assert.NoError(t, err)
 
-	processed, err := ProcessCustomYamlTags(&atmosConfig, res, stack, []string{})
+	processed, err := ProcessCustomYamlTags(&atmosConfig, res, stack, []string{}, nil)
 	assert.NoError(t, err)
 
 	val, err := u.EvaluateYqExpression(&atmosConfig, processed, ".vars.foo")

@@ -383,6 +383,7 @@ func ExecuteDescribeStacks(
 									componentSection,
 									configAndStacksInfo.Stack,
 									skip,
+									&configAndStacksInfo,
 								)
 								if err != nil {
 									return nil, err
@@ -609,6 +610,7 @@ func ExecuteDescribeStacks(
 									componentSection,
 									configAndStacksInfo.Stack,
 									skip,
+									&configAndStacksInfo,
 								)
 								if err != nil {
 									return nil, err
@@ -819,6 +821,7 @@ func ExecuteDescribeStacks(
 									componentSection,
 									configAndStacksInfo.Stack,
 									skip,
+									&configAndStacksInfo,
 								)
 								if err != nil {
 									return nil, err

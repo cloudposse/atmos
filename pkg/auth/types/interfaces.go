@@ -29,6 +29,15 @@ type Provider interface {
 	Environment() (map[string]string, error)
 }
 
+// PostAuthenticateParams contains parameters for PostAuthenticate method.
+type PostAuthenticateParams struct {
+	AuthContext  *schema.AuthContext
+	StackInfo    *schema.ConfigAndStacksInfo
+	ProviderName string
+	IdentityName string
+	Credentials  ICredentials
+}
+
 // Identity defines the interface that all authentication identities must implement.
 type Identity interface {
 	// Kind returns the identity kind (e.g., "aws/permission-set").
@@ -48,8 +57,9 @@ type Identity interface {
 	Environment() (map[string]string, error)
 
 	// PostAuthenticate is called after successful authentication with the final credentials.
-	// Implementations can use the manager to perform provider-specific file setup or other side effects.
-	PostAuthenticate(ctx context.Context, stackInfo *schema.ConfigAndStacksInfo, providerName, identityName string, creds ICredentials) error
+	// It receives both authContext (to populate runtime credentials) and stackInfo (to read
+	// stack-level auth configuration overrides and write environment variables).
+	PostAuthenticate(ctx context.Context, params *PostAuthenticateParams) error
 }
 
 // AuthManager manages the overall authentication process.

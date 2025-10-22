@@ -73,7 +73,7 @@ func (s stubUser) Authenticate(_ context.Context, _ types.ICredentials) (types.I
 }
 func (s stubUser) Validate() error                         { return nil }
 func (s stubUser) Environment() (map[string]string, error) { return map[string]string{}, nil }
-func (s stubUser) PostAuthenticate(_ context.Context, _ *schema.ConfigAndStacksInfo, _ string, _ string, _ types.ICredentials) error {
+func (s stubUser) PostAuthenticate(_ context.Context, _ *types.PostAuthenticateParams) error {
 	return nil
 }
 
@@ -241,12 +241,24 @@ func TestUser_PostAuthenticate_SetsEnvAndFiles(t *testing.T) {
 	t.Setenv("HOME", to)
 	id, _ := NewUserIdentity("dev", &schema.Identity{Kind: "aws/user"})
 	ui := id.(*userIdentity)
+	authContext := &schema.AuthContext{}
 	stack := &schema.ConfigAndStacksInfo{}
 	creds := &types.AWSCredentials{AccessKeyID: "AK", SecretAccessKey: "SE", Region: "us-east-1"}
-	err := ui.PostAuthenticate(context.Background(), stack, "aws-user", "dev", creds)
+	err := ui.PostAuthenticate(context.Background(), &types.PostAuthenticateParams{
+		AuthContext:  authContext,
+		StackInfo:    stack,
+		ProviderName: "aws-user",
+		IdentityName: "dev",
+		Credentials:  creds,
+	})
 	require.NoError(t, err)
 
-	// Env set on stack.
+	// Auth context populated.
+	require.NotNil(t, authContext.AWS)
+	assert.Equal(t, "dev", authContext.AWS.Profile)
+	assert.Equal(t, "us-east-1", authContext.AWS.Region)
+
+	// Env set on stack (derived from auth context).
 	assert.Contains(t, stack.ComponentEnvSection["AWS_SHARED_CREDENTIALS_FILE"], filepath.Join(".aws", "atmos", "aws-user", "credentials"))
 	assert.Equal(t, "dev", stack.ComponentEnvSection["AWS_PROFILE"])
 }

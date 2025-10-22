@@ -15,10 +15,11 @@ func ProcessCustomYamlTags(
 	input schema.AtmosSectionMapType,
 	currentStack string,
 	skip []string,
+	stackInfo *schema.ConfigAndStacksInfo,
 ) (schema.AtmosSectionMapType, error) {
 	defer perf.Track(atmosConfig, "exec.ProcessCustomYamlTags")()
 
-	return processNodes(atmosConfig, input, currentStack, skip), nil
+	return processNodes(atmosConfig, input, currentStack, skip, stackInfo), nil
 }
 
 func processNodes(
@@ -26,6 +27,7 @@ func processNodes(
 	data map[string]any,
 	currentStack string,
 	skip []string,
+	stackInfo *schema.ConfigAndStacksInfo,
 ) map[string]any {
 	newMap := make(map[string]any)
 	var recurse func(any) any
@@ -33,7 +35,7 @@ func processNodes(
 	recurse = func(node any) any {
 		switch v := node.(type) {
 		case string:
-			return processCustomTags(atmosConfig, v, currentStack, skip)
+			return processCustomTags(atmosConfig, v, currentStack, skip, stackInfo)
 
 		case map[string]any:
 			newNestedMap := make(map[string]any)
@@ -66,6 +68,7 @@ func processCustomTags(
 	input string,
 	currentStack string,
 	skip []string,
+	stackInfo *schema.ConfigAndStacksInfo,
 ) any {
 	switch {
 	case strings.HasPrefix(input, u.AtmosYamlFuncTemplate) && !skipFunc(skip, u.AtmosYamlFuncTemplate):
@@ -81,7 +84,7 @@ func processCustomTags(
 	case strings.HasPrefix(input, u.AtmosYamlFuncTerraformOutput) && !skipFunc(skip, u.AtmosYamlFuncTerraformOutput):
 		return processTagTerraformOutput(atmosConfig, input, currentStack)
 	case strings.HasPrefix(input, u.AtmosYamlFuncTerraformState) && !skipFunc(skip, u.AtmosYamlFuncTerraformState):
-		return processTagTerraformState(atmosConfig, input, currentStack)
+		return processTagTerraformState(atmosConfig, input, currentStack, stackInfo)
 	case strings.HasPrefix(input, u.AtmosYamlFuncEnv) && !skipFunc(skip, u.AtmosYamlFuncEnv):
 		res, err := u.ProcessTagEnv(input)
 		errUtils.CheckErrorPrintAndExit(err, "", "")

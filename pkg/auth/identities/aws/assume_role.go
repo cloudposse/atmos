@@ -223,15 +223,23 @@ func (i *assumeRoleIdentity) GetProviderName() (string, error) {
 	return "", fmt.Errorf("%w: assume role identity %q has no valid via configuration", errUtils.ErrInvalidIdentityConfig, i.name)
 }
 
-// PostAuthenticate sets up AWS files after authentication.
-func (i *assumeRoleIdentity) PostAuthenticate(ctx context.Context, stackInfo *schema.ConfigAndStacksInfo, providerName, identityName string, creds types.ICredentials) error {
+// PostAuthenticate sets up AWS files and populates auth context after authentication.
+func (i *assumeRoleIdentity) PostAuthenticate(ctx context.Context, params *types.PostAuthenticateParams) error {
 	// Setup AWS files using shared AWS cloud package.
-	if err := awsCloud.SetupFiles(providerName, identityName, creds); err != nil {
+	if err := awsCloud.SetupFiles(params.ProviderName, params.IdentityName, params.Credentials); err != nil {
 		return errors.Join(errUtils.ErrAwsAuth, err)
 	}
-	if err := awsCloud.SetEnvironmentVariables(stackInfo, providerName, identityName); err != nil {
+
+	// Populate auth context (single source of truth for runtime credentials).
+	if err := awsCloud.SetAuthContext(params.AuthContext, params.StackInfo, params.ProviderName, params.IdentityName, params.Credentials); err != nil {
 		return errors.Join(errUtils.ErrAwsAuth, err)
 	}
+
+	// Derive environment variables from auth context for spawned processes.
+	if err := awsCloud.SetEnvironmentVariables(params.AuthContext, params.StackInfo); err != nil {
+		return errors.Join(errUtils.ErrAwsAuth, err)
+	}
+
 	return nil
 }
 

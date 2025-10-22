@@ -135,7 +135,23 @@ func (m *manager) Authenticate(ctx context.Context, identityName string) (*types
 			errUtils.CheckErrorAndPrint(errUtils.ErrInvalidAuthConfig, "GetProviderName", "")
 			return nil, errUtils.ErrInvalidAuthConfig
 		}
-		if err := identity.PostAuthenticate(ctx, m.stackInfo, providerName, identityName, finalCreds); err != nil {
+
+		// Get or create auth context in stackInfo.
+		var authContext *schema.AuthContext
+		if m.stackInfo != nil {
+			if m.stackInfo.AuthContext == nil {
+				m.stackInfo.AuthContext = &schema.AuthContext{}
+			}
+			authContext = m.stackInfo.AuthContext
+		}
+
+		if err := identity.PostAuthenticate(ctx, &types.PostAuthenticateParams{
+			AuthContext:  authContext,
+			StackInfo:    m.stackInfo,
+			ProviderName: providerName,
+			IdentityName: identityName,
+			Credentials:  finalCreds,
+		}); err != nil {
 			errUtils.CheckErrorAndPrint(errUtils.ErrAuthenticationFailed, "PostAuthenticate", "")
 			return nil, errUtils.ErrAuthenticationFailed
 		}

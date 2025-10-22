@@ -47,8 +47,17 @@ func TestSetEnvironmentVariables_SetsStackEnv(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
 
+	// Create auth context with AWS credentials.
+	authContext := &schema.AuthContext{
+		AWS: &schema.AWSAuthContext{
+			CredentialsFile: filepath.Join(tmp, ".aws", "atmos", "prov", "credentials"),
+			ConfigFile:      filepath.Join(tmp, ".aws", "atmos", "prov", "config"),
+			Profile:         "dev",
+		},
+	}
+
 	stack := &schema.ConfigAndStacksInfo{}
-	err := SetEnvironmentVariables(stack, "prov", "dev")
+	err := SetEnvironmentVariables(authContext, stack)
 	require.NoError(t, err)
 
 	credPath := filepath.Join(".aws", "atmos", "prov", "credentials")

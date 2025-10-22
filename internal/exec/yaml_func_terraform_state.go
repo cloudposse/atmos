@@ -16,6 +16,7 @@ func processTagTerraformState(
 	atmosConfig *schema.AtmosConfiguration,
 	input string,
 	currentStack string,
+	stackInfo *schema.ConfigAndStacksInfo,
 ) any {
 	defer perf.Track(atmosConfig, "exec.processTagTerraformState")()
 
@@ -54,7 +55,13 @@ func processTagTerraformState(
 		errUtils.CheckErrorPrintAndExit(er, "", "")
 	}
 
-	value, err := GetTerraformState(atmosConfig, input, stack, component, output, false)
+	// Extract authContext from stackInfo.
+	var authContext *schema.AuthContext
+	if stackInfo != nil {
+		authContext = stackInfo.AuthContext
+	}
+
+	value, err := GetTerraformState(atmosConfig, input, stack, component, output, false, authContext)
 	errUtils.CheckErrorPrintAndExit(err, "", "")
 	return value
 }

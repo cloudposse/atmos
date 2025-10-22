@@ -77,7 +77,7 @@ func TestGetTerraformBackendLocal(t *testing.T) {
 			}
 
 			// Use componentData as a pointer.
-			content, err := tb.ReadTerraformBackendLocal(config, &tt.componentData)
+			content, err := tb.ReadTerraformBackendLocal(config, &tt.componentData, nil)
 
 			if tt.expectedError != "" {
 				require.Error(t, err)
