@@ -131,6 +131,7 @@ var (
 	ErrHTTPBackendWorkspaces       = errors.New("workspaces are not supported for the HTTP backend")
 	ErrInvalidTerraformComponent   = errors.New("invalid Terraform component")
 	ErrNoTty                       = errors.New("no TTY attached")
+	ErrNoSuitableShell             = errors.New("no suitable shell found")
 	ErrFailedToLoadTerraformModule = errors.New("failed to load terraform module")
 
 	ErrMissingPackerTemplate = errors.New("packer template is required; it can be specified in the `settings.packer.template` section in the Atmos component manifest, or on the command line via the flag `--template <template>` (shorthand `-t`)")
