@@ -355,9 +355,11 @@ JIT vendoring dramatically improves performance by vendoring only the components
 
 2. **Lazy Evaluation**: Components are vendored on first use, not during repository initialization.
 
-3. **Cached Results**: Vendored components are cached per deployment to avoid repeated pulls.
+3. **Vendor Cache**: Centralized cache (`.atmos/vendor-cache/`) stores vendored components, indexed by source URL and version/tag. Multiple deployments share cached components.
 
-4. **Garbage Collection**: Unused vendored components can be cleaned up automatically.
+4. **Environment-Specific Vendoring**: Use labels/tags to vendor different component versions per environment (dev/staging/prod).
+
+5. **Garbage Collection**: Unused vendored components can be cleaned up automatically based on age and usage.
 
 **Vendoring Workflow**:
 
@@ -396,20 +398,32 @@ deployment:
       - source: "github.com/cloudposse/terraform-aws-components//modules/ecs-service"
         version: "1.2.3"
         targets: ["ecs/service-api"]
+        labels:
+          environment: ["dev", "staging"]  # Only vendor for dev/staging
 
-      # Vendor from registry
+      # Vendor from registry with environment-specific versions
       - source: "registry.terraform.io/cloudposse/ecs-service/aws"
         version: "~> 2.0"
         targets: ["ecs/taskdef-api"]
+        labels:
+          environment: ["dev", "staging"]
+
+      # Production uses different (stable) version
+      - source: "registry.terraform.io/cloudposse/ecs-service/aws"
+        version: "2.1.5"  # pinned version for prod
+        targets: ["ecs/taskdef-api"]
+        labels:
+          environment: ["prod"]
 
     # Or auto-discover from component references
     auto_discover: true  # default: true
 
-    # Cache configuration
+    # Vendor cache configuration
     cache:
       enabled: true  # default: true
-      dir: ".atmos/vendor-cache/deployments/${deployment.name}"
+      dir: ".atmos/vendor-cache"  # centralized cache location
       ttl: 24h  # re-check sources after 24 hours
+      strategy: "content-addressable"  # or "source-versioned"
 ```
 
 **Auto-Discovery of Vendored Components**:
@@ -427,35 +441,110 @@ components:
 
 Atmos checks:
 1. Does `components/terraform/ecs-service/` exist locally?
-2. If not, is it defined in `vendor.yaml`?
-3. If yes, vendor it to `.atmos/vendor-cache/deployments/api/terraform/ecs-service/`
+2. If not, is it defined in `vendor.yaml` or deployment vendor config?
+3. If yes, check vendor cache for matching content (by digest)
+4. If not cached, pull and store in content-addressable cache
+5. Create symlink/reference from deployment workspace to cached content
 
-**Vendor Cache Structure**:
+### Vendor Cache Architecture
+
+The vendor cache is a **centralized, content-addressable store** that eliminates duplication and enables efficient sharing across deployments and environments.
+
+**Cache Structure**:
 
 ```
 .atmos/
 └── vendor-cache/
-    └── deployments/
-        ├── api/
-        │   ├── terraform/
-        │   │   ├── ecs-service/
-        │   │   └── ecs-taskdef/
-        │   └── .vendor-lock.yaml  # Lock file with versions/digests
-        ├── worker/
-        │   └── terraform/
-        │       └── sqs-consumer/
-        └── platform/
-            └── terraform/
-                ├── vpc/
-                ├── eks/
-                └── rds/
+    ├── objects/
+    │   └── sha256/
+    │       ├── abc123.../          # Content-addressable storage
+    │       │   ├── main.tf
+    │       │   ├── variables.tf
+    │       │   └── outputs.tf
+    │       ├── def456.../
+    │       └── xyz789.../
+    ├── refs/
+    │   ├── github.com/
+    │   │   └── cloudposse/
+    │   │       └── terraform-aws-components/
+    │   │           └── modules/
+    │   │               └── ecs-service/
+    │   │                   ├── 1.2.3 -> ../../../../objects/sha256/abc123...
+    │   │                   ├── 1.2.4 -> ../../../../objects/sha256/def456...
+    │   │                   └── latest -> 1.2.4
+    │   └── registry.terraform.io/
+    │       └── cloudposse/
+    │           └── ecs-service/
+    │               └── aws/
+    │                   ├── 2.1.0 -> ../../../../objects/sha256/xyz789...
+    │                   └── 2.1.5 -> ../../../../objects/sha256/aaa111...
+    ├── deployments/
+    │   ├── api/
+    │   │   ├── dev/
+    │   │   │   ├── terraform/
+    │   │   │   │   └── ecs-service -> ../../../../refs/github.com/.../1.2.3
+    │   │   │   └── .vendor-lock.yaml
+    │   │   ├── staging/
+    │   │   │   └── terraform/
+    │   │   │       └── ecs-service -> ../../../../refs/github.com/.../1.2.4
+    │   │   └── prod/
+    │   │       └── terraform/
+    │   │           └── ecs-service -> ../../../../refs/registry.terraform.io/.../2.1.5
+    │   └── worker/
+    │       └── dev/
+    └── .cache-index.yaml  # Global cache metadata
 ```
 
-**Vendor Lock File**:
+**Benefits of Content-Addressable Cache**:
+
+1. **Deduplication**: Same component version stored once, referenced by multiple deployments
+2. **Environment Isolation**: Dev/staging/prod can use different versions without conflicts
+3. **Fast Switching**: Changing versions is instant (symlink update)
+4. **Disk Efficiency**: 100 deployments using same component = 1x storage
+5. **Garbage Collection**: Easy to identify unreferenced objects
+
+**Cache Index**:
 
 ```yaml
-# .atmos/vendor-cache/deployments/api/.vendor-lock.yaml
+# .atmos/vendor-cache/.cache-index.yaml
+version: 1
+generated_at: "2025-01-15T10:30:00Z"
+
+objects:
+  sha256:abc123...:
+    size: 45678
+    refs:
+      - github.com/cloudposse/terraform-aws-components//modules/ecs-service@1.2.3
+    deployments:
+      - api/dev
+      - api/staging
+      - worker/dev
+    last_accessed: "2025-01-15T10:30:00Z"
+    created_at: "2025-01-10T08:00:00Z"
+
+  sha256:def456...:
+    size: 50123
+    refs:
+      - github.com/cloudposse/terraform-aws-components//modules/ecs-service@1.2.4
+    deployments:
+      - api/staging
+    last_accessed: "2025-01-14T15:20:00Z"
+    created_at: "2025-01-12T09:00:00Z"
+
+refs:
+  github.com/cloudposse/terraform-aws-components//modules/ecs-service:
+    versions:
+      1.2.3: sha256:abc123...
+      1.2.4: sha256:def456...
+      latest: 1.2.4
+```
+
+**Deployment Lock File**:
+
+```yaml
+# .atmos/vendor-cache/deployments/api/dev/.vendor-lock.yaml
 deployment: api
+target: dev
 generated_at: "2025-01-15T10:30:00Z"
 
 components:
@@ -463,51 +552,104 @@ components:
     source: "github.com/cloudposse/terraform-aws-components//modules/ecs-service"
     version: "1.2.3"
     digest: "sha256:abc123..."
+    cache_path: ".atmos/vendor-cache/objects/sha256/abc123..."
     pulled_at: "2025-01-15T10:30:00Z"
+    labels:
+      environment: dev
 
   terraform/ecs-taskdef:
     source: "registry.terraform.io/cloudposse/ecs-service/aws"
     version: "2.1.0"
     digest: "sha256:def456..."
+    cache_path: ".atmos/vendor-cache/objects/sha256/def456..."
     pulled_at: "2025-01-15T10:30:00Z"
+    labels:
+      environment: dev
 ```
 
 **CLI Commands for JIT Vendoring**:
 
 ```bash
-# Vendor all components for a deployment
+# Vendor all components for a deployment (all targets)
 atmos vendor pull --deployment api
 # Output:
 # Discovering components for deployment 'api'...
-# Found 3 components to vendor
-# ✓ terraform/ecs-service (1.2.3)
-# ✓ terraform/ecs-taskdef (2.1.0)
-# ✓ terraform/alb-target-group (1.0.5)
-# Cached in .atmos/vendor-cache/deployments/api/
+# Found 3 components across 3 targets (dev, staging, prod)
+# ✓ terraform/ecs-service@1.2.3 (dev, staging) → sha256:abc123... [cached]
+# ✓ terraform/ecs-service@2.1.5 (prod) → sha256:xyz789... [pulled]
+# ✓ terraform/ecs-taskdef@2.1.0 (dev, staging) → sha256:def456... [cached]
+# ✓ terraform/ecs-taskdef@2.1.5 (prod) → sha256:aaa111... [cached]
+# Cache usage: 180 MB (3 unique objects, 6 deployment refs)
 
-# Show vendor status for deployment
+# Vendor for specific target (environment)
+atmos vendor pull --deployment api --target dev
+# Output:
+# Discovering components for deployment 'api' target 'dev'...
+# Found 2 components
+# ✓ terraform/ecs-service@1.2.3 → sha256:abc123... [cached]
+# ✓ terraform/ecs-taskdef@2.1.0 → sha256:def456... [cached]
+# Created workspace: .atmos/vendor-cache/deployments/api/dev/
+
+# Show vendor status for deployment (all targets)
 atmos vendor status --deployment api
 # Output:
-# COMPONENT                  VERSION   STATUS    LAST_PULLED
-# terraform/ecs-service      1.2.3     cached    2h ago
-# terraform/ecs-taskdef      2.1.0     cached    2h ago
-# terraform/alb-target-group 1.0.5     outdated  30d ago (1.0.6 available)
+# TARGET    COMPONENT                  VERSION   DIGEST      STATUS    AGE
+# dev       terraform/ecs-service      1.2.3     abc123...   cached    2h
+# dev       terraform/ecs-taskdef      2.1.0     def456...   cached    2h
+# staging   terraform/ecs-service      1.2.4     ghi789...   cached    1d
+# staging   terraform/ecs-taskdef      2.1.0     def456...   cached    1d
+# prod      terraform/ecs-service      2.1.5     xyz789...   cached    7d
+# prod      terraform/ecs-taskdef      2.1.5     aaa111...   outdated  30d (2.1.6 available)
 
-# Update vendored components
-atmos vendor pull --deployment api --update
+# Show vendor status for specific target
+atmos vendor status --deployment api --target prod
 
-# Clean unused vendor cache
+# Show cache statistics
+atmos vendor cache stats
+# Output:
+# Vendor Cache Statistics
+#
+# Total size: 2.3 GB
+# Unique objects: 145
+# Deployment workspaces: 23
+# Total references: 378
+#
+# Top 5 components by size:
+#   1. eks-cluster (250 MB, 8 refs)
+#   2. rds-instance (180 MB, 12 refs)
+#   3. vpc (120 MB, 15 refs)
+#   4. ecs-service (90 MB, 25 refs)
+#   5. lambda-function (60 MB, 18 refs)
+#
+# Deduplication savings: 8.7 GB (78% reduction)
+
+# Update vendored components for specific target
+atmos vendor pull --deployment api --target prod --update
+
+# Clean unused vendor cache (automatic GC)
 atmos vendor clean
 # Output:
 # Analyzing vendor cache...
-# Found 15 deployments with cached components
-# api: 3 components (45 MB) - used 2h ago - KEEP
-# worker: 2 components (30 MB) - used 1d ago - KEEP
-# old-service: 5 components (80 MB) - used 180d ago - REMOVE
-# Clean 80 MB? (y/N)
+#
+# Unreferenced objects (not used by any deployment):
+#   sha256:old123... (45 MB, last used 180d ago)
+#   sha256:old456... (60 MB, last used 200d ago)
+#
+# Stale deployment workspaces (deployment no longer exists):
+#   old-service/dev (80 MB)
+#   old-service/prod (80 MB)
+#
+# Total reclaimable: 265 MB
+# Clean? (y/N)
 
-# Force clean specific deployment cache
+# Force clean specific deployment cache (all targets)
 atmos vendor clean --deployment old-service --force
+
+# Clean specific target only
+atmos vendor clean --deployment api --target staging --force
+
+# Prune unreferenced objects older than 30 days
+atmos vendor clean --prune --older-than 30d
 ```
 
 **Integration with Existing Vendoring**:
@@ -527,22 +669,104 @@ atmos vendor pull --deployment api
 - Existing `vendor.yaml` continues to work unchanged
 - `atmos vendor pull` (without `--deployment`) behaves identically to current behavior
 
+**Environment-Specific Vendoring Use Cases**:
+
+JIT vendoring with labels enables sophisticated environment-specific component versioning strategies:
+
+**Use Case 1: Progressive Rollout**
+```yaml
+vendor:
+  components:
+    # Dev/staging use latest (unstable) version for testing
+    - source: "github.com/cloudposse/terraform-aws-components//modules/ecs-service"
+      version: "1.3.0-beta.1"
+      labels:
+        environment: ["dev", "staging"]
+
+    # Production uses stable version
+    - source: "github.com/cloudposse/terraform-aws-components//modules/ecs-service"
+      version: "1.2.5"
+      labels:
+        environment: ["prod"]
+```
+
+**Use Case 2: Cost Optimization in Non-Prod**
+```yaml
+vendor:
+  components:
+    # Dev uses lightweight component variant
+    - source: "github.com/internal/rds-cluster-dev"
+      version: "1.0.0"
+      labels:
+        environment: ["dev"]
+
+    # Production uses full-featured component
+    - source: "github.com/internal/rds-cluster-prod"
+      version: "2.1.0"
+      labels:
+        environment: ["prod"]
+```
+
+**Use Case 3: Multi-Region with Regional Variations**
+```yaml
+vendor:
+  components:
+    # US region component
+    - source: "github.com/internal/compliance-us"
+      version: "1.0.0"
+      labels:
+        region: ["us-east-1", "us-west-2"]
+
+    # EU region component (GDPR compliance)
+    - source: "github.com/internal/compliance-eu"
+      version: "1.0.0"
+      labels:
+        region: ["eu-west-1", "eu-central-1"]
+```
+
+**Use Case 4: Feature Flags via Labels**
+```yaml
+vendor:
+  components:
+    # Feature preview for canary deployments
+    - source: "github.com/internal/api-gateway"
+      version: "2.0.0"
+      labels:
+        feature: "new-auth-system"
+        environment: ["dev"]
+
+    # Stable version for production
+    - source: "github.com/internal/api-gateway"
+      version: "1.5.0"
+      labels:
+        environment: ["prod"]
+```
+
 **Performance Comparison**:
 
 ```
-Scenario: Monorepo with 100 components, deployment uses 5
+Scenario: Monorepo with 100 components, deployment uses 5, 3 environments
 
 Traditional Vendoring:
   Initial:     atmos vendor pull → 60s, 500 MB
   Subsequent:  Cached, but 500 MB on disk
+  Per-env:     N/A (same components for all environments)
 
-JIT Vendoring:
-  Initial:     atmos vendor pull --deployment api → 5s, 25 MB
-  Subsequent:  Cached, 25 MB on disk
+JIT Vendoring with Environment-Specific Versions:
+  Initial:     atmos vendor pull --deployment api → 8s, 40 MB
+  Subsequent:  Cached (content-addressable deduplication)
+  dev:         5 components @ v1.3.x → 25 MB (latest/unstable)
+  staging:     5 components @ v1.3.x → 25 MB (shared with dev, 0 MB additional)
+  prod:        5 components @ v1.2.x → 22 MB (stable, different digest)
+  Total:       47 MB (3 unique versions, 6 deployment refs)
 
-Multi-Deployment:
-  Traditional: 500 MB total (shared)
-  JIT:        25 MB × 10 deployments = 250 MB (isolated, parallelizable)
+Multi-Deployment Scenario (10 deployments × 3 environments):
+  Traditional: 500 MB total (shared, all envs use same versions)
+  JIT Content-Addressable:
+    - Unique component versions: ~50 (mix of stable/latest per env)
+    - Total storage: ~300 MB
+    - Deployment refs: 150 (10 deployments × 3 targets × 5 components avg)
+    - Deduplication savings: 70% (would be 1 GB without content-addressing)
 ```
 
 **OCI Bundle Integration**:
@@ -562,15 +786,17 @@ atmos release create api --target dev --bundle
 atmos rollout apply api --target prod --bundle oci://registry/api:release-abc123
 ```
 
-**Benefits of JIT Vendoring**:
+**Benefits of JIT Vendoring with Content-Addressable Cache**:
 
 1. **Speed**: 10x faster vendoring by pulling only what's needed
-2. **Disk Space**: 10-50x reduction in vendored component storage
-3. **Isolation**: Each deployment has independent vendor cache
-4. **Reproducibility**: Lock files ensure consistent component versions
+2. **Disk Space**: 10-50x reduction through content-addressable deduplication
+3. **Environment Isolation**: Dev/staging/prod use different component versions via labels
+4. **Reproducibility**: Lock files ensure consistent component versions per environment
 5. **Parallelization**: Multiple deployments can vendor concurrently
-6. **Cleanup**: Automatic garbage collection of unused components
+6. **Cleanup**: Automatic garbage collection of unreferenced objects
 7. **Monorepo-Friendly**: Scale to hundreds of components without performance degradation
+8. **Version Flexibility**: Progressive rollout strategies (beta in dev, stable in prod)
+9. **Cache Sharing**: Same component version used by multiple deployments = 1x storage
 
 ## CLI Design
 
