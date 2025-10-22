@@ -4,14 +4,14 @@ import (
 	"fmt"
 	"sync"
 
-	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
+
+	log "github.com/cloudposse/atmos/pkg/logger"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	tb "github.com/cloudposse/atmos/internal/terraform_backend"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
-	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 var terraformStateCache = sync.Map{}
@@ -43,7 +43,7 @@ func GetTerraformState(
 	if !skipCache {
 		backend, found := terraformStateCache.Load(stackSlug)
 		if found && backend != nil {
-			log.Debug("Cache hit for terraform state",
+			log.Debug("Cache hit",
 				"function", yamlFunc,
 				cfg.ComponentStr, component,
 				cfg.StackStr, stack,
@@ -58,21 +58,8 @@ func GetTerraformState(
 		}
 	}
 
-	message := fmt.Sprintf("Fetching %s output from %s in %s", output, component, stack)
-
-	if atmosConfig != nil && (atmosConfig.Logs.Level == u.LogLevelTrace || atmosConfig.Logs.Level == u.LogLevelDebug) {
-		// Initialize spinner.
-		p := NewSpinner(message)
-		spinnerDone := make(chan struct{})
-		// Run spinner in a goroutine.
-		RunSpinner(p, spinnerDone, message)
-		// Ensure the spinner is stopped before returning.
-		defer StopSpinner(p, spinnerDone)
-	}
-
 	componentSections, err := ExecuteDescribeComponent(component, stack, true, true, nil)
 	if err != nil {
-		u.PrintfMessageToTUI("\r✗ %s\n", message)
 		er := fmt.Errorf("%w `%s` in stack `%s`\nin YAML function: `%s`\n%v", errUtils.ErrDescribeComponent, component, stack, yamlFunc, err)
 		return nil, er
 	}
@@ -87,22 +74,18 @@ func GetTerraformState(
 		terraformStateCache.Store(stackSlug, remoteStateBackendStaticTypeOutputs)
 		result, exists, err := GetStaticRemoteStateOutput(atmosConfig, component, stack, remoteStateBackendStaticTypeOutputs, output)
 		if err != nil {
-			u.PrintfMessageToTUI("\r✗ %s\n", message)
 			return nil, fmt.Errorf("%w for component `%s` in stack `%s`\nin YAML function: `%s`\n%v", errUtils.ErrReadTerraformState, component, stack, yamlFunc, err)
 		}
 		if !exists {
-			u.PrintfMessageToTUI("\r✗ %s\n", message)
 			return nil, fmt.Errorf("%w: output `%s` does not exist for component `%s` in stack `%s`\nin YAML function: `%s`", errUtils.ErrReadTerraformState, output, component, stack, yamlFunc)
 		}
 		// result may be nil if the output is legitimately null
-		u.PrintfMessageToTUI("\r✓ %s\n", message)
 		return result, nil
 	}
 
 	// Read Terraform backend.
 	backend, err := tb.GetTerraformBackend(atmosConfig, &componentSections)
 	if err != nil {
-		u.PrintfMessageToTUI("\r✗ %s\n", message)
 		er := fmt.Errorf("%w for component `%s` in stack `%s`\nin YAML function: `%s`\n%v", errUtils.ErrReadTerraformState, component, stack, yamlFunc, err)
 		return nil, er
 	}
@@ -112,18 +95,15 @@ func GetTerraformState(
 
 	// If `backend` is `nil`, return `nil` (the component in the stack has not been provisioned yet).
 	if backend == nil {
-		u.PrintfMessageToTUI("\r✓ %s\n", message)
 		return nil, nil
 	}
 
 	// Get the output.
 	result, err := tb.GetTerraformBackendVariable(atmosConfig, backend, output)
 	if err != nil {
-		u.PrintfMessageToTUI("\r✗ %s\n", message)
 		er := fmt.Errorf("%w %s for component `%s` in stack `%s`\nin YAML function: `%s`\n%v", errUtils.ErrEvaluateTerraformBackendVariable, output, component, stack, yamlFunc, err)
 		return nil, er
 	}
 
-	u.PrintfMessageToTUI("\r✓ %s\n", message)
 	return result, nil
 }
