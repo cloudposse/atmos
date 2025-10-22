@@ -40,6 +40,7 @@ jobs:
     name: "Build and push Docker image for Atmos CLI"
     runs-on: ubuntu-latest
     needs: release
+    if: ${{ github.event.release.prerelease == false }}
     steps:
       - name: "Checkout source code at current commit"
         uses: actions/checkout@v4
