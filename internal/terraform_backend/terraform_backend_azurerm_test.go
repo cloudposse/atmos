@@ -848,7 +848,7 @@ func TestReadTerraformBackendAzurerm_Integration_CacheKeyDeterminism(t *testing.
 			description:  "Different accounts should create separate clients",
 		},
 		{
-			name: "different containers should use different cache",
+			name: "different containers same account should use same cache",
 			backend1: map[string]any{
 				"storage_account_name": "account1",
 				"container_name":       "container1",
@@ -859,21 +859,17 @@ func TestReadTerraformBackendAzurerm_Integration_CacheKeyDeterminism(t *testing.
 				"container_name":       "container2",
 				"key":                  "terraform.tfstate",
 			},
-			shouldBeSame: false,
-			description:  "Different containers should create separate clients",
+			shouldBeSame: true,
+			description:  "Same account with different containers should share client",
 		},
 	}
 
 	for _, tt := range testCases {
 		t.Run(tt.name, func(t *testing.T) {
 			// Generate cache keys manually to verify determinism.
-			cacheKey1 := fmt.Sprintf("account=%s;container=%s",
-				GetBackendAttribute(&tt.backend1, "storage_account_name"),
-				GetBackendAttribute(&tt.backend1, "container_name"))
-
-			cacheKey2 := fmt.Sprintf("account=%s;container=%s",
-				GetBackendAttribute(&tt.backend2, "storage_account_name"),
-				GetBackendAttribute(&tt.backend2, "container_name"))
+			// Cache keys are now based on storage account only.
+			cacheKey1 := GetBackendAttribute(&tt.backend1, "storage_account_name")
+			cacheKey2 := GetBackendAttribute(&tt.backend2, "storage_account_name")
 
 			if tt.shouldBeSame {
 				assert.Equal(t, cacheKey1, cacheKey2, tt.description)

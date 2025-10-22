@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob"
 
@@ -28,6 +29,8 @@ const (
 	// Error format for wrapping errors with context.
 	errWrapFormat = "%w: %v"
 )
+
+//go:generate mockgen -source=$GOFILE -destination=mock_$GOFILE -package=$GOPACKAGE
 
 // AzureBlobAPI defines an interface for interacting with Azure Blob Storage.
 type AzureBlobAPI interface {
@@ -78,19 +81,18 @@ func getCachedAzureBlobClient(backend *map[string]any) (AzureBlobAPI, error) {
 	defer perf.Track(nil, "terraform_backend.getCachedAzureBlobClient")()
 
 	storageAccountName := GetBackendAttribute(backend, "storage_account_name")
-	containerName := GetBackendAttribute(backend, "container_name")
-
-	// Build a deterministic cache key.
-	cacheKey := fmt.Sprintf("account=%s;container=%s", storageAccountName, containerName)
-
-	// Check the cache.
-	if cached, ok := azureBlobClientCache.Load(cacheKey); ok {
-		return cached.(AzureBlobAPI), nil
-	}
 
 	// Build the Azure Blob client if not cached.
 	if storageAccountName == "" {
 		return nil, errUtils.ErrStorageAccountRequired
+	}
+
+	// Cache by storage account only (client can access any container in the account).
+	cacheKey := storageAccountName
+
+	// Check the cache.
+	if cached, ok := azureBlobClientCache.Load(cacheKey); ok {
+		return cached.(AzureBlobAPI), nil
 	}
 
 	// Construct the blob service URL.
@@ -107,7 +109,16 @@ func getCachedAzureBlobClient(backend *map[string]any) (AzureBlobAPI, error) {
 		return nil, fmt.Errorf(errWrapFormat, errUtils.ErrCreateAzureCredential, err)
 	}
 
-	client, err := azblob.NewClient(serviceURL, cred, nil)
+	// Configure client options with telemetry.
+	clientOptions := &azblob.ClientOptions{
+		ClientOptions: policy.ClientOptions{
+			Telemetry: policy.TelemetryOptions{
+				ApplicationID: "atmos",
+			},
+		},
+	}
+
+	client, err := azblob.NewClient(serviceURL, cred, clientOptions)
 	if err != nil {
 		return nil, fmt.Errorf(errWrapFormat, errUtils.ErrCreateAzureClient, err)
 	}
