@@ -14,6 +14,13 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
+const (
+	dockerCmd    = "docker"
+	logKeyID     = "id"
+	logKeyImage  = "image"
+	logKeyStatus = "status"
+)
+
 // DockerRuntime implements the Runtime interface for Docker.
 type DockerRuntime struct{}
 
@@ -41,7 +48,7 @@ func (d *DockerRuntime) Build(ctx context.Context, config *BuildConfig) error {
 	// Add context and dockerfile
 	args = append(args, "-f", config.Dockerfile, config.Context)
 
-	cmd := exec.CommandContext(ctx, "docker", args...)
+	cmd := exec.CommandContext(ctx, dockerCmd, args...)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("%w: docker build failed: %v: %s", errUtils.ErrContainerRuntimeOperation, err, string(output))
@@ -57,14 +64,14 @@ func (d *DockerRuntime) Create(ctx context.Context, config *CreateConfig) (strin
 
 	args := buildCreateArgs(config)
 
-	cmd := exec.CommandContext(ctx, "docker", args...)
+	cmd := exec.CommandContext(ctx, dockerCmd, args...)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return "", fmt.Errorf("%w: docker create failed: %v: %s", errUtils.ErrContainerRuntimeOperation, err, string(output))
 	}
 
 	containerID := strings.TrimSpace(string(output))
-	log.Debug("Created docker container", "id", containerID, "name", config.Name)
+	log.Debug("Created docker container", logKeyID, containerID, "name", config.Name)
 
 	return containerID, nil
 }
@@ -73,13 +80,13 @@ func (d *DockerRuntime) Create(ctx context.Context, config *CreateConfig) (strin
 func (d *DockerRuntime) Start(ctx context.Context, containerID string) error {
 	defer perf.Track(nil, "container.DockerRuntime.Start")()
 
-	cmd := exec.CommandContext(ctx, "docker", "start", containerID)
+	cmd := exec.CommandContext(ctx, dockerCmd, "start", containerID)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("%w: docker start failed: %v: %s", errUtils.ErrContainerRuntimeOperation, err, string(output))
 	}
 
-	log.Debug("Started docker container", "id", containerID)
+	log.Debug("Started docker container", logKeyID, containerID)
 	return nil
 }
 
@@ -88,13 +95,13 @@ func (d *DockerRuntime) Stop(ctx context.Context, containerID string, timeout ti
 	defer perf.Track(nil, "container.DockerRuntime.Stop")()
 
 	timeoutSecs := int(timeout.Seconds())
-	cmd := exec.CommandContext(ctx, "docker", "stop", "-t", fmt.Sprintf("%d", timeoutSecs), containerID) //nolint:gosec // docker command is intentional
+	cmd := exec.CommandContext(ctx, dockerCmd, "stop", "-t", fmt.Sprintf("%d", timeoutSecs), containerID) //nolint:gosec // docker command is intentional
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("%w: docker stop failed: %v: %s", errUtils.ErrContainerRuntimeOperation, err, string(output))
 	}
 
-	log.Debug("Stopped docker container", "id", containerID)
+	log.Debug("Stopped docker container", logKeyID, containerID)
 	return nil
 }
 
@@ -108,13 +115,13 @@ func (d *DockerRuntime) Remove(ctx context.Context, containerID string, force bo
 	}
 	args = append(args, containerID)
 
-	cmd := exec.CommandContext(ctx, "docker", args...)
+	cmd := exec.CommandContext(ctx, dockerCmd, args...)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("%w: docker rm failed: %v: %s", errUtils.ErrContainerRuntimeOperation, err, string(output))
 	}
 
-	log.Debug("Removed docker container", "id", containerID)
+	log.Debug("Removed docker container", logKeyID, containerID)
 	return nil
 }
 
@@ -137,7 +144,7 @@ func (d *DockerRuntime) List(ctx context.Context, filters map[string]string) ([]
 		args = append(args, "--filter", fmt.Sprintf("%s=%s", key, value))
 	}
 
-	cmd := exec.CommandContext(ctx, "docker", args...)
+	cmd := exec.CommandContext(ctx, dockerCmd, args...)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return nil, fmt.Errorf("%w: docker ps failed: %v: %s", errUtils.ErrContainerRuntimeOperation, err, string(output))
@@ -205,7 +212,7 @@ func parseLabels(labelsStr string) map[string]string {
 func (d *DockerRuntime) Exec(ctx context.Context, containerID string, cmd []string, opts *ExecOptions) error {
 	defer perf.Track(nil, "container.DockerRuntime.Exec")()
 
-	return execWithRuntime(ctx, "docker", containerID, cmd, opts)
+	return execWithRuntime(ctx, dockerCmd, containerID, cmd, opts)
 }
 
 // Attach attaches to a running container with an interactive shell.
@@ -246,7 +253,7 @@ func (d *DockerRuntime) Attach(ctx context.Context, containerID string, opts *At
 func (d *DockerRuntime) Pull(ctx context.Context, image string) error {
 	defer perf.Track(nil, "container.DockerRuntime.Pull")()
 
-	cmd := exec.CommandContext(ctx, "docker", "pull", image)
+	cmd := exec.CommandContext(ctx, dockerCmd, "pull", image)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("%w: docker pull failed: %v: %s", errUtils.ErrContainerRuntimeOperation, err, string(output))
@@ -271,7 +278,7 @@ func (d *DockerRuntime) Logs(ctx context.Context, containerID string, follow boo
 
 	args = append(args, containerID)
 
-	cmd := exec.CommandContext(ctx, "docker", args...)
+	cmd := exec.CommandContext(ctx, dockerCmd, args...)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 
@@ -282,7 +289,7 @@ func (d *DockerRuntime) Logs(ctx context.Context, containerID string, follow boo
 func (d *DockerRuntime) Info(ctx context.Context) (*RuntimeInfo, error) {
 	defer perf.Track(nil, "container.DockerRuntime.Info")()
 
-	cmd := exec.CommandContext(ctx, "docker", "version", "--format", "{{.Server.Version}}")
+	cmd := exec.CommandContext(ctx, dockerCmd, "version", "--format", "{{.Server.Version}}")
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return nil, fmt.Errorf("%w: docker version failed: %v: %s", errUtils.ErrContainerRuntimeOperation, err, string(output))

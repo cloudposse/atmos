@@ -12,6 +12,10 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
+const (
+	logKeyRuntime = "runtime"
+)
+
 // DetectRuntime auto-detects the available container runtime.
 // Priority order:
 // 1. ATMOS_CONTAINER_RUNTIME environment variable
@@ -24,7 +28,7 @@ func DetectRuntime(ctx context.Context) (Runtime, error) {
 	// Check environment variable first.
 	_ = viper.BindEnv("ATMOS_CONTAINER_RUNTIME", "ATMOS_CONTAINER_RUNTIME")
 	if envRuntime := viper.GetString("ATMOS_CONTAINER_RUNTIME"); envRuntime != "" {
-		log.Debug("Using container runtime from ATMOS_CONTAINER_RUNTIME", "runtime", envRuntime)
+		log.Debug("Using container runtime from ATMOS_CONTAINER_RUNTIME", logKeyRuntime, envRuntime)
 
 		switch envRuntime {
 		case string(TypeDocker):
@@ -46,13 +50,13 @@ func DetectRuntime(ctx context.Context) (Runtime, error) {
 
 	// Try Docker first
 	if isAvailable(ctx, TypeDocker) {
-		log.Debug("Auto-detected container runtime", "runtime", "docker")
+		log.Debug("Auto-detected container runtime", logKeyRuntime, "docker")
 		return NewDockerRuntime(), nil
 	}
 
 	// Try Podman
 	if isAvailable(ctx, TypePodman) {
-		log.Debug("Auto-detected container runtime", "runtime", "podman")
+		log.Debug("Auto-detected container runtime", logKeyRuntime, "podman")
 		return NewPodmanRuntime(), nil
 	}
 
@@ -66,14 +70,14 @@ func isAvailable(ctx context.Context, runtimeType Type) bool {
 	// Check if binary exists in PATH
 	_, err := exec.LookPath(string(runtimeType))
 	if err != nil {
-		log.Debug("Runtime binary not found in PATH", "runtime", runtimeType)
+		log.Debug("Runtime binary not found in PATH", logKeyRuntime, runtimeType)
 		return false
 	}
 
 	// Check if runtime is responsive.
 	cmd := exec.CommandContext(ctx, string(runtimeType), "info") //nolint:gosec // runtimeType is from enum, not user input
 	if err := cmd.Run(); err != nil {
-		log.Debug("Runtime is not responsive", "runtime", runtimeType, "error", err)
+		log.Debug("Runtime is not responsive", logKeyRuntime, runtimeType, "error", err)
 		return false
 	}
 

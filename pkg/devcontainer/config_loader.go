@@ -11,6 +11,10 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
+const (
+	logKeyName = "name"
+)
+
 // Settings represents Atmos-specific devcontainer settings.
 type Settings struct {
 	Runtime string `yaml:"runtime,omitempty" json:"runtime,omitempty" mapstructure:"runtime"`
@@ -171,79 +175,102 @@ func LoadConfig(
 ) (*Config, *Settings, error) {
 	defer perf.Track(atmosConfig, "devcontainer.LoadConfig")()
 
-	log.Debug("LoadConfig called", "name", name, "devcontainer_nil", atmosConfig.Components.Devcontainer == nil)
+	devcontainerMap, err := getDevcontainerMap(atmosConfig, name)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	settings, err := extractSettings(devcontainerMap, name)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	config, err := extractAndValidateSpec(devcontainerMap, name)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	log.Debug("Loaded devcontainer configuration", logKeyName, name, "image", config.Image, "runtime", settings.Runtime)
+
+	return config, settings, nil
+}
+
+func getDevcontainerMap(atmosConfig *schema.AtmosConfiguration, name string) (map[string]any, error) {
+	log.Debug("LoadConfig called", logKeyName, name, "devcontainer_nil", atmosConfig.Components.Devcontainer == nil)
 
 	if atmosConfig.Components.Devcontainer == nil {
 		log.Debug("No devcontainers configured in Components.Devcontainer")
-		return nil, nil, fmt.Errorf("%w: no devcontainers configured", errUtils.ErrDevcontainerNotFound)
+		return nil, fmt.Errorf("%w: no devcontainers configured", errUtils.ErrDevcontainerNotFound)
 	}
 
 	log.Debug("Devcontainer field populated", "count", len(atmosConfig.Components.Devcontainer))
 
 	rawDevcontainer, exists := atmosConfig.Components.Devcontainer[name]
 	if !exists {
-		return nil, nil, fmt.Errorf("%w: devcontainer '%s' not found", errUtils.ErrDevcontainerNotFound, name)
+		return nil, fmt.Errorf("%w: devcontainer '%s' not found", errUtils.ErrDevcontainerNotFound, name)
 	}
 
-	// Convert to map to extract settings and spec.
 	devcontainerMap, ok := rawDevcontainer.(map[string]any)
 	if !ok {
-		return nil, nil, fmt.Errorf("%w: devcontainer '%s' must be a map", errUtils.ErrInvalidDevcontainerConfig, name)
+		return nil, fmt.Errorf("%w: devcontainer '%s' must be a map", errUtils.ErrInvalidDevcontainerConfig, name)
 	}
 
-	// Extract settings section.
+	return devcontainerMap, nil
+}
+
+func extractSettings(devcontainerMap map[string]any, name string) (*Settings, error) {
 	var settings Settings
-	if settingsRaw, hasSettings := devcontainerMap["settings"]; hasSettings {
-		data, err := yaml.Marshal(settingsRaw)
-		if err != nil {
-			return nil, nil, fmt.Errorf("%w: failed to marshal settings for %s: %v", errUtils.ErrInvalidDevcontainerConfig, name, err)
-		}
-		if err := yaml.Unmarshal(data, &settings); err != nil {
-			return nil, nil, fmt.Errorf("%w: failed to unmarshal settings for %s: %v", errUtils.ErrInvalidDevcontainerConfig, name, err)
-		}
+
+	settingsRaw, hasSettings := devcontainerMap["settings"]
+	if !hasSettings {
+		return &settings, nil
 	}
 
-	// Extract spec section.
+	data, err := yaml.Marshal(settingsRaw)
+	if err != nil {
+		return nil, fmt.Errorf("%w: failed to marshal settings for %s: %v", errUtils.ErrInvalidDevcontainerConfig, name, err)
+	}
+
+	if err := yaml.Unmarshal(data, &settings); err != nil {
+		return nil, fmt.Errorf("%w: failed to unmarshal settings for %s: %v", errUtils.ErrInvalidDevcontainerConfig, name, err)
+	}
+
+	return &settings, nil
+}
+
+func extractAndValidateSpec(devcontainerMap map[string]any, name string) (*Config, error) {
 	specRaw, hasSpec := devcontainerMap["spec"]
 	if !hasSpec {
-		return nil, nil, fmt.Errorf("%w: devcontainer '%s' missing 'spec' section", errUtils.ErrInvalidDevcontainerConfig, name)
+		return nil, fmt.Errorf("%w: devcontainer '%s' missing 'spec' section", errUtils.ErrInvalidDevcontainerConfig, name)
 	}
 
-	// Deserialize spec using explicit mapping to handle Viper's case-insensitive keys.
 	specMap, ok := specRaw.(map[string]any)
 	if !ok {
-		return nil, nil, fmt.Errorf("%w: devcontainer spec must be a map", errUtils.ErrInvalidDevcontainerConfig)
+		return nil, fmt.Errorf("%w: devcontainer spec must be a map", errUtils.ErrInvalidDevcontainerConfig)
 	}
 
 	config, err := deserializeSpec(specMap, name)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
-	// Set the name if not already set.
 	if config.Name == "" {
 		config.Name = name
 	}
 
-	// Set default for overrideCommand (defaults to true per devcontainer spec).
-	// Only check if it wasn't explicitly set in the spec.
 	if _, hasOverride := specMap["overridecommand"]; !hasOverride {
 		config.OverrideCommand = true
 	}
 
-	// Filter and log unsupported fields.
 	if specMap, ok := specRaw.(map[string]any); ok {
 		filterUnsupportedFields(specMap, name)
 	}
 
-	// Validate the config.
 	if err := validateConfig(config); err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
-	log.Debug("Loaded devcontainer configuration", "name", name, "image", config.Image, "runtime", settings.Runtime)
-
-	return config, &settings, nil
+	return config, nil
 }
 
 // LoadAllConfigs loads all devcontainer configurations from atmos.yaml.
@@ -260,10 +287,10 @@ func LoadAllConfigs(atmosConfig *schema.AtmosConfiguration) (map[string]*Config,
 	configs := make(map[string]*Config)
 
 	for name := range atmosConfig.Components.Devcontainer {
-		log.Debug("Loading devcontainer", "name", name)
+		log.Debug("Loading devcontainer", logKeyName, name)
 		config, _, err := LoadConfig(atmosConfig, name)
 		if err != nil {
-			log.Debug("Failed to load devcontainer", "name", name, "error", err)
+			log.Debug("Failed to load devcontainer", logKeyName, name, "error", err)
 			return nil, err
 		}
 		configs[name] = config
