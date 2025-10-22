@@ -131,10 +131,10 @@ func getCachedAzureBlobClient(backend *map[string]any) (AzureBlobAPI, error) {
 // ReadTerraformBackendAzurerm reads the Terraform state file from the configured Azure Blob Storage backend.
 // If the state file does not exist in the container, the function returns `nil`.
 func ReadTerraformBackendAzurerm(
-	_ *schema.AtmosConfiguration,
+	atmosConfig *schema.AtmosConfiguration,
 	componentSections *map[string]any,
 ) ([]byte, error) {
-	defer perf.Track(nil, "terraform_backend.ReadTerraformBackendAzurerm")()
+	defer perf.Track(atmosConfig, "terraform_backend.ReadTerraformBackendAzurerm")()
 
 	backend := GetComponentBackend(componentSections)
 	if backend == nil {
