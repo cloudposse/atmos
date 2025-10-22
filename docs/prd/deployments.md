@@ -1654,15 +1654,106 @@ atmos deployment rollout payment-service --target prod --parallelism 5 --keep-wo
 5. **Configurable**: Tune parallelism for CI resources (small = 2, large = 10+)
 6. **Cross-Platform**: Works on Linux, macOS, Windows
 
-## CI/CD Provider Abstraction
+## VCS and CI/CD Provider Abstraction
 
 ### Overview
 
-Atmos deployments include **native CI/CD provider support** using a provider abstraction pattern (inspired by `tools/gotcha/pkg/vcs`). This enables Atmos to work seamlessly in GitHub Actions, GitLab CI, and other CI/CD platforms **without requiring bash scripting or external actions**.
+Atmos deployments include **dual provider abstractions** (inspired by `tools/gotcha/pkg/vcs`):
+
+1. **VCS Provider** (`pkg/vcs/`) - Version control operations (PR comments, commit status, releases)
+2. **CI/CD Provider** (`pkg/cicd/`) - Automation operations (matrix generation, approvals, job summaries)
+
+These are **separate abstractions** because:
+- Some platforms provide both (GitHub = VCS + Actions, GitLab = VCS + CI)
+- Some provide only CI/CD (CircleCI, Jenkins, Buildkite, Spacelift)
+- Some provide only VCS (Gitea without Actions)
+- Allows graceful degradation and specialized integrations
 
 **Success Criteria**: Install Atmos → Run `atmos deployment rollout` directly in CI → Zero bash glue code required.
 
-### Provider Interface
+### VCS Provider Interface
+
+**Core interface definition** (`pkg/vcs/interface.go`, matching Gotcha pattern):
+
+```go
+// Platform represents a VCS platform type.
+type Platform string
+
+const (
+    PlatformGitHub      Platform = "github"
+    PlatformGitLab      Platform = "gitlab"
+    PlatformBitbucket   Platform = "bitbucket"
+    PlatformAzureDevOps Platform = "azuredevops"
+    PlatformGitea       Platform = "gitea"
+    PlatformUnknown     Platform = "unknown"
+)
+
+// Provider is the main VCS provider interface.
+type Provider interface {
+    // Core functionality
+    DetectContext() (Context, error)
+    CreateCommentManager(ctx Context) CommentManager
+
+    // Optional capabilities - return nil if not supported
+    GetCommitStatusWriter() CommitStatusWriter
+    GetReleasePublisher() ReleasePublisher
+
+    // Metadata
+    GetPlatform() Platform
+    IsAvailable() bool
+}
+
+// Context provides VCS-specific context information.
+type Context interface {
+    GetOwner() string        // GitHub org/user, GitLab namespace
+    GetRepo() string         // Repository name
+    GetPRNumber() int        // PR/MR number (0 if not PR)
+    GetBranch() string       // Current branch
+    GetCommitSHA() string    // Current commit
+    GetEventName() string    // Event type (push, pull_request, etc.)
+    GetPlatform() Platform
+}
+
+// CommentManager handles VCS comment operations (PR/MR comments).
+type CommentManager interface {
+    PostOrUpdateComment(ctx context.Context, content string) error
+    FindExistingComment(ctx context.Context, uuid string) (interface{}, error)
+}
+
+// CommitStatusWriter updates commit status checks (optional).
+type CommitStatusWriter interface {
+    SetCommitStatus(ctx context.Context, status CommitStatus) error
+    IsCommitStatusSupported() bool
+}
+
+type CommitStatus struct {
+    State       string // success, failure, pending
+    Context     string // "atmos/deployment"
+    Description string
+    TargetURL   string
+}
+
+// ReleasePublisher creates VCS releases (optional).
+type ReleasePublisher interface {
+    CreateRelease(ctx context.Context, release Release) error
+    IsReleaseSupported() bool
+}
+
+type Release struct {
+    Tag         string
+    Name        string
+    Body        string
+    Draft       bool
+    Prerelease  bool
+}
+```
+
+**VCS providers are for**:
+- PR/MR comments (deployment status, SBOM links)
+- Commit status checks (✓ Deployment successful)
+- Creating releases (tagging release records)
+
+### CI/CD Provider Interface
 
 **Core interface definition** (`pkg/cicd/interface.go`):
 
@@ -1671,9 +1762,14 @@ Atmos deployments include **native CI/CD provider support** using a provider abs
 type Platform string
 
 const (
-    PlatformGitHubActions Platform = "github-actions"
-    PlatformGitLabCI      Platform = "gitlab-ci"
-    PlatformUnknown       Platform = "unknown"
+    PlatformGitHubActions   Platform = "github-actions"
+    PlatformGitLabCI        Platform = "gitlab-ci"
+    PlatformCircleCI        Platform = "circleci"
+    PlatformJenkins         Platform = "jenkins"
+    PlatformBuildkite       Platform = "buildkite"
+    PlatformSpacelift       Platform = "spacelift"
+    PlatformAzurePipelines  Platform = "azure-pipelines"
+    PlatformUnknown         Platform = "unknown"
 )
 
 // Provider is the main CI/CD provider interface.
@@ -1695,17 +1791,13 @@ type Provider interface {
 
 // Context provides CI/CD-specific context information.
 type Context interface {
-    GetOwner() string        // GitHub org/user, GitLab namespace
-    GetRepo() string         // Repository name
-    GetPRNumber() int        // PR/MR number (0 if not PR)
-    GetBranch() string       // Current branch
-    GetCommitSHA() string    // Current commit
-    GetRunID() string        // Workflow/pipeline run ID
-    GetJobID() string        // Current job ID
-    GetToken() string        // API token for provider
-    GetEventName() string    // Event type (push, pull_request, etc.)
+    GetRunID() string        // Workflow/pipeline/build run ID
+    GetJobID() string        // Current job/step ID
+    GetBuildNumber() int     // Build number (Jenkins, CircleCI)
+    GetWorkflowName() string // Workflow/pipeline name
     IsCI() bool              // Running in CI environment
     GetPlatform() Platform
+    GetEnvironment() map[string]string // Platform-specific env vars
 }
 
 // ApprovalManager handles deployment approval workflows (Atmos Pro integration).
@@ -1745,12 +1837,72 @@ type ArtifactPublisher interface {
 }
 ```
 
+**CI/CD providers are for**:
+- Matrix generation (parallel component deployment)
+- Approval workflows (Atmos Pro integration)
+- Job summaries (deployment reports in CI UI)
+- Workflow dispatch (trigger deployments programmatically)
+- Artifact publishing (SBOMs, test reports)
+
 **Key Design Decisions**:
 
-1. **Optional Capabilities**: Not all providers support all features (e.g., GitLab may not support matrix generation). Return `nil` for unsupported features.
-2. **Atmos Pro Integration**: Approval manager integrates with Atmos Pro API for deployment gates.
-3. **DAG-Aware**: Matrix strategies understand component dependencies.
-4. **Provider Detection**: Automatic detection via environment variables (like `GITHUB_ACTIONS=true`).
+1. **Separate VCS and CI/CD**: Allows mixing (GitHub VCS + CircleCI, GitLab VCS + Jenkins, etc.)
+2. **Optional Capabilities**: Return `nil` for unsupported features (graceful degradation)
+3. **Atmos Pro Integration**: Approval manager integrates with Atmos Pro API
+4. **DAG-Aware**: Matrix strategies understand component dependencies
+5. **Auto-Detection**: Environment variable-based provider discovery
+
+### Dual Provider Pattern
+
+**GitHub (implements both)**:
+```go
+// pkg/vcs/github/provider.go
+func init() {
+    vcs.RegisterProvider(vcs.PlatformGitHub, NewGitHubVCSProvider)
+}
+
+// pkg/cicd/github/provider.go
+func init() {
+    cicd.RegisterProvider(cicd.PlatformGitHubActions, NewGitHubCICDProvider)
+}
+```
+
+**CircleCI (implements only CI/CD)**:
+```go
+// pkg/cicd/circleci/provider.go
+func init() {
+    cicd.RegisterProvider(cicd.PlatformCircleCI, NewCircleCIProvider)
+}
+// No VCS provider - CircleCI doesn't manage repos
+```
+
+**Gitea (implements only VCS)**:
+```go
+// pkg/vcs/gitea/provider.go
+func init() {
+    vcs.RegisterProvider(vcs.PlatformGitea, NewGiteaProvider)
+}
+// No CI/CD provider (yet) - Gitea Actions is separate
+```
+
+**Usage in Atmos**:
+```go
+// Detect both providers independently
+vcsProvider := vcs.DetectProvider()
+cicdProvider := cicd.DetectProvider()
+
+// Use VCS for PR comments
+if vcsProvider != nil {
+    commentMgr := vcsProvider.CreateCommentManager(ctx)
+    commentMgr.PostOrUpdateComment(ctx, "Deployment started...")
+}
+
+// Use CI/CD for matrix generation
+if cicdProvider != nil {
+    matrixStrategy := cicdProvider.CreateMatrixStrategy()
+    matrix, _ := matrixStrategy.GenerateMatrix("payment-service", "prod")
+}
+```
 
 ### GitHub Actions Provider
 
@@ -2055,21 +2207,32 @@ func RegisterProvider(platform Platform, factory ProviderFactory) {
 ### Benefits
 
 1. **Zero Bash Required**: Native Atmos commands work directly in CI
-2. **Provider Agnostic**: Same commands on GitHub, GitLab, etc.
-3. **Atmos Pro Integration**: Native approval workflows
-4. **Matrix Support**: Auto-generate CI matrix configs with DAG awareness
-5. **Job Summaries**: Rich deployment reports in CI UI
-6. **Extensible**: Add new providers via interface implementation
-7. **Graceful Degradation**: Unsupported features return `nil`, not errors
-8. **Workflow Dispatch**: Single-component deployments via workflow inputs
+2. **Dual Abstraction**: VCS and CI/CD separate, allows mixing providers
+3. **Provider Agnostic**: Same commands on GitHub, GitLab, CircleCI, etc.
+4. **Atmos Pro Integration**: Native approval workflows via CI/CD provider
+5. **Matrix Support**: Auto-generate CI matrix configs with DAG awareness
+6. **Job Summaries**: Rich deployment reports in CI UI
+7. **PR/MR Comments**: Deployment status via VCS provider
+8. **Commit Status**: CI checks integration via VCS provider
+9. **Extensible**: Add new providers via interface implementation
+10. **Graceful Degradation**: Unsupported features return `nil`, not errors
+11. **Mix and Match**: GitHub VCS + CircleCI, GitLab VCS + Jenkins, etc.
 
 ### Future Provider Implementations
 
-- **GitLab CI** (`pkg/cicd/gitlab`): Approval via GitLab API, pipeline triggers, job artifacts
-- **Bitbucket Pipelines** (`pkg/cicd/bitbucket`): Deployment gates, pipeline variables
-- **Azure DevOps** (`pkg/cicd/azuredevops`): Approval gates, pipeline runs
-- **CircleCI** (`pkg/cicd/circleci`): Approval jobs, dynamic config
+**VCS Providers**:
+- **GitLab** (`pkg/vcs/gitlab`): MR comments, commit status, releases
+- **Bitbucket** (`pkg/vcs/bitbucket`): PR comments, commit status
+- **Azure DevOps** (`pkg/vcs/azuredevops`): PR comments, work item linking
+- **Gitea** (`pkg/vcs/gitea`): PR comments, releases
+
+**CI/CD Providers**:
+- **GitLab CI** (`pkg/cicd/gitlab`): Approval via API, pipeline triggers, job artifacts
+- **CircleCI** (`pkg/cicd/circleci`): Approval jobs, dynamic config, artifacts
 - **Jenkins** (`pkg/cicd/jenkins`): Approval input steps, parameterized builds
+- **Buildkite** (`pkg/cicd/buildkite`): Pipeline generation, annotations
+- **Spacelift** (`pkg/cicd/spacelift`): Stack-based deployments, approval policies
+- **Azure Pipelines** (`pkg/cicd/azurepipelines`): Approval gates, pipeline runs
 
 ## CLI Design
 
@@ -2394,13 +2557,22 @@ atmos deployment rollout api --target prod --release xyz789
 - [ ] Dependency-aware rollouts
 - [ ] Atomic multi-component updates
 
-**Week 4-6: CI/CD Provider Abstraction**
-- [ ] Create `pkg/cicd/interface.go` with provider abstraction (inspired by `tools/gotcha/pkg/vcs`)
+**Week 4-6: VCS and CI/CD Provider Abstraction**
+- [ ] Create `pkg/vcs/interface.go` (matching `tools/gotcha/pkg/vcs` pattern)
+  - [ ] `Provider`, `Context`, `CommentManager` interfaces
+  - [ ] `CommitStatusWriter`, `ReleasePublisher` (optional)
+  - [ ] Provider registry: `RegisterProvider()`, `DetectProvider()`
+- [ ] Create `pkg/cicd/interface.go` (separate from VCS)
   - [ ] `Provider`, `Context`, `ApprovalManager`, `MatrixStrategy` interfaces
   - [ ] `WorkflowDispatcher`, `JobSummaryWriter`, `ArtifactPublisher` (optional)
-- [ ] Implement GitHub Actions provider (`pkg/cicd/github/`)
+  - [ ] Provider registry: `RegisterProvider()`, `DetectProvider()`
+- [ ] Implement GitHub VCS provider (`pkg/vcs/github/`)
+  - [ ] PR comment management
+  - [ ] Commit status updates (optional)
+  - [ ] Release publishing (optional)
+- [ ] Implement GitHub Actions CI/CD provider (`pkg/cicd/github/`)
   - [ ] Provider registration and auto-detection via `GITHUB_ACTIONS` env
-  - [ ] Context detection (owner, repo, branch, commit, PR number)
+  - [ ] Context detection (run ID, job ID, workflow name)
   - [ ] Matrix strategy (DAG-aware component matrices)
   - [ ] Atmos Pro approval manager integration
   - [ ] Job summary writer (`$GITHUB_STEP_SUMMARY`)
@@ -2411,10 +2583,9 @@ atmos deployment rollout api --target prod --release xyz789
   - [ ] Detects CI/CD provider automatically
   - [ ] Blocks until Atmos Pro approval received
   - [ ] Prints approval URL to logs
-- [ ] Provider registry pattern (`pkg/cicd/factory.go`)
-  - [ ] `RegisterProvider()`, `DetectProvider()`, `GetProvider()`
-- [ ] Integration tests with mocked CI environments
+- [ ] Integration tests with mocked VCS/CI environments
 - [ ] Test zero-bash workflows in actual GitHub Actions
+- [ ] Document dual-provider pattern (VCS + CI/CD separate)
 
 **Week 6-8: Polish & Documentation**
 - [ ] Performance optimization
