@@ -553,10 +553,40 @@ Use fixtures in `tests/test-cases/` for integration tests. Each test case should
 - `components/` - Component configurations
 
 ### Golden Snapshots (MANDATORY)
-- **NEVER modify files under `tests/test-cases/` or `tests/testdata/`** unless explicitly instructed
-- These directories contain golden snapshots that are sensitive to even minor changes
-- Golden snapshots are used to verify expected output remains consistent
-- If you need to update golden snapshots, do so intentionally and document the reason
+- **NEVER manually edit snapshot files** - Always regenerate them using the test framework
+- **Golden snapshots** are located in `tests/snapshots/` and verify expected CLI output
+- **Snapshot types**:
+  - `.stdout.golden` - Standard output for non-TTY tests (data meant for piping)
+  - `.stderr.golden` - Standard error for non-TTY tests (UI messages, warnings)
+  - `.tty.golden` - Combined stdout/stderr for TTY tests (terminal emulation)
+
+#### Regenerating Snapshots
+
+**To regenerate ALL snapshots** (use with caution):
+```bash
+go test ./tests -v -regenerate-snapshots -timeout 5m
+```
+
+**To regenerate snapshots for a specific test**:
+```bash
+go test ./tests -v -run 'TestCLICommands/atmos_auth_invalid-command' -regenerate-snapshots -timeout 2m
+```
+
+**After regenerating, ALWAYS review the changes**:
+```bash
+git diff tests/snapshots/
+```
+
+**Then add the updated snapshots**:
+```bash
+git add tests/snapshots/
+```
+
+**Important**:
+- Snapshot files use Unix line endings (LF) regardless of platform
+- TTY tests only create `.tty.golden` files (no separate stdout/stderr)
+- Non-TTY tests create both `.stdout.golden` and `.stderr.golden` files
+- See `tests/README.md` for complete documentation
 
 ## Common Development Tasks
 
