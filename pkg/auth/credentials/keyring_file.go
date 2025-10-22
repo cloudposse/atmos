@@ -51,7 +51,7 @@ type fileKeyringStore struct {
 func parseFileKeyringConfig(authConfig *schema.AuthConfig) (path, passwordEnv string) {
 	// Check environment variable first (for testing and CI).
 	// Use os.Getenv directly to avoid viper caching issues in tests.
-	// nolint:forbidigo // os.Getenv required here to avoid viper singleton caching in tests
+	//nolint:forbidigo // os.Getenv required here to avoid viper singleton caching in tests
 	if envPath := os.Getenv("ATMOS_KEYRING_FILE_PATH"); envPath != "" {
 		path = envPath
 	} else if authConfig != nil && authConfig.Keyring.Spec != nil {
@@ -62,7 +62,7 @@ func parseFileKeyringConfig(authConfig *schema.AuthConfig) (path, passwordEnv st
 	}
 
 	// Check environment variable for password env var name.
-	// nolint:forbidigo // os.Getenv required here to avoid viper singleton caching in tests
+	//nolint:forbidigo // os.Getenv required here to avoid viper singleton caching in tests
 	if envPasswordEnv := os.Getenv("ATMOS_KEYRING_PASSWORD_ENV"); envPasswordEnv != "" {
 		passwordEnv = envPasswordEnv
 	} else if authConfig != nil && authConfig.Keyring.Spec != nil {
@@ -152,7 +152,7 @@ func createPasswordPrompt(passwordEnv string) keyring.PromptFunc {
 	return func(prompt string) (string, error) {
 		// 1. Check environment variable first (for automation/CI).
 		// Use os.Getenv directly to avoid viper caching issues in tests.
-		// nolint:forbidigo // os.Getenv required here to avoid viper singleton caching in tests
+		//nolint:forbidigo // os.Getenv required here to avoid viper singleton caching in tests
 		if password := os.Getenv(passwordEnv); password != "" {
 			// Validate environment password meets minimum length requirement.
 			if len(password) < MinPasswordLength {
