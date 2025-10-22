@@ -12,7 +12,7 @@ func init() {
 // Analyzer is a standalone analyzer for CLI usage.
 var Analyzer = &analysis.Analyzer{
 	Name: "lintroller",
-	Doc:  "Atmos project-specific linting rules (t.Setenv/os.Setenv/t.TempDir/t.Chdir/os.Args/test assertions checks)",
+	Doc:  "Atmos project-specific linting rules (t.Setenv/os.Setenv/t.TempDir/t.Chdir/os.Args/test assertions/log level checks)",
 	Run:  standaloneRun,
 }
 
@@ -26,6 +26,8 @@ func standaloneRun(pass *analysis.Pass) (interface{}, error) {
 		&OsChdirInTestRule{},
 		&OsArgsInTestRule{},
 		&TestNoAssertionsRule{},
+		// TODO: Enable LogLevelChecksRule after fixing existing violations.
+		// &LogLevelChecksRule{},
 	}
 
 	for _, file := range pass.Files {
@@ -47,6 +49,7 @@ type Settings struct {
 	OsChdirInTest     bool `json:"os-chdir-in-test" yaml:"os-chdir-in-test"`
 	OsArgsInTest      bool `json:"os-args-in-test" yaml:"os-args-in-test"`
 	TestNoAssertions  bool `json:"test-no-assertions" yaml:"test-no-assertions"`
+	LogLevelChecks    bool `json:"log-level-checks" yaml:"log-level-checks"`
 }
 
 // LintrollerPlugin implements the register.LinterPlugin interface.
@@ -62,13 +65,15 @@ func New(settings any) (register.LinterPlugin, error) {
 	}
 
 	// Default to enabling all rules if no settings provided.
-	if !s.TSetenvInDefer && !s.OsSetenvInTest && !s.OsMkdirTempInTest && !s.OsChdirInTest && !s.OsArgsInTest && !s.TestNoAssertions {
+	if !s.TSetenvInDefer && !s.OsSetenvInTest && !s.OsMkdirTempInTest && !s.OsChdirInTest && !s.OsArgsInTest && !s.TestNoAssertions && !s.LogLevelChecks {
 		s.TSetenvInDefer = true
 		s.OsSetenvInTest = true
 		s.OsMkdirTempInTest = true
 		s.OsChdirInTest = true
 		s.OsArgsInTest = true
 		s.TestNoAssertions = true
+		// TODO: Enable LogLevelChecks by default after fixing existing violations.
+		// s.LogLevelChecks = true
 	}
 
 	return &LintrollerPlugin{settings: s}, nil
@@ -79,7 +84,7 @@ func (p *LintrollerPlugin) BuildAnalyzers() ([]*analysis.Analyzer, error) {
 	return []*analysis.Analyzer{
 		{
 			Name: "lintroller",
-			Doc:  "Atmos project-specific linting rules (t.Setenv/os.Setenv/t.TempDir/t.Chdir/os.Args/test assertions checks)",
+			Doc:  "Atmos project-specific linting rules (t.Setenv/os.Setenv/t.TempDir/t.Chdir/os.Args/test assertions/log level checks)",
 			Run:  p.run,
 		},
 	}, nil
@@ -111,6 +116,9 @@ func (p *LintrollerPlugin) run(pass *analysis.Pass) (interface{}, error) {
 	}
 	if p.settings.TestNoAssertions {
 		rules = append(rules, &TestNoAssertionsRule{})
+	}
+	if p.settings.LogLevelChecks {
+		rules = append(rules, &LogLevelChecksRule{})
 	}
 
 	// Run all enabled rules.
