@@ -132,6 +132,30 @@ deployment:
     default_target: dev
     promote_by: digest  # or 'tag'
 
+  # Vendor configuration with environment-specific versions
+  vendor:
+    components:
+      # Dev/staging use latest (bleeding edge) for testing
+      - source: "github.com/cloudposse/terraform-aws-components//modules/ecs-service"
+        version: "1.3.0"  # Latest version
+        targets: ["ecs/service-api"]
+        labels:
+          environment: ["dev", "staging"]
+
+      # Production uses stable, battle-tested version
+      - source: "github.com/cloudposse/terraform-aws-components//modules/ecs-service"
+        version: "1.2.5"  # Stable version (2 releases behind)
+        targets: ["ecs/service-api"]
+        labels:
+          environment: ["prod"]
+
+      # All environments use same version of ECR component
+      - source: "github.com/cloudposse/terraform-aws-components//modules/ecr"
+        version: "0.5.0"
+        targets: ["ecr/api"]
+
+    auto_discover: true
+
   components:
     nixpack:
       api:
@@ -1503,6 +1527,223 @@ deployment:
   targets:
     dev: {...}
     prod: {...}
+```
+
+### Environment-Specific Component Versions (Complete Example)
+
+This example demonstrates pinning different component versions to different environments - dev uses bleeding edge, prod uses stable:
+
+```yaml
+# deployments/payment-service.yaml
+deployment:
+  name: payment-service
+  description: "Payment processing microservice with PCI compliance"
+  labels:
+    service: payment
+    team: payments
+    compliance: pci-dss
+
+  stacks:
+    - "platform/vpc"
+    - "platform/security"
+    - "rds"
+    - "ecs"
+
+  # Environment-specific vendor versions
+  vendor:
+    components:
+      # Dev uses latest RDS component (1.5.0) for testing new features
+      - source: "github.com/cloudposse/terraform-aws-components//modules/rds"
+        version: "1.5.0"  # Latest - includes new backup features
+        targets: ["rds/payment-db"]
+        labels:
+          environment: ["dev"]
+
+      # Staging uses release candidate (1.4.0) for pre-prod validation
+      - source: "github.com/cloudposse/terraform-aws-components//modules/rds"
+        version: "1.4.0"  # RC - tested in dev, ready for staging
+        targets: ["rds/payment-db"]
+        labels:
+          environment: ["staging"]
+
+      # Production uses stable version (1.3.5) - battle-tested
+      - source: "github.com/cloudposse/terraform-aws-components//modules/rds"
+        version: "1.3.5"  # Stable - proven in production
+        targets: ["rds/payment-db"]
+        labels:
+          environment: ["prod"]
+
+      # Dev/staging use beta ECS service with new ALB features
+      - source: "github.com/cloudposse/terraform-aws-components//modules/ecs-service"
+        version: "2.0.0-beta.3"  # Beta - testing new load balancer config
+        targets: ["ecs/payment-api"]
+        labels:
+          environment: ["dev", "staging"]
+
+      # Production uses stable ECS service
+      - source: "github.com/cloudposse/terraform-aws-components//modules/ecs-service"
+        version: "1.8.2"  # Stable - current production version
+        targets: ["ecs/payment-api"]
+        labels:
+          environment: ["prod"]
+
+      # Security groups use same version across all environments (compliance)
+      - source: "github.com/cloudposse/terraform-aws-components//modules/security-group"
+        version: "0.3.0"  # Pinned - compliance requirement
+        targets: ["security/payment-sg"]
+        # No labels = applies to all environments
+
+    auto_discover: true
+    cache:
+      enabled: true
+      ttl: 12h
+
+  components:
+    nixpack:
+      payment-api:
+        metadata:
+          labels:
+            service: payment
+            tier: api
+        vars:
+          source: "./services/payment-api"
+          image:
+            registry: "123456789012.dkr.ecr.us-east-1.amazonaws.com"
+            name: "payment-api"
+            tag: "{{ git.sha }}"
+
+    terraform:
+      rds/payment-db:
+        metadata:
+          labels:
+            service: payment
+            data: primary
+        vars:
+          identifier: "payment-db"
+          engine: "postgres"
+          engine_version: "15.3"
+          # Version-specific features available based on vendored component
+          # v1.5.0 (dev): supports new snapshot_retention_days
+          # v1.3.5 (prod): uses older backup_retention_period
+
+      ecs/payment-api:
+        metadata:
+          labels:
+            service: payment
+        vars:
+          cluster_name: "payment-cluster"
+          # Version-specific features
+          # v2.0.0-beta.3 (dev/staging): new ALB target group deregistration_delay
+          # v1.8.2 (prod): stable ALB configuration
+
+      security/payment-sg:
+        metadata:
+          labels:
+            service: payment
+            compliance: pci-dss
+        vars:
+          name: "payment-sg"
+          # Same version across all environments for compliance audit trail
+
+  targets:
+    dev:
+      labels:
+        environment: dev
+      context:
+        db_instance_class: "db.t3.small"  # Cost-optimized
+        db_backup_retention: 1
+        ecs_cpu: 256
+        ecs_memory: 512
+        ecs_desired_count: 1
+
+    staging:
+      labels:
+        environment: staging
+      context:
+        db_instance_class: "db.t3.medium"
+        db_backup_retention: 7
+        ecs_cpu: 512
+        ecs_memory: 1024
+        ecs_desired_count: 2
+
+    prod:
+      labels:
+        environment: prod
+      context:
+        db_instance_class: "db.r6g.xlarge"  # Production-grade
+        db_backup_retention: 30  # Compliance requirement
+        db_multi_az: true
+        ecs_cpu: 1024
+        ecs_memory: 2048
+        ecs_desired_count: 4
+        ecs_autoscaling:
+          enabled: true
+          min_capacity: 4
+          max_capacity: 20
+```
+
+**Workflow Example: Progressive Version Rollout**
+
+```bash
+# Week 1: Test new RDS component (1.5.0) in dev
+atmos vendor pull --deployment payment-service --target dev
+atmos rollout plan payment-service --target dev
+atmos rollout apply payment-service --target dev
+
+# Week 2: Promote to staging (1.4.0 RC)
+atmos vendor pull --deployment payment-service --target staging
+atmos rollout plan payment-service --target staging
+atmos rollout apply payment-service --target staging
+
+# Week 4: After validation, promote stable (1.3.5) to prod
+# (Version 1.4.0 becomes 1.3.5 after testing)
+atmos vendor pull --deployment payment-service --target prod
+atmos rollout plan payment-service --target prod
+atmos rollout apply payment-service --target prod
+
+# Check what versions are actually deployed
+atmos vendor status --deployment payment-service
+# Output:
+# TARGET    COMPONENT           VERSION        DIGEST      STATUS
+# dev       rds/payment-db      1.5.0          abc123...   cached
+# dev       ecs/payment-api     2.0.0-beta.3   def456...   cached
+# staging   rds/payment-db      1.4.0          ghi789...   cached
+# staging   ecs/payment-api     2.0.0-beta.3   def456...   cached (shared)
+# prod      rds/payment-db      1.3.5          jkl012...   cached
+# prod      ecs/payment-api     1.8.2          mno345...   cached
+```
+
+**Content-Addressable Cache Benefits:**
+
+```
+Vendor cache structure for payment-service:
+
+.atmos/vendor-cache/
+├── objects/
+│   └── sha256/
+│       ├── abc123.../  (RDS 1.5.0)     → 12 MB
+│       ├── ghi789.../  (RDS 1.4.0)     → 12 MB
+│       ├── jkl012.../  (RDS 1.3.5)     → 11 MB
+│       ├── def456.../  (ECS 2.0.0-β)   → 8 MB
+│       └── mno345.../  (ECS 1.8.2)     → 7 MB
+├── deployments/
+│   └── payment-service/
+│       ├── dev/
+│       │   └── terraform/
+│       │       ├── rds/ → refs/.../rds/1.5.0
+│       │       └── ecs-service/ → refs/.../ecs-service/2.0.0-beta.3
+│       ├── staging/
+│       │   └── terraform/
+│       │       ├── rds/ → refs/.../rds/1.4.0
+│       │       └── ecs-service/ → refs/.../ecs-service/2.0.0-beta.3 (shared!)
+│       └── prod/
+│           └── terraform/
+│               ├── rds/ → refs/.../rds/1.3.5
+│               └── ecs-service/ → refs/.../ecs-service/1.8.2
+
+Total storage: 50 MB (5 unique component versions)
+Without dedup: 75 MB (would duplicate ECS 2.0.0-beta.3 for dev+staging)
+Savings: 33% deduplication
 ```
 
 ## Appendix B: JSON Schema
