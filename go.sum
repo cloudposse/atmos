@@ -903,8 +903,8 @@ github.com/playwright-community/playwright-go v0.4702.0/go.mod h1:bpArn5TqNzmP0j
 github.com/pmezard/go-difflib v1.0.0/go.mod h1:iKH77koFhYxTK1pcRnkKkqfTogsbg7gZNVY4sRDYZ/4=
 github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 h1:Jamvg5psRIccs7FGNTlIRMkT8wgtp5eCXdBlqhYGL6U=
 github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2/go.mod h1:iKH77koFhYxTK1pcRnkKkqfTogsbg7gZNVY4sRDYZ/4=
-github.com/posthog/posthog-go v1.6.11 h1:5G8Y3pxnOpc3S4+PK1z1dCmZRuldiWxBsqqvvSfC2+w=
-github.com/posthog/posthog-go v1.6.11/go.mod h1:LcC1Nu4AgvV22EndTtrMXTy+7RGVC0MhChSw7Qk5XkY=
+github.com/posthog/posthog-go v1.6.12 h1:rsOBL/YdMfLJtOVjKJLgdzYmvaL3aIW6IVbAteSe+aI=
+github.com/posthog/posthog-go v1.6.12/go.mod h1:LcC1Nu4AgvV22EndTtrMXTy+7RGVC0MhChSw7Qk5XkY=
 github.com/prometheus/client_golang v0.9.1/go.mod h1:7SWBe2y4D6OKWSNQJUaRYU/AaXPKyh/dDVn+NZz0KFw=
 github.com/prometheus/client_golang v0.9.3/go.mod h1:/TN21ttK/J9q6uSwhBd54HahCDft0ttaMvbicHlPoso=
 github.com/prometheus/client_golang v1.0.0/go.mod h1:db9x61etRT2tGnBNRi70OPL5FsnadC4Ky3P0J6CfImo=

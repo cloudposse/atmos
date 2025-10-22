@@ -197,7 +197,7 @@ func TestStackProcessor(t *testing.T) {
 	t.Cleanup(func() {
 		if t.Failed() {
 			if yamlConfig != "" {
-				t.Logf("Stack config:\n%s", string(yamlConfig))
+				t.Logf("Stack config:\n%s", yamlConfig)
 			} else {
 				t.Logf("Stack config (raw): %+v", mapConfig1)
 			}
