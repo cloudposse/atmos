@@ -229,8 +229,9 @@ func (c *testCreds) IsExpired() bool {
 	}
 	return time.Now().After(*c.exp)
 }
-func (c *testCreds) GetExpiration() (*time.Time, error)     { return c.exp, nil }
-func (c *testCreds) BuildWhoamiInfo(info *types.WhoamiInfo) {}
+func (c *testCreds) GetExpiration() (*time.Time, error)                 { return c.exp, nil }
+func (c *testCreds) BuildWhoamiInfo(info *types.WhoamiInfo)             {}
+func (c *testCreds) Validate(ctx context.Context) (*time.Time, error) { return c.exp, nil }
 
 func (s *testStore) Store(alias string, creds types.ICredentials) error {
 	if s.data == nil {
