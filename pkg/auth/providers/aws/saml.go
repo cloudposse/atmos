@@ -3,6 +3,7 @@ package aws
 import (
 	"context"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"net/url"
 	"os"
@@ -21,6 +22,7 @@ import (
 	awsCloud "github.com/cloudposse/atmos/pkg/auth/cloud/aws"
 	"github.com/cloudposse/atmos/pkg/auth/types"
 	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -354,6 +356,8 @@ func (p *samlProvider) getDriver() string {
 
 // Validate validates the provider configuration.
 func (p *samlProvider) Validate() error {
+	defer perf.Track(nil, "aws.samlProvider.Validate")()
+
 	if p.url == "" {
 		return fmt.Errorf("%w: URL is required for SAML provider", errUtils.ErrInvalidProviderConfig)
 	}
@@ -366,6 +370,11 @@ func (p *samlProvider) Validate() error {
 	u, err := url.ParseRequestURI(p.url)
 	if err != nil || u.Scheme == "" || u.Host == "" {
 		return fmt.Errorf("%w: invalid URL format: %w", errUtils.ErrInvalidProviderConfig, err)
+	}
+
+	// Validate spec.files.base_path if provided.
+	if err := awsCloud.ValidateFilesBasePath(p.config); err != nil {
+		return err
 	}
 
 	return nil
@@ -504,4 +513,39 @@ func (p *samlProvider) setupBrowserAutomation() {
 		os.Setenv("SAML2AWS_AUTO_BROWSER_DOWNLOAD", "true")
 		log.Debug("Browser driver auto-download enabled", logFieldDriver, p.getDriver())
 	}
+}
+
+// Logout removes provider-specific credential storage.
+func (p *samlProvider) Logout(ctx context.Context) error {
+	defer perf.Track(nil, "aws.samlProvider.Logout")()
+
+	// Get base_path from provider spec if configured.
+	basePath := awsCloud.GetFilesBasePath(p.config)
+
+	fileManager, err := awsCloud.NewAWSFileManager(basePath)
+	if err != nil {
+		return errors.Join(errUtils.ErrProviderLogout, errUtils.ErrLogoutFailed, err)
+	}
+
+	if err := fileManager.Cleanup(p.name); err != nil {
+		log.Debug("Failed to cleanup AWS files for SAML provider", "provider", p.name, "error", err)
+		return errors.Join(errUtils.ErrProviderLogout, errUtils.ErrLogoutFailed, err)
+	}
+
+	log.Debug("Cleaned up AWS files for SAML provider", "provider", p.name)
+	return nil
+}
+
+// GetFilesDisplayPath returns the display path for AWS credential files.
+func (p *samlProvider) GetFilesDisplayPath() string {
+	defer perf.Track(nil, "aws.samlProvider.GetFilesDisplayPath")()
+
+	basePath := awsCloud.GetFilesBasePath(p.config)
+
+	fileManager, err := awsCloud.NewAWSFileManager(basePath)
+	if err != nil {
+		return "~/.aws/atmos"
+	}
+
+	return fileManager.GetDisplayPath()
 }

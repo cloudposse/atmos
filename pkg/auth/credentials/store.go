@@ -104,6 +104,10 @@ func (s *keyringStore) Retrieve(alias string) (types.ICredentials, error) {
 // Delete deletes credentials for the given alias.
 func (s *keyringStore) Delete(alias string) error {
 	if err := keyring.Delete(alias, KeyringUser); err != nil {
+		// Treat "not found" as success - credential already removed.
+		if errors.Is(err, keyring.ErrNotFound) {
+			return nil
+		}
 		return fmt.Errorf("%w: failed to delete credentials from keyring: %w", ErrCredentialStore, err)
 	}
 

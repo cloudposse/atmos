@@ -31,7 +31,7 @@ type DescribeStacksArgs struct {
 	File                 string
 }
 
-//go:generate mockgen -source=$GOFILE -destination=mock_$GOFILE -package=$GOPACKAGE
+//go:generate go run go.uber.org/mock/mockgen@v0.6.0 -source=$GOFILE -destination=mock_$GOFILE -package=$GOPACKAGE
 type DescribeStacksExec interface {
 	Execute(atmosConfig *schema.AtmosConfiguration, args *DescribeStacksArgs) error
 }
