@@ -1,10 +1,126 @@
 # Atmos Deployments PRD
 
+## Definitions
+
+### Core Concepts
+
+**Deployment**
+- A YAML configuration file that defines an isolated subset of stacks and components representing a complete application or service
+- Contains component definitions (nixpack, terraform, helmfile, lambda), targets (dev/staging/prod), and vendor configuration
+- **Example**: `deployments/payment-service.yaml`
+- **Purpose**: Scopes what Atmos processes (10-20x faster than scanning entire repository)
+
+**Target**
+- An environment-specific variant of a deployment (e.g., `dev`, `staging`, `prod`)
+- Each target has its own labels and context (CPU, memory, replicas, etc.)
+- Targets use the same component definitions but with different configuration overrides
+- **Example**: `payment-service` deployment has targets: `dev`, `staging`, `prod`
+
+**Build**
+- The process of creating a container image from source code using nixpacks (or Dockerfile)
+- Executed via `atmos deployment build <deployment> --target <target>`
+- **Input**: Source code + nixpack configuration
+- **Output**: Container image with digest (e.g., `sha256:abc123...`)
+- **Artifact**: Image pushed to registry + local SBOM
+
+**Release**
+- An immutable record capturing the state of a deployment at a specific point in time
+- Contains image digests, Git metadata, SBOM, provenance, and annotations
+- Stored as YAML in `releases/<deployment>/<target>/release-<id>.yaml`
+- **Purpose**: Enables promotion across targets and rollbacks
+- **Created by**: `atmos deployment release <deployment> --target <target>`
+
+**Rollout** (formerly "Apply")
+- The act of updating infrastructure components (Terraform/Helm/Lambda) to use a specific release
+- Updates ECS task definitions, Lambda functions, Helm charts with new image digests from a release
+- Executed via `atmos deployment rollout <deployment> --target <target> [--release <id>]`
+- **Default behavior**: Uses latest release for target
+- **Promotion**: Can rollout a release from one target to another (e.g., dev release to staging)
+
+### Deployment Stages
+
+Atmos deployments follow a **multi-stage pipeline** where each stage is extensible and optional:
+
+```
+Source Code
+    ↓
+[BUILD STAGE] ────→ Container Image (sha256:abc123...)
+    ↓
+[TEST STAGE] ─────→ Test Results (JUnit, coverage)
+    ↓
+[RELEASE STAGE] ──→ Release Record (release-abc123.yaml)
+    ↓                 ↓
+    │                 └──→ [PROMOTE] ─────→ staging/prod
+    ↓
+[ROLLOUT STAGE] ──→ Infrastructure Updated (ECS/Lambda/Helm)
+```
+
+**Stage Abstraction**:
+- Each stage is a discrete, reusable operation
+- Stages can be run independently: `atmos deployment build`, `atmos deployment test`, etc.
+- Future stages can be added without breaking existing workflows
+- Not all stages required for every deployment (e.g., Lambda deployments skip build stage)
+
+**Future Extensibility** (potential stages):
+- **Scan Stage**: Security scanning (Trivy, Grype, Snyk) of container images
+- **Validate Stage**: Policy validation (OPA, JSON Schema) before rollout
+- **Package Stage**: Bundle deployment artifacts (OCI, Helm charts)
+- **Promote Stage**: Cross-target promotion with approval gates
+- **Verify Stage**: Post-deployment smoke tests and health checks
+- **Benchmark Stage**: Performance testing and regression detection
+
+**Stage Design Principles**:
+1. **Composable**: Stages can be combined in any order
+2. **Idempotent**: Running a stage multiple times produces same result
+3. **Stateless**: Each stage operates on inputs, produces outputs
+4. **CI-Friendly**: Stages map naturally to CI/CD pipeline steps
+5. **Local-First**: All stages work identically on laptop and in CI
+
+**Example Workflow**:
+```bash
+# 1. Build: Create container images for dev target
+atmos deployment build payment-service --target dev
+# → Builds nixpack components, pushes to registry
+# → Output: sha256:abc123...
+
+# 2. Release: Capture current state as immutable record
+atmos deployment release payment-service --target dev
+# → Creates releases/payment-service/dev/release-xyz789.yaml
+# → Contains: image digests, Git SHA, SBOM, provenance
+
+# 3. Rollout: Update infrastructure to use release
+atmos deployment rollout payment-service --target dev
+# → Runs terraform apply on ECS components with new image digest
+# → Updates task definitions, services
+
+# 4. Promote: Use dev release in staging
+atmos deployment rollout payment-service --target staging --release xyz789
+# → Same release, different target
+# → No rebuild needed
+
+# 5. Rollback: Revert to previous release
+atmos deployment rollout payment-service --target prod --release abc456
+# → Infrastructure reverts to older image digests
+```
+
+### Key Distinctions
+
+| Concept | What It Does | Command | Artifact Created |
+|---------|--------------|---------|------------------|
+| **Build** | Compiles source → container image | `atmos deployment build` | Image + digest |
+| **Release** | Captures deployment state snapshot | `atmos deployment release` | Release record (YAML) |
+| **Rollout** | Updates infrastructure with release | `atmos deployment rollout` | Terraform state changes |
+
+**Why separate Release from Rollout?**
+- **Release** is environment-agnostic: same image can be promoted to staging/prod
+- **Rollout** is environment-specific: applies Terraform changes to specific target
+- Enables: Build once → Release once → Rollout many times (dev → staging → prod)
+
 ## Overview
 
 Deployments are a new first-class concept in Atmos that enable reproducible, efficient application lifecycle management from build through production rollout. Like vendoring, deployments become a core primitive with their own configuration schema, CLI commands, and workflows.
 
-A deployment defines an isolated subset of stacks and components that represent a complete application or service, enabling Atmos to process only the relevant configuration files rather than scanning the entire repository. This dramatically improves performance and creates clear boundaries for build, test, release, and rollout operations.
+A deployment defines an isolated subset of stacks and components that represent a complete application or service, enabling Atmos to process only the relevant configuration files rather than scanning the entire repository. This dramatically improves performance and creates clear boundaries for build, release, and rollout operations.
 
 ## Problem Statement
 
@@ -47,14 +163,32 @@ A deployment defines an isolated subset of stacks and components that represent 
 15. **SBOM Generation**: Software Bill of Materials for security/compliance
 16. **Provenance Tracking**: Build metadata for supply chain security
 17. **Vendor Caching**: Cache vendored components per deployment for faster subsequent operations
+18. **Native CI/CD Integration**: Zero-bash workflows in GitHub Actions, GitLab CI via provider abstraction
+19. **Local Iteration**: Same `atmos deployment` commands work locally and in CI
+20. **Simplified Workflows**: Matrix generation, approvals, job summaries built-in
 
 ### Nice to Have (P2)
-18. **CI Export**: Generate minimal CI stubs for popular platforms (GitHub Actions, GitLab CI)
-19. **Dockerfile Escape**: Use Dockerfile when CNB doesn't meet requirements
-20. **Multi-Component Deployments**: Coordinate releases across multiple nixpack components
-21. **Deployment Status**: Track which releases are deployed to which targets
-22. **Drift Detection**: Identify when infrastructure differs from expected release
-23. **Vendor Garbage Collection**: Clean up unused vendored components
+21. **Dockerfile Escape**: Use Dockerfile when nixpacks doesn't meet requirements
+22. **Multi-Component Deployments**: Coordinate releases across multiple nixpack components
+23. **Deployment Status**: Track which releases are deployed to which targets
+24. **Drift Detection**: Identify when infrastructure differs from expected release
+25. **Vendor Garbage Collection**: Clean up unused vendored components
+26. **Additional CI/CD Providers**: GitLab CI, Bitbucket Pipelines, Azure DevOps, CircleCI
+
+## Goals
+
+### Local Development & Iteration
+- **Same commands locally and in CI**: `atmos deployment build/test/rollout` work identically
+- **Fast feedback loops**: Build/test locally before pushing to CI
+- **No CI lock-in**: Test entire deployment workflow on laptop
+- **Reproducible builds**: Same inputs → same outputs (container digests)
+
+### Simplified CI/CD Workflows
+- **Zero bash scripting**: Native Atmos commands replace custom CI glue code
+- **Auto-generated matrices**: DAG-aware parallel component deployment
+- **Built-in approvals**: Atmos Pro integration for deployment gates
+- **Job summaries**: Rich deployment reports in CI UI automatically
+- **Provider-agnostic**: Same workflow patterns across GitHub/GitLab/etc.
 
 ## Non-Goals
 
@@ -63,6 +197,7 @@ A deployment defines an isolated subset of stacks and components that represent 
 - **Not a test framework**: Teams bring their own test commands/frameworks
 - **Not replacing stacks**: Deployments reference stacks, don't replace them
 - **Not auto-inheritance**: Targets use explicit `context` for overrides, not automatic inheritance
+- **Not workflow generation**: We provide native integration, not CI config file generators
 
 ## Design
 
@@ -600,6 +735,8 @@ The vendor cache is a **centralized, content-addressable store** that eliminates
 
 **Cache Structure**:
 
+**Note**: The cache uses **hard links on Unix/Mac and file copies on Windows** for cross-platform compatibility. Symlinks are NOT used due to Windows admin privilege requirements.
+
 ```
 .atmos/
 └── vendor-cache/
@@ -611,37 +748,47 @@ The vendor cache is a **centralized, content-addressable store** that eliminates
     │       │   └── outputs.tf
     │       ├── def456.../
     │       └── xyz789.../
-    ├── refs/
-    │   ├── github.com/
-    │   │   └── cloudposse/
-    │   │       └── terraform-aws-components/
-    │   │           └── modules/
-    │   │               └── ecs-service/
-    │   │                   ├── 1.2.3 -> ../../../../objects/sha256/abc123...
-    │   │                   ├── 1.2.4 -> ../../../../objects/sha256/def456...
-    │   │                   └── latest -> 1.2.4
-    │   └── registry.terraform.io/
-    │       └── cloudposse/
-    │           └── ecs-service/
-    │               └── aws/
-    │                   ├── 2.1.0 -> ../../../../objects/sha256/xyz789...
-    │                   └── 2.1.5 -> ../../../../objects/sha256/aaa111...
     ├── deployments/
     │   ├── api/
     │   │   ├── dev/
     │   │   │   ├── terraform/
-    │   │   │   │   └── ecs-service -> ../../../../refs/github.com/.../1.2.3
+    │   │   │   │   └── ecs-service/        # Hard link or copy from objects/
+    │   │   │   │       ├── main.tf
+    │   │   │   │       ├── variables.tf
+    │   │   │   │       └── outputs.tf
     │   │   │   └── .vendor-lock.yaml
     │   │   ├── staging/
     │   │   │   └── terraform/
-    │   │   │       └── ecs-service -> ../../../../refs/github.com/.../1.2.4
+    │   │   │       └── ecs-service/        # Same content, shared via hard link
     │   │   └── prod/
     │   │       └── terraform/
-    │   │           └── ecs-service -> ../../../../refs/registry.terraform.io/.../2.1.5
+    │   │           └── ecs-service/        # Different version, different content
     │   └── worker/
     │       └── dev/
     └── .cache-index.yaml  # Global cache metadata
 ```
+
+**Cross-Platform File Sharing Strategy**:
+
+1. **Unix/Linux/macOS**: Use hard links from `objects/sha256/<digest>/` to deployment workspace
+   - Space efficient (same inode, zero duplication)
+   - Transparent to tools (looks like regular files)
+   - No special privileges required
+
+2. **Windows**: Copy files from cache to deployment workspace
+   - Fallback when hard links fail
+   - Slight disk usage increase, but still manageable
+   - Cache cleanup reclaims space
+
+3. **Implementation**: Detect OS and attempt hard link first, fall back to copy
+   ```go
+   // Try hard link first (Unix/Mac/Windows NTFS)
+   err := os.Link(sourcePath, destPath)
+   if err != nil {
+       // Fall back to copy (Windows FAT32, network drives)
+       err = copyFile(sourcePath, destPath)
+   }
+   ```
 
 **Benefits of Content-Addressable Cache**:
 
@@ -967,7 +1114,7 @@ Multi-Deployment Scenario (10 deployments × 3 environments):
 When creating OCI bundle artifacts, vendored components are included:
 
 ```bash
-atmos release create api --target dev --bundle
+atmos deployment release api --target dev --bundle
 # Creates OCI artifact containing:
 # - Built container images (digests)
 # - Deployment configuration
@@ -976,7 +1123,7 @@ atmos release create api --target dev --bundle
 # - Release metadata
 
 # Result: fully self-contained artifact for rollback
-atmos rollout apply api --target prod --bundle oci://registry/api:release-abc123
+atmos deployment rollout api --target prod --release abc123 --bundle oci://registry/api:release-abc123
 ```
 
 **Benefits of JIT Vendoring with Content-Addressable Cache**:
@@ -990,6 +1137,939 @@ atmos rollout apply api --target prod --bundle oci://registry/api:release-abc123
 7. **Monorepo-Friendly**: Scale to hundreds of components without performance degradation
 8. **Version Flexibility**: Progressive rollout strategies (beta in dev, stable in prod)
 9. **Cache Sharing**: Same component version used by multiple deployments = 1x storage
+
+## Concurrent Deployment Architecture
+
+### Dependency DAG and Parallelism
+
+Deployments support **concurrent component processing** using the existing Atmos dependency DAG (`depends_on` field). Components are executed in topological order with configurable parallelism.
+
+**Key Concepts**:
+
+1. **Dependency DAG**: Components declare dependencies via `metadata.depends_on`
+2. **Topological Ordering**: DAG ensures dependencies are processed before dependents
+3. **Concurrent Execution**: Multiple independent components run in parallel
+4. **Workspace Isolation**: Each concurrent component gets isolated temporary workspace
+5. **Automatic Cleanup**: Temporary workspaces cleaned up after execution
+
+**Dependency Graph Example**:
+
+```yaml
+# deployments/payment-service.yaml
+deployment:
+  name: payment-service
+  components:
+    terraform:
+      vpc:
+        # No dependencies - can run immediately
+        vars:
+          cidr: "10.0.0.0/16"
+
+      security-group:
+        metadata:
+          depends_on:
+            - terraform/vpc  # Requires VPC outputs
+        vars:
+          vpc_id: "{{ terraform.output('vpc', 'vpc_id') }}"
+
+      rds/payment-db:
+        metadata:
+          depends_on:
+            - terraform/vpc
+            - terraform/security-group
+        vars:
+          vpc_id: "{{ terraform.output('vpc', 'vpc_id') }}"
+          security_group_ids: ["{{ terraform.output('security-group', 'id') }}"]
+
+      ecs/cluster:
+        metadata:
+          depends_on:
+            - terraform/vpc
+        vars:
+          vpc_id: "{{ terraform.output('vpc', 'vpc_id') }}"
+
+    nixpack:
+      payment-api:
+        metadata:
+          depends_on:
+            - terraform/ecr  # Requires ECR repository
+        vars:
+          source: "./services/payment-api"
+
+    terraform:
+      ecs/payment-api:
+        metadata:
+          depends_on:
+            - terraform/ecs/cluster
+            - terraform/rds/payment-db
+            - nixpack/payment-api  # Requires container image digest
+        vars:
+          cluster_id: "{{ terraform.output('ecs/cluster', 'cluster_id') }}"
+          image_digest: "{{ nixpack.payment-api.digest }}"
+          db_endpoint: "{{ terraform.output('rds/payment-db', 'endpoint') }}"
+```
+
+**Execution DAG** (with `--parallelism 3`):
+
+```
+Wave 1 (parallel):
+  terraform/vpc
+
+Wave 2 (parallel - up to 3):
+  terraform/security-group  (depends: vpc)
+  terraform/ecs/cluster     (depends: vpc)
+  terraform/ecr             (no deps, queued from wave 1)
+
+Wave 3 (parallel - up to 3):
+  terraform/rds/payment-db  (depends: vpc, security-group)
+  nixpack/payment-api       (depends: ecr)
+
+Wave 4:
+  terraform/ecs/payment-api (depends: cluster, db, nixpack)
+```
+
+### Workspace Isolation Strategy
+
+**Problem**: Concurrent component execution requires isolated working directories to prevent conflicts (e.g., Terraform state operations, vendored files, generated configs).
+
+**Solution**: Temporary workspace cloning with automatic cleanup.
+
+**Workspace Structure**:
+
+```
+.atmos/
+└── workspaces/
+    └── deployment-{uuid}/          # Unique per rollout execution
+        ├── terraform/
+        │   ├── vpc/                # Isolated workspace for vpc component
+        │   │   ├── main.tf         # Hard link/copy from vendor cache
+        │   │   ├── variables.tf
+        │   │   ├── backend.tf      # Generated backend config
+        │   │   ├── terraform.tfvars # Generated from component vars
+        │   │   └── .terraform/     # Terraform init artifacts
+        │   ├── security-group/     # Isolated workspace
+        │   └── rds-payment-db/
+        ├── nixpack/
+        │   └── payment-api/
+        └── .cleanup                # Marker for cleanup on exit
+```
+
+**Workspace Lifecycle**:
+
+1. **Initialization** (`atmos rollout apply`):
+   ```
+   - Generate unique deployment UUID
+   - Create .atmos/workspaces/deployment-{uuid}/
+   - Register cleanup handler (defer)
+   ```
+
+2. **Component Execution** (per component, concurrent):
+   ```
+   - Create component workspace: .atmos/workspaces/{uuid}/{type}/{component}/
+   - Hard link/copy vendored files from cache to workspace
+   - Generate component-specific files (backend.tf, tfvars, etc.)
+   - Execute component (terraform apply, docker build, etc.)
+   - Capture outputs for downstream dependencies
+   ```
+
+3. **Cleanup** (on success or failure):
+   ```
+   - Remove entire .atmos/workspaces/deployment-{uuid}/ tree
+   - Keep release records and SBOMs (.atmos/sboms/, releases/)
+   - Log cleanup errors but don't fail
+   ```
+
+**Implementation**:
+
+```go
+// pkg/deployment/workspace.go
+package deployment
+
+import (
+    "context"
+    "fmt"
+    "os"
+    "path/filepath"
+
+    "github.com/google/uuid"
+    "github.com/cloudposse/atmos/pkg/schema"
+)
+
+// Workspace manages isolated component execution environments.
+type Workspace struct {
+    ID          string
+    RootPath    string
+    Deployment  string
+    Target      string
+    cleanupDone bool
+}
+
+// NewWorkspace creates isolated workspace for deployment execution.
+func NewWorkspace(deployment, target string) (*Workspace, error) {
+    id := uuid.New().String()
+    rootPath := filepath.Join(".atmos", "workspaces", fmt.Sprintf("deployment-%s", id))
+
+    if err := os.MkdirAll(rootPath, 0755); err != nil {
+        return nil, fmt.Errorf("failed to create workspace: %w", err)
+    }
+
+    ws := &Workspace{
+        ID:         id,
+        RootPath:   rootPath,
+        Deployment: deployment,
+        Target:     target,
+    }
+
+    return ws, nil
+}
+
+// GetComponentWorkspace returns isolated workspace path for component.
+func (w *Workspace) GetComponentWorkspace(componentType, componentName string) (string, error) {
+    workspacePath := filepath.Join(w.RootPath, componentType, componentName)
+    if err := os.MkdirAll(workspacePath, 0755); err != nil {
+        return "", fmt.Errorf("failed to create component workspace: %w", err)
+    }
+    return workspacePath, nil
+}
+
+// Cleanup removes workspace directory tree.
+func (w *Workspace) Cleanup() error {
+    if w.cleanupDone {
+        return nil
+    }
+
+    if err := os.RemoveAll(w.RootPath); err != nil {
+        // Log error but don't fail - cleanup is best-effort
+        log.Warn("Failed to cleanup workspace", "workspace", w.ID, "error", err)
+        return err
+    }
+
+    w.cleanupDone = true
+    log.Debug("Cleaned up workspace", "workspace", w.ID)
+    return nil
+}
+
+// PrepareComponentFiles copies/links files from vendor cache to component workspace.
+func (w *Workspace) PrepareComponentFiles(
+    componentType string,
+    componentName string,
+    vendorCachePath string,
+) error {
+    workspacePath, err := w.GetComponentWorkspace(componentType, componentName)
+    if err != nil {
+        return err
+    }
+
+    // Copy/hard-link files from vendor cache to workspace
+    return copyOrLinkDirectory(vendorCachePath, workspacePath)
+}
+
+// copyOrLinkDirectory uses hard links on Unix/Mac, copies on Windows.
+func copyOrLinkDirectory(src, dst string) error {
+    return filepath.Walk(src, func(path string, info os.FileInfo, err error) error {
+        if err != nil {
+            return err
+        }
+
+        // Compute destination path
+        relPath, err := filepath.Rel(src, path)
+        if err != nil {
+            return err
+        }
+        dstPath := filepath.Join(dst, relPath)
+
+        if info.IsDir() {
+            return os.MkdirAll(dstPath, info.Mode())
+        }
+
+        // Try hard link first, fall back to copy
+        if err := os.Link(path, dstPath); err != nil {
+            // Hard link failed (Windows FAT32, cross-device, etc.)
+            return copyFile(path, dstPath)
+        }
+
+        return nil
+    })
+}
+```
+
+### DAG-Based Concurrent Execution
+
+**Executor** manages parallel component execution respecting dependencies:
+
+```go
+// pkg/deployment/executor.go
+package deployment
+
+import (
+    "context"
+    "fmt"
+    "sync"
+
+    "golang.org/x/sync/errgroup"
+    "github.com/cloudposse/atmos/pkg/component"
+)
+
+// Executor manages concurrent component execution with DAG-based ordering.
+type Executor struct {
+    workspace   *Workspace
+    parallelism int
+    components  map[string]component.Component
+    dag         *DependencyDAG
+}
+
+// DependencyDAG represents component dependency graph.
+type DependencyDAG struct {
+    nodes map[string]*DAGNode
+}
+
+type DAGNode struct {
+    Name         string
+    Component    component.Component
+    Dependencies []string
+    Dependents   []string
+    completed    bool
+    mu           sync.Mutex
+}
+
+// Execute runs components in topological order with parallelism limit.
+func (e *Executor) Execute(ctx context.Context) error {
+    // Build dependency graph
+    if err := e.dag.Build(e.components); err != nil {
+        return fmt.Errorf("failed to build dependency DAG: %w", err)
+    }
+
+    // Topological sort to get execution waves
+    waves, err := e.dag.TopologicalSort()
+    if err != nil {
+        return fmt.Errorf("dependency cycle detected: %w", err)
+    }
+
+    // Execute waves with parallelism
+    for waveNum, wave := range waves {
+        log.Info("Executing wave", "wave", waveNum+1, "components", len(wave))
+
+        if err := e.executeWave(ctx, wave); err != nil {
+            return fmt.Errorf("wave %d failed: %w", waveNum+1, err)
+        }
+    }
+
+    return nil
+}
+
+// executeWave runs components in parallel with parallelism limit.
+func (e *Executor) executeWave(ctx context.Context, components []string) error {
+    // Use errgroup with parallelism limit
+    g, ctx := errgroup.WithContext(ctx)
+    g.SetLimit(e.parallelism)
+
+    for _, compName := range components {
+        compName := compName // Capture for goroutine
+
+        g.Go(func() error {
+            return e.executeComponent(ctx, compName)
+        })
+    }
+
+    return g.Wait()
+}
+
+// executeComponent executes single component in isolated workspace.
+func (e *Executor) executeComponent(ctx context.Context, name string) error {
+    comp := e.components[name]
+    node := e.dag.nodes[name]
+
+    log.Info("Executing component", "component", name, "type", comp.GetType())
+
+    // Get isolated workspace for this component
+    workspacePath, err := e.workspace.GetComponentWorkspace(comp.GetType(), name)
+    if err != nil {
+        return err
+    }
+
+    // Prepare component files (copy from vendor cache)
+    if err := e.workspace.PrepareComponentFiles(
+        comp.GetType(),
+        name,
+        comp.GetVendorCachePath(),
+    ); err != nil {
+        return fmt.Errorf("failed to prepare workspace: %w", err)
+    }
+
+    // Execute component in isolated workspace
+    componentCtx := context.WithValue(ctx, "workspace", workspacePath)
+    if err := comp.Execute(componentCtx); err != nil {
+        return fmt.Errorf("component execution failed: %w", err)
+    }
+
+    // Mark as completed
+    node.mu.Lock()
+    node.completed = true
+    node.mu.Unlock()
+
+    log.Info("Component completed", "component", name)
+    return nil
+}
+
+// Build constructs dependency graph from components.
+func (dag *DependencyDAG) Build(components map[string]component.Component) error {
+    dag.nodes = make(map[string]*DAGNode)
+
+    // Create nodes
+    for name, comp := range components {
+        dag.nodes[name] = &DAGNode{
+            Name:         name,
+            Component:    comp,
+            Dependencies: comp.GetDependencies(),
+            Dependents:   []string{},
+        }
+    }
+
+    // Build edges (reverse dependencies)
+    for name, node := range dag.nodes {
+        for _, depName := range node.Dependencies {
+            if depNode, exists := dag.nodes[depName]; exists {
+                depNode.Dependents = append(depNode.Dependents, name)
+            } else {
+                return fmt.Errorf("component %s depends on non-existent component %s", name, depName)
+            }
+        }
+    }
+
+    return nil
+}
+
+// TopologicalSort returns execution waves (groups of independent components).
+func (dag *DependencyDAG) TopologicalSort() ([][]string, error) {
+    waves := [][]string{}
+    remaining := make(map[string]*DAGNode)
+    inDegree := make(map[string]int)
+
+    // Initialize
+    for name, node := range dag.nodes {
+        remaining[name] = node
+        inDegree[name] = len(node.Dependencies)
+    }
+
+    // Extract waves
+    for len(remaining) > 0 {
+        wave := []string{}
+
+        // Find components with no remaining dependencies
+        for name, degree := range inDegree {
+            if degree == 0 {
+                if _, exists := remaining[name]; exists {
+                    wave = append(wave, name)
+                }
+            }
+        }
+
+        if len(wave) == 0 {
+            // No progress - cycle detected
+            return nil, fmt.Errorf("dependency cycle detected among: %v", remaining)
+        }
+
+        // Process wave
+        for _, name := range wave {
+            delete(remaining, name)
+            delete(inDegree, name)
+
+            // Decrement in-degree for dependents
+            for _, depName := range dag.nodes[name].Dependents {
+                inDegree[depName]--
+            }
+        }
+
+        waves = append(waves, wave)
+    }
+
+    return waves, nil
+}
+```
+
+**CLI Usage**:
+
+```bash
+# Default: sequential execution (parallelism=1)
+atmos deployment rollout payment-service --target prod
+
+# Parallel execution: up to 5 components at once
+atmos deployment rollout payment-service --target prod --parallelism 5
+
+# Maximum parallelism: unlimited (use with caution)
+atmos deployment rollout payment-service --target prod --parallelism 0
+
+# With workspace debugging (don't cleanup on error)
+atmos deployment rollout payment-service --target prod --parallelism 5 --keep-workspace
+```
+
+**Output Example**:
+
+```
+→ Creating deployment workspace: deployment-abc123-def456
+→ Building dependency DAG...
+  ✓ Found 8 components with 12 dependencies
+  ✓ Validated DAG (no cycles)
+  ✓ Generated 4 execution waves
+
+→ Wave 1/4: Executing 2 components (parallelism: 5)
+  ⠿ terraform/vpc                 [executing]
+  ⠿ terraform/ecr                 [executing]
+  ✓ terraform/vpc                 [completed in 45s]
+  ✓ terraform/ecr                 [completed in 23s]
+
+→ Wave 2/4: Executing 3 components (parallelism: 5)
+  ⠿ terraform/security-group      [executing]
+  ⠿ terraform/ecs/cluster         [executing]
+  ⠿ nixpack/payment-api           [waiting for ecr]
+  ✓ terraform/security-group      [completed in 12s]
+  ⠿ nixpack/payment-api           [executing]
+  ✓ terraform/ecs/cluster         [completed in 34s]
+  ✓ nixpack/payment-api           [completed in 67s]
+
+→ Wave 3/4: Executing 2 components (parallelism: 5)
+  ⠿ terraform/rds/payment-db      [executing]
+  ✓ terraform/rds/payment-db      [completed in 123s]
+
+→ Wave 4/4: Executing 1 component (parallelism: 5)
+  ⠿ terraform/ecs/payment-api     [executing]
+  ✓ terraform/ecs/payment-api     [completed in 34s]
+
+✓ Deployment completed successfully
+  Total: 338s (5m 38s)
+  Components: 8
+  Waves: 4
+  Peak parallelism: 3
+
+→ Cleaning up workspace: deployment-abc123-def456
+✓ Workspace cleaned
+```
+
+### Benefits
+
+1. **Performance**: 3-5x faster for deployments with independent components
+2. **Safety**: DAG prevents race conditions and ensures correct ordering
+3. **Isolation**: Temporary workspaces prevent conflicts
+4. **Existing Pattern**: Reuses Atmos `depends_on` - no new concepts
+5. **Configurable**: Tune parallelism for CI resources (small = 2, large = 10+)
+6. **Cross-Platform**: Works on Linux, macOS, Windows
+
+## CI/CD Provider Abstraction
+
+### Overview
+
+Atmos deployments include **native CI/CD provider support** using a provider abstraction pattern (inspired by `tools/gotcha/pkg/vcs`). This enables Atmos to work seamlessly in GitHub Actions, GitLab CI, and other CI/CD platforms **without requiring bash scripting or external actions**.
+
+**Success Criteria**: Install Atmos → Run `atmos deployment rollout` directly in CI → Zero bash glue code required.
+
+### Provider Interface
+
+**Core interface definition** (`pkg/cicd/interface.go`):
+
+```go
+// Platform represents a CI/CD platform type.
+type Platform string
+
+const (
+    PlatformGitHubActions Platform = "github-actions"
+    PlatformGitLabCI      Platform = "gitlab-ci"
+    PlatformUnknown       Platform = "unknown"
+)
+
+// Provider is the main CI/CD provider interface.
+type Provider interface {
+    // Core functionality
+    DetectContext() (Context, error)
+    CreateApprovalManager(ctx Context) (ApprovalManager, error)
+    CreateMatrixStrategy() MatrixStrategy
+
+    // Optional capabilities - return nil if not supported
+    GetWorkflowDispatcher() WorkflowDispatcher
+    GetJobSummaryWriter() JobSummaryWriter
+    GetArtifactPublisher() ArtifactPublisher
+
+    // Metadata
+    GetPlatform() Platform
+    IsAvailable() bool
+}
+
+// Context provides CI/CD-specific context information.
+type Context interface {
+    GetOwner() string        // GitHub org/user, GitLab namespace
+    GetRepo() string         // Repository name
+    GetPRNumber() int        // PR/MR number (0 if not PR)
+    GetBranch() string       // Current branch
+    GetCommitSHA() string    // Current commit
+    GetRunID() string        // Workflow/pipeline run ID
+    GetJobID() string        // Current job ID
+    GetToken() string        // API token for provider
+    GetEventName() string    // Event type (push, pull_request, etc.)
+    IsCI() bool              // Running in CI environment
+    GetPlatform() Platform
+}
+
+// ApprovalManager handles deployment approval workflows (Atmos Pro integration).
+type ApprovalManager interface {
+    // RequestApproval blocks until approved/rejected
+    RequestApproval(ctx context.Context, req ApprovalRequest) (*ApprovalResponse, error)
+
+    // IsApprovalSupported returns true if approval workflow available
+    IsApprovalSupported() bool
+}
+
+// MatrixStrategy generates CI matrix configuration for parallel rollouts.
+type MatrixStrategy interface {
+    // GenerateMatrix creates matrix for all components
+    GenerateMatrix(deployment, target string) (*Matrix, error)
+
+    // GenerateMatrixForWaves creates wave-based matrix (respects DAG)
+    GenerateMatrixForWaves(deployment, target string) (*WaveMatrix, error)
+}
+
+// WorkflowDispatcher triggers workflows programmatically (optional).
+type WorkflowDispatcher interface {
+    TriggerWorkflow(ctx context.Context, req WorkflowDispatchRequest) error
+    IsWorkflowDispatchSupported() bool
+}
+
+// JobSummaryWriter writes CI job summary (optional).
+type JobSummaryWriter interface {
+    WriteJobSummary(content string) error
+    IsJobSummarySupported() bool
+}
+
+// ArtifactPublisher publishes CI artifacts (optional).
+type ArtifactPublisher interface {
+    PublishArtifact(name string, paths []string) error
+    IsArtifactSupported() bool
+}
+```
+
+**Key Design Decisions**:
+
+1. **Optional Capabilities**: Not all providers support all features (e.g., GitLab may not support matrix generation). Return `nil` for unsupported features.
+2. **Atmos Pro Integration**: Approval manager integrates with Atmos Pro API for deployment gates.
+3. **DAG-Aware**: Matrix strategies understand component dependencies.
+4. **Provider Detection**: Automatic detection via environment variables (like `GITHUB_ACTIONS=true`).
+
+### GitHub Actions Provider
+
+**Implementation** (`pkg/cicd/github/provider.go`):
+
+```go
+func init() {
+    cicd.RegisterProvider(cicd.PlatformGitHubActions, NewGitHubActionsProvider)
+}
+
+type GitHubActionsProvider struct{}
+
+func (p *GitHubActionsProvider) IsAvailable() bool {
+    return os.Getenv("GITHUB_ACTIONS") == "true"
+}
+
+func (p *GitHubActionsProvider) DetectContext() (cicd.Context, error) {
+    return &GitHubContext{
+        Owner:     os.Getenv("GITHUB_REPOSITORY_OWNER"),
+        Repo:      os.Getenv("GITHUB_REPOSITORY"),
+        Branch:    os.Getenv("GITHUB_REF_NAME"),
+        CommitSHA: os.Getenv("GITHUB_SHA"),
+        RunID:     os.Getenv("GITHUB_RUN_ID"),
+        Token:     os.Getenv("GITHUB_TOKEN"),
+        EventName: os.Getenv("GITHUB_EVENT_NAME"),
+        PRNumber:  parsePRNumber(os.Getenv("GITHUB_REF")),
+    }, nil
+}
+
+func (p *GitHubActionsProvider) CreateApprovalManager(ctx cicd.Context) (cicd.ApprovalManager, error) {
+    return NewGitHubApprovalManager(ctx), nil
+}
+
+func (p *GitHubActionsProvider) CreateMatrixStrategy() cicd.MatrixStrategy {
+    return &GitHubMatrixStrategy{}
+}
+
+func (p *GitHubActionsProvider) GetJobSummaryWriter() cicd.JobSummaryWriter {
+    if os.Getenv("GITHUB_STEP_SUMMARY") != "" {
+        return &GitHubJobSummaryWriter{}
+    }
+    return nil // Not supported (e.g., running locally)
+}
+```
+
+### Atmos Pro Approval Integration
+
+**Approval manager** integrates deployment approvals with Atmos Pro:
+
+```go
+// pkg/cicd/github/approval.go
+type GitHubApprovalManager struct {
+    ctx    cicd.Context
+    client *pro.Client
+}
+
+func (m *GitHubApprovalManager) RequestApproval(
+    ctx context.Context,
+    req cicd.ApprovalRequest,
+) (*cicd.ApprovalResponse, error) {
+    // Create Atmos Pro approval request
+    approval, err := m.client.CreateDeploymentApproval(ctx, pro.ApprovalRequest{
+        Deployment:     req.Deployment,
+        Target:         req.Target,
+        Release:        req.Release,
+        Component:      req.Component, // Optional: component-level approval
+        Repository:     fmt.Sprintf("%s/%s", m.ctx.GetOwner(), m.ctx.GetRepo()),
+        RunID:          m.ctx.GetRunID(),
+        CommitSHA:      m.ctx.GetCommitSHA(),
+        RequiredTeams:  req.RequiredTeams,
+        RequiredUsers:  req.RequiredUsers,
+        TimeoutMinutes: req.TimeoutMinutes,
+    })
+
+    // Poll for approval (Atmos Pro sends webhook when approved)
+    return m.pollForApproval(ctx, approval.ID, req.TimeoutMinutes)
+}
+
+func (m *GitHubApprovalManager) IsApprovalSupported() bool {
+    return m.client.IsConfigured() && os.Getenv("ATMOS_PRO_TOKEN") != ""
+}
+```
+
+### Matrix Generation
+
+**GitHub matrix strategy** for parallel deployments:
+
+```go
+// pkg/cicd/github/matrix.go
+type GitHubMatrixStrategy struct{}
+
+func (s *GitHubMatrixStrategy) GenerateMatrix(
+    deploymentName, target string,
+) (*cicd.Matrix, error) {
+    deploy, err := deployment.Load(deploymentName)
+    if err != nil {
+        return nil, err
+    }
+
+    matrix := &cicd.Matrix{Include: []cicd.MatrixEntry{}}
+
+    for _, comp := range deploy.GetComponents(target) {
+        matrix.Include = append(matrix.Include, cicd.MatrixEntry{
+            Deployment: deploymentName,
+            Target:     target,
+            Component:  comp.Name,
+        })
+    }
+
+    return matrix, nil
+}
+
+func (s *GitHubMatrixStrategy) GenerateMatrixForWaves(
+    deploymentName, target string,
+) (*cicd.WaveMatrix, error) {
+    // Build DAG, topological sort, generate wave-based matrices
+    // (See Concurrent Deployment Architecture section for DAG details)
+}
+```
+
+### CLI Usage in CI/CD
+
+**Deployment with approval**:
+
+```bash
+# GitHub Actions environment automatically detected
+atmos deployment rollout payment-service --target prod --approve
+# → Detects GitHub Actions provider
+# → Creates Atmos Pro approval request
+# → Prints approval URL
+# → Blocks until approved/rejected
+# → Continues rollout on approval
+```
+
+**Matrix generation**:
+
+```bash
+# Generate GitHub Actions matrix JSON
+atmos deployment matrix payment-service --target prod --format json
+# Output:
+# {
+#   "include": [
+#     {"deployment": "payment-service", "target": "prod", "component": "vpc"},
+#     {"deployment": "payment-service", "target": "prod", "component": "rds"},
+#     {"deployment": "payment-service", "target": "prod", "component": "ecs"}
+#   ]
+# }
+
+# Generate wave-based matrix (respects dependencies)
+atmos deployment matrix payment-service --target prod --waves --format json
+# Output:
+# {
+#   "waves": [
+#     {"include": [{"deployment": "payment-service", "target": "prod", "component": "vpc", "wave": 1}]},
+#     {"include": [{"deployment": "payment-service", "target": "prod", "component": "rds", "wave": 2}]},
+#     {"include": [{"deployment": "payment-service", "target": "prod", "component": "ecs", "wave": 3}]}
+#   ]
+# }
+```
+
+### GitHub Actions Workflow Examples
+
+**Simple deployment** (zero bash required):
+
+```yaml
+name: Deploy to Production
+
+on:
+  workflow_dispatch:
+    inputs:
+      deployment:
+        required: true
+      target:
+        required: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: cloudposse/github-action-setup-atmos@v2
+
+      - name: Deploy
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ATMOS_PRO_TOKEN: ${{ secrets.ATMOS_PRO_TOKEN }}
+        run: |
+          atmos deployment rollout ${{ inputs.deployment }} \
+            --target ${{ inputs.target }} \
+            --approve \
+            --auto-approve
+```
+
+**Matrix-based parallel deployment**:
+
+```yaml
+name: Parallel Deployment
+
+jobs:
+  matrix:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.gen.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: cloudposse/github-action-setup-atmos@v2
+      - id: gen
+        run: |
+          MATRIX=$(atmos deployment matrix payment-service --target prod --format json)
+          echo "matrix=$MATRIX" >> $GITHUB_OUTPUT
+
+  deploy:
+    needs: matrix
+    runs-on: ubuntu-latest
+    strategy:
+      matrix: ${{ fromJson(needs.matrix.outputs.matrix) }}
+      max-parallel: 5
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: cloudposse/github-action-setup-atmos@v2
+
+      - name: Deploy Component
+        run: |
+          atmos deployment rollout ${{ matrix.deployment }} \
+            --target ${{ matrix.target }} \
+            --component ${{ matrix.component }}
+```
+
+**Component-specific workflow dispatch**:
+
+```yaml
+name: Deploy Single Component
+
+on:
+  workflow_dispatch:
+    inputs:
+      deployment:
+        required: true
+      target:
+        required: true
+      component:
+        required: true
+
+jobs:
+  deploy-component:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: cloudposse/github-action-setup-atmos@v2
+
+      - name: Deploy Component
+        env:
+          ATMOS_PRO_TOKEN: ${{ secrets.ATMOS_PRO_TOKEN }}
+        run: |
+          atmos deployment rollout ${{ inputs.deployment }} \
+            --target ${{ inputs.target }} \
+            --component ${{ inputs.component }} \
+            --approve
+```
+
+### Provider Registry Pattern
+
+```go
+// pkg/cicd/factory.go
+package cicd
+
+type ProviderFactory func() Provider
+
+var providers = map[Platform]ProviderFactory{}
+
+// DetectProvider automatically detects CI/CD provider.
+func DetectProvider() Provider {
+    orderedPlatforms := []Platform{
+        PlatformGitHubActions,
+        PlatformGitLabCI,
+        // Add others as implemented
+    }
+
+    for _, platform := range orderedPlatforms {
+        if factory, ok := providers[platform]; ok {
+            provider := factory()
+            if provider.IsAvailable() {
+                return provider
+            }
+        }
+    }
+
+    return nil // No CI/CD provider (running locally)
+}
+
+// RegisterProvider registers provider factory (called in init()).
+func RegisterProvider(platform Platform, factory ProviderFactory) {
+    providers[platform] = factory
+}
+```
+
+### Benefits
+
+1. **Zero Bash Required**: Native Atmos commands work directly in CI
+2. **Provider Agnostic**: Same commands on GitHub, GitLab, etc.
+3. **Atmos Pro Integration**: Native approval workflows
+4. **Matrix Support**: Auto-generate CI matrix configs with DAG awareness
+5. **Job Summaries**: Rich deployment reports in CI UI
+6. **Extensible**: Add new providers via interface implementation
+7. **Graceful Degradation**: Unsupported features return `nil`, not errors
+8. **Workflow Dispatch**: Single-component deployments via workflow inputs
+
+### Future Provider Implementations
+
+- **GitLab CI** (`pkg/cicd/gitlab`): Approval via GitLab API, pipeline triggers, job artifacts
+- **Bitbucket Pipelines** (`pkg/cicd/bitbucket`): Deployment gates, pipeline variables
+- **Azure DevOps** (`pkg/cicd/azuredevops`): Approval gates, pipeline runs
+- **CircleCI** (`pkg/cicd/circleci`): Approval jobs, dynamic config
+- **Jenkins** (`pkg/cicd/jenkins`): Approval input steps, parameterized builds
 
 ## CLI Design
 
@@ -1023,23 +2103,25 @@ atmos deployments init api \
   --output deployments/api.yaml
 ```
 
-### Build Phase
+### Build Stage
+
+**Purpose**: Compile source code into container images with reproducible digests.
 
 ```bash
 # Build all nixpack components in deployment
-atmos build api --target dev
+atmos deployment build api --target dev
 
-# Build specific component
-atmos build api --component api --target dev
+# Build specific component only
+atmos deployment build api --target dev --component payment-api
 
 # Build with Git reference for provenance
-atmos build api --target dev --ref $(git rev-parse HEAD)
+atmos deployment build api --target dev --ref $(git rev-parse HEAD)
 
 # Build without publishing (local testing)
-atmos build api --target dev --no-publish
+atmos deployment build api --target dev --no-publish
 
 # Build with custom nixpacks options
-atmos build api --target dev \
+atmos deployment build api --target dev \
   --pkgs ffmpeg,imagemagick \
   --install-cmd "npm ci" \
   --build-cmd "npm run build" \
@@ -1047,53 +2129,57 @@ atmos build api --target dev \
 
 # Build with Dockerfile (escape hatch)
 # If Dockerfile exists in component source, nixpacks uses it automatically
-atmos build api --target dev --dockerfile ./services/api/Dockerfile
+atmos deployment build api --target dev --dockerfile ./services/api/Dockerfile
 ```
 
-### Test Phase
+### Test Stage
+
+**Purpose**: Execute tests inside built containers, capture results.
 
 ```bash
 # Run tests inside built container
-atmos test api --target dev
+atmos deployment test api --target dev
 
 # Run with custom test command
-atmos test api --target dev -- command "go test ./... -v"
+atmos deployment test api --target dev --command "go test ./... -v"
 
 # Run with JUnit output
-atmos test api --target dev -- command "go test ./..." --report ./out/junit.xml
+atmos deployment test api --target dev --command "go test ./..." --report ./out/junit.xml
 
 # Run with volume mounts
-atmos test api --target dev -- command "pytest -v" --mount ./tests:/app/tests
+atmos deployment test api --target dev --command "pytest -v" --mount ./tests:/app/tests
 
 # Run integration tests
-atmos test api --target dev --suite integration
+atmos deployment test api --target dev --suite integration
 ```
 
-### Release Phase
+### Release Stage
+
+**Purpose**: Capture immutable release record with image digests, SBOM, provenance.
 
 ```bash
 # Create release from latest build
-atmos release create api --target dev
+atmos deployment release api --target dev
 
 # Create release with annotations
-atmos release create api --target dev \
+atmos deployment release api --target dev \
   --annotate "description=Add user authentication" \
   --annotate "pr=#482" \
   --annotate "jira=PROJ-123"
 
 # Create release with specific digest
-atmos release create api --target dev --digest sha256:abc123...
+atmos deployment release api --target dev --digest sha256:abc123...
 
-# List releases
-atmos release list api
-atmos release list api --target dev
-atmos release list api --target dev --limit 10
+# List releases for deployment
+atmos deployment releases api
+atmos deployment releases api --target dev
+atmos deployment releases api --target dev --limit 10
 
 # Show release details
-atmos release describe api abc123
+atmos deployment releases api --id abc123
 
 # Create OCI bundle artifact (self-contained deployment)
-atmos release create api --target dev --bundle
+atmos deployment release api --target dev --bundle
 # Creates OCI artifact with:
 # - Image digest
 # - Deployment configuration
@@ -1102,38 +2188,40 @@ atmos release create api --target dev --bundle
 # - Release metadata
 ```
 
-### Rollout Phase
+### Rollout Stage
+
+**Purpose**: Update infrastructure components (Terraform/Helm/Lambda) to use release.
 
 ```bash
-# Plan rollout (like terraform plan)
-atmos rollout plan api --target dev
+# Rollout latest release to target (default behavior)
+atmos deployment rollout api --target dev
 
-# Plan rollout for specific release
-atmos rollout plan api --target dev --release abc123
-
-# Apply rollout (like terraform apply)
-atmos rollout apply api --target dev
-
-# Apply specific release
-atmos rollout apply api --target dev --release abc123
+# Rollout specific release
+atmos deployment rollout api --target dev --release abc123
 
 # Auto-approve (for CI)
-atmos rollout apply api --target dev --auto-approve
+atmos deployment rollout api --target dev --auto-approve
+
+# Parallel rollout with DAG-based concurrency
+atmos deployment rollout api --target dev --parallelism 5
+# Respects component dependencies (depends_on)
+# Processes up to 5 components concurrently
+# Components with no dependencies run first
+# Blocks downstream components until dependencies complete
 
 # Promote release to another target (no rebuild)
-atmos rollout apply api --target staging --release abc123
-atmos rollout apply api --target prod --release abc123
+atmos deployment rollout api --target staging --release abc123
+atmos deployment rollout api --target prod --release abc123
 
 # Rollback to previous release
-atmos release list api --target prod --limit 5
-atmos rollout apply api --target prod --release xyz789
+atmos deployment releases api --target prod --limit 5
+atmos deployment rollout api --target prod --release xyz789
 
-# Show rollout status
-atmos rollout status api
-atmos rollout status api --target prod
+# Show deployment status for target
+atmos deployment status api --target prod
 
 # Detect drift (compare deployed vs expected)
-atmos rollout drift api --target prod
+atmos deployment drift api --target prod
 ```
 
 ### Complete Workflow Examples
@@ -1141,54 +2229,51 @@ atmos rollout drift api --target prod
 **Development Workflow**:
 ```bash
 # 1. Build locally
-atmos build api --target dev --no-publish
+atmos deployment build api --target dev --no-publish
 
 # 2. Test locally
-atmos test api --target dev
+atmos deployment test api --target dev
 
 # 3. Build and publish
-atmos build api --target dev
+atmos deployment build api --target dev
 
 # 4. Create release
-atmos release create api --target dev --annotate "pr=#482"
+atmos deployment release api --target dev --annotate "pr=#482"
 
 # 5. Rollout to dev
-atmos rollout apply api --target dev --auto-approve
+atmos deployment rollout api --target dev --auto-approve
 ```
 
 **CI/CD Workflow**:
 ```bash
 # Pull request (build + test only)
-atmos build api --target dev
-atmos test api --target dev
+atmos deployment build api --target dev
+atmos deployment test api --target dev
 
 # Merge to main (release + rollout dev)
-atmos build api --target dev --ref $GITHUB_SHA
-atmos test api --target dev
-atmos release create api --target dev --annotate "sha=$GITHUB_SHA"
-atmos rollout apply api --target dev --auto-approve
+atmos deployment build api --target dev --ref $GITHUB_SHA
+atmos deployment test api --target dev
+atmos deployment release api --target dev --annotate "sha=$GITHUB_SHA"
+atmos deployment rollout api --target dev --auto-approve
 
 # Manual promotion to staging
-RELEASE_ID=$(atmos release list api --target dev --limit 1 --format json | jq -r '.id')
-atmos rollout apply api --target staging --release $RELEASE_ID
+RELEASE_ID=$(atmos deployment releases api --target dev --limit 1 --format json | jq -r '.id')
+atmos deployment rollout api --target staging --release $RELEASE_ID
 
 # Manual promotion to prod
-atmos rollout apply api --target prod --release $RELEASE_ID
+atmos deployment rollout api --target prod --release $RELEASE_ID
 ```
 
 **Rollback Workflow**:
 ```bash
 # 1. List recent releases
-atmos release list api --target prod --limit 10
+atmos deployment releases api --target prod --limit 10
 
 # 2. Inspect previous release
-atmos release describe api xyz789
+atmos deployment releases api --id xyz789
 
-# 3. Plan rollback
-atmos rollout plan api --target prod --release xyz789
-
-# 4. Execute rollback
-atmos rollout apply api --target prod --release xyz789
+# 3. Rollback to previous release
+atmos deployment rollout api --target prod --release xyz789
 ```
 
 ## Implementation Plan
@@ -1206,6 +2291,9 @@ atmos rollout apply api --target prod --release xyz789
 - [ ] Modify stack processor to accept deployment context
 - [ ] Filter stack loading based on `deployment.stacks`
 - [ ] Implement content-addressable vendor cache (`.atmos/vendor-cache/`)
+  - [ ] Cross-platform file linking: hard links (Unix/Mac) + copy fallback (Windows)
+  - [ ] No symlinks (Windows admin privilege requirement)
+  - [ ] Test on all platforms: Linux, macOS, Windows
 - [ ] Cache index and lock file generation
 - [ ] Benchmark performance improvements
 - [ ] Add deployment-scoped component resolution
@@ -1242,16 +2330,16 @@ atmos rollout apply api --target prod --release xyz789
 - [ ] Coordinate with in-flight nixpacks PR
 
 **Week 2-3: Build Commands**
-- [ ] `atmos build` command implementation
+- [ ] `atmos deployment build` command implementation
 - [ ] Image digest capture and storage
 - [ ] Local build (no publish) support
 - [ ] CI build with provenance
 
 **Week 3-4: Release Commands**
 - [ ] Release record schema and storage
-- [ ] `atmos release create` command
-- [ ] `atmos release list` command
-- [ ] `atmos release describe` command
+- [ ] `atmos deployment release` command
+- [ ] `atmos deployment releases` command (list/describe)
+- [ ] Release promotion workflow
 
 **Week 4-6: Testing & Documentation**
 - [ ] Build/release integration tests
@@ -1259,19 +2347,29 @@ atmos rollout apply api --target prod --release xyz789
 - [ ] Documentation with examples
 - [ ] CI workflow examples
 
-### Phase 3: Test & Rollout (4-6 weeks)
+### Phase 3: Test & Rollout Stages (4-6 weeks)
 
-**Week 1-2: Test Phase**
+**Week 1-2: Test Stage Implementation**
 - [ ] Container test execution framework
-- [ ] `atmos test` command implementation
+- [ ] `atmos deployment test` command implementation
 - [ ] Test report collection (JUnit, etc.)
 - [ ] Volume mount support for test data
 
-**Week 2-4: Rollout Phase**
+**Week 2-4: Rollout Stage Implementation**
 - [ ] Label-based component binding
 - [ ] Digest injection into Terraform/Helm/Lambda
-- [ ] `atmos rollout plan` command
-- [ ] `atmos rollout apply` command
+- [ ] `atmos deployment rollout` command
+- [ ] `atmos deployment status` command
+- [ ] `atmos deployment drift` command
+- [ ] Concurrent deployment architecture:
+  - [ ] Workspace isolation (`pkg/deployment/workspace.go`)
+  - [ ] Dependency DAG builder (reuse existing `depends_on`)
+  - [ ] Topological sort for execution waves
+  - [ ] Parallel executor with `--parallelism` flag
+  - [ ] `golang.org/x/sync/errgroup` for bounded concurrency
+  - [ ] Automatic workspace cleanup (defer)
+  - [ ] `--keep-workspace` flag for debugging
+- [ ] Test parallelism on all platforms (Linux, macOS, Windows)
 
 **Week 4-6: Testing & Documentation**
 - [ ] End-to-end deployment tests
@@ -1296,10 +2394,27 @@ atmos rollout apply api --target prod --release xyz789
 - [ ] Dependency-aware rollouts
 - [ ] Atomic multi-component updates
 
-**Week 4-6: CI Export**
-- [ ] GitHub Actions workflow generation
-- [ ] GitLab CI pipeline generation
-- [ ] Generic CI template system
+**Week 4-6: CI/CD Provider Abstraction**
+- [ ] Create `pkg/cicd/interface.go` with provider abstraction (inspired by `tools/gotcha/pkg/vcs`)
+  - [ ] `Provider`, `Context`, `ApprovalManager`, `MatrixStrategy` interfaces
+  - [ ] `WorkflowDispatcher`, `JobSummaryWriter`, `ArtifactPublisher` (optional)
+- [ ] Implement GitHub Actions provider (`pkg/cicd/github/`)
+  - [ ] Provider registration and auto-detection via `GITHUB_ACTIONS` env
+  - [ ] Context detection (owner, repo, branch, commit, PR number)
+  - [ ] Matrix strategy (DAG-aware component matrices)
+  - [ ] Atmos Pro approval manager integration
+  - [ ] Job summary writer (`$GITHUB_STEP_SUMMARY`)
+- [ ] Add `atmos deployment matrix` command
+  - [ ] `--format json` output for GitHub Actions matrix
+  - [ ] `--waves` flag for DAG-based wave matrices
+- [ ] Add `--approve` flag to `atmos deployment rollout`
+  - [ ] Detects CI/CD provider automatically
+  - [ ] Blocks until Atmos Pro approval received
+  - [ ] Prints approval URL to logs
+- [ ] Provider registry pattern (`pkg/cicd/factory.go`)
+  - [ ] `RegisterProvider()`, `DetectProvider()`, `GetProvider()`
+- [ ] Integration tests with mocked CI environments
+- [ ] Test zero-bash workflows in actual GitHub Actions
 
 **Week 6-8: Polish & Documentation**
 - [ ] Performance optimization
@@ -1705,41 +2820,245 @@ This example shows the complete dependency chain including:
 }
 ```
 
-#### **Go Libraries for SBOM Generation**
+#### **Component Registry Pattern for SBOM Generation**
 
-**Primary Library: CycloneDX Go**
+**Architecture**: Each component type is responsible for generating its own SBOM. The component registry is extended with an SBOM generation interface.
+
+**Component Interface Extension**:
+
 ```go
+// pkg/component/interface.go
+package component
+
 import (
     cdx "github.com/CycloneDX/cyclonedx-go"
 )
 
-// Generate SBOM for container image
-func GenerateContainerSBOM(image string, digest string, deps []Dependency) (*cdx.BOM, error) {
+// Component interface (existing)
+type Component interface {
+    GetName() string
+    GetType() string
+    Validate() error
+    Execute(ctx context.Context) error
+}
+
+// SBOMGenerator interface (new) - components opt-in by implementing this
+type SBOMGenerator interface {
+    // GenerateSBOM returns a CycloneDX BOM for this component
+    GenerateSBOM(ctx context.Context) (*cdx.BOM, error)
+
+    // SupportsSBOM returns true if this component can generate SBOMs
+    SupportsSBOM() bool
+}
+
+// SBOM-aware component combines both interfaces
+type SBOMAwareComponent interface {
+    Component
+    SBOMGenerator
+}
+```
+
+**Component Implementation Examples**:
+
+```go
+// pkg/component/nixpack/sbom.go
+package nixpack
+
+import (
+    "context"
+
+    cdx "github.com/CycloneDX/cyclonedx-go"
+    purl "github.com/package-url/packageurl-go"
+)
+
+// NixpackComponent implements SBOMGenerator
+func (n *NixpackComponent) SupportsSBOM() bool {
+    return true
+}
+
+func (n *NixpackComponent) GenerateSBOM(ctx context.Context) (*cdx.BOM, error) {
     bom := cdx.NewBOM()
+
+    // Container image metadata
     bom.Metadata = &cdx.Metadata{
         Component: &cdx.Component{
             Type:    cdx.ComponentTypeContainer,
-            Name:    image,
-            Version: digest,
-            PackageURL: fmt.Sprintf("pkg:oci/%s@%s", image, digest),
+            Name:    n.imageName,
+            Version: n.imageDigest,
+            PackageURL: fmt.Sprintf("pkg:oci/%s@%s", n.imageName, n.imageDigest),
+        },
+        Tools: []cdx.Tool{
+            {Vendor: "Atmos", Name: "atmos-nixpack", Version: schema.VERSION},
+            {Vendor: "Nixpacks", Name: "nixpacks", Version: n.nixpacksVersion},
         },
     }
 
-    for _, dep := range deps {
-        component := cdx.Component{
-            Type:    cdx.ComponentTypeLibrary,
-            Name:    dep.Name,
-            Version: dep.Version,
-            PackageURL: dep.PURL,
-        }
-        bom.Components = &[]cdx.Component{component}
+    components := []cdx.Component{}
+
+    // Add Nix packages
+    for _, pkg := range n.nixPackages {
+        components = append(components, cdx.Component{
+            Type:       cdx.ComponentTypeLibrary,
+            Name:       pkg,
+            PackageURL: purl.NewPackageURL("nix", "", pkg, "", nil, "").String(),
+        })
     }
 
+    // Add application dependencies (language-specific)
+    // Delegate to language-specific scanners
+    appDeps, err := n.scanApplicationDependencies(ctx)
+    if err != nil {
+        return nil, fmt.Errorf("failed to scan app dependencies: %w", err)
+    }
+    components = append(components, appDeps...)
+
+    bom.Components = &components
+    return bom, nil
+}
+
+// scanApplicationDependencies detects language and scans dependencies
+func (n *NixpackComponent) scanApplicationDependencies(ctx context.Context) ([]cdx.Component, error) {
+    // Detect language from nixpacks provider
+    switch n.detectedProvider {
+    case "go":
+        return n.scanGoModules()
+    case "node":
+        return n.scanNpmPackages()
+    case "python":
+        return n.scanPipPackages()
+    default:
+        return []cdx.Component{}, nil
+    }
+}
+```
+
+```go
+// pkg/component/terraform/sbom.go
+package terraform
+
+import (
+    "context"
+
+    cdx "github.com/CycloneDX/cyclonedx-go"
+    "github.com/cloudposse/atmos/pkg/sbom"
+)
+
+// TerraformComponent implements SBOMGenerator
+func (t *TerraformComponent) SupportsSBOM() bool {
+    return true
+}
+
+func (t *TerraformComponent) GenerateSBOM(ctx context.Context) (*cdx.BOM, error) {
+    // Parse Terraform configuration using terraform-config-inspect
+    moduleInfo, err := sbom.ParseTerraformModule(t.componentPath)
+    if err != nil {
+        return nil, err
+    }
+
+    // Parse lock file for provider versions
+    lockFile := filepath.Join(t.componentPath, ".terraform.lock.hcl")
+    providerLocks, _ := sbom.ParseTerraformLockFile(lockFile)
+
+    bom := cdx.NewBOM()
+    bom.Metadata = &cdx.Metadata{
+        Component: &cdx.Component{
+            Type: cdx.ComponentTypeApplication,
+            Name: t.componentName,
+        },
+    }
+
+    components := []cdx.Component{}
+
+    // Add providers from lock file
+    for _, provider := range providerLocks {
+        components = append(components, sbom.CreateProviderComponent(provider))
+    }
+
+    // Add module dependencies
+    for _, modCall := range moduleInfo.ModuleCalls {
+        if !sbom.IsLocalModule(modCall.Source) {
+            components = append(components, sbom.CreateModuleComponent(modCall))
+        }
+    }
+
+    bom.Components = &components
     return bom, nil
 }
 ```
 
-**Recommended Libraries:**
+```go
+// pkg/component/helmfile/sbom.go
+package helmfile
+
+// HelmfileComponent implements SBOMGenerator
+func (h *HelmfileComponent) SupportsSBOM() bool {
+    return true // Can scan Helm charts
+}
+
+func (h *HelmfileComponent) GenerateSBOM(ctx context.Context) (*cdx.BOM, error) {
+    // Parse helmfile.yaml for chart dependencies
+    // Extract chart versions, repositories
+    // Return BOM with Helm charts as components
+    // ...
+}
+```
+
+**Component Registry Integration**:
+
+```go
+// pkg/component/registry.go
+package component
+
+import (
+    "context"
+
+    cdx "github.com/CycloneDX/cyclonedx-go"
+)
+
+type Registry struct {
+    components map[string]Component
+}
+
+// GenerateDeploymentSBOM aggregates SBOMs from all components in deployment
+func (r *Registry) GenerateDeploymentSBOM(
+    ctx context.Context,
+    deployment string,
+    target string,
+) (*cdx.BOM, error) {
+    bom := cdx.NewBOM()
+    bom.Metadata = &cdx.Metadata{
+        Component: &cdx.Component{
+            Type:    cdx.ComponentTypeApplication,
+            Name:    fmt.Sprintf("%s-%s", deployment, target),
+        },
+    }
+
+    allComponents := []cdx.Component{}
+
+    // Iterate through all components in deployment
+    for name, comp := range r.components {
+        // Check if component supports SBOM generation
+        if sbomGen, ok := comp.(SBOMGenerator); ok && sbomGen.SupportsSBOM() {
+            componentBOM, err := sbomGen.GenerateSBOM(ctx)
+            if err != nil {
+                // Log warning but continue with other components
+                log.Warn("Failed to generate SBOM for component", "component", name, "error", err)
+                continue
+            }
+
+            // Merge component BOM into deployment BOM
+            if componentBOM.Components != nil {
+                allComponents = append(allComponents, *componentBOM.Components...)
+            }
+        }
+    }
+
+    bom.Components = &allComponents
+    return bom, nil
+}
+```
+
+**Go Libraries** (shared across component types):
 
 1. **github.com/CycloneDX/cyclonedx-go** (Primary)
    - Official CycloneDX Go library
@@ -1753,7 +3072,7 @@ func GenerateContainerSBOM(image string, digest string, deps []Dependency) (*cdx
    - JSON/YAML/RDF support
    - License: Apache 2.0
 
-3. **github.com/anchore/syft** (Integration)
+3. **github.com/anchore/syft** (Container/dependency scanning)
    - Can call syft as library or CLI
    - Excellent container scanning
    - Supports multiple output formats
@@ -1763,6 +3082,421 @@ func GenerateContainerSBOM(image string, digest string, deps []Dependency) (*cdx
    - Generate Package URLs
    - Required for CycloneDX/SPDX
    - License: MIT
+
+#### **Extracting Terraform Module and Provider Information from HCL**
+
+To build comprehensive SBOMs for Terraform infrastructure, Atmos must programmatically extract module sources, versions, and provider requirements from HCL files. HashiCorp provides official Go libraries for this purpose.
+
+**Recommended Libraries:**
+
+1. **`github.com/hashicorp/terraform-config-inspect`** - High-level Terraform module inspection
+   - Parses module calls and their sources
+   - Extracts provider requirements
+   - Handles Terraform Registry references
+   - Works without Terraform CLI installation
+   - License: MPL-2.0
+
+2. **`github.com/hashicorp/hcl/v2`** - Low-level HCL parsing (if needed)
+   - For custom parsing needs beyond module inspection
+   - Direct AST access
+   - License: MPL-2.0
+
+3. **`.terraform.lock.hcl` parsing** - Extract provider checksums and exact versions
+   - Use standard HCL parser for lock file
+   - Contains authoritative provider versions and checksums
+
+**Implementation Strategy:**
+
+```go
+// pkg/sbom/terraform_parser.go
+package sbom
+
+import (
+    "fmt"
+    "os"
+    "path/filepath"
+
+    "github.com/hashicorp/hcl/v2"
+    "github.com/hashicorp/hcl/v2/hclparse"
+    "github.com/hashicorp/terraform-config-inspect/tfconfig"
+)
+
+// TerraformModuleInfo contains parsed module metadata.
+type TerraformModuleInfo struct {
+    Path              string
+    ModuleCalls       []ModuleCall
+    RequiredProviders []ProviderRequirement
+    NestedModules     []TerraformModuleInfo
+}
+
+// ModuleCall represents a module {} block.
+type ModuleCall struct {
+    Name    string
+    Source  string
+    Version string // from version constraint
+}
+
+// ProviderRequirement from required_providers block.
+type ProviderRequirement struct {
+    Name      string
+    Source    string // e.g., "hashicorp/aws"
+    Version   string // constraint like ">= 5.0"
+}
+
+// ParseTerraformModule uses terraform-config-inspect to extract module and provider info.
+func ParseTerraformModule(modulePath string) (*TerraformModuleInfo, error) {
+    // Load module configuration
+    module, diags := tfconfig.LoadModule(modulePath)
+    if diags.HasErrors() {
+        return nil, fmt.Errorf("failed to load module: %w", diags.Err())
+    }
+
+    info := &TerraformModuleInfo{
+        Path:              modulePath,
+        ModuleCalls:       []ModuleCall{},
+        RequiredProviders: []ProviderRequirement{},
+        NestedModules:     []TerraformModuleInfo{},
+    }
+
+    // Extract module calls
+    for name, modCall := range module.ModuleCalls {
+        call := ModuleCall{
+            Name:    name,
+            Source:  modCall.Source,
+            Version: modCall.Version, // May be empty if no version constraint
+        }
+        info.ModuleCalls = append(info.ModuleCalls, call)
+
+        // Recursively parse nested modules (if local)
+        if isLocalModule(modCall.Source) {
+            nestedPath := filepath.Join(modulePath, modCall.Source)
+            if nested, err := ParseTerraformModule(nestedPath); err == nil {
+                info.NestedModules = append(info.NestedModules, *nested)
+            }
+        }
+    }
+
+    // Extract required providers
+    for name, provider := range module.RequiredProviders {
+        req := ProviderRequirement{
+            Name:    name,
+            Source:  provider.Source,
+            Version: joinVersionConstraints(provider.VersionConstraints),
+        }
+        info.RequiredProviders = append(info.RequiredProviders, req)
+    }
+
+    return info, nil
+}
+
+// ParseTerraformLockFile extracts exact provider versions and checksums.
+func ParseTerraformLockFile(lockFilePath string) ([]ProviderLockEntry, error) {
+    parser := hclparse.NewParser()
+    f, diags := parser.ParseHCLFile(lockFilePath)
+    if diags.HasErrors() {
+        return nil, fmt.Errorf("failed to parse lock file: %w", diags.Errs())
+    }
+
+    var providers []ProviderLockEntry
+
+    // Lock file structure:
+    // provider "registry.terraform.io/hashicorp/aws" {
+    //   version     = "5.31.0"
+    //   constraints = ">= 5.0"
+    //   hashes = [
+    //     "h1:abc123...",
+    //     "zh:def456...",
+    //   ]
+    // }
+
+    content, _, diags := f.Body.PartialContent(&hcl.BodySchema{
+        Blocks: []hcl.BlockHeaderSchema{
+            {Type: "provider", LabelNames: []string{"source"}},
+        },
+    })
+
+    if diags.HasErrors() {
+        return nil, fmt.Errorf("failed to read lock file content: %w", diags.Errs())
+    }
+
+    for _, block := range content.Blocks {
+        provider := ProviderLockEntry{
+            Source: block.Labels[0],
+        }
+
+        attrs, diags := block.Body.JustAttributes()
+        if diags.HasErrors() {
+            continue
+        }
+
+        if version, exists := attrs["version"]; exists {
+            val, _ := version.Expr.Value(nil)
+            provider.Version = val.AsString()
+        }
+
+        if constraints, exists := attrs["constraints"]; exists {
+            val, _ := constraints.Expr.Value(nil)
+            provider.Constraints = val.AsString()
+        }
+
+        if hashes, exists := attrs["hashes"]; exists {
+            val, _ := hashes.Expr.Value(nil)
+            if val.Type().IsListType() {
+                for _, hash := range val.AsValueSlice() {
+                    provider.Hashes = append(provider.Hashes, hash.AsString())
+                }
+            }
+        }
+
+        providers = append(providers, provider)
+    }
+
+    return providers, nil
+}
+
+// ProviderLockEntry from .terraform.lock.hcl
+type ProviderLockEntry struct {
+    Source      string   // "registry.terraform.io/hashicorp/aws"
+    Version     string   // "5.31.0"
+    Constraints string   // ">= 5.0"
+    Hashes      []string // ["h1:...", "zh:..."]
+}
+
+// Helper: check if module source is local path
+func isLocalModule(source string) bool {
+    return filepath.IsAbs(source) ||
+           source == "." ||
+           source[:2] == "./" ||
+           source[:3] == "../"
+}
+
+// Helper: join version constraints
+func joinVersionConstraints(constraints []string) string {
+    if len(constraints) == 0 {
+        return ""
+    }
+    return constraints[0] // Simplified; could join multiple constraints
+}
+
+// ParseVendoredComponent combines module info + lock file for complete SBOM.
+func ParseVendoredComponent(componentPath string) (*VendoredComponentSBOM, error) {
+    // 1. Parse module configuration
+    moduleInfo, err := ParseTerraformModule(componentPath)
+    if err != nil {
+        return nil, fmt.Errorf("failed to parse module: %w", err)
+    }
+
+    // 2. Parse lock file (if exists)
+    lockFilePath := filepath.Join(componentPath, ".terraform.lock.hcl")
+    var providerLocks []ProviderLockEntry
+    if _, err := os.Stat(lockFilePath); err == nil {
+        providerLocks, err = ParseTerraformLockFile(lockFilePath)
+        if err != nil {
+            // Lock file is optional; log warning but continue
+            fmt.Fprintf(os.Stderr, "Warning: failed to parse lock file: %v\n", err)
+        }
+    }
+
+    // 3. Combine into SBOM data structure
+    sbom := &VendoredComponentSBOM{
+        ModuleInfo:    moduleInfo,
+        ProviderLocks: providerLocks,
+    }
+
+    return sbom, nil
+}
+
+// VendoredComponentSBOM combines module and provider data for SBOM generation.
+type VendoredComponentSBOM struct {
+    ModuleInfo    *TerraformModuleInfo
+    ProviderLocks []ProviderLockEntry
+}
+
+// Example usage in vendor SBOM generation:
+func (g *Generator) GenerateVendorSBOMFromParsedData(
+    deployment string,
+    target string,
+    vendoredComponents map[string]*VendoredComponentSBOM,
+) (*cdx.BOM, error) {
+    bom := cdx.NewBOM()
+
+    components := []cdx.Component{}
+
+    for componentName, sbomData := range vendoredComponents {
+        // Add main module component
+        moduleComponent := cdx.Component{
+            Type:  cdx.ComponentTypeLibrary,
+            Group: "terraform-modules",
+            Name:  componentName,
+        }
+        components = append(components, moduleComponent)
+
+        // Add providers from lock file (authoritative versions)
+        for _, providerLock := range sbomData.ProviderLocks {
+            providerComponent := g.createProviderComponentFromLock(providerLock)
+            components = append(components, providerComponent)
+        }
+
+        // Add nested module dependencies
+        for _, nestedModule := range flattenNestedModules(sbomData.ModuleInfo) {
+            for _, modCall := range nestedModule.ModuleCalls {
+                if !isLocalModule(modCall.Source) {
+                    // External module dependency
+                    depComponent := g.createModuleDependencyComponent(modCall)
+                    components = append(components, depComponent)
+                }
+            }
+        }
+    }
+
+    bom.Components = &components
+    return bom, nil
+}
+
+func (g *Generator) createProviderComponentFromLock(lock ProviderLockEntry) cdx.Component {
+    // Parse source to extract namespace/name
+    // "registry.terraform.io/hashicorp/aws" → namespace=hashicorp, name=aws
+    parts := parseProviderSource(lock.Source)
+
+    return cdx.Component{
+        Type:    cdx.ComponentTypeLibrary,
+        Group:   "terraform-providers",
+        Name:    fmt.Sprintf("%s/%s", parts.Namespace, parts.Name),
+        Version: lock.Version,
+        PackageURL: fmt.Sprintf("pkg:terraform/%s/%s@%s",
+            parts.Namespace,
+            parts.Name,
+            lock.Version,
+        ),
+        Hashes: convertHashesToCDX(lock.Hashes),
+        ExternalReferences: []cdx.ExternalReference{
+            {
+                Type: cdx.ERTypeDistribution,
+                URL: fmt.Sprintf("https://registry.terraform.io/providers/%s/%s/%s",
+                    parts.Namespace, parts.Name, lock.Version),
+            },
+        },
+        Properties: []cdx.Property{
+            {Name: "terraform:constraints", Value: lock.Constraints},
+            {Name: "terraform:lock_hashes", Value: joinStrings(lock.Hashes, ",")},
+        },
+    }
+}
+
+func (g *Generator) createModuleDependencyComponent(modCall ModuleCall) cdx.Component {
+    return cdx.Component{
+        Type:    cdx.ComponentTypeLibrary,
+        Group:   "terraform-modules",
+        Name:    modCall.Source,
+        Version: modCall.Version,
+        PackageURL: generateModulePURL(modCall.Source, modCall.Version),
+        Properties: []cdx.Property{
+            {Name: "terraform:module_name", Value: modCall.Name},
+            {Name: "terraform:version_constraint", Value: modCall.Version},
+        },
+    }
+}
+
+// Helper: flatten nested modules for dependency tracking
+func flattenNestedModules(module *TerraformModuleInfo) []*TerraformModuleInfo {
+    result := []*TerraformModuleInfo{module}
+    for _, nested := range module.NestedModules {
+        result = append(result, flattenNestedModules(&nested)...)
+    }
+    return result
+}
+
+type ProviderSourceParts struct {
+    Registry  string // "registry.terraform.io"
+    Namespace string // "hashicorp"
+    Name      string // "aws"
+}
+
+func parseProviderSource(source string) ProviderSourceParts {
+    // Parse "registry.terraform.io/hashicorp/aws" → {hashicorp, aws}
+    // Simplified implementation
+    parts := strings.Split(source, "/")
+    if len(parts) == 3 {
+        return ProviderSourceParts{
+            Registry:  parts[0],
+            Namespace: parts[1],
+            Name:      parts[2],
+        }
+    }
+    return ProviderSourceParts{}
+}
+
+func convertHashesToCDX(hashes []string) []cdx.Hash {
+    var result []cdx.Hash
+    for _, h := range hashes {
+        // Terraform lock hashes are in format "h1:base64..." or "zh:base64..."
+        // Convert to CycloneDX format
+        if strings.HasPrefix(h, "h1:") {
+            result = append(result, cdx.Hash{
+                Algorithm: cdx.HashAlgoSHA256,
+                Value:     h[3:], // Strip "h1:" prefix
+            })
+        }
+        // zh: hashes are legacy, can include if needed
+    }
+    return result
+}
+
+func joinStrings(items []string, sep string) string {
+    return strings.Join(items, sep)
+}
+```
+
+**Complete Workflow: From Vendored Component to SBOM**
+
+```go
+// pkg/vendor/sbom_integration.go
+package vendor
+
+import (
+    "github.com/cloudposse/atmos/pkg/sbom"
+)
+
+// GenerateSBOMForDeployment creates SBOM for all vendored components in a deployment.
+func GenerateSBOMForDeployment(deployment string, target string) error {
+    // 1. Get vendored components for this deployment/target
+    vendorCache := ".atmos/vendor-cache/deployments/" + deployment + "/" + target
+
+    components, err := discoverVendoredComponents(vendorCache)
+    if err != nil {
+        return err
+    }
+
+    // 2. Parse each component's Terraform configuration
+    sbomData := make(map[string]*sbom.VendoredComponentSBOM)
+    for name, path := range components {
+        parsed, err := sbom.ParseVendoredComponent(path)
+        if err != nil {
+            return fmt.Errorf("failed to parse component %s: %w", name, err)
+        }
+        sbomData[name] = parsed
+    }
+
+    // 3. Generate CycloneDX SBOM
+    generator := &sbom.Generator{Format: "cyclonedx"}
+    bom, err := generator.GenerateVendorSBOMFromParsedData(deployment, target, sbomData)
+    if err != nil {
+        return err
+    }
+
+    // 4. Write SBOM to file
+    sbomPath := fmt.Sprintf(".atmos/sboms/%s-%s-vendor.cdx.json", deployment, target)
+    return writeBOMToFile(bom, sbomPath)
+}
+```
+
+**Key Benefits of This Approach:**
+
+1. **No Terraform CLI Required**: Uses Go libraries that parse HCL directly
+2. **Comprehensive Dependency Graph**: Tracks modules, providers, and nested dependencies
+3. **Authoritative Version Info**: Lock file provides exact provider versions and checksums
+4. **Multi-Source Support**: Handles GitHub, GitLab, Terraform Registry, local modules
+5. **SBOM Standard Compliance**: Generates CycloneDX/SPDX with proper PURLs and metadata
 
 **Integration Approach:**
 
@@ -2035,33 +3769,48 @@ func generateVendorPURL(comp VendoredComponent) string {
 
 #### **CLI Integration**
 
+**Component-Level SBOM Generation** (automatic during build/release):
+
 ```bash
-# Generate SBOM during build
-atmos build payment-api --target prod --sbom cyclonedx,spdx
+# Generate SBOM during build (nixpack component auto-generates SBOM)
+atmos deployment build payment-api --target prod --sbom
 # Creates:
-# - .atmos/sboms/payment-api-prod-sha256:abc123.cdx.json
-# - .atmos/sboms/payment-api-prod-sha256:abc123.spdx.json
+# - .atmos/sboms/nixpack-payment-api-prod-sha256:abc123.cdx.json
+# Nixpack component generates SBOM with container + app dependencies
 
-# Generate SBOM for vendored components
-atmos vendor pull --deployment payment-service --target prod --sbom
+# Generate SBOM for specific component
+atmos describe component ecs/payment-api -s prod --sbom
 # Creates:
-# - .atmos/sboms/payment-service-prod-vendor.cdx.json
+# - .atmos/sboms/terraform-ecs-payment-api-prod.cdx.json
+# Terraform component generates SBOM with modules + providers
 
-# Generate combined deployment SBOM
-atmos release create payment-service --target prod --sbom
+# Generate combined deployment SBOM (aggregates all components)
+atmos deployment release payment-service --target prod --sbom
+# Component registry calls GenerateSBOM() on each component
 # Creates:
 # - releases/payment-service/prod/release-abc123-sbom.cdx.json
-# Includes: container images + vendored components + Atmos metadata
+# Includes: nixpack SBOMs + terraform SBOMs + helmfile SBOMs
 
 # Export SBOM in different format
-atmos sbom export payment-service prod release-abc123 --format spdx --output /tmp/sbom.spdx.json
+atmos deployment sbom export payment-service --release abc123 --format spdx --output /tmp/sbom.spdx.json
 
 # Validate SBOM
-atmos sbom validate payment-service prod release-abc123
+atmos deployment sbom validate payment-service --release abc123
 
 # Scan SBOM for vulnerabilities (integration with Grype/Trivy)
-atmos sbom scan payment-service prod release-abc123 --scanner grype
+atmos deployment sbom scan payment-service --release abc123 --scanner grype
 ```
+
+**Component Registry Workflow**:
+
+1. **Build Phase**: Nixpack component generates container SBOM
+2. **Release Phase**: Component registry aggregates SBOMs from all components
+3. **Rollout Phase**: Terraform components generate infrastructure SBOMs on-demand
+
+Each component type decides:
+- What to include in its SBOM
+- How to scan dependencies
+- Whether SBOM generation is supported (`SupportsSBOM()` returns false = skip)
 
 #### **SBOM Storage in Releases**
 
@@ -2161,11 +3910,16 @@ settings:
 Add to Phase 2 implementation plan:
 
 ```markdown
-**Week 3-4: SBOM Generation**
-- [ ] Integrate CycloneDX Go library
-- [ ] Container image SBOM generation (nixpack builds)
-- [ ] Vendored component SBOM generation
-- [ ] Combined deployment SBOM
+**Week 3-4: SBOM Generation (Component Registry Pattern)**
+- [ ] Extend component interface with `SBOMGenerator` interface
+  - [ ] `GenerateSBOM(ctx) (*cdx.BOM, error)` method
+  - [ ] `SupportsSBOM() bool` method
+- [ ] Integrate CycloneDX Go library (shared across components)
+- [ ] Implement SBOM generation per component type:
+  - [ ] Nixpack component: container image + app dependencies
+  - [ ] Terraform component: modules + providers (using terraform-config-inspect)
+  - [ ] Helmfile component: Helm charts + dependencies
+- [ ] Component registry aggregation method: `GenerateDeploymentSBOM()`
 - [ ] SBOM storage in release records
 - [ ] CLI commands: `atmos sbom export/validate/scan`
 - [ ] Integration with Grype/Trivy for vulnerability scanning
@@ -2571,20 +4325,24 @@ Vendor cache structure for payment-service:
 │   └── payment-service/
 │       ├── dev/
 │       │   └── terraform/
-│       │       ├── rds/ → refs/.../rds/1.5.0
-│       │       └── ecs-service/ → refs/.../ecs-service/2.0.0-beta.3
+│       │       ├── rds/              # Hard link/copy from objects/abc123...
+│       │       └── ecs-service/      # Hard link/copy from objects/def456...
 │       ├── staging/
 │       │   └── terraform/
-│       │       ├── rds/ → refs/.../rds/1.4.0
-│       │       └── ecs-service/ → refs/.../ecs-service/2.0.0-beta.3 (shared!)
+│       │       ├── rds/              # Hard link/copy from objects/ghi789...
+│       │       └── ecs-service/      # Hard link from objects/def456... (shared!)
 │       └── prod/
 │           └── terraform/
-│               ├── rds/ → refs/.../rds/1.3.5
-│               └── ecs-service/ → refs/.../ecs-service/1.8.2
+│               ├── rds/              # Hard link/copy from objects/jkl012...
+│               └── ecs-service/      # Hard link/copy from objects/mno345...
 
-Total storage: 50 MB (5 unique component versions)
-Without dedup: 75 MB (would duplicate ECS 2.0.0-beta.3 for dev+staging)
-Savings: 33% deduplication
+Total storage (Unix/Mac with hard links): 50 MB (5 unique component versions)
+Total storage (Windows with copies):      75 MB (all files copied per deployment)
+Without content-addressable cache:        150 MB (no deduplication at all)
+
+Deduplication savings:
+- Unix/Mac: 67% savings (hard links)
+- Windows:  50% savings (copies but shared cache objects)
 ```
 
 ## Appendix B: JSON Schema
