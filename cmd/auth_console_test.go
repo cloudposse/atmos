@@ -301,7 +301,7 @@ func TestAuthConsoleCommand_ErrorHandling(t *testing.T) {
 		{
 			name: "config loading errors wrapped with sentinel",
 			setup: func() error {
-				return fmt.Errorf("%w: failed to load atmos config: %v", errUtils.ErrAuthConsole, fmt.Errorf("file not found"))
+				return fmt.Errorf("%w: failed to load atmos config: %w", errUtils.ErrAuthConsole, fmt.Errorf("file not found"))
 			},
 			errType: errUtils.ErrAuthConsole,
 			errMsg:  "failed to load",
