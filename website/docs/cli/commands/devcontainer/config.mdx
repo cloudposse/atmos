@@ -1,0 +1,60 @@
+---
+title: atmos devcontainer config
+sidebar_label: config
+sidebar_class_name: command
+id: config
+description: Show devcontainer configuration
+---
+import Screengrab from '@site/src/components/Screengrab'
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Use this command to view the resolved configuration for a devcontainer, including all settings from your `atmos.yaml` and devcontainer spec.
+</Intro>
+
+<Screengrab title="atmos devcontainer config --help" slug="atmos-devcontainer-config--help" />
+
+## Usage
+
+```shell
+atmos devcontainer config <name>
+```
+
+## Arguments
+
+<dl>
+  <dt>`name`</dt>
+  <dd>Name of the devcontainer to show configuration for</dd>
+</dl>
+
+## Examples
+
+```shell
+# Show devcontainer configuration
+atmos devcontainer config geodesic
+```
+
+Example output:
+```yaml
+Runtime: podman
+
+Name: Geodesic
+Image: cloudposse/geodesic:latest
+
+Workspace Folder: /workspace
+Workspace Mount: type=bind,source=/Users/erik/project,target=/workspace
+
+Mounts:
+  - type=bind,source=/Users/erik/.aws,target=/root/.aws,readonly
+  - type=volume,source=geodesic-home,target=/root
+
+Forward Ports:
+  - 8080
+  - 3000
+
+Remote User: root
+```
+
+## See Also
+
+- [`atmos devcontainer list`](/cli/commands/devcontainer/list)

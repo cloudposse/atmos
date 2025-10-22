@@ -1,0 +1,77 @@
+# Example atmos.yaml configuration with devcontainer support
+#
+# Quick start:
+#   atmos devcontainer start geodesic     # Start Geodesic container
+#   atmos devcontainer attach geodesic    # Attach to running container
+#   atmos devcontainer stop geodesic      # Stop container
+#   atmos shell                            # Alias for 'devcontainer geodesic'
+
+# Base path for components and stacks
+base_path: "."
+
+# Command aliases
+aliases:
+  shell: "devcontainer geodesic"
+
+components:
+  terraform:
+    base_path: "components/terraform"
+  helmfile:
+    base_path: "components/helmfile"
+
+  # Devcontainer configurations follow the component pattern
+  devcontainer:
+    # Geodesic devcontainer (replaces geodesic.sh wrapper)
+    geodesic:
+      settings:
+        runtime: podman  # Optional: docker, podman, or omit for auto-detect
+      spec: !include devcontainer.json
+
+    # Alternative: Define inline
+    terraform:
+      settings:
+        runtime: podman  # Use Podman for this devcontainer
+      spec:
+        name: "Terraform Dev"
+        image: "hashicorp/terraform:1.6"
+        workspaceFolder: "/workspace"
+        workspaceMount: "type=bind,source=${localWorkspaceFolder},target=/workspace"
+        mounts:
+          - "type=bind,source=${localEnv:HOME}/.aws,target=/root/.aws,readonly"
+          - "type=volume,source=terraform-cache,target=/root/.terraform.d"
+        forwardPorts:
+          - 8080
+          - 3000
+        portsAttributes:
+          "8080":
+            label: "Terraform UI"
+            protocol: "http"
+        containerEnv:
+          TF_PLUGIN_CACHE_DIR: "/root/.terraform.d/plugin-cache"
+        remoteUser: "root"
+
+    # Python development environment
+    python:
+      spec:
+        name: "Python 3.11 Dev"
+        image: "python:3.11-slim"
+        workspaceFolder: "/workspace"
+        workspaceMount: "type=bind,source=${localWorkspaceFolder},target=/workspace"
+        forwardPorts:
+          - 8000
+          - 8080
+        portsAttributes:
+          "8000":
+            label: "Django/Flask"
+            protocol: "http"
+        containerEnv:
+          PYTHONUNBUFFERED: "1"
+        remoteUser: "root"
+
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "**/*"
+  excluded_paths:
+    - "**/_defaults.yaml"
+  name_pattern: "{tenant}-{environment}-{stage}"

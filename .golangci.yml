@@ -244,6 +244,15 @@ severity:
     - linters:
         - nestif
         - nolintlint
+        - gocognit
+      severity: warning
+    - linters:
+        - gocritic
+      text: "hugeParam.*Init|hugeParam.*Update|hugeParam.*View"
+      severity: warning
+    - linters:
+        - gosec
+      text: "G204.*docker|G204.*podman"
       severity: warning
 formatters:
   enable:

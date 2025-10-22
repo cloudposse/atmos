@@ -1180,3 +1180,15 @@ The project includes Cursor rules in `.cursor/rules/atmos-rules.mdc` covering:
 - **If pre-commit fails, fix the issues** - do not bypass with --no-verify
 - **Run `make lint` before committing** to catch issues early
 - **All commits must pass pre-commit checks** to maintain code standards
+
+### Lint Exclusions (MANDATORY)
+- **ALWAYS ask for user approval before adding nolint comments** - do not add them automatically
+- **Prefer refactoring over nolint** - only use nolint as last resort with explicit user permission
+- **Exception for bubbletea models**: `//nolint:gocritic // bubbletea models must be passed by value` is acceptable (library convention)
+- **Exception for intentional subprocess calls**: `//nolint:gosec // intentional subprocess call` is acceptable for container runtimes
+- **NEVER add nolint for**:
+  - gocognit (cognitive complexity) - refactor the function instead
+  - cyclomatic complexity - refactor the function instead
+  - magic numbers - extract constants instead
+  - nestif - refactor nested logic instead
+- **If you think nolint is needed, stop and ask the user first** - explain why refactoring isn't possible

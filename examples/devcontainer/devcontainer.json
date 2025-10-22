@@ -1,0 +1,31 @@
+{
+  "name": "Geodesic",
+  "image": "cloudposse/geodesic:latest",
+  "workspaceFolder": "/localhost",
+  "workspaceMount": "type=bind,source=${localWorkspaceFolder},target=/localhost",
+
+  "forwardPorts": [8080, 3000],
+
+  "portsAttributes": {
+    "8080": {
+      "label": "Web Server",
+      "protocol": "http"
+    },
+    "3000": {
+      "label": "Development Server",
+      "protocol": "http"
+    }
+  },
+
+  "containerEnv": {
+    "ATMOS_BASE_PATH": "/localhost"
+  },
+
+  "remoteUser": "root",
+
+  "runArgs": [
+    "--hostname=geodesic"
+  ],
+
+  "userEnvProbe": "loginInteractiveShell"
+}

@@ -1,0 +1,91 @@
+---
+title: atmos devcontainer
+sidebar_label: devcontainer
+sidebar_class_name: command
+id: devcontainer
+description: Manage development containers for Atmos workflows
+---
+import Screengrab from '@site/src/components/Screengrab'
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Use this command to manage development containers (devcontainers) for your Atmos workflows.
+
+Devcontainers provide isolated, reproducible development environments with all required tools and dependencies pre-configured.
+</Intro>
+
+<Screengrab title="atmos devcontainer --help" slug="atmos-devcontainer--help" />
+
+## Usage
+
+```shell
+atmos devcontainer <subcommand> [options]
+```
+
+## Subcommands
+
+- [`list`](/cli/commands/devcontainer/list) - List available devcontainers
+- [`start`](/cli/commands/devcontainer/start) - Start a devcontainer
+- [`stop`](/cli/commands/devcontainer/stop) - Stop a running devcontainer
+- [`attach`](/cli/commands/devcontainer/attach) - Attach to a running devcontainer
+- [`exec`](/cli/commands/devcontainer/exec) - Execute a command in a running devcontainer
+- [`logs`](/cli/commands/devcontainer/logs) - Show logs from a devcontainer
+- [`config`](/cli/commands/devcontainer/config) - Show devcontainer configuration
+- [`rebuild`](/cli/commands/devcontainer/rebuild) - Rebuild a devcontainer from scratch
+- [`remove`](/cli/commands/devcontainer/remove) - Remove a devcontainer
+
+## Container Runtimes
+
+Atmos supports both Docker and Podman as container runtimes:
+
+- **Auto-detection**: Atmos automatically detects the available runtime (Docker first, then Podman)
+- **Explicit selection**: Set `ATMOS_CONTAINER_RUNTIME=docker` or `ATMOS_CONTAINER_RUNTIME=podman`
+- **Per-devcontainer**: Configure runtime in `atmos.yaml` under `components.devcontainer.<name>.settings.runtime`
+
+## Configuration
+
+Devcontainers are configured in `atmos.yaml` under the `components.devcontainer` section:
+
+```yaml
+components:
+  devcontainer:
+    geodesic:
+      settings:
+        runtime: podman  # Optional: docker, podman, or omit for auto-detect
+      spec: !include devcontainer.json
+```
+
+The `spec` field follows the [VS Code Dev Container specification](https://containers.dev/implementors/json_reference/).
+
+## Examples
+
+```shell
+# List all devcontainers
+atmos devcontainer list
+
+# Start a devcontainer
+atmos devcontainer start geodesic
+
+# Start and attach in one command
+atmos devcontainer start geodesic --attach
+
+# Attach to a running devcontainer
+atmos devcontainer attach geodesic
+
+# Show logs
+atmos devcontainer logs geodesic
+
+# Rebuild a devcontainer
+atmos devcontainer rebuild geodesic
+
+# Stop a devcontainer
+atmos devcontainer stop geodesic
+
+# Remove a devcontainer
+atmos devcontainer remove geodesic
+```
+
+## See Also
+
+- [Dev Container Specification](https://containers.dev/)
+- [Atmos Devcontainer Configuration](/core-concepts/components/devcontainer)

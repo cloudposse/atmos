@@ -356,9 +356,10 @@ type Packer struct {
 
 type Components struct {
 	// Built-in component types (legacy - will migrate to plugin model in future phases).
-	Terraform Terraform `yaml:"terraform" json:"terraform" mapstructure:"terraform"`
-	Helmfile  Helmfile  `yaml:"helmfile" json:"helmfile" mapstructure:"helmfile"`
-	Packer    Packer    `yaml:"packer" json:"packer" mapstructure:"packer"`
+	Terraform    Terraform      `yaml:"terraform" json:"terraform" mapstructure:"terraform"`
+	Helmfile     Helmfile       `yaml:"helmfile" json:"helmfile" mapstructure:"helmfile"`
+	Packer       Packer         `yaml:"packer" json:"packer" mapstructure:"packer"`
+	Devcontainer map[string]any `yaml:"devcontainer,omitempty" json:"devcontainer,omitempty" mapstructure:"devcontainer"`
 
 	// Dynamic plugin component types.
 	// Uses mapstructure:",remain" to capture all unmapped fields from the YAML/JSON.
