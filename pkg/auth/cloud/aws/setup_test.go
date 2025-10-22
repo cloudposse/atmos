@@ -199,8 +199,8 @@ func TestSetAuthContext_PopulatesAuthContext(t *testing.T) {
 	require.NotNil(t, authContext.AWS)
 	assert.Equal(t, "test-identity", authContext.AWS.Profile)
 	assert.Equal(t, "us-west-2", authContext.AWS.Region)
-	assert.Contains(t, authContext.AWS.CredentialsFile, "test-provider/credentials")
-	assert.Contains(t, authContext.AWS.ConfigFile, "test-provider/config")
+	assert.Contains(t, authContext.AWS.CredentialsFile, filepath.Join("test-provider", "credentials"))
+	assert.Contains(t, authContext.AWS.ConfigFile, filepath.Join("test-provider", "config"))
 }
 
 func TestSetAuthContext_NilParams(t *testing.T) {

@@ -130,11 +130,13 @@ For Atmos codebase consistency:
    ```
    **Why:** Creates flat list (not chain), less common pattern, harder to unwrap.
 
-## Proposed Linter Rules
+## Proposed Linter Rules (Illustrative - Not Implemented)
 
-### Option 1: Add Custom Lintroller Rules
+> **Note:** The code examples below are **illustrative only** and are **not complete implementations**. They demonstrate the proposed approach but require additional work before use. See the [Linter Implementation Checklist](#linter-implementation-checklist) for implementation status.
 
-Add to `tools/lintroller/rule_error_wrapping.go`:
+### Option 1: Add Custom Lintroller Rules (Proposed Implementation)
+
+Example illustrative code for `tools/lintroller/rule_error_wrapping.go`:
 
 ```go
 package lintroller
@@ -157,12 +159,12 @@ func (r *ErrorWrappingRule) Check(pass *analysis.Pass) {
 			return true
 		}
 
-		// Check for fmt.Errorf calls
+		// Check for fmt.Errorf calls.
 		if !isFmtErrorf(call, pass) {
 			return true
 		}
 
-		// Check for redundant wrapping: fmt.Errorf("%w: failed to X: %w", ...)
+		// Check for redundant wrapping: fmt.Errorf("%w: failed to X: %w", ...).
 		if hasRedundantWrapping(call) {
 			pass.Reportf(call.Pos(),
 				"redundant error wrapping: use errors.Join instead of fmt.Errorf with generic 'failed to' message")
@@ -176,9 +178,31 @@ func (r *ErrorWrappingRule) Check(pass *analysis.Pass) {
 	}
 }
 
+// isFmtErrorf checks if the CallExpr is a call to fmt.Errorf.
+func isFmtErrorf(call *ast.CallExpr, pass *analysis.Pass) bool {
+	// Check for selector expression: fmt.Errorf.
+	if sel, ok := call.Fun.(*ast.SelectorExpr); ok {
+		if ident, ok := sel.X.(*ast.Ident); ok {
+			if ident.Name == "fmt" && sel.Sel.Name == "Errorf" {
+				return true
+			}
+		}
+	}
+
+	// Check for plain identifier (dot import): Errorf.
+	if ident, ok := call.Fun.(*ast.Ident); ok {
+		if ident.Name == "Errorf" {
+			// Optionally verify with pass.TypesInfo that this is fmt.Errorf.
+			return true
+		}
+	}
+
+	return false
+}
+
 func hasRedundantWrapping(call *ast.CallExpr) bool {
-	// Check if format string contains pattern: "%w: failed to ...: %w"
-	// This is redundant - should use errors.Join instead
+	// Check if format string contains pattern: "%w: failed to ...: %w".
+	// This is redundant - should use errors.Join instead.
 	if len(call.Args) < 1 {
 		return false
 	}
@@ -190,12 +214,12 @@ func hasRedundantWrapping(call *ast.CallExpr) bool {
 
 	format := formatLit.Value
 
-	// Detect patterns like "%w: failed to X: %w" with no specific context
+	// Detect patterns like "%w: failed to X: %w" with no specific context.
 	if strings.Contains(format, "%w") &&
 	   strings.Count(format, "%w") == 2 &&
 	   (strings.Contains(format, "failed to") || strings.Contains(format, "error")) {
-		// Check if there's actual context between the %w verbs
-		// If it's just generic "failed to X", suggest errors.Join
+		// Check if there's actual context between the %w verbs.
+		// If it's just generic "failed to X", suggest errors.Join.
 		return true
 	}
 
@@ -315,17 +339,25 @@ return fmt.Errorf("%w: identity %q authentication failed: %w",
 
 ## Linter Implementation Checklist
 
-- [ ] Create `tools/lintroller/rule_error_wrapping.go`
-- [ ] Implement `redundant-error-wrapping` rule
-- [ ] Add tests in `tools/lintroller/lintroller_test.go`
-- [ ] Update `.golangci.yml` with new rule setting
-- [ ] Add documentation to this PRD
-- [ ] Create migration tracking issue
-- [ ] Add examples to `CLAUDE.md`
+**Status:** Not implemented - awaiting decision on enforcement
+
+**Completed:**
+- [x] Add documentation to this PRD
+- [x] Add examples to `CLAUDE.md`
+
+**Pending (if implementation proceeds):**
+- [ ] Create `tools/lintroller/rule_error_wrapping.go` (illustrative code provided above)
+- [ ] Implement `redundant-error-wrapping` rule with complete AST analysis
+- [ ] Add comprehensive tests in `tools/lintroller/lintroller_test.go`
+- [ ] Update `.golangci.yml` with new rule setting (example provided above)
+- [ ] Create migration tracking issue for existing codebase
 - [ ] Run `golangci-lint custom` to rebuild `custom-gcl` binary
-- [ ] Test on CI with warning severity
-- [ ] Fix existing violations
-- [ ] Promote to error severity
+- [ ] Test on CI with warning severity first
+- [ ] Fix existing violations incrementally
+- [ ] Promote to error severity after cleanup
+
+**Decision Required:**
+Whether to enforce error wrapping consistency via linter or code review. Current consensus is to document best practices but not enforce via linter yet.
 
 ## References
 
