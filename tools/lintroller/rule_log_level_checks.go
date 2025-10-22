@@ -12,14 +12,19 @@ import (
 // LogLevelChecksRule checks for log level comparisons outside the logger package.
 type LogLevelChecksRule struct{}
 
+// Name returns the rule identifier "log-level-checks".
 func (r *LogLevelChecksRule) Name() string {
 	return "log-level-checks"
 }
 
+// Doc returns the documentation string for this rule.
 func (r *LogLevelChecksRule) Doc() string {
-	return "Checks for log level comparisons outside the logger package; log levels are internal implementation details and should not control UI behavior"
+	return "Checks for log level comparisons outside the logger package; log levels are internal implementation details and should not control UI behavior."
 }
 
+// Check analyzes the given file for log level comparisons outside the logger package.
+// It reports diagnostics when atmosConfig.Logs.Level is accessed or compared outside
+// the logger package (excluding test files), as log levels should not control UI behavior.
 func (r *LogLevelChecksRule) Check(pass *analysis.Pass, file *ast.File) error {
 	filename := pass.Fset.Position(file.Pos()).Filename
 
@@ -101,7 +106,7 @@ func (r *LogLevelChecksRule) isLogsLevelAccess(sel *ast.SelectorExpr) bool {
 // isLogLevelComparison checks if a binary expression compares log levels.
 func (r *LogLevelChecksRule) isLogLevelComparison(bin *ast.BinaryExpr) bool {
 	// Check for equality or inequality operators.
-	if bin.Op.String() != "==" && bin.Op.String() != "!=" {
+	if bin.Op != token.EQL && bin.Op != token.NEQ {
 		return false
 	}
 
