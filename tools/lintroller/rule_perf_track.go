@@ -11,6 +11,32 @@ import (
 // PerfTrackRule checks for missing defer perf.Track() calls in public functions.
 type PerfTrackRule struct{}
 
+// Packages to exclude from perf.Track() checks (avoid infinite recursion or overhead).
+var excludedPackages = []string{
+	"/logger",      // Avoid infinite recursion.
+	"/profiler",    // Profiling code shouldn't track itself.
+	"/perf",        // Performance tracking shouldn't track itself.
+	"/store",       // Store interfaces have many implementations.
+	"/ui/theme",    // UI theme constants and helpers.
+	"/ui",          // UI/TUI components and models.
+	"/tui",         // Terminal UI components.
+}
+
+// Receiver types to exclude from perf.Track() checks.
+var excludedReceivers = []string{
+	"noopLogger",                  // Noop logger implementations.
+	"AtmosLogger",                 // Logger methods would cause infinite recursion.
+	"mockPerf",                    // Test mocks.
+	"Mock",                        // General mocks.
+	"modelSpinner",                // TUI spinner models.
+	"modelVendor",                 // TUI vendor models.
+	"defaultTemplateRenderer",     // Simple template renderer.
+	"realTerraformDocsRunner",     // Simple terraform docs runner.
+	"ErrInvalidPattern",           // Error types.
+	"DescribeConfigFormatError",   // Error types.
+	"DefaultStacksProcessor",      // Processor implementations.
+}
+
 func (r *PerfTrackRule) Name() string {
 	return "perf-track"
 }
@@ -28,10 +54,12 @@ func (r *PerfTrackRule) Check(pass *analysis.Pass, file *ast.File) error {
 		return nil
 	}
 
-	// Skip logger package to avoid infinite recursion.
+	// Check if package is in exclusion list.
 	pkgPath := pass.Pkg.Path()
-	if strings.HasSuffix(pkgPath, "/logger") {
-		return nil
+	for _, excluded := range excludedPackages {
+		if strings.HasSuffix(pkgPath, excluded) {
+			return nil
+		}
 	}
 
 	// Track package name for error messages.
@@ -66,9 +94,11 @@ func (r *PerfTrackRule) Check(pass *analysis.Pass, file *ast.File) error {
 			receiverType := ""
 			if funcDecl.Recv != nil && len(funcDecl.Recv.List) > 0 {
 				receiverType = formatReceiverType(funcDecl.Recv.List[0].Type)
-				// Skip mock types (for testing).
-				if strings.HasPrefix(receiverType, "mock") || strings.HasPrefix(receiverType, "Mock") {
-					return true
+				// Check if receiver type is in exclusion list.
+				for _, excluded := range excludedReceivers {
+					if receiverType == excluded || strings.HasPrefix(receiverType, "mock") || strings.HasPrefix(receiverType, "Mock") {
+						return true
+					}
 				}
 			}
 

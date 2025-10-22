@@ -133,7 +133,7 @@ linters:
           tsetenv-in-defer: true      # Detects t.Setenv called inside defer blocks (use os.Setenv in defer instead)
           os-setenv-in-test: true     # Detects os.Setenv in test files (use t.Setenv instead for auto cleanup)
           os-mkdirtemp-in-test: true  # Detects os.MkdirTemp in test files (use t.TempDir instead for auto cleanup)
-          perf-track: false           # Detects missing defer perf.Track() in public functions per coding guidelines (disabled by default due to many existing violations)
+          perf-track: true            # Detects missing defer perf.Track() in public functions per coding guidelines (see excludedPackages/excludedReceivers in rule_perf_track.go)
 
       # Example: Add another custom linter configuration
       # another-linter:

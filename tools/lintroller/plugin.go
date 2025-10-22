@@ -18,15 +18,14 @@ var Analyzer = &analysis.Analyzer{
 
 // standaloneRun runs all rules for the standalone CLI tool.
 func standaloneRun(pass *analysis.Pass) (interface{}, error) {
-	// Run all rules (all enabled by default except perf-track which has many existing violations).
+	// Run all rules (all enabled by default).
 	rules := []Rule{
 		&TSetenvInDeferRule{},
 		&OsSetenvInTestRule{},
 		&OsMkdirTempInTestRule{},
 		&OsChdirInTestRule{},
 		&OsArgsInTestRule{},
-		// Note: PerfTrackRule is intentionally excluded from standalone mode by default
-		// to avoid blocking commits. Enable via golangci-lint with custom-gcl binary.
+		&PerfTrackRule{},
 	}
 
 	for _, file := range pass.Files {
