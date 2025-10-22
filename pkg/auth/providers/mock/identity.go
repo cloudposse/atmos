@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/cloudposse/atmos/pkg/auth/types"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -17,6 +18,8 @@ type Identity struct {
 
 // NewIdentity creates a new mock identity.
 func NewIdentity(name string, config *schema.Identity) *Identity {
+	defer perf.Track(nil, "mock.NewIdentity")()
+
 	return &Identity{
 		name:   name,
 		config: config,
@@ -25,11 +28,15 @@ func NewIdentity(name string, config *schema.Identity) *Identity {
 
 // Kind returns the identity kind.
 func (i *Identity) Kind() string {
+	defer perf.Track(nil, "mock.Identity.Kind")()
+
 	return i.config.Kind
 }
 
 // GetProviderName returns the provider name for this identity.
 func (i *Identity) GetProviderName() (string, error) {
+	defer perf.Track(nil, "mock.Identity.GetProviderName")()
+
 	if i.config.Via != nil && i.config.Via.Provider != "" {
 		return i.config.Via.Provider, nil
 	}
@@ -38,6 +45,8 @@ func (i *Identity) GetProviderName() (string, error) {
 
 // Authenticate performs mock authentication.
 func (i *Identity) Authenticate(ctx context.Context, baseCreds types.ICredentials) (types.ICredentials, error) {
+	defer perf.Track(nil, "mock.Identity.Authenticate")()
+
 	// For mock identities, we just return new mock credentials.
 	// In a real implementation, this would use baseCreds to assume a role or similar.
 	// Use a fixed timestamp far in the future for deterministic testing and snapshot stability.
@@ -54,12 +63,16 @@ func (i *Identity) Authenticate(ctx context.Context, baseCreds types.ICredential
 
 // Validate validates the identity configuration.
 func (i *Identity) Validate() error {
+	defer perf.Track(nil, "mock.Identity.Validate")()
+
 	return nil
 }
 
 // Environment returns mock environment variables.
 // For mock AWS-like identities, we return file paths similar to real AWS identities.
 func (i *Identity) Environment() (map[string]string, error) {
+	defer perf.Track(nil, "mock.Identity.Environment")()
+
 	env := map[string]string{
 		"MOCK_IDENTITY": i.name,
 	}
@@ -76,10 +89,14 @@ func (i *Identity) Environment() (map[string]string, error) {
 
 // PostAuthenticate is a no-op for mock identities.
 func (i *Identity) PostAuthenticate(ctx context.Context, stackInfo *schema.ConfigAndStacksInfo, providerName, identityName string, creds types.ICredentials) error {
+	defer perf.Track(nil, "mock.Identity.PostAuthenticate")()
+
 	return nil
 }
 
 // Logout is a no-op for mock identities.
 func (i *Identity) Logout(ctx context.Context) error {
+	defer perf.Track(nil, "mock.Identity.Logout")()
+
 	return nil
 }

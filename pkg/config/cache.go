@@ -33,7 +33,7 @@ type CacheConfig struct {
 
 // GetCacheFilePath returns the filesystem path to the Atmos cache file.
 // It respects ATMOS_XDG_CACHE_HOME and XDG_CACHE_HOME environment variables for cache directory location.
-// Returns an error if the cache directory cannot be created or if environment variables cannot be bound.
+// Returns an error if xdg.GetXDGCacheDir fails or if the cache directory cannot be created.
 func GetCacheFilePath() (string, error) {
 	cacheDir, err := xdg.GetXDGCacheDir("", CacheDirPermissions)
 	if err != nil {
