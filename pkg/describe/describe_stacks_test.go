@@ -19,9 +19,17 @@ func TestDescribeStacks(t *testing.T) {
 	stacks, err := ExecuteDescribeStacks(atmosConfig, "", nil, nil, nil, false, false)
 	assert.Nil(t, err)
 
-	dependentsYaml, err := u.ConvertToYAML(stacks)
+	stacksYaml, err := u.ConvertToYAML(stacks)
 	assert.Nil(t, err)
-	t.Log(dependentsYaml)
+	t.Cleanup(func() {
+		if t.Failed() {
+			if stacksYaml != "" {
+				t.Logf("Stacks:\n%s", stacksYaml)
+			} else {
+				t.Logf("Stacks (raw): %+v", stacks)
+			}
+		}
+	})
 }
 
 func TestDescribeStacksWithFilter1(t *testing.T) {
@@ -35,9 +43,17 @@ func TestDescribeStacksWithFilter1(t *testing.T) {
 	stacks, err := ExecuteDescribeStacks(atmosConfig, stack, nil, nil, nil, false, false)
 	assert.Nil(t, err)
 
-	dependentsYaml, err := u.ConvertToYAML(stacks)
+	stacksYaml, err := u.ConvertToYAML(stacks)
 	assert.Nil(t, err)
-	t.Log(dependentsYaml)
+	t.Cleanup(func() {
+		if t.Failed() {
+			if stacksYaml != "" {
+				t.Logf("Stacks:\n%s", stacksYaml)
+			} else {
+				t.Logf("Stacks (raw): %+v", stacks)
+			}
+		}
+	})
 }
 
 func TestDescribeStacksWithFilter2(t *testing.T) {
@@ -52,9 +68,17 @@ func TestDescribeStacksWithFilter2(t *testing.T) {
 	stacks, err := ExecuteDescribeStacks(atmosConfig, stack, components, nil, nil, false, false)
 	assert.Nil(t, err)
 
-	dependentsYaml, err := u.ConvertToYAML(stacks)
+	stacksYaml, err := u.ConvertToYAML(stacks)
 	assert.Nil(t, err)
-	t.Log(dependentsYaml)
+	t.Cleanup(func() {
+		if t.Failed() {
+			if stacksYaml != "" {
+				t.Logf("Stacks:\n%s", stacksYaml)
+			} else {
+				t.Logf("Stacks (raw): %+v", stacks)
+			}
+		}
+	})
 }
 
 func TestDescribeStacksWithFilter3(t *testing.T) {
@@ -69,9 +93,17 @@ func TestDescribeStacksWithFilter3(t *testing.T) {
 	stacks, err := ExecuteDescribeStacks(atmosConfig, stack, nil, nil, sections, false, false)
 	assert.Nil(t, err)
 
-	dependentsYaml, err := u.ConvertToYAML(stacks)
+	stacksYaml, err := u.ConvertToYAML(stacks)
 	assert.Nil(t, err)
-	t.Log(dependentsYaml)
+	t.Cleanup(func() {
+		if t.Failed() {
+			if stacksYaml != "" {
+				t.Logf("Stacks:\n%s", stacksYaml)
+			} else {
+				t.Logf("Stacks (raw): %+v", stacks)
+			}
+		}
+	})
 }
 
 func TestDescribeStacksWithFilter4(t *testing.T) {
@@ -86,9 +118,17 @@ func TestDescribeStacksWithFilter4(t *testing.T) {
 	stacks, err := ExecuteDescribeStacks(atmosConfig, "", nil, componentTypes, sections, false, false)
 	assert.Nil(t, err)
 
-	dependentsYaml, err := u.ConvertToYAML(stacks)
+	stacksYaml, err := u.ConvertToYAML(stacks)
 	assert.Nil(t, err)
-	t.Log(dependentsYaml)
+	t.Cleanup(func() {
+		if t.Failed() {
+			if stacksYaml != "" {
+				t.Logf("Stacks:\n%s", stacksYaml)
+			} else {
+				t.Logf("Stacks (raw): %+v", stacks)
+			}
+		}
+	})
 }
 
 func TestDescribeStacksWithFilter5(t *testing.T) {
@@ -119,7 +159,15 @@ func TestDescribeStacksWithFilter5(t *testing.T) {
 
 	stacksYaml, err := u.ConvertToYAML(stacks)
 	assert.Nil(t, err)
-	t.Log(stacksYaml)
+	t.Cleanup(func() {
+		if t.Failed() {
+			if stacksYaml != "" {
+				t.Logf("Stacks:\n%s", stacksYaml)
+			} else {
+				t.Logf("Stacks (raw): %+v", stacks)
+			}
+		}
+	})
 }
 
 func TestDescribeStacksWithFilter6(t *testing.T) {
@@ -146,7 +194,15 @@ func TestDescribeStacksWithFilter6(t *testing.T) {
 
 	stacksYaml, err := u.ConvertToYAML(stacks)
 	assert.Nil(t, err)
-	t.Log(stacksYaml)
+	t.Cleanup(func() {
+		if t.Failed() {
+			if stacksYaml != "" {
+				t.Logf("Stacks:\n%s", stacksYaml)
+			} else {
+				t.Logf("Stacks (raw): %+v", stacks)
+			}
+		}
+	})
 }
 
 func TestDescribeStacksWithFilter7(t *testing.T) {
@@ -173,7 +229,15 @@ func TestDescribeStacksWithFilter7(t *testing.T) {
 
 	stacksYaml, err := u.ConvertToYAML(stacks)
 	assert.Nil(t, err)
-	t.Log(stacksYaml)
+	t.Cleanup(func() {
+		if t.Failed() {
+			if stacksYaml != "" {
+				t.Logf("Stacks:\n%s", stacksYaml)
+			} else {
+				t.Logf("Stacks (raw): %+v", stacks)
+			}
+		}
+	})
 }
 
 func TestDescribeStacksWithFilter8(t *testing.T) {
@@ -188,9 +252,17 @@ func TestDescribeStacksWithFilter8(t *testing.T) {
 	stacks, err := ExecuteDescribeStacks(atmosConfig, "", nil, componentTypes, sections, false, false)
 	assert.Nil(t, err)
 
-	dependentsYaml, err := u.ConvertToYAML(stacks)
+	stacksYaml, err := u.ConvertToYAML(stacks)
 	assert.Nil(t, err)
-	t.Log(dependentsYaml)
+	t.Cleanup(func() {
+		if t.Failed() {
+			if stacksYaml != "" {
+				t.Logf("Stacks:\n%s", stacksYaml)
+			} else {
+				t.Logf("Stacks (raw): %+v", stacks)
+			}
+		}
+	})
 }
 
 func TestDescribeStacksWithEmptyStacks(t *testing.T) {
