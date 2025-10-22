@@ -102,7 +102,7 @@ func testDelete(t *testing.T, factory StoreFactory) {
 	_, err := store.Retrieve(alias)
 	assert.Error(t, err)
 
-	// Delete non-existent should error.
+	// Delete non-existent should succeed (idempotent).
 	err = store.Delete("non-existent")
-	assert.Error(t, err)
+	assert.NoError(t, err)
 }
