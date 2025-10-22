@@ -59,10 +59,10 @@ func TestStoreRetrieve_OIDC(t *testing.T) {
 // fakeCreds implements types.ICredentials but is not a supported concrete type.
 type fakeCreds struct{}
 
-func (f *fakeCreds) IsExpired() bool                                         { return false }
-func (f *fakeCreds) GetExpiration() (*time.Time, error)                      { return nil, nil }
-func (f *fakeCreds) BuildWhoamiInfo(info *types.WhoamiInfo)                  {}
-func (f *fakeCreds) Validate(ctx context.Context) (*time.Time, error)        { return nil, nil }
+func (f *fakeCreds) IsExpired() bool                                  { return false }
+func (f *fakeCreds) GetExpiration() (*time.Time, error)               { return nil, nil }
+func (f *fakeCreds) BuildWhoamiInfo(info *types.WhoamiInfo)           {}
+func (f *fakeCreds) Validate(ctx context.Context) (*time.Time, error) { return nil, nil }
 
 func TestStore_UnsupportedType(t *testing.T) {
 	s := NewCredentialStore()
