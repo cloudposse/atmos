@@ -16,8 +16,8 @@ import (
 
 // cachedCredential holds validated credentials with expiration info.
 type cachedCredential struct {
-	creds      types.ICredentials
-	expiration *time.Time
+	creds       types.ICredentials
+	expiration  *time.Time
 	validatedAt time.Time
 }
 
