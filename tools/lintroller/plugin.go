@@ -12,19 +12,21 @@ func init() {
 // Analyzer is a standalone analyzer for CLI usage.
 var Analyzer = &analysis.Analyzer{
 	Name: "lintroller",
-	Doc:  "Atmos project-specific linting rules (t.Setenv/os.Setenv/t.TempDir/t.Chdir/os.Args checks)",
+	Doc:  "Atmos project-specific linting rules (t.Setenv/os.Setenv/t.TempDir/t.Chdir/os.Args/multi-line markdown examples checks)",
 	Run:  standaloneRun,
 }
 
 // standaloneRun runs all rules for the standalone CLI tool.
 func standaloneRun(pass *analysis.Pass) (interface{}, error) {
-	// Run all rules (all enabled by default).
+	// Run all rules (all enabled by default except MultilineMarkdownExample).
 	rules := []Rule{
 		&TSetenvInDeferRule{},
 		&OsSetenvInTestRule{},
 		&OsMkdirTempInTestRule{},
 		&OsChdirInTestRule{},
 		&OsArgsInTestRule{},
+		// MultilineMarkdownExample is disabled by default until existing violations are fixed.
+		// &MultilineMarkdownExampleRule{},
 	}
 
 	for _, file := range pass.Files {
@@ -40,11 +42,12 @@ func standaloneRun(pass *analysis.Pass) (interface{}, error) {
 
 // Settings for the lintroller plugin.
 type Settings struct {
-	TSetenvInDefer    bool `json:"tsetenv-in-defer" yaml:"tsetenv-in-defer"`
-	OsSetenvInTest    bool `json:"os-setenv-in-test" yaml:"os-setenv-in-test"`
-	OsMkdirTempInTest bool `json:"os-mkdirtemp-in-test" yaml:"os-mkdirtemp-in-test"`
-	OsChdirInTest     bool `json:"os-chdir-in-test" yaml:"os-chdir-in-test"`
-	OsArgsInTest      bool `json:"os-args-in-test" yaml:"os-args-in-test"`
+	TSetenvInDefer           bool `json:"tsetenv-in-defer" yaml:"tsetenv-in-defer"`
+	OsSetenvInTest           bool `json:"os-setenv-in-test" yaml:"os-setenv-in-test"`
+	OsMkdirTempInTest        bool `json:"os-mkdirtemp-in-test" yaml:"os-mkdirtemp-in-test"`
+	OsChdirInTest            bool `json:"os-chdir-in-test" yaml:"os-chdir-in-test"`
+	OsArgsInTest             bool `json:"os-args-in-test" yaml:"os-args-in-test"`
+	MultilineMarkdownExample bool `json:"multiline-markdown-example" yaml:"multiline-markdown-example"`
 }
 
 // LintrollerPlugin implements the register.LinterPlugin interface.
@@ -60,12 +63,14 @@ func New(settings any) (register.LinterPlugin, error) {
 	}
 
 	// Default to enabling all rules if no settings provided.
-	if !s.TSetenvInDefer && !s.OsSetenvInTest && !s.OsMkdirTempInTest && !s.OsChdirInTest && !s.OsArgsInTest {
+	if !s.TSetenvInDefer && !s.OsSetenvInTest && !s.OsMkdirTempInTest && !s.OsChdirInTest && !s.OsArgsInTest && !s.MultilineMarkdownExample {
 		s.TSetenvInDefer = true
 		s.OsSetenvInTest = true
 		s.OsMkdirTempInTest = true
 		s.OsChdirInTest = true
 		s.OsArgsInTest = true
+		// MultilineMarkdownExample is disabled by default until existing violations are fixed.
+		// s.MultilineMarkdownExample = true
 	}
 
 	return &LintrollerPlugin{settings: s}, nil
@@ -76,7 +81,7 @@ func (p *LintrollerPlugin) BuildAnalyzers() ([]*analysis.Analyzer, error) {
 	return []*analysis.Analyzer{
 		{
 			Name: "lintroller",
-			Doc:  "Atmos project-specific linting rules (t.Setenv/os.Setenv/t.TempDir/t.Chdir/os.Args checks)",
+			Doc:  "Atmos project-specific linting rules (t.Setenv/os.Setenv/t.TempDir/t.Chdir/os.Args/multi-line markdown examples checks)",
 			Run:  p.run,
 		},
 	}, nil
@@ -105,6 +110,9 @@ func (p *LintrollerPlugin) run(pass *analysis.Pass) (interface{}, error) {
 	}
 	if p.settings.OsArgsInTest {
 		rules = append(rules, &OsArgsInTestRule{})
+	}
+	if p.settings.MultilineMarkdownExample {
+		rules = append(rules, &MultilineMarkdownExampleRule{})
 	}
 
 	// Run all enabled rules.
