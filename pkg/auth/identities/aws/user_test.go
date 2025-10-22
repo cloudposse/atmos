@@ -76,6 +76,7 @@ func (s stubUser) Environment() (map[string]string, error) { return map[string]s
 func (s stubUser) PostAuthenticate(_ context.Context, _ *types.PostAuthenticateParams) error {
 	return nil
 }
+func (s stubUser) Logout(_ context.Context) error { return nil }
 
 func TestAuthenticateStandaloneAWSUser(t *testing.T) {
 	// Not found -> error.
@@ -310,4 +311,54 @@ func TestUser_buildGetSessionTokenInput_MFAError(t *testing.T) {
 	in, err := ui.buildGetSessionTokenInput(&types.AWSCredentials{MfaArn: "arn:aws:iam::111111111111:mfa/me"})
 	assert.Nil(t, in)
 	assert.Error(t, err)
+}
+
+func TestUserIdentity_Logout(t *testing.T) {
+	tests := []struct {
+		name         string
+		identityName string
+		expectError  bool
+	}{
+		{
+			name:         "successful logout",
+			identityName: "test-user",
+			expectError:  false,
+		},
+		{
+			name:         "logout with different identity name",
+			identityName: "dev",
+			expectError:  false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			identity, err := NewUserIdentity(tt.identityName, &schema.Identity{
+				Kind: "aws/user",
+			})
+			require.NoError(t, err)
+
+			ctx := context.Background()
+			err = identity.Logout(ctx)
+
+			// Logout should succeed (it creates temp dir for file manager).
+			if tt.expectError {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
+func TestUserIdentity_Validate(t *testing.T) {
+	identity := &userIdentity{
+		name: "test-user",
+		config: &schema.Identity{
+			Kind: "aws/user",
+		},
+	}
+
+	err := identity.Validate()
+	assert.NoError(t, err, "user identity validation should always succeed")
 }

@@ -12,14 +12,16 @@ import (
 )
 
 // SetupFiles sets up AWS credentials and config files for the given identity.
-func SetupFiles(providerName, identityName string, creds types.ICredentials) error {
+// BasePath specifies the base directory for AWS files (from provider's files.base_path).
+// If empty, uses the default ~/.aws/atmos path.
+func SetupFiles(providerName, identityName string, creds types.ICredentials, basePath string) error {
 	awsCreds, ok := creds.(*types.AWSCredentials)
 	if !ok {
 		return nil // No AWS credentials to setup
 	}
 
-	// Create AWS file manager.
-	fileManager, err := NewAWSFileManager()
+	// Create AWS file manager with configured or default path.
+	fileManager, err := NewAWSFileManager(basePath)
 	if err != nil {
 		return errors.Join(errUtils.ErrAuthAwsFileManagerFailed, err)
 	}
@@ -61,7 +63,7 @@ func SetAuthContext(authContext *schema.AuthContext, stackInfo *schema.ConfigAnd
 		return nil // No AWS credentials to setup.
 	}
 
-	m, err := NewAWSFileManager()
+	m, err := NewAWSFileManager("")
 	if err != nil {
 		return errors.Join(errUtils.ErrAuthAwsFileManagerFailed, err)
 	}

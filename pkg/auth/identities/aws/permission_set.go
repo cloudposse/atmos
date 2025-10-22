@@ -14,6 +14,7 @@ import (
 	awsCloud "github.com/cloudposse/atmos/pkg/auth/cloud/aws"
 	"github.com/cloudposse/atmos/pkg/auth/types"
 	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -143,7 +144,7 @@ func (i *permissionSetIdentity) Environment() (map[string]string, error) {
 	}
 
 	// Get AWS file environment variables.
-	awsFileManager, err := awsCloud.NewAWSFileManager()
+	awsFileManager, err := awsCloud.NewAWSFileManager("")
 	if err != nil {
 		return nil, errors.Join(errUtils.ErrAuthAwsFileManagerFailed, err)
 	}
@@ -173,7 +174,7 @@ func (i *permissionSetIdentity) GetProviderName() (string, error) {
 // PostAuthenticate sets up AWS files and populates auth context after authentication.
 func (i *permissionSetIdentity) PostAuthenticate(ctx context.Context, params *types.PostAuthenticateParams) error {
 	// Setup AWS files using shared AWS cloud package.
-	if err := awsCloud.SetupFiles(params.ProviderName, params.IdentityName, params.Credentials); err != nil {
+	if err := awsCloud.SetupFiles(params.ProviderName, params.IdentityName, params.Credentials, ""); err != nil {
 		return fmt.Errorf("%w: failed to setup AWS files: %v", errUtils.ErrAwsAuth, err)
 	}
 
@@ -271,4 +272,15 @@ func (i *permissionSetIdentity) buildCredsFromRole(resp *sso.GetRoleCredentialsO
 		Region:          region,
 		Expiration:      expiration,
 	}, nil
+}
+
+// Logout removes identity-specific credential storage.
+func (i *permissionSetIdentity) Logout(ctx context.Context) error {
+	defer perf.Track(nil, "aws.permissionSetIdentity.Logout")()
+
+	// AWS permission-set identities don't have identity-specific storage.
+	// File cleanup is handled by the provider's Logout method.
+	// Keyring cleanup is handled by AuthManager.
+	log.Debug("Logout called for permission-set identity (no identity-specific cleanup)", "identity", i.name)
+	return nil
 }

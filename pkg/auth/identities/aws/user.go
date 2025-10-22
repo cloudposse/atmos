@@ -17,6 +17,7 @@ import (
 	atmosCredentials "github.com/cloudposse/atmos/pkg/auth/credentials"
 	"github.com/cloudposse/atmos/pkg/auth/types"
 	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -140,7 +141,7 @@ func (i *userIdentity) resolveRegion() string {
 
 // writeAWSFiles writes credentials to AWS config files using "aws-user" as mock provider.
 func (i *userIdentity) writeAWSFiles(creds *types.AWSCredentials, region string) error {
-	awsFileManager, err := awsCloud.NewAWSFileManager()
+	awsFileManager, err := awsCloud.NewAWSFileManager("")
 	if err != nil {
 		return errors.Join(errUtils.ErrAuthAwsFileManagerFailed, err)
 	}
@@ -289,7 +290,7 @@ func (i *userIdentity) Environment() (map[string]string, error) {
 	env := make(map[string]string)
 
 	// Get AWS file environment variables using "aws-user" as mock provider.
-	awsFileManager, err := awsCloud.NewAWSFileManager()
+	awsFileManager, err := awsCloud.NewAWSFileManager("")
 	if err != nil {
 		return nil, errors.Join(errUtils.ErrAuthAwsFileManagerFailed, err)
 	}
@@ -345,7 +346,7 @@ func AuthenticateStandaloneAWSUser(ctx context.Context, identityName string, ide
 // PostAuthenticate sets up AWS files and populates auth context after authentication.
 func (i *userIdentity) PostAuthenticate(ctx context.Context, params *types.PostAuthenticateParams) error {
 	// Setup AWS files using shared AWS cloud package.
-	if err := awsCloud.SetupFiles(params.ProviderName, params.IdentityName, params.Credentials); err != nil {
+	if err := awsCloud.SetupFiles(params.ProviderName, params.IdentityName, params.Credentials, ""); err != nil {
 		return errors.Join(errUtils.ErrAwsAuth, err)
 	}
 
@@ -359,5 +360,27 @@ func (i *userIdentity) PostAuthenticate(ctx context.Context, params *types.PostA
 		return errors.Join(errUtils.ErrAwsAuth, err)
 	}
 
+	return nil
+}
+
+// Logout removes identity-specific credential storage.
+func (i *userIdentity) Logout(ctx context.Context) error {
+	defer perf.Track(nil, "aws.userIdentity.Logout")()
+
+	// AWS user identities use "aws-user" as their provider name.
+	// Clean up files under ~/.aws/atmos/aws-user/.
+	fileManager, err := awsCloud.NewAWSFileManager("")
+	if err != nil {
+		return errors.Join(errUtils.ErrLogoutFailed, err)
+	}
+
+	// Use CleanupIdentity to remove only this identity's sections from shared INI files.
+	// This preserves credentials for other identities using the same provider.
+	if err := fileManager.CleanupIdentity(ctx, "aws-user", i.name); err != nil {
+		log.Debug("Failed to cleanup AWS files for user identity", "identity", i.name, "error", err)
+		return errors.Join(errUtils.ErrLogoutFailed, err)
+	}
+
+	log.Debug("Cleaned up AWS files for user identity", "identity", i.name)
 	return nil
 }

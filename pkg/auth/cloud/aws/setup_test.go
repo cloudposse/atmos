@@ -10,15 +10,17 @@ import (
 	ini "gopkg.in/ini.v1"
 
 	"github.com/cloudposse/atmos/pkg/auth/types"
+	"github.com/cloudposse/atmos/pkg/config/homedir"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 func TestSetupFiles_WritesCredentialsAndConfig(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	homedir.Reset() // Clear homedir cache to pick up the test HOME
 
 	creds := &types.AWSCredentials{AccessKeyID: "AKIA123", SecretAccessKey: "secret", SessionToken: "token", Region: "us-east-2"}
-	err := SetupFiles("prov", "dev", creds)
+	err := SetupFiles("prov", "dev", creds, "")
 	require.NoError(t, err)
 
 	credPath := filepath.Join(tmp, ".aws", "atmos", "prov", "credentials")
@@ -46,6 +48,7 @@ func TestSetupFiles_WritesCredentialsAndConfig(t *testing.T) {
 func TestSetEnvironmentVariables_SetsStackEnv(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	homedir.Reset() // Clear homedir cache to pick up the test HOME
 
 	// Create auth context with AWS credentials.
 	authContext := &schema.AuthContext{
