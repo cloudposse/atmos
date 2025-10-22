@@ -387,7 +387,7 @@ func TestReadTerraformBackendAzurerm_MissingStorageAccount(t *testing.T) {
 
 func TestReadTerraformBackendAzurerm_CachedClient(t *testing.T) {
 	// Pre-populate cache with a mock client.
-	cacheKey := "account=cachedaccount;container=cachedcontainer"
+	cacheKey := "cachedaccount"
 	mockContent := `{"version": 4, "outputs": {"cached": {"value": "from-cache"}}}`
 
 	mockClient := &mockAzureBlobClient{
