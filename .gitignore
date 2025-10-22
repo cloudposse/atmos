@@ -18,8 +18,8 @@
 **/kubeconfig.yaml
 **/*.planfile.json
 
-# Atmos binary
-atmos
+# Atmos binary (only in root directory)
+/atmos
 
 # Module directory
 .terraform
