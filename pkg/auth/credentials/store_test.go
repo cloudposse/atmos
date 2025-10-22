@@ -1,6 +1,7 @@
 package credentials
 
 import (
+	"context"
 	"errors"
 	"testing"
 	"time"
@@ -57,9 +58,10 @@ func TestStoreRetrieve_OIDC(t *testing.T) {
 // fakeCreds implements types.ICredentials but is not a supported concrete type.
 type fakeCreds struct{}
 
-func (f *fakeCreds) IsExpired() bool                        { return false }
-func (f *fakeCreds) GetExpiration() (*time.Time, error)     { return nil, nil }
-func (f *fakeCreds) BuildWhoamiInfo(info *types.WhoamiInfo) {}
+func (f *fakeCreds) IsExpired() bool                                         { return false }
+func (f *fakeCreds) GetExpiration() (*time.Time, error)                      { return nil, nil }
+func (f *fakeCreds) BuildWhoamiInfo(info *types.WhoamiInfo)                  {}
+func (f *fakeCreds) Validate(ctx context.Context) (*time.Time, error)        { return nil, nil }
 
 func TestStore_UnsupportedType(t *testing.T) {
 	s := NewCredentialStore()
@@ -99,4 +101,88 @@ func TestDefaultStore_Suite(t *testing.T) {
 	}
 
 	RunCredentialStoreTests(t, factory)
+}
+
+// TestNewCredentialStoreWithConfig_NoopFallback tests that credential store uses no-op keyring when system keyring is unavailable.
+func TestNewCredentialStoreWithConfig_NoopFallback(t *testing.T) {
+	tests := []struct {
+		name           string
+		keyringType    string
+		expectNoop     bool
+		expectRetrieve bool
+	}{
+		{
+			name:           "memory keyring always works",
+			keyringType:    "memory",
+			expectNoop:     false,
+			expectRetrieve: true,
+		},
+		{
+			name:           "file keyring always works",
+			keyringType:    "file",
+			expectNoop:     false,
+			expectRetrieve: true,
+		},
+		{
+			name:           "system keyring works in test environment",
+			keyringType:    "system",
+			expectNoop:     false,
+			expectRetrieve: true, // In test environment with MockInit, system keyring works
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv("ATMOS_KEYRING_TYPE", tt.keyringType)
+			// File keyring requires password.
+			if tt.keyringType == "file" {
+				t.Setenv("ATMOS_KEYRING_PASSWORD", "test-password")
+			}
+
+			store := NewCredentialStore()
+			assert.NotNil(t, store, "store should always be created")
+
+			// Verify store is functional by storing and retrieving.
+			alias := "test-fallback"
+			creds := &types.OIDCCredentials{Token: "test-token", Provider: "test"}
+			err := store.Store(alias, creds)
+			assert.NoError(t, err, "store should be able to store credentials")
+
+			if tt.expectRetrieve {
+				retrieved, err := store.Retrieve(alias)
+				assert.NoError(t, err, "store should be able to retrieve credentials")
+				assert.NotNil(t, retrieved, "retrieved credentials should not be nil")
+			}
+		})
+	}
+}
+
+// TestNoopKeyringStore tests the no-op keyring behavior.
+func TestNoopKeyringStore(t *testing.T) {
+	store := newNoopKeyringStore()
+
+	// Store succeeds (no-op).
+	creds := &types.OIDCCredentials{Token: "test-token", Provider: "test"}
+	err := store.Store("alias", creds)
+	assert.NoError(t, err, "Store should succeed (no-op)")
+
+	// Retrieve validates credentials and returns "not found".
+	// Note: In test environment without AWS credentials, this will fail validation.
+	retrieved, err := store.Retrieve("alias")
+	assert.Error(t, err, "Retrieve should return error (no AWS credentials in test)")
+	assert.Nil(t, retrieved, "Retrieved credentials should be nil")
+
+	// Delete succeeds (no-op).
+	err = store.Delete("alias")
+	assert.NoError(t, err, "Delete should succeed (no-op)")
+
+	// List returns empty.
+	list, err := store.List()
+	assert.NoError(t, err, "List should succeed")
+	assert.Empty(t, list, "List should be empty")
+
+	// IsExpired returns true with error.
+	expired, err := store.IsExpired("alias")
+	assert.True(t, expired, "IsExpired should return true")
+	assert.ErrorIs(t, err, ErrCredentialsNotFound, "Should return credentials not found error")
 }

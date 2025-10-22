@@ -164,4 +164,9 @@ type ICredentials interface {
 	GetExpiration() (*time.Time, error)
 
 	BuildWhoamiInfo(info *WhoamiInfo)
+
+	// Validate validates credentials by making an API call to the provider.
+	// Returns expiration time if available, error if credentials are invalid.
+	// Returns ErrNotImplemented if validation is not supported for this credential type.
+	Validate(ctx context.Context) (*time.Time, error)
 }

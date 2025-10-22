@@ -19,6 +19,7 @@ var (
 	ErrUnknownPackageType                    = errors.New("unknown package type")
 	ErrLocalMixinURICannotBeEmpty            = errors.New("local mixin URI cannot be empty")
 	ErrLocalMixinInstallationNotImplemented  = errors.New("local mixin installation not implemented")
+	ErrNotImplemented                        = errors.New("not implemented")
 	ErrFailedToInitializeTUIModel            = errors.New("failed to initialize TUI model: verify terminal capabilities and permissions")
 	ErrSetTempDirPermissions                 = errors.New("failed to set temp directory permissions")
 	ErrCopyPackageToTarget                   = errors.New("failed to copy package to target")

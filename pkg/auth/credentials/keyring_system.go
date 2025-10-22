@@ -15,7 +15,21 @@ import (
 type systemKeyringStore struct{}
 
 // newSystemKeyringStore creates a new system keyring store.
+// It tests keyring availability by attempting a test operation.
+// Returns an error if the system keyring is not available (e.g., no dbus in containers).
 func newSystemKeyringStore() (*systemKeyringStore, error) {
+	// Test keyring availability by attempting to get a non-existent key.
+	// This will fail with ErrNotFound if keyring is working,
+	// or with a different error (e.g., dbus error) if keyring is unavailable.
+	testKey := "atmos-keyring-test"
+	_, err := keyring.Get(testKey, KeyringUser)
+
+	// If error is ErrNotFound, keyring is available (key just doesn't exist).
+	if err != nil && !errors.Is(err, keyring.ErrNotFound) {
+		// Any other error indicates keyring is not available.
+		return nil, fmt.Errorf("system keyring not available: %w", err)
+	}
+
 	return &systemKeyringStore{}, nil
 }
 
