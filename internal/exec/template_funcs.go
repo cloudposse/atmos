@@ -42,10 +42,14 @@ type AtmosFuncs struct {
 }
 
 func (f AtmosFuncs) Component(component string, stack string) (any, error) {
+	defer perf.Track(nil, "exec.AtmosFuncs.Component")()
+
 	return componentFunc(f.atmosConfig, component, stack)
 }
 
 func (f AtmosFuncs) GomplateDatasource(alias string, args ...string) (any, error) {
+	defer perf.Track(nil, "exec.AtmosFuncs.GomplateDatasource")()
+
 	return gomplateDatasourceFunc(alias, f.gomplateData, args...)
 }
 

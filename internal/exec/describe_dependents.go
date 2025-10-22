@@ -29,6 +29,17 @@ type DescribeDependentsExecProps struct {
 	Skip                 []string
 }
 
+// DescribeDependentsArgs holds arguments for ExecuteDescribeDependents.
+type DescribeDependentsArgs struct {
+	Component            string
+	Stack                string
+	IncludeSettings      bool
+	ProcessTemplates     bool
+	ProcessYamlFunctions bool
+	Skip                 []string
+	OnlyInStack          string
+}
+
 //go:generate go run go.uber.org/mock/mockgen@v0.6.0 -source=$GOFILE -destination=mock_$GOFILE -package=$GOPACKAGE
 type DescribeDependentsExec interface {
 	Execute(describeDependentsExecProps *DescribeDependentsExecProps) error
@@ -38,13 +49,7 @@ type describeDependentsExec struct {
 	atmosConfig               *schema.AtmosConfiguration
 	executeDescribeDependents func(
 		atmosConfig *schema.AtmosConfiguration,
-		component string,
-		stack string,
-		includeSettings bool,
-		processTemplates bool,
-		processYamlFunctions bool,
-		skip []string,
-		onlyInStack string,
+		args *DescribeDependentsArgs,
 	) ([]schema.Dependent, error)
 	newPageCreator        pager.PageCreator
 	isTTYSupportForStdout func() bool
@@ -73,13 +78,15 @@ func (d *describeDependentsExec) Execute(describeDependentsExecProps *DescribeDe
 
 	dependents, err := d.executeDescribeDependents(
 		d.atmosConfig,
-		describeDependentsExecProps.Component,
-		describeDependentsExecProps.Stack,
-		describeDependentsExecProps.IncludeSettings,
-		describeDependentsExecProps.ProcessTemplates,
-		describeDependentsExecProps.ProcessYamlFunctions,
-		describeDependentsExecProps.Skip,
-		"", // onlyInStack - empty string means process all stacks for direct CLI usage
+		&DescribeDependentsArgs{
+			Component:            describeDependentsExecProps.Component,
+			Stack:                describeDependentsExecProps.Stack,
+			IncludeSettings:      describeDependentsExecProps.IncludeSettings,
+			ProcessTemplates:     describeDependentsExecProps.ProcessTemplates,
+			ProcessYamlFunctions: describeDependentsExecProps.ProcessYamlFunctions,
+			Skip:                 describeDependentsExecProps.Skip,
+			OnlyInStack:          "", // empty string means process all stacks for direct CLI usage
+		},
 	)
 	if err != nil {
 		return err
@@ -111,13 +118,7 @@ func (d *describeDependentsExec) Execute(describeDependentsExecProps *DescribeDe
 // ExecuteDescribeDependents produces a list of Atmos components in Atmos stacks that depend on the provided Atmos component.
 func ExecuteDescribeDependents(
 	atmosConfig *schema.AtmosConfiguration,
-	component string,
-	stack string,
-	includeSettings bool,
-	processTemplates bool,
-	processYamlFunctions bool,
-	skip []string,
-	onlyInStack string,
+	args *DescribeDependentsArgs,
 ) ([]schema.Dependent, error) {
 	defer perf.Track(atmosConfig, "exec.ExecuteDescribeDependents")()
 
@@ -131,26 +132,26 @@ func ExecuteDescribeDependents(
 	// Get all stacks with all components, filtered by onlyInStack if provided.
 	stacks, err := ExecuteDescribeStacks(
 		atmosConfig,
-		onlyInStack,
+		args.OnlyInStack,
 		nil,
 		nil,
 		nil,
 		false,
-		processTemplates,
-		processYamlFunctions,
+		args.ProcessTemplates,
+		args.ProcessYamlFunctions,
 		false,
-		skip,
+		args.Skip,
 	)
 	if err != nil {
 		return nil, err
 	}
 
 	providedComponentSection, err := ExecuteDescribeComponent(
-		component,
-		stack,
-		processTemplates,
-		processYamlFunctions,
-		skip,
+		args.Component,
+		args.Stack,
+		args.ProcessTemplates,
+		args.ProcessYamlFunctions,
+		args.Skip,
 	)
 	if err != nil {
 		return nil, err
@@ -195,7 +196,7 @@ func ExecuteDescribeDependents(
 				}
 
 				// Skip the stack component if it's the same as the provided component.
-				if stackComponentName == component {
+				if stackComponentName == args.Component {
 					continue
 				}
 
@@ -245,7 +246,7 @@ func ExecuteDescribeDependents(
 
 				// Check if the stack component is a dependent of the provided component.
 				for _, dependsOn := range stackComponentSettings.DependsOn {
-					if dependsOn.Component != component {
+					if dependsOn.Component != args.Component {
 						continue
 					}
 
@@ -253,10 +254,10 @@ func ExecuteDescribeDependents(
 					// - `stack` is specified in `depends_on` and the provided component's stack is equal to the stack in `depends_on`.
 					// - `stack` is not specified in `depends_on` and the provided component is from the same stack as the component in `depends_on`.
 					if dependsOn.Stack != "" {
-						if stack != dependsOn.Stack {
+						if args.Stack != dependsOn.Stack {
 							continue
 						}
-					} else if stack != stackName &&
+					} else if args.Stack != stackName &&
 						dependsOn.Namespace == "" &&
 						dependsOn.Tenant == "" &&
 						dependsOn.Environment == "" &&
@@ -348,7 +349,7 @@ func ExecuteDescribeDependents(
 						dependent.AtlantisProject = atlantisProjectName
 					}
 
-					if includeSettings {
+					if args.IncludeSettings {
 						dependent.Settings = stackComponentSettingsSection
 					}
 

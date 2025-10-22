@@ -49,6 +49,8 @@ func (f *sectionFilter) filterValue(value any) any {
 }
 
 func FilterEmptySections(data map[string]any, includeEmpty bool) map[string]any {
+	defer perf.Track(nil, "exec.FilterEmptySections")()
+
 	if includeEmpty {
 		return data
 	}

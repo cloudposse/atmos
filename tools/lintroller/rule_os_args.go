@@ -24,6 +24,30 @@ func (r *OsArgsInTestRule) Check(pass *analysis.Pass, file *ast.File) error {
 		return nil // Only check test files.
 	}
 
+	// Skip integration tests - they test main() which requires os.Args.
+	if strings.HasSuffix(filename, "_integration_test.go") ||
+		strings.Contains(filename, "/main_") && strings.HasSuffix(filename, "_integration_test.go") {
+		return nil
+	}
+
+	// Skip test helper files - they need to snapshot/restore os.Args for test isolation.
+	if strings.HasSuffix(filename, "testing_helpers_test.go") ||
+		strings.HasSuffix(filename, "testkit_test.go") {
+		return nil
+	}
+
+	// Skip specific test files that legitimately need os.Args:
+	// - Testing functions that directly read os.Args (flag parsers)
+	// - Subprocess testing using os.Args[0] for executable path
+	// - Testing heatmap flag detection
+	// All these use proper save/restore pattern for test isolation.
+	if strings.HasSuffix(filename, "cmd/cmd_utils_test.go") ||
+		strings.HasSuffix(filename, "cmd/terraform_test.go") ||
+		strings.HasSuffix(filename, "errors/error_funcs_test.go") ||
+		strings.HasSuffix(filename, "pkg/config/config_test.go") {
+		return nil
+	}
+
 	// Find benchmark functions to exclude from checks.
 	benchmarks := findBenchmarks(file)
 

@@ -548,13 +548,15 @@ func addDependentsToAffected(
 
 		deps, err := ExecuteDescribeDependents(
 			atmosConfig,
-			a.Component,
-			a.Stack,
-			includeSettings,
-			processTemplates,
-			processYamlFunctions,
-			skip,
-			onlyInStack,
+			&DescribeDependentsArgs{
+				Component:            a.Component,
+				Stack:                a.Stack,
+				IncludeSettings:      includeSettings,
+				ProcessTemplates:     processTemplates,
+				ProcessYamlFunctions: processYamlFunctions,
+				Skip:                 skip,
+				OnlyInStack:          onlyInStack,
+			},
 		)
 		if err != nil {
 			return err
@@ -598,13 +600,15 @@ func addDependentsToDependents(
 
 		deps, err := ExecuteDescribeDependents(
 			atmosConfig,
-			d.Component,
-			d.Stack,
-			includeSettings,
-			processTemplates,
-			processYamlFunctions,
-			skip,
-			onlyInStack,
+			&DescribeDependentsArgs{
+				Component:            d.Component,
+				Stack:                d.Stack,
+				IncludeSettings:      includeSettings,
+				ProcessTemplates:     processTemplates,
+				ProcessYamlFunctions: processYamlFunctions,
+				Skip:                 skip,
+				OnlyInStack:          onlyInStack,
+			},
 		)
 		if err != nil {
 			return err

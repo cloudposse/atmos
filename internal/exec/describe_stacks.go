@@ -55,6 +55,8 @@ type describeStacksExec struct {
 }
 
 func NewDescribeStacksExec() DescribeStacksExec {
+	defer perf.Track(nil, "exec.NewDescribeStacksExec")()
+
 	return &describeStacksExec{
 		pageCreator:           pager.New(),
 		isTTYSupportForStdout: term.IsTTYSupportForStdout,
@@ -119,6 +121,8 @@ func ExecuteDescribeStacks(
 	includeEmptyStacks bool,
 	skip []string,
 ) (map[string]any, error) {
+	defer perf.Track(atmosConfig, "exec.ExecuteDescribeStacks")()
+
 	stacksMap, _, err := FindStacksMap(atmosConfig, ignoreMissingFiles)
 	if err != nil {
 		return nil, err

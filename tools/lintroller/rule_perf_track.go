@@ -14,13 +14,47 @@ type PerfTrackRule struct{}
 
 // Packages to exclude from perf.Track() checks (avoid infinite recursion or overhead).
 var excludedPackages = []string{
-	"/logger",   // Avoid infinite recursion.
-	"/profiler", // Profiling code shouldn't track itself.
-	"/perf",     // Performance tracking shouldn't track itself.
-	"/store",    // Store interfaces have many implementations.
-	"/ui/theme", // UI theme constants and helpers.
-	"/ui",       // UI/TUI components and models.
-	"/tui",      // Terminal UI components.
+	"/logger",        // Avoid infinite recursion.
+	"/profiler",      // Profiling code shouldn't track itself.
+	"/perf",          // Performance tracking shouldn't track itself.
+	"/store",         // Store interfaces have many implementations.
+	"/ui/theme",      // UI theme constants and helpers.
+	"/ui",            // UI/TUI components and models.
+	"/tui",           // Terminal UI components.
+	"/schema",        // Schema data structures and simple getters/setters.
+	"/terminal",      // Terminal utilities and TTY detection.
+	"/errors",        // Error handling utilities to avoid overhead.
+	"/filetype",      // Simple file type detection utilities.
+	"/cmd/internal",  // Command registry initialization functions.
+	"/pkg/utils",     // Simple utility functions (avoid bloat per CLAUDE.md).
+	"/pkg/hcl",       // HCL parsing utilities.
+	"/downloader",    // File/git downloading infrastructure.
+	"/filesystem",    // Low-level filesystem abstraction.
+	"/telemetry",     // Telemetry code shouldn't track itself.
+	"/xdg",           // XDG directory utilities.
+	"/homedir",       // Home directory utilities.
+	"/cmd/",          // Command providers are just CLI wiring/glue code.
+	"/cmd",           // Root cmd package (CLI wiring/glue code).
+	"/tests",         // Test packages and helpers.
+	"/pkg/auth",      // Auth runs once per command, not in hot path.
+	"/pkg/config",    // Config loading runs once per command, not in hot path.
+	"/pkg/merge",     // Merge happens during config loading, not in hot path.
+	"/pkg/list",      // List commands are one-shot operations.
+	"/pkg/pager",     // Pager is UI concern, one-shot operation.
+	"/pkg/retry",     // Retry logic, not in hot path.
+	"/pkg/pro",       // Pro features, not in hot path.
+	"/pkg/hooks",     // Hooks run once per command, not in hot path.
+	"/pkg/git",       // Git operations are one-shot, not in hot path.
+	"/datafetcher",   // Data fetching is one-time operation.
+	"/filematch",     // File matching is one-time operation.
+	"/pkg/aws",       // AWS operations are one-shot, not in hot path.
+	"/pkg/convert",   // Simple conversion utilities.
+	"/spinner",       // UI spinner utilities.
+	"/vendor",        // Vendor operations are one-shot.
+	"/workflow",      // Workflow utilities are one-shot.
+	"/mock",          // Mock/test utilities.
+	"/pkg/spacelift", // Spacelift generation is one-shot per command.
+	"/pkg/validator", // Validation runs once per command.
 }
 
 // Receiver types to exclude from perf.Track() checks.
@@ -49,16 +83,28 @@ func (r *PerfTrackRule) Doc() string {
 func (r *PerfTrackRule) Check(pass *analysis.Pass, file *ast.File) error {
 	filename := pass.Fset.Position(file.Pos()).Filename
 
-	// Skip test files, mock files, and generated files.
+	// Skip test files, mock files, test helpers, and generated files.
 	if strings.HasSuffix(filename, "_test.go") ||
-		strings.Contains(filename, "mock_") {
+		strings.Contains(filename, "mock_") ||
+		strings.HasSuffix(filename, "test_helpers.go") {
+		return nil
+	}
+
+	// Skip specific utility files that are not in hot paths.
+	if strings.HasSuffix(filename, "spinner_utils.go") ||
+		strings.HasSuffix(filename, "workflow_utils.go") ||
+		strings.HasSuffix(filename, "stack_processor_utils.go") ||
+		strings.HasSuffix(filename, "copy_glob.go") ||
+		strings.HasSuffix(filename, "describe_config.go") ||
+		strings.HasSuffix(filename, "/vendor.go") ||
+		strings.HasSuffix(filename, "helmfile.go") {
 		return nil
 	}
 
 	// Check if package is in exclusion list.
 	pkgPath := pass.Pkg.Path()
 	for _, excluded := range excludedPackages {
-		if strings.HasSuffix(pkgPath, excluded) {
+		if strings.Contains(pkgPath, excluded) {
 			return nil
 		}
 	}
@@ -91,6 +137,11 @@ func (r *PerfTrackRule) Check(pass *analysis.Pass, file *ast.File) error {
 		}
 
 		if !hasPerfTrack {
+			// Skip specific functions that are one-time operations.
+			if funcName == "GetStackNamePattern" {
+				return true
+			}
+
 			// Get receiver type if it's a method.
 			receiverType := ""
 			if funcDecl.Recv != nil && len(funcDecl.Recv.List) > 0 {

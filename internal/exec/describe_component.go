@@ -54,6 +54,8 @@ func NewDescribeComponentExec() *DescribeComponentExec {
 }
 
 func (d *DescribeComponentExec) ExecuteDescribeComponentCmd(describeComponentParams DescribeComponentParams) error {
+	defer perf.Track(nil, "exec.DescribeComponentExec.ExecuteDescribeComponentCmd")()
+
 	component := describeComponentParams.Component
 	stack := describeComponentParams.Stack
 	processTemplates := describeComponentParams.ProcessTemplates
@@ -488,6 +490,8 @@ func ExecuteDescribeComponentWithContext(params DescribeComponentContextParams) 
 // FilterComputedFields removes Atmos-added fields that don't come from stack files.
 // Only keeps fields that are defined in stack YAML files.
 func FilterComputedFields(componentSection map[string]any) map[string]any {
+	defer perf.Track(nil, "exec.FilterComputedFields")()
+
 	if componentSection == nil {
 		return map[string]any{}
 	}
