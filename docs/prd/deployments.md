@@ -1326,10 +1326,534 @@ atmos rollout apply api --target prod --release xyz789
 
 ## Security & Compliance
 
-### SBOM Generation
-- Automatic SBOM generation for all builds
-- Multiple formats: CycloneDX, SPDX
-- Integrated with vulnerability scanning tools
+### SBOM (Software Bill of Materials) Generation
+
+Atmos deployments generate comprehensive SBOMs for both **container images** (nixpack builds) and **vendored infrastructure components** (Terraform modules, Helmfile charts).
+
+#### **SBOM Formats Supported**
+
+- **CycloneDX** (primary) - OWASP standard, JSON/XML
+- **SPDX** (secondary) - Linux Foundation standard, JSON/YAML
+- **Syft JSON** (optional) - Anchore format for tooling integration
+
+#### **What Goes in the SBOM**
+
+**1. Container Image SBOM** (from nixpack builds):
+```json
+{
+  "bomFormat": "CycloneDX",
+  "specVersion": "1.5",
+  "serialNumber": "urn:uuid:...",
+  "version": 1,
+  "metadata": {
+    "component": {
+      "type": "container",
+      "name": "payment-api",
+      "version": "sha256:abc123...",
+      "purl": "pkg:oci/payment-api@sha256:abc123..."
+    },
+    "tools": [
+      {
+        "vendor": "Atmos",
+        "name": "atmos-nixpack-builder",
+        "version": "1.0.0"
+      }
+    ]
+  },
+  "components": [
+    {
+      "type": "library",
+      "name": "golang.org/x/crypto",
+      "version": "v0.14.0",
+      "purl": "pkg:golang/golang.org/x/crypto@v0.14.0",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "abc123..."
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "BSD-3-Clause"
+          }
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "github.com/gin-gonic/gin",
+      "version": "v1.9.1",
+      "purl": "pkg:golang/github.com/gin-gonic/gin@v1.9.1"
+    },
+    {
+      "type": "operating-system",
+      "name": "ubuntu",
+      "version": "22.04",
+      "purl": "pkg:deb/ubuntu/ubuntu@22.04"
+    }
+  ],
+  "dependencies": [
+    {
+      "ref": "pkg:golang/golang.org/x/crypto@v0.14.0",
+      "dependsOn": []
+    }
+  ]
+}
+```
+
+**2. Vendored Component SBOM** (Terraform/Helmfile):
+```json
+{
+  "bomFormat": "CycloneDX",
+  "specVersion": "1.5",
+  "metadata": {
+    "component": {
+      "type": "application",
+      "name": "payment-service-deployment",
+      "version": "release-abc123"
+    }
+  },
+  "components": [
+    {
+      "type": "library",
+      "group": "terraform-modules",
+      "name": "cloudposse/terraform-aws-components/ecs-service",
+      "version": "1.8.2",
+      "purl": "pkg:github/cloudposse/terraform-aws-components@1.8.2#modules/ecs-service",
+      "externalReferences": [
+        {
+          "type": "vcs",
+          "url": "https://github.com/cloudposse/terraform-aws-components/tree/1.8.2/modules/ecs-service"
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "sha256:mno345..."
+        }
+      ],
+      "properties": [
+        {
+          "name": "atmos:deployment",
+          "value": "payment-service"
+        },
+        {
+          "name": "atmos:target",
+          "value": "prod"
+        },
+        {
+          "name": "atmos:component",
+          "value": "ecs/payment-api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "group": "terraform-modules",
+      "name": "cloudposse/terraform-aws-components/rds",
+      "version": "1.3.5",
+      "purl": "pkg:github/cloudposse/terraform-aws-components@1.3.5#modules/rds"
+    },
+    {
+      "type": "library",
+      "group": "terraform-providers",
+      "name": "hashicorp/aws",
+      "version": "5.31.0",
+      "purl": "pkg:terraform/hashicorp/aws@5.31.0",
+      "licenses": [
+        {
+          "license": {
+            "id": "MPL-2.0"
+          }
+        }
+      ]
+    }
+  ]
+}
+```
+
+**3. Combined Deployment SBOM** (everything):
+```json
+{
+  "bomFormat": "CycloneDX",
+  "specVersion": "1.5",
+  "metadata": {
+    "component": {
+      "type": "application",
+      "name": "payment-service-deployment",
+      "version": "release-abc123"
+    }
+  },
+  "components": [
+    {
+      "type": "container",
+      "name": "payment-api",
+      "version": "sha256:abc123...",
+      "components": []  // Nested: application dependencies
+    },
+    {
+      "type": "library",
+      "group": "terraform-modules",
+      "name": "cloudposse/terraform-aws-components/ecs-service",
+      "version": "1.8.2"
+    },
+    {
+      "type": "application",
+      "name": "atmos-cli",
+      "version": "1.85.0",
+      "purl": "pkg:golang/github.com/cloudposse/atmos@v1.85.0"
+    }
+  ]
+}
+```
+
+#### **Go Libraries for SBOM Generation**
+
+**Primary Library: CycloneDX Go**
+```go
+import (
+    cdx "github.com/CycloneDX/cyclonedx-go"
+)
+
+// Generate SBOM for container image
+func GenerateContainerSBOM(image string, digest string, deps []Dependency) (*cdx.BOM, error) {
+    bom := cdx.NewBOM()
+    bom.Metadata = &cdx.Metadata{
+        Component: &cdx.Component{
+            Type:    cdx.ComponentTypeContainer,
+            Name:    image,
+            Version: digest,
+            PackageURL: fmt.Sprintf("pkg:oci/%s@%s", image, digest),
+        },
+    }
+
+    for _, dep := range deps {
+        component := cdx.Component{
+            Type:    cdx.ComponentTypeLibrary,
+            Name:    dep.Name,
+            Version: dep.Version,
+            PackageURL: dep.PURL,
+        }
+        bom.Components = &[]cdx.Component{component}
+    }
+
+    return bom, nil
+}
+```
+
+**Recommended Libraries:**
+
+1. **github.com/CycloneDX/cyclonedx-go** (Primary)
+   - Official CycloneDX Go library
+   - Supports CycloneDX 1.5 spec
+   - JSON/XML encoding
+   - License: Apache 2.0
+
+2. **github.com/spdx/tools-golang** (SPDX support)
+   - Official SPDX Go tools
+   - SPDX 2.3 spec
+   - JSON/YAML/RDF support
+   - License: Apache 2.0
+
+3. **github.com/anchore/syft** (Integration)
+   - Can call syft as library or CLI
+   - Excellent container scanning
+   - Supports multiple output formats
+   - License: Apache 2.0
+
+4. **github.com/package-url/packageurl-go** (PURL generation)
+   - Generate Package URLs
+   - Required for CycloneDX/SPDX
+   - License: MIT
+
+**Integration Approach:**
+
+```go
+// pkg/sbom/generator.go
+package sbom
+
+import (
+    cdx "github.com/CycloneDX/cyclonedx-go"
+    purl "github.com/package-url/packageurl-go"
+    "github.com/cloudposse/atmos/pkg/schema"
+)
+
+type Generator struct {
+    format string // cyclonedx, spdx, syft
+}
+
+// Generate SBOM for nixpack build
+func (g *Generator) GenerateNixpackSBOM(
+    componentName string,
+    imageDigest string,
+    nixPackages []string,
+    appDependencies []Dependency,
+) (*cdx.BOM, error) {
+    bom := cdx.NewBOM()
+
+    // Add nixpack build metadata
+    bom.Metadata = &cdx.Metadata{
+        Component: &cdx.Component{
+            Type:    cdx.ComponentTypeContainer,
+            Name:    componentName,
+            Version: imageDigest,
+        },
+        Tools: []cdx.Tool{
+            {
+                Vendor:  "Atmos",
+                Name:    "atmos-build",
+                Version: schema.VERSION,
+            },
+            {
+                Vendor:  "Nixpacks",
+                Name:    "nixpacks",
+                Version: getNixpacksVersion(),
+            },
+        },
+    }
+
+    components := []cdx.Component{}
+
+    // Add Nix packages
+    for _, pkg := range nixPackages {
+        components = append(components, cdx.Component{
+            Type:    cdx.ComponentTypeLibrary,
+            Name:    pkg,
+            PackageURL: purl.NewPackageURL("nix", "", pkg, "", nil, "").String(),
+        })
+    }
+
+    // Add application dependencies (Go modules, npm packages, etc.)
+    for _, dep := range appDependencies {
+        components = append(components, cdx.Component{
+            Type:       cdx.ComponentTypeLibrary,
+            Name:       dep.Name,
+            Version:    dep.Version,
+            PackageURL: dep.PURL,
+            Licenses:   parseLicenses(dep.License),
+        })
+    }
+
+    bom.Components = &components
+    return bom, nil
+}
+
+// Generate SBOM for vendored components
+func (g *Generator) GenerateVendorSBOM(
+    deployment string,
+    target string,
+    vendoredComponents map[string]VendoredComponent,
+) (*cdx.BOM, error) {
+    bom := cdx.NewBOM()
+
+    bom.Metadata = &cdx.Metadata{
+        Component: &cdx.Component{
+            Type:    cdx.ComponentTypeApplication,
+            Name:    fmt.Sprintf("%s-%s-vendor", deployment, target),
+        },
+    }
+
+    components := []cdx.Component{}
+
+    for name, comp := range vendoredComponents {
+        purl := generateVendorPURL(comp)
+
+        component := cdx.Component{
+            Type:    cdx.ComponentTypeLibrary,
+            Group:   "terraform-modules",
+            Name:    comp.Source,
+            Version: comp.Version,
+            PackageURL: purl,
+            Hashes: []cdx.Hash{
+                {
+                    Algorithm: cdx.HashAlgoSHA256,
+                    Value:     comp.Digest,
+                },
+            },
+            Properties: []cdx.Property{
+                {Name: "atmos:deployment", Value: deployment},
+                {Name: "atmos:target", Value: target},
+                {Name: "atmos:component", Value: name},
+            },
+        }
+
+        components = append(components, component)
+    }
+
+    bom.Components = &components
+    return bom, nil
+}
+
+func generateVendorPURL(comp VendoredComponent) string {
+    // For GitHub sources
+    if strings.Contains(comp.Source, "github.com") {
+        parts := parseGitHubURL(comp.Source)
+        return purl.NewPackageURL(
+            "github",
+            parts.Owner,
+            parts.Repo,
+            comp.Version,
+            nil,
+            parts.Subpath,
+        ).String()
+    }
+
+    // For Terraform registry
+    if strings.Contains(comp.Source, "registry.terraform.io") {
+        parts := parseTerraformRegistry(comp.Source)
+        return purl.NewPackageURL(
+            "terraform",
+            parts.Namespace,
+            parts.Name,
+            comp.Version,
+            nil,
+            "",
+        ).String()
+    }
+
+    return ""
+}
+```
+
+#### **CLI Integration**
+
+```bash
+# Generate SBOM during build
+atmos build payment-api --target prod --sbom cyclonedx,spdx
+# Creates:
+# - .atmos/sboms/payment-api-prod-sha256:abc123.cdx.json
+# - .atmos/sboms/payment-api-prod-sha256:abc123.spdx.json
+
+# Generate SBOM for vendored components
+atmos vendor pull --deployment payment-service --target prod --sbom
+# Creates:
+# - .atmos/sboms/payment-service-prod-vendor.cdx.json
+
+# Generate combined deployment SBOM
+atmos release create payment-service --target prod --sbom
+# Creates:
+# - releases/payment-service/prod/release-abc123-sbom.cdx.json
+# Includes: container images + vendored components + Atmos metadata
+
+# Export SBOM in different format
+atmos sbom export payment-service prod release-abc123 --format spdx --output /tmp/sbom.spdx.json
+
+# Validate SBOM
+atmos sbom validate payment-service prod release-abc123
+
+# Scan SBOM for vulnerabilities (integration with Grype/Trivy)
+atmos sbom scan payment-service prod release-abc123 --scanner grype
+```
+
+#### **SBOM Storage in Releases**
+
+```yaml
+# releases/payment-service/prod/release-abc123.yaml
+release:
+  id: "abc123"
+  deployment: payment-service
+  target: prod
+
+  artifacts:
+    payment-api:
+      type: nixpack
+      digest: "sha256:1234567890abcdef..."
+      sbom:
+        - format: "cyclonedx-json"
+          digest: "sha256:sbom123..."
+          path: ".atmos/sboms/payment-api-prod-sha256:1234567890abcdef.cdx.json"
+          url: "oci://registry/payment-api@sha256:sbom123..."
+        - format: "spdx-json"
+          digest: "sha256:sbom456..."
+          path: ".atmos/sboms/payment-api-prod-sha256:1234567890abcdef.spdx.json"
+
+  vendor_sbom:
+    format: "cyclonedx-json"
+    digest: "sha256:vendor789..."
+    path: ".atmos/sboms/payment-service-prod-vendor.cdx.json"
+    components: 15
+
+  combined_sbom:
+    format: "cyclonedx-json"
+    digest: "sha256:combined012..."
+    path: "releases/payment-service/prod/release-abc123-sbom.cdx.json"
+    total_components: 287
+```
+
+#### **Vulnerability Scanning Integration**
+
+```go
+// Integration with Grype/Trivy
+func ScanSBOM(sbomPath string, scanner string) (*ScanResult, error) {
+    switch scanner {
+    case "grype":
+        return scanWithGrype(sbomPath)
+    case "trivy":
+        return scanWithTrivy(sbomPath)
+    default:
+        return nil, fmt.Errorf("unknown scanner: %s", scanner)
+    }
+}
+
+func scanWithGrype(sbomPath string) (*ScanResult, error) {
+    cmd := exec.Command("grype", "sbom:"+sbomPath, "-o", "json")
+    output, err := cmd.Output()
+    if err != nil {
+        return nil, err
+    }
+
+    var result ScanResult
+    json.Unmarshal(output, &result)
+    return &result, nil
+}
+```
+
+#### **SBOM Policy Enforcement**
+
+```yaml
+# atmos.yaml
+settings:
+  sbom:
+    enabled: true
+    formats: ["cyclonedx-json", "spdx-json"]
+
+    # Require SBOM for production releases
+    require_for_targets: ["prod", "staging"]
+
+    # Vulnerability scanning
+    scan:
+      enabled: true
+      scanner: "grype"  # or "trivy"
+      fail_on_severity: "high"  # critical, high, medium, low
+
+    # License compliance
+    licenses:
+      allowed:
+        - "Apache-2.0"
+        - "MIT"
+        - "BSD-3-Clause"
+        - "MPL-2.0"
+      denied:
+        - "AGPL-3.0"
+        - "GPL-3.0"
+```
+
+#### **Implementation Tasks**
+
+Add to Phase 2 implementation plan:
+
+```markdown
+**Week 3-4: SBOM Generation**
+- [ ] Integrate CycloneDX Go library
+- [ ] Container image SBOM generation (nixpack builds)
+- [ ] Vendored component SBOM generation
+- [ ] Combined deployment SBOM
+- [ ] SBOM storage in release records
+- [ ] CLI commands: `atmos sbom export/validate/scan`
+- [ ] Integration with Grype/Trivy for vulnerability scanning
+- [ ] License compliance checking
+```
 
 ### Provenance Tracking
 - Capture nixpacks version, detected provider, Nix packages
