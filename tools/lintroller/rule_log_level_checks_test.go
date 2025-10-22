@@ -87,14 +87,15 @@ func foo(config *Config) {
 				t.Fatalf("Failed to parse test code: %v", err)
 			}
 
+			// Track diagnostics reported.
+			var diagnostics []analysis.Diagnostic
+
 			// Create a minimal analysis.Pass.
 			pass := &analysis.Pass{
 				Fset:  fset,
 				Files: []*ast.File{file},
 				Report: func(d analysis.Diagnostic) {
-					if !tt.wantError {
-						t.Errorf("Unexpected error reported: %s", d.Message)
-					}
+					diagnostics = append(diagnostics, d)
 				},
 			}
 
@@ -102,6 +103,20 @@ func foo(config *Config) {
 			err = rule.Check(pass, file)
 			if err != nil {
 				t.Fatalf("Check returned error: %v", err)
+			}
+
+			// Verify diagnostic count matches expectation.
+			if tt.wantError {
+				if len(diagnostics) == 0 {
+					t.Errorf("Expected at least one diagnostic, got none")
+				}
+			} else {
+				if len(diagnostics) > 0 {
+					t.Errorf("Expected no diagnostics, got %d:", len(diagnostics))
+					for _, d := range diagnostics {
+						t.Errorf("  - %s", d.Message)
+					}
+				}
 			}
 		})
 	}

@@ -3,6 +3,7 @@ package linters
 import (
 	"go/ast"
 	"go/token"
+	"path/filepath"
 	"strings"
 
 	"golang.org/x/tools/go/analysis"
@@ -22,8 +23,11 @@ func (r *LogLevelChecksRule) Doc() string {
 func (r *LogLevelChecksRule) Check(pass *analysis.Pass, file *ast.File) error {
 	filename := pass.Fset.Position(file.Pos()).Filename
 
+	// Normalize path to forward slashes for cross-platform compatibility.
+	normalizedPath := filepath.ToSlash(filename)
+
 	// Skip files in the logger package (check both path and package name).
-	if strings.Contains(filename, "/pkg/logger/") {
+	if strings.Contains(normalizedPath, "/pkg/logger/") {
 		return nil
 	}
 	if file.Name != nil && file.Name.Name == "logger" {
@@ -31,7 +35,7 @@ func (r *LogLevelChecksRule) Check(pass *analysis.Pass, file *ast.File) error {
 	}
 
 	// Skip test files - it's reasonable for tests to check log levels.
-	if strings.HasSuffix(filename, "_test.go") {
+	if strings.HasSuffix(normalizedPath, "_test.go") {
 		return nil
 	}
 
