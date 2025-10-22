@@ -383,6 +383,12 @@ JIT Vendoring with Deployments:
 
 **Deployment Vendor Configuration**:
 
+Deployments support **three vendor configuration strategies**:
+
+**Option 1: Inline Vendor Configuration**
+
+Declare vendor dependencies directly in the deployment file:
+
 ```yaml
 # deployments/api.yaml
 deployment:
@@ -391,7 +397,7 @@ deployment:
     - "platform/vpc"
     - "ecs"
 
-  # Optional: explicitly declare vendored dependencies
+  # Inline vendor configuration
   vendor:
     components:
       # Vendor from component catalog
@@ -424,6 +430,124 @@ deployment:
       dir: ".atmos/vendor-cache"  # centralized cache location
       ttl: 24h  # re-check sources after 24 hours
       strategy: "content-addressable"  # or "source-versioned"
+```
+
+**Option 2: External vendor.yaml Reference**
+
+Reference an external vendor manifest file:
+
+```yaml
+# deployments/api.yaml
+deployment:
+  name: api
+  stacks:
+    - "platform/vpc"
+    - "ecs"
+
+  # Reference external vendor manifest
+  vendor:
+    manifest: "vendor/api-vendor.yaml"  # Path relative to repo root
+    auto_discover: true
+    cache:
+      enabled: true
+```
+
+```yaml
+# vendor/api-vendor.yaml
+apiVersion: atmos/v1
+kind: VendorManifest
+metadata:
+  name: api-components
+
+spec:
+  components:
+    - source: "github.com/cloudposse/terraform-aws-components//modules/ecs-service"
+      version: "1.2.3"
+      targets: ["ecs/service-api"]
+      labels:
+        environment: ["dev", "staging"]
+
+    - source: "registry.terraform.io/cloudposse/ecs-service/aws"
+      version: "2.1.5"
+      targets: ["ecs/taskdef-api"]
+      labels:
+        environment: ["prod"]
+```
+
+**Option 3: Repository-Wide vendor.yaml Fallback**
+
+Use the existing repository-wide `vendor.yaml` as fallback:
+
+```yaml
+# deployments/api.yaml
+deployment:
+  name: api
+  stacks:
+    - "platform/vpc"
+    - "ecs"
+
+  # Use repository-wide vendor.yaml (no vendor config needed)
+  # Atmos will automatically filter vendor.yaml entries based on:
+  # 1. Components referenced by this deployment
+  # 2. Labels matching deployment targets
+```
+
+```yaml
+# vendor.yaml (repository root)
+apiVersion: atmos/v1
+kind: VendorManifest
+metadata:
+  name: repository-components
+
+spec:
+  components:
+    # This will be auto-discovered if deployment references ecs-service
+    - source: "github.com/cloudposse/terraform-aws-components//modules/ecs-service"
+      version: "1.2.3"
+      targets: ["components/terraform/ecs-service"]
+      labels:
+        environment: ["dev", "staging"]
+
+    - source: "github.com/cloudposse/terraform-aws-components//modules/ecs-service"
+      version: "2.1.5"
+      targets: ["components/terraform/ecs-service"]
+      labels:
+        environment: ["prod"]
+
+    # This won't be vendored (not used by api deployment)
+    - source: "github.com/cloudposse/terraform-aws-components//modules/eks-cluster"
+      version: "1.0.0"
+      targets: ["components/terraform/eks"]
+```
+
+**Configuration Resolution Order**:
+
+1. **Inline vendor configuration** in deployment file (highest priority)
+2. **External vendor manifest** referenced by `vendor.manifest`
+3. **Repository-wide vendor.yaml** (fallback, auto-filtered)
+4. **Auto-discovery** from component references (if enabled)
+
+**Mixing Strategies**:
+
+You can combine strategies - inline config takes precedence:
+
+```yaml
+# deployments/api.yaml
+deployment:
+  name: api
+  vendor:
+    # Load base configuration from external manifest
+    manifest: "vendor/base-components.yaml"
+
+    # Override/extend with inline config (takes precedence)
+    components:
+      # This overrides matching entry from base-components.yaml
+      - source: "github.com/cloudposse/terraform-aws-components//modules/ecs-service"
+        version: "1.3.0-beta.1"  # Override version for testing
+        labels:
+          environment: ["dev"]
+
+    auto_discover: true  # Still auto-discover missing components
 ```
 
 **Auto-Discovery of Vendored Components**:
@@ -657,17 +781,62 @@ atmos vendor clean --prune --older-than 30d
 JIT vendoring is **opt-in per deployment**. Existing `atmos vendor pull` continues to work for repository-wide vendoring:
 
 ```bash
-# Traditional: vendor everything
+# Traditional: vendor everything from vendor.yaml
 atmos vendor pull
 
 # New: vendor only for specific deployment
 atmos vendor pull --deployment api
+
+# Vendor specific deployment + target
+atmos vendor pull --deployment api --target prod
 ```
 
 **Backwards Compatibility**:
-- Deployments without `vendor` configuration fall back to repository-wide vendored components
-- Existing `vendor.yaml` continues to work unchanged
-- `atmos vendor pull` (without `--deployment`) behaves identically to current behavior
+
+1. **Existing vendor.yaml works unchanged**:
+   - Repository-wide `vendor.yaml` continues to function as before
+   - Deployments without vendor config automatically use `vendor.yaml` entries (filtered by component references)
+   - `atmos vendor pull` (without `--deployment`) behaves identically to current behavior
+
+2. **Gradual migration path**:
+   ```yaml
+   # Phase 1: Use existing vendor.yaml (no changes needed)
+   deployment:
+     name: api
+     # No vendor config - falls back to vendor.yaml
+
+   # Phase 2: Add deployment-specific vendor manifest
+   deployment:
+     name: api
+     vendor:
+       manifest: "vendor/api-vendor.yaml"  # Split from monolithic vendor.yaml
+
+   # Phase 3: Add environment-specific versions
+   deployment:
+     name: api
+     vendor:
+       manifest: "vendor/api-vendor.yaml"
+       components:  # Override for specific environments
+         - source: "github.com/cloudposse/terraform-aws-components//modules/ecs-service"
+           version: "1.3.0-beta.1"
+           labels:
+             environment: ["dev"]
+   ```
+
+3. **Vendor cache is shared**:
+   - Traditional `atmos vendor pull` writes to `components/**` (unchanged)
+   - Deployment vendoring writes to `.atmos/vendor-cache/` (new, content-addressable)
+   - Both can coexist without conflicts
+   - Teams can use both approaches simultaneously during migration
+
+4. **Component resolution order**:
+   ```
+   When resolving component "ecs-service":
+   1. Check local components/terraform/ecs-service/ (committed to repo)
+   2. Check deployment vendor cache (.atmos/vendor-cache/deployments/api/dev/)
+   3. Check traditional vendor cache (components/terraform/ecs-service/ vendored globally)
+   4. If not found, attempt auto-discovery and JIT vendor
+   ```
 
 **Environment-Specific Vendoring Use Cases**:
 
@@ -1007,23 +1176,36 @@ atmos rollout apply api --target prod --release xyz789
 - [ ] Add deployment discovery in `pkg/config/`
 - [ ] Implement deployment validation
 - [ ] Update `atmos.yaml` schema to reference deployments directory
+- [ ] Vendor manifest schema support (inline, external, vendor.yaml fallback)
 
-**Week 2-3: Performance Optimization**
+**Week 2-3: Performance Optimization & Vendor Cache**
 - [ ] Modify stack processor to accept deployment context
 - [ ] Filter stack loading based on `deployment.stacks`
+- [ ] Implement content-addressable vendor cache (`.atmos/vendor-cache/`)
+- [ ] Cache index and lock file generation
 - [ ] Benchmark performance improvements
 - [ ] Add deployment-scoped component resolution
 
-**Week 3-4: CLI Commands - Discovery**
+**Week 3-4: JIT Vendoring**
+- [ ] Vendor configuration resolution (inline → manifest → vendor.yaml)
+- [ ] Label-based component filtering for environments
+- [ ] `atmos vendor pull --deployment` implementation
+- [ ] `atmos vendor status --deployment` implementation
+- [ ] `atmos vendor cache stats` implementation
+- [ ] `atmos vendor clean` with GC support
+
+**Week 4-5: CLI Commands - Discovery**
 - [ ] `atmos deployments list` command
 - [ ] `atmos deployments describe` command
 - [ ] `atmos deployments validate` command
 - [ ] `atmos deployments migrate` command (generate from stacks)
 
-**Week 4-6: Testing & Documentation**
+**Week 5-6: Testing & Documentation**
 - [ ] Unit tests for deployment loading/validation
+- [ ] Unit tests for vendor cache and JIT vendoring
 - [ ] Integration tests with test fixtures
 - [ ] Docusaurus documentation for deployment concept
+- [ ] Vendor cache architecture documentation
 - [ ] Migration guide from existing stacks
 
 ### Phase 2: Build & Release (4-6 weeks)
@@ -1186,22 +1368,32 @@ atmos deployments validate platform-dev
    - Option B: Unified component type (`build`) with driver selection (nixpacks, cnb, dockerfile)
    - **Decision**: Option A - use `nixpack` component type for now, unified `build` type in future release
 
-2. **OCI Bundle Format**: What should bundled artifact structure look like?
+2. **Vendor Manifest Format**: Should we extend existing vendor.yaml format or create new deployment-specific format?
+   - Option A: Extend existing vendor.yaml with `labels` field (backwards compatible)
+   - Option B: New VendorManifest kind for deployment-specific files
+   - **Decision**: Option A for backwards compatibility - add `labels` as optional field to existing schema
+
+3. **OCI Bundle Format**: What should bundled artifact structure look like?
    - Include entire stack hierarchy or flatten?
    - How to handle external dependencies (vendored components)?
    - Recommendation: Hierarchical with vendored deps included
 
-3. **Release Retention**: Default policy for release records?
+4. **Vendor Cache Location**: Should `.atmos/vendor-cache/` be gitignored by default?
+   - Option A: Always gitignore (ephemeral cache, rebuild on CI)
+   - Option B: Optionally commit lock files only (not cached objects)
+   - Recommendation: Option B - gitignore objects, commit lock files for reproducibility
+
+5. **Release Retention**: Default policy for release records?
    - Keep last N releases per target?
    - Time-based retention (90 days)?
    - Recommendation: Keep last 10 per target, configurable
 
-4. **Multi-Region Deployments**: How to handle deployments across regions?
+6. **Multi-Region Deployments**: How to handle deployments across regions?
    - Single deployment with multi-region targets?
    - Separate deployments per region?
    - Recommendation: Single deployment, targets can specify region
 
-5. **Deployment Dependencies**: Should deployments depend on other deployments?
+7. **Deployment Dependencies**: Should deployments depend on other deployments?
    - Example: app deployment depends on platform deployment
    - Recommendation: Yes, via `depends_on` field
 
