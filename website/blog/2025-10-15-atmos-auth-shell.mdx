@@ -164,12 +164,22 @@ If you're familiar with `aws-vault exec`, you'll recognize this pattern. Both to
 
 When you're in an `atmos auth shell` session, you'll have access to:
 
-- **`ATMOS_IDENTITY`**: The name of the active identity
-- **`ATMOS_SHLVL`**: Shell nesting level (increments for nested shells)
-- **AWS configuration paths** (for AWS identities):
-  - `AWS_SHARED_CREDENTIALS_FILE`: Path to Atmos-managed credentials file
-  - `AWS_CONFIG_FILE`: Path to Atmos-managed config file
-  - `AWS_PROFILE`: Profile name corresponding to your identity
+<dl>
+  <dt><code>ATMOS_IDENTITY</code></dt>
+  <dd>The name of the active identity</dd>
+
+  <dt><code>ATMOS_SHLVL</code></dt>
+  <dd>Shell nesting level (increments for nested shells)</dd>
+
+  <dt><code>AWS_SHARED_CREDENTIALS_FILE</code></dt>
+  <dd>Path to Atmos-managed credentials file (AWS identities only)</dd>
+
+  <dt><code>AWS_CONFIG_FILE</code></dt>
+  <dd>Path to Atmos-managed config file (AWS identities only)</dd>
+
+  <dt><code>AWS_PROFILE</code></dt>
+  <dd>Profile name corresponding to your identity (AWS identities only)</dd>
+</dl>
 
 These environment variables work seamlessly with any tool that uses the AWS SDK, such as Terraform, the AWS CLI, kubectl with AWS authentication, and more. Credentials are never exposed directly in environment variables—only secure file paths are set.
 
