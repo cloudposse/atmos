@@ -1403,6 +1403,13 @@ Atmos deployments generate comprehensive SBOMs for both **container images** (ni
 ```
 
 **2. Vendored Component SBOM** (Terraform/Helmfile):
+
+This example shows the complete dependency chain including:
+- Vendored Terraform modules (from GitHub/registry)
+- Terraform providers used by those modules
+- Nested module dependencies
+- Vendor source metadata (Git URL, commit SHA, cache path)
+
 ```json
 {
   "bomFormat": "CycloneDX",
@@ -1410,9 +1417,10 @@ Atmos deployments generate comprehensive SBOMs for both **container images** (ni
   "metadata": {
     "component": {
       "type": "application",
-      "name": "payment-service-deployment",
+      "name": "payment-service-prod-vendor",
       "version": "release-abc123"
-    }
+    },
+    "timestamp": "2025-01-15T10:30:00Z"
   },
   "components": [
     {
@@ -1425,12 +1433,23 @@ Atmos deployments generate comprehensive SBOMs for both **container images** (ni
         {
           "type": "vcs",
           "url": "https://github.com/cloudposse/terraform-aws-components/tree/1.8.2/modules/ecs-service"
+        },
+        {
+          "type": "distribution",
+          "url": "https://github.com/cloudposse/terraform-aws-components/archive/refs/tags/1.8.2.tar.gz"
         }
       ],
       "hashes": [
         {
           "alg": "SHA-256",
-          "content": "sha256:mno345..."
+          "content": "mno345abc789def456..."
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache-2.0"
+          }
         }
       ],
       "properties": [
@@ -1445,6 +1464,26 @@ Atmos deployments generate comprehensive SBOMs for both **container images** (ni
         {
           "name": "atmos:component",
           "value": "ecs/payment-api"
+        },
+        {
+          "name": "atmos:vendor_source",
+          "value": "github.com/cloudposse/terraform-aws-components//modules/ecs-service"
+        },
+        {
+          "name": "atmos:vendor_method",
+          "value": "git"
+        },
+        {
+          "name": "atmos:git_commit",
+          "value": "a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0"
+        },
+        {
+          "name": "atmos:cache_path",
+          "value": ".atmos/vendor-cache/objects/sha256/mno345..."
+        },
+        {
+          "name": "atmos:pulled_at",
+          "value": "2025-01-15T09:00:00Z"
         }
       ]
     },
@@ -1453,7 +1492,48 @@ Atmos deployments generate comprehensive SBOMs for both **container images** (ni
       "group": "terraform-modules",
       "name": "cloudposse/terraform-aws-components/rds",
       "version": "1.3.5",
-      "purl": "pkg:github/cloudposse/terraform-aws-components@1.3.5#modules/rds"
+      "purl": "pkg:github/cloudposse/terraform-aws-components@1.3.5#modules/rds",
+      "externalReferences": [
+        {
+          "type": "vcs",
+          "url": "https://github.com/cloudposse/terraform-aws-components/tree/1.3.5/modules/rds"
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "jkl012uvw345xyz678..."
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache-2.0"
+          }
+        }
+      ],
+      "properties": [
+        {
+          "name": "atmos:deployment",
+          "value": "payment-service"
+        },
+        {
+          "name": "atmos:target",
+          "value": "prod"
+        },
+        {
+          "name": "atmos:component",
+          "value": "rds/payment-db"
+        },
+        {
+          "name": "atmos:vendor_source",
+          "value": "github.com/cloudposse/terraform-aws-components//modules/rds"
+        },
+        {
+          "name": "atmos:vendor_method",
+          "value": "git"
+        }
+      ]
     },
     {
       "type": "library",
@@ -1461,12 +1541,129 @@ Atmos deployments generate comprehensive SBOMs for both **container images** (ni
       "name": "hashicorp/aws",
       "version": "5.31.0",
       "purl": "pkg:terraform/hashicorp/aws@5.31.0",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.terraform.io/providers/hashicorp/aws/5.31.0"
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "provider-sha256-abc123..."
+        }
+      ],
       "licenses": [
         {
           "license": {
             "id": "MPL-2.0"
           }
         }
+      ],
+      "properties": [
+        {
+          "name": "terraform:provider_type",
+          "value": "official"
+        },
+        {
+          "name": "terraform:registry_url",
+          "value": "https://registry.terraform.io/providers/hashicorp/aws/5.31.0"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "group": "terraform-providers",
+      "name": "hashicorp/random",
+      "version": "3.6.0",
+      "purl": "pkg:terraform/hashicorp/random@3.6.0",
+      "licenses": [
+        {
+          "license": {
+            "id": "MPL-2.0"
+          }
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "group": "terraform-modules",
+      "name": "cloudposse/label/null",
+      "version": "0.25.0",
+      "purl": "pkg:terraform/cloudposse/label@0.25.0",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.terraform.io/modules/cloudposse/label/null/0.25.0"
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "nested-module-sha256..."
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache-2.0"
+          }
+        }
+      ],
+      "properties": [
+        {
+          "name": "atmos:nested_dependency",
+          "value": "true"
+        },
+        {
+          "name": "atmos:parent_module",
+          "value": "cloudposse/terraform-aws-components/ecs-service"
+        },
+        {
+          "name": "terraform:module_source",
+          "value": "cloudposse/label/null"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "group": "terraform-modules",
+      "name": "cloudposse/ecs-alb-service-task/aws",
+      "version": "0.73.0",
+      "purl": "pkg:terraform/cloudposse/ecs-alb-service-task@0.73.0",
+      "properties": [
+        {
+          "name": "atmos:nested_dependency",
+          "value": "true"
+        },
+        {
+          "name": "atmos:parent_module",
+          "value": "cloudposse/terraform-aws-components/ecs-service"
+        }
+      ]
+    }
+  ],
+  "dependencies": [
+    {
+      "ref": "pkg:github/cloudposse/terraform-aws-components@1.8.2#modules/ecs-service",
+      "dependsOn": [
+        "pkg:terraform/hashicorp/aws@5.31.0",
+        "pkg:terraform/hashicorp/random@3.6.0",
+        "pkg:terraform/cloudposse/label@0.25.0",
+        "pkg:terraform/cloudposse/ecs-alb-service-task@0.73.0"
+      ]
+    },
+    {
+      "ref": "pkg:github/cloudposse/terraform-aws-components@1.3.5#modules/rds",
+      "dependsOn": [
+        "pkg:terraform/hashicorp/aws@5.31.0",
+        "pkg:terraform/cloudposse/label@0.25.0"
+      ]
+    },
+    {
+      "ref": "pkg:terraform/cloudposse/ecs-alb-service-task@0.73.0",
+      "dependsOn": [
+        "pkg:terraform/cloudposse/label@0.25.0"
       ]
     }
   ]
@@ -1657,32 +1854,119 @@ func (g *Generator) GenerateVendorSBOM(
     components := []cdx.Component{}
 
     for name, comp := range vendoredComponents {
-        purl := generateVendorPURL(comp)
+        // Generate component for the vendored module
+        moduleComponent := g.createModuleComponent(name, comp, deployment, target)
+        components = append(components, moduleComponent)
 
-        component := cdx.Component{
-            Type:    cdx.ComponentTypeLibrary,
-            Group:   "terraform-modules",
-            Name:    comp.Source,
-            Version: comp.Version,
-            PackageURL: purl,
-            Hashes: []cdx.Hash{
-                {
-                    Algorithm: cdx.HashAlgoSHA256,
-                    Value:     comp.Digest,
-                },
-            },
-            Properties: []cdx.Property{
-                {Name: "atmos:deployment", Value: deployment},
-                {Name: "atmos:target", Value: target},
-                {Name: "atmos:component", Value: name},
-            },
+        // Also track Terraform providers used by this module
+        if comp.TerraformProviders != nil {
+            for _, provider := range comp.TerraformProviders {
+                providerComponent := g.createProviderComponent(provider)
+                components = append(components, providerComponent)
+            }
         }
 
-        components = append(components, component)
+        // Track nested module dependencies
+        if comp.ModuleDependencies != nil {
+            for _, dep := range comp.ModuleDependencies {
+                depComponent := g.createNestedModuleComponent(dep)
+                components = append(components, depComponent)
+            }
+        }
     }
 
     bom.Components = &components
     return bom, nil
+}
+
+func (g *Generator) createModuleComponent(
+    name string,
+    comp VendoredComponent,
+    deployment string,
+    target string,
+) cdx.Component {
+    purl := generateVendorPURL(comp)
+
+    component := cdx.Component{
+        Type:    cdx.ComponentTypeLibrary,
+        Group:   "terraform-modules",
+        Name:    comp.Source,
+        Version: comp.Version,
+        PackageURL: purl,
+        Hashes: []cdx.Hash{
+            {
+                Algorithm: cdx.HashAlgoSHA256,
+                Value:     comp.Digest,
+            },
+        },
+        ExternalReferences: []cdx.ExternalReference{
+            {
+                Type: cdx.ERTypeVCS,
+                URL:  comp.SourceURL,
+            },
+        },
+        Properties: []cdx.Property{
+            {Name: "atmos:deployment", Value: deployment},
+            {Name: "atmos:target", Value: target},
+            {Name: "atmos:component", Value: name},
+            {Name: "atmos:vendor_source", Value: comp.Source},
+            {Name: "atmos:vendor_method", Value: comp.VendorMethod}, // git, http, local
+            {Name: "atmos:cache_path", Value: comp.CachePath},
+        },
+    }
+
+    // Add license if detected from module metadata
+    if comp.License != "" {
+        component.Licenses = &cdx.Licenses{
+            {License: &cdx.License{ID: comp.License}},
+        }
+    }
+
+    return component
+}
+
+func (g *Generator) createProviderComponent(provider TerraformProvider) cdx.Component {
+    return cdx.Component{
+        Type:    cdx.ComponentTypeLibrary,
+        Group:   "terraform-providers",
+        Name:    provider.Name,
+        Version: provider.Version,
+        PackageURL: fmt.Sprintf("pkg:terraform/%s/%s@%s",
+            provider.Namespace,
+            provider.Name,
+            provider.Version,
+        ),
+        Hashes: []cdx.Hash{
+            {
+                Algorithm: cdx.HashAlgoSHA256,
+                Value:     provider.SHA256Sum,
+            },
+        },
+        Licenses: &cdx.Licenses{
+            {License: &cdx.License{ID: provider.License}},
+        },
+        ExternalReferences: []cdx.ExternalReference{
+            {
+                Type: cdx.ERTypeDistribution,
+                URL:  fmt.Sprintf("https://registry.terraform.io/providers/%s/%s/%s",
+                    provider.Namespace, provider.Name, provider.Version),
+            },
+        },
+    }
+}
+
+func (g *Generator) createNestedModuleComponent(dep ModuleDependency) cdx.Component {
+    return cdx.Component{
+        Type:    cdx.ComponentTypeLibrary,
+        Group:   "terraform-modules",
+        Name:    dep.Source,
+        Version: dep.Version,
+        PackageURL: generateModulePURL(dep.Source, dep.Version),
+        Properties: []cdx.Property{
+            {Name: "atmos:nested_dependency", Value: "true"},
+            {Name: "atmos:parent_module", Value: dep.ParentModule},
+        },
+    }
 }
 
 func generateVendorPURL(comp VendoredComponent) string {
@@ -1697,6 +1981,7 @@ func generateVendorPURL(comp VendoredComponent) string {
             nil,
             parts.Subpath,
         ).String()
+        // Result: pkg:github/cloudposse/terraform-aws-components@1.8.2#modules/ecs-service
     }
 
     // For Terraform registry
@@ -1710,6 +1995,38 @@ func generateVendorPURL(comp VendoredComponent) string {
             nil,
             "",
         ).String()
+        // Result: pkg:terraform/cloudposse/ecs-service@1.8.2
+    }
+
+    // For GitLab sources
+    if strings.Contains(comp.Source, "gitlab.com") {
+        parts := parseGitLabURL(comp.Source)
+        return purl.NewPackageURL(
+            "gitlab",
+            parts.Namespace,
+            parts.Project,
+            comp.Version,
+            nil,
+            parts.Subpath,
+        ).String()
+    }
+
+    // For Bitbucket sources
+    if strings.Contains(comp.Source, "bitbucket.org") {
+        parts := parseBitbucketURL(comp.Source)
+        return purl.NewPackageURL(
+            "bitbucket",
+            parts.Workspace,
+            parts.Repo,
+            comp.Version,
+            nil,
+            parts.Subpath,
+        ).String()
+    }
+
+    // For generic Git sources
+    if strings.HasPrefix(comp.Source, "git::") {
+        return fmt.Sprintf("pkg:generic/%s@%s", sanitizeName(comp.Source), comp.Version)
     }
 
     return ""
