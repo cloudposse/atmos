@@ -141,7 +141,7 @@ func (p *PodmanRuntime) List(ctx context.Context, filters map[string]string) ([]
 
 	var podmanContainers []map[string]interface{}
 	if err := json.Unmarshal(output, &podmanContainers); err != nil {
-		return nil, fmt.Errorf("%w: failed to parse podman output: %v", errUtils.ErrContainerRuntimeOperation, err)
+		return nil, fmt.Errorf("%w: failed to parse podman output: %w", errUtils.ErrContainerRuntimeOperation, err)
 	}
 
 	return parsePodmanContainers(podmanContainers), nil

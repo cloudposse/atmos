@@ -1,6 +1,7 @@
 package devcontainer
 
 import (
+	"github.com/cloudposse/atmos/cmd/markdown"
 	"github.com/spf13/cobra"
 
 	e "github.com/cloudposse/atmos/internal/exec"
@@ -14,12 +15,8 @@ var configCmd = &cobra.Command{
 
 This shows the final configuration after merging all sources including
 imported devcontainer.json files.`,
-	Example: `  # Show configuration for default devcontainer
-  atmos devcontainer config default
-
-  # Show configuration in JSON format
-  atmos devcontainer config terraform --format json`,
-	Args: cobra.ExactArgs(1),
+	Example: markdown.DevcontainerConfigUsageMarkdown,
+	Args:    cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		defer perf.Track(atmosConfigPtr, "devcontainer.config.RunE")()
 

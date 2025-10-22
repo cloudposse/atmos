@@ -149,7 +149,7 @@ func ExecuteDevcontainerStart(atmosConfig *schema.AtmosConfiguration, name, inst
 	filters := map[string]string{"name": containerName}
 	containers, err := runtime.List(ctx, filters)
 	if err != nil {
-		return fmt.Errorf("%w: failed to list containers: %v", errUtils.ErrContainerRuntimeOperation, err)
+		return fmt.Errorf("%w: failed to list containers: %w", errUtils.ErrContainerRuntimeOperation, err)
 	}
 
 	if len(containers) == 0 {
@@ -203,7 +203,7 @@ func ExecuteDevcontainerStop(atmosConfig *schema.AtmosConfiguration, name, insta
 	}
 	containers, err := runtime.List(ctx, filters)
 	if err != nil {
-		return fmt.Errorf("%w: failed to list containers: %v", errUtils.ErrContainerRuntimeOperation, err)
+		return fmt.Errorf("%w: failed to list containers: %w", errUtils.ErrContainerRuntimeOperation, err)
 	}
 
 	if len(containers) == 0 {
@@ -222,7 +222,7 @@ func ExecuteDevcontainerStop(atmosConfig *schema.AtmosConfiguration, name, insta
 	return runWithSpinner(fmt.Sprintf("Stopping container %s", containerName), func() error {
 		stopTimeout := time.Duration(timeout) * time.Second
 		if err := runtime.Stop(ctx, container.ID, stopTimeout); err != nil {
-			return fmt.Errorf("%w: failed to stop container: %v", errUtils.ErrContainerRuntimeOperation, err)
+			return fmt.Errorf("%w: failed to stop container: %w", errUtils.ErrContainerRuntimeOperation, err)
 		}
 		return nil
 	})
@@ -265,7 +265,7 @@ func findAndStartContainer(ctx context.Context, runtime container.Runtime, conta
 	filters := map[string]string{"name": containerName}
 	containers, err := runtime.List(ctx, filters)
 	if err != nil {
-		return nil, fmt.Errorf("%w: failed to list containers: %v", errUtils.ErrContainerRuntimeOperation, err)
+		return nil, fmt.Errorf("%w: failed to list containers: %w", errUtils.ErrContainerRuntimeOperation, err)
 	}
 
 	if len(containers) == 0 {
@@ -286,7 +286,7 @@ func findAndStartContainer(ctx context.Context, runtime container.Runtime, conta
 func startContainerForAttach(ctx context.Context, runtime container.Runtime, containerInfo *container.Info, containerName string) error {
 	fmt.Fprintf(os.Stderr, "Starting container %s...\n", containerName)
 	if err := runtime.Start(ctx, containerInfo.ID); err != nil {
-		return fmt.Errorf("%w: failed to start container: %v", errUtils.ErrContainerRuntimeOperation, err)
+		return fmt.Errorf("%w: failed to start container: %w", errUtils.ErrContainerRuntimeOperation, err)
 	}
 	return nil
 }

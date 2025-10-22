@@ -4,6 +4,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/cloudposse/atmos/cmd/internal"
+	"github.com/cloudposse/atmos/cmd/markdown"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -25,20 +26,7 @@ var devcontainerCmd = &cobra.Command{
 Devcontainers provide isolated, reproducible development environments with all
 required tools and dependencies pre-configured. This command supports both Docker
 and Podman runtimes with automatic detection.`,
-	Example: `  # List available devcontainers
-  atmos devcontainer list
-
-  # Start a devcontainer
-  atmos devcontainer start default
-
-  # Start a specific instance
-  atmos devcontainer start terraform --instance my-instance
-
-  # Attach to a running devcontainer
-  atmos devcontainer attach default
-
-  # Stop a devcontainer
-  atmos devcontainer stop default`,
+	Example: markdown.DevcontainerUsageMarkdown,
 }
 
 func init() {

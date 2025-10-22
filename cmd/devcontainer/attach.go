@@ -1,6 +1,7 @@
 package devcontainer
 
 import (
+	"github.com/cloudposse/atmos/cmd/markdown"
 	"github.com/spf13/cobra"
 
 	e "github.com/cloudposse/atmos/internal/exec"
@@ -15,12 +16,8 @@ var attachCmd = &cobra.Command{
 	Long: `Attach to a running devcontainer and get an interactive shell.
 
 If the container is not running, it will be started automatically.`,
-	Example: `  # Attach to the default devcontainer
-  atmos devcontainer attach default
-
-  # Attach to a specific instance
-  atmos devcontainer attach terraform --instance my-instance`,
-	Args: cobra.ExactArgs(1),
+	Example: markdown.DevcontainerAttachUsageMarkdown,
+	Args:    cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		defer perf.Track(atmosConfigPtr, "devcontainer.attach.RunE")()
 

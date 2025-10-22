@@ -1,6 +1,7 @@
 package devcontainer
 
 import (
+	"github.com/cloudposse/atmos/cmd/markdown"
 	"github.com/spf13/cobra"
 
 	e "github.com/cloudposse/atmos/internal/exec"
@@ -23,15 +24,8 @@ var stopCmd = &cobra.Command{
 
 The container will be stopped but not removed, allowing you to restart it later
 with all your work preserved.`,
-	Example: `  # Stop the default devcontainer
-  atmos devcontainer stop default
-
-  # Stop a specific instance
-  atmos devcontainer stop terraform --instance my-instance
-
-  # Stop with custom timeout
-  atmos devcontainer stop default --timeout 30`,
-	Args: cobra.ExactArgs(1),
+	Example: markdown.DevcontainerStopUsageMarkdown,
+	Args:    cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		defer perf.Track(atmosConfigPtr, "devcontainer.stop.RunE")()
 

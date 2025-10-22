@@ -88,7 +88,7 @@ func startExistingContainer(ctx context.Context, runtime container.Runtime, cont
 
 	return runWithSpinner(fmt.Sprintf("Starting container %s", containerName), func() error {
 		if err := runtime.Start(ctx, containerInfo.ID); err != nil {
-			return fmt.Errorf("%w: failed to start container: %v", errUtils.ErrContainerRuntimeOperation, err)
+			return fmt.Errorf("%w: failed to start container: %w", errUtils.ErrContainerRuntimeOperation, err)
 		}
 		return nil
 	})
@@ -117,7 +117,7 @@ func stopContainerIfRunning(ctx context.Context, runtime container.Runtime, cont
 
 	return runWithSpinner(fmt.Sprintf("Stopping container %s", containerInfo.Name), func() error {
 		if err := runtime.Stop(ctx, containerInfo.ID, 10); err != nil {
-			return fmt.Errorf("%w: failed to stop container: %v", errUtils.ErrContainerRuntimeOperation, err)
+			return fmt.Errorf("%w: failed to stop container: %w", errUtils.ErrContainerRuntimeOperation, err)
 		}
 		return nil
 	})
@@ -127,7 +127,7 @@ func stopContainerIfRunning(ctx context.Context, runtime container.Runtime, cont
 func removeContainer(ctx context.Context, runtime container.Runtime, containerInfo *container.Info, containerName string) error {
 	return runWithSpinner(fmt.Sprintf("Removing container %s", containerName), func() error {
 		if err := runtime.Remove(ctx, containerInfo.ID, true); err != nil {
-			return fmt.Errorf("%w: failed to remove container: %v", errUtils.ErrContainerRuntimeOperation, err)
+			return fmt.Errorf("%w: failed to remove container: %w", errUtils.ErrContainerRuntimeOperation, err)
 		}
 		return nil
 	})
@@ -141,7 +141,7 @@ func pullImageIfNeeded(ctx context.Context, runtime container.Runtime, image str
 
 	return runWithSpinner(fmt.Sprintf("Pulling image %s", image), func() error {
 		if err := runtime.Pull(ctx, image); err != nil {
-			return fmt.Errorf("%w: failed to pull image: %v", errUtils.ErrContainerRuntimeOperation, err)
+			return fmt.Errorf("%w: failed to pull image: %w", errUtils.ErrContainerRuntimeOperation, err)
 		}
 		return nil
 	})
@@ -156,7 +156,7 @@ func createContainer(params *containerParams) (string, error) {
 
 		id, err := params.runtime.Create(params.ctx, createConfig)
 		if err != nil {
-			return fmt.Errorf("%w: failed to create container: %v", errUtils.ErrContainerRuntimeOperation, err)
+			return fmt.Errorf("%w: failed to create container: %w", errUtils.ErrContainerRuntimeOperation, err)
 		}
 		containerID = id
 		return nil
@@ -169,7 +169,7 @@ func createContainer(params *containerParams) (string, error) {
 func startContainer(ctx context.Context, runtime container.Runtime, containerID, containerName string) error {
 	return runWithSpinner(fmt.Sprintf("Starting container %s", containerName), func() error {
 		if err := runtime.Start(ctx, containerID); err != nil {
-			return fmt.Errorf("%w: failed to start container: %v", errUtils.ErrContainerRuntimeOperation, err)
+			return fmt.Errorf("%w: failed to start container: %w", errUtils.ErrContainerRuntimeOperation, err)
 		}
 		return nil
 	})

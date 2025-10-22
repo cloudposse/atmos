@@ -1,6 +1,7 @@
 package devcontainer
 
 import (
+	"github.com/cloudposse/atmos/cmd/markdown"
 	"github.com/spf13/cobra"
 
 	e "github.com/cloudposse/atmos/internal/exec"
@@ -19,15 +20,8 @@ var removeCmd = &cobra.Command{
 
 This will stop the container if it's running and remove it completely.
 Use --force to remove a running container without stopping it first.`,
-	Example: `  # Remove the default devcontainer
-  atmos devcontainer remove default
-
-  # Remove a specific instance
-  atmos devcontainer remove terraform --instance my-instance
-
-  # Force remove a running container
-  atmos devcontainer remove default --force`,
-	Args: cobra.ExactArgs(1),
+	Example: markdown.DevcontainerRemoveUsageMarkdown,
+	Args:    cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		defer perf.Track(atmosConfigPtr, "devcontainer.remove.RunE")()
 

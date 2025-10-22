@@ -1,6 +1,7 @@
 package devcontainer
 
 import (
+	"github.com/cloudposse/atmos/cmd/markdown"
 	"github.com/spf13/cobra"
 
 	e "github.com/cloudposse/atmos/internal/exec"
@@ -16,15 +17,8 @@ var execCmd = &cobra.Command{
 
 The container must already be running. Use '--' to separate devcontainer arguments
 from the command to execute.`,
-	Example: `  # Run a command in the default devcontainer
-  atmos devcontainer exec default -- terraform version
-
-  # Run a command in a specific instance
-  atmos devcontainer exec terraform --instance my-instance -- make build
-
-  # Run a shell command
-  atmos devcontainer exec default -- sh -c "echo Hello from container"`,
-	Args: cobra.MinimumNArgs(1),
+	Example: markdown.DevcontainerExecUsageMarkdown,
+	Args:    cobra.MinimumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		defer perf.Track(atmosConfigPtr, "devcontainer.exec.RunE")()
 

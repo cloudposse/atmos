@@ -1,6 +1,7 @@
 package devcontainer
 
 import (
+	"github.com/cloudposse/atmos/cmd/markdown"
 	"github.com/spf13/cobra"
 
 	e "github.com/cloudposse/atmos/internal/exec"
@@ -13,12 +14,8 @@ var listCmd = &cobra.Command{
 	Long: `List all devcontainers defined in your Atmos configuration.
 
 Shows the name, image, and configured ports for each devcontainer.`,
-	Example: `  # List all devcontainers
-  atmos devcontainer list
-
-  # List with specific format
-  atmos devcontainer list --format json`,
-	Args: cobra.NoArgs,
+	Example: markdown.DevcontainerListUsageMarkdown,
+	Args:    cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		defer perf.Track(atmosConfigPtr, "devcontainer.list.RunE")()
 

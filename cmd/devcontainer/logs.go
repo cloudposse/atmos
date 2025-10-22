@@ -1,6 +1,7 @@
 package devcontainer
 
 import (
+	"github.com/cloudposse/atmos/cmd/markdown"
 	"github.com/spf13/cobra"
 
 	e "github.com/cloudposse/atmos/internal/exec"
@@ -20,18 +21,8 @@ var logsCmd = &cobra.Command{
 
 By default, shows all logs. Use --follow to stream logs in real-time,
 or --tail to limit the number of lines shown.`,
-	Example: `  # Show all logs from a devcontainer
-  atmos devcontainer logs default
-
-  # Follow logs in real-time
-  atmos devcontainer logs default --follow
-
-  # Show last 100 lines
-  atmos devcontainer logs default --tail 100
-
-  # Show logs from a specific instance
-  atmos devcontainer logs terraform --instance my-instance`,
-	Args: cobra.ExactArgs(1),
+	Example: markdown.DevcontainerLogsUsageMarkdown,
+	Args:    cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		defer perf.Track(atmosConfigPtr, "devcontainer.logs.RunE")()
 

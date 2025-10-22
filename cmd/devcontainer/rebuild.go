@@ -1,6 +1,7 @@
 package devcontainer
 
 import (
+	"github.com/cloudposse/atmos/cmd/markdown"
 	"github.com/spf13/cobra"
 
 	e "github.com/cloudposse/atmos/internal/exec"
@@ -22,18 +23,8 @@ This command stops and removes the existing container, pulls the latest image
 (unless --no-pull is specified), and creates a new container with the current
 configuration. This is useful when you've updated the devcontainer.json or
 need to start fresh.`,
-	Example: `  # Rebuild a devcontainer
-  atmos devcontainer rebuild default
-
-  # Rebuild and attach
-  atmos devcontainer rebuild default --attach
-
-  # Rebuild without pulling latest image
-  atmos devcontainer rebuild default --no-pull
-
-  # Rebuild a specific instance
-  atmos devcontainer rebuild terraform --instance my-instance`,
-	Args: cobra.ExactArgs(1),
+	Example: markdown.DevcontainerRebuildUsageMarkdown,
+	Args:    cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		defer perf.Track(atmosConfigPtr, "devcontainer.rebuild.RunE")()
 
