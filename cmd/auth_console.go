@@ -178,6 +178,8 @@ func printConsoleURL(consoleURL string) {
 
 // getConsoleProvider returns a ConsoleAccessProvider for the given identity.
 func getConsoleProvider(authManager types.AuthManager, identityName string) (types.ConsoleAccessProvider, error) {
+	defer perf.Track(nil, "cmd.getConsoleProvider")()
+
 	// Get provider kind for the identity.
 	providerKind, err := authManager.GetProviderKindForIdentity(identityName)
 	if err != nil {
@@ -201,6 +203,8 @@ func getConsoleProvider(authManager types.AuthManager, identityName string) (typ
 
 // initializeAuthManager loads config and creates the auth manager.
 func initializeAuthManager() (types.AuthManager, error) {
+	defer perf.Track(nil, "cmd.initializeAuthManager")()
+
 	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
 	if err != nil {
 		return nil, fmt.Errorf("%w: failed to load atmos config: %w", errUtils.ErrAuthConsole, err)
@@ -216,6 +220,8 @@ func initializeAuthManager() (types.AuthManager, error) {
 
 // resolveIdentityName gets identity from flag or uses default.
 func resolveIdentityName(cmd *cobra.Command, authManager types.AuthManager) (string, error) {
+	defer perf.Track(nil, "cmd.resolveIdentityName")()
+
 	identityName, _ := cmd.Flags().GetString(IdentityFlagName)
 	if identityName != "" {
 		return identityName, nil
@@ -235,6 +241,8 @@ func resolveIdentityName(cmd *cobra.Command, authManager types.AuthManager) (str
 
 // retrieveCredentials retrieves credentials from whoami info.
 func retrieveCredentials(whoami *types.WhoamiInfo) (types.ICredentials, error) {
+	defer perf.Track(nil, "cmd.retrieveCredentials")()
+
 	switch {
 	case whoami.Credentials != nil:
 		return whoami.Credentials, nil
