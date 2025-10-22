@@ -70,6 +70,7 @@ var excludedReceivers = []string{
 	"ErrInvalidPattern",         // Error types.
 	"DescribeConfigFormatError", // Error types.
 	"DefaultStacksProcessor",    // Processor implementations.
+	"AtmosFuncs",                // Template function wrappers (high-frequency).
 }
 
 func (r *PerfTrackRule) Name() string {
@@ -137,8 +138,8 @@ func (r *PerfTrackRule) Check(pass *analysis.Pass, file *ast.File) error {
 		}
 
 		if !hasPerfTrack {
-			// Skip specific functions that are one-time operations.
-			if funcName == "GetStackNamePattern" {
+			// Skip specific functions that are one-time operations or high-frequency utilities.
+			if funcName == "GetStackNamePattern" || funcName == "FilterComputedFields" {
 				return true
 			}
 
