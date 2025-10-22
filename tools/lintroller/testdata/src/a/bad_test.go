@@ -77,3 +77,21 @@ func BenchmarkGoodOsArgs(b *testing.B) {
 
 	os.Args = []string{"bench", "arg"} // OK: os.Args is allowed in benchmarks.
 }
+
+// TestDocumentationOnly is a bad test with only logging and no assertions (test-no-assertions rule).
+func TestDocumentationOnly(t *testing.T) { // want "Test function 'TestDocumentationOnly' contains only t.Log\\(\\) calls with no assertions.*"
+	t.Log("This test documents the expected behavior")
+	t.Logf("Some value: %s", "test")
+}
+
+// TestUnconditionalSkip is a bad test that always skips (test-no-assertions rule).
+func TestUnconditionalSkip(t *testing.T) {
+	t.Skipf("This test always skips") // want "Test function 'TestUnconditionalSkip' unconditionally skips.*"
+}
+
+// TestUnconditionalSkipWithTrue is a bad test with if (true) t.Skip (test-no-assertions rule).
+func TestUnconditionalSkipWithTrue(t *testing.T) {
+	if true {
+		t.Skipf("This also always skips") // want "Test function 'TestUnconditionalSkipWithTrue' unconditionally skips.*"
+	}
+}
