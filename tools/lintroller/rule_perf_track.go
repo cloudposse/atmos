@@ -1,6 +1,7 @@
 package linters
 
 import (
+	"fmt"
 	"go/ast"
 	"go/token"
 	"strings"
@@ -102,12 +103,23 @@ func (r *PerfTrackRule) Check(pass *analysis.Pass, file *ast.File) error {
 				}
 			}
 
+			// Check if function has atmosConfig parameter.
+			hasAtmosConfig := hasAtmosConfigParam(funcDecl)
+
 			// Build suggested function name.
 			suggestedName := buildPerfTrackName(pkgName, receiverType, funcName)
 
+			// Build context-aware suggestion based on whether atmosConfig is available.
+			var suggestion string
+			if hasAtmosConfig {
+				suggestion = fmt.Sprintf("defer perf.Track(atmosConfig, \"%s\")()", suggestedName)
+			} else {
+				suggestion = fmt.Sprintf("defer perf.Track(nil, \"%s\")()", suggestedName)
+			}
+
 			pass.Reportf(funcDecl.Pos(),
-				"missing defer perf.Track() call at start of public function %s; add: defer perf.Track(atmosConfig, \"%s\")()",
-				funcName, suggestedName)
+				"missing defer perf.Track() call at start of public function %s; add: %s",
+				funcName, suggestion)
 		}
 
 		return true
@@ -161,4 +173,21 @@ func buildPerfTrackName(pkgPath, receiverType, funcName string) string {
 
 	// Function: "pkg.FuncName".
 	return pkgName + "." + funcName
+}
+
+// hasAtmosConfigParam checks if a function has an atmosConfig parameter.
+func hasAtmosConfigParam(funcDecl *ast.FuncDecl) bool {
+	if funcDecl.Type == nil || funcDecl.Type.Params == nil {
+		return false
+	}
+
+	for _, param := range funcDecl.Type.Params.List {
+		for _, name := range param.Names {
+			if name.Name == "atmosConfig" {
+				return true
+			}
+		}
+	}
+
+	return false
 }

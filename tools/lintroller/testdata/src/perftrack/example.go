@@ -16,8 +16,13 @@ func GoodFunction() {
 	// Function body.
 }
 
-// BadFunction - missing perf.Track.
-func BadFunction() { // want "missing defer perf.Track\\(\\) call at start of public function BadFunction"
+// BadFunction - missing perf.Track (no atmosConfig param).
+func BadFunction() { // want "missing defer perf.Track\\(\\) call at start of public function BadFunction; add: defer perf.Track\\(nil, \"perftrack.BadFunction\"\\)\\(\\)"
+	// Function body.
+}
+
+// BadFunctionWithConfig - missing perf.Track (has atmosConfig param).
+func BadFunctionWithConfig(atmosConfig interface{}) { // want "missing defer perf.Track\\(\\) call at start of public function BadFunctionWithConfig; add: defer perf.Track\\(atmosConfig, \"perftrack.BadFunctionWithConfig\"\\)\\(\\)"
 	// Function body.
 }
 
@@ -31,7 +36,7 @@ func (m *MyType) GoodMethod() {
 }
 
 // BadMethod - missing perf.Track.
-func (m *MyType) BadMethod() { // want "missing defer perf.Track\\(\\) call at start of public function BadMethod"
+func (m *MyType) BadMethod() { // want "missing defer perf.Track\\(\\) call at start of public function BadMethod; add: defer perf.Track\\(nil, \"perftrack.MyType.BadMethod\"\\)\\(\\)"
 	// Method body.
 }
 
