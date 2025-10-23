@@ -41,6 +41,13 @@ The Atmos AI Assistant is an AI-powered terminal agent that helps with Atmos inf
 - **Customizable Sections**: Control what context is shared with AI
 - **Team Collaboration**: Share memory file with your team via version control
 
+### MCP Server Integration
+- **Universal Compatibility**: Expose Atmos tools via Model Context Protocol (MCP)
+- **Claude Desktop Integration**: Use Atmos directly in Claude conversations
+- **VSCode Support**: Access Atmos capabilities in code editors
+- **Flexible Transports**: stdio for local clients, HTTP for remote access
+- **Custom Applications**: Build your own MCP-compatible tools
+
 ## Quick Start
 
 Enable AI features in your `atmos.yaml`:
@@ -92,7 +99,7 @@ export ANTHROPIC_API_KEY="your-api-key-here"
 
 Start using the AI assistant:
 
-<Terminal title="atmos ai chat">
+<Terminal title="atmos ai">
 ```bash
 # Interactive chat
 atmos ai chat
@@ -102,8 +109,15 @@ atmos ai ask "What components are available?"
 
 # Topic help
 atmos ai help stacks
+
+# Start MCP server for Claude Desktop integration
+atmos mcp-server
 ```
 </Terminal>
+
+:::tip Claude Desktop Integration
+Want to use Atmos tools directly in Claude Desktop? Check out the [MCP Server documentation](/ai/mcp-server) for setup instructions.
+:::
 
 ## What the AI Can Help With
 
