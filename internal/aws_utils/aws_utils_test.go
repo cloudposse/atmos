@@ -105,80 +105,130 @@ func TestLoadAWSConfigWithAuth(t *testing.T) {
 			name:   "with auth context and explicit region",
 			region: "us-west-2",
 			authContext: &schema.AWSAuthContext{
-				Profile:         "test-profile",
-				Region:          "eu-west-1",
-				CredentialsFile: "/tmp/test-credentials",
-				ConfigFile:      "/tmp/test-config",
+				Profile: "test-profile",
+				Region:  "eu-west-1",
 			},
-			wantRegion: "us-west-2", // Explicit region takes precedence
+			wantRegion: "us-west-2", // Explicit region takes precedence.
 			wantErr:    false,
 		},
 		{
 			name:   "with auth context using context region",
 			region: "",
 			authContext: &schema.AWSAuthContext{
-				Profile:         "test-profile",
-				Region:          "ap-southeast-1",
-				CredentialsFile: "/tmp/test-credentials",
-				ConfigFile:      "/tmp/test-config",
+				Profile: "test-profile",
+				Region:  "ap-southeast-1",
 			},
-			wantRegion: "ap-southeast-1", // Uses auth context region
+			wantRegion: "ap-southeast-1", // Uses auth context region.
 			wantErr:    false,
 		},
 		{
 			name:   "with auth context without region",
 			region: "",
 			authContext: &schema.AWSAuthContext{
-				Profile:         "test-profile",
-				Region:          "",
-				CredentialsFile: "/tmp/test-credentials",
-				ConfigFile:      "/tmp/test-config",
+				Profile: "test-profile",
+				Region:  "",
 			},
-			wantRegion: "", // No region specified
+			wantRegion: "", // No region specified.
 			wantErr:    false,
+		},
+		{
+			name:   "non-existent credentials file",
+			region: "us-east-1",
+			authContext: &schema.AWSAuthContext{
+				Profile:         "test-profile",
+				Region:          "us-east-1",
+				CredentialsFile: "/non/existent/credentials",
+				ConfigFile:      "/non/existent/config",
+			},
+			wantRegion: "",
+			wantErr:    true,
+		},
+		{
+			name:   "invalid profile name in auth context",
+			region: "us-east-1",
+			authContext: &schema.AWSAuthContext{
+				Profile: "nonexistent-profile",
+				Region:  "us-east-1",
+			},
+			wantRegion: "",
+			wantErr:    true,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Clear AWS environment variables to avoid conflicts
+			// Clear AWS environment variables to avoid conflicts.
 			t.Setenv("AWS_PROFILE", "")
 			t.Setenv("AWS_REGION", "")
 			t.Setenv("AWS_DEFAULT_REGION", "")
 			t.Setenv("AWS_ACCESS_KEY_ID", "test-key")
 			t.Setenv("AWS_SECRET_ACCESS_KEY", "test-secret")
 
-			// Create temp credential files if authContext is provided
+			// Create a local copy of authContext to avoid mutating test table.
+			var authContextCopy *schema.AWSAuthContext
 			if tt.authContext != nil {
-				tempDir := t.TempDir()
-				credFile := filepath.Join(tempDir, "credentials")
-				configFile := filepath.Join(tempDir, "config")
-
-				// Write minimal credential file
-				credContent := "[" + tt.authContext.Profile + "]\n"
-				credContent += "aws_access_key_id = test-key\n"
-				credContent += "aws_secret_access_key = test-secret\n"
-				require.NoError(t, os.WriteFile(credFile, []byte(credContent), 0o600))
-
-				// Write minimal config file
-				cfgContent := "[profile " + tt.authContext.Profile + "]\n"
-				if tt.authContext.Region != "" {
-					cfgContent += "region = " + tt.authContext.Region + "\n"
+				// Copy the struct to avoid race conditions.
+				authContextCopy = &schema.AWSAuthContext{
+					Profile: tt.authContext.Profile,
+					Region:  tt.authContext.Region,
 				}
-				require.NoError(t, os.WriteFile(configFile, []byte(cfgContent), 0o600))
 
-				// Update authContext with actual file paths
-				tt.authContext.CredentialsFile = credFile
-				tt.authContext.ConfigFile = configFile
+				// Handle different test scenarios.
+				if tt.authContext.CredentialsFile != "" {
+					// For error test cases with explicit file paths, use them.
+					authContextCopy.CredentialsFile = tt.authContext.CredentialsFile
+					authContextCopy.ConfigFile = tt.authContext.ConfigFile
+				} else if !tt.wantErr {
+					// Create valid credentials for happy-path tests.
+					tempDir := t.TempDir()
+					credFile := filepath.Join(tempDir, "credentials")
+					configFile := filepath.Join(tempDir, "config")
+
+					// Write minimal credential file.
+					credContent := "[" + authContextCopy.Profile + "]\n"
+					credContent += "aws_access_key_id = test-key\n"
+					credContent += "aws_secret_access_key = test-secret\n"
+					require.NoError(t, os.WriteFile(credFile, []byte(credContent), 0o600))
+
+					// Write minimal config file.
+					cfgContent := "[profile " + authContextCopy.Profile + "]\n"
+					if authContextCopy.Region != "" {
+						cfgContent += "region = " + authContextCopy.Region + "\n"
+					}
+					require.NoError(t, os.WriteFile(configFile, []byte(cfgContent), 0o600))
+
+					// Set file paths on the copy.
+					authContextCopy.CredentialsFile = credFile
+					authContextCopy.ConfigFile = configFile
+				} else if tt.name == "invalid profile name in auth context" {
+					// Create valid files but with a different profile name.
+					tempDir := t.TempDir()
+					credFile := filepath.Join(tempDir, "credentials")
+					configFile := filepath.Join(tempDir, "config")
+
+					// Write credential file with different profile.
+					credContent := "[different-profile]\n"
+					credContent += "aws_access_key_id = test-key\n"
+					credContent += "aws_secret_access_key = test-secret\n"
+					require.NoError(t, os.WriteFile(credFile, []byte(credContent), 0o600))
+
+					// Write config file with different profile.
+					cfgContent := "[profile different-profile]\n"
+					cfgContent += "region = us-east-1\n"
+					require.NoError(t, os.WriteFile(configFile, []byte(cfgContent), 0o600))
+
+					authContextCopy.CredentialsFile = credFile
+					authContextCopy.ConfigFile = configFile
+				}
 			}
 
-			// Execute
+			// Execute.
 			cfg, err := LoadAWSConfigWithAuth(
 				context.Background(),
 				tt.region,
-				"", // No role ARN for these tests
+				"", // No role ARN for these tests.
 				time.Minute*15,
-				tt.authContext,
+				authContextCopy,
 			)
 
 			// Assert
