@@ -1,26 +1,18 @@
 package exec
 
 import (
-	"os"
-	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-// TestExecuteTerraformGenerateVarfiles tests the ExecuteTerraformGenerateVarfiles function.
-func TestExecuteTerraformGenerateVarfiles(t *testing.T) {
-	t.Run("generates varfiles in JSON format", func(t *testing.T) {
-		// Create a temporary directory for terraform components
+// TestExecuteTerraformGenerateVarfiles_ParameterHandling tests parameter acceptance.
+func TestExecuteTerraformGenerateVarfiles_ParameterHandling(t *testing.T) {
+	t.Run("accepts valid formats without error", func(t *testing.T) {
 		tempDir := t.TempDir()
-		componentDir := filepath.Join(tempDir, "components", "terraform", "vpc")
-		err := os.MkdirAll(componentDir, 0o755)
-		require.NoError(t, err)
 
-		// Create atmos config
 		atmosConfig := &schema.AtmosConfiguration{
 			BasePath: tempDir,
 			Components: schema.Components{
@@ -34,18 +26,19 @@ func TestExecuteTerraformGenerateVarfiles(t *testing.T) {
 			},
 		}
 
-		// Set ATMOS_LOGS_LEVEL to suppress debug output
 		t.Setenv("ATMOS_LOGS_LEVEL", "Error")
 
-		// Call the function with empty stacks map (no actual stacks to process)
-		err = ExecuteTerraformGenerateVarfiles(atmosConfig, "", "json", []string{}, []string{})
-
-		// Should succeed even with no stacks
-		assert.NoError(t, err)
+		// Test valid formats - should not error (even with no stacks).
+		validFormats := []string{"json", "yaml", "hcl"}
+		for _, format := range validFormats {
+			err := ExecuteTerraformGenerateVarfiles(atmosConfig, "", format, []string{}, []string{})
+			assert.NoError(t, err, "format %s should be valid", format)
+		}
 	})
 
-	t.Run("validates format parameter", func(t *testing.T) {
+	t.Run("accepts component and stack filters", func(t *testing.T) {
 		tempDir := t.TempDir()
+
 		atmosConfig := &schema.AtmosConfiguration{
 			BasePath: tempDir,
 			Components: schema.Components{
@@ -53,23 +46,30 @@ func TestExecuteTerraformGenerateVarfiles(t *testing.T) {
 					BasePath: "components/terraform",
 				},
 			},
+			Stacks: schema.Stacks{
+				BasePath:    "stacks",
+				NamePattern: "{tenant}-{environment}-{stage}",
+			},
 		}
 
 		t.Setenv("ATMOS_LOGS_LEVEL", "Error")
 
-		// Test with valid formats - should not error
-		err := ExecuteTerraformGenerateVarfiles(atmosConfig, "", "json", []string{}, []string{})
-		assert.NoError(t, err)
+		// Test with component filter.
+		err := ExecuteTerraformGenerateVarfiles(atmosConfig, "", "json", []string{}, []string{"vpc", "eks"})
+		assert.NoError(t, err, "should accept component filters")
 
-		err = ExecuteTerraformGenerateVarfiles(atmosConfig, "", "yaml", []string{}, []string{})
-		assert.NoError(t, err)
+		// Test with stack filter.
+		err = ExecuteTerraformGenerateVarfiles(atmosConfig, "", "json", []string{"dev", "prod"}, []string{})
+		assert.NoError(t, err, "should accept stack filters")
 
-		err = ExecuteTerraformGenerateVarfiles(atmosConfig, "", "hcl", []string{}, []string{})
-		assert.NoError(t, err)
+		// Test with both filters.
+		err = ExecuteTerraformGenerateVarfiles(atmosConfig, "", "json", []string{"dev"}, []string{"vpc"})
+		assert.NoError(t, err, "should accept both component and stack filters")
 	})
 
-	t.Run("handles file template with context tokens", func(t *testing.T) {
+	t.Run("accepts file template parameter", func(t *testing.T) {
 		tempDir := t.TempDir()
+
 		atmosConfig := &schema.AtmosConfiguration{
 			BasePath: tempDir,
 			Components: schema.Components{
@@ -77,92 +77,17 @@ func TestExecuteTerraformGenerateVarfiles(t *testing.T) {
 					BasePath: "components/terraform",
 				},
 			},
+			Stacks: schema.Stacks{
+				BasePath:    "stacks",
+				NamePattern: "{tenant}-{environment}-{stage}",
+			},
 		}
 
 		t.Setenv("ATMOS_LOGS_LEVEL", "Error")
 
-		// File template with context tokens
-		fileTemplate := filepath.Join(tempDir, "varfiles", "{tenant}", "{environment}", "{component}.tfvars.json")
-
+		// Test with file template containing context tokens.
+		fileTemplate := "/tmp/varfiles/{tenant}/{environment}/{component}.tfvars.json"
 		err := ExecuteTerraformGenerateVarfiles(atmosConfig, fileTemplate, "json", []string{}, []string{})
-		assert.NoError(t, err)
+		assert.NoError(t, err, "should accept file template with tokens")
 	})
-
-	t.Run("handles specific stacks filter", func(t *testing.T) {
-		tempDir := t.TempDir()
-		atmosConfig := &schema.AtmosConfiguration{
-			BasePath: tempDir,
-			Components: schema.Components{
-				Terraform: schema.Terraform{
-					BasePath: "components/terraform",
-				},
-			},
-		}
-
-		t.Setenv("ATMOS_LOGS_LEVEL", "Error")
-
-		// Pass specific stacks to filter
-		stacks := []string{"dev", "prod"}
-		err := ExecuteTerraformGenerateVarfiles(atmosConfig, "", "json", stacks, []string{})
-		assert.NoError(t, err)
-	})
-
-	t.Run("handles specific components filter", func(t *testing.T) {
-		tempDir := t.TempDir()
-		atmosConfig := &schema.AtmosConfiguration{
-			BasePath: tempDir,
-			Components: schema.Components{
-				Terraform: schema.Terraform{
-					BasePath: "components/terraform",
-				},
-			},
-		}
-
-		t.Setenv("ATMOS_LOGS_LEVEL", "Error")
-
-		// Pass specific components to filter
-		components := []string{"vpc", "eks"}
-		err := ExecuteTerraformGenerateVarfiles(atmosConfig, "", "json", []string{}, components)
-		assert.NoError(t, err)
-	})
-}
-
-// TestGenerateVarfilesWithMultipleFormats tests varfile generation with different formats.
-func TestGenerateVarfilesWithMultipleFormats(t *testing.T) {
-	testCases := []struct {
-		name   string
-		format string
-	}{
-		{
-			name:   "JSON format",
-			format: "json",
-		},
-		{
-			name:   "YAML format",
-			format: "yaml",
-		},
-		{
-			name:   "HCL format",
-			format: "hcl",
-		},
-	}
-
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			tempDir := t.TempDir()
-			atmosConfig := &schema.AtmosConfiguration{
-				BasePath: tempDir,
-				Components: schema.Components{
-					Terraform: schema.Terraform{
-						BasePath: "components/terraform",
-					},
-				},
-			}
-
-			t.Setenv("ATMOS_LOGS_LEVEL", "Error")
-
-			err := ExecuteTerraformGenerateVarfiles(atmosConfig, "", tc.format, []string{}, []string{})
-			assert.NoError(t, err)
-		})
-	}
 }
