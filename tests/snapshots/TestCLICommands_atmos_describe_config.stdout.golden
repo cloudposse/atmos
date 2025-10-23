@@ -193,6 +193,7 @@
       "file": "",
       "level": ""
     },
+    "keyring": {},
     "providers": null,
     "identities": null
   },

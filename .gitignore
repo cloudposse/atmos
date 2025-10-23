@@ -18,8 +18,8 @@
 **/kubeconfig.yaml
 **/*.planfile.json
 
-# Atmos binary
-atmos
+# Atmos binary (only in root directory)
+/atmos
 
 # Module directory
 .terraform
@@ -81,6 +81,10 @@ TEST_QUALITY_*.md
 /.lintroller
 tools/lintroller/.lintroller
 /custom-gcl
+
+# Claude Code and Hive Mind development tools
+.claude-flow/
+.hive-mind/
 
 performance-optimization/
 
