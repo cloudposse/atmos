@@ -432,12 +432,20 @@ html[data-theme="dark"] .feature-card:hover {
   box-shadow: 0 8px 16px rgba(0, 0, 0, 0.2);
 }
 
+/* Feature header - icon and title inline */
+.feature-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
 /* React icon styling */
 .feature-icon {
   font-size: 2rem;
   color: #1e5bb8;
-  margin-bottom: 1rem;
-  display: inline-block;
+  display: inline-flex;
+  flex-shrink: 0;
 }
 
 html[data-theme="dark"] .feature-icon {
@@ -446,7 +454,7 @@ html[data-theme="dark"] .feature-icon {
 
 .feature-card h3 {
   font-size: 1.3rem;
-  margin-bottom: 0.5rem;
+  margin: 0;
   color: #1a1d23;
   text-align: left;
 }

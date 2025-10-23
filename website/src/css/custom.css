@@ -39,6 +39,15 @@ html[data-theme='dark'] a.navbar__item.navbar__link.latest-release-link {
     margin-right: 0;
 }
 
+/* Add drop shadow to alien logo in light mode */
+.navbar__logo img {
+    filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.15));
+}
+
+html[data-theme='dark'] .navbar__logo img {
+    filter: none;
+}
+
 div.atmos__effect, html[data-theme='dark'] div.navbar__logo {
     position: relative;
     display: inline-block;

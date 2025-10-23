@@ -6,6 +6,7 @@ import Screengrab from '@site/src/components/Screengrab'
 import TypingAnimation from '@site/src/components/TypingAnimation'
 import LazyDemo from '@site/src/components/LazyDemo'
 import ScrollFadeIn from '@site/src/components/ScrollFadeIn'
+import ScrollReveal from '@site/src/components/ScrollReveal'
 import { RiLockLine, RiBox3Line, RiFlashlightLine, RiStackLine } from 'react-icons/ri';
 import '../css/landing-page.css';
 
@@ -36,26 +37,42 @@ function Home() {
         </section>
         <main>
           <section className="features-grid">
-            <div className="feature-card">
-              <div className="feature-icon"><RiLockLine /></div>
-              <h3>Unified Authentication</h3>
-              <p>Replace a dozen auth tools with one consistent identity layer</p>
-            </div>
-            <div className="feature-card">
-              <div className="feature-icon"><RiBox3Line /></div>
-              <h3>Built-in Vendoring</h3>
-              <p>Purpose-built engine for Terraform and all your dependencies</p>
-            </div>
-            <div className="feature-card">
-              <div className="feature-icon"><RiFlashlightLine /></div>
-              <h3>Workflow Automation</h3>
-              <p>Native task runner with built-in identity and context</p>
-            </div>
-            <div className="feature-card">
-              <div className="feature-icon"><RiStackLine /></div>
-              <h3>Smart Scaffolding</h3>
-              <p>Configuration inheritance and composable stacks that scale</p>
-            </div>
+            <ScrollReveal delay={0}>
+              <div className="feature-card">
+                <div className="feature-header">
+                  <div className="feature-icon"><RiLockLine /></div>
+                  <h3>Unified Authentication</h3>
+                </div>
+                <p>Replace a dozen auth tools with one consistent identity layer</p>
+              </div>
+            </ScrollReveal>
+            <ScrollReveal delay={0.1}>
+              <div className="feature-card">
+                <div className="feature-header">
+                  <div className="feature-icon"><RiBox3Line /></div>
+                  <h3>Built-in Vendoring</h3>
+                </div>
+                <p>Purpose-built engine for Terraform and all your dependencies</p>
+              </div>
+            </ScrollReveal>
+            <ScrollReveal delay={0.2}>
+              <div className="feature-card">
+                <div className="feature-header">
+                  <div className="feature-icon"><RiFlashlightLine /></div>
+                  <h3>Workflow Automation</h3>
+                </div>
+                <p>Native task runner with built-in identity and context</p>
+              </div>
+            </ScrollReveal>
+            <ScrollReveal delay={0.3}>
+              <div className="feature-card">
+                <div className="feature-header">
+                  <div className="feature-icon"><RiStackLine /></div>
+                  <h3>Smart Scaffolding</h3>
+                </div>
+                <p>Configuration inheritance and composable stacks that scale</p>
+              </div>
+            </ScrollReveal>
           </section>
           <section className="alternate-section section--image-right">
             <Screengrab title="Start your Project" command="# here's an example of what your folder structure will like..." slug="demo-stacks/start-your-project" />
