@@ -52,6 +52,11 @@ var (
 	ErrSpinnerReturnedNilModel               = errors.New("spinner returned nil model")
 	ErrSpinnerUnexpectedModelType            = errors.New("spinner returned unexpected model type")
 
+	// ErrAuthConsole is returned when auth console command operations fail.
+	ErrAuthConsole          = errors.New("auth console operation failed")
+	ErrProviderNotSupported = errors.New("provider does not support this operation")
+	ErrUnknownServiceAlias  = errors.New("unknown service alias")
+
 	// ErrPlanHasDiff is returned when there are differences between two Terraform plan files.
 	ErrPlanHasDiff = errors.New("plan files have differences")
 
@@ -96,6 +101,7 @@ var (
 	ErrInvalidPagerCommand = errors.New("invalid pager command")
 	ErrEmptyURL            = errors.New("empty URL provided")
 	ErrFailedToFindImport  = errors.New("failed to find import")
+	ErrHTTPRequestFailed   = errors.New("HTTP request failed")
 
 	// Config loading errors.
 	ErrAtmosDirConfigNotFound      = errors.New("atmos config directory not found")
