@@ -27,31 +27,24 @@ function Home() {
           </div>
         </header>
         <main>
-          <section className="hero-narrative">
-            <div className="narrative-content">
-              <p className="narrative-intro">Developers complain about tool fatigue — and they're right. Every project turns into a patchwork of tools duct-taped together with fragile Bash scripts, no tests, and inconsistent conventions.</p>
-
-              <p className="narrative-solution"><strong>Atmos fixes that.</strong></p>
-
-              <p>Atmos replaces the chaos with a cohesive, comprehensive framework that unifies your toolchain — combining the power of 25 different tools into one system that doesn't lock you in. (You do that to yourself. Kidding… mostly.)</p>
-
-              <h3>With Atmos, you get:</h3>
-              <ul className="feature-list">
-                <li><strong>Vendoring built in.</strong> It combines the best of Vendyr by Caraval into a purpose-built vendoring engine for Terraform and all your dependencies.</li>
-                <li><strong>Authentication reimagined.</strong> Replace a dozen tools — Granted, AWS Vault, aws-saml, saml2aws, and more — with a single consistent identity layer.</li>
-                <li><strong>Workflow automation.</strong> Skip GoTask and Makefiles. Atmos includes a native task runner with built-in identity and context.</li>
-                <li><strong>Templating & scaffolding.</strong> Configuration inheritance, composable stacks, and project scaffolding that scale with you.</li>
-                <li><strong>Multi-identity support.</strong> Manage so many identities you might start to wonder if you have multiple personality disorder (we call it multi-account mastery).</li>
-              </ul>
-
-              <p>Atmos gives you repeatable processes, best practices, and proven design patterns — so your whole team can finally get back on the same page and stop reinventing the wheel.</p>
-
-              <p className="narrative-closer"><strong>Atmos doesn't just reduce tool fatigue — it cures tool insanity.</strong></p>
-
-              <p className="narrative-final">It makes you wonder why you didn't start this way from the beginning.</p>
+          <section className="features-grid">
+            <div className="feature-card">
+              <h3>🔒 Unified Authentication</h3>
+              <p>Replace a dozen auth tools with one consistent identity layer</p>
+            </div>
+            <div className="feature-card">
+              <h3>📦 Built-in Vendoring</h3>
+              <p>Purpose-built engine for Terraform and all your dependencies</p>
+            </div>
+            <div className="feature-card">
+              <h3>⚡ Workflow Automation</h3>
+              <p>Native task runner with built-in identity and context</p>
+            </div>
+            <div className="feature-card">
+              <h3>🏗️ Smart Scaffolding</h3>
+              <p>Configuration inheritance and composable stacks that scale</p>
             </div>
           </section>
-          <h2 className="section">Simplify complex architectures with <strong className="atmos__text">DRY configuration</strong></h2>
           <section className="alternate-section section--image-right">
             <Screengrab title="Start your Project" command="# here's an example of what your folder structure will like..." slug="demo-stacks/start-your-project" />
             <div className="section__description">

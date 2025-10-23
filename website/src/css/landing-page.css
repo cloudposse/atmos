@@ -300,100 +300,51 @@ strong.underline::after {
   padding: 2rem 0;
 }
 
-/* Hero narrative section */
-.hero-narrative {
-  max-width: 900px;
-  margin: 4em auto;
-  padding: 3em 2em;
-  text-align: left;
+/* Modern Features Grid */
+.features-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 2rem;
+  max-width: 1200px;
+  margin: 4rem auto;
+  padding: 0 2rem;
 }
 
-.narrative-content {
-  font-size: 1.2em;
-  line-height: 1.8em;
+.feature-card {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  padding: 2rem;
+  transition: all 0.3s ease;
 }
 
-.narrative-content p {
-  margin-bottom: 1.5em;
+.feature-card:hover {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.2);
+  transform: translateY(-4px);
 }
 
-.narrative-intro {
-  font-size: 1.1em;
-  color: #999;
-}
-
-.narrative-solution {
-  font-size: 1.3em;
-  text-align: center;
-  margin: 2em 0;
-}
-
-.narrative-solution strong {
-  color: #fff;
-  font-size: 1.2em;
-}
-
-.narrative-content h3 {
-  margin-top: 2em;
-  margin-bottom: 1em;
-  font-size: 1.4em;
-}
-
-.feature-list {
-  list-style: none;
-  padding-left: 0;
-  margin: 2em 0;
-}
-
-.feature-list li {
-  margin-bottom: 1.5em;
-  padding-left: 2em;
-  position: relative;
-}
-
-.feature-list li::before {
-  content: "✓";
-  position: absolute;
-  left: 0;
-  color: #00ff00;
-  font-weight: bold;
-  font-size: 1.3em;
-}
-
-.feature-list li strong {
+.feature-card h3 {
+  font-size: 1.4rem;
+  margin-bottom: 0.75rem;
   color: #fff;
 }
 
-html[data-theme="dark"] .feature-list li {
+.feature-card p {
+  font-size: 1rem;
+  line-height: 1.6;
   color: #ccc;
+  margin: 0;
 }
 
-.narrative-closer {
-  font-size: 1.2em;
-  text-align: center;
-  margin: 2.5em 0 1.5em 0;
-}
-
-.narrative-closer strong {
-  color: #fff;
-  font-size: 1.1em;
-}
-
-.narrative-final {
-  text-align: center;
-  font-style: italic;
-  color: #999;
-  font-size: 1.1em;
-  margin-top: 2em;
-}
-
-@media screen and (max-width: 996px) {
-  .hero-narrative {
-    padding: 2em 1.5em;
-    margin: 2em auto;
+@media screen and (max-width: 768px) {
+  .features-grid {
+    grid-template-columns: 1fr;
+    gap: 1.5rem;
+    margin: 2rem auto;
   }
 
-  .narrative-content {
-    font-size: 1em;
+  .feature-card {
+    padding: 1.5rem;
   }
 }
