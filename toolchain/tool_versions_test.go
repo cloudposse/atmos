@@ -243,7 +243,7 @@ func TestAddToolToVersionsAsDefault(t *testing.T) {
 
 		// Create minimal tools.yaml to allow installer to initialize
 		toolsConfigPath := filepath.Join(tempDir, "tools.yaml")
-		err = os.WriteFile(toolsConfigPath, []byte("aliases:\n  terraform: hashicorp/terraform\n"), 0644)
+		err = os.WriteFile(toolsConfigPath, []byte("aliases:\n  terraform: hashicorp/terraform\n"), 0o644)
 		require.NoError(t, err)
 		t.Setenv("ATMOS_TOOLS_CONFIG_FILE", toolsConfigPath)
 
@@ -279,7 +279,7 @@ func TestAddToolToVersionsAsDefault(t *testing.T) {
 
 		// Create minimal tools.yaml
 		toolsConfigPath := filepath.Join(tempDir, "tools.yaml")
-		err = os.WriteFile(toolsConfigPath, []byte("aliases:\n  terraform: hashicorp/terraform\n"), 0644)
+		err = os.WriteFile(toolsConfigPath, []byte("aliases:\n  terraform: hashicorp/terraform\n"), 0o644)
 		require.NoError(t, err)
 		t.Setenv("ATMOS_TOOLS_CONFIG_FILE", toolsConfigPath)
 

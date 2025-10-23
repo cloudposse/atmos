@@ -20,7 +20,7 @@ func TestToolchainListCommand(t *testing.T) {
 	// Create a test .tool-versions file.
 	toolVersionsPath := filepath.Join(tempDir, ".tool-versions")
 	content := "terraform 1.5.7\nkubectl 1.28.0\n"
-	err := os.WriteFile(toolVersionsPath, []byte(content), 0644)
+	err := os.WriteFile(toolVersionsPath, []byte(content), 0o644)
 	require.NoError(t, err)
 
 	// Set the tool-versions flag to use our temp file.
@@ -51,7 +51,7 @@ func TestToolchainGetCommand(t *testing.T) {
 	// Create a test .tool-versions file.
 	toolVersionsPath := filepath.Join(tempDir, ".tool-versions")
 	content := "terraform 1.5.7\n"
-	err := os.WriteFile(toolVersionsPath, []byte(content), 0644)
+	err := os.WriteFile(toolVersionsPath, []byte(content), 0o644)
 	require.NoError(t, err)
 
 	// Set the tool-versions flag to use our temp file.
@@ -82,13 +82,13 @@ func TestToolchainAddCommand(t *testing.T) {
 	// Create a test .tool-versions file.
 	toolVersionsPath := filepath.Join(tempDir, ".tool-versions")
 	content := ""
-	err := os.WriteFile(toolVersionsPath, []byte(content), 0644)
+	err := os.WriteFile(toolVersionsPath, []byte(content), 0o644)
 	require.NoError(t, err)
 
 	// Create tools config.
 	toolsConfigPath := filepath.Join(tempDir, "tools.yaml")
 	toolsConfigContent := "aliases:\n  terraform: hashicorp/terraform\n"
-	err = os.WriteFile(toolsConfigPath, []byte(toolsConfigContent), 0644)
+	err = os.WriteFile(toolsConfigPath, []byte(toolsConfigContent), 0o644)
 	require.NoError(t, err)
 
 	// Set the flags to use our temp files.
@@ -124,13 +124,13 @@ func TestToolchainRemoveCommand(t *testing.T) {
 	// Create a test .tool-versions file with a tool.
 	toolVersionsPath := filepath.Join(tempDir, ".tool-versions")
 	content := "terraform 1.5.7\n"
-	err := os.WriteFile(toolVersionsPath, []byte(content), 0644)
+	err := os.WriteFile(toolVersionsPath, []byte(content), 0o644)
 	require.NoError(t, err)
 
 	// Create tools config.
 	toolsConfigPath := filepath.Join(tempDir, "tools.yaml")
 	toolsConfigContent := "aliases:\n  terraform: hashicorp/terraform\n"
-	err = os.WriteFile(toolsConfigPath, []byte(toolsConfigContent), 0644)
+	err = os.WriteFile(toolsConfigPath, []byte(toolsConfigContent), 0o644)
 	require.NoError(t, err)
 
 	// Set the flags to use our temp files.
@@ -182,9 +182,9 @@ func TestToolchainCleanCommand(t *testing.T) {
 
 	// Create tools directory with some files.
 	toolsDirPath := filepath.Join(tempDir, ".tools")
-	err := os.MkdirAll(filepath.Join(toolsDirPath, "bin", "hashicorp", "terraform", "1.5.7"), 0755)
+	err := os.MkdirAll(filepath.Join(toolsDirPath, "bin", "hashicorp", "terraform", "1.5.7"), 0o755)
 	require.NoError(t, err)
-	err = os.WriteFile(filepath.Join(toolsDirPath, "bin", "hashicorp", "terraform", "1.5.7", "terraform"), []byte("test"), 0755)
+	err = os.WriteFile(filepath.Join(toolsDirPath, "bin", "hashicorp", "terraform", "1.5.7", "terraform"), []byte("test"), 0o755)
 	require.NoError(t, err)
 
 	// Set the flags.
@@ -215,22 +215,22 @@ func TestToolchainPathCommand(t *testing.T) {
 	// Create a test .tool-versions file.
 	toolVersionsPath := filepath.Join(tempDir, ".tool-versions")
 	content := "terraform 1.5.7\n"
-	err := os.WriteFile(toolVersionsPath, []byte(content), 0644)
+	err := os.WriteFile(toolVersionsPath, []byte(content), 0o644)
 	require.NoError(t, err)
 
 	// Create tools directory structure with actual binary.
 	toolsDirPath := filepath.Join(tempDir, ".tools")
 	binaryPath := filepath.Join(toolsDirPath, "bin", "hashicorp", "terraform", "1.5.7", "terraform")
-	err = os.MkdirAll(filepath.Dir(binaryPath), 0755)
+	err = os.MkdirAll(filepath.Dir(binaryPath), 0o755)
 	require.NoError(t, err)
 	// Create a dummy binary file.
-	err = os.WriteFile(binaryPath, []byte("#!/bin/sh\necho test"), 0755)
+	err = os.WriteFile(binaryPath, []byte("#!/bin/sh\necho test"), 0o755)
 	require.NoError(t, err)
 
 	// Create tools config.
 	toolsConfigPath := filepath.Join(tempDir, "tools.yaml")
 	toolsConfigContent := "aliases:\n  terraform: hashicorp/terraform\n"
-	err = os.WriteFile(toolsConfigPath, []byte(toolsConfigContent), 0644)
+	err = os.WriteFile(toolsConfigPath, []byte(toolsConfigContent), 0o644)
 	require.NoError(t, err)
 
 	// Set the flags.
@@ -261,21 +261,21 @@ func TestToolchainWhichCommand(t *testing.T) {
 	// Create a test .tool-versions file.
 	toolVersionsPath := filepath.Join(tempDir, ".tool-versions")
 	content := "terraform 1.5.7\n"
-	err := os.WriteFile(toolVersionsPath, []byte(content), 0644)
+	err := os.WriteFile(toolVersionsPath, []byte(content), 0o644)
 	require.NoError(t, err)
 
 	// Create tools directory with binary.
 	toolsDirPath := filepath.Join(tempDir, ".tools")
 	binaryPath := filepath.Join(toolsDirPath, "bin", "hashicorp", "terraform", "1.5.7", "terraform")
-	err = os.MkdirAll(filepath.Dir(binaryPath), 0755)
+	err = os.MkdirAll(filepath.Dir(binaryPath), 0o755)
 	require.NoError(t, err)
-	err = os.WriteFile(binaryPath, []byte("#!/bin/sh\necho test"), 0755)
+	err = os.WriteFile(binaryPath, []byte("#!/bin/sh\necho test"), 0o755)
 	require.NoError(t, err)
 
 	// Create tools config.
 	toolsConfigPath := filepath.Join(tempDir, "tools.yaml")
 	toolsConfigContent := "aliases:\n  terraform: hashicorp/terraform\n"
-	err = os.WriteFile(toolsConfigPath, []byte(toolsConfigContent), 0644)
+	err = os.WriteFile(toolsConfigPath, []byte(toolsConfigContent), 0o644)
 	require.NoError(t, err)
 
 	// Set the flags.
@@ -306,13 +306,13 @@ func TestToolchainSetCommand(t *testing.T) {
 	// Create a test .tool-versions file with multiple versions.
 	toolVersionsPath := filepath.Join(tempDir, ".tool-versions")
 	content := "terraform 1.5.5 1.5.6 1.5.7\n"
-	err := os.WriteFile(toolVersionsPath, []byte(content), 0644)
+	err := os.WriteFile(toolVersionsPath, []byte(content), 0o644)
 	require.NoError(t, err)
 
 	// Create tools config.
 	toolsConfigPath := filepath.Join(tempDir, "tools.yaml")
 	toolsConfigContent := "aliases:\n  terraform: hashicorp/terraform\n"
-	err = os.WriteFile(toolsConfigPath, []byte(toolsConfigContent), 0644)
+	err = os.WriteFile(toolsConfigPath, []byte(toolsConfigContent), 0o644)
 	require.NoError(t, err)
 
 	// Set the flags.
@@ -348,21 +348,21 @@ func TestToolchainUninstallCommand(t *testing.T) {
 	// Create a test .tool-versions file.
 	toolVersionsPath := filepath.Join(tempDir, ".tool-versions")
 	content := "terraform 1.5.7\n"
-	err := os.WriteFile(toolVersionsPath, []byte(content), 0644)
+	err := os.WriteFile(toolVersionsPath, []byte(content), 0o644)
 	require.NoError(t, err)
 
 	// Create tools directory with binary.
 	toolsDirPath := filepath.Join(tempDir, ".tools")
 	binaryPath := filepath.Join(toolsDirPath, "bin", "hashicorp", "terraform", "1.5.7", "terraform")
-	err = os.MkdirAll(filepath.Dir(binaryPath), 0755)
+	err = os.MkdirAll(filepath.Dir(binaryPath), 0o755)
 	require.NoError(t, err)
-	err = os.WriteFile(binaryPath, []byte("#!/bin/sh\necho test"), 0755)
+	err = os.WriteFile(binaryPath, []byte("#!/bin/sh\necho test"), 0o755)
 	require.NoError(t, err)
 
 	// Create tools config.
 	toolsConfigPath := filepath.Join(tempDir, "tools.yaml")
 	toolsConfigContent := "aliases:\n  terraform: hashicorp/terraform\n"
-	err = os.WriteFile(toolsConfigPath, []byte(toolsConfigContent), 0644)
+	err = os.WriteFile(toolsConfigPath, []byte(toolsConfigContent), 0o644)
 	require.NoError(t, err)
 
 	// Set the flags.

@@ -17,4 +17,3 @@ var removeCmd = &cobra.Command{
 		return toolchain.RemoveToolVersion(filePath, tool, version)
 	},
 }
-

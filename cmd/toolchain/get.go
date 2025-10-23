@@ -24,4 +24,3 @@ var getCmd = &cobra.Command{
 		return toolchain.ListToolVersions(showAllVersions, versionLimit, toolName)
 	},
 }
-

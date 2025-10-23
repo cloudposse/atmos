@@ -15,4 +15,3 @@ var whichCmd = &cobra.Command{
 		return toolchain.WhichExec(args[0])
 	},
 }
-

@@ -20,4 +20,3 @@ var pathCmd = &cobra.Command{
 		return toolchain.EmitPath(exportFlag, jsonFlag, relativeFlag)
 	},
 }
-

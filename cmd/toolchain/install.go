@@ -29,4 +29,3 @@ func runInstall(cmd *cobra.Command, args []string) error {
 	}
 	return toolchain.RunInstall(toolSpec, defaultFlag, reinstallFlag)
 }
-

@@ -19,4 +19,3 @@ var uninstallCmd = &cobra.Command{
 		return toolchain.RunUninstall(toolSpec)
 	},
 }
-

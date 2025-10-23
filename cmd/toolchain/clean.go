@@ -21,4 +21,3 @@ var cleanCmd = &cobra.Command{
 		return toolchain.CleanToolsAndCaches(toolsDir, cacheDir, tempCacheDir)
 	},
 }
-

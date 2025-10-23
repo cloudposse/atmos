@@ -15,4 +15,3 @@ var execCmd = &cobra.Command{
 		return toolchain.RunExecCommand(installer, args)
 	},
 }
-

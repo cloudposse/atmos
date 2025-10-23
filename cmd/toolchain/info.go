@@ -6,9 +6,7 @@ import (
 	"github.com/cloudposse/atmos/toolchain"
 )
 
-var (
-	outputFormat string
-)
+var outputFormat string
 
 var infoCmd = &cobra.Command{
 	Use:   "info <tool>",
@@ -19,4 +17,3 @@ var infoCmd = &cobra.Command{
 		return toolchain.InfoExec(args[0], outputFormat)
 	},
 }
-

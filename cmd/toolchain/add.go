@@ -19,4 +19,3 @@ var addCmd = &cobra.Command{
 		return toolchain.AddToolVersion(tool, version)
 	},
 }
-

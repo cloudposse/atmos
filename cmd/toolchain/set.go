@@ -20,4 +20,3 @@ var setCmd = &cobra.Command{
 		return toolchain.SetToolVersion(toolName, version, 0)
 	},
 }
-

@@ -7,7 +7,6 @@ import (
 	"strings"
 )
 
-
 // ToolVersions represents the .tool-versions file format (asdf-compatible: tool -> list of versions, first is default).
 type ToolVersions struct {
 	Tools map[string][]string
