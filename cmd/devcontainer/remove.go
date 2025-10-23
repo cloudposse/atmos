@@ -22,6 +22,7 @@ This will stop the container if it's running and remove it completely.
 Use --force to remove a running container without stopping it first.`,
 	Example: markdown.DevcontainerRemoveUsageMarkdown,
 	Args:    cobra.ExactArgs(1),
+	ValidArgsFunction: devcontainerNameCompletion,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		defer perf.Track(atmosConfigPtr, "devcontainer.remove.RunE")()
 

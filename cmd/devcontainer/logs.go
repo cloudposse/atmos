@@ -23,6 +23,7 @@ By default, shows all logs. Use --follow to stream logs in real-time,
 or --tail to limit the number of lines shown.`,
 	Example: markdown.DevcontainerLogsUsageMarkdown,
 	Args:    cobra.ExactArgs(1),
+	ValidArgsFunction: devcontainerNameCompletion,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		defer perf.Track(atmosConfigPtr, "devcontainer.logs.RunE")()
 

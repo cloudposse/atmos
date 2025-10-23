@@ -25,6 +25,7 @@ configuration. This is useful when you've updated the devcontainer.json or
 need to start fresh.`,
 	Example: markdown.DevcontainerRebuildUsageMarkdown,
 	Args:    cobra.ExactArgs(1),
+	ValidArgsFunction: devcontainerNameCompletion,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		defer perf.Track(atmosConfigPtr, "devcontainer.rebuild.RunE")()
 
