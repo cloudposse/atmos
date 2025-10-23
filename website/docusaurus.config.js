@@ -44,7 +44,10 @@ const config = {
         [
             '@docusaurus/plugin-client-redirects', {
                 redirects: [
-
+                    {
+                        from: '/blog',
+                        to: '/changelog'
+                    },
                     {
                         from: '/reference/terraform-limitations',
                         to: '/introduction/why-atmos'
@@ -185,6 +188,7 @@ const config = {
                     exclude: ['README.md'],
                 },
                 blog: {
+                    routeBasePath: 'changelog',
                     showReadingTime: true,
                     postsPerPage: 10,
                     blogTitle: 'Atmos Changelog',
@@ -247,7 +251,7 @@ const config = {
                     {
                         label: 'Changelog',
                         position: 'left',
-                        to: '/blog'
+                        to: '/changelog'
                     },
                     // Algolia search configuration
                     {
