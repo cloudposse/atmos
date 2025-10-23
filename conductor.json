@@ -1,6 +1,6 @@
 {
     "scripts": {
         "setup": "cd website && npm install",
-        "run": "cd website && npm start"
+        "run": "cd website && npm start -- -p $CONDUCTOR_PORT"
     }
 }
