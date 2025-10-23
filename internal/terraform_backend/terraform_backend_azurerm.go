@@ -53,6 +53,8 @@ type azureBlobDownloadResponseWrapper struct {
 }
 
 func (w *azureBlobDownloadResponseWrapper) GetBody() io.ReadCloser {
+	defer perf.Track(nil, "terraform_backend.azureBlobDownloadResponseWrapper.GetBody")()
+
 	return w.response.Body
 }
 
