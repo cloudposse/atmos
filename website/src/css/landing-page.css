@@ -348,7 +348,7 @@ strong.underline::after {
   gap: 1.5rem;
   max-width: 1200px;
   margin: 4rem auto;
-  padding: 0 2rem;
+  padding: 0.5rem 2rem 0 2rem;
 }
 
 .feature-card {
@@ -363,6 +363,7 @@ strong.underline::after {
   background: rgba(255, 255, 255, 0.05);
   border-color: rgba(255, 255, 255, 0.2);
   transform: translateY(-4px);
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.2);
 }
 
 /* React icon styling */
