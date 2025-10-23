@@ -20,14 +20,14 @@ require (
 	github.com/arsham/figurine v1.3.0
 	github.com/atotto/clipboard v0.1.4
 	github.com/aws/aws-sdk-go-v2 v1.39.3
-	github.com/aws/aws-sdk-go-v2/config v1.31.13
-	github.com/aws/aws-sdk-go-v2/credentials v1.18.17
-	github.com/aws/aws-sdk-go-v2/feature/s3/manager v1.19.13
-	github.com/aws/aws-sdk-go-v2/service/s3 v1.88.5
-	github.com/aws/aws-sdk-go-v2/service/ssm v1.66.0
+	github.com/aws/aws-sdk-go-v2/config v1.31.14
+	github.com/aws/aws-sdk-go-v2/credentials v1.18.18
+	github.com/aws/aws-sdk-go-v2/feature/s3/manager v1.19.14
+	github.com/aws/aws-sdk-go-v2/service/s3 v1.88.6
+	github.com/aws/aws-sdk-go-v2/service/ssm v1.66.1
 	github.com/aws/aws-sdk-go-v2/service/sso v1.29.7
 	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.35.2
-	github.com/aws/aws-sdk-go-v2/service/sts v1.38.7
+	github.com/aws/aws-sdk-go-v2/service/sts v1.38.8
 	github.com/aws/smithy-go v1.23.1
 	github.com/bmatcuk/doublestar/v4 v4.9.1
 	github.com/charmbracelet/bubbles v0.21.1-0.20250623103423-23b8fd6302d7
