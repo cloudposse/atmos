@@ -81,7 +81,15 @@ func TestMergeListReplace(t *testing.T) {
 
 	yamlConfig, err := u.ConvertToYAML(result)
 	assert.Nil(t, err)
-	t.Log(yamlConfig)
+	t.Cleanup(func() {
+		if t.Failed() {
+			if yamlConfig != "" {
+				t.Logf("Merge result:\n%s", yamlConfig)
+			} else {
+				t.Logf("Merge result (raw): %+v", result)
+			}
+		}
+	})
 }
 
 func TestMergeListAppend(t *testing.T) {
@@ -108,7 +116,15 @@ func TestMergeListAppend(t *testing.T) {
 
 	yamlConfig, err := u.ConvertToYAML(result)
 	assert.Nil(t, err)
-	t.Log(yamlConfig)
+	t.Cleanup(func() {
+		if t.Failed() {
+			if yamlConfig != "" {
+				t.Logf("Merge result:\n%s", yamlConfig)
+			} else {
+				t.Logf("Merge result (raw): %+v", result)
+			}
+		}
+	})
 }
 
 func TestMergeListMerge(t *testing.T) {
@@ -162,7 +178,15 @@ func TestMergeListMerge(t *testing.T) {
 
 	yamlConfig, err := u.ConvertToYAML(result)
 	assert.Nil(t, err)
-	t.Log(yamlConfig)
+	t.Cleanup(func() {
+		if t.Failed() {
+			if yamlConfig != "" {
+				t.Logf("Merge result:\n%s", yamlConfig)
+			} else {
+				t.Logf("Merge result (raw): %+v", result)
+			}
+		}
+	})
 }
 
 func TestMergeWithNilConfig(t *testing.T) {
