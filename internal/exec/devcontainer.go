@@ -73,6 +73,7 @@ func (m devcontainerSpinnerModel) View() string {
 
 func newDevcontainerSpinner(message string) devcontainerSpinnerModel {
 	s := spinner.New()
+	s.Spinner = spinner.Dot
 	s.Style = theme.Styles.Link
 	return devcontainerSpinnerModel{
 		spinner: s,
