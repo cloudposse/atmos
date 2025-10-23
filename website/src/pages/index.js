@@ -5,6 +5,7 @@ import Link from '@docusaurus/Link';
 import useBaseUrl from '@docusaurus/useBaseUrl'
 import Screengrab from '@site/src/components/Screengrab'
 import TypingAnimation from '@site/src/components/TypingAnimation'
+import { RiLockLine, RiBox3Line, RiFlashlightLine, RiStackLine } from 'react-icons/ri';
 import '../css/landing-page.css';
 
 function Home() {
@@ -29,19 +30,23 @@ function Home() {
         <main>
           <section className="features-grid">
             <div className="feature-card">
-              <h3>🔒 Unified Authentication</h3>
+              <div className="feature-icon"><RiLockLine /></div>
+              <h3>Unified Authentication</h3>
               <p>Replace a dozen auth tools with one consistent identity layer</p>
             </div>
             <div className="feature-card">
-              <h3>📦 Built-in Vendoring</h3>
+              <div className="feature-icon"><RiBox3Line /></div>
+              <h3>Built-in Vendoring</h3>
               <p>Purpose-built engine for Terraform and all your dependencies</p>
             </div>
             <div className="feature-card">
-              <h3>⚡ Workflow Automation</h3>
+              <div className="feature-icon"><RiFlashlightLine /></div>
+              <h3>Workflow Automation</h3>
               <p>Native task runner with built-in identity and context</p>
             </div>
             <div className="feature-card">
-              <h3>🏗️ Smart Scaffolding</h3>
+              <div className="feature-icon"><RiStackLine /></div>
+              <h3>Smart Scaffolding</h3>
               <p>Configuration inheritance and composable stacks that scale</p>
             </div>
           </section>

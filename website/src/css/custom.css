@@ -604,3 +604,20 @@ article header h1 {
     white-space: normal;
     line-height: 1.4;
 }
+
+/* Fix blog sidebar to not look like run-on paragraph */
+.theme-blog-sidebar-item {
+    margin-bottom: 0.75rem !important;
+}
+
+.theme-blog-sidebar-item__title {
+    font-size: 0.95rem !important;
+    line-height: 1.5 !important;
+    margin-bottom: 0 !important;
+}
+
+/* Add visual separation between blog sidebar items */
+.theme-blog-sidebar-item:not(:last-child) {
+    padding-bottom: 0.75rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
