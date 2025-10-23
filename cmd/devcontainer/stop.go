@@ -24,8 +24,8 @@ var stopCmd = &cobra.Command{
 
 The container will be stopped but not removed, allowing you to restart it later
 with all your work preserved.`,
-	Example: markdown.DevcontainerStopUsageMarkdown,
-	Args:    cobra.ExactArgs(1),
+	Example:           markdown.DevcontainerStopUsageMarkdown,
+	Args:              cobra.ExactArgs(1),
 	ValidArgsFunction: devcontainerNameCompletion,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		defer perf.Track(atmosConfigPtr, "devcontainer.stop.RunE")()

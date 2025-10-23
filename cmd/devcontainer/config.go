@@ -15,8 +15,8 @@ var configCmd = &cobra.Command{
 
 This shows the final configuration after merging all sources including
 imported devcontainer.json files.`,
-	Example: markdown.DevcontainerConfigUsageMarkdown,
-	Args:    cobra.ExactArgs(1),
+	Example:           markdown.DevcontainerConfigUsageMarkdown,
+	Args:              cobra.ExactArgs(1),
 	ValidArgsFunction: devcontainerNameCompletion,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		defer perf.Track(atmosConfigPtr, "devcontainer.config.RunE")()

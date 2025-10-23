@@ -23,8 +23,8 @@ This command stops and removes the existing container, pulls the latest image
 (unless --no-pull is specified), and creates a new container with the current
 configuration. This is useful when you've updated the devcontainer.json or
 need to start fresh.`,
-	Example: markdown.DevcontainerRebuildUsageMarkdown,
-	Args:    cobra.ExactArgs(1),
+	Example:           markdown.DevcontainerRebuildUsageMarkdown,
+	Args:              cobra.ExactArgs(1),
 	ValidArgsFunction: devcontainerNameCompletion,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		defer perf.Track(atmosConfigPtr, "devcontainer.rebuild.RunE")()

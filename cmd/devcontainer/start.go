@@ -20,8 +20,8 @@ var startCmd = &cobra.Command{
 
 If the container doesn't exist, it will be created. If it exists but is stopped,
 it will be started. Use --instance to manage multiple instances of the same devcontainer.`,
-	Example: markdown.DevcontainerStartUsageMarkdown,
-	Args:    cobra.ExactArgs(1),
+	Example:           markdown.DevcontainerStartUsageMarkdown,
+	Args:              cobra.ExactArgs(1),
 	ValidArgsFunction: devcontainerNameCompletion,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		defer perf.Track(atmosConfigPtr, "devcontainer.start.RunE")()

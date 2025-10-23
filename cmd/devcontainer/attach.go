@@ -16,8 +16,8 @@ var attachCmd = &cobra.Command{
 	Long: `Attach to a running devcontainer and get an interactive shell.
 
 If the container is not running, it will be started automatically.`,
-	Example: markdown.DevcontainerAttachUsageMarkdown,
-	Args:    cobra.ExactArgs(1),
+	Example:           markdown.DevcontainerAttachUsageMarkdown,
+	Args:              cobra.ExactArgs(1),
 	ValidArgsFunction: devcontainerNameCompletion,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		defer perf.Track(atmosConfigPtr, "devcontainer.attach.RunE")()
