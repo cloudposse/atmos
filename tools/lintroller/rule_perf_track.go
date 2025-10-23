@@ -56,6 +56,7 @@ var excludedPackages = []string{
 	"/pkg/spacelift", // Spacelift generation is one-shot per command.
 	"/pkg/validator", // Validation runs once per command.
 	"/pkg/ai",        // AI operations are external API calls, not in hot path.
+	"/pkg/mcp",       // MCP protocol implementation, AI infrastructure, not in hot path.
 }
 
 // Receiver types to exclude from perf.Track() checks.

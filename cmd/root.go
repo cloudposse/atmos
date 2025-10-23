@@ -40,6 +40,7 @@ import (
 	// The init() function in each package registers the command with the registry.
 	_ "github.com/cloudposse/atmos/cmd/about"
 	"github.com/cloudposse/atmos/cmd/internal"
+	_ "github.com/cloudposse/atmos/cmd/mcp-server"
 	"github.com/cloudposse/atmos/cmd/version"
 )
 

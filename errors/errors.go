@@ -460,6 +460,8 @@ var (
 	ErrAIFileNotFound               = errors.New("file not found")
 	ErrAIPathIsDirectory            = errors.New("path is a directory, not a file")
 	ErrAISessionManagerNotAvailable = errors.New("session manager not available")
+	ErrMCPToolNotFound              = errors.New("MCP tool not found")
+	ErrMCPInvalidJSONRPCVersion     = errors.New("invalid JSON-RPC version")
 )
 
 // ExitCodeError is a typed error that preserves subcommand exit codes.
