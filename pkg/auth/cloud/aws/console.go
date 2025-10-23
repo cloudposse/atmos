@@ -28,6 +28,9 @@ const (
 	// AWSDefaultSessionDuration is the default session duration (1 hour).
 	AWSDefaultSessionDuration = 1 * time.Hour
 
+	// AWSMinSessionDuration is the minimum session duration for AWS console (15 minutes).
+	AWSMinSessionDuration = 15 * time.Minute
+
 	// AWSSigninTokenExpirationMinutes is the number of minutes a signin token remains valid (15 minutes per AWS docs).
 	AWSSigninTokenExpirationMinutes = 15
 )
@@ -124,8 +127,12 @@ func determineSessionDuration(requested time.Duration) time.Duration {
 	if duration == 0 {
 		duration = AWSDefaultSessionDuration
 	}
+	if duration < AWSMinSessionDuration {
+		log.Debug("Session duration below AWS minimum, raising to minimum.", "requested", duration, "min", AWSMinSessionDuration)
+		duration = AWSMinSessionDuration
+	}
 	if duration > AWSMaxSessionDuration {
-		log.Debug("Session duration exceeds AWS maximum, capping at 12 hours", "requested", duration, "max", AWSMaxSessionDuration)
+		log.Debug("Session duration exceeds AWS maximum, capping.", "requested", duration, "max", AWSMaxSessionDuration)
 		duration = AWSMaxSessionDuration
 	}
 	return duration
