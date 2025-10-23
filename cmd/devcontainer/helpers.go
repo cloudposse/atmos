@@ -46,7 +46,7 @@ func promptForDevcontainer(message string, devcontainers []string) (string, erro
 	)
 
 	if err := form.Run(); err != nil {
-		return "", fmt.Errorf("%w: failed to prompt for devcontainer: %v", errUtils.ErrUnsupportedInputType, err)
+		return "", fmt.Errorf("failed to prompt for devcontainer: %w", err)
 	}
 
 	return selectedDevcontainer, nil
