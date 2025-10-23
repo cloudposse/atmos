@@ -585,3 +585,22 @@ article header h1 {
 .theme-blog-post-item footer a {
     font-weight: 600;
 }
+
+/* Fix sidebar width to prevent unnecessary wrapping */
+.theme-doc-sidebar-container {
+    min-width: 280px !important;
+    width: 280px !important;
+}
+
+@media (min-width: 997px) {
+    .theme-doc-sidebar-container {
+        min-width: 300px !important;
+        width: 300px !important;
+    }
+}
+
+/* Prevent text wrapping in sidebar links */
+.menu__link {
+    white-space: normal;
+    line-height: 1.4;
+}
