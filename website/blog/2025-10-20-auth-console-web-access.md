@@ -1,7 +1,7 @@
 ---
 slug: auth-console-web-access
 title: "Cloud Console Access with atmos auth console"
-authors: [atmos]
+authors: [aknysh]
 tags: [feature, auth, aws, cloud-architecture]
 ---
 

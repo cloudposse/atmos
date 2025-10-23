@@ -1,7 +1,7 @@
 ---
 slug: introducing-auth-logout
 title: "Introducing atmos auth logout: Secure Credential Cleanup"
-authors: [atmos]
+authors: [aknysh]
 tags: [feature, authentication, security]
 ---
 

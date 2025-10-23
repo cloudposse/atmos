@@ -1,7 +1,7 @@
 ---
 slug: interactive-identity-selection
 title: "Interactive Identity Selection for Auth Login"
-authors: [atmos]
+authors: [aknysh]
 tags: [enhancement, auth]
 ---
 

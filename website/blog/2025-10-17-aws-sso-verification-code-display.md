@@ -1,7 +1,7 @@
 ---
 slug: aws-sso-verification-code-display
 title: "Enhanced AWS SSO Authentication: Better UX with Styled Dialogs and Graceful Cancellation"
-authors: [atmos]
+authors: [aknysh]
 tags: [enhancement, aws, authentication, dx]
 date: 2025-10-17
 ---

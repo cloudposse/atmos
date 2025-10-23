@@ -1,7 +1,7 @@
 ---
 slug: introducing-atmos-auth-list
 title: "Introducing atmos auth list: Visualize Your Authentication Configuration"
-authors: [atmos]
+authors: [aknysh]
 tags: [atmos, authentication, providers, identities, cli]
 ---
 

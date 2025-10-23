@@ -1,7 +1,7 @@
 ---
 slug: version-list-show-commands
 title: "Browse and Explore Atmos Releases from Your Terminal"
-authors: [atmos]
+authors: [aknysh]
 tags: [feature, atmos-core]
 date: 2025-10-17
 ---

@@ -1,7 +1,7 @@
 ---
 slug: pager-default-correction
 title: Pager Default Behavior Corrected
-authors: [atmos]
+authors: [aknysh]
 tags: [atmos, bugfix, breaking-change, dx]
 date: 2025-10-15
 ---
