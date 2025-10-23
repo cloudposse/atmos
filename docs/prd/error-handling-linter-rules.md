@@ -142,88 +142,88 @@ Example illustrative code for `tools/lintroller/rule_error_wrapping.go`:
 package lintroller
 
 import (
-	"go/ast"
-	"go/token"
-	"strings"
+    "go/ast"
+    "go/token"
+    "strings"
 
-	"golang.org/x/tools/go/analysis"
+    "golang.org/x/tools/go/analysis"
 )
 
 // ErrorWrappingRule checks for redundant error wrapping patterns.
 type ErrorWrappingRule struct{}
 
 func (r *ErrorWrappingRule) Check(pass *analysis.Pass) {
-	inspect := func(node ast.Node) bool {
-		call, ok := node.(*ast.CallExpr)
-		if !ok {
-			return true
-		}
+    inspect := func(node ast.Node) bool {
+        call, ok := node.(*ast.CallExpr)
+        if !ok {
+            return true
+        }
 
-		// Check for fmt.Errorf calls.
-		if !isFmtErrorf(call, pass) {
-			return true
-		}
+        // Check for fmt.Errorf calls.
+        if !isFmtErrorf(call, pass) {
+            return true
+        }
 
-		// Check for redundant wrapping: fmt.Errorf("%w: failed to X: %w", ...).
-		if hasRedundantWrapping(call) {
-			pass.Reportf(call.Pos(),
-				"redundant error wrapping: use errors.Join instead of fmt.Errorf with generic 'failed to' message")
-		}
+        // Check for redundant wrapping: fmt.Errorf("%w: failed to X: %w", ...).
+        if hasRedundantWrapping(call) {
+            pass.Reportf(call.Pos(),
+                "redundant error wrapping: use errors.Join instead of fmt.Errorf with generic 'failed to' message")
+        }
 
-		return true
-	}
+        return true
+    }
 
-	for _, file := range pass.Files {
-		ast.Inspect(file, inspect)
-	}
+    for _, file := range pass.Files {
+        ast.Inspect(file, inspect)
+    }
 }
 
 // isFmtErrorf checks if the CallExpr is a call to fmt.Errorf.
 func isFmtErrorf(call *ast.CallExpr, pass *analysis.Pass) bool {
-	// Check for selector expression: fmt.Errorf.
-	if sel, ok := call.Fun.(*ast.SelectorExpr); ok {
-		if ident, ok := sel.X.(*ast.Ident); ok {
-			if ident.Name == "fmt" && sel.Sel.Name == "Errorf" {
-				return true
-			}
-		}
-	}
+    // Check for selector expression: fmt.Errorf.
+    if sel, ok := call.Fun.(*ast.SelectorExpr); ok {
+        if ident, ok := sel.X.(*ast.Ident); ok {
+            if ident.Name == "fmt" && sel.Sel.Name == "Errorf" {
+                return true
+            }
+        }
+    }
 
-	// Check for plain identifier (dot import): Errorf.
-	if ident, ok := call.Fun.(*ast.Ident); ok {
-		if ident.Name == "Errorf" {
-			// Optionally verify with pass.TypesInfo that this is fmt.Errorf.
-			return true
-		}
-	}
+    // Check for plain identifier (dot import): Errorf.
+    if ident, ok := call.Fun.(*ast.Ident); ok {
+        if ident.Name == "Errorf" {
+            // Optionally verify with pass.TypesInfo that this is fmt.Errorf.
+            return true
+        }
+    }
 
-	return false
+    return false
 }
 
 func hasRedundantWrapping(call *ast.CallExpr) bool {
-	// Check if format string contains pattern: "%w: failed to ...: %w".
-	// This is redundant - should use errors.Join instead.
-	if len(call.Args) < 1 {
-		return false
-	}
+    // Check if format string contains pattern: "%w: failed to ...: %w".
+    // This is redundant - should use errors.Join instead.
+    if len(call.Args) < 1 {
+        return false
+    }
 
-	formatLit, ok := call.Args[0].(*ast.BasicLit)
-	if !ok || formatLit.Kind != token.STRING {
-		return false
-	}
+    formatLit, ok := call.Args[0].(*ast.BasicLit)
+    if !ok || formatLit.Kind != token.STRING {
+        return false
+    }
 
-	format := formatLit.Value
+    format := formatLit.Value
 
-	// Detect patterns like "%w: failed to X: %w" with no specific context.
-	if strings.Contains(format, "%w") &&
-	   strings.Count(format, "%w") == 2 &&
-	   (strings.Contains(format, "failed to") || strings.Contains(format, "error")) {
-		// Check if there's actual context between the %w verbs.
-		// If it's just generic "failed to X", suggest errors.Join.
-		return true
-	}
+    // Detect patterns like "%w: failed to X: %w" with no specific context.
+    if strings.Contains(format, "%w") &&
+       strings.Count(format, "%w") == 2 &&
+       (strings.Contains(format, "failed to") || strings.Contains(format, "error")) {
+        // Check if there's actual context between the %w verbs.
+        // If it's just generic "failed to X", suggest errors.Join.
+        return true
+    }
 
-	return false
+    return false
 }
 ```
 
