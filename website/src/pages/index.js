@@ -5,6 +5,7 @@ import Link from '@docusaurus/Link';
 import Screengrab from '@site/src/components/Screengrab'
 import TypingAnimation from '@site/src/components/TypingAnimation'
 import LazyDemo from '@site/src/components/LazyDemo'
+import ScrollFadeIn from '@site/src/components/ScrollFadeIn'
 import { RiLockLine, RiBox3Line, RiFlashlightLine, RiStackLine } from 'react-icons/ri';
 import '../css/landing-page.css';
 
@@ -25,10 +26,10 @@ function Home() {
               <Link to="/introduction" className="button button--lg button--outline button--primary ml20"><p>Learn More</p></Link>
             </div>
           </div>
-          <div className="hero-demo-intro">
+          <ScrollFadeIn className="hero-demo-intro">
             <h2>See Atmos in Action</h2>
             <p>Watch how Atmos simplifies infrastructure orchestration with an intuitive workflow</p>
-          </div>
+          </ScrollFadeIn>
         </header>
         <section className="hero-demo">
           <LazyDemo />
