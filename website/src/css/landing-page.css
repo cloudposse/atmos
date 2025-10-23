@@ -108,25 +108,30 @@ html[data-theme="dark"] .landing-page .section__description > h2 {
   text-align: center;
 }
 
-/* Hero subtitle and tagline */
-.hero__subtitle {
-  font-size: 1.2em;
+/* Clean Cloud Posse-style hero */
+.hero__eyebrow {
+  font-size: 0.9em;
   color: #999;
-  margin-bottom: 0.5em;
+  margin-bottom: 1.5em;
   text-transform: uppercase;
-  letter-spacing: 2px;
-  font-weight: 300;
+  letter-spacing: 3px;
+  font-weight: 400;
 }
 
-.hero__tagline {
-  font-size: 1.8em;
-  margin-top: 1em;
-  line-height: 1.4em;
+.hero__description {
+  font-size: 1.3em;
+  margin-top: 1.5em;
+  line-height: 1.6em;
   text-align: center;
+  color: #ccc;
+  max-width: 800px;
 }
 
-html[data-theme="dark"] .hero__tagline {
-  color: #ccc;
+/* Fixed-width container for typing animation to prevent layout shift */
+.typing-container {
+  display: inline-block;
+  min-width: 180px;
+  text-align: left;
 }
 
 .landing-page .hero img {
