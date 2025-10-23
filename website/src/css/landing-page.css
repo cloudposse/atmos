@@ -156,12 +156,42 @@ html[data-theme="dark"] .landing-page .section__description > h2 {
 /* Hero demo section - appears on scroll */
 .hero-demo {
   display: flex;
+  flex-direction: column;
   justify-content: center;
   align-items: center;
   padding: 4rem 2rem;
   width: 100%;
   max-width: 1400px;
   margin: 0 auto;
+}
+
+.hero-demo-intro {
+  text-align: center;
+  margin-bottom: 3rem;
+  max-width: 700px;
+}
+
+.hero-demo-intro h2 {
+  font-size: 2.5em;
+  margin-bottom: 1rem;
+  font-weight: 700;
+}
+
+html[data-theme="dark"] .hero-demo-intro h2 {
+  background: linear-gradient(
+      to right bottom,
+      rgb(255, 255, 255) 30%,
+      rgba(255, 255, 255, 0.5)
+    )
+    text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.hero-demo-intro p {
+  font-size: 1.2em;
+  color: #999;
+  line-height: 1.6;
 }
 
 .hero-demo .screenshot-container {

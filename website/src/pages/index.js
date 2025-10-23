@@ -27,6 +27,10 @@ function Home() {
           </div>
         </header>
         <section className="hero-demo">
+          <div className="hero-demo-intro">
+            <h2>See Atmos in Action</h2>
+            <p>Watch how Atmos simplifies infrastructure orchestration with an intuitive workflow</p>
+          </div>
           <LazyDemo />
         </section>
         <main>
