@@ -165,3 +165,33 @@ type ICredentials interface {
 
 	BuildWhoamiInfo(info *WhoamiInfo)
 }
+
+// ConsoleAccessProvider is an optional interface that providers can implement
+// to support web console/browser-based login.
+type ConsoleAccessProvider interface {
+	// GetConsoleURL generates a web console sign-in URL using the provided credentials.
+	// Returns the sign-in URL, the duration for which the URL remains valid, and any error encountered.
+	GetConsoleURL(ctx context.Context, creds ICredentials, options ConsoleURLOptions) (url string, duration time.Duration, err error)
+
+	// SupportsConsoleAccess returns true if this provider supports web console access.
+	SupportsConsoleAccess() bool
+}
+
+// ConsoleURLOptions provides configuration for console URL generation.
+type ConsoleURLOptions struct {
+	// Destination is the specific console page to navigate to (optional).
+	// For AWS: "https://console.aws.amazon.com/s3" or similar.
+	// For Azure: "https://portal.azure.com/#blade/...".
+	// For GCP: "https://console.cloud.google.com/...".
+	Destination string
+
+	// SessionDuration is the requested duration for the console session.
+	// Providers may have maximum limits (e.g., AWS: 12 hours).
+	SessionDuration time.Duration
+
+	// Issuer is an optional identifier shown in the console URL (used by AWS).
+	Issuer string
+
+	// OpenInBrowser if true, automatically opens the URL in the default browser.
+	OpenInBrowser bool
+}
