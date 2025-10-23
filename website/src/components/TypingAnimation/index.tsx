@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
 import './index.css';
 
 interface TypingAnimationProps {
@@ -51,18 +50,9 @@ export default function TypingAnimation({
 
   return (
     <span className="typing-animation">
-      <AnimatePresence mode="wait">
-        <motion.span
-          key={currentText}
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          transition={{ duration: 0.1 }}
-          className="typing-text"
-        >
-          {currentText}
-        </motion.span>
-      </AnimatePresence>
+      <span className="typing-text">
+        {currentText}
+      </span>
       <span className="typing-cursor" />
     </span>
   );
