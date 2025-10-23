@@ -297,7 +297,7 @@ func TestExecuteAuthLoginCommand(t *testing.T) {
 			name:          "explicit identity but no auth config",
 			identityFlag:  "test-identity",
 			expectError:   true,
-			errorContains: "no default identity configured",
+			errorContains: "identity not found",
 		},
 	}
 
