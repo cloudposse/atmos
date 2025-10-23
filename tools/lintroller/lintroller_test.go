@@ -9,3 +9,7 @@ import (
 func TestAnalyzer(t *testing.T) {
 	analysistest.Run(t, analysistest.TestData(), Analyzer, "a")
 }
+
+func TestPerfTrackRule(t *testing.T) {
+	analysistest.Run(t, analysistest.TestData(), Analyzer, "perftrack")
+}
