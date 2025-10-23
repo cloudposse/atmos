@@ -450,6 +450,7 @@ var (
 	ErrAINoPrompter              = errors.New("no prompter available")
 	ErrAIProjectMemoryNotFound   = errors.New("project memory file (ATMOS.md) not found")
 	ErrAIProjectMemoryNotLoaded  = errors.New("project memory not loaded")
+	ErrAIProjectMemoryExists     = errors.New("project memory file already exists")
 	ErrAISessionsNotEnabled      = errors.New("sessions are not enabled in configuration")
 	ErrAIInvalidDurationFormat   = errors.New("invalid duration format")
 	ErrAIUnsupportedDurationUnit = errors.New("unsupported duration unit")

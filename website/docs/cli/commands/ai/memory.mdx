@@ -1,0 +1,405 @@
+---
+title: atmos ai memory
+sidebar_label: memory
+sidebar_class_name: command
+id: memory
+description: Manage AI project memory for context-aware assistance
+---
+import Terminal from '@site/src/components/Terminal'
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Use this command to manage the AI project memory file (ATMOS.md), which stores project-specific context, patterns, and conventions that help the AI provide more accurate and relevant assistance.
+</Intro>
+
+## Description
+
+The `atmos ai memory` command provides tools to initialize, view, validate, edit, and locate your project memory file. Project memory allows the AI assistant to remember your organization's specific patterns, common commands, stack structures, and infrastructure conventions.
+
+## Usage
+
+```shell
+atmos ai memory [subcommand]
+```
+
+## Subcommands
+
+<dl>
+  <dt>`init`</dt>
+  <dd>Create a new ATMOS.md template file in your project</dd>
+
+  <dt>`show`</dt>
+  <dd>Display the current project memory content</dd>
+
+  <dt>`validate`</dt>
+  <dd>Validate the ATMOS.md file format and structure</dd>
+
+  <dt>`edit`</dt>
+  <dd>Open the ATMOS.md file in your editor ($EDITOR)</dd>
+
+  <dt>`path`</dt>
+  <dd>Show the absolute path to the ATMOS.md file</dd>
+</dl>
+
+## Configuration
+
+Enable project memory in your `atmos.yaml`:
+
+```yaml
+settings:
+  ai:
+    enabled: true
+    provider: "anthropic"
+    memory:
+      enabled: true                # Enable project memory
+      file_path: "ATMOS.md"       # Memory file location (default)
+      create_if_missing: true      # Auto-create template if needed
+      auto_update: false           # Manual updates only (recommended)
+      sections:                    # Sections to include in AI context
+        - project_context
+        - common_commands
+        - stack_patterns
+        - frequent_issues
+        - infrastructure_patterns
+        - component_catalog
+        - team_conventions
+        - recent_learnings
+```
+
+## Subcommand Details
+
+### atmos ai memory init
+
+Create a new ATMOS.md template file with all standard sections.
+
+<Terminal title="atmos ai memory init">
+```console
+$ atmos ai memory init
+
+✅ Created ATMOS.md at: /path/to/project/ATMOS.md
+
+Edit this file to customize your project memory.
+Then enable memory in atmos.yaml:
+  ai:
+    memory:
+      enabled: true
+```
+</Terminal>
+
+**Options:**
+
+<dl>
+  <dt>`--force`</dt>
+  <dd>Overwrite existing ATMOS.md file</dd>
+</dl>
+
+**Example with --force:**
+
+```shell
+atmos ai memory init --force
+```
+
+### atmos ai memory show
+
+Display the current project memory content that will be sent to the AI assistant.
+
+<Terminal title="atmos ai memory show">
+```console
+$ atmos ai memory show
+
+# Project Memory (ATMOS.md)
+
+The following information has been stored about this project:
+
+## Project Context
+
+**Organization:** acme-corp
+**Atmos Version:** 1.89.0
+**Primary Regions:** us-east-1, us-west-2
+**Environments:** dev, staging, prod
+
+**Stack Naming Pattern:**
+\```
+{org}-{tenant}-{environment}-{region}-{stage}
+Example: acme-core-prod-use1-network
+\```
+
+## Common Commands
+
+### Describe and Validate
+\```bash
+# Describe a component
+atmos describe component vpc -s acme-core-prod-use1-network
+
+# List all stacks
+atmos list stacks
+
+# Validate stacks
+atmos validate stacks
+\```
+
+...
+```
+</Terminal>
+
+### atmos ai memory validate
+
+Validate the ATMOS.md file format and report any issues.
+
+<Terminal title="atmos ai memory validate">
+```console
+$ atmos ai memory validate
+
+✅ Memory file is valid
+
+File: /path/to/project/ATMOS.md
+Sections found: 8
+
+Available sections:
+  - Project Context (project_context)
+  - Common Commands (common_commands)
+  - Stack Patterns (stack_patterns)
+  - Frequent Issues & Solutions (frequent_issues)
+  - Infrastructure Patterns (infrastructure_patterns)
+  - Component Catalog Structure (component_catalog)
+  - Team Conventions (team_conventions)
+  - Recent Learnings (recent_learnings)
+```
+</Terminal>
+
+### atmos ai memory edit
+
+Open the ATMOS.md file in your preferred text editor.
+
+<Terminal title="atmos ai memory edit">
+```console
+$ atmos ai memory edit
+
+Opening ATMOS.md in vim...
+
+✅ Memory file saved
+```
+</Terminal>
+
+Uses the editor specified in `$EDITOR` environment variable, or `vim` if not set.
+
+**Setting your editor:**
+
+```shell
+export EDITOR="code"    # VS Code
+export EDITOR="nano"    # Nano
+export EDITOR="emacs"   # Emacs
+```
+
+If the ATMOS.md file doesn't exist, it will be created automatically with the default template.
+
+### atmos ai memory path
+
+Display the absolute path to the ATMOS.md file.
+
+<Terminal title="atmos ai memory path">
+```console
+$ atmos ai memory path
+
+/Users/you/projects/infrastructure/ATMOS.md
+```
+</Terminal>
+
+Useful for:
+- Locating the file quickly
+- Scripting and automation
+- Verifying the configured path
+
+## Memory File Structure
+
+The ATMOS.md file is a standard Markdown document with level 2 headers (`##`) defining sections:
+
+```markdown
+# Atmos Project Memory
+
+> This file is automatically maintained by Atmos AI to remember project-specific
+> context, patterns, and conventions. Edit freely - AI will preserve manual changes.
+
+## Project Context
+
+**Organization:** your-org
+**Atmos Version:** 1.89.0
+**Primary Regions:** us-east-1, us-west-2
+**Environments:** dev, staging, prod
+
+## Common Commands
+
+\```bash
+# Describe a component
+atmos describe component <component> -s <stack>
+\```
+
+## Stack Patterns
+
+### Stack Structure
+\```yaml
+# Common import pattern
+import:
+  - catalog/stacks/baseline
+  - catalog/stacks/network
+\```
+
+## Frequent Issues & Solutions
+
+### Stack not found error
+**Problem:** `Error: stack 'my-stack' not found`
+**Solution:** Check stack naming and verify config exists in stacks/ directory
+
+## Infrastructure Patterns
+
+### Multi-Region Setup
+- Primary region for production workloads
+- DR region with replication
+- Cross-region networking configured
+
+## Component Catalog Structure
+
+\```
+components/
+  terraform/
+    vpc/           # VPC and networking
+    rds/           # RDS databases
+    eks/           # EKS clusters
+\```
+
+## Team Conventions
+
+- All infrastructure changes require PR review
+- Use `atmos validate` before committing
+- Tag all resources appropriately
+
+## Recent Learnings
+
+*AI will add notes here as it learns about the project*
+```
+
+## Examples
+
+### Initialize and Configure
+
+<Terminal title="Setting up project memory">
+```console
+$ # Initialize memory file
+$ atmos ai memory init
+
+$ # Edit to customize for your project
+$ atmos ai memory edit
+
+$ # Validate the format
+$ atmos ai memory validate
+
+$ # View what will be sent to AI
+$ atmos ai memory show
+```
+</Terminal>
+
+### View Memory Path
+
+```shell
+# Find memory file location
+atmos ai memory path
+
+# Open in your favorite editor
+code $(atmos ai memory path)
+
+# Add to version control
+git add $(atmos ai memory path)
+git commit -m "Add project memory for AI assistant"
+```
+
+### Validation Workflow
+
+```shell
+# After editing, validate format
+atmos ai memory validate
+
+# If valid, commit changes
+if atmos ai memory validate; then
+  git add ATMOS.md
+  git commit -m "Update project memory"
+fi
+```
+
+## Benefits
+
+**Context Retention**: AI remembers your project-specific patterns:
+- Organization naming conventions
+- Common stack configurations
+- Frequently used commands
+- Known issues and solutions
+
+**Team Collaboration**: Share knowledge across team:
+- Document conventions once
+- Version control with Git
+- Consistent AI assistance for all team members
+
+**Improved Accuracy**: AI provides better answers:
+- Project-specific recommendations
+- Accurate command examples
+- Relevant troubleshooting steps
+
+## Best Practices
+
+1. **Keep it Current**: Update memory as your project evolves
+2. **Be Concise**: Focus on frequently used patterns and commands
+3. **Use Examples**: Include real command examples from your project
+4. **Version Control**: Commit ATMOS.md to Git
+5. **Team Review**: Have team review and approve changes
+6. **Optimize Size**: Keep file under 10KB for optimal performance
+
+## Troubleshooting
+
+### Memory not being used
+
+1. Check that memory is enabled:
+```shell
+grep -A 5 "memory:" atmos.yaml
+```
+
+2. Verify file exists:
+```shell
+atmos ai memory path
+ls -la $(atmos ai memory path)
+```
+
+3. Validate file format:
+```shell
+atmos ai memory validate
+```
+
+### File not found
+
+Create the file:
+```shell
+atmos ai memory init
+```
+
+Or enable auto-creation in `atmos.yaml`:
+```yaml
+ai:
+  memory:
+    create_if_missing: true
+```
+
+### Validation errors
+
+Check that:
+- File is valid UTF-8 text
+- Sections use level 2 headers (`##`)
+- No special characters in section names
+
+## Related Commands
+
+- [`atmos ai chat`](/cli/commands/ai/chat) - Chat with memory-aware AI
+- [`atmos ai ask`](/cli/commands/ai/ask) - Ask questions with project context
+- [`atmos ai help`](/cli/commands/ai/ai-help) - Get AI help on topics
+
+## Related Documentation
+
+- [AI Configuration](/ai/configuration) - Complete AI settings reference
+- [AI Troubleshooting](/ai/troubleshooting) - Common issues and solutions
