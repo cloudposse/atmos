@@ -18,7 +18,7 @@ function Home() {
         <header className="hero hero--full-height">
           <div className="intro">
             <p className="hero__eyebrow">Infrastructure as Code Framework</p>
-            <h1>One CLI to Orchestrate<br/><span className="typing-container"><TypingAnimation words={['Terraform', 'OpenTofu', 'Packer', 'Helmfile', 'and more...']} /></span></h1>
+            <h1>One Tool to Orchestrate <span className="typing-container"><TypingAnimation words={['Terraform', 'OpenTofu', 'Packer', 'Helmfile', 'and more...']} /></span></h1>
             <p className="hero__description">Unified workflows, authentication, and vendoring for all your IaC tools</p>
             <div className="hero__cta">
               <Link to="/quick-start/" className="button button--lg button--primary"><p>Try the Quick Start</p></Link>
