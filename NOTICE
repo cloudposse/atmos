@@ -594,6 +594,10 @@ BSD LICENSED DEPENDENCIES
     License: BSD-3-Clause
     URL: https://github.com/go-jose/go-jose/blob/v4.1.2/json/LICENSE
 
+  - github.com/godbus/dbus
+    License: BSD-2-Clause
+    URL: https://github.com/godbus/dbus/blob/v4.1.0/LICENSE
+
   - github.com/godbus/dbus/v5
     License: BSD-2-Clause
     URL: https://github.com/godbus/dbus/blob/v5.1.0/LICENSE
@@ -916,6 +920,10 @@ MOZILLA PUBLIC LICENSE (MPL) 2.0 DEPENDENCIES
 
 MIT LICENSED DEPENDENCIES
 
+  - github.com/99designs/keyring
+    License: MIT
+    URL: https://github.com/99designs/keyring/blob/v1.2.2/LICENSE
+
   - github.com/AlecAivazis/survey/v2
     License: MIT
     URL: https://github.com/AlecAivazis/survey/blob/v2.3.7/LICENSE
@@ -1140,6 +1148,10 @@ MIT LICENSED DEPENDENCIES
     License: MIT
     URL: https://github.com/dustin/go-humanize/blob/v1.0.1/LICENSE
 
+  - github.com/dvsekhvalnov/jose2go
+    License: MIT
+    URL: https://github.com/dvsekhvalnov/jose2go/blob/v1.6.0/LICENSE
+
   - github.com/editorconfig-checker/editorconfig-checker/v3/pkg
     License: MIT
     URL: https://github.com/editorconfig-checker/editorconfig-checker/blob/v3.4.1/LICENSE
@@ -1207,6 +1219,10 @@ MIT LICENSED DEPENDENCIES
   - github.com/gookit/color
     License: MIT
     URL: https://github.com/gookit/color/blob/v1.5.4/LICENSE
+
+  - github.com/gsterjov/go-libsecret
+    License: MIT
+    URL: https://github.com/gsterjov/go-libsecret/blob/a6f4afe4910c/LICENSE
 
   - github.com/hairyhenderson/go-fsimpl
     License: MIT
@@ -1396,6 +1412,10 @@ MIT LICENSED DEPENDENCIES
     License: MIT
     URL: https://github.com/mitchellh/reflectwalk/blob/v1.0.2/LICENSE
 
+  - github.com/mtibben/percent
+    License: MIT
+    URL: https://github.com/mtibben/percent/blob/v0.2.1/LICENSE
+
   - github.com/muesli/ansi
     License: MIT
     URL: https://github.com/muesli/ansi/blob/276c6243b2f6/LICENSE
@@ -1426,7 +1446,7 @@ MIT LICENSED DEPENDENCIES
 
   - github.com/posthog/posthog-go
     License: MIT
-    URL: https://github.com/posthog/posthog-go/blob/v1.6.11/LICENSE.md
+    URL: https://github.com/posthog/posthog-go/blob/v1.6.12/LICENSE.md
 
   - github.com/rivo/uniseg
     License: MIT

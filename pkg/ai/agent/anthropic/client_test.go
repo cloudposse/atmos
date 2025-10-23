@@ -18,7 +18,7 @@ func TestExtractSimpleAIConfig(t *testing.T) {
 			name: "Default configuration",
 			atmosConfig: &schema.AtmosConfiguration{
 				Settings: schema.AtmosSettings{
-					AI: nil,
+					AI: schema.AISettings{},
 				},
 			},
 			expectedConfig: &SimpleAIConfig{
@@ -32,11 +32,11 @@ func TestExtractSimpleAIConfig(t *testing.T) {
 			name: "Enabled configuration",
 			atmosConfig: &schema.AtmosConfiguration{
 				Settings: schema.AtmosSettings{
-					AI: map[string]interface{}{
-						"enabled":     true,
-						"model":       "claude-4-20250514",
-						"api_key_env": "CUSTOM_API_KEY",
-						"max_tokens":  8192,
+					AI: schema.AISettings{
+						Enabled:   true,
+						Model:     "claude-4-20250514",
+						ApiKeyEnv: "CUSTOM_API_KEY",
+						MaxTokens: 8192,
 					},
 				},
 			},
@@ -51,9 +51,9 @@ func TestExtractSimpleAIConfig(t *testing.T) {
 			name: "Partial configuration",
 			atmosConfig: &schema.AtmosConfiguration{
 				Settings: schema.AtmosSettings{
-					AI: map[string]interface{}{
-						"enabled": true,
-						"model":   "claude-3-haiku-20240307",
+					AI: schema.AISettings{
+						Enabled: true,
+						Model:   "claude-3-haiku-20240307",
 					},
 				},
 			},
@@ -77,8 +77,8 @@ func TestExtractSimpleAIConfig(t *testing.T) {
 func TestNewSimpleClient_Disabled(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{
 		Settings: schema.AtmosSettings{
-			AI: map[string]interface{}{
-				"enabled": false,
+			AI: schema.AISettings{
+				Enabled: false,
 			},
 		},
 	}

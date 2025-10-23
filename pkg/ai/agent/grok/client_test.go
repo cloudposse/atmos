@@ -18,7 +18,7 @@ func TestExtractConfig(t *testing.T) {
 			name: "Default configuration",
 			atmosConfig: &schema.AtmosConfiguration{
 				Settings: schema.AtmosSettings{
-					AI: nil,
+					AI: schema.AISettings{},
 				},
 			},
 			expectedConfig: &Config{
@@ -33,12 +33,12 @@ func TestExtractConfig(t *testing.T) {
 			name: "Enabled configuration",
 			atmosConfig: &schema.AtmosConfiguration{
 				Settings: schema.AtmosSettings{
-					AI: map[string]interface{}{
-						"enabled":     true,
-						"model":       "grok-4",
-						"api_key_env": "CUSTOM_XAI_KEY",
-						"max_tokens":  8192,
-						"base_url":    "https://custom.api.x.ai/v1",
+					AI: schema.AISettings{
+						Enabled:   true,
+						Model:     "grok-4",
+						ApiKeyEnv: "CUSTOM_XAI_KEY",
+						MaxTokens: 8192,
+						BaseURL:   "https://custom.api.x.ai/v1",
 					},
 				},
 			},
@@ -54,9 +54,9 @@ func TestExtractConfig(t *testing.T) {
 			name: "Partial configuration",
 			atmosConfig: &schema.AtmosConfiguration{
 				Settings: schema.AtmosSettings{
-					AI: map[string]interface{}{
-						"enabled": true,
-						"model":   "grok-2",
+					AI: schema.AISettings{
+						Enabled: true,
+						Model:   "grok-2",
 					},
 				},
 			},
@@ -81,8 +81,8 @@ func TestExtractConfig(t *testing.T) {
 func TestNewClient_Disabled(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{
 		Settings: schema.AtmosSettings{
-			AI: map[string]interface{}{
-				"enabled": false,
+			AI: schema.AISettings{
+				Enabled: false,
 			},
 		},
 	}

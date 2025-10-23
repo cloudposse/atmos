@@ -18,7 +18,7 @@ func TestExtractConfig(t *testing.T) {
 			name: "Default configuration",
 			atmosConfig: &schema.AtmosConfiguration{
 				Settings: schema.AtmosSettings{
-					AI: nil,
+					AI: schema.AISettings{},
 				},
 			},
 			expectedConfig: &Config{
@@ -32,11 +32,11 @@ func TestExtractConfig(t *testing.T) {
 			name: "Enabled configuration",
 			atmosConfig: &schema.AtmosConfiguration{
 				Settings: schema.AtmosSettings{
-					AI: map[string]interface{}{
-						"enabled":     true,
-						"model":       "gpt-4-turbo",
-						"api_key_env": "CUSTOM_API_KEY",
-						"max_tokens":  8192,
+					AI: schema.AISettings{
+						Enabled:   true,
+						Model:     "gpt-4-turbo",
+						ApiKeyEnv: "CUSTOM_API_KEY",
+						MaxTokens: 8192,
 					},
 				},
 			},
@@ -51,9 +51,9 @@ func TestExtractConfig(t *testing.T) {
 			name: "Partial configuration",
 			atmosConfig: &schema.AtmosConfiguration{
 				Settings: schema.AtmosSettings{
-					AI: map[string]interface{}{
-						"enabled": true,
-						"model":   "gpt-3.5-turbo",
+					AI: schema.AISettings{
+						Enabled: true,
+						Model:   "gpt-3.5-turbo",
 					},
 				},
 			},
@@ -77,8 +77,8 @@ func TestExtractConfig(t *testing.T) {
 func TestNewClient_Disabled(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{
 		Settings: schema.AtmosSettings{
-			AI: map[string]interface{}{
-				"enabled": false,
+			AI: schema.AISettings{
+				Enabled: false,
 			},
 		},
 	}

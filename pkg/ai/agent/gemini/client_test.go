@@ -18,7 +18,7 @@ func TestExtractConfig(t *testing.T) {
 			name: "Default configuration",
 			atmosConfig: &schema.AtmosConfiguration{
 				Settings: schema.AtmosSettings{
-					AI: nil,
+					AI: schema.AISettings{},
 				},
 			},
 			expectedConfig: &Config{
@@ -32,11 +32,11 @@ func TestExtractConfig(t *testing.T) {
 			name: "Enabled configuration",
 			atmosConfig: &schema.AtmosConfiguration{
 				Settings: schema.AtmosSettings{
-					AI: map[string]interface{}{
-						"enabled":     true,
-						"model":       "gemini-1.5-pro",
-						"api_key_env": "CUSTOM_GEMINI_KEY",
-						"max_tokens":  16384,
+					AI: schema.AISettings{
+						Enabled:   true,
+						Model:     "gemini-1.5-pro",
+						ApiKeyEnv: "CUSTOM_GEMINI_KEY",
+						MaxTokens: 16384,
 					},
 				},
 			},
@@ -51,9 +51,9 @@ func TestExtractConfig(t *testing.T) {
 			name: "Partial configuration",
 			atmosConfig: &schema.AtmosConfiguration{
 				Settings: schema.AtmosSettings{
-					AI: map[string]interface{}{
-						"enabled": true,
-						"model":   "gemini-1.5-flash",
+					AI: schema.AISettings{
+						Enabled: true,
+						Model:   "gemini-1.5-flash",
 					},
 				},
 			},
@@ -77,8 +77,8 @@ func TestExtractConfig(t *testing.T) {
 func TestNewClient_Disabled(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{
 		Settings: schema.AtmosSettings{
-			AI: map[string]interface{}{
-				"enabled": false,
+			AI: schema.AISettings{
+				Enabled: false,
 			},
 		},
 	}

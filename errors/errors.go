@@ -51,6 +51,11 @@ var (
 	ErrSpinnerReturnedNilModel               = errors.New("spinner returned nil model")
 	ErrSpinnerUnexpectedModelType            = errors.New("spinner returned unexpected model type")
 
+	// ErrAuthConsole is returned when auth console command operations fail.
+	ErrAuthConsole          = errors.New("auth console operation failed")
+	ErrProviderNotSupported = errors.New("provider does not support this operation")
+	ErrUnknownServiceAlias  = errors.New("unknown service alias")
+
 	// ErrPlanHasDiff is returned when there are differences between two Terraform plan files.
 	ErrPlanHasDiff = errors.New("plan files have differences")
 
@@ -95,6 +100,7 @@ var (
 	ErrInvalidPagerCommand = errors.New("invalid pager command")
 	ErrEmptyURL            = errors.New("empty URL provided")
 	ErrFailedToFindImport  = errors.New("failed to find import")
+	ErrHTTPRequestFailed   = errors.New("HTTP request failed")
 
 	// Config loading errors.
 	ErrAtmosDirConfigNotFound      = errors.New("atmos config directory not found")
@@ -121,6 +127,7 @@ var (
 	ErrHTTPBackendWorkspaces       = errors.New("workspaces are not supported for the HTTP backend")
 	ErrInvalidTerraformComponent   = errors.New("invalid Terraform component")
 	ErrNoTty                       = errors.New("no TTY attached")
+	ErrNoSuitableShell             = errors.New("no suitable shell found")
 	ErrFailedToLoadTerraformModule = errors.New("failed to load terraform module")
 
 	ErrMissingPackerTemplate = errors.New("packer template is required; it can be specified in the `settings.packer.template` section in the Atmos component manifest, or on the command line via the flag `--template <template>` (shorthand `-t`)")

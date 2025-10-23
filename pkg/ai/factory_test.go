@@ -19,7 +19,7 @@ func TestNewClient(t *testing.T) {
 			name: "No AI settings",
 			atmosConfig: &schema.AtmosConfiguration{
 				Settings: schema.AtmosSettings{
-					AI: nil,
+					AI: schema.AISettings{},
 				},
 			},
 			expectError: true,
@@ -29,9 +29,9 @@ func TestNewClient(t *testing.T) {
 			name: "Anthropic provider (explicit)",
 			atmosConfig: &schema.AtmosConfiguration{
 				Settings: schema.AtmosSettings{
-					AI: map[string]interface{}{
-						"enabled":  true,
-						"provider": "anthropic",
+					AI: schema.AISettings{
+						Enabled:  true,
+						Provider: "anthropic",
 					},
 				},
 			},
@@ -41,8 +41,8 @@ func TestNewClient(t *testing.T) {
 			name: "Anthropic provider (default)",
 			atmosConfig: &schema.AtmosConfiguration{
 				Settings: schema.AtmosSettings{
-					AI: map[string]interface{}{
-						"enabled": true,
+					AI: schema.AISettings{
+						Enabled: true,
 					},
 				},
 			},
@@ -52,9 +52,9 @@ func TestNewClient(t *testing.T) {
 			name: "Unsupported provider",
 			atmosConfig: &schema.AtmosConfiguration{
 				Settings: schema.AtmosSettings{
-					AI: map[string]interface{}{
-						"enabled":  true,
-						"provider": "unsupported",
+					AI: schema.AISettings{
+						Enabled:  true,
+						Provider: "unsupported",
 					},
 				},
 			},
@@ -65,9 +65,9 @@ func TestNewClient(t *testing.T) {
 			name: "OpenAI provider",
 			atmosConfig: &schema.AtmosConfiguration{
 				Settings: schema.AtmosSettings{
-					AI: map[string]interface{}{
-						"enabled":  true,
-						"provider": "openai",
+					AI: schema.AISettings{
+						Enabled:  true,
+						Provider: "openai",
 					},
 				},
 			},
@@ -77,9 +77,9 @@ func TestNewClient(t *testing.T) {
 			name: "Gemini provider",
 			atmosConfig: &schema.AtmosConfiguration{
 				Settings: schema.AtmosSettings{
-					AI: map[string]interface{}{
-						"enabled":  true,
-						"provider": "gemini",
+					AI: schema.AISettings{
+						Enabled:  true,
+						Provider: "gemini",
 					},
 				},
 			},
@@ -89,9 +89,9 @@ func TestNewClient(t *testing.T) {
 			name: "Grok provider",
 			atmosConfig: &schema.AtmosConfiguration{
 				Settings: schema.AtmosSettings{
-					AI: map[string]interface{}{
-						"enabled":  true,
-						"provider": "grok",
+					AI: schema.AISettings{
+						Enabled:  true,
+						Provider: "grok",
 					},
 				},
 			},
@@ -101,8 +101,8 @@ func TestNewClient(t *testing.T) {
 			name: "Disabled AI",
 			atmosConfig: &schema.AtmosConfiguration{
 				Settings: schema.AtmosSettings{
-					AI: map[string]interface{}{
-						"enabled": false,
+					AI: schema.AISettings{
+						Enabled: false,
 					},
 				},
 			},
