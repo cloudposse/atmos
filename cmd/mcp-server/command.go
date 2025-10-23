@@ -17,8 +17,17 @@ import (
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/mcp"
+	"github.com/cloudposse/atmos/pkg/mcp/protocol"
 	"github.com/cloudposse/atmos/pkg/mcp/transport"
 	"github.com/cloudposse/atmos/pkg/schema"
+)
+
+const (
+	transportStdio     = "stdio"
+	transportHTTP      = "http"
+	defaultHTTPPort    = 8080
+	defaultHTTPHost    = "localhost"
+	mcpProtocolVersion = "2025-03-26"
 )
 
 // NewCommand creates a new mcp-server command.
@@ -31,12 +40,11 @@ func NewCommand() *cobra.Command {
 The MCP server allows AI assistants (Claude Desktop, Claude Code, VSCode, etc.) to access
 Atmos infrastructure management capabilities through a standardized protocol.
 
-By default, the server uses stdio transport for desktop applications. The server will:
-- Expose all available Atmos AI tools as MCP tools
-- Handle tool execution with proper permission checking
-- Provide real-time logging and error reporting
+The server supports two transport modes:
+- stdio: Standard input/output for local desktop applications (default)
+- http: HTTP with Server-Sent Events (SSE) for remote/cloud clients
 
-Example usage with Claude Desktop:
+Example usage with Claude Desktop (stdio):
   Add to ~/.config/claude/claude_desktop_config.json:
   {
     "mcpServers": {
@@ -47,19 +55,41 @@ Example usage with Claude Desktop:
     }
   }
 
+Example usage with HTTP transport:
+  atmos mcp-server --transport http --port 8080
+
 The server runs until interrupted (Ctrl+C) or the client disconnects.`,
-		Example: `  # Start MCP server (stdio transport for desktop clients)
+		Example: `  # Start MCP server with stdio transport (default, for desktop clients)
   atmos mcp-server
 
-  # The server will communicate via stdin/stdout using JSON-RPC 2.0`,
+  # Start MCP server with HTTP transport
+  atmos mcp-server --transport http --port 8080
+
+  # Start HTTP server on custom host and port
+  atmos mcp-server --transport http --host 0.0.0.0 --port 3000`,
 		RunE: executeMCPServer,
 	}
+
+	// Add flags.
+	cmd.Flags().String("transport", transportStdio, "Transport type: stdio or http")
+	cmd.Flags().String("host", defaultHTTPHost, "Host to bind HTTP server (only for http transport)")
+	cmd.Flags().Int("port", defaultHTTPPort, "Port to bind HTTP server (only for http transport)")
 
 	return cmd
 }
 
 func executeMCPServer(cmd *cobra.Command, args []string) error {
 	defer log.Info("MCP server stopped")
+
+	// Get transport flags.
+	transportType, _ := cmd.Flags().GetString("transport")
+	host, _ := cmd.Flags().GetString("host")
+	port, _ := cmd.Flags().GetInt("port")
+
+	// Validate transport type.
+	if transportType != transportStdio && transportType != transportHTTP {
+		return fmt.Errorf("%w: %s (must be 'stdio' or 'http')", errUtils.ErrMCPInvalidTransport, transportType)
+	}
 
 	// Load Atmos configuration.
 	configAndStacksInfo := schema.ConfigAndStacksInfo{}
@@ -86,24 +116,47 @@ func executeMCPServer(cmd *cobra.Command, args []string) error {
 	adapter := mcp.NewAdapter(registry, executor)
 	server := mcp.NewServer(adapter)
 
-	logServerInfo(server)
+	// Select and run transport.
+	switch transportType {
+	case transportStdio:
+		logServerInfo(server, transportStdio, "")
+		stdioTransport := transport.NewStdioTransport()
+		return runServerWithSignalHandling(stdioTransport, server)
 
-	// Create stdio transport and run server.
-	stdioTransport := transport.NewStdioTransport()
-	return runServerWithSignalHandling(stdioTransport, server)
+	case transportHTTP:
+		addr := fmt.Sprintf("%s:%d", host, port)
+		logServerInfo(server, transportHTTP, addr)
+		httpTransport := transport.NewHTTPTransport(addr)
+		return runServerWithSignalHandling(httpTransport, server)
+
+	default:
+		return fmt.Errorf("%w: %s", errUtils.ErrMCPUnsupportedTransport, transportType)
+	}
 }
 
 // logServerInfo logs the server startup information.
-func logServerInfo(server *mcp.Server) {
+func logServerInfo(server *mcp.Server, transportType, addr string) {
 	log.Info("Starting Atmos MCP server...")
 	log.Info(fmt.Sprintf("Server: %s v%s", server.ServerInfo().Name, server.ServerInfo().Version))
-	log.Info(fmt.Sprintf("Protocol: MCP %s", "2025-03-26"))
-	log.Info("Transport: stdio")
+	log.Info(fmt.Sprintf("Protocol: MCP %s", mcpProtocolVersion))
+	if transportType == transportHTTP {
+		log.Info(fmt.Sprintf("Transport: HTTP (listening on %s)", addr))
+		log.Info(fmt.Sprintf("  - SSE endpoint: http://%s/sse", addr))
+		log.Info(fmt.Sprintf("  - Message endpoint: http://%s/message", addr))
+		log.Info(fmt.Sprintf("  - Health endpoint: http://%s/health", addr))
+	} else {
+		log.Info("Transport: stdio")
+	}
 	log.Info("Waiting for client connection...")
 }
 
+// serverTransport defines the interface for MCP transports.
+type serverTransport interface {
+	Serve(ctx context.Context, handler protocol.Handler) error
+}
+
 // runServerWithSignalHandling runs the server with signal handling.
-func runServerWithSignalHandling(stdioTransport *transport.StdioTransport, server *mcp.Server) error {
+func runServerWithSignalHandling(trans serverTransport, server *mcp.Server) error {
 	// Set up context with cancellation.
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -115,7 +168,7 @@ func runServerWithSignalHandling(stdioTransport *transport.StdioTransport, serve
 	// Start server in goroutine.
 	errChan := make(chan error, 1)
 	go func() {
-		errChan <- stdioTransport.Serve(ctx, server.Handler())
+		errChan <- trans.Serve(ctx, server.Handler())
 	}()
 
 	// Wait for signal or error.

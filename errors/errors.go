@@ -462,6 +462,8 @@ var (
 	ErrAISessionManagerNotAvailable = errors.New("session manager not available")
 	ErrMCPToolNotFound              = errors.New("MCP tool not found")
 	ErrMCPInvalidJSONRPCVersion     = errors.New("invalid JSON-RPC version")
+	ErrMCPInvalidTransport          = errors.New("invalid transport type")
+	ErrMCPUnsupportedTransport      = errors.New("unsupported transport")
 )
 
 // ExitCodeError is a typed error that preserves subcommand exit codes.

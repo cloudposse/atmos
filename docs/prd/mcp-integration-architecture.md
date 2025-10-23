@@ -108,92 +108,118 @@ atmos mcp-server
 - VSCode extension integration
 - Local development workflows
 
-### Option B: Standalone Server (HTTP transport)
+### Option B: Standalone Server (HTTP transport with SSE) ✅ **Implemented**
 
 **Command:**
 ```bash
-atmos mcp-server --http --port 8080
+atmos mcp-server --transport http --port 8080
 ```
 
-**Communication:** HTTP POST/GET (Streamable HTTP)
+**Communication:** HTTP with Server-Sent Events (SSE) for streaming
+
+**Endpoints:**
+- `GET /sse` - Server-Sent Events endpoint for server→client messages
+- `POST /message` - JSON-RPC message endpoint for client→server requests
+- `GET /health` - Health check endpoint
 
 **Benefits:**
 - Multiple concurrent clients
-- Network-accessible
+- Network-accessible from remote/cloud environments
 - Better for team/shared environments
-- Can run as a service
+- Can run as a service or in containers
+- Real-time streaming via SSE
 
 **Tradeoffs:**
 - More complex deployment
 - Requires port management
-- Security considerations (auth, TLS)
+- Security considerations (currently no auth/TLS in v1)
 - Higher operational overhead
 
 **Use Cases:**
 - Team shared resources
 - CI/CD integration
 - Remote/cloud environments
+- Containerized deployments
+- Cloud Desktop integration
 
-### Recommended Approach: Support Both
+### Recommended Approach: Both Transports Supported ✅
 
-Implement both transports with stdio as the default:
+Both transports are implemented with stdio as the default:
 
 ```bash
-# Default: stdio for desktop clients
+# Default: stdio for desktop clients (Claude Desktop, VSCode)
 atmos mcp-server
 
-# Optional: HTTP for remote access
-atmos mcp-server --http --port 8080
+# HTTP transport for remote/cloud access
+atmos mcp-server --transport http --port 8080
 
-# Optional: HTTP with authentication
-atmos mcp-server --http --port 8080 --auth-token-file /path/to/token
+# HTTP with custom host and port
+atmos mcp-server --transport http --host 0.0.0.0 --port 3000
 ```
+
+**Future Enhancements (not in v1):**
+- Authentication (API keys, JWT tokens)
+- TLS/HTTPS support
+- Rate limiting
+- Connection pooling
 
 ## Complete Architecture Diagram
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                    User Environment                          │
-├─────────────────────────────────────────────────────────────┤
-│                                                               │
-│  ┌─────────────────┐        ┌──────────────────┐           │
-│  │  Claude Desktop │        │   VSCode/IDEs    │           │
-│  │  Claude Code    │        │   + MCP Plugin   │           │
-│  └────────┬────────┘        └────────┬─────────┘           │
-│           │                           │                      │
-│           └─────────MCP Client────────┘                      │
-│                     │                                        │
-│                     ↓ JSON-RPC 2.0                          │
-│           ┌─────────────────────┐                           │
-│           │  Atmos MCP Server   │                           │
-│           │  (atmos mcp-server) │                           │
-│           └──────────┬──────────┘                           │
-│                      │                                       │
-│         ┌────────────┴────────────┐                         │
-│         ↓                         ↓                          │
-│  ┌─────────────┐          ┌─────────────┐                  │
-│  │ MCP Tools   │          │ MCP Resources│                  │
-│  ├─────────────┤          ├─────────────┤                  │
-│  │ list_*      │          │ stack_config│                  │
-│  │ describe_*  │          │ component_  │                  │
-│  │ validate_*  │          │   _schema   │                  │
-│  │ terraform_* │          └─────────────┘                  │
-│  └─────────────┘                                            │
-│         │                                                    │
-│         ↓                                                    │
-│  ┌──────────────────────────────────┐                      │
-│  │    Atmos Core Engine             │                      │
-│  │  (shared with 'atmos ai chat')   │                      │
-│  ├──────────────────────────────────┤                      │
-│  │ • Component Loader               │                      │
-│  │ • Stack Processor                │                      │
-│  │ • Terraform Integration          │                      │
-│  │ • Validation Engine              │                      │
-│  │ • Tool Registry (reused)         │                      │
-│  │ • Permission System (reused)     │                      │
-│  └──────────────────────────────────┘                      │
-│                                                               │
-└─────────────────────────────────────────────────────────────┘
+┌────────────────────────────────────────────────────────────────────┐
+│                        Client Environments                          │
+├────────────────────────────────────────────────────────────────────┤
+│                                                                      │
+│  ┌─────────────────┐        ┌──────────────────┐                  │
+│  │  Claude Desktop │        │  Cloud Desktop   │                  │
+│  │  Claude Code    │        │  Web Clients     │                  │
+│  │  VSCode/IDEs    │        │  Remote Clients  │                  │
+│  └────────┬────────┘        └────────┬─────────┘                  │
+│           │                           │                             │
+│           │ stdio                     │ HTTP/SSE                   │
+│           │ (subprocess)              │ (network)                  │
+│           │                           │                             │
+│           └───────────┬───────────────┘                             │
+│                       ↓                                             │
+│           ┌───────────────────────────┐                            │
+│           │   Atmos MCP Server        │                            │
+│           │   (atmos mcp-server)      │                            │
+│           ├───────────────────────────┤                            │
+│           │ Transport Layer:          │                            │
+│           │  • stdio (default)        │                            │
+│           │  • HTTP + SSE             │                            │
+│           ├───────────────────────────┤                            │
+│           │ Protocol Handler:         │                            │
+│           │  • JSON-RPC 2.0           │                            │
+│           │  • MCP Spec 2025-03-26    │                            │
+│           └───────────┬───────────────┘                            │
+│                       │                                             │
+│         ┌─────────────┴─────────────┐                              │
+│         ↓                           ↓                               │
+│  ┌─────────────┐          ┌─────────────┐                         │
+│  │ MCP Tools   │          │ MCP Resources│                         │
+│  ├─────────────┤          ├─────────────┤                         │
+│  │ list_*      │          │ stack_config│                         │
+│  │ describe_*  │          │ component_  │                         │
+│  │ validate_*  │          │   _schema   │                         │
+│  │ terraform_* │          └─────────────┘                         │
+│  │ file_access │                                                   │
+│  └─────────────┘                                                   │
+│         │                                                           │
+│         ↓                                                           │
+│  ┌──────────────────────────────────┐                             │
+│  │    Atmos Core Engine             │                             │
+│  │  (shared with 'atmos ai chat')   │                             │
+│  ├──────────────────────────────────┤                             │
+│  │ • Component Loader               │                             │
+│  │ • Stack Processor                │                             │
+│  │ • Terraform Integration          │                             │
+│  │ • Validation Engine              │                             │
+│  │ • Tool Registry (reused)         │                             │
+│  │ • Permission System (reused)     │                             │
+│  └──────────────────────────────────┘                             │
+│                                                                      │
+└────────────────────────────────────────────────────────────────────┘
 ```
 
 ## Complete Atmos Ecosystem
