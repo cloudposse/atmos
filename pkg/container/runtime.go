@@ -1,5 +1,7 @@
 package container
 
+//go:generate go run go.uber.org/mock/mockgen@latest -source=runtime.go -destination=mock_runtime_test.go -package=container
+
 import (
 	"context"
 	"time"
