@@ -16,5 +16,5 @@ jobs:
       publish: true
       format: binary
       prerelease: true
-      runs-on: '["runs-on=${{github.run_id}}", "runner=terraform", "tag=atmos","extras=s3-cache", "private=false]"'
+      runs-on: '["runs-on=${{github.run_id}}", "runner=terraform", "tag=atmos","extras=s3-cache", "private=false"]'
     secrets: inherit
