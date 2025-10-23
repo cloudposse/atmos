@@ -67,6 +67,7 @@ require (
 	github.com/lrstanley/bubblezone v1.0.0
 	github.com/mattn/go-isatty v0.0.20
 	github.com/mattn/go-runewidth v0.0.19
+	github.com/mattn/go-sqlite3 v1.14.32
 	github.com/mikefarah/yq/v4 v4.48.1
 	github.com/mitchellh/go-wordwrap v1.0.1
 	github.com/mitchellh/mapstructure v1.5.0

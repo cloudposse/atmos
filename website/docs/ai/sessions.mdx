@@ -1,0 +1,462 @@
+---
+title: AI Sessions
+sidebar_label: Sessions
+sidebar_position: 3
+description: Persistent conversation sessions for the Atmos AI Assistant
+---
+import Terminal from '@site/src/components/Terminal'
+import File from '@site/src/components/File'
+
+# AI Sessions
+
+Atmos AI supports persistent conversation sessions that maintain message history across CLI invocations. Sessions allow you to have long-running conversations with the AI assistant, picking up exactly where you left off.
+
+## Overview
+
+Sessions provide:
+- **Persistent History**: Complete conversation history saved locally
+- **Named Sessions**: Organize conversations by topic or project
+- **Context Preservation**: Session-specific context and references
+- **SQLite Storage**: Fast, reliable local storage
+- **Automatic Cleanup**: Configurable retention policies
+
+## Configuration
+
+Enable sessions in your `atmos.yaml`:
+
+<File title="atmos.yaml">
+```yaml
+settings:
+  ai:
+    enabled: true
+    provider: "anthropic"
+
+    sessions:
+      enabled: true                    # Enable persistent sessions
+      storage: "sqlite"                # Storage backend (default: sqlite)
+      path: ".atmos/sessions"          # Storage directory (default: .atmos/sessions)
+      max_sessions: 10                 # Max sessions per project (default: 10)
+      auto_save: true                  # Auto-save messages (default: true)
+      retention_days: 30               # Retention period in days (default: 30)
+```
+</File>
+
+### Configuration Options
+
+<dl>
+  <dt>`sessions.enabled`</dt>
+  <dd>Enable or disable persistent sessions (default: `false`)</dd>
+
+  <dt>`sessions.storage`</dt>
+  <dd>Storage backend for sessions. Currently only `sqlite` is supported (default: `sqlite`)</dd>
+
+  <dt>`sessions.path`</dt>
+  <dd>Directory path where the session database is stored (default: `.atmos/sessions`)</dd>
+
+  <dt>`sessions.max_sessions`</dt>
+  <dd>Maximum number of sessions to keep per project. When this limit is reached, the oldest sessions are automatically cleaned up (default: `10`)</dd>
+
+  <dt>`sessions.auto_save`</dt>
+  <dd>Automatically save messages after each exchange. If disabled, messages are only saved when you exit the chat (default: `true`)</dd>
+
+  <dt>`sessions.retention_days`</dt>
+  <dd>Number of days to retain sessions before automatic cleanup. Set to `0` to keep sessions indefinitely (default: `30`)</dd>
+</dl>
+
+## Using Sessions
+
+### Starting a Named Session
+
+Start a new chat session with a specific name:
+
+<Terminal title="atmos ai chat --session">
+```bash
+atmos ai chat --session vpc-refactor
+```
+</Terminal>
+
+If the session doesn't exist, it will be created. If it exists, the conversation history will be loaded.
+
+### Starting an Anonymous Session
+
+If you don't provide a session name, a new anonymous session is created:
+
+<Terminal title="atmos ai chat">
+```bash
+atmos ai chat
+# Creates session with auto-generated name like: session-20250123-143022
+```
+</Terminal>
+
+### Resuming an Existing Session
+
+Resume a previous conversation by specifying its name:
+
+<Terminal title="atmos ai chat --session">
+```bash
+# Continue your vpc-refactor conversation
+atmos ai chat --session vpc-refactor
+```
+</Terminal>
+
+The AI will have access to the complete conversation history, providing continuity and context.
+
+### Listing Sessions
+
+View all available sessions:
+
+<Terminal title="atmos ai sessions">
+```bash
+atmos ai sessions
+```
+</Terminal>
+
+Example output:
+```
+Available Sessions:
+
+Name: vpc-refactor
+  ID: a8f3e9d2-4b1c-4d7e-8f3a-9c2b4e8d7f3a
+  Created: 2025-10-20 14:30:22
+  Updated: 2025-10-23 09:15:45
+  Messages: 47
+  Model: claude-3-5-sonnet-20241022
+  Provider: anthropic
+
+Name: session-20251015-091032
+  ID: b7e2d8c1-3a4b-5c6d-7e8f-1a2b3c4d5e6f
+  Created: 2025-10-15 09:10:32
+  Updated: 2025-10-15 09:45:18
+  Messages: 12
+  Model: gpt-4o
+  Provider: openai
+```
+
+### Cleaning Old Sessions
+
+Remove sessions older than a specified period:
+
+<Terminal title="atmos ai sessions clean">
+```bash
+# Clean sessions older than 30 days
+atmos ai sessions clean --older-than 30d
+
+# Clean sessions older than 7 days
+atmos ai sessions clean --older-than 7d
+
+# Clean sessions older than 24 hours
+atmos ai sessions clean --older-than 24h
+```
+</Terminal>
+
+Example output:
+```
+🧹 Cleaning sessions older than 30 days...
+✅ Deleted 5 sessions
+```
+
+Supported time units:
+- `h` - hours (e.g., `24h`)
+- `d` - days (e.g., `7d`)
+- `w` - weeks (e.g., `2w`)
+- `m` - months (e.g., `3m`)
+
+## Session Storage
+
+### Storage Location
+
+Sessions are stored in a SQLite database at:
+```
+<project-root>/.atmos/sessions/sessions.db
+```
+
+The database is created automatically when you start your first session.
+
+### Database Schema
+
+The SQLite database contains three tables:
+
+**sessions** - Session metadata
+- `id` (TEXT) - Unique session identifier
+- `name` (TEXT) - Session name
+- `project_path` (TEXT) - Project directory path
+- `model` (TEXT) - AI model used
+- `provider` (TEXT) - AI provider (anthropic, openai, gemini, grok)
+- `created_at` (TIMESTAMP) - Creation timestamp
+- `updated_at` (TIMESTAMP) - Last update timestamp
+- `metadata` (TEXT) - JSON metadata
+
+**messages** - Conversation history
+- `id` (INTEGER) - Message ID
+- `session_id` (TEXT) - Foreign key to sessions
+- `role` (TEXT) - Message role (user, assistant, system)
+- `content` (TEXT) - Message content
+- `created_at` (TIMESTAMP) - Message timestamp
+
+**session_context** - Context items
+- `session_id` (TEXT) - Foreign key to sessions
+- `context_type` (TEXT) - Type of context (stack_file, component, etc.)
+- `context_key` (TEXT) - Context identifier
+- `context_value` (TEXT) - Context data
+
+### Backing Up Sessions
+
+To backup your sessions, simply copy the database file:
+
+<Terminal title="shell">
+```bash
+# Backup sessions
+cp .atmos/sessions/sessions.db .atmos/sessions/sessions.db.backup
+
+# Restore from backup
+cp .atmos/sessions/sessions.db.backup .atmos/sessions/sessions.db
+```
+</Terminal>
+
+### Inspecting Sessions
+
+You can inspect sessions using any SQLite client:
+
+<Terminal title="sqlite3">
+```bash
+# Open the database
+sqlite3 .atmos/sessions/sessions.db
+
+# List all sessions
+SELECT name, created_at, updated_at FROM sessions;
+
+# Count messages per session
+SELECT s.name, COUNT(m.id) as message_count
+FROM sessions s
+LEFT JOIN messages m ON s.id = m.session_id
+GROUP BY s.id;
+
+# View recent messages
+SELECT s.name, m.role, substr(m.content, 1, 50) as preview, m.created_at
+FROM messages m
+JOIN sessions s ON m.session_id = s.id
+ORDER BY m.created_at DESC
+LIMIT 10;
+```
+</Terminal>
+
+## Privacy and Security
+
+### Local Storage
+
+Sessions are stored **locally on your machine** in the SQLite database. No session data is transmitted to AI providers except during active conversations.
+
+### Session Data
+
+Sessions contain:
+- ✅ Your questions and the AI's responses
+- ✅ Session metadata (name, timestamps, model)
+- ✅ Context references (stack files, components)
+- ❌ No API keys or credentials
+- ❌ No data sent to AI providers unless actively chatting
+
+### Data Sent to AI Providers
+
+When you resume a session, the message history is sent to the AI provider to provide context. This happens:
+- Only during active chat sessions
+- Only for the specific session you're using
+- According to your provider's data handling policies
+
+**Important**: If your conversations contain sensitive information (AWS account IDs, infrastructure details), be aware that this data is sent to your AI provider.
+
+### Deleting Sessions
+
+To permanently delete a session:
+
+<Terminal title="shell">
+```bash
+# Clean all sessions older than 0 days (delete all)
+atmos ai sessions clean --older-than 0d
+
+# Or manually delete the database
+rm .atmos/sessions/sessions.db
+```
+</Terminal>
+
+## Best Practices
+
+### Naming Conventions
+
+Use descriptive session names that reflect the topic:
+
+<Terminal title="shell">
+```bash
+# Good session names
+atmos ai chat --session vpc-refactor
+atmos ai chat --session rds-troubleshooting
+atmos ai chat --session new-region-setup
+
+# Avoid generic names
+atmos ai chat --session test
+atmos ai chat --session temp
+```
+</Terminal>
+
+### Session Organization
+
+- **One Topic per Session**: Keep conversations focused on a single topic
+- **Descriptive Names**: Use clear names that describe the conversation purpose
+- **Regular Cleanup**: Clean old sessions regularly to avoid clutter
+- **Important Sessions**: For critical sessions, backup the database file
+
+### Retention Strategy
+
+Choose retention based on your needs:
+
+<File title="atmos.yaml">
+```yaml
+# For active development (keep recent sessions)
+sessions:
+  retention_days: 7
+
+# For long-term projects (keep longer)
+sessions:
+  retention_days: 90
+
+# Never auto-delete (manual cleanup only)
+sessions:
+  retention_days: 0
+```
+</File>
+
+### Performance Optimization
+
+For large repositories:
+
+<File title="atmos.yaml">
+```yaml
+sessions:
+  max_sessions: 20          # Increase if you need more active sessions
+  auto_save: true           # Keep enabled for data safety
+  retention_days: 30        # Clean up regularly to maintain performance
+```
+</File>
+
+## Use Cases
+
+### Long-term Infrastructure Projects
+
+<Terminal title="shell">
+```bash
+# Start a session for a major refactoring project
+atmos ai chat --session vpc-migration-2025
+
+# Work on it over multiple days/weeks
+# Each time you resume, the AI remembers the context
+
+# Day 1: Planning
+atmos ai chat --session vpc-migration-2025
+> "Let's plan the VPC migration from 10.0.0.0/16 to 10.1.0.0/16"
+
+# Day 2: Implementation
+atmos ai chat --session vpc-migration-2025
+> "Show me the plan we discussed yesterday"
+# AI has full context of previous discussion
+
+# Week 2: Troubleshooting
+atmos ai chat --session vpc-migration-2025
+> "We're seeing routing issues with the new VPC"
+# AI can reference earlier conversations about the migration
+```
+</Terminal>
+
+### Topic-Specific Sessions
+
+<Terminal title="shell">
+```bash
+# Separate sessions for different concerns
+atmos ai chat --session security-review
+atmos ai chat --session performance-optimization
+atmos ai chat --session cost-reduction
+atmos ai chat --session dr-planning
+```
+</Terminal>
+
+### Team Collaboration
+
+<Terminal title="shell">
+```bash
+# Share session database with team
+# Team members can view conversation history
+sqlite3 .atmos/sessions/sessions.db .dump > session-export.sql
+
+# Team member imports
+sqlite3 .atmos/sessions/sessions.db < session-export.sql
+```
+</Terminal>
+
+## Troubleshooting
+
+### Session Not Found
+
+If you get "session not found" errors:
+
+<Terminal title="shell">
+```bash
+# List all sessions to verify the name
+atmos ai sessions
+
+# Check database exists
+ls -la .atmos/sessions/sessions.db
+```
+</Terminal>
+
+### Database Corruption
+
+If you encounter database errors:
+
+<Terminal title="shell">
+```bash
+# Check database integrity
+sqlite3 .atmos/sessions/sessions.db "PRAGMA integrity_check;"
+
+# If corrupted, restore from backup
+cp .atmos/sessions/sessions.db.backup .atmos/sessions/sessions.db
+
+# Or start fresh (WARNING: deletes all sessions)
+rm .atmos/sessions/sessions.db
+```
+</Terminal>
+
+### Disk Space Issues
+
+If sessions are consuming too much disk space:
+
+<Terminal title="shell">
+```bash
+# Check database size
+du -h .atmos/sessions/sessions.db
+
+# Clean old sessions
+atmos ai sessions clean --older-than 7d
+
+# Vacuum database to reclaim space
+sqlite3 .atmos/sessions/sessions.db "VACUUM;"
+```
+</Terminal>
+
+### Permission Errors
+
+If you get permission errors:
+
+<Terminal title="shell">
+```bash
+# Check directory permissions
+ls -la .atmos/sessions/
+
+# Fix permissions
+chmod 755 .atmos/sessions
+chmod 644 .atmos/sessions/sessions.db
+```
+</Terminal>
+
+## Related Documentation
+
+- [AI Configuration](/ai/configuration) - Configure AI providers and settings
+- [AI Commands](/cli/commands/ai/usage) - Complete command reference
+- [Tool Execution](/ai/tools) - Learn about AI tool execution capabilities

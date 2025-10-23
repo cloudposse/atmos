@@ -1,0 +1,689 @@
+---
+title: AI Tool Execution
+sidebar_label: Tools
+sidebar_position: 4
+description: AI tool execution and permission system for Atmos AI Assistant
+---
+import Terminal from '@site/src/components/Terminal'
+import File from '@site/src/components/File'
+
+# AI Tool Execution
+
+Atmos AI can execute tools to query your infrastructure configuration. Tools allow the AI to automatically inspect stacks, components, and validate configurations without requiring manual intervention.
+
+## Overview
+
+Tool execution provides:
+- **Automated Queries**: AI can inspect your infrastructure on demand
+- **Read-only Operations**: Safe execution of describe, list, and validate commands
+- **Permission System**: Granular control over what the AI can execute
+- **User Confirmations**: Smart prompts for sensitive operations
+- **Timeout Protection**: Automatic cancellation of long-running operations
+
+## Configuration
+
+Enable tool execution in your `atmos.yaml`:
+
+<File title="atmos.yaml">
+```yaml
+settings:
+  ai:
+    enabled: true
+    provider: "anthropic"
+
+    tools:
+      enabled: true                        # Enable tool execution
+      require_confirmation: true           # Prompt before executing tools
+
+      # Tools that can execute without user confirmation
+      allowed_tools:
+        - atmos_describe_component
+        - atmos_list_stacks
+        - atmos_validate_stacks
+        - atmos_describe_*                 # Wildcard patterns supported
+
+      # Tools that always require confirmation
+      restricted_tools:
+        - file_edit
+        - atmos_terraform_plan
+
+      # Tools that are completely blocked
+      blocked_tools:
+        - atmos_terraform_destroy
+        - atmos_terraform_apply
+
+      yolo_mode: false                     # Skip all confirmations (DANGEROUS!)
+```
+</File>
+
+### Configuration Options
+
+<dl>
+  <dt>`tools.enabled`</dt>
+  <dd>Enable or disable AI tool execution capabilities (default: `false`)</dd>
+
+  <dt>`tools.require_confirmation`</dt>
+  <dd>Prompt user before executing any tool not in the `allowed_tools` list (default: `true`)</dd>
+
+  <dt>`tools.allowed_tools`</dt>
+  <dd>List of tools that can execute without user confirmation. Supports wildcard patterns like `atmos_*` (default: `[]`)</dd>
+
+  <dt>`tools.restricted_tools`</dt>
+  <dd>List of tools that always require user confirmation, even if `require_confirmation` is `false` (default: `[]`)</dd>
+
+  <dt>`tools.blocked_tools`</dt>
+  <dd>List of tools that are completely blocked from execution (default: `[]`)</dd>
+
+  <dt>`tools.yolo_mode`</dt>
+  <dd>Skip all permission checks and execute all tools automatically. **DANGEROUS!** Only use in trusted CI/CD environments (default: `false`)</dd>
+</dl>
+
+## Available Tools
+
+### Atmos Tools
+
+These tools interact with your Atmos configuration:
+
+#### `atmos_describe_component`
+
+Describes an Atmos component configuration in a specific stack.
+
+**Parameters:**
+- `component` (string, required) - Component name (e.g., 'vpc', 'rds')
+- `stack` (string, required) - Stack name (e.g., 'prod-use1')
+
+**Example Usage:**
+
+<Terminal title="atmos ai chat">
+```bash
+You: "What's the CIDR block for the VPC in prod-use1?"
+
+AI: Let me check that for you.
+
+🔧 Tool Execution Request
+Tool: atmos_describe_component
+Description: Describe an Atmos component configuration in a specific stack
+
+Parameters:
+  component: vpc
+  stack: prod-use1
+
+Allow execution? (y/N): y
+
+✅ Executing tool...
+
+The VPC in prod-use1 uses CIDR block 10.0.0.0/16 with the following configuration:
+...
+```
+</Terminal>
+
+**Permissions:** Read-only, no confirmation required by default
+
+---
+
+#### `atmos_list_stacks`
+
+Lists all available Atmos stacks.
+
+**Parameters:**
+- `format` (string, optional) - Output format: `yaml` or `json` (default: `yaml`)
+
+**Example Usage:**
+
+<Terminal title="atmos ai chat">
+```bash
+You: "What stacks are available?"
+
+AI: Let me list the available stacks.
+
+🔧 Tool Execution Request
+Tool: atmos_list_stacks
+Description: List all available Atmos stacks
+
+Parameters:
+  format: yaml
+
+Allow execution? (y/N): y
+
+✅ Executing tool...
+
+You have the following stacks:
+- prod-use1
+- prod-use2
+- staging-use1
+- dev-use1
+```
+</Terminal>
+
+**Permissions:** Read-only, no confirmation required by default
+
+---
+
+#### `atmos_validate_stacks`
+
+Validates Atmos stack configurations for correctness.
+
+**Parameters:**
+- `schema_type` (string, optional) - Schema validation type: `jsonschema` or `opa` (default: `jsonschema`)
+
+**Example Usage:**
+
+<Terminal title="atmos ai chat">
+```bash
+You: "Are my stack configurations valid?"
+
+AI: Let me validate your stack configurations.
+
+🔧 Tool Execution Request
+Tool: atmos_validate_stacks
+Description: Validate Atmos stack configurations for correctness
+
+Parameters:
+  schema_type: jsonschema
+
+Allow execution? (y/N): y
+
+✅ Executing tool...
+
+✅ All stacks validated successfully using jsonschema.
+```
+</Terminal>
+
+**Permissions:** Read-only, no confirmation required by default
+
+## Permission System
+
+The permission system provides granular control over what tools the AI can execute.
+
+### Permission Modes
+
+#### Prompt Mode (Default)
+
+User is prompted for each tool execution:
+
+<File title="atmos.yaml">
+```yaml
+tools:
+  enabled: true
+  require_confirmation: true  # Default mode
+```
+</File>
+
+#### Allow Mode
+
+All tools execute without prompts (except restricted tools):
+
+<File title="atmos.yaml">
+```yaml
+tools:
+  enabled: true
+  require_confirmation: false
+  # Still prompt for restricted_tools
+  restricted_tools:
+    - atmos_terraform_plan
+```
+</File>
+
+#### YOLO Mode (⚠️ Dangerous)
+
+All tools execute automatically without any prompts:
+
+<File title="atmos.yaml">
+```yaml
+tools:
+  enabled: true
+  yolo_mode: true  # ⚠️ DANGEROUS! No safety checks!
+```
+</File>
+
+**Warning:** Only use YOLO mode in isolated CI/CD environments with strict access controls.
+
+### Permission Flow
+
+When the AI requests tool execution:
+
+```
+1. YOLO Mode Enabled?
+   └─ Yes → Execute immediately (skip all checks)
+   └─ No  → Continue to step 2
+
+2. Tool in Blocked List?
+   └─ Yes → Deny execution
+   └─ No  → Continue to step 3
+
+3. Tool in Allowed List?
+   └─ Yes → Execute without prompt
+   └─ No  → Continue to step 4
+
+4. Tool in Restricted List?
+   └─ Yes → Always prompt user
+   └─ No  → Continue to step 5
+
+5. require_confirmation = true?
+   └─ Yes → Prompt user
+   └─ No  → Execute without prompt
+```
+
+### Wildcard Patterns
+
+Use wildcards to match multiple tools:
+
+<File title="atmos.yaml">
+```yaml
+tools:
+  allowed_tools:
+    - atmos_describe_*      # Match: atmos_describe_component, atmos_describe_stacks
+    - atmos_list_*          # Match: atmos_list_stacks, atmos_list_components
+    - file_read*            # Match: file_read, file_read_lines
+    - *_validate            # Match: atmos_validate, stack_validate
+```
+</File>
+
+**Pattern Rules:**
+- `*` matches any characters
+- Patterns are matched against the full tool name
+- First match wins (check order matters)
+
+### Permission Lists
+
+#### Allowed Tools
+
+Tools that execute without confirmation:
+
+<File title="atmos.yaml">
+```yaml
+tools:
+  allowed_tools:
+    - atmos_describe_component   # Specific tool
+    - atmos_list_stacks
+    - atmos_validate_stacks
+    - atmos_describe_*           # All describe commands
+```
+</File>
+
+Use for:
+- ✅ Read-only operations
+- ✅ Safe query commands
+- ✅ Frequently used tools
+
+#### Restricted Tools
+
+Tools that always require confirmation:
+
+<File title="atmos.yaml">
+```yaml
+tools:
+  restricted_tools:
+    - file_edit                  # Modifies files
+    - atmos_terraform_plan       # Generates plans
+    - atmos_terraform_*          # All terraform operations
+```
+</File>
+
+Use for:
+- ⚠️ Operations that modify state
+- ⚠️ Commands that generate plans
+- ⚠️ Potentially expensive operations
+
+#### Blocked Tools
+
+Tools that are completely prohibited:
+
+<File title="atmos.yaml">
+```yaml
+tools:
+  blocked_tools:
+    - atmos_terraform_destroy    # Destructive operation
+    - atmos_terraform_apply      # Applies changes
+    - file_delete                # Deletes files
+    - *_delete                   # Block all delete operations
+```
+</File>
+
+Use for:
+- 🚫 Destructive operations
+- 🚫 Commands that apply changes
+- 🚫 Tools that should never run automatically
+
+## Permission Prompts
+
+When a tool requires confirmation, you'll see a detailed prompt:
+
+<Terminal title="atmos ai chat">
+```bash
+🔧 Tool Execution Request
+Tool: atmos_describe_component
+Description: Describe an Atmos component configuration in a specific stack
+
+Parameters:
+  component: vpc
+  stack: prod-use1
+
+Allow execution? (y/N):
+```
+</Terminal>
+
+**Responses:**
+- `y` or `yes` - Allow this execution
+- `n`, `no`, or Enter - Deny this execution
+
+### Prompt Information
+
+Each prompt shows:
+- **Tool Name** - The specific tool being executed
+- **Description** - What the tool does
+- **Parameters** - All parameters being passed to the tool
+
+This allows you to make informed decisions about tool execution.
+
+## Security Best Practices
+
+### Start Conservative
+
+Begin with strict permissions and relax over time:
+
+<File title="atmos.yaml">
+```yaml
+# Day 1: Prompt for everything
+tools:
+  enabled: true
+  require_confirmation: true
+  allowed_tools: []
+
+# After trust is established: Allow read-only tools
+tools:
+  enabled: true
+  require_confirmation: true
+  allowed_tools:
+    - atmos_describe_*
+    - atmos_list_*
+    - atmos_validate_*
+```
+</File>
+
+### Block Destructive Operations
+
+Always block tools that modify infrastructure:
+
+<File title="atmos.yaml">
+```yaml
+tools:
+  blocked_tools:
+    - atmos_terraform_destroy
+    - atmos_terraform_apply
+    - file_delete
+    - file_write
+    - *_delete
+    - *_destroy
+```
+</File>
+
+### Use Restricted List Wisely
+
+Force confirmation for state-modifying operations:
+
+<File title="atmos.yaml">
+```yaml
+tools:
+  restricted_tools:
+    - atmos_terraform_plan      # Always confirm plans
+    - file_edit                 # Always confirm edits
+    - atmos_workflow_*          # Always confirm workflows
+```
+</File>
+
+### Avoid YOLO Mode
+
+Never use YOLO mode in:
+- ❌ Production environments
+- ❌ Shared development environments
+- ❌ Workstations with access to production
+- ❌ Any environment with sensitive data
+
+Only use YOLO mode in:
+- ✅ Isolated CI/CD runners
+- ✅ Read-only analysis environments
+- ✅ Sandboxed testing environments
+
+### Review Permissions Regularly
+
+Audit your tool configuration as new tools are added:
+
+<Terminal title="shell">
+```bash
+# Review current configuration
+grep -A 20 "tools:" atmos.yaml
+
+# Test permission system
+atmos ai chat
+> "List all stacks"  # Should trigger permission prompt or execute based on config
+```
+</Terminal>
+
+### Environment-Specific Configuration
+
+Use different configurations for different environments:
+
+<File title="atmos.yaml (production)">
+```yaml
+# Production: Very restrictive
+tools:
+  enabled: true
+  require_confirmation: true
+  allowed_tools: []              # Nothing auto-allowed
+  blocked_tools:
+    - atmos_terraform_*          # Block all Terraform operations
+    - file_*                     # Block all file operations
+```
+</File>
+
+<File title="atmos.yaml (development)">
+```yaml
+# Development: More permissive
+tools:
+  enabled: true
+  require_confirmation: true
+  allowed_tools:
+    - atmos_describe_*           # Allow describe operations
+    - atmos_list_*               # Allow list operations
+    - atmos_validate_*           # Allow validation
+  blocked_tools:
+    - atmos_terraform_destroy    # Still block destroy
+```
+</File>
+
+## Tool Execution Behavior
+
+### Timeouts
+
+Tools have a default timeout of 30 seconds:
+
+- Long-running operations are automatically cancelled
+- Prevents hanging on unresponsive operations
+- Error returned to AI if timeout occurs
+
+### Error Handling
+
+When a tool fails:
+
+<Terminal title="atmos ai chat">
+```bash
+You: "Describe the vpc component in nonexistent-stack"
+
+AI: Let me check that.
+
+🔧 Tool Execution Request
+Tool: atmos_describe_component
+Parameters:
+  component: vpc
+  stack: nonexistent-stack
+
+Allow execution? (y/N): y
+
+❌ Tool execution failed: stack 'nonexistent-stack' not found
+
+I apologize, but the stack 'nonexistent-stack' doesn't exist in your configuration.
+Would you like me to list the available stacks instead?
+```
+</Terminal>
+
+The AI receives error information and can adjust its response accordingly.
+
+### Tool Results
+
+Tools return structured results:
+
+```go
+type Result struct {
+    Success bool                      // Did the tool succeed?
+    Output  string                    // Human-readable output
+    Data    map[string]interface{}    // Structured data
+    Error   error                     // Error if failed
+}
+```
+
+The AI uses this information to:
+- Provide accurate answers
+- Handle errors gracefully
+- Make follow-up queries
+
+## Use Cases
+
+### Automated Infrastructure Analysis
+
+<Terminal title="atmos ai chat">
+```bash
+You: "Analyze the VPC configuration across all production stacks"
+
+AI: Let me analyze the VPC configurations.
+
+# AI automatically executes:
+# 1. atmos_list_stacks to find all prod stacks
+# 2. atmos_describe_component vpc prod-use1
+# 3. atmos_describe_component vpc prod-use2
+# ... (with appropriate permissions)
+
+Based on my analysis of your production VPCs:
+- prod-use1: CIDR 10.0.0.0/16, 3 availability zones
+- prod-use2: CIDR 10.1.0.0/16, 3 availability zones
+- Both use consistent subnet layouts
+- All have VPN gateway enabled
+```
+</Terminal>
+
+### Configuration Validation
+
+<Terminal title="atmos ai chat">
+```bash
+You: "Are all my stack configurations valid?"
+
+AI: Let me validate your configurations.
+
+# AI executes: atmos_validate_stacks
+
+All stack configurations are valid! I found:
+- 15 stacks validated
+- No schema violations
+- No missing required fields
+
+Your configurations look good.
+```
+</Terminal>
+
+### Troubleshooting
+
+<Terminal title="atmos ai chat">
+```bash
+You: "Why is the prod-use1 stack failing validation?"
+
+AI: Let me check the configuration.
+
+# AI executes:
+# 1. atmos_describe_component * prod-use1
+# 2. atmos_validate_stacks
+
+I found the issue. The `vpc` component in prod-use1 is missing the required
+`enable_dns_hostnames` field. This is required by your JSON schema.
+
+Would you like me to suggest the correct configuration?
+```
+</Terminal>
+
+## Troubleshooting
+
+### Tool Execution Denied
+
+If you see "tool execution denied" errors:
+
+<Terminal title="shell">
+```bash
+# Check if tools are enabled
+grep -A 5 "tools:" atmos.yaml
+
+# Verify tool isn't blocked
+grep -A 10 "blocked_tools:" atmos.yaml
+```
+</Terminal>
+
+### Permission Prompts Not Appearing
+
+If prompts don't appear when expected:
+
+<File title="atmos.yaml">
+```yaml
+# Ensure require_confirmation is true
+tools:
+  require_confirmation: true
+
+# Check if tool is in allowed_tools
+allowed_tools:
+  - atmos_describe_*  # This would skip prompts!
+```
+</File>
+
+### Timeouts
+
+If tools are timing out:
+
+- Tools have a 30-second timeout
+- Long-running operations will be cancelled
+- Consider running the operation manually: `atmos describe component <component> <stack>`
+
+### YOLO Mode Not Working
+
+YOLO mode requires explicit configuration:
+
+<File title="atmos.yaml">
+```yaml
+tools:
+  enabled: true
+  yolo_mode: true  # Must be explicitly set
+```
+</File>
+
+**Warning:** Only use YOLO mode in controlled environments.
+
+## Future Tools
+
+Future Atmos AI releases will include additional tools:
+
+**Planned Tools:**
+- `atmos_list_components` - List all components
+- `atmos_describe_stacks` - Describe multiple stacks
+- `atmos_terraform_plan` - Generate Terraform plans (read-only)
+- `file_read` - Read file contents
+- `file_search` - Search files for patterns
+
+**Tool Categories:**
+- **Atmos Operations**: Stack and component queries
+- **File Operations**: Read and search files
+- **Validation**: Schema and configuration validation
+- **Planning**: Generate plans and previews (read-only)
+
+Stay tuned for updates in future releases!
+
+## Related Documentation
+
+- [AI Configuration](/ai/configuration) - Configure AI providers and settings
+- [AI Sessions](/ai/sessions) - Learn about persistent conversation sessions
+- [AI Commands](/cli/commands/ai/usage) - Complete command reference

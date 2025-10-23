@@ -438,6 +438,16 @@ var (
 	ErrAINoResponseContent       = errors.New("no content in response")
 	ErrAIResponseNotText         = errors.New("response part does not contain text")
 	ErrAINoResponseChoices       = errors.New("no response choices returned")
+	ErrAISessionNotFound         = errors.New("AI session not found")
+	ErrAIToolNotFound            = errors.New("AI tool not found")
+	ErrAIToolExecutionDenied     = errors.New("AI tool execution denied by user")
+	ErrAIToolExecutionFailed     = errors.New("AI tool execution failed")
+	ErrAIToolParameterRequired   = errors.New("tool parameter is required")
+	ErrAIToolNameEmpty           = errors.New("tool name cannot be empty")
+	ErrAIToolAlreadyRegistered   = errors.New("tool already registered")
+	ErrAIToolBlocked             = errors.New("tool is blocked")
+	ErrAIToolsDisabled           = errors.New("tools are disabled")
+	ErrAINoPrompter              = errors.New("no prompter available")
 )
 
 // ExitCodeError is a typed error that preserves subcommand exit codes.

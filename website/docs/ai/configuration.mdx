@@ -196,6 +196,218 @@ export XAI_API_KEY="your-api-key-here"
   <dd>Prompt user for consent before sending context, even when `send_context` is `true` (default: `true`)</dd>
 </dl>
 
+## Session Management
+
+Atmos AI supports persistent conversation sessions that maintain message history across CLI invocations. Sessions are stored locally in SQLite and can be resumed anytime.
+
+### Configuration
+
+<File title="atmos.yaml">
+```yaml
+settings:
+  ai:
+    enabled: true
+    provider: "anthropic"
+
+    # Session management settings
+    sessions:
+      enabled: true                    # Enable persistent sessions (default: false)
+      storage: "sqlite"                # Storage backend: sqlite (default: sqlite)
+      path: ".atmos/sessions"          # Storage location (default: .atmos/sessions)
+      max_sessions: 10                 # Maximum sessions to keep (default: 10)
+      auto_save: true                  # Auto-save messages (default: true)
+      retention_days: 30               # Delete sessions older than N days (default: 30)
+```
+</File>
+
+### Session Settings
+
+<dl>
+  <dt>`sessions.enabled`</dt>
+  <dd>Enable persistent conversation sessions (default: `false`)</dd>
+
+  <dt>`sessions.storage`</dt>
+  <dd>Storage backend for sessions. Currently only `sqlite` is supported (default: `sqlite`)</dd>
+
+  <dt>`sessions.path`</dt>
+  <dd>Directory path where session database is stored (default: `.atmos/sessions`)</dd>
+
+  <dt>`sessions.max_sessions`</dt>
+  <dd>Maximum number of sessions to keep per project. Oldest sessions are cleaned up automatically (default: `10`)</dd>
+
+  <dt>`sessions.auto_save`</dt>
+  <dd>Automatically save messages to the session after each exchange (default: `true`)</dd>
+
+  <dt>`sessions.retention_days`</dt>
+  <dd>Number of days to retain sessions before cleanup. Use `0` to keep sessions indefinitely (default: `30`)</dd>
+</dl>
+
+### Using Sessions
+
+When sessions are enabled, you can:
+
+<Terminal title="shell">
+```bash
+# Start a named session
+atmos ai chat --session vpc-refactor
+
+# List all sessions
+atmos ai sessions
+
+# Resume an existing session
+atmos ai chat --session vpc-refactor
+
+# Clean old sessions
+atmos ai sessions clean --older-than 30d
+```
+</Terminal>
+
+Sessions store:
+- Complete message history (user and assistant messages)
+- Session metadata (creation time, last update, model used)
+- Context items (stack files, component references)
+
+### Storage Location
+
+Sessions are stored in a SQLite database at:
+```
+<project-root>/.atmos/sessions/sessions.db
+```
+
+The database includes three tables:
+- `sessions` - Session metadata
+- `messages` - Message history
+- `session_context` - Context items
+
+### Privacy Note
+
+Sessions are stored **locally on your machine**. No session data is sent to AI providers except during active conversations.
+
+## Tool Execution
+
+Atmos AI can execute read-only tools to query your infrastructure configuration. Tools allow the AI to inspect stacks, components, and validate configurations without manual intervention.
+
+### Configuration
+
+<File title="atmos.yaml">
+```yaml
+settings:
+  ai:
+    enabled: true
+    provider: "anthropic"
+
+    # Tool execution settings
+    tools:
+      enabled: true                        # Enable tool execution (default: false)
+      require_confirmation: true           # Prompt before executing tools (default: true)
+
+      # Allowed tools (no confirmation needed)
+      allowed_tools:
+        - atmos_describe_component         # Allow without prompting
+        - atmos_list_stacks
+        - atmos_validate_stacks
+        - atmos_describe_*                 # Wildcard patterns supported
+
+      # Restricted tools (always prompt)
+      restricted_tools:
+        - file_edit                        # Always require confirmation
+        - atmos_terraform_plan
+
+      # Blocked tools (never allow)
+      blocked_tools:
+        - atmos_terraform_destroy          # Completely blocked
+        - atmos_terraform_apply
+
+      yolo_mode: false                     # Skip all confirmations (DANGEROUS!)
+```
+</File>
+
+### Tool Settings
+
+<dl>
+  <dt>`tools.enabled`</dt>
+  <dd>Enable AI tool execution capabilities (default: `false`)</dd>
+
+  <dt>`tools.require_confirmation`</dt>
+  <dd>Prompt user before executing any tool not in `allowed_tools` (default: `true`)</dd>
+
+  <dt>`tools.allowed_tools`</dt>
+  <dd>List of tools that can execute without user confirmation. Supports wildcard patterns like `atmos_*` (default: `[]`)</dd>
+
+  <dt>`tools.restricted_tools`</dt>
+  <dd>List of tools that always require user confirmation, even if `require_confirmation` is `false` (default: `[]`)</dd>
+
+  <dt>`tools.blocked_tools`</dt>
+  <dd>List of tools that are completely blocked from execution (default: `[]`)</dd>
+
+  <dt>`tools.yolo_mode`</dt>
+  <dd>Skip all permission checks and execute all tools automatically. **DANGEROUS!** Only use in trusted CI/CD environments (default: `false`)</dd>
+</dl>
+
+### Available Tools
+
+Atmos AI includes these read-only tools:
+
+| Tool | Description | Permission Required |
+|------|-------------|---------------------|
+| `atmos_describe_component` | Describe component configuration in a stack | No |
+| `atmos_list_stacks` | List all available stacks | No |
+| `atmos_validate_stacks` | Validate stack configurations | No |
+
+### Permission Flow
+
+When the AI requests tool execution:
+
+1. **YOLO Mode Enabled?** → Execute immediately (skip all checks)
+2. **Tool Blocked?** → Deny execution
+3. **Tool in Allowed List?** → Execute without prompt
+4. **Tool in Restricted List?** → Always prompt user
+5. **Default Behavior** → Prompt user if `require_confirmation` is `true`
+
+### Permission Prompt Example
+
+When a tool requires confirmation:
+
+<Terminal title="atmos ai chat">
+```bash
+🔧 Tool Execution Request
+Tool: atmos_describe_component
+Description: Describe an Atmos component configuration in a specific stack
+
+Parameters:
+  component: vpc
+  stack: prod-use1
+
+Allow execution? (y/N): y
+
+✅ Executing tool...
+```
+</Terminal>
+
+### Wildcard Patterns
+
+You can use wildcards in tool lists:
+
+```yaml
+tools:
+  allowed_tools:
+    - atmos_describe_*    # Allow all describe commands
+    - atmos_list_*        # Allow all list commands
+    - file_*              # Allow all file operations
+```
+
+### Security Best Practices
+
+1. **Start Conservative**: Begin with `require_confirmation: true` and add trusted tools to `allowed_tools` over time
+2. **Block Destructive Operations**: Always add dangerous tools like `terraform_destroy` to `blocked_tools`
+3. **Use Restricted List**: For tools that modify state, add them to `restricted_tools` to force confirmation
+4. **Avoid YOLO Mode**: Only enable `yolo_mode` in isolated CI/CD environments with strict access controls
+5. **Review Permissions Regularly**: Audit your tool configuration as new tools are added
+
+### Tool Execution Timeouts
+
+Tools have a default timeout of 30 seconds. Long-running operations will be cancelled automatically to prevent hanging.
+
 ## Context-Aware AI Queries
 
 The AI assistant can analyze your actual stack configurations to provide specific, context-aware answers.

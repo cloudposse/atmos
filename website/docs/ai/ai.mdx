@@ -16,11 +16,24 @@ The Atmos AI Assistant is an AI-powered terminal agent that helps with Atmos inf
 
 ## Features
 
+### Conversation Management
 - **Interactive Chat Interface**: Terminal-based chat session for extended conversations
+- **Persistent Sessions**: Save and resume conversations across CLI invocations
+- **Message History**: Complete conversation history stored locally in SQLite
+- **Named Sessions**: Organize conversations by topic or project
+- **Session Management**: List, clean, and manage your conversation sessions
+
+### AI Capabilities
 - **Command-line Q&A**: Ask questions directly from the command line
 - **Context-aware Help**: Get help on specific Atmos topics
 - **Configuration Analysis**: The AI has knowledge of your Atmos setup
 - **Best Practice Guidance**: Receive recommendations for optimal configurations
+
+### Tool Execution
+- **Automated Queries**: AI can automatically inspect your infrastructure configuration
+- **Read-only Tools**: Safe execution of describe, list, and validate operations
+- **Permission System**: Granular control over what tools the AI can execute
+- **Smart Prompts**: User confirmation for sensitive operations
 
 ## Quick Start
 
@@ -33,7 +46,23 @@ settings:
     enabled: true
     provider: "anthropic"  # or "openai", "gemini", "grok"
     api_key_env: "ANTHROPIC_API_KEY"
-    # Optional performance tuning
+
+    # Optional: Enable persistent sessions
+    sessions:
+      enabled: true              # Save conversation history
+      storage: "sqlite"          # Local SQLite storage
+      path: ".atmos/sessions"    # Storage location
+      retention_days: 30         # Auto-cleanup after 30 days
+
+    # Optional: Enable tool execution
+    tools:
+      enabled: true              # Allow AI to query your infrastructure
+      require_confirmation: true # Prompt before executing tools
+      allowed_tools:             # Tools that don't need confirmation
+        - atmos_describe_component
+        - atmos_list_stacks
+
+    # Optional: Performance tuning
     timeout_seconds: 60         # Default: 60
     max_context_files: 10       # Default: 10
     max_context_lines: 500      # Default: 500
