@@ -745,6 +745,9 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 	if _, exists := tc.Env["COLORTERM"]; !exists {
 		tc.Env["COLORTERM"] = "" // Explicitly empty to prevent truecolor (force 256-color)
 	}
+	if _, exists := tc.Env["COLUMNS"]; !exists {
+		tc.Env["COLUMNS"] = "80" // Force consistent terminal width for table rendering
+	}
 	// Set any environment variables defined in the test case using t.Setenv for proper isolation.
 	for key, value := range tc.Env {
 		t.Setenv(key, value)

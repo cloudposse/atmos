@@ -19,6 +19,7 @@ var (
 	ErrUnknownPackageType                    = errors.New("unknown package type")
 	ErrLocalMixinURICannotBeEmpty            = errors.New("local mixin URI cannot be empty")
 	ErrLocalMixinInstallationNotImplemented  = errors.New("local mixin installation not implemented")
+	ErrNotImplemented                        = errors.New("not implemented")
 	ErrFailedToInitializeTUIModel            = errors.New("failed to initialize TUI model: verify terminal capabilities and permissions")
 	ErrSetTempDirPermissions                 = errors.New("failed to set temp directory permissions")
 	ErrCopyPackageToTarget                   = errors.New("failed to copy package to target")
@@ -50,6 +51,11 @@ var (
 	ErrTerminalTooNarrow                     = errors.New("terminal too narrow")
 	ErrSpinnerReturnedNilModel               = errors.New("spinner returned nil model")
 	ErrSpinnerUnexpectedModelType            = errors.New("spinner returned unexpected model type")
+
+	// ErrAuthConsole is returned when auth console command operations fail.
+	ErrAuthConsole          = errors.New("auth console operation failed")
+	ErrProviderNotSupported = errors.New("provider does not support this operation")
+	ErrUnknownServiceAlias  = errors.New("unknown service alias")
 
 	// ErrPlanHasDiff is returned when there are differences between two Terraform plan files.
 	ErrPlanHasDiff = errors.New("plan files have differences")
@@ -105,6 +111,7 @@ var (
 	ErrInvalidPagerCommand = errors.New("invalid pager command")
 	ErrEmptyURL            = errors.New("empty URL provided")
 	ErrFailedToFindImport  = errors.New("failed to find import")
+	ErrHTTPRequestFailed   = errors.New("HTTP request failed")
 
 	// Config loading errors.
 	ErrAtmosDirConfigNotFound      = errors.New("atmos config directory not found")

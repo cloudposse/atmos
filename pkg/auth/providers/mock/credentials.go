@@ -1,6 +1,7 @@
 package mock
 
 import (
+	"context"
 	"time"
 
 	"github.com/cloudposse/atmos/pkg/auth/types"
@@ -53,4 +54,13 @@ func (c *Credentials) BuildWhoamiInfo(info *types.WhoamiInfo) {
 
 	// Set region at top level.
 	info.Region = c.Region
+}
+
+// Validate is a no-op for mock credentials (always valid).
+// Returns expiration time if available.
+func (c *Credentials) Validate(ctx context.Context) (*time.Time, error) {
+	if !c.Expiration.IsZero() {
+		return &c.Expiration, nil
+	}
+	return nil, nil
 }

@@ -1,8 +1,13 @@
 package types
 
 import (
+	"context"
 	"fmt"
 	"time"
+
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/credentials"
+	"github.com/aws/aws-sdk-go-v2/service/sts"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 )
@@ -48,4 +53,35 @@ func (c *AWSCredentials) BuildWhoamiInfo(info *WhoamiInfo) {
 	if t, _ := c.GetExpiration(); t != nil {
 		info.Expiration = t
 	}
+}
+
+// Validate validates AWS credentials by calling STS GetCallerIdentity.
+// Returns the expiration time if available, or an error if credentials are invalid.
+func (c *AWSCredentials) Validate(ctx context.Context) (*time.Time, error) {
+	// Create AWS config with these credentials.
+	cfg := aws.Config{
+		Region: c.Region,
+		Credentials: credentials.NewStaticCredentialsProvider(
+			c.AccessKeyID,
+			c.SecretAccessKey,
+			c.SessionToken,
+		),
+	}
+
+	// Create STS client.
+	stsClient := sts.NewFromConfig(cfg)
+
+	// Call GetCallerIdentity to validate credentials.
+	_, err := stsClient.GetCallerIdentity(ctx, &sts.GetCallerIdentityInput{})
+	if err != nil {
+		return nil, fmt.Errorf("%w: failed to validate AWS credentials: %w", errUtils.ErrAuthenticationFailed, err)
+	}
+
+	// Return expiration time if available.
+	if expTime, err := c.GetExpiration(); err == nil && expTime != nil {
+		return expTime, nil
+	}
+
+	// No expiration available (long-term credentials).
+	return nil, nil
 }
