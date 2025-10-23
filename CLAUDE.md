@@ -220,7 +220,37 @@ Small focused files (<600 lines). One cmd/impl per file. Co-locate tests. Never 
 
 **Fixtures**: `tests/test-cases/` for integration tests
 
-**Golden Snapshots**: Regenerate with `go test ./tests -v -run 'TestName' -regenerate-snapshots`. Review with `git diff tests/snapshots/`. See `tests/README.md`
+**Golden Snapshots (MANDATORY):**
+- **NEVER manually edit golden snapshot files** - Always use `-regenerate-snapshots` flag
+- **ALWAYS use the test flag to regenerate** - Manual edits fail due to environment-specific formatting
+- Snapshots capture exact output including invisible formatting (lipgloss padding, ANSI codes, trailing whitespace)
+- Different environments produce different output (terminal width, Unicode support, styling libraries)
+
+**Regeneration process:**
+```bash
+# Regenerate specific test
+go test ./tests -run 'TestCLICommands/test_name' -regenerate-snapshots
+
+# Verify snapshot
+go test ./tests -run 'TestCLICommands/test_name' -v
+
+# Review changes
+git diff tests/snapshots/
+```
+
+**Why manual editing fails:**
+- Lipgloss table padding varies by terminal width and environment
+- Trailing whitespace is significant but invisible in editors
+- ANSI color codes may differ between environments
+- Unicode character rendering affects column width calculations
+
+**When snapshot tests fail in CI:**
+1. Regenerate locally: `go test ./tests -run 'TestName' -regenerate-snapshots`
+2. Verify: `go test ./tests -run 'TestName'`
+3. Commit and push the regenerated snapshot
+4. If still fails: Environment mismatch - contact maintainers
+
+See `tests/README.md` for details.
 
 ## Common Development Tasks
 
