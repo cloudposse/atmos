@@ -7,8 +7,60 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/spf13/viper"
+
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
+
+const (
+	// DefaultMaxContextFiles is the default maximum number of stack files to include in AI context.
+	DefaultMaxContextFiles = 10
+	// DefaultMaxContextLines is the default maximum number of lines per stack file in AI context.
+	DefaultMaxContextLines = 500
+)
+
+// findStackFiles searches for stack configuration files in the given path.
+func findStackFiles(stacksPath string) ([]string, error) {
+	stackFiles, err := filepath.Glob(stacksPath + string(filepath.Separator) + "**/*.yaml")
+	if err != nil {
+		return nil, fmt.Errorf("failed to find stack files: %w", err)
+	}
+
+	// Add more patterns for common stack file locations.
+	yamlFiles, err := filepath.Glob(stacksPath + string(filepath.Separator) + "*.yaml")
+	if err == nil {
+		stackFiles = append(stackFiles, yamlFiles...)
+	}
+
+	ymlFiles, err := filepath.Glob(stacksPath + string(filepath.Separator) + "**/*.yml")
+	if err == nil {
+		stackFiles = append(stackFiles, ymlFiles...)
+	}
+
+	if len(stackFiles) == 0 {
+		return nil, fmt.Errorf("%w in %s", errUtils.ErrAINoStackFilesFound, stacksPath)
+	}
+
+	return stackFiles, nil
+}
+
+// formatFileContent reads and formats a stack file with optional line truncation.
+func formatFileContent(file string, maxLines int) string {
+	content, err := os.ReadFile(file)
+	if err != nil {
+		return fmt.Sprintf("Error reading file: %v\n", err)
+	}
+
+	lines := strings.Split(string(content), "\n")
+	if len(lines) > maxLines {
+		truncated := strings.Join(lines[:maxLines], "\n")
+		truncatedCount := len(lines) - maxLines
+		return truncated + fmt.Sprintf("\n... (truncated, %d more lines)", truncatedCount)
+	}
+
+	return string(content)
+}
 
 // GatherStackContext reads stack configurations and returns them as context for AI.
 func GatherStackContext(atmosConfig *schema.AtmosConfiguration) (string, error) {
@@ -17,29 +69,19 @@ func GatherStackContext(atmosConfig *schema.AtmosConfiguration) (string, error) 
 	// Get stacks path.
 	stacksPath := filepath.Join(atmosConfig.BasePath, atmosConfig.Stacks.BasePath)
 
-	// Read stack files.
-	stackFiles, err := filepath.Glob(filepath.Join(stacksPath, "**/*.yaml"))
+	// Find stack files.
+	stackFiles, err := findStackFiles(stacksPath)
 	if err != nil {
-		return "", fmt.Errorf("failed to find stack files: %w", err)
-	}
-
-	// Add more patterns for common stack file locations.
-	yamlFiles, err := filepath.Glob(filepath.Join(stacksPath, "*.yaml"))
-	if err == nil {
-		stackFiles = append(stackFiles, yamlFiles...)
-	}
-
-	ymlFiles, err := filepath.Glob(filepath.Join(stacksPath, "**/*.yml"))
-	if err == nil {
-		stackFiles = append(stackFiles, ymlFiles...)
-	}
-
-	if len(stackFiles) == 0 {
-		return "", fmt.Errorf("no stack files found in %s", stacksPath)
+		return "", err
 	}
 
 	// Limit the number of files to prevent overwhelming the AI.
-	maxFiles := 10
+	// Use configured value or default.
+	maxFiles := DefaultMaxContextFiles
+	if atmosConfig.Settings.AI.MaxContextFiles > 0 {
+		maxFiles = atmosConfig.Settings.AI.MaxContextFiles
+	}
+
 	if len(stackFiles) > maxFiles {
 		stackFiles = stackFiles[:maxFiles]
 		context.WriteString(fmt.Sprintf("Note: Showing first %d stack files (out of %d total)\n\n", maxFiles, len(stackFiles)))
@@ -47,27 +89,19 @@ func GatherStackContext(atmosConfig *schema.AtmosConfiguration) (string, error) 
 
 	context.WriteString("=== Atmos Stack Configurations ===\n\n")
 
+	// Get max lines configuration.
+	maxLines := DefaultMaxContextLines
+	if atmosConfig.Settings.AI.MaxContextLines > 0 {
+		maxLines = atmosConfig.Settings.AI.MaxContextLines
+	}
+
 	for _, file := range stackFiles {
 		relPath, _ := filepath.Rel(atmosConfig.BasePath, file)
 		context.WriteString(fmt.Sprintf("File: %s\n", relPath))
 		context.WriteString("```yaml\n")
 
-		// Read file content.
-		content, err := os.ReadFile(file)
-		if err != nil {
-			context.WriteString(fmt.Sprintf("Error reading file: %v\n", err))
-		} else {
-			// Limit file content size (max 500 lines per file).
-			lines := strings.Split(string(content), "\n")
-			maxLines := 500
-			if len(lines) > maxLines {
-				lines = lines[:maxLines]
-				context.WriteString(strings.Join(lines, "\n"))
-				context.WriteString(fmt.Sprintf("\n... (truncated, %d more lines)", len(strings.Split(string(content), "\n"))-maxLines))
-			} else {
-				context.WriteString(string(content))
-			}
-		}
+		content := formatFileContent(file, maxLines)
+		context.WriteString(content)
 
 		context.WriteString("\n```\n\n")
 	}
@@ -92,8 +126,10 @@ func PromptForConsent() (bool, error) {
 
 // ShouldSendContext determines if context should be sent based on configuration and environment.
 func ShouldSendContext(atmosConfig *schema.AtmosConfiguration, question string) (bool, bool, error) {
-	// Check environment variable ATMOS_AI_SEND_CONTEXT.
-	if envVal := os.Getenv("ATMOS_AI_SEND_CONTEXT"); envVal != "" {
+	// Check environment variable ATMOS_AI_SEND_CONTEXT using viper.
+	_ = viper.BindEnv("ATMOS_AI_SEND_CONTEXT", "ATMOS_AI_SEND_CONTEXT")
+	envVal := viper.GetString("ATMOS_AI_SEND_CONTEXT")
+	if envVal != "" {
 		sendContext := envVal == "true" || envVal == "1" || strings.ToLower(envVal) == "yes"
 		return sendContext, false, nil // No prompt needed, env var takes precedence.
 	}

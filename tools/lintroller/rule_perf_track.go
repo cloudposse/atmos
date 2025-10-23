@@ -55,22 +55,24 @@ var excludedPackages = []string{
 	"/mock",          // Mock/test utilities.
 	"/pkg/spacelift", // Spacelift generation is one-shot per command.
 	"/pkg/validator", // Validation runs once per command.
+	"/pkg/ai",        // AI operations are external API calls, not in hot path.
 }
 
 // Receiver types to exclude from perf.Track() checks.
 var excludedReceivers = []string{
-	"noopLogger",                // Noop logger implementations.
-	"AtmosLogger",               // Logger methods would cause infinite recursion.
-	"mockPerf",                  // Test mocks.
-	"Mock",                      // General mocks.
-	"modelSpinner",              // TUI spinner models.
-	"modelVendor",               // TUI vendor models.
-	"defaultTemplateRenderer",   // Simple template renderer.
-	"realTerraformDocsRunner",   // Simple terraform docs runner.
-	"ErrInvalidPattern",         // Error types.
-	"DescribeConfigFormatError", // Error types.
-	"DefaultStacksProcessor",    // Processor implementations.
-	"AtmosFuncs",                // Template function wrappers (high-frequency).
+	"noopLogger",                       // Noop logger implementations.
+	"AtmosLogger",                      // Logger methods would cause infinite recursion.
+	"mockPerf",                         // Test mocks.
+	"Mock",                             // General mocks.
+	"modelSpinner",                     // TUI spinner models.
+	"modelVendor",                      // TUI vendor models.
+	"defaultTemplateRenderer",          // Simple template renderer.
+	"realTerraformDocsRunner",          // Simple terraform docs runner.
+	"ErrInvalidPattern",                // Error types.
+	"DescribeConfigFormatError",        // Error types.
+	"DefaultStacksProcessor",           // Processor implementations.
+	"AtmosFuncs",                       // Template function wrappers (high-frequency).
+	"azureBlobDownloadResponseWrapper", // Azure SDK response wrapper - simple getter.
 }
 
 // Functions to exclude from perf.Track() checks (by name).
@@ -111,6 +113,10 @@ func (r *PerfTrackRule) Check(pass *analysis.Pass, file *ast.File) error {
 	}
 
 	// Check if package is in exclusion list.
+	if pass.Pkg == nil {
+		return nil
+	}
+
 	pkgPath := pass.Pkg.Path()
 	for _, excluded := range excludedPackages {
 		// Match only complete path segments to avoid false positives.

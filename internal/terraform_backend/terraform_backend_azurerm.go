@@ -67,6 +67,8 @@ func (w *azureBlobClientWrapper) DownloadStream(
 	blobName string,
 	options *azblob.DownloadStreamOptions,
 ) (AzureBlobDownloadResponse, error) {
+	defer perf.Track(nil, "terraform_backend.azureBlobClientWrapper.DownloadStream")()
+
 	response, err := w.client.DownloadStream(ctx, containerName, blobName, options)
 	if err != nil {
 		return nil, err

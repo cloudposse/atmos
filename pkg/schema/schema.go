@@ -274,14 +274,17 @@ type AtmosSettings struct {
 
 // AISettings contains configuration for AI assistant.
 type AISettings struct {
-	Enabled      bool   `yaml:"enabled,omitempty" json:"enabled,omitempty" mapstructure:"enabled"`
-	Provider     string `yaml:"provider,omitempty" json:"provider,omitempty" mapstructure:"provider"`
-	Model        string `yaml:"model,omitempty" json:"model,omitempty" mapstructure:"model"`
-	ApiKeyEnv    string `yaml:"api_key_env,omitempty" json:"api_key_env,omitempty" mapstructure:"api_key_env"`
-	MaxTokens    int    `yaml:"max_tokens,omitempty" json:"max_tokens,omitempty" mapstructure:"max_tokens"`
-	BaseURL      string `yaml:"base_url,omitempty" json:"base_url,omitempty" mapstructure:"base_url"`
-	SendContext  bool   `yaml:"send_context,omitempty" json:"send_context,omitempty" mapstructure:"send_context"`
-	PromptOnSend bool   `yaml:"prompt_on_send,omitempty" json:"prompt_on_send,omitempty" mapstructure:"prompt_on_send"`
+	Enabled         bool   `yaml:"enabled,omitempty" json:"enabled,omitempty" mapstructure:"enabled"`
+	Provider        string `yaml:"provider,omitempty" json:"provider,omitempty" mapstructure:"provider"`
+	Model           string `yaml:"model,omitempty" json:"model,omitempty" mapstructure:"model"`
+	ApiKeyEnv       string `yaml:"api_key_env,omitempty" json:"api_key_env,omitempty" mapstructure:"api_key_env"`
+	MaxTokens       int    `yaml:"max_tokens,omitempty" json:"max_tokens,omitempty" mapstructure:"max_tokens"`
+	BaseURL         string `yaml:"base_url,omitempty" json:"base_url,omitempty" mapstructure:"base_url"`
+	SendContext     bool   `yaml:"send_context,omitempty" json:"send_context,omitempty" mapstructure:"send_context"`
+	PromptOnSend    bool   `yaml:"prompt_on_send,omitempty" json:"prompt_on_send,omitempty" mapstructure:"prompt_on_send"`
+	TimeoutSeconds  int    `yaml:"timeout_seconds,omitempty" json:"timeout_seconds,omitempty" mapstructure:"timeout_seconds"`
+	MaxContextFiles int    `yaml:"max_context_files,omitempty" json:"max_context_files,omitempty" mapstructure:"max_context_files"`
+	MaxContextLines int    `yaml:"max_context_lines,omitempty" json:"max_context_lines,omitempty" mapstructure:"max_context_lines"`
 }
 
 // TelemetrySettings contains configuration for telemetry collection.

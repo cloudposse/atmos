@@ -3,12 +3,18 @@ package grok
 import (
 	"context"
 	"fmt"
-	"os"
 
 	"github.com/openai/openai-go"
 	"github.com/openai/openai-go/option"
+	"github.com/spf13/viper"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
+)
+
+const (
+	// DefaultMaxTokens is the default maximum number of tokens in AI responses.
+	DefaultMaxTokens = 4096
 )
 
 // Client provides a simplified interface to the xAI Grok API for Atmos.
@@ -33,13 +39,14 @@ func NewClient(atmosConfig *schema.AtmosConfiguration) (*Client, error) {
 	config := extractConfig(atmosConfig)
 
 	if !config.Enabled {
-		return nil, fmt.Errorf("AI features are disabled in configuration")
+		return nil, errUtils.ErrAIDisabledInConfiguration
 	}
 
-	// Get API key from environment.
-	apiKey := os.Getenv(config.APIKeyEnv)
+	// Get API key from environment using viper.
+	_ = viper.BindEnv(config.APIKeyEnv, config.APIKeyEnv)
+	apiKey := viper.GetString(config.APIKeyEnv)
 	if apiKey == "" {
-		return nil, fmt.Errorf("API key not found in environment variable: %s", config.APIKeyEnv)
+		return nil, fmt.Errorf("%w: %s", errUtils.ErrAIAPIKeyNotFound, config.APIKeyEnv)
 	}
 
 	// Create OpenAI client with Grok's base URL.
@@ -61,7 +68,7 @@ func extractConfig(atmosConfig *schema.AtmosConfiguration) *Config {
 		Enabled:   false,
 		Model:     "grok-beta",
 		APIKeyEnv: "XAI_API_KEY",
-		MaxTokens: 4096,
+		MaxTokens: DefaultMaxTokens,
 		BaseURL:   "https://api.x.ai/v1",
 	}
 
@@ -91,7 +98,7 @@ func (c *Client) SendMessage(ctx context.Context, message string) (string, error
 		Messages: []openai.ChatCompletionMessageParamUnion{
 			openai.UserMessage(message),
 		},
-		Model:     openai.ChatModel(c.config.Model),
+		Model:     c.config.Model,
 		MaxTokens: openai.Int(int64(c.config.MaxTokens)),
 	}
 
@@ -102,7 +109,7 @@ func (c *Client) SendMessage(ctx context.Context, message string) (string, error
 
 	// Extract text from response.
 	if len(response.Choices) == 0 {
-		return "", fmt.Errorf("no response choices returned")
+		return "", errUtils.ErrAINoResponseChoices
 	}
 
 	return response.Choices[0].Message.Content, nil

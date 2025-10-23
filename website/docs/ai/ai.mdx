@@ -33,6 +33,10 @@ settings:
     enabled: true
     provider: "anthropic"  # or "openai", "gemini", "grok"
     api_key_env: "ANTHROPIC_API_KEY"
+    # Optional performance tuning
+    timeout_seconds: 60         # Default: 60
+    max_context_files: 10       # Default: 10
+    max_context_lines: 500      # Default: 500
 ```
 </File>
 

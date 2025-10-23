@@ -428,7 +428,16 @@ var (
 	ErrInvalidLogoutOption  = errors.New("invalid logout option")
 
 	// AI-related errors.
-	ErrAINotEnabled = errors.New("AI features are not enabled")
+	ErrAINotEnabled              = errors.New("AI features are not enabled")
+	ErrAIDisabledInConfiguration = errors.New("AI features are disabled in configuration")
+	ErrAIAPIKeyNotFound          = errors.New("API key not found in environment variable")
+	ErrAINoStackFilesFound       = errors.New("no stack files found")
+	ErrAIUnsupportedProvider     = errors.New("unsupported AI provider")
+	ErrAIClientNil               = errors.New("AI client cannot be nil")
+	ErrAINoResponseCandidates    = errors.New("no response candidates returned")
+	ErrAINoResponseContent       = errors.New("no content in response")
+	ErrAIResponseNotText         = errors.New("response part does not contain text")
+	ErrAINoResponseChoices       = errors.New("no response choices returned")
 )
 
 // ExitCodeError is a typed error that preserves subcommand exit codes.

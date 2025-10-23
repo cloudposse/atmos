@@ -80,8 +80,12 @@ Examples:
 			}
 		}
 
-		// Create context with timeout.
-		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+		// Create context with timeout (default 60 seconds if not configured).
+		timeoutSeconds := 60
+		if atmosConfig.Settings.AI.TimeoutSeconds > 0 {
+			timeoutSeconds = atmosConfig.Settings.AI.TimeoutSeconds
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), time.Duration(timeoutSeconds)*time.Second)
 		defer cancel()
 
 		// Send question and get response.

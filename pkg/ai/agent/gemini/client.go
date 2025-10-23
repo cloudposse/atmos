@@ -3,11 +3,17 @@ package gemini
 import (
 	"context"
 	"fmt"
-	"os"
 
+	"github.com/spf13/viper"
 	"google.golang.org/genai"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
+)
+
+const (
+	// DefaultMaxTokens is the default maximum number of tokens in AI responses.
+	DefaultMaxTokens = 8192
 )
 
 // Client provides a simplified interface to the Google Gemini API for Atmos.
@@ -30,13 +36,14 @@ func NewClient(ctx context.Context, atmosConfig *schema.AtmosConfiguration) (*Cl
 	config := extractConfig(atmosConfig)
 
 	if !config.Enabled {
-		return nil, fmt.Errorf("AI features are disabled in configuration")
+		return nil, errUtils.ErrAIDisabledInConfiguration
 	}
 
-	// Get API key from environment.
-	apiKey := os.Getenv(config.APIKeyEnv)
+	// Get API key from environment using viper.
+	_ = viper.BindEnv(config.APIKeyEnv, config.APIKeyEnv)
+	apiKey := viper.GetString(config.APIKeyEnv)
 	if apiKey == "" {
-		return nil, fmt.Errorf("API key not found in environment variable: %s", config.APIKeyEnv)
+		return nil, fmt.Errorf("%w: %s", errUtils.ErrAIAPIKeyNotFound, config.APIKeyEnv)
 	}
 
 	// Create Gemini client.
@@ -60,7 +67,7 @@ func extractConfig(atmosConfig *schema.AtmosConfiguration) *Config {
 		Enabled:   false,
 		Model:     "gemini-2.0-flash-exp",
 		APIKeyEnv: "GEMINI_API_KEY",
-		MaxTokens: 8192,
+		MaxTokens: DefaultMaxTokens,
 	}
 
 	// Override defaults with configuration from atmos.yaml.
@@ -92,17 +99,17 @@ func (c *Client) SendMessage(ctx context.Context, message string) (string, error
 
 	// Extract text from response.
 	if len(response.Candidates) == 0 {
-		return "", fmt.Errorf("no response candidates returned")
+		return "", errUtils.ErrAINoResponseCandidates
 	}
 
 	if response.Candidates[0].Content == nil || len(response.Candidates[0].Content.Parts) == 0 {
-		return "", fmt.Errorf("no content in response")
+		return "", errUtils.ErrAINoResponseContent
 	}
 
 	// Get the first text part.
 	part := response.Candidates[0].Content.Parts[0]
 	if part.Text == "" {
-		return "", fmt.Errorf("response part does not contain text")
+		return "", errUtils.ErrAIResponseNotText
 	}
 
 	return part.Text, nil

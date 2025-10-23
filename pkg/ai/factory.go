@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/ai/agent/anthropic"
 	"github.com/cloudposse/atmos/pkg/ai/agent/gemini"
 	"github.com/cloudposse/atmos/pkg/ai/agent/grok"
@@ -32,6 +33,6 @@ func NewClient(atmosConfig *schema.AtmosConfiguration) (Client, error) {
 	case "grok":
 		return grok.NewClient(atmosConfig)
 	default:
-		return nil, fmt.Errorf("unsupported AI provider: %s (supported: anthropic, openai, gemini, grok)", provider)
+		return nil, fmt.Errorf("%w: %s (supported: anthropic, openai, gemini, grok)", errUtils.ErrAIUnsupportedProvider, provider)
 	}
 }

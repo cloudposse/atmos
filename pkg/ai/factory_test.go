@@ -23,7 +23,7 @@ func TestNewClient(t *testing.T) {
 				},
 			},
 			expectError: true,
-			errorMsg:    "AI settings not configured",
+			errorMsg:    "AI features are disabled in configuration",
 		},
 		{
 			name: "Anthropic provider (explicit)",
@@ -115,29 +115,38 @@ func TestNewClient(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			client, err := NewClient(tt.atmosConfig)
 
+			// Handle expected error cases.
 			if tt.expectError {
 				assert.Error(t, err)
 				if tt.errorMsg != "" {
 					assert.Contains(t, err.Error(), tt.errorMsg)
 				}
 				assert.Nil(t, client)
-			} else {
-				// Note: These tests require API key to be set.
-				// We're testing the factory routing logic, not the actual client creation.
-				if err != nil {
-					// Expected errors when API key is not set.
-					if err.Error() == "AI features are disabled in configuration" ||
-						err.Error() == "API key not found in environment variable: ANTHROPIC_API_KEY" ||
-						err.Error() == "API key not found in environment variable: OPENAI_API_KEY" ||
-						err.Error() == "API key not found in environment variable: GEMINI_API_KEY" ||
-						err.Error() == "API key not found in environment variable: XAI_API_KEY" {
-						t.Skipf("Skipping test: %s (expected for factory test without API key)", err.Error())
-					}
-					// Unexpected error.
-					assert.NoError(t, err)
-				}
-				assert.NotNil(t, client)
+				return
 			}
+
+			// Handle success cases.
+			// Note: These tests require API key to be set.
+			// We're testing the factory routing logic, not the actual client creation.
+			if err == nil {
+				assert.NotNil(t, client)
+				return
+			}
+
+			// Check for expected errors when API key is not set.
+			errMsg := err.Error()
+			if errMsg == "AI features are disabled in configuration" ||
+				errMsg == "API key not found in environment variable: ANTHROPIC_API_KEY" ||
+				errMsg == "API key not found in environment variable: OPENAI_API_KEY" ||
+				errMsg == "API key not found in environment variable: GEMINI_API_KEY" ||
+				errMsg == "API key not found in environment variable: XAI_API_KEY" {
+				t.Skipf("Skipping test: %s (expected for factory test without API key)", errMsg)
+				return
+			}
+
+			// Unexpected error.
+			assert.NoError(t, err)
+			assert.NotNil(t, client)
 		})
 	}
 }

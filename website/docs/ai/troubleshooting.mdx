@@ -4,6 +4,7 @@ sidebar_label: Troubleshooting
 sidebar_position: 3
 description: Troubleshoot common issues with the Atmos AI Assistant
 ---
+
 import Terminal from '@site/src/components/Terminal'
 
 # AI Assistant Troubleshooting
@@ -17,9 +18,9 @@ Common issues and solutions for the Atmos AI Assistant.
 Verify AI is enabled in your `atmos.yaml`:
 
 <Terminal title="shell">
-```bash
-grep -A 5 "ai:" atmos.yaml
-```
+    ```bash
+    grep -A 5 "ai:" atmos.yaml
+    ```
 </Terminal>
 
 Expected output:
@@ -36,27 +37,27 @@ ai:
 Check that your API key environment variable is set:
 
 <Terminal title="shell">
-```bash
-# For Anthropic
-echo $ANTHROPIC_API_KEY
+    ```bash
+    # For Anthropic
+    echo $ANTHROPIC_API_KEY
 
-# For OpenAI
-echo $OPENAI_API_KEY
+    # For OpenAI
+    echo $OPENAI_API_KEY
 
-# For Google Gemini
-echo $GEMINI_API_KEY
+    # For Google Gemini
+    echo $GEMINI_API_KEY
 
-# For xAI Grok
-echo $XAI_API_KEY
-```
+    # For xAI Grok
+    echo $XAI_API_KEY
+    ```
 </Terminal>
 
 If empty, set the appropriate variable:
 
 <Terminal title="shell">
-```bash
-export ANTHROPIC_API_KEY="your-api-key-here"
-```
+    ```bash
+    export ANTHROPIC_API_KEY="your-api-key-here"
+    ```
 </Terminal>
 
 ### Test Connectivity
@@ -64,9 +65,9 @@ export ANTHROPIC_API_KEY="your-api-key-here"
 Test if the AI assistant can connect:
 
 <Terminal title="atmos ai ask">
-```bash
-atmos ai ask "test"
-```
+    ```bash
+    atmos ai ask "test"
+    ```
 </Terminal>
 
 ## Common Error Messages
@@ -93,59 +94,59 @@ settings:
 #### How to Get API Keys
 
 <dl>
-  <dt>**Anthropic (Claude)**</dt>
-  <dd>
-    1. Visit [Anthropic Console](https://console.anthropic.com/)<br/>
-    2. Sign up or log in to your account<br/>
-    3. Navigate to API Keys section<br/>
-    4. Click "Create Key" to generate a new API key<br/>
-    5. Copy the key (starts with `sk-ant-`)
-  </dd>
+    <dt>**Anthropic (Claude)**</dt>
+    <dd>
+        1. Visit [Anthropic Console](https://console.anthropic.com/)<br/>
+        2. Sign up or log in to your account<br/>
+        3. Navigate to API Keys section<br/>
+        4. Click "Create Key" to generate a new API key<br/>
+        5. Copy the key (starts with `sk-ant-`)
+    </dd>
 
-  <dt>**OpenAI (GPT)**</dt>
-  <dd>
-    1. Visit [OpenAI Platform](https://platform.openai.com/)<br/>
-    2. Sign up or log in to your account<br/>
-    3. Go to API Keys section<br/>
-    4. Click "Create new secret key"<br/>
-    5. Copy the key immediately (you won't be able to see it again)
-  </dd>
+    <dt>**OpenAI (GPT)**</dt>
+    <dd>
+        1. Visit [OpenAI Platform](https://platform.openai.com/)<br/>
+        2. Sign up or log in to your account<br/>
+        3. Go to API Keys section<br/>
+        4. Click "Create new secret key"<br/>
+        5. Copy the key immediately (you won't be able to see it again)
+    </dd>
 
-  <dt>**Google (Gemini)**</dt>
-  <dd>
-    1. Visit [Google AI Studio](https://aistudio.google.com/)<br/>
-    2. Sign in with your Google account<br/>
-    3. Click "Get API key" in the top navigation<br/>
-    4. Create a new API key or use an existing one<br/>
-    5. Copy the key
-  </dd>
+    <dt>**Google (Gemini)**</dt>
+    <dd>
+        1. Visit [Google AI Studio](https://aistudio.google.com/)<br/>
+        2. Sign in with your Google account<br/>
+        3. Click "Get API key" in the top navigation<br/>
+        4. Create a new API key or use an existing one<br/>
+        5. Copy the key
+    </dd>
 
-  <dt>**xAI (Grok)**</dt>
-  <dd>
-    1. Visit [xAI API](https://x.ai/api)<br/>
-    2. Sign up or log in to your account<br/>
-    3. Navigate to API Keys section<br/>
-    4. Generate a new API key<br/>
-    5. Copy the key
-  </dd>
+    <dt>**xAI (Grok)**</dt>
+    <dd>
+        1. Visit [xAI API](https://x.ai/api)<br/>
+        2. Sign up or log in to your account<br/>
+        3. Navigate to API Keys section<br/>
+        4. Generate a new API key<br/>
+        5. Copy the key
+    </dd>
 </dl>
 
 #### Set Environment Variable
 
 <Terminal title="shell">
-```bash
-# For Anthropic
-export ANTHROPIC_API_KEY="sk-ant-..."
+    ```bash
+    # For Anthropic
+    export ANTHROPIC_API_KEY="sk-ant-..."
 
-# For OpenAI
-export OPENAI_API_KEY="sk-..."
+    # For OpenAI
+    export OPENAI_API_KEY="sk-..."
 
-# For Google Gemini
-export GEMINI_API_KEY="..."
+    # For Google Gemini
+    export GEMINI_API_KEY="..."
 
-# For xAI Grok
-export XAI_API_KEY="..."
-```
+    # For xAI Grok
+    export XAI_API_KEY="..."
+    ```
 </Terminal>
 
 ### "Failed to create AI client"
@@ -155,24 +156,24 @@ export XAI_API_KEY="..."
 **Solutions**:
 
 1. **Verify API key is correct**:
-   - Check for typos or extra whitespace
-   - Ensure the key hasn't been revoked
+- Check for typos or extra whitespace
+- Ensure the key hasn't been revoked
 
 2. **Check account status**:
-   - Verify you have available credits
-   - Check billing status in provider dashboard
+- Verify you have available credits
+- Check billing status in provider dashboard
 
 3. **Test API key directly**:
 
 <Terminal title="shell">
-```bash
-# For Anthropic (example)
-curl https://api.anthropic.com/v1/messages \
-  -H "x-api-key: $ANTHROPIC_API_KEY" \
-  -H "anthropic-version: 2023-06-01" \
-  -H "content-type: application/json" \
-  -d '{"model": "claude-3-5-sonnet-20241022", "max_tokens": 1024, "messages": [{"role": "user", "content": "Hello"}]}'
-```
+    ```bash
+    # For Anthropic (example)
+    curl https://api.anthropic.com/v1/messages \
+    -H "x-api-key: $ANTHROPIC_API_KEY" \
+    -H "anthropic-version: 2023-06-01" \
+    -H "content-type: application/json" \
+    -d '{"model": "claude-3-5-sonnet-20241022", "max_tokens": 1024, "messages": [{"role": "user", "content": "Hello"}]}'
+    ```
 </Terminal>
 
 ### "Unsupported AI provider"
@@ -236,29 +237,29 @@ settings:
 ### 1. Enable Debug Logging
 
 <Terminal title="shell">
-```bash
-atmos ai ask "test" --logs-level=Debug
-```
+    ```bash
+    atmos ai ask "test" --logs-level=Debug
+    ```
 </Terminal>
 
 ### 2. Check Atmos Configuration
 
 <Terminal title="atmos describe config">
-```bash
-atmos describe config | grep -A 10 "ai"
-```
+    ```bash
+    atmos describe config | grep -A 10 "ai"
+    ```
 </Terminal>
 
 ### 3. Verify Network Connectivity
 
 <Terminal title="shell">
-```bash
-# Test API endpoint connectivity
-curl -I https://api.anthropic.com  # For Anthropic
-curl -I https://api.openai.com     # For OpenAI
-curl -I https://generativelanguage.googleapis.com  # For Gemini
-curl -I https://api.x.ai           # For Grok
-```
+    ```bash
+    # Test API endpoint connectivity
+    curl -I https://api.anthropic.com # For Anthropic
+    curl -I https://api.openai.com # For OpenAI
+    curl -I https://generativelanguage.googleapis.com # For Gemini
+    curl -I https://api.x.ai # For Grok
+    ```
 </Terminal>
 
 ### 4. Test with Minimal Configuration
@@ -292,11 +293,11 @@ settings:
 **Solution**: Increase timeout in your question:
 
 <Terminal title="shell">
-```bash
-# AI commands have a 60-second default timeout
-# For complex questions, be more concise or break into smaller parts
-atmos ai ask "brief question"
-```
+    ```bash
+    # AI commands have a 60-second default timeout
+    # For complex questions, be more concise or break into smaller parts
+    atmos ai ask "brief question"
+    ```
 </Terminal>
 
 ## Getting Help
@@ -306,10 +307,10 @@ If you continue to experience issues:
 1. **Check documentation**: Review [AI Configuration](/ai/configuration)
 2. **Search issues**: Look for similar problems in [GitHub Issues](https://github.com/cloudposse/atmos/issues)
 3. **Open an issue**: Create a new issue with:
-   - Atmos version (`atmos version`)
-   - Provider and model being used
-   - Full error message
-   - Steps to reproduce
+- Atmos version (`atmos version`)
+- Provider and model being used
+- Full error message
+- Steps to reproduce
 
 ## Related Resources
 

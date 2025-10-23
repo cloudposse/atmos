@@ -26,6 +26,9 @@ settings:
     max_tokens: 4096                      # Maximum tokens per response
     send_context: false                   # Send stack configs to AI (default: false)
     prompt_on_send: true                  # Prompt before sending context (default: true)
+    timeout_seconds: 60                   # Request timeout in seconds (default: 60)
+    max_context_files: 10                 # Maximum stack files to send (default: 10)
+    max_context_lines: 500                # Maximum lines per file (default: 500)
 ```
 </File>
 
@@ -363,6 +366,40 @@ Each provider has its strengths:
 - **GPT (OpenAI)**: Strong general capabilities, widely available
 - **Gemini (Google)**: Fast responses, excellent for large contexts
 - **Grok (xAI)**: Real-time knowledge, OpenAI-compatible
+
+## Performance Tuning
+
+You can adjust timeout and context limits to optimize performance for your needs:
+
+<File title="atmos.yaml">
+```yaml
+settings:
+  ai:
+    enabled: true
+    provider: "anthropic"
+    # Timeout configuration
+    timeout_seconds: 120         # Increase for complex questions (default: 60)
+
+    # Context limits
+    max_context_files: 20        # Send more files for deeper analysis (default: 10)
+    max_context_lines: 1000      # Increase for larger files (default: 500)
+```
+</File>
+
+### Configuration Options
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `timeout_seconds` | 60 | Maximum time to wait for AI response |
+| `max_context_files` | 10 | Maximum number of stack files to send |
+| `max_context_lines` | 500 | Maximum lines per file to include |
+
+### Recommendations
+
+- **For large repositories**: Increase `max_context_files` and `max_context_lines`
+- **For slow connections**: Increase `timeout_seconds` to 120 or more
+- **For faster responses**: Reduce context limits to 5 files and 250 lines
+- **For cost optimization**: Lower context limits to reduce token usage
 
 ## Security Best Practices
 

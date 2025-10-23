@@ -12,8 +12,16 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/ai"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
+)
+
+const (
+	// DefaultViewportWidth is the default width for the chat viewport before window sizing.
+	DefaultViewportWidth = 80
+	// DefaultViewportHeight is the default height for the chat viewport before window sizing.
+	DefaultViewportHeight = 20
 )
 
 // ChatModel represents the state of the chat TUI.
@@ -24,7 +32,6 @@ type ChatModel struct {
 	textarea  textarea.Model
 	spinner   spinner.Model
 	isLoading bool
-	err       error
 	width     int
 	height    int
 	ready     bool
@@ -40,11 +47,11 @@ type ChatMessage struct {
 // NewChatModel creates a new chat model with the provided AI client.
 func NewChatModel(client ai.Client) (*ChatModel, error) {
 	if client == nil {
-		return nil, fmt.Errorf("AI client cannot be nil")
+		return nil, errUtils.ErrAIClientNil
 	}
 
 	// Initialize viewport
-	vp := viewport.New(80, 20)
+	vp := viewport.New(DefaultViewportWidth, DefaultViewportHeight)
 	vp.SetContent("")
 
 	// Initialize textarea
@@ -68,15 +75,63 @@ func NewChatModel(client ai.Client) (*ChatModel, error) {
 }
 
 // Init initializes the chat model.
-func (m ChatModel) Init() tea.Cmd {
+func (m *ChatModel) Init() tea.Cmd {
 	return tea.Batch(
 		textarea.Blink,
 		m.spinner.Tick,
 	)
 }
 
+// handleWindowResize processes window size changes and adjusts UI components.
+func (m *ChatModel) handleWindowResize(msg tea.WindowSizeMsg) {
+	m.width = msg.Width
+	m.height = msg.Height
+
+	headerHeight := lipgloss.Height(m.headerView())
+	footerHeight := lipgloss.Height(m.footerView())
+	verticalMarginHeight := headerHeight + footerHeight
+
+	if !m.ready {
+		// Initialize viewport and textarea sizes.
+		m.viewport = viewport.New(msg.Width, msg.Height-verticalMarginHeight-4) // -4 for textarea
+		m.viewport.YPosition = headerHeight + 1
+		m.textarea.SetWidth(msg.Width - 4)
+		m.textarea.SetHeight(3)
+		m.ready = true
+	} else {
+		// Adjust existing sizes.
+		m.viewport.Width = msg.Width
+		m.viewport.Height = msg.Height - verticalMarginHeight - 4
+		m.textarea.SetWidth(msg.Width - 4)
+	}
+
+	m.updateViewportContent()
+}
+
+// handleKeyMsg processes keyboard input.
+func (m *ChatModel) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	if m.isLoading {
+		// Only allow quitting while loading.
+		if msg.String() == "ctrl+c" {
+			return m, tea.Quit
+		}
+		return m, nil
+	}
+
+	switch msg.String() {
+	case "ctrl+c":
+		return m, tea.Quit
+	case "enter":
+		if strings.TrimSpace(m.textarea.Value()) != "" {
+			return m, m.sendMessage(m.textarea.Value())
+		}
+	}
+
+	return m, nil
+}
+
 // Update handles messages and updates the model state.
-func (m ChatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+func (m *ChatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var (
 		cmd  tea.Cmd
 		cmds []tea.Cmd
@@ -84,53 +139,10 @@ func (m ChatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
-		m.width = msg.Width
-		m.height = msg.Height
-
-		if !m.ready {
-			// Initialize viewport and textarea sizes
-			headerHeight := lipgloss.Height(m.headerView())
-			footerHeight := lipgloss.Height(m.footerView())
-			verticalMarginHeight := headerHeight + footerHeight
-
-			m.viewport = viewport.New(msg.Width, msg.Height-verticalMarginHeight-4) // -4 for textarea
-			m.viewport.YPosition = headerHeight + 1
-
-			m.textarea.SetWidth(msg.Width - 4)
-			m.textarea.SetHeight(3)
-
-			m.ready = true
-		} else {
-			headerHeight := lipgloss.Height(m.headerView())
-			footerHeight := lipgloss.Height(m.footerView())
-			verticalMarginHeight := headerHeight + footerHeight
-
-			m.viewport.Width = msg.Width
-			m.viewport.Height = msg.Height - verticalMarginHeight - 4
-
-			m.textarea.SetWidth(msg.Width - 4)
-		}
-
-		m.updateViewportContent()
+		m.handleWindowResize(msg)
 
 	case tea.KeyMsg:
-		if m.isLoading {
-			// Only allow quitting while loading
-			switch msg.String() {
-			case "ctrl+c":
-				return m, tea.Quit
-			}
-			return m, nil
-		}
-
-		switch msg.String() {
-		case "ctrl+c":
-			return m, tea.Quit
-		case "enter":
-			if strings.TrimSpace(m.textarea.Value()) != "" {
-				return m, m.sendMessage(m.textarea.Value())
-			}
-		}
+		return m.handleKeyMsg(msg)
 
 	case sendMessageMsg:
 		// Add user message
@@ -176,7 +188,7 @@ func (m ChatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 // View renders the chat interface.
-func (m ChatModel) View() string {
+func (m *ChatModel) View() string {
 	if !m.ready {
 		return "\n  Initializing Atmos AI Chat..."
 	}
@@ -274,18 +286,20 @@ func (m *ChatModel) updateViewportContent() {
 	m.viewport.GotoBottom()
 }
 
-// Custom message types
+// Custom message types.
 type sendMessageMsg string
+
 type aiResponseMsg string
+
 type aiErrorMsg string
 
-func (m ChatModel) sendMessage(content string) tea.Cmd {
+func (m *ChatModel) sendMessage(content string) tea.Cmd {
 	return func() tea.Msg {
 		return sendMessageMsg(content)
 	}
 }
 
-func (m ChatModel) getAIResponse(userMessage string) tea.Cmd {
+func (m *ChatModel) getAIResponse(userMessage string) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 		defer cancel()

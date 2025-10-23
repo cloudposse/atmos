@@ -1,6 +1,7 @@
 package gemini
 
 import (
+	"context"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -83,7 +84,7 @@ func TestNewClient_Disabled(t *testing.T) {
 		},
 	}
 
-	client, err := NewClient(nil, atmosConfig)
+	client, err := NewClient(context.TODO(), atmosConfig)
 	assert.Error(t, err)
 	assert.Nil(t, client)
 	assert.Contains(t, err.Error(), "AI features are disabled")

@@ -3,12 +3,18 @@ package anthropic
 import (
 	"context"
 	"fmt"
-	"os"
 
 	"github.com/anthropics/anthropic-sdk-go"
 	"github.com/anthropics/anthropic-sdk-go/option"
+	"github.com/spf13/viper"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
+)
+
+const (
+	// DefaultMaxTokens is the default maximum number of tokens in AI responses.
+	DefaultMaxTokens = 4096
 )
 
 // SimpleClient provides a simplified interface to the Anthropic API for Atmos.
@@ -31,13 +37,14 @@ func NewSimpleClient(atmosConfig *schema.AtmosConfiguration) (*SimpleClient, err
 	config := extractSimpleAIConfig(atmosConfig)
 
 	if !config.Enabled {
-		return nil, fmt.Errorf("AI features are disabled in configuration")
+		return nil, errUtils.ErrAIDisabledInConfiguration
 	}
 
-	// Get API key from environment
-	apiKey := os.Getenv(config.APIKeyEnv)
+	// Get API key from environment using viper
+	_ = viper.BindEnv(config.APIKeyEnv, config.APIKeyEnv)
+	apiKey := viper.GetString(config.APIKeyEnv)
 	if apiKey == "" {
-		return nil, fmt.Errorf("API key not found in environment variable: %s", config.APIKeyEnv)
+		return nil, fmt.Errorf("%w: %s", errUtils.ErrAIAPIKeyNotFound, config.APIKeyEnv)
 	}
 
 	// Create Anthropic client
@@ -58,7 +65,7 @@ func extractSimpleAIConfig(atmosConfig *schema.AtmosConfiguration) *SimpleAIConf
 		Enabled:   false,
 		Model:     "claude-3-5-sonnet-20241022",
 		APIKeyEnv: "ANTHROPIC_API_KEY",
-		MaxTokens: 4096,
+		MaxTokens: DefaultMaxTokens,
 	}
 
 	// Override defaults with configuration from atmos.yaml.
@@ -91,11 +98,11 @@ func (c *SimpleClient) SendMessage(ctx context.Context, message string) (string,
 		return "", fmt.Errorf("failed to send message: %w", err)
 	}
 
-	// Extract text from response
+	// Extract text from response (use indexing to avoid copying large structs).
 	var responseText string
-	for _, content := range response.Content {
-		if content.Type == "text" {
-			responseText += content.Text
+	for i := range response.Content {
+		if response.Content[i].Type == "text" {
+			responseText += response.Content[i].Text
 		}
 	}
 
