@@ -12,7 +12,7 @@ func init() {
 // Analyzer is a standalone analyzer for CLI usage.
 var Analyzer = &analysis.Analyzer{
 	Name: "lintroller",
-	Doc:  "Atmos project-specific linting rules (t.Setenv/os.Setenv/t.TempDir/t.Chdir/os.Args checks)",
+	Doc:  "Atmos project-specific linting rules (t.Setenv/os.Setenv/t.TempDir/t.Chdir/os.Args/perf.Track checks)",
 	Run:  standaloneRun,
 }
 
@@ -25,6 +25,7 @@ func standaloneRun(pass *analysis.Pass) (interface{}, error) {
 		&OsMkdirTempInTestRule{},
 		&OsChdirInTestRule{},
 		&OsArgsInTestRule{},
+		&PerfTrackRule{},
 	}
 
 	for _, file := range pass.Files {
@@ -45,6 +46,7 @@ type Settings struct {
 	OsMkdirTempInTest bool `json:"os-mkdirtemp-in-test" yaml:"os-mkdirtemp-in-test"`
 	OsChdirInTest     bool `json:"os-chdir-in-test" yaml:"os-chdir-in-test"`
 	OsArgsInTest      bool `json:"os-args-in-test" yaml:"os-args-in-test"`
+	PerfTrack         bool `json:"perf-track" yaml:"perf-track"`
 }
 
 // LintrollerPlugin implements the register.LinterPlugin interface.
@@ -60,12 +62,13 @@ func New(settings any) (register.LinterPlugin, error) {
 	}
 
 	// Default to enabling all rules if no settings provided.
-	if !s.TSetenvInDefer && !s.OsSetenvInTest && !s.OsMkdirTempInTest && !s.OsChdirInTest && !s.OsArgsInTest {
+	if !s.TSetenvInDefer && !s.OsSetenvInTest && !s.OsMkdirTempInTest && !s.OsChdirInTest && !s.OsArgsInTest && !s.PerfTrack {
 		s.TSetenvInDefer = true
 		s.OsSetenvInTest = true
 		s.OsMkdirTempInTest = true
 		s.OsChdirInTest = true
 		s.OsArgsInTest = true
+		s.PerfTrack = true
 	}
 
 	return &LintrollerPlugin{settings: s}, nil
@@ -76,7 +79,7 @@ func (p *LintrollerPlugin) BuildAnalyzers() ([]*analysis.Analyzer, error) {
 	return []*analysis.Analyzer{
 		{
 			Name: "lintroller",
-			Doc:  "Atmos project-specific linting rules (t.Setenv/os.Setenv/t.TempDir/t.Chdir/os.Args checks)",
+			Doc:  "Atmos project-specific linting rules (t.Setenv/os.Setenv/t.TempDir/t.Chdir/os.Args/perf.Track checks)",
 			Run:  p.run,
 		},
 	}, nil
@@ -105,6 +108,9 @@ func (p *LintrollerPlugin) run(pass *analysis.Pass) (interface{}, error) {
 	}
 	if p.settings.OsArgsInTest {
 		rules = append(rules, &OsArgsInTestRule{})
+	}
+	if p.settings.PerfTrack {
+		rules = append(rules, &PerfTrackRule{})
 	}
 
 	// Run all enabled rules.
