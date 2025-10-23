@@ -13,19 +13,44 @@ function Home() {
 
   return (
     <div className="landing-page">
-      <Layout title={`Hello from ${siteConfig.title}`} description="Manage Environments Easily in Terraform, OpenTofu, Packer using Atmos">
+      <Layout title={`Hello from ${siteConfig.title}`} description="Atmos: Sanity for the Modern Platform Engineer - An IaC Framework that unifies your toolchain">
         <header className="hero hero--full-height">
           <div className="intro">
+            <p className="hero__subtitle">Atmos is an IaC Framework</p>
             <h1>Manage Environments Easily<br/>in <TypingAnimation words={['Terraform', 'OpenTofu', 'Packer', 'Helmfile', 'and more...']} /></h1>
+            <h2 className="hero__tagline">Atmos: <strong className="underline">Sanity for the Modern Platform Engineer</strong></h2>
           </div>
           <img src={useBaseUrl('/img/demo.gif')} alt="Product Screenshot" className="screenshot" />
           <div className="hero__cta">
             <Link to="/quick-start/" className="button button--lg button--primary"><p>Try the Quick Start</p></Link>
             <Link to="/introduction" className="button button--lg button--outline button--primary ml20"><p>Learn More</p></Link>
           </div>
-          <h3>Use a Modern <strong className="underline">Composable Framework</strong> for Terraform, OpenTofu, Packer and Helmfile backed by YAML</h3>
         </header>
         <main>
+          <section className="hero-narrative">
+            <div className="narrative-content">
+              <p className="narrative-intro">Developers complain about tool fatigue — and they're right. Every project turns into a patchwork of tools duct-taped together with fragile Bash scripts, no tests, and inconsistent conventions.</p>
+
+              <p className="narrative-solution"><strong>Atmos fixes that.</strong></p>
+
+              <p>Atmos replaces the chaos with a cohesive, comprehensive framework that unifies your toolchain — combining the power of 25 different tools into one system that doesn't lock you in. (You do that to yourself. Kidding… mostly.)</p>
+
+              <h3>With Atmos, you get:</h3>
+              <ul className="feature-list">
+                <li><strong>Vendoring built in.</strong> It combines the best of Vendyr by Caraval into a purpose-built vendoring engine for Terraform and all your dependencies.</li>
+                <li><strong>Authentication reimagined.</strong> Replace a dozen tools — Granted, AWS Vault, aws-saml, saml2aws, and more — with a single consistent identity layer.</li>
+                <li><strong>Workflow automation.</strong> Skip GoTask and Makefiles. Atmos includes a native task runner with built-in identity and context.</li>
+                <li><strong>Templating & scaffolding.</strong> Configuration inheritance, composable stacks, and project scaffolding that scale with you.</li>
+                <li><strong>Multi-identity support.</strong> Manage so many identities you might start to wonder if you have multiple personality disorder (we call it multi-account mastery).</li>
+              </ul>
+
+              <p>Atmos gives you repeatable processes, best practices, and proven design patterns — so your whole team can finally get back on the same page and stop reinventing the wheel.</p>
+
+              <p className="narrative-closer"><strong>Atmos doesn't just reduce tool fatigue — it cures tool insanity.</strong></p>
+
+              <p className="narrative-final">It makes you wonder why you didn't start this way from the beginning.</p>
+            </div>
+          </section>
           <h2 className="section">Simplify complex architectures with <strong className="atmos__text">DRY configuration</strong></h2>
           <section className="alternate-section section--image-right">
             <Screengrab title="Start your Project" command="# here's an example of what your folder structure will like..." slug="demo-stacks/start-your-project" />
