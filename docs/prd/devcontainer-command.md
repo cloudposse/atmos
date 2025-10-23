@@ -502,6 +502,36 @@ atmos devcontainer attach default
 atmos devcontainer attach terraform --instance alice --shell /bin/zsh
 ```
 
+#### `atmos devcontainer shell`
+
+Launch a shell in a devcontainer (convenience command - alias for `start --attach`).
+
+This command is consistent with other Atmos shell commands (`terraform shell`, `auth shell`) and provides a quick way to launch an interactive development environment.
+
+```bash
+atmos devcontainer shell <name> [flags]
+
+Flags:
+      --instance string       Instance name (default: "default")
+```
+
+**Examples:**
+
+```bash
+# Launch shell in default instance (starts if stopped)
+atmos devcontainer shell default
+
+# Launch shell in named instance
+atmos devcontainer shell terraform --instance alice
+```
+
+**Note:** This command will:
+1. Start the container if it's stopped
+2. Create the container if it doesn't exist
+3. Attach to the container with an interactive shell
+
+This makes it the quickest way to get into a devcontainer environment, equivalent to running `atmos devcontainer start <name> --attach`.
+
 #### `atmos devcontainer exec`
 
 Execute a command in a running devcontainer.

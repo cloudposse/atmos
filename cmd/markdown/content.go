@@ -56,3 +56,8 @@ var DevcontainerRebuildUsageMarkdown string
 //
 //go:embed atmos_devcontainer_config_usage.md
 var DevcontainerConfigUsageMarkdown string
+
+// DevcontainerShellUsageMarkdown contains usage examples for the devcontainer shell command.
+//
+//go:embed atmos_devcontainer_shell_usage.md
+var DevcontainerShellUsageMarkdown string
