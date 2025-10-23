@@ -20,7 +20,7 @@ version: version-default
 
 # The following will lint only files in git. `golangci-lint run --new-from-rev=HEAD` should do it,
 # but it's still including files not in git.
-lint: deps lintroller custom-gcl
+lint: deps lintroller gomodcheck custom-gcl
 	./custom-gcl run --new-from-rev=origin/main
 
 # Build custom golangci-lint binary with lintroller plugin.
@@ -42,6 +42,17 @@ tools/lintroller/.lintroller: tools/lintroller/*.go tools/lintroller/cmd/lintrol
 	@cd tools/lintroller && go build -o .lintroller ./cmd/lintroller
 	@chmod +x tools/lintroller/.lintroller
 	@test -x tools/lintroller/.lintroller || (echo "Error: Failed to make lintroller executable" && exit 1)
+
+# Check go.mod for replace/exclude directives that break go install.
+.PHONY: gomodcheck
+gomodcheck: tools/gomodcheck/.gomodcheck
+	@tools/gomodcheck/.gomodcheck go.mod
+
+tools/gomodcheck/.gomodcheck: tools/gomodcheck/*.go
+	@echo "Building gomodcheck..."
+	@cd tools/gomodcheck && go build -o .gomodcheck .
+	@chmod +x tools/gomodcheck/.gomodcheck
+	@test -x tools/gomodcheck/.gomodcheck || (echo "Error: Failed to make gomodcheck executable" && exit 1)
 
 build-linux: GOOS=linux
 build-linux: build-default
@@ -95,4 +106,4 @@ test-short-cover: deps
 	@echo "Running quick tests with coverage (skipping long-running tests)"
 	@GOCOVERDIR=coverage go test -short -cover $(TEST) $(TESTARGS) -timeout 5m
 
-.PHONY: lint lintroller build version build-linux build-windows build-macos deps version-linux version-windows version-macos testacc testacc-cover testacc-coverage test-short test-short-cover
+.PHONY: lint lintroller gomodcheck build version build-linux build-windows build-macos deps version-linux version-windows version-macos testacc testacc-cover testacc-coverage test-short test-short-cover

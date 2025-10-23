@@ -403,5 +403,3 @@ require (
 	oras.land/oras-go/v2 v2.6.0 // indirect
 	sigs.k8s.io/yaml v1.6.0 // indirect
 )
-
-exclude github.com/godbus/dbus v0.0.0-20190726142602-4481cbc300e2
