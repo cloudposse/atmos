@@ -90,6 +90,8 @@ performance-optimization/
 node_modules
 
 # Toolchain installed tools
+.tools/
+.tool-versions
 toolchain/.tools/
 toolchain/.tool-versions
 
