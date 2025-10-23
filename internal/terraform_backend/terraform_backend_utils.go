@@ -110,24 +110,8 @@ func ProcessTerraformStateFile(data []byte) (map[string]any, error) {
 	rawOutputs := rawState.Outputs
 	result := make(map[string]any, len(rawOutputs))
 
-	// Process each output value through JSON round-trip to match terraform.output behavior.
-	// This ensures consistent type handling (e.g., numbers, maps, arrays) between
-	// terraform.output (which gets json.RawMessage from tfexec) and terraform.state
-	// (which unmarshals from state file).
 	for key, output := range rawOutputs {
-		// Marshal the value back to JSON
-		valueJSON, err := json.Marshal(output.Value)
-		if err != nil {
-			return nil, fmt.Errorf("failed to marshal output %s: %w", key, err)
-		}
-
-		// Unmarshal it back to ensure consistent type representation
-		var convertedValue any
-		if err := json.Unmarshal(valueJSON, &convertedValue); err != nil {
-			return nil, fmt.Errorf("failed to unmarshal output %s: %w", key, err)
-		}
-
-		result[key] = convertedValue
+		result[key] = output.Value
 	}
 
 	return result, nil
