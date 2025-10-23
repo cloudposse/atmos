@@ -73,6 +73,8 @@ func TestNoColorLog(t *testing.T) {
 }
 
 func TestInitFunction(t *testing.T) {
+	_ = NewTestKit(t)
+
 	// Test doesn't modify os.Args, so no need to save/restore.
 
 	// Test cases
@@ -315,6 +317,8 @@ func TestSetupLogger_NoColorWithTraceLevel(t *testing.T) {
 }
 
 func TestVersionFlagParsing(t *testing.T) {
+	_ = NewTestKit(t)
+
 	tests := []struct {
 		name        string
 		args        []string
@@ -366,6 +370,8 @@ func TestVersionFlagParsing(t *testing.T) {
 }
 
 func TestVersionFlagExecutionPath(t *testing.T) {
+	_ = NewTestKit(t)
+
 	tests := []struct {
 		name       string
 		setup      func()
