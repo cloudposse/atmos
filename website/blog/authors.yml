@@ -1,5 +1,31 @@
+# Default atmos author - replace with actual contributors
 atmos:
-  name: atmos
-  title: atmos
+  name: Atmos Team
+  title: Atmos Team
   url: https://github.com/cloudposse/atmos
   image_url: https://github.com/cloudposse/atmos/raw/main/docs/img/atmos-logo-128.svg
+
+# Add team members - replace with actual GitHub usernames
+osterman:
+  name: Erik Osterman
+  title: Founder @ Cloud Posse
+  url: https://github.com/osterman
+  image_url: https://github.com/osterman.png
+
+aknysh:
+  name: Andriy Knysh
+  title: Principal Architect @ Cloud Posse
+  url: https://github.com/aknysh
+  image_url: https://github.com/aknysh.png
+
+Nuru:
+  name: Jeremy Randall
+  title: Staff Engineer @ Cloud Posse
+  url: https://github.com/Nuru
+  image_url: https://github.com/Nuru.png
+
+gberenice:
+  name: Berenice Greenstein
+  title: Director of Growth Marketing @ Cloud Posse
+  url: https://github.com/gberenice
+  image_url: https://github.com/gberenice.png

@@ -513,3 +513,75 @@ sub {
 .markdown h3 {
     margin-top: 3em;
 }
+
+/* Modern Blog/Changelog Styling */
+
+/* Reduce massive blog post titles */
+article header h1 {
+    font-size: 2.5rem !important;
+    line-height: 1.3 !important;
+    margin-bottom: 1rem !important;
+}
+
+/* Make blog list titles more reasonable */
+.blog-list-page h2 a {
+    font-size: 2rem !important;
+    line-height: 1.4 !important;
+}
+
+/* Improve blog post metadata */
+.theme-blog-post-item header {
+    margin-bottom: 2rem;
+}
+
+/* Better author card styling */
+.avatar__photo {
+    border-radius: 50%;
+    width: 48px;
+    height: 48px;
+}
+
+.avatar__intro {
+    font-size: 0.95rem;
+}
+
+.avatar__name {
+    font-weight: 600;
+    font-size: 1rem;
+}
+
+.avatar__subtitle {
+    font-size: 0.85rem;
+    opacity: 0.8;
+}
+
+/* Improve blog post spacing */
+.theme-blog-post-item {
+    margin-bottom: 3rem;
+}
+
+/* Better date and read time styling */
+.theme-blog-post-item time,
+.theme-blog-post-item .blogPostData_node_modules-\@docusaurus-theme-classic-lib-theme-BlogPostItem-Header-Info-styles-module {
+    font-size: 0.9rem;
+    opacity: 0.7;
+}
+
+/* Modern tag styling */
+.blog-tags-post-page a[class*="tag_"] {
+    font-size: 0.85rem;
+    padding: 0.3rem 0.8rem;
+    border-radius: 0.5rem;
+}
+
+/* Improve blog excerpt */
+.theme-blog-post-item p {
+    font-size: 1.1rem;
+    line-height: 1.7;
+    margin-top: 1rem;
+}
+
+/* Better Read more link */
+.theme-blog-post-item footer a {
+    font-weight: 600;
+}
