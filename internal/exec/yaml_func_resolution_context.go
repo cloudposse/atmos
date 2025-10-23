@@ -39,19 +39,41 @@ func NewResolutionContext() *ResolutionContext {
 }
 
 const (
-	// Buffer size for capturing goroutine stack traces.
+	// Initial buffer size for capturing goroutine stack traces.
 	goroutineStackBufSize = 64
+	// Maximum buffer size to prevent unbounded growth.
+	maxGoroutineStackBufSize = 8192
 )
 
 // getGoroutineID returns the current goroutine ID.
+// Returns "unknown" if parsing fails to prevent panics.
 func getGoroutineID() string {
+	// Allocate buffer and grow it if needed to avoid truncation.
 	buf := make([]byte, goroutineStackBufSize)
-	n := runtime.Stack(buf, false)
+	for {
+		n := runtime.Stack(buf, false)
+		if n < len(buf) {
+			// Buffer was large enough.
+			buf = buf[:n]
+			break
+		}
+		// Buffer was too small, double it and try again.
+		if len(buf) >= maxGoroutineStackBufSize {
+			// Safety limit reached.
+			return "unknown"
+		}
+		buf = make([]byte, len(buf)*2)
+	}
+
 	// Format: "goroutine 123 [running]:\n..."
-	buf = buf[:n]
+	// Parse defensively to avoid panics.
+	fields := strings.Fields(string(buf))
+	if len(fields) < 2 {
+		return "unknown"
+	}
+
 	// Extract the number after "goroutine ".
-	idField := strings.Fields(string(buf))[1]
-	return idField
+	return fields[1]
 }
 
 // GetOrCreateResolutionContext gets or creates a resolution context for the current goroutine.
@@ -75,6 +97,35 @@ func ClearResolutionContext() {
 
 	gid := getGoroutineID()
 	goroutineResolutionContexts.Delete(gid)
+}
+
+// scopedResolutionContext creates a new scoped resolution context and returns a restore function.
+// This prevents memory leaks and cross-call contamination by ensuring contexts are cleaned up.
+// Usage:
+//
+//	restoreCtx := scopedResolutionContext()
+//	defer restoreCtx()
+func scopedResolutionContext() func() {
+	gid := getGoroutineID()
+
+	// Save the existing context (if any).
+	var savedCtx *ResolutionContext
+	if ctx, ok := goroutineResolutionContexts.Load(gid); ok {
+		savedCtx = ctx.(*ResolutionContext)
+	}
+
+	// Install a fresh context.
+	freshCtx := NewResolutionContext()
+	goroutineResolutionContexts.Store(gid, freshCtx)
+
+	// Return a restore function that reinstates the saved context or clears it.
+	return func() {
+		if savedCtx != nil {
+			goroutineResolutionContexts.Store(gid, savedCtx)
+		} else {
+			goroutineResolutionContexts.Delete(gid)
+		}
+	}
 }
 
 // Push adds a node to the call stack and checks for circular dependencies.

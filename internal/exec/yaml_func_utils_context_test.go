@@ -1,6 +1,7 @@
 package exec
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -197,6 +198,9 @@ func TestProcessCustomYamlTagsContextIsolation(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{}
 	input := schema.AtmosSectionMapType{"test": "value"}
 
+	// Channel to collect errors from goroutines.
+	errChan := make(chan error, 2)
+
 	// Goroutine 1.
 	go func() {
 		defer close(done1)
@@ -210,13 +214,26 @@ func TestProcessCustomYamlTagsContextIsolation(t *testing.T) {
 			FunctionType: "test",
 			FunctionCall: "test1",
 		}
-		require.NoError(t, ctx1.Push(atmosConfig, node1))
+		if err := ctx1.Push(atmosConfig, node1); err != nil {
+			errChan <- err
+			return
+		}
 
 		_, err := ProcessCustomYamlTags(atmosConfig, input, "stack1", nil)
-		assert.NoError(t, err)
+		if err != nil {
+			errChan <- err
+			return
+		}
 
-		assert.Equal(t, 1, len(ctx1.CallStack))
-		assert.Equal(t, "component1", ctx1.CallStack[0].Component)
+		if len(ctx1.CallStack) != 1 {
+			errChan <- fmt.Errorf("expected 1 item in call stack, got %d", len(ctx1.CallStack))
+			return
+		}
+		if ctx1.CallStack[0].Component != "component1" {
+			errChan <- fmt.Errorf("expected component1, got %s", ctx1.CallStack[0].Component)
+			return
+		}
+		errChan <- nil
 	}()
 
 	// Goroutine 2.
@@ -232,15 +249,34 @@ func TestProcessCustomYamlTagsContextIsolation(t *testing.T) {
 			FunctionType: "test",
 			FunctionCall: "test2",
 		}
-		require.NoError(t, ctx2.Push(atmosConfig, node2))
+		if err := ctx2.Push(atmosConfig, node2); err != nil {
+			errChan <- err
+			return
+		}
 
 		_, err := ProcessCustomYamlTags(atmosConfig, input, "stack2", nil)
-		assert.NoError(t, err)
+		if err != nil {
+			errChan <- err
+			return
+		}
 
-		assert.Equal(t, 1, len(ctx2.CallStack))
-		assert.Equal(t, "component2", ctx2.CallStack[0].Component)
+		if len(ctx2.CallStack) != 1 {
+			errChan <- fmt.Errorf("expected 1 item in call stack, got %d", len(ctx2.CallStack))
+			return
+		}
+		if ctx2.CallStack[0].Component != "component2" {
+			errChan <- fmt.Errorf("expected component2, got %s", ctx2.CallStack[0].Component)
+			return
+		}
+		errChan <- nil
 	}()
 
 	<-done1
 	<-done2
+
+	// Collect errors from goroutines and fail in main goroutine.
+	for i := 0; i < 2; i++ {
+		err := <-errChan
+		require.NoError(t, err)
+	}
 }

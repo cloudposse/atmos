@@ -18,8 +18,12 @@ func ProcessCustomYamlTags(
 ) (schema.AtmosSectionMapType, error) {
 	defer perf.Track(atmosConfig, "exec.ProcessCustomYamlTags")()
 
-	// Use goroutine-local resolution context for cycle detection.
-	// This allows nested YAML function calls to share the same context.
+	// Create a scoped resolution context to prevent memory leaks and cross-call contamination.
+	// Save any existing context, install a fresh one, and restore on exit.
+	restoreCtx := scopedResolutionContext()
+	defer restoreCtx()
+
+	// Get the fresh context we just installed.
 	resolutionCtx := GetOrCreateResolutionContext()
 	return ProcessCustomYamlTagsWithContext(atmosConfig, input, currentStack, skip, resolutionCtx)
 }
