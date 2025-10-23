@@ -86,7 +86,9 @@ html[data-theme="dark"] .landing-page .section__description > h2 {
 }
 
 .landing-page .intro h1 {
-  font-size: 3em;
+  font-size: 4em;
+  font-weight: 700;
+  line-height: 1.1;
 }
 
 .landing-page .intro h2 {
@@ -114,12 +116,12 @@ html[data-theme="dark"] .landing-page .section__description > h2 {
 }
 
 .hero__description {
-  font-size: 1.2em;
-  margin-top: 1rem;
-  line-height: 1.5em;
+  font-size: 1.4em;
+  margin-top: 1.5rem;
+  line-height: 1.6em;
   text-align: center;
   color: #ccc;
-  max-width: 800px;
+  max-width: 900px;
 }
 
 /* Fixed-width container for typing animation to prevent layout shift */
@@ -157,12 +159,20 @@ html[data-theme="dark"] .landing-page .section__description > h2 {
   justify-content: center;
   align-items: center;
   padding: 4rem 2rem;
+  width: 100%;
   max-width: 1400px;
   margin: 0 auto;
 }
 
+.hero-demo .screenshot-container {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+}
+
 .hero-demo img.screenshot {
-  max-width: 80%;
+  max-width: 90%;
+  width: 100%;
   height: auto;
   box-shadow: 0 0 20px 3px rgb(8 115 115 / 29%);
   border-radius: 10px;
@@ -396,6 +406,14 @@ html[data-theme="dark"] .feature-icon {
   }
 
   .landing-page .intro h1 {
-    font-size: 2.2em;
+    font-size: 2.5em;
+  }
+
+  .hero__description {
+    font-size: 1.1em;
+  }
+
+  .hero-demo img.screenshot {
+    max-width: 95%;
   }
 }
