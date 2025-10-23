@@ -190,6 +190,7 @@ html[data-theme="dark"] .landing-page main h2.section {
   background: rgb(0 0 0 / 21%);
 }
 html[data-theme="dark"] .hero h1,
+html[data-theme="dark"] .hero h1 *,
 html[data-theme="dark"] .section__description h2 {
   color: unset;
   background: linear-gradient(
