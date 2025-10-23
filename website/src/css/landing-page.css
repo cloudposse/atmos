@@ -381,6 +381,7 @@ html[data-theme="dark"] .feature-icon {
   font-size: 1.3rem;
   margin-bottom: 0.5rem;
   color: #fff;
+  text-align: left;
 }
 
 .feature-card p {
