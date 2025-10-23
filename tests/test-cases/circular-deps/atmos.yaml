@@ -1,0 +1,10 @@
+components:
+  terraform:
+    base_path: "components/terraform"
+
+stacks:
+  base_path: "stacks"
+  name_pattern: "{stage}"
+
+logs:
+  level: Info
