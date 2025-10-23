@@ -4,6 +4,7 @@ import useDocusaurusContext from '@docusaurus/useDocusaurusContext';
 import Link from '@docusaurus/Link';
 import useBaseUrl from '@docusaurus/useBaseUrl'
 import Screengrab from '@site/src/components/Screengrab'
+import TypingAnimation from '@site/src/components/TypingAnimation'
 import '../css/landing-page.css';
 
 function Home() {
@@ -15,7 +16,7 @@ function Home() {
       <Layout title={`Hello from ${siteConfig.title}`} description="Manage Environments Easily in Terraform, OpenTofu, Packer using Atmos">
         <header className="hero hero--full-height">
           <div className="intro">
-            <h1>Manage Environments Easily<br/>in Terraform, OpenTofu, Packer</h1>
+            <h1>Manage Environments Easily<br/>in <TypingAnimation words={['Terraform', 'OpenTofu', 'Packer', 'Helmfile', 'and more...']} /></h1>
           </div>
           <img src={useBaseUrl('/img/demo.gif')} alt="Product Screenshot" className="screenshot" />
           <div className="hero__cta">

@@ -31,7 +31,9 @@
     "clsx": "^2.1.1",
     "custom-loaders": "file:plugins/custom-loaders",
     "docusaurus-plugin-image-zoom": "^2.0.0",
+    "docusaurus-plugin-llms": "^0.2.2",
     "docusaurus-plugin-sentry": "^2.0.0",
+    "framer-motion": "^12.23.24",
     "gray-matter": "^4.0.3",
     "html-loader": "^5.1.0",
     "marked": "^15.0.4",
@@ -49,8 +51,7 @@
     "react-table": "^7.8.0",
     "remark-html": "^16.0.1",
     "remark-parse": "^11.0.0",
-    "unified": "^11.0.5",
-    "docusaurus-plugin-llms": "^0.2.2"
+    "unified": "^11.0.5"
   },
   "devDependencies": {
     "@docusaurus/module-type-aliases": "^3.6.3",
