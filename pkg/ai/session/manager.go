@@ -131,6 +131,16 @@ func (m *Manager) GetMessages(ctx context.Context, sessionID string, limit int) 
 	return messages, nil
 }
 
+// GetMessageCount returns the number of messages in a session.
+func (m *Manager) GetMessageCount(ctx context.Context, sessionID string) (int, error) {
+	count, err := m.storage.GetMessageCount(ctx, sessionID)
+	if err != nil {
+		return 0, fmt.Errorf("failed to get message count: %w", err)
+	}
+
+	return count, nil
+}
+
 // AddContext adds a context item to a session.
 func (m *Manager) AddContext(ctx context.Context, sessionID, contextType, key, value string) error {
 	item := &ContextItem{

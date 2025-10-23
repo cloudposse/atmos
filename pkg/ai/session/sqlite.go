@@ -43,6 +43,12 @@ func NewSQLiteStorage(storagePath string) (*SQLiteStorage, error) {
 	// Configure connection.
 	db.SetMaxOpenConns(1) // SQLite works best with single connection
 
+	// Enable foreign key constraints (required for cascade deletes).
+	if _, err := db.Exec("PRAGMA foreign_keys = ON"); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("failed to enable foreign keys: %w", err)
+	}
+
 	storage := &SQLiteStorage{
 		db:   db,
 		path: storagePath,

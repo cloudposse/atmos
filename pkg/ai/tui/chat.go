@@ -14,6 +14,9 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/ai"
+	"github.com/cloudposse/atmos/pkg/ai/session"
+	"github.com/cloudposse/atmos/pkg/ai/tools"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
 
@@ -22,11 +25,19 @@ const (
 	DefaultViewportWidth = 80
 	// DefaultViewportHeight is the default height for the chat viewport before window sizing.
 	DefaultViewportHeight = 20
+
+	// Message roles.
+	roleUser      = "user"
+	roleAssistant = "assistant"
+	roleSystem    = "system"
 )
 
 // ChatModel represents the state of the chat TUI.
 type ChatModel struct {
 	client    ai.Client
+	manager   *session.Manager
+	sess      *session.Session
+	executor  *tools.Executor
 	messages  []ChatMessage
 	viewport  viewport.Model
 	textarea  textarea.Model
@@ -45,33 +56,69 @@ type ChatMessage struct {
 }
 
 // NewChatModel creates a new chat model with the provided AI client.
-func NewChatModel(client ai.Client) (*ChatModel, error) {
+func NewChatModel(client ai.Client, manager *session.Manager, sess *session.Session, executor *tools.Executor) (*ChatModel, error) {
 	if client == nil {
 		return nil, errUtils.ErrAIClientNil
 	}
 
-	// Initialize viewport
+	// Initialize viewport.
 	vp := viewport.New(DefaultViewportWidth, DefaultViewportHeight)
 	vp.SetContent("")
 
-	// Initialize textarea
+	// Initialize textarea.
 	ta := textarea.New()
 	ta.Placeholder = "Type your message... (Ctrl+C to quit, Enter to send)"
 	ta.Focus()
 
-	// Initialize spinner
+	// Initialize spinner.
 	s := spinner.New()
 	s.Spinner = spinner.Dot
 	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorCyan))
 
-	return &ChatModel{
+	model := &ChatModel{
 		client:    client,
+		manager:   manager,
+		sess:      sess,
+		executor:  executor,
 		messages:  make([]ChatMessage, 0),
 		viewport:  vp,
 		textarea:  ta,
 		spinner:   s,
 		isLoading: false,
-	}, nil
+	}
+
+	// Load existing messages from session if available.
+	if manager != nil && sess != nil {
+		if err := model.loadSessionMessages(); err != nil {
+			log.Warn(fmt.Sprintf("Failed to load session messages: %v", err))
+		}
+	}
+
+	return model, nil
+}
+
+// loadSessionMessages loads existing messages from the session.
+func (m *ChatModel) loadSessionMessages() error {
+	if m.manager == nil || m.sess == nil {
+		return nil
+	}
+
+	ctx := context.Background()
+	sessionMessages, err := m.manager.GetMessages(ctx, m.sess.ID, 0)
+	if err != nil {
+		return fmt.Errorf("failed to get session messages: %w", err)
+	}
+
+	// Convert session messages to chat messages.
+	for _, msg := range sessionMessages {
+		m.messages = append(m.messages, ChatMessage{
+			Role:    msg.Role,
+			Content: msg.Content,
+			Time:    msg.CreatedAt,
+		})
+	}
+
+	return nil
 }
 
 // Init initializes the chat model.
@@ -145,8 +192,8 @@ func (m *ChatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleKeyMsg(msg)
 
 	case sendMessageMsg:
-		// Add user message
-		m.addMessage("user", string(msg))
+		// Add user message.
+		m.addMessage(roleUser, string(msg))
 		m.textarea.Reset()
 		m.isLoading = true
 		m.updateViewportContent()
@@ -156,14 +203,14 @@ func (m *ChatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		)
 
 	case aiResponseMsg:
-		// Add AI response
-		m.addMessage("assistant", string(msg))
+		// Add AI response.
+		m.addMessage(roleAssistant, string(msg))
 		m.isLoading = false
 		m.updateViewportContent()
 
 	case aiErrorMsg:
-		// Handle AI error
-		m.addMessage("system", fmt.Sprintf("Error: %s", string(msg)))
+		// Handle AI error.
+		m.addMessage(roleSystem, fmt.Sprintf("Error: %s", string(msg)))
 		m.isLoading = false
 		m.updateViewportContent()
 
@@ -241,6 +288,14 @@ func (m *ChatModel) addMessage(role, content string) {
 		Time:    time.Now(),
 	}
 	m.messages = append(m.messages, message)
+
+	// Save message to session if available.
+	if m.manager != nil && m.sess != nil && role != roleSystem {
+		ctx := context.Background()
+		if err := m.manager.AddMessage(ctx, m.sess.ID, role, content); err != nil {
+			log.Warn(fmt.Sprintf("Failed to save message to session: %v", err))
+		}
+	}
 }
 
 func (m *ChatModel) updateViewportContent() {
@@ -251,16 +306,16 @@ func (m *ChatModel) updateViewportContent() {
 		var prefix string
 
 		switch msg.Role {
-		case "user":
+		case roleUser:
 			style = lipgloss.NewStyle().
 				Foreground(lipgloss.Color(theme.ColorGreen)).
 				Bold(true)
 			prefix = "You:"
-		case "assistant":
+		case roleAssistant:
 			style = lipgloss.NewStyle().
 				Foreground(lipgloss.Color(theme.ColorCyan))
 			prefix = "Atmos AI:"
-		case "system":
+		case roleSystem:
 			style = lipgloss.NewStyle().
 				Foreground(lipgloss.Color(theme.ColorRed)).
 				Italic(true)
@@ -314,14 +369,15 @@ func (m *ChatModel) getAIResponse(userMessage string) tea.Cmd {
 }
 
 // RunChat starts the chat TUI with the provided AI client.
-func RunChat(client ai.Client) error {
-	model, err := NewChatModel(client)
+func RunChat(client ai.Client, manager *session.Manager, sess *session.Session, executor *tools.Executor) error {
+	model, err := NewChatModel(client, manager, sess, executor)
 	if err != nil {
 		return fmt.Errorf("failed to create chat model: %w", err)
 	}
 
-	// Add welcome message
-	model.addMessage("assistant", `Welcome to Atmos AI Assistant! 🚀
+	// Add welcome message only if this is a new session (no existing messages).
+	if len(model.messages) == 0 {
+		model.addMessage(roleAssistant, `Welcome to Atmos AI Assistant! 🚀
 
 I'm here to help you with your Atmos infrastructure management. I can:
 
@@ -339,6 +395,14 @@ Try asking me something like:
 - "How do I validate my stack configuration?"
 
 What would you like to know?`)
+	} else {
+		// Resuming existing session.
+		sessionName := "session"
+		if sess != nil {
+			sessionName = sess.Name
+		}
+		model.addMessage(roleSystem, fmt.Sprintf("Resumed session: %s (%d messages)", sessionName, len(model.messages)))
+	}
 
 	model.updateViewportContent()
 
