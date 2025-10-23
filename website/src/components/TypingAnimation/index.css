@@ -29,7 +29,22 @@
   }
 }
 
-/* Match the heading gradient styling */
-html[data-theme='dark'] .typing-animation {
-  color: inherit;
+/* Match the heading gradient styling from landing-page.css */
+html[data-theme='dark'] .hero h1 .typing-animation,
+html[data-theme='dark'] .hero h1 .typing-text {
+  color: unset;
+  background: linear-gradient(
+      to right bottom,
+      rgb(255, 255, 255) 30%,
+      rgba(255, 255, 255, 0.5)
+    )
+    text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Ensure cursor is visible with gradient text */
+html[data-theme='dark'] .hero h1 .typing-cursor {
+  background-color: rgba(255, 255, 255, 0.8);
 }
