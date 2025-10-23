@@ -42,21 +42,33 @@ This PR changes the Go version:
 - This PR: 1.25.0
 - Change: ⬆️ Upgrade
 
-### Upgrade Checklist
-- [ ] Verify all CI workflows pass with new Go version
-- [ ] Check for new language features that could be leveraged
-- [ ] Review release notes: https://go.dev/doc/go1.25
-- [ ] Update .tool-versions if using asdf
-- [ ] Update Dockerfile Go version if applicable
+> [!TIP]
+> ### Upgrade Checklist
+> - [ ] Verify all CI workflows pass with new Go version
+> - [ ] Check for new language features that could be leveraged
+> - [ ] Review release notes: https://go.dev/doc/go1.25
+> - [ ] Update .tool-versions if using asdf
+> - [ ] Update Dockerfile Go version if applicable
 ```
 
 ### Downgrade
 ```
 ⚠️ Go Version Change Detected
 
-### Downgrade Warning
-⚠️ Warning: Downgrading Go version may indicate:
-- This PR was based on an outdated branch
-- Consider rebasing on latest main
-- Verify this change is intentional
+This PR changes the Go version:
+- Base branch (main): 1.25.0
+- This PR: 1.24.8
+- Change: ⬇️ Downgrade
+
+> [!WARNING]
+> ### Downgrade Detected
+> Downgrading Go version may indicate:
+> - This PR was based on an outdated branch
+> - Consider rebasing on latest main
+> - Verify this change is intentional
+>
+> **If unintentional, please:**
+> 1. Rebase on latest main
+> 2. Run `go mod tidy`
+> 3. Push updated changes
 ```

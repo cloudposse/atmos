@@ -92,22 +92,25 @@ runs:
           comment += '- **Change**: ' + versionChange + '\n\n';
 
           if (isUpgrade) {
-            comment += '### Upgrade Checklist\n\n';
-            comment += '- [ ] Verify all CI workflows pass with new Go version\n';
-            comment += '- [ ] Check for new language features that could be leveraged\n';
-            comment += '- [ ] Review release notes: https://go.dev/doc/go' + prVersion.replace(/\.\d+$/, '') + '\n';
-            comment += '- [ ] Update `.tool-versions` if using asdf\n';
-            comment += '- [ ] Update Dockerfile Go version if applicable\n';
+            comment += '> [!TIP]\n';
+            comment += '> ### Upgrade Checklist\n';
+            comment += '> - [ ] Verify all CI workflows pass with new Go version\n';
+            comment += '> - [ ] Check for new language features that could be leveraged\n';
+            comment += '> - [ ] Review release notes: https://go.dev/doc/go' + prVersion.replace(/\.\d+$/, '') + '\n';
+            comment += '> - [ ] Update `.tool-versions` if using asdf\n';
+            comment += '> - [ ] Update Dockerfile Go version if applicable\n';
           } else {
-            comment += '### Downgrade Warning\n\n';
-            comment += '⚠️ **Warning**: Downgrading Go version may indicate:\n';
-            comment += '- This PR was based on an outdated branch\n';
-            comment += '- Consider rebasing on latest `' + baseRef + '`\n';
-            comment += '- Verify this change is intentional\n\n';
-            comment += 'If unintentional, please:\n';
-            comment += '1. Rebase on latest `' + baseRef + '`\n';
-            comment += '2. Run `go mod tidy`\n';
-            comment += '3. Push updated changes\n';
+            comment += '> [!WARNING]\n';
+            comment += '> ### Downgrade Detected\n';
+            comment += '> Downgrading Go version may indicate:\n';
+            comment += '> - This PR was based on an outdated branch\n';
+            comment += '> - Consider rebasing on latest `' + baseRef + '`\n';
+            comment += '> - Verify this change is intentional\n';
+            comment += '>\n';
+            comment += '> **If unintentional, please:**\n';
+            comment += '> 1. Rebase on latest `' + baseRef + '`\n';
+            comment += '> 2. Run `go mod tidy`\n';
+            comment += '> 3. Push updated changes\n';
           }
 
           comment += '\n---\n';
