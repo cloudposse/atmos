@@ -17,8 +17,39 @@ import (
 )
 
 // LoadAWSConfigWithAuth loads AWS config, preferring auth context if available.
-// If authContext is provided, it uses the Atmos-managed credentials files and profile.
-// Otherwise, it falls back to standard AWS SDK credential resolution.
+/*
+	When authContext is provided, it uses the Atmos-managed credentials files and profile.
+	Otherwise, it falls back to standard AWS SDK credential resolution.
+
+	Standard AWS SDK credential resolution order:
+
+	Environment variables:
+	  AWS_ACCESS_KEY_ID
+	  AWS_SECRET_ACCESS_KEY
+	  AWS_SESSION_TOKEN (optional, for temporary credentials)
+
+	Shared credentials file:
+	  Typically at ~/.aws/credentials
+	  Controlled by:
+	    AWS_PROFILE (defaults to default)
+	    AWS_SHARED_CREDENTIALS_FILE
+
+	Shared config file:
+	  Typically at ~/.aws/config
+	  Also supports named profiles and region settings
+
+	Amazon EC2 Instance Metadata Service (IMDS):
+	  If running on EC2 or ECS
+	  Uses IAM roles attached to the instance/task
+
+	Web Identity Token credentials:
+	  When AWS_WEB_IDENTITY_TOKEN_FILE and AWS_ROLE_ARN are set (e.g., in EKS)
+
+	SSO credentials (if configured)
+
+	Custom credential sources:
+	  Provided programmatically using config.WithCredentialsProvider(...)
+*/
 func LoadAWSConfigWithAuth(
 	ctx context.Context,
 	region string,
