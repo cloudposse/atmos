@@ -216,12 +216,20 @@ func TestNoopKeyringStore(t *testing.T) {
 func TestNoopKeyringStore_CacheBehavior(t *testing.T) {
 	store := newNoopKeyringStore()
 
-	// First call validates (will fail without AWS creds).
+	// First call attempts validation (may succeed or fail depending on environment).
 	_, err1 := store.Retrieve("test-alias")
-	assert.Error(t, err1, "First retrieve should fail validation")
 
-	// Cache should be empty on validation failure.
-	assert.Empty(t, store.cache, "Cache should be empty after failed validation")
+	// If validation failed, cache should be empty.
+	// If validation succeeded, cache should have entry and error should be ErrCredentialsNotFound.
+	if errors.Is(err1, ErrCredentialsNotFound) {
+		// Validation succeeded - cache should be populated.
+		assert.NotEmpty(t, store.cache, "Cache should be populated after successful validation")
+		assert.Contains(t, store.cache, "test-alias", "Cache should contain the alias")
+	} else {
+		// Validation failed - cache should be empty.
+		assert.Error(t, err1, "Retrieve should return error when validation fails")
+		assert.Empty(t, store.cache, "Cache should be empty after failed validation")
+	}
 }
 
 // TestNoopKeyringStore_ExpiredCache tests expired cache handling.
