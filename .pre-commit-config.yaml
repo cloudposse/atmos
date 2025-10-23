@@ -49,10 +49,10 @@ repos:
         pass_filenames: false
         exclude: ^(vendor/|tests/test-cases/|tests/testdata/|tests/snapshots/|tools/lintroller/testdata/)
 
-      - id: check-go-mod-install-compatibility
+      - id: gomodcheck
         name: Check go.mod install compatibility
         description: Ensure go.mod doesn't have replace/exclude directives that break go install
-        entry: scripts/check-go-mod-install-compatibility.sh
+        entry: make gomodcheck
         language: system
         files: ^go\.mod$
         pass_filenames: false
