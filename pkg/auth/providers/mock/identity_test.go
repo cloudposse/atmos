@@ -205,7 +205,13 @@ func TestIdentity_PostAuthenticate(t *testing.T) {
 	}
 
 	// PostAuthenticate is a no-op for mock identity.
-	err := identity.PostAuthenticate(ctx, nil, "test-provider", "test-identity", mockCreds)
+	params := &types.PostAuthenticateParams{
+		AuthContext:  nil,
+		ProviderName: "test-provider",
+		IdentityName: "test-identity",
+		Credentials:  mockCreds,
+	}
+	err := identity.PostAuthenticate(ctx, params)
 
 	assert.NoError(t, err)
 }
