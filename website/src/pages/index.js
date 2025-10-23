@@ -21,18 +21,18 @@ function Home() {
           <div className="intro">
             <p className="hero__eyebrow">Infrastructure as Code Framework</p>
             <h1>One Tool to Orchestrate <span className="typing-container"><TypingAnimation words={['Terraform', 'OpenTofu', 'Packer', 'Helmfile', 'and more...']} /></span></h1>
-            <p className="hero__description">Unified workflows, authentication, and vendoring for all your IaC tools</p>
+            <p className="hero__description">Treat environments as configuration and eliminate code duplication, custom bash scripts, and complicated tooling with one tool to rule them all</p>
             <div className="hero__cta">
               <Link to="/quick-start/" className="button button--lg button--primary"><p>Try the Quick Start</p></Link>
               <Link to="/introduction" className="button button--lg button--outline button--primary ml20"><p>Learn More</p></Link>
             </div>
           </div>
+        </header>
+        <section className="hero-demo">
           <ScrollFadeIn className="hero-demo-intro">
             <h2>See Atmos in Action</h2>
             <p>Watch how Atmos simplifies infrastructure orchestration with an intuitive workflow</p>
           </ScrollFadeIn>
-        </header>
-        <section className="hero-demo">
           <LazyDemo />
         </section>
         <main>

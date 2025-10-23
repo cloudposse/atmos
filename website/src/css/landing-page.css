@@ -168,7 +168,7 @@ html[data-theme="dark"] .hero__description {
   flex-direction: column;
   justify-content: center;
   align-items: center;
-  padding: 0.5rem 2rem 4rem 2rem;
+  padding: 4rem 2rem 4rem 2rem;
   width: 100%;
   max-width: 1400px;
   margin: 0 auto;
@@ -176,13 +176,9 @@ html[data-theme="dark"] .hero__description {
 
 .hero-demo-intro {
   text-align: center;
-  max-width: 700px;
-  margin: 0 auto;
+  max-width: 800px;
+  margin: 0 auto 2rem auto;
   padding: 2rem;
-  position: absolute;
-  bottom: 4rem;
-  left: 50%;
-  transform: translateX(-50%);
   width: 100%;
   opacity: 0;
   transition: opacity 0.6s ease-out;
@@ -193,7 +189,7 @@ html[data-theme="dark"] .hero__description {
 }
 
 .hero-demo-intro h2 {
-  font-size: 2em;
+  font-size: 2.5em;
   margin-bottom: 0.75rem;
   font-weight: 700;
 }
@@ -210,7 +206,7 @@ html[data-theme="dark"] .hero-demo-intro h2 {
 }
 
 .hero-demo-intro p {
-  font-size: 1.2em;
+  font-size: 1.5em;
   color: #4a5568;
   line-height: 1.6;
 }
