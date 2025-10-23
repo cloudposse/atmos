@@ -1481,3 +1481,110 @@ func TestCreateLatestFile(t *testing.T) {
 		})
 	}
 }
+
+// TestMoveFile_Success tests successful file move operation.
+func TestMoveFile_Success(t *testing.T) {
+	tempDir := t.TempDir()
+
+	// Create source file
+	srcPath := filepath.Join(tempDir, "source.txt")
+	content := []byte("test content")
+	err := os.WriteFile(srcPath, content, 0o644)
+	require.NoError(t, err)
+
+	// Move to destination
+	dstPath := filepath.Join(tempDir, "dest.txt")
+	err = MoveFile(srcPath, dstPath)
+	assert.NoError(t, err)
+
+	// Verify destination exists
+	data, err := os.ReadFile(dstPath)
+	assert.NoError(t, err)
+	assert.Equal(t, content, data)
+
+	// Verify source no longer exists
+	_, err = os.Stat(srcPath)
+	assert.True(t, os.IsNotExist(err))
+}
+
+// TestMoveFile_CreateTargetDir tests MoveFile creates target directory if needed.
+func TestMoveFile_CreateTargetDir(t *testing.T) {
+	tempDir := t.TempDir()
+
+	// Create source file
+	srcPath := filepath.Join(tempDir, "source.txt")
+	content := []byte("test content")
+	err := os.WriteFile(srcPath, content, 0o644)
+	require.NoError(t, err)
+
+	// Move to destination in non-existent directory
+	dstPath := filepath.Join(tempDir, "subdir", "newdir", "dest.txt")
+	err = MoveFile(srcPath, dstPath)
+	assert.NoError(t, err)
+
+	// Verify destination exists
+	data, err := os.ReadFile(dstPath)
+	assert.NoError(t, err)
+	assert.Equal(t, content, data)
+}
+
+// TestMoveFile_CopyFallback tests MoveFile falls back to copy+delete when rename fails.
+func TestMoveFile_CopyFallback(t *testing.T) {
+	// This test is tricky because os.Rename usually works within the same filesystem.
+	// We'll test the copy path by using different filesystems or permissions.
+	// For simplicity, we'll just verify the function handles the fallback correctly.
+	// by testing cross-filesystem moves if possible.
+
+	tempDir1 := t.TempDir()
+	tempDir2 := t.TempDir()
+
+	// Create source file
+	srcPath := filepath.Join(tempDir1, "source.txt")
+	content := []byte("test content for fallback")
+	err := os.WriteFile(srcPath, content, 0o644)
+	require.NoError(t, err)
+
+	// Move to different temp directory (may or may not trigger fallback depending on OS)
+	dstPath := filepath.Join(tempDir2, "dest.txt")
+	err = MoveFile(srcPath, dstPath)
+	assert.NoError(t, err)
+
+	// Verify destination exists
+	data, err := os.ReadFile(dstPath)
+	assert.NoError(t, err)
+	assert.Equal(t, content, data)
+
+	// Verify source no longer exists
+	_, err = os.Stat(srcPath)
+	assert.True(t, os.IsNotExist(err))
+}
+
+// TestMoveFile_SourceNotFound tests MoveFile with non-existent source file.
+func TestMoveFile_SourceNotFound(t *testing.T) {
+	tempDir := t.TempDir()
+
+	srcPath := filepath.Join(tempDir, "nonexistent.txt")
+	dstPath := filepath.Join(tempDir, "dest.txt")
+
+	err := MoveFile(srcPath, dstPath)
+	assert.Error(t, err)
+}
+
+// TestMoveFile_InvalidDestinationPath tests MoveFile with invalid destination path.
+func TestMoveFile_InvalidDestinationPath(t *testing.T) {
+	tempDir := t.TempDir()
+
+	// Create source file
+	srcPath := filepath.Join(tempDir, "source.txt")
+	err := os.WriteFile(srcPath, []byte("content"), 0o644)
+	require.NoError(t, err)
+
+	// Try to move to invalid path (e.g., path that can't be created).
+	// This is OS-specific, so we'll test a reasonable scenario.
+	dstPath := filepath.Join(tempDir, "file.txt", "subfile.txt")
+	err = os.WriteFile(filepath.Join(tempDir, "file.txt"), []byte("blocking"), 0o644)
+	require.NoError(t, err)
+
+	err = MoveFile(srcPath, dstPath)
+	assert.Error(t, err)
+}

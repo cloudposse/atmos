@@ -567,3 +567,49 @@ func TestInfoCommand_EdgeCases(t *testing.T) {
 		assert.Contains(t, table, "http")
 	})
 }
+
+// TestInfoExec_YAMLOutput tests InfoExec with YAML output format.
+func TestInfoExec_YAMLOutput(t *testing.T) {
+	SetAtmosConfig(&schema.AtmosConfiguration{})
+
+	// Test with terraform (known tool in local config)
+	err := InfoExec("terraform", "yaml")
+	assert.NoError(t, err)
+}
+
+// TestInfoExec_TableOutput tests InfoExec with table output format.
+func TestInfoExec_TableOutput(t *testing.T) {
+	SetAtmosConfig(&schema.AtmosConfiguration{})
+
+	// Test with terraform (known tool in local config)
+	err := InfoExec("terraform", "table")
+	assert.NoError(t, err)
+}
+
+// TestInfoExec_InvalidTool tests InfoExec with an invalid tool name.
+func TestInfoExec_InvalidTool(t *testing.T) {
+	SetAtmosConfig(&schema.AtmosConfiguration{})
+
+	// Test with non-existent tool
+	err := InfoExec("nonexistent-tool-xyz", "table")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "not found in local aliases or Aqua registry")
+}
+
+// TestInfoExec_CanonicalOrgRepo tests InfoExec with canonical org/repo format.
+func TestInfoExec_CanonicalOrgRepo(t *testing.T) {
+	SetAtmosConfig(&schema.AtmosConfiguration{})
+
+	// Test with canonical org/repo format
+	err := InfoExec("hashicorp/terraform", "yaml")
+	assert.NoError(t, err)
+}
+
+// TestInfoExec_GitHubReleaseTool tests InfoExec with a GitHub release tool.
+func TestInfoExec_GitHubReleaseTool(t *testing.T) {
+	SetAtmosConfig(&schema.AtmosConfiguration{})
+
+	// Test with opentofu (GitHub release type)
+	err := InfoExec("opentofu", "table")
+	assert.NoError(t, err)
+}

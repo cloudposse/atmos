@@ -9,474 +9,497 @@ import File from '@site/src/components/File'
 import Terminal from '@site/src/components/Terminal'
 
 :::note Purpose
-Use these subcommands to interact with Terraform and OpenTofu.
+Manage CLI tool versions natively in Atmos with seamless Aqua registry integration—no external tool managers required.
 :::
 
 <Screengrab title="atmos toolchain --help" slug="atmos-toolchain--help" />
 
-# Toolchain - Atmos Tools
+# Toolchain Management
 
-A standalone Go CLI tool that installs CLI binaries using metadata from the Aqua registry. This is a prototype for the [Atmos packages feature](https://github.com/cloudposse/atmos/issues/927).
+Atmos includes native toolchain management that integrates with the [Aqua registry ecosystem](https://github.com/aquaproj/aqua-registry), giving you access to hundreds of pre-configured CLI tools while maintaining deep integration with your infrastructure workflows.
 
 ## Overview
 
-This tool demonstrates how to integrate with the Aqua registry ecosystem while maintaining independence from the Aqua CLI itself. It serves as a proof-of-concept for the Atmos packages feature, showing how to:
+The toolchain feature enables you to:
 
-- Parse YAML files from the Aqua registry
-- Download GitHub release assets
-- Extract binaries from various archive formats
-- Install binaries to a local directory
-- Support multiple concurrent versions
-- Provide backward compatibility with `.tool-versions` files
+- **Manage tool versions** across your infrastructure team
+- **Install CLI binaries** directly from GitHub releases and other sources
+- **Version control your tools** using `.tool-versions` files (asdf-compatible)
+- **Integrate with Atmos workflows** for automatic tool provisioning
+- **Leverage the Aqua registry** for reliable tool metadata
+- **Maintain consistency** across development, CI/CD, and production environments
 
-## Design Rationale
+## Why Native Toolchain Management?
 
-### Why Reimplement the Aqua Registry?
+### The Problem
 
-We chose to reimplement the Aqua registry functionality rather than using Aqua's Go modules as dependencies for several important reasons:
+Infrastructure teams struggle with tool version inconsistencies:
+- Different developers use different versions of terraform, kubectl, helm, etc.
+- "Works on my machine" problems plague deployments
+- Managing multiple tool managers (asdf, tfenv, aqua) adds complexity
+- No integration between tool management and infrastructure automation
 
-#### **No Stable SDK**
-Despite providing public Go modules, Aqua's author has explicitly stated that their API is **not stable for external use**. The modules are intended for internal Aqua CLI use only, making any integration fragile and subject to breaking changes without notice.
+### The Solution
 
-#### **Focused Use Case**
-Our implementation serves a specific subset of Aqua's functionality tailored to our needs:
-- **Atmos Integration**: We provide native integration with Atmos framework for infrastructure automation
-- **Seamless Workflow**: Integration with Atmos commands, workflows, components, and other features
-- **Not Standalone**: We're not optimizing for standalone shell experience like Aqua CLI
+Atmos provides **native toolchain management** with zero external dependencies:
+- **One tool to rule them all** - Manage infrastructure _and_ CLI tools with Atmos
+- **Seamless integration** - Tools work natively with Atmos commands and workflows
+- **Team consistency** - Version-controlled `.tool-versions` ensures everyone uses the same tools
+- **Zero installation overhead** - No need for asdf, aqua, or other tool managers
 
-#### **Dependency Control**
-By implementing our own parser, we maintain:
-- **Full Control**: Complete control over our dependencies and avoid potential conflicts
-- **Version Independence**: No lock-in to Aqua's development timeline or breaking changes
-- **Long-term Maintainability**: Our implementation evolves with our specific needs
+## Aqua Registry Integration
 
-#### **Extensible Architecture**
-Our approach allows us to:
-- **Extend as Needed**: Add features specific to Atmos integration
-- **Custom Optimizations**: Optimize for our infrastructure automation workflows
-- **Future Flexibility**: Adapt to changing requirements without external dependencies
+### Why Aqua Registry?
 
-### Why Use Aqua Registry Format?
+The [Aqua registry](https://github.com/aquaproj/aqua-registry) is the de facto standard for CLI tool metadata, providing:
 
-While we reimplement the functionality, we still leverage the Aqua registry ecosystem because:
+- **1,000+ tools** - Pre-configured definitions for terraform, kubectl, helm, aws-cli, and more
+- **Community-maintained** - Regular updates and new tools added by active contributors
+- **Battle-tested format** - Proven YAML format used by thousands of teams worldwide
+- **Rich metadata** - Includes download URLs, checksums, version mapping, and more
 
-1. **Community Standard**: The Aqua registry is a well-maintained, community-driven collection of package definitions
-2. **Rich Ecosystem**: Access to hundreds of pre-configured tools with proper metadata
-3. **Proven Format**: The YAML format is well-tested and widely adopted
-4. **Remote Integration**: We fetch registry files directly from GitHub, avoiding local maintenance
+### Native Implementation
 
-### Focused Feature Set
+We reimplemented the Aqua registry parser rather than depending on Aqua's Go modules because:
 
-Our implementation supports a carefully selected subset of Aqua registry features that align with our infrastructure automation use case:
+**Aqua's SDK Isn't Stable**
+The Aqua project maintainers explicitly state their Go modules are for internal use only and not stable for external dependencies. Using them would make Atmos fragile to breaking changes without notice.
 
-**Supported Package Types:**
-- `http` - Direct HTTP downloads (e.g., HashiCorp releases)
+**Deep Atmos Integration**
+Our implementation provides native integration with:
+- Atmos configuration system
+- Component-level dependencies
+- Stack-aware tool resolution
+- Workflow automation
+- Performance optimizations for infrastructure workflows
+
+**Focused Feature Subset**
+We support the core Aqua registry features needed for infrastructure tooling while maintaining a lean, focused implementation.
+
+### Supported Features
+
+**Package Types:**
 - `github_release` - GitHub release assets with version overrides
+- `http` - Direct HTTP downloads (e.g., HashiCorp releases)
 
-**Supported Archive Formats:**
-- `.zip` - ZIP archives
+**Archive Formats:**
 - `.tar.gz` - Gzip-compressed tarballs
+- `.zip` - ZIP archives
 - `.gz` - Single gzip-compressed binaries
 - Raw binaries
 
-**Supported Template Functions:**
+**Template Functions:**
 - `trimV` - Remove 'v' prefix from versions
 - `trimPrefix` - Remove prefix from strings
 - `trimSuffix` - Remove suffix from strings
 - `replace` - String replacement
 
-**Version Override Support:**
-- Basic version constraint handling
+**Additional Features:**
+- Version constraint handling
 - Asset template resolution
-- Format detection (zip vs tar.gz)
+- Format detection
+- Local tool aliases
+- GitHub token authentication
 
-**Atmos-Specific Features:**
-- Native integration with Atmos configuration
-- Workflow-aware tool management
-- Component-level tool dependencies
-- Seamless command integration
+## Quick Start
 
-### Why Use Aqua Registry Without Aqua CLI?
-
-1. **Registry Ecosystem**: The Aqua registry is a well-maintained, community-driven collection of package definitions. It's the de facto standard for CLI tool metadata.
-
-2. **Minimal Dependencies**: We don't require users to install Aqua CLI just to use Atmos tools. This keeps the dependency chain minimal and focused.
-
-3. **Remote Integration**: We fetch registry files directly from GitHub, avoiding the need to clone or maintain a local copy of the registry.
-
-4. **Optimized Caching**: We implement our own caching layer for registry files and downloaded assets, optimized for our infrastructure automation workflows.
-
-5. **Atmos Integration**: Our implementation is designed specifically for seamless integration with Atmos framework features, not as a standalone tool manager.
-
-## Features
-
-- ✅ Parse Aqua registry YAML files remotely
-- ✅ Template interpolation for asset URLs
-- ✅ Download from GitHub releases and HTTP sources
-- ✅ Support for `.tar.gz`, `.zip`, `.gz`, and raw binaries
-- ✅ Magic file type detection using `mimetype` library
-- ✅ Cache downloaded assets in `~/.cache/installer`
-- ✅ Install binaries to `./.tools/bin/`
-- ✅ Support multiple concurrent versions
-- ✅ Make binaries executable
-- ✅ Backward compatibility with `.tool-versions` files
-- ✅ Graceful error handling
-- ✅ GitHub token authentication for API requests
-- ✅ Intelligent authentication (only applies tokens where needed)
-- ✅ Local tool configuration with aliases
-
-## Usage
+### Install Tools
 
 ```bash
-# Install a specific version of a tool (using full registry path)
-toolchain install hashicorp/terraform@1.9.8
-toolchain install opentofu/opentofu@1.10.3
+# Install specific tool versions
+atmos toolchain install terraform@1.9.8
+atmos toolchain install opentofu@1.10.3
+atmos toolchain install kubectl@1.28.0
 
-# Install a specific version of a tool (using aliases)
-toolchain install terraform@1.9.8
-toolchain install opentofu@1.10.3
-toolchain install tflint@0.44.1
+# Install using canonical registry paths
+atmos toolchain install hashicorp/terraform@1.9.8
+atmos toolchain install opentofu/opentofu@1.10.3
 
 # Install all tools from .tool-versions file
-toolchain install
-
-# Uninstall a specific version of a tool (using aliases)
-toolchain uninstall terraform@1.9.8
-toolchain uninstall opentofu@1.10.3
-toolchain uninstall tflint@0.44.1
-
-# Uninstall all tools from .tool-versions file
-toolchain uninstall
-
-# List installed tools with sizes and dates
-toolchain list
-
-# Check status of tools in .tool-versions
-toolchain tool-versions
-
-# Display tool configuration information
-toolchain info terraform
-toolchain info hashicorp/terraform
-toolchain info opentofu
-
-# Run a specific version of a tool
-toolchain run terraform@1.9.8 -- --version
-toolchain run opentofu@1.10.3 -- --version
+atmos toolchain install
 ```
 
-## Architecture
+### Manage Versions
 
-The toolchain follows a modular architecture with each command in its own file:
-
-### Core Files
-- `main.go` - CLI entry point using Cobra with global flags (`--tool-versions`, `--tools-dir`, `--log-level`, `--github-token`)
-- `installer.go` - Core installation logic, asset URL building, and binary extraction
-- `http_client.go` - HTTP client with GitHub token authentication
-- `local_config.go` - Local `tools.yaml` configuration management
-- `aqua_registry.go` - Aqua registry integration for tool discovery
-- `tool_versions.go` - `.tool-versions` file management
-- `types.go` - Core data structures and YAML marshalling
-
-### Command Files
-- `add.go` - Add/update tool versions in `.tool-versions`
-- `remove.go` - Remove tools from `.tool-versions`
-- `install.go` - Install CLI binaries from registry
-- `uninstall.go` - Uninstall CLI binaries
-- `list.go` - List installed tools and versions
-- `run.go` - Run specific version of a tool
-- `exec.go` - Exec specific version of a tool (replaces current process)
-- `path.go` - Emit PATH environment variable
-- `info.go` - Display tool configuration information
-- `clean.go` - Remove all installed tools
-- `aliases.go` - List configured tool aliases
-
-## Commands
-
-### info
-The `info` command displays the rendered YAML configuration for a tool, showing how it's configured and what registry it comes from. It uses "latest" as the default version when none is specified.
-
-**Usage:**
 ```bash
-# Using aliases
-toolchain info terraform
-toolchain info opentofu
+# Add tool to .tool-versions
+atmos toolchain add terraform@1.9.8
 
-# Using canonical org/repo format
-toolchain info hashicorp/terraform
-toolchain info opentofu/opentofu
+# Remove tool from .tool-versions
+atmos toolchain remove terraform
+
+# Set default version (when multiple installed)
+atmos toolchain set terraform 1.9.8
+
+# List installed tools with status
+atmos toolchain list
 ```
 
-**Output includes:**
-- Tool name and owner/repo
-- Tool type (http, github_release)
-- Asset template URLs (with processed examples)
-- Format information
-- Binary name
-- Raw YAML configuration for debugging
-
-**Note:** The command automatically uses "latest" version to find the tool configuration, which is consistent with how other commands work when no specific version is provided. Template processing shows what the actual download URLs would look like.
-
-## Registry Integration
-
-The tool integrates with the Aqua registry by:
-
-1. **Remote Fetching**: Downloads registry YAML files directly from GitHub
-2. **Caching**: Caches registry files locally to avoid repeated downloads
-3. **Parsing**: Parses package definitions and version overrides
-4. **Template Resolution**: Resolves asset URLs using template functions
-5. **Version Handling**: Supports version constraints and overrides
-
-## Recent Improvements
-
-### Code Organization
-- **Command Refactoring**: All commands moved to standalone files for better maintainability
-- **Modular Architecture**: Clear separation between core logic and command interfaces
-- **Improved Documentation**: Enhanced help text and examples for all commands
-
-### Global Flags
-- **`--tools-dir`**: Configurable tools directory (default: `.tools`)
-- **`--tool-versions`**: Configurable tool-versions file path (default: `.tool-versions`)
-- **`--log-level`**: Configurable logging levels
-- **`--github-token`**: GitHub token support for authenticated requests
-
-### New Commands
-- **`aliases`**: List all configured tool aliases with beautiful table output
-- **`info`**: Display tool configuration with table or YAML output formats
-
-### Duplicate Prevention
-- Fixed issue with duplicate entries in `.tool-versions` files
-- Ensures consistent tool name format using aliases
-- Prevents conflicts between full registry paths and aliases
-
-### GitHub Token Support
-- Added intelligent GitHub token authentication
-- Only applies tokens to requests that need authentication
-- Supports both `ATMOS_GITHUB_TOKEN` and `GITHUB_TOKEN` environment variables
-- Excludes raw content URLs from authentication (they're public)
-
-### HTTP Client Improvements
-- Custom HTTP client with configurable timeouts
-- Automatic User-Agent headers for GitHub API requests
-- Proper error handling and retry logic
-
-## Future Enhancements
-
-- Version resolution (latest, semver ranges)
-- Platform-specific overrides
-- Dependency management
-- Integration with Atmos configuration
-- Support for more package types
-- Enhanced version constraint parsing
-
-## Requirements
-
-- Go 1.21+
-- System tools: `unzip`, `tar` (for archive extraction)
-
-## Installation
+### Execute Tools
 
 ```bash
-cd experiments/toolchain
-go mod tidy
-go build -o toolchain
+# Execute specific version
+atmos toolchain exec terraform@1.9.8 -- plan
+
+# Execute default version from .tool-versions
+atmos toolchain exec terraform -- plan
+
+# Get tool path for scripts
+atmos toolchain which terraform
+
+# Print PATH entries for all tools
+atmos toolchain path
 ```
 
 ## Configuration
 
-The tool automatically:
-- Caches registry files in `~/.cache/installer/registries`
-- Caches downloaded assets in `~/.cache/installer`
-- Installs binaries to `./.tools/bin/` (configurable via `--tools-dir` flag)
+### Global Settings
 
-### GitHub Token Support
+Configure toolchain behavior in `atmos.yaml`:
 
-The toolchain supports GitHub token authentication for GitHub API requests to improve rate limits and access to private repositories.
+```yaml
+# Toolchain configuration
+toolchain:
+  # Path to .tool-versions file (relative or absolute)
+  file_path: ".tool-versions"
 
-#### Environment Variables
+  # Directory where tools are installed
+  tools_dir: ".tools"
 
-The toolchain uses Cobra's environment variable binding to automatically use GitHub tokens from the following environment variables (in order of precedence):
-
-1. `ATMOS_GITHUB_TOKEN` - Primary token for Atmos toolchain
-2. `GITHUB_TOKEN` - Fallback token (standard GitHub token variable)
-
-The tokens are bound to a hidden `--github-token` flag that can also be set directly if needed.
-
-#### When Tokens Are Used
-
-GitHub tokens are **only** applied to requests that actually need authentication:
-
-- ✅ **GitHub API requests** (`api.github.com`) - Requires authentication for higher rate limits
-- ✅ **GitHub release downloads** (`github.com`) - May benefit from authentication for private repos
-- ❌ **Raw content URLs** (`raw.githubusercontent.com`) - Public content, no authentication needed
-
-#### Usage
-
-```bash
-# Using ATMOS_GITHUB_TOKEN (recommended)
-export ATMOS_GITHUB_TOKEN=your_github_token_here
-./toolchain install terraform@1.9.8
-
-# Or using GITHUB_TOKEN
-export GITHUB_TOKEN=your_github_token_here
-./toolchain install terraform@1.9.8
-
-# Or inline for a single command
-ATMOS_GITHUB_TOKEN=your_token_here ./toolchain install terraform@1.9.8
+  # Tool configuration file for aliases
+  tools_config_file: "tools.yaml"
 ```
-
-#### Benefits
-
-- **Higher rate limits**: Authenticated requests have higher rate limits than anonymous requests
-- **Access to private repositories**: If any tools are hosted in private repositories
-- **Better reliability**: Reduced likelihood of being rate-limited during bulk operations
-
-#### Token Permissions
-
-For most use cases, a GitHub Personal Access Token with the following permissions is sufficient:
-
-- `public_repo` - For public repository access
-- `repo` - For private repository access (if needed)
-
-No additional permissions are required for the toolchain's current functionality.
-
-#### Security Notes
-
-- Store tokens securely and never commit them to version control
-- Use environment variables or secure credential managers
-- Consider using GitHub's fine-grained personal access tokens for minimal permissions
-- Rotate tokens regularly for security best practices
-
-### Global Flags
-
-The toolchain supports several global flags that apply to all commands:
-
-#### `--tool-versions`
-
-Specifies the path to the tool-versions file. Defaults to `.tool-versions` in the current directory.
-
-```bash
-# Use a custom tool-versions file
-./toolchain --tool-versions /path/to/custom/.tool-versions install
-
-# Use the default .tool-versions file (same as above)
-./toolchain install
-
-# Use a different file for a specific command
-./toolchain --tool-versions /tmp/test-versions add terraform 1.9.8
-```
-
-This flag allows you to:
-- Use different tool-versions files for different projects
-- Test configurations without affecting your main `.tool-versions` file
-- Use absolute paths for consistent behavior across directories
-
-#### `--tools-dir`
-
-Specifies the directory where installed tools are stored. Defaults to `.tools` in the current directory.
-
-```bash
-# Use a custom tools directory
-./toolchain --tools-dir /tmp/custom-tools install terraform@1.9.8
-
-# Use the default .tools directory (same as above)
-./toolchain install terraform@1.9.8
-
-# Clean a specific tools directory
-./toolchain --tools-dir /tmp/custom-tools clean
-```
-
-This flag allows you to:
-- Install tools to different directories for different projects
-- Use absolute paths for consistent behavior across directories
-- Test installations without affecting your main `.tools` directory
-
-#### `--log-level`
-
-Sets the logging level for debugging. Valid values: `debug`, `info`, `warn`, `error`.
-
-```bash
-# Enable debug logging
-./toolchain --log-level debug install terraform@1.9.8
-
-# Show only warnings and errors
-./toolchain --log-level warn install terraform@1.9.8
-```
-
-#### `--github-token`
-
-Directly specify a GitHub token (hidden flag, primarily for environment variables).
-
-```bash
-./toolchain --github-token your_token_here install terraform@1.9.8
-```
-
-**Note:** It's recommended to use environment variables (`ATMOS_GITHUB_TOKEN` or `GITHUB_TOKEN`) instead of this flag for security reasons.
 
 ### Tool Aliases
 
-The `tools.yaml` file supports an `aliases` section that maps common tool names to their registry paths. This allows you to use simple tool names in `.tool-versions` files:
+Define convenient aliases in `tools.yaml`:
 
+<File title="tools.yaml">
 ```yaml
 aliases:
+  # HashiCorp tools
   terraform: hashicorp/terraform
-  opentofu: opentofu/opentofu
-  helm: helm/helm
-  kubectl: kubernetes-sigs/kubectl
-  tflint: terraform-linters/tflint
-  tfsec: aquasecurity/tfsec
-  checkov: bridgecrewio/checkov
-  terragrunt: gruntwork-io/terragrunt
   packer: hashicorp/packer
   vault: hashicorp/vault
   consul: hashicorp/consul
-  nomad: hashicorp/nomad
-  waypoint: hashicorp/waypoint
-  boundary: hashicorp/boundary
+
+  # OpenTofu
+  opentofu: opentofu/opentofu
+
+  # Kubernetes tools
+  kubectl: kubernetes-sigs/kubectl
+  helm: helm/helm
+  k9s: derailed/k9s
+
+  # Terraform ecosystem
+  tflint: terraform-linters/tflint
+  tfsec: aquasecurity/tfsec
+  terragrunt: gruntwork-io/terragrunt
+
+  # AWS tools
+  aws: aws/aws-cli
+  awscli: aws/aws-cli
 ```
+</File>
 
-With these aliases, you can use simple tool names in your `.tool-versions` file:
+### Version File
 
+Create a `.tool-versions` file (asdf-compatible):
+
+<File title=".tool-versions">
 ```
 terraform 1.9.8
 opentofu 1.10.3
+kubectl 1.28.0
+helm 3.13.0
 tflint 0.44.1
 ```
+</File>
 
-The tool will automatically resolve these to their full registry paths.
+### GitHub Token
+
+For higher API rate limits and private repositories:
+
+```bash
+# Set via environment variable (recommended)
+export ATMOS_GITHUB_TOKEN=ghp_your_token_here
+
+# Or use standard GITHUB_TOKEN
+export GITHUB_TOKEN=ghp_your_token_here
+
+# Or pass as flag
+atmos toolchain install --github-token=ghp_your_token_here terraform@1.9.8
+```
+
+The token provides:
+- **Higher rate limits** - 5,000 requests/hour vs 60 for unauthenticated
+- **Private repository access** - Install tools from private GitHub repos
+- **Better reliability** - Reduced likelihood of rate limiting during bulk operations
+
+## Command Reference
+
+### Installation Commands
+
+<dl>
+  <dt>`install [tool@version]`</dt>
+  <dd>Install a specific tool version or all tools from .tool-versions file</dd>
+
+  <dt>`uninstall [tool@version]`</dt>
+  <dd>Uninstall a specific tool version or all tools from .tool-versions file</dd>
+
+  <dt>`clean`</dt>
+  <dd>Remove all installed tools and cached downloads</dd>
+</dl>
+
+### Version Management
+
+<dl>
+  <dt>`add tool@version`</dt>
+  <dd>Add a tool version to .tool-versions file</dd>
+
+  <dt>`remove tool`</dt>
+  <dd>Remove a tool from .tool-versions file</dd>
+
+  <dt>`set tool version`</dt>
+  <dd>Set the default version for a tool (when multiple versions installed)</dd>
+
+  <dt>`list`</dt>
+  <dd>List installed tools with versions, sizes, and installation dates</dd>
+
+  <dt>`versions`</dt>
+  <dd>Show tool versions configured in .tool-versions file</dd>
+</dl>
+
+### Execution Commands
+
+<dl>
+  <dt>`exec tool [-- args]`</dt>
+  <dd>Execute a tool with the specified version (replaces current process)</dd>
+
+  <dt>`path`</dt>
+  <dd>Print PATH entries for all installed tools</dd>
+
+  <dt>`which tool`</dt>
+  <dd>Show the full path to a tool's binary</dd>
+</dl>
+
+### Information Commands
+
+<dl>
+  <dt>`info tool`</dt>
+  <dd>Display configuration information for a tool from the registry</dd>
+
+  <dt>`aliases`</dt>
+  <dd>List all configured tool aliases</dd>
+</dl>
+
+## Use Cases
+
+### Team Consistency
+
+Ensure everyone on your team uses the same tool versions:
+
+<File title=".tool-versions">
+```
+terraform 1.9.8
+kubectl 1.28.0
+helm 3.13.0
+```
+</File>
+
+Commit this file to version control, and everyone runs:
+
+```bash
+atmos toolchain install
+```
+
+### CI/CD Integration
+
+Install tools automatically in your CI/CD pipeline:
+
+```yaml
+# GitHub Actions example
+- name: Install Atmos tools
+  run: atmos toolchain install
+
+- name: Run Terraform plan
+  run: atmos terraform plan vpc -s prod
+```
+
+### Multiple Terraform Versions
+
+Test components across different Terraform versions:
+
+```bash
+# Install multiple versions
+atmos toolchain add terraform@1.9.8
+atmos toolchain add terraform@1.8.5
+
+# Test with specific version
+atmos toolchain exec terraform@1.9.8 -- plan
+atmos toolchain exec terraform@1.8.5 -- plan
+```
+
+### Workflow Integration
+
+Integrate tools with Atmos workflows:
+
+<File title="stacks/workflows/deploy.yaml">
+```yaml
+workflows:
+  deploy:
+    description: Deploy infrastructure with correct tool versions
+    steps:
+      - name: Install required tools
+        command: toolchain install
+
+      - name: Validate with tflint
+        command: toolchain exec tflint -- --recursive
+
+      - name: Plan infrastructure
+        command: terraform plan vpc -s prod
+
+      - name: Apply infrastructure
+        command: terraform apply vpc -s prod --auto-approve
+```
+</File>
+
+## Architecture
+
+The toolchain is implemented as a native Atmos feature with a modular architecture:
+
+### Core Components
+
+**Registry Integration** (`aqua_registry.go`)
+- Fetches registry YAML files from GitHub
+- Caches registry data locally
+- Parses package definitions and version overrides
+- Resolves asset URLs using template functions
+
+**Installation Engine** (`installer.go`)
+- Downloads binaries from GitHub releases and HTTP sources
+- Extracts archives (.tar.gz, .zip, .gz)
+- Installs binaries to configured directory
+- Manages file permissions and symlinks
+
+**Version Management** (`tool_versions.go`)
+- Parses .tool-versions files (asdf-compatible)
+- Maintains multiple versions per tool
+- Tracks default version per tool
+- Resolves aliases to canonical names
+
+**Local Configuration** (`local_config.go`)
+- Manages tools.yaml configuration
+- Resolves tool aliases
+- Provides tool metadata lookup
+
+### Command Structure
+
+Each toolchain command is implemented in its own file for maintainability:
+- `add.go` - Add tools to .tool-versions
+- `remove.go` - Remove tools from .tool-versions
+- `install.go` - Install binaries from registry
+- `uninstall.go` - Uninstall binaries
+- `list.go` - List installed tools
+- `exec.go` - Execute tool binaries
+- `path.go` - Generate PATH entries
+- `which.go` - Locate tool binaries
+- `info.go` - Display tool information
+- `clean.go` - Clean tools and cache
+- `aliases.go` - List configured aliases
+- `set.go` - Set default versions
+
+## Advanced Topics
+
+### Custom Registries
+
+While Atmos uses the Aqua registry by default, you can configure custom registry URLs:
+
+```yaml
+toolchain:
+  registry:
+    # Use custom Aqua registry fork
+    base_url: "https://github.com/your-org/custom-registry"
+```
+
+### Tool Version Constraints
+
+The toolchain supports version resolution:
+
+```bash
+# Install latest version
+atmos toolchain install terraform@latest
+
+# Version constraints (planned)
+atmos toolchain install terraform@"~>1.9.0"
+atmos toolchain install terraform@">=1.8.0,<2.0.0"
+```
+
+### Caching
+
+Tools and registry data are cached for performance:
+
+```
+~/.cache/atmos/toolchain/
+├── registries/          # Cached registry YAML files
+├── downloads/           # Downloaded tool archives
+└── temp/                # Temporary extraction directory
+```
+
+Clear cache with:
+
+```bash
+atmos toolchain clean
+```
 
 ## Troubleshooting
 
-### Common Issues
+### Rate Limiting
 
-#### Rate Limiting
-If you encounter GitHub rate limiting errors, set a GitHub token:
+If you encounter GitHub API rate limiting:
+
 ```bash
-export ATMOS_GITHUB_TOKEN=your_token_here
-./toolchain install terraform@1.9.8
+# Check rate limit status
+curl -H "Authorization: token $GITHUB_TOKEN" \
+  https://api.github.com/rate_limit
+
+# Set token to increase limits
+export ATMOS_GITHUB_TOKEN=ghp_your_token_here
 ```
 
-#### Duplicate Tool Entries
-If you see duplicate entries in `.tool-versions`, the toolchain now automatically prevents this. Clean up existing duplicates manually:
+### Tool Not Found
+
+If a tool isn't found in the registry:
+
 ```bash
-# Remove duplicate entries, keeping only alias format
-# terraform 1.9.8 1.11.4  # ✅ Correct
-# hashicorp/terraform 1.9.8  # ❌ Remove this
+# Check if tool is in registry
+atmos toolchain info terraform
+
+# Use canonical org/repo format
+atmos toolchain install opentofu/opentofu@1.10.3
+
+# Check aliases configuration
+atmos toolchain aliases
 ```
 
-#### Permission Denied
-If you get permission errors when running installed tools:
+### Permission Issues
+
+If tools aren't executable:
+
 ```bash
-# Make sure the .tools/bin directory is in your PATH
-export PATH="$PWD/.tools/bin:$PATH"
+# Check file permissions
+ls -l .tools/bin/*/terraform/*/terraform
+
+# Manually fix permissions if needed
+chmod +x .tools/bin/*/terraform/*/terraform
 ```
 
-### Debug Mode
-Enable debug logging to see detailed information:
-```bash
-export DEBUG=1
-./toolchain install terraform@1.9.8
-```
+## Related Documentation
 
-## Contributing
+- [Aqua Registry](https://github.com/aquaproj/aqua-registry) - Browse available tools
+- [Atmos Workflows](/core-concepts/workflows/) - Integrate toolchain with workflows
+- [Atmos Configuration](/cli/configuration/) - Configure Atmos behavior
 
-This is a prototype for the Atmos packages feature. The design decisions and implementation choices are documented here to help guide the eventual integration into the main Atmos codebase.
+## Subcommands
+
+<DocCardList />

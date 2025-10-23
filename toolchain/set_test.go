@@ -17,6 +17,8 @@ import (
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 // Test data structures.
@@ -1721,4 +1723,107 @@ func TestOriginalSetToolVersion_Wrapper(t *testing.T) {
 	// 1. Add a build tag like // +build !test
 	// 2. Create a test version with dependency injection
 	// 3. Or use interfaces and global variables that can be swapped in tests
+}
+
+// TestSetToolVersion_WithValidVersion tests SetToolVersion with a provided version.
+func TestSetToolVersion_WithValidVersion(t *testing.T) {
+	// Create a temporary tool-versions file
+	tmpFile, err := os.CreateTemp("", "tool-versions-*")
+	require.NoError(t, err)
+	defer os.Remove(tmpFile.Name())
+
+	// Set up Atmos config to use the temp file
+	oldConfig := atmosConfig
+	defer func() { atmosConfig = oldConfig }()
+
+	atmosConfig = &schema.AtmosConfiguration{
+		Toolchain: schema.Toolchain{
+			FilePath: tmpFile.Name(),
+		},
+	}
+
+	// Test with a valid tool and version
+	err = SetToolVersion("terraform", "1.11.4", 3)
+	assert.NoError(t, err)
+
+	// Verify the file was updated
+	content, err := os.ReadFile(tmpFile.Name())
+	require.NoError(t, err)
+	assert.Contains(t, string(content), "hashicorp/terraform")
+	assert.Contains(t, string(content), "1.11.4")
+}
+
+// TestSetToolVersion_WithInvalidTool tests SetToolVersion with an invalid tool name.
+func TestSetToolVersion_WithInvalidTool(t *testing.T) {
+	// Create a temporary tool-versions file
+	tmpFile, err := os.CreateTemp("", "tool-versions-*")
+	require.NoError(t, err)
+	defer os.Remove(tmpFile.Name())
+
+	// Set up Atmos config to use the temp file
+	oldConfig := atmosConfig
+	defer func() { atmosConfig = oldConfig }()
+
+	atmosConfig = &schema.AtmosConfiguration{
+		Toolchain: schema.Toolchain{
+			FilePath: tmpFile.Name(),
+		},
+	}
+
+	// Test with an invalid tool name (not in registry or local config)
+	err = SetToolVersion("nonexistent-tool-xyz-invalid", "1.0.0", 3)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "not found in local aliases or Aqua registry")
+}
+
+// TestSetToolVersion_WithCanonicalFormat tests SetToolVersion with org/repo format.
+func TestSetToolVersion_WithCanonicalFormat(t *testing.T) {
+	// Create a temporary tool-versions file
+	tmpFile, err := os.CreateTemp("", "tool-versions-*")
+	require.NoError(t, err)
+	defer os.Remove(tmpFile.Name())
+
+	// Set up Atmos config to use the temp file
+	oldConfig := atmosConfig
+	defer func() { atmosConfig = oldConfig }()
+
+	atmosConfig = &schema.AtmosConfiguration{
+		Toolchain: schema.Toolchain{
+			FilePath: tmpFile.Name(),
+		},
+	}
+
+	// Test with canonical org/repo format
+	err = SetToolVersion("hashicorp/terraform", "1.11.4", 3)
+	assert.NoError(t, err)
+
+	// Verify the file was updated
+	content, err := os.ReadFile(tmpFile.Name())
+	require.NoError(t, err)
+	assert.Contains(t, string(content), "hashicorp/terraform")
+	assert.Contains(t, string(content), "1.11.4")
+}
+
+// TestSetToolVersion_NonGitHubReleaseWithoutVersion tests error when no version provided for non-GitHub release tool.
+func TestSetToolVersion_NonGitHubReleaseWithoutVersion(t *testing.T) {
+	// Create a temporary tool-versions file
+	tmpFile, err := os.CreateTemp("", "tool-versions-*")
+	require.NoError(t, err)
+	defer os.Remove(tmpFile.Name())
+
+	// Set up Atmos config to use the temp file
+	oldConfig := atmosConfig
+	defer func() { atmosConfig = oldConfig }()
+
+	atmosConfig = &schema.AtmosConfiguration{
+		Toolchain: schema.Toolchain{
+			FilePath: tmpFile.Name(),
+		},
+	}
+
+	// Test with terraform (http type, not github_release) without version
+	// Should error because interactive selection only works for github_release
+	err = SetToolVersion("terraform", "", 3)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "interactive version selection is only available for GitHub release type tools")
 }
