@@ -1,6 +1,6 @@
 package types
 
-//go:generate go run go.uber.org/mock/mockgen@latest -source=$GOFILE -destination=mock_$GOFILE -package=$GOPACKAGE
+//go:generate go run go.uber.org/mock/mockgen@v0.5.0 -source=$GOFILE -destination=mock_interfaces_test.go -package=$GOPACKAGE
 
 import (
 	"context"
@@ -195,8 +195,9 @@ type ConsoleURLOptions struct {
 	// For GCP: "https://console.cloud.google.com/...".
 	Destination string
 
-	// SessionDuration is the requested duration for the console session.
+	// SessionDuration is the requested duration for the console session (how long you stay logged in).
 	// Providers may have maximum limits (e.g., AWS: 12 hours).
+	// Note: AWS signin tokens themselves have a fixed 15-minute expiration (time to click the link).
 	SessionDuration time.Duration
 
 	// Issuer is an optional identifier shown in the console URL (used by AWS).
