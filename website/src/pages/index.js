@@ -2,9 +2,9 @@ import React from 'react';
 import Layout from '@theme/Layout';
 import useDocusaurusContext from '@docusaurus/useDocusaurusContext';
 import Link from '@docusaurus/Link';
-import useBaseUrl from '@docusaurus/useBaseUrl'
 import Screengrab from '@site/src/components/Screengrab'
 import TypingAnimation from '@site/src/components/TypingAnimation'
+import LazyDemo from '@site/src/components/LazyDemo'
 import { RiLockLine, RiBox3Line, RiFlashlightLine, RiStackLine } from 'react-icons/ri';
 import '../css/landing-page.css';
 
@@ -27,7 +27,7 @@ function Home() {
           </div>
         </header>
         <section className="hero-demo">
-          <img src={useBaseUrl('/img/demo.gif')} alt="Product Screenshot" className="screenshot" />
+          <LazyDemo />
         </section>
         <main>
           <section className="features-grid">
