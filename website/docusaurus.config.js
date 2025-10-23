@@ -198,6 +198,8 @@ const config = {
                         return `https://github.com/cloudposse/atmos/edit/main/website/${versionDocsDirPath}/${docPath}`;
                     },
                     exclude: ['README.md'],
+                    blogSidebarTitle: 'Recent Changes',
+                    blogSidebarCount: 'ALL',
                 },
                 theme: {
                     customCss: require.resolve('./src/css/custom.css'),
