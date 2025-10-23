@@ -9,6 +9,7 @@ import (
 	"github.com/spf13/viper"
 
 	"github.com/cloudposse/atmos/pkg/auth/types"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -78,13 +79,22 @@ func NewCredentialStoreWithConfig(authConfig *schema.AuthConfig) types.Credentia
 	}
 
 	if err != nil {
-		// Fall back to system keyring on error.
-		fmt.Fprintf(os.Stderr, "Warning: failed to create %s keyring (%v), attempting system keyring\n", keyringType, err)
-		store, err = newSystemKeyringStore()
-		if err != nil {
-			// Final fallback to memory store if system keyring also fails.
-			fmt.Fprintf(os.Stderr, "Warning: system keyring failed (%v), using in-memory keyring (credentials will not persist)\n", err)
-			store = newMemoryKeyringStore()
+		// Handle keyring initialization failure.
+		if keyringType == "system" {
+			// System keyring unavailable (e.g., no dbus in containers).
+			// Use no-op keyring to gracefully handle missing keyring.
+			// Auth will continue using credentials from files/environment.
+			log.Debug("System keyring not available, using no-op keyring (will use credentials from files/environment)", "error", err.Error())
+			store = newNoopKeyringStore()
+		} else {
+			// Non-system keyring failed - try system keyring.
+			log.Debug("Keyring type failed, attempting system keyring fallback", "keyringType", keyringType, "error", err.Error())
+			store, err = newSystemKeyringStore()
+			if err != nil {
+				// System keyring also failed - use no-op keyring.
+				log.Debug("System keyring not available, using no-op keyring (will use credentials from files/environment)", "error", err.Error())
+				store = newNoopKeyringStore()
+			}
 		}
 	}
 

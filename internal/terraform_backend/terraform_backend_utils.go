@@ -134,7 +134,7 @@ func GetTerraformBackend(
 
 	readBackendStateFunc := GetTerraformBackendReadFunc(backendType)
 	if readBackendStateFunc == nil {
-		return nil, fmt.Errorf("%w: `%s`\nsupported backends: `local`, `s3`", errUtils.ErrUnsupportedBackendType, backendType)
+		return nil, fmt.Errorf("%w: `%s`\nsupported backends: `local`, `s3`, `azurerm`", errUtils.ErrUnsupportedBackendType, backendType)
 	}
 
 	content, err := readBackendStateFunc(atmosConfig, componentSections, authContext)
