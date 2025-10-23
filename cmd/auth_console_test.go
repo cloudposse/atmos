@@ -13,6 +13,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth/types"
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 func TestAuthConsoleCommand_Registration(t *testing.T) {
@@ -437,4 +438,289 @@ func TestPrintConsoleURL(t *testing.T) {
 			})
 		})
 	}
+}
+
+func TestGetConsoleProvider(t *testing.T) {
+	tests := []struct {
+		name         string
+		providerKind string
+		identityName string
+		wantErr      bool
+		errContains  string
+	}{
+		{
+			name:         "AWS IAM Identity Center returns provider",
+			providerKind: types.ProviderKindAWSIAMIdentityCenter,
+			identityName: "test-identity",
+			wantErr:      false,
+		},
+		{
+			name:         "AWS SAML returns provider",
+			providerKind: types.ProviderKindAWSSAML,
+			identityName: "test-identity",
+			wantErr:      false,
+		},
+		{
+			name:         "Azure OIDC returns not implemented error",
+			providerKind: types.ProviderKindAzureOIDC,
+			identityName: "test-identity",
+			wantErr:      true,
+			errContains:  "Azure console access not yet implemented",
+		},
+		{
+			name:         "GCP OIDC returns not implemented error",
+			providerKind: types.ProviderKindGCPOIDC,
+			identityName: "test-identity",
+			wantErr:      true,
+			errContains:  "GCP console access not yet implemented",
+		},
+		{
+			name:         "unknown provider returns error",
+			providerKind: "unknown",
+			identityName: "test-identity",
+			wantErr:      true,
+			errContains:  "does not support web console access",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Create a mock auth manager.
+			mockManager := &mockAuthManagerForProvider{
+				providerKind: tt.providerKind,
+			}
+
+			provider, err := getConsoleProvider(mockManager, tt.identityName)
+
+			if tt.wantErr {
+				assert.Error(t, err)
+				assert.Contains(t, err.Error(), tt.errContains)
+				assert.Nil(t, provider)
+			} else {
+				assert.NoError(t, err)
+				assert.NotNil(t, provider)
+			}
+		})
+	}
+}
+
+func TestResolveIdentityName(t *testing.T) {
+	tests := []struct {
+		name            string
+		flagValue       string
+		defaultIdentity string
+		defaultErr      error
+		wantIdentity    string
+		wantErr         bool
+		errContains     string
+	}{
+		{
+			name:            "uses flag value when provided",
+			flagValue:       "prod-admin",
+			defaultIdentity: "dev-user",
+			wantIdentity:    "prod-admin",
+			wantErr:         false,
+		},
+		{
+			name:            "uses default identity when flag not provided",
+			flagValue:       "",
+			defaultIdentity: "dev-user",
+			wantIdentity:    "dev-user",
+			wantErr:         false,
+		},
+		{
+			name:            "returns error when no default identity",
+			flagValue:       "",
+			defaultIdentity: "",
+			wantErr:         true,
+			errContains:     "no default identity configured",
+		},
+		{
+			name:        "returns error when GetDefaultIdentity fails",
+			flagValue:   "",
+			defaultErr:  fmt.Errorf("auth manager error"),
+			wantErr:     true,
+			errContains: "failed to get default identity",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_ = NewTestKit(t)
+
+			// Create a mock command.
+			cmd := &cobra.Command{}
+			cmd.Flags().String("identity", "", "identity name")
+			if tt.flagValue != "" {
+				_ = cmd.Flags().Set("identity", tt.flagValue)
+			}
+
+			// Create a mock auth manager.
+			mockManager := &mockAuthManagerForIdentity{
+				defaultIdentity: tt.defaultIdentity,
+				defaultErr:      tt.defaultErr,
+			}
+
+			identity, err := resolveIdentityName(cmd, mockManager)
+
+			if tt.wantErr {
+				assert.Error(t, err)
+				assert.Contains(t, err.Error(), tt.errContains)
+				assert.Empty(t, identity)
+			} else {
+				assert.NoError(t, err)
+				assert.Equal(t, tt.wantIdentity, identity)
+			}
+		})
+	}
+}
+
+// mockAuthManagerForProvider implements minimal AuthManager for testing getConsoleProvider.
+type mockAuthManagerForProvider struct {
+	providerKind string
+}
+
+func (m *mockAuthManagerForProvider) GetProviderKindForIdentity(identityName string) (string, error) {
+	return m.providerKind, nil
+}
+
+func (m *mockAuthManagerForProvider) Authenticate(ctx context.Context, identityName string) (*types.WhoamiInfo, error) {
+	return nil, errors.New("not implemented")
+}
+
+func (m *mockAuthManagerForProvider) GetDefaultIdentity() (string, error) {
+	return "", errors.New("not implemented")
+}
+
+func (m *mockAuthManagerForProvider) ListIdentities() []string {
+	return nil
+}
+
+func (m *mockAuthManagerForProvider) Logout(ctx context.Context, identityName string) error {
+	return errors.New("not implemented")
+}
+
+func (m *mockAuthManagerForProvider) GetIdentity(identityName string) (types.Identity, error) {
+	return nil, errors.New("not implemented")
+}
+
+func (m *mockAuthManagerForProvider) GetFilesDisplayPath(providerName string) string {
+	return ""
+}
+
+func (m *mockAuthManagerForProvider) GetChain() []string {
+	return nil
+}
+
+func (m *mockAuthManagerForProvider) GetIdentities() map[string]schema.Identity {
+	return nil
+}
+
+func (m *mockAuthManagerForProvider) Whoami(ctx context.Context, identityName string) (*types.WhoamiInfo, error) {
+	return nil, errors.New("not implemented")
+}
+
+func (m *mockAuthManagerForProvider) Validate() error {
+	return errors.New("not implemented")
+}
+
+func (m *mockAuthManagerForProvider) GetProviderForIdentity(identityName string) string {
+	return ""
+}
+
+func (m *mockAuthManagerForProvider) GetStackInfo() *schema.ConfigAndStacksInfo {
+	return nil
+}
+
+func (m *mockAuthManagerForProvider) ListProviders() []string {
+	return nil
+}
+
+func (m *mockAuthManagerForProvider) GetProviders() map[string]schema.Provider {
+	return nil
+}
+
+func (m *mockAuthManagerForProvider) LogoutProvider(ctx context.Context, providerName string) error {
+	return errors.New("not implemented")
+}
+
+func (m *mockAuthManagerForProvider) LogoutAll(ctx context.Context) error {
+	return errors.New("not implemented")
+}
+
+// mockAuthManagerForIdentity implements minimal AuthManager for testing resolveIdentityName.
+type mockAuthManagerForIdentity struct {
+	defaultIdentity string
+	defaultErr      error
+}
+
+func (m *mockAuthManagerForIdentity) GetProviderKindForIdentity(identityName string) (string, error) {
+	return "", errors.New("not implemented")
+}
+
+func (m *mockAuthManagerForIdentity) Authenticate(ctx context.Context, identityName string) (*types.WhoamiInfo, error) {
+	return nil, errors.New("not implemented")
+}
+
+func (m *mockAuthManagerForIdentity) GetDefaultIdentity() (string, error) {
+	if m.defaultErr != nil {
+		return "", m.defaultErr
+	}
+	return m.defaultIdentity, nil
+}
+
+func (m *mockAuthManagerForIdentity) ListIdentities() []string {
+	return nil
+}
+
+func (m *mockAuthManagerForIdentity) Logout(ctx context.Context, identityName string) error {
+	return errors.New("not implemented")
+}
+
+func (m *mockAuthManagerForIdentity) GetIdentity(identityName string) (types.Identity, error) {
+	return nil, errors.New("not implemented")
+}
+
+func (m *mockAuthManagerForIdentity) GetFilesDisplayPath(providerName string) string {
+	return ""
+}
+
+func (m *mockAuthManagerForIdentity) GetChain() []string {
+	return nil
+}
+
+func (m *mockAuthManagerForIdentity) GetIdentities() map[string]schema.Identity {
+	return nil
+}
+
+func (m *mockAuthManagerForIdentity) Whoami(ctx context.Context, identityName string) (*types.WhoamiInfo, error) {
+	return nil, errors.New("not implemented")
+}
+
+func (m *mockAuthManagerForIdentity) Validate() error {
+	return errors.New("not implemented")
+}
+
+func (m *mockAuthManagerForIdentity) GetProviderForIdentity(identityName string) string {
+	return ""
+}
+
+func (m *mockAuthManagerForIdentity) GetStackInfo() *schema.ConfigAndStacksInfo {
+	return nil
+}
+
+func (m *mockAuthManagerForIdentity) ListProviders() []string {
+	return nil
+}
+
+func (m *mockAuthManagerForIdentity) GetProviders() map[string]schema.Provider {
+	return nil
+}
+
+func (m *mockAuthManagerForIdentity) LogoutProvider(ctx context.Context, providerName string) error {
+	return errors.New("not implemented")
+}
+
+func (m *mockAuthManagerForIdentity) LogoutAll(ctx context.Context) error {
+	return errors.New("not implemented")
 }
