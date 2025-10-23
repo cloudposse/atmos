@@ -20,13 +20,15 @@ function Home() {
             <p className="hero__eyebrow">Infrastructure as Code Framework</p>
             <h1>One CLI to Orchestrate<br/><span className="typing-container"><TypingAnimation words={['Terraform', 'OpenTofu', 'Packer', 'Helmfile', 'and more...']} /></span></h1>
             <p className="hero__description">Unified workflows, authentication, and vendoring for all your IaC tools</p>
-          </div>
-          <img src={useBaseUrl('/img/demo.gif')} alt="Product Screenshot" className="screenshot" />
-          <div className="hero__cta">
-            <Link to="/quick-start/" className="button button--lg button--primary"><p>Try the Quick Start</p></Link>
-            <Link to="/introduction" className="button button--lg button--outline button--primary ml20"><p>Learn More</p></Link>
+            <div className="hero__cta">
+              <Link to="/quick-start/" className="button button--lg button--primary"><p>Try the Quick Start</p></Link>
+              <Link to="/introduction" className="button button--lg button--outline button--primary ml20"><p>Learn More</p></Link>
+            </div>
           </div>
         </header>
+        <section className="hero-demo">
+          <img src={useBaseUrl('/img/demo.gif')} alt="Product Screenshot" className="screenshot" />
+        </section>
         <main>
           <section className="features-grid">
             <div className="feature-card">

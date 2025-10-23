@@ -77,17 +77,12 @@ html[data-theme="dark"] .landing-page .section__description > h2 {
 
 .landing-page header {
   display: flex;
-  max-height: 90vh;
-  min-height: 700px;
   height: 100vh;
   width: 100vw;
   justify-content: center;
-  margin-top: 2em;
-  margin-bottom: 2em;
-}
-
-.landing-page header img.screenshot {
-  margin: 2em;
+  align-items: center;
+  margin: 0;
+  padding: 0;
 }
 
 .landing-page .intro h1 {
@@ -142,16 +137,34 @@ html[data-theme="dark"] .landing-page .section__description > h2 {
 
 .hero--full-height {
   box-sizing: border-box;
-  height: calc(90vh);
+  height: 100vh;
   flex-direction: column;
-  justify-content: space-between;
-  padding: 0px 0;
+  justify-content: center;
+  padding: 0;
 }
 
 .hero__cta {
   gap: 1rem;
   justify-content: center;
   display: flex;
+  margin-top: 2rem;
+}
+
+/* Hero demo section - appears on scroll */
+.hero-demo {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 4rem 2rem;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+.hero-demo img.screenshot {
+  max-width: 80%;
+  height: auto;
+  box-shadow: 0 0 20px 3px rgb(8 115 115 / 29%);
+  border-radius: 10px;
 }
 .landing-page main h2 {
   text-align: center;
@@ -256,9 +269,11 @@ strong.underline::after {
 
 @media screen and (max-width: 996px) {
   .landing-page header {
-    justify-content: flex-start;
+    height: auto;
+    min-height: 100vh;
     max-width: 100vw;
     overflow: hidden;
+    padding: 2rem 0;
   }
 
   .hero__cta {
@@ -266,6 +281,14 @@ strong.underline::after {
     display: flex;
     max-width: 100vw;
     flex-wrap: wrap;
+  }
+
+  .hero-demo {
+    padding: 2rem 1rem;
+  }
+
+  .hero-demo img.screenshot {
+    max-width: 95%;
   }
 
   .alternate-section {
