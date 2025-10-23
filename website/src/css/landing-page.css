@@ -125,8 +125,9 @@ html[data-theme="dark"] .landing-page .section__description > h2 {
 /* Fixed-width container for typing animation to prevent layout shift */
 .typing-container {
   display: inline-block;
-  min-width: 180px;
+  width: 380px;
   text-align: left;
+  vertical-align: bottom;
 }
 
 .landing-page .hero img {
@@ -387,5 +388,13 @@ html[data-theme="dark"] .feature-icon {
 
   .feature-card {
     padding: 1.5rem;
+  }
+
+  .typing-container {
+    width: 280px;
+  }
+
+  .landing-page .intro h1 {
+    font-size: 2.2em;
   }
 }
