@@ -11,8 +11,8 @@ import (
 	"github.com/cloudposse/atmos/tests/testhelpers"
 )
 
-// TestGoModNoReplaceDirectives ensures that go.mod does not contain replace directives.
-// This is critical because replace directives break `go install github.com/cloudposse/atmos@latest`.
+// TestGoModNoReplaceOrExcludeDirectives ensures that go.mod does not contain replace or exclude directives.
+// This is critical because these directives break `go install github.com/cloudposse/atmos@latest`.
 //
 // Background:
 // - `go install cmd@version` intentionally does not support modules with replace or exclude directives
@@ -23,7 +23,7 @@ import (
 // - `go install` is a documented installation method for Atmos.
 // - Breaking this method creates user friction and support burden.
 // - This test prevents accidental regressions that would break this installation path.
-func TestGoModNoReplaceDirectives(t *testing.T) {
+func TestGoModNoReplaceOrExcludeDirectives(t *testing.T) {
 	// Find the repository root by looking for .git directory
 	repoRoot, err := testhelpers.FindRepoRoot()
 	require.NoError(t, err, "Failed to find repository root")
@@ -33,11 +33,13 @@ func TestGoModNoReplaceDirectives(t *testing.T) {
 	content, err := os.ReadFile(goModPath)
 	require.NoError(t, err, "Failed to read go.mod")
 
-	// Check for replace directives
+	// Check for replace and exclude directives
 	lines := strings.Split(string(content), "\n")
 	var replaceDirectives []string
+	var excludeDirectives []string
 
 	inReplaceBlock := false
+	inExcludeBlock := false
 	for _, line := range lines {
 		trimmed := strings.TrimSpace(line)
 
@@ -47,9 +49,21 @@ func TestGoModNoReplaceDirectives(t *testing.T) {
 			continue
 		}
 
+		// Detect start of exclude block
+		if strings.HasPrefix(trimmed, "exclude (") {
+			inExcludeBlock = true
+			continue
+		}
+
 		// Detect end of replace block
 		if inReplaceBlock && trimmed == ")" {
 			inReplaceBlock = false
+			continue
+		}
+
+		// Detect end of exclude block
+		if inExcludeBlock && trimmed == ")" {
+			inExcludeBlock = false
 			continue
 		}
 
@@ -58,9 +72,19 @@ func TestGoModNoReplaceDirectives(t *testing.T) {
 			replaceDirectives = append(replaceDirectives, trimmed)
 		}
 
+		// Detect inline exclude directive
+		if strings.HasPrefix(trimmed, "exclude ") && !strings.HasPrefix(trimmed, "exclude (") {
+			excludeDirectives = append(excludeDirectives, trimmed)
+		}
+
 		// Detect replace directive inside block
 		if inReplaceBlock && trimmed != "" && !strings.HasPrefix(trimmed, "//") {
 			replaceDirectives = append(replaceDirectives, trimmed)
+		}
+
+		// Detect exclude directive inside block
+		if inExcludeBlock && trimmed != "" && !strings.HasPrefix(trimmed, "//") {
+			excludeDirectives = append(excludeDirectives, trimmed)
 		}
 	}
 
@@ -71,4 +95,12 @@ func TestGoModNoReplaceDirectives(t *testing.T) {
 			"This breaks a documented installation method. If you need to replace a dependency,\n"+
 			"consider alternative approaches that don't break go install compatibility.",
 		strings.Join(replaceDirectives, "\n  "))
+
+	// Assert no exclude directives found
+	require.Empty(t, excludeDirectives,
+		"go.mod contains exclude directives which break 'go install github.com/cloudposse/atmos@latest'.\n"+
+			"Exclude directives found:\n  %s\n\n"+
+			"This breaks a documented installation method. If you need to exclude a dependency,\n"+
+			"consider alternative approaches that don't break go install compatibility.",
+		strings.Join(excludeDirectives, "\n  "))
 }
