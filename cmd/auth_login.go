@@ -135,6 +135,9 @@ func displayAuthSuccess(whoami *authTypes.WhoamiInfo) {
 	}
 
 	// Create minimal charmbracelet table.
+	// Note: Padding variation across platforms was causing snapshot test failures.
+	// The table auto-sizes columns but the final width varied (Linux: 40 chars, macOS: 45 chars).
+	// Removed `.Width()` constraint as it was causing word-wrapping issues.
 	t := table.New().
 		Rows(rows...).
 		BorderTop(false).

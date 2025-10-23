@@ -370,6 +370,8 @@ func getCommentColumn() int {
 // RenderInlineProvenance renders YAML with provenance as inline comments.
 // Deprecated: Use RenderInlineProvenanceWithStackFile instead.
 func RenderInlineProvenance(yamlData any, ctx *m.MergeContext, atmosConfig *schema.AtmosConfiguration) string {
+	defer perf.Track(atmosConfig, "provenance.RenderInlineProvenance")()
+
 	return RenderInlineProvenanceWithStackFile(yamlData, ctx, atmosConfig, "")
 }
 
