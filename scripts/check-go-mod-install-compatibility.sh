@@ -11,24 +11,24 @@ if [ ! -f "$GO_MOD_FILE" ]; then
     exit 1
 fi
 
-# Check for replace directives.
-if grep -E "^replace\s+|^replace\s*\(" "$GO_MOD_FILE" > /dev/null 2>&1; then
+# Check for replace directives (inline or block).
+if grep -E "^replace\s+" "$GO_MOD_FILE" > /dev/null 2>&1; then
     echo "ERROR: go.mod contains 'replace' directives which break 'go install'."
     echo ""
     echo "Replace directives found:"
-    grep -E "^replace\s+|^replace\s*\(|^\s+.*=>.*" "$GO_MOD_FILE" | grep -v "^//"
+    grep -E "^replace\s+" "$GO_MOD_FILE"
     echo ""
     echo "This breaks a documented installation method for Atmos."
     echo "Consider alternative approaches that don't break go install compatibility."
     exit 1
 fi
 
-# Check for exclude directives.
-if grep -E "^exclude\s+|^exclude\s*\(" "$GO_MOD_FILE" > /dev/null 2>&1; then
+# Check for exclude directives (inline or block).
+if grep -E "^exclude\s+" "$GO_MOD_FILE" > /dev/null 2>&1; then
     echo "ERROR: go.mod contains 'exclude' directives which break 'go install'."
     echo ""
     echo "Exclude directives found:"
-    grep -E "^exclude\s+|^exclude\s*\(|^\s+[a-z]" "$GO_MOD_FILE" | grep -v "^//"
+    grep -E "^exclude\s+" "$GO_MOD_FILE"
     echo ""
     echo "This breaks a documented installation method for Atmos."
     echo "Consider alternative approaches that don't break go install compatibility."
