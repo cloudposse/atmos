@@ -124,6 +124,20 @@ The AI assistant has access to your current Atmos configuration and can help wit
 				log.Warn(fmt.Sprintf("Failed to register validate_stacks tool: %v", err))
 			}
 
+			// Register file access tools (read/write for components and stacks).
+			if err := registry.Register(atmosTools.NewReadComponentFileTool(&atmosConfig)); err != nil {
+				log.Warn(fmt.Sprintf("Failed to register read_component_file tool: %v", err))
+			}
+			if err := registry.Register(atmosTools.NewReadStackFileTool(&atmosConfig)); err != nil {
+				log.Warn(fmt.Sprintf("Failed to register read_stack_file tool: %v", err))
+			}
+			if err := registry.Register(atmosTools.NewWriteComponentFileTool(&atmosConfig)); err != nil {
+				log.Warn(fmt.Sprintf("Failed to register write_component_file tool: %v", err))
+			}
+			if err := registry.Register(atmosTools.NewWriteStackFileTool(&atmosConfig)); err != nil {
+				log.Warn(fmt.Sprintf("Failed to register write_stack_file tool: %v", err))
+			}
+
 			log.Debug(fmt.Sprintf("Registered %d tools", registry.Count()))
 
 			// Create permission checker.
