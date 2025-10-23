@@ -108,11 +108,15 @@ html[data-theme="dark"] .landing-page .section__description > h2 {
 /* Clean Cloud Posse-style hero - tighter spacing */
 .hero__eyebrow {
   font-size: 0.85em;
-  color: #999;
+  color: #666;
   margin-bottom: 1rem;
   text-transform: uppercase;
   letter-spacing: 3px;
   font-weight: 400;
+}
+
+html[data-theme="dark"] .hero__eyebrow {
+  color: #999;
 }
 
 .hero__description {
@@ -120,8 +124,12 @@ html[data-theme="dark"] .landing-page .section__description > h2 {
   margin-top: 1.5rem;
   line-height: 1.6em;
   text-align: center;
-  color: #ccc;
+  color: #4a5568;
   max-width: 900px;
+}
+
+html[data-theme="dark"] .hero__description {
+  color: #ccc;
 }
 
 /* Fixed-width container for typing animation to prevent layout shift */
@@ -190,8 +198,12 @@ html[data-theme="dark"] .hero-demo-intro h2 {
 
 .hero-demo-intro p {
   font-size: 1.2em;
-  color: #999;
+  color: #4a5568;
   line-height: 1.6;
+}
+
+html[data-theme="dark"] .hero-demo-intro p {
+  color: #999;
 }
 
 .hero-demo .screenshot-container {
@@ -382,17 +394,28 @@ strong.underline::after {
 }
 
 .feature-card {
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(0, 0, 0, 0.02);
+  border: 1px solid rgba(0, 0, 0, 0.1);
   border-radius: 12px;
   padding: 1.75rem;
   transition: all 0.3s ease;
 }
 
+html[data-theme="dark"] .feature-card {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
 .feature-card:hover {
+  background: rgba(0, 0, 0, 0.04);
+  border-color: rgba(0, 0, 0, 0.2);
+  transform: translateY(-4px);
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.1);
+}
+
+html[data-theme="dark"] .feature-card:hover {
   background: rgba(255, 255, 255, 0.05);
   border-color: rgba(255, 255, 255, 0.2);
-  transform: translateY(-4px);
   box-shadow: 0 8px 16px rgba(0, 0, 0, 0.2);
 }
 
@@ -411,15 +434,23 @@ html[data-theme="dark"] .feature-icon {
 .feature-card h3 {
   font-size: 1.3rem;
   margin-bottom: 0.5rem;
-  color: #fff;
+  color: #1a1d23;
   text-align: left;
+}
+
+html[data-theme="dark"] .feature-card h3 {
+  color: #fff;
 }
 
 .feature-card p {
   font-size: 0.95rem;
   line-height: 1.5;
-  color: #ccc;
+  color: #4a5568;
   margin: 0;
+}
+
+html[data-theme="dark"] .feature-card p {
+  color: #ccc;
 }
 
 @media screen and (max-width: 768px) {
