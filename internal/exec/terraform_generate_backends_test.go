@@ -427,3 +427,63 @@ func TestProcessedComponentsTracking(t *testing.T) {
 		assert.True(t, exists)
 	})
 }
+
+func TestExecuteTerraformGenerateBackends_StackAndComponentFilters(t *testing.T) {
+	t.Run("handles specific stacks filter", func(t *testing.T) {
+		tempDir := t.TempDir()
+		atmosConfig := &schema.AtmosConfiguration{
+			BasePath: tempDir,
+			Components: schema.Components{
+				Terraform: schema.Terraform{
+					BasePath: "components/terraform",
+				},
+			},
+		}
+
+		t.Setenv("ATMOS_LOGS_LEVEL", "Error")
+
+		// Pass specific stacks to filter
+		stacks := []string{"dev", "prod"}
+		err := ExecuteTerraformGenerateBackends(atmosConfig, "", "hcl", stacks, []string{})
+		assert.NoError(t, err)
+	})
+
+	t.Run("handles specific components filter", func(t *testing.T) {
+		tempDir := t.TempDir()
+		atmosConfig := &schema.AtmosConfiguration{
+			BasePath: tempDir,
+			Components: schema.Components{
+				Terraform: schema.Terraform{
+					BasePath: "components/terraform",
+				},
+			},
+		}
+
+		t.Setenv("ATMOS_LOGS_LEVEL", "Error")
+
+		// Pass specific components to filter
+		components := []string{"vpc", "eks"}
+		err := ExecuteTerraformGenerateBackends(atmosConfig, "", "hcl", []string{}, components)
+		assert.NoError(t, err)
+	})
+
+	t.Run("handles both stacks and components filters", func(t *testing.T) {
+		tempDir := t.TempDir()
+		atmosConfig := &schema.AtmosConfiguration{
+			BasePath: tempDir,
+			Components: schema.Components{
+				Terraform: schema.Terraform{
+					BasePath: "components/terraform",
+				},
+			},
+		}
+
+		t.Setenv("ATMOS_LOGS_LEVEL", "Error")
+
+		// Pass both filters
+		stacks := []string{"dev"}
+		components := []string{"vpc"}
+		err := ExecuteTerraformGenerateBackends(atmosConfig, "", "hcl", stacks, components)
+		assert.NoError(t, err)
+	})
+}
