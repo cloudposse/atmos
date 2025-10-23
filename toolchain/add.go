@@ -3,10 +3,14 @@ package toolchain
 import (
 	"fmt"
 	"log"
+
+	"github.com/cloudposse/atmos/pkg/perf"
 )
 
 // AddToolVersion contains the actual business logic for adding/updating a tool.
 func AddToolVersion(tool, version string) error {
+	defer perf.Track(nil, "toolchain.AddToolVersion")()
+
 	installer := NewInstaller()
 
 	owner, repo, err := installer.parseToolSpec(tool)

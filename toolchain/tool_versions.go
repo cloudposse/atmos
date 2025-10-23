@@ -5,6 +5,8 @@ import (
 	"os"
 	"sort"
 	"strings"
+
+	"github.com/cloudposse/atmos/pkg/perf"
 )
 
 // ToolVersions represents the .tool-versions file format (asdf-compatible: tool -> list of versions, first is default).
@@ -14,6 +16,8 @@ type ToolVersions struct {
 
 // LoadToolVersions loads a .tool-versions file (asdf-compatible: tool version1 [version2 ...]).
 func LoadToolVersions(filePath string) (*ToolVersions, error) {
+	defer perf.Track(nil, "toolchain.LoadToolVersions")()
+
 	data, err := os.ReadFile(filePath)
 	if err != nil {
 		return nil, err
@@ -43,6 +47,8 @@ func LoadToolVersions(filePath string) (*ToolVersions, error) {
 
 // SaveToolVersions saves a ToolVersions struct to a .tool-versions file (asdf-compatible).
 func SaveToolVersions(filePath string, toolVersions *ToolVersions) error {
+	defer perf.Track(nil, "toolchain.SaveToolVersions")()
+
 	if toolVersions == nil || toolVersions.Tools == nil {
 		return fmt.Errorf("%w: toolVersions or toolVersions.Tools is nil", ErrInvalidToolSpec)
 	}
@@ -73,6 +79,8 @@ func SaveToolVersions(filePath string, toolVersions *ToolVersions) error {
 
 // AddVersionToTool adds a version to a tool, optionally as default (front of list).
 func AddVersionToTool(toolVersions *ToolVersions, tool, version string, asDefault bool) {
+	defer perf.Track(nil, "toolchain.AddVersionToTool")()
+
 	versions := toolVersions.Tools[tool]
 	for i, v := range versions {
 		if v == version {
@@ -93,6 +101,8 @@ func AddVersionToTool(toolVersions *ToolVersions, tool, version string, asDefaul
 
 // GetDefaultVersion returns the default (first) version for a tool.
 func GetDefaultVersion(toolVersions *ToolVersions, tool string) (string, bool) {
+	defer perf.Track(nil, "toolchain.GetDefaultVersion")()
+
 	versions := toolVersions.Tools[tool]
 	if len(versions) == 0 {
 		return "", false
@@ -102,6 +112,8 @@ func GetDefaultVersion(toolVersions *ToolVersions, tool string) (string, bool) {
 
 // GetAllVersions returns all versions for a tool.
 func GetAllVersions(toolVersions *ToolVersions, tool string) []string {
+	defer perf.Track(nil, "toolchain.GetAllVersions")()
+
 	return toolVersions.Tools[tool]
 }
 
@@ -109,18 +121,24 @@ func GetAllVersions(toolVersions *ToolVersions, tool string) []string {
 // If the tool already exists, it updates the version
 // If the aliased version already exists, it skips adding the non-aliased version to prevent duplicates.
 func AddToolToVersions(filePath, tool, version string) error {
+	defer perf.Track(nil, "toolchain.AddToolToVersions")()
+
 	return addToolToVersionsInternal(filePath, tool, version, false)
 }
 
 // AddToolToVersionsAsDefault adds a tool and version to the .tool-versions file as the default
 // If the tool already exists, it updates the version and sets it as default.
 func AddToolToVersionsAsDefault(filePath, tool, version string) error {
+	defer perf.Track(nil, "toolchain.AddToolToVersionsAsDefault")()
+
 	return addToolToVersionsInternal(filePath, tool, version, true)
 }
 
 // addToolToVersionsInternal is the single path for adding tools to .tool-versions
 // All other functions should use this to ensure consistent duplicate checking.
 func addToolToVersionsInternal(filePath, tool, version string, asDefault bool) error {
+	defer perf.Track(nil, "toolchain.addToolToVersionsInternal")()
+
 	if version == "" {
 		return fmt.Errorf("%w: cannot add tool '%s' without a version", ErrInvalidToolSpec, tool)
 	}
@@ -200,6 +218,8 @@ func wouldCreateDuplicate(toolVersions *ToolVersions, tool, version string, reso
 // LookupToolVersion attempts to find the version for a tool, trying both the raw name and its resolved alias.
 // Returns the key found (raw or alias), the version, and whether it was found.
 func LookupToolVersion(tool string, toolVersions *ToolVersions, resolver ToolResolver) (resolvedKey, version string, found bool) {
+	defer perf.Track(nil, "toolchain.LookupToolVersion")()
+
 	// Try raw tool name first
 	if versions, ok := toolVersions.Tools[tool]; ok && len(versions) > 0 {
 		return tool, versions[0], true
@@ -219,6 +239,8 @@ func LookupToolVersion(tool string, toolVersions *ToolVersions, resolver ToolRes
 // If not found, but the alias resolves, returns 'latest' as the version and usedLatest=true.
 // Returns the key found (raw or alias), the version, whether it was found in toolVersions, and whether 'latest' was used as a fallback.
 func LookupToolVersionOrLatest(tool string, toolVersions *ToolVersions, resolver ToolResolver) (resolvedKey, version string, found bool, usedLatest bool) {
+	defer perf.Track(nil, "toolchain.LookupToolVersionOrLatest")()
+
 	// Try raw tool name first
 	if versions, ok := toolVersions.Tools[tool]; ok && len(versions) > 0 {
 		return tool, versions[0], true, false
@@ -239,6 +261,8 @@ func LookupToolVersionOrLatest(tool string, toolVersions *ToolVersions, resolver
 // ParseToolVersionArg parses a CLI argument in the form tool, tool@version, or owner/repo@version.
 // Returns tool (or owner/repo), version (may be empty), and error if invalid.
 func ParseToolVersionArg(arg string) (string, string, error) {
+	defer perf.Track(nil, "toolchain.ParseToolVersionArg")()
+
 	if arg == "" {
 		return "", "", fmt.Errorf("%w: empty tool argument", ErrInvalidToolSpec)
 	}

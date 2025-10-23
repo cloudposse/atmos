@@ -5,10 +5,14 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
+
+	"github.com/cloudposse/atmos/pkg/perf"
 )
 
 // InfoExec handles the core logic for retrieving and formatting tool information.
 func InfoExec(toolName, outputFormat string) error {
+	defer perf.Track(nil, "toolchain.RunInfo")()
+
 	// Create installer inside the function
 	installer := NewInstaller()
 

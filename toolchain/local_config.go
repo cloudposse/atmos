@@ -6,6 +6,8 @@ import (
 
 	"github.com/Masterminds/semver/v3"
 	"gopkg.in/yaml.v3"
+
+	"github.com/cloudposse/atmos/pkg/perf"
 )
 
 // LocalConfig represents the local tools.yaml configuration.
@@ -41,11 +43,15 @@ type LocalConfigManager struct {
 
 // NewLocalConfigManager creates a new local config manager.
 func NewLocalConfigManager() *LocalConfigManager {
+	defer perf.Track(nil, "toolchain.NewLocalConfigManager")()
+
 	return &LocalConfigManager{}
 }
 
 // Load loads the local tools.yaml configuration.
 func (lcm *LocalConfigManager) Load(configPath string) error {
+	defer perf.Track(nil, "toolchain.LocalConfigManager.Load")()
+
 	if configPath == "" {
 		configPath = "tools.yaml"
 	}
@@ -71,6 +77,8 @@ func (lcm *LocalConfigManager) Load(configPath string) error {
 
 // GetTool returns a local tool definition if it exists.
 func (lcm *LocalConfigManager) GetTool(owner, repo string) (*LocalTool, bool) {
+	defer perf.Track(nil, "toolchain.LocalConfigManager.GetTool")()
+
 	if lcm.config == nil {
 		return nil, false
 	}
@@ -86,6 +94,8 @@ func (lcm *LocalConfigManager) GetTool(owner, repo string) (*LocalTool, bool) {
 
 // ResolveAlias resolves a tool name to its owner/repo path using aliases.
 func (lcm *LocalConfigManager) ResolveAlias(toolName string) (string, bool) {
+	defer perf.Track(nil, "toolchain.LocalConfigManager.ResolveAlias")()
+
 	if lcm.config == nil || lcm.config.Aliases == nil {
 		return "", false
 	}
@@ -100,6 +110,8 @@ func (lcm *LocalConfigManager) ResolveAlias(toolName string) (string, bool) {
 
 // GetToolConfig returns a tool configuration by owner/repo path.
 func (lcm *LocalConfigManager) GetToolConfig(ownerRepo string) (*LocalTool, bool) {
+	defer perf.Track(nil, "toolchain.LocalConfigManager.GetToolConfig")()
+
 	if lcm.config == nil {
 		return nil, false
 	}
@@ -114,6 +126,8 @@ func (lcm *LocalConfigManager) GetToolConfig(ownerRepo string) (*LocalTool, bool
 
 // ResolveVersionConstraint resolves the appropriate version constraint for a given version.
 func (lcm *LocalConfigManager) ResolveVersionConstraint(tool *LocalTool, version string) *LocalVersionConstraint {
+	defer perf.Track(nil, "toolchain.LocalConfigManager.ResolveVersionConstraint")()
+
 	if len(tool.VersionConstraints) == 0 {
 		return nil
 	}
@@ -143,6 +157,8 @@ func (lcm *LocalConfigManager) ResolveVersionConstraint(tool *LocalTool, version
 
 // GetToolWithVersion returns a Tool for the given owner/repo and version, using local config (asdf-style versioned local tool lookup).
 func (lcm *LocalConfigManager) GetToolWithVersion(owner, repo, version string) (*Tool, error) {
+	defer perf.Track(nil, "toolchain.LocalConfigManager.GetToolWithVersion")()
+
 	tool, exists := lcm.GetTool(owner, repo)
 	if !exists {
 		return nil, fmt.Errorf("%w: tool %s/%s not found in local config", ErrToolNotFound, owner, repo)

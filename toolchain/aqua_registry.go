@@ -14,6 +14,8 @@ import (
 	"github.com/Masterminds/semver/v3"
 	log "github.com/charmbracelet/log"
 	"gopkg.in/yaml.v3"
+
+	"github.com/cloudposse/atmos/pkg/perf"
 )
 
 const versionPrefix = "v"
@@ -32,6 +34,8 @@ type RegistryCache struct {
 
 // NewAquaRegistry creates a new Aqua registry client.
 func NewAquaRegistry() *AquaRegistry {
+	defer perf.Track(nil, "toolchain.NewAquaRegistry")()
+
 	return &AquaRegistry{
 		client: NewDefaultHTTPClient(),
 		cache: &RegistryCache{
@@ -43,11 +47,15 @@ func NewAquaRegistry() *AquaRegistry {
 
 // LoadLocalConfig loads the local configuration.
 func (ar *AquaRegistry) LoadLocalConfig(configPath string) error {
+	defer perf.Track(nil, "toolchain.AquaRegistry.LoadLocalConfig")()
+
 	return ar.local.Load(configPath)
 }
 
 // GetTool fetches tool metadata from the Aqua registry.
 func (ar *AquaRegistry) GetTool(owner, repo string) (*Tool, error) {
+	defer perf.Track(nil, "toolchain.AquaRegistry.GetTool")()
+
 	// Check local configuration first
 	if localTool, exists := ar.local.GetTool(owner, repo); exists {
 		log.Debug("Using local configuration", "owner", owner, "repo", repo)
@@ -80,6 +88,8 @@ func (ar *AquaRegistry) GetTool(owner, repo string) (*Tool, error) {
 
 // GetToolWithVersion fetches tool metadata and resolves version-specific overrides.
 func (ar *AquaRegistry) GetToolWithVersion(owner, repo, version string) (*Tool, error) {
+	defer perf.Track(nil, "toolchain.AquaRegistry.GetToolWithVersion")()
+
 	tool, err := ar.GetTool(owner, repo)
 	if err != nil {
 		return nil, err
@@ -281,6 +291,8 @@ func (ar *AquaRegistry) parseRegistryFile(data []byte) (*Tool, error) {
 
 // BuildAssetURL constructs the download URL for a tool version.
 func (ar *AquaRegistry) BuildAssetURL(tool *Tool, version string) (string, error) {
+	defer perf.Track(nil, "toolchain.AquaRegistry.BuildAssetURL")()
+
 	if tool.Asset == "" {
 		return "", fmt.Errorf("%w: no asset template defined for tool", ErrNoAssetTemplate)
 	}
@@ -372,6 +384,8 @@ func (ar *AquaRegistry) convertLocalToolToTool(localTool *LocalTool, repo string
 
 // GetLatestVersion fetches the latest non-prerelease version from GitHub releases.
 func (ar *AquaRegistry) GetLatestVersion(owner, repo string) (string, error) {
+	defer perf.Track(nil, "toolchain.AquaRegistry.GetLatestVersion")()
+
 	// GitHub API endpoint for releases
 	apiURL := fmt.Sprintf("https://api.github.com/repos/%s/%s/releases", owner, repo)
 
@@ -414,6 +428,8 @@ func (ar *AquaRegistry) GetLatestVersion(owner, repo string) (string, error) {
 
 // GetAvailableVersions fetches all available versions from GitHub releases.
 func (ar *AquaRegistry) GetAvailableVersions(owner, repo string) ([]string, error) {
+	defer perf.Track(nil, "toolchain.AquaRegistry.GetAvailableVersions")()
+
 	// GitHub API endpoint for releases
 	apiURL := fmt.Sprintf("https://api.github.com/repos/%s/%s/releases", owner, repo)
 

@@ -14,6 +14,8 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/muesli/termenv"
 	"github.com/spf13/viper"
+
+	"github.com/cloudposse/atmos/pkg/perf"
 )
 
 type versionItem struct {
@@ -23,9 +25,23 @@ type versionItem struct {
 	releaseNotes string
 }
 
-func (i versionItem) Title() string       { return i.version }
-func (i versionItem) Description() string { return i.title }
-func (i versionItem) FilterValue() string { return i.version }
+func (i versionItem) Title() string {
+	defer perf.Track(nil, "toolchain.versionItem.Title")()
+
+	return i.version
+}
+
+func (i versionItem) Description() string {
+	defer perf.Track(nil, "toolchain.versionItem.Description")()
+
+	return i.title
+}
+
+func (i versionItem) FilterValue() string {
+	defer perf.Track(nil, "toolchain.versionItem.FilterValue")()
+
+	return i.version
+}
 
 type versionListModel struct {
 	list             list.Model
@@ -42,10 +58,14 @@ type versionListModel struct {
 }
 
 func (m versionListModel) Init() tea.Cmd {
+	defer perf.Track(nil, "toolchain.versionListModel.Init")()
+
 	return nil
 }
 
 func (m versionListModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	defer perf.Track(nil, "toolchain.versionListModel.Update")()
+
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		switch keypress := msg.String(); keypress {
@@ -168,6 +188,8 @@ func (m versionListModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m versionListModel) View() string {
+	defer perf.Track(nil, "toolchain.versionListModel.View")()
+
 	if m.err != nil {
 		return fmt.Sprintf("Error: %v\n", m.err)
 	}
@@ -219,6 +241,8 @@ func (m versionListModel) View() string {
 // SetToolVersion handles the core logic of setting a tool version.
 // If version is empty, it will prompt the user interactively (for GitHub release type tools).
 func SetToolVersion(toolName, version string, scrollSpeed int) error {
+	defer perf.Track(nil, "toolchain.SetToolVersion")()
+
 	// Resolve the tool name to handle aliases
 	installer := NewInstaller()
 	owner, repo, err := installer.parseToolSpec(toolName)
@@ -461,6 +485,8 @@ type ModelI interface {
 }
 
 func (d customDelegate) RenderFooter(w int, m ModelI) string {
+	defer perf.Track(nil, "toolchain.customDelegate.RenderFooter")()
+
 	return fmt.Sprintf(" %d releases", len(m.Items()))
 }
 

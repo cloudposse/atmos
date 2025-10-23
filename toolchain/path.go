@@ -6,9 +6,13 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+
+	"github.com/cloudposse/atmos/pkg/perf"
 )
 
 func EmitPath(exportFlag, jsonFlag, relativeFlag bool) error {
+	defer perf.Track(nil, "toolchain.PathExec")()
+
 	installer := NewInstaller()
 
 	// Read tool-versions file

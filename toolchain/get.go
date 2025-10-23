@@ -8,10 +8,14 @@ import (
 	"github.com/Masterminds/semver/v3"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/muesli/termenv"
+
+	"github.com/cloudposse/atmos/pkg/perf"
 )
 
 // ListToolVersions handles the logic for listing tool versions.
 func ListToolVersions(showAll bool, limit int, toolName string) error {
+	defer perf.Track(nil, "toolchain.GetVersionForTool")()
+
 	filePath := GetToolVersionsFilePath()
 	installer := NewInstaller()
 

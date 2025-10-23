@@ -8,6 +8,8 @@ import (
 	"strings"
 
 	"github.com/spf13/viper"
+
+	"github.com/cloudposse/atmos/pkg/perf"
 )
 
 // GitHubAPI defines the interface for GitHub API operations.
@@ -23,6 +25,8 @@ type GitHubAPIClient struct {
 
 // NewGitHubAPIClient creates a new GitHub API client.
 func NewGitHubAPIClient() *GitHubAPIClient {
+	defer perf.Track(nil, "toolchain.NewGitHubAPIClient")()
+
 	return &GitHubAPIClient{
 		client:  &http.Client{},
 		baseURL: "https://api.github.com",
@@ -31,6 +35,8 @@ func NewGitHubAPIClient() *GitHubAPIClient {
 
 // NewGitHubAPIClientWithBaseURL creates a new GitHub API client with a custom base URL (for testing).
 func NewGitHubAPIClientWithBaseURL(baseURL string) *GitHubAPIClient {
+	defer perf.Track(nil, "toolchain.NewGitHubAPIClientWithBaseURL")()
+
 	return &GitHubAPIClient{
 		client:  &http.Client{},
 		baseURL: baseURL,
@@ -39,6 +45,8 @@ func NewGitHubAPIClientWithBaseURL(baseURL string) *GitHubAPIClient {
 
 // FetchReleases fetches all available versions from GitHub API.
 func (g *GitHubAPIClient) FetchReleases(owner, repo string, limit int) ([]string, error) {
+	defer perf.Track(nil, "toolchain.GitHubAPIClient.FetchReleases")()
+
 	// GitHub API endpoint for releases with per_page parameter
 	apiURL := fmt.Sprintf("%s/repos/%s/%s/releases?per_page=%d", g.baseURL, owner, repo, limit)
 
@@ -102,11 +110,15 @@ var defaultGitHubAPI GitHubAPI = NewGitHubAPIClient()
 
 // SetGitHubAPI sets the global GitHub API client (for testing).
 func SetGitHubAPI(api GitHubAPI) {
+	defer perf.Track(nil, "toolchain.SetGitHubAPI")()
+
 	defaultGitHubAPI = api
 }
 
 // ResetGitHubAPI resets the global GitHub API client to the default.
 func ResetGitHubAPI() {
+	defer perf.Track(nil, "toolchain.ResetGitHubAPI")()
+
 	defaultGitHubAPI = NewGitHubAPIClient()
 }
 

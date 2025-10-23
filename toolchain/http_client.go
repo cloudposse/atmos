@@ -6,6 +6,8 @@ import (
 	"time"
 
 	"github.com/spf13/viper"
+
+	"github.com/cloudposse/atmos/pkg/perf"
 )
 
 // HTTPClientConfig holds configuration for HTTP clients.
@@ -17,6 +19,8 @@ type HTTPClientConfig struct {
 
 // NewHTTPClient creates a new HTTP client with optional GitHub token authentication.
 func NewHTTPClient(config HTTPClientConfig) *http.Client {
+	defer perf.Track(nil, "toolchain.NewHTTPClient")()
+
 	client := &http.Client{
 		Timeout: config.Timeout,
 	}
@@ -40,6 +44,8 @@ type GitHubAuthenticatedTransport struct {
 
 // RoundTrip implements http.RoundTripper interface.
 func (t *GitHubAuthenticatedTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	defer perf.Track(nil, "toolchain.GitHubAuthenticatedTransport.RoundTrip")()
+
 	host := req.URL.Hostname()
 	if (host == "api.github.com" || host == "raw.githubusercontent.com") && t.GitHubToken != "" {
 		req.Header.Set("Authorization", "Bearer "+t.GitHubToken)
@@ -61,11 +67,15 @@ func (t *GitHubAuthenticatedTransport) RoundTrip(req *http.Request) (*http.Respo
 
 // GetGitHubToken retrieves GitHub token from Viper configuration.
 func GetGitHubToken() string {
+	defer perf.Track(nil, "toolchain.GetGitHubToken")()
+
 	return viper.GetString("github-token")
 }
 
 // NewDefaultHTTPClient creates a new HTTP client with default configuration and GitHub token support.
 func NewDefaultHTTPClient() *http.Client {
+	defer perf.Track(nil, "toolchain.NewDefaultHTTPClient")()
+
 	return NewHTTPClient(HTTPClientConfig{
 		Timeout:     30 * time.Second,
 		GitHubToken: GetGitHubToken(),

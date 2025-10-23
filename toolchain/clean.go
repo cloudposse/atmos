@@ -4,11 +4,15 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+
+	"github.com/cloudposse/atmos/pkg/perf"
 )
 
 // CleanToolsAndCaches handles the business logic for cleaning tools and cache directories.
 // It performs file counting, deletion, and writes UI messages to stderr.
 func CleanToolsAndCaches(toolsDir, cacheDir, tempCacheDir string) error {
+	defer perf.Track(nil, "toolchain.CleanToolsAndCaches")()
+
 	toolsCount, err := cleanDir(toolsDir, true)
 	if err != nil {
 		return err

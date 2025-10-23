@@ -10,6 +10,8 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"golang.org/x/term"
+
+	"github.com/cloudposse/atmos/pkg/perf"
 )
 
 // Bubble Tea spinner model.
@@ -30,10 +32,14 @@ func initialSpinnerModel(message string) *spinnerModel {
 }
 
 func (m *spinnerModel) Init() tea.Cmd {
+	defer perf.Track(nil, "toolchain.spinnerModel.Init")()
+
 	return m.spinner.Tick
 }
 
 func (m *spinnerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	defer perf.Track(nil, "toolchain.spinnerModel.Update")()
+
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		switch msg.String() {
@@ -52,6 +58,8 @@ func (m *spinnerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m *spinnerModel) View() string {
+	defer perf.Track(nil, "toolchain.spinnerModel.View")()
+
 	if m.done {
 		return ""
 	}
@@ -68,6 +76,8 @@ func runBubbleTeaSpinner(message string) *tea.Program {
 }
 
 func RunInstall(toolSpec string, setAsDefault, reinstallFlag bool) error {
+	defer perf.Track(nil, "toolchain.Install")()
+
 	if toolSpec == "" {
 		return installFromToolVersions(GetToolVersionsFilePath(), reinstallFlag)
 	}
@@ -133,6 +143,8 @@ func RunInstall(toolSpec string, setAsDefault, reinstallFlag bool) error {
 }
 
 func InstallSingleTool(owner, repo, version string, isLatest bool, showProgressBar bool) error {
+	defer perf.Track(nil, "toolchain.InstallSingleTool")()
+
 	installer := NewInstaller()
 
 	var p *tea.Program

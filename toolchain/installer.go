@@ -18,6 +18,8 @@ import (
 	log "github.com/charmbracelet/log"
 	"github.com/gabriel-vasile/mimetype"
 	"gopkg.in/yaml.v3"
+
+	"github.com/cloudposse/atmos/pkg/perf"
 )
 
 const defaultFileWritePermissions = 0o644
@@ -32,6 +34,8 @@ type ToolResolver interface {
 type DefaultToolResolver struct{}
 
 func (d *DefaultToolResolver) Resolve(toolName string) (string, string, error) {
+	defer perf.Track(nil, "toolchain.DefaultToolResolver.Resolve")()
+
 	// First, check local config aliases
 	lcm := NewLocalConfigManager()
 	if err := lcm.Load(GetToolsConfigFilePath()); err == nil {
@@ -61,6 +65,8 @@ type Installer struct {
 
 // NewInstallerWithResolver allows injecting a custom ToolResolver (for tests).
 func NewInstallerWithResolver(resolver ToolResolver) *Installer {
+	defer perf.Track(nil, "toolchain.NewInstaller")()
+
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
 		log.Warn("Falling back to temp dir for cache.", "error", err)
@@ -83,11 +89,15 @@ func NewInstallerWithResolver(resolver ToolResolver) *Installer {
 
 // NewInstaller uses the default resolver.
 func NewInstaller() *Installer {
+	defer perf.Track(nil, "toolchain.NewInstaller")()
+
 	return NewInstallerWithResolver(&DefaultToolResolver{})
 }
 
 // Install installs a tool from the registry.
 func (i *Installer) Install(owner, repo, version string) (string, error) {
+	defer perf.Track(nil, "toolchain.Install")()
+
 	// 1. Try local config manager first
 	lcm := i.getLocalConfigManager()
 	if lcm != nil {
@@ -132,6 +142,8 @@ func (i *Installer) installFromTool(tool *Tool, version string) (string, error) 
 
 // findTool searches for a tool in the registry.
 func (i *Installer) findTool(owner, repo, version string) (*Tool, error) {
+	defer perf.Track(nil, "toolchain.findTool")()
+
 	// First, try to find the tool in local configuration
 	lcm := i.getLocalConfigManager()
 	if lcm != nil {
@@ -204,6 +216,8 @@ func (i *Installer) loadToolFile(filePath string) (*Tool, error) {
 
 // parseToolSpec parses a tool specification (owner/repo or just repo).
 func (i *Installer) parseToolSpec(tool string) (string, string, error) {
+	defer perf.Track(nil, "toolchain.parseToolSpec")()
+
 	parts := strings.Split(tool, "/")
 	if len(parts) == 2 {
 		return parts[0], parts[1], nil
@@ -554,6 +568,8 @@ func (i *Installer) extractZip(zipPath, binaryPath string, tool *Tool) error {
 // Unzip extracts a zip archive to a destination directory.
 // Works on Windows, macOS, and Linux.
 func Unzip(src, dest string) error {
+	defer perf.Track(nil, "toolchain.Unzip")()
+
 	const maxDecompressedSize = 3000 * 1024 * 1024 // 1000MB limit per file
 
 	r, err := zip.OpenReader(src)
@@ -641,6 +657,8 @@ func copyWithLimit(src io.Reader, dst io.Writer, name string, maxSize int64) err
 
 // ExtractTarGz extracts a .tar.gz file to the given destination directory.
 func ExtractTarGz(src, dest string) error {
+	defer perf.Track(nil, "toolchain.ExtractTarGz")()
+
 	f, err := os.Open(src)
 	if err != nil {
 		return fmt.Errorf("failed to open source file: %w", err)
@@ -782,6 +800,8 @@ func (i *Installer) extractTarGz(tarPath, binaryPath string, tool *Tool) error {
 // MoveFile tries os.Rename, but if that fails due to cross-device link,
 // it falls back to a copy+remove.
 func MoveFile(src, dst string) error {
+	defer perf.Track(nil, "toolchain.MoveFile")()
+
 	// Ensure target dir exists
 	if err := os.MkdirAll(filepath.Dir(dst), defaultMkdirPermissions); err != nil {
 		return fmt.Errorf("failed to create target dir: %w", err)
@@ -892,6 +912,8 @@ func (i *Installer) getBinaryPath(owner, repo, version string) string {
 
 // Uninstall removes a previously installed tool.
 func (i *Installer) Uninstall(owner, repo, version string) error {
+	defer perf.Track(nil, "toolchain.Installer.Uninstall")()
+
 	// Try to find the binary by searching
 	binaryPath, err := i.FindBinaryPath(owner, repo, version)
 	if err != nil {
@@ -933,6 +955,8 @@ func (i *Installer) Uninstall(owner, repo, version string) error {
 
 // FindBinaryPath searches for a binary with the given owner, repo, and version.
 func (i *Installer) FindBinaryPath(owner, repo, version string) (string, error) {
+	defer perf.Track(nil, "toolchain.installBinaryFromGitHub")()
+
 	// Handle "latest" keyword
 	if version == "latest" {
 		actualVersion, err := i.ReadLatestFile(owner, repo)
@@ -972,6 +996,8 @@ func (i *Installer) FindBinaryPath(owner, repo, version string) (string, error) 
 
 // CreateLatestFile creates a "latest" file that contains a pointer to the actual version.
 func (i *Installer) CreateLatestFile(owner, repo, version string) error {
+	defer perf.Track(nil, "toolchain.WriteSymlink")()
+
 	// Create the latest file path
 	latestDir := filepath.Join(i.binDir, owner, repo)
 	if err := os.MkdirAll(latestDir, defaultMkdirPermissions); err != nil {
@@ -991,6 +1017,8 @@ func (i *Installer) CreateLatestFile(owner, repo, version string) error {
 
 // ReadLatestFile reads the version from a "latest" file.
 func (i *Installer) ReadLatestFile(owner, repo string) (string, error) {
+	defer perf.Track(nil, "toolchain.Installer.ReadLatestFile")()
+
 	latestFilePath := filepath.Join(i.binDir, owner, repo, "latest")
 
 	data, err := os.ReadFile(latestFilePath)
@@ -1045,5 +1073,7 @@ func searchRegistryForTool(toolName string) (string, string, error) {
 }
 
 func (i *Installer) GetResolver() ToolResolver {
+	defer perf.Track(nil, "toolchain.GetResolver")()
+
 	return i.resolver
 }

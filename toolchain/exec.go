@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"os"
 	"syscall"
+
+	"github.com/cloudposse/atmos/pkg/perf"
 )
 
 var execFunc = syscall.Exec
@@ -19,6 +21,8 @@ type ToolRunner interface {
 // RunExecCommand contains business logic for executing tools.
 // It does not depend on cobra.Command, only raw args.
 func RunExecCommand(installer ToolRunner, args []string) error {
+	defer perf.Track(nil, "toolchain.Exec")()
+
 	if len(args) == 0 {
 		return fmt.Errorf("%w: no arguments provided. Expected format: tool@version", ErrInvalidToolSpec)
 	}

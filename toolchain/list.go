@@ -11,6 +11,8 @@ import (
 	"github.com/charmbracelet/bubbles/table"
 	"github.com/charmbracelet/lipgloss"
 	log "github.com/charmbracelet/log"
+
+	"github.com/cloudposse/atmos/pkg/perf"
 )
 
 // Table row data structure.
@@ -27,6 +29,8 @@ type toolRow struct {
 }
 
 func RunList() error {
+	defer perf.Track(nil, "toolchain.ListTools")()
+
 	installer := NewInstaller()
 	toolVersionsFile := GetToolVersionsFilePath()
 

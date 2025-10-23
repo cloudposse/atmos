@@ -12,6 +12,8 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
+
+	"github.com/cloudposse/atmos/pkg/perf"
 )
 
 // Refactored runUninstall to accept an optional installer parameter for testability.
@@ -82,6 +84,8 @@ func runUninstallWithInstaller(cmd *cobra.Command, args []string, installer *Ins
 }
 
 func RunUninstall(toolSpec string) error {
+	defer perf.Track(nil, "toolchain.RunUninstall")()
+
 	installer := NewInstaller()
 	// If no arguments, uninstall from tool-versions file
 	if len(toolSpec) == 0 {

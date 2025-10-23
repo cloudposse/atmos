@@ -6,10 +6,14 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
+
+	"github.com/cloudposse/atmos/pkg/perf"
 )
 
 // listAliases handles the business logic for retrieving and formatting aliases.
 func ListAliases() error {
+	defer perf.Track(nil, "toolchain.ListAliases")()
+
 	configFilePath := GetToolsConfigFilePath()
 	// Load local configuration
 	lcm := NewLocalConfigManager()

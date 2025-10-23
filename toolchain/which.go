@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"os"
 	"strings"
+
+	"github.com/cloudposse/atmos/pkg/perf"
 )
 
 const versionSplit = "@"
@@ -13,6 +15,8 @@ func init() {
 }
 
 func WhichExec(toolName string) error {
+	defer perf.Track(nil, "toolchain.WhichExec")()
+
 	binaryPath, err := findBinaryPath(toolName)
 	if err != nil {
 		return err

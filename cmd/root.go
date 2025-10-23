@@ -38,10 +38,11 @@ import (
 
 	// Import built-in command packages for side-effect registration.
 	// The init() function in each package registers the command with the registry.
-	_ "github.com/cloudposse/atmos/cmd/about"
 	"github.com/cloudposse/atmos/cmd/internal"
-	_ "github.com/cloudposse/atmos/cmd/toolchain"
 	"github.com/cloudposse/atmos/cmd/version"
+
+	_ "github.com/cloudposse/atmos/cmd/about"
+	_ "github.com/cloudposse/atmos/cmd/toolchain"
 )
 
 const (

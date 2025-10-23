@@ -4,11 +4,15 @@ import (
 	"fmt"
 
 	log "github.com/charmbracelet/log"
+
+	"github.com/cloudposse/atmos/pkg/perf"
 )
 
 // RemoveToolVersion removes either the entire tool or a specific version.
 // Returns the version removed (empty if all versions were removed).
 func RemoveToolVersion(filePath, tool, version string) error {
+	defer perf.Track(nil, "toolchain.RemoveToolVersionFromFile")()
+
 	if tool == "" {
 		return fmt.Errorf("%w: empty tool argument", ErrInvalidToolSpec)
 	}
