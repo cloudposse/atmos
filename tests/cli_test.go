@@ -234,10 +234,10 @@ func loadTestSuite(filePath string) (*TestSuite, error) {
 }
 
 func init() {
-	// Initialize with default settings.
+	// Initialize logger with default settings.
+	// Verbosity level will be configured in TestMain based on -v flag.
 	logger = log.New()
-	logger.SetOutput(os.Stdout)
-	logger.SetLevel(log.InfoLevel)
+	logger.SetOutput(os.Stderr)
 
 	// Ensure that Lipgloss uses terminal colors for tests
 	lipgloss.SetColorProfile(termenv.TrueColor)
@@ -256,11 +256,8 @@ func init() {
 	// Add a custom style for key `err`
 	styles.Keys["err"] = lipgloss.NewStyle().Foreground(lipgloss.Color("204"))
 	styles.Values["err"] = lipgloss.NewStyle().Bold(true)
-	logger = log.New()
-	logger.SetOutput(os.Stderr)
 	logger.SetStyles(styles)
 	logger.SetColorProfile(termenv.TrueColor)
-	logger.Info("Smoke tests for atmos CLI starting")
 }
 
 // Determine if running in a CI environment.
@@ -516,6 +513,21 @@ func loadTestSuites(testCasesDir string) (*TestSuite, error) {
 
 // Entry point for tests to parse flags and handle setup/teardown.
 func TestMain(m *testing.M) {
+	// Parse flags first to get -v status
+	flag.Parse()
+
+	// Configure logger verbosity based on test flags
+	switch {
+	case os.Getenv("ATMOS_TEST_DEBUG") != "":
+		logger.SetLevel(log.DebugLevel) // Show everything including debug
+	case testing.Verbose():
+		logger.SetLevel(log.InfoLevel) // Show info, warnings, and errors with -v flag
+	default:
+		logger.SetLevel(log.WarnLevel) // Only show warnings and errors by default
+	}
+
+	logger.Info("Smoke tests for atmos CLI starting")
+
 	// Declare err in the function's scope
 	var err error
 
@@ -541,7 +553,6 @@ func TestMain(m *testing.M) {
 	// Define the base directory for snapshots relative to startingDir
 	snapshotBaseDir = filepath.Join(startingDir, "snapshots")
 
-	flag.Parse()        // Parse command-line flags
 	exitCode := m.Run() // ALWAYS run tests so they can skip properly
 
 	// Clean up sandboxes.
@@ -1428,7 +1439,7 @@ func cleanDirectory(t *testing.T, workdir string) error {
 		if statusEntry.Worktree == git.Untracked {
 			fullPath := filepath.Join(repoRoot, file)
 			if strings.HasPrefix(fullPath, workdir) {
-				t.Logf("Removing untracked file: %q\n", fullPath)
+				t.Logf("Removing untracked file: %q", fullPath)
 				if err := os.RemoveAll(fullPath); err != nil {
 					return fmt.Errorf("failed to remove %q: %w", fullPath, err)
 				}
@@ -1480,9 +1491,5 @@ expect:
 	err := yaml.Unmarshal([]byte(yamlData), &testCase)
 	if err != nil {
 		t.Fatalf("Failed to unmarshal YAML: %v", err)
-	}
-
-	for i, pattern := range testCase.Expect.Stdout {
-		t.Logf("Pattern %d: %+v", i, pattern)
 	}
 }
