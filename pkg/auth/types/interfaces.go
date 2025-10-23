@@ -1,5 +1,7 @@
 package types
 
+//go:generate mockgen -source=$GOFILE -destination=mock_$GOFILE -package=$GOPACKAGE
+
 import (
 	"context"
 	"time"
@@ -27,6 +29,16 @@ type Provider interface {
 
 	// Environment returns environment variables that should be set for this provider.
 	Environment() (map[string]string, error)
+
+	// Logout removes provider-specific credential storage (files, cache, etc.).
+	// Returns error only if cleanup fails for critical resources.
+	// Best-effort: continue cleanup even if individual steps fail.
+	Logout(ctx context.Context) error
+
+	// GetFilesDisplayPath returns the display path for credential files.
+	// Returns the configured path if set, otherwise a default path.
+	// For display purposes only (may use ~ for home directory).
+	GetFilesDisplayPath() string
 }
 
 // Identity defines the interface that all authentication identities must implement.
@@ -50,6 +62,10 @@ type Identity interface {
 	// PostAuthenticate is called after successful authentication with the final credentials.
 	// Implementations can use the manager to perform provider-specific file setup or other side effects.
 	PostAuthenticate(ctx context.Context, stackInfo *schema.ConfigAndStacksInfo, providerName, identityName string, creds ICredentials) error
+
+	// Logout removes identity-specific credential storage.
+	// Best-effort: continue cleanup even if individual steps fail.
+	Logout(ctx context.Context) error
 }
 
 // AuthManager manages the overall authentication process.
@@ -73,6 +89,10 @@ type AuthManager interface {
 	// Recursively resolves through identity chains to find the root provider.
 	GetProviderForIdentity(identityName string) string
 
+	// GetFilesDisplayPath returns the display path for AWS files for a provider.
+	// Returns the configured path if set, otherwise default ~/.aws/atmos.
+	GetFilesDisplayPath(providerName string) string
+
 	// GetProviderKindForIdentity returns the provider kind for the given identity.
 	GetProviderKindForIdentity(identityName string) (string, error)
 
@@ -91,6 +111,18 @@ type AuthManager interface {
 
 	// GetProviders returns all available provider configurations.
 	GetProviders() map[string]schema.Provider
+
+	// Logout removes credentials for the specified identity and its authentication chain.
+	// Best-effort: continues cleanup even if individual steps fail.
+	Logout(ctx context.Context, identityName string) error
+
+	// LogoutProvider removes all credentials for the specified provider.
+	// Best-effort: continues cleanup even if individual steps fail.
+	LogoutProvider(ctx context.Context, providerName string) error
+
+	// LogoutAll removes all cached credentials for all identities.
+	// Best-effort: continues cleanup even if individual steps fail.
+	LogoutAll(ctx context.Context) error
 }
 
 // CredentialStore defines the interface for storing and retrieving credentials.
@@ -132,4 +164,39 @@ type ICredentials interface {
 	GetExpiration() (*time.Time, error)
 
 	BuildWhoamiInfo(info *WhoamiInfo)
+
+	// Validate validates credentials by making an API call to the provider.
+	// Returns expiration time if available, error if credentials are invalid.
+	// Returns ErrNotImplemented if validation is not supported for this credential type.
+	Validate(ctx context.Context) (*time.Time, error)
+}
+
+// ConsoleAccessProvider is an optional interface that providers can implement
+// to support web console/browser-based login.
+type ConsoleAccessProvider interface {
+	// GetConsoleURL generates a web console sign-in URL using the provided credentials.
+	// Returns the sign-in URL, the duration for which the URL remains valid, and any error encountered.
+	GetConsoleURL(ctx context.Context, creds ICredentials, options ConsoleURLOptions) (url string, duration time.Duration, err error)
+
+	// SupportsConsoleAccess returns true if this provider supports web console access.
+	SupportsConsoleAccess() bool
+}
+
+// ConsoleURLOptions provides configuration for console URL generation.
+type ConsoleURLOptions struct {
+	// Destination is the specific console page to navigate to (optional).
+	// For AWS: "https://console.aws.amazon.com/s3" or similar.
+	// For Azure: "https://portal.azure.com/#blade/...".
+	// For GCP: "https://console.cloud.google.com/...".
+	Destination string
+
+	// SessionDuration is the requested duration for the console session.
+	// Providers may have maximum limits (e.g., AWS: 12 hours).
+	SessionDuration time.Duration
+
+	// Issuer is an optional identifier shown in the console URL (used by AWS).
+	Issuer string
+
+	// OpenInBrowser if true, automatically opens the URL in the default browser.
+	OpenInBrowser bool
 }

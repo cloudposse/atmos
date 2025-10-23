@@ -33,14 +33,14 @@ func (v *validator) ValidateAuthConfig(config *schema.AuthConfig) error {
 
 	// Validate logs.
 	if err := v.ValidateLogsConfig(&config.Logs); err != nil {
-		return fmt.Errorf("%w: logs configuration validation failed: %v", errUtils.ErrInvalidAuthConfig, err)
+		return fmt.Errorf("%w: logs configuration validation failed: %w", errUtils.ErrInvalidAuthConfig, err)
 	}
 
 	// Validate providers.
 	//nolint:gocritic // rangeValCopy: map stores structs; address of map element can't be taken. Passing copy to factory is intended.
 	for name, provider := range config.Providers {
 		if err := v.ValidateProvider(name, &provider); err != nil {
-			return fmt.Errorf("%w: provider %q validation failed: %v", errUtils.ErrInvalidAuthConfig, name, err)
+			return fmt.Errorf("%w: provider %q validation failed: %w", errUtils.ErrInvalidAuthConfig, name, err)
 		}
 	}
 
@@ -48,13 +48,13 @@ func (v *validator) ValidateAuthConfig(config *schema.AuthConfig) error {
 
 	for name, identity := range config.Identities {
 		if err := v.ValidateIdentity(name, &identity, convertProviders(config.Providers)); err != nil {
-			return fmt.Errorf("%w: identity %q validation failed: %v", errUtils.ErrInvalidAuthConfig, name, err)
+			return fmt.Errorf("%w: identity %q validation failed: %w", errUtils.ErrInvalidAuthConfig, name, err)
 		}
 	}
 
 	// Validate chains.
 	if err := v.ValidateChains(convertIdentities(config.Identities), convertProviders(config.Providers)); err != nil {
-		return fmt.Errorf("%w: identity chain validation failed: %v", errUtils.ErrInvalidAuthConfig, err)
+		return fmt.Errorf("%w: identity chain validation failed: %w", errUtils.ErrInvalidAuthConfig, err)
 	}
 
 	return nil

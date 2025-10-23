@@ -363,9 +363,37 @@ type Packer struct {
 }
 
 type Components struct {
+	// Built-in component types (legacy - will migrate to plugin model in future phases).
 	Terraform Terraform `yaml:"terraform" json:"terraform" mapstructure:"terraform"`
 	Helmfile  Helmfile  `yaml:"helmfile" json:"helmfile" mapstructure:"helmfile"`
 	Packer    Packer    `yaml:"packer" json:"packer" mapstructure:"packer"`
+
+	// Dynamic plugin component types.
+	// Uses mapstructure:",remain" to capture all unmapped fields from the YAML/JSON.
+	// This allows new component types (like mock, pulumi, cdk) to be added without schema changes.
+	Plugins map[string]any `yaml:",inline" json:",inline" mapstructure:",remain"`
+}
+
+// GetComponentConfig retrieves configuration for any component type.
+// It first checks built-in types (terraform, helmfile, packer) for type-safe access,
+// then falls back to the Plugins map for dynamic component types.
+//
+// Returns the configuration and true if found, nil and false otherwise.
+func (c *Components) GetComponentConfig(componentType string) (any, bool) {
+	switch componentType {
+	case "terraform":
+		return c.Terraform, true
+	case "helmfile":
+		return c.Helmfile, true
+	case "packer":
+		return c.Packer, true
+	default:
+		// Check plugin types.
+		if config, ok := c.Plugins[componentType]; ok {
+			return config, true
+		}
+		return nil, false
+	}
 }
 
 type Stacks struct {

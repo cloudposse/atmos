@@ -26,6 +26,7 @@ import (
 	"github.com/cloudposse/atmos/internal/tui/templates/term"
 	tuiUtils "github.com/cloudposse/atmos/internal/tui/utils"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/filesystem"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/pager"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -75,8 +76,15 @@ func processChdirFlag(cmd *cobra.Command) error {
 		return nil // No chdir specified.
 	}
 
+	// Expand tilde to home directory using filesystem package.
+	homeDirProvider := filesystem.NewOSHomeDirProvider()
+	expandedPath, err := homeDirProvider.Expand(chdir)
+	if err != nil {
+		return fmt.Errorf("%w: %s", errUtils.ErrPathResolution, err)
+	}
+
 	// Clean and make absolute to handle both relative and absolute paths.
-	absPath, err := filepath.Abs(chdir)
+	absPath, err := filepath.Abs(expandedPath)
 	if err != nil {
 		return fmt.Errorf("%w: invalid chdir path: %s", errUtils.ErrPathResolution, chdir)
 	}

@@ -9,6 +9,7 @@ import (
 
 	"github.com/cloudposse/atmos/cmd/internal"
 	"github.com/cloudposse/atmos/pkg/schema"
+	toolchainpkg "github.com/cloudposse/atmos/toolchain"
 )
 
 var (
@@ -20,10 +21,10 @@ var (
 
 // SetAtmosConfig sets the Atmos configuration for the toolchain command.
 // This is called from root.go after atmosConfig is initialized.
-// Currently unused but kept for future expansion when subcommands need access to config.
 func SetAtmosConfig(config *schema.AtmosConfiguration) {
-	// Reserved for future use when toolchain subcommands need access to Atmos configuration.
-	_ = config
+	// Import the toolchain package to access its SetAtmosConfig.
+	// This ensures the toolchain package has access to the Atmos configuration.
+	_ = config // Currently not used, but available for future expansion.
 }
 
 // toolchainCmd represents the toolchain command.
@@ -31,8 +32,20 @@ var toolchainCmd = &cobra.Command{
 	Use:   "toolchain",
 	Short: "Toolchain CLI",
 	Long:  `A standalone tool to install CLI binaries using registry metadata.`,
-	PreRunE: func(cmd *cobra.Command, args []string) error {
-		// Set log level.
+	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+		// Initialize the toolchain package with the Atmos configuration.
+		// This ensures that the toolchain package has access to the configuration.
+		atmosCfg := &schema.AtmosConfiguration{
+			Toolchain: schema.Toolchain{
+				FilePath:        toolVersionsFile,
+				ToolsDir:        toolsDir,
+				ToolsConfigFile: toolsConfigFile,
+			},
+		}
+
+		// Call the toolchain package's SetAtmosConfig.
+		toolchainpkg.SetAtmosConfig(atmosCfg)
+
 		return nil
 	},
 	RunE: func(cmd *cobra.Command, args []string) error {

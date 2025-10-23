@@ -11,21 +11,23 @@ import (
 )
 
 // SetupFiles sets up AWS credentials and config files for the given identity.
-func SetupFiles(providerName, identityName string, creds types.ICredentials) error {
+// BasePath specifies the base directory for AWS files (from provider's files.base_path).
+// If empty, uses the default ~/.aws/atmos path.
+func SetupFiles(providerName, identityName string, creds types.ICredentials, basePath string) error {
 	awsCreds, ok := creds.(*types.AWSCredentials)
 	if !ok {
 		return nil // No AWS credentials to setup
 	}
 
-	// Create AWS file manager.
-	fileManager, err := NewAWSFileManager()
+	// Create AWS file manager with configured or default path.
+	fileManager, err := NewAWSFileManager(basePath)
 	if err != nil {
 		return errors.Join(errUtils.ErrAuthAwsFileManagerFailed, err)
 	}
 
 	// Write credentials file.
 	if err := fileManager.WriteCredentials(providerName, identityName, awsCreds); err != nil {
-		return fmt.Errorf("%w: failed to write AWS credentials: %v", errUtils.ErrAwsAuth, err)
+		return fmt.Errorf("%s: failed to write AWS credentials: %w", errUtils.ErrAwsAuth.Error(), err)
 	}
 
 	// Write config file with region.
@@ -35,15 +37,17 @@ func SetupFiles(providerName, identityName string, creds types.ICredentials) err
 	}
 
 	if err := fileManager.WriteConfig(providerName, identityName, region, ""); err != nil {
-		return fmt.Errorf("%w: failed to write AWS config: %v", errUtils.ErrAwsAuth, err)
+		return fmt.Errorf("%s: failed to write AWS config: %w", errUtils.ErrAwsAuth.Error(), err)
 	}
 
 	return nil
 }
 
 // SetEnvironmentVariables sets the AWS_SHARED_CREDENTIALS_FILE and AWS_CONFIG_FILE environment variables.
-func SetEnvironmentVariables(stackInfo *schema.ConfigAndStacksInfo, providerName, identityName string) error {
-	m, err := NewAWSFileManager()
+// BasePath specifies the base directory for AWS files (from provider's files.base_path).
+// If empty, uses the default ~/.aws/atmos path.
+func SetEnvironmentVariables(stackInfo *schema.ConfigAndStacksInfo, providerName, identityName string, basePath string) error {
+	m, err := NewAWSFileManager(basePath)
 	if err != nil {
 		return errors.Join(errUtils.ErrAuthAwsFileManagerFailed, err)
 	}

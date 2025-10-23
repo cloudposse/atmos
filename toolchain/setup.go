@@ -25,7 +25,7 @@ func SetAtmosConfig(config *schema.AtmosConfiguration) {
 
 // GetToolVersionsFilePath returns the path to the tool-versions file.
 func GetToolVersionsFilePath() string {
-	if atmosConfig.Toolchain.FilePath == "" {
+	if atmosConfig == nil || atmosConfig.Toolchain.FilePath == "" {
 		return DefaultToolVersionsFilePath
 	}
 	return atmosConfig.Toolchain.FilePath
@@ -33,7 +33,7 @@ func GetToolVersionsFilePath() string {
 
 // GetToolsDirPath returns the path to the tools directory.
 func GetToolsDirPath() string {
-	if atmosConfig.Toolchain.ToolsDir == "" {
+	if atmosConfig == nil || atmosConfig.Toolchain.ToolsDir == "" {
 		return DefaultToolsDir
 	}
 	return atmosConfig.Toolchain.ToolsDir
@@ -41,7 +41,7 @@ func GetToolsDirPath() string {
 
 // GetToolsConfigFilePath returns the path to the tools configuration file.
 func GetToolsConfigFilePath() string {
-	if atmosConfig.Toolchain.ToolsConfigFile == "" {
+	if atmosConfig == nil || atmosConfig.Toolchain.ToolsConfigFile == "" {
 		return DefaultToolsConfig
 	}
 	return atmosConfig.Toolchain.ToolsConfigFile
