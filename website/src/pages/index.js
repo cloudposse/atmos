@@ -25,12 +25,12 @@ function Home() {
               <Link to="/introduction" className="button button--lg button--outline button--primary ml20"><p>Learn More</p></Link>
             </div>
           </div>
-        </header>
-        <section className="hero-demo">
           <div className="hero-demo-intro">
             <h2>See Atmos in Action</h2>
             <p>Watch how Atmos simplifies infrastructure orchestration with an intuitive workflow</p>
           </div>
+        </header>
+        <section className="hero-demo">
           <LazyDemo />
         </section>
         <main>
