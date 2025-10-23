@@ -1,7 +1,7 @@
 ---
 slug: azure-blob-terraform-state-support
 title: "Azure Blob Storage Support for !terraform.state Function"
-authors: [aknysh]
+authors: [jamengual]
 tags: [feature, terraform]
 date: 2025-10-21
 ---
