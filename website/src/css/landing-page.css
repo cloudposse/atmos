@@ -239,6 +239,7 @@ strong.underline::after {
 .alternate-section {
   display: flex;
   gap: 2rem;
+  margin-top: 6rem;
   margin-bottom: 10rem;
   flex-wrap: nowrap;
   padding: 2rem;
@@ -311,7 +312,7 @@ strong.underline::after {
   grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
   gap: 1.5rem;
   max-width: 1200px;
-  margin: 2rem auto;
+  margin: 4rem auto;
   padding: 0 2rem;
 }
 
