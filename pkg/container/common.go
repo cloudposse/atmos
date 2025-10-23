@@ -2,6 +2,7 @@ package container
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -144,11 +145,12 @@ func execWithRuntime(ctx context.Context, runtimeName string, containerID string
 
 		if err := execCmd.Run(); err != nil {
 			// Don't treat exit code as error for interactive sessions.
-			if exitErr, ok := err.(*exec.ExitError); ok {
+			var exitErr *exec.ExitError
+			if errors.As(err, &exitErr) {
 				log.Debug("Interactive session exited", "code", exitErr.ExitCode())
 				return nil
 			}
-			return fmt.Errorf("%w: %s exec failed: %v", errUtils.ErrContainerRuntimeOperation, runtimeName, err)
+			return fmt.Errorf("%w: %s exec failed: %w", errUtils.ErrContainerRuntimeOperation, runtimeName, err)
 		}
 		return nil
 	}
@@ -156,7 +158,7 @@ func execWithRuntime(ctx context.Context, runtimeName string, containerID string
 	// Non-interactive mode.
 	output, err := execCmd.CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("%w: %s exec failed: %v: %s", errUtils.ErrContainerRuntimeOperation, runtimeName, err, string(output))
+		return fmt.Errorf("%w: %s exec failed: %w: %s", errUtils.ErrContainerRuntimeOperation, runtimeName, err, string(output))
 	}
 
 	return nil

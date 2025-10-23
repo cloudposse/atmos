@@ -48,7 +48,7 @@ func (p *PodmanRuntime) Build(ctx context.Context, config *BuildConfig) error {
 	cmd := exec.CommandContext(ctx, podmanCmd, args...)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("%w: podman build failed: %v: %s", errUtils.ErrContainerRuntimeOperation, err, string(output))
+		return fmt.Errorf("%w: podman build failed: %w: %s", errUtils.ErrContainerRuntimeOperation, err, string(output))
 	}
 
 	log.Debug("Built podman image", "tags", config.Tags)
@@ -64,7 +64,7 @@ func (p *PodmanRuntime) Create(ctx context.Context, config *CreateConfig) (strin
 	cmd := exec.CommandContext(ctx, podmanCmd, args...)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		return "", fmt.Errorf("%w: podman create failed: %v: %s", errUtils.ErrContainerRuntimeOperation, err, string(output))
+		return "", fmt.Errorf("%w: podman create failed: %w: %s", errUtils.ErrContainerRuntimeOperation, err, string(output))
 	}
 
 	containerID := strings.TrimSpace(string(output))
@@ -80,7 +80,7 @@ func (p *PodmanRuntime) Start(ctx context.Context, containerID string) error {
 	cmd := exec.CommandContext(ctx, podmanCmd, "start", containerID)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("%w: podman start failed: %v: %s", errUtils.ErrContainerRuntimeOperation, err, string(output))
+		return fmt.Errorf("%w: podman start failed: %w: %s", errUtils.ErrContainerRuntimeOperation, err, string(output))
 	}
 
 	log.Debug("Started podman container", logKeyID, containerID)
@@ -95,7 +95,7 @@ func (p *PodmanRuntime) Stop(ctx context.Context, containerID string, timeout ti
 	cmd := exec.CommandContext(ctx, podmanCmd, "stop", "-t", fmt.Sprintf("%d", timeoutSecs), containerID) //nolint:gosec // podman command is intentional
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("%w: podman stop failed: %v: %s", errUtils.ErrContainerRuntimeOperation, err, string(output))
+		return fmt.Errorf("%w: podman stop failed: %w: %s", errUtils.ErrContainerRuntimeOperation, err, string(output))
 	}
 
 	log.Debug("Stopped podman container", logKeyID, containerID)
@@ -115,7 +115,7 @@ func (p *PodmanRuntime) Remove(ctx context.Context, containerID string, force bo
 	cmd := exec.CommandContext(ctx, podmanCmd, args...)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("%w: podman rm failed: %v: %s", errUtils.ErrContainerRuntimeOperation, err, string(output))
+		return fmt.Errorf("%w: podman rm failed: %w: %s", errUtils.ErrContainerRuntimeOperation, err, string(output))
 	}
 
 	log.Debug("Removed podman container", logKeyID, containerID)
@@ -157,7 +157,7 @@ func executePodmanList(ctx context.Context, filters map[string]string) ([]byte, 
 	cmd := exec.CommandContext(ctx, podmanCmd, args...)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		return nil, fmt.Errorf("%w: podman ps failed: %v: %s", errUtils.ErrContainerRuntimeOperation, err, string(output))
+		return nil, fmt.Errorf("%w: podman ps failed: %w: %s", errUtils.ErrContainerRuntimeOperation, err, string(output))
 	}
 
 	return output, nil
@@ -262,7 +262,7 @@ func (p *PodmanRuntime) Pull(ctx context.Context, image string) error {
 	cmd := exec.CommandContext(ctx, podmanCmd, "pull", image)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("%w: podman pull failed: %v: %s", errUtils.ErrContainerRuntimeOperation, err, string(output))
+		return fmt.Errorf("%w: podman pull failed: %w: %s", errUtils.ErrContainerRuntimeOperation, err, string(output))
 	}
 
 	return nil
@@ -298,7 +298,7 @@ func (p *PodmanRuntime) Info(ctx context.Context) (*RuntimeInfo, error) {
 	cmd := exec.CommandContext(ctx, podmanCmd, "version", "--format", "{{.Version}}")
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		return nil, fmt.Errorf("%w: podman version failed: %v: %s", errUtils.ErrContainerRuntimeOperation, err, string(output))
+		return nil, fmt.Errorf("%w: podman version failed: %w: %s", errUtils.ErrContainerRuntimeOperation, err, string(output))
 	}
 
 	return &RuntimeInfo{

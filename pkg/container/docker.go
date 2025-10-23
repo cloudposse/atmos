@@ -51,7 +51,7 @@ func (d *DockerRuntime) Build(ctx context.Context, config *BuildConfig) error {
 	cmd := exec.CommandContext(ctx, dockerCmd, args...)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("%w: docker build failed: %v: %s", errUtils.ErrContainerRuntimeOperation, err, string(output))
+		return fmt.Errorf("%w: docker build failed: %w: %s", errUtils.ErrContainerRuntimeOperation, err, string(output))
 	}
 
 	log.Debug("Built docker image", "tags", config.Tags)
@@ -67,7 +67,7 @@ func (d *DockerRuntime) Create(ctx context.Context, config *CreateConfig) (strin
 	cmd := exec.CommandContext(ctx, dockerCmd, args...)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		return "", fmt.Errorf("%w: docker create failed: %v: %s", errUtils.ErrContainerRuntimeOperation, err, string(output))
+		return "", fmt.Errorf("%w: docker create failed: %w: %s", errUtils.ErrContainerRuntimeOperation, err, string(output))
 	}
 
 	containerID := strings.TrimSpace(string(output))
@@ -83,7 +83,7 @@ func (d *DockerRuntime) Start(ctx context.Context, containerID string) error {
 	cmd := exec.CommandContext(ctx, dockerCmd, "start", containerID)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("%w: docker start failed: %v: %s", errUtils.ErrContainerRuntimeOperation, err, string(output))
+		return fmt.Errorf("%w: docker start failed: %w: %s", errUtils.ErrContainerRuntimeOperation, err, string(output))
 	}
 
 	log.Debug("Started docker container", logKeyID, containerID)
@@ -98,7 +98,7 @@ func (d *DockerRuntime) Stop(ctx context.Context, containerID string, timeout ti
 	cmd := exec.CommandContext(ctx, dockerCmd, "stop", "-t", fmt.Sprintf("%d", timeoutSecs), containerID) //nolint:gosec // docker command is intentional
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("%w: docker stop failed: %v: %s", errUtils.ErrContainerRuntimeOperation, err, string(output))
+		return fmt.Errorf("%w: docker stop failed: %w: %s", errUtils.ErrContainerRuntimeOperation, err, string(output))
 	}
 
 	log.Debug("Stopped docker container", logKeyID, containerID)
@@ -118,7 +118,7 @@ func (d *DockerRuntime) Remove(ctx context.Context, containerID string, force bo
 	cmd := exec.CommandContext(ctx, dockerCmd, args...)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("%w: docker rm failed: %v: %s", errUtils.ErrContainerRuntimeOperation, err, string(output))
+		return fmt.Errorf("%w: docker rm failed: %w: %s", errUtils.ErrContainerRuntimeOperation, err, string(output))
 	}
 
 	log.Debug("Removed docker container", logKeyID, containerID)
@@ -147,7 +147,7 @@ func (d *DockerRuntime) List(ctx context.Context, filters map[string]string) ([]
 	cmd := exec.CommandContext(ctx, dockerCmd, args...)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		return nil, fmt.Errorf("%w: docker ps failed: %v: %s", errUtils.ErrContainerRuntimeOperation, err, string(output))
+		return nil, fmt.Errorf("%w: docker ps failed: %w: %s", errUtils.ErrContainerRuntimeOperation, err, string(output))
 	}
 
 	// Parse JSON output line by line.
@@ -256,7 +256,7 @@ func (d *DockerRuntime) Pull(ctx context.Context, image string) error {
 	cmd := exec.CommandContext(ctx, dockerCmd, "pull", image)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("%w: docker pull failed: %v: %s", errUtils.ErrContainerRuntimeOperation, err, string(output))
+		return fmt.Errorf("%w: docker pull failed: %w: %s", errUtils.ErrContainerRuntimeOperation, err, string(output))
 	}
 
 	return nil
@@ -292,7 +292,7 @@ func (d *DockerRuntime) Info(ctx context.Context) (*RuntimeInfo, error) {
 	cmd := exec.CommandContext(ctx, dockerCmd, "version", "--format", "{{.Server.Version}}")
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		return nil, fmt.Errorf("%w: docker version failed: %v: %s", errUtils.ErrContainerRuntimeOperation, err, string(output))
+		return nil, fmt.Errorf("%w: docker version failed: %w: %s", errUtils.ErrContainerRuntimeOperation, err, string(output))
 	}
 
 	return &RuntimeInfo{
