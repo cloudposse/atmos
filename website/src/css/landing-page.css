@@ -332,9 +332,13 @@ strong.underline::after {
 /* React icon styling */
 .feature-icon {
   font-size: 2rem;
-  color: #538ce9;
+  color: #1e5bb8;
   margin-bottom: 1rem;
   display: inline-block;
+}
+
+html[data-theme="dark"] .feature-icon {
+  color: #538ce9;
 }
 
 .feature-card h3 {

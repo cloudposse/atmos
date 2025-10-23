@@ -83,6 +83,12 @@ div.atmos__effect::before, html[data-theme='dark'] div.navbar__logo::before {
 
 ::selection {
     background-color: yellow;
+    color: black;
+}
+
+html[data-theme='dark'] ::selection {
+    background-color: yellow;
+    color: white;
 }
 
 html[data-theme='dark'] body {

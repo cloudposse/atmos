@@ -17,7 +17,7 @@ function Home() {
       <Layout title={`Hello from ${siteConfig.title}`} description="Atmos: Sanity for the Modern Platform Engineer - An IaC Framework that unifies your toolchain">
         <header className="hero hero--full-height">
           <div className="intro">
-            <p className="hero__eyebrow">IaC Framework</p>
+            <p className="hero__eyebrow">One framework to easily manage environments</p>
             <h1>Sanity for the Modern<br/>Platform Engineer</h1>
             <p className="hero__description">Manage environments easily in <span className="typing-container"><TypingAnimation words={['Terraform', 'OpenTofu', 'Packer', 'Helmfile', 'and more...']} /></span></p>
           </div>
