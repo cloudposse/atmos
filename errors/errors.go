@@ -459,6 +459,7 @@ var (
 	ErrAIFileAccessDeniedStacks     = errors.New("access denied: file path must be within stacks directory")
 	ErrAIFileNotFound               = errors.New("file not found")
 	ErrAIPathIsDirectory            = errors.New("path is a directory, not a file")
+	ErrAISessionManagerNotAvailable = errors.New("session manager not available")
 )
 
 // ExitCodeError is a typed error that preserves subcommand exit codes.

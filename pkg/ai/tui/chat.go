@@ -33,21 +33,33 @@ const (
 	roleSystem    = "system"
 )
 
+// viewMode represents the current view mode of the TUI.
+type viewMode int
+
+const (
+	viewModeChat viewMode = iota
+	viewModeSessionList
+)
+
 // ChatModel represents the state of the chat TUI.
 type ChatModel struct {
-	client    ai.Client
-	manager   *session.Manager
-	sess      *session.Session
-	executor  *tools.Executor
-	memoryMgr *memory.Manager
-	messages  []ChatMessage
-	viewport  viewport.Model
-	textarea  textarea.Model
-	spinner   spinner.Model
-	isLoading bool
-	width     int
-	height    int
-	ready     bool
+	client               ai.Client
+	manager              *session.Manager
+	sess                 *session.Session
+	executor             *tools.Executor
+	memoryMgr            *memory.Manager
+	messages             []ChatMessage
+	viewport             viewport.Model
+	textarea             textarea.Model
+	spinner              spinner.Model
+	isLoading            bool
+	width                int
+	height               int
+	ready                bool
+	currentView          viewMode
+	availableSessions    []*session.Session
+	selectedSessionIndex int
+	sessionListError     string
 }
 
 // ChatMessage represents a single message in the chat.
@@ -69,8 +81,10 @@ func NewChatModel(client ai.Client, manager *session.Manager, sess *session.Sess
 
 	// Initialize textarea.
 	ta := textarea.New()
-	ta.Placeholder = "Type your message... (Ctrl+C to quit, Enter to send)"
+	ta.Placeholder = "Type your message... (Enter to send, Shift+Enter for new line, Ctrl+C to quit)"
 	ta.Focus()
+	ta.ShowLineNumbers = false
+	ta.CharLimit = 0 // No character limit
 
 	// Initialize spinner.
 	s := spinner.New()
@@ -78,16 +92,19 @@ func NewChatModel(client ai.Client, manager *session.Manager, sess *session.Sess
 	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorCyan))
 
 	model := &ChatModel{
-		client:    client,
-		manager:   manager,
-		sess:      sess,
-		executor:  executor,
-		memoryMgr: memoryMgr,
-		messages:  make([]ChatMessage, 0),
-		viewport:  vp,
-		textarea:  ta,
-		spinner:   s,
-		isLoading: false,
+		client:               client,
+		manager:              manager,
+		sess:                 sess,
+		executor:             executor,
+		memoryMgr:            memoryMgr,
+		messages:             make([]ChatMessage, 0),
+		viewport:             vp,
+		textarea:             ta,
+		spinner:              s,
+		isLoading:            false,
+		currentView:          viewModeChat,
+		availableSessions:    make([]*session.Session, 0),
+		selectedSessionIndex: 0,
 	}
 
 	// Load existing messages from session if available.
@@ -158,28 +175,6 @@ func (m *ChatModel) handleWindowResize(msg tea.WindowSizeMsg) {
 	m.updateViewportContent()
 }
 
-// handleKeyMsg processes keyboard input.
-func (m *ChatModel) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	if m.isLoading {
-		// Only allow quitting while loading.
-		if msg.String() == "ctrl+c" {
-			return m, tea.Quit
-		}
-		return m, nil
-	}
-
-	switch msg.String() {
-	case "ctrl+c":
-		return m, tea.Quit
-	case "enter":
-		if strings.TrimSpace(m.textarea.Value()) != "" {
-			return m, m.sendMessage(m.textarea.Value())
-		}
-	}
-
-	return m, nil
-}
-
 // Update handles messages and updates the model state.
 func (m *ChatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var (
@@ -187,60 +182,110 @@ func (m *ChatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmds []tea.Cmd
 	)
 
-	switch msg := msg.(type) {
-	case tea.WindowSizeMsg:
-		m.handleWindowResize(msg)
-
-	case tea.KeyMsg:
-		return m.handleKeyMsg(msg)
-
-	case sendMessageMsg:
-		// Add user message.
-		m.addMessage(roleUser, string(msg))
-		m.textarea.Reset()
-		m.isLoading = true
-		m.updateViewportContent()
-		return m, tea.Batch(
-			m.spinner.Tick,
-			m.getAIResponse(string(msg)),
-		)
-
-	case aiResponseMsg:
-		// Add AI response.
-		m.addMessage(roleAssistant, string(msg))
-		m.isLoading = false
-		m.updateViewportContent()
-
-	case aiErrorMsg:
-		// Handle AI error.
-		m.addMessage(roleSystem, fmt.Sprintf("Error: %s", string(msg)))
-		m.isLoading = false
-		m.updateViewportContent()
-
-	case spinner.TickMsg:
-		if m.isLoading {
-			m.spinner, cmd = m.spinner.Update(msg)
-			cmds = append(cmds, cmd)
+	// Handle different message types.
+	if handled, returnCmd := m.handleMessage(msg, &cmds); handled {
+		if returnCmd != nil {
+			return m, returnCmd
 		}
 	}
 
-	// Update textarea only if not loading
-	if !m.isLoading {
+	// Update textarea only if not loading and in chat mode.
+	if !m.isLoading && m.currentView == viewModeChat {
 		m.textarea, cmd = m.textarea.Update(msg)
 		cmds = append(cmds, cmd)
 	}
 
-	// Update viewport
+	// Update viewport.
 	m.viewport, cmd = m.viewport.Update(msg)
 	cmds = append(cmds, cmd)
 
 	return m, tea.Batch(cmds...)
 }
 
+// handleMessage processes different message types and returns whether it was handled.
+func (m *ChatModel) handleMessage(msg tea.Msg, cmds *[]tea.Cmd) (bool, tea.Cmd) {
+	switch msg := msg.(type) {
+	case tea.WindowSizeMsg:
+		m.handleWindowResize(msg)
+		return true, nil
+
+	case tea.KeyMsg:
+		return m.handleKeyMessage(msg)
+
+	case sendMessageMsg:
+		return m.handleSendMessage(msg)
+
+	case aiResponseMsg, aiErrorMsg:
+		return m.handleAIMessage(msg), nil
+
+	case spinner.TickMsg:
+		return m.handleSpinnerTick(msg, cmds), nil
+
+	case sessionListLoadedMsg:
+		m.handleSessionListLoaded(msg)
+		return true, nil
+
+	case sessionSwitchedMsg:
+		m.handleSessionSwitched(msg)
+		return true, nil
+	}
+
+	return false, nil
+}
+
+// handleKeyMessage handles keyboard input.
+func (m *ChatModel) handleKeyMessage(msg tea.KeyMsg) (bool, tea.Cmd) {
+	if keyCmd := m.handleKeyMsg(msg); keyCmd != nil {
+		return true, keyCmd
+	}
+	// Fall through to update textarea with the key.
+	return false, nil
+}
+
+// handleSendMessage handles user message sending.
+func (m *ChatModel) handleSendMessage(msg sendMessageMsg) (bool, tea.Cmd) {
+	m.addMessage(roleUser, string(msg))
+	m.textarea.Reset()
+	m.isLoading = true
+	m.updateViewportContent()
+	return true, tea.Batch(
+		m.spinner.Tick,
+		m.getAIResponse(string(msg)),
+	)
+}
+
+// handleAIMessage handles AI response and error messages.
+func (m *ChatModel) handleAIMessage(msg tea.Msg) bool {
+	switch msg := msg.(type) {
+	case aiResponseMsg:
+		m.addMessage(roleAssistant, string(msg))
+	case aiErrorMsg:
+		m.addMessage(roleSystem, fmt.Sprintf("Error: %s", string(msg)))
+	}
+	m.isLoading = false
+	m.updateViewportContent()
+	return true
+}
+
+// handleSpinnerTick handles spinner animation updates.
+func (m *ChatModel) handleSpinnerTick(msg spinner.TickMsg, cmds *[]tea.Cmd) bool {
+	if m.isLoading {
+		var cmd tea.Cmd
+		m.spinner, cmd = m.spinner.Update(msg)
+		*cmds = append(*cmds, cmd)
+	}
+	return true
+}
+
 // View renders the chat interface.
 func (m *ChatModel) View() string {
 	if !m.ready {
 		return "\n  Initializing Atmos AI Chat..."
+	}
+
+	// Render appropriate view based on current mode.
+	if m.currentView == viewModeSessionList {
+		return m.sessionListView()
 	}
 
 	return fmt.Sprintf("%s\n%s\n%s", m.headerView(), m.viewport.View(), m.footerView())
@@ -259,11 +304,26 @@ func (m *ChatModel) headerView() string {
 		Foreground(lipgloss.Color("240")).
 		Padding(0, 1)
 
-	return lipgloss.JoinVertical(
-		lipgloss.Left,
+	sessionStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("245")).
+		Italic(true).
+		Padding(0, 1)
+
+	lines := []string{
 		titleStyle.Render(title),
 		subtitleStyle.Render(subtitle),
-	)
+	}
+
+	// Add session info if available.
+	if m.sess != nil {
+		sessionInfo := fmt.Sprintf("Session: %s | Created: %s | Messages: %d",
+			m.sess.Name,
+			m.sess.CreatedAt.Format("Jan 02, 15:04"),
+			len(m.messages))
+		lines = append(lines, sessionStyle.Render(sessionInfo))
+	}
+
+	return lipgloss.JoinVertical(lipgloss.Left, lines...)
 }
 
 func (m *ChatModel) footerView() string {
@@ -272,7 +332,12 @@ func (m *ChatModel) footerView() string {
 	if m.isLoading {
 		content = fmt.Sprintf("%s AI is thinking...", m.spinner.View())
 	} else {
-		content = m.textarea.View()
+		helpStyle := lipgloss.NewStyle().
+			Foreground(lipgloss.Color("240")).
+			Italic(true)
+
+		help := helpStyle.Render("Ctrl+L: Sessions | Ctrl+C: Quit")
+		content = fmt.Sprintf("%s\n%s", m.textarea.View(), help)
 	}
 
 	footerStyle := lipgloss.NewStyle().

@@ -44,7 +44,8 @@ settings:
 
       # Tools that always require confirmation
       restricted_tools:
-        - file_edit
+        - write_component_file
+        - write_stack_file
         - atmos_terraform_plan
 
       # Tools that are completely blocked
@@ -191,6 +192,173 @@ Allow execution? (y/N): y
 
 **Permissions:** Read-only, no confirmation required by default
 
+---
+
+#### `read_component_file`
+
+Reads a file from the components directory (Terraform, Helmfile, or Packer).
+
+**Parameters:**
+- `component_type` (string, required) - Component type: `terraform`, `helmfile`, or `packer`
+- `file_path` (string, required) - Relative file path within the component type directory (e.g., `vpc/main.tf`)
+
+**Example Usage:**
+
+<Terminal title="atmos ai chat">
+```bash
+You: "Show me the VPC Terraform configuration"
+
+AI: Let me read that file for you.
+
+🔧 Tool Execution Request
+Tool: read_component_file
+Description: Read a file from the components directory
+
+Parameters:
+  component_type: terraform
+  file_path: vpc/main.tf
+
+✅ Executing tool...
+
+Here's the VPC configuration from components/terraform/vpc/main.tf:
+[file contents displayed]
+```
+</Terminal>
+
+**Permissions:** Read-only, no confirmation required by default
+
+**Security:** Path traversal protection ensures files can only be read from the configured components directory.
+
+---
+
+#### `read_stack_file`
+
+Reads a file from the stacks directory.
+
+**Parameters:**
+- `file_path` (string, required) - Relative file path within the stacks directory (e.g., `catalog/vpc.yaml`)
+
+**Example Usage:**
+
+<Terminal title="atmos ai chat">
+```bash
+You: "Show me the VPC stack configuration"
+
+AI: Let me read that stack file.
+
+🔧 Tool Execution Request
+Tool: read_stack_file
+Description: Read a file from the stacks directory
+
+Parameters:
+  file_path: catalog/vpc.yaml
+
+✅ Executing tool...
+
+Here's the stack configuration from stacks/catalog/vpc.yaml:
+[file contents displayed]
+```
+</Terminal>
+
+**Permissions:** Read-only, no confirmation required by default
+
+**Security:** Path traversal protection ensures files can only be read from the configured stacks directory.
+
+---
+
+#### `write_component_file`
+
+Writes or modifies a file in the components directory.
+
+**Parameters:**
+- `component_type` (string, required) - Component type: `terraform`, `helmfile`, or `packer`
+- `file_path` (string, required) - Relative file path within the component type directory
+- `content` (string, required) - File content to write
+
+**Example Usage:**
+
+<Terminal title="atmos ai chat">
+```bash
+You: "Create a new Terraform variables file for the VPC component"
+
+AI: I'll create that file for you.
+
+🔧 Tool Execution Request
+Tool: write_component_file
+Description: Write or modify a file in the components directory
+
+Parameters:
+  component_type: terraform
+  file_path: vpc/variables.tf
+  content: |
+    variable "cidr_block" {
+      type        = string
+      description = "CIDR block for VPC"
+    }
+
+⚠️  This tool requires confirmation (writes files)
+Allow execution? (y/N): y
+
+✅ Executing tool...
+
+Successfully created components/terraform/vpc/variables.tf
+```
+</Terminal>
+
+**Permissions:** Requires user confirmation (modifies files)
+
+**Security:**
+- Path traversal protection
+- File permissions set to 0600 (owner read/write only)
+- Parent directories created with 0755 permissions
+
+---
+
+#### `write_stack_file`
+
+Writes or modifies a file in the stacks directory.
+
+**Parameters:**
+- `file_path` (string, required) - Relative file path within the stacks directory
+- `content` (string, required) - File content to write
+
+**Example Usage:**
+
+<Terminal title="atmos ai chat">
+```bash
+You: "Create a new stack configuration for the VPC"
+
+AI: I'll create that stack file.
+
+🔧 Tool Execution Request
+Tool: write_stack_file
+Description: Write or modify a file in the stacks directory
+
+Parameters:
+  file_path: catalog/vpc-new.yaml
+  content: |
+    components:
+      terraform:
+        vpc:
+          vars:
+            cidr_block: 10.1.0.0/16
+
+⚠️  This tool requires confirmation (writes files)
+Allow execution? (y/N): y
+
+✅ Executing tool...
+
+Successfully created stacks/catalog/vpc-new.yaml
+```
+</Terminal>
+
+**Permissions:** Requires user confirmation (modifies files)
+
+**Security:**
+- Path traversal protection
+- File permissions set to 0600 (owner read/write only)
+- Parent directories created with 0755 permissions
+
 ## Permission System
 
 The permission system provides granular control over what tools the AI can execute.
@@ -298,6 +466,8 @@ tools:
     - atmos_list_stacks
     - atmos_validate_stacks
     - atmos_describe_*           # All describe commands
+    - read_component_file        # Read component files
+    - read_stack_file            # Read stack files
 ```
 </File>
 
@@ -314,7 +484,8 @@ Tools that always require confirmation:
 ```yaml
 tools:
   restricted_tools:
-    - file_edit                  # Modifies files
+    - write_component_file       # Modifies component files
+    - write_stack_file           # Modifies stack files
     - atmos_terraform_plan       # Generates plans
     - atmos_terraform_*          # All terraform operations
 ```
@@ -335,7 +506,6 @@ tools:
   blocked_tools:
     - atmos_terraform_destroy    # Destructive operation
     - atmos_terraform_apply      # Applies changes
-    - file_delete                # Deletes files
     - *_delete                   # Block all delete operations
 ```
 </File>
@@ -411,8 +581,8 @@ tools:
   blocked_tools:
     - atmos_terraform_destroy
     - atmos_terraform_apply
-    - file_delete
-    - file_write
+    - write_component_file        # Prevent AI from modifying components
+    - write_stack_file            # Prevent AI from modifying stacks
     - *_delete
     - *_destroy
 ```
@@ -427,7 +597,8 @@ Force confirmation for state-modifying operations:
 tools:
   restricted_tools:
     - atmos_terraform_plan      # Always confirm plans
-    - file_edit                 # Always confirm edits
+    - write_component_file      # Always confirm component edits
+    - write_stack_file          # Always confirm stack edits
     - atmos_workflow_*          # Always confirm workflows
 ```
 </File>
@@ -473,7 +644,7 @@ tools:
   allowed_tools: []              # Nothing auto-allowed
   blocked_tools:
     - atmos_terraform_*          # Block all Terraform operations
-    - file_*                     # Block all file operations
+    - write_*                    # Block all write operations
 ```
 </File>
 
@@ -487,8 +658,12 @@ tools:
     - atmos_describe_*           # Allow describe operations
     - atmos_list_*               # Allow list operations
     - atmos_validate_*           # Allow validation
+    - read_component_file        # Allow reading component files
+    - read_stack_file            # Allow reading stack files
   blocked_tools:
     - atmos_terraform_destroy    # Still block destroy
+    - write_component_file       # Block file modifications
+    - write_stack_file           # Block file modifications
 ```
 </File>
 
@@ -671,12 +846,11 @@ Future Atmos AI releases will include additional tools:
 - `atmos_list_components` - List all components
 - `atmos_describe_stacks` - Describe multiple stacks
 - `atmos_terraform_plan` - Generate Terraform plans (read-only)
-- `file_read` - Read file contents
 - `file_search` - Search files for patterns
 
 **Tool Categories:**
 - **Atmos Operations**: Stack and component queries
-- **File Operations**: Read and search files
+- **File Operations**: Read, write, and modify files (read/write tools available now!)
 - **Validation**: Schema and configuration validation
 - **Planning**: Generate plans and previews (read-only)
 

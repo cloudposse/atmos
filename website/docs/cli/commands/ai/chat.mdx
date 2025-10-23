@@ -29,7 +29,27 @@ The AI assistant has access to your current Atmos configuration and can help wit
 ## Usage
 
 ```shell
+atmos ai chat [flags]
+```
+
+### Flags
+
+<dl>
+  <dt>`--session <name>`</dt>
+  <dd>Start or resume a named session. If the session doesn't exist, it will be created. If it exists, the conversation history will be loaded.</dd>
+</dl>
+
+### Examples
+
+```shell
+# Start anonymous session (auto-generated name)
 atmos ai chat
+
+# Start or resume named session
+atmos ai chat --session vpc-refactor
+
+# Resume existing session
+atmos ai chat --session my-session
 ```
 
 ## Configuration
@@ -102,7 +122,61 @@ The chat interface supports:
 - **Multi-turn conversations**: Ask follow-up questions
 - **Context awareness**: The AI remembers your conversation
 - **Markdown rendering**: Responses include formatted code and documentation
+- **Multi-line input**: Press `Shift+Enter` or `Alt+Enter` to add newlines in your messages
+- **Session management**: Press `Ctrl+L` to switch between sessions without leaving the chat
+- **Session history**: See session metadata (name, created date, message count) in the header
 - **Exit commands**: Type `exit`, `quit`, or press `Ctrl+C` to close the chat
+
+### Keyboard Shortcuts
+
+| Shortcut | Action |
+|----------|--------|
+| `Enter` | Send message |
+| `Shift+Enter` or `Alt+Enter` | Add newline (multi-line input) |
+| `Ctrl+L` | Open session picker |
+| `Ctrl+C` | Quit chat |
+
+### Multi-line Messages
+
+You can compose multi-line messages using `Shift+Enter`:
+
+```
+You: I need help with a complex Terraform configuration. Here's what I'm trying to do:
+[Shift+Enter]
+1. Create a VPC with multiple subnets
+[Shift+Enter]
+2. Set up route tables for each subnet
+[Shift+Enter]
+3. Configure NAT gateways
+[Enter to send]
+```
+
+This is especially useful for:
+- Pasting code snippets
+- Writing detailed questions
+- Formatting structured information
+- Creating multi-paragraph descriptions
+
+### Session Picker
+
+While chatting, press `Ctrl+L` to open the session picker:
+
+```
+Session List
+↑/↓: Navigate | Enter: Select | Esc/q: Back | Ctrl+C: Quit
+
+→ vpc-refactor (Jan 20, 14:30, 47 messages)
+  rds-troubleshooting (Jan 18, 09:15, 23 messages)
+  session-20251015-091032 (Jan 15, 09:10, 12 messages)
+```
+
+**Session Picker Controls:**
+- `↑`/`↓` or `j`/`k` - Navigate sessions
+- `Enter` - Switch to selected session
+- `Esc` or `q` - Return to current chat
+- `Ctrl+C` - Quit application
+
+This allows you to seamlessly switch between different conversation topics without restarting the chat.
 
 ## Common Use Cases
 
@@ -131,3 +205,4 @@ AI: [Suggests organizational patterns and best practices]
 
 - [`atmos ai ask`](/cli/commands/ai/ask) - Ask a single question without entering chat mode
 - [`atmos ai help`](/cli/commands/ai/ai-help) - Get help on specific Atmos topics
+- [`atmos ai sessions`](/ai/sessions) - Learn about persistent conversation sessions

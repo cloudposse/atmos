@@ -101,6 +101,48 @@ atmos ai chat --session vpc-refactor
 
 The AI will have access to the complete conversation history, providing continuity and context.
 
+### Switching Sessions in the TUI
+
+While in an active chat session, you can switch between sessions using the built-in session picker:
+
+<Terminal title="atmos ai chat">
+```bash
+# Press Ctrl+L to open the session picker
+Ctrl+L
+```
+</Terminal>
+
+The session picker displays:
+- All available sessions with metadata
+- Session names and creation dates
+- Message count per session
+- Visual selection indicator
+
+**Session Picker Controls:**
+- `↑`/`↓` or `j`/`k` - Navigate through sessions
+- `Enter` - Switch to the selected session
+- `Esc` or `q` - Return to current chat
+- `Ctrl+C` - Quit the application
+
+**Example Workflow:**
+
+```
+1. Start a chat session
+   atmos ai chat --session vpc-refactor
+
+2. Have a conversation with the AI
+
+3. Press Ctrl+L to open session picker
+
+4. Navigate to a different session using arrow keys
+
+5. Press Enter to switch
+
+6. Continue conversation in the new session context
+```
+
+The session picker provides a seamless way to manage multiple conversations without leaving the TUI.
+
 ### Listing Sessions
 
 View all available sessions:
