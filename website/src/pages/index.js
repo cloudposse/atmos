@@ -1,4 +1,5 @@
 import React from 'react';
+import { motion } from 'framer-motion';
 import Layout from '@theme/Layout';
 import useDocusaurusContext from '@docusaurus/useDocusaurusContext';
 import Link from '@docusaurus/Link';
@@ -6,7 +7,6 @@ import Screengrab from '@site/src/components/Screengrab'
 import TypingAnimation from '@site/src/components/TypingAnimation'
 import LazyDemo from '@site/src/components/LazyDemo'
 import ScrollFadeIn from '@site/src/components/ScrollFadeIn'
-import ScrollReveal from '@site/src/components/ScrollReveal'
 import { RiLockLine, RiBox3Line, RiFlashlightLine, RiStackLine } from 'react-icons/ri';
 import '../css/landing-page.css';
 
@@ -37,7 +37,12 @@ function Home() {
         </section>
         <main>
           <section className="features-grid">
-            <ScrollReveal delay={0}>
+            <motion.div
+              initial={{ opacity: 0, y: 30 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true, margin: "-100px" }}
+              transition={{ duration: 0.5, delay: 0, ease: "easeOut" }}
+            >
               <div className="feature-card">
                 <div className="feature-header">
                   <div className="feature-icon"><RiLockLine /></div>
@@ -45,8 +50,13 @@ function Home() {
                 </div>
                 <p>Replace a dozen auth tools with one consistent identity layer</p>
               </div>
-            </ScrollReveal>
-            <ScrollReveal delay={0.1}>
+            </motion.div>
+            <motion.div
+              initial={{ opacity: 0, y: 30 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true, margin: "-100px" }}
+              transition={{ duration: 0.5, delay: 0.1, ease: "easeOut" }}
+            >
               <div className="feature-card">
                 <div className="feature-header">
                   <div className="feature-icon"><RiBox3Line /></div>
@@ -54,8 +64,13 @@ function Home() {
                 </div>
                 <p>Purpose-built engine for Terraform and all your dependencies</p>
               </div>
-            </ScrollReveal>
-            <ScrollReveal delay={0.2}>
+            </motion.div>
+            <motion.div
+              initial={{ opacity: 0, y: 30 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true, margin: "-100px" }}
+              transition={{ duration: 0.5, delay: 0.2, ease: "easeOut" }}
+            >
               <div className="feature-card">
                 <div className="feature-header">
                   <div className="feature-icon"><RiFlashlightLine /></div>
@@ -63,8 +78,13 @@ function Home() {
                 </div>
                 <p>Native task runner with built-in identity and context</p>
               </div>
-            </ScrollReveal>
-            <ScrollReveal delay={0.3}>
+            </motion.div>
+            <motion.div
+              initial={{ opacity: 0, y: 30 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true, margin: "-100px" }}
+              transition={{ duration: 0.5, delay: 0.3, ease: "easeOut" }}
+            >
               <div className="feature-card">
                 <div className="feature-header">
                   <div className="feature-icon"><RiStackLine /></div>
@@ -72,7 +92,7 @@ function Home() {
                 </div>
                 <p>Configuration inheritance and composable stacks that scale</p>
               </div>
-            </ScrollReveal>
+            </motion.div>
           </section>
           <section className="alternate-section section--image-right">
             <Screengrab title="Start your Project" command="# here's an example of what your folder structure will like..." slug="demo-stacks/start-your-project" />
