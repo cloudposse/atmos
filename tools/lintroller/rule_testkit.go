@@ -32,27 +32,39 @@ func (r *TestKitRule) Check(pass *analysis.Pass, file *ast.File) error {
 	// Find all test functions.
 	testFunctions := findTestFunctions(file)
 
-	// For each test function, check if it uses RootCmd and if it calls NewTestKit.
+	// For each test function, check if it modifies RootCmd and if it calls NewTestKit.
 	for _, testFunc := range testFunctions {
-		usesRootCmd := false
+		modifiesRootCmd := false
 		callsTestKit := false
 
-		// Check if the function uses RootCmd directly.
+		// Check if the function modifies RootCmd state.
 		ast.Inspect(testFunc.Body, func(n ast.Node) bool {
-			// Check for RootCmd identifier usage.
-			if ident, ok := n.(*ast.Ident); ok {
-				if ident.Name == "RootCmd" {
-					usesRootCmd = true
-				}
-			}
-
 			// Check for RootCmd.Execute() or RootCmd.SetArgs() calls specifically.
 			if call, ok := n.(*ast.CallExpr); ok {
 				if sel, ok := call.Fun.(*ast.SelectorExpr); ok {
-					// Only flag Execute/SetArgs if called on RootCmd.
-					if sel.Sel.Name == "Execute" || sel.Sel.Name == "SetArgs" {
-						if ident, ok := sel.X.(*ast.Ident); ok && ident.Name == "RootCmd" {
-							usesRootCmd = true
+					if ident, ok := sel.X.(*ast.Ident); ok && ident.Name == "RootCmd" {
+						// Methods that modify RootCmd state.
+						switch sel.Sel.Name {
+						case "Execute", "ExecuteC", "SetArgs", "ParseFlags":
+							modifiesRootCmd = true
+						}
+					}
+				}
+			}
+
+			// Check for flag modifications: RootCmd.PersistentFlags().Set(...) or RootCmd.Flags().Set(...).
+			if call, ok := n.(*ast.CallExpr); ok {
+				if sel, ok := call.Fun.(*ast.SelectorExpr); ok {
+					if sel.Sel.Name == "Set" {
+						// Check if Set is called on RootCmd.PersistentFlags() or RootCmd.Flags().
+						if innerCall, ok := sel.X.(*ast.CallExpr); ok {
+							if innerSel, ok := innerCall.Fun.(*ast.SelectorExpr); ok {
+								if ident, ok := innerSel.X.(*ast.Ident); ok && ident.Name == "RootCmd" {
+									if innerSel.Sel.Name == "PersistentFlags" || innerSel.Sel.Name == "Flags" {
+										modifiesRootCmd = true
+									}
+								}
+							}
 						}
 					}
 				}
@@ -70,11 +82,12 @@ func (r *TestKitRule) Check(pass *analysis.Pass, file *ast.File) error {
 			return true
 		})
 
-		// Report if RootCmd is used without TestKit.
-		if usesRootCmd && !callsTestKit {
+		// Report if RootCmd is modified without TestKit.
+		if modifiesRootCmd && !callsTestKit {
 			pass.Reportf(testFunc.Pos(),
-				"test function %s uses RootCmd but does not call NewTestKit; "+
-					"use t := NewTestKit(t) to ensure proper RootCmd state cleanup",
+				"test function %s modifies RootCmd state but does not call NewTestKit; "+
+					"use _ = NewTestKit(t) to ensure proper RootCmd state cleanup "+
+					"(only needed for Execute/SetArgs/ParseFlags/flag modifications, not read-only access)",
 				testFunc.Name.Name)
 		}
 	}

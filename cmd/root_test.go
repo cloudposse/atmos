@@ -73,9 +73,7 @@ func TestNoColorLog(t *testing.T) {
 }
 
 func TestInitFunction(t *testing.T) {
-	_ = NewTestKit(t)
-
-	// Test doesn't modify os.Args, so no need to save/restore.
+	// Test doesn't modify os.Args or RootCmd, so no need for TestKit.
 
 	// Test cases
 	tests := []struct {
