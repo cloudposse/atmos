@@ -287,6 +287,7 @@ type AISettings struct {
 	MaxContextLines int               `yaml:"max_context_lines,omitempty" json:"max_context_lines,omitempty" mapstructure:"max_context_lines"`
 	Sessions        AISessionSettings `yaml:"sessions,omitempty" json:"sessions,omitempty" mapstructure:"sessions"`
 	Tools           AIToolSettings    `yaml:"tools,omitempty" json:"tools,omitempty" mapstructure:"tools"`
+	Memory          AIMemorySettings  `yaml:"memory,omitempty" json:"memory,omitempty" mapstructure:"memory"`
 }
 
 // AISessionSettings contains session management configuration.
@@ -307,6 +308,15 @@ type AIToolSettings struct {
 	RestrictedTools     []string `yaml:"restricted_tools,omitempty" json:"restricted_tools,omitempty" mapstructure:"restricted_tools"`
 	BlockedTools        []string `yaml:"blocked_tools,omitempty" json:"blocked_tools,omitempty" mapstructure:"blocked_tools"`
 	YOLOMode            bool     `yaml:"yolo_mode,omitempty" json:"yolo_mode,omitempty" mapstructure:"yolo_mode"`
+}
+
+// AIMemorySettings contains project memory configuration.
+type AIMemorySettings struct {
+	Enabled      bool     `yaml:"enabled,omitempty" json:"enabled,omitempty" mapstructure:"enabled"`
+	FilePath     string   `yaml:"file,omitempty" json:"file,omitempty" mapstructure:"file"` // Path to ATMOS.md
+	AutoUpdate   bool     `yaml:"auto_update,omitempty" json:"auto_update,omitempty" mapstructure:"auto_update"`
+	CreateIfMiss bool     `yaml:"create_if_missing,omitempty" json:"create_if_missing,omitempty" mapstructure:"create_if_missing"`
+	Sections     []string `yaml:"sections,omitempty" json:"sections,omitempty" mapstructure:"sections"` // Sections to include in context
 }
 
 // TelemetrySettings contains configuration for telemetry collection.

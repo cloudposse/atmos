@@ -10,6 +10,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/ai"
+	"github.com/cloudposse/atmos/pkg/ai/memory"
 	"github.com/cloudposse/atmos/pkg/ai/session"
 	"github.com/cloudposse/atmos/pkg/ai/tools"
 	atmosTools "github.com/cloudposse/atmos/pkg/ai/tools/atmos"
@@ -140,8 +141,36 @@ The AI assistant has access to your current Atmos configuration and can help wit
 			log.Debug("Tool executor initialized")
 		}
 
-		// Start chat TUI with session and tools.
-		if err := tui.RunChat(client, manager, sess, executor); err != nil {
+		// Initialize project memory if enabled.
+		ctx := context.Background()
+		var memoryMgr *memory.Manager
+		if atmosConfig.Settings.AI.Memory.Enabled {
+			log.Debug("Initializing project memory")
+
+			// Create memory config.
+			memConfig := &memory.Config{
+				Enabled:      atmosConfig.Settings.AI.Memory.Enabled,
+				FilePath:     atmosConfig.Settings.AI.Memory.FilePath,
+				AutoUpdate:   atmosConfig.Settings.AI.Memory.AutoUpdate,
+				CreateIfMiss: atmosConfig.Settings.AI.Memory.CreateIfMiss,
+				Sections:     atmosConfig.Settings.AI.Memory.Sections,
+			}
+
+			// Create memory manager.
+			memoryMgr = memory.NewManager(atmosConfig.BasePath, memConfig)
+
+			// Load memory (creates default if missing and CreateIfMiss is true).
+			_, err := memoryMgr.Load(ctx)
+			if err != nil {
+				log.Warn(fmt.Sprintf("Failed to load project memory: %v", err))
+				memoryMgr = nil // Disable memory on error
+			} else {
+				log.Debug("Project memory loaded successfully")
+			}
+		}
+
+		// Start chat TUI with session, tools, and memory.
+		if err := tui.RunChat(client, manager, sess, executor, memoryMgr); err != nil {
 			return fmt.Errorf("chat session failed: %w", err)
 		}
 

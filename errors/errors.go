@@ -448,6 +448,8 @@ var (
 	ErrAIToolBlocked             = errors.New("tool is blocked")
 	ErrAIToolsDisabled           = errors.New("tools are disabled")
 	ErrAINoPrompter              = errors.New("no prompter available")
+	ErrAIProjectMemoryNotFound   = errors.New("project memory file (ATMOS.md) not found")
+	ErrAIProjectMemoryNotLoaded  = errors.New("project memory not loaded")
 	ErrAISessionsNotEnabled      = errors.New("sessions are not enabled in configuration")
 	ErrAIInvalidDurationFormat   = errors.New("invalid duration format")
 	ErrAIUnsupportedDurationUnit = errors.New("unsupported duration unit")

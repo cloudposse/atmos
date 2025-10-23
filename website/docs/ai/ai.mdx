@@ -35,6 +35,12 @@ The Atmos AI Assistant is an AI-powered terminal agent that helps with Atmos inf
 - **Permission System**: Granular control over what tools the AI can execute
 - **Smart Prompts**: User confirmation for sensitive operations
 
+### Project Memory
+- **Persistent Context**: AI remembers project-specific patterns and conventions
+- **Markdown-Based**: Simple `ATMOS.md` file stores project knowledge
+- **Customizable Sections**: Control what context is shared with AI
+- **Team Collaboration**: Share memory file with your team via version control
+
 ## Quick Start
 
 Enable AI features in your `atmos.yaml`:
@@ -61,6 +67,13 @@ settings:
       allowed_tools:             # Tools that don't need confirmation
         - atmos_describe_component
         - atmos_list_stacks
+
+    # Optional: Enable project memory
+    memory:
+      enabled: true              # Remember project-specific context
+      file_path: "ATMOS.md"      # Memory file location
+      create_if_missing: true    # Auto-create template
+      auto_update: false         # Manual updates only (recommended)
 
     # Optional: Performance tuning
     timeout_seconds: 60         # Default: 60

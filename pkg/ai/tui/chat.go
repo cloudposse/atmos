@@ -14,6 +14,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/ai"
+	"github.com/cloudposse/atmos/pkg/ai/memory"
 	"github.com/cloudposse/atmos/pkg/ai/session"
 	"github.com/cloudposse/atmos/pkg/ai/tools"
 	log "github.com/cloudposse/atmos/pkg/logger"
@@ -38,6 +39,7 @@ type ChatModel struct {
 	manager   *session.Manager
 	sess      *session.Session
 	executor  *tools.Executor
+	memoryMgr *memory.Manager
 	messages  []ChatMessage
 	viewport  viewport.Model
 	textarea  textarea.Model
@@ -56,7 +58,7 @@ type ChatMessage struct {
 }
 
 // NewChatModel creates a new chat model with the provided AI client.
-func NewChatModel(client ai.Client, manager *session.Manager, sess *session.Session, executor *tools.Executor) (*ChatModel, error) {
+func NewChatModel(client ai.Client, manager *session.Manager, sess *session.Session, executor *tools.Executor, memoryMgr *memory.Manager) (*ChatModel, error) {
 	if client == nil {
 		return nil, errUtils.ErrAIClientNil
 	}
@@ -80,6 +82,7 @@ func NewChatModel(client ai.Client, manager *session.Manager, sess *session.Sess
 		manager:   manager,
 		sess:      sess,
 		executor:  executor,
+		memoryMgr: memoryMgr,
 		messages:  make([]ChatMessage, 0),
 		viewport:  vp,
 		textarea:  ta,
@@ -359,7 +362,17 @@ func (m *ChatModel) getAIResponse(userMessage string) tea.Cmd {
 		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 		defer cancel()
 
-		response, err := m.client.SendMessage(ctx, userMessage)
+		// Build message with memory context if available.
+		messageWithContext := userMessage
+		if m.memoryMgr != nil {
+			memoryContext := m.memoryMgr.GetContext()
+			if memoryContext != "" {
+				// Prepend memory context to the user message.
+				messageWithContext = memoryContext + "\n---\n\n" + userMessage
+			}
+		}
+
+		response, err := m.client.SendMessage(ctx, messageWithContext)
 		if err != nil {
 			return aiErrorMsg(err.Error())
 		}
@@ -369,8 +382,8 @@ func (m *ChatModel) getAIResponse(userMessage string) tea.Cmd {
 }
 
 // RunChat starts the chat TUI with the provided AI client.
-func RunChat(client ai.Client, manager *session.Manager, sess *session.Session, executor *tools.Executor) error {
-	model, err := NewChatModel(client, manager, sess, executor)
+func RunChat(client ai.Client, manager *session.Manager, sess *session.Session, executor *tools.Executor, memoryMgr *memory.Manager) error {
+	model, err := NewChatModel(client, manager, sess, executor, memoryMgr)
 	if err != nil {
 		return fmt.Errorf("failed to create chat model: %w", err)
 	}

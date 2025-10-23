@@ -232,6 +232,180 @@ settings:
 **Issue**: "Invalid endpoint"
 - **Solution**: Ensure you're using a valid Grok model name
 
+## Project Memory Issues
+
+### Memory File Not Created
+
+**Problem**: `ATMOS.md` file doesn't get created automatically.
+
+**Solutions**:
+
+1. **Verify configuration**:
+```yaml
+settings:
+  ai:
+    memory:
+      enabled: true
+      create_if_missing: true  # Must be true
+```
+
+2. **Check permissions**:
+<Terminal title="shell">
+    ```bash
+    # Verify write access to project directory
+    touch ATMOS.md && rm ATMOS.md
+    ```
+</Terminal>
+
+3. **Create manually if needed**:
+<Terminal title="shell">
+    ```bash
+    # Copy the template from configuration docs
+    vim ATMOS.md  # Add content from documentation
+    ```
+</Terminal>
+
+### AI Not Using Memory Context
+
+**Problem**: AI responses don't reflect project-specific knowledge.
+
+**Solutions**:
+
+1. **Verify memory is enabled**:
+<Terminal title="shell">
+    ```bash
+    grep -A 5 "memory:" atmos.yaml
+    ```
+</Terminal>
+
+Expected output:
+```yaml
+memory:
+  enabled: true
+  file_path: "ATMOS.md"
+```
+
+2. **Check file exists**:
+<Terminal title="shell">
+    ```bash
+    ls -la ATMOS.md
+    cat ATMOS.md  # Verify content is present
+    ```
+</Terminal>
+
+3. **Verify section formatting**:
+Ensure sections use level 2 headers (`##`):
+```markdown
+## Project Context    ✅ Correct
+### Project Context   ❌ Wrong (level 3)
+# Project Context     ❌ Wrong (level 1)
+```
+
+### Memory File Load Errors
+
+**Problem**: Error loading `ATMOS.md` file.
+
+**Solutions**:
+
+1. **Check file encoding**:
+<Terminal title="shell">
+    ```bash
+    file ATMOS.md  # Should show: UTF-8 Unicode text
+    ```
+</Terminal>
+
+2. **Validate markdown format**:
+<Terminal title="shell">
+    ```bash
+    # Check for parsing issues
+    atmos ai chat  # Look for memory-related warnings in logs
+    ```
+</Terminal>
+
+3. **Verify path configuration**:
+```yaml
+settings:
+  ai:
+    memory:
+      # Use relative path (recommended)
+      file_path: "ATMOS.md"
+
+      # Or absolute path
+      file_path: "/absolute/path/to/ATMOS.md"
+```
+
+### Memory Sections Not Appearing
+
+**Problem**: Some sections missing from AI context.
+
+**Solution**: Check configured sections match file headers:
+
+```yaml
+settings:
+  ai:
+    memory:
+      sections:
+        - project_context         # Matches: ## Project Context
+        - common_commands         # Matches: ## Common Commands
+        - stack_patterns          # Matches: ## Stack Patterns
+```
+
+Section keys must match (case-insensitive, spaces→underscores):
+- "Project Context" → `project_context`
+- "Common Commands" → `common_commands`
+- "Stack Patterns" → `stack_patterns`
+
+### Auto-Update Not Working
+
+**Problem**: AI isn't adding learnings to memory file.
+
+**Reasons why this is expected**:
+
+1. **Auto-update disabled** (default and recommended):
+```yaml
+memory:
+  auto_update: false  # Manual updates only
+```
+
+2. **Manual editing recommended**: Edit `ATMOS.md` directly for better control
+
+**To enable auto-update** (experimental):
+```yaml
+memory:
+  enabled: true
+  auto_update: true  # AI can append to Recent Learnings section
+```
+
+### Large Memory File Performance
+
+**Problem**: AI requests are slow or expensive.
+
+**Solution**: Optimize memory size:
+
+1. **Enable only needed sections**:
+```yaml
+memory:
+  sections:
+    - project_context      # Essential
+    - common_commands      # Essential
+    # Remove rarely used sections
+```
+
+2. **Keep content concise**:
+<Terminal title="shell">
+    ```bash
+    # Check file size
+    wc -c ATMOS.md
+
+    # Aim for < 10KB for optimal performance
+    ```
+</Terminal>
+
+3. **Remove outdated information**:
+- Delete obsolete patterns
+- Archive old learnings
+- Keep only active conventions
+
 ## Debugging Steps
 
 ### 1. Enable Debug Logging

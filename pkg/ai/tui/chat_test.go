@@ -40,7 +40,7 @@ func TestNewChatModel(t *testing.T) {
 			maxTokens: 4096,
 		}
 
-		model, err := NewChatModel(client, nil, nil, nil)
+		model, err := NewChatModel(client, nil, nil, nil, nil)
 
 		require.NoError(t, err)
 		assert.NotNil(t, model)
@@ -55,7 +55,7 @@ func TestNewChatModel(t *testing.T) {
 	})
 
 	t.Run("nil client returns error", func(t *testing.T) {
-		model, err := NewChatModel(nil, nil, nil, nil)
+		model, err := NewChatModel(nil, nil, nil, nil, nil)
 
 		assert.Error(t, err)
 		assert.Nil(t, model)
@@ -69,7 +69,7 @@ func TestChatModel_Init(t *testing.T) {
 		maxTokens: 4096,
 	}
 
-	model, err := NewChatModel(client, nil, nil, nil)
+	model, err := NewChatModel(client, nil, nil, nil, nil)
 	require.NoError(t, err)
 
 	cmd := model.Init()
@@ -110,7 +110,7 @@ func TestChatModel_WindowResize(t *testing.T) {
 		maxTokens: 4096,
 	}
 
-	model, err := NewChatModel(client, nil, nil, nil)
+	model, err := NewChatModel(client, nil, nil, nil, nil)
 	require.NoError(t, err)
 
 	// Simulate window resize.
@@ -134,7 +134,7 @@ func TestChatModel_MessageStorage(t *testing.T) {
 		maxTokens: 4096,
 	}
 
-	model, err := NewChatModel(client, nil, nil, nil)
+	model, err := NewChatModel(client, nil, nil, nil, nil)
 	require.NoError(t, err)
 
 	// Add a message to the model.
@@ -157,7 +157,7 @@ func TestChatModel_MultipleMessages(t *testing.T) {
 		maxTokens: 4096,
 	}
 
-	model, err := NewChatModel(client, nil, nil, nil)
+	model, err := NewChatModel(client, nil, nil, nil, nil)
 	require.NoError(t, err)
 
 	// Add multiple messages.
@@ -183,7 +183,7 @@ func TestChatModel_LoadingState(t *testing.T) {
 		maxTokens: 4096,
 	}
 
-	model, err := NewChatModel(client, nil, nil, nil)
+	model, err := NewChatModel(client, nil, nil, nil, nil)
 	require.NoError(t, err)
 
 	// Initially not loading.
