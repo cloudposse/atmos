@@ -1,13 +1,16 @@
 .typing-animation {
   display: inline-flex;
-  align-items: center;
+  align-items: baseline;
   position: relative;
   min-height: 1.2em;
+  line-height: 1.2;
 }
 
 .typing-text {
   display: inline-block;
   min-width: 0.5em;
+  min-height: 1em;
+  line-height: inherit;
 }
 
 .typing-cursor {
