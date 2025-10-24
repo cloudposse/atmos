@@ -1,0 +1,9 @@
+components:
+  terraform:
+    component-b:
+      metadata:
+        component: test-component
+      vars:
+        name: component-b
+        # B depends on C
+        dependency: !terraform.state component-c indirect-c value
