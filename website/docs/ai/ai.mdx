@@ -22,7 +22,7 @@ The Atmos AI Assistant is an AI-powered terminal agent that helps with Atmos inf
 - **In-TUI Session Creation**: Create new sessions with provider selection using Ctrl+N
 - **Session Switching**: Switch between sessions without leaving the TUI (Ctrl+L)
 - **Session Management**: Delete (d), rename (r), and filter (f) sessions in the TUI
-- **Provider Filtering**: Filter sessions by AI provider (Claude, GPT, Gemini, Grok)
+- **Provider Filtering**: Filter sessions by AI provider (Claude, GPT, Gemini, Grok, Ollama)
 - **Enhanced Display**: Color-coded provider badges, creation dates, and message counts
 - **Message History**: Complete conversation history stored locally in SQLite
 - **History Navigation**: Navigate through previous messages with ↑/↓ arrow keys
@@ -65,8 +65,9 @@ Enable AI features in your `atmos.yaml`:
 settings:
   ai:
     enabled: true
-    provider: "anthropic"  # or "openai", "gemini", "grok"
+    provider: "anthropic"  # or "openai", "gemini", "grok", "ollama"
     api_key_env: "ANTHROPIC_API_KEY"
+    # base_url: "http://localhost:11434/v1"  # For Ollama or custom endpoints
 
     # Optional: Enable persistent sessions
     sessions:
@@ -142,7 +143,7 @@ atmos mcp-server
 - **Enter** - Switch to selected session
 - **d** - Delete selected session (with confirmation)
 - **r** - Rename selected session
-- **f** - Cycle through provider filters (All/Claude/GPT/Gemini/Grok)
+- **f** - Cycle through provider filters (All/Claude/GPT/Gemini/Grok/Ollama)
 - **n** or **Ctrl+N** - Create a new session
 - **Esc** or **q** - Return to chat
 - **Ctrl+C** - Quit the application
@@ -187,8 +188,423 @@ Atmos AI Assistant supports multiple AI providers:
 | **OpenAI (GPT)** | `gpt-4o` | `OPENAI_API_KEY` | Widely available, strong general capabilities |
 | **Google (Gemini)** | `gemini-2.0-flash-exp` | `GEMINI_API_KEY` | Fast responses, larger context window |
 | **xAI (Grok)** | `grok-beta` | `XAI_API_KEY` | OpenAI-compatible, real-time knowledge |
+| **Ollama (Local)** | `llama3.3:70b` | `OLLAMA_API_KEY` (optional) | Run locally, privacy-focused, offline capable, zero API costs |
 
 You can switch providers by changing the `provider` field in your configuration.
+
+### Using Ollama for Local AI
+
+Ollama provides a local AI runtime that runs on your machine, offering several advantages:
+
+- **Privacy**: All data stays on your machine, nothing sent to external APIs
+- **Offline**: Works without internet connection
+- **Zero Cost**: No API usage fees after initial setup
+- **Customizable**: Use any Ollama-supported model
+- **No Rate Limits**: Run as many queries as your hardware can handle
+
+#### Installation
+
+**macOS:**
+
+<Terminal title="shell">
+```bash
+# Download and install from ollama.com, or use Homebrew:
+brew install ollama
+
+# Start Ollama service
+ollama serve
+```
+</Terminal>
+
+**Linux:**
+
+<Terminal title="shell">
+```bash
+# Install Ollama
+curl -fsSL https://ollama.com/install.sh | sh
+
+# Ollama will start automatically as a service
+# Check status: systemctl status ollama
+```
+</Terminal>
+
+**Windows:**
+
+Download the installer from [ollama.com/download](https://ollama.com/download) and run it. Ollama will start automatically.
+
+**Docker:**
+
+<Terminal title="shell">
+```bash
+# Run Ollama in Docker
+docker run -d \
+  -v ollama:/root/.ollama \
+  -p 11434:11434 \
+  --name ollama \
+  ollama/ollama
+
+# For GPU support (NVIDIA):
+docker run -d \
+  --gpus=all \
+  -v ollama:/root/.ollama \
+  -p 11434:11434 \
+  --name ollama \
+  ollama/ollama
+```
+</Terminal>
+
+#### Model Selection
+
+Choose a model based on your use case and available hardware:
+
+| Model | Size | RAM Required | Quality | Best For |
+|-------|------|--------------|---------|----------|
+| `llama3.3:70b` | ~40GB | 64GB+ | ⭐⭐⭐⭐⭐ Excellent | Production use (default) |
+| `llama3.1:8b` | ~5GB | 8GB+ | ⭐⭐⭐ Good | Quick queries, limited hardware |
+| `llama3.2:3b` | ~2GB | 4GB+ | ⭐⭐ Fair | Simple tasks only |
+| `codellama:13b` | ~8GB | 16GB+ | ⭐⭐⭐⭐ Very Good | Code-focused tasks |
+| `mistral:7b` | ~4GB | 8GB+ | ⭐⭐⭐ Good | Fast responses |
+| `mixtral:8x7b` | ~26GB | 32GB+ | ⭐⭐⭐⭐ Very Good | Complex reasoning |
+
+**Download a model:**
+
+<Terminal title="shell">
+```bash
+# Pull the default recommended model
+ollama pull llama3.3:70b
+
+# Or choose a smaller model for limited hardware
+ollama pull llama3.1:8b
+
+# List available models
+ollama list
+
+# Remove a model to free up space
+ollama rm llama3.2:3b
+```
+</Terminal>
+
+:::tip Model Download Size
+Large models like `llama3.3:70b` are ~40GB downloads. Ensure you have:
+- Sufficient disk space (~50GB free)
+- Good internet connection (or patience!)
+- Adequate RAM for running the model
+:::
+
+#### Configuration
+
+**Basic Local Setup (No API Key Required):**
+
+<File title="atmos.yaml">
+```yaml
+settings:
+  ai:
+    enabled: true
+    provider: "ollama"
+    model: "llama3.3:70b"
+    # base_url defaults to http://localhost:11434/v1
+```
+</File>
+
+**Custom Port Configuration:**
+
+<File title="atmos.yaml">
+```yaml
+settings:
+  ai:
+    enabled: true
+    provider: "ollama"
+    model: "llama3.3:70b"
+    base_url: "http://localhost:8080/v1"  # Custom port
+```
+</File>
+
+**Remote Ollama Server:**
+
+<File title="atmos.yaml">
+```yaml
+settings:
+  ai:
+    enabled: true
+    provider: "ollama"
+    model: "llama3.3:70b"
+    base_url: "https://ollama.company.com/v1"
+    api_key_env: "OLLAMA_API_KEY"  # If authentication is required
+```
+</File>
+
+**Advanced Configuration:**
+
+<File title="atmos.yaml">
+```yaml
+settings:
+  ai:
+    enabled: true
+    provider: "ollama"
+    model: "llama3.3:70b"
+    base_url: "http://localhost:11434/v1"
+    max_tokens: 8192  # Adjust based on model capabilities
+    timeout_seconds: 120  # Longer timeout for large models
+```
+</File>
+
+#### Usage
+
+**Start a chat session:**
+
+<Terminal title="shell">
+```bash
+# No API key needed for local Ollama!
+atmos ai chat
+
+# Create a named session
+atmos ai chat --session infrastructure-review
+```
+</Terminal>
+
+**Ask quick questions:**
+
+<Terminal title="shell">
+```bash
+atmos ai ask "What are Atmos stacks?"
+atmos ai ask "List all components in my project"
+```
+</Terminal>
+
+**Get help on topics:**
+
+<Terminal title="shell">
+```bash
+atmos ai help workflows
+atmos ai help components
+```
+</Terminal>
+
+#### Performance Tips
+
+**1. Use GPU Acceleration (NVIDIA):**
+
+Ollama automatically uses GPU if available. For NVIDIA GPUs:
+
+<Terminal title="shell">
+```bash
+# Check if GPU is detected
+nvidia-smi
+
+# Ollama will automatically use GPU
+# Look for "CUDA" in ollama logs
+```
+</Terminal>
+
+**2. Optimize Model Selection:**
+
+- **Mac M1/M2/M3**: Can handle `llama3.3:70b` well with unified memory
+- **16GB RAM**: Use `llama3.1:8b` or `mistral:7b`
+- **32GB+ RAM**: Use `llama3.3:70b` or `mixtral:8x7b`
+- **Limited RAM**: Use `llama3.2:3b` or `phi3:mini`
+
+**3. Adjust Context Window:**
+
+<File title="atmos.yaml">
+```yaml
+settings:
+  ai:
+    max_tokens: 4096  # Smaller = faster responses
+    # Default: 4096, Max depends on model
+```
+</File>
+
+**4. Keep Ollama Updated:**
+
+<Terminal title="shell">
+```bash
+# Update Ollama
+brew upgrade ollama  # macOS
+# or download latest from ollama.com
+
+# Update models
+ollama pull llama3.3:70b
+```
+</Terminal>
+
+#### Troubleshooting
+
+**Problem: "Connection refused" error**
+
+<Terminal title="shell">
+```bash
+# Check if Ollama is running
+curl http://localhost:11434/api/version
+
+# If not running, start it:
+ollama serve  # macOS/Linux
+# or restart Ollama app on Windows
+
+# Check the port in atmos.yaml matches Ollama's port
+```
+</Terminal>
+
+**Problem: "Model not found" error**
+
+<Terminal title="shell">
+```bash
+# Pull the model first
+ollama pull llama3.3:70b
+
+# List available models
+ollama list
+
+# Verify model name in atmos.yaml matches exactly
+```
+</Terminal>
+
+**Problem: Slow responses**
+
+- Switch to a smaller model (`llama3.1:8b`)
+- Reduce `max_tokens` in `atmos.yaml`
+- Ensure no other heavy processes are running
+- Check if GPU acceleration is working (`nvidia-smi`)
+
+**Problem: Out of memory**
+
+<Terminal title="shell">
+```bash
+# Use a smaller model
+ollama pull llama3.1:8b
+
+# Update atmos.yaml
+# model: "llama3.1:8b"
+
+# Or increase system swap space (not recommended for performance)
+```
+</Terminal>
+
+#### Docker Deployment
+
+**Docker Compose setup for team use:**
+
+<File title="docker-compose.yml">
+```yaml
+version: '3.8'
+
+services:
+  ollama:
+    image: ollama/ollama:latest
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    environment:
+      - OLLAMA_HOST=0.0.0.0
+    # Uncomment for GPU support:
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: all
+    #           capabilities: [gpu]
+    restart: unless-stopped
+
+volumes:
+  ollama_data:
+```
+</File>
+
+<Terminal title="shell">
+```bash
+# Start Ollama
+docker-compose up -d
+
+# Pull model into container
+docker exec ollama ollama pull llama3.3:70b
+
+# Configure Atmos to use containerized Ollama
+# base_url: "http://localhost:11434/v1"
+```
+</Terminal>
+
+#### Remote Team Setup
+
+For teams wanting shared Ollama access:
+
+**1. Deploy Ollama on a server:**
+
+<Terminal title="shell">
+```bash
+# On the server:
+docker run -d \
+  --gpus=all \
+  -v ollama:/root/.ollama \
+  -p 11434:11434 \
+  --name ollama \
+  ollama/ollama
+
+# Pull models
+docker exec ollama ollama pull llama3.3:70b
+```
+</Terminal>
+
+**2. Configure reverse proxy with authentication (optional):**
+
+<File title="nginx.conf">
+```nginx
+server {
+    listen 443 ssl;
+    server_name ollama.company.com;
+
+    ssl_certificate /path/to/cert.pem;
+    ssl_certificate_key /path/to/key.pem;
+
+    location / {
+        proxy_pass http://localhost:11434;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+
+        # Optional: Basic auth
+        auth_basic "Ollama Access";
+        auth_basic_user_file /etc/nginx/.htpasswd;
+    }
+}
+```
+</File>
+
+**3. Team members configure Atmos:**
+
+<File title="atmos.yaml">
+```yaml
+settings:
+  ai:
+    enabled: true
+    provider: "ollama"
+    model: "llama3.3:70b"
+    base_url: "https://ollama.company.com/v1"
+    api_key_env: "OLLAMA_API_KEY"  # If using auth
+```
+</File>
+
+#### Environment Variables
+
+Ollama respects these environment variables:
+
+<Terminal title="shell">
+```bash
+# Custom Ollama host/port
+export OLLAMA_HOST=0.0.0.0:8080
+
+# Model storage location
+export OLLAMA_MODELS=/custom/path/to/models
+
+# Keep models in memory (faster subsequent queries)
+export OLLAMA_KEEP_ALIVE=5m
+
+# Number of parallel requests
+export OLLAMA_NUM_PARALLEL=4
+
+# GPU layers (for performance tuning)
+export OLLAMA_NUM_GPU=999  # Use all GPU layers
+```
+</Terminal>
 
 ## Example Use Cases
 
@@ -236,15 +652,16 @@ atmos ai ask "What's the best way to handle secrets in Atmos?"
 
 - **API Key Security**: Store your API keys securely and never commit them to version control
 - **Configuration Privacy**: The AI assistant does not store or transmit your configuration data beyond the current session
-- **Local Processing**: All processing is done through the provider's API; no data is stored locally by the AI features
-- **Provider Terms**: Your usage is subject to the terms of service of your chosen provider (Anthropic, OpenAI, Google, or xAI)
+- **Local Processing**: Cloud providers (Anthropic, OpenAI, Google, xAI) process data through their APIs; Ollama processes everything locally on your machine
+- **Privacy-First Option**: Use Ollama for complete data privacy - no data leaves your machine
+- **Provider Terms**: Cloud provider usage is subject to their terms of service; Ollama runs entirely locally
 
 ## Limitations
 
 - **AI Knowledge Cutoff**: The AI's knowledge of Atmos is current as of its training date
-- **API Dependencies**: Requires internet connection and valid API key for your chosen provider
+- **API Dependencies**: Cloud providers (Anthropic, OpenAI, Google, xAI) require internet connection and valid API key; Ollama works offline
 - **Configuration Context**: The AI works with your current Atmos configuration but cannot make direct changes
-- **Rate Limits**: Subject to your provider's API rate limits and usage policies
+- **Rate Limits**: Cloud providers are subject to API rate limits and usage policies; Ollama has no rate limits
 
 ## Related Documentation
 
