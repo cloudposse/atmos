@@ -17,7 +17,17 @@ func processTagTerraformState(
 	input string,
 	currentStack string,
 ) any {
-	defer perf.Track(atmosConfig, "exec.processTagTerraformState")()
+	return processTagTerraformStateWithContext(atmosConfig, input, currentStack, nil)
+}
+
+// processTagTerraformStateWithContext processes `!terraform.state` YAML tag with cycle detection.
+func processTagTerraformStateWithContext(
+	atmosConfig *schema.AtmosConfiguration,
+	input string,
+	currentStack string,
+	resolutionCtx *ResolutionContext,
+) any {
+	defer perf.Track(atmosConfig, "exec.processTagTerraformStateWithContext")()
 
 	log.Debug("Executing Atmos YAML function", "function", input)
 
@@ -52,6 +62,24 @@ func processTagTerraformState(
 	default:
 		er := fmt.Errorf("%w %s", errUtils.ErrYamlFuncInvalidArguments, input)
 		errUtils.CheckErrorPrintAndExit(er, "", "")
+	}
+
+	// Check for circular dependencies if resolution context is provided.
+	if resolutionCtx != nil {
+		node := DependencyNode{
+			Component:    component,
+			Stack:        stack,
+			FunctionType: "terraform.state",
+			FunctionCall: input,
+		}
+
+		// Check and record this dependency.
+		if err := resolutionCtx.Push(atmosConfig, node); err != nil {
+			errUtils.CheckErrorPrintAndExit(err, "", "")
+		}
+
+		// Defer pop to ensure we clean up even if there's an error.
+		defer resolutionCtx.Pop(atmosConfig)
 	}
 
 	value, err := GetTerraformState(atmosConfig, input, stack, component, output, false)

@@ -1,0 +1,10 @@
+components:
+  terraform:
+    vpc:
+      metadata:
+        component: vpc
+      vars:
+        name: staging-vpc
+        cidr_block: "10.1.0.0/16"
+        # This creates a circular dependency: staging depends on core
+        transit_gateway_id: !terraform.state vpc core transit_gateway_id
