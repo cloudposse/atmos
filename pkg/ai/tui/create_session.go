@@ -19,7 +19,6 @@ const (
 	// Form field constants.
 	sessionNameCharLimit = 100
 	sessionNameWidth     = 50
-	newlineChar          = "\n"
 )
 
 // Provider represents an AI provider with its default model.

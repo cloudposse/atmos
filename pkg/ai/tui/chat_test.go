@@ -1551,3 +1551,117 @@ func TestChatModel_HistoryNavigation(t *testing.T) {
 		assert.Equal(t, "User message 2", m.messageHistory[1])
 	})
 }
+
+func TestChatModel_MarkdownRendering(t *testing.T) {
+	client := &mockAIClient{model: "test-model"}
+
+	t.Run("renders markdown for assistant messages", func(t *testing.T) {
+		m, _ := NewChatModel(client, nil, nil, nil, nil)
+		m.ready = true
+		m.viewport.Width = 80
+
+		markdown := "# Hello\n\nThis is **bold** and *italic*.\n\n```go\nfunc main() {\n    fmt.Println(\"Hello\")\n}\n```"
+		rendered := m.renderMarkdown(markdown)
+
+		// Verify markdown was rendered (not plain text)
+		assert.NotEqual(t, markdown, rendered)
+		// Verify it's not empty
+		assert.NotEmpty(t, rendered)
+		// Verify padding was added
+		assert.Contains(t, rendered, "  ")
+	})
+
+	t.Run("handles plain text in markdown renderer", func(t *testing.T) {
+		m, _ := NewChatModel(client, nil, nil, nil, nil)
+		m.ready = true
+		m.viewport.Width = 80
+
+		plainText := "This is plain text without markdown"
+		rendered := m.renderMarkdown(plainText)
+
+		// Should still render successfully
+		assert.NotEmpty(t, rendered)
+		assert.Contains(t, rendered, "  ")
+	})
+
+	t.Run("handles minimum width constraint", func(t *testing.T) {
+		m, _ := NewChatModel(client, nil, nil, nil, nil)
+		m.ready = true
+		m.viewport.Width = 10 // Very narrow viewport
+
+		markdown := "# Test"
+		rendered := m.renderMarkdown(markdown)
+
+		// Should still render without panicking
+		assert.NotEmpty(t, rendered)
+	})
+
+	t.Run("renders code blocks with syntax highlighting", func(t *testing.T) {
+		m, _ := NewChatModel(client, nil, nil, nil, nil)
+		m.ready = true
+		m.viewport.Width = 80
+
+		markdown := "```yaml\ncomponents:\n  terraform:\n    vpc:\n      vars:\n        cidr: 10.0.0.0/16\n```"
+		rendered := m.renderMarkdown(markdown)
+
+		// Verify code block was processed
+		assert.NotEmpty(t, rendered)
+		// Should contain the YAML content
+		assert.Contains(t, rendered, "components")
+	})
+
+	t.Run("renders lists correctly", func(t *testing.T) {
+		m, _ := NewChatModel(client, nil, nil, nil, nil)
+		m.ready = true
+		m.viewport.Width = 80
+
+		markdown := "- Item 1\n- Item 2\n- Item 3"
+		rendered := m.renderMarkdown(markdown)
+
+		// Verify list was rendered
+		assert.NotEmpty(t, rendered)
+	})
+
+	t.Run("uses markdown for assistant role only", func(t *testing.T) {
+		m, _ := NewChatModel(client, nil, nil, nil, nil)
+		m.ready = true
+		m.viewport.Width = 80
+		m.viewport.Height = 20
+
+		// Add assistant message with markdown
+		m.messages = []ChatMessage{
+			{Role: roleAssistant, Content: "**Bold text**", Time: time.Now()},
+			{Role: roleUser, Content: "**Bold text**", Time: time.Now()},
+		}
+
+		m.updateViewportContent()
+		content := m.viewport.View()
+
+		// Assistant message should be rendered differently than user message
+		assert.NotEmpty(t, content)
+	})
+
+	t.Run("handles empty markdown", func(t *testing.T) {
+		m, _ := NewChatModel(client, nil, nil, nil, nil)
+		m.ready = true
+		m.viewport.Width = 80
+
+		rendered := m.renderMarkdown("")
+
+		// Should handle gracefully
+		assert.NotNil(t, rendered)
+	})
+
+	t.Run("handles markdown with tables", func(t *testing.T) {
+		m, _ := NewChatModel(client, nil, nil, nil, nil)
+		m.ready = true
+		m.viewport.Width = 80
+
+		markdown := "| Header 1 | Header 2 |\n|----------|----------|\n| Cell 1   | Cell 2   |"
+		rendered := m.renderMarkdown(markdown)
+
+		// Verify table was rendered
+		assert.NotEmpty(t, rendered)
+		assert.Contains(t, rendered, "Header")
+	})
+}

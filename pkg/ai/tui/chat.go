@@ -11,6 +11,7 @@ import (
 	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/lipgloss"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -27,6 +28,10 @@ const (
 	DefaultViewportWidth = 80
 	// DefaultViewportHeight is the default height for the chat viewport before window sizing.
 	DefaultViewportHeight = 20
+
+	// Markdown rendering constants.
+	minMarkdownWidth = 20
+	newlineChar      = "\n"
 
 	// Message roles.
 	roleUser      = "user"
@@ -278,7 +283,7 @@ func (m *ChatModel) handleSendMessage(msg sendMessageMsg) (bool, tea.Cmd) {
 	m.addMessage(roleUser, string(msg))
 	// Add to message history for navigation
 	m.messageHistory = append(m.messageHistory, string(msg))
-	m.historyIndex = -1 // Reset history navigation
+	m.historyIndex = -1  // Reset history navigation
 	m.historyBuffer = "" // Clear history buffer
 	m.textarea.Reset()
 	m.isLoading = true
@@ -433,18 +438,64 @@ func (m *ChatModel) updateViewportContent() {
 
 		header := fmt.Sprintf("%s %s", style.Render(prefix), timeStyle.Render(timestamp))
 
-		// Wrap content to viewport width
-		contentStyle := lipgloss.NewStyle().
-			PaddingLeft(2).
-			Width(m.viewport.Width - 4)
+		// Render content with markdown for assistant messages
+		var renderedContent string
+		if msg.Role == roleAssistant {
+			// Render markdown with syntax highlighting
+			renderedContent = m.renderMarkdown(msg.Content)
+		} else {
+			// Plain text for user and system messages
+			contentStyle := lipgloss.NewStyle().
+				PaddingLeft(2).
+				Width(m.viewport.Width - 4)
+			renderedContent = contentStyle.Render(msg.Content)
+		}
 
 		contentParts = append(contentParts, header)
-		contentParts = append(contentParts, contentStyle.Render(msg.Content))
+		contentParts = append(contentParts, renderedContent)
 		contentParts = append(contentParts, "") // Empty line between messages
 	}
 
-	m.viewport.SetContent(strings.Join(contentParts, "\n"))
+	m.viewport.SetContent(strings.Join(contentParts, newlineChar))
 	m.viewport.GotoBottom()
+}
+
+// renderMarkdown renders markdown content with syntax highlighting using glamour.
+func (m *ChatModel) renderMarkdown(content string) string {
+	// Create glamour renderer with dark theme optimized for terminals
+	width := m.viewport.Width - 4
+	if width < minMarkdownWidth {
+		width = minMarkdownWidth // Minimum width
+	}
+
+	renderer, err := glamour.NewTermRenderer(
+		glamour.WithAutoStyle(),
+		glamour.WithWordWrap(width),
+	)
+	if err != nil {
+		// Fallback to plain text if markdown rendering fails
+		return lipgloss.NewStyle().
+			PaddingLeft(2).
+			Width(m.viewport.Width - 4).
+			Render(content)
+	}
+
+	rendered, err := renderer.Render(content)
+	if err != nil {
+		// Fallback to plain text if rendering fails
+		return lipgloss.NewStyle().
+			PaddingLeft(2).
+			Width(m.viewport.Width - 4).
+			Render(content)
+	}
+
+	// Add left padding to match other messages
+	paddedLines := make([]string, 0)
+	for _, line := range strings.Split(rendered, newlineChar) {
+		paddedLines = append(paddedLines, "  "+line)
+	}
+
+	return strings.TrimRight(strings.Join(paddedLines, newlineChar), newlineChar)
 }
 
 // Custom message types.
