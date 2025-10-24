@@ -57,7 +57,7 @@ settings:
   ai:
     providers:
       bedrock:
-        model: "anthropic.claude-3-5-sonnet-20241022-v2:0"
+        model: "anthropic.claude-sonnet-4-20250514-v2:0"
         max_tokens: 4096
         base_url: "us-east-1"  # AWS region
 ```
@@ -69,7 +69,7 @@ settings:
 - No separate API key required
 
 **Supported Models**:
-- `anthropic.claude-3-5-sonnet-20241022-v2:0` (default)
+- `anthropic.claude-sonnet-4-20250514-v2:0` (default)
 - `anthropic.claude-3-haiku-20240307-v1:0`
 - `anthropic.claude-3-opus-20240229-v1:0`
 - Any Bedrock-supported Claude model
@@ -240,7 +240,7 @@ settings:
     default_provider: "bedrock"
     providers:
       bedrock:
-        model: "anthropic.claude-3-5-sonnet-20241022-v2:0"
+        model: "anthropic.claude-sonnet-4-20250514-v2:0"
         max_tokens: 4096
         base_url: "us-east-1"
 ```
@@ -269,13 +269,13 @@ For teams currently using Anthropic directly:
 # Before
 providers:
   anthropic:
-    model: "claude-3-5-sonnet-20241022"
+    model: "claude-sonnet-4-20250514"
     api_key_env: "ANTHROPIC_API_KEY"
 
 # After (same model via Bedrock)
 providers:
   bedrock:
-    model: "anthropic.claude-3-5-sonnet-20241022-v2:0"
+    model: "anthropic.claude-sonnet-4-20250514-v2:0"
     base_url: "us-east-1"
 ```
 

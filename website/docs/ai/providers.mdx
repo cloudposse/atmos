@@ -16,12 +16,12 @@ Atmos supports 7 AI providers, giving you flexibility to choose based on your ne
 
 | Provider | Default Model | Authentication | Best For |
 |----------|---------------|----------------|----------|
-| **Anthropic (Claude)** | `claude-3-5-sonnet-20241022` | API Key | Advanced reasoning, default choice |
+| **Anthropic (Claude)** | `claude-sonnet-4-20250514` | API Key | Advanced reasoning, default choice |
 | **OpenAI (GPT)** | `gpt-4o` | API Key | Widely available, strong general capabilities |
 | **Google (Gemini)** | `gemini-2.0-flash-exp` | API Key | Fast responses, larger context window |
 | **xAI (Grok)** | `grok-beta` | API Key | OpenAI-compatible, real-time knowledge |
 | **Ollama (Local)** | `llama3.3:70b` | None (local) | Privacy, offline use, zero API costs |
-| **AWS Bedrock** | `anthropic.claude-3-5-sonnet-20241022-v2:0` | AWS Credentials | Enterprise security, AWS integration |
+| **AWS Bedrock** | `anthropic.claude-sonnet-4-20250514-v2:0` | AWS Credentials | Enterprise security, AWS integration |
 | **Azure OpenAI** | `gpt-4o` | API Key / Azure AD | Enterprise compliance, Azure integration |
 
 ## Feature Comparison
@@ -58,7 +58,7 @@ settings:
     # Configure one or more providers
     providers:
       anthropic:
-        model: "claude-3-5-sonnet-20241022"
+        model: "claude-sonnet-4-20250514"
         api_key_env: "ANTHROPIC_API_KEY"
         max_tokens: 4096
 ```
@@ -74,7 +74,7 @@ settings:
 ```yaml
 providers:
   anthropic:
-    model: "claude-3-5-sonnet-20241022"  # Default
+    model: "claude-sonnet-4-20250514"  # Default
     # Alternatives:
     # model: "claude-3-opus-20240229"     # Most capable
     # model: "claude-3-haiku-20240307"    # Fastest, cheapest
@@ -408,7 +408,7 @@ Run Claude models via AWS Bedrock for enterprise security and compliance.
 ```yaml
 providers:
   bedrock:
-    model: "anthropic.claude-3-5-sonnet-20241022-v2:0"
+    model: "anthropic.claude-sonnet-4-20250514-v2:0"
     # Alternatives:
     # model: "anthropic.claude-3-opus-20240229-v1:0"
     # model: "anthropic.claude-3-haiku-20240307-v1:0"
@@ -506,7 +506,7 @@ settings:
     providers:
       # Cloud providers
       anthropic:
-        model: "claude-3-5-sonnet-20241022"
+        model: "claude-sonnet-4-20250514"
         api_key_env: "ANTHROPIC_API_KEY"
         max_tokens: 4096
 
@@ -522,7 +522,7 @@ settings:
 
       # Enterprise providers
       bedrock:
-        model: "anthropic.claude-3-5-sonnet-20241022-v2:0"
+        model: "anthropic.claude-sonnet-4-20250514-v2:0"
         base_url: "us-east-1"
         # Uses AWS credentials
 

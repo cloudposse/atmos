@@ -17,7 +17,7 @@ const (
 	// DefaultMaxTokens is the default maximum number of tokens in AI responses.
 	DefaultMaxTokens = 4096
 	// DefaultModel is the default Bedrock model.
-	DefaultModel = "anthropic.claude-3-5-sonnet-20241022-v2:0"
+	DefaultModel = "anthropic.claude-sonnet-4-20250514-v2:0"
 	// DefaultRegion is the default AWS region for Bedrock.
 	DefaultRegion = "us-east-1"
 )

@@ -63,7 +63,7 @@ func extractSimpleAIConfig(atmosConfig *schema.AtmosConfiguration) *SimpleAIConf
 	// Set defaults.
 	config := &SimpleAIConfig{
 		Enabled:   false,
-		Model:     "claude-3-5-sonnet-20241022",
+		Model:     "claude-sonnet-4-20250514",
 		APIKeyEnv: "ANTHROPIC_API_KEY",
 		MaxTokens: DefaultMaxTokens,
 	}

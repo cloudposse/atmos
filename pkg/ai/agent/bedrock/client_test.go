@@ -24,7 +24,7 @@ func TestExtractConfig(t *testing.T) {
 			},
 			expectedConfig: &Config{
 				Enabled:   false,
-				Model:     "anthropic.claude-3-5-sonnet-20241022-v2:0",
+				Model:     "anthropic.claude-sonnet-4-20250514-v2:0",
 				Region:    "us-east-1",
 				MaxTokens: 4096,
 			},
@@ -89,7 +89,7 @@ func TestExtractConfig(t *testing.T) {
 			},
 			expectedConfig: &Config{
 				Enabled:   true,
-				Model:     "anthropic.claude-3-5-sonnet-20241022-v2:0",
+				Model:     "anthropic.claude-sonnet-4-20250514-v2:0",
 				Region:    "eu-west-1",
 				MaxTokens: 4096,
 			},
@@ -122,7 +122,7 @@ func TestNewClient_Disabled(t *testing.T) {
 func TestClientGetters(t *testing.T) {
 	config := &Config{
 		Enabled:   true,
-		Model:     "anthropic.claude-3-5-sonnet-20241022-v2:0",
+		Model:     "anthropic.claude-sonnet-4-20250514-v2:0",
 		Region:    "us-east-1",
 		MaxTokens: 4096,
 	}
@@ -132,14 +132,14 @@ func TestClientGetters(t *testing.T) {
 		config: config,
 	}
 
-	assert.Equal(t, "anthropic.claude-3-5-sonnet-20241022-v2:0", client.GetModel())
+	assert.Equal(t, "anthropic.claude-sonnet-4-20250514-v2:0", client.GetModel())
 	assert.Equal(t, 4096, client.GetMaxTokens())
 	assert.Equal(t, "us-east-1", client.GetRegion())
 }
 
 func TestDefaultConstants(t *testing.T) {
 	assert.Equal(t, 4096, DefaultMaxTokens)
-	assert.Equal(t, "anthropic.claude-3-5-sonnet-20241022-v2:0", DefaultModel)
+	assert.Equal(t, "anthropic.claude-sonnet-4-20250514-v2:0", DefaultModel)
 	assert.Equal(t, "us-east-1", DefaultRegion)
 }
 

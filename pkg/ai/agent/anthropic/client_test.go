@@ -23,7 +23,7 @@ func TestExtractSimpleAIConfig(t *testing.T) {
 			},
 			expectedConfig: &SimpleAIConfig{
 				Enabled:   false,
-				Model:     "claude-3-5-sonnet-20241022",
+				Model:     "claude-sonnet-4-20250514",
 				APIKeyEnv: "ANTHROPIC_API_KEY",
 				MaxTokens: 4096,
 			},
@@ -100,7 +100,7 @@ func TestNewSimpleClient_Disabled(t *testing.T) {
 func TestSimpleClientGetters(t *testing.T) {
 	config := &SimpleAIConfig{
 		Enabled:   true,
-		Model:     "claude-3-5-sonnet-20241022",
+		Model:     "claude-sonnet-4-20250514",
 		APIKeyEnv: "ANTHROPIC_API_KEY",
 		MaxTokens: 4096,
 	}
@@ -110,6 +110,6 @@ func TestSimpleClientGetters(t *testing.T) {
 		config: config,
 	}
 
-	assert.Equal(t, "claude-3-5-sonnet-20241022", client.GetModel())
+	assert.Equal(t, "claude-sonnet-4-20250514", client.GetModel())
 	assert.Equal(t, 4096, client.GetMaxTokens())
 }

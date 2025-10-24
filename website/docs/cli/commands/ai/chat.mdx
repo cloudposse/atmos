@@ -63,7 +63,7 @@ settings:
     default_provider: "anthropic"  # Default for CLI commands like 'atmos ai ask'
     providers:
       anthropic:
-        model: "claude-3-5-sonnet-20241022"
+        model: "claude-sonnet-4-20250514"
         api_key_env: "ANTHROPIC_API_KEY"
         max_tokens: 4096
       openai:
@@ -85,7 +85,7 @@ settings:
         max_tokens: 4096
         base_url: "http://localhost:11434/v1"
       bedrock:
-        model: "anthropic.claude-3-5-sonnet-20241022-v2:0"
+        model: "anthropic.claude-sonnet-4-20250514-v2:0"
         max_tokens: 4096
         base_url: "us-east-1"  # AWS region
       azureopenai:
@@ -103,12 +103,12 @@ For detailed configuration options, see the [AI Assistant documentation](/ai/).
 
 | Provider | Environment Variable | Default Model | Notes |
 |----------|---------------------|---------------|-------|
-| Anthropic (Claude) | `ANTHROPIC_API_KEY` | `claude-3-5-sonnet-20241022` | Industry-leading reasoning |
+| Anthropic (Claude) | `ANTHROPIC_API_KEY` | `claude-sonnet-4-20250514` | Industry-leading reasoning |
 | OpenAI (GPT) | `OPENAI_API_KEY` | `gpt-4o` | Most popular, widely adopted |
 | Google (Gemini) | `GEMINI_API_KEY` | `gemini-2.0-flash-exp` | Strong multimodal capabilities |
 | xAI (Grok) | `XAI_API_KEY` | `grok-beta` | Real-time data access |
 | Ollama | `OLLAMA_API_KEY` | `llama3.3:70b` | Local models, no API key for local |
-| AWS Bedrock | AWS credentials | `anthropic.claude-3-5-sonnet-20241022-v2:0` | Enterprise-grade, AWS security |
+| AWS Bedrock | AWS credentials | `anthropic.claude-sonnet-4-20250514-v2:0` | Enterprise-grade, AWS security |
 | Azure OpenAI | `AZURE_OPENAI_API_KEY` | `gpt-4o` | Enterprise OpenAI with Azure integration |
 
 ## Enterprise Providers
@@ -128,7 +128,7 @@ For organizations with strict security, compliance, and data governance requirem
 ```yaml
 providers:
   bedrock:
-    model: "anthropic.claude-3-5-sonnet-20241022-v2:0"
+    model: "anthropic.claude-sonnet-4-20250514-v2:0"
     max_tokens: 4096
     base_url: "us-east-1"  # AWS region
 ```

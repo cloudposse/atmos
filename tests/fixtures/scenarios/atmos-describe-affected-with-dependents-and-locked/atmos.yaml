@@ -43,5 +43,14 @@ settings:
     max_width: 120  # Maximum width for terminal output
   ai:
     enabled: true
+    default_provider: "anthropic"  # Default provider for CLI commands
+
+    # Configure your preferred AI provider
+    providers:
+      anthropic:
+        model: "claude-sonnet-4-20250514"
+        api_key_env: "ANTHROPIC_API_KEY"
+        max_tokens: 4096
+
     sessions:
       enabled: true

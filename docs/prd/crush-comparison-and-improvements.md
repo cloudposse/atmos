@@ -842,7 +842,7 @@ settings:
       models:
         - name: claude-sonnet
           provider: anthropic
-          model: claude-3-5-sonnet-20241022
+          model: claude-sonnet-4-20250514
           use_for: [general, complex]
 
         - name: claude-haiku
@@ -987,7 +987,7 @@ settings:
       "name": "anthropic",
       "models": [
         {
-          "id": "claude-3-5-sonnet-20241022",
+          "id": "claude-sonnet-4-20250514",
           "name": "Claude 3.5 Sonnet",
           "context_window": 200000,
           "capabilities": ["tool_use", "vision"],
@@ -1222,7 +1222,7 @@ settings:
     # Core settings
     enabled: true
     provider: anthropic  # anthropic, openai, gemini, grok
-    model: claude-3-5-sonnet-20241022
+    model: claude-sonnet-4-20250514
     api_key_env: ANTHROPIC_API_KEY
     max_tokens: 4096
     base_url: ""  # For custom endpoints
@@ -1379,7 +1379,7 @@ settings:
       models:
         - name: claude-sonnet
           provider: anthropic
-          model: claude-3-5-sonnet-20241022
+          model: claude-sonnet-4-20250514
           use_for: [general, complex, analysis]
 
         - name: claude-haiku

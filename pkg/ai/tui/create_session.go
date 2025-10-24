@@ -34,7 +34,7 @@ var AvailableProviders = []Provider{
 	{
 		Name:         "anthropic",
 		DisplayName:  "Anthropic (Claude)",
-		DefaultModel: "claude-3-5-sonnet-20241022",
+		DefaultModel: "claude-sonnet-4-20250514",
 		APIKeyEnv:    "ANTHROPIC_API_KEY",
 	},
 	{
@@ -64,7 +64,7 @@ var AvailableProviders = []Provider{
 	{
 		Name:         "bedrock",
 		DisplayName:  "AWS Bedrock",
-		DefaultModel: "anthropic.claude-3-5-sonnet-20241022-v2:0",
+		DefaultModel: "anthropic.claude-sonnet-4-20250514-v2:0",
 		APIKeyEnv:    "AWS_ACCESS_KEY_ID",
 	},
 	{

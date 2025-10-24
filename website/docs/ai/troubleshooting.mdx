@@ -185,7 +185,7 @@ API keys are only needed for cloud providers (Anthropic, OpenAI, Gemini, Grok). 
     -H "x-api-key: $ANTHROPIC_API_KEY" \
     -H "anthropic-version: 2023-06-01" \
     -H "content-type: application/json" \
-    -d '{"model": "claude-3-5-sonnet-20241022", "max_tokens": 1024, "messages": [{"role": "user", "content": "Hello"}]}'
+    -d '{"model": "claude-sonnet-4-20250514", "max_tokens": 1024, "messages": [{"role": "user", "content": "Hello"}]}'
     ```
 </Terminal>
 
@@ -221,7 +221,7 @@ See [AI Providers](/ai/providers) for complete provider documentation.
 - **Solution**: Ensure API key starts with `sk-ant-` and is from [console.anthropic.com](https://console.anthropic.com/)
 
 **Issue**: "Model not found"
-- **Solution**: Use a valid model name like `claude-3-5-sonnet-20241022`
+- **Solution**: Use a valid model name like `claude-sonnet-4-20250514`
 
 ### OpenAI (GPT)
 
@@ -425,7 +425,7 @@ aws configure
 ```yaml
 providers:
   bedrock:
-    model: "anthropic.claude-3-5-sonnet-20241022-v2:0"  # Full Bedrock model ID
+    model: "anthropic.claude-sonnet-4-20250514-v2:0"  # Full Bedrock model ID
 ```
 
 2. **Verify model availability in region**:
@@ -536,7 +536,7 @@ settings:
   ai:
     providers:
       anthropic:
-        model: "claude-3-5-sonnet-20241022"
+        model: "claude-sonnet-4-20250514"
         api_key_env: "ANTHROPIC_API_KEY"
       openai:
         model: "gpt-4o"
@@ -577,7 +577,7 @@ settings:
   ai:
     providers:
       anthropic:  # Provider must be configured here
-        model: "claude-3-5-sonnet-20241022"
+        model: "claude-sonnet-4-20250514"
         api_key_env: "ANTHROPIC_API_KEY"
 ```
 
