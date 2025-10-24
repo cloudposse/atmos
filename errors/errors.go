@@ -107,6 +107,11 @@ var (
 	ErrReadFile    = errors.New("error reading file")
 	ErrInvalidFlag = errors.New("invalid flag")
 
+	// Dependency management errors.
+	ErrDependencyConstraint = errors.New("dependency constraint validation failed")
+	ErrDependencyResolution = errors.New("dependency resolution failed")
+	ErrToolInstall          = errors.New("tool installation failed")
+
 	// File and URL handling errors.
 	ErrInvalidPagerCommand = errors.New("invalid pager command")
 	ErrEmptyURL            = errors.New("empty URL provided")
