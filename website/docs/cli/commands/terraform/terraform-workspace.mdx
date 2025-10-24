@@ -32,6 +32,41 @@ If the workspace does not exist, the command creates it by executing the `terraf
 Run `atmos terraform workspace --help` to see all the available options
 :::
 
+## Configuration
+
+Configure workspace behavior in your `atmos.yaml`:
+
+```yaml
+components:
+  terraform:
+    # Run 'terraform init -reconfigure' when selecting workspace
+    init_run_reconfigure: true
+
+    # Enable workspace management
+    workspaces_enabled: true
+```
+
+These settings can also be controlled via environment variables:
+```shell
+export ATMOS_COMPONENTS_TERRAFORM_INIT_RUN_RECONFIGURE=true
+export ATMOS_COMPONENTS_TERRAFORM_WORKSPACES_ENABLED=true
+```
+
+### Dynamic Workspace Naming
+
+The `workspace_key_prefix` backend configuration supports Go templates for dynamic workspace naming. This is configured at the stack level, not in `atmos.yaml`:
+
+```yaml
+components:
+  terraform:
+    vpc:
+      backend:
+        # Use Go templates for dynamic workspace key prefix
+        workspace_key_prefix: "{{.vars.namespace}}-{{.vars.environment}}-{{.vars.stage}}"
+```
+
+This allows you to construct workspace names dynamically based on stack variables, providing flexible workspace organization strategies.
+
 ## Examples
 
 ```shell
