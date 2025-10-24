@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	awsCloud "github.com/cloudposse/atmos/pkg/auth/cloud/aws"
 	"github.com/cloudposse/atmos/pkg/auth/types"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -134,16 +134,17 @@ func (s *noopKeyringStore) SetAny(key string, value interface{}) error {
 }
 
 // validateAWSCredentials validates AWS credentials by calling STS GetCallerIdentity.
-// The AWS SDK automatically loads credentials from environment variables:
-// - AWS_SHARED_CREDENTIALS_FILE
-// - AWS_CONFIG_FILE
-// - AWS_PROFILE
+// Uses LoadAtmosManagedAWSConfig to:
+// - Clear external AWS environment variables (AWS_PROFILE, AWS_ACCESS_KEY_ID, etc.)
+// - Allow loading from Atmos-managed credential files (AWS_SHARED_CREDENTIALS_FILE, AWS_CONFIG_FILE)
+// This prevents external AWS_PROFILE from interfering while still using Atmos credentials.
 // Returns expiration time if available (temporary credentials), nil otherwise.
 func (s *noopKeyringStore) validateAWSCredentials(ctx context.Context) (*time.Time, error) {
 	defer perf.Track(nil, "credentials.noopKeyringStore.validateAWSCredentials")()
 
-	// Load AWS config from environment (SDK handles everything).
-	cfg, err := config.LoadDefaultConfig(ctx)
+	// Load AWS config using Atmos-managed approach.
+	// This clears problematic external env vars but allows Atmos credential files.
+	cfg, err := awsCloud.LoadAtmosManagedAWSConfig(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load AWS config: %w", err)
 	}

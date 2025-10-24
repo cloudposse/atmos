@@ -58,7 +58,9 @@ func (c *AWSCredentials) BuildWhoamiInfo(info *WhoamiInfo) {
 // Validate validates AWS credentials by calling STS GetCallerIdentity.
 // Returns the expiration time if available, or an error if credentials are invalid.
 func (c *AWSCredentials) Validate(ctx context.Context) (*time.Time, error) {
-	// Create AWS config with these credentials.
+	// Import here to avoid circular dependency issues.
+	// Note: This is a validation check using explicit credentials, not loading from files,
+	// so we create a minimal config with just the credentials and region.
 	cfg := aws.Config{
 		Region: c.Region,
 		Credentials: credentials.NewStaticCredentialsProvider(

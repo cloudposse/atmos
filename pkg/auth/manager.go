@@ -11,6 +11,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/internal/tui/templates/term"
+	"github.com/cloudposse/atmos/pkg/auth/credentials"
 	"github.com/cloudposse/atmos/pkg/auth/factory"
 	"github.com/cloudposse/atmos/pkg/auth/identities/aws"
 	"github.com/cloudposse/atmos/pkg/auth/types"
@@ -192,7 +193,15 @@ func (m *manager) Whoami(ctx context.Context, identityName string) (*types.Whoam
 	// Try to retrieve credentials for the resolved identity.
 	creds, err := m.credentialStore.Retrieve(identityName)
 	if err != nil {
-		return nil, fmt.Errorf("%w: identity=%s: %w", errUtils.ErrNoCredentialsFound, identityName, err)
+		// Check if this is the noop keyring pattern (credentials validated but not stored).
+		// In this case, credentials are in the environment/files, not the keyring.
+		if !errors.Is(err, credentials.ErrCredentialsNotFound) {
+			return nil, fmt.Errorf("%w: identity=%s: %w", errUtils.ErrNoCredentialsFound, identityName, err)
+		}
+		// Noop keyring: credentials exist in environment/files but not in keyring.
+		// Build WhoamiInfo from environment instead of keyring credentials.
+		log.Debug("Using noop keyring - credentials managed externally", "identity", identityName)
+		return m.buildWhoamiInfoFromEnvironment(identityName), nil
 	}
 
 	// Check if credentials are expired.
@@ -754,6 +763,33 @@ func (m *manager) buildWhoamiInfo(identityName string, creds types.ICredentials)
 		// Clear raw credentials to avoid accidental serialization of secrets.
 		info.Credentials = nil
 	}
+
+	return info
+}
+
+// buildWhoamiInfoFromEnvironment creates a WhoamiInfo struct when using noop keyring.
+// This is used when credentials are managed externally (e.g., in containers with mounted files).
+// Instead of retrieving credentials from the keyring, it gets information from the identity's
+// environment configuration.
+func (m *manager) buildWhoamiInfoFromEnvironment(identityName string) *types.WhoamiInfo {
+	providerName := m.getProviderForIdentity(identityName)
+
+	info := &types.WhoamiInfo{
+		Provider:    providerName,
+		Identity:    identityName,
+		LastUpdated: time.Now(),
+	}
+
+	// Get environment variables from the identity.
+	if identity, exists := m.identities[identityName]; exists {
+		if env, err := identity.Environment(); err == nil {
+			info.Environment = env
+		}
+	}
+
+	// Note: We don't have access to credentials or expiration from the keyring.
+	// The noop keyring validates credentials exist but doesn't return them.
+	// Credentials are managed externally via AWS_SHARED_CREDENTIALS_FILE, etc.
 
 	return info
 }

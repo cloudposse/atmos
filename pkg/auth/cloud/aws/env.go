@@ -93,6 +93,9 @@ func WithIsolatedAWSEnv(fn func() error) error {
 // The AWS SDK by default loads from ~/.aws/config and ~/.aws/credentials even when
 // AWS_PROFILE is not set. We disable shared config loading to prevent profile-based
 // configuration from interfering with Atmos auth.
+//
+// Use this for initial authentication (SSO device flow, etc.) when you want complete isolation.
+// Use LoadAtmosManagedAWSConfig when you want to use Atmos-managed credential files.
 func LoadIsolatedAWSConfig(ctx context.Context, optFns ...func(*config.LoadOptions) error) (aws.Config, error) {
 	var cfg aws.Config
 	var err error
@@ -110,6 +113,59 @@ func LoadIsolatedAWSConfig(ctx context.Context, optFns ...func(*config.LoadOptio
 
 	if isolateErr != nil {
 		return aws.Config{}, fmt.Errorf("%w: %w", errUtils.ErrLoadAwsConfig, isolateErr)
+	}
+
+	if err != nil {
+		return aws.Config{}, fmt.Errorf("%w: %w", errUtils.ErrLoadAwsConfig, err)
+	}
+
+	return cfg, nil
+}
+
+// LoadAtmosManagedAWSConfig loads AWS configuration while clearing external AWS environment
+// variables but ALLOWING Atmos-managed credential files to be loaded.
+//
+// This function should be used when you want to use credentials that Atmos has already
+// written to ~/.aws/atmos/<provider>/ directories. Unlike LoadIsolatedAWSConfig, this
+// function ALLOWS the AWS SDK to load from shared config files and respects AWS_PROFILE,
+// AWS_SHARED_CREDENTIALS_FILE, and AWS_CONFIG_FILE environment variables.
+//
+// It only clears credentials-related variables (AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY,
+// AWS_SESSION_TOKEN) to prevent conflicts with file-based credentials.
+//
+// Use this when:
+// - Validating Atmos-managed credentials
+// - Using credentials from the credential store
+// - Any operation that needs to access previously authenticated credentials
+//
+// Use LoadIsolatedAWSConfig for initial authentication (SSO device flow, etc.)
+func LoadAtmosManagedAWSConfig(ctx context.Context, optFns ...func(*config.LoadOptions) error) (aws.Config, error) {
+	var cfg aws.Config
+	var err error
+
+	// Only clear credential environment variables, not file paths or profile.
+	// This allows SDK to load from Atmos-managed files using AWS_PROFILE.
+	credentialEnvVars := []string{
+		"AWS_ACCESS_KEY_ID",
+		"AWS_SECRET_ACCESS_KEY",
+		"AWS_SESSION_TOKEN",
+	}
+
+	// Save and clear credential variables.
+	originalValues := make(map[string]string)
+	for _, key := range credentialEnvVars {
+		if value, exists := os.LookupEnv(key); exists {
+			originalValues[key] = value
+			os.Unsetenv(key)
+		}
+	}
+
+	// Load config (respects AWS_PROFILE, AWS_SHARED_CREDENTIALS_FILE, AWS_CONFIG_FILE).
+	cfg, err = config.LoadDefaultConfig(ctx, optFns...)
+
+	// Restore credential variables.
+	for key, value := range originalValues {
+		os.Setenv(key, value)
 	}
 
 	if err != nil {
