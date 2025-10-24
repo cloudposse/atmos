@@ -15,6 +15,7 @@ import (
 	log "github.com/charmbracelet/log"
 	"gopkg.in/yaml.v3"
 
+	httpClient "github.com/cloudposse/atmos/pkg/http"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
@@ -22,7 +23,7 @@ const versionPrefix = "v"
 
 // AquaRegistry represents the Aqua registry structure.
 type AquaRegistry struct {
-	client *http.Client
+	client httpClient.Client
 	cache  *RegistryCache
 	local  *LocalConfigManager
 }
@@ -37,12 +38,30 @@ func NewAquaRegistry() *AquaRegistry {
 	defer perf.Track(nil, "toolchain.NewAquaRegistry")()
 
 	return &AquaRegistry{
-		client: NewDefaultHTTPClient(),
+		client: httpClient.NewDefaultClient(
+			httpClient.WithGitHubToken(httpClient.GetGitHubTokenFromEnv()),
+		),
 		cache: &RegistryCache{
 			baseDir: filepath.Join(os.TempDir(), "tools-cache"),
 		},
 		local: NewLocalConfigManager(),
 	}
+}
+
+// get performs an HTTP GET request and returns the response.
+// This is a helper method to adapt the pkg/http Client interface.
+func (ar *AquaRegistry) get(url string) (*http.Response, error) {
+	req, err := http.NewRequest(http.MethodGet, url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	resp, err := ar.client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+
+	return resp, nil
 }
 
 // LoadLocalConfig loads the local configuration.
@@ -109,7 +128,7 @@ func (ar *AquaRegistry) resolveVersionOverrides(owner, repo, version string) (*T
 	// Fetch the registry file again to get version overrides
 	registryURL := fmt.Sprintf("https://raw.githubusercontent.com/aquaproj/aqua-registry/main/pkgs/%s/%s/registry.yaml", owner, repo)
 
-	resp, err := ar.client.Get(registryURL)
+	resp, err := ar.get(registryURL)
 	if err != nil {
 		return nil, fmt.Errorf("%w: failed to fetch registry file: %w", ErrHTTPRequest, err)
 	}
@@ -233,7 +252,7 @@ func (ar *AquaRegistry) fetchRegistryFile(url string) (*Tool, error) {
 	}
 
 	// Fetch from remote
-	resp, err := ar.client.Get(url)
+	resp, err := ar.get(url)
 	if err != nil {
 		return nil, fmt.Errorf("%w: failed to fetch %s: %w", ErrHTTPRequest, url, err)
 	}
@@ -389,7 +408,7 @@ func (ar *AquaRegistry) GetLatestVersion(owner, repo string) (string, error) {
 	// GitHub API endpoint for releases
 	apiURL := fmt.Sprintf("https://api.github.com/repos/%s/%s/releases", owner, repo)
 
-	resp, err := ar.client.Get(apiURL)
+	resp, err := ar.get(apiURL)
 	if err != nil {
 		return "", fmt.Errorf("%w: failed to fetch releases from GitHub: %w", ErrHTTPRequest, err)
 	}
@@ -433,7 +452,7 @@ func (ar *AquaRegistry) GetAvailableVersions(owner, repo string) ([]string, erro
 	// GitHub API endpoint for releases
 	apiURL := fmt.Sprintf("https://api.github.com/repos/%s/%s/releases", owner, repo)
 
-	resp, err := ar.client.Get(apiURL)
+	resp, err := ar.get(apiURL)
 	if err != nil {
 		return nil, fmt.Errorf("%w: failed to fetch releases from GitHub: %w", ErrHTTPRequest, err)
 	}

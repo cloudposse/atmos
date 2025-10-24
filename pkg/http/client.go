@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"time"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -21,20 +22,95 @@ type Client interface {
 	Do(req *http.Request) (*http.Response, error)
 }
 
+// ClientOption is a functional option for configuring the DefaultClient.
+type ClientOption func(*DefaultClient)
+
+// WithTimeout sets the HTTP client timeout.
+func WithTimeout(timeout time.Duration) ClientOption {
+	return func(c *DefaultClient) {
+		c.client.Timeout = timeout
+	}
+}
+
+// WithGitHubToken sets the GitHub token for authenticated requests.
+func WithGitHubToken(token string) ClientOption {
+	return func(c *DefaultClient) {
+		if token != "" {
+			c.client.Transport = &GitHubAuthenticatedTransport{
+				Base:        http.DefaultTransport,
+				GitHubToken: token,
+			}
+		}
+	}
+}
+
+// WithTransport sets a custom HTTP transport.
+func WithTransport(transport http.RoundTripper) ClientOption {
+	return func(c *DefaultClient) {
+		c.client.Transport = transport
+	}
+}
+
 // DefaultClient is the default HTTP client implementation.
 type DefaultClient struct {
 	client *http.Client
 }
 
-// NewDefaultClient creates a new DefaultClient with the specified timeout.
-func NewDefaultClient(timeout time.Duration) *DefaultClient {
+// NewDefaultClient creates a new DefaultClient with optional configuration.
+func NewDefaultClient(opts ...ClientOption) *DefaultClient {
 	defer perf.Track(nil, "http.NewDefaultClient")()
 
-	return &DefaultClient{
+	client := &DefaultClient{
 		client: &http.Client{
-			Timeout: timeout,
+			Timeout: 30 * time.Second, // Default timeout
 		},
 	}
+
+	for _, opt := range opts {
+		opt(client)
+	}
+
+	return client
+}
+
+// GitHubAuthenticatedTransport wraps an http.Transport to add GitHub token authentication.
+type GitHubAuthenticatedTransport struct {
+	Base        http.RoundTripper
+	GitHubToken string
+}
+
+// RoundTrip implements http.RoundTripper interface.
+func (t *GitHubAuthenticatedTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	defer perf.Track(nil, "http.GitHubAuthenticatedTransport.RoundTrip")()
+
+	host := req.URL.Hostname()
+	if (host == "api.github.com" || host == "raw.githubusercontent.com") && t.GitHubToken != "" {
+		req.Header.Set("Authorization", "Bearer "+t.GitHubToken)
+		req.Header.Set("User-Agent", "atmos-toolchain/1.0")
+	}
+
+	base := t.Base
+	if base == nil {
+		base = http.DefaultTransport
+	}
+
+	resp, err := base.RoundTrip(req)
+	if err != nil {
+		return nil, fmt.Errorf("GitHub transport roundtrip: %w", err)
+	}
+
+	return resp, nil
+}
+
+// GetGitHubTokenFromEnv retrieves GitHub token from environment variables.
+// Checks ATMOS_GITHUB_TOKEN first, then falls back to GITHUB_TOKEN.
+func GetGitHubTokenFromEnv() string {
+	defer perf.Track(nil, "http.GetGitHubTokenFromEnv")()
+
+	if token := os.Getenv("ATMOS_GITHUB_TOKEN"); token != "" {
+		return token
+	}
+	return os.Getenv("GITHUB_TOKEN")
 }
 
 // Do implements Client.Do.

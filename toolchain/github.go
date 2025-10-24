@@ -9,6 +9,7 @@ import (
 
 	"github.com/spf13/viper"
 
+	httpClient "github.com/cloudposse/atmos/pkg/http"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
@@ -19,7 +20,7 @@ type GitHubAPI interface {
 
 // GitHubAPIClient implements GitHubAPI with real HTTP calls.
 type GitHubAPIClient struct {
-	client  *http.Client
+	client  httpClient.Client
 	baseURL string
 }
 
@@ -27,8 +28,15 @@ type GitHubAPIClient struct {
 func NewGitHubAPIClient() *GitHubAPIClient {
 	defer perf.Track(nil, "toolchain.NewGitHubAPIClient")()
 
+	token := viper.GetString("github-token")
+	if token == "" {
+		token = httpClient.GetGitHubTokenFromEnv()
+	}
+
 	return &GitHubAPIClient{
-		client:  &http.Client{},
+		client: httpClient.NewDefaultClient(
+			httpClient.WithGitHubToken(token),
+		),
 		baseURL: "https://api.github.com",
 	}
 }
@@ -37,8 +45,15 @@ func NewGitHubAPIClient() *GitHubAPIClient {
 func NewGitHubAPIClientWithBaseURL(baseURL string) *GitHubAPIClient {
 	defer perf.Track(nil, "toolchain.NewGitHubAPIClientWithBaseURL")()
 
+	token := viper.GetString("github-token")
+	if token == "" {
+		token = httpClient.GetGitHubTokenFromEnv()
+	}
+
 	return &GitHubAPIClient{
-		client:  &http.Client{},
+		client: httpClient.NewDefaultClient(
+			httpClient.WithGitHubToken(token),
+		),
 		baseURL: baseURL,
 	}
 }
@@ -50,19 +65,12 @@ func (g *GitHubAPIClient) FetchReleases(owner, repo string, limit int) ([]string
 	// GitHub API endpoint for releases with per_page parameter
 	apiURL := fmt.Sprintf("%s/repos/%s/%s/releases?per_page=%d", g.baseURL, owner, repo, limit)
 
-	// Get GitHub token for authenticated requests
-	token := viper.GetString("github-token")
-
 	req, err := http.NewRequest("GET", apiURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
 
-	// Add GitHub token if available
-	if token != "" {
-		req.Header.Set("Authorization", "Bearer "+token)
-	}
-
+	// GitHub token authentication is handled by the GitHubAuthenticatedTransport
 	resp, err := g.client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch releases from GitHub: %w", err)

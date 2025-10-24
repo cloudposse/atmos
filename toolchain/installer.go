@@ -19,6 +19,7 @@ import (
 	"github.com/gabriel-vasile/mimetype"
 	"gopkg.in/yaml.v3"
 
+	httpClient "github.com/cloudposse/atmos/pkg/http"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
@@ -385,8 +386,16 @@ func (i *Installer) downloadAsset(url string) (string, error) {
 
 	// Download the file using authenticated HTTP client
 	log.Debug("Downloading asset", "filename", filename)
-	client := NewDefaultHTTPClient()
-	resp, err := client.Get(url)
+	client := httpClient.NewDefaultClient(
+		httpClient.WithGitHubToken(httpClient.GetGitHubTokenFromEnv()),
+	)
+
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return "", fmt.Errorf("%w: failed to create request: %w", ErrHTTPRequest, err)
+	}
+
+	resp, err := client.Do(req)
 	if err != nil {
 		return "", fmt.Errorf("%w: failed to download asset: %w", ErrHTTPRequest, err)
 	}
@@ -1050,9 +1059,17 @@ func searchRegistryForTool(toolName string) (string, string, error) {
 		fmt.Sprintf("https://raw.githubusercontent.com/aquaproj/aqua-registry/main/pkgs/%s/registry.yaml", toolName),
 	}
 
-	client := NewDefaultHTTPClient()
+	client := httpClient.NewDefaultClient(
+		httpClient.WithGitHubToken(httpClient.GetGitHubTokenFromEnv()),
+	)
+
 	for _, path := range commonPaths {
-		resp, err := client.Get(path)
+		req, err := http.NewRequest("GET", path, nil)
+		if err != nil {
+			continue
+		}
+
+		resp, err := client.Do(req)
 		if err == nil && resp.StatusCode == http.StatusOK {
 			resp.Body.Close()
 			// Extract owner/repo from the URL

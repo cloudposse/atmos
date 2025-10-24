@@ -6,6 +6,8 @@ import (
 
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
+
+	httpClient "github.com/cloudposse/atmos/pkg/http"
 )
 
 // TestGitHubTokenEnvBinding tests that environment variables are properly bound to Viper in TestMain.
@@ -44,11 +46,11 @@ func TestGitHubTokenEnvBinding(t *testing.T) {
 
 	t.Run("GitHub API functions work with environment token", func(t *testing.T) {
 		// If GITHUB_TOKEN is set in the environment (as it would be in CI),
-		// GetGitHubToken should return it thanks to TestMain's binding.
+		// GetGitHubTokenFromEnv should return it.
 		if envToken := os.Getenv("GITHUB_TOKEN"); envToken != "" {
-			token := GetGitHubToken()
+			token := httpClient.GetGitHubTokenFromEnv()
 			// The token should be accessible (either the env token or empty if not set).
-			assert.NotNil(t, token, "GetGitHubToken should not return nil")
+			assert.NotEmpty(t, token, "GetGitHubTokenFromEnv should not return empty when GITHUB_TOKEN is set")
 		}
 
 		// Test that a new GitHub API client can be created.
