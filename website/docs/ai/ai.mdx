@@ -25,6 +25,9 @@ The Atmos AI Assistant is an AI-powered terminal agent that helps with Atmos inf
 - **Provider Filtering**: Filter sessions by AI provider (Claude, GPT, Gemini, Grok)
 - **Enhanced Display**: Color-coded provider badges, creation dates, and message counts
 - **Message History**: Complete conversation history stored locally in SQLite
+- **History Navigation**: Navigate through previous messages with ↑/↓ arrow keys
+- **Markdown Rendering**: AI responses rendered with rich formatting (bold, italic, lists, tables)
+- **Syntax Highlighting**: Code blocks displayed with syntax highlighting for better readability
 - **Named Sessions**: Organize conversations by topic or project
 - **Provider-Aware Sessions**: Each session remembers its AI provider and model
 
@@ -131,6 +134,8 @@ atmos mcp-server
 - **Ctrl+C** - Quit the application
 - **Enter** - Send message
 - **Shift+Enter** - Add newline in message
+- **↑** - Navigate to previous message in history
+- **↓** - Navigate to next message in history
 
 **Session Picker:**
 - **↑/↓** or **j/k** - Navigate through sessions
