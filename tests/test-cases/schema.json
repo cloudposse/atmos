@@ -58,6 +58,49 @@
               "description": "Run test in a sandboxed environment. Use boolean to enable/disable or string to specify sandbox name.",
               "default": false
             },
+            "env": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "string"
+              },
+              "description": "Environment variables to set for the command execution."
+            },
+            "clean": {
+              "type": "boolean",
+              "description": "Remove untracked files in work directory after test.",
+              "default": false
+            },
+            "snapshot": {
+              "type": "boolean",
+              "description": "Enable snapshot comparison for test output.",
+              "default": false
+            },
+            "preconditions": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Required preconditions for test execution (e.g., 'git', 'aws-cli')."
+            },
+            "skip": {
+              "type": "object",
+              "properties": {
+                "os": {
+                  "anyOf": [
+                    { "type": "string" },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "not": { "type": "string" }
+                      },
+                      "required": ["not"]
+                    }
+                  ],
+                  "description": "OS pattern to skip test on (e.g., 'windows', 'darwin', 'linux')."
+                }
+              },
+              "description": "Conditions under which to skip the test."
+            },
             "expect": {
               "type": "object",
               "properties": {
@@ -120,6 +163,56 @@
                     "enum": ["yaml", "json"]
                   },
                   "description": "Format validations for stdout output."
+                },
+                "file_exists": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "description": "List of file paths that should exist after command execution."
+                },
+                "file_not_exists": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "description": "List of file paths that should not exist after command execution."
+                },
+                "file_contains": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "array",
+                    "items": {
+                      "anyOf": [
+                        { "type": "string" },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "not": { "type": "string" }
+                          },
+                          "required": ["not"]
+                        }
+                      ]
+                    }
+                  },
+                  "description": "Map of file paths to expected content patterns."
+                },
+                "diff": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "description": "Regex patterns for lines to ignore during snapshot comparison."
+                },
+                "timeout": {
+                  "type": "string",
+                  "description": "Maximum execution time (e.g., '1s', '1m', '1h' or a number in seconds).",
+                  "default": "120s"
+                },
+                "ignore_trailing_whitespace": {
+                  "type": "boolean",
+                  "description": "Strip trailing whitespace from each line before snapshot comparison. Useful for lipgloss table padding that varies by platform/terminal width.",
+                  "default": false
                 }
               },
               "required": ["exit_code"],
