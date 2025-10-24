@@ -1,0 +1,25 @@
+components:
+  terraform:
+    # Valid linear dependency chain
+    component-leaf:
+      metadata:
+        component: test-component
+      vars:
+        name: leaf
+        value: "leaf-value"
+
+    component-middle:
+      metadata:
+        component: test-component
+      vars:
+        name: middle
+        # Middle depends on leaf (valid)
+        dependency: !terraform.state component-leaf valid-chain value
+
+    component-root:
+      metadata:
+        component: test-component
+      vars:
+        name: root
+        # Root depends on middle (valid chain: root → middle → leaf)
+        dependency: !terraform.state component-middle valid-chain value

@@ -17,7 +17,45 @@ func processTagTerraformOutput(
 	input string,
 	currentStack string,
 ) any {
-	defer perf.Track(atmosConfig, "exec.processTagTerraformOutput")()
+	return processTagTerraformOutputWithContext(atmosConfig, input, currentStack, nil)
+}
+
+// trackOutputDependency records the dependency in the resolution context and returns a cleanup function.
+func trackOutputDependency(
+	atmosConfig *schema.AtmosConfiguration,
+	resolutionCtx *ResolutionContext,
+	component string,
+	stack string,
+	input string,
+) func() {
+	if resolutionCtx == nil {
+		return func() {}
+	}
+
+	node := DependencyNode{
+		Component:    component,
+		Stack:        stack,
+		FunctionType: "terraform.output",
+		FunctionCall: input,
+	}
+
+	// Check and record this dependency.
+	if err := resolutionCtx.Push(atmosConfig, node); err != nil {
+		errUtils.CheckErrorPrintAndExit(err, "", "")
+	}
+
+	// Return cleanup function.
+	return func() { resolutionCtx.Pop(atmosConfig) }
+}
+
+// processTagTerraformOutputWithContext processes `!terraform.output` YAML tag with cycle detection.
+func processTagTerraformOutputWithContext(
+	atmosConfig *schema.AtmosConfiguration,
+	input string,
+	currentStack string,
+	resolutionCtx *ResolutionContext,
+) any {
+	defer perf.Track(atmosConfig, "exec.processTagTerraformOutputWithContext")()
 
 	log.Debug("Executing Atmos YAML function", "function", input)
 
@@ -53,6 +91,9 @@ func processTagTerraformOutput(
 		er := fmt.Errorf("%w %s", errUtils.ErrYamlFuncInvalidArguments, input)
 		errUtils.CheckErrorPrintAndExit(er, "", "")
 	}
+
+	// Track dependency and defer cleanup.
+	defer trackOutputDependency(atmosConfig, resolutionCtx, component, stack, input)()
 
 	value, exists, err := GetTerraformOutput(atmosConfig, stack, component, output, false)
 	if err != nil {
