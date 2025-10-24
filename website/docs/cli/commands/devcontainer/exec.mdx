@@ -1,0 +1,66 @@
+---
+title: atmos devcontainer exec
+sidebar_label: exec
+sidebar_class_name: command
+id: exec
+description: Execute a command in a running devcontainer
+---
+import Screengrab from '@site/src/components/Screengrab'
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Use this command to execute a specific command inside a running devcontainer without attaching to an interactive shell.
+</Intro>
+
+<Screengrab title="atmos devcontainer exec --help" slug="atmos-devcontainer-exec--help" />
+
+## Usage
+
+```shell
+atmos devcontainer exec <name> -- <command> [args...]
+```
+
+## Arguments
+
+<dl>
+  <dt>`name`</dt>
+  <dd>Name of the devcontainer to execute the command in</dd>
+
+  <dt>`command` <em>(after `--`)</em></dt>
+  <dd>The command and arguments to execute in the container</dd>
+</dl>
+
+## Flags
+
+<dl>
+  <dt>`--instance string`</dt>
+  <dd>Instance name for this devcontainer (default: `default`)</dd>
+</dl>
+
+## Examples
+
+```shell
+# Run a single command
+atmos devcontainer exec geodesic -- terraform version
+
+# Run a command with arguments
+atmos devcontainer exec geodesic -- atmos terraform plan vpc -s dev
+
+# Check tool version
+atmos devcontainer exec terraform -- terraform --version
+
+# Execute in a specific instance
+atmos devcontainer exec terraform --instance project-a -- terraform init
+```
+
+## Behavior
+
+- Executes the command in the running container
+- Streams stdout and stderr to your terminal
+- Returns the exit code of the command
+- Container must be running (use `atmos devcontainer start` first)
+
+## See Also
+
+- [`atmos devcontainer attach`](/cli/commands/devcontainer/attach)
+- [`atmos devcontainer start`](/cli/commands/devcontainer/start)
