@@ -26,7 +26,7 @@ func ProcessCustomYamlTags(
 
 	// Get the fresh context we just installed.
 	resolutionCtx := GetOrCreateResolutionContext()
-	return ProcessCustomYamlTagsWithContext(atmosConfig, input, currentStack, skip, resolutionCtx)
+	return processNodesWithContext(atmosConfig, input, currentStack, skip, resolutionCtx, stackInfo), nil
 }
 
 func ProcessCustomYamlTagsWithContext(
@@ -38,7 +38,7 @@ func ProcessCustomYamlTagsWithContext(
 ) (schema.AtmosSectionMapType, error) {
 	defer perf.Track(atmosConfig, "exec.ProcessCustomYamlTagsWithContext")()
 
-	return processNodesWithContext(atmosConfig, input, currentStack, skip, resolutionCtx), nil
+	return processNodesWithContext(atmosConfig, input, currentStack, skip, resolutionCtx, nil), nil
 }
 
 func processNodes(
@@ -48,7 +48,7 @@ func processNodes(
 	skip []string,
 	stackInfo *schema.ConfigAndStacksInfo,
 ) map[string]any {
-	return processNodesWithContext(atmosConfig, data, currentStack, skip, nil)
+	return processNodesWithContext(atmosConfig, data, currentStack, skip, nil, stackInfo)
 }
 
 func processNodesWithContext(
@@ -57,6 +57,7 @@ func processNodesWithContext(
 	currentStack string,
 	skip []string,
 	resolutionCtx *ResolutionContext,
+	stackInfo *schema.ConfigAndStacksInfo,
 ) map[string]any {
 	newMap := make(map[string]any)
 	var recurse func(any) any
@@ -64,7 +65,7 @@ func processNodesWithContext(
 	recurse = func(node any) any {
 		switch v := node.(type) {
 		case string:
-			return processCustomTagsWithContext(atmosConfig, v, currentStack, skip, resolutionCtx)
+			return processCustomTagsWithContext(atmosConfig, v, currentStack, skip, resolutionCtx, stackInfo)
 
 		case map[string]any:
 			newNestedMap := make(map[string]any)
@@ -99,7 +100,7 @@ func processCustomTags(
 	skip []string,
 	stackInfo *schema.ConfigAndStacksInfo,
 ) any {
-	return processCustomTagsWithContext(atmosConfig, input, currentStack, skip, nil)
+	return processCustomTagsWithContext(atmosConfig, input, currentStack, skip, nil, stackInfo)
 }
 
 // matchesPrefix checks if input has the given prefix and the function is not skipped.
@@ -114,12 +115,13 @@ func processContextAwareTags(
 	currentStack string,
 	skip []string,
 	resolutionCtx *ResolutionContext,
+	stackInfo *schema.ConfigAndStacksInfo,
 ) (any, bool) {
 	if matchesPrefix(input, u.AtmosYamlFuncTerraformOutput, skip) {
 		return processTagTerraformOutputWithContext(atmosConfig, input, currentStack, resolutionCtx), true
 	}
 	if matchesPrefix(input, u.AtmosYamlFuncTerraformState, skip) {
-		return processTagTerraformStateWithContext(atmosConfig, input, currentStack, resolutionCtx), true
+		return processTagTerraformStateWithContext(atmosConfig, input, currentStack, resolutionCtx, stackInfo), true
 	}
 	return nil, false
 }
@@ -159,9 +161,10 @@ func processCustomTagsWithContext(
 	currentStack string,
 	skip []string,
 	resolutionCtx *ResolutionContext,
+	stackInfo *schema.ConfigAndStacksInfo,
 ) any {
 	// Try context-aware tags first.
-	if result, handled := processContextAwareTags(atmosConfig, input, currentStack, skip, resolutionCtx); handled {
+	if result, handled := processContextAwareTags(atmosConfig, input, currentStack, skip, resolutionCtx, stackInfo); handled {
 		return result
 	}
 

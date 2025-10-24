@@ -18,7 +18,7 @@ func processTagTerraformState(
 	currentStack string,
 	stackInfo *schema.ConfigAndStacksInfo,
 ) any {
-	return processTagTerraformStateWithContext(atmosConfig, input, currentStack, nil)
+	return processTagTerraformStateWithContext(atmosConfig, input, currentStack, nil, stackInfo)
 }
 
 // processTagTerraformStateWithContext processes `!terraform.state` YAML tag with cycle detection.
@@ -27,6 +27,7 @@ func processTagTerraformStateWithContext(
 	input string,
 	currentStack string,
 	resolutionCtx *ResolutionContext,
+	stackInfo *schema.ConfigAndStacksInfo,
 ) any {
 	defer perf.Track(atmosConfig, "exec.processTagTerraformStateWithContext")()
 
@@ -83,7 +84,13 @@ func processTagTerraformStateWithContext(
 		defer resolutionCtx.Pop(atmosConfig)
 	}
 
-	value, err := GetTerraformState(atmosConfig, input, stack, component, output, false, nil)
+	// Extract authContext from stackInfo if available.
+	var authContext *schema.AuthContext
+	if stackInfo != nil {
+		authContext = stackInfo.AuthContext
+	}
+
+	value, err := GetTerraformState(atmosConfig, input, stack, component, output, false, authContext)
 	errUtils.CheckErrorPrintAndExit(err, "", "")
 	return value
 }
