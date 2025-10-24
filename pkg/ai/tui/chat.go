@@ -8,6 +8,7 @@ import (
 
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/textarea"
+	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -62,6 +63,11 @@ type ChatModel struct {
 	selectedSessionIndex int
 	sessionListError     string
 	createForm           createSessionForm
+	deleteConfirm        bool            // Whether we're in delete confirmation state
+	deleteSessionID      string          // ID of session to delete
+	renameMode           bool            // Whether we're in rename mode
+	renameSessionID      string          // ID of session to rename
+	renameInput          textinput.Model // Text input for new session name
 }
 
 // ChatMessage represents a single message in the chat.
@@ -206,6 +212,8 @@ func (m *ChatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 // handleMessage processes different message types and returns whether it was handled.
+//
+//revive:disable:cyclomatic // Message handling naturally requires branching for different message types.
 func (m *ChatModel) handleMessage(msg tea.Msg, cmds *[]tea.Cmd) (bool, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
@@ -235,6 +243,12 @@ func (m *ChatModel) handleMessage(msg tea.Msg, cmds *[]tea.Cmd) (bool, tea.Cmd) 
 	case sessionCreatedMsg:
 		m.handleSessionCreated(msg)
 		return true, nil
+
+	case sessionDeletedMsg:
+		return true, m.handleSessionDeleted(msg)
+
+	case sessionRenamedMsg:
+		return true, m.handleSessionRenamed(msg)
 	}
 
 	return false, nil

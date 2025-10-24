@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -955,4 +956,420 @@ func TestAvailableProviders(t *testing.T) {
 		assert.NotEmpty(t, p.DefaultModel)
 		assert.NotEmpty(t, p.APIKeyEnv)
 	}
+}
+
+func TestChatModel_DeleteSession(t *testing.T) {
+	t.Run("initiates delete confirmation with d key", func(t *testing.T) {
+		client := &mockAIClient{model: "test-model"}
+		m, _ := NewChatModel(client, nil, nil, nil, nil)
+
+		// Set up session list with sessions
+		m.availableSessions = []*session.Session{
+			{ID: "session-1", Name: "Test Session 1"},
+			{ID: "session-2", Name: "Test Session 2"},
+		}
+		m.selectedSessionIndex = 0
+		m.currentView = viewModeSessionList
+
+		// Press 'd' key to initiate delete
+		msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'d'}}
+		cmd := m.handleSessionListKeys(msg)
+
+		// Verify delete confirmation state is set
+		assert.True(t, m.deleteConfirm)
+		assert.Equal(t, "session-1", m.deleteSessionID)
+		assert.Nil(t, cmd) // No command should be returned yet
+	})
+
+	t.Run("cancels delete with n key", func(t *testing.T) {
+		client := &mockAIClient{model: "test-model"}
+		m, _ := NewChatModel(client, nil, nil, nil, nil)
+
+		// Set up delete confirmation state
+		m.deleteConfirm = true
+		m.deleteSessionID = "session-1"
+		m.currentView = viewModeSessionList
+
+		// Press 'n' to cancel
+		msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'n'}}
+		cmd := m.handleSessionListKeys(msg)
+
+		// Verify delete confirmation is canceled
+		assert.False(t, m.deleteConfirm)
+		assert.Empty(t, m.deleteSessionID)
+		assert.Nil(t, cmd)
+	})
+
+	t.Run("cancels delete with esc key", func(t *testing.T) {
+		client := &mockAIClient{model: "test-model"}
+		m, _ := NewChatModel(client, nil, nil, nil, nil)
+
+		// Set up delete confirmation state
+		m.deleteConfirm = true
+		m.deleteSessionID = "session-1"
+		m.currentView = viewModeSessionList
+
+		// Press 'esc' to cancel
+		msg := tea.KeyMsg{Type: tea.KeyEscape}
+		cmd := m.handleSessionListKeys(msg)
+
+		// Verify delete confirmation is canceled
+		assert.False(t, m.deleteConfirm)
+		assert.Empty(t, m.deleteSessionID)
+		assert.Nil(t, cmd)
+	})
+
+	t.Run("confirms delete with y key", func(t *testing.T) {
+		client := &mockAIClient{model: "test-model"}
+		m, _ := NewChatModel(client, nil, nil, nil, nil)
+
+		// Set up delete confirmation state
+		m.deleteConfirm = true
+		m.deleteSessionID = "session-1"
+		m.currentView = viewModeSessionList
+
+		// Press 'y' to confirm
+		msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'y'}}
+		cmd := m.handleSessionListKeys(msg)
+
+		// Verify delete command is returned
+		assert.NotNil(t, cmd)
+
+		// Execute the command - it should return sessionDeletedMsg
+		// (We can't test the actual deletion without a real manager)
+	})
+
+	t.Run("renders delete confirmation dialog", func(t *testing.T) {
+		client := &mockAIClient{model: "test-model"}
+		m, _ := NewChatModel(client, nil, nil, nil, nil)
+
+		// Set up session list and delete confirmation
+		m.availableSessions = []*session.Session{
+			{ID: "session-1", Name: "Test Session 1"},
+		}
+		m.deleteConfirm = true
+		m.deleteSessionID = "session-1"
+		m.currentView = viewModeSessionList
+
+		// Render view
+		view := m.sessionListView()
+
+		// Verify confirmation dialog is shown
+		assert.Contains(t, view, "Delete session 'Test Session 1'")
+		assert.Contains(t, view, "This action cannot be undone")
+		assert.Contains(t, view, "y: Confirm Delete")
+		assert.Contains(t, view, "n/Esc: Cancel")
+	})
+
+	t.Run("shows delete option in help text", func(t *testing.T) {
+		client := &mockAIClient{model: "test-model"}
+		m, _ := NewChatModel(client, nil, nil, nil, nil)
+
+		// Set up session list
+		m.availableSessions = []*session.Session{
+			{ID: "session-1", Name: "Test Session 1"},
+		}
+		m.currentView = viewModeSessionList
+
+		// Render view
+		view := m.sessionListView()
+
+		// Verify delete option is in help text
+		assert.Contains(t, view, "d: Delete")
+	})
+
+	t.Run("handles sessionDeletedMsg successfully", func(t *testing.T) {
+		client := &mockAIClient{model: "test-model"}
+		m, _ := NewChatModel(client, nil, nil, nil, nil)
+
+		// Set up delete confirmation state
+		m.deleteConfirm = true
+		m.deleteSessionID = "session-1"
+
+		// Handle successful deletion
+		msg := sessionDeletedMsg{sessionID: "session-1", err: nil}
+		cmd := m.handleSessionDeleted(msg)
+
+		// Verify state is reset
+		assert.False(t, m.deleteConfirm)
+		assert.Empty(t, m.deleteSessionID)
+		assert.Empty(t, m.sessionListError)
+
+		// Command should be returned to reload session list
+		assert.NotNil(t, cmd)
+	})
+
+	t.Run("handles sessionDeletedMsg with error", func(t *testing.T) {
+		client := &mockAIClient{model: "test-model"}
+		m, _ := NewChatModel(client, nil, nil, nil, nil)
+
+		// Set up delete confirmation state
+		m.deleteConfirm = true
+		m.deleteSessionID = "session-1"
+
+		// Handle deletion error
+		msg := sessionDeletedMsg{sessionID: "session-1", err: assert.AnError}
+		cmd := m.handleSessionDeleted(msg)
+
+		// Verify state is reset
+		assert.False(t, m.deleteConfirm)
+		assert.Empty(t, m.deleteSessionID)
+		assert.Contains(t, m.sessionListError, "Failed to delete session")
+
+		// No command should be returned on error
+		assert.Nil(t, cmd)
+	})
+
+	t.Run("clears current session if deleted", func(t *testing.T) {
+		client := &mockAIClient{model: "test-model"}
+		m, _ := NewChatModel(client, nil, nil, nil, nil)
+
+		// Set up current session
+		m.sess = &session.Session{ID: "session-1", Name: "Test Session"}
+		m.messages = []ChatMessage{
+			{Role: "user", Content: "test", Time: time.Now()},
+		}
+
+		// Handle deletion of current session
+		msg := sessionDeletedMsg{sessionID: "session-1", err: nil}
+		m.handleSessionDeleted(msg)
+
+		// Verify current session is cleared
+		assert.Nil(t, m.sess)
+		assert.Empty(t, m.messages)
+	})
+
+	t.Run("does not clear different session", func(t *testing.T) {
+		client := &mockAIClient{model: "test-model"}
+		m, _ := NewChatModel(client, nil, nil, nil, nil)
+
+		// Set up current session
+		m.sess = &session.Session{ID: "session-1", Name: "Test Session"}
+		m.messages = []ChatMessage{
+			{Role: "user", Content: "test", Time: time.Now()},
+		}
+
+		// Handle deletion of different session
+		msg := sessionDeletedMsg{sessionID: "session-2", err: nil}
+		m.handleSessionDeleted(msg)
+
+		// Verify current session is not cleared
+		assert.NotNil(t, m.sess)
+		assert.NotEmpty(t, m.messages)
+	})
+}
+
+func TestChatModel_RenameSession(t *testing.T) {
+	t.Run("initiates rename mode with r key", func(t *testing.T) {
+		client := &mockAIClient{model: "test-model"}
+		m, _ := NewChatModel(client, nil, nil, nil, nil)
+
+		// Set up session list with sessions
+		m.availableSessions = []*session.Session{
+			{ID: "session-1", Name: "Test Session 1"},
+			{ID: "session-2", Name: "Test Session 2"},
+		}
+		m.selectedSessionIndex = 0
+		m.currentView = viewModeSessionList
+
+		// Press 'r' key to initiate rename
+		msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'r'}}
+		cmd := m.handleSessionListKeys(msg)
+
+		// Verify rename mode is set
+		assert.True(t, m.renameMode)
+		assert.Equal(t, "session-1", m.renameSessionID)
+		assert.Equal(t, "Test Session 1", m.renameInput.Value())
+		assert.Nil(t, cmd) // No command should be returned yet
+	})
+
+	t.Run("cancels rename with esc key", func(t *testing.T) {
+		client := &mockAIClient{model: "test-model"}
+		m, _ := NewChatModel(client, nil, nil, nil, nil)
+
+		// Set up rename mode
+		m.renameMode = true
+		m.renameSessionID = "session-1"
+		m.currentView = viewModeSessionList
+
+		// Press 'esc' to cancel
+		msg := tea.KeyMsg{Type: tea.KeyEscape}
+		cmd := m.handleSessionListKeys(msg)
+
+		// Verify rename mode is canceled
+		assert.False(t, m.renameMode)
+		assert.Empty(t, m.renameSessionID)
+		assert.Nil(t, cmd)
+	})
+
+	t.Run("submits rename with enter key", func(t *testing.T) {
+		client := &mockAIClient{model: "test-model"}
+		m, _ := NewChatModel(client, nil, nil, nil, nil)
+
+		// Set up rename mode
+		m.renameMode = true
+		m.renameSessionID = "session-1"
+		m.renameInput = textinput.New()
+		m.renameInput.SetValue("New Session Name")
+		m.currentView = viewModeSessionList
+
+		// Press 'enter' to submit
+		msg := tea.KeyMsg{Type: tea.KeyEnter}
+		cmd := m.handleSessionListKeys(msg)
+
+		// Verify rename command is returned
+		assert.NotNil(t, cmd)
+	})
+
+	t.Run("cancels rename if empty name submitted", func(t *testing.T) {
+		client := &mockAIClient{model: "test-model"}
+		m, _ := NewChatModel(client, nil, nil, nil, nil)
+
+		// Set up rename mode with empty input
+		m.renameMode = true
+		m.renameSessionID = "session-1"
+		m.renameInput = textinput.New()
+		m.renameInput.SetValue("   ") // Empty after trim
+		m.currentView = viewModeSessionList
+
+		// Press 'enter' to submit
+		msg := tea.KeyMsg{Type: tea.KeyEnter}
+		cmd := m.handleSessionListKeys(msg)
+
+		// Verify rename is canceled
+		assert.False(t, m.renameMode)
+		assert.Empty(t, m.renameSessionID)
+		assert.Nil(t, cmd)
+	})
+
+	t.Run("updates text input during rename", func(t *testing.T) {
+		client := &mockAIClient{model: "test-model"}
+		m, _ := NewChatModel(client, nil, nil, nil, nil)
+
+		// Set up rename mode
+		m.renameMode = true
+		m.renameSessionID = "session-1"
+		m.renameInput = textinput.New()
+		m.renameInput.SetValue("Test")
+		m.currentView = viewModeSessionList
+
+		// Type a character
+		msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'A'}}
+		m.handleSessionListKeys(msg)
+
+		// Verify we're still in rename mode (input was processed)
+		assert.True(t, m.renameMode)
+	})
+
+	t.Run("renders rename dialog", func(t *testing.T) {
+		client := &mockAIClient{model: "test-model"}
+		m, _ := NewChatModel(client, nil, nil, nil, nil)
+
+		// Set up session list and rename mode
+		m.availableSessions = []*session.Session{
+			{ID: "session-1", Name: "Test Session 1"},
+		}
+		m.renameMode = true
+		m.renameSessionID = "session-1"
+		m.renameInput = textinput.New()
+		m.renameInput.SetValue("New Name")
+		m.currentView = viewModeSessionList
+
+		// Render view
+		view := m.sessionListView()
+
+		// Verify rename dialog is shown
+		assert.Contains(t, view, "Rename session 'Test Session 1'")
+		assert.Contains(t, view, "Enter: Save")
+		assert.Contains(t, view, "Esc: Cancel")
+	})
+
+	t.Run("shows rename option in help text", func(t *testing.T) {
+		client := &mockAIClient{model: "test-model"}
+		m, _ := NewChatModel(client, nil, nil, nil, nil)
+
+		// Set up session list
+		m.availableSessions = []*session.Session{
+			{ID: "session-1", Name: "Test Session 1"},
+		}
+		m.currentView = viewModeSessionList
+
+		// Render view
+		view := m.sessionListView()
+
+		// Verify rename option is in help text
+		assert.Contains(t, view, "r: Rename")
+	})
+
+	t.Run("handles sessionRenamedMsg successfully", func(t *testing.T) {
+		client := &mockAIClient{model: "test-model"}
+		m, _ := NewChatModel(client, nil, nil, nil, nil)
+
+		// Set up rename mode
+		m.renameMode = true
+		m.renameSessionID = "session-1"
+
+		// Handle successful rename
+		msg := sessionRenamedMsg{sessionID: "session-1", newName: "New Name", err: nil}
+		cmd := m.handleSessionRenamed(msg)
+
+		// Verify state is reset
+		assert.False(t, m.renameMode)
+		assert.Empty(t, m.renameSessionID)
+		assert.Empty(t, m.sessionListError)
+
+		// Command should be returned to reload session list
+		assert.NotNil(t, cmd)
+	})
+
+	t.Run("handles sessionRenamedMsg with error", func(t *testing.T) {
+		client := &mockAIClient{model: "test-model"}
+		m, _ := NewChatModel(client, nil, nil, nil, nil)
+
+		// Set up rename mode
+		m.renameMode = true
+		m.renameSessionID = "session-1"
+
+		// Handle rename error
+		msg := sessionRenamedMsg{sessionID: "session-1", newName: "New Name", err: assert.AnError}
+		cmd := m.handleSessionRenamed(msg)
+
+		// Verify state is reset
+		assert.False(t, m.renameMode)
+		assert.Empty(t, m.renameSessionID)
+		assert.Contains(t, m.sessionListError, "Failed to rename session")
+
+		// No command should be returned on error
+		assert.Nil(t, cmd)
+	})
+
+	t.Run("updates current session name if renamed", func(t *testing.T) {
+		client := &mockAIClient{model: "test-model"}
+		m, _ := NewChatModel(client, nil, nil, nil, nil)
+
+		// Set up current session
+		m.sess = &session.Session{ID: "session-1", Name: "Old Name"}
+
+		// Handle rename of current session
+		msg := sessionRenamedMsg{sessionID: "session-1", newName: "New Name", err: nil}
+		m.handleSessionRenamed(msg)
+
+		// Verify current session name is updated
+		assert.Equal(t, "New Name", m.sess.Name)
+	})
+
+	t.Run("does not update different session name", func(t *testing.T) {
+		client := &mockAIClient{model: "test-model"}
+		m, _ := NewChatModel(client, nil, nil, nil, nil)
+
+		// Set up current session
+		m.sess = &session.Session{ID: "session-1", Name: "Old Name"}
+
+		// Handle rename of different session
+		msg := sessionRenamedMsg{sessionID: "session-2", newName: "New Name", err: nil}
+		m.handleSessionRenamed(msg)
+
+		// Verify current session name is not updated
+		assert.Equal(t, "Old Name", m.sess.Name)
+	})
 }

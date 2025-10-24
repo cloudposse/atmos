@@ -2,8 +2,10 @@ package tui
 
 import (
 	"context"
+	"strings"
 	"time"
 
+	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -66,6 +68,61 @@ func (m *ChatModel) handleKeyMsg(msg tea.KeyMsg) tea.Cmd {
 
 // handleSessionListKeys processes keyboard input for the session list view.
 func (m *ChatModel) handleSessionListKeys(msg tea.KeyMsg) tea.Cmd {
+	// Handle different modes
+	if m.deleteConfirm {
+		return m.handleDeleteConfirmationKeys(msg)
+	}
+
+	if m.renameMode {
+		return m.handleRenameKeys(msg)
+	}
+
+	return m.handleNormalSessionListKeys(msg)
+}
+
+// handleDeleteConfirmationKeys handles keyboard input during delete confirmation.
+func (m *ChatModel) handleDeleteConfirmationKeys(msg tea.KeyMsg) tea.Cmd {
+	switch msg.String() {
+	case "y", "Y":
+		// Confirm deletion
+		return m.deleteSession(m.deleteSessionID)
+	case "n", "N", "esc":
+		// Cancel deletion
+		m.deleteConfirm = false
+		m.deleteSessionID = ""
+		return nil
+	}
+	return nil
+}
+
+// handleRenameKeys handles keyboard input during rename mode.
+func (m *ChatModel) handleRenameKeys(msg tea.KeyMsg) tea.Cmd {
+	switch msg.String() {
+	case "enter":
+		// Submit rename
+		newName := strings.TrimSpace(m.renameInput.Value())
+		if newName != "" {
+			return m.renameSession(m.renameSessionID, newName)
+		}
+		// Empty name, cancel rename
+		m.renameMode = false
+		m.renameSessionID = ""
+		return nil
+	case "esc":
+		// Cancel rename
+		m.renameMode = false
+		m.renameSessionID = ""
+		return nil
+	default:
+		// Update text input
+		var cmd tea.Cmd
+		m.renameInput, cmd = m.renameInput.Update(msg)
+		return cmd
+	}
+}
+
+// handleNormalSessionListKeys handles keyboard input during normal session list navigation.
+func (m *ChatModel) handleNormalSessionListKeys(msg tea.KeyMsg) tea.Cmd {
 	switch msg.String() {
 	case "ctrl+c":
 		return tea.Quit
@@ -89,6 +146,26 @@ func (m *ChatModel) handleSessionListKeys(msg tea.KeyMsg) tea.Cmd {
 		// Select session.
 		if m.selectedSessionIndex < len(m.availableSessions) {
 			return m.switchSession(m.availableSessions[m.selectedSessionIndex])
+		}
+		return nil
+	case "d", "D":
+		// Delete session - enter confirmation mode.
+		if m.selectedSessionIndex < len(m.availableSessions) {
+			m.deleteConfirm = true
+			m.deleteSessionID = m.availableSessions[m.selectedSessionIndex].ID
+		}
+		return nil
+	case "r", "R":
+		// Rename session - enter rename mode.
+		if m.selectedSessionIndex < len(m.availableSessions) {
+			sess := m.availableSessions[m.selectedSessionIndex]
+			m.renameMode = true
+			m.renameSessionID = sess.ID
+			// Initialize rename input with current name
+			m.renameInput = textinput.New()
+			m.renameInput.Placeholder = "Enter new session name"
+			m.renameInput.SetValue(sess.Name)
+			m.renameInput.Focus()
 		}
 		return nil
 	case "ctrl+n", "n":

@@ -167,6 +167,15 @@ func (m *Manager) GetContext(ctx context.Context, sessionID string) ([]*ContextI
 	return items, nil
 }
 
+// UpdateSession updates an existing session.
+func (m *Manager) UpdateSession(ctx context.Context, sess *Session) error {
+	if err := m.storage.UpdateSession(ctx, sess); err != nil {
+		return fmt.Errorf("failed to update session: %w", err)
+	}
+
+	return nil
+}
+
 // DeleteSession deletes a session and all its data.
 func (m *Manager) DeleteSession(ctx context.Context, id string) error {
 	// Delete context first.
