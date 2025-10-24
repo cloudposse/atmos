@@ -260,40 +260,233 @@ cloudposse/atmos:
 
 **Status**: 🚧 **Not Implemented**
 
-**Desired Behavior**:
+**Design Decision**: Tool dependencies MUST be at the **top level** (not in `metadata`) to support inheritance.
 
-**Component Configuration** (`components/terraform/vpc/component.yaml`):
-```yaml
-metadata:
-  component: terraform/vpc
-  dependencies:
-    tools:
-      terraform: "~> 1.5.0"
-      tflint: "^0.50.0"
-```
+### Configuration Structure
 
-**Stack Configuration** (`stacks/dev.yaml`):
+#### Stack Catalogs - Base Tool Requirements
+
+**Component Catalog** (`stacks/catalog/terraform/vpc.yaml`):
 ```yaml
-terraform:
-  vars: {}
-settings:
+# Top-level dependencies inherit through stack imports
+dependencies:
   tools:
-    terraform: "1.5.7"  # Override for this stack
+    terraform: "~> 1.5.0"      # SemVer constraint
+    tflint: "^0.50.0"          # Must satisfy constraint
+    tfsec: "latest"            # Always use latest
+
+components:
+  terraform:
+    vpc:
+      vars:
+        name: vpc
 ```
 
-**Expected Flow**:
-1. User runs `atmos terraform plan vpc -s dev`
-2. Atmos reads component dependencies: `terraform: ~> 1.5.0`
-3. Atmos reads stack override: `terraform: 1.5.7`
-4. Atmos verifies 1.5.7 satisfies ~> 1.5.0
-5. Auto-installs terraform 1.5.7 if missing
-6. Executes `terraform plan` with that version
+**Stack Configuration** (`stacks/orgs/acme/prod/us-east-1.yaml`):
+```yaml
+import:
+  - catalog/terraform/vpc    # Inherits tool dependencies
 
-**Implementation Needs**:
-- Schema updates for component.yaml and stack config
-- Dependency resolution logic in stack processor
-- Integration with toolchain installer
-- Version constraint validation (semver)
+# Override specific tool versions (must satisfy catalog constraints)
+dependencies:
+  tools:
+    terraform: "1.5.7"  # Satisfies ~> 1.5.0 from catalog
+    # tflint inherited from catalog: ^0.50.0
+    # tfsec inherited from catalog: latest
+
+components:
+  terraform:
+    vpc:
+      vars:
+        environment: prod
+```
+
+#### Workflows - Declaring Tool Dependencies
+
+**Workflow Configuration** (`stacks/workflows/deploy.yaml`):
+```yaml
+workflows:
+  deploy-infra:
+    description: Deploy infrastructure with required tools
+
+    # Tools needed for this workflow
+    dependencies:
+      tools:
+        terraform: "~> 1.5.0"
+        aws-cli: "^2.0.0"
+        jq: "latest"
+
+    steps:
+      - name: plan
+        command: terraform plan vpc -s {{ .stack }}
+      - name: apply
+        command: terraform apply vpc -s {{ .stack }}
+```
+
+#### Custom Commands - Tool Requirements
+
+**Custom Command** (in `atmos.yaml`):
+```yaml
+commands:
+  - name: deploy
+    description: Deploy with version-controlled tools
+
+    # Tools required for this command
+    dependencies:
+      tools:
+        terraform: "~> 1.5.0"
+        kubectl: "^1.28.0"
+
+    steps:
+      - atmos terraform plan vpc -s {{ .stack }}
+      - atmos terraform apply vpc -s {{ .stack }}
+```
+
+### Inheritance Behavior
+
+**Merge Strategy**: Deep merge with override (child overrides parent)
+
+```yaml
+# Parent stack (catalog/base.yaml)
+dependencies:
+  tools:
+    terraform: "~> 1.5.0"
+    helm: "^3.12.0"
+
+# Child stack (prod.yaml)
+import:
+  - catalog/base
+
+dependencies:
+  tools:
+    terraform: "1.5.7"     # Override: specific version (must satisfy ~> 1.5.0)
+    kubectl: "^1.28.0"     # Add: new tool
+    # helm: ^3.12.0        # Inherit: from parent
+
+# Result after inheritance:
+dependencies:
+  tools:
+    terraform: "1.5.7"     # From child (validated against parent constraint)
+    helm: "^3.12.0"        # From parent
+    kubectl: "^1.28.0"     # From child
+```
+
+### Execution Flow
+
+#### Component Execution (terraform/helmfile/packer commands)
+
+```
+atmos terraform plan vpc -s prod/us-east-1
+  ↓
+1. Load stack configuration (with imports and inheritance)
+2. Resolve dependencies.tools from merged stack config
+3. Validate child constraints satisfy parent constraints
+4. Check installed versions in .tool-versions or .tools/
+5. Auto-install missing tools or incorrect versions
+6. Set PATH to use toolchain-managed versions
+7. Execute: terraform plan
+```
+
+#### Workflow Execution
+
+```
+atmos workflow deploy-infra -s prod/us-east-1
+  ↓
+1. Load workflow configuration
+2. Resolve workflow dependencies.tools
+3. Merge with stack dependencies.tools (workflow takes precedence)
+4. Check/install required tools
+5. Execute workflow steps with toolchain-managed tools
+```
+
+#### Custom Command Execution
+
+```
+atmos deploy prod/us-east-1
+  ↓
+1. Load custom command configuration
+2. Resolve command dependencies.tools
+3. Check/install required tools
+4. Execute command steps with toolchain-managed tools
+```
+
+### Constraint Validation
+
+**Rules**:
+1. Child constraints MUST satisfy parent constraints
+2. Use SemVer for validation: `github.com/Masterminds/semver/v3`
+3. Fail fast if constraint conflict detected
+
+**Example Validation**:
+```go
+// Parent: terraform: "~> 1.5.0"  (allows 1.5.0 <= version < 1.6.0)
+// Child:  terraform: "1.5.7"     ✅ VALID (within range)
+// Child:  terraform: "1.6.0"     ❌ INVALID (outside range)
+// Child:  terraform: "^1.5.0"    ✅ VALID (more restrictive)
+```
+
+### Schema Updates Required
+
+#### Stack Configuration Schema
+```yaml
+# Top-level (inheritable)
+dependencies:
+  tools:
+    <tool-name>: <version-constraint>
+
+components:
+  terraform:
+    <component>:
+      # ... existing structure
+```
+
+#### Workflow Schema
+```yaml
+workflows:
+  <workflow-name>:
+    dependencies:
+      tools:
+        <tool-name>: <version-constraint>
+    steps:
+      # ... existing structure
+```
+
+#### Custom Command Schema
+```yaml
+commands:
+  - name: <command-name>
+    dependencies:
+      tools:
+        <tool-name>: <version-constraint>
+    steps:
+      # ... existing structure
+```
+
+### Implementation Phases
+
+**Phase 1: Stack Dependencies** (Highest Priority)
+- [ ] Update stack schema to support top-level `dependencies.tools`
+- [ ] Implement inheritance logic for tool dependencies
+- [ ] Add constraint validation (SemVer)
+- [ ] Integrate with component execution (terraform/helmfile/packer commands)
+- [ ] Auto-install missing tools before execution
+- [ ] Tests: Stack inheritance, constraint validation, auto-install
+
+**Phase 2: Workflow Dependencies**
+- [ ] Update workflow schema for `dependencies.tools`
+- [ ] Merge workflow and stack tool dependencies
+- [ ] Tool installation before workflow execution
+- [ ] Tests: Workflow tool dependencies
+
+**Phase 3: Custom Command Dependencies**
+- [ ] Update custom command schema for `dependencies.tools`
+- [ ] Tool installation before command execution
+- [ ] Tests: Custom command tool dependencies
+
+**Phase 4: Component Catalog Support** (Optional)
+- [ ] Support `dependencies.tools` in component.yaml files
+- [ ] Merge component.yaml dependencies with stack dependencies
+- [ ] Tests: Component-level tool requirements
 
 #### 2. Atmos Self-Exec Wrapper
 
