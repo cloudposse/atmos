@@ -196,7 +196,7 @@ func (m *ChatModel) handleSessionCreated(msg sessionCreatedMsg) {
 		m.createForm = newCreateSessionForm() // Reset form
 
 		// Add welcome message
-		m.addMessage(roleAssistant, `Welcome to Atmos AI Assistant! 🚀
+		m.addMessage(roleAssistant, `Welcome to Atmos AI Assistant! 👽
 
 I'm here to help you with your Atmos infrastructure management. I can:
 

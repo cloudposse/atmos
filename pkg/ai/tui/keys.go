@@ -3,6 +3,7 @@ package tui
 import (
 	"context"
 	"fmt"
+	"regexp"
 	"strings"
 	"time"
 
@@ -12,6 +13,20 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/ai/session"
 )
+
+// ansiEscapeRegex matches ANSI escape sequences and OSC (Operating System Command) sequences.
+// This includes:
+// - CSI sequences: ESC [ ... (e.g., colors, cursor movement, CPR).
+// - Bare CSI Cursor Position Report: [<row>;<col>R.
+// - OSC sequences with BEL terminator: ESC ] ... BEL.
+// - OSC sequences with ST terminator: ESC ] ... ESC \.
+// - Bare OSC sequences: ] ... \ or rgb:... \ or <number>;rgb:... \ (fragments without ESC prefix).
+var ansiEscapeRegex = regexp.MustCompile(`\x1b\[[0-9;]*[a-zA-Z]|\[[0-9;]+R|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)|][^\\]*\\|\d*;?rgb:[0-9a-fA-F/]*\\`)
+
+// stripANSI removes ANSI escape sequences from a string.
+func stripANSI(s string) string {
+	return ansiEscapeRegex.ReplaceAllString(s, "")
+}
 
 // handleKeyMsg processes keyboard input and returns a command if the key was handled.
 // Returns nil if the key should be passed to the textarea.
@@ -24,6 +39,28 @@ func (m *ChatModel) handleKeyMsg(msg tea.KeyMsg) tea.Cmd {
 			return tea.Quit
 		}
 		// Don't pass keys to textarea while loading.
+		return func() tea.Msg { return nil }
+	}
+
+	// Check for Enter key first (before other key processing).
+	keyStr := msg.String()
+
+	// Handle multiline input: Ctrl+J inserts newline (works in all terminals).
+	// Note: Most terminals don't send distinct codes for Shift+Enter, so we use Ctrl+J.
+	if keyStr == "ctrl+j" {
+		// Ctrl+J: insert newline for multi-line messages.
+		currentValue := m.textarea.Value()
+		m.textarea.SetValue(currentValue + "\n")
+		return func() tea.Msg { return nil }
+	}
+
+	// Plain Enter: send message.
+	if msg.Type == tea.KeyEnter {
+		value := stripANSI(m.textarea.Value()) // Strip any ANSI escape sequences
+		if value != "" && len(value) > 0 {
+			return m.sendMessage(value)
+		}
+		// Don't send empty messages, but don't pass Enter to textarea either.
 		return func() tea.Msg { return nil }
 	}
 
@@ -78,16 +115,6 @@ func (m *ChatModel) handleKeyMsg(msg tea.KeyMsg) tea.Cmd {
 			}
 		}
 		return nil
-	case "shift+enter", "alt+enter":
-		// Shift+Enter or Alt+Enter: let textarea handle it (adds newline).
-		return nil
-	case "enter":
-		// Plain Enter: send message.
-		if m.textarea.Value() != "" && len(m.textarea.Value()) > 0 {
-			return m.sendMessage(m.textarea.Value())
-		}
-		// Don't send empty messages, but don't pass Enter to textarea either.
-		return func() tea.Msg { return nil }
 	case "up":
 		// Navigate to previous message in history.
 		m.navigateHistoryUp()
@@ -286,9 +313,9 @@ func (m *ChatModel) navigateHistoryUp() {
 		return
 	}
 
-	// First time navigating: save current input
+	// First time navigating: save current input (strip ANSI codes)
 	if m.historyIndex == -1 {
-		m.historyBuffer = m.textarea.Value()
+		m.historyBuffer = stripANSI(m.textarea.Value())
 		m.historyIndex = len(m.messageHistory)
 	}
 

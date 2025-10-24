@@ -117,7 +117,7 @@ func NewChatModel(client ai.Client, atmosConfig *schema.AtmosConfiguration, mana
 
 	// Initialize textarea.
 	ta := textarea.New()
-	ta.Placeholder = "Type your message... (Enter to send, Shift+Enter for new line, Ctrl+C to quit)"
+	ta.Placeholder = "Type your message... (Enter to send, Ctrl+J for new line, Ctrl+C to quit)"
 	ta.Focus()
 	ta.ShowLineNumbers = false
 	ta.CharLimit = 0 // No character limit
@@ -243,6 +243,12 @@ func (m *ChatModel) switchProvider(provider string) error {
 
 // Init initializes the chat model.
 func (m *ChatModel) Init() tea.Cmd {
+	// Clean any ANSI escape sequences that may have leaked into textarea during initialization.
+	// This handles OSC sequences like ]11;rgb:0000/0000/0000 that terminals send on startup.
+	if m.textarea.Value() != "" {
+		m.textarea.Reset()
+	}
+
 	return tea.Batch(
 		textarea.Blink,
 		m.spinner.Tick,
@@ -272,6 +278,15 @@ func (m *ChatModel) handleWindowResize(msg tea.WindowSizeMsg) {
 		m.textarea.SetWidth(msg.Width - 4)
 	}
 
+	// Clean any ANSI escape sequences that may have leaked into textarea during resize.
+	// Terminal emulators often send OSC queries during resize events.
+	if currentValue := m.textarea.Value(); currentValue != "" {
+		cleanedValue := stripANSI(currentValue)
+		if cleanedValue != currentValue {
+			m.textarea.SetValue(cleanedValue)
+		}
+	}
+
 	m.updateViewportContent()
 }
 
@@ -293,6 +308,15 @@ func (m *ChatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if !m.isLoading && m.currentView == viewModeChat {
 		m.textarea, cmd = m.textarea.Update(msg)
 		cmds = append(cmds, cmd)
+
+		// Strip any ANSI escape sequences that leaked into textarea during the update.
+		// Terminal emulators can send OSC sequences as input at any time.
+		if currentValue := m.textarea.Value(); currentValue != "" {
+			cleanedValue := stripANSI(currentValue)
+			if cleanedValue != currentValue {
+				m.textarea.SetValue(cleanedValue)
+			}
+		}
 	}
 
 	// Update viewport.
@@ -457,7 +481,7 @@ func (m *ChatModel) footerView() string {
 			Foreground(lipgloss.Color("240")).
 			Italic(true)
 
-		help := helpStyle.Render("Ctrl+L: Sessions | Ctrl+N: New Session | Ctrl+P: Switch Provider | Ctrl+C: Quit")
+		help := helpStyle.Render("Enter: Send | Ctrl+J: Newline | Ctrl+L: Sessions | Ctrl+N: New | Ctrl+P: Provider | Ctrl+C: Quit")
 		content = fmt.Sprintf("%s\n%s", m.textarea.View(), help)
 	}
 
@@ -622,7 +646,7 @@ func RunChat(client ai.Client, atmosConfig *schema.AtmosConfiguration, manager *
 
 	// Add welcome message only if this is a new session (no existing messages).
 	if len(model.messages) == 0 {
-		model.addMessage(roleAssistant, `Welcome to Atmos AI Assistant! 🚀
+		model.addMessage(roleAssistant, `Welcome to Atmos AI Assistant! 👽
 
 I'm here to help you with your Atmos infrastructure management. I can:
 
@@ -651,7 +675,10 @@ What would you like to know?`)
 
 	model.updateViewportContent()
 
-	p := tea.NewProgram(model, tea.WithAltScreen())
+	p := tea.NewProgram(
+		model,
+		tea.WithAltScreen(),
+	)
 	_, err = p.Run()
 	return err
 }
