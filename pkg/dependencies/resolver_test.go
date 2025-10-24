@@ -156,8 +156,8 @@ func TestResolveComponentDependencies(t *testing.T) {
 			componentConfig: map[string]any{
 				"dependencies": map[string]any{
 					"tools": map[string]any{
-						"terraform": "1.10.3",  // Override (satisfies ~> 1.10.0)
-						"checkov":   "latest",  // Add
+						"terraform": "1.10.3", // Override (satisfies ~> 1.10.0)
+						"checkov":   "latest", // Add
 					},
 				},
 			},
