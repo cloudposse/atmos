@@ -7,7 +7,7 @@ The Atmos Toolchain provides a unified CLI tool management system that allows At
 ## Status: In Development
 
 **Current Version**: v0.1 (Initial Implementation)
-**Last Updated**: 2025-10-20
+**Last Updated**: 2025-10-23
 
 ---
 
@@ -788,9 +788,15 @@ settings:
 
 ## Testing Strategy
 
-### Current Coverage: 67.5%
+### Current Coverage: 76.3%
 
 **Target**: 80-90%
+
+**Recent Improvements** (2025-10-23):
+- Added comprehensive tests for `WhichExec` command
+- Improved `LookupToolVersion` from 33.3% to 100% coverage
+- Fixed `--help` flag handling in `exec` command
+- Overall coverage increased from 67.5% to 76.3%
 
 ### Test Categories
 

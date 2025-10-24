@@ -303,6 +303,82 @@ func TestAddToolToVersionsAsDefault(t *testing.T) {
 	})
 }
 
+func TestLookupToolVersion(t *testing.T) {
+	tests := []struct {
+		name            string
+		tool            string
+		toolVersions    *ToolVersions
+		mapping         map[string][2]string // mock resolver mapping
+		expectedKey     string
+		expectedVersion string
+		expectedFound   bool
+	}{
+		{
+			name: "raw tool name found",
+			tool: "terraform",
+			toolVersions: &ToolVersions{
+				Tools: map[string][]string{
+					"terraform": {"1.5.7"},
+				},
+			},
+			mapping:         nil,
+			expectedKey:     "terraform",
+			expectedVersion: "1.5.7",
+			expectedFound:   true,
+		},
+		{
+			name: "alias resolves and found",
+			tool: "terraform",
+			toolVersions: &ToolVersions{
+				Tools: map[string][]string{
+					"hashicorp/terraform": {"1.6.0"},
+				},
+			},
+			mapping: map[string][2]string{
+				"terraform": {"hashicorp", "terraform"},
+			},
+			expectedKey:     "hashicorp/terraform",
+			expectedVersion: "1.6.0",
+			expectedFound:   true,
+		},
+		{
+			name: "not found - no alias",
+			tool: "kubectl",
+			toolVersions: &ToolVersions{
+				Tools: map[string][]string{},
+			},
+			mapping:         nil,
+			expectedKey:     "",
+			expectedVersion: "",
+			expectedFound:   false,
+		},
+		{
+			name: "not found - alias resolves but not in versions",
+			tool: "kubectl",
+			toolVersions: &ToolVersions{
+				Tools: map[string][]string{},
+			},
+			mapping: map[string][2]string{
+				"kubectl": {"kubernetes", "kubectl"},
+			},
+			expectedKey:     "",
+			expectedVersion: "",
+			expectedFound:   false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			resolver := &mockToolResolver{mapping: tt.mapping}
+			key, version, found := LookupToolVersion(tt.tool, tt.toolVersions, resolver)
+
+			assert.Equal(t, tt.expectedKey, key, "resolvedKey mismatch")
+			assert.Equal(t, tt.expectedVersion, version, "version mismatch")
+			assert.Equal(t, tt.expectedFound, found, "found mismatch")
+		})
+	}
+}
+
 func TestLookupToolVersionOrLatest(t *testing.T) {
 	tests := []struct {
 		name            string

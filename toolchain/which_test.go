@@ -150,15 +150,56 @@ func TestWhichCommand_NoToolVersionsFile(t *testing.T) {
 }
 
 func TestWhichCommand_CanonicalName(t *testing.T) {
-	// Test with canonical name
+	// Create a temporary directory
+	tempDir := t.TempDir()
 
-	err := WhichExec("hashicorp/terraform")
-
-	// This might succeed if hashicorp/terraform is configured and installed, or fail if not
-	// We don't assert either way since it depends on the current .tool-versions state
-	if err != nil {
-		t.Logf("hashicorp/terraform not found or not installed: %v", err)
-	} else {
-		t.Logf("hashicorp/terraform found and installed via toolchain")
+	// Create a .tool-versions file with canonical tool name
+	toolVersions := &ToolVersions{
+		Tools: map[string][]string{
+			"hashicorp/terraform": {"1.5.7"},
+		},
 	}
+	toolVersionsPath := filepath.Join(tempDir, DefaultToolVersionsFilePath)
+	SetAtmosConfig(&schema.AtmosConfiguration{Toolchain: schema.Toolchain{ToolsDir: tempDir, FilePath: toolVersionsPath}})
+	err := SaveToolVersions(toolVersionsPath, toolVersions)
+	require.NoError(t, err)
+
+	// Create mock installed binary
+	installer := NewInstaller()
+	binaryPath := installer.getBinaryPath("hashicorp", "terraform", "1.5.7")
+	err = os.MkdirAll(filepath.Dir(binaryPath), defaultMkdirPermissions)
+	require.NoError(t, err)
+	err = os.WriteFile(binaryPath, []byte("mock terraform"), defaultMkdirPermissions)
+	require.NoError(t, err)
+
+	err = WhichExec("hashicorp/terraform")
+	require.NoError(t, err, "Should succeed with canonical tool name")
+}
+
+func TestWhichCommand_WithVersionSpecifier(t *testing.T) {
+	// Create a temporary directory
+	tempDir := t.TempDir()
+
+	// Create a .tool-versions file with multiple versions
+	toolVersions := &ToolVersions{
+		Tools: map[string][]string{
+			"terraform": {"1.5.7", "1.6.0"},
+		},
+	}
+	toolVersionsPath := filepath.Join(tempDir, DefaultToolVersionsFilePath)
+	SetAtmosConfig(&schema.AtmosConfiguration{Toolchain: schema.Toolchain{ToolsDir: tempDir, FilePath: toolVersionsPath}})
+	err := SaveToolVersions(toolVersionsPath, toolVersions)
+	require.NoError(t, err)
+
+	// Create mock installed binary for specific version
+	installer := NewInstaller()
+	binaryPath := installer.getBinaryPath("hashicorp", "terraform", "1.5.7")
+	err = os.MkdirAll(filepath.Dir(binaryPath), defaultMkdirPermissions)
+	require.NoError(t, err)
+	err = os.WriteFile(binaryPath, []byte("mock terraform"), defaultMkdirPermissions)
+	require.NoError(t, err)
+
+	// Test with version specifier
+	err = WhichExec("terraform@1.5.7")
+	require.NoError(t, err, "Should succeed with version specifier")
 }
