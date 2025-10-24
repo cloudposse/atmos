@@ -20,6 +20,23 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
+// getProviderFromConfig returns the current provider from configuration.
+func getProviderFromConfig(atmosConfig *schema.AtmosConfiguration) string {
+	if atmosConfig.Settings.AI.DefaultProvider != "" {
+		return atmosConfig.Settings.AI.DefaultProvider
+	}
+	return "anthropic"
+}
+
+// getModelFromConfig returns the model for the current provider from configuration.
+func getModelFromConfig(atmosConfig *schema.AtmosConfiguration) string {
+	provider := getProviderFromConfig(atmosConfig)
+	if providerConfig, err := ai.GetProviderConfig(atmosConfig, provider); err == nil {
+		return providerConfig.Model
+	}
+	return ""
+}
+
 // aiChatCmd represents the ai chat command.
 var aiChatCmd = &cobra.Command{
 	Use:   "chat",
@@ -85,7 +102,7 @@ The AI assistant has access to your current Atmos configuration and can help wit
 				if err != nil {
 					// Session doesn't exist, create new one.
 					log.Debug(fmt.Sprintf("Session '%s' not found, creating new session", sessionName))
-					sess, err = manager.CreateSession(ctx, sessionName, atmosConfig.Settings.AI.Model, atmosConfig.Settings.AI.Provider, nil)
+					sess, err = manager.CreateSession(ctx, sessionName, getModelFromConfig(&atmosConfig), getProviderFromConfig(&atmosConfig), nil)
 					if err != nil {
 						return fmt.Errorf("failed to create session: %w", err)
 					}
@@ -96,7 +113,7 @@ The AI assistant has access to your current Atmos configuration and can help wit
 			} else {
 				// Create anonymous session with timestamp.
 				sessionName = fmt.Sprintf("session-%s", time.Now().Format("20060102-150405"))
-				sess, err = manager.CreateSession(ctx, sessionName, atmosConfig.Settings.AI.Model, atmosConfig.Settings.AI.Provider, nil)
+				sess, err = manager.CreateSession(ctx, sessionName, getModelFromConfig(&atmosConfig), getProviderFromConfig(&atmosConfig), nil)
 				if err != nil {
 					return fmt.Errorf("failed to create session: %w", err)
 				}
@@ -142,7 +159,7 @@ The AI assistant has access to your current Atmos configuration and can help wit
 		}
 
 		// Start chat TUI with session, tools, and memory.
-		if err := tui.RunChat(client, manager, sess, executor, memoryMgr); err != nil {
+		if err := tui.RunChat(client, &atmosConfig, manager, sess, executor, memoryMgr); err != nil {
 			return fmt.Errorf("chat session failed: %w", err)
 		}
 

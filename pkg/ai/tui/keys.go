@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"time"
 
@@ -36,6 +37,11 @@ func (m *ChatModel) handleKeyMsg(msg tea.KeyMsg) tea.Cmd {
 		return m.handleCreateSessionKeys(msg)
 	}
 
+	// Handle provider select view keys.
+	if m.currentView == viewModeProviderSelect {
+		return m.handleProviderSelectKeys(msg)
+	}
+
 	// Handle chat view keys.
 	switch msg.String() {
 	case "ctrl+c":
@@ -48,6 +54,28 @@ func (m *ChatModel) handleKeyMsg(msg tea.KeyMsg) tea.Cmd {
 		if m.manager != nil {
 			m.currentView = viewModeCreateSession
 			m.createForm = newCreateSessionForm() // Reset form
+		}
+		return nil
+	case "ctrl+p":
+		// Open provider selection.
+		if m.atmosConfig != nil {
+			m.currentView = viewModeProviderSelect
+			m.selectedProviderIdx = 0
+			// Find current provider index.
+			currentProvider := ""
+			if m.sess != nil && m.sess.Provider != "" {
+				currentProvider = m.sess.Provider
+			} else if m.atmosConfig.Settings.AI.DefaultProvider != "" {
+				currentProvider = m.atmosConfig.Settings.AI.DefaultProvider
+			} else {
+				currentProvider = "anthropic"
+			}
+			for i, p := range availableProviders {
+				if p.Name == currentProvider {
+					m.selectedProviderIdx = i
+					break
+				}
+			}
 		}
 		return nil
 	case "shift+enter", "alt+enter":
@@ -288,4 +316,40 @@ func (m *ChatModel) navigateHistoryDown() {
 	} else {
 		m.textarea.SetValue(m.messageHistory[m.historyIndex])
 	}
+}
+
+// handleProviderSelectKeys processes keyboard input for the provider selection view.
+func (m *ChatModel) handleProviderSelectKeys(msg tea.KeyMsg) tea.Cmd {
+	switch msg.String() {
+	case "ctrl+c":
+		return tea.Quit
+	case "esc", "q":
+		// Return to chat view.
+		m.currentView = viewModeChat
+		return nil
+	case "up", "k":
+		// Move selection up.
+		if m.selectedProviderIdx > 0 {
+			m.selectedProviderIdx--
+		}
+		return nil
+	case "down", "j":
+		// Move selection down.
+		if m.selectedProviderIdx < len(availableProviders)-1 {
+			m.selectedProviderIdx++
+		}
+		return nil
+	case "enter":
+		// Switch to selected provider.
+		selectedProvider := availableProviders[m.selectedProviderIdx].Name
+		if err := m.switchProvider(selectedProvider); err != nil {
+			m.addMessage(roleSystem, fmt.Sprintf("Error switching provider: %v", err))
+		}
+		// Return to chat view.
+		m.currentView = viewModeChat
+		m.updateViewportContent()
+		return nil
+	}
+
+	return nil
 }

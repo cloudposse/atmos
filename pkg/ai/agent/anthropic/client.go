@@ -33,21 +33,21 @@ type SimpleAIConfig struct {
 
 // NewSimpleClient creates a new simple AI client from Atmos configuration.
 func NewSimpleClient(atmosConfig *schema.AtmosConfiguration) (*SimpleClient, error) {
-	// Extract simple AI configuration
+	// Extract simple AI configuration.
 	config := extractSimpleAIConfig(atmosConfig)
 
 	if !config.Enabled {
 		return nil, errUtils.ErrAIDisabledInConfiguration
 	}
 
-	// Get API key from environment using viper
+	// Get API key from environment using viper.
 	_ = viper.BindEnv(config.APIKeyEnv, config.APIKeyEnv)
 	apiKey := viper.GetString(config.APIKeyEnv)
 	if apiKey == "" {
 		return nil, fmt.Errorf("%w: %s", errUtils.ErrAIAPIKeyNotFound, config.APIKeyEnv)
 	}
 
-	// Create Anthropic client
+	// Create Anthropic client.
 	client := anthropic.NewClient(
 		option.WithAPIKey(apiKey),
 	)
@@ -60,7 +60,7 @@ func NewSimpleClient(atmosConfig *schema.AtmosConfiguration) (*SimpleClient, err
 
 // extractSimpleAIConfig extracts AI configuration from AtmosConfiguration.
 func extractSimpleAIConfig(atmosConfig *schema.AtmosConfiguration) *SimpleAIConfig {
-	// Set defaults
+	// Set defaults.
 	config := &SimpleAIConfig{
 		Enabled:   false,
 		Model:     "claude-3-5-sonnet-20241022",
@@ -68,18 +68,25 @@ func extractSimpleAIConfig(atmosConfig *schema.AtmosConfiguration) *SimpleAIConf
 		MaxTokens: DefaultMaxTokens,
 	}
 
-	// Override defaults with configuration from atmos.yaml.
+	// Check if AI is enabled.
 	if atmosConfig.Settings.AI.Enabled {
 		config.Enabled = atmosConfig.Settings.AI.Enabled
 	}
-	if atmosConfig.Settings.AI.Model != "" {
-		config.Model = atmosConfig.Settings.AI.Model
-	}
-	if atmosConfig.Settings.AI.ApiKeyEnv != "" {
-		config.APIKeyEnv = atmosConfig.Settings.AI.ApiKeyEnv
-	}
-	if atmosConfig.Settings.AI.MaxTokens > 0 {
-		config.MaxTokens = atmosConfig.Settings.AI.MaxTokens
+
+	// Get provider-specific configuration from Providers map.
+	if atmosConfig.Settings.AI.Providers != nil {
+		if providerConfig, exists := atmosConfig.Settings.AI.Providers["anthropic"]; exists && providerConfig != nil {
+			// Override defaults with provider-specific configuration.
+			if providerConfig.Model != "" {
+				config.Model = providerConfig.Model
+			}
+			if providerConfig.ApiKeyEnv != "" {
+				config.APIKeyEnv = providerConfig.ApiKeyEnv
+			}
+			if providerConfig.MaxTokens > 0 {
+				config.MaxTokens = providerConfig.MaxTokens
+			}
+		}
 	}
 
 	return config

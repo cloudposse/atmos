@@ -33,10 +33,14 @@ func TestExtractSimpleAIConfig(t *testing.T) {
 			atmosConfig: &schema.AtmosConfiguration{
 				Settings: schema.AtmosSettings{
 					AI: schema.AISettings{
-						Enabled:   true,
-						Model:     "claude-4-20250514",
-						ApiKeyEnv: "CUSTOM_API_KEY",
-						MaxTokens: 8192,
+						Enabled: true,
+						Providers: map[string]*schema.AIProviderConfig{
+							"anthropic": {
+								Model:     "claude-4-20250514",
+								ApiKeyEnv: "CUSTOM_API_KEY",
+								MaxTokens: 8192,
+							},
+						},
 					},
 				},
 			},
@@ -53,7 +57,11 @@ func TestExtractSimpleAIConfig(t *testing.T) {
 				Settings: schema.AtmosSettings{
 					AI: schema.AISettings{
 						Enabled: true,
-						Model:   "claude-3-haiku-20240307",
+						Providers: map[string]*schema.AIProviderConfig{
+							"anthropic": {
+								Model: "claude-3-haiku-20240307",
+							},
+						},
 					},
 				},
 			},

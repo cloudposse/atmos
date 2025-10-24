@@ -34,11 +34,15 @@ func TestExtractConfig(t *testing.T) {
 			atmosConfig: &schema.AtmosConfiguration{
 				Settings: schema.AtmosSettings{
 					AI: schema.AISettings{
-						Enabled:   true,
-						Model:     "llama3.1:8b",
-						ApiKeyEnv: "CUSTOM_API_KEY",
-						MaxTokens: 8192,
-						BaseURL:   "http://custom-ollama:11434/v1",
+						Enabled: true,
+						Providers: map[string]*schema.AIProviderConfig{
+							"ollama": {
+								Model:     "llama3.1:8b",
+								ApiKeyEnv: "CUSTOM_API_KEY",
+								MaxTokens: 8192,
+								BaseURL:   "http://custom-ollama:11434/v1",
+							},
+						},
 					},
 				},
 			},
@@ -56,7 +60,11 @@ func TestExtractConfig(t *testing.T) {
 				Settings: schema.AtmosSettings{
 					AI: schema.AISettings{
 						Enabled: true,
-						Model:   "codellama:13b",
+						Providers: map[string]*schema.AIProviderConfig{
+							"ollama": {
+								Model: "codellama:13b",
+							},
+						},
 					},
 				},
 			},
@@ -74,7 +82,11 @@ func TestExtractConfig(t *testing.T) {
 				Settings: schema.AtmosSettings{
 					AI: schema.AISettings{
 						Enabled: true,
-						BaseURL: "https://ollama.example.com/v1",
+						Providers: map[string]*schema.AIProviderConfig{
+							"ollama": {
+								BaseURL: "https://ollama.example.com/v1",
+							},
+						},
 					},
 				},
 			},
@@ -91,11 +103,15 @@ func TestExtractConfig(t *testing.T) {
 			atmosConfig: &schema.AtmosConfiguration{
 				Settings: schema.AtmosSettings{
 					AI: schema.AISettings{
-						Enabled:   true,
-						Model:     "llama3.3:70b",
-						ApiKeyEnv: "OLLAMA_REMOTE_KEY",
-						BaseURL:   "https://api.ollama-cloud.com/v1",
-						MaxTokens: 16384,
+						Enabled: true,
+						Providers: map[string]*schema.AIProviderConfig{
+							"ollama": {
+								Model:     "llama3.3:70b",
+								ApiKeyEnv: "OLLAMA_REMOTE_KEY",
+								BaseURL:   "https://api.ollama-cloud.com/v1",
+								MaxTokens: 16384,
+							},
+						},
 					},
 				},
 			},

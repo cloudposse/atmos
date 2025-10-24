@@ -18,6 +18,8 @@ The Atmos AI Assistant is an AI-powered terminal agent that helps with Atmos inf
 
 ### Conversation Management
 - **Interactive Chat Interface**: Terminal-based chat session for extended conversations
+- **Multi-Provider Support**: Configure and use multiple AI providers simultaneously
+- **Provider Switching**: Switch between AI providers mid-conversation with Ctrl+P
 - **Persistent Sessions**: Save and resume conversations across CLI invocations
 - **In-TUI Session Creation**: Create new sessions with provider selection using Ctrl+N
 - **Session Switching**: Switch between sessions without leaving the TUI (Ctrl+L)
@@ -65,9 +67,32 @@ Enable AI features in your `atmos.yaml`:
 settings:
   ai:
     enabled: true
-    provider: "anthropic"  # or "openai", "gemini", "grok", "ollama"
-    api_key_env: "ANTHROPIC_API_KEY"
-    # base_url: "http://localhost:11434/v1"  # For Ollama or custom endpoints
+    default_provider: "anthropic"  # Default provider for CLI commands
+
+    # Configure one or more AI providers
+    providers:
+      anthropic:
+        model: "claude-3-5-sonnet-20241022"
+        api_key_env: "ANTHROPIC_API_KEY"
+        max_tokens: 4096
+      openai:
+        model: "gpt-4o"
+        api_key_env: "OPENAI_API_KEY"
+        max_tokens: 4096
+      gemini:
+        model: "gemini-2.0-flash-exp"
+        api_key_env: "GEMINI_API_KEY"
+        max_tokens: 8192
+      grok:
+        model: "grok-beta"
+        api_key_env: "XAI_API_KEY"
+        max_tokens: 4096
+        base_url: "https://api.x.ai/v1"
+      ollama:
+        model: "llama3.3:70b"
+        api_key_env: "OLLAMA_API_KEY"  # Optional for local instances
+        max_tokens: 4096
+        base_url: "http://localhost:11434/v1"
 
     # Optional: Enable persistent sessions
     sessions:

@@ -34,11 +34,15 @@ func TestExtractConfig(t *testing.T) {
 			atmosConfig: &schema.AtmosConfiguration{
 				Settings: schema.AtmosSettings{
 					AI: schema.AISettings{
-						Enabled:   true,
-						Model:     "grok-4",
-						ApiKeyEnv: "CUSTOM_XAI_KEY",
-						MaxTokens: 8192,
-						BaseURL:   "https://custom.api.x.ai/v1",
+						Enabled: true,
+						Providers: map[string]*schema.AIProviderConfig{
+							"grok": {
+								Model:     "grok-4",
+								ApiKeyEnv: "CUSTOM_XAI_KEY",
+								MaxTokens: 8192,
+								BaseURL:   "https://custom.api.x.ai/v1",
+							},
+						},
 					},
 				},
 			},
@@ -56,7 +60,11 @@ func TestExtractConfig(t *testing.T) {
 				Settings: schema.AtmosSettings{
 					AI: schema.AISettings{
 						Enabled: true,
-						Model:   "grok-2",
+						Providers: map[string]*schema.AIProviderConfig{
+							"grok": {
+								Model: "grok-2",
+							},
+						},
 					},
 				},
 			},

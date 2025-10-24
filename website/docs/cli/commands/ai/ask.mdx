@@ -40,25 +40,36 @@ atmos ai ask [question]
 
 ## Configuration
 
-Configure an AI provider in your `atmos.yaml`:
+Configure one or more AI providers in your `atmos.yaml`. The `default_provider` is used for the `ask` command:
 
 ```yaml
 settings:
   ai:
     enabled: true
-    provider: "anthropic"  # anthropic, openai, gemini, or grok
-    model: "claude-3-5-sonnet-20241022"
-    api_key_env: "ANTHROPIC_API_KEY"
+    default_provider: "anthropic"  # Provider used for 'atmos ai ask'
+    providers:
+      anthropic:
+        model: "claude-3-5-sonnet-20241022"
+        api_key_env: "ANTHROPIC_API_KEY"
+        max_tokens: 4096
+      openai:
+        model: "gpt-4o"
+        api_key_env: "OPENAI_API_KEY"
+        max_tokens: 4096
+      # Add other providers as needed
 ```
 
-Set the appropriate environment variable for your provider:
+Set the appropriate environment variable for your chosen provider:
 
 ```shell
 export ANTHROPIC_API_KEY="your-key"  # For Anthropic
 export OPENAI_API_KEY="your-key"     # For OpenAI
 export GEMINI_API_KEY="your-key"     # For Google Gemini
 export XAI_API_KEY="your-key"        # For xAI Grok
+export OLLAMA_API_KEY="your-key"     # For Ollama (optional for local)
 ```
+
+**Note:** The `ask` command uses the provider specified in `default_provider`. To use a different provider, either change the `default_provider` setting or use [`atmos ai chat`](/cli/commands/ai/chat) which allows switching providers with `Ctrl+P`.
 
 ## Examples
 

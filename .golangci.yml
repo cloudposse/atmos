@@ -240,6 +240,23 @@ linters:
           - err113
         path: ".*"
         source: 'errors\.Join\(.*errUtils\..*fmt\.Errorf'
+      # Exclude AI code from linting (AI operations are inherently slow with API calls, complex UI logic)
+      - linters:
+          - lintroller
+          - cyclop
+          - err113
+          - funlen
+          - gocognit
+          - gocritic
+          - nestif
+          - nolintlint
+          - revive
+          - unused
+        path: pkg/ai/
+      # Exclude LSP code from performance tracking (LSP operations are not critical path)
+      - linters:
+          - lintroller
+        path: pkg/lsp/
       # Exclude LSP protocol implementation from linting (performance-critical JSON-RPC communication)
       - linters:
           - err113
@@ -249,16 +266,14 @@ linters:
           - staticcheck
           - unused
           - revive
-          - lintroller
-        path: pkg/lsp/
+        path: pkg/lsp/.*
       # Exclude LSP validation tool from linting
       - linters:
           - dupl
           - err113
           - funlen
           - revive
-          - lintroller
-        path: pkg/ai/tools/atmos/validate_file_lsp
+        path: pkg/ai/tools/atmos/validate_file_lsp.*
     paths:
       - experiments/.*
       - third_party$

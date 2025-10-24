@@ -46,13 +46,17 @@ func TestIsAIEnabled(t *testing.T) {
 			expected: true,
 		},
 		{
-			name: "AI enabled with other settings",
+			name: "AI enabled with provider configured",
 			atmosConfig: &schema.AtmosConfiguration{
 				Settings: schema.AtmosSettings{
 					AI: schema.AISettings{
-						Enabled:   true,
-						Model:     "claude-3-5-sonnet-20241022",
-						MaxTokens: 4096,
+						Enabled: true,
+						Providers: map[string]*schema.AIProviderConfig{
+							"anthropic": {
+								Model:     "claude-3-5-sonnet-20241022",
+								MaxTokens: 4096,
+							},
+						},
 					},
 				},
 			},

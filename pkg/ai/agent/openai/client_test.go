@@ -33,10 +33,14 @@ func TestExtractConfig(t *testing.T) {
 			atmosConfig: &schema.AtmosConfiguration{
 				Settings: schema.AtmosSettings{
 					AI: schema.AISettings{
-						Enabled:   true,
-						Model:     "gpt-4-turbo",
-						ApiKeyEnv: "CUSTOM_API_KEY",
-						MaxTokens: 8192,
+						Enabled: true,
+						Providers: map[string]*schema.AIProviderConfig{
+							"openai": {
+								Model:     "gpt-4-turbo",
+								ApiKeyEnv: "CUSTOM_API_KEY",
+								MaxTokens: 8192,
+							},
+						},
 					},
 				},
 			},
@@ -53,7 +57,11 @@ func TestExtractConfig(t *testing.T) {
 				Settings: schema.AtmosSettings{
 					AI: schema.AISettings{
 						Enabled: true,
-						Model:   "gpt-3.5-turbo",
+						Providers: map[string]*schema.AIProviderConfig{
+							"openai": {
+								Model: "gpt-3.5-turbo",
+							},
+						},
 					},
 				},
 			},

@@ -20,6 +20,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/ai/session"
 	"github.com/cloudposse/atmos/pkg/ai/tools"
 	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
 
@@ -39,6 +40,18 @@ const (
 	roleSystem    = "system"
 )
 
+// availableProviders lists all AI providers that can be switched between during a session.
+var availableProviders = []struct {
+	Name        string
+	Description string
+}{
+	{"anthropic", "Anthropic Claude - Industry-leading reasoning and coding"},
+	{"openai", "OpenAI GPT - Most popular, widely adopted models"},
+	{"gemini", "Google Gemini - Strong multimodal capabilities"},
+	{"grok", "xAI Grok - Real-time data access"},
+	{"ollama", "Ollama - Local models for privacy and offline use"},
+}
+
 // viewMode represents the current view mode of the TUI.
 type viewMode int
 
@@ -46,11 +59,13 @@ const (
 	viewModeChat viewMode = iota
 	viewModeSessionList
 	viewModeCreateSession
+	viewModeProviderSelect
 )
 
 // ChatModel represents the state of the chat TUI.
 type ChatModel struct {
 	client               ai.Client
+	atmosConfig          *schema.AtmosConfiguration // Configuration for recreating clients when switching providers
 	manager              *session.Manager
 	sess                 *session.Session
 	executor             *tools.Executor
@@ -77,6 +92,8 @@ type ChatModel struct {
 	messageHistory       []string        // History of user messages for navigation
 	historyIndex         int             // Current position in history (-1 = not navigating)
 	historyBuffer        string          // Temporary buffer for current input when navigating
+	providerSelectMode   bool            // Whether we're in provider selection mode
+	selectedProviderIdx  int             // Selected provider index in provider selection
 }
 
 // ChatMessage represents a single message in the chat.
@@ -87,7 +104,7 @@ type ChatMessage struct {
 }
 
 // NewChatModel creates a new chat model with the provided AI client.
-func NewChatModel(client ai.Client, manager *session.Manager, sess *session.Session, executor *tools.Executor, memoryMgr *memory.Manager) (*ChatModel, error) {
+func NewChatModel(client ai.Client, atmosConfig *schema.AtmosConfiguration, manager *session.Manager, sess *session.Session, executor *tools.Executor, memoryMgr *memory.Manager) (*ChatModel, error) {
 	if client == nil {
 		return nil, errUtils.ErrAIClientNil
 	}
@@ -110,6 +127,7 @@ func NewChatModel(client ai.Client, manager *session.Manager, sess *session.Sess
 
 	model := &ChatModel{
 		client:               client,
+		atmosConfig:          atmosConfig,
 		manager:              manager,
 		sess:                 sess,
 		executor:             executor,
@@ -161,6 +179,62 @@ func (m *ChatModel) loadSessionMessages() error {
 			m.messageHistory = append(m.messageHistory, msg.Content)
 		}
 	}
+
+	return nil
+}
+
+// switchProvider switches the AI provider mid-session while preserving message history.
+func (m *ChatModel) switchProvider(provider string) error {
+	if m.atmosConfig == nil {
+		return fmt.Errorf("cannot switch provider: atmosConfig is nil")
+	}
+
+	// Get provider-specific configuration to validate it exists.
+	providerConfig, err := ai.GetProviderConfig(m.atmosConfig, provider)
+	if err != nil {
+		return fmt.Errorf("cannot switch to provider %s: %w", provider, err)
+	}
+
+	// Store old provider for rollback on failure.
+	oldDefaultProvider := m.atmosConfig.Settings.AI.DefaultProvider
+
+	// Update atmosConfig to use the new provider.
+	m.atmosConfig.Settings.AI.DefaultProvider = provider
+
+	// Create new client with the updated provider.
+	newClient, err := ai.NewClient(m.atmosConfig)
+	if err != nil {
+		// Restore old settings on failure.
+		m.atmosConfig.Settings.AI.DefaultProvider = oldDefaultProvider
+		return fmt.Errorf("failed to create new client for provider %s: %w", provider, err)
+	}
+
+	// Replace the client.
+	m.client = newClient
+
+	// Update session if available.
+	if m.sess != nil {
+		m.sess.Provider = provider
+		m.sess.Model = providerConfig.Model
+
+		// Persist session update if manager is available.
+		if m.manager != nil {
+			ctx := context.Background()
+			if err := m.manager.UpdateSession(ctx, m.sess); err != nil {
+				log.Warn(fmt.Sprintf("Failed to persist provider switch in session: %v", err))
+			}
+		}
+	}
+
+	// Add system message indicating the switch.
+	providerName := provider
+	for _, p := range availableProviders {
+		if p.Name == provider {
+			providerName = p.Description
+			break
+		}
+	}
+	m.addMessage(roleAssistant, fmt.Sprintf("🔄 Switched to %s (model: %s)\n\nYour message history has been preserved.", providerName, providerConfig.Model))
 
 	return nil
 }
@@ -329,6 +403,8 @@ func (m *ChatModel) View() string {
 		return m.sessionListView()
 	case viewModeCreateSession:
 		return m.createSessionView()
+	case viewModeProviderSelect:
+		return m.providerSelectView()
 	default:
 		return fmt.Sprintf("%s\n%s\n%s", m.headerView(), m.viewport.View(), m.footerView())
 	}
@@ -379,7 +455,7 @@ func (m *ChatModel) footerView() string {
 			Foreground(lipgloss.Color("240")).
 			Italic(true)
 
-		help := helpStyle.Render("Ctrl+L: Sessions | Ctrl+N: New Session | Ctrl+C: Quit")
+		help := helpStyle.Render("Ctrl+L: Sessions | Ctrl+N: New Session | Ctrl+P: Switch Provider | Ctrl+C: Quit")
 		content = fmt.Sprintf("%s\n%s", m.textarea.View(), help)
 	}
 
@@ -536,8 +612,8 @@ func (m *ChatModel) getAIResponse(userMessage string) tea.Cmd {
 }
 
 // RunChat starts the chat TUI with the provided AI client.
-func RunChat(client ai.Client, manager *session.Manager, sess *session.Session, executor *tools.Executor, memoryMgr *memory.Manager) error {
-	model, err := NewChatModel(client, manager, sess, executor, memoryMgr)
+func RunChat(client ai.Client, atmosConfig *schema.AtmosConfiguration, manager *session.Manager, sess *session.Session, executor *tools.Executor, memoryMgr *memory.Manager) error {
+	model, err := NewChatModel(client, atmosConfig, manager, sess, executor, memoryMgr)
 	if err != nil {
 		return fmt.Errorf("failed to create chat model: %w", err)
 	}
@@ -576,4 +652,71 @@ What would you like to know?`)
 	p := tea.NewProgram(model, tea.WithAltScreen())
 	_, err = p.Run()
 	return err
+}
+
+// providerSelectView renders the provider selection interface.
+func (m *ChatModel) providerSelectView() string {
+	var content strings.Builder
+
+	// Title
+	titleStyle := lipgloss.NewStyle().
+		Bold(true).
+		Foreground(lipgloss.Color(theme.ColorCyan)).
+		MarginBottom(1)
+	content.WriteString(titleStyle.Render("Switch AI Provider"))
+	content.WriteString(newlineChar)
+
+	// Help text
+	helpStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color(theme.ColorGray)).
+		Margin(0, 0, 1, 0)
+	content.WriteString(helpStyle.Render("↑/↓: Navigate | Enter: Select | Esc/q: Cancel"))
+	content.WriteString(doubleNewline)
+
+	// Current provider indicator
+	// Use session provider if available, otherwise use configured default.
+	currentProvider := ""
+	if m.sess != nil && m.sess.Provider != "" {
+		currentProvider = m.sess.Provider
+	} else if m.atmosConfig.Settings.AI.DefaultProvider != "" {
+		currentProvider = m.atmosConfig.Settings.AI.DefaultProvider
+	} else {
+		currentProvider = "anthropic" // Default fallback
+	}
+
+	// Provider list
+	selectedStyle := lipgloss.NewStyle().
+		Bold(true).
+		Foreground(lipgloss.Color(theme.ColorCyan)).
+		Background(lipgloss.Color(theme.ColorGray))
+	normalStyle := lipgloss.NewStyle()
+	currentStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color(theme.ColorGreen))
+
+	for i, provider := range availableProviders {
+		var line string
+		prefix := "  "
+		if i == m.selectedProviderIdx {
+			prefix = "▶ "
+		}
+
+		providerInfo := fmt.Sprintf("%s%s", prefix, provider.Name)
+		if provider.Name == currentProvider {
+			providerInfo += " (current)"
+		}
+		providerInfo += fmt.Sprintf("\n    %s", provider.Description)
+
+		if i == m.selectedProviderIdx {
+			line = selectedStyle.Render(providerInfo)
+		} else if provider.Name == currentProvider {
+			line = currentStyle.Render(providerInfo)
+		} else {
+			line = normalStyle.Render(providerInfo)
+		}
+
+		content.WriteString(line)
+		content.WriteString(doubleNewline)
+	}
+
+	return content.String()
 }

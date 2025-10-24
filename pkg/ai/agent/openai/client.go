@@ -60,7 +60,7 @@ func NewClient(atmosConfig *schema.AtmosConfiguration) (*Client, error) {
 
 // extractConfig extracts AI configuration from AtmosConfiguration.
 func extractConfig(atmosConfig *schema.AtmosConfiguration) *Config {
-	// Set defaults
+	// Set defaults.
 	config := &Config{
 		Enabled:   false,
 		Model:     "gpt-4o",
@@ -68,18 +68,25 @@ func extractConfig(atmosConfig *schema.AtmosConfiguration) *Config {
 		MaxTokens: DefaultMaxTokens,
 	}
 
-	// Override defaults with configuration from atmos.yaml.
+	// Check if AI is enabled.
 	if atmosConfig.Settings.AI.Enabled {
 		config.Enabled = atmosConfig.Settings.AI.Enabled
 	}
-	if atmosConfig.Settings.AI.Model != "" {
-		config.Model = atmosConfig.Settings.AI.Model
-	}
-	if atmosConfig.Settings.AI.ApiKeyEnv != "" {
-		config.APIKeyEnv = atmosConfig.Settings.AI.ApiKeyEnv
-	}
-	if atmosConfig.Settings.AI.MaxTokens > 0 {
-		config.MaxTokens = atmosConfig.Settings.AI.MaxTokens
+
+	// Get provider-specific configuration from Providers map.
+	if atmosConfig.Settings.AI.Providers != nil {
+		if providerConfig, exists := atmosConfig.Settings.AI.Providers["openai"]; exists && providerConfig != nil {
+			// Override defaults with provider-specific configuration.
+			if providerConfig.Model != "" {
+				config.Model = providerConfig.Model
+			}
+			if providerConfig.ApiKeyEnv != "" {
+				config.APIKeyEnv = providerConfig.ApiKeyEnv
+			}
+			if providerConfig.MaxTokens > 0 {
+				config.MaxTokens = providerConfig.MaxTokens
+			}
+		}
 	}
 
 	return config

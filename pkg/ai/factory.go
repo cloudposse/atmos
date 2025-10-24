@@ -15,11 +15,8 @@ import (
 
 // NewClient creates a new AI client based on the provider configuration.
 func NewClient(atmosConfig *schema.AtmosConfiguration) (Client, error) {
-	// Get provider from config, default to "anthropic".
-	provider := "anthropic"
-	if atmosConfig.Settings.AI.Provider != "" {
-		provider = atmosConfig.Settings.AI.Provider
-	}
+	// Get provider from config.
+	provider := getProvider(atmosConfig)
 
 	// Create client based on provider.
 	switch provider {
@@ -38,4 +35,28 @@ func NewClient(atmosConfig *schema.AtmosConfiguration) (Client, error) {
 	default:
 		return nil, fmt.Errorf("%w: %s (supported: anthropic, openai, gemini, grok, ollama)", errUtils.ErrAIUnsupportedProvider, provider)
 	}
+}
+
+// getProvider returns the active provider name.
+func getProvider(atmosConfig *schema.AtmosConfiguration) string {
+	if atmosConfig.Settings.AI.DefaultProvider != "" {
+		return atmosConfig.Settings.AI.DefaultProvider
+	}
+
+	// Default to anthropic.
+	return "anthropic"
+}
+
+// GetProviderConfig returns the configuration for a specific provider.
+func GetProviderConfig(atmosConfig *schema.AtmosConfiguration, provider string) (*schema.AIProviderConfig, error) {
+	if atmosConfig.Settings.AI.Providers == nil {
+		return nil, fmt.Errorf("%w: no providers configured", errUtils.ErrAIUnsupportedProvider)
+	}
+
+	config, exists := atmosConfig.Settings.AI.Providers[provider]
+	if !exists {
+		return nil, fmt.Errorf("%w: provider %s not configured in atmos.yaml", errUtils.ErrAIUnsupportedProvider, provider)
+	}
+
+	return config, nil
 }

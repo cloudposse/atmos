@@ -44,7 +44,7 @@ func TestNewChatModel(t *testing.T) {
 			maxTokens: 4096,
 		}
 
-		model, err := NewChatModel(client, nil, nil, nil, nil)
+		model, err := NewChatModel(client, nil, nil, nil, nil, nil)
 
 		require.NoError(t, err)
 		assert.NotNil(t, model)
@@ -59,7 +59,7 @@ func TestNewChatModel(t *testing.T) {
 	})
 
 	t.Run("nil client returns error", func(t *testing.T) {
-		model, err := NewChatModel(nil, nil, nil, nil, nil)
+		model, err := NewChatModel(nil, nil, nil, nil, nil, nil)
 
 		assert.Error(t, err)
 		assert.Nil(t, model)
@@ -73,7 +73,7 @@ func TestChatModel_Init(t *testing.T) {
 		maxTokens: 4096,
 	}
 
-	model, err := NewChatModel(client, nil, nil, nil, nil)
+	model, err := NewChatModel(client, nil, nil, nil, nil, nil)
 	require.NoError(t, err)
 
 	cmd := model.Init()
@@ -114,7 +114,7 @@ func TestChatModel_WindowResize(t *testing.T) {
 		maxTokens: 4096,
 	}
 
-	model, err := NewChatModel(client, nil, nil, nil, nil)
+	model, err := NewChatModel(client, nil, nil, nil, nil, nil)
 	require.NoError(t, err)
 
 	// Simulate window resize.
@@ -138,7 +138,7 @@ func TestChatModel_MessageStorage(t *testing.T) {
 		maxTokens: 4096,
 	}
 
-	model, err := NewChatModel(client, nil, nil, nil, nil)
+	model, err := NewChatModel(client, nil, nil, nil, nil, nil)
 	require.NoError(t, err)
 
 	// Add a message to the model.
@@ -161,7 +161,7 @@ func TestChatModel_MultipleMessages(t *testing.T) {
 		maxTokens: 4096,
 	}
 
-	model, err := NewChatModel(client, nil, nil, nil, nil)
+	model, err := NewChatModel(client, nil, nil, nil, nil, nil)
 	require.NoError(t, err)
 
 	// Add multiple messages.
@@ -187,7 +187,7 @@ func TestChatModel_LoadingState(t *testing.T) {
 		maxTokens: 4096,
 	}
 
-	model, err := NewChatModel(client, nil, nil, nil, nil)
+	model, err := NewChatModel(client, nil, nil, nil, nil, nil)
 	require.NoError(t, err)
 
 	// Initially not loading.
@@ -208,7 +208,7 @@ func TestChatModel_MultiLineInput(t *testing.T) {
 		maxTokens: 4096,
 	}
 
-	model, err := NewChatModel(client, nil, nil, nil, nil)
+	model, err := NewChatModel(client, nil, nil, nil, nil, nil)
 	require.NoError(t, err)
 
 	t.Run("plain enter sends message", func(t *testing.T) {
@@ -258,7 +258,7 @@ func TestChatModel_SessionPickerInitialization(t *testing.T) {
 		maxTokens: 4096,
 	}
 
-	model, err := NewChatModel(client, nil, nil, nil, nil)
+	model, err := NewChatModel(client, nil, nil, nil, nil, nil)
 	require.NoError(t, err)
 
 	// Check session picker fields are initialized.
@@ -274,7 +274,7 @@ func TestChatModel_SessionListView(t *testing.T) {
 		maxTokens: 4096,
 	}
 
-	model, err := NewChatModel(client, nil, nil, nil, nil)
+	model, err := NewChatModel(client, nil, nil, nil, nil, nil)
 	require.NoError(t, err)
 
 	t.Run("renders empty session list", func(t *testing.T) {
@@ -316,7 +316,7 @@ func TestChatModel_KeyboardShortcuts(t *testing.T) {
 		maxTokens: 4096,
 	}
 
-	model, err := NewChatModel(client, nil, nil, nil, nil)
+	model, err := NewChatModel(client, nil, nil, nil, nil, nil)
 	require.NoError(t, err)
 
 	t.Run("ctrl+c quits in chat mode", func(t *testing.T) {
@@ -380,7 +380,7 @@ func TestChatModel_SessionNavigation(t *testing.T) {
 		maxTokens: 4096,
 	}
 
-	model, err := NewChatModel(client, nil, nil, nil, nil)
+	model, err := NewChatModel(client, nil, nil, nil, nil, nil)
 	require.NoError(t, err)
 
 	// Create mock sessions.
@@ -447,7 +447,7 @@ func TestChatModel_SessionSwitching(t *testing.T) {
 		maxTokens: 4096,
 	}
 
-	model, err := NewChatModel(client, nil, nil, nil, nil)
+	model, err := NewChatModel(client, nil, nil, nil, nil, nil)
 	require.NoError(t, err)
 
 	t.Run("handles session list loaded with sessions", func(t *testing.T) {
@@ -526,7 +526,7 @@ func TestChatModel_ViewModes(t *testing.T) {
 		maxTokens: 4096,
 	}
 
-	model, err := NewChatModel(client, nil, nil, nil, nil)
+	model, err := NewChatModel(client, nil, nil, nil, nil, nil)
 	require.NoError(t, err)
 
 	// Make the model ready.
@@ -564,7 +564,7 @@ func TestChatModel_AddMessage(t *testing.T) {
 		maxTokens: 4096,
 	}
 
-	model, err := NewChatModel(client, nil, nil, nil, nil)
+	model, err := NewChatModel(client, nil, nil, nil, nil, nil)
 	require.NoError(t, err)
 
 	t.Run("adds user message", func(t *testing.T) {
@@ -605,7 +605,7 @@ func TestChatModel_MessageHandling(t *testing.T) {
 		response:  "AI response",
 	}
 
-	model, err := NewChatModel(client, nil, nil, nil, nil)
+	model, err := NewChatModel(client, nil, nil, nil, nil, nil)
 	require.NoError(t, err)
 
 	t.Run("handles send message", func(t *testing.T) {
@@ -654,7 +654,7 @@ func TestChatModel_SendMessage(t *testing.T) {
 		maxTokens: 4096,
 	}
 
-	model, err := NewChatModel(client, nil, nil, nil, nil)
+	model, err := NewChatModel(client, nil, nil, nil, nil, nil)
 	require.NoError(t, err)
 
 	cmd := model.sendMessage("Test message")
@@ -672,7 +672,7 @@ func TestChatModel_HandleKeyMessage(t *testing.T) {
 		maxTokens: 4096,
 	}
 
-	model, err := NewChatModel(client, nil, nil, nil, nil)
+	model, err := NewChatModel(client, nil, nil, nil, nil, nil)
 	require.NoError(t, err)
 
 	t.Run("handles quit key", func(t *testing.T) {
@@ -698,7 +698,7 @@ func TestChatModel_UpdateWithKeyPress(t *testing.T) {
 		maxTokens: 4096,
 	}
 
-	model, err := NewChatModel(client, nil, nil, nil, nil)
+	model, err := NewChatModel(client, nil, nil, nil, nil, nil)
 	require.NoError(t, err)
 
 	// Set model as ready.
@@ -719,7 +719,7 @@ func TestChatModel_RenderSessionList(t *testing.T) {
 		maxTokens: 4096,
 	}
 
-	model, err := NewChatModel(client, nil, nil, nil, nil)
+	model, err := NewChatModel(client, nil, nil, nil, nil, nil)
 	require.NoError(t, err)
 
 	t.Run("renders session list with sessions", func(t *testing.T) {
@@ -768,7 +768,7 @@ func TestChatModel_HandleMessage(t *testing.T) {
 		response:  "Test response",
 	}
 
-	model, err := NewChatModel(client, nil, nil, nil, nil)
+	model, err := NewChatModel(client, nil, nil, nil, nil, nil)
 	require.NoError(t, err)
 
 	t.Run("handles window size message", func(t *testing.T) {
@@ -820,7 +820,7 @@ func TestChatModel_CreateSession(t *testing.T) {
 
 	manager := session.NewManager(storage, tmpDir, 10)
 
-	model, err := NewChatModel(client, manager, nil, nil, nil)
+	model, err := NewChatModel(client, nil, manager, nil, nil, nil)
 	require.NoError(t, err)
 
 	t.Run("opens create session form with Ctrl+N", func(t *testing.T) {
@@ -937,7 +937,7 @@ func TestNewCreateSessionForm(t *testing.T) {
 }
 
 func TestAvailableProviders(t *testing.T) {
-	assert.Len(t, AvailableProviders, 4)
+	assert.Len(t, AvailableProviders, 5)
 
 	// Verify all expected providers are present.
 	providerNames := make([]string, len(AvailableProviders))
@@ -949,6 +949,7 @@ func TestAvailableProviders(t *testing.T) {
 	assert.Contains(t, providerNames, "openai")
 	assert.Contains(t, providerNames, "gemini")
 	assert.Contains(t, providerNames, "grok")
+	assert.Contains(t, providerNames, "ollama")
 
 	// Verify provider details.
 	for _, p := range AvailableProviders {
@@ -962,7 +963,7 @@ func TestAvailableProviders(t *testing.T) {
 func TestChatModel_DeleteSession(t *testing.T) {
 	t.Run("initiates delete confirmation with d key", func(t *testing.T) {
 		client := &mockAIClient{model: "test-model"}
-		m, _ := NewChatModel(client, nil, nil, nil, nil)
+		m, _ := NewChatModel(client, nil, nil, nil, nil, nil)
 
 		// Set up session list with sessions
 		m.availableSessions = []*session.Session{
@@ -984,7 +985,7 @@ func TestChatModel_DeleteSession(t *testing.T) {
 
 	t.Run("cancels delete with n key", func(t *testing.T) {
 		client := &mockAIClient{model: "test-model"}
-		m, _ := NewChatModel(client, nil, nil, nil, nil)
+		m, _ := NewChatModel(client, nil, nil, nil, nil, nil)
 
 		// Set up delete confirmation state
 		m.deleteConfirm = true
@@ -1003,7 +1004,7 @@ func TestChatModel_DeleteSession(t *testing.T) {
 
 	t.Run("cancels delete with esc key", func(t *testing.T) {
 		client := &mockAIClient{model: "test-model"}
-		m, _ := NewChatModel(client, nil, nil, nil, nil)
+		m, _ := NewChatModel(client, nil, nil, nil, nil, nil)
 
 		// Set up delete confirmation state
 		m.deleteConfirm = true
@@ -1022,7 +1023,7 @@ func TestChatModel_DeleteSession(t *testing.T) {
 
 	t.Run("confirms delete with y key", func(t *testing.T) {
 		client := &mockAIClient{model: "test-model"}
-		m, _ := NewChatModel(client, nil, nil, nil, nil)
+		m, _ := NewChatModel(client, nil, nil, nil, nil, nil)
 
 		// Set up delete confirmation state
 		m.deleteConfirm = true
@@ -1042,7 +1043,7 @@ func TestChatModel_DeleteSession(t *testing.T) {
 
 	t.Run("renders delete confirmation dialog", func(t *testing.T) {
 		client := &mockAIClient{model: "test-model"}
-		m, _ := NewChatModel(client, nil, nil, nil, nil)
+		m, _ := NewChatModel(client, nil, nil, nil, nil, nil)
 
 		// Set up session list and delete confirmation
 		m.availableSessions = []*session.Session{
@@ -1064,7 +1065,7 @@ func TestChatModel_DeleteSession(t *testing.T) {
 
 	t.Run("shows delete option in help text", func(t *testing.T) {
 		client := &mockAIClient{model: "test-model"}
-		m, _ := NewChatModel(client, nil, nil, nil, nil)
+		m, _ := NewChatModel(client, nil, nil, nil, nil, nil)
 
 		// Set up session list
 		m.availableSessions = []*session.Session{
@@ -1081,7 +1082,7 @@ func TestChatModel_DeleteSession(t *testing.T) {
 
 	t.Run("handles sessionDeletedMsg successfully", func(t *testing.T) {
 		client := &mockAIClient{model: "test-model"}
-		m, _ := NewChatModel(client, nil, nil, nil, nil)
+		m, _ := NewChatModel(client, nil, nil, nil, nil, nil)
 
 		// Set up delete confirmation state
 		m.deleteConfirm = true
@@ -1102,7 +1103,7 @@ func TestChatModel_DeleteSession(t *testing.T) {
 
 	t.Run("handles sessionDeletedMsg with error", func(t *testing.T) {
 		client := &mockAIClient{model: "test-model"}
-		m, _ := NewChatModel(client, nil, nil, nil, nil)
+		m, _ := NewChatModel(client, nil, nil, nil, nil, nil)
 
 		// Set up delete confirmation state
 		m.deleteConfirm = true
@@ -1123,7 +1124,7 @@ func TestChatModel_DeleteSession(t *testing.T) {
 
 	t.Run("clears current session if deleted", func(t *testing.T) {
 		client := &mockAIClient{model: "test-model"}
-		m, _ := NewChatModel(client, nil, nil, nil, nil)
+		m, _ := NewChatModel(client, nil, nil, nil, nil, nil)
 
 		// Set up current session
 		m.sess = &session.Session{ID: "session-1", Name: "Test Session"}
@@ -1142,7 +1143,7 @@ func TestChatModel_DeleteSession(t *testing.T) {
 
 	t.Run("does not clear different session", func(t *testing.T) {
 		client := &mockAIClient{model: "test-model"}
-		m, _ := NewChatModel(client, nil, nil, nil, nil)
+		m, _ := NewChatModel(client, nil, nil, nil, nil, nil)
 
 		// Set up current session
 		m.sess = &session.Session{ID: "session-1", Name: "Test Session"}
@@ -1163,7 +1164,7 @@ func TestChatModel_DeleteSession(t *testing.T) {
 func TestChatModel_RenameSession(t *testing.T) {
 	t.Run("initiates rename mode with r key", func(t *testing.T) {
 		client := &mockAIClient{model: "test-model"}
-		m, _ := NewChatModel(client, nil, nil, nil, nil)
+		m, _ := NewChatModel(client, nil, nil, nil, nil, nil)
 
 		// Set up session list with sessions
 		m.availableSessions = []*session.Session{
@@ -1186,7 +1187,7 @@ func TestChatModel_RenameSession(t *testing.T) {
 
 	t.Run("cancels rename with esc key", func(t *testing.T) {
 		client := &mockAIClient{model: "test-model"}
-		m, _ := NewChatModel(client, nil, nil, nil, nil)
+		m, _ := NewChatModel(client, nil, nil, nil, nil, nil)
 
 		// Set up rename mode
 		m.renameMode = true
@@ -1205,7 +1206,7 @@ func TestChatModel_RenameSession(t *testing.T) {
 
 	t.Run("submits rename with enter key", func(t *testing.T) {
 		client := &mockAIClient{model: "test-model"}
-		m, _ := NewChatModel(client, nil, nil, nil, nil)
+		m, _ := NewChatModel(client, nil, nil, nil, nil, nil)
 
 		// Set up rename mode
 		m.renameMode = true
@@ -1224,7 +1225,7 @@ func TestChatModel_RenameSession(t *testing.T) {
 
 	t.Run("cancels rename if empty name submitted", func(t *testing.T) {
 		client := &mockAIClient{model: "test-model"}
-		m, _ := NewChatModel(client, nil, nil, nil, nil)
+		m, _ := NewChatModel(client, nil, nil, nil, nil, nil)
 
 		// Set up rename mode with empty input
 		m.renameMode = true
@@ -1245,7 +1246,7 @@ func TestChatModel_RenameSession(t *testing.T) {
 
 	t.Run("updates text input during rename", func(t *testing.T) {
 		client := &mockAIClient{model: "test-model"}
-		m, _ := NewChatModel(client, nil, nil, nil, nil)
+		m, _ := NewChatModel(client, nil, nil, nil, nil, nil)
 
 		// Set up rename mode
 		m.renameMode = true
@@ -1264,7 +1265,7 @@ func TestChatModel_RenameSession(t *testing.T) {
 
 	t.Run("renders rename dialog", func(t *testing.T) {
 		client := &mockAIClient{model: "test-model"}
-		m, _ := NewChatModel(client, nil, nil, nil, nil)
+		m, _ := NewChatModel(client, nil, nil, nil, nil, nil)
 
 		// Set up session list and rename mode
 		m.availableSessions = []*session.Session{
@@ -1287,7 +1288,7 @@ func TestChatModel_RenameSession(t *testing.T) {
 
 	t.Run("shows rename option in help text", func(t *testing.T) {
 		client := &mockAIClient{model: "test-model"}
-		m, _ := NewChatModel(client, nil, nil, nil, nil)
+		m, _ := NewChatModel(client, nil, nil, nil, nil, nil)
 
 		// Set up session list
 		m.availableSessions = []*session.Session{
@@ -1304,7 +1305,7 @@ func TestChatModel_RenameSession(t *testing.T) {
 
 	t.Run("handles sessionRenamedMsg successfully", func(t *testing.T) {
 		client := &mockAIClient{model: "test-model"}
-		m, _ := NewChatModel(client, nil, nil, nil, nil)
+		m, _ := NewChatModel(client, nil, nil, nil, nil, nil)
 
 		// Set up rename mode
 		m.renameMode = true
@@ -1325,7 +1326,7 @@ func TestChatModel_RenameSession(t *testing.T) {
 
 	t.Run("handles sessionRenamedMsg with error", func(t *testing.T) {
 		client := &mockAIClient{model: "test-model"}
-		m, _ := NewChatModel(client, nil, nil, nil, nil)
+		m, _ := NewChatModel(client, nil, nil, nil, nil, nil)
 
 		// Set up rename mode
 		m.renameMode = true
@@ -1346,7 +1347,7 @@ func TestChatModel_RenameSession(t *testing.T) {
 
 	t.Run("updates current session name if renamed", func(t *testing.T) {
 		client := &mockAIClient{model: "test-model"}
-		m, _ := NewChatModel(client, nil, nil, nil, nil)
+		m, _ := NewChatModel(client, nil, nil, nil, nil, nil)
 
 		// Set up current session
 		m.sess = &session.Session{ID: "session-1", Name: "Old Name"}
@@ -1361,7 +1362,7 @@ func TestChatModel_RenameSession(t *testing.T) {
 
 	t.Run("does not update different session name", func(t *testing.T) {
 		client := &mockAIClient{model: "test-model"}
-		m, _ := NewChatModel(client, nil, nil, nil, nil)
+		m, _ := NewChatModel(client, nil, nil, nil, nil, nil)
 
 		// Set up current session
 		m.sess = &session.Session{ID: "session-1", Name: "Old Name"}
@@ -1379,7 +1380,7 @@ func TestChatModel_HistoryNavigation(t *testing.T) {
 	client := &mockAIClient{model: "test-model"}
 
 	t.Run("initializes with empty history", func(t *testing.T) {
-		m, err := NewChatModel(client, nil, nil, nil, nil)
+		m, err := NewChatModel(client, nil, nil, nil, nil, nil)
 		require.NoError(t, err)
 
 		assert.Empty(t, m.messageHistory)
@@ -1388,7 +1389,7 @@ func TestChatModel_HistoryNavigation(t *testing.T) {
 	})
 
 	t.Run("adds messages to history when sent", func(t *testing.T) {
-		m, _ := NewChatModel(client, nil, nil, nil, nil)
+		m, _ := NewChatModel(client, nil, nil, nil, nil, nil)
 
 		// Send a message
 		msg := sendMessageMsg("Test message 1")
@@ -1409,7 +1410,7 @@ func TestChatModel_HistoryNavigation(t *testing.T) {
 	})
 
 	t.Run("navigates up through history", func(t *testing.T) {
-		m, _ := NewChatModel(client, nil, nil, nil, nil)
+		m, _ := NewChatModel(client, nil, nil, nil, nil, nil)
 
 		// Add messages to history
 		m.messageHistory = []string{"Message 1", "Message 2", "Message 3"}
@@ -1438,7 +1439,7 @@ func TestChatModel_HistoryNavigation(t *testing.T) {
 	})
 
 	t.Run("navigates down through history", func(t *testing.T) {
-		m, _ := NewChatModel(client, nil, nil, nil, nil)
+		m, _ := NewChatModel(client, nil, nil, nil, nil, nil)
 
 		// Add messages to history
 		m.messageHistory = []string{"Message 1", "Message 2", "Message 3"}
@@ -1469,7 +1470,7 @@ func TestChatModel_HistoryNavigation(t *testing.T) {
 	})
 
 	t.Run("does nothing on empty history", func(t *testing.T) {
-		m, _ := NewChatModel(client, nil, nil, nil, nil)
+		m, _ := NewChatModel(client, nil, nil, nil, nil, nil)
 
 		m.textarea.SetValue("Current input")
 
@@ -1480,7 +1481,7 @@ func TestChatModel_HistoryNavigation(t *testing.T) {
 	})
 
 	t.Run("handles up key in chat mode", func(t *testing.T) {
-		m, _ := NewChatModel(client, nil, nil, nil, nil)
+		m, _ := NewChatModel(client, nil, nil, nil, nil, nil)
 		m.messageHistory = []string{"Previous message"}
 		m.textarea.SetValue("Current input")
 
@@ -1494,7 +1495,7 @@ func TestChatModel_HistoryNavigation(t *testing.T) {
 	})
 
 	t.Run("handles down key in chat mode", func(t *testing.T) {
-		m, _ := NewChatModel(client, nil, nil, nil, nil)
+		m, _ := NewChatModel(client, nil, nil, nil, nil, nil)
 		m.messageHistory = []string{"Previous message"}
 		m.textarea.SetValue("Current input")
 
@@ -1511,7 +1512,7 @@ func TestChatModel_HistoryNavigation(t *testing.T) {
 	})
 
 	t.Run("resets history index when sending message", func(t *testing.T) {
-		m, _ := NewChatModel(client, nil, nil, nil, nil)
+		m, _ := NewChatModel(client, nil, nil, nil, nil, nil)
 		m.messageHistory = []string{"Message 1", "Message 2"}
 
 		// Navigate in history
@@ -1528,7 +1529,7 @@ func TestChatModel_HistoryNavigation(t *testing.T) {
 	})
 
 	t.Run("loads history from existing session messages", func(t *testing.T) {
-		m, _ := NewChatModel(client, nil, nil, nil, nil)
+		m, _ := NewChatModel(client, nil, nil, nil, nil, nil)
 
 		// Simulate loaded messages
 		m.messages = []ChatMessage{
@@ -1556,7 +1557,7 @@ func TestChatModel_MarkdownRendering(t *testing.T) {
 	client := &mockAIClient{model: "test-model"}
 
 	t.Run("renders markdown for assistant messages", func(t *testing.T) {
-		m, _ := NewChatModel(client, nil, nil, nil, nil)
+		m, _ := NewChatModel(client, nil, nil, nil, nil, nil)
 		m.ready = true
 		m.viewport.Width = 80
 
@@ -1572,7 +1573,7 @@ func TestChatModel_MarkdownRendering(t *testing.T) {
 	})
 
 	t.Run("handles plain text in markdown renderer", func(t *testing.T) {
-		m, _ := NewChatModel(client, nil, nil, nil, nil)
+		m, _ := NewChatModel(client, nil, nil, nil, nil, nil)
 		m.ready = true
 		m.viewport.Width = 80
 
@@ -1585,7 +1586,7 @@ func TestChatModel_MarkdownRendering(t *testing.T) {
 	})
 
 	t.Run("handles minimum width constraint", func(t *testing.T) {
-		m, _ := NewChatModel(client, nil, nil, nil, nil)
+		m, _ := NewChatModel(client, nil, nil, nil, nil, nil)
 		m.ready = true
 		m.viewport.Width = 10 // Very narrow viewport
 
@@ -1597,7 +1598,7 @@ func TestChatModel_MarkdownRendering(t *testing.T) {
 	})
 
 	t.Run("renders code blocks with syntax highlighting", func(t *testing.T) {
-		m, _ := NewChatModel(client, nil, nil, nil, nil)
+		m, _ := NewChatModel(client, nil, nil, nil, nil, nil)
 		m.ready = true
 		m.viewport.Width = 80
 
@@ -1611,7 +1612,7 @@ func TestChatModel_MarkdownRendering(t *testing.T) {
 	})
 
 	t.Run("renders lists correctly", func(t *testing.T) {
-		m, _ := NewChatModel(client, nil, nil, nil, nil)
+		m, _ := NewChatModel(client, nil, nil, nil, nil, nil)
 		m.ready = true
 		m.viewport.Width = 80
 
@@ -1623,7 +1624,7 @@ func TestChatModel_MarkdownRendering(t *testing.T) {
 	})
 
 	t.Run("uses markdown for assistant role only", func(t *testing.T) {
-		m, _ := NewChatModel(client, nil, nil, nil, nil)
+		m, _ := NewChatModel(client, nil, nil, nil, nil, nil)
 		m.ready = true
 		m.viewport.Width = 80
 		m.viewport.Height = 20
@@ -1642,7 +1643,7 @@ func TestChatModel_MarkdownRendering(t *testing.T) {
 	})
 
 	t.Run("handles empty markdown", func(t *testing.T) {
-		m, _ := NewChatModel(client, nil, nil, nil, nil)
+		m, _ := NewChatModel(client, nil, nil, nil, nil, nil)
 		m.ready = true
 		m.viewport.Width = 80
 
@@ -1653,7 +1654,7 @@ func TestChatModel_MarkdownRendering(t *testing.T) {
 	})
 
 	t.Run("handles markdown with tables", func(t *testing.T) {
-		m, _ := NewChatModel(client, nil, nil, nil, nil)
+		m, _ := NewChatModel(client, nil, nil, nil, nil, nil)
 		m.ready = true
 		m.viewport.Width = 80
 
@@ -1668,7 +1669,7 @@ func TestChatModel_MarkdownRendering(t *testing.T) {
 
 func TestChatModel_GetProviderBadge(t *testing.T) {
 	client := &mockAIClient{model: "test-model"}
-	m, _ := NewChatModel(client, nil, nil, nil, nil)
+	m, _ := NewChatModel(client, nil, nil, nil, nil, nil)
 
 	tests := []struct {
 		name          string
@@ -1695,7 +1696,7 @@ func TestChatModel_GetProviderBadge(t *testing.T) {
 
 func TestChatModel_GetFilterDisplayName(t *testing.T) {
 	client := &mockAIClient{model: "test-model"}
-	m, _ := NewChatModel(client, nil, nil, nil, nil)
+	m, _ := NewChatModel(client, nil, nil, nil, nil, nil)
 
 	tests := []struct {
 		name         string
@@ -1721,7 +1722,7 @@ func TestChatModel_GetFilterDisplayName(t *testing.T) {
 
 func TestChatModel_CycleFilter(t *testing.T) {
 	client := &mockAIClient{model: "test-model"}
-	m, _ := NewChatModel(client, nil, nil, nil, nil)
+	m, _ := NewChatModel(client, nil, nil, nil, nil, nil)
 
 	// Initialize with "all" filter
 	m.sessionFilter = "all"

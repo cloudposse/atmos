@@ -34,10 +34,14 @@ func TestExtractConfig(t *testing.T) {
 			atmosConfig: &schema.AtmosConfiguration{
 				Settings: schema.AtmosSettings{
 					AI: schema.AISettings{
-						Enabled:   true,
-						Model:     "gemini-1.5-pro",
-						ApiKeyEnv: "CUSTOM_GEMINI_KEY",
-						MaxTokens: 16384,
+						Enabled: true,
+						Providers: map[string]*schema.AIProviderConfig{
+							"gemini": {
+								Model:     "gemini-1.5-pro",
+								ApiKeyEnv: "CUSTOM_GEMINI_KEY",
+								MaxTokens: 16384,
+							},
+						},
 					},
 				},
 			},
@@ -54,7 +58,11 @@ func TestExtractConfig(t *testing.T) {
 				Settings: schema.AtmosSettings{
 					AI: schema.AISettings{
 						Enabled: true,
-						Model:   "gemini-1.5-flash",
+						Providers: map[string]*schema.AIProviderConfig{
+							"gemini": {
+								Model: "gemini-1.5-flash",
+							},
+						},
 					},
 				},
 			},
