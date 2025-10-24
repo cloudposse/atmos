@@ -55,6 +55,12 @@ var AvailableProviders = []Provider{
 		DefaultModel: "grok-beta",
 		APIKeyEnv:    "XAI_API_KEY",
 	},
+	{
+		Name:         "ollama",
+		DisplayName:  "Ollama (Local)",
+		DefaultModel: "llama3.3:70b",
+		APIKeyEnv:    "OLLAMA_API_KEY",
+	},
 }
 
 // createSessionForm holds the state of the create session form.

@@ -1680,6 +1680,7 @@ func TestChatModel_GetProviderBadge(t *testing.T) {
 		{"openai provider", "openai", "[GPT]", "#00FF00"},
 		{"gemini provider", "gemini", "[Gemini]", "#FFFF00"},
 		{"grok provider", "grok", "[Grok]", "#FF69B4"},
+		{"ollama provider", "ollama", "[Ollama]", "#5F5FFF"},
 		{"unknown provider", "unknown", "[AI]", "240"},
 	}
 
@@ -1706,6 +1707,7 @@ func TestChatModel_GetFilterDisplayName(t *testing.T) {
 		{"openai filter", "openai", "GPT"},
 		{"gemini filter", "gemini", "Gemini"},
 		{"grok filter", "grok", "Grok"},
+		{"ollama filter", "ollama", "Ollama"},
 		{"unknown filter", "unknown", "unknown"},
 	}
 
@@ -1754,8 +1756,14 @@ func TestChatModel_CycleFilter(t *testing.T) {
 		assert.Equal(t, "grok", m.sessionFilter)
 	})
 
-	t.Run("cycles from grok back to all", func(t *testing.T) {
+	t.Run("cycles from grok to ollama", func(t *testing.T) {
 		m.sessionFilter = "grok"
+		m.cycleFilter()
+		assert.Equal(t, "ollama", m.sessionFilter)
+	})
+
+	t.Run("cycles from ollama back to all", func(t *testing.T) {
+		m.sessionFilter = "ollama"
 		m.cycleFilter()
 		assert.Equal(t, "all", m.sessionFilter)
 	})

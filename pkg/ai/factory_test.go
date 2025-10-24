@@ -98,6 +98,18 @@ func TestNewClient(t *testing.T) {
 			expectError: false,
 		},
 		{
+			name: "Ollama provider",
+			atmosConfig: &schema.AtmosConfiguration{
+				Settings: schema.AtmosSettings{
+					AI: schema.AISettings{
+						Enabled:  true,
+						Provider: "ollama",
+					},
+				},
+			},
+			expectError: false,
+		},
+		{
 			name: "Disabled AI",
 			atmosConfig: &schema.AtmosConfiguration{
 				Settings: schema.AtmosSettings{

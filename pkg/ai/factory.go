@@ -8,6 +8,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/ai/agent/anthropic"
 	"github.com/cloudposse/atmos/pkg/ai/agent/gemini"
 	"github.com/cloudposse/atmos/pkg/ai/agent/grok"
+	"github.com/cloudposse/atmos/pkg/ai/agent/ollama"
 	"github.com/cloudposse/atmos/pkg/ai/agent/openai"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -32,7 +33,9 @@ func NewClient(atmosConfig *schema.AtmosConfiguration) (Client, error) {
 		return gemini.NewClient(ctx, atmosConfig)
 	case "grok":
 		return grok.NewClient(atmosConfig)
+	case "ollama":
+		return ollama.NewClient(atmosConfig)
 	default:
-		return nil, fmt.Errorf("%w: %s (supported: anthropic, openai, gemini, grok)", errUtils.ErrAIUnsupportedProvider, provider)
+		return nil, fmt.Errorf("%w: %s (supported: anthropic, openai, gemini, grok, ollama)", errUtils.ErrAIUnsupportedProvider, provider)
 	}
 }
