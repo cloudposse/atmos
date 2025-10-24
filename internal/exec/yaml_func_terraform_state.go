@@ -12,6 +12,8 @@ import (
 )
 
 // processTagTerraformState processes `!terraform.state` YAML tag.
+//
+//nolint:unparam // stackInfo is used via processTagTerraformStateWithContext
 func processTagTerraformState(
 	atmosConfig *schema.AtmosConfiguration,
 	input string,
@@ -90,7 +92,7 @@ func processTagTerraformStateWithContext(
 		authContext = stackInfo.AuthContext
 	}
 
-	value, err := GetTerraformState(atmosConfig, input, stack, component, output, false, authContext)
+	value, err := stateGetter.GetState(atmosConfig, input, stack, component, output, false, authContext)
 	errUtils.CheckErrorPrintAndExit(err, "", "")
 	return value
 }

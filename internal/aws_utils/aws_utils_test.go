@@ -174,11 +174,12 @@ func TestLoadAWSConfigWithAuth(t *testing.T) {
 				}
 
 				// Handle different test scenarios.
-				if tt.authContext.CredentialsFile != "" {
+				switch {
+				case tt.authContext.CredentialsFile != "":
 					// For error test cases with explicit file paths, use them.
 					authContextCopy.CredentialsFile = tt.authContext.CredentialsFile
 					authContextCopy.ConfigFile = tt.authContext.ConfigFile
-				} else if !tt.wantErr {
+				case !tt.wantErr:
 					// Create valid credentials for happy-path tests.
 					tempDir := t.TempDir()
 					credFile := filepath.Join(tempDir, "credentials")
@@ -200,7 +201,7 @@ func TestLoadAWSConfigWithAuth(t *testing.T) {
 					// Set file paths on the copy.
 					authContextCopy.CredentialsFile = credFile
 					authContextCopy.ConfigFile = configFile
-				} else if tt.name == "invalid profile name in auth context" {
+				case tt.name == "invalid profile name in auth context":
 					// Create valid files but with a different profile name.
 					tempDir := t.TempDir()
 					credFile := filepath.Join(tempDir, "credentials")
