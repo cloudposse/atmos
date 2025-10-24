@@ -50,6 +50,8 @@ var availableProviders = []struct {
 	{"gemini", "Google Gemini - Strong multimodal capabilities"},
 	{"grok", "xAI Grok - Real-time data access"},
 	{"ollama", "Ollama - Local models for privacy and offline use"},
+	{"bedrock", "AWS Bedrock - Enterprise-grade AI with AWS security and compliance"},
+	{"azureopenai", "Azure OpenAI - Enterprise OpenAI with Microsoft Azure integration"},
 }
 
 // viewMode represents the current view mode of the TUI.

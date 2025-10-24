@@ -84,6 +84,15 @@ settings:
         api_key_env: "OLLAMA_API_KEY"  # Optional for local instances
         max_tokens: 4096
         base_url: "http://localhost:11434/v1"
+      bedrock:
+        model: "anthropic.claude-3-5-sonnet-20241022-v2:0"
+        max_tokens: 4096
+        base_url: "us-east-1"  # AWS region
+      azureopenai:
+        model: "gpt-4o"  # Your Azure deployment name
+        api_key_env: "AZURE_OPENAI_API_KEY"
+        max_tokens: 4096
+        base_url: "https://<your-resource>.openai.azure.com"
 ```
 
 **Note:** You don't need to configure all providers - only the ones you want to use. The `default_provider` is used for non-interactive commands like `atmos ai ask`.
@@ -99,6 +108,60 @@ For detailed configuration options, see the [AI Assistant documentation](/ai/).
 | Google (Gemini) | `GEMINI_API_KEY` | `gemini-2.0-flash-exp` | Strong multimodal capabilities |
 | xAI (Grok) | `XAI_API_KEY` | `grok-beta` | Real-time data access |
 | Ollama | `OLLAMA_API_KEY` | `llama3.3:70b` | Local models, no API key for local |
+| AWS Bedrock | AWS credentials | `anthropic.claude-3-5-sonnet-20241022-v2:0` | Enterprise-grade, AWS security |
+| Azure OpenAI | `AZURE_OPENAI_API_KEY` | `gpt-4o` | Enterprise OpenAI with Azure integration |
+
+## Enterprise Providers
+
+For organizations with strict security, compliance, and data governance requirements, Atmos supports enterprise-grade AI providers that integrate with your existing cloud infrastructure.
+
+### AWS Bedrock
+
+**Security & Compliance Benefits:**
+- **Data Privacy**: Your data never leaves AWS infrastructure
+- **IAM-Based Access**: No API keys to manage - uses standard AWS credentials
+- **Audit Logging**: Complete audit trail via AWS CloudTrail
+- **Network Isolation**: Supports VPC endpoints and AWS PrivateLink for private connectivity
+- **Compliance**: Inherits AWS compliance certifications (SOC2, HIPAA, ISO, etc.)
+
+**Configuration:**
+```yaml
+providers:
+  bedrock:
+    model: "anthropic.claude-3-5-sonnet-20241022-v2:0"
+    max_tokens: 4096
+    base_url: "us-east-1"  # AWS region
+```
+
+**Authentication**: Uses standard AWS SDK credential chain (IAM roles, profiles, environment variables)
+
+### Azure OpenAI
+
+**Security & Compliance Benefits:**
+- **Data Residency**: Control exactly where your data is stored and processed
+- **Azure AD Integration**: Use managed identities instead of API keys
+- **Compliance Certifications**: SOC2, HIPAA, ISO 27001, and more
+- **Private Endpoints**: Azure Private Link for secure, private connections
+- **Customer-Managed Keys**: Bring your own encryption keys (BYOK)
+
+**Configuration:**
+```yaml
+providers:
+  azureopenai:
+    model: "gpt-4o"  # Your Azure deployment name
+    api_key_env: "AZURE_OPENAI_API_KEY"
+    max_tokens: 4096
+    base_url: "https://<your-resource>.openai.azure.com"
+```
+
+**Authentication**: API key via environment variable or Azure AD managed identity
+
+**When to Use Enterprise Providers:**
+- Your organization has existing AWS/Azure infrastructure
+- You need to meet compliance requirements (healthcare, finance, government)
+- Data must stay within specific geographic regions
+- You want centralized billing and governance
+- You need private network connectivity (no public internet)
 
 ## Examples
 

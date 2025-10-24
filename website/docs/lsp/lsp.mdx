@@ -62,29 +62,19 @@ Enable LSP in your `atmos.yaml` configuration file:
     <dt>`lsp.servers`</dt>
     <dd>Map of LSP server configurations. Each server handles specific file types.</dd>
 
-    <dt>`lsp.servers.
-        <name>.command`
-    </dt>
+    <dt>`lsp.servers.<name>.command`</dt>
     <dd>Command to start the LSP server (must be in PATH or absolute path)</dd>
 
-    <dt>`lsp.servers.
-        <name>.args`
-    </dt>
+    <dt>`lsp.servers.<name>.args`</dt>
     <dd>Arguments to pass to the LSP server command</dd>
 
-    <dt>`lsp.servers.
-        <name>.filetypes`
-    </dt>
+    <dt>`lsp.servers.<name>.filetypes`</dt>
     <dd>List of file extensions this server handles (e.g., `["yaml", "yml"]`)</dd>
 
-    <dt>`lsp.servers.
-        <name>.root_patterns`
-    </dt>
+    <dt>`lsp.servers.<name>.root_patterns`</dt>
     <dd>Files/directories that identify the project root (e.g., `[".git", "atmos.yaml"]`)</dd>
 
-    <dt>`lsp.servers.
-        <name>.initialization_options`
-    </dt>
+    <dt>`lsp.servers.<name>.initialization_options`</dt>
     <dd>Server-specific initialization options (varies by LSP server)</dd>
 </dl>
 

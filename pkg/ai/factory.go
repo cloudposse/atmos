@@ -6,6 +6,8 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/ai/agent/anthropic"
+	"github.com/cloudposse/atmos/pkg/ai/agent/azureopenai"
+	"github.com/cloudposse/atmos/pkg/ai/agent/bedrock"
 	"github.com/cloudposse/atmos/pkg/ai/agent/gemini"
 	"github.com/cloudposse/atmos/pkg/ai/agent/grok"
 	"github.com/cloudposse/atmos/pkg/ai/agent/ollama"
@@ -32,8 +34,14 @@ func NewClient(atmosConfig *schema.AtmosConfiguration) (Client, error) {
 		return grok.NewClient(atmosConfig)
 	case "ollama":
 		return ollama.NewClient(atmosConfig)
+	case "bedrock":
+		// Bedrock client requires context for AWS SDK initialization.
+		ctx := context.Background()
+		return bedrock.NewClient(ctx, atmosConfig)
+	case "azureopenai":
+		return azureopenai.NewClient(atmosConfig)
 	default:
-		return nil, fmt.Errorf("%w: %s (supported: anthropic, openai, gemini, grok, ollama)", errUtils.ErrAIUnsupportedProvider, provider)
+		return nil, fmt.Errorf("%w: %s (supported: anthropic, openai, gemini, grok, ollama, bedrock, azureopenai)", errUtils.ErrAIUnsupportedProvider, provider)
 	}
 }
 

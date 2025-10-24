@@ -24,7 +24,7 @@ The Atmos AI Assistant is an AI-powered terminal agent that helps with Atmos inf
 - **In-TUI Session Creation**: Create new sessions with provider selection using Ctrl+N
 - **Session Switching**: Switch between sessions without leaving the TUI (Ctrl+L)
 - **Session Management**: Delete (d), rename (r), and filter (f) sessions in the TUI
-- **Provider Filtering**: Filter sessions by AI provider (Claude, GPT, Gemini, Grok, Ollama)
+- **Provider Filtering**: Filter sessions by AI provider (Claude, GPT, Gemini, Grok, Ollama, Bedrock, Azure OpenAI)
 - **Enhanced Display**: Color-coded provider badges, creation dates, and message counts
 - **Message History**: Complete conversation history stored locally in SQLite
 - **History Navigation**: Navigate through previous messages with ↑/↓ arrow keys
@@ -93,6 +93,15 @@ settings:
         api_key_env: "OLLAMA_API_KEY"  # Optional for local instances
         max_tokens: 4096
         base_url: "http://localhost:11434/v1"
+      bedrock:
+        model: "anthropic.claude-3-5-sonnet-20241022-v2:0"
+        max_tokens: 4096
+        base_url: "us-east-1"  # AWS region
+      azureopenai:
+        model: "gpt-4o"  # Your Azure deployment name
+        api_key_env: "AZURE_OPENAI_API_KEY"
+        max_tokens: 4096
+        base_url: "https://<your-resource>.openai.azure.com"
 
     # Optional: Enable persistent sessions
     sessions:
@@ -151,6 +160,60 @@ atmos ai help stacks
 atmos mcp-server
 ```
 </Terminal>
+
+## Enterprise Providers
+
+For organizations with strict security, compliance, and data governance requirements, Atmos supports enterprise-grade AI providers.
+
+### AWS Bedrock
+
+Run Claude models via AWS Bedrock for enterprise security and compliance:
+
+**Benefits:**
+- Data never leaves AWS infrastructure
+- IAM-based access control (no API keys)
+- AWS CloudTrail audit logging
+- VPC isolation and PrivateLink support
+- Inherits AWS compliance certifications
+
+**Setup:**
+```yaml
+providers:
+  bedrock:
+    model: "anthropic.claude-3-5-sonnet-20241022-v2:0"
+    max_tokens: 4096
+    base_url: "us-east-1"  # AWS region
+```
+
+Uses standard AWS SDK credentials (IAM roles, profiles, environment variables).
+
+### Azure OpenAI
+
+Run GPT models via Azure OpenAI for enterprise integration:
+
+**Benefits:**
+- Data residency controls
+- Azure AD integration and managed identities
+- Compliance certifications (SOC2, HIPAA, ISO 27001)
+- Private endpoint support via Azure Private Link
+- Customer-managed encryption keys (BYOK)
+
+**Setup:**
+```yaml
+providers:
+  azureopenai:
+    model: "gpt-4o"  # Your deployment name
+    api_key_env: "AZURE_OPENAI_API_KEY"
+    max_tokens: 4096
+    base_url: "https://<resource>.openai.azure.com"
+```
+
+**When to use enterprise providers:**
+- Compliance requirements (healthcare, finance, government)
+- Data must stay within specific regions
+- Integration with existing cloud infrastructure
+- Centralized billing and governance
+- Private network connectivity required
 
 ### TUI Keyboard Shortcuts
 

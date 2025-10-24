@@ -62,11 +62,13 @@ settings:
 Set the appropriate environment variable for your chosen provider:
 
 ```shell
-export ANTHROPIC_API_KEY="your-key"  # For Anthropic
-export OPENAI_API_KEY="your-key"     # For OpenAI
-export GEMINI_API_KEY="your-key"     # For Google Gemini
-export XAI_API_KEY="your-key"        # For xAI Grok
-export OLLAMA_API_KEY="your-key"     # For Ollama (optional for local)
+export ANTHROPIC_API_KEY="your-key"        # For Anthropic
+export OPENAI_API_KEY="your-key"           # For OpenAI
+export GEMINI_API_KEY="your-key"           # For Google Gemini
+export XAI_API_KEY="your-key"              # For xAI Grok
+export OLLAMA_API_KEY="your-key"           # For Ollama (optional for local)
+# AWS Bedrock uses AWS SDK default credentials (no separate API key)
+export AZURE_OPENAI_API_KEY="your-key"     # For Azure OpenAI
 ```
 
 **Note:** The `ask` command uses the provider specified in `default_provider`. To use a different provider, either change the `default_provider` setting or use [`atmos ai chat`](/cli/commands/ai/chat) which allows switching providers with `Ctrl+P`.
