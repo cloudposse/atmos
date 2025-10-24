@@ -16,8 +16,8 @@ Crush is a **full-featured AI coding agent** focused on general-purpose software
 - ✅ **Tool Execution** - COMPLETE (Atmos-specific tools with permission system)
 - ✅ **Project Memory** - COMPLETE (ATMOS.md with auto-update)
 - ✅ **MCP Support** - COMPLETE (stdio/HTTP transports for Claude Desktop/VSCode)
-- ⚠️ **Enhanced TUI** - PARTIAL (sessions complete, syntax highlighting pending)
-- ❌ **LSP Integration** - PENDING (medium priority)
+- ✅ **Enhanced TUI** - COMPLETE (markdown rendering, syntax highlighting, history navigation)
+- ❌ **LSP Integration** - PENDING (high priority - next major feature)
 
 **Key Achievement:** Atmos AI has successfully adopted Crush's productivity patterns (sessions, tools, memory) while maintaining its domain-specific intelligence advantage.
 
@@ -34,9 +34,10 @@ Crush is a **full-featured AI coding agent** focused on general-purpose software
 | **Permission System** | ✅ Granular + YOLO | ⚠️ Basic | ✅ **Granular allowlists** | ✅ COMPLETE |
 | **Project Memory** | ✅ CRUSH.md | ❌ None | ✅ **ATMOS.md** | ✅ COMPLETE |
 | **MCP Support** | ✅ stdio/HTTP/SSE | ❌ None | ✅ **stdio/HTTP** | ✅ COMPLETE |
-| **LSP Integration** | ✅ Multi-language | ❌ None | ❌ **Pending** | 🟡 TODO |
-| **Interactive Chat** | ✅ Full TUI | ✅ Basic | ✅ **Enhanced TUI** | ⚠️ PARTIAL |
-| **Syntax Highlighting** | ✅ Yes | ❌ No | ❌ **Pending** | 🟡 TODO |
+| **LSP Integration** | ✅ Multi-language | ❌ None | ❌ **Pending** | 🟡 HIGH |
+| **Interactive Chat** | ✅ Full TUI | ✅ Basic | ✅ **Enhanced TUI** | ✅ COMPLETE |
+| **Syntax Highlighting** | ✅ Yes | ❌ No | ✅ **Glamour + Chroma** | ✅ COMPLETE |
+| **History Navigation** | ✅ Yes | ❌ No | ✅ **Bash-style ↑/↓** | ✅ COMPLETE |
 | **Model Switching** | ✅ Mid-session | ❌ Restart required | ❌ **Pending** | 🟢 LOW |
 | **Git Attribution** | ✅ Co-authored-by | ❌ None | ❌ **Pending** | 🟢 LOW |
 | **Domain Context** | ❌ No | ✅ Atmos-specific | ✅ **Atmos-specific** | ✅ Core |
@@ -694,9 +695,9 @@ settings:
 
 ---
 
-#### 6. ⚠️ Enhanced Interactive Chat UI - **PARTIAL**
+#### 6. ✅ Enhanced Interactive Chat UI - **COMPLETE**
 
-**✅ Completed Features:**
+**✅ Implemented Features:**
 - ✅ Full session management TUI (Ctrl+N: create, Ctrl+L: switch, d: delete, r: rename)
 - ✅ Provider selection during session creation
 - ✅ Session filtering by provider (f key: All/Claude/GPT/Gemini/Grok)
@@ -705,11 +706,11 @@ settings:
 - ✅ Multi-line input with Shift+Enter
 - ✅ Message history persistence
 - ✅ Enhanced TUI with Bubble Tea components
+- ✅ **Syntax highlighting for code blocks** (using Chroma)
+- ✅ **History navigation** (↑/↓ arrows for previous messages, Bash-style)
+- ✅ **Markdown rendering** (bold, italic, lists, tables using Glamour)
 
-**❌ Still Pending:**
-- ❌ Syntax highlighting for code blocks in AI responses
-- ❌ History navigation (↑/↓ arrows for previous messages)
-- ❌ Markdown rendering (bold, italic, lists, tables)
+**🟢 Future Enhancements (LOW PRIORITY):**
 - ❌ Interactive code block buttons (Copy, Save, Apply)
 - ❌ History search (Ctrl+R)
 
