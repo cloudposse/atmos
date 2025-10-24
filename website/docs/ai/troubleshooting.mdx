@@ -38,17 +38,18 @@ Check that your API key environment variable is set:
 
 <Terminal title="shell">
     ```bash
-    # For Anthropic
-    echo $ANTHROPIC_API_KEY
+    # Cloud Providers (API keys required)
+    echo $ANTHROPIC_API_KEY    # Anthropic Claude
+    echo $OPENAI_API_KEY       # OpenAI GPT
+    echo $GEMINI_API_KEY       # Google Gemini
+    echo $XAI_API_KEY          # xAI Grok
 
-    # For OpenAI
-    echo $OPENAI_API_KEY
+    # Enterprise Providers (use cloud authentication)
+    aws sts get-caller-identity           # AWS Bedrock
+    echo $AZURE_OPENAI_API_KEY            # Azure OpenAI
 
-    # For Google Gemini
-    echo $GEMINI_API_KEY
-
-    # For xAI Grok
-    echo $XAI_API_KEY
+    # Local Provider (no API key needed)
+    curl http://localhost:11434/api/version  # Ollama
     ```
 </Terminal>
 
@@ -56,7 +57,15 @@ If empty, set the appropriate variable:
 
 <Terminal title="shell">
     ```bash
-    export ANTHROPIC_API_KEY="your-api-key-here"
+    # Cloud Providers
+    export ANTHROPIC_API_KEY="sk-ant-..."
+    export OPENAI_API_KEY="sk-..."
+    export GEMINI_API_KEY="..."
+    export XAI_API_KEY="xai-..."
+
+    # Enterprise Providers
+    export AWS_PROFILE="bedrock-profile"           # AWS Bedrock
+    export AZURE_OPENAI_API_KEY="..."             # Azure OpenAI
     ```
 </Terminal>
 
@@ -92,6 +101,10 @@ settings:
 **Solution**: Obtain an API key from your chosen provider and set the appropriate environment variable.
 
 #### How to Get API Keys
+
+:::info Cloud Providers Only
+API keys are only needed for cloud providers (Anthropic, OpenAI, Gemini, Grok). Ollama runs locally and requires no API key. Enterprise providers (Bedrock, Azure OpenAI) use their respective cloud authentication systems.
+:::
 
 <dl>
     <dt>**Anthropic (Claude)**</dt>
@@ -185,8 +198,10 @@ settings:
 ```yaml
 settings:
   ai:
-    provider: "anthropic"  # Valid options: anthropic, openai, gemini, grok
+    default_provider: "anthropic"  # Valid options: anthropic, openai, gemini, grok, ollama, bedrock, azureopenai
 ```
+
+See [AI Providers](/ai/providers) for complete provider documentation.
 
 ### Rate Limiting Errors
 
@@ -231,6 +246,713 @@ settings:
 
 **Issue**: "Invalid endpoint"
 - **Solution**: Ensure you're using a valid Grok model name
+
+### Ollama (Local)
+
+**Issue**: "Connection refused"
+
+**Solutions**:
+
+1. **Check if Ollama is running**:
+<Terminal title="shell">
+```bash
+# Test Ollama connection
+curl http://localhost:11434/api/version
+
+# Start Ollama if not running (macOS/Linux)
+ollama serve
+```
+</Terminal>
+
+2. **Verify port configuration**:
+```yaml
+providers:
+  ollama:
+    base_url: "http://localhost:11434/v1"  # Default port
+```
+
+3. **Check Ollama service status** (Linux):
+<Terminal title="shell">
+```bash
+systemctl status ollama
+```
+</Terminal>
+
+**Issue**: "Model not found"
+
+**Solutions**:
+
+1. **Pull the model first**:
+<Terminal title="shell">
+```bash
+# List available models
+ollama list
+
+# Pull the model you need
+ollama pull llama3.3:70b
+```
+</Terminal>
+
+2. **Verify model name in configuration**:
+```yaml
+providers:
+  ollama:
+    model: "llama3.3:70b"  # Must match exactly
+```
+
+**Issue**: "Out of memory" or slow responses
+
+**Solutions**:
+
+1. **Use a smaller model**:
+<Terminal title="shell">
+```bash
+# For systems with limited RAM
+ollama pull llama3.1:8b  # Requires ~8GB RAM
+```
+</Terminal>
+
+2. **Update configuration**:
+```yaml
+providers:
+  ollama:
+    model: "llama3.1:8b"  # Smaller, faster model
+    max_tokens: 2048      # Reduce token limit
+```
+
+3. **Check available RAM**:
+<Terminal title="shell">
+```bash
+# macOS
+vm_stat
+
+# Linux
+free -h
+```
+</Terminal>
+
+**Issue**: "Slow inference"
+
+**Solutions**:
+
+1. **Check GPU acceleration**:
+<Terminal title="shell">
+```bash
+# NVIDIA
+nvidia-smi
+
+# AMD
+rocm-smi
+
+# Ollama should show GPU usage in logs
+```
+</Terminal>
+
+2. **Optimize Ollama settings**:
+```yaml
+providers:
+  ollama:
+    max_tokens: 2048        # Smaller responses
+    timeout_seconds: 120    # Allow more time
+```
+
+See [Ollama Documentation](/ai/providers#ollama) for detailed setup and optimization.
+
+### AWS Bedrock (Enterprise)
+
+**Issue**: "Authentication failed"
+
+**Solutions**:
+
+1. **Check AWS credentials**:
+<Terminal title="shell">
+```bash
+# Verify credentials are set
+aws sts get-caller-identity
+
+# Or check environment variables
+echo $AWS_ACCESS_KEY_ID
+echo $AWS_PROFILE
+```
+</Terminal>
+
+2. **Configure AWS credentials**:
+<Terminal title="shell">
+```bash
+# Option 1: Environment variables
+export AWS_ACCESS_KEY_ID="AKIA..."
+export AWS_SECRET_ACCESS_KEY="..."
+
+# Option 2: AWS Profile
+export AWS_PROFILE="bedrock-profile"
+
+# Option 3: AWS Configure
+aws configure
+```
+</Terminal>
+
+**Issue**: "Access denied" or "Not authorized"
+
+**Solutions**:
+
+1. **Check IAM permissions**:
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": [
+        "bedrock:InvokeModel",
+        "bedrock:InvokeModelWithResponseStream"
+      ],
+      "Resource": "arn:aws:bedrock:*:*:model/*"
+    }
+  ]
+}
+```
+
+2. **Enable Bedrock model access**:
+- Go to AWS Console → Bedrock → Model access
+- Request access to Claude models
+- Wait for approval (usually immediate)
+
+**Issue**: "Model not found"
+
+**Solutions**:
+
+1. **Use correct model ID**:
+```yaml
+providers:
+  bedrock:
+    model: "anthropic.claude-3-5-sonnet-20241022-v2:0"  # Full Bedrock model ID
+```
+
+2. **Verify model availability in region**:
+<Terminal title="shell">
+```bash
+aws bedrock list-foundation-models --region us-east-1
+```
+</Terminal>
+
+**Issue**: "Invalid region"
+
+**Solution**: Configure correct AWS region:
+```yaml
+providers:
+  bedrock:
+    base_url: "us-east-1"  # Use region where Bedrock is available
+```
+
+Available Bedrock regions: `us-east-1`, `us-west-2`, `ap-southeast-1`, `eu-central-1`
+
+See [AWS Bedrock Documentation](/ai/providers#aws-bedrock) for setup details.
+
+### Azure OpenAI (Enterprise)
+
+**Issue**: "Authentication failed"
+
+**Solutions**:
+
+1. **Check API key**:
+<Terminal title="shell">
+```bash
+# Verify Azure OpenAI API key is set
+echo $AZURE_OPENAI_API_KEY
+```
+</Terminal>
+
+2. **Get API key from Azure Portal**:
+- Navigate to your Azure OpenAI resource
+- Go to "Keys and Endpoint"
+- Copy either Key 1 or Key 2
+
+3. **Set environment variable**:
+<Terminal title="shell">
+```bash
+export AZURE_OPENAI_API_KEY="your-key-here"
+```
+</Terminal>
+
+**Issue**: "Resource not found" or "Invalid endpoint"
+
+**Solutions**:
+
+1. **Verify resource endpoint**:
+```yaml
+providers:
+  azureopenai:
+    base_url: "https://your-resource-name.openai.azure.com"  # Replace with your resource
+```
+
+2. **Get correct endpoint from Azure Portal**:
+- Go to your Azure OpenAI resource
+- Copy the "Endpoint" URL
+- Use in `base_url` configuration
+
+**Issue**: "Deployment not found"
+
+**Solutions**:
+
+1. **Use deployment name (not model name)**:
+```yaml
+providers:
+  azureopenai:
+    model: "gpt-4o"  # Use your deployment name from Azure Portal
+```
+
+2. **List your deployments**:
+<Terminal title="shell">
+```bash
+# Using Azure CLI
+az cognitiveservices account deployment list \
+  --name your-resource-name \
+  --resource-group your-resource-group
+```
+</Terminal>
+
+**Issue**: "API version not supported"
+
+**Solution**: Use correct API version:
+```yaml
+providers:
+  azureopenai:
+    api_version: "2024-02-15-preview"  # Current version
+```
+
+See [Azure OpenAI Documentation](/ai/providers#azure-openai) for configuration details.
+
+## Multi-Provider Issues
+
+### Provider Switching Not Working
+
+**Problem**: Can't switch providers in TUI with Ctrl+P.
+
+**Solutions**:
+
+1. **Ensure multiple providers are configured**:
+```yaml
+settings:
+  ai:
+    providers:
+      anthropic:
+        model: "claude-3-5-sonnet-20241022"
+        api_key_env: "ANTHROPIC_API_KEY"
+      openai:
+        model: "gpt-4o"
+        api_key_env: "OPENAI_API_KEY"
+```
+
+2. **Verify API keys for all providers**:
+<Terminal title="shell">
+```bash
+echo $ANTHROPIC_API_KEY
+echo $OPENAI_API_KEY
+```
+</Terminal>
+
+3. **Check TUI keybinding** - Press `Ctrl+P` (not `Command+P`)
+
+### Default Provider Not Used
+
+**Problem**: Wrong provider being used.
+
+**Solution**: Set `default_provider` correctly:
+```yaml
+settings:
+  ai:
+    default_provider: "anthropic"  # Provider for CLI commands
+    providers:
+      anthropic:
+        # ... configuration
+```
+
+### Provider Configuration Not Found
+
+**Problem**: "Provider X not configured" error.
+
+**Solution**: Add provider configuration:
+```yaml
+settings:
+  ai:
+    providers:
+      anthropic:  # Provider must be configured here
+        model: "claude-3-5-sonnet-20241022"
+        api_key_env: "ANTHROPIC_API_KEY"
+```
+
+## Session Management Issues
+
+### Sessions Not Persisting
+
+**Problem**: Chat history lost between CLI invocations.
+
+**Solutions**:
+
+1. **Enable session storage**:
+```yaml
+settings:
+  ai:
+    sessions:
+      enabled: true
+      storage: "sqlite"
+      path: ".atmos/sessions"
+```
+
+2. **Check storage directory permissions**:
+<Terminal title="shell">
+```bash
+# Verify directory exists and is writable
+ls -la .atmos/
+mkdir -p .atmos/sessions
+```
+</Terminal>
+
+3. **Use named sessions**:
+<Terminal title="atmos ai chat">
+```bash
+# Create named session
+atmos ai chat --session my-project
+
+# Resume session
+atmos ai chat --session my-project
+```
+</Terminal>
+
+### SQLite Database Errors
+
+**Problem**: "Failed to initialize session storage" or SQLite errors.
+
+**Solutions**:
+
+1. **Check SQLite installation**:
+<Terminal title="shell">
+```bash
+sqlite3 --version
+```
+</Terminal>
+
+2. **Remove corrupt database**:
+<Terminal title="shell">
+```bash
+# Backup first
+cp .atmos/sessions/sessions.db .atmos/sessions/sessions.db.backup
+
+# Remove and recreate
+rm .atmos/sessions/sessions.db
+atmos ai chat  # Will create new database
+```
+</Terminal>
+
+3. **Verify database integrity**:
+<Terminal title="shell">
+```bash
+sqlite3 .atmos/sessions/sessions.db "PRAGMA integrity_check;"
+```
+</Terminal>
+
+### Session List Empty
+
+**Problem**: `Ctrl+L` shows no sessions.
+
+**Reasons**:
+
+1. **No sessions created yet** - Create first session with `atmos ai chat --session name`
+2. **Sessions expired** - Check `retention_days` setting
+3. **Wrong directory** - Verify `path` configuration points to correct location
+
+## MCP Server Issues
+
+### MCP Server Not Starting
+
+**Problem**: "Failed to start MCP server" or connection errors.
+
+**Solutions**:
+
+1. **Test MCP server directly**:
+<Terminal title="shell">
+```bash
+# Start MCP server manually
+atmos mcp-server
+
+# Should output: Starting Atmos MCP server on stdio...
+```
+</Terminal>
+
+2. **Check Atmos installation**:
+<Terminal title="shell">
+```bash
+# Verify atmos is in PATH
+which atmos
+
+# Test atmos works
+atmos version
+```
+</Terminal>
+
+3. **Verify MCP configuration** (for Claude Desktop):
+```json
+{
+  "mcpServers": {
+    "atmos": {
+      "command": "/usr/local/bin/atmos",  // Use full path
+      "args": ["mcp-server"]
+    }
+  }
+}
+```
+
+### MCP Tools Not Available
+
+**Problem**: AI can't access Atmos tools via MCP.
+
+**Solutions**:
+
+1. **Restart MCP client** (Claude Desktop, etc.)
+2. **Check MCP server logs**:
+<Terminal title="shell">
+```bash
+# Run server with debug output
+ATMOS_LOGS_LEVEL=Debug atmos mcp-server
+```
+</Terminal>
+
+3. **Verify tool permissions** in MCP client configuration
+
+### MCP Connection Timeout
+
+**Problem**: Slow or hanging MCP requests.
+
+**Solutions**:
+
+1. **Check Atmos performance**:
+<Terminal title="shell">
+```bash
+# Test Atmos commands directly
+time atmos list stacks
+time atmos describe component vpc -s prod
+```
+</Terminal>
+
+2. **Reduce result size** - Ask for specific stacks/components instead of all
+3. **Increase timeout** in MCP client configuration
+
+See [MCP Server Documentation](/ai/mcp-server) for complete setup guide.
+
+## LSP Integration Issues
+
+### LSP Server Not Found
+
+**Problem**: "LSP server not found" or "Failed to start LSP server".
+
+**Solutions**:
+
+1. **Install LSP server**:
+<Terminal title="shell">
+```bash
+# YAML Language Server
+npm install -g yaml-language-server
+yaml-language-server --version
+
+# Terraform Language Server
+brew install terraform-ls
+terraform-ls version
+```
+</Terminal>
+
+2. **Use full path in configuration**:
+```yaml
+settings:
+  lsp:
+    servers:
+      yaml-ls:
+        command: "/usr/local/bin/yaml-language-server"  # Full path
+```
+
+3. **Verify server in PATH**:
+<Terminal title="shell">
+```bash
+which yaml-language-server
+which terraform-ls
+```
+</Terminal>
+
+### LSP Not Validating Files
+
+**Problem**: No errors/warnings shown for invalid files.
+
+**Solutions**:
+
+1. **Enable LSP globally**:
+```yaml
+settings:
+  lsp:
+    enabled: true  # Must be true
+```
+
+2. **Enable AI LSP access**:
+```yaml
+settings:
+  ai:
+    use_lsp: true  # Allow AI to use LSP
+```
+
+3. **Check file type mapping**:
+```yaml
+lsp:
+  servers:
+    yaml-ls:
+      filetypes: ["yaml", "yml"]  # Include your file extensions
+```
+
+4. **Test LSP server manually**:
+<Terminal title="shell">
+```bash
+# YAML LS
+yaml-language-server --stdio
+
+# Terraform LS
+terraform-ls serve
+```
+</Terminal>
+
+### LSP Server Crashes
+
+**Problem**: Server stops responding or validation hangs.
+
+**Solutions**:
+
+1. **Check server logs**:
+<Terminal title="shell">
+```bash
+# Enable debug logging
+ATMOS_LOGS_LEVEL=Debug atmos ai chat
+```
+</Terminal>
+
+2. **Update LSP server**:
+<Terminal title="shell">
+```bash
+# Update YAML LS
+npm update -g yaml-language-server
+
+# Update Terraform LS
+brew upgrade terraform-ls
+```
+</Terminal>
+
+3. **Simplify initialization options**:
+```yaml
+lsp:
+  servers:
+    yaml-ls:
+      command: "yaml-language-server"
+      args: ["--stdio"]
+      # Remove complex initialization_options temporarily
+```
+
+See [LSP Integration Documentation](/lsp) for detailed configuration.
+
+## Claude Code Subagents
+
+### Subagent Not Being Invoked
+
+**Problem**: Typing `@atmos-expert` doesn't invoke subagent.
+
+**Solutions**:
+
+1. **Check file location**:
+<Terminal title="shell">
+```bash
+# User-level subagent
+ls -la ~/.claude/agents/atmos-expert.md
+
+# Project-level subagent (takes precedence)
+ls -la .claude/agents/atmos-expert.md
+```
+</Terminal>
+
+2. **Verify subagent configuration**:
+```markdown
+---
+name: atmos-expert
+description: Expert in Atmos infrastructure... (must be descriptive)
+tools:
+  - mcp__atmos__describe_stacks
+model: inherit
+---
+```
+
+3. **Use explicit invocation** - Type `@atmos-expert your question` with space
+
+### Subagent Can't Access MCP Tools
+
+**Problem**: Subagent doesn't use Atmos tools.
+
+**Solutions**:
+
+1. **Verify MCP server is running**:
+<Terminal title="shell">
+```bash
+# Test directly
+atmos mcp-server
+```
+</Terminal>
+
+2. **Check tool names have correct prefix**:
+```yaml
+tools:
+  - mcp__atmos__describe_stacks     # ✅ Correct
+  - describe_stacks                  # ❌ Wrong (missing prefix)
+```
+
+3. **Restart Claude Desktop** after subagent or MCP config changes
+
+4. **Verify MCP server configuration**:
+```json
+{
+  "mcpServers": {
+    "atmos": {  // Server name must match tool prefix
+      "command": "/usr/local/bin/atmos",
+      "args": ["mcp-server"]
+    }
+  }
+}
+```
+
+### Subagent Uses Wrong Tools
+
+**Problem**: Subagent has wrong permissions or tools.
+
+**Solution**: Review tool access control:
+```markdown
+---
+name: atmos-expert
+tools:
+  # Read-only access
+  - mcp__atmos__describe_stacks
+  - mcp__atmos__list_stacks
+  - Read
+  - Glob
+
+  # Don't include if you want read-only:
+  # - Write  ❌
+  # - Bash   ❌
+---
+```
+
+### Project-Specific Subagent Not Used
+
+**Problem**: User-level subagent used instead of project-level.
+
+**Reason**: Project-level subagents (`.claude/agents/`) override user-level (`~/.claude/agents/`) only when names match exactly.
+
+**Solution**:
+1. Ensure file is at `.claude/agents/atmos-expert.md` (relative to project root)
+2. Name must match exactly: `name: atmos-expert`
+3. Restart Claude Code after creating
+
+See [Subagents Documentation](/ai/subagents) for complete setup guide.
 
 ## Project Memory Issues
 
@@ -429,10 +1151,19 @@ memory:
 <Terminal title="shell">
     ```bash
     # Test API endpoint connectivity
-    curl -I https://api.anthropic.com # For Anthropic
-    curl -I https://api.openai.com # For OpenAI
-    curl -I https://generativelanguage.googleapis.com # For Gemini
-    curl -I https://api.x.ai # For Grok
+
+    # Cloud Providers
+    curl -I https://api.anthropic.com                      # Anthropic
+    curl -I https://api.openai.com                         # OpenAI
+    curl -I https://generativelanguage.googleapis.com      # Gemini
+    curl -I https://api.x.ai                               # Grok
+
+    # Local Provider
+    curl http://localhost:11434/api/version                # Ollama
+
+    # Enterprise Providers (if using)
+    aws bedrock list-foundation-models --region us-east-1  # AWS Bedrock
+    az account show                                        # Azure (check authentication)
     ```
 </Terminal>
 
@@ -453,14 +1184,46 @@ settings:
 ### Slow Responses
 
 **Possible causes**:
-- Network latency
+- Network latency to cloud providers
 - Model selection (larger models are slower)
 - API rate limiting
+- Internet connection issues
 
 **Solutions**:
-1. Use faster models (e.g., `claude-3-haiku`, `gpt-3.5-turbo`, `gemini-1.5-flash`)
-2. Reduce `max_tokens` setting
-3. Check network connection
+
+1. **Use faster models**:
+```yaml
+providers:
+  anthropic:
+    model: "claude-3-haiku-20240307"    # Fastest Claude model
+  openai:
+    model: "gpt-3.5-turbo"              # Fastest GPT model
+  gemini:
+    model: "gemini-1.5-flash"           # Fastest Gemini model
+```
+
+2. **Consider local deployment** - Use Ollama for zero network latency:
+```yaml
+providers:
+  ollama:
+    model: "llama3.1:8b"  # Fast local model
+```
+
+3. **Reduce token limits**:
+```yaml
+providers:
+  anthropic:
+    max_tokens: 1024  # Smaller responses = faster
+```
+
+4. **Check network connection**:
+<Terminal title="shell">
+```bash
+# Test latency to provider
+ping api.anthropic.com
+curl -I https://api.openai.com
+```
+</Terminal>
 
 ### Timeout Errors
 
@@ -488,6 +1251,26 @@ If you continue to experience issues:
 
 ## Related Resources
 
-- [AI Configuration](/ai/configuration) - Detailed provider setup
-- [AI Commands](/cli/commands/ai/usage) - Command reference
-- [AI Assistant](/ai/) - Feature overview
+### Documentation
+- [AI Assistant Overview](/ai/) - Feature overview and capabilities
+- [AI Providers](/ai/providers) - Complete provider setup (all 7 providers)
+- [AI Configuration](/ai/configuration) - Detailed configuration options
+- [AI Tools](/ai/tools) - Available AI tools and permissions
+- [AI Sessions](/ai/sessions) - Persistent conversation management
+- [MCP Server](/ai/mcp-server) - Model Context Protocol integration
+- [Claude Code Subagents](/ai/subagents) - IDE integration guide
+- [LSP Integration](/lsp) - Language Server Protocol setup
+
+### Commands
+- [atmos ai chat](/cli/commands/ai/chat) - Interactive chat command
+- [atmos ai ask](/cli/commands/ai/ask) - Quick question command
+
+### External Resources
+- [Anthropic API Documentation](https://docs.anthropic.com/)
+- [OpenAI API Documentation](https://platform.openai.com/docs/)
+- [Google Gemini Documentation](https://ai.google.dev/docs)
+- [Ollama Documentation](https://ollama.com/docs)
+- [AWS Bedrock Documentation](https://docs.aws.amazon.com/bedrock/)
+- [Azure OpenAI Documentation](https://learn.microsoft.com/en-us/azure/ai-services/openai/)
+- [Model Context Protocol](https://modelcontextprotocol.io/)
+- [Claude Code Subagents](https://docs.claude.com/en/docs/claude-code/sub-agents)
