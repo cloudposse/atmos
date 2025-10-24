@@ -142,7 +142,7 @@ func initMemoryManager() (*memory.Manager, *schema.AtmosConfiguration, error) {
 
 	// Check if AI is enabled.
 	if !isAIEnabled(&atmosConfig) {
-		return nil, nil, fmt.Errorf("%w: AI features are not enabled. Set 'ai.enabled: true' in atmos.yaml", errUtils.ErrAINotEnabled)
+		return nil, nil, fmt.Errorf("%w: Set 'settings.ai.enabled: true' in atmos.yaml", errUtils.ErrAINotEnabled)
 	}
 
 	// Create memory config (allow disabled memory for some commands).

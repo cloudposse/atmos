@@ -92,12 +92,12 @@ func initSessionManager() (*session.Manager, func(), error) {
 
 	// Check if AI is enabled.
 	if !isAIEnabled(&atmosConfig) {
-		return nil, nil, fmt.Errorf("%w: AI features are not enabled", errUtils.ErrAINotEnabled)
+		return nil, nil, fmt.Errorf("%w: Set 'settings.ai.enabled: true' in atmos.yaml", errUtils.ErrAINotEnabled)
 	}
 
 	// Check if sessions are enabled.
 	if !atmosConfig.Settings.AI.Sessions.Enabled {
-		return nil, nil, fmt.Errorf("%w. Set 'ai.sessions.enabled: true' in atmos.yaml", errUtils.ErrAISessionsNotEnabled)
+		return nil, nil, fmt.Errorf("%w. Set 'settings.ai.sessions.enabled: true' in atmos.yaml", errUtils.ErrAISessionsNotEnabled)
 	}
 
 	// Initialize session storage.

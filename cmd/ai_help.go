@@ -67,7 +67,7 @@ Examples:
 
 		// Check if AI is enabled.
 		if !isAIEnabled(&atmosConfig) {
-			return fmt.Errorf("%w: AI features are not enabled. Set 'ai.enabled: true' in your atmos.yaml configuration",
+			return fmt.Errorf("%w: Set 'settings.ai.enabled: true' in your atmos.yaml configuration",
 				errUtils.ErrAINotEnabled)
 		}
 

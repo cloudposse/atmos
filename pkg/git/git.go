@@ -128,11 +128,11 @@ func NewDefaultGitRepo() GitRepoInterface {
 func (d *DefaultGitRepo) GetLocalRepoInfo() (*RepoInfo, error) {
 	repo, err := GetLocalRepo()
 	if err != nil {
-		return nil, fmt.Errorf("%w: failed to get local repository: %s", errUtils.ErrFailedToGetLocalRepo, err)
+		return nil, fmt.Errorf("%w: %w", errUtils.ErrFailedToGetLocalRepo, err)
 	}
 	info, err := GetRepoInfo(repo)
 	if err != nil {
-		return nil, fmt.Errorf("%w: failed to get repository info: %s", errUtils.ErrFailedToGetRepoInfo, err)
+		return nil, fmt.Errorf("%w: %w", errUtils.ErrFailedToGetRepoInfo, err)
 	}
 	return &info, nil
 }
