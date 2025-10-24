@@ -64,7 +64,7 @@ func TestProcessCustomYamlTagsWithContextParameter(t *testing.T) {
 	}
 	require.NoError(t, ctx.Push(atmosConfig, node))
 
-	result, err := ProcessCustomYamlTagsWithContext(atmosConfig, input, "test-stack", nil, ctx)
+	result, err := ProcessCustomYamlTagsWithContext(atmosConfig, input, "test-stack", nil, ctx, nil)
 
 	require.NoError(t, err)
 	assert.NotNil(t, result)

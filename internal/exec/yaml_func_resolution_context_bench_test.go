@@ -102,7 +102,7 @@ func BenchmarkProcessCustomYamlTagsWithContext(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, _ = ProcessCustomYamlTagsWithContext(atmosConfig, input, "test-stack", nil, ctx)
+		_, _ = ProcessCustomYamlTagsWithContext(atmosConfig, input, "test-stack", nil, ctx, nil)
 	}
 }
 

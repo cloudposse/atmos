@@ -35,10 +35,11 @@ func ProcessCustomYamlTagsWithContext(
 	currentStack string,
 	skip []string,
 	resolutionCtx *ResolutionContext,
+	stackInfo *schema.ConfigAndStacksInfo,
 ) (schema.AtmosSectionMapType, error) {
 	defer perf.Track(atmosConfig, "exec.ProcessCustomYamlTagsWithContext")()
 
-	return processNodesWithContext(atmosConfig, input, currentStack, skip, resolutionCtx, nil), nil
+	return processNodesWithContext(atmosConfig, input, currentStack, skip, resolutionCtx, stackInfo), nil
 }
 
 func processNodes(
