@@ -102,7 +102,7 @@ func BenchmarkProcessCustomYamlTagsWithContext(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, _ = ProcessCustomYamlTagsWithContext(atmosConfig, input, "test-stack", nil, ctx)
+		_, _ = ProcessCustomYamlTagsWithContext(atmosConfig, input, "test-stack", nil, ctx, nil)
 	}
 }
 
@@ -117,7 +117,7 @@ func BenchmarkProcessCustomYamlTagsOverhead(b *testing.B) {
 	b.Run("WithoutCycleDetection", func(b *testing.B) {
 		// Simulate old behavior (direct processing without context).
 		for i := 0; i < b.N; i++ {
-			result := processNodes(atmosConfig, input, "test-stack", nil)
+			result := processNodes(atmosConfig, input, "test-stack", nil, nil)
 			_ = result
 		}
 	})
@@ -126,7 +126,7 @@ func BenchmarkProcessCustomYamlTagsOverhead(b *testing.B) {
 		// New behavior with cycle detection.
 		for i := 0; i < b.N; i++ {
 			ClearResolutionContext()
-			_, _ = ProcessCustomYamlTags(atmosConfig, input, "test-stack", nil)
+			_, _ = ProcessCustomYamlTags(atmosConfig, input, "test-stack", nil, nil)
 		}
 	})
 }

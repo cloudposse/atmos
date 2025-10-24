@@ -343,7 +343,7 @@ func TestReadTerraformBackendAzurerm_MissingBackend(t *testing.T) {
 		// No backend section.
 	}
 
-	result, err := ReadTerraformBackendAzurerm(nil, &componentSections)
+	result, err := ReadTerraformBackendAzurerm(nil, &componentSections, nil)
 
 	assert.Error(t, err)
 	assert.Nil(t, result)
@@ -361,7 +361,7 @@ func TestReadTerraformBackendAzurerm_EmptyStorageAccount(t *testing.T) {
 		},
 	}
 
-	result, err := ReadTerraformBackendAzurerm(nil, &componentSections)
+	result, err := ReadTerraformBackendAzurerm(nil, &componentSections, nil)
 
 	assert.Error(t, err)
 	assert.Nil(t, result)
@@ -378,7 +378,7 @@ func TestReadTerraformBackendAzurerm_MissingStorageAccount(t *testing.T) {
 		},
 	}
 
-	result, err := ReadTerraformBackendAzurerm(nil, &componentSections)
+	result, err := ReadTerraformBackendAzurerm(nil, &componentSections, nil)
 
 	assert.Error(t, err)
 	assert.Nil(t, result)
@@ -412,7 +412,7 @@ func TestReadTerraformBackendAzurerm_CachedClient(t *testing.T) {
 		},
 	}
 
-	result, err := ReadTerraformBackendAzurerm(nil, &componentSections)
+	result, err := ReadTerraformBackendAzurerm(nil, &componentSections, nil)
 
 	assert.NoError(t, err)
 	assert.NotNil(t, result)
@@ -764,7 +764,7 @@ func TestReadTerraformBackendAzurerm_Integration_InvalidConfig(t *testing.T) {
 
 			atmosConfig := &schema.AtmosConfiguration{}
 
-			result, err := ReadTerraformBackendAzurerm(atmosConfig, &tt.componentData)
+			result, err := ReadTerraformBackendAzurerm(atmosConfig, &tt.componentData, nil)
 
 			if tt.wantErr {
 				assert.Error(t, err)
@@ -793,7 +793,7 @@ func TestReadTerraformBackendAzurerm_Integration_BlobNotFound(t *testing.T) {
 		},
 	}
 
-	result, err := ReadTerraformBackendAzurerm(nil, &componentSections)
+	result, err := ReadTerraformBackendAzurerm(nil, &componentSections, nil)
 	// Should either return nil/nil (blob not found) or error (storage account doesn't exist).
 	// Both are acceptable for this test since we're testing against nonexistent resources.
 	if err != nil {

@@ -474,7 +474,7 @@ func (s stubUserID) Authenticate(_ context.Context, _ types.ICredentials) (types
 }
 func (s stubUserID) Validate() error                         { return nil }
 func (s stubUserID) Environment() (map[string]string, error) { return map[string]string{}, nil }
-func (s stubUserID) PostAuthenticate(_ context.Context, _ *schema.ConfigAndStacksInfo, _ string, _ string, _ types.ICredentials) error {
+func (s stubUserID) PostAuthenticate(_ context.Context, _ *types.PostAuthenticateParams) error {
 	return nil
 }
 func (s stubUserID) Logout(_ context.Context) error { return nil }
@@ -543,7 +543,7 @@ func (s stubPSIdentity) Authenticate(_ context.Context, base types.ICredentials)
 }
 func (s stubPSIdentity) Validate() error                         { return nil }
 func (s stubPSIdentity) Environment() (map[string]string, error) { return s.env, nil }
-func (s stubPSIdentity) PostAuthenticate(_ context.Context, _ *schema.ConfigAndStacksInfo, _ string, _ string, _ types.ICredentials) error {
+func (s stubPSIdentity) PostAuthenticate(_ context.Context, _ *types.PostAuthenticateParams) error {
 	if s.postCalled != nil {
 		*s.postCalled = true
 	}
@@ -790,7 +790,7 @@ func (s stubIdentity) Authenticate(_ context.Context, _ types.ICredentials) (typ
 }
 func (s stubIdentity) Validate() error                         { return nil }
 func (s stubIdentity) Environment() (map[string]string, error) { return nil, nil }
-func (s stubIdentity) PostAuthenticate(_ context.Context, _ *schema.ConfigAndStacksInfo, _ string, _ string, _ types.ICredentials) error {
+func (s stubIdentity) PostAuthenticate(_ context.Context, _ *types.PostAuthenticateParams) error {
 	return nil
 }
 func (s stubIdentity) Logout(_ context.Context) error { return nil }

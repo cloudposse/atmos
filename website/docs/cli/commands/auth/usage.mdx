@@ -74,6 +74,13 @@ auth:
       region: us-east-1
       start_url: https://mycompany.awsapps.com/start
 
+      # Optional: Configure session durations
+      session:
+        duration: 1h  # Credential lifetime for auth shell/env/exec
+
+      console:
+        session_duration: 12h  # Web console session duration (max 12h for AWS)
+
   identities:
     admin:
       kind: aws/permission-set
