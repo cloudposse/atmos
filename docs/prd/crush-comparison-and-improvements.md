@@ -1,55 +1,80 @@
 # Crush vs Atmos AI: Feature Comparison & Improvement Recommendations
 
-**Document Version:** 1.0
-**Date:** 2025-10-23
-**Status:** Draft
+**Document Version:** 2.0
+**Date:** 2025-10-23 (Updated: 2025-10-23)
+**Status:** Active - Tracking Implementation Progress
 **Author:** AI Analysis based on https://github.com/charmbracelet/crush
 
 ---
 
 ## Executive Summary
 
-Crush is a **full-featured AI coding agent** focused on general-purpose software development, while Atmos AI is a **domain-specific AI assistant** focused on infrastructure-as-code management. Crush has significantly more features but serves a different purpose.
+Crush is a **full-featured AI coding agent** focused on general-purpose software development, while Atmos AI is a **domain-specific AI assistant** focused on infrastructure-as-code management.
 
-**Key Finding:** Atmos AI should adopt Crush's productivity patterns (sessions, tools, memory) while maintaining its domain-specific intelligence advantage.
+**Implementation Status (as of 2025-10-23):**
+- ✅ **Session Management** - COMPLETE (SQLite-backed, TUI with create/delete/rename/filter)
+- ✅ **Tool Execution** - COMPLETE (Atmos-specific tools with permission system)
+- ✅ **Project Memory** - COMPLETE (ATMOS.md with auto-update)
+- ✅ **MCP Support** - COMPLETE (stdio/HTTP transports for Claude Desktop/VSCode)
+- ⚠️ **Enhanced TUI** - PARTIAL (sessions complete, syntax highlighting pending)
+- ❌ **LSP Integration** - PENDING (medium priority)
+
+**Key Achievement:** Atmos AI has successfully adopted Crush's productivity patterns (sessions, tools, memory) while maintaining its domain-specific intelligence advantage.
 
 ---
 
 ## Feature Comparison Matrix
 
-| Feature Category | Crush | Atmos AI | Priority for Atmos |
-|-----------------|-------|----------|-------------------|
-| **Session Management** | ✅ SQLite-backed persistent sessions | ❌ Stateless (new context each time) | 🔴 HIGH |
-| **LSP Integration** | ✅ Multi-language LSP support | ❌ No LSP | 🟡 MEDIUM |
-| **MCP Support** | ✅ stdio/HTTP/SSE transport | ❌ No MCP | 🟡 MEDIUM |
-| **Tool Execution** | ✅ Bash, file edit, search | ❌ Read-only (no execution) | 🔴 HIGH |
-| **Permission System** | ✅ Granular + YOLO mode | ⚠️ Basic (prompt for context) | 🟡 MEDIUM |
-| **Model Switching** | ✅ Mid-session (preserves context) | ❌ Restart required | 🟢 LOW |
-| **File Ignore** | ✅ .gitignore + .crushignore | ⚠️ Glob patterns only | 🟢 LOW |
-| **Context Persistence** | ✅ CRUSH.md project memory | ❌ No persistent memory | 🔴 HIGH |
-| **Provider Management** | ✅ Auto-update from Catwalk | ⚠️ Manual config | 🟢 LOW |
-| **Git Attribution** | ✅ Co-authored-by + generated-with | ❌ No git integration | 🟢 LOW |
-| **Interactive Chat** | ✅ Full TUI with history | ✅ Basic TUI (Bubble Tea) | 🟡 MEDIUM |
-| **Domain Context** | ❌ No domain-specific knowledge | ✅ Atmos-specific knowledge | ✅ Core |
-| **Stack Context** | ❌ N/A | ✅ Stack file analysis | ✅ Core |
-| **AI Providers** | ✅ 10+ providers | ✅ 4 providers | 🟢 LOW |
+| Feature Category | Crush | Atmos AI (Original) | Atmos AI (Current) | Status |
+|-----------------|-------|---------------------|--------------------| -------|
+| **Session Management** | ✅ SQLite-backed | ❌ Stateless | ✅ **SQLite-backed** | ✅ COMPLETE |
+| **Session TUI** | ✅ Create/Switch | ❌ None | ✅ **Create/Delete/Rename/Filter** | ✅ COMPLETE |
+| **Provider-Aware Sessions** | ❌ No | ❌ No | ✅ **Yes** | ✅ COMPLETE |
+| **Tool Execution** | ✅ Bash, file edit | ❌ Read-only | ✅ **Atmos tools + file ops** | ✅ COMPLETE |
+| **Permission System** | ✅ Granular + YOLO | ⚠️ Basic | ✅ **Granular allowlists** | ✅ COMPLETE |
+| **Project Memory** | ✅ CRUSH.md | ❌ None | ✅ **ATMOS.md** | ✅ COMPLETE |
+| **MCP Support** | ✅ stdio/HTTP/SSE | ❌ None | ✅ **stdio/HTTP** | ✅ COMPLETE |
+| **LSP Integration** | ✅ Multi-language | ❌ None | ❌ **Pending** | 🟡 TODO |
+| **Interactive Chat** | ✅ Full TUI | ✅ Basic | ✅ **Enhanced TUI** | ⚠️ PARTIAL |
+| **Syntax Highlighting** | ✅ Yes | ❌ No | ❌ **Pending** | 🟡 TODO |
+| **Model Switching** | ✅ Mid-session | ❌ Restart required | ❌ **Pending** | 🟢 LOW |
+| **Git Attribution** | ✅ Co-authored-by | ❌ None | ❌ **Pending** | 🟢 LOW |
+| **Domain Context** | ❌ No | ✅ Atmos-specific | ✅ **Atmos-specific** | ✅ Core |
+| **Stack Context** | ❌ N/A | ✅ Stack analysis | ✅ **Stack analysis** | ✅ Core |
+| **AI Providers** | ✅ 10+ | ✅ 4 | ✅ **4 (+ Ollama pending)** | ✅ Core |
 
 ---
 
-## Missing Features in Atmos AI (by Priority)
+## Implementation Status by Priority
 
-### 🔴 HIGH PRIORITY - Critical for Productivity
+### ✅ COMPLETED - HIGH PRIORITY Features
 
-#### 1. Session Management & Context Persistence
+#### 1. ✅ Session Management & Context Persistence - **COMPLETE**
 
-**What Crush Has:**
+**✅ Implemented in Atmos AI:**
+- ✅ SQLite-backed session storage (`pkg/ai/session/storage/sqlite.go`)
+- ✅ Full CRUD operations (Create, Read, Update, Delete sessions)
+- ✅ Message history persistence across CLI invocations
+- ✅ Provider-aware sessions (each session remembers its AI provider and model)
+- ✅ TUI session management (Ctrl+N: create, Ctrl+L: switch, d: delete, r: rename)
+- ✅ Session filtering by provider (All/Claude/GPT/Gemini/Grok)
+- ✅ Enhanced session display with provider badges, creation date, message count
+- ✅ Configurable retention (auto-cleanup after N days)
+
+**Implementation Files:**
+- `pkg/ai/session/manager.go` - Session lifecycle management
+- `pkg/ai/session/storage/sqlite.go` - SQLite storage implementation
+- `pkg/ai/tui/sessions.go` - Session list UI with CRUD operations
+- `pkg/ai/tui/create_session.go` - Session creation form with provider selection
+
+**Original Requirements (from Crush):**
 - SQLite-backed session storage
 - Maintains conversation history across restarts
 - Multiple concurrent sessions per project
 - Automatic state persistence
 - Session isolation with independent contexts
 
-**Why It Matters for Atmos:**
+**Why It Mattered for Atmos:**
 - Users work on long-running infrastructure changes
 - Need to maintain context across multiple CLI invocations
 - Should remember previous questions about specific stacks/components
@@ -136,16 +161,43 @@ atmos ai sessions clean --older-than 30d
 
 ---
 
-#### 2. Tool Execution System
+#### 2. ✅ Tool Execution System - **COMPLETE**
 
-**What Crush Has:**
+**✅ Implemented in Atmos AI:**
+- ✅ Atmos-specific tools (`atmos_describe_component`, `atmos_list_stacks`, `atmos_validate_stacks`, etc.)
+- ✅ File operations (`file_read`, `file_write`, `file_search`)
+- ✅ Granular permission system with allowlist/restricted/blocked categories
+- ✅ Interactive permission prompts with tool details
+- ✅ Tool result streaming to AI for analysis
+- ✅ YOLO mode for bypassing confirmations (configurable)
+- ✅ Audit logging for tool executions
+
+**Implementation Files:**
+- `pkg/ai/tools/interface.go` - Tool interface definition
+- `pkg/ai/tools/atmos/tools.go` - Atmos-specific tool implementations
+- `pkg/ai/tools/permission/manager.go` - Permission checking logic
+- `pkg/ai/tools/executor.go` - Tool execution engine
+- `pkg/ai/agent/*/client.go` - Tool use integration (Anthropic, OpenAI, Gemini, Grok)
+
+**Supported Tools:**
+- `atmos_describe_component` - Describe component configuration in stack
+- `atmos_describe_stacks` - Describe all stacks
+- `atmos_list_stacks` - List available stacks
+- `atmos_list_components` - List available components
+- `atmos_validate_stacks` - Validate stack configurations
+- `atmos_validate_component` - Validate specific component
+- `file_read` - Read file contents
+- `file_write` - Write file contents
+- `file_search` - Search for files/content
+
+**Original Requirements (from Crush):**
 - Bash command execution with security controls
 - File read/write/edit operations
 - Search and grep capabilities
 - Granular permission system with allowlists
 - Tool result streaming to AI
 
-**Why It Matters for Atmos:**
+**Why It Mattered for Atmos:**
 - AI could validate configurations automatically
 - Execute `atmos describe component` to gather detailed context
 - Run `atmos validate stacks` to check for issues
@@ -292,9 +344,34 @@ settings:
 
 ---
 
-#### 3. Project Memory (ATMOS.md)
+#### 3. ✅ Project Memory (ATMOS.md) - **COMPLETE**
 
-**What Crush Has:**
+**✅ Implemented in Atmos AI:**
+- ✅ `ATMOS.md` file for persistent project knowledge
+- ✅ Automatically created from template if missing
+- ✅ Context injection to AI prompts
+- ✅ Configurable sections (project_context, common_commands, stack_patterns, etc.)
+- ✅ Manual and auto-update modes
+- ✅ Preserves user edits while allowing AI updates
+- ✅ Reduces repetitive context loading
+
+**Implementation Files:**
+- `pkg/ai/memory/manager.go` - Project memory management
+- `pkg/ai/memory/parser.go` - Markdown section parser
+- `templates/atmos_md.tmpl` - Default ATMOS.md template
+
+**Configuration:**
+```yaml
+settings:
+  ai:
+    memory:
+      enabled: true
+      file_path: ATMOS.md
+      create_if_missing: true
+      auto_update: false  # Manual updates recommended
+```
+
+**Original Requirements (from Crush):**
 - `CRUSH.md` file for persistent project knowledge
 - Automatically updated by AI during sessions
 - Stores frequently used commands
@@ -302,7 +379,7 @@ settings:
 - Maintains codebase structure notes
 - Avoids re-discovering same information
 
-**Why It Matters for Atmos:**
+**Why It Mattered for Atmos:**
 - Store common stack patterns for the project
 - Remember organization-specific naming conventions
 - Cache frequently asked questions and answers
@@ -516,9 +593,52 @@ settings:
 
 ---
 
-### 🟡 MEDIUM PRIORITY - Quality of Life Improvements
+---
 
-#### 4. LSP Integration
+### ⚠️ PARTIAL - MEDIUM PRIORITY Features
+
+#### 4. ✅ MCP (Model Context Protocol) Support - **COMPLETE**
+
+**✅ Implemented in Atmos AI:**
+- ✅ stdio transport for local MCP servers (Claude Desktop, VSCode)
+- ✅ HTTP transport for remote MCP servers
+- ✅ `atmos mcp-server` command to start MCP server
+- ✅ Exposes all Atmos tools via MCP protocol
+- ✅ Compatible with Claude Desktop, VSCode, and any MCP client
+- ✅ Configurable in `atmos.yaml`
+
+**Implementation Files:**
+- `pkg/ai/mcp/server.go` - MCP server implementation
+- `pkg/ai/mcp/stdio_transport.go` - stdio transport
+- `pkg/ai/mcp/http_transport.go` - HTTP transport
+- `cmd/mcp_server.go` - MCP server command
+
+**Usage:**
+```bash
+# Start MCP server (stdio for Claude Desktop)
+atmos mcp-server
+
+# Start HTTP server
+atmos mcp-server --transport http --port 3000
+```
+
+**Configuration:**
+```yaml
+settings:
+  ai:
+    mcp:
+      enabled: true
+      transport: stdio  # or http
+      http:
+        port: 3000
+        host: localhost
+```
+
+See documentation: `website/docs/ai/mcp-server.mdx`
+
+---
+
+#### 5. ❌ LSP Integration - **PENDING**
 
 **What Crush Has:**
 - Spawns LSP servers (gopls, rust-analyzer, pyright, typescript-language-server)
@@ -574,17 +694,32 @@ settings:
 
 ---
 
-#### 5. Enhanced Interactive Chat UI
+#### 6. ⚠️ Enhanced Interactive Chat UI - **PARTIAL**
 
-**Current State:**
-- Basic Bubble Tea TUI
-- No history navigation
-- No multi-line input
-- No syntax highlighting
-- No session management UI
-- Basic message display
+**✅ Completed Features:**
+- ✅ Full session management TUI (Ctrl+N: create, Ctrl+L: switch, d: delete, r: rename)
+- ✅ Provider selection during session creation
+- ✅ Session filtering by provider (f key: All/Claude/GPT/Gemini/Grok)
+- ✅ Color-coded provider badges ([Claude], [GPT], [Gemini], [Grok])
+- ✅ Rich session metadata (name, provider, creation date, message count)
+- ✅ Multi-line input with Shift+Enter
+- ✅ Message history persistence
+- ✅ Enhanced TUI with Bubble Tea components
 
-**Improvements Needed:**
+**❌ Still Pending:**
+- ❌ Syntax highlighting for code blocks in AI responses
+- ❌ History navigation (↑/↓ arrows for previous messages)
+- ❌ Markdown rendering (bold, italic, lists, tables)
+- ❌ Interactive code block buttons (Copy, Save, Apply)
+- ❌ History search (Ctrl+R)
+
+**Implementation Files:**
+- `pkg/ai/tui/chat.go` - Main chat model
+- `pkg/ai/tui/sessions.go` - Session list and management UI
+- `pkg/ai/tui/create_session.go` - Session creation form
+- `pkg/ai/tui/keys.go` - Keyboard navigation handlers
+
+**Improvements Still Needed:**
 
 **A. History Navigation**
 ```
@@ -645,89 +780,8 @@ components:
 ```
 
 **Files to Update:**
-- `pkg/ai/tui/chat.go` - Enhanced chat model
-- `pkg/ai/tui/input.go` - Multi-line input handler
-- `pkg/ai/tui/renderer.go` - Markdown/syntax highlighting
-- `pkg/ai/tui/history.go` - History navigation
-- `pkg/ai/tui/sessions.go` - Session selector UI
-
----
-
-#### 6. MCP (Model Context Protocol) Support
-
-**What It Is:**
-- Anthropic's standardized protocol for AI context providers
-- Enables external tools and data sources
-- Three transport types: stdio, HTTP, SSE
-- Dynamic tool registration
-
-**What It Enables for Atmos:**
-
-**A. External Integrations**
-```yaml
-settings:
-  ai:
-    mcp:
-      enabled: true
-      servers:
-        # GitHub integration
-        - name: github
-          transport: http
-          url: https://api.github.com
-          env:
-            GITHUB_TOKEN: $(echo $GITHUB_TOKEN)
-
-        # Spacelift integration
-        - name: spacelift
-          transport: http
-          url: https://acme.app.spacelift.io
-          env:
-            SPACELIFT_API_TOKEN: $(echo $SPACELIFT_TOKEN)
-
-        # AWS resource lookup
-        - name: aws-resources
-          transport: stdio
-          command: aws-mcp-server
-          args: ["--region", "us-east-1"]
-```
-
-**B. Use Cases**
-
-**GitHub PR Context:**
-```bash
-User: "What components are affected by PR #123?"
-AI: *Uses GitHub MCP to fetch PR diff*
-AI: *Runs atmos describe affected with PR changes*
-AI: "PR #123 affects:
-- vpc component in prod-use1
-- security-groups component in prod-use1
-- Changes: CIDR block expansion"
-```
-
-**Spacelift Stack Status:**
-```bash
-User: "What's the status of the VPC deployment?"
-AI: *Queries Spacelift MCP server*
-AI: "VPC stack (prod-use1):
-- Last run: 2 hours ago
-- Status: Applied successfully
-- Resources: 45 created, 0 changed, 0 destroyed"
-```
-
-**AWS Resource Lookup:**
-```bash
-User: "What RDS instances exist in prod?"
-AI: *Queries AWS MCP server*
-AI: "Found 3 RDS instances in us-east-1:
-1. acme-prod-postgres (db.r6g.xlarge) - Running
-2. acme-prod-analytics (db.r6g.2xlarge) - Running
-3. acme-prod-reports (db.r6g.large) - Stopped"
-```
-
-**Implementation:**
-- `pkg/ai/mcp/client.go` - MCP client implementation
-- `pkg/ai/mcp/registry.go` - MCP server registry
-- `pkg/ai/mcp/tools.go` - MCP tool adapter
+- `pkg/ai/tui/renderer.go` - Markdown/syntax highlighting (NEW)
+- `pkg/ai/tui/history.go` - History navigation (NEW)
 
 ---
 
@@ -777,7 +831,80 @@ settings:
 
 ---
 
-#### 8. Auto-Updating Provider Database
+#### 8. ❌ Ollama/LLAMA Support - **PENDING (Recommended)**
+
+**What is LLAMA/Ollama:**
+- **LLAMA** - Meta's open-source LLM family (Llama 3.1, 3.2, 3.3)
+- **Ollama** - Popular local LLM runtime (https://ollama.com)
+- Runs models locally on your hardware
+- OpenAI-compatible API (easy integration)
+
+**Model Quality Assessment:**
+
+| Model | Size | Quality | Best For |
+|-------|------|---------|----------|
+| Llama 3.3 70B | ~40GB | ⭐⭐⭐⭐⭐ Excellent | Production (rivals GPT-4) |
+| Llama 3.1 8B | ~5GB | ⭐⭐⭐ Good | Quick queries, cost-sensitive |
+| Llama 3.2 3B | ~2GB | ⭐⭐ Fair | Simple tasks only |
+
+**Pros for Atmos AI:**
+- ✅ **Privacy** - Infrastructure configs never leave premises (critical for enterprises)
+- ✅ **Cost** - Zero API costs after initial setup
+- ✅ **Offline** - Works in air-gapped environments
+- ✅ **Compliance** - Meets data residency requirements
+- ✅ **Control** - Fine-tunable for Atmos-specific use cases
+
+**Cons:**
+- ❌ **Setup complexity** - Users must install Ollama + download models (5-40GB)
+- ❌ **Performance** - Requires GPU for acceptable speeds with larger models
+- ❌ **Quality variance** - Smaller models (3B-8B) inferior to cloud APIs
+- ❌ **Maintenance** - Users responsible for updates
+
+**Implementation Effort: LOW** (OpenAI-compatible API, 90% code reuse)
+
+**Configuration:**
+```yaml
+# atmos.yaml
+settings:
+  ai:
+    enabled: true
+    provider: "ollama"  # New provider
+    model: "llama3.3:70b"
+    api_key_env: ""  # Not needed for Ollama
+    base_url: "http://localhost:11434/v1"  # Ollama default
+```
+
+**User Setup:**
+```bash
+# 1. Install Ollama
+curl -fsSL https://ollama.com/install.sh | sh
+
+# 2. Download model (one-time, ~40GB for 70B)
+ollama pull llama3.3:70b
+
+# 3. Configure Atmos (see above)
+
+# 4. Use normally
+atmos ai chat
+```
+
+**Target Use Cases:**
+- Government/defense contractors (air-gapped environments)
+- Financial institutions (data sovereignty requirements)
+- Healthcare (HIPAA compliance)
+- Cost-sensitive high-volume users
+- Teams with GPU infrastructure
+
+**Implementation Files to Create:**
+- `pkg/ai/agent/ollama/client.go` - Ollama client (wraps OpenAI client)
+
+**Priority Recommendation:** 🟢 LOW (after LSP and TUI polish, but before Git integration)
+
+**Strategic Value:** HIGH - Differentiates Atmos from cloud-only AI tools, addresses enterprise privacy requirements.
+
+---
+
+#### 9. Auto-Updating Provider Database
 
 **Feature:** Similar to Crush's Catwalk system
 - Automatically discover new AI models
@@ -1310,14 +1437,26 @@ Not a direct clone of Crush, but an infrastructure-focused AI assistant that:
 - **Model Context Protocol:** https://modelcontextprotocol.io
 - **Atmos Documentation:** https://atmos.tools
 - **Bubble Tea TUI:** https://github.com/charmbracelet/bubbletea
+- **Ollama (Local LLM Runtime):** https://ollama.com
+- **Meta LLAMA Models:** https://llama.meta.com
 
 ---
 
 ## Changelog
 
 - **2025-10-23:** Initial draft based on Crush analysis
-- **Future:** Update as features are implemented
+- **2025-10-23 (v2.0):** Major update reflecting implementation progress
+  - ✅ Marked Session Management as COMPLETE
+  - ✅ Marked Tool Execution System as COMPLETE
+  - ✅ Marked Project Memory (ATMOS.md) as COMPLETE
+  - ✅ Marked MCP Support as COMPLETE
+  - ⚠️ Marked Enhanced TUI as PARTIAL (sessions complete, syntax highlighting pending)
+  - ❌ Marked LSP Integration as PENDING
+  - 📝 Added Ollama/LLAMA analysis and recommendation
+  - 📝 Updated feature comparison matrix with 3-column view (Original → Current → Status)
+  - 📝 Added implementation file references for completed features
+  - 📝 Reorganized sections by completion status (COMPLETED / PARTIAL / PENDING)
 
 ---
 
-*This document is a living PRD. Update it as implementation progresses and requirements evolve.*
+*This document is a living PRD. Updated as of 2025-10-23 to reflect current implementation status.*
