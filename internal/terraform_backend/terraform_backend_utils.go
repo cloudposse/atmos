@@ -121,6 +121,7 @@ func ProcessTerraformStateFile(data []byte) (map[string]any, error) {
 func GetTerraformBackend(
 	atmosConfig *schema.AtmosConfiguration,
 	componentSections *map[string]any,
+	authContext *schema.AuthContext,
 ) (map[string]any, error) {
 	defer perf.Track(atmosConfig, "terraform_backend.GetTerraformBackend")()
 
@@ -136,7 +137,7 @@ func GetTerraformBackend(
 		return nil, fmt.Errorf("%w: `%s`\nsupported backends: `local`, `s3`, `azurerm`", errUtils.ErrUnsupportedBackendType, backendType)
 	}
 
-	content, err := readBackendStateFunc(atmosConfig, componentSections)
+	content, err := readBackendStateFunc(atmosConfig, componentSections, authContext)
 	if err != nil {
 		return nil, err
 	}

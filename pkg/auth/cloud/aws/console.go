@@ -31,8 +31,10 @@ const (
 	// AWSMinSessionDuration is the minimum session duration for AWS console (15 minutes).
 	AWSMinSessionDuration = 15 * time.Minute
 
-	// AWSSigninTokenExpirationMinutes is the number of minutes a signin token remains valid (15 minutes per AWS docs).
-	AWSSigninTokenExpirationMinutes = 15
+	// AWSDefaultSigninTokenExpiration is the signin token expiration enforced by AWS (15 minutes, not configurable).
+	// This is the time you have to click the generated URL before it expires.
+	// To control how long you stay logged into the console, configure provider.console.session_duration.
+	AWSDefaultSigninTokenExpiration = 15 * time.Minute
 )
 
 // ConsoleURLGenerator generates AWS console federation URLs.
@@ -91,11 +93,15 @@ func (g *ConsoleURLGenerator) GetConsoleURL(ctx context.Context, creds types.ICr
 		issuer = "atmos"
 	}
 
-	loginURL := fmt.Sprintf("%s?Action=login&Issuer=%s&Destination=%s&SigninToken=%s",
+	// Convert duration to seconds for SessionDuration parameter.
+	sessionDurationSeconds := int(duration.Seconds())
+
+	loginURL := fmt.Sprintf("%s?Action=login&Issuer=%s&Destination=%s&SigninToken=%s&SessionDuration=%d",
 		AWSFederationEndpoint,
 		url.QueryEscape(issuer),
 		url.QueryEscape(destination),
 		url.QueryEscape(signinToken),
+		sessionDurationSeconds,
 	)
 
 	log.Debug("Generated AWS console URL", "destination", destination, "duration", duration)

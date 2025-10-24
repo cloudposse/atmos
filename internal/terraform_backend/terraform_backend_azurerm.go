@@ -137,6 +137,7 @@ func getCachedAzureBlobClient(backend *map[string]any) (AzureBlobAPI, error) {
 func ReadTerraformBackendAzurerm(
 	atmosConfig *schema.AtmosConfiguration,
 	componentSections *map[string]any,
+	authContext *schema.AuthContext,
 ) ([]byte, error) {
 	defer perf.Track(atmosConfig, "terraform_backend.ReadTerraformBackendAzurerm")()
 

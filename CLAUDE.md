@@ -152,6 +152,51 @@ pkg/newfeature/
 ### Comment Style (MANDATORY)
 All comments must end with periods (enforced by `godot` linter).
 
+### Comment Preservation (MANDATORY)
+**NEVER delete existing comments without a very strong reason.**
+
+Comments are documentation that helps developers understand:
+- **Why** code was written a certain way
+- **How** complex algorithms or flows work
+- **What** edge cases or gotchas to be aware of
+- **Where** credentials or configuration come from
+
+**Guidelines:**
+- **Preserve helpful comments** - Especially those explaining credential resolution, complex logic, or non-obvious behavior
+- **Update comments to match code** - When refactoring, update comments to reflect current implementation
+- **Refactor for clarity** - It's okay to improve comment wording or structure for better readability
+- **Add context when modifying** - If changing code with comments, ensure comments still accurately describe the behavior
+
+**Acceptable reasons to remove comments:**
+- Comment is factually incorrect and cannot be updated
+- Code is completely removed
+- Comment duplicates what the code obviously does (e.g., `// increment counter` above `counter++`)
+- Comment is outdated TODO that has been completed
+
+**Anti-pattern:**
+```go
+// WRONG: Deleting helpful documentation during refactoring
+-// LoadAWSConfig looks for credentials in the following order:
+-//   1. Environment variables (AWS_ACCESS_KEY_ID, etc.)
+-//   2. Shared credentials file (~/.aws/credentials)
+-//   3. EC2 Instance Metadata Service (IMDS)
+-//   ... (more helpful details)
+ func LoadAWSConfig(ctx context.Context) (aws.Config, error) {
+```
+
+**Correct pattern:**
+```go
+// CORRECT: Preserving and updating helpful documentation
+-// LoadAWSConfig looks for credentials in the following order:
++// LoadAWSConfigWithAuth looks for credentials in the following order:
++// When authContext is provided, uses Atmos-managed credentials.
++// Otherwise, falls back to standard AWS SDK resolution:
+ //   1. Environment variables (AWS_ACCESS_KEY_ID, etc.)
+ //   2. Shared credentials file (~/.aws/credentials)
+ //   3. EC2 Instance Metadata Service (IMDS)
+ //   ... (more helpful details)
+```
+
 ### Import Organization (MANDATORY)
 Three groups separated by blank lines, sorted alphabetically:
 1. Go stdlib
@@ -168,10 +213,16 @@ Precedence: CLI flags → ENV vars → config files → defaults (use Viper)
 
 ### Error Handling (MANDATORY)
 - Wrap with static errors from `errors/errors.go`
-- Combine: `errors.Join(errUtils.ErrFoo, err)`
-- Add context: `fmt.Errorf("%w: msg", errUtils.ErrFoo)`
+- Chain errors: `fmt.Errorf("%w: msg", errUtils.ErrFoo)` - creates error chain
+- Join errors: `errors.Join(errUtils.ErrFoo, err)` - combines independent errors
+- Multiple wrapping: `fmt.Errorf("%w: context: %w", errUtils.ErrBase, err)` (valid Go 1.20+)
 - Check: `errors.Is(err, target)`
 - Never dynamic errors or string comparison
+
+**Important distinction:**
+- **`fmt.Errorf` with single `%w`**: Creates error **chain** - `errors.Unwrap()` returns next error. Use when error context builds sequentially through call stack. **Prefer this when error chain matters.**
+- **`errors.Join`**: Creates **flat list** - `errors.Unwrap()` returns `nil`, must use `Unwrap() []error` interface. Use for independent errors (parallel operations, multiple validations).
+- **`fmt.Errorf` with multiple `%w`**: Like `errors.Join` but adds format string. Valid Go 1.20+, returns `Unwrap() []error`.
 
 ### Testing Strategy (MANDATORY)
 - **Prefer unit tests with mocks** over integration tests

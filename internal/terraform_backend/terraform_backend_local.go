@@ -16,6 +16,7 @@ import (
 func ReadTerraformBackendLocal(
 	atmosConfig *schema.AtmosConfiguration,
 	componentSections *map[string]any,
+	_ *schema.AuthContext, // Auth context not used for local backend.
 ) ([]byte, error) {
 	defer perf.Track(atmosConfig, "terraform_backend.ReadTerraformBackendLocal")()
 

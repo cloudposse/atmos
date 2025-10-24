@@ -557,6 +557,45 @@ type ArgsAndFlagsInfo struct {
 	Identity                  string
 }
 
+// AuthContext holds active authentication credentials for multiple providers.
+// This is the SINGLE SOURCE OF TRUTH for auth credentials, populated by the
+// auth system during PostAuthenticate().
+//
+// AuthContext is used by:
+// 1. In-process SDK calls (e.g., !terraform.state reading from S3)
+// 2. Deriving ComponentEnvSection/ComponentEnvList for spawned processes
+//
+// It enables multiple cloud provider identities to be active simultaneously
+// (e.g., AWS + GitHub credentials in the same component).
+type AuthContext struct {
+	// AWS holds AWS credentials if an AWS identity is active.
+	AWS *AWSAuthContext `json:"aws,omitempty" yaml:"aws,omitempty"`
+
+	// Future: Add other cloud providers as needed
+	// Azure *AzureAuthContext `json:"azure,omitempty" yaml:"azure,omitempty"`
+	// GCP *GCPAuthContext `json:"gcp,omitempty" yaml:"gcp,omitempty"`
+	// GitHub *GitHubAuthContext `json:"github,omitempty" yaml:"github,omitempty"`
+}
+
+// AWSAuthContext holds AWS-specific authentication context.
+// This is populated by the AWS auth system and consumed by AWS SDK calls.
+type AWSAuthContext struct {
+	// CredentialsFile is the absolute path to the AWS credentials file managed by Atmos.
+	// Example: /home/user/.atmos/auth/aws-sso/credentials
+	CredentialsFile string `json:"credentials_file" yaml:"credentials_file"`
+
+	// ConfigFile is the absolute path to the AWS config file managed by Atmos.
+	// Example: /home/user/.atmos/auth/aws-sso/config
+	ConfigFile string `json:"config_file" yaml:"config_file"`
+
+	// Profile is the AWS profile name to use from the credentials file.
+	// This corresponds to the identity name in Atmos auth config.
+	Profile string `json:"profile" yaml:"profile"`
+
+	// Region is the AWS region (optional, may be empty if not specified in identity).
+	Region string `json:"region,omitempty" yaml:"region,omitempty"`
+}
+
 type ConfigAndStacksInfo struct {
 	StackFromArg                  string
 	Stack                         string
@@ -582,60 +621,64 @@ type ConfigAndStacksInfo struct {
 	ComponentAuthSection          AtmosSectionMapType
 	ComponentEnvList              []string
 	ComponentBackendSection       AtmosSectionMapType
-	ComponentBackendType          string
-	AdditionalArgsAndFlags        []string
-	GlobalOptions                 []string
-	BasePath                      string
-	VendorBasePathFlag            string
-	TerraformCommand              string
-	TerraformDir                  string
-	HelmfileCommand               string
-	HelmfileDir                   string
-	PackerCommand                 string
-	PackerDir                     string
-	ConfigDir                     string
-	StacksDir                     string
-	WorkflowsDir                  string
-	Context                       Context
-	ContextPrefix                 string
-	DeployRunInit                 string
-	InitRunReconfigure            string
-	InitPassVars                  string
-	PlanSkipPlanfile              string
-	AutoGenerateBackendFile       string
-	UseTerraformPlan              bool
-	PlanFile                      string
-	DryRun                        bool
-	SkipInit                      bool
-	ComponentInheritanceChain     []string
-	ComponentImportsSection       []string
-	NeedHelp                      bool
-	ComponentIsAbstract           bool
-	ComponentIsEnabled            bool
-	ComponentIsLocked             bool
-	ComponentMetadataSection      AtmosSectionMapType
-	TerraformWorkspace            string
-	JsonSchemaDir                 string
-	OpaDir                        string
-	CueDir                        string
-	AtmosManifestJsonSchema       string
-	AtmosCliConfigPath            string
-	AtmosBasePath                 string
-	RedirectStdErr                string
-	LogsLevel                     string
-	LogsFile                      string
-	SettingsListMergeStrategy     string
-	Query                         string
-	AtmosConfigFilesFromArg       []string
-	AtmosConfigDirsFromArg        []string
-	ProcessTemplates              bool
-	ProcessFunctions              bool
-	Skip                          []string
-	CliArgs                       []string
-	Affected                      bool
-	All                           bool
-	Components                    []string
-	Identity                      string
+	// AuthContext holds active authentication credentials for cloud providers.
+	// This is the SINGLE SOURCE OF TRUTH for auth credentials.
+	// ComponentEnvSection/ComponentEnvList are derived from this context.
+	AuthContext               *AuthContext
+	ComponentBackendType      string
+	AdditionalArgsAndFlags    []string
+	GlobalOptions             []string
+	BasePath                  string
+	VendorBasePathFlag        string
+	TerraformCommand          string
+	TerraformDir              string
+	HelmfileCommand           string
+	HelmfileDir               string
+	PackerCommand             string
+	PackerDir                 string
+	ConfigDir                 string
+	StacksDir                 string
+	WorkflowsDir              string
+	Context                   Context
+	ContextPrefix             string
+	DeployRunInit             string
+	InitRunReconfigure        string
+	InitPassVars              string
+	PlanSkipPlanfile          string
+	AutoGenerateBackendFile   string
+	UseTerraformPlan          bool
+	PlanFile                  string
+	DryRun                    bool
+	SkipInit                  bool
+	ComponentInheritanceChain []string
+	ComponentImportsSection   []string
+	NeedHelp                  bool
+	ComponentIsAbstract       bool
+	ComponentIsEnabled        bool
+	ComponentIsLocked         bool
+	ComponentMetadataSection  AtmosSectionMapType
+	TerraformWorkspace        string
+	JsonSchemaDir             string
+	OpaDir                    string
+	CueDir                    string
+	AtmosManifestJsonSchema   string
+	AtmosCliConfigPath        string
+	AtmosBasePath             string
+	RedirectStdErr            string
+	LogsLevel                 string
+	LogsFile                  string
+	SettingsListMergeStrategy string
+	Query                     string
+	AtmosConfigFilesFromArg   []string
+	AtmosConfigDirsFromArg    []string
+	ProcessTemplates          bool
+	ProcessFunctions          bool
+	Skip                      []string
+	CliArgs                   []string
+	Affected                  bool
+	All                       bool
+	Components                []string
+	Identity                  string
 }
 
 type BackoffStrategy string
