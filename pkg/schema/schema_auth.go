@@ -26,6 +26,7 @@ type Provider struct {
 	ProviderType          string                 `yaml:"provider_type,omitempty" json:"provider_type,omitempty" mapstructure:"provider_type"` // Deprecated: use driver.
 	DownloadBrowserDriver bool                   `yaml:"download_browser_driver,omitempty" json:"download_browser_driver,omitempty" mapstructure:"download_browser_driver"`
 	Session               *SessionConfig         `yaml:"session,omitempty" json:"session,omitempty" mapstructure:"session"`
+	Console               *ConsoleConfig         `yaml:"console,omitempty" json:"console,omitempty" mapstructure:"console"`
 	Default               bool                   `yaml:"default,omitempty" json:"default,omitempty" mapstructure:"default"`
 	Spec                  map[string]interface{} `yaml:"spec,omitempty" json:"spec,omitempty" mapstructure:"spec"`
 }
@@ -33,6 +34,11 @@ type Provider struct {
 // SessionConfig defines session configuration for providers.
 type SessionConfig struct {
 	Duration string `yaml:"duration,omitempty" json:"duration,omitempty" mapstructure:"duration"`
+}
+
+// ConsoleConfig defines web console access configuration for providers.
+type ConsoleConfig struct {
+	SessionDuration string `yaml:"session_duration,omitempty" json:"session_duration,omitempty" mapstructure:"session_duration"` // Duration string (e.g., "12h"). Max: 12h for AWS.
 }
 
 // Identity defines an authentication identity configuration.

@@ -1,6 +1,6 @@
 package types
 
-//go:generate mockgen -source=$GOFILE -destination=mock_$GOFILE -package=$GOPACKAGE
+//go:generate go run go.uber.org/mock/mockgen@v0.5.0 -source=$GOFILE -destination=mock_interfaces_test.go -package=$GOPACKAGE
 
 import (
 	"context"
@@ -41,6 +41,15 @@ type Provider interface {
 	GetFilesDisplayPath() string
 }
 
+// PostAuthenticateParams contains parameters for PostAuthenticate method.
+type PostAuthenticateParams struct {
+	AuthContext  *schema.AuthContext
+	StackInfo    *schema.ConfigAndStacksInfo
+	ProviderName string
+	IdentityName string
+	Credentials  ICredentials
+}
+
 // Identity defines the interface that all authentication identities must implement.
 type Identity interface {
 	// Kind returns the identity kind (e.g., "aws/permission-set").
@@ -60,8 +69,9 @@ type Identity interface {
 	Environment() (map[string]string, error)
 
 	// PostAuthenticate is called after successful authentication with the final credentials.
-	// Implementations can use the manager to perform provider-specific file setup or other side effects.
-	PostAuthenticate(ctx context.Context, stackInfo *schema.ConfigAndStacksInfo, providerName, identityName string, creds ICredentials) error
+	// It receives both authContext (to populate runtime credentials) and stackInfo (to read
+	// stack-level auth configuration overrides and write environment variables).
+	PostAuthenticate(ctx context.Context, params *PostAuthenticateParams) error
 
 	// Logout removes identity-specific credential storage.
 	// Best-effort: continue cleanup even if individual steps fail.
@@ -190,8 +200,9 @@ type ConsoleURLOptions struct {
 	// For GCP: "https://console.cloud.google.com/...".
 	Destination string
 
-	// SessionDuration is the requested duration for the console session.
+	// SessionDuration is the requested duration for the console session (how long you stay logged in).
 	// Providers may have maximum limits (e.g., AWS: 12 hours).
+	// Note: AWS signin tokens themselves have a fixed 15-minute expiration (time to click the link).
 	SessionDuration time.Duration
 
 	// Issuer is an optional identifier shown in the console URL (used by AWS).

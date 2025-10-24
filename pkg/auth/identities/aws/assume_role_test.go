@@ -230,11 +230,23 @@ func TestAssumeRoleIdentity_PostAuthenticate_SetsEnvAndFiles(t *testing.T) {
 	i := &assumeRoleIdentity{name: "role", config: &schema.Identity{Kind: "aws/assume-role", Principal: map[string]any{
 		"assume_role": "arn:aws:iam::123:role/x",
 	}}}
+	authContext := &schema.AuthContext{}
 	stack := &schema.ConfigAndStacksInfo{}
 	creds := &types.AWSCredentials{AccessKeyID: "AK", SecretAccessKey: "SE", SessionToken: "TK", Region: "us-east-1"}
-	err := i.PostAuthenticate(context.Background(), stack, "aws-sso", "role", creds)
+	err := i.PostAuthenticate(context.Background(), &types.PostAuthenticateParams{
+		AuthContext:  authContext,
+		StackInfo:    stack,
+		ProviderName: "aws-sso",
+		IdentityName: "role",
+		Credentials:  creds,
+	})
 	require.NoError(t, err)
-	// AWS files/env are set under the provider namespace.
+
+	// Auth context populated.
+	require.NotNil(t, authContext.AWS)
+	assert.Equal(t, "role", authContext.AWS.Profile)
+
+	// AWS files/env are set under the provider namespace (derived from auth context).
 	require.Contains(t, stack.ComponentEnvSection["AWS_SHARED_CREDENTIALS_FILE"], "aws-sso")
 }
 

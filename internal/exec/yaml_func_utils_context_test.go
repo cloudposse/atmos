@@ -22,7 +22,7 @@ func TestProcessCustomYamlTagsWithoutContext(t *testing.T) {
 	ClearResolutionContext()
 	defer ClearResolutionContext()
 
-	result, err := ProcessCustomYamlTags(atmosConfig, input, "test-stack", nil)
+	result, err := ProcessCustomYamlTags(atmosConfig, input, "test-stack", nil, nil)
 
 	require.NoError(t, err)
 	assert.Equal(t, input, result)
@@ -39,7 +39,7 @@ func TestProcessCustomYamlTagsCreatesContext(t *testing.T) {
 	defer ClearResolutionContext()
 
 	// Processing should create a goroutine-local context.
-	_, err := ProcessCustomYamlTags(atmosConfig, input, "test-stack", nil)
+	_, err := ProcessCustomYamlTags(atmosConfig, input, "test-stack", nil, nil)
 	require.NoError(t, err)
 
 	// Verify context was created.
@@ -64,7 +64,7 @@ func TestProcessCustomYamlTagsWithContextParameter(t *testing.T) {
 	}
 	require.NoError(t, ctx.Push(atmosConfig, node))
 
-	result, err := ProcessCustomYamlTagsWithContext(atmosConfig, input, "test-stack", nil, ctx)
+	result, err := ProcessCustomYamlTagsWithContext(atmosConfig, input, "test-stack", nil, ctx, nil)
 
 	require.NoError(t, err)
 	assert.NotNil(t, result)
@@ -85,7 +85,7 @@ func TestProcessNodesWithContextNestedMaps(t *testing.T) {
 		},
 	}
 
-	result := processNodesWithContext(atmosConfig, input, "test-stack", nil, ctx)
+	result := processNodesWithContext(atmosConfig, input, "test-stack", nil, ctx, nil)
 
 	require.NotNil(t, result)
 	assert.Equal(t, input, result)
@@ -105,7 +105,7 @@ func TestProcessNodesWithContextSlices(t *testing.T) {
 		},
 	}
 
-	result := processNodesWithContext(atmosConfig, input, "test-stack", nil, ctx)
+	result := processNodesWithContext(atmosConfig, input, "test-stack", nil, ctx, nil)
 
 	require.NotNil(t, result)
 	assert.Equal(t, input, result)
@@ -126,7 +126,7 @@ func TestProcessNodesWithContextMixedTypes(t *testing.T) {
 		"complex": []any{map[string]any{"nested": true}},
 	}
 
-	result := processNodesWithContext(atmosConfig, input, "test-stack", nil, ctx)
+	result := processNodesWithContext(atmosConfig, input, "test-stack", nil, ctx, nil)
 
 	require.NotNil(t, result)
 	assert.Equal(t, input, result)
@@ -141,16 +141,16 @@ func TestProcessCustomTagsWithContextSkipFunctions(t *testing.T) {
 
 	// These should not be processed (just returned as-is).
 	input1 := "!terraform.state vpc dev output"
-	result1 := processCustomTagsWithContext(atmosConfig, input1, "test-stack", skip, ctx)
+	result1 := processCustomTagsWithContext(atmosConfig, input1, "test-stack", skip, ctx, nil)
 	assert.Equal(t, input1, result1)
 
 	input2 := "!terraform.output vpc dev output"
-	result2 := processCustomTagsWithContext(atmosConfig, input2, "test-stack", skip, ctx)
+	result2 := processCustomTagsWithContext(atmosConfig, input2, "test-stack", skip, ctx, nil)
 	assert.Equal(t, input2, result2)
 
 	// Non-skipped functions should still be processed.
 	input3 := "!env HOME"
-	result3 := processCustomTagsWithContext(atmosConfig, input3, "test-stack", skip, ctx)
+	result3 := processCustomTagsWithContext(atmosConfig, input3, "test-stack", skip, ctx, nil)
 	// Result should be different (env var value or empty string).
 	assert.IsType(t, "", result3)
 }
@@ -161,7 +161,7 @@ func TestProcessCustomTagsWithContextTemplateFunction(t *testing.T) {
 
 	// Template function should work without errors.
 	input := "!template {{ .test }}"
-	result := processCustomTagsWithContext(atmosConfig, input, "test-stack", nil, ctx)
+	result := processCustomTagsWithContext(atmosConfig, input, "test-stack", nil, ctx, nil)
 
 	// Should return a string (the template).
 	assert.IsType(t, "", result)
@@ -173,7 +173,7 @@ func TestProcessCustomTagsWithContextEnvFunction(t *testing.T) {
 
 	// Test !env function.
 	input := "!env USER"
-	result := processCustomTagsWithContext(atmosConfig, input, "test-stack", nil, ctx)
+	result := processCustomTagsWithContext(atmosConfig, input, "test-stack", nil, ctx, nil)
 
 	// Should return a string.
 	assert.IsType(t, "", result)
@@ -185,7 +185,7 @@ func TestProcessCustomTagsWithContextUnknownTag(t *testing.T) {
 
 	// Unknown tags should be returned as-is.
 	input := "!unknown.function arg1 arg2"
-	result := processCustomTagsWithContext(atmosConfig, input, "test-stack", nil, ctx)
+	result := processCustomTagsWithContext(atmosConfig, input, "test-stack", nil, ctx, nil)
 
 	assert.Equal(t, input, result)
 }
@@ -219,7 +219,7 @@ func TestProcessCustomYamlTagsContextIsolation(t *testing.T) {
 			return
 		}
 
-		_, err := ProcessCustomYamlTags(atmosConfig, input, "stack1", nil)
+		_, err := ProcessCustomYamlTags(atmosConfig, input, "stack1", nil, nil)
 		if err != nil {
 			errChan <- err
 			return
@@ -254,7 +254,7 @@ func TestProcessCustomYamlTagsContextIsolation(t *testing.T) {
 			return
 		}
 
-		_, err := ProcessCustomYamlTags(atmosConfig, input, "stack2", nil)
+		_, err := ProcessCustomYamlTags(atmosConfig, input, "stack2", nil, nil)
 		if err != nil {
 			errChan <- err
 			return
