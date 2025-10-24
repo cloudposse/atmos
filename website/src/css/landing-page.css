@@ -155,6 +155,41 @@ html[data-theme="dark"] .hero__description {
   position: relative;
 }
 
+/* Subtle radial glow in center of hero section */
+.hero--full-height::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 1200px;
+  height: 1200px;
+  background: radial-gradient(
+    circle at center,
+    rgba(83, 140, 233, 0.18) 0%,
+    rgba(83, 140, 233, 0.10) 30%,
+    rgba(83, 140, 233, 0.03) 50%,
+    transparent 70%
+  );
+  pointer-events: none;
+  z-index: 0;
+}
+
+html[data-theme="light"] .hero--full-height::before {
+  background: radial-gradient(
+    circle at center,
+    rgba(255, 255, 255, 0.8) 0%,
+    rgba(245, 247, 250, 0.4) 30%,
+    transparent 70%
+  );
+}
+
+/* Ensure hero content is above the glow */
+.hero--full-height > * {
+  position: relative;
+  z-index: 1;
+}
+
 .hero__cta {
   gap: 1rem;
   justify-content: center;
@@ -166,12 +201,14 @@ html[data-theme="dark"] .hero__description {
 .hero-demo {
   display: flex;
   flex-direction: column;
-  justify-content: center;
+  justify-content: flex-start;
   align-items: center;
-  padding: 4rem 2rem 4rem 2rem;
+  padding: 0 2rem 4rem 2rem;
   width: 100%;
   max-width: 1400px;
-  margin: 0 auto;
+  margin: -20vh auto 0 auto;
+  position: relative;
+  z-index: 1;
 }
 
 .hero-demo-intro {
@@ -182,6 +219,11 @@ html[data-theme="dark"] .hero__description {
   width: 100%;
   opacity: 0;
   transition: opacity 0.6s ease-out;
+  pointer-events: none;
+}
+
+.hero-demo-intro.visible {
+  opacity: 1;
 }
 
 .hero-demo-intro.visible {
@@ -217,12 +259,14 @@ html[data-theme="dark"] .hero-demo-intro p {
 
 .hero-demo .screenshot-container {
   width: 100%;
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 0 3rem;
   display: flex;
   justify-content: center;
 }
 
 .hero-demo img.screenshot {
-  max-width: 90%;
   width: 100%;
   height: auto;
   box-shadow: 0 0 20px 3px rgb(8 115 115 / 29%);
