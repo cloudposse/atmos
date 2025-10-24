@@ -61,9 +61,12 @@
             "env": {
               "type": "object",
               "additionalProperties": {
-                "type": "string"
+                "oneOf": [
+                  { "type": "string" },
+                  { "type": "boolean" }
+                ]
               },
-              "description": "Environment variables to set for the command execution."
+              "description": "Environment variables to set for the command execution. Values can be strings or booleans."
             },
             "clean": {
               "type": "boolean",
