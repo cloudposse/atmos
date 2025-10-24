@@ -91,6 +91,7 @@ func TestLoadAWSConfigWithAuth(t *testing.T) {
 		name        string
 		region      string
 		authContext *schema.AWSAuthContext
+		scenario    string // Test scenario for setup logic: "mismatched-profile", "explicit-files", or ""
 		wantRegion  string
 		wantErr     bool
 	}{
@@ -150,6 +151,7 @@ func TestLoadAWSConfigWithAuth(t *testing.T) {
 				Profile: "nonexistent-profile",
 				Region:  "us-east-1",
 			},
+			scenario:   "mismatched-profile",
 			wantRegion: "",
 			wantErr:    true,
 		},
@@ -179,6 +181,25 @@ func TestLoadAWSConfigWithAuth(t *testing.T) {
 					// For error test cases with explicit file paths, use them.
 					authContextCopy.CredentialsFile = tt.authContext.CredentialsFile
 					authContextCopy.ConfigFile = tt.authContext.ConfigFile
+				case tt.scenario == "mismatched-profile":
+					// Create valid files but with a different profile name.
+					tempDir := t.TempDir()
+					credFile := filepath.Join(tempDir, "credentials")
+					configFile := filepath.Join(tempDir, "config")
+
+					// Write credential file with different profile.
+					credContent := "[different-profile]\n"
+					credContent += "aws_access_key_id = test-key\n"
+					credContent += "aws_secret_access_key = test-secret\n"
+					require.NoError(t, os.WriteFile(credFile, []byte(credContent), 0o600))
+
+					// Write config file with different profile.
+					cfgContent := "[profile different-profile]\n"
+					cfgContent += "region = us-east-1\n"
+					require.NoError(t, os.WriteFile(configFile, []byte(cfgContent), 0o600))
+
+					authContextCopy.CredentialsFile = credFile
+					authContextCopy.ConfigFile = configFile
 				case !tt.wantErr:
 					// Create valid credentials for happy-path tests.
 					tempDir := t.TempDir()
@@ -199,25 +220,6 @@ func TestLoadAWSConfigWithAuth(t *testing.T) {
 					require.NoError(t, os.WriteFile(configFile, []byte(cfgContent), 0o600))
 
 					// Set file paths on the copy.
-					authContextCopy.CredentialsFile = credFile
-					authContextCopy.ConfigFile = configFile
-				case tt.name == "invalid profile name in auth context":
-					// Create valid files but with a different profile name.
-					tempDir := t.TempDir()
-					credFile := filepath.Join(tempDir, "credentials")
-					configFile := filepath.Join(tempDir, "config")
-
-					// Write credential file with different profile.
-					credContent := "[different-profile]\n"
-					credContent += "aws_access_key_id = test-key\n"
-					credContent += "aws_secret_access_key = test-secret\n"
-					require.NoError(t, os.WriteFile(credFile, []byte(credContent), 0o600))
-
-					// Write config file with different profile.
-					cfgContent := "[profile different-profile]\n"
-					cfgContent += "region = us-east-1\n"
-					require.NoError(t, os.WriteFile(configFile, []byte(cfgContent), 0o600))
-
 					authContextCopy.CredentialsFile = credFile
 					authContextCopy.ConfigFile = configFile
 				}
