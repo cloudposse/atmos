@@ -1665,3 +1665,106 @@ func TestChatModel_MarkdownRendering(t *testing.T) {
 		assert.Contains(t, rendered, "Header")
 	})
 }
+
+func TestChatModel_GetProviderBadge(t *testing.T) {
+	client := &mockAIClient{model: "test-model"}
+	m, _ := NewChatModel(client, nil, nil, nil, nil)
+
+	tests := []struct {
+		name          string
+		provider      string
+		expectedBadge string
+		expectedColor string
+	}{
+		{"anthropic provider", "anthropic", "[Claude]", "#00FFFF"},
+		{"openai provider", "openai", "[GPT]", "#00FF00"},
+		{"gemini provider", "gemini", "[Gemini]", "#FFFF00"},
+		{"grok provider", "grok", "[Grok]", "#FF69B4"},
+		{"unknown provider", "unknown", "[AI]", "240"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			badge, color := m.getProviderBadge(tt.provider)
+			assert.Equal(t, tt.expectedBadge, badge)
+			assert.Equal(t, tt.expectedColor, color)
+		})
+	}
+}
+
+func TestChatModel_GetFilterDisplayName(t *testing.T) {
+	client := &mockAIClient{model: "test-model"}
+	m, _ := NewChatModel(client, nil, nil, nil, nil)
+
+	tests := []struct {
+		name         string
+		filter       string
+		expectedName string
+	}{
+		{"all filter", "all", "All"},
+		{"anthropic filter", "anthropic", "Claude"},
+		{"openai filter", "openai", "GPT"},
+		{"gemini filter", "gemini", "Gemini"},
+		{"grok filter", "grok", "Grok"},
+		{"unknown filter", "unknown", "unknown"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			name := m.getFilterDisplayName(tt.filter)
+			assert.Equal(t, tt.expectedName, name)
+		})
+	}
+}
+
+func TestChatModel_CycleFilter(t *testing.T) {
+	client := &mockAIClient{model: "test-model"}
+	m, _ := NewChatModel(client, nil, nil, nil, nil)
+
+	// Initialize with "all" filter
+	m.sessionFilter = "all"
+	m.selectedSessionIndex = 5
+
+	// Test cycling through all filters
+	t.Run("cycles from all to anthropic", func(t *testing.T) {
+		m.sessionFilter = "all"
+		m.selectedSessionIndex = 5
+		m.cycleFilter()
+		assert.Equal(t, "anthropic", m.sessionFilter)
+		assert.Equal(t, 0, m.selectedSessionIndex, "should reset index")
+	})
+
+	t.Run("cycles from anthropic to openai", func(t *testing.T) {
+		m.sessionFilter = "anthropic"
+		m.selectedSessionIndex = 3
+		m.cycleFilter()
+		assert.Equal(t, "openai", m.sessionFilter)
+		assert.Equal(t, 0, m.selectedSessionIndex, "should reset index")
+	})
+
+	t.Run("cycles from openai to gemini", func(t *testing.T) {
+		m.sessionFilter = "openai"
+		m.cycleFilter()
+		assert.Equal(t, "gemini", m.sessionFilter)
+	})
+
+	t.Run("cycles from gemini to grok", func(t *testing.T) {
+		m.sessionFilter = "gemini"
+		m.cycleFilter()
+		assert.Equal(t, "grok", m.sessionFilter)
+	})
+
+	t.Run("cycles from grok back to all", func(t *testing.T) {
+		m.sessionFilter = "grok"
+		m.cycleFilter()
+		assert.Equal(t, "all", m.sessionFilter)
+	})
+
+	t.Run("handles unknown filter by defaulting to all", func(t *testing.T) {
+		m.sessionFilter = "unknown"
+		m.selectedSessionIndex = 2
+		m.cycleFilter()
+		assert.Equal(t, "all", m.sessionFilter)
+		assert.Equal(t, 0, m.selectedSessionIndex)
+	})
+}
