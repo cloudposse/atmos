@@ -220,3 +220,39 @@ func GetLatestReleaseInfo(owner, repo string) (*github.RepositoryRelease, error)
 
 	return release, nil
 }
+
+// GetReleaseVersions fetches release versions as strings (tag names without 'v' prefix).
+// Returns only non-prerelease versions, suitable for toolchain version management.
+func GetReleaseVersions(owner, repo string, limit int) ([]string, error) {
+	defer perf.Track(nil, "github.GetReleaseVersions")()
+
+	log.Debug("Fetching release versions from GitHub API", logFieldOwner, owner, logFieldRepo, repo, "limit", limit)
+
+	releases, err := GetReleases(ReleasesOptions{
+		Owner:              owner,
+		Repo:               repo,
+		Limit:              limit,
+		IncludePrereleases: false,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	versions := make([]string, 0, len(releases))
+	for _, release := range releases {
+		if release.TagName != nil {
+			// Remove 'v' prefix if present
+			version := *release.TagName
+			if len(version) > 0 && version[0] == 'v' {
+				version = version[1:]
+			}
+			versions = append(versions, version)
+		}
+	}
+
+	if len(versions) == 0 {
+		return nil, fmt.Errorf("no non-prerelease versions found for %s/%s", owner, repo)
+	}
+
+	return versions, nil
+}

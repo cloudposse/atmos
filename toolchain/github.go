@@ -1,15 +1,7 @@
 package toolchain
 
 import (
-	"encoding/json"
-	"fmt"
-	"io"
-	"net/http"
-	"strings"
-
-	"github.com/spf13/viper"
-
-	httpClient "github.com/cloudposse/atmos/pkg/http"
+	"github.com/cloudposse/atmos/pkg/github"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
@@ -18,99 +10,21 @@ type GitHubAPI interface {
 	FetchReleases(owner, repo string, limit int) ([]string, error)
 }
 
-// GitHubAPIClient implements GitHubAPI with real HTTP calls.
-type GitHubAPIClient struct {
-	client  httpClient.Client
-	baseURL string
-}
+// GitHubAPIClient implements GitHubAPI using pkg/github.
+type GitHubAPIClient struct{}
 
 // NewGitHubAPIClient creates a new GitHub API client.
 func NewGitHubAPIClient() *GitHubAPIClient {
 	defer perf.Track(nil, "toolchain.NewGitHubAPIClient")()
 
-	token := viper.GetString("github-token")
-	if token == "" {
-		token = httpClient.GetGitHubTokenFromEnv()
-	}
-
-	return &GitHubAPIClient{
-		client: httpClient.NewDefaultClient(
-			httpClient.WithGitHubToken(token),
-		),
-		baseURL: "https://api.github.com",
-	}
-}
-
-// NewGitHubAPIClientWithBaseURL creates a new GitHub API client with a custom base URL (for testing).
-func NewGitHubAPIClientWithBaseURL(baseURL string) *GitHubAPIClient {
-	defer perf.Track(nil, "toolchain.NewGitHubAPIClientWithBaseURL")()
-
-	token := viper.GetString("github-token")
-	if token == "" {
-		token = httpClient.GetGitHubTokenFromEnv()
-	}
-
-	return &GitHubAPIClient{
-		client: httpClient.NewDefaultClient(
-			httpClient.WithGitHubToken(token),
-		),
-		baseURL: baseURL,
-	}
+	return &GitHubAPIClient{}
 }
 
 // FetchReleases fetches all available versions from GitHub API.
 func (g *GitHubAPIClient) FetchReleases(owner, repo string, limit int) ([]string, error) {
 	defer perf.Track(nil, "toolchain.GitHubAPIClient.FetchReleases")()
 
-	// GitHub API endpoint for releases with per_page parameter
-	apiURL := fmt.Sprintf("%s/repos/%s/%s/releases?per_page=%d", g.baseURL, owner, repo, limit)
-
-	req, err := http.NewRequest("GET", apiURL, nil)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
-	}
-
-	// GitHub token authentication is handled by the GitHubAuthenticatedTransport
-	resp, err := g.client.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("failed to fetch releases from GitHub: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("%w: GitHub API returned status %d", ErrHTTPRequest, resp.StatusCode)
-	}
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read response body: %w", err)
-	}
-
-	// Parse the JSON response
-	var releases []struct {
-		TagName    string `json:"tag_name"`
-		Prerelease bool   `json:"prerelease"`
-	}
-
-	if err := json.Unmarshal(body, &releases); err != nil {
-		return nil, fmt.Errorf("failed to parse releases JSON: %w", err)
-	}
-
-	// Extract all non-prerelease versions
-	var versions []string
-	for _, release := range releases {
-		if !release.Prerelease {
-			// Remove 'v' prefix if present
-			version := strings.TrimPrefix(release.TagName, versionPrefix)
-			versions = append(versions, version)
-		}
-	}
-
-	if len(versions) == 0 {
-		return nil, fmt.Errorf("%w: no non-prerelease versions found for %s/%s", ErrNoVersionsFound, owner, repo)
-	}
-
-	return versions, nil
+	return github.GetReleaseVersions(owner, repo, limit)
 }
 
 // Global GitHub API client instance.
