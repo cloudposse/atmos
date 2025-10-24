@@ -4,84 +4,50 @@ import (
 	"fmt"
 
 	"gopkg.in/yaml.v3"
+
+	"github.com/cloudposse/atmos/toolchain/registry"
 )
 
+// Tool is a type alias for registry.Tool for backward compatibility.
+// New code should import and use toolchain/registry.Tool directly.
+type Tool = registry.Tool
+
+// File is a type alias for registry.File for backward compatibility.
+type File = registry.File
+
+// Override is a type alias for registry.Override for backward compatibility.
+type Override = registry.Override
+
+// SupportedIf is a type alias for registry.SupportedIf for backward compatibility.
+type SupportedIf = registry.SupportedIf
+
 // ToolRegistry represents the structure of a tool registry YAML file.
-type ToolRegistry struct {
-	Tools []Tool `yaml:"tools"`
-}
+// This is kept in toolchain for legacy reasons.
+type ToolRegistry = registry.ToolRegistryFile
 
-// Tool represents a single tool in the registry.
-type Tool struct {
-	Name         string            `yaml:"name"`
-	Registry     string            `yaml:"registry"`
-	Version      string            `yaml:"version"`
-	Type         string            `yaml:"type"`
-	RepoOwner    string            `yaml:"repo_owner"`
-	RepoName     string            `yaml:"repo_name"`
-	Asset        string            `yaml:"asset"`
-	URL          string            `yaml:"url"`
-	Format       string            `yaml:"format"`
-	Files        []File            `yaml:"files"`
-	Overrides    []Override        `yaml:"overrides"`
-	SupportedIf  *SupportedIf      `yaml:"supported_if"`
-	Replacements map[string]string `yaml:"replacements"`
-	BinaryName   string            `yaml:"binary_name"`
-}
+// AquaPackage is a type alias for registry.AquaPackage for backward compatibility.
+type AquaPackage = registry.AquaPackage
 
-// File represents a file to be extracted from the archive.
-type File struct {
-	Name string `yaml:"name"`
-	Src  string `yaml:"src"`
-}
+// ChecksumConfig is a type alias for registry.ChecksumConfig for backward compatibility.
+type ChecksumConfig = registry.ChecksumConfig
 
-// Override represents platform-specific overrides.
-type Override struct {
-	GOOS   string `yaml:"goos"`
-	GOARCH string `yaml:"goarch"`
-	Asset  string `yaml:"asset"`
-	Files  []File `yaml:"files"`
-}
+// VersionOverride is a type alias for registry.VersionOverride for backward compatibility.
+type VersionOverride = registry.VersionOverride
 
-// SupportedIf represents conditions for when a tool is supported.
-type SupportedIf struct {
-	GOOS   string `yaml:"goos"`
-	GOARCH string `yaml:"goarch"`
-}
+// AquaRegistryFile is a type alias for registry.AquaRegistryFile for backward compatibility.
+type AquaRegistryFile = registry.AquaRegistryFile
 
-// AquaPackage represents a single package in the Aqua registry format
-// This struct matches the Aqua registry YAML fields exactly
-// and is used only for parsing Aqua registry files.
-type AquaPackage struct {
-	Type       string `yaml:"type"`
-	RepoOwner  string `yaml:"repo_owner"`
-	RepoName   string `yaml:"repo_name"`
-	URL        string `yaml:"url"`
-	Format     string `yaml:"format"`
-	BinaryName string `yaml:"binary_name"`
-	// Add other Aqua fields as needed
-	Description       string            `yaml:"description"`
-	SupportedEnvs     []string          `yaml:"supported_envs"`
-	Checksum          ChecksumConfig    `yaml:"checksum"`
-	VersionConstraint string            `yaml:"version_constraint"`
-	VersionOverrides  []VersionOverride `yaml:"version_overrides"`
-}
+// LocalConfig is a type alias for registry.LocalConfig for backward compatibility.
+type LocalConfig = registry.LocalConfig
 
-type ChecksumConfig struct {
-	Type      string `yaml:"type"`
-	URL       string `yaml:"url"`
-	Algorithm string `yaml:"algorithm"`
-}
+// LocalTool is a type alias for registry.LocalTool for backward compatibility.
+type LocalTool = registry.LocalTool
 
-type VersionOverride struct {
-	VersionConstraint string `yaml:"version_constraint"`
-	Rosetta2          bool   `yaml:"rosetta2"`
-}
+// LocalVersionConstraint is a type alias for registry.LocalVersionConstraint for backward compatibility.
+type LocalVersionConstraint = registry.LocalVersionConstraint
 
-// AquaRegistryFile represents the structure of an Aqua registry YAML file (uses 'packages' key).
-type AquaRegistryFile struct {
-	Packages []AquaPackage `yaml:"packages"`
-}
+// LocalConfigManager is a type alias for registry.LocalConfigManager for backward compatibility.
+type LocalConfigManager = registry.LocalConfigManager
 
 // toolToYAML converts a Tool struct to YAML string representation.
 func toolToYAML(tool *Tool) (string, error) {

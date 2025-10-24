@@ -1,30 +1,31 @@
 package toolchain
 
-import "errors"
+import "github.com/cloudposse/atmos/toolchain/registry"
 
-// Error definitions for the toolchain package.
+// Error re-exports from the registry package for backward compatibility.
+// New code should import and use toolchain/registry errors directly.
 var (
 	// ErrToolNotFound indicates a tool was not found in the registry or local configuration.
-	ErrToolNotFound = errors.New("tool not found")
+	ErrToolNotFound = registry.ErrToolNotFound
 
 	// ErrNoVersionsFound indicates no versions are available for a tool.
-	ErrNoVersionsFound = errors.New("no versions found")
+	ErrNoVersionsFound = registry.ErrNoVersionsFound
 
 	// ErrInvalidToolSpec indicates the tool specification format is invalid.
-	ErrInvalidToolSpec = errors.New("invalid tool specification")
+	ErrInvalidToolSpec = registry.ErrInvalidToolSpec
 
 	// ErrHTTPRequest indicates an HTTP request failed.
-	ErrHTTPRequest = errors.New("HTTP request failed")
+	ErrHTTPRequest = registry.ErrHTTPRequest
 
 	// ErrRegistryParse indicates the registry file could not be parsed.
-	ErrRegistryParse = errors.New("registry parse error")
+	ErrRegistryParse = registry.ErrRegistryParse
 
 	// ErrNoPackagesInRegistry indicates the registry contains no packages.
-	ErrNoPackagesInRegistry = errors.New("no packages found in registry")
+	ErrNoPackagesInRegistry = registry.ErrNoPackagesInRegistry
 
 	// ErrNoAssetTemplate indicates no asset template is defined for the tool.
-	ErrNoAssetTemplate = errors.New("no asset template defined")
+	ErrNoAssetTemplate = registry.ErrNoAssetTemplate
 
 	// ErrFileOperation indicates a file operation failed.
-	ErrFileOperation = errors.New("file operation failed")
+	ErrFileOperation = registry.ErrFileOperation
 )

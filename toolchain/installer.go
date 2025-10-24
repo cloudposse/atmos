@@ -23,7 +23,11 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
-const defaultFileWritePermissions = 0o644
+const (
+	versionPrefix               = "v"
+	defaultFileWritePermissions = 0o644
+	defaultMkdirPermissions     = 0o755
+)
 
 // ToolResolver defines an interface for resolving tool names to owner/repo pairs
 // This allows for mocking in tests and flexible resolution in production.

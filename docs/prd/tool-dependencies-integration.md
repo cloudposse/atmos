@@ -34,17 +34,24 @@ Currently, the toolchain package provides tool installation and execution capabi
 
 ### Configuration Levels
 
-Tool dependencies can be declared at four levels (highest to lowest priority):
+Tool dependencies can be declared at multiple scopes with proper inheritance and merging:
 
-1. **Component Instance** - Specific component in a stack file
-2. **Component Catalog** - Component definition in catalog
-3. **Stack Instance** - Top-level in stack file
-4. **Stack Catalog** - Top-level in catalog file
+#### Stack Configuration Scopes
 
-Additionally:
+For components (terraform/helmfile/packer), dependencies are resolved from **stack configuration files** with 3 scopes (lowest to highest priority):
 
-5. **Workflow** - Tools required for workflow execution
-6. **Custom Command** - Tools required for command execution
+1. **Global Scope** - Top-level `dependencies` in stack files (applies to all components)
+2. **Component Type Scope** - `terraform.dependencies` / `helmfile.dependencies` / `packer.dependencies` (applies to all components of that type)
+3. **Component Instance Scope** - `components.terraform.vpc.dependencies` (applies to specific component)
+
+Stack inheritance applies to all 3 scopes through Atmos's existing import mechanism.
+
+#### Workflow and Command Scopes
+
+Additionally, for workflows and custom commands:
+
+4. **Workflow Scope** - `workflows.<name>.dependencies` in atmos.yaml
+5. **Custom Command Scope** - `commands[].dependencies` in atmos.yaml
 
 ### Schema Structure
 
@@ -55,48 +62,77 @@ type Dependencies struct {
 }
 ```
 
-**Usage in YAML:**
+**Usage in Stack Configuration:**
 
 ```yaml
-# Stack-level (applies to all components)
+# Scope 1: Global dependencies (applies to all components)
 dependencies:
   tools:
-    terraform: "~> 1.10.0"  # SemVer constraint
-    tflint: "^0.54.0"       # Caret constraint
-    aws-cli: "latest"       # Always latest
+    aws-cli: "^2.0.0"       # All components get aws-cli
+    jq: "latest"            # All components get jq
 
+# Scope 2: Component type dependencies (applies to all terraform components)
+terraform:
+  dependencies:
+    tools:
+      terraform: "~> 1.10.0"  # All terraform components
+      tflint: "^0.54.0"       # All terraform components
+
+# Scope 3: Component instance dependencies (specific component)
 components:
   terraform:
     vpc:
-      # Component-level (overrides stack-level for this component)
       dependencies:
         tools:
-          terraform: "1.10.3"  # Specific version (must satisfy stack constraint)
+          terraform: "1.10.3"  # Must satisfy terraform: "~> 1.10.0" from scope 2
           checkov: "latest"     # Component-specific tool
+```
+
+**Inheritance Example:**
+
+```yaml
+# stacks/catalog/terraform.yaml (imported by other stacks)
+terraform:
+  dependencies:
+    tools:
+      terraform: "~> 1.10.0"
+      tflint: "latest"
+
+# stacks/prod/us-east-1.yaml
+import:
+  - catalog/terraform
+
+# Inherits terraform.dependencies from catalog
+# Can override at component level:
+components:
+  terraform:
+    vpc:
+      dependencies:
+        tools:
+          terraform: "1.10.3"  # Overrides but must satisfy ~> 1.10.0
 ```
 
 ### Resolution Algorithm
 
 ```
 For component execution (terraform/helmfile/packer):
-  1. Load stack configuration with imports
-  2. Collect dependencies from all levels:
-     - Stack catalog (from imports)
-     - Stack instance (top-level dependencies)
-     - Component catalog (from imports)
-     - Component instance (component.dependencies)
-  3. Deep merge with override (child overrides parent)
-  4. Validate constraints (child must satisfy parent)
+  1. Load stack configuration with imports (Atmos handles this)
+  2. Collect dependencies from stack config in order:
+     a. Extract global dependencies (top-level dependencies.tools)
+     b. Extract component-type dependencies (terraform.dependencies.tools)
+     c. Extract component instance dependencies (components.terraform.vpc.dependencies.tools)
+  3. Deep merge with override (higher priority overrides lower)
+  4. Validate constraints (child version must satisfy parent constraint)
   5. Return merged dependency map
 
 For workflow execution:
-  1. Load workflow definition
-  2. Collect workflow.dependencies.tools
+  1. Load workflow definition from atmos.yaml
+  2. Extract workflow.dependencies.tools
   3. Return workflow dependency map
 
 For custom command execution:
-  1. Load command definition
-  2. Collect command.dependencies.tools
+  1. Load command definition from atmos.yaml
+  2. Extract command.dependencies.tools
   3. Return command dependency map
 ```
 

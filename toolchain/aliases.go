@@ -21,19 +21,20 @@ func ListAliases() error {
 		return fmt.Errorf("failed to load local config: %w", err)
 	}
 
-	if lcm.config == nil || len(lcm.config.Aliases) == 0 {
+	aliasMap := lcm.GetAliases()
+	if aliasMap == nil || len(aliasMap) == 0 {
 		fmt.Println("No aliases configured.")
 		return nil
 	}
 
 	// Get aliases and sort them for consistent output
-	aliases := make([]string, 0, len(lcm.config.Aliases))
-	for alias := range lcm.config.Aliases {
+	aliases := make([]string, 0, len(aliasMap))
+	for alias := range aliasMap {
 		aliases = append(aliases, alias)
 	}
 	sort.Strings(aliases)
 
-	fmt.Print(formatAliasesAsTable(aliases, lcm.config.Aliases))
+	fmt.Print(formatAliasesAsTable(aliases, aliasMap))
 	// Format as table
 	return nil
 }

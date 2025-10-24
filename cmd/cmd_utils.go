@@ -19,6 +19,7 @@ import (
 	e "github.com/cloudposse/atmos/internal/exec"
 	tuiUtils "github.com/cloudposse/atmos/internal/tui/utils"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/dependencies"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -330,6 +331,26 @@ func executeCustomCommand(
 	if mergedArgsStr == "" {
 		// If for some reason no annotation was set, just fallback
 		finalArgs = args
+	}
+
+	// Resolve and install command dependencies
+	resolver := dependencies.NewResolver(&atmosConfig)
+	deps, err := resolver.ResolveCommandDependencies(commandConfig)
+	if err != nil {
+		errUtils.CheckErrorPrintAndExit(err, "", fmt.Sprintf("Failed to resolve dependencies for command '%s'", commandConfig.Name))
+	}
+
+	if len(deps) > 0 {
+		log.Debug("Installing command dependencies", "command", commandConfig.Name, "tools", deps)
+		installer := dependencies.NewInstaller(&atmosConfig)
+		if err := installer.EnsureTools(deps); err != nil {
+			errUtils.CheckErrorPrintAndExit(err, "", fmt.Sprintf("Failed to install dependencies for command '%s'", commandConfig.Name))
+		}
+
+		// Update PATH to include installed tools
+		if err := dependencies.UpdatePathForTools(&atmosConfig, deps); err != nil {
+			errUtils.CheckErrorPrintAndExit(err, "", fmt.Sprintf("Failed to update PATH for command '%s'", commandConfig.Name))
+		}
 	}
 
 	// Execute custom command's steps

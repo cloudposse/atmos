@@ -1,4 +1,4 @@
-package toolchain
+package aqua
 
 import (
 	"encoding/json"
@@ -11,6 +11,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/cloudposse/atmos/toolchain/registry"
 )
 
 func TestNewAquaRegistry(t *testing.T) {
@@ -320,7 +322,7 @@ func TestAquaRegistry_parseRegistryFile_Invalid(t *testing.T) {
 func TestAquaRegistry_BuildAssetURL_HTTP(t *testing.T) {
 	ar := NewAquaRegistry()
 
-	tool := &Tool{
+	tool := &registry.Tool{
 		Name:      "test-tool",
 		Type:      "http",
 		RepoOwner: "test",
@@ -337,7 +339,7 @@ func TestAquaRegistry_BuildAssetURL_HTTP(t *testing.T) {
 func TestAquaRegistry_BuildAssetURL_GitHubRelease(t *testing.T) {
 	ar := NewAquaRegistry()
 
-	tool := &Tool{
+	tool := &registry.Tool{
 		Name:      "test-tool",
 		Type:      "github_release",
 		RepoOwner: "test",
@@ -354,7 +356,7 @@ func TestAquaRegistry_BuildAssetURL_GitHubRelease(t *testing.T) {
 func TestAquaRegistry_BuildAssetURL_WithTemplateFunctions(t *testing.T) {
 	ar := NewAquaRegistry()
 
-	tool := &Tool{
+	tool := &registry.Tool{
 		Name:      "test-tool",
 		Type:      "http",
 		RepoOwner: "test",
@@ -372,7 +374,7 @@ func TestAquaRegistry_BuildAssetURL_WithTemplateFunctions(t *testing.T) {
 func TestAquaRegistry_BuildAssetURL_NoAsset(t *testing.T) {
 	ar := NewAquaRegistry()
 
-	tool := &Tool{
+	tool := &registry.Tool{
 		Name:      "test-tool",
 		Type:      "http",
 		RepoOwner: "test",
@@ -389,7 +391,7 @@ func TestAquaRegistry_BuildAssetURL_NoAsset(t *testing.T) {
 func TestAquaRegistry_BuildAssetURL_InvalidTemplate(t *testing.T) {
 	ar := NewAquaRegistry()
 
-	tool := &Tool{
+	tool := &registry.Tool{
 		Name:      "test-tool",
 		Type:      "http",
 		RepoOwner: "test",
@@ -410,7 +412,7 @@ func TestAquaRegistry_BuildAssetURL_InvalidTemplate(t *testing.T) {
 func TestAquaRegistry_convertLocalToolToTool(t *testing.T) {
 	ar := NewAquaRegistry()
 
-	localTool := &LocalTool{
+	localTool := &registry.LocalTool{
 		Type:       "http",
 		RepoOwner:  "test",
 		RepoName:   "tool",

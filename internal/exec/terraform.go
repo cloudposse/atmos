@@ -11,6 +11,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	auth "github.com/cloudposse/atmos/pkg/auth"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/dependencies"
 	git "github.com/cloudposse/atmos/pkg/git"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -130,6 +131,28 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 	// Check if trying to use `workspace` commands with HTTP backend.
 	if info.SubCommand == "workspace" && info.ComponentBackendType == "http" {
 		return errUtils.ErrHTTPBackendWorkspaces
+	}
+
+	// Resolve and install component dependencies.
+	if shouldProcessStacks {
+		resolver := dependencies.NewResolver(&atmosConfig)
+		deps, err := resolver.ResolveComponentDependencies("terraform", info.StackSection, info.ComponentSection)
+		if err != nil {
+			return fmt.Errorf("failed to resolve component dependencies: %w", err)
+		}
+
+		if len(deps) > 0 {
+			log.Debug("Installing component dependencies", logFieldComponent, info.ComponentFromArg, "stack", info.Stack, "tools", deps)
+			installer := dependencies.NewInstaller(&atmosConfig)
+			if err := installer.EnsureTools(deps); err != nil {
+				return fmt.Errorf("failed to install component dependencies: %w", err)
+			}
+
+			// Update PATH to include installed tools.
+			if err := dependencies.UpdatePathForTools(&atmosConfig, deps); err != nil {
+				return fmt.Errorf("failed to update PATH for component: %w", err)
+			}
+		}
 	}
 
 	if info.SubCommand == "clean" {

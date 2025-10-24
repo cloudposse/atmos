@@ -108,35 +108,59 @@ func TestResolveCommandDependencies(t *testing.T) {
 func TestResolveComponentDependencies(t *testing.T) {
 	tests := []struct {
 		name            string
-		componentConfig map[string]any
+		componentType   string
 		stackConfig     map[string]any
+		componentConfig map[string]any
 		want            map[string]string
 		wantErr         bool
 	}{
 		{
 			name:            "no dependencies",
-			componentConfig: map[string]any{},
+			componentType:   "terraform",
 			stackConfig:     map[string]any{},
+			componentConfig: map[string]any{},
 			want:            map[string]string{},
 		},
 		{
-			name:            "stack-level dependencies only",
-			componentConfig: map[string]any{},
+			name:          "scope 1: global dependencies only",
+			componentType: "terraform",
 			stackConfig: map[string]any{
 				"dependencies": map[string]any{
 					"tools": map[string]any{
-						"terraform": "~> 1.10.0",
-						"tflint":    "^0.54.0",
+						"aws-cli": "^2.0.0",
+						"jq":      "latest",
 					},
 				},
 			},
+			componentConfig: map[string]any{},
+			want: map[string]string{
+				"aws-cli": "^2.0.0",
+				"jq":      "latest",
+			},
+		},
+		{
+			name:          "scope 2: component type dependencies only",
+			componentType: "terraform",
+			stackConfig: map[string]any{
+				"terraform": map[string]any{
+					"dependencies": map[string]any{
+						"tools": map[string]any{
+							"terraform": "~> 1.10.0",
+							"tflint":    "^0.54.0",
+						},
+					},
+				},
+			},
+			componentConfig: map[string]any{},
 			want: map[string]string{
 				"terraform": "~> 1.10.0",
 				"tflint":    "^0.54.0",
 			},
 		},
 		{
-			name: "component-level dependencies only",
+			name:          "scope 3: component instance dependencies only",
+			componentType: "terraform",
+			stackConfig:   map[string]any{},
 			componentConfig: map[string]any{
 				"dependencies": map[string]any{
 					"tools": map[string]any{
@@ -145,38 +169,61 @@ func TestResolveComponentDependencies(t *testing.T) {
 					},
 				},
 			},
-			stackConfig: map[string]any{},
 			want: map[string]string{
 				"terraform": "1.10.3",
 				"checkov":   "latest",
 			},
 		},
 		{
-			name: "stack and component dependencies merged",
+			name:          "all 3 scopes merged with proper precedence",
+			componentType: "terraform",
+			stackConfig: map[string]any{
+				// Scope 1: Global
+				"dependencies": map[string]any{
+					"tools": map[string]any{
+						"aws-cli": "^2.0.0",
+						"jq":      "latest",
+					},
+				},
+				// Scope 2: Component type
+				"terraform": map[string]any{
+					"dependencies": map[string]any{
+						"tools": map[string]any{
+							"terraform": "~> 1.10.0",
+							"tflint":    "^0.54.0",
+						},
+					},
+				},
+			},
+			// Scope 3: Component instance
 			componentConfig: map[string]any{
 				"dependencies": map[string]any{
 					"tools": map[string]any{
-						"terraform": "1.10.3", // Override (satisfies ~> 1.10.0)
-						"checkov":   "latest", // Add
-					},
-				},
-			},
-			stackConfig: map[string]any{
-				"dependencies": map[string]any{
-					"tools": map[string]any{
-						"terraform": "~> 1.10.0",
-						"tflint":    "^0.54.0",
+						"terraform": "1.10.3", // Overrides scope 2 (satisfies constraint)
+						"checkov":   "latest", // Adds new tool
 					},
 				},
 			},
 			want: map[string]string{
-				"terraform": "1.10.3",
-				"tflint":    "^0.54.0",
-				"checkov":   "latest",
+				"aws-cli":   "^2.0.0",  // From scope 1
+				"jq":        "latest",  // From scope 1
+				"terraform": "1.10.3",  // From scope 3 (overrides scope 2)
+				"tflint":    "^0.54.0", // From scope 2
+				"checkov":   "latest",  // From scope 3
 			},
 		},
 		{
-			name: "component override violates stack constraint",
+			name:          "component instance override violates component type constraint",
+			componentType: "terraform",
+			stackConfig: map[string]any{
+				"terraform": map[string]any{
+					"dependencies": map[string]any{
+						"tools": map[string]any{
+							"terraform": "~> 1.10.0",
+						},
+					},
+				},
+			},
 			componentConfig: map[string]any{
 				"dependencies": map[string]any{
 					"tools": map[string]any{
@@ -184,21 +231,66 @@ func TestResolveComponentDependencies(t *testing.T) {
 					},
 				},
 			},
+			wantErr: true,
+		},
+		{
+			name:          "component type override violates global constraint",
+			componentType: "terraform",
 			stackConfig: map[string]any{
 				"dependencies": map[string]any{
 					"tools": map[string]any{
-						"terraform": "~> 1.10.0",
+						"aws-cli": "^2.15.0", // Requires >= 2.15.0
+					},
+				},
+				"terraform": map[string]any{
+					"dependencies": map[string]any{
+						"tools": map[string]any{
+							"aws-cli": "2.14.0", // Does not satisfy ^2.15.0
+						},
 					},
 				},
 			},
-			wantErr: true,
+			componentConfig: map[string]any{},
+			wantErr:         true,
+		},
+		{
+			name:          "different component type (helmfile) uses only relevant scopes",
+			componentType: "helmfile",
+			stackConfig: map[string]any{
+				"dependencies": map[string]any{
+					"tools": map[string]any{
+						"aws-cli": "^2.0.0",
+					},
+				},
+				"terraform": map[string]any{
+					"dependencies": map[string]any{
+						"tools": map[string]any{
+							"terraform": "~> 1.10.0", // Should be ignored for helmfile
+						},
+					},
+				},
+				"helmfile": map[string]any{
+					"dependencies": map[string]any{
+						"tools": map[string]any{
+							"helmfile": "latest",
+							"kubectl":  "^1.32.0",
+						},
+					},
+				},
+			},
+			componentConfig: map[string]any{},
+			want: map[string]string{
+				"aws-cli":  "^2.0.0",
+				"helmfile": "latest",
+				"kubectl":  "^1.32.0",
+			},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			resolver := NewResolver(&schema.AtmosConfiguration{})
-			got, err := resolver.ResolveComponentDependencies(tt.componentConfig, tt.stackConfig)
+			got, err := resolver.ResolveComponentDependencies(tt.componentType, tt.stackConfig, tt.componentConfig)
 
 			if tt.wantErr {
 				require.Error(t, err)

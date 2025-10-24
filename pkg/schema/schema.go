@@ -508,6 +508,7 @@ type ConfigAndStacksInfo struct {
 	Command                       string
 	SubCommand                    string
 	SubCommand2                   string
+	StackSection                  AtmosSectionMapType
 	ComponentSection              AtmosSectionMapType
 	ComponentVarsSection          AtmosSectionMapType
 	ComponentSettingsSection      AtmosSectionMapType

@@ -7,32 +7,31 @@ import (
 )
 
 func TestGetToolWithVersion(t *testing.T) {
-	lcm := &LocalConfigManager{
-		config: &LocalConfig{
-			Tools: map[string]LocalTool{
-				"owner1/repo1": {
-					Type:       "github_release",
-					RepoOwner:  "owner1",
-					RepoName:   "repo1",
-					Asset:      "asset1",
-					Format:     "tar.gz",
-					BinaryName: "bin1",
-				},
-				"owner2/repo2": {
-					Type:       "github_release",
-					RepoOwner:  "owner2",
-					RepoName:   "repo2",
-					Asset:      "asset2",
-					Format:     "zip",
-					BinaryName: "bin2",
-					VersionConstraints: []LocalVersionConstraint{
-						{Constraint: ">= 2.0.0", Asset: "asset2-2.x", Format: "tar.gz", BinaryName: "bin2-2.x"},
-						{Constraint: "< 2.0.0", Asset: "asset2-1.x", Format: "zip", BinaryName: "bin2-1.x"},
-					},
+	lcm := NewLocalConfigManagerWithConfig(&LocalConfig{
+		Tools: map[string]LocalTool{
+			"owner1/repo1": {
+				Type:       "github_release",
+				RepoOwner:  "owner1",
+				RepoName:   "repo1",
+				Asset:      "asset1",
+				Format:     "tar.gz",
+				BinaryName: "bin1",
+			},
+			"owner2/repo2": {
+				Type:       "github_release",
+				RepoOwner:  "owner2",
+				RepoName:   "repo2",
+				Asset:      "asset2",
+				Format:     "zip",
+				BinaryName: "bin2",
+				VersionConstraints: []LocalVersionConstraint{
+					{Constraint: ">= 2.0.0", Asset: "asset2-2.x", Format: "tar.gz", BinaryName: "bin2-2.x"},
+					{Constraint: "< 2.0.0", Asset: "asset2-1.x", Format: "zip", BinaryName: "bin2-1.x"},
 				},
 			},
 		},
-	}
+	},
+	)
 
 	tests := []struct {
 		name       string
@@ -82,39 +81,38 @@ func TestGetToolWithVersion(t *testing.T) {
 }
 
 func TestGetToolWithVersion_BinaryNameAndHttpType(t *testing.T) {
-	lcm := &LocalConfigManager{
-		config: &LocalConfig{
-			Tools: map[string]LocalTool{
-				"owner1/repo1": {
-					Type:       "github_release",
-					RepoOwner:  "owner1",
-					RepoName:   "repo1",
-					Asset:      "asset1",
-					Format:     "tar.gz",
-					BinaryName: "bin1",
-				},
-				"owner2/repo2": {
-					Type:       "github_release",
-					RepoOwner:  "owner2",
-					RepoName:   "repo2",
-					Asset:      "asset2",
-					Format:     "zip",
-					BinaryName: "bin2",
-					VersionConstraints: []LocalVersionConstraint{
-						{Constraint: ">= 2.0.0", Asset: "asset2-2.x", Format: "tar.gz", BinaryName: "bin2-2.x"},
-						{Constraint: "< 2.0.0", Asset: "asset2-1.x", Format: "zip", BinaryName: "bin2-1.x"},
-					},
-				},
-				"owner3/repo3": {
-					Type:      "http",
-					RepoOwner: "owner3",
-					RepoName:  "repo3",
-					URL:       "https://example.com/repo3.tar.gz",
-					Format:    "tar.gz",
+	lcm := NewLocalConfigManagerWithConfig(&LocalConfig{
+		Tools: map[string]LocalTool{
+			"owner1/repo1": {
+				Type:       "github_release",
+				RepoOwner:  "owner1",
+				RepoName:   "repo1",
+				Asset:      "asset1",
+				Format:     "tar.gz",
+				BinaryName: "bin1",
+			},
+			"owner2/repo2": {
+				Type:       "github_release",
+				RepoOwner:  "owner2",
+				RepoName:   "repo2",
+				Asset:      "asset2",
+				Format:     "zip",
+				BinaryName: "bin2",
+				VersionConstraints: []LocalVersionConstraint{
+					{Constraint: ">= 2.0.0", Asset: "asset2-2.x", Format: "tar.gz", BinaryName: "bin2-2.x"},
+					{Constraint: "< 2.0.0", Asset: "asset2-1.x", Format: "zip", BinaryName: "bin2-1.x"},
 				},
 			},
+			"owner3/repo3": {
+				Type:      "http",
+				RepoOwner: "owner3",
+				RepoName:  "repo3",
+				URL:       "https://example.com/repo3.tar.gz",
+				Format:    "tar.gz",
+			},
 		},
-	}
+	},
+	)
 
 	tests := []struct {
 		name       string

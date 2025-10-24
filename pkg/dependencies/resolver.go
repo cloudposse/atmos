@@ -53,31 +53,53 @@ func (r *Resolver) ResolveCommandDependencies(command *schema.Command) (map[stri
 }
 
 // ResolveComponentDependencies resolves tool dependencies for a component.
-// Merges: stack catalog → stack instance → component catalog → component instance.
+// Merges 3 scopes from stack configuration (lowest to highest priority):
+//  1. Global scope: top-level dependencies
+//  2. Component type scope: terraform.dependencies / helmfile.dependencies / packer.dependencies
+//  3. Component instance scope: components.terraform.vpc.dependencies
+//
+// Parameters:
+//   - componentType: "terraform", "helmfile", or "packer"
+//   - stackConfig: Full merged stack configuration (includes all scopes)
+//   - componentConfig: Merged component configuration
 func (r *Resolver) ResolveComponentDependencies(
-	componentConfig map[string]any,
+	componentType string,
 	stackConfig map[string]any,
+	componentConfig map[string]any,
 ) (map[string]string, error) {
 	defer perf.Track(r.atmosConfig, "dependencies.ResolveComponentDependencies")()
 
-	// Start with empty dependencies
+	// Start with empty dependencies.
 	merged := make(map[string]string)
 
-	// 1. Get stack-level dependencies (if any)
-	if stackDeps := extractDependenciesFromConfig(stackConfig); stackDeps != nil {
+	// Scope 1: Global dependencies (top-level dependencies in stack config).
+	if globalDeps := extractDependenciesFromConfig(stackConfig); globalDeps != nil {
 		var err error
-		merged, err = MergeDependencies(merged, stackDeps)
+		merged, err = MergeDependencies(merged, globalDeps)
 		if err != nil {
-			return nil, fmt.Errorf("%w: failed to merge stack dependencies: %w", errUtils.ErrDependencyResolution, err)
+			return nil, fmt.Errorf("%w: failed to merge global dependencies: %w", errUtils.ErrDependencyResolution, err)
 		}
 	}
 
-	// 2. Get component-level dependencies (if any)
+	// Scope 2: Component type dependencies (terraform.dependencies in stack config).
+	if componentType != "" {
+		if typeConfig, hasType := stackConfig[componentType].(map[string]any); hasType {
+			if typeDeps := extractDependenciesFromConfig(typeConfig); typeDeps != nil {
+				var err error
+				merged, err = MergeDependencies(merged, typeDeps)
+				if err != nil {
+					return nil, fmt.Errorf("%w: failed to merge %s component type dependencies: %w", errUtils.ErrDependencyResolution, componentType, err)
+				}
+			}
+		}
+	}
+
+	// Scope 3: Component instance dependencies (components.terraform.vpc.dependencies).
 	if componentDeps := extractDependenciesFromConfig(componentConfig); componentDeps != nil {
 		var err error
 		merged, err = MergeDependencies(merged, componentDeps)
 		if err != nil {
-			return nil, fmt.Errorf("%w: failed to merge component dependencies: %w", errUtils.ErrDependencyResolution, err)
+			return nil, fmt.Errorf("%w: failed to merge component instance dependencies: %w", errUtils.ErrDependencyResolution, err)
 		}
 	}
 

@@ -83,7 +83,8 @@ func RunList() error {
 			// Otherwise, toolName is already the full path, so we need to find what alias maps to it
 			// Reverse lookup: find alias name for this owner/repo
 			ownerRepo := fmt.Sprintf("%s/%s", owner, repo)
-			for aliasName, aliasValue := range lcm.config.Aliases {
+			aliasMap := lcm.GetAliases()
+			for aliasName, aliasValue := range aliasMap {
 				if aliasValue == ownerRepo {
 					alias = aliasName
 					break
