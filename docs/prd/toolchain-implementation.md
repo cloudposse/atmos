@@ -264,15 +264,15 @@ cloudposse/atmos:
 
 ### Configuration Structure
 
-#### Stack Catalogs - Base Tool Requirements
+#### Stack-Level Dependencies - Global Tool Requirements
 
-**Component Catalog** (`stacks/catalog/terraform/vpc.yaml`):
+**Stack Catalog** (`stacks/catalog/base.yaml`):
 ```yaml
-# Top-level dependencies inherit through stack imports
+# Stack-level dependencies apply to ALL components in this stack
 dependencies:
   tools:
-    terraform: "~> 1.5.0"      # SemVer constraint
-    tflint: "^0.50.0"          # Must satisfy constraint
+    terraform: "~> 1.10.0"     # SemVer constraint
+    tflint: "^0.54.0"          # Must satisfy constraint
     tfsec: "latest"            # Always use latest
 
 components:
@@ -285,13 +285,13 @@ components:
 **Stack Configuration** (`stacks/orgs/acme/prod/us-east-1.yaml`):
 ```yaml
 import:
-  - catalog/terraform/vpc    # Inherits tool dependencies
+  - catalog/base    # Inherits stack-level tool dependencies
 
-# Override specific tool versions (must satisfy catalog constraints)
+# Stack-level override (applies to all components)
 dependencies:
   tools:
-    terraform: "1.5.7"  # Satisfies ~> 1.5.0 from catalog
-    # tflint inherited from catalog: ^0.50.0
+    terraform: "1.10.3"  # Satisfies ~> 1.10.0 from catalog
+    # tflint inherited from catalog: ^0.54.0
     # tfsec inherited from catalog: latest
 
 components:
@@ -299,6 +299,55 @@ components:
     vpc:
       vars:
         environment: prod
+```
+
+#### Component-Level Dependencies - Component-Specific Requirements
+
+**Component Catalog** (`stacks/catalog/terraform/vpc.yaml`):
+```yaml
+components:
+  terraform:
+    vpc:
+      # Component-level dependencies override stack-level
+      dependencies:
+        tools:
+          terraform: "~> 1.10.0"  # Component-specific constraint
+          tflint: "^0.54.0"       # Component-specific requirement
+      vars:
+        name: vpc
+```
+
+**Component Instance Configuration** (`stacks/orgs/acme/prod/us-east-1.yaml`):
+```yaml
+import:
+  - catalog/terraform/vpc    # Inherits component-level dependencies
+
+# Stack-level dependencies (apply to all components)
+dependencies:
+  tools:
+    terraform: "~> 1.9.0"      # Stack-wide constraint
+    aws-cli: "^2.0.0"          # Stack-wide tool
+
+components:
+  terraform:
+    vpc:
+      # Component-level override (only affects this component)
+      dependencies:
+        tools:
+          terraform: "1.10.3"   # Must satisfy both stack (~> 1.9.0) and component (~> 1.10.0)
+          tflint: "0.54.2"      # Specific version satisfying ^0.54.0
+          checkov: "latest"     # Component-specific tool
+      vars:
+        environment: prod
+
+    # Different component with different tool requirements
+    rds:
+      dependencies:
+        tools:
+          terraform: "1.9.8"    # Different version for this component
+          # aws-cli inherited from stack: ^2.0.0
+      vars:
+        engine: postgres
 ```
 
 #### Workflows - Declaring Tool Dependencies
@@ -312,7 +361,7 @@ workflows:
     # Tools needed for this workflow
     dependencies:
       tools:
-        terraform: "~> 1.5.0"
+        terraform: "~> 1.10.0"
         aws-cli: "^2.0.0"
         jq: "latest"
 
@@ -334,8 +383,8 @@ commands:
     # Tools required for this command
     dependencies:
       tools:
-        terraform: "~> 1.5.0"
-        kubectl: "^1.28.0"
+        terraform: "~> 1.10.0"
+        kubectl: "^1.32.0"
 
     steps:
       - atmos terraform plan vpc -s {{ .stack }}
@@ -346,12 +395,14 @@ commands:
 
 **Merge Strategy**: Deep merge with override (child overrides parent)
 
+#### Stack-Level Inheritance
+
 ```yaml
 # Parent stack (catalog/base.yaml)
 dependencies:
   tools:
-    terraform: "~> 1.5.0"
-    helm: "^3.12.0"
+    terraform: "~> 1.10.0"
+    helm: "^3.17.0"
 
 # Child stack (prod.yaml)
 import:
@@ -359,17 +410,69 @@ import:
 
 dependencies:
   tools:
-    terraform: "1.5.7"     # Override: specific version (must satisfy ~> 1.5.0)
-    kubectl: "^1.28.0"     # Add: new tool
-    # helm: ^3.12.0        # Inherit: from parent
+    terraform: "1.10.3"    # Override: specific version (must satisfy ~> 1.10.0)
+    kubectl: "^1.32.0"     # Add: new tool
+    # helm: ^3.17.0        # Inherit: from parent
 
 # Result after inheritance:
 dependencies:
   tools:
-    terraform: "1.5.7"     # From child (validated against parent constraint)
-    helm: "^3.12.0"        # From parent
-    kubectl: "^1.28.0"     # From child
+    terraform: "1.10.3"    # From child (validated against parent constraint)
+    helm: "^3.17.0"        # From parent
+    kubectl: "^1.32.0"     # From child
 ```
+
+#### Component-Level Inheritance
+
+```yaml
+# Component catalog (catalog/terraform/vpc.yaml)
+components:
+  terraform:
+    vpc:
+      dependencies:
+        tools:
+          terraform: "~> 1.10.0"
+          tflint: "^0.54.0"
+
+# Stack file (stacks/orgs/acme/prod.yaml)
+import:
+  - catalog/terraform/vpc
+
+# Stack-level dependencies
+dependencies:
+  tools:
+    terraform: "~> 1.9.0"    # Stack-wide constraint
+    aws-cli: "^2.0.0"
+
+components:
+  terraform:
+    vpc:
+      dependencies:
+        tools:
+          terraform: "1.10.3"  # Override component catalog (must satisfy both constraints)
+          checkov: "latest"    # Add: component-specific tool
+          # tflint inherited from component catalog: ^0.54.0
+
+# Result after inheritance for vpc component:
+components:
+  terraform:
+    vpc:
+      dependencies:
+        tools:
+          terraform: "1.10.3"   # From component (validated against ~> 1.10.0 and ~> 1.9.0)
+          tflint: "^0.54.0"     # From component catalog
+          checkov: "latest"     # From component instance
+          aws-cli: "^2.0.0"     # From stack-level
+```
+
+#### Resolution Order (Highest to Lowest Priority)
+
+1. **Component instance** (`components.terraform.vpc.dependencies.tools`)
+2. **Component catalog** (imported component's `dependencies.tools`)
+3. **Stack instance** (top-level `dependencies.tools`)
+4. **Stack catalog** (imported stack's `dependencies.tools`)
+
+**Validation**: All overrides must satisfy constraints from parent levels.
 
 ### Execution Flow
 

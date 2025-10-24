@@ -27,6 +27,8 @@ type ClientOption func(*DefaultClient)
 
 // WithTimeout sets the HTTP client timeout.
 func WithTimeout(timeout time.Duration) ClientOption {
+	defer perf.Track(nil, "http.WithTimeout")()
+
 	return func(c *DefaultClient) {
 		c.client.Timeout = timeout
 	}
@@ -34,6 +36,8 @@ func WithTimeout(timeout time.Duration) ClientOption {
 
 // WithGitHubToken sets the GitHub token for authenticated requests.
 func WithGitHubToken(token string) ClientOption {
+	defer perf.Track(nil, "http.WithGitHubToken")()
+
 	return func(c *DefaultClient) {
 		if token != "" {
 			c.client.Transport = &GitHubAuthenticatedTransport{
@@ -46,6 +50,8 @@ func WithGitHubToken(token string) ClientOption {
 
 // WithTransport sets a custom HTTP transport.
 func WithTransport(transport http.RoundTripper) ClientOption {
+	defer perf.Track(nil, "http.WithTransport")()
+
 	return func(c *DefaultClient) {
 		c.client.Transport = transport
 	}

@@ -97,8 +97,8 @@ func TestGetGitHubTokenFromEnv(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			os.Setenv("ATMOS_GITHUB_TOKEN", tt.atmosToken)
-			os.Setenv("GITHUB_TOKEN", tt.githubToken)
+			t.Setenv("ATMOS_GITHUB_TOKEN", tt.atmosToken)
+			t.Setenv("GITHUB_TOKEN", tt.githubToken)
 
 			got := GetGitHubTokenFromEnv()
 			assert.Equal(t, tt.want, got)
