@@ -122,7 +122,12 @@ func (m *ChatModel) handleRenameKeys(msg tea.KeyMsg) tea.Cmd {
 }
 
 // handleNormalSessionListKeys handles keyboard input during normal session list navigation.
+//
+//nolint:funlen // TUI keyboard handlers require comprehensive switch cases.
 func (m *ChatModel) handleNormalSessionListKeys(msg tea.KeyMsg) tea.Cmd {
+	// Get filtered sessions for navigation
+	filteredSessions := m.getFilteredSessions()
+
 	switch msg.String() {
 	case "ctrl+c":
 		return tea.Quit
@@ -131,42 +136,46 @@ func (m *ChatModel) handleNormalSessionListKeys(msg tea.KeyMsg) tea.Cmd {
 		m.currentView = viewModeChat
 		return nil
 	case "up", "k":
-		// Navigate up.
+		// Navigate up in filtered list.
 		if m.selectedSessionIndex > 0 {
 			m.selectedSessionIndex--
 		}
 		return nil
 	case "down", "j":
-		// Navigate down.
-		if m.selectedSessionIndex < len(m.availableSessions)-1 {
+		// Navigate down in filtered list.
+		if m.selectedSessionIndex < len(filteredSessions)-1 {
 			m.selectedSessionIndex++
 		}
 		return nil
 	case "enter":
-		// Select session.
-		if m.selectedSessionIndex < len(m.availableSessions) {
-			return m.switchSession(m.availableSessions[m.selectedSessionIndex])
+		// Select session from filtered list.
+		if m.selectedSessionIndex < len(filteredSessions) {
+			return m.switchSession(filteredSessions[m.selectedSessionIndex])
 		}
 		return nil
 	case "d", "D":
-		// Delete session - enter confirmation mode.
-		if m.selectedSessionIndex < len(m.availableSessions) {
+		// Delete session from filtered list.
+		if m.selectedSessionIndex < len(filteredSessions) {
 			m.deleteConfirm = true
-			m.deleteSessionID = m.availableSessions[m.selectedSessionIndex].ID
+			m.deleteSessionID = filteredSessions[m.selectedSessionIndex].ID
 		}
 		return nil
 	case "r", "R":
-		// Rename session - enter rename mode.
-		if m.selectedSessionIndex < len(m.availableSessions) {
-			sess := m.availableSessions[m.selectedSessionIndex]
+		// Rename session from filtered list.
+		if m.selectedSessionIndex < len(filteredSessions) {
+			sess := filteredSessions[m.selectedSessionIndex]
 			m.renameMode = true
 			m.renameSessionID = sess.ID
 			// Initialize rename input with current name
 			m.renameInput = textinput.New()
-			m.renameInput.Placeholder = "Enter new session name"
+			m.renameInput.Placeholder = sessionNamePlaceholder
 			m.renameInput.SetValue(sess.Name)
 			m.renameInput.Focus()
 		}
+		return nil
+	case "f", "F":
+		// Cycle through provider filters.
+		m.cycleFilter()
 		return nil
 	case "ctrl+n", "n":
 		// Open create session form.
@@ -176,6 +185,21 @@ func (m *ChatModel) handleNormalSessionListKeys(msg tea.KeyMsg) tea.Cmd {
 	}
 
 	return nil
+}
+
+// getFilteredSessions returns sessions filtered by the current provider filter.
+func (m *ChatModel) getFilteredSessions() []*session.Session {
+	if m.sessionFilter == filterAll {
+		return m.availableSessions
+	}
+
+	filtered := make([]*session.Session, 0)
+	for _, sess := range m.availableSessions {
+		if sess.Provider == m.sessionFilter {
+			filtered = append(filtered, sess)
+		}
+	}
+	return filtered
 }
 
 // loadSessionList loads the list of available sessions.

@@ -188,6 +188,129 @@ The session picker displays:
 
 The TUI session management provides a seamless way to organize multiple AI conversations without leaving your terminal.
 
+#### Deleting Sessions (d key)
+
+Delete unwanted sessions directly from the session picker:
+
+<Terminal title="atmos ai chat">
+```bash
+# Press Ctrl+L to open the session picker
+Ctrl+L
+
+# Navigate to the session you want to delete
+# Press 'd' to delete
+d
+```
+</Terminal>
+
+**Delete Workflow:**
+1. Navigate to the session you want to delete using `↑`/`↓` or `j`/`k`
+2. Press `d` to initiate deletion
+3. Confirm with `y` or cancel with `n`/`Esc`
+
+**Safety Features:**
+- **Confirmation required** - Prevents accidental deletion
+- **Clear warning message** - Shows session name and warns action cannot be undone
+- **Graceful handling** - If you delete the currently active session, you'll be returned to a clean state
+
+:::warning Permanent Action
+Deleting a session permanently removes all conversation history for that session. This action cannot be undone.
+:::
+
+#### Renaming Sessions (r key)
+
+Rename sessions to keep your conversations organized:
+
+<Terminal title="atmos ai chat">
+```bash
+# Press Ctrl+L to open the session picker
+Ctrl+L
+
+# Navigate to the session you want to rename
+# Press 'r' to rename
+r
+```
+</Terminal>
+
+**Rename Workflow:**
+1. Navigate to the session you want to rename using `↑`/`↓` or `j`/`k`
+2. Press `r` to enter rename mode
+3. Edit the session name (pre-filled with current name)
+4. Press `Enter` to save or `Esc` to cancel
+
+**Rename Features:**
+- **Inline editing** - Edit directly in the session picker
+- **Pre-filled value** - Current name is pre-populated for easy editing
+- **Validation** - Empty names are rejected
+- **Live update** - If renaming the active session, the name updates immediately
+
+#### Filtering Sessions by Provider (f key)
+
+Filter sessions to show only those from a specific AI provider:
+
+<Terminal title="atmos ai chat">
+```bash
+# Press Ctrl+L to open the session picker
+Ctrl+L
+
+# Press 'f' to cycle through provider filters
+f  # Shows only Claude sessions
+f  # Shows only GPT sessions
+f  # Shows only Gemini sessions
+f  # Shows only Grok sessions
+f  # Shows all sessions
+```
+</Terminal>
+
+**Filter Options:**
+- **All** - Show all sessions (default)
+- **Claude** - Show only Anthropic Claude sessions
+- **GPT** - Show only OpenAI GPT sessions
+- **Gemini** - Show only Google Gemini sessions
+- **Grok** - Show only xAI Grok sessions
+
+**Visual Indicators:**
+- **Title shows active filter** - "Session List [Claude]" when filtering
+- **Color-coded provider badges** - Each session displays its provider with color coding:
+  - `[Claude]` in cyan
+  - `[GPT]` in green
+  - `[Gemini]` in yellow
+  - `[Grok]` in pink
+- **Empty state message** - "No sessions for Gemini" when filter has no results
+
+**Navigation with Filters:**
+All session operations (select, delete, rename) work seamlessly with filters. When you filter sessions:
+- Navigation only shows filtered sessions
+- Selection index resets to first filtered session
+- Delete and rename operate on the filtered session
+
+#### Enhanced Session Display
+
+The session picker now displays rich metadata for each session:
+
+**Display Format:**
+```
+→ vpc-refactor [Claude] • Oct 23 • 47 msg
+  security-review [GPT] • Oct 22 • 12 msg
+  cost-analysis [Gemini] • Oct 20 • 8 msg
+```
+
+**Metadata Shown:**
+- **Session name** - Your custom session name
+- **Provider badge** - Color-coded AI provider indicator
+- **Creation date** - When the session was created (condensed format)
+- **Message count** - Total messages in the conversation
+
+**Complete Session Picker Controls:**
+- `↑`/`↓` or `j`/`k` - Navigate through sessions
+- `Enter` - Switch to the selected session
+- `d` - Delete the selected session (with confirmation)
+- `r` - Rename the selected session
+- `f` - Cycle through provider filters
+- `n` or `Ctrl+N` - Create a new session
+- `Esc` or `q` - Return to current chat
+- `Ctrl+C` - Quit the application
+
 ### Listing Sessions
 
 View all available sessions:

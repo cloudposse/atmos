@@ -280,6 +280,7 @@ func TestChatModel_SessionListView(t *testing.T) {
 	t.Run("renders empty session list", func(t *testing.T) {
 		model.currentView = viewModeSessionList
 		model.availableSessions = []*session.Session{}
+		model.sessionFilter = "all" // Initialize filter
 
 		view := model.sessionListView()
 

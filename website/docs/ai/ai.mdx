@@ -21,10 +21,12 @@ The Atmos AI Assistant is an AI-powered terminal agent that helps with Atmos inf
 - **Persistent Sessions**: Save and resume conversations across CLI invocations
 - **In-TUI Session Creation**: Create new sessions with provider selection using Ctrl+N
 - **Session Switching**: Switch between sessions without leaving the TUI (Ctrl+L)
+- **Session Management**: Delete (d), rename (r), and filter (f) sessions in the TUI
+- **Provider Filtering**: Filter sessions by AI provider (Claude, GPT, Gemini, Grok)
+- **Enhanced Display**: Color-coded provider badges, creation dates, and message counts
 - **Message History**: Complete conversation history stored locally in SQLite
 - **Named Sessions**: Organize conversations by topic or project
 - **Provider-Aware Sessions**: Each session remembers its AI provider and model
-- **Session Management**: List, clean, and manage your conversation sessions
 
 ### AI Capabilities
 - **Command-line Q&A**: Ask questions directly from the command line
@@ -123,13 +125,22 @@ atmos mcp-server
 
 ### TUI Keyboard Shortcuts
 
-While in the interactive chat session:
-
+**Chat View:**
 - **Ctrl+N** - Create a new session with provider selection
 - **Ctrl+L** - Open session picker to switch between sessions
 - **Ctrl+C** - Quit the application
 - **Enter** - Send message
 - **Shift+Enter** - Add newline in message
+
+**Session Picker:**
+- **↑/↓** or **j/k** - Navigate through sessions
+- **Enter** - Switch to selected session
+- **d** - Delete selected session (with confirmation)
+- **r** - Rename selected session
+- **f** - Cycle through provider filters (All/Claude/GPT/Gemini/Grok)
+- **n** or **Ctrl+N** - Create a new session
+- **Esc** or **q** - Return to chat
+- **Ctrl+C** - Quit the application
 
 :::tip Claude Desktop Integration
 Want to use Atmos tools directly in Claude Desktop? Check out the [MCP Server documentation](/ai/mcp-server) for setup instructions.

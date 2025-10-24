@@ -14,7 +14,9 @@ import (
 )
 
 const (
-	doubleNewline = "\n\n"
+	doubleNewline          = "\n\n"
+	filterAll              = "all"
+	sessionNamePlaceholder = "Enter new session name"
 )
 
 // sessionListLoadedMsg is sent when the session list has been loaded.
@@ -62,6 +64,10 @@ func (m *ChatModel) handleSessionListLoaded(msg sessionListLoadedMsg) {
 		m.selectedSessionIndex = 0
 		m.sessionListError = ""
 		m.currentView = viewModeSessionList
+		// Initialize filter to "all" if not set
+		if m.sessionFilter == "" {
+			m.sessionFilter = filterAll
+		}
 	}
 }
 
@@ -91,8 +97,23 @@ func (m *ChatModel) sessionListView() string {
 	styles := m.sessionListStyles()
 	var content strings.Builder
 
-	content.WriteString(styles.title.Render("Session List"))
-	content.WriteString("\n")
+	m.renderSessionListHeader(&content, &styles)
+	m.renderSessionListDialogs(&content, &styles)
+	m.renderSessionListContent(&content, &styles)
+
+	return content.String()
+}
+
+// renderSessionListHeader renders the title and help text.
+func (m *ChatModel) renderSessionListHeader(content *strings.Builder, styles *sessionListStyles) {
+	// Title with filter indicator
+	title := "Session List"
+	if m.sessionFilter != filterAll {
+		filterName := m.getFilterDisplayName(m.sessionFilter)
+		title = fmt.Sprintf("Session List [%s]", filterName)
+	}
+	content.WriteString(styles.title.Render(title))
+	content.WriteString(newlineChar)
 
 	// Show different help text based on state
 	switch {
@@ -101,7 +122,7 @@ func (m *ChatModel) sessionListView() string {
 	case m.renameMode:
 		content.WriteString(styles.help.Render("Enter: Save | Esc: Cancel"))
 	default:
-		content.WriteString(styles.help.Render("↑/↓: Navigate | Enter: Select | d: Delete | r: Rename | n/Ctrl+N: New | Esc/q: Back | Ctrl+C: Quit"))
+		content.WriteString(styles.help.Render("↑/↓: Navigate | Enter: Select | d: Delete | r: Rename | f: Filter | n/Ctrl+N: New | Esc/q: Back | Ctrl+C: Quit"))
 	}
 	content.WriteString(doubleNewline)
 
@@ -109,26 +130,36 @@ func (m *ChatModel) sessionListView() string {
 		content.WriteString(styles.error.Render(fmt.Sprintf("Error: %s", m.sessionListError)))
 		content.WriteString(doubleNewline)
 	}
+}
 
+// renderSessionListDialogs renders any active dialogs.
+func (m *ChatModel) renderSessionListDialogs(content *strings.Builder, styles *sessionListStyles) {
 	// Show delete confirmation if active
 	if m.deleteConfirm && m.deleteSessionID != "" {
-		m.renderDeleteConfirmation(&content, &styles)
+		m.renderDeleteConfirmation(content, styles)
 		content.WriteString(doubleNewline)
 	}
 
 	// Show rename dialog if active
 	if m.renameMode && m.renameSessionID != "" {
-		m.renderRenameDialog(&content, &styles)
+		m.renderRenameDialog(content, styles)
 		content.WriteString(doubleNewline)
 	}
+}
 
-	if len(m.availableSessions) == 0 {
-		content.WriteString(styles.session.Render("No sessions available"))
+// renderSessionListContent renders the session list or empty state.
+func (m *ChatModel) renderSessionListContent(content *strings.Builder, styles *sessionListStyles) {
+	filteredSessions := m.filterSessions(m.availableSessions)
+
+	if len(filteredSessions) == 0 {
+		if m.sessionFilter != filterAll {
+			content.WriteString(styles.session.Render(fmt.Sprintf("No sessions for %s", m.getFilterDisplayName(m.sessionFilter))))
+		} else {
+			content.WriteString(styles.session.Render("No sessions available"))
+		}
 	} else {
-		m.renderSessionList(&content, &styles)
+		m.renderFilteredSessionList(content, styles, filteredSessions)
 	}
-
-	return content.String()
 }
 
 // sessionListStyles creates the styles for the session list view.
@@ -167,16 +198,133 @@ func (m *ChatModel) renderSessionList(content *strings.Builder, styles *sessionL
 			style = styles.selected
 		}
 
-		msgCount := m.getSessionMessageCount(sess.ID)
-		sessionInfo := fmt.Sprintf("%s%s (%s, %d messages)",
-			prefix,
-			sess.Name,
-			sess.CreatedAt.Format("Jan 02, 15:04"),
-			msgCount)
+		// Get provider badge and color
+		providerBadge, providerColor := m.getProviderBadge(sess.Provider)
 
-		content.WriteString(style.Render(sessionInfo))
+		msgCount := m.getSessionMessageCount(sess.ID)
+
+		// Build session info with provider badge
+		var sessionLine strings.Builder
+		sessionLine.WriteString(prefix)
+		sessionLine.WriteString(sess.Name)
+		sessionLine.WriteString(" ")
+
+		// Add provider badge with color
+		badgeStyle := lipgloss.NewStyle().
+			Foreground(lipgloss.Color(providerColor)).
+			Bold(true)
+		sessionLine.WriteString(badgeStyle.Render(providerBadge))
+
+		// Add metadata
+		sessionLine.WriteString(fmt.Sprintf(" • %s • %d msg",
+			sess.CreatedAt.Format("Jan 02"),
+			msgCount))
+
+		content.WriteString(style.Render(sessionLine.String()))
 		content.WriteString("\n")
 	}
+}
+
+// renderFilteredSessionList renders the filtered list of sessions.
+func (m *ChatModel) renderFilteredSessionList(content *strings.Builder, styles *sessionListStyles, sessions []*session.Session) {
+	for i, sess := range sessions {
+		prefix := "  "
+		style := styles.session
+		if i == m.selectedSessionIndex {
+			prefix = "→ "
+			style = styles.selected
+		}
+
+		// Get provider badge and color
+		providerBadge, providerColor := m.getProviderBadge(sess.Provider)
+
+		msgCount := m.getSessionMessageCount(sess.ID)
+
+		// Build session info with provider badge
+		var sessionLine strings.Builder
+		sessionLine.WriteString(prefix)
+		sessionLine.WriteString(sess.Name)
+		sessionLine.WriteString(" ")
+
+		// Add provider badge with color
+		badgeStyle := lipgloss.NewStyle().
+			Foreground(lipgloss.Color(providerColor)).
+			Bold(true)
+		sessionLine.WriteString(badgeStyle.Render(providerBadge))
+
+		// Add metadata
+		sessionLine.WriteString(fmt.Sprintf(" • %s • %d msg",
+			sess.CreatedAt.Format("Jan 02"),
+			msgCount))
+
+		content.WriteString(style.Render(sessionLine.String()))
+		content.WriteString("\n")
+	}
+}
+
+// getProviderBadge returns the badge and color for a provider.
+func (m *ChatModel) getProviderBadge(provider string) (string, string) {
+	switch provider {
+	case "anthropic":
+		return "[Claude]", theme.ColorCyan
+	case "openai":
+		return "[GPT]", theme.ColorGreen
+	case "gemini":
+		return "[Gemini]", theme.ColorYellow
+	case "grok":
+		return "[Grok]", theme.ColorPink
+	default:
+		return "[AI]", "240"
+	}
+}
+
+// filterSessions filters sessions by the current provider filter.
+func (m *ChatModel) filterSessions(sessions []*session.Session) []*session.Session {
+	if m.sessionFilter == filterAll {
+		return sessions
+	}
+
+	filtered := make([]*session.Session, 0)
+	for _, sess := range sessions {
+		if sess.Provider == m.sessionFilter {
+			filtered = append(filtered, sess)
+		}
+	}
+	return filtered
+}
+
+// getFilterDisplayName returns the display name for a filter.
+func (m *ChatModel) getFilterDisplayName(filter string) string {
+	switch filter {
+	case filterAll:
+		return "All"
+	case "anthropic":
+		return "Claude"
+	case "openai":
+		return "GPT"
+	case "gemini":
+		return "Gemini"
+	case "grok":
+		return "Grok"
+	default:
+		return filter
+	}
+}
+
+// cycleFilter cycles to the next provider filter.
+func (m *ChatModel) cycleFilter() {
+	filters := []string{filterAll, "anthropic", "openai", "gemini", "grok"}
+	for i, f := range filters {
+		if f == m.sessionFilter {
+			m.sessionFilter = filters[(i+1)%len(filters)]
+			// Reset selection when filter changes
+			m.selectedSessionIndex = 0
+			return
+		}
+	}
+	// Default to "all" if current filter not found
+	m.sessionFilter = filterAll
+	m.selectedSessionIndex = 0
 }
 
 // getSessionMessageCount returns the message count for a session.

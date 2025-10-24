@@ -68,6 +68,7 @@ type ChatModel struct {
 	renameMode           bool            // Whether we're in rename mode
 	renameSessionID      string          // ID of session to rename
 	renameInput          textinput.Model // Text input for new session name
+	sessionFilter        string          // Current provider filter ("all", "anthropic", "openai", "gemini", "grok")
 }
 
 // ChatMessage represents a single message in the chat.
