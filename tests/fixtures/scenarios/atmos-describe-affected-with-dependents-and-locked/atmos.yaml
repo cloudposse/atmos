@@ -41,3 +41,7 @@ settings:
   terminal:
     no_color: true  # Disable color output (Can also be set using 'ATMOS_NO_COLOR' or 'NO_COLOR' ENV var or '--no-color' command-line argument)
     max_width: 120  # Maximum width for terminal output
+  ai:
+    enabled: true
+    sessions:
+      enabled: true

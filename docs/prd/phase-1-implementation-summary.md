@@ -780,7 +780,7 @@ pkg/ai/tools/atmos/describe_component_test.go
 
 **Go Modules:**
 ```bash
-go get github.com/mattn/go-sqlite3      # SQLite driver
+go get modernc.org/sqlite                # Pure Go SQLite driver (no CGO required)
 go get github.com/google/uuid            # UUID generation
 ```
 

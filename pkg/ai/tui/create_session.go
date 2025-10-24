@@ -61,6 +61,18 @@ var AvailableProviders = []Provider{
 		DefaultModel: "llama3.3:70b",
 		APIKeyEnv:    "OLLAMA_API_KEY",
 	},
+	{
+		Name:         "bedrock",
+		DisplayName:  "AWS Bedrock",
+		DefaultModel: "anthropic.claude-3-5-sonnet-20241022-v2:0",
+		APIKeyEnv:    "AWS_ACCESS_KEY_ID",
+	},
+	{
+		Name:         "azureopenai",
+		DisplayName:  "Azure OpenAI",
+		DefaultModel: "gpt-4o",
+		APIKeyEnv:    "AZURE_OPENAI_API_KEY",
+	},
 }
 
 // createSessionForm holds the state of the create session form.
@@ -123,16 +135,18 @@ func (m *ChatModel) handleCreateSessionKeys(msg tea.KeyMsg) tea.Cmd {
 			if m.createForm.selectedProvider > 0 {
 				m.createForm.selectedProvider--
 			}
+			return nil
 		}
-		return nil
+		// Fall through to name input if focused
 	case "down", "j":
 		if m.createForm.focusedField == 1 {
 			// Navigate provider selection down
 			if m.createForm.selectedProvider < len(AvailableProviders)-1 {
 				m.createForm.selectedProvider++
 			}
+			return nil
 		}
-		return nil
+		// Fall through to name input if focused
 	case "enter":
 		// Submit form
 		return m.submitCreateSession()

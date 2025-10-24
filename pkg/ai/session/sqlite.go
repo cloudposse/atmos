@@ -10,7 +10,7 @@ import (
 	"path/filepath"
 	"time"
 
-	_ "github.com/mattn/go-sqlite3" // SQLite driver
+	_ "modernc.org/sqlite" // Pure Go SQLite driver
 
 	errUtils "github.com/cloudposse/atmos/errors"
 )
@@ -35,7 +35,7 @@ func NewSQLiteStorage(storagePath string) (*SQLiteStorage, error) {
 	}
 
 	// Open database.
-	db, err := sql.Open("sqlite3", storagePath)
+	db, err := sql.Open("sqlite", storagePath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open database: %w", err)
 	}

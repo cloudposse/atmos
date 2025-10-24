@@ -17,11 +17,12 @@ import (
 // ansiEscapeRegex matches ANSI escape sequences and OSC (Operating System Command) sequences.
 // This includes:
 // - CSI sequences: ESC [ ... (e.g., colors, cursor movement, CPR).
-// - Bare CSI Cursor Position Report: [<row>;<col>R.
+// - Bare CSI Cursor Position Report: [<row>;<col>R or partial fragments like <number>R.
 // - OSC sequences with BEL terminator: ESC ] ... BEL.
 // - OSC sequences with ST terminator: ESC ] ... ESC \.
 // - Bare OSC sequences: ] ... \ or rgb:... \ or <number>;rgb:... \ (fragments without ESC prefix).
-var ansiEscapeRegex = regexp.MustCompile(`\x1b\[[0-9;]*[a-zA-Z]|\[[0-9;]+R|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)|][^\\]*\\|\d*;?rgb:[0-9a-fA-F/]*\\`)
+// - Color query fragments: :0000/0000/0000\<letter> (hex color responses).
+var ansiEscapeRegex = regexp.MustCompile(`\x1b\[[0-9;]*[a-zA-Z]|\[[0-9;]+R|^\d+R|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)|][^\\]*\\|\d*;?rgb:[0-9a-fA-F/]*\\|:[0-9a-fA-F/]+\\[a-zA-Z]?`)
 
 // stripANSI removes ANSI escape sequences from a string.
 func stripANSI(s string) string {
@@ -42,7 +43,22 @@ func (m *ChatModel) handleKeyMsg(msg tea.KeyMsg) tea.Cmd {
 		return func() tea.Msg { return nil }
 	}
 
-	// Check for Enter key first (before other key processing).
+	// Handle view-specific keys first (before chat keys).
+	// This ensures Enter works correctly in session list, create session, and provider select views.
+
+	if m.currentView == viewModeSessionList {
+		return m.handleSessionListKeys(msg)
+	}
+
+	if m.currentView == viewModeCreateSession {
+		return m.handleCreateSessionKeys(msg)
+	}
+
+	if m.currentView == viewModeProviderSelect {
+		return m.handleProviderSelectKeys(msg)
+	}
+
+	// Handle chat view Enter key variants.
 	keyStr := msg.String()
 
 	// Handle multiline input: Ctrl+J inserts newline (works in all terminals).
@@ -54,7 +70,7 @@ func (m *ChatModel) handleKeyMsg(msg tea.KeyMsg) tea.Cmd {
 		return func() tea.Msg { return nil }
 	}
 
-	// Plain Enter: send message.
+	// Plain Enter: send message (only in chat view).
 	if msg.Type == tea.KeyEnter {
 		value := stripANSI(m.textarea.Value()) // Strip any ANSI escape sequences
 		if value != "" && len(value) > 0 {
@@ -64,35 +80,26 @@ func (m *ChatModel) handleKeyMsg(msg tea.KeyMsg) tea.Cmd {
 		return func() tea.Msg { return nil }
 	}
 
-	// Handle session list view keys.
-	if m.currentView == viewModeSessionList {
-		return m.handleSessionListKeys(msg)
-	}
-
-	// Handle create session view keys.
-	if m.currentView == viewModeCreateSession {
-		return m.handleCreateSessionKeys(msg)
-	}
-
-	// Handle provider select view keys.
-	if m.currentView == viewModeProviderSelect {
-		return m.handleProviderSelectKeys(msg)
-	}
-
 	// Handle chat view keys.
 	switch msg.String() {
 	case "ctrl+c":
 		return tea.Quit
 	case "ctrl+l":
 		// Open session list.
+		if m.manager == nil {
+			m.addMessage(roleSystem, "Sessions are not enabled. Enable them in your atmos.yaml config: settings.ai.sessions.enabled: true")
+			return func() tea.Msg { return nil }
+		}
 		return m.loadSessionList()
 	case "ctrl+n":
 		// Open create session form.
-		if m.manager != nil {
-			m.currentView = viewModeCreateSession
-			m.createForm = newCreateSessionForm() // Reset form
+		if m.manager == nil {
+			m.addMessage(roleSystem, "Sessions are not enabled. Enable them in your atmos.yaml config: settings.ai.sessions.enabled: true")
+			return func() tea.Msg { return nil }
 		}
-		return nil
+		m.currentView = viewModeCreateSession
+		m.createForm = newCreateSessionForm() // Reset form
+		return func() tea.Msg { return nil }
 	case "ctrl+p":
 		// Open provider selection.
 		if m.atmosConfig != nil {
@@ -114,7 +121,7 @@ func (m *ChatModel) handleKeyMsg(msg tea.KeyMsg) tea.Cmd {
 				}
 			}
 		}
-		return nil
+		return func() tea.Msg { return nil }
 	case "up":
 		// Navigate to previous message in history.
 		m.navigateHistoryUp()
@@ -191,6 +198,15 @@ func (m *ChatModel) handleNormalSessionListKeys(msg tea.KeyMsg) tea.Cmd {
 	// Get filtered sessions for navigation
 	filteredSessions := m.getFilteredSessions()
 
+	// Check for Enter key using Type (more reliable than String).
+	if msg.Type == tea.KeyEnter {
+		// Select session from filtered list.
+		if m.selectedSessionIndex < len(filteredSessions) {
+			return m.switchSession(filteredSessions[m.selectedSessionIndex])
+		}
+		return nil
+	}
+
 	switch msg.String() {
 	case "ctrl+c":
 		return tea.Quit
@@ -208,12 +224,6 @@ func (m *ChatModel) handleNormalSessionListKeys(msg tea.KeyMsg) tea.Cmd {
 		// Navigate down in filtered list.
 		if m.selectedSessionIndex < len(filteredSessions)-1 {
 			m.selectedSessionIndex++
-		}
-		return nil
-	case "enter":
-		// Select session from filtered list.
-		if m.selectedSessionIndex < len(filteredSessions) {
-			return m.switchSession(filteredSessions[m.selectedSessionIndex])
 		}
 		return nil
 	case "d", "D":

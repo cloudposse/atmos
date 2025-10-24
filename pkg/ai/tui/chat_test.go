@@ -937,7 +937,7 @@ func TestNewCreateSessionForm(t *testing.T) {
 }
 
 func TestAvailableProviders(t *testing.T) {
-	assert.Len(t, AvailableProviders, 5)
+	assert.Len(t, AvailableProviders, 7)
 
 	// Verify all expected providers are present.
 	providerNames := make([]string, len(AvailableProviders))
@@ -950,6 +950,8 @@ func TestAvailableProviders(t *testing.T) {
 	assert.Contains(t, providerNames, "gemini")
 	assert.Contains(t, providerNames, "grok")
 	assert.Contains(t, providerNames, "ollama")
+	assert.Contains(t, providerNames, "bedrock")
+	assert.Contains(t, providerNames, "azureopenai")
 
 	// Verify provider details.
 	for _, p := range AvailableProviders {

@@ -264,18 +264,29 @@ func (m *ChatModel) handleWindowResize(msg tea.WindowSizeMsg) {
 	footerHeight := lipgloss.Height(m.footerView())
 	verticalMarginHeight := headerHeight + footerHeight
 
+	// Calculate dynamic textarea height (about 40% of available content height).
+	contentHeight := msg.Height - verticalMarginHeight
+	textareaHeight := contentHeight * 2 / 5 // 40% of content height
+	if textareaHeight < 3 {
+		textareaHeight = 3 // Minimum height
+	}
+	if textareaHeight > 20 {
+		textareaHeight = 20 // Maximum height
+	}
+
 	if !m.ready {
 		// Initialize viewport and textarea sizes.
-		m.viewport = viewport.New(msg.Width, msg.Height-verticalMarginHeight-4) // -4 for textarea
+		m.viewport = viewport.New(msg.Width, contentHeight-textareaHeight)
 		m.viewport.YPosition = headerHeight + 1
 		m.textarea.SetWidth(msg.Width - 4)
-		m.textarea.SetHeight(3)
+		m.textarea.SetHeight(textareaHeight)
 		m.ready = true
 	} else {
 		// Adjust existing sizes.
 		m.viewport.Width = msg.Width
-		m.viewport.Height = msg.Height - verticalMarginHeight - 4
+		m.viewport.Height = contentHeight - textareaHeight
 		m.textarea.SetWidth(msg.Width - 4)
+		m.textarea.SetHeight(textareaHeight)
 	}
 
 	// Clean any ANSI escape sequences that may have leaked into textarea during resize.
