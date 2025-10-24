@@ -15,6 +15,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	w "github.com/cloudposse/atmos/internal/tui/workflow"
 	"github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/dependencies"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/retry"
@@ -89,6 +90,26 @@ func ExecuteWorkflow(
 	checkAndGenerateWorkflowStepNames(workflowDefinition)
 
 	log.Debug("Executing workflow", "workflow", workflow, "path", workflowPath)
+
+	// Resolve and install workflow dependencies
+	resolver := dependencies.NewResolver(&atmosConfig)
+	deps, err := resolver.ResolveWorkflowDependencies(workflowDefinition)
+	if err != nil {
+		return fmt.Errorf("failed to resolve workflow dependencies: %w", err)
+	}
+
+	if len(deps) > 0 {
+		log.Debug("Installing workflow dependencies", "tools", deps)
+		installer := dependencies.NewInstaller(&atmosConfig)
+		if err := installer.EnsureTools(deps); err != nil {
+			return fmt.Errorf("failed to install workflow dependencies: %w", err)
+		}
+
+		// Update PATH to include installed tools
+		if err := dependencies.UpdatePathForTools(&atmosConfig, deps); err != nil {
+			return fmt.Errorf("failed to update PATH for workflow dependencies: %w", err)
+		}
+	}
 
 	if atmosConfig.Logs.Level == u.LogLevelTrace || atmosConfig.Logs.Level == u.LogLevelDebug {
 		err := u.PrintAsYAMLToFileDescriptor(&atmosConfig, workflowDefinition)
