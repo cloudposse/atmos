@@ -43,14 +43,48 @@ settings:
     max_width: 120  # Maximum width for terminal output
   ai:
     enabled: true
+
+    sessions:
+      enabled: true
+
     default_provider: "anthropic"  # Default provider for CLI commands
 
-    # Configure your preferred AI provider
+    # Providers
     providers:
       anthropic:
         model: "claude-sonnet-4-20250514"
         api_key_env: "ANTHROPIC_API_KEY"
         max_tokens: 4096
 
-    sessions:
-      enabled: true
+      openai:
+        model: "gpt-4o"
+        api_key_env: "OPENAI_API_KEY"
+        max_tokens: 4096
+
+      gemini:
+        model: "gemini-2.0-flash-exp"
+        api_key_env: "GEMINI_API_KEY"
+        max_tokens: 8192
+
+      grok:
+        model: "grok-beta"
+        api_key_env: "XAI_API_KEY"
+        max_tokens: 4096
+        base_url: "https://api.x.ai/v1"
+
+      # Local Provider (no API key needed)
+      ollama:
+        model: "llama3.3:70b"
+        base_url: "http://localhost:11434/v1"
+
+      # Enterprise Providers
+      bedrock:
+        model: "anthropic.claude-sonnet-4-20250514-v2:0"
+        base_url: "us-east-1"              # AWS region
+        # Uses AWS credentials (no api_key_env needed)
+
+      azureopenai:
+        model: "gpt-4o"
+        api_key_env: "AZURE_OPENAI_API_KEY"
+        base_url: "https://your-resource.openai.azure.com"
+        api_version: "2024-02-15-preview"
