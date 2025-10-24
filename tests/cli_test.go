@@ -61,16 +61,17 @@ var (
 var logger *log.AtmosLogger
 
 type Expectation struct {
-	Stdout        []MatchPattern            `yaml:"stdout"`          // Expected stdout output (non-TTY mode)
-	Stderr        []MatchPattern            `yaml:"stderr"`          // Expected stderr output (non-TTY mode)
-	Tty           []MatchPattern            `yaml:"tty"`             // Expected TTY output (TTY mode - combined stdout+stderr)
-	ExitCode      int                       `yaml:"exit_code"`       // Expected exit code
-	FileExists    []string                  `yaml:"file_exists"`     // Files to validate
-	FileNotExists []string                  `yaml:"file_not_exists"` // Files that should not exist
-	FileContains  map[string][]MatchPattern `yaml:"file_contains"`   // File contents to validate (file to patterns map)
-	Diff          []string                  `yaml:"diff"`            // Acceptable differences in snapshot
-	Timeout       string                    `yaml:"timeout"`         // Maximum execution time as a string, e.g., "1s", "1m", "1h", or a number (seconds)
-	Valid         []string                  `yaml:"valid"`           // Format validations: "yaml", "json"
+	Stdout                    []MatchPattern            `yaml:"stdout"`                       // Expected stdout output (non-TTY mode)
+	Stderr                    []MatchPattern            `yaml:"stderr"`                       // Expected stderr output (non-TTY mode)
+	Tty                       []MatchPattern            `yaml:"tty"`                          // Expected TTY output (TTY mode - combined stdout+stderr)
+	ExitCode                  int                       `yaml:"exit_code"`                    // Expected exit code
+	FileExists                []string                  `yaml:"file_exists"`                  // Files to validate
+	FileNotExists             []string                  `yaml:"file_not_exists"`              // Files that should not exist
+	FileContains              map[string][]MatchPattern `yaml:"file_contains"`                // File contents to validate (file to patterns map)
+	Diff                      []string                  `yaml:"diff"`                         // Acceptable differences in snapshot
+	Timeout                   string                    `yaml:"timeout"`                      // Maximum execution time as a string, e.g., "1s", "1m", "1h", or a number (seconds)
+	Valid                     []string                  `yaml:"valid"`                        // Format validations: "yaml", "json"
+	IgnoreTrailingWhitespace  bool                      `yaml:"ignore_trailing_whitespace"`  // Strip trailing whitespace before snapshot comparison
 }
 type TestCase struct {
 	Name          string            `yaml:"name"`          // Name of the test
@@ -405,6 +406,15 @@ func sanitizeTestName(name string) string {
 }
 
 // Drop any lines matched by the ignore patterns so they do not affect the comparison.
+// stripTrailingWhitespace removes trailing whitespace from each line.
+func stripTrailingWhitespace(input string) string {
+	lines := strings.Split(input, "\n")
+	for i, line := range lines {
+		lines[i] = strings.TrimRight(line, " \t")
+	}
+	return strings.Join(lines, "\n")
+}
+
 func applyIgnorePatterns(input string, patterns []string) string {
 	lines := strings.Split(input, "\n") // Split input into lines
 	var filteredLines []string          // Store lines that don't match the patterns
@@ -1292,6 +1302,12 @@ $ go test ./tests -run %q -regenerate-snapshots`, ttyPath, t.Name())
 	filteredActual := applyIgnorePatterns(combinedOutput, tc.Expect.Diff)
 	filteredExpected := applyIgnorePatterns(readSnapshot(t, ttyPath), tc.Expect.Diff)
 
+	// Strip trailing whitespace if requested.
+	if tc.Expect.IgnoreTrailingWhitespace {
+		filteredActual = stripTrailingWhitespace(filteredActual)
+		filteredExpected = stripTrailingWhitespace(filteredExpected)
+	}
+
 	if filteredExpected != filteredActual {
 		var diff string
 		if isCIEnvironment() || !term.IsTerminal(int(os.Stdout.Fd())) {
@@ -1373,6 +1389,12 @@ $ go test ./tests -run %q -regenerate-snapshots`, stdoutPath, t.Name())
 	filteredStdoutActual := applyIgnorePatterns(stdoutOutput, tc.Expect.Diff)
 	filteredStdoutExpected := applyIgnorePatterns(readSnapshot(t, stdoutPath), tc.Expect.Diff)
 
+	// Strip trailing whitespace if requested.
+	if tc.Expect.IgnoreTrailingWhitespace {
+		filteredStdoutActual = stripTrailingWhitespace(filteredStdoutActual)
+		filteredStdoutExpected = stripTrailingWhitespace(filteredStdoutExpected)
+	}
+
 	if filteredStdoutExpected != filteredStdoutActual {
 		var diff string
 		if isCIEnvironment() || !term.IsTerminal(int(os.Stdout.Fd())) {
@@ -1393,6 +1415,12 @@ $ go test -run=%q -regenerate-snapshots`, stderrPath, t.Name())
 	}
 	filteredStderrActual := applyIgnorePatterns(stderrOutput, tc.Expect.Diff)
 	filteredStderrExpected := applyIgnorePatterns(readSnapshot(t, stderrPath), tc.Expect.Diff)
+
+	// Strip trailing whitespace if requested.
+	if tc.Expect.IgnoreTrailingWhitespace {
+		filteredStderrActual = stripTrailingWhitespace(filteredStderrActual)
+		filteredStderrExpected = stripTrailingWhitespace(filteredStderrExpected)
+	}
 
 	if filteredStderrExpected != filteredStderrActual {
 		var diff string
