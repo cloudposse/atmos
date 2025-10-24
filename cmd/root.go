@@ -15,7 +15,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/charmbracelet/lipgloss"
 	"github.com/elewis787/boa"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -34,6 +33,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/telemetry"
 	"github.com/cloudposse/atmos/pkg/ui/heatmap"
+	"github.com/cloudposse/atmos/pkg/ui/theme"
 	"github.com/cloudposse/atmos/pkg/utils"
 
 	// Import built-in command packages for side-effect registration.
@@ -244,34 +244,20 @@ func setupLogger(atmosConfig *schema.AtmosConfiguration) {
 		log.SetLevel(log.WarnLevel)
 	}
 
-	// Always set up styles to ensure trace level shows as "TRCE".
-	styles := log.DefaultStyles()
-
-	// Set trace level to show "TRCE" instead of being blank/DEBU.
-	if debugStyle, ok := styles.Levels[log.DebugLevel]; ok {
-		// Copy debug style but set the string to "TRCE"
-		styles.Levels[log.TraceLevel] = debugStyle.SetString("TRCE")
-	} else {
-		// Fallback if debug style doesn't exist.
-		styles.Levels[log.TraceLevel] = lipgloss.NewStyle().SetString("TRCE")
-	}
-
-	// If colors are disabled, clear the colors but keep the level strings.
+	// Configure log styles based on theme and no-color settings
 	if !atmosConfig.Settings.Terminal.IsColorEnabled() {
-		clearedStyles := &log.Styles{}
-		clearedStyles.Levels = make(map[log.Level]lipgloss.Style)
-		for k := range styles.Levels {
-			if k == log.TraceLevel {
-				// Keep TRCE string but remove color
-				clearedStyles.Levels[k] = lipgloss.NewStyle().SetString("TRCE")
-			} else {
-				// For other levels, keep their default strings but remove color
-				clearedStyles.Levels[k] = styles.Levels[k].UnsetForeground().Bold(false)
-			}
-		}
-		log.SetStyles(clearedStyles)
+		// Use no-color styles
+		log.SetStyles(theme.GetLogStylesNoColor())
 	} else {
-		log.SetStyles(styles)
+		// Get theme-aware log styles
+		themeName := atmosConfig.Settings.Terminal.Theme
+		if themeName == "" {
+			themeName = "default"
+		}
+		colorScheme, err := theme.GetColorSchemeForTheme(themeName)
+		if err == nil && colorScheme != nil {
+			log.SetStyles(theme.GetLogStyles(colorScheme))
+		}
 	}
 	// Only set output if a log file is configured.
 	if atmosConfig.Logs.File != "" {
@@ -505,6 +491,13 @@ func Execute() error {
 	// Here we need the custom commands from the config.
 	var initErr error
 	atmosConfig, initErr = cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+
+	// Validate theme configuration if specified and config was loaded successfully
+	if initErr == nil && atmosConfig.Settings.Terminal.Theme != "" {
+		if err := theme.ValidateTheme(atmosConfig.Settings.Terminal.Theme); err != nil {
+			return fmt.Errorf("theme validation failed: %w", err)
+		}
+	}
 
 	// Set atmosConfig for version command (needs access to config).
 	version.SetAtmosConfig(&atmosConfig)

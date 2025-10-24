@@ -37,13 +37,40 @@ const (
 	pkgTypeLocal
 )
 
-var (
-	currentPkgNameStyle = theme.Styles.PackageName
-	doneStyle           = lipgloss.NewStyle().Margin(1, 2)
-	checkMark           = theme.Styles.Checkmark
-	xMark               = theme.Styles.XMark
-	grayColor           = theme.Styles.GrayText
-)
+// Style getters that use dynamic theme.
+func getCurrentPkgNameStyle() lipgloss.Style {
+	styles := theme.GetCurrentStyles()
+	if styles == nil {
+		return lipgloss.NewStyle()
+	}
+	return styles.PackageName
+}
+
+func getCheckMark() lipgloss.Style {
+	styles := theme.GetCurrentStyles()
+	if styles == nil {
+		return lipgloss.NewStyle().SetString("✓")
+	}
+	return styles.Checkmark
+}
+
+func getXMark() lipgloss.Style {
+	styles := theme.GetCurrentStyles()
+	if styles == nil {
+		return lipgloss.NewStyle().SetString("✗")
+	}
+	return styles.XMark
+}
+
+func getGrayColor() lipgloss.Style {
+	styles := theme.GetCurrentStyles()
+	if styles == nil {
+		return lipgloss.NewStyle()
+	}
+	return styles.Muted
+}
+
+var doneStyle = lipgloss.NewStyle().Margin(1, 2)
 
 type installedPkgMsg struct {
 	err  error
@@ -239,14 +266,14 @@ func (m *modelVendor) handleInstalledPkgMsg(msg *installedPkgMsg) (tea.Model, te
 	}
 	pkg := m.packages[m.index]
 
-	mark := checkMark
+	mark := getCheckMark()
 	errMsg := ""
 	if msg.err != nil {
 		errMsg = fmt.Sprintf("Failed to vendor %s: error : %s", pkg.name, msg.err)
 		if !m.isTTY {
 			log.Error(errMsg)
 		}
-		mark = xMark
+		mark = getXMark()
 		m.failedPkg++
 	}
 	version := ""
@@ -257,7 +284,7 @@ func (m *modelVendor) handleInstalledPkgMsg(msg *installedPkgMsg) (tea.Model, te
 		// Everything's been installed. We're done!
 		m.done = true
 		m.logNonNTYFinalStatus(pkg, &mark)
-		version := grayColor.Render(version)
+		version := getGrayColor().Render(version)
 		return m, tea.Sequence(
 			tea.Printf("%s %s %s %s", mark, pkg.name, version, errMsg),
 			tea.Quit,
@@ -270,7 +297,7 @@ func (m *modelVendor) handleInstalledPkgMsg(msg *installedPkgMsg) (tea.Model, te
 	// Update progress bar
 	progressCmd := m.progress.SetPercent(float64(m.index) / float64(len(m.packages)))
 
-	version = grayColor.Render(version)
+	version = getGrayColor().Render(version)
 	return m, tea.Batch(
 		progressCmd,
 		tea.Printf("%s %s %s %s", mark, pkg.name, version, errMsg),   // print message above our program
@@ -322,7 +349,7 @@ func (m *modelVendor) View() string {
 	if m.index >= len(m.packages) {
 		return ""
 	}
-	pkgName := currentPkgNameStyle.Render(m.packages[m.index].name)
+	pkgName := getCurrentPkgNameStyle().Render(m.packages[m.index].name)
 
 	info := lipgloss.NewStyle().MaxWidth(cellsAvail).Render("Pulling " + pkgName)
 

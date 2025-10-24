@@ -2,17 +2,21 @@
 
 Generate and manage Atlantis configurations that use Atmos under the hood to run Terraform workflows, bringing the power of Atmos to Atlantis for streamlined infrastructure automation.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                
 
-Usage:
+USAGE
 
-  atmos atlantis [sub-command] [flags]
+                                                                            
+                                                                            
+  atmos atlantis [sub-command] [flags]                                      
+                                                                            
+                                                                            
 
 
-Available Commands:
+AVAILABLE COMMANDS
 
   generate                       Generate Atlantis configuration files
 
 
-Flags:
+FLAGS
 
     -h, --help    help for atlantis
 
@@ -20,7 +24,7 @@ Flags:
                   native arguments and flags for the command.
 
 
-Global Flags:
+GLOBAL FLAGS
 
         --base-path string           Base path for Atmos project
 

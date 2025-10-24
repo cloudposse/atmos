@@ -146,6 +146,7 @@ var (
 
 	ErrAtmosConfigIsNil              = errors.New("atmos config is nil")
 	ErrFailedToInitializeAtmosConfig = errors.New("failed to initialize atmos config")
+	ErrThemeNotFound                 = errors.New("theme not found")
 	ErrInvalidListMergeStrategy      = errors.New("invalid list merge strategy")
 	ErrMerge                         = errors.New("merge error")
 
@@ -249,6 +250,18 @@ var (
 	ErrInvalidSpecificTerraformComponent = errors.New("invalid terraform component configuration")
 	ErrInvalidSpecificHelmfileComponent  = errors.New("invalid helmfile component configuration")
 	ErrInvalidSpecificPackerComponent    = errors.New("invalid packer component configuration")
+
+	// Command errors.
+	ErrSubcommandNotFound   = errors.New("subcommand not found")
+	ErrCommandNoSteps       = errors.New("command has no steps or subcommands configured")
+	ErrInvalidCommandConfig = errors.New("invalid command configuration")
+	ErrInvalidEnvVarConfig  = errors.New("invalid environment variable configuration")
+
+	// Terraform clean errors.
+	ErrReadingPath       = errors.New("error reading path")
+	ErrUserAborted       = errors.New("operation aborted by user")
+	ErrSymlinkNotAllowed = errors.New("refusing to delete symbolic link")
+	ErrComponentNotFound = errors.New("component not found")
 
 	// Pro API client errors.
 	ErrFailedToCreateRequest        = errors.New("failed to create request")
