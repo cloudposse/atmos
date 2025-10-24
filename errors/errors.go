@@ -457,6 +457,8 @@ var (
 	ErrAIUnsupportedComponentType   = errors.New("unsupported component type")
 	ErrAIFileAccessDeniedComponents = errors.New("access denied: file path must be within components directory")
 	ErrAIFileAccessDeniedStacks     = errors.New("access denied: file path must be within stacks directory")
+	ErrAIInvalidConfiguration       = errors.New("invalid AI configuration")
+	ErrAINotInitialized             = errors.New("AI client not initialized")
 	ErrAIFileNotFound               = errors.New("file not found")
 	ErrAIPathIsDirectory            = errors.New("path is a directory, not a file")
 	ErrAISessionManagerNotAvailable = errors.New("session manager not available")

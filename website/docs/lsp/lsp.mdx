@@ -1,0 +1,465 @@
+---
+title: Language Server Protocol (LSP)
+sidebar_label: LSP Integration
+sidebar_position: 1
+description: Integrate Language Server Protocol servers for real-time file validation in Atmos
+---
+
+import Terminal from '@site/src/components/Terminal'
+import File from '@site/src/components/File'
+
+# Language Server Protocol (LSP) Integration
+
+Atmos integrates with Language Server Protocol (LSP) servers to provide real-time validation of YAML, Terraform, and HCL files. This enables precise error detection with line numbers, warnings, and suggestions before you run commands.
+
+## What is LSP?
+
+Language Server Protocol is an industry-standard protocol created by Microsoft that powers real-time validation and autocomplete in modern code editors like VS Code, Neovim, and others. By integrating LSP servers, Atmos can:
+
+- **Detect syntax errors** before you run Terraform/Atmos commands
+- **Validate YAML structure** in stack configurations
+- **Check Terraform/HCL syntax** in component files
+- **Provide precise error locations** with line and column numbers
+- **Catch configuration issues** early in development
+
+LSP is **independent from AI** but can be used by Atmos AI when enabled.
+
+## Basic Configuration
+
+Enable LSP in your `atmos.yaml` configuration file:
+
+<File title="atmos.yaml">
+    ```yaml
+    settings:
+    lsp:
+    enabled: true # Enable LSP integration (default: false)
+
+    servers:
+    # YAML Language Server
+    yaml-ls:
+    command: "yaml-language-server"
+    args: ["--stdio"]
+    filetypes: ["yaml", "yml"]
+    root_patterns: ["atmos.yaml", ".git"]
+
+    # Terraform Language Server
+    terraform-ls:
+    command: "terraform-ls"
+    args: ["serve"]
+    filetypes: ["tf", "tfvars", "hcl"]
+    root_patterns: [".terraform", ".git"]
+    ```
+</File>
+
+## Configuration Options
+
+### LSP Settings
+
+<dl>
+    <dt>`lsp.enabled`</dt>
+    <dd>Enable LSP integration globally (default: `false`)</dd>
+
+    <dt>`lsp.servers`</dt>
+    <dd>Map of LSP server configurations. Each server handles specific file types.</dd>
+
+    <dt>`lsp.servers.
+        <name>.command`
+    </dt>
+    <dd>Command to start the LSP server (must be in PATH or absolute path)</dd>
+
+    <dt>`lsp.servers.
+        <name>.args`
+    </dt>
+    <dd>Arguments to pass to the LSP server command</dd>
+
+    <dt>`lsp.servers.
+        <name>.filetypes`
+    </dt>
+    <dd>List of file extensions this server handles (e.g., `["yaml", "yml"]`)</dd>
+
+    <dt>`lsp.servers.
+        <name>.root_patterns`
+    </dt>
+    <dd>Files/directories that identify the project root (e.g., `[".git", "atmos.yaml"]`)</dd>
+
+    <dt>`lsp.servers.
+        <name>.initialization_options`
+    </dt>
+    <dd>Server-specific initialization options (varies by LSP server)</dd>
+</dl>
+
+## Setting Up LSP Servers
+
+### YAML Language Server
+
+The YAML Language Server provides validation, autocomplete, and hover documentation for YAML files.
+
+#### Installation
+
+<Terminal title="shell">
+    ```bash
+    # Install via npm (requires Node.js)
+    npm install -g yaml-language-server
+
+    # Verify installation
+    yaml-language-server --version
+    ```
+</Terminal>
+
+#### Configuration
+
+<File title="atmos.yaml">
+    ```yaml
+    settings:
+    lsp:
+    enabled: true
+    servers:
+    yaml-ls:
+    command: "yaml-language-server"
+    args: ["--stdio"]
+    filetypes: ["yaml", "yml"]
+    root_patterns: ["atmos.yaml", ".git"]
+    initialization_options:
+    yaml:
+    # Schema validation
+    schemas:
+    # GitHub Actions workflows
+    https://json.schemastore.org/github-workflow.json: ".github/workflows/*.{yml,yaml}"
+    # Kubernetes resources
+    kubernetes: "k8s/**/*.yaml"
+    # Formatting
+    format:
+    enable: true
+    singleQuote: false
+    bracketSpacing: true
+    # Validation
+    validation: true
+    # Hover documentation
+    hover: true
+    # Completion
+    completion: true
+    ```
+</File>
+
+### Terraform Language Server
+
+The Terraform Language Server provides validation and intelligence for Terraform and HCL files.
+
+#### Installation
+
+<Terminal title="shell">
+    ```bash
+    # Install via Homebrew (macOS/Linux)
+    brew install terraform-ls
+
+    # Or download from GitHub releases
+    # https://github.com/hashicorp/terraform-ls/releases
+
+    # Verify installation
+    terraform-ls version
+    ```
+</Terminal>
+
+#### Configuration
+
+<File title="atmos.yaml">
+    ```yaml
+    settings:
+    lsp:
+    enabled: true
+    servers:
+    terraform-ls:
+    command: "terraform-ls"
+    args: ["serve"]
+    filetypes: ["tf", "tfvars", "hcl"]
+    root_patterns: [".terraform", ".git"]
+    initialization_options:
+    experimentalFeatures:
+    validateOnSave: true
+    prefillRequiredFields: true
+    terraform:
+    # Path to Terraform binary (optional)
+    path: "/usr/local/bin/terraform"
+    # Timeout for Terraform execution
+    timeout: "30s"
+    ```
+</File>
+
+## Available LSP Servers
+
+| Language Server | File Types | Installation | Purpose |
+|----------------|------------|--------------|---------|
+| **yaml-language-server** | YAML, YML | `npm install -g yaml-language-server` | YAML validation and schemas |
+| **terraform-ls** | TF, TFVARS, HCL | `brew install terraform-ls` | Terraform/HCL validation |
+| **vscode-json-languageserver** | JSON | `npm install -g vscode-json-languageserver` | JSON validation and schemas |
+
+## Using LSP with Atmos AI
+
+When LSP is configured, Atmos AI can use it for file validation via the `validate_file_lsp` tool.
+
+### Configuration
+
+<File title="atmos.yaml">
+    ```yaml
+    settings:
+    # LSP configuration (independent)
+    lsp:
+    enabled: true
+    servers:
+    yaml-ls:
+    command: "yaml-language-server"
+    args: ["--stdio"]
+    filetypes: ["yaml", "yml"]
+
+    # AI configuration
+    ai:
+    enabled: true
+    provider: "anthropic"
+    use_lsp: true # Allow AI to use LSP (default: false)
+    tools:
+    enabled: true # Enable tool execution
+    ```
+</File>
+
+### AI Validation Example
+
+<Terminal title="atmos ai chat">
+    ```bash
+    $ atmos ai chat
+
+    You: Can you validate stacks/prod/vpc.yaml?
+
+    AI: I'll validate that file using LSP...
+
+    [Tool: validate_file_lsp]
+    file_path: stacks/prod/vpc.yaml
+
+    Found 2 issue(s) in /project/stacks/prod/vpc.yaml:
+
+    ERRORS (1):
+    1. Line 15: Unknown property 'vpc_ciddr' (did you mean 'vpc_cidr'?)
+
+    WARNINGS (1):
+    1. Line 23: Property 'availability_zones' is deprecated, use 'azs' instead
+
+    The file has 1 error and 1 warning. Would you like me to explain the issues?
+    ```
+</Terminal>
+
+See [AI Configuration](/ai/configuration#language-server-protocol-lsp-integration) for more details on AI integration.
+
+## Troubleshooting
+
+### LSP Server Not Found
+
+<Terminal title="shell">
+    ```bash
+    # Check if server is in PATH
+    which yaml-language-server
+    which terraform-ls
+
+    # Test server manually
+    yaml-language-server --stdio
+    terraform-ls serve
+    ```
+</Terminal>
+
+**Solution:**
+1. Verify server is installed
+2. Ensure server command is in your PATH
+3. Use absolute path in configuration if needed:
+```yaml
+command: "/usr/local/bin/yaml-language-server"
+```
+
+### LSP Not Validating Files
+
+**Symptoms:**
+- No errors/warnings shown for invalid files
+- LSP appears to not be running
+
+**Solutions:**
+1. Verify `lsp.enabled: true` in `atmos.yaml`
+2. Check server configuration matches your file types
+3. Ensure server command is correct and in PATH
+4. Check Atmos logs for LSP initialization errors:
+```bash
+ATMOS_LOGS_LEVEL=Debug atmos <command>
+    ```
+
+    ### AI Not Using LSP
+
+    **Symptoms:**
+    - AI doesn't offer to validate files
+    - `validate_file_lsp` tool not available
+
+    **Solutions:**
+    1. Verify `ai.use_lsp: true` in `atmos.yaml`
+    2. Enable AI tools: `ai.tools.enabled: true`
+    3. Ensure `validate_file_lsp` is not in `blocked_tools` list:
+    ```yaml
+    settings:
+    ai:
+    tools:
+    enabled: true
+    blocked_tools: [] # Don't block validate_file_lsp
+    ```
+
+    ### LSP Server Crashes
+
+    **Symptoms:**
+    - Server stops responding
+    - Validation hangs or times out
+
+    **Solutions:**
+    1. Check server logs for errors
+    2. Verify `initialization_options` are correct for your server version
+    3. Test server manually:
+    ```bash
+    # YAML LS
+    yaml-language-server --stdio
+    # Type: {"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}
+
+    # Terraform LS
+    terraform-ls serve
+    ```
+    4. Try updating the LSP server to the latest version
+
+    ### File Type Not Detected
+
+    **Symptoms:**
+    - Validation doesn't run for certain files
+    - Wrong LSP server used for file
+
+    **Solutions:**
+    1. Check `filetypes` configuration matches file extension
+    2. Verify file extension is correct (e.g., `.yaml` not `.yml`)
+    3. Add multiple extensions to `filetypes`:
+    ```yaml
+    filetypes: ["yaml", "yml", "yaml.template"]
+    ```
+
+    ## Performance Considerations
+
+    LSP servers run as background processes:
+
+    - **Memory**: Each server uses 50-200MB RAM
+    - **Startup**: Servers initialize on first file validation (~1-2 seconds)
+    - **Caching**: LSP servers cache parsed files for fast subsequent validations
+
+    ### Optimization Tips
+
+    1. **Only configure needed servers**: Don't enable LSP servers for file types you don't use
+    2. **Automatic cleanup**: LSP servers shut down automatically when Atmos exits
+    3. **Disable unused features**: Use `initialization_options` to disable unused features:
+    ```yaml
+    initialization_options:
+    yaml:
+    hover: false # Disable if only validating
+    completion: false # Disable if only validating
+    ```
+
+    ### Multiple Servers
+
+    You can run multiple LSP servers simultaneously:
+
+    <File title="atmos.yaml">
+        ```yaml
+        settings:
+        lsp:
+        enabled: true
+        servers:
+        yaml-ls:
+        command: "yaml-language-server"
+        args: ["--stdio"]
+        filetypes: ["yaml", "yml"]
+
+        terraform-ls:
+        command: "terraform-ls"
+        args: ["serve"]
+        filetypes: ["tf", "tfvars"]
+
+        json-ls:
+        command: "vscode-json-languageserver"
+        args: ["--stdio"]
+        filetypes: ["json"]
+        ```
+    </File>
+
+    Each server handles its configured file types independently.
+
+    ## Security & Privacy
+
+    LSP servers run **locally on your machine**:
+
+    - ✅ No file contents are sent to external servers
+    - ✅ LSP servers only access files you explicitly validate
+    - ✅ Communication happens over stdio (standard input/output)
+    - ✅ Servers shut down when Atmos exits
+    - ✅ All validation happens offline
+
+    **Best Practices:**
+    1. Only install LSP servers from trusted sources
+    2. Keep LSP servers updated to latest versions
+    3. Review `initialization_options` for security-sensitive settings
+    4. Use official LSP servers from language maintainers when available
+
+    ## Example Workflows
+
+    ### Workflow 1: Validate Before Terraform Plan
+
+    <Terminal title="shell">
+        ```bash
+        # Configure LSP for Terraform
+        # atmos.yaml has terraform-ls configured
+
+        # Let AI validate files before planning
+        atmos ai chat
+        # "Validate components/terraform/vpc/main.tf before I run terraform plan"
+
+        # AI uses LSP to check for errors
+        # Fix any issues found
+        # Then run terraform plan with confidence
+        atmos terraform plan vpc -s prod-use1
+        ```
+    </Terminal>
+
+    ### Workflow 2: Validate Stack YAML
+
+    <Terminal title="shell">
+        ```bash
+        # Configure LSP for YAML
+        # atmos.yaml has yaml-ls configured
+
+        # Validate stack configuration
+        atmos ai chat
+        # "Check stacks/prod/network.yaml for errors"
+
+        # AI reports any YAML syntax or schema issues
+        # Fix errors and re-validate
+        # Then use the stack
+        atmos terraform plan vpc -s prod-network
+        ```
+    </Terminal>
+
+    ### Workflow 3: Continuous Validation
+
+    <Terminal title="shell">
+        ```bash
+        # Add LSP configuration to atmos.yaml
+        # Enable AI use_lsp
+        # Configure pre-commit hooks to validate YAML/TF files
+
+        # During development:
+        # 1. Edit stack/component files
+        # 2. Ask AI: "Validate my changes"
+        # 3. Fix issues immediately
+        # 4. Commit with confidence
+        ```
+    </Terminal>
+
+    ## Next Steps
+
+    - [AI Configuration](/ai/configuration) - Configure AI to use LSP
+    - [AI Tools](/ai/tools) - Learn about AI tool execution
+    - [Troubleshooting](/ai/troubleshooting) - Common LSP issues

@@ -194,6 +194,60 @@ Allow execution? (y/N): y
 
 ---
 
+#### `validate_file_lsp`
+
+Validates a YAML, Terraform, or HCL file using Language Server Protocol for real-time diagnostics and error detection.
+
+:::info Prerequisites
+This tool requires [LSP to be configured](/lsp/lsp) in your `atmos.yaml` and `ai.use_lsp: true`.
+:::
+
+**Parameters:**
+- `file_path` (string, required) - Absolute or relative path to the file to validate (e.g., 'stacks/prod/vpc.yaml', 'components/terraform/vpc/main.tf')
+
+**Example Usage:**
+
+<Terminal title="atmos ai chat">
+```bash
+You: "Validate stacks/prod/vpc.yaml"
+
+AI: I'll validate that file using LSP.
+
+🔧 Tool Execution Request
+Tool: validate_file_lsp
+Description: Validate a YAML, Terraform, or HCL file using Language Server Protocol
+
+Parameters:
+  file_path: stacks/prod/vpc.yaml
+
+Allow execution? (y/N): y
+
+✅ Executing tool...
+
+Found 2 issue(s) in /project/stacks/prod/vpc.yaml:
+
+ERRORS (1):
+1. Line 15: Unknown property 'vpc_ciddr' (did you mean 'vpc_cidr'?)
+
+WARNINGS (1):
+1. Line 23: Property 'availability_zones' is deprecated, use 'azs' instead
+
+The file has 1 error and 1 warning. The error on line 15 is a typo in the property name - it should be 'vpc_cidr' not 'vpc_ciddr'. Would you like me to help fix these issues?
+```
+</Terminal>
+
+**Permissions:** Read-only, no confirmation required by default
+
+**Benefits:**
+- **Precise error locations** with line and column numbers
+- **Real-time validation** before running Terraform/Atmos commands
+- **Syntax and schema checks** for YAML, Terraform, and HCL
+- **Early error detection** catches issues during development
+
+**Learn more:** [LSP Integration](/lsp/lsp)
+
+---
+
 #### `read_component_file`
 
 Reads a file from the components directory (Terraform, Helmfile, or Packer).

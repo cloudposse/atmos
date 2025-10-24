@@ -270,6 +270,8 @@ type AtmosSettings struct {
 	Telemetry TelemetrySettings `yaml:"telemetry,omitempty" json:"telemetry,omitempty" mapstructure:"telemetry"`
 	// AI settings
 	AI AISettings `yaml:"ai,omitempty" json:"ai,omitempty" mapstructure:"ai"`
+	// LSP settings
+	LSP LSPSettings `yaml:"lsp,omitempty" json:"lsp,omitempty" mapstructure:"lsp"`
 }
 
 // AISettings contains configuration for AI assistant.
@@ -288,6 +290,7 @@ type AISettings struct {
 	Sessions        AISessionSettings `yaml:"sessions,omitempty" json:"sessions,omitempty" mapstructure:"sessions"`
 	Tools           AIToolSettings    `yaml:"tools,omitempty" json:"tools,omitempty" mapstructure:"tools"`
 	Memory          AIMemorySettings  `yaml:"memory,omitempty" json:"memory,omitempty" mapstructure:"memory"`
+	UseLSP          bool              `yaml:"use_lsp,omitempty" json:"use_lsp,omitempty" mapstructure:"use_lsp"` // Enable LSP integration for diagnostics
 }
 
 // AISessionSettings contains session management configuration.
@@ -317,6 +320,21 @@ type AIMemorySettings struct {
 	AutoUpdate   bool     `yaml:"auto_update,omitempty" json:"auto_update,omitempty" mapstructure:"auto_update"`
 	CreateIfMiss bool     `yaml:"create_if_missing,omitempty" json:"create_if_missing,omitempty" mapstructure:"create_if_missing"`
 	Sections     []string `yaml:"sections,omitempty" json:"sections,omitempty" mapstructure:"sections"` // Sections to include in context
+}
+
+// LSPSettings contains configuration for Language Server Protocol integration.
+type LSPSettings struct {
+	Enabled bool                  `yaml:"enabled,omitempty" json:"enabled,omitempty" mapstructure:"enabled"`
+	Servers map[string]*LSPServer `yaml:"servers,omitempty" json:"servers,omitempty" mapstructure:"servers"`
+}
+
+// LSPServer contains configuration for a single LSP server.
+type LSPServer struct {
+	Command               string                 `yaml:"command,omitempty" json:"command,omitempty" mapstructure:"command"`                                              // Command to run (e.g., "yaml-language-server")
+	Args                  []string               `yaml:"args,omitempty" json:"args,omitempty" mapstructure:"args"`                                                       // Command arguments (e.g., ["--stdio"])
+	FileTypes             []string               `yaml:"filetypes,omitempty" json:"filetypes,omitempty" mapstructure:"filetypes"`                                        // Supported file types (e.g., ["yaml", "yml"])
+	RootPatterns          []string               `yaml:"root_patterns,omitempty" json:"root_patterns,omitempty" mapstructure:"root_patterns"`                            // Workspace root patterns (e.g., ["atmos.yaml", ".git"])
+	InitializationOptions map[string]interface{} `yaml:"initialization_options,omitempty" json:"initialization_options,omitempty" mapstructure:"initialization_options"` // Custom initialization options
 }
 
 // TelemetrySettings contains configuration for telemetry collection.

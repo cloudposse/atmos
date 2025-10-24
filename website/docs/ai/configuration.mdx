@@ -408,6 +408,64 @@ tools:
 
 Tools have a default timeout of 30 seconds. Long-running operations will be cancelled automatically to prevent hanging.
 
+## Language Server Protocol (LSP) Integration
+
+Atmos AI can integrate with Language Server Protocol (LSP) servers to validate YAML, Terraform, and HCL files with precise error diagnostics.
+
+:::info
+LSP is an independent Atmos feature that can optionally be used by AI. For comprehensive LSP documentation, see [LSP Integration](/lsp/lsp).
+:::
+
+### Quick Setup
+
+<File title="atmos.yaml">
+```yaml
+settings:
+  # Configure LSP (independent feature)
+  lsp:
+    enabled: true
+    servers:
+      yaml-ls:
+        command: "yaml-language-server"
+        args: ["--stdio"]
+        filetypes: ["yaml", "yml"]
+
+  # Enable AI to use LSP
+  ai:
+    enabled: true
+    provider: "anthropic"
+    use_lsp: true                      # Allow AI to use LSP (default: false)
+    tools:
+      enabled: true                    # Required for AI to use tools
+```
+</File>
+
+### AI LSP Tool
+
+When enabled, AI can use the `validate_file_lsp` tool to validate files:
+
+<Terminal title="atmos ai chat">
+```bash
+$ atmos ai chat
+
+You: Validate stacks/prod/vpc.yaml
+
+AI: [Uses validate_file_lsp tool]
+
+Found 2 issue(s):
+ERRORS (1):
+1. Line 15: Unknown property 'vpc_ciddr'
+
+WARNINGS (1):
+1. Line 23: Deprecated property 'availability_zones'
+```
+</Terminal>
+
+**Learn more:**
+- [LSP Integration](/lsp/lsp) - Complete LSP documentation
+- [LSP Configuration](/lsp/lsp#configuration-options) - Server setup
+- [LSP Troubleshooting](/lsp/lsp#troubleshooting) - Common issues
+
 ## Project Memory
 
 Atmos AI can remember project-specific context, patterns, and conventions using a persistent memory file (`ATMOS.md`). This allows the AI to provide consistent, context-aware responses without you having to repeatedly explain your project setup.

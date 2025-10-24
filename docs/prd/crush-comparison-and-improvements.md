@@ -17,7 +17,7 @@ Crush is a **full-featured AI coding agent** focused on general-purpose software
 - ✅ **Project Memory** - COMPLETE (ATMOS.md with auto-update)
 - ✅ **MCP Support** - COMPLETE (stdio/HTTP transports for Claude Desktop/VSCode)
 - ✅ **Enhanced TUI** - COMPLETE (markdown rendering, syntax highlighting, history navigation)
-- ❌ **LSP Integration** - PENDING (high priority - next major feature)
+- ✅ **LSP Integration** - COMPLETE (YAML/Terraform validation with diagnostics)
 
 **Key Achievement:** Atmos AI has successfully adopted Crush's productivity patterns (sessions, tools, memory) while maintaining its domain-specific intelligence advantage.
 
@@ -34,7 +34,7 @@ Crush is a **full-featured AI coding agent** focused on general-purpose software
 | **Permission System** | ✅ Granular + YOLO | ⚠️ Basic | ✅ **Granular allowlists** | ✅ COMPLETE |
 | **Project Memory** | ✅ CRUSH.md | ❌ None | ✅ **ATMOS.md** | ✅ COMPLETE |
 | **MCP Support** | ✅ stdio/HTTP/SSE | ❌ None | ✅ **stdio/HTTP** | ✅ COMPLETE |
-| **LSP Integration** | ✅ Multi-language | ❌ None | ❌ **Pending** | 🟡 HIGH |
+| **LSP Integration** | ✅ Multi-language | ❌ None | ✅ **YAML/Terraform** | ✅ COMPLETE |
 | **Interactive Chat** | ✅ Full TUI | ✅ Basic | ✅ **Enhanced TUI** | ✅ COMPLETE |
 | **Syntax Highlighting** | ✅ Yes | ❌ No | ✅ **Glamour + Chroma** | ✅ COMPLETE |
 | **History Navigation** | ✅ Yes | ❌ No | ✅ **Bash-style ↑/↓** | ✅ COMPLETE |
@@ -639,7 +639,26 @@ See documentation: `website/docs/ai/mcp-server.mdx`
 
 ---
 
-#### 5. ❌ LSP Integration - **PENDING**
+#### 5. ✅ LSP Integration - **COMPLETE**
+
+**✅ Implemented in Atmos:**
+- ✅ JSON-RPC 2.0 communication over stdin/stdout
+- ✅ Real-time diagnostics with precise line/column numbers
+- ✅ Multi-server management (YAML, Terraform, HCL)
+- ✅ Diagnostic formatting for AI consumption
+- ✅ AI tool integration (`validate_file_lsp`)
+- ✅ Comprehensive test coverage (diagnostics, manager, tool)
+- ✅ Complete documentation (website + PRD)
+
+**Implementation Files:**
+- `pkg/lsp/protocol.go` - LSP protocol types (Position, Range, Diagnostic, etc.)
+- `pkg/lsp/client.go` - LSP client with JSON-RPC communication
+- `pkg/lsp/manager.go` - Multi-server management with file type routing
+- `pkg/lsp/diagnostics.go` - Diagnostic formatting (AI-optimized, detailed, compact)
+- `pkg/ai/tools/atmos/validate_file_lsp.go` - AI validation tool
+- `pkg/lsp/diagnostics_test.go` - Diagnostic formatter tests
+- `pkg/lsp/manager_test.go` - Manager tests
+- `pkg/ai/tools/atmos/validate_file_lsp_test.go` - Tool tests
 
 **What Crush Has:**
 - Spawns LSP servers (gopls, rust-analyzer, pyright, typescript-language-server)
@@ -657,41 +676,60 @@ See documentation: `website/docs/ai/mcp-server.mdx`
 
 **Use Cases:**
 ```bash
-User: "Check my VPC stack configuration for errors"
-AI: *Uses yaml-language-server to validate stacks/vpc-dev.yaml*
-AI: "Found 3 issues:
-1. Line 23: Unknown property 'vpc_cidr' (did you mean 'cidr_block'?)
-2. Line 45: Invalid CIDR format
-3. Line 67: Required property 'availability_zones' missing"
+User: "Validate stacks/prod/vpc.yaml"
+AI: *Uses validate_file_lsp tool with yaml-language-server*
+AI: "Found 2 issue(s) in /project/stacks/prod/vpc.yaml:
+
+ERRORS (1):
+1. Line 15: Unknown property 'vpc_ciddr' (did you mean 'vpc_cidr'?)
+
+WARNINGS (1):
+1. Line 23: Property 'availability_zones' is deprecated, use 'azs' instead
+
+The file has 1 error and 1 warning. Would you like me to help fix these issues?"
 ```
 
 **Configuration:**
 ```yaml
 settings:
-  ai:
-    lsp:
-      enabled: true
-      servers:
-        yaml:
-          command: yaml-language-server
-          args: ["--stdio"]
-          filetypes: ["yaml", "yml"]
-          initialization_options:
+  # LSP is independent from AI
+  lsp:
+    enabled: true
+    servers:
+      yaml-ls:
+        command: "yaml-language-server"
+        args: ["--stdio"]
+        filetypes: ["yaml", "yml"]
+        root_patterns: ["atmos.yaml", ".git"]
+        initialization_options:
+          yaml:
             schemas:
-              - uri: "file:///path/to/atmos-schema.json"
-                fileMatch: ["stacks/**/*.yaml"]
+              https://json.schemastore.org/github-workflow.json: ".github/workflows/*.{yml,yaml}"
+            format:
+              enable: true
+            validation: true
 
-        terraform:
-          command: terraform-ls
-          args: ["serve"]
-          filetypes: ["tf", "tfvars"]
-          root_patterns: [".terraform", "main.tf"]
+      terraform-ls:
+        command: "terraform-ls"
+        args: ["serve"]
+        filetypes: ["tf", "tfvars", "hcl"]
+        root_patterns: [".terraform", ".git"]
+        initialization_options:
+          experimentalFeatures:
+            validateOnSave: true
+
+  # AI can use LSP for validation
+  ai:
+    enabled: true
+    use_lsp: true  # Enable LSP tool for AI
+    tools:
+      enabled: true
 ```
 
-**Implementation:**
-- `pkg/ai/lsp/client.go` - LSP client wrapper
-- `pkg/ai/lsp/manager.go` - Multi-server management
-- `pkg/ai/lsp/diagnostics.go` - Diagnostic processing
+**Supported LSP Servers:**
+- `yaml-language-server` - YAML/YML validation with JSON Schema support
+- `terraform-ls` - Terraform/HCL validation and intelligence
+- Extensible architecture supports any LSP server
 
 ---
 
@@ -1479,6 +1517,15 @@ Not a direct clone of Crush, but an infrastructure-focused AI assistant that:
 - **2025-10-23 (v2.1):** Ollama Support Implementation
   - ✅ Marked Ollama/LLAMA Support as COMPLETE
   - 📝 Updated AI Providers count from 4 to 5
+- **2025-10-23 (v2.2):** LSP Integration Implementation
+  - ✅ Marked LSP Integration as COMPLETE
+  - ✅ Implemented JSON-RPC 2.0 LSP client with multi-server management
+  - ✅ Added diagnostic formatting (AI-optimized, detailed, compact)
+  - ✅ Created `validate_file_lsp` AI tool
+  - ✅ Added comprehensive test coverage (diagnostics, manager, tool)
+  - ✅ Created complete documentation in website/docs/lsp/
+  - 📝 Updated feature comparison matrix to show LSP as COMPLETE
+  - 📝 Added implementation file references for LSP components
   - 📝 Added implementation files and test coverage details
   - 📝 Added website documentation reference
   - 📝 Noted strategic value for privacy-focused and offline use cases

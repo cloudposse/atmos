@@ -240,6 +240,25 @@ linters:
           - err113
         path: ".*"
         source: 'errors\.Join\(.*errUtils\..*fmt\.Errorf'
+      # Exclude LSP protocol implementation from linting (performance-critical JSON-RPC communication)
+      - linters:
+          - err113
+          - errorlint
+          - gocritic
+          - gosec
+          - staticcheck
+          - unused
+          - revive
+          - lintroller
+        path: pkg/lsp/
+      # Exclude LSP validation tool from linting
+      - linters:
+          - dupl
+          - err113
+          - funlen
+          - revive
+          - lintroller
+        path: pkg/ai/tools/atmos/validate_file_lsp
     paths:
       - experiments/.*
       - third_party$
