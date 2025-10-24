@@ -150,8 +150,18 @@ var (
 	ErrMerge                         = errors.New("merge error")
 
 	// Stack processing errors.
-	ErrInvalidStackManifest                   = errors.New("invalid stack manifest")
-	ErrInvalidHooksSection                    = errors.New("invalid 'hooks' section in the file")
+	ErrInvalidStackManifest = errors.New("invalid stack manifest")
+	ErrInvalidHooksSection  = errors.New("invalid 'hooks' section in the file")
+
+	// Init and scaffold errors.
+	ErrScaffoldNotFound                       = errors.New("scaffold template not found")
+	ErrScaffoldValidation                     = errors.New("scaffold validation failed")
+	ErrScaffoldGeneration                     = errors.New("scaffold generation failed")
+	ErrInitialization                         = errors.New("initialization failed")
+	ErrTemplateProcessing                     = errors.New("template processing failed")
+	ErrInvalidScaffoldConfig                  = errors.New("invalid scaffold configuration")
+	ErrTargetDirectoryExists                  = errors.New("target directory already exists")
+	ErrTargetDirectoryNotEmpty                = errors.New("target directory is not empty")
 	ErrInvalidTerraformHooksSection           = errors.New("invalid 'terraform.hooks' section in the file")
 	ErrInvalidComponentVars                   = errors.New("invalid component vars section")
 	ErrInvalidComponentSettings               = errors.New("invalid component settings section")
