@@ -61,17 +61,17 @@ var (
 var logger *log.AtmosLogger
 
 type Expectation struct {
-	Stdout                    []MatchPattern            `yaml:"stdout"`                       // Expected stdout output (non-TTY mode)
-	Stderr                    []MatchPattern            `yaml:"stderr"`                       // Expected stderr output (non-TTY mode)
-	Tty                       []MatchPattern            `yaml:"tty"`                          // Expected TTY output (TTY mode - combined stdout+stderr)
-	ExitCode                  int                       `yaml:"exit_code"`                    // Expected exit code
-	FileExists                []string                  `yaml:"file_exists"`                  // Files to validate
-	FileNotExists             []string                  `yaml:"file_not_exists"`              // Files that should not exist
-	FileContains              map[string][]MatchPattern `yaml:"file_contains"`                // File contents to validate (file to patterns map)
-	Diff                      []string                  `yaml:"diff"`                         // Acceptable differences in snapshot
-	Timeout                   string                    `yaml:"timeout"`                      // Maximum execution time as a string, e.g., "1s", "1m", "1h", or a number (seconds)
-	Valid                     []string                  `yaml:"valid"`                        // Format validations: "yaml", "json"
-	IgnoreTrailingWhitespace  bool                      `yaml:"ignore_trailing_whitespace"`  // Strip trailing whitespace before snapshot comparison
+	Stdout                   []MatchPattern            `yaml:"stdout"`                     // Expected stdout output (non-TTY mode)
+	Stderr                   []MatchPattern            `yaml:"stderr"`                     // Expected stderr output (non-TTY mode)
+	Tty                      []MatchPattern            `yaml:"tty"`                        // Expected TTY output (TTY mode - combined stdout+stderr)
+	ExitCode                 int                       `yaml:"exit_code"`                  // Expected exit code
+	FileExists               []string                  `yaml:"file_exists"`                // Files to validate
+	FileNotExists            []string                  `yaml:"file_not_exists"`            // Files that should not exist
+	FileContains             map[string][]MatchPattern `yaml:"file_contains"`              // File contents to validate (file to patterns map)
+	Diff                     []string                  `yaml:"diff"`                       // Acceptable differences in snapshot
+	Timeout                  string                    `yaml:"timeout"`                    // Maximum execution time as a string, e.g., "1s", "1m", "1h", or a number (seconds)
+	Valid                    []string                  `yaml:"valid"`                      // Format validations: "yaml", "json"
+	IgnoreTrailingWhitespace bool                      `yaml:"ignore_trailing_whitespace"` // Strip trailing whitespace before snapshot comparison
 }
 type TestCase struct {
 	Name          string            `yaml:"name"`          // Name of the test
