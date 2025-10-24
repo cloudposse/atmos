@@ -60,6 +60,14 @@ func (m *ChatModel) handleKeyMsg(msg tea.KeyMsg) tea.Cmd {
 		}
 		// Don't send empty messages, but don't pass Enter to textarea either.
 		return func() tea.Msg { return nil }
+	case "up":
+		// Navigate to previous message in history.
+		m.navigateHistoryUp()
+		return func() tea.Msg { return nil }
+	case "down":
+		// Navigate to next message in history.
+		m.navigateHistoryDown()
+		return func() tea.Msg { return nil }
 	}
 
 	// Return nil to allow textarea to handle the key.
@@ -241,5 +249,43 @@ func (m *ChatModel) switchSession(sess *session.Session) tea.Cmd {
 			session:  sess,
 			messages: messages,
 		}
+	}
+}
+
+// navigateHistoryUp navigates to the previous message in history.
+func (m *ChatModel) navigateHistoryUp() {
+	if len(m.messageHistory) == 0 {
+		return
+	}
+
+	// First time navigating: save current input
+	if m.historyIndex == -1 {
+		m.historyBuffer = m.textarea.Value()
+		m.historyIndex = len(m.messageHistory)
+	}
+
+	// Navigate backwards in history
+	if m.historyIndex > 0 {
+		m.historyIndex--
+		m.textarea.SetValue(m.messageHistory[m.historyIndex])
+	}
+}
+
+// navigateHistoryDown navigates to the next message in history.
+func (m *ChatModel) navigateHistoryDown() {
+	if len(m.messageHistory) == 0 || m.historyIndex == -1 {
+		return
+	}
+
+	// Navigate forwards in history
+	m.historyIndex++
+
+	if m.historyIndex >= len(m.messageHistory) {
+		// Reached the end: restore original input
+		m.textarea.SetValue(m.historyBuffer)
+		m.historyIndex = -1
+		m.historyBuffer = ""
+	} else {
+		m.textarea.SetValue(m.messageHistory[m.historyIndex])
 	}
 }

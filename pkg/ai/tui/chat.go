@@ -69,6 +69,9 @@ type ChatModel struct {
 	renameSessionID      string          // ID of session to rename
 	renameInput          textinput.Model // Text input for new session name
 	sessionFilter        string          // Current provider filter ("all", "anthropic", "openai", "gemini", "grok")
+	messageHistory       []string        // History of user messages for navigation
+	historyIndex         int             // Current position in history (-1 = not navigating)
+	historyBuffer        string          // Temporary buffer for current input when navigating
 }
 
 // ChatMessage represents a single message in the chat.
@@ -115,6 +118,8 @@ func NewChatModel(client ai.Client, manager *session.Manager, sess *session.Sess
 		availableSessions:    make([]*session.Session, 0),
 		selectedSessionIndex: 0,
 		createForm:           newCreateSessionForm(),
+		messageHistory:       make([]string, 0),
+		historyIndex:         -1,
 	}
 
 	// Load existing messages from session if available.
@@ -139,13 +144,17 @@ func (m *ChatModel) loadSessionMessages() error {
 		return fmt.Errorf("failed to get session messages: %w", err)
 	}
 
-	// Convert session messages to chat messages.
+	// Convert session messages to chat messages and populate history.
 	for _, msg := range sessionMessages {
 		m.messages = append(m.messages, ChatMessage{
 			Role:    msg.Role,
 			Content: msg.Content,
 			Time:    msg.CreatedAt,
 		})
+		// Add user messages to history for navigation
+		if msg.Role == roleUser {
+			m.messageHistory = append(m.messageHistory, msg.Content)
+		}
 	}
 
 	return nil
@@ -267,6 +276,10 @@ func (m *ChatModel) handleKeyMessage(msg tea.KeyMsg) (bool, tea.Cmd) {
 // handleSendMessage handles user message sending.
 func (m *ChatModel) handleSendMessage(msg sendMessageMsg) (bool, tea.Cmd) {
 	m.addMessage(roleUser, string(msg))
+	// Add to message history for navigation
+	m.messageHistory = append(m.messageHistory, string(msg))
+	m.historyIndex = -1 // Reset history navigation
+	m.historyBuffer = "" // Clear history buffer
 	m.textarea.Reset()
 	m.isLoading = true
 	m.updateViewportContent()

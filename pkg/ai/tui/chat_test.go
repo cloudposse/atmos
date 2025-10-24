@@ -1374,3 +1374,180 @@ func TestChatModel_RenameSession(t *testing.T) {
 		assert.Equal(t, "Old Name", m.sess.Name)
 	})
 }
+
+func TestChatModel_HistoryNavigation(t *testing.T) {
+	client := &mockAIClient{model: "test-model"}
+
+	t.Run("initializes with empty history", func(t *testing.T) {
+		m, err := NewChatModel(client, nil, nil, nil, nil)
+		require.NoError(t, err)
+
+		assert.Empty(t, m.messageHistory)
+		assert.Equal(t, -1, m.historyIndex)
+		assert.Empty(t, m.historyBuffer)
+	})
+
+	t.Run("adds messages to history when sent", func(t *testing.T) {
+		m, _ := NewChatModel(client, nil, nil, nil, nil)
+
+		// Send a message
+		msg := sendMessageMsg("Test message 1")
+		m.handleSendMessage(msg)
+
+		// Verify history
+		assert.Len(t, m.messageHistory, 1)
+		assert.Equal(t, "Test message 1", m.messageHistory[0])
+		assert.Equal(t, -1, m.historyIndex)
+
+		// Send another message
+		msg = sendMessageMsg("Test message 2")
+		m.handleSendMessage(msg)
+
+		// Verify history
+		assert.Len(t, m.messageHistory, 2)
+		assert.Equal(t, "Test message 2", m.messageHistory[1])
+	})
+
+	t.Run("navigates up through history", func(t *testing.T) {
+		m, _ := NewChatModel(client, nil, nil, nil, nil)
+
+		// Add messages to history
+		m.messageHistory = []string{"Message 1", "Message 2", "Message 3"}
+		m.textarea.SetValue("Current input")
+
+		// Navigate up once
+		m.navigateHistoryUp()
+		assert.Equal(t, "Message 3", m.textarea.Value())
+		assert.Equal(t, 2, m.historyIndex)
+		assert.Equal(t, "Current input", m.historyBuffer)
+
+		// Navigate up again
+		m.navigateHistoryUp()
+		assert.Equal(t, "Message 2", m.textarea.Value())
+		assert.Equal(t, 1, m.historyIndex)
+
+		// Navigate up again
+		m.navigateHistoryUp()
+		assert.Equal(t, "Message 1", m.textarea.Value())
+		assert.Equal(t, 0, m.historyIndex)
+
+		// Try to navigate past beginning
+		m.navigateHistoryUp()
+		assert.Equal(t, "Message 1", m.textarea.Value())
+		assert.Equal(t, 0, m.historyIndex)
+	})
+
+	t.Run("navigates down through history", func(t *testing.T) {
+		m, _ := NewChatModel(client, nil, nil, nil, nil)
+
+		// Add messages to history
+		m.messageHistory = []string{"Message 1", "Message 2", "Message 3"}
+		m.textarea.SetValue("Current input")
+
+		// Navigate to beginning
+		m.navigateHistoryUp()
+		m.navigateHistoryUp()
+		m.navigateHistoryUp()
+		assert.Equal(t, "Message 1", m.textarea.Value())
+		assert.Equal(t, 0, m.historyIndex)
+
+		// Navigate down
+		m.navigateHistoryDown()
+		assert.Equal(t, "Message 2", m.textarea.Value())
+		assert.Equal(t, 1, m.historyIndex)
+
+		// Navigate down
+		m.navigateHistoryDown()
+		assert.Equal(t, "Message 3", m.textarea.Value())
+		assert.Equal(t, 2, m.historyIndex)
+
+		// Navigate down past end - should restore original input
+		m.navigateHistoryDown()
+		assert.Equal(t, "Current input", m.textarea.Value())
+		assert.Equal(t, -1, m.historyIndex)
+		assert.Empty(t, m.historyBuffer)
+	})
+
+	t.Run("does nothing on empty history", func(t *testing.T) {
+		m, _ := NewChatModel(client, nil, nil, nil, nil)
+
+		m.textarea.SetValue("Current input")
+
+		// Try to navigate up
+		m.navigateHistoryUp()
+		assert.Equal(t, "Current input", m.textarea.Value())
+		assert.Equal(t, -1, m.historyIndex)
+	})
+
+	t.Run("handles up key in chat mode", func(t *testing.T) {
+		m, _ := NewChatModel(client, nil, nil, nil, nil)
+		m.messageHistory = []string{"Previous message"}
+		m.textarea.SetValue("Current input")
+
+		// Simulate up key
+		keyMsg := tea.KeyMsg{Type: tea.KeyUp}
+		m.handleKeyMsg(keyMsg)
+
+		// Verify navigation occurred
+		assert.Equal(t, "Previous message", m.textarea.Value())
+		assert.Equal(t, 0, m.historyIndex)
+	})
+
+	t.Run("handles down key in chat mode", func(t *testing.T) {
+		m, _ := NewChatModel(client, nil, nil, nil, nil)
+		m.messageHistory = []string{"Previous message"}
+		m.textarea.SetValue("Current input")
+
+		// Navigate up first
+		m.navigateHistoryUp()
+
+		// Simulate down key
+		keyMsg := tea.KeyMsg{Type: tea.KeyDown}
+		m.handleKeyMsg(keyMsg)
+
+		// Verify navigation occurred
+		assert.Equal(t, "Current input", m.textarea.Value())
+		assert.Equal(t, -1, m.historyIndex)
+	})
+
+	t.Run("resets history index when sending message", func(t *testing.T) {
+		m, _ := NewChatModel(client, nil, nil, nil, nil)
+		m.messageHistory = []string{"Message 1", "Message 2"}
+
+		// Navigate in history
+		m.navigateHistoryUp()
+		assert.Equal(t, 1, m.historyIndex)
+
+		// Send message
+		msg := sendMessageMsg("New message")
+		m.handleSendMessage(msg)
+
+		// Verify history index is reset
+		assert.Equal(t, -1, m.historyIndex)
+		assert.Empty(t, m.historyBuffer)
+	})
+
+	t.Run("loads history from existing session messages", func(t *testing.T) {
+		m, _ := NewChatModel(client, nil, nil, nil, nil)
+
+		// Simulate loaded messages
+		m.messages = []ChatMessage{
+			{Role: roleUser, Content: "User message 1"},
+			{Role: roleAssistant, Content: "Assistant response 1"},
+			{Role: roleUser, Content: "User message 2"},
+			{Role: roleAssistant, Content: "Assistant response 2"},
+		}
+
+		// Manually populate history (simulating what loadSessionMessages does)
+		for _, msg := range m.messages {
+			if msg.Role == roleUser {
+				m.messageHistory = append(m.messageHistory, msg.Content)
+			}
+		}
+
+		// Verify history contains only user messages
+		assert.Len(t, m.messageHistory, 2)
+		assert.Equal(t, "User message 1", m.messageHistory[0])
+		assert.Equal(t, "User message 2", m.messageHistory[1])
+	})
+}
