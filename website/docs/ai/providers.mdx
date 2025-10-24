@@ -24,6 +24,28 @@ Atmos supports 7 AI providers, giving you flexibility to choose based on your ne
 | **AWS Bedrock** | `anthropic.claude-3-5-sonnet-20241022-v2:0` | AWS Credentials | Enterprise security, AWS integration |
 | **Azure OpenAI** | `gpt-4o` | API Key / Azure AD | Enterprise compliance, Azure integration |
 
+## Feature Comparison
+
+Choose the right provider based on your requirements:
+
+| Feature | Cloud Providers<br/>(Claude, GPT, Gemini, Grok) | Ollama<br/>(Local) | Enterprise<br/>(Bedrock, Azure) |
+|---------|------------------------------------------|-------------------|------------------------------|
+| **Authentication** | API Key | None | AWS/Azure Credentials |
+| **Internet Required** | ✅ Yes | ❌ No | ✅ Yes |
+| **Cost** | Per-token pricing | Free | Per-token + cloud costs |
+| **Data Privacy** | Sent to provider | 100% local | Stays in your cloud |
+| **Rate Limits** | Yes | No | Yes (configurable) |
+| **Setup Complexity** | Easy | Medium | Complex |
+| **Offline Capable** | ❌ No | ✅ Yes | ❌ No |
+| **Compliance Certs** | Provider-dependent | N/A | SOC2, HIPAA, ISO |
+| **Private Network** | ❌ No | ✅ Yes | ✅ Yes (VPC/VNet) |
+| **Hardware Requirements** | None | 8-64GB+ RAM | None (cloud) |
+
+**Use Cases:**
+- **Cloud Providers**: Best for most users, easy setup, pay-as-you-go
+- **Ollama**: Ideal for sensitive data, offline work, unlimited queries
+- **Enterprise**: Required for compliance, data residency, private networks
+
 ## Quick Configuration
 
 <File title="atmos.yaml">

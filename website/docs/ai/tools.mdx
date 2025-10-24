@@ -29,7 +29,11 @@ Enable tool execution in your `atmos.yaml`:
 settings:
   ai:
     enabled: true
-    provider: "anthropic"
+    default_provider: "anthropic"
+    providers:
+      anthropic:
+        model: "claude-3-5-sonnet-20241022"
+        api_key_env: "ANTHROPIC_API_KEY"
 
     tools:
       enabled: true                        # Enable tool execution

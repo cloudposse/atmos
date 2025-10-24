@@ -29,7 +29,11 @@ Enable sessions in your `atmos.yaml`:
 settings:
   ai:
     enabled: true
-    provider: "anthropic"
+    default_provider: "anthropic"
+    providers:
+      anthropic:
+        model: "claude-3-5-sonnet-20241022"
+        api_key_env: "ANTHROPIC_API_KEY"
 
     sessions:
       enabled: true                    # Enable persistent sessions
@@ -125,7 +129,7 @@ Ctrl+N
 
 The create session form allows you to:
 - **Enter a custom session name** - Descriptive names help organize conversations
-- **Select an AI provider** - Choose between Anthropic, OpenAI, Gemini, or Grok
+- **Select an AI provider** - Choose from 7 providers: cloud (Anthropic, OpenAI, Gemini, Grok), local (Ollama), or enterprise (Bedrock, Azure)
 - **Pick the default model** - Each provider has its default model pre-selected
 
 **Create Session Form Controls:**
@@ -135,10 +139,13 @@ The create session form allows you to:
 - `Esc` - Cancel and return to previous view
 
 **Available Providers:**
-- **Anthropic (Claude)** - `claude-3-5-sonnet-20241022`
-- **OpenAI (GPT)** - `gpt-4o`
-- **Google (Gemini)** - `gemini-2.0-flash-exp`
-- **xAI (Grok)** - `grok-beta`
+- **Anthropic (Claude)** - `claude-3-5-sonnet-20241022` - Cloud provider, advanced reasoning
+- **OpenAI (GPT)** - `gpt-4o` - Cloud provider, general capabilities
+- **Google (Gemini)** - `gemini-2.0-flash-exp` - Cloud provider, fast responses
+- **xAI (Grok)** - `grok-beta` - Cloud provider, real-time knowledge
+- **Ollama (Local)** - `llama3.3:70b` - Local provider, complete privacy
+- **AWS Bedrock** - `anthropic.claude-3-5-sonnet-20241022-v2:0` - Enterprise provider, AWS integration
+- **Azure OpenAI** - `gpt-4o` - Enterprise provider, Azure integration
 
 :::tip Provider-Aware Sessions
 Each session remembers which provider and model it was created with. This allows you to have different sessions using different AI providers, each optimized for specific tasks.
@@ -265,6 +272,9 @@ f  # Shows only Claude sessions
 f  # Shows only GPT sessions
 f  # Shows only Gemini sessions
 f  # Shows only Grok sessions
+f  # Shows only Ollama sessions
+f  # Shows only Bedrock sessions
+f  # Shows only Azure sessions
 f  # Shows all sessions
 ```
 </Terminal>
@@ -275,6 +285,9 @@ f  # Shows all sessions
 - **GPT** - Show only OpenAI GPT sessions
 - **Gemini** - Show only Google Gemini sessions
 - **Grok** - Show only xAI Grok sessions
+- **Ollama** - Show only Ollama local model sessions
+- **Bedrock** - Show only AWS Bedrock sessions
+- **Azure** - Show only Azure OpenAI sessions
 
 **Visual Indicators:**
 - **Title shows active filter** - "Session List [Claude]" when filtering
@@ -283,6 +296,9 @@ f  # Shows all sessions
   - `[GPT]` in green
   - `[Gemini]` in yellow
   - `[Grok]` in pink
+  - `[Ollama]` in purple
+  - `[Bedrock]` in orange
+  - `[Azure]` in blue
 - **Empty state message** - "No sessions for Gemini" when filter has no results
 
 **Navigation with Filters:**

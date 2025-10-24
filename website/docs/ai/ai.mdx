@@ -117,7 +117,11 @@ settings:
 </File>
 
 :::info Multiple Providers
-Atmos supports 7 AI providers including cloud (Claude, GPT, Gemini, Grok), local (Ollama), and enterprise (AWS Bedrock, Azure OpenAI). See [AI Providers](/ai/providers) for complete configuration options.
+Atmos supports 7 AI providers including cloud (Claude, GPT, Gemini, Grok), local (Ollama), and enterprise (AWS Bedrock, Azure OpenAI).
+
+**Ollama runs locally** on your machine for complete privacy. Requires 8GB+ RAM (64GB+ recommended for large models). See [Ollama setup guide](/ai/providers#ollama) for installation and hardware requirements.
+
+See [AI Providers](/ai/providers) for complete configuration options.
 :::
 
 Set your API key:
@@ -248,7 +252,7 @@ atmos ai ask "What's the best way to handle secrets in Atmos?"
 - **API Key Security**: Store your API keys securely and never commit them to version control
 - **Configuration Privacy**: The AI assistant does not store or transmit your configuration data beyond the current session
 - **Local Processing**: Cloud providers (Anthropic, OpenAI, Google, xAI) process data through their APIs
-- **Privacy-First Option**: Use Ollama for complete data privacy - no data leaves your machine
+- **Privacy-First Option**: Use [Ollama](/ai/providers#ollama) for complete data privacy - no data leaves your machine (requires 8GB+ RAM)
 - **Enterprise Options**: AWS Bedrock and Azure OpenAI provide enterprise-grade security and compliance
 
 See [AI Providers](/ai/providers) for detailed security and privacy considerations for each provider.

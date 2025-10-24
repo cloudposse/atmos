@@ -16,6 +16,15 @@ The Atmos MCP Server exposes Atmos AI tools through the Model Context Protocol (
 The [Model Context Protocol](https://modelcontextprotocol.io) is an open standard created by Anthropic that standardizes how AI systems connect to external data sources and tools. Think of it as "USB-C for AI" - a universal way for any AI assistant to connect to any tool without requiring custom integrations.
 :::
 
+:::danger Security Warning
+The MCP server does not include built-in authentication or encryption. **HTTP transport exposes your infrastructure data to anyone who can reach the port.** Use with caution:
+
+- **stdio transport (default)**: Secure for local use only
+- **HTTP transport**: Requires additional security measures (firewall, VPN, reverse proxy with auth)
+
+See [Security Considerations](#security-considerations) below for detailed guidance.
+:::
+
 ## Overview
 
 The MCP server allows you to use Atmos infrastructure management capabilities from any AI assistant that supports the MCP protocol:
@@ -67,8 +76,11 @@ All tools respect your configured [permission settings](/ai/tools#permission-sys
 settings:
   ai:
     enabled: true
-    provider: "anthropic"
-    api_key_env: "ANTHROPIC_API_KEY"
+    default_provider: "anthropic"
+    providers:
+      anthropic:
+        model: "claude-3-5-sonnet-20241022"
+        api_key_env: "ANTHROPIC_API_KEY"
 
     # Enable tools for MCP access
     tools:
