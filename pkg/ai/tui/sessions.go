@@ -73,7 +73,7 @@ func (m *ChatModel) sessionListView() string {
 
 	content.WriteString(styles.title.Render("Session List"))
 	content.WriteString("\n")
-	content.WriteString(styles.help.Render("↑/↓: Navigate | Enter: Select | Esc/q: Back | Ctrl+C: Quit"))
+	content.WriteString(styles.help.Render("↑/↓: Navigate | Enter: Select | n/Ctrl+N: New | Esc/q: Back | Ctrl+C: Quit"))
 	content.WriteString("\n\n")
 
 	if m.sessionListError != "" {

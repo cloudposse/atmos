@@ -12,6 +12,8 @@ import (
 
 // handleKeyMsg processes keyboard input and returns a command if the key was handled.
 // Returns nil if the key should be passed to the textarea.
+//
+//revive:disable:cyclomatic // TUI keyboard handlers naturally have high complexity.
 func (m *ChatModel) handleKeyMsg(msg tea.KeyMsg) tea.Cmd {
 	if m.isLoading {
 		// Only allow quitting while loading.
@@ -27,6 +29,11 @@ func (m *ChatModel) handleKeyMsg(msg tea.KeyMsg) tea.Cmd {
 		return m.handleSessionListKeys(msg)
 	}
 
+	// Handle create session view keys.
+	if m.currentView == viewModeCreateSession {
+		return m.handleCreateSessionKeys(msg)
+	}
+
 	// Handle chat view keys.
 	switch msg.String() {
 	case "ctrl+c":
@@ -34,6 +41,13 @@ func (m *ChatModel) handleKeyMsg(msg tea.KeyMsg) tea.Cmd {
 	case "ctrl+l":
 		// Open session list.
 		return m.loadSessionList()
+	case "ctrl+n":
+		// Open create session form.
+		if m.manager != nil {
+			m.currentView = viewModeCreateSession
+			m.createForm = newCreateSessionForm() // Reset form
+		}
+		return nil
 	case "shift+enter", "alt+enter":
 		// Shift+Enter or Alt+Enter: let textarea handle it (adds newline).
 		return nil
@@ -77,9 +91,10 @@ func (m *ChatModel) handleSessionListKeys(msg tea.KeyMsg) tea.Cmd {
 			return m.switchSession(m.availableSessions[m.selectedSessionIndex])
 		}
 		return nil
-	case "ctrl+n":
-		// Create new session (placeholder for now).
-		m.sessionListError = "Create new session: not yet implemented"
+	case "ctrl+n", "n":
+		// Open create session form.
+		m.currentView = viewModeCreateSession
+		m.createForm = newCreateSessionForm() // Reset form
 		return nil
 	}
 

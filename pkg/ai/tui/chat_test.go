@@ -802,3 +802,157 @@ func TestChatModel_HandleMessage(t *testing.T) {
 		assert.Nil(t, cmd)
 	})
 }
+
+func TestChatModel_CreateSession(t *testing.T) {
+	client := &mockAIClient{
+		model:     "test-model",
+		maxTokens: 4096,
+	}
+
+	// Create temporary session storage.
+	tmpDir := t.TempDir()
+	storagePath := tmpDir + "/sessions.db"
+	storage, err := session.NewSQLiteStorage(storagePath)
+	require.NoError(t, err)
+	defer storage.Close()
+
+	manager := session.NewManager(storage, tmpDir, 10)
+
+	model, err := NewChatModel(client, manager, nil, nil, nil)
+	require.NoError(t, err)
+
+	t.Run("opens create session form with Ctrl+N", func(t *testing.T) {
+		model.currentView = viewModeChat
+		keyMsg := tea.KeyMsg{Type: tea.KeyCtrlN}
+
+		cmd := model.handleKeyMsg(keyMsg)
+
+		assert.Nil(t, cmd) // Opens form, no immediate command
+		assert.Equal(t, viewModeCreateSession, model.currentView)
+	})
+
+	t.Run("opens create session form from session list with n", func(t *testing.T) {
+		model.currentView = viewModeSessionList
+		keyMsg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'n'}}
+
+		cmd := model.handleSessionListKeys(keyMsg)
+
+		assert.Nil(t, cmd)
+		assert.Equal(t, viewModeCreateSession, model.currentView)
+	})
+
+	t.Run("navigates create session form fields with tab", func(t *testing.T) {
+		model.currentView = viewModeCreateSession
+		model.createForm = newCreateSessionForm()
+		assert.Equal(t, 0, model.createForm.focusedField) // Name input
+
+		keyMsg := tea.KeyMsg{Type: tea.KeyTab}
+		model.handleCreateSessionKeys(keyMsg)
+
+		assert.Equal(t, 1, model.createForm.focusedField) // Provider selection
+	})
+
+	t.Run("navigates provider selection with arrow keys", func(t *testing.T) {
+		model.currentView = viewModeCreateSession
+		model.createForm = newCreateSessionForm()
+		model.createForm.focusedField = 1 // Provider selection
+		model.createForm.selectedProvider = 0
+
+		// Down arrow
+		keyMsg := tea.KeyMsg{Type: tea.KeyDown}
+		model.handleCreateSessionKeys(keyMsg)
+		assert.Equal(t, 1, model.createForm.selectedProvider)
+
+		// Up arrow
+		keyMsg = tea.KeyMsg{Type: tea.KeyUp}
+		model.handleCreateSessionKeys(keyMsg)
+		assert.Equal(t, 0, model.createForm.selectedProvider)
+	})
+
+	t.Run("cancels create session with Esc", func(t *testing.T) {
+		model.currentView = viewModeCreateSession
+		keyMsg := tea.KeyMsg{Type: tea.KeyEsc}
+
+		cmd := model.handleCreateSessionKeys(keyMsg)
+
+		// Should either go to session list or chat view
+		assert.True(t, model.currentView == viewModeSessionList || model.currentView == viewModeChat)
+		assert.NotNil(t, cmd) // May load session list
+	})
+
+	t.Run("renders create session view", func(t *testing.T) {
+		model.currentView = viewModeCreateSession
+		model.createForm = newCreateSessionForm()
+		model.ready = true
+
+		view := model.View()
+
+		assert.Contains(t, view, "Create New Session")
+		assert.Contains(t, view, "Session Name:")
+		assert.Contains(t, view, "Provider:")
+		assert.Contains(t, view, "Anthropic")
+		assert.Contains(t, view, "OpenAI")
+		assert.Contains(t, view, "Gemini")
+		assert.Contains(t, view, "Grok")
+	})
+
+	t.Run("handles session created successfully", func(t *testing.T) {
+		model.currentView = viewModeCreateSession
+		sess := &session.Session{
+			ID:       "test-id",
+			Name:     "test-session",
+			Model:    "gpt-4o",
+			Provider: "openai",
+		}
+
+		msg := sessionCreatedMsg{session: sess}
+		model.handleSessionCreated(msg)
+
+		assert.Equal(t, viewModeChat, model.currentView)
+		assert.Equal(t, sess, model.sess)
+		assert.Greater(t, len(model.messages), 0) // Welcome message added
+	})
+
+	t.Run("handles session creation error", func(t *testing.T) {
+		model.currentView = viewModeCreateSession
+		model.createForm = newCreateSessionForm()
+
+		msg := sessionCreatedMsg{err: assert.AnError}
+		model.handleSessionCreated(msg)
+
+		assert.Equal(t, viewModeCreateSession, model.currentView) // Stays in form
+		assert.NotEmpty(t, model.createForm.error)
+	})
+}
+
+func TestNewCreateSessionForm(t *testing.T) {
+	form := newCreateSessionForm()
+
+	assert.NotNil(t, form.nameInput)
+	assert.Equal(t, 0, form.selectedProvider) // Defaults to Anthropic
+	assert.Equal(t, 0, form.focusedField)     // Starts with name input focused
+	assert.Empty(t, form.error)
+}
+
+func TestAvailableProviders(t *testing.T) {
+	assert.Len(t, AvailableProviders, 4)
+
+	// Verify all expected providers are present.
+	providerNames := make([]string, len(AvailableProviders))
+	for i, p := range AvailableProviders {
+		providerNames[i] = p.Name
+	}
+
+	assert.Contains(t, providerNames, "anthropic")
+	assert.Contains(t, providerNames, "openai")
+	assert.Contains(t, providerNames, "gemini")
+	assert.Contains(t, providerNames, "grok")
+
+	// Verify provider details.
+	for _, p := range AvailableProviders {
+		assert.NotEmpty(t, p.Name)
+		assert.NotEmpty(t, p.DisplayName)
+		assert.NotEmpty(t, p.DefaultModel)
+		assert.NotEmpty(t, p.APIKeyEnv)
+	}
+}

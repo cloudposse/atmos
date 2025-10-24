@@ -39,6 +39,7 @@ type viewMode int
 const (
 	viewModeChat viewMode = iota
 	viewModeSessionList
+	viewModeCreateSession
 )
 
 // ChatModel represents the state of the chat TUI.
@@ -60,6 +61,7 @@ type ChatModel struct {
 	availableSessions    []*session.Session
 	selectedSessionIndex int
 	sessionListError     string
+	createForm           createSessionForm
 }
 
 // ChatMessage represents a single message in the chat.
@@ -105,6 +107,7 @@ func NewChatModel(client ai.Client, manager *session.Manager, sess *session.Sess
 		currentView:          viewModeChat,
 		availableSessions:    make([]*session.Session, 0),
 		selectedSessionIndex: 0,
+		createForm:           newCreateSessionForm(),
 	}
 
 	// Load existing messages from session if available.
@@ -228,6 +231,10 @@ func (m *ChatModel) handleMessage(msg tea.Msg, cmds *[]tea.Cmd) (bool, tea.Cmd) 
 	case sessionSwitchedMsg:
 		m.handleSessionSwitched(msg)
 		return true, nil
+
+	case sessionCreatedMsg:
+		m.handleSessionCreated(msg)
+		return true, nil
 	}
 
 	return false, nil
@@ -284,11 +291,14 @@ func (m *ChatModel) View() string {
 	}
 
 	// Render appropriate view based on current mode.
-	if m.currentView == viewModeSessionList {
+	switch m.currentView {
+	case viewModeSessionList:
 		return m.sessionListView()
+	case viewModeCreateSession:
+		return m.createSessionView()
+	default:
+		return fmt.Sprintf("%s\n%s\n%s", m.headerView(), m.viewport.View(), m.footerView())
 	}
-
-	return fmt.Sprintf("%s\n%s\n%s", m.headerView(), m.viewport.View(), m.footerView())
 }
 
 func (m *ChatModel) headerView() string {
@@ -336,7 +346,7 @@ func (m *ChatModel) footerView() string {
 			Foreground(lipgloss.Color("240")).
 			Italic(true)
 
-		help := helpStyle.Render("Ctrl+L: Sessions | Ctrl+C: Quit")
+		help := helpStyle.Render("Ctrl+L: Sessions | Ctrl+N: New Session | Ctrl+C: Quit")
 		content = fmt.Sprintf("%s\n%s", m.textarea.View(), help)
 	}
 
