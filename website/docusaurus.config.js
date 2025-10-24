@@ -20,7 +20,6 @@ const config = {
     url: 'https://atmos.tools',
     baseUrl: `${BASE_URL}/`,
     onBrokenLinks: 'throw',
-    onBrokenMarkdownLinks: 'warn',
     favicon: 'img/atmos-logo.png',
 
     // GitHub pages deployment config.
@@ -45,7 +44,10 @@ const config = {
         [
             '@docusaurus/plugin-client-redirects', {
                 redirects: [
-
+                    {
+                        from: '/blog',
+                        to: '/changelog'
+                    },
                     {
                         from: '/reference/terraform-limitations',
                         to: '/introduction/why-atmos'
@@ -186,6 +188,7 @@ const config = {
                     exclude: ['README.md'],
                 },
                 blog: {
+                    routeBasePath: 'changelog',
                     showReadingTime: true,
                     postsPerPage: 10,
                     blogTitle: 'Atmos Changelog',
@@ -195,6 +198,8 @@ const config = {
                         return `https://github.com/cloudposse/atmos/edit/main/website/${versionDocsDirPath}/${docPath}`;
                     },
                     exclude: ['README.md'],
+                    blogSidebarTitle: 'Recent Changes',
+                    blogSidebarCount: 'ALL',
                 },
                 theme: {
                     customCss: require.resolve('./src/css/custom.css'),
@@ -248,7 +253,7 @@ const config = {
                     {
                         label: 'Changelog',
                         position: 'left',
-                        to: '/blog'
+                        to: '/changelog'
                     },
                     // Algolia search configuration
                     {
@@ -327,6 +332,9 @@ const config = {
 
     markdown: {
         mermaid: true,
+        hooks: {
+            onBrokenMarkdownLinks: 'warn',
+        },
     },
 
     themes: ['@docusaurus/theme-mermaid']
