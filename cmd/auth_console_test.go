@@ -10,6 +10,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth/types"
@@ -723,4 +724,97 @@ func (m *mockAuthManagerForIdentity) LogoutProvider(ctx context.Context, provide
 
 func (m *mockAuthManagerForIdentity) LogoutAll(ctx context.Context) error {
 	return errors.New("not implemented")
+}
+
+func TestResolveConsoleDuration(t *testing.T) {
+	_ = NewTestKit(t)
+
+	tests := []struct {
+		name             string
+		flagSet          bool
+		flagValue        time.Duration
+		providerConfig   *schema.ConsoleConfig
+		expectedDuration time.Duration
+		expectError      bool
+	}{
+		{
+			name:             "flag explicitly set takes precedence",
+			flagSet:          true,
+			flagValue:        4 * time.Hour,
+			providerConfig:   &schema.ConsoleConfig{SessionDuration: "12h"},
+			expectedDuration: 4 * time.Hour,
+			expectError:      false,
+		},
+		{
+			name:             "provider config used when flag not set",
+			flagSet:          false,
+			flagValue:        1 * time.Hour, // default flag value
+			providerConfig:   &schema.ConsoleConfig{SessionDuration: "8h"},
+			expectedDuration: 8 * time.Hour,
+			expectError:      false,
+		},
+		{
+			name:             "default flag value when no provider config",
+			flagSet:          false,
+			flagValue:        1 * time.Hour,
+			providerConfig:   nil,
+			expectedDuration: 1 * time.Hour,
+			expectError:      false,
+		},
+		{
+			name:             "default flag value when provider config empty",
+			flagSet:          false,
+			flagValue:        1 * time.Hour,
+			providerConfig:   &schema.ConsoleConfig{SessionDuration: ""},
+			expectedDuration: 1 * time.Hour,
+			expectError:      false,
+		},
+		{
+			name:           "invalid provider config duration",
+			flagSet:        false,
+			flagValue:      1 * time.Hour,
+			providerConfig: &schema.ConsoleConfig{SessionDuration: "invalid"},
+			expectError:    true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_ = NewTestKit(t)
+
+			// Create test command with duration flag.
+			cmd := &cobra.Command{}
+			cmd.Flags().DurationVar(&consoleDuration, "duration", 1*time.Hour, "duration flag")
+
+			// Set flag value and simulate whether user explicitly set it.
+			consoleDuration = tt.flagValue
+			if tt.flagSet {
+				require.NoError(t, cmd.Flags().Set("duration", tt.flagValue.String()))
+			}
+
+			// Create mock auth manager using gomock.
+			ctrl := gomock.NewController(t)
+			mockManager := types.NewMockAuthManager(ctrl)
+
+			// Setup expectation for GetProviders.
+			providers := map[string]schema.Provider{
+				"test-provider": {
+					Kind:    "aws/iam-identity-center",
+					Console: tt.providerConfig,
+				},
+			}
+			mockManager.EXPECT().GetProviders().Return(providers).AnyTimes()
+
+			// Call resolveConsoleDuration.
+			duration, err := resolveConsoleDuration(cmd, mockManager, "test-provider")
+
+			if tt.expectError {
+				assert.Error(t, err)
+				return
+			}
+
+			require.NoError(t, err)
+			assert.Equal(t, tt.expectedDuration, duration)
+		})
+	}
 }

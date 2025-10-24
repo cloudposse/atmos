@@ -171,15 +171,38 @@ func (i *permissionSetIdentity) GetProviderName() (string, error) {
 	return "", fmt.Errorf("%w: permission set identity %q has no valid via provider configuration", errUtils.ErrInvalidIdentityConfig, i.name)
 }
 
-// PostAuthenticate sets up AWS files after authentication.
-func (i *permissionSetIdentity) PostAuthenticate(ctx context.Context, stackInfo *schema.ConfigAndStacksInfo, providerName, identityName string, creds types.ICredentials) error {
+// PostAuthenticate sets up AWS files and populates auth context after authentication.
+func (i *permissionSetIdentity) PostAuthenticate(ctx context.Context, params *types.PostAuthenticateParams) error {
+	// Guard against nil parameters to avoid panics.
+	if params == nil {
+		return fmt.Errorf("%w: PostAuthenticate parameters cannot be nil", errUtils.ErrInvalidAuthConfig)
+	}
+	if params.Credentials == nil {
+		return fmt.Errorf("%w: credentials are required", errUtils.ErrInvalidAuthConfig)
+	}
+
 	// Setup AWS files using shared AWS cloud package.
-	if err := awsCloud.SetupFiles(providerName, identityName, creds, ""); err != nil {
-		return fmt.Errorf("%w: failed to setup AWS files: %v", errUtils.ErrAwsAuth, err)
+	if err := awsCloud.SetupFiles(params.ProviderName, params.IdentityName, params.Credentials, ""); err != nil {
+		return fmt.Errorf("%w: failed to setup AWS files: %w", errUtils.ErrAwsAuth, err)
 	}
-	if err := awsCloud.SetEnvironmentVariables(stackInfo, providerName, identityName, ""); err != nil {
-		return fmt.Errorf("%w: failed to set environment variables: %v", errUtils.ErrAwsAuth, err)
+
+	// Populate auth context (single source of truth for runtime credentials).
+	if err := awsCloud.SetAuthContext(&awsCloud.SetAuthContextParams{
+		AuthContext:  params.AuthContext,
+		StackInfo:    params.StackInfo,
+		ProviderName: params.ProviderName,
+		IdentityName: params.IdentityName,
+		Credentials:  params.Credentials,
+		BasePath:     "",
+	}); err != nil {
+		return fmt.Errorf("%w: failed to set auth context: %w", errUtils.ErrAwsAuth, err)
 	}
+
+	// Derive environment variables from auth context for spawned processes.
+	if err := awsCloud.SetEnvironmentVariables(params.AuthContext, params.StackInfo); err != nil {
+		return fmt.Errorf("%w: failed to set environment variables: %w", errUtils.ErrAwsAuth, err)
+	}
+
 	return nil
 }
 

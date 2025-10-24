@@ -343,15 +343,43 @@ func AuthenticateStandaloneAWSUser(ctx context.Context, identityName string, ide
 	return credentials, nil
 }
 
-// PostAuthenticate sets up AWS files after authentication.
-func (i *userIdentity) PostAuthenticate(ctx context.Context, stackInfo *schema.ConfigAndStacksInfo, providerName, identityName string, creds types.ICredentials) error {
+// PostAuthenticate sets up AWS files and populates auth context after authentication.
+func (i *userIdentity) PostAuthenticate(ctx context.Context, params *types.PostAuthenticateParams) error {
+	// Guard against nil parameters to avoid panics.
+	if params == nil {
+		return fmt.Errorf("%w: PostAuthenticate parameters cannot be nil", errUtils.ErrInvalidAuthConfig)
+	}
+	if params.Credentials == nil {
+		return fmt.Errorf("%w: credentials are required", errUtils.ErrInvalidAuthConfig)
+	}
+
+	// Enforce fixed provider for aws/user identities to avoid path drift.
+	// User identities always use "aws-user" provider name regardless of caller input.
+	providerName := awsUserProviderName
+	identityName := i.name
+
 	// Setup AWS files using shared AWS cloud package.
-	if err := awsCloud.SetupFiles(providerName, identityName, creds, ""); err != nil {
+	if err := awsCloud.SetupFiles(providerName, identityName, params.Credentials, ""); err != nil {
 		return errors.Join(errUtils.ErrAwsAuth, err)
 	}
-	if err := awsCloud.SetEnvironmentVariables(stackInfo, providerName, identityName, ""); err != nil {
+
+	// Populate auth context (single source of truth for runtime credentials).
+	if err := awsCloud.SetAuthContext(&awsCloud.SetAuthContextParams{
+		AuthContext:  params.AuthContext,
+		StackInfo:    params.StackInfo,
+		ProviderName: providerName,
+		IdentityName: identityName,
+		Credentials:  params.Credentials,
+		BasePath:     "",
+	}); err != nil {
 		return errors.Join(errUtils.ErrAwsAuth, err)
 	}
+
+	// Derive environment variables from auth context for spawned processes.
+	if err := awsCloud.SetEnvironmentVariables(params.AuthContext, params.StackInfo); err != nil {
+		return errors.Join(errUtils.ErrAwsAuth, err)
+	}
+
 	return nil
 }
 

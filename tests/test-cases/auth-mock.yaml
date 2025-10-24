@@ -30,6 +30,7 @@ tests:
       - "mock-identity"
     expect:
       diff: []
+      ignore_trailing_whitespace: true  # Lipgloss table padding varies by platform/terminal width
       stderr:
         - "Authentication successful"
         - "mock-identity"
@@ -48,6 +49,7 @@ tests:
       - "login"
     expect:
       diff: []
+      ignore_trailing_whitespace: true  # Lipgloss table padding varies by platform/terminal width
       stderr:
         - "Authentication successful"
         - "mock-identity"
@@ -68,6 +70,7 @@ tests:
       - "mock-identity-2"
     expect:
       diff: []
+      ignore_trailing_whitespace: true  # Lipgloss table padding varies by platform/terminal width
       stderr:
         - "Authentication successful"
         - "mock-identity"  # TODO: Should be "mock-identity-2" but logs show default identity

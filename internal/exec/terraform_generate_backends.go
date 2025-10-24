@@ -239,6 +239,10 @@ func ExecuteTerraformGenerateBackends(
 				configAndStacksInfo.ComponentSection["atmos_stack_file"] = stackFileName
 				configAndStacksInfo.ComponentSection["atmos_manifest"] = stackFileName
 
+				// Populate context and stack name for YAML/template processing
+				configAndStacksInfo.Context = context
+				configAndStacksInfo.Stack = stackName
+
 				// Process `Go` templates
 				componentSectionStr, err := u.ConvertToYAML(componentSection)
 				if err != nil {
@@ -276,7 +280,7 @@ func ExecuteTerraformGenerateBackends(
 					errUtils.CheckErrorPrintAndExit(err, "", "")
 				}
 
-				componentSectionFinal, err := ProcessCustomYamlTags(atmosConfig, componentSectionConverted, stackName, nil)
+				componentSectionFinal, err := ProcessCustomYamlTags(atmosConfig, componentSectionConverted, stackName, nil, &configAndStacksInfo)
 				if err != nil {
 					return err
 				}

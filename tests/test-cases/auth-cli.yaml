@@ -318,8 +318,8 @@ tests:
       - "--identity"
       - "mock-identity"
     expect:
-      diff:
-        - '\s+$'  # Ignore trailing whitespace (lipgloss padding varies by platform/terminal width)
+      diff: []
+      ignore_trailing_whitespace: true  # Lipgloss table padding varies by platform/terminal width
       stderr:
         - "Authentication successful"
         - "mock-identity"

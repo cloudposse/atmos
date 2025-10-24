@@ -91,10 +91,16 @@ func executeAuthConsoleCommand(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("%w: %w", errUtils.ErrAuthConsole, err)
 	}
 
+	// Resolve session duration (flag takes precedence over provider config).
+	sessionDuration, err := resolveConsoleDuration(cmd, authManager, whoami.Provider)
+	if err != nil {
+		return fmt.Errorf("%w: %w", errUtils.ErrAuthConsole, err)
+	}
+
 	// Generate console URL.
 	options := types.ConsoleURLOptions{
 		Destination:     consoleDestination,
-		SessionDuration: consoleDuration,
+		SessionDuration: sessionDuration,
 		Issuer:          consoleIssuer,
 		OpenInBrowser:   !consoleSkipOpen && !consolePrintOnly,
 	}
@@ -256,6 +262,39 @@ func retrieveCredentials(whoami *types.WhoamiInfo) (types.ICredentials, error) {
 	default:
 		return nil, fmt.Errorf("%w: no credentials available", errUtils.ErrAuthConsole)
 	}
+}
+
+// resolveConsoleDuration resolves console session duration from flag or provider config.
+// Flag takes precedence over provider configuration.
+func resolveConsoleDuration(cmd *cobra.Command, authManager types.AuthManager, providerName string) (time.Duration, error) {
+	defer perf.Track(nil, "cmd.resolveConsoleDuration")()
+
+	// Check if flag was explicitly set by user.
+	if cmd.Flags().Changed("duration") {
+		return consoleDuration, nil
+	}
+
+	// Get provider configuration.
+	providers := authManager.GetProviders()
+	provider, exists := providers[providerName]
+	if !exists {
+		// No provider config found, use default from flag.
+		return consoleDuration, nil
+	}
+
+	// Check if provider has console configuration.
+	if provider.Console == nil || provider.Console.SessionDuration == "" {
+		// No console config, use default from flag.
+		return consoleDuration, nil
+	}
+
+	// Parse provider's session duration.
+	duration, err := time.ParseDuration(provider.Console.SessionDuration)
+	if err != nil {
+		return 0, fmt.Errorf("invalid session_duration in provider %q console config: %w", providerName, err)
+	}
+
+	return duration, nil
 }
 
 func init() {
