@@ -121,7 +121,9 @@ atmos ai chat
 The chat interface supports:
 - **Multi-turn conversations**: Ask follow-up questions
 - **Context awareness**: The AI remembers your conversation
-- **Markdown rendering**: Responses include formatted code and documentation
+- **Markdown rendering**: AI responses rendered with rich formatting (bold, italic, lists, tables)
+- **Syntax highlighting**: Code blocks displayed with language-specific syntax highlighting
+- **History navigation**: Navigate through previous messages with ↑/↓ arrow keys (like Bash history)
 - **Multi-line input**: Press `Shift+Enter` or `Alt+Enter` to add newlines in your messages
 - **Session management**: Press `Ctrl+L` to switch between sessions without leaving the chat
 - **Session history**: See session metadata (name, created date, message count) in the header
@@ -133,8 +135,77 @@ The chat interface supports:
 |----------|--------|
 | `Enter` | Send message |
 | `Shift+Enter` or `Alt+Enter` | Add newline (multi-line input) |
+| `↑` | Navigate to previous message in history |
+| `↓` | Navigate to next message in history |
 | `Ctrl+L` | Open session picker |
+| `Ctrl+N` | Create new session |
 | `Ctrl+C` | Quit chat |
+
+### History Navigation
+
+Navigate through your previous messages using the arrow keys, just like in Bash or Zsh:
+
+```
+You: What components are available?
+AI: [Response about components...]
+
+# Press ↑ to recall your last message
+You: What components are available?  [← Previous message restored]
+
+# Edit and resend, or press ↓ to return to empty input
+```
+
+**How it works:**
+- Press `↑` to recall previous messages, starting from most recent
+- Press `↓` to move forward through history
+- When you reach the end of history (↓ past the last message), your original unsent input is restored
+- Sending a message automatically resets history navigation
+
+This is especially useful for:
+- Reusing similar queries with minor changes
+- Correcting typos in sent messages
+- Iterating on complex questions
+- Avoiding retyping long commands
+
+### Markdown Rendering & Syntax Highlighting
+
+AI responses are automatically rendered with rich markdown formatting for better readability:
+
+**Supported Formatting:**
+- **Bold** and *italic* text
+- Headers and subheadings
+- Bulleted and numbered lists
+- Tables with proper alignment
+- Code blocks with syntax highlighting
+- Blockquotes and horizontal rules
+
+**Code Block Example:**
+
+When the AI responds with code, it's automatically syntax-highlighted:
+
+````
+AI: Here's a sample Atmos stack configuration:
+
+```yaml
+components:
+  terraform:
+    vpc:
+      vars:
+        cidr_block: "10.0.0.0/16"
+        enable_dns_hostnames: true
+        availability_zones:
+          - us-east-1a
+          - us-east-1b
+```
+````
+
+The code will be displayed with:
+- ✅ Language-specific syntax highlighting (YAML, HCL, Go, Python, etc.)
+- ✅ Proper indentation and formatting
+- ✅ Color-coded keywords and values
+- ✅ Automatic terminal theme detection
+
+**Note:** Only AI assistant messages are rendered with markdown. Your input messages remain as plain text for clarity.
 
 ### Multi-line Messages
 
