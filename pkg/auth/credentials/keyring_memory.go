@@ -134,6 +134,11 @@ func (s *memoryKeyringStore) IsExpired(alias string) (bool, error) {
 	return creds.IsExpired(), nil
 }
 
+// Type returns the type of this credential store.
+func (s *memoryKeyringStore) Type() string {
+	return "memory"
+}
+
 // GetAny retrieves and unmarshals any type from the memory store.
 func (s *memoryKeyringStore) GetAny(key string, dest interface{}) error {
 	defer perf.Track(nil, "credentials.memoryKeyringStore.GetAny")()

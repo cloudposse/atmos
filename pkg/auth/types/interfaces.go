@@ -167,6 +167,9 @@ type CredentialStore interface {
 
 	// IsExpired checks if credentials for the given alias are expired.
 	IsExpired(alias string) (bool, error)
+
+	// Type returns the type of credential store (e.g., "system-keyring", "noop").
+	Type() string
 }
 
 // Validator defines the interface for validating auth configurations.

@@ -22,6 +22,11 @@ import (
 const (
 	PermissionRWX = 0o700
 	PermissionRW  = 0o600
+
+	// Logging keys.
+	logKeyProvider = "provider"
+	logKeyIdentity = "identity"
+	logKeyProfile  = "profile"
 )
 
 var (
@@ -113,8 +118,8 @@ func (m *AWSFileManager) WriteCredentials(providerName, identityName string, cre
 	credentialsPath := m.GetCredentialsPath(providerName)
 
 	log.Debug("Writing AWS credentials",
-		"provider", providerName,
-		"identity", identityName,
+		logKeyProvider, providerName,
+		logKeyIdentity, identityName,
 		"credentials_file", credentialsPath,
 		"has_session_token", creds.SessionToken != "",
 	)
@@ -177,8 +182,8 @@ func (m *AWSFileManager) WriteCredentials(providerName, identityName string, cre
 	}
 
 	log.Debug("Successfully wrote AWS credentials",
-		"provider", providerName,
-		"identity", identityName,
+		logKeyProvider, providerName,
+		logKeyIdentity, identityName,
 		"credentials_file", credentialsPath,
 	)
 
@@ -190,8 +195,8 @@ func (m *AWSFileManager) WriteConfig(providerName, identityName, region, outputF
 	configPath := m.GetConfigPath(providerName)
 
 	log.Debug("Writing AWS config",
-		"provider", providerName,
-		"identity", identityName,
+		logKeyProvider, providerName,
+		logKeyIdentity, identityName,
 		"config_file", configPath,
 		"region", region,
 		"output_format", outputFormat,
@@ -251,8 +256,8 @@ func (m *AWSFileManager) WriteConfig(providerName, identityName, region, outputF
 	}
 
 	log.Debug("Successfully wrote AWS config",
-		"provider", providerName,
-		"identity", identityName,
+		logKeyProvider, providerName,
+		logKeyIdentity, identityName,
 		"config_file", configPath,
 	)
 

@@ -266,6 +266,7 @@ func (s *testStore) IsExpired(alias string) (bool, error) {
 	}
 	return false, nil
 }
+func (s *testStore) Type() string { return "test" }
 
 func (p *testProvider) Kind() string {
 	if p.kind == "" {

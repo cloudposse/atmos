@@ -675,6 +675,20 @@ func (mr *MockCredentialStoreMockRecorder) Store(alias, creds any) *gomock.Call 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Store", reflect.TypeOf((*MockCredentialStore)(nil).Store), alias, creds)
 }
 
+// Type mocks base method.
+func (m *MockCredentialStore) Type() string {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Type")
+	ret0, _ := ret[0].(string)
+	return ret0
+}
+
+// Type indicates an expected call of Type.
+func (mr *MockCredentialStoreMockRecorder) Type() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Type", reflect.TypeOf((*MockCredentialStore)(nil).Type))
+}
+
 // MockValidator is a mock of Validator interface.
 type MockValidator struct {
 	ctrl     *gomock.Controller
@@ -821,10 +835,10 @@ func (mr *MockICredentialsMockRecorder) IsExpired() *gomock.Call {
 }
 
 // Validate mocks base method.
-func (m *MockICredentials) Validate(ctx context.Context) (*time.Time, error) {
+func (m *MockICredentials) Validate(ctx context.Context) (*ValidationInfo, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Validate", ctx)
-	ret0, _ := ret[0].(*time.Time)
+	ret0, _ := ret[0].(*ValidationInfo)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }

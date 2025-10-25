@@ -4,13 +4,13 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"path/filepath"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/perf"
 )
 
 // problematicAWSEnvVars lists environment variables that should be ignored by Atmos auth
@@ -145,54 +145,6 @@ func LoadAtmosManagedAWSConfig(ctx context.Context, optFns ...func(*config.LoadO
 
 	var cfg aws.Config
 	var err error
-
-	log.Debug("=== UPDATED CODE: LoadAtmosManagedAWSConfig called ===")
-
-	// Log AWS environment configuration for debugging.
-	home, homeErr := os.UserHomeDir()
-	if homeErr != nil {
-		log.Debug("Failed to get user home directory, skipping default AWS path checks", "error", homeErr)
-	} else {
-		defaultCredsFile := filepath.Join(home, ".aws", "credentials")
-		defaultConfigFile := filepath.Join(home, ".aws", "config")
-
-		credsFile := os.Getenv("AWS_SHARED_CREDENTIALS_FILE")
-		if credsFile == "" {
-			credsFile = defaultCredsFile
-		}
-
-		configFile := os.Getenv("AWS_CONFIG_FILE")
-		if configFile == "" {
-			configFile = defaultConfigFile
-		}
-
-		profile := os.Getenv("AWS_PROFILE")
-		if profile == "" {
-			profile = "default"
-		}
-
-		log.Debug("LoadAtmosManagedAWSConfig: checking AWS credential files",
-			"credentials_file", credsFile,
-			"config_file", configFile,
-			"profile", profile,
-			"AWS_SHARED_CREDENTIALS_FILE", os.Getenv("AWS_SHARED_CREDENTIALS_FILE"),
-			"AWS_CONFIG_FILE", os.Getenv("AWS_CONFIG_FILE"),
-			"AWS_PROFILE", os.Getenv("AWS_PROFILE"),
-		)
-
-		// Check if credential files exist.
-		if _, statErr := os.Stat(credsFile); statErr == nil {
-			log.Debug("Found AWS credentials file", "path", credsFile)
-		} else {
-			log.Debug("AWS credentials file not found", "path", credsFile, "error", statErr)
-		}
-
-		if _, statErr := os.Stat(configFile); statErr == nil {
-			log.Debug("Found AWS config file", "path", configFile)
-		} else {
-			log.Debug("AWS config file not found", "path", configFile, "error", statErr)
-		}
-	}
 
 	// Only clear credential environment variables, not file paths or profile.
 	// This allows SDK to load from Atmos-managed files using AWS_PROFILE.

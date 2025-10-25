@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
 	awsConfig "github.com/aws/aws-sdk-go-v2/config"
 	"gopkg.in/ini.v1"
 
@@ -15,28 +16,77 @@ import (
 	log "github.com/cloudposse/atmos/pkg/logger"
 )
 
+const (
+	// Logging keys.
+	logKeyProfile = "profile"
+)
+
 // loadAWSCredentialsFromEnvironment loads AWS credentials from files using environment variables.
 // This is a shared helper for all AWS identity types to use with noop keyring.
 // It temporarily sets AWS env vars, loads credentials via SDK, then restores original env.
 func loadAWSCredentialsFromEnvironment(ctx context.Context, env map[string]string) (*types.AWSCredentials, error) {
-	// Extract AWS environment variables.
+	// Extract and validate AWS environment variables.
+	envVars, err := extractAWSEnvVars(env)
+	if err != nil {
+		return nil, err
+	}
+
+	log.Debug("Loading AWS credentials from files",
+		"credentials_file", envVars.credsFile,
+		"config_file", envVars.configFile,
+		logKeyProfile, envVars.profile,
+		"region", envVars.region,
+	)
+
+	// Setup and restore environment variables.
+	cleanup := setupAWSEnv(envVars.credsFile, envVars.configFile, envVars.profile, envVars.region)
+	defer cleanup()
+
+	// Load credentials via AWS SDK.
+	creds, err := loadCredentialsViaSDK(ctx, envVars.credsFile, envVars.profile)
+	if err != nil {
+		return nil, err
+	}
+
+	log.Debug("Successfully loaded AWS credentials from files",
+		logKeyProfile, envVars.profile,
+		"region", creds.Region,
+		"has_session_token", creds.SessionToken != "",
+		"has_expiration", creds.Expiration != "",
+	)
+
+	return creds, nil
+}
+
+// awsEnvVars holds AWS environment variable values.
+type awsEnvVars struct {
+	credsFile  string
+	configFile string
+	profile    string
+	region     string
+}
+
+// extractAWSEnvVars extracts and validates required AWS environment variables.
+func extractAWSEnvVars(env map[string]string) (awsEnvVars, error) {
 	credsFile, hasCredsFile := env["AWS_SHARED_CREDENTIALS_FILE"]
 	configFile, hasConfigFile := env["AWS_CONFIG_FILE"]
 	profile, hasProfile := env["AWS_PROFILE"]
 	region := env["AWS_REGION"] // Optional.
 
 	if !hasCredsFile || !hasConfigFile || !hasProfile {
-		return nil, fmt.Errorf("%w: AWS_SHARED_CREDENTIALS_FILE, AWS_CONFIG_FILE, AWS_PROFILE", errUtils.ErrAwsMissingEnvVars)
+		return awsEnvVars{}, fmt.Errorf("%w: AWS_SHARED_CREDENTIALS_FILE, AWS_CONFIG_FILE, AWS_PROFILE", errUtils.ErrAwsMissingEnvVars)
 	}
 
-	log.Debug("Loading AWS credentials from files",
-		"credentials_file", credsFile,
-		"config_file", configFile,
-		"profile", profile,
-		"region", region,
-	)
+	return awsEnvVars{
+		credsFile:  credsFile,
+		configFile: configFile,
+		profile:    profile,
+		region:     region,
+	}, nil
+}
 
-	// Temporarily set environment variables for AWS SDK.
+// setupAWSEnv temporarily sets AWS environment variables and returns a cleanup function.
+func setupAWSEnv(credsFile, configFile, profile, region string) func() {
 	originalEnv := make(map[string]string)
 	envVarsToSet := map[string]string{
 		"AWS_SHARED_CREDENTIALS_FILE": credsFile,
@@ -55,8 +105,8 @@ func loadAWSCredentialsFromEnvironment(ctx context.Context, env map[string]strin
 		os.Setenv(key, value)
 	}
 
-	// Restore original environment when done.
-	defer func() {
+	// Return cleanup function to restore original environment.
+	return func() {
 		for key := range envVarsToSet {
 			if origValue, hadOriginal := originalEnv[key]; hadOriginal {
 				os.Setenv(key, origValue)
@@ -64,8 +114,11 @@ func loadAWSCredentialsFromEnvironment(ctx context.Context, env map[string]strin
 				os.Unsetenv(key)
 			}
 		}
-	}()
+	}
+}
 
+// loadCredentialsViaSDK loads credentials via AWS SDK and populates expiration metadata.
+func loadCredentialsViaSDK(ctx context.Context, credsFile, profile string) (*types.AWSCredentials, error) {
 	// Load AWS config using SDK (which will read from the files via env vars).
 	cfg, err := awsConfig.LoadDefaultConfig(ctx)
 	if err != nil {
@@ -86,7 +139,14 @@ func loadAWSCredentialsFromEnvironment(ctx context.Context, env map[string]strin
 		Region:          cfg.Region,
 	}
 
-	// Get expiration from AWS SDK if available.
+	// Populate expiration from SDK or metadata.
+	populateExpiration(creds, &awsCreds, credsFile, profile)
+
+	return creds, nil
+}
+
+// populateExpiration populates expiration from AWS SDK or credentials file metadata.
+func populateExpiration(creds *types.AWSCredentials, awsCreds *aws.Credentials, credsFile, profile string) {
 	if !awsCreds.Expires.IsZero() {
 		creds.Expiration = awsCreds.Expires.Format(time.RFC3339)
 	} else if creds.SessionToken != "" {
@@ -95,20 +155,11 @@ func loadAWSCredentialsFromEnvironment(ctx context.Context, env map[string]strin
 		if expiration := readExpirationFromMetadata(credsFile, profile); expiration != "" {
 			creds.Expiration = expiration
 			log.Debug("Loaded expiration from credentials file metadata",
-				"profile", profile,
+				logKeyProfile, profile,
 				"expiration", expiration,
 			)
 		}
 	}
-
-	log.Debug("Successfully loaded AWS credentials from files",
-		"profile", profile,
-		"region", creds.Region,
-		"has_session_token", creds.SessionToken != "",
-		"has_expiration", creds.Expiration != "",
-	)
-
-	return creds, nil
 }
 
 // readExpirationFromMetadata reads expiration from atmos comment in credentials file.
@@ -131,7 +182,7 @@ func readExpirationFromMetadata(credentialsPath, profile string) string {
 	section, err := cfg.GetSection(profile)
 	if err != nil {
 		log.Debug("Profile section not found in credentials file",
-			"profile", profile,
+			logKeyProfile, profile,
 		)
 		return ""
 	}

@@ -65,6 +65,11 @@ func (s *noopKeyringStore) IsExpired(alias string) (bool, error) {
 	return true, ErrCredentialsNotFound
 }
 
+// Type returns the type of this credential store.
+func (s *noopKeyringStore) Type() string {
+	return "noop"
+}
+
 // GetAny always returns "not found" error.
 func (s *noopKeyringStore) GetAny(key string, dest interface{}) error {
 	defer perf.Track(nil, "credentials.noopKeyringStore.GetAny")()

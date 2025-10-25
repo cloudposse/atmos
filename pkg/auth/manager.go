@@ -22,11 +22,13 @@ import (
 
 const (
 	logKeyIdentity           = "identity"
+	logKeyProvider           = "provider"
 	identityNameKey          = "identityName"
 	buildAuthenticationChain = "buildAuthenticationChain"
 	buildChainRecursive      = "buildChainRecursive"
-	backtickedQuotedFmt      = "`%q`"
+	backtickedFmt            = "`%s`"
 	errFormatWithString      = "%w: %s"
+	errFormatWrapTwo         = "%w for %q: %w"
 )
 
 // contextKey is a type for context keys to avoid collisions.
@@ -120,7 +122,7 @@ func (m *manager) Authenticate(ctx context.Context, identityName string) (*types
 	}
 	if _, exists := m.identities[identityName]; !exists {
 		errUtils.CheckErrorAndPrint(errUtils.ErrInvalidAuthConfig, identityNameKey, "Identity specified was not found in the auth config.")
-		return nil, fmt.Errorf(errFormatWithString, errUtils.ErrIdentityNotFound, fmt.Sprintf(backtickedQuotedFmt, identityName))
+		return nil, fmt.Errorf(errFormatWithString, errUtils.ErrIdentityNotFound, fmt.Sprintf(backtickedFmt, identityName))
 	}
 
 	// Build the complete authentication chain.
@@ -187,13 +189,13 @@ func (m *manager) Whoami(ctx context.Context, identityName string) (*types.Whoam
 	defer perf.Track(nil, "auth.Manager.Whoami")()
 
 	if _, exists := m.identities[identityName]; !exists {
-		return nil, fmt.Errorf(errFormatWithString, errUtils.ErrIdentityNotFound, fmt.Sprintf(backtickedQuotedFmt, identityName))
+		return nil, fmt.Errorf(errFormatWithString, errUtils.ErrIdentityNotFound, fmt.Sprintf(backtickedFmt, identityName))
 	}
 
 	// Try to retrieve credentials for the resolved identity.
 	creds, err := m.credentialStore.Retrieve(identityName)
 	log.Debug("credentialStore.Retrieve result",
-		"identity", identityName,
+		logKeyIdentity, identityName,
 		"creds_nil", creds == nil,
 		"error", err,
 	)
@@ -201,11 +203,20 @@ func (m *manager) Whoami(ctx context.Context, identityName string) (*types.Whoam
 		// Check if this is the noop keyring pattern (credentials validated but not stored).
 		// In this case, credentials are in the environment/files, not the keyring.
 		if !errors.Is(err, credentials.ErrCredentialsNotFound) {
-			return nil, fmt.Errorf("%w: identity=%s: %w", errUtils.ErrNoCredentialsFound, identityName, err)
+			providerName := "unknown"
+			if prov, provErr := m.identities[identityName].GetProviderName(); provErr == nil {
+				providerName = prov
+			}
+			return nil, fmt.Errorf("%w: identity=%s, provider=%s, credential_store=%s: %w",
+				errUtils.ErrNoCredentialsFound,
+				identityName,
+				providerName,
+				m.credentialStore.Type(),
+				err)
 		}
 		// Noop keyring: credentials exist in environment/files but not in keyring.
 		// Build WhoamiInfo from environment instead of keyring credentials.
-		log.Debug("Using noop keyring - credentials managed externally", "identity", identityName)
+		log.Debug("Using noop keyring - credentials managed externally", logKeyIdentity, identityName)
 		return m.buildWhoamiInfoFromEnvironment(identityName), nil
 	}
 
@@ -213,10 +224,10 @@ func (m *manager) Whoami(ctx context.Context, identityName string) (*types.Whoam
 	if expired, err := m.credentialStore.IsExpired(identityName); err != nil {
 		return nil, fmt.Errorf("%w: identity=%s: %w", errUtils.ErrExpiredCredentials, identityName, err)
 	} else if expired {
-		return nil, fmt.Errorf(errFormatWithString, errUtils.ErrExpiredCredentials, fmt.Sprintf(backtickedQuotedFmt, identityName))
+		return nil, fmt.Errorf(errFormatWithString, errUtils.ErrExpiredCredentials, fmt.Sprintf(backtickedFmt, identityName))
 	}
 
-	log.Debug("Using credentials from keyring", "identity", identityName)
+	log.Debug("Using credentials from keyring", logKeyIdentity, identityName)
 	return m.buildWhoamiInfo(identityName, creds), nil
 }
 
@@ -259,7 +270,7 @@ func (m *manager) GetDefaultIdentity() (string, error) {
 	default:
 		// Multiple default identities found.
 		if !isInteractive() {
-			return "", fmt.Errorf(errFormatWithString, errUtils.ErrMultipleDefaultIdentities, fmt.Sprintf(backtickedQuotedFmt, defaultIdentities))
+			return "", fmt.Errorf(errFormatWithString, errUtils.ErrMultipleDefaultIdentities, fmt.Sprintf(backtickedFmt, defaultIdentities))
 		}
 		// In interactive mode, prompt user to choose from default identities.
 		return m.promptForIdentity("Multiple default identities found. Please choose one:", defaultIdentities)
@@ -288,6 +299,10 @@ func (m *manager) promptForIdentity(message string, identities []string) (string
 	)
 
 	if err := form.Run(); err != nil {
+		// Check if user aborted (Ctrl+C, ESC, etc.).
+		if errors.Is(err, huh.ErrUserAborted) {
+			return "", errUtils.ErrUserAborted
+		}
 		errUtils.CheckErrorAndPrint(err, "Prompt for Identity", "")
 		return "", fmt.Errorf("%w: %w", errUtils.ErrUnsupportedInputType, err)
 	}
@@ -738,320 +753,6 @@ func (m *manager) buildChainRecursive(identityName string, chain *[]string, visi
 	return fmt.Errorf("%w: identity %q has invalid via configuration", errUtils.ErrInvalidIdentityConfig, identityName)
 }
 
-// buildWhoamiInfo creates a WhoamiInfo struct from identity and credentials.
-func (m *manager) buildWhoamiInfo(identityName string, creds types.ICredentials) *types.WhoamiInfo {
-	providerName := m.getProviderForIdentity(identityName)
-
-	info := &types.WhoamiInfo{
-		Provider:    providerName,
-		Identity:    identityName,
-		LastUpdated: time.Now(),
-	}
-
-	// Populate high-level fields from the concrete credential type.
-	info.Credentials = creds
-	creds.BuildWhoamiInfo(info)
-	if expTime, err := creds.GetExpiration(); err == nil && expTime != nil {
-		info.Expiration = expTime
-	}
-	// Get environment variables.
-	if identity, exists := m.identities[identityName]; exists {
-		if env, err := identity.Environment(); err == nil {
-			info.Environment = env
-		}
-	}
-
-	// Store credentials in the keystore and set a reference handle.
-	// Use the identity name as the opaque handle for retrieval.
-	if err := m.credentialStore.Store(identityName, creds); err == nil {
-		info.CredentialsRef = identityName
-		// Note: We keep info.Credentials populated for validation purposes.
-		// The Credentials field is marked with json:"-" yaml:"-" tags to prevent
-		// accidental serialization, so there's no security risk in keeping it.
-	}
-
-	return info
-}
-
-// buildWhoamiInfoFromEnvironment creates a WhoamiInfo struct when using noop keyring.
-// This is used when credentials are managed externally (e.g., in containers with mounted files).
-// Instead of retrieving credentials from the keyring, it gets information from the identity's
-// environment configuration and loads credentials from identity storage if available.
-func (m *manager) buildWhoamiInfoFromEnvironment(identityName string) *types.WhoamiInfo {
-	providerName := m.getProviderForIdentity(identityName)
-
-	info := &types.WhoamiInfo{
-		Provider:    providerName,
-		Identity:    identityName,
-		LastUpdated: time.Now(),
-	}
-
-	log.Debug("buildWhoamiInfoFromEnvironment called", "identity", identityName)
-
-	// Get environment variables and try to load credentials from identity storage.
-	identity, exists := m.identities[identityName]
-	log.Debug("Identity lookup", "identity", identityName, "exists", exists)
-	if exists {
-		// Get environment variables.
-		if env, err := identity.Environment(); err == nil {
-			info.Environment = env
-		}
-
-		// Try to load credentials from identity-managed storage (files, etc.).
-		// This enables credential validation in whoami when using noop keyring.
-		ctx := context.Background()
-		creds, err := identity.LoadCredentials(ctx)
-		log.Debug("LoadCredentials result",
-			"identity", identityName,
-			"creds_nil", creds == nil,
-			"error", err,
-		)
-		if err == nil && creds != nil {
-			info.Credentials = creds
-			// Populate whoami info fields (expiration, region, etc.) from credentials.
-			creds.BuildWhoamiInfo(info)
-			log.Debug("Loaded credentials from identity storage",
-				"identity", identityName,
-			)
-		} else if err != nil {
-			log.Debug("Failed to load credentials from identity storage",
-				"identity", identityName,
-				"error", err,
-			)
-		}
-	}
-
-	return info
-}
-
-// Logout removes credentials for the specified identity and its authentication chain.
-func (m *manager) Logout(ctx context.Context, identityName string) error {
-	defer perf.Track(nil, "auth.Manager.Logout")()
-
-	// Validate identity exists in configuration.
-	if _, exists := m.identities[identityName]; !exists {
-		return fmt.Errorf("%w: identity %q", errUtils.ErrIdentityNotInConfig, identityName)
-	}
-
-	// Build authentication chain to determine all credentials to remove.
-	chain, err := m.buildAuthenticationChain(identityName)
-	if err != nil {
-		log.Debug("Failed to build authentication chain for logout", logKeyIdentity, identityName, "error", err)
-		// Continue with best-effort cleanup of just the identity.
-		chain = []string{identityName}
-	}
-
-	log.Debug("Logout authentication chain", logKeyIdentity, identityName, "chain", chain)
-
-	var errs []error
-	removedCount := 0
-	identityLogoutCalled := false
-
-	// Step 1: Delete keyring entries for each step in the chain.
-	for _, alias := range chain {
-		if err := m.credentialStore.Delete(alias); err != nil {
-			log.Debug("Failed to delete keyring entry (may not exist)", "alias", alias, "error", err)
-			errs = append(errs, fmt.Errorf("%w for %q: %w", errUtils.ErrKeyringDeletion, alias, err))
-		} else {
-			log.Debug("Deleted keyring entry", "alias", alias)
-			removedCount++
-		}
-	}
-
-	// Step 2: Call provider-specific cleanup (files, etc.) unless skipped.
-	skipProviderLogout, _ := ctx.Value(skipProviderLogoutKey).(bool)
-	if len(chain) > 0 && !skipProviderLogout {
-		providerName := chain[0]
-		if provider, exists := m.providers[providerName]; exists {
-			if err := provider.Logout(ctx); err != nil {
-				// ErrLogoutNotSupported is a successful no-op (exit 0).
-				if errors.Is(err, errUtils.ErrLogoutNotSupported) {
-					log.Debug("Provider logout not supported (no-op)", "provider", providerName)
-				} else {
-					log.Debug("Provider logout failed", "provider", providerName, "error", err)
-					errs = append(errs, fmt.Errorf("%w for %q: %w", errUtils.ErrProviderLogout, providerName, err))
-				}
-			} else {
-				log.Debug("Provider logout successful", "provider", providerName)
-			}
-		} else {
-			// Check if it's an identity (e.g., aws-user standalone).
-			if identity, exists := m.identities[providerName]; exists {
-				identityLogoutCalled = true
-				if err := identity.Logout(ctx); err != nil {
-					// ErrLogoutNotSupported is a successful no-op (exit 0).
-					if errors.Is(err, errUtils.ErrLogoutNotSupported) {
-						log.Debug("Identity logout not supported (no-op)", "identity", providerName)
-					} else {
-						log.Debug("Identity logout failed", "identity", providerName, "error", err)
-						errs = append(errs, fmt.Errorf("%w for %q: %w", errUtils.ErrIdentityLogout, providerName, err))
-					}
-				} else {
-					log.Debug("Identity logout successful", "identity", providerName)
-				}
-			}
-		}
-	}
-
-	// Step 3: Call identity-specific cleanup (only if not already called in Step 2).
-	if !identityLogoutCalled {
-		if identity, exists := m.identities[identityName]; exists {
-			if err := identity.Logout(ctx); err != nil {
-				// ErrLogoutNotSupported is a successful no-op (exit 0).
-				if errors.Is(err, errUtils.ErrLogoutNotSupported) {
-					log.Debug("Identity logout not supported (no-op)", logKeyIdentity, identityName)
-				} else {
-					log.Debug("Identity logout failed", logKeyIdentity, identityName, "error", err)
-					errs = append(errs, fmt.Errorf("%w for %q: %w", errUtils.ErrIdentityLogout, identityName, err))
-				}
-			}
-		}
-	}
-
-	log.Info("Logout completed", logKeyIdentity, identityName, "removed", removedCount, "errors", len(errs))
-
-	// Return success if at least one credential was removed, even if there were errors.
-	if removedCount > 0 && len(errs) > 0 {
-		return errors.Join(append([]error{errUtils.ErrPartialLogout}, errs...)...)
-	}
-	if len(errs) > 0 {
-		return errors.Join(append([]error{errUtils.ErrLogoutFailed}, errs...)...)
-	}
-
-	return nil
-}
-
-// resolveProviderForIdentity follows the Via chain to find the root provider for an identity.
-// Returns empty string if no provider is found or if a cycle is detected.
-func (m *manager) resolveProviderForIdentity(identityName string) string {
-	visited := make(map[string]bool)
-	current := identityName
-
-	for {
-		// Check for cycles.
-		if visited[current] {
-			log.Debug("Cycle detected while resolving provider", "identity", current)
-			return ""
-		}
-		visited[current] = true
-
-		// Get identity configuration.
-		identity, exists := m.config.Identities[current]
-		if !exists {
-			log.Debug("Missing identity reference while resolving provider", "identity", current)
-			return ""
-		}
-
-		// Check if identity has Via configuration.
-		if identity.Via == nil {
-			return ""
-		}
-
-		// Found a direct provider reference.
-		if identity.Via.Provider != "" {
-			return identity.Via.Provider
-		}
-
-		// Follow the identity chain.
-		if identity.Via.Identity != "" {
-			current = identity.Via.Identity
-			continue
-		}
-
-		// No provider or identity reference.
-		return ""
-	}
-}
-
-// LogoutProvider removes all credentials for the specified provider.
-func (m *manager) LogoutProvider(ctx context.Context, providerName string) error {
-	defer perf.Track(nil, "auth.Manager.LogoutProvider")()
-
-	// Validate provider exists in configuration.
-	if _, exists := m.providers[providerName]; !exists {
-		return fmt.Errorf("%w: provider %q", errUtils.ErrProviderNotInConfig, providerName)
-	}
-
-	log.Debug("Logout provider", "provider", providerName)
-
-	// Find all identities that use this provider (directly or transitively).
-	var identityNames []string
-	for name := range m.config.Identities {
-		if m.resolveProviderForIdentity(name) == providerName {
-			identityNames = append(identityNames, name)
-		}
-	}
-
-	if len(identityNames) == 0 {
-		log.Debug("No identities found for provider", "provider", providerName)
-	}
-
-	var errs []error
-
-	// Set context flag to skip provider.Logout during per-identity cleanup.
-	ctxWithSkip := context.WithValue(ctx, skipProviderLogoutKey, true)
-
-	// Logout each identity (skipping provider-specific cleanup).
-	for _, identityName := range identityNames {
-		if err := m.Logout(ctxWithSkip, identityName); err != nil {
-			log.Debug("Failed to logout identity", logKeyIdentity, identityName, "error", err)
-			errs = append(errs, fmt.Errorf("%w for identity %q: %w", errUtils.ErrIdentityLogout, identityName, err))
-		}
-	}
-
-	// Delete provider credentials from keyring.
-	if err := m.credentialStore.Delete(providerName); err != nil {
-		log.Debug("Failed to delete provider keyring entry", "provider", providerName, "error", err)
-		errs = append(errs, fmt.Errorf("%w for provider %q: %w", errUtils.ErrKeyringDeletion, providerName, err))
-	}
-
-	// Call provider-specific cleanup once for the entire provider.
-	if provider, exists := m.providers[providerName]; exists {
-		if err := provider.Logout(ctx); err != nil {
-			// ErrLogoutNotSupported is a successful no-op (exit 0).
-			if errors.Is(err, errUtils.ErrLogoutNotSupported) {
-				log.Debug("Provider logout not supported (no-op)", "provider", providerName)
-			} else {
-				log.Debug("Provider logout failed", "provider", providerName, "error", err)
-				errs = append(errs, fmt.Errorf("%w for %q: %w", errUtils.ErrProviderLogout, providerName, err))
-			}
-		}
-	}
-
-	log.Info("Provider logout completed", "provider", providerName, "identities", len(identityNames), "errors", len(errs))
-
-	if len(errs) > 0 {
-		return errors.Join(append([]error{errUtils.ErrLogoutFailed}, errs...)...)
-	}
-
-	return nil
-}
-
-// LogoutAll removes all cached credentials for all identities.
-func (m *manager) LogoutAll(ctx context.Context) error {
-	defer perf.Track(nil, "auth.Manager.LogoutAll")()
-
-	log.Debug("Logout all identities")
-
-	var errs []error
-
-	// Logout each identity.
-	for identityName := range m.config.Identities {
-		if err := m.Logout(ctx, identityName); err != nil {
-			log.Debug("Failed to logout identity", logKeyIdentity, identityName, "error", err)
-			errs = append(errs, fmt.Errorf("%w for identity %q: %w", errUtils.ErrIdentityLogout, identityName, err))
-		}
-	}
-
-	log.Info("Logout all completed", "identities", len(m.config.Identities), "errors", len(errs))
-
-	if len(errs) > 0 {
-		return errors.Join(append([]error{errUtils.ErrLogoutFailed}, errs...)...)
-	}
-
-	return nil
-}
-
 // GetEnvironmentVariables returns the environment variables for an identity
 // without performing authentication or validation.
 func (m *manager) GetEnvironmentVariables(identityName string) (map[string]string, error) {
@@ -1060,7 +761,7 @@ func (m *manager) GetEnvironmentVariables(identityName string) (map[string]strin
 	// Verify identity exists.
 	identity, exists := m.identities[identityName]
 	if !exists {
-		return nil, fmt.Errorf(errFormatWithString, errUtils.ErrIdentityNotFound, fmt.Sprintf(backtickedQuotedFmt, identityName))
+		return nil, fmt.Errorf(errFormatWithString, errUtils.ErrIdentityNotFound, fmt.Sprintf(backtickedFmt, identityName))
 	}
 
 	// Get environment variables from the identity.

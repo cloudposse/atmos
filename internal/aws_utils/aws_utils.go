@@ -3,8 +3,6 @@ package aws_utils
 import (
 	"context"
 	"fmt"
-	"os"
-	"path/filepath"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -84,40 +82,7 @@ func LoadAWSConfigWithAuth(
 			region = authContext.Region
 		}
 	} else {
-		// Log default AWS SDK paths and environment for debugging.
-		home, err := os.UserHomeDir()
-		if err != nil {
-			log.Debug("Failed to get user home directory, skipping default AWS path checks", "error", err)
-		} else {
-			defaultCredsFile := filepath.Join(home, ".aws", "credentials")
-			defaultConfigFile := filepath.Join(home, ".aws", "config")
-			profile := os.Getenv("AWS_PROFILE")
-			if profile == "" {
-				profile = "default"
-			}
-
-			log.Debug("Using standard AWS SDK credential resolution (no auth context provided)",
-				"default_credentials_file", defaultCredsFile,
-				"default_config_file", defaultConfigFile,
-				"profile", profile,
-				"AWS_SHARED_CREDENTIALS_FILE", os.Getenv("AWS_SHARED_CREDENTIALS_FILE"),
-				"AWS_CONFIG_FILE", os.Getenv("AWS_CONFIG_FILE"),
-				"AWS_PROFILE", os.Getenv("AWS_PROFILE"),
-			)
-
-			// Check if default files exist.
-			if _, statErr := os.Stat(defaultCredsFile); statErr == nil {
-				log.Debug("Found default AWS credentials file", "path", defaultCredsFile)
-			} else {
-				log.Debug("Default AWS credentials file not found", "path", defaultCredsFile)
-			}
-
-			if _, statErr := os.Stat(defaultConfigFile); statErr == nil {
-				log.Debug("Found default AWS config file", "path", defaultConfigFile)
-			} else {
-				log.Debug("Default AWS config file not found", "path", defaultConfigFile)
-			}
-		}
+		log.Debug("Using standard AWS SDK credential resolution (no auth context provided)")
 	}
 
 	// Set region if provided.
