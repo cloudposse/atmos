@@ -98,10 +98,25 @@ type Identity interface {
 
 // AuthManager manages the overall authentication process.
 type AuthManager interface {
-	// Authenticate performs authentication for the specified identity.
+	// GetCachedCredentials retrieves valid cached credentials for the specified identity.
+	// This is a passive check that does not trigger any authentication flows.
+	// It checks:
+	//   1. Keyring for cached credentials
+	//   2. Identity-managed storage (AWS files, etc.)
+	// Returns error if credentials are not found, expired, or invalid.
+	// Use this when you want to use existing credentials without triggering authentication.
+	GetCachedCredentials(ctx context.Context, identityName string) (*WhoamiInfo, error)
+
+	// Authenticate performs full authentication for the specified identity.
+	// This may trigger interactive authentication flows (SSO device prompts, etc.).
+	// Use this when you want to force fresh authentication (e.g., `auth login` command).
 	Authenticate(ctx context.Context, identityName string) (*WhoamiInfo, error)
 
 	// Whoami returns information about the specified identity's credentials.
+	// First checks for cached credentials, then falls back to chain authentication
+	// (using cached provider credentials to derive identity credentials).
+	// This does NOT trigger interactive authentication flows (no SSO prompts).
+	// Use this for user-facing "whoami" command and as a fallback check.
 	Whoami(ctx context.Context, identityName string) (*WhoamiInfo, error)
 
 	// Validate validates the entire auth configuration.

@@ -185,29 +185,31 @@ func (m *manager) GetChain() []string {
 	return m.chain
 }
 
-// Whoami returns information about the specified identity's credentials.
-func (m *manager) Whoami(ctx context.Context, identityName string) (*types.WhoamiInfo, error) {
-	defer perf.Track(nil, "auth.Manager.Whoami")()
+// GetCachedCredentials retrieves valid cached credentials without triggering authentication.
+// This is a passive check that:
+//  1. Checks keyring for cached credentials
+//  2. Tries loading from identity-managed storage (AWS files, etc.)
+//  3. Returns error if credentials are not found, expired, or invalid
+//
+// This method does NOT trigger any authentication flows or prompts.
+func (m *manager) GetCachedCredentials(ctx context.Context, identityName string) (*types.WhoamiInfo, error) {
+	defer perf.Track(nil, "auth.Manager.GetCachedCredentials")()
 
 	if _, exists := m.identities[identityName]; !exists {
 		return nil, fmt.Errorf(errFormatWithString, errUtils.ErrIdentityNotFound, fmt.Sprintf(backtickedFmt, identityName))
 	}
 
-	// Try to retrieve credentials for the resolved identity.
+	// Try to retrieve credentials from keyring.
 	creds, err := m.credentialStore.Retrieve(identityName)
 	log.Debug("credentialStore.Retrieve result",
 		logKeyIdentity, identityName,
 		"creds_nil", creds == nil,
 		"error", err,
 	)
+
 	if err != nil {
-		// Check if credentials are not found in keyring.
-		// This could be because:
-		// 1. Using noop keyring (credentials managed externally in files)
-		// 2. Using system keyring but credentials exist in AWS files (not yet cached in keyring)
-		// 3. Using chained authentication where provider credentials exist but identity credentials don't
+		// If not in keyring, try loading from identity-managed storage (AWS files, etc.).
 		if errors.Is(err, credentials.ErrCredentialsNotFound) {
-			// Try to load credentials from identity-managed storage (files, etc.).
 			log.Debug("Credentials not in keyring, trying to load from identity storage", logKeyIdentity, identityName)
 			info := m.buildWhoamiInfoFromEnvironment(identityName)
 
@@ -216,22 +218,9 @@ func (m *manager) Whoami(ctx context.Context, identityName string) (*types.Whoam
 				log.Debug("Successfully loaded credentials from identity storage", logKeyIdentity, identityName)
 				return info, nil
 			}
-
-			// If direct loading failed, try to authenticate through the chain.
-			// This handles cases where provider credentials exist (e.g., in AWS files)
-			// and can be used to derive the identity credentials.
-			log.Debug("Direct credential loading failed, attempting chain authentication", logKeyIdentity, identityName)
-			authInfo, authErr := m.Authenticate(ctx, identityName)
-			if authErr == nil {
-				log.Debug("Successfully authenticated through chain", logKeyIdentity, identityName)
-				return authInfo, nil
-			}
-
-			log.Debug("Chain authentication failed", logKeyIdentity, identityName, "error", authErr)
-			// If chain authentication also failed, return the original not found error.
 		}
 
-		// Other errors (not "not found") or failed authentication indicate a real problem.
+		// Credentials not found or error occurred.
 		providerName := "unknown"
 		if prov, provErr := m.identities[identityName].GetProviderName(); provErr == nil {
 			providerName = prov
@@ -251,8 +240,38 @@ func (m *manager) Whoami(ctx context.Context, identityName string) (*types.Whoam
 		return nil, fmt.Errorf(errFormatWithString, errUtils.ErrExpiredCredentials, fmt.Sprintf(backtickedFmt, identityName))
 	}
 
-	log.Debug("Using credentials from keyring", logKeyIdentity, identityName)
+	log.Debug("Using cached credentials from keyring", logKeyIdentity, identityName)
 	return m.buildWhoamiInfo(identityName, creds), nil
+}
+
+// Whoami returns information about the specified identity's credentials.
+// First checks for cached credentials via GetCachedCredentials, then falls back
+// to chain authentication (using cached provider credentials to derive identity credentials).
+// This does NOT trigger interactive authentication flows (no SSO prompts).
+func (m *manager) Whoami(ctx context.Context, identityName string) (*types.WhoamiInfo, error) {
+	defer perf.Track(nil, "auth.Manager.Whoami")()
+
+	// First, try to get cached credentials (passive check).
+	info, err := m.GetCachedCredentials(ctx, identityName)
+	if err == nil {
+		return info, nil
+	}
+
+	log.Debug("GetCachedCredentials failed, attempting chain authentication", logKeyIdentity, identityName, "error", err)
+
+	// If cached credentials aren't available, try to authenticate through the chain.
+	// This handles cases where provider credentials exist (e.g., in AWS files)
+	// and can be used to derive the identity credentials without interactive prompts.
+	authInfo, authErr := m.Authenticate(ctx, identityName)
+	if authErr == nil {
+		log.Debug("Successfully authenticated through chain", logKeyIdentity, identityName)
+		return authInfo, nil
+	}
+
+	log.Debug("Chain authentication failed", logKeyIdentity, identityName, "error", authErr)
+
+	// Return the original GetCachedCredentials error since chain auth also failed.
+	return nil, err
 }
 
 // Validate validates the entire auth configuration.

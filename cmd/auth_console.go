@@ -72,10 +72,10 @@ func executeAuthConsoleCommand(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	// Check for existing valid credentials first, only authenticate if needed.
-	// This prevents unnecessary re-authentication when valid credentials already exist.
+	// Try to use cached credentials first (passive check, no prompts).
+	// Only authenticate if cached credentials are not available or expired.
 	ctx := context.Background()
-	whoami, err := authManager.Whoami(ctx, identityName)
+	whoami, err := authManager.GetCachedCredentials(ctx, identityName)
 	if err != nil {
 		log.Debug("No valid cached credentials found, authenticating", "identity", identityName, "error", err)
 		// No valid cached credentials - perform full authentication.
