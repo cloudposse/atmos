@@ -567,6 +567,312 @@ Successfully created stacks/catalog/vpc-new.yaml
 - File permissions set to 0600 (owner read/write only)
 - Parent directories created with 0755 permissions
 
+---
+
+### File and Command Tools
+
+These tools provide powerful file operations and command execution capabilities.
+
+#### `read_file`
+
+Read any file from the Atmos repository (atmos.yaml, workflows, vendor manifests, documentation, etc.).
+
+**Parameters:**
+- `file_path` (string, required) - Path to the file to read. Can be relative to Atmos base path (e.g., 'atmos.yaml', 'workflows/deploy.yaml') or absolute.
+
+**Example Usage:**
+
+<Terminal title="atmos ai chat">
+```bash
+You: "Show me the atmos.yaml configuration"
+
+AI: Let me read that file for you.
+
+🔧 Tool Execution Request
+Tool: read_file
+Description: Read any file from the Atmos repository
+
+Parameters:
+  file_path: atmos.yaml
+
+✅ Executing tool...
+
+Here's your atmos.yaml configuration:
+[file contents displayed]
+```
+</Terminal>
+
+**Permissions:** Read-only, no confirmation required by default
+
+**Security:** Path traversal protection ensures files can only be read from within the Atmos base path.
+
+---
+
+#### `execute_atmos_command`
+
+Execute any Atmos CLI command and return the output.
+
+**Parameters:**
+- `command` (string, required) - The Atmos command to execute (without the 'atmos' prefix). Examples: 'terraform plan vpc -s prod-us-east-1', 'describe component vpc -s prod-us-east-1', 'list stacks', 'validate stacks', 'describe affected'.
+
+**Example Usage:**
+
+<Terminal title="atmos ai chat">
+```bash
+You: "Run terraform plan for the VPC in prod-us-east-1"
+
+AI: I'll run that Terraform plan for you.
+
+🔧 Tool Execution Request
+Tool: execute_atmos_command
+Description: Execute any Atmos CLI command and return the output
+
+Parameters:
+  command: terraform plan vpc -s prod-us-east-1
+
+⚠️  This tool requires confirmation (executes commands)
+Allow execution? (y/N): y
+
+✅ Executing tool...
+
+Here's the Terraform plan output:
+[plan output displayed]
+
+The plan shows 3 resources will be added for the VPC infrastructure.
+```
+</Terminal>
+
+**Permissions:** Requires user confirmation (executes commands)
+
+**Security:**
+- Command executed in Atmos base path
+- Combined output (stdout + stderr) captured
+- Timeout protection (operations cancelled after timeout)
+
+**Use Cases:**
+- Run Terraform operations: `terraform plan`, `terraform apply`
+- Execute workflows: `workflow deploy`
+- Describe affected components: `describe affected`
+- Any other Atmos CLI command
+
+---
+
+#### `search_files`
+
+Search for text patterns or regex across files in the Atmos repository.
+
+**Parameters:**
+- `pattern` (string, required) - The text pattern or regular expression to search for (e.g., 'module "vpc"', 'terraform_version', 'backend_type').
+- `path` (string, optional) - The path to search in, relative to Atmos base path. Use '.' for entire repository, 'components/terraform' for components, 'stacks' for stacks. Default is '.' (entire repository).
+- `file_pattern` (string, optional) - File pattern to filter (e.g., '*.yaml', '*.tf', '*.hcl'). Default is '*' (all files).
+- `case_sensitive` (boolean, optional) - Whether the search should be case-sensitive. Default is false.
+
+**Example Usage:**
+
+<Terminal title="atmos ai chat">
+```bash
+You: "Find all components that use the VPC module"
+
+AI: Let me search for that pattern.
+
+🔧 Tool Execution Request
+Tool: search_files
+Description: Search for a text pattern or regex across files
+
+Parameters:
+  pattern: module "vpc"
+  path: components/terraform
+  file_pattern: *.tf
+
+✅ Executing tool...
+
+Found 5 matches in 3 files for pattern 'module "vpc"':
+
+components/terraform/eks/main.tf:
+  Line 12: module "vpc" {
+
+components/terraform/rds/main.tf:
+  Line 8: module "vpc" {
+
+components/terraform/networking/main.tf:
+  Line 5: module "vpc" {
+  Line 23: module "vpc_endpoints" {
+```
+</Terminal>
+
+**Permissions:** Read-only, no confirmation required by default
+
+**Use Cases:**
+- Find components using specific modules
+- Locate stacks with particular configurations
+- Search for variable usage across configurations
+- Find all references to a resource
+
+---
+
+#### `list_component_files`
+
+List all files in a component directory to discover component structure.
+
+**Parameters:**
+- `component_type` (string, required) - Type of component: 'terraform', 'helmfile', or 'packer'
+- `component_path` (string, optional) - Path to the component within the component type directory (e.g., 'vpc', 'eks', 'networking/vpc'). Use '.' to list all components. Default is '.'.
+- `file_pattern` (string, optional) - File pattern to filter (e.g., '*.tf', '*.yaml', '*.hcl'). Default is '*' (all files).
+
+**Example Usage:**
+
+<Terminal title="atmos ai chat">
+```bash
+You: "What files are in the VPC component?"
+
+AI: Let me list those files.
+
+🔧 Tool Execution Request
+Tool: list_component_files
+Description: List all files in a component directory
+
+Parameters:
+  component_type: terraform
+  component_path: vpc
+  file_pattern: *.tf
+
+✅ Executing tool...
+
+Files in terraform/vpc (pattern: *.tf):
+(4 files, 1 directories)
+
+main.tf
+variables.tf
+outputs.tf
+versions.tf
+modules/
+```
+</Terminal>
+
+**Permissions:** Read-only, no confirmation required by default
+
+**Use Cases:**
+- Discover component structure
+- Find configuration files
+- Understand component organization
+- Locate specific files before reading them
+
+---
+
+#### `get_template_context`
+
+Get the template context (variables and functions) available for a component in a stack. Use this to debug Go template failures.
+
+**Parameters:**
+- `component` (string, required) - The component name (e.g., 'vpc', 'eks', 'rds')
+- `stack` (string, required) - The stack name (e.g., 'prod-us-east-1', 'staging-eu-west-1')
+
+**Example Usage:**
+
+<Terminal title="atmos ai chat">
+```bash
+You: "Why is the Go template failing in the VPC component for prod-us-east-1?"
+
+AI: Let me check the template context.
+
+🔧 Tool Execution Request
+Tool: get_template_context
+Description: Get template context for debugging Go template failures
+
+Parameters:
+  component: vpc
+  stack: prod-us-east-1
+
+✅ Executing tool...
+
+Template context for component 'vpc' in stack 'prod-us-east-1':
+
+{
+  "vars": {
+    "cidr_block": "10.0.0.0/16",
+    "availability_zones": ["us-east-1a", "us-east-1b", "us-east-1c"],
+    ...
+  },
+  "settings": {...},
+  ...
+}
+
+Available template functions:
+- atmos.Component(component, stack) - Get component configuration
+- atmos.Stack(stack) - Get stack configuration
+- atmos.Setting(key) - Get Atmos setting
+- terraform.output(component, stack, output_name) - Get Terraform output
+- terraform.state(component, stack) - Get Terraform state
+- store.get(key) - Get value from configured store (SSM, Azure Key Vault, etc.)
+- exec(command) - Execute shell command
+- env(var_name) - Get environment variable
+Plus all Gomplate functions: https://docs.gomplate.ca/functions/
+
+I can see that the context includes all the variables and functions you need.
+The template should have access to `atmos.Component("vpc", "prod-us-east-1")` which returns the configuration shown above.
+```
+</Terminal>
+
+**Permissions:** Read-only, no confirmation required by default
+
+**Use Cases:**
+- Debug Go template failures
+- Understand available template variables
+- See what `atmos.Component()` returns
+- Verify template function availability
+- Troubleshoot template rendering issues
+
+---
+
+#### `describe_affected`
+
+Show components affected by git changes for change impact analysis.
+
+**Parameters:**
+- `ref` (string, optional) - Git reference to compare against (e.g., 'main', 'HEAD~1', 'origin/main'). Default is 'main'.
+- `verbose` (boolean, optional) - Include detailed information about affected files. Default is false.
+
+**Example Usage:**
+
+<Terminal title="atmos ai chat">
+```bash
+You: "What components will be affected by my changes?"
+
+AI: Let me check what's affected.
+
+🔧 Tool Execution Request
+Tool: describe_affected
+Description: Show components affected by git changes
+
+Parameters:
+  ref: main
+  verbose: false
+
+✅ Executing tool...
+
+Affected components (compared to main):
+
+Total: 3 components
+
+- vpc in stack prod-us-east-1
+- vpc in stack staging-us-east-1
+- rds in stack prod-us-east-1
+
+These components will be affected by your changes since diverging from main branch.
+```
+</Terminal>
+
+**Permissions:** Read-only, no confirmation required by default
+
+**Use Cases:**
+- Change impact analysis
+- Understand deployment scope
+- Plan deployments
+- Review PR impact
+- Identify affected infrastructure
+
+---
+
 ## Permission System
 
 The permission system provides granular control over what tools the AI can execute.
@@ -1046,23 +1352,35 @@ tools:
 
 **Warning:** Only use YOLO mode in controlled environments.
 
-## Future Tools
+## Complete Tool Catalog
 
-Future Atmos AI releases will include additional tools:
+Atmos AI now includes a comprehensive set of tools for infrastructure management:
 
-**Planned Tools:**
-- `atmos_list_components` - List all components
-- `atmos_describe_stacks` - Describe multiple stacks
-- `atmos_terraform_plan` - Generate Terraform plans (read-only)
-- `file_search` - Search files for patterns
+**Component & Stack Tools:**
+- ✅ `atmos_describe_component` - Describe component configuration in a stack
+- ✅ `atmos_list_stacks` - List all available stacks
+- ✅ `describe_affected` - Show affected components from git changes
+- ✅ `get_template_context` - Debug Go template failures
 
-**Tool Categories:**
-- **Atmos Operations**: Stack and component queries
-- **File Operations**: Read, write, and modify files (read/write tools available now!)
-- **Validation**: Schema and configuration validation
-- **Planning**: Generate plans and previews (read-only)
+**Validation Tools:**
+- ✅ `atmos_validate_stacks` - Validate all stack configurations
+- ✅ `validate_file_lsp` - Validate files with Language Server Protocol
 
-Stay tuned for updates in future releases!
+**File Operation Tools:**
+- ✅ `read_component_file` - Read files from components directory
+- ✅ `write_component_file` - Write files to components directory
+- ✅ `read_stack_file` - Read files from stacks directory
+- ✅ `write_stack_file` - Write files to stacks directory
+- ✅ `read_file` - Read any file from repository
+- ✅ `search_files` - Search for patterns across files
+- ✅ `list_component_files` - List files in a component
+
+**Command Execution Tools:**
+- ✅ `execute_atmos_command` - Execute any Atmos CLI command
+
+**Total Tools Available:** 14 tools across all categories
+
+With these tools, Atmos AI has full Claude Code-like capabilities for infrastructure management!
 
 ## Related Documentation
 
