@@ -51,7 +51,7 @@ Atmos-managed AWS credentials now follow the **XDG Base Directory Specification*
 
 **New default locations:**
 - **Linux**: `~/.config/atmos/aws/<provider>/credentials`
-- **macOS**: `~/Library/Application Support/atmos/aws/<provider>/credentials`
+- **macOS**: `~/.config/atmos/aws/<provider>/credentials`
 - **Windows**: `%APPDATA%\atmos\aws\<provider>\credentials`
 
 **Why this matters:**
