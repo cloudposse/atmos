@@ -97,6 +97,31 @@ func TestStripANSI(t *testing.T) {
 			input:    "hello]11;rgb:0000/0000/0000\\world",
 			expected: "helloworld",
 		},
+		{
+			name:     "mouse tracking sequence",
+			input:    "text[<64;122;37Mmore",
+			expected: "textmore",
+		},
+		{
+			name:     "mouse tracking at start",
+			input:    "[<64;122;37Mhello",
+			expected: "hello",
+		},
+		{
+			name:     "CPR fragment without ESC",
+			input:    "text7;1Rmore",
+			expected: "textmore",
+		},
+		{
+			name:     "CPR fragment at start",
+			input:    "7;1Rhello",
+			expected: "hello",
+		},
+		{
+			name:     "multiple new sequences",
+			input:    "[<64;122;37M7;1Rtext",
+			expected: "text",
+		},
 	}
 
 	for _, tt := range tests {

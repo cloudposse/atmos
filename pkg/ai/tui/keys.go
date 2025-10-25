@@ -17,14 +17,15 @@ import (
 // ansiEscapeRegex matches ANSI escape sequences and OSC (Operating System Command) sequences.
 // This includes:
 // - CSI sequences: ESC [ ... (e.g., colors, cursor movement, CPR).
-// - Bare CSI Cursor Position Report: [<row>;<col>R or partial fragments like <number>R.
+// - Mouse tracking: [<digits>M (e.g., [<64;122;37M).
+// - Bare CSI Cursor Position Report: [<row>;<col>R or partial fragments like <number>R or row;colR.
 // - OSC sequences with BEL terminator: ESC ] ... BEL.
 // - OSC sequences with ST terminator: ESC ] ... ESC \.
 // - Bare OSC sequences: ] ... \ or rgb:... \ or <number>;rgb:... \ (fragments without ESC prefix).
 // - Color query fragments: :0000/0000/0000\<letter> or bare [0-]0000/0000/0000[\\] (hex color responses, 1-4 digits per component).
 // - Two-component color fragments: 000/0000\ (2 hex components with backslash terminator).
 // - Standalone escape terminators: space-backslash " \" or bare "\" at start of line.
-var ansiEscapeRegex = regexp.MustCompile(`\x1b\[[0-9;]*[a-zA-Z]|\[[0-9;]+R|^\d+R|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)|][^\\]*\\|\d*;?rgb:[0-9a-fA-F/]*\\|:[0-9a-fA-F/]+\\[a-zA-Z]?|[0-9a-fA-F]{1,4}/[0-9a-fA-F]{1,4}/[0-9a-fA-F]{1,4}\\?|[0-9a-fA-F]{1,4}/[0-9a-fA-F]{1,4}\\|^\s*\\$`)
+var ansiEscapeRegex = regexp.MustCompile(`\x1b\[[0-9;]*[a-zA-Z]|\[<[0-9;]+M|\[[0-9;]+R|\d+;\d+R|^\d+R|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)|][^\\]*\\|\d*;?rgb:[0-9a-fA-F/]*\\|:[0-9a-fA-F/]+\\[a-zA-Z]?|[0-9a-fA-F]{1,4}/[0-9a-fA-F]{1,4}/[0-9a-fA-F]{1,4}\\?|[0-9a-fA-F]{1,4}/[0-9a-fA-F]{1,4}\\|^\s*\\$`)
 
 // stripANSI removes ANSI escape sequences from a string.
 func stripANSI(s string) string {
@@ -127,13 +128,23 @@ func (m *ChatModel) handleKeyMsg(msg tea.KeyMsg) tea.Cmd {
 		}
 		return func() tea.Msg { return nil }
 	case "up":
-		// Navigate to previous message in history.
-		m.navigateHistoryUp()
-		return func() tea.Msg { return nil }
+		// Only use up arrow for history if textarea is single-line.
+		// For multiline text, let the textarea handle cursor movement.
+		if !strings.Contains(m.textarea.Value(), "\n") {
+			m.navigateHistoryUp()
+			return func() tea.Msg { return nil }
+		}
+		// Let textarea handle up arrow for multiline navigation.
+		return nil
 	case "down":
-		// Navigate to next message in history.
-		m.navigateHistoryDown()
-		return func() tea.Msg { return nil }
+		// Only use down arrow for history if textarea is single-line.
+		// For multiline text, let the textarea handle cursor movement.
+		if !strings.Contains(m.textarea.Value(), "\n") {
+			m.navigateHistoryDown()
+			return func() tea.Msg { return nil }
+		}
+		// Let textarea handle down arrow for multiline navigation.
+		return nil
 	}
 
 	// Return nil to allow textarea to handle the key.
@@ -217,18 +228,23 @@ func (m *ChatModel) handleNormalSessionListKeys(msg tea.KeyMsg) tea.Cmd {
 	case "esc", "q":
 		// Return to chat view.
 		m.currentView = viewModeChat
+		m.textarea.Focus()
 		// Return empty command to consume the key event and prevent it from reaching the textarea
 		return func() tea.Msg { return nil }
 	case "up", "k":
-		// Navigate up in filtered list.
+		// Navigate up in filtered list with wraparound.
 		if m.selectedSessionIndex > 0 {
 			m.selectedSessionIndex--
+		} else if len(filteredSessions) > 0 {
+			m.selectedSessionIndex = len(filteredSessions) - 1
 		}
 		return func() tea.Msg { return nil }
 	case "down", "j":
-		// Navigate down in filtered list.
+		// Navigate down in filtered list with wraparound.
 		if m.selectedSessionIndex < len(filteredSessions)-1 {
 			m.selectedSessionIndex++
+		} else if len(filteredSessions) > 0 {
+			m.selectedSessionIndex = 0
 		}
 		return func() tea.Msg { return nil }
 	case "d", "D":
@@ -371,18 +387,23 @@ func (m *ChatModel) handleProviderSelectKeys(msg tea.KeyMsg) tea.Cmd {
 	case "esc", "q":
 		// Return to chat view.
 		m.currentView = viewModeChat
+		m.textarea.Focus()
 		// Return empty command to consume the key event
 		return func() tea.Msg { return nil }
 	case "up", "k":
-		// Move selection up.
+		// Move selection up with wraparound.
 		if m.selectedProviderIdx > 0 {
 			m.selectedProviderIdx--
+		} else if len(configuredProviders) > 0 {
+			m.selectedProviderIdx = len(configuredProviders) - 1
 		}
 		return func() tea.Msg { return nil }
 	case "down", "j":
-		// Move selection down.
+		// Move selection down with wraparound.
 		if m.selectedProviderIdx < len(configuredProviders)-1 {
 			m.selectedProviderIdx++
+		} else if len(configuredProviders) > 0 {
+			m.selectedProviderIdx = 0
 		}
 		return func() tea.Msg { return nil }
 	case "enter":
@@ -395,6 +416,7 @@ func (m *ChatModel) handleProviderSelectKeys(msg tea.KeyMsg) tea.Cmd {
 		}
 		// Return to chat view.
 		m.currentView = viewModeChat
+		m.textarea.Focus()
 		m.updateViewportContent()
 		// Return empty command to consume the key event and prevent it from reaching the textarea
 		return func() tea.Msg { return nil }

@@ -102,6 +102,7 @@ func (m *ChatModel) handleSessionSwitched(msg sessionSwitchedMsg) {
 		}
 		m.updateViewportContent()
 		m.currentView = viewModeChat
+		m.textarea.Focus()
 		m.sessionListError = ""
 	}
 }
@@ -231,7 +232,7 @@ func (m *ChatModel) renderSessionList(content *strings.Builder, styles *sessionL
 
 		// Add metadata
 		sessionLine.WriteString(fmt.Sprintf(" • %s • %d msg",
-			sess.CreatedAt.Format("Jan 02"),
+			sess.CreatedAt.Format("2006-01-02 15:04"),
 			msgCount))
 
 		content.WriteString(style.Render(sessionLine.String()))
@@ -268,7 +269,7 @@ func (m *ChatModel) renderFilteredSessionList(content *strings.Builder, styles *
 
 		// Add metadata
 		sessionLine.WriteString(fmt.Sprintf(" • %s • %d msg",
-			sess.CreatedAt.Format("Jan 02"),
+			sess.CreatedAt.Format("2006-01-02 15:04"),
 			msgCount))
 
 		content.WriteString(style.Render(sessionLine.String()))

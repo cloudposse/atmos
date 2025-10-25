@@ -21,60 +21,6 @@ const (
 	sessionNameWidth     = 50
 )
 
-// Provider represents an AI provider with its default model.
-type Provider struct {
-	Name         string
-	DisplayName  string
-	DefaultModel string
-	APIKeyEnv    string
-}
-
-// AvailableProviders lists all supported AI providers.
-var AvailableProviders = []Provider{
-	{
-		Name:         "anthropic",
-		DisplayName:  "Anthropic (Claude)",
-		DefaultModel: "claude-sonnet-4-20250514",
-		APIKeyEnv:    "ANTHROPIC_API_KEY",
-	},
-	{
-		Name:         "openai",
-		DisplayName:  "OpenAI (GPT)",
-		DefaultModel: "gpt-4o",
-		APIKeyEnv:    "OPENAI_API_KEY",
-	},
-	{
-		Name:         "gemini",
-		DisplayName:  "Google (Gemini)",
-		DefaultModel: "gemini-2.0-flash-exp",
-		APIKeyEnv:    "GEMINI_API_KEY",
-	},
-	{
-		Name:         "grok",
-		DisplayName:  "xAI (Grok)",
-		DefaultModel: "grok-beta",
-		APIKeyEnv:    "XAI_API_KEY",
-	},
-	{
-		Name:         "ollama",
-		DisplayName:  "Ollama (Local)",
-		DefaultModel: "llama3.3:70b",
-		APIKeyEnv:    "OLLAMA_API_KEY",
-	},
-	{
-		Name:         "bedrock",
-		DisplayName:  "AWS Bedrock",
-		DefaultModel: "anthropic.claude-sonnet-4-20250514-v2:0",
-		APIKeyEnv:    "AWS_ACCESS_KEY_ID",
-	},
-	{
-		Name:         "azureopenai",
-		DisplayName:  "Azure OpenAI",
-		DefaultModel: "gpt-4o",
-		APIKeyEnv:    "AZURE_OPENAI_API_KEY",
-	},
-}
-
 // createSessionForm holds the state of the create session form.
 type createSessionForm struct {
 	nameInput        textinput.Model
@@ -118,6 +64,7 @@ func (m *ChatModel) handleCreateSessionKeys(msg tea.KeyMsg) tea.Cmd {
 			return m.loadSessionList()
 		}
 		m.currentView = viewModeChat
+		m.textarea.Focus()
 		// Return empty command to consume the key event and prevent it from reaching the textarea
 		return func() tea.Msg { return nil }
 	case "tab", "shift+tab":
@@ -131,23 +78,33 @@ func (m *ChatModel) handleCreateSessionKeys(msg tea.KeyMsg) tea.Cmd {
 		}
 		return func() tea.Msg { return nil }
 	case "up", "k":
-		if m.createForm.focusedField == 1 {
-			// Navigate provider selection up
-			if m.createForm.selectedProvider > 0 {
-				m.createForm.selectedProvider--
-			}
-			return func() tea.Msg { return nil }
+		// If name field is focused, switch to provider field first
+		if m.createForm.focusedField == 0 {
+			m.createForm.focusedField = 1
+			m.createForm.nameInput.Blur()
 		}
-		// Fall through to name input if focused
+		// Navigate provider selection up with wraparound
+		configuredProviders := m.getConfiguredProvidersForCreate()
+		if m.createForm.selectedProvider > 0 {
+			m.createForm.selectedProvider--
+		} else if len(configuredProviders) > 0 {
+			m.createForm.selectedProvider = len(configuredProviders) - 1
+		}
+		return func() tea.Msg { return nil }
 	case "down", "j":
-		if m.createForm.focusedField == 1 {
-			// Navigate provider selection down
-			if m.createForm.selectedProvider < len(AvailableProviders)-1 {
-				m.createForm.selectedProvider++
-			}
-			return func() tea.Msg { return nil }
+		// If name field is focused, switch to provider field first
+		if m.createForm.focusedField == 0 {
+			m.createForm.focusedField = 1
+			m.createForm.nameInput.Blur()
 		}
-		// Fall through to name input if focused
+		// Navigate provider selection down with wraparound
+		configuredProviders := m.getConfiguredProvidersForCreate()
+		if m.createForm.selectedProvider < len(configuredProviders)-1 {
+			m.createForm.selectedProvider++
+		} else if len(configuredProviders) > 0 {
+			m.createForm.selectedProvider = 0
+		}
+		return func() tea.Msg { return nil }
 	case "enter":
 		// Submit form
 		return m.submitCreateSession()
@@ -176,8 +133,12 @@ func (m *ChatModel) submitCreateSession() tea.Cmd {
 			return sessionCreatedMsg{err: errUtils.ErrAISessionNameEmpty}
 		}
 
-		// Get selected provider
-		provider := AvailableProviders[m.createForm.selectedProvider]
+		// Get selected provider from atmos.yaml configuration
+		configuredProviders := m.getConfiguredProvidersForCreate()
+		if m.createForm.selectedProvider >= len(configuredProviders) {
+			return sessionCreatedMsg{err: fmt.Errorf("invalid provider selection")}
+		}
+		provider := configuredProviders[m.createForm.selectedProvider]
 
 		// Create session
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -186,7 +147,7 @@ func (m *ChatModel) submitCreateSession() tea.Cmd {
 		sess, err := m.manager.CreateSession(
 			ctx,
 			name,
-			provider.DefaultModel,
+			provider.Model, // Use model from atmos.yaml
 			provider.Name,
 			nil, // metadata
 		)
@@ -208,6 +169,7 @@ func (m *ChatModel) handleSessionCreated(msg sessionCreatedMsg) {
 		m.messages = make([]ChatMessage, 0)
 		m.updateViewportContent()
 		m.currentView = viewModeChat
+		m.textarea.Focus()
 		m.createForm = newCreateSessionForm() // Reset form
 
 		// Add welcome message
@@ -280,8 +242,9 @@ func (m *ChatModel) createSessionView() string {
 	content.WriteString(labelStyle.Render(providerLabel))
 	content.WriteString(newlineChar)
 
-	// Render provider options
-	for i, provider := range AvailableProviders {
+	// Render provider options from atmos.yaml configuration
+	configuredProviders := m.getConfiguredProvidersForCreate()
+	for i, provider := range configuredProviders {
 		var style lipgloss.Style
 		var prefix string
 
@@ -305,7 +268,7 @@ func (m *ChatModel) createSessionView() string {
 			prefix = "○ "
 		}
 
-		modelInfo := fmt.Sprintf("%s%s (%s)", prefix, provider.DisplayName, provider.DefaultModel)
+		modelInfo := fmt.Sprintf("%s%s (%s)", prefix, provider.DisplayName, provider.Model)
 		content.WriteString(style.Render(modelInfo))
 		content.WriteString(newlineChar)
 	}

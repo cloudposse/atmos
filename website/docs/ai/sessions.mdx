@@ -551,41 +551,52 @@ Supported time units:
 
 ## Session Storage
 
+### How Sessions Are Stored
+
+Atmos stores all your AI conversations **locally on your machine** in a lightweight SQLite database. When you chat with the AI, your messages and the AI's responses are automatically saved so you can continue conversations later.
+
+**Storage Benefits:**
+- ✅ **Fast & Efficient** - Optimized for quick access to conversation history
+- ✅ **Fully Local** - All data stays on your computer, nothing sent to cloud storage
+- ✅ **Automatic** - No manual saving required, conversations persist automatically
+- ✅ **Portable** - Single database file you can backup, share, or move between machines
+
 ### Storage Location
 
-Sessions are stored in a SQLite database at:
+Sessions are stored in a SQLite database file inside your project directory:
+
 ```
 <project-root>/.atmos/sessions/sessions.db
 ```
 
-The database is created automatically when you start your first session.
+**Example locations:**
+```
+~/infrastructure/.atmos/sessions/sessions.db          # Local project
+/workspace/atmos-config/.atmos/sessions/sessions.db   # Team project
+```
 
-### Database Schema
+The database file is created automatically when you start your first session. You can customize the storage location in your `atmos.yaml` configuration:
 
-The SQLite database contains three tables:
+```yaml
+settings:
+  ai:
+    sessions:
+      path: ".atmos/sessions"  # Default location
+```
 
-**sessions** - Session metadata
-- `id` (TEXT) - Unique session identifier
-- `name` (TEXT) - Session name
-- `project_path` (TEXT) - Project directory path
-- `model` (TEXT) - AI model used
-- `provider` (TEXT) - AI provider (anthropic, openai, gemini, grok)
-- `created_at` (TIMESTAMP) - Creation timestamp
-- `updated_at` (TIMESTAMP) - Last update timestamp
-- `metadata` (TEXT) - JSON metadata
+:::tip File System Performance
+The session database uses Write-Ahead Logging (WAL) mode for optimal performance. This means writes don't block reads, and you get fast response times even with long conversation histories.
+:::
 
-**messages** - Conversation history
-- `id` (INTEGER) - Message ID
-- `session_id` (TEXT) - Foreign key to sessions
-- `role` (TEXT) - Message role (user, assistant, system)
-- `content` (TEXT) - Message content
-- `created_at` (TIMESTAMP) - Message timestamp
+### What's Stored
 
-**session_context** - Context items
-- `session_id` (TEXT) - Foreign key to sessions
-- `context_type` (TEXT) - Type of context (stack_file, component, etc.)
-- `context_key` (TEXT) - Context identifier
-- `context_value` (TEXT) - Context data
+Each session contains:
+- **Your messages** - Everything you ask the AI
+- **AI responses** - Complete conversation history
+- **Session metadata** - Name, creation date, model, provider
+- **Context references** - Links to stack files and components discussed
+
+The database is optimized for performance with proper indexes on frequently accessed data, ensuring your chat experience remains fast even with hundreds of messages.
 
 ### Backing Up Sessions
 
@@ -601,32 +612,26 @@ cp .atmos/sessions/sessions.db.backup .atmos/sessions/sessions.db
 ```
 </Terminal>
 
-### Inspecting Sessions
+### Viewing Session Details
 
-You can inspect sessions using any SQLite client:
+Use the built-in commands to view your sessions without needing to access the database directly:
 
-<Terminal title="sqlite3">
+<Terminal title="atmos ai sessions">
 ```bash
-# Open the database
-sqlite3 .atmos/sessions/sessions.db
+# List all sessions with metadata
+atmos ai sessions
 
-# List all sessions
-SELECT name, created_at, updated_at FROM sessions;
-
-# Count messages per session
-SELECT s.name, COUNT(m.id) as message_count
-FROM sessions s
-LEFT JOIN messages m ON s.id = m.session_id
-GROUP BY s.id;
-
-# View recent messages
-SELECT s.name, m.role, substr(m.content, 1, 50) as preview, m.created_at
-FROM messages m
-JOIN sessions s ON m.session_id = s.id
-ORDER BY m.created_at DESC
-LIMIT 10;
+# View sessions in the interactive TUI
+atmos ai chat
+# Press Ctrl+L to see all sessions with details
 ```
 </Terminal>
+
+The session picker shows everything you need: session names, AI providers, creation dates, and message counts.
+
+:::info Advanced Users
+If you're comfortable with SQLite, you can query the database directly at `.atmos/sessions/sessions.db` using any SQLite client. However, we recommend using the built-in `atmos ai sessions` command for most use cases.
+:::
 
 ## Privacy and Security
 

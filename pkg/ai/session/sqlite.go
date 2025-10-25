@@ -43,10 +43,22 @@ func NewSQLiteStorage(storagePath string) (*SQLiteStorage, error) {
 	// Configure connection.
 	db.SetMaxOpenConns(1) // SQLite works best with single connection
 
-	// Enable foreign key constraints (required for cascade deletes).
-	if _, err := db.Exec("PRAGMA foreign_keys = ON"); err != nil {
-		db.Close()
-		return nil, fmt.Errorf("failed to enable foreign keys: %w", err)
+	// Enable performance optimizations.
+	pragmas := []string{
+		"PRAGMA foreign_keys = ON",     // Required for cascade deletes
+		"PRAGMA journal_mode = WAL",    // Write-Ahead Logging: faster, non-blocking writes
+		"PRAGMA synchronous = NORMAL",  // Reduce fsyncs while maintaining crash safety
+		"PRAGMA busy_timeout = 5000",   // Wait up to 5s if database is locked
+		"PRAGMA cache_size = -64000",   // 64MB cache (negative = KB, positive = pages)
+		"PRAGMA temp_store = MEMORY",   // Store temp tables in memory
+		"PRAGMA mmap_size = 268435456", // 256MB memory-mapped I/O for faster reads
+	}
+
+	for _, pragma := range pragmas {
+		if _, err := db.Exec(pragma); err != nil {
+			db.Close()
+			return nil, fmt.Errorf("%w %q: %w", errUtils.ErrAISQLitePragmaFailed, pragma, err)
+		}
 	}
 
 	storage := &SQLiteStorage{

@@ -235,11 +235,19 @@ func (m *ChatModel) switchProvider(provider string) error {
 		m.sess.Model = providerConfig.Model
 
 		// Persist session update if manager is available.
+		// IMPORTANT: This runs asynchronously to prevent UI freezes during database writes.
+		// Database operations can take 3-5 seconds depending on disk speed and load.
 		if m.manager != nil {
-			ctx := context.Background()
-			if err := m.manager.UpdateSession(ctx, m.sess); err != nil {
-				log.Warn(fmt.Sprintf("Failed to persist provider switch in session: %v", err))
-			}
+			// Capture values before goroutine to avoid race conditions.
+			manager := m.manager
+			sess := m.sess
+			go func() {
+				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+				defer cancel()
+				if err := manager.UpdateSession(ctx, sess); err != nil {
+					log.Warn(fmt.Sprintf("Failed to persist provider switch in session: %v", err))
+				}
+			}()
 		}
 	}
 
@@ -367,6 +375,9 @@ func (m *ChatModel) handleMessage(msg tea.Msg, cmds *[]tea.Cmd) (bool, tea.Cmd) 
 	case tea.KeyMsg:
 		return m.handleKeyMessage(msg)
 
+	case tea.MouseMsg:
+		return m.handleMouseMessage(msg)
+
 	case sendMessageMsg:
 		return m.handleSendMessage(msg)
 
@@ -404,6 +415,37 @@ func (m *ChatModel) handleKeyMessage(msg tea.KeyMsg) (bool, tea.Cmd) {
 		return true, keyCmd
 	}
 	// Fall through to update textarea with the key.
+	return false, nil
+}
+
+// handleMouseMessage handles mouse input.
+func (m *ChatModel) handleMouseMessage(msg tea.MouseMsg) (bool, tea.Cmd) {
+	// Only handle left button presses
+	if msg.Button != tea.MouseButtonLeft || msg.Action != tea.MouseActionPress {
+		return false, nil
+	}
+
+	// Handle mouse clicks in create session view
+	if m.currentView == viewModeCreateSession {
+		// Simple heuristic: clicks in upper area (rows 0-6) focus name field,
+		// clicks in lower area (rows 7+) focus provider field
+		if msg.Y <= 6 {
+			// Click in name field area - focus it
+			if m.createForm.focusedField != 0 {
+				m.createForm.focusedField = 0
+				m.createForm.nameInput.Focus()
+			}
+			return true, nil
+		} else {
+			// Click in provider area - focus provider field
+			if m.createForm.focusedField != 1 {
+				m.createForm.focusedField = 1
+				m.createForm.nameInput.Blur()
+			}
+			return true, nil
+		}
+	}
+
 	return false, nil
 }
 
@@ -539,11 +581,19 @@ func (m *ChatModel) addMessage(role, content string) {
 	m.messages = append(m.messages, message)
 
 	// Save message to session if available.
+	// IMPORTANT: This runs asynchronously to prevent UI freezes during database writes.
+	// Database operations can take 3-5 seconds depending on disk speed and load.
 	if m.manager != nil && m.sess != nil && role != roleSystem {
-		ctx := context.Background()
-		if err := m.manager.AddMessage(ctx, m.sess.ID, role, content); err != nil {
-			log.Warn(fmt.Sprintf("Failed to save message to session: %v", err))
-		}
+		// Capture values before goroutine to avoid race conditions.
+		manager := m.manager
+		sessionID := m.sess.ID
+		go func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			if err := manager.AddMessage(ctx, sessionID, role, content); err != nil {
+				log.Warn(fmt.Sprintf("Failed to save message to session: %v", err))
+			}
+		}()
 	}
 }
 
@@ -867,6 +917,73 @@ func (m *ChatModel) getConfiguredProviders() []struct {
 	// If no providers are configured, show all (fallback for backward compatibility)
 	if len(configured) == 0 {
 		return availableProviders
+	}
+
+	return configured
+}
+
+// ProviderWithModel represents a provider with its configured model.
+type ProviderWithModel struct {
+	Name        string
+	DisplayName string
+	Model       string
+}
+
+// getConfiguredProvidersForCreate returns configured providers with their models from atmos.yaml.
+func (m *ChatModel) getConfiguredProvidersForCreate() []ProviderWithModel {
+	if m.atmosConfig == nil || m.atmosConfig.Settings.AI.Providers == nil {
+		// Fallback to default providers with hardcoded models if no config
+		return []ProviderWithModel{
+			{Name: "anthropic", DisplayName: "Anthropic (Claude)", Model: "claude-sonnet-4-20250514"},
+			{Name: "openai", DisplayName: "OpenAI (GPT)", Model: "gpt-4o"},
+			{Name: "gemini", DisplayName: "Google (Gemini)", Model: "gemini-2.0-flash-exp"},
+			{Name: "grok", DisplayName: "xAI (Grok)", Model: "grok-beta"},
+			{Name: "ollama", DisplayName: "Ollama (Local)", Model: "llama3.3:70b"},
+			{Name: "bedrock", DisplayName: "AWS Bedrock", Model: "anthropic.claude-sonnet-4-20250514-v2:0"},
+			{Name: "azureopenai", DisplayName: "Azure OpenAI", Model: "gpt-4o"},
+		}
+	}
+
+	// Map of display names
+	displayNames := map[string]string{
+		"anthropic":   "Anthropic (Claude)",
+		"openai":      "OpenAI (GPT)",
+		"gemini":      "Google (Gemini)",
+		"grok":        "xAI (Grok)",
+		"ollama":      "Ollama (Local)",
+		"bedrock":     "AWS Bedrock",
+		"azureopenai": "Azure OpenAI",
+	}
+
+	configured := make([]ProviderWithModel, 0)
+
+	for _, provider := range availableProviders {
+		// Check if this provider is configured
+		if providerConfig, exists := m.atmosConfig.Settings.AI.Providers[provider.Name]; exists {
+			displayName := displayNames[provider.Name]
+			if displayName == "" {
+				displayName = provider.Name // Fallback to name if no display name
+			}
+
+			configured = append(configured, ProviderWithModel{
+				Name:        provider.Name,
+				DisplayName: displayName,
+				Model:       providerConfig.Model, // Use model from atmos.yaml
+			})
+		}
+	}
+
+	// If no providers are configured, return all with defaults
+	if len(configured) == 0 {
+		return []ProviderWithModel{
+			{Name: "anthropic", DisplayName: "Anthropic (Claude)", Model: "claude-sonnet-4-20250514"},
+			{Name: "openai", DisplayName: "OpenAI (GPT)", Model: "gpt-4o"},
+			{Name: "gemini", DisplayName: "Google (Gemini)", Model: "gemini-2.0-flash-exp"},
+			{Name: "grok", DisplayName: "xAI (Grok)", Model: "grok-beta"},
+			{Name: "ollama", DisplayName: "Ollama (Local)", Model: "llama3.3:70b"},
+			{Name: "bedrock", DisplayName: "AWS Bedrock", Model: "anthropic.claude-sonnet-4-20250514-v2:0"},
+			{Name: "azureopenai", DisplayName: "Azure OpenAI", Model: "gpt-4o"},
+		}
 	}
 
 	return configured

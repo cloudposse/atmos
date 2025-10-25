@@ -463,6 +463,7 @@ var (
 	ErrAIPathIsDirectory            = errors.New("path is a directory, not a file")
 	ErrAISessionManagerNotAvailable = errors.New("session manager not available")
 	ErrAISessionNameEmpty           = errors.New("session name cannot be empty")
+	ErrAISQLitePragmaFailed         = errors.New("failed to set SQLite pragma")
 	ErrMCPToolNotFound              = errors.New("MCP tool not found")
 	ErrMCPInvalidJSONRPCVersion     = errors.New("invalid JSON-RPC version")
 	ErrMCPInvalidTransport          = errors.New("invalid transport type")

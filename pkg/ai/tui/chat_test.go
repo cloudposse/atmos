@@ -14,6 +14,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/ai/session"
 	"github.com/cloudposse/atmos/pkg/ai/tools"
 	"github.com/cloudposse/atmos/pkg/ai/types"
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 // mockAIClient is a mock implementation of ai.Client for testing.
@@ -438,7 +439,7 @@ func TestChatModel_SessionNavigation(t *testing.T) {
 		assert.Equal(t, 1, model.selectedSessionIndex)
 	})
 
-	t.Run("down arrow at bottom stays at bottom", func(t *testing.T) {
+	t.Run("down arrow at bottom wraps to top", func(t *testing.T) {
 		model.selectedSessionIndex = 2
 
 		keyMsg := tea.KeyMsg{
@@ -447,7 +448,7 @@ func TestChatModel_SessionNavigation(t *testing.T) {
 
 		model.handleSessionListKeys(keyMsg)
 
-		assert.Equal(t, 2, model.selectedSessionIndex)
+		assert.Equal(t, 0, model.selectedSessionIndex)
 	})
 
 	t.Run("up arrow navigates up", func(t *testing.T) {
@@ -462,7 +463,7 @@ func TestChatModel_SessionNavigation(t *testing.T) {
 		assert.Equal(t, 1, model.selectedSessionIndex)
 	})
 
-	t.Run("up arrow at top stays at top", func(t *testing.T) {
+	t.Run("up arrow at top wraps to bottom", func(t *testing.T) {
 		model.selectedSessionIndex = 0
 
 		keyMsg := tea.KeyMsg{
@@ -471,7 +472,7 @@ func TestChatModel_SessionNavigation(t *testing.T) {
 
 		model.handleSessionListKeys(keyMsg)
 
-		assert.Equal(t, 0, model.selectedSessionIndex)
+		assert.Equal(t, 2, model.selectedSessionIndex)
 	})
 }
 
@@ -905,6 +906,28 @@ func TestChatModel_CreateSession(t *testing.T) {
 		assert.Equal(t, 0, model.createForm.selectedProvider)
 	})
 
+	t.Run("wraps provider selection at boundaries", func(t *testing.T) {
+		model.currentView = viewModeCreateSession
+		model.createForm = newCreateSessionForm()
+		model.createForm.focusedField = 1 // Provider selection
+
+		// Get provider count
+		configuredProviders := model.getConfiguredProvidersForCreate()
+		lastIndex := len(configuredProviders) - 1
+
+		// Up arrow at top wraps to bottom
+		model.createForm.selectedProvider = 0
+		keyMsg := tea.KeyMsg{Type: tea.KeyUp}
+		model.handleCreateSessionKeys(keyMsg)
+		assert.Equal(t, lastIndex, model.createForm.selectedProvider)
+
+		// Down arrow at bottom wraps to top
+		model.createForm.selectedProvider = lastIndex
+		keyMsg = tea.KeyMsg{Type: tea.KeyDown}
+		model.handleCreateSessionKeys(keyMsg)
+		assert.Equal(t, 0, model.createForm.selectedProvider)
+	})
+
 	t.Run("cancels create session with Esc", func(t *testing.T) {
 		model.currentView = viewModeCreateSession
 		keyMsg := tea.KeyMsg{Type: tea.KeyEsc}
@@ -914,6 +937,77 @@ func TestChatModel_CreateSession(t *testing.T) {
 		// Should either go to session list or chat view
 		assert.True(t, model.currentView == viewModeSessionList || model.currentView == viewModeChat)
 		assert.NotNil(t, cmd) // May load session list
+	})
+
+	t.Run("handles mouse clicks to focus fields", func(t *testing.T) {
+		model.currentView = viewModeCreateSession
+		model.createForm = newCreateSessionForm()
+		model.createForm.focusedField = 1 // Start with provider field focused
+
+		// Click in name field area (Y <= 6)
+		mouseMsg := tea.MouseMsg{
+			Button: tea.MouseButtonLeft,
+			Action: tea.MouseActionPress,
+			X:      10,
+			Y:      3,
+		}
+
+		handled, cmd := model.handleMouseMessage(mouseMsg)
+
+		assert.True(t, handled)
+		assert.Nil(t, cmd)
+		assert.Equal(t, 0, model.createForm.focusedField) // Name field should be focused
+
+		// Click in provider area (Y > 6)
+		mouseMsg = tea.MouseMsg{
+			Button: tea.MouseButtonLeft,
+			Action: tea.MouseActionPress,
+			X:      10,
+			Y:      10,
+		}
+
+		handled, cmd = model.handleMouseMessage(mouseMsg)
+
+		assert.True(t, handled)
+		assert.Nil(t, cmd)
+		assert.Equal(t, 1, model.createForm.focusedField) // Provider field should be focused
+	})
+
+	t.Run("ignores non-left mouse clicks in create session", func(t *testing.T) {
+		model.currentView = viewModeCreateSession
+		model.createForm = newCreateSessionForm()
+		model.createForm.focusedField = 0
+
+		// Right click should be ignored
+		mouseMsg := tea.MouseMsg{
+			Button: tea.MouseButtonRight,
+			Action: tea.MouseActionPress,
+			X:      10,
+			Y:      10,
+		}
+
+		handled, cmd := model.handleMouseMessage(mouseMsg)
+
+		assert.False(t, handled)
+		assert.Nil(t, cmd)
+		assert.Equal(t, 0, model.createForm.focusedField) // Field should not change
+	})
+
+	t.Run("ignores mouse clicks outside create session view", func(t *testing.T) {
+		model.currentView = viewModeChat
+		model.createForm = newCreateSessionForm()
+
+		mouseMsg := tea.MouseMsg{
+			Button: tea.MouseButtonLeft,
+			Action: tea.MouseActionPress,
+			X:      10,
+			Y:      3,
+		}
+
+		handled, cmd := model.handleMouseMessage(mouseMsg)
+
+		assert.False(t, handled)
+		assert.Nil(t, cmd)
 	})
 
 	t.Run("renders create session view", func(t *testing.T) {
@@ -970,30 +1064,132 @@ func TestNewCreateSessionForm(t *testing.T) {
 	assert.Empty(t, form.error)
 }
 
-func TestAvailableProviders(t *testing.T) {
-	assert.Len(t, AvailableProviders, 7)
+func TestGetConfiguredProvidersForCreate(t *testing.T) {
+	t.Run("returns configured providers with models from atmos.yaml", func(t *testing.T) {
+		// Create mock config with specific providers
+		atmosConfig := &schema.AtmosConfiguration{
+			Settings: schema.AtmosSettings{
+				AI: schema.AISettings{
+					Providers: map[string]*schema.AIProviderConfig{
+						"anthropic": {
+							Model: "claude-3-opus-20240229",
+						},
+						"openai": {
+							Model: "gpt-4-turbo",
+						},
+					},
+				},
+			},
+		}
 
-	// Verify all expected providers are present.
-	providerNames := make([]string, len(AvailableProviders))
-	for i, p := range AvailableProviders {
-		providerNames[i] = p.Name
+		model := &ChatModel{
+			atmosConfig: atmosConfig,
+		}
+
+		providers := model.getConfiguredProvidersForCreate()
+
+		// Should have exactly 2 configured providers
+		assert.Len(t, providers, 2)
+
+		// Verify Anthropic provider
+		assert.Equal(t, "anthropic", providers[0].Name)
+		assert.Equal(t, "Anthropic (Claude)", providers[0].DisplayName)
+		assert.Equal(t, "claude-3-opus-20240229", providers[0].Model) // From atmos.yaml
+
+		// Verify OpenAI provider
+		assert.Equal(t, "openai", providers[1].Name)
+		assert.Equal(t, "OpenAI (GPT)", providers[1].DisplayName)
+		assert.Equal(t, "gpt-4-turbo", providers[1].Model) // From atmos.yaml
+	})
+
+	t.Run("returns default providers when no config", func(t *testing.T) {
+		model := &ChatModel{
+			atmosConfig: nil,
+		}
+
+		providers := model.getConfiguredProvidersForCreate()
+
+		// Should have default providers
+		assert.GreaterOrEqual(t, len(providers), 7)
+
+		// Verify all have required fields
+		for _, p := range providers {
+			assert.NotEmpty(t, p.Name)
+			assert.NotEmpty(t, p.DisplayName)
+			assert.NotEmpty(t, p.Model)
+		}
+	})
+}
+
+func TestChatModel_ProviderSelectNavigation(t *testing.T) {
+	// Create mock config with multiple providers
+	atmosConfig := &schema.AtmosConfiguration{
+		Settings: schema.AtmosSettings{
+			AI: schema.AISettings{
+				Providers: map[string]*schema.AIProviderConfig{
+					"anthropic": {Model: "claude-3-opus-20240229"},
+					"openai":    {Model: "gpt-4-turbo"},
+					"gemini":    {Model: "gemini-pro"},
+				},
+			},
+		},
 	}
 
-	assert.Contains(t, providerNames, "anthropic")
-	assert.Contains(t, providerNames, "openai")
-	assert.Contains(t, providerNames, "gemini")
-	assert.Contains(t, providerNames, "grok")
-	assert.Contains(t, providerNames, "ollama")
-	assert.Contains(t, providerNames, "bedrock")
-	assert.Contains(t, providerNames, "azureopenai")
+	client := &mockAIClient{model: "test-model"}
+	model, err := NewChatModel(client, atmosConfig, nil, nil, nil, nil)
+	require.NoError(t, err)
 
-	// Verify provider details.
-	for _, p := range AvailableProviders {
-		assert.NotEmpty(t, p.Name)
-		assert.NotEmpty(t, p.DisplayName)
-		assert.NotEmpty(t, p.DefaultModel)
-		assert.NotEmpty(t, p.APIKeyEnv)
-	}
+	model.currentView = viewModeProviderSelect
+	model.selectedProviderIdx = 0
+
+	t.Run("navigates down through providers", func(t *testing.T) {
+		model.selectedProviderIdx = 0
+		keyMsg := tea.KeyMsg{Type: tea.KeyDown}
+
+		model.handleProviderSelectKeys(keyMsg)
+
+		assert.Equal(t, 1, model.selectedProviderIdx)
+	})
+
+	t.Run("navigates up through providers", func(t *testing.T) {
+		model.selectedProviderIdx = 1
+		keyMsg := tea.KeyMsg{Type: tea.KeyUp}
+
+		model.handleProviderSelectKeys(keyMsg)
+
+		assert.Equal(t, 0, model.selectedProviderIdx)
+	})
+
+	t.Run("wraps to bottom when up at top", func(t *testing.T) {
+		model.selectedProviderIdx = 0
+		configuredProviders := model.getConfiguredProviders()
+		lastIndex := len(configuredProviders) - 1
+
+		keyMsg := tea.KeyMsg{Type: tea.KeyUp}
+		model.handleProviderSelectKeys(keyMsg)
+
+		assert.Equal(t, lastIndex, model.selectedProviderIdx)
+	})
+
+	t.Run("wraps to top when down at bottom", func(t *testing.T) {
+		configuredProviders := model.getConfiguredProviders()
+		lastIndex := len(configuredProviders) - 1
+		model.selectedProviderIdx = lastIndex
+
+		keyMsg := tea.KeyMsg{Type: tea.KeyDown}
+		model.handleProviderSelectKeys(keyMsg)
+
+		assert.Equal(t, 0, model.selectedProviderIdx)
+	})
+
+	t.Run("returns to chat on esc", func(t *testing.T) {
+		model.currentView = viewModeProviderSelect
+		keyMsg := tea.KeyMsg{Type: tea.KeyEsc}
+
+		model.handleProviderSelectKeys(keyMsg)
+
+		assert.Equal(t, viewModeChat, model.currentView)
+	})
 }
 
 func TestChatModel_DeleteSession(t *testing.T) {
@@ -1562,6 +1758,50 @@ func TestChatModel_HistoryNavigation(t *testing.T) {
 		// Verify history index is reset
 		assert.Equal(t, -1, m.historyIndex)
 		assert.Empty(t, m.historyBuffer)
+	})
+
+	t.Run("allows up/down navigation in multiline text", func(t *testing.T) {
+		m, _ := NewChatModel(client, nil, nil, nil, nil, nil)
+		m.messageHistory = []string{"Previous message"}
+
+		// Set multiline text in textarea
+		m.textarea.SetValue("Line 1\nLine 2\nLine 3")
+
+		// Simulate up key - should NOT navigate history, should be handled by textarea
+		keyMsg := tea.KeyMsg{Type: tea.KeyUp}
+		cmd := m.handleKeyMsg(keyMsg)
+
+		// Command should be nil, allowing textarea to handle the key
+		assert.Nil(t, cmd)
+		// History should not be activated
+		assert.Equal(t, -1, m.historyIndex)
+
+		// Simulate down key - should NOT navigate history, should be handled by textarea
+		keyMsg = tea.KeyMsg{Type: tea.KeyDown}
+		cmd = m.handleKeyMsg(keyMsg)
+
+		// Command should be nil, allowing textarea to handle the key
+		assert.Nil(t, cmd)
+		// History should not be activated
+		assert.Equal(t, -1, m.historyIndex)
+	})
+
+	t.Run("uses up/down for history in single-line text", func(t *testing.T) {
+		m, _ := NewChatModel(client, nil, nil, nil, nil, nil)
+		m.messageHistory = []string{"Previous message"}
+
+		// Set single-line text in textarea (no newlines)
+		m.textarea.SetValue("Current single line")
+
+		// Simulate up key - should navigate history
+		keyMsg := tea.KeyMsg{Type: tea.KeyUp}
+		cmd := m.handleKeyMsg(keyMsg)
+
+		// Command should consume the key
+		assert.NotNil(t, cmd)
+		// History should be activated
+		assert.Equal(t, "Previous message", m.textarea.Value())
+		assert.Equal(t, 0, m.historyIndex)
 	})
 
 	t.Run("loads history from existing session messages", func(t *testing.T) {
