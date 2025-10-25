@@ -4,14 +4,28 @@ This document defines the logging levels in Atmos and provides guidance on when 
 
 ## Core Principle: Logging is Not UI
 
-Logging is for diagnostics, debugging, and telemetry. It is not for user interface.
-User-facing output goes through TextUI (`utils.PrintfMessageToTUI`), never through logs.
+**Logging** is for diagnostics and debugging. **UI output** is for user interaction.
 
-The terminal window is effectively a text-based user interface (TextUI) for our CLI. Anything intended for user interaction—menus, prompts, animations, progress indicators—should be rendered to the terminal as UI output.
+**Key distinction:**
+- **UI output is required** - Without it, the user can't use the command
+- **Logging is optional metadata** - Adds diagnostic context but user doesn't need it
 
-Logging is different: logs are structured records of what the program is doing. They help developers debug issues and feed into telemetry or monitoring systems. Treat logging like sending messages to the developer console in a browser, not to the UI seen by the user.
+**Don't use `logger.Info()` for user messages** - users won't see them if logging is disabled. Use UI output instead (see [I/O and UI Output Guide](io-and-ui-output.md)).
 
-Atmos provides `utils.PrintfMessageToTUI` for writing TextUI messages. It always writes to `stderr` so that `stdout` can remain a clean data stream (for example, JSON output that may be piped to another command). Avoid using `fmt.Println` or `fmt.Printf` for UI output because they default to `stdout` and can corrupt piped data. Log functions such as `log.Info` or `log.Error` are not meant for TextUI and may be silenced via log level configuration.
+**Quick test:** "What happens if I disable logging (`--logs-level=Off`)?"
+- Breaks user experience → It's UI output, use `ui.Success()`, `ui.Error()`, `ui.Data()`
+- User unaffected → It's logging, use `log.Debug()`, `log.Trace()`
+
+**Examples:**
+
+```go
+// ❌ WRONG - using logger for user-facing output
+log.Info("Configuration loaded successfully")
+
+// ✅ CORRECT - UI for user, logging for diagnostics
+ui.Success("Configuration loaded")
+log.Debug("config.LoadAtmosYAML: loaded 42 stacks from atmos.yaml")
+```
 
 ---
 

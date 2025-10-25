@@ -147,17 +147,20 @@ func (v versionExec) displayVersionInFormat(forceCheck bool, format string) erro
 	}
 	switch format {
 	case "json":
-		if data, err := json.MarshalIndent(version, " ", " "); err == nil {
-			fmt.Println(string(data))
+		data, err := json.MarshalIndent(version, " ", " ")
+		if err != nil {
+			return err
 		}
+		return tuiUtils.Data(string(data) + "\n")
 	case "yaml":
-		if data, err := yaml.Marshal(version); err == nil {
-			fmt.Println(string(data))
+		data, err := yaml.Marshal(version)
+		if err != nil {
+			return err
 		}
+		return tuiUtils.Data(string(data))
 	default:
 		return ErrInvalidFormat
 	}
-	return nil
 }
 
 func (v versionExec) checkRelease() {

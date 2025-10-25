@@ -15,8 +15,15 @@ import (
 	xterm "golang.org/x/term"
 
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui"
 	mdstyle "github.com/cloudposse/atmos/pkg/ui/markdown"
 )
+
+// Data writes plain text to stdout (data channel).
+// This is a convenience wrapper around ui.Data().
+func Data(content string) error {
+	return ui.Data(content)
+}
 
 // HighlightCode returns a syntax highlighted code for the specified language
 func HighlightCode(code string, language string, syntaxTheme string) (string, error) {

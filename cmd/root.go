@@ -27,7 +27,9 @@ import (
 	tuiUtils "github.com/cloudposse/atmos/internal/tui/utils"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/filesystem"
+	iolib "github.com/cloudposse/atmos/pkg/io"
 	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/ui"
 	"github.com/cloudposse/atmos/pkg/pager"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/profiler"
@@ -511,6 +513,13 @@ func Execute() error {
 
 	utils.InitializeMarkdown(atmosConfig)
 	errUtils.InitializeMarkdown(atmosConfig)
+
+	// Initialize I/O context and global formatter.
+	ioCtx, ioErr := iolib.NewContext()
+	if ioErr != nil {
+		return fmt.Errorf("failed to initialize I/O context: %w", ioErr)
+	}
+	ui.InitFormatter(ioCtx)
 
 	if initErr != nil && !errors.Is(initErr, cfg.NotFound) {
 		if isVersionCommand() {
