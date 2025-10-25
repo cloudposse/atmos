@@ -149,6 +149,72 @@ func (c *Client) SendMessageWithTools(ctx context.Context, message string, avail
 	return parseGrokResponse(response)
 }
 
+// SendMessageWithHistory sends messages with full conversation history.
+func (c *Client) SendMessageWithHistory(ctx context.Context, messages []types.Message) (string, error) {
+	// Convert messages to Grok/OpenAI format.
+	grokMessages := convertMessagesToGrokFormat(messages)
+
+	params := openai.ChatCompletionNewParams{
+		Messages:  grokMessages,
+		Model:     c.config.Model,
+		MaxTokens: openai.Int(int64(c.config.MaxTokens)),
+	}
+
+	response, err := c.client.Chat.Completions.New(ctx, params)
+	if err != nil {
+		return "", fmt.Errorf("failed to send messages with history: %w", err)
+	}
+
+	// Extract text from response.
+	if len(response.Choices) == 0 {
+		return "", errUtils.ErrAINoResponseChoices
+	}
+
+	return response.Choices[0].Message.Content, nil
+}
+
+// SendMessageWithToolsAndHistory sends messages with full conversation history and available tools.
+func (c *Client) SendMessageWithToolsAndHistory(ctx context.Context, messages []types.Message, availableTools []tools.Tool) (*types.Response, error) {
+	// Convert messages to Grok/OpenAI format.
+	grokMessages := convertMessagesToGrokFormat(messages)
+
+	// Convert tools to Grok format.
+	grokTools := convertToolsToGrokFormat(availableTools)
+
+	params := openai.ChatCompletionNewParams{
+		Messages:  grokMessages,
+		Model:     c.config.Model,
+		MaxTokens: openai.Int(int64(c.config.MaxTokens)),
+		Tools:     grokTools,
+	}
+
+	response, err := c.client.Chat.Completions.New(ctx, params)
+	if err != nil {
+		return nil, fmt.Errorf("failed to send messages with history and tools: %w", err)
+	}
+
+	// Parse response.
+	return parseGrokResponse(response)
+}
+
+// convertMessagesToGrokFormat converts our Message slice to Grok/OpenAI's message format.
+func convertMessagesToGrokFormat(messages []types.Message) []openai.ChatCompletionMessageParamUnion {
+	grokMessages := make([]openai.ChatCompletionMessageParamUnion, 0, len(messages))
+
+	for _, msg := range messages {
+		switch msg.Role {
+		case types.RoleUser:
+			grokMessages = append(grokMessages, openai.UserMessage(msg.Content))
+		case types.RoleAssistant:
+			grokMessages = append(grokMessages, openai.AssistantMessage(msg.Content))
+		case types.RoleSystem:
+			grokMessages = append(grokMessages, openai.SystemMessage(msg.Content))
+		}
+	}
+
+	return grokMessages
+}
+
 // convertToolsToGrokFormat converts our Tool interface to Grok's function format.
 // Since Grok uses the OpenAI SDK, the format is identical to OpenAI.
 func convertToolsToGrokFormat(availableTools []tools.Tool) []openai.ChatCompletionToolParam {

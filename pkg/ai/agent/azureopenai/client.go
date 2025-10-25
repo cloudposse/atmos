@@ -165,6 +165,72 @@ func (c *Client) SendMessageWithTools(ctx context.Context, message string, avail
 	return parseAzureOpenAIResponse(response)
 }
 
+// SendMessageWithHistory sends messages with full conversation history.
+func (c *Client) SendMessageWithHistory(ctx context.Context, messages []types.Message) (string, error) {
+	// Convert messages to Azure OpenAI/OpenAI format.
+	azureMessages := convertMessagesToAzureOpenAIFormat(messages)
+
+	params := openai.ChatCompletionNewParams{
+		Messages:  azureMessages,
+		Model:     c.config.Model,
+		MaxTokens: openai.Int(int64(c.config.MaxTokens)),
+	}
+
+	response, err := c.client.Chat.Completions.New(ctx, params)
+	if err != nil {
+		return "", fmt.Errorf("failed to send messages with history to Azure OpenAI: %w", err)
+	}
+
+	// Extract text from response.
+	if len(response.Choices) == 0 {
+		return "", errUtils.ErrAINoResponseChoices
+	}
+
+	return response.Choices[0].Message.Content, nil
+}
+
+// SendMessageWithToolsAndHistory sends messages with full conversation history and available tools.
+func (c *Client) SendMessageWithToolsAndHistory(ctx context.Context, messages []types.Message, availableTools []tools.Tool) (*types.Response, error) {
+	// Convert messages to Azure OpenAI/OpenAI format.
+	azureMessages := convertMessagesToAzureOpenAIFormat(messages)
+
+	// Convert tools to Azure OpenAI format.
+	azureTools := convertToolsToAzureOpenAIFormat(availableTools)
+
+	params := openai.ChatCompletionNewParams{
+		Messages:  azureMessages,
+		Model:     c.config.Model,
+		MaxTokens: openai.Int(int64(c.config.MaxTokens)),
+		Tools:     azureTools,
+	}
+
+	response, err := c.client.Chat.Completions.New(ctx, params)
+	if err != nil {
+		return nil, fmt.Errorf("failed to send messages with history and tools to Azure OpenAI: %w", err)
+	}
+
+	// Parse response.
+	return parseAzureOpenAIResponse(response)
+}
+
+// convertMessagesToAzureOpenAIFormat converts our Message slice to Azure OpenAI/OpenAI's message format.
+func convertMessagesToAzureOpenAIFormat(messages []types.Message) []openai.ChatCompletionMessageParamUnion {
+	azureMessages := make([]openai.ChatCompletionMessageParamUnion, 0, len(messages))
+
+	for _, msg := range messages {
+		switch msg.Role {
+		case types.RoleUser:
+			azureMessages = append(azureMessages, openai.UserMessage(msg.Content))
+		case types.RoleAssistant:
+			azureMessages = append(azureMessages, openai.AssistantMessage(msg.Content))
+		case types.RoleSystem:
+			azureMessages = append(azureMessages, openai.SystemMessage(msg.Content))
+		}
+	}
+
+	return azureMessages
+}
+
 // convertToolsToAzureOpenAIFormat converts our Tool interface to Azure OpenAI's function format.
 // Since Azure OpenAI uses the OpenAI SDK, the format is identical to OpenAI.
 func convertToolsToAzureOpenAIFormat(availableTools []tools.Tool) []openai.ChatCompletionToolParam {

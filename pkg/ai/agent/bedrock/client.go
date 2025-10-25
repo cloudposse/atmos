@@ -186,6 +186,116 @@ func (c *Client) SendMessageWithTools(ctx context.Context, message string, avail
 	return parseBedrockResponse(response.Body)
 }
 
+// SendMessageWithHistory sends messages with full conversation history.
+func (c *Client) SendMessageWithHistory(ctx context.Context, messages []types.Message) (string, error) {
+	// Convert messages to Bedrock/Anthropic format.
+	bedrockMessages := convertMessagesToBedrockFormat(messages)
+
+	// Prepare request body for Claude models on Bedrock.
+	requestBody := map[string]interface{}{
+		"anthropic_version": "bedrock-2023-05-31",
+		"max_tokens":        c.config.MaxTokens,
+		"messages":          bedrockMessages,
+	}
+
+	bodyBytes, err := json.Marshal(requestBody)
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal request: %w", err)
+	}
+
+	// Invoke model.
+	response, err := c.client.InvokeModel(ctx, &bedrockruntime.InvokeModelInput{
+		ModelId:     aws.String(c.config.Model),
+		Body:        bodyBytes,
+		ContentType: aws.String("application/json"),
+	})
+	if err != nil {
+		return "", fmt.Errorf("failed to invoke Bedrock model with history: %w", err)
+	}
+
+	// Unmarshal response.
+	var responseBody struct {
+		Content []struct {
+			Type string `json:"type"`
+			Text string `json:"text"`
+		} `json:"content"`
+	}
+
+	if err := json.Unmarshal(response.Body, &responseBody); err != nil {
+		return "", fmt.Errorf("failed to unmarshal response: %w", err)
+	}
+
+	// Extract text from response.
+	var responseText string
+	for i := range responseBody.Content {
+		if responseBody.Content[i].Type == "text" {
+			responseText += responseBody.Content[i].Text
+		}
+	}
+
+	return responseText, nil
+}
+
+// SendMessageWithToolsAndHistory sends messages with full conversation history and available tools.
+func (c *Client) SendMessageWithToolsAndHistory(ctx context.Context, messages []types.Message, availableTools []tools.Tool) (*types.Response, error) {
+	// Convert messages to Bedrock/Anthropic format.
+	bedrockMessages := convertMessagesToBedrockFormat(messages)
+
+	// Convert tools to Bedrock/Anthropic format.
+	bedrockTools := convertToolsToBedrockFormat(availableTools)
+
+	// Prepare request body for Claude models on Bedrock with tools.
+	requestBody := map[string]interface{}{
+		"anthropic_version": "bedrock-2023-05-31",
+		"max_tokens":        c.config.MaxTokens,
+		"messages":          bedrockMessages,
+		"tools":             bedrockTools,
+	}
+
+	bodyBytes, err := json.Marshal(requestBody)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal request: %w", err)
+	}
+
+	// Invoke model.
+	response, err := c.client.InvokeModel(ctx, &bedrockruntime.InvokeModelInput{
+		ModelId:     aws.String(c.config.Model),
+		Body:        bodyBytes,
+		ContentType: aws.String("application/json"),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to invoke Bedrock model with history and tools: %w", err)
+	}
+
+	// Parse response.
+	return parseBedrockResponse(response.Body)
+}
+
+// convertMessagesToBedrockFormat converts our Message slice to Bedrock/Anthropic's format.
+func convertMessagesToBedrockFormat(messages []types.Message) []map[string]string {
+	bedrockMessages := make([]map[string]string, 0, len(messages))
+
+	for _, msg := range messages {
+		// Bedrock/Anthropic uses "user" and "assistant" roles only.
+		// System messages are typically sent via a separate "system" parameter, not in messages array.
+		switch msg.Role {
+		case types.RoleUser:
+			bedrockMessages = append(bedrockMessages, map[string]string{
+				"role":    "user",
+				"content": msg.Content,
+			})
+		case types.RoleAssistant:
+			bedrockMessages = append(bedrockMessages, map[string]string{
+				"role":    "assistant",
+				"content": msg.Content,
+			})
+			// Skip system messages as they should be sent via the "system" parameter
+		}
+	}
+
+	return bedrockMessages
+}
+
 // convertToolsToBedrockFormat converts our Tool interface to Bedrock/Anthropic's format.
 func convertToolsToBedrockFormat(availableTools []tools.Tool) []map[string]interface{} {
 	bedrockTools := make([]map[string]interface{}, 0, len(availableTools))

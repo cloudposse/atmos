@@ -19,6 +19,58 @@ Sessions provide:
 - **Context Preservation**: Session-specific context and references
 - **SQLite Storage**: Fast, reliable local storage
 - **Automatic Cleanup**: Configurable retention policies
+- **Conversation Memory**: AI remembers previous messages within a session
+
+## Conversation Memory
+
+Atmos AI now has **full conversation memory** within sessions. When you send a message, the AI receives the complete conversation history, enabling:
+
+### How It Works
+
+1. **Message History**: All previous messages (user and assistant) are stored in the session database
+2. **Context Window**: When you send a message, the full conversation history is sent to the AI provider
+3. **Multi-turn Conversations**: The AI can reference previous questions and answers
+4. **Follow-up Questions**: You can ask "yes", "tell me more", or "what about that?" and the AI understands
+
+### Example Conversation
+
+<Terminal title="atmos ai chat --session vpc-design">
+```bash
+You: What are Atmos stacks?
+
+Atmos AI: Atmos stacks are configuration files that define your infrastructure...
+          [Detailed explanation about stacks, components, and inheritance]
+
+You: yes
+
+Atmos AI: Great! Since you understand stacks, let me explain how they work with components...
+          # ✅ AI remembers it just explained stacks
+```
+</Terminal>
+
+### Benefits
+
+- **Natural Conversations**: Talk to the AI like you would a colleague
+- **No Repetition**: Don't need to repeat context in every message
+- **Complex Workflows**: Build on previous answers to solve multi-step problems
+- **Session Continuity**: Resume conversations days later with full context
+
+### Technical Implementation
+
+The conversation memory works across **all 7 AI providers**:
+- ✅ **Anthropic** (Claude) - Full history support
+- ✅ **OpenAI** (GPT) - Full history support
+- ✅ **Google** (Gemini) - Full history support
+- ✅ **xAI** (Grok) - Full history support
+- ✅ **Ollama** (Local) - Full history support
+- ✅ **AWS Bedrock** - Full history support
+- ✅ **Azure OpenAI** - Full history support
+
+Each provider receives messages in their native format while maintaining the same conversation experience.
+
+:::info Privacy Note
+When resuming a session, the complete message history is sent to the AI provider. If your conversations contain sensitive information, review the [Privacy and Security](#privacy-and-security) section below.
+:::
 
 ## Configuration
 

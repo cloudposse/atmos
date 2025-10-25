@@ -141,6 +141,75 @@ func (c *SimpleClient) SendMessageWithTools(ctx context.Context, message string,
 	return parseAnthropicResponse(response)
 }
 
+// SendMessageWithHistory sends messages with full conversation history.
+func (c *SimpleClient) SendMessageWithHistory(ctx context.Context, messages []types.Message) (string, error) {
+	// Convert messages to Anthropic format.
+	anthropicMessages := convertMessagesToAnthropicFormat(messages)
+
+	response, err := c.client.Messages.New(ctx, anthropic.MessageNewParams{
+		Model:     anthropic.Model(c.config.Model),
+		MaxTokens: int64(c.config.MaxTokens),
+		Messages:  anthropicMessages,
+	})
+	if err != nil {
+		return "", fmt.Errorf("failed to send messages with history: %w", err)
+	}
+
+	// Extract text from response.
+	var responseText string
+	for i := range response.Content {
+		if response.Content[i].Type == "text" {
+			responseText += response.Content[i].Text
+		}
+	}
+
+	return responseText, nil
+}
+
+// SendMessageWithToolsAndHistory sends messages with full conversation history and available tools.
+func (c *SimpleClient) SendMessageWithToolsAndHistory(ctx context.Context, messages []types.Message, availableTools []tools.Tool) (*types.Response, error) {
+	// Convert messages to Anthropic format.
+	anthropicMessages := convertMessagesToAnthropicFormat(messages)
+
+	// Convert tools to Anthropic format.
+	anthropicTools := convertToolsToAnthropicFormat(availableTools)
+
+	// Send message with tools and history.
+	response, err := c.client.Messages.New(ctx, anthropic.MessageNewParams{
+		Model:     anthropic.Model(c.config.Model),
+		MaxTokens: int64(c.config.MaxTokens),
+		Messages:  anthropicMessages,
+		Tools:     anthropicTools,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to send messages with history and tools: %w", err)
+	}
+
+	// Parse response.
+	return parseAnthropicResponse(response)
+}
+
+// convertMessagesToAnthropicFormat converts our Message slice to Anthropic's MessageParam format.
+func convertMessagesToAnthropicFormat(messages []types.Message) []anthropic.MessageParam {
+	anthropicMessages := make([]anthropic.MessageParam, 0, len(messages))
+
+	for _, msg := range messages {
+		switch msg.Role {
+		case types.RoleUser:
+			anthropicMessages = append(anthropicMessages,
+				anthropic.NewUserMessage(anthropic.NewTextBlock(msg.Content)))
+		case types.RoleAssistant:
+			anthropicMessages = append(anthropicMessages,
+				anthropic.NewAssistantMessage(anthropic.NewTextBlock(msg.Content)))
+			// Note: Anthropic doesn't support system messages in the Messages array.
+			// System messages should be passed via the System parameter in MessageNewParams.
+			// For now, we skip system messages in the conversation history.
+		}
+	}
+
+	return anthropicMessages
+}
+
 // convertToolsToAnthropicFormat converts our Tool interface to Anthropic's ToolUnionParam.
 func convertToolsToAnthropicFormat(availableTools []tools.Tool) []anthropic.ToolUnionParam {
 	anthropicTools := make([]anthropic.ToolUnionParam, 0, len(availableTools))

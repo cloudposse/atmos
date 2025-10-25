@@ -157,6 +157,72 @@ func (c *Client) SendMessageWithTools(ctx context.Context, message string, avail
 	return parseOllamaResponse(response)
 }
 
+// SendMessageWithHistory sends messages with full conversation history.
+func (c *Client) SendMessageWithHistory(ctx context.Context, messages []types.Message) (string, error) {
+	// Convert messages to Ollama/OpenAI format.
+	ollamaMessages := convertMessagesToOllamaFormat(messages)
+
+	params := openai.ChatCompletionNewParams{
+		Messages:  ollamaMessages,
+		Model:     c.config.Model,
+		MaxTokens: openai.Int(int64(c.config.MaxTokens)),
+	}
+
+	response, err := c.client.Chat.Completions.New(ctx, params)
+	if err != nil {
+		return "", fmt.Errorf("failed to send messages with history to Ollama: %w", err)
+	}
+
+	// Extract text from response.
+	if len(response.Choices) == 0 {
+		return "", errUtils.ErrAINoResponseChoices
+	}
+
+	return response.Choices[0].Message.Content, nil
+}
+
+// SendMessageWithToolsAndHistory sends messages with full conversation history and available tools.
+func (c *Client) SendMessageWithToolsAndHistory(ctx context.Context, messages []types.Message, availableTools []tools.Tool) (*types.Response, error) {
+	// Convert messages to Ollama/OpenAI format.
+	ollamaMessages := convertMessagesToOllamaFormat(messages)
+
+	// Convert tools to Ollama format.
+	ollamaTools := convertToolsToOllamaFormat(availableTools)
+
+	params := openai.ChatCompletionNewParams{
+		Messages:  ollamaMessages,
+		Model:     c.config.Model,
+		MaxTokens: openai.Int(int64(c.config.MaxTokens)),
+		Tools:     ollamaTools,
+	}
+
+	response, err := c.client.Chat.Completions.New(ctx, params)
+	if err != nil {
+		return nil, fmt.Errorf("failed to send messages with history and tools to Ollama: %w", err)
+	}
+
+	// Parse response.
+	return parseOllamaResponse(response)
+}
+
+// convertMessagesToOllamaFormat converts our Message slice to Ollama/OpenAI's message format.
+func convertMessagesToOllamaFormat(messages []types.Message) []openai.ChatCompletionMessageParamUnion {
+	ollamaMessages := make([]openai.ChatCompletionMessageParamUnion, 0, len(messages))
+
+	for _, msg := range messages {
+		switch msg.Role {
+		case types.RoleUser:
+			ollamaMessages = append(ollamaMessages, openai.UserMessage(msg.Content))
+		case types.RoleAssistant:
+			ollamaMessages = append(ollamaMessages, openai.AssistantMessage(msg.Content))
+		case types.RoleSystem:
+			ollamaMessages = append(ollamaMessages, openai.SystemMessage(msg.Content))
+		}
+	}
+
+	return ollamaMessages
+}
+
 // convertToolsToOllamaFormat converts our Tool interface to Ollama's function format.
 // Since Ollama uses the OpenAI-compatible API, the format is identical to OpenAI.
 func convertToolsToOllamaFormat(availableTools []tools.Tool) []openai.ChatCompletionToolParam {

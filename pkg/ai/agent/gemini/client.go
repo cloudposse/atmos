@@ -147,6 +147,95 @@ func (c *Client) SendMessageWithTools(ctx context.Context, message string, avail
 	return parseGeminiResponse(response)
 }
 
+// SendMessageWithHistory sends messages with full conversation history.
+func (c *Client) SendMessageWithHistory(ctx context.Context, messages []types.Message) (string, error) {
+	// Convert messages to Gemini format.
+	geminiContents := convertMessagesToGeminiFormat(messages)
+
+	// Send messages.
+	response, err := c.client.Models.GenerateContent(ctx, c.config.Model, geminiContents, nil)
+	if err != nil {
+		return "", fmt.Errorf("failed to send messages with history: %w", err)
+	}
+
+	// Extract text from response.
+	if len(response.Candidates) == 0 {
+		return "", errUtils.ErrAINoResponseCandidates
+	}
+
+	if response.Candidates[0].Content == nil || len(response.Candidates[0].Content.Parts) == 0 {
+		return "", errUtils.ErrAINoResponseContent
+	}
+
+	// Get the first text part.
+	part := response.Candidates[0].Content.Parts[0]
+	if part.Text == "" {
+		return "", errUtils.ErrAIResponseNotText
+	}
+
+	return part.Text, nil
+}
+
+// SendMessageWithToolsAndHistory sends messages with full conversation history and available tools.
+func (c *Client) SendMessageWithToolsAndHistory(ctx context.Context, messages []types.Message, availableTools []tools.Tool) (*types.Response, error) {
+	// Convert messages to Gemini format.
+	geminiContents := convertMessagesToGeminiFormat(messages)
+
+	// Convert tools to Gemini format.
+	geminiTools := convertToolsToGeminiFormat(availableTools)
+
+	// Create GenerateContentConfig with tools.
+	config := &genai.GenerateContentConfig{
+		Tools: geminiTools,
+	}
+
+	// Send messages with tools.
+	response, err := c.client.Models.GenerateContent(ctx, c.config.Model, geminiContents, config)
+	if err != nil {
+		return nil, fmt.Errorf("failed to send messages with history and tools: %w", err)
+	}
+
+	// Parse response.
+	return parseGeminiResponse(response)
+}
+
+// convertMessagesToGeminiFormat converts our Message slice to Gemini's Content format.
+func convertMessagesToGeminiFormat(messages []types.Message) []*genai.Content {
+	geminiContents := make([]*genai.Content, 0, len(messages))
+
+	for _, msg := range messages {
+		// Map role to Gemini role.
+		var role string
+		switch msg.Role {
+		case types.RoleUser:
+			role = genai.RoleUser
+		case types.RoleAssistant:
+			role = genai.RoleModel
+		case types.RoleSystem:
+			// Gemini doesn't support system messages in the same way.
+			// We can prepend system messages as user messages or skip them.
+			// For now, treat system messages as user messages.
+			role = genai.RoleUser
+		default:
+			role = genai.RoleUser
+		}
+
+		// Create content with text part.
+		content := &genai.Content{
+			Role: role,
+			Parts: []*genai.Part{
+				{
+					Text: msg.Content,
+				},
+			},
+		}
+
+		geminiContents = append(geminiContents, content)
+	}
+
+	return geminiContents
+}
+
 // convertToolsToGeminiFormat converts our Tool interface to Gemini's function format.
 func convertToolsToGeminiFormat(availableTools []tools.Tool) []*genai.Tool {
 	if len(availableTools) == 0 {

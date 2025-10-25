@@ -43,6 +43,26 @@ func (m *mockAIClient) SendMessageWithTools(ctx context.Context, message string,
 	}, nil
 }
 
+func (m *mockAIClient) SendMessageWithHistory(ctx context.Context, messages []types.Message) (string, error) {
+	// For testing, just return the mock response
+	if m.err != nil {
+		return "", m.err
+	}
+	return m.response, nil
+}
+
+func (m *mockAIClient) SendMessageWithToolsAndHistory(ctx context.Context, messages []types.Message, availableTools []tools.Tool) (*types.Response, error) {
+	// For testing, just return the mock response
+	if m.err != nil {
+		return nil, m.err
+	}
+	return &types.Response{
+		Content:    m.response,
+		ToolCalls:  []types.ToolCall{},
+		StopReason: types.StopReasonEndTurn,
+	}, nil
+}
+
 func (m *mockAIClient) GetModel() string {
 	return m.model
 }

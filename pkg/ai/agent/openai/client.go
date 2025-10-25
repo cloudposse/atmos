@@ -142,6 +142,72 @@ func (c *Client) SendMessageWithTools(ctx context.Context, message string, avail
 	return parseOpenAIResponse(response)
 }
 
+// SendMessageWithHistory sends messages with full conversation history.
+func (c *Client) SendMessageWithHistory(ctx context.Context, messages []types.Message) (string, error) {
+	// Convert messages to OpenAI format.
+	openaiMessages := convertMessagesToOpenAIFormat(messages)
+
+	params := openai.ChatCompletionNewParams{
+		Messages:  openaiMessages,
+		Model:     c.config.Model,
+		MaxTokens: openai.Int(int64(c.config.MaxTokens)),
+	}
+
+	response, err := c.client.Chat.Completions.New(ctx, params)
+	if err != nil {
+		return "", fmt.Errorf("failed to send messages with history: %w", err)
+	}
+
+	// Extract text from response.
+	if len(response.Choices) == 0 {
+		return "", errUtils.ErrAINoResponseChoices
+	}
+
+	return response.Choices[0].Message.Content, nil
+}
+
+// SendMessageWithToolsAndHistory sends messages with full conversation history and available tools.
+func (c *Client) SendMessageWithToolsAndHistory(ctx context.Context, messages []types.Message, availableTools []tools.Tool) (*types.Response, error) {
+	// Convert messages to OpenAI format.
+	openaiMessages := convertMessagesToOpenAIFormat(messages)
+
+	// Convert tools to OpenAI format.
+	openaiTools := convertToolsToOpenAIFormat(availableTools)
+
+	params := openai.ChatCompletionNewParams{
+		Messages:  openaiMessages,
+		Model:     c.config.Model,
+		MaxTokens: openai.Int(int64(c.config.MaxTokens)),
+		Tools:     openaiTools,
+	}
+
+	response, err := c.client.Chat.Completions.New(ctx, params)
+	if err != nil {
+		return nil, fmt.Errorf("failed to send messages with history and tools: %w", err)
+	}
+
+	// Parse response.
+	return parseOpenAIResponse(response)
+}
+
+// convertMessagesToOpenAIFormat converts our Message slice to OpenAI's message format.
+func convertMessagesToOpenAIFormat(messages []types.Message) []openai.ChatCompletionMessageParamUnion {
+	openaiMessages := make([]openai.ChatCompletionMessageParamUnion, 0, len(messages))
+
+	for _, msg := range messages {
+		switch msg.Role {
+		case types.RoleUser:
+			openaiMessages = append(openaiMessages, openai.UserMessage(msg.Content))
+		case types.RoleAssistant:
+			openaiMessages = append(openaiMessages, openai.AssistantMessage(msg.Content))
+		case types.RoleSystem:
+			openaiMessages = append(openaiMessages, openai.SystemMessage(msg.Content))
+		}
+	}
+
+	return openaiMessages
+}
+
 // convertToolsToOpenAIFormat converts our Tool interface to OpenAI's function format.
 func convertToolsToOpenAIFormat(availableTools []tools.Tool) []openai.ChatCompletionToolParam {
 	openaiTools := make([]openai.ChatCompletionToolParam, 0, len(availableTools))

@@ -636,13 +636,33 @@ func (m *ChatModel) getAIResponse(userMessage string) tea.Cmd {
 		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 		defer cancel()
 
-		// Build message with memory context if available.
-		messageWithContext := userMessage
+		// Build full message history from stored messages.
+		messages := make([]aiTypes.Message, 0, len(m.messages)+1)
+		for _, msg := range m.messages {
+			// Skip system messages (UI-only notifications)
+			if msg.Role != roleSystem {
+				messages = append(messages, aiTypes.Message{
+					Role:    msg.Role,
+					Content: msg.Content,
+				})
+			}
+		}
+
+		// Add current user message.
+		messages = append(messages, aiTypes.Message{
+			Role:    aiTypes.RoleUser,
+			Content: userMessage,
+		})
+
+		// Apply memory context if available by prepending a system message.
 		if m.memoryMgr != nil {
 			memoryContext := m.memoryMgr.GetContext()
 			if memoryContext != "" {
-				// Prepend memory context to the user message.
-				messageWithContext = memoryContext + "\n---\n\n" + userMessage
+				// Prepend system message with context.
+				messages = append([]aiTypes.Message{{
+					Role:    aiTypes.RoleSystem,
+					Content: memoryContext,
+				}}, messages...)
 			}
 		}
 
@@ -654,8 +674,8 @@ func (m *ChatModel) getAIResponse(userMessage string) tea.Cmd {
 
 		// Use tool calling if tools are available.
 		if len(availableTools) > 0 {
-			// Send message with tools.
-			response, err := m.client.SendMessageWithTools(ctx, messageWithContext, availableTools)
+			// Send messages with tools and full history.
+			response, err := m.client.SendMessageWithToolsAndHistory(ctx, messages, availableTools)
 			if err != nil {
 				return aiErrorMsg(err.Error())
 			}
@@ -690,8 +710,8 @@ func (m *ChatModel) getAIResponse(userMessage string) tea.Cmd {
 			return aiResponseMsg(response.Content)
 		}
 
-		// Fallback to simple message without tools.
-		response, err := m.client.SendMessage(ctx, messageWithContext)
+		// Fallback to message with history but no tools.
+		response, err := m.client.SendMessageWithHistory(ctx, messages)
 		if err != nil {
 			return aiErrorMsg(err.Error())
 		}
