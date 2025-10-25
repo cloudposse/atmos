@@ -58,7 +58,7 @@ settings:
         max_tokens: 4096
 
       openai:
-        model: "gpt-4o"
+        model: "gpt-5"
         api_key_env: "OPENAI_API_KEY"
         max_tokens: 4096
 
