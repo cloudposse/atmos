@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"errors"
 	"fmt"
 	"slices"
 	"sort"
@@ -69,6 +70,10 @@ var authEnvCmd = &cobra.Command{
 				// No valid cached credentials - perform full authentication.
 				whoami, err = authManager.Authenticate(ctx, identityName)
 				if err != nil {
+					// Check for user cancellation - return clean error without wrapping.
+					if errors.Is(err, errUtils.ErrUserAborted) {
+						return errUtils.ErrUserAborted
+					}
 					return fmt.Errorf("authentication failed: %w", err)
 				}
 			}

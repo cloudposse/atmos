@@ -25,6 +25,11 @@ func (s *stubAuthManager) Authenticate(ctx context.Context, identityName string)
 func (s *stubAuthManager) Whoami(ctx context.Context, identityName string) (*types.WhoamiInfo, error) {
 	return s.whoami, nil
 }
+
+func (s *stubAuthManager) GetCachedCredentials(ctx context.Context, identityName string) (*types.WhoamiInfo, error) {
+	return s.whoami, nil
+}
+
 func (s *stubAuthManager) Validate() error { return nil }
 func (s *stubAuthManager) GetDefaultIdentity() (string, error) {
 	return s.defaultIdentity, s.defaultErr

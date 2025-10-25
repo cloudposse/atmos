@@ -397,7 +397,7 @@ func (m spinnerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyMsg:
 		if msg.String() == "ctrl+c" {
 			m.done = true
-			m.result = &pollResult{err: fmt.Errorf("%w: authentication cancelled", errUtils.ErrAuthenticationFailed)}
+			m.result = &pollResult{err: errUtils.ErrUserAborted}
 			if m.cancel != nil {
 				m.cancel()
 			}

@@ -98,6 +98,10 @@ type stubSamlMgr struct {
 	idmap map[string]schema.Identity
 }
 
+func (s stubSamlMgr) GetCachedCredentials(context.Context, string) (*types.WhoamiInfo, error) {
+	return nil, nil
+}
+
 func (s stubSamlMgr) Authenticate(context.Context, string) (*types.WhoamiInfo, error) {
 	return nil, nil
 }

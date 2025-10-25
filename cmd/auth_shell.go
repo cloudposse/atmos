@@ -92,6 +92,10 @@ func executeAuthShellCommandCore(cmd *cobra.Command, args []string) error {
 		// No valid cached credentials - perform full authentication.
 		whoami, err = authManager.Authenticate(ctx, identityName)
 		if err != nil {
+			// Check for user cancellation - return clean error without wrapping.
+			if errors.Is(err, errUtils.ErrUserAborted) {
+				return errUtils.ErrUserAborted
+			}
 			return errors.Join(errUtils.ErrAuthenticationFailed, err)
 		}
 	}

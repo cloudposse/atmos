@@ -3,6 +3,7 @@ package cmd
 import (
 	"context"
 	_ "embed"
+	"errors"
 	"fmt"
 	"os"
 	"time"
@@ -81,6 +82,10 @@ func executeAuthConsoleCommand(cmd *cobra.Command, args []string) error {
 		// No valid cached credentials - perform full authentication.
 		whoami, err = authManager.Authenticate(ctx, identityName)
 		if err != nil {
+			// Check for user cancellation - return clean error without wrapping.
+			if errors.Is(err, errUtils.ErrUserAborted) {
+				return errUtils.ErrUserAborted
+			}
 			return fmt.Errorf("%w: authentication failed: %w", errUtils.ErrAuthConsole, err)
 		}
 	}
@@ -113,7 +118,7 @@ func executeAuthConsoleCommand(cmd *cobra.Command, args []string) error {
 
 	consoleURL, duration, err := consoleProvider.GetConsoleURL(ctx, creds, options)
 	if err != nil {
-		return fmt.Errorf("%w: failed to generate console URL: %w", errUtils.ErrAuthConsole, err)
+		return fmt.Errorf("%w: failed to generate console URL for identity %q: %w", errUtils.ErrAuthConsole, identityName, err)
 	}
 
 	if consolePrintOnly {

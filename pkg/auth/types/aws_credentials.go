@@ -32,7 +32,7 @@ func (c *AWSCredentials) IsExpired() bool {
 	if err != nil {
 		return true
 	}
-	return time.Now().After(expTime)
+	return !time.Now().Before(expTime)
 }
 
 // GetExpiration implements ICredentials for AWSCredentials.

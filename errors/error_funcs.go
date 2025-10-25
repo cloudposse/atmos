@@ -2,6 +2,7 @@ package errors
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 
@@ -33,18 +34,32 @@ func CheckErrorAndPrint(err error, title string, suggestion string) {
 	if err == nil {
 		return
 	}
+
+	// If markdown renderer is not initialized, fall back to plain error output.
 	if render == nil {
-		log.Error(err)
+		if title != "" {
+			title = cases.Title(language.English).String(title)
+			fmt.Fprintf(os.Stderr, "\n%s: %v\n", title, err)
+		} else {
+			fmt.Fprintf(os.Stderr, "\nError: %v\n", err)
+		}
+		if suggestion != "" {
+			fmt.Fprintf(os.Stderr, "%s\n", suggestion)
+		}
 		return
 	}
+
 	if title == "" {
 		title = "Error"
 	}
 	title = cases.Title(language.English).String(title)
 	errorMarkdown, renderErr := render.RenderError(title, err.Error(), suggestion)
 	if renderErr != nil {
-		log.Error(renderErr)
-		log.Error(err)
+		// Rendering failed - fall back to plain error output.
+		fmt.Fprintf(os.Stderr, "\n%s: %v\n", title, err)
+		if suggestion != "" {
+			fmt.Fprintf(os.Stderr, "%s\n", suggestion)
+		}
 		return
 	}
 	_, printErr := os.Stderr.WriteString(errorMarkdown + "\n")

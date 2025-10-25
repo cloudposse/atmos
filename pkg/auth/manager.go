@@ -213,8 +213,12 @@ func (m *manager) GetCachedCredentials(ctx context.Context, identityName string)
 			log.Debug("Credentials not in keyring, trying to load from identity storage", logKeyIdentity, identityName)
 			info := m.buildWhoamiInfoFromEnvironment(identityName)
 
-			// If we successfully loaded credentials from storage, return the info.
+			// If we successfully loaded credentials from storage, check if they're expired.
 			if info.Credentials != nil {
+				if info.Credentials.IsExpired() {
+					log.Debug("Credentials from identity storage are expired", logKeyIdentity, identityName)
+					return nil, fmt.Errorf(errFormatWithString, errUtils.ErrExpiredCredentials, fmt.Sprintf(backtickedFmt, identityName))
+				}
 				log.Debug("Successfully loaded credentials from identity storage", logKeyIdentity, identityName)
 				return info, nil
 			}

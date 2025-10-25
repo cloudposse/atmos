@@ -331,27 +331,37 @@ func TestManager_buildAuthenticationChain_Errors(t *testing.T) {
 
 func TestManager_isCredentialValid(t *testing.T) {
 	now := time.Now().UTC()
-	s := &testStore{expired: map[string]bool{"ok": false, "expired": true}}
+	s := &testStore{}
 	m := &manager{credentialStore: s}
 
-	// Expired -> false.
-	valid, exp := m.isCredentialValid("expired", &testCreds{exp: ptrTime(now.Add(1 * time.Hour))})
+	// Expired credentials (expiration in the past) -> false, returns expiration time.
+	pastExp := now.Add(-1 * time.Hour)
+	valid, exp := m.isCredentialValid("expired", &testCreds{exp: &pastExp})
 	assert.False(t, valid)
-	assert.Nil(t, exp)
+	assert.NotNil(t, exp) // Returns the expiration time even when invalid.
+	assert.Equal(t, pastExp, *exp)
 
-	// Not expired, far future -> true, non-nil exp.
-	texp := now.Add(10 * time.Minute)
-	valid, exp = m.isCredentialValid("ok", &testCreds{exp: &texp})
+	// Expiring soon (less than 5 minutes) -> false, returns expiration time.
+	soonExp := now.Add(3 * time.Minute)
+	valid, exp = m.isCredentialValid("expiring-soon", &testCreds{exp: &soonExp})
+	assert.False(t, valid)
+	assert.NotNil(t, exp)
+	assert.Equal(t, soonExp, *exp)
+
+	// Valid credentials with future expiration (>5 minutes) -> true, returns expiration.
+	futureExp := now.Add(10 * time.Minute)
+	valid, exp = m.isCredentialValid("valid", &testCreds{exp: &futureExp})
 	assert.True(t, valid)
 	require.NotNil(t, exp)
+	assert.Equal(t, futureExp, *exp)
 
-	// Not expired, no expiration -> true, nil exp.
-	valid, exp = m.isCredentialValid("ok", &testCreds{exp: nil})
+	// Non-expiring credentials (no expiration info) -> true, nil expiration.
+	valid, exp = m.isCredentialValid("non-expiring", &testCreds{exp: nil})
 	assert.True(t, valid)
 	assert.Nil(t, exp)
 }
 
-func TestManager_Whoami_Paths(t *testing.T) {
+func TestManager_GetCachedCredentials_Paths(t *testing.T) {
 	s := &testStore{data: map[string]any{}, expired: map[string]bool{}}
 	m := &manager{
 		config: &schema.AuthConfig{Identities: map[string]schema.Identity{
@@ -363,27 +373,53 @@ func TestManager_Whoami_Paths(t *testing.T) {
 		credentialStore: s,
 	}
 	// Not found.
-	_, err := m.Whoami(context.Background(), "ghost")
+	_, err := m.GetCachedCredentials(context.Background(), "ghost")
 	assert.Error(t, err)
 
 	// No creds.
-	_, err = m.Whoami(context.Background(), "dev")
+	_, err = m.GetCachedCredentials(context.Background(), "dev")
 	assert.Error(t, err)
 
 	// Expired.
 	s.data["dev"] = &testCreds{}
 	s.expired["dev"] = true
-	_, err = m.Whoami(context.Background(), "dev")
+	_, err = m.GetCachedCredentials(context.Background(), "dev")
 	assert.Error(t, err)
 
 	// Success.
 	s.expired["dev"] = false
+	info, err := m.GetCachedCredentials(context.Background(), "dev")
+	require.NoError(t, err)
+	assert.Equal(t, "p", info.Provider)
+	assert.Equal(t, "dev", info.Identity)
+	assert.Equal(t, "dev", info.CredentialsRef)
+	assert.NotNil(t, info.Credentials) // Credentials are preserved in WhoamiInfo.
+}
+
+func TestManager_Whoami_WithCachedCredentials(t *testing.T) {
+	// Test that Whoami successfully retrieves cached credentials when available.
+	s := &testStore{data: map[string]any{}, expired: map[string]bool{}}
+	m := &manager{
+		config: &schema.AuthConfig{Identities: map[string]schema.Identity{
+			"dev": {Kind: "aws/user"},
+		}},
+		identities: map[string]types.Identity{
+			"dev": stubIdentity{provider: "p"},
+		},
+		credentialStore: s,
+	}
+
+	// Setup valid cached credentials.
+	s.data["dev"] = &testCreds{}
+	s.expired["dev"] = false
+
+	// Whoami should use GetCachedCredentials and succeed.
 	info, err := m.Whoami(context.Background(), "dev")
 	require.NoError(t, err)
 	assert.Equal(t, "p", info.Provider)
 	assert.Equal(t, "dev", info.Identity)
 	assert.Equal(t, "dev", info.CredentialsRef)
-	assert.Nil(t, info.Credentials)
+	assert.NotNil(t, info.Credentials) // Credentials are preserved in WhoamiInfo.
 }
 
 func TestManager_authenticateWithProvider_Paths(t *testing.T) {
@@ -439,25 +475,25 @@ func TestManager_GetProviderKindForIdentity_UnknownProvider(t *testing.T) {
 func ptrTime(t time.Time) *time.Time { return &t }
 
 func TestManager_findFirstValidCachedCredentials(t *testing.T) {
-	s := &testStore{data: map[string]any{}, expired: map[string]bool{}}
-	now := time.Now().UTC().Add(10 * time.Minute)
+	s := &testStore{data: map[string]any{}}
+	now := time.Now().UTC()
+	validExp := now.Add(10 * time.Minute) // Valid: expires in 10 minutes.
+	expiredExp := now.Add(-1 * time.Hour) // Expired: expired 1 hour ago.
 	m := &manager{credentialStore: s, chain: []string{"prov", "id1", "id2"}}
 
-	// Seed: id2 valid, id1 valid.
-	s.data["id2"] = &testCreds{exp: &now}
-	s.expired["id2"] = false
-	s.data["id1"] = &testCreds{exp: &now}
-	s.expired["id1"] = false
+	// Both id1 and id2 have valid credentials -> should return id2 (last in chain).
+	s.data["id2"] = &testCreds{exp: &validExp}
+	s.data["id1"] = &testCreds{exp: &validExp}
 	idx := m.findFirstValidCachedCredentials()
 	require.Equal(t, 2, idx)
 
-	// Mark id2 expired, should pick id1.
-	s.expired["id2"] = true
+	// id2 expired, id1 still valid -> should pick id1.
+	s.data["id2"] = &testCreds{exp: &expiredExp}
 	idx = m.findFirstValidCachedCredentials()
 	require.Equal(t, 1, idx)
 
-	// Both expired -> -1.
-	s.expired["id1"] = true
+	// Both expired -> should return -1 (no valid credentials).
+	s.data["id1"] = &testCreds{exp: &expiredExp}
 	idx = m.findFirstValidCachedCredentials()
 	require.Equal(t, -1, idx)
 }
@@ -513,7 +549,7 @@ func TestManager_buildWhoamiInfo_SetsRefAndEnv(t *testing.T) {
 	assert.Equal(t, "p", info.Provider)
 	assert.Equal(t, "dev", info.Identity)
 	assert.Equal(t, "dev", info.CredentialsRef)
-	assert.Nil(t, info.Credentials)
+	assert.NotNil(t, info.Credentials) // Credentials are preserved for validation purposes.
 }
 
 // dummyValidator implements types.Validator for tests.
@@ -632,7 +668,7 @@ func TestManager_Authenticate_SuccessFlow(t *testing.T) {
 	assert.Equal(t, "p", info.Provider)
 	assert.Equal(t, "dev", info.Identity)
 	assert.Equal(t, "dev", info.CredentialsRef)
-	assert.Nil(t, info.Credentials)
+	assert.NotNil(t, info.Credentials) // Credentials are preserved in WhoamiInfo.
 	assert.Equal(t, "BAR", info.Environment["FOO"])
 	assert.True(t, called, "PostAuthenticate should be called")
 }

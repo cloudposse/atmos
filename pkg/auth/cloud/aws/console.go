@@ -57,6 +57,24 @@ func NewConsoleURLGenerator(httpClient http.Client) *ConsoleURLGenerator {
 }
 
 // GetConsoleURL generates an AWS console sign-in URL using temporary credentials.
+//
+// IMPORTANT: There is NO AWS SDK method for console federation. The AWS federation
+// endpoint (https://signin.aws.amazon.com/federation) is a web service separate from
+// the AWS API and must be called directly via HTTP.
+//
+// AWS Federation Endpoint Limitations:
+//   - SessionDuration parameter is ONLY valid with direct AssumeRole* operations
+//   - SessionDuration is NOT valid with GetFederationToken
+//   - SessionDuration is NOT valid with role chaining (role → role → role)
+//   - Including SessionDuration with role-chained credentials returns 400 Bad Request
+//
+// Since Atmos uses role chaining (SSO → PermissionSet → AssumeRole), we MUST omit
+// the SessionDuration parameter. AWS automatically uses the remaining validity of
+// the source credentials (typically 1 hour for role chaining).
+//
+// References:
+//   - https://docs.aws.amazon.com/IAM/latest/UserGuide/id_roles_providers_enable-console-custom-url.html
+//   - https://github.com/99designs/aws-vault (similar implementation)
 func (g *ConsoleURLGenerator) GetConsoleURL(ctx context.Context, creds types.ICredentials, options types.ConsoleURLOptions) (string, time.Duration, error) {
 	defer perf.Track(nil, "aws.ConsoleURLGenerator.GetConsoleURL")()
 
@@ -87,22 +105,24 @@ func (g *ConsoleURLGenerator) GetConsoleURL(ctx context.Context, creds types.ICr
 		return "", 0, fmt.Errorf("failed to get signin token: %w", err)
 	}
 
-	// Build console URL.
+	// Build console URL using proper URL construction.
 	issuer := options.Issuer
 	if issuer == "" {
 		issuer = "atmos"
 	}
 
-	// Convert duration to seconds for SessionDuration parameter.
-	sessionDurationSeconds := int(duration.Seconds())
+	params := url.Values{}
+	params.Set("Action", "login")
+	params.Set("Issuer", issuer)
+	params.Set("Destination", destination)
+	params.Set("SigninToken", signinToken)
 
-	loginURL := fmt.Sprintf("%s?Action=login&Issuer=%s&Destination=%s&SigninToken=%s&SessionDuration=%d",
-		AWSFederationEndpoint,
-		url.QueryEscape(issuer),
-		url.QueryEscape(destination),
-		url.QueryEscape(signinToken),
-		sessionDurationSeconds,
-	)
+	baseURL, err := url.Parse(AWSFederationEndpoint)
+	if err != nil {
+		return "", 0, fmt.Errorf("failed to parse federation endpoint URL: %w", err)
+	}
+	baseURL.RawQuery = params.Encode()
+	loginURL := baseURL.String()
 
 	log.Debug("Generated AWS console URL", "destination", destination, "duration", duration)
 
@@ -157,6 +177,13 @@ func prepareSessionData(awsCreds *types.AWSCredentials) ([]byte, error) {
 		return nil, fmt.Errorf("%w: failed to marshal session data: %w", errUtils.ErrInvalidAuthConfig, err)
 	}
 
+	expiration, _ := awsCreds.GetExpiration()
+	log.Debug("Preparing session data for AWS federation",
+		"access_key_length", len(awsCreds.AccessKeyID),
+		"secret_key_length", len(awsCreds.SecretAccessKey),
+		"session_token_length", len(awsCreds.SessionToken),
+		"credential_expiration", expiration)
+
 	return sessionData, nil
 }
 
@@ -176,14 +203,26 @@ func resolveDestinationWithDefault(dest string) (string, error) {
 func (g *ConsoleURLGenerator) getSigninToken(ctx context.Context, sessionData []byte, duration time.Duration) (string, error) {
 	defer perf.Track(nil, "aws.ConsoleURLGenerator.getSigninToken")()
 
-	// Build federation endpoint URL for getSigninToken action.
-	federationURL := fmt.Sprintf("%s?Action=getSigninToken&SessionDuration=%d&Session=%s",
-		AWSFederationEndpoint,
-		int(duration.Seconds()),
-		url.QueryEscape(string(sessionData)),
-	)
+	// Build federation endpoint URL for getSigninToken action using proper URL construction.
+	// Note: SessionDuration parameter is not supported when using role-chained credentials
+	// (e.g., SSO → PermissionSet → AssumeRole). AWS will return 400 Bad Request.
+	// For role-chained credentials, omit SessionDuration - AWS uses the remaining validity
+	// of the source credentials (typically 1 hour for role chaining).
+	params := url.Values{}
+	params.Set("Action", "getSigninToken")
+	params.Set("Session", string(sessionData))
 
-	log.Debug("Requesting signin token from AWS federation endpoint", "duration", duration)
+	baseURL, err := url.Parse(AWSFederationEndpoint)
+	if err != nil {
+		return "", fmt.Errorf("failed to parse federation endpoint URL: %w", err)
+	}
+	baseURL.RawQuery = params.Encode()
+	federationURL := baseURL.String()
+
+	log.Debug("Requesting signin token from AWS federation endpoint",
+		"duration", duration,
+		"session_data_length", len(sessionData),
+		"total_url_length", len(federationURL))
 
 	// Make HTTP request to federation endpoint.
 	response, err := http.Get(ctx, federationURL, g.httpClient)

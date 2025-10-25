@@ -12,12 +12,14 @@ import (
 	"strings"
 	"text/template"
 
+	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/viper"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui/theme"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -307,6 +309,9 @@ func ExecAuthShellCommand(
 
 	log.Debug("Setting the ENV vars in the shell")
 
+	// Print user-facing message about entering the shell.
+	printShellEnterMessage(identityName)
+
 	// Merge env vars, ensuring authEnvList takes precedence.
 	mergedEnv := mergeEnvVarsSimple(authEnvList)
 
@@ -319,7 +324,12 @@ func ExecAuthShellCommand(
 	log.Debug("Starting process", logFieldCommand, shellCommand, "args", shellCommandArgs)
 
 	// Execute the shell and wait for it to exit.
-	return executeShellProcess(shellCommand, shellCommandArgs, mergedEnv)
+	err := executeShellProcess(shellCommand, shellCommandArgs, mergedEnv)
+
+	// Print user-facing message about exiting the shell.
+	printShellExitMessage(identityName)
+
+	return err
 }
 
 // executeShellProcess starts a shell process and waits for it to exit, propagating the exit code.
@@ -516,4 +526,37 @@ func mergeEnvVarsSimple(newEnvList []string) []string {
 		merged = append(merged, k+envVarSeparator+v)
 	}
 	return merged
+}
+
+// printShellEnterMessage prints a user-facing message when entering an Atmos-managed shell.
+func printShellEnterMessage(identityName string) {
+	headerStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color(theme.ColorGreen)).
+		Bold(true)
+
+	identityStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color(theme.ColorCyan))
+
+	hintStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color(theme.ColorGray))
+
+	fmt.Fprintf(os.Stderr, "\n%s %s\n",
+		headerStyle.Render("→ Entering Atmos shell with identity:"),
+		identityStyle.Render(identityName))
+
+	fmt.Fprintf(os.Stderr, "%s\n\n",
+		hintStyle.Render("  Type 'exit' to return to your normal shell"))
+}
+
+// printShellExitMessage prints a user-facing message when exiting an Atmos-managed shell.
+func printShellExitMessage(identityName string) {
+	headerStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color(theme.ColorGray))
+
+	identityStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color(theme.ColorGray))
+
+	fmt.Fprintf(os.Stderr, "\n%s %s\n\n",
+		headerStyle.Render("← Exited Atmos shell for identity:"),
+		identityStyle.Render(identityName))
 }

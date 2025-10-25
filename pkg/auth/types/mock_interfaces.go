@@ -350,6 +350,21 @@ func (mr *MockAuthManagerMockRecorder) Authenticate(ctx, identityName any) *gomo
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Authenticate", reflect.TypeOf((*MockAuthManager)(nil).Authenticate), ctx, identityName)
 }
 
+// GetCachedCredentials mocks base method.
+func (m *MockAuthManager) GetCachedCredentials(ctx context.Context, identityName string) (*WhoamiInfo, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetCachedCredentials", ctx, identityName)
+	ret0, _ := ret[0].(*WhoamiInfo)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetCachedCredentials indicates an expected call of GetCachedCredentials.
+func (mr *MockAuthManagerMockRecorder) GetCachedCredentials(ctx, identityName any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetCachedCredentials", reflect.TypeOf((*MockAuthManager)(nil).GetCachedCredentials), ctx, identityName)
+}
+
 // GetChain mocks base method.
 func (m *MockAuthManager) GetChain() []string {
 	m.ctrl.T.Helper()

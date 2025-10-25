@@ -585,6 +585,10 @@ func (m *mockAuthManagerForProvider) GetProviderKindForIdentity(identityName str
 	return m.providerKind, nil
 }
 
+func (m *mockAuthManagerForProvider) GetCachedCredentials(ctx context.Context, identityName string) (*types.WhoamiInfo, error) {
+	return nil, errors.New("not implemented")
+}
+
 func (m *mockAuthManagerForProvider) Authenticate(ctx context.Context, identityName string) (*types.WhoamiInfo, error) {
 	return nil, errors.New("not implemented")
 }
@@ -661,6 +665,10 @@ type mockAuthManagerForIdentity struct {
 
 func (m *mockAuthManagerForIdentity) GetProviderKindForIdentity(identityName string) (string, error) {
 	return "", errors.New("not implemented")
+}
+
+func (m *mockAuthManagerForIdentity) GetCachedCredentials(ctx context.Context, identityName string) (*types.WhoamiInfo, error) {
+	return nil, errors.New("not implemented")
 }
 
 func (m *mockAuthManagerForIdentity) Authenticate(ctx context.Context, identityName string) (*types.WhoamiInfo, error) {
