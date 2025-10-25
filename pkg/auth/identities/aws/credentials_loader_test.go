@@ -22,7 +22,7 @@ func TestReadExpirationFromMetadata(t *testing.T) {
 			setupFile: func(path string) error {
 				cfg := ini.Empty()
 				section, _ := cfg.NewSection("test-profile")
-				section.Key("x_atmos_expiration").SetValue("2025-10-24T23:42:49Z")
+				section.Comment = "atmos: expiration=2025-10-24T23:42:49Z"
 				section.Key("aws_access_key_id").SetValue("AKIATEST")
 				section.Key("aws_secret_access_key").SetValue("test-secret")
 				return cfg.SaveTo(path)
@@ -47,7 +47,7 @@ func TestReadExpirationFromMetadata(t *testing.T) {
 			setupFile: func(path string) error {
 				cfg := ini.Empty()
 				section, _ := cfg.NewSection("test-profile")
-				section.Key("x_atmos_expiration").SetValue("not-a-valid-date")
+				section.Comment = "atmos: expiration=not-a-valid-date"
 				section.Key("aws_access_key_id").SetValue("AKIATEST")
 				section.Key("aws_secret_access_key").SetValue("test-secret")
 				return cfg.SaveTo(path)
@@ -56,11 +56,11 @@ func TestReadExpirationFromMetadata(t *testing.T) {
 			expectedResult: "",
 		},
 		{
-			name: "wrong key name",
+			name: "wrong comment prefix",
 			setupFile: func(path string) error {
 				cfg := ini.Empty()
 				section, _ := cfg.NewSection("test-profile")
-				section.Key("x_other_expiration").SetValue("2025-10-24T23:42:49Z")
+				section.Comment = "other: expiration=2025-10-24T23:42:49Z"
 				section.Key("aws_access_key_id").SetValue("AKIATEST")
 				section.Key("aws_secret_access_key").SetValue("test-secret")
 				return cfg.SaveTo(path)
@@ -73,7 +73,7 @@ func TestReadExpirationFromMetadata(t *testing.T) {
 			setupFile: func(path string) error {
 				cfg := ini.Empty()
 				section, _ := cfg.NewSection("different-profile")
-				section.Key("x_atmos_expiration").SetValue("2025-10-24T23:42:49Z")
+				section.Comment = "atmos: expiration=2025-10-24T23:42:49Z"
 				section.Key("aws_access_key_id").SetValue("AKIATEST")
 				return cfg.SaveTo(path)
 			},
@@ -116,8 +116,8 @@ func TestMetadataRoundTrip(t *testing.T) {
 	section, err := cfg.NewSection("test-profile")
 	assert.NoError(t, err)
 
-	// Add metadata (same as WriteCredentials does).
-	section.Key("x_atmos_expiration").SetValue(expiration)
+	// Add metadata comment (same as WriteCredentials does).
+	section.Comment = "atmos: expiration=" + expiration
 
 	// Add credentials.
 	section.Key("aws_access_key_id").SetValue("AKIATEST")

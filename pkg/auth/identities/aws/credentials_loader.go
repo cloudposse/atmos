@@ -10,6 +10,7 @@ import (
 	awsConfig "github.com/aws/aws-sdk-go-v2/config"
 	"gopkg.in/ini.v1"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth/types"
 	log "github.com/cloudposse/atmos/pkg/logger"
 )
@@ -25,7 +26,7 @@ func loadAWSCredentialsFromEnvironment(ctx context.Context, env map[string]strin
 	region := env["AWS_REGION"] // Optional.
 
 	if !hasCredsFile || !hasConfigFile || !hasProfile {
-		return nil, fmt.Errorf("missing required AWS environment variables (AWS_SHARED_CREDENTIALS_FILE, AWS_CONFIG_FILE, AWS_PROFILE)")
+		return nil, fmt.Errorf("%w: AWS_SHARED_CREDENTIALS_FILE, AWS_CONFIG_FILE, AWS_PROFILE", errUtils.ErrAwsMissingEnvVars)
 	}
 
 	log.Debug("Loading AWS credentials from files",
@@ -110,12 +111,14 @@ func loadAWSCredentialsFromEnvironment(ctx context.Context, env map[string]strin
 	return creds, nil
 }
 
-// readExpirationFromMetadata reads expiration from atmos metadata in credentials file.
-// Format: x_atmos_expiration = 2025-10-24T23:42:49Z
+// readExpirationFromMetadata reads expiration from atmos comment in credentials file.
+// Format: ; atmos: expiration=2025-10-24T23:42:49Z
 // Returns empty string if not found or invalid.
 func readExpirationFromMetadata(credentialsPath, profile string) string {
-	// Load the credentials file using ini parser.
-	cfg, err := ini.Load(credentialsPath)
+	// Load the credentials file with comment preservation enabled.
+	cfg, err := ini.LoadSources(ini.LoadOptions{
+		IgnoreInlineComment: false,
+	}, credentialsPath)
 	if err != nil {
 		log.Debug("Failed to load credentials file for metadata",
 			"path", credentialsPath,
@@ -133,24 +136,41 @@ func readExpirationFromMetadata(credentialsPath, profile string) string {
 		return ""
 	}
 
-	// Check if section has the atmos metadata key.
-	// This is stored as "x_atmos_expiration = ..." (AWS ignores keys starting with "x_").
-	if !section.HasKey("x_atmos_expiration") {
+	// Check if section has a comment with metadata.
+	if section.Comment == "" {
 		return ""
 	}
 
-	expiration := section.Key("x_atmos_expiration").String()
-	expiration = strings.TrimSpace(expiration)
+	// Parse comment: "; atmos: expiration=2025-10-24T23:42:49Z"
+	// The ini library includes the comment prefix (;) when reading.
+	comment := strings.TrimSpace(section.Comment)
+	comment = strings.TrimPrefix(comment, ";")
+	comment = strings.TrimPrefix(comment, "#")
+	comment = strings.TrimSpace(comment)
 
-	// Validate it's a valid RFC3339 timestamp.
-	if _, err := time.Parse(time.RFC3339, expiration); err == nil {
-		return expiration
+	if !strings.HasPrefix(comment, "atmos:") {
+		return ""
 	}
 
-	log.Debug("Invalid expiration format in metadata",
-		"expiration", expiration,
-		"error", err,
-	)
+	// Extract key=value pairs.
+	metadata := strings.TrimPrefix(comment, "atmos:")
+	metadata = strings.TrimSpace(metadata)
+
+	// Simple parsing: split by spaces and look for expiration=value.
+	parts := strings.Fields(metadata)
+	for _, part := range parts {
+		if strings.HasPrefix(part, "expiration=") {
+			expiration := strings.TrimPrefix(part, "expiration=")
+			// Validate it's a valid RFC3339 timestamp.
+			if _, err := time.Parse(time.RFC3339, expiration); err == nil {
+				return expiration
+			}
+			log.Debug("Invalid expiration format in metadata",
+				"expiration", expiration,
+				"error", err,
+			)
+		}
+	}
 
 	return ""
 }

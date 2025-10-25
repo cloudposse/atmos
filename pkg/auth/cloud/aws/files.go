@@ -146,6 +146,14 @@ func (m *AWSFileManager) WriteCredentials(providerName, identityName string, cre
 		}
 	}
 
+	// Add metadata comment with expiration if available (before section keys).
+	// The ini library preserves comments when loading with IgnoreInlineComment: false.
+	if creds.Expiration != "" {
+		section.Comment = fmt.Sprintf("atmos: expiration=%s", creds.Expiration)
+	} else {
+		section.Comment = ""
+	}
+
 	// Set credentials.
 	section.Key("aws_access_key_id").SetValue(creds.AccessKeyID)
 	section.Key("aws_secret_access_key").SetValue(creds.SecretAccessKey)
@@ -154,15 +162,6 @@ func (m *AWSFileManager) WriteCredentials(providerName, identityName string, cre
 	} else {
 		// Remove session token if not present.
 		section.DeleteKey("aws_session_token")
-	}
-
-	// Add metadata with expiration if available.
-	// Store as a special key that AWS CLI will ignore but we can read.
-	// Key format: "x_atmos_expiration" - AWS ignores keys starting with "x_".
-	if creds.Expiration != "" {
-		section.Key("x_atmos_expiration").SetValue(creds.Expiration)
-	} else {
-		section.DeleteKey("x_atmos_expiration")
 	}
 
 	// Save file with proper permissions.
