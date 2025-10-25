@@ -200,24 +200,28 @@ func (m *manager) Whoami(ctx context.Context, identityName string) (*types.Whoam
 		"error", err,
 	)
 	if err != nil {
-		// Check if this is the noop keyring pattern (credentials validated but not stored).
-		// In this case, credentials are in the environment/files, not the keyring.
-		if !errors.Is(err, credentials.ErrCredentialsNotFound) {
-			providerName := "unknown"
-			if prov, provErr := m.identities[identityName].GetProviderName(); provErr == nil {
-				providerName = prov
-			}
-			return nil, fmt.Errorf("%w: identity=%s, provider=%s, credential_store=%s: %w",
-				errUtils.ErrNoCredentialsFound,
-				identityName,
-				providerName,
-				m.credentialStore.Type(),
-				err)
+		// Check if credentials are not found in keyring.
+		// This could be because:
+		// 1. Using noop keyring (credentials managed externally in files)
+		// 2. Using system keyring but credentials exist in AWS files (not yet cached in keyring)
+		if errors.Is(err, credentials.ErrCredentialsNotFound) {
+			// Try to load credentials from identity-managed storage (files, etc.).
+			// This allows whoami to work even when credentials aren't in the keyring yet.
+			log.Debug("Credentials not in keyring, trying to load from identity storage", logKeyIdentity, identityName)
+			return m.buildWhoamiInfoFromEnvironment(identityName), nil
 		}
-		// Noop keyring: credentials exist in environment/files but not in keyring.
-		// Build WhoamiInfo from environment instead of keyring credentials.
-		log.Debug("Using noop keyring - credentials managed externally", logKeyIdentity, identityName)
-		return m.buildWhoamiInfoFromEnvironment(identityName), nil
+
+		// Other errors (not "not found") indicate a real problem.
+		providerName := "unknown"
+		if prov, provErr := m.identities[identityName].GetProviderName(); provErr == nil {
+			providerName = prov
+		}
+		return nil, fmt.Errorf("%w: identity=%s, provider=%s, credential_store=%s: %w",
+			errUtils.ErrNoCredentialsFound,
+			identityName,
+			providerName,
+			m.credentialStore.Type(),
+			err)
 	}
 
 	// Check if credentials are expired.
