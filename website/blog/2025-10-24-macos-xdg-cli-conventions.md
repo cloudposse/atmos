@@ -153,9 +153,8 @@ This ensures **all code** in Atmos (even code that directly imports `github.com/
 
 ## Documentation Updates
 
-- [XDG Base Directory Specification PRD](/docs/prd/xdg-base-directory-specification) - Updated with CLI tool conventions
-- [Configuring Geodesic with Atmos Auth](/cli/commands/auth/tutorials/configuring-geodesic) - Simplified configuration (no setup needed!)
-- [Auth Usage Guide](/cli/commands/auth/usage) - Updated with correct macOS paths
+- [Configuring Geodesic with Atmos Auth](/docs/cli/commands/auth/tutorials/configuring-geodesic) - Simplified configuration (no setup needed!)
+- [Auth Usage Guide](/docs/cli/commands/auth/usage) - Updated with correct macOS paths
 
 ## Migration Support
 
@@ -167,9 +166,7 @@ If you encounter issues:
    ls -la ~/.config/atmos
    ```
 
-2. See the [XDG PRD Migration Guide](/docs/prd/xdg-base-directory-specification#migration-guide-for-v20-macos-users)
-
-3. Open an issue on [GitHub](https://github.com/cloudposse/atmos/issues) if you need help
+2. Open an issue on [GitHub](https://github.com/cloudposse/atmos/issues) if you need help
 
 ## References
 
