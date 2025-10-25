@@ -40,20 +40,6 @@ func getFormatter() Formatter {
 
 // Package-level functions that delegate to the global formatter.
 
-// Data writes plain text to stdout (data channel).
-// Use this for JSON, YAML, or other machine-readable output.
-func Data(content string) error {
-	_, err := fmt.Fprint(getFormatter().(*formatter).ioCtx.Data(), content)
-	return err
-}
-
-// Dataf writes formatted text to stdout (data channel).
-// Use this for formatted data output.
-func Dataf(format string, a ...interface{}) error {
-	_, err := fmt.Fprintf(getFormatter().(*formatter).ioCtx.Data(), format, a...)
-	return err
-}
-
 // Markdown writes rendered markdown to stdout (data channel).
 // Use this for help text, documentation, and other pipeable content.
 func Markdown(content string) error {

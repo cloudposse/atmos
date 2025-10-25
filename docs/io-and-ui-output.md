@@ -1,14 +1,16 @@
-# UI Output Guide
+# Output Guide
 
 Simple guide for outputting data and UI messages in Atmos commands.
 
 ## Core Concept
 
-**Use `ui` package functions directly - no setup required.**
+**Three layers: UI, Data, and I/O.**
 
 - **UI messages** (status, errors, warnings) → `ui.Success()`, `ui.Error()`, etc. → **stderr**
-- **Data output** (JSON, YAML, results) → `ui.Data()` → **stdout**
-- **Help/docs** → `ui.Markdown()` → **stdout**
+- **Data output** (JSON, YAML, text) → `data.Write()`, `data.WriteJSON()`, etc. → **stdout**
+- **I/O layer** (channels, masking, terminal) → Foundation for both
+
+All use the same I/O context initialized at startup - no setup required in commands.
 
 ## UI vs Logging: When to Use What
 
@@ -16,7 +18,8 @@ Simple guide for outputting data and UI messages in Atmos commands.
 
 | Purpose | For | Use | Example |
 |---------|-----|-----|---------|
-| **UI Output** | End users | `ui.Success()`, `ui.Error()`, `ui.Data()` | "✓ Configuration loaded", JSON output |
+| **UI Output** | End users | `ui.Success()`, `ui.Error()` | "✓ Configuration loaded" |
+| **Data Output** | Machines/pipes | `data.Write()`, `data.WriteJSON()` | JSON, YAML, text |
 | **Logging** | Developers/operators | `log.Debug()`, `log.Error()` | "config.LoadAtmosYAML: parsing file" |
 
 **Key distinction:**
@@ -66,8 +69,10 @@ ui.Infof("Found %d files", count)    // ℹ Found 10 files (cyan)
 ### Data Output (→ stdout)
 
 ```go
-ui.Data(jsonOutput)                   // Plain text → stdout
-ui.Dataf("%s\n", content)            // Formatted → stdout
+data.Write(content)                  // Plain text → stdout
+data.Writef("Value: %s\n", value)   // Formatted → stdout
+data.WriteJSON(object)               // JSON → stdout
+data.WriteYAML(object)               // YAML → stdout
 ```
 
 ### Markdown (→ stdout)
@@ -90,11 +95,7 @@ text := ui.Format.RenderMarkdown(md)  // Returns rendered string - doesn't write
 ```go
 func ExecuteDescribeComponent(cmd *cobra.Command, args []string) error {
     config := getComponentConfig(args[0])
-    jsonOutput, err := json.MarshalIndent(config, "", "  ")
-    if err != nil {
-        return err
-    }
-    return ui.Data(string(jsonOutput) + "\n")
+    return data.WriteJSON(config)
 }
 ```
 

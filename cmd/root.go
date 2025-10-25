@@ -29,6 +29,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/filesystem"
 	iolib "github.com/cloudposse/atmos/pkg/io"
 	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/data"
 	"github.com/cloudposse/atmos/pkg/ui"
 	"github.com/cloudposse/atmos/pkg/pager"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -520,6 +521,7 @@ func Execute() error {
 		return fmt.Errorf("failed to initialize I/O context: %w", ioErr)
 	}
 	ui.InitFormatter(ioCtx)
+	data.InitData(ioCtx)
 
 	if initErr != nil && !errors.Is(initErr, cfg.NotFound) {
 		if isVersionCommand() {

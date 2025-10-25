@@ -14,15 +14,21 @@ import (
 	"github.com/jwalton/go-supportscolor"
 	xterm "golang.org/x/term"
 
+	"github.com/cloudposse/atmos/pkg/data"
 	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/cloudposse/atmos/pkg/ui"
 	mdstyle "github.com/cloudposse/atmos/pkg/ui/markdown"
 )
 
-// Data writes plain text to stdout (data channel).
-// This is a convenience wrapper around ui.Data().
-func Data(content string) error {
-	return ui.Data(content)
+// WriteJSON writes JSON to stdout (data channel).
+// This is a convenience wrapper around data.WriteJSON().
+func WriteJSON(v interface{}) error {
+	return data.WriteJSON(v)
+}
+
+// WriteYAML writes YAML to stdout (data channel).
+// This is a convenience wrapper around data.WriteYAML().
+func WriteYAML(v interface{}) error {
+	return data.WriteYAML(v)
 }
 
 // HighlightCode returns a syntax highlighted code for the specified language
