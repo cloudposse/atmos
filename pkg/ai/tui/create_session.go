@@ -118,7 +118,8 @@ func (m *ChatModel) handleCreateSessionKeys(msg tea.KeyMsg) tea.Cmd {
 			return m.loadSessionList()
 		}
 		m.currentView = viewModeChat
-		return nil
+		// Return empty command to consume the key event and prevent it from reaching the textarea
+		return func() tea.Msg { return nil }
 	case "tab", "shift+tab":
 		// Toggle focus between name input and provider selection
 		if m.createForm.focusedField == 0 {
@@ -128,14 +129,14 @@ func (m *ChatModel) handleCreateSessionKeys(msg tea.KeyMsg) tea.Cmd {
 			m.createForm.focusedField = 0
 			m.createForm.nameInput.Focus()
 		}
-		return nil
+		return func() tea.Msg { return nil }
 	case "up", "k":
 		if m.createForm.focusedField == 1 {
 			// Navigate provider selection up
 			if m.createForm.selectedProvider > 0 {
 				m.createForm.selectedProvider--
 			}
-			return nil
+			return func() tea.Msg { return nil }
 		}
 		// Fall through to name input if focused
 	case "down", "j":
@@ -144,7 +145,7 @@ func (m *ChatModel) handleCreateSessionKeys(msg tea.KeyMsg) tea.Cmd {
 			if m.createForm.selectedProvider < len(AvailableProviders)-1 {
 				m.createForm.selectedProvider++
 			}
-			return nil
+			return func() tea.Msg { return nil }
 		}
 		// Fall through to name input if focused
 	case "enter":
@@ -159,7 +160,7 @@ func (m *ChatModel) handleCreateSessionKeys(msg tea.KeyMsg) tea.Cmd {
 		return cmd
 	}
 
-	return nil
+	return func() tea.Msg { return nil }
 }
 
 // submitCreateSession validates and submits the create session form.

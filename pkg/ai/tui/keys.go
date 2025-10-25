@@ -217,26 +217,27 @@ func (m *ChatModel) handleNormalSessionListKeys(msg tea.KeyMsg) tea.Cmd {
 	case "esc", "q":
 		// Return to chat view.
 		m.currentView = viewModeChat
-		return nil
+		// Return empty command to consume the key event and prevent it from reaching the textarea
+		return func() tea.Msg { return nil }
 	case "up", "k":
 		// Navigate up in filtered list.
 		if m.selectedSessionIndex > 0 {
 			m.selectedSessionIndex--
 		}
-		return nil
+		return func() tea.Msg { return nil }
 	case "down", "j":
 		// Navigate down in filtered list.
 		if m.selectedSessionIndex < len(filteredSessions)-1 {
 			m.selectedSessionIndex++
 		}
-		return nil
+		return func() tea.Msg { return nil }
 	case "d", "D":
 		// Delete session from filtered list.
 		if m.selectedSessionIndex < len(filteredSessions) {
 			m.deleteConfirm = true
 			m.deleteSessionID = filteredSessions[m.selectedSessionIndex].ID
 		}
-		return nil
+		return func() tea.Msg { return nil }
 	case "r", "R":
 		// Rename session from filtered list.
 		if m.selectedSessionIndex < len(filteredSessions) {
@@ -249,19 +250,19 @@ func (m *ChatModel) handleNormalSessionListKeys(msg tea.KeyMsg) tea.Cmd {
 			m.renameInput.SetValue(sess.Name)
 			m.renameInput.Focus()
 		}
-		return nil
+		return func() tea.Msg { return nil }
 	case "f", "F":
 		// Cycle through provider filters.
 		m.cycleFilter()
-		return nil
+		return func() tea.Msg { return nil }
 	case "ctrl+n", "n":
 		// Open create session form.
 		m.currentView = viewModeCreateSession
 		m.createForm = newCreateSessionForm() // Reset form
-		return nil
+		return func() tea.Msg { return nil }
 	}
 
-	return nil
+	return func() tea.Msg { return nil }
 }
 
 // getFilteredSessions returns sessions filtered by the current provider filter.
@@ -370,19 +371,20 @@ func (m *ChatModel) handleProviderSelectKeys(msg tea.KeyMsg) tea.Cmd {
 	case "esc", "q":
 		// Return to chat view.
 		m.currentView = viewModeChat
-		return nil
+		// Return empty command to consume the key event
+		return func() tea.Msg { return nil }
 	case "up", "k":
 		// Move selection up.
 		if m.selectedProviderIdx > 0 {
 			m.selectedProviderIdx--
 		}
-		return nil
+		return func() tea.Msg { return nil }
 	case "down", "j":
 		// Move selection down.
 		if m.selectedProviderIdx < len(configuredProviders)-1 {
 			m.selectedProviderIdx++
 		}
-		return nil
+		return func() tea.Msg { return nil }
 	case "enter":
 		// Switch to selected provider.
 		if m.selectedProviderIdx < len(configuredProviders) {
@@ -394,8 +396,9 @@ func (m *ChatModel) handleProviderSelectKeys(msg tea.KeyMsg) tea.Cmd {
 		// Return to chat view.
 		m.currentView = viewModeChat
 		m.updateViewportContent()
-		return nil
+		// Return empty command to consume the key event and prevent it from reaching the textarea
+		return func() tea.Msg { return nil }
 	}
 
-	return nil
+	return func() tea.Msg { return nil }
 }

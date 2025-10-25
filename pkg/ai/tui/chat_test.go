@@ -390,7 +390,7 @@ func TestChatModel_KeyboardShortcuts(t *testing.T) {
 		cmd := model.handleSessionListKeys(keyMsg)
 
 		assert.Equal(t, viewModeChat, model.currentView)
-		assert.Nil(t, cmd)
+		assert.NotNil(t, cmd) // Returns command to consume key event
 	})
 
 	t.Run("q returns to chat from session list", func(t *testing.T) {
@@ -404,7 +404,7 @@ func TestChatModel_KeyboardShortcuts(t *testing.T) {
 		cmd := model.handleSessionListKeys(keyMsg)
 
 		assert.Equal(t, viewModeChat, model.currentView)
-		assert.Nil(t, cmd)
+		assert.NotNil(t, cmd) // Returns command to consume key event
 	})
 }
 
@@ -863,7 +863,7 @@ func TestChatModel_CreateSession(t *testing.T) {
 
 		cmd := model.handleKeyMsg(keyMsg)
 
-		assert.Nil(t, cmd) // Opens form, no immediate command
+		assert.NotNil(t, cmd) // Returns command to consume key event
 		assert.Equal(t, viewModeCreateSession, model.currentView)
 	})
 
@@ -873,7 +873,7 @@ func TestChatModel_CreateSession(t *testing.T) {
 
 		cmd := model.handleSessionListKeys(keyMsg)
 
-		assert.Nil(t, cmd)
+		assert.NotNil(t, cmd) // Returns command to consume key event
 		assert.Equal(t, viewModeCreateSession, model.currentView)
 	})
 
@@ -1016,7 +1016,7 @@ func TestChatModel_DeleteSession(t *testing.T) {
 		// Verify delete confirmation state is set
 		assert.True(t, m.deleteConfirm)
 		assert.Equal(t, "session-1", m.deleteSessionID)
-		assert.Nil(t, cmd) // No command should be returned yet
+		assert.NotNil(t, cmd) // Returns command to consume key event
 	})
 
 	t.Run("cancels delete with n key", func(t *testing.T) {
@@ -1218,7 +1218,7 @@ func TestChatModel_RenameSession(t *testing.T) {
 		assert.True(t, m.renameMode)
 		assert.Equal(t, "session-1", m.renameSessionID)
 		assert.Equal(t, "Test Session 1", m.renameInput.Value())
-		assert.Nil(t, cmd) // No command should be returned yet
+		assert.NotNil(t, cmd) // Returns command to consume key event
 	})
 
 	t.Run("cancels rename with esc key", func(t *testing.T) {
