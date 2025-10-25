@@ -75,6 +75,10 @@ func (s *systemKeyringStore) Retrieve(alias string) (types.ICredentials, error) 
 
 	data, err := keyring.Get(alias, KeyringUser)
 	if err != nil {
+		// If credentials not found, return ErrCredentialsNotFound for consistent error handling.
+		if errors.Is(err, keyring.ErrNotFound) {
+			return nil, errors.Join(ErrCredentialStore, ErrCredentialsNotFound, fmt.Errorf("failed to retrieve credentials from keyring: %w", err))
+		}
 		return nil, errors.Join(ErrCredentialStore, fmt.Errorf("failed to retrieve credentials from keyring: %w", err))
 	}
 
