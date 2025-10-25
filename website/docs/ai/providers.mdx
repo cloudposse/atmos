@@ -177,6 +177,10 @@ export OPENAI_API_KEY="sk-..."
 ```
 </Terminal>
 
+:::info Max Tokens Parameter
+OpenAI's newer models (gpt-5, o1-preview, o1-mini, chatgpt-4o-latest) use `max_completion_tokens` instead of `max_tokens` in their API. Atmos automatically handles this difference based on the model you configure - just use `max_tokens` in your configuration and Atmos will use the correct parameter for your model.
+:::
+
 ### Google (Gemini)
 
 **Best for**: Fast responses, large context windows
@@ -551,6 +555,10 @@ export AZURE_OPENAI_API_KEY="..."
 # Or use Azure AD managed identity (in production)
 ```
 </Terminal>
+
+:::info Max Tokens Parameter
+Azure OpenAI's newer model deployments (gpt-5, o1-preview, o1-mini) use `max_completion_tokens` instead of `max_tokens` in their API. Atmos automatically handles this difference based on your deployment model - just use `max_tokens` in your configuration and Atmos will use the correct parameter.
+:::
 
 **Use Cases:**
 - Azure-native organizations

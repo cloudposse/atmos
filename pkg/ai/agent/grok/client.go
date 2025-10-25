@@ -108,9 +108,11 @@ func (c *Client) SendMessage(ctx context.Context, message string) (string, error
 		Messages: []openai.ChatCompletionMessageParamUnion{
 			openai.UserMessage(message),
 		},
-		Model:     c.config.Model,
-		MaxTokens: openai.Int(int64(c.config.MaxTokens)),
+		Model: c.config.Model,
 	}
+
+	// Set the appropriate token limit parameter based on the model.
+	c.setTokenLimit(&params)
 
 	response, err := c.client.Chat.Completions.New(ctx, params)
 	if err != nil {
@@ -135,10 +137,12 @@ func (c *Client) SendMessageWithTools(ctx context.Context, message string, avail
 		Messages: []openai.ChatCompletionMessageParamUnion{
 			openai.UserMessage(message),
 		},
-		Model:     c.config.Model,
-		MaxTokens: openai.Int(int64(c.config.MaxTokens)),
-		Tools:     grokTools,
+		Model: c.config.Model,
+		Tools: grokTools,
 	}
+
+	// Set the appropriate token limit parameter based on the model.
+	c.setTokenLimit(&params)
 
 	response, err := c.client.Chat.Completions.New(ctx, params)
 	if err != nil {
@@ -155,10 +159,12 @@ func (c *Client) SendMessageWithHistory(ctx context.Context, messages []types.Me
 	grokMessages := convertMessagesToGrokFormat(messages)
 
 	params := openai.ChatCompletionNewParams{
-		Messages:  grokMessages,
-		Model:     c.config.Model,
-		MaxTokens: openai.Int(int64(c.config.MaxTokens)),
+		Messages: grokMessages,
+		Model:    c.config.Model,
 	}
+
+	// Set the appropriate token limit parameter based on the model.
+	c.setTokenLimit(&params)
 
 	response, err := c.client.Chat.Completions.New(ctx, params)
 	if err != nil {
@@ -182,11 +188,13 @@ func (c *Client) SendMessageWithToolsAndHistory(ctx context.Context, messages []
 	grokTools := convertToolsToGrokFormat(availableTools)
 
 	params := openai.ChatCompletionNewParams{
-		Messages:  grokMessages,
-		Model:     c.config.Model,
-		MaxTokens: openai.Int(int64(c.config.MaxTokens)),
-		Tools:     grokTools,
+		Messages: grokMessages,
+		Model:    c.config.Model,
+		Tools:    grokTools,
 	}
+
+	// Set the appropriate token limit parameter based on the model.
+	c.setTokenLimit(&params)
 
 	response, err := c.client.Chat.Completions.New(ctx, params)
 	if err != nil {
@@ -195,6 +203,36 @@ func (c *Client) SendMessageWithToolsAndHistory(ctx context.Context, messages []
 
 	// Parse response.
 	return parseGrokResponse(response)
+}
+
+// setTokenLimit sets the appropriate token limit parameter based on the model.
+// Newer models (gpt-5, o1-preview, o1-mini, chatgpt-4o-latest) use max_completion_tokens,
+// while older models use max_tokens.
+func (c *Client) setTokenLimit(params *openai.ChatCompletionNewParams) {
+	// Models that require max_completion_tokens instead of max_tokens.
+	usesMaxCompletionTokens := c.requiresMaxCompletionTokens()
+
+	if usesMaxCompletionTokens {
+		params.MaxCompletionTokens = openai.Int(int64(c.config.MaxTokens))
+	} else {
+		params.MaxTokens = openai.Int(int64(c.config.MaxTokens))
+	}
+}
+
+// requiresMaxCompletionTokens returns true if the model requires max_completion_tokens parameter.
+func (c *Client) requiresMaxCompletionTokens() bool {
+	model := c.config.Model
+
+	// Check for models that use max_completion_tokens.
+	// These include: gpt-5*, o1-preview, o1-mini, chatgpt-4o-latest.
+	if len(model) >= 5 && model[:5] == "gpt-5" {
+		return true
+	}
+	if model == "o1-preview" || model == "o1-mini" || model == "chatgpt-4o-latest" {
+		return true
+	}
+
+	return false
 }
 
 // convertMessagesToGrokFormat converts our Message slice to Grok/OpenAI's message format.
