@@ -141,51 +141,57 @@ func LoadIsolatedAWSConfig(ctx context.Context, optFns ...func(*config.LoadOptio
 //
 // Use LoadIsolatedAWSConfig for initial authentication (SSO device flow, etc.)
 func LoadAtmosManagedAWSConfig(ctx context.Context, optFns ...func(*config.LoadOptions) error) (aws.Config, error) {
+	defer perf.Track(nil, "pkg/auth/cloud/aws.LoadAtmosManagedAWSConfig")()
+
 	var cfg aws.Config
 	var err error
 
 	log.Debug("=== UPDATED CODE: LoadAtmosManagedAWSConfig called ===")
 
 	// Log AWS environment configuration for debugging.
-	home, _ := os.UserHomeDir()
-	defaultCredsFile := filepath.Join(home, ".aws", "credentials")
-	defaultConfigFile := filepath.Join(home, ".aws", "config")
-
-	credsFile := os.Getenv("AWS_SHARED_CREDENTIALS_FILE")
-	if credsFile == "" {
-		credsFile = defaultCredsFile
-	}
-
-	configFile := os.Getenv("AWS_CONFIG_FILE")
-	if configFile == "" {
-		configFile = defaultConfigFile
-	}
-
-	profile := os.Getenv("AWS_PROFILE")
-	if profile == "" {
-		profile = "default"
-	}
-
-	log.Debug("LoadAtmosManagedAWSConfig: checking AWS credential files",
-		"credentials_file", credsFile,
-		"config_file", configFile,
-		"profile", profile,
-		"AWS_SHARED_CREDENTIALS_FILE", os.Getenv("AWS_SHARED_CREDENTIALS_FILE"),
-		"AWS_CONFIG_FILE", os.Getenv("AWS_CONFIG_FILE"),
-		"AWS_PROFILE", os.Getenv("AWS_PROFILE"),
-	)
-
-	// Check if credential files exist.
-	if _, statErr := os.Stat(credsFile); statErr == nil {
-		log.Debug("Found AWS credentials file", "path", credsFile)
+	home, homeErr := os.UserHomeDir()
+	if homeErr != nil {
+		log.Debug("Failed to get user home directory, skipping default AWS path checks", "error", homeErr)
 	} else {
-		log.Debug("AWS credentials file not found", "path", credsFile, "error", statErr)
-	}
+		defaultCredsFile := filepath.Join(home, ".aws", "credentials")
+		defaultConfigFile := filepath.Join(home, ".aws", "config")
 
-	if _, statErr := os.Stat(configFile); statErr == nil {
-		log.Debug("Found AWS config file", "path", configFile)
-	} else {
-		log.Debug("AWS config file not found", "path", configFile, "error", statErr)
+		credsFile := os.Getenv("AWS_SHARED_CREDENTIALS_FILE")
+		if credsFile == "" {
+			credsFile = defaultCredsFile
+		}
+
+		configFile := os.Getenv("AWS_CONFIG_FILE")
+		if configFile == "" {
+			configFile = defaultConfigFile
+		}
+
+		profile := os.Getenv("AWS_PROFILE")
+		if profile == "" {
+			profile = "default"
+		}
+
+		log.Debug("LoadAtmosManagedAWSConfig: checking AWS credential files",
+			"credentials_file", credsFile,
+			"config_file", configFile,
+			"profile", profile,
+			"AWS_SHARED_CREDENTIALS_FILE", os.Getenv("AWS_SHARED_CREDENTIALS_FILE"),
+			"AWS_CONFIG_FILE", os.Getenv("AWS_CONFIG_FILE"),
+			"AWS_PROFILE", os.Getenv("AWS_PROFILE"),
+		)
+
+		// Check if credential files exist.
+		if _, statErr := os.Stat(credsFile); statErr == nil {
+			log.Debug("Found AWS credentials file", "path", credsFile)
+		} else {
+			log.Debug("AWS credentials file not found", "path", credsFile, "error", statErr)
+		}
+
+		if _, statErr := os.Stat(configFile); statErr == nil {
+			log.Debug("Found AWS config file", "path", configFile)
+		} else {
+			log.Debug("AWS config file not found", "path", configFile, "error", statErr)
+		}
 	}
 
 	// Only clear credential environment variables, not file paths or profile.

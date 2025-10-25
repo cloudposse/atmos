@@ -178,13 +178,31 @@ func execTerraformOutput(
 				"config_file", authContext.AWS.ConfigFile,
 			)
 
+			// Clear any pre-existing direct AWS credential env vars to prevent conflicts.
+			// When using Atmos-managed credentials via profile+files, we don't want
+			// direct credentials to override them.
+			delete(environMap, "AWS_ACCESS_KEY_ID")
+			delete(environMap, "AWS_SECRET_ACCESS_KEY")
+			delete(environMap, "AWS_SESSION_TOKEN")
+			delete(environMap, "AWS_SECURITY_TOKEN")
+
+			// Set Atmos-managed credential file paths and profile.
 			environMap["AWS_SHARED_CREDENTIALS_FILE"] = authContext.AWS.CredentialsFile
 			environMap["AWS_CONFIG_FILE"] = authContext.AWS.ConfigFile
 			environMap["AWS_PROFILE"] = authContext.AWS.Profile
 
+			// Force AWS SDK to load shared config files.
+			environMap["AWS_SDK_LOAD_CONFIG"] = "1"
+
+			// Set region if provided.
 			if authContext.AWS.Region != "" {
 				environMap["AWS_REGION"] = authContext.AWS.Region
+				environMap["AWS_DEFAULT_REGION"] = authContext.AWS.Region
 			}
+
+			// Disable EC2 metadata service (IMDS) fallback to ensure we only use
+			// Atmos-managed credentials and don't accidentally pick up instance credentials.
+			environMap["AWS_EC2_METADATA_DISABLED"] = "true"
 		}
 
 		// Add/override environment variables from the component's 'env' section.
