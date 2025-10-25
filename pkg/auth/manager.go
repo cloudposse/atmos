@@ -23,6 +23,7 @@ import (
 const (
 	logKeyIdentity           = "identity"
 	logKeyProvider           = "provider"
+	logKeyChainIndex         = "chainIndex"
 	identityNameKey          = "identityName"
 	buildAuthenticationChain = "buildAuthenticationChain"
 	buildChainRecursive      = "buildChainRecursive"
@@ -502,44 +503,44 @@ func (m *manager) findFirstValidCachedCredentials() int {
 	// Check from target identity (bottom) up to provider (top).
 	for i := len(m.chain) - 1; i >= 0; i-- {
 		identityName := m.chain[i]
-		log.Debug("Checking cached credentials", "chainIndex", i, identityNameKey, identityName)
+		log.Debug("Checking cached credentials", logKeyChainIndex, i, identityNameKey, identityName)
 
 		// First, try to retrieve from keyring.
 		cachedCreds, err := m.credentialStore.Retrieve(identityName)
-		log.Debug("Keyring retrieve result", "chainIndex", i, identityNameKey, identityName, "hasError", err != nil, "hasCreds", cachedCreds != nil)
+		log.Debug("Keyring retrieve result", logKeyChainIndex, i, identityNameKey, identityName, "hasError", err != nil, "hasCreds", cachedCreds != nil)
 		if err != nil {
 			// If not in keyring, try loading from identity storage (AWS files, etc.).
 			// This handles the case where credentials were created outside of Atmos
 			// (e.g., via AWS CLI, SSO) but are available in standard AWS credential files.
 			if !errors.Is(err, credentials.ErrCredentialsNotFound) {
-				log.Debug("Error is not ErrCredentialsNotFound, skipping", "chainIndex", i, identityNameKey, identityName, "error", err)
+				log.Debug("Error is not ErrCredentialsNotFound, skipping", logKeyChainIndex, i, identityNameKey, identityName, "error", err)
 				continue
 			}
 
 			identity, exists := m.identities[identityName]
 			if !exists {
-				log.Debug("Identity not in m.identities, skipping", "chainIndex", i, identityNameKey, identityName)
+				log.Debug("Identity not in m.identities, skipping", logKeyChainIndex, i, identityNameKey, identityName)
 				continue
 			}
 
-			log.Debug("Credentials not in keyring, trying identity storage", "chainIndex", i, identityNameKey, identityName)
+			log.Debug("Credentials not in keyring, trying identity storage", logKeyChainIndex, i, identityNameKey, identityName)
 			loadedCreds, loadErr := identity.LoadCredentials(context.Background())
 			if loadErr != nil || loadedCreds == nil {
-				log.Debug("Failed to load from identity storage", "chainIndex", i, identityNameKey, identityName, "error", loadErr)
+				log.Debug("Failed to load from identity storage", logKeyChainIndex, i, identityNameKey, identityName, "error", loadErr)
 				continue
 			}
 
-			log.Debug("Loaded credentials from identity storage", "chainIndex", i, identityNameKey, identityName)
+			log.Debug("Loaded credentials from identity storage", logKeyChainIndex, i, identityNameKey, identityName)
 			cachedCreds = loadedCreds
 		}
 
 		valid, expTime := m.isCredentialValid(identityName, cachedCreds)
 		if valid {
 			if expTime != nil {
-				log.Debug("Found valid cached credentials", "chainIndex", i, identityNameKey, identityName, "expiration", *expTime)
+				log.Debug("Found valid cached credentials", logKeyChainIndex, i, identityNameKey, identityName, "expiration", *expTime)
 			} else {
 				// Non-AWS credentials or no expiration info, assume valid.
-				log.Debug("Found valid cached credentials (non-AWS)", "chainIndex", i, identityNameKey, identityName)
+				log.Debug("Found valid cached credentials (non-AWS)", logKeyChainIndex, i, identityNameKey, identityName)
 			}
 			return i
 		}
@@ -547,34 +548,34 @@ func (m *manager) findFirstValidCachedCredentials() int {
 		// Credentials are invalid (expired or missing expiration).
 		// Try loading from identity storage in case there's a fresher version.
 		if expTime != nil {
-			log.Debug("Credentials expired, trying identity storage", "chainIndex", i, identityNameKey, identityName, "expiration", *expTime)
+			log.Debug("Credentials expired, trying identity storage", logKeyChainIndex, i, identityNameKey, identityName, "expiration", *expTime)
 		} else {
-			log.Debug("Credentials invalid (no expiration info), trying identity storage", "chainIndex", i, identityNameKey, identityName)
+			log.Debug("Credentials invalid (no expiration info), trying identity storage", logKeyChainIndex, i, identityNameKey, identityName)
 		}
 
 		identity, exists := m.identities[identityName]
 		if !exists {
-			log.Debug("Identity not in m.identities, skipping reload", "chainIndex", i, identityNameKey, identityName)
+			log.Debug("Identity not in m.identities, skipping reload", logKeyChainIndex, i, identityNameKey, identityName)
 			continue
 		}
 
 		loadedCreds, loadErr := identity.LoadCredentials(context.Background())
 		if loadErr != nil || loadedCreds == nil {
-			log.Debug("Failed to reload from identity storage", "chainIndex", i, identityNameKey, identityName, "error", loadErr)
+			log.Debug("Failed to reload from identity storage", logKeyChainIndex, i, identityNameKey, identityName, "error", loadErr)
 			continue
 		}
 
-		log.Debug("Reloaded credentials from identity storage", "chainIndex", i, identityNameKey, identityName)
+		log.Debug("Reloaded credentials from identity storage", logKeyChainIndex, i, identityNameKey, identityName)
 		// Check if the reloaded credentials are valid.
 		if valid, reloadExpTime := m.isCredentialValid(identityName, loadedCreds); valid {
 			if reloadExpTime != nil {
-				log.Debug("Reloaded credentials are valid", "chainIndex", i, identityNameKey, identityName, "expiration", *reloadExpTime)
+				log.Debug("Reloaded credentials are valid", logKeyChainIndex, i, identityNameKey, identityName, "expiration", *reloadExpTime)
 			} else {
-				log.Debug("Reloaded credentials are valid (non-AWS)", "chainIndex", i, identityNameKey, identityName)
+				log.Debug("Reloaded credentials are valid (non-AWS)", logKeyChainIndex, i, identityNameKey, identityName)
 			}
 			return i
 		}
-		log.Debug("Reloaded credentials also invalid", "chainIndex", i, identityNameKey, identityName)
+		log.Debug("Reloaded credentials also invalid", logKeyChainIndex, i, identityNameKey, identityName)
 	}
 	return -1 // No valid cached credentials found
 }

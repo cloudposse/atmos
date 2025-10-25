@@ -333,3 +333,24 @@ func TestExecuteAuthLogoutCommand_InvalidConfig(t *testing.T) {
 	err := cmd.ValidateArgs([]string{})
 	assert.NoError(t, err) // Command accepts 0 or 1 args.
 }
+
+func TestExecuteAuthLogoutCommand_RejectsIdentityFlag(t *testing.T) {
+	// This test verifies that using --identity flag (inherited from parent auth command)
+	// produces a clear error message directing users to use positional argument instead.
+	// This prevents the confusing behavior where --identity silently falls through to interactive mode.
+	tk := NewTestKit(t)
+	defer tk.Cleanup(func() {
+		// Reset the flag after test.
+		authLogoutCmd.Flags().Set("identity", "")
+	})
+
+	// Set the --identity flag (inherited from parent command).
+	authLogoutCmd.Flags().Set("identity", "test-identity")
+
+	err := executeAuthLogoutCommand(authLogoutCmd, []string{})
+
+	// Should get an error about using positional argument.
+	assert.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrInvalidFlag)
+	assert.Contains(t, err.Error(), "use positional argument instead of --identity flag")
+}
