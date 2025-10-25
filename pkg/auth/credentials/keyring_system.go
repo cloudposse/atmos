@@ -142,7 +142,7 @@ func (s *systemKeyringStore) IsExpired(alias string) (bool, error) {
 
 // Type returns the type of this credential store.
 func (s *systemKeyringStore) Type() string {
-	return "system-keyring"
+	return types.CredentialStoreTypeSystemKeyring
 }
 
 // GetAny retrieves and unmarshals any type from the keyring.

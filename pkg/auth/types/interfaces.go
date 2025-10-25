@@ -9,6 +9,14 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
+// Credential store type constants.
+const (
+	CredentialStoreTypeSystemKeyring = "system-keyring"
+	CredentialStoreTypeNoop          = "noop"
+	CredentialStoreTypeMemory        = "memory"
+	CredentialStoreTypeFile          = "file"
+)
+
 // Provider defines the interface that all authentication providers must implement.
 type Provider interface {
 	// Kind returns the provider kind (e.g., "aws/iam-identity-center").

@@ -67,7 +67,7 @@ func (s *noopKeyringStore) IsExpired(alias string) (bool, error) {
 
 // Type returns the type of this credential store.
 func (s *noopKeyringStore) Type() string {
-	return "noop"
+	return types.CredentialStoreTypeNoop
 }
 
 // GetAny always returns "not found" error.
