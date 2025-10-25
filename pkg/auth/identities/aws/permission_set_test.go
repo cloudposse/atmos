@@ -2,6 +2,7 @@ package aws
 
 import (
 	"context"
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
@@ -195,7 +196,8 @@ func TestPermissionSetIdentity_PostAuthenticate_WritesFiles(t *testing.T) {
 	assert.Equal(t, "us-east-1", authContext.AWS.Region)
 
 	// Env set on stack (derived from auth context).
-	assert.Contains(t, stack.ComponentEnvSection["AWS_SHARED_CREDENTIALS_FILE"], filepath.Join(".aws", "atmos", "aws-sso", "credentials"))
+	// XDG path contains "atmos/aws/aws-sso/credentials"
+	assert.Contains(t, stack.ComponentEnvSection["AWS_SHARED_CREDENTIALS_FILE"], filepath.Join("atmos", "aws", "aws-sso", "credentials"))
 	assert.Equal(t, "dev", stack.ComponentEnvSection["AWS_PROFILE"])
 }
 
@@ -222,4 +224,129 @@ func TestPermissionSetIdentity_Logout(t *testing.T) {
 
 	// Should always succeed with no cleanup.
 	assert.NoError(t, err)
+}
+
+func TestPermissionSetIdentity_CredentialsExist(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	tests := []struct {
+		name           string
+		setupFiles     bool
+		expectedExists bool
+	}{
+		{
+			name:           "credentials file exists",
+			setupFiles:     true,
+			expectedExists: true,
+		},
+		{
+			name:           "credentials file does not exist",
+			setupFiles:     false,
+			expectedExists: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			identity, err := NewPermissionSetIdentity("test-ps", &schema.Identity{
+				Kind: "aws/permission-set",
+				Via:  &schema.IdentityVia{Provider: "aws-sso"},
+				Principal: map[string]interface{}{
+					"name":    "DevAccess",
+					"account": map[string]interface{}{"id": "123456789012"},
+				},
+			})
+			require.NoError(t, err)
+
+			if tt.setupFiles {
+				t.Setenv("ATMOS_XDG_CONFIG_HOME", tmpDir)
+				credPath := filepath.Join(tmpDir, "atmos", "aws", "aws-sso", "credentials")
+				require.NoError(t, os.MkdirAll(filepath.Dir(credPath), 0o700))
+				require.NoError(t, os.WriteFile(credPath, []byte("[test-ps]\naws_access_key_id=test\n"), 0o600))
+			} else {
+				t.Setenv("ATMOS_XDG_CONFIG_HOME", filepath.Join(tmpDir, "nonexistent"))
+			}
+
+			exists, err := identity.CredentialsExist()
+			assert.NoError(t, err)
+			assert.Equal(t, tt.expectedExists, exists)
+		})
+	}
+}
+
+func TestPermissionSetIdentity_LoadCredentials(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	tests := []struct {
+		name          string
+		setupFiles    bool
+		expectedError bool
+	}{
+		{
+			name:          "successfully loads credentials from files",
+			setupFiles:    true,
+			expectedError: false,
+		},
+		{
+			name:          "fails when credentials file does not exist",
+			setupFiles:    false,
+			expectedError: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			identity, err := NewPermissionSetIdentity("test-ps", &schema.Identity{
+				Kind: "aws/permission-set",
+				Via:  &schema.IdentityVia{Provider: "aws-sso"},
+				Principal: map[string]interface{}{
+					"name":    "DevAccess",
+					"account": map[string]interface{}{"id": "123456789012"},
+				},
+			})
+			require.NoError(t, err)
+
+			if tt.setupFiles {
+				t.Setenv("ATMOS_XDG_CONFIG_HOME", tmpDir)
+
+				// Create credentials file.
+				credPath := filepath.Join(tmpDir, "atmos", "aws", "aws-sso", "credentials")
+				require.NoError(t, os.MkdirAll(filepath.Dir(credPath), 0o700))
+				credContent := `[test-ps]
+aws_access_key_id = AKIAIOSFODNN7EXAMPLE
+aws_secret_access_key = wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
+aws_session_token = FwoGZXIvYXdzEBExample
+`
+				require.NoError(t, os.WriteFile(credPath, []byte(credContent), 0o600))
+
+				// Create config file.
+				configPath := filepath.Join(tmpDir, "atmos", "aws", "aws-sso", "config")
+				configContent := `[profile test-ps]
+region = us-east-1
+output = json
+`
+				require.NoError(t, os.WriteFile(configPath, []byte(configContent), 0o600))
+			} else {
+				t.Setenv("ATMOS_XDG_CONFIG_HOME", filepath.Join(tmpDir, "nonexistent"))
+			}
+
+			ctx := context.Background()
+			creds, err := identity.LoadCredentials(ctx)
+
+			if tt.expectedError {
+				assert.Error(t, err)
+				assert.Nil(t, creds)
+			} else {
+				require.NoError(t, err)
+				require.NotNil(t, creds)
+
+				awsCreds, ok := creds.(*types.AWSCredentials)
+				require.True(t, ok, "credentials should be AWSCredentials type")
+				assert.Equal(t, "AKIAIOSFODNN7EXAMPLE", awsCreds.AccessKeyID)
+				assert.Equal(t, "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY", awsCreds.SecretAccessKey)
+				assert.Equal(t, "FwoGZXIvYXdzEBExample", awsCreds.SessionToken)
+				assert.Equal(t, "us-east-1", awsCreds.Region)
+			}
+		})
+	}
 }

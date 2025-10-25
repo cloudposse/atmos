@@ -48,17 +48,65 @@ func executeAuthWhoamiCommand(cmd *cobra.Command, args []string) error {
 	}
 
 	// Query whoami.
-	whoami, err := authManager.Whoami(context.Background(), identityName)
+	ctx := context.Background()
+	whoami, err := authManager.Whoami(ctx, identityName)
 	if err != nil {
 		errUtils.CheckErrorPrintAndExit(err, "", "")
 	}
+
+	// Validate credentials if available.
+	isValid := validateCredentials(ctx, whoami)
 
 	// Output.
 	if viper.GetString("auth.whoami.output") == "json" {
 		return printWhoamiJSON(whoami)
 	}
-	printWhoamiHuman(whoami)
+	printWhoamiHuman(whoami, isValid)
 	return nil
+}
+
+// validateCredentials attempts to validate the credentials and returns true if valid.
+// If validation succeeds, it populates whoami with additional info (principal, expiration, etc.).
+func validateCredentials(ctx context.Context, whoami *authTypes.WhoamiInfo) bool {
+	if whoami.Credentials == nil {
+		log.Debug("Validation failed: no credentials in WhoamiInfo", "identity", whoami.Identity)
+		return false
+	}
+
+	// Try to validate using the Validate method if available.
+	type validator interface {
+		Validate(context.Context) (*authTypes.ValidationInfo, error)
+	}
+
+	if v, ok := whoami.Credentials.(validator); ok {
+		validationInfo, err := v.Validate(ctx)
+		if err != nil {
+			log.Debug("Credential validation failed", "identity", whoami.Identity, "error", err)
+			return false
+		}
+
+		log.Debug("Credential validation succeeded", "identity", whoami.Identity)
+
+		// Populate whoami with validation info.
+		if validationInfo != nil {
+			if validationInfo.Principal != "" {
+				whoami.Principal = validationInfo.Principal
+			}
+			if validationInfo.Account != "" {
+				whoami.Account = validationInfo.Account
+			}
+			if validationInfo.Expiration != nil {
+				whoami.Expiration = validationInfo.Expiration
+			}
+		}
+
+		return true
+	}
+
+	// If no validator, check expiration as fallback.
+	expired := whoami.Credentials.IsExpired()
+	log.Debug("Credential validation using expiration check", "identity", whoami.Identity, "expired", expired)
+	return !expired
 }
 
 func loadAuthManager() (authTypes.AuthManager, error) {
@@ -103,12 +151,18 @@ func printWhoamiJSON(whoami *authTypes.WhoamiInfo) error {
 	return nil
 }
 
-func printWhoamiHuman(whoami *authTypes.WhoamiInfo) {
+func printWhoamiHuman(whoami *authTypes.WhoamiInfo, isValid bool) {
 	const (
 		expiringThresholdMinutes = 15
 	)
 
-	fmt.Fprintf(os.Stderr, "Current Authentication Status\n\n")
+	// Display status indicator with colored checkmark or X at the beginning.
+	statusIndicator := theme.Styles.XMark.String()
+	if isValid {
+		statusIndicator = theme.Styles.Checkmark.String()
+	}
+
+	fmt.Fprintf(os.Stderr, "%s Current Authentication Status\n\n", statusIndicator)
 
 	// Build table rows.
 	var rows [][]string
@@ -168,7 +222,7 @@ func printWhoamiHuman(whoami *authTypes.WhoamiInfo) {
 			return lipgloss.NewStyle().Padding(0, 1)
 		})
 
-	fmt.Fprintf(os.Stderr, "%s\n\n", t)
+	fmt.Fprintf(os.Stderr, "%s\n", t)
 }
 
 // redactHomeDir replaces occurrences of the homeDir at the start of v with "~" to avoid leaking user paths.

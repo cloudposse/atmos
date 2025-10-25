@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -146,12 +147,12 @@ func (i *userIdentity) writeAWSFiles(creds *types.AWSCredentials, region string)
 		return errors.Join(errUtils.ErrAuthAwsFileManagerFailed, err)
 	}
 
-	// Write credentials to ~/.aws/atmos/aws-user/credentials.
+	// Write credentials to XDG config directory (e.g., ~/.config/atmos/aws/aws-user/credentials on Linux).
 	if err := awsFileManager.WriteCredentials(awsUserProviderName, i.name, creds); err != nil {
 		return fmt.Errorf("%w: failed to write AWS credentials: %w", errUtils.ErrAwsAuth, err)
 	}
 
-	// Write config to ~/.aws/atmos/aws-user/config.
+	// Write config to XDG config directory (e.g., ~/.config/atmos/aws/aws-user/config on Linux).
 	if err := awsFileManager.WriteConfig(awsUserProviderName, i.name, region, ""); err != nil {
 		return fmt.Errorf("%w: failed to write AWS config: %w", errUtils.ErrAwsAuth, err)
 	}
@@ -384,12 +385,52 @@ func (i *userIdentity) PostAuthenticate(ctx context.Context, params *types.PostA
 	return nil
 }
 
+// CredentialsExist checks if credentials exist for this identity.
+func (i *userIdentity) CredentialsExist() (bool, error) {
+	defer perf.Track(nil, "aws.userIdentity.CredentialsExist")()
+
+	// Check if credentials file exists for aws-user provider.
+	awsFileManager, err := awsCloud.NewAWSFileManager("")
+	if err != nil {
+		return false, err
+	}
+
+	credentialsPath := awsFileManager.GetCredentialsPath("aws-user")
+	if _, err := os.Stat(credentialsPath); os.IsNotExist(err) {
+		return false, nil
+	} else if err != nil {
+		return false, err
+	}
+
+	return true, nil
+}
+
+// LoadCredentials loads AWS credentials from files using environment variables.
+// This is used with noop keyring to enable credential validation in whoami.
+func (i *userIdentity) LoadCredentials(ctx context.Context) (types.ICredentials, error) {
+	defer perf.Track(nil, "aws.userIdentity.LoadCredentials")()
+
+	// Get environment variables that specify where credentials are stored.
+	env, err := i.Environment()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get environment variables: %w", err)
+	}
+
+	// Load credentials from files using AWS SDK.
+	creds, err := loadAWSCredentialsFromEnvironment(ctx, env)
+	if err != nil {
+		return nil, err
+	}
+
+	return creds, nil
+}
+
 // Logout removes identity-specific credential storage.
 func (i *userIdentity) Logout(ctx context.Context) error {
 	defer perf.Track(nil, "aws.userIdentity.Logout")()
 
 	// AWS user identities use "aws-user" as their provider name.
-	// Clean up files under ~/.aws/atmos/aws-user/.
+	// Clean up files under XDG config directory (e.g., ~/.config/atmos/aws/aws-user/ on Linux).
 	fileManager, err := awsCloud.NewAWSFileManager("")
 	if err != nil {
 		return errors.Join(errUtils.ErrLogoutFailed, err)

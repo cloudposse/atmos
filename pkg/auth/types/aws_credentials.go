@@ -56,8 +56,8 @@ func (c *AWSCredentials) BuildWhoamiInfo(info *WhoamiInfo) {
 }
 
 // Validate validates AWS credentials by calling STS GetCallerIdentity.
-// Returns the expiration time if available, or an error if credentials are invalid.
-func (c *AWSCredentials) Validate(ctx context.Context) (*time.Time, error) {
+// Returns validation info including ARN, account, and expiration.
+func (c *AWSCredentials) Validate(ctx context.Context) (*ValidationInfo, error) {
 	// Import here to avoid circular dependency issues.
 	// Note: This is a validation check using explicit credentials, not loading from files,
 	// so we create a minimal config with just the credentials and region.
@@ -73,17 +73,22 @@ func (c *AWSCredentials) Validate(ctx context.Context) (*time.Time, error) {
 	// Create STS client.
 	stsClient := sts.NewFromConfig(cfg)
 
-	// Call GetCallerIdentity to validate credentials.
-	_, err := stsClient.GetCallerIdentity(ctx, &sts.GetCallerIdentityInput{})
+	// Call GetCallerIdentity to validate credentials and get ARN.
+	result, err := stsClient.GetCallerIdentity(ctx, &sts.GetCallerIdentityInput{})
 	if err != nil {
 		return nil, fmt.Errorf("%w: failed to validate AWS credentials: %w", errUtils.ErrAuthenticationFailed, err)
 	}
 
-	// Return expiration time if available.
-	if expTime, err := c.GetExpiration(); err == nil && expTime != nil {
-		return expTime, nil
+	// Build validation info from GetCallerIdentity response.
+	info := &ValidationInfo{
+		Principal: aws.ToString(result.Arn),
+		Account:   aws.ToString(result.Account),
 	}
 
-	// No expiration available (long-term credentials).
-	return nil, nil
+	// Add expiration time if available.
+	if expTime, err := c.GetExpiration(); err == nil && expTime != nil {
+		info.Expiration = expTime
+	}
+
+	return info, nil
 }

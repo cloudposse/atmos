@@ -192,6 +192,11 @@ func (m *manager) Whoami(ctx context.Context, identityName string) (*types.Whoam
 
 	// Try to retrieve credentials for the resolved identity.
 	creds, err := m.credentialStore.Retrieve(identityName)
+	log.Debug("credentialStore.Retrieve result",
+		"identity", identityName,
+		"creds_nil", creds == nil,
+		"error", err,
+	)
 	if err != nil {
 		// Check if this is the noop keyring pattern (credentials validated but not stored).
 		// In this case, credentials are in the environment/files, not the keyring.
@@ -211,6 +216,7 @@ func (m *manager) Whoami(ctx context.Context, identityName string) (*types.Whoam
 		return nil, fmt.Errorf(errFormatWithString, errUtils.ErrExpiredCredentials, fmt.Sprintf(backtickedQuotedFmt, identityName))
 	}
 
+	log.Debug("Using credentials from keyring", "identity", identityName)
 	return m.buildWhoamiInfo(identityName, creds), nil
 }
 
@@ -756,12 +762,12 @@ func (m *manager) buildWhoamiInfo(identityName string, creds types.ICredentials)
 	}
 
 	// Store credentials in the keystore and set a reference handle.
-	// Use the identity name as the opaque handle for retrieval. Only clear
-	// in-memory credentials if storage succeeded to avoid losing access.
+	// Use the identity name as the opaque handle for retrieval.
 	if err := m.credentialStore.Store(identityName, creds); err == nil {
 		info.CredentialsRef = identityName
-		// Clear raw credentials to avoid accidental serialization of secrets.
-		info.Credentials = nil
+		// Note: We keep info.Credentials populated for validation purposes.
+		// The Credentials field is marked with json:"-" yaml:"-" tags to prevent
+		// accidental serialization, so there's no security risk in keeping it.
 	}
 
 	return info
@@ -770,7 +776,7 @@ func (m *manager) buildWhoamiInfo(identityName string, creds types.ICredentials)
 // buildWhoamiInfoFromEnvironment creates a WhoamiInfo struct when using noop keyring.
 // This is used when credentials are managed externally (e.g., in containers with mounted files).
 // Instead of retrieving credentials from the keyring, it gets information from the identity's
-// environment configuration.
+// environment configuration and loads credentials from identity storage if available.
 func (m *manager) buildWhoamiInfoFromEnvironment(identityName string) *types.WhoamiInfo {
 	providerName := m.getProviderForIdentity(identityName)
 
@@ -780,16 +786,40 @@ func (m *manager) buildWhoamiInfoFromEnvironment(identityName string) *types.Who
 		LastUpdated: time.Now(),
 	}
 
-	// Get environment variables from the identity.
-	if identity, exists := m.identities[identityName]; exists {
+	log.Debug("buildWhoamiInfoFromEnvironment called", "identity", identityName)
+
+	// Get environment variables and try to load credentials from identity storage.
+	identity, exists := m.identities[identityName]
+	log.Debug("Identity lookup", "identity", identityName, "exists", exists)
+	if exists {
+		// Get environment variables.
 		if env, err := identity.Environment(); err == nil {
 			info.Environment = env
 		}
-	}
 
-	// Note: We don't have access to credentials or expiration from the keyring.
-	// The noop keyring validates credentials exist but doesn't return them.
-	// Credentials are managed externally via AWS_SHARED_CREDENTIALS_FILE, etc.
+		// Try to load credentials from identity-managed storage (files, etc.).
+		// This enables credential validation in whoami when using noop keyring.
+		ctx := context.Background()
+		creds, err := identity.LoadCredentials(ctx)
+		log.Debug("LoadCredentials result",
+			"identity", identityName,
+			"creds_nil", creds == nil,
+			"error", err,
+		)
+		if err == nil && creds != nil {
+			info.Credentials = creds
+			// Populate whoami info fields (expiration, region, etc.) from credentials.
+			creds.BuildWhoamiInfo(info)
+			log.Debug("Loaded credentials from identity storage",
+				"identity", identityName,
+			)
+		} else if err != nil {
+			log.Debug("Failed to load credentials from identity storage",
+				"identity", identityName,
+				"error", err,
+			)
+		}
+	}
 
 	return info
 }
@@ -1020,4 +1050,25 @@ func (m *manager) LogoutAll(ctx context.Context) error {
 	}
 
 	return nil
+}
+
+// GetEnvironmentVariables returns the environment variables for an identity
+// without performing authentication or validation.
+func (m *manager) GetEnvironmentVariables(identityName string) (map[string]string, error) {
+	defer perf.Track(nil, "auth.Manager.GetEnvironmentVariables")()
+
+	// Verify identity exists.
+	identity, exists := m.identities[identityName]
+	if !exists {
+		return nil, fmt.Errorf(errFormatWithString, errUtils.ErrIdentityNotFound, fmt.Sprintf(backtickedQuotedFmt, identityName))
+	}
+
+	// Get environment variables from the identity.
+	env, err := identity.Environment()
+	if err != nil {
+		return nil, fmt.Errorf("%w: failed to get environment variables for identity %q: %w",
+			errUtils.ErrInvalidAuthConfig, identityName, err)
+	}
+
+	return env, nil
 }

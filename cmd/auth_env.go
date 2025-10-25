@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"context"
 	"fmt"
 	"slices"
 	"sort"
@@ -33,6 +32,9 @@ var authEnvCmd = &cobra.Command{
 			return fmt.Errorf("%w invalid format: %s", errUtils.ErrInvalidArgumentError, format)
 		}
 
+		// Get login flag
+		login, _ := cmd.Flags().GetBool("login")
+
 		// Load atmos configuration
 		atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
 		if err != nil {
@@ -55,17 +57,28 @@ var authEnvCmd = &cobra.Command{
 			identityName = defaultIdentity
 		}
 
-		// Authenticate and get environment variables
-		ctx := context.Background()
-		whoami, err := authManager.Authenticate(ctx, identityName)
-		if err != nil {
-			return fmt.Errorf("authentication failed: %w", err)
-		}
+		var envVars map[string]string
 
-		// Get environment variables from authentication result
-		envVars := whoami.Environment
-		if envVars == nil {
-			envVars = make(map[string]string)
+		if login {
+			// Authenticate and get environment variables
+			// This triggers authentication flow if credentials are missing/expired
+			ctx := cmd.Context()
+			whoami, err := authManager.Authenticate(ctx, identityName)
+			if err != nil {
+				return fmt.Errorf("authentication failed: %w", err)
+			}
+			envVars = whoami.Environment
+			if envVars == nil {
+				envVars = make(map[string]string)
+			}
+		} else {
+			// Get environment variables WITHOUT authentication/validation
+			// This allows users to see what environment variables would be set
+			// even if they don't have valid credentials yet
+			envVars, err = authManager.GetEnvironmentVariables(identityName)
+			if err != nil {
+				return fmt.Errorf("failed to get environment variables: %w", err)
+			}
 		}
 
 		switch format {
@@ -122,6 +135,8 @@ func outputEnvAsDotenv(envVars map[string]string) error {
 
 func init() {
 	authEnvCmd.Flags().StringP("format", "f", "bash", "Output format: bash, json, dotenv.")
+	authEnvCmd.Flags().Bool("login", false, "Trigger authentication if credentials are missing or expired (default: false)")
+
 	if err := viper.BindEnv("auth_env_format", "ATMOS_AUTH_ENV_FORMAT"); err != nil {
 		log.Trace("Failed to bind auth_env_format environment variable", "error", err)
 	}

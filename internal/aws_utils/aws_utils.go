@@ -3,6 +3,8 @@ package aws_utils
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -81,18 +83,53 @@ func LoadAWSConfigWithAuth(
 		if region == "" && authContext.Region != "" {
 			region = authContext.Region
 		}
+	} else {
+		// Log default AWS SDK paths and environment for debugging.
+		home, _ := os.UserHomeDir()
+		defaultCredsFile := filepath.Join(home, ".aws", "credentials")
+		defaultConfigFile := filepath.Join(home, ".aws", "config")
+		profile := os.Getenv("AWS_PROFILE")
+		if profile == "" {
+			profile = "default"
+		}
+
+		log.Debug("Using standard AWS SDK credential resolution (no auth context provided)",
+			"default_credentials_file", defaultCredsFile,
+			"default_config_file", defaultConfigFile,
+			"profile", profile,
+			"AWS_SHARED_CREDENTIALS_FILE", os.Getenv("AWS_SHARED_CREDENTIALS_FILE"),
+			"AWS_CONFIG_FILE", os.Getenv("AWS_CONFIG_FILE"),
+			"AWS_PROFILE", os.Getenv("AWS_PROFILE"),
+		)
+
+		// Check if default files exist.
+		if _, err := os.Stat(defaultCredsFile); err == nil {
+			log.Debug("Found default AWS credentials file", "path", defaultCredsFile)
+		} else {
+			log.Debug("Default AWS credentials file not found", "path", defaultCredsFile)
+		}
+
+		if _, err := os.Stat(defaultConfigFile); err == nil {
+			log.Debug("Found default AWS config file", "path", defaultConfigFile)
+		} else {
+			log.Debug("Default AWS config file not found", "path", defaultConfigFile)
+		}
 	}
 
 	// Set region if provided.
 	if region != "" {
+		log.Debug("Using explicit region", "region", region)
 		cfgOpts = append(cfgOpts, config.WithRegion(region))
 	}
 
 	// Load base config.
+	log.Debug("Loading AWS SDK config", "num_options", len(cfgOpts))
 	baseCfg, err := config.LoadDefaultConfig(ctx, cfgOpts...)
 	if err != nil {
+		log.Debug("Failed to load AWS config", "error", err)
 		return aws.Config{}, fmt.Errorf("%w: %v", errUtils.ErrLoadAwsConfig, err)
 	}
+	log.Debug("Successfully loaded AWS SDK config", "region", baseCfg.Region)
 
 	// Conditionally assume role if specified.
 	if roleArn != "" {

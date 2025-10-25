@@ -75,7 +75,7 @@ The shell session will have the following environment variables set:
   - `AWS_PROFILE` - Profile name corresponding to your identity
 
 :::info Secure Credential Handling
-Atmos never exposes sensitive credentials directly in environment variables. Instead, it writes credentials to managed configuration files (typically in `~/.aws/atmos/`) and sets environment variables pointing to these files. This approach follows AWS SDK best practices and works seamlessly with any tool that uses the AWS SDK, including Terraform, AWS CLI, kubectl with AWS authentication, and more.
+Atmos never exposes sensitive credentials directly in environment variables. Instead, it writes credentials to managed configuration files following XDG Base Directory Specification (e.g., `~/.config/atmos/aws/` on Linux, `~/Library/Application Support/atmos/aws/` on macOS) and sets environment variables pointing to these files. This approach follows AWS SDK best practices and works seamlessly with any tool that uses the AWS SDK, including Terraform, AWS CLI, kubectl with AWS authentication, and more.
 :::
 
 ## Notes

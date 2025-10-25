@@ -229,9 +229,11 @@ func (c *testCreds) IsExpired() bool {
 	}
 	return time.Now().After(*c.exp)
 }
-func (c *testCreds) GetExpiration() (*time.Time, error)               { return c.exp, nil }
-func (c *testCreds) BuildWhoamiInfo(info *types.WhoamiInfo)           {}
-func (c *testCreds) Validate(ctx context.Context) (*time.Time, error) { return c.exp, nil }
+func (c *testCreds) GetExpiration() (*time.Time, error)     { return c.exp, nil }
+func (c *testCreds) BuildWhoamiInfo(info *types.WhoamiInfo) {}
+func (c *testCreds) Validate(ctx context.Context) (*types.ValidationInfo, error) {
+	return &types.ValidationInfo{Expiration: c.exp}, nil
+}
 
 func (s *testStore) Store(alias string, creds types.ICredentials) error {
 	if s.data == nil {
@@ -477,7 +479,9 @@ func (s stubUserID) Environment() (map[string]string, error) { return map[string
 func (s stubUserID) PostAuthenticate(_ context.Context, _ *types.PostAuthenticateParams) error {
 	return nil
 }
-func (s stubUserID) Logout(_ context.Context) error { return nil }
+func (s stubUserID) Logout(_ context.Context) error                                { return nil }
+func (s stubUserID) CredentialsExist() (bool, error)                               { return true, nil }
+func (s stubUserID) LoadCredentials(_ context.Context) (types.ICredentials, error) { return nil, nil }
 
 func TestManager_authenticateFromIndex_StandaloneAWSUser(t *testing.T) {
 	creds := &testCreds{}
@@ -549,7 +553,11 @@ func (s stubPSIdentity) PostAuthenticate(_ context.Context, _ *types.PostAuthent
 	}
 	return s.postErr
 }
-func (s stubPSIdentity) Logout(_ context.Context) error { return nil }
+func (s stubPSIdentity) Logout(_ context.Context) error  { return nil }
+func (s stubPSIdentity) CredentialsExist() (bool, error) { return true, nil }
+func (s stubPSIdentity) LoadCredentials(_ context.Context) (types.ICredentials, error) {
+	return nil, nil
+}
 
 func TestNewAuthManager_ParamValidation(t *testing.T) {
 	t.Run("nil config", func(t *testing.T) {
@@ -793,7 +801,9 @@ func (s stubIdentity) Environment() (map[string]string, error) { return nil, nil
 func (s stubIdentity) PostAuthenticate(_ context.Context, _ *types.PostAuthenticateParams) error {
 	return nil
 }
-func (s stubIdentity) Logout(_ context.Context) error { return nil }
+func (s stubIdentity) Logout(_ context.Context) error                                { return nil }
+func (s stubIdentity) CredentialsExist() (bool, error)                               { return true, nil }
+func (s stubIdentity) LoadCredentials(_ context.Context) (types.ICredentials, error) { return nil, nil }
 
 func TestBuildAuthenticationChain_Basic(t *testing.T) {
 	m := &manager{config: &schema.AuthConfig{

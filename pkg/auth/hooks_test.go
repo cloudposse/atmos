@@ -60,6 +60,10 @@ func (s *stubAuthManager) LogoutAll(ctx context.Context) error {
 	return nil
 }
 
+func (s *stubAuthManager) GetEnvironmentVariables(identityName string) (map[string]string, error) {
+	return make(map[string]string), nil
+}
+
 func TestGetConfigLogLevels(t *testing.T) {
 	// Nil config falls back to Info.
 	atmos, auth := getConfigLogLevels(nil)

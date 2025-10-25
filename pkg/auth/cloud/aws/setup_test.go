@@ -16,15 +16,15 @@ import (
 
 func TestSetupFiles_WritesCredentialsAndConfig(t *testing.T) {
 	tmp := t.TempDir()
-	t.Setenv("HOME", tmp)
-	homedir.Reset() // Clear homedir cache to pick up the test HOME
+	t.Setenv("XDG_CONFIG_HOME", tmp) // XDG config home for AWS credentials
+	homedir.Reset()                  // Clear homedir cache
 
 	creds := &types.AWSCredentials{AccessKeyID: "AKIA123", SecretAccessKey: "secret", SessionToken: "token", Region: "us-east-2"}
 	err := SetupFiles("prov", "dev", creds, "")
 	require.NoError(t, err)
 
-	credPath := filepath.Join(tmp, ".aws", "atmos", "prov", "credentials")
-	cfgPath := filepath.Join(tmp, ".aws", "atmos", "prov", "config")
+	credPath := filepath.Join(tmp, "atmos", "aws", "prov", "credentials")
+	cfgPath := filepath.Join(tmp, "atmos", "aws", "prov", "config")
 
 	// Verify credentials file.
 	cfg, err := ini.Load(credPath)
@@ -47,15 +47,15 @@ func TestSetupFiles_WritesCredentialsAndConfig(t *testing.T) {
 
 func TestSetupFiles_WithEmptyRegion(t *testing.T) {
 	tmp := t.TempDir()
-	t.Setenv("HOME", tmp)
-	homedir.Reset() // Clear homedir cache to pick up the test HOME
+	t.Setenv("XDG_CONFIG_HOME", tmp) // XDG config home for AWS credentials
+	homedir.Reset()                  // Clear homedir cache
 
 	// Credentials without region - should default to us-east-1.
 	creds := &types.AWSCredentials{AccessKeyID: "AKIA456", SecretAccessKey: "secret2", SessionToken: "token2", Region: ""}
 	err := SetupFiles("test-prov", "test-id", creds, "")
 	require.NoError(t, err)
 
-	cfgPath := filepath.Join(tmp, ".aws", "atmos", "test-prov", "config")
+	cfgPath := filepath.Join(tmp, "atmos", "aws", "test-prov", "config")
 
 	// Verify default region was applied.
 	cfg, err := ini.Load(cfgPath)
@@ -100,14 +100,14 @@ func TestSetupFiles_WithBasePath(t *testing.T) {
 
 func TestSetEnvironmentVariables_SetsStackEnv(t *testing.T) {
 	tmp := t.TempDir()
-	t.Setenv("HOME", tmp)
-	homedir.Reset() // Clear homedir cache to pick up the test HOME
+	t.Setenv("XDG_CONFIG_HOME", tmp) // XDG config home for AWS credentials
+	homedir.Reset()                  // Clear homedir cache
 
 	// Create auth context with AWS credentials.
 	authContext := &schema.AuthContext{
 		AWS: &schema.AWSAuthContext{
-			CredentialsFile: filepath.Join(tmp, ".aws", "atmos", "prov", "credentials"),
-			ConfigFile:      filepath.Join(tmp, ".aws", "atmos", "prov", "config"),
+			CredentialsFile: filepath.Join(tmp, "atmos", "aws", "prov", "credentials"),
+			ConfigFile:      filepath.Join(tmp, "atmos", "aws", "prov", "config"),
 			Profile:         "dev",
 		},
 	}
@@ -116,8 +116,8 @@ func TestSetEnvironmentVariables_SetsStackEnv(t *testing.T) {
 	err := SetEnvironmentVariables(authContext, stack)
 	require.NoError(t, err)
 
-	credPath := filepath.Join(".aws", "atmos", "prov", "credentials")
-	cfgPath := filepath.Join(".aws", "atmos", "prov", "config")
+	credPath := filepath.Join("atmos", "aws", "prov", "credentials")
+	cfgPath := filepath.Join("atmos", "aws", "prov", "config")
 
 	assert.Contains(t, stack.ComponentEnvSection["AWS_SHARED_CREDENTIALS_FILE"], credPath)
 	assert.Contains(t, stack.ComponentEnvSection["AWS_CONFIG_FILE"], cfgPath)
@@ -126,14 +126,14 @@ func TestSetEnvironmentVariables_SetsStackEnv(t *testing.T) {
 
 func TestSetEnvironmentVariables_WithRegion(t *testing.T) {
 	tmp := t.TempDir()
-	t.Setenv("HOME", tmp)
-	homedir.Reset() // Clear homedir cache to pick up the test HOME
+	t.Setenv("XDG_CONFIG_HOME", tmp) // XDG config home for AWS credentials
+	homedir.Reset()                  // Clear homedir cache
 
 	// Create auth context with AWS credentials including region.
 	authContext := &schema.AuthContext{
 		AWS: &schema.AWSAuthContext{
-			CredentialsFile: filepath.Join(tmp, ".aws", "atmos", "prov", "credentials"),
-			ConfigFile:      filepath.Join(tmp, ".aws", "atmos", "prov", "config"),
+			CredentialsFile: filepath.Join(tmp, "atmos", "aws", "prov", "credentials"),
+			ConfigFile:      filepath.Join(tmp, "atmos", "aws", "prov", "config"),
 			Profile:         "prod",
 			Region:          "eu-central-1",
 		},
@@ -172,8 +172,8 @@ func TestSetEnvironmentVariables_NoAWSContext(t *testing.T) {
 
 func TestSetAuthContext_PopulatesAuthContext(t *testing.T) {
 	tmp := t.TempDir()
-	t.Setenv("HOME", tmp)
-	homedir.Reset() // Clear homedir cache to pick up the test HOME
+	t.Setenv("XDG_CONFIG_HOME", tmp) // XDG config home for AWS credentials
+	homedir.Reset()                  // Clear homedir cache
 
 	creds := &types.AWSCredentials{
 		AccessKeyID:     "AKIA123",
@@ -242,8 +242,8 @@ func TestSetAuthContext_NonAWSCredentials(t *testing.T) {
 
 func TestSetAuthContext_WithComponentRegionOverride(t *testing.T) {
 	tmp := t.TempDir()
-	t.Setenv("HOME", tmp)
-	homedir.Reset() // Clear homedir cache to pick up the test HOME
+	t.Setenv("XDG_CONFIG_HOME", tmp) // XDG config home for AWS credentials
+	homedir.Reset()                  // Clear homedir cache
 
 	creds := &types.AWSCredentials{
 		AccessKeyID:     "AKIA123",

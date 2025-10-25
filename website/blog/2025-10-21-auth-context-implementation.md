@@ -19,6 +19,7 @@ We introduced `AuthContext` as the **single source of truth** for runtime authen
 - Updated Terraform backend operations to accept and use `authContext` parameter
 - Created `SetAuthContext()` function to populate context after authentication
 - Derived environment variables from auth context rather than duplicating credential logic
+- **Migrated AWS credential storage to XDG Base Directory Specification** for consistency with other Atmos data
 
 ## Why This Matters
 
@@ -44,15 +45,33 @@ Authenticate → SetupFiles → SetAuthContext → SetEnvironmentVariables
                 Used by: Terraform state ops, SDK calls, spawned processes
 ```
 
+## XDG Base Directory Compliance
+
+Atmos-managed AWS credentials now follow the **XDG Base Directory Specification**, providing a consistent location pattern across all Atmos data:
+
+**New default locations:**
+- **Linux**: `~/.config/atmos/aws/<provider>/credentials`
+- **macOS**: `~/Library/Application Support/atmos/aws/<provider>/credentials`
+- **Windows**: `%APPDATA%\atmos\aws\<provider>\credentials`
+
+**Why this matters:**
+- **Consistency**: All Atmos data (cache, keyring, AWS credentials) now follows XDG conventions
+- **Overridable**: Respect `$XDG_CONFIG_HOME` and `$ATMOS_XDG_CONFIG_HOME` environment variables
+- **Clean namespace**: Atmos-managed credentials stay under the `atmos/` namespace, not mixed with user's personal AWS credentials
+- **Platform-aware**: Automatically uses platform-appropriate paths (Linux/macOS/Windows)
+
+**Migration:** Users with custom `files.base_path` in their provider configuration are unaffected. For users relying on defaults, credentials will be created in the new XDG location on next login.
+
 ## For Atmos Contributors
 
-This is an **internal architecture improvement** with zero user-facing impact. The changes enable:
+This is an **internal architecture improvement** with minimal user-facing impact. The changes enable:
 
 1. **Concurrent multi-provider support** - Components can use AWS + GitHub + other providers simultaneously without credentials conflicting
 2. **Terraform state operations with proper auth** - `terraform.output()` and state queries now work correctly in multi-identity scenarios
 3. **Cleaner interface design** - PostAuthenticateParams struct is more maintainable than 6 individual parameters
 4. **Extensibility** - Adding new providers (Azure, GCP) just means adding fields to AuthContext
 5. **Better testability** - Auth context can be mocked/injected for testing
+6. **XDG compliance** - AWS credential storage follows same patterns as cache and keyring
 
 **Related PRs:**
 - #1695 - Auth context implementation

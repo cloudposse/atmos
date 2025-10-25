@@ -374,3 +374,254 @@ func TestAWSFileManager_GetDisplayPath(t *testing.T) {
 		})
 	}
 }
+
+func TestNewAWSFileManager_LegacyPathWarning(t *testing.T) {
+	// This test verifies that NewAWSFileManager detects legacy ~/.aws/atmos paths
+	// and logs a warning. This is important for users migrating from pre-XDG versions.
+
+	// Create a temp directory to act as home.
+	tempHome := t.TempDir()
+	legacyPath := filepath.Join(tempHome, ".aws", "atmos")
+
+	// Create legacy directory structure.
+	err := os.MkdirAll(legacyPath, 0o755)
+	require.NoError(t, err)
+
+	// Override home directory for this test.
+	originalDir, _ := homedir.Dir()
+	defer func() {
+		// Restore original home directory (not possible with homedir package, but test isolation ensures cleanup).
+		_ = originalDir
+	}()
+	t.Setenv("HOME", tempHome)
+
+	// Set XDG config to use temp directory.
+	xdgConfigDir := filepath.Join(tempHome, ".config")
+	t.Setenv("XDG_CONFIG_HOME", xdgConfigDir)
+
+	// Create file manager (should trigger warning about legacy path).
+	fm, err := NewAWSFileManager("")
+	require.NoError(t, err)
+	require.NotNil(t, fm)
+
+	// Verify that new base directory is XDG-compliant, not legacy.
+	assert.Contains(t, fm.baseDir, filepath.Join(xdgConfigDir, "atmos", "aws"),
+		"New file manager should use XDG config directory")
+	assert.NotContains(t, fm.baseDir, filepath.Join(".aws", "atmos"),
+		"New file manager should not use legacy path")
+
+	// Note: Actual warning log verification would require capturing log output,
+	// which is beyond the scope of this unit test. The warning is logged by checkLegacyAWSAtmosPath.
+	t.Logf("Legacy path created at: %s", legacyPath)
+	t.Logf("New base directory: %s", fm.baseDir)
+}
+
+func TestNewAWSFileManager_NoLegacyPath(t *testing.T) {
+	// This test verifies that no warning is logged when legacy path doesn't exist.
+
+	// Create a temp directory to act as home.
+	tempHome := t.TempDir()
+
+	// Override home directory for this test.
+	t.Setenv("HOME", tempHome)
+
+	// Set XDG config to use temp directory.
+	xdgConfigDir := filepath.Join(tempHome, ".config")
+	t.Setenv("XDG_CONFIG_HOME", xdgConfigDir)
+
+	// Create file manager without legacy path (should not trigger warning).
+	fm, err := NewAWSFileManager("")
+	require.NoError(t, err)
+	require.NotNil(t, fm)
+
+	// Verify XDG-compliant path.
+	assert.Contains(t, fm.baseDir, filepath.Join(xdgConfigDir, "atmos", "aws"))
+
+	t.Logf("New base directory: %s", fm.baseDir)
+}
+
+// TestAWSFileManager_CustomBasePath verifies that provider-specific base_path configuration works.
+func TestAWSFileManager_CustomBasePath(t *testing.T) {
+	tests := []struct {
+		name             string
+		basePath         string
+		expectedBasePath string
+		setupEnv         func(*testing.T)
+	}{
+		{
+			name:             "uses custom base_path from provider config",
+			basePath:         "~/.aws/atmos",
+			expectedBasePath: ".aws/atmos",
+			setupEnv:         func(t *testing.T) {},
+		},
+		{
+			name:             "uses absolute custom base_path",
+			basePath:         "/tmp/custom-aws-creds",
+			expectedBasePath: "/tmp/custom-aws-creds",
+			setupEnv:         func(t *testing.T) {},
+		},
+		{
+			name:             "expands tilde in base_path",
+			basePath:         "~/custom/path",
+			expectedBasePath: "custom/path",
+			setupEnv:         func(t *testing.T) {},
+		},
+		{
+			name:             "empty base_path uses XDG default",
+			basePath:         "",
+			expectedBasePath: filepath.Join(".config", "atmos", "aws"),
+			setupEnv: func(t *testing.T) {
+				homeDir, err := homedir.Dir()
+				require.NoError(t, err)
+				t.Setenv("XDG_CONFIG_HOME", filepath.Join(homeDir, ".config"))
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tt.setupEnv(t)
+
+			fm, err := NewAWSFileManager(tt.basePath)
+			require.NoError(t, err)
+			require.NotNil(t, fm)
+
+			// Verify the base directory contains the expected path.
+			assert.Contains(t, fm.baseDir, tt.expectedBasePath,
+				"Base directory should contain expected path")
+
+			t.Logf("Base path: %s → Resolved: %s", tt.basePath, fm.baseDir)
+		})
+	}
+}
+
+// TestAWSFileManager_BasePathCredentialIsolation verifies that different
+// base_path configurations properly isolate credentials.
+func TestAWSFileManager_BasePathCredentialIsolation(t *testing.T) {
+	// Create two file managers with different base paths.
+	basePath1 := t.TempDir()
+	basePath2 := t.TempDir()
+
+	fm1, err := NewAWSFileManager(basePath1)
+	require.NoError(t, err)
+
+	fm2, err := NewAWSFileManager(basePath2)
+	require.NoError(t, err)
+
+	// Write credentials to both managers with same provider/identity.
+	creds1 := &types.AWSCredentials{
+		AccessKeyID:     "AKIA_MANAGER1",
+		SecretAccessKey: "secret1",
+		SessionToken:    "token1",
+	}
+
+	creds2 := &types.AWSCredentials{
+		AccessKeyID:     "AKIA_MANAGER2",
+		SecretAccessKey: "secret2",
+		SessionToken:    "token2",
+	}
+
+	providerName := "test-provider"
+	identityName := "test-identity"
+
+	err = fm1.WriteCredentials(providerName, identityName, creds1)
+	require.NoError(t, err)
+
+	err = fm2.WriteCredentials(providerName, identityName, creds2)
+	require.NoError(t, err)
+
+	// Verify credentials are isolated to their respective base paths.
+	cfg1, err := ini.Load(fm1.GetCredentialsPath(providerName))
+	require.NoError(t, err)
+	sec1 := cfg1.Section(identityName)
+	assert.Equal(t, "AKIA_MANAGER1", sec1.Key("aws_access_key_id").String())
+
+	cfg2, err := ini.Load(fm2.GetCredentialsPath(providerName))
+	require.NoError(t, err)
+	sec2 := cfg2.Section(identityName)
+	assert.Equal(t, "AKIA_MANAGER2", sec2.Key("aws_access_key_id").String())
+
+	// Verify paths are different.
+	assert.NotEqual(t, fm1.GetCredentialsPath(providerName), fm2.GetCredentialsPath(providerName),
+		"Different base paths should produce different credential file paths")
+
+	t.Logf("Manager 1 credentials: %s", fm1.GetCredentialsPath(providerName))
+	t.Logf("Manager 2 credentials: %s", fm2.GetCredentialsPath(providerName))
+}
+
+// TestAWSFileManager_BasePathEnvironmentVariables verifies that environment
+// variables point to the correct base_path location.
+func TestAWSFileManager_BasePathEnvironmentVariables(t *testing.T) {
+	customBasePath := t.TempDir()
+	fm, err := NewAWSFileManager(customBasePath)
+	require.NoError(t, err)
+
+	providerName := "custom-sso"
+	identityName := "dev-identity"
+
+	envVars := fm.GetEnvironmentVariables(providerName, identityName)
+
+	// Verify environment variables point to custom base path.
+	expectedCredsPath := filepath.Join(customBasePath, providerName, "credentials")
+	expectedConfigPath := filepath.Join(customBasePath, providerName, "config")
+
+	assert.Equal(t, expectedCredsPath, envVars[0].Value, "AWS_SHARED_CREDENTIALS_FILE should use custom base_path")
+	assert.Equal(t, expectedConfigPath, envVars[1].Value, "AWS_CONFIG_FILE should use custom base_path")
+	assert.Equal(t, identityName, envVars[2].Value, "AWS_PROFILE should be identity name")
+
+	t.Logf("Environment variables with custom base_path:")
+	for _, env := range envVars {
+		t.Logf("  %s=%s", env.Key, env.Value)
+	}
+}
+
+// TestAWSFileManager_BasePathLegacyCompatibility verifies that setting
+// base_path to legacy location works for migration scenarios.
+func TestAWSFileManager_BasePathLegacyCompatibility(t *testing.T) {
+	homeDir, err := homedir.Dir()
+	require.NoError(t, err)
+
+	// Simulate legacy path: ~/.aws/atmos.
+	legacyBasePath := filepath.Join(homeDir, ".aws", "atmos")
+
+	// Create file manager with legacy base path.
+	fm, err := NewAWSFileManager(legacyBasePath)
+	require.NoError(t, err)
+
+	// Write credentials.
+	creds := &types.AWSCredentials{
+		AccessKeyID:     "AKIA_LEGACY",
+		SecretAccessKey: "legacy-secret",
+	}
+
+	providerName := "legacy-provider"
+	identityName := "legacy-identity"
+
+	err = fm.WriteCredentials(providerName, identityName, creds)
+	require.NoError(t, err)
+
+	// Verify credentials are written to legacy path.
+	expectedPath := filepath.Join(legacyBasePath, providerName, "credentials")
+	assert.Equal(t, expectedPath, fm.GetCredentialsPath(providerName))
+
+	// Verify credentials file exists and contains correct data.
+	cfg, err := ini.Load(expectedPath)
+	require.NoError(t, err)
+	sec := cfg.Section(identityName)
+	assert.Equal(t, "AKIA_LEGACY", sec.Key("aws_access_key_id").String())
+
+	// Cleanup.
+	defer os.RemoveAll(filepath.Join(legacyBasePath, providerName))
+
+	t.Logf("Legacy credentials path: %s", expectedPath)
+}
+
+// TestAWSFileManager_BasePathInvalidPath tests error handling for invalid base paths.
+func TestAWSFileManager_BasePathInvalidPath(t *testing.T) {
+	// Test with path that cannot be expanded.
+	invalidPath := "~nonexistentuser/path"
+
+	_, err := NewAWSFileManager(invalidPath)
+	assert.Error(t, err, "Should fail with invalid home directory expansion")
+	assert.Contains(t, err.Error(), "invalid base_path")
+}

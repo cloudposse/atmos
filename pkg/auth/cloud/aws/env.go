@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
@@ -143,6 +144,50 @@ func LoadAtmosManagedAWSConfig(ctx context.Context, optFns ...func(*config.LoadO
 	var cfg aws.Config
 	var err error
 
+	log.Debug("=== UPDATED CODE: LoadAtmosManagedAWSConfig called ===")
+
+	// Log AWS environment configuration for debugging.
+	home, _ := os.UserHomeDir()
+	defaultCredsFile := filepath.Join(home, ".aws", "credentials")
+	defaultConfigFile := filepath.Join(home, ".aws", "config")
+
+	credsFile := os.Getenv("AWS_SHARED_CREDENTIALS_FILE")
+	if credsFile == "" {
+		credsFile = defaultCredsFile
+	}
+
+	configFile := os.Getenv("AWS_CONFIG_FILE")
+	if configFile == "" {
+		configFile = defaultConfigFile
+	}
+
+	profile := os.Getenv("AWS_PROFILE")
+	if profile == "" {
+		profile = "default"
+	}
+
+	log.Debug("LoadAtmosManagedAWSConfig: checking AWS credential files",
+		"credentials_file", credsFile,
+		"config_file", configFile,
+		"profile", profile,
+		"AWS_SHARED_CREDENTIALS_FILE", os.Getenv("AWS_SHARED_CREDENTIALS_FILE"),
+		"AWS_CONFIG_FILE", os.Getenv("AWS_CONFIG_FILE"),
+		"AWS_PROFILE", os.Getenv("AWS_PROFILE"),
+	)
+
+	// Check if credential files exist.
+	if _, statErr := os.Stat(credsFile); statErr == nil {
+		log.Debug("Found AWS credentials file", "path", credsFile)
+	} else {
+		log.Debug("AWS credentials file not found", "path", credsFile, "error", statErr)
+	}
+
+	if _, statErr := os.Stat(configFile); statErr == nil {
+		log.Debug("Found AWS config file", "path", configFile)
+	} else {
+		log.Debug("AWS config file not found", "path", configFile, "error", statErr)
+	}
+
 	// Only clear credential environment variables, not file paths or profile.
 	// This allows SDK to load from Atmos-managed files using AWS_PROFILE.
 	credentialEnvVars := []string{
@@ -153,14 +198,21 @@ func LoadAtmosManagedAWSConfig(ctx context.Context, optFns ...func(*config.LoadO
 
 	// Save and clear credential variables.
 	originalValues := make(map[string]string)
+	clearedVars := []string{}
 	for _, key := range credentialEnvVars {
 		if value, exists := os.LookupEnv(key); exists {
 			originalValues[key] = value
+			clearedVars = append(clearedVars, key)
 			os.Unsetenv(key)
 		}
 	}
 
+	if len(clearedVars) > 0 {
+		log.Debug("Cleared credential environment variables", "variables", clearedVars)
+	}
+
 	// Load config (respects AWS_PROFILE, AWS_SHARED_CREDENTIALS_FILE, AWS_CONFIG_FILE).
+	log.Debug("Loading AWS SDK config with Atmos-managed credentials")
 	cfg, err = config.LoadDefaultConfig(ctx, optFns...)
 
 	// Restore credential variables.
@@ -169,8 +221,11 @@ func LoadAtmosManagedAWSConfig(ctx context.Context, optFns ...func(*config.LoadO
 	}
 
 	if err != nil {
+		log.Debug("Failed to load AWS SDK config", "error", err)
 		return aws.Config{}, fmt.Errorf("%w: %w", errUtils.ErrLoadAwsConfig, err)
 	}
+
+	log.Debug("Successfully loaded AWS SDK config", "region", cfg.Region)
 
 	return cfg, nil
 }

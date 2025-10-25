@@ -65,6 +65,7 @@ func execTerraformOutput(
 	component string,
 	stack string,
 	sections map[string]any,
+	authContext *schema.AuthContext,
 ) (map[string]any, error) {
 	outputProcessed := map[string]any{}
 	componentAbstract := false
@@ -166,30 +167,50 @@ func execTerraformOutput(
 			return nil, err
 		}
 
-		// Set environment variables from the `env` section
+		// Get all environment variables (excluding the variables prohibited by terraform-exec/tfexec) from the parent process.
+		environMap := environToMap()
+
+		// Add auth-based environment variables if authContext is provided.
+		if authContext != nil && authContext.AWS != nil {
+			log.Debug("Adding auth-based environment variables",
+				"profile", authContext.AWS.Profile,
+				"credentials_file", authContext.AWS.CredentialsFile,
+				"config_file", authContext.AWS.ConfigFile,
+			)
+
+			environMap["AWS_SHARED_CREDENTIALS_FILE"] = authContext.AWS.CredentialsFile
+			environMap["AWS_CONFIG_FILE"] = authContext.AWS.ConfigFile
+			environMap["AWS_PROFILE"] = authContext.AWS.Profile
+
+			if authContext.AWS.Region != "" {
+				environMap["AWS_REGION"] = authContext.AWS.Region
+			}
+		}
+
+		// Add/override environment variables from the component's 'env' section.
 		envSection, ok := sections[cfg.EnvSectionName]
 		if ok {
 			envMap, ok2 := envSection.(map[string]any)
 			if ok2 && len(envMap) > 0 {
-				log.Debug("Setting environment variables from component",
+				log.Debug("Adding environment variables from component",
 					"source", "env section",
-					"env", envMap,
+					"count", len(envMap),
 				)
-				// Get all environment variables (excluding the variables prohibited by terraform-exec/tfexec) from the parent process
-				environMap := environToMap()
-				// Add/override the environment variables from the component's 'env' section
 				for k, v := range envMap {
 					environMap[k] = fmt.Sprintf("%v", v)
 				}
-				// Set the environment variables in the process that executes the `tfexec` functions
-				err = tf.SetEnv(environMap)
-				if err != nil {
-					return nil, err
-				}
-				log.Debug("Resolved final environment variables",
-					"environment", environMap,
-				)
 			}
+		}
+
+		// Set the environment variables in the process that executes the `tfexec` functions.
+		if len(environMap) > 0 {
+			err = tf.SetEnv(environMap)
+			if err != nil {
+				return nil, err
+			}
+			log.Debug("Resolved final environment variables",
+				"count", len(environMap),
+			)
 		}
 
 		ctx, cancel := context.WithTimeout(context.Background(), time.Minute*5)
@@ -342,6 +363,7 @@ func execTerraformOutput(
 //   - component: Component identifier
 //   - output: Output variable key to retrieve
 //   - skipCache: Flag to bypass cache lookup
+//   - authContext: Authentication context for credential access (may be nil)
 //
 // Returns:
 //   - value: The output value (may be nil if the output exists but has a null value)
@@ -353,6 +375,7 @@ func GetTerraformOutput(
 	component string,
 	output string,
 	skipCache bool,
+	authContext *schema.AuthContext,
 ) (any, bool, error) {
 	defer perf.Track(atmosConfig, "exec.GetTerraformOutput")()
 
@@ -404,7 +427,7 @@ func GetTerraformOutput(
 		value, exists, resultErr = GetStaticRemoteStateOutput(atmosConfig, component, stack, remoteStateBackendStaticTypeOutputs, output)
 	} else {
 		// Execute `terraform output`
-		terraformOutputs, err := execTerraformOutput(atmosConfig, component, stack, sections)
+		terraformOutputs, err := execTerraformOutput(atmosConfig, component, stack, sections, authContext)
 		if err != nil {
 			u.PrintfMessageToTUI("\r✗ %s\n", message)
 			return nil, false, fmt.Errorf("failed to execute terraform output for the component %s in the stack %s: %w", component, stack, err)
