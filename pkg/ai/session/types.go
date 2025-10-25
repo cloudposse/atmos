@@ -6,14 +6,15 @@ import (
 
 // Session represents an AI chat session with persistent state.
 type Session struct {
-	ID          string                 `json:"id"`
-	Name        string                 `json:"name"`
-	ProjectPath string                 `json:"project_path"`
-	Model       string                 `json:"model"`
-	Provider    string                 `json:"provider"`
-	CreatedAt   time.Time              `json:"created_at"`
-	UpdatedAt   time.Time              `json:"updated_at"`
-	Metadata    map[string]interface{} `json:"metadata,omitempty"`
+	ID           string                 `json:"id"`
+	Name         string                 `json:"name"`
+	ProjectPath  string                 `json:"project_path"`
+	Model        string                 `json:"model"`
+	Provider     string                 `json:"provider"`
+	CreatedAt    time.Time              `json:"created_at"`
+	UpdatedAt    time.Time              `json:"updated_at"`
+	Metadata     map[string]interface{} `json:"metadata,omitempty"`
+	MessageCount int                    `json:"message_count,omitempty"`
 }
 
 // Message represents a single message in a session.

@@ -12,7 +12,7 @@ import (
 
 const (
 	// DefaultMaxSessions is the default maximum number of sessions to keep.
-	DefaultMaxSessions = 10
+	DefaultMaxSessions = 40
 	// DefaultRetentionDays is the default number of days to retain sessions.
 	DefaultRetentionDays = 30
 )

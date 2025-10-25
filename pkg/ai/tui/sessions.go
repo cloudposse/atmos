@@ -216,7 +216,7 @@ func (m *ChatModel) renderSessionList(content *strings.Builder, styles *sessionL
 		// Get provider badge and color
 		providerBadge, providerColor := m.getProviderBadge(sess.Provider)
 
-		msgCount := m.getSessionMessageCount(sess.ID)
+		msgCount := sess.MessageCount
 
 		// Build session info with provider badge
 		var sessionLine strings.Builder
@@ -253,7 +253,7 @@ func (m *ChatModel) renderFilteredSessionList(content *strings.Builder, styles *
 		// Get provider badge and color
 		providerBadge, providerColor := m.getProviderBadge(sess.Provider)
 
-		msgCount := m.getSessionMessageCount(sess.ID)
+		msgCount := sess.MessageCount
 
 		// Build session info with provider badge
 		var sessionLine strings.Builder
@@ -344,17 +344,6 @@ func (m *ChatModel) cycleFilter() {
 	// Default to "all" if current filter not found
 	m.sessionFilter = filterAll
 	m.selectedSessionIndex = 0
-}
-
-// getSessionMessageCount returns the message count for a session.
-func (m *ChatModel) getSessionMessageCount(sessionID string) int {
-	if m.manager == nil {
-		return 0
-	}
-
-	ctx := context.Background()
-	count, _ := m.manager.GetMessageCount(ctx, sessionID)
-	return count
 }
 
 // deleteSession deletes the specified session.

@@ -225,9 +225,13 @@ func (s *SQLiteStorage) GetSessionByName(ctx context.Context, projectPath, name 
 
 // ListSessions returns all sessions for a project.
 func (s *SQLiteStorage) ListSessions(ctx context.Context, projectPath string, limit int) ([]*Session, error) {
-	query := `SELECT id, name, project_path, model, provider, created_at, updated_at, metadata
-	          FROM sessions WHERE project_path = ?
-	          ORDER BY updated_at DESC LIMIT ?`
+	query := `SELECT s.id, s.name, s.project_path, s.model, s.provider, s.created_at, s.updated_at, s.metadata, COALESCE(COUNT(m.id), 0) as message_count
+	          FROM sessions s
+	          LEFT JOIN messages m ON s.id = m.session_id
+	          WHERE s.project_path = ?
+	          GROUP BY s.id
+	          ORDER BY s.updated_at DESC
+	          LIMIT ?`
 
 	rows, err := s.db.QueryContext(ctx, query, projectPath, limit)
 	if err != nil {
@@ -250,6 +254,7 @@ func (s *SQLiteStorage) ListSessions(ctx context.Context, projectPath string, li
 			&session.CreatedAt,
 			&session.UpdatedAt,
 			&metadataJSON,
+			&session.MessageCount,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan session: %w", err)
