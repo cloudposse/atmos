@@ -260,33 +260,36 @@ func (m *ChatModel) handleWindowResize(msg tea.WindowSizeMsg) {
 	m.width = msg.Width
 	m.height = msg.Height
 
-	headerHeight := lipgloss.Height(m.headerView())
-	footerHeight := lipgloss.Height(m.footerView())
-	verticalMarginHeight := headerHeight + footerHeight
+	// Fixed textarea height as requested (7 lines).
+	const textareaHeight = 7
 
-	// Calculate dynamic textarea height (about 40% of available content height).
-	contentHeight := msg.Height - verticalMarginHeight
-	textareaHeight := contentHeight * 2 / 5 // 40% of content height
-	if textareaHeight < 3 {
-		textareaHeight = 3 // Minimum height
-	}
-	if textareaHeight > 20 {
-		textareaHeight = 20 // Maximum height
+	// Set textarea size.
+	m.textarea.SetWidth(msg.Width - 4)
+	m.textarea.SetHeight(textareaHeight)
+
+	// Use fixed heights for header and footer to avoid measurement issues:
+	// Header: title (1) + subtitle (1) + session info (1) + padding = 4 lines
+	// Footer: border (1) + top padding (1) + textarea (7) + newline (1) + help (1) + bottom padding (1) = 12 lines
+	// Separators: 2 newlines between header/viewport/footer = 2 lines
+	// Total non-viewport space: 4 + 12 + 2 = 18 lines
+	const headerHeight = 4
+	const headerAndFooterHeight = 18
+
+	// Viewport gets all remaining space.
+	viewportHeight := msg.Height - headerAndFooterHeight
+	if viewportHeight < 10 {
+		viewportHeight = 10 // Minimum viewport height
 	}
 
 	if !m.ready {
-		// Initialize viewport and textarea sizes.
-		m.viewport = viewport.New(msg.Width, contentHeight-textareaHeight)
+		// Initialize viewport size.
+		m.viewport = viewport.New(msg.Width, viewportHeight)
 		m.viewport.YPosition = headerHeight + 1
-		m.textarea.SetWidth(msg.Width - 4)
-		m.textarea.SetHeight(textareaHeight)
 		m.ready = true
 	} else {
 		// Adjust existing sizes.
 		m.viewport.Width = msg.Width
-		m.viewport.Height = contentHeight - textareaHeight
-		m.textarea.SetWidth(msg.Width - 4)
-		m.textarea.SetHeight(textareaHeight)
+		m.viewport.Height = viewportHeight
 	}
 
 	// Clean any ANSI escape sequences that may have leaked into textarea during resize.
@@ -492,7 +495,7 @@ func (m *ChatModel) footerView() string {
 			Foreground(lipgloss.Color("240")).
 			Italic(true)
 
-		help := helpStyle.Render("Enter: Send | Ctrl+J: Newline | Ctrl+L: Sessions | Ctrl+N: New | Ctrl+P: Provider | Ctrl+C: Quit")
+		help := helpStyle.Render("Enter: Send | Ctrl+J: Newline | Ctrl+L: Sessions | Ctrl+N: New | Ctrl+P: Provider | Alt+Drag: Select Text | Ctrl+C: Quit")
 		content = fmt.Sprintf("%s\n%s", m.textarea.View(), help)
 	}
 
@@ -524,6 +527,9 @@ func (m *ChatModel) addMessage(role, content string) {
 
 func (m *ChatModel) updateViewportContent() {
 	var contentParts []string
+
+	// Add empty line at the top for spacing after header.
+	contentParts = append(contentParts, "")
 
 	for _, msg := range m.messages {
 		var style lipgloss.Style
@@ -689,9 +695,39 @@ What would you like to know?`)
 	p := tea.NewProgram(
 		model,
 		tea.WithAltScreen(),
+		tea.WithMouseCellMotion(), // Enable mouse wheel scrolling
 	)
 	_, err = p.Run()
 	return err
+}
+
+// getConfiguredProviders returns only the providers that are configured in atmos.yaml.
+func (m *ChatModel) getConfiguredProviders() []struct {
+	Name        string
+	Description string
+} {
+	if m.atmosConfig == nil || m.atmosConfig.Settings.AI.Providers == nil {
+		return availableProviders
+	}
+
+	configured := make([]struct {
+		Name        string
+		Description string
+	}, 0)
+
+	for _, provider := range availableProviders {
+		// Check if this provider is configured
+		if _, exists := m.atmosConfig.Settings.AI.Providers[provider.Name]; exists {
+			configured = append(configured, provider)
+		}
+	}
+
+	// If no providers are configured, show all (fallback for backward compatibility)
+	if len(configured) == 0 {
+		return availableProviders
+	}
+
+	return configured
 }
 
 // providerSelectView renders the provider selection interface.
@@ -733,7 +769,10 @@ func (m *ChatModel) providerSelectView() string {
 	currentStyle := lipgloss.NewStyle().
 		Foreground(lipgloss.Color(theme.ColorGreen))
 
-	for i, provider := range availableProviders {
+	// Get only configured providers
+	configuredProviders := m.getConfiguredProviders()
+
+	for i, provider := range configuredProviders {
 		var line string
 		prefix := "  "
 		if i == m.selectedProviderIdx {

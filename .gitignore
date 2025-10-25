@@ -44,8 +44,9 @@
 # Tool version managers
 .tool-versions
 
-# Ignore cache files
+# Ignore cache files and sessions
 **/.atmos/cache.yaml
+**/.atmos/sessions/
 **/cache.*.txt
 
 # Development configs - track only specific files

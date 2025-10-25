@@ -21,8 +21,8 @@ import (
 // - OSC sequences with BEL terminator: ESC ] ... BEL.
 // - OSC sequences with ST terminator: ESC ] ... ESC \.
 // - Bare OSC sequences: ] ... \ or rgb:... \ or <number>;rgb:... \ (fragments without ESC prefix).
-// - Color query fragments: :0000/0000/0000\<letter> (hex color responses).
-var ansiEscapeRegex = regexp.MustCompile(`\x1b\[[0-9;]*[a-zA-Z]|\[[0-9;]+R|^\d+R|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)|][^\\]*\\|\d*;?rgb:[0-9a-fA-F/]*\\|:[0-9a-fA-F/]+\\[a-zA-Z]?`)
+// - Color query fragments: :0000/0000/0000\<letter> or bare [0-]0000/0000/0000[\\] (hex color responses, 1-4 digits per component).
+var ansiEscapeRegex = regexp.MustCompile(`\x1b\[[0-9;]*[a-zA-Z]|\[[0-9;]+R|^\d+R|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)|][^\\]*\\|\d*;?rgb:[0-9a-fA-F/]*\\|:[0-9a-fA-F/]+\\[a-zA-Z]?|[0-9a-fA-F]{1,4}/[0-9a-fA-F]{1,4}/[0-9a-fA-F]{1,4}\\?`)
 
 // stripANSI removes ANSI escape sequences from a string.
 func stripANSI(s string) string {
@@ -105,7 +105,7 @@ func (m *ChatModel) handleKeyMsg(msg tea.KeyMsg) tea.Cmd {
 		if m.atmosConfig != nil {
 			m.currentView = viewModeProviderSelect
 			m.selectedProviderIdx = 0
-			// Find current provider index.
+			// Find current provider index in configured providers.
 			currentProvider := ""
 			if m.sess != nil && m.sess.Provider != "" {
 				currentProvider = m.sess.Provider
@@ -114,7 +114,9 @@ func (m *ChatModel) handleKeyMsg(msg tea.KeyMsg) tea.Cmd {
 			} else {
 				currentProvider = "anthropic"
 			}
-			for i, p := range availableProviders {
+			// Use configured providers only
+			configuredProviders := m.getConfiguredProviders()
+			for i, p := range configuredProviders {
 				if p.Name == currentProvider {
 					m.selectedProviderIdx = i
 					break
@@ -357,6 +359,9 @@ func (m *ChatModel) navigateHistoryDown() {
 
 // handleProviderSelectKeys processes keyboard input for the provider selection view.
 func (m *ChatModel) handleProviderSelectKeys(msg tea.KeyMsg) tea.Cmd {
+	// Get configured providers
+	configuredProviders := m.getConfiguredProviders()
+
 	switch msg.String() {
 	case "ctrl+c":
 		return tea.Quit
@@ -372,15 +377,17 @@ func (m *ChatModel) handleProviderSelectKeys(msg tea.KeyMsg) tea.Cmd {
 		return nil
 	case "down", "j":
 		// Move selection down.
-		if m.selectedProviderIdx < len(availableProviders)-1 {
+		if m.selectedProviderIdx < len(configuredProviders)-1 {
 			m.selectedProviderIdx++
 		}
 		return nil
 	case "enter":
 		// Switch to selected provider.
-		selectedProvider := availableProviders[m.selectedProviderIdx].Name
-		if err := m.switchProvider(selectedProvider); err != nil {
-			m.addMessage(roleSystem, fmt.Sprintf("Error switching provider: %v", err))
+		if m.selectedProviderIdx < len(configuredProviders) {
+			selectedProvider := configuredProviders[m.selectedProviderIdx].Name
+			if err := m.switchProvider(selectedProvider); err != nil {
+				m.addMessage(roleSystem, fmt.Sprintf("Error switching provider: %v", err))
+			}
 		}
 		// Return to chat view.
 		m.currentView = viewModeChat
