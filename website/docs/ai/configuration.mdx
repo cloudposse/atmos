@@ -480,6 +480,70 @@ Each provider in the `providers` map supports:
   <dd>Request timeout in seconds (default: 60, increase for large local models)</dd>
 </dl>
 
+### Understanding max_tokens
+
+The `max_tokens` setting controls the maximum length of the AI's response. A "token" is a piece of text - roughly 3-4 characters for English text, or about 0.75 words on average.
+
+**What it means:**
+- **Higher values** = Longer, more detailed responses (costs more, takes longer)
+- **Lower values** = Shorter, more concise responses (costs less, faster)
+- The AI can respond with fewer tokens than the limit, but never more
+
+**Token-to-text approximations:**
+- `1000 tokens` ≈ 750 words ≈ 1-2 paragraphs
+- `2048 tokens` ≈ 1,500 words ≈ 1 page of text
+- `4096 tokens` ≈ 3,000 words ≈ 2-3 pages of text
+- `8192 tokens` ≈ 6,000 words ≈ 5-6 pages of text
+
+**Recommended values for average use:**
+
+<File title="atmos.yaml">
+```yaml
+providers:
+  anthropic:
+    max_tokens: 4096      # Good balance for most queries
+
+  openai:
+    max_tokens: 4096      # Sufficient for detailed explanations
+
+  gemini:
+    max_tokens: 8192      # Gemini handles longer contexts well
+
+  grok:
+    max_tokens: 4096      # Standard for most use cases
+
+  ollama:
+    max_tokens: 2048      # Lower for local models (faster generation)
+```
+</File>
+
+**When to adjust:**
+
+- **Increase to 8192+** for:
+  - Long code generation tasks
+  - Detailed infrastructure analysis
+  - Complex multi-step explanations
+  - Stack configuration reviews
+
+- **Decrease to 1024-2048** for:
+  - Quick questions and answers
+  - Simple clarifications
+  - Local models (Ollama) for faster responses
+  - Cost optimization
+
+**Cost impact:**
+Each provider charges per token (both input and output). Higher `max_tokens` means higher maximum cost per request. See your provider's pricing page for exact rates.
+
+:::tip Token Limits by Provider
+Different models have different maximum token limits:
+- **Claude Sonnet 4**: Up to 200,000 tokens
+- **GPT-4/GPT-5**: Up to 128,000 tokens
+- **Gemini 2.0**: Up to 1,000,000 tokens
+- **Local models (Ollama)**: Typically 2,048-8,192 tokens
+
+Setting `max_tokens` higher than the model's limit will be automatically capped by the provider.
+:::
+
 ### Global Settings
 
 <dl>
