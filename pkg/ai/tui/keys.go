@@ -22,7 +22,8 @@ import (
 // - OSC sequences with ST terminator: ESC ] ... ESC \.
 // - Bare OSC sequences: ] ... \ or rgb:... \ or <number>;rgb:... \ (fragments without ESC prefix).
 // - Color query fragments: :0000/0000/0000\<letter> or bare [0-]0000/0000/0000[\\] (hex color responses, 1-4 digits per component).
-var ansiEscapeRegex = regexp.MustCompile(`\x1b\[[0-9;]*[a-zA-Z]|\[[0-9;]+R|^\d+R|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)|][^\\]*\\|\d*;?rgb:[0-9a-fA-F/]*\\|:[0-9a-fA-F/]+\\[a-zA-Z]?|[0-9a-fA-F]{1,4}/[0-9a-fA-F]{1,4}/[0-9a-fA-F]{1,4}\\?`)
+// - Standalone escape terminators: space-backslash " \" or bare "\" at start of line.
+var ansiEscapeRegex = regexp.MustCompile(`\x1b\[[0-9;]*[a-zA-Z]|\[[0-9;]+R|^\d+R|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)|][^\\]*\\|\d*;?rgb:[0-9a-fA-F/]*\\|:[0-9a-fA-F/]+\\[a-zA-Z]?|[0-9a-fA-F]{1,4}/[0-9a-fA-F]{1,4}/[0-9a-fA-F]{1,4}\\?|^\s*\\$`)
 
 // stripANSI removes ANSI escape sequences from a string.
 func stripANSI(s string) string {
