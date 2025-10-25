@@ -1589,6 +1589,155 @@ func TestChatModel_HistoryNavigation(t *testing.T) {
 	})
 }
 
+// mockAIClientWithHistory is a mock that captures message history.
+type mockAIClientWithHistory struct {
+	mockAIClient
+	receivedMessages []types.Message
+}
+
+func (m *mockAIClientWithHistory) SendMessageWithHistory(ctx context.Context, messages []types.Message) (string, error) {
+	m.receivedMessages = messages
+	return m.response, m.err
+}
+
+func TestChatModel_ProviderFilteredHistory(t *testing.T) {
+	t.Run("filters messages by provider when building history", func(t *testing.T) {
+		// Create a mock client that tracks the messages it receives
+		client := &mockAIClientWithHistory{
+			mockAIClient: mockAIClient{
+				model:    "test-model",
+				response: "Test response",
+			},
+		}
+
+		// Create a session with anthropic provider
+		sess := &session.Session{
+			ID:       "test-session",
+			Name:     "Test Session",
+			Provider: "anthropic",
+		}
+
+		m, _ := NewChatModel(client, nil, nil, nil, nil, nil)
+		m.sess = sess
+		m.ready = true
+
+		// Add messages from different providers
+		m.messages = []ChatMessage{
+			{Role: roleUser, Content: "User question 1", Provider: ""},
+			{Role: roleAssistant, Content: "Anthropic response 1", Provider: "anthropic"},
+			{Role: roleUser, Content: "User question 2", Provider: ""},
+			{Role: roleAssistant, Content: "OpenAI response", Provider: "openai"}, // Different provider
+			{Role: roleUser, Content: "User question 3", Provider: ""},
+			{Role: roleAssistant, Content: "Anthropic response 2", Provider: "anthropic"},
+		}
+
+		// Trigger getAIResponse which should filter messages
+		cmd := m.getAIResponse("New user message")
+		result := cmd()
+
+		// Verify we got a response
+		assert.NotNil(t, result)
+
+		// Check that receivedMessages only contains:
+		// - All user messages
+		// - Only assistant messages from anthropic (current provider)
+		// - The new user message
+		expectedMessageCount := 6 // 3 existing user + 2 anthropic assistant + 1 new user
+		assert.Len(t, client.receivedMessages, expectedMessageCount,
+			"Should include all user messages and only assistant messages from current provider")
+
+		// Verify the messages are in the correct order and from correct provider
+		assert.Equal(t, roleUser, client.receivedMessages[0].Role)
+		assert.Equal(t, "User question 1", client.receivedMessages[0].Content)
+
+		assert.Equal(t, roleAssistant, client.receivedMessages[1].Role)
+		assert.Equal(t, "Anthropic response 1", client.receivedMessages[1].Content)
+
+		assert.Equal(t, roleUser, client.receivedMessages[2].Role)
+		assert.Equal(t, "User question 2", client.receivedMessages[2].Content)
+
+		// OpenAI response should be skipped (index 3 would be User question 3)
+		assert.Equal(t, roleUser, client.receivedMessages[3].Role)
+		assert.Equal(t, "User question 3", client.receivedMessages[3].Content)
+
+		assert.Equal(t, roleAssistant, client.receivedMessages[4].Role)
+		assert.Equal(t, "Anthropic response 2", client.receivedMessages[4].Content)
+
+		// New user message should be last
+		assert.Equal(t, roleUser, client.receivedMessages[5].Role)
+		assert.Equal(t, "New user message", client.receivedMessages[5].Content)
+	})
+
+	t.Run("includes all messages when provider matches", func(t *testing.T) {
+		client := &mockAIClientWithHistory{
+			mockAIClient: mockAIClient{
+				model:    "test-model",
+				response: "Test response",
+			},
+		}
+
+		sess := &session.Session{
+			ID:       "test-session",
+			Name:     "Test Session",
+			Provider: "openai",
+		}
+
+		m, _ := NewChatModel(client, nil, nil, nil, nil, nil)
+		m.sess = sess
+		m.ready = true
+
+		// Add messages all from openai
+		m.messages = []ChatMessage{
+			{Role: roleUser, Content: "User question 1", Provider: ""},
+			{Role: roleAssistant, Content: "OpenAI response 1", Provider: "openai"},
+			{Role: roleUser, Content: "User question 2", Provider: ""},
+			{Role: roleAssistant, Content: "OpenAI response 2", Provider: "openai"},
+		}
+
+		cmd := m.getAIResponse("New message")
+		cmd()
+
+		// All messages should be included
+		assert.Len(t, client.receivedMessages, 5) // 2 user + 2 assistant + 1 new user
+	})
+
+	t.Run("excludes all assistant messages when provider doesn't match", func(t *testing.T) {
+		client := &mockAIClientWithHistory{
+			mockAIClient: mockAIClient{
+				model:    "test-model",
+				response: "Test response",
+			},
+		}
+
+		sess := &session.Session{
+			ID:       "test-session",
+			Name:     "Test Session",
+			Provider: "gemini", // Different from messages
+		}
+
+		m, _ := NewChatModel(client, nil, nil, nil, nil, nil)
+		m.sess = sess
+		m.ready = true
+
+		// Add messages from anthropic and openai
+		m.messages = []ChatMessage{
+			{Role: roleUser, Content: "User question 1", Provider: ""},
+			{Role: roleAssistant, Content: "Anthropic response", Provider: "anthropic"},
+			{Role: roleUser, Content: "User question 2", Provider: ""},
+			{Role: roleAssistant, Content: "OpenAI response", Provider: "openai"},
+		}
+
+		cmd := m.getAIResponse("New message")
+		cmd()
+
+		// Only user messages should be included
+		assert.Len(t, client.receivedMessages, 3) // 2 existing user + 1 new user
+		assert.Equal(t, roleUser, client.receivedMessages[0].Role)
+		assert.Equal(t, roleUser, client.receivedMessages[1].Role)
+		assert.Equal(t, roleUser, client.receivedMessages[2].Role)
+	})
+}
+
 func TestChatModel_MarkdownRendering(t *testing.T) {
 	client := &mockAIClient{model: "test-model"}
 

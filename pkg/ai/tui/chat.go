@@ -101,9 +101,10 @@ type ChatModel struct {
 
 // ChatMessage represents a single message in the chat.
 type ChatMessage struct {
-	Role    string // "user" or "assistant"
-	Content string
-	Time    time.Time
+	Role     string // "user" or "assistant"
+	Content  string
+	Time     time.Time
+	Provider string // The AI provider that generated this message (for assistant messages)
 }
 
 // NewChatModel creates a new chat model with the provided AI client.
@@ -171,11 +172,24 @@ func (m *ChatModel) loadSessionMessages() error {
 	}
 
 	// Convert session messages to chat messages and populate history.
+	// Use the session's provider for historical messages.
+	sessionProvider := ""
+	if m.sess != nil {
+		sessionProvider = m.sess.Provider
+	}
+
 	for _, msg := range sessionMessages {
+		// Preserve the provider for assistant messages.
+		provider := ""
+		if msg.Role == roleAssistant {
+			provider = sessionProvider
+		}
+
 		m.messages = append(m.messages, ChatMessage{
-			Role:    msg.Role,
-			Content: msg.Content,
-			Time:    msg.CreatedAt,
+			Role:     msg.Role,
+			Content:  msg.Content,
+			Time:     msg.CreatedAt,
+			Provider: provider,
 		})
 		// Add user messages to history for navigation
 		if msg.Role == roleUser {
@@ -510,10 +524,17 @@ func (m *ChatModel) footerView() string {
 }
 
 func (m *ChatModel) addMessage(role, content string) {
+	// Capture the current provider for assistant messages.
+	provider := ""
+	if role == roleAssistant && m.sess != nil && m.sess.Provider != "" {
+		provider = m.sess.Provider
+	}
+
 	message := ChatMessage{
-		Role:    role,
-		Content: content,
-		Time:    time.Now(),
+		Role:     role,
+		Content:  content,
+		Time:     time.Now(),
+		Provider: provider,
 	}
 	m.messages = append(m.messages, message)
 
@@ -545,7 +566,13 @@ func (m *ChatModel) updateViewportContent() {
 		case roleAssistant:
 			style = lipgloss.NewStyle().
 				Foreground(lipgloss.Color(theme.ColorCyan))
-			prefix = "Atmos AI:"
+			// Include alien emoji and provider name in the prefix.
+			// Use the provider stored with the message, not the current session provider.
+			provider := msg.Provider
+			if provider == "" {
+				provider = "unknown"
+			}
+			prefix = fmt.Sprintf("👽 Atmos AI (%s):", provider)
 		case roleSystem:
 			style = lipgloss.NewStyle().
 				Foreground(lipgloss.Color(theme.ColorRed)).
@@ -591,8 +618,12 @@ func (m *ChatModel) renderMarkdown(content string) string {
 	renderer, err := glamour.NewTermRenderer(
 		glamour.WithAutoStyle(),
 		glamour.WithWordWrap(width),
+		glamour.WithColorProfile(lipgloss.ColorProfile()),
+		glamour.WithEmoji(),
 	)
 	if err != nil {
+		// Log the error for debugging
+		log.Debug(fmt.Sprintf("Failed to create glamour renderer: %v", err))
 		// Fallback to plain text if markdown rendering fails
 		return lipgloss.NewStyle().
 			PaddingLeft(2).
@@ -602,6 +633,8 @@ func (m *ChatModel) renderMarkdown(content string) string {
 
 	rendered, err := renderer.Render(content)
 	if err != nil {
+		// Log the error and content length for debugging
+		log.Debug(fmt.Sprintf("Failed to render markdown (content length: %d): %v", len(content), err))
 		// Fallback to plain text if rendering fails
 		return lipgloss.NewStyle().
 			PaddingLeft(2).
@@ -636,11 +669,33 @@ func (m *ChatModel) getAIResponse(userMessage string) tea.Cmd {
 		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 		defer cancel()
 
-		// Build full message history from stored messages.
+		// Build message history filtered by provider.
+		// Only include:
+		// - All user messages (provider-agnostic)
+		// - Assistant messages from the current provider only
+		currentProvider := ""
+		if m.sess != nil {
+			currentProvider = m.sess.Provider
+		}
+
 		messages := make([]aiTypes.Message, 0, len(m.messages)+1)
 		for _, msg := range m.messages {
 			// Skip system messages (UI-only notifications)
-			if msg.Role != roleSystem {
+			if msg.Role == roleSystem {
+				continue
+			}
+
+			// Include all user messages
+			if msg.Role == roleUser {
+				messages = append(messages, aiTypes.Message{
+					Role:    msg.Role,
+					Content: msg.Content,
+				})
+				continue
+			}
+
+			// Include assistant messages only from the current provider
+			if msg.Role == roleAssistant && msg.Provider == currentProvider {
 				messages = append(messages, aiTypes.Message{
 					Role:    msg.Role,
 					Content: msg.Content,
@@ -752,9 +807,7 @@ func RunChat(client ai.Client, atmosConfig *schema.AtmosConfiguration, manager *
 
 	// Add welcome message only if this is a new session (no existing messages).
 	if len(model.messages) == 0 {
-		model.addMessage(roleAssistant, `Welcome to Atmos AI Assistant! 👽
-
-I'm here to help you with your Atmos infrastructure management. I can:
+		model.addMessage(roleAssistant, `I'm here to help you with your Atmos infrastructure management. I can:
 
 • Describe components and their configurations
 • List available components and stacks

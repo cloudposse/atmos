@@ -78,12 +78,26 @@ func (m *ChatModel) handleSessionSwitched(msg sessionSwitchedMsg) {
 	} else {
 		m.sess = msg.session
 		m.messages = make([]ChatMessage, 0)
+
+		// Get the session's provider for historical messages.
+		sessionProvider := ""
+		if msg.session != nil {
+			sessionProvider = msg.session.Provider
+		}
+
 		// Convert session messages to chat messages.
 		for _, sessionMsg := range msg.messages {
+			// Preserve the provider for assistant messages.
+			provider := ""
+			if sessionMsg.Role == roleAssistant {
+				provider = sessionProvider
+			}
+
 			m.messages = append(m.messages, ChatMessage{
-				Role:    sessionMsg.Role,
-				Content: sessionMsg.Content,
-				Time:    sessionMsg.CreatedAt,
+				Role:     sessionMsg.Role,
+				Content:  sessionMsg.Content,
+				Time:     sessionMsg.CreatedAt,
+				Provider: provider,
 			})
 		}
 		m.updateViewportContent()
