@@ -316,6 +316,11 @@ func (s *fileKeyringStore) IsExpired(alias string) (bool, error) {
 	return creds.IsExpired(), nil
 }
 
+// Type returns the type of this credential store.
+func (s *fileKeyringStore) Type() string {
+	return types.CredentialStoreTypeFile
+}
+
 // GetAny retrieves and unmarshals any type from the file keyring.
 func (s *fileKeyringStore) GetAny(key string, dest interface{}) error {
 	defer perf.Track(nil, "credentials.fileKeyringStore.GetAny")()

@@ -57,10 +57,16 @@ func (c *Credentials) BuildWhoamiInfo(info *types.WhoamiInfo) {
 }
 
 // Validate is a no-op for mock credentials (always valid).
-// Returns expiration time if available.
-func (c *Credentials) Validate(ctx context.Context) (*time.Time, error) {
-	if !c.Expiration.IsZero() {
-		return &c.Expiration, nil
+// Returns validation info with mock principal and expiration.
+func (c *Credentials) Validate(ctx context.Context) (*types.ValidationInfo, error) {
+	info := &types.ValidationInfo{
+		Principal: "arn:aws:iam::123456789012:user/mock-user",
+		Account:   "123456789012",
 	}
-	return nil, nil
+
+	if !c.Expiration.IsZero() {
+		info.Expiration = &c.Expiration
+	}
+
+	return info, nil
 }

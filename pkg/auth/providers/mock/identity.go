@@ -94,6 +94,30 @@ func (i *Identity) PostAuthenticate(ctx context.Context, params *types.PostAuthe
 	return nil
 }
 
+// CredentialsExist always returns true for mock identities (credentials are in-memory).
+func (i *Identity) CredentialsExist() (bool, error) {
+	defer perf.Track(nil, "mock.Identity.CredentialsExist")()
+
+	// Mock identities don't use file-based storage.
+	// Credentials are always available in-memory.
+	return true, nil
+}
+
+// LoadCredentials returns mock credentials for testing.
+// Mock identities don't use file-based storage, so this just returns test credentials.
+func (i *Identity) LoadCredentials(ctx context.Context) (types.ICredentials, error) {
+	defer perf.Track(nil, "mock.Identity.LoadCredentials")()
+
+	// Return mock credentials.
+	return &Credentials{
+		AccessKeyID:     "mock-access-key",
+		SecretAccessKey: "mock-secret-key",
+		SessionToken:    "mock-session-token",
+		Region:          "us-east-1",
+		Expiration:      time.Now().Add(1 * time.Hour),
+	}, nil
+}
+
 // Logout is a no-op for mock identities.
 func (i *Identity) Logout(ctx context.Context) error {
 	defer perf.Track(nil, "mock.Identity.Logout")()

@@ -8,10 +8,12 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	log "github.com/cloudposse/atmos/pkg/logger"
-	"github.com/stretchr/testify/assert"
-
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/tests"
 )
@@ -784,4 +786,74 @@ func TestExecuteTerraform_OpaValidationFunctionality(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestExecuteTerraform_AuthPreHookErrorPropagation verifies that errors from the auth pre-hook
+// are properly propagated and cause terraform execution to abort.
+// This ensures that when authentication fails (e.g., user presses Ctrl+C during SSO),
+// the terraform command does not continue executing.
+//
+// This test verifies the fix in terraform.go:236 where auth pre-hook errors were logged
+// but not returned, causing terraform execution to continue even when authentication failed.
+func TestExecuteTerraform_AuthPreHookErrorPropagation(t *testing.T) {
+	defer perf.Track(nil, "exec.TestExecuteTerraform_AuthPreHookErrorPropagation")()
+
+	// Use the existing atmos-auth fixture which has valid auth configuration.
+	workDir := "../../tests/fixtures/scenarios/atmos-auth"
+	t.Chdir(workDir)
+
+	// Create a stack that references a nonexistent identity to trigger auth error.
+	stacksDir := "stacks/deploy"
+	stackContent := `
+vars:
+  stage: error-propagation-test
+import:
+  - catalog/mock
+components:
+  terraform:
+    error-propagation-test:
+      metadata:
+        component: mock_caller_identity
+      auth:
+        # Reference a nonexistent identity to trigger auth error
+        identity: nonexistent-identity
+`
+	stackFile := filepath.Join(stacksDir, "error-propagation-test.yaml")
+	err := os.WriteFile(stackFile, []byte(stackContent), 0o644)
+	require.NoError(t, err)
+
+	defer os.Remove(stackFile)
+
+	// Attempt to execute terraform - should fail during auth pre-hook.
+	info := schema.ConfigAndStacksInfo{
+		ComponentFromArg: "error-propagation-test",
+		Stack:            "error-propagation-test",
+		ComponentType:    "terraform",
+		SubCommand:       "plan",
+	}
+
+	// Redirect stderr to suppress error output during test.
+	oldStderr := os.Stderr
+	r, w, _ := os.Pipe()
+	os.Stderr = w
+
+	err = ExecuteTerraform(info)
+
+	// Restore stderr.
+	w.Close()
+	os.Stderr = oldStderr
+	var buf bytes.Buffer
+	buf.ReadFrom(r)
+
+	// Verify error was returned (not just logged and ignored).
+	// The key assertion: ExecuteTerraform MUST return an error when auth pre-hook fails.
+	require.Error(t, err, "ExecuteTerraform must return error when auth pre-hook fails")
+
+	// The error should be related to authentication/provider/identity.
+	errMsg := err.Error()
+	hasAuthError := strings.Contains(errMsg, "identity") ||
+		strings.Contains(errMsg, "auth") ||
+		strings.Contains(errMsg, "provider") ||
+		strings.Contains(errMsg, "credential")
+	assert.True(t, hasAuthError, "Expected auth-related error, got: %v", err)
 }

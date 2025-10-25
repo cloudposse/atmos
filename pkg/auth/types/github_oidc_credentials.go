@@ -66,6 +66,6 @@ func (c *OIDCCredentials) BuildWhoamiInfo(info *WhoamiInfo) {
 
 // Validate is not implemented for OIDC credentials.
 // OIDC tokens cannot be validated without provider-specific logic.
-func (c *OIDCCredentials) Validate(ctx context.Context) (*time.Time, error) {
+func (c *OIDCCredentials) Validate(ctx context.Context) (*ValidationInfo, error) {
 	return nil, errUtils.ErrNotImplemented
 }

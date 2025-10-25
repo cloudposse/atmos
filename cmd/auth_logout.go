@@ -60,6 +60,19 @@ func executeAuthLogoutCommand(cmd *cobra.Command, args []string) error {
 	providerFlag, _ := cmd.Flags().GetString("provider")
 	dryRun, _ := cmd.Flags().GetBool("dry-run")
 
+	// Check if the inherited --identity flag was used (common mistake).
+	identityFlag, _ := cmd.Flags().GetString("identity")
+	if identityFlag != "" {
+		u.PrintfMarkdownToTUI("**Error:** The `--identity` flag is not supported by `atmos auth logout`.\n\n")
+		u.PrintfMarkdownToTUI("**Usage:**\n")
+		u.PrintfMessageToTUI("  Logout specific identity:  atmos auth logout <identity-name>\n")
+		u.PrintfMessageToTUI("  Logout specific provider:  atmos auth logout --provider <provider-name>\n")
+		u.PrintfMessageToTUI("  Logout all:                atmos auth logout\n\n")
+		u.PrintfMarkdownToTUI("**Example:**\n")
+		u.PrintfMessageToTUI("  atmos auth logout plat-dev/admin\n\n")
+		return fmt.Errorf("%w: use positional argument instead of --identity flag", errUtils.ErrInvalidFlag)
+	}
+
 	ctx := context.Background()
 
 	// Determine what to logout.

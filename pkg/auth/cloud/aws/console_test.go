@@ -310,6 +310,116 @@ func TestConsoleURLGenerator_GetConsoleURL(t *testing.T) {
 	}
 }
 
+// TestGetSigninTokenURL_NoSessionDuration verifies that SessionDuration parameter
+// is NEVER included in the getSigninToken request URL.
+//
+// CRITICAL: AWS federation endpoint returns 400 Bad Request when SessionDuration
+// is included with role-chained credentials (SSO → PermissionSet → AssumeRole).
+//
+// Per AWS documentation:
+// - SessionDuration is ONLY valid with direct AssumeRole* operations
+// - SessionDuration is NOT valid with GetFederationToken
+// - SessionDuration is NOT valid with role chaining
+//
+// Since Atmos uses role chaining, we must NEVER include SessionDuration in the
+// getSigninToken request. AWS automatically uses the remaining validity of the
+// source credentials (typically 1 hour for role chaining).
+//
+// This test prevents regression of the bug fixed in commit [hash].
+func TestGetSigninTokenURL_NoSessionDuration(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockHTTPClient := pkghttp.NewMockClient(ctrl)
+
+	// Capture the actual HTTP request to inspect the URL.
+	var capturedRequest *http.Request
+	mockHTTPClient.EXPECT().
+		Do(gomock.Any()).
+		DoAndReturn(func(req *http.Request) (*http.Response, error) {
+			capturedRequest = req
+			responseBody := io.NopCloser(bytes.NewBufferString(`{"SigninToken": "test-token"}`))
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Body:       responseBody,
+			}, nil
+		})
+
+	generator := NewConsoleURLGenerator(mockHTTPClient)
+	ctx := context.Background()
+
+	sessionData := mustMarshal(t, map[string]string{
+		"sessionId":    "ASIAQ7VMTGAYPX2VJ2V7",
+		"sessionKey":   "test-secret-key",
+		"sessionToken": "test-session-token",
+	})
+
+	_, err := generator.getSigninToken(ctx, sessionData, 1*time.Hour)
+	require.NoError(t, err)
+	require.NotNil(t, capturedRequest, "HTTP request should have been made")
+
+	// CRITICAL ASSERTION: SessionDuration must NEVER be in the URL.
+	requestURL := capturedRequest.URL.String()
+	assert.NotContains(t, requestURL, "SessionDuration",
+		"SessionDuration parameter MUST NOT be present in getSigninToken URL (causes 400 Bad Request with role-chained credentials)")
+
+	// Verify required parameters ARE present.
+	assert.Contains(t, requestURL, "Action=getSigninToken")
+	assert.Contains(t, requestURL, "Session=")
+}
+
+// TestLoginURL_NoSessionDuration verifies that SessionDuration parameter
+// is NEVER included in the final login URL.
+//
+// The login URL should only contain: Action, Issuer, Destination, SigninToken.
+// SessionDuration belongs ONLY in the getSigninToken request (and even there,
+// only for non-role-chained credentials).
+//
+// This test prevents regression of adding SessionDuration to the login URL.
+func TestLoginURL_NoSessionDuration(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockHTTPClient := pkghttp.NewMockClient(ctrl)
+
+	// Mock the getSigninToken HTTP call.
+	mockHTTPClient.EXPECT().
+		Do(gomock.Any()).
+		Return(&http.Response{
+			StatusCode: http.StatusOK,
+			Body:       io.NopCloser(bytes.NewBufferString(`{"SigninToken": "test-signin-token-123"}`)),
+		}, nil)
+
+	generator := NewConsoleURLGenerator(mockHTTPClient)
+	ctx := context.Background()
+
+	creds := &types.AWSCredentials{
+		AccessKeyID:     "ASIAQ7VMTGAYPX2VJ2V7",
+		SecretAccessKey: "test-secret-key",
+		SessionToken:    "test-session-token",
+	}
+
+	options := types.ConsoleURLOptions{
+		Destination:     "https://console.aws.amazon.com/s3",
+		SessionDuration: 2 * time.Hour,
+		Issuer:          "atmos-test",
+	}
+
+	loginURL, _, err := generator.GetConsoleURL(ctx, creds, options)
+	require.NoError(t, err)
+	require.NotEmpty(t, loginURL)
+
+	// CRITICAL ASSERTION: SessionDuration must NEVER be in the login URL.
+	assert.NotContains(t, loginURL, "SessionDuration",
+		"SessionDuration parameter MUST NOT be present in login URL (not a valid parameter for Action=login)")
+
+	// Verify required parameters ARE present.
+	assert.Contains(t, loginURL, "Action=login")
+	assert.Contains(t, loginURL, "Issuer=atmos-test")
+	assert.Contains(t, loginURL, "Destination=")
+	assert.Contains(t, loginURL, "SigninToken=test-signin-token-123")
+}
+
 func TestConsoleURLGenerator_getSigninToken(t *testing.T) {
 	tests := []struct {
 		name             string

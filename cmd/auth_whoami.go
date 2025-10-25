@@ -22,6 +22,10 @@ import (
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
 
+const (
+	logKeyIdentity = "identity"
+)
+
 // authWhoamiCmd shows current authentication status.
 var authWhoamiCmd = &cobra.Command{
 	Use:   "whoami",
@@ -48,17 +52,72 @@ func executeAuthWhoamiCommand(cmd *cobra.Command, args []string) error {
 	}
 
 	// Query whoami.
-	whoami, err := authManager.Whoami(context.Background(), identityName)
+	ctx := context.Background()
+	whoami, err := authManager.Whoami(ctx, identityName)
 	if err != nil {
 		errUtils.CheckErrorPrintAndExit(err, "", "")
 	}
+
+	// Validate credentials if available.
+	isValid := validateCredentials(ctx, whoami)
 
 	// Output.
 	if viper.GetString("auth.whoami.output") == "json" {
 		return printWhoamiJSON(whoami)
 	}
-	printWhoamiHuman(whoami)
+	printWhoamiHuman(whoami, isValid)
 	return nil
+}
+
+// validateCredentials attempts to validate the credentials and returns true if valid.
+// If validation succeeds, it populates whoami with additional info (principal, expiration, etc.).
+func validateCredentials(ctx context.Context, whoami *authTypes.WhoamiInfo) bool {
+	if whoami.Credentials == nil {
+		log.Debug("Validation failed: no credentials in WhoamiInfo", "identity", whoami.Identity)
+		return false
+	}
+
+	// Try to validate using the Validate method if available.
+	type validator interface {
+		Validate(context.Context) (*authTypes.ValidationInfo, error)
+	}
+
+	v, ok := whoami.Credentials.(validator)
+	if !ok {
+		// If no validator, check expiration as fallback.
+		expired := whoami.Credentials.IsExpired()
+		log.Debug("Credential validation using expiration check", logKeyIdentity, whoami.Identity, "expired", expired)
+		return !expired
+	}
+
+	validationInfo, err := v.Validate(ctx)
+	if err != nil {
+		log.Debug("Credential validation failed", logKeyIdentity, whoami.Identity, "error", err)
+		return false
+	}
+
+	log.Debug("Credential validation succeeded", logKeyIdentity, whoami.Identity)
+
+	// Populate whoami with validation info.
+	populateWhoamiFromValidation(whoami, validationInfo)
+
+	return true
+}
+
+// populateWhoamiFromValidation populates whoami info from validation results.
+func populateWhoamiFromValidation(whoami *authTypes.WhoamiInfo, validationInfo *authTypes.ValidationInfo) {
+	if validationInfo == nil {
+		return
+	}
+	if validationInfo.Principal != "" {
+		whoami.Principal = validationInfo.Principal
+	}
+	if validationInfo.Account != "" {
+		whoami.Account = validationInfo.Account
+	}
+	if validationInfo.Expiration != nil {
+		whoami.Expiration = validationInfo.Expiration
+	}
 }
 
 func loadAuthManager() (authTypes.AuthManager, error) {
@@ -103,14 +162,26 @@ func printWhoamiJSON(whoami *authTypes.WhoamiInfo) error {
 	return nil
 }
 
-func printWhoamiHuman(whoami *authTypes.WhoamiInfo) {
-	const (
-		expiringThresholdMinutes = 15
-	)
+func printWhoamiHuman(whoami *authTypes.WhoamiInfo, isValid bool) {
+	// Display status indicator with colored checkmark or X.
+	statusIndicator := theme.Styles.XMark.String()
+	if isValid {
+		statusIndicator = theme.Styles.Checkmark.String()
+	}
 
-	fmt.Fprintf(os.Stderr, "Current Authentication Status\n\n")
+	fmt.Fprintf(os.Stderr, "%s Current Authentication Status\n\n", statusIndicator)
 
-	// Build table rows.
+	// Build and print table.
+	rows := buildWhoamiTableRows(whoami)
+	t := createWhoamiTable(rows)
+
+	fmt.Fprintf(os.Stderr, "%s\n", t)
+}
+
+// buildWhoamiTableRows builds table rows for whoami output.
+func buildWhoamiTableRows(whoami *authTypes.WhoamiInfo) [][]string {
+	const expiringThresholdMinutes = 15
+
 	var rows [][]string
 	rows = append(rows, []string{"Provider", whoami.Provider})
 	rows = append(rows, []string{"Identity", whoami.Identity})
@@ -128,28 +199,34 @@ func printWhoamiHuman(whoami *authTypes.WhoamiInfo) {
 	}
 
 	if whoami.Expiration != nil {
-		expiresStr := whoami.Expiration.Format("2006-01-02 15:04:05 MST")
-		duration := formatDuration(time.Until(*whoami.Expiration))
-
-		// Check if expiring within threshold and style duration accordingly.
-		timeUntilExpiration := time.Until(*whoami.Expiration)
-		var durationStyle lipgloss.Style
-		if timeUntilExpiration > 0 && timeUntilExpiration < expiringThresholdMinutes*time.Minute {
-			// Expiring soon - use red for duration.
-			durationStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorRed))
-		} else {
-			// Normal - use darker gray for duration.
-			durationStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#808080"))
-		}
-		expiresStr = fmt.Sprintf("%s %s", expiresStr, durationStyle.Render(fmt.Sprintf("(%s)", duration)))
-
+		expiresStr := formatExpiration(whoami.Expiration, expiringThresholdMinutes)
 		rows = append(rows, []string{"Expires", expiresStr})
 	}
 
 	rows = append(rows, []string{"Last Updated", whoami.LastUpdated.Format("2006-01-02 15:04:05 MST")})
 
-	// Create minimal charmbracelet table.
-	t := table.New().
+	return rows
+}
+
+// formatExpiration formats expiration time with duration and styling.
+func formatExpiration(expiration *time.Time, thresholdMinutes int) string {
+	expiresStr := expiration.Format("2006-01-02 15:04:05 MST")
+	duration := formatDuration(time.Until(*expiration))
+
+	timeUntilExpiration := time.Until(*expiration)
+	var durationStyle lipgloss.Style
+	if timeUntilExpiration > 0 && timeUntilExpiration < time.Duration(thresholdMinutes)*time.Minute {
+		durationStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorRed))
+	} else {
+		durationStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#808080"))
+	}
+
+	return fmt.Sprintf("%s %s", expiresStr, durationStyle.Render(fmt.Sprintf("(%s)", duration)))
+}
+
+// createWhoamiTable creates a formatted table for whoami output.
+func createWhoamiTable(rows [][]string) *table.Table {
+	return table.New().
 		Rows(rows...).
 		BorderTop(false).
 		BorderBottom(false).
@@ -159,16 +236,12 @@ func printWhoamiHuman(whoami *authTypes.WhoamiInfo) {
 		BorderColumn(false).
 		StyleFunc(func(row, col int) lipgloss.Style {
 			if col == 0 {
-				// Key column - use cyan color.
 				return lipgloss.NewStyle().
 					Foreground(lipgloss.Color(theme.ColorCyan)).
 					Padding(0, 1, 0, 2)
 			}
-			// Value column - default color with padding.
 			return lipgloss.NewStyle().Padding(0, 1)
 		})
-
-	fmt.Fprintf(os.Stderr, "%s\n\n", t)
 }
 
 // redactHomeDir replaces occurrences of the homeDir at the start of v with "~" to avoid leaking user paths.

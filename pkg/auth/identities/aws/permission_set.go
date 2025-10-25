@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"time"
 
 	awssdk "github.com/aws/aws-sdk-go-v2/aws"
@@ -287,6 +288,52 @@ func (i *permissionSetIdentity) buildCredsFromRole(resp *sso.GetRoleCredentialsO
 		Region:          region,
 		Expiration:      expiration,
 	}, nil
+}
+
+// CredentialsExist checks if credentials exist for this identity.
+func (i *permissionSetIdentity) CredentialsExist() (bool, error) {
+	defer perf.Track(nil, "aws.permissionSetIdentity.CredentialsExist")()
+
+	// Get provider name to construct credential file path.
+	providerName, err := i.GetProviderName()
+	if err != nil {
+		return false, err
+	}
+
+	// Check if credentials file exists.
+	awsFileManager, err := awsCloud.NewAWSFileManager("")
+	if err != nil {
+		return false, err
+	}
+
+	credentialsPath := awsFileManager.GetCredentialsPath(providerName)
+	if _, err := os.Stat(credentialsPath); os.IsNotExist(err) {
+		return false, nil
+	} else if err != nil {
+		return false, err
+	}
+
+	return true, nil
+}
+
+// LoadCredentials loads AWS credentials from files using environment variables.
+// This is used with noop keyring to enable credential validation in whoami.
+func (i *permissionSetIdentity) LoadCredentials(ctx context.Context) (types.ICredentials, error) {
+	defer perf.Track(nil, "aws.permissionSetIdentity.LoadCredentials")()
+
+	// Get environment variables that specify where credentials are stored.
+	env, err := i.Environment()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get environment variables: %w", err)
+	}
+
+	// Load credentials from files using AWS SDK.
+	creds, err := loadAWSCredentialsFromEnvironment(ctx, env)
+	if err != nil {
+		return nil, err
+	}
+
+	return creds, nil
 }
 
 // Logout removes identity-specific credential storage.

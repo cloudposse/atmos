@@ -16,11 +16,17 @@ import (
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/xdg"
 )
 
 const (
 	PermissionRWX = 0o700
 	PermissionRW  = 0o600
+
+	// Logging keys.
+	logKeyProvider = "provider"
+	logKeyIdentity = "identity"
+	logKeyProfile  = "profile"
 )
 
 var (
@@ -44,7 +50,14 @@ type AWSFileManager struct {
 
 // NewAWSFileManager creates a new AWS file manager instance.
 // BasePath is optional and can be empty to use defaults.
-// Precedence: 1) basePath parameter from provider spec, 2) default ~/.aws/atmos.
+// Precedence: 1) basePath parameter from provider spec, 2) XDG config directory.
+//
+// Default path follows XDG Base Directory Specification:
+//   - Linux: $XDG_CONFIG_HOME/atmos/aws (default: ~/.config/atmos/aws)
+//   - macOS: ~/Library/Application Support/atmos/aws
+//   - Windows: %APPDATA%\atmos\aws
+//
+// Respects ATMOS_XDG_CONFIG_HOME and XDG_CONFIG_HOME environment variables.
 func NewAWSFileManager(basePath string) (*AWSFileManager, error) {
 	var baseDir string
 
@@ -56,12 +69,17 @@ func NewAWSFileManager(basePath string) (*AWSFileManager, error) {
 		}
 		baseDir = expanded
 	} else {
-		// Default: ~/.aws/atmos
-		homeDir, err := homedir.Dir()
+		// Default: Use XDG config directory for AWS credentials.
+		// This keeps Atmos-managed AWS credentials under Atmos's namespace,
+		// following the same pattern as cache and keyring storage.
+		var err error
+		baseDir, err = xdg.GetXDGConfigDir("aws", PermissionRWX)
 		if err != nil {
-			return nil, ErrGetHomeDir
+			return nil, fmt.Errorf("failed to get XDG config directory for AWS: %w", err)
 		}
-		baseDir = filepath.Join(homeDir, ".aws", "atmos")
+
+		// Check for legacy ~/.aws/atmos path and warn if found.
+		checkLegacyAWSAtmosPath(baseDir)
 	}
 
 	return &AWSFileManager{
@@ -69,9 +87,42 @@ func NewAWSFileManager(basePath string) (*AWSFileManager, error) {
 	}, nil
 }
 
+// checkLegacyAWSAtmosPath checks if the legacy ~/.aws/atmos directory exists
+// and logs a warning if it does, informing users about the new XDG-compliant location.
+func checkLegacyAWSAtmosPath(newBaseDir string) {
+	homeDir, err := homedir.Dir()
+	if err != nil {
+		return // Cannot determine home directory, skip check.
+	}
+
+	legacyPath := filepath.Join(homeDir, ".aws", "atmos")
+
+	// Check if legacy path exists.
+	if _, err := os.Stat(legacyPath); os.IsNotExist(err) {
+		return // Legacy path doesn't exist, nothing to warn about.
+	}
+
+	// Log warning about legacy path.
+	log.Warn(fmt.Sprintf(
+		"Legacy AWS credentials directory detected at %s. "+
+			"Atmos now uses XDG Base Directory Specification. "+
+			"New credentials are stored at %s. "+
+			"Run 'atmos auth login' to re-authenticate and store credentials in the new location.",
+		legacyPath,
+		newBaseDir,
+	))
+}
+
 // WriteCredentials writes AWS credentials to the provider-specific file with identity profile.
 func (m *AWSFileManager) WriteCredentials(providerName, identityName string, creds *types.AWSCredentials) error {
 	credentialsPath := m.GetCredentialsPath(providerName)
+
+	log.Debug("Writing AWS credentials",
+		logKeyProvider, providerName,
+		logKeyIdentity, identityName,
+		"credentials_file", credentialsPath,
+		"has_session_token", creds.SessionToken != "",
+	)
 
 	// Ensure directory exists.
 	if err := os.MkdirAll(filepath.Dir(credentialsPath), PermissionRWX); err != nil {
@@ -100,6 +151,14 @@ func (m *AWSFileManager) WriteCredentials(providerName, identityName string, cre
 		}
 	}
 
+	// Add metadata comment with expiration if available (before section keys).
+	// The ini library preserves comments when loading with IgnoreInlineComment: false.
+	if creds.Expiration != "" {
+		section.Comment = fmt.Sprintf("atmos: expiration=%s", creds.Expiration)
+	} else {
+		section.Comment = ""
+	}
+
 	// Set credentials.
 	section.Key("aws_access_key_id").SetValue(creds.AccessKeyID)
 	section.Key("aws_secret_access_key").SetValue(creds.SecretAccessKey)
@@ -122,12 +181,26 @@ func (m *AWSFileManager) WriteCredentials(providerName, identityName string, cre
 		return ErrSetCredentialsFilePermissions
 	}
 
+	log.Debug("Successfully wrote AWS credentials",
+		logKeyProvider, providerName,
+		logKeyIdentity, identityName,
+		"credentials_file", credentialsPath,
+	)
+
 	return nil
 }
 
 // WriteConfig writes AWS config to the provider-specific file with identity profile.
 func (m *AWSFileManager) WriteConfig(providerName, identityName, region, outputFormat string) error {
 	configPath := m.GetConfigPath(providerName)
+
+	log.Debug("Writing AWS config",
+		logKeyProvider, providerName,
+		logKeyIdentity, identityName,
+		"config_file", configPath,
+		"region", region,
+		"output_format", outputFormat,
+	)
 
 	// Ensure directory exists.
 	if err := os.MkdirAll(filepath.Dir(configPath), PermissionRWX); err != nil {
@@ -153,7 +226,6 @@ func (m *AWSFileManager) WriteConfig(providerName, identityName, region, outputF
 	}
 
 	section := cfg.Section(profileSectionName)
-	log.Debug("AWS WriteConfig", "providerName", providerName, "identityName", identityName, "region", region, "outputFormat", outputFormat)
 
 	// Set config values only if they are not empty.
 	if region != "" {
@@ -182,6 +254,12 @@ func (m *AWSFileManager) WriteConfig(providerName, identityName, region, outputF
 		errUtils.CheckErrorAndPrint(ErrSetConfigFilePermissions, identityName, "failed to set config file permissions")
 		return ErrSetConfigFilePermissions
 	}
+
+	log.Debug("Successfully wrote AWS config",
+		logKeyProvider, providerName,
+		logKeyIdentity, identityName,
+		"config_file", configPath,
+	)
 
 	return nil
 }

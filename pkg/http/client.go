@@ -59,13 +59,16 @@ func Get(ctx context.Context, url string, client Client) ([]byte, error) {
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("%w: unexpected status code: %d", errUtils.ErrHTTPRequestFailed, resp.StatusCode)
-	}
-
+	// Read response body (needed for both success and error cases).
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read response: %w", errors.Join(errUtils.ErrHTTPRequestFailed, err))
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		// Include full response body in error message for debugging.
+		// Let the terminal handle formatting - don't truncate or sanitize.
+		return nil, fmt.Errorf("%w: unexpected status code: %d, content-type: %s, response body:\n%s", errUtils.ErrHTTPRequestFailed, resp.StatusCode, resp.Header.Get("Content-Type"), string(body))
 	}
 
 	return body, nil

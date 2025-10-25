@@ -4,10 +4,27 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 
 	"github.com/adrg/xdg"
 	"github.com/spf13/viper"
 )
+
+func init() {
+	// Override adrg/xdg defaults for macOS to follow CLI tool conventions.
+	// This must happen in init() to ensure it runs before any code uses xdg.ConfigHome, etc.
+	// CLI tools use ~/.config on all platforms for consistency, while GUI apps use
+	// platform-specific locations like ~/Library/Application Support on macOS.
+	if runtime.GOOS == "darwin" {
+		homeDir, err := os.UserHomeDir()
+		if err == nil {
+			// Override macOS defaults to use CLI tool conventions.
+			xdg.CacheHome = filepath.Join(homeDir, ".cache")
+			xdg.DataHome = filepath.Join(homeDir, ".local", "share")
+			xdg.ConfigHome = filepath.Join(homeDir, ".config")
+		}
+	}
+}
 
 // GetXDGCacheDir returns the Atmos cache directory following XDG Base Directory Specification.
 // It respects ATMOS_XDG_CACHE_HOME and XDG_CACHE_HOME environment variables.

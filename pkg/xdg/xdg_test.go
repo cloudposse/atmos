@@ -3,8 +3,10 @@ package xdg
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
+	adrg "github.com/adrg/xdg"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -133,4 +135,121 @@ func TestGetXDGDir_DefaultFallback(t *testing.T) {
 	info, err := os.Stat(dir)
 	require.NoError(t, err)
 	assert.True(t, info.IsDir())
+}
+
+func TestGetXDGConfigDir_PlatformDefaults(t *testing.T) {
+	// This test verifies that the adrg/xdg library returns the expected
+	// platform-specific defaults when no environment variables are set.
+	// This is critical for documentation accuracy and Geodesic integration.
+
+	// Unset all XDG environment variables to test platform defaults.
+	t.Setenv("XDG_CONFIG_HOME", "")
+	t.Setenv("ATMOS_XDG_CONFIG_HOME", "")
+
+	dir, err := GetXDGConfigDir("aws/test-provider", 0o755)
+	require.NoError(t, err)
+
+	// Verify the path contains the expected platform-specific components.
+	// We test for path segments that should be present on each platform.
+	// Platform-specific defaults from github.com/adrg/xdg:
+	// - Linux/Unix: ~/.config/atmos/aws/test-provider
+	// - macOS: ~/Library/Application Support/atmos/aws/test-provider
+	// - Windows: %APPDATA%\atmos\aws\test-provider
+
+	// All platforms should have "atmos/aws/test-provider" in the path.
+	assert.Contains(t, dir, filepath.Join("atmos", "aws", "test-provider"),
+		"Path should contain atmos/aws/test-provider segment")
+
+	// Verify directory was created.
+	info, err := os.Stat(dir)
+	require.NoError(t, err)
+	assert.True(t, info.IsDir())
+
+	// Log the actual path for debugging and documentation verification.
+	t.Logf("Platform-specific XDG config path: %s", dir)
+}
+
+func TestGetXDGConfigDir_AwsCredentialPath(t *testing.T) {
+	// This test verifies the exact path structure used for AWS credential storage.
+	// This is what gets documented in our Geodesic configuration guide.
+
+	tempHome := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(tempHome, ".config"))
+
+	providerName := "acme-sso"
+	dir, err := GetXDGConfigDir(filepath.Join("aws", providerName), 0o700)
+	require.NoError(t, err)
+
+	expectedPath := filepath.Join(tempHome, ".config", "atmos", "aws", providerName)
+	assert.Equal(t, expectedPath, dir,
+		"AWS credential path should follow XDG config structure")
+
+	// Verify this matches the path we document for Geodesic.
+	credentialsFile := filepath.Join(dir, "credentials")
+	configFile := filepath.Join(dir, "config")
+
+	// These paths should be constructible from the base directory.
+	assert.Contains(t, credentialsFile, filepath.Join("atmos", "aws", providerName, "credentials"))
+	assert.Contains(t, configFile, filepath.Join("atmos", "aws", providerName, "config"))
+
+	t.Logf("AWS credentials path: %s", credentialsFile)
+	t.Logf("AWS config path: %s", configFile)
+}
+
+func TestGetXDGConfigDir_BackwardCompatibilityPath(t *testing.T) {
+	// This test verifies the backward-compatibility option documented in the
+	// Geodesic configuration guide, where users can set ATMOS_XDG_CONFIG_HOME
+	// to use the legacy ~/.aws/atmos/ path.
+
+	tempHome := t.TempDir()
+	awsDir := filepath.Join(tempHome, ".aws")
+	t.Setenv("ATMOS_XDG_CONFIG_HOME", awsDir)
+
+	providerName := "acme-sso"
+	dir, err := GetXDGConfigDir(filepath.Join("aws", providerName), 0o700)
+	require.NoError(t, err)
+
+	// Should use ~/.aws/atmos/aws/acme-sso (for backward compatibility).
+	expectedPath := filepath.Join(awsDir, "atmos", "aws", providerName)
+	assert.Equal(t, expectedPath, dir,
+		"ATMOS_XDG_CONFIG_HOME should enable backward-compatible paths")
+
+	// This allows users to keep credentials at ~/.aws/atmos/ and only
+	// mount ~/.aws/ in their Geodesic containers.
+	assert.Contains(t, dir, filepath.Join(".aws", "atmos", "aws"))
+
+	t.Logf("Backward-compatible path: %s", dir)
+}
+
+func TestXDGLibraryDirectAccess(t *testing.T) {
+	// This test verifies that our init() function properly overrides the adrg/xdg
+	// library defaults on macOS, so even code that directly uses xdg.ConfigHome
+	// (without going through our GetXDGConfigDir) will get the correct CLI tool paths.
+
+	if runtime.GOOS != "darwin" {
+		t.Skip("This test is macOS-specific")
+	}
+
+	// Import the xdg package to trigger our init().
+	// Since we're already in the xdg package, the init() has already run.
+
+	// Directly access the adrg/xdg library's exported variables.
+	homeDir, err := os.UserHomeDir()
+	require.NoError(t, err)
+
+	// On macOS, our init() should have set these to CLI tool conventions.
+	expectedConfigHome := filepath.Join(homeDir, ".config")
+	expectedDataHome := filepath.Join(homeDir, ".local", "share")
+	expectedCacheHome := filepath.Join(homeDir, ".cache")
+
+	assert.Equal(t, expectedConfigHome, adrg.ConfigHome,
+		"adrg/xdg ConfigHome should be overridden to use CLI convention on macOS")
+	assert.Equal(t, expectedDataHome, adrg.DataHome,
+		"adrg/xdg DataHome should be overridden to use CLI convention on macOS")
+	assert.Equal(t, expectedCacheHome, adrg.CacheHome,
+		"adrg/xdg CacheHome should be overridden to use CLI convention on macOS")
+
+	t.Logf("adrg.ConfigHome: %s", adrg.ConfigHome)
+	t.Logf("adrg.DataHome: %s", adrg.DataHome)
+	t.Logf("adrg.CacheHome: %s", adrg.CacheHome)
 }

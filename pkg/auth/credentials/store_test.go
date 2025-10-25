@@ -9,7 +9,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/zalando/go-keyring"
 
-	"github.com/cloudposse/atmos/pkg/auth/providers/mock"
 	"github.com/cloudposse/atmos/pkg/auth/types"
 )
 
@@ -59,10 +58,10 @@ func TestStoreRetrieve_OIDC(t *testing.T) {
 // fakeCreds implements types.ICredentials but is not a supported concrete type.
 type fakeCreds struct{}
 
-func (f *fakeCreds) IsExpired() bool                                  { return false }
-func (f *fakeCreds) GetExpiration() (*time.Time, error)               { return nil, nil }
-func (f *fakeCreds) BuildWhoamiInfo(info *types.WhoamiInfo)           {}
-func (f *fakeCreds) Validate(ctx context.Context) (*time.Time, error) { return nil, nil }
+func (f *fakeCreds) IsExpired() bool                                             { return false }
+func (f *fakeCreds) GetExpiration() (*time.Time, error)                          { return nil, nil }
+func (f *fakeCreds) BuildWhoamiInfo(info *types.WhoamiInfo)                      {}
+func (f *fakeCreds) Validate(ctx context.Context) (*types.ValidationInfo, error) { return nil, nil }
 
 func TestStore_UnsupportedType(t *testing.T) {
 	s := NewCredentialStore()
@@ -212,134 +211,12 @@ func TestNoopKeyringStore(t *testing.T) {
 	assert.NoError(t, err, "SetAny should succeed (no-op)")
 }
 
-// TestNoopKeyringStore_CacheBehavior tests the caching logic.
-func TestNoopKeyringStore_CacheBehavior(t *testing.T) {
+// TestNoopKeyringStore_RetrieveBehavior tests the noop keyring immediately returns not found.
+func TestNoopKeyringStore_RetrieveBehavior(t *testing.T) {
 	store := newNoopKeyringStore()
 
-	// First call attempts validation (may succeed or fail depending on environment).
-	_, err1 := store.Retrieve("test-alias")
-
-	// If validation failed, cache should be empty.
-	// If validation succeeded, cache should have entry and error should be ErrCredentialsNotFound.
-	if errors.Is(err1, ErrCredentialsNotFound) {
-		// Validation succeeded - cache should be populated.
-		assert.NotEmpty(t, store.cache, "Cache should be populated after successful validation")
-		assert.Contains(t, store.cache, "test-alias", "Cache should contain the alias")
-	} else {
-		// Validation failed - cache should be empty.
-		assert.Error(t, err1, "Retrieve should return error when validation fails")
-		assert.Empty(t, store.cache, "Cache should be empty after failed validation")
-	}
-}
-
-// TestNoopKeyringStore_ExpiredCache tests expired cache handling.
-func TestNoopKeyringStore_ExpiredCache(t *testing.T) {
-	store := newNoopKeyringStore()
-
-	// Manually populate cache with expired credentials.
-	expiredTime := time.Now().Add(-1 * time.Hour)
-	store.cache["test-alias"] = cachedCredential{
-		creds:       nil,
-		expiration:  &expiredTime,
-		validatedAt: time.Now().Add(-6 * time.Minute), // Older than 5-min cache
-	}
-
-	// Retrieve should attempt revalidation (will fail without AWS creds).
-	_, err := store.Retrieve("test-alias")
-	assert.Error(t, err, "Should attempt revalidation after cache expiry")
-}
-
-// TestNoopKeyringStore_ValidCache tests returning early when cache is valid.
-func TestNoopKeyringStore_ValidCache(t *testing.T) {
-	store := newNoopKeyringStore()
-
-	// Manually populate cache with valid, non-expired credentials.
-	futureTime := time.Now().Add(1 * time.Hour)
-	store.cache["test-alias"] = cachedCredential{
-		creds:       nil,
-		expiration:  &futureTime,
-		validatedAt: time.Now(), // Recent validation (< 5 min)
-	}
-
-	// Retrieve should return ErrCredentialsNotFound without revalidation.
+	// Retrieve should immediately return ErrCredentialsNotFound without any validation.
 	creds, err := store.Retrieve("test-alias")
-	assert.Nil(t, creds, "Should return nil credentials")
-	assert.ErrorIs(t, err, ErrCredentialsNotFound, "Should return credentials not found")
-}
-
-// TestNoopKeyringStore_ExpiredInCache tests returning error for expired cached credentials.
-func TestNoopKeyringStore_ExpiredInCache(t *testing.T) {
-	store := newNoopKeyringStore()
-
-	// Manually populate cache with expired credentials but recent validation.
-	expiredTime := time.Now().Add(-1 * time.Hour)
-	store.cache["test-alias"] = cachedCredential{
-		creds:       nil,
-		expiration:  &expiredTime,
-		validatedAt: time.Now(), // Recent validation (< 5 min)
-	}
-
-	// Retrieve should return expired error without revalidation.
-	creds, err := store.Retrieve("test-alias")
-	assert.Nil(t, creds, "Should return nil credentials")
-	assert.Error(t, err, "Should return error for expired credentials")
-	assert.Contains(t, err.Error(), "credentials expired", "Should mention expired credentials")
-}
-
-// TestNoopKeyringStore_StoreWithMockCredentials tests storing mock credentials and validating them.
-func TestNoopKeyringStore_StoreWithMockCredentials(t *testing.T) {
-	store := newNoopKeyringStore()
-
-	// Create mock credentials with future expiration.
-	futureTime := time.Now().Add(1 * time.Hour)
-	mockCreds := &mock.Credentials{
-		AccessKeyID:     "AKIATEST",
-		SecretAccessKey: "secret",
-		SessionToken:    "token",
-		Region:          "us-east-1",
-		Expiration:      futureTime,
-	}
-
-	// Store should succeed (no-op).
-	err := store.Store("mock-alias", mockCreds)
-	assert.NoError(t, err, "Store should succeed for mock credentials")
-
-	// Manually populate cache to simulate successful validation.
-	store.cache["mock-alias"] = cachedCredential{
-		creds:       mockCreds,
-		expiration:  &futureTime,
-		validatedAt: time.Now(),
-	}
-
-	// Retrieve should return credentials not found (signals to use SDK).
-	creds, err := store.Retrieve("mock-alias")
-	assert.Nil(t, creds, "Should return nil credentials")
-	assert.ErrorIs(t, err, ErrCredentialsNotFound, "Should return credentials not found")
-}
-
-// TestNoopKeyringStore_ExpirationWarning tests warning for expiring credentials.
-func TestNoopKeyringStore_ExpirationWarning(t *testing.T) {
-	store := newNoopKeyringStore()
-
-	// Create mock credentials expiring in 10 minutes (< 15 min threshold).
-	expiringTime := time.Now().Add(10 * time.Minute)
-	mockCreds := &mock.Credentials{
-		AccessKeyID:     "AKIATEST",
-		SecretAccessKey: "secret",
-		SessionToken:    "token",
-		Region:          "us-east-1",
-		Expiration:      expiringTime,
-	}
-
-	// Manually populate cache with expiring credentials.
-	store.cache["expiring-alias"] = cachedCredential{
-		creds:       mockCreds,
-		expiration:  &expiringTime,
-		validatedAt: time.Now(),
-	}
-
-	// Retrieve should warn about expiring credentials but still succeed.
-	creds, err := store.Retrieve("expiring-alias")
 	assert.Nil(t, creds, "Should return nil credentials")
 	assert.ErrorIs(t, err, ErrCredentialsNotFound, "Should return credentials not found")
 }
