@@ -60,12 +60,17 @@ var authEnvCmd = &cobra.Command{
 		var envVars map[string]string
 
 		if login {
-			// Authenticate and get environment variables
-			// This triggers authentication flow if credentials are missing/expired
+			// Check for existing valid credentials first, only authenticate if needed.
+			// This prevents unnecessary re-authentication when valid credentials already exist.
 			ctx := cmd.Context()
-			whoami, err := authManager.Authenticate(ctx, identityName)
+			whoami, err := authManager.Whoami(ctx, identityName)
 			if err != nil {
-				return fmt.Errorf("authentication failed: %w", err)
+				log.Debug("No valid cached credentials found, authenticating", "identity", identityName, "error", err)
+				// No valid cached credentials - perform full authentication.
+				whoami, err = authManager.Authenticate(ctx, identityName)
+				if err != nil {
+					return fmt.Errorf("authentication failed: %w", err)
+				}
 			}
 			envVars = whoami.Environment
 			if envVars == nil {

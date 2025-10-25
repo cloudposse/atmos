@@ -72,11 +72,17 @@ func executeAuthConsoleCommand(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	// Authenticate and get whoami info.
+	// Check for existing valid credentials first, only authenticate if needed.
+	// This prevents unnecessary re-authentication when valid credentials already exist.
 	ctx := context.Background()
-	whoami, err := authManager.Authenticate(ctx, identityName)
+	whoami, err := authManager.Whoami(ctx, identityName)
 	if err != nil {
-		return fmt.Errorf("%w: authentication failed: %w", errUtils.ErrAuthConsole, err)
+		log.Debug("No valid cached credentials found, authenticating", "identity", identityName, "error", err)
+		// No valid cached credentials - perform full authentication.
+		whoami, err = authManager.Authenticate(ctx, identityName)
+		if err != nil {
+			return fmt.Errorf("%w: authentication failed: %w", errUtils.ErrAuthConsole, err)
+		}
 	}
 
 	// Retrieve credentials.

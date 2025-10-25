@@ -83,11 +83,17 @@ func executeAuthShellCommandCore(cmd *cobra.Command, args []string) error {
 		identityName = defaultIdentity
 	}
 
-	// Authenticate and get environment variables.
+	// Check for existing valid credentials first, only authenticate if needed.
+	// This prevents unnecessary re-authentication when valid credentials already exist.
 	ctx := context.Background()
-	whoami, err := authManager.Authenticate(ctx, identityName)
+	whoami, err := authManager.Whoami(ctx, identityName)
 	if err != nil {
-		return errors.Join(errUtils.ErrAuthenticationFailed, err)
+		log.Debug("No valid cached credentials found, authenticating", "identity", identityName, "error", err)
+		// No valid cached credentials - perform full authentication.
+		whoami, err = authManager.Authenticate(ctx, identityName)
+		if err != nil {
+			return errors.Join(errUtils.ErrAuthenticationFailed, err)
+		}
 	}
 
 	// Get environment variables from authentication result.
