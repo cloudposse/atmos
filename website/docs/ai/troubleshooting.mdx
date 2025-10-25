@@ -661,6 +661,95 @@ sqlite3 .atmos/sessions/sessions.db "PRAGMA integrity_check;"
 2. **Sessions expired** - Check `retention_days` setting
 3. **Wrong directory** - Verify `path` configuration points to correct location
 
+### Conversation Memory Not Working
+
+**Problem**: AI doesn't remember previous messages in the conversation.
+
+**Symptoms**:
+```
+You: What are Atmos stacks?
+AI: [Detailed explanation]
+
+You: yes
+AI: I don't have the context of what you're responding to...
+# ❌ AI forgot the previous message
+```
+
+**Solutions**:
+
+1. **Verify sessions are enabled**:
+<Terminal title="shell">
+```bash
+# Check if sessions are enabled
+grep -A3 "sessions:" atmos.yaml
+```
+</Terminal>
+
+Expected output:
+```yaml
+sessions:
+  enabled: true  # Must be true
+  storage: "sqlite"
+```
+
+2. **Check message history in database**:
+<Terminal title="shell">
+```bash
+# View recent messages
+sqlite3 .atmos/sessions/sessions.db \
+  "SELECT role, substr(content, 1, 50) as preview, created_at
+   FROM messages
+   ORDER BY created_at DESC
+   LIMIT 10;"
+```
+</Terminal>
+
+If messages are empty, session storage isn't working properly.
+
+3. **Test with named session**:
+<Terminal title="atmos ai chat">
+```bash
+# Create named session
+atmos ai chat --session memory-test
+
+You: Remember this number: 42
+AI: I'll remember that number is 42.
+
+You: What number did I ask you to remember?
+AI: You asked me to remember the number 42.
+# ✅ AI remembers!
+```
+</Terminal>
+
+4. **Verify conversation memory is implemented for your provider**:
+
+All 7 providers support conversation memory:
+- ✅ Anthropic (Claude)
+- ✅ OpenAI (GPT)
+- ✅ Google (Gemini)
+- ✅ xAI (Grok)
+- ✅ Ollama (Local)
+- ✅ AWS Bedrock
+- ✅ Azure OpenAI
+
+If memory doesn't work, it's a configuration issue, not a provider limitation.
+
+**Common Causes**:
+
+| Issue | Cause | Solution |
+|-------|-------|----------|
+| Anonymous sessions | Session created without `--session name` | Use named sessions for persistence |
+| SQLite not configured | Missing `sessions.storage: "sqlite"` | Add to atmos.yaml |
+| Database permissions | Can't write to `.atmos/sessions/` | `chmod 755 .atmos/sessions` |
+| Different session | Switched to new session accidentally | Press `Ctrl+L` to check current session |
+
+**Privacy Note**: When conversation memory is working, the **complete message history** is sent to the AI provider. For sensitive conversations:
+- Use Ollama (100% local, nothing sent to external servers)
+- Clean up sessions regularly
+- Disable sessions for very sensitive work
+
+See [Conversation Memory](/ai/sessions#conversation-memory) for details.
+
 ## MCP Server Issues
 
 ### MCP Server Not Starting

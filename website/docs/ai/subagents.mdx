@@ -47,6 +47,58 @@ Claude Code subagents are specialized AI assistants that enhance your developmen
 
 ## When to Use Subagents vs Built-in AI
 
+Use this decision flowchart to choose the right approach for your task:
+
+```mermaid
+flowchart TD
+    Start{What are you doing?}
+
+    Start -->|Writing/editing code| Dev[Development Task]
+    Start -->|Infrastructure analysis| Ops[Operations Task]
+    Start -->|Quick question| Quick[Quick Query]
+
+    Dev --> IDE{Using an IDE?}
+    IDE -->|Yes - Claude Code| Subagent[✅ Use Claude Code Subagent]
+    IDE -->|No - Terminal/CLI| Built1[✅ Use Built-in Atmos AI]
+
+    Ops --> Provider{Need specific provider?}
+    Provider -->|Only Claude is fine| Either[Either works]
+    Provider -->|Need GPT/Gemini/Ollama| Built2[✅ Use Built-in Atmos AI]
+
+    Quick --> Context{Need project context?}
+    Context -->|Yes - long discussion| Session[✅ Use Built-in AI + Sessions]
+    Context -->|No - one-off question| Ask[✅ Use atmos ai ask]
+
+    Subagent -.->|Best for| SubUse[• Code generation<br/>• Component design<br/>• File editing<br/>• IDE integration]
+
+    Built1 -.->|Best for| Built1Use[• Infrastructure review<br/>• Multi-step workflows<br/>• Persistent sessions<br/>• Provider choice]
+
+    Built2 -.->|Best for| Built2Use[• Multi-provider access<br/>• Ollama privacy<br/>• Enterprise compliance<br/>• Cost optimization]
+
+    Session -.->|Best for| SessionUse[• Long discussions<br/>• Multi-day projects<br/>• Context retention<br/>• Team collaboration]
+
+    Ask -.->|Best for| AskUse[• Quick answers<br/>• One-off questions<br/>• Scripting/automation]
+
+    style Subagent fill:#a8e6cf
+    style Built1 fill:#a8e6cf
+    style Built2 fill:#a8e6cf
+    style Session fill:#a8e6cf
+    style Ask fill:#a8e6cf
+```
+
+**Quick Decision Guide:**
+
+| If you want to... | Use this |
+|-------------------|----------|
+| Write Terraform code | Claude Code Subagent (in IDE) |
+| Edit component files | Claude Code Subagent (in IDE) |
+| Get help while coding | Claude Code Subagent (in IDE) |
+| Analyze infrastructure | Built-in Atmos AI (`atmos ai chat`) |
+| Use Ollama/GPT/Gemini | Built-in Atmos AI (7 providers) |
+| Multi-day project discussion | Built-in Atmos AI (persistent sessions) |
+| Quick one-off question | Built-in Atmos AI (`atmos ai ask`) |
+| Team collaboration | Built-in Atmos AI (shareable sessions) |
+
 ### Use Claude Code Subagent
 
 **Best for development workflows**:

@@ -32,19 +32,122 @@ Atmos AI now has **full conversation memory** within sessions. When you send a m
 3. **Multi-turn Conversations**: The AI can reference previous questions and answers
 4. **Follow-up Questions**: You can ask "yes", "tell me more", or "what about that?" and the AI understands
 
-### Example Conversation
+### Example Conversations
+
+**Example 1: Follow-up Questions**
 
 <Terminal title="atmos ai chat --session vpc-design">
 ```bash
 You: What are Atmos stacks?
 
-Atmos AI: Atmos stacks are configuration files that define your infrastructure...
-          [Detailed explanation about stacks, components, and inheritance]
+AI: Atmos stacks are configuration files that define your infrastructure.
+    They use inheritance and composition to share configuration across environments.
+    For example, you might have a base stack with common settings, then specific
+    stacks for dev, staging, and prod that inherit from the base.
 
 You: yes
 
-Atmos AI: Great! Since you understand stacks, let me explain how they work with components...
-          # ✅ AI remembers it just explained stacks
+AI: Great! Since you understand stacks, let me explain how they work with components.
+    # ✅ AI remembers it just explained stacks
+
+You: can you show me an example for production?
+
+AI: Sure! Based on the stack structure I explained, here's a production stack example:
+    # ✅ AI references the earlier explanation
+    [Shows YAML example with production values]
+
+You: what about staging?
+
+AI: For staging, you'd use a similar structure but with different values:
+    # ✅ AI knows you want comparison to production
+    [Shows staging example highlighting differences from production]
+```
+</Terminal>
+
+**Example 2: Multi-Step Problem Solving**
+
+<Terminal title="atmos ai chat --session rds-setup">
+```bash
+You: I need to set up RDS in production
+
+AI: I'll help you set up RDS. First, let's plan the configuration:
+    1. VPC and subnet selection
+    2. Security groups
+    3. Instance size and storage
+    4. Backup and maintenance windows
+    What VPC will this RDS instance be in?
+
+You: use the prod-use1-network VPC
+
+AI: Perfect, I'll use prod-use1-network. Now, what instance size do you need?
+    # ✅ Remembers we're setting up RDS in prod-use1-network
+    Options: db.t3.micro (dev), db.t3.medium (staging), db.r5.large (prod)
+
+You: db.r5.large
+
+AI: Good choice for production. I'm configuring:
+    # ✅ Remembers: RDS, prod-use1-network VPC, db.r5.large
+    - VPC: prod-use1-network
+    - Instance: db.r5.large
+    - Environment: production
+
+    What's your preferred backup window? (off-peak hours recommended)
+
+You: 2am to 4am UTC
+
+AI: Excellent. Here's your complete RDS configuration:
+    # ✅ Remembers all choices from the conversation
+    [Shows complete YAML with all specified values]
+```
+</Terminal>
+
+**Example 3: Session Continuity Across Days**
+
+<Terminal title="atmos ai chat --session migration-plan">
+```bash
+# Day 1: Initial planning
+You: We're migrating from 10.0.0.0/16 to 10.1.0.0/16
+
+AI: I'll help plan this VPC migration. This is a significant change that will require:
+    1. Creating the new VPC (10.1.0.0/16)
+    2. Setting up VPC peering during transition
+    3. Migrating resources incrementally
+    4. Updating route tables and security groups
+    5. Decommissioning the old VPC
+
+    Should we start by planning the new VPC structure?
+
+You: yes, let's define the subnets first
+
+AI: For 10.1.0.0/16, I recommend this subnet layout:
+    [Provides detailed subnet plan]
+
+# Day 2: Resume session
+atmos ai chat --session migration-plan
+
+You: let's continue with the migration plan
+
+AI: Welcome back! We were planning the VPC migration from 10.0.0.0/16 to 10.1.0.0/16.
+    # ✅ Remembers the entire discussion from Day 1
+
+    Yesterday we defined the subnet structure for the new VPC.
+    Ready to plan the VPC peering setup for the transition period?
+
+You: yes
+
+AI: Based on the subnet plan we created yesterday:
+    # ✅ Can reference specific details from previous session
+    [Shows VPC peering configuration using the exact subnets discussed]
+
+# Week later: Review decisions
+atmos ai chat --session migration-plan
+
+You: why did we choose /16 instead of /24?
+
+AI: We chose /16 (65,536 IPs) to accommodate future growth.
+    # ✅ Can recall reasoning from the original discussion
+    In our initial planning, we discussed that /24 (256 IPs) would be too small
+    for production workloads with plans to scale EKS nodes and additional services.
 ```
 </Terminal>
 

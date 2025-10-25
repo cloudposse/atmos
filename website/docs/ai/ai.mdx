@@ -45,6 +45,21 @@ The Atmos AI Assistant is an AI-powered terminal agent that helps with Atmos inf
 - **Permission System**: Granular control over what tools the AI can execute
 - **Smart Prompts**: User confirmation for sensitive operations
 
+### LSP Integration
+- **Real-time Validation**: AI can validate YAML, Terraform, and HCL files using Language Server Protocol
+- **Precise Error Locations**: Get exact line and column numbers for configuration errors
+- **Early Error Detection**: Catch syntax and schema issues before running Atmos commands
+- **Multi-Language Support**: YAML for stacks, Terraform for components, HCL for configurations
+- **IDE-Quality Feedback**: Same validation as modern code editors, directly in the AI chat
+
+:::tip Understanding Tool Calling
+Wondering how AI tool execution works and what data is sent to AI providers? See [How Tool Calling Works](/ai/tools#how-tool-calling-works) for a detailed explanation with diagrams showing:
+- The tool calling process flow
+- What gets sent to AI servers (and when)
+- Privacy and security implications
+- Tool execution security features
+:::
+
 ### Project Memory
 - **Persistent Context**: AI remembers project-specific patterns and conventions
 - **Markdown-Based**: Simple `ATMOS.md` file stores project knowledge
@@ -152,6 +167,105 @@ atmos ai help stacks
 atmos mcp-server
 ```
 </Terminal>
+
+## Conversation Memory
+
+One of the most powerful features of Atmos AI is **full conversation memory** within sessions. Unlike basic chatbots that forget previous messages, Atmos AI remembers your entire conversation history, enabling natural, context-aware dialogues.
+
+### How It Works
+
+When you send a message in a chat session, the AI receives:
+1. **All previous messages** from the current session
+2. **Your new message**
+3. **Project memory context** (if configured)
+
+This means the AI can:
+- ✅ Remember what you asked 10 messages ago
+- ✅ Reference previous answers and build on them
+- ✅ Understand follow-up questions like "yes", "tell me more", or "what about that?"
+- ✅ Maintain context across complex, multi-step workflows
+
+### Example: Natural Conversation
+
+<Terminal title="atmos ai chat">
+```bash
+You: What are Atmos stacks?
+
+AI: Atmos stacks are YAML configuration files that define your infrastructure.
+    They use inheritance and composition to share configuration across environments...
+    [Detailed explanation with examples]
+
+You: yes
+
+AI: Great! Since you understand stacks, let me explain how they work with components.
+    # ✅ AI remembers it just explained stacks
+
+You: can you show an example for production?
+
+AI: Absolutely! Based on the stack structure I explained, here's a production example:
+    # ✅ AI references previous context about stack structure
+    [Shows production stack example]
+
+You: what about staging?
+
+AI: For staging, you'd use a similar structure but with different values:
+    # ✅ AI understands you want the same thing for a different environment
+    [Shows staging stack example comparing to production]
+```
+</Terminal>
+
+### Multi-Provider Support
+
+Conversation memory works across **all 7 AI providers**:
+
+| Provider | Conversation Memory | Notes |
+|----------|---------------------|-------|
+| **Anthropic (Claude)** | ✅ Full support | Best for complex reasoning |
+| **OpenAI (GPT)** | ✅ Full support | Fast and reliable |
+| **Google (Gemini)** | ✅ Full support | Large context window |
+| **xAI (Grok)** | ✅ Full support | Real-time knowledge |
+| **Ollama (Local)** | ✅ Full support | Complete privacy |
+| **AWS Bedrock** | ✅ Full support | Enterprise deployment |
+| **Azure OpenAI** | ✅ Full support | Azure integration |
+
+You can switch providers mid-conversation (Ctrl+P) while maintaining the conversation history!
+
+### Session Persistence
+
+Conversations are stored in a local SQLite database, so you can:
+
+- **Resume later**: Pick up exactly where you left off days or weeks later
+- **Organize by topic**: Use named sessions for different projects or topics
+- **Review history**: Browse past conversations to find previous solutions
+
+<Terminal title="session examples">
+```bash
+# Day 1: Start VPC refactoring discussion
+atmos ai chat --session vpc-refactor
+> "Let's plan migrating from 10.0.0.0/16 to 10.1.0.0/16"
+
+# Day 2: Resume with full context
+atmos ai chat --session vpc-refactor
+> "Show me the plan we discussed yesterday"
+# AI has complete context from Day 1
+
+# Week later: Reference earlier decisions
+atmos ai chat --session vpc-refactor
+> "Why did we choose /16 instead of /24?"
+# AI can answer based on the original discussion
+```
+</Terminal>
+
+### Privacy Considerations
+
+:::info Session Data
+When you resume a session, the **complete message history** is sent to your AI provider. If your conversations contain sensitive information:
+- Review the [Privacy and Security](/ai/sessions#privacy-and-security) section
+- Consider using [Ollama (local)](/ai/providers#ollama) for complete privacy
+- Clean up old sessions regularly
+:::
+
+**Learn more:** [AI Sessions](/ai/sessions) - Complete session management documentation
 
 ## TUI Keyboard Shortcuts
 

@@ -46,6 +46,67 @@ Choose the right provider based on your requirements:
 - **Ollama**: Ideal for sensitive data, offline work, unlimited queries
 - **Enterprise**: Required for compliance, data residency, private networks
 
+## Detailed Provider Comparison
+
+### Performance & Cost
+
+| Provider | Speed | Context Window | Approx. Cost (per 1M tokens) | Notes |
+|----------|-------|----------------|------------------------------|-------|
+| **Anthropic (Claude)** | Fast | 200K tokens | $3-$15 (input/output) | Best reasoning, longer responses |
+| **OpenAI (GPT)** | Very Fast | 128K tokens | $2.50-$10 (input/output) | Fast responses, strong general use |
+| **Google (Gemini)** | Very Fast | 2M tokens | $0.075-$0.30 (input/output) | Huge context, very economical |
+| **xAI (Grok)** | Fast | 128K tokens | Similar to GPT-4 | Real-time web knowledge |
+| **Ollama (Local)** | Varies | 128K tokens | $0 (hardware only) | Free, speed depends on hardware |
+| **AWS Bedrock** | Fast | 200K tokens | $3-$15 + AWS costs | Same models, AWS pricing |
+| **Azure OpenAI** | Fast | 128K tokens | $2.50-$10 + Azure costs | GPT models, enterprise features |
+
+:::tip Cost Optimization
+- **For budget**: Gemini (cheapest) or Ollama (free)
+- **For balanced cost/quality**: Claude Sonnet or GPT-4o
+- **For enterprise**: Bedrock or Azure OpenAI (with committed use discounts)
+:::
+
+### Privacy & Security
+
+| Provider | Data Location | Data Retention | Zero Data Retention Option | Compliance |
+|----------|---------------|----------------|---------------------------|------------|
+| **Anthropic** | US (cloud) | 30 days | ✅ Yes (opt-in) | SOC 2, GDPR |
+| **OpenAI** | US (cloud) | 30 days | ✅ Yes (opt-out required) | SOC 2, GDPR |
+| **Gemini** | US (cloud) | Per Google policy | ❌ Standard terms | SOC 2, GDPR |
+| **Grok** | US (cloud) | xAI policy | ❌ Standard terms | Standard |
+| **Ollama** | **Your machine** | **Never sent** | ✅ **100% local** | **Your control** |
+| **Bedrock** | **Your AWS region** | **Your control** | ✅ **Your VPC** | SOC 2, HIPAA, ISO |
+| **Azure OpenAI** | **Your Azure region** | **Your control** | ✅ **Your VNet** | SOC 2, HIPAA, ISO |
+
+:::warning Privacy Considerations
+- **Most private**: Ollama (never leaves your machine)
+- **Enterprise private**: Bedrock/Azure (stays in your cloud account)
+- **Cloud providers**: Data sent to third-party servers (check data retention policies)
+
+For sensitive infrastructure data, consider Ollama or enterprise providers.
+:::
+
+### Hardware Requirements
+
+| Provider | Local Hardware | Network | Best Environment |
+|----------|----------------|---------|------------------|
+| **Anthropic** | None | Internet required | Any |
+| **OpenAI** | None | Internet required | Any |
+| **Gemini** | None | Internet required | Any |
+| **Grok** | None | Internet required | Any |
+| **Ollama** | **8-64GB+ RAM**, CPU/GPU | **No internet needed** | Workstation/Server |
+| **Bedrock** | None | Internet + AWS access | Cloud/VPN to AWS |
+| **Azure OpenAI** | None | Internet + Azure access | Cloud/VPN to Azure |
+
+:::info Ollama Hardware Guide
+- **Small models** (8B params): 8GB RAM minimum
+- **Medium models** (13B-33B): 16-32GB RAM
+- **Large models** (70B): 64GB+ RAM, GPU recommended
+- **GPU acceleration**: 10-50x faster (NVIDIA/AMD/Metal)
+
+See [Ollama Setup](/ai/providers#ollama) for detailed requirements.
+:::
+
 ## Quick Configuration
 
 <File title="atmos.yaml">
@@ -458,14 +519,27 @@ Run GPT models via Azure OpenAI for enterprise integration.
 ```yaml
 providers:
   azureopenai:
-    model: "gpt-4o"  # Your Azure deployment name
-    # Use your actual deployment name from Azure portal
+    model: "gpt-4o"  # Your Azure deployment name (NOT the model name!)
+    # REQUIRED: Your Azure OpenAI resource endpoint
+    base_url: "https://<your-resource>.openai.azure.com"
+    # Replace <your-resource> with your actual Azure resource name
+
+    # REQUIRED: Azure OpenAI API version
+    api_version: "2024-02-15-preview"  # Current version (Feb 2024)
+
     api_key_env: "AZURE_OPENAI_API_KEY"
     max_tokens: 4096
-    base_url: "https://<your-resource>.openai.azure.com"
-    # Replace <your-resource> with your Azure resource name
 ```
 </File>
+
+:::warning Azure-Specific Configuration
+Azure OpenAI has unique requirements:
+- **model**: Use your **deployment name** from Azure Portal, not the OpenAI model name
+- **base_url**: Your Azure resource endpoint (required)
+- **api_version**: Azure API version string (required, default: `2024-02-15-preview`)
+
+See [Azure OpenAI Documentation](https://learn.microsoft.com/en-us/azure/ai-services/openai/) for latest API versions.
+:::
 
 **Authentication:**
 
@@ -527,9 +601,10 @@ settings:
         # Uses AWS credentials
 
       azureopenai:
-        model: "gpt-4o"
+        model: "gpt-4o"  # Azure deployment name
         api_key_env: "AZURE_OPENAI_API_KEY"
         base_url: "https://mycompany.openai.azure.com"
+        api_version: "2024-02-15-preview"  # Required
 ```
 </File>
 
