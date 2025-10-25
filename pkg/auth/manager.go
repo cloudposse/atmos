@@ -484,10 +484,30 @@ func (m *manager) findFirstValidCachedCredentials() int {
 	for i := len(m.chain) - 1; i >= 0; i-- {
 		identityName := m.chain[i]
 
-		// Check if we have cached credentials for this level.
+		// First, try to retrieve from keyring.
 		cachedCreds, err := m.credentialStore.Retrieve(identityName)
 		if err != nil {
-			continue
+			// If not in keyring, try loading from identity storage (AWS files, etc.).
+			// This handles the case where credentials were created outside of Atmos
+			// (e.g., via AWS CLI, SSO) but are available in standard AWS credential files.
+			if !errors.Is(err, credentials.ErrCredentialsNotFound) {
+				continue
+			}
+
+			identity, exists := m.identities[identityName]
+			if !exists {
+				continue
+			}
+
+			log.Debug("Credentials not in keyring, trying identity storage", "chainIndex", i, identityNameKey, identityName)
+			loadedCreds, loadErr := identity.LoadCredentials(context.Background())
+			if loadErr != nil || loadedCreds == nil {
+				log.Debug("Failed to load from identity storage", "chainIndex", i, identityNameKey, identityName, "error", loadErr)
+				continue
+			}
+
+			log.Debug("Loaded credentials from identity storage", "chainIndex", i, identityNameKey, identityName)
+			cachedCreds = loadedCreds
 		}
 
 		if valid, expTime := m.isCredentialValid(identityName, cachedCreds); valid {
