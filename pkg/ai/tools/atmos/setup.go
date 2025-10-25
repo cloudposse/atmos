@@ -51,6 +51,9 @@ func RegisterTools(registry *tools.Registry, atmosConfig *schema.AtmosConfigurat
 	if err := registry.Register(NewReadFileTool(atmosConfig)); err != nil {
 		return err
 	}
+	if err := registry.Register(NewEditFileTool(atmosConfig)); err != nil {
+		return err
+	}
 	if err := registry.Register(NewSearchFilesTool(atmosConfig)); err != nil {
 		return err
 	}
@@ -60,6 +63,9 @@ func RegisterTools(registry *tools.Registry, atmosConfig *schema.AtmosConfigurat
 
 	// Register command execution and template tools.
 	if err := registry.Register(NewExecuteAtmosCommandTool(atmosConfig)); err != nil {
+		return err
+	}
+	if err := registry.Register(NewExecuteBashCommandTool(atmosConfig)); err != nil {
 		return err
 	}
 	if err := registry.Register(NewGetTemplateContextTool(atmosConfig)); err != nil {
