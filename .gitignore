@@ -92,8 +92,3 @@ performance-optimization/
 # Merge conflict artifacts
 *.orig
 *.rej
-
-# Testing scripts (local development only)
-/test-geodesic.sh
-scripts/test-geodesic.sh
-scripts/test-geodesic-README.md
