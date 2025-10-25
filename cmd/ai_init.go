@@ -23,29 +23,10 @@ func initializeAIToolsAndExecutor(atmosConfig *schema.AtmosConfiguration) (*tool
 	// Create tool registry.
 	registry := tools.NewRegistry()
 
-	// Register Atmos tools.
-	if err := registry.Register(atmosTools.NewDescribeComponentTool(atmosConfig)); err != nil {
-		log.Warn(fmt.Sprintf("Failed to register describe_component tool: %v", err))
-	}
-	if err := registry.Register(atmosTools.NewListStacksTool(atmosConfig)); err != nil {
-		log.Warn(fmt.Sprintf("Failed to register list_stacks tool: %v", err))
-	}
-	if err := registry.Register(atmosTools.NewValidateStacksTool(atmosConfig)); err != nil {
-		log.Warn(fmt.Sprintf("Failed to register validate_stacks tool: %v", err))
-	}
-
-	// Register file access tools (read/write for components and stacks).
-	if err := registry.Register(atmosTools.NewReadComponentFileTool(atmosConfig)); err != nil {
-		log.Warn(fmt.Sprintf("Failed to register read_component_file tool: %v", err))
-	}
-	if err := registry.Register(atmosTools.NewReadStackFileTool(atmosConfig)); err != nil {
-		log.Warn(fmt.Sprintf("Failed to register read_stack_file tool: %v", err))
-	}
-	if err := registry.Register(atmosTools.NewWriteComponentFileTool(atmosConfig)); err != nil {
-		log.Warn(fmt.Sprintf("Failed to register write_component_file tool: %v", err))
-	}
-	if err := registry.Register(atmosTools.NewWriteStackFileTool(atmosConfig)); err != nil {
-		log.Warn(fmt.Sprintf("Failed to register write_stack_file tool: %v", err))
+	// Register all Atmos tools (components, stacks, validation, etc.).
+	// Pass nil for LSP manager as it's not initialized in the command layer.
+	if err := atmosTools.RegisterTools(registry, atmosConfig, nil); err != nil {
+		log.Warn(fmt.Sprintf("Failed to register Atmos tools: %v", err))
 	}
 
 	log.Debug(fmt.Sprintf("Registered %d tools", registry.Count()))

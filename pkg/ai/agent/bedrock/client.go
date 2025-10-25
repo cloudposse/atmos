@@ -10,6 +10,8 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/bedrockruntime"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/ai/tools"
+	"github.com/cloudposse/atmos/pkg/ai/types"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -145,6 +147,132 @@ func (c *Client) SendMessage(ctx context.Context, message string) (string, error
 	}
 
 	return responseText, nil
+}
+
+// SendMessageWithTools sends a message with available tools.
+func (c *Client) SendMessageWithTools(ctx context.Context, message string, availableTools []tools.Tool) (*types.Response, error) {
+	// Convert our tools to Bedrock/Anthropic's format.
+	bedrockTools := convertToolsToBedrockFormat(availableTools)
+
+	// Prepare request body for Claude models on Bedrock with tools.
+	requestBody := map[string]interface{}{
+		"anthropic_version": "bedrock-2023-05-31",
+		"max_tokens":        c.config.MaxTokens,
+		"messages": []map[string]string{
+			{
+				"role":    "user",
+				"content": message,
+			},
+		},
+		"tools": bedrockTools,
+	}
+
+	bodyBytes, err := json.Marshal(requestBody)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal request: %w", err)
+	}
+
+	// Invoke model.
+	response, err := c.client.InvokeModel(ctx, &bedrockruntime.InvokeModelInput{
+		ModelId:     aws.String(c.config.Model),
+		Body:        bodyBytes,
+		ContentType: aws.String("application/json"),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to invoke Bedrock model with tools: %w", err)
+	}
+
+	// Parse response.
+	return parseBedrockResponse(response.Body)
+}
+
+// convertToolsToBedrockFormat converts our Tool interface to Bedrock/Anthropic's format.
+func convertToolsToBedrockFormat(availableTools []tools.Tool) []map[string]interface{} {
+	bedrockTools := make([]map[string]interface{}, 0, len(availableTools))
+
+	for _, tool := range availableTools {
+		// Build input schema with properties and required fields.
+		properties := make(map[string]interface{})
+		required := make([]string, 0)
+
+		for _, param := range tool.Parameters() {
+			properties[param.Name] = map[string]interface{}{
+				"type":        string(param.Type),
+				"description": param.Description,
+			}
+			if param.Required {
+				required = append(required, param.Name)
+			}
+		}
+
+		// Create tool definition in Anthropic/Bedrock format.
+		toolDef := map[string]interface{}{
+			"name":        tool.Name(),
+			"description": tool.Description(),
+			"input_schema": map[string]interface{}{
+				"type":       "object",
+				"properties": properties,
+				"required":   required,
+			},
+		}
+
+		bedrockTools = append(bedrockTools, toolDef)
+	}
+
+	return bedrockTools
+}
+
+// parseBedrockResponse parses a Bedrock response into our Response format.
+func parseBedrockResponse(responseBody []byte) (*types.Response, error) {
+	// Parse Bedrock/Anthropic response format.
+	var apiResponse struct {
+		Content []struct {
+			Type  string                 `json:"type"`
+			Text  string                 `json:"text,omitempty"`
+			ID    string                 `json:"id,omitempty"`
+			Name  string                 `json:"name,omitempty"`
+			Input map[string]interface{} `json:"input,omitempty"`
+		} `json:"content"`
+		StopReason string `json:"stop_reason"`
+	}
+
+	if err := json.Unmarshal(responseBody, &apiResponse); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal Bedrock response: %w", err)
+	}
+
+	result := &types.Response{
+		Content:   "",
+		ToolCalls: make([]types.ToolCall, 0),
+	}
+
+	// Map stop reason.
+	switch apiResponse.StopReason {
+	case "end_turn":
+		result.StopReason = types.StopReasonEndTurn
+	case "tool_use":
+		result.StopReason = types.StopReasonToolUse
+	case "max_tokens":
+		result.StopReason = types.StopReasonMaxTokens
+	default:
+		result.StopReason = types.StopReasonEndTurn
+	}
+
+	// Extract content blocks.
+	for _, content := range apiResponse.Content {
+		switch content.Type {
+		case "text":
+			result.Content += content.Text
+		case "tool_use":
+			// Extract tool call.
+			result.ToolCalls = append(result.ToolCalls, types.ToolCall{
+				ID:    content.ID,
+				Name:  content.Name,
+				Input: content.Input,
+			})
+		}
+	}
+
+	return result, nil
 }
 
 // GetModel returns the configured model name.

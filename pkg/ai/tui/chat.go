@@ -19,6 +19,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/ai/memory"
 	"github.com/cloudposse/atmos/pkg/ai/session"
 	"github.com/cloudposse/atmos/pkg/ai/tools"
+	aiTypes "github.com/cloudposse/atmos/pkg/ai/types"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
@@ -645,6 +646,51 @@ func (m *ChatModel) getAIResponse(userMessage string) tea.Cmd {
 			}
 		}
 
+		// Check if tools are available.
+		var availableTools []tools.Tool
+		if m.executor != nil {
+			availableTools = m.executor.ListTools()
+		}
+
+		// Use tool calling if tools are available.
+		if len(availableTools) > 0 {
+			// Send message with tools.
+			response, err := m.client.SendMessageWithTools(ctx, messageWithContext, availableTools)
+			if err != nil {
+				return aiErrorMsg(err.Error())
+			}
+
+			// Check if AI wants to use tools.
+			if response.StopReason == aiTypes.StopReasonToolUse && len(response.ToolCalls) > 0 {
+				// Execute tools and get results.
+				toolResults := m.executeToolCalls(ctx, response.ToolCalls)
+
+				// For now, just display tool results to the user.
+				// TODO: Implement multi-turn conversation with tool results.
+				var resultText string
+				for i, result := range toolResults {
+					if i > 0 {
+						resultText += "\n\n"
+					}
+					resultText += fmt.Sprintf("**Tool: %s**\n%s", response.ToolCalls[i].Name, result.Output)
+				}
+
+				finalResponse := response.Content
+				if resultText != "" {
+					if finalResponse != "" {
+						finalResponse += "\n\n--- Tool Execution ---\n\n" + resultText
+					} else {
+						finalResponse = "--- Tool Execution ---\n\n" + resultText
+					}
+				}
+				return aiResponseMsg(finalResponse)
+			}
+
+			// No tool use, return the text response.
+			return aiResponseMsg(response.Content)
+		}
+
+		// Fallback to simple message without tools.
 		response, err := m.client.SendMessage(ctx, messageWithContext)
 		if err != nil {
 			return aiErrorMsg(err.Error())
@@ -652,6 +698,29 @@ func (m *ChatModel) getAIResponse(userMessage string) tea.Cmd {
 
 		return aiResponseMsg(response)
 	}
+}
+
+// executeToolCalls executes tool calls and returns the results.
+func (m *ChatModel) executeToolCalls(ctx context.Context, toolCalls []aiTypes.ToolCall) []*tools.Result {
+	results := make([]*tools.Result, len(toolCalls))
+
+	for i, toolCall := range toolCalls {
+		log.Debug(fmt.Sprintf("Executing tool: %s with params: %v", toolCall.Name, toolCall.Input))
+
+		// Execute the tool.
+		result, err := m.executor.Execute(ctx, toolCall.Name, toolCall.Input)
+		if err != nil {
+			results[i] = &tools.Result{
+				Success: false,
+				Output:  fmt.Sprintf("Error: %v", err),
+				Error:   err,
+			}
+		} else {
+			results[i] = result
+		}
+	}
+
+	return results
 }
 
 // RunChat starts the chat TUI with the provided AI client.

@@ -99,3 +99,11 @@ type ToolCall struct {
 	Tool   string                 `json:"tool"`
 	Params map[string]interface{} `json:"params"`
 }
+
+// ListTools returns all available tools from the registry.
+func (e *Executor) ListTools() []Tool {
+	if e.registry == nil {
+		return nil
+	}
+	return e.registry.List()
+}

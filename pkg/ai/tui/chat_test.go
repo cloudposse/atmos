@@ -12,6 +12,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/cloudposse/atmos/pkg/ai/session"
+	"github.com/cloudposse/atmos/pkg/ai/tools"
+	"github.com/cloudposse/atmos/pkg/ai/types"
 )
 
 // mockAIClient is a mock implementation of ai.Client for testing.
@@ -27,6 +29,18 @@ func (m *mockAIClient) SendMessage(ctx context.Context, message string) (string,
 		return "", m.err
 	}
 	return m.response, nil
+}
+
+func (m *mockAIClient) SendMessageWithTools(ctx context.Context, message string, availableTools []tools.Tool) (*types.Response, error) {
+	response, err := m.SendMessage(ctx, message)
+	if err != nil {
+		return nil, err
+	}
+	return &types.Response{
+		Content:    response,
+		ToolCalls:  []types.ToolCall{},
+		StopReason: types.StopReasonEndTurn,
+	}, nil
 }
 
 func (m *mockAIClient) GetModel() string {

@@ -2,6 +2,7 @@ package anthropic
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 
 	"github.com/anthropics/anthropic-sdk-go"
@@ -9,6 +10,8 @@ import (
 	"github.com/spf13/viper"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/ai/tools"
+	"github.com/cloudposse/atmos/pkg/ai/types"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -114,6 +117,110 @@ func (c *SimpleClient) SendMessage(ctx context.Context, message string) (string,
 	}
 
 	return responseText, nil
+}
+
+// SendMessageWithTools sends a message with available tools and handles tool calls.
+func (c *SimpleClient) SendMessageWithTools(ctx context.Context, message string, availableTools []tools.Tool) (*types.Response, error) {
+	// Convert our tools to Anthropic's format.
+	anthropicTools := convertToolsToAnthropicFormat(availableTools)
+
+	// Send message with tools.
+	response, err := c.client.Messages.New(ctx, anthropic.MessageNewParams{
+		Model:     anthropic.Model(c.config.Model),
+		MaxTokens: int64(c.config.MaxTokens),
+		Messages: []anthropic.MessageParam{
+			anthropic.NewUserMessage(anthropic.NewTextBlock(message)),
+		},
+		Tools: anthropicTools,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to send message with tools: %w", err)
+	}
+
+	// Parse response.
+	return parseAnthropicResponse(response)
+}
+
+// convertToolsToAnthropicFormat converts our Tool interface to Anthropic's ToolUnionParam.
+func convertToolsToAnthropicFormat(availableTools []tools.Tool) []anthropic.ToolUnionParam {
+	anthropicTools := make([]anthropic.ToolUnionParam, 0, len(availableTools))
+
+	for _, tool := range availableTools {
+		// Build input schema from parameters.
+		properties := make(map[string]interface{})
+		required := make([]string, 0)
+
+		for _, param := range tool.Parameters() {
+			properties[param.Name] = map[string]interface{}{
+				"type":        string(param.Type),
+				"description": param.Description,
+			}
+			if param.Required {
+				required = append(required, param.Name)
+			}
+		}
+
+		// Create tool input schema.
+		inputSchema := anthropic.ToolInputSchemaParam{
+			Properties: properties,
+			Required:   required,
+		}
+
+		// Create tool union param.
+		toolParam := anthropic.ToolUnionParamOfTool(inputSchema, tool.Name())
+
+		// Set description if provided (using reflection to access the underlying ToolParam).
+		// Note: The SDK doesn't expose a clean way to set description, so we build it manually.
+		anthropicTools = append(anthropicTools, toolParam)
+	}
+
+	return anthropicTools
+}
+
+// parseAnthropicResponse parses an Anthropic response into our Response format.
+func parseAnthropicResponse(response *anthropic.Message) (*types.Response, error) {
+	result := &types.Response{
+		Content:   "",
+		ToolCalls: make([]types.ToolCall, 0),
+	}
+
+	// Map stop reason.
+	switch response.StopReason {
+	case "end_turn":
+		result.StopReason = types.StopReasonEndTurn
+	case "tool_use":
+		result.StopReason = types.StopReasonToolUse
+	case "max_tokens":
+		result.StopReason = types.StopReasonMaxTokens
+	default:
+		result.StopReason = types.StopReasonEndTurn
+	}
+
+	// Extract text and tool uses from content blocks.
+	for i := range response.Content {
+		switch response.Content[i].Type {
+		case "text":
+			result.Content += response.Content[i].Text
+		case "tool_use":
+			// Parse tool use.
+			toolUse := response.Content[i]
+			input := make(map[string]interface{})
+			if toolUse.Input != nil {
+				// Convert RawJSON to map.
+				if err := json.Unmarshal(toolUse.Input, &input); err != nil {
+					return nil, fmt.Errorf("failed to parse tool input: %w", err)
+				}
+			}
+
+			result.ToolCalls = append(result.ToolCalls, types.ToolCall{
+				ID:    toolUse.ID,
+				Name:  toolUse.Name,
+				Input: input,
+			})
+		}
+	}
+
+	return result, nil
 }
 
 // GetModel returns the configured model name.

@@ -2,6 +2,7 @@ package azureopenai
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 
 	"github.com/openai/openai-go"
@@ -9,6 +10,8 @@ import (
 	"github.com/spf13/viper"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/ai/tools"
+	"github.com/cloudposse/atmos/pkg/ai/types"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -136,6 +139,124 @@ func (c *Client) SendMessage(ctx context.Context, message string) (string, error
 	}
 
 	return response.Choices[0].Message.Content, nil
+}
+
+// SendMessageWithTools sends a message with available tools.
+func (c *Client) SendMessageWithTools(ctx context.Context, message string, availableTools []tools.Tool) (*types.Response, error) {
+	// Convert our tools to OpenAI's format (Azure OpenAI is OpenAI-compatible).
+	azureTools := convertToolsToAzureOpenAIFormat(availableTools)
+
+	// Send message with tools.
+	params := openai.ChatCompletionNewParams{
+		Messages: []openai.ChatCompletionMessageParamUnion{
+			openai.UserMessage(message),
+		},
+		Model:     c.config.Model,
+		MaxTokens: openai.Int(int64(c.config.MaxTokens)),
+		Tools:     azureTools,
+	}
+
+	response, err := c.client.Chat.Completions.New(ctx, params)
+	if err != nil {
+		return nil, fmt.Errorf("failed to send message with tools to Azure OpenAI: %w", err)
+	}
+
+	// Parse response.
+	return parseAzureOpenAIResponse(response)
+}
+
+// convertToolsToAzureOpenAIFormat converts our Tool interface to Azure OpenAI's function format.
+// Since Azure OpenAI uses the OpenAI SDK, the format is identical to OpenAI.
+func convertToolsToAzureOpenAIFormat(availableTools []tools.Tool) []openai.ChatCompletionToolParam {
+	azureTools := make([]openai.ChatCompletionToolParam, 0, len(availableTools))
+
+	for _, tool := range availableTools {
+		// Build properties and required fields from parameters.
+		properties := make(map[string]interface{})
+		required := make([]string, 0)
+
+		for _, param := range tool.Parameters() {
+			properties[param.Name] = map[string]interface{}{
+				"type":        string(param.Type),
+				"description": param.Description,
+			}
+			if param.Required {
+				required = append(required, param.Name)
+			}
+		}
+
+		// Create function parameters.
+		params := openai.FunctionParameters{
+			"type":       "object",
+			"properties": properties,
+			"required":   required,
+		}
+
+		// Create tool param with function definition.
+		toolParam := openai.ChatCompletionToolParam{
+			Function: openai.FunctionDefinitionParam{
+				Name:        tool.Name(),
+				Description: openai.String(tool.Description()),
+				Parameters:  params,
+			},
+		}
+
+		azureTools = append(azureTools, toolParam)
+	}
+
+	return azureTools
+}
+
+// parseAzureOpenAIResponse parses an Azure OpenAI response into our Response format.
+// Since Azure OpenAI uses the OpenAI SDK, the format is identical to OpenAI.
+func parseAzureOpenAIResponse(response *openai.ChatCompletion) (*types.Response, error) {
+	result := &types.Response{
+		Content:   "",
+		ToolCalls: make([]types.ToolCall, 0),
+	}
+
+	// Check if we have choices.
+	if len(response.Choices) == 0 {
+		return nil, errUtils.ErrAINoResponseChoices
+	}
+
+	choice := response.Choices[0]
+
+	// Map finish reason to stop reason.
+	switch choice.FinishReason {
+	case "stop":
+		result.StopReason = types.StopReasonEndTurn
+	case "tool_calls":
+		result.StopReason = types.StopReasonToolUse
+	case "length":
+		result.StopReason = types.StopReasonMaxTokens
+	default:
+		result.StopReason = types.StopReasonEndTurn
+	}
+
+	// Extract text content.
+	result.Content = choice.Message.Content
+
+	// Extract tool calls if present.
+	if len(choice.Message.ToolCalls) > 0 {
+		for _, toolCall := range choice.Message.ToolCalls {
+			// Parse function arguments.
+			var args map[string]interface{}
+			if toolCall.Function.Arguments != "" {
+				if err := json.Unmarshal([]byte(toolCall.Function.Arguments), &args); err != nil {
+					return nil, fmt.Errorf("failed to parse tool arguments: %w", err)
+				}
+			}
+
+			result.ToolCalls = append(result.ToolCalls, types.ToolCall{
+				ID:    toolCall.ID,
+				Name:  toolCall.Function.Name,
+				Input: args,
+			})
+		}
+	}
+
+	return result, nil
 }
 
 // GetModel returns the configured model deployment name.

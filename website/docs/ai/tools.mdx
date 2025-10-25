@@ -20,6 +20,156 @@ Tool execution provides:
 - **User Confirmations**: Smart prompts for sensitive operations
 - **Timeout Protection**: Automatic cancellation of long-running operations
 
+## How Tool Calling Works
+
+### The Tool Calling Process
+
+When you chat with Atmos AI, here's what happens behind the scenes:
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant AtmosAI as Atmos AI Chat
+    participant LLM as AI Provider (Claude)
+    participant Tools as Local Tools
+    participant Files as Local Files
+
+    User->>AtmosAI: "What's the VPC CIDR in prod-use1?"
+    AtmosAI->>LLM: Send message + tool definitions (metadata only)
+    Note over LLM: AI analyzes question<br/>Determines it needs tool
+    LLM->>AtmosAI: Response: "I need atmos_describe_component"
+    AtmosAI->>User: Request permission (if required)
+    User->>AtmosAI: Approve
+    AtmosAI->>Tools: Execute: describe_component(vpc, prod-use1)
+    Tools->>Files: Read local stack/component files
+    Files-->>Tools: Component configuration
+    Tools-->>AtmosAI: Tool result with CIDR info
+    AtmosAI->>LLM: Send tool results
+    LLM->>AtmosAI: Final answer with CIDR
+    AtmosAI->>User: "The VPC CIDR is 10.0.0.0/16"
+```
+
+### What Gets Sent to AI Servers
+
+It's important to understand **when and what** data is sent to the AI provider:
+
+#### Initial Message (Always Sent)
+When you start a conversation, Atmos sends:
+1. **Your question** - The message you type
+2. **Tool definitions** - Metadata describing available tools (names, parameters, descriptions)
+3. **Context** - Session history and memory context (if enabled)
+
+**Example tool definition sent to AI:**
+```json
+{
+  "name": "atmos_describe_component",
+  "description": "Describe an Atmos component configuration in a specific stack",
+  "parameters": {
+    "component": {"type": "string", "description": "Component name", "required": true},
+    "stack": {"type": "string", "description": "Stack name", "required": true}
+  }
+}
+```
+
+**Note:** At this stage, **no actual component or stack data** is sent - only the tool definitions (metadata).
+
+#### When AI Decides to Use a Tool
+
+If the AI determines it needs information from your local environment:
+
+1. **AI sends back a tool call request** - Specifies which tool and parameters
+2. **Tool executes locally** - Reads your local files/runs Atmos commands
+3. **Only the tool results are sent** - Specific data the AI requested
+
+**Example flow:**
+```
+You: "What's the VPC configuration in prod-use1?"
+
+→ Sent to AI: Your question + tool definitions (no actual data yet)
+← AI responds: "I need to call atmos_describe_component(vpc, prod-use1)"
+→ Tool executes locally, reads your stack files
+→ Sent to AI: Only the VPC component configuration for prod-use1
+← AI responds: "The VPC in prod-use1 has CIDR 10.0.0.0/16 with..."
+```
+
+### When Tools Are Called
+
+The AI automatically decides to call tools when:
+
+1. **Specific Information Needed**: You ask about a specific component, stack, or configuration
+   - "What's the CIDR block for VPC in prod?"
+   - "Show me the RDS configuration"
+
+2. **Listing/Discovery**: You want to see what's available
+   - "What stacks do I have?"
+   - "List all components"
+
+3. **Validation**: You ask about configuration correctness
+   - "Is my stack configuration valid?"
+   - "Check for errors in my stacks"
+
+4. **File Operations**: You request file content or modifications
+   - "Show me the vpc/main.tf file"
+   - "Read the catalog/vpc.yaml file"
+
+5. **Analysis**: You ask the AI to analyze or compare configurations
+   - "Compare VPC configs across all prod stacks"
+   - "Find differences between dev and prod"
+
+**The AI will NOT call tools when:**
+- Answering general questions about Atmos ("What is a stack?")
+- Explaining concepts ("How do components work?")
+- Providing documentation ("How do I configure Atmos?")
+- You explicitly ask it not to ("Don't look at my files, just explain...")
+
+### Data Privacy and Security
+
+**Key Points:**
+
+✅ **Tool definitions are always sent** - These contain no sensitive data, just metadata about what tools exist
+
+✅ **Your questions are always sent** - This is how the AI understands what you're asking
+
+✅ **Actual data is only sent when tools are called** - Component configs, stack files, validation results are ONLY sent when the AI specifically requests them by calling a tool
+
+✅ **You control tool execution** - Permission system lets you approve/deny each tool call
+
+✅ **Local execution** - Tools run on your machine, reading your local files
+
+✅ **Results only** - Only the tool's output is sent, not your entire codebase
+
+**Example - What gets sent:**
+
+```
+Question: "Explain how Atmos stacks work"
+→ Sent to AI: Your question + tool definitions
+→ Tools called: NONE
+→ Data sent: NONE (just your question)
+
+Question: "What's the VPC CIDR in prod-use1?"
+→ Sent to AI: Your question + tool definitions
+→ Tools called: atmos_describe_component(vpc, prod-use1)
+→ Data sent: VPC component configuration from prod-use1 stack ONLY
+```
+
+### Tool Execution Security
+
+When a tool is executed:
+
+1. **Permission Check**: Verifies tool is allowed (not blocked, respects permissions)
+2. **User Prompt**: Shows tool name, description, and parameters (if confirmation required)
+3. **Local Execution**: Tool runs on your machine with your Atmos configuration
+4. **Path Validation**: File operations validate paths to prevent directory traversal
+5. **Timeout Protection**: Operations automatically cancelled after 30 seconds
+6. **Result Transmission**: Only the tool's specific output is sent back to the AI
+
+**Security Features:**
+- Path traversal protection for file operations
+- Sandboxed execution within configured directories
+- File permissions (0600 for sensitive files)
+- Permission system prevents unauthorized operations
+- All execution happens locally on your machine
+
 ## Configuration
 
 Enable tool execution in your `atmos.yaml`:
