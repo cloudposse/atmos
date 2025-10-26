@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -389,17 +390,32 @@ func (i *userIdentity) PostAuthenticate(ctx context.Context, params *types.PostA
 func (i *userIdentity) CredentialsExist() (bool, error) {
 	defer perf.Track(nil, "aws.userIdentity.CredentialsExist")()
 
-	// Check if credentials file exists for aws-user provider.
-	awsFileManager, err := awsCloud.NewAWSFileManager("")
+	mgr, err := awsCloud.NewAWSFileManager("")
 	if err != nil {
 		return false, err
 	}
 
-	credentialsPath := awsFileManager.GetCredentialsPath("aws-user")
-	if _, err := os.Stat(credentialsPath); os.IsNotExist(err) {
+	credPath := mgr.GetCredentialsPath(awsUserProviderName)
+
+	// Load and parse the credentials file to verify the identity section exists.
+	cfg, err := awsCloud.LoadINIFile(credPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return false, nil
+		}
+		return false, fmt.Errorf("load credentials file: %w", err)
+	}
+
+	// Check if this identity's section exists in the credentials file.
+	sec, err := cfg.GetSection(i.name)
+	if err != nil {
+		// Section doesn't exist - credentials don't exist for this identity.
 		return false, nil
-	} else if err != nil {
-		return false, err
+	}
+
+	// Verify the section has actual credential keys (not just an empty section).
+	if strings.TrimSpace(sec.Key("aws_access_key_id").String()) == "" {
+		return false, nil
 	}
 
 	return true, nil
