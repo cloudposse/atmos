@@ -730,6 +730,18 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 				t.Fatalf("Failed to clean directory %q: %v", tc.Workdir, err)
 			}
 		}
+
+		// Set ATMOS_CLI_CONFIG_PATH to ensure test isolation.
+		// This forces Atmos to use the workdir's atmos.yaml instead of searching
+		// up the directory tree or using ~/.config/atmos/atmos.yaml.
+		atmosConfigPath := filepath.Join(absoluteWorkdir, "atmos.yaml")
+		if _, err := os.Stat(atmosConfigPath); err == nil {
+			if tc.Env == nil {
+				tc.Env = make(map[string]string)
+			}
+			tc.Env["ATMOS_CLI_CONFIG_PATH"] = absoluteWorkdir
+			logger.Debug("Setting ATMOS_CLI_CONFIG_PATH for test isolation", "path", absoluteWorkdir)
+		}
 	}
 
 	// Include the system PATH in the test environment

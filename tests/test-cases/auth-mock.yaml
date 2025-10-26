@@ -83,7 +83,7 @@ tests:
   - name: atmos auth whoami without authentication
     enabled: true
     snapshot: true
-    description: "Test whoami fails when no credentials cached"
+    description: "Test whoami succeeds by falling back to authentication (mock provider auto-authenticates)"
     workdir: "fixtures/scenarios/atmos-auth-mock/"
     command: "atmos"
     env:
@@ -96,8 +96,12 @@ tests:
     expect:
       diff: []
       stderr:
-        - "no credentials found"
-      exit_code: 1
+        - "GetCachedCredentials failed"
+        - "attempting chain authentication"
+      stdout:
+        - "Current Authentication Status"
+        - "mock-identity"
+      exit_code: 0
 
   # ============================================================================
   # Auth Env Tests - Environment Variable Generation
@@ -106,7 +110,7 @@ tests:
   - name: atmos auth env --format json --identity mock-identity
     enabled: true
     snapshot: true
-    description: "Test env command outputs JSON format (mock provider auto-authenticates)"
+    description: "Test env command outputs JSON format without authentication (returns env vars from config)"
     workdir: "fixtures/scenarios/atmos-auth-mock/"
     command: "atmos"
     env:
@@ -120,15 +124,13 @@ tests:
       - "mock-identity"
     expect:
       diff: []
-      stderr:
-        - "Chained identity"
-        - "mock-identity"
+      stderr: []
       exit_code: 0
 
   - name: atmos auth env --format bash --identity mock-identity
     enabled: true
     snapshot: true
-    description: "Test env command outputs bash export format (mock provider auto-authenticates)"
+    description: "Test env command outputs bash export format without authentication (returns env vars from config)"
     workdir: "fixtures/scenarios/atmos-auth-mock/"
     command: "atmos"
     env:
@@ -142,15 +144,13 @@ tests:
       - "mock-identity"
     expect:
       diff: []
-      stderr:
-        - "Chained identity"
-        - "mock-identity"
+      stderr: []
       exit_code: 0
 
   - name: atmos auth env --format dotenv --identity mock-identity
     enabled: true
     snapshot: true
-    description: "Test env command outputs dotenv format (mock provider auto-authenticates)"
+    description: "Test env command outputs dotenv format without authentication (returns env vars from config)"
     workdir: "fixtures/scenarios/atmos-auth-mock/"
     command: "atmos"
     env:
@@ -164,9 +164,7 @@ tests:
       - "mock-identity"
     expect:
       diff: []
-      stderr:
-        - "Chained identity"
-        - "mock-identity"
+      stderr: []
       exit_code: 0
 
   # ============================================================================
@@ -176,7 +174,7 @@ tests:
   - name: atmos auth exec without authentication
     enabled: true
     snapshot: true
-    description: "Test exec succeeds with mock provider (auto-authenticates)"
+    description: "Test exec succeeds with mock provider (loads credentials from identity storage)"
     workdir: "fixtures/scenarios/atmos-auth-mock/"
     command: "atmos"
     env:
@@ -192,8 +190,8 @@ tests:
     expect:
       diff: []
       stderr:
-        - "Chained identity"
-        - "mock-identity"
+        - "Credentials not in keyring, trying to load from identity storage"
+        - "Loaded credentials from identity storage"
       stdout:
         - "test"
       exit_code: 0

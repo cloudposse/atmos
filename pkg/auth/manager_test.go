@@ -2,6 +2,7 @@ package auth
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"testing"
 	"time"
@@ -420,6 +421,77 @@ func TestManager_Whoami_WithCachedCredentials(t *testing.T) {
 	assert.Equal(t, "dev", info.Identity)
 	assert.Equal(t, "dev", info.CredentialsRef)
 	assert.NotNil(t, info.Credentials) // Credentials are preserved in WhoamiInfo.
+}
+
+func TestManager_Whoami_FallbackAuthenticationFails(t *testing.T) {
+	// Test that Whoami returns error when both GetCachedCredentials and Authenticate fail.
+	// This covers the case where no cached credentials exist and reauthentication also fails.
+	s := &testStore{data: map[string]any{}, expired: map[string]bool{}}
+	m := &manager{
+		config: &schema.AuthConfig{
+			Providers: map[string]schema.Provider{
+				"p": {Kind: "test"},
+			},
+			Identities: map[string]schema.Identity{
+				"dev": {Kind: "test", Via: &schema.IdentityVia{Provider: "p"}},
+			},
+		},
+		identities: map[string]types.Identity{
+			"dev": stubPSIdentity{provider: "p"},
+		},
+		providers: map[string]types.Provider{
+			// Provider that fails authentication.
+			"p": &testProvider{name: "p", authErr: fmt.Errorf("provider auth failed")},
+		},
+		credentialStore: s,
+		validator:       dummyValidator{},
+	}
+
+	// No cached credentials exist (empty store).
+	// Whoami should try GetCachedCredentials (fail), then fall back to Authenticate (also fail).
+	info, err := m.Whoami(context.Background(), "dev")
+
+	// Should return error.
+	// Note: Returns the original GetCachedCredentials error, not the Authenticate error.
+	assert.Error(t, err)
+	assert.Nil(t, info)
+	assert.Contains(t, err.Error(), "no credentials found")
+}
+
+func TestManager_Whoami_FallbackAuthenticationSucceeds(t *testing.T) {
+	// Test that Whoami succeeds via fallback authentication when no cached credentials exist.
+	// This covers the case where provider credentials exist (e.g., in AWS files) and can be used
+	// to derive identity credentials without interactive prompts.
+	s := &testStore{data: map[string]any{}, expired: map[string]bool{}}
+	m := &manager{
+		config: &schema.AuthConfig{
+			Providers: map[string]schema.Provider{
+				"p": {Kind: "test"},
+			},
+			Identities: map[string]schema.Identity{
+				"dev": {Kind: "test", Via: &schema.IdentityVia{Provider: "p"}},
+			},
+		},
+		identities: map[string]types.Identity{
+			"dev": stubPSIdentity{provider: "p", out: &testCreds{}},
+		},
+		providers: map[string]types.Provider{
+			// Provider that succeeds authentication.
+			"p": &testProvider{name: "p", creds: &testCreds{}},
+		},
+		credentialStore: s,
+		validator:       dummyValidator{},
+	}
+
+	// No cached credentials exist (empty store).
+	// Whoami should try GetCachedCredentials (fail), then fall back to Authenticate (succeed).
+	info, err := m.Whoami(context.Background(), "dev")
+
+	// Should succeed via fallback authentication.
+	require.NoError(t, err)
+	assert.Equal(t, "p", info.Provider)
+	assert.Equal(t, "dev", info.Identity)
+	assert.NotNil(t, info.Credentials)
 }
 
 func TestManager_authenticateWithProvider_Paths(t *testing.T) {
