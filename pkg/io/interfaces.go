@@ -7,14 +7,15 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-// Context provides access to all I/O primitives.
+// Context provides access to I/O channels and masking.
 // This is the main entry point for I/O operations.
 //
-// Key Principle: I/O layer provides CHANNELS and CAPABILITIES, not formatting.
+// Key Principle: I/O layer provides CHANNELS and MASKING, not formatting or terminal detection.
 // - Channels: Where does output go? (stdout, stderr, stdin)
-// - Capabilities: What can the terminal do? (color, TTY, width)
+// - Masking: Secret redaction for security
 //
 // The UI layer (pkg/ui/) handles formatting and rendering.
+// The terminal layer (pkg/terminal/) handles TTY detection and capabilities.
 type Context interface {
 	// Channel access - explicit and clear
 	Data() stdio.Writer    // stdout - for pipeable data (JSON, YAML, results)
@@ -24,9 +25,6 @@ type Context interface {
 	// Raw channels (unmasked - requires justification)
 	RawData() stdio.Writer  // Unmasked stdout
 	RawUI() stdio.Writer    // Unmasked stderr
-
-	// Terminal capabilities
-	Terminal() Terminal
 
 	// Configuration
 	Config() *Config
