@@ -125,6 +125,83 @@ func ProcessAll(ctx context.Context, items []Item) error {
 
 **Context should be first parameter** in functions that accept it.
 
+### I/O and UI Usage (MANDATORY)
+Atmos separates I/O (streams) from UI (formatting) for clarity and testability.
+
+**Two-layer architecture:**
+- **I/O Layer** (`pkg/io/`) - Stream access (stdout/stderr/stdin), terminal capabilities, masking
+- **UI Layer** (`pkg/ui/`) - Formatting (colors, styles, markdown rendering)
+
+**Access pattern:**
+```go
+import (
+    iolib "github.com/cloudposse/atmos/pkg/io"
+    "github.com/cloudposse/atmos/pkg/ui"
+)
+
+// I/O context initialized in cmd/root.go PersistentPreRun
+// Available globally after flag parsing via data.Writer() and ui package functions
+```
+
+**Output functions (use these):**
+```go
+// Data channel (stdout) - for pipeable output
+data.Write("result\n")              // Plain text to stdout
+data.Writef("value: %s\n", val)     // Formatted text to stdout
+data.WriteJSON(structData)          // JSON to stdout
+data.WriteYAML(structData)          // YAML to stdout
+
+// UI channel (stderr) - for human messages
+ui.Write("Loading configuration...")            // Plain text (no icon, no color, stderr)
+ui.Writef("Processing %d items...", count)      // Formatted text (no icon, no color, stderr)
+ui.Success("Deployment complete!")              // ✓ Deployment complete! (green, stderr)
+ui.Error("Configuration failed")                // ✗ Configuration failed (red, stderr)
+ui.Warning("Deprecated feature")                // ⚠ Deprecated feature (yellow, stderr)
+ui.Info("Processing components...")             // ℹ Processing components... (cyan, stderr)
+
+// Markdown rendering
+ui.Markdown("# Help\n\nUsage...")               // Rendered to stdout (data)
+ui.MarkdownMessage("**Error:** Invalid config") // Rendered to stderr (UI)
+```
+
+**Decision tree:**
+```
+What am I outputting?
+
+├─ Pipeable data (JSON, YAML, results)
+│  └─ Use data.Write(), data.Writef(), data.WriteJSON(), data.WriteYAML()
+│
+├─ Plain UI messages (no icon, no color)
+│  └─ Use ui.Write() or ui.Writef()
+│
+├─ Status messages (with icons and colors)
+│  └─ Use ui.Success(), ui.Error(), ui.Warning(), ui.Info()
+│
+└─ Formatted documentation
+   ├─ Help text, usage → ui.Markdown() (stdout)
+   └─ Error details → ui.MarkdownMessage() (stderr)
+```
+
+**Anti-patterns (DO NOT use):**
+```go
+// WRONG: Direct stream access
+fmt.Fprintf(os.Stdout, ...)  // Use data.Printf() instead
+fmt.Fprintf(os.Stderr, ...)  // Use ui.Success/Error/etc instead
+fmt.Println(...)             // Use data.Println() instead
+
+// WRONG: Will be blocked by linter
+io := iolib.NewContext()
+fmt.Fprintf(io.Data(), ...)  // Use data.Printf() instead
+```
+
+**Why this matters:**
+- ✅ Automatic secret masking on all output
+- ✅ Respects --no-color, --redirect-stderr flags
+- ✅ Testable (mock data.Writer() and ui functions)
+- ✅ Clear separation: data (stdout) vs messages (stderr)
+
+See `pkg/io/example_test.go` for comprehensive examples.
+
 ### Package Organization (MANDATORY)
 - **Avoid utils package bloat** - Don't add new functions to `pkg/utils/`
 - **Create purpose-built packages** - New functionality gets its own package in `pkg/`

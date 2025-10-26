@@ -97,40 +97,46 @@ The current design doesn't make this distinction clear.
 
 ### Simplified Developer Interface
 
-Commands should think in terms of **channels** and **presentation**:
+Commands use **package-level functions** that handle both formatting and channel selection:
 
 ```go
-// Get I/O context
-io := cmd.Context().Value(ioContextKey).(io.Context)
-
-// Get UI formatter
-ui := cmd.Context().Value(uiFormatterKey).(ui.Formatter)
+import (
+    "github.com/cloudposse/atmos/pkg/data"
+    "github.com/cloudposse/atmos/pkg/ui"
+)
 
 // ===== DATA CHANNEL (stdout) - pipeable =====
 // Plain data
-fmt.Fprintf(io.Data(), "%s\n", jsonOutput)
+data.Write("result\n")
+data.Writef("Component: %s\n", name)
+data.WriteJSON(structData)
+data.WriteYAML(structData)
 
 // Formatted data (markdown help, docs)
-markdown := ui.RenderMarkdown("# Help\n\n...")
-fmt.Fprint(io.Data(), markdown)
+ui.Markdown("# Help\n\nUsage instructions...")  // → stdout
 
 // ===== UI CHANNEL (stderr) - human messages =====
-// Plain messages
-fmt.Fprintf(io.UI(), "Loading configuration...\n")
-
-// Formatted messages
-fmt.Fprintf(io.UI(), "%s Configuration loaded!\n", ui.Success("✓"))
-fmt.Fprintf(io.UI(), "%s\n", ui.Warning("Stack is deprecated"))
+// Formatted messages with automatic icons and colors
+ui.Success("Deployment complete!")               // ✓ Deployment complete! → stderr
+ui.Error("Configuration failed")                 // ✗ Configuration failed → stderr
+ui.Warning("Stack is deprecated")                // ⚠ Stack is deprecated → stderr
+ui.Info("Processing components...")              // ℹ Processing components... → stderr
 
 // Formatted markdown for UI
-helpMsg := ui.RenderMarkdown("**Error:** Invalid config")
-fmt.Fprint(io.UI(), helpMsg)
+ui.MarkdownMessage("**Error:** Invalid config") // → stderr
 ```
 
 **Mental model:**
-1. **Choose channel:** `io.Data()` for pipeable output, `io.UI()` for human messages
-2. **Choose presentation:** `ui.RenderMarkdown()` or `ui.Success()` for formatting
-3. **Write:** Use `fmt.Fprint*()` to write formatted strings to chosen channel
+1. **Choose what to output:** Data (JSON/YAML/results) vs messages (status/errors)
+2. **Use the right function:** `data.*` for stdout, `ui.*` for stderr
+3. **Formatting is automatic:** Functions handle styling, icons, colors, and masking
+
+**Why package-level functions?**
+- ✅ Simple, discoverable API (`ui.Success()` vs `fmt.Fprintf(io.UI(), formatter.Success(...))`)
+- ✅ Automatic I/O initialization (no context retrieval needed)
+- ✅ Enforced by linter (prevents direct `fmt.Fprintf` to streams)
+- ✅ Consistent usage across codebase
+- ✅ Easy to mock for testing
 
 ### Core Interfaces - I/O Layer
 
@@ -207,39 +213,64 @@ const (
 
 ### Core Interfaces - Presentation Layer
 
-**Purpose:** Formatting and rendering (returns formatted strings)
+**Purpose:** Formatting and output to UI channel (stderr)
 
 ```go
 package ui
 
+// ===== Package-level functions (what developers use) =====
+
+// UI channel output (stderr) - formatted messages with icons
+func Success(text string) error              // ✓ {text} in green → stderr
+func Successf(format string, a ...any) error // ✓ {formatted} in green → stderr
+func Error(text string) error                // ✗ {text} in red → stderr
+func Errorf(format string, a ...any) error   // ✗ {formatted} in red → stderr
+func Warning(text string) error              // ⚠ {text} in yellow → stderr
+func Warningf(format string, a ...any) error // ⚠ {formatted} in yellow → stderr
+func Info(text string) error                 // ℹ {text} in cyan → stderr
+func Infof(format string, a ...any) error    // ℹ {formatted} in cyan → stderr
+
+// Raw UI output (stderr) - no icons, no automatic styling
+func Write(text string) error                // Plain text → stderr
+func Writef(format string, a ...any) error   // Formatted text → stderr
+
+// Markdown rendering
+func Markdown(content string) error          // Rendered markdown → stdout (data channel)
+func Markdownf(format string, a ...any) error
+func MarkdownMessage(content string) error   // Rendered markdown → stderr (UI channel)
+func MarkdownMessagef(format string, a ...any) error
+
+// Initialization (called by cmd/root.go)
+func InitFormatter(ioCtx io.Context)
+
+// ===== Formatter interface (internal) =====
+
 // Formatter provides text formatting.
 // Returns formatted strings - NEVER writes to streams.
+// Commands should use package-level functions (Success, Error, etc.) instead.
 type Formatter interface {
-	// Semantic formatting (uses theme)
+	// Semantic formatting (uses theme) - returns strings
 	Success(text string) string
 	Warning(text string) string
 	Error(text string) string
 	Info(text string) string
 	Muted(text string) string
 
-	// Text formatting
+	// Text formatting - returns strings
 	Bold(text string) string
 	Heading(text string) string
 	Label(text string) string
 
-	// Markdown rendering
-	RenderMarkdown(content string) (string, error)
+	// Markdown rendering - returns string
+	Markdown(content string) (string, error)
 
 	// Theme access
 	Styles() *StyleSet
 
 	// Capability queries (delegates to io.Terminal)
 	SupportsColor() bool
-	ColorProfile() io.ColorProfile
+	ColorProfile() terminal.ColorProfile
 }
-
-// NewFormatter creates a formatter that uses io.Terminal for capabilities.
-func NewFormatter(ioCtx io.Context) Formatter
 
 // StyleSet provides lipgloss styles (from theme system).
 type StyleSet struct {
@@ -255,161 +286,127 @@ type StyleSet struct {
 ```
 
 **Key principles:**
-- `ui.Formatter` **returns formatted strings**, never writes
-- Internally uses `io.Terminal` for capability detection
-- Delegates to theme system for colors/styles
-- Pure functions - no side effects
+- **Developers use package-level functions** (`ui.Success()`, `ui.Error()`, etc.)
+- **Formatter interface is internal** - returns formatted strings, never writes
+- **Package-level functions handle I/O** - write to appropriate channel (stdout/stderr)
+- **Automatic initialization** - `InitFormatter()` called in `cmd/root.go` after flag parsing
+- **Enforced by linter** - prevents direct `fmt.Fprintf` to streams
 
 ### Usage Patterns
 
 #### Pattern 1: Data Output (stdout)
 
 ```go
-// Get I/O context
-io := cmd.Context().Value(ioContextKey).(io.Context)
+import (
+    "github.com/cloudposse/atmos/pkg/data"
+    "github.com/cloudposse/atmos/pkg/ui"
+)
 
 // Plain data to stdout
-fmt.Fprintf(io.Data(), "%s\n", jsonOutput)
+data.Write("result\n")
+data.Writef("Component: %s\n", componentName)
 
-// With formatting (e.g., help text)
-ui := cmd.Context().Value(uiFormatterKey).(ui.Formatter)
-helpMarkdown := ui.RenderMarkdown("# Usage\n\nThis command...")
-fmt.Fprint(io.Data(), helpMarkdown)
+// Structured data to stdout
+data.WriteJSON(result)
+data.WriteYAML(config)
+
+// Formatted help text → stdout (pipeable)
+ui.Markdown("# Usage\n\nThis command...")
 ```
 
 #### Pattern 2: UI Messages (stderr)
 
 ```go
-// Get I/O and UI
-io := cmd.Context().Value(ioContextKey).(io.Context)
-ui := cmd.Context().Value(uiFormatterKey).(ui.Formatter)
+import "github.com/cloudposse/atmos/pkg/ui"
 
-// Plain message
-fmt.Fprintf(io.UI(), "Loading configuration...\n")
+// Plain messages (no icon, no color)
+ui.Write("Loading configuration...\n")
+ui.Writef("Processing %d items...\n", count)
 
-// Formatted success message
-successMsg := ui.Success("✓ Configuration loaded!")
-fmt.Fprintf(io.UI(), "%s\n", successMsg)
-
-// Formatted error with context
-errorMsg := ui.Error("Failed to load configuration")
-details := ui.Muted("Check atmos.yaml syntax")
-fmt.Fprintf(io.UI(), "%s\n%s\n", errorMsg, details)
+// Formatted messages (with icons and colors)
+ui.Success("Configuration loaded!")
+ui.Error("Failed to load configuration")
+ui.Warning("Stack is deprecated")
+ui.Info("Processing 150 components...")
 ```
 
 #### Pattern 3: Markdown (Context-Dependent)
 
 ```go
-// Markdown can go to either channel depending on context
-io := cmd.Context().Value(ioContextKey).(io.Context)
-ui := cmd.Context().Value(uiFormatterKey).(ui.Formatter)
+import "github.com/cloudposse/atmos/pkg/ui"
 
 // Help text → stdout (pipeable, can be saved to file)
-helpMarkdown := ui.RenderMarkdown(helpContent)
-fmt.Fprint(io.Data(), helpMarkdown)
+ui.Markdown(helpContent)
 
 // Error explanation → stderr (UI message)
-errorMarkdown := ui.RenderMarkdown("**Error:** Invalid stack config\n\nSee docs...")
-fmt.Fprint(io.UI(), errorMarkdown)
+ui.MarkdownMessage("**Error:** Invalid stack config\n\nSee docs...")
 ```
 
-#### Pattern 4: Conditional Formatting (TTY-aware)
+#### Pattern 4: Formatted Variants
 
 ```go
-io := cmd.Context().Value(ioContextKey).(io.Context)
-ui := cmd.Context().Value(uiFormatterKey).(ui.Formatter)
+import "github.com/cloudposse/atmos/pkg/ui"
 
-// Show progress only if stderr is TTY
-if io.Terminal().IsTTY(io.UIChannel) {
-	progress := ui.Info("⏳ Processing 150 components...")
-	fmt.Fprintf(io.UI(), "%s\n", progress)
-}
-
-// Output data to stdout (always)
-fmt.Fprintf(io.Data(), "%s\n", result)
+// Printf-style formatting
+ui.Successf("Deployed %d components successfully", count)
+ui.Errorf("Failed to process component %s", name)
+ui.Warningf("Stack %s will be deprecated in version %s", stack, version)
+ui.Infof("Processing %d/%d components...", current, total)
+ui.Markdownf("# Component: %s\n\nStatus: %s", name, status)
 ```
 
-#### Pattern 5: Helper Functions (Optional Convenience)
-
-For commands that do lots of output, we could provide optional helpers:
+#### Pattern 5: Mixed Data and UI Output
 
 ```go
-package uihelper
+import (
+    "github.com/cloudposse/atmos/pkg/data"
+    "github.com/cloudposse/atmos/pkg/ui"
+)
 
-// Helper wraps io.Context + ui.Formatter for convenience.
-type Helper struct {
-	io io.Context
-	ui ui.Formatter
-}
+func deployComponents(cmd *cobra.Command, args []string) error {
+    // UI message to stderr (human-readable status)
+    ui.Info("Starting deployment...")
 
-func New(ioCtx io.Context, formatter ui.Formatter) *Helper {
-	return &Helper{io: ioCtx, ui: formatter}
-}
+    // Process components
+    result, err := processDeployment()
+    if err != nil {
+        ui.Error("Deployment failed")
+        return err
+    }
 
-// Data channel methods
-func (h *Helper) PrintData(format string, a ...interface{}) {
-	fmt.Fprintf(h.io.Data(), format, a...)
-}
+    // Data output to stdout (machine-readable result)
+    data.WriteJSON(result)
 
-func (h *Helper) PrintMarkdownData(content string) error {
-	rendered, err := h.ui.RenderMarkdown(content)
-	if err != nil {
-		fmt.Fprint(h.io.Data(), content) // Fallback to plain text
-		return err
-	}
-	fmt.Fprint(h.io.Data(), rendered)
-	return nil
-}
+    // Success message to stderr
+    ui.Successf("Deployed %d components", result.Count)
 
-// UI channel methods
-func (h *Helper) Message(format string, a ...interface{}) {
-	fmt.Fprintf(h.io.UI(), format, a...)
-}
-
-func (h *Helper) Success(format string, a ...interface{}) {
-	msg := fmt.Sprintf(format, a...)
-	formatted := h.ui.Success(msg)
-	fmt.Fprintf(h.io.UI(), "%s\n", formatted)
-}
-
-func (h *Helper) Warning(format string, a ...interface{}) {
-	msg := fmt.Sprintf(format, a...)
-	formatted := h.ui.Warning(msg)
-	fmt.Fprintf(h.io.UI(), "%s\n", formatted)
-}
-
-func (h *Helper) Error(format string, a ...interface{}) {
-	msg := fmt.Sprintf(format, a...)
-	formatted := h.ui.Error(msg)
-	fmt.Fprintf(h.io.UI(), "%s\n", formatted)
-}
-
-func (h *Helper) PrintMarkdownUI(content string) error {
-	rendered, err := h.ui.RenderMarkdown(content)
-	if err != nil {
-		fmt.Fprint(h.io.UI(), content)
-		return err
-	}
-	fmt.Fprint(h.io.UI(), rendered)
-	return nil
-}
-
-// Usage in commands
-func executeCommand(cmd *cobra.Command, args []string) error {
-	io := cmd.Context().Value(ioContextKey).(io.Context)
-	ui := cmd.Context().Value(uiFormatterKey).(ui.Formatter)
-
-	out := uihelper.New(io, ui)
-
-	out.Message("Loading...")
-	out.Success("Done!")
-	out.PrintData("%s\n", jsonResult)
-
-	return nil
+    return nil
 }
 ```
 
-**Note:** The helper is **optional** - commands can always use `io.Data()` + `ui.RenderMarkdown()` directly for full control.
+#### Pattern 6: Implementation Details (Not for Commands)
+
+For internal package implementation, the Formatter interface is available:
+
+```go
+// Low-level access (internal packages only)
+import (
+    iolib "github.com/cloudposse/atmos/pkg/io"
+    "github.com/cloudposse/atmos/pkg/ui"
+)
+
+// Get I/O context if needed for terminal capabilities
+ioCtx, err := iolib.NewContext()
+
+// Get formatter instance (returns formatted strings, doesn't write)
+formatter, err := ui.GetFormatter()
+formatted := formatter.Success("message")  // Returns string, doesn't write
+
+// Write to specific stream (use package functions instead in commands)
+fmt.Fprint(ioCtx.UI(), formatted)
+```
+
+**Important:** Commands should use package-level functions (`ui.Success()`, `data.Println()`) instead of accessing I/O context or formatter directly.
 
 ## Developer Mental Model
 
@@ -418,20 +415,32 @@ func executeCommand(cmd *cobra.Command, args []string) error {
 ```
 When I need to output something:
 
-1. WHERE should it go?
-   ├─ Pipeable data (JSON, YAML, results)     → io.Data()
-   ├─ Human messages (status, errors, help)    → io.UI()
-   └─ User input                               → io.Input()
+1. WHAT am I outputting?
+   ├─ Pipeable data (JSON, YAML, results)      → Use data.Write/WriteJSON/WriteYAML()
+   ├─ Human messages (status, errors, warnings) → Use ui.Success/Error/Warning/Info()
+   ├─ Help/documentation                        → Use ui.Markdown() (stdout)
+   └─ Error details with formatting             → Use ui.MarkdownMessage() (stderr)
 
-2. HOW should it look?
-   ├─ Plain text                               → fmt.Fprintf(channel, text)
-   ├─ Colored/styled                           → fmt.Fprintf(channel, ui.Success(text))
-   └─ Markdown rendered                        → fmt.Fprint(channel, ui.RenderMarkdown(md))
+2. Which package function?
+   ├─ data.Write(text)            → Plain text to stdout
+   ├─ data.Writef(format, ...)    → Formatted text to stdout
+   ├─ data.WriteJSON(v)           → JSON to stdout
+   ├─ data.WriteYAML(v)           → YAML to stdout
+   ├─ ui.Write(text)              → Plain text to stderr (no icon/color)
+   ├─ ui.Writef(format, ...)      → Formatted text to stderr (no icon/color)
+   ├─ ui.Success(text)            → ✓ message in green to stderr
+   ├─ ui.Error(text)              → ✗ message in red to stderr
+   ├─ ui.Warning(text)            → ⚠ message in yellow to stderr
+   ├─ ui.Info(text)               → ℹ message in cyan to stderr
+   ├─ ui.Markdown(content)        → Rendered markdown to stdout
+   └─ ui.MarkdownMessage(content) → Rendered markdown to stderr
 
-3. WHEN to format?
-   ├─ Always for UI channel                    → Use ui.* formatters
-   ├─ Conditionally for data channel           → Check io.Terminal().IsTTY()
-   └─ Never for piped output                   → Auto-handled by io layer
+3. Benefits of this approach:
+   ├─ Automatic secret masking           → All output is masked
+   ├─ Respects user flags                 → --no-color, --redirect-stderr work
+   ├─ Testable                            → Mock data.Writer() and ui functions
+   ├─ No boilerplate                      → No context retrieval needed
+   └─ Enforced by linter                  → Prevents direct fmt.Fprintf usage
 ```
 
 ### Examples by Use Case
