@@ -1,7 +1,6 @@
 package exec
 
 import (
-	"encoding/json"
 	"fmt"
 	"runtime"
 	"strings"
@@ -13,7 +12,6 @@ import (
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
-	"gopkg.in/yaml.v2"
 
 	"github.com/cloudposse/atmos/pkg/version"
 )
@@ -147,17 +145,12 @@ func (v versionExec) displayVersionInFormat(forceCheck bool, format string) erro
 	}
 	switch format {
 	case "json":
-		if data, err := json.MarshalIndent(version, " ", " "); err == nil {
-			fmt.Println(string(data))
-		}
+		return tuiUtils.WriteJSON(version)
 	case "yaml":
-		if data, err := yaml.Marshal(version); err == nil {
-			fmt.Println(string(data))
-		}
+		return tuiUtils.WriteYAML(version)
 	default:
 		return ErrInvalidFormat
 	}
-	return nil
 }
 
 func (v versionExec) checkRelease() {

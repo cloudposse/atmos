@@ -9,6 +9,12 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 )
 
+// Context keys for passing values through cobra command context.
+type contextKey string
+
+// IoContextKey is the key for storing io.Context in cobra command context.
+const IoContextKey contextKey = "ioContext"
+
 // registry is the global command registry instance.
 var registry = &CommandRegistry{
 	providers: make(map[string]CommandProvider),
