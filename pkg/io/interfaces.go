@@ -18,13 +18,13 @@ import (
 // The terminal layer (pkg/terminal/) handles TTY detection and capabilities.
 type Context interface {
 	// Channel access - explicit and clear
-	Data() stdio.Writer    // stdout - for pipeable data (JSON, YAML, results)
-	UI() stdio.Writer      // stderr - for human messages (status, errors, prompts)
-	Input() stdio.Reader   // stdin - for user input
+	Data() stdio.Writer  // stdout - for pipeable data (JSON, YAML, results)
+	UI() stdio.Writer    // stderr - for human messages (status, errors, prompts)
+	Input() stdio.Reader // stdin - for user input
 
 	// Raw channels (unmasked - requires justification)
-	RawData() stdio.Writer  // Unmasked stdout
-	RawUI() stdio.Writer    // Unmasked stderr
+	RawData() stdio.Writer // Unmasked stdout
+	RawUI() stdio.Writer   // Unmasked stderr
 
 	// Configuration
 	Config() *Config
@@ -64,37 +64,6 @@ type Streams interface {
 	RawError() stdio.Writer
 }
 
-// Terminal provides terminal capability detection and operations.
-// NO FORMATTING - only capabilities and detection.
-type Terminal interface {
-	// IsTTY returns whether the given stream is a TTY.
-	// Accepts either Channel or StreamType for backward compatibility.
-	IsTTY(stream interface{}) bool
-
-	// ColorProfile returns the terminal's color capabilities.
-	ColorProfile() ColorProfile
-
-	// Width returns the terminal width for the given stream.
-	// Returns 0 if width cannot be determined.
-	// Accepts either Channel or StreamType for backward compatibility.
-	Width(stream interface{}) int
-
-	// Height returns the terminal height for the given stream.
-	// Returns 0 if height cannot be determined.
-	// Accepts either Channel or StreamType for backward compatibility.
-	Height(stream interface{}) int
-
-	// SetTitle sets the terminal window title (if supported).
-	// Does nothing if terminal doesn't support titles or if disabled in config.
-	SetTitle(title string)
-
-	// RestoreTitle restores the original terminal title.
-	RestoreTitle()
-
-	// Alert emits a terminal bell/alert (if supported and enabled).
-	Alert()
-}
-
 // Masker handles automatic masking of sensitive data in output.
 type Masker interface {
 	// RegisterValue registers a literal value to be masked.
@@ -128,49 +97,14 @@ type Masker interface {
 	Enabled() bool
 }
 
-// Config holds I/O configuration from flags, environment variables, and atmos.yaml.
+// Config holds I/O configuration for channels and masking.
 type Config struct {
 	// From global flags
-	NoColor        bool
-	Color          bool
 	RedirectStderr string
 	DisableMasking bool // --disable-masking flag for debugging
 
-	// From environment variables
-	EnvNoColor       bool   // NO_COLOR
-	EnvCLIColor      string // CLICOLOR
-	EnvCLIColorForce bool   // CLICOLOR_FORCE
-	EnvTerm          string // TERM
-	EnvColorTerm     string // COLORTERM
-
 	// From atmos.yaml
 	AtmosConfig schema.AtmosConfiguration
-}
-
-// ColorProfile represents terminal color capabilities.
-type ColorProfile int
-
-const (
-	ColorNone  ColorProfile = iota // No color (Ascii)
-	Color16                        // 16 colors (ANSI)
-	Color256                       // 256 colors (ANSI256)
-	ColorTrue                      // 24-bit color (TrueColor)
-)
-
-// String returns the string representation of the color profile.
-func (cp ColorProfile) String() string {
-	switch cp {
-	case ColorNone:
-		return "None"
-	case Color16:
-		return "16"
-	case Color256:
-		return "256"
-	case ColorTrue:
-		return "TrueColor"
-	default:
-		return "Unknown"
-	}
 }
 
 // StreamType identifies an I/O stream.

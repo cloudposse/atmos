@@ -174,7 +174,6 @@ func TestOutput_MarkdownUI(t *testing.T) {
 	out := NewOutput(ioCtx)
 
 	err := out.MarkdownUI("# Title")
-
 	if err != nil {
 		t.Errorf("MarkdownUI() error = %v", err)
 	}
@@ -379,7 +378,6 @@ func createTestIOContextWithBuffers() (iolib.Context, *bytes.Buffer, *bytes.Buff
 
 	ctx, _ := iolib.NewContext(
 		iolib.WithStreams(streams),
-		iolib.WithTerminal(&mockTerminal{profile: iolib.Color16}),
 	)
 
 	return ctx, stdout, stderr

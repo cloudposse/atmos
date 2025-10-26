@@ -9,12 +9,14 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/cloudposse/atmos/pkg/io"
+	"github.com/cloudposse/atmos/pkg/terminal"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
 
 var (
-	// Global formatter instance (like the logger).
+	// Global formatter and terminal instances.
 	globalFormatter Formatter
+	globalTerminal  terminal.Terminal
 	formatterMu     sync.RWMutex
 )
 
@@ -23,7 +25,12 @@ var (
 func InitFormatter(ioCtx io.Context) {
 	formatterMu.Lock()
 	defer formatterMu.Unlock()
-	globalFormatter = NewFormatter(ioCtx)
+
+	// Create terminal instance for UI layer
+	globalTerminal = terminal.New()
+
+	// Create formatter with I/O context and terminal
+	globalFormatter = NewFormatter(ioCtx, globalTerminal)
 	Format = globalFormatter // Also expose for advanced use
 }
 
@@ -115,24 +122,21 @@ var Format Formatter
 
 // formatter implements the Formatter interface.
 type formatter struct {
-	ioCtx  io.Context
-	styles *StyleSet
+	ioCtx    io.Context
+	terminal terminal.Terminal
+	styles   *StyleSet
 }
 
-// NewFormatter creates a new Formatter that uses io.Terminal for capabilities.
+// NewFormatter creates a new Formatter with I/O context and terminal.
 // Most code should use the package-level functions instead (ui.Markdown, ui.Success, etc.).
-func NewFormatter(ioCtx io.Context) Formatter {
-	styles := generateStyleSet(ioCtx.Terminal().ColorProfile())
+func NewFormatter(ioCtx io.Context, term terminal.Terminal) Formatter {
+	styles := generateStyleSet(term.ColorProfile())
 
 	return &formatter{
-		ioCtx:  ioCtx,
-		styles: styles,
+		ioCtx:    ioCtx,
+		terminal: term,
+		styles:   styles,
 	}
-}
-
-// newFormatter is the internal constructor (kept for backward compatibility).
-func newFormatter(ioCtx io.Context) Formatter {
-	return NewFormatter(ioCtx)
 }
 
 func (f *formatter) Styles() *StyleSet {
@@ -140,11 +144,11 @@ func (f *formatter) Styles() *StyleSet {
 }
 
 func (f *formatter) SupportsColor() bool {
-	return f.ioCtx.Terminal().ColorProfile() != io.ColorNone
+	return f.terminal.ColorProfile() != terminal.ColorNone
 }
 
-func (f *formatter) ColorProfile() io.ColorProfile {
-	return f.ioCtx.Terminal().ColorProfile()
+func (f *formatter) ColorProfile() terminal.ColorProfile {
+	return f.terminal.ColorProfile()
 }
 
 // StatusMessage formats a message with an icon and color.
@@ -250,7 +254,7 @@ func (f *formatter) RenderMarkdown(content string) (string, error) {
 	maxWidth := f.ioCtx.Config().AtmosConfig.Settings.Terminal.MaxWidth
 	if maxWidth == 0 {
 		// Use terminal width if available
-		termWidth := f.ioCtx.Terminal().Width(io.StreamOutput)
+		termWidth := f.terminal.Width(terminal.Stdout)
 		if termWidth > 0 {
 			maxWidth = termWidth
 		}
@@ -265,10 +269,10 @@ func (f *formatter) RenderMarkdown(content string) (string, error) {
 
 	// Select style based on color profile
 	var styleName string
-	switch f.ioCtx.Terminal().ColorProfile() {
-	case io.ColorNone:
+	switch f.terminal.ColorProfile() {
+	case terminal.ColorNone:
 		styleName = "notty"
-	case io.Color16, io.Color256, io.ColorTrue:
+	case terminal.Color16, terminal.Color256, terminal.ColorTrue:
 		// Use dark style as default - this will be theme-aware in PR #1433
 		styleName = "dark"
 	}
@@ -294,8 +298,8 @@ func (f *formatter) RenderMarkdown(content string) (string, error) {
 
 // generateStyleSet creates a StyleSet based on color profile.
 // This is a simplified version - will be replaced by theme system from PR #1433.
-func generateStyleSet(profile io.ColorProfile) *StyleSet {
-	if profile == io.ColorNone {
+func generateStyleSet(profile terminal.ColorProfile) *StyleSet {
+	if profile == terminal.ColorNone {
 		// No color - return styles with no formatting
 		return &StyleSet{
 			Title:   lipgloss.NewStyle(),

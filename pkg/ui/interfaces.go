@@ -4,20 +4,22 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/cloudposse/atmos/pkg/io"
+	"github.com/cloudposse/atmos/pkg/terminal"
 )
 
 // Formatter provides text formatting with automatic degradation.
 // Key Principle: Formatter RETURNS FORMATTED STRINGS - it never writes to streams.
 //
 // Usage Pattern:
-//   io := cmd.Context().Value(ioContextKey).(io.Context)
-//   ui := cmd.Context().Value(uiFormatterKey).(ui.Formatter)
 //
-//   // Format text with automatic icons
-//   msg := ui.Success("Deployment complete!")  // Returns "✓ Deployment complete!" in green
+//	io := cmd.Context().Value(ioContextKey).(io.Context)
+//	ui := cmd.Context().Value(uiFormatterKey).(ui.Formatter)
 //
-//   // Developer chooses channel
-//   fmt.Fprintf(io.UI(), "%s\n", msg)  // UI message → stderr
+//	// Format text with automatic icons
+//	msg := ui.Success("Deployment complete!")  // Returns "✓ Deployment complete!" in green
+//
+//	// Developer chooses channel
+//	fmt.Fprintf(io.UI(), "%s\n", msg)  // UI message → stderr
 //
 // Uses io.Terminal for capability detection and theme.StyleSet for styling.
 type Formatter interface {
@@ -38,9 +40,9 @@ type Formatter interface {
 	Muted(text string) string                        // Returns muted text (gray, no icon)
 
 	// Text formatting - returns styled strings
-	Bold(text string) string       // Returns bold text
-	Heading(text string) string    // Returns heading-styled text
-	Label(text string) string      // Returns label-styled text
+	Bold(text string) string    // Returns bold text
+	Heading(text string) string // Returns heading-styled text
+	Label(text string) string   // Returns label-styled text
 
 	// Markdown rendering - writes rendered markdown to channel (degrades gracefully to plain text)
 	// Automatically chooses Data or UI channel based on useDataChannel parameter
@@ -49,8 +51,8 @@ type Formatter interface {
 	// Theme access
 	Styles() *StyleSet // Access to full StyleSet
 
-	// Capability queries (delegates to io.Terminal)
-	ColorProfile() io.ColorProfile
+	// Capability queries (delegates to terminal.Terminal)
+	ColorProfile() terminal.ColorProfile
 	SupportsColor() bool
 
 	// Low-level: Returns rendered markdown string (for advanced use only)
@@ -83,12 +85,14 @@ type StyleSet struct {
 // DEPRECATED: Use io.Context.Data()/UI() + ui.Formatter directly instead.
 //
 // Old pattern (being phased out):
-//   out.Success("done!")  // Where does this go? Not explicit
+//
+//	out.Success("done!")  // Where does this go? Not explicit
 //
 // New pattern (preferred):
-//   io := io.Context
-//   ui := ui.Formatter
-//   fmt.Fprintf(io.UI(), "%s\n", ui.Success("done!"))  // Explicit channel
+//
+//	io := io.Context
+//	ui := ui.Formatter
+//	fmt.Fprintf(io.UI(), "%s\n", ui.Success("done!"))  // Explicit channel
 //
 // This interface exists for backward compatibility during migration.
 type Output interface {
@@ -108,8 +112,8 @@ type Output interface {
 
 	// Formatted output
 	// DEPRECATED: Use fmt.Fprint(io.Data(), ui.RenderMarkdown(...)) instead
-	Markdown(content string) error      // Rendered to stdout
-	MarkdownUI(content string) error    // Rendered to stderr
+	Markdown(content string) error   // Rendered to stdout
+	MarkdownUI(content string) error // Rendered to stderr
 
 	// Output options
 	SetTrimTrailingWhitespace(enabled bool) // Enable/disable trailing whitespace trimming

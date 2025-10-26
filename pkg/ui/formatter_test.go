@@ -5,15 +5,17 @@ import (
 	"testing"
 
 	iolib "github.com/cloudposse/atmos/pkg/io"
+	"github.com/cloudposse/atmos/pkg/terminal"
 )
 
 func TestNewFormatter(t *testing.T) {
 	ioCtx := createTestIOContext()
+	term := terminal.New()
 
-	f := newFormatter(ioCtx)
+	f := NewFormatter(ioCtx, term)
 
 	if f == nil {
-		t.Fatal("newFormatter() returned nil")
+		t.Fatal("NewFormatter() returned nil")
 	}
 
 	if f.Styles() == nil {
@@ -24,35 +26,36 @@ func TestNewFormatter(t *testing.T) {
 func TestFormatter_SupportsColor(t *testing.T) {
 	tests := []struct {
 		name    string
-		profile iolib.ColorProfile
+		profile terminal.ColorProfile
 		want    bool
 	}{
 		{
 			name:    "ColorNone returns false",
-			profile: iolib.ColorNone,
+			profile: terminal.ColorNone,
 			want:    false,
 		},
 		{
 			name:    "Color16 returns true",
-			profile: iolib.Color16,
+			profile: terminal.Color16,
 			want:    true,
 		},
 		{
 			name:    "Color256 returns true",
-			profile: iolib.Color256,
+			profile: terminal.Color256,
 			want:    true,
 		},
 		{
 			name:    "ColorTrue returns true",
-			profile: iolib.ColorTrue,
+			profile: terminal.ColorTrue,
 			want:    true,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ioCtx := createTestIOContextWithProfile(tt.profile)
-			f := newFormatter(ioCtx)
+			ioCtx := createTestIOContext()
+			term := createMockTerminal(tt.profile)
+			f := NewFormatter(ioCtx, term)
 
 			got := f.SupportsColor()
 			if got != tt.want {
@@ -63,17 +66,18 @@ func TestFormatter_SupportsColor(t *testing.T) {
 }
 
 func TestFormatter_ColorProfile(t *testing.T) {
-	profiles := []iolib.ColorProfile{
-		iolib.ColorNone,
-		iolib.Color16,
-		iolib.Color256,
-		iolib.ColorTrue,
+	profiles := []terminal.ColorProfile{
+		terminal.ColorNone,
+		terminal.Color16,
+		terminal.Color256,
+		terminal.ColorTrue,
 	}
 
 	for _, profile := range profiles {
-		t.Run(profile.String(), func(t *testing.T) {
-			ioCtx := createTestIOContextWithProfile(profile)
-			f := newFormatter(ioCtx)
+		t.Run("profile_"+string(rune(profile)), func(t *testing.T) {
+			ioCtx := createTestIOContext()
+			term := createMockTerminal(profile)
+			f := NewFormatter(ioCtx, term)
 
 			got := f.ColorProfile()
 			if got != profile {
@@ -86,25 +90,26 @@ func TestFormatter_ColorProfile(t *testing.T) {
 func TestFormatter_Success(t *testing.T) {
 	tests := []struct {
 		name    string
-		profile iolib.ColorProfile
+		profile terminal.ColorProfile
 		input   string
 	}{
 		{
 			name:    "no color",
-			profile: iolib.ColorNone,
+			profile: terminal.ColorNone,
 			input:   "test",
 		},
 		{
 			name:    "with color",
-			profile: iolib.Color16,
+			profile: terminal.Color16,
 			input:   "test",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ioCtx := createTestIOContextWithProfile(tt.profile)
-			f := newFormatter(ioCtx)
+			ioCtx := createTestIOContext()
+			term := createMockTerminal(tt.profile)
+			f := NewFormatter(ioCtx, term)
 
 			got := f.Success(tt.input)
 
@@ -115,7 +120,7 @@ func TestFormatter_Success(t *testing.T) {
 
 			// Output should always include checkmark icon (with or without color)
 			expectedNoColor := "✓ " + tt.input
-			if tt.profile == iolib.ColorNone && got != expectedNoColor {
+			if tt.profile == terminal.ColorNone && got != expectedNoColor {
 				t.Errorf("Success() with no color = %q, want %q", got, expectedNoColor)
 			}
 
@@ -129,7 +134,8 @@ func TestFormatter_Success(t *testing.T) {
 
 func TestFormatter_Warning(t *testing.T) {
 	ioCtx := createTestIOContext()
-	f := newFormatter(ioCtx)
+	term := terminal.New()
+	f := NewFormatter(ioCtx, term)
 
 	input := "warning message"
 	got := f.Warning(input)
@@ -142,7 +148,8 @@ func TestFormatter_Warning(t *testing.T) {
 
 func TestFormatter_Error(t *testing.T) {
 	ioCtx := createTestIOContext()
-	f := newFormatter(ioCtx)
+	term := terminal.New()
+	f := NewFormatter(ioCtx, term)
 
 	input := "error message"
 	got := f.Error(input)
@@ -155,7 +162,8 @@ func TestFormatter_Error(t *testing.T) {
 
 func TestFormatter_Info(t *testing.T) {
 	ioCtx := createTestIOContext()
-	f := newFormatter(ioCtx)
+	term := terminal.New()
+	f := NewFormatter(ioCtx, term)
 
 	input := "info message"
 	got := f.Info(input)
@@ -169,25 +177,26 @@ func TestFormatter_Info(t *testing.T) {
 func TestFormatter_Muted(t *testing.T) {
 	tests := []struct {
 		name    string
-		profile iolib.ColorProfile
+		profile terminal.ColorProfile
 		input   string
 	}{
 		{
 			name:    "no color",
-			profile: iolib.ColorNone,
+			profile: terminal.ColorNone,
 			input:   "muted text",
 		},
 		{
 			name:    "with color",
-			profile: iolib.Color16,
+			profile: terminal.Color16,
 			input:   "muted text",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ioCtx := createTestIOContextWithProfile(tt.profile)
-			f := newFormatter(ioCtx)
+			ioCtx := createTestIOContext()
+			term := createMockTerminal(tt.profile)
+			f := NewFormatter(ioCtx, term)
 
 			got := f.Muted(tt.input)
 
@@ -197,7 +206,7 @@ func TestFormatter_Muted(t *testing.T) {
 			}
 
 			// Without color, output should equal input exactly
-			if tt.profile == iolib.ColorNone && got != tt.input {
+			if tt.profile == terminal.ColorNone && got != tt.input {
 				t.Errorf("Muted() with no color = %q, want %q", got, tt.input)
 			}
 		})
@@ -207,25 +216,26 @@ func TestFormatter_Muted(t *testing.T) {
 func TestFormatter_Bold(t *testing.T) {
 	tests := []struct {
 		name    string
-		profile iolib.ColorProfile
+		profile terminal.ColorProfile
 		input   string
 	}{
 		{
 			name:    "no color",
-			profile: iolib.ColorNone,
+			profile: terminal.ColorNone,
 			input:   "bold text",
 		},
 		{
 			name:    "with color",
-			profile: iolib.Color16,
+			profile: terminal.Color16,
 			input:   "bold text",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ioCtx := createTestIOContextWithProfile(tt.profile)
-			f := newFormatter(ioCtx)
+			ioCtx := createTestIOContext()
+			term := createMockTerminal(tt.profile)
+			f := NewFormatter(ioCtx, term)
 
 			got := f.Bold(tt.input)
 
@@ -235,7 +245,7 @@ func TestFormatter_Bold(t *testing.T) {
 			}
 
 			// Without color, output should equal input exactly
-			if tt.profile == iolib.ColorNone && got != tt.input {
+			if tt.profile == terminal.ColorNone && got != tt.input {
 				t.Errorf("Bold() with no color = %q, want %q", got, tt.input)
 			}
 		})
@@ -245,25 +255,26 @@ func TestFormatter_Bold(t *testing.T) {
 func TestFormatter_Heading(t *testing.T) {
 	tests := []struct {
 		name    string
-		profile iolib.ColorProfile
+		profile terminal.ColorProfile
 		input   string
 	}{
 		{
 			name:    "no color",
-			profile: iolib.ColorNone,
+			profile: terminal.ColorNone,
 			input:   "heading",
 		},
 		{
 			name:    "with color",
-			profile: iolib.Color16,
+			profile: terminal.Color16,
 			input:   "heading",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ioCtx := createTestIOContextWithProfile(tt.profile)
-			f := newFormatter(ioCtx)
+			ioCtx := createTestIOContext()
+			term := createMockTerminal(tt.profile)
+			f := NewFormatter(ioCtx, term)
 
 			got := f.Heading(tt.input)
 
@@ -273,7 +284,7 @@ func TestFormatter_Heading(t *testing.T) {
 			}
 
 			// Without color, output should equal input exactly
-			if tt.profile == iolib.ColorNone && got != tt.input {
+			if tt.profile == terminal.ColorNone && got != tt.input {
 				t.Errorf("Heading() with no color = %q, want %q", got, tt.input)
 			}
 		})
@@ -283,25 +294,26 @@ func TestFormatter_Heading(t *testing.T) {
 func TestFormatter_Label(t *testing.T) {
 	tests := []struct {
 		name    string
-		profile iolib.ColorProfile
+		profile terminal.ColorProfile
 		input   string
 	}{
 		{
 			name:    "no color",
-			profile: iolib.ColorNone,
+			profile: terminal.ColorNone,
 			input:   "label",
 		},
 		{
 			name:    "with color",
-			profile: iolib.Color16,
+			profile: terminal.Color16,
 			input:   "label",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ioCtx := createTestIOContextWithProfile(tt.profile)
-			f := newFormatter(ioCtx)
+			ioCtx := createTestIOContext()
+			term := createMockTerminal(tt.profile)
+			f := NewFormatter(ioCtx, term)
 
 			got := f.Label(tt.input)
 
@@ -311,7 +323,7 @@ func TestFormatter_Label(t *testing.T) {
 			}
 
 			// Without color, output should equal input exactly
-			if tt.profile == iolib.ColorNone && got != tt.input {
+			if tt.profile == terminal.ColorNone && got != tt.input {
 				t.Errorf("Label() with no color = %q, want %q", got, tt.input)
 			}
 		})
@@ -344,7 +356,8 @@ func TestFormatter_RenderMarkdown(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			ioCtx := createTestIOContext()
-			f := newFormatter(ioCtx)
+			term := terminal.New()
+			f := NewFormatter(ioCtx, term)
 
 			got, err := f.RenderMarkdown(tt.input)
 
@@ -364,11 +377,11 @@ func TestFormatter_RenderMarkdown_MaxWidth(t *testing.T) {
 	// Test that RenderMarkdown doesn't fail with markdown content
 	// This test ensures the method handles content correctly
 	ioCtx := createTestIOContext()
-	f := newFormatter(ioCtx)
+	term := terminal.New()
+	f := NewFormatter(ioCtx, term)
 
 	input := "# Test\n\nThis is a very long line that should be wrapped according to the terminal width."
 	got, err := f.RenderMarkdown(input)
-
 	if err != nil {
 		t.Errorf("RenderMarkdown() error = %v", err)
 	}
@@ -381,23 +394,23 @@ func TestFormatter_RenderMarkdown_MaxWidth(t *testing.T) {
 func TestGenerateStyleSet(t *testing.T) {
 	tests := []struct {
 		name    string
-		profile iolib.ColorProfile
+		profile terminal.ColorProfile
 	}{
 		{
 			name:    "ColorNone",
-			profile: iolib.ColorNone,
+			profile: terminal.ColorNone,
 		},
 		{
 			name:    "Color16",
-			profile: iolib.Color16,
+			profile: terminal.Color16,
 		},
 		{
 			name:    "Color256",
-			profile: iolib.Color256,
+			profile: terminal.Color256,
 		},
 		{
 			name:    "ColorTrue",
-			profile: iolib.ColorTrue,
+			profile: terminal.ColorTrue,
 		},
 	}
 
@@ -410,7 +423,7 @@ func TestGenerateStyleSet(t *testing.T) {
 			}
 
 			// Verify all styles are initialized
-			if styles.Title.String() == "" && tt.profile != iolib.ColorNone {
+			if styles.Title.String() == "" && tt.profile != terminal.ColorNone {
 				// This is okay - lipgloss styles can have empty string representation
 			}
 		})
@@ -424,34 +437,31 @@ func createTestIOContext() iolib.Context {
 	return ctx
 }
 
-func createTestIOContextWithProfile(profile iolib.ColorProfile) iolib.Context {
-	ctx, _ := iolib.NewContext(
-		iolib.WithTerminal(&mockTerminal{profile: profile}),
-	)
-	return ctx
+func createMockTerminal(profile terminal.ColorProfile) terminal.Terminal {
+	return &mockTerminal{profile: profile}
 }
 
-// mockTerminal implements iolib.Terminal for testing.
+// mockTerminal implements terminal.Terminal for testing.
 type mockTerminal struct {
-	profile iolib.ColorProfile
+	profile terminal.ColorProfile
 	width   int
 	height  int
 	isTTY   bool
 }
 
-func (m *mockTerminal) IsTTY(stream interface{}) bool {
+func (m *mockTerminal) IsTTY(stream terminal.Stream) bool {
 	return m.isTTY
 }
 
-func (m *mockTerminal) ColorProfile() iolib.ColorProfile {
+func (m *mockTerminal) ColorProfile() terminal.ColorProfile {
 	return m.profile
 }
 
-func (m *mockTerminal) Width(stream interface{}) int {
+func (m *mockTerminal) Width(stream terminal.Stream) int {
 	return m.width
 }
 
-func (m *mockTerminal) Height(stream interface{}) int {
+func (m *mockTerminal) Height(stream terminal.Stream) int {
 	return m.height
 }
 
@@ -474,21 +484,21 @@ func (m *mockIOContext) Config() *iolib.Config {
 func TestFormatter_StatusMessage(t *testing.T) {
 	tests := []struct {
 		name    string
-		profile iolib.ColorProfile
+		profile terminal.ColorProfile
 		icon    string
 		text    string
 		want    string
 	}{
 		{
 			name:    "no color - plain formatting",
-			profile: iolib.ColorNone,
+			profile: terminal.ColorNone,
 			icon:    "✓",
 			text:    "test message",
 			want:    "✓ test message",
 		},
 		{
 			name:    "with color - contains icon and text",
-			profile: iolib.Color16,
+			profile: terminal.Color16,
 			icon:    "✗",
 			text:    "error message",
 			// With color, output will have ANSI codes, so just check it contains the parts
@@ -498,13 +508,14 @@ func TestFormatter_StatusMessage(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ioCtx := createTestIOContextWithProfile(tt.profile)
-			f := newFormatter(ioCtx)
+			ioCtx := createTestIOContext()
+			term := createMockTerminal(tt.profile)
+			f := NewFormatter(ioCtx, term)
 
 			got := f.StatusMessage(tt.icon, f.Styles().Success, tt.text)
 
 			// For no color, output should match exactly
-			if tt.profile == iolib.ColorNone && got != tt.want {
+			if tt.profile == terminal.ColorNone && got != tt.want {
 				t.Errorf("StatusMessage() = %q, want %q", got, tt.want)
 			}
 
@@ -555,8 +566,9 @@ func TestFormatter_AutomaticIcons(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Test with color
-			ioCtx := createTestIOContextWithProfile(iolib.Color16)
-			f := newFormatter(ioCtx)
+			ioCtx := createTestIOContext()
+			term := createMockTerminal(terminal.Color16)
+			f := NewFormatter(ioCtx, term)
 
 			got := tt.method(f, tt.text)
 
@@ -568,8 +580,9 @@ func TestFormatter_AutomaticIcons(t *testing.T) {
 			}
 
 			// Test without color
-			ioCtxNoColor := createTestIOContextWithProfile(iolib.ColorNone)
-			fNoColor := newFormatter(ioCtxNoColor)
+			ioCtxNoColor := createTestIOContext()
+			termNoColor := createMockTerminal(terminal.ColorNone)
+			fNoColor := NewFormatter(ioCtxNoColor, termNoColor)
 
 			gotNoColor := tt.method(fNoColor, tt.text)
 			expectedNoColor := tt.expectedIcon + " " + tt.text
@@ -617,8 +630,9 @@ func TestFormatter_FormattedMethods(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Test with color
-			ioCtx := createTestIOContextWithProfile(iolib.Color16)
-			f := newFormatter(ioCtx)
+			ioCtx := createTestIOContext()
+			term := createMockTerminal(terminal.Color16)
+			f := NewFormatter(ioCtx, term)
 
 			got := tt.method(f)
 
@@ -630,8 +644,9 @@ func TestFormatter_FormattedMethods(t *testing.T) {
 			}
 
 			// Test without color
-			ioCtxNoColor := createTestIOContextWithProfile(iolib.ColorNone)
-			fNoColor := newFormatter(ioCtxNoColor)
+			ioCtxNoColor := createTestIOContext()
+			termNoColor := createMockTerminal(terminal.ColorNone)
+			fNoColor := NewFormatter(ioCtxNoColor, termNoColor)
 
 			gotNoColor := tt.method(fNoColor)
 			expectedNoColor := tt.expectedIcon + " " + tt.expectedText
@@ -642,4 +657,3 @@ func TestFormatter_FormattedMethods(t *testing.T) {
 		})
 	}
 }
-

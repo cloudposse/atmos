@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	iolib "github.com/cloudposse/atmos/pkg/io"
+	"github.com/cloudposse/atmos/pkg/terminal"
 	"github.com/cloudposse/atmos/pkg/ui"
 )
 
@@ -11,11 +12,14 @@ import (
 // This shows the clear separation between I/O (channels) and UI (formatting).
 func Example_newPattern() {
 	// ===== SETUP =====
-	// Create I/O context - provides channels and terminal capabilities
+	// Create I/O context - provides channels and masking
 	ioCtx, _ := iolib.NewContext()
 
+	// Create terminal instance - provides TTY detection and color capabilities
+	term := terminal.New()
+
 	// Create UI formatter - provides formatting functions (returns strings)
-	formatter := ui.NewFormatter(ioCtx)
+	formatter := ui.NewFormatter(ioCtx, term)
 
 	// ===== PATTERN 1: Data Output (stdout) =====
 	// Data channel is for pipeable output (JSON, YAML, results)
@@ -55,7 +59,7 @@ func Example_newPattern() {
 	// ===== PATTERN 4: Conditional Formatting =====
 	// Only show progress if stderr is a TTY
 
-	if ioCtx.Terminal().IsTTY(iolib.UIChannel) {
+	if term.IsTTY(terminal.Stderr) {
 		progress := formatter.Info("⏳ Processing 150 components...")
 		fmt.Fprintf(ioCtx.UI(), "%s\n", progress)
 	}
@@ -63,8 +67,8 @@ func Example_newPattern() {
 	// ===== PATTERN 5: Using Terminal Capabilities =====
 	// Set terminal title (if supported)
 
-	ioCtx.Terminal().SetTitle("Atmos - Processing")
-	defer ioCtx.Terminal().RestoreTitle()
+	term.SetTitle("Atmos - Processing")
+	defer term.RestoreTitle()
 
 	// Check color support
 	if formatter.SupportsColor() {
@@ -73,7 +77,7 @@ func Example_newPattern() {
 	}
 
 	// Get terminal width for adaptive formatting
-	width := ioCtx.Terminal().Width(iolib.DataChannel)
+	width := term.Width(terminal.Stdout)
 	if width > 0 {
 		fmt.Fprintf(ioCtx.UI(), "Terminal width: %d columns\n", width)
 	}
@@ -82,7 +86,8 @@ func Example_newPattern() {
 // Example_comparisonOldVsNew shows the difference between old and new patterns.
 func Example_comparisonOldVsNew() {
 	ioCtx, _ := iolib.NewContext()
-	formatter := ui.NewFormatter(ioCtx)
+	term := terminal.New()
+	formatter := ui.NewFormatter(ioCtx, term)
 
 	// ===== OLD PATTERN (being phased out) =====
 	// Mixed concerns - unclear where output goes
@@ -116,7 +121,8 @@ func Example_comparisonOldVsNew() {
 // Example_decisionTree shows how to decide where to output.
 func Example_decisionTree() {
 	ioCtx, _ := iolib.NewContext()
-	formatter := ui.NewFormatter(ioCtx)
+	term := terminal.New()
+	formatter := ui.NewFormatter(ioCtx, term)
 
 	// DECISION TREE:
 	// 1. WHERE should it go?
@@ -131,7 +137,7 @@ func Example_decisionTree() {
 	//
 	// 3. WHEN to format?
 	//    ├─ Always for UI channel                    → Use formatter.* methods
-	//    ├─ Conditionally for data channel           → Check ioCtx.Terminal().IsTTY()
+	//    ├─ Conditionally for data channel           → Check term.IsTTY()
 	//    └─ Never for piped output                   → Auto-handled by I/O layer
 
 	// Example: Command help
@@ -165,7 +171,8 @@ func Example_decisionTree() {
 // Example_keyPrinciples demonstrates the architectural principles.
 func Example_keyPrinciples() {
 	ioCtx, _ := iolib.NewContext()
-	formatter := ui.NewFormatter(ioCtx)
+	term := terminal.New()
+	formatter := ui.NewFormatter(ioCtx, term)
 
 	// KEY PRINCIPLE 1: I/O layer provides CHANNELS and CAPABILITIES
 	// - Channels: Where does output go? (stdout, stderr, stdin)
@@ -178,9 +185,9 @@ func Example_keyPrinciples() {
 	_ = ioCtx.Input() // stdin - user input
 
 	// Access capabilities
-	_ = ioCtx.Terminal().IsTTY(iolib.DataChannel)
-	_ = ioCtx.Terminal().ColorProfile()
-	_ = ioCtx.Terminal().Width(iolib.DataChannel)
+	_ = term.IsTTY(terminal.Stdout)
+	_ = term.ColorProfile()
+	_ = term.Width(terminal.Stdout)
 
 	// KEY PRINCIPLE 2: UI layer provides FORMATTING
 	// - Returns formatted strings (pure functions)
@@ -188,9 +195,9 @@ func Example_keyPrinciples() {
 	// - Uses I/O layer for capability detection
 
 	// Get formatted strings
-	_ = formatter.Success("Success!")     // Returns string
-	_ = formatter.Warning("Warning!")     // Returns string
-	_ = formatter.Error("Error!")         // Returns string
+	_ = formatter.Success("Success!")          // Returns string
+	_ = formatter.Warning("Warning!")          // Returns string
+	_ = formatter.Error("Error!")              // Returns string
 	_, _ = formatter.RenderMarkdown("# Title") // Returns string
 
 	// KEY PRINCIPLE 3: Application layer COMBINES both

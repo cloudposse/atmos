@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/cloudposse/atmos/pkg/io"
+	"github.com/cloudposse/atmos/pkg/terminal"
 )
 
 // output implements the Output interface.
@@ -16,9 +17,12 @@ type output struct {
 
 // NewOutput creates a new Output.
 func NewOutput(ioCtx io.Context, opts ...OutputOption) Output {
+	// Create terminal instance for this output
+	term := terminal.New()
+
 	o := &output{
 		ioCtx:                  ioCtx,
-		formatter:              newFormatter(ioCtx),
+		formatter:              NewFormatter(ioCtx, term),
 		trimTrailingWhitespace: false, // Default to false
 	}
 
