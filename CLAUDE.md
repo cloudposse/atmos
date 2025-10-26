@@ -146,14 +146,16 @@ import (
 **Output functions (use these):**
 ```go
 // Data channel (stdout) - for pipeable output
-data.Write("result\n")              // Plain text to stdout
-data.Writef("value: %s\n", val)     // Formatted text to stdout
+data.Write("result")                // Plain text to stdout
+data.Writef("value: %s", val)       // Formatted text to stdout
+data.Writeln("result")              // Plain text with newline to stdout
 data.WriteJSON(structData)          // JSON to stdout
 data.WriteYAML(structData)          // YAML to stdout
 
 // UI channel (stderr) - for human messages
 ui.Write("Loading configuration...")            // Plain text (no icon, no color, stderr)
 ui.Writef("Processing %d items...", count)      // Formatted text (no icon, no color, stderr)
+ui.Writeln("Done")                              // Plain text with newline (no icon, no color, stderr)
 ui.Success("Deployment complete!")              // ✓ Deployment complete! (green, stderr)
 ui.Error("Configuration failed")                // ✗ Configuration failed (red, stderr)
 ui.Warning("Deprecated feature")                // ⚠ Deprecated feature (yellow, stderr)
@@ -169,10 +171,11 @@ ui.MarkdownMessage("**Error:** Invalid config") // Rendered to stderr (UI)
 What am I outputting?
 
 ├─ Pipeable data (JSON, YAML, results)
-│  └─ Use data.Write(), data.Writef(), data.WriteJSON(), data.WriteYAML()
+│  └─ Use data.Write(), data.Writef(), data.Writeln()
+│     data.WriteJSON(), data.WriteYAML()
 │
 ├─ Plain UI messages (no icon, no color)
-│  └─ Use ui.Write() or ui.Writef()
+│  └─ Use ui.Write(), ui.Writef(), ui.Writeln()
 │
 ├─ Status messages (with icons and colors)
 │  └─ Use ui.Success(), ui.Error(), ui.Warning(), ui.Info()

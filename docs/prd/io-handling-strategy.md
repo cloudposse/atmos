@@ -107,8 +107,9 @@ import (
 
 // ===== DATA CHANNEL (stdout) - pipeable =====
 // Plain data
-data.Write("result\n")
-data.Writef("Component: %s\n", name)
+data.Write("result")
+data.Writef("Component: %s", name)
+data.Writeln("result")  // Automatic newline
 data.WriteJSON(structData)
 data.WriteYAML(structData)
 
@@ -116,6 +117,11 @@ data.WriteYAML(structData)
 ui.Markdown("# Help\n\nUsage instructions...")  // → stdout
 
 // ===== UI CHANNEL (stderr) - human messages =====
+// Plain messages (no icons, no colors)
+ui.Write("Loading configuration...")
+ui.Writef("Processing %d items...", count)
+ui.Writeln("Done")  // Automatic newline
+
 // Formatted messages with automatic icons and colors
 ui.Success("Deployment complete!")               // ✓ Deployment complete! → stderr
 ui.Error("Configuration failed")                 // ✗ Configuration failed → stderr
@@ -233,6 +239,7 @@ func Infof(format string, a ...any) error    // ℹ {formatted} in cyan → stde
 // Raw UI output (stderr) - no icons, no automatic styling
 func Write(text string) error                // Plain text → stderr
 func Writef(format string, a ...any) error   // Formatted text → stderr
+func Writeln(text string) error              // Plain text with newline → stderr
 
 // Markdown rendering
 func Markdown(content string) error          // Rendered markdown → stdout (data channel)
@@ -303,8 +310,9 @@ import (
 )
 
 // Plain data to stdout
-data.Write("result\n")
-data.Writef("Component: %s\n", componentName)
+data.Write("result")
+data.Writef("Component: %s", componentName)
+data.Writeln("result")  // Automatic newline
 
 // Structured data to stdout
 data.WriteJSON(result)
@@ -320,8 +328,9 @@ ui.Markdown("# Usage\n\nThis command...")
 import "github.com/cloudposse/atmos/pkg/ui"
 
 // Plain messages (no icon, no color)
-ui.Write("Loading configuration...\n")
-ui.Writef("Processing %d items...\n", count)
+ui.Write("Loading configuration...")
+ui.Writef("Processing %d items...", count)
+ui.Writeln("Done")  // Automatic newline
 
 // Formatted messages (with icons and colors)
 ui.Success("Configuration loaded!")
@@ -424,10 +433,12 @@ When I need to output something:
 2. Which package function?
    ├─ data.Write(text)            → Plain text to stdout
    ├─ data.Writef(format, ...)    → Formatted text to stdout
+   ├─ data.Writeln(text)          → Plain text with newline to stdout
    ├─ data.WriteJSON(v)           → JSON to stdout
    ├─ data.WriteYAML(v)           → YAML to stdout
    ├─ ui.Write(text)              → Plain text to stderr (no icon/color)
    ├─ ui.Writef(format, ...)      → Formatted text to stderr (no icon/color)
+   ├─ ui.Writeln(text)            → Plain text with newline to stderr (no icon/color)
    ├─ ui.Success(text)            → ✓ message in green to stderr
    ├─ ui.Error(text)              → ✗ message in red to stderr
    ├─ ui.Warning(text)            → ⚠ message in yellow to stderr
