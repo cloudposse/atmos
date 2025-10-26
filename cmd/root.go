@@ -521,7 +521,7 @@ func Execute() error {
 		return fmt.Errorf("failed to initialize I/O context: %w", ioErr)
 	}
 	ui.InitFormatter(ioCtx)
-	data.InitData(ioCtx)
+	data.InitWriter(ioCtx)
 
 	if initErr != nil && !errors.Is(initErr, cfg.NotFound) {
 		if isVersionCommand() {

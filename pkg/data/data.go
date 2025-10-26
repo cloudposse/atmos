@@ -15,9 +15,9 @@ var (
 	ioMu            sync.RWMutex
 )
 
-// InitData initializes the global data writer with an I/O context.
+// InitWriter initializes the global data writer with an I/O context.
 // This should be called once at application startup (in root.go).
-func InitData(ioCtx io.Context) {
+func InitWriter(ioCtx io.Context) {
 	ioMu.Lock()
 	defer ioMu.Unlock()
 	globalIOContext = ioCtx
@@ -30,7 +30,7 @@ func getIOContext() io.Context {
 	defer ioMu.RUnlock()
 
 	if globalIOContext == nil {
-		panic("data.InitData() must be called before using data package functions")
+		panic("data.InitWriter() must be called before using data package functions")
 	}
 
 	return globalIOContext
