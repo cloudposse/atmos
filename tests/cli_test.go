@@ -841,6 +841,30 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 		}
 	}
 
+	// Filter out ATMOS_* environment variables that shouldn't be inherited from developer's shell.
+	// This ensures test reproducibility between local and CI environments.
+	// Only allow ATMOS_* vars explicitly set in tc.Env.
+	atmosVarsToFilter := []string{
+		"ATMOS_LOGS_LEVEL", // Can change log verbosity and affect snapshot output
+		"ATMOS_CHDIR",      // Can change working directory resolution
+		"ATMOS_LOGS_FILE",  // Can redirect logs to unexpected locations
+	}
+
+	for _, atmosVar := range atmosVarsToFilter {
+		// Skip if test explicitly sets this variable
+		if _, exists := tc.Env[atmosVar]; exists {
+			continue
+		}
+
+		// Remove from inherited environment
+		for i, env := range envVars {
+			if strings.HasPrefix(env, atmosVar+"=") {
+				envVars = append(envVars[:i], envVars[i+1:]...)
+				break
+			}
+		}
+	}
+
 	cmd.Env = envVars
 
 	var stdout, stderr bytes.Buffer
