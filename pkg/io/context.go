@@ -6,6 +6,7 @@ import (
 
 	"github.com/spf13/viper"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -21,7 +22,7 @@ func NewContext(opts ...ContextOption) (Context, error) {
 	// Build config from flags, env vars, and atmos.yaml
 	cfg, err := buildConfig()
 	if err != nil {
-		return nil, fmt.Errorf("failed to build I/O config: %w", err)
+		return nil, fmt.Errorf("%w: %w", errUtils.ErrBuildIOConfig, err)
 	}
 
 	// Create masker
@@ -58,12 +59,15 @@ func (c *context) Write(stream Stream, content string) error {
 	case UIStream:
 		writer = c.streams.RawError() // Use raw since we already masked
 	default:
-		return fmt.Errorf("unknown stream: %v", stream)
+		return fmt.Errorf("%w: %v", errUtils.ErrUnknownStream, stream)
 	}
 
 	// Write to stream
 	_, err := fmt.Fprint(writer, masked)
-	return err
+	if err != nil {
+		return fmt.Errorf("%w: %w", errUtils.ErrWriteToStream, err)
+	}
+	return nil
 }
 
 // Channel access - explicit and clear.

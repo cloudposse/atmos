@@ -11,6 +11,13 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
+const (
+	// ANSI escape sequences for terminal control.
+	escBEL = "\007" // Bell/Alert character
+	escOSC = "\033]" // Operating System Command
+	escST  = "\007"  // String Terminator (can also be "\033\\")
+)
+
 // IOWriter is the interface for writing to I/O streams.
 // This avoids circular dependency with pkg/io.
 // The stream parameter uses int to allow different packages to define their own stream types.
@@ -228,9 +235,18 @@ func (t *terminal) SetTitle(title string) {
 	}
 
 	// Use OSC sequence to set terminal title
-	// OSC 0 ; <title> BEL
+	// OSC 0 ; <title> ST
 	// Works in most modern terminals
-	fmt.Fprintf(os.Stderr, "\033]0;%s\007", title)
+	titleSeq := fmt.Sprintf("%s0;%s%s", escOSC, title, escST)
+
+	if t.io != nil {
+		// Write through I/O layer (no masking needed for terminal control sequences)
+		// Use raw writer to avoid masking escape sequences
+		_ = t.io.Write(int(IOStreamUI), titleSeq)
+	} else {
+		// Fallback for tests
+		fmt.Fprint(os.Stderr, titleSeq)
+	}
 }
 
 func (t *terminal) RestoreTitle() {
@@ -250,8 +266,13 @@ func (t *terminal) Alert() {
 		return
 	}
 
-	// Emit BEL character
-	fmt.Fprint(os.Stderr, "\007")
+	if t.io != nil {
+		// Write through I/O layer
+		_ = t.io.Write(int(IOStreamUI), escBEL)
+	} else {
+		// Fallback for tests
+		fmt.Fprint(os.Stderr, escBEL)
+	}
 }
 
 // streamToFd converts Stream to file descriptor.
