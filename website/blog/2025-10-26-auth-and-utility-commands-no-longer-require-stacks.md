@@ -40,11 +40,9 @@ This created an unnecessary barrier for teams who wanted to:
 - Browse component documentation without setting up stacks
 - Manage workflows independently of stack operations
 
-## Better Support for "Native" Terraform
+With these changes, Atmos now works with "native" Terraform, regardless of whether you use Atmos to manage stack configuration or not (but let's face it, [Nobody Runs Native Terraform](https://cloudposse.com/blog/nobody-runs-native-terraform/)).
 
-Everyone says they're using "native" Terraform, but as we point out in [Nobody Runs Native Terraform](https://cloudposse.com/blog/nobody-runs-native-terraform/), teams are actually using wrapper scripts, CI/CD templating, shared modules, and various abstractions around Terraform—they're just not using a dedicated framework. Atmos is designed to work alongside your existing workflow, not force you into a specific pattern.
-
-With this change, you can now use Atmos components incrementally:
+You can now use Atmos features incrementally:
 
 ### Just Authentication
 Use Atmos for cloud credential management without any stack configuration:
@@ -114,49 +112,9 @@ Commands that actually work with stacks still require stack configuration:
 
 This ensures that stack-dependent operations have the context they need while allowing utility commands to work independently.
 
-## CI/CD Benefits
-
-This change is particularly valuable for CI/CD pipelines where you might want to:
-
-**Authenticate without stack context:**
-```bash
-# In your CI pipeline
-atmos auth exec -- aws sts get-caller-identity
-atmos auth exec -- terraform init
-atmos auth exec -- terraform plan
-```
-
-**Manage vendor dependencies:**
-```bash
-# Check for outdated components
-atmos list vendor --format json
-```
-
-**Execute workflows:**
-```bash
-# Run deployment workflows
-atmos workflow deploy -f workflows/deploy.yaml
-```
-
-## Migration Guide
-
-No migration needed! This is a purely additive enhancement. If your commands were working before, they'll continue to work exactly the same way.
-
-If you were previously blocked by stack configuration requirements, you can now:
-
-1. Remove unnecessary stack configuration from your `atmos.yaml` if you're only using auth/vendor/docs commands
-2. Start using Atmos incrementally without committing to full stack-based configuration
-3. Use Atmos auth in environments where stacks don't make sense (like shared service accounts or CI runners)
-
-## Technical Details
-
-The fix involved changing these commands to skip stack manifest processing during initialization. Stack paths and configurations are still respected when present, but they're no longer required for commands that don't need them.
-
 ## Related Links
 
 - [PR #1717: Relax stack config requirement for commands that don't operate on stacks](https://github.com/cloudposse/atmos/pull/1717)
 - [Nobody Runs Native Terraform](https://cloudposse.com/blog/nobody-runs-native-terraform/)
 - [Authentication Documentation](/cli/commands/auth)
 - [Vendor Configuration](/cli/commands/vendor)
-
-This enhancement makes Atmos more flexible and easier to adopt incrementally, letting you choose which features add value to your workflow without requiring all-or-nothing adoption.
