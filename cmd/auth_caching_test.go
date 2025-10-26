@@ -27,11 +27,18 @@ func TestAuth_CredentialCaching(t *testing.T) {
 
 	// Use mock auth scenario with file keyring for test isolation.
 	// Memory keyring doesn't persist between RootCmd.Execute() calls.
-	tk.Chdir("../tests/fixtures/scenarios/atmos-auth-mock")
+	mockDir := "../tests/fixtures/scenarios/atmos-auth-mock"
+	absPath, err := filepath.Abs(mockDir)
+	require.NoError(t, err, "Failed to resolve absolute path")
+
+	tk.Chdir(mockDir)
 	tempDir := t.TempDir()
 	tk.Setenv("ATMOS_KEYRING_TYPE", "file")
 	tk.Setenv("ATMOS_KEYRING_FILE_PATH", tempDir+"/keyring.json")
 	tk.Setenv("ATMOS_KEYRING_PASSWORD", "test-password-for-file-keyring")
+	// Set ATMOS_CLI_CONFIG_PATH to use the mock auth scenario config.
+	tk.Setenv("ATMOS_CLI_CONFIG_PATH", absPath)
+	tk.Setenv("ATMOS_BASE_PATH", absPath)
 
 	// Step 1: Authenticate (this caches credentials).
 	t.Run("initial login caches credentials", func(t *testing.T) {
@@ -99,16 +106,23 @@ func TestAuth_NoBrowserPromptForCachedCredentials(t *testing.T) {
 	tk := NewTestKit(t)
 
 	// Setup mock auth scenario with file keyring.
-	tk.Chdir("../tests/fixtures/scenarios/atmos-auth-mock")
+	mockDir := "../tests/fixtures/scenarios/atmos-auth-mock"
+	absPath, err := filepath.Abs(mockDir)
+	require.NoError(t, err, "Failed to resolve absolute path")
+
+	tk.Chdir(mockDir)
 	tempDir := t.TempDir()
 	tk.Setenv("ATMOS_KEYRING_TYPE", "file")
 	tk.Setenv("ATMOS_KEYRING_FILE_PATH", tempDir+"/keyring.json")
 	tk.Setenv("ATMOS_KEYRING_PASSWORD", "test-password-for-file-keyring")
+	// Set ATMOS_CLI_CONFIG_PATH to use the mock auth scenario config.
+	tk.Setenv("ATMOS_CLI_CONFIG_PATH", absPath)
+	tk.Setenv("ATMOS_BASE_PATH", absPath)
 
 	// Step 1: Initial login to cache credentials.
 	t.Log("Step 1: Performing initial login to cache credentials")
 	RootCmd.SetArgs([]string{"auth", "login", "--identity", "mock-identity"})
-	err := RootCmd.Execute()
+	err = RootCmd.Execute()
 	require.NoError(t, err, "Initial login should succeed")
 
 	// Step 2: Simulate a typical workflow with multiple commands.
@@ -156,11 +170,18 @@ func TestAuth_NoBrowserPromptForCachedCredentials(t *testing.T) {
 func TestAuth_AutoAuthenticationWhenNoCachedCredentials(t *testing.T) {
 	tk := NewTestKit(t)
 
-	tk.Chdir("../tests/fixtures/scenarios/atmos-auth-mock")
+	mockDir := "../tests/fixtures/scenarios/atmos-auth-mock"
+	absPath, err := filepath.Abs(mockDir)
+	require.NoError(t, err, "Failed to resolve absolute path")
+
+	tk.Chdir(mockDir)
 	tempDir := t.TempDir()
 	tk.Setenv("ATMOS_KEYRING_TYPE", "file")
 	tk.Setenv("ATMOS_KEYRING_FILE_PATH", tempDir+"/keyring.json")
 	tk.Setenv("ATMOS_KEYRING_PASSWORD", "test-password-for-file-keyring")
+	// Set ATMOS_CLI_CONFIG_PATH to use the mock auth scenario config.
+	tk.Setenv("ATMOS_CLI_CONFIG_PATH", absPath)
+	tk.Setenv("ATMOS_BASE_PATH", absPath)
 
 	// Note: Mock provider auto-authenticates when no cached credentials exist.
 	// This test verifies that commands succeed even without explicit login.
@@ -197,11 +218,18 @@ func TestAuth_AutoAuthenticationWhenNoCachedCredentials(t *testing.T) {
 func TestAuth_MultipleIdentities(t *testing.T) {
 	tk := NewTestKit(t)
 
-	tk.Chdir("../tests/fixtures/scenarios/atmos-auth-mock")
+	mockDir := "../tests/fixtures/scenarios/atmos-auth-mock"
+	absPath, err := filepath.Abs(mockDir)
+	require.NoError(t, err, "Failed to resolve absolute path")
+
+	tk.Chdir(mockDir)
 	tempDir := t.TempDir()
 	tk.Setenv("ATMOS_KEYRING_TYPE", "file")
 	tk.Setenv("ATMOS_KEYRING_FILE_PATH", tempDir+"/keyring.json")
 	tk.Setenv("ATMOS_KEYRING_PASSWORD", "test-password-for-file-keyring")
+	// Set ATMOS_CLI_CONFIG_PATH to use the mock auth scenario config.
+	tk.Setenv("ATMOS_CLI_CONFIG_PATH", absPath)
+	tk.Setenv("ATMOS_BASE_PATH", absPath)
 
 	identities := []string{"mock-identity", "mock-identity-2"}
 
