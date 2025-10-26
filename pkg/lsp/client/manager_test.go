@@ -1,4 +1,4 @@
-package lsp
+package client
 
 import (
 	"context"
@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/cloudposse/atmos/pkg/lsp"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -244,10 +245,10 @@ func TestManager_GetAllDiagnostics(t *testing.T) {
 	// Create mock clients with diagnostics
 	client1 := &Client{
 		name: "yaml-ls",
-		diagnostics: map[string][]Diagnostic{
+		diagnostics: map[string][]lsp.Diagnostic{
 			"file:///test/file1.yaml": {
 				{
-					Severity: DiagnosticSeverityError,
+					Severity: lsp.DiagnosticSeverityError,
 					Message:  "Error in file1",
 				},
 			},
@@ -256,10 +257,10 @@ func TestManager_GetAllDiagnostics(t *testing.T) {
 
 	client2 := &Client{
 		name: "terraform-ls",
-		diagnostics: map[string][]Diagnostic{
+		diagnostics: map[string][]lsp.Diagnostic{
 			"file:///test/main.tf": {
 				{
-					Severity: DiagnosticSeverityWarning,
+					Severity: lsp.DiagnosticSeverityWarning,
 					Message:  "Warning in main.tf",
 				},
 			},
@@ -299,14 +300,14 @@ func TestManager_GetDiagnosticsForFile(t *testing.T) {
 	// Create mock clients with diagnostics
 	client1 := &Client{
 		name: "yaml-ls",
-		diagnostics: map[string][]Diagnostic{
+		diagnostics: map[string][]lsp.Diagnostic{
 			"file:///test/config.yaml": {
 				{
-					Severity: DiagnosticSeverityError,
+					Severity: lsp.DiagnosticSeverityError,
 					Message:  "Error 1",
 				},
 				{
-					Severity: DiagnosticSeverityWarning,
+					Severity: lsp.DiagnosticSeverityWarning,
 					Message:  "Warning 1",
 				},
 			},
@@ -315,10 +316,10 @@ func TestManager_GetDiagnosticsForFile(t *testing.T) {
 
 	client2 := &Client{
 		name: "terraform-ls",
-		diagnostics: map[string][]Diagnostic{
+		diagnostics: map[string][]lsp.Diagnostic{
 			"file:///test/config.yaml": {
 				{
-					Severity: DiagnosticSeverityError,
+					Severity: lsp.DiagnosticSeverityError,
 					Message:  "Error 2",
 				},
 			},

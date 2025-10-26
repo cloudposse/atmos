@@ -1,5 +1,10 @@
 package lsp
 
+import (
+	"bytes"
+	"strconv"
+)
+
 // Protocol types for LSP (Language Server Protocol) communication.
 // Based on the Language Server Protocol Specification.
 
@@ -126,4 +131,19 @@ type InitializeResult struct {
 // ServerCapabilities represents server capabilities.
 type ServerCapabilities struct {
 	TextDocumentSync interface{} `json:"textDocumentSync"` // Text document sync kind
+}
+
+// MarshalText implements encoding.TextMarshaler.
+func (d DiagnosticSeverity) MarshalText() ([]byte, error) {
+	return []byte(strconv.Itoa(int(d))), nil
+}
+
+// UnmarshalText implements encoding.TextUnmarshaler.
+func (d *DiagnosticSeverity) UnmarshalText(text []byte) error {
+	val, err := strconv.Atoi(string(bytes.TrimSpace(text)))
+	if err != nil {
+		return err
+	}
+	*d = DiagnosticSeverity(val)
+	return nil
 }

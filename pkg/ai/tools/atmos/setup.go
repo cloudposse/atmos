@@ -2,12 +2,12 @@ package atmos
 
 import (
 	"github.com/cloudposse/atmos/pkg/ai/tools"
-	"github.com/cloudposse/atmos/pkg/lsp"
+	"github.com/cloudposse/atmos/pkg/lsp/client"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 // RegisterTools registers all Atmos tools to the registry.
-func RegisterTools(registry *tools.Registry, atmosConfig *schema.AtmosConfiguration, lspManager lsp.ManagerInterface) error {
+func RegisterTools(registry *tools.Registry, atmosConfig *schema.AtmosConfiguration, lspManager client.ManagerInterface) error {
 	// Register component file tools.
 	if err := registry.Register(NewReadComponentFileTool(atmosConfig)); err != nil {
 		return err

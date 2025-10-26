@@ -1,10 +1,8 @@
-package lsp
+package client
 
 import (
 	"bufio"
-	"bytes"
 	"context"
-	"encoding"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -15,6 +13,7 @@ import (
 	"sync/atomic"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/lsp"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -24,7 +23,7 @@ type Client struct {
 	stdin          io.WriteCloser
 	stdout         io.ReadCloser
 	stderr         io.ReadCloser
-	diagnostics    map[string][]Diagnostic // URI -> diagnostics
+	diagnostics    map[string][]lsp.Diagnostic // URI -> diagnostics
 	diagnosticsMu  sync.RWMutex
 	messageID      atomic.Int64
 	pendingCalls   map[int64]chan *jsonRPCResponse
@@ -106,7 +105,7 @@ func NewClient(ctx context.Context, name string, config *schema.LSPServer, rootU
 		stdin:        stdin,
 		stdout:       stdout,
 		stderr:       stderr,
-		diagnostics:  make(map[string][]Diagnostic),
+		diagnostics:  make(map[string][]lsp.Diagnostic),
 		pendingCalls: make(map[int64]chan *jsonRPCResponse),
 		rootURI:      rootURI,
 		name:         name,
@@ -131,12 +130,12 @@ func NewClient(ctx context.Context, name string, config *schema.LSPServer, rootU
 
 // Initialize sends the initialize request to the LSP server.
 func (c *Client) Initialize() error {
-	params := InitializeParams{
+	params := lsp.InitializeParams{
 		ProcessID: -1, // Parent process ID (not applicable)
 		RootURI:   c.rootURI,
-		Capabilities: ClientCapabilities{
-			TextDocument: TextDocumentClientCapabilities{
-				PublishDiagnostics: PublishDiagnosticsCapabilities{
+		Capabilities: lsp.ClientCapabilities{
+			TextDocument: lsp.TextDocumentClientCapabilities{
+				PublishDiagnostics: lsp.PublishDiagnosticsCapabilities{
 					RelatedInformation: true,
 				},
 			},
@@ -144,7 +143,7 @@ func (c *Client) Initialize() error {
 		InitializationOptions: c.config.InitializationOptions,
 	}
 
-	var result InitializeResult
+	var result lsp.InitializeResult
 	if err := c.call("initialize", params, &result); err != nil {
 		return fmt.Errorf("initialize request failed: %w", err)
 	}
@@ -164,8 +163,8 @@ func (c *Client) OpenDocument(uri, languageID, text string) error {
 		return fmt.Errorf("%w: client not initialized", errUtils.ErrAINotInitialized)
 	}
 
-	params := DidOpenTextDocumentParams{
-		TextDocument: TextDocumentItem{
+	params := lsp.DidOpenTextDocumentParams{
+		TextDocument: lsp.TextDocumentItem{
 			URI:        uri,
 			LanguageID: languageID,
 			Version:    1,
@@ -182,8 +181,8 @@ func (c *Client) CloseDocument(uri string) error {
 		return fmt.Errorf("%w: client not initialized", errUtils.ErrAINotInitialized)
 	}
 
-	params := DidCloseTextDocumentParams{
-		TextDocument: TextDocumentIdentifier{
+	params := lsp.DidCloseTextDocumentParams{
+		TextDocument: lsp.TextDocumentIdentifier{
 			URI: uri,
 		},
 	}
@@ -192,30 +191,30 @@ func (c *Client) CloseDocument(uri string) error {
 }
 
 // GetDiagnostics returns diagnostics for the specified URI.
-func (c *Client) GetDiagnostics(uri string) []Diagnostic {
+func (c *Client) GetDiagnostics(uri string) []lsp.Diagnostic {
 	c.diagnosticsMu.RLock()
 	defer c.diagnosticsMu.RUnlock()
 
 	diagnostics := c.diagnostics[uri]
 	if diagnostics == nil {
-		return []Diagnostic{}
+		return []lsp.Diagnostic{}
 	}
 
 	// Return copy to avoid data races
-	result := make([]Diagnostic, len(diagnostics))
+	result := make([]lsp.Diagnostic, len(diagnostics))
 	copy(result, diagnostics)
 	return result
 }
 
 // GetAllDiagnostics returns all diagnostics from all documents.
-func (c *Client) GetAllDiagnostics() map[string][]Diagnostic {
+func (c *Client) GetAllDiagnostics() map[string][]lsp.Diagnostic {
 	c.diagnosticsMu.RLock()
 	defer c.diagnosticsMu.RUnlock()
 
 	// Return copy to avoid data races
-	result := make(map[string][]Diagnostic)
+	result := make(map[string][]lsp.Diagnostic)
 	for uri, diagnostics := range c.diagnostics {
-		copied := make([]Diagnostic, len(diagnostics))
+		copied := make([]lsp.Diagnostic, len(diagnostics))
 		copy(copied, diagnostics)
 		result[uri] = copied
 	}
@@ -432,7 +431,7 @@ func (c *Client) processMessage(data []byte) {
 func (c *Client) handleNotification(notification *jsonRPCNotification) {
 	switch notification.Method {
 	case "textDocument/publishDiagnostics":
-		var params PublishDiagnosticsParams
+		var params lsp.PublishDiagnosticsParams
 		if err := json.Unmarshal(notification.Params, &params); err != nil {
 			return
 		}
@@ -455,7 +454,7 @@ func (c *Client) handleResponse(response *jsonRPCResponse) {
 }
 
 // updateDiagnostics updates diagnostics for a document.
-func (c *Client) updateDiagnostics(uri string, diagnostics []Diagnostic) {
+func (c *Client) updateDiagnostics(uri string, diagnostics []lsp.Diagnostic) {
 	c.diagnosticsMu.Lock()
 	defer c.diagnosticsMu.Unlock()
 	c.diagnostics[uri] = diagnostics
@@ -476,25 +475,4 @@ func mustMarshalJSON(v interface{}) json.RawMessage {
 // extractConfig extracts LSP configuration from AtmosConfiguration.
 func extractConfig(atmosConfig *schema.AtmosConfiguration) *schema.LSPSettings {
 	return &atmosConfig.Settings.LSP
-}
-
-// Ensure we implement encoding.TextUnmarshaler for custom types if needed.
-var (
-	_ encoding.TextMarshaler   = (*DiagnosticSeverity)(nil)
-	_ encoding.TextUnmarshaler = (*DiagnosticSeverity)(nil)
-)
-
-// MarshalText implements encoding.TextMarshaler.
-func (d DiagnosticSeverity) MarshalText() ([]byte, error) {
-	return []byte(strconv.Itoa(int(d))), nil
-}
-
-// UnmarshalText implements encoding.TextUnmarshaler.
-func (d *DiagnosticSeverity) UnmarshalText(text []byte) error {
-	val, err := strconv.Atoi(string(bytes.TrimSpace(text)))
-	if err != nil {
-		return err
-	}
-	*d = DiagnosticSeverity(val)
-	return nil
 }

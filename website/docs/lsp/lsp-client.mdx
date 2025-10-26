@@ -1,61 +1,62 @@
 ---
-title: Language Server Protocol (LSP)
-sidebar_label: LSP Integration
+title: LSP Client for AI Validation
+sidebar_label: LSP Client
 sidebar_position: 1
-description: Integrate Language Server Protocol servers for real-time file validation in Atmos
+description: LSP client for Atmos AI to validate YAML, Terraform, and HCL files using external language servers
 ---
 
 import Terminal from '@site/src/components/Terminal'
 import File from '@site/src/components/File'
 
-# Language Server Protocol (LSP) Integration
+# LSP Client for AI Validation
 
-Atmos integrates with Language Server Protocol (LSP) servers to provide real-time validation of YAML, Terraform, and HCL files. This enables precise error detection with line numbers, warnings, and suggestions before you run commands.
+Atmos includes an **LSP client** that connects to external Language Server Protocol (LSP) servers for file validation. This enables **Atmos AI** to detect syntax errors, validate YAML structure, and check Terraform/HCL syntax with precise line numbers and warnings.
 
-## What is LSP?
+:::info LSP Client vs LSP Server
+**Atmos LSP Client** (this document): Connects TO external LSP servers (yaml-ls, terraform-ls) for **Atmos AI validation**. This is implemented in `pkg/lsp/client`.
 
-Language Server Protocol is an industry-standard protocol created by Microsoft that powers real-time validation and autocomplete in modern code editors like VS Code, Neovim, and others. By integrating LSP servers, Atmos can:
+**Atmos LSP Server** (future): Will allow **IDEs to connect TO Atmos** for Atmos-specific features like stack syntax validation, component autocomplete, and intelligent suggestions. This will be implemented in `pkg/lsp/server` and is not yet available.
+:::
 
-- **Detect syntax errors** before you run Terraform/Atmos commands
-- **Validate YAML structure** in stack configurations
-- **Check Terraform/HCL syntax** in component files
-- **Provide precise error locations** with line and column numbers
-- **Catch configuration issues** early in development
+## What is the LSP Client?
 
-LSP is **independent from AI** but can be used by Atmos AI when enabled.
+The Atmos LSP client is a **component of Atmos AI** that connects to external LSP servers to validate infrastructure files. When enabled, Atmos AI can:
 
-## How Atmos LSP Works
+- **Detect syntax errors** in YAML, Terraform, and HCL files
+- **Validate file structure** and schemas
+- **Report precise error locations** with line and column numbers
+- **Provide warnings and suggestions** from language servers
+- **Catch configuration issues** before running commands
 
-:::tip Understanding Atmos LSP
-**Atmos is an LSP client, not a server.** It manages and communicates with external LSP servers (yaml-language-server, terraform-ls, etc.) to provide validation for your infrastructure files.
+The LSP client is **designed for Atmos AI validation**, not for IDE integration (that requires an LSP server, which will be a separate future feature).
+
+## How the LSP Client Works
+
+:::tip Understanding Atmos LSP Client
+**Atmos is an LSP client, not a server.** It manages and communicates with external LSP servers (yaml-language-server, terraform-ls, etc.) to validate files when requested by Atmos AI.
 :::
 
 **Architecture:**
 
 ```
 ┌─────────────────────┐
-│    Your Editor      │
-│  (VS Code, Vim,     │
-│   Emacs, etc.)      │
-└──────────┬──────────┘
-           │ (optional - for editing)
-           ↓
-┌─────────────────────┐
-│   Atmos Commands    │
-│  (ai chat, etc.)    │
+│   Atmos AI Chat     │
+│  (ai chat, mcp)     │
 └──────────┬──────────┘
            │
+           │ validate_file_lsp tool
            ↓
 ┌─────────────────────┐
 │   Atmos LSP Client  │
-│   (manages servers) │
+│  (pkg/lsp/client)   │
 └──────────┬──────────┘
            │
      ┌─────┴─────┬──────────┐
      ↓           ↓          ↓
 ┌─────────┐ ┌─────────┐ ┌──────────┐
 │ YAML LS │ │  TF LS  │ │ JSON LS  │
-│(process)│ │(process)│ │(process) │
+│(external│ │(external│ │(external │
+│ process)│ │ process)│ │ process) │
 └─────────┘ └─────────┘ └──────────┘
 ```
 
@@ -120,31 +121,30 @@ settings:
 ```
 </File>
 
-### 3. Use LSP Validation
+### 3. Use LSP Validation with Atmos AI
 
-LSP servers start automatically when needed:
+Once configured, Atmos AI can use LSP for file validation:
 
-**With Atmos AI:**
 <Terminal title="atmos ai chat">
 ```bash
 atmos ai chat
-# Ask: "Validate stacks/prod/vpc.yaml for errors"
-# AI uses LSP to check for syntax errors
+
+# Ask AI to validate files
+You: "Validate stacks/prod/vpc.yaml for errors"
+
+# AI uses the validate_file_lsp tool
+# LSP client connects to yaml-language-server
+# Returns syntax errors with line numbers
 ```
 </Terminal>
 
-**Standalone (when LSP is enabled):**
-```bash
-# LSP validates files when commands run
-atmos terraform plan vpc -s prod-use1
-# Errors are caught before plan execution
-```
-
 :::tip First-Time Setup
 When you first enable LSP, Atmos will:
-1. Start LSP servers on-demand (1-2 second startup)
+1. Start LSP servers on-demand when AI requests validation (1-2 second startup)
 2. Cache validation results for fast subsequent checks
-3. Automatically clean up processes on exit
+3. Automatically clean up server processes on exit
+
+The LSP client is used by Atmos AI via the `validate_file_lsp` tool.
 :::
 
 ## Basic Configuration
@@ -316,12 +316,21 @@ The Terraform Language Server provides validation and intelligence for Terraform
 | **terraform-ls** | TF, TFVARS, HCL | `brew install terraform-ls` | Terraform/HCL validation |
 | **vscode-json-languageserver** | JSON | `npm install -g vscode-json-languageserver` | JSON validation and schemas |
 
-## Using LSP in Your Editor
+## Optional: Using LSP in Your Editor
 
-While Atmos manages LSP servers for validation, you can also configure your code editor to use the same LSP servers for real-time editing features like autocomplete, hover documentation, and inline error checking.
+:::warning Separate from Atmos LSP Client
+This section is about configuring **your code editor** to use external LSP servers (yaml-ls, terraform-ls) for editing Atmos files. This is **separate and independent** from the Atmos LSP client described above.
 
-:::tip Editor Integration
-These are **optional** configurations for your code editor. Atmos LSP works independently—these editor setups just provide a better editing experience for your Atmos files.
+- **Atmos LSP Client**: Used by Atmos AI for validation (`pkg/lsp/client`)
+- **Editor LSP**: Used by your editor for autocomplete, hover docs, inline errors (optional)
+
+Both can use the same external LSP servers, but they serve different purposes.
+:::
+
+You can optionally configure your code editor to use the same LSP servers that Atmos uses. This provides real-time editing features like autocomplete, hover documentation, and inline error checking while you edit Atmos files.
+
+:::tip Completely Optional
+These editor configurations are **entirely optional**. The Atmos LSP client works independently for AI validation regardless of your editor setup. This section just improves your editing experience.
 :::
 
 ### VS Code
@@ -649,11 +658,11 @@ Zed has built-in LSP support. Configure in `~/.config/zed/settings.json`:
 All editors work great with Atmos files once configured!
 :::
 
-## Using LSP with Atmos AI
+## AI Integration Configuration
 
-When LSP is configured, Atmos AI can use it for file validation via the `validate_file_lsp` tool.
+The LSP client is automatically available to Atmos AI when enabled. AI can use it for file validation via the `validate_file_lsp` tool.
 
-### Configuration
+### Complete Configuration Example
 
 <File title="atmos.yaml">
     ```yaml
@@ -943,6 +952,12 @@ ATMOS_LOGS_LEVEL=Debug atmos <command>
 
     ## Next Steps
 
-    - Start with the [Quick Start](#quick-start) if you're new to LSP
-    - Configure your [editor](#using-lsp-in-your-editor) for the best editing experience
-    - Enable [AI integration](#using-lsp-with-atmos-ai) for intelligent file validation
+    - Start with the [Quick Start](#quick-start) to enable the LSP client for Atmos AI
+    - Configure your [editor](#optional-using-lsp-in-your-editor) for better editing experience (optional)
+    - Enable [AI integration](#ai-integration-configuration) to use LSP validation with Atmos AI
+
+    ### Looking for IDE Integration?
+
+    If you want **your IDE to connect to Atmos** for Atmos-specific features like stack validation and component autocomplete, you're looking for an **Atmos LSP Server** (not the LSP client documented here).
+
+    **Atmos LSP Server** will be implemented in the future in `pkg/lsp/server/` and will allow IDEs like VS Code, Neovim, and others to get intelligent Atmos-specific assistance. This is a separate feature from the LSP client.

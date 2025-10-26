@@ -11,6 +11,7 @@ import (
 
 	"github.com/cloudposse/atmos/pkg/ai/tools"
 	"github.com/cloudposse/atmos/pkg/lsp"
+	"github.com/cloudposse/atmos/pkg/lsp/client"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -76,7 +77,7 @@ func TestValidateFileLSPTool_Execute_MissingFilePath(t *testing.T) {
 		Servers: map[string]*schema.LSPServer{},
 	}
 
-	lspManager, err := lsp.NewManager(ctx, lspConfig, "/test")
+	lspManager, err := client.NewManager(ctx, lspConfig, "/test")
 	require.NoError(t, err)
 	defer lspManager.Close()
 
@@ -126,7 +127,7 @@ func TestValidateFileLSPTool_Execute_FileNotFound(t *testing.T) {
 		Servers: map[string]*schema.LSPServer{},
 	}
 
-	lspManager, err := lsp.NewManager(ctx, lspConfig, atmosConfig.BasePath)
+	lspManager, err := client.NewManager(ctx, lspConfig, atmosConfig.BasePath)
 	require.NoError(t, err)
 	defer lspManager.Close()
 
@@ -162,7 +163,7 @@ func TestValidateFileLSPTool_Execute_Success_NoLSPServer(t *testing.T) {
 		Servers: map[string]*schema.LSPServer{},
 	}
 
-	lspManager, err := lsp.NewManager(ctx, lspConfig, tempDir)
+	lspManager, err := client.NewManager(ctx, lspConfig, tempDir)
 	require.NoError(t, err)
 	defer lspManager.Close()
 
@@ -198,7 +199,7 @@ func TestValidateFileLSPTool_Execute_AbsolutePath(t *testing.T) {
 		Servers: map[string]*schema.LSPServer{},
 	}
 
-	lspManager, err := lsp.NewManager(ctx, lspConfig, tempDir)
+	lspManager, err := client.NewManager(ctx, lspConfig, tempDir)
 	require.NoError(t, err)
 	defer lspManager.Close()
 
@@ -236,7 +237,7 @@ func TestValidateFileLSPTool_Execute_RelativePath(t *testing.T) {
 		Servers: map[string]*schema.LSPServer{},
 	}
 
-	lspManager, err := lsp.NewManager(ctx, lspConfig, tempDir)
+	lspManager, err := client.NewManager(ctx, lspConfig, tempDir)
 	require.NoError(t, err)
 	defer lspManager.Close()
 
@@ -255,18 +256,18 @@ func TestValidateFileLSPTool_Execute_RelativePath(t *testing.T) {
 	assert.Contains(t, result.Error.Error(), "no LSP server found")
 }
 
-// mockLSPManager implements lsp.ManagerInterface for testing.
+// mockLSPManager implements client.ManagerInterface for testing.
 type mockLSPManager struct {
 	enabled      bool
 	diagnostics  []lsp.Diagnostic
 	analyzeError error
 }
 
-func (m *mockLSPManager) GetClient(name string) (*lsp.Client, bool) {
+func (m *mockLSPManager) GetClient(name string) (*client.Client, bool) {
 	return nil, false
 }
 
-func (m *mockLSPManager) GetClientForFile(filePath string) (*lsp.Client, bool) {
+func (m *mockLSPManager) GetClientForFile(filePath string) (*client.Client, bool) {
 	return nil, m.enabled
 }
 

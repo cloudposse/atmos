@@ -1,9 +1,11 @@
-package lsp
+package client
 
 import (
 	"fmt"
 	"sort"
 	"strings"
+
+	"github.com/cloudposse/atmos/pkg/lsp"
 )
 
 // DiagnosticFormatter formats LSP diagnostics for display.
@@ -21,7 +23,7 @@ func NewDiagnosticFormatter() *DiagnosticFormatter {
 }
 
 // FormatDiagnostics formats a list of diagnostics into a human-readable string.
-func (f *DiagnosticFormatter) FormatDiagnostics(uri string, diagnostics []Diagnostic) string {
+func (f *DiagnosticFormatter) FormatDiagnostics(uri string, diagnostics []lsp.Diagnostic) string {
 	if len(diagnostics) == 0 {
 		return ""
 	}
@@ -29,10 +31,10 @@ func (f *DiagnosticFormatter) FormatDiagnostics(uri string, diagnostics []Diagno
 	var sb strings.Builder
 
 	// Group diagnostics by severity
-	errors := f.filterBySeverity(diagnostics, DiagnosticSeverityError)
-	warnings := f.filterBySeverity(diagnostics, DiagnosticSeverityWarning)
-	infos := f.filterBySeverity(diagnostics, DiagnosticSeverityInformation)
-	hints := f.filterBySeverity(diagnostics, DiagnosticSeverityHint)
+	errors := f.filterBySeverity(diagnostics, lsp.DiagnosticSeverityError)
+	warnings := f.filterBySeverity(diagnostics, lsp.DiagnosticSeverityWarning)
+	infos := f.filterBySeverity(diagnostics, lsp.DiagnosticSeverityInformation)
+	hints := f.filterBySeverity(diagnostics, lsp.DiagnosticSeverityHint)
 
 	// Summary
 	sb.WriteString(fmt.Sprintf("File: %s\n", f.formatURI(uri)))
@@ -79,7 +81,7 @@ func (f *DiagnosticFormatter) FormatDiagnostics(uri string, diagnostics []Diagno
 }
 
 // FormatDiagnostic formats a single diagnostic.
-func (f *DiagnosticFormatter) formatDiagnostic(index int, diag Diagnostic) string {
+func (f *DiagnosticFormatter) formatDiagnostic(index int, diag lsp.Diagnostic) string {
 	var sb strings.Builder
 
 	// Number and location
@@ -114,7 +116,7 @@ func (f *DiagnosticFormatter) formatDiagnostic(index int, diag Diagnostic) strin
 }
 
 // FormatAllDiagnostics formats diagnostics from multiple files.
-func (f *DiagnosticFormatter) FormatAllDiagnostics(diagnosticsByURI map[string][]Diagnostic) string {
+func (f *DiagnosticFormatter) FormatAllDiagnostics(diagnosticsByURI map[string][]lsp.Diagnostic) string {
 	if len(diagnosticsByURI) == 0 {
 		return "No diagnostics found."
 	}
@@ -135,10 +137,10 @@ func (f *DiagnosticFormatter) FormatAllDiagnostics(diagnosticsByURI map[string][
 	totalHints := 0
 
 	for _, diagnostics := range diagnosticsByURI {
-		totalErrors += len(f.filterBySeverity(diagnostics, DiagnosticSeverityError))
-		totalWarnings += len(f.filterBySeverity(diagnostics, DiagnosticSeverityWarning))
-		totalInfos += len(f.filterBySeverity(diagnostics, DiagnosticSeverityInformation))
-		totalHints += len(f.filterBySeverity(diagnostics, DiagnosticSeverityHint))
+		totalErrors += len(f.filterBySeverity(diagnostics, lsp.DiagnosticSeverityError))
+		totalWarnings += len(f.filterBySeverity(diagnostics, lsp.DiagnosticSeverityWarning))
+		totalInfos += len(f.filterBySeverity(diagnostics, lsp.DiagnosticSeverityInformation))
+		totalHints += len(f.filterBySeverity(diagnostics, lsp.DiagnosticSeverityHint))
 	}
 
 	sb.WriteString(fmt.Sprintf("DIAGNOSTICS SUMMARY:\n"))
@@ -159,7 +161,7 @@ func (f *DiagnosticFormatter) FormatAllDiagnostics(diagnosticsByURI map[string][
 }
 
 // FormatCompact formats diagnostics in a compact, one-line-per-issue format.
-func (f *DiagnosticFormatter) FormatCompact(uri string, diagnostics []Diagnostic) string {
+func (f *DiagnosticFormatter) FormatCompact(uri string, diagnostics []lsp.Diagnostic) string {
 	var sb strings.Builder
 
 	for _, diag := range diagnostics {
@@ -181,15 +183,15 @@ func (f *DiagnosticFormatter) FormatCompact(uri string, diagnostics []Diagnostic
 }
 
 // FormatForAI formats diagnostics in a format optimized for AI consumption.
-func (f *DiagnosticFormatter) FormatForAI(uri string, diagnostics []Diagnostic) string {
+func (f *DiagnosticFormatter) FormatForAI(uri string, diagnostics []lsp.Diagnostic) string {
 	if len(diagnostics) == 0 {
 		return fmt.Sprintf("No issues found in %s", f.formatURI(uri))
 	}
 
 	var sb strings.Builder
 
-	errors := f.filterBySeverity(diagnostics, DiagnosticSeverityError)
-	warnings := f.filterBySeverity(diagnostics, DiagnosticSeverityWarning)
+	errors := f.filterBySeverity(diagnostics, lsp.DiagnosticSeverityError)
+	warnings := f.filterBySeverity(diagnostics, lsp.DiagnosticSeverityWarning)
 
 	sb.WriteString(fmt.Sprintf("Found %d issue(s) in %s:\n\n",
 		len(diagnostics), f.formatURI(uri)))
@@ -216,17 +218,17 @@ func (f *DiagnosticFormatter) FormatForAI(uri string, diagnostics []Diagnostic) 
 }
 
 // GetDiagnosticSummary returns a summary of diagnostics.
-func (f *DiagnosticFormatter) GetDiagnosticSummary(diagnosticsByURI map[string][]Diagnostic) DiagnosticSummary {
+func (f *DiagnosticFormatter) GetDiagnosticSummary(diagnosticsByURI map[string][]lsp.Diagnostic) DiagnosticSummary {
 	summary := DiagnosticSummary{
 		Files: make(map[string]FileDiagnosticSummary),
 	}
 
 	for uri, diagnostics := range diagnosticsByURI {
 		fileSummary := FileDiagnosticSummary{
-			Errors:   len(f.filterBySeverity(diagnostics, DiagnosticSeverityError)),
-			Warnings: len(f.filterBySeverity(diagnostics, DiagnosticSeverityWarning)),
-			Infos:    len(f.filterBySeverity(diagnostics, DiagnosticSeverityInformation)),
-			Hints:    len(f.filterBySeverity(diagnostics, DiagnosticSeverityHint)),
+			Errors:   len(f.filterBySeverity(diagnostics, lsp.DiagnosticSeverityError)),
+			Warnings: len(f.filterBySeverity(diagnostics, lsp.DiagnosticSeverityWarning)),
+			Infos:    len(f.filterBySeverity(diagnostics, lsp.DiagnosticSeverityInformation)),
+			Hints:    len(f.filterBySeverity(diagnostics, lsp.DiagnosticSeverityHint)),
 		}
 		summary.Files[uri] = fileSummary
 		summary.TotalErrors += fileSummary.Errors
@@ -259,8 +261,8 @@ type FileDiagnosticSummary struct {
 }
 
 // filterBySeverity filters diagnostics by severity level.
-func (f *DiagnosticFormatter) filterBySeverity(diagnostics []Diagnostic, severity DiagnosticSeverity) []Diagnostic {
-	var filtered []Diagnostic
+func (f *DiagnosticFormatter) filterBySeverity(diagnostics []lsp.Diagnostic, severity lsp.DiagnosticSeverity) []lsp.Diagnostic {
+	var filtered []lsp.Diagnostic
 	for _, diag := range diagnostics {
 		if diag.Severity == severity {
 			filtered = append(filtered, diag)
@@ -275,7 +277,7 @@ func (f *DiagnosticFormatter) formatURI(uri string) string {
 }
 
 // formatLocation formats a location for display.
-func (f *DiagnosticFormatter) formatLocation(loc Location) string {
+func (f *DiagnosticFormatter) formatLocation(loc lsp.Location) string {
 	return fmt.Sprintf("%s:%d:%d",
 		f.formatURI(loc.URI),
 		loc.Range.Start.Line+1,
@@ -283,15 +285,15 @@ func (f *DiagnosticFormatter) formatLocation(loc Location) string {
 }
 
 // severityString returns a string representation of a severity level.
-func (f *DiagnosticFormatter) severityString(severity DiagnosticSeverity) string {
+func (f *DiagnosticFormatter) severityString(severity lsp.DiagnosticSeverity) string {
 	switch severity {
-	case DiagnosticSeverityError:
+	case lsp.DiagnosticSeverityError:
 		return "error"
-	case DiagnosticSeverityWarning:
+	case lsp.DiagnosticSeverityWarning:
 		return "warning"
-	case DiagnosticSeverityInformation:
+	case lsp.DiagnosticSeverityInformation:
 		return "info"
-	case DiagnosticSeverityHint:
+	case lsp.DiagnosticSeverityHint:
 		return "hint"
 	default:
 		return "unknown"
@@ -299,9 +301,9 @@ func (f *DiagnosticFormatter) severityString(severity DiagnosticSeverity) string
 }
 
 // HasErrors returns true if there are any error-level diagnostics.
-func HasErrors(diagnostics []Diagnostic) bool {
+func HasErrors(diagnostics []lsp.Diagnostic) bool {
 	for _, diag := range diagnostics {
-		if diag.Severity == DiagnosticSeverityError {
+		if diag.Severity == lsp.DiagnosticSeverityError {
 			return true
 		}
 	}
@@ -309,9 +311,9 @@ func HasErrors(diagnostics []Diagnostic) bool {
 }
 
 // HasWarnings returns true if there are any warning-level diagnostics.
-func HasWarnings(diagnostics []Diagnostic) bool {
+func HasWarnings(diagnostics []lsp.Diagnostic) bool {
 	for _, diag := range diagnostics {
-		if diag.Severity == DiagnosticSeverityWarning {
+		if diag.Severity == lsp.DiagnosticSeverityWarning {
 			return true
 		}
 	}
@@ -319,8 +321,8 @@ func HasWarnings(diagnostics []Diagnostic) bool {
 }
 
 // CountByeSeverity counts diagnostics by severity.
-func CountBySeverity(diagnostics []Diagnostic) map[DiagnosticSeverity]int {
-	counts := make(map[DiagnosticSeverity]int)
+func CountBySeverity(diagnostics []lsp.Diagnostic) map[lsp.DiagnosticSeverity]int {
+	counts := make(map[lsp.DiagnosticSeverity]int)
 	for _, diag := range diagnostics {
 		counts[diag.Severity]++
 	}

@@ -1,10 +1,12 @@
-package lsp
+package client
 
 import (
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+
+	"github.com/cloudposse/atmos/pkg/lsp"
 )
 
 func TestDiagnosticFormatter_FormatForAI(t *testing.T) {
@@ -13,13 +15,13 @@ func TestDiagnosticFormatter_FormatForAI(t *testing.T) {
 	tests := []struct {
 		name           string
 		uri            string
-		diagnostics    []Diagnostic
+		diagnostics    []lsp.Diagnostic
 		expectContains []string
 	}{
 		{
 			name:        "No diagnostics",
 			uri:         "file:///test/file.yaml",
-			diagnostics: []Diagnostic{},
+			diagnostics: []lsp.Diagnostic{},
 			expectContains: []string{
 				"No issues found",
 				"/test/file.yaml",
@@ -28,13 +30,13 @@ func TestDiagnosticFormatter_FormatForAI(t *testing.T) {
 		{
 			name: "Single error",
 			uri:  "file:///test/stack.yaml",
-			diagnostics: []Diagnostic{
+			diagnostics: []lsp.Diagnostic{
 				{
-					Range: Range{
-						Start: Position{Line: 10, Character: 5},
-						End:   Position{Line: 10, Character: 15},
+					Range: lsp.Range{
+						Start: lsp.Position{Line: 10, Character: 5},
+						End:   lsp.Position{Line: 10, Character: 15},
 					},
-					Severity: DiagnosticSeverityError,
+					Severity: lsp.DiagnosticSeverityError,
 					Message:  "Unknown property 'vpc_cidr'",
 					Source:   "yaml-language-server",
 				},
@@ -49,20 +51,20 @@ func TestDiagnosticFormatter_FormatForAI(t *testing.T) {
 		{
 			name: "Multiple errors and warnings",
 			uri:  "file:///test/main.tf",
-			diagnostics: []Diagnostic{
+			diagnostics: []lsp.Diagnostic{
 				{
-					Range:    Range{Start: Position{Line: 5, Character: 0}},
-					Severity: DiagnosticSeverityError,
+					Range:    lsp.Range{Start: lsp.Position{Line: 5, Character: 0}},
+					Severity: lsp.DiagnosticSeverityError,
 					Message:  "Missing required argument",
 				},
 				{
-					Range:    Range{Start: Position{Line: 10, Character: 2}},
-					Severity: DiagnosticSeverityError,
+					Range:    lsp.Range{Start: lsp.Position{Line: 10, Character: 2}},
+					Severity: lsp.DiagnosticSeverityError,
 					Message:  "Invalid CIDR format",
 				},
 				{
-					Range:    Range{Start: Position{Line: 15, Character: 0}},
-					Severity: DiagnosticSeverityWarning,
+					Range:    lsp.Range{Start: lsp.Position{Line: 15, Character: 0}},
+					Severity: lsp.DiagnosticSeverityWarning,
 					Message:  "Deprecated argument",
 				},
 			},
@@ -92,22 +94,22 @@ func TestDiagnosticFormatter_FormatForAI(t *testing.T) {
 func TestDiagnosticFormatter_FormatDiagnostics(t *testing.T) {
 	formatter := NewDiagnosticFormatter()
 
-	diagnostics := []Diagnostic{
+	diagnostics := []lsp.Diagnostic{
 		{
-			Range: Range{
-				Start: Position{Line: 10, Character: 5},
-				End:   Position{Line: 10, Character: 15},
+			Range: lsp.Range{
+				Start: lsp.Position{Line: 10, Character: 5},
+				End:   lsp.Position{Line: 10, Character: 15},
 			},
-			Severity: DiagnosticSeverityError,
+			Severity: lsp.DiagnosticSeverityError,
 			Message:  "Syntax error",
 			Source:   "yaml-ls",
 			Code:     "E001",
 		},
 		{
-			Range: Range{
-				Start: Position{Line: 20, Character: 0},
+			Range: lsp.Range{
+				Start: lsp.Position{Line: 20, Character: 0},
 			},
-			Severity: DiagnosticSeverityWarning,
+			Severity: lsp.DiagnosticSeverityWarning,
 			Message:  "Unused variable",
 			Source:   "terraform-ls",
 		},
@@ -137,16 +139,16 @@ func TestDiagnosticFormatter_FormatDiagnostics(t *testing.T) {
 func TestDiagnosticFormatter_FormatCompact(t *testing.T) {
 	formatter := NewDiagnosticFormatter()
 
-	diagnostics := []Diagnostic{
+	diagnostics := []lsp.Diagnostic{
 		{
-			Range:    Range{Start: Position{Line: 5, Character: 10}},
-			Severity: DiagnosticSeverityError,
+			Range:    lsp.Range{Start: lsp.Position{Line: 5, Character: 10}},
+			Severity: lsp.DiagnosticSeverityError,
 			Message:  "Parse error",
 			Source:   "yaml-ls",
 		},
 		{
-			Range:    Range{Start: Position{Line: 15, Character: 0}},
-			Severity: DiagnosticSeverityWarning,
+			Range:    lsp.Range{Start: lsp.Position{Line: 15, Character: 0}},
+			Severity: lsp.DiagnosticSeverityWarning,
 			Message:  "Deprecated syntax",
 		},
 	}
@@ -166,16 +168,16 @@ func TestDiagnosticFormatter_FormatCompact(t *testing.T) {
 func TestDiagnosticFormatter_GetDiagnosticSummary(t *testing.T) {
 	formatter := NewDiagnosticFormatter()
 
-	diagnosticsByURI := map[string][]Diagnostic{
+	diagnosticsByURI := map[string][]lsp.Diagnostic{
 		"file:///test/file1.yaml": {
-			{Severity: DiagnosticSeverityError, Message: "Error 1"},
-			{Severity: DiagnosticSeverityError, Message: "Error 2"},
-			{Severity: DiagnosticSeverityWarning, Message: "Warning 1"},
+			{Severity: lsp.DiagnosticSeverityError, Message: "Error 1"},
+			{Severity: lsp.DiagnosticSeverityError, Message: "Error 2"},
+			{Severity: lsp.DiagnosticSeverityWarning, Message: "Warning 1"},
 		},
 		"file:///test/file2.tf": {
-			{Severity: DiagnosticSeverityWarning, Message: "Warning 2"},
-			{Severity: DiagnosticSeverityInformation, Message: "Info 1"},
-			{Severity: DiagnosticSeverityHint, Message: "Hint 1"},
+			{Severity: lsp.DiagnosticSeverityWarning, Message: "Warning 2"},
+			{Severity: lsp.DiagnosticSeverityInformation, Message: "Info 1"},
+			{Severity: lsp.DiagnosticSeverityHint, Message: "Hint 1"},
 		},
 	}
 
@@ -197,18 +199,18 @@ func TestDiagnosticFormatter_GetDiagnosticSummary(t *testing.T) {
 func TestDiagnosticFormatter_FormatAllDiagnostics(t *testing.T) {
 	formatter := NewDiagnosticFormatter()
 
-	diagnosticsByURI := map[string][]Diagnostic{
+	diagnosticsByURI := map[string][]lsp.Diagnostic{
 		"file:///test/file1.yaml": {
 			{
-				Range:    Range{Start: Position{Line: 0, Character: 0}},
-				Severity: DiagnosticSeverityError,
+				Range:    lsp.Range{Start: lsp.Position{Line: 0, Character: 0}},
+				Severity: lsp.DiagnosticSeverityError,
 				Message:  "Error in file1",
 			},
 		},
 		"file:///test/file2.yaml": {
 			{
-				Range:    Range{Start: Position{Line: 5, Character: 0}},
-				Severity: DiagnosticSeverityWarning,
+				Range:    lsp.Range{Start: lsp.Position{Line: 5, Character: 0}},
+				Severity: lsp.DiagnosticSeverityWarning,
 				Message:  "Warning in file2",
 			},
 		},
@@ -228,150 +230,94 @@ func TestDiagnosticFormatter_FormatAllDiagnostics(t *testing.T) {
 func TestDiagnosticFormatter_FilterBySeverity(t *testing.T) {
 	formatter := NewDiagnosticFormatter()
 
-	diagnostics := []Diagnostic{
-		{Severity: DiagnosticSeverityError, Message: "Error 1"},
-		{Severity: DiagnosticSeverityError, Message: "Error 2"},
-		{Severity: DiagnosticSeverityWarning, Message: "Warning 1"},
-		{Severity: DiagnosticSeverityInformation, Message: "Info 1"},
-		{Severity: DiagnosticSeverityHint, Message: "Hint 1"},
+	diagnostics := []lsp.Diagnostic{
+		{Severity: lsp.DiagnosticSeverityError, Message: "Error 1"},
+		{Severity: lsp.DiagnosticSeverityError, Message: "Error 2"},
+		{Severity: lsp.DiagnosticSeverityWarning, Message: "Warning 1"},
+		{Severity: lsp.DiagnosticSeverityInformation, Message: "Info 1"},
+		{Severity: lsp.DiagnosticSeverityHint, Message: "Hint 1"},
 	}
 
-	errors := formatter.filterBySeverity(diagnostics, DiagnosticSeverityError)
+	errors := formatter.filterBySeverity(diagnostics, lsp.DiagnosticSeverityError)
 	assert.Len(t, errors, 2)
 	assert.Equal(t, "Error 1", errors[0].Message)
 	assert.Equal(t, "Error 2", errors[1].Message)
 
-	warnings := formatter.filterBySeverity(diagnostics, DiagnosticSeverityWarning)
+	warnings := formatter.filterBySeverity(diagnostics, lsp.DiagnosticSeverityWarning)
 	assert.Len(t, warnings, 1)
 	assert.Equal(t, "Warning 1", warnings[0].Message)
 
-	infos := formatter.filterBySeverity(diagnostics, DiagnosticSeverityInformation)
+	infos := formatter.filterBySeverity(diagnostics, lsp.DiagnosticSeverityInformation)
 	assert.Len(t, infos, 1)
 
-	hints := formatter.filterBySeverity(diagnostics, DiagnosticSeverityHint)
+	hints := formatter.filterBySeverity(diagnostics, lsp.DiagnosticSeverityHint)
 	assert.Len(t, hints, 1)
 }
 
 func TestHasErrors(t *testing.T) {
-	tests := []struct {
-		name        string
-		diagnostics []Diagnostic
-		expected    bool
-	}{
-		{
-			name:        "No diagnostics",
-			diagnostics: []Diagnostic{},
-			expected:    false,
-		},
-		{
-			name: "Has errors",
-			diagnostics: []Diagnostic{
-				{Severity: DiagnosticSeverityError, Message: "Error"},
-			},
-			expected: true,
-		},
-		{
-			name: "Only warnings",
-			diagnostics: []Diagnostic{
-				{Severity: DiagnosticSeverityWarning, Message: "Warning"},
-			},
-			expected: false,
-		},
-		{
-			name: "Mixed with errors",
-			diagnostics: []Diagnostic{
-				{Severity: DiagnosticSeverityWarning, Message: "Warning"},
-				{Severity: DiagnosticSeverityError, Message: "Error"},
-			},
-			expected: true,
-		},
+	noDiagnostics := []lsp.Diagnostic{}
+	onlyErrors := []lsp.Diagnostic{{Severity: lsp.DiagnosticSeverityError, Message: "Error"}}
+	onlyWarnings := []lsp.Diagnostic{{Severity: lsp.DiagnosticSeverityWarning, Message: "Warning"}}
+	mixed := []lsp.Diagnostic{
+		{Severity: lsp.DiagnosticSeverityWarning, Message: "Warning"},
+		{Severity: lsp.DiagnosticSeverityError, Message: "Error"},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := HasErrors(tt.diagnostics)
-			assert.Equal(t, tt.expected, result)
-		})
-	}
+	assert.False(t, HasErrors(noDiagnostics), "No diagnostics should return false")
+	assert.True(t, HasErrors(onlyErrors), "Only errors should return true")
+	assert.False(t, HasErrors(onlyWarnings), "Only warnings should return false")
+	assert.True(t, HasErrors(mixed), "Mixed with errors should return true")
 }
 
 func TestHasWarnings(t *testing.T) {
-	tests := []struct {
-		name        string
-		diagnostics []Diagnostic
-		expected    bool
-	}{
-		{
-			name:        "No diagnostics",
-			diagnostics: []Diagnostic{},
-			expected:    false,
-		},
-		{
-			name: "Has warnings",
-			diagnostics: []Diagnostic{
-				{Severity: DiagnosticSeverityWarning, Message: "Warning"},
-			},
-			expected: true,
-		},
-		{
-			name: "Only errors",
-			diagnostics: []Diagnostic{
-				{Severity: DiagnosticSeverityError, Message: "Error"},
-			},
-			expected: false,
-		},
-		{
-			name: "Mixed with warnings",
-			diagnostics: []Diagnostic{
-				{Severity: DiagnosticSeverityError, Message: "Error"},
-				{Severity: DiagnosticSeverityWarning, Message: "Warning"},
-			},
-			expected: true,
-		},
+	noDiagnostics := []lsp.Diagnostic{}
+	onlyWarnings := []lsp.Diagnostic{{Severity: lsp.DiagnosticSeverityWarning, Message: "Warning"}}
+	onlyErrors := []lsp.Diagnostic{{Severity: lsp.DiagnosticSeverityError, Message: "Error"}}
+	mixed := []lsp.Diagnostic{
+		{Severity: lsp.DiagnosticSeverityError, Message: "Error"},
+		{Severity: lsp.DiagnosticSeverityWarning, Message: "Warning"},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := HasWarnings(tt.diagnostics)
-			assert.Equal(t, tt.expected, result)
-		})
-	}
+	assert.False(t, HasWarnings(noDiagnostics), "No diagnostics should return false")
+	assert.True(t, HasWarnings(onlyWarnings), "Only warnings should return true")
+	assert.False(t, HasWarnings(onlyErrors), "Only errors should return false")
+	assert.True(t, HasWarnings(mixed), "Mixed with warnings should return true")
 }
 
 func TestCountBySeverity(t *testing.T) {
-	diagnostics := []Diagnostic{
-		{Severity: DiagnosticSeverityError, Message: "Error 1"},
-		{Severity: DiagnosticSeverityError, Message: "Error 2"},
-		{Severity: DiagnosticSeverityWarning, Message: "Warning 1"},
-		{Severity: DiagnosticSeverityWarning, Message: "Warning 2"},
-		{Severity: DiagnosticSeverityWarning, Message: "Warning 3"},
-		{Severity: DiagnosticSeverityInformation, Message: "Info 1"},
-		{Severity: DiagnosticSeverityHint, Message: "Hint 1"},
+	diagnostics := []lsp.Diagnostic{
+		{Severity: lsp.DiagnosticSeverityError, Message: "Error 1"},
+		{Severity: lsp.DiagnosticSeverityError, Message: "Error 2"},
+		{Severity: lsp.DiagnosticSeverityWarning, Message: "Warning 1"},
+		{Severity: lsp.DiagnosticSeverityWarning, Message: "Warning 2"},
+		{Severity: lsp.DiagnosticSeverityWarning, Message: "Warning 3"},
+		{Severity: lsp.DiagnosticSeverityInformation, Message: "Info 1"},
+		{Severity: lsp.DiagnosticSeverityHint, Message: "Hint 1"},
 	}
 
 	counts := CountBySeverity(diagnostics)
 
-	assert.Equal(t, 2, counts[DiagnosticSeverityError])
-	assert.Equal(t, 3, counts[DiagnosticSeverityWarning])
-	assert.Equal(t, 1, counts[DiagnosticSeverityInformation])
-	assert.Equal(t, 1, counts[DiagnosticSeverityHint])
+	assert.Equal(t, 2, counts[lsp.DiagnosticSeverityError])
+	assert.Equal(t, 3, counts[lsp.DiagnosticSeverityWarning])
+	assert.Equal(t, 1, counts[lsp.DiagnosticSeverityInformation])
+	assert.Equal(t, 1, counts[lsp.DiagnosticSeverityHint])
 }
 
 func TestDiagnosticFormatter_WithRelatedInformation(t *testing.T) {
 	formatter := NewDiagnosticFormatter()
 	formatter.ShowRelated = true
 
-	diagnostics := []Diagnostic{
+	diagnostics := []lsp.Diagnostic{
 		{
-			Range:    Range{Start: Position{Line: 10, Character: 5}},
-			Severity: DiagnosticSeverityError,
+			Range:    lsp.Range{Start: lsp.Position{Line: 10, Character: 5}},
+			Severity: lsp.DiagnosticSeverityError,
 			Message:  "Variable 'foo' is undefined",
 			Source:   "typescript",
-			RelatedInformation: []DiagnosticInfo{
+			RelatedInformation: []lsp.DiagnosticInfo{
 				{
-					Location: Location{
+					Location: lsp.Location{
 						URI:   "file:///test/other.ts",
-						Range: Range{Start: Position{Line: 5, Character: 10}},
+						Range: lsp.Range{Start: lsp.Position{Line: 5, Character: 10}},
 					},
 					Message: "Variable 'foo' was declared here",
 				},
@@ -391,14 +337,14 @@ func TestDiagnosticFormatter_SeverityString(t *testing.T) {
 	formatter := NewDiagnosticFormatter()
 
 	tests := []struct {
-		severity DiagnosticSeverity
+		severity lsp.DiagnosticSeverity
 		expected string
 	}{
-		{DiagnosticSeverityError, "error"},
-		{DiagnosticSeverityWarning, "warning"},
-		{DiagnosticSeverityInformation, "info"},
-		{DiagnosticSeverityHint, "hint"},
-		{DiagnosticSeverity(99), "unknown"},
+		{lsp.DiagnosticSeverityError, "error"},
+		{lsp.DiagnosticSeverityWarning, "warning"},
+		{lsp.DiagnosticSeverityInformation, "info"},
+		{lsp.DiagnosticSeverityHint, "hint"},
+		{lsp.DiagnosticSeverity(99), "unknown"},
 	}
 
 	for _, tt := range tests {

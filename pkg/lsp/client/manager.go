@@ -1,4 +1,4 @@
-package lsp
+package client
 
 import (
 	"context"
@@ -7,6 +7,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/cloudposse/atmos/pkg/lsp"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -14,9 +15,9 @@ import (
 type ManagerInterface interface {
 	GetClient(name string) (*Client, bool)
 	GetClientForFile(filePath string) (*Client, bool)
-	AnalyzeFile(filePath, content string) ([]Diagnostic, error)
-	GetAllDiagnostics() map[string]map[string][]Diagnostic
-	GetDiagnosticsForFile(filePath string) []Diagnostic
+	AnalyzeFile(filePath, content string) ([]lsp.Diagnostic, error)
+	GetAllDiagnostics() map[string]map[string][]lsp.Diagnostic
+	GetDiagnosticsForFile(filePath string) []lsp.Diagnostic
 	Close() error
 	IsEnabled() bool
 	GetServerNames() []string
@@ -116,7 +117,7 @@ func (m *Manager) GetClientForFile(filePath string) (*Client, bool) {
 }
 
 // AnalyzeFile opens a file in the appropriate LSP server and returns diagnostics.
-func (m *Manager) AnalyzeFile(filePath, content string) ([]Diagnostic, error) {
+func (m *Manager) AnalyzeFile(filePath, content string) ([]lsp.Diagnostic, error) {
 	client, found := m.GetClientForFile(filePath)
 	if !found {
 		return nil, fmt.Errorf("no LSP server found for file: %s", filePath)
@@ -145,11 +146,11 @@ func (m *Manager) AnalyzeFile(filePath, content string) ([]Diagnostic, error) {
 }
 
 // GetAllDiagnostics returns all diagnostics from all LSP servers.
-func (m *Manager) GetAllDiagnostics() map[string]map[string][]Diagnostic {
+func (m *Manager) GetAllDiagnostics() map[string]map[string][]lsp.Diagnostic {
 	m.clientsMu.RLock()
 	defer m.clientsMu.RUnlock()
 
-	result := make(map[string]map[string][]Diagnostic)
+	result := make(map[string]map[string][]lsp.Diagnostic)
 	for name, client := range m.clients {
 		result[name] = client.GetAllDiagnostics()
 	}
@@ -158,13 +159,13 @@ func (m *Manager) GetAllDiagnostics() map[string]map[string][]Diagnostic {
 }
 
 // GetDiagnosticsForFile returns diagnostics for a specific file from all servers.
-func (m *Manager) GetDiagnosticsForFile(filePath string) []Diagnostic {
+func (m *Manager) GetDiagnosticsForFile(filePath string) []lsp.Diagnostic {
 	uri := "file://" + filePath
 
 	m.clientsMu.RLock()
 	defer m.clientsMu.RUnlock()
 
-	var allDiagnostics []Diagnostic
+	var allDiagnostics []lsp.Diagnostic
 	for _, client := range m.clients {
 		diagnostics := client.GetDiagnostics(uri)
 		allDiagnostics = append(allDiagnostics, diagnostics...)

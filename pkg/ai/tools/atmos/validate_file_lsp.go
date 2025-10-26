@@ -7,18 +7,18 @@ import (
 	"path/filepath"
 
 	"github.com/cloudposse/atmos/pkg/ai/tools"
-	"github.com/cloudposse/atmos/pkg/lsp"
+	"github.com/cloudposse/atmos/pkg/lsp/client"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 // ValidateFileLSPTool provides LSP-based file validation.
 type ValidateFileLSPTool struct {
 	atmosConfig *schema.AtmosConfiguration
-	lspManager  lsp.ManagerInterface
+	lspManager  client.ManagerInterface
 }
 
 // NewValidateFileLSPTool creates a new LSP validation tool.
-func NewValidateFileLSPTool(atmosConfig *schema.AtmosConfiguration, lspManager lsp.ManagerInterface) *ValidateFileLSPTool {
+func NewValidateFileLSPTool(atmosConfig *schema.AtmosConfiguration, lspManager client.ManagerInterface) *ValidateFileLSPTool {
 	return &ValidateFileLSPTool{
 		atmosConfig: atmosConfig,
 		lspManager:  lspManager,
@@ -104,7 +104,7 @@ func (t *ValidateFileLSPTool) Execute(ctx context.Context, params map[string]int
 	}
 
 	// Format diagnostics for AI
-	formatter := lsp.NewDiagnosticFormatter()
+	formatter := client.NewDiagnosticFormatter()
 	uri := "file://" + absPath
 
 	output := formatter.FormatForAI(uri, diagnostics)
@@ -121,8 +121,8 @@ func (t *ValidateFileLSPTool) Execute(ctx context.Context, params map[string]int
 		Output:  output,
 		Data: map[string]interface{}{
 			"diagnostics_count": len(diagnostics),
-			"has_errors":        lsp.HasErrors(diagnostics),
-			"has_warnings":      lsp.HasWarnings(diagnostics),
+			"has_errors":        client.HasErrors(diagnostics),
+			"has_warnings":      client.HasWarnings(diagnostics),
 		},
 	}, nil
 }
