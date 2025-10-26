@@ -176,10 +176,10 @@ type Context interface {
 // NO FORMATTING - only capabilities.
 type Terminal interface {
 	// Capability detection
-	IsTTY(channel Channel) bool
+	IsTTY(stream Stream) bool
 	ColorProfile() ColorProfile
-	Width(channel Channel) int
-	Height(channel Channel) int
+	Width(stream Stream) int
+	Height(stream Stream) int
 
 	// Terminal control
 	SetTitle(title string)
@@ -188,16 +188,15 @@ type Terminal interface {
 
 	// Environment detection
 	IsCI() bool
-	IsPiped(channel Channel) bool
+	IsPiped(stream Stream) bool
 }
 
-// Channel identifies an I/O channel.
-type Channel int
+// Stream identifies an I/O stream for writing output.
+type Stream int
 
 const (
-	DataChannel  Channel = iota  // stdout
-	UIChannel                    // stderr
-	InputChannel                 // stdin
+	DataStream Stream = iota  // stdout - for pipeable data
+	UIStream                  // stderr - for human messages
 )
 
 // ColorProfile represents terminal color capabilities.
@@ -670,7 +669,7 @@ func (f *formatter) RenderMarkdown(content string) (string, error) {
 	// Delegate to existing markdown package
 	renderer, err := markdown.NewRenderer(
 		f.ioCtx.Config().AtmosConfig,
-		markdown.WithWidth(f.ioCtx.Terminal().Width(io.DataChannel)),
+		markdown.WithWidth(f.ioCtx.Terminal().Width(terminal.Stdout)),
 		markdown.WithColorProfile(f.ioCtx.Terminal().ColorProfile()),
 	)
 	if err != nil {
