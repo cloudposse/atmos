@@ -13,6 +13,12 @@ import (
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
 
+const (
+	// Character constants.
+	newline = "\n"
+	tab     = "\t"
+)
+
 var (
 	// Global formatter and terminal instances.
 	globalFormatter Formatter
@@ -67,7 +73,7 @@ func MarkdownMessage(content string) error {
 // Flow: ui.Success() → terminal.Write() → io.Write(UIStream) → masking → stderr
 func Success(text string) error {
 	f := getFormatter().(*formatter)
-	formatted := f.Success(text) + "\n"
+	formatted := f.Success(text) + newline
 	return f.terminal.Write(formatted)
 }
 
@@ -75,7 +81,7 @@ func Success(text string) error {
 // Flow: ui.Successf() → terminal.Write() → io.Write(UIStream) → masking → stderr
 func Successf(format string, a ...interface{}) error {
 	f := getFormatter().(*formatter)
-	formatted := f.Successf(format, a...) + "\n"
+	formatted := f.Successf(format, a...) + newline
 	return f.terminal.Write(formatted)
 }
 
@@ -83,7 +89,7 @@ func Successf(format string, a ...interface{}) error {
 // Flow: ui.Error() → terminal.Write() → io.Write(UIStream) → masking → stderr
 func Error(text string) error {
 	f := getFormatter().(*formatter)
-	formatted := f.Error(text) + "\n"
+	formatted := f.Error(text) + newline
 	return f.terminal.Write(formatted)
 }
 
@@ -91,7 +97,7 @@ func Error(text string) error {
 // Flow: ui.Errorf() → terminal.Write() → io.Write(UIStream) → masking → stderr
 func Errorf(format string, a ...interface{}) error {
 	f := getFormatter().(*formatter)
-	formatted := f.Errorf(format, a...) + "\n"
+	formatted := f.Errorf(format, a...) + newline
 	return f.terminal.Write(formatted)
 }
 
@@ -99,7 +105,7 @@ func Errorf(format string, a ...interface{}) error {
 // Flow: ui.Warning() → terminal.Write() → io.Write(UIStream) → masking → stderr
 func Warning(text string) error {
 	f := getFormatter().(*formatter)
-	formatted := f.Warning(text) + "\n"
+	formatted := f.Warning(text) + newline
 	return f.terminal.Write(formatted)
 }
 
@@ -107,7 +113,7 @@ func Warning(text string) error {
 // Flow: ui.Warningf() → terminal.Write() → io.Write(UIStream) → masking → stderr
 func Warningf(format string, a ...interface{}) error {
 	f := getFormatter().(*formatter)
-	formatted := f.Warningf(format, a...) + "\n"
+	formatted := f.Warningf(format, a...) + newline
 	return f.terminal.Write(formatted)
 }
 
@@ -115,7 +121,7 @@ func Warningf(format string, a ...interface{}) error {
 // Flow: ui.Info() → terminal.Write() → io.Write(UIStream) → masking → stderr
 func Info(text string) error {
 	f := getFormatter().(*formatter)
-	formatted := f.Info(text) + "\n"
+	formatted := f.Info(text) + newline
 	return f.terminal.Write(formatted)
 }
 
@@ -123,7 +129,7 @@ func Info(text string) error {
 // Flow: ui.Infof() → terminal.Write() → io.Write(UIStream) → masking → stderr
 func Infof(format string, a ...interface{}) error {
 	f := getFormatter().(*formatter)
-	formatted := f.Infof(format, a...) + "\n"
+	formatted := f.Infof(format, a...) + newline
 	return f.terminal.Write(formatted)
 }
 
@@ -280,15 +286,7 @@ func (f *formatter) RenderMarkdown(content string) (string, error) {
 	}
 
 	// Select style based on color profile
-	var styleName string
-	switch f.terminal.ColorProfile() {
-	case terminal.ColorNone:
-		styleName = "notty"
-	case terminal.Color16, terminal.Color256, terminal.ColorTrue:
-		// Use dark style as default - this will be theme-aware in PR #1433
-		styleName = "dark"
-	}
-
+	styleName := f.selectMarkdownStyle()
 	if styleName != "" {
 		opts = append(opts, glamour.WithStylePath(styleName))
 	}
@@ -306,6 +304,20 @@ func (f *formatter) RenderMarkdown(content string) (string, error) {
 	}
 
 	return rendered, nil
+}
+
+// selectMarkdownStyle returns the glamour style name based on terminal color profile.
+// This will be replaced with full theme system from PR #1433.
+func (f *formatter) selectMarkdownStyle() string {
+	switch f.terminal.ColorProfile() {
+	case terminal.ColorNone:
+		return "notty"
+	case terminal.Color16, terminal.Color256, terminal.ColorTrue:
+		// Use dark style as default - this will be theme-aware in PR #1433
+		return "dark"
+	default:
+		return ""
+	}
 }
 
 // generateStyleSet creates a StyleSet based on color profile.

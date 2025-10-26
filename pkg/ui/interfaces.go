@@ -3,7 +3,6 @@ package ui
 import (
 	"github.com/charmbracelet/lipgloss"
 
-	"github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/terminal"
 )
 
@@ -79,47 +78,4 @@ type StyleSet struct {
 	Link    lipgloss.Style
 	Command lipgloss.Style
 	Label   lipgloss.Style
-}
-
-// Output provides high-level output methods with formatting.
-// DEPRECATED: Use io.Context.Data()/UI() + ui.Formatter directly instead.
-//
-// Old pattern (being phased out):
-//
-//	out.Success("done!")  // Where does this go? Not explicit
-//
-// New pattern (preferred):
-//
-//	io := io.Context
-//	ui := ui.Formatter
-//	fmt.Fprintf(io.UI(), "%s\n", ui.Success("done!"))  // Explicit channel
-//
-// This interface exists for backward compatibility during migration.
-type Output interface {
-	// Data output (to stdout - pipeable)
-	// DEPRECATED: Use fmt.Fprintf(io.Data(), ...) instead
-	Print(a ...interface{})
-	Printf(format string, a ...interface{})
-	Println(a ...interface{})
-
-	// UI output (to stderr - human-readable)
-	// DEPRECATED: Use fmt.Fprintf(io.UI(), ui.Success(...)) instead
-	Message(format string, a ...interface{})
-	Success(format string, a ...interface{})
-	Warning(format string, a ...interface{})
-	Error(format string, a ...interface{})
-	Info(format string, a ...interface{})
-
-	// Formatted output
-	// DEPRECATED: Use fmt.Fprint(io.Data(), ui.RenderMarkdown(...)) instead
-	Markdown(content string) error   // Rendered to stdout
-	MarkdownUI(content string) error // Rendered to stderr
-
-	// Output options
-	SetTrimTrailingWhitespace(enabled bool) // Enable/disable trailing whitespace trimming
-	TrimTrailingWhitespace() bool           // Get current trimming setting
-
-	// Get underlying components
-	Formatter() Formatter
-	IOContext() io.Context // Access to underlying I/O
 }
