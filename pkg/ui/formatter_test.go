@@ -449,6 +449,11 @@ type mockTerminal struct {
 	isTTY   bool
 }
 
+func (m *mockTerminal) Write(content string) error {
+	// No-op for tests - just discard output
+	return nil
+}
+
 func (m *mockTerminal) IsTTY(stream terminal.Stream) bool {
 	return m.isTTY
 }

@@ -37,18 +37,19 @@ func getIOContext() io.Context {
 }
 
 // Write writes content to the data channel (stdout).
+// Flow: data.Write() → io.Write(DataStream) → masking → stdout
 func Write(content string) error {
-	_, err := fmt.Fprint(getIOContext().Data(), content)
-	return err
+	return getIOContext().Write(io.DataStream, content)
 }
 
 // Writef writes formatted content to the data channel (stdout).
+// Flow: data.Writef() → io.Write(DataStream) → masking → stdout
 func Writef(format string, a ...interface{}) error {
-	_, err := fmt.Fprintf(getIOContext().Data(), format, a...)
-	return err
+	return getIOContext().Write(io.DataStream, fmt.Sprintf(format, a...))
 }
 
 // WriteJSON marshals v to JSON and writes to the data channel (stdout).
+// Flow: data.WriteJSON() → io.Write(DataStream) → masking → stdout
 func WriteJSON(v interface{}) error {
 	output, err := json.MarshalIndent(v, "", "  ")
 	if err != nil {
@@ -58,6 +59,7 @@ func WriteJSON(v interface{}) error {
 }
 
 // WriteYAML marshals v to YAML and writes to the data channel (stdout).
+// Flow: data.WriteYAML() → io.Write(DataStream) → masking → stdout
 func WriteYAML(v interface{}) error {
 	output, err := yaml.Marshal(v)
 	if err != nil {
