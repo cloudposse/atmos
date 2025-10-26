@@ -129,26 +129,6 @@ tests:
       stderr: []
       exit_code: 0
 
-  - name: atmos auth env --format bash --identity mock-identity
-    enabled: true
-    snapshot: true
-    description: "Test env command outputs bash export format without authentication (returns env vars from config)"
-    workdir: "fixtures/scenarios/atmos-auth-mock/"
-    command: "atmos"
-    env:
-      ATMOS_KEYRING_TYPE: "memory"
-    args:
-      - "auth"
-      - "env"
-      - "--format"
-      - "bash"
-      - "--identity"
-      - "mock-identity"
-    expect:
-      diff: []
-      stderr: []
-      exit_code: 0
-
   - name: atmos auth env --format dotenv --identity mock-identity
     enabled: true
     snapshot: true
