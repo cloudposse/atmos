@@ -34,7 +34,6 @@ var listWorkflowsCmd = &cobra.Command{
 		}
 
 		configAndStacksInfo := schema.ConfigAndStacksInfo{}
-		// Workflows are loaded from workflow files, not stack manifests
 		atmosConfig, err := config.InitCliConfig(configAndStacksInfo, false)
 		if err != nil {
 			return err

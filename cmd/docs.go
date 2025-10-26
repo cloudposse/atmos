@@ -35,7 +35,6 @@ var docsCmd = &cobra.Command{
 				ComponentFolderPrefix: "terraform",
 			}
 
-			// Docs are loaded from component README files, not stack manifests
 			atmosConfig, err := cfg.InitCliConfig(info, false)
 			if err != nil {
 				return err

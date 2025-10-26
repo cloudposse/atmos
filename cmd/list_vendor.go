@@ -17,7 +17,6 @@ var listVendorCmd = &cobra.Command{
 	Long:  "List all vendor configurations in a tabular way, including component and vendor manifests.",
 	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		// Check Atmos configuration (vendor configs don't require stacks)
 		checkAtmosConfig(WithStackValidation(false))
 
 		// Get flags
@@ -40,7 +39,6 @@ var listVendorCmd = &cobra.Command{
 
 		// Initialize CLI config
 		configAndStacksInfo := schema.ConfigAndStacksInfo{}
-		// Vendor configs are loaded from component.yaml files, not stack manifests
 		atmosConfig, err := config.InitCliConfig(configAndStacksInfo, false)
 		if err != nil {
 			return err
