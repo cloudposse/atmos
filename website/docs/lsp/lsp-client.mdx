@@ -13,9 +13,9 @@ import File from '@site/src/components/File'
 Atmos includes an **LSP client** that connects to external Language Server Protocol (LSP) servers for file validation. This enables **Atmos AI** to detect syntax errors, validate YAML structure, and check Terraform/HCL syntax with precise line numbers and warnings.
 
 :::info LSP Client vs LSP Server
-**Atmos LSP Client** (this document): Connects TO external LSP servers (yaml-ls, terraform-ls) for **Atmos AI validation**. This is implemented in `pkg/lsp/client`.
+**Atmos LSP Client** (this document): Connects TO external LSP servers (yaml-ls, terraform-ls) for **Atmos AI validation**. Implemented in `pkg/lsp/client`.
 
-**Atmos LSP Server** (future): Will allow **IDEs to connect TO Atmos** for Atmos-specific features like stack syntax validation, component autocomplete, and intelligent suggestions. This will be implemented in `pkg/lsp/server` and is not yet available.
+**Atmos LSP Server**: Allows **IDEs to connect TO Atmos** for Atmos-specific features like stack syntax validation, component autocomplete, and intelligent suggestions. Implemented in `pkg/lsp/server`. See [LSP Server](/lsp/lsp-server) documentation.
 :::
 
 ## What is the LSP Client?
@@ -185,29 +185,19 @@ Enable LSP in your `atmos.yaml` configuration file:
     <dt>`lsp.servers`</dt>
     <dd>Map of LSP server configurations. Each server handles specific file types.</dd>
 
-    <dt>`lsp.servers.
-        <name>.command`
-    </dt>
+    <dt>`lsp.servers.{"{name}"}.command`</dt>
     <dd>Command to start the LSP server (must be in PATH or absolute path)</dd>
 
-    <dt>`lsp.servers.
-        <name>.args`
-    </dt>
+    <dt>`lsp.servers.{"{name}"}.args`</dt>
     <dd>Arguments to pass to the LSP server command</dd>
 
-    <dt>`lsp.servers.
-        <name>.filetypes`
-    </dt>
+    <dt>`lsp.servers.{"{name}"}.filetypes`</dt>
     <dd>List of file extensions this server handles (e.g., `["yaml", "yml"]`)</dd>
 
-    <dt>`lsp.servers.
-        <name>.root_patterns`
-    </dt>
+    <dt>`lsp.servers.{"{name}"}.root_patterns`</dt>
     <dd>Files/directories that identify the project root (e.g., `[".git", "atmos.yaml"]`)</dd>
 
-    <dt>`lsp.servers.
-        <name>.initialization_options`
-    </dt>
+    <dt>`lsp.servers.{"{name}"}.initialization_options`</dt>
     <dd>Server-specific initialization options (varies by LSP server)</dd>
 </dl>
 
@@ -958,6 +948,6 @@ ATMOS_LOGS_LEVEL=Debug atmos <command>
 
     ### Looking for IDE Integration?
 
-    If you want **your IDE to connect to Atmos** for Atmos-specific features like stack validation and component autocomplete, you're looking for an **Atmos LSP Server** (not the LSP client documented here).
+    If you want **your IDE to connect to Atmos** for Atmos-specific features like stack validation and component autocomplete, check out the **Atmos LSP Server** (not the LSP client documented here).
 
-    **Atmos LSP Server** will be implemented in the future in `pkg/lsp/server/` and will allow IDEs like VS Code, Neovim, and others to get intelligent Atmos-specific assistance. This is a separate feature from the LSP client.
+    **Atmos LSP Server** is now available! See the [LSP Server documentation](/lsp/lsp-server) to learn how to integrate Atmos with VS Code, Neovim, and other editors for real-time validation, autocomplete, and hover documentation. This is a separate feature from the LSP client.
