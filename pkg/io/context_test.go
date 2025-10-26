@@ -385,33 +385,33 @@ func TestWithOptions(t *testing.T) {
 // Mock types for option testing.
 type mockStreams struct{}
 
-func (m *mockStreams) Input() stdIo.Reader  { return os.Stdin }
-func (m *mockStreams) Output() stdIo.Writer { return os.Stdout }
-func (m *mockStreams) Error() stdIo.Writer  { return os.Stderr }
+func (m *mockStreams) Input() stdIo.Reader     { return os.Stdin }
+func (m *mockStreams) Output() stdIo.Writer    { return os.Stdout }
+func (m *mockStreams) Error() stdIo.Writer     { return os.Stderr }
 func (m *mockStreams) RawOutput() stdIo.Writer { return os.Stdout }
 func (m *mockStreams) RawError() stdIo.Writer  { return os.Stderr }
 
 type mockTerminal struct{}
 
-func (m *mockTerminal) ColorProfile() ColorProfile  { return ColorNone }
-func (m *mockTerminal) IsTTY(stream interface{}) bool         { return false }
-func (m *mockTerminal) Width(stream interface{}) int          { return 80 }
-func (m *mockTerminal) Height(stream interface{}) int         { return 24 }
-func (m *mockTerminal) SetTitle(title string)                {}
-func (m *mockTerminal) RestoreTitle()                        {}
-func (m *mockTerminal) Alert()                               {}
+func (m *mockTerminal) ColorProfile() ColorProfile    { return ColorNone }
+func (m *mockTerminal) IsTTY(stream interface{}) bool { return false }
+func (m *mockTerminal) Width(stream interface{}) int  { return 80 }
+func (m *mockTerminal) Height(stream interface{}) int { return 24 }
+func (m *mockTerminal) SetTitle(title string)         {}
+func (m *mockTerminal) RestoreTitle()                 {}
+func (m *mockTerminal) Alert()                        {}
 
 type mockMasker struct{}
 
-func (m *mockMasker) RegisterValue(value string)               {}
-func (m *mockMasker) RegisterSecret(secret string)             {}
-func (m *mockMasker) RegisterPattern(pattern string) error     { return nil }
-func (m *mockMasker) RegisterRegex(pattern *regexp.Regexp)     {}
-func (m *mockMasker) RegisterAWSAccessKey(accessKeyID string)  {}
-func (m *mockMasker) Mask(input string) string                 { return input }
-func (m *mockMasker) Clear()                                   {}
-func (m *mockMasker) Count() int                               { return 0 }
-func (m *mockMasker) Enabled() bool                            { return true }
+func (m *mockMasker) RegisterValue(value string)              {}
+func (m *mockMasker) RegisterSecret(secret string)            {}
+func (m *mockMasker) RegisterPattern(pattern string) error    { return nil }
+func (m *mockMasker) RegisterRegex(pattern *regexp.Regexp)    {}
+func (m *mockMasker) RegisterAWSAccessKey(accessKeyID string) {}
+func (m *mockMasker) Mask(input string) string                { return input }
+func (m *mockMasker) Clear()                                  {}
+func (m *mockMasker) Count() int                              { return 0 }
+func (m *mockMasker) Enabled() bool                           { return true }
 
 func TestColorProfile_String_Unknown(t *testing.T) {
 	// Test invalid color profile

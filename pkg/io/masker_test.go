@@ -132,10 +132,10 @@ func TestMasker_RegisterAWSAccessKey(t *testing.T) {
 
 func TestMasker_Mask(t *testing.T) {
 	tests := []struct {
-		name     string
-		setup    func(Masker)
-		input    string
-		want     string
+		name  string
+		setup func(Masker)
+		input string
+		want  string
 	}{
 		{
 			name: "empty input",

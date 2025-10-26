@@ -9,8 +9,8 @@ import (
 
 // terminal implements the Terminal interface.
 type terminal struct {
-	config       *Config
-	colorProfile ColorProfile
+	config        *Config
+	colorProfile  ColorProfile
 	originalTitle string
 }
 

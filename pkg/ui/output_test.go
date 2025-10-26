@@ -174,7 +174,6 @@ func TestOutput_MarkdownUI(t *testing.T) {
 	out := NewOutput(ioCtx)
 
 	err := out.MarkdownUI("# Title")
-
 	if err != nil {
 		t.Errorf("MarkdownUI() error = %v", err)
 	}

@@ -188,9 +188,9 @@ func Example_keyPrinciples() {
 	// - Uses I/O layer for capability detection
 
 	// Get formatted strings
-	_ = formatter.Success("Success!")     // Returns string
-	_ = formatter.Warning("Warning!")     // Returns string
-	_ = formatter.Error("Error!")         // Returns string
+	_ = formatter.Success("Success!")          // Returns string
+	_ = formatter.Warning("Warning!")          // Returns string
+	_ = formatter.Error("Error!")              // Returns string
 	_, _ = formatter.RenderMarkdown("# Title") // Returns string
 
 	// KEY PRINCIPLE 3: Application layer COMBINES both

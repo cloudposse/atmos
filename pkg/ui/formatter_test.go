@@ -368,7 +368,6 @@ func TestFormatter_RenderMarkdown_MaxWidth(t *testing.T) {
 
 	input := "# Test\n\nThis is a very long line that should be wrapped according to the terminal width."
 	got, err := f.RenderMarkdown(input)
-
 	if err != nil {
 		t.Errorf("RenderMarkdown() error = %v", err)
 	}
@@ -642,4 +641,3 @@ func TestFormatter_FormattedMethods(t *testing.T) {
 		})
 	}
 }
-

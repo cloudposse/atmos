@@ -7,13 +7,13 @@ import (
 
 // streams implements the Streams interface.
 type streams struct {
-	input      stdio.Reader
-	output     stdio.Writer // Masked
-	error      stdio.Writer // Masked
-	rawOutput  stdio.Writer // Unmasked
-	rawError   stdio.Writer // Unmasked
-	masker     Masker
-	config     *Config
+	input     stdio.Reader
+	output    stdio.Writer // Masked
+	error     stdio.Writer // Masked
+	rawOutput stdio.Writer // Unmasked
+	rawError  stdio.Writer // Unmasked
+	masker    Masker
+	config    *Config
 }
 
 // newStreams creates a new Streams with automatic masking.

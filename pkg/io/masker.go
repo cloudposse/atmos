@@ -18,7 +18,7 @@ const (
 // masker implements the Masker interface.
 type masker struct {
 	mu       sync.RWMutex
-	literals map[string]bool // Literal values to mask
+	literals map[string]bool  // Literal values to mask
 	patterns []*regexp.Regexp // Regex patterns to mask
 	enabled  bool
 }

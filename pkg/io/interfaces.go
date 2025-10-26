@@ -17,13 +17,13 @@ import (
 // The UI layer (pkg/ui/) handles formatting and rendering.
 type Context interface {
 	// Channel access - explicit and clear
-	Data() stdio.Writer    // stdout - for pipeable data (JSON, YAML, results)
-	UI() stdio.Writer      // stderr - for human messages (status, errors, prompts)
-	Input() stdio.Reader   // stdin - for user input
+	Data() stdio.Writer  // stdout - for pipeable data (JSON, YAML, results)
+	UI() stdio.Writer    // stderr - for human messages (status, errors, prompts)
+	Input() stdio.Reader // stdin - for user input
 
 	// Raw channels (unmasked - requires justification)
-	RawData() stdio.Writer  // Unmasked stdout
-	RawUI() stdio.Writer    // Unmasked stderr
+	RawData() stdio.Writer // Unmasked stdout
+	RawUI() stdio.Writer   // Unmasked stderr
 
 	// Terminal capabilities
 	Terminal() Terminal
@@ -153,10 +153,10 @@ type Config struct {
 type ColorProfile int
 
 const (
-	ColorNone  ColorProfile = iota // No color (Ascii)
-	Color16                        // 16 colors (ANSI)
-	Color256                       // 256 colors (ANSI256)
-	ColorTrue                      // 24-bit color (TrueColor)
+	ColorNone ColorProfile = iota // No color (Ascii)
+	Color16                       // 16 colors (ANSI)
+	Color256                      // 256 colors (ANSI256)
+	ColorTrue                     // 24-bit color (TrueColor)
 )
 
 // String returns the string representation of the color profile.
