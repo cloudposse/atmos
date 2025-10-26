@@ -70,7 +70,7 @@ func MarkdownMessage(content string) error {
 }
 
 // Success writes a success message with green checkmark to stderr (UI channel).
-// Flow: ui.Success() → terminal.Write() → io.Write(UIStream) → masking → stderr
+// Flow: ui.Success() → terminal.Write() → io.Write(UIStream) → masking → stderr.
 func Success(text string) error {
 	f := getFormatter().(*formatter)
 	formatted := f.Success(text) + newline
@@ -78,7 +78,7 @@ func Success(text string) error {
 }
 
 // Successf writes a formatted success message with green checkmark to stderr (UI channel).
-// Flow: ui.Successf() → terminal.Write() → io.Write(UIStream) → masking → stderr
+// Flow: ui.Successf() → terminal.Write() → io.Write(UIStream) → masking → stderr.
 func Successf(format string, a ...interface{}) error {
 	f := getFormatter().(*formatter)
 	formatted := f.Successf(format, a...) + newline
@@ -86,7 +86,7 @@ func Successf(format string, a ...interface{}) error {
 }
 
 // Error writes an error message with red X to stderr (UI channel).
-// Flow: ui.Error() → terminal.Write() → io.Write(UIStream) → masking → stderr
+// Flow: ui.Error() → terminal.Write() → io.Write(UIStream) → masking → stderr.
 func Error(text string) error {
 	f := getFormatter().(*formatter)
 	formatted := f.Error(text) + newline
@@ -94,7 +94,7 @@ func Error(text string) error {
 }
 
 // Errorf writes a formatted error message with red X to stderr (UI channel).
-// Flow: ui.Errorf() → terminal.Write() → io.Write(UIStream) → masking → stderr
+// Flow: ui.Errorf() → terminal.Write() → io.Write(UIStream) → masking → stderr.
 func Errorf(format string, a ...interface{}) error {
 	f := getFormatter().(*formatter)
 	formatted := f.Errorf(format, a...) + newline
@@ -102,7 +102,7 @@ func Errorf(format string, a ...interface{}) error {
 }
 
 // Warning writes a warning message with yellow warning sign to stderr (UI channel).
-// Flow: ui.Warning() → terminal.Write() → io.Write(UIStream) → masking → stderr
+// Flow: ui.Warning() → terminal.Write() → io.Write(UIStream) → masking → stderr.
 func Warning(text string) error {
 	f := getFormatter().(*formatter)
 	formatted := f.Warning(text) + newline
@@ -110,7 +110,7 @@ func Warning(text string) error {
 }
 
 // Warningf writes a formatted warning message with yellow warning sign to stderr (UI channel).
-// Flow: ui.Warningf() → terminal.Write() → io.Write(UIStream) → masking → stderr
+// Flow: ui.Warningf() → terminal.Write() → io.Write(UIStream) → masking → stderr.
 func Warningf(format string, a ...interface{}) error {
 	f := getFormatter().(*formatter)
 	formatted := f.Warningf(format, a...) + newline
@@ -118,7 +118,7 @@ func Warningf(format string, a ...interface{}) error {
 }
 
 // Info writes an info message with cyan info icon to stderr (UI channel).
-// Flow: ui.Info() → terminal.Write() → io.Write(UIStream) → masking → stderr
+// Flow: ui.Info() → terminal.Write() → io.Write(UIStream) → masking → stderr.
 func Info(text string) error {
 	f := getFormatter().(*formatter)
 	formatted := f.Info(text) + newline
@@ -126,7 +126,7 @@ func Info(text string) error {
 }
 
 // Infof writes a formatted info message with cyan info icon to stderr (UI channel).
-// Flow: ui.Infof() → terminal.Write() → io.Write(UIStream) → masking → stderr
+// Flow: ui.Infof() → terminal.Write() → io.Write(UIStream) → masking → stderr.
 func Infof(format string, a ...interface{}) error {
 	f := getFormatter().(*formatter)
 	formatted := f.Infof(format, a...) + newline
@@ -178,7 +178,7 @@ func (f *formatter) ColorProfile() terminal.ColorProfile {
 //   - text: The message text
 //
 // Returns formatted string: "{icon} {text}" with color applied (or plain if no color support).
-func (f *formatter) StatusMessage(icon string, style lipgloss.Style, text string) string {
+func (f *formatter) StatusMessage(icon string, style *lipgloss.Style, text string) string {
 	if !f.SupportsColor() {
 		return fmt.Sprintf("%s %s", icon, text)
 	}
@@ -187,7 +187,7 @@ func (f *formatter) StatusMessage(icon string, style lipgloss.Style, text string
 
 // Semantic formatting - delegates to StatusMessage with appropriate icons and styles.
 func (f *formatter) Success(text string) string {
-	return f.StatusMessage("✓", f.styles.Success, text)
+	return f.StatusMessage("✓", &f.styles.Success, text)
 }
 
 func (f *formatter) Successf(format string, a ...interface{}) string {
@@ -195,7 +195,7 @@ func (f *formatter) Successf(format string, a ...interface{}) string {
 }
 
 func (f *formatter) Warning(text string) string {
-	return f.StatusMessage("⚠", f.styles.Warning, text)
+	return f.StatusMessage("⚠", &f.styles.Warning, text)
 }
 
 func (f *formatter) Warningf(format string, a ...interface{}) string {
@@ -203,7 +203,7 @@ func (f *formatter) Warningf(format string, a ...interface{}) string {
 }
 
 func (f *formatter) Error(text string) string {
-	return f.StatusMessage("✗", f.styles.Error, text)
+	return f.StatusMessage("✗", &f.styles.Error, text)
 }
 
 func (f *formatter) Errorf(format string, a ...interface{}) string {
@@ -211,7 +211,7 @@ func (f *formatter) Errorf(format string, a ...interface{}) string {
 }
 
 func (f *formatter) Info(text string) string {
-	return f.StatusMessage("ℹ", f.styles.Info, text)
+	return f.StatusMessage("ℹ", &f.styles.Info, text)
 }
 
 func (f *formatter) Infof(format string, a ...interface{}) string {
@@ -247,8 +247,8 @@ func (f *formatter) Label(text string) string {
 }
 
 // Markdown writes rendered markdown to the appropriate channel.
-// useDataChannel=true writes to stdout (for pipeable content like help).
-// useDataChannel=false writes to stderr (for UI messages).
+// UseDataChannel=true writes to stdout (for pipeable content like help).
+// UseDataChannel=false writes to stderr (for UI messages).
 // Degrades gracefully to plain text if rendering fails.
 func (f *formatter) Markdown(content string, useDataChannel bool) error {
 	rendered, _ := f.RenderMarkdown(content)
@@ -294,13 +294,13 @@ func (f *formatter) RenderMarkdown(content string) (string, error) {
 	renderer, err := glamour.NewTermRenderer(opts...)
 	if err != nil {
 		// Degrade gracefully: return plain content if renderer creation fails
-		return content, nil
+		return content, err
 	}
 
 	rendered, err := renderer.Render(content)
 	if err != nil {
 		// Degrade gracefully: return plain content if rendering fails
-		return content, nil
+		return content, err
 	}
 
 	return rendered, nil

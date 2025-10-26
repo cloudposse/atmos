@@ -3,17 +3,19 @@ package io
 import (
 	stdio "io"
 	"os"
+
+	"github.com/cloudposse/atmos/pkg/perf"
 )
 
 // streams implements the Streams interface.
 type streams struct {
-	input      stdio.Reader
-	output     stdio.Writer // Masked
-	error      stdio.Writer // Masked
-	rawOutput  stdio.Writer // Unmasked
-	rawError   stdio.Writer // Unmasked
-	masker     Masker
-	config     *Config
+	input     stdio.Reader
+	output    stdio.Writer // Masked
+	error     stdio.Writer // Masked
+	rawOutput stdio.Writer // Unmasked
+	rawError  stdio.Writer // Unmasked
+	masker    Masker
+	config    *Config
 }
 
 // newStreams creates a new Streams with automatic masking.
@@ -45,22 +47,32 @@ func newStreams(masker Masker, config *Config) Streams {
 }
 
 func (s *streams) Input() stdio.Reader {
+	defer perf.Track(nil, "io.streams.Input")()
+
 	return s.input
 }
 
 func (s *streams) Output() stdio.Writer {
+	defer perf.Track(nil, "io.streams.Output")()
+
 	return s.output
 }
 
 func (s *streams) Error() stdio.Writer {
+	defer perf.Track(nil, "io.streams.Error")()
+
 	return s.error
 }
 
 func (s *streams) RawOutput() stdio.Writer {
+	defer perf.Track(nil, "io.streams.RawOutput")()
+
 	return s.rawOutput
 }
 
 func (s *streams) RawError() stdio.Writer {
+	defer perf.Track(nil, "io.streams.RawError")()
+
 	return s.rawError
 }
 
@@ -72,6 +84,8 @@ type maskedWriter struct {
 
 // Write implements stdio.Writer with automatic masking.
 func (mw *maskedWriter) Write(p []byte) (n int, err error) {
+	defer perf.Track(nil, "io.maskedWriter.Write")()
+
 	input := string(p)
 	masked := mw.masker.Mask(input)
 

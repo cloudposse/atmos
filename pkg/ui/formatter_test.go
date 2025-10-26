@@ -422,10 +422,8 @@ func TestGenerateStyleSet(t *testing.T) {
 				t.Fatal("generateStyleSet() returned nil")
 			}
 
-			// Verify all styles are initialized
-			if styles.Title.String() == "" && tt.profile != terminal.ColorNone {
-				// This is okay - lipgloss styles can have empty string representation
-			}
+			// Verify all styles are initialized (lipgloss styles can have empty string representation)
+			_ = styles.Title.String()
 		})
 	}
 }
@@ -476,16 +474,6 @@ func (m *mockTerminal) RestoreTitle() {}
 
 func (m *mockTerminal) Alert() {}
 
-// mockIOContext allows injecting custom config for testing.
-type mockIOContext struct {
-	iolib.Context
-	config *iolib.Config
-}
-
-func (m *mockIOContext) Config() *iolib.Config {
-	return m.config
-}
-
 func TestFormatter_StatusMessage(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -517,7 +505,8 @@ func TestFormatter_StatusMessage(t *testing.T) {
 			term := createMockTerminal(tt.profile)
 			f := NewFormatter(ioCtx, term)
 
-			got := f.StatusMessage(tt.icon, f.Styles().Success, tt.text)
+			successStyle := f.Styles().Success
+			got := f.StatusMessage(tt.icon, &successStyle, tt.text)
 
 			// For no color, output should match exactly
 			if tt.profile == terminal.ColorNone && got != tt.want {

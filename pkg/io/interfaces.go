@@ -4,6 +4,7 @@ import (
 	stdio "io"
 	"regexp"
 
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -41,30 +42,30 @@ type Context interface {
 }
 
 // Streams provides access to input/output streams with automatic masking.
-// DEPRECATED: Use Context.Data()/UI() directly instead.
+// Deprecated: Use Context.Data()/UI() directly instead.
 // This interface exists for backward compatibility during migration.
 type Streams interface {
 	// Input returns the input stream (typically stdin).
 	Input() stdio.Reader
 
 	// Output returns the output stream (typically stdout) with automatic masking.
-	// DEPRECATED: Use Context.Data() instead.
+	// Deprecated: Use Context.Data() instead.
 	Output() stdio.Writer
 
 	// Error returns the error stream (typically stderr) with automatic masking.
-	// DEPRECATED: Use Context.UI() instead.
+	// Deprecated: Use Context.UI() instead.
 	Error() stdio.Writer
 
 	// RawOutput returns the unmasked output stream.
 	// Use only when absolutely necessary (e.g., binary output).
 	// Requires explicit justification in code review.
-	// DEPRECATED: Use Context.RawData() instead.
+	// Deprecated: Use Context.RawData() instead.
 	RawOutput() stdio.Writer
 
 	// RawError returns the unmasked error stream.
 	// Use only when absolutely necessary.
 	// Requires explicit justification in code review.
-	// DEPRECATED: Use Context.RawUI() instead.
+	// Deprecated: Use Context.RawUI() instead.
 	RawError() stdio.Writer
 }
 
@@ -112,17 +113,19 @@ type Config struct {
 }
 
 // StreamType identifies an I/O stream.
-// DEPRECATED: Use Channel instead for clearer semantics.
+// Deprecated: Use Channel instead for clearer semantics.
 type StreamType int
 
 const (
 	StreamInput  StreamType = iota // stdin
-	StreamOutput                   // stdout (DEPRECATED: use DataChannel)
-	StreamError                    // stderr (DEPRECATED: use UIChannel)
+	StreamOutput                   // stdout (Deprecated: use DataChannel)
+	StreamError                    // stderr (Deprecated: use UIChannel)
 )
 
 // String returns the string representation of the stream type.
 func (st StreamType) String() string {
+	defer perf.Track(nil, "io.StreamType.String")()
+
 	switch st {
 	case StreamInput:
 		return "stdin"
@@ -146,6 +149,8 @@ const (
 
 // String returns the string representation of the stream.
 func (s Stream) String() string {
+	defer perf.Track(nil, "io.Stream.String")()
+
 	switch s {
 	case DataStream:
 		return "data"
@@ -157,7 +162,7 @@ func (s Stream) String() string {
 }
 
 // Channel identifies an I/O channel with clear semantic meaning.
-// DEPRECATED: Use Stream instead with Context.Write().
+// Deprecated: Use Stream instead with Context.Write().
 // This replaces StreamType with more intuitive naming.
 type Channel int
 
@@ -169,6 +174,8 @@ const (
 
 // String returns the string representation of the channel.
 func (c Channel) String() string {
+	defer perf.Track(nil, "io.Channel.String")()
+
 	switch c {
 	case DataChannel:
 		return "data (stdout)"
@@ -184,6 +191,8 @@ func (c Channel) String() string {
 // ToStreamType converts Channel to legacy StreamType.
 // This supports backward compatibility during migration.
 func (c Channel) ToStreamType() StreamType {
+	defer perf.Track(nil, "io.Channel.ToStreamType")()
+
 	switch c {
 	case DataChannel:
 		return StreamOutput

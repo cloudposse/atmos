@@ -65,10 +65,7 @@ func TestBuildConfig(t *testing.T) {
 	viper.Set("redirect-stderr", "")
 	viper.Set("disable-masking", false)
 
-	cfg, err := buildConfig()
-	if err != nil {
-		t.Fatalf("buildConfig() error = %v", err)
-	}
+	cfg := buildConfig()
 
 	if cfg == nil {
 		t.Fatal("buildConfig() returned nil")
@@ -77,10 +74,7 @@ func TestBuildConfig(t *testing.T) {
 	// Test with atmos.yaml config
 	viper.Set("settings", schema.Settings{})
 
-	cfg, err = buildConfig()
-	if err != nil {
-		t.Fatalf("buildConfig() with atmos.yaml error = %v", err)
-	}
+	cfg = buildConfig()
 
 	if cfg == nil {
 		t.Fatal("buildConfig() with atmos.yaml returned nil")

@@ -8,6 +8,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/cloudposse/atmos/pkg/io"
+	"github.com/cloudposse/atmos/pkg/perf"
 )
 
 var (
@@ -18,6 +19,8 @@ var (
 // InitWriter initializes the global data writer with an I/O context.
 // This should be called once at application startup (in root.go).
 func InitWriter(ioCtx io.Context) {
+	defer perf.Track(nil, "data.InitWriter")()
+
 	ioMu.Lock()
 	defer ioMu.Unlock()
 	globalIOContext = ioCtx
@@ -37,20 +40,26 @@ func getIOContext() io.Context {
 }
 
 // Write writes content to the data channel (stdout).
-// Flow: data.Write() → io.Write(DataStream) → masking → stdout
+// Flow: data.Write() → io.Write(DataStream) → masking → stdout.
 func Write(content string) error {
+	defer perf.Track(nil, "data.Write")()
+
 	return getIOContext().Write(io.DataStream, content)
 }
 
 // Writef writes formatted content to the data channel (stdout).
-// Flow: data.Writef() → io.Write(DataStream) → masking → stdout
+// Flow: data.Writef() → io.Write(DataStream) → masking → stdout.
 func Writef(format string, a ...interface{}) error {
+	defer perf.Track(nil, "data.Writef")()
+
 	return getIOContext().Write(io.DataStream, fmt.Sprintf(format, a...))
 }
 
 // WriteJSON marshals v to JSON and writes to the data channel (stdout).
-// Flow: data.WriteJSON() → io.Write(DataStream) → masking → stdout
+// Flow: data.WriteJSON() → io.Write(DataStream) → masking → stdout.
 func WriteJSON(v interface{}) error {
+	defer perf.Track(nil, "data.WriteJSON")()
+
 	output, err := json.MarshalIndent(v, "", "  ")
 	if err != nil {
 		return err
@@ -59,8 +68,10 @@ func WriteJSON(v interface{}) error {
 }
 
 // WriteYAML marshals v to YAML and writes to the data channel (stdout).
-// Flow: data.WriteYAML() → io.Write(DataStream) → masking → stdout
+// Flow: data.WriteYAML() → io.Write(DataStream) → masking → stdout.
 func WriteYAML(v interface{}) error {
+	defer perf.Track(nil, "data.WriteYAML")()
+
 	output, err := yaml.Marshal(v)
 	if err != nil {
 		return err

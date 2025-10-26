@@ -8,17 +8,22 @@ import (
 	"regexp"
 	"strings"
 	"sync"
+
+	"github.com/cloudposse/atmos/pkg/perf"
 )
 
 const (
 	// MaskReplacement is the string used to replace masked values.
 	MaskReplacement = "***MASKED***"
+
+	// AWS access key ID length (AKIA prefix + 16 characters).
+	awsAccessKeyIDLength = 20
 )
 
 // masker implements the Masker interface.
 type masker struct {
 	mu       sync.RWMutex
-	literals map[string]bool // Literal values to mask
+	literals map[string]bool  // Literal values to mask
 	patterns []*regexp.Regexp // Regex patterns to mask
 	enabled  bool
 }
@@ -35,6 +40,8 @@ func newMasker(config *Config) Masker {
 }
 
 func (m *masker) RegisterValue(value string) {
+	defer perf.Track(nil, "io.masker.RegisterValue")()
+
 	if value == "" {
 		return
 	}
@@ -46,6 +53,8 @@ func (m *masker) RegisterValue(value string) {
 }
 
 func (m *masker) RegisterSecret(secret string) {
+	defer perf.Track(nil, "io.masker.RegisterSecret")()
+
 	if secret == "" {
 		return
 	}
@@ -72,6 +81,8 @@ func (m *masker) RegisterSecret(secret string) {
 }
 
 func (m *masker) RegisterPattern(pattern string) error {
+	defer perf.Track(nil, "io.masker.RegisterPattern")()
+
 	re, err := regexp.Compile(pattern)
 	if err != nil {
 		return fmt.Errorf("invalid regex pattern: %w", err)
@@ -82,6 +93,8 @@ func (m *masker) RegisterPattern(pattern string) error {
 }
 
 func (m *masker) RegisterRegex(pattern *regexp.Regexp) {
+	defer perf.Track(nil, "io.masker.RegisterRegex")()
+
 	if pattern == nil {
 		return
 	}
@@ -93,6 +106,8 @@ func (m *masker) RegisterRegex(pattern *regexp.Regexp) {
 }
 
 func (m *masker) RegisterAWSAccessKey(accessKeyID string) {
+	defer perf.Track(nil, "io.masker.RegisterAWSAccessKey")()
+
 	if accessKeyID == "" {
 		return
 	}
@@ -101,7 +116,7 @@ func (m *masker) RegisterAWSAccessKey(accessKeyID string) {
 
 	// AWS access keys follow pattern: AKIA[0-9A-Z]{16}
 	// If this is a valid AWS access key, register a pattern to catch the paired secret key
-	if strings.HasPrefix(accessKeyID, "AKIA") && len(accessKeyID) == 20 {
+	if strings.HasPrefix(accessKeyID, "AKIA") && len(accessKeyID) == awsAccessKeyIDLength {
 		// AWS secret keys are 40 characters of base64-like characters
 		// Register a pattern to catch anything that looks like an AWS secret key near this access key
 		// This is a best-effort approach
@@ -110,6 +125,8 @@ func (m *masker) RegisterAWSAccessKey(accessKeyID string) {
 }
 
 func (m *masker) Mask(input string) string {
+	defer perf.Track(nil, "io.masker.Mask")()
+
 	if !m.enabled || input == "" {
 		return input
 	}
@@ -136,6 +153,8 @@ func (m *masker) Mask(input string) string {
 }
 
 func (m *masker) Clear() {
+	defer perf.Track(nil, "io.masker.Clear")()
+
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -144,6 +163,8 @@ func (m *masker) Clear() {
 }
 
 func (m *masker) Count() int {
+	defer perf.Track(nil, "io.masker.Count")()
+
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
@@ -151,5 +172,7 @@ func (m *masker) Count() int {
 }
 
 func (m *masker) Enabled() bool {
+	defer perf.Track(nil, "io.masker.Enabled")()
+
 	return m.enabled
 }

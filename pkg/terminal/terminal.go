@@ -13,7 +13,7 @@ import (
 
 const (
 	// ANSI escape sequences for terminal control.
-	escBEL = "\007" // Bell/Alert character
+	escBEL = "\007"  // Bell/Alert character
 	escOSC = "\033]" // Operating System Command
 	escST  = "\007"  // String Terminator (can also be "\033\\")
 )
@@ -297,12 +297,12 @@ func buildConfig() *Config {
 		NoColor: viper.GetBool("no-color"),
 		Color:   viper.GetBool("color"),
 
-		// From environment variables
-		EnvNoColor:       os.Getenv("NO_COLOR") != "",
-		EnvCLIColor:      os.Getenv("CLICOLOR"),
-		EnvCLIColorForce: os.Getenv("CLICOLOR_FORCE") != "",
-		EnvTerm:          os.Getenv("TERM"),
-		EnvColorTerm:     os.Getenv("COLORTERM"),
+		// From environment variables (standard terminal env vars, not Atmos-specific)
+		EnvNoColor:       os.Getenv("NO_COLOR") != "",       //nolint:forbidigo // Standard terminal env var
+		EnvCLIColor:      os.Getenv("CLICOLOR"),             //nolint:forbidigo // Standard terminal env var
+		EnvCLIColorForce: os.Getenv("CLICOLOR_FORCE") != "", //nolint:forbidigo // Standard terminal env var
+		EnvTerm:          os.Getenv("TERM"),                 //nolint:forbidigo // Standard terminal env var
+		EnvColorTerm:     os.Getenv("COLORTERM"),            //nolint:forbidigo // Standard terminal env var
 	}
 
 	// Load atmos.yaml config (if available)
@@ -323,9 +323,9 @@ func buildConfig() *Config {
 // 3. CLICOLOR_FORCE - forces color even for non-TTY
 // 4. --no-color flag
 // 5. --color flag
-// 6. atmos.yaml terminal.no_color (deprecated)
-// 7. atmos.yaml terminal.color
-// 8. Default (true for TTY, false for non-TTY)
+// 6. Atmos.yaml terminal.no_color (deprecated).
+// 7. Atmos.yaml terminal.color.
+// 8. Default (true for TTY, false for non-TTY).
 func (c *Config) ShouldUseColor(isTTY bool) bool {
 	// 1. NO_COLOR always wins
 	if c.EnvNoColor {

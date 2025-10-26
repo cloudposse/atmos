@@ -7,6 +7,7 @@ import (
 	"github.com/spf13/viper"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -19,11 +20,10 @@ type context struct {
 
 // NewContext creates a new I/O context with default configuration.
 func NewContext(opts ...ContextOption) (Context, error) {
+	defer perf.Track(nil, "io.NewContext")()
+
 	// Build config from flags, env vars, and atmos.yaml
-	cfg, err := buildConfig()
-	if err != nil {
-		return nil, fmt.Errorf("%w: %w", errUtils.ErrBuildIOConfig, err)
-	}
+	cfg := buildConfig()
 
 	// Create masker
 	masker := newMasker(cfg)
@@ -48,6 +48,8 @@ func NewContext(opts ...ContextOption) (Context, error) {
 // Write is the primary output method - ALL writes go through here for masking.
 // This is the central choke point that ensures all output is masked.
 func (c *context) Write(stream Stream, content string) error {
+	defer perf.Track(nil, "io.context.Write")()
+
 	// Apply masking
 	masked := c.masker.Mask(content)
 
@@ -71,38 +73,54 @@ func (c *context) Write(stream Stream, content string) error {
 }
 
 // Channel access - explicit and clear.
-// DEPRECATED: Use Write() instead for automatic masking.
+// Deprecated: Use Write() instead for automatic masking.
 func (c *context) Data() stdio.Writer {
+	defer perf.Track(nil, "io.context.Data")()
+
 	return c.streams.Output()
 }
 
 func (c *context) UI() stdio.Writer {
+	defer perf.Track(nil, "io.context.UI")()
+
 	return c.streams.Error()
 }
 
 func (c *context) Input() stdio.Reader {
+	defer perf.Track(nil, "io.context.Input")()
+
 	return c.streams.Input()
 }
 
 // Raw channels (unmasked).
 func (c *context) RawData() stdio.Writer {
+	defer perf.Track(nil, "io.context.RawData")()
+
 	return c.streams.RawOutput()
 }
 
 func (c *context) RawUI() stdio.Writer {
+	defer perf.Track(nil, "io.context.RawUI")()
+
 	return c.streams.RawError()
 }
 
 // Legacy compatibility.
 func (c *context) Streams() Streams {
+	defer perf.Track(nil, "io.context.Streams")()
+
 	return c.streams
 }
 
 func (c *context) Config() *Config {
+	defer perf.Track(nil, "io.context.Config")()
+
 	return c.config
 }
 
 func (c *context) Masker() Masker {
+	defer perf.Track(nil, "io.context.Masker")()
+
 	return c.masker
 }
 
@@ -111,6 +129,8 @@ type ContextOption func(*context)
 
 // WithStreams sets custom streams (for testing).
 func WithStreams(streams Streams) ContextOption {
+	defer perf.Track(nil, "io.WithStreams")()
+
 	return func(c *context) {
 		c.streams = streams
 	}
@@ -118,13 +138,15 @@ func WithStreams(streams Streams) ContextOption {
 
 // WithMasker sets a custom masker (for testing).
 func WithMasker(masker Masker) ContextOption {
+	defer perf.Track(nil, "io.WithMasker")()
+
 	return func(c *context) {
 		c.masker = masker
 	}
 }
 
 // buildConfig constructs Config from all sources.
-func buildConfig() (*Config, error) {
+func buildConfig() *Config {
 	cfg := &Config{
 		// From flags (bound via viper in cmd/root.go)
 		RedirectStderr: viper.GetString("redirect-stderr"),
@@ -140,5 +162,5 @@ func buildConfig() (*Config, error) {
 		}
 	}
 
-	return cfg, nil
+	return cfg
 }

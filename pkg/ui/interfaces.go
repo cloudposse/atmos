@@ -24,7 +24,7 @@ import (
 type Formatter interface {
 	// Status message formatting - standardized output with icons
 	// This is the foundational method used by Success/Error/Warning/Info
-	StatusMessage(icon string, style lipgloss.Style, text string) string
+	StatusMessage(icon string, style *lipgloss.Style, text string) string
 
 	// Semantic formatting - returns styled strings with automatic icons (uses theme.StyleSet)
 	// These methods use StatusMessage internally with predefined icons
