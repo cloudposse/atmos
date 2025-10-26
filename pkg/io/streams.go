@@ -88,10 +88,16 @@ func (mw *maskedWriter) Write(p []byte) (n int, err error) {
 
 	input := string(p)
 	masked := mw.masker.Mask(input)
+	maskedBytes := []byte(masked)
 
-	written, err := mw.underlying.Write([]byte(masked))
+	written, err := mw.underlying.Write(maskedBytes)
 	if err != nil {
 		return written, err
+	}
+
+	// Check for partial write
+	if written < len(maskedBytes) {
+		return written, stdio.ErrShortWrite
 	}
 
 	// Return original length to maintain write semantics

@@ -229,9 +229,14 @@ func (t *terminal) SetTitle(title string) {
 		return
 	}
 
-	// Only set title if stdout is a TTY
-	if !t.IsTTY(Stdout) {
+	// Only set title if stderr is a TTY (we write control sequences to stderr)
+	if !t.IsTTY(Stderr) {
 		return
+	}
+
+	// Capture original title on first call (best-effort - can't query current title)
+	if t.originalTitle == "" {
+		t.originalTitle = title
 	}
 
 	// Use OSC sequence to set terminal title
@@ -241,7 +246,6 @@ func (t *terminal) SetTitle(title string) {
 
 	if t.io != nil {
 		// Write through I/O layer (no masking needed for terminal control sequences)
-		// Use raw writer to avoid masking escape sequences
 		_ = t.io.Write(int(IOStreamUI), titleSeq)
 	} else {
 		// Fallback for tests
@@ -250,8 +254,15 @@ func (t *terminal) SetTitle(title string) {
 }
 
 func (t *terminal) RestoreTitle() {
+	// Best-effort restore: Set to captured original title
+	// Note: We can't query the actual terminal title, so we use the first title we set
 	if t.originalTitle != "" {
-		t.SetTitle(t.originalTitle)
+		titleSeq := fmt.Sprintf("%s0;%s%s", escOSC, t.originalTitle, escST)
+		if t.io != nil {
+			_ = t.io.Write(int(IOStreamUI), titleSeq)
+		} else {
+			fmt.Fprint(os.Stderr, titleSeq)
+		}
 	}
 }
 
@@ -356,8 +367,8 @@ func (c *Config) ShouldUseColor(isTTY bool) bool {
 	if c.AtmosConfig.Settings.Terminal.NoColor {
 		return false
 	}
-	if !c.AtmosConfig.Settings.Terminal.Color {
-		return false
+	if c.AtmosConfig.Settings.Terminal.Color {
+		return true
 	}
 
 	// 8. Default based on TTY
