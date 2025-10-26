@@ -1,15 +1,27 @@
 DEBU Set logs-level=debug logs-file=/dev/stderr
-DEBU GetCachedCredentials failed, attempting chain authentication identity=mock-identity error="identity not found: `mock-identity`"
+DEBU Found config ENV ATMOS_CLI_CONFIG_PATH=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-auth-mock
+DEBU Found config ENV ATMOS_CLI_CONFIG_PATH=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-auth-mock
+DEBU Found config ENV ATMOS_CLI_CONFIG_PATH=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-auth-mock
+DEBU credentialStore.Retrieve result identity=mock-identity creds_nil=true
+  error=
+  │ credential store
+  │ credentials not found for alias "mock-identity"
+DEBU Credentials not in keyring, trying to load from identity storage identity=mock-identity
+DEBU buildWhoamiInfoFromEnvironment called identity=mock-identity
+DEBU Identity lookup identity=mock-identity exists=true
+DEBU LoadCredentials result identity=mock-identity creds_nil=false error=<nil>
+DEBU Loaded credentials from identity storage identity=mock-identity
+DEBU Successfully loaded credentials from identity storage identity=mock-identity
+DEBU Credential validation succeeded identity=mock-identity
+✓ Current Authentication Status
 
-# Identityname                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        
-invalid auth configIdentity specified was not found in the auth config.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 
-
-
-DEBU Chain authentication failed identity=mock-identity error="identity not found: `mock-identity`"
-
-# Error                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        
-identity not found: mock-identity                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       
-
-
+  Provider      mock-provider                            
+  Identity      mock-identity                            
+  Principal     arn:aws:iam::123456789012:user/mock-user 
+  Account       123456789012                             
+  Region        us-east-1                                
+  Expires       2025-10-26 10:10:00 CDT (1h 0m)        
+  Last Updated  2025-10-26 09:10:00 CDT                  
+DEBU Found config ENV ATMOS_CLI_CONFIG_PATH=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-auth-mock
+DEBU Found config ENV ATMOS_CLI_CONFIG_PATH=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-auth-mock
+DEBU Telemetry is disabled, skipping capture

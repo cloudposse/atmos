@@ -83,7 +83,7 @@ tests:
   - name: atmos auth whoami without authentication
     enabled: true
     snapshot: true
-    description: "Test whoami succeeds by falling back to authentication (mock provider auto-authenticates)"
+    description: "Test whoami succeeds by loading credentials from identity storage (mock provider)"
     workdir: "fixtures/scenarios/atmos-auth-mock/"
     command: "atmos"
     env:
@@ -94,13 +94,15 @@ tests:
       - "--identity"
       - "mock-identity"
     expect:
-      diff: []
+      diff:
+        - "Expires"
+        - "Last Updated"
       stderr:
-        - "GetCachedCredentials failed"
-        - "attempting chain authentication"
-      stdout:
+        - "Credentials not in keyring, trying to load from identity storage"
+        - "Loaded credentials from identity storage"
         - "Current Authentication Status"
         - "mock-identity"
+      stdout: []
       exit_code: 0
 
   # ============================================================================
