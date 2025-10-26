@@ -686,6 +686,8 @@ func init() {
 	RootCmd.PersistentFlags().StringSlice("config", []string{}, "Paths to configuration files (comma-separated or repeated flag)")
 	RootCmd.PersistentFlags().StringSlice("config-path", []string{}, "Paths to configuration directories (comma-separated or repeated flag)")
 	RootCmd.PersistentFlags().Bool("no-color", false, "Disable color output")
+	RootCmd.PersistentFlags().Bool("force-color", false, "Force color output even when not a TTY (useful for screenshots)")
+	RootCmd.PersistentFlags().Bool("force-tty", false, "Force TTY mode with sane defaults when terminal detection fails (useful for screenshots)")
 	RootCmd.PersistentFlags().String("pager", "", "Enable pager for output (--pager or --pager=true to enable, --pager=false to disable, --pager=less to use specific pager)")
 	// Set NoOptDefVal so --pager without value means "true".
 	RootCmd.PersistentFlags().Lookup("pager").NoOptDefVal = "true"
@@ -698,6 +700,15 @@ func init() {
 			"Options: cpu, heap, allocs, goroutine, block, mutex, threadcreate, trace")
 	RootCmd.PersistentFlags().Bool("heatmap", false, "Show performance heatmap visualization after command execution (includes P95 latency)")
 	RootCmd.PersistentFlags().String("heatmap-mode", "bar", "Heatmap visualization mode: bar, sparkline, table (press 1-3 to switch in TUI)")
+
+	// Bind terminal flags to environment variables.
+	if err := viper.BindEnv("force-tty", "ATMOS_FORCE_TTY"); err != nil {
+		log.Error("Failed to bind ATMOS_FORCE_TTY environment variable", "error", err)
+	}
+	// Bind both ATMOS_FORCE_COLOR and CLICOLOR_FORCE to the same viper key (they are equivalent).
+	if err := viper.BindEnv("force-color", "ATMOS_FORCE_COLOR", "CLICOLOR_FORCE"); err != nil {
+		log.Error("Failed to bind ATMOS_FORCE_COLOR/CLICOLOR_FORCE environment variables", "error", err)
+	}
 
 	// Bind environment variables for GitHub authentication.
 	// ATMOS_GITHUB_TOKEN takes precedence over GITHUB_TOKEN.

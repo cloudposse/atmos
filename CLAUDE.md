@@ -227,6 +227,32 @@ Write code assuming a full-featured TTY - the system automatically handles every
 - ✅ **Accessibility** - Works in all terminal environments (screen readers, etc.)
 - ✅ **Consistent** - Same code path for all output, fewer bugs
 
+**Force Flags (for screenshot generation):**
+Use these flags to generate consistent output regardless of environment:
+- `--force-tty` / `ATMOS_FORCE_TTY=true` - Force TTY mode with sane defaults (width=120, height=40) when terminal detection fails
+- `--force-color` / `ATMOS_FORCE_COLOR=true` - Force TrueColor output even when not a TTY
+
+**Flag behavior:**
+- `--color` - Enables color **only if TTY** (respects terminal capabilities)
+- `--force-color` - Forces TrueColor **even for non-TTY** (for screenshots)
+- `--no-color` - Disables all color
+- `terminal.color` in atmos.yaml - Same as `--color` (respects TTY)
+
+**Example:**
+```bash
+# Generate screenshot with consistent output (using flags)
+atmos terraform plan --force-tty --force-color | screenshot.sh
+
+# Generate screenshot with consistent output (using env vars)
+ATMOS_FORCE_TTY=true ATMOS_FORCE_COLOR=true atmos terraform plan | screenshot.sh
+
+# Normal usage - automatically detects terminal
+atmos terraform plan
+
+# Piped output - automatically disables color
+atmos terraform output | jq .vpc_id
+```
+
 See `pkg/io/example_test.go` for comprehensive examples.
 
 ### Package Organization (MANDATORY)

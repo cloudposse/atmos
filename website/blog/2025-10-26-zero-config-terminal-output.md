@@ -198,9 +198,14 @@ The system automatically respects all standard conventions:
 - `FORCE_COLOR=1` - Forces color even when piped
 - `TERM=dumb` - Uses plain text output
 - `CI=true` - Detects CI environment
+- `ATMOS_FORCE_TTY=true` - Forces TTY mode with sane defaults (for screenshots)
+- `ATMOS_FORCE_COLOR=true` - Forces TrueColor even for non-TTY (for screenshots)
 
 ### CLI Flags
 - `--no-color` - Disables colors
+- `--color` - Enables color (only if TTY)
+- `--force-color` - Forces TrueColor even for non-TTY (for screenshots)
+- `--force-tty` - Forces TTY mode with sane defaults (for screenshots)
 - `--redirect-stderr` - Redirects UI to stdout
 
 ### Terminal Detection

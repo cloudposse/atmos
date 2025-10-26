@@ -109,8 +109,10 @@ func (c ColorProfile) String() string {
 // Config holds terminal configuration from various sources.
 type Config struct {
 	// From CLI flags
-	NoColor bool
-	Color   bool
+	NoColor    bool
+	Color      bool
+	ForceColor bool
+	ForceTTY   bool
 
 	// From environment variables
 	EnvNoColor       bool   // NO_COLOR
@@ -129,7 +131,15 @@ type terminal struct {
 	config        *Config
 	colorProfile  ColorProfile
 	originalTitle string
+	forceTTY      bool
+	forceColor    bool
 }
+
+const (
+	// Sane defaults for forced TTY mode (used for screenshots).
+	defaultForcedWidth  = 120
+	defaultForcedHeight = 40
+)
 
 // New creates a new Terminal with configuration.
 func New(opts ...Option) Terminal {
@@ -138,7 +148,9 @@ func New(opts ...Option) Terminal {
 	cfg := buildConfig()
 
 	t := &terminal{
-		config: cfg,
+		config:     cfg,
+		forceTTY:   cfg.ForceTTY,
+		forceColor: cfg.ForceColor,
 	}
 
 	// Apply options
@@ -147,12 +159,19 @@ func New(opts ...Option) Terminal {
 	}
 
 	// Detect color profile once at initialization
-	// Check stderr first (where UI is written), fall back to stdout
+	// When --force-tty is set, treat as TTY even if detection fails
+	// When --force-color is set, use TrueColor profile
 	isTTYOut := t.IsTTY(Stderr)
 	if !isTTYOut {
 		isTTYOut = t.IsTTY(Stdout)
 	}
-	t.colorProfile = cfg.DetectColorProfile(isTTYOut)
+
+	// Force color profile if --force-color is set
+	if t.forceColor {
+		t.colorProfile = ColorTrue
+	} else {
+		t.colorProfile = cfg.DetectColorProfile(isTTYOut)
+	}
 
 	return t
 }
@@ -172,6 +191,8 @@ func WithIO(io IOWriter) Option {
 func WithConfig(cfg *Config) Option {
 	return func(t *terminal) {
 		t.config = cfg
+		t.forceTTY = cfg.ForceTTY
+		t.forceColor = cfg.ForceColor
 	}
 }
 
@@ -195,6 +216,11 @@ func (t *terminal) Write(content string) error {
 func (t *terminal) IsTTY(stream Stream) bool {
 	defer perf.Track(nil, "terminal.IsTTY")()
 
+	// If --force-tty is set, always return true (for screenshot generation).
+	if t.forceTTY {
+		return true
+	}
+
 	fd := streamToFd(stream)
 	if fd < 0 {
 		return false
@@ -213,11 +239,19 @@ func (t *terminal) Width(stream Stream) int {
 
 	fd := streamToFd(stream)
 	if fd < 0 {
+		// If --force-tty is set, return sane default width.
+		if t.forceTTY {
+			return defaultForcedWidth
+		}
 		return 0
 	}
 
 	width, _, err := term.GetSize(fd)
 	if err != nil {
+		// If --force-tty is set and detection fails, return sane default width.
+		if t.forceTTY {
+			return defaultForcedWidth
+		}
 		return 0
 	}
 
@@ -229,11 +263,19 @@ func (t *terminal) Height(stream Stream) int {
 
 	fd := streamToFd(stream)
 	if fd < 0 {
+		// If --force-tty is set, return sane default height.
+		if t.forceTTY {
+			return defaultForcedHeight
+		}
 		return 0
 	}
 
 	_, height, err := term.GetSize(fd)
 	if err != nil {
+		// If --force-tty is set and detection fails, return sane default height.
+		if t.forceTTY {
+			return defaultForcedHeight
+		}
 		return 0
 	}
 
@@ -328,8 +370,10 @@ func streamToFd(stream Stream) int {
 func buildConfig() *Config {
 	cfg := &Config{
 		// From flags (bound via viper in cmd/root.go)
-		NoColor: viper.GetBool("no-color"),
-		Color:   viper.GetBool("color"),
+		NoColor:    viper.GetBool("no-color"),
+		Color:      viper.GetBool("color"),
+		ForceColor: viper.GetBool("force-color"),
+		ForceTTY:   viper.GetBool("force-tty"),
 
 		// From environment variables (standard terminal env vars, not Atmos-specific)
 		EnvNoColor:       os.Getenv("NO_COLOR") != "",       //nolint:forbidigo // Standard terminal env var
@@ -353,13 +397,16 @@ func buildConfig() *Config {
 // ShouldUseColor determines if color should be used based on config priority.
 // Priority (highest to lowest):
 // 1. NO_COLOR env var - disables all color
-// 2. CLICOLOR=0 - disables color (unless CLICOLOR_FORCE is set)
+// 2. CLICOLOR=0 - disables color (unless CLICOLOR_FORCE or --force-color is set)
 // 3. CLICOLOR_FORCE - forces color even for non-TTY
-// 4. --no-color flag
-// 5. --color flag
-// 6. Atmos.yaml terminal.no_color (deprecated).
-// 7. Atmos.yaml terminal.color.
-// 8. Default (true for TTY, false for non-TTY).
+// 4. --force-color flag - forces color even for non-TTY
+// 5. --no-color flag - disables color
+// 6. --color flag - enables color (only if TTY)
+// 7. Atmos.yaml terminal.no_color (deprecated) - disables color
+// 8. Atmos.yaml terminal.color - enables color (only if TTY)
+// 9. Default (true for TTY, false for non-TTY).
+//
+//nolint:revive // Cyclomatic complexity acceptable for priority-based configuration logic.
 func (c *Config) ShouldUseColor(isTTY bool) bool {
 	// 1. NO_COLOR always wins
 	if c.EnvNoColor {
@@ -367,7 +414,7 @@ func (c *Config) ShouldUseColor(isTTY bool) bool {
 	}
 
 	// 2. CLICOLOR=0 (unless forced)
-	if c.EnvCLIColor == "0" && !c.EnvCLIColorForce {
+	if c.EnvCLIColor == "0" && !c.EnvCLIColorForce && !c.ForceColor {
 		return false
 	}
 
@@ -376,33 +423,50 @@ func (c *Config) ShouldUseColor(isTTY bool) bool {
 		return true
 	}
 
-	// 4. --no-color flag
+	// 4. --force-color flag overrides TTY detection
+	if c.ForceColor {
+		return true
+	}
+
+	// 5. --no-color flag
 	if c.NoColor {
 		return false
 	}
 
-	// 5. --color flag
-	if c.Color {
+	// 6. --color flag (respects TTY - only enables color if TTY)
+	if c.Color && isTTY {
 		return true
 	}
 
-	// 6-7. atmos.yaml config
+	// 7-8. atmos.yaml config (respects TTY)
 	if c.AtmosConfig.Settings.Terminal.NoColor {
 		return false
 	}
-	if c.AtmosConfig.Settings.Terminal.Color {
+	if c.AtmosConfig.Settings.Terminal.Color && isTTY {
 		return true
 	}
 
-	// 8. Default based on TTY
+	// 9. Default based on TTY
 	return isTTY
 }
 
 // DetectColorProfile determines the terminal's color capabilities.
+//
+//nolint:revive // Cyclomatic complexity acceptable for priority-based capability detection.
 func (c *Config) DetectColorProfile(isTTY bool) ColorProfile {
 	// If color is disabled, return ColorNone
 	if !c.ShouldUseColor(isTTY) {
 		return ColorNone
+	}
+
+	// If --force-color is set, return TrueColor
+	if c.ForceColor {
+		return ColorTrue
+	}
+
+	// If CLICOLOR_FORCE is set, return TrueColor
+	if c.EnvCLIColorForce {
+		return ColorTrue
 	}
 
 	// Check for truecolor support
