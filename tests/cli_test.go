@@ -865,6 +865,41 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 		}
 	}
 
+	// Set up XDG directories in temp locations to ensure test isolation.
+	// This prevents tests from:
+	// 1. Reading user's telemetry acknowledgment state (causing inconsistent telemetry notices)
+	// 2. Writing to user's cache/config/data directories
+	// 3. Being affected by user's XDG environment settings
+	//
+	// Create a unique temp directory for this test's XDG state.
+	xdgTempDir := filepath.Join(t.TempDir(), "xdg")
+	xdgVars := map[string]string{
+		"XDG_CACHE_HOME":        filepath.Join(xdgTempDir, "cache"),
+		"XDG_CONFIG_HOME":       filepath.Join(xdgTempDir, "config"),
+		"XDG_DATA_HOME":         filepath.Join(xdgTempDir, "data"),
+		"ATMOS_XDG_CACHE_HOME":  filepath.Join(xdgTempDir, "cache"),
+		"ATMOS_XDG_CONFIG_HOME": filepath.Join(xdgTempDir, "config"),
+		"ATMOS_XDG_DATA_HOME":   filepath.Join(xdgTempDir, "data"),
+	}
+
+	// Add XDG vars to environment unless test explicitly sets them.
+	for xdgVar, xdgPath := range xdgVars {
+		if _, exists := tc.Env[xdgVar]; exists {
+			continue // Test explicitly set this, don't override
+		}
+
+		// Remove any inherited XDG var first
+		for i, env := range envVars {
+			if strings.HasPrefix(env, xdgVar+"=") {
+				envVars = append(envVars[:i], envVars[i+1:]...)
+				break
+			}
+		}
+
+		// Add our isolated XDG var
+		envVars = append(envVars, fmt.Sprintf("%s=%s", xdgVar, xdgPath))
+	}
+
 	cmd.Env = envVars
 
 	var stdout, stderr bytes.Buffer
