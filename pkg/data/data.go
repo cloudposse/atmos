@@ -55,6 +55,14 @@ func Writef(format string, a ...interface{}) error {
 	return getIOContext().Write(io.DataStream, fmt.Sprintf(format, a...))
 }
 
+// Writeln writes content followed by a newline to the data channel (stdout).
+// Flow: data.Writeln() → io.Write(DataStream) → masking → stdout.
+func Writeln(content string) error {
+	defer perf.Track(nil, "data.Writeln")()
+
+	return getIOContext().Write(io.DataStream, content+"\n")
+}
+
 // WriteJSON marshals v to JSON and writes to the data channel (stdout).
 // Flow: data.WriteJSON() → io.Write(DataStream) → masking → stdout.
 func WriteJSON(v interface{}) error {

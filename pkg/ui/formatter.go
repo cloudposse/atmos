@@ -200,6 +200,28 @@ func Infof(format string, a ...interface{}) error {
 	return f.terminal.Write(formatted)
 }
 
+// Write writes plain text to stderr (UI channel) without icons or automatic styling.
+// Flow: ui.Write() → terminal.Write() → io.Write(UIStream) → masking → stderr.
+func Write(text string) error {
+	f, err := getFormatter()
+	if err != nil {
+		return err
+	}
+	return f.terminal.Write(text)
+}
+
+// Writef writes formatted text to stderr (UI channel) without icons or automatic styling.
+// Flow: ui.Writef() → terminal.Write() → io.Write(UIStream) → masking → stderr.
+func Writef(format string, a ...interface{}) error {
+	return Write(fmt.Sprintf(format, a...))
+}
+
+// Writeln writes text followed by a newline to stderr (UI channel) without icons or automatic styling.
+// Flow: ui.Writeln() → terminal.Write() → io.Write(UIStream) → masking → stderr.
+func Writeln(text string) error {
+	return Write(text + newline)
+}
+
 // Format exposes the global formatter for advanced use cases.
 // Most code should use the package-level functions (ui.Success, ui.Error, etc.).
 // Use this when you need the formatted string without writing it.
