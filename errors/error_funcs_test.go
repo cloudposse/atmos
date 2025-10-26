@@ -193,12 +193,25 @@ func TestCheckErrorAndPrint(t *testing.T) {
 			render = originalRender
 		}()
 
-		logBuf.Reset()
+		r, w, _ := os.Pipe()
+		originalStderr := os.Stderr
+		os.Stderr = w
+		defer func() {
+			os.Stderr = originalStderr
+		}()
+
 		testErr := errors.New("error with nil render")
 		CheckErrorAndPrint(testErr, "Test", "Suggestion")
 
-		// Should log error directly
-		assert.Contains(t, logBuf.String(), "error with nil render")
+		w.Close()
+		var buf bytes.Buffer
+		_, _ = buf.ReadFrom(r)
+		output := buf.String()
+
+		// Should output plain text error to stderr
+		assert.Contains(t, output, "error with nil render")
+		assert.Contains(t, output, "Test")
+		assert.Contains(t, output, "Suggestion")
 	})
 
 	// Test with empty title (defaults to "Error")

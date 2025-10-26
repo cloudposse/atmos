@@ -341,11 +341,12 @@ func TestExecuteAuthLogoutCommand_RejectsIdentityFlag(t *testing.T) {
 	tk := NewTestKit(t)
 	defer tk.Cleanup(func() {
 		// Reset the flag after test.
-		authLogoutCmd.Flags().Set("identity", "")
+		authCmd.PersistentFlags().Set("identity", "")
 	})
 
 	// Set the --identity flag (inherited from parent command).
-	authLogoutCmd.Flags().Set("identity", "test-identity")
+	// The identity flag is defined on the parent authCmd, not authLogoutCmd.
+	authCmd.PersistentFlags().Set("identity", "test-identity")
 
 	err := executeAuthLogoutCommand(authLogoutCmd, []string{})
 

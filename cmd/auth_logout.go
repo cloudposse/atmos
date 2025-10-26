@@ -61,7 +61,11 @@ func executeAuthLogoutCommand(cmd *cobra.Command, args []string) error {
 	dryRun, _ := cmd.Flags().GetBool("dry-run")
 
 	// Check if the inherited --identity flag was used (common mistake).
-	identityFlag, _ := cmd.Flags().GetString("identity")
+	// Note: "identity" is a persistent flag on parent authCmd, so we need to check inherited flags.
+	identityFlag := ""
+	if flag := cmd.Flag("identity"); flag != nil {
+		identityFlag = flag.Value.String()
+	}
 	if identityFlag != "" {
 		u.PrintfMarkdownToTUI("**Error:** The `--identity` flag is not supported by `atmos auth logout`.\n\n")
 		u.PrintfMarkdownToTUI("**Usage:**\n")
