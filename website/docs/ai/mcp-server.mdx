@@ -29,10 +29,19 @@ See [Security Considerations](#security-considerations) below for detailed guida
 
 The MCP server allows you to use Atmos infrastructure management capabilities from any AI assistant that supports the MCP protocol:
 
+### Desktop Applications
 - **Claude Desktop**: Use Atmos tools directly in Claude conversations
-- **Claude Code**: Access Atmos capabilities in your code editor
-- **VSCode**: Integrate with VSCode AI extensions
-- **Custom Clients**: Build your own MCP-compatible applications
+- **Cursor**: AI-first code editor with deep MCP integration
+- **Windsurf**: AI-powered development environment
+
+### VS Code Extensions
+- **GitHub Copilot**: Microsoft's AI coding assistant with MCP support
+- **Cline**: Autonomous coding agent that creates and adds tools
+- **Continue.dev**: Multi-model AI assistant with comprehensive MCP features
+
+### Other Integrations
+- **100+ Applications**: The MCP protocol is supported by a growing ecosystem of tools
+- **Custom Clients**: Build your own MCP-compatible applications using official SDKs
 
 ## Features
 
@@ -362,22 +371,181 @@ After adding the configuration:
    - **Windows**: `%APPDATA%\Claude\logs\mcp*.log`
    - **Linux**: `~/.config/Claude/logs/mcp*.log`
 
-#### VSCode Integration
+#### Other MCP Clients
 
-For VSCode extensions that support MCP:
+Beyond Claude Desktop, the Atmos MCP server works with many popular development tools and AI assistants.
 
-<File title="settings.json">
+##### VS Code with GitHub Copilot
+
+**Prerequisites**: VS Code with GitHub Copilot extension installed
+
+**Configuration Location**: `.vscode/mcp.json` (workspace) or global via Command Palette
+
+Create or edit `.vscode/mcp.json` in your project:
+
+<File title=".vscode/mcp.json">
 ```json
 {
-  "mcp.servers": {
+  "servers": {
     "atmos": {
+      "type": "stdio",
       "command": "atmos",
-      "args": ["mcp-server"]
+      "args": ["mcp-server"],
+      "cwd": "${workspaceFolder}"
     }
   }
 }
 ```
 </File>
+
+**Alternative Setup via Command Palette**:
+1. Press `Cmd+Shift+P` (macOS) or `Ctrl+Shift+P` (Windows/Linux)
+2. Search for "MCP: Add Server"
+3. Choose workspace or global configuration
+4. Configure the Atmos server
+
+VS Code will prompt you to trust the server on first use.
+
+:::tip VS Code Configuration
+VS Code can automatically detect MCP configurations from Claude Desktop. Enable `chat.mcp.discovery.enabled` in settings to reuse your Claude Desktop configuration.
+:::
+
+##### Cursor IDE
+
+**Configuration Location**: `~/.cursor/mcp.json` (global) or `.cursor/mcp.json` (project)
+
+<File title="~/.cursor/mcp.json">
+```json
+{
+  "mcpServers": {
+    "atmos": {
+      "command": "atmos",
+      "args": ["mcp-server"],
+      "cwd": "/path/to/your/atmos/project",
+      "env": {
+        "ATMOS_BASE_PATH": "/path/to/your/atmos/project"
+      }
+    }
+  }
+}
+```
+</File>
+
+**GUI Setup**:
+1. Open Cursor Settings → Tools & Integrations
+2. Click "New MCP Server"
+3. Enter server details
+4. Save configuration
+
+**Manual Setup**:
+1. Go to Settings → Developer → Edit Config
+2. Select "MCP Tools"
+3. Click "Add Custom MCP"
+4. Edit the `mcp.json` file
+
+##### Cline (VS Code Extension)
+
+**Prerequisites**: Install [Cline extension](https://marketplace.visualstudio.com/items?itemName=saoudrizwan.claude-dev) from VS Code Marketplace
+
+**Configuration**:
+1. Click the "MCP Servers" icon in Cline's top navigation
+2. Click "Configure MCP Servers" to open `cline_mcp_settings.json`
+3. Add Atmos configuration:
+
+<File title="cline_mcp_settings.json">
+```json
+{
+  "mcpServers": {
+    "atmos": {
+      "command": "atmos",
+      "args": ["mcp-server"],
+      "cwd": "/path/to/your/atmos/project",
+      "env": {},
+      "alwaysAllow": [],
+      "disabled": false
+    }
+  }
+}
+```
+</File>
+
+**Configuration Options**:
+- `alwaysAllow`: Array of tool names to auto-approve (e.g., `["atmos_list_stacks"]`)
+- `disabled`: Set to `true` to temporarily disable the server
+- Network timeout: Default 1 minute, configurable from 30s to 1 hour
+
+##### Continue.dev (VS Code Extension)
+
+**Prerequisites**: Install [Continue extension](https://marketplace.visualstudio.com/items?itemName=Continue.continue) from VS Code Marketplace
+
+**Configuration Method 1 - Dedicated Folder**:
+
+Create `.continue/mcpServers/atmos.yaml` in your workspace:
+
+<File title=".continue/mcpServers/atmos.yaml">
+```yaml
+name: atmos
+command: atmos
+args:
+  - mcp-server
+cwd: /path/to/your/atmos/project
+env:
+  ATMOS_BASE_PATH: /path/to/your/atmos/project
+```
+</File>
+
+**Configuration Method 2 - Main Config**:
+
+Edit `.continue/config.yaml`:
+
+<File title=".continue/config.yaml">
+```yaml
+mcpServers:
+  - name: atmos
+    command: atmos
+    args:
+      - mcp-server
+    cwd: /path/to/your/atmos/project
+    env:
+      ATMOS_BASE_PATH: /path/to/your/atmos/project
+```
+</File>
+
+##### Windsurf IDE
+
+Windsurf uses a similar configuration to Cursor:
+
+<File title="~/.windsurf/mcp.json">
+```json
+{
+  "mcpServers": {
+    "atmos": {
+      "command": "atmos",
+      "args": ["mcp-server"],
+      "cwd": "/path/to/your/atmos/project"
+    }
+  }
+}
+```
+</File>
+
+##### Client Comparison
+
+| Client | Best For | Configuration | MCP Features |
+|--------|----------|---------------|--------------|
+| **Claude Desktop** | General AI chat, infrastructure queries | Simple JSON config | Tools, Resources, Prompts |
+| **VS Code Copilot** | Coding with AI assistance | `.vscode/mcp.json` | Tools, Resources |
+| **Cursor** | AI-first code editor | `~/.cursor/mcp.json` | Tools, Resources, Prompts |
+| **Cline** | Autonomous coding agent | GUI + JSON config | Tools, Resources |
+| **Continue.dev** | Multi-model code assistant | YAML config | Tools, Resources |
+| **Windsurf** | AI code editor | Similar to Cursor | Tools, Resources |
+
+:::tip Choosing a Client
+- **Claude Desktop**: Best for general infrastructure management and queries
+- **VS Code/Cursor/Cline**: Best for coding while having Atmos context
+- **Continue.dev**: Best if you want to use multiple AI models
+- **HTTP transport**: Best for team collaboration and CI/CD pipelines
+:::
 
 ### HTTP Transport (Remote/Cloud)
 
@@ -1240,6 +1408,14 @@ You can use both simultaneously - they're complementary features!
 ### Setup Guides
 - [Claude Desktop Guide](https://claude.ai/desktop) - Claude Desktop setup and usage
 - [Notes on Setting Up Claude Desktop MCP Servers](https://nishtahir.com/notes-on-setting-up-claude-desktop-mcp-servers/) - Troubleshooting common issues
+- [VS Code MCP Documentation](https://code.visualstudio.com/docs/copilot/chat/mcp-servers) - Official VS Code MCP server guide
+- [Cursor MCP Documentation](https://docs.cursor.com/context/model-context-protocol) - Cursor IDE MCP setup
+- [Cline Documentation](https://docs.cline.bot/mcp/configuring-mcp-servers) - Cline MCP configuration guide
+- [Continue.dev Documentation](https://docs.continue.dev/reference) - Continue extension reference
+
+### MCP Client Lists
+- [Official MCP Clients](https://modelcontextprotocol.io/clients) - Complete list of 100+ MCP-compatible applications
+- [Awesome MCP Clients](https://github.com/punkpeye/awesome-mcp-clients) - Community-curated list of MCP clients
 
 ## Feedback and Support
 
