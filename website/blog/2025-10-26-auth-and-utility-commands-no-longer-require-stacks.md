@@ -116,5 +116,5 @@ This ensures that stack-dependent operations have the context they need while al
 
 - [PR #1717: Relax stack config requirement for commands that don't operate on stacks](https://github.com/cloudposse/atmos/pull/1717)
 - [Nobody Runs Native Terraform](https://cloudposse.com/blog/nobody-runs-native-terraform/)
-- [Authentication Documentation](/cli/commands/auth)
-- [Vendor Configuration](/cli/commands/vendor)
+- [Authentication Documentation](/cli/commands/auth/auth-login)
+- [Vendor Configuration](/core-concepts/vendor/vendor)
