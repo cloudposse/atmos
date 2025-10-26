@@ -360,3 +360,48 @@ func TestJoinPath_WindowsPathNormalization(t *testing.T) {
 		})
 	}
 }
+
+// TestJoinPath_WindowsAbsolutePaths specifically tests Windows absolute path scenarios.
+func TestJoinPath_WindowsAbsolutePaths(t *testing.T) {
+	tests := []struct {
+		name         string
+		basePath     string
+		providedPath string
+		expected     string
+	}{
+		{
+			name:         "GitHub Actions Windows path - components absolute",
+			basePath:     `C:\Users\runner\_work\infrastructure\infrastructure`,
+			providedPath: `C:\Users\runner\_work\infrastructure\infrastructure\atmos\components\terraform`,
+			expected:     `C:\Users\runner\_work\infrastructure\infrastructure\atmos\components\terraform`,
+		},
+		{
+			name:         "GitHub Actions Windows path - components relative",
+			basePath:     `C:\Users\runner\_work\infrastructure\infrastructure`,
+			providedPath: `atmos\components\terraform`,
+			expected:     `C:\Users\runner\_work\infrastructure\infrastructure\atmos\components\terraform`,
+		},
+		{
+			name:         "Windows UNC path",
+			basePath:     `\\server\share\project`,
+			providedPath: `components\terraform`,
+			expected:     `\\server\share\project\components\terraform`,
+		},
+		{
+			name:         "Different drive letters",
+			basePath:     `C:\project`,
+			providedPath: `D:\components`,
+			expected:     `D:\components`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := JoinPath(tt.basePath, tt.providedPath)
+			assert.Equal(t, tt.expected, result)
+			// Verify no path duplication.
+			assert.NotContains(t, result, `C:\Users\runner\_work\infrastructure\infrastructure\C:\Users`,
+				"Should not duplicate absolute paths")
+		})
+	}
+}

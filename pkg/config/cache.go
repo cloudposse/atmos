@@ -11,41 +11,32 @@ import (
 	"strings"
 	"time"
 
-	"github.com/adrg/xdg"
 	"github.com/spf13/viper"
 	"go.yaml.in/yaml/v3"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/xdg"
+)
+
+const (
+	// CacheDirPermissions is the default permission for cache directory (read/write/execute for owner, read/execute for group and others).
+	CacheDirPermissions = 0o755
 )
 
 type CacheConfig struct {
-	LastChecked              int64  `mapstructure:"last_checked" yaml:"last_checked"`
-	InstallationId           string `mapstructure:"installation_id" yaml:"installation_id"`
-	TelemetryDisclosureShown bool   `mapstructure:"telemetry_disclosure_shown" yaml:"telemetry_disclosure_shown"`
+	LastChecked                int64  `mapstructure:"last_checked" yaml:"last_checked"`
+	InstallationId             string `mapstructure:"installation_id" yaml:"installation_id"`
+	TelemetryDisclosureShown   bool   `mapstructure:"telemetry_disclosure_shown" yaml:"telemetry_disclosure_shown"`
+	BrowserSessionWarningShown bool   `mapstructure:"browser_session_warning_shown" yaml:"browser_session_warning_shown"`
 }
 
 // GetCacheFilePath returns the filesystem path to the Atmos cache file.
 // It respects ATMOS_XDG_CACHE_HOME and XDG_CACHE_HOME environment variables for cache directory location.
-// Returns an error if the cache directory cannot be created or if environment variables cannot be bound.
+// Returns an error if xdg.GetXDGCacheDir fails or if the cache directory cannot be created.
 func GetCacheFilePath() (string, error) {
-	// Bind both ATMOS_XDG_CACHE_HOME and XDG_CACHE_HOME to support ATMOS override
-	// This allows operators to use ATMOS_XDG_CACHE_HOME to override the standard XDG_CACHE_HOME
-	v := viper.New()
-	if err := v.BindEnv("XDG_CACHE_HOME", "ATMOS_XDG_CACHE_HOME", "XDG_CACHE_HOME"); err != nil {
-		return "", fmt.Errorf("error binding XDG_CACHE_HOME environment variables: %w", err)
-	}
-
-	var cacheDir string
-	if customCacheHome := v.GetString("XDG_CACHE_HOME"); customCacheHome != "" {
-		// Use the custom cache home from either ATMOS_XDG_CACHE_HOME or XDG_CACHE_HOME
-		cacheDir = filepath.Join(customCacheHome, "atmos")
-	} else {
-		// Fall back to XDG library default behavior
-		cacheDir = filepath.Join(xdg.CacheHome, "atmos")
-	}
-
-	if err := os.MkdirAll(cacheDir, 0o755); err != nil {
+	cacheDir, err := xdg.GetXDGCacheDir("", CacheDirPermissions)
+	if err != nil {
 		return "", errors.Join(errUtils.ErrCacheDir, err)
 	}
 
@@ -81,9 +72,13 @@ func LoadCache() (CacheConfig, error) {
 		v := viper.New()
 		v.SetConfigFile(cacheFile)
 		// Ignore read errors on Windows - cache is non-critical.
-		_ = v.ReadInConfig()
+		if err := v.ReadInConfig(); err != nil {
+			log.Trace("Failed to read cache file on Windows (non-critical)", "error", err, "file", cacheFile)
+		}
 		// Ignore unmarshal errors on Windows - cache is non-critical.
-		_ = v.Unmarshal(&cfg)
+		if err := v.Unmarshal(&cfg); err != nil {
+			log.Trace("Failed to unmarshal cache on Windows (non-critical)", "error", err, "file", cacheFile)
+		}
 		return cfg, nil
 	}
 

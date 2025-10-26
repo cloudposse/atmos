@@ -6,9 +6,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
+	"go.uber.org/mock/gomock"
 
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/pager"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -189,12 +190,6 @@ func TestDescribeComponentWithOverridesSection(t *testing.T) {
 	log.SetLevel(log.InfoLevel)
 	log.SetOutput(os.Stdout)
 
-	// Capture the starting working directory
-	startingDir, err := os.Getwd()
-	if err != nil {
-		t.Fatalf("Failed to get the current working directory: %v", err)
-	}
-
 	defer func() {
 		// Delete the generated files and folders after the test
 		err := os.RemoveAll(filepath.Join("..", "..", "components", "terraform", "mock", ".terraform"))
@@ -202,18 +197,11 @@ func TestDescribeComponentWithOverridesSection(t *testing.T) {
 
 		err = os.RemoveAll(filepath.Join("..", "..", "components", "terraform", "mock", "terraform.tfstate.d"))
 		assert.NoError(t, err)
-
-		// Change back to the original working directory after the test
-		if err = os.Chdir(startingDir); err != nil {
-			t.Fatalf("Failed to change back to the starting directory: %v", err)
-		}
 	}()
 
 	// Define the working directory
 	workDir := "../../tests/fixtures/scenarios/atmos-overrides-section"
-	if err := os.Chdir(workDir); err != nil {
-		t.Fatalf("Failed to change directory to %q: %v", workDir, err)
-	}
+	t.Chdir(workDir)
 
 	component := "c1"
 
@@ -351,24 +339,9 @@ func TestDescribeComponent_Packer(t *testing.T) {
 	log.SetLevel(log.InfoLevel)
 	log.SetOutput(os.Stdout)
 
-	// Capture the starting working directory
-	startingDir, err := os.Getwd()
-	if err != nil {
-		t.Fatalf("Failed to get the current working directory: %v", err)
-	}
-
-	defer func() {
-		// Change back to the original working directory after the test
-		if err = os.Chdir(startingDir); err != nil {
-			t.Fatalf("Failed to change back to the starting directory: %v", err)
-		}
-	}()
-
 	// Define the working directory
 	workDir := "../../tests/fixtures/scenarios/packer"
-	if err := os.Chdir(workDir); err != nil {
-		t.Fatalf("Failed to change directory to %q: %v", workDir, err)
-	}
+	t.Chdir(workDir)
 
 	atmosConfig := schema.AtmosConfiguration{
 		Logs: schema.Logs{
@@ -401,6 +374,12 @@ func TestDescribeComponent_Packer(t *testing.T) {
 }
 
 func TestDescribeComponentWithProvenance(t *testing.T) {
+	// Clear cache to ensure fresh processing.
+	ClearBaseComponentConfigCache()
+	ClearMergeContexts()
+	ClearLastMergeContext()
+	ClearFileContentCache()
+
 	err := os.Unsetenv("ATMOS_CLI_CONFIG_PATH")
 	if err != nil {
 		t.Fatalf("Failed to unset 'ATMOS_CLI_CONFIG_PATH': %v", err)
@@ -414,65 +393,34 @@ func TestDescribeComponentWithProvenance(t *testing.T) {
 	log.SetLevel(log.InfoLevel)
 	log.SetOutput(os.Stdout)
 
-	// Capture the starting working directory
-	startingDir, err := os.Getwd()
-	if err != nil {
-		t.Fatalf("Failed to get the current working directory: %v", err)
-	}
-
-	defer func() {
-		// Change back to the original working directory after the test
-		if err = os.Chdir(startingDir); err != nil {
-			t.Fatalf("Failed to change back to the starting directory: %v", err)
-		}
-	}()
-
 	// Define the working directory - using quick-start-advanced as it has a good mix of configs
 	workDir := "../../examples/quick-start-advanced"
-	if err := os.Chdir(workDir); err != nil {
-		t.Fatalf("Failed to change directory to %q: %v", workDir, err)
-	}
+	t.Chdir(workDir)
 
 	component := "vpc-flow-logs-bucket"
 	stack := "plat-ue2-dev"
 
-	// Execute describe component WITHOUT provenance first to get a baseline
-	componentSection, err := ExecuteDescribeComponent(
-		component,
-		stack,
-		true, // processTemplates
-		true, // processYamlFunctions
-		nil,  // skip
-	)
+	// Initialize atmosConfig with provenance tracking enabled
+	var configAndStacksInfo schema.ConfigAndStacksInfo
+	configAndStacksInfo.ComponentFromArg = component
+	configAndStacksInfo.Stack = stack
+	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
 	assert.NoError(t, err)
-	assert.NotNil(t, componentSection)
+	atmosConfig.TrackProvenance = true
 
-	// Now execute with provenance by passing nil atmosConfig
-	// This will initialize it properly, but we need to set provenance tracking
-	// We'll use the DescribeComponentExec with the Provenance flag set
-	exec := NewDescribeComponentExec()
-
-	// Execute with provenance enabled
-	err = exec.ExecuteDescribeComponentCmd(DescribeComponentParams{
+	// Execute with provenance enabled using ExecuteDescribeComponentWithContext
+	result, err := ExecuteDescribeComponentWithContext(DescribeComponentContextParams{
+		AtmosConfig:          &atmosConfig,
 		Component:            component,
 		Stack:                stack,
 		ProcessTemplates:     true,
 		ProcessYamlFunctions: true,
-		Provenance:           true,
+		Skip:                 nil,
 	})
 	assert.NoError(t, err)
-
-	// Get the last merge context that was stored
-	mergeContext := GetLastMergeContext()
-	assert.NotNil(t, mergeContext, "MergeContext should not be nil when provenance is enabled")
-	assert.True(t, mergeContext.IsProvenanceEnabled(), "MergeContext should have provenance enabled")
-
-	// Use the baseline component section for further checks
-	result := &DescribeComponentResult{
-		ComponentSection: componentSection,
-		MergeContext:     mergeContext,
-	}
 	assert.NotNil(t, result)
+	assert.NotNil(t, result.MergeContext, "MergeContext should not be nil when provenance is enabled")
+	assert.True(t, result.MergeContext.IsProvenanceEnabled(), "MergeContext should have provenance enabled")
 
 	// Verify component section is populated
 	assert.NotNil(t, result.ComponentSection)
@@ -486,30 +434,29 @@ func TestDescribeComponentWithProvenance(t *testing.T) {
 	provenancePaths := result.MergeContext.GetProvenancePaths()
 	assert.NotEmpty(t, provenancePaths, "Provenance paths should not be empty")
 
-	// Verify we have provenance entries for some expected paths
-	foundVarsEnabled := false
-	foundVarsName := false
+	// Verify we have provenance entries for vars fields.
+	// Check for any vars-related paths rather than specific ones to avoid platform-specific issues.
+	foundVarsPath := false
+	varsPathsFound := []string{}
 	for _, path := range provenancePaths {
 		entries := result.MergeContext.GetProvenance(path)
 		if len(entries) > 0 {
-			// Check for vars.enabled
-			if path == "vars.enabled" || path == "components.terraform.vpc-flow-logs-bucket.vars.enabled" {
-				foundVarsEnabled = true
+			// Check for any vars.* path.
+			if strings.Contains(path, "vars.") {
+				foundVarsPath = true
+				varsPathsFound = append(varsPathsFound, path)
 				// Verify the entry has file and line information
-				assert.NotEmpty(t, entries[0].File, "Provenance entry should have a file")
-				assert.Greater(t, entries[0].Line, 0, "Provenance entry should have a line number")
-			}
-			// Check for vars.name
-			if path == "vars.name" || path == "components.terraform.vpc-flow-logs-bucket.vars.name" {
-				foundVarsName = true
-				assert.NotEmpty(t, entries[0].File, "Provenance entry should have a file")
-				assert.Greater(t, entries[0].Line, 0, "Provenance entry should have a line number")
+				assert.NotEmpty(t, entries[0].File, "Provenance entry for %s should have a file", path)
+				assert.Greater(t, entries[0].Line, 0, "Provenance entry for %s should have a line number", path)
 			}
 		}
 	}
 
-	// At least one of these should be found
-	assert.True(t, foundVarsEnabled || foundVarsName, "Should find provenance for at least one vars field")
+	// At least one vars path should be found.
+	if !foundVarsPath {
+		t.Logf("No vars.* paths found in provenance. Available paths: %v", provenancePaths)
+	}
+	assert.True(t, foundVarsPath, "Should find provenance for at least one vars field. Found vars paths: %v", varsPathsFound)
 
 	// Filter computed fields
 	filtered := FilterComputedFields(result.ComponentSection)

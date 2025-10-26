@@ -54,25 +54,34 @@ type S3API interface {
 // It's a map[string]S3API.
 var s3ClientCache sync.Map
 
-func getCachedS3Client(backend *map[string]any) (S3API, error) {
+func getCachedS3Client(backend *map[string]any, authContext *schema.AuthContext) (S3API, error) {
 	region := GetBackendAttribute(backend, "region")
 	roleArn := GetS3BackendAssumeRoleArn(backend)
 
-	// Build a deterministic cache key
+	// Build a deterministic cache key including auth profile if present.
 	cacheKey := fmt.Sprintf("region=%s;role_arn=%s", region, roleArn)
+	if authContext != nil && authContext.AWS != nil {
+		cacheKey += fmt.Sprintf(";profile=%s", authContext.AWS.Profile)
+	}
 
-	// Check the cache
+	// Check the cache.
 	if cached, ok := s3ClientCache.Load(cacheKey); ok {
 		return cached.(S3API), nil
 	}
 
-	// Build the S3 client if not cached
+	// Build the S3 client if not cached.
 	// 30 sec timeout to configure an AWS client (and assume a role if provided).
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	// The minimum `assume role` duration allowed by AWS is 15 minutes
-	cfg, err := awsUtils.LoadAWSConfig(ctx, region, roleArn, 15*time.Minute)
+	// Extract AWS auth context.
+	var awsAuthContext *schema.AWSAuthContext
+	if authContext != nil {
+		awsAuthContext = authContext.AWS
+	}
+
+	// The minimum `assume role` duration allowed by AWS is 15 minutes.
+	cfg, err := awsUtils.LoadAWSConfigWithAuth(ctx, region, roleArn, 15*time.Minute, awsAuthContext)
 	if err != nil {
 		return nil, err
 	}
@@ -87,12 +96,13 @@ func getCachedS3Client(backend *map[string]any) (S3API, error) {
 func ReadTerraformBackendS3(
 	_ *schema.AtmosConfiguration,
 	componentSections *map[string]any,
+	authContext *schema.AuthContext,
 ) ([]byte, error) {
 	defer perf.Track(nil, "terraform_backend.ReadTerraformBackendS3")()
 
 	backend := GetComponentBackend(componentSections)
 
-	s3Client, err := getCachedS3Client(&backend)
+	s3Client, err := getCachedS3Client(&backend, authContext)
 	if err != nil {
 		return nil, err
 	}
@@ -148,7 +158,9 @@ func ReadTerraformBackendS3Internal(
 		}
 
 		content, err := io.ReadAll(output.Body)
-		_ = output.Body.Close()
+		if closeErr := output.Body.Close(); closeErr != nil {
+			log.Trace("Failed to close S3 object body", "error", closeErr, "file", tfStateFilePath, "s3_bucket", bucket)
+		}
 		if err != nil {
 			return nil, fmt.Errorf("%w: %v", errUtils.ErrReadS3ObjectBody, err)
 		}

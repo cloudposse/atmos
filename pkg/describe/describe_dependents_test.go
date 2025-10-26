@@ -20,13 +20,29 @@ func TestDescribeDependents(t *testing.T) {
 	component := "test/test-component"
 	stack := "tenant1-ue2-test-1"
 
-	dependents, err := e.ExecuteDescribeDependents(&atmosConfig, component, stack, false, true, true, nil)
+	dependents, err := e.ExecuteDescribeDependents(&atmosConfig, &e.DescribeDependentsArgs{
+		Component:            component,
+		Stack:                stack,
+		IncludeSettings:      false,
+		ProcessTemplates:     true,
+		ProcessYamlFunctions: true,
+		Skip:                 nil,
+		OnlyInStack:          "",
+	})
 	assert.Nil(t, err)
 	assert.Equal(t, 1, len(dependents))
 
 	dependentsYaml, err := u.ConvertToYAML(dependents)
 	assert.Nil(t, err)
-	t.Log(dependentsYaml)
+	t.Cleanup(func() {
+		if t.Failed() {
+			if dependentsYaml != "" {
+				t.Logf("Dependents:\n%s", dependentsYaml)
+			} else {
+				t.Logf("Dependents (raw): %+v", dependents)
+			}
+		}
+	})
 }
 
 func TestDescribeDependents2(t *testing.T) {
@@ -38,11 +54,27 @@ func TestDescribeDependents2(t *testing.T) {
 	component := "test/test-component"
 	stack := "tenant1-ue2-dev"
 
-	dependents, err := e.ExecuteDescribeDependents(&atmosConfig, component, stack, false, true, true, nil)
+	dependents, err := e.ExecuteDescribeDependents(&atmosConfig, &e.DescribeDependentsArgs{
+		Component:            component,
+		Stack:                stack,
+		IncludeSettings:      false,
+		ProcessTemplates:     true,
+		ProcessYamlFunctions: true,
+		Skip:                 nil,
+		OnlyInStack:          "",
+	})
 	assert.Nil(t, err)
 	assert.Equal(t, 4, len(dependents))
 
 	dependentsYaml, err := u.ConvertToYAML(dependents)
 	assert.Nil(t, err)
-	t.Log(dependentsYaml)
+	t.Cleanup(func() {
+		if t.Failed() {
+			if dependentsYaml != "" {
+				t.Logf("Dependents:\n%s", dependentsYaml)
+			} else {
+				t.Logf("Dependents (raw): %+v", dependents)
+			}
+		}
+	})
 }

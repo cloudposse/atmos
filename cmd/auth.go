@@ -3,10 +3,11 @@ package cmd
 import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
+
+	log "github.com/cloudposse/atmos/pkg/logger"
 )
 
 const (
-	ProfileFlagName  = "profile"
 	IdentityFlagName = "identity"
 )
 
@@ -22,13 +23,17 @@ var authCmd = &cobra.Command{
 func init() {
 	// Avoid adding "stack" at the group level unless subcommands require it.
 	// AddStackCompletion(authCmd)
-	authCmd.PersistentFlags().String(ProfileFlagName, "", "Specify the profile to use for authentication.")
 	authCmd.PersistentFlags().StringP(IdentityFlagName, "i", "", "Specify the target identity to assume.")
 	// Bind to Viper and env (flags > env > config > defaults).
-	_ = viper.BindEnv(ProfileFlagName, "ATMOS_PROFILE", "PROFILE")
-	_ = viper.BindEnv(IdentityFlagName, "ATMOS_IDENTITY", "IDENTITY")
-	_ = viper.BindPFlag(ProfileFlagName, authCmd.PersistentFlags().Lookup(ProfileFlagName))
-	_ = viper.BindPFlag(IdentityFlagName, authCmd.PersistentFlags().Lookup(IdentityFlagName))
+	if err := viper.BindEnv(IdentityFlagName, "ATMOS_IDENTITY", "IDENTITY"); err != nil {
+		log.Trace("Failed to bind identity environment variables", "error", err)
+	}
+	if err := viper.BindPFlag(IdentityFlagName, authCmd.PersistentFlags().Lookup(IdentityFlagName)); err != nil {
+		log.Trace("Failed to bind identity flag", "error", err)
+	}
+
+	// Add completion for identity flag.
+	AddIdentityCompletion(authCmd)
 
 	RootCmd.AddCommand(authCmd)
 }

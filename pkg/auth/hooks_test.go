@@ -31,6 +31,7 @@ func (s *stubAuthManager) GetDefaultIdentity() (string, error) {
 }
 func (s *stubAuthManager) ListIdentities() []string                          { return []string{"one", "two"} }
 func (s *stubAuthManager) GetProviderForIdentity(identityName string) string { return "prov" }
+func (s *stubAuthManager) GetFilesDisplayPath(providerName string) string    { return "~/.aws/atmos" }
 func (s *stubAuthManager) GetProviderKindForIdentity(identityName string) (string, error) {
 	return "kind", nil
 }
@@ -45,6 +46,18 @@ func (s *stubAuthManager) GetIdentities() map[string]schema.Identity {
 
 func (s *stubAuthManager) GetProviders() map[string]schema.Provider {
 	return map[string]schema.Provider{}
+}
+
+func (s *stubAuthManager) Logout(ctx context.Context, identityName string) error {
+	return nil
+}
+
+func (s *stubAuthManager) LogoutProvider(ctx context.Context, providerName string) error {
+	return nil
+}
+
+func (s *stubAuthManager) LogoutAll(ctx context.Context) error {
+	return nil
 }
 
 func TestGetConfigLogLevels(t *testing.T) {

@@ -187,6 +187,10 @@ const config = {
                 },
                 blog: {
                     showReadingTime: true,
+                    postsPerPage: 10,
+                    blogTitle: 'Atmos Changelog',
+                    blogDescription: 'Release notes for Atmos',
+                    include: ['**/*.{md,mdx}'],
                     editUrl: ({versionDocsDirPath, docPath, locale}) => {
                         return `https://github.com/cloudposse/atmos/edit/main/website/${versionDocsDirPath}/${docPath}`;
                     },
@@ -240,6 +244,11 @@ const config = {
                         label: 'Community',
                         position: 'left',
                         to: '/community'
+                    },
+                    {
+                        label: 'Changelog',
+                        position: 'left',
+                        to: '/blog'
                     },
                     // Algolia search configuration
                     {

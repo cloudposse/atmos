@@ -44,9 +44,6 @@ atmos auth whoami
 <dl>
   <dt>`--identity` <em>(alias `-i`)</em></dt>
   <dd>Specify the default identity for subcommands. Can be overridden per command.</dd>
-
-  <dt>`--profile`</dt>
-  <dd>Atmos profile used to resolve configuration when running auth subcommands.</dd>
 </dl>
 
 ## Subcommands
@@ -77,6 +74,13 @@ auth:
       region: us-east-1
       start_url: https://mycompany.awsapps.com/start
 
+      # Optional: Configure session durations
+      session:
+        duration: 1h  # Credential lifetime for auth shell/env/exec
+
+      console:
+        session_duration: 12h  # Web console session duration (max 12h for AWS)
+
   identities:
     admin:
       kind: aws/permission-set
@@ -86,7 +90,7 @@ auth:
       principal:
         name: AdminAccess
         account:
-          name: "account-name"
+          name: production
 ```
 
 Notes:
@@ -167,7 +171,7 @@ identities:
     principal:
       name: AdminAccess
       account:
-        name: "123456789012"
+        name: core-identity
 
   # Cross-account role using base permissions
   prod-admin:
@@ -182,6 +186,17 @@ identities:
 ## Configuration Examples
 
 ### AWS SSO with Permission Sets
+
+AWS Permission Set identities assume roles via AWS IAM Identity Center (SSO). The `account` field specifies which AWS account contains the permission set.
+
+**Account Specification Options:**
+
+You can specify the account using either:
+
+- `account.name` - Account name/alias (resolved via SSO ListAccounts API)
+- `account.id` - Numeric account ID (used directly, no lookup required)
+
+**Using account names is recommended** as it's more readable and maintainable. Account names match the account names/aliases configured in AWS Organizations.
 
 ```yaml
 auth:
@@ -200,7 +215,9 @@ auth:
       principal:
         name: AdminAccess
         account:
-          name: "123456789012"
+          name: development
+          # OR use account ID directly:
+          # id: "123456789012"
 
     prod-readonly:
       kind: aws/permission-set
@@ -209,7 +226,7 @@ auth:
       principal:
         name: ReadOnlyAccess
         account:
-          name: "999999999999"
+          name: production
 ```
 
 ### AWS SAML Authentication
@@ -226,6 +243,13 @@ auth:
       region: us-east-1
       url: https://company.okta.com/app/amazon_aws/abc123/sso/saml
       idp_arn: arn:aws:iam::123456789012:saml-provider/okta-saml
+      # Optional: Specify SAML driver (Browser, GoogleApps, Okta, ADFS).
+      # Note: provider_type is deprecated; use driver instead.
+      # If not specified, Atmos automatically selects the best driver based on:
+      # 1. Browser (if Playwright drivers are installed)
+      # 2. Provider-specific fallback (GoogleApps for Google, Okta for Okta, ADFS for ADFS)
+      # 3. Browser with auto-download
+      driver: Browser
 
   identities:
     saml-admin:
@@ -236,6 +260,22 @@ auth:
       principal:
         assume_role: arn:aws:iam::123456789012:role/AdminRole
 ```
+
+#### SAML Driver Options
+
+The `driver` field controls how Atmos authenticates with your SAML identity provider:
+
+- **`Browser`** (recommended): Opens your system browser for authentication. Requires Playwright drivers to be installed or enables auto-download when supported.
+  ```bash
+  # Install Playwright drivers
+  go run github.com/playwright-community/playwright-go/cmd/playwright@latest install
+  ```
+
+- **`GoogleApps`**: Uses Google Apps SAML API (no browser needed)
+- **`Okta`**: Uses Okta SAML API (no browser needed)
+- **`ADFS`**: Uses Active Directory Federation Services API (no browser needed)
+
+If `driver` is not specified, Atmos automatically selects the best option based on your SAML URL and available drivers.
 
 ### GitHub Actions OIDC
 
@@ -282,7 +322,7 @@ auth:
         region: us-east-1
 ```
 
-Then run `atmos auth user configure` to configure the credentials on the keychain. See [user configure](/cli/commands/auth/user-configure) for details.
+Then run `atmos auth user configure` to configure the credentials on the keychain. See [user configure](/cli/commands/auth/auth-user-configure) for details.
 
 ## CLI Commands
 
@@ -305,7 +345,6 @@ atmos auth whoami --identity dev-admin
 atmos auth env
 atmos auth env --identity prod-admin --format bash
 atmos auth env --format json
-atmos auth env --format dotenv
 atmos auth env --format dotenv
 
 # Execute command with authentication
@@ -418,11 +457,79 @@ $ atmos auth whoami
 
 ## Credential Storage
 
-Atmos securely stores credentials using your operating system's keyring:
+Atmos supports three keyring backends for storing authentication credentials, selectable via configuration:
+
+### System Keyring (Default)
+
+Uses your operating system's native secure credential storage:
 
 - **macOS**: Keychain
 - **Linux**: Secret Service (GNOME Keyring, KDE Wallet)
 - **Windows**: Windows Credential Manager
+
+```yaml
+# atmos.yaml (optional - this is the default)
+auth:
+  keyring:
+    type: system
+```
+
+**Best for**: Personal workstations with OS-level security integration
+
+### File Keyring
+
+AES-256 encrypted file-based storage with interactive password prompting:
+
+```yaml
+# atmos.yaml
+auth:
+  keyring:
+    type: file
+    spec:
+      path: ~/.atmos/keyring  # Optional: custom path
+      password_env: ATMOS_KEYRING_PASSWORD  # Optional: env var name
+```
+
+**Best for**: Shared environments, servers, or CI/CD pipelines
+
+**Default storage location**:
+- Follows the [XDG Base Directory Specification](https://specifications.freedesktop.org/basedir-spec/basedir-spec-latest.html)
+- Default: `$XDG_DATA_HOME/atmos/keyring` (typically `~/.local/share/atmos/keyring` on Linux/Unix, `~/Library/Application Support/atmos/keyring` on macOS)
+- Can be overridden via `ATMOS_XDG_DATA_HOME` or `XDG_DATA_HOME` environment variables
+- Custom path can be specified via `spec.path` configuration
+
+**Password resolution order**:
+1. Environment variable (`ATMOS_KEYRING_PASSWORD` or custom from `password_env`)
+2. Interactive prompt (if TTY available)
+3. Error if neither available
+
+```bash
+# Interactive mode - prompts for password
+atmos auth login --identity prod-admin
+
+# Automation mode - password from environment
+export ATMOS_KEYRING_PASSWORD="my-secure-password"
+atmos auth login --identity prod-admin
+
+# Custom XDG data directory
+export ATMOS_XDG_DATA_HOME=/custom/data
+atmos auth login --identity prod-admin
+```
+
+### Memory Keyring
+
+In-memory storage with no persistence (credentials lost on exit):
+
+```yaml
+# atmos.yaml
+auth:
+  keyring:
+    type: memory
+```
+
+**Best for**: Unit tests, integration tests, and temporary credential caching
+
+**Note**: Can also be set via `ATMOS_KEYRING_TYPE` environment variable
 
 ### Credential Expiration
 

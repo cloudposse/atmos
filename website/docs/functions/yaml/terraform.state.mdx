@@ -19,10 +19,11 @@ without the overhead of initializing Terraform, downloading providers, or genera
 Currently, the `!terraform.state` YAML function supports the following backend types:
 - `local` ([Terraform](https://developer.hashicorp.com/terraform/language/settings/backends/local) and [OpenTofu](https://opentofu.org/docs/language/settings/backends/local))
 - `s3` ([Terraform](https://developer.hashicorp.com/terraform/language/settings/backends/s3) and [OpenTofu](https://opentofu.org/docs/language/settings/backends/s3))
+- `azurerm` ([Terraform](https://developer.hashicorp.com/terraform/language/settings/backends/azurerm) and [OpenTofu](https://opentofu.org/docs/language/settings/backends/azurerm))
 
-As support for new backend types is added (e.g. `azurerm`, `gcs`), this document will be updated accordingly.
+As support for new backend types is added (e.g. `gcs`), this document will be updated accordingly.
 
-Meanwhile, if you are using backends other than `local` and `s3`, consider the [__`!store`__](/functions/yaml/store)
+Meanwhile, if you are using backends other than `local`, `s3`, and `azurerm`, consider the [__`!store`__](/functions/yaml/store)
 or [__`!terraform.output`__](/functions/yaml/terraform.output) YAML function to read remote state
 and [share data between components](/core-concepts/share-data).
 :::

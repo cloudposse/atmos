@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -19,6 +20,7 @@ import (
 	tuiUtils "github.com/cloudposse/atmos/internal/tui/utils"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/cloudposse/atmos/pkg/version"
@@ -291,7 +293,9 @@ func preCustomCommand(
 
 	// no "steps" means a sub command should be specified
 	if len(commandConfig.Steps) == 0 {
-		_ = cmd.Help()
+		if err := cmd.Help(); err != nil {
+			log.Trace("Failed to display command help", "error", err, "command", cmd.Name())
+		}
 		errUtils.Exit(0)
 	}
 }
@@ -640,6 +644,19 @@ func getConfigAndStacksInfo(commandName string, cmd *cobra.Command, args []strin
 	return info
 }
 
+// enableHeatmapIfRequested checks os.Args for --heatmap and --heatmap-mode flags.
+// This is needed for commands with DisableFlagParsing=true (terraform, helmfile, packer)
+// where Cobra doesn't parse the flags, so PersistentPreRun can't detect them.
+// We only enable tracking if --heatmap is present; --heatmap-mode is only relevant when --heatmap is set.
+func enableHeatmapIfRequested() {
+	for _, arg := range os.Args {
+		if arg == "--heatmap" {
+			perf.EnableTracking(true)
+			return
+		}
+	}
+}
+
 // isGitRepository checks if the current directory is within a git repository.
 func isGitRepository() bool {
 	_, err := git.PlainOpenWithOptions(currentDirPath, &git.PlainOpenOptions{
@@ -717,6 +734,60 @@ func AddStackCompletion(cmd *cobra.Command) {
 		cmd.PersistentFlags().StringP("stack", "s", "", stackHint)
 	}
 	cmd.RegisterFlagCompletionFunc("stack", stackFlagCompletion)
+}
+
+// identityFlagCompletion provides shell completion for identity flags by fetching
+// available identities from the Atmos configuration.
+func identityFlagCompletion(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+	if err != nil {
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+
+	var identities []string
+	if atmosConfig.Auth.Identities != nil {
+		for name := range atmosConfig.Auth.Identities {
+			identities = append(identities, name)
+		}
+	}
+
+	sort.Strings(identities)
+
+	return identities, cobra.ShellCompDirectiveNoFileComp
+}
+
+// AddIdentityCompletion registers shell completion for the identity flag if present on the command.
+func AddIdentityCompletion(cmd *cobra.Command) {
+	if cmd.Flag("identity") != nil {
+		if err := cmd.RegisterFlagCompletionFunc("identity", identityFlagCompletion); err != nil {
+			log.Trace("Failed to register identity flag completion", "error", err)
+		}
+	}
+}
+
+// identityArgCompletion provides shell completion for identity positional arguments.
+// It returns a list of available identities from the Atmos configuration.
+func identityArgCompletion(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+	// Only complete the first positional argument.
+	if len(args) != 0 {
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+
+	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+	if err != nil {
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+
+	var identities []string
+	if atmosConfig.Auth.Identities != nil {
+		for name := range atmosConfig.Auth.Identities {
+			identities = append(identities, name)
+		}
+	}
+
+	sort.Strings(identities)
+
+	return identities, cobra.ShellCompDirectiveNoFileComp
 }
 
 func ComponentsArgCompletion(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {

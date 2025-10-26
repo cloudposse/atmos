@@ -6,13 +6,13 @@ import (
 
 // HomeDirProvider defines the interface for resolving home directories.
 //
-//go:generate mockgen -source=$GOFILE -destination=mock_$GOFILE -package=$GOPACKAGE
+//go:generate go run go.uber.org/mock/mockgen@v0.6.0 -source=$GOFILE -destination=mock_$GOFILE -package=$GOPACKAGE
 type HomeDirProvider interface {
 	Dir() (string, error)
 	Expand(path string) (string, error)
 }
 
-// OSHomeDirProvider is the default implementation using Atmos's local fork of go-homedir.
+// OSHomeDirProvider is the default implementation using Atmos's vendored homedir package.
 type OSHomeDirProvider struct{}
 
 // NewOSHomeDirProvider creates a new OS homedir provider.

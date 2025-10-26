@@ -177,11 +177,24 @@ func TestPermissionSetIdentity_PostAuthenticate_WritesFiles(t *testing.T) {
 		"name":    "DevAccess",
 		"account": map[string]any{"id": "123456789012"},
 	}}}
+	authContext := &schema.AuthContext{}
 	stack := &schema.ConfigAndStacksInfo{}
 	creds := &types.AWSCredentials{AccessKeyID: "AK", SecretAccessKey: "SE", SessionToken: "TK", Region: "us-east-1"}
-	err := i.PostAuthenticate(context.Background(), stack, "aws-sso", "dev", creds)
+	err := i.PostAuthenticate(context.Background(), &types.PostAuthenticateParams{
+		AuthContext:  authContext,
+		StackInfo:    stack,
+		ProviderName: "aws-sso",
+		IdentityName: "dev",
+		Credentials:  creds,
+	})
 	require.NoError(t, err)
-	// Env set on stack.
+
+	// Auth context populated.
+	require.NotNil(t, authContext.AWS)
+	assert.Equal(t, "dev", authContext.AWS.Profile)
+	assert.Equal(t, "us-east-1", authContext.AWS.Region)
+
+	// Env set on stack (derived from auth context).
 	assert.Contains(t, stack.ComponentEnvSection["AWS_SHARED_CREDENTIALS_FILE"], filepath.Join(".aws", "atmos", "aws-sso", "credentials"))
 	assert.Equal(t, "dev", stack.ComponentEnvSection["AWS_PROFILE"])
 }
@@ -191,4 +204,22 @@ func TestPermissionSetIdentity_resolveAccountID_ReturnsProvidedID(t *testing.T) 
 	id, err := i.resolveAccountID(context.Background(), nil, "", "123456789012", "token")
 	require.NoError(t, err)
 	assert.Equal(t, "123456789012", id)
+}
+
+func TestPermissionSetIdentity_Logout(t *testing.T) {
+	// Test that permission-set identity Logout returns nil (no identity-specific cleanup).
+	identity, err := NewPermissionSetIdentity("test-ps", &schema.Identity{
+		Kind: "aws/permission-set",
+		Principal: map[string]interface{}{
+			"name":    "DevAccess",
+			"account": map[string]interface{}{"id": "123456789012"},
+		},
+	})
+	require.NoError(t, err)
+
+	ctx := context.Background()
+	err = identity.Logout(ctx)
+
+	// Should always succeed with no cleanup.
+	assert.NoError(t, err)
 }

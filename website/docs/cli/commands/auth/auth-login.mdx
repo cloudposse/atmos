@@ -2,6 +2,7 @@
 title: atmos auth login
 sidebar_label: login
 sidebar_class_name: command
+sidebar_position: 3
 id: login
 description: Authenticate to cloud providers using an identity defined in atmos.yaml.
 ---
@@ -23,11 +24,14 @@ atmos auth login [--identity <name>]
 ## Examples
 
 ```shell
-# Use default identity
+# Use default identity (prompts if no default is configured)
 atmos auth login
 
 # Use specific identity
 atmos auth login --identity admin
+
+# Use short form of identity flag
+atmos auth login -i admin
 ```
 
 ## Arguments
@@ -41,9 +45,30 @@ atmos auth login --identity admin
 
 <dl>
   <dt>`--identity` <em>(alias `-i`)</em></dt>
-  <dd>Specify the identity to authenticate. If omitted, the default identity is used.</dd>
+  <dd>
+    Specify the identity to authenticate. If omitted, Atmos will:
+
+    - **Exactly one default identity**: Use it automatically
+    - **No default identities** (interactive): Show selector with all available identities
+    - **Multiple default identities** (interactive): Show selector with only the default identities
+    - **No/multiple defaults** (CI/non-interactive): Return an error
+
+    **Environment variables:** `ATMOS_IDENTITY` or `IDENTITY` (checked in that order)
+  </dd>
 </dl>
+
+## Interactive Identity Selection
+
+When no `--identity` flag is provided and no default identity is configured, Atmos presents an interactive selector with all available identities. This allows you to quickly choose an identity without remembering exact names or using command-line flags.
+
+The interactive selector is available in terminal environments and will display all configured identities for selection. In CI/CD pipelines or non-interactive environments, you must either:
+
+- Configure a default identity in your `atmos.yaml`
+- Explicitly specify the identity using the `--identity` flag or environment variable
 
 ## Notes
 
 - Prints provider, identity, account, region, and expiration when successful.
+- Credentials are cached to avoid repeated logins until expiration.
+- The interactive selector uses arrow keys for navigation and Enter to confirm selection.
+- For AWS SSO (IAM Identity Center), you will see a **verification code** displayed in the terminal. This is a device authorization user code (e.g., "WDDD-HRQV") that AWS generates for the device flow - **this is NOT an MFA token**. The code is displayed so you can visually verify it matches what AWS shows in the browser. Any MFA prompts will appear in the browser during authentication.

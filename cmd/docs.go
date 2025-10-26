@@ -7,11 +7,12 @@ import (
 
 	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/lipgloss"
-	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 
+	termUtils "github.com/cloudposse/atmos/internal/tui/templates/term"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -50,7 +51,7 @@ var docsCmd = &cobra.Command{
 			screenWidth := defaultWidth
 
 			// Detect terminal width and use it by default if available
-			if term.IsTerminal(int(os.Stdout.Fd())) {
+			if termUtils.IsTTYSupportForStdout() {
 				termWidth, _, err := term.GetSize(int(os.Stdout.Fd()))
 				if err == nil && termWidth > 0 {
 					// Adjusted for subtle padding effect at the terminal boundaries

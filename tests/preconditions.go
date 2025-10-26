@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"runtime"
 	"testing"
 	"time"
 
@@ -81,6 +82,44 @@ func RequireAWSProfile(t *testing.T, profileName string) {
 	if err != nil {
 		t.Skipf("AWS profile '%s' not available: %v. Configure AWS credentials or set ATMOS_TEST_SKIP_PRECONDITION_CHECKS=true", profileName, err)
 	}
+}
+
+// RequireAzureCredentials checks if Azure credentials appear to be configured.
+// This function looks for common Azure credential sources:
+// - Environment variables (AZURE_TENANT_ID, AZURE_CLIENT_ID, AZURE_CLIENT_SECRET)
+// - Azure CLI credentials (az login)
+// Note: This does not validate that credentials are valid, only that they are present.
+func RequireAzureCredentials(t *testing.T) {
+	t.Helper()
+
+	if !ShouldCheckPreconditions() {
+		return
+	}
+
+	// Check for explicit Azure environment variables first
+	tenantID := os.Getenv("AZURE_TENANT_ID")
+	clientID := os.Getenv("AZURE_CLIENT_ID")
+	clientSecret := os.Getenv("AZURE_CLIENT_SECRET")
+
+	// If all three are set, we have service principal credentials
+	if tenantID != "" && clientID != "" && clientSecret != "" {
+		t.Logf("Azure credentials available via environment variables (service principal)")
+		return
+	}
+
+	// Check if Azure CLI is configured
+	cmd := exec.Command("az", "account", "show")
+	output, err := cmd.Output()
+	if err == nil && len(output) > 0 {
+		t.Logf("Azure credentials available via Azure CLI (az login)")
+		return
+	}
+
+	// No credentials found, skip the test
+	t.Skipf("Azure credentials not available. Configure via: " +
+		"(1) Environment variables: AZURE_TENANT_ID, AZURE_CLIENT_ID, AZURE_CLIENT_SECRET, " +
+		"(2) Azure CLI: run 'az login', " +
+		"(3) Set ATMOS_TEST_SKIP_PRECONDITION_CHECKS=true to bypass")
 }
 
 // RequireGitRepository checks if we're in a valid Git repository.
@@ -389,5 +428,21 @@ func SkipIfShort(t *testing.T) {
 
 	if testing.Short() {
 		t.Skipf("Skipping long-running test in short mode (use 'go test' without -short to run)")
+	}
+}
+
+// SkipOnDarwinARM64 skips the test if running on darwin/arm64 (macOS ARM).
+// Use this for tests that are incompatible with ARM64 macOS, such as tests using gomonkey
+// which causes fatal SIGBUS errors due to memory protection on ARM64.
+func SkipOnDarwinARM64(t *testing.T, reason string) {
+	t.Helper()
+
+	if !ShouldCheckPreconditions() {
+		return
+	}
+
+	// Check if we're on darwin/arm64
+	if runtime.GOOS == "darwin" && runtime.GOARCH == "arm64" {
+		t.Skipf("Skipping on darwin/arm64: %s. Set ATMOS_TEST_SKIP_PRECONDITION_CHECKS=true to override", reason)
 	}
 }

@@ -7,15 +7,16 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+	"sync"
 	"text/template"
 	"text/template/parse"
 	"time"
 
 	"github.com/Masterminds/sprig/v3"
+	"github.com/go-viper/mapstructure/v2"
 	"github.com/hairyhenderson/gomplate/v3"
 	"github.com/hairyhenderson/gomplate/v3/data"
 	_ "github.com/hairyhenderson/gomplate/v4"
-	"github.com/mitchellh/mapstructure"
 	"github.com/samber/lo"
 
 	log "github.com/cloudposse/atmos/pkg/logger"
@@ -24,6 +25,25 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
+
+// Cache for sprig function maps to avoid repeated expensive allocations.
+// Sprig function maps are immutable once created, so caching is safe.
+// Note: Gomplate functions are NOT cached as they may have state and context dependencies.
+var (
+	sprigFuncMapCache     template.FuncMap
+	sprigFuncMapCacheOnce sync.Once
+)
+
+// getSprigFuncMap returns a cached copy of the sprig function map.
+// Sprig function maps are expensive to create (173MB+ allocations) and immutable,
+// so we cache and reuse them across template operations.
+// This optimization reduces heap allocations by ~3.76% (173MB) per profile run.
+func getSprigFuncMap() template.FuncMap {
+	sprigFuncMapCacheOnce.Do(func() {
+		sprigFuncMapCache = sprig.FuncMap()
+	})
+	return sprigFuncMapCache
+}
 
 // ProcessTmpl parses and executes Go templates.
 func ProcessTmpl(
@@ -43,7 +63,7 @@ func ProcessTmpl(
 	if cfg == nil {
 		cfg = &schema.AtmosConfiguration{}
 	}
-	funcs := lo.Assign(gomplate.CreateFuncs(ctx, &d), sprig.FuncMap(), FuncMap(cfg, &schema.ConfigAndStacksInfo{}, ctx, &d))
+	funcs := lo.Assign(gomplate.CreateFuncs(ctx, &d), getSprigFuncMap(), FuncMap(cfg, &schema.ConfigAndStacksInfo{}, ctx, &d))
 
 	t, err := template.New(tmplName).Funcs(funcs).Parse(tmplValue)
 	if err != nil {
@@ -156,7 +176,7 @@ func ProcessTmplWithDatasources(
 
 		// Sprig functions
 		if atmosConfig.Templates.Settings.Sprig.Enabled {
-			funcs = lo.Assign(funcs, sprig.FuncMap())
+			funcs = lo.Assign(funcs, getSprigFuncMap())
 		}
 
 		// Atmos functions

@@ -1,0 +1,143 @@
+---
+title: atmos version show
+sidebar_label: show
+sidebar_class_name: command
+id: show
+description: Display detailed information about a specific Atmos release
+---
+
+import Screengrab from '@site/src/components/Screengrab'
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+    Display detailed information about a specific Atmos release including release notes and download links.
+</Intro>
+
+<Screengrab title="atmos version show --help" slug="atmos-version-show--help"/>
+
+## Usage
+
+Execute the `version show` command like this:
+
+```shell
+atmos version show [version]
+```
+
+This command displays comprehensive details about an Atmos release, including full release notes, metadata, and platform-specific download links.
+
+:::tip
+Run `atmos version show --help` to see all the available options
+:::
+
+## Arguments
+
+<dl>
+    <dt>`version` <em>(optional)</em></dt>
+    <dd>The version to show details for. Can be a specific version (e.g., `v1.194.0` or `1.194.0`) or `latest`. Default: `latest`</dd>
+</dl>
+
+## Examples
+
+Show details for the latest release:
+
+```shell
+atmos version show
+# or explicitly
+atmos version show latest
+```
+
+Show details for a specific version:
+
+```shell
+atmos version show v1.194.0
+```
+
+Version prefix is optional:
+
+```shell
+atmos version show 1.194.0
+```
+
+Output as JSON:
+
+```shell
+atmos version show v1.194.0 --format json
+```
+
+Output as YAML:
+
+```shell
+atmos version show v1.194.0 --format yaml
+```
+
+## Flags
+
+<dl>
+    <dt>`--format`</dt>
+    <dd>Output format: `table`, `json`, or `yaml`. Default: `table`</dd>
+</dl>
+
+## Features
+
+- **Full release notes** - Rendered in Markdown with colors preserved
+- **Release metadata** - Version, publication date, and title
+- **Platform-specific artifacts** - Only shows assets matching your OS and architecture
+- **File sizes and download URLs** - Styled links for easy access
+- **Prerelease indicator** - Clearly marks beta, alpha, and release candidate versions
+
+## GitHub API Rate Limits
+
+The command uses the GitHub API which has rate limits:
+
+- **Without authentication**: 60 requests/hour
+- **With authentication**: 5,000 requests/hour
+
+To increase your rate limit, set a GitHub token:
+
+```shell
+# Using GitHub CLI (recommended)
+export ATMOS_GITHUB_TOKEN=$(gh auth token)
+
+# Or set GITHUB_TOKEN directly
+export GITHUB_TOKEN="ghp_xxxxxxxxxxxx"
+```
+
+:::note
+`ATMOS_GITHUB_TOKEN` takes precedence over `GITHUB_TOKEN`. This allows you to use a different token for Atmos without affecting other tools that use `GITHUB_TOKEN`.
+:::
+
+No special scopes are needed for accessing public repositories.
+
+## Use Cases
+
+### Review Release Notes
+
+Read full release notes before upgrading:
+
+```shell
+atmos version show latest
+```
+
+### Check Specific Version Details
+
+Verify what's included in a specific release:
+
+```shell
+atmos version show v1.194.0
+```
+
+### Inspect Release Artifacts
+
+Check available download URLs and file sizes:
+
+```shell
+atmos version show v1.194.0
+```
+
+### Export Release Information
+
+Export release details for documentation:
+
+```shell
+atmos version show v1.194.0 --format json > release-notes.json
+```

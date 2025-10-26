@@ -2,6 +2,7 @@ package stack
 
 import (
 	"github.com/cloudposse/atmos/internal/exec"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -22,6 +23,8 @@ func ProcessYAMLConfigFiles(
 	map[string]map[string]any,
 	error,
 ) {
+	defer perf.Track(atmosConfig, "stack.ProcessYAMLConfigFiles")()
+
 	return exec.ProcessYAMLConfigFiles(
 		atmosConfig,
 		stacksBasePath,
@@ -60,6 +63,8 @@ func ProcessYAMLConfigFile(
 	map[string]any,
 	error,
 ) {
+	defer perf.Track(atmosConfig, "stack.ProcessYAMLConfigFile")()
+
 	return exec.ProcessYAMLConfigFile(
 		atmosConfig,
 		basePath,
@@ -94,6 +99,8 @@ func ProcessStackConfig(
 	importsConfig map[string]map[string]any,
 	checkBaseComponentExists bool,
 ) (map[string]any, error) {
+	defer perf.Track(atmosConfig, "stack.ProcessStackConfig")()
+
 	return exec.ProcessStackConfig(
 		atmosConfig,
 		stacksBasePath,

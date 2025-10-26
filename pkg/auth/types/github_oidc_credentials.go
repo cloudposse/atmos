@@ -1,6 +1,7 @@
 package types
 
 import (
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -61,4 +62,10 @@ func (c *OIDCCredentials) BuildWhoamiInfo(info *WhoamiInfo) {
 	if exp, _ := c.GetExpiration(); exp != nil {
 		info.Expiration = exp
 	}
+}
+
+// Validate is not implemented for OIDC credentials.
+// OIDC tokens cannot be validated without provider-specific logic.
+func (c *OIDCCredentials) Validate(ctx context.Context) (*time.Time, error) {
+	return nil, errUtils.ErrNotImplemented
 }

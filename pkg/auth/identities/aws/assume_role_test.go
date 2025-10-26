@@ -69,10 +69,17 @@ func TestAssumeRoleIdentity_Environment(t *testing.T) {
 		Kind:      "aws/assume-role",
 		Principal: map[string]any{"assume_role": "arn:aws:iam::123:role/x"},
 		Env:       []schema.EnvironmentVariable{{Key: "FOO", Value: "BAR"}},
+		Via:       &schema.IdentityVia{Provider: "test-provider"},
 	}}
 	env, err := i.Environment()
 	assert.NoError(t, err)
+	// Should include custom env vars from config.
 	assert.Equal(t, "BAR", env["FOO"])
+	// Should include AWS file environment variables.
+	assert.NotEmpty(t, env["AWS_SHARED_CREDENTIALS_FILE"])
+	assert.NotEmpty(t, env["AWS_CONFIG_FILE"])
+	assert.NotEmpty(t, env["AWS_PROFILE"])
+	assert.Equal(t, "role", env["AWS_PROFILE"])
 }
 
 func TestAssumeRoleIdentity_BuildAssumeRoleInput(t *testing.T) {
@@ -223,11 +230,23 @@ func TestAssumeRoleIdentity_PostAuthenticate_SetsEnvAndFiles(t *testing.T) {
 	i := &assumeRoleIdentity{name: "role", config: &schema.Identity{Kind: "aws/assume-role", Principal: map[string]any{
 		"assume_role": "arn:aws:iam::123:role/x",
 	}}}
+	authContext := &schema.AuthContext{}
 	stack := &schema.ConfigAndStacksInfo{}
 	creds := &types.AWSCredentials{AccessKeyID: "AK", SecretAccessKey: "SE", SessionToken: "TK", Region: "us-east-1"}
-	err := i.PostAuthenticate(context.Background(), stack, "aws-sso", "role", creds)
+	err := i.PostAuthenticate(context.Background(), &types.PostAuthenticateParams{
+		AuthContext:  authContext,
+		StackInfo:    stack,
+		ProviderName: "aws-sso",
+		IdentityName: "role",
+		Credentials:  creds,
+	})
 	require.NoError(t, err)
-	// AWS files/env are set under the provider namespace.
+
+	// Auth context populated.
+	require.NotNil(t, authContext.AWS)
+	assert.Equal(t, "role", authContext.AWS.Profile)
+
+	// AWS files/env are set under the provider namespace (derived from auth context).
 	require.Contains(t, stack.ComponentEnvSection["AWS_SHARED_CREDENTIALS_FILE"], "aws-sso")
 }
 
@@ -334,4 +353,220 @@ func TestAssumeRoleIdentity_Authenticate_ValidationErrors(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestAssumeRoleIdentity_WithCustomResolver(t *testing.T) {
+	// Test assume role identity with custom resolver configuration.
+	config := &schema.Identity{
+		Kind: "aws/assume-role",
+		Via:  &schema.IdentityVia{Provider: "test-provider"},
+		Principal: map[string]interface{}{
+			"assume_role": "arn:aws:iam::123456789012:role/TestRole",
+			"region":      "us-east-1",
+		},
+		Credentials: map[string]interface{}{
+			"aws": map[string]interface{}{
+				"resolver": map[string]interface{}{
+					"url": "http://localhost:4566",
+				},
+			},
+		},
+	}
+
+	identity, err := NewAssumeRoleIdentity("test-role", config)
+	require.NoError(t, err)
+	assert.NotNil(t, identity)
+
+	// Cast to concrete type to verify internal state.
+	ari, ok := identity.(*assumeRoleIdentity)
+	require.True(t, ok)
+	assert.Equal(t, "test-role", ari.name)
+	assert.NotNil(t, ari.config)
+	assert.NotNil(t, ari.config.Credentials)
+
+	// Verify resolver config exists.
+	awsCreds, ok := ari.config.Credentials["aws"]
+	assert.True(t, ok)
+	assert.NotNil(t, awsCreds)
+}
+
+func TestAssumeRoleIdentity_WithoutCustomResolver(t *testing.T) {
+	// Test assume role identity without custom resolver configuration.
+	config := &schema.Identity{
+		Kind: "aws/assume-role",
+		Via:  &schema.IdentityVia{Provider: "test-provider"},
+		Principal: map[string]interface{}{
+			"assume_role": "arn:aws:iam::123456789012:role/TestRole",
+			"region":      "us-east-1",
+		},
+	}
+
+	identity, err := NewAssumeRoleIdentity("test-role", config)
+	require.NoError(t, err)
+	assert.NotNil(t, identity)
+
+	// Verify it works without resolver config.
+	assert.NoError(t, identity.Validate())
+}
+
+func TestAssumeRoleIdentity_newSTSClient_WithResolver(t *testing.T) {
+	// This test requires AWS credentials to create an STS client.
+	tests.RequireAWSProfile(t, "cplive-core-gbl-identity")
+
+	// Test newSTSClient with custom resolver.
+	config := &schema.Identity{
+		Kind: "aws/assume-role",
+		Via:  &schema.IdentityVia{Provider: "test-provider"},
+		Principal: map[string]interface{}{
+			"assume_role": "arn:aws:iam::123456789012:role/TestRole",
+			"region":      "us-east-1",
+		},
+		Credentials: map[string]interface{}{
+			"aws": map[string]interface{}{
+				"resolver": map[string]interface{}{
+					"url": "http://localhost:4566",
+				},
+			},
+		},
+	}
+
+	identity, err := NewAssumeRoleIdentity("test-role", config)
+	require.NoError(t, err)
+
+	ari, ok := identity.(*assumeRoleIdentity)
+	require.True(t, ok)
+
+	// Create base credentials.
+	baseCreds := &types.AWSCredentials{
+		AccessKeyID:     "AKIAEXAMPLE",
+		SecretAccessKey: "secret",
+		SessionToken:    "token",
+		Region:          "us-east-1",
+	}
+
+	// Call newSTSClient - this should not error even with custom resolver.
+	client, err := ari.newSTSClient(context.Background(), baseCreds)
+	assert.NoError(t, err)
+	assert.NotNil(t, client)
+}
+
+func TestAssumeRoleIdentity_newSTSClient_WithoutResolver(t *testing.T) {
+	// This test requires AWS credentials to create an STS client.
+	tests.RequireAWSProfile(t, "cplive-core-gbl-identity")
+
+	// Test newSTSClient without custom resolver.
+	config := &schema.Identity{
+		Kind: "aws/assume-role",
+		Via:  &schema.IdentityVia{Provider: "test-provider"},
+		Principal: map[string]interface{}{
+			"assume_role": "arn:aws:iam::123456789012:role/TestRole",
+			"region":      "us-east-1",
+		},
+	}
+
+	identity, err := NewAssumeRoleIdentity("test-role", config)
+	require.NoError(t, err)
+
+	ari, ok := identity.(*assumeRoleIdentity)
+	require.True(t, ok)
+
+	// Create base credentials.
+	baseCreds := &types.AWSCredentials{
+		AccessKeyID:     "AKIAEXAMPLE",
+		SecretAccessKey: "secret",
+		SessionToken:    "token",
+		Region:          "us-east-1",
+	}
+
+	// Call newSTSClient - should work without resolver.
+	client, err := ari.newSTSClient(context.Background(), baseCreds)
+	assert.NoError(t, err)
+	assert.NotNil(t, client)
+}
+
+func TestAssumeRoleIdentity_newSTSClient_RegionResolution(t *testing.T) {
+	// This test requires AWS credentials to create an STS client.
+	tests.RequireAWSProfile(t, "cplive-core-gbl-identity")
+
+	testCases := []struct {
+		name           string
+		identityRegion string
+		baseRegion     string
+		expectedRegion string
+	}{
+		{
+			name:           "uses identity region when set",
+			identityRegion: "eu-west-1",
+			baseRegion:     "us-east-1",
+			expectedRegion: "eu-west-1",
+		},
+		{
+			name:           "falls back to base region",
+			identityRegion: "",
+			baseRegion:     "ap-south-1",
+			expectedRegion: "ap-south-1",
+		},
+		{
+			name:           "defaults to us-east-1",
+			identityRegion: "",
+			baseRegion:     "",
+			expectedRegion: "us-east-1",
+		},
+	}
+
+	for _, tt := range testCases {
+		t.Run(tt.name, func(t *testing.T) {
+			config := &schema.Identity{
+				Kind: "aws/assume-role",
+				Via:  &schema.IdentityVia{Provider: "test-provider"},
+				Principal: map[string]interface{}{
+					"assume_role": "arn:aws:iam::123456789012:role/TestRole",
+				},
+			}
+
+			if tt.identityRegion != "" {
+				config.Principal["region"] = tt.identityRegion
+			}
+
+			identity, err := NewAssumeRoleIdentity("test-role", config)
+			require.NoError(t, err)
+
+			ari, ok := identity.(*assumeRoleIdentity)
+			require.True(t, ok)
+
+			// Validate to extract region from principal.
+			err = ari.Validate()
+			require.NoError(t, err)
+
+			baseCreds := &types.AWSCredentials{
+				AccessKeyID:     "AKIAEXAMPLE",
+				SecretAccessKey: "secret",
+				SessionToken:    "token",
+				Region:          tt.baseRegion,
+			}
+
+			client, err := ari.newSTSClient(context.Background(), baseCreds)
+			assert.NoError(t, err)
+			assert.NotNil(t, client)
+			// Verify region was persisted.
+			assert.Equal(t, tt.expectedRegion, ari.region)
+		})
+	}
+}
+
+func TestAssumeRoleIdentity_Logout(t *testing.T) {
+	// Test that assume-role identity Logout returns nil (no identity-specific cleanup).
+	identity, err := NewAssumeRoleIdentity("test-role", &schema.Identity{
+		Kind: "aws/assume-role",
+		Principal: map[string]interface{}{
+			"assume_role": "arn:aws:iam::123456789012:role/MyRole",
+		},
+	})
+	require.NoError(t, err)
+
+	ctx := context.Background()
+	err = identity.Logout(ctx)
+
+	// Should always succeed with no cleanup.
+	assert.NoError(t, err)
 }

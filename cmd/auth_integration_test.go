@@ -16,15 +16,10 @@ import (
 )
 
 func TestAuthCLIIntegrationWithCloudProvider(t *testing.T) {
-	// Skip integration tests in CI or if no auth config is available
+	// Use memory keyring for CI, system keyring otherwise
 	if os.Getenv("CI") != "" {
-		t.Skipf("Skipping integration tests in CI environment.")
+		t.Setenv("ATMOS_KEYRING_TYPE", "memory")
 	}
-
-	// Create a temporary directory for test files
-	tempDir, err := os.MkdirTemp("", "atmos-auth-test")
-	require.NoError(t, err)
-	defer os.RemoveAll(tempDir)
 
 	// Create test auth configuration
 	authConfig := &schema.AuthConfig{
@@ -156,4 +151,112 @@ func formatEnvironmentVariables(envVars []schema.EnvironmentVariable, format str
 		}
 		return result
 	}
+}
+
+// TestAuthCommandCompletion tests shell completion for auth commands.
+func TestAuthCommandCompletion(t *testing.T) {
+	// Change to demo-auth directory with valid auth config (automatically reverted after test).
+	testDir := "../examples/demo-auth"
+	t.Chdir(testDir)
+
+	t.Run("identity flag completion for auth command", func(t *testing.T) {
+		// Test that identity completion function returns expected identities.
+		completions, directive := identityFlagCompletion(authCmd, []string{}, "")
+
+		// Verify we get the expected identities from demo-auth config.
+		assert.NotEmpty(t, completions)
+		assert.Contains(t, completions, "oidc")
+		assert.Contains(t, completions, "sso")
+		assert.Contains(t, completions, "superuser")
+		assert.Contains(t, completions, "saml")
+		assert.Equal(t, 4, int(directive)) // ShellCompDirectiveNoFileComp
+	})
+
+	t.Run("identity flag completion for auth exec command", func(t *testing.T) {
+		// Test that identity completion works for auth exec command.
+		completions, directive := identityFlagCompletion(authExecCmd, []string{}, "")
+
+		// Verify we get identities.
+		assert.NotEmpty(t, completions)
+		assert.Contains(t, completions, "oidc")
+		assert.Equal(t, 4, int(directive)) // ShellCompDirectiveNoFileComp
+	})
+
+	t.Run("format flag completion for auth env command", func(t *testing.T) {
+		// Get the completion function for the format flag.
+		completionFunc, exists := authEnvCmd.GetFlagCompletionFunc("format")
+		require.True(t, exists, "Format flag should have completion function")
+
+		// Call the completion function.
+		completions, directive := completionFunc(authEnvCmd, []string{}, "")
+
+		// Verify we get the expected formats.
+		assert.Equal(t, 3, len(completions))
+		assert.Contains(t, completions, "json")
+		assert.Contains(t, completions, "bash")
+		assert.Contains(t, completions, "dotenv")
+		assert.Equal(t, 4, int(directive)) // ShellCompDirectiveNoFileComp
+	})
+
+	t.Run("auth command has persistent identity flag", func(t *testing.T) {
+		// Verify auth command has identity flag.
+		flag := authCmd.PersistentFlags().Lookup("identity")
+		assert.NotNil(t, flag)
+		assert.Equal(t, "i", flag.Shorthand)
+
+		// Verify completion function is registered.
+		completionFunc, exists := authCmd.GetFlagCompletionFunc("identity")
+		assert.True(t, exists)
+		assert.NotNil(t, completionFunc)
+	})
+
+	t.Run("auth subcommands inherit identity completion", func(t *testing.T) {
+		// Test that subcommands like auth login can access parent's persistent flag.
+		flag := authLoginCmd.InheritedFlags().Lookup("identity")
+		assert.NotNil(t, flag, "auth login should inherit identity flag")
+	})
+}
+
+// TestAuthEnvFormatCompletion specifically tests the format flag completion.
+func TestAuthEnvFormatCompletion(t *testing.T) {
+	t.Run("format flag provides correct completions", func(t *testing.T) {
+		// Get the completion function for the format flag.
+		completionFunc, exists := authEnvCmd.GetFlagCompletionFunc("format")
+		require.True(t, exists, "Format flag should have completion function registered")
+
+		// Call the completion function.
+		completions, directive := completionFunc(authEnvCmd, []string{}, "")
+
+		// Verify all supported formats are present.
+		assert.ElementsMatch(t, SupportedFormats, completions)
+		assert.Equal(t, 4, int(directive)) // ShellCompDirectiveNoFileComp
+	})
+
+	t.Run("format flag respects partial input", func(t *testing.T) {
+		// Get the completion function.
+		completionFunc, exists := authEnvCmd.GetFlagCompletionFunc("format")
+		require.True(t, exists)
+
+		// Call with partial input.
+		completions, _ := completionFunc(authEnvCmd, []string{}, "js")
+
+		// Should still return all formats (filtering is done by shell).
+		assert.ElementsMatch(t, SupportedFormats, completions)
+	})
+}
+
+// TestAuthWhoamiOutputCompletion tests the output flag completion for auth whoami.
+func TestAuthWhoamiOutputCompletion(t *testing.T) {
+	t.Run("output flag provides json completion", func(t *testing.T) {
+		// Get the completion function for the output flag.
+		completionFunc, exists := authWhoamiCmd.GetFlagCompletionFunc("output")
+		require.True(t, exists, "Output flag should have completion function registered")
+
+		// Call the completion function.
+		completions, directive := completionFunc(authWhoamiCmd, []string{}, "")
+
+		// Verify json format is present.
+		assert.Equal(t, []string{"json"}, completions)
+		assert.Equal(t, 4, int(directive)) // ShellCompDirectiveNoFileComp
+	})
 }

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -56,20 +57,23 @@ func TestSAMLProvider_RequestedSessionSeconds(t *testing.T) {
 }
 
 func TestSAMLProvider_GetProviderType(t *testing.T) {
+	// Explicit driver config always wins.
 	p := &samlProvider{config: &schema.Provider{ProviderType: "Okta"}, url: "https://idp"}
-	assert.Equal(t, "Okta", p.getProviderType())
+	assert.Equal(t, "Okta", p.getDriver())
 
+	// Without Playwright drivers, falls back to provider-specific types.
 	p = &samlProvider{config: &schema.Provider{}, url: "https://accounts.google.com/saml"}
-	assert.Equal(t, "Browser", p.getProviderType())
+	assert.Equal(t, "GoogleApps", p.getDriver()) // Falls back when no drivers.
 
 	p = &samlProvider{config: &schema.Provider{}, url: "https://example.okta.com"}
-	assert.Equal(t, "Okta", p.getProviderType())
+	assert.Equal(t, "Okta", p.getDriver())
 
 	p = &samlProvider{config: &schema.Provider{}, url: "https://corp/adfs/ls"}
-	assert.Equal(t, "ADFS", p.getProviderType())
+	assert.Equal(t, "ADFS", p.getDriver())
 
+	// Unknown provider without drivers defaults to Browser (will auto-download).
 	p = &samlProvider{config: &schema.Provider{}, url: "https://idp"}
-	assert.Equal(t, "Browser", p.getProviderType())
+	assert.Equal(t, "Browser", p.getDriver())
 }
 
 func TestSAMLProvider_ValidateAndEnvironment(t *testing.T) {
@@ -102,12 +106,16 @@ func (s stubSamlMgr) Validate() error                                           
 func (s stubSamlMgr) GetDefaultIdentity() (string, error)                       { return "", nil }
 func (s stubSamlMgr) ListIdentities() []string                                  { return nil }
 func (s stubSamlMgr) GetProviderForIdentity(string) string                      { return "" }
+func (s stubSamlMgr) GetFilesDisplayPath(string) string                         { return "~/.aws/atmos" }
 func (s stubSamlMgr) GetProviderKindForIdentity(string) (string, error)         { return "", nil }
 func (s stubSamlMgr) GetChain() []string                                        { return s.chain }
 func (s stubSamlMgr) GetStackInfo() *schema.ConfigAndStacksInfo                 { return nil }
 func (s stubSamlMgr) ListProviders() []string                                   { return nil }
 func (s stubSamlMgr) GetIdentities() map[string]schema.Identity                 { return s.idmap }
 func (s stubSamlMgr) GetProviders() map[string]schema.Provider                  { return nil }
+func (s stubSamlMgr) Logout(context.Context, string) error                      { return nil }
+func (s stubSamlMgr) LogoutProvider(context.Context, string) error              { return nil }
+func (s stubSamlMgr) LogoutAll(context.Context) error                           { return nil }
 
 func TestSAMLProvider_PreAuthenticate(t *testing.T) {
 	p, err := NewSAMLProvider("p", &schema.Provider{Kind: "aws/saml", URL: "https://idp.example.com/saml", Region: "us-east-1"})
@@ -490,4 +498,356 @@ func TestSAMLProvider_selectRole_PartialMatch(t *testing.T) {
 	sel := sp.selectRole(roles)
 	require.NotNil(t, sel)
 	assert.Equal(t, "arn:aws:iam::123:role/Development", sel.RoleARN)
+}
+
+func TestSAMLProvider_WithCustomResolver(t *testing.T) {
+	// Test SAML provider with custom resolver configuration
+	config := &schema.Provider{
+		Kind:   "aws/saml",
+		Region: "us-east-1",
+		URL:    "https://idp.example.com/saml",
+		Spec: map[string]interface{}{
+			"aws": map[string]interface{}{
+				"resolver": map[string]interface{}{
+					"url": "http://localhost:4566",
+				},
+			},
+		},
+	}
+
+	p, err := NewSAMLProvider("saml-localstack", config)
+	require.NoError(t, err)
+	assert.NotNil(t, p)
+
+	// Cast to concrete type to access internal fields
+	sp, ok := p.(*samlProvider)
+	require.True(t, ok)
+	assert.Equal(t, "saml-localstack", sp.name)
+	assert.Equal(t, "us-east-1", sp.region)
+	assert.Equal(t, "https://idp.example.com/saml", sp.url)
+
+	// Verify the provider has the config with resolver
+	assert.NotNil(t, sp.config)
+	assert.NotNil(t, sp.config.Spec)
+	awsSpec, exists := sp.config.Spec["aws"]
+	assert.True(t, exists)
+	assert.NotNil(t, awsSpec)
+}
+
+func TestSAMLProvider_WithoutCustomResolver(t *testing.T) {
+	// Test SAML provider without custom resolver configuration
+	config := &schema.Provider{
+		Kind:   "aws/saml",
+		Region: "us-east-1",
+		URL:    "https://idp.example.com/saml",
+	}
+
+	p, err := NewSAMLProvider("saml-standard", config)
+	require.NoError(t, err)
+	assert.NotNil(t, p)
+
+	// Cast to concrete type
+	sp, ok := p.(*samlProvider)
+	require.True(t, ok)
+	assert.Equal(t, "saml-standard", sp.name)
+
+	// Verify the provider works without resolver config
+	assert.NoError(t, p.Validate())
+}
+
+func TestSAMLProvider_shouldDownloadBrowser(t *testing.T) {
+	tests := []struct {
+		name                string
+		config              *schema.Provider
+		driverValue         string
+		playwrightInstalled bool
+		expectedResult      bool
+	}{
+		{
+			name:                "explicit download flag set to true",
+			config:              &schema.Provider{DownloadBrowserDriver: true},
+			driverValue:         "Browser",
+			playwrightInstalled: false,
+			expectedResult:      true,
+		},
+		{
+			name:                "driver is not Browser",
+			config:              &schema.Provider{},
+			driverValue:         "Okta",
+			playwrightInstalled: false,
+			expectedResult:      false,
+		},
+		{
+			name:                "playwright drivers already installed",
+			config:              &schema.Provider{},
+			driverValue:         "Browser",
+			playwrightInstalled: true,
+			expectedResult:      false,
+		},
+		{
+			name:                "no drivers installed, enables auto-download",
+			config:              &schema.Provider{},
+			driverValue:         "Browser",
+			playwrightInstalled: false,
+			expectedResult:      true,
+		},
+	}
+
+	for _, tt := range tests {
+		tc := tt
+		t.Run(tc.name, func(t *testing.T) {
+			sp := &samlProvider{
+				config: tc.config,
+			}
+
+			// Mock driver value.
+			sp.config.Driver = tc.driverValue
+
+			// Mock playwrightDriversInstalled based on test case.
+			if tc.playwrightInstalled {
+				// Create temporary directory with playwright drivers.
+				tmpDir := t.TempDir()
+				homeDir := tmpDir
+				t.Setenv("HOME", homeDir)
+				t.Setenv("USERPROFILE", homeDir)
+
+				// Create a mock playwright driver directory with a file inside to pass validation.
+				playwrightPath := filepath.Join(homeDir, ".cache", "ms-playwright", "chromium-1084")
+				err := os.MkdirAll(playwrightPath, 0o755)
+				require.NoError(t, err)
+
+				// hasValidPlaywrightDrivers checks for files inside version directory.
+				dummyBinary := filepath.Join(playwrightPath, "chrome")
+				err = os.WriteFile(dummyBinary, []byte("dummy"), 0o755)
+				require.NoError(t, err)
+			} else {
+				// Use empty temp directory (no drivers).
+				tmpDir := t.TempDir()
+				t.Setenv("HOME", tmpDir)
+				t.Setenv("USERPROFILE", tmpDir)
+			}
+
+			result := sp.shouldDownloadBrowser()
+			assert.Equal(t, tc.expectedResult, result)
+		})
+	}
+}
+
+func TestSAMLProvider_Logout(t *testing.T) {
+	tests := []struct {
+		name        string
+		providerCfg *schema.Provider
+		expectError bool
+	}{
+		{
+			name: "successful logout",
+			providerCfg: &schema.Provider{
+				Kind:   "aws/saml",
+				URL:    "https://idp.example.com/saml",
+				Region: "us-east-1",
+			},
+			expectError: false,
+		},
+		{
+			name: "logout with custom base_path",
+			providerCfg: &schema.Provider{
+				Kind:   "aws/saml",
+				URL:    "https://idp.example.com/saml",
+				Region: "us-east-1",
+				Spec: map[string]interface{}{
+					"files": map[string]interface{}{
+						"base_path": t.TempDir(),
+					},
+				},
+			},
+			expectError: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p, err := NewSAMLProvider("test-saml", tt.providerCfg)
+			require.NoError(t, err)
+
+			testProviderLogoutWithFilesystemVerification(t, tt.providerCfg, "test-saml", p, tt.expectError)
+		})
+	}
+}
+
+func TestSAMLProvider_Validate_URLFormats(t *testing.T) {
+	tests := []struct {
+		name      string
+		url       string
+		expectErr bool
+	}{
+		{
+			name:      "valid https URL",
+			url:       "https://idp.example.com/saml",
+			expectErr: false,
+		},
+		{
+			name:      "valid http URL (not recommended but valid)",
+			url:       "http://idp.example.com/saml",
+			expectErr: false,
+		},
+		{
+			name:      "invalid URL missing scheme",
+			url:       "idp.example.com/saml",
+			expectErr: true,
+		},
+		{
+			name:      "invalid URL malformed",
+			url:       "://bad",
+			expectErr: true,
+		},
+		{
+			name:      "invalid URL with spaces",
+			url:       "https://idp example.com/saml",
+			expectErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		tc := tt
+		t.Run(tc.name, func(t *testing.T) {
+			p, err := NewSAMLProvider("test", &schema.Provider{
+				Kind:   "aws/saml",
+				URL:    tc.url,
+				Region: "us-east-1",
+			})
+			require.NoError(t, err)
+
+			err = p.Validate()
+			if tc.expectErr {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
+func TestSAMLProvider_GetFilesDisplayPath(t *testing.T) {
+	tests := []struct {
+		name     string
+		config   *schema.Provider
+		expected string
+	}{
+		{
+			name: "default path with no base_path",
+			config: &schema.Provider{
+				Kind:   "aws/saml",
+				URL:    "https://idp.example.com/saml",
+				Region: "us-east-1",
+			},
+			expected: "~/.aws/atmos",
+		},
+		{
+			name: "custom base_path",
+			config: &schema.Provider{
+				Kind:   "aws/saml",
+				URL:    "https://idp.example.com/saml",
+				Region: "us-east-1",
+				Spec: map[string]interface{}{
+					"files": map[string]interface{}{
+						"base_path": "/custom/path",
+					},
+				},
+			},
+			expected: "/custom/path",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			provider, err := NewSAMLProvider("test-saml", tt.config)
+			require.NoError(t, err)
+
+			path := provider.GetFilesDisplayPath()
+			// Normalize path separators for cross-platform compatibility.
+			normalizedPath := filepath.ToSlash(path)
+			assert.Contains(t, normalizedPath, tt.expected)
+		})
+	}
+}
+
+func TestSAMLProvider_Logout_ErrorPaths(t *testing.T) {
+	tests := []struct {
+		name        string
+		providerCfg *schema.Provider
+		expectError bool
+	}{
+		{
+			name: "handles invalid base_path gracefully",
+			providerCfg: &schema.Provider{
+				Kind:   "aws/saml",
+				URL:    "https://idp.example.com/saml",
+				Region: "us-east-1",
+				Spec: map[string]interface{}{
+					"files": map[string]interface{}{
+						"base_path": "/invalid/\x00/path", // Invalid path with null character.
+					},
+				},
+			},
+			expectError: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p, err := NewSAMLProvider("test-saml", tt.providerCfg)
+			require.NoError(t, err)
+
+			ctx := context.Background()
+			err = p.Logout(ctx)
+
+			if tt.expectError {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
+func TestSAMLProvider_Environment_AutoDownload(t *testing.T) {
+	tests := []struct {
+		name                    string
+		downloadBrowserDriver   bool
+		expectedAutoDownloadVar string
+	}{
+		{
+			name:                    "download browser driver enabled",
+			downloadBrowserDriver:   true,
+			expectedAutoDownloadVar: "true",
+		},
+		{
+			name:                    "download browser driver disabled",
+			downloadBrowserDriver:   false,
+			expectedAutoDownloadVar: "",
+		},
+	}
+
+	for _, tt := range tests {
+		tc := tt
+		t.Run(tc.name, func(t *testing.T) {
+			p, err := NewSAMLProvider("test", &schema.Provider{
+				Kind:                  "aws/saml",
+				URL:                   "https://idp.example.com/saml",
+				Region:                "us-west-2",
+				DownloadBrowserDriver: tc.downloadBrowserDriver,
+			})
+			require.NoError(t, err)
+
+			env, err := p.Environment()
+			require.NoError(t, err)
+
+			if tc.expectedAutoDownloadVar != "" {
+				assert.Equal(t, tc.expectedAutoDownloadVar, env["SAML2AWS_AUTO_BROWSER_DOWNLOAD"])
+			} else {
+				_, exists := env["SAML2AWS_AUTO_BROWSER_DOWNLOAD"]
+				assert.False(t, exists)
+			}
+		})
+	}
 }

@@ -1,7 +1,6 @@
 package utils
 
 import (
-	"os"
 	"testing"
 
 	"github.com/spf13/viper"
@@ -12,22 +11,7 @@ import (
 )
 
 func TestDisplayDocs(t *testing.T) {
-	// Save original env/viper state
-	originalPager := os.Getenv("PAGER")
-	originalAtmosPager := os.Getenv("ATMOS_PAGER")
-	defer func() {
-		if originalPager != "" {
-			os.Setenv("PAGER", originalPager)
-		} else {
-			os.Unsetenv("PAGER")
-		}
-		if originalAtmosPager != "" {
-			os.Setenv("ATMOS_PAGER", originalAtmosPager)
-		} else {
-			os.Unsetenv("ATMOS_PAGER")
-		}
-		viper.Reset()
-	}()
+	// viper.Reset() is called in each subtest
 
 	t.Run("no pager - prints to stdout", func(t *testing.T) {
 		// When usePager is false, should print directly and not use pager
@@ -69,8 +53,8 @@ func TestDisplayDocs(t *testing.T) {
 
 	t.Run("default pager fallback", func(t *testing.T) {
 		viper.Reset()
-		os.Unsetenv("PAGER")
-		os.Unsetenv("ATMOS_PAGER")
+		t.Setenv("PAGER", "")
+		t.Setenv("ATMOS_PAGER", "")
 
 		// Should fall back to "less -r" when no pager is set
 		// This may fail on systems without less, but that's expected
@@ -82,7 +66,7 @@ func TestDisplayDocs(t *testing.T) {
 
 	t.Run("ATMOS_PAGER environment variable", func(t *testing.T) {
 		viper.Reset()
-		os.Setenv("ATMOS_PAGER", "cat")
+		t.Setenv("ATMOS_PAGER", "cat")
 		// Need to rebind env after setting it
 		_ = viper.BindEnv("pager", "ATMOS_PAGER", "PAGER")
 
@@ -92,8 +76,8 @@ func TestDisplayDocs(t *testing.T) {
 
 	t.Run("PAGER environment variable", func(t *testing.T) {
 		viper.Reset()
-		os.Setenv("PAGER", "cat")
-		os.Unsetenv("ATMOS_PAGER")
+		t.Setenv("PAGER", "cat")
+		t.Setenv("ATMOS_PAGER", "")
 		// Need to rebind env after setting it
 		_ = viper.BindEnv("pager", "ATMOS_PAGER", "PAGER")
 
@@ -103,8 +87,8 @@ func TestDisplayDocs(t *testing.T) {
 
 	t.Run("ATMOS_PAGER takes precedence over PAGER", func(t *testing.T) {
 		viper.Reset()
-		os.Setenv("ATMOS_PAGER", "cat")
-		os.Setenv("PAGER", "nonexistent-command")
+		t.Setenv("ATMOS_PAGER", "cat")
+		t.Setenv("PAGER", "nonexistent-command")
 		// Need to rebind env after setting it
 		_ = viper.BindEnv("pager", "ATMOS_PAGER", "PAGER")
 

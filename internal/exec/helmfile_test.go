@@ -3,6 +3,9 @@ package exec
 import (
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/tests"
 )
@@ -34,4 +37,35 @@ func TestExecuteHelmfile_Version(t *testing.T) {
 			}, tt.expectedOutput)
 		})
 	}
+}
+
+func TestExecuteHelmfile_MissingStack(t *testing.T) {
+	workDir := "../../tests/fixtures/scenarios/complete"
+	t.Chdir(workDir)
+
+	info := schema.ConfigAndStacksInfo{
+		ComponentFromArg: "echo-server",
+		Stack:            "",
+		SubCommand:       "diff",
+	}
+
+	err := ExecuteHelmfile(info)
+	assert.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrMissingStack)
+}
+
+func TestExecuteHelmfile_ComponentNotFound(t *testing.T) {
+	workDir := "../../tests/fixtures/scenarios/complete"
+	t.Chdir(workDir)
+
+	info := schema.ConfigAndStacksInfo{
+		ComponentFromArg: "non-existent-component",
+		Stack:            "tenant1-ue2-dev",
+		SubCommand:       "diff",
+	}
+
+	err := ExecuteHelmfile(info)
+	assert.Error(t, err)
+	// ExecuteHelmfile calls ProcessStacks which will fail to find the component.
+	assert.Contains(t, err.Error(), "Could not find the component")
 }
