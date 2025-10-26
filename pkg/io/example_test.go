@@ -28,7 +28,7 @@ func Example_newPattern() {
 	fmt.Fprintf(ioCtx.Data(), "plain data output\n")
 
 	// Formatted data (markdown help text)
-	helpMarkdown, _ := formatter.RenderMarkdown("# Help\n\nThis is help text.")
+	helpMarkdown, _ := formatter.Markdown("# Help\n\nThis is help text.")
 	fmt.Fprint(ioCtx.Data(), helpMarkdown)
 
 	// ===== PATTERN 2: UI Messages (stderr) =====
@@ -53,7 +53,7 @@ func Example_newPattern() {
 	// ===== PATTERN 3: Markdown for UI (stderr) =====
 	// Error explanation with rich formatting
 
-	errorMarkdown, _ := formatter.RenderMarkdown("**Error:** Invalid configuration\n\n```yaml\nstack: invalid\n```")
+	errorMarkdown, _ := formatter.Markdown("**Error:** Invalid configuration\n\n```yaml\nstack: invalid\n```")
 	fmt.Fprint(ioCtx.UI(), errorMarkdown)
 
 	// ===== PATTERN 4: Conditional Formatting =====
@@ -108,13 +108,13 @@ func Example_comparisonOldVsNew() {
 	fmt.Fprintf(ioCtx.UI(), "%s\n", successMsg)
 
 	// Markdown - developer chooses channel based on context
-	helpMarkdown, _ := formatter.RenderMarkdown("# Documentation")
+	helpMarkdown, _ := formatter.Markdown("# Documentation")
 
 	// Help text → stdout (pipeable)
 	fmt.Fprint(ioCtx.Data(), helpMarkdown)
 
 	// Error details → stderr (UI message)
-	errorMarkdown, _ := formatter.RenderMarkdown("**Error:** Something failed")
+	errorMarkdown, _ := formatter.Markdown("**Error:** Something failed")
 	fmt.Fprint(ioCtx.UI(), errorMarkdown)
 }
 
@@ -133,7 +133,7 @@ func Example_decisionTree() {
 	// 2. HOW should it look?
 	//    ├─ Plain text                               → fmt.Fprintf(channel, text)
 	//    ├─ Colored/styled                           → fmt.Fprintf(channel, formatter.Success(text))
-	//    └─ Markdown rendered                        → fmt.Fprint(channel, formatter.RenderMarkdown(md))
+	//    └─ Markdown rendered                        → fmt.Fprint(channel, formatter.Markdown(md))
 	//
 	// 3. WHEN to format?
 	//    ├─ Always for UI channel                    → Use formatter.* methods
@@ -143,7 +143,7 @@ func Example_decisionTree() {
 	// Example: Command help
 	// Help is DATA (can be saved, piped) but uses markdown formatting
 	helpContent := "# atmos terraform apply\n\nApplies Terraform configuration..."
-	rendered, _ := formatter.RenderMarkdown(helpContent)
+	rendered, _ := formatter.Markdown(helpContent)
 	fmt.Fprint(ioCtx.Data(), rendered)
 
 	// Example: Processing status
@@ -164,7 +164,7 @@ func Example_decisionTree() {
 	// Example: Error with explanation
 	// Error is UI with markdown for rich explanation
 	errorTitle := formatter.Error("Failed to load stack configuration")
-	errorDetails, _ := formatter.RenderMarkdown("**Reason:** Invalid YAML syntax\n\n```yaml\nstack: invalid\n```")
+	errorDetails, _ := formatter.Markdown("**Reason:** Invalid YAML syntax\n\n```yaml\nstack: invalid\n```")
 	fmt.Fprintf(ioCtx.UI(), "%s\n\n%s\n", errorTitle, errorDetails)
 }
 
@@ -195,10 +195,10 @@ func Example_keyPrinciples() {
 	// - Uses I/O layer for capability detection
 
 	// Get formatted strings
-	_ = formatter.Success("Success!")          // Returns string
-	_ = formatter.Warning("Warning!")          // Returns string
-	_ = formatter.Error("Error!")              // Returns string
-	_, _ = formatter.RenderMarkdown("# Title") // Returns string
+	_ = formatter.Success("Success!")    // Returns string
+	_ = formatter.Warning("Warning!")    // Returns string
+	_ = formatter.Error("Error!")        // Returns string
+	_, _ = formatter.Markdown("# Title") // Returns string
 
 	// KEY PRINCIPLE 3: Application layer COMBINES both
 	// - Gets formatted string from UI layer

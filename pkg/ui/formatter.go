@@ -2,7 +2,6 @@ package ui
 
 import (
 	"fmt"
-	stdio "io"
 	"sync"
 
 	"github.com/charmbracelet/glamour"
@@ -21,7 +20,8 @@ const (
 )
 
 var (
-	// Global formatter instance.
+	// Global formatter instance and I/O context.
+	globalIO        io.Context
 	globalFormatter *formatter
 	formatterMu     sync.RWMutex
 )
@@ -31,6 +31,9 @@ var (
 func InitFormatter(ioCtx io.Context) {
 	formatterMu.Lock()
 	defer formatterMu.Unlock()
+
+	// Store I/O context for package-level output functions
+	globalIO = ioCtx
 
 	// Create adapter for terminal to write through I/O layer
 	termWriter := io.NewTerminalWriter(ioCtx)
@@ -60,21 +63,53 @@ func getFormatter() (*formatter, error) {
 // Markdown writes rendered markdown to stdout (data channel).
 // Use this for help text, documentation, and other pipeable content.
 func Markdown(content string) error {
-	f, err := getFormatter()
-	if err != nil {
-		return err
+	formatterMu.RLock()
+	defer formatterMu.RUnlock()
+
+	if globalFormatter == nil || globalIO == nil {
+		return errUtils.ErrUIFormatterNotInitialized
 	}
-	return f.Markdown(content, true)
+
+	rendered, err := globalFormatter.Markdown(content)
+	if err != nil {
+		// Degrade gracefully - write plain content if rendering fails
+		rendered = content
+	}
+
+	_, writeErr := fmt.Fprint(globalIO.Data(), rendered)
+	return writeErr
+}
+
+// Markdownf writes formatted markdown to stdout (data channel).
+func Markdownf(format string, a ...interface{}) error {
+	content := fmt.Sprintf(format, a...)
+	return Markdown(content)
 }
 
 // MarkdownMessage writes rendered markdown to stderr (UI channel).
 // Use this for formatted UI messages and errors.
 func MarkdownMessage(content string) error {
-	f, err := getFormatter()
-	if err != nil {
-		return err
+	formatterMu.RLock()
+	defer formatterMu.RUnlock()
+
+	if globalFormatter == nil || globalIO == nil {
+		return errUtils.ErrUIFormatterNotInitialized
 	}
-	return f.Markdown(content, false)
+
+	rendered, err := globalFormatter.Markdown(content)
+	if err != nil {
+		// Degrade gracefully - write plain content if rendering fails
+		rendered = content
+	}
+
+	_, writeErr := fmt.Fprint(globalIO.UI(), rendered)
+	return writeErr
+}
+
+// MarkdownMessagef writes formatted markdown to stderr (UI channel).
+func MarkdownMessagef(format string, a ...interface{}) error {
+	content := fmt.Sprintf(format, a...)
+	return MarkdownMessage(content)
 }
 
 // Success writes a success message with green checkmark to stderr (UI channel).
@@ -278,28 +313,9 @@ func (f *formatter) Label(text string) string {
 	return f.styles.Label.Render(text)
 }
 
-// Markdown writes rendered markdown to the appropriate channel.
-// UseDataChannel=true writes to stdout (for pipeable content like help).
-// UseDataChannel=false writes to stderr (for UI messages).
-// Degrades gracefully to plain text if rendering fails.
-func (f *formatter) Markdown(content string, useDataChannel bool) error {
-	rendered, _ := f.RenderMarkdown(content)
-
-	var writer stdio.Writer
-	if useDataChannel {
-		writer = f.ioCtx.Data()
-	} else {
-		writer = f.ioCtx.UI()
-	}
-
-	_, err := fmt.Fprint(writer, rendered)
-	return err
-}
-
-// RenderMarkdown is a low-level function that returns the rendered markdown string.
-// Most code should use Markdown() instead, which writes directly to the channel.
-// This is kept for backward compatibility and advanced use cases.
-func (f *formatter) RenderMarkdown(content string) (string, error) {
+// Markdown returns the rendered markdown string (pure function, no I/O).
+// For writing markdown to channels, use package-level ui.Markdown() or ui.MarkdownMessage().
+func (f *formatter) Markdown(content string) (string, error) {
 	// Determine max width from config or terminal
 	maxWidth := f.ioCtx.Config().AtmosConfig.Settings.Terminal.MaxWidth
 	if maxWidth == 0 {

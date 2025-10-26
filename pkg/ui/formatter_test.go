@@ -359,35 +359,35 @@ func TestFormatter_RenderMarkdown(t *testing.T) {
 			term := terminal.New()
 			f := NewFormatter(ioCtx, term)
 
-			got, err := f.RenderMarkdown(tt.input)
+			got, err := f.Markdown(tt.input)
 
 			if (err != nil) != tt.wantErr {
-				t.Errorf("RenderMarkdown() error = %v, wantErr %v", err, tt.wantErr)
+				t.Errorf("Markdown() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
 
 			if !tt.wantErr && got == "" && tt.input != "" {
-				t.Error("RenderMarkdown() returned empty string for non-empty input")
+				t.Error("Markdown() returned empty string for non-empty input")
 			}
 		})
 	}
 }
 
-func TestFormatter_RenderMarkdown_MaxWidth(t *testing.T) {
-	// Test that RenderMarkdown doesn't fail with markdown content
+func TestFormatter_Markdown_MaxWidth(t *testing.T) {
+	// Test that Markdown doesn't fail with markdown content
 	// This test ensures the method handles content correctly
 	ioCtx := createTestIOContext()
 	term := terminal.New()
 	f := NewFormatter(ioCtx, term)
 
 	input := "# Test\n\nThis is a very long line that should be wrapped according to the terminal width."
-	got, err := f.RenderMarkdown(input)
+	got, err := f.Markdown(input)
 	if err != nil {
-		t.Errorf("RenderMarkdown() error = %v", err)
+		t.Errorf("Markdown() error = %v", err)
 	}
 
 	if got == "" {
-		t.Error("RenderMarkdown() returned empty string")
+		t.Error("Markdown() returned empty string")
 	}
 }
 

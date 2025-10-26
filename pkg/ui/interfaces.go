@@ -43,10 +43,6 @@ type Formatter interface {
 	Heading(text string) string // Returns heading-styled text
 	Label(text string) string   // Returns label-styled text
 
-	// Markdown rendering - writes rendered markdown to channel (degrades gracefully to plain text)
-	// Automatically chooses Data or UI channel based on useDataChannel parameter
-	Markdown(content string, useDataChannel bool) error
-
 	// Theme access
 	Styles() *StyleSet // Access to full StyleSet
 
@@ -54,9 +50,9 @@ type Formatter interface {
 	ColorProfile() terminal.ColorProfile
 	SupportsColor() bool
 
-	// Low-level: Returns rendered markdown string (for advanced use only)
-	// Most code should use Markdown() instead
-	RenderMarkdown(content string) (string, error)
+	// Markdown rendering - returns rendered markdown string (pure function, no I/O)
+	// For writing markdown to channels, use package-level ui.Markdown() or ui.MarkdownMessage()
+	Markdown(content string) (string, error)
 }
 
 // StyleSet provides pre-configured lipgloss styles for common UI elements.
