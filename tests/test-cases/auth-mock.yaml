@@ -170,6 +170,82 @@ tests:
       exit_code: 0
 
   # ============================================================================
+  # Auth Env --login Flag Tests - Authentication Behavior
+  # ============================================================================
+
+  - name: atmos auth env --login without cached credentials
+    enabled: true
+    snapshot: true
+    description: "Test env --login loads credentials from identity storage when no cached credentials exist"
+    workdir: "fixtures/scenarios/atmos-auth-mock/"
+    command: "atmos"
+    env:
+      ATMOS_KEYRING_TYPE: "memory"
+    args:
+      - "auth"
+      - "env"
+      - "--login"
+      - "--format"
+      - "json"
+      - "--identity"
+      - "mock-identity"
+    expect:
+      diff: []
+      stderr:
+        - "Credentials not in keyring, trying to load from identity storage"
+        - "Loaded credentials from identity storage"
+      stdout:
+        - "AWS_PROFILE"
+        - "mock-identity"
+      exit_code: 0
+
+  - name: atmos auth env --login --format bash
+    enabled: true
+    snapshot: true
+    description: "Test env --login outputs bash format after loading credentials"
+    workdir: "fixtures/scenarios/atmos-auth-mock/"
+    command: "atmos"
+    env:
+      ATMOS_KEYRING_TYPE: "memory"
+    args:
+      - "auth"
+      - "env"
+      - "--login"
+      - "--format"
+      - "bash"
+      - "--identity"
+      - "mock-identity"
+    expect:
+      diff: []
+      stderr:
+        - "Credentials not in keyring, trying to load from identity storage"
+      stdout:
+        - "export AWS_PROFILE='mock-identity'"
+      exit_code: 0
+
+  - name: atmos auth env without --login returns config env vars
+    enabled: true
+    snapshot: true
+    description: "Test env without --login returns environment variables from config without authentication"
+    workdir: "fixtures/scenarios/atmos-auth-mock/"
+    command: "atmos"
+    env:
+      ATMOS_KEYRING_TYPE: "memory"
+    args:
+      - "auth"
+      - "env"
+      - "--format"
+      - "bash"
+      - "--identity"
+      - "mock-identity"
+    expect:
+      diff: []
+      stderr: []
+      stdout:
+        - "export AWS_PROFILE='mock-identity'"
+      exit_code: 0
+
+  # ============================================================================
   # Auth Exec Tests - Command Execution with Credentials
   # ============================================================================
 
