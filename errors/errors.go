@@ -468,6 +468,7 @@ var (
 	ErrMCPInvalidJSONRPCVersion     = errors.New("invalid JSON-RPC version")
 	ErrMCPInvalidTransport          = errors.New("invalid transport type")
 	ErrMCPUnsupportedTransport      = errors.New("unsupported transport")
+	ErrLSPInvalidTransport          = errors.New("invalid LSP transport type")
 )
 
 // ExitCodeError is a typed error that preserves subcommand exit codes.
