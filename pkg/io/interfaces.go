@@ -112,32 +112,6 @@ type Config struct {
 	AtmosConfig schema.AtmosConfiguration
 }
 
-// StreamType identifies an I/O stream.
-// Deprecated: Use Channel instead for clearer semantics.
-type StreamType int
-
-const (
-	StreamInput  StreamType = iota // stdin
-	StreamOutput                   // stdout (Deprecated: use DataChannel)
-	StreamError                    // stderr (Deprecated: use UIChannel)
-)
-
-// String returns the string representation of the stream type.
-func (st StreamType) String() string {
-	defer perf.Track(nil, "io.StreamType.String")()
-
-	switch st {
-	case StreamInput:
-		return "stdin"
-	case StreamOutput:
-		return "stdout"
-	case StreamError:
-		return "stderr"
-	default:
-		return "unknown"
-	}
-}
-
 // Stream identifies an I/O stream for writing output.
 // Used with Context.Write(stream, content) for centralized masking.
 type Stream int
@@ -158,49 +132,5 @@ func (s Stream) String() string {
 		return "ui"
 	default:
 		return "unknown"
-	}
-}
-
-// Channel identifies an I/O channel with clear semantic meaning.
-// Deprecated: Use Stream instead with Context.Write().
-// This replaces StreamType with more intuitive naming.
-type Channel int
-
-const (
-	DataChannel  Channel = iota // stdout - for pipeable data
-	UIChannel                   // stderr - for human messages
-	InputChannel                // stdin - for user input
-)
-
-// String returns the string representation of the channel.
-func (c Channel) String() string {
-	defer perf.Track(nil, "io.Channel.String")()
-
-	switch c {
-	case DataChannel:
-		return "data (stdout)"
-	case UIChannel:
-		return "ui (stderr)"
-	case InputChannel:
-		return "input (stdin)"
-	default:
-		return "unknown"
-	}
-}
-
-// ToStreamType converts Channel to legacy StreamType.
-// This supports backward compatibility during migration.
-func (c Channel) ToStreamType() StreamType {
-	defer perf.Track(nil, "io.Channel.ToStreamType")()
-
-	switch c {
-	case DataChannel:
-		return StreamOutput
-	case UIChannel:
-		return StreamError
-	case InputChannel:
-		return StreamInput
-	default:
-		return StreamOutput
 	}
 }

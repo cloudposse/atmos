@@ -158,9 +158,10 @@ func New(opts ...Option) Terminal {
 		opt(t)
 	}
 
-	// Detect color profile once at initialization
-	// When --force-tty is set, treat as TTY even if detection fails
-	// When --force-color is set, use TrueColor profile
+	// Detect color profile once at initialization.
+	// When --force-tty is set, treat as TTY even if detection fails.
+	// When --force-color is set, use TrueColor profile.
+	// Check Stderr first (where UI is written), fall back to Stdout.
 	isTTYOut := t.IsTTY(Stderr)
 	if !isTTYOut {
 		isTTYOut = t.IsTTY(Stdout)

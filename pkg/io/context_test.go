@@ -37,26 +37,6 @@ func TestNewContext(t *testing.T) {
 	}
 }
 
-func TestStreamType_String(t *testing.T) {
-	tests := []struct {
-		name string
-		st   StreamType
-		want string
-	}{
-		{"stdin", StreamInput, "stdin"},
-		{"stdout", StreamOutput, "stdout"},
-		{"stderr", StreamError, "stderr"},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := tt.st.String(); got != tt.want {
-				t.Errorf("StreamType.String() = %v, want %v", got, tt.want)
-			}
-		})
-	}
-}
-
 func TestBuildConfig(t *testing.T) {
 	// Reset viper state before test
 	viper.Reset()
@@ -131,16 +111,5 @@ func TestWithOptions(t *testing.T) {
 				t.Fatal("NewContext() with options returned nil")
 			}
 		})
-	}
-}
-
-func TestStreamType_String_Unknown(t *testing.T) {
-	// Test unknown stream type
-	var unknownStream StreamType = 999
-	got := unknownStream.String()
-	want := "unknown"
-
-	if got != want {
-		t.Errorf("StreamType.String() for unknown = %v, want %v", got, want)
 	}
 }

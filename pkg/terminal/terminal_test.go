@@ -702,3 +702,319 @@ func TestDetectColorProfile_RespectsTTY(t *testing.T) {
 		})
 	}
 }
+
+// mockIOWriter implements IOWriter for testing.
+type mockIOWriter struct {
+	writes []string
+}
+
+func (m *mockIOWriter) Write(stream int, content string) error {
+	m.writes = append(m.writes, content)
+	return nil
+}
+
+func TestWithIO(t *testing.T) {
+	mockIO := &mockIOWriter{}
+
+	term := New(WithIO(mockIO))
+	require.NotNil(t, term)
+
+	// Write should use the mock IO
+	err := term.Write("test content")
+	assert.NoError(t, err)
+	assert.Len(t, mockIO.writes, 1)
+	assert.Equal(t, "test content", mockIO.writes[0])
+}
+
+func TestWrite(t *testing.T) {
+	cleanup := setupTest(t)
+	defer cleanup()
+
+	tests := []struct {
+		name     string
+		withIO   bool
+		expected int
+	}{
+		{
+			name:     "Write with IO writer",
+			withIO:   true,
+			expected: 1,
+		},
+		{
+			name:     "Write without IO writer (fallback to stderr)",
+			withIO:   false,
+			expected: 0, // Mock IO won't capture fallback writes
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockIO := &mockIOWriter{}
+
+			var term Terminal
+			if tt.withIO {
+				term = New(WithIO(mockIO))
+			} else {
+				term = New()
+			}
+
+			err := term.Write("test message")
+			assert.NoError(t, err)
+
+			if tt.withIO {
+				assert.Len(t, mockIO.writes, tt.expected)
+			}
+		})
+	}
+}
+
+func TestSetTitle(t *testing.T) {
+	cleanup := setupTest(t)
+	defer cleanup()
+
+	tests := []struct {
+		name           string
+		titleEnabled   bool
+		forceTTY       bool
+		shouldSetTitle bool
+	}{
+		{
+			name:           "SetTitle with title enabled and TTY",
+			titleEnabled:   true,
+			forceTTY:       true,
+			shouldSetTitle: true,
+		},
+		{
+			name:           "SetTitle with title disabled",
+			titleEnabled:   false,
+			forceTTY:       true,
+			shouldSetTitle: false,
+		},
+		{
+			name:           "SetTitle with non-TTY",
+			titleEnabled:   true,
+			forceTTY:       false,
+			shouldSetTitle: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockIO := &mockIOWriter{}
+
+			cfg := &Config{
+				ForceTTY: tt.forceTTY,
+				AtmosConfig: schema.AtmosConfiguration{
+					Settings: schema.AtmosSettings{
+						Terminal: schema.Terminal{
+							Title: tt.titleEnabled,
+						},
+					},
+				},
+			}
+
+			term := New(WithConfig(cfg), WithIO(mockIO))
+
+			term.SetTitle("Test Title")
+
+			if tt.shouldSetTitle {
+				// Should have written terminal control sequence
+				assert.Len(t, mockIO.writes, 1)
+				assert.Contains(t, mockIO.writes[0], "Test Title")
+			} else {
+				// Should not have written anything
+				assert.Len(t, mockIO.writes, 0)
+			}
+		})
+	}
+}
+
+func TestRestoreTitle(t *testing.T) {
+	cleanup := setupTest(t)
+	defer cleanup()
+
+	mockIO := &mockIOWriter{}
+
+	cfg := &Config{
+		ForceTTY: true,
+		AtmosConfig: schema.AtmosConfiguration{
+			Settings: schema.AtmosSettings{
+				Terminal: schema.Terminal{
+					Title: true,
+				},
+			},
+		},
+	}
+
+	term := New(WithConfig(cfg), WithIO(mockIO))
+
+	// Set title first (this captures the original title)
+	term.SetTitle("New Title")
+	assert.Len(t, mockIO.writes, 1)
+
+	// Restore title
+	term.RestoreTitle()
+	assert.Len(t, mockIO.writes, 2)
+	assert.Contains(t, mockIO.writes[1], "New Title") // Restores to first title set
+}
+
+func TestAlert(t *testing.T) {
+	cleanup := setupTest(t)
+	defer cleanup()
+
+	tests := []struct {
+		name          string
+		alertsEnabled bool
+		forceTTY      bool
+		shouldAlert   bool
+	}{
+		{
+			name:          "Alert with alerts enabled and TTY",
+			alertsEnabled: true,
+			forceTTY:      true,
+			shouldAlert:   true,
+		},
+		{
+			name:          "Alert with alerts disabled",
+			alertsEnabled: false,
+			forceTTY:      true,
+			shouldAlert:   false,
+		},
+		{
+			name:          "Alert with non-TTY",
+			alertsEnabled: true,
+			forceTTY:      false,
+			shouldAlert:   false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockIO := &mockIOWriter{}
+
+			cfg := &Config{
+				ForceTTY: tt.forceTTY,
+				AtmosConfig: schema.AtmosConfiguration{
+					Settings: schema.AtmosSettings{
+						Terminal: schema.Terminal{
+							Alerts: tt.alertsEnabled,
+						},
+					},
+				},
+			}
+
+			term := New(WithConfig(cfg), WithIO(mockIO))
+
+			term.Alert()
+
+			if tt.shouldAlert {
+				// Should have written bell character
+				assert.Len(t, mockIO.writes, 1)
+				assert.Equal(t, "\007", mockIO.writes[0])
+			} else {
+				// Should not have written anything
+				assert.Len(t, mockIO.writes, 0)
+			}
+		})
+	}
+}
+
+func TestBuildConfig_ViperIntegration(t *testing.T) {
+	cleanup := setupTest(t)
+	defer cleanup()
+
+	// Set viper values
+	viper.Set("force-tty", true)
+	viper.Set("force-color", true)
+	viper.Set("no-color", false)
+	viper.Set("color", true)
+
+	// Set AtmosConfiguration in viper
+	viper.Set("settings.terminal.title", true)
+	viper.Set("settings.terminal.alerts", true)
+
+	cfg := buildConfig()
+
+	assert.True(t, cfg.ForceTTY)
+	assert.True(t, cfg.ForceColor)
+	assert.False(t, cfg.NoColor)
+	assert.True(t, cfg.Color)
+}
+
+func TestWidth_EdgeCases(t *testing.T) {
+	cleanup := setupTest(t)
+	defer cleanup()
+
+	tests := []struct {
+		name     string
+		forceTTY bool
+		expected int
+	}{
+		{
+			name:     "Width with force-tty returns default",
+			forceTTY: true,
+			expected: defaultForcedWidth,
+		},
+		{
+			name:     "Width without force-tty returns 0 when not TTY",
+			forceTTY: false,
+			expected: 0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			viper.Set("force-tty", tt.forceTTY)
+
+			term := New()
+			width := term.Width(Stdout)
+
+			if tt.forceTTY {
+				assert.Equal(t, tt.expected, width)
+			} else {
+				// When not forced, width depends on actual TTY
+				// Just verify it doesn't panic
+				assert.GreaterOrEqual(t, width, 0)
+			}
+		})
+	}
+}
+
+func TestHeight_EdgeCases(t *testing.T) {
+	cleanup := setupTest(t)
+	defer cleanup()
+
+	tests := []struct {
+		name     string
+		forceTTY bool
+		expected int
+	}{
+		{
+			name:     "Height with force-tty returns default",
+			forceTTY: true,
+			expected: defaultForcedHeight,
+		},
+		{
+			name:     "Height without force-tty returns 0 when not TTY",
+			forceTTY: false,
+			expected: 0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			viper.Set("force-tty", tt.forceTTY)
+
+			term := New()
+			height := term.Height(Stdout)
+
+			if tt.forceTTY {
+				assert.Equal(t, tt.expected, height)
+			} else {
+				// When not forced, height depends on actual TTY
+				// Just verify it doesn't panic
+				assert.GreaterOrEqual(t, height, 0)
+			}
+		})
+	}
+}
