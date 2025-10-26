@@ -63,6 +63,13 @@ Global Flags:
         --dry-run                     Simulate the command without making any
                                       changes (default false)
 
+        --force-color                 Force color output even when not a TTY
+                                      (useful for screenshots) (default false)
+
+        --force-tty                   Force TTY mode with sane defaults when
+                                      terminal detection fails (useful for
+                                      screenshots) (default false)
+
         --heatmap                     Show performance heatmap visualization
                                       after command execution (includes P95
                                       latency) (default false)
