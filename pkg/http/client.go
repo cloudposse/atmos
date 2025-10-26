@@ -4,6 +4,7 @@ package http
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -55,38 +56,41 @@ func Get(ctx context.Context, url string, client Client) ([]byte, error) {
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
-		return nil, fmt.Errorf("%w: failed to create request for %s: %w", errUtils.ErrHTTPRequestFailed, url, err)
+		return nil, fmt.Errorf("failed to create request for %s: %w", url, errors.Join(errUtils.ErrHTTPRequestFailed, err))
 	}
 
 	resp, err := client.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %s %s failed: %w", errUtils.ErrHTTPRequestFailed, req.Method, url, err)
+		return nil, fmt.Errorf("%s %s failed: %w", req.Method, req.URL.Redacted(), errors.Join(errUtils.ErrHTTPRequestFailed, err))
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		// Read limited response body for error reporting (prevent DOS from huge responses).
-		errorBody, readErr := io.ReadAll(io.LimitReader(resp.Body, maxErrorBodySize))
+		// Read maxErrorBodySize+1 to detect truncation.
+		limited := io.LimitReader(resp.Body, maxErrorBodySize+1)
+		errorBody, readErr := io.ReadAll(limited)
 		if readErr != nil {
-			return nil, fmt.Errorf("%w: %s %s returned status %d (failed to read error body: %w)",
-				errUtils.ErrHTTPRequestFailed, req.Method, url, resp.StatusCode, readErr)
+			return nil, fmt.Errorf("%s %s returned status %d (failed to read error body: %w)",
+				req.Method, req.URL.Redacted(), resp.StatusCode, errors.Join(errUtils.ErrHTTPRequestFailed, readErr))
 		}
 
-		// Truncate marker if we hit the limit.
+		// Truncate marker if we exceeded the limit.
 		truncated := ""
-		if len(errorBody) == maxErrorBodySize {
+		if len(errorBody) > maxErrorBodySize {
 			truncated = " [truncated]"
+			errorBody = errorBody[:maxErrorBodySize]
 		}
 
-		return nil, fmt.Errorf("%w: %s %s returned status %d, content-type: %s, response body%s:\n%s",
-			errUtils.ErrHTTPRequestFailed, req.Method, url, resp.StatusCode,
-			resp.Header.Get("Content-Type"), truncated, string(errorBody))
+		return nil, fmt.Errorf("%s %s returned status %d, content-type: %s, response body%s:\n%s: %w",
+			req.Method, req.URL.Redacted(), resp.StatusCode,
+			resp.Header.Get("Content-Type"), truncated, string(errorBody), errUtils.ErrHTTPRequestFailed)
 	}
 
 	// Success case: Read full response body.
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %s %s failed to read response: %w", errUtils.ErrHTTPRequestFailed, req.Method, url, err)
+		return nil, fmt.Errorf("%s %s failed to read response: %w", req.Method, req.URL.Redacted(), errors.Join(errUtils.ErrHTTPRequestFailed, err))
 	}
 
 	return body, nil
