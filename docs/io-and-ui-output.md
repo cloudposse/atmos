@@ -4,13 +4,49 @@ Simple guide for outputting data and UI messages in Atmos commands.
 
 ## Core Concept
 
-**Three layers: UI, Data, and I/O.**
+**Four layers: Commands, UI/Data, Terminal, and I/O.**
 
-- **UI messages** (status, errors, warnings) → `ui.Success()`, `ui.Error()`, etc. → **stderr**
-- **Data output** (JSON, YAML, text) → `data.Write()`, `data.WriteJSON()`, etc. → **stdout**
-- **I/O layer** (channels, masking, terminal) → Foundation for both
+All output flows through `io.Write()` for automatic secret masking:
+
+- **UI messages** (status, errors, warnings) → `ui.Success()` → `terminal.Write()` → `io.Write(UIStream)` → **stderr**
+- **Data output** (JSON, YAML, text) → `data.Write()` → `io.Write(DataStream)` → **stdout**
+- **Automatic masking** - All secrets registered with `io.Masker()` are automatically masked in ALL output
 
 All use the same I/O context initialized at startup - no setup required in commands.
+
+## Architecture
+
+```mermaid
+graph TD
+    Commands[Commands Layer]
+
+    Commands -->|ui.Success/Error/etc| UI[UI Package]
+    Commands -->|data.Write/JSON/etc| Data[Data Package]
+
+    UI -->|formatted text| Terminal[Terminal]
+    Terminal -->|Write| IO[I/O Context]
+    Data -->|content| IO
+
+    IO -->|Write UIStream| Masking[Secret Masking]
+    IO -->|Write DataStream| Masking
+
+    Masking -->|masked| Stderr[stderr]
+    Masking -->|masked| Stdout[stdout]
+
+    Terminal -.capabilities.-> TTY[TTY Detection<br/>Color Profile<br/>Width/Height]
+
+    style IO fill:#e1f5ff
+    style Masking fill:#fff3cd
+    style Commands fill:#d4edda
+```
+
+**Key Flow:**
+1. Commands call `ui.Success()` or `data.Write()`
+2. UI formats text and writes through `terminal.Write()`
+3. Data writes directly through `io.Write(DataStream)`
+4. Terminal writes through `io.Write(UIStream)`
+5. **I/O layer applies masking** to ALL output
+6. Masked output goes to stderr (UI) or stdout (Data)
 
 ## UI vs Logging: When to Use What
 
@@ -130,11 +166,66 @@ func ExecuteAbout(cmd *cobra.Command, args []string) error {
 
 One line. Renders beautifully, degrades gracefully when piped.
 
-## Notes
+## Secret Masking
 
-### Automatic Secret Masking
+**All output is automatically masked** - both UI and Data channels flow through `io.Write()` which applies masking transparently.
 
-All output through `ui` package functions is automatically masked for secrets. This happens transparently - no developer action required.
+### How It Works
+
+```mermaid
+graph LR
+    UI[ui.Success] -->|formatted text| Term[terminal.Write]
+    Data[data.Write] -->|content| IOWrite[io.Write]
+    Term -->|content| IOWrite
+
+    IOWrite -->|1. Apply masking| Mask[masker.Mask]
+    Mask -->|2. Replace secrets| Masked[***MASKED***]
+    Masked -->|3. Write to stream| Output[stdout/stderr]
+
+    style Mask fill:#fff3cd
+    style IOWrite fill:#e1f5ff
+```
+
+**The flow:**
+1. All output goes through `io.Write(stream, content)`
+2. I/O layer calls `masker.Mask(content)`
+3. Secrets are replaced with `***MASKED***`
+4. Masked content written to stdout/stderr
+
+### Registering Secrets
+
+Secrets are registered at the I/O context level and automatically apply to ALL output:
+
+```go
+// In command initialization or runtime
+ioCtx := getIOContext() // From cobra context
+
+// Register a secret value
+ioCtx.Masker().RegisterValue("my-secret-key-123")
+
+// Register with encoding variations (base64, URL, JSON)
+ioCtx.Masker().RegisterSecret("password123")
+
+// Register pattern
+ioCtx.Masker().RegisterPattern(`SECRET_\w+`)
+
+// AWS access keys get special handling
+ioCtx.Masker().RegisterAWSAccessKey("AKIAIOSFODNN7EXAMPLE")
+```
+
+**After registration, the secret is masked in ALL output:**
+
+```go
+ui.Info("Connecting with key my-secret-key-123")
+// Output: "ℹ Connecting with key ***MASKED***"
+
+data.WriteJSON(map[string]string{"password": "password123"})
+// Output: {"password": "***MASKED***"}
+```
+
+### No Action Required
+
+**For command developers**: Just use `ui.Success()` or `data.Write()`. Masking happens automatically - no special handling needed.
 
 ### Advanced Use Cases
 
