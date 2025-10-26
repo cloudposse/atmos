@@ -198,10 +198,34 @@ fmt.Fprintf(io.Data(), ...)  // Use data.Printf() instead
 ```
 
 **Why this matters:**
-- ✅ Automatic secret masking on all output
-- ✅ Respects --no-color, --redirect-stderr flags
-- ✅ Testable (mock data.Writer() and ui functions)
-- ✅ Clear separation: data (stdout) vs messages (stderr)
+
+**Zero-Configuration Degradation:**
+Write code assuming a full-featured TTY - the system automatically handles everything:
+- ✅ **Color degradation** - TrueColor → 256 → 16 → None (respects NO_COLOR, CLICOLOR, terminal capability)
+- ✅ **Width adaptation** - Automatically wraps to terminal width or config max_width
+- ✅ **TTY detection** - Piped/redirected output becomes plain text automatically
+- ✅ **CI detection** - Detects CI environments and disables interactivity
+- ✅ **Markdown rendering** - Degrades gracefully from styled to plain text
+- ✅ **Icon support** - Shows icons in capable terminals, omits in others
+
+**Security & Reliability:**
+- ✅ **Automatic secret masking** - AWS keys, tokens, passwords masked before output
+- ✅ **Format-aware masking** - Handles JSON/YAML quoted variants
+- ✅ **No leakage** - Secrets never reach stdout/stderr/logs
+- ✅ **Pattern-based** - Detects common secret patterns automatically
+
+**Developer Experience:**
+- ✅ **No capability checking** - Never write `if tty { color() } else { plain() }`
+- ✅ **No manual masking** - Never write `redact(secret)` before output
+- ✅ **No stream selection** - Just use `data.*` (stdout) or `ui.*` (stderr)
+- ✅ **Testable** - Mock data.Writer() and ui functions for unit tests
+- ✅ **Enforced by linter** - Prevents direct fmt.Fprintf usage
+
+**User Experience:**
+- ✅ **Respects preferences** - Honors --no-color, --redirect-stderr, NO_COLOR env
+- ✅ **Pipeline friendly** - `atmos deploy | tee log.txt` works perfectly
+- ✅ **Accessibility** - Works in all terminal environments (screen readers, etc.)
+- ✅ **Consistent** - Same code path for all output, fewer bugs
 
 See `pkg/io/example_test.go` for comprehensive examples.
 
