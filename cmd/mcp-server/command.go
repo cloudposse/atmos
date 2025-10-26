@@ -4,10 +4,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
+	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/spf13/cobra"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -17,8 +20,6 @@ import (
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/mcp"
-	"github.com/cloudposse/atmos/pkg/mcp/protocol"
-	"github.com/cloudposse/atmos/pkg/mcp/transport"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -29,6 +30,13 @@ const (
 	defaultHTTPHost    = "localhost"
 	mcpProtocolVersion = "2025-03-26"
 )
+
+// transportConfig holds the validated transport configuration.
+type transportConfig struct {
+	transportType string
+	host          string
+	port          int
+}
 
 // NewCommand creates a new mcp-server command.
 func NewCommand() *cobra.Command {
@@ -81,32 +89,78 @@ The server runs until interrupted (Ctrl+C) or the client disconnects.`,
 func executeMCPServer(cmd *cobra.Command, args []string) error {
 	defer log.Info("MCP server stopped")
 
-	// Get transport flags.
+	// Get and validate transport flags.
+	config, err := getTransportConfig(cmd)
+	if err != nil {
+		return err
+	}
+
+	// Setup MCP server.
+	server, err := setupMCPServer()
+	if err != nil {
+		return err
+	}
+
+	// Create context with cancellation for signal handling.
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// Set up signal handling.
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
+
+	// Start server based on transport type.
+	errChan := make(chan error, 1)
+
+	switch config.transportType {
+	case transportStdio:
+		startStdioServer(ctx, server, errChan)
+	case transportHTTP:
+		startHTTPServer(server, config.host, config.port, errChan)
+	default:
+		return fmt.Errorf("%w: %s", errUtils.ErrMCPUnsupportedTransport, config.transportType)
+	}
+
+	// Wait for signal or error.
+	return waitForShutdown(sigChan, errChan, cancel)
+}
+
+// getTransportConfig extracts and validates transport configuration from command flags.
+func getTransportConfig(cmd *cobra.Command) (*transportConfig, error) {
 	transportType, _ := cmd.Flags().GetString("transport")
 	host, _ := cmd.Flags().GetString("host")
 	port, _ := cmd.Flags().GetInt("port")
 
 	// Validate transport type.
 	if transportType != transportStdio && transportType != transportHTTP {
-		return fmt.Errorf("%w: %s (must be 'stdio' or 'http')", errUtils.ErrMCPInvalidTransport, transportType)
+		return nil, fmt.Errorf("%w: %s (must be 'stdio' or 'http')", errUtils.ErrMCPInvalidTransport, transportType)
 	}
 
+	return &transportConfig{
+		transportType: transportType,
+		host:          host,
+		port:          port,
+	}, nil
+}
+
+// setupMCPServer initializes the MCP server with all required components.
+func setupMCPServer() (*mcp.Server, error) {
 	// Load Atmos configuration.
 	configAndStacksInfo := schema.ConfigAndStacksInfo{}
 	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
 	if err != nil {
-		return fmt.Errorf("failed to load configuration: %w", err)
+		return nil, fmt.Errorf("failed to load configuration: %w", err)
 	}
 
 	// Check if AI is enabled.
 	if !atmosConfig.Settings.AI.Enabled {
-		return errUtils.ErrAINotEnabled
+		return nil, errUtils.ErrAINotEnabled
 	}
 
 	// Initialize tool registry and executor.
 	registryRaw, executorRaw, err := initializeAIComponents(&atmosConfig)
 	if err != nil {
-		return fmt.Errorf("failed to initialize AI components: %w", err)
+		return nil, fmt.Errorf("failed to initialize AI components: %w", err)
 	}
 
 	registry := registryRaw.(*tools.Registry)
@@ -114,64 +168,11 @@ func executeMCPServer(cmd *cobra.Command, args []string) error {
 
 	// Create MCP adapter and server.
 	adapter := mcp.NewAdapter(registry, executor)
-	server := mcp.NewServer(adapter)
-
-	// Select and run transport.
-	switch transportType {
-	case transportStdio:
-		logServerInfo(server, transportStdio, "")
-		stdioTransport := transport.NewStdioTransport()
-		return runServerWithSignalHandling(stdioTransport, server)
-
-	case transportHTTP:
-		addr := fmt.Sprintf("%s:%d", host, port)
-		logServerInfo(server, transportHTTP, addr)
-		httpTransport := transport.NewHTTPTransport(addr)
-		return runServerWithSignalHandling(httpTransport, server)
-
-	default:
-		return fmt.Errorf("%w: %s", errUtils.ErrMCPUnsupportedTransport, transportType)
-	}
+	return mcp.NewServer(adapter), nil
 }
 
-// logServerInfo logs the server startup information.
-func logServerInfo(server *mcp.Server, transportType, addr string) {
-	log.Info("Starting Atmos MCP server...")
-	log.Info(fmt.Sprintf("Server: %s v%s", server.ServerInfo().Name, server.ServerInfo().Version))
-	log.Info(fmt.Sprintf("Protocol: MCP %s", mcpProtocolVersion))
-	if transportType == transportHTTP {
-		log.Info(fmt.Sprintf("Transport: HTTP (listening on %s)", addr))
-		log.Info(fmt.Sprintf("  - SSE endpoint: http://%s/sse", addr))
-		log.Info(fmt.Sprintf("  - Message endpoint: http://%s/message", addr))
-		log.Info(fmt.Sprintf("  - Health endpoint: http://%s/health", addr))
-	} else {
-		log.Info("Transport: stdio")
-	}
-	log.Info("Waiting for client connection...")
-}
-
-// serverTransport defines the interface for MCP transports.
-type serverTransport interface {
-	Serve(ctx context.Context, handler protocol.Handler) error
-}
-
-// runServerWithSignalHandling runs the server with signal handling.
-func runServerWithSignalHandling(trans serverTransport, server *mcp.Server) error {
-	// Set up context with cancellation.
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	// Handle shutdown signals.
-	sigChan := make(chan os.Signal, 1)
-	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
-
-	// Start server in goroutine.
-	errChan := make(chan error, 1)
-	go func() {
-		errChan <- trans.Serve(ctx, server.Handler())
-	}()
-
-	// Wait for signal or error.
+// waitForShutdown waits for either a shutdown signal or server error.
+func waitForShutdown(sigChan chan os.Signal, errChan chan error, cancel context.CancelFunc) error {
 	select {
 	case sig := <-sigChan:
 		log.Info(fmt.Sprintf("Received signal: %v", sig))
@@ -183,6 +184,52 @@ func runServerWithSignalHandling(trans serverTransport, server *mcp.Server) erro
 		}
 		return nil
 	}
+}
+
+// startStdioServer starts the MCP server with stdio transport.
+func startStdioServer(ctx context.Context, server *mcp.Server, errChan chan error) {
+	logServerInfo(server, transportStdio, "")
+	go func() {
+		transport := &mcpsdk.StdioTransport{}
+		errChan <- server.Run(ctx, transport)
+	}()
+}
+
+// startHTTPServer starts the MCP server with HTTP transport.
+func startHTTPServer(server *mcp.Server, host string, port int, errChan chan error) {
+	addr := fmt.Sprintf("%s:%d", host, port)
+	logServerInfo(server, transportHTTP, addr)
+	go func() {
+		handler := mcpsdk.NewSSEHandler(func(req *http.Request) *mcpsdk.Server {
+			return server.SDK()
+		}, nil)
+
+		httpServer := &http.Server{
+			Addr:              addr,
+			Handler:           handler,
+			ReadTimeout:       30 * time.Second,
+			WriteTimeout:      30 * time.Second,
+			IdleTimeout:       60 * time.Second,
+			ReadHeaderTimeout: 10 * time.Second,
+		}
+		errChan <- httpServer.ListenAndServe()
+	}()
+}
+
+// logServerInfo logs the server startup information.
+func logServerInfo(server *mcp.Server, transportType, addr string) {
+	log.Info("Starting Atmos MCP server...")
+	serverInfo := server.ServerInfo()
+	log.Info(fmt.Sprintf("Server: %s v%s", serverInfo.Name, serverInfo.Version))
+	log.Info(fmt.Sprintf("Protocol: MCP %s", mcpProtocolVersion))
+	if transportType == transportHTTP {
+		log.Info(fmt.Sprintf("Transport: HTTP (listening on %s)", addr))
+		log.Info(fmt.Sprintf("  - SSE endpoint: http://%s/sse", addr))
+		log.Info(fmt.Sprintf("  - Message endpoint: http://%s/message", addr))
+	} else {
+		log.Info("Transport: stdio")
+	}
+	log.Info("Waiting for client connection...")
 }
 
 // initializeAIComponents initializes the AI tool registry and executor.

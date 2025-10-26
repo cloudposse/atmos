@@ -27,7 +27,7 @@ See [Security Considerations](#security-considerations) below for detailed guida
 
 ## Overview
 
-The MCP server allows you to use Atmos infrastructure management capabilities from any AI assistant that supports the MCP protocol:
+The Atmos MCP Server is built on the [official MCP Go SDK](https://github.com/modelcontextprotocol/go-sdk), ensuring full compatibility with the MCP specification and supporting all MCP features and protocols. This standards-based implementation allows you to use Atmos infrastructure management capabilities from any AI assistant that supports the MCP protocol:
 
 ### Desktop Applications
 - **Claude Desktop**: Use Atmos tools directly in Claude conversations
@@ -44,6 +44,24 @@ The MCP server allows you to use Atmos infrastructure management capabilities fr
 - **Custom Clients**: Build your own MCP-compatible applications using official SDKs
 
 ## Features
+
+### Built on Official MCP SDK
+
+The Atmos MCP Server leverages the official [MCP Go SDK v1.0.0](https://github.com/modelcontextprotocol/go-sdk), providing:
+
+- **Full Protocol Compliance** - Implements the complete [MCP specification (2025-03-26)](https://modelcontextprotocol.io/specification/2025-03-26)
+- **Standard JSON-RPC 2.0** - Compatible with all MCP-compliant clients
+- **Automatic Schema Generation** - Tools are automatically registered with JSON Schema for their parameters
+- **Type-Safe Communication** - Leverages the SDK's type system for reliable message handling
+- **Future-Proof Architecture** - Automatically benefits from SDK updates and new MCP features
+- **Community-Tested** - Built on the same foundation as official MCP reference implementations
+
+All MCP protocol features are supported, including:
+- ✅ **Tools** - Execute infrastructure operations (describe, list, validate, plan, read, write)
+- ✅ **Resources** - Access infrastructure configuration files and metadata
+- ✅ **Prompts** - Pre-configured interaction patterns (planned for future releases)
+- ✅ **Progress Tracking** - Real-time operation status updates
+- ✅ **Error Handling** - Structured error responses with detailed diagnostics
 
 ### Two Transport Modes
 
@@ -1006,6 +1024,50 @@ You don't need to use exact tool names. Claude understands natural language and 
 
 ## Architecture
 
+### SDK-Based Implementation
+
+The Atmos MCP Server is implemented as a lightweight wrapper around the [official MCP Go SDK](https://github.com/modelcontextprotocol/go-sdk):
+
+```
+┌──────────────────────────────┐
+│   MCP Client (Claude, etc)   │
+└──────────────┬───────────────┘
+               │ MCP Protocol
+               │ (JSON-RPC 2.0)
+               ↓
+┌──────────────────────────────┐
+│  Official MCP Go SDK v1.0.0  │
+│  • Protocol handling          │
+│  • Message serialization     │
+│  • Schema validation         │
+│  • Transport abstraction     │
+└──────────────┬───────────────┘
+               │
+               ↓
+┌──────────────────────────────┐
+│   Atmos MCP Server Adapter   │
+│  • Tool registration         │
+│  • Schema generation         │
+│  • Request routing           │
+└──────────────┬───────────────┘
+               │
+               ↓
+┌──────────────────────────────┐
+│     Atmos AI Tools Layer     │
+│  • describe_component        │
+│  • list_stacks               │
+│  • validate_stacks           │
+│  • terraform_plan            │
+│  • read/write files          │
+└──────────────────────────────┘
+```
+
+This architecture ensures:
+- **Standards Compliance**: Full adherence to MCP specification
+- **Minimal Maintenance**: SDK handles protocol complexities
+- **Automatic Updates**: Benefits from SDK improvements
+- **Type Safety**: Compile-time validation of messages
+
 ### stdio Transport Flow
 
 ```
@@ -1017,10 +1079,14 @@ You don't need to use exact tool names. Claude understands natural language and 
          │ subprocess
          ↓
 ┌─────────────────┐
-│  atmos mcp-     │
-│     server      │
-│                 │
+│  MCP Go SDK     │
 │  (stdio)        │
+└────────┬────────┘
+         │
+         ↓
+┌─────────────────┐
+│  Atmos MCP      │
+│  Server Adapter │
 └────────┬────────┘
          │
          ↓
@@ -1044,10 +1110,17 @@ You don't need to use exact tool names. Claude understands natural language and 
          └───────────┬───────────┘
                      ↓
          ┌─────────────────────┐
-         │  atmos mcp-server   │
+         │   MCP Go SDK        │
+         │   (SSE Handler)     │
          │                     │
          │  GET  /sse          │
          │  POST /message      │
+         └──────────┬──────────┘
+                    │
+                    ↓
+         ┌─────────────────────┐
+         │  Atmos MCP Adapter  │
+         │  + Health Endpoint  │
          │  GET  /health       │
          └──────────┬──────────┘
                     │
@@ -1679,8 +1752,8 @@ You can use both simultaneously - they're complementary features!
 - [MCP Community Hub](https://modelcontextprotocol.info/) - Community resources and guides
 
 ### MCP Server Implementations
-- [Official MCP Servers](https://github.com/modelcontextprotocol/servers) - Reference implementations and examples
-- [MCP Go SDK](https://github.com/modelcontextprotocol/go-sdk) - Official Go SDK for building MCP servers
+- [MCP Go SDK](https://github.com/modelcontextprotocol/go-sdk) - **Official Go SDK used by Atmos MCP Server** - Provides full protocol compliance and type-safe communication
+- [Official MCP Servers](https://github.com/modelcontextprotocol/servers) - Reference implementations and examples in multiple languages
 
 ### Setup Guides
 - [Claude Desktop Guide](https://claude.ai/desktop) - Claude Desktop setup and usage

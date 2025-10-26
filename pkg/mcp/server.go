@@ -5,154 +5,200 @@ import (
 	"encoding/json"
 	"fmt"
 
+	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
+
+	"github.com/cloudposse/atmos/pkg/ai/tools"
 	log "github.com/cloudposse/atmos/pkg/logger"
-	"github.com/cloudposse/atmos/pkg/mcp/protocol"
 	"github.com/cloudposse/atmos/pkg/version"
 )
 
-// Server implements an MCP server that exposes Atmos AI tools.
+// Server wraps the official MCP SDK server with Atmos-specific functionality.
 type Server struct {
-	adapter     *Adapter
-	handler     *protocol.DefaultHandler
-	initialized bool
-	serverInfo  protocol.Implementation
+	sdk      *mcpsdk.Server
+	adapter  *Adapter
+	registry *tools.Registry
 }
 
-// NewServer creates a new MCP server.
+// NewServer creates a new MCP server using the official SDK.
 func NewServer(adapter *Adapter) *Server {
+	// Create SDK server with Atmos implementation details.
+	sdk := mcpsdk.NewServer(&mcpsdk.Implementation{
+		Name:    "atmos-mcp-server",
+		Version: version.Version,
+	}, nil)
+
 	s := &Server{
-		adapter:     adapter,
-		handler:     protocol.NewDefaultHandler(),
-		initialized: false,
-		serverInfo: protocol.Implementation{
-			Name:    "atmos-mcp-server",
-			Version: version.Version,
-		},
+		sdk:      sdk,
+		adapter:  adapter,
+		registry: adapter.registry,
 	}
 
-	// Register method handlers.
-	s.registerHandlers()
+	// Register all Atmos tools with the SDK.
+	s.registerTools()
 
 	return s
 }
 
-// registerHandlers registers all MCP protocol handlers.
-func (s *Server) registerHandlers() {
-	s.handler.RegisterMethod(protocol.MethodInitialize, s.handleInitialize)
-	s.handler.RegisterMethod(protocol.MethodPing, s.handlePing)
-	s.handler.RegisterMethod(protocol.MethodToolsList, s.handleToolsList)
-	s.handler.RegisterMethod(protocol.MethodToolsCall, s.handleToolsCall)
+// registerTools registers all Atmos tools with the MCP SDK server.
+func (s *Server) registerTools() {
+	toolsList := s.registry.List()
 
-	// Register notifications.
-	s.handler.RegisterNotification(protocol.MethodInitialized, s.handleInitialized)
-}
+	for _, tool := range toolsList {
+		toolName := tool.Name()
+		log.Debug(fmt.Sprintf("Registering MCP tool: %s", toolName))
 
-// handleInitialize handles the initialize request.
-func (s *Server) handleInitialize(ctx context.Context, params json.RawMessage) (interface{}, error) {
-	var initParams protocol.InitializeParams
-	if len(params) > 0 {
-		if err := json.Unmarshal(params, &initParams); err != nil {
-			return nil, &protocol.Error{
-				Code:    protocol.ErrorCodeInvalidParams,
-				Message: "invalid initialize params",
-				Data:    err.Error(),
+		// Create a closure to capture the tool name for the handler.
+		toolNameCopy := toolName
+
+		// Create handler function using SDK's CallToolRequest type.
+		handler := func(ctx context.Context, req *mcpsdk.CallToolRequest) (*mcpsdk.CallToolResult, error) {
+			// Unmarshal arguments from raw JSON.
+			var args map[string]interface{}
+			if len(req.Params.Arguments) > 0 {
+				if err := json.Unmarshal(req.Params.Arguments, &args); err != nil {
+					return &mcpsdk.CallToolResult{
+						Content: []mcpsdk.Content{
+							&mcpsdk.TextContent{Text: fmt.Sprintf("Failed to parse arguments: %v", err)},
+						},
+						IsError: true,
+					}, nil
+				}
 			}
+
+			return s.handleToolCall(ctx, toolNameCopy, args)
 		}
+
+		// Add tool to SDK server with input schema.
+		s.sdk.AddTool(&mcpsdk.Tool{
+			Name:        toolName,
+			Description: tool.Description(),
+			InputSchema: s.generateInputSchema(tool),
+		}, handler)
 	}
 
-	log.Info(fmt.Sprintf("MCP client connected: %s v%s",
-		initParams.ClientInfo.Name,
-		initParams.ClientInfo.Version))
-
-	// Return server capabilities.
-	result := protocol.InitializeResult{
-		ProtocolVersion: protocol.ProtocolVersion,
-		ServerInfo:      s.serverInfo,
-		Capabilities: protocol.ServerCapabilities{
-			Tools: &protocol.ToolsCapability{
-				ListChanged: false,
-			},
-		},
-		Instructions: "Atmos MCP Server provides access to Atmos infrastructure management tools. " +
-			"Use the available tools to list components, describe stacks, validate configurations, and plan Terraform changes.",
-	}
-
-	return result, nil
+	log.Debug(fmt.Sprintf("Registered %d MCP tools", len(toolsList)))
 }
 
-// handleInitialized handles the initialized notification.
-func (s *Server) handleInitialized(ctx context.Context, params json.RawMessage) error {
-	s.initialized = true
-	log.Info("MCP server initialized")
-	return nil
-}
+// handleToolCall executes a tool and returns the result in SDK format.
+func (s *Server) handleToolCall(ctx context.Context, name string, arguments map[string]interface{}) (*mcpsdk.CallToolResult, error) {
+	log.Info(fmt.Sprintf("Executing tool: %s", name))
 
-// handlePing handles ping requests.
-func (s *Server) handlePing(ctx context.Context, params json.RawMessage) (interface{}, error) {
-	return map[string]interface{}{"status": "pong"}, nil
-}
-
-// handleToolsList handles tools/list requests.
-func (s *Server) handleToolsList(ctx context.Context, params json.RawMessage) (interface{}, error) {
-	if !s.initialized {
-		return nil, &protocol.Error{
-			Code:    protocol.ErrorCodeInvalidRequest,
-			Message: "server not initialized",
-		}
-	}
-
-	tools, err := s.adapter.ListTools(ctx)
+	// Execute the tool using our adapter.
+	result, err := s.adapter.ExecuteTool(ctx, name, arguments)
 	if err != nil {
-		return nil, &protocol.Error{
-			Code:    protocol.ErrorCodeInternalError,
-			Message: "failed to list tools",
-			Data:    err.Error(),
+		// Return error as tool result.
+		return &mcpsdk.CallToolResult{
+			Content: []mcpsdk.Content{
+				&mcpsdk.TextContent{Text: fmt.Sprintf("Tool execution failed: %v", err)},
+			},
+			IsError: true,
+		}, nil
+	}
+
+	// Convert our result to SDK format.
+	content := make([]mcpsdk.Content, 0)
+
+	// Add output as text content.
+	if result.Output != "" {
+		content = append(content, &mcpsdk.TextContent{Text: result.Output})
+	}
+
+	// Add error if present.
+	if result.Error != nil {
+		content = append(content, &mcpsdk.TextContent{Text: fmt.Sprintf("Error: %v", result.Error)})
+	}
+
+	// Add data if present.
+	if len(result.Data) > 0 {
+		for key, value := range result.Data {
+			content = append(content, &mcpsdk.TextContent{
+				Text: fmt.Sprintf("Data '%s': %v", key, value),
+			})
 		}
 	}
 
-	return protocol.ToolsListResult{
-		Tools: tools,
+	return &mcpsdk.CallToolResult{
+		Content: content,
+		IsError: !result.Success,
 	}, nil
 }
 
-// handleToolsCall handles tools/call requests.
-func (s *Server) handleToolsCall(ctx context.Context, params json.RawMessage) (interface{}, error) {
-	if !s.initialized {
-		return nil, &protocol.Error{
-			Code:    protocol.ErrorCodeInvalidRequest,
-			Message: "server not initialized",
-		}
-	}
-
-	var callParams protocol.CallToolParams
-	if err := json.Unmarshal(params, &callParams); err != nil {
-		return nil, &protocol.Error{
-			Code:    protocol.ErrorCodeInvalidParams,
-			Message: "invalid call tool params",
-			Data:    err.Error(),
-		}
-	}
-
-	log.Info(fmt.Sprintf("Executing tool: %s", callParams.Name))
-
-	result, err := s.adapter.ExecuteTool(ctx, callParams.Name, callParams.Arguments)
-	if err != nil {
-		return nil, &protocol.Error{
-			Code:    protocol.ErrorCodeInternalError,
-			Message: "tool execution failed",
-			Data:    err.Error(),
-		}
-	}
-
-	return result, nil
-}
-
-// Handler returns the protocol handler.
-func (s *Server) Handler() protocol.Handler {
-	return s.handler
+// SDK returns the underlying SDK server instance.
+func (s *Server) SDK() *mcpsdk.Server {
+	return s.sdk
 }
 
 // ServerInfo returns the server implementation information.
-func (s *Server) ServerInfo() protocol.Implementation {
-	return s.serverInfo
+func (s *Server) ServerInfo() mcpsdk.Implementation {
+	return mcpsdk.Implementation{
+		Name:    "atmos-mcp-server",
+		Version: version.Version,
+	}
+}
+
+// generateInputSchema converts tool parameters to JSON Schema format for the SDK.
+func (s *Server) generateInputSchema(tool tools.Tool) map[string]interface{} {
+	params := tool.Parameters()
+	if len(params) == 0 {
+		// Return minimal schema for tools with no parameters.
+		return map[string]interface{}{
+			"type":       "object",
+			"properties": map[string]interface{}{},
+		}
+	}
+
+	schema := map[string]interface{}{
+		"type":       "object",
+		"properties": make(map[string]interface{}),
+	}
+
+	properties := schema["properties"].(map[string]interface{})
+	required := make([]string, 0)
+
+	for _, param := range params {
+		propSchema := map[string]interface{}{
+			"description": param.Description,
+			"type":        mapParamTypeToJSONSchema(param.Type),
+		}
+
+		if param.Default != nil {
+			propSchema["default"] = param.Default
+		}
+
+		properties[param.Name] = propSchema
+
+		if param.Required {
+			required = append(required, param.Name)
+		}
+	}
+
+	if len(required) > 0 {
+		schema["required"] = required
+	}
+
+	return schema
+}
+
+// mapParamTypeToJSONSchema maps tool parameter types to JSON Schema types.
+func mapParamTypeToJSONSchema(paramType tools.ParamType) string {
+	switch paramType {
+	case tools.ParamTypeString:
+		return "string"
+	case tools.ParamTypeInt:
+		return "integer"
+	case tools.ParamTypeBool:
+		return "boolean"
+	case tools.ParamTypeArray:
+		return "array"
+	case tools.ParamTypeObject:
+		return "object"
+	default:
+		return "string"
+	}
+}
+
+// Run starts the server with the given transport.
+func (s *Server) Run(ctx context.Context, transport mcpsdk.Transport) error {
+	log.Info("MCP server started (using official SDK)")
+	return s.sdk.Run(ctx, transport)
 }
