@@ -8,6 +8,7 @@ import (
 	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/lipgloss"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/terminal"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
@@ -20,9 +21,8 @@ const (
 )
 
 var (
-	// Global formatter and terminal instances.
-	globalFormatter Formatter
-	globalTerminal  terminal.Terminal
+	// Global formatter instance.
+	globalFormatter *formatter
 	formatterMu     sync.RWMutex
 )
 
@@ -37,22 +37,22 @@ func InitFormatter(ioCtx io.Context) {
 
 	// Create terminal instance with I/O writer for automatic masking
 	// terminal.Write() → io.Write(UIStream) → masking → stderr
-	globalTerminal = terminal.New(terminal.WithIO(termWriter))
+	globalTerminal := terminal.New(terminal.WithIO(termWriter))
 
 	// Create formatter with I/O context and terminal
-	globalFormatter = NewFormatter(ioCtx, globalTerminal)
+	globalFormatter = NewFormatter(ioCtx, globalTerminal).(*formatter)
 	Format = globalFormatter // Also expose for advanced use
 }
 
 // getFormatter returns the global formatter instance.
-// Panics if not initialized (programming error, not runtime error).
-func getFormatter() Formatter {
+// Returns error if not initialized instead of panicking.
+func getFormatter() (*formatter, error) {
 	formatterMu.RLock()
 	defer formatterMu.RUnlock()
 	if globalFormatter == nil {
-		panic("ui.InitFormatter() must be called before using UI functions")
+		return nil, errUtils.ErrUIFormatterNotInitialized
 	}
-	return globalFormatter
+	return globalFormatter, nil
 }
 
 // Package-level functions that delegate to the global formatter.
@@ -60,19 +60,30 @@ func getFormatter() Formatter {
 // Markdown writes rendered markdown to stdout (data channel).
 // Use this for help text, documentation, and other pipeable content.
 func Markdown(content string) error {
-	return getFormatter().Markdown(content, true)
+	f, err := getFormatter()
+	if err != nil {
+		return err
+	}
+	return f.Markdown(content, true)
 }
 
 // MarkdownMessage writes rendered markdown to stderr (UI channel).
 // Use this for formatted UI messages and errors.
 func MarkdownMessage(content string) error {
-	return getFormatter().Markdown(content, false)
+	f, err := getFormatter()
+	if err != nil {
+		return err
+	}
+	return f.Markdown(content, false)
 }
 
 // Success writes a success message with green checkmark to stderr (UI channel).
 // Flow: ui.Success() → terminal.Write() → io.Write(UIStream) → masking → stderr.
 func Success(text string) error {
-	f := getFormatter().(*formatter)
+	f, err := getFormatter()
+	if err != nil {
+		return err
+	}
 	formatted := f.Success(text) + newline
 	return f.terminal.Write(formatted)
 }
@@ -80,7 +91,10 @@ func Success(text string) error {
 // Successf writes a formatted success message with green checkmark to stderr (UI channel).
 // Flow: ui.Successf() → terminal.Write() → io.Write(UIStream) → masking → stderr.
 func Successf(format string, a ...interface{}) error {
-	f := getFormatter().(*formatter)
+	f, err := getFormatter()
+	if err != nil {
+		return err
+	}
 	formatted := f.Successf(format, a...) + newline
 	return f.terminal.Write(formatted)
 }
@@ -88,7 +102,10 @@ func Successf(format string, a ...interface{}) error {
 // Error writes an error message with red X to stderr (UI channel).
 // Flow: ui.Error() → terminal.Write() → io.Write(UIStream) → masking → stderr.
 func Error(text string) error {
-	f := getFormatter().(*formatter)
+	f, err := getFormatter()
+	if err != nil {
+		return err
+	}
 	formatted := f.Error(text) + newline
 	return f.terminal.Write(formatted)
 }
@@ -96,7 +113,10 @@ func Error(text string) error {
 // Errorf writes a formatted error message with red X to stderr (UI channel).
 // Flow: ui.Errorf() → terminal.Write() → io.Write(UIStream) → masking → stderr.
 func Errorf(format string, a ...interface{}) error {
-	f := getFormatter().(*formatter)
+	f, err := getFormatter()
+	if err != nil {
+		return err
+	}
 	formatted := f.Errorf(format, a...) + newline
 	return f.terminal.Write(formatted)
 }
@@ -104,7 +124,10 @@ func Errorf(format string, a ...interface{}) error {
 // Warning writes a warning message with yellow warning sign to stderr (UI channel).
 // Flow: ui.Warning() → terminal.Write() → io.Write(UIStream) → masking → stderr.
 func Warning(text string) error {
-	f := getFormatter().(*formatter)
+	f, err := getFormatter()
+	if err != nil {
+		return err
+	}
 	formatted := f.Warning(text) + newline
 	return f.terminal.Write(formatted)
 }
@@ -112,7 +135,10 @@ func Warning(text string) error {
 // Warningf writes a formatted warning message with yellow warning sign to stderr (UI channel).
 // Flow: ui.Warningf() → terminal.Write() → io.Write(UIStream) → masking → stderr.
 func Warningf(format string, a ...interface{}) error {
-	f := getFormatter().(*formatter)
+	f, err := getFormatter()
+	if err != nil {
+		return err
+	}
 	formatted := f.Warningf(format, a...) + newline
 	return f.terminal.Write(formatted)
 }
@@ -120,7 +146,10 @@ func Warningf(format string, a ...interface{}) error {
 // Info writes an info message with cyan info icon to stderr (UI channel).
 // Flow: ui.Info() → terminal.Write() → io.Write(UIStream) → masking → stderr.
 func Info(text string) error {
-	f := getFormatter().(*formatter)
+	f, err := getFormatter()
+	if err != nil {
+		return err
+	}
 	formatted := f.Info(text) + newline
 	return f.terminal.Write(formatted)
 }
@@ -128,7 +157,10 @@ func Info(text string) error {
 // Infof writes a formatted info message with cyan info icon to stderr (UI channel).
 // Flow: ui.Infof() → terminal.Write() → io.Write(UIStream) → masking → stderr.
 func Infof(format string, a ...interface{}) error {
-	f := getFormatter().(*formatter)
+	f, err := getFormatter()
+	if err != nil {
+		return err
+	}
 	formatted := f.Infof(format, a...) + newline
 	return f.terminal.Write(formatted)
 }
@@ -296,6 +328,7 @@ func (f *formatter) RenderMarkdown(content string) (string, error) {
 		// Degrade gracefully: return plain content if renderer creation fails
 		return content, err
 	}
+	defer renderer.Close()
 
 	rendered, err := renderer.Render(content)
 	if err != nil {

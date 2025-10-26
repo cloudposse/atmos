@@ -8,6 +8,7 @@ import (
 	"github.com/spf13/viper"
 	"golang.org/x/term"
 
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -132,6 +133,8 @@ type terminal struct {
 
 // New creates a new Terminal with configuration.
 func New(opts ...Option) Terminal {
+	defer perf.Track(nil, "terminal.New")()
+
 	cfg := buildConfig()
 
 	t := &terminal{
@@ -144,7 +147,11 @@ func New(opts ...Option) Terminal {
 	}
 
 	// Detect color profile once at initialization
-	isTTYOut := t.IsTTY(Stdout)
+	// Check stderr first (where UI is written), fall back to stdout
+	isTTYOut := t.IsTTY(Stderr)
+	if !isTTYOut {
+		isTTYOut = t.IsTTY(Stdout)
+	}
 	t.colorProfile = cfg.DetectColorProfile(isTTYOut)
 
 	return t
@@ -171,6 +178,8 @@ func WithConfig(cfg *Config) Option {
 // Write outputs UI content to the terminal through the I/O layer.
 // This ensures all terminal output flows through io.Write() for automatic masking.
 func (t *terminal) Write(content string) error {
+	defer perf.Track(nil, "terminal.Write")()
+
 	if t.io != nil {
 		// Write through I/O layer for masking
 		// IOStreamUI has value 1, matching io.UIStream
@@ -184,6 +193,8 @@ func (t *terminal) Write(content string) error {
 }
 
 func (t *terminal) IsTTY(stream Stream) bool {
+	defer perf.Track(nil, "terminal.IsTTY")()
+
 	fd := streamToFd(stream)
 	if fd < 0 {
 		return false
@@ -192,10 +203,14 @@ func (t *terminal) IsTTY(stream Stream) bool {
 }
 
 func (t *terminal) ColorProfile() ColorProfile {
+	defer perf.Track(nil, "terminal.ColorProfile")()
+
 	return t.colorProfile
 }
 
 func (t *terminal) Width(stream Stream) int {
+	defer perf.Track(nil, "terminal.Width")()
+
 	fd := streamToFd(stream)
 	if fd < 0 {
 		return 0
@@ -210,6 +225,8 @@ func (t *terminal) Width(stream Stream) int {
 }
 
 func (t *terminal) Height(stream Stream) int {
+	defer perf.Track(nil, "terminal.Height")()
+
 	fd := streamToFd(stream)
 	if fd < 0 {
 		return 0
@@ -224,6 +241,8 @@ func (t *terminal) Height(stream Stream) int {
 }
 
 func (t *terminal) SetTitle(title string) {
+	defer perf.Track(nil, "terminal.SetTitle")()
+
 	// Check if title setting is enabled
 	if !t.config.AtmosConfig.Settings.Terminal.Title {
 		return
@@ -254,6 +273,8 @@ func (t *terminal) SetTitle(title string) {
 }
 
 func (t *terminal) RestoreTitle() {
+	defer perf.Track(nil, "terminal.RestoreTitle")()
+
 	// Best-effort restore: Set to captured original title
 	// Note: We can't query the actual terminal title, so we use the first title we set
 	if t.originalTitle != "" {
@@ -267,6 +288,8 @@ func (t *terminal) RestoreTitle() {
 }
 
 func (t *terminal) Alert() {
+	defer perf.Track(nil, "terminal.Alert")()
+
 	// Check if alerts are enabled
 	if !t.config.AtmosConfig.Settings.Terminal.Alerts {
 		return

@@ -70,10 +70,12 @@ func (m *masker) RegisterSecret(secret string) {
 	// Register URL encoded version
 	m.RegisterValue(url.QueryEscape(secret))
 
-	// Register JSON encoded version
+	// Register JSON encoded version (both quoted and unquoted)
 	if jsonBytes, err := json.Marshal(secret); err == nil {
-		// Remove surrounding quotes
 		jsonStr := string(jsonBytes)
+		// Register the full quoted JSON string
+		m.RegisterValue(jsonStr)
+		// Also register the unquoted inner text
 		if len(jsonStr) > 2 {
 			m.RegisterValue(jsonStr[1 : len(jsonStr)-1])
 		}
@@ -114,13 +116,10 @@ func (m *masker) RegisterAWSAccessKey(accessKeyID string) {
 
 	m.RegisterValue(accessKeyID)
 
-	// AWS access keys follow pattern: AKIA[0-9A-Z]{16}
-	// If this is a valid AWS access key, register a pattern to catch the paired secret key
-	if strings.HasPrefix(accessKeyID, "AKIA") && len(accessKeyID) == awsAccessKeyIDLength {
-		// AWS secret keys are 40 characters of base64-like characters
-		// Register a pattern to catch anything that looks like an AWS secret key near this access key
-		// This is a best-effort approach
-		_ = m.RegisterPattern(`[A-Za-z0-9/+=]{40}`)
+	// If this looks like an AWS access key, also mask the paired secret when labeled.
+	if len(accessKeyID) == awsAccessKeyIDLength && (strings.HasPrefix(accessKeyID, "AKIA") || strings.HasPrefix(accessKeyID, "ASIA")) {
+		// Match common labeling to reduce false positives.
+		_ = m.RegisterPattern(`(?i)\bAWS_SECRET_ACCESS_KEY\b[=:]\s*[A-Za-z0-9/+=]{40}`)
 	}
 }
 
@@ -138,10 +137,27 @@ func (m *masker) Mask(input string) string {
 
 	// Mask literals (exact matches)
 	// Sort by length (longest first) to avoid partial replacements
+	// Collect literals into slice
+	literals := make([]string, 0, len(m.literals))
 	for literal := range m.literals {
 		if literal != "" {
-			masked = strings.ReplaceAll(masked, literal, MaskReplacement)
+			literals = append(literals, literal)
 		}
+	}
+
+	// Sort by length descending (longest first)
+	// This prevents shorter literals from being replaced before longer ones
+	for i := 0; i < len(literals); i++ {
+		for j := i + 1; j < len(literals); j++ {
+			if len(literals[j]) > len(literals[i]) {
+				literals[i], literals[j] = literals[j], literals[i]
+			}
+		}
+	}
+
+	// Replace literals in order (longest first)
+	for _, literal := range literals {
+		masked = strings.ReplaceAll(masked, literal, MaskReplacement)
 	}
 
 	// Mask regex patterns

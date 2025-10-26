@@ -192,6 +192,15 @@ var RootCmd = &cobra.Command{
 		if !isCompletionCommand(cmd) && err == nil {
 			telemetry.PrintTelemetryDisclosure()
 		}
+
+		// Initialize I/O context and global formatter after flag parsing.
+		// This ensures flags like --no-color, --redirect-stderr, --disable-masking are respected.
+		ioCtx, ioErr := iolib.NewContext()
+		if ioErr != nil {
+			errUtils.CheckErrorPrintAndExit(fmt.Errorf("failed to initialize I/O context: %w", ioErr), "", "")
+		}
+		ui.InitFormatter(ioCtx)
+		data.InitWriter(ioCtx)
 	},
 	PersistentPostRun: func(cmd *cobra.Command, args []string) {
 		// Stop profiler after command execution.
@@ -514,14 +523,6 @@ func Execute() error {
 
 	utils.InitializeMarkdown(atmosConfig)
 	errUtils.InitializeMarkdown(atmosConfig)
-
-	// Initialize I/O context and global formatter.
-	ioCtx, ioErr := iolib.NewContext()
-	if ioErr != nil {
-		return fmt.Errorf("failed to initialize I/O context: %w", ioErr)
-	}
-	ui.InitFormatter(ioCtx)
-	data.InitWriter(ioCtx)
 
 	if initErr != nil && !errors.Is(initErr, cfg.NotFound) {
 		if isVersionCommand() {

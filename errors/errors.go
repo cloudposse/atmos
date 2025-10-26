@@ -28,6 +28,7 @@ var (
 	ErrValidPackage                          = errors.New("no valid installer package provided for")
 	ErrTUIModel                              = errors.New("failed to initialize TUI model")
 	ErrTUIRun                                = errors.New("failed to run TUI")
+	ErrUIFormatterNotInitialized             = errors.New("ui formatter not initialized")
 	ErrNoFilesFound                          = errors.New("no files found in directory")
 	ErrMultipleFilesFound                    = errors.New("multiple files found in directory")
 	ErrSourceDirNotExist                     = errors.New("source directory does not exist")
@@ -104,7 +105,7 @@ var (
 	ErrUnknownStream  = errors.New("unknown I/O stream")
 	ErrWriteToStream  = errors.New("failed to write to stream")
 	ErrMaskingContent = errors.New("failed to mask content")
-	ErrHeadLookup           = errors.New("HEAD not found")
+	ErrHeadLookup     = errors.New("HEAD not found")
 
 	// Slice utility errors.
 	ErrNilInput         = errors.New("input must not be nil")
