@@ -42,7 +42,7 @@ This created an unnecessary barrier for teams who wanted to:
 
 ## Better Support for "Native" Terraform
 
-As we discussed in our post [Nobody Runs Native Terraform](https://cloudposse.com/blog/nobody-runs-native-terraform/), teams use various abstractions and tools around Terraform. Atmos is designed to work alongside your existing workflow, not force you into a specific pattern.
+Everyone says they're using "native" Terraform, but as we point out in [Nobody Runs Native Terraform](https://cloudposse.com/blog/nobody-runs-native-terraform/), teams are actually using wrapper scripts, CI/CD templating, shared modules, and various abstractions around Terraform—they're just not using a dedicated framework. Atmos is designed to work alongside your existing workflow, not force you into a specific pattern.
 
 With this change, you can now use Atmos components incrementally:
 
