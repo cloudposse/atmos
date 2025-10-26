@@ -954,7 +954,7 @@ MIT LICENSED DEPENDENCIES
 
   - github.com/Azure/azure-sdk-for-go/sdk/storage/azblob
     License: MIT
-    URL: https://github.com/Azure/azure-sdk-for-go/blob/sdk/storage/azblob/v1.6.1/sdk/storage/azblob/LICENSE.txt
+    URL: https://github.com/Azure/azure-sdk-for-go/blob/sdk/storage/azblob/v1.6.2/sdk/storage/azblob/LICENSE.txt
 
   - github.com/Azure/go-ntlmssp
     License: MIT
