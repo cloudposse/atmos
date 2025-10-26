@@ -612,6 +612,153 @@ You don't need to use exact tool names. Claude understands natural language and 
          └─────────────────────┘
 ```
 
+## Server Execution Model
+
+Understanding how MCP servers run helps clarify their behavior and operational requirements.
+
+### stdio Transport: Foreground Subprocess Execution
+
+**All MCP servers using stdio transport run in the foreground as blocking processes.** This is the industry standard defined by the MCP specification and followed by all major implementations.
+
+#### How It Works
+
+1. **Client Launches Server as Subprocess**
+   - When Claude Desktop starts, it spawns `atmos mcp-server` as a child process
+   - The server process is directly managed by the client application
+   - Process lifecycle is tied to the client session
+
+2. **Blocking Execution Loop**
+   - The server enters a blocking loop reading from stdin
+   - Each incoming message is processed synchronously
+   - The main thread remains blocked until shutdown
+
+3. **Clean Shutdown Process**
+   - Client closes stdin when disconnecting
+   - Server detects EOF and exits gracefully
+   - Signal handlers (SIGTERM/SIGINT) allow manual interruption
+   - Process cleanup happens automatically
+
+#### Why Foreground Execution?
+
+This design choice provides several benefits:
+
+**Process Lifecycle Control**
+- Client can terminate the subprocess when done
+- No orphaned processes or daemon management needed
+- Automatic cleanup when client crashes
+
+**Resource Management**
+- When the client dies, the server dies automatically
+- No need for PID files or process tracking
+- Simple memory and file handle cleanup
+
+**Cross-Platform Compatibility**
+- Works identically on Windows, macOS, and Linux
+- No platform-specific daemon management
+- Consistent behavior across environments
+
+**Debugging and Monitoring**
+- Server output appears in client logs
+- Easy to diagnose connection issues
+- Simple to trace request/response flow
+
+**Security Through Isolation**
+- Process runs under the same user as the client
+- Inherits client's security context and permissions
+- No additional privilege escalation
+
+#### MCP Specification Requirements
+
+From the [official MCP specification](https://modelcontextprotocol.io/specification/2025-03-26/basic/transports):
+
+> "The client launches the MCP server as a subprocess and the server reads JSON-RPC messages from its standard input (stdin) and sends messages to its standard output (stdout)."
+
+Key requirements for stdio transport:
+- Messages are newline-delimited
+- Server reads from stdin, writes to stdout
+- Logging goes to stderr (not stdout)
+- Server blocks until client disconnects
+
+### HTTP Transport: Background Daemon Execution
+
+Unlike stdio, **HTTP transport servers can run as background daemons:**
+
+```bash
+# Start HTTP server in background
+atmos mcp-server --transport http --host 0.0.0.0 --port 8080 &
+
+# Or use process managers
+systemctl start atmos-mcp-server  # systemd
+docker run -d atmos-mcp           # Docker
+```
+
+HTTP servers:
+- ✅ Run independently of any client
+- ✅ Handle multiple concurrent connections
+- ✅ Suitable for production deployments
+- ✅ Can be daemonized with systemd, Docker, etc.
+- ⚠️ Require additional security measures (authentication, TLS)
+
+### Execution Model Comparison
+
+| Aspect | stdio Transport | HTTP Transport |
+|--------|----------------|----------------|
+| **Execution Mode** | Foreground (blocking) | Background (daemon) |
+| **Process Launch** | Client spawns subprocess | Manually started/managed |
+| **Lifecycle** | Tied to client session | Independent of clients |
+| **Multiple Clients** | No (1:1 relationship) | Yes (1:many) |
+| **Startup** | Automatic by client | Manual or via init system |
+| **Shutdown** | When client disconnects | Manual or signal-based |
+| **Resource Cleanup** | Automatic with client | Requires proper shutdown |
+| **Production Use** | Desktop applications | Server/cloud deployments |
+
+### Common Misconceptions
+
+:::tip Understanding Foreground Execution
+Running in the foreground is **not a limitation** for stdio servers—it's the designed behavior that ensures:
+- Clean process management
+- Automatic resource cleanup
+- Protocol compliance
+- Cross-platform consistency
+
+This is how **all** MCP stdio servers work, including official reference implementations.
+:::
+
+**"Should I run stdio servers in the background?"**
+
+No. stdio servers are designed to run as foreground subprocesses. If you need a background server:
+- Use HTTP transport instead: `atmos mcp-server --transport http`
+- Set up proper daemon management (systemd, Docker, etc.)
+- Implement security measures (authentication, TLS)
+
+**"Can I detach the stdio server from Claude Desktop?"**
+
+No. The stdio protocol requires the client to maintain the subprocess connection. Detaching would break the communication channel.
+
+**"Why does the server exit when I close Claude Desktop?"**
+
+This is correct behavior. The stdio server's lifecycle is tied to the client. When Claude Desktop quits, it terminates its child processes, including the MCP server.
+
+### Best Practices
+
+Following these practices ensures reliable MCP server operation:
+
+**For stdio Transport (Local Development):**
+- ✅ Let the client manage the process lifecycle
+- ✅ Use stderr for logging, stdout for protocol messages only
+- ✅ Implement graceful shutdown on signal handlers
+- ✅ Handle context cancellation properly
+- ❌ Don't try to daemonize or detach the process
+- ❌ Don't write non-protocol data to stdout
+
+**For HTTP Transport (Production):**
+- ✅ Use process managers (systemd, Docker, Kubernetes)
+- ✅ Implement health check endpoints
+- ✅ Add proper monitoring and logging
+- ✅ Configure authentication and TLS
+- ✅ Set up graceful shutdown procedures
+- ❌ Don't expose unauthenticated HTTP servers to the internet
+
 ## Security Considerations
 
 ### Current Security Model (v1)
@@ -1076,10 +1223,23 @@ You can use both simultaneously - they're complementary features!
 
 ## Related Documentation
 
+### Atmos Documentation
 - [AI Configuration](/ai/configuration) - Configure AI provider settings
 - [AI Tools](/ai/tools) - Available tools and permissions
-- [MCP Specification](https://modelcontextprotocol.io) - Official MCP documentation
-- [Claude Desktop Guide](https://claude.ai/desktop) - Claude Desktop setup
+
+### MCP Protocol Resources
+- [MCP Official Documentation](https://modelcontextprotocol.io/docs/getting-started/intro) - Getting started with MCP
+- [MCP Specification](https://modelcontextprotocol.io) - Official protocol specification
+- [MCP Best Practices](https://modelcontextprotocol.info/docs/best-practices/) - Architecture and implementation guide
+- [MCP Community Hub](https://modelcontextprotocol.info/) - Community resources and guides
+
+### MCP Server Implementations
+- [Official MCP Servers](https://github.com/modelcontextprotocol/servers) - Reference implementations and examples
+- [MCP Go SDK](https://github.com/modelcontextprotocol/go-sdk) - Official Go SDK for building MCP servers
+
+### Setup Guides
+- [Claude Desktop Guide](https://claude.ai/desktop) - Claude Desktop setup and usage
+- [Notes on Setting Up Claude Desktop MCP Servers](https://nishtahir.com/notes-on-setting-up-claude-desktop-mcp-servers/) - Troubleshooting common issues
 
 ## Feedback and Support
 
