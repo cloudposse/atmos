@@ -11,8 +11,33 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
+// IOWriter is the interface for writing to I/O streams.
+// This avoids circular dependency with pkg/io.
+// The stream parameter uses int to allow different packages to define their own stream types.
+type IOWriter interface {
+	// Write outputs content to the specified stream with automatic masking.
+	// stream values: 0=Data (stdout), 1=UI (stderr)
+	Write(stream int, content string) error
+}
+
+// IOStream represents an I/O stream type for terminal operations.
+// This mirrors io.Stream but avoids circular dependency.
+type IOStream int
+
+const (
+	// IOStreamData represents stdout (data channel) - value 0.
+	IOStreamData IOStream = 0
+	// IOStreamUI represents stderr (UI channel) - value 1.
+	IOStreamUI IOStream = 1
+)
+
 // Terminal provides terminal capability detection and operations.
+// Terminal writes UI output through the I/O layer for automatic masking.
 type Terminal interface {
+	// Write outputs UI content to the terminal.
+	// Content flows: terminal.Write() → io.Write(UIStream) → masking → stderr
+	Write(content string) error
+
 	// IsTTY returns whether the given stream is a TTY.
 	IsTTY(stream Stream) bool
 
@@ -92,6 +117,7 @@ type Config struct {
 
 // terminal implements the Terminal interface.
 type terminal struct {
+	io            IOWriter
 	config        *Config
 	colorProfile  ColorProfile
 	originalTitle string
@@ -120,11 +146,34 @@ func New(opts ...Option) Terminal {
 // Option configures Terminal.
 type Option func(*terminal)
 
+// WithIO sets the I/O writer for output.
+// If not set, terminal will write directly to os.Stderr (no masking).
+func WithIO(io IOWriter) Option {
+	return func(t *terminal) {
+		t.io = io
+	}
+}
+
 // WithConfig sets a custom config (for testing).
 func WithConfig(cfg *Config) Option {
 	return func(t *terminal) {
 		t.config = cfg
 	}
+}
+
+// Write outputs UI content to the terminal through the I/O layer.
+// This ensures all terminal output flows through io.Write() for automatic masking.
+func (t *terminal) Write(content string) error {
+	if t.io != nil {
+		// Write through I/O layer for masking
+		// IOStreamUI has value 1, matching io.UIStream
+		return t.io.Write(int(IOStreamUI), content)
+	}
+
+	// Fallback: write directly to stderr (no masking)
+	// This should only happen in tests or when terminal is created without I/O
+	_, err := fmt.Fprint(os.Stderr, content)
+	return err
 }
 
 func (t *terminal) IsTTY(stream Stream) bool {

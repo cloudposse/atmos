@@ -26,8 +26,12 @@ func InitFormatter(ioCtx io.Context) {
 	formatterMu.Lock()
 	defer formatterMu.Unlock()
 
-	// Create terminal instance for UI layer
-	globalTerminal = terminal.New()
+	// Create adapter for terminal to write through I/O layer
+	termWriter := io.NewTerminalWriter(ioCtx)
+
+	// Create terminal instance with I/O writer for automatic masking
+	// terminal.Write() → io.Write(UIStream) → masking → stderr
+	globalTerminal = terminal.New(terminal.WithIO(termWriter))
 
 	// Create formatter with I/O context and terminal
 	globalFormatter = NewFormatter(ioCtx, globalTerminal)
@@ -60,59 +64,67 @@ func MarkdownMessage(content string) error {
 }
 
 // Success writes a success message with green checkmark to stderr (UI channel).
+// Flow: ui.Success() → terminal.Write() → io.Write(UIStream) → masking → stderr
 func Success(text string) error {
 	f := getFormatter().(*formatter)
-	_, err := fmt.Fprintln(f.ioCtx.UI(), f.Success(text))
-	return err
+	formatted := f.Success(text) + "\n"
+	return f.terminal.Write(formatted)
 }
 
 // Successf writes a formatted success message with green checkmark to stderr (UI channel).
+// Flow: ui.Successf() → terminal.Write() → io.Write(UIStream) → masking → stderr
 func Successf(format string, a ...interface{}) error {
 	f := getFormatter().(*formatter)
-	_, err := fmt.Fprintln(f.ioCtx.UI(), f.Successf(format, a...))
-	return err
+	formatted := f.Successf(format, a...) + "\n"
+	return f.terminal.Write(formatted)
 }
 
 // Error writes an error message with red X to stderr (UI channel).
+// Flow: ui.Error() → terminal.Write() → io.Write(UIStream) → masking → stderr
 func Error(text string) error {
 	f := getFormatter().(*formatter)
-	_, err := fmt.Fprintln(f.ioCtx.UI(), f.Error(text))
-	return err
+	formatted := f.Error(text) + "\n"
+	return f.terminal.Write(formatted)
 }
 
 // Errorf writes a formatted error message with red X to stderr (UI channel).
+// Flow: ui.Errorf() → terminal.Write() → io.Write(UIStream) → masking → stderr
 func Errorf(format string, a ...interface{}) error {
 	f := getFormatter().(*formatter)
-	_, err := fmt.Fprintln(f.ioCtx.UI(), f.Errorf(format, a...))
-	return err
+	formatted := f.Errorf(format, a...) + "\n"
+	return f.terminal.Write(formatted)
 }
 
 // Warning writes a warning message with yellow warning sign to stderr (UI channel).
+// Flow: ui.Warning() → terminal.Write() → io.Write(UIStream) → masking → stderr
 func Warning(text string) error {
 	f := getFormatter().(*formatter)
-	_, err := fmt.Fprintln(f.ioCtx.UI(), f.Warning(text))
-	return err
+	formatted := f.Warning(text) + "\n"
+	return f.terminal.Write(formatted)
 }
 
 // Warningf writes a formatted warning message with yellow warning sign to stderr (UI channel).
+// Flow: ui.Warningf() → terminal.Write() → io.Write(UIStream) → masking → stderr
 func Warningf(format string, a ...interface{}) error {
 	f := getFormatter().(*formatter)
-	_, err := fmt.Fprintln(f.ioCtx.UI(), f.Warningf(format, a...))
-	return err
+	formatted := f.Warningf(format, a...) + "\n"
+	return f.terminal.Write(formatted)
 }
 
 // Info writes an info message with cyan info icon to stderr (UI channel).
+// Flow: ui.Info() → terminal.Write() → io.Write(UIStream) → masking → stderr
 func Info(text string) error {
 	f := getFormatter().(*formatter)
-	_, err := fmt.Fprintln(f.ioCtx.UI(), f.Info(text))
-	return err
+	formatted := f.Info(text) + "\n"
+	return f.terminal.Write(formatted)
 }
 
 // Infof writes a formatted info message with cyan info icon to stderr (UI channel).
+// Flow: ui.Infof() → terminal.Write() → io.Write(UIStream) → masking → stderr
 func Infof(format string, a ...interface{}) error {
 	f := getFormatter().(*formatter)
-	_, err := fmt.Fprintln(f.ioCtx.UI(), f.Infof(format, a...))
-	return err
+	formatted := f.Infof(format, a...) + "\n"
+	return f.terminal.Write(formatted)
 }
 
 // Format exposes the global formatter for advanced use cases.

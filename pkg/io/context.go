@@ -44,7 +44,30 @@ func NewContext(opts ...ContextOption) (Context, error) {
 	return ctx, nil
 }
 
+// Write is the primary output method - ALL writes go through here for masking.
+// This is the central choke point that ensures all output is masked.
+func (c *context) Write(stream Stream, content string) error {
+	// Apply masking
+	masked := c.masker.Mask(content)
+
+	// Route to appropriate stream
+	var writer stdio.Writer
+	switch stream {
+	case DataStream:
+		writer = c.streams.RawOutput() // Use raw since we already masked
+	case UIStream:
+		writer = c.streams.RawError() // Use raw since we already masked
+	default:
+		return fmt.Errorf("unknown stream: %v", stream)
+	}
+
+	// Write to stream
+	_, err := fmt.Fprint(writer, masked)
+	return err
+}
+
 // Channel access - explicit and clear.
+// DEPRECATED: Use Write() instead for automatic masking.
 func (c *context) Data() stdio.Writer {
 	return c.streams.Output()
 }

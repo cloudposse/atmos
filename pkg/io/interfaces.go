@@ -14,10 +14,14 @@ import (
 // - Channels: Where does output go? (stdout, stderr, stdin)
 // - Masking: Secret redaction for security
 //
+// ALL output must flow through Write() for automatic masking.
 // The UI layer (pkg/ui/) handles formatting and rendering.
 // The terminal layer (pkg/terminal/) handles TTY detection and capabilities.
 type Context interface {
-	// Channel access - explicit and clear
+	// Primary output method - ALL writes should go through this for masking
+	Write(stream Stream, content string) error
+
+	// Channel access - explicit and clear (deprecated - use Write() instead)
 	Data() stdio.Writer  // stdout - for pipeable data (JSON, YAML, results)
 	UI() stdio.Writer    // stderr - for human messages (status, errors, prompts)
 	Input() stdio.Reader // stdin - for user input
@@ -131,7 +135,29 @@ func (st StreamType) String() string {
 	}
 }
 
+// Stream identifies an I/O stream for writing output.
+// Used with Context.Write(stream, content) for centralized masking.
+type Stream int
+
+const (
+	DataStream Stream = iota // stdout - for pipeable data (JSON, YAML, results)
+	UIStream                 // stderr - for human messages (status, errors, prompts)
+)
+
+// String returns the string representation of the stream.
+func (s Stream) String() string {
+	switch s {
+	case DataStream:
+		return "data"
+	case UIStream:
+		return "ui"
+	default:
+		return "unknown"
+	}
+}
+
 // Channel identifies an I/O channel with clear semantic meaning.
+// DEPRECATED: Use Stream instead with Context.Write().
 // This replaces StreamType with more intuitive naming.
 type Channel int
 
