@@ -544,7 +544,284 @@ Windsurf uses a similar configuration to Cursor:
 - **Claude Desktop**: Best for general infrastructure management and queries
 - **VS Code/Cursor/Cline**: Best for coding while having Atmos context
 - **Continue.dev**: Best if you want to use multiple AI models
+- **CLI Tools**: Best for terminal-based workflows and automation
 - **HTTP transport**: Best for team collaboration and CI/CD pipelines
+:::
+
+#### AI CLI Tools
+
+Beyond desktop applications and IDE extensions, several AI CLI tools support MCP for terminal-based workflows.
+
+##### Claude Code
+
+**Prerequisites**: [Claude Code](https://docs.claude.com/en/docs/claude-code) installed
+
+**Configuration Scopes**:
+- **Local**: Project-specific (default)
+- **Project**: Shared via `.mcp.json` in project root
+- **User**: Cross-project (`~/.claude.json`)
+
+**Adding MCP Servers**:
+
+<Terminal title="claude mcp add">
+```bash
+# HTTP transport (recommended)
+claude mcp add --transport http atmos http://localhost:8080
+
+# stdio transport (local server)
+claude mcp add --transport stdio atmos -- atmos mcp-server
+
+# With environment variables
+claude mcp add --transport stdio atmos \
+  --env ATMOS_BASE_PATH=/path/to/project \
+  -- atmos mcp-server
+
+# With specific scope
+claude mcp add --scope project --transport stdio atmos -- atmos mcp-server
+```
+</Terminal>
+
+**Management Commands**:
+
+<Terminal title="claude mcp commands">
+```bash
+# List all MCP servers
+claude mcp list
+
+# Get server details
+claude mcp get atmos
+
+# Remove server
+claude mcp remove atmos
+```
+</Terminal>
+
+**Manual Configuration** (`.mcp.json`):
+
+<File title=".mcp.json (project root)">
+```json
+{
+  "mcpServers": {
+    "atmos": {
+      "type": "stdio",
+      "command": "atmos",
+      "args": ["mcp-server"],
+      "env": {
+        "ATMOS_BASE_PATH": "${PROJECT_ROOT}"
+      }
+    }
+  }
+}
+```
+</File>
+
+##### Gemini CLI
+
+**Prerequisites**: [Gemini CLI](https://github.com/google-gemini/gemini-cli) installed
+
+**Installation**:
+
+<Terminal title="npm install">
+```bash
+# Install Gemini CLI globally
+npm install -g @google/gemini-cli@latest
+
+# Verify installation
+gemini --version
+```
+</Terminal>
+
+**Adding MCP Servers**:
+
+<Terminal title="gemini mcp add">
+```bash
+# stdio transport (local server)
+gemini mcp add atmos atmos mcp-server
+
+# HTTP transport
+gemini mcp add --transport http atmos http://localhost:8080
+
+# With environment variables
+gemini mcp add atmos -e ATMOS_BASE_PATH=/path/to/project atmos mcp-server
+
+# With custom headers (HTTP)
+gemini mcp add --transport http atmos http://localhost:8080 \
+  --header "Authorization: Bearer token"
+```
+</Terminal>
+
+**Management Commands**:
+
+<Terminal title="gemini mcp commands">
+```bash
+# List all MCP servers
+gemini mcp list
+
+# Remove server
+gemini mcp remove atmos
+
+# Check server status within CLI
+gemini
+# Then type: /mcp
+```
+</Terminal>
+
+**Manual Configuration** (`settings.json`):
+
+<File title="~/.gemini/settings.json">
+```json
+{
+  "mcpServers": {
+    "atmos": {
+      "command": "atmos",
+      "args": ["mcp-server"],
+      "env": {
+        "ATMOS_BASE_PATH": "$HOME/infrastructure"
+      },
+      "timeout": 30000,
+      "trust": false
+    }
+  }
+}
+```
+</File>
+
+##### OpenAI Codex CLI
+
+**Prerequisites**: [Codex CLI](https://developers.openai.com/codex/cli/) installed
+
+**Installation**:
+
+<Terminal title="installation">
+```bash
+# Install via npm (when available)
+npm install -g @openai/codex
+
+# Or download from official releases
+# https://github.com/openai/codex/releases
+```
+</Terminal>
+
+**Configuration** (`~/.codex/config.json`):
+
+<File title="config.json">
+```json
+{
+  "mcpServers": {
+    "atmos": {
+      "command": "atmos",
+      "args": ["mcp-server"],
+      "env": {
+        "ATMOS_BASE_PATH": "/path/to/project"
+      }
+    }
+  }
+}
+```
+</File>
+
+:::note Codex Configuration
+Codex CLI uses `config.json` in the `~/.codex/` directory. Refer to the [official documentation](https://developers.openai.com/codex/cli/) for the latest configuration format.
+:::
+
+##### Grok CLI
+
+**Prerequisites**: [Grok CLI](https://github.com/superagent-ai/grok-cli) installed
+
+**Installation**:
+
+<Terminal title="npm install">
+```bash
+# Install Grok CLI globally
+npm install -g @webdevtoday/grok-cli
+
+# Or with yarn
+yarn global add @webdevtoday/grok-cli
+
+# Verify installation
+grok --version
+```
+</Terminal>
+
+**Adding MCP Servers** (Interactive):
+
+<Terminal title="grok interactive">
+```bash
+# Start Grok CLI
+grok
+
+# Within the CLI, add MCP server
+/mcp add atmos "atmos" "mcp-server"
+
+# Add with environment variables
+/mcp add atmos "atmos" "mcp-server" "--env=ATMOS_BASE_PATH=/path/to/project"
+
+# List MCP servers
+/mcp list --verbose
+
+# Test MCP tools
+/mcp tools
+```
+</Terminal>
+
+**Alternative Grok CLI** (superagent-ai):
+
+<Terminal title="grok mcp add">
+```bash
+# stdio transport
+grok mcp add atmos --transport stdio --command "atmos" --args "mcp-server"
+
+# HTTP transport
+grok mcp add atmos --transport http --url "http://localhost:8080"
+
+# With environment variables
+grok mcp add atmos --transport stdio \
+  --command "atmos" --args "mcp-server" \
+  --env "ATMOS_BASE_PATH=/path/to/project"
+```
+</Terminal>
+
+**Manual Configuration** (`.grok/settings.json`):
+
+<File title="settings.json">
+```json
+{
+  "mcp": {
+    "servers": {
+      "atmos": {
+        "command": "atmos",
+        "args": ["mcp-server"],
+        "env": {
+          "ATMOS_BASE_PATH": "/path/to/infrastructure"
+        }
+      }
+    }
+  },
+  "permissions": {
+    "mode": "ask",
+    "allowedTools": [],
+    "disallowedTools": []
+  }
+}
+```
+</File>
+
+##### CLI Tools Comparison
+
+| CLI Tool | Provider | Installation | MCP Support | Best For |
+|----------|----------|--------------|-------------|----------|
+| **Claude Code** | Anthropic | Official installer | Excellent | Claude users, deep integration |
+| **Gemini CLI** | Google | npm install | Excellent | Gemini users, FastMCP integration |
+| **Codex CLI** | OpenAI | npm install | Good | OpenAI users, coding assistance |
+| **Grok CLI** | xAI/Community | npm install | Good | xAI users, terminal workflows |
+
+:::tip Which CLI Tool Should I Use?
+- **Claude Code**: Best if you're already using Claude, most mature MCP support
+- **Gemini CLI**: Best for Google Cloud users, excellent FastMCP integration
+- **Codex CLI**: Best for OpenAI ecosystem users (GPT-4, GPT-5)
+- **Grok CLI**: Best for xAI users, latest AI models from xAI
+
+All support stdio and HTTP transports for Atmos MCP server!
 :::
 
 ### HTTP Transport (Remote/Cloud)
@@ -1412,6 +1689,17 @@ You can use both simultaneously - they're complementary features!
 - [Cursor MCP Documentation](https://docs.cursor.com/context/model-context-protocol) - Cursor IDE MCP setup
 - [Cline Documentation](https://docs.cline.bot/mcp/configuring-mcp-servers) - Cline MCP configuration guide
 - [Continue.dev Documentation](https://docs.continue.dev/reference) - Continue extension reference
+
+### AI CLI Tools
+- [Claude Code Documentation](https://docs.claude.com/en/docs/claude-code) - Official Claude Code CLI documentation
+- [Claude Code MCP Guide](https://docs.claude.com/en/docs/claude-code/mcp) - Guide for adding MCP servers to Claude Code
+- [Gemini CLI GitHub](https://github.com/google-gemini/gemini-cli) - Official Gemini CLI repository
+- [Gemini CLI MCP Documentation](https://google-gemini.github.io/gemini-cli/docs/tools/mcp-server.html) - MCP server integration guide for Gemini
+- [Gemini CLI + FastMCP](https://developers.googleblog.com/en/gemini-cli-fastmcp-simplifying-mcp-server-development/) - Simplifying MCP server development with Gemini
+- [OpenAI Codex CLI Documentation](https://developers.openai.com/codex/cli/) - Official OpenAI Codex CLI documentation
+- [Grok CLI (webdevtoday)](https://www.npmjs.com/package/@webdevtoday/grok-cli) - Community-maintained Grok CLI with MCP support
+- [Grok CLI (superagent-ai)](https://github.com/superagent-ai/grok-cli) - Alternative Grok CLI implementation
+- [Adding MCP Servers to Claude Code](https://mcpcat.io/guides/adding-an-mcp-server-to-claude-code/) - Step-by-step guide for Claude Code MCP setup
 
 ### MCP Client Lists
 - [Official MCP Clients](https://modelcontextprotocol.io/clients) - Complete list of 100+ MCP-compatible applications

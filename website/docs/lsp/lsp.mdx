@@ -24,6 +24,129 @@ Language Server Protocol is an industry-standard protocol created by Microsoft t
 
 LSP is **independent from AI** but can be used by Atmos AI when enabled.
 
+## How Atmos LSP Works
+
+:::tip Understanding Atmos LSP
+**Atmos is an LSP client, not a server.** It manages and communicates with external LSP servers (yaml-language-server, terraform-ls, etc.) to provide validation for your infrastructure files.
+:::
+
+**Architecture:**
+
+```
+┌─────────────────────┐
+│    Your Editor      │
+│  (VS Code, Vim,     │
+│   Emacs, etc.)      │
+└──────────┬──────────┘
+           │ (optional - for editing)
+           ↓
+┌─────────────────────┐
+│   Atmos Commands    │
+│  (ai chat, etc.)    │
+└──────────┬──────────┘
+           │
+           ↓
+┌─────────────────────┐
+│   Atmos LSP Client  │
+│   (manages servers) │
+└──────────┬──────────┘
+           │
+     ┌─────┴─────┬──────────┐
+     ↓           ↓          ↓
+┌─────────┐ ┌─────────┐ ┌──────────┐
+│ YAML LS │ │  TF LS  │ │ JSON LS  │
+│(process)│ │(process)│ │(process) │
+└─────────┘ └─────────┘ └──────────┘
+```
+
+**Process Model:**
+- LSP servers run **automatically in the background** as child processes
+- Servers start when Atmos needs to validate a file
+- Servers shut down automatically when Atmos exits
+- No manual server management required
+
+**Communication:**
+- Atmos communicates with LSP servers via stdin/stdout
+- Each server runs as an independent subprocess
+- All validation happens locally on your machine
+
+## Quick Start
+
+Get started with LSP validation in 3 steps:
+
+### 1. Install LSP Servers
+
+Install the LSP servers you need:
+
+<Terminal title="install LSP servers">
+```bash
+# YAML Language Server (for stack files)
+npm install -g yaml-language-server
+
+# Terraform Language Server (for component files)
+brew install terraform-ls
+
+# Verify installation
+yaml-language-server --version
+terraform-ls version
+```
+</Terminal>
+
+:::note
+These are standard LSP servers used by many editors. You may already have them installed if you use VS Code, Neovim, or other modern editors.
+:::
+
+### 2. Enable LSP in atmos.yaml
+
+Add LSP configuration to your `atmos.yaml`:
+
+<File title="atmos.yaml">
+```yaml
+settings:
+  lsp:
+    enabled: true
+    servers:
+      yaml-ls:
+        command: "yaml-language-server"
+        args: ["--stdio"]
+        filetypes: ["yaml", "yml"]
+        root_patterns: ["atmos.yaml", ".git"]
+
+      terraform-ls:
+        command: "terraform-ls"
+        args: ["serve"]
+        filetypes: ["tf", "tfvars", "hcl"]
+        root_patterns: [".terraform", ".git"]
+```
+</File>
+
+### 3. Use LSP Validation
+
+LSP servers start automatically when needed:
+
+**With Atmos AI:**
+<Terminal title="atmos ai chat">
+```bash
+atmos ai chat
+# Ask: "Validate stacks/prod/vpc.yaml for errors"
+# AI uses LSP to check for syntax errors
+```
+</Terminal>
+
+**Standalone (when LSP is enabled):**
+```bash
+# LSP validates files when commands run
+atmos terraform plan vpc -s prod-use1
+# Errors are caught before plan execution
+```
+
+:::tip First-Time Setup
+When you first enable LSP, Atmos will:
+1. Start LSP servers on-demand (1-2 second startup)
+2. Cache validation results for fast subsequent checks
+3. Automatically clean up processes on exit
+:::
+
 ## Basic Configuration
 
 Enable LSP in your `atmos.yaml` configuration file:
@@ -62,19 +185,29 @@ Enable LSP in your `atmos.yaml` configuration file:
     <dt>`lsp.servers`</dt>
     <dd>Map of LSP server configurations. Each server handles specific file types.</dd>
 
-    <dt>`lsp.servers.<name>.command`</dt>
+    <dt>`lsp.servers.
+        <name>.command`
+    </dt>
     <dd>Command to start the LSP server (must be in PATH or absolute path)</dd>
 
-    <dt>`lsp.servers.<name>.args`</dt>
+    <dt>`lsp.servers.
+        <name>.args`
+    </dt>
     <dd>Arguments to pass to the LSP server command</dd>
 
-    <dt>`lsp.servers.<name>.filetypes`</dt>
+    <dt>`lsp.servers.
+        <name>.filetypes`
+    </dt>
     <dd>List of file extensions this server handles (e.g., `["yaml", "yml"]`)</dd>
 
-    <dt>`lsp.servers.<name>.root_patterns`</dt>
+    <dt>`lsp.servers.
+        <name>.root_patterns`
+    </dt>
     <dd>Files/directories that identify the project root (e.g., `[".git", "atmos.yaml"]`)</dd>
 
-    <dt>`lsp.servers.<name>.initialization_options`</dt>
+    <dt>`lsp.servers.
+        <name>.initialization_options`
+    </dt>
     <dd>Server-specific initialization options (varies by LSP server)</dd>
 </dl>
 
@@ -182,6 +315,339 @@ The Terraform Language Server provides validation and intelligence for Terraform
 | **yaml-language-server** | YAML, YML | `npm install -g yaml-language-server` | YAML validation and schemas |
 | **terraform-ls** | TF, TFVARS, HCL | `brew install terraform-ls` | Terraform/HCL validation |
 | **vscode-json-languageserver** | JSON | `npm install -g vscode-json-languageserver` | JSON validation and schemas |
+
+## Using LSP in Your Editor
+
+While Atmos manages LSP servers for validation, you can also configure your code editor to use the same LSP servers for real-time editing features like autocomplete, hover documentation, and inline error checking.
+
+:::tip Editor Integration
+These are **optional** configurations for your code editor. Atmos LSP works independently—these editor setups just provide a better editing experience for your Atmos files.
+:::
+
+### VS Code
+
+VS Code has built-in support for LSP and can automatically detect installed language servers.
+
+**YAML Extension:**
+
+Install the [YAML extension](https://marketplace.visualstudio.com/items?itemName=redhat.vscode-yaml):
+
+<Terminal title="VS Code">
+```bash
+code --install-extension redhat.vscode-yaml
+```
+</Terminal>
+
+Configure in `.vscode/settings.json`:
+
+<File title=".vscode/settings.json">
+```json
+{
+  "yaml.schemas": {
+    "https://json.schemastore.org/atmos.json": "atmos.yaml",
+    "file:///path/to/atmos-schema.json": "stacks/**/*.yaml"
+  },
+  "yaml.format.enable": true,
+  "yaml.validate": true
+}
+```
+</File>
+
+**Terraform Extension:**
+
+Install the [HashiCorp Terraform extension](https://marketplace.visualstudio.com/items?itemName=HashiCorp.terraform):
+
+<Terminal title="VS Code">
+```bash
+code --install-extension HashiCorp.terraform
+```
+</Terminal>
+
+The extension automatically uses `terraform-ls` if installed.
+
+### Neovim
+
+Neovim has built-in LSP support via `vim.lsp`.
+
+**Using nvim-lspconfig:**
+
+<File title="~/.config/nvim/init.lua">
+```lua
+-- Install nvim-lspconfig
+-- :Lazy install nvim-lspconfig (if using Lazy.nvim)
+
+local lspconfig = require('lspconfig')
+
+-- YAML Language Server
+lspconfig.yamlls.setup{
+  settings = {
+    yaml = {
+      schemas = {
+        ["https://json.schemastore.org/atmos.json"] = "atmos.yaml",
+        kubernetes = "k8s/*.yaml"
+      },
+      format = { enable = true },
+      validate = true
+    }
+  }
+}
+
+-- Terraform Language Server
+lspconfig.terraformls.setup{
+  filetypes = { "terraform", "tf", "hcl" },
+}
+
+-- Auto-format on save (optional)
+vim.api.nvim_create_autocmd("BufWritePre", {
+  pattern = { "*.yaml", "*.yml", "*.tf" },
+  callback = function()
+    vim.lsp.buf.format({ async = false })
+  end,
+})
+```
+</File>
+
+**Installation commands:**
+
+<Terminal title="Neovim">
+```bash
+# Install nvim-lspconfig via your plugin manager
+# Example with Lazy.nvim:
+# Add to ~/.config/nvim/lua/plugins/lsp.lua:
+return {
+  "neovim/nvim-lspconfig",
+  config = function()
+    -- Your LSP config here
+  end
+}
+```
+</Terminal>
+
+### Vim with coc.nvim
+
+Install [coc.nvim](https://github.com/neoclide/coc.nvim) for LSP support in Vim:
+
+<File title="~/.vimrc or ~/.config/nvim/init.vim">
+```vim
+" Install coc.nvim via vim-plug
+Plug 'neoclide/coc.nvim', {'branch': 'release'}
+
+" Install LSP extensions
+:CocInstall coc-yaml
+:CocInstall coc-terraform
+```
+</File>
+
+Configure in `:CocConfig`:
+
+<File title="coc-settings.json">
+```json
+{
+  "yaml.schemas": {
+    "https://json.schemastore.org/atmos.json": "atmos.yaml",
+    "file:///path/to/schema.json": "stacks/**/*.yaml"
+  },
+  "languageserver": {
+    "terraform": {
+      "command": "terraform-ls",
+      "args": ["serve"],
+      "filetypes": ["terraform", "tf"],
+      "initializationOptions": {}
+    }
+  }
+}
+```
+</File>
+
+### Emacs
+
+**Using lsp-mode:**
+
+<File title="~/.emacs.d/init.el or ~/.emacs">
+```elisp
+;; Install lsp-mode
+(use-package lsp-mode
+  :ensure t
+  :hook ((yaml-mode . lsp)
+         (terraform-mode . lsp))
+  :commands lsp)
+
+;; Install yaml-mode
+(use-package yaml-mode
+  :ensure t
+  :mode ("\\.ya?ml\\'" . yaml-mode))
+
+;; Install terraform-mode
+(use-package terraform-mode
+  :ensure t
+  :mode ("\\.tf\\'" . terraform-mode))
+
+;; Configure YAML LSP
+(with-eval-after-load 'lsp-mode
+  (add-to-list 'lsp-file-watch-ignored-directories "[/\\\\]\\stacks\\'")
+  (setq lsp-yaml-schemas
+        '((:uri "https://json.schemastore.org/atmos.json"
+           :fileMatch ["atmos.yaml"])
+          (:uri "file:///path/to/schema.json"
+           :fileMatch ["stacks/**/*.yaml"]))))
+```
+</File>
+
+**Using eglot (built-in Emacs 29+):**
+
+<File title="~/.emacs.d/init.el">
+```elisp
+;; Eglot is built-in starting Emacs 29
+(require 'eglot)
+
+;; Enable for YAML files
+(add-hook 'yaml-mode-hook 'eglot-ensure)
+
+;; Enable for Terraform files
+(add-hook 'terraform-mode-hook 'eglot-ensure)
+
+;; Configure servers
+(add-to-list 'eglot-server-programs
+             '(yaml-mode . ("yaml-language-server" "--stdio")))
+(add-to-list 'eglot-server-programs
+             '(terraform-mode . ("terraform-ls" "serve")))
+```
+</File>
+
+### Sublime Text
+
+Install the [LSP package](https://packagecontrol.io/packages/LSP):
+
+1. Open Command Palette: `Cmd+Shift+P` (macOS) or `Ctrl+Shift+P` (Windows/Linux)
+2. Run: `Package Control: Install Package`
+3. Search and install: `LSP`
+4. Install language-specific packages:
+   - `LSP-yaml`
+   - `LSP-terraform`
+
+Configure in `Preferences → Package Settings → LSP → Settings`:
+
+<File title="LSP.sublime-settings">
+```json
+{
+  "clients": {
+    "yaml-language-server": {
+      "enabled": true,
+      "command": ["yaml-language-server", "--stdio"],
+      "selector": "source.yaml",
+      "settings": {
+        "yaml": {
+          "schemas": {
+            "https://json.schemastore.org/atmos.json": "atmos.yaml"
+          }
+        }
+      }
+    },
+    "terraform-ls": {
+      "enabled": true,
+      "command": ["terraform-ls", "serve"],
+      "selector": "source.terraform"
+    }
+  }
+}
+```
+</File>
+
+### IntelliJ IDEA / PyCharm
+
+Install the LSP Support plugin:
+
+1. Go to `Preferences → Plugins`
+2. Search for "LSP Support" or "Language Server Protocol Support"
+3. Install and restart
+
+Configure LSP servers:
+
+1. Go to `Preferences → Languages & Frameworks → Language Server Protocol → Server Definitions`
+2. Click `+` to add new server definitions:
+
+**YAML Server:**
+- Extension: `yaml`, `yml`
+- Command: `yaml-language-server --stdio`
+
+**Terraform Server:**
+- Extension: `tf`, `tfvars`
+- Command: `terraform-ls serve`
+
+Alternatively, use the native Terraform plugin which has built-in support.
+
+### Cursor / VS Code Forks
+
+Cursor, VSCodium, and other VS Code-based editors work the same as VS Code:
+
+<File title="settings.json">
+```json
+{
+  "yaml.schemas": {
+    "https://json.schemastore.org/atmos.json": "atmos.yaml"
+  },
+  "terraform.languageServer": {
+    "enabled": true,
+    "path": "terraform-ls"
+  }
+}
+```
+</File>
+
+### Zed Editor
+
+Zed has built-in LSP support. Configure in `~/.config/zed/settings.json`:
+
+<File title="settings.json">
+```json
+{
+  "lsp": {
+    "yaml-language-server": {
+      "binary": {
+        "path": "yaml-language-server",
+        "arguments": ["--stdio"]
+      },
+      "settings": {
+        "yaml": {
+          "schemas": {
+            "https://json.schemastore.org/atmos.json": "atmos.yaml"
+          }
+        }
+      }
+    },
+    "terraform-ls": {
+      "binary": {
+        "path": "terraform-ls",
+        "arguments": ["serve"]
+      }
+    }
+  }
+}
+```
+</File>
+
+### Editor Comparison
+
+| Editor | Setup Complexity | LSP Support | Best For |
+|--------|------------------|-------------|----------|
+| **VS Code** | Easy | Excellent | Beginners, full-featured IDE experience |
+| **Neovim** | Moderate | Excellent | Power users, keyboard-driven workflow |
+| **Vim (coc.nvim)** | Moderate | Good | Vim users wanting modern LSP features |
+| **Emacs** | Moderate | Excellent | Emacs users, highly customizable |
+| **Sublime Text** | Easy | Good | Lightweight, fast startup |
+| **IntelliJ/PyCharm** | Easy | Good | JetBrains IDE users |
+| **Cursor** | Easy | Excellent | AI-enhanced coding |
+| **Zed** | Easy | Good | High performance, modern editor |
+
+:::tip Which Editor Should I Use?
+- **New to LSP**: VS Code (easiest setup, best documentation)
+- **Vim/Neovim user**: nvim-lspconfig (best native integration)
+- **Emacs user**: lsp-mode or eglot (both excellent)
+- **Want AI features**: Cursor (VS Code fork with AI)
+- **Want performance**: Zed (Rust-based, very fast)
+
+All editors work great with Atmos files once configured!
+:::
 
 ## Using LSP with Atmos AI
 
@@ -448,8 +914,35 @@ ATMOS_LOGS_LEVEL=Debug atmos <command>
         ```
     </Terminal>
 
+    ## Related Documentation
+
+### Atmos Documentation
+- [AI Configuration](/ai/configuration) - Configure AI to use LSP
+- [AI Tools](/ai/tools) - Learn about AI tool execution
+- [Troubleshooting](/ai/troubleshooting) - Common LSP issues
+
+### LSP Protocol Resources
+- [Language Server Protocol](https://langserver.org/) - Official LSP website and documentation
+- [LSP Specification](https://microsoft.github.io/language-server-protocol/) - Microsoft's LSP specification
+- [LSP Implementations](https://microsoft.github.io/language-server-protocol/implementors/servers/) - List of LSP servers
+
+### LSP Servers
+- [yaml-language-server](https://github.com/redhat-developer/yaml-language-server) - YAML LSP server (Red Hat)
+- [terraform-ls](https://github.com/hashicorp/terraform-ls) - Terraform LSP server (HashiCorp)
+- [vscode-json-languageserver](https://github.com/microsoft/vscode/tree/main/extensions/json-language-features/server) - JSON LSP server (Microsoft)
+
+### Editor LSP Documentation
+- [VS Code LSP](https://code.visualstudio.com/api/language-extensions/language-server-extension-guide) - VS Code LSP extension guide
+- [Neovim LSP](https://neovim.io/doc/user/lsp.html) - Built-in LSP documentation
+- [nvim-lspconfig](https://github.com/neovim/nvim-lspconfig) - LSP configurations for Neovim
+- [coc.nvim](https://github.com/neoclide/coc.nvim) - Intellisense engine for Vim/Neovim
+- [lsp-mode](https://emacs-lsp.github.io/lsp-mode/) - LSP support for Emacs
+- [eglot](https://github.com/joaotavora/eglot) - Minimalist LSP client for Emacs
+- [Sublime LSP](https://lsp.sublimetext.io/) - LSP for Sublime Text
+- [IntelliJ LSP](https://github.com/redhat-developer/lsp4ij) - LSP plugin for IntelliJ IDEA
+
     ## Next Steps
 
-    - [AI Configuration](/ai/configuration) - Configure AI to use LSP
-    - [AI Tools](/ai/tools) - Learn about AI tool execution
-    - [Troubleshooting](/ai/troubleshooting) - Common LSP issues
+    - Start with the [Quick Start](#quick-start) if you're new to LSP
+    - Configure your [editor](#using-lsp-in-your-editor) for the best editing experience
+    - Enable [AI integration](#using-lsp-with-atmos-ai) for intelligent file validation
