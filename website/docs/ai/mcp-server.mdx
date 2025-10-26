@@ -65,11 +65,146 @@ When connected, the MCP server exposes all enabled Atmos AI tools:
 
 All tools respect your configured [permission settings](/ai/tools#permission-system).
 
+## Quick Start
+
+Get started with Claude Desktop in 5 minutes:
+
+### 1. Verify Prerequisites
+
+<Terminal title="verify installation">
+```bash
+# Check Atmos is installed
+atmos version
+
+# Check atmos is in PATH
+which atmos
+```
+</Terminal>
+
+Requirements:
+- **Atmos**: v1.63.0 or later
+- **Claude Desktop**: v0.7.0 or later ([Download](https://claude.ai/download))
+
+### 2. Enable AI in atmos.yaml
+
+<File title="atmos.yaml">
+```yaml
+settings:
+  ai:
+    enabled: true
+    tools:
+      enabled: true
+      require_confirmation: false  # Optional: set to false for smoother experience
+```
+</File>
+
+### 3. Configure Claude Desktop
+
+Create or edit the configuration file:
+
+**macOS/Linux:**
+<Terminal title="setup config">
+```bash
+# Create config directory if it doesn't exist
+mkdir -p ~/.config/claude
+
+# Create/edit configuration file
+nano ~/.config/claude/claude_desktop_config.json
+```
+</Terminal>
+
+**Windows:**
+<Terminal title="setup config">
+```powershell
+# Create config directory if it doesn't exist
+New-Item -Path "$env:APPDATA\Claude" -ItemType Directory -Force
+
+# Create/edit configuration file
+notepad "$env:APPDATA\Claude\claude_desktop_config.json"
+```
+</Terminal>
+
+Add this configuration:
+
+<File title="claude_desktop_config.json">
+```json
+{
+  "mcpServers": {
+    "atmos": {
+      "command": "atmos",
+      "args": ["mcp-server"],
+      "cwd": "/path/to/your/atmos/project"
+    }
+  }
+}
+```
+</File>
+
+:::tip Working Directory
+The `cwd` (current working directory) parameter tells the MCP server where to find your `atmos.yaml` file. Replace `/path/to/your/atmos/project` with the actual path to your Atmos project.
+:::
+
+### 4. Restart Claude Desktop
+
+After saving the configuration:
+1. Completely quit Claude Desktop (not just close the window)
+2. Restart Claude Desktop
+3. Wait a few seconds for MCP servers to initialize
+
+### 5. Verify Connection
+
+Look for the **MCP indicator** in Claude Desktop:
+
+1. **Check the status icon**: Look for the 🔌 (plug) icon in the bottom-right corner of the Claude Desktop window
+2. **Click the icon**: You should see "atmos" listed with a green dot (● connected) or yellow dot (● initializing)
+3. **Test with a query**: Ask Claude: "Can you list my Atmos stacks?"
+
+Claude should respond using the `atmos_list_stacks` tool and show your actual stack names.
+
+:::info First Connection
+The first time Claude Desktop connects, it may take 5-10 seconds to initialize. If you see a yellow indicator, wait a moment before testing.
+:::
+
+### 6. Try Example Queries
+
+Once connected, try these questions:
+
+**Infrastructure Discovery:**
+```
+List all my Atmos stacks
+Show me the configuration for the vpc component in prod-us-east-1
+What stacks are using the RDS component?
+```
+
+**Validation:**
+```
+Validate all my stack configurations
+Check if my dev-us-west-2 stack is valid
+```
+
+**Configuration Review:**
+```
+Show me the stack file for production
+What are the configured variables for the vpc component?
+```
+
 ## Configuration
 
 ### Prerequisites
 
-1. **Enable AI features** in your `atmos.yaml`:
+1. **Atmos** (v1.63.0 or later):
+
+<Terminal title="check version">
+```bash
+atmos version
+```
+</Terminal>
+
+2. **Claude Desktop** (v0.7.0 or later) for MCP support:
+   - Download from: https://claude.ai/download
+   - Verify version in: Settings → About
+
+3. **Enable AI features** in your `atmos.yaml`:
 
 <File title="atmos.yaml">
 ```yaml
@@ -125,38 +260,107 @@ The server will start and wait for client connections via stdin/stdout.
 
 Add Atmos to your Claude Desktop configuration:
 
-<File title="~/.config/claude/claude_desktop_config.json (macOS/Linux)">
+**macOS/Linux** (`~/.config/claude/claude_desktop_config.json`):
+
+<File title="claude_desktop_config.json">
 ```json
 {
   "mcpServers": {
     "atmos": {
       "command": "atmos",
-      "args": ["mcp-server"]
+      "args": ["mcp-server"],
+      "cwd": "/path/to/your/atmos/project"
     }
   }
 }
 ```
 </File>
 
-<File title="%APPDATA%\Claude\claude_desktop_config.json (Windows)">
+**Windows** (`%APPDATA%\Claude\claude_desktop_config.json`):
+
+<File title="claude_desktop_config.json">
 ```json
 {
   "mcpServers": {
     "atmos": {
       "command": "atmos.exe",
-      "args": ["mcp-server"]
+      "args": ["mcp-server"],
+      "cwd": "C:\\Users\\YourName\\atmos-project"
     }
   }
 }
 ```
 </File>
 
+:::tip Configuration Options
+- **`cwd`**: Working directory where `atmos.yaml` is located (recommended)
+- **`env`**: Environment variables (optional, see below)
+- **`command`**: Use full path if `atmos` is not in PATH
+:::
+
+**Advanced: Environment Variables and Custom Paths**
+
+If you need to pass environment variables or use a custom Atmos installation:
+
+<File title="claude_desktop_config.json">
+```json
+{
+  "mcpServers": {
+    "atmos": {
+      "command": "/usr/local/bin/atmos",
+      "args": ["mcp-server"],
+      "cwd": "/home/user/infrastructure",
+      "env": {
+        "ANTHROPIC_API_KEY": "your-key-here",
+        "ATMOS_BASE_PATH": "/home/user/infrastructure"
+      }
+    }
+  }
+}
+```
+</File>
+
+**Windows with Custom Path:**
+
+<File title="claude_desktop_config.json (Windows)">
+```json
+{
+  "mcpServers": {
+    "atmos": {
+      "command": "C:\\Program Files\\atmos\\atmos.exe",
+      "args": ["mcp-server"],
+      "cwd": "C:\\Users\\YourName\\infrastructure"
+    }
+  }
+}
+```
+</File>
+
+:::warning Windows Paths
+Use double backslashes `\\` in JSON for Windows paths, or use forward slashes `/` which also work on Windows.
+:::
+
+#### Verify the Connection
+
 After adding the configuration:
 
-1. Restart Claude Desktop
-2. Look for the 🔌 icon in the bottom-right corner
-3. Atmos tools will be available in your conversations
-4. Claude can now query your infrastructure configuration directly
+1. **Restart Claude Desktop** - Completely quit and reopen (required for config changes)
+2. **Wait for initialization** - MCP servers take 5-10 seconds to start on first connection
+3. **Check the MCP status icon** - Look for 🔌 in the bottom-right corner
+4. **Verify Atmos is connected**:
+   - Click the 🔌 icon
+   - Look for "atmos" in the server list
+   - Green dot (●) = connected
+   - Yellow dot (●) = initializing
+   - Red dot (●) = error (check logs)
+
+5. **Test with a simple query**:
+   Ask Claude: "Can you list my Atmos stacks using the atmos_list_stacks tool?"
+
+6. **Check Claude Desktop logs** if tools don't appear:
+   - **macOS**: `~/Library/Logs/Claude/mcp*.log`
+   - **Windows**: `%APPDATA%\Claude\logs\mcp*.log`
+   - **Linux**: `~/.config/Claude/logs/mcp*.log`
 
 #### VSCode Integration
 
@@ -276,6 +480,84 @@ atmos mcp-server --transport http --host 0.0.0.0 --port 8080
 - **Custom MCP clients** - Build your own applications using Atmos tools
 - **Integration platforms** - Connect Atmos to workflow automation
 - **Monitoring dashboards** - Real-time infrastructure queries
+
+## Example Queries
+
+Once your MCP server is connected to Claude Desktop, try these practical queries:
+
+### Infrastructure Discovery
+
+<Terminal title="claude queries">
+```
+List all my Atmos stacks
+
+Show me the configuration for the vpc component in prod-us-east-1
+
+What stacks are using the RDS component?
+
+What are all the components defined in my infrastructure?
+
+Show me the differences between dev and prod configurations for the vpc component
+```
+</Terminal>
+
+### Validation and Verification
+
+<Terminal title="validation queries">
+```
+Validate all my stack configurations
+
+Check if my dev-us-west-2 stack is valid
+
+Are there any configuration errors in my production stacks?
+
+Validate the VPC component configuration across all environments
+```
+</Terminal>
+
+### Configuration Review
+
+<Terminal title="config queries">
+```
+Show me the stack file for prod-us-east-1
+
+What are the configured variables for the vpc component?
+
+What's the current configuration for the RDS database in staging?
+
+Show me the terraform.backend configuration for production
+```
+</Terminal>
+
+### Planning and Changes
+
+<Terminal title="planning queries">
+```
+Generate a Terraform plan for the vpc component in staging
+
+What would change if I apply the RDS component in prod-us-east-1?
+
+Show me the planned changes for all components in dev-us-west-2
+```
+</Terminal>
+
+### File Operations
+
+<Terminal title="file queries">
+```
+Read the stack configuration file for prod-us-east-1
+
+Show me the contents of the vpc component file
+
+What's in my atmos.yaml configuration file?
+
+List all available component files
+```
+</Terminal>
+
+:::tip Natural Language
+You don't need to use exact tool names. Claude understands natural language and will automatically select the appropriate Atmos tools based on your question.
+:::
 
 ## Architecture
 
@@ -405,11 +687,99 @@ Planned for future releases:
 
 ### Connection Issues (stdio)
 
-**Claude Desktop not showing Atmos tools:**
-1. Check configuration file location and JSON syntax
-2. Restart Claude Desktop after configuration changes
-3. Ensure `atmos` binary is in PATH
-4. Check Claude Desktop logs: `~/Library/Logs/Claude/` (macOS)
+**Claude Desktop not showing Atmos server:**
+
+1. **Verify configuration file location and syntax:**
+   - macOS/Linux: `~/.config/claude/claude_desktop_config.json`
+   - Windows: `%APPDATA%\Claude\claude_desktop_config.json`
+   - Validate JSON syntax (use https://jsonlint.com)
+
+2. **Restart Claude Desktop properly:**
+   - Completely quit the application (Cmd+Q on macOS, not just close window)
+   - Wait 5 seconds
+   - Reopen Claude Desktop
+
+3. **Verify `atmos` is in PATH:**
+   <Terminal title="verify path">
+   ```bash
+   # Check if atmos is accessible
+   which atmos
+
+   # Test the MCP server command directly
+   atmos mcp-server
+   # Should output: "MCP server started (stdio transport)"
+   # Press Ctrl+C to exit
+   ```
+   </Terminal>
+
+4. **Check Claude Desktop logs:**
+   - **macOS**: `~/Library/Logs/Claude/mcp*.log`
+   - **Windows**: `%APPDATA%\Claude\logs\mcp*.log`
+   - **Linux**: `~/.config/Claude/logs/mcp*.log`
+
+   Look for errors containing "atmos" or "mcp-server"
+
+**Tools not appearing in Claude conversations:**
+
+1. **Verify MCP server is connected:**
+   - Click the 🔌 icon in bottom-right corner of Claude Desktop
+   - "atmos" should show green dot (● connected)
+   - If yellow (● initializing), wait 10 seconds
+   - If red (● error), check logs for error messages
+
+2. **Explicitly ask Claude to use tools:**
+
+   Instead of: "What stacks do I have?"
+
+   Try: "Use the atmos_list_stacks tool to show my stacks"
+
+3. **Check tool permissions in `atmos.yaml`:**
+   <File title="atmos.yaml">
+   ```yaml
+   settings:
+     ai:
+       enabled: true
+       tools:
+         enabled: true  # Must be true
+         require_confirmation: false  # Set to false for automatic execution
+
+         # Ensure tools are not blocked
+         blocked_tools: []
+
+         # Or explicitly allow tools
+         allowed_tools:
+           - atmos_list_stacks
+           - atmos_describe_component
+           - atmos_validate_stacks
+   ```
+   </File>
+
+4. **Verify working directory is correct:**
+
+   Add `cwd` to your Claude Desktop config to ensure Atmos finds your `atmos.yaml`:
+   <File title="claude_desktop_config.json">
+   ```json
+   {
+     "mcpServers": {
+       "atmos": {
+         "command": "atmos",
+         "args": ["mcp-server"],
+         "cwd": "/full/path/to/your/atmos/project"
+       }
+     }
+   }
+   ```
+   </File>
+
+5. **Test the MCP server manually:**
+   <Terminal title="manual test">
+   ```bash
+   cd /path/to/your/atmos/project
+   atmos mcp-server
+   # Should start without errors
+   # Press Ctrl+C to exit
+   ```
+   </Terminal>
 
 **"Command not found" errors:**
 <Terminal title="solution">
@@ -458,6 +828,46 @@ sudo ufw allow 8080/tcp
 </Terminal>
 
 ### Configuration Issues
+
+**Configuration file not found:**
+
+If Claude Desktop can't find the config file, create it:
+
+**macOS/Linux:**
+<Terminal title="create config">
+```bash
+# Create directory
+mkdir -p ~/.config/claude
+
+# Create file with proper structure
+cat > ~/.config/claude/claude_desktop_config.json << 'EOF'
+{
+  "mcpServers": {}
+}
+EOF
+
+# Now edit to add Atmos server
+nano ~/.config/claude/claude_desktop_config.json
+```
+</Terminal>
+
+**Windows:**
+<Terminal title="create config">
+```powershell
+# Create directory
+New-Item -Path "$env:APPDATA\Claude" -ItemType Directory -Force
+
+# Create file
+@'
+{
+  "mcpServers": {}
+}
+'@ | Out-File -FilePath "$env:APPDATA\Claude\claude_desktop_config.json" -Encoding UTF8
+
+# Now edit to add Atmos server
+notepad "$env:APPDATA\Claude\claude_desktop_config.json"
+```
+</Terminal>
 
 **"AI tools are not enabled" error:**
 
