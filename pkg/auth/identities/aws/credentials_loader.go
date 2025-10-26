@@ -9,9 +9,9 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	awsConfig "github.com/aws/aws-sdk-go-v2/config"
-	"gopkg.in/ini.v1"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	awsCloud "github.com/cloudposse/atmos/pkg/auth/cloud/aws"
 	"github.com/cloudposse/atmos/pkg/auth/types"
 	log "github.com/cloudposse/atmos/pkg/logger"
 )
@@ -167,9 +167,7 @@ func populateExpiration(creds *types.AWSCredentials, awsCreds *aws.Credentials, 
 // Returns empty string if not found or invalid.
 func readExpirationFromMetadata(credentialsPath, profile string) string {
 	// Load the credentials file with comment preservation enabled.
-	cfg, err := ini.LoadSources(ini.LoadOptions{
-		IgnoreInlineComment: false,
-	}, credentialsPath)
+	cfg, err := awsCloud.LoadINIFile(credentialsPath)
 	if err != nil {
 		log.Debug("Failed to load credentials file for metadata",
 			"path", credentialsPath,

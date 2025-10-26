@@ -48,6 +48,14 @@ type AWSFileManager struct {
 	baseDir string
 }
 
+// LoadINIFile loads an INI file with options that preserve section comments.
+// This is critical for maintaining expiration metadata in credentials files.
+func LoadINIFile(path string) (*ini.File, error) {
+	return ini.LoadSources(ini.LoadOptions{
+		IgnoreInlineComment: false,
+	}, path)
+}
+
 // NewAWSFileManager creates a new AWS file manager instance.
 // BasePath is optional and can be empty to use defaults.
 // Precedence: 1) basePath parameter from provider spec, 2) XDG config directory.
@@ -131,7 +139,7 @@ func (m *AWSFileManager) WriteCredentials(providerName, identityName string, cre
 	}
 
 	// Load existing INI file or create new one.
-	cfg, err := ini.Load(credentialsPath)
+	cfg, err := LoadINIFile(credentialsPath)
 	if err != nil {
 		// ini.Load returns a wrapped error, check if the file doesn't exist.
 		if !os.IsNotExist(err) {
@@ -152,7 +160,9 @@ func (m *AWSFileManager) WriteCredentials(providerName, identityName string, cre
 	}
 
 	// Add metadata comment with expiration if available (before section keys).
-	// The ini library preserves comments when loading with IgnoreInlineComment: false.
+	// This comment is critical for credential validation when keychain access is unavailable
+	// (e.g., inside Docker containers). The expiration timestamp serves as a fallback
+	// to determine if credentials are still valid.
 	if creds.Expiration != "" {
 		section.Comment = fmt.Sprintf("atmos: expiration=%s", creds.Expiration)
 	} else {
@@ -209,7 +219,7 @@ func (m *AWSFileManager) WriteConfig(providerName, identityName, region, outputF
 	}
 
 	// Load existing INI file or create new one.
-	cfg, err := ini.Load(configPath)
+	cfg, err := LoadINIFile(configPath)
 	if err != nil {
 		if !os.IsNotExist(err) {
 			errUtils.CheckErrorAndPrint(ErrLoadConfigFile, identityName, "failed to load config file")
@@ -352,7 +362,7 @@ func (m *AWSFileManager) CleanupIdentity(ctx context.Context, providerName, iden
 // removeIniSection removes a section from an INI file.
 func (m *AWSFileManager) removeIniSection(filePath, sectionName string) error {
 	// Load INI file.
-	cfg, err := ini.Load(filePath)
+	cfg, err := LoadINIFile(filePath)
 	if err != nil {
 		// If file doesn't exist, section is already removed.
 		if os.IsNotExist(err) {

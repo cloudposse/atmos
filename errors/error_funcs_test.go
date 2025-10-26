@@ -165,7 +165,8 @@ func TestCheckErrorAndPrint(t *testing.T) {
 
 	// Redirect stderr
 	oldStderr := os.Stderr
-	r, w, _ := os.Pipe()
+	r, w, pipeErr := os.Pipe()
+	assert.NoError(t, pipeErr, "failed to create pipe")
 	os.Stderr = w
 
 	CheckErrorAndPrint(err, title, suggestion)
@@ -193,7 +194,8 @@ func TestCheckErrorAndPrint(t *testing.T) {
 			render = originalRender
 		}()
 
-		r, w, _ := os.Pipe()
+		r, w, pipeErr := os.Pipe()
+		assert.NoError(t, pipeErr, "failed to create pipe")
 		originalStderr := os.Stderr
 		os.Stderr = w
 		defer func() {
@@ -203,9 +205,12 @@ func TestCheckErrorAndPrint(t *testing.T) {
 		testErr := errors.New("error with nil render")
 		CheckErrorAndPrint(testErr, "Test", "Suggestion")
 
-		w.Close()
+		err := w.Close()
+		assert.NoError(t, err, "failed to close pipe writer")
+
 		var buf bytes.Buffer
-		_, _ = buf.ReadFrom(r)
+		_, err = buf.ReadFrom(r)
+		assert.NoError(t, err, "failed to read from pipe")
 		output := buf.String()
 
 		// Should output plain text error to stderr
@@ -218,7 +223,8 @@ func TestCheckErrorAndPrint(t *testing.T) {
 	t.Run("empty title", func(t *testing.T) {
 		render, _ = markdown.NewTerminalMarkdownRenderer(schema.AtmosConfiguration{})
 
-		r, w, _ := os.Pipe()
+		r, w, pipeErr := os.Pipe()
+		assert.NoError(t, pipeErr, "failed to create pipe")
 		os.Stderr = w
 
 		testErr := errors.New("test error with empty title")

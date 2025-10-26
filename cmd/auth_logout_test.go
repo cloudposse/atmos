@@ -339,7 +339,7 @@ func TestExecuteAuthLogoutCommand_RejectsIdentityFlag(t *testing.T) {
 	// produces a clear error message directing users to use positional argument instead.
 	// This prevents the confusing behavior where --identity silently falls through to interactive mode.
 	tk := NewTestKit(t)
-	defer tk.Cleanup(func() {
+	tk.Cleanup(func() {
 		// Reset the flag after test.
 		authCmd.PersistentFlags().Set("identity", "")
 	})

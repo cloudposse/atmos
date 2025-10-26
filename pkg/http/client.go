@@ -1,10 +1,9 @@
-//go:generate go run go.uber.org/mock/mockgen@v0.5.0 -source=client.go -destination=mock_client_test.go -package=http
+//go:generate go run go.uber.org/mock/mockgen@latest -source=client.go -destination=mock_client.go -package=http
 
 package http
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -44,31 +43,50 @@ func (c *DefaultClient) Do(req *http.Request) (*http.Response, error) {
 	return c.client.Do(req)
 }
 
+const (
+	// MaxErrorBodySize limits how much of an HTTP error response body to include in error messages.
+	// This prevents log pollution and potential exposure of large sensitive payloads.
+	maxErrorBodySize = 64 * 1024 // 64 KB
+)
+
 // Get performs an HTTP GET request with context using the provided client.
 func Get(ctx context.Context, url string, client Client) ([]byte, error) {
 	defer perf.Track(nil, "http.Get")()
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", errors.Join(errUtils.ErrHTTPRequestFailed, err))
+		return nil, fmt.Errorf("%w: failed to create request for %s: %w", errUtils.ErrHTTPRequestFailed, url, err)
 	}
 
 	resp, err := client.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("request failed: %w", errors.Join(errUtils.ErrHTTPRequestFailed, err))
+		return nil, fmt.Errorf("%w: %s %s failed: %w", errUtils.ErrHTTPRequestFailed, req.Method, url, err)
 	}
 	defer resp.Body.Close()
 
-	// Read response body (needed for both success and error cases).
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read response: %w", errors.Join(errUtils.ErrHTTPRequestFailed, err))
+	if resp.StatusCode != http.StatusOK {
+		// Read limited response body for error reporting (prevent DOS from huge responses).
+		errorBody, readErr := io.ReadAll(io.LimitReader(resp.Body, maxErrorBodySize))
+		if readErr != nil {
+			return nil, fmt.Errorf("%w: %s %s returned status %d (failed to read error body: %w)",
+				errUtils.ErrHTTPRequestFailed, req.Method, url, resp.StatusCode, readErr)
+		}
+
+		// Truncate marker if we hit the limit.
+		truncated := ""
+		if len(errorBody) == maxErrorBodySize {
+			truncated = " [truncated]"
+		}
+
+		return nil, fmt.Errorf("%w: %s %s returned status %d, content-type: %s, response body%s:\n%s",
+			errUtils.ErrHTTPRequestFailed, req.Method, url, resp.StatusCode,
+			resp.Header.Get("Content-Type"), truncated, string(errorBody))
 	}
 
-	if resp.StatusCode != http.StatusOK {
-		// Include full response body in error message for debugging.
-		// Let the terminal handle formatting - don't truncate or sanitize.
-		return nil, fmt.Errorf("%w: unexpected status code: %d, content-type: %s, response body:\n%s", errUtils.ErrHTTPRequestFailed, resp.StatusCode, resp.Header.Get("Content-Type"), string(body))
+	// Success case: Read full response body.
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %s %s failed to read response: %w", errUtils.ErrHTTPRequestFailed, req.Method, url, err)
 	}
 
 	return body, nil

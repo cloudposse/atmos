@@ -305,23 +305,37 @@ func sanitizeRoleSessionNameLengthAndTrim(name string) string {
 func (i *assumeRoleIdentity) CredentialsExist() (bool, error) {
 	defer perf.Track(nil, "aws.assumeRoleIdentity.CredentialsExist")()
 
-	// Get provider name to construct credential file path.
 	providerName, err := i.GetProviderName()
 	if err != nil {
 		return false, err
 	}
 
-	// Check if credentials file exists.
-	awsFileManager, err := awsCloud.NewAWSFileManager("")
+	mgr, err := awsCloud.NewAWSFileManager("")
 	if err != nil {
 		return false, err
 	}
 
-	credentialsPath := awsFileManager.GetCredentialsPath(providerName)
-	if _, err := os.Stat(credentialsPath); os.IsNotExist(err) {
+	credPath := mgr.GetCredentialsPath(providerName)
+
+	// Load and parse the credentials file to verify the identity section exists.
+	cfg, err := awsCloud.LoadINIFile(credPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return false, nil
+		}
+		return false, fmt.Errorf("load credentials file: %w", err)
+	}
+
+	// Check if this identity's section exists in the credentials file.
+	sec, err := cfg.GetSection(i.name)
+	if err != nil {
+		// Section doesn't exist - credentials don't exist for this identity.
 		return false, nil
-	} else if err != nil {
-		return false, err
+	}
+
+	// Verify the section has actual credential keys (not just an empty section).
+	if strings.TrimSpace(sec.Key("aws_access_key_id").String()) == "" {
+		return false, nil
 	}
 
 	return true, nil

@@ -1,6 +1,6 @@
 package types
 
-//go:generate go run go.uber.org/mock/mockgen@v0.5.0 -source=$GOFILE -destination=mock_interfaces_test.go -package=$GOPACKAGE
+//go:generate go run go.uber.org/mock/mockgen@latest -source=$GOFILE -destination=mock_interfaces.go -package=$GOPACKAGE
 
 import (
 	"context"

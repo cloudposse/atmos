@@ -19,7 +19,7 @@ We introduced `AuthContext` as the **single source of truth** for runtime authen
 - Updated Terraform backend operations to accept and use `authContext` parameter
 - Created `SetAuthContext()` function to populate context after authentication
 - Derived environment variables from auth context rather than duplicating credential logic
-- **Migrated AWS credential storage to XDG Base Directory Specification** for consistency with other Atmos data
+- **Migrated AWS credential storage to XDG Base Directory Specification** for consistency with other Atmos data.
 
 ## Why This Matters
 

@@ -180,11 +180,14 @@ func execTerraformOutput(
 
 			// Clear any pre-existing direct AWS credential env vars to prevent conflicts.
 			// When using Atmos-managed credentials via profile+files, we don't want
-			// direct credentials to override them.
+			// direct credentials, assumed-role, or web-identity env vars to override them.
 			delete(environMap, "AWS_ACCESS_KEY_ID")
 			delete(environMap, "AWS_SECRET_ACCESS_KEY")
 			delete(environMap, "AWS_SESSION_TOKEN")
 			delete(environMap, "AWS_SECURITY_TOKEN")
+			delete(environMap, "AWS_WEB_IDENTITY_TOKEN_FILE")
+			delete(environMap, "AWS_ROLE_ARN")
+			delete(environMap, "AWS_ROLE_SESSION_NAME")
 
 			// Set Atmos-managed credential file paths and profile.
 			environMap["AWS_SHARED_CREDENTIALS_FILE"] = authContext.AWS.CredentialsFile
