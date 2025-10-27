@@ -37,4 +37,4 @@ auth:
           id: "987654321098"
 
 logs:
-  level: Info
+  level: Debug

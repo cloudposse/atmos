@@ -1,6 +1,8 @@
 DEBU Set logs-level=debug logs-file=/dev/stderr
 DEBU Found config ENV ATMOS_CLI_CONFIG_PATH=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-auth-mock
 DEBU Found config ENV ATMOS_CLI_CONFIG_PATH=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-auth-mock
+
+**Notice:** Telemetry Enabled - Atmos now collects anonymous telemetry regarding usage. This information is used to shape the Atmos roadmap and prioritize features. You can learn more, including how to opt out if you'd prefer not to participate in this anonymous program, by visiting: https://atmos.tools/cli/telemetry
 DEBU Found config ENV ATMOS_CLI_CONFIG_PATH=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-auth-mock
 DEBU credentialStore.Retrieve result identity=mock-identity creds_nil=true
   error=
@@ -20,8 +22,8 @@ DEBU Credential validation succeeded identity=mock-identity
   Principal     arn:aws:iam::123456789012:user/mock-user 
   Account       123456789012                             
   Region        us-east-1                                
-  Expires       2025-10-26 10:10:00 CDT (1h 0m)        
-  Last Updated  2025-10-26 09:10:00 CDT                  
+  Expires       2025-10-26 22:17:16 CDT (1h 0m)        
+  Last Updated  2025-10-26 21:17:16 CDT                  
 DEBU Found config ENV ATMOS_CLI_CONFIG_PATH=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-auth-mock
 DEBU Found config ENV ATMOS_CLI_CONFIG_PATH=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-auth-mock
-DEBU Telemetry is disabled, skipping capture
+DEBU Telemetry event enqueued
