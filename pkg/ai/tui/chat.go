@@ -498,6 +498,10 @@ func (m *ChatModel) handleAIMessage(msg tea.Msg) bool {
 	}
 	m.isLoading = false
 	m.updateViewportContent()
+
+	// Focus the textarea so the user can immediately type their next message.
+	m.textarea.Focus()
+
 	return true
 }
 
