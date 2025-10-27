@@ -1231,6 +1231,41 @@ func (m *ChatModel) handleToolExecutionFlow(ctx context.Context, response *aiTyp
 		return aiErrorMsg(fmt.Sprintf("Error getting final response after tool execution: %v", err))
 	}
 
+	// Check if the final response wants to use more tools.
+	if finalResponse.StopReason == aiTypes.StopReasonToolUse && len(finalResponse.ToolCalls) > 0 {
+		// AI wants to use more tools after seeing the results. Execute them recursively.
+		return m.handleToolExecutionFlow(ctx, finalResponse, messages, availableTools)
+	}
+
+	// Check if AI expressed intent to take more action in the final response.
+	if detectActionIntent(finalResponse.Content) {
+		// AI said it would do something else but didn't use tools. Prompt it again.
+		messages = append(messages, aiTypes.Message{
+			Role:    aiTypes.RoleAssistant,
+			Content: finalResponse.Content,
+		})
+		messages = append(messages, aiTypes.Message{
+			Role:    aiTypes.RoleUser,
+			Content: "Please use the available tools to perform that action now, rather than just describing what you would do.",
+		})
+
+		// Retry with the prompt.
+		retryResponse, err := m.client.SendMessageWithToolsAndHistory(ctx, messages, availableTools)
+		if err != nil {
+			return aiErrorMsg(fmt.Sprintf("Error getting retry response: %v", err))
+		}
+
+		// Check if AI now uses tools.
+		if retryResponse.StopReason == aiTypes.StopReasonToolUse && len(retryResponse.ToolCalls) > 0 {
+			// Recursively handle the new tool execution.
+			return m.handleToolExecutionFlow(ctx, retryResponse, messages, availableTools)
+		}
+
+		// If still no tool use, combine all responses.
+		combinedResponse := resultText + "\n\n---\n\n" + finalResponse.Content + "\n\n" + retryResponse.Content
+		return aiResponseMsg(combinedResponse)
+	}
+
 	// Combine tool execution display with final AI response.
 	combinedResponse := resultText + "\n\n---\n\n" + finalResponse.Content
 
