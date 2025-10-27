@@ -15,6 +15,12 @@ import (
 	"github.com/cloudposse/atmos/pkg/config/homedir"
 )
 
+// TestMain disables homedir caching to prevent cached values from affecting test isolation.
+func TestMain(m *testing.M) {
+	homedir.DisableCache = true
+	os.Exit(m.Run())
+}
+
 func TestAWSFileManager_WriteCredentials(t *testing.T) {
 	tmp := t.TempDir()
 	m := &AWSFileManager{baseDir: tmp}
@@ -389,12 +395,10 @@ func TestNewAWSFileManager_LegacyPathWarning(t *testing.T) {
 	require.NoError(t, err)
 
 	// Override home directory for this test.
-	originalDir, _ := homedir.Dir()
-	defer func() {
-		// Restore original home directory (not possible with homedir package, but test isolation ensures cleanup).
-		_ = originalDir
-	}()
 	t.Setenv("HOME", tempHome)
+	if runtime.GOOS == "windows" {
+		t.Setenv("USERPROFILE", tempHome)
+	}
 
 	// Set XDG config to use temp directory.
 	xdgConfigDir := filepath.Join(tempHome, ".config")
