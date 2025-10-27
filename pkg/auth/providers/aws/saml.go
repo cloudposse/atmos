@@ -400,21 +400,27 @@ func (p *samlProvider) Environment() (map[string]string, error) {
 func (p *samlProvider) Paths() ([]types.Path, error) {
 	basePath := awsCloud.GetFilesBasePath(p.config)
 
+	// Use AWSFileManager to get correct provider-namespaced paths.
+	fileManager, err := awsCloud.NewAWSFileManager(basePath)
+	if err != nil {
+		return nil, err
+	}
+
 	return []types.Path{
 		{
-			Location: filepath.Join(basePath, "credentials"),
+			Location: fileManager.GetCredentialsPath(p.name),
 			Type:     types.PathTypeFile,
 			Required: true,
-			Purpose:  "AWS credentials file",
+			Purpose:  fmt.Sprintf("AWS credentials file for provider %s", p.name),
 			Metadata: map[string]string{
 				"read_only": "true",
 			},
 		},
 		{
-			Location: filepath.Join(basePath, "config"),
+			Location: fileManager.GetConfigPath(p.name),
 			Type:     types.PathTypeFile,
 			Required: false, // Config file is optional.
-			Purpose:  "AWS config file",
+			Purpose:  fmt.Sprintf("AWS config file for provider %s", p.name),
 			Metadata: map[string]string{
 				"read_only": "true",
 			},
