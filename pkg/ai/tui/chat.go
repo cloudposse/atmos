@@ -916,39 +916,48 @@ func (m *ChatModel) getAIResponse(userMessage string) tea.Cmd {
 				// Execute tools and get results.
 				toolResults := m.executeToolCalls(ctx, response.ToolCalls)
 
-				// For now, just display tool results to the user.
-				// TODO: Implement multi-turn conversation with tool results.
-				var resultText string
+				// Multi-turn conversation: Send tool results back to AI for final response.
+				// Build tool results message for the AI.
+				var toolResultsContent string
 				for i, result := range toolResults {
 					if i > 0 {
-						resultText += "\n\n"
+						toolResultsContent += "\n\n"
 					}
 
-					// Determine what to display: use Error if Output is empty or tool failed.
-					displayOutput := result.Output
-					if displayOutput == "" && result.Error != nil {
-						displayOutput = fmt.Sprintf("Error: %v", result.Error)
+					// Determine what to send to AI: use Error if Output is empty or tool failed.
+					toolOutput := result.Output
+					if toolOutput == "" && result.Error != nil {
+						toolOutput = fmt.Sprintf("Error: %v", result.Error)
+					}
+					if toolOutput == "" {
+						toolOutput = "No output returned"
 					}
 
-					// Handle completely empty results.
-					if displayOutput == "" {
-						displayOutput = "No output returned"
-					}
-
-					// Detect output format and wrap in appropriate code block for syntax highlighting.
-					format := detectOutputFormat(displayOutput)
-					resultText += fmt.Sprintf("**Tool:** `%s`\n\n```%s\n%s\n```", response.ToolCalls[i].Name, format, displayOutput)
+					toolResultsContent += fmt.Sprintf("Tool: %s\nResult:\n%s", response.ToolCalls[i].Name, toolOutput)
 				}
 
-				finalResponse := response.Content
-				if resultText != "" {
-					if finalResponse != "" {
-						finalResponse += "\n\n--- Tool Execution ---\n\n" + resultText
-					} else {
-						finalResponse = "--- Tool Execution ---\n\n" + resultText
-					}
+				// Add assistant's thinking/explanation to conversation history.
+				if response.Content != "" {
+					messages = append(messages, aiTypes.Message{
+						Role:    aiTypes.RoleAssistant,
+						Content: response.Content,
+					})
 				}
-				return aiResponseMsg(finalResponse)
+
+				// Add tool results as a user message (this is the standard pattern for tool results).
+				messages = append(messages, aiTypes.Message{
+					Role:    aiTypes.RoleUser,
+					Content: fmt.Sprintf("Tool execution results:\n\n%s\n\nPlease provide your final response based on these results.", toolResultsContent),
+				})
+
+				// Call AI again with tool results to get final response.
+				finalResponse, err := m.client.SendMessageWithToolsAndHistory(ctx, messages, availableTools)
+				if err != nil {
+					return aiErrorMsg(fmt.Sprintf("Error getting final response after tool execution: %v", err))
+				}
+
+				// Return the AI's final response (which should now include the table/analysis).
+				return aiResponseMsg(finalResponse.Content)
 			}
 
 			// No tool use, return the text response.

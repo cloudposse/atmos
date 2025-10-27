@@ -92,6 +92,97 @@ You: "What's the VPC configuration in prod-use1?"
 ← AI responds: "The VPC in prod-use1 has CIDR 10.0.0.0/16 with..."
 ```
 
+### Multi-Turn Conversations with Tools
+
+When you ask the AI to perform complex tasks with tools, it automatically follows through to completion. Instead of just showing you raw tool output, the AI analyzes the results and provides complete, formatted answers.
+
+**Example - Complete Response:**
+
+<Terminal title="atmos ai chat">
+```bash
+You: "Execute 'atmos describe stacks' and create a table of all stacks"
+
+AI: I'll execute the describe stacks command and create a formatted table for you.
+
+🔧 Executing tool: execute_atmos_command
+Parameters: { command: "describe stacks" }
+
+✅ Tool executed successfully
+
+Here's a formatted table of your Atmos stacks:
+
+| Stack Name      | Stage   | Region    | Components         |
+|-----------------|---------|-----------|-------------------|
+| prod-use1       | prod    | us-east-1 | vpc, rds, eks     |
+| prod-use2       | prod    | us-east-2 | vpc, rds          |
+| staging-use1    | staging | us-east-1 | vpc, rds          |
+| dev-use1        | dev     | us-east-1 | vpc               |
+
+You have 4 stacks across 3 stages (prod, staging, dev) in 2 regions.
+```
+</Terminal>
+
+**What Happens Behind the Scenes:**
+
+1. **You make a request** - Ask the AI to execute a command and format results
+2. **AI plans the task** - "I need to execute the command, then format the output as a table"
+3. **Tool executes** - Command runs locally and returns raw data
+4. **AI receives results** - Raw output is sent back to the AI
+5. **AI formats and explains** - Creates the table and provides insights
+
+**Benefits:**
+
+- **Complete Answers** - Get formatted, analyzed results instead of raw output
+- **Natural Flow** - The AI completes what it promises to do
+- **Smart Analysis** - AI can interpret data, create visualizations, and provide insights
+- **Multi-Step Tasks** - Handle requests like "compare these components and create a table"
+
+**More Examples:**
+
+<Terminal title="atmos ai chat">
+```bash
+# Example 1: Analysis after tool execution
+You: "Check if my VPC configurations are consistent across all prod stacks"
+
+AI: I'll check the VPC configurations and analyze consistency.
+
+[Executes: atmos_describe_component vpc -s prod-use1]
+[Executes: atmos_describe_component vpc -s prod-use2]
+
+Analysis of VPC configurations across prod stacks:
+
+✅ CIDR blocks follow consistent pattern:
+   - prod-use1: 10.0.0.0/16
+   - prod-use2: 10.1.0.0/16
+
+✅ All use 3 availability zones
+✅ All have VPN gateway enabled
+⚠️  prod-use2 has different NAT gateway configuration
+
+Your VPCs are mostly consistent, but you may want to review the NAT gateway settings.
+
+# Example 2: Multiple tool executions with summary
+You: "Find all components that use the VPC module and list them"
+
+AI: I'll search for VPC module usage and summarize findings.
+
+[Executes: search_files pattern="module \"vpc\""]
+
+Found 5 components using the VPC module:
+
+1. components/terraform/eks/main.tf (line 12)
+2. components/terraform/rds/main.tf (line 8)
+3. components/terraform/networking/main.tf (lines 5, 23)
+
+The VPC module is primarily used for networking infrastructure across your
+EKS, RDS, and dedicated networking components.
+```
+</Terminal>
+
+This intelligent behavior ensures you always get complete, useful answers rather than just raw command output.
+
+---
+
 ### When Tools Are Called
 
 The AI automatically decides to call tools when:
@@ -1007,7 +1098,7 @@ is available at https://registry.terraform.io/modules/terraform-aws-modules/vpc/
 - Discover community resources and tutorials
 - Get up-to-date information beyond AI's knowledge cutoff
 
-**Web Search Configuration:**
+#### Web Search Configuration
 
 Enable web search in your `atmos.yaml`:
 
