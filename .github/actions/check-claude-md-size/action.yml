@@ -1,0 +1,172 @@
+name: Check CLAUDE.md Size
+description: Validates that CLAUDE.md does not exceed the 40k character limit
+inputs:
+  file-path:
+    description: 'Path to CLAUDE.md file'
+    required: false
+    default: 'CLAUDE.md'
+  max-size:
+    description: 'Maximum file size in characters'
+    required: false
+    default: '40000'
+  github-token:
+    description: 'GitHub token for posting comments'
+    required: true
+outputs:
+  size:
+    description: 'Current file size in characters'
+    value: ${{ steps.check.outputs.size }}
+  exceeds-limit:
+    description: 'Whether the file exceeds the size limit (true/false)'
+    value: ${{ steps.check.outputs.exceeds_limit }}
+  usage-percent:
+    description: 'Percentage of limit used'
+    value: ${{ steps.check.outputs.usage_percent }}
+
+runs:
+  using: composite
+  steps:
+    - name: Check file size
+      id: check
+      shell: bash
+      run: |
+        FILE="${{ inputs.file-path }}"
+        MAX_SIZE="${{ inputs.max-size }}"
+
+        if [ ! -f "$FILE" ]; then
+          echo "✅ $FILE does not exist - skipping check"
+          echo "exists=false" >> $GITHUB_OUTPUT
+          exit 0
+        fi
+
+        SIZE=$(wc -c < "$FILE" | tr -d ' ')
+        USAGE_PERCENT=$((SIZE * 100 / MAX_SIZE))
+
+        echo "exists=true" >> $GITHUB_OUTPUT
+        echo "size=$SIZE" >> $GITHUB_OUTPUT
+        echo "max_size=$MAX_SIZE" >> $GITHUB_OUTPUT
+        echo "usage_percent=$USAGE_PERCENT" >> $GITHUB_OUTPUT
+
+        if [ "$SIZE" -gt "$MAX_SIZE" ]; then
+          echo "exceeds_limit=true" >> $GITHUB_OUTPUT
+          echo "❌ $FILE is too large: $SIZE characters (limit: $MAX_SIZE)"
+        else
+          echo "exceeds_limit=false" >> $GITHUB_OUTPUT
+          echo "✅ $FILE size OK: $SIZE characters (limit: $MAX_SIZE, ${USAGE_PERCENT}%)"
+        fi
+
+    - name: Post PR comment if file too large
+      if: steps.check.outputs.exists == 'true' && steps.check.outputs.exceeds_limit == 'true'
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github-token }}
+      run: |
+        if [ -z "${{ github.event.pull_request.number }}" ]; then
+          echo "ℹ️ Not a pull request - skipping comment"
+          exit 0
+        fi
+
+        PR_NUMBER="${{ github.event.pull_request.number }}"
+        SIZE="${{ steps.check.outputs.size }}"
+        MAX_SIZE="${{ steps.check.outputs.max_size }}"
+        EXCESS=$((SIZE - MAX_SIZE))
+        EXCESS_PERCENT=$((EXCESS * 100 / MAX_SIZE))
+
+        EXISTING_COMMENT=$(gh pr view $PR_NUMBER --json comments --jq '.comments[] | select(.body | contains("<!-- claude-md-size-check -->")) | .id' | head -1)
+
+        COMMENT_BODY="<!-- claude-md-size-check -->
+        > [!WARNING]
+        > #### CLAUDE.md File Too Large
+        >
+        > The CLAUDE.md file is **${SIZE} characters** but must not exceed **${MAX_SIZE} characters** (40k limit).
+        >
+        > **Size:** ${SIZE} chars
+        > **Limit:** ${MAX_SIZE} chars
+        > **Over by:** ${EXCESS} chars (~${EXCESS_PERCENT}%)
+        >
+        > **Action needed:** Please compress the CLAUDE.md file to reduce its size. Consider:
+        > - Removing verbose explanations
+        > - Consolidating redundant examples
+        > - Keeping only essential requirements
+        > - Moving detailed guides to separate docs in \`docs/\`
+        >
+        > All MANDATORY requirements must be preserved."
+
+        if [ -n "$EXISTING_COMMENT" ]; then
+          echo "Updating existing comment..."
+          gh api -X PATCH "/repos/${{ github.repository }}/issues/comments/$EXISTING_COMMENT" \
+            -f body="$COMMENT_BODY"
+        else
+          echo "Creating new comment..."
+          gh pr comment $PR_NUMBER --body "$COMMENT_BODY"
+        fi
+
+    - name: Update comment with success if size is OK
+      if: steps.check.outputs.exists == 'true' && steps.check.outputs.exceeds_limit == 'false'
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github-token }}
+      run: |
+        if [ -z "${{ github.event.pull_request.number }}" ]; then
+          echo "ℹ️ Not a pull request - skipping comment"
+          exit 0
+        fi
+
+        PR_NUMBER="${{ github.event.pull_request.number }}"
+        SIZE="${{ steps.check.outputs.size }}"
+        MAX_SIZE="${{ steps.check.outputs.max_size }}"
+        USAGE_PERCENT="${{ steps.check.outputs.usage_percent }}"
+
+        EXISTING_COMMENT=$(gh pr view $PR_NUMBER --json comments --jq '.comments[] | select(.body | contains("<!-- claude-md-size-check -->")) | .id' | head -1)
+
+        if [ -z "$EXISTING_COMMENT" ]; then
+          echo "ℹ️ No existing comment to update"
+          exit 0
+        fi
+
+        EXISTING_COMMENT_BODY=$(gh pr view $PR_NUMBER --json comments --jq '.comments[] | select(.body | contains("<!-- claude-md-size-check -->")) | .body' | head -1)
+
+        SUCCESS_COMMENT_BODY="<!-- claude-md-size-check -->
+        > [!NOTE]
+        > #### CLAUDE.md Size OK ✅
+        >
+        > **Size:** ${SIZE} chars
+        > **Limit:** ${MAX_SIZE} chars
+        > **Usage:** ${USAGE_PERCENT}%
+        >
+        > Thank you for keeping the file optimized!"
+
+        if echo "$EXISTING_COMMENT_BODY" | grep -q "CLAUDE.md Size OK ✅"; then
+          echo "ℹ️ Comment already shows success - no update needed"
+        else
+          echo "Updating existing comment with success message..."
+          gh api -X PATCH "/repos/${{ github.repository }}/issues/comments/$EXISTING_COMMENT" \
+            -f body="$SUCCESS_COMMENT_BODY" || {
+            echo "⚠️ Failed to update comment (it may have been deleted)"
+          }
+          echo "✅ Comment updated from warning to success"
+        fi
+
+    - name: Fail if file too large
+      if: steps.check.outputs.exists == 'true' && steps.check.outputs.exceeds_limit == 'true'
+      shell: bash
+      run: |
+        SIZE="${{ steps.check.outputs.size }}"
+        MAX_SIZE="${{ steps.check.outputs.max_size }}"
+        EXCESS=$((SIZE - MAX_SIZE))
+        EXCESS_PERCENT=$((EXCESS * 100 / MAX_SIZE))
+
+        echo "❌ ERROR: CLAUDE.md is too large"
+        echo ""
+        echo "Current size: $SIZE characters"
+        echo "Maximum size: $MAX_SIZE characters (40k limit)"
+        echo "Over by: $EXCESS characters (~${EXCESS_PERCENT}%)"
+        echo ""
+        echo "Please compress the file by:"
+        echo "  - Removing verbose explanations"
+        echo "  - Consolidating redundant examples"
+        echo "  - Keeping only essential requirements"
+        echo "  - Moving detailed guides to docs/"
+        echo ""
+        echo "All MANDATORY requirements must be preserved."
+        exit 1

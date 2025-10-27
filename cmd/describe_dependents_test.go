@@ -3,16 +3,18 @@ package cmd
 import (
 	"testing"
 
-	"github.com/golang/mock/gomock"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 	"github.com/stretchr/testify/assert"
+	"go.uber.org/mock/gomock"
 
 	"github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 func TestDescribeDependents(t *testing.T) {
+	_ = NewTestKit(t)
+
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
@@ -38,6 +40,8 @@ func TestDescribeDependents(t *testing.T) {
 }
 
 func TestSetFlagInDescribeDependents(t *testing.T) {
+	_ = NewTestKit(t)
+
 	// Initialize test cases
 	tests := []struct {
 		name        string
@@ -78,6 +82,8 @@ func TestSetFlagInDescribeDependents(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			_ = NewTestKit(t)
+
 			fs := pflag.NewFlagSet("test", pflag.ContinueOnError)
 			fs.StringP("format", "f", "yaml", "Specify the output format (`yaml` is default)")
 			fs.StringP("output", "o", "list", "Specify the output type (`list` is default)")
@@ -96,6 +102,8 @@ func TestSetFlagInDescribeDependents(t *testing.T) {
 }
 
 func TestDescribeDependentsCmd_Error(t *testing.T) {
+	_ = NewTestKit(t)
+
 	stacksPath := "../tests/fixtures/scenarios/terraform-apply-affected"
 
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)

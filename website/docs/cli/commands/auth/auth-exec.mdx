@@ -2,6 +2,7 @@
 title: atmos auth exec
 sidebar_label: exec
 sidebar_class_name: command
+sidebar_position: 2
 id: exec
 description: Execute a command with authentication environment variables set for the selected identity.
 ---
@@ -13,6 +14,10 @@ Run any tool (Terraform, AWS CLI, kubectl, etc.) with the right cloud identity i
 </Intro>
 
 <Screengrab title="atmos auth exec --help" slug="atmos-auth-exec--help" />
+
+:::tip Exec vs Shell
+Use `exec` for single commands or automation. Use [`shell`](/cli/commands/auth/shell) for interactive sessions where you'll run multiple commands.
+:::
 
 ## Usage
 

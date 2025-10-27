@@ -4,15 +4,17 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/golang/mock/gomock"
 	"github.com/spf13/pflag"
 	"github.com/stretchr/testify/assert"
+	"go.uber.org/mock/gomock"
 
 	"github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 func TestDescribeAffected(t *testing.T) {
+	_ = NewTestKit(t)
+
 	t.Chdir("../tests/fixtures/scenarios/basic")
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -33,6 +35,8 @@ func TestDescribeAffected(t *testing.T) {
 }
 
 func TestSetFlagValueInCliArgs(t *testing.T) {
+	_ = NewTestKit(t)
+
 	// Initialize test cases
 	tests := []struct {
 		name          string
@@ -98,6 +102,8 @@ func TestSetFlagValueInCliArgs(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			_ = NewTestKit(t)
+
 			// Create a new flag set
 			fs := pflag.NewFlagSet("test", pflag.ContinueOnError)
 
@@ -149,6 +155,8 @@ func TestSetFlagValueInCliArgs(t *testing.T) {
 }
 
 func TestDescribeAffectedCmd_Error(t *testing.T) {
+	_ = NewTestKit(t)
+
 	stacksPath := "../tests/fixtures/scenarios/terraform-apply-affected"
 
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)

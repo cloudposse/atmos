@@ -4,16 +4,18 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/golang/mock/gomock"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 	"github.com/stretchr/testify/assert"
+	"go.uber.org/mock/gomock"
 
 	"github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 func TestDescribeStacksRunnable(t *testing.T) {
+	_ = NewTestKit(t)
+
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
@@ -45,6 +47,8 @@ func TestDescribeStacksRunnable(t *testing.T) {
 }
 
 func TestSetFlagValueInDescribeStacksCliArgs(t *testing.T) {
+	_ = NewTestKit(t)
+
 	// Initialize test cases
 	tests := []struct {
 		name          string
@@ -99,6 +103,8 @@ func TestSetFlagValueInDescribeStacksCliArgs(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			_ = NewTestKit(t)
+
 			// Create a new flag set
 			fs := pflag.NewFlagSet("test", pflag.ContinueOnError)
 
@@ -140,6 +146,8 @@ func TestSetFlagValueInDescribeStacksCliArgs(t *testing.T) {
 }
 
 func TestSetCliArgs_ComponentTypes_StringSlice(t *testing.T) {
+	_ = NewTestKit(t)
+
 	fs := pflag.NewFlagSet("test", pflag.ContinueOnError)
 	// Define only the flags we plan to change
 	fs.StringSlice("component-types", nil, "Filter by specific component types")
@@ -155,6 +163,8 @@ func TestSetCliArgs_ComponentTypes_StringSlice(t *testing.T) {
 }
 
 func TestDescribeStacksCmd_Error(t *testing.T) {
+	_ = NewTestKit(t)
+
 	stacksPath := "../tests/fixtures/scenarios/terraform-apply-affected"
 
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)

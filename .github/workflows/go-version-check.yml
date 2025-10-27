@@ -1,0 +1,27 @@
+name: Go Version Change Detection
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    paths:
+      - 'go.mod'
+
+permissions:
+  pull-requests: write
+  contents: read
+
+jobs:
+  check-go-version:
+    name: Check for Go version changes
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout PR branch
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check Go version and comment
+        uses: ./.github/actions/go-version-check
+        with:
+          base-ref: ${{ github.base_ref }}
+          token: ${{ secrets.GITHUB_TOKEN }}

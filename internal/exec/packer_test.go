@@ -23,6 +23,24 @@ func TestExecutePacker_Validate(t *testing.T) {
 	t.Setenv("ATMOS_LOGS_LEVEL", "Warning")
 	log.SetLevel(log.InfoLevel)
 
+	// Run packer init first to install required plugins.
+	initInfo := schema.ConfigAndStacksInfo{
+		StackFromArg:     "",
+		Stack:            "nonprod",
+		StackFile:        "",
+		ComponentType:    "packer",
+		ComponentFromArg: "aws/bastion",
+		SubCommand:       "init",
+		ProcessTemplates: true,
+		ProcessFunctions: true,
+	}
+
+	packerFlags := PackerFlags{}
+	err := ExecutePacker(&initInfo, &packerFlags)
+	if err != nil {
+		t.Skipf("Skipping test: packer init failed (may require network access): %v", err)
+	}
+
 	info := schema.ConfigAndStacksInfo{
 		StackFromArg:     "",
 		Stack:            "nonprod",
@@ -39,9 +57,8 @@ func TestExecutePacker_Validate(t *testing.T) {
 	os.Stdout = w
 
 	log.SetOutput(w)
-	packerFlags := PackerFlags{}
 
-	err := ExecutePacker(&info, &packerFlags)
+	err = ExecutePacker(&info, &packerFlags)
 	assert.NoError(t, err)
 
 	// Restore std

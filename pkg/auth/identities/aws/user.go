@@ -17,6 +17,7 @@ import (
 	atmosCredentials "github.com/cloudposse/atmos/pkg/auth/credentials"
 	"github.com/cloudposse/atmos/pkg/auth/types"
 	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -140,19 +141,19 @@ func (i *userIdentity) resolveRegion() string {
 
 // writeAWSFiles writes credentials to AWS config files using "aws-user" as mock provider.
 func (i *userIdentity) writeAWSFiles(creds *types.AWSCredentials, region string) error {
-	awsFileManager, err := awsCloud.NewAWSFileManager()
+	awsFileManager, err := awsCloud.NewAWSFileManager("")
 	if err != nil {
 		return errors.Join(errUtils.ErrAuthAwsFileManagerFailed, err)
 	}
 
 	// Write credentials to ~/.aws/atmos/aws-user/credentials.
 	if err := awsFileManager.WriteCredentials(awsUserProviderName, i.name, creds); err != nil {
-		return fmt.Errorf("%w: failed to write AWS credentials: %v", errUtils.ErrAwsAuth, err)
+		return fmt.Errorf("%w: failed to write AWS credentials: %w", errUtils.ErrAwsAuth, err)
 	}
 
 	// Write config to ~/.aws/atmos/aws-user/config.
 	if err := awsFileManager.WriteConfig(awsUserProviderName, i.name, region, ""); err != nil {
-		return fmt.Errorf("%w: failed to write AWS config: %v", errUtils.ErrAwsAuth, err)
+		return fmt.Errorf("%w: failed to write AWS config: %w", errUtils.ErrAwsAuth, err)
 	}
 
 	return nil
@@ -176,9 +177,10 @@ func (i *userIdentity) generateSessionToken(ctx context.Context, longLivedCreds 
 	}
 
 	// Create AWS config with long-lived credentials.
-	cfg, err := config.LoadDefaultConfig(ctx, configOpts...)
+	// Use isolated environment to avoid conflicts with external AWS env vars.
+	cfg, err := awsCloud.LoadIsolatedAWSConfig(ctx, configOpts...)
 	if err != nil {
-		return nil, fmt.Errorf("%w: failed to load AWS config: %v", errUtils.ErrAwsAuth, err)
+		return nil, fmt.Errorf("%w: failed to load AWS config: %w", errUtils.ErrAwsAuth, err)
 	}
 
 	// Create STS client.
@@ -219,7 +221,7 @@ func (i *userIdentity) generateSessionToken(ctx context.Context, longLivedCreds 
 
 	// Write session credentials to AWS files using "aws-user" as mock provider.
 	if err := i.writeAWSFiles(sessionCreds, region); err != nil {
-		return nil, fmt.Errorf("%w: failed to write AWS files: %v", errUtils.ErrAwsAuth, err)
+		return nil, fmt.Errorf("%w: failed to write AWS files: %w", errUtils.ErrAwsAuth, err)
 	}
 
 	// Note: We keep the long-lived credentials in the keystore unchanged.
@@ -234,7 +236,7 @@ var promptMfaTokenFunc = func(longLivedCreds *types.AWSCredentials) (string, err
 	var mfaToken string
 	form := newMfaForm(longLivedCreds, &mfaToken)
 	if err := form.Run(); err != nil {
-		return "", fmt.Errorf("%w: failed to get MFA token: %v", errUtils.ErrAuthenticationFailed, err)
+		return "", fmt.Errorf("%w: failed to get MFA token: %w", errUtils.ErrAuthenticationFailed, err)
 	}
 	return mfaToken, nil
 }
@@ -288,7 +290,7 @@ func (i *userIdentity) Environment() (map[string]string, error) {
 	env := make(map[string]string)
 
 	// Get AWS file environment variables using "aws-user" as mock provider.
-	awsFileManager, err := awsCloud.NewAWSFileManager()
+	awsFileManager, err := awsCloud.NewAWSFileManager("")
 	if err != nil {
 		return nil, errors.Join(errUtils.ErrAuthAwsFileManagerFailed, err)
 	}
@@ -334,21 +336,71 @@ func AuthenticateStandaloneAWSUser(ctx context.Context, identityName string, ide
 	// AWS user identities authenticate directly without provider credentials.
 	credentials, err := userIdentity.Authenticate(ctx, nil)
 	if err != nil {
-		return nil, fmt.Errorf("%w: AWS user identity %q authentication failed: %v", errUtils.ErrAuthenticationFailed, identityName, err)
+		return nil, fmt.Errorf("%w: AWS user identity %q authentication failed: %w", errUtils.ErrAuthenticationFailed, identityName, err)
 	}
 
 	log.Debug("AWS user identity authenticated successfully", "identity", identityName)
 	return credentials, nil
 }
 
-// PostAuthenticate sets up AWS files after authentication.
-func (i *userIdentity) PostAuthenticate(ctx context.Context, stackInfo *schema.ConfigAndStacksInfo, providerName, identityName string, creds types.ICredentials) error {
+// PostAuthenticate sets up AWS files and populates auth context after authentication.
+func (i *userIdentity) PostAuthenticate(ctx context.Context, params *types.PostAuthenticateParams) error {
+	// Guard against nil parameters to avoid panics.
+	if params == nil {
+		return fmt.Errorf("%w: PostAuthenticate parameters cannot be nil", errUtils.ErrInvalidAuthConfig)
+	}
+	if params.Credentials == nil {
+		return fmt.Errorf("%w: credentials are required", errUtils.ErrInvalidAuthConfig)
+	}
+
+	// Enforce fixed provider for aws/user identities to avoid path drift.
+	// User identities always use "aws-user" provider name regardless of caller input.
+	providerName := awsUserProviderName
+	identityName := i.name
+
 	// Setup AWS files using shared AWS cloud package.
-	if err := awsCloud.SetupFiles(providerName, identityName, creds); err != nil {
+	if err := awsCloud.SetupFiles(providerName, identityName, params.Credentials, ""); err != nil {
 		return errors.Join(errUtils.ErrAwsAuth, err)
 	}
-	if err := awsCloud.SetEnvironmentVariables(stackInfo, providerName, identityName); err != nil {
+
+	// Populate auth context (single source of truth for runtime credentials).
+	if err := awsCloud.SetAuthContext(&awsCloud.SetAuthContextParams{
+		AuthContext:  params.AuthContext,
+		StackInfo:    params.StackInfo,
+		ProviderName: providerName,
+		IdentityName: identityName,
+		Credentials:  params.Credentials,
+		BasePath:     "",
+	}); err != nil {
 		return errors.Join(errUtils.ErrAwsAuth, err)
 	}
+
+	// Derive environment variables from auth context for spawned processes.
+	if err := awsCloud.SetEnvironmentVariables(params.AuthContext, params.StackInfo); err != nil {
+		return errors.Join(errUtils.ErrAwsAuth, err)
+	}
+
+	return nil
+}
+
+// Logout removes identity-specific credential storage.
+func (i *userIdentity) Logout(ctx context.Context) error {
+	defer perf.Track(nil, "aws.userIdentity.Logout")()
+
+	// AWS user identities use "aws-user" as their provider name.
+	// Clean up files under ~/.aws/atmos/aws-user/.
+	fileManager, err := awsCloud.NewAWSFileManager("")
+	if err != nil {
+		return errors.Join(errUtils.ErrLogoutFailed, err)
+	}
+
+	// Use CleanupIdentity to remove only this identity's sections from shared INI files.
+	// This preserves credentials for other identities using the same provider.
+	if err := fileManager.CleanupIdentity(ctx, "aws-user", i.name); err != nil {
+		log.Debug("Failed to cleanup AWS files for user identity", "identity", i.name, "error", err)
+		return errors.Join(errUtils.ErrLogoutFailed, err)
+	}
+
+	log.Debug("Cleaned up AWS files for user identity", "identity", i.name)
 	return nil
 }

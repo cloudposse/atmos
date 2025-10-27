@@ -5,10 +5,11 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/cloudposse/atmos/pkg/utils"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 func TestParsePlanDiffFlags(t *testing.T) {
@@ -229,13 +230,13 @@ Terraform show output
 
 func TestTerraformPlanDiff_FlagParsing(t *testing.T) {
 	// Save the original OsExit function and restore it after the test
-	originalOsExit := utils.OsExit
-	defer func() { utils.OsExit = originalOsExit }()
+	originalOsExit := errUtils.OsExit
+	defer func() { errUtils.OsExit = originalOsExit }()
 
 	// Mock OsExit to prevent the test from exiting
 	var exitCalled bool
 	var exitCode int
-	utils.OsExit = func(code int) {
+	errUtils.OsExit = func(code int) {
 		exitCalled = true
 		exitCode = code
 		// Don't actually exit

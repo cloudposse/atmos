@@ -16,9 +16,9 @@ import (
 )
 
 func TestAuthCLIIntegrationWithCloudProvider(t *testing.T) {
-	// Skip integration tests in CI or if no auth config is available
+	// Use memory keyring for CI, system keyring otherwise
 	if os.Getenv("CI") != "" {
-		t.Skipf("Skipping integration tests in CI environment.")
+		t.Setenv("ATMOS_KEYRING_TYPE", "memory")
 	}
 
 	// Create test auth configuration
@@ -155,18 +155,9 @@ func formatEnvironmentVariables(envVars []schema.EnvironmentVariable, format str
 
 // TestAuthCommandCompletion tests shell completion for auth commands.
 func TestAuthCommandCompletion(t *testing.T) {
-	// Save current directory.
-	origDir, err := os.Getwd()
-	require.NoError(t, err)
-	defer func() {
-		err := os.Chdir(origDir)
-		require.NoError(t, err)
-	}()
-
-	// Change to demo-auth directory with valid auth config.
+	// Change to demo-auth directory with valid auth config (automatically reverted after test).
 	testDir := "../examples/demo-auth"
-	err = os.Chdir(testDir)
-	require.NoError(t, err)
+	t.Chdir(testDir)
 
 	t.Run("identity flag completion for auth command", func(t *testing.T) {
 		// Test that identity completion function returns expected identities.
