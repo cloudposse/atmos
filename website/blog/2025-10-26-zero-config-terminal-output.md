@@ -144,7 +144,7 @@ atmos terraform output | jq .vpc_id
   - Controlled by `--logs-level` flag
   - Not affected by terminal capabilities
 
-Read more in the [Logging Configuration](/cli/configuration/logging) documentation.
+Read more in the [CLI Configuration](/cli/configuration) documentation (see `logs` section) and [Global Flags](/cli/global-flags) for `--logs-level` and `--logs-file` options.
 
 ## Real-World Examples
 
