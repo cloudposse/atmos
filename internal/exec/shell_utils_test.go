@@ -626,6 +626,29 @@ func TestExecuteShell(t *testing.T) {
 		assert.NoError(t, err)
 	})
 
+	t.Run("custom env vars override parent env", func(t *testing.T) {
+		// Test that custom env vars can override parent environment variables
+		// while still inheriting everything else like PATH.
+		if runtime.GOOS == "windows" {
+			t.Skip("Skipping Unix-specific test on Windows")
+		}
+
+		// Set a test environment variable in the parent process.
+		t.Setenv("TEST_OVERRIDE", "parent_value")
+
+		// Pass a custom env that overrides TEST_OVERRIDE.
+		// The shell command should see the override value, not the parent value,
+		// but should still have access to PATH.
+		err := ExecuteShell(
+			"test \"$TEST_OVERRIDE\" = \"custom_value\" && env | grep -q PATH",
+			"test-shell",
+			".",
+			[]string{"TEST_OVERRIDE=custom_value"},
+			false,
+		)
+		assert.NoError(t, err, "custom env var should override parent, and PATH should be inherited")
+	})
+
 	t.Run("empty env should inherit PATH from parent process", func(t *testing.T) {
 		// This test demonstrates the bug reported in DEV-3725.
 		// When ExecuteShell is called with an empty env slice (as workflow commands do),
