@@ -140,7 +140,7 @@ func NewChatModel(client ai.Client, atmosConfig *schema.AtmosConfiguration, mana
 		glamour.WithEmoji(),
 	)
 	if err != nil {
-		log.Warn(fmt.Sprintf("Failed to create cached markdown renderer: %v", err))
+		log.Debug(fmt.Sprintf("Failed to create cached markdown renderer: %v", err))
 		// Continue without renderer - will fallback to plain text
 	}
 
@@ -169,7 +169,7 @@ func NewChatModel(client ai.Client, atmosConfig *schema.AtmosConfiguration, mana
 	// Load existing messages from session if available.
 	if manager != nil && sess != nil {
 		if err := model.loadSessionMessages(); err != nil {
-			log.Warn(fmt.Sprintf("Failed to load session messages: %v", err))
+			log.Debug(fmt.Sprintf("Failed to load session messages: %v", err))
 		}
 	}
 
@@ -337,7 +337,7 @@ func (m *ChatModel) handleWindowResize(msg tea.WindowSizeMsg) {
 		glamour.WithEmoji(),
 	)
 	if err != nil {
-		log.Warn(fmt.Sprintf("Failed to recreate markdown renderer on resize: %v", err))
+		log.Debug(fmt.Sprintf("Failed to recreate markdown renderer on resize: %v", err))
 	} else {
 		m.markdownRenderer = renderer
 		m.renderedMessages = make([]string, 0) // Clear cache
@@ -535,7 +535,7 @@ func (m *ChatModel) handleProviderSwitched(msg providerSwitchedMsg) {
 				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 				defer cancel()
 				if err := manager.UpdateSession(ctx, sess); err != nil {
-					log.Warn(fmt.Sprintf("Failed to persist provider switch in session: %v", err))
+					log.Debug(fmt.Sprintf("Failed to persist provider switch in session: %v", err))
 				}
 			}()
 		}
@@ -632,6 +632,67 @@ func (m *ChatModel) footerView() string {
 	return footerStyle.Render(content)
 }
 
+// detectOutputFormat detects the format of command output and returns the appropriate markdown language tag.
+func detectOutputFormat(output string) string {
+	trimmed := strings.TrimSpace(output)
+
+	// Check for JSON
+	if strings.HasPrefix(trimmed, "{") || strings.HasPrefix(trimmed, "[") {
+		return "json"
+	}
+
+	// Check for YAML (looks for key: value patterns at start of lines)
+	lines := strings.Split(trimmed, "\n")
+	yamlPatterns := 0
+	for i, line := range lines {
+		if i > 10 {
+			break // Check first 10 lines
+		}
+		trimmedLine := strings.TrimSpace(line)
+		// YAML key-value pattern or list item
+		if strings.Contains(trimmedLine, ": ") || strings.HasPrefix(trimmedLine, "- ") {
+			yamlPatterns++
+		}
+	}
+	if yamlPatterns >= 3 { // If we see 3+ yaml patterns, it's probably YAML
+		return "yaml"
+	}
+
+	// Check for HCL/Terraform
+	if strings.Contains(trimmed, "resource \"") || strings.Contains(trimmed, "data \"") ||
+		strings.Contains(trimmed, "module \"") || strings.Contains(trimmed, "variable \"") {
+		return "hcl"
+	}
+
+	// Check for tables (multiple lines with consistent column separators)
+	if len(lines) > 2 {
+		pipeCount := strings.Count(lines[0], "|")
+		if pipeCount > 1 {
+			consistentPipes := true
+			for i := 1; i < min(5, len(lines)); i++ {
+				if strings.Count(lines[i], "|") != pipeCount {
+					consistentPipes = false
+					break
+				}
+			}
+			if consistentPipes {
+				return "text" // Tables render better as text in glamour
+			}
+		}
+	}
+
+	// Default to text
+	return "text"
+}
+
+// min returns the minimum of two integers.
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
+
 func (m *ChatModel) addMessage(role, content string) {
 	// Capture the current provider for assistant messages.
 	provider := ""
@@ -658,7 +719,7 @@ func (m *ChatModel) addMessage(role, content string) {
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
 			if err := manager.AddMessage(ctx, sessionID, role, content); err != nil {
-				log.Warn(fmt.Sprintf("Failed to save message to session: %v", err))
+				log.Debug(fmt.Sprintf("Failed to save message to session: %v", err))
 			}
 		}()
 	}
@@ -870,7 +931,9 @@ func (m *ChatModel) getAIResponse(userMessage string) tea.Cmd {
 					if i > 0 {
 						resultText += "\n\n"
 					}
-					resultText += fmt.Sprintf("**Tool:** `%s`\n\n%s", response.ToolCalls[i].Name, result.Output)
+					// Detect output format and wrap in appropriate code block for syntax highlighting.
+					format := detectOutputFormat(result.Output)
+					resultText += fmt.Sprintf("**Tool:** `%s`\n\n```%s\n%s\n```", response.ToolCalls[i].Name, format, result.Output)
 				}
 
 				finalResponse := response.Content
