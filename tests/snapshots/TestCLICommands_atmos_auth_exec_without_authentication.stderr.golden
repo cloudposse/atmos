@@ -1,20 +1,2 @@
-DEBU Set logs-level=debug logs-file=/dev/stderr
-DEBU Found config ENV ATMOS_CLI_CONFIG_PATH=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-auth-mock
-DEBU Found config ENV ATMOS_CLI_CONFIG_PATH=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-auth-mock
 
 **Notice:** Telemetry Enabled - Atmos now collects anonymous telemetry regarding usage. This information is used to shape the Atmos roadmap and prioritize features. You can learn more, including how to opt out if you'd prefer not to participate in this anonymous program, by visiting: https://atmos.tools/cli/telemetry
-DEBU Found config ENV ATMOS_CLI_CONFIG_PATH=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-auth-mock
-DEBU Found config ENV ATMOS_CLI_CONFIG_PATH=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-auth-mock
-DEBU credentialStore.Retrieve result identity=mock-identity creds_nil=true
-  error=
-  │ credential store
-  │ credentials not found for alias "mock-identity"
-DEBU Credentials not in keyring, trying to load from identity storage identity=mock-identity
-DEBU buildWhoamiInfoFromEnvironment called identity=mock-identity
-DEBU Identity lookup identity=mock-identity exists=true
-DEBU LoadCredentials result identity=mock-identity creds_nil=false error=<nil>
-DEBU Loaded credentials from identity storage identity=mock-identity
-DEBU Successfully loaded credentials from identity storage identity=mock-identity
-DEBU Found config ENV ATMOS_CLI_CONFIG_PATH=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-auth-mock
-DEBU Found config ENV ATMOS_CLI_CONFIG_PATH=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-auth-mock
-DEBU Telemetry event enqueued

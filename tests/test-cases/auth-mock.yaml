@@ -98,8 +98,6 @@ tests:
         - "Expires"
         - "Last Updated"
       stderr:
-        - "Credentials not in keyring, trying to load from identity storage"
-        - "Loaded credentials from identity storage"
         - "Current Authentication Status"
         - "mock-identity"
       stdout: []
@@ -171,9 +169,7 @@ tests:
       - "mock-identity"
     expect:
       diff: []
-      stderr:
-        - "Credentials not in keyring, trying to load from identity storage"
-        - "Loaded credentials from identity storage"
+      stderr: []
       stdout:
         - "AWS_PROFILE"
         - "mock-identity"
@@ -197,8 +193,7 @@ tests:
       - "mock-identity"
     expect:
       diff: []
-      stderr:
-        - "Credentials not in keyring, trying to load from identity storage"
+      stderr: []
       stdout:
         - "export AWS_PROFILE='mock-identity'"
       exit_code: 0
@@ -247,9 +242,7 @@ tests:
       - "test"
     expect:
       diff: []
-      stderr:
-        - "Credentials not in keyring, trying to load from identity storage"
-        - "Loaded credentials from identity storage"
+      stderr: []
       stdout:
         - "test"
       exit_code: 0

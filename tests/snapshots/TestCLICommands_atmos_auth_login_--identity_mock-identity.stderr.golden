@@ -1,33 +1,5 @@
-DEBU Set logs-level=debug logs-file=/dev/stderr
-DEBU Found config ENV ATMOS_CLI_CONFIG_PATH=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-auth-mock
-DEBU Found config ENV ATMOS_CLI_CONFIG_PATH=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-auth-mock
 
 **Notice:** Telemetry Enabled - Atmos now collects anonymous telemetry regarding usage. This information is used to shape the Atmos roadmap and prioritize features. You can learn more, including how to opt out if you'd prefer not to participate in this anonymous program, by visiting: https://atmos.tools/cli/telemetry
-DEBU Found config ENV ATMOS_CLI_CONFIG_PATH=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-auth-mock
-DEBU Authentication chain discovered identity=mock-identity chainLength=2 chain="[mock-provider mock-identity]"
-DEBU Checking cached credentials chainIndex=1 identityName=mock-identity
-DEBU Keyring retrieve result chainIndex=1 identityName=mock-identity hasError=true hasCreds=false
-DEBU Credentials not in keyring, trying identity storage chainIndex=1 identityName=mock-identity
-DEBU Loaded credentials from identity storage chainIndex=1 identityName=mock-identity
-DEBU Found valid cached credentials chainIndex=1 identityName=mock-identity expiration="2025-01-01 12:00:00.000000 +0000 UTC m=+3600.000000000"
-DEBU Found valid cached credentials validFromIndex=1 chainStep=mock-identity
-DEBU Failed to retrieve cached credentials, starting from provider
-  error=
-  │ credential store
-  │ credentials not found
-  │ failed to retrieve credentials from keyring: secret not found in keyring
-DEBU Authenticating with provider provider=mock-provider
-DEBU Failed to cache provider credentials
-  error=
-  │ credential store
-  │ unsupported credential type: *mock.Credentials
-DEBU Provider authenticated provider=mock-provider
-DEBU Authenticating identity chain chainLength=2 startIndex=1 chain="[mock-provider mock-identity]"
-DEBU Authenticating identity step step=1 identity=mock-identity kind=mock
-DEBU Failed to cache credentials identityStep=mock-identity
-  error=
-  │ credential store
-  │ unsupported credential type: *mock.Credentials
 INFO Chained identity from=mock-provider to=mock-identity
 
 ✓ Authentication successful!
@@ -37,6 +9,3 @@ INFO Chained identity from=mock-provider to=mock-identity
   Region    us-east-1                             
   Expires   2099-12-31 23:59:59 UTC (1h 0m) 
 
-DEBU Found config ENV ATMOS_CLI_CONFIG_PATH=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-auth-mock
-DEBU Found config ENV ATMOS_CLI_CONFIG_PATH=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-auth-mock
-DEBU Telemetry event enqueued
