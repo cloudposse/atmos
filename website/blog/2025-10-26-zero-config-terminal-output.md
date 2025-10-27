@@ -8,7 +8,7 @@ tags: [feature, enhancement, contributors]
 
 # Zero-Configuration Terminal Output: Write Once, Works Everywhere
 
-We're excited to announce a major enhancement to Atmos's terminal output system. Developers can now write code assuming a full-featured terminal, and Atmos automatically handles degradation for all environments - no capability checking, no manual color detection, no secret masking code. Just write clean, simple output code and it works everywhere.
+Atmos now features intelligent terminal output that adapts to any environment automatically. Developers can write code assuming a full-featured terminal, and Atmos handles the rest - capability detection, color adaptation, and secret masking happen transparently. No more capability checking, manual color detection, or masking code. Just write clean, simple output code and it works everywhere.
 
 <!--truncate-->
 

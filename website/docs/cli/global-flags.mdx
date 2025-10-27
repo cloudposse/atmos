@@ -154,6 +154,7 @@ These flags are available for every Atmos command:
         - Useful for CI/CD environments or when piping output
         - Can also use `ATMOS_NO_COLOR` or `NO_COLOR` environment variables
         - The `NO_COLOR` env var follows the standard from https://no-color.org/
+        - **Takes highest precedence**: Overrides `--force-color`, `--color`, and all other color settings
     </dd>
 
     <dt>`--force-tty`</dt>
@@ -173,6 +174,7 @@ These flags are available for every Atmos command:
         - Forces 24-bit TrueColor profile regardless of terminal detection
         - Overrides automatic color degradation
         - Can also use `ATMOS_FORCE_COLOR` environment variable
+        - **Note**: The `NO_COLOR` environment variable or `--no-color` flag takes precedence and will disable color even when `--force-color` is set
         - Example: `ATMOS_FORCE_COLOR=true atmos describe stacks | vhs record.tape`
     </dd>
 
@@ -388,7 +390,8 @@ All global flags can be set using environment variables. The precedence order is
         Disable colored output (any non-empty value disables color).
         - `NO_COLOR` is a standard environment variable supported by many CLI tools (https://no-color.org/)
         - Maintained for portability across different systems and CI/CD environments
-        - Takes precedence over `ATMOS_COLOR`/`COLOR` settings
+        - **Highest precedence**: Takes precedence over `ATMOS_FORCE_COLOR`, `CLICOLOR_FORCE`, `ATMOS_COLOR`, and `COLOR` settings
+        - Overrides `--force-color` flag
         - Both `ATMOS_NO_COLOR` and `NO_COLOR` are fully supported
     </dd>
 
@@ -407,6 +410,7 @@ All global flags can be set using environment variables. The precedence order is
         - `CLICOLOR_FORCE` is a standard environment variable (https://bixense.com/clicolors/)
         - Useful for screenshot generation and piping to color-aware tools
         - Forces 24-bit TrueColor profile regardless of terminal detection
+        - **Note**: `NO_COLOR` environment variable takes precedence and will disable color even when this is set
         - Example: `ATMOS_FORCE_COLOR=true atmos describe config | bat`
         - Example: `CLICOLOR_FORCE=1 atmos terraform plan`
     </dd>

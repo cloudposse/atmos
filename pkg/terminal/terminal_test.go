@@ -177,24 +177,35 @@ func TestForceColor_ColorProfile(t *testing.T) {
 		name       string
 		forceColor bool
 		forceTTY   bool
+		noColor    bool
 		expected   ColorProfile
 	}{
+		{
+			name:       "NO_COLOR takes precedence over force-color",
+			forceColor: true,
+			forceTTY:   false,
+			noColor:    true,
+			expected:   ColorNone,
+		},
 		{
 			name:       "force-color enabled returns TrueColor",
 			forceColor: true,
 			forceTTY:   false,
+			noColor:    false,
 			expected:   ColorTrue,
 		},
 		{
 			name:       "force-color and force-tty both enabled returns TrueColor",
 			forceColor: true,
 			forceTTY:   true,
+			noColor:    false,
 			expected:   ColorTrue,
 		},
 		{
 			name:       "force-color disabled returns ColorNone when not TTY",
 			forceColor: false,
 			forceTTY:   false,
+			noColor:    false,
 			expected:   ColorNone,
 		},
 	}
@@ -207,12 +218,17 @@ func TestForceColor_ColorProfile(t *testing.T) {
 			viper.Set("no-color", false)
 			viper.Set("color", false)
 
+			// Set NO_COLOR environment variable if needed
+			if tt.noColor {
+				t.Setenv("NO_COLOR", "1")
+			}
+
 			// Create terminal
 			term := New()
 
 			// Check color profile
 			result := term.ColorProfile()
-			assert.Equal(t, tt.expected, result, "ColorProfile should return %v when force-color=%v, force-tty=%v", tt.expected, tt.forceColor, tt.forceTTY)
+			assert.Equal(t, tt.expected, result, "ColorProfile should return %v when force-color=%v, force-tty=%v, NO_COLOR=%v", tt.expected, tt.forceColor, tt.forceTTY, tt.noColor)
 		})
 	}
 }
