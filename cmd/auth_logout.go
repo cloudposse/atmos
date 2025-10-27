@@ -30,6 +30,10 @@ This command removes:
   • AWS credential files (~/.aws/atmos/<provider>/credentials)
   • AWS config files (~/.aws/atmos/<provider>/config)
 
+You can specify the identity to logout using either:
+  • Positional argument: atmos auth logout <identity>
+  • Flag: atmos auth logout --identity <identity>
+
 Note: This only removes local credentials. Your browser session with the
 identity provider (AWS SSO, Okta, etc.) may still be active. To completely
 end your session, visit your identity provider's website and sign out.`,
@@ -60,21 +64,11 @@ func executeAuthLogoutCommand(cmd *cobra.Command, args []string) error {
 	providerFlag, _ := cmd.Flags().GetString("provider")
 	dryRun, _ := cmd.Flags().GetBool("dry-run")
 
-	// Check if the inherited --identity flag was used (common mistake).
-	// Note: "identity" is a persistent flag on parent authCmd, so we need to check inherited flags.
+	// Get identity from flag or positional argument.
+	// Note: "identity" is a persistent flag on parent authCmd, so it's automatically available.
 	identityFlag := ""
 	if flag := cmd.Flag("identity"); flag != nil {
 		identityFlag = flag.Value.String()
-	}
-	if identityFlag != "" {
-		u.PrintfMarkdownToTUI("**Error:** The `--identity` flag is not supported by `atmos auth logout`.\n\n")
-		u.PrintfMarkdownToTUI("**Usage:**\n")
-		u.PrintfMessageToTUI("  Logout specific identity:  atmos auth logout <identity-name>\n")
-		u.PrintfMessageToTUI("  Logout specific provider:  atmos auth logout --provider <provider-name>\n")
-		u.PrintfMessageToTUI("  Logout all:                atmos auth logout\n\n")
-		u.PrintfMarkdownToTUI("**Example:**\n")
-		u.PrintfMessageToTUI("  atmos auth logout plat-dev/admin\n\n")
-		return fmt.Errorf("%w: use positional argument instead of --identity flag", errUtils.ErrInvalidFlag)
 	}
 
 	ctx := context.Background()
@@ -85,9 +79,17 @@ func executeAuthLogoutCommand(cmd *cobra.Command, args []string) error {
 		return performProviderLogout(ctx, authManager, providerFlag, dryRun)
 	}
 
+	// Support both positional argument and --identity flag for consistency with other auth commands.
+	// Positional argument takes precedence if both are provided.
+	var identityName string
 	if len(args) > 0 {
+		identityName = args[0]
+	} else if identityFlag != "" {
+		identityName = identityFlag
+	}
+
+	if identityName != "" {
 		// Logout specific identity.
-		identityName := args[0]
 		return performIdentityLogout(ctx, authManager, identityName, dryRun)
 	}
 
