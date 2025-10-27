@@ -142,7 +142,14 @@
       "endpoint": "https://us.i.posthog.com",
       "token": "phc_TEST_TOKEN_PLACEHOLDER",
       "logging": false
-    }
+    },
+    "ai": {
+      "sessions": {},
+      "tools": {},
+      "memory": {},
+      "web_search": {}
+    },
+    "lsp": {}
   },
   "describe": {
     "settings": {}

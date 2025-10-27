@@ -11,6 +11,7 @@ Usage:
 Available Commands:
 
   about                          Learn about Atmos
+  ai                             AI-powered assistant for Atmos operations
   atlantis                       Generate and manage Atlantis configurations
   auth                           Authenticate with cloud providers and identity services.
   aws                            Run AWS-specific commands for interacting with cloud resources
@@ -20,6 +21,8 @@ Available Commands:
   helmfile                       Manage Helmfile-based Kubernetes deployments
   help                           Display help information for Atmos commands
   list                           List available stacks and components
+  lsp                            Language Server Protocol commands
+  mcp-server                     Start Atmos MCP (Model Context Protocol) server
   packer                         Manage packer-based machine images for multiple platforms
   pro                            Access premium features integrated with atmos-pro.com
   support                        Show Atmos support options
