@@ -494,7 +494,7 @@ auth:
 
 **Default storage location**:
 - Follows the [XDG Base Directory Specification](https://specifications.freedesktop.org/basedir-spec/basedir-spec-latest.html)
-- Default: `$XDG_DATA_HOME/atmos/keyring` (typically `~/.local/share/atmos/keyring` on Linux/Unix, `~/Library/Application Support/atmos/keyring` on macOS)
+- Default: `$XDG_DATA_HOME/atmos/keyring` (typically `~/.local/share/atmos/keyring` on Linux/Unix and macOS)
 - Can be overridden via `ATMOS_XDG_DATA_HOME` or `XDG_DATA_HOME` environment variables
 - Custom path can be specified via `spec.path` configuration
 
@@ -564,8 +564,8 @@ Atmos-managed AWS credentials are stored following the XDG Base Directory Specif
 - Config: `~/.config/atmos/aws/<provider>/config`
 
 **macOS:**
-- Credentials: `~/Library/Application Support/atmos/aws/<provider>/credentials`
-- Config: `~/Library/Application Support/atmos/aws/<provider>/config`
+- Credentials: `~/.config/atmos/aws/<provider>/credentials`
+- Config: `~/.config/atmos/aws/<provider>/config`
 
 **Windows:**
 - Credentials: `%APPDATA%\atmos\aws\<provider>\credentials`

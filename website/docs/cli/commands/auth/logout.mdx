@@ -195,7 +195,7 @@ Some providers (like AWS) also write credential files for compatibility with oth
 - **AWS credentials**: `<base_path>/<provider>/credentials`
 - **AWS config**: `<base_path>/<provider>/config`
 
-The default base path follows XDG Base Directory Specification (`~/.config/atmos/aws/` on Linux, `~/Library/Application Support/atmos/aws/` on macOS), but this can be customized (see [Custom File Paths](#custom-file-paths)).
+The default base path follows XDG Base Directory Specification (`~/.config/atmos/aws/` on both Linux and macOS), but this can be customized (see [Custom File Paths](#custom-file-paths)).
 
 The logout command removes both keyring entries and file storage.
 
@@ -398,7 +398,7 @@ auth:
 The file path is resolved using this precedence order:
 
 1. **Provider configuration** (`spec.files.base_path` in `atmos.yaml`)
-2. **Default** (XDG-compliant: `~/.config/atmos/aws/` on Linux, `~/Library/Application Support/atmos/aws/` on macOS)
+2. **Default** (XDG-compliant: `~/.config/atmos/aws/` on both Linux and macOS)
 
 #### Path Expansion
 
