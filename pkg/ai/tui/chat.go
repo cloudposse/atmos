@@ -13,6 +13,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/lipgloss/table"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/ai"
@@ -803,7 +804,13 @@ func (m *ChatModel) updateViewportContent() {
 
 // renderMarkdown renders markdown content with syntax highlighting using the cached glamour renderer.
 // PERFORMANCE: Uses cached renderer instead of creating new one each time.
+// Tables are detected and rendered using lipgloss.Table for better formatting.
 func (m *ChatModel) renderMarkdown(content string) string {
+	// Detect and extract markdown tables for special rendering.
+	if hasMarkdownTable(content) {
+		return m.renderMarkdownWithTables(content)
+	}
+
 	// Fallback to plain text if no cached renderer available.
 	if m.markdownRenderer == nil {
 		return lipgloss.NewStyle().
@@ -831,6 +838,155 @@ func (m *ChatModel) renderMarkdown(content string) string {
 	}
 
 	return strings.TrimRight(strings.Join(paddedLines, newlineChar), newlineChar)
+}
+
+// hasMarkdownTable detects if content contains a markdown table.
+func hasMarkdownTable(content string) bool {
+	lines := strings.Split(content, "\n")
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		// Look for separator line like |---|---|---|
+		if strings.HasPrefix(trimmed, "|") && strings.Contains(trimmed, "---") {
+			return true
+		}
+	}
+	return false
+}
+
+// renderMarkdownWithTables renders markdown content with special handling for tables.
+func (m *ChatModel) renderMarkdownWithTables(content string) string {
+	lines := strings.Split(content, "\n")
+	var result strings.Builder
+	var tableLines []string
+	inTable := false
+
+	for i := 0; i < len(lines); i++ {
+		line := lines[i]
+		trimmed := strings.TrimSpace(line)
+
+		// Check if this is a table line.
+		isTableLine := strings.HasPrefix(trimmed, "|") && strings.Contains(trimmed, "|")
+
+		if isTableLine {
+			if !inTable {
+				inTable = true
+				tableLines = []string{}
+			}
+			tableLines = append(tableLines, line)
+		} else {
+			// End of table - render it.
+			if inTable {
+				table := m.renderTable(tableLines)
+				result.WriteString(table)
+				result.WriteString("\n")
+				inTable = false
+				tableLines = nil
+			}
+
+			// Render non-table content with glamour.
+			if trimmed != "" {
+				if m.markdownRenderer != nil {
+					rendered, err := m.markdownRenderer.Render(line)
+					if err == nil {
+						result.WriteString("  " + strings.TrimSpace(rendered) + "\n")
+					} else {
+						result.WriteString("  " + line + "\n")
+					}
+				} else {
+					result.WriteString("  " + line + "\n")
+				}
+			} else {
+				result.WriteString("\n")
+			}
+		}
+	}
+
+	// Handle table at end of content.
+	if inTable && len(tableLines) > 0 {
+		table := m.renderTable(tableLines)
+		result.WriteString(table)
+	}
+
+	return strings.TrimRight(result.String(), "\n")
+}
+
+// renderTable renders a markdown table using lipgloss.Table for better formatting.
+func (m *ChatModel) renderTable(lines []string) string {
+	if len(lines) < 2 {
+		// Not a valid table.
+		return strings.Join(lines, "\n")
+	}
+
+	// Parse table structure.
+	var headers []string
+	var rows [][]string
+
+	for i, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" {
+			continue
+		}
+
+		// Split by | and clean up.
+		parts := strings.Split(trimmed, "|")
+		var cells []string
+		for _, part := range parts {
+			cell := strings.TrimSpace(part)
+			if cell != "" && cell != "---" && !strings.Contains(cell, "---") {
+				cells = append(cells, cell)
+			}
+		}
+
+		if len(cells) == 0 {
+			continue
+		}
+
+		if i == 0 {
+			// Header row.
+			headers = cells
+		} else if i == 1 {
+			// Separator row - skip.
+			continue
+		} else {
+			// Data row.
+			rows = append(rows, cells)
+		}
+	}
+
+	// Create lipgloss table.
+	t := table.New().
+		Border(lipgloss.NormalBorder()).
+		BorderStyle(lipgloss.NewStyle().Foreground(lipgloss.Color("240"))).
+		StyleFunc(func(row, col int) lipgloss.Style {
+			if row == 0 {
+				// Header style.
+				return lipgloss.NewStyle().
+					Foreground(lipgloss.Color(theme.ColorCyan)).
+					Bold(true).
+					Padding(0, 1)
+			}
+			// Data cell style.
+			return lipgloss.NewStyle().Padding(0, 1)
+		})
+
+	// Set headers.
+	if len(headers) > 0 {
+		t.Headers(headers...)
+	}
+
+	// Add rows.
+	for _, row := range rows {
+		t.Row(row...)
+	}
+
+	// Render and add left padding.
+	rendered := t.Render()
+	paddedLines := make([]string, 0)
+	for _, line := range strings.Split(rendered, "\n") {
+		paddedLines = append(paddedLines, "  "+line)
+	}
+
+	return strings.Join(paddedLines, "\n")
 }
 
 // Custom message types.
