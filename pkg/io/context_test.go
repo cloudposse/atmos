@@ -113,3 +113,36 @@ func TestWithOptions(t *testing.T) {
 		})
 	}
 }
+
+func TestStreamString(t *testing.T) {
+	tests := []struct {
+		name   string
+		stream Stream
+		want   string
+	}{
+		{
+			name:   "DataStream returns 'data'",
+			stream: DataStream,
+			want:   "data",
+		},
+		{
+			name:   "UIStream returns 'ui'",
+			stream: UIStream,
+			want:   "ui",
+		},
+		{
+			name:   "Unknown stream returns 'unknown'",
+			stream: Stream(999),
+			want:   "unknown",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := tt.stream.String()
+			if got != tt.want {
+				t.Errorf("Stream.String() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
