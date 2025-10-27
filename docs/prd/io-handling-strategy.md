@@ -1,8 +1,8 @@
 # PRD: Input/Output (I/O) and UI Handling Strategy
 
-**Status**: Draft v2
+**Status**: Adopted
 **Created**: 2025-10-24
-**Updated**: 2025-10-25
+**Updated**: 2025-10-27
 **Owner**: Engineering Team
 
 ## Executive Summary
@@ -18,13 +18,14 @@ The goal is to make it **effortless for developers** to know:
 - When to use formatting (UI) vs raw output (data)
 - How to handle terminal capabilities (color, width, TTY)
 
-## Problem Statement
+## Historical Context
 
-Current implementation has conceptual confusion:
+### Problem Solved
 
-### What We Have Now
+The previous implementation had conceptual confusion where the `ui.Output` interface mixed responsibilities:
+
 ```go
-// Mixed responsibilities in ui.Output
+// OLD: Mixed responsibilities (deprecated)
 out.Print("data")           // → stdout (data channel)
 out.Success("done!")        // → stderr (UI channel) with formatting
 out.Markdown("# Doc")       // → stdout (data? UI? both?)
@@ -35,14 +36,14 @@ out.Markdown("# Doc")       // → stdout (data? UI? both?)
 - Why does `ui.Output` handle both data and UI?
 - What's the relationship between I/O and UI?
 
-### Root Cause
-We conflated "where to write" (I/O concern) with "how to format" (UI concern).
+### Root Cause Addressed
+The old design conflated "where to write" (I/O concern) with "how to format" (UI concern).
 
 **Markdown rendering is UI/presentation**, not I/O. But markdown can be:
 - **Data output**: Help text, documentation, API responses → stdout
 - **UI output**: Interactive prompts, status messages → stderr
 
-The current design doesn't make this distinction clear.
+The current implementation makes this distinction clear through package-level functions.
 
 ## Conceptual Model
 
@@ -93,7 +94,7 @@ The current design doesn't make this distinction clear.
 
 **Application Layer answers:** "What do I show?" (data/messages/help)
 
-## Proposed Solution
+## Current Implementation
 
 ### Simplified Developer Interface
 
@@ -215,6 +216,85 @@ const (
 - `io.Terminal` provides **capabilities** (color/width/TTY), not formatting
 - Everything returns primitives (`io.Writer`, `int`, `bool`)
 - NO `Print*()`, `Success()`, `Markdown()` methods - those are application concerns
+
+### Output Masking Configuration
+
+The I/O layer provides automatic masking of sensitive data (secrets, credentials, tokens) in all output. Masking can be controlled at multiple levels:
+
+#### Configuration Precedence
+
+Masking configuration follows this precedence (highest to lowest):
+
+1. **`--mask` flag** - Enables/disables masking for current command
+2. **`ATMOS_MASK` environment variable** - Global masking control
+3. **`settings.terminal.mask.enabled`** in atmos.yaml - Project-wide default
+4. **Default** - Masking enabled (true)
+
+#### Command Line Flag
+
+```bash
+# Enable masking (default)
+atmos terraform apply --mask
+
+# Disable masking temporarily
+atmos terraform apply --mask=false
+
+# View raw output (e.g., for debugging)
+atmos describe component vpc --mask=false
+```
+
+#### Environment Variable
+
+```bash
+# Disable masking globally
+export ATMOS_MASK=false
+
+# Enable masking globally
+export ATMOS_MASK=true
+```
+
+#### Configuration File
+
+```yaml
+# atmos.yaml
+settings:
+  terminal:
+    mask:
+      enabled: true                    # Enable/disable masking
+      replacement: "***REDACTED***"    # Custom replacement string (optional)
+      patterns:                        # Custom regex patterns to mask (optional)
+        - 'password=\S+'
+        - 'token:\s*\S+'
+      literals:                        # Custom literal values to mask (optional)
+        - "my-secret-key"
+```
+
+**Configuration options:**
+- `enabled` (bool): Enable or disable masking (default: true)
+- `replacement` (string): Custom replacement string (default: `***MASKED***`)
+- `patterns` ([]string): Additional regex patterns to mask
+- `literals` ([]string): Additional literal values to mask
+
+#### Per-Call Bypass
+
+For code that needs to bypass masking (e.g., logging, debugging):
+
+```go
+// Access unmasked streams directly
+rawData := ioCtx.RawData()   // Unmasked stdout
+rawUI := ioCtx.RawUI()       // Unmasked stderr
+
+// Use for debugging only - requires justification
+fmt.Fprint(rawData, sensitiveData)
+```
+
+**When to disable masking:**
+- Debugging credential resolution issues
+- Viewing raw Terraform state for troubleshooting
+- Examining full error messages with credentials
+- Development environments where secrets are test values
+
+**Security note:** Always re-enable masking after debugging. Never disable masking in CI/CD or production environments.
 
 ### Core Interfaces - Presentation Layer
 

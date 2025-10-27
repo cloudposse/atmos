@@ -194,7 +194,7 @@ var RootCmd = &cobra.Command{
 		}
 
 		// Initialize I/O context and global formatter after flag parsing.
-		// This ensures flags like --no-color, --redirect-stderr, --disable-masking are respected.
+		// This ensures flags like --no-color, --redirect-stderr, --mask are respected.
 		ioCtx, ioErr := iolib.NewContext()
 		if ioErr != nil {
 			errUtils.CheckErrorPrintAndExit(fmt.Errorf("failed to initialize I/O context: %w", ioErr), "", "")
@@ -689,6 +689,7 @@ func init() {
 	RootCmd.PersistentFlags().Bool("no-color", false, "Disable color output")
 	RootCmd.PersistentFlags().Bool("force-color", false, "Force color output even when not a TTY (useful for screenshots)")
 	RootCmd.PersistentFlags().Bool("force-tty", false, "Force TTY mode with sane defaults when terminal detection fails (useful for screenshots)")
+	RootCmd.PersistentFlags().Bool("mask", true, "Enable automatic masking of sensitive data in output (use --mask=false to disable)")
 	RootCmd.PersistentFlags().String("pager", "", "Enable pager for output (--pager or --pager=true to enable, --pager=false to disable, --pager=less to use specific pager)")
 	// Set NoOptDefVal so --pager without value means "true".
 	RootCmd.PersistentFlags().Lookup("pager").NoOptDefVal = "true"
@@ -709,6 +710,10 @@ func init() {
 	// Bind both ATMOS_FORCE_COLOR and CLICOLOR_FORCE to the same viper key (they are equivalent).
 	if err := viper.BindEnv("force-color", "ATMOS_FORCE_COLOR", "CLICOLOR_FORCE"); err != nil {
 		log.Error("Failed to bind ATMOS_FORCE_COLOR/CLICOLOR_FORCE environment variables", "error", err)
+	}
+	// Bind mask flag to environment variable.
+	if err := viper.BindEnv("mask", "ATMOS_MASK"); err != nil {
+		log.Error("Failed to bind ATMOS_MASK environment variable", "error", err)
 	}
 
 	// Bind environment variables for GitHub authentication.

@@ -34,8 +34,8 @@ func Example_newPattern() {
 	// ===== PATTERN 2: UI Messages (stderr) =====
 	// UI channel is for human-readable messages.
 
-	// Plain message.
-	fmt.Fprintf(ioCtx.UI(), "Loading configuration...\n")
+	// Plain message (asking for user confirmation).
+	fmt.Fprintf(ioCtx.UI(), "Would you like to continue? (y/n): ")
 
 	// Formatted success message.
 	successMsg := formatter.Success("✓ Configuration loaded!")

@@ -215,6 +215,15 @@ type Terminal struct {
 	TabWidth           int                `yaml:"tab_width,omitempty" json:"tab_width,omitempty" mapstructure:"tab_width"`
 	Title              bool               `yaml:"title,omitempty" json:"title,omitempty" mapstructure:"title"`
 	Alerts             bool               `yaml:"alerts,omitempty" json:"alerts,omitempty" mapstructure:"alerts"`
+	Mask               MaskSettings       `yaml:"mask,omitempty" json:"mask,omitempty" mapstructure:"mask"`
+}
+
+// MaskSettings contains configuration for sensitive data masking.
+type MaskSettings struct {
+	Enabled     bool     `yaml:"enabled" json:"enabled" mapstructure:"enabled"`
+	Replacement string   `yaml:"replacement,omitempty" json:"replacement,omitempty" mapstructure:"replacement"` // Custom replacement string (default: ***MASKED***)
+	Patterns    []string `yaml:"patterns,omitempty" json:"patterns,omitempty" mapstructure:"patterns"`          // Custom regex patterns to mask
+	Literals    []string `yaml:"literals,omitempty" json:"literals,omitempty" mapstructure:"literals"`          // Custom literal values to mask
 }
 
 // IsPagerEnabled reports whether a pager should be used based on Terminal.Pager.

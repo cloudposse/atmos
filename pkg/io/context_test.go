@@ -43,7 +43,7 @@ func TestBuildConfig(t *testing.T) {
 
 	// Test with minimal viper configuration
 	viper.Set("redirect-stderr", "")
-	viper.Set("disable-masking", false)
+	viper.Set("mask", true)
 
 	cfg := buildConfig()
 
@@ -145,4 +145,151 @@ func TestStreamString(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestMaskConfiguration(t *testing.T) {
+	tests := []struct {
+		name                  string
+		maskFlag              *bool  // nil means not set
+		maskEnv               string // empty means not set
+		configMaskEnabled     *bool  // nil means not set in config
+		expectedDisabled      bool   // expected value of DisableMasking (true = masking disabled)
+		expectedMaskerEnabled bool   // expected masker.Enabled() result
+	}{
+		{
+			name:                  "Default: masking enabled when nothing set",
+			maskFlag:              nil,
+			maskEnv:               "",
+			configMaskEnabled:     nil,
+			expectedDisabled:      false,
+			expectedMaskerEnabled: true,
+		},
+		{
+			name:                  "--mask=true enables masking",
+			maskFlag:              boolPtr(true),
+			maskEnv:               "",
+			configMaskEnabled:     nil,
+			expectedDisabled:      false,
+			expectedMaskerEnabled: true,
+		},
+		{
+			name:                  "--mask=false disables masking",
+			maskFlag:              boolPtr(false),
+			maskEnv:               "",
+			configMaskEnabled:     nil,
+			expectedDisabled:      true,
+			expectedMaskerEnabled: false,
+		},
+		{
+			name:                  "ATMOS_MASK=true enables masking",
+			maskFlag:              nil,
+			maskEnv:               "true",
+			configMaskEnabled:     nil,
+			expectedDisabled:      false,
+			expectedMaskerEnabled: true,
+		},
+		{
+			name:                  "ATMOS_MASK=false disables masking",
+			maskFlag:              nil,
+			maskEnv:               "false",
+			configMaskEnabled:     nil,
+			expectedDisabled:      true,
+			expectedMaskerEnabled: false,
+		},
+		{
+			name:                  "--mask flag overrides env var",
+			maskFlag:              boolPtr(true),
+			maskEnv:               "false",
+			configMaskEnabled:     nil,
+			expectedDisabled:      false,
+			expectedMaskerEnabled: true,
+		},
+		{
+			name:                  "settings.terminal.mask.enabled=true enables masking",
+			maskFlag:              nil,
+			maskEnv:               "",
+			configMaskEnabled:     boolPtr(true),
+			expectedDisabled:      false,
+			expectedMaskerEnabled: true,
+		},
+		{
+			name:                  "settings.terminal.mask.enabled=false disables masking",
+			maskFlag:              nil,
+			maskEnv:               "",
+			configMaskEnabled:     boolPtr(false),
+			expectedDisabled:      true,
+			expectedMaskerEnabled: false,
+		},
+		{
+			name:                  "--mask flag overrides config",
+			maskFlag:              boolPtr(false),
+			maskEnv:               "",
+			configMaskEnabled:     boolPtr(true),
+			expectedDisabled:      true,
+			expectedMaskerEnabled: false,
+		},
+		{
+			name:                  "env var overrides config",
+			maskFlag:              nil,
+			maskEnv:               "false",
+			configMaskEnabled:     boolPtr(true),
+			expectedDisabled:      true,
+			expectedMaskerEnabled: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Reset viper state
+			viper.Reset()
+
+			// Set environment variable if specified
+			if tt.maskEnv != "" {
+				t.Setenv("ATMOS_MASK", tt.maskEnv)
+				if err := viper.BindEnv("mask", "ATMOS_MASK"); err != nil {
+					t.Fatalf("Failed to bind ATMOS_MASK: %v", err)
+				}
+			}
+
+			// Set flag if specified
+			if tt.maskFlag != nil {
+				viper.Set("mask", *tt.maskFlag)
+			} else if tt.maskEnv == "" && tt.configMaskEnabled == nil {
+				// Only set default when neither flag, env, nor config is specified
+				// This ensures config precedence works correctly
+				viper.SetDefault("mask", true)
+			}
+
+			// Set config if specified
+			if tt.configMaskEnabled != nil {
+				viper.Set("settings", schema.AtmosSettings{
+					Terminal: schema.Terminal{
+						Mask: schema.MaskSettings{
+							Enabled: *tt.configMaskEnabled,
+						},
+					},
+				})
+				viper.Set("settings.terminal.mask.enabled", *tt.configMaskEnabled)
+			}
+
+			// Build config
+			cfg := buildConfig()
+
+			// Check DisableMasking field
+			if cfg.DisableMasking != tt.expectedDisabled {
+				t.Errorf("DisableMasking = %v, want %v", cfg.DisableMasking, tt.expectedDisabled)
+			}
+
+			// Create masker and check if it respects the configuration
+			m := newMasker(cfg)
+			if m.Enabled() != tt.expectedMaskerEnabled {
+				t.Errorf("Masker.Enabled() = %v, want %v", m.Enabled(), tt.expectedMaskerEnabled)
+			}
+		})
+	}
+}
+
+// boolPtr returns a pointer to a bool value.
+func boolPtr(b bool) *bool {
+	return &b
 }

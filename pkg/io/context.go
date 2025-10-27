@@ -150,16 +150,33 @@ func buildConfig() *Config {
 	cfg := &Config{
 		// From flags (bound via viper in cmd/root.go)
 		RedirectStderr: viper.GetString("redirect-stderr"),
-		DisableMasking: viper.GetBool("disable-masking"),
+		// Mask flag: --mask (default true) means masking is enabled.
+		// Invert for DisableMasking field (true = disabled).
+		DisableMasking: !viper.GetBool("mask"),
 	}
 
 	// Load atmos.yaml config (if available)
 	// This may not be loaded yet during early initialization
-	if viper.IsSet("settings") {
-		var atmosConfig schema.AtmosConfiguration
-		if err := viper.Unmarshal(&atmosConfig); err == nil {
-			cfg.AtmosConfig = atmosConfig
-		}
+	if !viper.IsSet("settings") {
+		return cfg
+	}
+
+	var atmosConfig schema.AtmosConfiguration
+	if err := viper.Unmarshal(&atmosConfig); err != nil {
+		return cfg
+	}
+
+	cfg.AtmosConfig = atmosConfig
+
+	// If --mask flag wasn't explicitly set, use atmos.yaml config
+	if viper.IsSet("mask") {
+		return cfg
+	}
+
+	// settings.terminal.mask.enabled in atmos.yaml
+	// Default behavior when not set: masking enabled (DisableMasking=false)
+	if viper.IsSet("settings.terminal.mask.enabled") {
+		cfg.DisableMasking = !atmosConfig.Settings.Terminal.Mask.Enabled
 	}
 
 	return cfg

@@ -132,6 +132,9 @@ Atmos separates I/O (streams) from UI (formatting) for clarity and testability.
 - **I/O Layer** (`pkg/io/`) - Stream access (stdout/stderr/stdin), terminal capabilities, masking
 - **UI Layer** (`pkg/ui/`) - Formatting (colors, styles, markdown rendering)
 
+**Terminal as Text UI:**
+The terminal window is effectively a text-based user interface (TextUI) for our CLI. Anything intended for user interaction—menus, prompts, animations, progress indicators—should be rendered to the terminal as UI output (stderr). Data intended for processing, piping, or machine consumption goes to the data channel (stdout).
+
 **Access pattern:**
 ```go
 import (

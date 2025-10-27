@@ -10,10 +10,10 @@ This document defines the logging levels in Atmos and provides guidance on when 
 - **UI output is required** - Without it, the user can't use the command
 - **Logging is optional metadata** - Adds diagnostic context but user doesn't need it
 
-**Don't use `logger.Info()` for user messages** - users won't see them if logging is disabled. Use UI output instead (see [I/O and UI Output Guide](io-and-ui-output.md)).
+**Don't use `logger.Info()` for user messages** - users won't see them if logging is disabled. Use UI output instead.
 
 **Quick test:** "What happens if I disable logging (`--logs-level=Off`)?"
-- Breaks user experience → It's UI output, use `ui.Success()`, `ui.Error()`, `ui.Data()`
+- Breaks user experience → It's UI output, use `ui.Success()`, `ui.Error()`, `data.Write()`
 - User unaffected → It's logging, use `log.Debug()`, `log.Trace()`
 
 **Examples:**
@@ -320,9 +320,9 @@ log.Info("Validation passed")
 
 **Right**: Separate UI from logging
 ```go
-// User feedback via TextUI
-utils.PrintfMessageToTUI("Deploying component 'vpc'...\n")
-utils.PrintfMessageToTUI("✓ Component deployed successfully!\n")
+// User feedback via UI package (stderr)
+ui.Write("Deploying component 'vpc'...\n")
+ui.Success("Component deployed successfully!")
 
 // Diagnostic logging at appropriate level
 log.Debug("Component deployment started", "component", "vpc", "stack", stack)
@@ -330,7 +330,7 @@ log.Debug("Component deployment completed", "component", "vpc", "duration", dura
 ```
 
 This separation ensures:
-- Users see progress and status (via TextUI).
+- Users see progress and status (via UI output to stderr).
 - Developers can debug issues (via logs).
 - Logs can be disabled without breaking the user experience.
 - Log aggregation systems don't get polluted with UI elements.
@@ -366,8 +366,8 @@ log.Info("Processing 3 of 10...")
 
 **Right**: Progress belongs in UI, summary in logs
 ```go
-// Show progress to user
-utils.PrintfMessageToTUI("Processing components: 3/10\r")
+// Show progress to user (stderr)
+ui.Write(fmt.Sprintf("Processing components: 3/10\r"))
 
 // Log the summary once
 log.Debug("Component processing completed", "total", 10, "duration", totalTime)
@@ -380,7 +380,7 @@ log.Debug("Component processing completed", "total", 10, "duration", totalTime)
 ### The Litmus Test
 
 Ask yourself: "Is this something the user needs to see to use the tool?"
-- Yes → Use TextUI output
+- Yes → Use UI output (ui.Success, ui.Error, ui.Write, data.Write)
 - No → It's logging
 
 Then ask: "Would hiding this information impact operations or debugging?"
@@ -405,11 +405,11 @@ These are all Debug level (diagnostic details):
 
 The user doesn't need to know any of these things - they just want the tool to work. If you're struggling to justify why something should be Info instead of Debug, it should be Debug.
 
-These are NOT logging at all (user interface):
-- "✓ Successfully deployed"
-- "Press Enter to continue"
-- "Deploying component..."
-- Progress bars or percentages
+These are NOT logging at all (terminal UI output):
+- "✓ Successfully deployed" (use `ui.Success()`)
+- "Press Enter to continue" (use `ui.Write()`)
+- "Deploying component..." (use `ui.Write()`)
+- Progress bars or percentages (use `ui.Write()` with carriage returns)
 
 ---
 
@@ -434,7 +434,7 @@ Proper log levels mean:
 ### For Users
 
 Correct separation means:
-- They see what they need to see (via TextUI).
+- They see what they need to see (via terminal UI output to stderr).
 - They don't see what they don't need (logs).
 - `--logs-level=Off` doesn't break their experience.
 - Error messages are actionable, not buried in noise.
