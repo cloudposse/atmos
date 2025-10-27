@@ -301,6 +301,16 @@ func (p *ssoProvider) Environment() (map[string]string, error) {
 	return env, nil
 }
 
+// PrepareEnvironment prepares environment variables for external processes.
+// For SSO providers, this method is typically not called directly since SSO providers
+// authenticate to get identity credentials, which then have their own PrepareEnvironment.
+// However, we implement it for interface compliance.
+func (p *ssoProvider) PrepareEnvironment(_ context.Context, environ map[string]string) (map[string]string, error) {
+	// SSO provider doesn't write credential files itself - that's done by identities.
+	// Just return the environment unchanged.
+	return environ, nil
+}
+
 // Note: SSO caching is now handled at the manager level to prevent duplicate entries.
 
 // getSessionDuration returns the session duration in minutes.

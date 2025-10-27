@@ -1,405 +1,189 @@
 package aws
 
 import (
-	"context"
-	"os"
 	"testing"
 
-	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
-
-	errUtils "github.com/cloudposse/atmos/errors"
 )
 
-func TestWithIsolatedAWSEnv_ClearsProblematicVariables(t *testing.T) {
-	// Set problematic environment variables.
-	t.Setenv("AWS_PROFILE", "test-profile")
-	t.Setenv("AWS_ACCESS_KEY_ID", "test-key")
-	t.Setenv("AWS_SECRET_ACCESS_KEY", "test-secret")
-	t.Setenv("AWS_SESSION_TOKEN", "test-token")
-	t.Setenv("AWS_CONFIG_FILE", "/custom/config")
-	t.Setenv("AWS_SHARED_CREDENTIALS_FILE", "/custom/credentials")
-
-	// Set a safe variable that should not be cleared.
-	t.Setenv("AWS_REGION", "us-west-2")
-
-	var envDuringExecution map[string]string
-
-	err := WithIsolatedAWSEnv(func() error {
-		// Capture environment during execution.
-		envDuringExecution = map[string]string{
-			"AWS_PROFILE":                 os.Getenv("AWS_PROFILE"),
-			"AWS_ACCESS_KEY_ID":           os.Getenv("AWS_ACCESS_KEY_ID"),
-			"AWS_SECRET_ACCESS_KEY":       os.Getenv("AWS_SECRET_ACCESS_KEY"),
-			"AWS_SESSION_TOKEN":           os.Getenv("AWS_SESSION_TOKEN"),
-			"AWS_CONFIG_FILE":             os.Getenv("AWS_CONFIG_FILE"),
-			"AWS_SHARED_CREDENTIALS_FILE": os.Getenv("AWS_SHARED_CREDENTIALS_FILE"),
-			"AWS_REGION":                  os.Getenv("AWS_REGION"),
-		}
-		return nil
-	})
-
-	require.NoError(t, err)
-
-	// Verify problematic variables were cleared during execution.
-	assert.Equal(t, "", envDuringExecution["AWS_PROFILE"])
-	assert.Equal(t, "", envDuringExecution["AWS_ACCESS_KEY_ID"])
-	assert.Equal(t, "", envDuringExecution["AWS_SECRET_ACCESS_KEY"])
-	assert.Equal(t, "", envDuringExecution["AWS_SESSION_TOKEN"])
-	assert.Equal(t, "", envDuringExecution["AWS_CONFIG_FILE"])
-	assert.Equal(t, "", envDuringExecution["AWS_SHARED_CREDENTIALS_FILE"])
-
-	// Verify safe variable was preserved.
-	assert.Equal(t, "us-west-2", envDuringExecution["AWS_REGION"])
-
-	// Verify variables were restored after execution.
-	assert.Equal(t, "test-profile", os.Getenv("AWS_PROFILE"))
-	assert.Equal(t, "test-key", os.Getenv("AWS_ACCESS_KEY_ID"))
-	assert.Equal(t, "test-secret", os.Getenv("AWS_SECRET_ACCESS_KEY"))
-	assert.Equal(t, "test-token", os.Getenv("AWS_SESSION_TOKEN"))
-	assert.Equal(t, "/custom/config", os.Getenv("AWS_CONFIG_FILE"))
-	assert.Equal(t, "/custom/credentials", os.Getenv("AWS_SHARED_CREDENTIALS_FILE"))
-	assert.Equal(t, "us-west-2", os.Getenv("AWS_REGION"))
-}
-
-func TestWithIsolatedAWSEnv_RestoresOnError(t *testing.T) {
-	// Set environment variables.
-	t.Setenv("AWS_PROFILE", "original-profile")
-	t.Setenv("AWS_ACCESS_KEY_ID", "original-key")
-
-	expectedErr := assert.AnError
-
-	err := WithIsolatedAWSEnv(func() error {
-		// Verify variables are cleared.
-		assert.Equal(t, "", os.Getenv("AWS_PROFILE"))
-		assert.Equal(t, "", os.Getenv("AWS_ACCESS_KEY_ID"))
-		return expectedErr
-	})
-
-	// Verify error was propagated.
-	assert.Equal(t, expectedErr, err)
-
-	// Verify variables were restored even after error.
-	assert.Equal(t, "original-profile", os.Getenv("AWS_PROFILE"))
-	assert.Equal(t, "original-key", os.Getenv("AWS_ACCESS_KEY_ID"))
-}
-
-func TestWithIsolatedAWSEnv_HandlesUnsetVariables(t *testing.T) {
-	// Ensure variables are not set initially.
-	for _, key := range problematicAWSEnvVars {
-		os.Unsetenv(key)
+func TestPrepareEnvironment(t *testing.T) {
+	tests := []struct {
+		name            string
+		inputEnv        map[string]string
+		profile         string
+		credentialsFile string
+		configFile      string
+		region          string
+		expectedEnv     map[string]string
+	}{
+		{
+			name: "basic environment preparation",
+			inputEnv: map[string]string{
+				"HOME": "/home/user",
+				"PATH": "/usr/bin",
+			},
+			profile:         "test-profile",
+			credentialsFile: "/home/user/.aws/atmos/provider/credentials",
+			configFile:      "/home/user/.aws/atmos/provider/config",
+			region:          "us-west-2",
+			expectedEnv: map[string]string{
+				"HOME":                        "/home/user",
+				"PATH":                        "/usr/bin",
+				"AWS_SHARED_CREDENTIALS_FILE": "/home/user/.aws/atmos/provider/credentials",
+				"AWS_CONFIG_FILE":             "/home/user/.aws/atmos/provider/config",
+				"AWS_PROFILE":                 "test-profile",
+				"AWS_SDK_LOAD_CONFIG":         "1",
+				"AWS_REGION":                  "us-west-2",
+				"AWS_DEFAULT_REGION":          "us-west-2",
+				"AWS_EC2_METADATA_DISABLED":   "true",
+			},
+		},
+		{
+			name: "clears conflicting credential environment variables",
+			inputEnv: map[string]string{
+				"AWS_ACCESS_KEY_ID":           "AKIAIOSFODNN7EXAMPLE",
+				"AWS_SECRET_ACCESS_KEY":       "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
+				"AWS_SESSION_TOKEN":           "session-token-value",
+				"AWS_SECURITY_TOKEN":          "security-token-value",
+				"AWS_WEB_IDENTITY_TOKEN_FILE": "/path/to/token",
+				"AWS_ROLE_ARN":                "arn:aws:iam::123456789012:role/MyRole",
+				"AWS_ROLE_SESSION_NAME":       "my-session",
+				"HOME":                        "/home/user",
+			},
+			profile:         "test-profile",
+			credentialsFile: "/home/user/.aws/atmos/provider/credentials",
+			configFile:      "/home/user/.aws/atmos/provider/config",
+			region:          "",
+			expectedEnv: map[string]string{
+				"HOME":                        "/home/user",
+				"AWS_SHARED_CREDENTIALS_FILE": "/home/user/.aws/atmos/provider/credentials",
+				"AWS_CONFIG_FILE":             "/home/user/.aws/atmos/provider/config",
+				"AWS_PROFILE":                 "test-profile",
+				"AWS_SDK_LOAD_CONFIG":         "1",
+				"AWS_EC2_METADATA_DISABLED":   "true",
+			},
+		},
+		{
+			name: "without region",
+			inputEnv: map[string]string{
+				"HOME": "/home/user",
+			},
+			profile:         "test-profile",
+			credentialsFile: "/home/user/.aws/atmos/provider/credentials",
+			configFile:      "/home/user/.aws/atmos/provider/config",
+			region:          "",
+			expectedEnv: map[string]string{
+				"HOME":                        "/home/user",
+				"AWS_SHARED_CREDENTIALS_FILE": "/home/user/.aws/atmos/provider/credentials",
+				"AWS_CONFIG_FILE":             "/home/user/.aws/atmos/provider/config",
+				"AWS_PROFILE":                 "test-profile",
+				"AWS_SDK_LOAD_CONFIG":         "1",
+				"AWS_EC2_METADATA_DISABLED":   "true",
+			},
+		},
+		{
+			name:            "with empty input environment",
+			inputEnv:        map[string]string{},
+			profile:         "test-profile",
+			credentialsFile: "/home/user/.aws/atmos/provider/credentials",
+			configFile:      "/home/user/.aws/atmos/provider/config",
+			region:          "eu-central-1",
+			expectedEnv: map[string]string{
+				"AWS_SHARED_CREDENTIALS_FILE": "/home/user/.aws/atmos/provider/credentials",
+				"AWS_CONFIG_FILE":             "/home/user/.aws/atmos/provider/config",
+				"AWS_PROFILE":                 "test-profile",
+				"AWS_SDK_LOAD_CONFIG":         "1",
+				"AWS_REGION":                  "eu-central-1",
+				"AWS_DEFAULT_REGION":          "eu-central-1",
+				"AWS_EC2_METADATA_DISABLED":   "true",
+			},
+		},
+		{
+			name: "preserves non-AWS environment variables",
+			inputEnv: map[string]string{
+				"HOME":       "/home/user",
+				"PATH":       "/usr/bin",
+				"USER":       "testuser",
+				"LANG":       "en_US.UTF-8",
+				"CUSTOM_VAR": "custom-value",
+			},
+			profile:         "test-profile",
+			credentialsFile: "/home/user/.aws/atmos/provider/credentials",
+			configFile:      "/home/user/.aws/atmos/provider/config",
+			region:          "ap-southeast-1",
+			expectedEnv: map[string]string{
+				"HOME":                        "/home/user",
+				"PATH":                        "/usr/bin",
+				"USER":                        "testuser",
+				"LANG":                        "en_US.UTF-8",
+				"CUSTOM_VAR":                  "custom-value",
+				"AWS_SHARED_CREDENTIALS_FILE": "/home/user/.aws/atmos/provider/credentials",
+				"AWS_CONFIG_FILE":             "/home/user/.aws/atmos/provider/config",
+				"AWS_PROFILE":                 "test-profile",
+				"AWS_SDK_LOAD_CONFIG":         "1",
+				"AWS_REGION":                  "ap-southeast-1",
+				"AWS_DEFAULT_REGION":          "ap-southeast-1",
+				"AWS_EC2_METADATA_DISABLED":   "true",
+			},
+		},
 	}
 
-	err := WithIsolatedAWSEnv(func() error {
-		// Verify all problematic variables are still unset.
-		for _, key := range problematicAWSEnvVars {
-			assert.Equalf(t, "", os.Getenv(key), "Variable %s should be empty", key)
-		}
-		return nil
-	})
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Call PrepareEnvironment.
+			result := PrepareEnvironment(tt.inputEnv, tt.profile, tt.credentialsFile, tt.configFile, tt.region)
 
-	require.NoError(t, err)
+			// Verify result matches expected environment.
+			assert.Equal(t, tt.expectedEnv, result, "environment should match expected")
 
-	// Verify variables remain unset after execution.
-	for _, key := range problematicAWSEnvVars {
-		assert.Equalf(t, "", os.Getenv(key), "Variable %s should remain empty", key)
+			// Verify input environment was not mutated.
+			for key, value := range tt.inputEnv {
+				// Check that original values are still there (unless they should be cleared).
+				shouldBeCleared := false
+				for _, clearVar := range environmentVarsToClear {
+					if key == clearVar {
+						shouldBeCleared = true
+						break
+					}
+				}
+				if !shouldBeCleared {
+					// Non-cleared variables should remain in input.
+					assert.Equal(t, value, tt.inputEnv[key], "input environment should not be mutated for %s", key)
+				}
+			}
+		})
 	}
 }
 
-func TestWithIsolatedAWSEnv_PartiallySetVariables(t *testing.T) {
-	// Set only some variables.
-	t.Setenv("AWS_PROFILE", "test-profile")
-	t.Setenv("AWS_ACCESS_KEY_ID", "test-key")
-	// AWS_SECRET_ACCESS_KEY intentionally not set.
-
-	var envDuringExecution map[string]string
-
-	err := WithIsolatedAWSEnv(func() error {
-		envDuringExecution = map[string]string{
-			"AWS_PROFILE":           os.Getenv("AWS_PROFILE"),
-			"AWS_ACCESS_KEY_ID":     os.Getenv("AWS_ACCESS_KEY_ID"),
-			"AWS_SECRET_ACCESS_KEY": os.Getenv("AWS_SECRET_ACCESS_KEY"),
-		}
-		return nil
-	})
-
-	require.NoError(t, err)
-
-	// All should be cleared during execution.
-	assert.Equal(t, "", envDuringExecution["AWS_PROFILE"])
-	assert.Equal(t, "", envDuringExecution["AWS_ACCESS_KEY_ID"])
-	assert.Equal(t, "", envDuringExecution["AWS_SECRET_ACCESS_KEY"])
-
-	// Only originally set variables should be restored.
-	assert.Equal(t, "test-profile", os.Getenv("AWS_PROFILE"))
-	assert.Equal(t, "test-key", os.Getenv("AWS_ACCESS_KEY_ID"))
-	assert.Equal(t, "", os.Getenv("AWS_SECRET_ACCESS_KEY"))
-}
-
-func TestLoadIsolatedAWSConfig_ClearsEnvironment(t *testing.T) {
-	// Set conflicting environment variables.
-	t.Setenv("AWS_PROFILE", "nonexistent-profile")
-	t.Setenv("AWS_ACCESS_KEY_ID", "fake-key")
-	t.Setenv("AWS_SECRET_ACCESS_KEY", "fake-secret")
-	t.Setenv("AWS_REGION", "us-east-1")
-
-	ctx := context.Background()
-
-	// LoadIsolatedAWSConfig should succeed because it clears problematic variables.
-	// The AWS SDK will fall back to its default credential chain without the conflicting vars.
-	cfg, err := LoadIsolatedAWSConfig(ctx)
-
-	// The function should complete without panic.
-	// We don't assert NoError because in test environments without AWS credentials,
-	// this may fail - but it should fail gracefully, not because of our env vars.
-	_ = err
-
-	// Verify AWS_REGION was loaded from environment (it should NOT be cleared).
-	// This proves the config was populated and AWS_REGION was preserved.
-	assert.Equal(t, "us-east-1", cfg.Region, "AWS_REGION should be loaded from environment")
-
-	// Verify environment variables were restored after the call.
-	assert.Equal(t, "nonexistent-profile", os.Getenv("AWS_PROFILE"))
-	assert.Equal(t, "fake-key", os.Getenv("AWS_ACCESS_KEY_ID"))
-	assert.Equal(t, "fake-secret", os.Getenv("AWS_SECRET_ACCESS_KEY"))
-	assert.Equal(t, "us-east-1", os.Getenv("AWS_REGION"))
-}
-
-func TestProblematicAWSEnvVars_Coverage(t *testing.T) {
-	// Verify all expected problematic variables are in the list.
-	expectedVars := map[string]bool{
-		"AWS_ACCESS_KEY_ID":           true,
-		"AWS_SECRET_ACCESS_KEY":       true,
-		"AWS_SESSION_TOKEN":           true,
-		"AWS_PROFILE":                 true,
-		"AWS_CONFIG_FILE":             true,
-		"AWS_SHARED_CREDENTIALS_FILE": true,
+func TestPrepareEnvironment_DoesNotMutateInput(t *testing.T) {
+	// Create input environment.
+	inputEnv := map[string]string{
+		"HOME":                  "/home/user",
+		"AWS_ACCESS_KEY_ID":     "AKIAIOSFODNN7EXAMPLE",
+		"AWS_SECRET_ACCESS_KEY": "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
 	}
 
-	actualVars := make(map[string]bool)
-	for _, v := range problematicAWSEnvVars {
-		actualVars[v] = true
-	}
+	// Save original values.
+	originalHome := inputEnv["HOME"]
+	originalAccessKey := inputEnv["AWS_ACCESS_KEY_ID"]
+	originalSecretKey := inputEnv["AWS_SECRET_ACCESS_KEY"]
 
-	// Check all expected variables are present.
-	for expected := range expectedVars {
-		assert.Truef(t, actualVars[expected], "Variable %s should be in problematicAWSEnvVars", expected)
-	}
+	// Call PrepareEnvironment.
+	result := PrepareEnvironment(inputEnv, "test-profile", "/creds", "/config", "us-east-1")
 
-	// Verify AWS_REGION is NOT in the list (it should be preserved).
-	assert.False(t, actualVars["AWS_REGION"], "AWS_REGION should NOT be in problematicAWSEnvVars")
-}
+	// Verify input was not mutated.
+	assert.Equal(t, originalHome, inputEnv["HOME"], "HOME should not be modified in input")
+	assert.Equal(t, originalAccessKey, inputEnv["AWS_ACCESS_KEY_ID"], "AWS_ACCESS_KEY_ID should not be modified in input")
+	assert.Equal(t, originalSecretKey, inputEnv["AWS_SECRET_ACCESS_KEY"], "AWS_SECRET_ACCESS_KEY should not be modified in input")
 
-func TestWithIsolatedAWSEnv_LogsIgnoredVariables(t *testing.T) {
-	// Set some problematic environment variables.
-	t.Setenv("AWS_PROFILE", "test-profile")
-	t.Setenv("AWS_ACCESS_KEY_ID", "test-key")
+	// Verify result does not contain credentials.
+	_, hasAccessKey := result["AWS_ACCESS_KEY_ID"]
+	_, hasSecretKey := result["AWS_SECRET_ACCESS_KEY"]
+	assert.False(t, hasAccessKey, "result should not contain AWS_ACCESS_KEY_ID")
+	assert.False(t, hasSecretKey, "result should not contain AWS_SECRET_ACCESS_KEY")
 
-	// WithIsolatedAWSEnv should log which variables are being ignored.
-	// Note: We can't easily test the log output in unit tests without mocking the logger,
-	// but we can verify the function executes without error and the mechanism works.
-	err := WithIsolatedAWSEnv(func() error {
-		// Variables should be cleared here.
-		assert.Equal(t, "", os.Getenv("AWS_PROFILE"))
-		assert.Equal(t, "", os.Getenv("AWS_ACCESS_KEY_ID"))
-		return nil
-	})
-
-	require.NoError(t, err)
-
-	// Variables should be restored.
-	assert.Equal(t, "test-profile", os.Getenv("AWS_PROFILE"))
-	assert.Equal(t, "test-key", os.Getenv("AWS_ACCESS_KEY_ID"))
-}
-
-func TestWithIsolatedAWSEnv_NoLogWhenNoVariablesSet(t *testing.T) {
-	// Ensure no problematic variables are set.
-	for _, key := range problematicAWSEnvVars {
-		os.Unsetenv(key)
-	}
-
-	// WithIsolatedAWSEnv should not log anything when no variables are set.
-	// This test just verifies the function executes without issues.
-	err := WithIsolatedAWSEnv(func() error {
-		return nil
-	})
-
-	require.NoError(t, err)
-}
-
-func TestLoadIsolatedAWSConfig_WrapsSentinelErrors(t *testing.T) {
-	// Force an error by providing an invalid config option.
-	ctx := context.Background()
-
-	invalidOption := func(opts *config.LoadOptions) error {
-		return assert.AnError
-	}
-
-	_, err := LoadIsolatedAWSConfig(ctx, invalidOption)
-
-	// Verify error is wrapped with sentinel error.
-	require.Error(t, err)
-	assert.ErrorIs(t, err, errUtils.ErrLoadAwsConfig, "Error should be wrapped with ErrLoadAwsConfig sentinel")
-
-	// The original error message should be included (but not in the chain due to %v formatting).
-	assert.Contains(t, err.Error(), assert.AnError.Error(), "Error message should include original error")
-}
-
-func TestLoadAtmosManagedAWSConfig_ClearsOnlyCredentials(t *testing.T) {
-	// Set credential environment variables.
-	t.Setenv("AWS_ACCESS_KEY_ID", "test-key")
-	t.Setenv("AWS_SECRET_ACCESS_KEY", "test-secret")
-	t.Setenv("AWS_SESSION_TOKEN", "test-token")
-
-	// Set file path and profile variables that should NOT be cleared.
-	t.Setenv("AWS_PROFILE", "test-profile")
-	t.Setenv("AWS_CONFIG_FILE", "/custom/config")
-	t.Setenv("AWS_SHARED_CREDENTIALS_FILE", "/custom/credentials")
-	t.Setenv("AWS_REGION", "us-east-1")
-
-	ctx := context.Background()
-
-	// Track whether credentials are cleared during execution.
-	credsClearedDuringExec := false
-	customOption := func(opts *config.LoadOptions) error {
-		// Verify credentials are cleared but file paths are NOT.
-		if os.Getenv("AWS_ACCESS_KEY_ID") == "" &&
-			os.Getenv("AWS_SECRET_ACCESS_KEY") == "" &&
-			os.Getenv("AWS_SESSION_TOKEN") == "" &&
-			os.Getenv("AWS_PROFILE") == "test-profile" &&
-			os.Getenv("AWS_CONFIG_FILE") == "/custom/config" {
-			credsClearedDuringExec = true
-		}
-		return nil
-	}
-
-	_, err := LoadAtmosManagedAWSConfig(ctx, customOption)
-
-	// Function should complete without panic.
-	_ = err
-
-	// Verify credentials were cleared but file paths were NOT.
-	assert.True(t, credsClearedDuringExec, "Credentials should be cleared but file paths should be preserved during execution")
-
-	// Verify credential variables were restored after the call.
-	assert.Equal(t, "test-key", os.Getenv("AWS_ACCESS_KEY_ID"))
-	assert.Equal(t, "test-secret", os.Getenv("AWS_SECRET_ACCESS_KEY"))
-	assert.Equal(t, "test-token", os.Getenv("AWS_SESSION_TOKEN"))
-
-	// Verify file path and profile variables were NOT cleared.
-	assert.Equal(t, "test-profile", os.Getenv("AWS_PROFILE"))
-	assert.Equal(t, "/custom/config", os.Getenv("AWS_CONFIG_FILE"))
-	assert.Equal(t, "/custom/credentials", os.Getenv("AWS_SHARED_CREDENTIALS_FILE"))
-	assert.Equal(t, "us-east-1", os.Getenv("AWS_REGION"))
-}
-
-func TestLoadAtmosManagedAWSConfig_RestoresCredentialsOnError(t *testing.T) {
-	// Set credential environment variables.
-	t.Setenv("AWS_ACCESS_KEY_ID", "original-key")
-	t.Setenv("AWS_SECRET_ACCESS_KEY", "original-secret")
-	t.Setenv("AWS_SESSION_TOKEN", "original-token")
-
-	ctx := context.Background()
-
-	// Force an error by providing an invalid config option.
-	invalidOption := func(opts *config.LoadOptions) error {
-		// Verify credentials are cleared during execution.
-		assert.Equal(t, "", os.Getenv("AWS_ACCESS_KEY_ID"))
-		assert.Equal(t, "", os.Getenv("AWS_SECRET_ACCESS_KEY"))
-		assert.Equal(t, "", os.Getenv("AWS_SESSION_TOKEN"))
-		return assert.AnError
-	}
-
-	_, err := LoadAtmosManagedAWSConfig(ctx, invalidOption)
-
-	// Verify error is wrapped with sentinel error.
-	require.Error(t, err)
-	assert.ErrorIs(t, err, errUtils.ErrLoadAwsConfig, "Error should be wrapped with ErrLoadAwsConfig sentinel")
-
-	// Verify credentials were restored even after error.
-	assert.Equal(t, "original-key", os.Getenv("AWS_ACCESS_KEY_ID"))
-	assert.Equal(t, "original-secret", os.Getenv("AWS_SECRET_ACCESS_KEY"))
-	assert.Equal(t, "original-token", os.Getenv("AWS_SESSION_TOKEN"))
-}
-
-func TestLoadAtmosManagedAWSConfig_HandlesNoCredentialVars(t *testing.T) {
-	// Ensure no credential environment variables are set.
-	os.Unsetenv("AWS_ACCESS_KEY_ID")
-	os.Unsetenv("AWS_SECRET_ACCESS_KEY")
-	os.Unsetenv("AWS_SESSION_TOKEN")
-
-	// Set other variables that should be preserved.
-	t.Setenv("AWS_PROFILE", "test-profile")
-	t.Setenv("AWS_REGION", "us-west-2")
-
-	ctx := context.Background()
-
-	// LoadAtmosManagedAWSConfig should work even when no credentials are set.
-	_, err := LoadAtmosManagedAWSConfig(ctx)
-
-	// Function should complete without panic.
-	_ = err
-
-	// Verify other variables were preserved.
-	assert.Equal(t, "test-profile", os.Getenv("AWS_PROFILE"))
-	assert.Equal(t, "us-west-2", os.Getenv("AWS_REGION"))
-
-	// Verify credentials remain unset.
-	assert.Equal(t, "", os.Getenv("AWS_ACCESS_KEY_ID"))
-	assert.Equal(t, "", os.Getenv("AWS_SECRET_ACCESS_KEY"))
-	assert.Equal(t, "", os.Getenv("AWS_SESSION_TOKEN"))
-}
-
-func TestLoadAtmosManagedAWSConfig_PartialCredentials(t *testing.T) {
-	// Set only some credential variables.
-	t.Setenv("AWS_ACCESS_KEY_ID", "test-key")
-	// AWS_SECRET_ACCESS_KEY intentionally not set.
-	t.Setenv("AWS_SESSION_TOKEN", "test-token")
-	t.Setenv("AWS_REGION", "ap-south-1")
-
-	ctx := context.Background()
-
-	_, err := LoadAtmosManagedAWSConfig(ctx)
-
-	// Function should complete without panic.
-	_ = err
-
-	// Verify all credential variables were restored to their original state.
-	assert.Equal(t, "test-key", os.Getenv("AWS_ACCESS_KEY_ID"))
-	assert.Equal(t, "", os.Getenv("AWS_SECRET_ACCESS_KEY")) // Was not set originally.
-	assert.Equal(t, "test-token", os.Getenv("AWS_SESSION_TOKEN"))
-	assert.Equal(t, "ap-south-1", os.Getenv("AWS_REGION"))
-}
-
-func TestLoadAtmosManagedAWSConfig_WithCustomOptions(t *testing.T) {
-	// Set credentials and region.
-	t.Setenv("AWS_ACCESS_KEY_ID", "test-key")
-	t.Setenv("AWS_SECRET_ACCESS_KEY", "test-secret")
-	t.Setenv("AWS_REGION", "eu-west-1")
-
-	ctx := context.Background()
-
-	// Track whether custom option was called.
-	customOptionCalled := false
-	customOption := func(opts *config.LoadOptions) error {
-		customOptionCalled = true
-		// Verify credentials are cleared when custom option is called.
-		assert.Equal(t, "", os.Getenv("AWS_ACCESS_KEY_ID"))
-		assert.Equal(t, "", os.Getenv("AWS_SECRET_ACCESS_KEY"))
-		return nil
-	}
-
-	_, err := LoadAtmosManagedAWSConfig(ctx, customOption)
-
-	// Function should complete.
-	_ = err
-
-	// Verify custom option was executed.
-	assert.True(t, customOptionCalled, "Custom option should have been called")
-
-	// Verify credentials were restored.
-	assert.Equal(t, "test-key", os.Getenv("AWS_ACCESS_KEY_ID"))
-	assert.Equal(t, "test-secret", os.Getenv("AWS_SECRET_ACCESS_KEY"))
-	assert.Equal(t, "eu-west-1", os.Getenv("AWS_REGION"))
+	// Verify result contains expected values.
+	assert.Equal(t, "test-profile", result["AWS_PROFILE"])
+	assert.Equal(t, "/creds", result["AWS_SHARED_CREDENTIALS_FILE"])
+	assert.Equal(t, "/config", result["AWS_CONFIG_FILE"])
 }

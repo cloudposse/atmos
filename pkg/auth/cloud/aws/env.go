@@ -187,3 +187,83 @@ func LoadAtmosManagedAWSConfig(ctx context.Context, optFns ...func(*config.LoadO
 
 	return cfg, nil
 }
+
+// environmentVarsToClear lists AWS credential environment variables that must be
+// cleared when using Atmos-managed profile-based credentials.
+//
+// These variables would override the AWS_PROFILE mechanism, causing the AWS SDK
+// to use direct credentials instead of the profile from AWS_SHARED_CREDENTIALS_FILE.
+var environmentVarsToClear = []string{
+	"AWS_ACCESS_KEY_ID",
+	"AWS_SECRET_ACCESS_KEY",
+	"AWS_SESSION_TOKEN",
+	"AWS_SECURITY_TOKEN",          // Legacy variable, same as AWS_SESSION_TOKEN
+	"AWS_WEB_IDENTITY_TOKEN_FILE", // Web identity (EKS, etc.)
+	"AWS_ROLE_ARN",                // Role assumption
+	"AWS_ROLE_SESSION_NAME",       // Role session name
+}
+
+// PrepareEnvironment configures environment variables for AWS SDK when using Atmos auth.
+//
+// This function:
+//  1. Clears direct credential env vars to prevent conflicts with profile-based auth
+//  2. Sets AWS_SHARED_CREDENTIALS_FILE and AWS_CONFIG_FILE to Atmos-managed paths
+//  3. Sets AWS_PROFILE to the authenticated identity
+//  4. Configures region if provided
+//  5. Disables IMDS fallback to prevent accidental instance credential usage
+//
+// Returns a NEW map with modifications - does not mutate the input.
+//
+// Parameters:
+//   - environ: Current environment variables (map[string]string)
+//   - profile: AWS profile name (identity name)
+//   - credentialsFile: Path to AWS credentials file
+//   - configFile: Path to AWS config file
+//   - region: AWS region (optional)
+func PrepareEnvironment(environ map[string]string, profile, credentialsFile, configFile, region string) map[string]string {
+	defer perf.Track(nil, "pkg/auth/cloud/aws.PrepareEnvironment")()
+
+	log.Debug("Preparing AWS environment for Atmos-managed credentials",
+		"profile", profile,
+		"credentials_file", credentialsFile,
+		"config_file", configFile,
+	)
+
+	// Create a copy to avoid mutating the input.
+	result := make(map[string]string, len(environ)+6)
+	for k, v := range environ {
+		result[k] = v
+	}
+
+	// Clear problematic credential environment variables.
+	// When using profile-based authentication, these variables would override
+	// the credentials from AWS_SHARED_CREDENTIALS_FILE, causing auth to fail.
+	for _, key := range environmentVarsToClear {
+		if _, exists := result[key]; exists {
+			log.Debug("Clearing AWS credential environment variable", "key", key)
+			delete(result, key)
+		}
+	}
+
+	// Set Atmos-managed credential file paths and profile.
+	result["AWS_SHARED_CREDENTIALS_FILE"] = credentialsFile
+	result["AWS_CONFIG_FILE"] = configFile
+	result["AWS_PROFILE"] = profile
+
+	// Force AWS SDK to load shared config files.
+	result["AWS_SDK_LOAD_CONFIG"] = "1"
+
+	// Set region if provided in auth context.
+	if region != "" {
+		result["AWS_REGION"] = region
+		result["AWS_DEFAULT_REGION"] = region
+	}
+
+	// Disable EC2 metadata service (IMDS) fallback.
+	// This prevents accidentally picking up instance credentials when running
+	// in EC2/ECS/EKS environments. We want to use ONLY Atmos-managed credentials.
+	result["AWS_EC2_METADATA_DISABLED"] = "true"
+
+	log.Debug("Prepared AWS environment", "profile", profile)
+	return result
+}

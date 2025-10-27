@@ -122,6 +122,8 @@ func TestSetEnvironmentVariables_SetsStackEnv(t *testing.T) {
 	assert.Contains(t, stack.ComponentEnvSection["AWS_SHARED_CREDENTIALS_FILE"], credPath)
 	assert.Contains(t, stack.ComponentEnvSection["AWS_CONFIG_FILE"], cfgPath)
 	assert.Equal(t, "dev", stack.ComponentEnvSection["AWS_PROFILE"])
+	assert.Equal(t, "1", stack.ComponentEnvSection["AWS_SDK_LOAD_CONFIG"])
+	assert.Equal(t, "true", stack.ComponentEnvSection["AWS_EC2_METADATA_DISABLED"])
 }
 
 func TestSetEnvironmentVariables_WithRegion(t *testing.T) {
@@ -145,6 +147,7 @@ func TestSetEnvironmentVariables_WithRegion(t *testing.T) {
 
 	assert.Equal(t, "prod", stack.ComponentEnvSection["AWS_PROFILE"])
 	assert.Equal(t, "eu-central-1", stack.ComponentEnvSection["AWS_REGION"])
+	assert.Equal(t, "eu-central-1", stack.ComponentEnvSection["AWS_DEFAULT_REGION"])
 }
 
 func TestSetEnvironmentVariables_NilAuthContext(t *testing.T) {
@@ -168,6 +171,70 @@ func TestSetEnvironmentVariables_NoAWSContext(t *testing.T) {
 	stack := &schema.ConfigAndStacksInfo{}
 	err := SetEnvironmentVariables(authContext, stack)
 	require.NoError(t, err) // Should succeed without setting anything.
+}
+
+func TestSetEnvironmentVariables_ClearsConflictingCredentials(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp) // XDG config home for AWS credentials
+	homedir.Reset()                  // Clear homedir cache
+
+	// Create auth context with AWS credentials.
+	authContext := &schema.AuthContext{
+		AWS: &schema.AWSAuthContext{
+			CredentialsFile: filepath.Join(tmp, "atmos", "aws", "prov", "credentials"),
+			ConfigFile:      filepath.Join(tmp, "atmos", "aws", "prov", "config"),
+			Profile:         "dev",
+			Region:          "us-west-2",
+		},
+	}
+
+	// Create stack with existing conflicting credential environment variables.
+	stack := &schema.ConfigAndStacksInfo{
+		ComponentEnvSection: map[string]any{
+			"AWS_ACCESS_KEY_ID":           "AKIAIOSFODNN7EXAMPLE",
+			"AWS_SECRET_ACCESS_KEY":       "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
+			"AWS_SESSION_TOKEN":           "session-token-value",
+			"AWS_SECURITY_TOKEN":          "security-token-value",
+			"AWS_WEB_IDENTITY_TOKEN_FILE": "/path/to/token",
+			"AWS_ROLE_ARN":                "arn:aws:iam::123456789012:role/MyRole",
+			"AWS_ROLE_SESSION_NAME":       "my-session",
+			"HOME":                        "/home/user",
+			"PATH":                        "/usr/bin",
+		},
+	}
+
+	err := SetEnvironmentVariables(authContext, stack)
+	require.NoError(t, err)
+
+	// Verify conflicting credential environment variables were cleared.
+	_, hasAccessKey := stack.ComponentEnvSection["AWS_ACCESS_KEY_ID"]
+	_, hasSecretKey := stack.ComponentEnvSection["AWS_SECRET_ACCESS_KEY"]
+	_, hasSessionToken := stack.ComponentEnvSection["AWS_SESSION_TOKEN"]
+	_, hasSecurityToken := stack.ComponentEnvSection["AWS_SECURITY_TOKEN"]
+	_, hasWebIdentityToken := stack.ComponentEnvSection["AWS_WEB_IDENTITY_TOKEN_FILE"]
+	_, hasRoleArn := stack.ComponentEnvSection["AWS_ROLE_ARN"]
+	_, hasRoleSessionName := stack.ComponentEnvSection["AWS_ROLE_SESSION_NAME"]
+
+	assert.False(t, hasAccessKey, "AWS_ACCESS_KEY_ID should be cleared")
+	assert.False(t, hasSecretKey, "AWS_SECRET_ACCESS_KEY should be cleared")
+	assert.False(t, hasSessionToken, "AWS_SESSION_TOKEN should be cleared")
+	assert.False(t, hasSecurityToken, "AWS_SECURITY_TOKEN should be cleared")
+	assert.False(t, hasWebIdentityToken, "AWS_WEB_IDENTITY_TOKEN_FILE should be cleared")
+	assert.False(t, hasRoleArn, "AWS_ROLE_ARN should be cleared")
+	assert.False(t, hasRoleSessionName, "AWS_ROLE_SESSION_NAME should be cleared")
+
+	// Verify non-AWS environment variables were preserved.
+	assert.Equal(t, "/home/user", stack.ComponentEnvSection["HOME"])
+	assert.Equal(t, "/usr/bin", stack.ComponentEnvSection["PATH"])
+
+	// Verify Atmos-managed credentials were set.
+	assert.Contains(t, stack.ComponentEnvSection["AWS_SHARED_CREDENTIALS_FILE"], filepath.Join("prov", "credentials"))
+	assert.Contains(t, stack.ComponentEnvSection["AWS_CONFIG_FILE"], filepath.Join("prov", "config"))
+	assert.Equal(t, "dev", stack.ComponentEnvSection["AWS_PROFILE"])
+	assert.Equal(t, "us-west-2", stack.ComponentEnvSection["AWS_REGION"])
+	assert.Equal(t, "us-west-2", stack.ComponentEnvSection["AWS_DEFAULT_REGION"])
+	assert.Equal(t, "1", stack.ComponentEnvSection["AWS_SDK_LOAD_CONFIG"])
+	assert.Equal(t, "true", stack.ComponentEnvSection["AWS_EC2_METADATA_DISABLED"])
 }
 
 func TestSetAuthContext_PopulatesAuthContext(t *testing.T) {

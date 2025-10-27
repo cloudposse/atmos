@@ -253,6 +253,10 @@ func (m *mockIdentityWithStorage) Logout(ctx context.Context) error {
 	return nil
 }
 
+func (m *mockIdentityWithStorage) PrepareEnvironment(_ context.Context, environ map[string]string) (map[string]string, error) {
+	return environ, nil
+}
+
 // mockCreds is a simple test credential implementation.
 type mockCreds struct {
 	expired bool

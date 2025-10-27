@@ -201,6 +201,16 @@ func (p *oidcProvider) Environment() (map[string]string, error) {
 	return map[string]string{}, nil
 }
 
+// PrepareEnvironment prepares environment variables for external processes.
+// For GitHub OIDC providers, we don't modify the environment since OIDC tokens
+// are used for authentication chains but not directly consumed by external processes.
+func (p *oidcProvider) PrepareEnvironment(_ context.Context, environ map[string]string) (map[string]string, error) {
+	// GitHub OIDC provider doesn't need to modify environment for external processes.
+	// The OIDC token is used during authentication to obtain cloud credentials,
+	// which are then managed by the respective cloud identities.
+	return environ, nil
+}
+
 // Logout removes provider-specific credential storage.
 func (p *oidcProvider) Logout(ctx context.Context) error {
 	// GitHub OIDC provider has no logout concept - tokens come from GitHub Actions environment.

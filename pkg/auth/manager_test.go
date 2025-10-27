@@ -290,6 +290,9 @@ func (p *testProvider) Validate() error                         { return nil }
 func (p *testProvider) Environment() (map[string]string, error) { return map[string]string{}, nil }
 func (p *testProvider) Logout(_ context.Context) error          { return nil }
 func (p *testProvider) GetFilesDisplayPath() string             { return "~/.aws/atmos" }
+func (p *testProvider) PrepareEnvironment(_ context.Context, environ map[string]string) (map[string]string, error) {
+	return environ, nil
+}
 
 func TestManager_getProviderForIdentity_NameAndAlias(t *testing.T) {
 	m := &manager{
@@ -591,6 +594,9 @@ func (s stubUserID) PostAuthenticate(_ context.Context, _ *types.PostAuthenticat
 func (s stubUserID) Logout(_ context.Context) error                                { return nil }
 func (s stubUserID) CredentialsExist() (bool, error)                               { return true, nil }
 func (s stubUserID) LoadCredentials(_ context.Context) (types.ICredentials, error) { return nil, nil }
+func (s stubUserID) PrepareEnvironment(_ context.Context, environ map[string]string) (map[string]string, error) {
+	return environ, nil
+}
 
 func TestManager_authenticateFromIndex_StandaloneAWSUser(t *testing.T) {
 	creds := &testCreds{}
@@ -666,6 +672,10 @@ func (s stubPSIdentity) Logout(_ context.Context) error  { return nil }
 func (s stubPSIdentity) CredentialsExist() (bool, error) { return true, nil }
 func (s stubPSIdentity) LoadCredentials(_ context.Context) (types.ICredentials, error) {
 	return nil, nil
+}
+
+func (s stubPSIdentity) PrepareEnvironment(_ context.Context, environ map[string]string) (map[string]string, error) {
+	return environ, nil
 }
 
 func TestNewAuthManager_ParamValidation(t *testing.T) {
@@ -913,6 +923,9 @@ func (s stubIdentity) PostAuthenticate(_ context.Context, _ *types.PostAuthentic
 func (s stubIdentity) Logout(_ context.Context) error                                { return nil }
 func (s stubIdentity) CredentialsExist() (bool, error)                               { return true, nil }
 func (s stubIdentity) LoadCredentials(_ context.Context) (types.ICredentials, error) { return nil, nil }
+func (s stubIdentity) PrepareEnvironment(_ context.Context, environ map[string]string) (map[string]string, error) {
+	return environ, nil
+}
 
 func TestBuildAuthenticationChain_Basic(t *testing.T) {
 	m := &manager{config: &schema.AuthConfig{
@@ -1186,6 +1199,10 @@ func (s *stubEnvIdentity) CredentialsExist() (bool, error) {
 
 func (s *stubEnvIdentity) LoadCredentials(_ context.Context) (types.ICredentials, error) {
 	return s.loadCreds, s.loadCredsErr
+}
+
+func (s *stubEnvIdentity) PrepareEnvironment(_ context.Context, environ map[string]string) (map[string]string, error) {
+	return environ, nil
 }
 
 func TestManager_GetEnvironmentVariables(t *testing.T) {

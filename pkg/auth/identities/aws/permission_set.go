@@ -165,6 +165,38 @@ func (i *permissionSetIdentity) Environment() (map[string]string, error) {
 	return env, nil
 }
 
+// PrepareEnvironment prepares environment variables for external processes.
+// For AWS permission set identities, we use the shared AWS PrepareEnvironment helper
+// which configures credential files, profile, region, and disables IMDS fallback.
+func (i *permissionSetIdentity) PrepareEnvironment(ctx context.Context, environ map[string]string) (map[string]string, error) {
+	defer perf.Track(nil, "aws.permissionSetIdentity.PrepareEnvironment")()
+
+	// Get provider name and construct file paths.
+	providerName, err := i.GetProviderName()
+	if err != nil {
+		return environ, fmt.Errorf("failed to get provider name: %w", err)
+	}
+
+	awsFileManager, err := awsCloud.NewAWSFileManager("")
+	if err != nil {
+		return environ, fmt.Errorf("failed to create AWS file manager: %w", err)
+	}
+
+	credentialsFile := awsFileManager.GetCredentialsPath(providerName)
+	configFile := awsFileManager.GetConfigPath(providerName)
+
+	// Get region from identity config if available.
+	region := ""
+	if i.config.Principal != nil {
+		if r, ok := i.config.Principal["region"].(string); ok {
+			region = r
+		}
+	}
+
+	// Use shared AWS environment preparation helper.
+	return awsCloud.PrepareEnvironment(environ, i.name, credentialsFile, configFile, region), nil
+}
+
 // GetProviderName extracts the provider name from the identity configuration.
 func (i *permissionSetIdentity) GetProviderName() (string, error) {
 	if i.config.Via != nil && i.config.Via.Provider != "" {

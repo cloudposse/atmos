@@ -142,6 +142,21 @@ func (mr *MockProviderMockRecorder) PreAuthenticate(manager any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PreAuthenticate", reflect.TypeOf((*MockProvider)(nil).PreAuthenticate), manager)
 }
 
+// PrepareEnvironment mocks base method.
+func (m *MockProvider) PrepareEnvironment(ctx context.Context, environ map[string]string) (map[string]string, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "PrepareEnvironment", ctx, environ)
+	ret0, _ := ret[0].(map[string]string)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// PrepareEnvironment indicates an expected call of PrepareEnvironment.
+func (mr *MockProviderMockRecorder) PrepareEnvironment(ctx, environ any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PrepareEnvironment", reflect.TypeOf((*MockProvider)(nil).PrepareEnvironment), ctx, environ)
+}
+
 // Validate mocks base method.
 func (m *MockProvider) Validate() error {
 	m.ctrl.T.Helper()
@@ -295,6 +310,21 @@ func (m *MockIdentity) PostAuthenticate(ctx context.Context, params *PostAuthent
 func (mr *MockIdentityMockRecorder) PostAuthenticate(ctx, params any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PostAuthenticate", reflect.TypeOf((*MockIdentity)(nil).PostAuthenticate), ctx, params)
+}
+
+// PrepareEnvironment mocks base method.
+func (m *MockIdentity) PrepareEnvironment(ctx context.Context, environ map[string]string) (map[string]string, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "PrepareEnvironment", ctx, environ)
+	ret0, _ := ret[0].(map[string]string)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// PrepareEnvironment indicates an expected call of PrepareEnvironment.
+func (mr *MockIdentityMockRecorder) PrepareEnvironment(ctx, environ any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PrepareEnvironment", reflect.TypeOf((*MockIdentity)(nil).PrepareEnvironment), ctx, environ)
 }
 
 // Validate mocks base method.

@@ -38,6 +38,14 @@ type Provider interface {
 	// Environment returns environment variables that should be set for this provider.
 	Environment() (map[string]string, error)
 
+	// PrepareEnvironment prepares environment variables for external processes (Terraform, workflows, etc.).
+	// Takes current environment and returns modified environment suitable for the provider's SDK/CLI.
+	// Implementations should:
+	//   - Clear conflicting credential environment variables
+	//   - Set provider-specific configuration (credential files, profiles, regions)
+	//   - Return a NEW map without mutating the input
+	PrepareEnvironment(ctx context.Context, environ map[string]string) (map[string]string, error)
+
 	// Logout removes provider-specific credential storage (files, cache, etc.).
 	// Returns error only if cleanup fails for critical resources.
 	// Best-effort: continue cleanup even if individual steps fail.
@@ -75,6 +83,15 @@ type Identity interface {
 
 	// Environment returns environment variables that should be set for this identity.
 	Environment() (map[string]string, error)
+
+	// PrepareEnvironment prepares environment variables for external processes (Terraform, workflows, etc.).
+	// Takes current environment (already modified by provider's PrepareEnvironment) and returns
+	// modified environment with identity-specific overrides.
+	// Implementations should:
+	//   - Add identity-specific environment variables (e.g., role ARN, session name)
+	//   - Override provider defaults if needed
+	//   - Return a NEW map without mutating the input
+	PrepareEnvironment(ctx context.Context, environ map[string]string) (map[string]string, error)
 
 	// PostAuthenticate is called after successful authentication with the final credentials.
 	// It receives both authContext (to populate runtime credentials) and stackInfo (to read

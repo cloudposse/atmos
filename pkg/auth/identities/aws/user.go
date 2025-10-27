@@ -312,6 +312,28 @@ func (i *userIdentity) Environment() (map[string]string, error) {
 	return env, nil
 }
 
+// PrepareEnvironment prepares environment variables for external processes.
+// For AWS user identities, we use the shared AWS PrepareEnvironment helper
+// which configures credential files, profile, region, and disables IMDS fallback.
+func (i *userIdentity) PrepareEnvironment(ctx context.Context, environ map[string]string) (map[string]string, error) {
+	defer perf.Track(nil, "aws.userIdentity.PrepareEnvironment")()
+
+	awsFileManager, err := awsCloud.NewAWSFileManager("")
+	if err != nil {
+		return environ, fmt.Errorf("failed to create AWS file manager: %w", err)
+	}
+
+	// AWS user identities always use "aws-user" as their provider name.
+	credentialsFile := awsFileManager.GetCredentialsPath(awsUserProviderName)
+	configFile := awsFileManager.GetConfigPath(awsUserProviderName)
+
+	// Get region from identity config if available.
+	region := i.resolveRegion()
+
+	// Use shared AWS environment preparation helper.
+	return awsCloud.PrepareEnvironment(environ, i.name, credentialsFile, configFile, region), nil
+}
+
 // IsStandaloneAWSUserChain checks if the authentication chain represents a standalone AWS user identity.
 func IsStandaloneAWSUserChain(chain []string, identities map[string]schema.Identity) bool {
 	if len(chain) != 1 {

@@ -87,6 +87,17 @@ func (i *Identity) Environment() (map[string]string, error) {
 	return env, nil
 }
 
+// PrepareEnvironment prepares environment variables for external processes.
+// For mock identities, we don't modify the environment since mock credentials
+// are only for testing and don't interact with real cloud SDKs.
+func (i *Identity) PrepareEnvironment(_ context.Context, environ map[string]string) (map[string]string, error) {
+	defer perf.Track(nil, "mock.Identity.PrepareEnvironment")()
+
+	// Mock identities don't need to modify environment for external processes.
+	// Just return the environment unchanged.
+	return environ, nil
+}
+
 // PostAuthenticate is a no-op for mock identities.
 func (i *Identity) PostAuthenticate(ctx context.Context, params *types.PostAuthenticateParams) error {
 	defer perf.Track(nil, "mock.Identity.PostAuthenticate")()

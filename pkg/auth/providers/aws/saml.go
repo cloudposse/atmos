@@ -396,6 +396,16 @@ func (p *samlProvider) Environment() (map[string]string, error) {
 	return env, nil
 }
 
+// PrepareEnvironment prepares environment variables for external processes.
+// For SAML providers, this method is typically not called directly since SAML providers
+// authenticate to get identity credentials, which then have their own PrepareEnvironment.
+// However, we implement it for interface compliance.
+func (p *samlProvider) PrepareEnvironment(_ context.Context, environ map[string]string) (map[string]string, error) {
+	// SAML provider doesn't write credential files itself - that's done by identities.
+	// Just return the environment unchanged.
+	return environ, nil
+}
+
 // playwrightDriversInstalled checks if valid Playwright drivers are installed in standard locations.
 // Returns true if drivers are found, false if not found or home directory cannot be determined.
 func (p *samlProvider) playwrightDriversInstalled() bool {
