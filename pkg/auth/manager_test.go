@@ -1149,3 +1149,226 @@ func TestManager_GetFilesDisplayPath(t *testing.T) {
 		})
 	}
 }
+
+// stubEnvIdentity is a test stub for testing GetEnvironmentVariables and buildWhoamiInfoFromEnvironment.
+type stubEnvIdentity struct {
+	provider         string
+	env              map[string]string
+	envErr           error
+	loadCreds        types.ICredentials
+	loadCredsErr     error
+	credentialsExist bool
+}
+
+func (s *stubEnvIdentity) Kind() string { return "test" }
+func (s *stubEnvIdentity) GetProviderName() (string, error) {
+	if s.provider == "" {
+		return "test-provider", nil
+	}
+	return s.provider, nil
+}
+
+func (s *stubEnvIdentity) Authenticate(_ context.Context, base types.ICredentials) (types.ICredentials, error) {
+	return base, nil
+}
+func (s *stubEnvIdentity) Validate() error { return nil }
+func (s *stubEnvIdentity) Environment() (map[string]string, error) {
+	return s.env, s.envErr
+}
+
+func (s *stubEnvIdentity) PostAuthenticate(_ context.Context, _ *types.PostAuthenticateParams) error {
+	return nil
+}
+func (s *stubEnvIdentity) Logout(_ context.Context) error { return nil }
+func (s *stubEnvIdentity) CredentialsExist() (bool, error) {
+	return s.credentialsExist, nil
+}
+
+func (s *stubEnvIdentity) LoadCredentials(_ context.Context) (types.ICredentials, error) {
+	return s.loadCreds, s.loadCredsErr
+}
+
+func TestManager_GetEnvironmentVariables(t *testing.T) {
+	tests := []struct {
+		name         string
+		identityName string
+		identity     types.Identity
+		expectError  bool
+		expectedVars map[string]string
+	}{
+		{
+			name:         "identity exists with environment variables",
+			identityName: "test-identity",
+			identity: &stubEnvIdentity{
+				env: map[string]string{
+					"AWS_PROFILE":     "test-profile",
+					"AWS_CONFIG_FILE": "/path/to/config",
+				},
+			},
+			expectError: false,
+			expectedVars: map[string]string{
+				"AWS_PROFILE":     "test-profile",
+				"AWS_CONFIG_FILE": "/path/to/config",
+			},
+		},
+		{
+			name:         "identity not found",
+			identityName: "nonexistent",
+			identity:     nil,
+			expectError:  true,
+		},
+		{
+			name:         "identity with empty environment",
+			identityName: "empty-identity",
+			identity: &stubEnvIdentity{
+				env: map[string]string{},
+			},
+			expectError:  false,
+			expectedVars: map[string]string{},
+		},
+		{
+			name:         "identity environment returns error",
+			identityName: "error-identity",
+			identity: &stubEnvIdentity{
+				envErr: fmt.Errorf("environment generation failed"),
+			},
+			expectError: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := &manager{
+				identities: make(map[string]types.Identity),
+			}
+
+			if tt.identity != nil {
+				m.identities[tt.identityName] = tt.identity
+			}
+
+			vars, err := m.GetEnvironmentVariables(tt.identityName)
+
+			if tt.expectError {
+				assert.Error(t, err)
+				assert.Nil(t, vars)
+			} else {
+				assert.NoError(t, err)
+				assert.Equal(t, tt.expectedVars, vars)
+			}
+		})
+	}
+}
+
+func TestManager_buildWhoamiInfoFromEnvironment(t *testing.T) {
+	tests := []struct {
+		name         string
+		identityName string
+		identity     types.Identity
+		providerName string
+		expectEnv    map[string]string
+		expectCreds  bool
+	}{
+		{
+			name:         "identity with environment and credentials",
+			identityName: "test-identity",
+			providerName: "test-provider",
+			identity: &stubEnvIdentity{
+				provider: "test-provider",
+				env: map[string]string{
+					"AWS_PROFILE":     "test-profile",
+					"AWS_CONFIG_FILE": "/path/to/config",
+				},
+				loadCreds: &testCreds{},
+			},
+			expectEnv: map[string]string{
+				"AWS_PROFILE":     "test-profile",
+				"AWS_CONFIG_FILE": "/path/to/config",
+			},
+			expectCreds: true,
+		},
+		{
+			name:         "identity with environment but no credentials",
+			identityName: "env-only",
+			providerName: "test-provider",
+			identity: &stubEnvIdentity{
+				provider: "test-provider",
+				env: map[string]string{
+					"FOO": "bar",
+				},
+				loadCreds: nil,
+			},
+			expectEnv: map[string]string{
+				"FOO": "bar",
+			},
+			expectCreds: false,
+		},
+		{
+			name:         "identity with credentials load error",
+			identityName: "creds-error",
+			providerName: "test-provider",
+			identity: &stubEnvIdentity{
+				provider: "test-provider",
+				env: map[string]string{
+					"FOO": "bar",
+				},
+				loadCredsErr: fmt.Errorf("failed to load credentials"),
+			},
+			expectEnv: map[string]string{
+				"FOO": "bar",
+			},
+			expectCreds: false,
+		},
+		{
+			name:         "identity with environment error",
+			identityName: "env-error",
+			providerName: "test-provider",
+			identity: &stubEnvIdentity{
+				provider:  "test-provider",
+				envErr:    fmt.Errorf("environment error"),
+				loadCreds: &testCreds{},
+			},
+			expectEnv:   nil,
+			expectCreds: true,
+		},
+		{
+			name:         "identity not found",
+			identityName: "nonexistent",
+			providerName: "",
+			identity:     nil,
+			expectEnv:    nil,
+			expectCreds:  false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := &manager{
+				identities: make(map[string]types.Identity),
+				providers:  make(map[string]types.Provider),
+			}
+
+			if tt.identity != nil {
+				m.identities[tt.identityName] = tt.identity
+				if tt.providerName != "" {
+					m.providers[tt.providerName] = &testProvider{name: tt.providerName}
+				}
+			}
+
+			info := m.buildWhoamiInfoFromEnvironment(tt.identityName)
+
+			assert.NotNil(t, info)
+			assert.Equal(t, tt.identityName, info.Identity)
+			assert.Equal(t, tt.providerName, info.Provider)
+
+			if tt.expectEnv != nil {
+				assert.Equal(t, tt.expectEnv, info.Environment)
+			}
+
+			if tt.expectCreds {
+				assert.NotNil(t, info.Credentials)
+			} else {
+				assert.Nil(t, info.Credentials)
+			}
+		})
+	}
+}
