@@ -115,4 +115,51 @@ vendor:
 				"docs command should display component README")
 		}
 	})
+
+	// Test auth env command (should not require stacks)
+	t.Run("auth_env_without_stacks", func(t *testing.T) {
+		cmd := atmosRunner.Command("auth", "env")
+		cmd.Dir = tmpDir
+		output, err := cmd.CombinedOutput()
+		outputStr := string(output)
+
+		// Command may fail due to missing AWS credentials, but not stack config
+		if err != nil {
+			assert.NotContains(t, outputStr, "stack base path must be provided",
+				"auth env should not require stack configuration")
+		}
+	})
+
+	// Test auth exec command (should not require stacks)
+	t.Run("auth_exec_without_stacks", func(t *testing.T) {
+		cmd := atmosRunner.Command("auth", "exec", "--", "echo", "test")
+		cmd.Dir = tmpDir
+		output, err := cmd.CombinedOutput()
+		outputStr := string(output)
+
+		// Command may fail due to missing AWS credentials, but not stack config
+		if err != nil {
+			assert.NotContains(t, outputStr, "stack base path must be provided",
+				"auth exec should not require stack configuration")
+		}
+	})
+
+	// Test auth shell command (should not require stacks)
+	t.Run("auth_shell_without_stacks", func(t *testing.T) {
+		cmd := atmosRunner.Command("auth", "shell", "--help")
+		cmd.Dir = tmpDir
+		output, err := cmd.CombinedOutput()
+		outputStr := string(output)
+
+		// Help should always succeed
+		if err != nil {
+			assert.NotContains(t, outputStr, "stack base path must be provided",
+				"auth shell should not require stack configuration")
+		}
+		// If successful, should contain usage info
+		if err == nil {
+			assert.Contains(t, outputStr, "atmos auth shell",
+				"auth shell help should display usage")
+		}
+	})
 }
