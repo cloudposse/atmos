@@ -39,14 +39,25 @@ if containsSecret(output) {
 fmt.Println(output)
 ```
 
+### What Existing Solutions Don't Solve
+
+While [Charm Bracelet's Lip Gloss](https://github.com/charmbracelet/lipgloss) and similar libraries handle **rendering** beautifully (styled components, layouts, colors), they don't solve critical infrastructure CLI challenges:
+
+- **Secret Masking**: No automatic redaction of sensitive data across all output channels
+- **Centralized I/O Control**: Output scattered across stdout/stderr without unified masking
+- **Security-First Design**: Secrets can leak through unmasked channels or error messages
+- **Atmos-Specific Requirements**: Infrastructure tools handle AWS keys, API tokens, and sensitive configs that must never appear in logs
+
 This leads to:
 - 🚫 Duplicated capability checking throughout the codebase
 - 🚫 Inconsistent output behavior across commands
-- 🚫 Secrets accidentally leaked to logs
+- 🚫 **Secrets accidentally leaked to logs** (the primary driver for this work)
 - 🚫 Broken pipelines when output assumptions change
 - 🚫 Difficult testing (mocking TTY detection is painful)
 
 ## The Atmos Solution: Write Once, Works Everywhere
+
+**Atmos's I/O system complements Charm Bracelet** by adding the infrastructure-critical layer that rendering libraries don't provide: centralized I/O control with automatic secret masking. Lip Gloss handles the beautiful rendering; Atmos ensures that rendering never exposes sensitive data.
 
 With Atmos's new I/O system, developers write code once:
 
