@@ -495,7 +495,7 @@ func mergeEnvVars(componentEnvList []string) []string {
 	// Convert back to slice.
 	merged := make([]string, 0, len(envMap))
 	for k, v := range envMap {
-		log.Debug("Setting ENV var", "key", k, "value", v)
+		log.Trace("Setting ENV var", "key", k, "value", v)
 		merged = append(merged, k+"="+v)
 	}
 	return merged
@@ -522,7 +522,7 @@ func mergeEnvVarsSimple(newEnvList []string) []string {
 	// Convert back to slice.
 	merged := make([]string, 0, len(envMap))
 	for k, v := range envMap {
-		log.Debug("Setting ENV var", "key", k, "value", v)
+		log.Trace("Setting ENV var", "key", k, "value", v)
 		merged = append(merged, k+envVarSeparator+v)
 	}
 	return merged
