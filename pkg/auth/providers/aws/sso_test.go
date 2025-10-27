@@ -558,7 +558,7 @@ func TestSpinnerModel_Update_KeyPress(t *testing.T) {
 	assert.True(t, updatedModel.done)
 	assert.NotNil(t, updatedModel.result)
 	assert.Error(t, updatedModel.result.err)
-	assert.Contains(t, updatedModel.result.err.Error(), "cancelled")
+	assert.Contains(t, updatedModel.result.err.Error(), "user aborted")
 	assert.True(t, cancelCalled)
 }
 

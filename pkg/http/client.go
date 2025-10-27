@@ -1,4 +1,4 @@
-//go:generate go run go.uber.org/mock/mockgen@latest -source=client.go -destination=mock_client.go -package=http
+//go:generate go run go.uber.org/mock/mockgen@v0.6.0 -source=client.go -destination=mock_client.go -package=http
 
 package http
 
@@ -82,9 +82,9 @@ func Get(ctx context.Context, url string, client Client) ([]byte, error) {
 			errorBody = errorBody[:maxErrorBodySize]
 		}
 
-		return nil, fmt.Errorf("%s %s returned status %d, content-type: %s, response body%s:\n%s: %w",
-			req.Method, req.URL.Redacted(), resp.StatusCode,
-			resp.Header.Get("Content-Type"), truncated, string(errorBody), errUtils.ErrHTTPRequestFailed)
+		return nil, fmt.Errorf("%w: %s %s returned status %d, content-type: %s, response body%s:\n%s",
+			errUtils.ErrHTTPRequestFailed, req.Method, req.URL.Redacted(), resp.StatusCode,
+			resp.Header.Get("Content-Type"), truncated, string(errorBody))
 	}
 
 	// Success case: Read full response body.

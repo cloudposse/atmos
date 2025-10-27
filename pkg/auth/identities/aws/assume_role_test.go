@@ -643,6 +643,10 @@ func TestAssumeRoleIdentity_LoadCredentials(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			// Unset AWS environment variables that might interfere with test isolation.
+			t.Setenv("AWS_REGION", "")
+			t.Setenv("AWS_DEFAULT_REGION", "")
+
 			identity, err := NewAssumeRoleIdentity("test-role", &schema.Identity{
 				Kind: "aws/assume-role",
 				Via:  &schema.IdentityVia{Provider: "aws-sso"},
