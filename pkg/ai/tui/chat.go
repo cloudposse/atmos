@@ -346,12 +346,20 @@ func (m *ChatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.textarea, cmd = m.textarea.Update(msg)
 		cmds = append(cmds, cmd)
 
-		// Strip any ANSI escape sequences that leaked into textarea during the update.
-		// Terminal emulators can send OSC sequences as input at any time.
-		if currentValue := m.textarea.Value(); currentValue != "" {
-			cleanedValue := stripANSI(currentValue)
-			if cleanedValue != currentValue {
-				m.textarea.SetValue(cleanedValue)
+		// Strip any ANSI escape sequences only on certain key events, not every update.
+		// Terminal emulators can send OSC sequences as input, but checking on every keystroke
+		// is too expensive for large text. Only check on paste events or special keys.
+		if keyMsg, ok := msg.(tea.KeyMsg); ok {
+			// Only strip ANSI on potential paste events (Ctrl+V, Shift+Insert, etc.)
+			// or when we detect potential ANSI sequences in the key string.
+			if keyMsg.String() == "ctrl+v" || keyMsg.Type == tea.KeySpace ||
+				strings.Contains(keyMsg.String(), "\x1b") || strings.Contains(keyMsg.String(), "\033") {
+				if currentValue := m.textarea.Value(); currentValue != "" {
+					cleanedValue := stripANSI(currentValue)
+					if cleanedValue != currentValue {
+						m.textarea.SetValue(cleanedValue)
+					}
+				}
 			}
 		}
 	}
@@ -797,7 +805,7 @@ func (m *ChatModel) getAIResponse(userMessage string) tea.Cmd {
 					if i > 0 {
 						resultText += "\n\n"
 					}
-					resultText += fmt.Sprintf("**Tool: %s**\n%s", response.ToolCalls[i].Name, result.Output)
+					resultText += fmt.Sprintf("**Tool:** `%s`\n\n%s", response.ToolCalls[i].Name, result.Output)
 				}
 
 				finalResponse := response.Content
