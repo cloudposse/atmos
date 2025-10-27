@@ -83,9 +83,9 @@ var authEnvCmd = &cobra.Command{
 				envVars = make(map[string]string)
 			}
 		} else {
-			// Get environment variables WITHOUT authentication/validation
+			// Get environment variables WITHOUT authentication/validation.
 			// This allows users to see what environment variables would be set
-			// even if they don't have valid credentials yet
+			// even if they don't have valid credentials yet.
 			envVars, err = authManager.GetEnvironmentVariables(identityName)
 			if err != nil {
 				return fmt.Errorf("failed to get environment variables: %w", err)
