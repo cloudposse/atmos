@@ -117,6 +117,15 @@ func ExecuteShell(
 	if err != nil {
 		return err
 	}
+
+	// If env is empty or nil, start with the current process environment.
+	// This ensures that PATH and other environment variables are available.
+	// We must do this BEFORE appending ATMOS_SHLVL, otherwise ShellRunner
+	// will see a non-empty env and won't fall back to os.Environ().
+	if len(env) == 0 {
+		env = os.Environ()
+	}
+
 	env = append(env, fmt.Sprintf("ATMOS_SHLVL=%d", newShellLevel))
 
 	log.Debug("Executing", "command", command)
