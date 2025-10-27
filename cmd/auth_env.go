@@ -33,8 +33,8 @@ var authEnvCmd = &cobra.Command{
 			return fmt.Errorf("%w invalid format: %s", errUtils.ErrInvalidArgumentError, format)
 		}
 
-		// Load atmos configuration
-		atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
+		// Load atmos configuration (processStacks=false since auth commands don't require stack manifests)
+		atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
 		if err != nil {
 			return fmt.Errorf("failed to load atmos config: %w", err)
 		}
