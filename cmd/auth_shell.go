@@ -60,8 +60,8 @@ func executeAuthShellCommandCore(cmd *cobra.Command, args []string) error {
 	// Get the non-flag arguments (shell arguments after --).
 	shellArgs := cmd.Flags().Args()
 
-	// Load atmos configuration (store as pointer for downstream use).
-	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
+	// Load atmos configuration (processStacks=false since auth commands don't require stack manifests)
+	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
 	if err != nil {
 		return errors.Join(errUtils.ErrFailedToInitializeAtmosConfig, err)
 	}
