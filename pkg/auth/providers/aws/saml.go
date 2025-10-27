@@ -396,6 +396,32 @@ func (p *samlProvider) Environment() (map[string]string, error) {
 	return env, nil
 }
 
+// Paths returns credential files/directories used by this provider.
+func (p *samlProvider) Paths() ([]types.Path, error) {
+	basePath := awsCloud.GetFilesBasePath(p.config)
+
+	return []types.Path{
+		{
+			Location: filepath.Join(basePath, "credentials"),
+			Type:     types.PathTypeFile,
+			Required: true,
+			Purpose:  "AWS credentials file",
+			Metadata: map[string]string{
+				"read_only": "true",
+			},
+		},
+		{
+			Location: filepath.Join(basePath, "config"),
+			Type:     types.PathTypeFile,
+			Required: false, // Config file is optional.
+			Purpose:  "AWS config file",
+			Metadata: map[string]string{
+				"read_only": "true",
+			},
+		},
+	}, nil
+}
+
 // playwrightDriversInstalled checks if valid Playwright drivers are installed in standard locations.
 // Returns true if drivers are found, false if not found or home directory cannot be determined.
 func (p *samlProvider) playwrightDriversInstalled() bool {

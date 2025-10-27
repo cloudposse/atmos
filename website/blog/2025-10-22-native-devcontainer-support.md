@@ -308,10 +308,26 @@ components:
         runtime: docker  # or podman, or omit for auto-detect
 ```
 
-### 6. Identity Injection (Coming Soon)
-Atmos will support injecting authenticated identities directly into devcontainers with the `--identity` flag, eliminating manual credential management.
+### 6. Identity Injection
+Atmos supports injecting authenticated identities directly into devcontainers with the `--identity` flag:
 
-### 7. Run Atmos from Atmos
+```bash
+# Launch with AWS identity
+atmos devcontainer shell geodesic --identity aws-prod
+
+# Launch with GitHub identity
+atmos devcontainer shell geodesic --identity github-main
+
+# Works with ANY provider - Azure, GCP, custom providers
+atmos devcontainer shell geodesic --identity azure-prod
+```
+
+Inside the container, cloud provider SDKs automatically use the authenticated identity. The implementation is provider-agnostic - each provider's credentials are injected via environment variables without devcontainer code knowing provider-specific details.
+
+### 7. XDG Base Directory Support
+Atmos automatically configures XDG Base Directory environment variables inside containers, ensuring Atmos and other tools use the correct paths for config, cache, and data files.
+
+### 8. Run Atmos from Atmos
 The inception pattern—run Atmos inside a devcontainer that already has Atmos installed. Your host machine only needs the Atmos binary; everything else lives in the container.
 
 ## Use Cases for Development Containers
@@ -462,10 +478,10 @@ Each project gets the right tool versions automatically.
 
 This is just the beginning. We're planning:
 
-- **Identity injection**: `--identity` flag support to inject authenticated sessions into devcontainers
 - **Pre-built environments**: Official Atmos devcontainer images for common workflows
 - **Enhanced IDE integration**: Better detection and coordination with VS Code and JetBrains
 - **Template library**: Common devcontainer configurations for different infrastructure patterns
+- **Identity autocomplete**: Tab completion for available identities
 
 But the foundation is solid, battle-tested, and ready for production use today.
 

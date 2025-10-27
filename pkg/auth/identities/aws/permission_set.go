@@ -163,6 +163,12 @@ func (i *permissionSetIdentity) Environment() (map[string]string, error) {
 	return env, nil
 }
 
+// Paths returns credential files/directories used by this identity.
+func (i *permissionSetIdentity) Paths() ([]types.Path, error) {
+	// Permission set identities don't add additional credential files beyond the provider.
+	return []types.Path{}, nil
+}
+
 // GetProviderName extracts the provider name from the identity configuration.
 func (i *permissionSetIdentity) GetProviderName() (string, error) {
 	if i.config.Via != nil && i.config.Via.Provider != "" {

@@ -309,6 +309,12 @@ func (i *userIdentity) Environment() (map[string]string, error) {
 	return env, nil
 }
 
+// Paths returns credential files/directories used by this identity.
+func (i *userIdentity) Paths() ([]types.Path, error) {
+	// AWS user identities don't add additional credential files beyond the provider.
+	return []types.Path{}, nil
+}
+
 // IsStandaloneAWSUserChain checks if the authentication chain represents a standalone AWS user identity.
 func IsStandaloneAWSUserChain(chain []string, identities map[string]schema.Identity) bool {
 	if len(chain) != 1 {

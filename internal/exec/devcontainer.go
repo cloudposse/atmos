@@ -122,11 +122,8 @@ func ExecuteDevcontainerList(atmosConfig *schema.AtmosConfiguration) error {
 	return nil
 }
 
-// ExecuteDevcontainerStart starts a devcontainer.
-// TODO: Add --identity flag support. When implemented, ENV file paths from identity
-// must be resolved relative to container paths (e.g., /localhost or bind mount location),
-// not host paths, since the container runs in its own filesystem namespace.
-func ExecuteDevcontainerStart(atmosConfig *schema.AtmosConfiguration, name, instance string) error {
+// ExecuteDevcontainerStart starts a devcontainer with optional identity.
+func ExecuteDevcontainerStart(atmosConfig *schema.AtmosConfiguration, name, instance, identityName string) error {
 	defer perf.Track(atmosConfig, "exec.ExecuteDevcontainerStart")()
 
 	ctx := context.Background()
@@ -138,6 +135,13 @@ func ExecuteDevcontainerStart(atmosConfig *schema.AtmosConfiguration, name, inst
 	config, settings, err := devcontainer.LoadConfig(&freshConfig, name)
 	if err != nil {
 		return err
+	}
+
+	// Inject identity environment variables if identity is specified.
+	if identityName != "" {
+		if err := injectIdentityEnvironment(ctx, config, identityName); err != nil {
+			return err
+		}
 	}
 
 	runtime, err := devcontainer.DetectRuntime(settings.Runtime)
@@ -502,7 +506,7 @@ func ExecuteDevcontainerLogs(atmosConfig *schema.AtmosConfiguration, name, insta
 }
 
 // ExecuteDevcontainerRebuild rebuilds a devcontainer from scratch.
-func ExecuteDevcontainerRebuild(atmosConfig *schema.AtmosConfiguration, name, instance string, noPull bool) error {
+func ExecuteDevcontainerRebuild(atmosConfig *schema.AtmosConfiguration, name, instance, identityName string, noPull bool) error {
 	defer perf.Track(atmosConfig, "exec.ExecuteDevcontainerRebuild")()
 
 	freshConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
@@ -513,6 +517,14 @@ func ExecuteDevcontainerRebuild(atmosConfig *schema.AtmosConfiguration, name, in
 	config, settings, err := devcontainer.LoadConfig(&freshConfig, name)
 	if err != nil {
 		return err
+	}
+
+	// Inject identity environment variables if identity is specified.
+	if identityName != "" {
+		ctx := context.Background()
+		if err := injectIdentityEnvironment(ctx, config, identityName); err != nil {
+			return err
+		}
 	}
 
 	runtime, err := devcontainer.DetectRuntime(settings.Runtime)

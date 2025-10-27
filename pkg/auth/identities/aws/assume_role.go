@@ -211,6 +211,12 @@ func (i *assumeRoleIdentity) Environment() (map[string]string, error) {
 	return env, nil
 }
 
+// Paths returns credential files/directories used by this identity.
+func (i *assumeRoleIdentity) Paths() ([]types.Path, error) {
+	// Assume role identities don't add additional credential files beyond the provider.
+	return []types.Path{}, nil
+}
+
 // GetProviderName extracts the provider name from the identity configuration.
 func (i *assumeRoleIdentity) GetProviderName() (string, error) {
 	if i.config.Via != nil && i.config.Via.Provider != "" {

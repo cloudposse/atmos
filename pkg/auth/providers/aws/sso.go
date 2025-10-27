@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -299,6 +300,32 @@ func (p *ssoProvider) Environment() (map[string]string, error) {
 	env := make(map[string]string)
 	env["AWS_REGION"] = p.region
 	return env, nil
+}
+
+// Paths returns credential files/directories used by this provider.
+func (p *ssoProvider) Paths() ([]authTypes.Path, error) {
+	basePath := awsCloud.GetFilesBasePath(p.config)
+
+	return []authTypes.Path{
+		{
+			Location: filepath.Join(basePath, "credentials"),
+			Type:     authTypes.PathTypeFile,
+			Required: true,
+			Purpose:  "AWS credentials file",
+			Metadata: map[string]string{
+				"read_only": "true",
+			},
+		},
+		{
+			Location: filepath.Join(basePath, "config"),
+			Type:     authTypes.PathTypeFile,
+			Required: false, // Config file is optional.
+			Purpose:  "AWS config file",
+			Metadata: map[string]string{
+				"read_only": "true",
+			},
+		},
+	}, nil
 }
 
 // Note: SSO caching is now handled at the manager level to prevent duplicate entries.

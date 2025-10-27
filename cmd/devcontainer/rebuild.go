@@ -12,6 +12,7 @@ var (
 	rebuildInstance string
 	rebuildAttach   bool
 	rebuildNoPull   bool
+	rebuildIdentity string
 )
 
 var rebuildCmd = &cobra.Command{
@@ -30,7 +31,7 @@ need to start fresh.`,
 		defer perf.Track(atmosConfigPtr, "devcontainer.rebuild.RunE")()
 
 		name := args[0]
-		if err := e.ExecuteDevcontainerRebuild(atmosConfigPtr, name, rebuildInstance, rebuildNoPull); err != nil {
+		if err := e.ExecuteDevcontainerRebuild(atmosConfigPtr, name, rebuildInstance, rebuildIdentity, rebuildNoPull); err != nil {
 			return err
 		}
 
@@ -47,5 +48,6 @@ func init() {
 	rebuildCmd.Flags().StringVar(&rebuildInstance, "instance", "default", "Instance name for this devcontainer")
 	rebuildCmd.Flags().BoolVar(&rebuildAttach, "attach", false, "Attach to the container after rebuilding")
 	rebuildCmd.Flags().BoolVar(&rebuildNoPull, "no-pull", false, "Don't pull the latest image before rebuilding")
+	rebuildCmd.Flags().StringVarP(&rebuildIdentity, "identity", "i", "", "Authenticate with specified identity")
 	devcontainerCmd.AddCommand(rebuildCmd)
 }

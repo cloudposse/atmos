@@ -65,6 +65,31 @@ terraform:~ $ gh auth status
 6. **Security**: Credentials are injected via environment variables, never hardcoded in container images
 7. **Backward Compatibility**: `--identity` flag is optional; devcontainers work without it as before
 
+## Prerequisites
+
+This feature depends on the **Auth Paths Interface** (see `docs/prd/auth-mounts-interface.md`), which extends the `Identity` and `Provider` interfaces to return credential path information via a `Paths()` method.
+
+**Why This Matters:**
+- **Environment variables alone are insufficient** for providers like AWS that require credential files (`~/.aws/credentials`, `~/.aws/config`)
+- **Devcontainer code must remain provider-agnostic** - no hardcoded knowledge of AWS, Azure, GCP file locations
+- **Providers know what paths they use** - they tell us via interface; we decide what to do with them (mount, copy, etc.)
+
+**Key Design Principle:** Providers return **paths** (generic), consumers convert to **mounts** (specific to devcontainers).
+
+**Example:**
+```go
+// Provider-agnostic devcontainer code (CORRECT)
+whoami, err := authManager.Authenticate(ctx, identityName)
+envVars := whoami.Environment  // Get env vars from provider
+paths := whoami.Paths          // Get credential paths from provider
+
+// Convert paths to mounts (consumer-specific logic)
+for _, credPath := range paths {
+    mount := convertPathToMount(credPath, containerConfig)
+    config.Mounts = append(config.Mounts, mount)
+}
+```
+
 ## Technical Specification
 
 ### 1. Command Interface

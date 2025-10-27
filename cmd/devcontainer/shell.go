@@ -8,7 +8,10 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
-var shellInstance string
+var (
+	shellInstance string
+	shellIdentity string
+)
 
 var shellCmd = &cobra.Command{
 	Use:   "shell [name]",
@@ -23,7 +26,15 @@ This is a convenience command that combines start and attach operations:
 If no devcontainer name is provided, you will be prompted to select one interactively.
 
 This command is consistent with other Atmos shell commands (terraform shell, auth shell)
-and provides the quickest way to get into a devcontainer environment.`,
+and provides the quickest way to get into a devcontainer environment.
+
+## Using Authenticated Identities
+
+Launch a devcontainer with Atmos-managed credentials:
+
+  atmos devcontainer shell <name> --identity <identity-name>
+
+Inside the container, cloud provider SDKs automatically use the authenticated identity.`,
 	Example:           markdown.DevcontainerShellUsageMarkdown,
 	Args:              cobra.MaximumNArgs(1),
 	ValidArgsFunction: devcontainerNameCompletion,
@@ -37,7 +48,7 @@ and provides the quickest way to get into a devcontainer environment.`,
 		}
 
 		// Start the container (creates if necessary).
-		if err := e.ExecuteDevcontainerStart(atmosConfigPtr, name, shellInstance); err != nil {
+		if err := e.ExecuteDevcontainerStart(atmosConfigPtr, name, shellInstance, shellIdentity); err != nil {
 			return err
 		}
 
@@ -48,5 +59,6 @@ and provides the quickest way to get into a devcontainer environment.`,
 
 func init() {
 	shellCmd.Flags().StringVar(&shellInstance, "instance", "default", "Instance name for this devcontainer")
+	shellCmd.Flags().StringVarP(&shellIdentity, "identity", "i", "", "Authenticate with specified identity")
 	devcontainerCmd.AddCommand(shellCmd)
 }

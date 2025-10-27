@@ -11,6 +11,7 @@ import (
 var (
 	startInstance string
 	startAttach   bool
+	startIdentity string
 )
 
 var startCmd = &cobra.Command{
@@ -19,7 +20,9 @@ var startCmd = &cobra.Command{
 	Long: `Start a devcontainer by name.
 
 If the container doesn't exist, it will be created. If it exists but is stopped,
-it will be started. Use --instance to manage multiple instances of the same devcontainer.`,
+it will be started. Use --instance to manage multiple instances of the same devcontainer.
+
+Use --identity to launch the container with Atmos-managed credentials.`,
 	Example:           markdown.DevcontainerStartUsageMarkdown,
 	Args:              cobra.ExactArgs(1),
 	ValidArgsFunction: devcontainerNameCompletion,
@@ -27,7 +30,7 @@ it will be started. Use --instance to manage multiple instances of the same devc
 		defer perf.Track(atmosConfigPtr, "devcontainer.start.RunE")()
 
 		name := args[0]
-		if err := e.ExecuteDevcontainerStart(atmosConfigPtr, name, startInstance); err != nil {
+		if err := e.ExecuteDevcontainerStart(atmosConfigPtr, name, startInstance, startIdentity); err != nil {
 			return err
 		}
 
@@ -43,5 +46,6 @@ it will be started. Use --instance to manage multiple instances of the same devc
 func init() {
 	startCmd.Flags().StringVar(&startInstance, "instance", "default", "Instance name for this devcontainer")
 	startCmd.Flags().BoolVar(&startAttach, "attach", false, "Attach to the container after starting")
+	startCmd.Flags().StringVarP(&startIdentity, "identity", "i", "", "Authenticate with specified identity")
 	devcontainerCmd.AddCommand(startCmd)
 }

@@ -201,6 +201,13 @@ func (p *oidcProvider) Environment() (map[string]string, error) {
 	return map[string]string{}, nil
 }
 
+// Paths returns credential files/directories used by this provider.
+func (p *oidcProvider) Paths() ([]types.Path, error) {
+	// GitHub OIDC provider doesn't use filesystem credentials.
+	// The OIDC token comes from GitHub Actions environment.
+	return []types.Path{}, nil
+}
+
 // Logout removes provider-specific credential storage.
 func (p *oidcProvider) Logout(ctx context.Context) error {
 	// GitHub OIDC provider has no logout concept - tokens come from GitHub Actions environment.

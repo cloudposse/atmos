@@ -73,6 +73,7 @@ func (s stubUser) Authenticate(_ context.Context, _ types.ICredentials) (types.I
 }
 func (s stubUser) Validate() error                         { return nil }
 func (s stubUser) Environment() (map[string]string, error) { return map[string]string{}, nil }
+func (s stubUser) Paths() ([]types.Path, error)            { return []types.Path{}, nil }
 func (s stubUser) PostAuthenticate(_ context.Context, _ *types.PostAuthenticateParams) error {
 	return nil
 }

@@ -87,6 +87,14 @@ func (i *Identity) Environment() (map[string]string, error) {
 	return env, nil
 }
 
+// Paths returns credential files/directories used by this identity.
+func (i *Identity) Paths() ([]types.Path, error) {
+	defer perf.Track(nil, "mock.Identity.Paths")()
+
+	// Mock identity doesn't use filesystem credentials.
+	return []types.Path{}, nil
+}
+
 // PostAuthenticate is a no-op for mock identities.
 func (i *Identity) PostAuthenticate(ctx context.Context, params *types.PostAuthenticateParams) error {
 	defer perf.Track(nil, "mock.Identity.PostAuthenticate")()

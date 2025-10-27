@@ -100,6 +100,14 @@ func (p *Provider) Environment() (map[string]string, error) {
 	}, nil
 }
 
+// Paths returns credential files/directories used by this provider.
+func (p *Provider) Paths() ([]types.Path, error) {
+	defer perf.Track(nil, "mock.Provider.Paths")()
+
+	// Mock provider doesn't use filesystem credentials.
+	return []types.Path{}, nil
+}
+
 // Logout is a no-op for the mock provider.
 func (p *Provider) Logout(ctx context.Context) error {
 	defer perf.Track(nil, "mock.Provider.Logout")()

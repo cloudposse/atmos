@@ -423,7 +423,6 @@ var (
 	ErrContainerNotRunning       = errors.New("container is not running")
 	ErrInvalidDevcontainerConfig = errors.New("invalid devcontainer configuration")
 	ErrRuntimeNotAvailable       = errors.New("container runtime not available")
-	ErrNotImplemented            = errors.New("not implemented")
 	ErrDevcontainerNameEmpty     = errors.New("devcontainer name cannot be empty")
 	ErrDevcontainerNameInvalid   = errors.New("devcontainer name contains invalid characters")
 	ErrDevcontainerNameTooLong   = errors.New("devcontainer name is too long")

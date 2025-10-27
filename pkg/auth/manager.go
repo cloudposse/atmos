@@ -746,6 +746,26 @@ func (m *manager) buildWhoamiInfo(identityName string, creds types.ICredentials)
 		}
 	}
 
+	// Collect paths from provider and identity chains.
+	var allPaths []types.Path
+
+	// Get provider paths.
+	if provider, exists := m.providers[providerName]; exists {
+		if providerPaths, err := provider.Paths(); err == nil {
+			allPaths = append(allPaths, providerPaths...)
+		}
+	}
+
+	// Get identity paths.
+	if identity, exists := m.identities[identityName]; exists {
+		if identityPaths, err := identity.Paths(); err == nil {
+			allPaths = append(allPaths, identityPaths...)
+		}
+	}
+
+	// Deduplicate paths - later paths override earlier ones if Location matches.
+	info.Paths = deduplicatePaths(allPaths)
+
 	// Store credentials in the keystore and set a reference handle.
 	// Use the identity name as the opaque handle for retrieval. Only clear
 	// in-memory credentials if storage succeeded to avoid losing access.
@@ -756,6 +776,26 @@ func (m *manager) buildWhoamiInfo(identityName string, creds types.ICredentials)
 	}
 
 	return info
+}
+
+// deduplicatePaths removes duplicate paths, keeping the last occurrence.
+// This allows identities to override provider paths.
+func deduplicatePaths(paths []types.Path) []types.Path {
+	seen := make(map[string]int) // Location -> index
+	result := make([]types.Path, 0, len(paths))
+
+	for _, path := range paths {
+		if idx, exists := seen[path.Location]; exists {
+			// Override existing path.
+			result[idx] = path
+		} else {
+			// Add new path.
+			seen[path.Location] = len(result)
+			result = append(result, path)
+		}
+	}
+
+	return result
 }
 
 // Logout removes credentials for the specified identity and its authentication chain.
