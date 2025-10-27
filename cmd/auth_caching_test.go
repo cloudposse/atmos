@@ -25,7 +25,7 @@ func setupMockAuthDir(t *testing.T, tk *TestKit) string {
 	tk.Chdir(mockDir)
 	tempDir := t.TempDir()
 	tk.Setenv("ATMOS_KEYRING_TYPE", "file")
-	tk.Setenv("ATMOS_KEYRING_FILE_PATH", tempDir+"/keyring.json")
+	tk.Setenv("ATMOS_KEYRING_FILE_PATH", filepath.Join(tempDir, "keyring.json"))
 	tk.Setenv("ATMOS_KEYRING_PASSWORD", "test-password-for-file-keyring")
 	// Set ATMOS_CLI_CONFIG_PATH to use the mock auth scenario config.
 	tk.Setenv("ATMOS_CLI_CONFIG_PATH", absPath)

@@ -154,7 +154,7 @@ This ensures **all code** in Atmos (even code that directly imports `github.com/
 ## Documentation Updates
 
 - [Configuring Geodesic with Atmos Auth](/cli/commands/auth/tutorials/configuring-geodesic) - Simplified configuration (no setup needed!)
-- [Auth Usage Guide](/cli/commands/auth/usage) - Updated with correct macOS paths
+- [Auth Usage Guide](/cli/commands/auth/usage) - Updated with correct macOS paths.
 
 ## Migration Support
 

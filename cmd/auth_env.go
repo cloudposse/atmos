@@ -74,7 +74,8 @@ var authEnvCmd = &cobra.Command{
 					if errors.Is(err, errUtils.ErrUserAborted) {
 						return errUtils.ErrUserAborted
 					}
-					return fmt.Errorf("authentication failed: %w", err)
+					// Wrap with ErrAuthenticationFailed sentinel while preserving original error.
+					return fmt.Errorf("%w: %w", errUtils.ErrAuthenticationFailed, err)
 				}
 			}
 			envVars = whoami.Environment
