@@ -387,6 +387,12 @@ func sanitizeOutput(output string) (string, error) {
 	expiresRegex := regexp.MustCompile(`(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}\s+[A-Z]{3,4})\s+\([^)]+\)`)
 	result = expiresRegex.ReplaceAllString(result, "$1 (1h 0m)")
 
+	// 10. Normalize debug log timestamps (Go time.Time string format).
+	// These appear in debug logs like: expiration="2025-10-26 23:04:36.236866 -0500 CDT m=+3600.098519710"
+	// Replace with a constant timestamp to avoid snapshot mismatches.
+	debugTimestampRegex := regexp.MustCompile(`expiration="[^"]+\s+[+-]\d{4}\s+[A-Z]{3,4}\s+m=[+-][\d.]+`)
+	result = debugTimestampRegex.ReplaceAllString(result, `expiration="2025-01-01 12:00:00.000000 +0000 UTC m=+3600.000000000`)
+
 	return result, nil
 }
 

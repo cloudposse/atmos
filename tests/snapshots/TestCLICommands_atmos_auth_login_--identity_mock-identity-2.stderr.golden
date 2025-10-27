@@ -9,7 +9,7 @@ DEBU Checking cached credentials chainIndex=1 identityName=mock-identity-2
 DEBU Keyring retrieve result chainIndex=1 identityName=mock-identity-2 hasError=true hasCreds=false
 DEBU Credentials not in keyring, trying identity storage chainIndex=1 identityName=mock-identity-2
 DEBU Loaded credentials from identity storage chainIndex=1 identityName=mock-identity-2
-DEBU Found valid cached credentials chainIndex=1 identityName=mock-identity-2 expiration="2025-10-26 23:04:36.811415 -0500 CDT m=+3600.051260959"
+DEBU Found valid cached credentials chainIndex=1 identityName=mock-identity-2 expiration="2025-01-01 12:00:00.000000 +0000 UTC m=+3600.000000000"
 DEBU Found valid cached credentials validFromIndex=1 chainStep=mock-identity-2
 DEBU Failed to retrieve cached credentials, starting from provider
   error=
