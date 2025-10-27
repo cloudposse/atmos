@@ -66,13 +66,13 @@ If you're upgrading from versions **prior to v1.195.0**, you're not affected bec
 
 If you were using Atmos auth on macOS from the main branch between v1.195.0 and this release:
 
-**Option 1: Use new path (recommended)**
+### Option 1: Use new path (recommended)
 ```bash
 # Re-login to store credentials in new location
 atmos auth login
 ```
 
-**Option 2: Keep existing location**
+### Option 2: Keep existing location
 ```bash
 # Add to ~/.zshrc or ~/.bash_profile
 export ATMOS_XDG_CONFIG_HOME="$HOME/Library/Application Support"
@@ -80,7 +80,7 @@ export ATMOS_XDG_CONFIG_HOME="$HOME/Library/Application Support"
 
 **Note**: This keeps credentials in the old location but affects **all** Atmos XDG paths (config, cache, data), not just credentials. This may cause issues with Geodesic which expects credentials in `~/.config`. We recommend Option 1 (re-login) instead.
 
-**Option 3: Move credentials**
+### Option 3: Move credentials
 ```bash
 if [ -d "$HOME/Library/Application Support/atmos" ]; then
     mkdir -p ~/.config

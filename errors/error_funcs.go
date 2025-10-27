@@ -29,6 +29,19 @@ func InitializeMarkdown(atmosConfig schema.AtmosConfiguration) {
 	}
 }
 
+// printPlainError writes a plain-text error to stderr without Markdown formatting.
+func printPlainError(title string, err error, suggestion string) {
+	if title != "" {
+		title = cases.Title(language.English).String(title)
+		fmt.Fprintf(os.Stderr, "\n%s: %v\n", title, err)
+	} else {
+		fmt.Fprintf(os.Stderr, "\nError: %v\n", err)
+	}
+	if suggestion != "" {
+		fmt.Fprintf(os.Stderr, "%s\n", suggestion)
+	}
+}
+
 // CheckErrorAndPrint prints an error message.
 func CheckErrorAndPrint(err error, title string, suggestion string) {
 	if err == nil {
@@ -37,15 +50,7 @@ func CheckErrorAndPrint(err error, title string, suggestion string) {
 
 	// If markdown renderer is not initialized, fall back to plain error output.
 	if render == nil {
-		if title != "" {
-			title = cases.Title(language.English).String(title)
-			fmt.Fprintf(os.Stderr, "\n%s: %v\n", title, err)
-		} else {
-			fmt.Fprintf(os.Stderr, "\nError: %v\n", err)
-		}
-		if suggestion != "" {
-			fmt.Fprintf(os.Stderr, "%s\n", suggestion)
-		}
+		printPlainError(title, err, suggestion)
 		return
 	}
 
@@ -56,10 +61,7 @@ func CheckErrorAndPrint(err error, title string, suggestion string) {
 	errorMarkdown, renderErr := render.RenderError(title, err.Error(), suggestion)
 	if renderErr != nil {
 		// Rendering failed - fall back to plain error output.
-		fmt.Fprintf(os.Stderr, "\n%s: %v\n", title, err)
-		if suggestion != "" {
-			fmt.Fprintf(os.Stderr, "%s\n", suggestion)
-		}
+		printPlainError(title, err, suggestion)
 		return
 	}
 	_, printErr := os.Stderr.WriteString(errorMarkdown + "\n")
