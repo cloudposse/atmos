@@ -916,6 +916,33 @@ func (m *ChatModel) getAIResponse(userMessage string) tea.Cmd {
 				// Execute tools and get results.
 				toolResults := m.executeToolCalls(ctx, response.ToolCalls)
 
+				// Build display output for user showing tool execution results.
+				var resultText string
+				if response.Content != "" {
+					resultText = response.Content + "\n\n"
+				}
+
+				for i, result := range toolResults {
+					if i > 0 {
+						resultText += "\n\n"
+					}
+
+					// Determine what to display: use Error if Output is empty or tool failed.
+					displayOutput := result.Output
+					if displayOutput == "" && result.Error != nil {
+						displayOutput = fmt.Sprintf("Error: %v", result.Error)
+					}
+
+					// Handle completely empty results.
+					if displayOutput == "" {
+						displayOutput = "No output returned"
+					}
+
+					// Detect output format and wrap in appropriate code block for syntax highlighting.
+					format := detectOutputFormat(displayOutput)
+					resultText += fmt.Sprintf("**Tool:** `%s`\n\n```%s\n%s\n```", response.ToolCalls[i].Name, format, displayOutput)
+				}
+
 				// Multi-turn conversation: Send tool results back to AI for final response.
 				// Build tool results message for the AI.
 				var toolResultsContent string
@@ -956,8 +983,11 @@ func (m *ChatModel) getAIResponse(userMessage string) tea.Cmd {
 					return aiErrorMsg(fmt.Sprintf("Error getting final response after tool execution: %v", err))
 				}
 
-				// Return the AI's final response (which should now include the table/analysis).
-				return aiResponseMsg(finalResponse.Content)
+				// Combine tool execution display with final AI response.
+				combinedResponse := resultText + "\n\n---\n\n" + finalResponse.Content
+
+				// Return the combined response (tool results + AI's final analysis).
+				return aiResponseMsg(combinedResponse)
 			}
 
 			// No tool use, return the text response.
