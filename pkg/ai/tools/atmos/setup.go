@@ -72,5 +72,10 @@ func RegisterTools(registry *tools.Registry, atmosConfig *schema.AtmosConfigurat
 		return err
 	}
 
+	// Register web search tool.
+	if err := registry.Register(NewWebSearchTool(atmosConfig)); err != nil {
+		return err
+	}
+
 	return nil
 }

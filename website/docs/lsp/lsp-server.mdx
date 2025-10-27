@@ -18,6 +18,45 @@ The **Atmos LSP Server** enables IDE and editor integration for Atmos stack file
 **Atmos LSP Client**: Connects TO external LSP servers (yaml-ls, terraform-ls) for **Atmos AI validation**. See [LSP Client](/lsp/lsp-client) documentation.
 :::
 
+## Understanding the Difference
+
+### What Each Component Validates
+
+The LSP Server and LSP Client validate **completely different things**:
+
+| What Gets Validated | Atmos LSP Server | External LSP Servers (via Client) |
+|---------------------|------------------|-----------------------------------|
+| **Atmos structure** | ✅ Import arrays | ❌ |
+| **Atmos structure** | ✅ Component maps | ❌ |
+| **Atmos structure** | ✅ Stack inheritance | ❌ |
+| **Generic YAML syntax** | ❌ | ✅ YAML schemas |
+| **Terraform syntax** | ❌ | ✅ HCL parsing |
+| **Typos/unknown properties** | ❌ | ✅ Schema validation |
+
+**Example:**
+
+```yaml
+# stacks/prod/vpc.yaml
+import: "not-an-array"        # ← Atmos LSP Server catches this
+                              #   (Atmos structure error)
+
+vpc_ciddr: "10.0.0.0/16"      # ← yaml-language-server catches this
+                              #   (typo/unknown property)
+```
+
+### Component Comparison
+
+| Component | Validates | Used By | Connects To |
+|-----------|-----------|---------|-------------|
+| **LSP Client** | Generic syntax (YAML/TF/HCL) | Atmos AI | External LSP servers |
+| **LSP Server** | Atmos structure | IDEs (VS Code, Neovim) | N/A (IDEs connect TO it) |
+| **Direct Validation** | Atmos structure | Atmos AI | N/A (same process) |
+
+**Why both exist:**
+- **LSP Server** (this doc): IDEs need to validate Atmos-specific structure (imports, components, stack inheritance), so they connect to Atmos' LSP server for real-time validation and autocomplete
+- **LSP Client**: Atmos doesn't have built-in Terraform/HCL parsers, so Atmos AI connects to external LSP servers (terraform-ls, yaml-language-server) to validate generic syntax
+- **Direct Validation**: When Atmos AI needs to validate Atmos structure, it calls validation functions directly (no LSP needed)
+
 ## What is the Atmos LSP Server?
 
 The Atmos LSP Server is a Language Server Protocol implementation that provides Atmos-specific language support to any LSP-compatible editor. When you connect your IDE to the Atmos LSP Server, you get:
@@ -1106,6 +1145,21 @@ ssh -L 7777:localhost:7777 user@dev.example.com
 
 ## Comparison: LSP Server vs LSP Client
 
+### Validation Scope
+
+The LSP Server and LSP Client validate **completely different things**:
+
+| What Gets Validated | Atmos LSP Server | External LSP Servers (via Client) |
+|---------------------|------------------|-----------------------------------|
+| **Atmos structure** | ✅ Import arrays | ❌ |
+| **Atmos structure** | ✅ Component maps | ❌ |
+| **Atmos structure** | ✅ Stack inheritance | ❌ |
+| **Generic YAML syntax** | ❌ | ✅ YAML schemas |
+| **Terraform syntax** | ❌ | ✅ HCL parsing |
+| **Typos/unknown properties** | ❌ | ✅ Schema validation |
+
+### Feature Comparison
+
 | Feature | LSP Server (this doc) | LSP Client |
 |---------|----------------------|------------|
 | **Purpose** | IDE integration for Atmos files | AI validation of infrastructure files |
@@ -1118,11 +1172,21 @@ ssh -L 7777:localhost:7777 user@dev.example.com
 | **Implementation** | `pkg/lsp/server/` | `pkg/lsp/client/` |
 | **Configuration** | Editor config | `atmos.yaml` |
 
-**When to use which:**
-- **LSP Server**: For editing Atmos files in your IDE
-- **LSP Client**: For Atmos AI to validate infrastructure files
+### Component Overview
 
-Both can work together! Use the LSP Server for IDE integration while editing, and the LSP Client for AI-powered validation.
+| Component | Validates | Used By | Connects To |
+|-----------|-----------|---------|-------------|
+| **LSP Client** | Generic syntax (YAML/TF/HCL) | Atmos AI | External LSP servers |
+| **LSP Server** | Atmos structure | IDEs (VS Code, Neovim) | N/A (IDEs connect TO it) |
+| **Direct Validation** | Atmos structure | Atmos AI | N/A (same process) |
+
+### When to Use Which
+
+- **LSP Server** (this doc): For editing Atmos files in your IDE with Atmos-specific autocomplete and validation
+- **LSP Client**: For Atmos AI to validate generic YAML/Terraform/HCL syntax using external language servers
+- **Both together**: Use the LSP Server for IDE integration while editing, and the LSP Client for AI-powered generic syntax validation
+
+**Important:** The LSP Client does **not** connect to the Atmos LSP Server. That would be redundant since Atmos AI can call Atmos validation functions directly. The LSP Client only connects to external LSP servers (yaml-language-server, terraform-ls) for generic syntax validation that Atmos doesn't provide natively.
 
 ## Limitations & Roadmap
 

@@ -122,6 +122,80 @@ The AI automatically decides to call tools when:
 - Providing documentation ("How do I configure Atmos?")
 - You explicitly ask it not to ("Don't look at my files, just explain...")
 
+### How Tool Descriptions Determine Triggering
+
+**The Critical Role of Tool Descriptions:**
+
+Tool descriptions are the **instruction manual** for the AI - they tell the AI exactly WHEN and WHY to call each tool. Without proper descriptions, the AI has no way to know that a tool exists or what it does.
+
+**Technical Implementation:**
+
+When Atmos sends tool definitions to the AI provider (Claude, GPT, Gemini, etc.), each tool includes:
+
+1. **Name** - The tool identifier (e.g., `atmos_describe_component`)
+2. **Description** - **Critical!** Explains WHAT the tool does and WHEN to use it
+3. **Parameters** - The inputs the tool accepts
+
+The AI analyzes your question, reads all tool descriptions, and decides which tool (if any) can help answer your question.
+
+**Example - How Descriptions Enable Tool Selection:**
+
+<File title="Tool Definition Sent to AI Provider">
+```json
+{
+  "name": "web_search",
+  "description": "Search the web for information using DuckDuckGo or Google Custom Search. Returns titles, URLs, and descriptions of search results. Use this to find current information, documentation, examples, or answers to questions that require up-to-date knowledge.",
+  "parameters": {
+    "query": {
+      "type": "string",
+      "description": "The search query to execute",
+      "required": true
+    },
+    "max_results": {
+      "type": "integer",
+      "description": "Maximum number of search results to return (1-50, default: 10)",
+      "required": false
+    }
+  }
+}
+```
+</File>
+
+**When you ask:** "Search for the latest Terraform AWS VPC module documentation"
+
+**The AI thinks:**
+1. Reads the question: needs to "search for" something
+2. Scans tool descriptions
+3. Finds `web_search` description mentions "Search the web for information"
+4. Determines this tool can help
+5. Calls `web_search` with query="Terraform AWS VPC module documentation"
+
+**Writing Effective Tool Descriptions:**
+
+Good descriptions should include:
+- **Action** - What the tool does (e.g., "Search the web", "Validate files", "List stacks")
+- **Purpose** - What problem it solves
+- **Use Cases** - When to use it (e.g., "Use this to find current information")
+- **Scope** - What it covers (e.g., "Returns titles, URLs, and descriptions")
+
+**Anti-pattern (Bad Description):**
+```json
+{
+  "name": "web_search",
+  "description": "Searches the web"  // ❌ Too vague, AI won't know when to use it
+}
+```
+
+**Best Practice (Good Description):**
+```json
+{
+  "name": "web_search",
+  "description": "Search the web for information using DuckDuckGo or Google Custom Search. Returns titles, URLs, and descriptions of search results. Use this to find current information, documentation, examples, or answers to questions that require up-to-date knowledge."  // ✅ Clear, specific, explains when to use it
+}
+```
+
+**Key Takeaway:** Tool descriptions are not optional metadata - they are the **mechanism** by which the AI knows tools exist and when to use them. Every tool in Atmos includes a detailed description specifically designed to help the AI make the right decision about when to call it.
+
 ### Data Privacy and Security
 
 **Key Points:**
@@ -873,6 +947,102 @@ These components will be affected by your changes since diverging from main bran
 
 ---
 
+#### `web_search`
+
+Search the web for current information, documentation, and examples using DuckDuckGo or Google Custom Search.
+
+:::info Configuration Required
+This tool requires web search to be enabled in your `atmos.yaml` configuration. See [Configuration](#web-search-configuration) below.
+:::
+
+**Parameters:**
+- `query` (string, required) - The search query to execute (e.g., 'Terraform AWS VPC module', 'latest Kubernetes version')
+- `max_results` (integer, optional) - Maximum number of search results to return (1-50, default: 10)
+
+**Example Usage:**
+
+<Terminal title="atmos ai chat">
+```bash
+You: "Search for the latest Terraform AWS VPC module documentation"
+
+AI: I'll search the web for that information.
+
+🔧 Tool Execution Request
+Tool: web_search
+Description: Search the web for information using DuckDuckGo
+
+Parameters:
+  query: Terraform AWS VPC module documentation
+  max_results: 5
+
+Allow execution? (y/N): y
+
+✅ Executing tool...
+
+Web search results for 'Terraform AWS VPC module documentation' (5 results):
+
+1. Terraform AWS VPC Module - Official Documentation
+   URL: https://registry.terraform.io/modules/terraform-aws-modules/vpc/aws
+   Terraform module to create AWS VPC resources with best practices...
+
+2. AWS VPC Terraform Module Examples
+   URL: https://github.com/terraform-aws-modules/terraform-aws-vpc
+   Complete examples for using the terraform-aws-vpc module...
+
+3. How to Create a VPC Using Terraform
+   URL: https://spacelift.io/blog/terraform-aws-vpc
+   Step-by-step guide to creating AWS VPCs with Terraform...
+
+Based on the search results, the official Terraform AWS VPC module documentation
+is available at https://registry.terraform.io/modules/terraform-aws-modules/vpc/aws.
+```
+</Terminal>
+
+**Permissions:** Requires user confirmation (makes external HTTP requests)
+
+**Use Cases:**
+- Find current documentation and examples
+- Research best practices and solutions
+- Look up latest versions and features
+- Discover community resources and tutorials
+- Get up-to-date information beyond AI's knowledge cutoff
+
+**Web Search Configuration:**
+
+Enable web search in your `atmos.yaml`:
+
+<File title="atmos.yaml">
+```yaml
+settings:
+  ai:
+    enabled: true
+
+    # Enable web search
+    web_search:
+      enabled: true
+      max_results: 10          # Optional: limit results (default: 10)
+      engine: "duckduckgo"     # Optional: duckduckgo or google (default: duckduckgo)
+
+      # Optional: Google Custom Search API (requires API key)
+      # google_api_key: "your-api-key"
+      # google_cse_id: "your-cse-id"
+```
+</File>
+
+**Search Engines:**
+
+- **DuckDuckGo** (default): No API key required, privacy-focused, works out of the box
+- **Google Custom Search**: Requires API key and CSE ID, provides more comprehensive results
+
+**Privacy & Security:**
+- Web searches make external HTTP requests to search engines
+- No search queries are logged or stored by Atmos
+- DuckDuckGo does not track searches
+- Google Custom Search respects your Google account privacy settings
+- Tool requires user confirmation before making requests
+
+---
+
 ## Permission System
 
 The permission system provides granular control over what tools the AI can execute.
@@ -1378,7 +1548,10 @@ Atmos AI now includes a comprehensive set of tools for infrastructure management
 **Command Execution Tools:**
 - ✅ `execute_atmos_command` - Execute any Atmos CLI command
 
-**Total Tools Available:** 14 tools across all categories
+**Web & Research Tools:**
+- ✅ `web_search` - Search the web for current information and documentation
+
+**Total Tools Available:** 15 tools across all categories
 
 With these tools, Atmos AI has full Claude Code-like capabilities for infrastructure management!
 

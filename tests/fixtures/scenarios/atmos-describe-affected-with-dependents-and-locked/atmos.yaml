@@ -48,6 +48,12 @@ settings:
     sessions:
       enabled: true
 
+    tools:
+      enabled: true
+
+    web_search:
+      enabled: true
+
     default_provider: "anthropic"  # Default provider for CLI commands
 
     # Providers

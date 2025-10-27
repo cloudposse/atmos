@@ -41,9 +41,11 @@ const (
 	// ParamTypeString is a string parameter.
 	ParamTypeString ParamType = "string"
 	// ParamTypeInt is an integer parameter.
-	ParamTypeInt ParamType = "int"
+	// Note: JSON Schema uses "integer", not "int".
+	ParamTypeInt ParamType = "integer"
 	// ParamTypeBool is a boolean parameter.
-	ParamTypeBool ParamType = "bool"
+	// Note: JSON Schema uses "boolean", not "bool".
+	ParamTypeBool ParamType = "boolean"
 	// ParamTypeArray is an array parameter.
 	ParamTypeArray ParamType = "array"
 	// ParamTypeObject is an object parameter.

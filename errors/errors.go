@@ -464,11 +464,18 @@ var (
 	ErrAISessionManagerNotAvailable = errors.New("session manager not available")
 	ErrAISessionNameEmpty           = errors.New("session name cannot be empty")
 	ErrAISQLitePragmaFailed         = errors.New("failed to set SQLite pragma")
-	ErrMCPToolNotFound              = errors.New("MCP tool not found")
-	ErrMCPInvalidJSONRPCVersion     = errors.New("invalid JSON-RPC version")
-	ErrMCPInvalidTransport          = errors.New("invalid transport type")
-	ErrMCPUnsupportedTransport      = errors.New("unsupported transport")
-	ErrLSPInvalidTransport          = errors.New("invalid LSP transport type")
+
+	// Web search errors.
+	ErrWebSearchFailed      = errors.New("web search request failed")
+	ErrWebSearchParseFailed = errors.New("failed to parse web search results")
+	ErrWebSearchNotEnabled  = errors.New("web search is not enabled in configuration")
+
+	// MCP errors.
+	ErrMCPToolNotFound          = errors.New("MCP tool not found")
+	ErrMCPInvalidJSONRPCVersion = errors.New("invalid JSON-RPC version")
+	ErrMCPInvalidTransport      = errors.New("invalid transport type")
+	ErrMCPUnsupportedTransport  = errors.New("unsupported transport")
+	ErrLSPInvalidTransport      = errors.New("invalid LSP transport type")
 )
 
 // ExitCodeError is a typed error that preserves subcommand exit codes.

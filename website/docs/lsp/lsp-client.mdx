@@ -18,6 +18,45 @@ Atmos includes an **LSP client** that connects to external Language Server Proto
 **Atmos LSP Server**: Allows **IDEs to connect TO Atmos** for Atmos-specific features like stack syntax validation, component autocomplete, and intelligent suggestions. Implemented in `pkg/lsp/server`. See [LSP Server](/lsp/lsp-server) documentation.
 :::
 
+## Understanding the Difference
+
+### What Each Component Validates
+
+The LSP Client and LSP Server validate **completely different things**:
+
+| What Gets Validated | Atmos LSP Server | External LSP Servers (via Client) |
+|---------------------|------------------|-----------------------------------|
+| **Atmos structure** | ✅ Import arrays | ❌ |
+| **Atmos structure** | ✅ Component maps | ❌ |
+| **Atmos structure** | ✅ Stack inheritance | ❌ |
+| **Generic YAML syntax** | ❌ | ✅ YAML schemas |
+| **Terraform syntax** | ❌ | ✅ HCL parsing |
+| **Typos/unknown properties** | ❌ | ✅ Schema validation |
+
+**Example:**
+
+```yaml
+# stacks/prod/vpc.yaml
+import: "not-an-array"        # ← Atmos LSP Server catches this
+                              #   (Atmos structure error)
+
+vpc_ciddr: "10.0.0.0/16"      # ← yaml-language-server catches this
+                              #   (typo/unknown property)
+```
+
+### Component Comparison
+
+| Component | Validates | Used By | Connects To |
+|-----------|-----------|---------|-------------|
+| **LSP Client** | Generic syntax (YAML/TF/HCL) | Atmos AI | External LSP servers |
+| **LSP Server** | Atmos structure | IDEs (VS Code, Neovim) | N/A (IDEs connect TO it) |
+| **Direct Validation** | Atmos structure | Atmos AI | N/A (same process) |
+
+**Why both exist:**
+- **LSP Client**: Atmos doesn't have built-in Terraform/HCL parsers, so it connects to external LSP servers (terraform-ls, yaml-language-server) to validate generic syntax
+- **LSP Server**: IDEs need to validate Atmos-specific structure (imports, components, stack inheritance), so they connect to Atmos' LSP server
+- **Direct Validation**: When Atmos AI needs to validate Atmos structure, it calls validation functions directly (no LSP needed)
+
 ## What is the LSP Client?
 
 The Atmos LSP client is a **component of Atmos AI** that connects to external LSP servers to validate infrastructure files. When enabled, Atmos AI can:

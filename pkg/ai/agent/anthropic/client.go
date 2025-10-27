@@ -230,17 +230,25 @@ func convertToolsToAnthropicFormat(availableTools []tools.Tool) []anthropic.Tool
 		}
 
 		// Create tool input schema.
+		// IMPORTANT: JSON Schema draft 2020-12 requires the "type" field.
 		inputSchema := anthropic.ToolInputSchemaParam{
+			Type:       "object",
 			Properties: properties,
 			Required:   required,
 		}
 
-		// Create tool union param.
-		toolParam := anthropic.ToolUnionParamOfTool(inputSchema, tool.Name())
+		// Create tool param with description.
+		// IMPORTANT: The description field is crucial for Claude to know WHEN to call the tool.
+		toolParam := anthropic.ToolParam{
+			Name:        tool.Name(),
+			Description: anthropic.String(tool.Description()),
+			InputSchema: inputSchema,
+		}
 
-		// Set description if provided (using reflection to access the underlying ToolParam).
-		// Note: The SDK doesn't expose a clean way to set description, so we build it manually.
-		anthropicTools = append(anthropicTools, toolParam)
+		// Wrap in ToolUnionParam using OfTool field.
+		anthropicTools = append(anthropicTools, anthropic.ToolUnionParam{
+			OfTool: &toolParam,
+		})
 	}
 
 	return anthropicTools

@@ -287,6 +287,7 @@ type AISettings struct {
 	Sessions        AISessionSettings            `yaml:"sessions,omitempty" json:"sessions,omitempty" mapstructure:"sessions"`
 	Tools           AIToolSettings               `yaml:"tools,omitempty" json:"tools,omitempty" mapstructure:"tools"`
 	Memory          AIMemorySettings             `yaml:"memory,omitempty" json:"memory,omitempty" mapstructure:"memory"`
+	WebSearch       AIWebSearchSettings          `yaml:"web_search,omitempty" json:"web_search,omitempty" mapstructure:"web_search"`
 	UseLSP          bool                         `yaml:"use_lsp,omitempty" json:"use_lsp,omitempty" mapstructure:"use_lsp"` // Enable LSP integration for diagnostics
 }
 
@@ -325,6 +326,16 @@ type AIMemorySettings struct {
 	AutoUpdate   bool     `yaml:"auto_update,omitempty" json:"auto_update,omitempty" mapstructure:"auto_update"`
 	CreateIfMiss bool     `yaml:"create_if_missing,omitempty" json:"create_if_missing,omitempty" mapstructure:"create_if_missing"`
 	Sections     []string `yaml:"sections,omitempty" json:"sections,omitempty" mapstructure:"sections"` // Sections to include in context
+}
+
+// AIWebSearchSettings contains web search configuration.
+type AIWebSearchSettings struct {
+	Enabled        bool   `yaml:"enabled,omitempty" json:"enabled,omitempty" mapstructure:"enabled"`
+	Engine         string `yaml:"engine,omitempty" json:"engine,omitempty" mapstructure:"engine"`                         // duckduckgo, google
+	GoogleAPIKey   string `yaml:"google_api_key,omitempty" json:"google_api_key,omitempty" mapstructure:"google_api_key"` // For Google Custom Search
+	GoogleCSEID    string `yaml:"google_cse_id,omitempty" json:"google_cse_id,omitempty" mapstructure:"google_cse_id"`    // Google Custom Search Engine ID
+	MaxResults     int    `yaml:"max_results,omitempty" json:"max_results,omitempty" mapstructure:"max_results"`          // Maximum results to return
+	TimeoutSeconds int    `yaml:"timeout_seconds,omitempty" json:"timeout_seconds,omitempty" mapstructure:"timeout_seconds"`
 }
 
 // LSPSettings contains configuration for Language Server Protocol integration.
