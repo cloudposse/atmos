@@ -590,11 +590,15 @@ func TestAWSFileManager_BasePathEnvironmentVariables(t *testing.T) {
 // TestAWSFileManager_BasePathLegacyCompatibility verifies that setting
 // base_path to legacy location works for migration scenarios.
 func TestAWSFileManager_BasePathLegacyCompatibility(t *testing.T) {
-	homeDir, err := homedir.Dir()
-	require.NoError(t, err)
+	// Sandbox HOME to prevent tests from touching real user directories.
+	fakeHome := t.TempDir()
+	t.Setenv("HOME", fakeHome)
+	if runtime.GOOS == "windows" {
+		t.Setenv("USERPROFILE", fakeHome)
+	}
 
 	// Simulate legacy path: ~/.aws/atmos.
-	legacyBasePath := filepath.Join(homeDir, ".aws", "atmos")
+	legacyBasePath := filepath.Join(fakeHome, ".aws", "atmos")
 
 	// Create file manager with legacy base path.
 	fm, err := NewAWSFileManager(legacyBasePath)
@@ -622,8 +626,7 @@ func TestAWSFileManager_BasePathLegacyCompatibility(t *testing.T) {
 	sec := cfg.Section(identityName)
 	assert.Equal(t, "AKIA_LEGACY", sec.Key("aws_access_key_id").String())
 
-	// Cleanup.
-	defer os.RemoveAll(filepath.Join(legacyBasePath, providerName))
+	// No manual cleanup needed - t.TempDir() automatically cleans up.
 
 	t.Logf("Legacy credentials path: %s", expectedPath)
 }
