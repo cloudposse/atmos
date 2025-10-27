@@ -931,9 +931,21 @@ func (m *ChatModel) getAIResponse(userMessage string) tea.Cmd {
 					if i > 0 {
 						resultText += "\n\n"
 					}
+
+					// Determine what to display: use Error if Output is empty or tool failed.
+					displayOutput := result.Output
+					if displayOutput == "" && result.Error != nil {
+						displayOutput = fmt.Sprintf("Error: %v", result.Error)
+					}
+
+					// Handle completely empty results.
+					if displayOutput == "" {
+						displayOutput = "No output returned"
+					}
+
 					// Detect output format and wrap in appropriate code block for syntax highlighting.
-					format := detectOutputFormat(result.Output)
-					resultText += fmt.Sprintf("**Tool:** `%s`\n\n```%s\n%s\n```", response.ToolCalls[i].Name, format, result.Output)
+					format := detectOutputFormat(displayOutput)
+					resultText += fmt.Sprintf("**Tool:** `%s`\n\n```%s\n%s\n```", response.ToolCalls[i].Name, format, displayOutput)
 				}
 
 				finalResponse := response.Content

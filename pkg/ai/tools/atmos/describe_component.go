@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 
+	"gopkg.in/yaml.v3"
+
 	"github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/ai/tools"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -81,8 +83,24 @@ func (t *DescribeComponentTool) Execute(ctx context.Context, params map[string]i
 		}, err
 	}
 
-	// Convert output to formatted string.
-	outputStr := fmt.Sprintf("Component: %s\nStack: %s\n\nConfiguration:\n%+v", component, stack, output)
+	// Convert output to YAML for better readability.
+	yamlBytes, err := yaml.Marshal(output)
+	if err != nil {
+		// Fallback to basic string representation if YAML marshaling fails.
+		outputStr := fmt.Sprintf("Component: %s\nStack: %s\n\nConfiguration:\n%+v", component, stack, output)
+		//nolint:nilerr // Graceful fallback: YAML marshal error doesn't fail the tool.
+		return &tools.Result{
+			Success: true,
+			Output:  outputStr,
+			Data: map[string]interface{}{
+				"component": component,
+				"stack":     stack,
+				"config":    output,
+			},
+		}, nil
+	}
+
+	outputStr := fmt.Sprintf("Component: %s\nStack: %s\n\nConfiguration:\n%s", component, stack, string(yamlBytes))
 
 	return &tools.Result{
 		Success: true,
