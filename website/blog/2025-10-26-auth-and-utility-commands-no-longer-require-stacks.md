@@ -28,7 +28,7 @@ Six Atmos commands that don't operate on stacks have been updated to no longer r
 
 Previously, these commands would fail with an error if you didn't have `stacks.base_path` and `stacks.included_paths` configured in your `atmos.yaml`:
 
-```
+```text
 Error: failed to initialize atmos config
 stack base path must be provided in 'stacks.base_path' config or ATMOS_STACKS_BASE_PATH' ENV variable
 ```
