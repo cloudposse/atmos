@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -480,14 +481,25 @@ func TestAWSFileManager_CustomBasePath(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			// Sandbox HOME to prevent tests from touching real user directories.
+			fakeHome := t.TempDir()
+			t.Setenv("HOME", fakeHome)
+			if runtime.GOOS == "windows" {
+				t.Setenv("USERPROFILE", fakeHome)
+			}
+
 			tt.setupEnv(t)
 
 			fm, err := NewAWSFileManager(tt.basePath)
 			require.NoError(t, err)
 			require.NotNil(t, fm)
 
+			// Normalize paths for cross-platform comparison (Windows uses backslashes).
+			normalizedBaseDir := filepath.ToSlash(fm.baseDir)
+			normalizedExpected := filepath.ToSlash(tt.expectedBasePath)
+
 			// Verify the base directory contains the expected path.
-			assert.Contains(t, fm.baseDir, tt.expectedBasePath,
+			assert.Contains(t, normalizedBaseDir, normalizedExpected,
 				"Base directory should contain expected path")
 
 			t.Logf("Base path: %s → Resolved: %s", tt.basePath, fm.baseDir)

@@ -526,6 +526,10 @@ func TestCopyFile_FailCreateDir(t *testing.T) {
 // TestCopyFile_FailChmod simulates failure when setting file permissions.
 // If the patch doesn't take effect, the test will be skipped.
 func TestCopyFile_FailChmod(t *testing.T) {
+	if runtime.GOARCH == "arm64" {
+		t.Skip("Skipping gomonkey test on ARM64 due to memory protection issues: https://github.com/agiledragon/gomonkey/issues/146")
+	}
+
 	patches := gomonkey.ApplyFunc(os.Chmod, func(name string, mode os.FileMode) error {
 		return errSimulatedChmodFailure
 	})
@@ -551,7 +555,7 @@ func TestCopyFile_FailChmod(t *testing.T) {
 // TestGetMatchesForPattern_GlobError forces u.GetGlobMatches to return an error.
 func TestGetMatchesForPattern_GlobError(t *testing.T) {
 	if runtime.GOARCH == "arm64" {
-		t.Skip("Skipping gomonkey test on ARM64 due to memory protection issues")
+		t.Skip("Skipping gomonkey test on ARM64 due to memory protection issues: https://github.com/agiledragon/gomonkey/issues/146")
 	}
 
 	patches := gomonkey.ApplyFunc(u.GetGlobMatches, func(pattern string) ([]string, error) {
@@ -636,6 +640,10 @@ func (fde fakeDirEntryWithInfo) Info() (os.FileInfo, error) { return fde.info, n
 
 // TestProcessPrefixEntry_FailMkdir simulates an error when creating a directory in processPrefixEntry.
 func TestProcessPrefixEntry_FailMkdir(t *testing.T) {
+	if runtime.GOARCH == "arm64" {
+		t.Skip("Skipping gomonkey test on ARM64 due to memory protection issues: https://github.com/agiledragon/gomonkey/issues/146")
+	}
+
 	srcDir := t.TempDir()
 	dstDir := t.TempDir()
 
@@ -671,6 +679,10 @@ func TestProcessPrefixEntry_FailMkdir(t *testing.T) {
 
 // TestCopyToTargetWithPatterns_UseCpCopy ensures that when no inclusion/exclusion patterns are defined, the cp.Copy branch is used.
 func TestCopyToTargetWithPatterns_UseCpCopy(t *testing.T) {
+	if runtime.GOARCH == "arm64" {
+		t.Skip("Skipping gomonkey test on ARM64 due to memory protection issues: https://github.com/agiledragon/gomonkey/issues/146")
+	}
+
 	srcDir := t.TempDir()
 	dstDir := t.TempDir()
 
@@ -708,6 +720,10 @@ func TestCopyToTargetWithPatterns_UseCpCopy(t *testing.T) {
 // TestGetMatchesForPattern_ShallowNoMatches tests a shallow pattern (ending with "/*" but not "/**")
 // when no matches are found, expecting an empty result.
 func TestGetMatchesForPattern_ShallowNoMatches(t *testing.T) {
+	if runtime.GOARCH == "arm64" {
+		t.Skip("Skipping gomonkey test on ARM64 due to memory protection issues: https://github.com/agiledragon/gomonkey/issues/146")
+	}
+
 	patches := gomonkey.ApplyFunc(u.GetGlobMatches, func(pattern string) ([]string, error) {
 		return []string{}, nil
 	})
@@ -726,6 +742,10 @@ func TestGetMatchesForPattern_ShallowNoMatches(t *testing.T) {
 
 // TestProcessMatch_RelPathError simulates an error in computing the relative path in processMatch.
 func TestProcessMatch_RelPathError(t *testing.T) {
+	if runtime.GOARCH == "arm64" {
+		t.Skip("Skipping gomonkey test on ARM64 due to memory protection issues: https://github.com/agiledragon/gomonkey/issues/146")
+	}
+
 	srcDir := "/dummy/src"
 	dstPath := "/dummy/dst"
 
@@ -842,6 +862,10 @@ func TestShouldSkipPrefixEntry_NoExclusion(t *testing.T) {
 
 // TestGetMatchesForPattern_RecursiveNoMatch tests recursive pattern with no matches.
 func TestGetMatchesForPattern_RecursiveNoMatch(t *testing.T) {
+	if runtime.GOARCH == "arm64" {
+		t.Skip("Skipping gomonkey test on ARM64 due to memory protection issues: https://github.com/agiledragon/gomonkey/issues/146")
+	}
+
 	patches := gomonkey.ApplyFunc(u.GetGlobMatches, func(pattern string) ([]string, error) {
 		return []string{}, nil
 	})

@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -15,18 +14,7 @@ import (
 // using the auth env command to retrieve environment variables.
 func TestAuth_EnvCommand_E2E(t *testing.T) {
 	tk := NewTestKit(t)
-
-	mockDir := "../tests/fixtures/scenarios/atmos-auth-mock"
-	absPath, err := filepath.Abs(mockDir)
-	require.NoError(t, err, "Failed to resolve absolute path")
-
-	tk.Chdir(mockDir)
-	tempDir := t.TempDir()
-	tk.Setenv("ATMOS_KEYRING_TYPE", "file")
-	tk.Setenv("ATMOS_KEYRING_FILE_PATH", filepath.Join(tempDir, "keyring.json"))
-	tk.Setenv("ATMOS_KEYRING_PASSWORD", "test-password-for-file-keyring")
-	tk.Setenv("ATMOS_CLI_CONFIG_PATH", absPath)
-	tk.Setenv("ATMOS_BASE_PATH", absPath)
+	_ = setupMockAuthDir(t, tk)
 
 	// Step 1: Login to cache credentials.
 	t.Run("login", func(t *testing.T) {
@@ -116,18 +104,7 @@ func TestAuth_EnvCommand_E2E(t *testing.T) {
 // using the auth exec command to run commands with authenticated environment.
 func TestAuth_ExecCommand_E2E(t *testing.T) {
 	tk := NewTestKit(t)
-
-	mockDir := "../tests/fixtures/scenarios/atmos-auth-mock"
-	absPath, err := filepath.Abs(mockDir)
-	require.NoError(t, err, "Failed to resolve absolute path")
-
-	tk.Chdir(mockDir)
-	tempDir := t.TempDir()
-	tk.Setenv("ATMOS_KEYRING_TYPE", "file")
-	tk.Setenv("ATMOS_KEYRING_FILE_PATH", filepath.Join(tempDir, "keyring.json"))
-	tk.Setenv("ATMOS_KEYRING_PASSWORD", "test-password-for-file-keyring")
-	tk.Setenv("ATMOS_CLI_CONFIG_PATH", absPath)
-	tk.Setenv("ATMOS_BASE_PATH", absPath)
+	_ = setupMockAuthDir(t, tk)
 
 	// Step 1: Login to cache credentials.
 	t.Run("login", func(t *testing.T) {
@@ -202,18 +179,7 @@ func TestAuth_ExecCommand_E2E(t *testing.T) {
 // using the auth whoami command to retrieve identity information.
 func TestAuth_WhoamiCommand_E2E(t *testing.T) {
 	tk := NewTestKit(t)
-
-	mockDir := "../tests/fixtures/scenarios/atmos-auth-mock"
-	absPath, err := filepath.Abs(mockDir)
-	require.NoError(t, err, "Failed to resolve absolute path")
-
-	tk.Chdir(mockDir)
-	tempDir := t.TempDir()
-	tk.Setenv("ATMOS_KEYRING_TYPE", "file")
-	tk.Setenv("ATMOS_KEYRING_FILE_PATH", filepath.Join(tempDir, "keyring.json"))
-	tk.Setenv("ATMOS_KEYRING_PASSWORD", "test-password-for-file-keyring")
-	tk.Setenv("ATMOS_CLI_CONFIG_PATH", absPath)
-	tk.Setenv("ATMOS_BASE_PATH", absPath)
+	_ = setupMockAuthDir(t, tk)
 
 	// Step 1: Login to cache credentials.
 	t.Run("login", func(t *testing.T) {
@@ -284,18 +250,7 @@ func TestAuth_ShellCommand_E2E(t *testing.T) {
 // mimics what a user would do: login, check whoami, get env vars, run command.
 func TestAuth_CompleteWorkflow_E2E(t *testing.T) {
 	tk := NewTestKit(t)
-
-	mockDir := "../tests/fixtures/scenarios/atmos-auth-mock"
-	absPath, err := filepath.Abs(mockDir)
-	require.NoError(t, err, "Failed to resolve absolute path")
-
-	tk.Chdir(mockDir)
-	tempDir := t.TempDir()
-	tk.Setenv("ATMOS_KEYRING_TYPE", "file")
-	tk.Setenv("ATMOS_KEYRING_FILE_PATH", filepath.Join(tempDir, "keyring.json"))
-	tk.Setenv("ATMOS_KEYRING_PASSWORD", "test-password-for-file-keyring")
-	tk.Setenv("ATMOS_CLI_CONFIG_PATH", absPath)
-	tk.Setenv("ATMOS_BASE_PATH", absPath)
+	_ = setupMockAuthDir(t, tk)
 
 	workflow := []struct {
 		name string
@@ -342,18 +297,7 @@ func TestAuth_CompleteWorkflow_E2E(t *testing.T) {
 // TestAuth_MultipleIdentities_E2E tests using multiple commands with a cached identity.
 func TestAuth_MultipleIdentities_E2E(t *testing.T) {
 	tk := NewTestKit(t)
-
-	mockDir := "../tests/fixtures/scenarios/atmos-auth-mock"
-	absPath, err := filepath.Abs(mockDir)
-	require.NoError(t, err, "Failed to resolve absolute path")
-
-	tk.Chdir(mockDir)
-	tempDir := t.TempDir()
-	tk.Setenv("ATMOS_KEYRING_TYPE", "file")
-	tk.Setenv("ATMOS_KEYRING_FILE_PATH", filepath.Join(tempDir, "keyring.json"))
-	tk.Setenv("ATMOS_KEYRING_PASSWORD", "test-password-for-file-keyring")
-	tk.Setenv("ATMOS_CLI_CONFIG_PATH", absPath)
-	tk.Setenv("ATMOS_BASE_PATH", absPath)
+	_ = setupMockAuthDir(t, tk)
 
 	// Login to identity.
 	t.Run("login", func(t *testing.T) {
