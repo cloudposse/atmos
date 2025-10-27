@@ -549,7 +549,7 @@ func (m *ChatModel) handleProviderSwitched(msg providerSwitchedMsg) {
 			break
 		}
 	}
-	m.addMessage(roleAssistant, fmt.Sprintf("🔄 Switched to %s (model: %s)\n\nYour message history has been preserved.", providerName, msg.providerConfig.Model))
+	m.addMessage(roleSystem, fmt.Sprintf("🔄 Switched to %s (model: %s)\n\nStarting fresh conversation with this provider.", providerName, msg.providerConfig.Model))
 
 	// Force viewport update to show the message immediately.
 	m.updateViewportContent()
@@ -694,9 +694,10 @@ func min(a, b int) int {
 }
 
 func (m *ChatModel) addMessage(role, content string) {
-	// Capture the current provider for assistant messages.
+	// Capture the current provider for all non-system messages.
+	// This ensures complete conversation isolation when switching providers.
 	provider := ""
-	if role == roleAssistant && m.sess != nil && m.sess.Provider != "" {
+	if role != roleSystem && m.sess != nil && m.sess.Provider != "" {
 		provider = m.sess.Provider
 	}
 
@@ -854,9 +855,8 @@ func (m *ChatModel) getAIResponse(userMessage string) tea.Cmd {
 		defer cancel()
 
 		// Build message history filtered by provider.
-		// Only include:
-		// - All user messages (provider-agnostic)
-		// - Assistant messages from the current provider only
+		// Only include messages from the current provider session for complete isolation.
+		// This ensures clean separation when switching between providers.
 		currentProvider := ""
 		if m.sess != nil {
 			currentProvider = m.sess.Provider
@@ -864,22 +864,14 @@ func (m *ChatModel) getAIResponse(userMessage string) tea.Cmd {
 
 		messages := make([]aiTypes.Message, 0, len(m.messages)+1)
 		for _, msg := range m.messages {
-			// Skip system messages (UI-only notifications)
+			// Skip system messages (UI-only notifications).
 			if msg.Role == roleSystem {
 				continue
 			}
 
-			// Include all user messages
-			if msg.Role == roleUser {
-				messages = append(messages, aiTypes.Message{
-					Role:    msg.Role,
-					Content: msg.Content,
-				})
-				continue
-			}
-
-			// Include assistant messages only from the current provider
-			if msg.Role == roleAssistant && msg.Provider == currentProvider {
+			// Include only messages from the current provider session.
+			// This provides complete conversation isolation when switching providers.
+			if msg.Provider == currentProvider {
 				messages = append(messages, aiTypes.Message{
 					Role:    msg.Role,
 					Content: msg.Content,

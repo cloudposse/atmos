@@ -1861,13 +1861,14 @@ func TestChatModel_ProviderFilteredHistory(t *testing.T) {
 		m.sess = sess
 		m.ready = true
 
-		// Add messages from different providers
+		// Add messages from different provider sessions
+		// With complete isolation, only messages from the current provider session are sent
 		m.messages = []ChatMessage{
-			{Role: roleUser, Content: "User question 1", Provider: ""},
+			{Role: roleUser, Content: "User question 1", Provider: "anthropic"},
 			{Role: roleAssistant, Content: "Anthropic response 1", Provider: "anthropic"},
-			{Role: roleUser, Content: "User question 2", Provider: ""},
+			{Role: roleUser, Content: "OpenAI user question", Provider: "openai"}, // Different provider
 			{Role: roleAssistant, Content: "OpenAI response", Provider: "openai"}, // Different provider
-			{Role: roleUser, Content: "User question 3", Provider: ""},
+			{Role: roleUser, Content: "User question 2", Provider: "anthropic"},
 			{Role: roleAssistant, Content: "Anthropic response 2", Provider: "anthropic"},
 		}
 
@@ -1879,12 +1880,12 @@ func TestChatModel_ProviderFilteredHistory(t *testing.T) {
 		assert.NotNil(t, result)
 
 		// Check that receivedMessages only contains:
-		// - All user messages
-		// - Only assistant messages from anthropic (current provider)
+		// - User and assistant messages from anthropic (current provider)
 		// - The new user message
-		expectedMessageCount := 6 // 3 existing user + 2 anthropic assistant + 1 new user
+		// OpenAI messages should be completely filtered out for isolation
+		expectedMessageCount := 5 // 2 anthropic user + 2 anthropic assistant + 1 new user
 		assert.Len(t, client.receivedMessages, expectedMessageCount,
-			"Should include all user messages and only assistant messages from current provider")
+			"Should include only messages from current provider (anthropic)")
 
 		// Verify the messages are in the correct order and from correct provider
 		assert.Equal(t, roleUser, client.receivedMessages[0].Role)
@@ -1896,16 +1897,13 @@ func TestChatModel_ProviderFilteredHistory(t *testing.T) {
 		assert.Equal(t, roleUser, client.receivedMessages[2].Role)
 		assert.Equal(t, "User question 2", client.receivedMessages[2].Content)
 
-		// OpenAI response should be skipped (index 3 would be User question 3)
-		assert.Equal(t, roleUser, client.receivedMessages[3].Role)
-		assert.Equal(t, "User question 3", client.receivedMessages[3].Content)
-
-		assert.Equal(t, roleAssistant, client.receivedMessages[4].Role)
-		assert.Equal(t, "Anthropic response 2", client.receivedMessages[4].Content)
+		// OpenAI messages should be completely skipped
+		assert.Equal(t, roleAssistant, client.receivedMessages[3].Role)
+		assert.Equal(t, "Anthropic response 2", client.receivedMessages[3].Content)
 
 		// New user message should be last
-		assert.Equal(t, roleUser, client.receivedMessages[5].Role)
-		assert.Equal(t, "New user message", client.receivedMessages[5].Content)
+		assert.Equal(t, roleUser, client.receivedMessages[4].Role)
+		assert.Equal(t, "New user message", client.receivedMessages[4].Content)
 	})
 
 	t.Run("includes all messages when provider matches", func(t *testing.T) {
@@ -1928,16 +1926,16 @@ func TestChatModel_ProviderFilteredHistory(t *testing.T) {
 
 		// Add messages all from openai
 		m.messages = []ChatMessage{
-			{Role: roleUser, Content: "User question 1", Provider: ""},
+			{Role: roleUser, Content: "User question 1", Provider: "openai"},
 			{Role: roleAssistant, Content: "OpenAI response 1", Provider: "openai"},
-			{Role: roleUser, Content: "User question 2", Provider: ""},
+			{Role: roleUser, Content: "User question 2", Provider: "openai"},
 			{Role: roleAssistant, Content: "OpenAI response 2", Provider: "openai"},
 		}
 
 		cmd := m.getAIResponse("New message")
 		cmd()
 
-		// All messages should be included
+		// All messages from openai should be included
 		assert.Len(t, client.receivedMessages, 5) // 2 user + 2 assistant + 1 new user
 	})
 
@@ -1959,22 +1957,21 @@ func TestChatModel_ProviderFilteredHistory(t *testing.T) {
 		m.sess = sess
 		m.ready = true
 
-		// Add messages from anthropic and openai
+		// Add messages from anthropic and openai (but not gemini)
 		m.messages = []ChatMessage{
-			{Role: roleUser, Content: "User question 1", Provider: ""},
+			{Role: roleUser, Content: "User question 1", Provider: "anthropic"},
 			{Role: roleAssistant, Content: "Anthropic response", Provider: "anthropic"},
-			{Role: roleUser, Content: "User question 2", Provider: ""},
+			{Role: roleUser, Content: "User question 2", Provider: "openai"},
 			{Role: roleAssistant, Content: "OpenAI response", Provider: "openai"},
 		}
 
 		cmd := m.getAIResponse("New message")
 		cmd()
 
-		// Only user messages should be included
-		assert.Len(t, client.receivedMessages, 3) // 2 existing user + 1 new user
+		// Since current provider is gemini and no messages match, only the new user message should be sent
+		assert.Len(t, client.receivedMessages, 1) // Only 1 new user message
 		assert.Equal(t, roleUser, client.receivedMessages[0].Role)
-		assert.Equal(t, roleUser, client.receivedMessages[1].Role)
-		assert.Equal(t, roleUser, client.receivedMessages[2].Role)
+		assert.Equal(t, "New message", client.receivedMessages[0].Content)
 	})
 }
 

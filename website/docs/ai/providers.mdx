@@ -624,6 +624,49 @@ Press `Ctrl+P` during a chat session to switch providers mid-conversation.
 
 Change `default_provider` to your preferred provider for `atmos ai ask` commands.
 
+### Provider Isolation
+
+When you switch between providers in the AI chat, each provider maintains its own **completely isolated conversation history**. This ensures clean separation and prevents context confusion between different AI models.
+
+**How it works:**
+
+1. **Isolated Conversations**: Each provider only sees messages from its own conversation thread
+2. **Full History Preservation**: When you switch back to a previous provider, it remembers the entire conversation you had with it
+3. **No Cross-Contamination**: OpenAI messages are never sent to Anthropic, and vice versa
+4. **System Messages Excluded**: UI notifications (like "Switched to...") are never sent to any provider
+
+**Example Flow:**
+
+```
+Session with OpenAI:
+  You: "What is Atmos?"
+  OpenAI: "Atmos is a framework..."
+  You: "How do I configure it?"
+  OpenAI: "You configure it with..."
+
+Switch to Anthropic (Ctrl+P):
+  System: "🔄 Switched to Anthropic"
+  You: "List all stacks"
+  Anthropic: "Here are the stacks..."
+
+Switch back to OpenAI (Ctrl+P):
+  System: "🔄 Switched to OpenAI"
+  You: "Tell me more about configuration"
+  OpenAI: [Sees full OpenAI conversation history]
+```
+
+**What OpenAI sees in the last message:**
+- ✅ "What is Atmos?"
+- ✅ "How do I configure it?"
+- ✅ "Tell me more about configuration" (new)
+- ❌ The Anthropic conversation (completely filtered out)
+
+**Benefits:**
+- **Clean Context**: Each provider has clean, relevant context without noise from other models
+- **Token Efficiency**: No wasted tokens sending irrelevant history
+- **Consistent Responses**: Each provider maintains continuity in its own conversation
+- **Compare Providers**: Easily compare how different providers respond to the same query by maintaining separate conversations
+
 ## Security & Privacy by Provider
 
 ### Cloud Providers (Anthropic, OpenAI, Google, xAI)
