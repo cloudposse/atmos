@@ -125,7 +125,7 @@ This ensures Atmos credentials are stored in mounted directories (`~/.config`) r
 ### Ecosystem Alignment
 
 Your `~/.config` directory now contains configuration for all your CLI tools:
-```
+```text
 ~/.config/
 ├── atmos/          # Atmos (now!)
 ├── gh/             # GitHub CLI
@@ -170,9 +170,9 @@ If you encounter issues:
 
 ## References
 
-- XDG Base Directory Specification: https://specifications.freedesktop.org/basedir-spec/basedir-spec-latest.html
-- Stack Overflow Discussion: https://stackoverflow.com/questions/3373948/equivalents-of-xdg-config-home-and-xdg-data-home-on-mac-os-x
-- Geodesic: https://github.com/cloudposse/geodesic
+- [XDG Base Directory Specification](https://specifications.freedesktop.org/basedir-spec/basedir-spec-latest.html)
+- [Stack Overflow discussion on XDG equivalents on macOS](https://stackoverflow.com/questions/3373948/equivalents-of-xdg-config-home-and-xdg-data-home-on-mac-os-x)
+- [Geodesic](https://github.com/cloudposse/geodesic)
 
 ---
 

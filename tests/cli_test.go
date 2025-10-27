@@ -877,8 +877,9 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 	// 2. Writing to user's cache/config/data directories
 	// 3. Being affected by user's XDG environment settings
 	//
-	// Create a unique temp directory for this test's XDG state.
-	xdgTempDir := filepath.Join(t.TempDir(), "xdg")
+	// Use the existing tempDir to ensure XDG paths share the same root directory.
+	// This preserves isolation and avoids bypass issues when tc.Env already contains XDG vars.
+	xdgTempDir := filepath.Join(tempDir, "xdg")
 	xdgVars := map[string]string{
 		"XDG_CACHE_HOME":        filepath.Join(xdgTempDir, "cache"),
 		"XDG_CONFIG_HOME":       filepath.Join(xdgTempDir, "config"),
