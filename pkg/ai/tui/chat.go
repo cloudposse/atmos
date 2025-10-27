@@ -86,17 +86,19 @@ type ChatModel struct {
 	selectedSessionIndex int
 	sessionListError     string
 	createForm           createSessionForm
-	deleteConfirm        bool            // Whether we're in delete confirmation state
-	deleteSessionID      string          // ID of session to delete
-	renameMode           bool            // Whether we're in rename mode
-	renameSessionID      string          // ID of session to rename
-	renameInput          textinput.Model // Text input for new session name
-	sessionFilter        string          // Current provider filter ("all", "anthropic", "openai", "gemini", "grok")
-	messageHistory       []string        // History of user messages for navigation
-	historyIndex         int             // Current position in history (-1 = not navigating)
-	historyBuffer        string          // Temporary buffer for current input when navigating
-	providerSelectMode   bool            // Whether we're in provider selection mode
-	selectedProviderIdx  int             // Selected provider index in provider selection
+	deleteConfirm        bool                  // Whether we're in delete confirmation state
+	deleteSessionID      string                // ID of session to delete
+	renameMode           bool                  // Whether we're in rename mode
+	renameSessionID      string                // ID of session to rename
+	renameInput          textinput.Model       // Text input for new session name
+	sessionFilter        string                // Current provider filter ("all", "anthropic", "openai", "gemini", "grok")
+	messageHistory       []string              // History of user messages for navigation
+	historyIndex         int                   // Current position in history (-1 = not navigating)
+	historyBuffer        string                // Temporary buffer for current input when navigating
+	providerSelectMode   bool                  // Whether we're in provider selection mode
+	selectedProviderIdx  int                   // Selected provider index in provider selection
+	markdownRenderer     *glamour.TermRenderer // Cached markdown renderer for performance
+	renderedMessages     []string              // Cache of rendered messages to avoid re-rendering
 }
 
 // ChatMessage represents a single message in the chat.
@@ -129,6 +131,19 @@ func NewChatModel(client ai.Client, atmosConfig *schema.AtmosConfiguration, mana
 	s.Spinner = spinner.Dot
 	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorCyan))
 
+	// Initialize cached markdown renderer for performance.
+	// Creating glamour renderers is expensive, so we create one and reuse it.
+	renderer, err := glamour.NewTermRenderer(
+		glamour.WithAutoStyle(),
+		glamour.WithWordWrap(DefaultViewportWidth-4),
+		glamour.WithColorProfile(lipgloss.ColorProfile()),
+		glamour.WithEmoji(),
+	)
+	if err != nil {
+		log.Warn(fmt.Sprintf("Failed to create cached markdown renderer: %v", err))
+		// Continue without renderer - will fallback to plain text
+	}
+
 	model := &ChatModel{
 		client:               client,
 		atmosConfig:          atmosConfig,
@@ -147,6 +162,8 @@ func NewChatModel(client ai.Client, atmosConfig *schema.AtmosConfiguration, mana
 		createForm:           newCreateSessionForm(),
 		messageHistory:       make([]string, 0),
 		historyIndex:         -1,
+		markdownRenderer:     renderer,
+		renderedMessages:     make([]string, 0),
 	}
 
 	// Load existing messages from session if available.
@@ -200,68 +217,51 @@ func (m *ChatModel) loadSessionMessages() error {
 	return nil
 }
 
-// switchProvider switches the AI provider mid-session while preserving message history.
-func (m *ChatModel) switchProvider(provider string) error {
-	if m.atmosConfig == nil {
-		return fmt.Errorf("cannot switch provider: atmosConfig is nil")
-	}
+// switchProviderAsync initiates an asynchronous provider switch to avoid blocking the UI.
+// PERFORMANCE: Creating AI clients can take 1-3 seconds, so we do it async.
+func (m *ChatModel) switchProviderAsync(provider string) tea.Cmd {
+	return func() tea.Msg {
+		if m.atmosConfig == nil {
+			return providerSwitchedMsg{
+				provider: provider,
+				err:      fmt.Errorf("cannot switch provider: atmosConfig is nil"),
+			}
+		}
 
-	// Get provider-specific configuration to validate it exists.
-	providerConfig, err := ai.GetProviderConfig(m.atmosConfig, provider)
-	if err != nil {
-		return fmt.Errorf("cannot switch to provider %s: %w", provider, err)
-	}
+		// Get provider-specific configuration to validate it exists.
+		providerConfig, err := ai.GetProviderConfig(m.atmosConfig, provider)
+		if err != nil {
+			return providerSwitchedMsg{
+				provider: provider,
+				err:      fmt.Errorf("cannot switch to provider %s: %w", provider, err),
+			}
+		}
 
-	// Store old provider for rollback on failure.
-	oldDefaultProvider := m.atmosConfig.Settings.AI.DefaultProvider
+		// Store old provider for rollback on failure.
+		oldDefaultProvider := m.atmosConfig.Settings.AI.DefaultProvider
 
-	// Update atmosConfig to use the new provider.
-	m.atmosConfig.Settings.AI.DefaultProvider = provider
+		// Update atmosConfig to use the new provider.
+		m.atmosConfig.Settings.AI.DefaultProvider = provider
 
-	// Create new client with the updated provider.
-	newClient, err := ai.NewClient(m.atmosConfig)
-	if err != nil {
-		// Restore old settings on failure.
-		m.atmosConfig.Settings.AI.DefaultProvider = oldDefaultProvider
-		return fmt.Errorf("failed to create new client for provider %s: %w", provider, err)
-	}
+		// Create new client with the updated provider.
+		// PERFORMANCE: This can take 1-3 seconds, which is why we run it async.
+		newClient, err := ai.NewClient(m.atmosConfig)
+		if err != nil {
+			// Restore old settings on failure.
+			m.atmosConfig.Settings.AI.DefaultProvider = oldDefaultProvider
+			return providerSwitchedMsg{
+				provider: provider,
+				err:      fmt.Errorf("failed to create new client for provider %s: %w", provider, err),
+			}
+		}
 
-	// Replace the client.
-	m.client = newClient
-
-	// Update session if available.
-	if m.sess != nil {
-		m.sess.Provider = provider
-		m.sess.Model = providerConfig.Model
-
-		// Persist session update if manager is available.
-		// IMPORTANT: This runs asynchronously to prevent UI freezes during database writes.
-		// Database operations can take 3-5 seconds depending on disk speed and load.
-		if m.manager != nil {
-			// Capture values before goroutine to avoid race conditions.
-			manager := m.manager
-			sess := m.sess
-			go func() {
-				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-				defer cancel()
-				if err := manager.UpdateSession(ctx, sess); err != nil {
-					log.Warn(fmt.Sprintf("Failed to persist provider switch in session: %v", err))
-				}
-			}()
+		return providerSwitchedMsg{
+			provider:       provider,
+			providerConfig: providerConfig,
+			newClient:      newClient,
+			err:            nil,
 		}
 	}
-
-	// Add system message indicating the switch.
-	providerName := provider
-	for _, p := range availableProviders {
-		if p.Name == provider {
-			providerName = p.Description
-			break
-		}
-	}
-	m.addMessage(roleAssistant, fmt.Sprintf("🔄 Switched to %s (model: %s)\n\nYour message history has been preserved.", providerName, providerConfig.Model))
-
-	return nil
 }
 
 // Init initializes the chat model.
@@ -324,6 +324,25 @@ func (m *ChatModel) handleWindowResize(msg tea.WindowSizeMsg) {
 		}
 	}
 
+	// Recreate markdown renderer with new width for proper word wrapping.
+	// Clear rendered message cache since width changed.
+	width := msg.Width - 4
+	if width < minMarkdownWidth {
+		width = minMarkdownWidth
+	}
+	renderer, err := glamour.NewTermRenderer(
+		glamour.WithAutoStyle(),
+		glamour.WithWordWrap(width),
+		glamour.WithColorProfile(lipgloss.ColorProfile()),
+		glamour.WithEmoji(),
+	)
+	if err != nil {
+		log.Warn(fmt.Sprintf("Failed to recreate markdown renderer on resize: %v", err))
+	} else {
+		m.markdownRenderer = renderer
+		m.renderedMessages = make([]string, 0) // Clear cache
+	}
+
 	m.updateViewportContent()
 }
 
@@ -346,20 +365,12 @@ func (m *ChatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.textarea, cmd = m.textarea.Update(msg)
 		cmds = append(cmds, cmd)
 
-		// Strip any ANSI escape sequences only on certain key events, not every update.
-		// Terminal emulators can send OSC sequences as input, but checking on every keystroke
-		// is too expensive for large text. Only check on paste events or special keys.
-		if keyMsg, ok := msg.(tea.KeyMsg); ok {
-			// Only strip ANSI on potential paste events (Ctrl+V, Shift+Insert, etc.)
-			// or when we detect potential ANSI sequences in the key string.
-			if keyMsg.String() == "ctrl+v" || keyMsg.Type == tea.KeySpace ||
-				strings.Contains(keyMsg.String(), "\x1b") || strings.Contains(keyMsg.String(), "\033") {
-				if currentValue := m.textarea.Value(); currentValue != "" {
-					cleanedValue := stripANSI(currentValue)
-					if cleanedValue != currentValue {
-						m.textarea.SetValue(cleanedValue)
-					}
-				}
+		// Strip any ANSI escape sequences that might be pasted.
+		// Terminal emulators can send OSC sequences as input.
+		if currentValue := m.textarea.Value(); currentValue != "" {
+			cleanedValue := stripANSI(currentValue)
+			if cleanedValue != currentValue {
+				m.textarea.SetValue(cleanedValue)
 			}
 		}
 	}
@@ -412,6 +423,10 @@ func (m *ChatModel) handleMessage(msg tea.Msg, cmds *[]tea.Cmd) (bool, tea.Cmd) 
 
 	case sessionRenamedMsg:
 		return true, m.handleSessionRenamed(msg)
+
+	case providerSwitchedMsg:
+		m.handleProviderSwitched(msg)
+		return true, nil
 	}
 
 	return false, nil
@@ -494,6 +509,50 @@ func (m *ChatModel) handleSpinnerTick(msg spinner.TickMsg, cmds *[]tea.Cmd) bool
 		*cmds = append(*cmds, cmd)
 	}
 	return true
+}
+
+// handleProviderSwitched handles the result of an async provider switch.
+func (m *ChatModel) handleProviderSwitched(msg providerSwitchedMsg) {
+	if msg.err != nil {
+		m.addMessage(roleSystem, fmt.Sprintf("Error switching provider: %v", msg.err))
+		m.updateViewportContent()
+		return
+	}
+
+	// Replace the client.
+	m.client = msg.newClient
+
+	// Update session if available.
+	if m.sess != nil {
+		m.sess.Provider = msg.provider
+		m.sess.Model = msg.providerConfig.Model
+
+		// Persist session update asynchronously.
+		if m.manager != nil {
+			manager := m.manager
+			sess := m.sess
+			go func() {
+				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+				defer cancel()
+				if err := manager.UpdateSession(ctx, sess); err != nil {
+					log.Warn(fmt.Sprintf("Failed to persist provider switch in session: %v", err))
+				}
+			}()
+		}
+	}
+
+	// Add system message indicating the switch.
+	providerName := msg.provider
+	for _, p := range availableProviders {
+		if p.Name == msg.provider {
+			providerName = p.Description
+			break
+		}
+	}
+	m.addMessage(roleAssistant, fmt.Sprintf("🔄 Switched to %s (model: %s)\n\nYour message history has been preserved.", providerName, msg.providerConfig.Model))
+
+	// Force viewport update to show the message immediately.
+	m.updateViewportContent()
 }
 
 // View renders the chat interface.
@@ -606,12 +665,23 @@ func (m *ChatModel) addMessage(role, content string) {
 }
 
 func (m *ChatModel) updateViewportContent() {
-	var contentParts []string
+	// PERFORMANCE OPTIMIZATION: Only render new messages, reuse cached renders.
+	// This dramatically improves performance with many messages.
 
-	// Add empty line at the top for spacing after header.
-	contentParts = append(contentParts, "")
+	// Calculate how many messages need rendering.
+	numCached := len(m.renderedMessages)
+	numTotal := len(m.messages)
 
-	for _, msg := range m.messages {
+	// If cache is empty or invalid, render all messages.
+	if numCached == 0 || numCached > numTotal {
+		m.renderedMessages = make([]string, 0, numTotal*3) // Pre-allocate: header + content + empty line per message
+		numCached = 0
+	}
+
+	// Render only new messages (from numCached to numTotal).
+	for i := numCached; i < numTotal; i++ {
+		msg := m.messages[i]
+
 		var style lipgloss.Style
 		var prefix string
 
@@ -625,7 +695,6 @@ func (m *ChatModel) updateViewportContent() {
 			style = lipgloss.NewStyle().
 				Foreground(lipgloss.Color(theme.ColorCyan))
 			// Include alien emoji and provider name in the prefix.
-			// Use the provider stored with the message, not the current session provider.
 			provider := msg.Provider
 			if provider == "" {
 				provider = "unknown"
@@ -640,67 +709,56 @@ func (m *ChatModel) updateViewportContent() {
 
 		timestamp := msg.Time.Format("15:04")
 		timeStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
-
 		header := fmt.Sprintf("%s %s", style.Render(prefix), timeStyle.Render(timestamp))
 
-		// Render content with markdown for assistant messages
+		// Render content with markdown for assistant messages.
 		var renderedContent string
 		if msg.Role == roleAssistant {
-			// Render markdown with syntax highlighting
 			renderedContent = m.renderMarkdown(msg.Content)
 		} else {
-			// Plain text for user and system messages
+			// Plain text for user and system messages.
 			contentStyle := lipgloss.NewStyle().
 				PaddingLeft(2).
 				Width(m.viewport.Width - 4)
 			renderedContent = contentStyle.Render(msg.Content)
 		}
 
-		contentParts = append(contentParts, header)
-		contentParts = append(contentParts, renderedContent)
-		contentParts = append(contentParts, "") // Empty line between messages
+		// Cache the rendered message parts.
+		m.renderedMessages = append(m.renderedMessages, header)
+		m.renderedMessages = append(m.renderedMessages, renderedContent)
+		m.renderedMessages = append(m.renderedMessages, "") // Empty line between messages
 	}
 
-	m.viewport.SetContent(strings.Join(contentParts, newlineChar))
+	// Build final content from cache with empty line at top.
+	finalContent := append([]string{""}, m.renderedMessages...)
+	m.viewport.SetContent(strings.Join(finalContent, newlineChar))
 	m.viewport.GotoBottom()
 }
 
-// renderMarkdown renders markdown content with syntax highlighting using glamour.
+// renderMarkdown renders markdown content with syntax highlighting using the cached glamour renderer.
+// PERFORMANCE: Uses cached renderer instead of creating new one each time.
 func (m *ChatModel) renderMarkdown(content string) string {
-	// Create glamour renderer with dark theme optimized for terminals
-	width := m.viewport.Width - 4
-	if width < minMarkdownWidth {
-		width = minMarkdownWidth // Minimum width
-	}
-
-	renderer, err := glamour.NewTermRenderer(
-		glamour.WithAutoStyle(),
-		glamour.WithWordWrap(width),
-		glamour.WithColorProfile(lipgloss.ColorProfile()),
-		glamour.WithEmoji(),
-	)
-	if err != nil {
-		// Log the error for debugging
-		log.Debug(fmt.Sprintf("Failed to create glamour renderer: %v", err))
-		// Fallback to plain text if markdown rendering fails
+	// Fallback to plain text if no cached renderer available.
+	if m.markdownRenderer == nil {
 		return lipgloss.NewStyle().
 			PaddingLeft(2).
 			Width(m.viewport.Width - 4).
 			Render(content)
 	}
 
-	rendered, err := renderer.Render(content)
+	// Use cached renderer for performance.
+	rendered, err := m.markdownRenderer.Render(content)
 	if err != nil {
-		// Log the error and content length for debugging
+		// Log the error and content length for debugging.
 		log.Debug(fmt.Sprintf("Failed to render markdown (content length: %d): %v", len(content), err))
-		// Fallback to plain text if rendering fails
+		// Fallback to plain text if rendering fails.
 		return lipgloss.NewStyle().
 			PaddingLeft(2).
 			Width(m.viewport.Width - 4).
 			Render(content)
 	}
 
-	// Add left padding to match other messages
+	// Add left padding to match other messages.
 	paddedLines := make([]string, 0)
 	for _, line := range strings.Split(rendered, newlineChar) {
 		paddedLines = append(paddedLines, "  "+line)
@@ -715,6 +773,13 @@ type sendMessageMsg string
 type aiResponseMsg string
 
 type aiErrorMsg string
+
+type providerSwitchedMsg struct {
+	provider       string
+	providerConfig *schema.AIProviderConfig
+	newClient      ai.Client
+	err            error
+}
 
 func (m *ChatModel) sendMessage(content string) tea.Cmd {
 	return func() tea.Msg {

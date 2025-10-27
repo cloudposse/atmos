@@ -106,9 +106,9 @@ The AI assistant has access to your current Atmos configuration and can help wit
 					if err != nil {
 						return fmt.Errorf("failed to create session: %w", err)
 					}
-					log.Info(fmt.Sprintf("Created new session: %s", sessionName))
+					log.Debug(fmt.Sprintf("Created new session: %s", sessionName))
 				} else {
-					log.Info(fmt.Sprintf("Resumed session: %s (%d messages)", sess.Name, 0))
+					log.Debug(fmt.Sprintf("Resumed session: %s (%d messages)", sess.Name, 0))
 				}
 			} else {
 				// Create anonymous session with timestamp.
@@ -117,7 +117,7 @@ The AI assistant has access to your current Atmos configuration and can help wit
 				if err != nil {
 					return fmt.Errorf("failed to create session: %w", err)
 				}
-				log.Info(fmt.Sprintf("Created new session: %s", sessionName))
+				log.Debug(fmt.Sprintf("Created new session: %s", sessionName))
 			}
 		}
 

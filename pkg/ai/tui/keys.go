@@ -407,18 +407,21 @@ func (m *ChatModel) handleProviderSelectKeys(msg tea.KeyMsg) tea.Cmd {
 		}
 		return func() tea.Msg { return nil }
 	case "enter":
-		// Switch to selected provider.
+		// Switch to selected provider asynchronously.
 		if m.selectedProviderIdx < len(configuredProviders) {
 			selectedProvider := configuredProviders[m.selectedProviderIdx].Name
-			if err := m.switchProvider(selectedProvider); err != nil {
-				m.addMessage(roleSystem, fmt.Sprintf("Error switching provider: %v", err))
-			}
+			// Add immediate feedback that switch is starting.
+			m.addMessage(roleSystem, fmt.Sprintf("Switching to %s...", selectedProvider))
+			// Return to chat view immediately and start async switch.
+			m.currentView = viewModeChat
+			m.textarea.Focus()
+			m.updateViewportContent()
+			// Initiate async provider switch (will send providerSwitchedMsg when done).
+			return m.switchProviderAsync(selectedProvider)
 		}
-		// Return to chat view.
+		// Return to chat view if no provider selected.
 		m.currentView = viewModeChat
 		m.textarea.Focus()
-		m.updateViewportContent()
-		// Return empty command to consume the key event and prevent it from reaching the textarea
 		return func() tea.Msg { return nil }
 	}
 
