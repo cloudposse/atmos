@@ -19,15 +19,9 @@ Most CLI tools force developers to make painful choices:
 ```go
 // Traditional approach - painful!
 if isatty.IsTerminal(os.Stdout.Fd()) {
-    if supportsColor() {
-        if supportsTrueColor() {
-            fmt.Println("\x1b[38;2;255;0;0mSuccess!\x1b[0m")
-        } else {
-            fmt.Println("\x1b[32mSuccess!\x1b[0m")
-        }
-    } else {
-        fmt.Println("Success!")
-    }
+    // Using Charm Bracelet's lipgloss for styling
+    successStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("10"))
+    fmt.Println(successStyle.Render("Success!"))
 } else {
     fmt.Println("Success!")  // Plain for pipes
 }
@@ -134,6 +128,24 @@ atmos terraform output | jq .vpc_id
 # ✓ Output retrieved!
 ```
 
+### 📝 Logging vs Terminal Output
+
+**Important distinction:** This I/O system is for **terminal output** (user-facing data and messages), not **logging** (system events and debugging).
+
+- **Terminal Output** (`ui.*`, `data.*`): User-facing messages, status updates, command results
+  - Goes to **stdout/stderr**
+  - Formatted for humans
+  - Respects TTY detection and color settings
+  - Automatically masked for secrets
+
+- **Logging** (`log.*`): System events, debugging, internal state
+  - Goes to **log files** (or `/dev/stderr` if configured)
+  - Machine-readable format
+  - Controlled by `--logs-level` flag
+  - Not affected by terminal capabilities
+
+Read more in the [Logging Configuration](/cli/configuration/logging) documentation.
+
 ## Real-World Examples
 
 ### Before: Manual Everything
@@ -142,11 +154,18 @@ atmos terraform output | jq .vpc_id
 func deploy(cmd *cobra.Command, args []string) error {
     // Capability checking
     isTTY := isatty.IsTerminal(os.Stderr.Fd())
-    hasColor := supportsColor()
+
+    // Using Charm Bracelet for styling
+    var infoStyle, errorStyle, successStyle lipgloss.Style
+    if isTTY {
+        infoStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("12"))
+        errorStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("9"))
+        successStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("10"))
+    }
 
     // Choose output format
-    if isTTY && hasColor {
-        fmt.Fprintf(os.Stderr, "\x1b[36m%s\x1b[0m\n", "ℹ Starting deployment...")
+    if isTTY {
+        fmt.Fprintf(os.Stderr, "%s\n", infoStyle.Render("ℹ Starting deployment..."))
     } else {
         fmt.Fprintf(os.Stderr, "Starting deployment...\n")
     }
@@ -154,8 +173,8 @@ func deploy(cmd *cobra.Command, args []string) error {
     // Do deployment
     result, err := performDeploy()
     if err != nil {
-        if isTTY && hasColor {
-            fmt.Fprintf(os.Stderr, "\x1b[31m%s\x1b[0m\n", "✗ Deployment failed")
+        if isTTY {
+            fmt.Fprintf(os.Stderr, "%s\n", errorStyle.Render("✗ Deployment failed"))
         } else {
             fmt.Fprintf(os.Stderr, "Deployment failed\n")
         }
@@ -168,8 +187,8 @@ func deploy(cmd *cobra.Command, args []string) error {
     // Output data
     json.NewEncoder(os.Stdout).Encode(sanitized)
 
-    if isTTY && hasColor {
-        fmt.Fprintf(os.Stderr, "\x1b[32m%s\x1b[0m\n", "✓ Deployment complete!")
+    if isTTY {
+        fmt.Fprintf(os.Stderr, "%s\n", successStyle.Render("✓ Deployment complete!"))
     } else {
         fmt.Fprintf(os.Stderr, "Deployment complete!\n")
     }
@@ -197,7 +216,7 @@ func deploy(cmd *cobra.Command, args []string) error {
 }
 ```
 
-**60% less code, zero capability checking, automatic secret masking, perfect degradation.**
+**Result: Dramatically less code, zero capability checking, automatic secret masking, perfect degradation.**
 
 ## Environment Support
 
@@ -248,17 +267,21 @@ No TTY mocking, no color detection stubbing, no complex test fixtures.
 
 ## Migration Guide
 
-### Old Pattern
+### Old Pattern (Atmos main branch before this PR)
 ```go
-// Old: Manual stream management
-io := cmd.Context().Value(ioContextKey).(io.Context)
-fmt.Fprintf(io.UI(), "%s\n", "Starting...")
-fmt.Fprintf(io.Data(), "%s\n", jsonOutput)
+// Old: Direct fmt.Fprintf with explicit stream access
+fmt.Fprintf(os.Stderr, "Starting...\n")
+fmt.Fprintf(os.Stdout, "%s\n", jsonOutput)
+
+// Or with context retrieval
+ioCtx, _ := io.NewContext()
+fmt.Fprintf(ioCtx.UI(), "Starting...\n")
+fmt.Fprintf(ioCtx.Data(), "%s\n", jsonOutput)
 ```
 
 ### New Pattern
 ```go
-// New: Package-level functions
+// New: Package-level functions with automatic I/O setup
 ui.Writeln("Starting...")
 data.Writeln(jsonOutput)
 ```
@@ -332,8 +355,13 @@ This foundation enables exciting future enhancements:
 Update to the latest Atmos version and start using the new I/O system:
 
 ```go
-// Replace manual formatting
-- fmt.Fprintf(os.Stderr, "\x1b[32m✓ Done\x1b[0m\n")
+// Replace manual TTY checking and Lip Gloss styling
+- if isatty.IsTerminal(os.Stderr.Fd()) {
+-     style := lipgloss.NewStyle().Foreground(lipgloss.Color("10"))
+-     fmt.Fprintf(os.Stderr, "%s\n", style.Render("✓ Done"))
+- } else {
+-     fmt.Fprintf(os.Stderr, "Done\n")
+- }
 + ui.Success("Done")
 
 // Replace manual JSON output
@@ -347,7 +375,7 @@ Update to the latest Atmos version and start using the new I/O system:
 
 ## Feedback
 
-We'd love to hear your feedback on the new I/O system! Join the discussion on [GitHub](https://github.com/cloudposse/atmos/discussions).
+We'd love to hear your feedback on the new I/O system! [Open an issue on GitHub](https://github.com/cloudposse/atmos/issues/new) or join the conversation in [Slack](https://slack.cloudposse.com).
 
 ---
 
