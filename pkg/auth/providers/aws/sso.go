@@ -306,6 +306,8 @@ func (p *ssoProvider) Environment() (map[string]string, error) {
 // authenticate to get identity credentials, which then have their own PrepareEnvironment.
 // However, we implement it for interface compliance.
 func (p *ssoProvider) PrepareEnvironment(_ context.Context, environ map[string]string) (map[string]string, error) {
+	defer perf.Track(nil, "aws.ssoProvider.PrepareEnvironment")()
+
 	// SSO provider doesn't write credential files itself - that's done by identities.
 	// Just return the environment unchanged.
 	return environ, nil

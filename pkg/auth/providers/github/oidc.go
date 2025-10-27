@@ -13,6 +13,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth/types"
 	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -205,6 +206,8 @@ func (p *oidcProvider) Environment() (map[string]string, error) {
 // For GitHub OIDC providers, we don't modify the environment since OIDC tokens
 // are used for authentication chains but not directly consumed by external processes.
 func (p *oidcProvider) PrepareEnvironment(_ context.Context, environ map[string]string) (map[string]string, error) {
+	defer perf.Track(nil, "github.oidcProvider.PrepareEnvironment")()
+
 	// GitHub OIDC provider doesn't need to modify environment for external processes.
 	// The OIDC token is used during authentication to obtain cloud credentials,
 	// which are then managed by the respective cloud identities.
