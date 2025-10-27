@@ -1065,6 +1065,25 @@ func (m *ChatModel) getAIResponse(userMessage string) tea.Cmd {
 
 		// Use tool calling if tools are available.
 		if len(availableTools) > 0 {
+			// Add system prompt instructing the AI to use tools for actions.
+			systemPrompt := `You are an AI assistant for Atmos infrastructure management. You have access to tools that allow you to perform actions.
+
+IMPORTANT: When you need to perform an action (read files, edit files, search, execute commands, etc.), you MUST use the available tools. Do NOT just describe what you would do - actually use the tools to do it.
+
+For example:
+- If you need to read a file, use the read_file tool immediately
+- If you need to edit a file, use the edit_file tool immediately
+- If you need to search for files, use the search_files tool immediately
+- If you need to execute an Atmos command, use the execute_atmos_command tool immediately
+
+Always take action using tools rather than describing what action you would take.`
+
+			// Prepend system prompt.
+			messages = append([]aiTypes.Message{{
+				Role:    aiTypes.RoleSystem,
+				Content: systemPrompt,
+			}}, messages...)
+
 			// Send messages with tools and full history.
 			response, err := m.client.SendMessageWithToolsAndHistory(ctx, messages, availableTools)
 			if err != nil {
@@ -1073,84 +1092,37 @@ func (m *ChatModel) getAIResponse(userMessage string) tea.Cmd {
 
 			// Check if AI wants to use tools.
 			if response.StopReason == aiTypes.StopReasonToolUse && len(response.ToolCalls) > 0 {
-				// Execute tools and get results.
-				toolResults := m.executeToolCalls(ctx, response.ToolCalls)
-
-				// Build display output for user showing tool execution results.
-				var resultText string
-				if response.Content != "" {
-					resultText = response.Content + "\n\n"
-				}
-
-				for i, result := range toolResults {
-					if i > 0 {
-						resultText += "\n\n"
-					}
-
-					// Determine what to display: use Error if Output is empty or tool failed.
-					displayOutput := result.Output
-					if displayOutput == "" && result.Error != nil {
-						displayOutput = fmt.Sprintf("Error: %v", result.Error)
-					}
-
-					// Handle completely empty results.
-					if displayOutput == "" {
-						displayOutput = "No output returned"
-					}
-
-					// Detect output format and wrap in appropriate code block for syntax highlighting.
-					format := detectOutputFormat(displayOutput)
-					resultText += fmt.Sprintf("**Tool:** `%s`\n\n```%s\n%s\n```", response.ToolCalls[i].Name, format, displayOutput)
-				}
-
-				// Multi-turn conversation: Send tool results back to AI for final response.
-				// Build tool results message for the AI.
-				var toolResultsContent string
-				for i, result := range toolResults {
-					if i > 0 {
-						toolResultsContent += "\n\n"
-					}
-
-					// Determine what to send to AI: use Error if Output is empty or tool failed.
-					toolOutput := result.Output
-					if toolOutput == "" && result.Error != nil {
-						toolOutput = fmt.Sprintf("Error: %v", result.Error)
-					}
-					if toolOutput == "" {
-						toolOutput = "No output returned"
-					}
-
-					toolResultsContent += fmt.Sprintf("Tool: %s\nResult:\n%s", response.ToolCalls[i].Name, toolOutput)
-				}
-
-				// Add assistant's thinking/explanation to conversation history.
-				if response.Content != "" {
-					messages = append(messages, aiTypes.Message{
-						Role:    aiTypes.RoleAssistant,
-						Content: response.Content,
-					})
-				}
-
-				// Add tool results as a user message (this is the standard pattern for tool results).
-				messages = append(messages, aiTypes.Message{
-					Role:    aiTypes.RoleUser,
-					Content: fmt.Sprintf("Tool execution results:\n\n%s\n\nPlease provide your final response based on these results.", toolResultsContent),
-				})
-
-				// Call AI again with tool results to get final response.
-				finalResponse, err := m.client.SendMessageWithToolsAndHistory(ctx, messages, availableTools)
-				if err != nil {
-					return aiErrorMsg(fmt.Sprintf("Error getting final response after tool execution: %v", err))
-				}
-
-				// Combine tool execution display with final AI response.
-				combinedResponse := resultText + "\n\n---\n\n" + finalResponse.Content
-
-				// Return the combined response (tool results + AI's final analysis).
-				return aiResponseMsg(combinedResponse)
+				return m.handleToolExecutionFlow(ctx, response, messages, availableTools)
 			}
 
-			// No tool use, return the text response.
+			// No tool use - check if AI expressed intent to take action but didn't use tools.
+			if detectActionIntent(response.Content) {
+				// AI said it would do something but didn't use tools. Prompt it to actually use them.
+				messages = append(messages, aiTypes.Message{
+					Role:    aiTypes.RoleAssistant,
+					Content: response.Content,
+				})
+				messages = append(messages, aiTypes.Message{
+					Role:    aiTypes.RoleUser,
+					Content: "Please use the available tools to perform that action now, rather than just describing what you would do.",
+				})
+
+				// Send the prompt again.
+				retryResponse, err := m.client.SendMessageWithToolsAndHistory(ctx, messages, availableTools)
+				if err != nil {
+					return aiErrorMsg(err.Error())
+				}
+
+				// Check if AI now uses tools.
+				if retryResponse.StopReason == aiTypes.StopReasonToolUse && len(retryResponse.ToolCalls) > 0 {
+					return m.handleToolExecutionFlow(ctx, retryResponse, messages, availableTools)
+				}
+
+				// If still no tool use after retry, just return the retry response.
+				return aiResponseMsg(retryResponse.Content)
+			}
+
+			// No action intent detected, return the text response.
 			return aiResponseMsg(response.Content)
 		}
 
@@ -1185,6 +1157,140 @@ func (m *ChatModel) executeToolCalls(ctx context.Context, toolCalls []aiTypes.To
 	}
 
 	return results
+}
+
+// handleToolExecutionFlow executes tools, sends results back to AI, and returns the combined response.
+func (m *ChatModel) handleToolExecutionFlow(ctx context.Context, response *aiTypes.Response, messages []aiTypes.Message, availableTools []tools.Tool) tea.Msg {
+	// Execute tools and get results.
+	toolResults := m.executeToolCalls(ctx, response.ToolCalls)
+
+	// Build display output for user showing tool execution results.
+	var resultText string
+	if response.Content != "" {
+		resultText = response.Content + "\n\n"
+	}
+
+	for i, result := range toolResults {
+		if i > 0 {
+			resultText += "\n\n"
+		}
+
+		// Determine what to display: use Error if Output is empty or tool failed.
+		displayOutput := result.Output
+		if displayOutput == "" && result.Error != nil {
+			displayOutput = fmt.Sprintf("Error: %v", result.Error)
+		}
+
+		// Handle completely empty results.
+		if displayOutput == "" {
+			displayOutput = "No output returned"
+		}
+
+		// Detect output format and wrap in appropriate code block for syntax highlighting.
+		format := detectOutputFormat(displayOutput)
+		resultText += fmt.Sprintf("**Tool:** `%s`\n\n```%s\n%s\n```", response.ToolCalls[i].Name, format, displayOutput)
+	}
+
+	// Multi-turn conversation: Send tool results back to AI for final response.
+	// Build tool results message for the AI.
+	var toolResultsContent string
+	for i, result := range toolResults {
+		if i > 0 {
+			toolResultsContent += "\n\n"
+		}
+
+		// Determine what to send to AI: use Error if Output is empty or tool failed.
+		toolOutput := result.Output
+		if toolOutput == "" && result.Error != nil {
+			toolOutput = fmt.Sprintf("Error: %v", result.Error)
+		}
+		if toolOutput == "" {
+			toolOutput = "No output returned"
+		}
+
+		toolResultsContent += fmt.Sprintf("Tool: %s\nResult:\n%s", response.ToolCalls[i].Name, toolOutput)
+	}
+
+	// Add assistant's thinking/explanation to conversation history.
+	if response.Content != "" {
+		messages = append(messages, aiTypes.Message{
+			Role:    aiTypes.RoleAssistant,
+			Content: response.Content,
+		})
+	}
+
+	// Add tool results as a user message (this is the standard pattern for tool results).
+	messages = append(messages, aiTypes.Message{
+		Role:    aiTypes.RoleUser,
+		Content: fmt.Sprintf("Tool execution results:\n\n%s\n\nPlease provide your final response based on these results.", toolResultsContent),
+	})
+
+	// Call AI again with tool results to get final response.
+	finalResponse, err := m.client.SendMessageWithToolsAndHistory(ctx, messages, availableTools)
+	if err != nil {
+		return aiErrorMsg(fmt.Sprintf("Error getting final response after tool execution: %v", err))
+	}
+
+	// Combine tool execution display with final AI response.
+	combinedResponse := resultText + "\n\n---\n\n" + finalResponse.Content
+
+	// Return the combined response (tool results + AI's final analysis).
+	return aiResponseMsg(combinedResponse)
+}
+
+// detectActionIntent checks if the AI response contains phrases indicating intent to take action.
+// Returns true if the AI says it will do something but didn't use tools.
+func detectActionIntent(content string) bool {
+	contentLower := strings.ToLower(content)
+
+	// Phrases that indicate the AI intends to take action.
+	actionPhrases := []string{
+		"i'll",
+		"i will",
+		"let me",
+		"i'm going to",
+		"i am going to",
+		"now i'll",
+		"now i will",
+		"first, i'll",
+		"first, i will",
+		"i'll now",
+		"i will now",
+	}
+
+	for _, phrase := range actionPhrases {
+		if strings.Contains(contentLower, phrase) {
+			// Check if the phrase is followed by action verbs.
+			actionVerbs := []string{
+				"read",
+				"edit",
+				"fix",
+				"update",
+				"modify",
+				"change",
+				"create",
+				"delete",
+				"search",
+				"find",
+				"execute",
+				"run",
+				"check",
+				"validate",
+				"describe",
+				"list",
+			}
+
+			for _, verb := range actionVerbs {
+				// Look for "I'll <verb>" or "I will <verb>" patterns.
+				pattern := phrase + " " + verb
+				if strings.Contains(contentLower, pattern) {
+					return true
+				}
+			}
+		}
+	}
+
+	return false
 }
 
 // RunChat starts the chat TUI with the provided AI client.

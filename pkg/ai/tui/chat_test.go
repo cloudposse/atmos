@@ -2199,3 +2199,80 @@ func TestChatModel_CycleFilter(t *testing.T) {
 		assert.Equal(t, 0, m.selectedSessionIndex)
 	})
 }
+
+// TestDetectActionIntent tests the action intent detection function.
+func TestDetectActionIntent(t *testing.T) {
+	tests := []struct {
+		name     string
+		content  string
+		expected bool
+	}{
+		{
+			name:     "detects 'I'll fix' intent",
+			content:  "I can see the broken template. I'll fix it by adding the missing braces.",
+			expected: true,
+		},
+		{
+			name:     "detects 'I will read' intent",
+			content:  "I will read the file to check the contents.",
+			expected: true,
+		},
+		{
+			name:     "detects 'let me search' intent",
+			content:  "Let me search for all the configuration files.",
+			expected: true,
+		},
+		{
+			name:     "detects 'I'm going to edit' intent",
+			content:  "I'm going to edit the configuration file to fix this issue.",
+			expected: true,
+		},
+		{
+			name:     "detects 'I am going to update' intent",
+			content:  "I am going to update the settings based on your requirements.",
+			expected: true,
+		},
+		{
+			name:     "no action intent - explanation only",
+			content:  "This file contains the configuration for the VPC component.",
+			expected: false,
+		},
+		{
+			name:     "no action intent - question",
+			content:  "Would you like me to update this configuration?",
+			expected: false,
+		},
+		{
+			name:     "no action intent - statement without action verb",
+			content:  "I'll be happy to help you with this task.",
+			expected: false,
+		},
+		{
+			name:     "detects 'first, I'll check' intent",
+			content:  "First, I'll check the existing configuration before making changes.",
+			expected: true,
+		},
+		{
+			name:     "detects 'now I will run' intent",
+			content:  "Now I will run the validation command to verify the configuration.",
+			expected: true,
+		},
+		{
+			name:     "case insensitive detection",
+			content:  "I'LL FIX the template now.",
+			expected: true,
+		},
+		{
+			name:     "detects multiple action phrases",
+			content:  "Let me first read the file, then I'll edit it to fix the issue.",
+			expected: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := detectActionIntent(tt.content)
+			assert.Equal(t, tt.expected, result, "Expected %v for content: %s", tt.expected, tt.content)
+		})
+	}
+}
