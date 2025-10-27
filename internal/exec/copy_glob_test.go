@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -549,6 +550,10 @@ func TestCopyFile_FailChmod(t *testing.T) {
 
 // TestGetMatchesForPattern_GlobError forces u.GetGlobMatches to return an error.
 func TestGetMatchesForPattern_GlobError(t *testing.T) {
+	if runtime.GOARCH == "arm64" {
+		t.Skip("Skipping gomonkey test on ARM64 due to memory protection issues")
+	}
+
 	patches := gomonkey.ApplyFunc(u.GetGlobMatches, func(pattern string) ([]string, error) {
 		return nil, errSimulatedGlobError
 	})
