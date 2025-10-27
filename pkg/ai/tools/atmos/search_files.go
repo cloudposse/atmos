@@ -101,12 +101,14 @@ func (t *SearchFilesTool) Execute(ctx context.Context, params map[string]interfa
 	absolutePath := filepath.Join(t.atmosConfig.BasePath, searchPath)
 	cleanPath := filepath.Clean(absolutePath)
 
-	// Security check.
+	// Security check: ensure search path is within Atmos base path.
 	cleanBase := filepath.Clean(t.atmosConfig.BasePath)
-	if !strings.HasPrefix(cleanPath, cleanBase+string(filepath.Separator)) && cleanPath != cleanBase {
+	// Allow if path is exactly the base path OR starts with base path followed by separator.
+	isWithinBase := cleanPath == cleanBase || strings.HasPrefix(cleanPath, cleanBase+string(filepath.Separator))
+	if !isWithinBase {
 		return &tools.Result{
 			Success: false,
-			Error:   fmt.Errorf("access denied: search path must be within Atmos base path"),
+			Error:   fmt.Errorf("access denied: search path '%s' must be within Atmos base path '%s'", cleanPath, cleanBase),
 		}, nil
 	}
 

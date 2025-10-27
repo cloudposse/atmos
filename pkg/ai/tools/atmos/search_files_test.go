@@ -188,3 +188,30 @@ func TestSearchFilesTool_Execute_NoMatches(t *testing.T) {
 	assert.Contains(t, result.Output, "No matches found")
 	assert.Equal(t, 0, result.Data["match_count"])
 }
+
+func TestSearchFilesTool_Execute_WithDotPath(t *testing.T) {
+	// Test explicit path="." to ensure base path access works.
+	tmpDir := t.TempDir()
+
+	file := filepath.Join(tmpDir, "test.yaml")
+	err := os.WriteFile(file, []byte("test_pattern: value"), 0o644)
+	require.NoError(t, err)
+
+	config := &schema.AtmosConfiguration{
+		BasePath: tmpDir,
+	}
+
+	tool := NewSearchFilesTool(config)
+	ctx := context.Background()
+
+	// Explicitly pass path=".".
+	result, err := tool.Execute(ctx, map[string]interface{}{
+		"pattern": "test_pattern",
+		"path":    ".",
+	})
+
+	assert.NoError(t, err)
+	assert.True(t, result.Success)
+	assert.Contains(t, result.Output, "test_pattern")
+	assert.Equal(t, 1, result.Data["match_count"])
+}
