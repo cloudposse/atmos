@@ -31,7 +31,7 @@ func (t *ExecuteAtmosCommandTool) Name() string {
 
 // Description returns the tool description.
 func (t *ExecuteAtmosCommandTool) Description() string {
-	return "Execute any Atmos CLI command and return the output. Use this to run Atmos operations like 'terraform plan', 'terraform apply', 'describe affected', 'workflow', etc. Examples: 'terraform plan vpc -s prod-us-east-1', 'describe component vpc -s prod-us-east-1', 'validate stacks'."
+	return "Execute any Atmos CLI command and return the output. Use this when the user explicitly asks to 'execute', 'run', or use a specific Atmos command. This includes ALL commands: 'describe stacks', 'describe component', 'list stacks', 'validate stacks', 'describe affected', 'terraform plan', 'terraform apply', 'workflow', etc. Examples: 'describe stacks', 'describe component vpc -s prod-us-east-1', 'list stacks', 'validate stacks', 'terraform plan vpc -s prod-us-east-1'."
 }
 
 // Parameters returns the tool parameters.
@@ -39,7 +39,7 @@ func (t *ExecuteAtmosCommandTool) Parameters() []tools.Parameter {
 	return []tools.Parameter{
 		{
 			Name:        "command",
-			Description: "The Atmos command to execute (without the 'atmos' prefix). Examples: 'terraform plan vpc -s prod-us-east-1', 'describe component vpc -s prod-us-east-1', 'list stacks', 'validate stacks', 'describe affected'.",
+			Description: "The Atmos command to execute (without the 'atmos' prefix). Can be ANY Atmos command. Examples: 'describe stacks', 'describe component vpc -s prod-us-east-1', 'list stacks', 'validate stacks', 'describe affected', 'terraform plan vpc -s prod-us-east-1'.",
 			Type:        tools.ParamTypeString,
 			Required:    true,
 		},
