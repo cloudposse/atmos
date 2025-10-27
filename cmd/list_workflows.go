@@ -16,6 +16,8 @@ var listWorkflowsCmd = &cobra.Command{
 	Short: "List all Atmos workflows",
 	Long:  "List Atmos workflows, with options to filter results by specific files.",
 	RunE: func(cmd *cobra.Command, args []string) error {
+		checkAtmosConfig(WithStackValidation(false))
+
 		flags := cmd.Flags()
 
 		fileFlag, err := flags.GetString("file")
