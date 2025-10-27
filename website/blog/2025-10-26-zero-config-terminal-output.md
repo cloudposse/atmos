@@ -2,7 +2,7 @@
 title: "Zero-Configuration Terminal Output: Write Once, Works Everywhere"
 description: "Atmos now features intelligent terminal output that automatically adapts to any environment - from rich interactive terminals to plain CI logs - without any code changes or capability checking"
 slug: zero-config-terminal-output
-authors: [cloudposse]
+authors: [osterman]
 tags: [feature, enhancement, contributors]
 ---
 

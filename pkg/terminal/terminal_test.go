@@ -265,6 +265,7 @@ func TestShouldUseColor_WithForceColor(t *testing.T) {
 
 	tests := []struct {
 		name       string
+		envNoColor bool
 		noColor    bool
 		color      bool
 		forceColor bool
@@ -273,11 +274,11 @@ func TestShouldUseColor_WithForceColor(t *testing.T) {
 		expected   bool
 	}{
 		{
-			name:       "force-color overrides no-color",
-			noColor:    true,
+			name:       "NO_COLOR env var takes precedence over force-color",
+			envNoColor: true,
 			forceColor: true,
 			isTTY:      false,
-			expected:   true, // Config.ShouldUseColor doesn't check ForceColor directly, but DetectColorProfile does
+			expected:   false, // NO_COLOR env var wins - force-color does not override it
 		},
 		{
 			name:       "force-color enables color for non-TTY",
@@ -290,20 +291,21 @@ func TestShouldUseColor_WithForceColor(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			cfg := &Config{
+				EnvNoColor: tt.envNoColor,
 				NoColor:    tt.noColor,
 				Color:      tt.color,
 				ForceColor: tt.forceColor,
 				ForceTTY:   tt.forceTTY,
 			}
 
-			// Note: ShouldUseColor doesn't directly check ForceColor
-			// ForceColor is handled in New() by setting colorProfile directly
+			// Note: ShouldUseColor doesn't directly check ForceColor.
+			// ForceColor is handled in New() by setting colorProfile directly.
 			result := cfg.ShouldUseColor(tt.isTTY)
 
-			// This test verifies the config structure
-			// The actual force-color logic is tested in TestForceColor_ColorProfile
-			assert.NotNil(t, cfg)
-			_ = result // Suppress unused variable warning
+			// Verify the result matches expected behavior.
+			assert.Equal(t, tt.expected, result, "ShouldUseColor should match expected")
+
+			// The actual force-color logic is tested in TestForceColor_ColorProfile.
 		})
 	}
 }

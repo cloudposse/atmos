@@ -454,6 +454,11 @@ Follow template (what/why/references).
 - Tag `feature`/`enhancement`/`bugfix` (user-facing) or `contributors` (internal changes)
 - CI will fail without blog post
 
+**Blog post authorship:**
+- Author should always be the committer (the one who opened the PR)
+- Use GitHub username in authors list, not generic "atmos" or "cloudposse"
+- Add author to `website/blog/authors.yml` if not already present
+
 Use `no-release` label for docs-only changes.
 
 ### PR Tools

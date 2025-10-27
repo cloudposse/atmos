@@ -232,13 +232,18 @@ func (t *Terminal) IsPagerEnabled() bool {
 }
 
 // IsColorEnabled determines if color output should be enabled.
-func (t *Terminal) IsColorEnabled() bool {
-	// Check deprecated NoColor field for backward compatibility
+// The isTTY parameter provides the default when Color is not explicitly set.
+func (t *Terminal) IsColorEnabled(isTTY bool) bool {
+	// NoColor takes precedence - force disable.
 	if t.NoColor {
 		return false
 	}
-	// Use Color setting (defaults to true if not explicitly set)
-	return t.Color
+	// If Color is explicitly set to true, force enable.
+	if t.Color {
+		return true
+	}
+	// Otherwise, fall back to TTY detection.
+	return isTTY
 }
 
 type SyntaxHighlighting struct {

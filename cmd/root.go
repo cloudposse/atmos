@@ -269,7 +269,8 @@ func setupLogger(atmosConfig *schema.AtmosConfiguration) {
 	}
 
 	// If colors are disabled, clear the colors but keep the level strings.
-	if !atmosConfig.Settings.Terminal.IsColorEnabled() {
+	// Use stderr TTY detection since logs go to stderr.
+	if !atmosConfig.Settings.Terminal.IsColorEnabled(term.IsTTYSupportForStderr()) {
 		clearedStyles := &log.Styles{}
 		clearedStyles.Levels = make(map[log.Level]lipgloss.Style)
 		for k := range styles.Levels {
