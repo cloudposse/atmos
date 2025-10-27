@@ -245,3 +245,161 @@ func TestLoadIsolatedAWSConfig_WrapsSentinelErrors(t *testing.T) {
 	// The original error message should be included (but not in the chain due to %v formatting).
 	assert.Contains(t, err.Error(), assert.AnError.Error(), "Error message should include original error")
 }
+
+func TestLoadAtmosManagedAWSConfig_ClearsOnlyCredentials(t *testing.T) {
+	// Set credential environment variables.
+	t.Setenv("AWS_ACCESS_KEY_ID", "test-key")
+	t.Setenv("AWS_SECRET_ACCESS_KEY", "test-secret")
+	t.Setenv("AWS_SESSION_TOKEN", "test-token")
+
+	// Set file path and profile variables that should NOT be cleared.
+	t.Setenv("AWS_PROFILE", "test-profile")
+	t.Setenv("AWS_CONFIG_FILE", "/custom/config")
+	t.Setenv("AWS_SHARED_CREDENTIALS_FILE", "/custom/credentials")
+	t.Setenv("AWS_REGION", "us-east-1")
+
+	ctx := context.Background()
+
+	// Track whether credentials are cleared during execution.
+	credsClearedDuringExec := false
+	customOption := func(opts *config.LoadOptions) error {
+		// Verify credentials are cleared but file paths are NOT.
+		if os.Getenv("AWS_ACCESS_KEY_ID") == "" &&
+			os.Getenv("AWS_SECRET_ACCESS_KEY") == "" &&
+			os.Getenv("AWS_SESSION_TOKEN") == "" &&
+			os.Getenv("AWS_PROFILE") == "test-profile" &&
+			os.Getenv("AWS_CONFIG_FILE") == "/custom/config" {
+			credsClearedDuringExec = true
+		}
+		return nil
+	}
+
+	_, err := LoadAtmosManagedAWSConfig(ctx, customOption)
+
+	// Function should complete without panic.
+	_ = err
+
+	// Verify credentials were cleared but file paths were NOT.
+	assert.True(t, credsClearedDuringExec, "Credentials should be cleared but file paths should be preserved during execution")
+
+	// Verify credential variables were restored after the call.
+	assert.Equal(t, "test-key", os.Getenv("AWS_ACCESS_KEY_ID"))
+	assert.Equal(t, "test-secret", os.Getenv("AWS_SECRET_ACCESS_KEY"))
+	assert.Equal(t, "test-token", os.Getenv("AWS_SESSION_TOKEN"))
+
+	// Verify file path and profile variables were NOT cleared.
+	assert.Equal(t, "test-profile", os.Getenv("AWS_PROFILE"))
+	assert.Equal(t, "/custom/config", os.Getenv("AWS_CONFIG_FILE"))
+	assert.Equal(t, "/custom/credentials", os.Getenv("AWS_SHARED_CREDENTIALS_FILE"))
+	assert.Equal(t, "us-east-1", os.Getenv("AWS_REGION"))
+}
+
+func TestLoadAtmosManagedAWSConfig_RestoresCredentialsOnError(t *testing.T) {
+	// Set credential environment variables.
+	t.Setenv("AWS_ACCESS_KEY_ID", "original-key")
+	t.Setenv("AWS_SECRET_ACCESS_KEY", "original-secret")
+	t.Setenv("AWS_SESSION_TOKEN", "original-token")
+
+	ctx := context.Background()
+
+	// Force an error by providing an invalid config option.
+	invalidOption := func(opts *config.LoadOptions) error {
+		// Verify credentials are cleared during execution.
+		assert.Equal(t, "", os.Getenv("AWS_ACCESS_KEY_ID"))
+		assert.Equal(t, "", os.Getenv("AWS_SECRET_ACCESS_KEY"))
+		assert.Equal(t, "", os.Getenv("AWS_SESSION_TOKEN"))
+		return assert.AnError
+	}
+
+	_, err := LoadAtmosManagedAWSConfig(ctx, invalidOption)
+
+	// Verify error is wrapped with sentinel error.
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrLoadAwsConfig, "Error should be wrapped with ErrLoadAwsConfig sentinel")
+
+	// Verify credentials were restored even after error.
+	assert.Equal(t, "original-key", os.Getenv("AWS_ACCESS_KEY_ID"))
+	assert.Equal(t, "original-secret", os.Getenv("AWS_SECRET_ACCESS_KEY"))
+	assert.Equal(t, "original-token", os.Getenv("AWS_SESSION_TOKEN"))
+}
+
+func TestLoadAtmosManagedAWSConfig_HandlesNoCredentialVars(t *testing.T) {
+	// Ensure no credential environment variables are set.
+	os.Unsetenv("AWS_ACCESS_KEY_ID")
+	os.Unsetenv("AWS_SECRET_ACCESS_KEY")
+	os.Unsetenv("AWS_SESSION_TOKEN")
+
+	// Set other variables that should be preserved.
+	t.Setenv("AWS_PROFILE", "test-profile")
+	t.Setenv("AWS_REGION", "us-west-2")
+
+	ctx := context.Background()
+
+	// LoadAtmosManagedAWSConfig should work even when no credentials are set.
+	_, err := LoadAtmosManagedAWSConfig(ctx)
+
+	// Function should complete without panic.
+	_ = err
+
+	// Verify other variables were preserved.
+	assert.Equal(t, "test-profile", os.Getenv("AWS_PROFILE"))
+	assert.Equal(t, "us-west-2", os.Getenv("AWS_REGION"))
+
+	// Verify credentials remain unset.
+	assert.Equal(t, "", os.Getenv("AWS_ACCESS_KEY_ID"))
+	assert.Equal(t, "", os.Getenv("AWS_SECRET_ACCESS_KEY"))
+	assert.Equal(t, "", os.Getenv("AWS_SESSION_TOKEN"))
+}
+
+func TestLoadAtmosManagedAWSConfig_PartialCredentials(t *testing.T) {
+	// Set only some credential variables.
+	t.Setenv("AWS_ACCESS_KEY_ID", "test-key")
+	// AWS_SECRET_ACCESS_KEY intentionally not set.
+	t.Setenv("AWS_SESSION_TOKEN", "test-token")
+	t.Setenv("AWS_REGION", "ap-south-1")
+
+	ctx := context.Background()
+
+	_, err := LoadAtmosManagedAWSConfig(ctx)
+
+	// Function should complete without panic.
+	_ = err
+
+	// Verify all credential variables were restored to their original state.
+	assert.Equal(t, "test-key", os.Getenv("AWS_ACCESS_KEY_ID"))
+	assert.Equal(t, "", os.Getenv("AWS_SECRET_ACCESS_KEY")) // Was not set originally.
+	assert.Equal(t, "test-token", os.Getenv("AWS_SESSION_TOKEN"))
+	assert.Equal(t, "ap-south-1", os.Getenv("AWS_REGION"))
+}
+
+func TestLoadAtmosManagedAWSConfig_WithCustomOptions(t *testing.T) {
+	// Set credentials and region.
+	t.Setenv("AWS_ACCESS_KEY_ID", "test-key")
+	t.Setenv("AWS_SECRET_ACCESS_KEY", "test-secret")
+	t.Setenv("AWS_REGION", "eu-west-1")
+
+	ctx := context.Background()
+
+	// Track whether custom option was called.
+	customOptionCalled := false
+	customOption := func(opts *config.LoadOptions) error {
+		customOptionCalled = true
+		// Verify credentials are cleared when custom option is called.
+		assert.Equal(t, "", os.Getenv("AWS_ACCESS_KEY_ID"))
+		assert.Equal(t, "", os.Getenv("AWS_SECRET_ACCESS_KEY"))
+		return nil
+	}
+
+	_, err := LoadAtmosManagedAWSConfig(ctx, customOption)
+
+	// Function should complete.
+	_ = err
+
+	// Verify custom option was executed.
+	assert.True(t, customOptionCalled, "Custom option should have been called")
+
+	// Verify credentials were restored.
+	assert.Equal(t, "test-key", os.Getenv("AWS_ACCESS_KEY_ID"))
+	assert.Equal(t, "test-secret", os.Getenv("AWS_SECRET_ACCESS_KEY"))
+	assert.Equal(t, "eu-west-1", os.Getenv("AWS_REGION"))
+}
