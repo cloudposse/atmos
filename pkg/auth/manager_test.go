@@ -346,15 +346,15 @@ func TestManager_isCredentialValid(t *testing.T) {
 	assert.NotNil(t, exp) // Returns the expiration time even when invalid.
 	assert.Equal(t, pastExp, *exp)
 
-	// Expiring soon (less than 5 minutes) -> false, returns expiration time.
-	soonExp := now.Add(3 * time.Minute)
+	// Expiring soon (less than 15 minutes) -> false, returns expiration time.
+	soonExp := now.Add(10 * time.Minute)
 	valid, exp = m.isCredentialValid("expiring-soon", &testCreds{exp: &soonExp})
 	assert.False(t, valid)
 	assert.NotNil(t, exp)
 	assert.Equal(t, soonExp, *exp)
 
-	// Valid credentials with future expiration (>5 minutes) -> true, returns expiration.
-	futureExp := now.Add(10 * time.Minute)
+	// Valid credentials with future expiration (>15 minutes) -> true, returns expiration.
+	futureExp := now.Add(20 * time.Minute)
 	valid, exp = m.isCredentialValid("valid", &testCreds{exp: &futureExp})
 	assert.True(t, valid)
 	require.NotNil(t, exp)
@@ -653,7 +653,7 @@ func ptrTime(t time.Time) *time.Time { return &t }
 func TestManager_findFirstValidCachedCredentials(t *testing.T) {
 	s := &testStore{data: map[string]any{}}
 	now := time.Now().UTC()
-	validExp := now.Add(10 * time.Minute) // Valid: expires in 10 minutes.
+	validExp := now.Add(20 * time.Minute) // Valid: expires in 20 minutes (> 15 min buffer).
 	expiredExp := now.Add(-1 * time.Hour) // Expired: expired 1 hour ago.
 	m := &manager{credentialStore: s, chain: []string{"prov", "id1", "id2"}}
 

@@ -154,12 +154,11 @@ func (m *manager) Authenticate(ctx context.Context, identityName string) (*types
 
 	// Call post-authentication hook on the identity (now part of Identity interface).
 	if identity, exists := m.identities[identityName]; exists {
-		providerName, perr := identity.GetProviderName()
-		if perr != nil {
-			wrappedErr := fmt.Errorf("%w: failed to get provider name: %w", errUtils.ErrInvalidAuthConfig, perr)
-			errUtils.CheckErrorAndPrint(wrappedErr, "Get Provider Name", "")
-			return nil, wrappedErr
-		}
+		// Get the root provider name from the authentication chain.
+		// The chain is [provider, identity1, identity2, ..., targetIdentity].
+		// We use the first element (root provider) for file storage to ensure
+		// consistent directory structure regardless of identity chaining.
+		rootProviderName := m.chain[0]
 
 		// Get or create auth context in stackInfo.
 		var authContext *schema.AuthContext
@@ -173,7 +172,7 @@ func (m *manager) Authenticate(ctx context.Context, identityName string) (*types
 		if err := identity.PostAuthenticate(ctx, &types.PostAuthenticateParams{
 			AuthContext:  authContext,
 			StackInfo:    m.stackInfo,
-			ProviderName: providerName,
+			ProviderName: rootProviderName,
 			IdentityName: identityName,
 			Credentials:  finalCreds,
 		}); err != nil {
