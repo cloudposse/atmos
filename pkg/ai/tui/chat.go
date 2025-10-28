@@ -1216,9 +1216,17 @@ func (m *ChatModel) handleToolExecutionFlow(ctx context.Context, response *aiTyp
 			displayOutput = "No output returned"
 		}
 
+		// Build tool header with name and parameters.
+		toolHeader := fmt.Sprintf("**Tool:** `%s`", response.ToolCalls[i].Name)
+
+		// Show the actual command/parameters being executed for better visibility.
+		if toolParams := formatToolParameters(response.ToolCalls[i]); toolParams != "" {
+			toolHeader += "\n" + toolParams
+		}
+
 		// Detect output format and wrap in appropriate code block for syntax highlighting.
 		format := detectOutputFormat(displayOutput)
-		resultText += fmt.Sprintf("**Tool:** `%s`\n\n```%s\n%s\n```", response.ToolCalls[i].Name, format, displayOutput)
+		resultText += fmt.Sprintf("%s\n\n```%s\n%s\n```", toolHeader, format, displayOutput)
 	}
 
 	// Multi-turn conversation: Send tool results back to AI for final response.
@@ -1301,6 +1309,88 @@ func (m *ChatModel) handleToolExecutionFlow(ctx context.Context, response *aiTyp
 
 	// Return the combined response (tool results + AI's final analysis).
 	return aiResponseMsg(combinedResponse)
+}
+
+// formatToolParameters formats tool call parameters for display in the UI.
+func formatToolParameters(toolCall aiTypes.ToolCall) string {
+	if len(toolCall.Input) == 0 {
+		return ""
+	}
+
+	// Special formatting for common tools.
+	switch toolCall.Name {
+	case "execute_atmos_command":
+		if cmd, ok := toolCall.Input["command"].(string); ok {
+			return fmt.Sprintf("**Command:** `atmos %s`", cmd)
+		}
+	case "read_file", "read_component_file", "read_stack_file":
+		if path, ok := toolCall.Input["path"].(string); ok {
+			return fmt.Sprintf("**Path:** `%s`", path)
+		}
+		if component, ok := toolCall.Input["component"].(string); ok {
+			return fmt.Sprintf("**Component:** `%s`", component)
+		}
+	case "edit_file", "write_component_file", "write_stack_file":
+		if path, ok := toolCall.Input["path"].(string); ok {
+			return fmt.Sprintf("**Path:** `%s`", path)
+		}
+		if component, ok := toolCall.Input["component"].(string); ok {
+			return fmt.Sprintf("**Component:** `%s`", component)
+		}
+	case "search_files":
+		if pattern, ok := toolCall.Input["pattern"].(string); ok {
+			return fmt.Sprintf("**Pattern:** `%s`", pattern)
+		}
+	case "execute_bash":
+		if command, ok := toolCall.Input["command"].(string); ok {
+			// Truncate long commands for display.
+			if len(command) > 80 {
+				command = command[:77] + "..."
+			}
+			return fmt.Sprintf("**Command:** `%s`", command)
+		}
+	case "describe_component":
+		parts := []string{}
+		if component, ok := toolCall.Input["component"].(string); ok {
+			parts = append(parts, component)
+		}
+		if stack, ok := toolCall.Input["stack"].(string); ok {
+			parts = append(parts, "-s "+stack)
+		}
+		if len(parts) > 0 {
+			return fmt.Sprintf("**Args:** `%s`", strings.Join(parts, " "))
+		}
+	}
+
+	// For other tools, show all parameters in a generic format.
+	var params []string
+	for key, value := range toolCall.Input {
+		// Format value based on type.
+		var valueStr string
+		switch v := value.(type) {
+		case string:
+			valueStr = v
+		case bool:
+			valueStr = fmt.Sprintf("%v", v)
+		case float64, int:
+			valueStr = fmt.Sprintf("%v", v)
+		default:
+			valueStr = fmt.Sprintf("%v", v)
+		}
+
+		// Truncate long values.
+		if len(valueStr) > 50 {
+			valueStr = valueStr[:47] + "..."
+		}
+
+		params = append(params, fmt.Sprintf("%s=`%s`", key, valueStr))
+	}
+
+	if len(params) > 0 {
+		return fmt.Sprintf("**Parameters:** %s", strings.Join(params, ", "))
+	}
+
+	return ""
 }
 
 // detectActionIntent checks if the AI response contains phrases indicating intent to take action.

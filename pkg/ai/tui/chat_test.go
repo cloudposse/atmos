@@ -2324,3 +2324,99 @@ func TestDetectActionIntent(t *testing.T) {
 		})
 	}
 }
+
+// TestFormatToolParameters tests the tool parameter formatting function.
+func TestFormatToolParameters(t *testing.T) {
+	tests := []struct {
+		name     string
+		toolCall types.ToolCall
+		expected string
+	}{
+		{
+			name: "execute_atmos_command shows command",
+			toolCall: types.ToolCall{
+				Name: "execute_atmos_command",
+				Input: map[string]interface{}{
+					"command": "describe component vpc -s ue1-network",
+				},
+			},
+			expected: "**Command:** `atmos describe component vpc -s ue1-network`",
+		},
+		{
+			name: "read_file shows path",
+			toolCall: types.ToolCall{
+				Name: "read_file",
+				Input: map[string]interface{}{
+					"path": "/path/to/file.yaml",
+				},
+			},
+			expected: "**Path:** `/path/to/file.yaml`",
+		},
+		{
+			name: "search_files shows pattern",
+			toolCall: types.ToolCall{
+				Name: "search_files",
+				Input: map[string]interface{}{
+					"pattern": "*.yaml",
+				},
+			},
+			expected: "**Pattern:** `*.yaml`",
+		},
+		{
+			name: "describe_component shows args",
+			toolCall: types.ToolCall{
+				Name: "describe_component",
+				Input: map[string]interface{}{
+					"component": "vpc",
+					"stack":     "ue1-network",
+				},
+			},
+			expected: "**Args:** `vpc -s ue1-network`",
+		},
+		{
+			name: "execute_bash shows truncated long command",
+			toolCall: types.ToolCall{
+				Name: "execute_bash",
+				Input: map[string]interface{}{
+					"command": strings.Repeat("very long command ", 10), // > 80 chars
+				},
+			},
+			expected: "**Command:** `" + strings.Repeat("very long command ", 10)[:77] + "...`",
+		},
+		{
+			name: "empty input returns empty string",
+			toolCall: types.ToolCall{
+				Name:  "some_tool",
+				Input: map[string]interface{}{},
+			},
+			expected: "",
+		},
+		{
+			name: "generic tool shows all parameters",
+			toolCall: types.ToolCall{
+				Name: "unknown_tool",
+				Input: map[string]interface{}{
+					"param1": "value1",
+					"param2": "value2",
+				},
+			},
+			// Generic format shows all params (order may vary due to map iteration)
+			expected: "", // We'll check it contains both params instead
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := formatToolParameters(tt.toolCall)
+
+			if tt.name == "generic tool shows all parameters" {
+				// For generic tools, check that both params are present (order may vary).
+				assert.Contains(t, result, "param1=`value1`")
+				assert.Contains(t, result, "param2=`value2`")
+				assert.Contains(t, result, "**Parameters:**")
+			} else {
+				assert.Equal(t, tt.expected, result)
+			}
+		})
+	}
+}
