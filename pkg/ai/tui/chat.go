@@ -1204,6 +1204,11 @@ Always take action using tools rather than describing what action you would take
 				return aiErrorMsg(formatAPIError(err))
 			}
 
+			// Handle empty initial response.
+			if response == nil {
+				return aiErrorMsg("Received nil response from AI provider")
+			}
+
 			// Check if AI wants to use tools.
 			if response.StopReason == aiTypes.StopReasonToolUse && len(response.ToolCalls) > 0 {
 				return m.handleToolExecutionFlow(ctx, response, messages, availableTools)
@@ -1232,8 +1237,21 @@ Always take action using tools rather than describing what action you would take
 					return m.handleToolExecutionFlow(ctx, retryResponse, messages, availableTools)
 				}
 
-				// If still no tool use after retry, just return the retry response.
-				return aiResponseMsg{content: retryResponse.Content, usage: retryResponse.Usage}
+				// Handle empty retry response.
+				if retryResponse == nil || retryResponse.Content == "" {
+					// Retry returned nil or empty - return original response.
+					return aiResponseMsg{content: response.Content, usage: response.Usage}
+				}
+
+				// If still no tool use after retry, combine both responses.
+				combinedContent := response.Content
+				if retryResponse.Content != "" {
+					if combinedContent != "" {
+						combinedContent += "\n\n"
+					}
+					combinedContent += retryResponse.Content
+				}
+				return aiResponseMsg{content: combinedContent, usage: combineUsage(response.Usage, retryResponse.Usage)}
 			}
 
 			// No action intent detected, return the text response.
@@ -1359,6 +1377,18 @@ func (m *ChatModel) handleToolExecutionFlowWithAccumulator(ctx context.Context, 
 		return aiErrorMsg(formatAPIError(err))
 	}
 
+	// Handle empty or truncated response from AI.
+	if finalResponse == nil || (finalResponse.Content == "" && finalResponse.StopReason != aiTypes.StopReasonToolUse) {
+		// AI returned empty response - this might indicate rate limiting or truncation.
+		// Return what we have so far (tool results) with a note.
+		combinedResponse := accumulatedContent
+		if combinedResponse != "" {
+			combinedResponse += "\n\n"
+		}
+		combinedResponse += resultText + "\n\n---\n\n*Note: AI response was empty. This might indicate rate limiting or a timeout.*"
+		return aiResponseMsg{content: combinedResponse, usage: finalResponse.Usage}
+	}
+
 	// Check if the final response wants to use more tools.
 	if finalResponse.StopReason == aiTypes.StopReasonToolUse && len(finalResponse.ToolCalls) > 0 {
 		// AI wants to use more tools after seeing the results. Execute them recursively.
@@ -1387,6 +1417,17 @@ func (m *ChatModel) handleToolExecutionFlowWithAccumulator(ctx context.Context, 
 		retryResponse, err := m.client.SendMessageWithToolsAndHistory(ctx, messages, availableTools)
 		if err != nil {
 			return aiErrorMsg(formatAPIError(err))
+		}
+
+		// Handle empty retry response.
+		if retryResponse == nil || (retryResponse.Content == "" && retryResponse.StopReason != aiTypes.StopReasonToolUse) {
+			// Retry also returned empty - return what we have.
+			combinedResponse := accumulatedContent
+			if combinedResponse != "" {
+				combinedResponse += "\n\n"
+			}
+			combinedResponse += resultText + "\n\n---\n\n" + finalResponse.Content + "\n\n*Note: AI retry response was empty.*"
+			return aiResponseMsg{content: combinedResponse, usage: combineUsage(finalResponse.Usage, retryResponse.Usage)}
 		}
 
 		// Check if AI now uses tools.
