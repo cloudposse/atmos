@@ -138,7 +138,7 @@ func (m *manager) Authenticate(ctx context.Context, identityName string) (*types
 	log.Debug("Authentication chain discovered", logKeyIdentity, identityName, "chainLength", len(chain), "chain", chain)
 
 	// Perform hierarchical credential validation (bottom-up).
-	finalCreds, err := m.authenticateHierarchical(ctx, identityName)
+	finalCreds, err := m.authenticateChain(ctx, identityName)
 	if err != nil {
 		wrappedErr := fmt.Errorf("%w: failed to authenticate hierarchically for identity %q: %w", errUtils.ErrAuthenticationFailed, identityName, err)
 		errUtils.CheckErrorAndPrint(wrappedErr, "Authenticate Hierarchical", "")
@@ -199,31 +199,9 @@ func (m *manager) GetCachedCredentials(ctx context.Context, identityName string)
 		return nil, fmt.Errorf(errFormatWithString, errUtils.ErrIdentityNotFound, fmt.Sprintf(backtickedFmt, identityName))
 	}
 
-	// Try to retrieve credentials from keyring.
-	creds, err := m.credentialStore.Retrieve(identityName)
-	log.Debug("credentialStore.Retrieve result",
-		logKeyIdentity, identityName,
-		"creds_nil", creds == nil,
-		"error", err,
-	)
-
+	// Retrieve credentials with automatic fallback from keyring to identity storage.
+	creds, err := m.loadCredentialsWithFallback(ctx, identityName)
 	if err != nil {
-		// If not in keyring, try loading from identity-managed storage (AWS files, etc.).
-		if errors.Is(err, credentials.ErrCredentialsNotFound) {
-			log.Debug("Credentials not in keyring, trying to load from identity storage", logKeyIdentity, identityName)
-			info := m.buildWhoamiInfoFromEnvironment(identityName)
-
-			// If we successfully loaded credentials from storage, check if they're expired.
-			if info.Credentials != nil {
-				if info.Credentials.IsExpired() {
-					log.Debug("Credentials from identity storage are expired", logKeyIdentity, identityName)
-					return nil, fmt.Errorf(errFormatWithString, errUtils.ErrExpiredCredentials, fmt.Sprintf(backtickedFmt, identityName))
-				}
-				log.Debug("Successfully loaded credentials from identity storage", logKeyIdentity, identityName)
-				return info, nil
-			}
-		}
-
 		// Credentials not found or error occurred.
 		providerName := "unknown"
 		if prov, provErr := m.identities[identityName].GetProviderName(); provErr == nil {
@@ -238,13 +216,11 @@ func (m *manager) GetCachedCredentials(ctx context.Context, identityName string)
 	}
 
 	// Check if credentials are expired.
-	if expired, err := m.credentialStore.IsExpired(identityName); err != nil {
-		return nil, fmt.Errorf("%w: identity=%s: %w", errUtils.ErrExpiredCredentials, identityName, err)
-	} else if expired {
+	if creds.IsExpired() {
+		log.Debug("Cached credentials are expired", logKeyIdentity, identityName)
 		return nil, fmt.Errorf(errFormatWithString, errUtils.ErrExpiredCredentials, fmt.Sprintf(backtickedFmt, identityName))
 	}
 
-	log.Debug("Using cached credentials from keyring", logKeyIdentity, identityName)
 	return m.buildWhoamiInfo(identityName, creds), nil
 }
 
@@ -498,8 +474,8 @@ func (m *manager) GetProviderKindForIdentity(identityName string) (string, error
 	return "", fmt.Errorf("%w: provider %q not found in configuration", errUtils.ErrInvalidAuthConfig, providerName)
 }
 
-// authenticateHierarchical performs hierarchical authentication with bottom-up validation.
-func (m *manager) authenticateHierarchical(ctx context.Context, targetIdentity string) (types.ICredentials, error) {
+// authenticateChain performs hierarchical authentication with bottom-up validation.
+func (m *manager) authenticateChain(ctx context.Context, targetIdentity string) (types.ICredentials, error) {
 	// Step 1: Bottom-up validation - check cached credentials from target to root.
 	validFromIndex := m.findFirstValidCachedCredentials()
 
@@ -528,35 +504,14 @@ func (m *manager) findFirstValidCachedCredentials() int {
 		identityName := m.chain[i]
 		log.Debug("Checking cached credentials", logKeyChainIndex, i, identityNameKey, identityName)
 
-		// First, try to retrieve from keyring.
-		cachedCreds, err := m.credentialStore.Retrieve(identityName)
-		log.Debug("Keyring retrieve result", logKeyChainIndex, i, identityNameKey, identityName, "hasError", err != nil, "hasCreds", cachedCreds != nil)
+		// Retrieve credentials with automatic keyring → identity storage fallback.
+		cachedCreds, err := m.loadCredentialsWithFallback(context.Background(), identityName)
 		if err != nil {
-			// If not in keyring, try loading from identity storage (AWS files, etc.).
-			// This handles the case where credentials were created outside of Atmos
-			// (e.g., via AWS CLI, SSO) but are available in standard AWS credential files.
-			if !errors.Is(err, credentials.ErrCredentialsNotFound) {
-				log.Debug("Error is not ErrCredentialsNotFound, skipping", logKeyChainIndex, i, identityNameKey, identityName, "error", err)
-				continue
-			}
-
-			identity, exists := m.identities[identityName]
-			if !exists {
-				log.Debug("Identity not in m.identities, skipping", logKeyChainIndex, i, identityNameKey, identityName)
-				continue
-			}
-
-			log.Debug("Credentials not in keyring, trying identity storage", logKeyChainIndex, i, identityNameKey, identityName)
-			loadedCreds, loadErr := identity.LoadCredentials(context.Background())
-			if loadErr != nil || loadedCreds == nil {
-				log.Debug("Failed to load from identity storage", logKeyChainIndex, i, identityNameKey, identityName, "error", loadErr)
-				continue
-			}
-
-			log.Debug("Loaded credentials from identity storage", logKeyChainIndex, i, identityNameKey, identityName)
-			cachedCreds = loadedCreds
+			log.Debug("Failed to retrieve credentials", logKeyChainIndex, i, identityNameKey, identityName, "error", err)
+			continue
 		}
 
+		// Validate credentials are not expired.
 		valid, expTime := m.isCredentialValid(identityName, cachedCreds)
 		if valid {
 			if expTime != nil {
@@ -568,37 +523,12 @@ func (m *manager) findFirstValidCachedCredentials() int {
 			return i
 		}
 
-		// Credentials are invalid (expired or missing expiration).
-		// Try loading from identity storage in case there's a fresher version.
+		// Credentials exist but are expired - log and continue to next in chain.
 		if expTime != nil {
-			log.Debug("Credentials expired, trying identity storage", logKeyChainIndex, i, identityNameKey, identityName, "expiration", *expTime)
+			log.Debug("Credentials are expired", logKeyChainIndex, i, identityNameKey, identityName, "expiration", *expTime)
 		} else {
-			log.Debug("Credentials invalid (no expiration info), trying identity storage", logKeyChainIndex, i, identityNameKey, identityName)
+			log.Debug("Credentials are invalid (no expiration info)", logKeyChainIndex, i, identityNameKey, identityName)
 		}
-
-		identity, exists := m.identities[identityName]
-		if !exists {
-			log.Debug("Identity not in m.identities, skipping reload", logKeyChainIndex, i, identityNameKey, identityName)
-			continue
-		}
-
-		loadedCreds, loadErr := identity.LoadCredentials(context.Background())
-		if loadErr != nil || loadedCreds == nil {
-			log.Debug("Failed to reload from identity storage", logKeyChainIndex, i, identityNameKey, identityName, "error", loadErr)
-			continue
-		}
-
-		log.Debug("Reloaded credentials from identity storage", logKeyChainIndex, i, identityNameKey, identityName)
-		// Check if the reloaded credentials are valid.
-		if valid, reloadExpTime := m.isCredentialValid(identityName, loadedCreds); valid {
-			if reloadExpTime != nil {
-				log.Debug("Reloaded credentials are valid", logKeyChainIndex, i, identityNameKey, identityName, "expiration", *reloadExpTime)
-			} else {
-				log.Debug("Reloaded credentials are valid (non-AWS)", logKeyChainIndex, i, identityNameKey, identityName)
-			}
-			return i
-		}
-		log.Debug("Reloaded credentials also invalid", logKeyChainIndex, i, identityNameKey, identityName)
 	}
 	return -1 // No valid cached credentials found
 }
@@ -667,7 +597,7 @@ func (m *manager) authenticateProviderChain(ctx context.Context, startIndex int)
 }
 
 func (m *manager) fetchCachedCredentials(startIndex int) (types.ICredentials, int) {
-	currentCreds, err := m.retrieveCachedCredentials(m.chain, startIndex)
+	currentCreds, err := m.getChainCredentials(m.chain, startIndex)
 	if err != nil {
 		log.Debug("Failed to retrieve cached credentials, starting from provider", "error", err)
 		return nil, 0
@@ -699,16 +629,57 @@ func (m *manager) determineStartingIndex(startIndex int) int {
 	return startIndex
 }
 
-// retrieveCachedCredentials retrieves cached credentials from the specified starting point.
-func (m *manager) retrieveCachedCredentials(chain []string, startIndex int) (types.ICredentials, error) {
+// loadCredentialsWithFallback retrieves credentials with keyring → identity storage fallback.
+// This is the single source of truth for credential retrieval across all auth operations.
+// It ensures consistent behavior whether credentials are in keyring or identity storage.
+func (m *manager) loadCredentialsWithFallback(ctx context.Context, identityName string) (types.ICredentials, error) {
+	// Fast path: Try keyring cache first.
+	creds, err := m.credentialStore.Retrieve(identityName)
+	if err == nil {
+		log.Debug("Retrieved credentials from keyring", logKeyIdentity, identityName)
+		return creds, nil
+	}
+
+	// If keyring returned an error other than "not found", propagate it.
+	if !errors.Is(err, credentials.ErrCredentialsNotFound) {
+		return nil, fmt.Errorf("keyring error for identity %q: %w", identityName, err)
+	}
+
+	// Slow path: Fall back to identity storage (AWS files, etc.).
+	// This handles cases where credentials were created outside of Atmos
+	// (e.g., via AWS CLI/SSO) but are available in standard credential files.
+	log.Debug("Credentials not in keyring, trying identity storage", logKeyIdentity, identityName)
+
+	identity, exists := m.identities[identityName]
+	if !exists {
+		return nil, fmt.Errorf("%w: %s", errUtils.ErrIdentityNotInConfig, identityName)
+	}
+
+	// Delegate to identity's LoadCredentials method.
+	// Each identity type knows how to load its own credentials from storage.
+	loadedCreds, loadErr := identity.LoadCredentials(ctx)
+	if loadErr != nil {
+		return nil, fmt.Errorf("failed to load credentials from identity storage for %q: %w", identityName, loadErr)
+	}
+
+	if loadedCreds == nil {
+		return nil, fmt.Errorf("%w: credentials loaded from storage are nil for identity %q", errUtils.ErrNoCredentialsFound, identityName)
+	}
+
+	log.Debug("Successfully loaded credentials from identity storage", logKeyIdentity, identityName)
+	return loadedCreds, nil
+}
+
+// getChainCredentials retrieves cached credentials from the specified starting point.
+func (m *manager) getChainCredentials(chain []string, startIndex int) (types.ICredentials, error) {
 	identityName := chain[startIndex]
-	currentCreds, err := m.credentialStore.Retrieve(identityName)
+	creds, err := m.loadCredentialsWithFallback(context.Background(), identityName)
 	if err != nil {
 		return nil, err
 	}
 
-	log.Debug("Starting authentication from cached credentials", "startIndex", startIndex)
-	return currentCreds, nil
+	log.Debug("Starting authentication from cached credentials", "startIndex", startIndex, logKeyIdentity, identityName)
+	return creds, nil
 }
 
 // authenticateWithProvider handles provider authentication.
