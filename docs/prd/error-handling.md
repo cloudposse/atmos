@@ -16,7 +16,7 @@ This document describes the architecture of Atmos's error handling system, which
 
 ### Core Components
 
-```text
+```
 errors/
 ├── exit_code.go          # Exit code wrapper and extraction
 ├── builder.go            # Fluent API for rich errors
@@ -182,7 +182,7 @@ err := errUtils.Build(baseErr).
 - Collapsed vs verbose modes
 
 **Example Output**:
-````text
+````
 # Error
 
 workflow file not found
@@ -246,7 +246,7 @@ This ensures Sentry focuses on actionable failures that affect users, without ov
 
 ### Error Creation
 
-```text
+```
 1. Create base error (static or dynamic)
    ↓
 2. Optionally enrich with builder
@@ -259,7 +259,7 @@ This ensures Sentry focuses on actionable failures that affect users, without ov
 
 ### Error Display
 
-```text
+```
 1. Receive error in CLI command
    ↓
 2. Check configuration
@@ -276,7 +276,7 @@ This ensures Sentry focuses on actionable failures that affect users, without ov
 
 ### Error Reporting
 
-```text
+```
 1. Check Sentry enabled
    ↓
 2. Extract error data
@@ -423,7 +423,7 @@ Use builder's `WithContext()` for structured, programmatic context:
 - **Debug Output**: Included in `%+v` formatting
 
 **Example Verbose Output:**
-```text
+```
 component not found
 
 ┏━━━━━━━━━━━┳━━━━━━━━━━━┓
