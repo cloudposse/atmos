@@ -25,6 +25,11 @@ func (s *stubAuthManager) Authenticate(ctx context.Context, identityName string)
 func (s *stubAuthManager) Whoami(ctx context.Context, identityName string) (*types.WhoamiInfo, error) {
 	return s.whoami, nil
 }
+
+func (s *stubAuthManager) GetCachedCredentials(ctx context.Context, identityName string) (*types.WhoamiInfo, error) {
+	return s.whoami, nil
+}
+
 func (s *stubAuthManager) Validate() error { return nil }
 func (s *stubAuthManager) GetDefaultIdentity() (string, error) {
 	return s.defaultIdentity, s.defaultErr
@@ -58,6 +63,10 @@ func (s *stubAuthManager) LogoutProvider(ctx context.Context, providerName strin
 
 func (s *stubAuthManager) LogoutAll(ctx context.Context) error {
 	return nil
+}
+
+func (s *stubAuthManager) GetEnvironmentVariables(identityName string) (map[string]string, error) {
+	return make(map[string]string), nil
 }
 
 func TestGetConfigLogLevels(t *testing.T) {

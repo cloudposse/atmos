@@ -113,7 +113,7 @@ func TestGet_Errors(t *testing.T) {
 			checkError: func(t *testing.T, err error) {
 				assert.Error(t, err)
 				assert.True(t, errors.Is(err, errUtils.ErrHTTPRequestFailed), "should wrap ErrHTTPRequestFailed")
-				assert.Contains(t, err.Error(), "unexpected status code: 500")
+				assert.Contains(t, err.Error(), "returned status 500")
 			},
 		},
 		{
@@ -127,7 +127,7 @@ func TestGet_Errors(t *testing.T) {
 			checkError: func(t *testing.T, err error) {
 				assert.Error(t, err)
 				assert.True(t, errors.Is(err, errUtils.ErrHTTPRequestFailed))
-				assert.Contains(t, err.Error(), "unexpected status code: 404")
+				assert.Contains(t, err.Error(), "returned status 404")
 			},
 		},
 		{
@@ -141,7 +141,7 @@ func TestGet_Errors(t *testing.T) {
 			checkError: func(t *testing.T, err error) {
 				assert.Error(t, err)
 				assert.True(t, errors.Is(err, errUtils.ErrHTTPRequestFailed))
-				assert.Contains(t, err.Error(), "unexpected status code: 401")
+				assert.Contains(t, err.Error(), "returned status 401")
 			},
 		},
 	}

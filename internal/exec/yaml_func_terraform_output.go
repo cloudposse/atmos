@@ -12,12 +12,15 @@ import (
 )
 
 // processTagTerraformOutput processes `!terraform.output` YAML tag.
+//
+//nolint:unparam // stackInfo is used via processTagTerraformOutputWithContext
 func processTagTerraformOutput(
 	atmosConfig *schema.AtmosConfiguration,
 	input string,
 	currentStack string,
+	stackInfo *schema.ConfigAndStacksInfo,
 ) any {
-	return processTagTerraformOutputWithContext(atmosConfig, input, currentStack, nil)
+	return processTagTerraformOutputWithContext(atmosConfig, input, currentStack, nil, stackInfo)
 }
 
 // trackOutputDependency records the dependency in the resolution context and returns a cleanup function.
@@ -54,6 +57,7 @@ func processTagTerraformOutputWithContext(
 	input string,
 	currentStack string,
 	resolutionCtx *ResolutionContext,
+	stackInfo *schema.ConfigAndStacksInfo,
 ) any {
 	defer perf.Track(atmosConfig, "exec.processTagTerraformOutputWithContext")()
 
@@ -95,7 +99,13 @@ func processTagTerraformOutputWithContext(
 	// Track dependency and defer cleanup.
 	defer trackOutputDependency(atmosConfig, resolutionCtx, component, stack, input)()
 
-	value, exists, err := GetTerraformOutput(atmosConfig, stack, component, output, false)
+	// Extract authContext from stackInfo if available.
+	var authContext *schema.AuthContext
+	if stackInfo != nil {
+		authContext = stackInfo.AuthContext
+	}
+
+	value, exists, err := outputGetter.GetOutput(atmosConfig, stack, component, output, false, authContext)
 	if err != nil {
 		er := fmt.Errorf("failed to get terraform output for component %s in stack %s, output %s: %w", component, stack, output, err)
 		errUtils.CheckErrorPrintAndExit(er, "", "")
