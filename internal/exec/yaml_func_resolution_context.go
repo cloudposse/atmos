@@ -165,29 +165,31 @@ func (ctx *ResolutionContext) Pop(atmosConfig *schema.AtmosConfiguration) {
 
 // buildCircularDependencyError creates a detailed error message showing the dependency chain.
 func (ctx *ResolutionContext) buildCircularDependencyError(newNode DependencyNode) error {
-	var builder strings.Builder
+	var chainBuilder strings.Builder
 
-	builder.WriteString(fmt.Sprintf("%s\n\n", errUtils.ErrCircularDependency))
-	builder.WriteString("Dependency chain:\n")
+	chainBuilder.WriteString("Dependency chain:\n\n")
 
 	// Show the full call stack
 	for i, node := range ctx.CallStack {
-		builder.WriteString(fmt.Sprintf("  %d. Component '%s' in stack '%s'\n",
+		chainBuilder.WriteString(fmt.Sprintf("  %d. Component '%s' in stack '%s'\n",
 			i+1, node.Component, node.Stack))
-		builder.WriteString(fmt.Sprintf("     → %s\n", node.FunctionCall))
+		chainBuilder.WriteString(fmt.Sprintf("     → %s\n", node.FunctionCall))
 	}
 
 	// Show where the cycle completes
-	builder.WriteString(fmt.Sprintf("  %d. Component '%s' in stack '%s' (cycle detected)\n",
+	chainBuilder.WriteString(fmt.Sprintf("  %d. Component '%s' in stack '%s' (cycle detected)\n",
 		len(ctx.CallStack)+1, newNode.Component, newNode.Stack))
-	builder.WriteString(fmt.Sprintf("     → %s\n\n", newNode.FunctionCall))
+	chainBuilder.WriteString(fmt.Sprintf("     → %s", newNode.FunctionCall))
 
-	builder.WriteString("To fix this issue:\n")
-	builder.WriteString("  - Review your component dependencies and break the circular reference\n")
-	builder.WriteString("  - Consider using Terraform data sources or direct remote state instead\n")
-	builder.WriteString("  - Ensure dependencies flow in one direction only\n")
-
-	return fmt.Errorf("%w: %s", errUtils.ErrCircularDependency, builder.String())
+	return errUtils.Build(errUtils.ErrCircularDependency).
+		WithExplanation(chainBuilder.String()).
+		WithHint("Review your component dependencies and break the circular reference").
+		WithHint("Consider using Terraform data sources or direct remote state instead").
+		WithHint("Ensure dependencies flow in one direction only").
+		WithContext("component", newNode.Component).
+		WithContext("stack", newNode.Stack).
+		WithExitCode(1).
+		Err()
 }
 
 // Clone creates a copy of the resolution context for use in concurrent operations.

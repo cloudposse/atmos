@@ -11,14 +11,13 @@ import (
 	"github.com/go-git/go-git/v5/plumbing/transport/ssh"
 	cp "github.com/otiai10/copy"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	g "github.com/cloudposse/atmos/pkg/git"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
-
-var RemoteRepoIsNotGitRepoError = errors.New("the target remote repo is not a Git repository. Check that it was initialized and has '.git' folder")
 
 const (
 	shaString = "SHA"
@@ -250,13 +249,21 @@ func ExecuteDescribeAffectedWithTargetRefCheckout(
 		EnableDotGitCommonDir: false,
 	})
 	if err != nil {
-		return nil, nil, nil, "", errors.Join(err, RemoteRepoIsNotGitRepoError)
+		return nil, nil, nil, "", errUtils.Build(errUtils.ErrRemoteRepoNotGitRepo).
+			WithHint("Verify that the repository was initialized with 'git init'").
+			WithHint("Check that the '.git' directory exists in the repository root").
+			WithExitCode(1).
+			Err()
 	}
 
 	// Check the Git config of the target ref
 	_, err = g.GetRepoConfig(remoteRepo)
 	if err != nil {
-		return nil, nil, nil, "", errors.Join(err, RemoteRepoIsNotGitRepoError)
+		return nil, nil, nil, "", errUtils.Build(errUtils.ErrRemoteRepoNotGitRepo).
+			WithHint("Verify that the repository was initialized with 'git init'").
+			WithHint("Check that the '.git' directory exists in the repository root").
+			WithExitCode(1).
+			Err()
 	}
 
 	if sha != "" {
@@ -375,13 +382,21 @@ func ExecuteDescribeAffectedWithTargetRepoPath(
 	// This handles both regular repositories and worktrees correctly
 	remoteRepo, err := g.OpenWorktreeAwareRepo(targetRefPath)
 	if err != nil {
-		return nil, nil, nil, "", errors.Join(err, RemoteRepoIsNotGitRepoError)
+		return nil, nil, nil, "", errUtils.Build(errUtils.ErrRemoteRepoNotGitRepo).
+			WithHint("Verify that the repository was initialized with 'git init'").
+			WithHint("Check that the '.git' directory exists in the repository root").
+			WithExitCode(1).
+			Err()
 	}
 
 	// Check the Git config of the remote target repo
 	_, err = g.GetRepoConfig(remoteRepo)
 	if err != nil {
-		return nil, nil, nil, "", errors.Join(err, RemoteRepoIsNotGitRepoError)
+		return nil, nil, nil, "", errUtils.Build(errUtils.ErrRemoteRepoNotGitRepo).
+			WithHint("Verify that the repository was initialized with 'git init'").
+			WithHint("Check that the '.git' directory exists in the repository root").
+			WithExitCode(1).
+			Err()
 	}
 
 	remoteRepoInfo, err := g.GetRepoInfo(remoteRepo)

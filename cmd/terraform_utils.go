@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"errors"
-	"fmt"
 
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/spf13/cobra"
@@ -135,18 +134,34 @@ func checkTerraformFlags(info *schema.ConfigAndStacksInfo) error {
 	// Check Multi-Component flags
 	// 1. Specifying the `component` argument is not allowed with the Multi-Component flags
 	if info.ComponentFromArg != "" && (info.All || info.Affected || len(info.Components) > 0 || info.Query != "") {
-		return fmt.Errorf("component `%s`: %w", info.ComponentFromArg, errUtils.ErrInvalidTerraformComponentWithMultiComponentFlags)
+		return errUtils.Build(errUtils.ErrInvalidTerraformComponentWithMultiComponentFlags).
+			WithExplanationf("Component argument `%s` cannot be used with bulk operation flags", info.ComponentFromArg).
+			WithHint("Remove the component argument to use bulk operations: `--affected`, `--all`, `--query`, or `--components`").
+			WithHint("Or remove bulk operation flags to target a single component").
+			WithContext("component", info.ComponentFromArg).
+			WithExitCode(2).
+			Err()
 	}
 	// 2. `--affected` is not allowed with the other Multi-Component flags
 	if info.Affected && (info.All || len(info.Components) > 0 || info.Query != "") {
-		return errUtils.ErrInvalidTerraformFlagsWithAffectedFlag
+		return errUtils.Build(errUtils.ErrInvalidTerraformFlagsWithAffectedFlag).
+			WithExplanation("The `--affected` flag performs its own component discovery and cannot be combined with other bulk operation flags").
+			WithHint("Use `--affected` alone to process only affected components").
+			WithHint("Or use `--all`, `--query`, or `--components` without `--affected`").
+			WithExitCode(2).
+			Err()
 	}
 
 	// Single-Component and Multi-Component flags are not allowed together
 	singleComponentFlagPassed := info.PlanFile != "" || info.UseTerraformPlan
 	multiComponentFlagPassed := info.Affected || info.All || len(info.Components) > 0 || info.Query != ""
 	if singleComponentFlagPassed && multiComponentFlagPassed {
-		return errUtils.ErrInvalidTerraformSingleComponentAndMultiComponentFlags
+		return errUtils.Build(errUtils.ErrInvalidTerraformSingleComponentAndMultiComponentFlags).
+			WithExplanation("Single-component flags (`--from-plan`, `--planfile`) target one component, while bulk operation flags (`--affected`, `--all`, `--query`, `--components`) target multiple components").
+			WithHint("Remove single-component flags to use bulk operations").
+			WithHint("Or remove bulk operation flags to target a single component").
+			WithExitCode(2).
+			Err()
 	}
 
 	return nil

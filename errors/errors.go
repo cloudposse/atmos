@@ -62,9 +62,9 @@ var (
 	// ErrPlanHasDiff is returned when there are differences between two Terraform plan files.
 	ErrPlanHasDiff = errors.New("plan files have differences")
 
-	ErrInvalidTerraformFlagsWithAffectedFlag                 = errors.New("the `--affected` flag can't be used with the other multi-component (bulk operations) flags `--all`, `--query` and `--components`")
-	ErrInvalidTerraformComponentWithMultiComponentFlags      = errors.New("the `component` argument can't be used with the multi-component (bulk operations) flags `--affected`, `--all`, `--query` and `--components`")
-	ErrInvalidTerraformSingleComponentAndMultiComponentFlags = errors.New("the single-component flags (`--from-plan`, `--planfile`) can't be used with the multi-component (bulk operations) flags (`--affected`, `--all`, `--query`, `--components`)")
+	ErrInvalidTerraformFlagsWithAffectedFlag                 = errors.New("incompatible flags: --affected cannot be combined with other bulk operation flags")
+	ErrInvalidTerraformComponentWithMultiComponentFlags      = errors.New("incompatible arguments: component argument cannot be used with bulk operation flags")
+	ErrInvalidTerraformSingleComponentAndMultiComponentFlags = errors.New("incompatible flags: single-component flags cannot be used with bulk operation flags")
 
 	ErrYamlFuncInvalidArguments         = errors.New("invalid number of arguments in the Atmos YAML function")
 	ErrDescribeComponent                = errors.New("failed to describe component")
@@ -97,6 +97,7 @@ var (
 	ErrRemoveGitDir         = errors.New("failed to remove the .git directory in the destination directory during git update")
 	ErrUnexpectedGitOutput  = errors.New("unexpected 'git version' output")
 	ErrGitVersionMismatch   = errors.New("git version requirement not met")
+	ErrRemoteRepoNotGitRepo = errors.New("target remote repository is not a git repository")
 	ErrFailedToGetLocalRepo = errors.New("failed to get local repository")
 	ErrFailedToGetRepoInfo  = errors.New("failed to get repository info")
 	ErrLocalRepoFetch       = errors.New("local repo unavailable")
@@ -131,8 +132,7 @@ var (
 	ErrEmptyConfigPath             = errors.New("config path cannot be empty")
 	ErrEmptyConfigFile             = errors.New("config file path cannot be empty")
 	ErrAtmosFilesDirConfigNotFound = errors.New("`atmos.yaml` or `.atmos.yaml` configuration file not found in directory")
-	ErrAtmosConfigNotFound         = errors.New("\n'atmos.yaml' CLI config was not found in any of the searched paths: system dir, home dir, current dir, ENV vars." +
-		"\nYou can download a sample config and adapt it to your requirements from https://atmos.tools/cli/configuration")
+	ErrAtmosConfigNotFound         = errors.New("atmos configuration file not found")
 
 	ErrMissingStack                               = errors.New("stack is required")
 	ErrMissingComponent                           = errors.New("component is required")
@@ -157,7 +157,7 @@ var (
 	ErrNewPlanFileNotExist              = errors.New("new plan file does not exist")
 	ErrTerraformGenerateBackendArgument = errors.New("invalid arguments. The command requires one argument `component`")
 
-	ErrMissingPackerTemplate = errors.New("packer template is required; it can be specified in the `settings.packer.template` section in the Atmos component manifest, or on the command line via the flag `--template <template>` (shorthand `-t`)")
+	ErrMissingPackerTemplate = errors.New("packer template is required")
 	ErrMissingPackerManifest = errors.New("packer manifest is missing")
 
 	ErrAtmosConfigIsNil              = errors.New("atmos config is nil")
