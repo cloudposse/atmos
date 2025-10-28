@@ -312,7 +312,17 @@ func (i *permissionSetIdentity) buildCredsFromRole(resp *sso.GetRoleCredentialsO
 	}
 	expiration := ""
 	if resp.RoleCredentials.Expiration != 0 {
-		expiration = time.Unix(resp.RoleCredentials.Expiration/1000, 0).Format(time.RFC3339)
+		// AWS SSO returns expiration as milliseconds since epoch.
+		expirationTime := time.Unix(resp.RoleCredentials.Expiration/1000, 0)
+		expiration = expirationTime.Format(time.RFC3339)
+
+		// Debug: Log the raw expiration value and converted time.
+		log.Debug("SSO credential expiration",
+			"identity", i.name,
+			"raw_milliseconds", resp.RoleCredentials.Expiration,
+			"converted_time", expirationTime,
+			"formatted", expiration,
+			"time_until_expiry", time.Until(expirationTime))
 	}
 	return &types.AWSCredentials{
 		AccessKeyID:     awssdk.ToString(resp.RoleCredentials.AccessKeyId),

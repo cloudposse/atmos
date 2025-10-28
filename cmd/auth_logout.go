@@ -30,9 +30,11 @@ This command removes:
   • AWS credential files (~/.aws/atmos/<provider>/credentials)
   • AWS config files (~/.aws/atmos/<provider>/config)
 
-You can specify the identity to logout using either:
-  • Positional argument: atmos auth logout <identity>
-  • Flag: atmos auth logout --identity <identity>
+You can specify what to logout:
+  • Specific identity: atmos auth logout <identity>
+  • All identities: atmos auth logout --all
+  • Specific provider: atmos auth logout --provider <provider>
+  • Interactive mode: atmos auth logout (no arguments)
 
 Note: This only removes local credentials. Your browser session with the
 identity provider (AWS SSO, Okta, etc.) may still be active. To completely
@@ -62,6 +64,7 @@ func executeAuthLogoutCommand(cmd *cobra.Command, args []string) error {
 
 	// Get flags.
 	providerFlag, _ := cmd.Flags().GetString("provider")
+	allFlag, _ := cmd.Flags().GetBool("all")
 	dryRun, _ := cmd.Flags().GetBool("dry-run")
 
 	// Get identity from flag or positional argument.
@@ -74,6 +77,11 @@ func executeAuthLogoutCommand(cmd *cobra.Command, args []string) error {
 	ctx := context.Background()
 
 	// Determine what to logout.
+	if allFlag {
+		// Logout all identities.
+		return performLogoutAll(ctx, authManager, dryRun)
+	}
+
 	if providerFlag != "" {
 		// Logout specific provider.
 		return performProviderLogout(ctx, authManager, providerFlag, dryRun)
@@ -350,6 +358,7 @@ func displayBrowserWarning() {
 
 func init() {
 	authLogoutCmd.Flags().String("provider", "", "Logout from specific provider")
+	authLogoutCmd.Flags().Bool("all", false, "Logout from all identities and providers")
 	authLogoutCmd.Flags().Bool("dry-run", false, "Preview what would be removed without deleting")
 	authCmd.AddCommand(authLogoutCmd)
 }

@@ -30,6 +30,13 @@ const (
 	backtickedFmt            = "`%s`"
 	errFormatWithString      = "%w: %s"
 	errFormatWrapTwo         = "%w for %q: %w"
+	logKeyExpiration         = "expiration"
+)
+
+const (
+	// MinCredentialValidityBuffer is the minimum duration credentials must be valid.
+	// AWS can invalidate credentials before their stated expiration time.
+	minCredentialValidityBuffer = 15 * time.Minute
 )
 
 // contextKey is a type for context keys to avoid collisions.
@@ -540,10 +547,15 @@ func (m *manager) isCredentialValid(identityName string, cachedCreds types.ICred
 	// Check expiration from the credentials object itself, not the keyring.
 	// This allows us to validate credentials loaded from any source (keyring, files, etc.).
 	if expTime, err := cachedCreds.GetExpiration(); err == nil && expTime != nil {
-		if expTime.After(time.Now().Add(5 * time.Minute)) {
+		if expTime.After(time.Now().Add(minCredentialValidityBuffer)) {
 			return true, expTime
 		}
 		// Expiration exists but is too close or already expired -> treat as invalid.
+		log.Debug("Credentials expiring soon or already expired",
+			logKeyIdentity, identityName,
+			logKeyExpiration, expTime,
+			"time_until_expiry", time.Until(*expTime),
+			"required_buffer", minCredentialValidityBuffer)
 		return false, expTime
 	}
 	// Non-expiring credentials (no expiration info) -> assume valid.
