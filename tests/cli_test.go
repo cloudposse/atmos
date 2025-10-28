@@ -393,6 +393,12 @@ func sanitizeOutput(output string) (string, error) {
 	debugTimestampRegex := regexp.MustCompile(`expiration="[^"]+\s+[+-]\d{4}\s+[A-Z]{3,4}\s+m=[+-][\d.]+`)
 	result = debugTimestampRegex.ReplaceAllString(result, `expiration="2025-01-01 12:00:00.000000 +0000 UTC m=+3600.000000000`)
 
+	// 11. Normalize "Last Updated" timestamps in auth whoami output.
+	// These appear as "Last Updated  2025-10-28 13:10:27 CDT" in table output.
+	// Replace with a fixed timestamp to avoid snapshot mismatches.
+	lastUpdatedRegex := regexp.MustCompile(`Last Updated\s+\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}\s+[A-Z]{3,4}`)
+	result = lastUpdatedRegex.ReplaceAllString(result, "Last Updated  2025-01-01 12:00:00 UTC")
+
 	return result, nil
 }
 
