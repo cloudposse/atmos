@@ -179,8 +179,8 @@ func ExecuteWorkflow(
 		if err != nil {
 			log.Debug("Workflow failed", "error", err)
 
-			// Extract exit code from error
-			exitCode := errUtils.GetExitCode(err)
+			// Extract exit code from error (currently unused - testing bare sentinel)
+			_ = errUtils.GetExitCode(err)
 
 			// Remove the workflow base path, stacks/workflows
 			workflowFileName := strings.TrimPrefix(filepath.ToSlash(workflowPath), filepath.ToSlash(atmosConfig.Workflows.BasePath))
@@ -211,9 +211,9 @@ func ExecuteWorkflow(
 				}
 			}
 
-			// Create simple workflow error with just the exit code.
-			// Skip error builder for now to test if that's causing the issue.
-			stepErr := errUtils.WithExitCode(ErrWorkflowStepFailed, exitCode)
+			// Create workflow error directly without exit code wrapper.
+			// Just use the sentinel error to test if it gets printed correctly.
+			stepErr := ErrWorkflowStepFailed
 
 			errUtils.CheckErrorAndPrint(stepErr, "", "")
 			return stepErr
