@@ -228,11 +228,11 @@ func extractSettings(devcontainerMap map[string]any, name string) (*Settings, er
 
 	data, err := yaml.Marshal(settingsRaw)
 	if err != nil {
-		return nil, fmt.Errorf("%w: failed to marshal settings for %s: %v", errUtils.ErrInvalidDevcontainerConfig, name, err)
+		return nil, fmt.Errorf("%w: failed to marshal settings for %s: %w", errUtils.ErrInvalidDevcontainerConfig, name, err)
 	}
 
 	if err := yaml.Unmarshal(data, &settings); err != nil {
-		return nil, fmt.Errorf("%w: failed to unmarshal settings for %s: %v", errUtils.ErrInvalidDevcontainerConfig, name, err)
+		return nil, fmt.Errorf("%w: failed to unmarshal settings for %s: %w", errUtils.ErrInvalidDevcontainerConfig, name, err)
 	}
 
 	return &settings, nil

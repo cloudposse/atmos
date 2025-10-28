@@ -13,6 +13,9 @@ Flags:
 
     -h, --help             help for env
 
+        --login            Trigger authentication if credentials are missing or
+                           expired (default: false) (default false)
+
 
 Global Flags:
 

@@ -75,6 +75,10 @@ func (s *systemKeyringStore) Retrieve(alias string) (types.ICredentials, error) 
 
 	data, err := keyring.Get(alias, KeyringUser)
 	if err != nil {
+		// If credentials not found, return ErrCredentialsNotFound for consistent error handling.
+		if errors.Is(err, keyring.ErrNotFound) {
+			return nil, errors.Join(ErrCredentialStore, ErrCredentialsNotFound, fmt.Errorf("failed to retrieve credentials from keyring: %w", err))
+		}
 		return nil, errors.Join(ErrCredentialStore, fmt.Errorf("failed to retrieve credentials from keyring: %w", err))
 	}
 
@@ -138,6 +142,11 @@ func (s *systemKeyringStore) IsExpired(alias string) (bool, error) {
 	}
 	// Delegate to the credential's IsExpired implementation.
 	return creds.IsExpired(), nil
+}
+
+// Type returns the type of this credential store.
+func (s *systemKeyringStore) Type() string {
+	return types.CredentialStoreTypeSystemKeyring
 }
 
 // GetAny retrieves and unmarshals any type from the keyring.

@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"os"
 	"strings"
 	"testing"
 
@@ -140,10 +139,9 @@ func TestAliasFlagPassing(t *testing.T) {
 			"alias should be for 'devcontainer start geodesic --attach'")
 
 		// The actual command that would be executed includes the program name.
-		// We verify the structure by checking that os.Args[0] would be prepended
+		// We verify the structure by checking that the program name would be prepended
 		// and the args would be appended to the alias command.
-		programName := os.Args[0]
-		fullCommand := programName + " " + expectedCommand
-		assert.NotEmpty(t, fullCommand, "constructed command should not be empty")
+		// Note: Production code in cmd_utils.go uses os.Args[0] to get the program name.
+		assert.NotEmpty(t, expectedCommand, "alias command should not be empty")
 	})
 }

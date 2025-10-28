@@ -271,12 +271,3 @@ func TestAuthShellCmd_MockProviderEnvironmentVariables(t *testing.T) {
 // 4. ✅ Exit code propagation
 //
 // The shell_utils_test.go also tests shell execution mechanics separately.
-
-// TestAuthShellWithoutStacks verifies that auth shell does not require stack configuration.
-// This is a documentation test that verifies the command uses InitCliConfig with processStacks=false.
-func TestAuthShellWithoutStacks(t *testing.T) {
-	// This test documents that auth shell command does not process stacks
-	// by verifying InitCliConfig is called with processStacks=false in auth_shell.go:64
-	// No runtime test needed - this is enforced by code structure.
-	t.Log("auth shell command uses InitCliConfig with processStacks=false")
-}

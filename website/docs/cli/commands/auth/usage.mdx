@@ -494,7 +494,7 @@ auth:
 
 **Default storage location**:
 - Follows the [XDG Base Directory Specification](https://specifications.freedesktop.org/basedir-spec/basedir-spec-latest.html)
-- Default: `$XDG_DATA_HOME/atmos/keyring` (typically `~/.local/share/atmos/keyring` on Linux/Unix, `~/Library/Application Support/atmos/keyring` on macOS)
+- Default: `$XDG_DATA_HOME/atmos/keyring` (typically `~/.local/share/atmos/keyring` on Linux/Unix and macOS)
 - Can be overridden via `ATMOS_XDG_DATA_HOME` or `XDG_DATA_HOME` environment variables
 - Custom path can be specified via `spec.path` configuration
 
@@ -539,30 +539,69 @@ auth:
 
 ## AWS File Management
 
-Atmos manages AWS credential files separately from your personal AWS configuration.
+Atmos manages AWS credential files separately from your personal AWS configuration, following the [XDG Base Directory Specification](https://specifications.freedesktop.org/basedir-spec/basedir-spec-latest.html).
 
 This design avoids common problems:
 
 1. **No risk of overwriting personal config**: Atmos never modifies `~/.aws/credentials` or `~/.aws/config`. This prevents accidental overrides of credentials you manage yourself and keeps your personal AWS setup intact.
 
-2. **Provider isolation**: Each provider’s credentials live under `~/.aws/atmos/<provider>/`, making it safe and easy to switch between SSO, SAML, OIDC, or static identities without conflicts.
+2. **Provider isolation**: Each provider's credentials live under the Atmos namespace (e.g., `~/.config/atmos/aws/<provider>/` on Linux), making it safe and easy to switch between SSO, SAML, OIDC, or static identities without conflicts.
 
 3. **Seamless SDK integration**: Under the hood, Atmos sets the standard AWS SDK environment variables (`AWS_SHARED_CREDENTIALS_FILE`, `AWS_CONFIG_FILE`) so tools that already rely on the AWS SDK (like Terraform, AWS CLI, CDK) just work without extra setup.
 
-4. **Project convenience**: Since all configuration lives under Atmos, every project is self-contained. You don’t have to share custom AWS config steps with teammates, and you can cleanly delete all credentials or config associated with a profile at any time.
+4. **Project convenience**: Since all configuration lives under Atmos, every project is self-contained. You don't have to share custom AWS config steps with teammates, and you can cleanly delete all credentials or config associated with a profile at any time.
+
+5. **XDG compliance**: Atmos follows platform conventions, storing credentials in standard locations that respect `$XDG_CONFIG_HOME` and `$ATMOS_XDG_CONFIG_HOME` environment variables.
 
 This makes authentication more secure, more portable across projects, and less error-prone in day-to-day development.
 
 ### File Locations
 
-- Credentials: `~/.aws/atmos/<provider>/credentials`
-- Config: `~/.aws/atmos/<provider>/config`
+Atmos-managed AWS credentials are stored following the XDG Base Directory Specification:
+
+**Linux:**
+- Credentials: `~/.config/atmos/aws/<provider>/credentials`
+- Config: `~/.config/atmos/aws/<provider>/config`
+
+**macOS:**
+- Credentials: `~/.config/atmos/aws/<provider>/credentials`
+- Config: `~/.config/atmos/aws/<provider>/config`
+
+**Windows:**
+- Credentials: `%APPDATA%\atmos\aws\<provider>\credentials`
+- Config: `%APPDATA%\atmos\aws\<provider>\config`
+
+**Custom Locations:**
+
+You can override the default location using environment variables:
+
+```bash
+# Override for Atmos only
+export ATMOS_XDG_CONFIG_HOME=/custom/path
+
+# Override for all XDG-compliant tools
+export XDG_CONFIG_HOME=/custom/path
+```
+
+Or configure per-provider in `atmos.yaml`:
+
+```yaml
+auth:
+  providers:
+    my-sso:
+      kind: aws/iam-identity-center
+      # ... other config ...
+      spec:
+        files:
+          base_path: /custom/path/aws
+```
 
 ### Environment Variables
 
 - Your files remain untouched
 - Your existing `~/.aws/credentials` and `~/.aws/config` are never modified
 - Atmos uses separate files to avoid conflicts
+- Standard AWS environment variables are set to point to Atmos-managed files
 
 ## Troubleshooting
 

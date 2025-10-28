@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
+	"strings"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -146,12 +148,12 @@ func (i *userIdentity) writeAWSFiles(creds *types.AWSCredentials, region string)
 		return errors.Join(errUtils.ErrAuthAwsFileManagerFailed, err)
 	}
 
-	// Write credentials to ~/.aws/atmos/aws-user/credentials.
+	// Write credentials to XDG config directory (e.g., ~/.config/atmos/aws/aws-user/credentials on Linux).
 	if err := awsFileManager.WriteCredentials(awsUserProviderName, i.name, creds); err != nil {
 		return fmt.Errorf("%w: failed to write AWS credentials: %w", errUtils.ErrAwsAuth, err)
 	}
 
-	// Write config to ~/.aws/atmos/aws-user/config.
+	// Write config to XDG config directory (e.g., ~/.config/atmos/aws/aws-user/config on Linux).
 	if err := awsFileManager.WriteConfig(awsUserProviderName, i.name, region, ""); err != nil {
 		return fmt.Errorf("%w: failed to write AWS config: %w", errUtils.ErrAwsAuth, err)
 	}
@@ -178,6 +180,7 @@ func (i *userIdentity) generateSessionToken(ctx context.Context, longLivedCreds 
 
 	// Create AWS config with long-lived credentials.
 	// Use isolated environment to avoid conflicts with external AWS env vars.
+	// Note: We provide explicit credentials via configOpts, so we don't need shared config loading.
 	cfg, err := awsCloud.LoadIsolatedAWSConfig(ctx, configOpts...)
 	if err != nil {
 		return nil, fmt.Errorf("%w: failed to load AWS config: %w", errUtils.ErrAwsAuth, err)
@@ -315,6 +318,28 @@ func (i *userIdentity) Paths() ([]types.Path, error) {
 	return []types.Path{}, nil
 }
 
+// PrepareEnvironment prepares environment variables for external processes.
+// For AWS user identities, we use the shared AWS PrepareEnvironment helper
+// which configures credential files, profile, region, and disables IMDS fallback.
+func (i *userIdentity) PrepareEnvironment(ctx context.Context, environ map[string]string) (map[string]string, error) {
+	defer perf.Track(nil, "aws.userIdentity.PrepareEnvironment")()
+
+	awsFileManager, err := awsCloud.NewAWSFileManager("")
+	if err != nil {
+		return environ, fmt.Errorf("failed to create AWS file manager: %w", err)
+	}
+
+	// AWS user identities always use "aws-user" as their provider name.
+	credentialsFile := awsFileManager.GetCredentialsPath(awsUserProviderName)
+	configFile := awsFileManager.GetConfigPath(awsUserProviderName)
+
+	// Get region from identity config if available.
+	region := i.resolveRegion()
+
+	// Use shared AWS environment preparation helper.
+	return awsCloud.PrepareEnvironment(environ, i.name, credentialsFile, configFile, region), nil
+}
+
 // IsStandaloneAWSUserChain checks if the authentication chain represents a standalone AWS user identity.
 func IsStandaloneAWSUserChain(chain []string, identities map[string]schema.Identity) bool {
 	if len(chain) != 1 {
@@ -389,12 +414,67 @@ func (i *userIdentity) PostAuthenticate(ctx context.Context, params *types.PostA
 	return nil
 }
 
+// CredentialsExist checks if credentials exist for this identity.
+func (i *userIdentity) CredentialsExist() (bool, error) {
+	defer perf.Track(nil, "aws.userIdentity.CredentialsExist")()
+
+	mgr, err := awsCloud.NewAWSFileManager("")
+	if err != nil {
+		return false, err
+	}
+
+	credPath := mgr.GetCredentialsPath(awsUserProviderName)
+
+	// Load and parse the credentials file to verify the identity section exists.
+	cfg, err := awsCloud.LoadINIFile(credPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return false, nil
+		}
+		return false, fmt.Errorf("load credentials file: %w", err)
+	}
+
+	// Check if this identity's section exists in the credentials file.
+	sec, err := cfg.GetSection(i.name)
+	if err != nil {
+		// Section doesn't exist - credentials don't exist for this identity.
+		return false, nil
+	}
+
+	// Verify the section has actual credential keys (not just an empty section).
+	if strings.TrimSpace(sec.Key("aws_access_key_id").String()) == "" {
+		return false, nil
+	}
+
+	return true, nil
+}
+
+// LoadCredentials loads AWS credentials from files using environment variables.
+// This is used with noop keyring to enable credential validation in whoami.
+func (i *userIdentity) LoadCredentials(ctx context.Context) (types.ICredentials, error) {
+	defer perf.Track(nil, "aws.userIdentity.LoadCredentials")()
+
+	// Get environment variables that specify where credentials are stored.
+	env, err := i.Environment()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get environment variables: %w", err)
+	}
+
+	// Load credentials from files using AWS SDK.
+	creds, err := loadAWSCredentialsFromEnvironment(ctx, env)
+	if err != nil {
+		return nil, err
+	}
+
+	return creds, nil
+}
+
 // Logout removes identity-specific credential storage.
 func (i *userIdentity) Logout(ctx context.Context) error {
 	defer perf.Track(nil, "aws.userIdentity.Logout")()
 
 	// AWS user identities use "aws-user" as their provider name.
-	// Clean up files under ~/.aws/atmos/aws-user/.
+	// Clean up files under XDG config directory (e.g., ~/.config/atmos/aws/aws-user/ on Linux).
 	fileManager, err := awsCloud.NewAWSFileManager("")
 	if err != nil {
 		return errors.Join(errUtils.ErrLogoutFailed, err)

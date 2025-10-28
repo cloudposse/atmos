@@ -10,6 +10,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth"
 	"github.com/cloudposse/atmos/pkg/auth/credentials"
+	"github.com/cloudposse/atmos/pkg/auth/types"
 	"github.com/cloudposse/atmos/pkg/auth/validation"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/devcontainer"
@@ -63,9 +64,26 @@ func injectIdentityEnvironment(ctx context.Context, config *devcontainer.Config,
 	}
 
 	// 6. Convert credential paths to container mounts (provider-agnostic!).
+	if err := addCredentialMounts(config, whoami.Paths); err != nil {
+		return err
+	}
+
+	// 7. Inject environment variables into container config.
+	if config.ContainerEnv == nil {
+		config.ContainerEnv = make(map[string]string)
+	}
+	for k, v := range envVars {
+		config.ContainerEnv[k] = v
+	}
+
+	return nil
+}
+
+// addCredentialMounts adds credential file/directory mounts to devcontainer config.
+func addCredentialMounts(config *devcontainer.Config, paths []types.Path) error {
 	hostPath, containerPath := parseMountPaths(config.WorkspaceMount, config.WorkspaceFolder)
 
-	for _, credPath := range whoami.Paths {
+	for _, credPath := range paths {
 		// Check if path exists if required.
 		if credPath.Required {
 			if _, err := os.Stat(credPath.Location); err != nil {
@@ -78,7 +96,8 @@ func injectIdentityEnvironment(ctx context.Context, config *devcontainer.Config,
 		}
 
 		// Translate host path to container path.
-		containerMountPath := translatePath(credPath.Location, hostPath, containerPath, os.Getenv("HOME"))
+		userHome, _ := os.UserHomeDir()
+		containerMountPath := translatePath(credPath.Location, hostPath, containerPath, userHome)
 
 		// Check metadata for hints.
 		readOnly := true // Default to read-only for security.
@@ -96,14 +115,6 @@ func injectIdentityEnvironment(ctx context.Context, config *devcontainer.Config,
 			config.Mounts = []string{}
 		}
 		config.Mounts = append(config.Mounts, mountStr)
-	}
-
-	// 7. Inject environment variables into container config.
-	if config.ContainerEnv == nil {
-		config.ContainerEnv = make(map[string]string)
-	}
-	for k, v := range envVars {
-		config.ContainerEnv[k] = v
 	}
 
 	return nil

@@ -66,7 +66,7 @@ func parsePortString(portStr string, portsAttributes map[string]PortAttributes) 
 		// Simple port: "8080" -> 8080:8080
 		port, err := strconv.Atoi(parts[0])
 		if err != nil {
-			return container.PortBinding{}, fmt.Errorf("%w: invalid port number '%s': %v", errUtils.ErrInvalidDevcontainerConfig, parts[0], err)
+			return container.PortBinding{}, fmt.Errorf("%w: invalid port number '%s': %w", errUtils.ErrInvalidDevcontainerConfig, parts[0], err)
 		}
 		protocol := getProtocol(parts[0], portsAttributes)
 		return container.PortBinding{
@@ -79,11 +79,11 @@ func parsePortString(portStr string, portsAttributes map[string]PortAttributes) 
 		// Explicit mapping: "3000:3000"
 		hostPort, err := strconv.Atoi(parts[0])
 		if err != nil {
-			return container.PortBinding{}, fmt.Errorf("%w: invalid host port '%s': %v", errUtils.ErrInvalidDevcontainerConfig, parts[0], err)
+			return container.PortBinding{}, fmt.Errorf("%w: invalid host port '%s': %w", errUtils.ErrInvalidDevcontainerConfig, parts[0], err)
 		}
 		containerPort, err := strconv.Atoi(parts[1])
 		if err != nil {
-			return container.PortBinding{}, fmt.Errorf("%w: invalid container port '%s': %v", errUtils.ErrInvalidDevcontainerConfig, parts[1], err)
+			return container.PortBinding{}, fmt.Errorf("%w: invalid container port '%s': %w", errUtils.ErrInvalidDevcontainerConfig, parts[1], err)
 		}
 		protocol := getProtocol(parts[1], portsAttributes)
 		return container.PortBinding{

@@ -108,6 +108,17 @@ func (p *Provider) Paths() ([]types.Path, error) {
 	return []types.Path{}, nil
 }
 
+// PrepareEnvironment prepares environment variables for external processes.
+// For mock providers, we don't modify the environment since mock credentials
+// are only for testing and don't interact with real cloud SDKs.
+func (p *Provider) PrepareEnvironment(_ context.Context, environ map[string]string) (map[string]string, error) {
+	defer perf.Track(nil, "mock.Provider.PrepareEnvironment")()
+
+	// Mock providers don't need to modify environment for external processes.
+	// Just return the environment unchanged.
+	return environ, nil
+}
+
 // Logout is a no-op for the mock provider.
 func (p *Provider) Logout(ctx context.Context) error {
 	defer perf.Track(nil, "mock.Provider.Logout")()

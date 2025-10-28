@@ -42,7 +42,7 @@ func GenerateContainerName(name, instance string) (string, error) {
 	defer perf.Track(nil, "devcontainer.GenerateContainerName")()
 
 	if err := ValidateName(name); err != nil {
-		return "", fmt.Errorf("%w: invalid devcontainer name: %v", errUtils.ErrInvalidDevcontainerConfig, err)
+		return "", fmt.Errorf("%w: invalid devcontainer name: %w", errUtils.ErrInvalidDevcontainerConfig, err)
 	}
 
 	if instance == "" {
@@ -50,7 +50,7 @@ func GenerateContainerName(name, instance string) (string, error) {
 	}
 
 	if err := ValidateName(instance); err != nil {
-		return "", fmt.Errorf("%w: invalid instance name: %v", errUtils.ErrInvalidDevcontainerConfig, err)
+		return "", fmt.Errorf("%w: invalid instance name: %w", errUtils.ErrInvalidDevcontainerConfig, err)
 	}
 
 	return fmt.Sprintf("%s-%s-%s", ContainerPrefix, name, instance), nil

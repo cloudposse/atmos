@@ -538,34 +538,57 @@ func ExecuteDevcontainerRebuild(atmosConfig *schema.AtmosConfiguration, name, in
 		return err
 	}
 
-	// Stop and remove existing container if it exists.
-	if err := stopAndRemoveContainer(ctx, runtime, containerName); err != nil {
-		return err
-	}
-
-	// Pull latest image unless --no-pull is set.
-	if err := pullImageIfNeeded(ctx, runtime, config.Image, noPull); err != nil {
-		return err
-	}
-
-	// Create and start new container.
-	params := &containerParams{
+	params := &rebuildParams{
 		ctx:           ctx,
 		runtime:       runtime,
 		config:        config,
 		containerName: containerName,
 		name:          name,
 		instance:      instance,
+		noPull:        noPull,
+	}
+	return rebuildContainer(params)
+}
+
+type rebuildParams struct {
+	ctx           context.Context
+	runtime       container.Runtime
+	config        *devcontainer.Config
+	containerName string
+	name          string
+	instance      string
+	noPull        bool
+}
+
+func rebuildContainer(p *rebuildParams) error {
+	// Stop and remove existing container if it exists.
+	if err := stopAndRemoveContainer(p.ctx, p.runtime, p.containerName); err != nil {
+		return err
+	}
+
+	// Pull latest image unless --no-pull is set.
+	if err := pullImageIfNeeded(p.ctx, p.runtime, p.config.Image, p.noPull); err != nil {
+		return err
+	}
+
+	// Create and start new container.
+	params := &containerParams{
+		ctx:           p.ctx,
+		runtime:       p.runtime,
+		config:        p.config,
+		containerName: p.containerName,
+		name:          p.name,
+		instance:      p.instance,
 	}
 	containerID, err := createContainer(params)
 	if err != nil {
 		return err
 	}
 
-	if err := startContainer(ctx, runtime, containerID, containerName); err != nil {
+	if err := startContainer(p.ctx, p.runtime, containerID, p.containerName); err != nil {
 		return err
 	}
 
-	u.PrintfMessageToTUI("\n%s Container %s rebuilt successfully\n", theme.Styles.Checkmark.String(), containerName)
+	u.PrintfMessageToTUI("\n%s Container %s rebuilt successfully\n", theme.Styles.Checkmark.String(), p.containerName)
 	return nil
 }

@@ -5,6 +5,8 @@ package container
 import (
 	"context"
 	"time"
+
+	"github.com/cloudposse/atmos/pkg/perf"
 )
 
 // Runtime defines the interface for container runtime operations.
@@ -126,5 +128,7 @@ const (
 )
 
 func (t Type) String() string {
+	defer perf.Track(nil, "container.Type.String")()
+
 	return string(t)
 }

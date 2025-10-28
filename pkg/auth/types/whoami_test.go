@@ -18,6 +18,7 @@ func (s *stubStore) Retrieve(alias string) (ICredentials, error)  { return s.cre
 func (s *stubStore) Delete(alias string) error                    { return nil }
 func (s *stubStore) List() ([]string, error)                      { return nil, errors.New("not implemented") }
 func (s *stubStore) IsExpired(alias string) (bool, error)         { return false, nil }
+func (s *stubStore) Type() string                                 { return "test" }
 
 func TestWhoami_Rehydrate_NilReceiver(t *testing.T) {
 	var w *WhoamiInfo

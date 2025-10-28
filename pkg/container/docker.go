@@ -26,6 +26,8 @@ type DockerRuntime struct{}
 
 // NewDockerRuntime creates a new Docker runtime.
 func NewDockerRuntime() *DockerRuntime {
+	defer perf.Track(nil, "container.NewDockerRuntime")()
+
 	return &DockerRuntime{}
 }
 

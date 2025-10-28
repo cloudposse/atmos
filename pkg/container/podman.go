@@ -33,6 +33,8 @@ type PodmanRuntime struct{}
 
 // NewPodmanRuntime creates a new Podman runtime.
 func NewPodmanRuntime() *PodmanRuntime {
+	defer perf.Track(nil, "container.NewPodmanRuntime")()
+
 	return &PodmanRuntime{}
 }
 
