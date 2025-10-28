@@ -77,6 +77,33 @@ Successfully logged out from 3 identities
    browser session.
 ```
 
+### Logout from All Identities
+
+```shell
+atmos auth logout --all
+```
+
+This removes all credentials for all configured identities and providers. Useful when switching AWS organizations or troubleshooting authentication issues.
+
+**Example output:**
+
+```
+Logging out from all identities...
+
+Removing all credentials...
+  ✓ Keyring: aws-sso
+  ✓ Keyring: dev-org-admin
+  ✓ Keyring: dev-admin
+  ✓ Keyring: prod-admin
+  ✓ Files: ~/.config/atmos/aws/aws-sso/ (XDG-compliant)
+
+Successfully logged out from 4 identities
+
+⚠️  Note: This only removes local credentials. Your browser session
+   may still be active. Visit your identity provider to end your
+   browser session.
+```
+
 ### Logout from Specific Provider
 
 ```shell
@@ -138,6 +165,23 @@ Would remove from identity: dev-admin
 3 identities would be logged out
 ```
 
+You can also use `--dry-run` with `--all` to preview a complete logout:
+
+```shell
+atmos auth logout --all --dry-run
+```
+
+```
+Dry run mode: No credentials will be removed
+
+Would remove:
+  • All identity keyring entries
+  • All provider keyring entries
+  • Files:
+    - ~/.config/atmos/aws/aws-sso/
+    - ~/.config/atmos/aws/backup-provider/
+```
+
 ## Arguments
 
 <dl>
@@ -148,6 +192,9 @@ Would remove from identity: dev-admin
 ## Flags
 
 <dl>
+  <dt>`--all`</dt>
+  <dd>Logout from all identities and providers. Removes all cached credentials from the system keyring and credential files. Useful when switching AWS organizations or troubleshooting authentication issues.</dd>
+
   <dt>`--provider`</dt>
   <dd>Logout from a specific provider instead of an identity. Removes all identities that authenticate through this provider.</dd>
 
@@ -438,7 +485,11 @@ atmos auth login prod-admin
 Remove credentials when ending your work session for security:
 
 ```shell
+# Logout from specific provider
 atmos auth logout --provider aws-sso
+
+# Or logout from all identities
+atmos auth logout --all
 ```
 
 ### 3. Use Dry Run for Verification
