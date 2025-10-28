@@ -5,4 +5,4 @@ DEBU Found ENV variable ATMOS_VERSION_CHECK_ENABLED=false
 
 DEBU Found ENV variable ATMOS_VERSION_CHECK_ENABLED=false
 DEBU Found ENV variable ATMOS_VERSION_CHECK_ENABLED=false
-DEBU Telemetry event enqueued
+DEBU Telemetry is disabled, skipping capture

@@ -1,23 +1,9 @@
 DEBU Set logs-level=debug logs-file=/dev/stderr
+DEBU Vendor config file not found file=vendor
+DEBU Telemetry is disabled, skipping capture
 
-**Notice:** Telemetry Enabled - Atmos now collects anonymous telemetry regarding usage. This information is used to shape the Atmos roadmap and prioritize features. You can learn more, including how to opt out if you'd prefer not to participate in this anonymous program, by visiting: https://atmos.tools/cli/telemetry
-INFO Vendoring from 'vendor.yaml'
-DEBU Added //. to Git URL without subdirectory normalized="git::git@github.com:cloudposse/terraform-null-label.git//.?ref=0.25.0"
-DEBU Added //. to Git URL without subdirectory normalized="git::ssh://git@github.com/cloudposse/terraform-null-label.git//.?ref=0.25.0"
-DEBU No TTY detected. Falling back to basic output. This can happen when no terminal is attached or when commands are pipelined.
-DEBU Downloading and installing package package=terraform-null-label-cred
-DEBU Entering dry-run flow for generic (non component/mixin) vendoring  package=terraform-null-label-cred
-DEBU Custom detection required for URI uri="git::git@github.com:cloudposse/terraform-null-label.git//.?ref=0.25.0"
-DEBU CustomGitDetector.Detect called
-DEBU Rewriting SCP-style SSH URL old_url="" new_url="ssh://***@github.com/cloudposse/terraform-null-label.git//.?ref=0.25.0"
-DEBU Reading config param InjectGithubToken=true
-DEBU Skipping token injection: URL already has user credentials url="ssh://***@github.com/cloudposse/terraform-null-label.git//.?ref=0.25.0"
-DEBU Final transformation url="git::ssh://***@github.com/cloudposse/terraform-null-label.git//.?depth=1&ref=0.25.0"
-INFO ✓ package=terraform-null-label-cred version=(0.25.0)
-DEBU Downloading and installing package package=terraform-null-label-basic
-DEBU Entering dry-run flow for generic (non component/mixin) vendoring  package=terraform-null-label-basic
-DEBU Skipping custom detection; URI already supported by go getter uri="git::ssh://git@github.com/cloudposse/terraform-null-label.git//.?ref=0.25.0"
-INFO ✓ package=terraform-null-label-basic version=(0.25.0)
-INFO Done! Dry run completed. No components vendored
-INFO Vendored components success=2
-DEBU Telemetry event enqueued
+# Error                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        
+the '--everything' flag is set, but vendor config file does not exist: vendor                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           
+
+

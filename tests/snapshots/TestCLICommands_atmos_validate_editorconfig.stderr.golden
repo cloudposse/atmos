@@ -1,0 +1,5 @@
+DEBU Set logs-level=debug logs-file=/dev/stderr
+DEBU
+DEBU Excluding regex=/.git/|/.jj/|Cargo/.lock$|composer/.lock$|Gemfile/.lock$|go/.(mod|sum|work|work/.sum)$|gradle/wrapper/gradle-wrapper/.properties$|gradlew(/.bat)?$|(buildscript-)?gradle/.lockfile?$|/.mvn/wrapper/maven-wrapper/.properties$|/.mvn/wrapper/MavenWrapperDownloader/.java$|mvnw(/.cmd)?$|/node_modules/|npm-shrinkwrap/.json$|package-lock/.json$|Pipfile/.lock$|poetry/.lock$|pnpm-lock/.yaml$|/.terraform/.lock/.hcl$|uv/.lock$|/.pnp/.c?js$|/.pnp/.loader/.mjs$|/.yarn/|yarn/.lock$|/.eot$|/.otf$|/.ttf$|/.woff2?$|/.avif$|/.gif$|/.ico$|/.jpe?g$|/.mp4$|/.p[bgnp]m$|/.png$|/.svg$|/.tiff?$|/.webp$|/.wmv$|/.bak$|/.bin$|/.docx?$|/.exe$|/.pdf$|/.snap$|/.xlsx?$|/.7z$|/.bz2$|/.gz$|/.jar$|/.tar$|/.tgz$|/.war$|/.zip$|/.log$|/.patch$|/.(css|js)/.map$|min/.(css|js)$|~$
+DEBU Files checked count=12
+DEBU Telemetry event enqueued

@@ -1,3 +1,4 @@
-
-**Notice:** Telemetry Enabled - Atmos now collects anonymous telemetry regarding usage. This information is used to shape the Atmos roadmap and prioritize features. You can learn more, including how to opt out if you'd prefer not to participate in this anonymous program, by visiting: https://atmos.tools/cli/telemetry
+DEBU Set logs-level=debug logs-file=/dev/stderr
+DEBU Skipping browser launch in test environment
 Opening default browser to 'https://atmos.tools'.
+DEBU Telemetry is disabled, skipping capture
