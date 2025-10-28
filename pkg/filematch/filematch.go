@@ -5,11 +5,13 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+
+	"github.com/cloudposse/atmos/pkg/filesystem"
 )
 
 // matcher is the main struct for matching files with injected dependencies.
 type matcher struct {
-	fs    fileSystem
+	fs    filesystem.FileSystem
 	globC globCompiler
 }
 
@@ -109,7 +111,7 @@ func extractBasePathAndGlob(pattern string) (string, string) {
 
 // Convenience function for default usage.
 func NewGlobMatcher() *matcher {
-	fs := newDefaultFileSystem()
+	fs := filesystem.NewOSFileSystem()
 	globC := NewDefaultGlobCompiler()
 	return &matcher{
 		fs:    fs,

@@ -6,6 +6,7 @@
     "docusaurus": "docusaurus",
     "start": "docusaurus start",
     "build": "docusaurus build",
+    "postbuild": "cp build/llms.txt static/llms.txt && cp build/llms-full.txt static/llms-full.txt && ./scripts/clean-llms-imports.sh",
     "swizzle": "docusaurus swizzle",
     "deploy": "docusaurus deploy",
     "clear": "docusaurus clear",
@@ -26,12 +27,12 @@
     "@fortawesome/free-regular-svg-icons": "^6.7.2",
     "@fortawesome/free-solid-svg-icons": "^6.7.2",
     "@fortawesome/react-fontawesome": "^0.2.2",
-    "@grnet/docusaurus-terminology": "^2.0.0-rc.1",
     "@mdx-js/react": "^3.1.0",
     "clsx": "^2.1.1",
     "custom-loaders": "file:plugins/custom-loaders",
     "docusaurus-plugin-image-zoom": "^2.0.0",
     "docusaurus-plugin-sentry": "^2.0.0",
+    "gray-matter": "^4.0.3",
     "html-loader": "^5.1.0",
     "marked": "^15.0.4",
     "node-fetch": "^3.3.2",
@@ -48,7 +49,8 @@
     "react-table": "^7.8.0",
     "remark-html": "^16.0.1",
     "remark-parse": "^11.0.0",
-    "unified": "^11.0.5"
+    "unified": "^11.0.5",
+    "docusaurus-plugin-llms": "^0.2.2"
   },
   "devDependencies": {
     "@docusaurus/module-type-aliases": "^3.6.3",

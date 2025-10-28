@@ -1,0 +1,82 @@
+/**
+ * Styling for Term component tooltips.
+ * Native implementation to replace @grnet/docusaurus-term-preview.
+ */
+
+.term-wrapper {
+  position: relative;
+  display: inline;
+}
+
+.term-link {
+  text-decoration: underline;
+  text-decoration-style: dotted;
+  text-decoration-color: var(--ifm-color-primary);
+  cursor: help;
+  border-bottom: none;
+}
+
+.term-link:hover {
+  text-decoration-style: solid;
+  text-decoration-color: var(--ifm-color-primary-dark);
+}
+
+.term-tooltip {
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  margin-bottom: 8px;
+  padding: 8px 12px;
+  background-color: var(--ifm-background-surface-color);
+  border: 1px solid var(--ifm-color-emphasis-300);
+  border-radius: 4px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  font-size: 0.875rem;
+  line-height: 1.4;
+  white-space: normal;
+  max-width: 300px;
+  z-index: 1000;
+  pointer-events: none;
+  animation: tooltipFadeIn 0.2s ease-in-out;
+}
+
+.term-tooltip::after {
+  content: '';
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  border: 6px solid transparent;
+  border-top-color: var(--ifm-background-surface-color);
+}
+
+@keyframes tooltipFadeIn {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+}
+
+/* Dark mode adjustments */
+[data-theme='dark'] .term-tooltip {
+  background-color: var(--ifm-background-surface-color);
+  border-color: var(--ifm-color-emphasis-300);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+}
+
+[data-theme='dark'] .term-tooltip::after {
+  border-top-color: var(--ifm-background-surface-color);
+}
+
+/* Mobile adjustments */
+@media (max-width: 768px) {
+  .term-tooltip {
+    max-width: 250px;
+    font-size: 0.8125rem;
+  }
+}

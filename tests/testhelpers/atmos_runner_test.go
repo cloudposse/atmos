@@ -11,9 +11,14 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/cloudposse/atmos/tests"
 )
 
 func TestAtmosRunner_Build(t *testing.T) {
+	// Skip long tests in short mode (these tests build atmos binary which takes 15-20s each)
+	tests.SkipIfShort(t)
+
 	t.Run("without coverage", func(t *testing.T) {
 		runner := NewAtmosRunner("")
 		err := runner.Build()
@@ -73,6 +78,9 @@ func TestAtmosRunner_Build(t *testing.T) {
 }
 
 func TestAtmosRunner_Command(t *testing.T) {
+	// Skip long tests in short mode (builds atmos binary ~15-20s)
+	tests.SkipIfShort(t)
+
 	t.Run("without coverage", func(t *testing.T) {
 		runner := NewAtmosRunner("")
 		require.NoError(t, runner.Build())
@@ -112,6 +120,9 @@ func TestAtmosRunner_Command(t *testing.T) {
 }
 
 func TestAtmosRunner_CommandContext(t *testing.T) {
+	// Skip long tests in short mode (builds atmos binary ~15-20s)
+	tests.SkipIfShort(t)
+
 	t.Run("without coverage", func(t *testing.T) {
 		runner := NewAtmosRunner("")
 		require.NoError(t, runner.Build())
@@ -249,13 +260,8 @@ func TestAtmosRunner_Cleanup(t *testing.T) {
 }
 
 func Test_findRepoRoot(t *testing.T) {
-	// Save current directory and restore after test.
-	oldWd, err := os.Getwd()
-	require.NoError(t, err)
-	defer os.Chdir(oldWd)
-
 	// Test from current directory.
-	root, err := findRepoRoot()
+	root, err := FindRepoRoot()
 
 	// Check if we found a repo.
 	if err == nil {
@@ -272,14 +278,17 @@ func Test_findRepoRoot(t *testing.T) {
 
 	// Test from a temp directory (should fail).
 	tempDir := t.TempDir()
-	os.Chdir(tempDir)
+	t.Chdir(tempDir)
 
-	_, err = findRepoRoot()
+	_, err = FindRepoRoot()
 	assert.Error(t, err)
 	assert.ErrorContains(t, err, "not in a git repository")
 }
 
 func TestAtmosRunner_buildWithoutCoverage(t *testing.T) {
+	// Skip long tests in short mode (builds atmos binary ~15-20s)
+	tests.SkipIfShort(t)
+
 	t.Run("successful build", func(t *testing.T) {
 		runner := &AtmosRunner{}
 
@@ -310,9 +319,7 @@ func TestAtmosRunner_buildWithoutCoverage(t *testing.T) {
 	t.Run("handles missing repo root", func(t *testing.T) {
 		// Change to directory without git repo.
 		tempDir := t.TempDir()
-		oldWd, _ := os.Getwd()
-		defer os.Chdir(oldWd)
-		os.Chdir(tempDir)
+		t.Chdir(tempDir)
 
 		runner := &AtmosRunner{}
 
@@ -323,6 +330,9 @@ func TestAtmosRunner_buildWithoutCoverage(t *testing.T) {
 }
 
 func TestAtmosRunner_buildWithCoverage(t *testing.T) {
+	// Skip long tests in short mode (builds atmos binary with coverage ~15-20s)
+	tests.SkipIfShort(t)
+
 	t.Run("successful build", func(t *testing.T) {
 		runner := &AtmosRunner{
 			coverDir: t.TempDir(),
@@ -355,9 +365,7 @@ func TestAtmosRunner_buildWithCoverage(t *testing.T) {
 	t.Run("handles missing repo root", func(t *testing.T) {
 		// Change to directory without git repo.
 		tempDir := t.TempDir()
-		oldWd, _ := os.Getwd()
-		defer os.Chdir(oldWd)
-		os.Chdir(tempDir)
+		t.Chdir(tempDir)
 
 		runner := &AtmosRunner{
 			coverDir: t.TempDir(),
@@ -370,6 +378,9 @@ func TestAtmosRunner_buildWithCoverage(t *testing.T) {
 }
 
 func TestAtmosRunner_CoverageIntegration(t *testing.T) {
+	// Skip long tests in short mode (integration test that builds and runs atmos ~15-20s)
+	tests.SkipIfShort(t)
+
 	// Integration test that actually runs atmos with coverage.
 	tempDir := t.TempDir()
 	runner := NewAtmosRunner(tempDir)
@@ -407,9 +418,7 @@ func TestAtmosRunner_ErrorPaths(t *testing.T) {
 		}
 
 		// Change to a directory without go.mod.
-		oldWd, _ := os.Getwd()
-		os.Chdir(t.TempDir())
-		defer os.Chdir(oldWd)
+		t.Chdir(t.TempDir())
 
 		// Should fail to build.
 		err := runner.buildWithCoverage()
@@ -418,6 +427,9 @@ func TestAtmosRunner_ErrorPaths(t *testing.T) {
 }
 
 func TestAtmosRunner_ConcurrentBuild(t *testing.T) {
+	// Skip long tests in short mode (builds atmos binary concurrently ~15-20s)
+	tests.SkipIfShort(t)
+
 	// Test that concurrent builds don't interfere with each other.
 	tempDir := t.TempDir()
 	runner := NewAtmosRunner(tempDir)

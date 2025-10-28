@@ -20,12 +20,102 @@ import Note from '@site/src/components/Note';
 These flags are available for every Atmos command:
 
 <dl>
+    <dt>`--chdir` / `-C`</dt>
+    <dd>
+        Change the working directory before Atmos runs. Equivalent to running `cd <directory>` before executing `atmos`.
+
+        **Use Cases:**
+        - **Development workflow**: Test local Atmos builds against different infrastructure repos
+        - **CI/CD**: Run Atmos from a build directory while operating on infrastructure elsewhere
+        - **Multi-repo operations**: Execute commands across multiple repos without changing your shell
+        - **Scripting**: Simplify scripts that operate on different directories
+
+        **Basic Usage:**
+        ```bash
+        # Run as if you did: cd /path/to/infra && atmos terraform plan
+        atmos -C /path/to/infra terraform plan vpc -s prod
+
+        # Use environment variable
+        ATMOS_CHDIR=/infrastructure atmos list components
+        ```
+
+        <details>
+        <summary><strong>How it differs from <code>--base-path</code></strong></summary>
+
+        **`--chdir`**: Changes the **process working directory** (calls `os.Chdir()`)
+        - Like running `cd` before `atmos`
+        - ALL file operations use the new directory
+        - Happens **before** any configuration loading
+
+        **`--base-path`**: Provides a **path prefix** for configuration (just a string)
+        - Does **not** change the working directory
+        - Used when joining paths: `filepath.Join(basePath, componentPath)`
+        - Processed **after** `--chdir`
+
+        **Examples showing the difference:**
+        ```bash
+        # Without any flags (current directory: /home/user)
+        atmos terraform plan
+        # Looks for atmos.yaml in: /home/user/atmos.yaml
+        # Resolves components from: /home/user/components/terraform/
+
+        # With --chdir (changes working directory)
+        atmos --chdir=/infra terraform plan
+        # Working directory changed to: /infra
+        # Looks for atmos.yaml in: /infra/atmos.yaml
+        # Resolves components from: /infra/components/terraform/
+
+        # With --base-path (working directory unchanged)
+        atmos --base-path=/infra terraform plan
+        # Working directory still: /home/user
+        # Base path prefix: /infra
+        # Looks for atmos.yaml using: /infra prefix
+        # Relative paths in config resolve from: /home/user
+
+        # With both flags
+        atmos --chdir=/home/user --base-path=/infra terraform plan
+        # First: changes working directory to /home/user
+        # Then: uses /infra as base path prefix
+        # Result: paths like /infra are resolved relative to /home/user
+        ```
+        </details>
+    </dd>
+
     <dt>`--base-path`</dt>
     <dd>
-        Base path for the Atmos project. This is the root directory where Atmos will look for configuration files,
-        stacks, and components.
-        - Can also use `ATMOS_BASE_PATH` environment variable
+        Specify the Atmos project root directory. Use this when your `atmos.yaml` and components are in a non-standard location.
+
+        **When to use it:**
+        - Your `atmos.yaml` and components are in a subdirectory
+        - Using Atmos programmatically (like the Terraform provider)
+        - Non-standard project layout where the Atmos root isn't the current directory
+
+        **Basic Usage:**
+        ```bash
+        # Look for atmos.yaml and components using /custom/path as the base
+        atmos --base-path=/custom/path terraform plan vpc -s prod
+
+        # Combine with --chdir
+        atmos --chdir=/infra --base-path=./custom describe stacks
+        ```
+
+        <details>
+        <summary><strong>Technical details</strong></summary>
+
+        **What it does internally:**
+        - Sets `atmosConfig.BasePath` (a configuration value, not a directory change)
+        - Used as a prefix when joining paths: `filepath.Join(basePath, componentPath)`
+        - Constructs paths to: stacks, terraform components, helmfile components, packer components
+        - Does **not** call `os.Chdir()` or change the working directory
+
+        **Path resolution:**
         - Supports both absolute and relative paths
+        - Relative paths resolved using `filepath.Abs()` from current working directory
+        - If `--chdir` was used, relative paths resolve from the NEW working directory
+        - Can also use `ATMOS_BASE_PATH` environment variable
+
+        See `--chdir` section above for detailed comparison of how these flags interact.
+        </details>
     </dd>
 
     <dt>`--config`</dt>
@@ -46,7 +136,7 @@ These flags are available for every Atmos command:
     <dd>
         Set the logging level for Atmos operations.
         - Options: `Trace`, `Debug`, `Info`, `Warning`, `Off`
-        - Default: `Info`
+        - Default: `Warning`
         - Can also use `ATMOS_LOGS_LEVEL` environment variable
     </dd>
 
@@ -97,6 +187,17 @@ These flags are available for every Atmos command:
         Redirect stderr to a file or file descriptor.
         - Can redirect to any file path or standard file descriptor
         - Example: `--redirect-stderr=/dev/null` to suppress error output
+    </dd>
+
+    <dt>`--version`</dt>
+    <dd>
+        Print a minimal single-line Atmos CLI version and exit.
+        - Outputs a simple `atmos &lt;version&gt;` format without styling or additional information
+        - Does not perform update checks or support `--check`/`--format` flags
+        - Available as a persistent flag on all commands
+        - Always displays the **Atmos version**, not the version of underlying tools (Terraform, Helmfile, etc.)
+        - For richer output and additional flags, use the [`atmos version`](/cli/commands/version/usage) command
+        - Example: `atmos --version`
     </dd>
 </dl>
 
@@ -199,11 +300,37 @@ These flags are available across multiple commands but not universally:
 </dl>
 
 
+### Performance Heatmap Flags
+
+<dl>
+    <dt>`--heatmap`</dt>
+    <dd>
+        Display performance heatmap visualization after command execution.
+        - Default: `false`
+        - Shows function call counts, execution times, and performance metrics
+        - Automatically tracks function execution with microsecond precision
+        - Includes P95 latency calculations using High Dynamic Range histograms
+        - Displays interactive TUI if terminal is available, otherwise static output
+    </dd>
+
+    <dt>`--heatmap-mode`</dt>
+    <dd>
+        Visualization mode for the performance heatmap.
+        - Options: `bar`, `ascii`, `sparkline`, `table`
+        - Default: `bar`
+        - `bar`: Colored horizontal bar chart with function names and durations
+        - `ascii`: Color-coded ASCII bars (Red &gt;1ms, Orange &gt;500µs, Yellow &gt;100µs, Green &lt;100µs)
+        - `sparkline`: Compact sparklines showing relative performance
+        - `table`: Interactive table with sortable columns
+        - Only used with `--heatmap` flag
+    </dd>
+</dl>
+
 ## Environment Variables
 
 All global flags can be set using environment variables. The precedence order is:
 
-1. Command-line flags (highest priority)
+1. Command-line flags (the highest priority)
 2. Environment variables
 3. Configuration file (`atmos.yaml`)
 4. Default values (lowest priority)
@@ -211,6 +338,14 @@ All global flags can be set using environment variables. The precedence order is
 ### Core Environment Variables
 
 <dl>
+    <dt>`ATMOS_CHDIR`</dt>
+    <dd>
+        Change to the specified directory before executing any command.
+        - Equivalent to the `--chdir` / `-C` flag
+        - CLI flag takes precedence over this environment variable
+        - Useful for CI/CD pipelines and scripting
+    </dd>
+
     <dt>`ATMOS_BASE_PATH`</dt>
     <dd>Sets the base path for the Atmos project</dd>
 
@@ -260,6 +395,34 @@ All global flags can be set using environment variables. The precedence order is
     <dd>Set the profile type for file-based profiling (cpu, heap, allocs, goroutine, block, mutex, threadcreate, trace)</dd>
 </dl>
 
+### XDG Base Directory Environment Variables
+
+<dl>
+    <dt>`ATMOS_XDG_CACHE_HOME` / `XDG_CACHE_HOME`</dt>
+    <dd>
+        Override the default XDG cache directory for Atmos.
+        - Default: `~/.cache` on Linux/Unix, `~/Library/Caches` on macOS, `%LOCALAPPDATA%` on Windows
+        - Used for: Cache files (`cache.yaml`)
+        - Example: `ATMOS_XDG_CACHE_HOME=/custom/cache atmos describe stacks`
+    </dd>
+
+    <dt>`ATMOS_XDG_DATA_HOME` / `XDG_DATA_HOME`</dt>
+    <dd>
+        Override the default XDG data directory for Atmos.
+        - Default: `~/.local/share` on Linux/Unix, `~/Library/Application Support` on macOS, `%LOCALAPPDATA%` on Windows
+        - Used for: File-based keyring storage
+        - Example: `ATMOS_XDG_DATA_HOME=/custom/data atmos auth login`
+    </dd>
+
+    <dt>`ATMOS_XDG_CONFIG_HOME` / `XDG_CONFIG_HOME`</dt>
+    <dd>
+        Override the default XDG config directory for Atmos.
+        - Default: `~/.config` on Linux/Unix, `~/Library/Application Support` on macOS, `%APPDATA%` on Windows
+        - Reserved for future use
+        - Example: `ATMOS_XDG_CONFIG_HOME=/custom/config`
+    </dd>
+</dl>
+
 ## Portability Notes
 
 Atmos supports both standard and Atmos-prefixed environment variables to ensure maximum portability:
@@ -285,6 +448,33 @@ atmos --base-path=/infrastructure \
       --config=base.yaml \
       --config=override.yaml \
       terraform plan vpc -s prod
+```
+
+### Directory Change Examples
+
+```bash
+# Change to infrastructure directory before running command
+atmos --chdir=/path/to/infrastructure describe stacks
+
+# Use short form (-C) for brevity
+atmos -C /infra terraform plan vpc -s prod
+
+# Relative path from current directory
+atmos --chdir=../other-repo list components
+
+# Use with other flags - chdir processes first
+atmos -C /infra --base-path=./config describe component vpc -s dev
+
+# Environment variable for scripting
+export ATMOS_CHDIR=/infrastructure
+atmos terraform apply vpc -s prod
+
+# Development workflow - point dev binary at different repo
+./build/atmos -C ~/projects/my-infrastructure describe stacks
+
+# CI/CD pipeline example
+cd /build
+atmos --chdir=/infrastructure terraform plan vpc -s prod
 ```
 
 ### Pager Control Examples

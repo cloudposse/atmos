@@ -10,23 +10,47 @@ import (
 	"strings"
 	"time"
 
+	"github.com/hashicorp/go-getter"
+	"github.com/spf13/viper"
+
+	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/filesystem"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
-	"github.com/hashicorp/go-getter"
-	"github.com/pkg/errors"
-	"github.com/spf13/viper"
 )
 
-var (
-	ErrBasePath           = errors.New("base path required to process imports")
-	ErrTempDir            = errors.New("temporary directory required to process imports")
-	ErrResolveLocal       = errors.New("failed to resolve local import path")
-	ErrSourceDestination  = errors.New("source and destination cannot be nil")
-	ErrImportPathRequired = errors.New("import path required to process imports")
-	ErrNOFileMatchPattern = errors.New("no files matching patterns found")
-	ErrMaxImportDepth     = errors.New("maximum import depth reached")
-)
+// sanitizeImport redacts credentials and query values from URLs while leaving paths intact.
+// Sanitizes credentials from any URL scheme (http, https, git, ssh, s3, gcs, oci, etc.).
+func sanitizeImport(s string) string {
+	// Handle go-getter style URLs with :: separator (e.g., git::https://...).
+	parts := strings.SplitN(s, "::", 2)
+	var prefix string
+	urlPart := s
+
+	if len(parts) == 2 {
+		prefix = parts[0] + "::"
+		urlPart = parts[1]
+	}
+
+	u, err := url.Parse(urlPart)
+	if err != nil {
+		// Unparsable; return as-is (might be SCP-style git).
+		return s
+	}
+
+	// Clear credentials regardless of scheme.
+	if u.User != nil {
+		u.User = nil
+	}
+
+	// Clear query params (may contain tokens/credentials).
+	if u.RawQuery != "" {
+		u.RawQuery = ""
+	}
+
+	return prefix + u.String()
+}
 
 type importTypes int
 
@@ -34,6 +58,8 @@ const (
 	LOCAL  importTypes = 0
 	REMOTE importTypes = 1
 )
+
+var defaultFileSystem = filesystem.NewOSFileSystem()
 
 // import Resolved Paths.
 type ResolvedPaths struct {
@@ -45,8 +71,13 @@ type ResolvedPaths struct {
 // processConfigImports It reads the import paths from the source configuration.
 // It processes imports from the source configuration and merges them into the destination configuration.
 func processConfigImports(source *schema.AtmosConfiguration, dst *viper.Viper) error {
+	return processConfigImportsWithFS(source, dst, defaultFileSystem)
+}
+
+// processConfigImportsWithFS processes imports using a FileSystem implementation.
+func processConfigImportsWithFS(source *schema.AtmosConfiguration, dst *viper.Viper, fs filesystem.FileSystem) error {
 	if source == nil || dst == nil {
-		return ErrSourceDestination
+		return errUtils.ErrSourceDestination
 	}
 	if len(source.Import) == 0 {
 		return nil
@@ -56,11 +87,15 @@ func processConfigImports(source *schema.AtmosConfiguration, dst *viper.Viper) e
 	if err != nil {
 		return err
 	}
-	tempDir, err := os.MkdirTemp("", "atmos-import-*")
+	tempDir, err := fs.MkdirTemp("", "atmos-import-*")
 	if err != nil {
 		return err
 	}
-	defer os.RemoveAll(tempDir)
+	defer func() {
+		if err := fs.RemoveAll(tempDir); err != nil {
+			log.Debug("Failed to remove temp directory", "path", tempDir, "error", err)
+		}
+	}()
 	resolvedPaths, err := processImports(basePath, importPaths, tempDir, 1, MaximumImportLvL)
 	if err != nil {
 		return err
@@ -69,14 +104,14 @@ func processConfigImports(source *schema.AtmosConfiguration, dst *viper.Viper) e
 	log.Debug("processConfigImports resolved paths", "count", len(resolvedPaths))
 
 	for _, resolvedPath := range resolvedPaths {
-		// Debug: log what we're about to merge.
-		log.Debug("attempting to merge import", "import", resolvedPath.importPaths, "file_path", resolvedPath.filePath)
+		// Trace: log what we're about to merge (sanitized).
+		log.Trace("attempting to merge import", "import", sanitizeImport(resolvedPath.importPaths), "file_path", resolvedPath.filePath)
 		err := mergeConfigFile(resolvedPath.filePath, dst)
 		if err != nil {
-			log.Debug("error loading config file", "import", resolvedPath.importPaths, "file_path", resolvedPath.filePath, "error", err)
+			log.Trace("error loading config file", "import", sanitizeImport(resolvedPath.importPaths), "file_path", resolvedPath.filePath, "error", err)
 			continue
 		}
-		log.Debug("successfully merged config from import", "import", resolvedPath.importPaths, "file_path", resolvedPath.filePath)
+		log.Trace("successfully merged config from import", "import", sanitizeImport(resolvedPath.importPaths), "file_path", resolvedPath.filePath)
 	}
 
 	return nil
@@ -84,13 +119,13 @@ func processConfigImports(source *schema.AtmosConfiguration, dst *viper.Viper) e
 
 func processImports(basePath string, importPaths []string, tempDir string, currentDepth, maxDepth int) (resolvedPaths []ResolvedPaths, err error) {
 	if basePath == "" {
-		return nil, ErrBasePath
+		return nil, errUtils.ErrBasePath
 	}
 	if tempDir == "" {
-		return nil, ErrTempDir
+		return nil, errUtils.ErrTempDir
 	}
 	if currentDepth > maxDepth {
-		return nil, ErrMaxImportDepth
+		return nil, errUtils.ErrMaxImportDepth
 	}
 	basePath, err = filepath.Abs(basePath)
 	if err != nil {
@@ -179,7 +214,7 @@ func processRemoteImport(basePath, importPath, tempDir string, currentDepth, max
 // Process local imports.
 func processLocalImport(basePath string, importPath, tempDir string, currentDepth, maxDepth int) ([]ResolvedPaths, error) {
 	if importPath == "" {
-		return nil, ErrImportPathRequired
+		return nil, errUtils.ErrImportPathRequired
 	}
 	if !filepath.IsAbs(importPath) {
 		importPath = filepath.Join(basePath, importPath)
@@ -193,7 +228,7 @@ func processLocalImport(basePath string, importPath, tempDir string, currentDept
 	paths, err := SearchAtmosConfig(importPath)
 	if err != nil {
 		log.Debug("failed to resolve local import path", "path", importPath, "err", err)
-		return nil, ErrResolveLocal
+		return nil, errUtils.ErrResolveLocal
 	}
 
 	resolvedPaths := make([]ResolvedPaths, 0)
@@ -298,7 +333,7 @@ func convertToAbsolutePaths(filePaths []string) ([]string, error) {
 	}
 
 	if len(absPaths) == 0 {
-		return nil, errors.New("no valid absolute paths found")
+		return nil, errUtils.ErrNoValidAbsolutePaths
 	}
 
 	return absPaths, nil
@@ -387,7 +422,7 @@ func findMatchingFiles(patterns []string) ([]string, error) {
 	}
 
 	if len(filePaths) == 0 {
-		return nil, ErrNOFileMatchPattern
+		return nil, errUtils.ErrNoFileMatchPattern
 	}
 
 	return filePaths, nil

@@ -38,6 +38,6 @@ templates:
       datasources: {}
 
 profiler:
-  enabled: true
+  enabled: false
   host: "localhost"
   port: 6060

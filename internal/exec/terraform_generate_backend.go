@@ -4,17 +4,20 @@ import (
 	"fmt"
 	"path/filepath"
 
-	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/perf"
 	u "github.com/cloudposse/atmos/pkg/utils"
 	errUtils "github.com/cloudposse/atmos/errors"
 )
 
-// ExecuteTerraformGenerateBackendCmd executes `terraform generate backend` command
+// ExecuteTerraformGenerateBackendCmd executes `terraform generate backend` command.
 func ExecuteTerraformGenerateBackendCmd(cmd *cobra.Command, args []string) error {
+	defer perf.Track(nil, "exec.ExecuteTerraformGenerateBackendCmd")()
+
 	if len(args) != 1 {
 		return errors.New("invalid arguments. The command requires one argument `component`")
 	}
@@ -88,7 +91,7 @@ func ExecuteTerraformGenerateBackendCmd(cmd *cobra.Command, args []string) error
 	// Check if the `backend` section has `bucket` when `backend_type` is `gcs`
 	if info.ComponentBackendType == cfg.BackendTypeGCS {
 		if _, ok := info.ComponentBackendSection["bucket"].(string); !ok {
-			return fmt.Errorf(errUtils.ErrStringWrappingFormat, errUtils.ErrInvalidBackendConfig, fmt.Sprintf("backend config for the '%s' component is missing 'bucket'", component))
+			return errUtils.ErrGCSBucketRequired
 		}
 	}
 

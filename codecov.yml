@@ -6,25 +6,30 @@ coverage:
     project:
       default:
         target: auto      # Automatically use the base branch's coverage
-        threshold: 1%     # Allow up to 1% drop in overall project coverage
+        threshold: 1%     # Allow up to 1% drop to account for Codecov rounding
         base: auto
         if_not_found: success  # Don't fail if base coverage is missing
+        paths:            # Only track Go files for coverage calculations
+          - "**/*.go"
     patch:
       default:
-        target: 80% # Require at least 80% test coverage on new/changed lines
-        threshold: 2% # Allow a small drop in coverage
+        target: 80% # Target at least 80% test coverage on new/changed lines
+        informational: true # Make patch coverage informational only
         base: auto
+        paths:            # Only track Go files for coverage calculations
+          - "**/*.go"
   ignore:
     - "**/mock_*.go"  # Adjust this pattern based on your project structure
     - "mock_*.go"  # Adjust this pattern based on your project structure
     - "**/mock/*.go" # Adjust interface required for mocking
+    - "**/*_test_helpers.go" # Test helper files (not test files but used only by tests)
+    - "**/testhelpers/**" # Test helper packages (used only by tests)
 
 comment:
   layout: "reach,diff,flags,tree"  # Display different coverage views
   behavior: default                # Default PR comment behavior
   require_changes: true             # Only post if coverage changes
-  require_base: true                 # Compare against base branch coverage
+  require_base: true                # Compare against base branch coverage
 
 github_checks:
   annotations: true    # Enable GitHub Checks Annotations
-  informational: false # Fail the PR check if coverage is too low

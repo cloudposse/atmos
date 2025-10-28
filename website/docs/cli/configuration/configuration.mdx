@@ -10,6 +10,8 @@ import Screengrab from '@site/src/components/Screengrab'
 import Terminal from '@site/src/components/Terminal'
 import File from '@site/src/components/File'
 import Intro from '@site/src/components/Intro'
+import Tabs from '@theme/Tabs'
+import TabItem from '@theme/TabItem'
 
 # CLI Configuration
 
@@ -226,6 +228,68 @@ If `base_path` is provided, `components.terraform.base_path`, `components.helmfi
 ```yaml
 base_path: "."
 ```
+
+### Windows Path Handling
+
+When configuring paths in `atmos.yaml` on Windows, there are important considerations for how YAML interprets backslashes:
+
+:::warning Windows Path Escaping
+Backslashes (`\`) are treated as escape characters only inside double-quoted YAML scalars. Single-quoted and plain scalars treat backslashes literally. Use single quotes or plain scalars for Windows paths, or double-escape backslashes in double quotes.
+:::
+
+#### Correct Ways to Specify Windows Paths
+
+<Tabs defaultValue="forward">
+<TabItem value="forward" label="Forward Slashes (Recommended)">
+```yaml
+# Forward slashes work on all platforms including Windows
+components:
+  terraform:
+    base_path: "C:/Users/username/projects/components/terraform"
+```
+</TabItem>
+
+<TabItem value="escaped" label="Escaped Backslashes">
+```yaml
+# Double backslashes to escape them in YAML
+components:
+  terraform:
+    base_path: "C:\\Users\\username\\projects\\components\\terraform"
+```
+</TabItem>
+
+<TabItem value="single" label="Single Quotes (Backslashes Literal)">
+```yaml
+# Single quotes treat backslashes as literal characters
+components:
+  terraform:
+    base_path: 'C:\Users\username\projects\components\terraform'
+```
+</TabItem>
+
+<TabItem value="unquoted" label="Unquoted Paths">
+```yaml
+# Unquoted paths with forward slashes also work
+components:
+  terraform:
+    base_path: C:/Users/username/projects/components/terraform
+```
+</TabItem>
+</Tabs>
+
+#### Incorrect Windows Path Format
+
+```yaml
+# ❌ WRONG: Single backslashes get interpreted as escape sequences
+components:
+  terraform:
+    base_path: "C:\Users\username\projects\components\terraform"
+    # This becomes: C:Usersusernameprojectscomponentsterraform (invalid)
+```
+
+:::tip Best Practice
+Use forward slashes (`/`) for all paths in `atmos.yaml`. They work correctly on all operating systems including Windows, Linux, and macOS.
+:::
 
 ## Settings
 

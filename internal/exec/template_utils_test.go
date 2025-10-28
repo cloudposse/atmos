@@ -10,33 +10,8 @@ import (
 	"testing"
 )
 
-// TestCreateTempDirectory verifies that a temporary directory is created with the expected permissions.
-func TestCreateTempDirectory(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skipf("Skipping permission check on Windows: Unix permissions not applicable")
-	}
-
-	dir, err := createTempDirectory()
-	if err != nil {
-		t.Fatalf("createTempDirectory returned error: %v", err)
-	}
-	defer os.RemoveAll(dir)
-
-	// Check that the directory exists.
-	info, err := os.Stat(dir)
-	if err != nil {
-		t.Fatalf("failed to stat directory: %v", err)
-	}
-	if !info.IsDir() {
-		t.Errorf("Expected a directory, got a file")
-	}
-
-	// Check that the permissions are exactlydefaultDirPermissions.
-	mode := info.Mode().Perm()
-	if mode != defaultDirPermissions {
-		t.Errorf("Expected mode %o, got %o", defaultDirPermissions, mode)
-	}
-}
+// Unix-specific test moved to template_utils_unix_test.go:
+// - TestCreateTempDirectory
 
 // TestWriteMergedDataToFile tests that merged data is written to a file and returns a valid file URL.
 func TestWriteMergedDataToFile(t *testing.T) {
@@ -163,7 +138,7 @@ func TestProcessTmplWithDatasourcesGomplate(t *testing.T) {
 		// No variables to interpolate.
 	}
 	tmpl := "Static Content"
-	result, err := ProcessTmplWithDatasourcesGomplate("test", tmpl, mergedData, false)
+	result, err := ProcessTmplWithDatasourcesGomplate(nil, "test", tmpl, mergedData, false)
 	if err != nil {
 		t.Fatalf("ProcessTmplWithDatasourcesGomplate returned error: %v", err)
 	}
@@ -178,7 +153,7 @@ func TestProcessTmplWithDatasourcesGomplate(t *testing.T) {
 	}
 	tmpl = " {{- $data := (ds \"config\") -}}\n\nHello {{ $data.name | default \"Project Title\" }}!"
 
-	result, err = ProcessTmplWithDatasourcesGomplate("test", tmpl, mergedData, false)
+	result, err = ProcessTmplWithDatasourcesGomplate(nil, "test", tmpl, mergedData, false)
 	if err != nil {
 		t.Fatalf("ProcessTmplWithDatasourcesGomplate returned error: %v", err)
 	}
@@ -195,7 +170,7 @@ func TestProcessTmplWithDatasourcesGomplate(t *testing.T) {
 	}
 	tmpl = "{{- $data := (ds \"config\") -}}\n\nVersion: {{ $data.config.version }}"
 
-	result, err = ProcessTmplWithDatasourcesGomplate("test", tmpl, mergedData, false)
+	result, err = ProcessTmplWithDatasourcesGomplate(nil, "test", tmpl, mergedData, false)
 	if err != nil {
 		t.Fatalf("ProcessTmplWithDatasourcesGomplate returned error: %v", err)
 	}

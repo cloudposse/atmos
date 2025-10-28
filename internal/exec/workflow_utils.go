@@ -2,6 +2,7 @@ package exec
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -9,13 +10,13 @@ import (
 	"sort"
 	"strings"
 
-	log "github.com/cloudposse/atmos/pkg/logger"
-	"github.com/pkg/errors"
 	"github.com/samber/lo"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	w "github.com/cloudposse/atmos/internal/tui/workflow"
 	"github.com/cloudposse/atmos/pkg/config"
+	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/retry"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -44,7 +45,15 @@ var (
 )
 
 // IsKnownWorkflowError returns true if the error matches any known workflow error.
+// This includes ExitCodeError which indicates a subcommand failure that's already been reported.
 func IsKnownWorkflowError(err error) bool {
+	// Check if it's an ExitCodeError - these are already reported by the subcommand
+	var exitCodeErr errUtils.ExitCodeError
+	if errors.As(err, &exitCodeErr) {
+		return true
+	}
+
+	// Check known workflow errors
 	for _, knownErr := range KnownWorkflowErrors {
 		if errors.Is(err, knownErr) {
 			return true
@@ -63,6 +72,8 @@ func ExecuteWorkflow(
 	commandLineStack string,
 	fromStep string,
 ) error {
+	defer perf.Track(&atmosConfig, "exec.ExecuteWorkflow")()
+
 	steps := workflowDefinition.Steps
 
 	if len(steps) == 0 {
@@ -201,7 +212,11 @@ func ExecuteWorkflow(
 				WorkflowErrTitle,
 				fmt.Sprintf("\n## Explanation\nThe following command failed to execute:\n```\n%s\n```\nTo resume the workflow from this step, run:\n```\n%s\n```", failedCmd, resumeCommand),
 			)
-			return ErrWorkflowStepFailed
+			// Return joined error to preserve classification and exit-code unwrapping.
+			// Returning only the underlying err drops ErrWorkflowStepFailed from the error chain,
+			// which can hinder classification and checks. Join both so callers can use
+			// errors.Is(err, ErrWorkflowStepFailed) and still unwrap ExitCodeError for proper exit codes.
+			return errors.Join(ErrWorkflowStepFailed, err)
 		}
 	}
 
@@ -221,12 +236,14 @@ func FormatList(items []string) string {
 func ExecuteDescribeWorkflows(
 	atmosConfig schema.AtmosConfiguration,
 ) ([]schema.DescribeWorkflowsItem, map[string][]string, map[string]schema.WorkflowManifest, error) {
+	defer perf.Track(&atmosConfig, "exec.ExecuteDescribeWorkflows")()
+
 	listResult := []schema.DescribeWorkflowsItem{}
 	mapResult := make(map[string][]string)
 	allResult := make(map[string]schema.WorkflowManifest)
 
 	if atmosConfig.Workflows.BasePath == "" {
-		return nil, nil, nil, errors.New("'workflows.base_path' must be configured in 'atmos.yaml'")
+		return nil, nil, nil, errUtils.ErrWorkflowBasePathNotConfigured
 	}
 
 	// If `workflows.base_path` is a relative path, join it with `stacks.base_path`
@@ -320,6 +337,8 @@ func checkAndGenerateWorkflowStepNames(workflowDefinition *schema.WorkflowDefini
 }
 
 func ExecuteWorkflowUI(atmosConfig schema.AtmosConfiguration) (string, string, string, error) {
+	defer perf.Track(&atmosConfig, "exec.ExecuteWorkflowUI")()
+
 	_, _, allWorkflows, err := ExecuteDescribeWorkflows(atmosConfig)
 	if err != nil {
 		return "", "", "", err

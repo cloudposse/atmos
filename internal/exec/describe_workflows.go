@@ -3,6 +3,7 @@ package exec
 import (
 	"github.com/cloudposse/atmos/internal/tui/templates/term"
 	"github.com/cloudposse/atmos/pkg/pager"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -13,7 +14,7 @@ type DescribeWorkflowsArgs struct {
 	Query      string
 }
 
-//go:generate mockgen -source=$GOFILE -destination=mock_$GOFILE -package=$GOPACKAGE
+//go:generate go run go.uber.org/mock/mockgen@v0.6.0 -source=$GOFILE -destination=mock_$GOFILE -package=$GOPACKAGE
 type DescribeWorkflowsExec interface {
 	Execute(*schema.AtmosConfiguration, *DescribeWorkflowsArgs) error
 }
@@ -26,6 +27,8 @@ type describeWorkflowsExec struct {
 }
 
 func NewDescribeWorkflowsExec() DescribeWorkflowsExec {
+	defer perf.Track(nil, "exec.NewDescribeWorkflowsExec")()
+
 	return &describeWorkflowsExec{
 		printOrWriteToFile:       printOrWriteToFile,
 		IsTTYSupportForStdout:    term.IsTTYSupportForStdout,
@@ -36,6 +39,8 @@ func NewDescribeWorkflowsExec() DescribeWorkflowsExec {
 
 // ExecuteDescribeWorkflowsCmd executes `atmos describe workflows` CLI command.
 func (d *describeWorkflowsExec) Execute(atmosConfig *schema.AtmosConfiguration, describeWorkflowsArgs *DescribeWorkflowsArgs) error {
+	defer perf.Track(atmosConfig, "exec.DescribeWorkflowsExec.Execute")()
+
 	outputType := describeWorkflowsArgs.OutputType
 	query := describeWorkflowsArgs.Query
 	format := describeWorkflowsArgs.Format

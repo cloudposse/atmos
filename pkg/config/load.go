@@ -10,12 +10,11 @@ import (
 	"runtime"
 	"strings"
 
+	"github.com/spf13/viper"
 	"gopkg.in/yaml.v3"
 
-	"github.com/spf13/viper"
-
 	errUtils "github.com/cloudposse/atmos/errors"
-	"github.com/cloudposse/atmos/pkg/config/go-homedir"
+	"github.com/cloudposse/atmos/pkg/filesystem"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/version"
@@ -33,7 +32,7 @@ const (
 	yamlType = "yaml"
 )
 
-var ErrAtmosDIrConfigNotFound = errors.New("atmos config directory not found")
+var defaultHomeDirProvider = filesystem.NewOSHomeDirProvider()
 
 // * Embedded atmos.yaml (`atmos/pkg/config/atmos.yaml`)
 // * System dir (`/usr/local/etc/atmos` on Linux, `%LOCALAPPDATA%/atmos` on Windows).
@@ -157,7 +156,7 @@ func setDefaultConfiguration(v *viper.Viper) {
 
 	v.SetDefault("settings.terminal.color", true)
 	v.SetDefault("settings.terminal.no_color", false)
-	v.SetDefault("settings.terminal.pager", true)
+	v.SetDefault("settings.terminal.pager", false)
 	v.SetDefault("docs.generate.readme.output", "./README.md")
 
 	// Atmos Pro defaults
@@ -213,7 +212,12 @@ func readSystemConfig(v *viper.Viper) error {
 
 // readHomeConfig load config from user's HOME dir.
 func readHomeConfig(v *viper.Viper) error {
-	home, err := homedir.Dir()
+	return readHomeConfigWithProvider(v, defaultHomeDirProvider)
+}
+
+// readHomeConfigWithProvider loads config from user's HOME dir using a HomeDirProvider.
+func readHomeConfigWithProvider(v *viper.Viper, homeProvider filesystem.HomeDirProvider) error {
+	home, err := homeProvider.Dir()
 	if err != nil {
 		return err
 	}
@@ -298,7 +302,7 @@ func loadConfigFile(path string, fileName string) (*viper.Viper, error) {
 			return nil, err
 		}
 		// Wrap any other error with context
-		return nil, fmt.Errorf("failed to read config %s/%s: %w", path, fileName, err)
+		return nil, errors.Join(errUtils.ErrReadConfig, fmt.Errorf("%s/%s: %w", path, fileName, err))
 	}
 
 	return tempViper, nil
@@ -308,7 +312,7 @@ func loadConfigFile(path string, fileName string) (*viper.Viper, error) {
 func readConfigFileContent(configFilePath string) ([]byte, error) {
 	content, err := os.ReadFile(configFilePath)
 	if err != nil {
-		return nil, fmt.Errorf("read config file %s: %w", configFilePath, err)
+		return nil, errors.Join(errUtils.ErrReadConfig, fmt.Errorf("%s: %w", configFilePath, err))
 	}
 	return content, nil
 }
@@ -319,7 +323,7 @@ func processConfigImportsAndReapply(path string, tempViper *viper.Viper, content
 	mainViper := viper.New()
 	mainViper.SetConfigType(yamlType)
 	if err := mainViper.ReadConfig(bytes.NewReader(content)); err != nil {
-		return fmt.Errorf("parse main config: %w", err)
+		return errors.Join(errUtils.ErrMergeConfiguration, fmt.Errorf("parse main config: %w", err))
 	}
 	mainCommands := mainViper.Get(commandsKey)
 
@@ -333,7 +337,7 @@ func processConfigImportsAndReapply(path string, tempViper *viper.Viper, content
 	// Now load the main config temporarily to process explicit imports.
 	// We need this because the import paths are defined in the main config.
 	if err := tempViper.MergeConfig(bytes.NewReader(content)); err != nil {
-		return fmt.Errorf("merge main config: %w", err)
+		return errors.Join(errUtils.ErrMergeConfiguration, fmt.Errorf("merge main config: %w", err))
 	}
 
 	// Clear commands before processing imports to collect only imported commands.
@@ -352,7 +356,7 @@ func processConfigImportsAndReapply(path string, tempViper *viper.Viper, content
 	// This ensures proper precedence: each config file's own settings override
 	// the settings from any files it imports (directly or transitively).
 	if err := tempViper.MergeConfig(bytes.NewReader(content)); err != nil {
-		return fmt.Errorf("re-apply main config: %w", err)
+		return errors.Join(errUtils.ErrMergeConfiguration, fmt.Errorf("re-applying main config after processing imports: %w", err))
 	}
 
 	// Now merge commands in the correct order with proper override behavior:
@@ -386,7 +390,7 @@ func marshalViperToYAML(tempViper *viper.Viper) ([]byte, error) {
 	allSettings := tempViper.AllSettings()
 	yamlBytes, err := yaml.Marshal(allSettings)
 	if err != nil {
-		return nil, fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrFailedMarshalConfigToYaml, err)
+		return nil, errors.Join(errUtils.ErrFailedMarshalConfigToYaml, err)
 	}
 	return yamlBytes, nil
 }
@@ -395,7 +399,7 @@ func marshalViperToYAML(tempViper *viper.Viper) ([]byte, error) {
 func mergeYAMLIntoViper(v *viper.Viper, configFilePath string, yamlContent []byte) error {
 	v.SetConfigFile(configFilePath)
 	if err := v.MergeConfig(strings.NewReader(string(yamlContent))); err != nil {
-		return fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrMerge, err)
+		return errors.Join(errUtils.ErrMerge, err)
 	}
 	return nil
 }
@@ -427,7 +431,7 @@ func mergeConfig(v *viper.Viper, path string, fileName string, processImports bo
 
 	// Process YAML functions
 	if err := preprocessAtmosYamlFunc(content, tempViper); err != nil {
-		return fmt.Errorf("preprocess YAML functions: %w", err)
+		return errors.Join(errUtils.ErrPreprocessYAMLFunctions, err)
 	}
 
 	// Marshal to YAML
@@ -495,7 +499,7 @@ func mergeDefaultImports(dirPath string, dst *viper.Viper) error {
 		isDir = true
 	}
 	if !isDir {
-		return ErrAtmosDIrConfigNotFound
+		return errUtils.ErrAtmosDirConfigNotFound
 	}
 
 	// Check if we should exclude .atmos.d from this directory during testing.
@@ -523,7 +527,7 @@ func mergeDefaultImports(dirPath string, dst *viper.Viper) error {
 			log.Debug("error loading config file", "path", filePath, "error", err)
 			continue
 		}
-		log.Debug("atmos merged config", "path", filePath)
+		log.Trace("atmos merged config", "path", filePath)
 	}
 	return nil
 }
@@ -650,7 +654,7 @@ func loadEmbeddedConfig(v *viper.Viper) error {
 
 	// Merge the embedded configuration into Viper
 	if err := v.MergeConfig(reader); err != nil {
-		return fmt.Errorf("failed to merge embedded config: %w", err)
+		return errors.Join(errUtils.ErrMergeEmbeddedConfig, err)
 	}
 
 	return nil

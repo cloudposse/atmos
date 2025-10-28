@@ -20,10 +20,11 @@ The `!terraform.state` YAML function supports the following backend types:
 - `local` ([Terraform](https://developer.hashicorp.com/terraform/language/settings/backends/local) and [OpenTofu](https://opentofu.org/docs/language/settings/backends/local))
 - `s3` ([Terraform](https://developer.hashicorp.com/terraform/language/settings/backends/s3) and [OpenTofu](https://opentofu.org/docs/language/settings/backends/s3))
 - `gcs` ([Terraform](https://developer.hashicorp.com/terraform/language/settings/backends/gcs) and [OpenTofu](https://opentofu.org/docs/language/settings/backends/gcs))
+- `azurerm` ([Terraform](https://developer.hashicorp.com/terraform/language/settings/backends/azurerm) and [OpenTofu](https://opentofu.org/docs/language/settings/backends/azurerm))
 
-As support for new backend types is added (e.g. `azurerm`), this document will be updated accordingly.
+As support for new backend types is added, this document will be updated accordingly.
 
-Meanwhile, if you are using backends other than `local`, `s3` and `gcs`, consider the [__`!store`__](/functions/yaml/store)
+Meanwhile, if you are using backends other than `local`, `s3`, `gcs`, and `azurerm`, consider the [__`!store`__](/functions/yaml/store)
 or [__`!terraform.output`__](/functions/yaml/terraform.output) YAML function to read remote state
 and [share data between components](/core-concepts/share-data).
 :::
@@ -124,6 +125,10 @@ For more details, review the following docs:
 
 - [YQ Guide](https://mikefarah.gitbook.io/yq)
 - [YQ Recipes](https://mikefarah.gitbook.io/yq/recipes)
+
+## Handling YQ Expressions with Bracket Notation and Quotes
+
+`!terraform.state` shares the same parser as `!terraform.output`, so the quoting rules are identical. When you need double quotes inside a YQ expression (for example, to reference `["github-dependabot"]`), wrap the entire expression in single quotes. Refer to the [!terraform.output guidance](/functions/yaml/terraform.output#handling-yq-expressions-with-bracket-notation-and-quotes) for detailed examples and escape rules.
 
 ## Using YQ Expressions to provide a default value
 

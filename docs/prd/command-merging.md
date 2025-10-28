@@ -233,10 +233,10 @@ None - all requirements have been implemented and tested.
 
 | Date | Decision | Rationale |
 |------|----------|-----------|
-| 2024-01-26 | Use name-based override instead of deep merge | Simpler mental model, predictable behavior |
-| 2024-01-26 | Process `.atmos.d/` before explicit imports | Follows precedence principle: more specific overrides less specific |
-| 2024-01-26 | Support glob patterns in imports | Enables modular command organization |
-| 2024-01-26 | Same code path for all import types | Ensures consistent behavior, easier maintenance |
+| 2025-09-26 | Use name-based override instead of deep merge | Simpler mental model, predictable behavior |
+| 2025-09-26 | Process `.atmos.d/` before explicit imports | Follows precedence principle: more specific overrides less specific |
+| 2025-09-26 | Support glob patterns in imports | Enables modular command organization |
+| 2025-09-26 | Same code path for all import types | Ensures consistent behavior, easier maintenance |
 
 ## References
 

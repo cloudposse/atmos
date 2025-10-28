@@ -123,11 +123,10 @@ const config = {
             },
         ],
         [
-            '@grnet/docusaurus-terminology', {
+            path.resolve(__dirname, './plugins/glossary-tooltips'), {
                 docsDir: './docs/',
-                termsDir: './reference/glossary/',
-                glossaryFilepath: './docs/reference/glossary/index.mdx',
-                glossaryComponentPath: '../../../src/components/glossary/Glossary.tsx'
+                termsDir: './docs/glossary/',
+                glossaryFilepath: './docs/glossary/index.mdx',
         }],
         [
             'custom-loaders', {}
@@ -154,6 +153,22 @@ const config = {
         ],
         [
             path.resolve(__dirname, 'plugins', 'fetch-latest-release'), {}
+        ],
+        [
+            'docusaurus-plugin-llms',
+            {
+                generateLLMsTxt: true,
+                generateLLMsFullTxt: true,
+                docsDir: 'docs',
+                includeBlog: true,
+                includeOrder: [
+                    'introduction/*',
+                    'quick-start/*',
+                    'install/*',
+                    'core-concepts/*',
+                    'cli/*',
+                ],
+            },
         ]
     ],
 
@@ -172,6 +187,10 @@ const config = {
                 },
                 blog: {
                     showReadingTime: true,
+                    postsPerPage: 10,
+                    blogTitle: 'Atmos Changelog',
+                    blogDescription: 'Release notes for Atmos',
+                    include: ['**/*.{md,mdx}'],
                     editUrl: ({versionDocsDirPath, docPath, locale}) => {
                         return `https://github.com/cloudposse/atmos/edit/main/website/${versionDocsDirPath}/${docPath}`;
                     },
@@ -225,6 +244,11 @@ const config = {
                         label: 'Community',
                         position: 'left',
                         to: '/community'
+                    },
+                    {
+                        label: 'Changelog',
+                        position: 'left',
+                        to: '/blog'
                     },
                     // Algolia search configuration
                     {

@@ -1,0 +1,76 @@
+---
+title: atmos auth env
+sidebar_label: env
+sidebar_class_name: command
+sidebar_position: 1
+id: env
+description: Export temporary cloud credentials as environment variables for the selected identity.
+---
+import Screengrab from '@site/src/components/Screengrab'
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Quickly generate temporary cloud credentials as environment variables so you can run tools like Terraform, AWS CLI, or SDKs without manually copying and pasting access keys. This makes it seamless to switch between identities, integrate with scripts, and keep your sessions secure and short-lived.
+</Intro>
+
+<Screengrab title="atmos auth env --help" slug="atmos-auth-env--help" />
+
+## Usage
+
+```shell
+atmos auth env [--identity <name>] [--format bash|json|dotenv]
+```
+
+
+### Formats
+
+<dl>
+  <dt>`bash` (default)</dt>
+  <dd>
+    Prints `export KEY='value'` lines.
+  </dd>
+
+  <dt>`json`</dt>
+  <dd>
+    Prints a JSON object of environment variables.
+  </dd>
+
+  <dt>`dotenv`</dt>
+  <dd>
+    Prints `KEY='value'` lines.
+  </dd>
+</dl>
+
+
+## Examples
+
+```shell
+# Export for the default identity (bash format)
+atmos auth env
+
+# JSON format for a specific identity
+atmos auth env --identity prod-admin --format json
+
+# Dotenv format
+atmos auth env --format dotenv
+```
+
+## Flags
+
+<dl>
+  <dt>`--identity` <em>(alias `-i`)</em></dt>
+  <dd>Specify the identity to use. If omitted, the default identity is used.</dd>
+
+  <dt>`--format` <em>(alias `-f`)</em></dt>
+  <dd>Output format. Supported: `bash`, `json`, `dotenv`. Default: `bash`.</dd>
+</dl>
+
+## Environment variables
+
+<dl>
+  <dt>`ATMOS_IDENTITY`</dt>
+  <dd>Default identity when `--identity` is not provided.</dd>
+
+  <dt>`ATMOS_AUTH_ENV_FORMAT`</dt>
+  <dd>Sets the default output style for exported credentials. Supported values: `bash`, `json`, `dotenv`.</dd>
+</dl>

@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/cloudposse/atmos/pkg/perf"
+
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/samber/lo"
 
@@ -13,8 +15,10 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
-// ExecuteAtmosCmd executes `atmos` command
+// ExecuteAtmosCmd executes `atmos` command.
 func ExecuteAtmosCmd() error {
+	defer perf.Track(nil, "exec.ExecuteAtmosCmd")()
+
 	commands := []string{
 		"terraform plan",
 		"terraform apply",
@@ -111,7 +115,15 @@ func ExecuteAtmosCmd() error {
 	}
 
 	if selectedCommand == "describe dependents" {
-		data, err := ExecuteDescribeDependents(&atmosConfig, selectedComponent, selectedStack, false, true, true, nil)
+		data, err := ExecuteDescribeDependents(&atmosConfig, &DescribeDependentsArgs{
+			Component:            selectedComponent,
+			Stack:                selectedStack,
+			IncludeSettings:      false,
+			ProcessTemplates:     true,
+			ProcessYamlFunctions: true,
+			Skip:                 nil,
+			OnlyInStack:          "",
+		})
 		if err != nil {
 			return err
 		}

@@ -32,7 +32,7 @@ func TestReadTerraformBackendGCS_InvalidConfig(t *testing.T) {
 				"prefix": "test-prefix",
 			},
 			wantErr: true,
-			errType: errUtils.ErrInvalidBackendConfig,
+			errType: errUtils.ErrGCSBucketRequired,
 		},
 		{
 			name: "empty GCS configuration",
@@ -41,7 +41,7 @@ func TestReadTerraformBackendGCS_InvalidConfig(t *testing.T) {
 			},
 			gcsBackend: map[string]any{},
 			wantErr:    true,
-			errType:    errUtils.ErrInvalidBackendConfig,
+			errType:    errUtils.ErrGCSBucketRequired,
 		},
 	}
 
@@ -275,7 +275,7 @@ func Test_ReadTerraformBackendGCSInternal_Errors(t *testing.T) {
 			backend: map[string]any{
 				"prefix": "test-prefix",
 			},
-			expectedErrSub:  "bucket name is required",
+			expectedErrSub:  "bucket is required for gcs backend",
 			expectedNilBody: true,
 		},
 	}

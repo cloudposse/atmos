@@ -401,3 +401,167 @@ func assertNonStringElementError(t *testing.T, input []any, err error) {
 		}
 	}
 }
+
+// TestSliceContainsInt tests the SliceContainsInt function.
+func TestSliceContainsInt(t *testing.T) {
+	tests := []struct {
+		name     string
+		slice    []int
+		value    int
+		expected bool
+	}{
+		{
+			name:     "Value exists in slice",
+			slice:    []int{1, 2, 3, 4, 5},
+			value:    3,
+			expected: true,
+		},
+		{
+			name:     "Value does not exist in slice",
+			slice:    []int{1, 2, 3, 4, 5},
+			value:    6,
+			expected: false,
+		},
+		{
+			name:     "Empty slice",
+			slice:    []int{},
+			value:    1,
+			expected: false,
+		},
+		{
+			name:     "Value at start",
+			slice:    []int{1, 2, 3},
+			value:    1,
+			expected: true,
+		},
+		{
+			name:     "Value at end",
+			slice:    []int{1, 2, 3},
+			value:    3,
+			expected: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := SliceContainsInt(tt.slice, tt.value)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+// TestSliceContainsStringStartsWith tests the SliceContainsStringStartsWith function.
+func TestSliceContainsStringStartsWith(t *testing.T) {
+	tests := []struct {
+		name     string
+		slice    []string
+		str      string
+		expected bool
+	}{
+		{
+			name:     "String starts with match",
+			slice:    []string{"foo", "bar", "baz"},
+			str:      "foobar",
+			expected: true,
+		},
+		{
+			name:     "No match",
+			slice:    []string{"foo", "bar", "baz"},
+			str:      "qux",
+			expected: false,
+		},
+		{
+			name:     "Empty slice",
+			slice:    []string{},
+			str:      "foo",
+			expected: false,
+		},
+		{
+			name:     "Exact match",
+			slice:    []string{"foo", "bar"},
+			str:      "foo",
+			expected: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := SliceContainsStringStartsWith(tt.slice, tt.str)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+// TestSliceContainsStringHasPrefix tests the SliceContainsStringHasPrefix function.
+func TestSliceContainsStringHasPrefix(t *testing.T) {
+	tests := []struct {
+		name     string
+		slice    []string
+		prefix   string
+		expected bool
+	}{
+		{
+			name:     "String has prefix",
+			slice:    []string{"foobar", "bazqux"},
+			prefix:   "foo",
+			expected: true,
+		},
+		{
+			name:     "No match",
+			slice:    []string{"foobar", "bazqux"},
+			prefix:   "test",
+			expected: false,
+		},
+		{
+			name:     "Empty slice",
+			slice:    []string{},
+			prefix:   "foo",
+			expected: false,
+		},
+		{
+			name:     "Exact match",
+			slice:    []string{"foo", "bar"},
+			prefix:   "foo",
+			expected: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := SliceContainsStringHasPrefix(tt.slice, tt.prefix)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+// TestSliceOfStringsToSpaceSeparatedString tests the SliceOfStringsToSpaceSeparatedString function.
+func TestSliceOfStringsToSpaceSeparatedString(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    []string
+		expected string
+	}{
+		{
+			name:     "Multiple strings",
+			input:    []string{"foo", "bar", "baz"},
+			expected: "foo bar baz",
+		},
+		{
+			name:     "Single string",
+			input:    []string{"foo"},
+			expected: "foo",
+		},
+		{
+			name:     "Empty slice",
+			input:    []string{},
+			expected: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := SliceOfStringsToSpaceSeparatedString(tt.input)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}

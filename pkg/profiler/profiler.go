@@ -134,7 +134,7 @@ func (p *Server) startFileBasedProfiling() error {
 	var err error
 	p.profFile, err = os.Create(p.config.File)
 	if err != nil {
-		return fmt.Errorf("%w: %s: %w", ErrCreateProfileFile, p.config.File, err)
+		return errors.Join(ErrCreateProfileFile, fmt.Errorf("%s: %w", p.config.File, err))
 	}
 
 	if err := p.startProfileByType(); err != nil {
@@ -215,7 +215,7 @@ func (p *Server) startServerBasedProfiling() error {
 		// Server started successfully (no immediate error)
 	}
 
-	log.Info("Profiler server available at:", "url", fmt.Sprintf("http://%s/debug/pprof/", addr))
+	log.Debug("Profiler server available at:", "url", fmt.Sprintf("http://%s/debug/pprof/", addr))
 	log.Debug("Profiler server started successfully")
 	return nil
 }

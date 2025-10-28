@@ -1,23 +1,25 @@
 package exec
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
 
-	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/spf13/cobra"
 	tfdocsFormat "github.com/terraform-docs/terraform-docs/format"
 	tfdocsPrint "github.com/terraform-docs/terraform-docs/print"
 	tfdocsTf "github.com/terraform-docs/terraform-docs/terraform"
-	"gopkg.in/yaml.v3"
+	"go.yaml.in/yaml/v3"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/downloader"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/merge"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -37,11 +39,13 @@ type defaultTemplateRenderer struct{}
 
 // Render delegates rendering to the existing ProcessTmplWithDatasourcesGomplate function.
 func (d defaultTemplateRenderer) Render(tmplName, tmplValue string, mergedData map[string]interface{}, ignoreMissing bool) (string, error) {
-	return ProcessTmplWithDatasourcesGomplate(tmplName, tmplValue, mergedData, ignoreMissing)
+	return ProcessTmplWithDatasourcesGomplate(&schema.AtmosConfiguration{}, tmplName, tmplValue, mergedData, ignoreMissing)
 }
 
 // ExecuteDocsGenerateCmd implements the 'atmos docs generate <doc-type>' logic.
 func ExecuteDocsGenerateCmd(cmd *cobra.Command, args []string) error {
+	defer perf.Track(nil, "exec.ExecuteDocsGenerateCmd")()
+
 	if len(args) == 0 {
 		return errUtils.ErrMissingDocType
 	}
@@ -141,7 +145,23 @@ func getTemplateContent(atmosConfig *schema.AtmosConfiguration, templateURL, dir
 	return string(body), nil
 }
 
+// TerraformDocsRunner defines an interface for running terraform-docs.
+type TerraformDocsRunner interface {
+	Run(dir string, settings *schema.TerraformDocsReadmeSettings) (string, error)
+}
+
+// realTerraformDocsRunner is the production implementation.
+type realTerraformDocsRunner struct{}
+
+func (r realTerraformDocsRunner) Run(dir string, settings *schema.TerraformDocsReadmeSettings) (string, error) {
+	return runTerraformDocs(dir, settings)
+}
+
 func applyTerraformDocs(dir string, docsGenerate *schema.DocsGenerate, mergedData map[string]any) error {
+	return applyTerraformDocsWithRunner(dir, docsGenerate, mergedData, realTerraformDocsRunner{})
+}
+
+func applyTerraformDocsWithRunner(dir string, docsGenerate *schema.DocsGenerate, mergedData map[string]any, runner TerraformDocsRunner) error {
 	if !docsGenerate.Terraform.Enabled {
 		return nil
 	}
@@ -152,9 +172,9 @@ func applyTerraformDocs(dir string, docsGenerate *schema.DocsGenerate, mergedDat
 		return nil
 	}
 
-	terraformDocs, err := runTerraformDocs(terraformSource, &docsGenerate.Terraform)
+	terraformDocs, err := runner.Run(terraformSource, &docsGenerate.Terraform)
 	if err != nil {
-		return fmt.Errorf("failed to generate terraform docs: %w", err)
+		return errors.Join(errUtils.ErrGenerateTerraformDocs, err)
 	}
 	mergedData["terraform_docs"] = terraformDocs
 	return nil
@@ -182,7 +202,7 @@ func generateDocument(
 	// 1) Merge YAML inputs.
 	mergedData, err := mergeInputs(atmosConfig, baseDir, docsGenerate)
 	if err != nil {
-		return fmt.Errorf("failed to merge input YAMLs: %w", err)
+		return errors.Join(errUtils.ErrMergeInputYAMLs, err)
 	}
 
 	// 2) Generate terraform docs if enabled.
@@ -196,20 +216,16 @@ func generateDocument(
 	// 4) Render final document using the injected renderer.
 	rendered, err := renderer.Render("docs-generate", chosenTemplate, mergedData, true)
 	if err != nil {
-		return fmt.Errorf("failed to render template with datasources: %w", err)
+		return errors.Join(errUtils.ErrRenderTemplate, err)
 	}
 
 	// 5) Resolve and write final document.
-	outputFile := docsGenerate.Output
-	if outputFile == "" {
-		outputFile = defaultReadmeOutput
-	}
-	outputPath, err := resolvePath(outputFile, baseDir)
+	outputPath, err := resolvePath(docsGenerate.Output, baseDir, defaultReadmeOutput)
 	if err != nil {
-		return fmt.Errorf("failed to resolve output path %s: %w", outputFile, err)
+		return fmt.Errorf("%w: %s: %s", errUtils.ErrResolveOutputPath, docsGenerate.Output, err)
 	}
 	if err = os.WriteFile(outputPath, []byte(rendered), defaultFilePermissions); err != nil {
-		return fmt.Errorf("failed to write output %s: %w", outputPath, err)
+		return fmt.Errorf("%w: %s: %s", errUtils.ErrWriteOutput, outputPath, err)
 	}
 
 	log.Info("Generated docs", "output", outputPath)
@@ -294,9 +310,9 @@ func downloadSource(
 	pathOrURL string,
 	baseDir string,
 ) (localPath string, temDir string, err error) {
-	// If path is not remote, resolve it.
+	// If path is not remote, resolve it (no default needed here).
 	if !isRemoteSource(pathOrURL) {
-		pathOrURL, err = resolvePath(pathOrURL, baseDir)
+		pathOrURL, err = resolvePath(pathOrURL, baseDir, "")
 		if err != nil {
 			return "", "", fmt.Errorf("%w: %s", errUtils.ErrPathResolution, err)
 		}
@@ -334,11 +350,17 @@ func isRemoteSource(s string) bool {
 	return false
 }
 
+// resolvePath resolves a file path according to the following rules:
+// - If path is empty, uses defaultPath.
+// - Absolute paths: resolved as is.
 // - Explicit relative (./ or ../) relative to cwd.
 // - Implicit relative paths first against baseDir, then cwd.
-func resolvePath(path string, baseDir string) (string, error) {
+func resolvePath(path string, baseDir string, defaultPath string) (string, error) {
 	if path == "" {
-		return "", errUtils.ErrEmptyFilePath
+		if defaultPath == "" {
+			return "", errUtils.ErrEmptyFilePath
+		}
+		path = defaultPath
 	}
 
 	if !filepath.IsAbs(path) && !strings.HasPrefix(path, "./") && !strings.HasPrefix(path, "../") {

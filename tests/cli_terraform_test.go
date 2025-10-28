@@ -20,24 +20,10 @@ func TestCLITerraformClean(t *testing.T) {
 	assert.NoError(t, err, "Unset 'ATMOS_CLI_CONFIG_PATH' environment variable should execute without error")
 	err = os.Unsetenv("ATMOS_BASE_PATH")
 	assert.NoError(t, err, "Unset 'ATMOS_BASE_PATH' environment variable should execute without error")
-	// Capture the starting working directory
-	startingDir, err := os.Getwd()
-	if err != nil {
-		t.Fatalf("Failed to get the current working directory: %v", err)
-	}
-
-	defer func() {
-		// Change back to the original working directory after the test
-		if err := os.Chdir(startingDir); err != nil {
-			t.Fatalf("Failed to change back to the starting directory: %v", err)
-		}
-	}()
 
 	// Define the work directory and change to it
 	workDir := "fixtures/scenarios/basic"
-	if err := os.Chdir(workDir); err != nil {
-		t.Fatalf("Failed to change directory to %q: %v", workDir, err)
-	}
+	t.Chdir(workDir)
 
 	// Force clean everything
 	runTerraformCleanCommand(t, "--force")

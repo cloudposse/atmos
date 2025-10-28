@@ -9,12 +9,13 @@ import (
 	"sync"
 	"time"
 
-	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/hashicorp/terraform-exec/tfexec"
 	"github.com/samber/lo"
 
-	errUtils "github.com/cloudposse/atmos/errors"
+	awsCloud "github.com/cloudposse/atmos/pkg/auth/cloud/aws"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -22,6 +23,7 @@ import (
 var terraformOutputsCache = sync.Map{}
 
 const (
+	dotSeparator             = "."
 	cliArgsEnvVar            = "TF_CLI_ARGS"
 	inputEnvVar              = "TF_INPUT"
 	automationEnvVar         = "TF_IN_AUTOMATION"
@@ -64,6 +66,7 @@ func execTerraformOutput(
 	component string,
 	stack string,
 	sections map[string]any,
+	authContext *schema.AuthContext,
 ) (map[string]any, error) {
 	outputProcessed := map[string]any{}
 	componentAbstract := false
@@ -165,30 +168,53 @@ func execTerraformOutput(
 			return nil, err
 		}
 
-		// Set environment variables from the `env` section
+		// Get all environment variables (excluding the variables prohibited by terraform-exec/tfexec) from the parent process.
+		environMap := environToMap()
+
+		// Add auth-based environment variables if authContext is provided.
+		if authContext != nil && authContext.AWS != nil {
+			log.Debug("Adding auth-based environment variables",
+				"profile", authContext.AWS.Profile,
+				"credentials_file", authContext.AWS.CredentialsFile,
+				"config_file", authContext.AWS.ConfigFile,
+			)
+
+			// Use shared AWS environment preparation helper.
+			// This clears conflicting credential env vars, sets AWS_SHARED_CREDENTIALS_FILE,
+			// AWS_CONFIG_FILE, AWS_PROFILE, region, and disables IMDS fallback.
+			environMap = awsCloud.PrepareEnvironment(
+				environMap,
+				authContext.AWS.Profile,
+				authContext.AWS.CredentialsFile,
+				authContext.AWS.ConfigFile,
+				authContext.AWS.Region,
+			)
+		}
+
+		// Add/override environment variables from the component's 'env' section.
 		envSection, ok := sections[cfg.EnvSectionName]
 		if ok {
 			envMap, ok2 := envSection.(map[string]any)
 			if ok2 && len(envMap) > 0 {
-				log.Debug("Setting environment variables from component",
+				log.Debug("Adding environment variables from component",
 					"source", "env section",
-					"env", envMap,
+					"count", len(envMap),
 				)
-				// Get all environment variables (excluding the variables prohibited by terraform-exec/tfexec) from the parent process
-				environMap := environToMap()
-				// Add/override the environment variables from the component's 'env' section
 				for k, v := range envMap {
 					environMap[k] = fmt.Sprintf("%v", v)
 				}
-				// Set the environment variables in the process that executes the `tfexec` functions
-				err = tf.SetEnv(environMap)
-				if err != nil {
-					return nil, err
-				}
-				log.Debug("Resolved final environment variables",
-					"environment", environMap,
-				)
 			}
+		}
+
+		// Set the environment variables in the process that executes the `tfexec` functions.
+		if len(environMap) > 0 {
+			err = tf.SetEnv(environMap)
+			if err != nil {
+				return nil, err
+			}
+			log.Debug("Resolved final environment variables",
+				"count", len(environMap),
+			)
 		}
 
 		ctx, cancel := context.WithTimeout(context.Background(), time.Minute*5)
@@ -341,15 +367,22 @@ func execTerraformOutput(
 //   - component: Component identifier
 //   - output: Output variable key to retrieve
 //   - skipCache: Flag to bypass cache lookup
+//   - authContext: Authentication context for credential access (may be nil)
 //
-// Returns the output value or nil if the component is not provisioned.
+// Returns:
+//   - value: The output value (may be nil if the output exists but has a null value)
+//   - exists: Whether the output key exists in the terraform outputs
+//   - error: Any error that occurred during retrieval (SDK errors, network issues, etc.)
 func GetTerraformOutput(
 	atmosConfig *schema.AtmosConfiguration,
 	stack string,
 	component string,
 	output string,
 	skipCache bool,
-) any {
+	authContext *schema.AuthContext,
+) (any, bool, error) {
+	defer perf.Track(atmosConfig, "exec.GetTerraformOutput")()
+
 	stackSlug := fmt.Sprintf("%s-%s", stack, component)
 
 	// If the result for the component in the stack already exists in the cache, return it
@@ -381,35 +414,41 @@ func GetTerraformOutput(
 	sections, err := ExecuteDescribeComponent(component, stack, true, true, nil)
 	if err != nil {
 		u.PrintfMessageToTUI("\r✗ %s\n", message)
-		er := fmt.Errorf("failed to describe the component %s in the stack %s. Error: %w", component, stack, err)
-		errUtils.CheckErrorPrintAndExit(er, "", "")
+		return nil, false, fmt.Errorf("failed to describe the component %s in the stack %s: %w", component, stack, err)
 	}
 
 	// Check if the component in the stack is configured with the 'static' remote state backend, in which case get the
 	// `output` from the static remote state instead of executing `terraform output`
 	remoteStateBackendStaticTypeOutputs := GetComponentRemoteStateBackendStaticType(&sections)
 
-	var result any
+	var value any
+	var exists bool
+	var resultErr error
+
 	if remoteStateBackendStaticTypeOutputs != nil {
 		// Cache the result
 		terraformOutputsCache.Store(stackSlug, remoteStateBackendStaticTypeOutputs)
-		result = GetStaticRemoteStateOutput(atmosConfig, component, stack, remoteStateBackendStaticTypeOutputs, output)
+		value, exists, resultErr = GetStaticRemoteStateOutput(atmosConfig, component, stack, remoteStateBackendStaticTypeOutputs, output)
 	} else {
 		// Execute `terraform output`
-		terraformOutputs, err := execTerraformOutput(atmosConfig, component, stack, sections)
+		terraformOutputs, err := execTerraformOutput(atmosConfig, component, stack, sections, authContext)
 		if err != nil {
 			u.PrintfMessageToTUI("\r✗ %s\n", message)
-			er := fmt.Errorf("failed to execute terraform output for the component %s in the stack %s. Error: %w", component, stack, err)
-			errUtils.CheckErrorPrintAndExit(er, "", "")
+			return nil, false, fmt.Errorf("failed to execute terraform output for the component %s in the stack %s: %w", component, stack, err)
 		}
 
 		// Cache the result
 		terraformOutputsCache.Store(stackSlug, terraformOutputs)
-		result = getTerraformOutputVariable(atmosConfig, component, stack, terraformOutputs, output)
+		value, exists, resultErr = getTerraformOutputVariable(atmosConfig, component, stack, terraformOutputs, output)
 	}
-	u.PrintfMessageToTUI("\r✓ %s\n", message)
 
-	return result
+	if resultErr != nil {
+		u.PrintfMessageToTUI("\r✗ %s\n", message)
+		return nil, false, resultErr
+	}
+
+	u.PrintfMessageToTUI("\r✓ %s\n", message)
+	return value, exists, nil
 }
 
 func getTerraformOutputVariable(
@@ -418,19 +457,45 @@ func getTerraformOutputVariable(
 	stack string,
 	outputs map[string]any,
 	output string,
-) any {
+) (any, bool, error) {
+	// Use yq to extract the value (handles nested paths, alternative operators, etc.).
 	val := output
-	if !strings.HasPrefix(output, ".") {
-		val = "." + val
+	if !strings.HasPrefix(output, dotSeparator) {
+		val = dotSeparator + val
 	}
 
 	res, err := u.EvaluateYqExpression(atmosConfig, outputs, val)
 	if err != nil {
-		er := fmt.Errorf("failed to evaluate the terraform output for the component %s in the stack %s. Error: %w", component, stack, err)
-		errUtils.CheckErrorPrintAndExit(er, "", "")
+		return nil, false, fmt.Errorf("failed to evaluate the terraform output for the component %s in the stack %s: %w", component, stack, err)
 	}
 
-	return res
+	// Check if this is a simple key lookup (no yq operators like //, |, etc.).
+	// If it's a simple lookup and the key doesn't exist, return not exists.
+	// Otherwise trust yq to handle fallback values and complex expressions.
+	hasYqOperators := strings.Contains(output, "//") ||
+		strings.Contains(output, "|") ||
+		strings.Contains(output, "=") ||
+		strings.Contains(output, "[") ||
+		strings.Contains(output, "]")
+
+	if !hasYqOperators {
+		// Simple key lookup - check if key exists.
+		outputKey := strings.TrimPrefix(output, dotSeparator)
+		// For simple paths without dots, check existence in the map.
+		if !strings.Contains(outputKey, dotSeparator) {
+			_, exists := outputs[outputKey]
+			if !exists {
+				return nil, false, nil
+			}
+		}
+		// For nested paths (e.g., "vpc.id"), if res is nil, the path doesn't exist.
+		// We can't easily distinguish between missing nested key and null nested value,
+		// so we assume if res is nil for a nested path, it exists but is null.
+	}
+
+	// Either yq handled the expression (with potential fallback), or key exists.
+	// res may be nil if the value is legitimately null.
+	return res, true, nil
 }
 
 // GetStaticRemoteStateOutput returns static remote state output for a component in a stack.
@@ -440,19 +505,37 @@ func GetStaticRemoteStateOutput(
 	stack string,
 	remoteStateSection map[string]any,
 	output string,
-) any {
+) (any, bool, error) {
+	defer perf.Track(atmosConfig, "exec.GetStaticRemoteStateOutput")()
+
 	val := output
-	if !strings.HasPrefix(output, ".") {
-		val = "." + val
+	if !strings.HasPrefix(output, dotSeparator) {
+		val = dotSeparator + val
 	}
 
 	res, err := u.EvaluateYqExpression(atmosConfig, remoteStateSection, val)
 	if err != nil {
-		er := fmt.Errorf("failed to evaluate the static remote state backend for the component %s in the stack %s. Error: %w", component, stack, err)
-		errUtils.CheckErrorPrintAndExit(er, "", "")
+		return nil, false, fmt.Errorf("failed to evaluate the static remote state backend for the component %s in the stack %s: %w", component, stack, err)
 	}
 
-	return res
+	// Check if this is a simple key lookup (no yq operators).
+	hasYqOperators := strings.Contains(output, "//") ||
+		strings.Contains(output, "|") ||
+		strings.Contains(output, "=") ||
+		strings.Contains(output, "[") ||
+		strings.Contains(output, "]")
+
+	if !hasYqOperators {
+		outputKey := strings.TrimPrefix(output, dotSeparator)
+		if !strings.Contains(outputKey, dotSeparator) {
+			_, exists := remoteStateSection[outputKey]
+			if !exists {
+				return nil, false, nil
+			}
+		}
+	}
+
+	return res, true, nil
 }
 
 // environToMap converts all the environment variables (excluding the variables prohibited by terraform-exec/tfexec) in the environment into a map of strings.

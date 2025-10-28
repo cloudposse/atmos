@@ -121,6 +121,7 @@ func getCachedGCSClient(backend *map[string]any) (GCSClient, error) {
 func ReadTerraformBackendGCS(
 	_ *schema.AtmosConfiguration,
 	componentSections *map[string]any,
+	_ *schema.AuthContext,
 ) ([]byte, error) {
 	backend := GetComponentBackend(componentSections)
 
@@ -173,7 +174,7 @@ func createGCSClient(ctx context.Context, backend *map[string]any) (GCSClient, e
 	// Create the storage client.
 	client, err := storage.NewClient(ctx, opts...)
 	if err != nil {
-		return nil, fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrCreateGCSClient, err)
+		return nil, fmt.Errorf(errWrapFormat, errUtils.ErrCreateGCSClient, err)
 	}
 
 	return &gcsClientImpl{client: client}, nil
@@ -189,6 +190,9 @@ func ReadTerraformBackendGCSInternal(
 	// According to Terraform docs: "Named states for workspaces are stored in an object called `<prefix>/<workspace>.tfstate`".
 	prefix := GetBackendAttribute(backend, "prefix")
 	workspace := GetTerraformWorkspace(componentSections)
+	if workspace == "" {
+		workspace = "default"
+	}
 
 	var tfStateFilePath string
 	if prefix == "" {
@@ -201,7 +205,7 @@ func ReadTerraformBackendGCSInternal(
 
 	bucket := GetBackendAttribute(backend, "bucket")
 	if bucket == "" {
-		return nil, fmt.Errorf(errUtils.ErrStringWrappingFormat, errUtils.ErrInvalidBackendConfig, "bucket name is required for GCS backend")
+		return nil, errUtils.ErrGCSBucketRequired
 	}
 
 	var lastErr error
@@ -227,17 +231,17 @@ func ReadTerraformBackendGCSInternal(
 				time.Sleep(time.Second * 2) // backoff
 				continue
 			}
-			return nil, fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrGetObjectFromGCS, lastErr)
+			return nil, fmt.Errorf(errWrapFormat, errUtils.ErrGetObjectFromGCS, lastErr)
 		}
 
 		content, err := io.ReadAll(reader)
 		_ = reader.Close() // Explicit close instead of defer
 		cancel()           // Cancel immediately after use
 		if err != nil {
-			return nil, fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrReadGCSObjectBody, err)
+			return nil, fmt.Errorf(errWrapFormat, errUtils.ErrReadGCSObjectBody, err)
 		}
 		return content, nil
 	}
 
-	return nil, fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrGetObjectFromGCS, lastErr)
+	return nil, fmt.Errorf(errWrapFormat, errUtils.ErrGetObjectFromGCS, lastErr)
 }

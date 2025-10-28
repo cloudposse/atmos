@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-
-	log "github.com/cloudposse/atmos/pkg/logger"
+	"strings"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -177,102 +177,6 @@ func isWorkspacesEnabled(atmosConfig *schema.AtmosConfiguration, info *schema.Co
 	return true
 }
 
-// ExecuteTerraformAffected executes `atmos terraform <command> --affected`.
-func ExecuteTerraformAffected(args *DescribeAffectedCmdArgs, info *schema.ConfigAndStacksInfo) error {
-	var affectedList []schema.Affected
-	var err error
-
-	switch {
-	case args.RepoPath != "":
-		affectedList, _, _, _, err = ExecuteDescribeAffectedWithTargetRepoPath(
-			args.CLIConfig,
-			args.RepoPath,
-			args.IncludeSpaceliftAdminStacks,
-			args.IncludeSettings,
-			args.Stack,
-			args.ProcessTemplates,
-			args.ProcessYamlFunctions,
-			args.Skip,
-			args.ExcludeLocked,
-		)
-	case args.CloneTargetRef:
-		affectedList, _, _, _, err = ExecuteDescribeAffectedWithTargetRefClone(
-			args.CLIConfig,
-			args.Ref,
-			args.SHA,
-			args.SSHKeyPath,
-			args.SSHKeyPassword,
-			args.IncludeSpaceliftAdminStacks,
-			args.IncludeSettings,
-			args.Stack,
-			args.ProcessTemplates,
-			args.ProcessYamlFunctions,
-			args.Skip,
-			args.ExcludeLocked,
-		)
-	default:
-		affectedList, _, _, _, err = ExecuteDescribeAffectedWithTargetRefCheckout(
-			args.CLIConfig,
-			args.Ref,
-			args.SHA,
-			args.IncludeSpaceliftAdminStacks,
-			args.IncludeSettings,
-			args.Stack,
-			args.ProcessTemplates,
-			args.ProcessYamlFunctions,
-			args.Skip,
-			args.ExcludeLocked,
-		)
-	}
-	if err != nil {
-		return err
-	}
-
-	// Add dependent components for each directly affected component.
-	if len(affectedList) > 0 {
-		err = addDependentsToAffected(
-			args.CLIConfig,
-			&affectedList,
-			args.IncludeSettings,
-			args.ProcessTemplates,
-			args.ProcessYamlFunctions,
-			args.Skip,
-		)
-		if err != nil {
-			return err
-		}
-	}
-
-	affectedYaml, err := u.ConvertToYAML(affectedList)
-	if err != nil {
-		return err
-	}
-	log.Debug("Affected", "components", affectedYaml)
-
-	for i := 0; i < len(affectedList); i++ {
-		affected := &affectedList[i]
-		// If the affected component is included in the dependencies of any other component, don't process it now;
-		// it will be processed in the dependency order.
-		if !affected.IncludedInDependents {
-			err = executeTerraformAffectedComponentInDepOrder(
-				info,
-				affectedList,
-				affected.Component,
-				affected.Stack,
-				"",
-				"",
-				affected.Dependents,
-				args,
-			)
-			if err != nil {
-				return err
-			}
-		}
-	}
-
-	return nil
-}
-
 // executeTerraformAffectedComponentInDepOrder recursively processes the affected components in the dependency order.
 func executeTerraformAffectedComponentInDepOrder(
 	info *schema.ConfigAndStacksInfo,
@@ -425,42 +329,25 @@ func processTerraformComponent(
 	return nil
 }
 
-// ExecuteTerraformQuery executes `atmos terraform <command> --query <yq-expression --stack <stack>`.
-func ExecuteTerraformQuery(info *schema.ConfigAndStacksInfo) error {
-	atmosConfig, err := cfg.InitCliConfig(*info, true)
-	if err != nil {
-		return err
+// parseUploadStatusFlag parses the upload status flag from the arguments.
+// It supports --flag, --flag=true, and --flag=false forms.
+// Returns true if the flag is present and not explicitly set to false.
+func parseUploadStatusFlag(args []string, flagName string) bool {
+	flagPrefix := "--" + flagName + "="
+
+	// Check for --flag (without value, defaults to true).
+	if u.SliceContainsString(args, "--"+flagName) {
+		return true
 	}
 
-	var logFunc func(msg any, keyvals ...any)
-	if info.DryRun {
-		logFunc = log.Info
-	} else {
-		logFunc = log.Debug
+	// Check for --flag=value forms
+	for _, arg := range args {
+		if strings.HasPrefix(arg, flagPrefix) {
+			value := strings.TrimPrefix(arg, flagPrefix)
+			// Parse boolean value, default to true if not a valid boolean.
+			return value != "false"
+		}
 	}
 
-	stacks, err := ExecuteDescribeStacks(
-		&atmosConfig,
-		info.Stack,
-		info.Components,
-		[]string{cfg.TerraformComponentType},
-		nil,
-		false,
-		info.ProcessTemplates,
-		info.ProcessFunctions,
-		false,
-		info.Skip,
-	)
-	if err != nil {
-		return err
-	}
-
-	err = walkTerraformComponents(stacks, func(stackName, componentName string, componentSection map[string]any) error {
-		return processTerraformComponent(&atmosConfig, info, stackName, componentName, componentSection, logFunc)
-	})
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return false
 }

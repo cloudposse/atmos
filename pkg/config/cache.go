@@ -2,6 +2,7 @@ package config
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -10,27 +11,33 @@ import (
 	"strings"
 	"time"
 
-	"github.com/adrg/xdg"
+	"github.com/spf13/viper"
+	"go.yaml.in/yaml/v3"
+
 	errUtils "github.com/cloudposse/atmos/errors"
 	log "github.com/cloudposse/atmos/pkg/logger"
-	"github.com/pkg/errors"
-	"github.com/spf13/viper"
-	"gopkg.in/yaml.v3"
+	"github.com/cloudposse/atmos/pkg/xdg"
+)
+
+const (
+	// CacheDirPermissions is the default permission for cache directory (read/write/execute for owner, read/execute for group and others).
+	CacheDirPermissions = 0o755
 )
 
 type CacheConfig struct {
-	LastChecked              int64  `mapstructure:"last_checked" yaml:"last_checked"`
-	InstallationId           string `mapstructure:"installation_id" yaml:"installation_id"`
-	TelemetryDisclosureShown bool   `mapstructure:"telemetry_disclosure_shown" yaml:"telemetry_disclosure_shown"`
+	LastChecked                int64  `mapstructure:"last_checked" yaml:"last_checked"`
+	InstallationId             string `mapstructure:"installation_id" yaml:"installation_id"`
+	TelemetryDisclosureShown   bool   `mapstructure:"telemetry_disclosure_shown" yaml:"telemetry_disclosure_shown"`
+	BrowserSessionWarningShown bool   `mapstructure:"browser_session_warning_shown" yaml:"browser_session_warning_shown"`
 }
 
+// GetCacheFilePath returns the filesystem path to the Atmos cache file.
+// It respects ATMOS_XDG_CACHE_HOME and XDG_CACHE_HOME environment variables for cache directory location.
+// Returns an error if xdg.GetXDGCacheDir fails or if the cache directory cannot be created.
 func GetCacheFilePath() (string, error) {
-	// Use the XDG library which automatically handles XDG_CACHE_HOME
-	// and falls back to the correct default based on the OS
-	cacheDir := filepath.Join(xdg.CacheHome, "atmos")
-
-	if err := os.MkdirAll(cacheDir, 0o755); err != nil {
-		return "", errors.Wrap(err, "error creating cache directory")
+	cacheDir, err := xdg.GetXDGCacheDir("", CacheDirPermissions)
+	if err != nil {
+		return "", errors.Join(errUtils.ErrCacheDir, err)
 	}
 
 	return filepath.Join(cacheDir, "cache.yaml"), nil
@@ -65,9 +72,13 @@ func LoadCache() (CacheConfig, error) {
 		v := viper.New()
 		v.SetConfigFile(cacheFile)
 		// Ignore read errors on Windows - cache is non-critical.
-		_ = v.ReadInConfig()
+		if err := v.ReadInConfig(); err != nil {
+			log.Trace("Failed to read cache file on Windows (non-critical)", "error", err, "file", cacheFile)
+		}
 		// Ignore unmarshal errors on Windows - cache is non-critical.
-		_ = v.Unmarshal(&cfg)
+		if err := v.Unmarshal(&cfg); err != nil {
+			log.Trace("Failed to unmarshal cache on Windows (non-critical)", "error", err, "file", cacheFile)
+		}
 		return cfg, nil
 	}
 
@@ -107,12 +118,12 @@ func SaveCache(cfg CacheConfig) error {
 		enc := yaml.NewEncoder(&buf)
 		enc.SetIndent(2)
 		if err := enc.Encode(data); err != nil {
-			return fmt.Errorf(errUtils.ErrValueWrappingFormat, errUtils.ErrCacheMarshal, err)
+			return errors.Join(errUtils.ErrCacheMarshal, err)
 		}
 
 		// Write atomically.
 		if err := writeFileAtomic(cacheFile, buf.Bytes(), 0o644); err != nil {
-			return fmt.Errorf(errUtils.ErrValueWrappingFormat, errUtils.ErrCacheWrite, err)
+			return errors.Join(errUtils.ErrCacheWrite, err)
 		}
 		return nil
 	})
@@ -147,10 +158,10 @@ func UpdateCache(update func(*CacheConfig)) error {
 			v := viper.New()
 			v.SetConfigFile(cacheFile)
 			if err := v.ReadInConfig(); err != nil {
-				return fmt.Errorf(errUtils.ErrValueWrappingFormat, errUtils.ErrCacheRead, err)
+				return errors.Join(errUtils.ErrCacheRead, err)
 			}
 			if err := v.Unmarshal(&cfg); err != nil {
-				return fmt.Errorf(errUtils.ErrValueWrappingFormat, errUtils.ErrCacheUnmarshal, err)
+				return errors.Join(errUtils.ErrCacheUnmarshal, err)
 			}
 		}
 
@@ -169,12 +180,12 @@ func UpdateCache(update func(*CacheConfig)) error {
 		enc := yaml.NewEncoder(&buf)
 		enc.SetIndent(2)
 		if err := enc.Encode(data); err != nil {
-			return fmt.Errorf(errUtils.ErrValueWrappingFormat, errUtils.ErrCacheMarshal, err)
+			return errors.Join(errUtils.ErrCacheMarshal, err)
 		}
 
 		// Write atomically.
 		if err := writeFileAtomic(cacheFile, buf.Bytes(), 0o644); err != nil {
-			return fmt.Errorf(errUtils.ErrValueWrappingFormat, errUtils.ErrCacheWrite, err)
+			return errors.Join(errUtils.ErrCacheWrite, err)
 		}
 		return nil
 	})

@@ -1,0 +1,53 @@
+---
+title: atmos auth validate
+sidebar_label: validate
+sidebar_class_name: command
+sidebar_position: 7
+id: validate
+description: Validate the authentication configuration in atmos.yaml for syntax and logical errors.
+---
+import Screengrab from '@site/src/components/Screengrab'
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Use this command to validate your `auth` configuration in `atmos.yaml`.
+</Intro>
+
+<Screengrab title="atmos auth validate --help" slug="atmos-auth-validate--help" />
+
+## Usage
+
+```shell
+atmos auth validate [--verbose]
+```
+
+## Arguments
+
+<dl>
+  <dt>n/a</dt>
+  <dd>No positional arguments.</dd>
+</dl>
+
+## Examples
+
+```shell
+# Basic validation
+atmos auth validate
+
+# Verbose output
+atmos auth validate --verbose
+```
+
+## Flags
+
+<dl>
+  <dt>`--verbose` <em>(alias `-v`)</em></dt>
+  <dd>Enable verbose output.</dd>
+</dl>
+
+## Environment variables
+
+<dl>
+  <dt>`ATMOS_AUTH_VALIDATE_VERBOSE`</dt>
+  <dd>Set to `true` to enable verbose output by default.</dd>
+</dl>

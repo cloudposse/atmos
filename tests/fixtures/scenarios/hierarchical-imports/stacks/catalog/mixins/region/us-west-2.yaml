@@ -1,0 +1,27 @@
+# Level 2: Region mixin for us-west-2
+
+import:
+  # Import all provider configs via glob - tests parallel processing
+  - catalog/mixins/provider/aws-*
+
+vars:
+  import_order_test: "level-2-region-us-west-2"
+
+  region: "us-west-2"
+  aws_region: "us-west-2"
+  availability_zones:
+    - "us-west-2a"
+    - "us-west-2b"
+    - "us-west-2c"
+
+  vpc_cidr: "10.2.0.0/16"
+
+  tags:
+    Region: "us-west-2"
+    Source: "level-2-region-us-west-2"
+
+settings:
+  import_order_test: "level-2-region-us-west-2-settings"
+  region:
+    name: "us-west-2"
+    short_name: "usw2"

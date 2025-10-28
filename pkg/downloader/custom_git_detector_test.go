@@ -2,9 +2,6 @@ package downloader
 
 import (
 	"net/url"
-	"os"
-	"path/filepath"
-	"runtime"
 	"strings"
 	"testing"
 
@@ -124,27 +121,6 @@ func TestGetDefaultUsername(t *testing.T) {
 	}
 }
 
-func TestAdjustSubdir(t *testing.T) {
-	detector := &CustomGitDetector{}
-	uObj, err := url.Parse("https://github.com/user/repo.git")
-	if err != nil {
-		t.Fatalf("Failed to parse URL: %v", err)
-	}
-	source := "repo.git"
-	detector.adjustSubdir(uObj, source)
-	if !strings.Contains(uObj.Path, "//.") {
-		t.Errorf("Expected '//.' appended to path, got %s", uObj.Path)
-	}
-	uObj2, err := url.Parse("https://github.com/user/repo.git//subdir")
-	if err != nil {
-		t.Fatalf("Failed to parse URL: %v", err)
-	}
-	detector.adjustSubdir(uObj2, "repo.git//subdir")
-	if strings.HasSuffix(uObj2.Path, "//.") {
-		t.Errorf("Did not expect subdir adjustment, got %s", uObj2.Path)
-	}
-}
-
 func TestDetect_UnsupportedHost(t *testing.T) {
 	// This tests the branch when the URL host is not supported (not GitHub, GitLab, or Bitbucket)
 	config := fakeAtmosConfig()
@@ -162,30 +138,5 @@ func TestDetect_UnsupportedHost(t *testing.T) {
 	}
 }
 
-func TestRemoveSymlinks(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skipf("Skipping symlink tests on Windows: symlinks require special privileges")
-	}
-	tempDir, err := os.MkdirTemp("", "symlinktest")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.RemoveAll(tempDir)
-	filePath := filepath.Join(tempDir, "file.txt")
-	if err := os.WriteFile(filePath, []byte("data"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	symlinkPath := filepath.Join(tempDir, "link.txt")
-	if err := os.Symlink(filePath, symlinkPath); err != nil {
-		t.Fatal(err)
-	}
-	if err := removeSymlinks(tempDir); err != nil {
-		t.Fatalf("removeSymlinks error: %v", err)
-	}
-	if _, err := os.Lstat(symlinkPath); !os.IsNotExist(err) {
-		t.Errorf("Expected symlink to be removed, but it exists")
-	}
-	if _, err := os.Stat(filePath); err != nil {
-		t.Errorf("Expected regular file to exist, but got error: %v", err)
-	}
-}
+// Unix-specific test moved to custom_git_detector_unix_test.go:
+// - TestRemoveSymlinks

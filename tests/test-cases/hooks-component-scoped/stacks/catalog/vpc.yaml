@@ -1,0 +1,17 @@
+# VPC component catalog entry
+components:
+  terraform:
+    vpc:
+      metadata:
+        component: vpc
+      vars:
+        name: "vpc"
+      hooks:
+        vpc-store-outputs:
+          events:
+            - after-terraform-apply
+          command: store
+          name: prod/ssm
+          outputs:
+            vpc_id: .vpc_id
+            vpc_cidr_block: .vpc_cidr_block

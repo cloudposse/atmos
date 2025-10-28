@@ -1,8 +1,4 @@
 
-Notice: Atmos now collects completely anonymous telemetry regarding usage.
-This information is used to shape Atmos roadmap and prioritize features.
-You can learn more, including how to opt-out if you'd not like to participate in this anonymous program,
-by visiting the following URL: https://atmos.tools/cli/telemetry
 
 Atmos is a universal tool for DevOps and cloud automation used for provisioning, managing and orchestrating workflows across various toolchains                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         
 
@@ -16,6 +12,7 @@ Available Commands:
 
   about                          Learn about Atmos
   atlantis                       Generate and manage Atlantis configurations
+  auth                           Authenticate with cloud providers and identity services.
   aws                            Run AWS-specific commands for interacting with cloud resources
   completion                     Generate autocompletion scripts for Bash, Zsh, Fish, and PowerShell
   describe                       Show details about Atmos configurations and components
@@ -43,6 +40,9 @@ Flags:
 
         --base-path string           Base path for Atmos project
 
+    -C, --chdir string               Change working directory before processing
+                                     (run as if Atmos started in this directory)
+
         --config stringSlice         Paths to configuration files
                                      (comma-separated or repeated flag) (default
                                      [])
@@ -50,6 +50,14 @@ Flags:
         --config-path stringSlice    Paths to configuration directories
                                      (comma-separated or repeated flag) (default
                                      [])
+
+        --heatmap                    Show performance heatmap visualization
+                                     after command execution (includes P95
+                                     latency) (default false)
+
+        --heatmap-mode string        Heatmap visualization mode: bar, sparkline,
+                                     table (press 1-3 to switch in TUI) (default
+                                     bar)
 
     -h, --help                       help for atmos
 
@@ -92,6 +100,8 @@ Flags:
                                      Errors can be redirected to any file or any
                                      standard file descriptor (including
                                      /dev/null)
+
+        --version                    Display the Atmos CLI version
 
 
 Use atmos [subcommand] --help for more information about a command.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     

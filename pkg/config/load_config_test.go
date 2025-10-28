@@ -8,18 +8,15 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 // test configuration with flags --config and --config-path with multiple files and directories merge.
 func TestLoadConfigFromCLIArgsMultipleMerge(t *testing.T) {
-	// create tmp folder
-	tmpDir, err := os.MkdirTemp("", "atmos-config-test")
-	if err != nil {
-		t.Fatalf("Failed to create temp directory: %v", err)
-	}
-	defer os.RemoveAll(tmpDir)
-	// create atmos.yaml file
+	// Create tmp folder.
+	tmpDir := t.TempDir()
+	// Create atmos.yaml file.
 	atmosConfigFilePath := filepath.Join(tmpDir, "test-config.yaml")
 	f, err := os.Create(atmosConfigFilePath)
 	if err != nil {
@@ -37,12 +34,8 @@ func TestLoadConfigFromCLIArgsMultipleMerge(t *testing.T) {
 		}
 	}
 	f.Close()
-	// write another config file
-	tmpDir2, err := os.MkdirTemp("", "atmos-config-test-2")
-	if err != nil {
-		t.Fatalf("Failed to create temp directory: %v", err)
-	}
-	defer os.RemoveAll(tmpDir2)
+	// Write another config file.
+	tmpDir2 := t.TempDir()
 	atmosConfigFilePath2 := filepath.Join(tmpDir2, "atmos.yaml")
 	f2, err := os.Create(atmosConfigFilePath2)
 	if err != nil {
@@ -75,7 +68,7 @@ func TestLoadConfigFromCLIArgsMultipleMerge(t *testing.T) {
 }
 
 func TestLoadConfigFromCLIArgs(t *testing.T) {
-	// Setup valid configuration for base case
+	// Setup valid configuration for base case.
 	validDir := t.TempDir()
 	validConfig := `
 logs:
@@ -148,7 +141,7 @@ logs:
 	}
 }
 
-func TestConnectPaths(t *testing.T) {
+func TestConnectPaths_WindowsPaths(t *testing.T) {
 	tests := []struct {
 		name     string
 		paths    []string
@@ -180,6 +173,219 @@ func TestConnectPaths(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			result := connectPaths(tt.paths)
 			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+// TestValidatedIsFiles_EdgeCases tests edge cases for file validation.
+func TestValidatedIsFiles_EdgeCases(t *testing.T) {
+	tmpDir := t.TempDir()
+	validFile := filepath.Join(tmpDir, "test.yaml")
+	require.NoError(t, os.WriteFile(validFile, []byte("test: value"), 0o644))
+
+	tests := []struct {
+		name      string
+		files     []string
+		wantError string
+		checkErr  error
+	}{
+		{
+			name:      "empty file path",
+			files:     []string{""},
+			wantError: "requires a non-empty file path",
+			checkErr:  errUtils.ErrEmptyConfigFile,
+		},
+		{
+			name:      "directory instead of file",
+			files:     []string{tmpDir},
+			wantError: "",
+			checkErr:  errUtils.ErrExpectedFile,
+		},
+		{
+			name:      "multiple files with one invalid",
+			files:     []string{validFile, ""},
+			wantError: "requires a non-empty file path",
+			checkErr:  errUtils.ErrEmptyConfigFile,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := validatedIsFiles(tt.files)
+			assert.Error(t, err)
+			if tt.wantError != "" {
+				assert.Contains(t, err.Error(), tt.wantError)
+			}
+			if tt.checkErr != nil {
+				assert.ErrorIs(t, err, tt.checkErr)
+			}
+		})
+	}
+}
+
+// TestValidatedIsDirs_EdgeCases tests edge cases for directory validation.
+func TestValidatedIsDirs_EdgeCases(t *testing.T) {
+	tmpDir := t.TempDir()
+	validDir := filepath.Join(tmpDir, "valid")
+	require.NoError(t, os.Mkdir(validDir, 0o755))
+
+	testFile := filepath.Join(tmpDir, "file.txt")
+	require.NoError(t, os.WriteFile(testFile, []byte("test"), 0o644))
+
+	tests := []struct {
+		name      string
+		dirs      []string
+		wantError string
+		checkErr  error
+	}{
+		{
+			name:      "empty directory path",
+			dirs:      []string{""},
+			wantError: "requires a non-empty directory path",
+			checkErr:  errUtils.ErrEmptyConfigPath,
+		},
+		{
+			name:      "file instead of directory",
+			dirs:      []string{testFile},
+			wantError: "requires a directory but found a file",
+			checkErr:  errUtils.ErrAtmosDirConfigNotFound,
+		},
+		{
+			name:      "non-existent directory",
+			dirs:      []string{filepath.Join(tmpDir, "nonexistent")},
+			wantError: "does not exist",
+			checkErr:  errUtils.ErrAtmosDirConfigNotFound,
+		},
+		{
+			name:      "multiple dirs with one invalid",
+			dirs:      []string{validDir, ""},
+			wantError: "requires a non-empty directory path",
+			checkErr:  errUtils.ErrEmptyConfigPath,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := validatedIsDirs(tt.dirs)
+			assert.Error(t, err)
+			if tt.wantError != "" {
+				assert.Contains(t, err.Error(), tt.wantError)
+			}
+			if tt.checkErr != nil {
+				assert.ErrorIs(t, err, tt.checkErr)
+			}
+		})
+	}
+}
+
+// TestMergeConfigFromDirectories_ConfigFileVariants tests finding both atmos.yaml and .atmos.yaml.
+func TestMergeConfigFromDirectories_ConfigFileVariants(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Directory with atmos.yaml.
+	dir1 := filepath.Join(tmpDir, "dir1")
+	require.NoError(t, os.Mkdir(dir1, 0o755))
+	require.NoError(t, os.WriteFile(
+		filepath.Join(dir1, "atmos.yaml"),
+		[]byte("base_path: /test1"),
+		0o644,
+	))
+
+	// Directory with .atmos.yaml.
+	dir2 := filepath.Join(tmpDir, "dir2")
+	require.NoError(t, os.Mkdir(dir2, 0o755))
+	require.NoError(t, os.WriteFile(
+		filepath.Join(dir2, ".atmos.yaml"),
+		[]byte("base_path: /test2"),
+		0o644,
+	))
+
+	// Directory with no config file.
+	emptyDir := filepath.Join(tmpDir, "empty")
+	require.NoError(t, os.Mkdir(emptyDir, 0o755))
+
+	tests := []struct {
+		name        string
+		dirs        []string
+		expectError bool
+	}{
+		{
+			name:        "finds atmos.yaml",
+			dirs:        []string{dir1},
+			expectError: false,
+		},
+		{
+			name:        "finds .atmos.yaml",
+			dirs:        []string{dir2},
+			expectError: false,
+		},
+		{
+			name:        "finds both variants in different directories",
+			dirs:        []string{dir1, dir2},
+			expectError: false,
+		},
+		{
+			name:        "fails for directory without config",
+			dirs:        []string{emptyDir},
+			expectError: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			configInfo := schema.ConfigAndStacksInfo{
+				AtmosConfigDirsFromArg: tt.dirs,
+			}
+
+			_, err := InitCliConfig(configInfo, false)
+
+			if tt.expectError {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
+// TestLoadConfigFromCLIArgs_ErrorPaths tests error paths in config loading.
+func TestLoadConfigFromCLIArgs_ErrorPaths(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create invalid YAML file.
+	invalidYaml := filepath.Join(tmpDir, "invalid.yaml")
+	require.NoError(t, os.WriteFile(invalidYaml, []byte("invalid: [unclosed"), 0o644))
+
+	tests := []struct {
+		name        string
+		files       []string
+		dirs        []string
+		expectError bool
+		description string
+	}{
+		{
+			name:        "invalid YAML syntax",
+			files:       []string{invalidYaml},
+			dirs:        []string{},
+			expectError: true,
+			description: "Should fail for invalid YAML syntax",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			configInfo := schema.ConfigAndStacksInfo{
+				AtmosConfigFilesFromArg: tt.files,
+				AtmosConfigDirsFromArg:  tt.dirs,
+			}
+
+			_, err := InitCliConfig(configInfo, false)
+
+			if tt.expectError {
+				assert.Error(t, err, tt.description)
+			} else {
+				assert.NoError(t, err, tt.description)
+			}
 		})
 	}
 }
