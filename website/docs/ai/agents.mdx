@@ -250,20 +250,20 @@ Press **Ctrl+A** in the chat interface to open the agent selector:
 │                                                     │
 │ ↑/↓: Navigate | Enter: Select | Esc/q: Cancel      │
 │                                                     │
-│ ▶ 🤖 General (current) [built-in]                  │
-│     General-purpose assistant for all operations   │
-│                                                     │
-│   📊 Stack Analyzer [built-in]                     │
-│     Analyze stack configurations and dependencies  │
-│                                                     │
 │   🔧 Component Refactor [built-in]                 │
 │     Refactor Terraform/Helmfile components         │
+│                                                     │
+│   ✅ Config Validator [built-in]                   │
+│     Validate Atmos configuration files             │
+│                                                     │
+│ ▶ 🤖 General (current) [built-in]                  │
+│     General-purpose assistant for all operations   │
 │                                                     │
 │   🔒 Security Auditor [built-in]                   │
 │     Security review of infrastructure configs      │
 │                                                     │
-│   ✅ Config Validator [built-in]                   │
-│     Validate Atmos configuration files             │
+│   📊 Stack Analyzer [built-in]                     │
+│     Analyze stack configurations and dependencies  │
 │                                                     │
 ╰─────────────────────────────────────────────────────╯
 ```
@@ -291,6 +291,10 @@ I'll analyze the VPC configuration for you.
 ```
 
 These visual indicators make it immediately clear which agent is active and help you track which specialized assistant is handling each part of your conversation.
+
+:::tip Agent Display Order
+Agents are displayed in **alphabetical order by name** in the agent selector for consistent, predictable navigation. This ensures the list never changes order unexpectedly as you navigate.
+:::
 
 ### Setting Default Agent
 

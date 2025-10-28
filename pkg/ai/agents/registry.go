@@ -2,6 +2,7 @@ package agents
 
 import (
 	"fmt"
+	"sort"
 	"sync"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -54,7 +55,7 @@ func (r *Registry) Get(name string) (*Agent, error) {
 	return agent, nil
 }
 
-// List returns all registered agents.
+// List returns all registered agents sorted alphabetically by name.
 func (r *Registry) List() []*Agent {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -64,10 +65,15 @@ func (r *Registry) List() []*Agent {
 		agents = append(agents, agent)
 	}
 
+	// Sort alphabetically by name for consistent ordering.
+	sort.Slice(agents, func(i, j int) bool {
+		return agents[i].Name < agents[j].Name
+	})
+
 	return agents
 }
 
-// ListByCategory returns agents in a specific category.
+// ListByCategory returns agents in a specific category sorted alphabetically by name.
 func (r *Registry) ListByCategory(category string) []*Agent {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -79,10 +85,15 @@ func (r *Registry) ListByCategory(category string) []*Agent {
 		}
 	}
 
+	// Sort alphabetically by name for consistent ordering.
+	sort.Slice(agents, func(i, j int) bool {
+		return agents[i].Name < agents[j].Name
+	})
+
 	return agents
 }
 
-// ListBuiltIn returns only built-in agents.
+// ListBuiltIn returns only built-in agents sorted alphabetically by name.
 func (r *Registry) ListBuiltIn() []*Agent {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -94,10 +105,15 @@ func (r *Registry) ListBuiltIn() []*Agent {
 		}
 	}
 
+	// Sort alphabetically by name for consistent ordering.
+	sort.Slice(agents, func(i, j int) bool {
+		return agents[i].Name < agents[j].Name
+	})
+
 	return agents
 }
 
-// ListCustom returns only custom (user-defined) agents.
+// ListCustom returns only custom (user-defined) agents sorted alphabetically by name.
 func (r *Registry) ListCustom() []*Agent {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -108,6 +124,11 @@ func (r *Registry) ListCustom() []*Agent {
 			agents = append(agents, agent)
 		}
 	}
+
+	// Sort alphabetically by name for consistent ordering.
+	sort.Slice(agents, func(i, j int) bool {
+		return agents[i].Name < agents[j].Name
+	})
 
 	return agents
 }
