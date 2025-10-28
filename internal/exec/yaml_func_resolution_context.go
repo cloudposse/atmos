@@ -165,31 +165,30 @@ func (ctx *ResolutionContext) Pop(atmosConfig *schema.AtmosConfiguration) {
 
 // buildCircularDependencyError creates a detailed error message showing the dependency chain.
 func (ctx *ResolutionContext) buildCircularDependencyError(newNode DependencyNode) error {
-	var chainBuilder strings.Builder
+	var errMsg strings.Builder
 
-	chainBuilder.WriteString("Dependency chain:\n\n")
+	errMsg.WriteString("Dependency chain:\n\n")
 
 	// Show the full call stack
 	for i, node := range ctx.CallStack {
-		chainBuilder.WriteString(fmt.Sprintf("  %d. Component '%s' in stack '%s'\n",
+		errMsg.WriteString(fmt.Sprintf("  %d. Component '%s' in stack '%s'\n",
 			i+1, node.Component, node.Stack))
-		chainBuilder.WriteString(fmt.Sprintf("     → %s\n", node.FunctionCall))
+		errMsg.WriteString(fmt.Sprintf("     → %s\n", node.FunctionCall))
 	}
 
 	// Show where the cycle completes
-	chainBuilder.WriteString(fmt.Sprintf("  %d. Component '%s' in stack '%s' (cycle detected)\n",
+	errMsg.WriteString(fmt.Sprintf("  %d. Component '%s' in stack '%s' (cycle detected)\n\n",
 		len(ctx.CallStack)+1, newNode.Component, newNode.Stack))
-	chainBuilder.WriteString(fmt.Sprintf("     → %s", newNode.FunctionCall))
+	errMsg.WriteString(fmt.Sprintf("     → %s\n\n", newNode.FunctionCall))
 
-	return errUtils.Build(errUtils.ErrCircularDependency).
-		WithExplanation(chainBuilder.String()).
-		WithHint("Review your component dependencies and break the circular reference").
-		WithHint("Consider using Terraform data sources or direct remote state instead").
-		WithHint("Ensure dependencies flow in one direction only").
-		WithContext("component", newNode.Component).
-		WithContext("stack", newNode.Stack).
-		WithExitCode(1).
-		Err()
+	// Add fix suggestions
+	errMsg.WriteString("To fix this issue:\n\n")
+	errMsg.WriteString("  • Review your component dependencies and break the circular reference\n")
+	errMsg.WriteString("  • Consider using Terraform data sources or direct remote state instead\n")
+	errMsg.WriteString("  • Ensure dependencies flow in one direction only\n")
+
+	// Wrap the sentinel error with the detailed message so errors.Is() still works
+	return errUtils.WithExitCode(fmt.Errorf("%w\n\n%s", errUtils.ErrCircularDependency, errMsg.String()), 1)
 }
 
 // Clone creates a copy of the resolution context for use in concurrent operations.

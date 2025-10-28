@@ -179,6 +179,9 @@ func ExecuteWorkflow(
 		if err != nil {
 			log.Debug("Workflow failed", "error", err)
 
+			// Extract exit code from error
+			exitCode := errUtils.GetExitCode(err)
+
 			// Remove the workflow base path, stacks/workflows
 			workflowFileName := strings.TrimPrefix(filepath.ToSlash(workflowPath), filepath.ToSlash(atmosConfig.Workflows.BasePath))
 			// Remove the leading slash
@@ -208,13 +211,17 @@ func ExecuteWorkflow(
 				}
 			}
 
-			stepErr := errUtils.Build(ErrWorkflowStepFailed).
+			// Create error with exit code in the message for backward compatibility
+			// We include the exit code in the message string for backward compatibility with tests
+			// that check error messages, while also preserving the exit code in the error chain
+			stepErr := fmt.Errorf("%w with exit code %d", ErrWorkflowStepFailed, exitCode)
+			stepErr = errUtils.Build(stepErr).
 				WithTitle(WorkflowErrTitle).
 				WithExplanationf("The following command failed to execute:\n```\n%s\n```\n\nTo resume the workflow from this step, run:\n```\n%s\n```", failedCmd, resumeCommand).
+				WithExitCode(exitCode).
 				Err()
 			errUtils.CheckErrorAndPrint(stepErr, "", "")
-			// Return the original error wrapped with stepErr to preserve exit code information
-			return errors.Join(stepErr, err)
+			return stepErr
 		}
 	}
 
