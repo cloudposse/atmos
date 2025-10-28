@@ -14,6 +14,7 @@ import (
 	"github.com/samber/lo"
 	"go.yaml.in/yaml/v3"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -29,19 +30,19 @@ var StderrLogger = func() *log.AtmosLogger {
 
 var (
 	ErrVendorComponents              = errors.New("failed to vendor components")
-	ErrSourceMissing                 = errors.New("'source' must be specified in 'sources' in the vendor config file")
-	ErrTargetsMissing                = errors.New("'targets' must be specified for the source in the vendor config file")
-	ErrVendorConfigSelfImport        = errors.New("vendor config file imports itself in 'spec.imports'")
-	ErrMissingVendorConfigDefinition = errors.New("either 'spec.sources' or 'spec.imports' (or both) must be defined in the vendor config file")
-	ErrVendoringNotConfigured        = errors.New("Vendoring is not configured. To set up vendoring, please see https://atmos.tools/core-concepts/vendor/")
-	ErrPermissionDenied              = errors.New("Permission denied when accessing")
-	ErrEmptySources                  = errors.New("'spec.sources' is empty in the vendor config file and the imports")
-	ErrNoComponentsWithTags          = errors.New("there are no components in the vendor config file")
-	ErrNoYAMLConfigFiles             = errors.New("no YAML configuration files found in directory")
+	ErrSourceMissing                 = errors.New("source is missing")
+	ErrTargetsMissing                = errors.New("targets are missing")
+	ErrVendorConfigSelfImport        = errors.New("vendor config file imports itself")
+	ErrMissingVendorConfigDefinition = errors.New("vendor config definition is missing")
+	ErrVendoringNotConfigured        = errors.New("vendoring is not configured")
+	ErrPermissionDenied              = errors.New("permission denied")
+	ErrEmptySources                  = errors.New("sources are empty")
+	ErrNoComponentsWithTags          = errors.New("no components found")
+	ErrNoYAMLConfigFiles             = errors.New("no YAML configuration files found")
 	ErrDuplicateComponents           = errors.New("duplicate component names")
-	ErrDuplicateImport               = errors.New("Duplicate import")
+	ErrDuplicateImport               = errors.New("duplicate import")
 	ErrDuplicateComponentsFound      = errors.New("duplicate component")
-	ErrComponentNotDefined           = errors.New("the flag '--component' is passed, but the component is not defined in any of the 'sources' in the vendor config file and the imports")
+	ErrComponentNotDefined           = errors.New("component not defined in vendor config")
 )
 
 type processTargetsParams struct {
@@ -131,7 +132,11 @@ func getConfigFiles(path string) ([]string, error) {
 	fileInfo, err := os.Stat(path)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return nil, ErrVendoringNotConfigured
+			return nil, errUtils.Build(ErrVendoringNotConfigured).
+				WithHint("Create a vendor.yaml file to configure vendoring").
+				WithHint("See https://atmos.tools/core-concepts/vendor/ for setup guide").
+				WithExitCode(1).
+				Err()
 		}
 		if os.IsPermission(err) {
 			return nil, fmt.Errorf("%w '%s'. Please check the file permissions", ErrPermissionDenied, path)

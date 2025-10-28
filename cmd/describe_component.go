@@ -1,8 +1,6 @@
 package cmd
 
 import (
-	"errors"
-
 	"github.com/spf13/cobra"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -21,7 +19,11 @@ var describeComponentCmd = &cobra.Command{
 		checkAtmosConfig()
 
 		if len(args) != 1 {
-			return errors.New("invalid arguments. The command requires one argument `component`")
+			return errUtils.Build(errUtils.ErrInvalidComponentArgument).
+				WithHint("Provide exactly one argument: the component name").
+				WithHint("Example: atmos describe component vpc -s prod").
+				WithExitCode(2).
+				Err()
 		}
 
 		flags := cmd.Flags()

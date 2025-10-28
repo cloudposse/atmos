@@ -41,14 +41,14 @@ var (
 	ErrNoDocsGenerateEntry                   = errors.New("no docs.generate entry found")
 	ErrMissingDocType                        = errors.New("doc-type argument missing")
 	ErrUnsupportedInputType                  = errors.New("unsupported input type")
-	ErrMissingStackNameTemplateAndPattern    = errors.New("'stacks.name_pattern' or 'stacks.name_template' needs to be specified in 'atmos.yaml'")
+	ErrMissingStackNameTemplateAndPattern    = errors.New("stack naming configuration is missing")
 	ErrFailedMarshalConfigToYaml             = errors.New("failed to marshal config to YAML")
 	ErrStacksDirectoryDoesNotExist           = errors.New("directory for Atmos stacks does not exist")
 	ErrCommandNil                            = errors.New("command cannot be nil")
 	ErrGitHubRateLimitExceeded               = errors.New("GitHub API rate limit exceeded")
-	ErrInvalidLimit                          = errors.New("limit must be between 1 and 100")
-	ErrInvalidOffset                         = errors.New("offset must be >= 0")
-	ErrInvalidSinceDate                      = errors.New("invalid date format for --since")
+	ErrInvalidLimit                          = errors.New("invalid limit value")
+	ErrInvalidOffset                         = errors.New("invalid offset value")
+	ErrInvalidSinceDate                      = errors.New("invalid date format")
 	ErrUnsupportedOutputFormat               = errors.New("unsupported output format")
 	ErrTerminalTooNarrow                     = errors.New("terminal too narrow")
 	ErrSpinnerReturnedNilModel               = errors.New("spinner returned nil model")
@@ -62,9 +62,9 @@ var (
 	// ErrPlanHasDiff is returned when there are differences between two Terraform plan files.
 	ErrPlanHasDiff = errors.New("plan files have differences")
 
-	ErrInvalidTerraformFlagsWithAffectedFlag                 = errors.New("incompatible flags: --affected cannot be combined with other bulk operation flags")
-	ErrInvalidTerraformComponentWithMultiComponentFlags      = errors.New("incompatible arguments: component argument cannot be used with bulk operation flags")
-	ErrInvalidTerraformSingleComponentAndMultiComponentFlags = errors.New("incompatible flags: single-component flags cannot be used with bulk operation flags")
+	ErrInvalidTerraformFlagsWithAffectedFlag                 = errors.New("incompatible flags")
+	ErrInvalidTerraformComponentWithMultiComponentFlags      = errors.New("incompatible arguments")
+	ErrInvalidTerraformSingleComponentAndMultiComponentFlags = errors.New("incompatible flags")
 
 	ErrYamlFuncInvalidArguments         = errors.New("invalid number of arguments in the Atmos YAML function")
 	ErrDescribeComponent                = errors.New("failed to describe component")
@@ -88,7 +88,7 @@ var (
 	ErrBackendConfigRequired  = errors.New("backend configuration is required")
 
 	// Git-related errors.
-	ErrGitNotAvailable      = errors.New("git must be available and on the PATH")
+	ErrGitNotAvailable      = errors.New("git is not available")
 	ErrInvalidGitPort       = errors.New("invalid port number")
 	ErrSSHKeyUsage          = errors.New("error using SSH key")
 	ErrGitCommandExited     = errors.New("git command exited with non-zero status")
@@ -124,14 +124,14 @@ var (
 	ErrMergeTempConfig             = errors.New("failed to merge temp config")
 	ErrPreprocessYAMLFunctions     = errors.New("failed to preprocess YAML functions")
 	ErrMergeEmbeddedConfig         = errors.New("failed to merge embedded config")
-	ErrExpectedDirOrPattern        = errors.New("--config-path expected directory found file")
+	ErrExpectedDirOrPattern        = errors.New("expected directory or pattern")
 	ErrFileNotFound                = errors.New("file not found")
 	ErrFileAccessDenied            = errors.New("file access denied")
-	ErrExpectedFile                = errors.New("--config expected file found directory")
+	ErrExpectedFile                = errors.New("expected file")
 	ErrAtmosArgConfigNotFound      = errors.New("atmos configuration not found")
-	ErrEmptyConfigPath             = errors.New("config path cannot be empty")
-	ErrEmptyConfigFile             = errors.New("config file path cannot be empty")
-	ErrAtmosFilesDirConfigNotFound = errors.New("`atmos.yaml` or `.atmos.yaml` configuration file not found in directory")
+	ErrEmptyConfigPath             = errors.New("config path is empty")
+	ErrEmptyConfigFile             = errors.New("config file path is empty")
+	ErrAtmosFilesDirConfigNotFound = errors.New("atmos configuration file not found in directory")
 	ErrAtmosConfigNotFound         = errors.New("atmos configuration file not found")
 
 	ErrMissingStack                               = errors.New("stack is required")
@@ -152,10 +152,10 @@ var (
 	ErrNoSuitableShell                  = errors.New("no suitable shell found")
 	ErrFailedToLoadTerraformModule      = errors.New("failed to load terraform module")
 	ErrNoJSONOutput                     = errors.New("no JSON output found in terraform show output")
-	ErrOriginalPlanFileRequired         = errors.New("original plan file (--orig) is required")
+	ErrOriginalPlanFileRequired         = errors.New("original plan file is required")
 	ErrOriginalPlanFileNotExist         = errors.New("original plan file does not exist")
 	ErrNewPlanFileNotExist              = errors.New("new plan file does not exist")
-	ErrTerraformGenerateBackendArgument = errors.New("invalid arguments. The command requires one argument `component`")
+	ErrTerraformGenerateBackendArgument = errors.New("invalid arguments")
 
 	ErrMissingPackerTemplate = errors.New("packer template is required")
 	ErrMissingPackerManifest = errors.New("packer manifest is missing")
@@ -203,7 +203,9 @@ var (
 	// Component registry errors.
 	ErrComponentProviderNotFound          = errors.New("component provider not found")
 	ErrComponentProviderNil               = errors.New("component provider cannot be nil")
-	ErrComponentTypeEmpty                 = errors.New("component type cannot be empty")
+	ErrComponentTypeEmpty                 = errors.New("component type is empty")
+	ErrComponentEmpty                     = errors.New("component is empty")
+	ErrStackEmpty                         = errors.New("stack is empty")
 	ErrComponentConfigInvalid             = errors.New("component configuration invalid")
 	ErrComponentListFailed                = errors.New("failed to list components")
 	ErrComponentValidationFailed          = errors.New("component validation failed")
@@ -212,7 +214,7 @@ var (
 	ErrComponentProviderRegistration      = errors.New("failed to register component provider")
 	ErrInvalidTerraformBackend            = errors.New("invalid terraform.backend section")
 	ErrInvalidTerraformRemoteStateBackend = errors.New("invalid terraform.remote_state_backend section")
-	ErrUnsupportedComponentType           = errors.New("unsupported component type. Valid types are 'terraform', 'helmfile', 'packer'")
+	ErrUnsupportedComponentType           = errors.New("unsupported component type")
 
 	// List command errors.
 	ErrInvalidStackPattern         = errors.New("invalid stack pattern")
@@ -229,9 +231,9 @@ var (
 	ErrComponentNameRequired       = errors.New("component name is required")
 
 	// Atlantis errors.
-	ErrAtlantisInvalidFlags          = errors.New("if the '--repo-path' flag is specified, the '--ref', '--sha', '--ssh-key' and '--ssh-key-password' flags can't be used")
-	ErrAtlantisProjectTemplateNotDef = errors.New("atlantis project template is not defined in 'integrations.atlantis.project_templates' in 'atmos.yaml'")
-	ErrAtlantisConfigTemplateNotDef  = errors.New("atlantis config template is not defined in `integrations.atlantis.config_templates` in `atmos.yaml`")
+	ErrAtlantisInvalidFlags          = errors.New("incompatible atlantis flags")
+	ErrAtlantisProjectTemplateNotDef = errors.New("atlantis project template is not defined")
+	ErrAtlantisConfigTemplateNotDef  = errors.New("atlantis config template is not defined")
 	ErrAtlantisConfigTemplateNotSpec = errors.New("atlantis config template is not specified")
 
 	// Validation errors.
@@ -319,7 +321,7 @@ var (
 	ErrAPIResponseError             = errors.New("API response error")
 
 	// Exec package errors.
-	ErrComponentAndStackRequired     = errors.New("both '--component' and '--stack' flags must be provided")
+	ErrComponentAndStackRequired     = errors.New("component and stack are both required")
 	ErrFailedToCreateAPIClient       = errors.New("failed to create API client")
 	ErrFailedToProcessArgs           = errors.New("failed to process command-line arguments")
 	ErrFailedToInitConfig            = errors.New("failed to initialize Atmos configuration")
@@ -331,7 +333,7 @@ var (
 	ErrInvalidRegoPolicy             = errors.New("invalid Rego policy")
 	ErrInvalidOPAPolicy              = errors.New("invalid OPA policy")
 	ErrTerraformEnvCliVarJSON        = errors.New("failed to parse JSON variable from TF_CLI_ARGS environment variable")
-	ErrWorkflowBasePathNotConfigured = errors.New("'workflows.base_path' must be configured in 'atmos.yaml'")
+	ErrWorkflowBasePathNotConfigured = errors.New("workflow base path is not configured")
 	ErrWorkflowDirectoryDoesNotExist = errors.New("workflow directory does not exist")
 	ErrInvalidComponentArgument      = errors.New("invalid arguments. The command requires one argument 'componentName'")
 	ErrValidation                    = errors.New("validation failed")

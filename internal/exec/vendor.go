@@ -8,19 +8,19 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 var (
-	ErrVendorConfigNotExist       = errors.New("the '--everything' flag is set, but vendor config file does not exist")
+	ErrVendorConfigNotExist       = errors.New("vendor config file does not exist")
 	ErrExecuteVendorDiffCmd       = errors.New("'atmos vendor diff' is not implemented yet")
-	ErrValidateComponentFlag      = errors.New("either '--component' or '--tags' flag can be provided, but not both")
-	ErrValidateComponentStackFlag = errors.New("either '--component' or '--stack' flag can be provided, but not both")
-	ErrValidateEverythingFlag     = errors.New("'--everything' flag cannot be combined with '--component', '--stack', or '--tags' flags")
-	ErrMissingVendorComponent     = errors.New("to vendor a component, the '--component' (shorthand '-c') flag needs to be specified.\n" +
-		"Example: atmos vendor pull -c <component>")
+	ErrValidateComponentFlag      = errors.New("incompatible flags: --component and --tags")
+	ErrValidateComponentStackFlag = errors.New("incompatible flags: --component and --stack")
+	ErrValidateEverythingFlag     = errors.New("incompatible flags: --everything with other filters")
+	ErrMissingVendorComponent     = errors.New("vendor component flag missing")
 )
 
 // ExecuteVendorPullCmd executes `vendor pull` commands.
@@ -128,15 +128,24 @@ func setDefaultEverythingFlag(flags *pflag.FlagSet, vendorFlags *VendorFlags) {
 
 func validateVendorFlags(flg *VendorFlags) error {
 	if flg.Component != "" && flg.Stack != "" {
-		return ErrValidateComponentStackFlag
+		return errUtils.Build(ErrValidateComponentStackFlag).
+			WithHint("Remove either '--component' or '--stack' flag").
+			WithExitCode(2).
+			Err()
 	}
 
 	if flg.Component != "" && len(flg.Tags) > 0 {
-		return ErrValidateComponentFlag
+		return errUtils.Build(ErrValidateComponentFlag).
+			WithHint("Remove either '--component' or '--tags' flag").
+			WithExitCode(2).
+			Err()
 	}
 
 	if flg.Everything && (flg.Component != "" || flg.Stack != "" || len(flg.Tags) > 0) {
-		return ErrValidateEverythingFlag
+		return errUtils.Build(ErrValidateEverythingFlag).
+			WithHint("Use '--everything' alone without '--component', '--stack', or '--tags'").
+			WithExitCode(2).
+			Err()
 	}
 
 	return nil
@@ -152,11 +161,13 @@ func handleVendorConfig(atmosConfig *schema.AtmosConfiguration, flg *VendorFlags
 		return err
 	}
 	if !vendorConfigExists && flg.Everything {
-		err := fmt.Errorf("%w: %s", ErrVendorConfigNotExist, cfg.AtmosVendorConfigFileName)
-		err = errors.WithHintf(err, "Create a `%s` file in your project root", cfg.AtmosVendorConfigFileName)
-		err = errors.WithHint(err, "Or use `--component` flag to vendor a specific component: `atmos vendor pull -c <component>`")
-		err = errors.WithHint(err, "See https://atmos.tools/core-concepts/vendoring for vendor configuration")
-		return err
+		return errUtils.Build(ErrVendorConfigNotExist).
+			WithExplanationf("The '--everything' flag requires a %s file", cfg.AtmosVendorConfigFileName).
+			WithHintf("Create a `%s` file in your project root", cfg.AtmosVendorConfigFileName).
+			WithHint("Or use `--component` flag to vendor a specific component: `atmos vendor pull -c <component>`").
+			WithHint("See https://atmos.tools/core-concepts/vendoring for vendor configuration").
+			WithExitCode(1).
+			Err()
 	}
 	if vendorConfigExists {
 		return ExecuteAtmosVendorInternal(&executeVendorOptions{

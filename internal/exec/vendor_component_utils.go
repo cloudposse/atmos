@@ -29,15 +29,15 @@ import (
 const ociScheme = "oci://"
 
 var (
-	ErrMissingMixinURI             = errors.New("'uri' must be specified for each 'mixin' in the 'component.yaml' file")
-	ErrMissingMixinFilename        = errors.New("'filename' must be specified for each 'mixin' in the 'component.yaml' file")
-	ErrMixinEmpty                  = errors.New("mixin URI cannot be empty")
+	ErrMissingMixinURI             = errors.New("mixin URI is missing")
+	ErrMissingMixinFilename        = errors.New("mixin filename is missing")
+	ErrMixinEmpty                  = errors.New("mixin URI is empty")
 	ErrMixinNotImplemented         = errors.New("local mixin installation not implemented")
-	ErrStackPullNotSupported       = errors.New("command 'atmos vendor pull --stack <stack>' is not supported yet")
-	ErrComponentConfigFileNotFound = errors.New("component vendoring config file does not exist in the folder")
-	ErrFolderNotFound              = errors.New("folder does not exist")
-	ErrInvalidComponentKind        = errors.New("invalid 'kind' in the component vendoring config file. Supported kinds: 'ComponentVendorConfig'")
-	ErrUriMustSpecified            = errors.New("'uri' must be specified in 'source.uri' in the component vendoring config file")
+	ErrStackPullNotSupported       = errors.New("stack-based vendoring not supported")
+	ErrComponentConfigFileNotFound = errors.New("component vendoring config file not found")
+	ErrFolderNotFound              = errors.New("folder not found")
+	ErrInvalidComponentKind        = errors.New("invalid component kind")
+	ErrUriMustSpecified            = errors.New("URI is missing")
 )
 
 type ComponentSkipFunc func(os.FileInfo, string, string) (bool, error)
@@ -74,7 +74,11 @@ func ReadAndProcessComponentVendorConfigFile(
 	case cfg.PackerComponentType:
 		componentBasePath = atmosConfig.Components.Packer.BasePath
 	default:
-		return componentConfig, "", fmt.Errorf("%s,%w", componentType, errUtils.ErrUnsupportedComponentType)
+		return componentConfig, "", errUtils.Build(errUtils.ErrUnsupportedComponentType).
+			WithExplanationf("Received component type: %s", componentType).
+			WithHint("Supported component types are: terraform, helmfile, packer").
+			WithExitCode(1).
+			Err()
 	}
 
 	componentPath := filepath.Join(atmosConfig.BasePath, componentBasePath, component)

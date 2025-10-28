@@ -6,14 +6,15 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/internal/exec"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 var (
-	ErrInvalidOutputType = errors.New("invalid output type specified. Valid values are 'list', 'map', and 'all'")
-	ErrInvalidFormat     = errors.New("invalid format specified. Valid values are 'yaml' and 'json'")
+	ErrInvalidOutputType = errors.New("invalid output type")
+	ErrInvalidFormat     = errors.New("invalid format")
 )
 
 // describeWorkflowsCmd executes 'atmos describe workflows' CLI commands.
@@ -87,13 +88,21 @@ func validateAndSetDefaults(describe *exec.DescribeWorkflowsArgs) error {
 	if describe.Format == "" {
 		describe.Format = "yaml"
 	} else if describe.Format != "yaml" && describe.Format != "json" {
-		return ErrInvalidFormat
+		return errUtils.Build(ErrInvalidFormat).
+			WithExplanationf("Received format: %s", describe.Format).
+			WithHint("Valid formats are: yaml, json").
+			WithExitCode(2).
+			Err()
 	}
 
 	if describe.OutputType == "" {
 		describe.OutputType = "list"
 	} else if describe.OutputType != "list" && describe.OutputType != "map" && describe.OutputType != "all" {
-		return ErrInvalidOutputType
+		return errUtils.Build(ErrInvalidOutputType).
+			WithExplanationf("Received output type: %s", describe.OutputType).
+			WithHint("Valid output types are: list, map, all").
+			WithExitCode(2).
+			Err()
 	}
 
 	return nil

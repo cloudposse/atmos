@@ -59,7 +59,11 @@ func parseLockUnlockCliArgs(cmd *cobra.Command, args []string) (ProLockUnlockCmd
 	}
 
 	if component == "" || stack == "" {
-		return ProLockUnlockCmdArgs{}, errUtils.ErrComponentAndStackRequired
+		return ProLockUnlockCmdArgs{}, errUtils.Build(errUtils.ErrComponentAndStackRequired).
+			WithHint("Provide a component as the first argument").
+			WithHint("Specify the stack using the '--stack' or '-s' flag").
+			WithExitCode(2).
+			Err()
 	}
 
 	result := ProLockUnlockCmdArgs{

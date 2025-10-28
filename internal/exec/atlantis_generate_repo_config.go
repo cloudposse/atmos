@@ -150,7 +150,12 @@ func ExecuteAtlantisGenerateRepoConfigAffectedOnly(
 	defer perf.Track(atmosConfig, "exec.ExecuteAtlantisGenerateRepoConfigAffectedOnly")()
 
 	if repoPath != "" && (ref != "" || sha != "" || sshKeyPath != "" || sshKeyPassword != "") {
-		return errUtils.ErrAtlantisInvalidFlags
+		return errUtils.Build(errUtils.ErrAtlantisInvalidFlags).
+			WithExplanation("When '--repo-path' is specified, the '--ref', '--sha', '--ssh-key' and '--ssh-key-password' flags cannot be used").
+			WithHint("Remove '--repo-path' to use remote repository flags").
+			WithHint("Or remove remote flags to use '--repo-path' with local repository").
+			WithExitCode(2).
+			Err()
 	}
 
 	var affected []schema.Affected
@@ -405,7 +410,12 @@ func ExecuteAtlantisGenerateRepoConfig(
 						return err
 					}
 				default:
-					return errUtils.ErrMissingStackNameTemplateAndPattern
+					return errUtils.Build(errUtils.ErrMissingStackNameTemplateAndPattern).
+						WithHint("Configure 'stacks.name_template' in atmos.yaml to use template-based naming").
+						WithHint("Or configure 'stacks.name_pattern' in atmos.yaml to use pattern-based naming").
+						WithHint("See https://atmos.tools/cli/configuration for details").
+						WithExitCode(1).
+						Err()
 				}
 
 				// Check if the 'stacks' filter is provided

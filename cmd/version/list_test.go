@@ -274,14 +274,14 @@ func TestListCommand_ValidationErrors(t *testing.T) {
 			limit:     0,
 			offset:    0,
 			wantError: true,
-			errString: "limit must be between",
+			errString: "invalid limit value",
 		},
 		{
 			name:      "invalid limit too high",
 			limit:     101,
 			offset:    0,
 			wantError: true,
-			errString: "limit must be between",
+			errString: "invalid limit value",
 		},
 		{
 			name:      "invalid since date format",
@@ -322,7 +322,7 @@ func TestListCommand_ValidationErrors(t *testing.T) {
 				// This will fail at GitHub API call, which is expected.
 				// We just want to verify validation passed.
 				// If it's not a validation error, that's acceptable.
-				assert.NotContains(t, err.Error(), "limit must be between")
+				assert.NotContains(t, err.Error(), "invalid limit value")
 				assert.NotContains(t, err.Error(), "date format")
 			}
 		})

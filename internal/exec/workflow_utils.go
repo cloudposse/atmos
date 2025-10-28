@@ -241,7 +241,12 @@ func ExecuteDescribeWorkflows(
 	allResult := make(map[string]schema.WorkflowManifest)
 
 	if atmosConfig.Workflows.BasePath == "" {
-		return nil, nil, nil, errUtils.ErrWorkflowBasePathNotConfigured
+		return nil, nil, nil, errUtils.Build(errUtils.ErrWorkflowBasePathNotConfigured).
+			WithHint("Configure 'workflows.base_path' in atmos.yaml").
+			WithHint("Set the base path where workflow manifests are stored").
+			WithHint("See https://atmos.tools/cli/configuration for details").
+			WithExitCode(1).
+			Err()
 	}
 
 	// If `workflows.base_path` is a relative path, join it with `stacks.base_path`

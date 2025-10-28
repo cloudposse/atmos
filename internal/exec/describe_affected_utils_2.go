@@ -273,7 +273,11 @@ func isComponentFolderChanged(
 	case cfg.PackerComponentType:
 		componentPath = filepath.Join(atmosConfig.BasePath, atmosConfig.Components.Packer.BasePath, component)
 	default:
-		return false, fmt.Errorf("%w: %s", errUtils.ErrUnsupportedComponentType, componentType)
+		return false, errUtils.Build(errUtils.ErrUnsupportedComponentType).
+			WithExplanationf("Received component type: %s", componentType).
+			WithHint("Supported component types are: terraform, helmfile, packer").
+			WithExitCode(1).
+			Err()
 	}
 
 	componentPathAbs, err := filepath.Abs(componentPath)

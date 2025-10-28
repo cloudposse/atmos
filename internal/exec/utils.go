@@ -51,15 +51,24 @@ func ProcessComponentConfig(
 	var ok bool
 
 	if len(stack) == 0 {
-		return errors.New("stack must be provided and must not be empty")
+		return errUtils.Build(errUtils.ErrStackEmpty).
+			WithHint("Provide a stack name when calling this function").
+			WithExitCode(2).
+			Err()
 	}
 
 	if len(component) == 0 {
-		return errors.New("component must be provided and must not be empty")
+		return errUtils.Build(errUtils.ErrComponentEmpty).
+			WithHint("Provide a component name when calling this function").
+			WithExitCode(2).
+			Err()
 	}
 
 	if len(componentType) == 0 {
-		return errors.New("component type must be provided and must not be empty")
+		return errUtils.Build(errUtils.ErrComponentTypeEmpty).
+			WithHint("Provide a component type (terraform, helmfile, or packer)").
+			WithExitCode(2).
+			Err()
 	}
 
 	if stackSection, ok = stacksMap[stack].(map[string]any); !ok {
