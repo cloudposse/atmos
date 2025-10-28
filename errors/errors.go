@@ -466,6 +466,10 @@ var (
 	ErrAISessionManagerNotAvailable = errors.New("session manager not available")
 	ErrAISessionNameEmpty           = errors.New("session name cannot be empty")
 	ErrAISQLitePragmaFailed         = errors.New("failed to set SQLite pragma")
+	ErrAIAgentNil                   = errors.New("AI agent cannot be nil")
+	ErrAIAgentNameEmpty             = errors.New("AI agent name cannot be empty")
+	ErrAIAgentNotFound              = errors.New("AI agent not found")
+	ErrAIAgentAlreadyRegistered     = errors.New("AI agent already registered")
 
 	// Web search errors.
 	ErrWebSearchFailed      = errors.New("web search request failed")

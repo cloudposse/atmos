@@ -69,6 +69,10 @@ func (m *ChatModel) handleKeyMsg(msg tea.KeyMsg) tea.Cmd {
 		return m.handleProviderSelectKeys(msg)
 	}
 
+	if m.currentView == viewModeAgentSelect {
+		return m.handleAgentSelectKeys(msg)
+	}
+
 	// Handle chat view Enter key variants.
 	keyStr := msg.String()
 
@@ -131,6 +135,23 @@ func (m *ChatModel) handleKeyMsg(msg tea.KeyMsg) tea.Cmd {
 				if p.Name == currentProvider {
 					m.selectedProviderIdx = i
 					break
+				}
+			}
+		}
+		return func() tea.Msg { return nil }
+	case "ctrl+a":
+		// Open agent selection.
+		if m.agentRegistry != nil {
+			m.currentView = viewModeAgentSelect
+			m.selectedAgentIdx = 0
+			// Find current agent index in available agents.
+			availableAgents := m.agentRegistry.List()
+			if m.currentAgent != nil {
+				for i, agent := range availableAgents {
+					if agent.Name == m.currentAgent.Name {
+						m.selectedAgentIdx = i
+						break
+					}
 				}
 			}
 		}
@@ -428,6 +449,54 @@ func (m *ChatModel) handleProviderSelectKeys(msg tea.KeyMsg) tea.Cmd {
 			return m.switchProviderAsync(selectedProvider)
 		}
 		// Return to chat view if no provider selected.
+		m.currentView = viewModeChat
+		m.textarea.Focus()
+		return func() tea.Msg { return nil }
+	}
+
+	return func() tea.Msg { return nil }
+}
+
+// handleAgentSelectKeys processes keyboard input for the agent selection view.
+func (m *ChatModel) handleAgentSelectKeys(msg tea.KeyMsg) tea.Cmd {
+	// Get available agents.
+	availableAgents := m.agentRegistry.List()
+
+	switch msg.String() {
+	case "ctrl+c":
+		return tea.Quit
+	case "esc", "q":
+		// Return to chat view.
+		m.currentView = viewModeChat
+		m.textarea.Focus()
+		// Return empty command to consume the key event.
+		return func() tea.Msg { return nil }
+	case "up", "k":
+		// Move selection up with wraparound.
+		if m.selectedAgentIdx > 0 {
+			m.selectedAgentIdx--
+		} else if len(availableAgents) > 0 {
+			m.selectedAgentIdx = len(availableAgents) - 1
+		}
+		return func() tea.Msg { return nil }
+	case "down", "j":
+		// Move selection down with wraparound.
+		if m.selectedAgentIdx < len(availableAgents)-1 {
+			m.selectedAgentIdx++
+		} else if len(availableAgents) > 0 {
+			m.selectedAgentIdx = 0
+		}
+		return func() tea.Msg { return nil }
+	case "enter":
+		// Switch to selected agent.
+		if m.selectedAgentIdx < len(availableAgents) {
+			selectedAgent := availableAgents[m.selectedAgentIdx]
+			m.currentAgent = selectedAgent
+			// Add feedback message.
+			m.addMessage(roleSystem, fmt.Sprintf("Switched to agent: %s (%s)", selectedAgent.DisplayName, selectedAgent.Description))
+			m.updateViewportContent()
+		}
+		// Return to chat view.
 		m.currentView = viewModeChat
 		m.textarea.Focus()
 		return func() tea.Msg { return nil }

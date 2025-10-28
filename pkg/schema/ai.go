@@ -4,7 +4,9 @@ package schema
 type AISettings struct {
 	Enabled            bool                         `yaml:"enabled,omitempty" json:"enabled,omitempty" mapstructure:"enabled"`
 	DefaultProvider    string                       `yaml:"default_provider,omitempty" json:"default_provider,omitempty" mapstructure:"default_provider"` // Default provider for non-interactive commands
+	DefaultAgent       string                       `yaml:"default_agent,omitempty" json:"default_agent,omitempty" mapstructure:"default_agent"`          // Default agent (defaults to "general")
 	Providers          map[string]*AIProviderConfig `yaml:"providers,omitempty" json:"providers,omitempty" mapstructure:"providers"`                      // Per-provider configurations
+	Agents             map[string]*AIAgentConfig    `yaml:"agents,omitempty" json:"agents,omitempty" mapstructure:"agents"`                               // Custom agent configurations
 	SendContext        bool                         `yaml:"send_context,omitempty" json:"send_context,omitempty" mapstructure:"send_context"`
 	PromptOnSend       bool                         `yaml:"prompt_on_send,omitempty" json:"prompt_on_send,omitempty" mapstructure:"prompt_on_send"`
 	TimeoutSeconds     int                          `yaml:"timeout_seconds,omitempty" json:"timeout_seconds,omitempty" mapstructure:"timeout_seconds"`
@@ -64,4 +66,14 @@ type AIWebSearchSettings struct {
 	GoogleCSEID    string `yaml:"google_cse_id,omitempty" json:"google_cse_id,omitempty" mapstructure:"google_cse_id"`    // Google Custom Search Engine ID
 	MaxResults     int    `yaml:"max_results,omitempty" json:"max_results,omitempty" mapstructure:"max_results"`          // Maximum results to return
 	TimeoutSeconds int    `yaml:"timeout_seconds,omitempty" json:"timeout_seconds,omitempty" mapstructure:"timeout_seconds"`
+}
+
+// AIAgentConfig contains configuration for a custom AI agent.
+type AIAgentConfig struct {
+	DisplayName     string   `yaml:"display_name,omitempty" json:"display_name,omitempty" mapstructure:"display_name"`             // User-facing name
+	Description     string   `yaml:"description,omitempty" json:"description,omitempty" mapstructure:"description"`                // What this agent does
+	SystemPrompt    string   `yaml:"system_prompt,omitempty" json:"system_prompt,omitempty" mapstructure:"system_prompt"`          // Specialized instructions
+	AllowedTools    []string `yaml:"allowed_tools,omitempty" json:"allowed_tools,omitempty" mapstructure:"allowed_tools"`          // Tool names this agent can use (empty = all tools)
+	RestrictedTools []string `yaml:"restricted_tools,omitempty" json:"restricted_tools,omitempty" mapstructure:"restricted_tools"` // Tools requiring extra confirmation
+	Category        string   `yaml:"category,omitempty" json:"category,omitempty" mapstructure:"category"`                         // "analysis", "refactor", "security", etc.
 }

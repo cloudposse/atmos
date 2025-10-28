@@ -1,0 +1,692 @@
+---
+title: AI Agents
+sidebar_position: 6
+sidebar_label: Agents
+description: Specialized AI agents for different Atmos tasks
+id: agents
+---
+import Terminal from '@site/src/components/Terminal'
+import File from '@site/src/components/File'
+
+# AI Agents
+
+Atmos AI includes a powerful agent system that provides specialized AI assistants for different infrastructure tasks. Each agent has a customized system prompt and tool access tailored to its specific domain.
+
+## Overview
+
+Agents are specialized AI assistants that focus on specific aspects of infrastructure management. Instead of having one general-purpose AI, you can switch between agents optimized for:
+
+- **Stack Analysis** - Understanding configurations and dependencies
+- **Component Refactoring** - Improving Terraform/Helmfile code
+- **Security Auditing** - Finding security vulnerabilities
+- **Configuration Validation** - Ensuring YAML correctness
+- **General Operations** - All-purpose assistance
+
+### Why Use Agents?
+
+1. **Focused Expertise**: Each agent has specialized knowledge and instructions
+2. **Better Results**: Task-specific prompts produce more accurate outputs
+3. **Tool Safety**: Agents can restrict access to dangerous operations
+4. **Workflow Optimization**: Switch agents as you move through different phases of work
+
+## Built-in Agents
+
+Atmos AI ships with 5 pre-configured agents:
+
+### General Agent (Default)
+
+**Best for**: General-purpose questions and operations
+
+The default agent with full tool access. Use this for:
+- General questions about Atmos
+- Multi-step workflows that span different domains
+- Ad-hoc exploration and troubleshooting
+
+**Available Tools**: All tools (read, write, execute, Atmos commands)
+
+**Key Features**:
+- No tool restrictions
+- Balanced system prompt for general assistance
+- Good starting point for any task
+
+<Terminal title="atmos ai chat">
+```bash
+atmos ai chat
+
+# General agent is active by default
+You: "How do I structure a new component?"
+AI: [Provides comprehensive guidance with examples]
+```
+</Terminal>
+
+### Stack Analyzer Agent
+
+**Best for**: Understanding stack configurations, dependencies, and architecture
+
+Specialized in analyzing Atmos stack configurations. Use this for:
+- Understanding component relationships
+- Analyzing stack inheritance patterns
+- Reviewing architecture decisions
+- Identifying configuration issues
+
+**Available Tools**: Read-only Atmos commands (`describe_component`, `describe_affected`, `list_stacks`, `read_stack_file`, `get_template_context`)
+
+**Key Features**:
+- Systematic analysis approach
+- Focus on patterns and relationships
+- Clear, structured recommendations
+- Read-only to prevent accidental changes
+
+<Terminal title="atmos ai chat">
+```bash
+atmos ai chat
+
+# Switch to stack analyzer (Ctrl+A)
+You: "Analyze the inheritance chain for prod-use1-eks"
+AI: [Systematically examines imports, variables, and inheritance]
+
+Starting with high-level overview...
+1. Base configuration: catalog/eks/defaults.yaml
+2. Environment mixin: mixins/env/prod.yaml
+3. Region-specific: stacks/prod/use1/eks.yaml
+
+Let me examine each layer...
+[Detailed analysis with actionable recommendations]
+```
+</Terminal>
+
+### Component Refactor Agent
+
+**Best for**: Improving and modernizing Terraform/Helmfile components
+
+Specialized in code refactoring and best practices. Use this for:
+- Refactoring Terraform modules
+- Improving Helmfile configurations
+- Applying infrastructure-as-code best practices
+- Modernizing deprecated patterns
+
+**Available Tools**: File operations (`read_file`, `edit_file`, `list_component_files`, `search_files`, `execute_bash`)
+
+**Restricted Tools**: `edit_file` and `execute_bash` require confirmation before execution
+
+**Key Features**:
+- Incremental, safe refactoring approach
+- Applies DRY and best practices
+- Tests changes when possible
+- Detailed explanations for each change
+
+<Terminal title="atmos ai chat">
+```bash
+atmos ai chat
+
+# Switch to component refactor (Ctrl+A)
+You: "Refactor the VPC component to use consistent naming"
+AI: [Reads current code, identifies improvements]
+
+I've identified 3 refactoring opportunities:
+
+1. Variable naming consistency
+   - Current: vpc_id, vpcCIDR, vpc-name
+   - Proposed: vpc_id, vpc_cidr, vpc_name
+
+2. Resource organization
+   - Group related resources together
+   - Add clear section comments
+
+3. Local values for computed attributes
+   - Extract repeated expressions to locals
+
+Shall I proceed with these changes?
+[Waits for confirmation before editing]
+```
+</Terminal>
+
+### Security Auditor Agent
+
+**Best for**: Finding security vulnerabilities and enforcing best practices
+
+Specialized in security review and compliance. Use this for:
+- Identifying security vulnerabilities
+- Reviewing IAM policies and permissions
+- Checking network security configurations
+- Validating encryption and secrets management
+
+**Available Tools**: Read-only operations (`describe_component`, `list_stacks`, `read_stack_file`, `read_component_file`, `validate_stacks`, `read_file`, `search_files`)
+
+**Key Features**:
+- Categorizes findings by severity (Critical, High, Medium, Low)
+- Provides specific line numbers for issues
+- Explains security risks clearly
+- Recommends specific remediation steps
+
+<Terminal title="atmos ai chat">
+```bash
+atmos ai chat
+
+# Switch to security auditor (Ctrl+A)
+You: "Audit the prod stacks for security issues"
+AI: [Systematically scans configurations]
+
+# Security Audit Report
+
+## Critical Issues (2)
+
+### 1. Public S3 Bucket
+- **Location**: components/terraform/s3-bucket/main.tf:45
+- **Issue**: ACL set to "public-read"
+- **Risk**: Data exposure, unauthorized access
+- **Fix**: Change ACL to "private", use CloudFront for public access
+
+### 2. Overly Permissive IAM Policy
+- **Location**: stacks/catalog/iam/prod.yaml:23
+- **Issue**: Action: "s3:*" with Resource: "*"
+- **Risk**: Privilege escalation, data breach
+- **Fix**: Limit to specific actions and bucket ARNs
+
+[Continues with High, Medium, Low severity issues...]
+```
+</Terminal>
+
+### Config Validator Agent
+
+**Best for**: Ensuring YAML configurations are correct and complete
+
+Specialized in configuration validation and schema compliance. Use this for:
+- Validating YAML syntax and structure
+- Checking schema compliance
+- Verifying variable references
+- Detecting circular dependencies
+
+**Available Tools**: Validation commands (`validate_stacks`, `describe_config`, `read_stack_file`, `read_file`, `validate_file_lsp`)
+
+**Key Features**:
+- Comprehensive validation checks
+- Clear error messages with line numbers
+- Specific fix instructions
+- Examples of correct configuration
+
+<Terminal title="atmos ai chat">
+```bash
+atmos ai chat
+
+# Switch to config validator (Ctrl+A)
+You: "Validate all my stack configurations"
+AI: [Runs comprehensive validation]
+
+# Validation Report
+
+## YAML Syntax ✓
+All files have valid YAML structure.
+
+## Schema Compliance
+Found 3 issues:
+
+### 1. Missing Required Field
+- **File**: stacks/catalog/eks/defaults.yaml:15
+- **Issue**: Required field 'cluster_version' is missing
+- **Fix**: Add cluster_version under vars:
+  ```yaml
+  vars:
+    cluster_version: "1.28"
+  ```
+
+### 2. Invalid Import Path
+- **File**: stacks/deploy/prod.yaml:3
+- **Issue**: Import path "mixins/prod" does not exist
+- **Fix**: Change to "mixins/env/prod"
+
+[Continues with detailed validation results...]
+```
+</Terminal>
+
+## Using Agents
+
+### Switching Agents in TUI
+
+Press **Ctrl+A** in the chat interface to open the agent selector:
+
+```
+╭─ Switch AI Agent ───────────────────────────────────╮
+│                                                     │
+│ ↑/↓: Navigate | Enter: Select | Esc/q: Cancel      │
+│                                                     │
+│ ▶ General (current) [built-in]                     │
+│     General-purpose assistant for all operations   │
+│                                                     │
+│   Stack Analyzer [built-in]                        │
+│     Analyze stack configurations and dependencies  │
+│                                                     │
+│   Component Refactor [built-in]                    │
+│     Refactor Terraform/Helmfile components         │
+│                                                     │
+│   Security Auditor [built-in]                      │
+│     Security review of infrastructure configs      │
+│                                                     │
+│   Config Validator [built-in]                      │
+│     Validate Atmos configuration files             │
+│                                                     │
+╰─────────────────────────────────────────────────────╯
+```
+
+Use **↑/↓** or **j/k** to navigate, **Enter** to select, **Esc** or **q** to cancel.
+
+### Setting Default Agent
+
+Configure the default agent in `atmos.yaml`:
+
+<File title="atmos.yaml">
+```yaml
+settings:
+  ai:
+    default_provider: anthropic
+    default_agent: stack-analyzer  # Start with stack analyzer
+
+    providers:
+      anthropic:
+        model: claude-sonnet-4-5
+```
+</File>
+
+Now `atmos ai chat` will start with the Stack Analyzer agent by default.
+
+## Custom Agents
+
+Create your own specialized agents by adding them to `atmos.yaml`:
+
+### Example: Cost Optimization Agent
+
+<File title="atmos.yaml">
+```yaml
+settings:
+  ai:
+    agents:
+      cost-optimizer:
+        display_name: "Cost Optimizer"
+        description: "Analyzes infrastructure for cost savings opportunities"
+        category: "analysis"
+
+        system_prompt: |
+          You are a cost optimization expert for Atmos infrastructure.
+
+          FOCUS AREAS:
+          - Identify overprovisioned resources
+          - Suggest rightsizing opportunities
+          - Find unused or idle resources
+          - Recommend reserved instances
+          - Analyze data transfer costs
+
+          ANALYSIS APPROACH:
+          1. Examine component configurations
+          2. Identify cost optimization opportunities
+          3. Estimate potential savings
+          4. Prioritize recommendations by impact
+          5. Provide specific implementation steps
+
+          Always use tools to gather data before making recommendations.
+
+        allowed_tools:
+          - atmos_describe_component
+          - atmos_describe_stacks
+          - atmos_list_stacks
+          - read_stack_file
+          - read_component_file
+          - read_file
+          - search_files
+
+        restricted_tools: []
+```
+</File>
+
+Now the Cost Optimizer agent appears in your agent selector (Ctrl+A).
+
+### Example: Compliance Auditor
+
+<File title="atmos.yaml">
+```yaml
+settings:
+  ai:
+    agents:
+      compliance-auditor:
+        display_name: "Compliance Auditor"
+        description: "Ensures infrastructure meets regulatory requirements"
+        category: "security"
+
+        system_prompt: |
+          You are a compliance expert for regulated industries (HIPAA, SOC2, PCI-DSS).
+
+          COMPLIANCE CHECKS:
+          - Data encryption (at rest and in transit)
+          - Audit logging and monitoring
+          - Access controls and authentication
+          - Data residency requirements
+          - Backup and disaster recovery
+
+          REPORTING:
+          - Categorize by compliance framework
+          - Cite specific requirements (e.g., "HIPAA 164.312(a)(2)(iv)")
+          - Mark findings as Pass/Fail/Partial
+          - Provide remediation with compliance rationale
+
+          Use tools to scan configurations systematically.
+
+        allowed_tools:
+          - atmos_describe_component
+          - atmos_list_stacks
+          - atmos_validate_stacks
+          - read_stack_file
+          - read_component_file
+          - read_file
+          - search_files
+```
+</File>
+
+### Example: Terraform Migrator (Restricted Tools)
+
+<File title="atmos.yaml">
+```yaml
+settings:
+  ai:
+    agents:
+      terraform-migrator:
+        display_name: "Terraform Migrator"
+        description: "Migrates components to newer Terraform/provider versions"
+        category: "refactor"
+
+        system_prompt: |
+          You are an expert in Terraform version migrations.
+
+          MIGRATION FOCUS:
+          - Upgrade deprecated syntax
+          - Update provider constraints
+          - Modernize resource configurations
+          - Handle state file compatibility
+
+          SAFETY:
+          - Always explain changes before making them
+          - Test syntax with terraform validate
+          - Preserve existing functionality
+          - Document breaking changes
+
+          Make incremental changes and verify at each step.
+
+        allowed_tools:
+          - read_file
+          - edit_file
+          - list_component_files
+          - read_component_file
+          - search_files
+          - execute_bash
+
+        restricted_tools:
+          - edit_file       # Require confirmation before editing
+          - execute_bash    # Require confirmation before executing
+```
+</File>
+
+## Agent Configuration Reference
+
+### Agent Schema
+
+```yaml
+agents:
+  <agent-name>:
+    display_name: string      # User-facing name (required)
+    description: string       # What this agent does (required)
+    system_prompt: string     # Specialized instructions (required)
+    allowed_tools: []         # Tool names (empty = all tools)
+    restricted_tools: []      # Tools requiring confirmation
+    category: string          # "analysis", "refactor", "security", etc.
+```
+
+### Available Tools
+
+**Atmos Commands**:
+- `atmos_describe_component` - Get component configuration
+- `atmos_describe_affected` - See impact analysis
+- `atmos_describe_stacks` - List and describe all stacks
+- `atmos_describe_config` - Show Atmos configuration
+- `atmos_list_stacks` - List available stacks
+- `atmos_list_components` - List available components
+- `atmos_validate_stacks` - Validate stack configurations
+- `atmos_get_template_context` - Get template variable context
+
+**File Operations**:
+- `read_file` - Read any file
+- `edit_file` - Edit file content
+- `write_file` - Create new files
+- `read_stack_file` - Read stack YAML files
+- `read_component_file` - Read component files
+- `list_component_files` - List files in component directory
+- `search_files` - Search for content across files
+
+**Execution**:
+- `execute_bash` - Execute shell commands
+- `execute_atmos_command` - Execute Atmos commands
+
+**Validation**:
+- `validate_file_lsp` - Validate files using LSP (if enabled)
+
+### Tool Safety
+
+**Allowed Tools** (empty = all):
+```yaml
+allowed_tools: []  # Agent can use any tool
+```
+
+**Restricted Tools** (require confirmation):
+```yaml
+allowed_tools:
+  - read_file
+  - edit_file
+restricted_tools:
+  - edit_file  # User must confirm before agent can edit files
+```
+
+**Read-Only Agent**:
+```yaml
+allowed_tools:
+  - atmos_describe_component
+  - atmos_list_stacks
+  - read_file
+  - search_files
+# No write/execute tools = read-only
+```
+
+## Best Practices
+
+### 1. Use the Right Agent for the Task
+
+Don't use the general agent for everything:
+
+❌ **Wrong**:
+```bash
+atmos ai chat
+You: "Audit my infrastructure for security issues"
+# General agent lacks security expertise
+```
+
+✅ **Right**:
+```bash
+atmos ai chat
+# Press Ctrl+A, select "Security Auditor"
+You: "Audit my infrastructure for security issues"
+# Security Auditor provides comprehensive security analysis
+```
+
+### 2. Switch Agents as Your Work Progresses
+
+Different phases need different agents:
+
+```bash
+# Phase 1: Understanding (Stack Analyzer)
+Ctrl+A → Stack Analyzer
+"Explain the prod-use1-eks configuration"
+
+# Phase 2: Improvement (Component Refactor)
+Ctrl+A → Component Refactor
+"Refactor the EKS component to use module v5"
+
+# Phase 3: Validation (Config Validator)
+Ctrl+A → Config Validator
+"Validate all my changes"
+
+# Phase 4: Security Review (Security Auditor)
+Ctrl+A → Security Auditor
+"Check for any security issues introduced"
+```
+
+### 3. Create Domain-Specific Agents
+
+For specialized workflows, create custom agents:
+
+**Multi-Region Deployment Agent**:
+```yaml
+agents:
+  multi-region:
+    display_name: "Multi-Region Deployer"
+    description: "Handles multi-region deployment workflows"
+    system_prompt: |
+      You specialize in multi-region deployments.
+
+      ALWAYS consider:
+      - Regional resource naming
+      - Cross-region dependencies
+      - Data replication
+      - Failover configurations
+
+      When deploying to multiple regions, ensure consistency.
+```
+
+**Migration Agent**:
+```yaml
+agents:
+  migrator:
+    display_name: "Infrastructure Migrator"
+    description: "Migrates infrastructure between accounts/regions"
+    system_prompt: |
+      You specialize in infrastructure migrations.
+
+      MIGRATION CHECKLIST:
+      - Verify state file location
+      - Check cross-account permissions
+      - Plan for DNS cutover
+      - Test rollback procedures
+
+      Always provide step-by-step migration plans.
+```
+
+### 4. Restrict Dangerous Operations
+
+For sensitive environments, restrict write access:
+
+```yaml
+agents:
+  prod-analyzer:
+    display_name: "Production Analyzer"
+    description: "Read-only analysis of production infrastructure"
+    allowed_tools:
+      # Only read operations
+      - atmos_describe_component
+      - atmos_describe_stacks
+      - atmos_list_stacks
+      - read_file
+      - read_stack_file
+      - search_files
+      # No edit_file, write_file, or execute_bash
+```
+
+### 5. Document Custom Agent Purpose
+
+Add clear descriptions so team members know when to use each agent:
+
+```yaml
+agents:
+  disaster-recovery:
+    display_name: "Disaster Recovery Planner"
+    description: "Creates and reviews DR plans for infrastructure. Use for: backup configs, failover testing, RTO/RPO analysis."
+    # Clear description tells users exactly when to use this agent
+```
+
+## Comparison with Claude Code Subagents
+
+Atmos has two types of agents serving different purposes:
+
+| Feature | Built-in Agents (this page) | [Claude Code Integration](/ai/claude-code-integration) |
+|---------|---------------------------|--------------------------|
+| **Location** | Inside Atmos AI | External (IDE) |
+| **Activation** | Ctrl+A in `atmos ai chat` | `@atmos-expert` in IDE |
+| **Purpose** | Task specialization | Development integration |
+| **Tool Access** | Direct Atmos tools | Via MCP protocol |
+| **Configuration** | `atmos.yaml` agents section | `.claude/agents/*.md` |
+| **Use Case** | Operations workflows | Code development |
+
+**Use Built-in Agents when**:
+- Working in terminal/CLI
+- Need task-specific AI behavior
+- Want tool access control
+- Performing operations tasks
+
+**Use Claude Code Integration when**:
+- Working in IDE
+- Writing/editing code
+- Need IDE integration
+- Performing development tasks
+
+Both systems can work together! Use built-in agents for infrastructure analysis in the terminal, and Claude Code subagents for code development in your IDE.
+
+## Related Documentation
+
+- [AI Chat Command](/cli/commands/ai/chat) - Interactive AI chat interface
+- [AI Ask Command](/cli/commands/ai/ask) - One-off AI questions
+- [AI Configuration](/ai/configuration) - Configure AI providers and settings
+- [Claude Code Integration](/ai/claude-code-integration) - Use Atmos with Claude Code IDE
+- [Tool Execution](/ai/tools) - How AI agents use tools
+
+## Troubleshooting
+
+### Agent Not Available
+
+**Check configuration**:
+
+<Terminal title="terminal">
+```bash
+atmos describe config | grep -A 20 "ai:"
+```
+</Terminal>
+
+Ensure your custom agent is properly defined in `atmos.yaml`.
+
+### Agent Not Using Specialized Prompt
+
+**Verify agent is active**:
+
+When you switch agents, you should see:
+```
+System: Switched to agent: Stack Analyzer (Analyze stack configurations and dependencies)
+```
+
+If you don't see this message, the agent switch didn't work. Press Ctrl+A again and ensure you press Enter on the desired agent.
+
+### Custom Agent Tools Not Working
+
+**Check tool names**:
+
+Tool names must match exactly:
+- ✅ `atmos_describe_component`
+- ❌ `describe_component` (missing prefix)
+- ❌ `atmos-describe-component` (wrong separator)
+
+**Verify tool exists**:
+
+<Terminal title="terminal">
+```bash
+# In chat, ask:
+"What tools do you have access to?"
+
+# Agent will list available tools
+```
+</Terminal>
+
+### Restricted Tools Not Asking for Confirmation
+
+This is expected behavior in the current implementation. The `restricted_tools` field is defined in the schema but confirmation prompts will be added in a future release. For now, use `allowed_tools` to completely block access to dangerous operations.

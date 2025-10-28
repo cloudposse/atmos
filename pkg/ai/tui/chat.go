@@ -17,6 +17,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/ai"
+	"github.com/cloudposse/atmos/pkg/ai/agents"
 	"github.com/cloudposse/atmos/pkg/ai/memory"
 	"github.com/cloudposse/atmos/pkg/ai/session"
 	"github.com/cloudposse/atmos/pkg/ai/tools"
@@ -64,6 +65,7 @@ const (
 	viewModeSessionList
 	viewModeCreateSession
 	viewModeProviderSelect
+	viewModeAgentSelect
 )
 
 // ChatModel represents the state of the chat TUI.
@@ -106,6 +108,10 @@ type ChatModel struct {
 	lastUsage            *aiTypes.Usage        // Usage from the last AI response
 	maxHistoryMessages   int                   // Maximum conversation messages to keep in history (0 = unlimited)
 	maxHistoryTokens     int                   // Maximum tokens in conversation history (0 = unlimited)
+	agentRegistry        *agents.Registry      // Registry of available agents
+	currentAgent         *agents.Agent         // Currently active agent
+	agentSelectMode      bool                  // Whether we're in agent selection mode
+	selectedAgentIdx     int                   // Selected agent index in agent selection UI
 }
 
 // ChatMessage represents a single message in the chat.
@@ -159,6 +165,20 @@ func NewChatModel(client ai.Client, atmosConfig *schema.AtmosConfiguration, mana
 		maxHistoryTokens = atmosConfig.Settings.AI.MaxHistoryTokens
 	}
 
+	// Load agent registry and set default agent.
+	agentRegistry, err := agents.LoadAgents(atmosConfig)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load agents: %w", err)
+	}
+
+	defaultAgentName := agents.GetDefaultAgent(atmosConfig)
+	currentAgent, err := agentRegistry.Get(defaultAgentName)
+	if err != nil {
+		// Fall back to general agent if default not found.
+		log.Debug(fmt.Sprintf("Default agent %q not found, falling back to general: %v", defaultAgentName, err))
+		currentAgent, _ = agentRegistry.Get(agents.GeneralAgent)
+	}
+
 	model := &ChatModel{
 		client:               client,
 		atmosConfig:          atmosConfig,
@@ -181,6 +201,8 @@ func NewChatModel(client ai.Client, atmosConfig *schema.AtmosConfiguration, mana
 		renderedMessages:     make([]string, 0),
 		maxHistoryMessages:   maxHistoryMessages,
 		maxHistoryTokens:     maxHistoryTokens,
+		agentRegistry:        agentRegistry,
+		currentAgent:         currentAgent,
 	}
 
 	// Load existing messages from session if available.
@@ -631,6 +653,8 @@ func (m *ChatModel) View() string {
 		return m.createSessionView()
 	case viewModeProviderSelect:
 		return m.providerSelectView()
+	case viewModeAgentSelect:
+		return m.agentSelectView()
 	default:
 		return fmt.Sprintf("%s\n%s\n%s", m.headerView(), m.viewport.View(), m.footerView())
 	}
@@ -692,7 +716,7 @@ func (m *ChatModel) footerView() string {
 			Foreground(lipgloss.Color("240")).
 			Italic(true)
 
-		help := helpStyle.Render("Enter: Send | Ctrl+J: Newline | Ctrl+L: Sessions | Ctrl+N: New | Ctrl+P: Provider | Alt+Drag: Select Text | Ctrl+C: Quit")
+		help := helpStyle.Render("Enter: Send | Ctrl+J: Newline | Ctrl+L: Sessions | Ctrl+N: New | Ctrl+P: Provider | Ctrl+A: Agent | Alt+Drag: Select Text | Ctrl+C: Quit")
 		content = fmt.Sprintf("%s\n%s", m.textarea.View(), help)
 	}
 
@@ -1179,7 +1203,7 @@ func (m *ChatModel) getAIResponseWithContext(userMessage string, ctx context.Con
 
 		// Use tool calling if tools are available.
 		if len(availableTools) > 0 {
-			// Add system prompt instructing the AI to use tools for actions.
+			// Get system prompt from current agent, or use default if no agent is set.
 			systemPrompt := `You are an AI assistant for Atmos infrastructure management. You have access to tools that allow you to perform actions.
 
 IMPORTANT: When you need to perform an action (read files, edit files, search, execute commands, etc.), you MUST use the available tools. Do NOT just describe what you would do - actually use the tools to do it.
@@ -1191,6 +1215,10 @@ For example:
 - If you need to execute an Atmos command, use the execute_atmos_command tool immediately
 
 Always take action using tools rather than describing what action you would take.`
+
+			if m.currentAgent != nil && m.currentAgent.SystemPrompt != "" {
+				systemPrompt = m.currentAgent.SystemPrompt
+			}
 
 			// Prepend system prompt.
 			messages = append([]aiTypes.Message{{
@@ -2004,6 +2032,74 @@ func (m *ChatModel) providerSelectView() string {
 			line = currentStyle.Render(providerInfo)
 		} else {
 			line = normalStyle.Render(providerInfo)
+		}
+
+		content.WriteString(line)
+		content.WriteString(doubleNewline)
+	}
+
+	return content.String()
+}
+
+// agentSelectView renders the agent selection interface.
+func (m *ChatModel) agentSelectView() string {
+	var content strings.Builder
+
+	// Title
+	titleStyle := lipgloss.NewStyle().
+		Bold(true).
+		Foreground(lipgloss.Color(theme.ColorCyan)).
+		MarginBottom(1)
+	content.WriteString(titleStyle.Render("Switch AI Agent"))
+	content.WriteString(newlineChar)
+
+	// Help text
+	helpStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color(theme.ColorGray)).
+		Margin(0, 0, 1, 0)
+	content.WriteString(helpStyle.Render("↑/↓: Navigate | Enter: Select | Esc/q: Cancel"))
+	content.WriteString(doubleNewline)
+
+	// Current agent indicator
+	currentAgentName := ""
+	if m.currentAgent != nil {
+		currentAgentName = m.currentAgent.Name
+	}
+
+	// Agent list
+	selectedStyle := lipgloss.NewStyle().
+		Bold(true).
+		Foreground(lipgloss.Color(theme.ColorCyan)).
+		Background(lipgloss.Color(theme.ColorGray))
+	normalStyle := lipgloss.NewStyle()
+	currentStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color(theme.ColorGreen))
+
+	// Get all available agents
+	availableAgents := m.agentRegistry.List()
+
+	for i, agent := range availableAgents {
+		var line string
+		prefix := "  "
+		if i == m.selectedAgentIdx {
+			prefix = "▶ "
+		}
+
+		agentInfo := fmt.Sprintf("%s%s", prefix, agent.DisplayName)
+		if agent.Name == currentAgentName {
+			agentInfo += " (current)"
+		}
+		if agent.IsBuiltIn {
+			agentInfo += " [built-in]"
+		}
+		agentInfo += fmt.Sprintf("\n    %s", agent.Description)
+
+		if i == m.selectedAgentIdx {
+			line = selectedStyle.Render(agentInfo)
+		} else if agent.Name == currentAgentName {
+			line = currentStyle.Render(agentInfo)
+		} else {
+			line = normalStyle.Render(agentInfo)
 		}
 
 		content.WriteString(line)
