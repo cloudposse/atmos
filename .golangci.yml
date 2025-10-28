@@ -70,6 +70,8 @@ linters:
       forbid:
         - pattern: os\.Getenv
           msg: Use `viper.BindEnv` for new environment variables instead of `os.Getenv`
+        - pattern: os\.UserHomeDir
+          msg: Use `homedir.Dir()` from `github.com/cloudposse/atmos/pkg/config/homedir` instead of `os.UserHomeDir()` for better cross-platform support, caching, and OS-specific methods
         - pattern: '\.(Skip|SkipNow)\('
           msg: Use `t.Skipf("<reason>")` with a descriptive reason; do not use `t.Skip`/`t.SkipNow`
         - pattern: ^path\.Join$
