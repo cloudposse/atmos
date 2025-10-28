@@ -13,6 +13,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/auth/types"
 	"github.com/cloudposse/atmos/pkg/auth/validation"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/config/homedir"
 	"github.com/cloudposse/atmos/pkg/devcontainer"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -96,7 +97,7 @@ func addCredentialMounts(config *devcontainer.Config, paths []types.Path) error 
 		}
 
 		// Translate host path to container path.
-		userHome, _ := os.UserHomeDir()
+		userHome, _ := homedir.Dir()
 		containerMountPath := translatePath(credPath.Location, hostPath, containerPath, userHome)
 
 		// Check metadata for hints.

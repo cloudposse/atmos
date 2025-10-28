@@ -21,6 +21,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	awsCloud "github.com/cloudposse/atmos/pkg/auth/cloud/aws"
 	"github.com/cloudposse/atmos/pkg/auth/types"
+	"github.com/cloudposse/atmos/pkg/config/homedir"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -443,7 +444,7 @@ func (p *samlProvider) PrepareEnvironment(_ context.Context, environ map[string]
 // playwrightDriversInstalled checks if valid Playwright drivers are installed in standard locations.
 // Returns true if drivers are found, false if not found or home directory cannot be determined.
 func (p *samlProvider) playwrightDriversInstalled() bool {
-	homeDir, err := os.UserHomeDir()
+	homeDir, err := homedir.Dir()
 	if err != nil {
 		log.Debug("Cannot determine home directory for driver detection", "error", err)
 		return false
