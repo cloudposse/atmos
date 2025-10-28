@@ -205,13 +205,28 @@ See [AI Providers](/ai/providers) for complete provider documentation.
 
 ### Rate Limiting Errors
 
-**Problem**: Too many API requests.
+**Problem**: Too many API requests or "429 Too Many Requests" errors.
+
+**Common Causes**:
+- Long conversations sending full message history with each request
+- Multi-turn tool execution making multiple API calls
+- Exceeding provider's tokens-per-minute limits
 
 **Solutions**:
 
-1. **Wait and retry**: Rate limits typically reset after a short period
-2. **Check usage**: Review your API usage in the provider dashboard
-3. **Upgrade plan**: Consider upgrading if you consistently hit limits
+1. **Limit conversation history** (recommended):
+```yaml
+settings:
+  ai:
+    max_history_messages: 20  # Keep only last 20 messages
+```
+This prevents sending excessive conversation history to the API, which is the most common cause of rate limits in long conversations.
+
+2. **Wait and retry**: Rate limits typically reset after a short period (usually 1 minute)
+
+3. **Check usage**: Review your API usage in the provider dashboard
+
+4. **Upgrade plan**: Consider upgrading if you consistently hit limits even with history limiting
 
 ## Provider-Specific Issues
 
@@ -1305,7 +1320,14 @@ providers:
     max_tokens: 1024  # Smaller responses = faster
 ```
 
-4. **Check network connection**:
+4. **Limit conversation history** (for long conversations):
+```yaml
+settings:
+  ai:
+    max_history_messages: 20  # Reduce tokens sent in each request
+```
+
+5. **Check network connection**:
 <Terminal title="shell">
 ```bash
 # Test latency to provider

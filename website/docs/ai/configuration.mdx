@@ -157,6 +157,7 @@ settings:
     timeout_seconds: 60                   # Request timeout in seconds (default: 60)
     max_context_files: 10                 # Maximum stack files to send (default: 10)
     max_context_lines: 500                # Maximum lines per file (default: 500)
+    max_history_messages: 20              # Maximum conversation messages to keep (default: 0 = unlimited)
 ```
 </File>
 
@@ -552,6 +553,9 @@ Setting `max_tokens` higher than the model's limit will be automatically capped 
 
   <dt>`prompt_on_send`</dt>
   <dd>Prompt user for consent before sending context, even when `send_context` is `true` (default: `true`)</dd>
+
+  <dt>`max_history_messages`</dt>
+  <dd>Maximum conversation messages to keep in history (default: `0` = unlimited). Use this to prevent rate limiting and reduce token usage in long conversations. Only the most recent N messages are sent to the AI.</dd>
 </dl>
 
 ## Session Management
@@ -644,6 +648,66 @@ The database includes three tables:
 ### Privacy Note
 
 Sessions are stored **locally on your machine**. No session data is sent to AI providers except during active conversations.
+
+## Conversation History Management
+
+Control how much conversation history is sent to AI providers with each request. This helps manage costs and prevent rate limiting in long conversations.
+
+### Sliding Window Configuration
+
+By default, Atmos sends the **full conversation history** to the AI with each request. For long conversations, this can lead to:
+- **Rate limiting**: Exceeding tokens-per-minute limits
+- **Higher costs**: More tokens = higher API charges
+- **Slower responses**: More data to process
+
+Use `max_history_messages` to keep only the most recent N messages:
+
+<File title="atmos.yaml">
+```yaml
+settings:
+  ai:
+    enabled: true
+    default_provider: "anthropic"
+    max_history_messages: 20  # Keep only last 20 messages
+
+    providers:
+      anthropic:
+        model: "claude-sonnet-4-20250514"
+        api_key_env: "ANTHROPIC_API_KEY"
+```
+</File>
+
+### How It Works
+
+When `max_history_messages` is set:
+
+1. **Provider filtering applied first**: Only messages from the current provider session are included
+2. **Sliding window applied**: If history exceeds the limit, only the most recent N messages are kept
+3. **System messages excluded**: UI notifications don't count toward the limit
+4. **Current message added**: Your new message is always included (not counted in the limit)
+
+**Example**: With `max_history_messages: 4` and 6 historical messages:
+- **Before**: Message 1, Response 1, Message 2, Response 2, Message 3, Response 3
+- **After**: Message 2, Response 2, Message 3, Response 3 (oldest 2 messages pruned)
+- **Sent to API**: Message 2, Response 2, Message 3, Response 3, + New Message = 5 total
+
+### Recommendations
+
+| Use Case | Recommended Value | Reason |
+|----------|------------------|---------|
+| Short questions | 0 (unlimited) | No need to limit, conversations are brief |
+| Long conversations | 20-30 | Balance between context and cost |
+| Complex analysis | 40-50 | More context for intricate discussions |
+| Cost optimization | 10-20 | Minimize token usage |
+| Rate limit issues | 10-20 | Prevent hitting provider limits |
+
+:::tip
+Set to `0` (or omit) for **unlimited history** (default behavior). This works well for most conversations but may cause rate limiting in extended sessions.
+:::
+
+:::warning
+Setting too low (e.g., 4-6 messages) may cause the AI to lose important context from earlier in the conversation. Start with 20-30 for a good balance.
+:::
 
 ## Tool Execution
 
@@ -1125,6 +1189,7 @@ settings:
 | `timeout_seconds` | 60 | Maximum time to wait for AI response |
 | `max_context_files` | 10 | Maximum number of stack files to send |
 | `max_context_lines` | 500 | Maximum lines per file to include |
+| `max_history_messages` | 0 (unlimited) | Maximum conversation messages to keep in history |
 
 ### Recommendations
 
@@ -1132,6 +1197,7 @@ settings:
 - **For slow connections**: Increase `timeout_seconds` to 120 or more
 - **For faster responses**: Reduce context limits to 5 files and 250 lines
 - **For cost optimization**: Lower context limits to reduce token usage
+- **For long conversations**: Set `max_history_messages` to 20-50 to prevent rate limiting and reduce costs
 
 ## Security Best Practices
 
