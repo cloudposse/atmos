@@ -589,4 +589,5 @@ jobs:
     with:
       publish: false
       format: binary
+      runs-on: '["runs-on=${{github.run_id}}", "runner=large", "tag=atmos","extras=s3-cache", "private=false"]'
     secrets: inherit

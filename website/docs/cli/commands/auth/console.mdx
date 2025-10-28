@@ -168,10 +168,14 @@ atmos auth console --destination iam
     The requested duration for the console session. Providers may enforce maximum limits.
 
     **AWS:** Maximum 12 hours
-    **Default:** 1 hour
+
+    **Default:** 1 hour, or the provider's `console.session_duration` configuration
+
     **Format:** Go duration (e.g., `1h`, `2h30m`, `12h`)
 
     **Example:** `--duration 4h`
+
+    **Note:** This flag overrides the provider's `console.session_duration` setting when specified.
   </dd>
 
   <dt>`--issuer`</dt>
@@ -285,6 +289,52 @@ atmos auth console --print-only | xclip   # Linux
 **Problem**: The authenticated identity's provider doesn't support console access yet.
 
 **Solution**: Check the Provider Support table above. Azure and GCP support is coming soon.
+
+## Configuration
+
+You can configure default console session duration for providers in your `atmos.yaml`:
+
+```yaml
+auth:
+  providers:
+    aws-sso:
+      kind: aws/iam-identity-center
+      region: us-east-1
+      start_url: https://mycompany.awsapps.com/start
+
+      # Session duration for programmatic credentials (auth shell, auth env)
+      session:
+        duration: 1h
+
+      # Console session duration for web browser access (auth console)
+      console:
+        session_duration: 12h  # Maximum for AWS
+```
+
+### Configuration Options
+
+<dl>
+  <dt>`console.session_duration`</dt>
+  <dd>
+    Default session duration for web console access when using this provider.
+
+    **Format:** Go duration string (e.g., `1h`, `4h`, `12h`)
+
+    **AWS Maximum:** 12 hours
+
+    **Default:** 1 hour if not specified
+
+    **Override:** Use the `--duration` flag to override this setting per command
+  </dd>
+</dl>
+
+### Session Duration vs Signin Token Expiration
+
+It's important to understand the difference between two types of timeouts:
+
+1. **Signin Token Expiration (15 minutes, AWS-enforced)**: After generating a console URL, you have 15 minutes to click the link before it expires. This cannot be configured.
+
+2. **Console Session Duration (configurable up to 12 hours)**: Once you're logged into the console, this controls how long you stay authenticated before being logged out. This is configured via `console.session_duration` or the `--duration` flag.
 
 ## Related Commands
 
