@@ -5,9 +5,11 @@ import (
 	"errors"
 	"testing"
 
+	charm "github.com/charmbracelet/log"
 	"github.com/stretchr/testify/assert"
 
 	"github.com/cloudposse/atmos/pkg/auth/types"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -16,6 +18,7 @@ type stubAuthManager struct {
 	defaultIdentity string
 	defaultErr      error
 	whoami          *types.WhoamiInfo
+	envVars         map[string]string // Environment variables to return from GetEnvironmentVariables
 }
 
 func (s *stubAuthManager) Authenticate(ctx context.Context, identityName string) (*types.WhoamiInfo, error) {
@@ -66,29 +69,138 @@ func (s *stubAuthManager) LogoutAll(ctx context.Context) error {
 }
 
 func (s *stubAuthManager) GetEnvironmentVariables(identityName string) (map[string]string, error) {
+	if s.envVars != nil {
+		return s.envVars, nil
+	}
 	return make(map[string]string), nil
 }
 
 func TestGetConfigLogLevels(t *testing.T) {
-	// Nil config falls back to Info.
-	atmos, auth := getConfigLogLevels(nil)
-	assert.Equal(t, "info", atmos.String())
-	assert.Equal(t, "info", auth.String())
+	tests := []struct {
+		name             string
+		atmosLogLevel    string
+		authLogLevel     string
+		setupGlobalLevel charm.Level // Set global log level before calling getConfigLogLevels
+		expectedAtmosStr string
+		expectedAuthStr  string
+	}{
+		{
+			name:             "nil config falls back to Info",
+			setupGlobalLevel: charm.InfoLevel,
+			expectedAtmosStr: "info",
+			expectedAuthStr:  "info",
+		},
+		{
+			name:             "empty config falls back to current global level",
+			setupGlobalLevel: charm.WarnLevel,
+			atmosLogLevel:    "",
+			authLogLevel:     "",
+			expectedAtmosStr: "warn",
+			expectedAuthStr:  "warn",
+		},
+		{
+			name:             "exact case Debug",
+			setupGlobalLevel: charm.DebugLevel,
+			atmosLogLevel:    "Debug",
+			authLogLevel:     "",
+			expectedAtmosStr: "debug",
+			expectedAuthStr:  "debug",
+		},
+		{
+			name:             "lowercase warning",
+			setupGlobalLevel: charm.WarnLevel,
+			atmosLogLevel:    "Warning",
+			authLogLevel:     "warning",
+			expectedAtmosStr: "warn",
+			expectedAuthStr:  "warn",
+		},
+		{
+			name:             "uppercase WARN",
+			setupGlobalLevel: charm.WarnLevel,
+			atmosLogLevel:    "Warning",
+			authLogLevel:     "WARN",
+			expectedAtmosStr: "warn",
+			expectedAuthStr:  "warn",
+		},
+		{
+			name:             "mixed case WaRnInG",
+			setupGlobalLevel: charm.WarnLevel,
+			atmosLogLevel:    "Warning",
+			authLogLevel:     "WaRnInG",
+			expectedAtmosStr: "warn",
+			expectedAuthStr:  "warn",
+		},
+		{
+			name:             "warn alias",
+			setupGlobalLevel: charm.WarnLevel,
+			atmosLogLevel:    "Warning",
+			authLogLevel:     "warn",
+			expectedAtmosStr: "warn",
+			expectedAuthStr:  "warn",
+		},
+		{
+			name:             "auth overrides atmos level",
+			setupGlobalLevel: charm.DebugLevel,
+			atmosLogLevel:    "Debug",
+			authLogLevel:     "Error",
+			expectedAtmosStr: "debug",
+			expectedAuthStr:  "error",
+		},
+		{
+			name:             "trace level",
+			setupGlobalLevel: log.TraceLevel,
+			atmosLogLevel:    "Trace",
+			authLogLevel:     "trace",
+			expectedAtmosStr: "trace",
+			expectedAuthStr:  "trace",
+		},
+		{
+			name:             "off level",
+			setupGlobalLevel: charm.FatalLevel,
+			atmosLogLevel:    "Off",
+			authLogLevel:     "Off",
+			expectedAtmosStr: "fatal",
+			expectedAuthStr:  "fatal",
+		},
+		{
+			name:             "invalid auth level falls back to atmos level",
+			setupGlobalLevel: charm.WarnLevel,
+			atmosLogLevel:    "Warning",
+			authLogLevel:     "InvalidLevel",
+			expectedAtmosStr: "warn",
+			expectedAuthStr:  "warn", // Falls back to atmos level
+		},
+	}
 
-	cfg := &schema.AtmosConfiguration{}
-	atmos, auth = getConfigLogLevels(cfg)
-	assert.Equal(t, "info", atmos.String())
-	assert.Equal(t, "info", auth.String())
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Set up global log level to simulate what setupLogger() does.
+			log.SetLevel(tt.setupGlobalLevel)
 
-	cfg.Logs.Level = "Debug"
-	atmos, auth = getConfigLogLevels(cfg)
-	assert.Equal(t, "debug", atmos.String())
-	assert.Equal(t, "debug", auth.String())
+			var cfg *schema.AtmosConfiguration
+			if tt.name == "nil config falls back to Info" {
+				cfg = nil
+			} else {
+				cfg = &schema.AtmosConfiguration{
+					Logs: schema.Logs{
+						Level: tt.atmosLogLevel,
+					},
+					Auth: schema.AuthConfig{
+						Logs: schema.Logs{
+							Level: tt.authLogLevel,
+						},
+					},
+				}
+			}
 
-	cfg.Auth.Logs.Level = "Error"
-	atmos, auth = getConfigLogLevels(cfg)
-	assert.Equal(t, "debug", atmos.String()) // unchanged from cfg.Logs
-	assert.Equal(t, "error", auth.String())  // overridden by cfg.Auth.Logs
+			atmos, auth := getConfigLogLevels(cfg)
+
+			assert.Equal(t, tt.expectedAtmosStr, log.LevelToString(atmos),
+				"Atmos log level mismatch for config: atmos=%q, auth=%q", tt.atmosLogLevel, tt.authLogLevel)
+			assert.Equal(t, tt.expectedAuthStr, log.LevelToString(auth),
+				"Auth log level mismatch for config: atmos=%q, auth=%q", tt.atmosLogLevel, tt.authLogLevel)
+		})
+	}
 }
 
 func TestDecodeAuthConfigFromStack(t *testing.T) {
@@ -157,6 +269,78 @@ func TestAuthenticateAndWriteEnv(t *testing.T) {
 	stack := &schema.ConfigAndStacksInfo{ComponentEnvSection: schema.AtmosSectionMapType{"FOO": "BAR"}}
 	err := authenticateAndWriteEnv(context.Background(), m, "dev", atmosCfg, stack)
 	assert.NoError(t, err)
+}
+
+func TestAuthenticateAndWriteEnv_AddsEnvironmentVariables(t *testing.T) {
+	tests := []struct {
+		name              string
+		envVars           map[string]string
+		initialEnvSection schema.AtmosSectionMapType
+		expectedKeys      []string
+	}{
+		{
+			name: "adds AWS environment variables to empty section",
+			envVars: map[string]string{
+				"AWS_CONFIG_FILE":             "/path/to/config",
+				"AWS_SHARED_CREDENTIALS_FILE": "/path/to/creds",
+				"AWS_PROFILE":                 "my-profile",
+				"AWS_REGION":                  "us-east-1",
+				"AWS_EC2_METADATA_DISABLED":   "true",
+			},
+			initialEnvSection: nil,
+			expectedKeys:      []string{"AWS_CONFIG_FILE", "AWS_SHARED_CREDENTIALS_FILE", "AWS_PROFILE", "AWS_REGION", "AWS_EC2_METADATA_DISABLED"},
+		},
+		{
+			name: "merges with existing environment variables",
+			envVars: map[string]string{
+				"AWS_PROFILE": "my-profile",
+				"AWS_REGION":  "us-west-2",
+			},
+			initialEnvSection: schema.AtmosSectionMapType{
+				"EXISTING_VAR": "value",
+				"TF_VAR_foo":   "bar",
+			},
+			expectedKeys: []string{"EXISTING_VAR", "TF_VAR_foo", "AWS_PROFILE", "AWS_REGION"},
+		},
+		{
+			name:              "handles no environment variables from identity",
+			envVars:           map[string]string{},
+			initialEnvSection: schema.AtmosSectionMapType{"FOO": "BAR"},
+			expectedKeys:      []string{"FOO"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Create stub manager that returns our test env vars.
+			stub := &stubAuthManager{
+				whoami: &types.WhoamiInfo{Provider: "test-provider", Identity: "test-identity"},
+			}
+			// Override GetEnvironmentVariables to return test data.
+			stub.envVars = tt.envVars
+
+			atmosCfg := &schema.AtmosConfiguration{}
+			stack := &schema.ConfigAndStacksInfo{
+				ComponentEnvSection: tt.initialEnvSection,
+			}
+
+			err := authenticateAndWriteEnv(context.Background(), stub, "test-identity", atmosCfg, stack)
+			assert.NoError(t, err)
+
+			// Verify all expected keys are present in ComponentEnvSection.
+			assert.NotNil(t, stack.ComponentEnvSection, "ComponentEnvSection should not be nil")
+			for _, key := range tt.expectedKeys {
+				assert.Contains(t, stack.ComponentEnvSection, key, "ComponentEnvSection should contain %s", key)
+			}
+
+			// Verify the values match what we provided.
+			for k, expectedValue := range tt.envVars {
+				actualValue, exists := stack.ComponentEnvSection[k]
+				assert.True(t, exists, "Expected key %s to exist in ComponentEnvSection", k)
+				assert.Equal(t, expectedValue, actualValue, "Value mismatch for key %s", k)
+			}
+		})
+	}
 }
 
 func TestTerraformPreHook_NoAuthConfigEarlyExit(t *testing.T) {

@@ -64,6 +64,7 @@ type PostAuthenticateParams struct {
 	ProviderName string
 	IdentityName string
 	Credentials  ICredentials
+	Manager      AuthManager // Auth manager for resolving provider chains
 }
 
 // Identity defines the interface that all authentication identities must implement.

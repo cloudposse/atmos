@@ -175,6 +175,7 @@ func (m *manager) Authenticate(ctx context.Context, identityName string) (*types
 			ProviderName: rootProviderName,
 			IdentityName: identityName,
 			Credentials:  finalCreds,
+			Manager:      m,
 		}); err != nil {
 			wrappedErr := fmt.Errorf("%w: post-authentication failed: %w", errUtils.ErrAuthenticationFailed, err)
 			errUtils.CheckErrorAndPrint(wrappedErr, "Post Authenticate", "")

@@ -29,8 +29,10 @@ const (
 
 // permissionSetIdentity implements AWS permission set identity.
 type permissionSetIdentity struct {
-	name   string
-	config *schema.Identity
+	name             string
+	config           *schema.Identity
+	manager          types.AuthManager // Auth manager for resolving root provider
+	rootProviderName string            // Cached root provider name from PostAuthenticate
 }
 
 // NewPermissionSetIdentity creates a new AWS permission set identity.
@@ -139,8 +141,8 @@ func (i *permissionSetIdentity) Validate() error {
 func (i *permissionSetIdentity) Environment() (map[string]string, error) {
 	env := make(map[string]string)
 
-	// Get provider name for AWS file paths.
-	providerName, err := i.GetProviderName()
+	// Get root provider name for file storage.
+	providerName, err := i.resolveRootProviderName()
 	if err != nil {
 		return nil, err
 	}
@@ -171,8 +173,8 @@ func (i *permissionSetIdentity) Environment() (map[string]string, error) {
 func (i *permissionSetIdentity) PrepareEnvironment(ctx context.Context, environ map[string]string) (map[string]string, error) {
 	defer perf.Track(nil, "aws.permissionSetIdentity.PrepareEnvironment")()
 
-	// Get provider name and construct file paths.
-	providerName, err := i.GetProviderName()
+	// Get root provider name for file storage.
+	providerName, err := i.resolveRootProviderName()
 	if err != nil {
 		return environ, fmt.Errorf("failed to get provider name: %w", err)
 	}
@@ -202,7 +204,39 @@ func (i *permissionSetIdentity) GetProviderName() (string, error) {
 	if i.config.Via != nil && i.config.Via.Provider != "" {
 		return i.config.Via.Provider, nil
 	}
-	return "", fmt.Errorf("%w: permission set identity %q has no valid via provider configuration", errUtils.ErrInvalidIdentityConfig, i.name)
+	return "", fmt.Errorf("%w: permission set identity %q has no valid via provider configuration", errUtils.ErrInvalidAuthConfig, i.name)
+}
+
+// resolveRootProviderName resolves the root provider name for file storage.
+// Tries manager first (if available), then falls back to cached value or config.
+func (i *permissionSetIdentity) resolveRootProviderName() (string, error) {
+	// Try manager first (available after PostAuthenticate).
+	if i.manager != nil {
+		if providerName := i.manager.GetProviderForIdentity(i.name); providerName != "" {
+			return providerName, nil
+		}
+	}
+
+	// Fall back to cached value or config.
+	return i.getRootProviderFromVia()
+}
+
+// getRootProviderFromVia gets the root provider name using available information.
+// This is used when manager is not available (e.g., LoadCredentials before PostAuthenticate).
+// Tries in order: cached value from PostAuthenticate, via.provider from config.
+func (i *permissionSetIdentity) getRootProviderFromVia() (string, error) {
+	// First try cached value set during PostAuthenticate.
+	if i.rootProviderName != "" {
+		return i.rootProviderName, nil
+	}
+
+	// Fall back to via.provider from config (permission sets always have via.provider).
+	if i.config.Via != nil && i.config.Via.Provider != "" {
+		return i.config.Via.Provider, nil
+	}
+
+	// Can't determine root provider - return error.
+	return "", fmt.Errorf("%w: cannot determine root provider for identity %q before authentication", errUtils.ErrInvalidAuthConfig, i.name)
 }
 
 // PostAuthenticate sets up AWS files and populates auth context after authentication.
@@ -214,6 +248,10 @@ func (i *permissionSetIdentity) PostAuthenticate(ctx context.Context, params *ty
 	if params.Credentials == nil {
 		return fmt.Errorf("%w: credentials are required", errUtils.ErrInvalidAuthConfig)
 	}
+
+	// Store manager reference and root provider name for resolving in file operations.
+	i.manager = params.Manager
+	i.rootProviderName = params.ProviderName
 
 	// Setup AWS files using shared AWS cloud package.
 	if err := awsCloud.SetupFiles(params.ProviderName, params.IdentityName, params.Credentials, ""); err != nil {
@@ -337,7 +375,8 @@ func (i *permissionSetIdentity) buildCredsFromRole(resp *sso.GetRoleCredentialsO
 func (i *permissionSetIdentity) CredentialsExist() (bool, error) {
 	defer perf.Track(nil, "aws.permissionSetIdentity.CredentialsExist")()
 
-	providerName, err := i.GetProviderName()
+	// Get root provider name for file storage.
+	providerName, err := i.resolveRootProviderName()
 	if err != nil {
 		return false, err
 	}

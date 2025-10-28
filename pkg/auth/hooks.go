@@ -101,6 +101,22 @@ func authenticateAndWriteEnv(ctx context.Context, authManager types.AuthManager,
 		return fmt.Errorf("failed to authenticate with identity %q: %w", identityName, err)
 	}
 	log.Debug("Authentication successful", "identity", whoami.Identity, "expiration", whoami.Expiration)
+
+	// Get environment variables from the identity and add to ComponentEnvSection.
+	// This is provider-agnostic and works for AWS, Azure, GCP, GitHub, etc.
+	envVars, err := authManager.GetEnvironmentVariables(identityName)
+	if err != nil {
+		return fmt.Errorf("failed to get environment variables: %w", err)
+	}
+
+	// Add auth environment variables to ComponentEnvSection which gets passed to Terraform/workflows.
+	if stackInfo.ComponentEnvSection == nil {
+		stackInfo.ComponentEnvSection = make(map[string]any)
+	}
+	for k, v := range envVars {
+		stackInfo.ComponentEnvSection[k] = v
+	}
+
 	if err := utils.PrintAsYAMLToFileDescriptor(atmosConfig, stackInfo.ComponentEnvSection); err != nil {
 		return fmt.Errorf("failed to print component env section: %w", err)
 	}
@@ -129,17 +145,31 @@ func getConfigLogLevels(atmosConfig *schema.AtmosConfiguration) (charm.Level, ch
 	if atmosConfig == nil {
 		return charm.InfoLevel, charm.InfoLevel
 	}
+	// Get the current atmos log level that was already set by setupLogger in root.go.
+	// This respects ATMOS_LOGS_LEVEL env var and --logs-level flag with case-insensitive parsing.
 	atmosLevel := log.GetLevel()
-	if atmosConfig.Logs.Level != "" {
-		if l, err := charm.ParseLevel(atmosConfig.Logs.Level); err == nil {
-			atmosLevel = l
-		}
-	}
+
 	// Determine auth log level (fallback to atmos level).
 	authLevel := atmosLevel
 	if atmosConfig.Auth.Logs.Level != "" {
-		if l, err := charm.ParseLevel(atmosConfig.Auth.Logs.Level); err == nil {
-			authLevel = l
+		// Parse the auth log level using Atmos' ParseLogLevel for case-insensitive parsing.
+		// This ensures "Warning", "warning", "WARN", "warn" all work correctly.
+		if atmosLogLevel, err := log.ParseLogLevel(atmosConfig.Auth.Logs.Level); err == nil {
+			// Convert Atmos LogLevel string to charm.Level.
+			switch atmosLogLevel {
+			case log.LogLevelTrace:
+				authLevel = log.TraceLevel
+			case log.LogLevelDebug:
+				authLevel = log.DebugLevel
+			case log.LogLevelInfo:
+				authLevel = log.InfoLevel
+			case log.LogLevelWarning:
+				authLevel = log.WarnLevel
+			case log.LogLevelError:
+				authLevel = log.ErrorLevel
+			case log.LogLevelOff:
+				authLevel = log.FatalLevel
+			}
 		}
 	}
 	return atmosLevel, authLevel
