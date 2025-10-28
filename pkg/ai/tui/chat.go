@@ -1148,7 +1148,7 @@ Always take action using tools rather than describing what action you would take
 			// Send messages with tools and full history.
 			response, err := m.client.SendMessageWithToolsAndHistory(ctx, messages, availableTools)
 			if err != nil {
-				return aiErrorMsg(err.Error())
+				return aiErrorMsg(formatAPIError(err))
 			}
 
 			// Check if AI wants to use tools.
@@ -1171,7 +1171,7 @@ Always take action using tools rather than describing what action you would take
 				// Send the prompt again.
 				retryResponse, err := m.client.SendMessageWithToolsAndHistory(ctx, messages, availableTools)
 				if err != nil {
-					return aiErrorMsg(err.Error())
+					return aiErrorMsg(formatAPIError(err))
 				}
 
 				// Check if AI now uses tools.
@@ -1190,7 +1190,7 @@ Always take action using tools rather than describing what action you would take
 		// Fallback to message with history but no tools.
 		response, err := m.client.SendMessageWithHistory(ctx, messages)
 		if err != nil {
-			return aiErrorMsg(err.Error())
+			return aiErrorMsg(formatAPIError(err))
 		}
 
 		return aiResponseMsg{content: response, usage: nil}
@@ -1297,7 +1297,7 @@ func (m *ChatModel) handleToolExecutionFlow(ctx context.Context, response *aiTyp
 	// Call AI again with tool results to get final response.
 	finalResponse, err := m.client.SendMessageWithToolsAndHistory(ctx, messages, availableTools)
 	if err != nil {
-		return aiErrorMsg(fmt.Sprintf("Error getting final response after tool execution: %v", err))
+		return aiErrorMsg(formatAPIError(err))
 	}
 
 	// Check if the final response wants to use more tools.
@@ -1321,7 +1321,7 @@ func (m *ChatModel) handleToolExecutionFlow(ctx context.Context, response *aiTyp
 		// Retry with the prompt.
 		retryResponse, err := m.client.SendMessageWithToolsAndHistory(ctx, messages, availableTools)
 		if err != nil {
-			return aiErrorMsg(fmt.Sprintf("Error getting retry response: %v", err))
+			return aiErrorMsg(formatAPIError(err))
 		}
 
 		// Check if AI now uses tools.
@@ -1409,6 +1409,82 @@ func formatUsage(usage *aiTypes.Usage) string {
 	}
 
 	return strings.Join(parts, " · ")
+}
+
+// formatAPIError formats API errors in a user-friendly way.
+func formatAPIError(err error) string {
+	if err == nil {
+		return ""
+	}
+
+	errStr := err.Error()
+
+	// Detect rate limit errors (429 Too Many Requests).
+	if strings.Contains(errStr, "429") || strings.Contains(errStr, "Too Many Requests") ||
+		strings.Contains(errStr, "rate_limit_error") {
+		return "Rate limit exceeded. Please wait a moment and try again, or contact your provider to increase your rate limit."
+	}
+
+	// Detect authentication errors (401 Unauthorized).
+	if strings.Contains(errStr, "401") || strings.Contains(errStr, "Unauthorized") ||
+		strings.Contains(errStr, "authentication_error") {
+		return "Authentication failed. Please check your API key configuration."
+	}
+
+	// Detect permission errors (403 Forbidden).
+	if strings.Contains(errStr, "403") || strings.Contains(errStr, "Forbidden") ||
+		strings.Contains(errStr, "permission_error") {
+		return "Permission denied. Your API key may not have access to this model or feature."
+	}
+
+	// Detect model errors (404 Not Found).
+	if strings.Contains(errStr, "404") || strings.Contains(errStr, "Not Found") ||
+		strings.Contains(errStr, "model not found") {
+		return "Model not found. Please check your model configuration."
+	}
+
+	// Detect timeout errors.
+	if strings.Contains(errStr, "timeout") || strings.Contains(errStr, "deadline exceeded") {
+		return "Request timed out. The AI provider took too long to respond. Please try again."
+	}
+
+	// Detect context length errors.
+	if strings.Contains(errStr, "context_length_exceeded") || strings.Contains(errStr, "maximum context length") {
+		return "Context length exceeded. Your conversation is too long. Try starting a new session."
+	}
+
+	// For other errors, clean up the message by removing technical details.
+	// Remove request IDs.
+	if idx := strings.Index(errStr, "(Request-ID:"); idx != -1 {
+		errStr = strings.TrimSpace(errStr[:idx])
+	}
+	if idx := strings.Index(errStr, "(request-id:"); idx != -1 {
+		errStr = strings.TrimSpace(errStr[:idx])
+	}
+
+	// Remove JSON response bodies.
+	if idx := strings.Index(errStr, `{"type":"error"`); idx != -1 {
+		errStr = strings.TrimSpace(errStr[:idx])
+	}
+
+	// Remove HTTP method and URL from error messages (e.g., "POST https://api.example.com: 500 Error").
+	// Look for pattern: METHOD "URL": error message
+	if strings.HasPrefix(errStr, "POST ") || strings.HasPrefix(errStr, "GET ") ||
+		strings.HasPrefix(errStr, "PUT ") || strings.HasPrefix(errStr, "DELETE ") {
+		// Find the closing quote and colon after the URL.
+		if idx := strings.Index(errStr, `":`); idx != -1 {
+			// Skip past the quote and colon, keep the rest.
+			errStr = strings.TrimSpace(errStr[idx+2:])
+		}
+	}
+
+	// Clean up nested error prefixes.
+	errStr = strings.TrimPrefix(errStr, "failed to send message: ")
+	errStr = strings.TrimPrefix(errStr, "failed to send message with tools: ")
+	errStr = strings.TrimPrefix(errStr, "failed to send messages with history: ")
+	errStr = strings.TrimPrefix(errStr, "failed to send messages with history and tools: ")
+
+	return errStr
 }
 
 // formatToolParameters formats tool call parameters for display in the UI.

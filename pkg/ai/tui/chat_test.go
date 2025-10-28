@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -2589,6 +2590,77 @@ func TestUsageTrackingInHandleAIMessage(t *testing.T) {
 	assert.Equal(t, int64(1500), model.cumulativeUsage.InputTokens)
 	assert.Equal(t, int64(3000), model.cumulativeUsage.OutputTokens)
 	assert.Equal(t, int64(4500), model.cumulativeUsage.TotalTokens)
+}
+
+func TestFormatAPIError(t *testing.T) {
+	tests := []struct {
+		name     string
+		err      error
+		expected string
+	}{
+		{
+			name:     "nil error",
+			err:      nil,
+			expected: "",
+		},
+		{
+			name:     "rate limit error with 429",
+			err:      fmt.Errorf("POST \"https://api.anthropic.com/v1/messages\": 429 Too Many Requests"),
+			expected: "Rate limit exceeded. Please wait a moment and try again, or contact your provider to increase your rate limit.",
+		},
+		{
+			name:     "rate limit error with rate_limit_error",
+			err:      fmt.Errorf("failed to send messages: rate_limit_error: This request would exceed the rate limit"),
+			expected: "Rate limit exceeded. Please wait a moment and try again, or contact your provider to increase your rate limit.",
+		},
+		{
+			name:     "authentication error 401",
+			err:      fmt.Errorf("POST \"https://api.openai.com/v1/chat/completions\": 401 Unauthorized"),
+			expected: "Authentication failed. Please check your API key configuration.",
+		},
+		{
+			name:     "permission error 403",
+			err:      fmt.Errorf("403 Forbidden: You do not have access to this model"),
+			expected: "Permission denied. Your API key may not have access to this model or feature.",
+		},
+		{
+			name:     "model not found 404",
+			err:      fmt.Errorf("404 Not Found: Model gpt-99 does not exist"),
+			expected: "Model not found. Please check your model configuration.",
+		},
+		{
+			name:     "timeout error",
+			err:      fmt.Errorf("context deadline exceeded: request timed out after 5 minutes"),
+			expected: "Request timed out. The AI provider took too long to respond. Please try again.",
+		},
+		{
+			name:     "context length exceeded",
+			err:      fmt.Errorf("context_length_exceeded: Your message exceeded the maximum context length"),
+			expected: "Context length exceeded. Your conversation is too long. Try starting a new session.",
+		},
+		{
+			name:     "error with request ID stripped",
+			err:      fmt.Errorf("failed to send messages with history and tools: POST \"https://api.anthropic.com/v1/messages\": 429 Too Many Requests (Request-ID: req_011CUYpGVDM4KU1nVwW9rzX4)"),
+			expected: "Rate limit exceeded. Please wait a moment and try again, or contact your provider to increase your rate limit.",
+		},
+		{
+			name:     "error with JSON body stripped",
+			err:      fmt.Errorf("POST \"https://api.anthropic.com/v1/messages\": 500 Internal Server Error {\"type\":\"error\",\"error\":{\"type\":\"internal_error\",\"message\":\"Something went wrong\"}}"),
+			expected: "500 Internal Server Error",
+		},
+		{
+			name:     "clean generic error",
+			err:      fmt.Errorf("network connection failed"),
+			expected: "network connection failed",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := formatAPIError(tt.err)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
 }
 
 func TestFormatToolParameters(t *testing.T) {
