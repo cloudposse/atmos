@@ -487,7 +487,9 @@ func (m *ChatModel) handleSendMessage(msg sendMessageMsg) (bool, tea.Cmd) {
 	m.isCancelling = false
 
 	// Create cancellable context for this AI request.
-	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	// Use 5-minute timeout to allow for complex operations with multiple tool executions.
+	// User can still cancel manually with Esc key if needed.
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	m.cancelFunc = cancel
 
 	m.updateViewportContent()
