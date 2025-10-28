@@ -105,6 +105,7 @@ type ChatModel struct {
 	cumulativeUsage      aiTypes.Usage         // Cumulative token usage for the session
 	lastUsage            *aiTypes.Usage        // Usage from the last AI response
 	maxHistoryMessages   int                   // Maximum conversation messages to keep in history (0 = unlimited)
+	maxHistoryTokens     int                   // Maximum tokens in conversation history (0 = unlimited)
 }
 
 // ChatMessage represents a single message in the chat.
@@ -150,10 +151,12 @@ func NewChatModel(client ai.Client, atmosConfig *schema.AtmosConfiguration, mana
 		// Continue without renderer - will fallback to plain text
 	}
 
-	// Get max history messages from configuration (0 = unlimited).
+	// Get max history messages and tokens from configuration (0 = unlimited).
 	maxHistoryMessages := 0
+	maxHistoryTokens := 0
 	if atmosConfig != nil {
 		maxHistoryMessages = atmosConfig.Settings.AI.MaxHistoryMessages
+		maxHistoryTokens = atmosConfig.Settings.AI.MaxHistoryTokens
 	}
 
 	model := &ChatModel{
@@ -177,6 +180,7 @@ func NewChatModel(client ai.Client, atmosConfig *schema.AtmosConfiguration, mana
 		markdownRenderer:     renderer,
 		renderedMessages:     make([]string, 0),
 		maxHistoryMessages:   maxHistoryMessages,
+		maxHistoryTokens:     maxHistoryTokens,
 	}
 
 	// Load existing messages from session if available.
@@ -1110,10 +1114,43 @@ func (m *ChatModel) getAIResponseWithContext(userMessage string, ctx context.Con
 
 		// Apply sliding window to limit conversation history if configured.
 		// This helps prevent rate limiting and reduces token usage for long conversations.
+		// Two limits can be configured:
+		// 1. Message-based: Keep only last N messages (simple, easy to configure)
+		// 2. Token-based: Keep messages up to N tokens (more precise for rate limits)
+		// If both are set, whichever limit is hit first is applied.
+
+		pruneIndex := 0 // Start of messages to keep (0 = keep all)
+
+		// Apply message-based limit if configured.
 		if m.maxHistoryMessages > 0 && len(messages) > m.maxHistoryMessages {
-			// Keep only the most recent N messages.
-			// We slice from the end to preserve the most recent conversation.
-			messages = messages[len(messages)-m.maxHistoryMessages:]
+			pruneIndex = len(messages) - m.maxHistoryMessages
+		}
+
+		// Apply token-based limit if configured.
+		// Count backwards from most recent message and stop when token limit is exceeded.
+		if m.maxHistoryTokens > 0 {
+			totalTokens := 0
+			tokenPruneIndex := len(messages)
+
+			// Count backwards from most recent.
+			for i := len(messages) - 1; i >= 0; i-- {
+				msgTokens := estimateTokens(messages[i].Content)
+				if totalTokens+msgTokens > m.maxHistoryTokens {
+					tokenPruneIndex = i + 1 // Keep from i+1 onwards
+					break
+				}
+				totalTokens += msgTokens
+			}
+
+			// Use whichever prune index is more restrictive (further right/more pruning).
+			if tokenPruneIndex > pruneIndex {
+				pruneIndex = tokenPruneIndex
+			}
+		}
+
+		// Apply the pruning if needed.
+		if pruneIndex > 0 && pruneIndex < len(messages) {
+			messages = messages[pruneIndex:]
 		}
 
 		// Add current user message.
@@ -1425,6 +1462,33 @@ func formatUsage(usage *aiTypes.Usage) string {
 	}
 
 	return strings.Join(parts, " · ")
+}
+
+// estimateTokens provides an approximate token count for text using a heuristic approach.
+// This uses a simple word-based estimation: tokens ≈ words × 1.3
+// This is accurate enough (±10-20%) for rate limit prevention without requiring
+// provider-specific tokenizers. More sophisticated approaches could use:
+//   - characters / 4 (simpler but less accurate)
+//   - word count × 1.5 (more conservative)
+//   - tiktoken library (accurate but adds 15MB+ dependency and only works for OpenAI)
+func estimateTokens(text string) int {
+	if text == "" {
+		return 0
+	}
+
+	// Count words (split on whitespace).
+	words := strings.Fields(text)
+	wordCount := len(words)
+
+	// Apply multiplier to estimate tokens.
+	// Based on empirical observation:
+	// - English text: ~1.3 tokens per word on average
+	// - Code: ~1.5 tokens per word (more punctuation)
+	// - Technical text: ~1.4 tokens per word
+	// We use 1.3 as a reasonable middle ground.
+	estimatedTokens := float64(wordCount) * 1.3
+
+	return int(estimatedTokens)
 }
 
 // formatAPIError formats API errors in a user-friendly way.

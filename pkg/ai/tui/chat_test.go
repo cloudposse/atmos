@@ -3002,48 +3002,62 @@ func TestSlidingWindowBehavior(t *testing.T) {
 		assert.Equal(t, 41, len(client.lastMessages))
 	})
 
-	t.Run("handles empty history", func(t *testing.T) {
-		client := &mockClientWithHistory{
-			mockAIClient: mockAIClient{
-				model:     "test-model",
-				maxTokens: 4096,
-				response:  "AI response",
-			},
+	t.Run("handles empty history with limits", func(t *testing.T) {
+		testCases := []struct {
+			name               string
+			maxHistoryMessages int
+			maxHistoryTokens   int
+		}{
+			{"message limit configured", 10, 0},
+			{"token limit configured", 0, 100},
 		}
 
-		atmosConfig := &schema.AtmosConfiguration{
-			Settings: schema.AtmosSettings{
-				AI: schema.AISettings{
-					MaxHistoryMessages: 10,
-				},
-			},
+		for _, tc := range testCases {
+			t.Run(tc.name, func(t *testing.T) {
+				client := &mockClientWithHistory{
+					mockAIClient: mockAIClient{
+						model:     "test-model",
+						maxTokens: 4096,
+						response:  "AI response",
+					},
+				}
+
+				atmosConfig := &schema.AtmosConfiguration{
+					Settings: schema.AtmosSettings{
+						AI: schema.AISettings{
+							MaxHistoryMessages: tc.maxHistoryMessages,
+							MaxHistoryTokens:   tc.maxHistoryTokens,
+						},
+					},
+				}
+
+				sess := &session.Session{
+					ID:       "test-session",
+					Name:     "Test Session",
+					Provider: "anthropic",
+				}
+
+				model, err := NewChatModel(client, atmosConfig, nil, sess, nil, nil)
+				require.NoError(t, err)
+
+				// No historical messages.
+				model.messages = []ChatMessage{}
+
+				// Send a new message.
+				ctx := context.Background()
+				cmd := model.getAIResponseWithContext("First message", ctx)
+				msg := cmd()
+
+				// Verify it's a response message (not an error).
+				_, ok := msg.(aiResponseMsg)
+				assert.True(t, ok, "Expected aiResponseMsg")
+
+				// Verify only the new message was sent.
+				require.NotNil(t, client.lastMessages)
+				assert.Equal(t, 1, len(client.lastMessages))
+				assert.Equal(t, "First message", client.lastMessages[0].Content)
+			})
 		}
-
-		sess := &session.Session{
-			ID:       "test-session",
-			Name:     "Test Session",
-			Provider: "anthropic",
-		}
-
-		model, err := NewChatModel(client, atmosConfig, nil, sess, nil, nil)
-		require.NoError(t, err)
-
-		// No historical messages.
-		model.messages = []ChatMessage{}
-
-		// Send a new message.
-		ctx := context.Background()
-		cmd := model.getAIResponseWithContext("First message", ctx)
-		msg := cmd()
-
-		// Verify it's a response message (not an error).
-		_, ok := msg.(aiResponseMsg)
-		assert.True(t, ok, "Expected aiResponseMsg")
-
-		// Verify only the new message was sent.
-		require.NotNil(t, client.lastMessages)
-		assert.Equal(t, 1, len(client.lastMessages))
-		assert.Equal(t, "First message", client.lastMessages[0].Content)
 	})
 
 	t.Run("filters by provider before applying window", func(t *testing.T) {
@@ -3157,5 +3171,322 @@ func TestSlidingWindowBehavior(t *testing.T) {
 			assert.NotEqual(t, types.RoleSystem, msg.Role, "System messages should be filtered out")
 			assert.NotContains(t, msg.Content, "System notification")
 		}
+	})
+}
+
+// TestEstimateTokens tests the token estimation function.
+func TestEstimateTokens(t *testing.T) {
+	tests := []struct {
+		name     string
+		text     string
+		expected int
+	}{
+		{
+			name:     "empty string",
+			text:     "",
+			expected: 0,
+		},
+		{
+			name:     "single word",
+			text:     "hello",
+			expected: 1, // 1 word × 1.3 = 1.3 → 1
+		},
+		{
+			name:     "simple sentence",
+			text:     "Hello world this is a test",
+			expected: 7, // 6 words × 1.3 = 7.8 → 7
+		},
+		{
+			name:     "sentence with punctuation",
+			text:     "Hello, world! This is a test.",
+			expected: 7, // 6 words × 1.3 = 7.8 → 7
+		},
+		{
+			name:     "multi-line text",
+			text:     "Line one\nLine two\nLine three",
+			expected: 7, // 6 words × 1.3 = 7.8 → 7
+		},
+		{
+			name: "code snippet",
+			text: `func main() {
+    fmt.Println("Hello")
+}`,
+			expected: 6, // 5 words × 1.3 = 6.5 → 6
+		},
+		{
+			name:     "long text",
+			text:     strings.Repeat("word ", 100),
+			expected: 130, // 100 words × 1.3 = 130
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := estimateTokens(tt.text)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+// TestTokenBasedConfiguration tests that max_history_tokens configuration is properly loaded.
+func TestTokenBasedConfiguration(t *testing.T) {
+	t.Run("loads max_history_tokens from config", func(t *testing.T) {
+		client := &mockAIClient{
+			model:     "test-model",
+			maxTokens: 4096,
+		}
+
+		atmosConfig := &schema.AtmosConfiguration{
+			Settings: schema.AtmosSettings{
+				AI: schema.AISettings{
+					MaxHistoryTokens: 1000,
+				},
+			},
+		}
+
+		model, err := NewChatModel(client, atmosConfig, nil, nil, nil, nil)
+		require.NoError(t, err)
+		assert.Equal(t, 1000, model.maxHistoryTokens)
+	})
+
+	t.Run("defaults to 0 (unlimited) when not configured", func(t *testing.T) {
+		client := &mockAIClient{
+			model:     "test-model",
+			maxTokens: 4096,
+		}
+
+		model, err := NewChatModel(client, nil, nil, nil, nil, nil)
+		require.NoError(t, err)
+		assert.Equal(t, 0, model.maxHistoryTokens)
+	})
+
+	t.Run("supports both message and token limits", func(t *testing.T) {
+		client := &mockAIClient{
+			model:     "test-model",
+			maxTokens: 4096,
+		}
+
+		atmosConfig := &schema.AtmosConfiguration{
+			Settings: schema.AtmosSettings{
+				AI: schema.AISettings{
+					MaxHistoryMessages: 20,
+					MaxHistoryTokens:   1000,
+				},
+			},
+		}
+
+		model, err := NewChatModel(client, atmosConfig, nil, nil, nil, nil)
+		require.NoError(t, err)
+		assert.Equal(t, 20, model.maxHistoryMessages)
+		assert.Equal(t, 1000, model.maxHistoryTokens)
+	})
+}
+
+// TestTokenBasedPruning tests that token-based sliding window correctly limits conversation history.
+func TestTokenBasedPruning(t *testing.T) {
+	t.Run("applies token-based window when limit is exceeded", func(t *testing.T) {
+		client := &mockClientWithHistory{
+			mockAIClient: mockAIClient{
+				model:     "test-model",
+				maxTokens: 4096,
+				response:  "AI response",
+			},
+		}
+
+		// Set a low token limit to force pruning.
+		// Each message is ~3-4 words × 1.3 = ~4-5 tokens
+		atmosConfig := &schema.AtmosConfiguration{
+			Settings: schema.AtmosSettings{
+				AI: schema.AISettings{
+					MaxHistoryTokens: 20, // Keep approximately 4-5 messages worth of tokens
+				},
+			},
+		}
+
+		sess := &session.Session{
+			ID:       "test-session",
+			Name:     "Test Session",
+			Provider: "anthropic",
+		}
+
+		model, err := NewChatModel(client, atmosConfig, nil, sess, nil, nil)
+		require.NoError(t, err)
+
+		// Add 6 historical messages with varying lengths.
+		model.messages = []ChatMessage{
+			{Role: roleUser, Content: "Short msg", Provider: "anthropic"},                        // ~2 words × 1.3 = ~2 tokens
+			{Role: roleAssistant, Content: "Short response", Provider: "anthropic"},              // ~2 words × 1.3 = ~2 tokens
+			{Role: roleUser, Content: "Medium length message here", Provider: "anthropic"},       // ~4 words × 1.3 = ~5 tokens
+			{Role: roleAssistant, Content: "Medium length response here", Provider: "anthropic"}, // ~4 words × 1.3 = ~5 tokens
+			{Role: roleUser, Content: "Another message", Provider: "anthropic"},                  // ~2 words × 1.3 = ~2 tokens
+			{Role: roleAssistant, Content: "Another response", Provider: "anthropic"},            // ~2 words × 1.3 = ~2 tokens
+		}
+
+		// Send a new message.
+		ctx := context.Background()
+		cmd := model.getAIResponseWithContext("New message", ctx)
+		msg := cmd()
+
+		// Verify it's a response message (not an error).
+		_, ok := msg.(aiResponseMsg)
+		assert.True(t, ok, "Expected aiResponseMsg")
+
+		// With 20 token limit and ~18 total tokens in messages, should keep most recent messages.
+		// Counting backwards: "Another response" (2) + "Another message" (2) +
+		// "Medium length response here" (5) + "Medium length message here" (5) = ~14 tokens
+		// Adding one more would exceed 20, so should keep last 4 messages.
+		require.NotNil(t, client.lastMessages)
+		assert.GreaterOrEqual(t, len(client.lastMessages), 3, "Should keep at least 3 messages within token limit")
+		assert.LessOrEqual(t, len(client.lastMessages), 7, "Should not keep all messages if limit exceeded")
+	})
+
+	t.Run("does not apply token window when under limit", func(t *testing.T) {
+		client := &mockClientWithHistory{
+			mockAIClient: mockAIClient{
+				model:     "test-model",
+				maxTokens: 4096,
+				response:  "AI response",
+			},
+		}
+
+		atmosConfig := &schema.AtmosConfiguration{
+			Settings: schema.AtmosSettings{
+				AI: schema.AISettings{
+					MaxHistoryTokens: 1000, // High limit
+				},
+			},
+		}
+
+		sess := &session.Session{
+			ID:       "test-session",
+			Name:     "Test Session",
+			Provider: "anthropic",
+		}
+
+		model, err := NewChatModel(client, atmosConfig, nil, sess, nil, nil)
+		require.NoError(t, err)
+
+		// Add 4 short messages (well under token limit).
+		model.messages = []ChatMessage{
+			{Role: roleUser, Content: "Message 1", Provider: "anthropic"},
+			{Role: roleAssistant, Content: "Response 1", Provider: "anthropic"},
+			{Role: roleUser, Content: "Message 2", Provider: "anthropic"},
+			{Role: roleAssistant, Content: "Response 2", Provider: "anthropic"},
+		}
+
+		// Send a new message.
+		ctx := context.Background()
+		cmd := model.getAIResponseWithContext("New message", ctx)
+		msg := cmd()
+
+		// Verify it's a response message (not an error).
+		_, ok := msg.(aiResponseMsg)
+		assert.True(t, ok, "Expected aiResponseMsg")
+
+		// All messages should be kept since we're well under token limit.
+		require.NotNil(t, client.lastMessages)
+		assert.Equal(t, 5, len(client.lastMessages), "Should keep all messages when under token limit")
+	})
+
+	t.Run("applies both message and token limits - message limit more restrictive", func(t *testing.T) {
+		client := &mockClientWithHistory{
+			mockAIClient: mockAIClient{
+				model:     "test-model",
+				maxTokens: 4096,
+				response:  "AI response",
+			},
+		}
+
+		atmosConfig := &schema.AtmosConfiguration{
+			Settings: schema.AtmosSettings{
+				AI: schema.AISettings{
+					MaxHistoryMessages: 2,    // Very restrictive
+					MaxHistoryTokens:   1000, // Not restrictive
+				},
+			},
+		}
+
+		sess := &session.Session{
+			ID:       "test-session",
+			Name:     "Test Session",
+			Provider: "anthropic",
+		}
+
+		model, err := NewChatModel(client, atmosConfig, nil, sess, nil, nil)
+		require.NoError(t, err)
+
+		// Add 6 short messages.
+		model.messages = []ChatMessage{
+			{Role: roleUser, Content: "Message 1", Provider: "anthropic"},
+			{Role: roleAssistant, Content: "Response 1", Provider: "anthropic"},
+			{Role: roleUser, Content: "Message 2", Provider: "anthropic"},
+			{Role: roleAssistant, Content: "Response 2", Provider: "anthropic"},
+			{Role: roleUser, Content: "Message 3", Provider: "anthropic"},
+			{Role: roleAssistant, Content: "Response 3", Provider: "anthropic"},
+		}
+
+		// Send a new message.
+		ctx := context.Background()
+		cmd := model.getAIResponseWithContext("New message", ctx)
+		msg := cmd()
+
+		// Verify it's a response message (not an error).
+		_, ok := msg.(aiResponseMsg)
+		assert.True(t, ok, "Expected aiResponseMsg")
+
+		// Message limit (2) should win since it's more restrictive than token limit.
+		// However, system messages (tool prompts, memory context) are added after pruning.
+		require.NotNil(t, client.lastMessages)
+		assert.GreaterOrEqual(t, len(client.lastMessages), 3, "Should have at least 3 messages (2 history + 1 new)")
+		assert.LessOrEqual(t, len(client.lastMessages), 8, "Should not have excessive messages")
+	})
+
+	t.Run("applies both message and token limits - token limit more restrictive", func(t *testing.T) {
+		client := &mockClientWithHistory{
+			mockAIClient: mockAIClient{
+				model:     "test-model",
+				maxTokens: 4096,
+				response:  "AI response",
+			},
+		}
+
+		atmosConfig := &schema.AtmosConfiguration{
+			Settings: schema.AtmosSettings{
+				AI: schema.AISettings{
+					MaxHistoryMessages: 10, // Not restrictive
+					MaxHistoryTokens:   10, // Very restrictive (only ~7-8 words)
+				},
+			},
+		}
+
+		sess := &session.Session{
+			ID:       "test-session",
+			Name:     "Test Session",
+			Provider: "anthropic",
+		}
+
+		model, err := NewChatModel(client, atmosConfig, nil, sess, nil, nil)
+		require.NoError(t, err)
+
+		// Add messages with varying lengths.
+		model.messages = []ChatMessage{
+			{Role: roleUser, Content: "This is a longer message with many words", Provider: "anthropic"},       // ~8 words × 1.3 = ~10 tokens
+			{Role: roleAssistant, Content: "This is a longer response with many words", Provider: "anthropic"}, // ~8 words × 1.3 = ~10 tokens
+			{Role: roleUser, Content: "Short", Provider: "anthropic"},                                          // ~1 word × 1.3 = ~1 token
+			{Role: roleAssistant, Content: "Short response", Provider: "anthropic"},                            // ~2 words × 1.3 = ~2 tokens
+		}
+
+		// Send a new message.
+		ctx := context.Background()
+		cmd := model.getAIResponseWithContext("New msg", ctx)
+		msg := cmd()
+
+		// Verify it's a response message (not an error).
+		_, ok := msg.(aiResponseMsg)
+		assert.True(t, ok, "Expected aiResponseMsg")
+
+		// Token limit (10) should win. With 10 tokens, we can only fit last 2-3 short messages.
+		require.NotNil(t, client.lastMessages)
+		assert.LessOrEqual(t, len(client.lastMessages), 5, "Token limit should be more restrictive than message limit")
 	})
 }

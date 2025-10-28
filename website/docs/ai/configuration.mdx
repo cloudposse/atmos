@@ -158,6 +158,7 @@ settings:
     max_context_files: 10                 # Maximum stack files to send (default: 10)
     max_context_lines: 500                # Maximum lines per file (default: 500)
     max_history_messages: 20              # Maximum conversation messages to keep (default: 0 = unlimited)
+    max_history_tokens: 8000              # Maximum tokens in conversation history (default: 0 = unlimited)
 ```
 </File>
 
@@ -555,7 +556,10 @@ Setting `max_tokens` higher than the model's limit will be automatically capped 
   <dd>Prompt user for consent before sending context, even when `send_context` is `true` (default: `true`)</dd>
 
   <dt>`max_history_messages`</dt>
-  <dd>Maximum conversation messages to keep in history (default: `0` = unlimited). Use this to prevent rate limiting and reduce token usage in long conversations. Only the most recent N messages are sent to the AI.</dd>
+  <dd>Maximum conversation messages to keep in history (default: `0` = unlimited). Simple message-based limit - easy to configure and understand.</dd>
+
+  <dt>`max_history_tokens`</dt>
+  <dd>Maximum tokens in conversation history (default: `0` = unlimited). More precise token-based limit using approximate counting (~±10-20% accuracy). If both limits are set, whichever is hit first is applied.</dd>
 </dl>
 
 ## Session Management
@@ -653,14 +657,18 @@ Sessions are stored **locally on your machine**. No session data is sent to AI p
 
 Control how much conversation history is sent to AI providers with each request. This helps manage costs and prevent rate limiting in long conversations.
 
-### Sliding Window Configuration
+### Two Approaches: Messages vs. Tokens
 
 By default, Atmos sends the **full conversation history** to the AI with each request. For long conversations, this can lead to:
 - **Rate limiting**: Exceeding tokens-per-minute limits
 - **Higher costs**: More tokens = higher API charges
 - **Slower responses**: More data to process
 
-Use `max_history_messages` to keep only the most recent N messages:
+Atmos offers two ways to limit conversation history:
+
+#### Option 1: Message-Based Limit (Simple)
+
+Use `max_history_messages` to keep only the most recent N messages. **Recommended for most users** - easy to understand and configure.
 
 <File title="atmos.yaml">
 ```yaml
@@ -677,14 +685,55 @@ settings:
 ```
 </File>
 
+#### Option 2: Token-Based Limit (Precise)
+
+Use `max_history_tokens` for more precise control based on estimated token count. Uses approximate counting (words × 1.3) with ~±10-20% accuracy.
+
+<File title="atmos.yaml">
+```yaml
+settings:
+  ai:
+    enabled: true
+    default_provider: "anthropic"
+    max_history_tokens: 8000  # Keep ~8000 tokens of history
+
+    providers:
+      anthropic:
+        model: "claude-sonnet-4-20250514"
+        api_key_env: "ANTHROPIC_API_KEY"
+```
+</File>
+
+#### Option 3: Combine Both Limits
+
+Set both limits - whichever is hit first will be applied. This gives you both control mechanisms.
+
+<File title="atmos.yaml">
+```yaml
+settings:
+  ai:
+    enabled: true
+    default_provider: "anthropic"
+    max_history_messages: 50  # Maximum 50 messages
+    max_history_tokens: 8000  # OR maximum 8000 tokens (whichever comes first)
+
+    providers:
+      anthropic:
+        model: "claude-sonnet-4-20250514"
+        api_key_env: "ANTHROPIC_API_KEY"
+```
+</File>
+
 ### How It Works
 
-When `max_history_messages` is set:
+When history limits are configured, Atmos applies them in this order:
 
 1. **Provider filtering applied first**: Only messages from the current provider session are included
-2. **Sliding window applied**: If history exceeds the limit, only the most recent N messages are kept
-3. **System messages excluded**: UI notifications don't count toward the limit
-4. **Current message added**: Your new message is always included (not counted in the limit)
+2. **Message-based limit applied (if set)**: If history exceeds `max_history_messages`, keep only the most recent N messages
+3. **Token-based limit applied (if set)**: Count backwards from most recent, keep messages up to `max_history_tokens`
+4. **Whichever is more restrictive wins**: If both limits are set, the one that results in fewer messages is used
+5. **System messages excluded**: UI notifications don't count toward limits
+6. **Current message added**: Your new message is always included (not counted in the limit)
 
 **Example**: With `max_history_messages: 4` and 6 historical messages:
 - **Before**: Message 1, Response 1, Message 2, Response 2, Message 3, Response 3
@@ -693,13 +742,14 @@ When `max_history_messages` is set:
 
 ### Recommendations
 
-| Use Case | Recommended Value | Reason |
-|----------|------------------|---------|
-| Short questions | 0 (unlimited) | No need to limit, conversations are brief |
-| Long conversations | 20-30 | Balance between context and cost |
-| Complex analysis | 40-50 | More context for intricate discussions |
-| Cost optimization | 10-20 | Minimize token usage |
-| Rate limit issues | 10-20 | Prevent hitting provider limits |
+| Use Case | Message-Based (`max_history_messages`) | Token-Based (`max_history_tokens`) | Best Approach |
+|----------|----------------------------------------|-------------------------------------|---------------|
+| Short questions | 0 (unlimited) | 0 (unlimited) | No limit needed |
+| Long conversations | 20-30 messages | 6000-8000 tokens | Either works well |
+| Complex analysis | 40-50 messages | 10000-15000 tokens | Token-based for precision |
+| Cost optimization | 10-20 messages | 4000-6000 tokens | Token-based for exact control |
+| Rate limit issues | 10-20 messages | 6000-8000 tokens | Token-based (matches provider limits) |
+| Combined protection | 50 messages | 8000 tokens | Use both limits together |
 
 :::tip
 Set to `0` (or omit) for **unlimited history** (default behavior). This works well for most conversations but may cause rate limiting in extended sessions.
@@ -1189,7 +1239,8 @@ settings:
 | `timeout_seconds` | 60 | Maximum time to wait for AI response |
 | `max_context_files` | 10 | Maximum number of stack files to send |
 | `max_context_lines` | 500 | Maximum lines per file to include |
-| `max_history_messages` | 0 (unlimited) | Maximum conversation messages to keep in history |
+| `max_history_messages` | 0 (unlimited) | Maximum conversation messages to keep in history (message-based limit) |
+| `max_history_tokens` | 0 (unlimited) | Maximum tokens in conversation history (token-based limit, ~±10-20% accuracy). If both limits are set, whichever is hit first is applied |
 
 ### Recommendations
 
@@ -1197,7 +1248,10 @@ settings:
 - **For slow connections**: Increase `timeout_seconds` to 120 or more
 - **For faster responses**: Reduce context limits to 5 files and 250 lines
 - **For cost optimization**: Lower context limits to reduce token usage
-- **For long conversations**: Set `max_history_messages` to 20-50 to prevent rate limiting and reduce costs
+- **For long conversations (message-based)**: Set `max_history_messages` to 20-50 to prevent rate limiting
+- **For long conversations (token-based)**: Set `max_history_tokens` to 6000-10000 for precise rate limit control
+- **For tight rate limits**: Use `max_history_tokens` with provider's per-minute token limit in mind (e.g., 40,000 TPM = set to 8000-10000)
+- **For combined control**: Set both limits - e.g., `max_history_messages: 50` and `max_history_tokens: 8000` for dual protection
 
 ## Security Best Practices
 

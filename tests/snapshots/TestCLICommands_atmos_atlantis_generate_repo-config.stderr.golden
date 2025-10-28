@@ -4,7 +4,7 @@
 
 ## Missing Configuration
 
-The atmos.yaml CLI config file specifies the directory for Atmos stacks as stacks, but the directory does not exist.
+The atmos.yaml CLI config file specifies the directory for Atmos stacks as /absolute/path/to/repo/stacks, but the directory does not exist.
 
 
 ## Getting Started

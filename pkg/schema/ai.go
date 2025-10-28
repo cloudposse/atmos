@@ -11,6 +11,7 @@ type AISettings struct {
 	MaxContextFiles    int                          `yaml:"max_context_files,omitempty" json:"max_context_files,omitempty" mapstructure:"max_context_files"`
 	MaxContextLines    int                          `yaml:"max_context_lines,omitempty" json:"max_context_lines,omitempty" mapstructure:"max_context_lines"`
 	MaxHistoryMessages int                          `yaml:"max_history_messages,omitempty" json:"max_history_messages,omitempty" mapstructure:"max_history_messages"` // Maximum conversation messages to keep in history (0 = unlimited)
+	MaxHistoryTokens   int                          `yaml:"max_history_tokens,omitempty" json:"max_history_tokens,omitempty" mapstructure:"max_history_tokens"`       // Maximum tokens in conversation history (0 = unlimited). If both max_history_messages and max_history_tokens are set, whichever limit is hit first is applied
 	Sessions           AISessionSettings            `yaml:"sessions,omitempty" json:"sessions,omitempty" mapstructure:"sessions"`
 	Tools              AIToolSettings               `yaml:"tools,omitempty" json:"tools,omitempty" mapstructure:"tools"`
 	Memory             AIMemorySettings             `yaml:"memory,omitempty" json:"memory,omitempty" mapstructure:"memory"`
