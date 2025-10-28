@@ -15,6 +15,13 @@ import (
 	toolchainregistry "github.com/cloudposse/atmos/toolchain/registry"
 )
 
+const (
+	defaultListLimit = 50
+	columnWidthOwner = 20
+	columnWidthRepo  = 25
+	columnWidthType  = 15
+)
+
 var (
 	listLimit  int
 	listOffset int
@@ -35,7 +42,7 @@ If a registry name is provided, displays all tools in that registry.`,
 }
 
 func init() {
-	listCmd.Flags().IntVar(&listLimit, "limit", 50, "Maximum number of results to show")
+	listCmd.Flags().IntVar(&listLimit, "limit", defaultListLimit, "Maximum number of results to show")
 	listCmd.Flags().IntVar(&listOffset, "offset", 0, "Skip first N results (pagination)")
 	listCmd.Flags().StringVar(&listFormat, "format", "table", "Output format (table, json, yaml)")
 	listCmd.Flags().StringVar(&listSort, "sort", "name", "Sort order (name, date, popularity)")
@@ -56,13 +63,8 @@ func executeListCommand(cmd *cobra.Command, args []string) error {
 	return listRegistryTools(ctx, registryName)
 }
 
-func listConfiguredRegistries(ctx context.Context) error {
+func listConfiguredRegistries(_ context.Context) error {
 	defer perf.Track(nil, "registry.listConfiguredRegistries")()
-
-	// Check context for cancellation.
-	if err := ctx.Err(); err != nil {
-		return err
-	}
 
 	// For MVP, show placeholder message.
 	// TODO: Load registries from atmos.yaml configuration.
@@ -85,7 +87,7 @@ func listRegistryTools(ctx context.Context, registryName string) error {
 	case "aqua-public", "aqua":
 		reg = toolchain.NewAquaRegistry()
 	default:
-		return fmt.Errorf("%w: %s (supported: aqua-public)", toolchainregistry.ErrUnknownRegistry, registryName)
+		return fmt.Errorf("%w: %s", toolchainregistry.ErrUnknownRegistry, registryName)
 	}
 
 	// Get tools from registry.
@@ -121,9 +123,9 @@ func displayToolsTable(tools []*toolchainregistry.Tool) {
 
 	// Create table columns.
 	columns := []table.Column{
-		{Title: "OWNER", Width: 20},
-		{Title: "REPO", Width: 25},
-		{Title: "TYPE", Width: 15},
+		{Title: "OWNER", Width: columnWidthOwner},
+		{Title: "REPO", Width: columnWidthRepo},
+		{Title: "TYPE", Width: columnWidthType},
 	}
 
 	// Convert tools to table rows.

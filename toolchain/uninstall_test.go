@@ -240,7 +240,7 @@ func TestRunUninstallWithNoArgs(t *testing.T) {
 	assert.NoError(t, err)
 }
 
-// FakeInstaller implements the minimal interface your RunUninstall needs
+// FakeInstaller implements the minimal interface your RunUninstall needs.
 type FakeInstaller struct {
 	CalledParseToolSpec   bool
 	ParseToolSpecOwner    string

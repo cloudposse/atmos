@@ -13,64 +13,18 @@ import (
 )
 
 func TestToolchainListCommand(t *testing.T) {
-	// Create temp directory for test.
-	tempDir := t.TempDir()
-	t.Setenv("HOME", tempDir)
-
-	// Create a test .tool-versions file.
-	toolVersionsPath := filepath.Join(tempDir, ".tool-versions")
-	content := "terraform 1.5.7\nkubectl 1.28.0\n"
-	err := os.WriteFile(toolVersionsPath, []byte(content), 0o644)
-	require.NoError(t, err)
-
-	// Set the tool-versions flag to use our temp file.
-	toolVersionsFile = toolVersionsPath
-	toolsDir = filepath.Join(tempDir, ".tools")
-	toolsConfigFile = filepath.Join(tempDir, "tools.yaml")
-
-	// Initialize the toolchain package config.
-	atmosCfg := &schema.AtmosConfiguration{
-		Toolchain: schema.Toolchain{
-			FilePath:        toolVersionsPath,
-			ToolsDir:        toolsDir,
-			ToolsConfigFile: toolsConfigFile,
-		},
-	}
-	toolchainpkg.SetAtmosConfig(atmosCfg)
+	_ = setupToolchainTest(t, "terraform 1.5.7\nkubectl 1.28.0\n")
 
 	// Test the list command runs without error.
-	err = listCmd.RunE(listCmd, []string{})
+	err := listCmd.RunE(listCmd, []string{})
 	assert.NoError(t, err)
 }
 
 func TestToolchainGetCommand(t *testing.T) {
-	// Create temp directory for test.
-	tempDir := t.TempDir()
-	t.Setenv("HOME", tempDir)
-
-	// Create a test .tool-versions file.
-	toolVersionsPath := filepath.Join(tempDir, ".tool-versions")
-	content := "terraform 1.5.7\n"
-	err := os.WriteFile(toolVersionsPath, []byte(content), 0o644)
-	require.NoError(t, err)
-
-	// Set the tool-versions flag to use our temp file.
-	toolVersionsFile = toolVersionsPath
-	toolsDir = filepath.Join(tempDir, ".tools")
-	toolsConfigFile = filepath.Join(tempDir, "tools.yaml")
-
-	// Initialize the toolchain package config.
-	atmosCfg := &schema.AtmosConfiguration{
-		Toolchain: schema.Toolchain{
-			FilePath:        toolVersionsPath,
-			ToolsDir:        toolsDir,
-			ToolsConfigFile: toolsConfigFile,
-		},
-	}
-	toolchainpkg.SetAtmosConfig(atmosCfg)
+	_ = setupToolchainTest(t, "terraform 1.5.7\n")
 
 	// Test the get command runs without error.
-	err = getCmd.RunE(getCmd, []string{"terraform"})
+	err := getCmd.RunE(getCmd, []string{"terraform"})
 	assert.NoError(t, err)
 }
 

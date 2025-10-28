@@ -346,7 +346,7 @@ func uninstallFromToolVersions(toolVersionsPath string, installer *Installer) er
 }
 
 // uninstallAllVersionsOfTool uninstalls all versions of a specific tool.
-// getVersionsToUninstall reads the tool directory and returns version directories to uninstall.
+// GetVersionsToUninstall reads the tool directory and returns version directories to uninstall.
 func getVersionsToUninstall(toolDir string) ([]string, error) {
 	entries, err := os.ReadDir(toolDir)
 	if err != nil {

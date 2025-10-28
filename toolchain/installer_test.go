@@ -1204,7 +1204,7 @@ func TestBuildAssetURLWithEmptyFields(t *testing.T) {
 	// https://github.com///releases/download/1.0.0/test-tool_1.0.0_darwin_arm64.tar.gz
 }
 
-// helper to create a tar.gz for testing
+// Helper to create a tar.gz for testing.
 func createTestTarGz(t *testing.T, path string, files map[string]string) {
 	t.Helper()
 

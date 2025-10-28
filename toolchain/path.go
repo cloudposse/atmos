@@ -7,6 +7,8 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/spf13/viper"
+
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
@@ -84,7 +86,8 @@ func EmitPath(exportFlag, jsonFlag, relativeFlag bool) error {
 	})
 
 	// Get current PATH
-	currentPath := os.Getenv("PATH")
+	// Use viper which checks environment variables automatically.
+	currentPath := viper.GetString("PATH")
 	if currentPath == "" {
 		currentPath = "/usr/local/bin:/usr/bin:/bin"
 	}

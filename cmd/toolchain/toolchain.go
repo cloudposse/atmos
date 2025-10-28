@@ -13,6 +13,11 @@ import (
 	toolchainpkg "github.com/cloudposse/atmos/toolchain"
 )
 
+const (
+	// GitHub token flag is the name of the GitHub token flag and configuration key.
+	githubTokenFlag = "github-token"
+)
+
 var (
 	githubToken      string
 	toolVersionsFile string
@@ -56,16 +61,16 @@ var toolchainCmd = &cobra.Command{
 
 func init() {
 	// Add GitHub token flag and bind to environment variables.
-	toolchainCmd.PersistentFlags().StringVar(&githubToken, "github-token", "", "GitHub token for authenticated requests")
-	if err := toolchainCmd.PersistentFlags().MarkHidden("github-token"); err != nil {
-		fmt.Fprintf(os.Stderr, "Error hiding github-token flag: %v\n", err)
+	toolchainCmd.PersistentFlags().StringVar(&githubToken, githubTokenFlag, "", "GitHub token for authenticated requests")
+	if err := toolchainCmd.PersistentFlags().MarkHidden(githubTokenFlag); err != nil {
+		fmt.Fprintf(os.Stderr, "Error hiding %s flag: %v\n", githubTokenFlag, err)
 	}
 	// Bind environment variables with proper precedence (ATMOS_GITHUB_TOKEN takes precedence over GITHUB_TOKEN).
-	if err := viper.BindPFlag("github-token", toolchainCmd.PersistentFlags().Lookup("github-token")); err != nil {
-		fmt.Fprintf(os.Stderr, "Error binding github-token flag: %v\n", err)
+	if err := viper.BindPFlag(githubTokenFlag, toolchainCmd.PersistentFlags().Lookup(githubTokenFlag)); err != nil {
+		fmt.Fprintf(os.Stderr, "Error binding %s flag: %v\n", githubTokenFlag, err)
 	}
-	if err := viper.BindEnv("github-token", "ATMOS_GITHUB_TOKEN", "GITHUB_TOKEN"); err != nil {
-		fmt.Fprintf(os.Stderr, "Error binding github-token environment variables: %v\n", err)
+	if err := viper.BindEnv(githubTokenFlag, "ATMOS_GITHUB_TOKEN", "GITHUB_TOKEN"); err != nil {
+		fmt.Fprintf(os.Stderr, "Error binding %s environment variables: %v\n", githubTokenFlag, err)
 	}
 
 	// Add tool-versions file flag.

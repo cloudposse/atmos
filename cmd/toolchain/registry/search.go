@@ -15,6 +15,13 @@ import (
 	toolchainregistry "github.com/cloudposse/atmos/toolchain/registry"
 )
 
+const (
+	defaultSearchLimit      = 20
+	columnWidthTool         = 30
+	columnWidthToolType     = 15
+	columnWidthToolRegistry = 20
+)
+
 var (
 	searchLimit         int
 	searchRegistry      string
@@ -38,7 +45,7 @@ Results are sorted by relevance score.`,
 }
 
 func init() {
-	searchCmd.Flags().IntVar(&searchLimit, "limit", 20, "Maximum number of results to show")
+	searchCmd.Flags().IntVar(&searchLimit, "limit", defaultSearchLimit, "Maximum number of results to show")
 	searchCmd.Flags().StringVar(&searchRegistry, "registry", "", "Search only in specific registry")
 	searchCmd.Flags().StringVar(&searchFormat, "format", "table", "Output format (table, json, yaml)")
 	searchCmd.Flags().BoolVar(&searchInstalledOnly, "installed-only", false, "Show only installed tools")
@@ -58,7 +65,7 @@ func executeSearchCommand(cmd *cobra.Command, args []string) error {
 		case "aqua-public", "aqua":
 			reg = toolchain.NewAquaRegistry()
 		default:
-			return fmt.Errorf("%w: %s (supported: aqua-public)", toolchainregistry.ErrUnknownRegistry, searchRegistry)
+			return fmt.Errorf("%w: %s", toolchainregistry.ErrUnknownRegistry, searchRegistry)
 		}
 	} else {
 		// Use default aqua registry for MVP.
@@ -104,9 +111,9 @@ func displaySearchResults(tools []*toolchainregistry.Tool) {
 
 	// Create table columns.
 	columns := []table.Column{
-		{Title: "TOOL", Width: 30},
-		{Title: "TYPE", Width: 15},
-		{Title: "REGISTRY", Width: 20},
+		{Title: "TOOL", Width: columnWidthTool},
+		{Title: "TYPE", Width: columnWidthToolType},
+		{Title: "REGISTRY", Width: columnWidthToolRegistry},
 	}
 
 	// Convert tools to table rows.

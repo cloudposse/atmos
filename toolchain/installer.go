@@ -28,6 +28,9 @@ const (
 	versionPrefix               = "v"
 	defaultFileWritePermissions = 0o644
 	defaultMkdirPermissions     = 0o755
+	maxUnixPermissions          = 0o7777
+	maxDecompressedSizeMB       = 3000
+	bufferSizeBytes             = 32 * 1024
 )
 
 // ToolResolver defines an interface for resolving tool names to owner/repo pairs
@@ -548,7 +551,7 @@ func (i *Installer) extractZip(zipPath, binaryPath string, tool *registry.Tool) 
 func Unzip(src, dest string) error {
 	defer perf.Track(nil, "toolchain.Unzip")()
 
-	const maxDecompressedSize = 3000 * 1024 * 1024 // 1000MB limit per file
+	const maxDecompressedSize = maxDecompressedSizeMB * 1024 * 1024 // 3000MB limit per file
 
 	r, err := zip.OpenReader(src)
 	if err != nil {
@@ -607,7 +610,7 @@ func copyFileContents(f *zip.File, fpath string, maxSize int64) error {
 
 func copyWithLimit(src io.Reader, dst io.Writer, name string, maxSize int64) error {
 	var totalBytes int64
-	buf := make([]byte, 32*1024)
+	buf := make([]byte, bufferSizeBytes)
 
 	for {
 		n, err := src.Read(buf)
@@ -690,8 +693,8 @@ func isSafePath(path, dest string) bool {
 
 func extractDir(path string, header *tar.Header) error {
 	// Validate header.Mode
-	if header.Mode < 0 || header.Mode > 0o7777 { // Restrict to typical Unix permissions
-		return fmt.Errorf("%w: invalid mode %d for %s: must be between 0 and 07777", ErrFileOperation, header.Mode, path)
+	if header.Mode < 0 || header.Mode > maxUnixPermissions { // Restrict to typical Unix permissions
+		return fmt.Errorf("%w: invalid mode %d for %s: must be between 0 and %o", ErrFileOperation, header.Mode, path, maxUnixPermissions)
 	}
 
 	// Safe conversion to os.FileMode

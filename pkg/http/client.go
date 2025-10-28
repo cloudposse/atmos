@@ -8,8 +8,9 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"os"
 	"time"
+
+	"github.com/spf13/viper"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -113,10 +114,10 @@ func (t *GitHubAuthenticatedTransport) RoundTrip(req *http.Request) (*http.Respo
 func GetGitHubTokenFromEnv() string {
 	defer perf.Track(nil, "http.GetGitHubTokenFromEnv")()
 
-	if token := os.Getenv("ATMOS_GITHUB_TOKEN"); token != "" {
+	if token := viper.GetString("ATMOS_GITHUB_TOKEN"); token != "" {
 		return token
 	}
-	return os.Getenv("GITHUB_TOKEN")
+	return viper.GetString("GITHUB_TOKEN")
 }
 
 // Do implements Client.Do.

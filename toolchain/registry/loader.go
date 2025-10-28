@@ -16,11 +16,11 @@ type registryFactory func() ToolRegistry
 type atmosRegistryFactory func(tools map[string]any) (ToolRegistry, error)
 
 var (
-	// defaultRegistryFactory is the factory for the default registry (Aqua).
+	// DefaultRegistryFactory is the factory for the default registry (Aqua).
 	// Set by the aqua package's init() function.
 	defaultRegistryFactory registryFactory
 
-	// atmosRegistryConstructor is the factory for creating inline registries.
+	// AtmosRegistryConstructor is the factory for creating inline registries.
 	// Set by the atmos package's init() function.
 	atmosRegistryConstructor atmosRegistryFactory
 )
