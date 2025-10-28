@@ -104,6 +104,7 @@ type ChatModel struct {
 	isCancelling         bool                  // Whether we're in the process of cancelling
 	cumulativeUsage      aiTypes.Usage         // Cumulative token usage for the session
 	lastUsage            *aiTypes.Usage        // Usage from the last AI response
+	maxHistoryMessages   int                   // Maximum conversation messages to keep in history (0 = unlimited)
 }
 
 // ChatMessage represents a single message in the chat.
@@ -149,6 +150,12 @@ func NewChatModel(client ai.Client, atmosConfig *schema.AtmosConfiguration, mana
 		// Continue without renderer - will fallback to plain text
 	}
 
+	// Get max history messages from configuration (0 = unlimited).
+	maxHistoryMessages := 0
+	if atmosConfig != nil {
+		maxHistoryMessages = atmosConfig.Settings.AI.MaxHistoryMessages
+	}
+
 	model := &ChatModel{
 		client:               client,
 		atmosConfig:          atmosConfig,
@@ -169,6 +176,7 @@ func NewChatModel(client ai.Client, atmosConfig *schema.AtmosConfiguration, mana
 		historyIndex:         -1,
 		markdownRenderer:     renderer,
 		renderedMessages:     make([]string, 0),
+		maxHistoryMessages:   maxHistoryMessages,
 	}
 
 	// Load existing messages from session if available.
@@ -1098,6 +1106,14 @@ func (m *ChatModel) getAIResponseWithContext(userMessage string, ctx context.Con
 					Content: msg.Content,
 				})
 			}
+		}
+
+		// Apply sliding window to limit conversation history if configured.
+		// This helps prevent rate limiting and reduces token usage for long conversations.
+		if m.maxHistoryMessages > 0 && len(messages) > m.maxHistoryMessages {
+			// Keep only the most recent N messages.
+			// We slice from the end to preserve the most recent conversation.
+			messages = messages[len(messages)-m.maxHistoryMessages:]
 		}
 
 		// Add current user message.

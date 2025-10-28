@@ -2762,3 +2762,400 @@ func TestFormatToolParameters(t *testing.T) {
 		})
 	}
 }
+
+// TestSlidingWindowConfiguration tests that max_history_messages configuration is properly loaded.
+func TestSlidingWindowConfiguration(t *testing.T) {
+	t.Run("loads max_history_messages from config", func(t *testing.T) {
+		client := &mockAIClient{
+			model:     "test-model",
+			maxTokens: 4096,
+		}
+
+		atmosConfig := &schema.AtmosConfiguration{
+			Settings: schema.AtmosSettings{
+				AI: schema.AISettings{
+					MaxHistoryMessages: 10,
+				},
+			},
+		}
+
+		model, err := NewChatModel(client, atmosConfig, nil, nil, nil, nil)
+		require.NoError(t, err)
+		assert.Equal(t, 10, model.maxHistoryMessages)
+	})
+
+	t.Run("defaults to 0 (unlimited) when not configured", func(t *testing.T) {
+		client := &mockAIClient{
+			model:     "test-model",
+			maxTokens: 4096,
+		}
+
+		model, err := NewChatModel(client, nil, nil, nil, nil, nil)
+		require.NoError(t, err)
+		assert.Equal(t, 0, model.maxHistoryMessages)
+	})
+
+	t.Run("handles zero value in config (unlimited)", func(t *testing.T) {
+		client := &mockAIClient{
+			model:     "test-model",
+			maxTokens: 4096,
+		}
+
+		atmosConfig := &schema.AtmosConfiguration{
+			Settings: schema.AtmosSettings{
+				AI: schema.AISettings{
+					MaxHistoryMessages: 0,
+				},
+			},
+		}
+
+		model, err := NewChatModel(client, atmosConfig, nil, nil, nil, nil)
+		require.NoError(t, err)
+		assert.Equal(t, 0, model.maxHistoryMessages)
+	})
+}
+
+// mockClientWithHistory tracks the messages sent to it for testing sliding window.
+type mockClientWithHistory struct {
+	mockAIClient
+	lastMessages []types.Message
+}
+
+func (m *mockClientWithHistory) SendMessageWithToolsAndHistory(ctx context.Context, messages []types.Message, availableTools []tools.Tool) (*types.Response, error) {
+	m.lastMessages = messages
+	return m.mockAIClient.SendMessageWithToolsAndHistory(ctx, messages, availableTools)
+}
+
+func (m *mockClientWithHistory) SendMessageWithHistory(ctx context.Context, messages []types.Message) (string, error) {
+	m.lastMessages = messages
+	return m.mockAIClient.SendMessageWithHistory(ctx, messages)
+}
+
+// TestSlidingWindowBehavior tests that sliding window correctly limits conversation history.
+func TestSlidingWindowBehavior(t *testing.T) {
+	t.Run("applies sliding window when limit is exceeded", func(t *testing.T) {
+		client := &mockClientWithHistory{
+			mockAIClient: mockAIClient{
+				model:     "test-model",
+				maxTokens: 4096,
+				response:  "AI response",
+			},
+		}
+
+		atmosConfig := &schema.AtmosConfiguration{
+			Settings: schema.AtmosSettings{
+				AI: schema.AISettings{
+					MaxHistoryMessages: 4, // Keep only 4 messages from history
+				},
+			},
+		}
+
+		// Create session to enable provider filtering.
+		sess := &session.Session{
+			ID:       "test-session",
+			Name:     "Test Session",
+			Provider: "anthropic",
+		}
+
+		model, err := NewChatModel(client, atmosConfig, nil, sess, nil, nil)
+		require.NoError(t, err)
+
+		// Add 6 historical messages (3 pairs of user/assistant exchanges).
+		// These should be pruned to keep only the last 4.
+		model.messages = []ChatMessage{
+			{Role: roleUser, Content: "Message 1", Provider: "anthropic"},
+			{Role: roleAssistant, Content: "Response 1", Provider: "anthropic"},
+			{Role: roleUser, Content: "Message 2", Provider: "anthropic"},
+			{Role: roleAssistant, Content: "Response 2", Provider: "anthropic"},
+			{Role: roleUser, Content: "Message 3", Provider: "anthropic"},
+			{Role: roleAssistant, Content: "Response 3", Provider: "anthropic"},
+		}
+
+		// Send a new message.
+		ctx := context.Background()
+		cmd := model.getAIResponseWithContext("New message", ctx)
+		msg := cmd()
+
+		// Verify it's a response message (not an error).
+		_, ok := msg.(aiResponseMsg)
+		assert.True(t, ok, "Expected aiResponseMsg")
+
+		// Verify the client received only the last 4 messages from history + the new message.
+		// Expected: Message 2, Response 2, Message 3, Response 3, New message = 5 total.
+		require.NotNil(t, client.lastMessages)
+		assert.Equal(t, 5, len(client.lastMessages), "Should have 4 history messages + 1 new message")
+
+		// Verify the oldest messages were pruned.
+		assert.Equal(t, "Message 2", client.lastMessages[0].Content)
+		assert.Equal(t, "Response 2", client.lastMessages[1].Content)
+		assert.Equal(t, "Message 3", client.lastMessages[2].Content)
+		assert.Equal(t, "Response 3", client.lastMessages[3].Content)
+		assert.Equal(t, "New message", client.lastMessages[4].Content)
+	})
+
+	t.Run("does not apply window when under limit", func(t *testing.T) {
+		client := &mockClientWithHistory{
+			mockAIClient: mockAIClient{
+				model:     "test-model",
+				maxTokens: 4096,
+				response:  "AI response",
+			},
+		}
+
+		atmosConfig := &schema.AtmosConfiguration{
+			Settings: schema.AtmosSettings{
+				AI: schema.AISettings{
+					MaxHistoryMessages: 10, // Limit is higher than actual messages
+				},
+			},
+		}
+
+		sess := &session.Session{
+			ID:       "test-session",
+			Name:     "Test Session",
+			Provider: "anthropic",
+		}
+
+		model, err := NewChatModel(client, atmosConfig, nil, sess, nil, nil)
+		require.NoError(t, err)
+
+		// Add 4 historical messages (under limit).
+		model.messages = []ChatMessage{
+			{Role: roleUser, Content: "Message 1", Provider: "anthropic"},
+			{Role: roleAssistant, Content: "Response 1", Provider: "anthropic"},
+			{Role: roleUser, Content: "Message 2", Provider: "anthropic"},
+			{Role: roleAssistant, Content: "Response 2", Provider: "anthropic"},
+		}
+
+		// Send a new message.
+		ctx := context.Background()
+		cmd := model.getAIResponseWithContext("New message", ctx)
+		msg := cmd()
+
+		// Verify it's a response message (not an error).
+		_, ok := msg.(aiResponseMsg)
+		assert.True(t, ok, "Expected aiResponseMsg")
+
+		// Verify all messages were sent (4 history + 1 new = 5 total).
+		require.NotNil(t, client.lastMessages)
+		assert.Equal(t, 5, len(client.lastMessages))
+
+		// Verify all historical messages are present.
+		assert.Equal(t, "Message 1", client.lastMessages[0].Content)
+		assert.Equal(t, "Response 1", client.lastMessages[1].Content)
+		assert.Equal(t, "Message 2", client.lastMessages[2].Content)
+		assert.Equal(t, "Response 2", client.lastMessages[3].Content)
+		assert.Equal(t, "New message", client.lastMessages[4].Content)
+	})
+
+	t.Run("unlimited history when maxHistoryMessages is 0", func(t *testing.T) {
+		client := &mockClientWithHistory{
+			mockAIClient: mockAIClient{
+				model:     "test-model",
+				maxTokens: 4096,
+				response:  "AI response",
+			},
+		}
+
+		atmosConfig := &schema.AtmosConfiguration{
+			Settings: schema.AtmosSettings{
+				AI: schema.AISettings{
+					MaxHistoryMessages: 0, // Unlimited
+				},
+			},
+		}
+
+		sess := &session.Session{
+			ID:       "test-session",
+			Name:     "Test Session",
+			Provider: "anthropic",
+		}
+
+		model, err := NewChatModel(client, atmosConfig, nil, sess, nil, nil)
+		require.NoError(t, err)
+
+		// Add many historical messages.
+		for i := 0; i < 20; i++ {
+			model.messages = append(model.messages, ChatMessage{
+				Role:     roleUser,
+				Content:  fmt.Sprintf("Message %d", i),
+				Provider: "anthropic",
+			})
+			model.messages = append(model.messages, ChatMessage{
+				Role:     roleAssistant,
+				Content:  fmt.Sprintf("Response %d", i),
+				Provider: "anthropic",
+			})
+		}
+
+		// Send a new message.
+		ctx := context.Background()
+		cmd := model.getAIResponseWithContext("New message", ctx)
+		msg := cmd()
+
+		// Verify it's a response message (not an error).
+		_, ok := msg.(aiResponseMsg)
+		assert.True(t, ok, "Expected aiResponseMsg")
+
+		// Verify all messages were sent (40 history + 1 new = 41 total).
+		require.NotNil(t, client.lastMessages)
+		assert.Equal(t, 41, len(client.lastMessages))
+	})
+
+	t.Run("handles empty history", func(t *testing.T) {
+		client := &mockClientWithHistory{
+			mockAIClient: mockAIClient{
+				model:     "test-model",
+				maxTokens: 4096,
+				response:  "AI response",
+			},
+		}
+
+		atmosConfig := &schema.AtmosConfiguration{
+			Settings: schema.AtmosSettings{
+				AI: schema.AISettings{
+					MaxHistoryMessages: 10,
+				},
+			},
+		}
+
+		sess := &session.Session{
+			ID:       "test-session",
+			Name:     "Test Session",
+			Provider: "anthropic",
+		}
+
+		model, err := NewChatModel(client, atmosConfig, nil, sess, nil, nil)
+		require.NoError(t, err)
+
+		// No historical messages.
+		model.messages = []ChatMessage{}
+
+		// Send a new message.
+		ctx := context.Background()
+		cmd := model.getAIResponseWithContext("First message", ctx)
+		msg := cmd()
+
+		// Verify it's a response message (not an error).
+		_, ok := msg.(aiResponseMsg)
+		assert.True(t, ok, "Expected aiResponseMsg")
+
+		// Verify only the new message was sent.
+		require.NotNil(t, client.lastMessages)
+		assert.Equal(t, 1, len(client.lastMessages))
+		assert.Equal(t, "First message", client.lastMessages[0].Content)
+	})
+
+	t.Run("filters by provider before applying window", func(t *testing.T) {
+		client := &mockClientWithHistory{
+			mockAIClient: mockAIClient{
+				model:     "test-model",
+				maxTokens: 4096,
+				response:  "AI response",
+			},
+		}
+
+		atmosConfig := &schema.AtmosConfiguration{
+			Settings: schema.AtmosSettings{
+				AI: schema.AISettings{
+					MaxHistoryMessages: 2, // Very small window
+				},
+			},
+		}
+
+		sess := &session.Session{
+			ID:       "test-session",
+			Name:     "Test Session",
+			Provider: "anthropic", // Current provider
+		}
+
+		model, err := NewChatModel(client, atmosConfig, nil, sess, nil, nil)
+		require.NoError(t, err)
+
+		// Add messages from different providers.
+		model.messages = []ChatMessage{
+			{Role: roleUser, Content: "OpenAI 1", Provider: "openai"},
+			{Role: roleAssistant, Content: "OpenAI Response 1", Provider: "openai"},
+			{Role: roleUser, Content: "Anthropic 1", Provider: "anthropic"},
+			{Role: roleAssistant, Content: "Anthropic Response 1", Provider: "anthropic"},
+			{Role: roleUser, Content: "Anthropic 2", Provider: "anthropic"},
+			{Role: roleAssistant, Content: "Anthropic Response 2", Provider: "anthropic"},
+			{Role: roleUser, Content: "Anthropic 3", Provider: "anthropic"},
+			{Role: roleAssistant, Content: "Anthropic Response 3", Provider: "anthropic"},
+		}
+
+		// Send a new message.
+		ctx := context.Background()
+		cmd := model.getAIResponseWithContext("New message", ctx)
+		msg := cmd()
+
+		// Verify it's a response message (not an error).
+		_, ok := msg.(aiResponseMsg)
+		assert.True(t, ok, "Expected aiResponseMsg")
+
+		// Verify:
+		// 1. OpenAI messages were filtered out
+		// 2. Only last 2 Anthropic messages were kept (+ new message = 3 total).
+		require.NotNil(t, client.lastMessages)
+		assert.Equal(t, 3, len(client.lastMessages))
+
+		// Should be: Anthropic 3, Anthropic Response 3, New message.
+		assert.Equal(t, "Anthropic 3", client.lastMessages[0].Content)
+		assert.Equal(t, "Anthropic Response 3", client.lastMessages[1].Content)
+		assert.Equal(t, "New message", client.lastMessages[2].Content)
+	})
+
+	t.Run("system messages are excluded from history", func(t *testing.T) {
+		client := &mockClientWithHistory{
+			mockAIClient: mockAIClient{
+				model:     "test-model",
+				maxTokens: 4096,
+				response:  "AI response",
+			},
+		}
+
+		atmosConfig := &schema.AtmosConfiguration{
+			Settings: schema.AtmosSettings{
+				AI: schema.AISettings{
+					MaxHistoryMessages: 4,
+				},
+			},
+		}
+
+		sess := &session.Session{
+			ID:       "test-session",
+			Name:     "Test Session",
+			Provider: "anthropic",
+		}
+
+		model, err := NewChatModel(client, atmosConfig, nil, sess, nil, nil)
+		require.NoError(t, err)
+
+		// Add messages including system messages.
+		model.messages = []ChatMessage{
+			{Role: roleSystem, Content: "System notification 1", Provider: "anthropic"},
+			{Role: roleUser, Content: "Message 1", Provider: "anthropic"},
+			{Role: roleAssistant, Content: "Response 1", Provider: "anthropic"},
+			{Role: roleSystem, Content: "System notification 2", Provider: "anthropic"},
+			{Role: roleUser, Content: "Message 2", Provider: "anthropic"},
+			{Role: roleAssistant, Content: "Response 2", Provider: "anthropic"},
+		}
+
+		// Send a new message.
+		ctx := context.Background()
+		cmd := model.getAIResponseWithContext("New message", ctx)
+		msg := cmd()
+
+		// Verify it's a response message (not an error).
+		_, ok := msg.(aiResponseMsg)
+		assert.True(t, ok, "Expected aiResponseMsg")
+
+		// Verify system messages were filtered out.
+		// Should have: Message 1, Response 1, Message 2, Response 2, New message = 5 total.
+		require.NotNil(t, client.lastMessages)
+		for _, msg := range client.lastMessages {
+			assert.NotEqual(t, types.RoleSystem, msg.Role, "System messages should be filtered out")
+			assert.NotContains(t, msg.Content, "System notification")
+		}
+	})
+}
