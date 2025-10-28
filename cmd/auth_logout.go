@@ -132,16 +132,16 @@ func performIdentityLogout(ctx context.Context, authManager auth.AuthManager, id
 	if err := authManager.Logout(ctx, identityName); err != nil {
 		// Check if it's a partial logout.
 		if errors.Is(err, errUtils.ErrPartialLogout) {
-			u.PrintfMarkdownToTUI("\n%s Logged out **%s** with warnings\n\n", theme.Styles.Checkmark, identityName)
+			u.PrintfMessageToTUI("\n%s Logged out %s with warnings\n\n", theme.Styles.Checkmark, identityName)
 			u.PrintfMessageToTUI("Some credentials could not be removed:\n")
 			u.PrintfMessageToTUI("  %v\n\n", err)
 		} else {
-			u.PrintfMarkdownToTUI("\n%s Failed to log out **%s**\n\n", theme.Styles.XMark, identityName)
+			u.PrintfMessageToTUI("\n%s Failed to log out %s\n\n", theme.Styles.XMark, identityName)
 			u.PrintfMessageToTUI("Error: %v\n\n", err)
 			return err
 		}
 	} else {
-		u.PrintfMarkdownToTUI("\n%s Logged out **%s**\n\n", theme.Styles.Checkmark, identityName)
+		u.PrintfMessageToTUI("\n%s Logged out %s\n\n", theme.Styles.Checkmark, identityName)
 	}
 
 	// Display browser session warning.
@@ -200,7 +200,7 @@ func performProviderLogout(ctx context.Context, authManager auth.AuthManager, pr
 		return err
 	}
 
-	u.PrintfMarkdownToTUI("\n%s Logged out provider **%s** (%d identities)\n\n", theme.Styles.Checkmark, providerName, len(identitiesForProvider))
+	u.PrintfMessageToTUI("\n%s Logged out provider %s (%d identities)\n\n", theme.Styles.Checkmark, providerName, len(identitiesForProvider))
 
 	// Display browser session warning.
 	displayBrowserWarning()
