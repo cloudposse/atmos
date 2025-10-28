@@ -152,7 +152,7 @@ var (
 	ErrNoSuitableShell                  = errors.New("no suitable shell found")
 	ErrFailedToLoadTerraformModule      = errors.New("failed to load terraform module")
 	ErrNoJSONOutput                     = errors.New("no JSON output found in terraform show output")
-	ErrOriginalPlanFileRequired         = errors.New("original plan file (--orig) is required")
+	ErrOriginalPlanFileRequired         = errors.New("original plan file is required")
 	ErrOriginalPlanFileNotExist         = errors.New("original plan file does not exist")
 	ErrNewPlanFileNotExist              = errors.New("new plan file does not exist")
 	ErrTerraformGenerateBackendArgument = errors.New("invalid arguments")

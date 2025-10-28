@@ -86,7 +86,9 @@ func parsePlanDiffFlags(args []string) (string, string, error) {
 	}
 
 	if origPlanFile == "" {
-		return "", "", errUtils.ErrOriginalPlanFileRequired
+		return "", "", errUtils.Build(errUtils.ErrOriginalPlanFileRequired).
+			WithHint("Use the --orig flag to specify the original plan file").
+			Err()
 	}
 
 	return origPlanFile, newPlanFile, nil
