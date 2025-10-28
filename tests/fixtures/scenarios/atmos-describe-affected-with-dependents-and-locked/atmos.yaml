@@ -69,7 +69,7 @@ settings:
         max_tokens: 4096
 
       gemini:
-        model: "gemini-2.0-flash-preview-image-generation"
+        model: "gemini-2.0-flash-exp"
         api_key_env: "GEMINI_API_KEY"
         max_tokens: 8192
 

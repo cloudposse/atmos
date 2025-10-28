@@ -2639,6 +2639,11 @@ func TestFormatAPIError(t *testing.T) {
 			expected: "Context length exceeded. Your conversation is too long. Try starting a new session.",
 		},
 		{
+			name:     "function calling not enabled (Gemini image model)",
+			err:      fmt.Errorf("Error 400, Message: Function calling is not enabled for models/gemini-2.0-flash-preview-image-generation, Status: INVALID_ARGUMENT"),
+			expected: "This model doesn't support function calling (tool use). Please switch to a different model using Ctrl+P. Try gemini-2.0-flash-exp or gemini-1.5-pro.",
+		},
+		{
 			name:     "error with request ID stripped",
 			err:      fmt.Errorf("failed to send messages with history and tools: POST \"https://api.anthropic.com/v1/messages\": 429 Too Many Requests (Request-ID: req_011CUYpGVDM4KU1nVwW9rzX4)"),
 			expected: "Rate limit exceeded. Please wait a moment and try again, or contact your provider to increase your rate limit.",

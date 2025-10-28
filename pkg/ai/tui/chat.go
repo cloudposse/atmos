@@ -1419,6 +1419,12 @@ func formatAPIError(err error) string {
 
 	errStr := err.Error()
 
+	// Detect function calling not supported errors (Gemini image generation models).
+	if strings.Contains(errStr, "Function calling is not enabled") ||
+		(strings.Contains(errStr, "function calling") && (strings.Contains(errStr, "not enabled") || strings.Contains(errStr, "not supported"))) {
+		return "This model doesn't support function calling (tool use). Please switch to a different model using Ctrl+P. Try gemini-2.0-flash-exp or gemini-1.5-pro."
+	}
+
 	// Detect rate limit errors (429 Too Many Requests).
 	if strings.Contains(errStr, "429") || strings.Contains(errStr, "Too Many Requests") ||
 		strings.Contains(errStr, "rate_limit_error") {
