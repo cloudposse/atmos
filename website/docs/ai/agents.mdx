@@ -250,25 +250,47 @@ Press **Ctrl+A** in the chat interface to open the agent selector:
 │                                                     │
 │ ↑/↓: Navigate | Enter: Select | Esc/q: Cancel      │
 │                                                     │
-│ ▶ General (current) [built-in]                     │
+│ ▶ 🤖 General (current) [built-in]                  │
 │     General-purpose assistant for all operations   │
 │                                                     │
-│   Stack Analyzer [built-in]                        │
+│   📊 Stack Analyzer [built-in]                     │
 │     Analyze stack configurations and dependencies  │
 │                                                     │
-│   Component Refactor [built-in]                    │
+│   🔧 Component Refactor [built-in]                 │
 │     Refactor Terraform/Helmfile components         │
 │                                                     │
-│   Security Auditor [built-in]                      │
+│   🔒 Security Auditor [built-in]                   │
 │     Security review of infrastructure configs      │
 │                                                     │
-│   Config Validator [built-in]                      │
+│   ✅ Config Validator [built-in]                   │
 │     Validate Atmos configuration files             │
 │                                                     │
 ╰─────────────────────────────────────────────────────╯
 ```
 
 Use **↑/↓** or **j/k** to navigate, **Enter** to select, **Esc** or **q** to cancel.
+
+#### Visual Indicators
+
+Each agent is identified by a unique icon that appears in both the agent selector and chat messages:
+
+- **🤖 General** - Robot icon for general-purpose assistance
+- **📊 Stack Analyzer** - Chart icon for data analysis and insights
+- **🔧 Component Refactor** - Wrench icon for fixing and building
+- **🔒 Security Auditor** - Lock icon for security and compliance
+- **✅ Config Validator** - Checkmark icon for validation
+
+When an agent responds in the chat, its icon appears in the message prefix:
+
+```
+You: Analyze the VPC configuration                      15:30
+
+Atmos AI 📊 👽 (anthropic):                             15:30
+I'll analyze the VPC configuration for you.
+[Stack Analyzer agent response with specialized analysis]
+```
+
+These visual indicators make it immediately clear which agent is active and help you track which specialized assistant is handling each part of your conversation.
 
 ### Setting Default Agent
 
@@ -633,6 +655,336 @@ Atmos has two types of agents serving different purposes:
 - Performing development tasks
 
 Both systems can work together! Use built-in agents for infrastructure analysis in the terminal, and Claude Code subagents for code development in your IDE.
+
+## Performance Tips
+
+### Agent Selection for Optimal Results
+
+Choosing the right agent significantly impacts response quality and speed. Here's when to use each built-in agent:
+
+#### 🤖 General Agent
+**Best for:**
+- Initial exploration and discovery
+- Questions that span multiple domains
+- When you're unsure which specialized agent to use
+- Quick one-off queries
+
+**Performance characteristics:**
+- ✅ Most flexible - can handle any task
+- ✅ No tool restrictions - fastest for multi-step workflows
+- ⚠️ Less specialized - may provide generic answers for domain-specific questions
+
+**Example use cases:**
+```bash
+# Good for general agent
+"What is Atmos?"
+"List all available stacks and their components"
+"Help me debug this error: [error message]"
+```
+
+---
+
+#### 📊 Stack Analyzer Agent
+**Best for:**
+- Understanding stack configurations and relationships
+- Analyzing component dependencies
+- Architecture reviews
+- Configuration impact analysis
+
+**Performance characteristics:**
+- ✅ Highly specialized - produces detailed architectural insights
+- ✅ Read-only - safe for production analysis
+- ✅ Optimized prompts - better at finding configuration patterns
+- ⚠️ Limited to analysis tools - can't make changes
+
+**Example use cases:**
+```bash
+# Good for stack analyzer
+"Analyze dependencies between all prod stacks"
+"Show me the inheritance chain for vpc component"
+"What stacks will be affected if I change the base mixin?"
+"Compare staging and prod configurations"
+```
+
+---
+
+#### 🔧 Component Refactor Agent
+**Best for:**
+- Improving Terraform/Helmfile code quality
+- Modernizing infrastructure code
+- Applying best practices
+- Refactoring for consistency
+
+**Performance characteristics:**
+- ✅ Code-focused - understands infrastructure-as-code patterns
+- ✅ Write access - can make improvements directly
+- ✅ Incremental changes - makes one improvement at a time with explanations
+- ⚠️ Requires confirmation - each change needs approval (by design)
+
+**Example use cases:**
+```bash
+# Good for component refactor
+"Refactor the VPC component to use Terraform 1.5 syntax"
+"Update all components to use consistent variable naming"
+"Improve the RDS module with better defaults"
+"Modernize the EKS configuration"
+```
+
+---
+
+#### 🔒 Security Auditor Agent
+**Best for:**
+- Security reviews and audits
+- Compliance checking
+- Finding vulnerabilities
+- IAM policy analysis
+
+**Performance characteristics:**
+- ✅ Security-focused - trained to spot vulnerabilities
+- ✅ Systematic approach - checks multiple security dimensions
+- ✅ Severity classification - prioritizes critical issues
+- ⚠️ Read-only - identifies but doesn't fix issues
+
+**Example use cases:**
+```bash
+# Good for security auditor
+"Audit VPC security groups for overly permissive rules"
+"Check all IAM policies for wildcards"
+"Find unencrypted resources across all stacks"
+"Identify publicly accessible resources"
+```
+
+---
+
+#### ✅ Config Validator Agent
+**Best for:**
+- YAML syntax validation
+- Schema compliance checking
+- Finding configuration errors
+- Pre-deployment validation
+
+**Performance characteristics:**
+- ✅ Validation-focused - catches config errors quickly
+- ✅ Schema-aware - understands Atmos configuration structure
+- ✅ Line-specific errors - provides exact file locations
+- ⚠️ Limited scope - only validates, doesn't analyze content
+
+**Example use cases:**
+```bash
+# Good for config validator
+"Validate all stack configurations"
+"Check for YAML syntax errors in prod stacks"
+"Verify all required fields are present"
+"Find circular import dependencies"
+```
+
+---
+
+### Custom vs Built-in Agents: Performance Implications
+
+#### Built-in Agents (Recommended)
+
+**Advantages:**
+- ✅ **Pre-optimized** - System prompts are carefully tuned for Atmos workflows
+- ✅ **Consistent behavior** - Same experience across all Atmos installations
+- ✅ **Maintained** - Updated with Atmos releases for improved performance
+- ✅ **Well-tested** - Validated against common infrastructure patterns
+- ✅ **Lower latency** - No configuration parsing overhead
+
+**When to use:**
+- You're performing standard infrastructure operations
+- You want proven, reliable results
+- Your team needs consistent AI behavior
+- You're new to Atmos AI agents
+
+#### Custom Agents
+
+**Advantages:**
+- ✅ **Domain-specific** - Tailored to your organization's needs
+- ✅ **Workflow-optimized** - Built for your specific processes
+- ✅ **Team knowledge** - Can encode institutional knowledge
+- ✅ **Compliance-focused** - Can enforce company policies
+
+**Considerations:**
+- ⚠️ **Prompt engineering required** - Needs careful crafting for good results
+- ⚠️ **Testing needed** - Must validate behavior across scenarios
+- ⚠️ **Maintenance overhead** - Requires updates as workflows change
+- ⚠️ **Inconsistent results** - Poorly-written prompts reduce quality
+
+**When to create custom agents:**
+```yaml
+# Good reasons for custom agents
+1. Specialized workflows
+   Example: Multi-cloud deployment agent that understands your AWS+Azure patterns
+
+2. Company-specific policies
+   Example: Compliance agent that enforces internal naming conventions
+
+3. Domain expertise
+   Example: Cost optimization agent tuned for your infrastructure patterns
+
+4. Team workflows
+   Example: Migration agent with your specific migration checklist
+```
+
+**When to stick with built-in:**
+```yaml
+# Better served by built-in agents
+❌ "I want a VPC analysis agent"
+   → Use Stack Analyzer - already optimized for this
+
+❌ "I need a security checker"
+   → Use Security Auditor - comprehensive coverage built-in
+
+❌ "I want to validate configs"
+   → Use Config Validator - knows Atmos schema perfectly
+
+❌ "I need to refactor code"
+   → Use Component Refactor - understands IaC best practices
+```
+
+### Performance Optimization Tips
+
+#### 1. Start Specific, Not General
+
+❌ **Slower**:
+```bash
+# Using general agent for specialized task
+atmos ai chat
+You: "Check my infrastructure for security issues"
+# Generic analysis, may miss domain-specific vulnerabilities
+```
+
+✅ **Faster**:
+```bash
+# Using specialized agent
+atmos ai chat
+Ctrl+A → Security Auditor
+You: "Check my infrastructure for security issues"
+# Focused, comprehensive security analysis
+```
+
+#### 2. Use Agent Persistence
+
+✅ **Efficient**:
+```bash
+# Create session with appropriate agent
+atmos ai chat --session vpc-security-review
+Ctrl+A → Security Auditor
+# Perform reviews...
+
+# Next time - agent automatically restored
+atmos ai chat --session vpc-security-review
+# ✅ Starts with Security Auditor, no need to switch
+```
+
+#### 3. Switch Agents During Workflows
+
+✅ **Optimal workflow**:
+```bash
+# Analysis phase
+Ctrl+A → Stack Analyzer
+"Analyze prod infrastructure"
+
+# Improvement phase
+Ctrl+A → Component Refactor
+"Refactor based on analysis"
+
+# Validation phase
+Ctrl+A → Config Validator
+"Validate changes"
+
+# Security review
+Ctrl+A → Security Auditor
+"Security audit of changes"
+```
+
+Each agent provides better results for its phase than using General agent throughout.
+
+#### 4. Limit Custom Agent Complexity
+
+**Simple, focused agents perform better:**
+
+✅ **Good - Focused custom agent**:
+```yaml
+agents:
+  cost-optimizer:
+    description: "Analyzes and recommends cost optimizations"
+    system_prompt: |
+      You specialize in AWS cost optimization.
+      Focus on: unused resources, rightsizing, reserved instances.
+```
+
+❌ **Bad - Overly complex agent**:
+```yaml
+agents:
+  everything-agent:
+    description: "Does security, cost, compliance, and refactoring"
+    system_prompt: |
+      You do security AND cost AND compliance AND refactoring AND...
+      # Too many responsibilities = poor performance in all areas
+```
+
+#### 5. Optimize Tool Access
+
+**Give agents only what they need:**
+
+✅ **Efficient - Minimal tool set**:
+```yaml
+agents:
+  cost-analyzer:
+    allowed_tools:
+      - atmos_describe_component
+      - atmos_list_stacks
+      - read_file
+    # Fast - AI only sees relevant tools
+```
+
+❌ **Slower - Unnecessary tools**:
+```yaml
+agents:
+  cost-analyzer:
+    allowed_tools: []  # All tools exposed
+    # Slower - AI must evaluate all tools, even irrelevant ones
+```
+
+### Measuring Agent Performance
+
+You can compare agent effectiveness:
+
+**Response Quality:**
+```bash
+# Same question, different agents
+# General agent
+atmos ai chat
+"Analyze VPC security"
+→ Generic security check
+
+# Security Auditor agent
+Ctrl+A → Security Auditor
+"Analyze VPC security"
+→ Comprehensive security audit with:
+  - Specific vulnerability identification
+  - Severity classification
+  - Remediation steps
+  - Compliance implications
+```
+
+**Speed (fewer tool calls = faster):**
+```bash
+# Specialized agents make better tool choices
+Security Auditor: 3-4 focused tool calls
+General Agent: 5-7 exploratory tool calls
+```
+
+**Accuracy (domain expertise matters):**
+```bash
+# Security Auditor finds issues General agent misses:
+- Subtle IAM policy problems
+- Network security misconfigurations
+- Encryption gaps
+- Compliance violations
+```
 
 ## Related Documentation
 

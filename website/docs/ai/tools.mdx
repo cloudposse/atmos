@@ -1442,6 +1442,483 @@ tools:
 ```
 </File>
 
+## Agent-Specific Tool Access
+
+Different AI agents have different tool access based on their specialization. This allows each agent to focus on its area of expertise while preventing inappropriate actions.
+
+### How Agent Tool Filtering Works
+
+When you switch to a specialized agent, Atmos automatically filters the available tools to match that agent's capabilities:
+
+1. **Agent Defines Allowed Tools** - Each agent specifies which tools it can use
+2. **Restricted Tools Require Confirmation** - Some agents mark certain tools as requiring user approval
+3. **Blocked Tools Are Unavailable** - Tools not in the allowed list cannot be called by that agent
+4. **Provider Restrictions** - Tools are filtered before being sent to the AI provider
+
+This creates a safety layer where specialized agents can only perform actions relevant to their purpose.
+
+### Built-in Agents and Their Tool Access
+
+#### General Agent (Default)
+
+**Access:** Full tool access - all tools available
+
+The default general-purpose agent has unrestricted access to all tools. It can perform any operation that your global tool configuration allows.
+
+**Use Cases:**
+- General infrastructure queries
+- Multi-purpose conversations
+- Tasks requiring diverse tool access
+- Exploratory analysis
+
+**Example:**
+
+<Terminal title="atmos ai chat">
+```bash
+You: List all stacks and describe the VPC component in prod
+
+AI (general): I'll list the stacks and describe the VPC for you.
+
+🔧 Tool: atmos_list_stacks
+✅ Executing...
+[Lists all stacks]
+
+🔧 Tool: atmos_describe_component (vpc, prod-use1)
+✅ Executing...
+[Shows VPC configuration]
+
+Here's what I found:
+- 15 stacks available
+- VPC in prod-use1 has CIDR 10.0.0.0/16 with 3 availability zones...
+```
+</Terminal>
+
+---
+
+#### Stack Analyzer Agent
+
+**Allowed Tools:**
+- ✅ `atmos_describe_component` - Examine component details
+- ✅ `atmos_describe_affected` - Impact analysis
+- ✅ `atmos_list_stacks` - Stack inventory
+- ✅ `read_stack_file` - Read stack configurations
+- ✅ `atmos_get_template_context` - Understand variables
+- ✅ `read_file` - Read any file
+- ❌ **Cannot edit files** - Read-only agent
+- ❌ **Cannot execute commands** - Analysis only
+
+**Use Cases:**
+- Analyzing stack configurations and dependencies
+- Understanding inheritance patterns
+- Reviewing architecture design
+- Identifying configuration issues
+
+**Example:**
+
+<Terminal title="atmos ai chat">
+```bash
+# Switch to Stack Analyzer agent
+Ctrl+A → Select "Stack Analyzer"
+
+You: Analyze the prod-use1 stack dependencies
+
+AI (stack-analyzer): I'll analyze the dependency chain for prod-use1.
+
+🔧 Tool: atmos_describe_component (vpc, prod-use1)
+✅ Executing...
+
+🔧 Tool: read_stack_file (stacks/prod/use1.yaml)
+✅ Executing...
+
+🔧 Tool: atmos_describe_affected (vpc)
+✅ Executing...
+
+Here's the dependency analysis:
+
+**Stack: prod-use1**
+- Inherits from: mixins/prod.yaml, mixins/use1.yaml
+- Components: vpc, eks, rds
+- Dependencies: vpc → eks → rds
+
+The VPC component is the foundation, with EKS and RDS depending on it.
+If you modify the VPC, it will affect 2 downstream components.
+
+# If you try to edit a file:
+You: Edit the vpc configuration
+
+AI (stack-analyzer): I'm a read-only analysis agent and cannot edit files.
+To make changes, please switch to the Component Refactor agent (Ctrl+A)
+or use the General agent.
+```
+</Terminal>
+
+**Why This Restriction?**
+Stack Analyzer is optimized for understanding and analyzing configurations, not modifying them. This prevents accidental changes during investigation and ensures the agent stays focused on its analytical role.
+
+---
+
+#### Component Refactor Agent
+
+**Allowed Tools:**
+- ✅ `list_component_files` - Discover component structure
+- ✅ `read_component_file` - Read component code
+- ✅ `read_file` - Read any file
+- ✅ `edit_file` ⚠️ - Edit files (requires confirmation)
+- ✅ `search_files` - Find patterns across files
+- ✅ `execute_bash` ⚠️ - Run commands (requires confirmation)
+- ❌ **Cannot access Atmos describe tools** - Focused on code, not stack queries
+- ❌ **Cannot validate stacks** - Not a validation agent
+
+**Restricted Tools (Require Confirmation):**
+- ⚠️ `edit_file` - Always prompts before modifying files
+- ⚠️ `execute_bash` - Always prompts before running commands
+
+**Use Cases:**
+- Refactoring Terraform/Helmfile components
+- Improving code structure and organization
+- Applying infrastructure-as-code best practices
+- Modernizing deprecated patterns
+
+**Example:**
+
+<Terminal title="atmos ai chat">
+```bash
+# Switch to Component Refactor agent
+Ctrl+A → Select "Component Refactor"
+
+You: Refactor the VPC component to use modern naming conventions
+
+AI (component-refactor): I'll analyze and refactor the VPC component.
+
+🔧 Tool: list_component_files (terraform, vpc)
+✅ Executing...
+
+🔧 Tool: read_component_file (terraform, vpc, main.tf)
+✅ Executing...
+
+I've identified several improvements:
+1. Variable names should use snake_case consistently
+2. Resources should follow the naming pattern: <type>-<env>-<name>
+3. Local values can reduce duplication
+
+Let me make these changes:
+
+🔧 Tool: edit_file
+Description: Update variable naming in vpc/variables.tf
+Parameters:
+  file_path: components/terraform/vpc/variables.tf
+  old_content: variable "vpcCIDR" {
+  new_content: variable "vpc_cidr" {
+
+⚠️ Allow execution? (y/N): y
+✅ Executing...
+
+File updated successfully. I've improved the variable naming consistency.
+
+# If you try to describe a stack:
+You: What stacks use this VPC?
+
+AI (component-refactor): I don't have access to stack analysis tools.
+For stack queries, please switch to the Stack Analyzer agent (Ctrl+A)
+or use the General agent.
+```
+</Terminal>
+
+**Why These Restrictions?**
+Component Refactor focuses exclusively on code quality and structure. It requires confirmation before making changes or running commands to ensure you review all modifications. It doesn't need stack analysis tools because its job is improving code, not analyzing infrastructure topology.
+
+---
+
+#### Security Auditor Agent
+
+**Allowed Tools:**
+- ✅ `atmos_describe_component` - Examine component security
+- ✅ `atmos_list_stacks` - Inventory all stacks
+- ✅ `read_stack_file` - Review stack configurations
+- ✅ `read_component_file` - Check component code
+- ✅ `atmos_validate_stacks` - Validate configurations
+- ✅ `read_file` - Read any file
+- ✅ `search_files` - Find security patterns
+- ❌ **Cannot edit files** - Audit only, no modifications
+- ❌ **Cannot execute commands** - Security review only
+
+**Use Cases:**
+- Security audits of infrastructure configurations
+- Identifying IAM policy issues
+- Checking network security (CIDR blocks, security groups)
+- Validating encryption and secrets management
+- Detecting exposed credentials
+
+**Example:**
+
+<Terminal title="atmos ai chat">
+```bash
+# Switch to Security Auditor agent
+Ctrl+A → Select "Security Auditor"
+
+You: Audit the VPC security configuration for prod
+
+AI (security-auditor): I'll perform a comprehensive security audit.
+
+🔧 Tool: atmos_describe_component (vpc, prod-use1)
+✅ Executing...
+
+🔧 Tool: read_component_file (terraform, vpc, security_groups.tf)
+✅ Executing...
+
+🔧 Tool: search_files (pattern: "0.0.0.0/0", path: components/terraform/vpc)
+✅ Executing...
+
+**SECURITY AUDIT REPORT: VPC prod-use1**
+
+🔴 CRITICAL FINDINGS (2):
+
+1. **Unrestricted SSH Access**
+   File: components/terraform/vpc/security_groups.tf:23
+   Issue: Security group allows SSH (port 22) from 0.0.0.0/0
+   Risk: Publicly accessible SSH increases brute-force attack risk
+   Fix: Restrict ingress to specific IP ranges or use bastion host
+
+2. **Overly Permissive Security Group**
+   File: components/terraform/vpc/security_groups.tf:45
+   Issue: Egress rule allows all traffic to 0.0.0.0/0
+   Risk: Potential data exfiltration if instance compromised
+   Fix: Restrict egress to specific destinations/ports
+
+🟡 HIGH FINDINGS (1):
+
+3. **Missing VPC Flow Logs**
+   Issue: VPC flow logs not enabled
+   Risk: No network traffic visibility for security monitoring
+   Fix: Enable VPC flow logs to CloudWatch or S3
+
+Recommendations:
+1. Implement bastion host for SSH access
+2. Use AWS Session Manager instead of direct SSH
+3. Enable VPC flow logs for all environments
+4. Review and tighten all security group rules
+
+# If you try to fix the issues:
+You: Fix these security issues
+
+AI (security-auditor): I'm an audit-only agent and cannot modify configurations.
+To implement these fixes, please switch to the Component Refactor agent (Ctrl+A)
+or use the General agent.
+
+I can provide you with the specific changes needed if you'd like.
+```
+</Terminal>
+
+**Why This Restriction?**
+Security Auditor is a read-only agent focused on finding and reporting security issues. It cannot make changes because security fixes require careful review and testing. This separation ensures audit findings remain objective and that all fixes go through proper review processes.
+
+---
+
+#### Config Validator Agent
+
+**Allowed Tools:**
+- ✅ `atmos_validate_stacks` - Comprehensive validation
+- ✅ `atmos_describe_config` - Understand configuration
+- ✅ `read_stack_file` - Read stack configurations
+- ✅ `read_file` - Read any file
+- ✅ `validate_file_lsp` - Detailed diagnostics (if LSP enabled)
+- ❌ **Cannot edit files** - Validation only
+- ❌ **Cannot execute commands** - Check only, no actions
+- ❌ **Cannot describe components** - Schema focus, not content
+
+**Use Cases:**
+- Validating YAML syntax and structure
+- Checking schema compliance
+- Verifying variable references
+- Detecting circular dependencies
+- Ensuring required fields are present
+
+**Example:**
+
+<Terminal title="atmos ai chat">
+```bash
+# Switch to Config Validator agent
+Ctrl+A → Select "Config Validator"
+
+You: Validate all stack configurations
+
+AI (config-validator): I'll run comprehensive validation on all stacks.
+
+🔧 Tool: atmos_validate_stacks
+✅ Executing...
+
+🔧 Tool: read_stack_file (stacks/prod/use1.yaml)
+✅ Executing...
+
+**VALIDATION REPORT**
+
+✅ PASSED (12 stacks):
+- prod-use1, prod-use2, prod-euw1
+- staging-use1, staging-use2
+- dev-use1, dev-use2
+- sandbox-1, sandbox-2
+- test-integration
+- dr-use1, dr-euw1
+
+❌ FAILED (2 stacks):
+
+**1. Stack: prod-apne1**
+   File: stacks/prod/apne1.yaml:45
+   Error: Invalid component reference
+   Details: Component 'vpc-legacy' does not exist
+   Fix: Change 'vpc-legacy' to 'vpc' or create the component
+
+**2. Stack: staging-apse1**
+   File: stacks/staging/apse1.yaml:23
+   Error: Missing required field
+   Details: Component 'eks' is missing required 'cluster_version' variable
+   Fix: Add 'cluster_version' to the component vars section
+
+Example fix for staging-apse1:
+```yaml
+components:
+  terraform:
+    eks:
+      vars:
+        cluster_version: "1.27"  # Add this line
+```
+
+All validation issues must be resolved before deployment.
+
+# If you try to make edits:
+You: Fix the validation errors
+
+AI (config-validator): I can identify and explain errors but cannot edit files.
+To fix these issues, please switch to the General agent (Ctrl+A)
+or manually edit the files based on my recommendations.
+```
+</Terminal>
+
+**Why This Restriction?**
+Config Validator focuses exclusively on finding configuration errors and schema violations. It's designed to be a "linter" agent that reports issues but doesn't modify files, ensuring validation results remain authoritative and objective.
+
+---
+
+### Creating Custom Agents with Tool Restrictions
+
+You can create custom agents with specific tool access in your `atmos.yaml`:
+
+<File title="atmos.yaml">
+```yaml
+settings:
+  ai:
+    agents:
+      # Custom read-only documentation agent
+      - name: "docs-helper"
+        display_name: "Documentation Helper"
+        description: "Helps write and review infrastructure documentation"
+        allowed_tools:
+          - read_file
+          - read_component_file
+          - read_stack_file
+          - search_files
+          - atmos_describe_component
+        # Restricted tools require confirmation
+        restricted_tools:
+          - edit_file
+        system_prompt: |
+          You are a documentation specialist for infrastructure.
+          Help users create clear, accurate documentation for their Atmos components and stacks.
+
+      # Custom terraform-focused agent
+      - name: "terraform-expert"
+        display_name: "Terraform Expert"
+        description: "Specialized in Terraform operations and best practices"
+        allowed_tools:
+          - list_component_files
+          - read_component_file
+          - edit_file
+          - atmos_terraform_plan
+          - atmos_terraform_validate
+        restricted_tools:
+          - edit_file
+          - atmos_terraform_plan
+        system_prompt: |
+          You are a Terraform expert focused on infrastructure code quality.
+          Help users write better Terraform code following best practices.
+```
+</File>
+
+**Key Concepts:**
+
+- **`allowed_tools`** - Explicitly list which tools this agent can use
+  - Empty list `[]` means all tools are allowed (like General agent)
+  - Specified list limits the agent to only those tools
+- **`restricted_tools`** - Tools that require user confirmation even if allowed
+  - Useful for write operations that should always be reviewed
+  - Overrides global `allowed_tools` auto-approval
+- **Tool filtering happens at runtime** - AI provider never sees tools the agent can't use
+
+### Practical Use Cases
+
+#### Workflow: Security Review → Fixes
+
+```bash
+# Step 1: Audit with Security Auditor (read-only)
+Ctrl+A → "Security Auditor"
+You: Audit the VPC security configuration
+
+AI: [Performs audit, identifies issues]
+    🔴 Found 3 critical security issues
+    [Details of each issue with line numbers]
+
+# Step 2: Fix with Component Refactor (write access)
+Ctrl+A → "Component Refactor"
+You: Fix the security issues we just found
+
+AI: I'll implement the security fixes:
+    [Makes each change with confirmation]
+    ✅ Fixed SSH access restriction
+    ✅ Tightened egress rules
+    ✅ Enabled VPC flow logs
+
+# Step 3: Validate with Config Validator
+Ctrl+A → "Config Validator"
+You: Validate the changes
+
+AI: [Runs validation]
+    ✅ All stacks valid
+    ✅ No schema errors
+```
+
+#### Workflow: Architecture Analysis → Refactoring
+
+```bash
+# Step 1: Analyze with Stack Analyzer
+Ctrl+A → "Stack Analyzer"
+You: Analyze our VPC architecture across all environments
+
+AI: [Performs deep analysis]
+    Found inconsistent subnet configurations between environments
+    [Shows detailed comparison]
+
+# Step 2: Refactor with Component Refactor
+Ctrl+A → "Component Refactor"
+You: Standardize the subnet configurations
+
+AI: [Makes changes with confirmation]
+    Updated 5 component files for consistency
+```
+
+### Benefits of Agent-Specific Tool Access
+
+1. **Safety** - Agents can only perform actions appropriate to their role
+2. **Focus** - Specialized prompts work better with limited, relevant tools
+3. **Intent Clarity** - Clear separation between analysis, modification, and validation
+4. **Audit Trail** - Easy to track which agent made what changes
+5. **Reduced Errors** - Agents can't accidentally use wrong tools for their task
+
+### Related Documentation
+
+- [AI Agents](/ai/agents) - Complete agent documentation and customization
+- [AI Configuration](/ai/configuration) - Configure AI providers and settings
+- [Permission System](#permission-system) - Global tool permission controls
+
 ## Tool Execution Behavior
 
 ### Timeouts

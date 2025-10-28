@@ -306,6 +306,87 @@ The create session form allows you to:
 Each session remembers which provider and model it was created with. This allows you to have different sessions using different AI providers, each optimized for specific tasks.
 :::
 
+### Agent Persistence
+
+**Sessions now remember which AI agent you're using!** When you switch agents during a conversation (with `Ctrl+A`), that choice is automatically saved to the session. When you resume the session later, it will continue using the same agent.
+
+#### How It Works
+
+1. **Start a session with an agent** - When you create a session, it uses your default agent (usually "general")
+2. **Switch agents during conversation** - Press `Ctrl+A` to switch to a specialized agent
+3. **Agent choice saved automatically** - Your agent selection is persisted to the session
+4. **Resume with same agent** - Next time you load the session, it automatically uses that agent
+
+#### Example: Agent Persistence Workflow
+
+<Terminal title="atmos ai chat --session infrastructure-review">
+```bash
+# Day 1: Start with general agent
+atmos ai chat --session infrastructure-review
+
+You: I want to review our infrastructure
+
+AI (general): I can help you review your infrastructure. What would you
+    like to focus on first?
+
+# Press Ctrl+A to switch to security-auditor agent
+Ctrl+A
+# Select "security-auditor"
+
+AI (system): Switched to agent: Security Auditor (Specialized in security reviews,
+              compliance checks, and vulnerability assessments)
+
+You: Now audit our VPC configuration for security issues
+
+AI (security-auditor): I'll perform a comprehensive security audit of your VPC.
+    Let me check for common security issues:
+    1. Security group rules analysis
+    2. Network ACL configuration
+    3. VPC flow logs status
+    4. Public subnet exposure
+    ...
+
+# Day 2: Resume session
+atmos ai chat --session infrastructure-review
+
+AI (security-auditor): Welcome back! We were performing a security audit of your
+    # ✅ Automatically restored to security-auditor agent
+    VPC configuration. Would you like to continue where we left off?
+
+You: yes, let's review the findings from yesterday
+
+AI (security-auditor): Based on yesterday's audit, I found several issues:
+    # ✅ Agent context preserved across sessions
+    [Provides detailed security findings from previous conversation]
+```
+</Terminal>
+
+#### Benefits
+
+- **Specialized Context Preserved**: Each session maintains its agent specialization
+- **No Manual Switching**: Automatically resumes with the right agent for the conversation
+- **Task-Focused Sessions**: Keep security reviews with security-auditor, component work with component-refactor, etc.
+- **Seamless Experience**: Agent context flows naturally across session resumptions
+
+#### Multiple Sessions with Different Agents
+
+You can have multiple sessions, each using different specialized agents:
+
+```
+sessions:
+  vpc-security-review      [security-auditor]   # Security-focused agent
+  component-refactor       [component-refactor] # Refactoring specialist
+  stack-analysis          [stack-analyzer]      # Stack investigation
+  config-validation       [config-validator]    # Configuration expert
+  general-questions       [general]             # General purpose agent
+```
+
+Each session maintains its own agent assignment, allowing you to organize conversations by both topic and the type of AI assistance needed.
+
+:::info Agent Availability
+If you resume a session that was using a custom agent that's no longer available in your configuration, Atmos will fall back to the default agent and log a debug message. The session will continue working, but with the default agent instead.
+:::
+
 #### Switching Between Sessions (Ctrl+L)
 
 Switch to a different existing session:

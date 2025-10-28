@@ -140,6 +140,12 @@ func (m *ChatModel) submitCreateSession() tea.Cmd {
 		}
 		provider := configuredProviders[m.createForm.selectedProvider]
 
+		// Get current agent name (default to empty string if not set)
+		agentName := ""
+		if m.currentAgent != nil {
+			agentName = m.currentAgent.Name
+		}
+
 		// Create session
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
@@ -149,7 +155,8 @@ func (m *ChatModel) submitCreateSession() tea.Cmd {
 			name,
 			provider.Model, // Use model from atmos.yaml
 			provider.Name,
-			nil, // metadata
+			agentName, // Current agent
+			nil,       // metadata
 		)
 		if err != nil {
 			return sessionCreatedMsg{err: fmt.Errorf("failed to create session: %w", err)}

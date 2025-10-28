@@ -957,6 +957,402 @@ lsp:
 
 See [LSP Integration Documentation](/lsp/lsp-client) for detailed configuration.
 
+## AI Agents
+
+### Agent Not Available in Selector
+
+**Problem**: Pressing Ctrl+A shows agent selector, but a specific agent is missing.
+
+**Solutions**:
+
+1. **Check agent configuration**:
+<Terminal title="shell">
+```bash
+# Verify agent is defined in atmos.yaml
+atmos describe config | grep -A 20 "agents:"
+```
+</Terminal>
+
+2. **Verify YAML syntax**:
+
+<File title="atmos.yaml">
+```yaml
+settings:
+  ai:
+    agents:
+      my-agent:              # Agent name
+        display_name: "My Agent"  # ✅ Required
+        description: "..."        # ✅ Required
+        system_prompt: "..."      # ✅ Required
+        # category, allowed_tools, restricted_tools are optional
+```
+</File>
+
+**Common mistakes**:
+- Missing required fields (`display_name`, `description`, `system_prompt`)
+- Invalid YAML indentation
+- Agent name contains spaces (use hyphens: `my-agent` not `my agent`)
+
+### Agent Not Using Specialized Prompt
+
+**Problem**: Switched to a specialized agent, but it's not behaving as expected.
+
+**Symptoms**:
+- Agent gives generic responses instead of specialized ones
+- Agent doesn't follow its domain-specific instructions
+- No confirmation message when switching agents
+
+**Solutions**:
+
+1. **Verify agent switch was successful**:
+
+When you select an agent with Ctrl+A and press Enter, you should see:
+```
+System: Switched to agent: Stack Analyzer (Analyze stack configurations and dependencies)
+```
+
+If you don't see this message, the agent didn't activate.
+
+2. **Check agent's system prompt**:
+
+<File title="atmos.yaml">
+```yaml
+settings:
+  ai:
+    agents:
+      stack-analyzer:
+        display_name: "Stack Analyzer"
+        description: "Analyzes stack configurations"
+        system_prompt: |
+          You are a specialized Atmos Stack Analyzer.
+
+          FOCUS AREAS:
+          - Stack configuration analysis
+          - Dependency identification
+
+          Always use tools to gather data first.
+```
+</File>
+
+The `system_prompt` field must be a string with clear instructions. Use `|` for multi-line prompts.
+
+3. **Test with a specific question**:
+
+After switching agents, ask a domain-specific question:
+
+<Terminal title="atmos ai chat">
+```bash
+# Switch to Stack Analyzer (Ctrl+A)
+You: "Analyze the inheritance chain for prod-use1-eks"
+
+# The agent should follow its systematic approach
+AI: Starting with high-level overview...
+    1. Base configuration: catalog/eks/defaults.yaml
+    ...
+```
+</Terminal>
+
+If the agent gives a generic response, its system prompt may not be detailed enough.
+
+### Custom Agent Not Working
+
+**Problem**: Created a custom agent, but it's not working as expected.
+
+**Checklist**:
+
+1. **Required fields present**:
+
+<File title="atmos.yaml">
+```yaml
+settings:
+  ai:
+    agents:
+      cost-optimizer:
+        display_name: "Cost Optimizer"        # ✅ Required
+        description: "Finds cost savings"     # ✅ Required
+        system_prompt: |                      # ✅ Required (multi-line)
+          You are a cost optimization expert.
+
+          Always analyze costs before recommending changes.
+        category: "analysis"                  # ⚠️ Optional
+        allowed_tools: []                     # ⚠️ Optional (empty = all tools)
+        restricted_tools: []                  # ⚠️ Optional
+```
+</File>
+
+2. **System prompt is comprehensive**:
+
+A good system prompt includes:
+- Role definition ("You are a...")
+- Focus areas (bulleted list)
+- Approach/methodology (numbered steps)
+- Tool usage instructions ("Always use tools to...")
+
+<File title="Good System Prompt Example">
+```yaml
+system_prompt: |
+  You are a cost optimization expert for Atmos infrastructure.
+
+  FOCUS AREAS:
+  - Identify overprovisioned resources
+  - Suggest rightsizing opportunities
+  - Find unused or idle resources
+
+  ANALYSIS APPROACH:
+  1. Use atmos_describe_component to examine configurations
+  2. Identify cost optimization opportunities
+  3. Estimate potential savings
+  4. Provide specific implementation steps
+
+  Always use tools to gather data before making recommendations.
+```
+</File>
+
+❌ **Poor system prompt** (too vague):
+```yaml
+system_prompt: "Help with cost optimization"
+```
+
+3. **Tool names are correct**:
+
+<File title="atmos.yaml">
+```yaml
+settings:
+  ai:
+    agents:
+      my-agent:
+        allowed_tools:
+          - atmos_describe_component      # ✅ Correct
+          - read_file                     # ✅ Correct
+          - describe_component            # ❌ Wrong (missing prefix)
+          - atmos-list-stacks             # ❌ Wrong (wrong separator)
+```
+</File>
+
+**Available tool names**:
+- `atmos_describe_component`
+- `atmos_describe_affected`
+- `atmos_describe_stacks`
+- `atmos_list_stacks`
+- `atmos_list_components`
+- `atmos_validate_stacks`
+- `read_file`
+- `edit_file`
+- `write_file`
+- `execute_bash`
+- `search_files`
+- etc.
+
+See [AI Tools](/ai/tools) for complete list.
+
+### Agent Switch Not Responding
+
+**Problem**: Press Ctrl+A, but nothing happens.
+
+**Solutions**:
+
+1. **Verify you're in chat view**:
+
+Ctrl+A only works in the main chat view, not in:
+- Session picker (Ctrl+L)
+- Provider selector (Ctrl+P)
+- Session creation form (Ctrl+N)
+
+Press Esc to return to chat view, then try Ctrl+A again.
+
+2. **Check terminal input mode**:
+
+If you're in the middle of typing a message, the textarea may capture Ctrl+A. Clear the textarea first:
+- Press Esc to clear
+- Then press Ctrl+A
+
+3. **Verify agent registry loaded**:
+
+If agents failed to load from configuration, the agent selector will be empty.
+
+<Terminal title="shell">
+```bash
+# Test agent loading
+atmos ai chat --session test-agents
+
+# Try to open agent selector
+# Press Ctrl+A
+
+# If you see an empty selector, check configuration
+atmos describe config | grep -A 50 "ai:"
+```
+</Terminal>
+
+### Tool Access Denied for Agent
+
+**Problem**: Agent says it cannot use a specific tool.
+
+**Example**:
+```
+You: "Edit the VPC component"
+Agent: "I don't have access to the edit_file tool"
+```
+
+**Reason**: The agent's `allowed_tools` list doesn't include `edit_file`.
+
+**Solutions**:
+
+1. **Check agent's tool permissions**:
+
+<File title="atmos.yaml">
+```yaml
+settings:
+  ai:
+    agents:
+      security-auditor:
+        display_name: "Security Auditor"
+        description: "Security review"
+        system_prompt: "..."
+        allowed_tools:
+          - atmos_describe_component
+          - read_stack_file
+          - read_file
+          # ❌ edit_file is NOT in this list
+```
+</File>
+
+2. **Add the tool to allowed_tools**:
+
+<File title="atmos.yaml">
+```yaml
+settings:
+  ai:
+    agents:
+      security-auditor:
+        allowed_tools:
+          - atmos_describe_component
+          - read_stack_file
+          - read_file
+          - edit_file              # ✅ Now allowed
+```
+</File>
+
+3. **Or use an agent with full tool access**:
+
+Press Ctrl+A and switch to the **General** agent, which has access to all tools.
+
+**Design consideration**: Some agents intentionally have restricted tool access for safety. For example:
+- **Security Auditor**: Read-only (cannot modify files)
+- **Config Validator**: Validation tools only (cannot execute commands)
+- **Component Refactor**: Has `edit_file`, but it's in `restricted_tools` (requires confirmation)
+
+### Default Agent Not Applying
+
+**Problem**: Set `default_agent` in config, but chat still starts with "General" agent.
+
+**Check**:
+
+<File title="atmos.yaml">
+```yaml
+settings:
+  ai:
+    default_agent: "stack-analyzer"    # ✅ Agent name (not display name)
+
+    agents:
+      stack-analyzer:                  # ✅ Must match exactly
+        display_name: "Stack Analyzer"
+        description: "..."
+        system_prompt: "..."
+```
+</File>
+
+**Common mistakes**:
+- Using `display_name` instead of agent key: `default_agent: "Stack Analyzer"` ❌
+- Typo in agent name: `default_agent: "stack_analyzer"` ❌ (should be `stack-analyzer`)
+- Agent not defined in `agents` section
+
+**Verify**:
+
+<Terminal title="shell">
+```bash
+# Start chat and check first message
+atmos ai chat
+
+# The initial greeting should indicate the active agent
+# Look for: "Switched to agent: Stack Analyzer" or similar
+```
+</Terminal>
+
+### Agent Configuration Not Loading
+
+**Problem**: Defined custom agents in `atmos.yaml`, but they're not appearing.
+
+**Debug steps**:
+
+1. **Verify configuration syntax**:
+
+<Terminal title="shell">
+```bash
+# Check for YAML syntax errors
+atmos describe config
+
+# If there are errors, they'll be shown here
+```
+</Terminal>
+
+2. **Check indentation**:
+
+<File title="atmos.yaml (correct indentation)">
+```yaml
+settings:
+  ai:                        # 2 spaces
+    enabled: true            # 4 spaces
+    agents:                  # 4 spaces
+      my-agent:              # 6 spaces
+        display_name: "..."  # 8 spaces
+        description: "..."   # 8 spaces
+        system_prompt: "..." # 8 spaces
+```
+</File>
+
+3. **Verify agents section location**:
+
+Agents must be under `settings.ai.agents`, not `settings.agents` or `ai.agents`.
+
+❌ **Wrong**:
+```yaml
+settings:
+  agents:           # Wrong location
+    my-agent: ...
+```
+
+✅ **Correct**:
+```yaml
+settings:
+  ai:
+    agents:         # Under ai section
+      my-agent: ...
+```
+
+4. **Test with minimal config**:
+
+<File title="atmos.yaml">
+```yaml
+settings:
+  ai:
+    enabled: true
+    default_provider: "anthropic"
+
+    providers:
+      anthropic:
+        model: "claude-sonnet-4-5"
+        api_key_env: "ANTHROPIC_API_KEY"
+
+    agents:
+      test-agent:
+        display_name: "Test"
+        description: "Test agent"
+        system_prompt: "You are a test agent."
+```
+</File>
+
+Start chat and press Ctrl+A. If "Test" appears, your syntax is correct and you can add more complex agents.
+
 ## Claude Code Subagents
 
 ### Subagent Not Being Invoked
@@ -1056,7 +1452,7 @@ tools:
 2. Name must match exactly: `name: atmos-expert`
 3. Restart Claude Code after creating
 
-See [Subagents Documentation](/ai/subagents) for complete setup guide.
+See [Claude Code Integration](/ai/claude-code-integration) for complete setup guide.
 
 ## Project Memory Issues
 
@@ -1366,10 +1762,11 @@ If you continue to experience issues:
 - [AI Assistant Overview](/ai/) - Feature overview and capabilities
 - [AI Providers](/ai/providers) - Complete provider setup (all 7 providers)
 - [AI Configuration](/ai/configuration) - Detailed configuration options
+- [AI Agents](/ai/agents) - Specialized agents for different tasks
 - [AI Tools](/ai/tools) - Available AI tools and permissions
 - [AI Sessions](/ai/sessions) - Persistent conversation management
 - [MCP Server](/ai/mcp-server) - Model Context Protocol integration
-- [Claude Code Subagents](/ai/subagents) - IDE integration guide
+- [Claude Code Integration](/ai/claude-code-integration) - IDE integration guide
 - [LSP Integration](/lsp/lsp-client) - Language Server Protocol setup
 
 ### Commands

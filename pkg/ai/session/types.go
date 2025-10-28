@@ -11,6 +11,7 @@ type Session struct {
 	ProjectPath  string                 `json:"project_path"`
 	Model        string                 `json:"model"`
 	Provider     string                 `json:"provider"`
+	Agent        string                 `json:"agent,omitempty"` // AI agent name (e.g., "general", "stack-analyzer")
 	CreatedAt    time.Time              `json:"created_at"`
 	UpdatedAt    time.Time              `json:"updated_at"`
 	Metadata     map[string]interface{} `json:"metadata,omitempty"`

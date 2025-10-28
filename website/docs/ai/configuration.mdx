@@ -159,8 +159,80 @@ settings:
     max_context_lines: 500                # Maximum lines per file (default: 500)
     max_history_messages: 20              # Maximum conversation messages to keep (default: 0 = unlimited)
     max_history_tokens: 8000              # Maximum tokens in conversation history (default: 0 = unlimited)
+    default_agent: "general"              # Default AI agent (default: "general")
 ```
 </File>
+
+## AI Agents Configuration
+
+Atmos AI includes specialized agents for different tasks. You can use built-in agents or create custom ones.
+
+### Built-in Agents
+
+Atmos ships with 5 built-in agents:
+
+- **general** (default) - General-purpose assistant for all operations
+- **stack-analyzer** - Specialized in analyzing stack configurations and dependencies
+- **component-refactor** - Expert in refactoring Terraform/Helmfile components
+- **security-auditor** - Focused on security review and vulnerability detection
+- **config-validator** - Validates YAML configurations and schema compliance
+
+Switch between agents during a chat session by pressing **Ctrl+A**.
+
+### Custom Agents
+
+Create your own specialized agents:
+
+<File title="atmos.yaml">
+```yaml
+settings:
+  ai:
+    enabled: true
+    default_provider: "anthropic"
+    default_agent: "stack-analyzer"     # Use stack analyzer by default
+
+    # Define custom agents
+    agents:
+      cost-optimizer:
+        display_name: "Cost Optimizer"
+        description: "Analyzes infrastructure for cost savings opportunities"
+        category: "analysis"
+        system_prompt: |
+          You are a cost optimization expert for Atmos infrastructure.
+
+          FOCUS AREAS:
+          - Identify overprovisioned resources
+          - Suggest rightsizing opportunities
+          - Find unused or idle resources
+
+          Always use tools to gather data before making recommendations.
+
+        allowed_tools:
+          - atmos_describe_component
+          - atmos_list_stacks
+          - read_stack_file
+          - read_file
+
+        restricted_tools: []
+```
+</File>
+
+### Agent Configuration Schema
+
+```yaml
+agents:
+  <agent-name>:
+    display_name: string          # User-facing name (required)
+    description: string           # What this agent does (required)
+    system_prompt: string         # Specialized instructions (required)
+    category: string              # "analysis", "refactor", "security", etc.
+    allowed_tools: []             # Tool names (empty = all tools)
+    restricted_tools: []          # Tools requiring confirmation
+```
+
+:::tip AI Agents
+For complete agent documentation including examples and best practices, see [AI Agents](/ai/agents).
+:::
 
 ## Provider-Specific Configuration
 

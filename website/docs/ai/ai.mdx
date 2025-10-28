@@ -73,15 +73,22 @@ Wondering how AI tool execution works and what data is sent to AI providers? See
 - **Flexible Transports**: stdio for local clients, HTTP for remote access
 - **Custom Applications**: Build your own MCP-compatible tools
 
-### Claude Code Subagents
-- **IDE Integration**: Create specialized `atmos-expert` subagents for Claude Code
-- **MCP-Powered**: Subagents use the Atmos MCP server for infrastructure access
-- **Isolated Context**: Each subagent maintains independent conversation threads
+### AI Agents
+- **Specialized Assistants**: 5 built-in agents optimized for specific tasks
+- **Agent Switching**: Switch agents with Ctrl+A during conversations
+- **Custom Agents**: Create your own specialized agents in `atmos.yaml`
+- **Tool Restrictions**: Control which tools each agent can access
+- **Task-Focused Prompts**: Each agent has specialized instructions for its domain
+
+### Claude Code Integration
+- **IDE Integration**: Use Atmos with Claude Code IDE via MCP protocol
+- **MCP-Powered**: Claude Code connects to Atmos through Model Context Protocol
+- **Isolated Context**: External IDE integration with independent conversations
 - **Tool Control**: Granular permissions for different team members
 - **Development Workflow**: Get Atmos help directly in your code editor
 
-:::tip IDE Integration
-Want Atmos expertise in your IDE? See [Claude Code Subagents](/ai/subagents) to create specialized subagents that use the MCP server.
+:::tip Specialized AI Agents
+Want task-specific AI assistance? See [AI Agents](/ai/agents) to learn about built-in agents for stack analysis, security auditing, and more. For IDE integration, see [Claude Code Integration](/ai/claude-code-integration).
 :::
 
 ## Quick Start
@@ -273,9 +280,10 @@ When you resume a session, the **complete message history** is sent to your AI p
 - **Ctrl+N** - Create a new session with provider selection
 - **Ctrl+L** - Open session picker to switch between sessions
 - **Ctrl+P** - Switch AI provider mid-conversation
+- **Ctrl+A** - Switch AI agent (specialized assistants)
 - **Ctrl+C** - Quit the application
 - **Enter** - Send message
-- **Shift+Enter** - Add newline in message
+- **Ctrl+J** - Add newline in message (Shift+Enter alternative)
 - **↑** - Navigate to previous message in history
 - **↓** - Navigate to next message in history
 

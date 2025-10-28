@@ -10,6 +10,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/ai/session"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
 
@@ -78,6 +79,16 @@ func (m *ChatModel) handleSessionSwitched(msg sessionSwitchedMsg) {
 	} else {
 		m.sess = msg.session
 		m.messages = make([]ChatMessage, 0)
+
+		// Restore agent from session if available.
+		if msg.session != nil && msg.session.Agent != "" && m.agentRegistry != nil {
+			if agent, err := m.agentRegistry.Get(msg.session.Agent); err == nil {
+				m.currentAgent = agent
+			} else {
+				// If agent not found, log and fall back to default.
+				log.Debug(fmt.Sprintf("Agent %q from session not found, using current agent", msg.session.Agent))
+			}
+		}
 
 		// Get the session's provider for historical messages.
 		sessionProvider := ""

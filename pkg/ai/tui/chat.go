@@ -853,12 +853,17 @@ func (m *ChatModel) updateViewportContent() {
 		case roleAssistant:
 			style = lipgloss.NewStyle().
 				Foreground(lipgloss.Color(theme.ColorCyan))
-			// Include alien emoji and provider name in the prefix.
+			// Include alien emoji, agent icon, and provider name in the prefix.
 			provider := msg.Provider
 			if provider == "" {
 				provider = "unknown"
 			}
-			prefix = fmt.Sprintf("Atmos AI 👽 (%s):", provider)
+			// Add agent icon if we have a current agent
+			agentIcon := ""
+			if m.currentAgent != nil {
+				agentIcon = getAgentIcon(m.currentAgent.Name) + " "
+			}
+			prefix = fmt.Sprintf("Atmos AI %s👽 (%s):", agentIcon, provider)
 		case roleSystem:
 			style = lipgloss.NewStyle().
 				Foreground(lipgloss.Color(theme.ColorRed)).
@@ -2041,6 +2046,22 @@ func (m *ChatModel) providerSelectView() string {
 	return content.String()
 }
 
+// getAgentIcon returns the icon/emoji for a given agent.
+func getAgentIcon(agentName string) string {
+	icons := map[string]string{
+		"general":            "🤖", // Robot - general purpose
+		"stack-analyzer":     "📊", // Chart - data analysis
+		"component-refactor": "🔧", // Wrench - fixing/building
+		"security-auditor":   "🔒", // Lock - security
+		"config-validator":   "✅", // Checkmark - validation
+	}
+
+	if icon, ok := icons[agentName]; ok {
+		return icon
+	}
+	return "🤖" // Default to robot icon
+}
+
 // agentSelectView renders the agent selection interface.
 func (m *ChatModel) agentSelectView() string {
 	var content strings.Builder
@@ -2085,7 +2106,9 @@ func (m *ChatModel) agentSelectView() string {
 			prefix = "▶ "
 		}
 
-		agentInfo := fmt.Sprintf("%s%s", prefix, agent.DisplayName)
+		// Add agent icon to display name
+		agentIcon := getAgentIcon(agent.Name)
+		agentInfo := fmt.Sprintf("%s%s %s", prefix, agentIcon, agent.DisplayName)
 		if agent.Name == currentAgentName {
 			agentInfo += " (current)"
 		}

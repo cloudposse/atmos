@@ -12,6 +12,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/ai/session"
+	log "github.com/cloudposse/atmos/pkg/logger"
 )
 
 // ansiEscapeRegex matches ANSI escape sequences and OSC (Operating System Command) sequences.
@@ -492,6 +493,18 @@ func (m *ChatModel) handleAgentSelectKeys(msg tea.KeyMsg) tea.Cmd {
 		if m.selectedAgentIdx < len(availableAgents) {
 			selectedAgent := availableAgents[m.selectedAgentIdx]
 			m.currentAgent = selectedAgent
+
+			// Persist agent to session if session management is enabled.
+			if m.manager != nil && m.sess != nil {
+				m.sess.Agent = selectedAgent.Name
+				m.sess.UpdatedAt = time.Now()
+				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+				defer cancel()
+				if err := m.manager.UpdateSession(ctx, m.sess); err != nil {
+					log.Debug(fmt.Sprintf("Failed to persist agent to session: %v", err))
+				}
+			}
+
 			// Add feedback message.
 			m.addMessage(roleSystem, fmt.Sprintf("Switched to agent: %s (%s)", selectedAgent.DisplayName, selectedAgent.Description))
 			m.updateViewportContent()

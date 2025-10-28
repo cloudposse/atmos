@@ -109,7 +109,7 @@ func TestManager_CreateSession(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			session, err := manager.CreateSession(ctx, tt.sessName, tt.model, tt.provider, tt.metadata)
+			session, err := manager.CreateSession(ctx, tt.sessName, tt.model, tt.provider, "", tt.metadata)
 
 			if tt.wantErr {
 				assert.Error(t, err)
@@ -140,7 +140,7 @@ func TestManager_GetSession(t *testing.T) {
 	ctx := context.Background()
 
 	// Create a session.
-	created, err := manager.CreateSession(ctx, "test", "gpt-4", "openai", nil)
+	created, err := manager.CreateSession(ctx, "test", "gpt-4", "openai", "", nil)
 	require.NoError(t, err)
 
 	tests := []struct {
@@ -183,7 +183,7 @@ func TestManager_GetSessionByName(t *testing.T) {
 	ctx := context.Background()
 
 	// Create sessions.
-	_, err := manager.CreateSession(ctx, "test-session", "gpt-4", "openai", nil)
+	_, err := manager.CreateSession(ctx, "test-session", "gpt-4", "openai", "", nil)
 	require.NoError(t, err)
 
 	tests := []struct {
@@ -227,7 +227,7 @@ func TestManager_ListSessions(t *testing.T) {
 
 	// Create multiple sessions.
 	for i := 0; i < 5; i++ {
-		_, err := manager.CreateSession(ctx, string(rune('a'+i)), "gpt-4", "openai", nil)
+		_, err := manager.CreateSession(ctx, string(rune('a'+i)), "gpt-4", "openai", "", nil)
 		require.NoError(t, err)
 	}
 
@@ -250,7 +250,7 @@ func TestManager_AddMessage(t *testing.T) {
 	ctx := context.Background()
 
 	// Create session.
-	session, err := manager.CreateSession(ctx, "test", "gpt-4", "openai", nil)
+	session, err := manager.CreateSession(ctx, "test", "gpt-4", "openai", "", nil)
 	require.NoError(t, err)
 
 	tests := []struct {
@@ -318,7 +318,7 @@ func TestManager_GetMessages(t *testing.T) {
 	ctx := context.Background()
 
 	// Create session.
-	session, err := manager.CreateSession(ctx, "test", "gpt-4", "openai", nil)
+	session, err := manager.CreateSession(ctx, "test", "gpt-4", "openai", "", nil)
 	require.NoError(t, err)
 
 	// Add messages.
@@ -371,7 +371,7 @@ func TestManager_GetMessageCount(t *testing.T) {
 	ctx := context.Background()
 
 	// Create session.
-	session, err := manager.CreateSession(ctx, "test", "gpt-4", "openai", nil)
+	session, err := manager.CreateSession(ctx, "test", "gpt-4", "openai", "", nil)
 	require.NoError(t, err)
 
 	// Initially should be 0.
@@ -398,7 +398,7 @@ func TestManager_AddContext(t *testing.T) {
 	ctx := context.Background()
 
 	// Create session.
-	session, err := manager.CreateSession(ctx, "test", "gpt-4", "openai", nil)
+	session, err := manager.CreateSession(ctx, "test", "gpt-4", "openai", "", nil)
 	require.NoError(t, err)
 
 	err = manager.AddContext(ctx, session.ID, "stack", "prod-us-east-1", "config-data")
@@ -420,7 +420,7 @@ func TestManager_GetContext(t *testing.T) {
 	ctx := context.Background()
 
 	// Create session.
-	session, err := manager.CreateSession(ctx, "test", "gpt-4", "openai", nil)
+	session, err := manager.CreateSession(ctx, "test", "gpt-4", "openai", "", nil)
 	require.NoError(t, err)
 
 	// Add context items.
@@ -442,7 +442,7 @@ func TestManager_DeleteSession(t *testing.T) {
 	ctx := context.Background()
 
 	// Create session with messages and context.
-	session, err := manager.CreateSession(ctx, "test", "gpt-4", "openai", nil)
+	session, err := manager.CreateSession(ctx, "test", "gpt-4", "openai", "", nil)
 	require.NoError(t, err)
 
 	err = manager.AddMessage(ctx, session.ID, "user", "test")

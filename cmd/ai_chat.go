@@ -102,7 +102,7 @@ The AI assistant has access to your current Atmos configuration and can help wit
 				if err != nil {
 					// Session doesn't exist, create new one.
 					log.Debug(fmt.Sprintf("Session '%s' not found, creating new session", sessionName))
-					sess, err = manager.CreateSession(ctx, sessionName, getModelFromConfig(&atmosConfig), getProviderFromConfig(&atmosConfig), nil)
+					sess, err = manager.CreateSession(ctx, sessionName, getModelFromConfig(&atmosConfig), getProviderFromConfig(&atmosConfig), "", nil)
 					if err != nil {
 						return fmt.Errorf("failed to create session: %w", err)
 					}
@@ -113,7 +113,7 @@ The AI assistant has access to your current Atmos configuration and can help wit
 			} else {
 				// Create anonymous session with timestamp.
 				sessionName = fmt.Sprintf("session-%s", time.Now().Format("20060102-150405"))
-				sess, err = manager.CreateSession(ctx, sessionName, getModelFromConfig(&atmosConfig), getProviderFromConfig(&atmosConfig), nil)
+				sess, err = manager.CreateSession(ctx, sessionName, getModelFromConfig(&atmosConfig), getProviderFromConfig(&atmosConfig), "", nil)
 				if err != nil {
 					return fmt.Errorf("failed to create session: %w", err)
 				}
