@@ -211,17 +211,9 @@ func ExecuteWorkflow(
 				}
 			}
 
-			// Create error with exit code in the message for backward compatibility with tests.
-			// Start with a base error that includes the exit code in the message.
-			baseErr := fmt.Errorf("%w with exit code %d", ErrWorkflowStepFailed, exitCode)
-
-			// Add rich context for the formatter using the error builder.
-			// The error builder preserves the base message while adding metadata.
-			stepErr := errUtils.Build(baseErr).
-				WithTitle(WorkflowErrTitle).
-				WithExplanationf("The following command failed to execute:\n```\n%s\n```\n\nTo resume the workflow from this step, run:\n```\n%s\n```", failedCmd, resumeCommand).
-				WithExitCode(exitCode).
-				Err()
+			// Create simple workflow error with just the exit code.
+			// Skip error builder for now to test if that's causing the issue.
+			stepErr := errUtils.WithExitCode(ErrWorkflowStepFailed, exitCode)
 
 			errUtils.CheckErrorAndPrint(stepErr, "", "")
 			return stepErr

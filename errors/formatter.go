@@ -133,6 +133,20 @@ func buildMarkdownSections(err error, config FormatterConfig) string {
 
 	// Extract sentinel error and wrapped message.
 	sentinelMsg, wrappedMsg := extractSentinelAndWrappedMessage(err)
+
+	// Check if error has an exit code and append it to the message for display.
+	// Skip this for ExitCodeError since it already includes the exit code in its message.
+	var exitCodeErr ExitCodeError
+	if !errors.As(err, &exitCodeErr) {
+		exitCode := GetExitCode(err)
+		if exitCode > 0 {
+			// For non-zero exit codes, append to the error message.
+			// This ensures errors like "workflow step execution failed" become
+			// "workflow step execution failed with exit code 1" in the display.
+			sentinelMsg = sentinelMsg + " with exit code " + fmt.Sprintf("%d", exitCode)
+		}
+	}
+
 	md.WriteString("**Error:** " + sentinelMsg + newline + newline)
 
 	// Section 2: Explanation.
