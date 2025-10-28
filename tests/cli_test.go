@@ -526,6 +526,11 @@ func TestMain(m *testing.M) {
 	// Parse flags first to get -v status
 	flag.Parse()
 
+	// CRITICAL: Unset ATMOS_CHDIR to prevent tests from accessing non-test directories.
+	// This prevents tests from inadvertently reading real infrastructure configs (e.g., infra-live).
+	// Tests should only use their fixture directories, not the user's working environment.
+	os.Unsetenv("ATMOS_CHDIR")
+
 	// Configure logger verbosity based on test flags
 	switch {
 	case os.Getenv("ATMOS_TEST_DEBUG") != "":
