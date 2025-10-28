@@ -224,10 +224,24 @@ func TestIdentity_Logout(t *testing.T) {
 	identity := NewIdentity("test-identity", config)
 	ctx := context.Background()
 
-	// Logout is a no-op for mock identity.
-	err := identity.Logout(ctx)
+	// First, authenticate to set up stored credentials.
+	err := identity.PostAuthenticate(ctx, &types.PostAuthenticateParams{})
+	require.NoError(t, err)
 
-	assert.NoError(t, err)
+	// Verify LoadCredentials succeeds after authentication.
+	creds, err := identity.LoadCredentials(ctx)
+	require.NoError(t, err)
+	require.NotNil(t, creds)
+
+	// Now logout, which should clear the stored credentials state.
+	err = identity.Logout(ctx)
+	require.NoError(t, err)
+
+	// Verify LoadCredentials now fails after logout.
+	creds, err = identity.LoadCredentials(ctx)
+	require.Error(t, err)
+	require.Nil(t, creds)
+	assert.Contains(t, err.Error(), "no stored credentials")
 }
 
 // TestIdentity_ImplementsInterface verifies that Identity implements types.Identity.
@@ -308,10 +322,22 @@ func TestIdentity_Concurrency(t *testing.T) {
 
 func TestIdentity_LoadCredentials(t *testing.T) {
 	tests := []struct {
-		name string
+		name             string
+		setupAuth        bool // Whether to call PostAuthenticate before LoadCredentials
+		expectedError    bool
+		expectedCredsNil bool
 	}{
 		{
-			name: "returns error for no stored credentials",
+			name:             "returns error when no credentials stored (before authentication)",
+			setupAuth:        false,
+			expectedError:    true,
+			expectedCredsNil: true,
+		},
+		{
+			name:             "returns credentials after authentication (stored state)",
+			setupAuth:        true,
+			expectedError:    false,
+			expectedCredsNil: false,
 		},
 	}
 
@@ -324,14 +350,37 @@ func TestIdentity_LoadCredentials(t *testing.T) {
 			identity := NewIdentity("test-identity", config)
 			ctx := context.Background()
 
+			// Simulate authentication if requested.
+			if tt.setupAuth {
+				err := identity.PostAuthenticate(ctx, &types.PostAuthenticateParams{})
+				require.NoError(t, err, "PostAuthenticate should succeed")
+			}
+
+			// Attempt to load credentials.
 			creds, err := identity.LoadCredentials(ctx)
 
-			// Mock identities don't have file-based storage, so LoadCredentials should return an error.
-			// This mimics real AWS identity behavior where LoadCredentials fails if credentials
-			// haven't been written to ~/.aws/credentials via authentication.
-			require.Error(t, err)
-			require.Nil(t, creds)
-			assert.Contains(t, err.Error(), "no stored credentials")
+			// Verify expectations.
+			if tt.expectedError {
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), "no stored credentials")
+			} else {
+				require.NoError(t, err)
+			}
+
+			if tt.expectedCredsNil {
+				require.Nil(t, creds)
+			} else {
+				require.NotNil(t, creds)
+				// Verify it's mock credentials with correct values.
+				mockCreds, ok := creds.(*Credentials)
+				require.True(t, ok, "credentials should be mock Credentials type")
+				assert.Equal(t, "mock-access-key", mockCreds.AccessKeyID)
+				assert.Equal(t, "mock-secret-key", mockCreds.SecretAccessKey)
+				assert.Equal(t, "mock-session-token", mockCreds.SessionToken)
+				assert.Equal(t, "us-east-1", mockCreds.Region)
+				assert.False(t, mockCreds.Expiration.IsZero())
+				assert.True(t, mockCreds.Expiration.After(time.Now()))
+			}
 		})
 	}
 }

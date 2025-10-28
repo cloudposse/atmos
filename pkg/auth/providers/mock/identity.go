@@ -11,9 +11,13 @@ import (
 )
 
 // Identity is a mock authentication identity for testing purposes only.
+// It simulates provider-agnostic credential storage behavior by tracking whether
+// credentials have been persisted (like AWS writing to ~/.aws/credentials, or
+// GitHub storing a token in an environment variable/file).
 type Identity struct {
-	name   string
-	config *schema.Identity
+	name                 string
+	config               *schema.Identity
+	hasStoredCredentials bool // Tracks if credentials have been written to "storage"
 }
 
 // NewIdentity creates a new mock identity.
@@ -100,9 +104,16 @@ func (i *Identity) PrepareEnvironment(_ context.Context, environ map[string]stri
 	return environ, nil
 }
 
-// PostAuthenticate is a no-op for mock identities.
+// PostAuthenticate simulates writing credentials to persistent storage.
+// For mock identities, this tracks that credentials have been "stored" after authentication.
+// This mimics real provider behavior where authentication results in credentials being written
+// to disk (AWS ~/.aws/credentials), environment variables (GitHub token), or other storage.
 func (i *Identity) PostAuthenticate(ctx context.Context, params *types.PostAuthenticateParams) error {
 	defer perf.Track(nil, "mock.Identity.PostAuthenticate")()
+
+	// Mark that credentials have been written to "storage".
+	// This allows LoadCredentials to succeed on subsequent calls.
+	i.hasStoredCredentials = true
 
 	return nil
 }
@@ -116,23 +127,49 @@ func (i *Identity) CredentialsExist() (bool, error) {
 	return true, nil
 }
 
-// LoadCredentials returns an error for mock identities.
-// Mock identities don't use file-based storage and cannot load credentials from disk.
-// Credentials must be obtained through the Authenticate() flow and stored in keyring.
-// This mimics real AWS identity behavior where LoadCredentials fails if credentials
-// haven't been written to ~/.aws/credentials via authentication.
+// LoadCredentials simulates loading credentials from persistent storage.
+// This method implements provider-agnostic credential loading behavior:
+// - Returns error if credentials haven't been stored yet (no authentication performed)
+// - Returns credentials if they were previously stored via PostAuthenticate
+//
+// This mimics real provider behavior across different storage mechanisms:
+// - AWS: Loading from ~/.aws/credentials after SSO login.
+// - GitHub: Loading token from environment variable or file.
+// - Azure: Loading from ~/.azure/ after authentication.
+// - Google Cloud: Loading from ~/.config/gcloud/ after auth.
 func (i *Identity) LoadCredentials(ctx context.Context) (types.ICredentials, error) {
 	defer perf.Track(nil, "mock.Identity.LoadCredentials")()
 
-	// Mock identities don't have persistent file-based storage like real AWS identities.
-	// Return an error to indicate credentials must be obtained via authentication.
-	// Note: We use fmt.Errorf instead of a static error because this is test-only mock code.
-	return nil, fmt.Errorf("mock identity %q has no stored credentials - use 'atmos auth login' to authenticate", i.name) //nolint:err113
+	// Check if credentials have been stored (via PostAuthenticate).
+	if !i.hasStoredCredentials {
+		// Simulate the "no credentials on disk" state before first authentication.
+		// Note: We use fmt.Errorf instead of a static error because this is test-only mock code.
+		return nil, fmt.Errorf("mock identity %q has no stored credentials - use 'atmos auth login' to authenticate", i.name) //nolint:err113
+	}
+
+	// Use a fixed timestamp far in the future for deterministic testing and snapshot stability.
+	// This ensures tests don't become flaky due to expiration checks.
+	fixedExpiration := time.Date(MockExpirationYear, MockExpirationMonth, MockExpirationDay, MockExpirationHour, MockExpirationMinute, MockExpirationSecond, 0, time.UTC)
+
+	// Return stored credentials.
+	// In a real provider, this would read from disk/environment/etc.
+	return &Credentials{
+		AccessKeyID:     "mock-access-key",
+		SecretAccessKey: "mock-secret-key",
+		SessionToken:    "mock-session-token",
+		Region:          "us-east-1",
+		Expiration:      fixedExpiration,
+	}, nil
 }
 
-// Logout is a no-op for mock identities.
+// Logout simulates removing credentials from persistent storage.
+// This clears the stored credentials state, requiring re-authentication.
 func (i *Identity) Logout(ctx context.Context) error {
 	defer perf.Track(nil, "mock.Identity.Logout")()
+
+	// Clear the stored credentials flag.
+	// This simulates removing credentials from disk/environment/etc.
+	i.hasStoredCredentials = false
 
 	return nil
 }
