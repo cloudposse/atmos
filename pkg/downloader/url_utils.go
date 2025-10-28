@@ -21,21 +21,15 @@ func maskBasicAuth(rawURL string) (string, error) {
 	}
 
 	if parsedURL.User != nil {
-		// If both username and password are set, mask both, otherwise mask only the username.
-		if _, hasPassword := parsedURL.User.Password(); hasPassword {
-			parsedURL.User = url.UserPassword(MaskedSecret, MaskedSecret)
-		} else {
-			parsedURL.User = url.User(MaskedSecret)
-		}
+		// Always mask the entire userinfo section uniformly.
+		// This prevents information leakage about whether a password exists.
+		parsedURL.User = url.User(MaskedSecret)
 	}
 
 	result := parsedURL.String()
 
 	// Post-process: Replace REDACTED with *** for cleaner output.
 	// This avoids URL encoding issues while providing traditional credential masking.
-	// Since this is purely for display/logging purposes, we don't need to worry about URL encoding.
-	// The replacement happens after URL stringification.
-	result = strings.ReplaceAll(result, "REDACTED:REDACTED", "***")
 	result = strings.ReplaceAll(result, "REDACTED", "***")
 
 	return result, nil
