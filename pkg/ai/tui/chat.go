@@ -858,7 +858,7 @@ func (m *ChatModel) updateViewportContent() {
 			if provider == "" {
 				provider = "unknown"
 			}
-			prefix = fmt.Sprintf("👽 Atmos AI (%s):", provider)
+			prefix = fmt.Sprintf("Atmos AI 👽 (%s):", provider)
 		case roleSystem:
 			style = lipgloss.NewStyle().
 				Foreground(lipgloss.Color(theme.ColorRed)).
