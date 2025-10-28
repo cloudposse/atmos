@@ -241,7 +241,7 @@ func TestIdentity_Logout(t *testing.T) {
 	creds, err = identity.LoadCredentials(ctx)
 	require.Error(t, err)
 	require.Nil(t, creds)
-	assert.Contains(t, err.Error(), "no stored credentials")
+	require.ErrorIs(t, err, ErrNoStoredCredentials)
 }
 
 // TestIdentity_ImplementsInterface verifies that Identity implements types.Identity.
@@ -323,20 +323,20 @@ func TestIdentity_Concurrency(t *testing.T) {
 func TestIdentity_LoadCredentials(t *testing.T) {
 	tests := []struct {
 		name             string
-		setupAuth        bool // Whether to call PostAuthenticate before LoadCredentials
-		expectedError    bool
+		setupAuth        bool  // Whether to call PostAuthenticate before LoadCredentials
+		expectedError    error // Expected sentinel error (nil if no error expected)
 		expectedCredsNil bool
 	}{
 		{
 			name:             "returns error when no credentials stored (before authentication)",
 			setupAuth:        false,
-			expectedError:    true,
+			expectedError:    ErrNoStoredCredentials,
 			expectedCredsNil: true,
 		},
 		{
 			name:             "returns credentials after authentication (stored state)",
 			setupAuth:        true,
-			expectedError:    false,
+			expectedError:    nil,
 			expectedCredsNil: false,
 		},
 	}
@@ -365,9 +365,9 @@ func TestIdentity_LoadCredentials(t *testing.T) {
 			creds, err := identity.LoadCredentials(ctx)
 
 			// Verify expectations.
-			if tt.expectedError {
+			if tt.expectedError != nil {
 				require.Error(t, err)
-				assert.Contains(t, err.Error(), "no stored credentials")
+				require.ErrorIs(t, err, tt.expectedError)
 			} else {
 				require.NoError(t, err)
 			}
