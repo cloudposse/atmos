@@ -393,6 +393,13 @@ func sanitizeOutput(output string) (string, error) {
 	debugTimestampRegex := regexp.MustCompile(`expiration="[^"]+\s+[+-]\d{4}\s+[A-Z]{3,4}\s+m=[+-][\d.]+`)
 	result = debugTimestampRegex.ReplaceAllString(result, `expiration="2025-01-01 12:00:00.000000 +0000 UTC m=+3600.000000000`)
 
+	// 11. Normalize external absolute paths to avoid environment-specific paths in snapshots.
+	// Replace common absolute path prefixes with generic placeholders.
+	// This handles paths outside the repo (e.g., /Users/username/other-projects/).
+	// Match Unix-style absolute paths (/Users/, /home/, /opt/, etc.) and Windows paths (C:\Users\, etc.).
+	externalPathRegex := regexp.MustCompile(`(/Users/[^/]+/[^/]+/[^/]+/[^/\s":]+|/home/[^/]+/[^/]+/[^/]+/[^/\s":]+|C:\\Users\\[^\\]+\\[^\\]+\\[^\\]+\\[^\\\s":]+)`)
+	result = externalPathRegex.ReplaceAllString(result, "/absolute/path/to/external")
+
 	return result, nil
 }
 
@@ -531,6 +538,11 @@ func loadTestSuites(testCasesDir string) (*TestSuite, error) {
 func TestMain(m *testing.M) {
 	// Parse flags first to get -v status
 	flag.Parse()
+
+	// CRITICAL: Unset ATMOS_CHDIR to prevent tests from accessing non-test directories.
+	// This prevents tests from inadvertently reading real infrastructure configs (e.g., infra-live).
+	// Tests should only use their fixture directories, not the user's working environment.
+	os.Unsetenv("ATMOS_CHDIR")
 
 	// Configure logger verbosity based on test flags
 	switch {

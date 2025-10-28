@@ -1,6 +1,0 @@
-{
-  "AWS_CONFIG_FILE": "/tmp/mock-config",
-  "AWS_PROFILE": "mock-identity",
-  "AWS_SHARED_CREDENTIALS_FILE": "/tmp/mock-credentials",
-  "MOCK_IDENTITY": "mock-identity"
-}

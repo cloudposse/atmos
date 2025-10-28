@@ -1,32 +1,184 @@
 {
   "identities": {
-    "mock-identity": {
-      "kind": "mock",
-      "default": true,
+    "core-analytics/admin": {
+      "kind": "aws/assume-role",
       "via": {
-        "provider": "mock-provider"
+        "identity": "core-identity/managers-team-access"
       },
       "principal": {
-        "account": {
-          "id": "123456789012"
-        }
+        "assume_role": "arn:aws:iam::372792920107:role/cplive-core-gbl-analytics-admin"
       }
     },
-    "mock-identity-2": {
-      "kind": "mock",
+    "core-artifacts/admin": {
+      "kind": "aws/assume-role",
       "via": {
-        "provider": "mock-provider"
+        "identity": "core-identity/managers-team-access"
+      },
+      "principal": {
+        "assume_role": "arn:aws:iam::463440035974:role/cplive-core-gbl-artifacts-admin"
+      }
+    },
+    "core-audit/admin": {
+      "kind": "aws/assume-role",
+      "via": {
+        "identity": "core-identity/managers-team-access"
+      },
+      "principal": {
+        "assume_role": "arn:aws:iam::969090876065:role/cplive-core-gbl-audit-admin"
+      }
+    },
+    "core-auto/admin": {
+      "kind": "aws/assume-role",
+      "via": {
+        "identity": "core-identity/managers-team-access"
+      },
+      "principal": {
+        "assume_role": "arn:aws:iam::252494810635:role/cplive-core-gbl-auto-admin"
+      }
+    },
+    "core-corp/admin": {
+      "kind": "aws/assume-role",
+      "via": {
+        "identity": "core-identity/managers-team-access"
+      },
+      "principal": {
+        "assume_role": "arn:aws:iam::092446917473:role/cplive-core-gbl-corp-admin"
+      }
+    },
+    "core-dns/admin": {
+      "kind": "aws/assume-role",
+      "via": {
+        "identity": "core-identity/managers-team-access"
+      },
+      "principal": {
+        "assume_role": "arn:aws:iam::970377366817:role/cplive-core-gbl-dns-admin"
+      }
+    },
+    "core-identity/admin": {
+      "kind": "aws/assume-role",
+      "via": {
+        "identity": "core-identity/managers-team-access"
+      },
+      "principal": {
+        "assume_role": "arn:aws:iam::555042905974:role/cplive-core-gbl-identity-admin"
+      }
+    },
+    "core-identity/managers": {
+      "kind": "aws/assume-role",
+      "via": {
+        "provider": "cplive-saml"
+      },
+      "principal": {
+        "assume_role": "arn:aws:iam::555042905974:role/cplive-core-gbl-identity-managers"
+      }
+    },
+    "core-identity/managers-team-access": {
+      "kind": "aws/permission-set",
+      "via": {
+        "provider": "cplive-sso"
       },
       "principal": {
         "account": {
-          "id": "987654321098"
-        }
+          "name": "core-identity"
+        },
+        "name": "IdentityManagersTeamAccess"
+      }
+    },
+    "core-marketplace/admin": {
+      "kind": "aws/assume-role",
+      "via": {
+        "identity": "core-identity/managers-team-access"
+      },
+      "principal": {
+        "assume_role": "arn:aws:iam::978188692326:role/cplive-core-gbl-marketplace-admin"
+      }
+    },
+    "core-network/admin": {
+      "kind": "aws/assume-role",
+      "via": {
+        "identity": "core-identity/managers-team-access"
+      },
+      "principal": {
+        "assume_role": "arn:aws:iam::167168760541:role/cplive-core-gbl-network-admin"
+      }
+    },
+    "core-public/admin": {
+      "kind": "aws/assume-role",
+      "via": {
+        "identity": "core-identity/managers-team-access"
+      },
+      "principal": {
+        "assume_role": "arn:aws:iam::847349463865:role/cplive-core-gbl-public-admin"
+      }
+    },
+    "core-root/admin": {
+      "kind": "aws/assume-role",
+      "via": {
+        "identity": "core-identity/managers-team-access"
+      },
+      "principal": {
+        "assume_role": "arn:aws:iam::828744362454:role/cplive-core-gbl-root-admin"
+      }
+    },
+    "core-security/admin": {
+      "kind": "aws/assume-role",
+      "via": {
+        "identity": "core-identity/managers-team-access"
+      },
+      "principal": {
+        "assume_role": "arn:aws:iam::940613624647:role/cplive-core-gbl-security-admin"
+      }
+    },
+    "cplive/superuser": {
+      "kind": "aws/user"
+    },
+    "plat-dev/admin": {
+      "kind": "aws/assume-role",
+      "via": {
+        "identity": "core-identity/managers-team-access"
+      },
+      "principal": {
+        "assume_role": "arn:aws:iam::068007702576:role/cplive-plat-gbl-dev-admin"
+      }
+    },
+    "plat-prod/admin": {
+      "kind": "aws/assume-role",
+      "via": {
+        "identity": "core-identity/managers-team-access"
+      },
+      "principal": {
+        "assume_role": "arn:aws:iam::557075604627:role/cplive-plat-gbl-prod-admin"
+      }
+    },
+    "plat-sandbox/admin": {
+      "kind": "aws/assume-role",
+      "via": {
+        "identity": "core-identity/managers-team-access"
+      },
+      "principal": {
+        "assume_role": "arn:aws:iam::539916835077:role/cplive-plat-gbl-sandbox-admin"
+      }
+    },
+    "plat-staging/admin": {
+      "kind": "aws/assume-role",
+      "via": {
+        "identity": "core-identity/managers-team-access"
+      },
+      "principal": {
+        "assume_role": "arn:aws:iam::675539733138:role/cplive-plat-gbl-staging-admin"
       }
     }
   },
   "providers": {
-    "mock-provider": {
-      "kind": "mock"
+    "cplive-saml": {
+      "kind": "aws/saml",
+      "url": "https://accounts.google.com/o/saml2/initsso?idpid=C01yjz1jl/u0026spid=1081421647897/u0026forceauthn=false",
+      "region": "us-east-2"
+    },
+    "cplive-sso": {
+      "kind": "aws/iam-identity-center",
+      "start_url": "https://cplive.awsapps.com/start/",
+      "region": "us-east-2"
     }
   }
 }

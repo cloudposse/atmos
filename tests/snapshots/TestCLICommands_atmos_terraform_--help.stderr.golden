@@ -1,0 +1,10 @@
+DEBU Set logs-level=debug logs-file=/dev/stderr
+DEBU 'atmos.yaml' CLI config was not found paths="system dir, home dir, current dir, ENV vars"
+DEBU Refer to https://atmos.tools/cli/configuration for details on how to configure 'atmos.yaml'
+DEBU Using the default CLI config
+DEBU Found ENV variable ATMOS_VERSION_CHECK_ENABLED=false
+DEBU 'atmos.yaml' CLI config was not found paths="system dir, home dir, current dir, ENV vars"
+DEBU Refer to https://atmos.tools/cli/configuration for details on how to configure 'atmos.yaml'
+DEBU Using the default CLI config
+DEBU Found ENV variable ATMOS_VERSION_CHECK_ENABLED=false
+DEBU Telemetry event enqueued
