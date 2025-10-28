@@ -333,14 +333,25 @@ func (m *AWSFileManager) Cleanup(providerName string) error {
 
 	providerDir := filepath.Join(m.baseDir, providerName)
 
+	log.Debug("Cleaning up AWS files directory",
+		"provider", providerName,
+		"directory", providerDir)
+
 	if err := os.RemoveAll(providerDir); err != nil {
 		// If directory doesn't exist, that's not an error (already cleaned up).
 		if os.IsNotExist(err) {
+			log.Debug("AWS files directory already removed (does not exist)",
+				"provider", providerName,
+				"directory", providerDir)
 			return nil
 		}
 		errUtils.CheckErrorAndPrint(ErrCleanupAWSFiles, providerDir, "failed to cleanup AWS files")
 		return ErrCleanupAWSFiles
 	}
+
+	log.Debug("Successfully removed AWS files directory",
+		"provider", providerName,
+		"directory", providerDir)
 
 	return nil
 }
