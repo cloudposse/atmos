@@ -83,6 +83,8 @@ func (i *Identity) Environment() (map[string]string, error) {
 	env["AWS_SHARED_CREDENTIALS_FILE"] = "/tmp/mock-credentials"
 	env["AWS_CONFIG_FILE"] = "/tmp/mock-config"
 	env["AWS_PROFILE"] = i.name
+	env["AWS_REGION"] = "us-east-1"
+	env["AWS_DEFAULT_REGION"] = "us-east-1"
 
 	return env, nil
 }
@@ -114,19 +116,18 @@ func (i *Identity) CredentialsExist() (bool, error) {
 	return true, nil
 }
 
-// LoadCredentials returns mock credentials for testing.
-// Mock identities don't use file-based storage, so this just returns test credentials.
+// LoadCredentials returns an error for mock identities.
+// Mock identities don't use file-based storage and cannot load credentials from disk.
+// Credentials must be obtained through the Authenticate() flow and stored in keyring.
+// This mimics real AWS identity behavior where LoadCredentials fails if credentials
+// haven't been written to ~/.aws/credentials via authentication.
 func (i *Identity) LoadCredentials(ctx context.Context) (types.ICredentials, error) {
 	defer perf.Track(nil, "mock.Identity.LoadCredentials")()
 
-	// Return mock credentials.
-	return &Credentials{
-		AccessKeyID:     "mock-access-key",
-		SecretAccessKey: "mock-secret-key",
-		SessionToken:    "mock-session-token",
-		Region:          "us-east-1",
-		Expiration:      time.Now().Add(1 * time.Hour),
-	}, nil
+	// Mock identities don't have persistent file-based storage like real AWS identities.
+	// Return an error to indicate credentials must be obtained via authentication.
+	// Note: We use fmt.Errorf instead of a static error because this is test-only mock code.
+	return nil, fmt.Errorf("mock identity %q has no stored credentials - use 'atmos auth login' to authenticate", i.name) //nolint:err113
 }
 
 // Logout is a no-op for mock identities.

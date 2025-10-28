@@ -311,7 +311,7 @@ func TestIdentity_LoadCredentials(t *testing.T) {
 		name string
 	}{
 		{
-			name: "returns mock credentials",
+			name: "returns error for no stored credentials",
 		},
 	}
 
@@ -326,18 +326,12 @@ func TestIdentity_LoadCredentials(t *testing.T) {
 
 			creds, err := identity.LoadCredentials(ctx)
 
-			require.NoError(t, err)
-			require.NotNil(t, creds)
-
-			// Verify it's mock credentials.
-			mockCreds, ok := creds.(*Credentials)
-			require.True(t, ok, "credentials should be mock Credentials type")
-			assert.Equal(t, "mock-access-key", mockCreds.AccessKeyID)
-			assert.Equal(t, "mock-secret-key", mockCreds.SecretAccessKey)
-			assert.Equal(t, "mock-session-token", mockCreds.SessionToken)
-			assert.Equal(t, "us-east-1", mockCreds.Region)
-			assert.False(t, mockCreds.Expiration.IsZero())
-			assert.True(t, mockCreds.Expiration.After(time.Now()))
+			// Mock identities don't have file-based storage, so LoadCredentials should return an error.
+			// This mimics real AWS identity behavior where LoadCredentials fails if credentials
+			// haven't been written to ~/.aws/credentials via authentication.
+			require.Error(t, err)
+			require.Nil(t, creds)
+			assert.Contains(t, err.Error(), "no stored credentials")
 		})
 	}
 }

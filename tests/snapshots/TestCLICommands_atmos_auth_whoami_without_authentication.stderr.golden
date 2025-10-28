@@ -1,5 +1,6 @@
 
 **Notice:** Telemetry Enabled - Atmos now collects anonymous telemetry regarding usage. This information is used to shape the Atmos roadmap and prioritize features. You can learn more, including how to opt out if you'd prefer not to participate in this anonymous program, by visiting: https://atmos.tools/cli/telemetry
+INFO Chained identity from=mock-provider to=mock-identity
 ✓ Current Authentication Status
 
   Provider      mock-provider                            
@@ -7,5 +8,5 @@
   Principal     arn:aws:iam::123456789012:user/mock-user 
   Account       123456789012                             
   Region        us-east-1                                
-  Expires       2025-10-27 12:50:34 CDT (1h 0m)        
-  Last Updated  2025-10-27 11:50:34 CDT                  
+  Expires       2099-12-31 23:59:59 UTC (1h 0m)    
+  Last Updated  2025-10-28 13:10:27 CDT                  
