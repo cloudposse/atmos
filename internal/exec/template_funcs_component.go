@@ -59,7 +59,8 @@ func componentFunc(
 			terraformOutputs = remoteStateBackendStaticTypeOutputs
 		} else {
 			// Execute `terraform output`
-			terraformOutputs, err = execTerraformOutput(atmosConfig, component, stack, sections)
+			// Note: authContext is nil here because template functions don't have access to stack-specific auth context
+			terraformOutputs, err = execTerraformOutput(atmosConfig, component, stack, sections, nil)
 			if err != nil {
 				return nil, err
 			}

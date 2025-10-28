@@ -32,20 +32,41 @@ Previously, these files used hardcoded paths like `~/.atmos/`, which:
 
 | Use Case | Environment Variable | Example Path |
 |----------|---------------------|--------------|
-| Linux developer workstation | `XDG_CACHE_HOME` | `~/.cache/atmos/cache.yaml` |
-| macOS developer workstation | (default) | `~/Library/Caches/atmos/cache.yaml` |
+| Linux developer workstation | (default) | `~/.cache/atmos/cache.yaml` |
+| macOS developer workstation | (default) | `~/.cache/atmos/cache.yaml` |
 | CI/CD with custom location | `ATMOS_XDG_DATA_HOME` | `/tmp/ci-build/data/atmos/keyring/` |
 | Shared server with per-user isolation | `ATMOS_XDG_DATA_HOME` | `/var/atmos/users/$USER/data/atmos/keyring/` |
 | Testing with hermetic isolation | `t.Setenv("XDG_DATA_HOME")` | `/tmp/test-xyz/data/atmos/` |
+| Geodesic on macOS (default) | (default) | `~/.config/atmos/aws/` (auto-mounted) |
 
 ## Design Goals
 
 1. **Standards compliance**: Follow XDG Base Directory Specification exactly on Linux/Unix
-2. **Platform awareness**: Adapt gracefully to macOS and Windows conventions
+2. **CLI tool conventions**: Use `~/.config`, `~/.cache`, `~/.local/share` on all platforms (including macOS)
 3. **Namespace isolation**: Atmos-specific overrides (`ATMOS_XDG_*`) don't affect other tools
 4. **Minimal global state**: Create new Viper instances for isolated environment reads
 5. **Automatic directory creation**: Ensure directories exist with correct permissions
 6. **Performance tracking**: Instrument directory creation for visibility
+
+### CLI Tools vs GUI Applications
+
+The XDG Base Directory Specification was originally designed for Linux desktop environments. When adapting to macOS, there's an important distinction:
+
+**CLI Tools (like Atmos):**
+- Should use `~/.config`, `~/.cache`, `~/.local/share` on all platforms
+- This is the de facto standard for CLI tools in the ecosystem
+- Examples: `gh`, `git`, `packer`, `stripe`, `op`, `kubectl`, `docker`, `terraform`
+- Benefits: Consistent paths across platforms, works seamlessly with tools like Geodesic
+
+**GUI Applications:**
+- Should follow platform conventions: `~/Library/Application Support` on macOS
+- This provides better integration with macOS system features
+- Used by native macOS applications
+
+**Atmos Decision:** As a CLI tool, Atmos uses `~/.config` paths on **all platforms**, including macOS. This ensures:
+- Consistency with other DevOps/infrastructure CLI tools
+- Seamless integration with Geodesic (which mounts `~/.config` by default)
+- Predictable paths for users working across Linux and macOS
 
 ## Technical Specification
 
@@ -63,13 +84,15 @@ The specification defines three directory types:
 
 #### Platform Defaults
 
-Implemented via the `github.com/adrg/xdg` library:
+Atmos follows CLI tool conventions and uses consistent paths across platforms:
 
-| Variable | Linux/Unix | macOS | Windows |
-|----------|-----------|--------|---------|
-| `XDG_CACHE_HOME` | `~/.cache` | `~/Library/Caches` | `%LOCALAPPDATA%` |
-| `XDG_DATA_HOME` | `~/.local/share` | `~/Library/Application Support` | `%LOCALAPPDATA%` |
-| `XDG_CONFIG_HOME` | `~/.config` | `~/Library/Application Support` | `%APPDATA%` |
+| Variable | Linux/Unix | macOS (CLI convention) | Windows |
+|----------|-----------|------------------------|---------|
+| `XDG_CACHE_HOME` | `~/.cache` | `~/.cache` | `%LOCALAPPDATA%` |
+| `XDG_DATA_HOME` | `~/.local/share` | `~/.local/share` | `%LOCALAPPDATA%` |
+| `XDG_CONFIG_HOME` | `~/.config` | `~/.config` | `%APPDATA%` |
+
+**Note:** While the `github.com/adrg/xdg` library defaults to `~/Library/Application Support` on macOS (following GUI application conventions), Atmos **overrides this behavior** by setting the library's exported variables (`xdg.ConfigHome`, `xdg.DataHome`, `xdg.CacheHome`) in an `init()` function. This ensures **all code** in Atmos (even code that directly imports `github.com/adrg/xdg`) gets CLI tool conventions on macOS.
 
 ### Package API
 
@@ -115,6 +138,30 @@ if customHome := v.GetString("XDG_CACHE_HOME"); customHome != "" {
 ```
 
 ### Implementation Details
+
+#### macOS CLI Tool Convention Override
+
+Atmos overrides the `github.com/adrg/xdg` library's macOS defaults in an `init()` function:
+
+```go
+func init() {
+    // Override adrg/xdg defaults for macOS to follow CLI tool conventions.
+    if runtime.GOOS == "darwin" {
+        homeDir, err := os.UserHomeDir()
+        if err == nil {
+            xdg.CacheHome = filepath.Join(homeDir, ".cache")
+            xdg.DataHome = filepath.Join(homeDir, ".local", "share")
+            xdg.ConfigHome = filepath.Join(homeDir, ".config")
+        }
+    }
+}
+```
+
+**Why this approach:**
+- Sets the library's exported variables directly, not just in wrapper functions
+- Ensures **any code** that imports `github.com/adrg/xdg` gets CLI conventions on macOS
+- Works even for code that doesn't use our `GetXDGConfigDir()` functions
+- Clean and maintainable - single point of override
 
 #### Directory Creation
 
@@ -500,7 +547,43 @@ Additional documentation:
 
 | Date | Version | Changes |
 |------|---------|---------|
+| 2025-10-24 | 2.0 | **Breaking Change for macOS**: Updated to use CLI tool conventions. macOS now uses `~/.config` instead of `~/Library/Application Support` for consistency with CLI tool ecosystem and Geodesic compatibility. **Rationale**: Research showed that CLI tools (gh, git, packer, stripe, op, kubectl, docker, terraform) standardize on `~/.config` across all platforms, while `~/Library/Application Support` is reserved for GUI applications. This change ensures Atmos works seamlessly with Geodesic (which mounts `~/.config` by default) and provides consistent paths for DevOps workflows across Linux and macOS. Implementation overrides `github.com/adrg/xdg` library defaults on macOS to return `~/.config` paths. |
 | 2025-01-21 | 1.0 | Initial PRD created after implementation |
+
+## Migration Guide for v2.0 (macOS Users)
+
+### Impact
+
+If you were using Atmos auth on macOS between v1.195.0 and this release, your credentials may have been stored at:
+- `~/Library/Application Support/atmos/` (old XDG library default)
+
+After upgrading to v2.0, Atmos will use:
+- `~/.config/atmos/` (new CLI tool convention)
+
+**Most users will not be affected** because:
+1. Versions prior to v1.195.0 used `~/.aws/atmos/` (legacy path)
+2. The XDG implementation with `~/Library/Application Support` was never released in a stable version
+
+### Migration Options
+
+**Option 1: Use new path (recommended)**
+Simply run `atmos auth login` again. Credentials will be stored in the new `~/.config/atmos/` location.
+
+**Option 2: Keep existing credentials location**
+If you have existing credentials you want to keep using:
+```bash
+# Add to ~/.zshrc or ~/.bash_profile
+export ATMOS_XDG_CONFIG_HOME="$HOME/Library/Application Support"
+```
+
+**Option 3: Move credentials to new location**
+```bash
+# If old credentials exist
+if [ -d "$HOME/Library/Application Support/atmos" ]; then
+    mkdir -p ~/.config
+    mv "$HOME/Library/Application Support/atmos" ~/.config/
+fi
+```
 
 ## Appendix: File Locations Reference
 
@@ -512,13 +595,15 @@ Data:   ~/.local/share/atmos/
 Config: ~/.config/atmos/
 ```
 
-### macOS Default Locations
+### macOS Default Locations (CLI Convention)
 
 ```
-Cache:  ~/Library/Caches/atmos/
-Data:   ~/Library/Application Support/atmos/
-Config: ~/Library/Application Support/atmos/
+Cache:  ~/.cache/atmos/
+Data:   ~/.local/share/atmos/
+Config: ~/.config/atmos/
 ```
+
+**Note:** These paths match Linux conventions. While macOS GUI applications typically use `~/Library/Application Support`, CLI tools (including Atmos) use `~/.config` for consistency across platforms and compatibility with containerized environments like Geodesic.
 
 ### Windows Default Locations
 
