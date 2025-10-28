@@ -2,8 +2,11 @@ package mock
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/cloudposse/atmos/pkg/auth/types"
@@ -11,18 +14,25 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
+const (
+	// MockRegion is the default AWS region for mock credentials.
+	MockRegion = "us-east-1"
+
+	// MockFilePermissions are the file permissions for credential files (owner read/write only).
+	MockFilePermissions = 0o600
+)
+
 // ErrNoStoredCredentials indicates storage is supported but currently empty.
 // This error is returned when LoadCredentials is called before authentication.
 var ErrNoStoredCredentials = errors.New("mock identity has no stored credentials")
 
 // Identity is a mock authentication identity for testing purposes only.
-// It simulates provider-agnostic credential storage behavior by tracking whether
-// credentials have been persisted (like AWS writing to ~/.aws/credentials, or
-// GitHub storing a token in an environment variable/file).
+// It simulates provider-agnostic credential storage behavior by persisting
+// credentials to disk (like AWS writing to ~/.aws/credentials, or GitHub storing
+// a token in a file). This allows credentials to persist across process invocations.
 type Identity struct {
-	name                 string
-	config               *schema.Identity
-	hasStoredCredentials bool // Tracks if credentials have been written to "storage"
+	name   string
+	config *schema.Identity
 }
 
 // NewIdentity creates a new mock identity.
@@ -33,6 +43,15 @@ func NewIdentity(name string, config *schema.Identity) *Identity {
 		name:   name,
 		config: config,
 	}
+}
+
+// getCredentialsFilePath returns the path where mock credentials are stored.
+// This simulates how real providers persist credentials to disk.
+func (i *Identity) getCredentialsFilePath() string {
+	// Use a temp directory that's cleaned up by the OS.
+	// In production, real providers would use XDG directories like ~/.config/atmos/aws/{provider}/.
+	tmpDir := os.TempDir()
+	return filepath.Join(tmpDir, "atmos-mock-"+i.name+".json")
 }
 
 // Kind returns the identity kind.
@@ -65,7 +84,7 @@ func (i *Identity) Authenticate(ctx context.Context, baseCreds types.ICredential
 		AccessKeyID:     fmt.Sprintf("MOCK_KEY_%s", i.name),
 		SecretAccessKey: fmt.Sprintf("MOCK_SECRET_%s", i.name),
 		SessionToken:    fmt.Sprintf("MOCK_TOKEN_%s", i.name),
-		Region:          "us-east-1",
+		Region:          MockRegion,
 		Expiration:      fixedExpiration,
 	}, nil
 }
@@ -92,8 +111,8 @@ func (i *Identity) Environment() (map[string]string, error) {
 	env["AWS_SHARED_CREDENTIALS_FILE"] = "/tmp/mock-credentials"
 	env["AWS_CONFIG_FILE"] = "/tmp/mock-config"
 	env["AWS_PROFILE"] = i.name
-	env["AWS_REGION"] = "us-east-1"
-	env["AWS_DEFAULT_REGION"] = "us-east-1"
+	env["AWS_REGION"] = MockRegion
+	env["AWS_DEFAULT_REGION"] = MockRegion
 
 	return env, nil
 }
@@ -110,15 +129,35 @@ func (i *Identity) PrepareEnvironment(_ context.Context, environ map[string]stri
 }
 
 // PostAuthenticate simulates writing credentials to persistent storage.
-// For mock identities, this tracks that credentials have been "stored" after authentication.
+// For mock identities, this writes credentials to a temporary file to persist them.
 // This mimics real provider behavior where authentication results in credentials being written
 // to disk (AWS ~/.aws/credentials), environment variables (GitHub token), or other storage.
 func (i *Identity) PostAuthenticate(ctx context.Context, params *types.PostAuthenticateParams) error {
 	defer perf.Track(nil, "mock.Identity.PostAuthenticate")()
 
-	// Mark that credentials have been written to "storage".
-	// This allows LoadCredentials to succeed on subsequent calls.
-	i.hasStoredCredentials = true
+	// Write credentials to disk to simulate persistent storage.
+	// Use a fixed timestamp for deterministic testing.
+	fixedExpiration := time.Date(MockExpirationYear, MockExpirationMonth, MockExpirationDay, MockExpirationHour, MockExpirationMinute, MockExpirationSecond, 0, time.UTC)
+
+	creds := &Credentials{
+		AccessKeyID:     "mock-access-key",
+		SecretAccessKey: "mock-secret-key",
+		SessionToken:    "mock-session-token",
+		Region:          MockRegion,
+		Expiration:      fixedExpiration,
+	}
+
+	// Serialize credentials to JSON.
+	data, err := json.Marshal(creds)
+	if err != nil {
+		return fmt.Errorf("failed to marshal mock credentials: %w", err)
+	}
+
+	// Write to temp file (simulates writing to XDG directory).
+	credPath := i.getCredentialsFilePath()
+	if err := os.WriteFile(credPath, data, MockFilePermissions); err != nil {
+		return fmt.Errorf("failed to write mock credentials to %s: %w", credPath, err)
+	}
 
 	return nil
 }
@@ -145,35 +184,37 @@ func (i *Identity) CredentialsExist() (bool, error) {
 func (i *Identity) LoadCredentials(ctx context.Context) (types.ICredentials, error) {
 	defer perf.Track(nil, "mock.Identity.LoadCredentials")()
 
-	// Check if credentials have been stored (via PostAuthenticate).
-	if !i.hasStoredCredentials {
-		// Return a typed error to indicate credentials must be obtained via authentication.
-		return nil, fmt.Errorf("%w: %q — use 'atmos auth login' to authenticate", ErrNoStoredCredentials, i.name)
+	// Check if credentials file exists.
+	credPath := i.getCredentialsFilePath()
+	data, err := os.ReadFile(credPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			// Return typed error to indicate credentials must be obtained via authentication.
+			return nil, fmt.Errorf("%w: %q — use 'atmos auth login' to authenticate", ErrNoStoredCredentials, i.name)
+		}
+		return nil, fmt.Errorf("failed to read mock credentials from %s: %w", credPath, err)
 	}
 
-	// Use a fixed timestamp far in the future for deterministic testing and snapshot stability.
-	// This ensures tests don't become flaky due to expiration checks.
-	fixedExpiration := time.Date(MockExpirationYear, MockExpirationMonth, MockExpirationDay, MockExpirationHour, MockExpirationMinute, MockExpirationSecond, 0, time.UTC)
+	// Deserialize credentials from JSON.
+	var creds Credentials
+	if err := json.Unmarshal(data, &creds); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal mock credentials: %w", err)
+	}
 
-	// Return stored credentials.
-	// In a real provider, this would read from disk/environment/etc.
-	return &Credentials{
-		AccessKeyID:     "mock-access-key",
-		SecretAccessKey: "mock-secret-key",
-		SessionToken:    "mock-session-token",
-		Region:          "us-east-1",
-		Expiration:      fixedExpiration,
-	}, nil
+	return &creds, nil
 }
 
 // Logout simulates removing credentials from persistent storage.
-// This clears the stored credentials state, requiring re-authentication.
+// This deletes the credentials file, requiring re-authentication.
 func (i *Identity) Logout(ctx context.Context) error {
 	defer perf.Track(nil, "mock.Identity.Logout")()
 
-	// Clear the stored credentials flag.
-	// This simulates removing credentials from disk/environment/etc.
-	i.hasStoredCredentials = false
+	// Delete the credentials file to simulate removal from disk/environment/etc.
+	credPath := i.getCredentialsFilePath()
+	err := os.Remove(credPath)
+	if err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("failed to delete mock credentials file %s: %w", credPath, err)
+	}
 
 	return nil
 }

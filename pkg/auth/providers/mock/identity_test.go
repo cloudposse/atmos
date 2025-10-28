@@ -347,8 +347,13 @@ func TestIdentity_LoadCredentials(t *testing.T) {
 				Kind: "mock",
 			}
 
-			identity := NewIdentity("test-identity", config)
+			identity := NewIdentity("test-load-creds", config)
 			ctx := context.Background()
+
+			// Cleanup credentials file after test.
+			t.Cleanup(func() {
+				_ = identity.Logout(ctx)
+			})
 
 			// Simulate authentication if requested.
 			if tt.setupAuth {
