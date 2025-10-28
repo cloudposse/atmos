@@ -411,91 +411,7 @@ func TestUninstall(t *testing.T) {
 }
 
 func TestLocalConfigAliases(t *testing.T) {
-	// Create a temporary tools.yaml file with aliases
-	tempDir := t.TempDir()
-	toolsYamlPath := filepath.Join(tempDir, "tools.yaml")
-
-	content := `aliases:
-  terraform: hashicorp/terraform
-  opentofu: opentofu/opentofu
-  tflint: terraform-linters/tflint
-  helmfile: helmfile/helmfile
-
-tools:
-  hashicorp/terraform:
-    type: http
-    url: https://example.com/terraform.zip
-`
-
-	err := os.WriteFile(toolsYamlPath, []byte(content), defaultFileWritePermissions)
-	if err != nil {
-		t.Fatalf("Failed to create test tools.yaml file: %v", err)
-	}
-
-	// Create a local config manager and load the test file
-	lcm := NewLocalConfigManager()
-	err = lcm.Load(toolsYamlPath)
-	if err != nil {
-		t.Fatalf("Failed to load test tools.yaml: %v", err)
-	}
-
-	// Test alias resolution
-	testCases := []struct {
-		name        string
-		toolName    string
-		expected    string
-		shouldExist bool
-	}{
-		{
-			name:        "terraform alias",
-			toolName:    "terraform",
-			expected:    "hashicorp/terraform",
-			shouldExist: true,
-		},
-		{
-			name:        "opentofu alias",
-			toolName:    "opentofu",
-			expected:    "opentofu/opentofu",
-			shouldExist: true,
-		},
-		{
-			name:        "tflint alias",
-			toolName:    "tflint",
-			expected:    "terraform-linters/tflint",
-			shouldExist: true,
-		},
-		{
-			name:        "helmfile alias",
-			toolName:    "helmfile",
-			expected:    "helmfile/helmfile",
-			shouldExist: true,
-		},
-		{
-			name:        "non-existent alias",
-			toolName:    "nonexistent",
-			expected:    "",
-			shouldExist: false,
-		},
-	}
-
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			alias, exists := lcm.ResolveAlias(tc.toolName)
-
-			if tc.shouldExist {
-				if !exists {
-					t.Errorf("Expected alias to exist for %s", tc.toolName)
-				}
-				if alias != tc.expected {
-					t.Errorf("Expected alias %s, got %s", tc.expected, alias)
-				}
-			} else {
-				if exists {
-					t.Errorf("Expected alias to not exist for %s", tc.toolName)
-				}
-			}
-		})
-	}
+	t.Skip("Local config support was removed in refactoring")
 }
 
 // func TestPathCommand(t *testing.T) {
@@ -773,7 +689,7 @@ tools:
 // 					toolVersionsFile = filepath.Join(tempDir, DefaultToolVersionsFilePath)
 
 // 					// Override the tools directory path for this test
-// 					originalToolsDir := GetToolsDirPath()
+// 					originalToolsDir := GetInstallPath()
 // 					defer func() { toolsDir = originalToolsDir }()
 // 					toolsDir = filepath.Join(tempDir, ".tools")
 
@@ -958,7 +874,7 @@ func TestEmitJSONPath(t *testing.T) {
 			os.Stdout = w
 
 			// Execute function
-			err := emitJSONPath(tt.toolPaths, tt.finalPath)
+			emitJSONPath(tt.toolPaths, tt.finalPath)
 
 			// Restore stdout
 			w.Close()
@@ -966,17 +882,11 @@ func TestEmitJSONPath(t *testing.T) {
 
 			// Read output
 			var buf strings.Builder
-			_, err2 := io.Copy(&buf, r)
-			if err2 != nil {
-				t.Fatalf("Failed to read output: %v", err2)
+			_, err := io.Copy(&buf, r)
+			if err != nil {
+				t.Fatalf("Failed to read output: %v", err)
 			}
 			output := strings.TrimSpace(buf.String())
-
-			// Check results
-			if err != nil {
-				t.Errorf("Unexpected error: %v", err)
-				return
-			}
 			if output != tt.expected {
 				t.Errorf("Output mismatch:\nGot:  %s\nWant: %s", output, tt.expected)
 			}

@@ -1,6 +1,7 @@
 package aqua
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -10,6 +11,7 @@ import (
 	"runtime"
 	"strings"
 	"text/template"
+	"time"
 
 	"github.com/Masterminds/semver/v3"
 	log "github.com/charmbracelet/log"
@@ -18,6 +20,7 @@ import (
 	httpClient "github.com/cloudposse/atmos/pkg/http"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/toolchain/registry"
+	"github.com/cloudposse/atmos/toolchain/registry/cache"
 )
 
 const (
@@ -26,11 +29,18 @@ const (
 	defaultMkdirPermissions     = 0o755
 )
 
+// init registers the Aqua registry as the default registry.
+func init() {
+	registry.RegisterDefaultRegistry(func() registry.ToolRegistry {
+		return NewAquaRegistry()
+	})
+}
+
 // AquaRegistry represents the Aqua registry structure.
 type AquaRegistry struct {
-	client httpClient.Client
-	cache  *RegistryCache
-	local  *registry.LocalConfigManager
+	client     httpClient.Client
+	cache      *RegistryCache
+	cacheStore cache.Store
 }
 
 // RegistryCache handles caching of registry files.
@@ -38,18 +48,26 @@ type RegistryCache struct {
 	baseDir string
 }
 
+// scoredTool represents a tool with its relevance score.
+type scoredTool struct {
+	tool  *registry.Tool
+	score int
+}
+
 // NewAquaRegistry creates a new Aqua registry client.
 func NewAquaRegistry() *AquaRegistry {
 	defer perf.Track(nil, "aqua.NewAquaRegistry")()
+
+	cacheBaseDir := filepath.Join(os.TempDir(), "atmos-toolchain-cache")
 
 	return &AquaRegistry{
 		client: httpClient.NewDefaultClient(
 			httpClient.WithGitHubToken(httpClient.GetGitHubTokenFromEnv()),
 		),
 		cache: &RegistryCache{
-			baseDir: filepath.Join(os.TempDir(), "tools-cache"),
+			baseDir: filepath.Join(cacheBaseDir, "registry"),
 		},
-		local: registry.NewLocalConfigManager(),
+		cacheStore: cache.NewFileStore(cacheBaseDir),
 	}
 }
 
@@ -69,22 +87,17 @@ func (ar *AquaRegistry) get(url string) (*http.Response, error) {
 	return resp, nil
 }
 
-// LoadLocalConfig loads the local configuration.
+// LoadLocalConfig is deprecated and no-op for compatibility.
 func (ar *AquaRegistry) LoadLocalConfig(configPath string) error {
 	defer perf.Track(nil, "aqua.AquaRegistry.LoadLocalConfig")()
 
-	return ar.local.Load(configPath)
+	// No-op for backward compatibility.
+	return nil
 }
 
 // GetTool fetches tool metadata from the Aqua registry.
 func (ar *AquaRegistry) GetTool(owner, repo string) (*registry.Tool, error) {
 	defer perf.Track(nil, "aqua.AquaRegistry.GetTool")()
-
-	// Check local configuration first
-	if localTool, exists := ar.local.GetTool(owner, repo); exists {
-		log.Debug("Using local configuration", "owner", owner, "repo", repo)
-		return ar.convertLocalToolToTool(localTool, repo), nil
-	}
 
 	// Fall back to remote registry
 	// Try multiple registry sources
@@ -382,30 +395,6 @@ func (ar *AquaRegistry) BuildAssetURL(tool *registry.Tool, version string) (stri
 	return url, nil
 }
 
-// convertLocalToolToTool converts a local tool definition to a Tool.
-func (ar *AquaRegistry) convertLocalToolToTool(localTool *registry.LocalTool, repo string) *registry.Tool {
-	tool := &registry.Tool{
-		Name:      repo,
-		Type:      localTool.Type,
-		RepoOwner: localTool.RepoOwner,
-		RepoName:  localTool.RepoName,
-		Asset:     localTool.URL,
-		Format:    localTool.Format,
-	}
-
-	// Set binary name if specified
-	if localTool.BinaryName != "" {
-		tool.Name = localTool.BinaryName
-	}
-
-	// Handle URL for http type
-	if localTool.Type == "http" {
-		tool.Asset = localTool.URL
-	}
-
-	return tool
-}
-
 // GetLatestVersion fetches the latest non-prerelease version from GitHub releases.
 func (ar *AquaRegistry) GetLatestVersion(owner, repo string) (string, error) {
 	defer perf.Track(nil, "aqua.AquaRegistry.GetLatestVersion")()
@@ -525,4 +514,271 @@ func getArch() string {
 	default:
 		return "amd64"
 	}
+}
+
+// Search searches for tools matching the query string.
+// The query is matched against tool owner, repo, and description.
+func (ar *AquaRegistry) Search(ctx context.Context, query string, opts ...registry.SearchOption) ([]*registry.Tool, error) {
+	defer perf.Track(nil, "aqua.AquaRegistry.Search")()
+
+	// Apply search options.
+	config := &registry.SearchConfig{
+		Limit: 20, // default
+	}
+	for _, opt := range opts {
+		opt(config)
+	}
+
+	// Get all tools from registry.
+	allTools, err := ar.ListAll(ctx, registry.WithListLimit(0)) // 0 = no limit
+	if err != nil {
+		return nil, err
+	}
+
+	// Filter and score results.
+	var results []scoredTool
+	queryLower := strings.ToLower(query)
+
+	for _, tool := range allTools {
+		score := ar.calculateRelevanceScore(tool, queryLower)
+		if score > 0 {
+			results = append(results, scoredTool{tool: tool, score: score})
+		}
+	}
+
+	// Sort by score (highest first), then alphabetically.
+	sortResults(results)
+
+	// Apply offset and limit.
+	start := config.Offset
+	if start > len(results) {
+		start = len(results)
+	}
+
+	end := start + config.Limit
+	if config.Limit == 0 || end > len(results) {
+		end = len(results)
+	}
+
+	filtered := make([]*registry.Tool, 0, end-start)
+	for i := start; i < end; i++ {
+		filtered = append(filtered, results[i].tool)
+	}
+
+	return filtered, nil
+}
+
+// calculateRelevanceScore scores a tool based on query match.
+// Scoring algorithm:
+// - Exact match on repo name: 100
+// - Prefix match on repo name: 70
+// - Contains match on repo name: 50
+// - Prefix match on owner: 40
+// - Contains match on owner: 20.
+func (ar *AquaRegistry) calculateRelevanceScore(tool *registry.Tool, queryLower string) int {
+	repoLower := strings.ToLower(tool.RepoName)
+	ownerLower := strings.ToLower(tool.RepoOwner)
+
+	// Exact repo match.
+	if repoLower == queryLower {
+		return 100
+	}
+
+	score := 0
+
+	// Prefix match on repo.
+	if strings.HasPrefix(repoLower, queryLower) {
+		score += 70
+	} else if strings.Contains(repoLower, queryLower) {
+		// Contains match on repo.
+		score += 50
+	}
+
+	// Prefix match on owner.
+	if strings.HasPrefix(ownerLower, queryLower) {
+		score += 40
+	} else if strings.Contains(ownerLower, queryLower) {
+		// Contains match on owner.
+		score += 20
+	}
+
+	return score
+}
+
+// sortResults sorts scored tools by score (descending) then alphabetically.
+func sortResults(results []scoredTool) {
+	// Simple bubble sort for small result sets.
+	for i := 0; i < len(results); i++ {
+		for j := i + 1; j < len(results); j++ {
+			// Sort by score descending.
+			if results[j].score > results[i].score {
+				results[i], results[j] = results[j], results[i]
+			} else if results[j].score == results[i].score {
+				// For equal scores, sort alphabetically by repo name.
+				if results[j].tool.RepoName < results[i].tool.RepoName {
+					results[i], results[j] = results[j], results[i]
+				}
+			}
+		}
+	}
+}
+
+// ListAll returns all tools available in the Aqua registry.
+func (ar *AquaRegistry) ListAll(ctx context.Context, opts ...registry.ListOption) ([]*registry.Tool, error) {
+	defer perf.Track(nil, "aqua.AquaRegistry.ListAll")()
+
+	// Apply list options.
+	config := &registry.ListConfig{
+		Limit: 50,     // default
+		Sort:  "name", // default
+	}
+	for _, opt := range opts {
+		opt(config)
+	}
+
+	// Fetch the main registry index.
+	// For now, we'll fetch a known list of popular tools.
+	// In V2, we should fetch the complete registry index.
+	tools, err := ar.fetchRegistryIndex(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	// Sort results.
+	if config.Sort == "name" {
+		sortToolsByName(tools)
+	}
+
+	// Apply pagination.
+	start := config.Offset
+	if start > len(tools) {
+		start = len(tools)
+	}
+
+	end := start + config.Limit
+	if config.Limit == 0 || end > len(tools) {
+		end = len(tools)
+	}
+
+	return tools[start:end], nil
+}
+
+// fetchRegistryIndex fetches the complete registry index from aqua-registry.
+func (ar *AquaRegistry) fetchRegistryIndex(ctx context.Context) ([]*registry.Tool, error) {
+	defer perf.Track(nil, "aqua.AquaRegistry.fetchRegistryIndex")()
+
+	const cacheKey = "aqua-registry-index"
+	const cacheTTL = 24 * time.Hour
+
+	// Try to get from cache first.
+	if cachedData, err := ar.cacheStore.Get(ctx, cacheKey); err == nil {
+		// Cache hit - parse and return.
+		tools, err := ar.parseIndexYAML(cachedData)
+		if err == nil {
+			log.Debug("Using cached registry index", "tool_count", len(tools))
+			return tools, nil
+		}
+		// If parse fails, continue to fetch fresh data.
+		log.Debug("Failed to parse cached index, fetching fresh", "error", err)
+	}
+
+	// Cache miss or expired - fetch from GitHub.
+	indexURL := "https://raw.githubusercontent.com/aquaproj/aqua-registry/main/registry.yaml"
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, indexURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	resp, err := ar.client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch registry index: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("%w: failed to fetch registry index (HTTP %d)", registry.ErrHTTPRequest, resp.StatusCode)
+	}
+
+	// Read response body.
+	data, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read registry index: %w", err)
+	}
+
+	// Parse the index.
+	tools, err := ar.parseIndexYAML(data)
+	if err != nil {
+		return nil, err
+	}
+
+	// Store in cache for next time.
+	if err := ar.cacheStore.Set(ctx, cacheKey, data, cacheTTL); err != nil {
+		log.Debug("Failed to cache registry index", "error", err)
+		// Non-fatal - continue with fetched data.
+	}
+
+	log.Debug("Fetched registry index", "tool_count", len(tools))
+	return tools, nil
+}
+
+// parseIndexYAML parses the aqua-registry registry.yaml format.
+func (ar *AquaRegistry) parseIndexYAML(data []byte) ([]*registry.Tool, error) {
+	defer perf.Track(nil, "aqua.AquaRegistry.parseIndexYAML")()
+
+	var index struct {
+		Packages []struct {
+			Type      string `yaml:"type"`
+			RepoOwner string `yaml:"repo_owner"`
+			RepoName  string `yaml:"repo_name"`
+		} `yaml:"packages"`
+	}
+
+	if err := yaml.Unmarshal(data, &index); err != nil {
+		return nil, fmt.Errorf("failed to parse registry index: %w", err)
+	}
+
+	// Convert to Tool objects.
+	tools := make([]*registry.Tool, 0, len(index.Packages))
+	for _, pkg := range index.Packages {
+		tools = append(tools, &registry.Tool{
+			RepoOwner: pkg.RepoOwner,
+			RepoName:  pkg.RepoName,
+			Type:      pkg.Type,
+			Registry:  "aqua-public",
+		})
+	}
+
+	return tools, nil
+}
+
+// sortToolsByName sorts tools alphabetically by repo name.
+func sortToolsByName(tools []*registry.Tool) {
+	for i := 0; i < len(tools); i++ {
+		for j := i + 1; j < len(tools); j++ {
+			if tools[j].RepoName < tools[i].RepoName {
+				tools[i], tools[j] = tools[j], tools[i]
+			}
+		}
+	}
+}
+
+// GetMetadata returns metadata about the Aqua registry.
+func (ar *AquaRegistry) GetMetadata(ctx context.Context) (*registry.RegistryMetadata, error) {
+	defer perf.Track(nil, "aqua.AquaRegistry.GetMetadata")()
+
+	// Get tool count by listing all tools.
+	tools, err := ar.ListAll(ctx, registry.WithListLimit(0))
+	if err != nil {
+		return nil, err
+	}
+
+	return &registry.RegistryMetadata{
+		Name:        "aqua-public",
+		Type:        "aqua",
+		Source:      "https://github.com/aquaproj/aqua-registry",
+		Priority:    10, // Default priority
+		ToolCount:   len(tools),
+		LastUpdated: time.Now(), // TODO: Fetch actual last updated from GitHub API
+	}, nil
 }

@@ -110,7 +110,7 @@ func TestListToolVersions(t *testing.T) {
 			}
 			SetAtmosConfig(&schema.AtmosConfiguration{
 				Toolchain: schema.Toolchain{
-					FilePath: filePath,
+					VersionsFile: filePath,
 				},
 			})
 			// Run the function

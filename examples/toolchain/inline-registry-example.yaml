@@ -1,0 +1,54 @@
+# Inline Registry Example
+# Demonstrates defining tools directly in atmos.yaml without external files
+
+toolchain:
+  install_path: .tools
+  versions_file: .tool-versions
+
+  registries:
+    # Inline registry - tools defined directly in this file
+    - name: my-inline-tools
+      type: atmos
+      priority: 150
+      tools:
+        # Custom internal tool
+        stedolan/jq:
+          type: github_release
+          url: "jq-{{.OS}}-{{.Arch}}"
+          binary_name: jq
+
+        # Another tool with version in URL
+        mikefarah/yq:
+          type: github_release
+          url: "yq_{{.OS}}_{{.Arch}}"
+          format: tar.gz
+          binary_name: yq
+
+        # HTTP-hosted tool
+        example/custom-cli:
+          type: http
+          url: "https://releases.example.com/{{trimV .Version}}/cli-{{.OS}}-{{.Arch}}.zip"
+          format: zip
+
+    # Standard Aqua registry as fallback
+    - name: aqua-public
+      type: aqua
+      source: https://github.com/aquaproj/aqua-registry/tree/main/pkgs
+      priority: 10
+
+# How this works:
+# 1. Tools in "my-inline-tools" are checked first (priority 150)
+# 2. If not found, falls back to "aqua-public" (priority 10)
+#
+# Template Variables Available:
+#   {{.OS}}         - Operating system (darwin, linux, windows)
+#   {{.Arch}}       - Architecture (amd64, arm64, 386)
+#   {{.Version}}    - Tool version (e.g., "1.7.1")
+#   {{trimV .Version}}  - Version without 'v' prefix
+#   {{.RepoOwner}}  - Repository owner
+#   {{.RepoName}}   - Repository name
+#   {{.Format}}     - Archive format (zip, tar.gz, etc.)
+#
+# Usage:
+#   atmos toolchain install jq@1.7.1    # Uses inline definition
+#   atmos toolchain install terraform   # Falls back to aqua-public

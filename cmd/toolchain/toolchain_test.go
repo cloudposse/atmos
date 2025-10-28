@@ -74,15 +74,16 @@ func TestToolchainGetCommand(t *testing.T) {
 	assert.NoError(t, err)
 }
 
-func TestToolchainAddCommand(t *testing.T) {
-	// Create temp directory for test.
+// setupToolchainTest creates a test environment with tool-versions and tools config files.
+func setupToolchainTest(t *testing.T, toolVersionsContent string) string {
+	t.Helper()
+
 	tempDir := t.TempDir()
 	t.Setenv("HOME", tempDir)
 
 	// Create a test .tool-versions file.
 	toolVersionsPath := filepath.Join(tempDir, ".tool-versions")
-	content := ""
-	err := os.WriteFile(toolVersionsPath, []byte(content), 0o644)
+	err := os.WriteFile(toolVersionsPath, []byte(toolVersionsContent), 0o644)
 	require.NoError(t, err)
 
 	// Create tools config.
@@ -92,22 +93,28 @@ func TestToolchainAddCommand(t *testing.T) {
 	require.NoError(t, err)
 
 	// Set the flags to use our temp files.
+	toolsDir := filepath.Join(tempDir, ".tools")
 	toolVersionsFile = toolVersionsPath
-	toolsDir = filepath.Join(tempDir, ".tools")
 	toolsConfigFile = toolsConfigPath
 
 	// Initialize the toolchain package config.
 	atmosCfg := &schema.AtmosConfiguration{
 		Toolchain: schema.Toolchain{
-			FilePath:        toolVersionsPath,
+			VersionsFile:    toolVersionsPath,
 			ToolsDir:        toolsDir,
 			ToolsConfigFile: toolsConfigPath,
 		},
 	}
 	toolchainpkg.SetAtmosConfig(atmosCfg)
 
+	return toolVersionsPath
+}
+
+func TestToolchainAddCommand(t *testing.T) {
+	toolVersionsPath := setupToolchainTest(t, "")
+
 	// Test the add command runs without error.
-	err = addCmd.RunE(addCmd, []string{"terraform@1.5.7"})
+	err := addCmd.RunE(addCmd, []string{"terraform@1.5.7"})
 	assert.NoError(t, err)
 
 	// Verify the tool was added.
@@ -117,39 +124,10 @@ func TestToolchainAddCommand(t *testing.T) {
 }
 
 func TestToolchainRemoveCommand(t *testing.T) {
-	// Create temp directory for test.
-	tempDir := t.TempDir()
-	t.Setenv("HOME", tempDir)
-
-	// Create a test .tool-versions file with a tool.
-	toolVersionsPath := filepath.Join(tempDir, ".tool-versions")
-	content := "terraform 1.5.7\n"
-	err := os.WriteFile(toolVersionsPath, []byte(content), 0o644)
-	require.NoError(t, err)
-
-	// Create tools config.
-	toolsConfigPath := filepath.Join(tempDir, "tools.yaml")
-	toolsConfigContent := "aliases:\n  terraform: hashicorp/terraform\n"
-	err = os.WriteFile(toolsConfigPath, []byte(toolsConfigContent), 0o644)
-	require.NoError(t, err)
-
-	// Set the flags to use our temp files.
-	toolVersionsFile = toolVersionsPath
-	toolsDir = filepath.Join(tempDir, ".tools")
-	toolsConfigFile = toolsConfigPath
-
-	// Initialize the toolchain package config.
-	atmosCfg := &schema.AtmosConfiguration{
-		Toolchain: schema.Toolchain{
-			FilePath:        toolVersionsPath,
-			ToolsDir:        toolsDir,
-			ToolsConfigFile: toolsConfigPath,
-		},
-	}
-	toolchainpkg.SetAtmosConfig(atmosCfg)
+	toolVersionsPath := setupToolchainTest(t, "terraform 1.5.7\n")
 
 	// Test the remove command runs without error.
-	err = removeCmd.RunE(removeCmd, []string{"terraform"})
+	err := removeCmd.RunE(removeCmd, []string{"terraform"})
 	assert.NoError(t, err)
 
 	// Verify the tool was removed.

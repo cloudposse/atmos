@@ -320,12 +320,12 @@ func SetToolVersion(toolName, version string, scrollSpeed int) error {
 	}
 
 	// Add the tool with the selected version
-	err = AddToolToVersions(atmosConfig.Toolchain.FilePath, resolvedKey, version)
+	err = AddToolToVersions(atmosConfig.Toolchain.VersionsFile, resolvedKey, version)
 	if err != nil {
 		return fmt.Errorf("failed to set version: %w", err)
 	}
 
-	fmt.Printf("✓ Set %s@%s in %s\n", resolvedKey, version, atmosConfig.Toolchain.FilePath)
+	fmt.Printf("✓ Set %s@%s in %s\n", resolvedKey, version, atmosConfig.Toolchain.VersionsFile)
 	return nil
 }
 

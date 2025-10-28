@@ -251,7 +251,7 @@ func GetReleaseVersions(owner, repo string, limit int) ([]string, error) {
 	}
 
 	if len(versions) == 0 {
-		return nil, fmt.Errorf("no non-prerelease versions found for %s/%s", owner, repo)
+		return nil, fmt.Errorf("%w: no non-prerelease versions for %s/%s", ErrNoVersionsFound, owner, repo)
 	}
 
 	return versions, nil

@@ -5,8 +5,10 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
+	"gopkg.in/yaml.v3"
 
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/toolchain/registry"
 )
 
 // InfoExec handles the core logic for retrieving and formatting tool information.
@@ -61,7 +63,7 @@ type toolContext struct {
 	Owner     string
 	Repo      string
 	Version   string
-	Tool      *Tool
+	Tool      *registry.Tool
 	Installer *Installer
 }
 
@@ -109,4 +111,52 @@ func formatToolInfoAsTable(ctx toolContext) string {
 	}
 
 	return strings.Join(rows, "\n") + "\n"
+}
+
+// getEvaluatedToolYAML returns the tool configuration as YAML with all templates evaluated.
+func getEvaluatedToolYAML(tool *registry.Tool, version string, installer *Installer) (string, error) {
+	// Build the asset URL to evaluate templates (if Asset is set)
+	assetURL := ""
+	var err error
+	if tool.Asset != "" {
+		assetURL, err = installer.buildAssetURL(tool, version)
+		if err != nil {
+			return "", fmt.Errorf("failed to build asset URL: %w", err)
+		}
+	}
+
+	// Create a copy of the tool with evaluated templates
+	evaluatedTool := struct {
+		Type         string              `yaml:"type"`
+		RepoOwner    string              `yaml:"repo_owner"`
+		RepoName     string              `yaml:"repo_name"`
+		Asset        string              `yaml:"asset"`
+		URL          string              `yaml:"url,omitempty"`
+		Format       string              `yaml:"format,omitempty"`
+		BinaryName   string              `yaml:"binary_name,omitempty"`
+		Files        []registry.File     `yaml:"files,omitempty"`
+		Overrides    []registry.Override `yaml:"overrides,omitempty"`
+		Version      string              `yaml:"version"`
+		ProcessedURL string              `yaml:"processed_url,omitempty"`
+	}{
+		Type:         tool.Type,
+		RepoOwner:    tool.RepoOwner,
+		RepoName:     tool.RepoName,
+		Asset:        assetURL, // Use evaluated URL instead of template
+		URL:          tool.URL,
+		Format:       tool.Format,
+		BinaryName:   tool.BinaryName,
+		Files:        tool.Files,
+		Overrides:    tool.Overrides,
+		Version:      version,
+		ProcessedURL: assetURL,
+	}
+
+	// Marshal to YAML
+	data, err := yaml.Marshal(evaluatedTool)
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal tool to YAML: %w", err)
+	}
+
+	return string(data), nil
 }

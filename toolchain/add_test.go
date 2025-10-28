@@ -14,7 +14,7 @@ func TestAddCommand_ValidTool(t *testing.T) {
 	tempDir := t.TempDir()
 	toolVersionsFile := filepath.Join(tempDir, DefaultToolVersionsFilePath)
 	SetAtmosConfig(&schema.AtmosConfiguration{
-		Toolchain: schema.Toolchain{FilePath: toolVersionsFile},
+		Toolchain: schema.Toolchain{VersionsFile: toolVersionsFile},
 	})
 	err := AddToolVersion("terraform", "1.11.4")
 	require.NoError(t, err, "Should successfully add valid tool")
@@ -31,7 +31,7 @@ func TestAddCommand_ValidToolWithAlias(t *testing.T) {
 	tempDir := t.TempDir()
 	toolVersionsFile := filepath.Join(tempDir, DefaultToolVersionsFilePath)
 	SetAtmosConfig(&schema.AtmosConfiguration{
-		Toolchain: schema.Toolchain{FilePath: toolVersionsFile},
+		Toolchain: schema.Toolchain{VersionsFile: toolVersionsFile},
 	})
 	err := AddToolVersion("helm", "3.12.0")
 	require.NoError(t, err, "Should successfully add valid tool using alias")
@@ -48,7 +48,7 @@ func TestAddCommand_ValidToolWithCanonicalName(t *testing.T) {
 	tempDir := t.TempDir()
 	toolVersionsFile := filepath.Join(tempDir, DefaultToolVersionsFilePath)
 	SetAtmosConfig(&schema.AtmosConfiguration{
-		Toolchain: schema.Toolchain{FilePath: toolVersionsFile},
+		Toolchain: schema.Toolchain{VersionsFile: toolVersionsFile},
 	})
 	// Test adding a valid tool using canonical name
 	err := AddToolVersion("hashicorp/terraform", "1.11.4")
@@ -66,11 +66,11 @@ func TestAddCommand_InvalidTool(t *testing.T) {
 	tempDir := t.TempDir()
 	toolVersionsFile := filepath.Join(tempDir, DefaultToolVersionsFilePath)
 	SetAtmosConfig(&schema.AtmosConfiguration{
-		Toolchain: schema.Toolchain{FilePath: toolVersionsFile},
+		Toolchain: schema.Toolchain{VersionsFile: toolVersionsFile},
 	})
 	err := AddToolVersion("nonexistent-tool", "1.0.0")
 	require.Error(t, err, "Should fail when adding invalid tool")
-	assert.Contains(t, err.Error(), "not found in local aliases or Aqua registry")
+	assert.Contains(t, err.Error(), "tool not found")
 
 	// Verify the tool was NOT added to the file
 	toolVersions, err := LoadToolVersions(toolVersionsFile)
@@ -84,7 +84,7 @@ func TestAddCommand_InvalidToolWithCanonicalName(t *testing.T) {
 	tempDir := t.TempDir()
 	toolVersionsFile := filepath.Join(tempDir, DefaultToolVersionsFilePath)
 	SetAtmosConfig(&schema.AtmosConfiguration{
-		Toolchain: schema.Toolchain{FilePath: toolVersionsFile},
+		Toolchain: schema.Toolchain{VersionsFile: toolVersionsFile},
 	})
 	// Test adding an invalid tool using canonical name
 	err := AddToolVersion("nonexistent/package", "1.0.0")
@@ -112,7 +112,7 @@ func TestAddCommand_UpdateExistingTool(t *testing.T) {
 	err := SaveToolVersions(toolVersionsFile, initialToolVersions)
 	require.NoError(t, err)
 	SetAtmosConfig(&schema.AtmosConfiguration{
-		Toolchain: schema.Toolchain{FilePath: toolVersionsFile},
+		Toolchain: schema.Toolchain{VersionsFile: toolVersionsFile},
 	})
 	err = AddToolVersion("terraform", "1.11.4")
 	require.NoError(t, err, "Should successfully update existing tool")
@@ -134,7 +134,7 @@ func TestAddCommand_InvalidVersion(t *testing.T) {
 	// Note: Since we only validate that the tool exists in registry, not the specific version,
 	// this test will pass even with an invalid version
 	SetAtmosConfig(&schema.AtmosConfiguration{
-		Toolchain: schema.Toolchain{FilePath: toolVersionsFile},
+		Toolchain: schema.Toolchain{VersionsFile: toolVersionsFile},
 	})
 	err := AddToolVersion("terraform", "999.999.999")
 	require.NoError(t, err, "Should pass since we only validate tool existence, not specific version")
@@ -151,7 +151,7 @@ func TestAddCommand_CustomToolVersionsFile(t *testing.T) {
 	tempDir := t.TempDir()
 	customToolVersionsFile := filepath.Join(tempDir, "custom-versions")
 	SetAtmosConfig(&schema.AtmosConfiguration{
-		Toolchain: schema.Toolchain{FilePath: customToolVersionsFile},
+		Toolchain: schema.Toolchain{VersionsFile: customToolVersionsFile},
 	})
 
 	// Test adding a tool to a custom file
@@ -174,7 +174,7 @@ func TestAddCommand_AquaRegistryTool(t *testing.T) {
 	// Note: This test may fail if kubectl is not available in the Aqua registry
 	// or if there are network issues
 	SetAtmosConfig(&schema.AtmosConfiguration{
-		Toolchain: schema.Toolchain{FilePath: toolVersionsFile},
+		Toolchain: schema.Toolchain{VersionsFile: toolVersionsFile},
 	})
 	err := AddToolVersion("kubectl", "v1.2.7")
 	require.NoError(t, err, "Should fail when adding tool from Aqua registry")
@@ -199,7 +199,7 @@ func TestAddCommand_EdgeCases(t *testing.T) {
 			tool:        "",
 			version:     "1.0.0",
 			expectError: true,
-			errorMsg:    "not found in local aliases or Aqua registry",
+			errorMsg:    "tool not found",
 		},
 		{
 			name:        "empty version",
@@ -224,7 +224,7 @@ func TestAddCommand_EdgeCases(t *testing.T) {
 			toolVersionsFile := filepath.Join(tempDir, DefaultToolVersionsFilePath)
 
 			SetAtmosConfig(&schema.AtmosConfiguration{
-				Toolchain: schema.Toolchain{FilePath: toolVersionsFile},
+				Toolchain: schema.Toolchain{VersionsFile: toolVersionsFile},
 			})
 			// Test the edge case
 			err := AddToolVersion(tt.tool, tt.version)

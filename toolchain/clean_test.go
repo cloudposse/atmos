@@ -52,14 +52,14 @@ func TestCleanToolsAndCaches(t *testing.T) {
 		}
 	}
 
-	// Helper to capture stdout
+	// Helper to capture stderr (TUI output goes to stderr)
 	captureOutput := func(f func()) string {
-		originalStdout := os.Stdout
+		originalStderr := os.Stderr
 		r, w, _ := os.Pipe()
-		os.Stdout = w
+		os.Stderr = w
 		f()
 		w.Close()
-		os.Stdout = originalStdout
+		os.Stderr = originalStderr
 		var buf bytes.Buffer
 		_, _ = buf.ReadFrom(r)
 		return buf.String()
@@ -85,9 +85,9 @@ func TestCleanToolsAndCaches(t *testing.T) {
 				return toolsDir, cacheDir, tempCacheDir
 			},
 			expectedError: false,
-			expectedOutput: `✓ Deleted 3 files/directories from %s
-✓ Deleted 2 files from %s cache
-✓ Deleted 1 files from %s cache
+			expectedOutput: `✓ Deleted **3** files/directories from %s
+✓ Deleted **2** files from %s cache
+✓ Deleted **1** files from %s cache
 `,
 		},
 		{
@@ -99,7 +99,7 @@ func TestCleanToolsAndCaches(t *testing.T) {
 					filepath.Join(base, "nonexistent-temp-cache")
 			},
 			expectedError: false,
-			expectedOutput: `✓ Deleted 0 files/directories from %s
+			expectedOutput: `✓ Deleted **0** files/directories from %s
 `,
 		},
 		{
@@ -121,7 +121,7 @@ func TestCleanToolsAndCaches(t *testing.T) {
 				return toolsDir, cacheDir, tempCacheDir
 			},
 			expectedError: false,
-			expectedOutput: `✓ Deleted 0 files/directories from %s
+			expectedOutput: `✓ Deleted **0** files/directories from %s
 `,
 		},
 		{
@@ -186,8 +186,8 @@ func TestCleanToolsAndCaches(t *testing.T) {
 			expectedError: false,
 			expectedOutput: `Warning: failed to count files in %s: permission denied
 Warning: failed to delete %s: permission denied
-✓ Deleted 1 files/directories from %s
-✓ Deleted 1 files from %s cache
+✓ Deleted **1** files/directories from %s
+✓ Deleted **1** files from %s cache
 `,
 		},
 	}

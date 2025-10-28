@@ -2,9 +2,10 @@ package toolchain
 
 import (
 	"fmt"
-	"log"
 
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/ui/theme"
+	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 // AddToolVersion contains the actual business logic for adding/updating a tool.
@@ -27,6 +28,6 @@ func AddToolVersion(tool, version string) error {
 	if err := AddToolToVersions(GetToolVersionsFilePath(), tool, version); err != nil {
 		return err
 	}
-	log.Printf("%s Added/updated %s %s in %s\n", checkMark.Render(), tool, version, atmosConfig.Toolchain.FilePath)
+	u.PrintfMarkdownToTUI("%s Added/updated **%s** %s in %s\n", theme.Styles.Checkmark, tool, version, atmosConfig.Toolchain.VersionsFile)
 	return nil
 }

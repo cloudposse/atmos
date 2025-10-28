@@ -19,8 +19,8 @@ func TestListCommand_WithInstalledTools(t *testing.T) {
 	toolsDir := filepath.Join(tempDir, ".tools")
 	atmosConfig := &schema.AtmosConfiguration{
 		Toolchain: schema.Toolchain{
-			FilePath: toolVersionsFile,
-			ToolsDir: toolsDir,
+			VersionsFile: toolVersionsFile,
+			ToolsDir:     toolsDir,
 		},
 	}
 
@@ -31,7 +31,7 @@ func TestListCommand_WithInstalledTools(t *testing.T) {
 			"kubectl":   {"1.28.0"},
 		},
 	}
-	err := SaveToolVersions(atmosConfig.Toolchain.FilePath, toolVersions)
+	err := SaveToolVersions(atmosConfig.Toolchain.VersionsFile, toolVersions)
 	require.NoError(t, err)
 	// Create mock installed binaries
 	terraformPath := filepath.Join(toolsDir, "bin", "hashicorp", "terraform", "1.11.4")
@@ -75,7 +75,7 @@ func TestListCommand_EmptyToolVersionsFile(t *testing.T) {
 
 	SetAtmosConfig(&schema.AtmosConfiguration{
 		Toolchain: schema.Toolchain{
-			FilePath: toolVersionsFile,
+			VersionsFile: toolVersionsFile,
 		},
 	})
 	err = RunList()
@@ -89,7 +89,7 @@ func TestListCommand_NonExistentToolVersionsFile(t *testing.T) {
 	// Test listing with non-existent file
 	SetAtmosConfig(&schema.AtmosConfiguration{
 		Toolchain: schema.Toolchain{
-			FilePath: filepath.Join(tempDir, "non-existent"),
+			VersionsFile: filepath.Join(tempDir, "non-existent"),
 		},
 	})
 	err := RunList()
@@ -112,7 +112,7 @@ func TestListCommand_ToolsNotInstalled(t *testing.T) {
 	require.NoError(t, err)
 	SetAtmosConfig(&schema.AtmosConfiguration{
 		Toolchain: schema.Toolchain{
-			FilePath: toolVersionsFile,
+			VersionsFile: toolVersionsFile,
 		},
 	})
 	err = RunList()
@@ -145,8 +145,8 @@ func TestListCommand_MixedInstalledAndNotInstalled(t *testing.T) {
 
 	SetAtmosConfig(&schema.AtmosConfiguration{
 		Toolchain: schema.Toolchain{
-			FilePath: toolVersionsFile,
-			ToolsDir: toolsDir,
+			VersionsFile: toolVersionsFile,
+			ToolsDir:     toolsDir,
 		},
 	})
 	err = RunList()
@@ -183,8 +183,8 @@ func TestListCommand_WithLatestVersion(t *testing.T) {
 
 	SetAtmosConfig(&schema.AtmosConfiguration{
 		Toolchain: schema.Toolchain{
-			FilePath: toolVersionsFile,
-			ToolsDir: toolsDir,
+			VersionsFile: toolVersionsFile,
+			ToolsDir:     toolsDir,
 		},
 	})
 	// Test listing with latest version
@@ -247,8 +247,8 @@ func TestListCommand_WithCanonicalNames(t *testing.T) {
 	require.NoError(t, err)
 	SetAtmosConfig(&schema.AtmosConfiguration{
 		Toolchain: schema.Toolchain{
-			FilePath: toolVersionsFile,
-			ToolsDir: toolsDir,
+			VersionsFile: toolVersionsFile,
+			ToolsDir:     toolsDir,
 		},
 	})
 	// Test listing with canonical names
@@ -289,8 +289,8 @@ func TestListCommand_WithMultipleVersions(t *testing.T) {
 
 	SetAtmosConfig(&schema.AtmosConfiguration{
 		Toolchain: schema.Toolchain{
-			FilePath: toolVersionsFile,
-			ToolsDir: toolsDir,
+			VersionsFile: toolVersionsFile,
+			ToolsDir:     toolsDir,
 		},
 	})
 	err = RunList()

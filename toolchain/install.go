@@ -12,6 +12,7 @@ import (
 	"golang.org/x/term"
 
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
 
 // Bubble Tea spinner model.
@@ -151,7 +152,10 @@ func InstallSingleTool(owner, repo, version string, isLatest bool, showProgressB
 	if showProgressBar {
 		message := fmt.Sprintf("Installing %s/%s@%s", owner, repo, version)
 		p = runBubbleTeaSpinner(message)
-		go p.Run()
+		go func() {
+			// Run spinner in background, ignore error since program is managed by quit channel.
+			_, _ = p.Run()
+		}()
 	}
 
 	// Perform installation.
@@ -161,19 +165,19 @@ func InstallSingleTool(owner, repo, version string, isLatest bool, showProgressB
 			p.Send(installDoneMsg{})
 		}
 		if showProgressBar {
-			fmt.Fprintf(os.Stderr, "%s Install failed %s/%s@%s: %v\n", xMark.Render(), owner, repo, version, err)
+			fmt.Fprintf(os.Stderr, "%s Install failed %s/%s@%s: %v\n", theme.Styles.XMark, owner, repo, version, err)
 		}
 		return err
 	}
 	if isLatest {
 		if err := installer.CreateLatestFile(owner, repo, version); err != nil {
 			if showProgressBar {
-				fmt.Fprintf(os.Stderr, "%s Failed to create latest file for %s/%s: %v\n", xMark.Render(), owner, repo, err)
+				fmt.Fprintf(os.Stderr, "%s Failed to create latest file for %s/%s: %v\n", theme.Styles.XMark, owner, repo, err)
 			}
 		}
 	}
 	if showProgressBar {
-		fmt.Fprintf(os.Stderr, "%s Installed %s/%s@%s to %s\n", checkMark.Render(), owner, repo, version, binaryPath)
+		fmt.Fprintf(os.Stderr, "%s Installed %s/%s@%s to %s\n", theme.Styles.Checkmark, owner, repo, version, binaryPath)
 	}
 	if showProgressBar && p != nil {
 		p.Send(installDoneMsg{})
@@ -181,7 +185,7 @@ func InstallSingleTool(owner, repo, version string, isLatest bool, showProgressB
 		time.Sleep(100 * time.Millisecond)
 	}
 	if err := AddToolToVersions(DefaultToolVersionsFilePath, repo, version); err == nil && showProgressBar {
-		fmt.Fprintf(os.Stderr, "%s Registered %s %s in .tool-versions\n", checkMark.Render(), repo, version)
+		fmt.Fprintf(os.Stderr, "%s Registered %s %s in .tool-versions\n", theme.Styles.Checkmark, repo, version)
 	}
 	return nil
 }
@@ -271,11 +275,11 @@ func showProgress(
 	var msg string
 	switch state.result {
 	case "skipped":
-		msg = fmt.Sprintf("%s Skipped %s/%s@%s (already installed)", checkMark.Render(), tool.owner, tool.repo, tool.version)
+		msg = fmt.Sprintf("%s Skipped %s/%s@%s (already installed)", theme.Styles.Checkmark, tool.owner, tool.repo, tool.version)
 	case "installed":
-		msg = fmt.Sprintf("%s Installed %s/%s@%s", checkMark.Render(), tool.owner, tool.repo, tool.version)
+		msg = fmt.Sprintf("%s Installed %s/%s@%s", theme.Styles.Checkmark, tool.owner, tool.repo, tool.version)
 	case "failed":
-		msg = fmt.Sprintf("%s Install failed %s/%s@%s: %v", xMark.Render(), tool.owner, tool.repo, tool.version, state.err)
+		msg = fmt.Sprintf("%s Install failed %s/%s@%s: %v", theme.Styles.XMark, tool.owner, tool.repo, tool.version, state.err)
 	}
 
 	percent := float64(state.index+1) / float64(state.total)
@@ -297,14 +301,14 @@ func printSummary(stderr *os.File, installed, failed, skipped, total int) {
 
 	switch {
 	case total == 0:
-		printStatusLine(stderr, term.IsTerminal(int(stderr.Fd())), fmt.Sprintf("%s No tools to install", checkMark.Render()))
+		printStatusLine(stderr, term.IsTerminal(int(stderr.Fd())), fmt.Sprintf("%s No tools to install", theme.Styles.Checkmark))
 	case failed == 0 && skipped == 0:
-		printStatusLine(stderr, term.IsTerminal(int(stderr.Fd())), fmt.Sprintf("%s Installed %d tools", checkMark.Render(), installed))
+		printStatusLine(stderr, term.IsTerminal(int(stderr.Fd())), fmt.Sprintf("%s Installed %d tools", theme.Styles.Checkmark, installed))
 	case failed == 0 && skipped > 0:
-		printStatusLine(stderr, term.IsTerminal(int(stderr.Fd())), fmt.Sprintf("%s Installed %d tools, skipped %d", checkMark.Render(), installed, skipped))
+		printStatusLine(stderr, term.IsTerminal(int(stderr.Fd())), fmt.Sprintf("%s Installed %d tools, skipped %d", theme.Styles.Checkmark, installed, skipped))
 	case failed > 0 && skipped == 0:
-		printStatusLine(stderr, term.IsTerminal(int(stderr.Fd())), fmt.Sprintf("%s Installed %d tools, failed %d", xMark.Render(), installed, failed))
+		printStatusLine(stderr, term.IsTerminal(int(stderr.Fd())), fmt.Sprintf("%s Installed %d tools, failed %d", theme.Styles.XMark, installed, failed))
 	default:
-		printStatusLine(stderr, term.IsTerminal(int(stderr.Fd())), fmt.Sprintf("%s Installed %d tools, failed %d, skipped %d", xMark.Render(), installed, failed, skipped))
+		printStatusLine(stderr, term.IsTerminal(int(stderr.Fd())), fmt.Sprintf("%s Installed %d tools, failed %d, skipped %d", theme.Styles.XMark, installed, failed, skipped))
 	}
 }

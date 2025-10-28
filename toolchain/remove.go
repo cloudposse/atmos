@@ -3,9 +3,9 @@ package toolchain
 import (
 	"fmt"
 
-	log "github.com/charmbracelet/log"
-
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/ui/theme"
+	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 // RemoveToolVersion removes either the entire tool or a specific version.
@@ -61,9 +61,9 @@ func RemoveToolVersion(filePath, tool, version string) error {
 	}
 
 	if version == "" {
-		log.Infof("%s Removed %s from %s\n", checkMark.Render(), tool, filePath)
+		u.PrintfMarkdownToTUI("%s Removed **%s** from %s\n", theme.Styles.Checkmark, tool, filePath)
 	} else {
-		log.Infof("%s Removed %s@%s from %s\n", checkMark.Render(), tool, version, filePath)
+		u.PrintfMarkdownToTUI("%s Removed **%s@%s** from %s\n", theme.Styles.Checkmark, tool, version, filePath)
 	}
 	return nil
 }

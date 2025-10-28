@@ -207,10 +207,24 @@ type EditorConfig struct {
 }
 
 type Toolchain struct {
-	InstallPath     string `yaml:"install_path" json:"install_path" mapstructure:"install_path"`
-	FilePath        string `yaml:"file_path" json:"file_path" mapstructure:"file_path"`
-	ToolsDir        string `yaml:"tools_dir" json:"tools_dir" mapstructure:"tools_dir"`
-	ToolsConfigFile string `yaml:"tools_config_file" json:"tools_config_file" mapstructure:"tools_config_file"`
+	InstallPath     string              `yaml:"install_path" json:"install_path" mapstructure:"install_path"`
+	FilePath        string              `yaml:"file_path" json:"file_path" mapstructure:"file_path"`
+	ToolsDir        string              `yaml:"tools_dir" json:"tools_dir" mapstructure:"tools_dir"`
+	ToolsConfigFile string              `yaml:"tools_config_file" json:"tools_config_file" mapstructure:"tools_config_file"`
+	VersionsFile    string              `yaml:"versions_file" json:"versions_file" mapstructure:"versions_file"`
+	LockFile        string              `yaml:"lock_file,omitempty" json:"lock_file,omitempty" mapstructure:"lock_file"`
+	UseToolVersions bool                `yaml:"use_tool_versions" json:"use_tool_versions" mapstructure:"use_tool_versions"`
+	UseLockFile     bool                `yaml:"use_lock_file" json:"use_lock_file" mapstructure:"use_lock_file"`
+	Registries      []ToolchainRegistry `yaml:"registries,omitempty" json:"registries,omitempty" mapstructure:"registries"`
+}
+
+// ToolchainRegistry defines a registry source for tool metadata.
+type ToolchainRegistry struct {
+	Name     string         `yaml:"name,omitempty" json:"name,omitempty" mapstructure:"name"`
+	Type     string         `yaml:"type" json:"type" mapstructure:"type"` // aqua, atmos, url
+	Source   string         `yaml:"source,omitempty" json:"source,omitempty" mapstructure:"source"`
+	Priority int            `yaml:"priority,omitempty" json:"priority,omitempty" mapstructure:"priority"`
+	Tools    map[string]any `yaml:"tools,omitempty" json:"tools,omitempty" mapstructure:"tools"` // For inline atmos-type registries
 }
 
 type Terminal struct {

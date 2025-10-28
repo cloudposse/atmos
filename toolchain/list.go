@@ -13,6 +13,7 @@ import (
 	log "github.com/charmbracelet/log"
 
 	"github.com/cloudposse/atmos/pkg/perf"
+	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 // Table row data structure.
@@ -41,15 +42,8 @@ func RunList() error {
 	}
 
 	if len(toolVersions.Tools) == 0 {
-		log.Error("No tools configured in .tool-versions file")
+		u.PrintfMessageToTUI("No tools configured in .tool-versions file\n")
 		return nil
-	}
-
-	// Load local config for aliases and binary names
-	lcm := NewLocalConfigManager()
-	if err := lcm.Load(GetToolsConfigFilePath()); err != nil {
-		// Log warning but continue - local config is optional
-		log.Warn("Failed to load local config", "error", err)
 	}
 
 	var rows []toolRow
@@ -63,42 +57,26 @@ func RunList() error {
 		// Use existing infrastructure to resolve tool
 		resolvedKey, version, found := LookupToolVersion(toolName, toolVersions, installer.resolver)
 		if !found {
-			log.Warn("Could not resolve tool", "tool", toolName)
+			u.PrintfMessageToTUI("Warning: Could not resolve tool '%s'\n", toolName)
 			continue
 		}
 
 		// Get owner/repo from resolved key
 		owner, repo, err := installer.resolver.Resolve(resolvedKey)
 		if err != nil {
-			log.Warn("Could not resolve owner/repo", "tool", resolvedKey, "error", err)
+			u.PrintfMessageToTUI("Warning: Could not resolve owner/repo for '%s': %v\n", resolvedKey, err)
 			continue
 		}
 
-		// Get alias using existing infrastructure
+		// No aliases - toolName is what's in .tool-versions
 		alias := ""
 		if resolvedKey != toolName {
-			// If resolved key is different from tool name, tool name is the alias
+			// If resolved key is different from tool name, tool name might be an alias
 			alias = toolName
-		} else {
-			// Otherwise, toolName is already the full path, so we need to find what alias maps to it
-			// Reverse lookup: find alias name for this owner/repo
-			ownerRepo := fmt.Sprintf("%s/%s", owner, repo)
-			aliasMap := lcm.GetAliases()
-			for aliasName, aliasValue := range aliasMap {
-				if aliasValue == ownerRepo {
-					alias = aliasName
-					break
-				}
-			}
 		}
 
-		// Get binary name from local config
-		binaryName := repo // Default to repo name
-		if toolConfig, exists := lcm.GetToolConfig(fmt.Sprintf("%s/%s", owner, repo)); exists {
-			if toolConfig.BinaryName != "" {
-				binaryName = toolConfig.BinaryName
-			}
-		}
+		// Binary name defaults to repo name
+		binaryName := repo
 
 		// Check installation status
 		binaryPath, err := installer.FindBinaryPath(owner, repo, version)

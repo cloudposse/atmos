@@ -19,6 +19,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/toolchain/registry"
 )
 
 // Test data structures.
@@ -288,7 +289,7 @@ func TestFetchGitHubVersions(t *testing.T) {
 		originalURL := fmt.Sprintf("https://api.github.com/repos/%s/%s/releases?per_page=100", "owner", "repo")
 		_ = originalURL
 
-		items, err := fetchGitHubVersionsWithCustomURL("owner", "repo", server.URL+"/repos/owner/repo/releases?per_page=100")
+		items, err := fetchGitHubVersionsWithCustomURL(server.URL + "/repos/owner/repo/releases?per_page=100")
 
 		w.Close()
 		os.Stdout = oldStdout
@@ -323,7 +324,7 @@ func TestFetchGitHubVersions(t *testing.T) {
 		server := createMockGitHubServer(nil, http.StatusNotFound)
 		defer server.Close()
 
-		_, err := fetchGitHubVersionsWithCustomURL("owner", "repo", server.URL+"/repos/owner/repo/releases?per_page=100")
+		_, err := fetchGitHubVersionsWithCustomURL(server.URL + "/repos/owner/repo/releases?per_page=100")
 		if err == nil {
 			t.Error("Expected error for 404 status")
 		}
@@ -348,7 +349,7 @@ func TestFetchGitHubVersions(t *testing.T) {
 		r, w, _ := os.Pipe()
 		os.Stdout = w
 
-		_, err := fetchGitHubVersionsWithCustomURL("owner", "repo", server.URL+"/repos/owner/repo/releases?per_page=100")
+		_, err := fetchGitHubVersionsWithCustomURL(server.URL + "/repos/owner/repo/releases?per_page=100")
 
 		w.Close()
 		os.Stdout = oldStdout
@@ -388,7 +389,7 @@ func TestFetchGitHubVersions(t *testing.T) {
 		r, w, _ := os.Pipe()
 		os.Stdout = w
 
-		_, err := fetchGitHubVersionsWithCustomURL("owner", "repo", server.URL)
+		_, err := fetchGitHubVersionsWithCustomURL(server.URL)
 
 		w.Close()
 		os.Stdout = oldStdout
@@ -406,7 +407,7 @@ func TestFetchGitHubVersions(t *testing.T) {
 		}))
 		defer server.Close()
 
-		_, err := fetchGitHubVersionsWithCustomURL("owner", "repo", server.URL)
+		_, err := fetchGitHubVersionsWithCustomURL(server.URL)
 		if err == nil {
 			t.Error("Expected error for invalid JSON")
 		}
@@ -417,7 +418,7 @@ func TestFetchGitHubVersions(t *testing.T) {
 }
 
 // Helper function to test with custom URL.
-func fetchGitHubVersionsWithCustomURL(owner, repo, apiURL string) ([]versionItem, error) {
+func fetchGitHubVersionsWithCustomURL(apiURL string) ([]versionItem, error) {
 	token := viper.GetString("github-token")
 
 	client := &http.Client{}
@@ -480,7 +481,7 @@ func fetchGitHubVersionsWithCustomURL(owner, repo, apiURL string) ([]versionItem
 	fmt.Printf("Found %d non-prerelease versions\n", len(items))
 
 	if len(items) == 0 {
-		return nil, fmt.Errorf("no non-prerelease versions found for %s/%s", owner, repo)
+		return nil, fmt.Errorf("no non-prerelease versions found")
 	}
 
 	return items, nil
@@ -517,7 +518,7 @@ func TestSetToolVersionWithMocks(t *testing.T) {
 		}
 		defer func() { addToolToVersionsFunc = originalAddTool }()
 
-		err := setToolVersionWithMocks("/test/file", "owner/repo", "1.0.0", 3)
+		err := setToolVersionWithMocks("owner/repo", "1.0.0")
 		if err != nil {
 			t.Errorf("Expected no error, got %v", err)
 		}
@@ -546,7 +547,7 @@ func TestSetToolVersionWithMocks(t *testing.T) {
 		}
 		defer func() { newInstallerFunc = originalNewInstaller }()
 
-		err := setToolVersionWithMocks("/test/file", "invalid", "1.0.0", 3)
+		err := setToolVersionWithMocks("invalid", "1.0.0")
 		if err == nil {
 			t.Error("Expected error for invalid tool name")
 		}
@@ -573,7 +574,7 @@ func TestSetToolVersionWithMocks(t *testing.T) {
 		}
 		defer func() { addToolToVersionsFunc = originalAddTool }()
 
-		err := setToolVersionWithMocks("/test/file", "owner/repo", "1.0.0", 3)
+		err := setToolVersionWithMocks("owner/repo", "1.0.0")
 		if err == nil {
 			t.Error("Expected error when AddToolToVersions fails")
 		}
@@ -597,7 +598,7 @@ func TestSetToolVersionWithMocks(t *testing.T) {
 		}
 		defer func() { newInstallerFunc = originalNewInstaller }()
 
-		err := setToolVersionWithMocks("/test/file", "owner/repo", "", 3)
+		err := setToolVersionWithMocks("owner/repo", "")
 		if err == nil {
 			t.Error("Expected error for non-github_release tool")
 		}
@@ -620,7 +621,7 @@ func TestSetToolVersionWithMocks(t *testing.T) {
 		}
 		defer func() { newInstallerFunc = originalNewInstaller }()
 
-		err := setToolVersionWithMocks("/test/file", "owner/repo", "", 3)
+		err := setToolVersionWithMocks("owner/repo", "")
 		if err == nil {
 			t.Error("Expected error when findTool fails")
 		}
@@ -631,7 +632,9 @@ func TestSetToolVersionWithMocks(t *testing.T) {
 }
 
 // Mock version of SetToolVersion for testing.
-func setToolVersionWithMocks(filePath, toolName, version string, scrollSpeed int) error {
+func setToolVersionWithMocks(toolName, version string) error {
+	const filePath = "/test/file"
+
 	installer := newInstallerFunc()
 	owner, repo, err := installer.parseToolSpec(toolName)
 	if err != nil {
@@ -888,7 +891,7 @@ func TestCustomDelegateEdgeCases(t *testing.T) {
 // Test fetchGitHubVersions network edge cases.
 func TestFetchGitHubVersionsNetworkEdgeCases(t *testing.T) {
 	t.Run("Malformed URL", func(t *testing.T) {
-		_, err := fetchGitHubVersionsWithCustomURL("owner", "repo", "not-a-url")
+		_, err := fetchGitHubVersionsWithCustomURL("not-a-url")
 		if err == nil {
 			t.Error("Expected error for malformed URL")
 		}
@@ -915,7 +918,7 @@ func TestFetchGitHubVersionsNetworkEdgeCases(t *testing.T) {
 		r, w, _ := os.Pipe()
 		os.Stdout = w
 
-		items, err := fetchGitHubVersionsWithCustomURL("owner", "repo", server.URL)
+		items, err := fetchGitHubVersionsWithCustomURL(server.URL)
 
 		w.Close()
 		os.Stdout = oldStdout
@@ -955,7 +958,7 @@ func TestFetchGitHubVersionsNetworkEdgeCases(t *testing.T) {
 		r, w, _ := os.Pipe()
 		os.Stdout = w
 
-		items, err := fetchGitHubVersionsWithCustomURL("owner", "repo", server.URL)
+		items, err := fetchGitHubVersionsWithCustomURL(server.URL)
 
 		w.Close()
 		os.Stdout = oldStdout
@@ -1068,7 +1071,7 @@ func TestVersionListModelViewFocusStates(t *testing.T) {
 // First, let's create interfaces that can be mocked.
 type ToolInstaller interface {
 	parseToolSpec(toolName string) (string, string, error)
-	findTool(owner, repo, version string) (*Tool, error)
+	findTool(owner, repo, version string) (*registry.Tool, error)
 }
 
 type VersionManager interface {
@@ -1082,7 +1085,7 @@ type GitHubClient interface {
 // Mock implementations.
 type MockToolInstaller struct {
 	parseToolSpecFunc func(string) (string, string, error)
-	findToolFunc      func(string, string, string) (*Tool, error)
+	findToolFunc      func(string, string, string) (*registry.Tool, error)
 }
 
 func (m *MockToolInstaller) parseToolSpec(toolName string) (string, string, error) {
@@ -1092,7 +1095,7 @@ func (m *MockToolInstaller) parseToolSpec(toolName string) (string, string, erro
 	return "", "", fmt.Errorf("not implemented")
 }
 
-func (m *MockToolInstaller) findTool(owner, repo, version string) (*Tool, error) {
+func (m *MockToolInstaller) findTool(owner, repo, version string) (*registry.Tool, error) {
 	if m.findToolFunc != nil {
 		return m.findToolFunc(owner, repo, version)
 	}
@@ -1263,11 +1266,11 @@ func TestSetToolVersionWithDeps_InteractiveSelection(t *testing.T) {
 				installer.parseToolSpecFunc = func(toolName string) (string, string, error) {
 					return "owner", "repo", nil
 				}
-				installer.findToolFunc = func(owner, repo, version string) (*Tool, error) {
+				installer.findToolFunc = func(owner, repo, version string) (*registry.Tool, error) {
 					assert.Equal(t, "owner", owner)
 					assert.Equal(t, "repo", repo)
 					assert.Equal(t, "", version)
-					return &Tool{Type: "binary"}, nil
+					return &registry.Tool{Type: "binary"}, nil
 				}
 			},
 			expectedError: "interactive version selection is only available for GitHub release type tools",
@@ -1281,7 +1284,7 @@ func TestSetToolVersionWithDeps_InteractiveSelection(t *testing.T) {
 				installer.parseToolSpecFunc = func(toolName string) (string, string, error) {
 					return "owner", "repo", nil
 				}
-				installer.findToolFunc = func(owner, repo, version string) (*Tool, error) {
+				installer.findToolFunc = func(owner, repo, version string) (*registry.Tool, error) {
 					return nil, fmt.Errorf("tool not found")
 				}
 			},
@@ -1296,8 +1299,8 @@ func TestSetToolVersionWithDeps_InteractiveSelection(t *testing.T) {
 				installer.parseToolSpecFunc = func(toolName string) (string, string, error) {
 					return "owner", "repo", nil
 				}
-				installer.findToolFunc = func(owner, repo, version string) (*Tool, error) {
-					return &Tool{Type: "github_release"}, nil
+				installer.findToolFunc = func(owner, repo, version string) (*registry.Tool, error) {
+					return &registry.Tool{Type: "github_release"}, nil
 				}
 				gh.fetchVersionsFunc = func(owner, repo string) ([]versionItem, error) {
 					assert.Equal(t, "owner", owner)
@@ -1323,8 +1326,8 @@ func TestSetToolVersionWithDeps_InteractiveSelection(t *testing.T) {
 				installer.parseToolSpecFunc = func(toolName string) (string, string, error) {
 					return "owner", "repo", nil
 				}
-				installer.findToolFunc = func(owner, repo, version string) (*Tool, error) {
-					return &Tool{Type: "github_release"}, nil
+				installer.findToolFunc = func(owner, repo, version string) (*registry.Tool, error) {
+					return &registry.Tool{Type: "github_release"}, nil
 				}
 				gh.fetchVersionsFunc = func(owner, repo string) ([]versionItem, error) {
 					return nil, fmt.Errorf("GitHub API error")
@@ -1341,8 +1344,8 @@ func TestSetToolVersionWithDeps_InteractiveSelection(t *testing.T) {
 				installer.parseToolSpecFunc = func(toolName string) (string, string, error) {
 					return "owner", "repo", nil
 				}
-				installer.findToolFunc = func(owner, repo, version string) (*Tool, error) {
-					return &Tool{Type: "github_release"}, nil
+				installer.findToolFunc = func(owner, repo, version string) (*registry.Tool, error) {
+					return &registry.Tool{Type: "github_release"}, nil
 				}
 				gh.fetchVersionsFunc = func(owner, repo string) ([]versionItem, error) {
 					return []versionItem{}, nil
@@ -1446,7 +1449,7 @@ func (c *RealGitHubClient) FetchVersions(owner, repo string) ([]versionItem, err
 	}
 
 	if len(items) == 0 {
-		return nil, fmt.Errorf("no non-prerelease versions found for %s/%s", owner, repo)
+		return nil, fmt.Errorf("no non-prerelease versions found")
 	}
 
 	return items, nil
@@ -1738,7 +1741,7 @@ func TestSetToolVersion_WithValidVersion(t *testing.T) {
 
 	atmosConfig = &schema.AtmosConfiguration{
 		Toolchain: schema.Toolchain{
-			FilePath: tmpFile.Name(),
+			VersionsFile: tmpFile.Name(),
 		},
 	}
 
@@ -1766,14 +1769,14 @@ func TestSetToolVersion_WithInvalidTool(t *testing.T) {
 
 	atmosConfig = &schema.AtmosConfiguration{
 		Toolchain: schema.Toolchain{
-			FilePath: tmpFile.Name(),
+			VersionsFile: tmpFile.Name(),
 		},
 	}
 
 	// Test with an invalid tool name (not in registry or local config)
 	err = SetToolVersion("nonexistent-tool-xyz-invalid", "1.0.0", 3)
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "not found in local aliases or Aqua registry")
+	assert.Contains(t, err.Error(), "tool not found")
 }
 
 // TestSetToolVersion_WithCanonicalFormat tests SetToolVersion with org/repo format.
@@ -1789,7 +1792,7 @@ func TestSetToolVersion_WithCanonicalFormat(t *testing.T) {
 
 	atmosConfig = &schema.AtmosConfiguration{
 		Toolchain: schema.Toolchain{
-			FilePath: tmpFile.Name(),
+			VersionsFile: tmpFile.Name(),
 		},
 	}
 
@@ -1817,7 +1820,7 @@ func TestSetToolVersion_NonGitHubReleaseWithoutVersion(t *testing.T) {
 
 	atmosConfig = &schema.AtmosConfiguration{
 		Toolchain: schema.Toolchain{
-			FilePath: tmpFile.Name(),
+			VersionsFile: tmpFile.Name(),
 		},
 	}
 

@@ -284,3 +284,20 @@ func ParseToolVersionArg(arg string) (string, string, error) {
 	}
 	return parts[0], parts[1], nil
 }
+
+// RemoveToolFromVersions removes a tool from the .tool-versions file.
+func RemoveToolFromVersions(filePath, tool, version string) error {
+	defer perf.Track(nil, "toolchain.RemoveToolFromVersions")()
+
+	// Load existing tool versions
+	toolVersions, err := LoadToolVersions(filePath)
+	if err != nil {
+		return fmt.Errorf("failed to load .tool-versions: %w", err)
+	}
+
+	// Remove the tool entirely
+	delete(toolVersions.Tools, tool)
+
+	// Save back to file
+	return SaveToolVersions(filePath, toolVersions)
+}

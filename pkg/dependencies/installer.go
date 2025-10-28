@@ -10,6 +10,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/toolchain"
+	"github.com/cloudposse/atmos/toolchain/registry"
 )
 
 // Installer handles automatic tool installation.
@@ -67,7 +68,7 @@ func (i *Installer) isToolInstalled(tool string, version string) bool {
 	defer perf.Track(i.atmosConfig, "dependencies.isToolInstalled")()
 
 	// Get tools directory
-	toolsDir := i.atmosConfig.Toolchain.ToolsDir
+	toolsDir := i.atmosConfig.Toolchain.InstallPath
 	if toolsDir == "" {
 		toolsDir = ".tools"
 	}
@@ -90,24 +91,9 @@ func resolveToolPath(tool string) (string, string, error) {
 	if strings.Contains(tool, "/") {
 		parts := strings.Split(tool, "/")
 		if len(parts) != 2 {
-			return "", "", fmt.Errorf("invalid tool path format: %s", tool)
+			return "", "", fmt.Errorf("%w: %s", registry.ErrInvalidToolSpec, tool)
 		}
 		return parts[0], parts[1], nil
-	}
-
-	// Try to resolve alias using toolchain
-	localConfig := toolchain.NewLocalConfigManager()
-	// Load default tools.yaml
-	_ = localConfig.Load(".tools/tools.yaml")
-
-	canonicalName, found := localConfig.ResolveAlias(tool)
-
-	// If alias resolved, use that
-	if found && canonicalName != "" && strings.Contains(canonicalName, "/") {
-		parts := strings.Split(canonicalName, "/")
-		if len(parts) == 2 {
-			return parts[0], parts[1], nil
-		}
 	}
 
 	// Fallback: assume tool name is same as repo name with unknown owner
@@ -129,7 +115,7 @@ func UpdatePathForTools(atmosConfig *schema.AtmosConfiguration, dependencies map
 		return nil
 	}
 
-	toolsDir := atmosConfig.Toolchain.ToolsDir
+	toolsDir := atmosConfig.Toolchain.InstallPath
 	if toolsDir == "" {
 		toolsDir = ".tools"
 	}

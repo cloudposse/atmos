@@ -2,10 +2,8 @@ package toolchain
 
 import (
 	"os"
-	"strings"
 	"testing"
 
-	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
 
@@ -17,15 +15,4 @@ func TestMain(m *testing.M) {
 
 	// Run tests.
 	os.Exit(m.Run())
-}
-
-// executeCommand is a helper function for testing cobra commands.
-// Currently unused but kept for potential future test expansion.
-func executeCommand(root *cobra.Command, args ...string) (output string, err error) {
-	buf := new(strings.Builder)
-	root.SetOut(buf)
-	root.SetErr(buf)
-	root.SetArgs(args)
-	err = root.Execute()
-	return buf.String(), err
 }

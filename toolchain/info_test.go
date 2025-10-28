@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/toolchain/registry"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -66,8 +67,11 @@ func TestInfoCommand_GitHubReleaseTool(t *testing.T) {
 }
 
 func TestToolToYAML(t *testing.T) {
-	// Test the toolToYAML function
-	tool := &Tool{
+	SetAtmosConfig(&schema.AtmosConfiguration{})
+
+	// Test the getEvaluatedToolYAML function
+	installer := NewInstaller()
+	tool := &registry.Tool{
 		Type:      "http",
 		RepoOwner: "test",
 		RepoName:  "tool",
@@ -75,7 +79,7 @@ func TestToolToYAML(t *testing.T) {
 		Format:    "zip",
 	}
 
-	yamlData, err := toolToYAML(tool)
+	yamlData, err := getEvaluatedToolYAML(tool, "1.0.0", installer)
 	assert.NoError(t, err)
 	assert.Contains(t, yamlData, "type: http")
 	assert.Contains(t, yamlData, "repo_owner: test")
@@ -89,7 +93,7 @@ func TestGetEvaluatedToolYAML(t *testing.T) {
 	SetAtmosConfig(&schema.AtmosConfiguration{})
 
 	installer := NewInstaller()
-	tool := &Tool{
+	tool := &registry.Tool{
 		Type:       "http",
 		RepoOwner:  "hashicorp",
 		RepoName:   "terraform",
@@ -121,7 +125,7 @@ func TestFormatToolInfoAsTable(t *testing.T) {
 	SetAtmosConfig(&schema.AtmosConfiguration{})
 
 	installer := NewInstaller()
-	tool := &Tool{
+	tool := &registry.Tool{
 		Type:       "http",
 		RepoOwner:  "hashicorp",
 		RepoName:   "terraform",
@@ -197,7 +201,7 @@ func TestInfoCommand_YAMLOutputFormat(t *testing.T) {
 	// Test that YAML output format contains all required fields
 	SetAtmosConfig(&schema.AtmosConfiguration{})
 	installer := NewInstaller()
-	tool := &Tool{
+	tool := &registry.Tool{
 		Type:       "http",
 		RepoOwner:  "hashicorp",
 		RepoName:   "terraform",
@@ -235,7 +239,7 @@ func TestInfoCommand_TableOutputFormat(t *testing.T) {
 	// Test that table output format contains all required information
 	SetAtmosConfig(&schema.AtmosConfiguration{})
 	installer := NewInstaller()
-	tool := &Tool{
+	tool := &registry.Tool{
 		Type:       "http",
 		RepoOwner:  "hashicorp",
 		RepoName:   "terraform",
@@ -512,7 +516,7 @@ func TestInfoCommand_EdgeCases(t *testing.T) {
 
 	t.Run("tool with files", func(t *testing.T) {
 		// Test tool with files configuration
-		tool := &Tool{
+		tool := &registry.Tool{
 			Type:      "github_release",
 			RepoOwner: "test",
 			RepoName:  "tool-with-files",
@@ -530,7 +534,7 @@ func TestInfoCommand_EdgeCases(t *testing.T) {
 
 	t.Run("tool with overrides", func(t *testing.T) {
 		// Test tool with platform overrides
-		tool := &Tool{
+		tool := &registry.Tool{
 			Type:      "github_release",
 			RepoOwner: "test",
 			RepoName:  "tool-with-overrides",
@@ -548,7 +552,7 @@ func TestInfoCommand_EdgeCases(t *testing.T) {
 
 	t.Run("tool with empty fields", func(t *testing.T) {
 		// Test tool with minimal configuration
-		tool := &Tool{
+		tool := &registry.Tool{
 			Type:      "http",
 			RepoOwner: "test",
 			RepoName:  "minimal-tool",
@@ -593,7 +597,7 @@ func TestInfoExec_InvalidTool(t *testing.T) {
 	// Test with non-existent tool
 	err := InfoExec("nonexistent-tool-xyz", "table")
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "not found in local aliases or Aqua registry")
+	assert.Contains(t, err.Error(), "tool not found")
 }
 
 // TestInfoExec_CanonicalOrgRepo tests InfoExec with canonical org/repo format.

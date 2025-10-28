@@ -1,19 +1,16 @@
 package registry
 
 import (
+	"context"
 	"errors"
-	"fmt"
-	"os"
-
-	"github.com/Masterminds/semver/v3"
-	"gopkg.in/yaml.v3"
+	"time"
 
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
 // Error definitions for the registry package.
 var (
-	// ErrToolNotFound indicates a tool was not found in the registry or local configuration.
+	// ErrToolNotFound indicates a tool was not found in the registry.
 	ErrToolNotFound = errors.New("tool not found")
 
 	// ErrNoVersionsFound indicates no versions are available for a tool.
@@ -36,10 +33,19 @@ var (
 
 	// ErrFileOperation indicates a file operation failed.
 	ErrFileOperation = errors.New("file operation failed")
+
+	// ErrUnknownRegistry indicates the registry name is not recognized.
+	ErrUnknownRegistry = errors.New("unknown registry")
+
+	// ErrRegistryNotRegistered indicates a registry factory has not been registered.
+	ErrRegistryNotRegistered = errors.New("registry not registered")
+
+	// ErrRegistryConfiguration indicates the registry configuration is invalid.
+	ErrRegistryConfiguration = errors.New("invalid registry configuration")
 )
 
 // ToolRegistry defines the interface for tool metadata registries.
-// This abstraction allows multiple registry implementations (Aqua, custom, local-only, etc.)
+// This abstraction allows multiple registry implementations (Aqua, custom URL-based, etc.)
 // while keeping the toolchain package decoupled from specific registry formats.
 type ToolRegistry interface {
 	// GetTool fetches tool metadata from the registry.
@@ -51,8 +57,114 @@ type ToolRegistry interface {
 	// GetLatestVersion fetches the latest non-prerelease version for a tool.
 	GetLatestVersion(owner, repo string) (string, error)
 
-	// LoadLocalConfig loads local configuration overrides.
+	// LoadLocalConfig is deprecated and will be removed. Returns nil for compatibility.
 	LoadLocalConfig(configPath string) error
+
+	// Search searches for tools matching the query string.
+	// The query is matched against tool owner, repo, aliases, and description.
+	// Results are sorted by relevance score.
+	Search(ctx context.Context, query string, opts ...SearchOption) ([]*Tool, error)
+
+	// ListAll returns all tools available in the registry.
+	// Results can be paginated and sorted using options.
+	ListAll(ctx context.Context, opts ...ListOption) ([]*Tool, error)
+
+	// GetMetadata returns metadata about the registry itself.
+	GetMetadata(ctx context.Context) (*RegistryMetadata, error)
+}
+
+// RegistryMetadata contains registry-level information.
+type RegistryMetadata struct {
+	Name        string
+	Type        string // "aqua", "atmos"
+	Source      string // URL
+	Priority    int
+	ToolCount   int
+	LastUpdated time.Time
+}
+
+// SearchOption configures search behavior.
+type SearchOption func(*SearchConfig)
+
+// SearchConfig contains search configuration.
+type SearchConfig struct {
+	Limit         int
+	Offset        int
+	InstalledOnly bool
+	AvailableOnly bool
+}
+
+// ListOption configures list behavior.
+type ListOption func(*ListConfig)
+
+// ListConfig contains list configuration.
+type ListConfig struct {
+	Limit  int
+	Offset int
+	Sort   string // "name", "date", "popularity"
+}
+
+// WithLimit sets the maximum number of results.
+func WithLimit(limit int) SearchOption {
+	defer perf.Track(nil, "registry.WithLimit")()
+
+	return func(c *SearchConfig) {
+		c.Limit = limit
+	}
+}
+
+// WithOffset sets the starting offset for results.
+func WithOffset(offset int) SearchOption {
+	defer perf.Track(nil, "registry.WithOffset")()
+
+	return func(c *SearchConfig) {
+		c.Offset = offset
+	}
+}
+
+// WithInstalledOnly filters to only show installed tools.
+func WithInstalledOnly(installedOnly bool) SearchOption {
+	defer perf.Track(nil, "registry.WithInstalledOnly")()
+
+	return func(c *SearchConfig) {
+		c.InstalledOnly = installedOnly
+	}
+}
+
+// WithAvailableOnly filters to only show non-installed tools.
+func WithAvailableOnly(availableOnly bool) SearchOption {
+	defer perf.Track(nil, "registry.WithAvailableOnly")()
+
+	return func(c *SearchConfig) {
+		c.AvailableOnly = availableOnly
+	}
+}
+
+// WithListLimit sets the maximum number of results for list operations.
+func WithListLimit(limit int) ListOption {
+	defer perf.Track(nil, "registry.WithListLimit")()
+
+	return func(c *ListConfig) {
+		c.Limit = limit
+	}
+}
+
+// WithListOffset sets the starting offset for list operations.
+func WithListOffset(offset int) ListOption {
+	defer perf.Track(nil, "registry.WithListOffset")()
+
+	return func(c *ListConfig) {
+		c.Offset = offset
+	}
+}
+
+// WithSort sets the sort order for list operations.
+func WithSort(sort string) ListOption {
+	defer perf.Track(nil, "registry.WithSort")()
+
+	return func(c *ListConfig) {
+		c.Sort = sort
+	}
 }
 
 // Tool represents a single tool in the registry.
@@ -132,226 +244,4 @@ type VersionOverride struct {
 // AquaRegistryFile represents the structure of an Aqua registry YAML file (uses 'packages' key).
 type AquaRegistryFile struct {
 	Packages []AquaPackage `yaml:"packages"`
-}
-
-// LocalConfig represents the local tools.yaml configuration.
-type LocalConfig struct {
-	Aliases map[string]string    `yaml:"aliases"`
-	Tools   map[string]LocalTool `yaml:"tools"`
-}
-
-// LocalTool represents a tool definition in the local config.
-type LocalTool struct {
-	Type               string                   `yaml:"type"`
-	URL                string                   `yaml:"url"`
-	RepoOwner          string                   `yaml:"repo_owner"`
-	RepoName           string                   `yaml:"repo_name"`
-	Asset              string                   `yaml:"asset"`
-	Format             string                   `yaml:"format"`
-	BinaryName         string                   `yaml:"binary_name"`
-	VersionConstraints []LocalVersionConstraint `yaml:"version_constraints"`
-}
-
-// LocalVersionConstraint represents a version constraint in local config.
-type LocalVersionConstraint struct {
-	Constraint string `yaml:"constraint"`
-	Asset      string `yaml:"asset"`
-	Format     string `yaml:"format"`
-	BinaryName string `yaml:"binary_name"`
-}
-
-// LocalConfigManager handles local configuration.
-type LocalConfigManager struct {
-	config *LocalConfig
-}
-
-// NewLocalConfigManager creates a new local config manager.
-func NewLocalConfigManager() *LocalConfigManager {
-	defer perf.Track(nil, "registry.NewLocalConfigManager")()
-
-	return &LocalConfigManager{}
-}
-
-// NewLocalConfigManagerWithConfig creates a new local config manager with the given config (for testing).
-func NewLocalConfigManagerWithConfig(config *LocalConfig) *LocalConfigManager {
-	defer perf.Track(nil, "registry.NewLocalConfigManagerWithConfig")()
-
-	return &LocalConfigManager{config: config}
-}
-
-// Load loads the local tools.yaml configuration.
-func (lcm *LocalConfigManager) Load(configPath string) error {
-	defer perf.Track(nil, "registry.LocalConfigManager.Load")()
-
-	if configPath == "" {
-		configPath = "tools.yaml"
-	}
-
-	data, err := os.ReadFile(configPath)
-	if err != nil {
-		if os.IsNotExist(err) {
-			// No local config file, that's okay
-			lcm.config = &LocalConfig{Tools: make(map[string]LocalTool)}
-			return nil
-		}
-		return fmt.Errorf("failed to read local config: %w", err)
-	}
-
-	var config LocalConfig
-	if err := yaml.Unmarshal(data, &config); err != nil {
-		return fmt.Errorf("failed to parse local config: %w", err)
-	}
-
-	lcm.config = &config
-	return nil
-}
-
-// GetTool returns a local tool definition if it exists.
-func (lcm *LocalConfigManager) GetTool(owner, repo string) (*LocalTool, bool) {
-	defer perf.Track(nil, "registry.LocalConfigManager.GetTool")()
-
-	if lcm.config == nil {
-		return nil, false
-	}
-
-	key := fmt.Sprintf("%s/%s", owner, repo)
-	tool, exists := lcm.config.Tools[key]
-	if !exists {
-		return nil, false
-	}
-
-	return &tool, true
-}
-
-// ResolveAlias resolves a tool name to its owner/repo path using aliases.
-func (lcm *LocalConfigManager) ResolveAlias(toolName string) (string, bool) {
-	defer perf.Track(nil, "registry.LocalConfigManager.ResolveAlias")()
-
-	if lcm.config == nil || lcm.config.Aliases == nil {
-		return "", false
-	}
-
-	alias, exists := lcm.config.Aliases[toolName]
-	if !exists {
-		return "", false
-	}
-
-	return alias, true
-}
-
-// GetToolConfig returns a tool configuration by owner/repo path.
-func (lcm *LocalConfigManager) GetToolConfig(ownerRepo string) (*LocalTool, bool) {
-	defer perf.Track(nil, "registry.LocalConfigManager.GetToolConfig")()
-
-	if lcm.config == nil {
-		return nil, false
-	}
-
-	tool, exists := lcm.config.Tools[ownerRepo]
-	if !exists {
-		return nil, false
-	}
-
-	return &tool, true
-}
-
-// GetAliases returns the aliases map from the config.
-func (lcm *LocalConfigManager) GetAliases() map[string]string {
-	defer perf.Track(nil, "registry.LocalConfigManager.GetAliases")()
-
-	if lcm.config == nil {
-		return nil
-	}
-
-	return lcm.config.Aliases
-}
-
-// ResolveVersionConstraint resolves the appropriate version constraint for a given version.
-func (lcm *LocalConfigManager) ResolveVersionConstraint(tool *LocalTool, version string) *LocalVersionConstraint {
-	defer perf.Track(nil, "registry.LocalConfigManager.ResolveVersionConstraint")()
-
-	if len(tool.VersionConstraints) == 0 {
-		return nil
-	}
-
-	v, err := semver.NewVersion(version)
-	if err != nil {
-		return nil // Invalid version string
-	}
-
-	for _, constraint := range tool.VersionConstraints {
-		c, err := semver.NewConstraint(constraint.Constraint)
-		if err != nil {
-			continue // Skip invalid constraints
-		}
-		if c.Check(v) {
-			return &constraint
-		}
-	}
-
-	// Return the last constraint as fallback
-	if len(tool.VersionConstraints) > 0 {
-		return &tool.VersionConstraints[len(tool.VersionConstraints)-1]
-	}
-
-	return nil
-}
-
-// GetToolWithVersion returns a Tool for the given owner/repo and version, using local config (asdf-style versioned local tool lookup).
-func (lcm *LocalConfigManager) GetToolWithVersion(owner, repo, version string) (*Tool, error) {
-	defer perf.Track(nil, "registry.LocalConfigManager.GetToolWithVersion")()
-
-	tool, exists := lcm.GetTool(owner, repo)
-	if !exists {
-		return nil, fmt.Errorf("%w: tool %s/%s not found in local config", ErrToolNotFound, owner, repo)
-	}
-
-	constraint := lcm.ResolveVersionConstraint(tool, version)
-
-	t := &Tool{
-		Name:       repo,
-		Type:       tool.Type,
-		RepoOwner:  owner,
-		RepoName:   repo,
-		Asset:      tool.Asset,
-		URL:        tool.URL,
-		Format:     tool.Format,
-		BinaryName: tool.BinaryName,
-		Version:    version,
-	}
-
-	// Set binary name if specified
-	if tool.BinaryName != "" {
-		t.Name = tool.BinaryName
-	}
-
-	// Handle URL for http type (copy URL to Asset for compatibility)
-	if tool.Type == "http" {
-		t.Asset = tool.URL
-	}
-
-	if constraint != nil {
-		if constraint.Asset != "" {
-			t.Asset = constraint.Asset
-		}
-		if constraint.Format != "" {
-			t.Format = constraint.Format
-		}
-		if constraint.BinaryName != "" {
-			t.Name = constraint.BinaryName
-		}
-	}
-
-	return t, nil
-}
-
-// DefaultRegistry returns the default registry implementation (Aqua).
-// This is a convenience function to avoid importing toolchain/registry/aqua directly
-// in most use cases.
-func DefaultRegistry() ToolRegistry {
-	defer perf.Track(nil, "registry.DefaultRegistry")()
-
-	// We import aqua dynamically here to avoid circular imports
-	// while still providing a convenient default
-	return nil // Will be implemented after moving aqua
 }

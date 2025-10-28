@@ -469,7 +469,7 @@ func TestEmitPath(t *testing.T) {
 	require.NoError(t, err)
 
 	// Temporarily set the global toolVersionsFile variable
-	SetAtmosConfig(&schema.AtmosConfiguration{Toolchain: schema.Toolchain{FilePath: toolVersionsPath, ToolsDir: tempDir}})
+	SetAtmosConfig(&schema.AtmosConfiguration{Toolchain: schema.Toolchain{VersionsFile: toolVersionsPath, ToolsDir: tempDir}})
 
 	// Test that runInstall with no arguments doesn't error
 	// This prevents regression where the function might error when no specific tool is provided

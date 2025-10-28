@@ -95,7 +95,7 @@ func EmitPath(exportFlag, jsonFlag, relativeFlag bool) error {
 	// Output based on flags
 	switch {
 	case jsonFlag:
-		return emitJSONPath(toolPaths, finalPath)
+		emitJSONPath(toolPaths, finalPath)
 	case exportFlag:
 		fmt.Printf("export PATH=\"%s\"\n", finalPath)
 	default:
@@ -112,7 +112,7 @@ type ToolPath struct {
 	Path    string `json:"path"`
 }
 
-func emitJSONPath(toolPaths []ToolPath, finalPath string) error {
+func emitJSONPath(toolPaths []ToolPath, finalPath string) {
 	// Simple JSON output (you could use encoding/json for more complex cases)
 	fmt.Printf("{\n")
 	fmt.Printf("  \"tools\": [\n")
@@ -131,6 +131,4 @@ func emitJSONPath(toolPaths []ToolPath, finalPath string) error {
 	fmt.Printf("  \"final_path\": \"%s\",\n", finalPath)
 	fmt.Printf("  \"count\": %d\n", len(toolPaths))
 	fmt.Printf("}\n")
-
-	return nil
 }

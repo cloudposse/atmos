@@ -8,6 +8,7 @@ import (
 	"github.com/spf13/viper"
 
 	"github.com/cloudposse/atmos/cmd/internal"
+	registrycmd "github.com/cloudposse/atmos/cmd/toolchain/registry"
 	"github.com/cloudposse/atmos/pkg/schema"
 	toolchainpkg "github.com/cloudposse/atmos/toolchain"
 )
@@ -37,9 +38,8 @@ var toolchainCmd = &cobra.Command{
 		// This ensures that the toolchain package has access to the configuration.
 		atmosCfg := &schema.AtmosConfiguration{
 			Toolchain: schema.Toolchain{
-				FilePath:        toolVersionsFile,
-				ToolsDir:        toolsDir,
-				ToolsConfigFile: toolsConfigFile,
+				VersionsFile: toolVersionsFile,
+				InstallPath:  toolsDir,
 			},
 		}
 
@@ -57,7 +57,9 @@ var toolchainCmd = &cobra.Command{
 func init() {
 	// Add GitHub token flag and bind to environment variables.
 	toolchainCmd.PersistentFlags().StringVar(&githubToken, "github-token", "", "GitHub token for authenticated requests")
-	toolchainCmd.PersistentFlags().MarkHidden("github-token") // Hide from help since it's primarily for env vars.
+	if err := toolchainCmd.PersistentFlags().MarkHidden("github-token"); err != nil {
+		fmt.Fprintf(os.Stderr, "Error hiding github-token flag: %v\n", err)
+	}
 	// Bind environment variables with proper precedence (ATMOS_GITHUB_TOKEN takes precedence over GITHUB_TOKEN).
 	if err := viper.BindPFlag("github-token", toolchainCmd.PersistentFlags().Lookup("github-token")); err != nil {
 		fmt.Fprintf(os.Stderr, "Error binding github-token flag: %v\n", err)
@@ -84,7 +86,9 @@ func init() {
 	toolchainCmd.AddCommand(installCmd)
 	toolchainCmd.AddCommand(listCmd)
 	toolchainCmd.AddCommand(pathCmd)
+	toolchainCmd.AddCommand(registrycmd.GetRegistryCommand())
 	toolchainCmd.AddCommand(removeCmd)
+	toolchainCmd.AddCommand(searchAliasCmd)
 	toolchainCmd.AddCommand(setCmd)
 	toolchainCmd.AddCommand(uninstallCmd)
 	toolchainCmd.AddCommand(whichCmd)

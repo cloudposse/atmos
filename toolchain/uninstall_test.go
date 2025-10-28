@@ -230,7 +230,7 @@ func TestRunUninstallWithNoArgs(t *testing.T) {
 
 	// Temporarily set the global toolVersionsFile variable
 	prev := atmosConfig
-	SetAtmosConfig(&schema.AtmosConfiguration{Toolchain: schema.Toolchain{FilePath: toolVersionsPath}})
+	SetAtmosConfig(&schema.AtmosConfiguration{Toolchain: schema.Toolchain{VersionsFile: toolVersionsPath}})
 	t.Cleanup(func() { SetAtmosConfig(prev) })
 
 	// Test that runUninstall with no arguments doesn't error
@@ -252,13 +252,6 @@ type FakeInstaller struct {
 	UninstallCalled       bool
 	UninstallErr          error
 	BinDir                string
-}
-
-// parseToolSpec is a mock method for FakeInstaller.
-// Currently unused but kept for test infrastructure completeness.
-func (f *FakeInstaller) parseToolSpec(tool string) (string, string, error) {
-	f.CalledParseToolSpec = true
-	return f.ParseToolSpecOwner, f.ParseToolSpecRepo, f.ParseToolSpecErr
 }
 
 func (f *FakeInstaller) ReadLatestFile(owner, repo string) (string, error) {

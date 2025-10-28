@@ -414,14 +414,94 @@ Each toolchain command is implemented in its own file for maintainability:
 
 ### Custom Registries
 
-While Atmos uses the Aqua registry by default, you can configure custom registry URLs:
+Atmos supports multiple registries with priority-based precedence. Configure custom registries in `atmos.yaml`:
 
 ```yaml
 toolchain:
-  registry:
-    # Use custom Aqua registry fork
-    base_url: "https://github.com/your-org/custom-registry"
+  # Install path for toolchain binaries
+  install_path: .tools
+
+  # Versions file tracking installed tools
+  versions_file: .tool-versions
+
+  # Multiple registries with priority ordering
+  registries:
+    # Corporate/private registry (highest priority - checked first)
+    - name: corporate
+      type: aqua
+      source: file://./custom-registry/registry.yaml
+      priority: 100
+
+    # Official Aqua registry (fallback)
+    - name: aqua-public
+      type: aqua
+      source: https://github.com/aquaproj/aqua-registry/tree/main/pkgs
+      priority: 10
 ```
+
+#### Registry Patterns
+
+Atmos supports two registry patterns:
+
+**1. Single Index File** (Recommended for custom registries):
+```yaml
+registries:
+  - name: custom
+    type: aqua
+    source: file://./registry.yaml  # All packages in one file
+    priority: 100
+```
+
+- Source ends with `.yaml` or `.yml`
+- All tool definitions in a single file
+- Matches official Aqua registry structure
+- Simplest to maintain
+
+**2. Per-Package Directory** (Separate file per package):
+```yaml
+registries:
+  - name: custom
+    type: aqua
+    source: file://./pkgs/  # Directory with per-package files
+    priority: 100
+```
+
+- Source doesn't end with `.yaml`/`.yml`
+- Each package has its own `registry.yaml` at `{source}/{owner}/{repo}/registry.yaml`
+- Each file contains ONE package definition
+- For larger registries where per-tool files are preferred
+
+**3. Inline Registry** (Tools defined directly in atmos.yaml):
+```yaml
+registries:
+  - name: my-tools
+    type: atmos
+    priority: 150
+    tools:
+      stedolan/jq:
+        type: github_release
+        url: "jq-{{.OS}}-{{.Arch}}"
+      mikefarah/yq:
+        type: github_release
+        url: "yq_{{.Version}}_{{.OS}}_{{.Arch}}.tar.gz"
+```
+
+- No external files needed
+- Perfect for quick prototyping or small tool sets
+- Supports all template variables (`{{.OS}}`, `{{.Arch}}`, `{{.Version}}`, `{{trimV .Version}}`, etc.)
+- Use `tools:` map with `owner/repo` format keys
+- Tools are defined inline in your `atmos.yaml`
+
+#### Priority System
+
+Registries are checked in priority order (highest to lowest):
+
+1. **Corporate registry** (priority: 100) - checked first
+2. **Internal mirror** (priority: 50) - checked second
+3. **Public Aqua registry** (priority: 10) - checked last
+4. **Error** if tool not found in any registry
+
+See `examples/toolchain/` for a complete working example.
 
 ### Tool Version Constraints
 

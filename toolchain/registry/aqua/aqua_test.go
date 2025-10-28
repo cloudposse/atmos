@@ -21,8 +21,7 @@ func TestNewAquaRegistry(t *testing.T) {
 	assert.NotNil(t, ar)
 	assert.NotNil(t, ar.client)
 	assert.NotNil(t, ar.cache)
-	assert.NotNil(t, ar.local)
-	assert.Contains(t, ar.cache.baseDir, "tools-cache")
+	assert.Contains(t, ar.cache.baseDir, "atmos-toolchain-cache")
 }
 
 func TestAquaRegistry_LoadLocalConfig(t *testing.T) {
@@ -410,24 +409,7 @@ func TestAquaRegistry_BuildAssetURL_InvalidTemplate(t *testing.T) {
 }
 
 func TestAquaRegistry_convertLocalToolToTool(t *testing.T) {
-	ar := NewAquaRegistry()
-
-	localTool := &registry.LocalTool{
-		Type:       "http",
-		RepoOwner:  "test",
-		RepoName:   "tool",
-		URL:        "https://example.com/tool-{{.Version}}.zip",
-		Format:     "zip",
-		BinaryName: "custom-tool",
-	}
-
-	tool := ar.convertLocalToolToTool(localTool, "test")
-	assert.NotNil(t, tool)
-	assert.Equal(t, "custom-tool", tool.Name)
-	assert.Equal(t, "test", tool.RepoOwner)
-	assert.Equal(t, "tool", tool.RepoName)
-	assert.Equal(t, "http", tool.Type)
-	assert.Equal(t, "https://example.com/tool-{{.Version}}.zip", tool.Asset)
+	t.Skip("Local config support was removed in refactoring")
 }
 
 func TestAquaRegistry_GetLatestVersion(t *testing.T) {
@@ -513,7 +495,7 @@ func TestAquaRegistry_CacheDirectory(t *testing.T) {
 	ar := NewAquaRegistry()
 
 	// Test that cache directory is created
-	assert.Contains(t, ar.cache.baseDir, "tools-cache")
+	assert.Contains(t, ar.cache.baseDir, "atmos-toolchain-cache")
 
 	// Test that cache directory can be created
 	err := os.MkdirAll(ar.cache.baseDir, defaultMkdirPermissions)

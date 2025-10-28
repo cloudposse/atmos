@@ -387,3 +387,13 @@ ALWAYS compile after changes: `go build . && go test ./...`. Fix errors immediat
 
 ### Pre-commit (MANDATORY)
 NEVER use `--no-verify`. Run `make lint` before committing. Hooks run go-fumpt, golangci-lint, go mod tidy.
+
+### Lint Errors and Pre-existing Code (MANDATORY)
+**Pre-existing code** refers ONLY to code that exists in the `main` branch. If code does not exist in `main`, it is NOT pre-existing - it is new code being added in the current branch.
+
+When fixing lint errors:
+- **New code**: ALL lint errors in new code must be fixed before committing
+- **Pre-existing code**: Lint errors in code from `main` branch can be left as-is (fix if related to your changes)
+- **Determining what's pre-existing**: Use `git diff main...HEAD` to see what's new in your branch
+
+Example: If you're working on a feature branch that adds the `toolchain/` package, and `toolchain/` doesn't exist in `main`, then ALL lint errors in `toolchain/` must be fixed - they are not pre-existing.

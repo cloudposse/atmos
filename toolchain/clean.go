@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/ui/theme"
+	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 // CleanToolsAndCaches handles the business logic for cleaning tools and cache directories.
@@ -21,12 +23,12 @@ func CleanToolsAndCaches(toolsDir, cacheDir, tempCacheDir string) error {
 	cacheCount, _ := cleanDir(cacheDir, false) // warnings only
 	tempCacheCount, _ := cleanDir(tempCacheDir, false)
 
-	fmt.Printf("%s Deleted %d files/directories from %s\n", checkMark.Render(), toolsCount, toolsDir)
+	u.PrintfMarkdownToTUI("%s Deleted **%d** files/directories from %s\n", theme.Styles.Checkmark, toolsCount, toolsDir)
 	if cacheCount > 0 {
-		fmt.Printf("%s Deleted %d files from %s cache\n", checkMark.Render(), cacheCount, cacheDir)
+		u.PrintfMarkdownToTUI("%s Deleted **%d** files from %s cache\n", theme.Styles.Checkmark, cacheCount, cacheDir)
 	}
 	if tempCacheCount > 0 {
-		fmt.Printf("%s Deleted %d files from %s cache\n", checkMark.Render(), tempCacheCount, tempCacheDir)
+		u.PrintfMarkdownToTUI("%s Deleted **%d** files from %s cache\n", theme.Styles.Checkmark, tempCacheCount, tempCacheDir)
 	}
 
 	return nil
@@ -39,7 +41,7 @@ func cleanDir(path string, fatal bool) (int, error) {
 		if fatal {
 			return 0, fmt.Errorf("%w: failed to count files in %s: %w", ErrFileOperation, path, err)
 		}
-		fmt.Println("Warning:", msg)
+		u.PrintfMessageToTUI("Warning: %s\n", msg)
 	}
 
 	err = os.RemoveAll(path)
@@ -48,7 +50,7 @@ func cleanDir(path string, fatal bool) (int, error) {
 		if fatal {
 			return count, fmt.Errorf("%w: failed to delete %s: %w", ErrFileOperation, path, err)
 		}
-		fmt.Println("Warning:", msg)
+		u.PrintfMessageToTUI("Warning: %s\n", msg)
 	}
 
 	return count, nil

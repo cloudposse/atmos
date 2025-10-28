@@ -21,7 +21,7 @@ func TestWhichCommand_ToolNotConfigured(t *testing.T) {
 	toolVersionsPath := filepath.Join(tempDir, DefaultToolVersionsFilePath)
 	err := SaveToolVersions(toolVersionsPath, emptyToolVersions)
 	require.NoError(t, err)
-	SetAtmosConfig(&schema.AtmosConfiguration{Toolchain: schema.Toolchain{ToolsDir: tempDir, FilePath: toolVersionsPath}})
+	SetAtmosConfig(&schema.AtmosConfiguration{Toolchain: schema.Toolchain{InstallPath: tempDir, VersionsFile: toolVersionsPath}})
 	err = WhichExec("kubectl")
 
 	require.Error(t, err, "Should fail when tool is not configured in .tool-versions")
@@ -40,7 +40,7 @@ func TestWhichCommand_InvalidTool(t *testing.T) {
 	err := SaveToolVersions(toolVersionsPath, emptyToolVersions)
 	require.NoError(t, err)
 
-	SetAtmosConfig(&schema.AtmosConfiguration{Toolchain: schema.Toolchain{ToolsDir: tempDir, FilePath: toolVersionsPath}})
+	SetAtmosConfig(&schema.AtmosConfiguration{Toolchain: schema.Toolchain{InstallPath: tempDir, VersionsFile: toolVersionsPath}})
 	err = WhichExec("nonexistent-tool-12345")
 
 	require.Error(t, err, "Should fail when tool doesn't exist in .tool-versions")
@@ -61,7 +61,7 @@ func TestWhichCommand_InvalidToolName(t *testing.T) {
 	err := SaveToolVersions(toolVersionsPath, toolVersions)
 	require.NoError(t, err)
 
-	SetAtmosConfig(&schema.AtmosConfiguration{Toolchain: schema.Toolchain{ToolsDir: tempDir, FilePath: toolVersionsPath}})
+	SetAtmosConfig(&schema.AtmosConfiguration{Toolchain: schema.Toolchain{InstallPath: tempDir, VersionsFile: toolVersionsPath}})
 	err = WhichExec("invalid/tool/name")
 	require.Error(t, err, "Should fail when tool name is invalid")
 	assert.Contains(t, err.Error(), "failed to resolve tool")
@@ -79,7 +79,7 @@ func TestWhichCommand_EmptyToolName(t *testing.T) {
 	err := SaveToolVersions(toolVersionsPath, emptyToolVersions)
 	require.NoError(t, err)
 
-	SetAtmosConfig(&schema.AtmosConfiguration{Toolchain: schema.Toolchain{ToolsDir: tempDir, FilePath: toolVersionsPath}})
+	SetAtmosConfig(&schema.AtmosConfiguration{Toolchain: schema.Toolchain{InstallPath: tempDir, VersionsFile: toolVersionsPath}})
 	err = WhichExec("")
 
 	require.Error(t, err, "Should fail when tool name is empty")
@@ -100,7 +100,7 @@ func TestWhichCommand_ToolConfiguredButNotInstalled(t *testing.T) {
 	err := SaveToolVersions(toolVersionsPath, toolVersions)
 	require.NoError(t, err)
 
-	SetAtmosConfig(&schema.AtmosConfiguration{Toolchain: schema.Toolchain{ToolsDir: tempDir, FilePath: toolVersionsPath}})
+	SetAtmosConfig(&schema.AtmosConfiguration{Toolchain: schema.Toolchain{InstallPath: tempDir, VersionsFile: toolVersionsPath}})
 	err = WhichExec("terraform")
 
 	require.Error(t, err, "Should fail when tool is configured but not installed")
@@ -118,12 +118,12 @@ func TestWhichCommand_ToolConfiguredAndInstalled(t *testing.T) {
 		},
 	}
 	toolVersionsPath := filepath.Join(tempDir, DefaultToolVersionsFilePath)
-	SetAtmosConfig(&schema.AtmosConfiguration{Toolchain: schema.Toolchain{ToolsDir: tempDir, FilePath: toolVersionsPath}})
+	SetAtmosConfig(&schema.AtmosConfiguration{Toolchain: schema.Toolchain{InstallPath: tempDir, VersionsFile: toolVersionsPath}})
 	err := SaveToolVersions(toolVersionsPath, toolVersions)
 	require.NoError(t, err)
 
 	// Create mock installed binary at the exact path the which command expects
-	// The which command uses NewInstaller() which has binDir = filepath.Join(GetToolsDirPath(), "bin")
+	// The which command uses NewInstaller() which has binDir = filepath.Join(GetInstallPath(), "bin")
 	// So we need to create the binary in ./.tools/bin/hashicorp/terraform/1.11.4/terraform
 	installer := NewInstaller()
 	binaryPath := installer.getBinaryPath("hashicorp", "terraform", "1.11.4")
@@ -142,7 +142,7 @@ func TestWhichCommand_NoToolVersionsFile(t *testing.T) {
 	// Don't create a .tool-versions file
 	toolVersionsPath := filepath.Join(tempDir, DefaultToolVersionsFilePath)
 
-	SetAtmosConfig(&schema.AtmosConfiguration{Toolchain: schema.Toolchain{ToolsDir: tempDir, FilePath: toolVersionsPath}})
+	SetAtmosConfig(&schema.AtmosConfiguration{Toolchain: schema.Toolchain{InstallPath: tempDir, VersionsFile: toolVersionsPath}})
 	err := WhichExec("terraform")
 
 	require.Error(t, err, "Should fail when .tool-versions file doesn't exist")
@@ -160,7 +160,7 @@ func TestWhichCommand_CanonicalName(t *testing.T) {
 		},
 	}
 	toolVersionsPath := filepath.Join(tempDir, DefaultToolVersionsFilePath)
-	SetAtmosConfig(&schema.AtmosConfiguration{Toolchain: schema.Toolchain{ToolsDir: tempDir, FilePath: toolVersionsPath}})
+	SetAtmosConfig(&schema.AtmosConfiguration{Toolchain: schema.Toolchain{InstallPath: tempDir, VersionsFile: toolVersionsPath}})
 	err := SaveToolVersions(toolVersionsPath, toolVersions)
 	require.NoError(t, err)
 
@@ -187,7 +187,7 @@ func TestWhichCommand_WithVersionSpecifier(t *testing.T) {
 		},
 	}
 	toolVersionsPath := filepath.Join(tempDir, DefaultToolVersionsFilePath)
-	SetAtmosConfig(&schema.AtmosConfiguration{Toolchain: schema.Toolchain{ToolsDir: tempDir, FilePath: toolVersionsPath}})
+	SetAtmosConfig(&schema.AtmosConfiguration{Toolchain: schema.Toolchain{InstallPath: tempDir, VersionsFile: toolVersionsPath}})
 	err := SaveToolVersions(toolVersionsPath, toolVersions)
 	require.NoError(t, err)
 

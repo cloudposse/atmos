@@ -10,6 +10,7 @@ import (
 	"github.com/muesli/termenv"
 
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
 
 // ListToolVersions handles the logic for listing tool versions.
@@ -124,7 +125,7 @@ func printVersions(versions []string, defaultVersion string, installed map[strin
 	for _, v := range versions {
 		indicator := " "
 		if v == defaultVersion {
-			indicator = checkMark.String()
+			indicator = theme.Styles.Checkmark.String()
 		}
 		if installed[v] {
 			fmt.Printf("%s %s\n", indicator, installedStyle.Render(v))

@@ -81,9 +81,9 @@ func TestRunInstallWithNoArgs(t *testing.T) {
 
 	// Temporarily set the global toolVersionsFile variable
 	originalToolVersionsFile := GetToolVersionsFilePath()
-	SetAtmosConfig(&schema.AtmosConfiguration{Toolchain: schema.Toolchain{FilePath: toolVersionsPath}})
+	SetAtmosConfig(&schema.AtmosConfiguration{Toolchain: schema.Toolchain{VersionsFile: toolVersionsPath}})
 	defer func() {
-		SetAtmosConfig(&schema.AtmosConfiguration{Toolchain: schema.Toolchain{FilePath: originalToolVersionsFile}})
+		SetAtmosConfig(&schema.AtmosConfiguration{Toolchain: schema.Toolchain{VersionsFile: originalToolVersionsFile}})
 	}()
 
 	// Test that runInstall with no arguments doesn't error
@@ -107,9 +107,9 @@ func TestRunInstall_WithValidToolSpec(t *testing.T) {
 
 	// Set Atmos config
 	originalToolVersionsFile := GetToolVersionsFilePath()
-	SetAtmosConfig(&schema.AtmosConfiguration{Toolchain: schema.Toolchain{FilePath: toolVersionsPath}})
+	SetAtmosConfig(&schema.AtmosConfiguration{Toolchain: schema.Toolchain{VersionsFile: toolVersionsPath}})
 	defer func() {
-		SetAtmosConfig(&schema.AtmosConfiguration{Toolchain: schema.Toolchain{FilePath: originalToolVersionsFile}})
+		SetAtmosConfig(&schema.AtmosConfiguration{Toolchain: schema.Toolchain{VersionsFile: originalToolVersionsFile}})
 	}()
 
 	// Test installing a specific tool with version
@@ -141,9 +141,9 @@ func TestRunInstall_WithSetAsDefault(t *testing.T) {
 
 	// Set Atmos config
 	originalToolVersionsFile := GetToolVersionsFilePath()
-	SetAtmosConfig(&schema.AtmosConfiguration{Toolchain: schema.Toolchain{FilePath: toolVersionsPath}})
+	SetAtmosConfig(&schema.AtmosConfiguration{Toolchain: schema.Toolchain{VersionsFile: toolVersionsPath}})
 	defer func() {
-		SetAtmosConfig(&schema.AtmosConfiguration{Toolchain: schema.Toolchain{FilePath: originalToolVersionsFile}})
+		SetAtmosConfig(&schema.AtmosConfiguration{Toolchain: schema.Toolchain{VersionsFile: originalToolVersionsFile}})
 	}()
 
 	// Test installing with setAsDefault=true
@@ -173,9 +173,9 @@ func TestRunInstall_WithInvalidToolSpec(t *testing.T) {
 
 	// Set Atmos config
 	originalToolVersionsFile := GetToolVersionsFilePath()
-	SetAtmosConfig(&schema.AtmosConfiguration{Toolchain: schema.Toolchain{FilePath: toolVersionsPath}})
+	SetAtmosConfig(&schema.AtmosConfiguration{Toolchain: schema.Toolchain{VersionsFile: toolVersionsPath}})
 	defer func() {
-		SetAtmosConfig(&schema.AtmosConfiguration{Toolchain: schema.Toolchain{FilePath: originalToolVersionsFile}})
+		SetAtmosConfig(&schema.AtmosConfiguration{Toolchain: schema.Toolchain{VersionsFile: originalToolVersionsFile}})
 	}()
 
 	// Test with invalid tool spec (no version)
@@ -198,9 +198,9 @@ func TestRunInstall_WithCanonicalFormat(t *testing.T) {
 
 	// Set Atmos config
 	originalToolVersionsFile := GetToolVersionsFilePath()
-	SetAtmosConfig(&schema.AtmosConfiguration{Toolchain: schema.Toolchain{FilePath: toolVersionsPath}})
+	SetAtmosConfig(&schema.AtmosConfiguration{Toolchain: schema.Toolchain{VersionsFile: toolVersionsPath}})
 	defer func() {
-		SetAtmosConfig(&schema.AtmosConfiguration{Toolchain: schema.Toolchain{FilePath: originalToolVersionsFile}})
+		SetAtmosConfig(&schema.AtmosConfiguration{Toolchain: schema.Toolchain{VersionsFile: originalToolVersionsFile}})
 	}()
 
 	// Test installing with canonical owner/repo@version format
@@ -238,9 +238,9 @@ func TestRunInstall_WithLatestKeyword(t *testing.T) {
 
 	// Set Atmos config
 	originalToolVersionsFile := GetToolVersionsFilePath()
-	SetAtmosConfig(&schema.AtmosConfiguration{Toolchain: schema.Toolchain{FilePath: toolVersionsPath}})
+	SetAtmosConfig(&schema.AtmosConfiguration{Toolchain: schema.Toolchain{VersionsFile: toolVersionsPath}})
 	defer func() {
-		SetAtmosConfig(&schema.AtmosConfiguration{Toolchain: schema.Toolchain{FilePath: originalToolVersionsFile}})
+		SetAtmosConfig(&schema.AtmosConfiguration{Toolchain: schema.Toolchain{VersionsFile: originalToolVersionsFile}})
 	}()
 
 	// Test installing with "latest" version
@@ -273,9 +273,9 @@ func TestRunInstall_Reinstall(t *testing.T) {
 
 	// Set Atmos config
 	originalToolVersionsFile := GetToolVersionsFilePath()
-	SetAtmosConfig(&schema.AtmosConfiguration{Toolchain: schema.Toolchain{FilePath: toolVersionsPath}})
+	SetAtmosConfig(&schema.AtmosConfiguration{Toolchain: schema.Toolchain{VersionsFile: toolVersionsPath}})
 	defer func() {
-		SetAtmosConfig(&schema.AtmosConfiguration{Toolchain: schema.Toolchain{FilePath: originalToolVersionsFile}})
+		SetAtmosConfig(&schema.AtmosConfiguration{Toolchain: schema.Toolchain{VersionsFile: originalToolVersionsFile}})
 	}()
 
 	// Test reinstalling all tools from .tool-versions
