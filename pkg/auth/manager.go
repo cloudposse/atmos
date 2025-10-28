@@ -11,6 +11,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/internal/tui/templates/term"
+	"github.com/cloudposse/atmos/pkg/auth/credentials"
 	"github.com/cloudposse/atmos/pkg/auth/factory"
 	"github.com/cloudposse/atmos/pkg/auth/identities/aws"
 	"github.com/cloudposse/atmos/pkg/auth/types"
@@ -21,11 +22,14 @@ import (
 
 const (
 	logKeyIdentity           = "identity"
+	logKeyProvider           = "provider"
+	logKeyChainIndex         = "chainIndex"
 	identityNameKey          = "identityName"
 	buildAuthenticationChain = "buildAuthenticationChain"
 	buildChainRecursive      = "buildChainRecursive"
-	backtickedQuotedFmt      = "`%q`"
+	backtickedFmt            = "`%s`"
 	errFormatWithString      = "%w: %s"
+	errFormatWrapTwo         = "%w for %q: %w"
 )
 
 // contextKey is a type for context keys to avoid collisions.
@@ -119,7 +123,7 @@ func (m *manager) Authenticate(ctx context.Context, identityName string) (*types
 	}
 	if _, exists := m.identities[identityName]; !exists {
 		errUtils.CheckErrorAndPrint(errUtils.ErrInvalidAuthConfig, identityNameKey, "Identity specified was not found in the auth config.")
-		return nil, fmt.Errorf(errFormatWithString, errUtils.ErrIdentityNotFound, fmt.Sprintf(backtickedQuotedFmt, identityName))
+		return nil, fmt.Errorf(errFormatWithString, errUtils.ErrIdentityNotFound, fmt.Sprintf(backtickedFmt, identityName))
 	}
 
 	// Build the complete authentication chain.
@@ -181,28 +185,97 @@ func (m *manager) GetChain() []string {
 	return m.chain
 }
 
-// Whoami returns information about the specified identity's credentials.
-func (m *manager) Whoami(ctx context.Context, identityName string) (*types.WhoamiInfo, error) {
-	defer perf.Track(nil, "auth.Manager.Whoami")()
+// GetCachedCredentials retrieves valid cached credentials without triggering authentication.
+// This is a passive check that:
+//  1. Checks keyring for cached credentials
+//  2. Tries loading from identity-managed storage (AWS files, etc.)
+//  3. Returns error if credentials are not found, expired, or invalid
+//
+// This method does NOT trigger any authentication flows or prompts.
+func (m *manager) GetCachedCredentials(ctx context.Context, identityName string) (*types.WhoamiInfo, error) {
+	defer perf.Track(nil, "auth.Manager.GetCachedCredentials")()
 
 	if _, exists := m.identities[identityName]; !exists {
-		return nil, fmt.Errorf(errFormatWithString, errUtils.ErrIdentityNotFound, fmt.Sprintf(backtickedQuotedFmt, identityName))
+		return nil, fmt.Errorf(errFormatWithString, errUtils.ErrIdentityNotFound, fmt.Sprintf(backtickedFmt, identityName))
 	}
 
-	// Try to retrieve credentials for the resolved identity.
+	// Try to retrieve credentials from keyring.
 	creds, err := m.credentialStore.Retrieve(identityName)
+	log.Debug("credentialStore.Retrieve result",
+		logKeyIdentity, identityName,
+		"creds_nil", creds == nil,
+		"error", err,
+	)
+
 	if err != nil {
-		return nil, fmt.Errorf("%w: identity=%s: %w", errUtils.ErrNoCredentialsFound, identityName, err)
+		// If not in keyring, try loading from identity-managed storage (AWS files, etc.).
+		if errors.Is(err, credentials.ErrCredentialsNotFound) {
+			log.Debug("Credentials not in keyring, trying to load from identity storage", logKeyIdentity, identityName)
+			info := m.buildWhoamiInfoFromEnvironment(identityName)
+
+			// If we successfully loaded credentials from storage, check if they're expired.
+			if info.Credentials != nil {
+				if info.Credentials.IsExpired() {
+					log.Debug("Credentials from identity storage are expired", logKeyIdentity, identityName)
+					return nil, fmt.Errorf(errFormatWithString, errUtils.ErrExpiredCredentials, fmt.Sprintf(backtickedFmt, identityName))
+				}
+				log.Debug("Successfully loaded credentials from identity storage", logKeyIdentity, identityName)
+				return info, nil
+			}
+		}
+
+		// Credentials not found or error occurred.
+		providerName := "unknown"
+		if prov, provErr := m.identities[identityName].GetProviderName(); provErr == nil {
+			providerName = prov
+		}
+		return nil, fmt.Errorf("%w: identity=%s, provider=%s, credential_store=%s: %w",
+			errUtils.ErrNoCredentialsFound,
+			identityName,
+			providerName,
+			m.credentialStore.Type(),
+			err)
 	}
 
 	// Check if credentials are expired.
 	if expired, err := m.credentialStore.IsExpired(identityName); err != nil {
 		return nil, fmt.Errorf("%w: identity=%s: %w", errUtils.ErrExpiredCredentials, identityName, err)
 	} else if expired {
-		return nil, fmt.Errorf(errFormatWithString, errUtils.ErrExpiredCredentials, fmt.Sprintf(backtickedQuotedFmt, identityName))
+		return nil, fmt.Errorf(errFormatWithString, errUtils.ErrExpiredCredentials, fmt.Sprintf(backtickedFmt, identityName))
 	}
 
+	log.Debug("Using cached credentials from keyring", logKeyIdentity, identityName)
 	return m.buildWhoamiInfo(identityName, creds), nil
+}
+
+// Whoami returns information about the specified identity's credentials.
+// First checks for cached credentials via GetCachedCredentials, then falls back
+// to chain authentication (using cached provider credentials to derive identity credentials).
+// This does NOT trigger interactive authentication flows (no SSO prompts).
+func (m *manager) Whoami(ctx context.Context, identityName string) (*types.WhoamiInfo, error) {
+	defer perf.Track(nil, "auth.Manager.Whoami")()
+
+	// First, try to get cached credentials (passive check).
+	info, err := m.GetCachedCredentials(ctx, identityName)
+	if err == nil {
+		return info, nil
+	}
+
+	log.Debug("GetCachedCredentials failed, attempting chain authentication", logKeyIdentity, identityName, "error", err)
+
+	// If cached credentials aren't available, try to authenticate through the chain.
+	// This handles cases where provider credentials exist (e.g., in AWS files)
+	// and can be used to derive the identity credentials without interactive prompts.
+	authInfo, authErr := m.Authenticate(ctx, identityName)
+	if authErr == nil {
+		log.Debug("Successfully authenticated through chain", logKeyIdentity, identityName)
+		return authInfo, nil
+	}
+
+	log.Debug("Chain authentication failed", logKeyIdentity, identityName, "error", authErr)
+
+	// Return the original GetCachedCredentials error since chain auth also failed.
+	return nil, err
 }
 
 // Validate validates the entire auth configuration.
@@ -244,7 +317,7 @@ func (m *manager) GetDefaultIdentity() (string, error) {
 	default:
 		// Multiple default identities found.
 		if !isInteractive() {
-			return "", fmt.Errorf(errFormatWithString, errUtils.ErrMultipleDefaultIdentities, fmt.Sprintf(backtickedQuotedFmt, defaultIdentities))
+			return "", fmt.Errorf(errFormatWithString, errUtils.ErrMultipleDefaultIdentities, fmt.Sprintf(backtickedFmt, defaultIdentities))
 		}
 		// In interactive mode, prompt user to choose from default identities.
 		return m.promptForIdentity("Multiple default identities found. Please choose one:", defaultIdentities)
@@ -273,6 +346,10 @@ func (m *manager) promptForIdentity(message string, identities []string) (string
 	)
 
 	if err := form.Run(); err != nil {
+		// Check if user aborted (Ctrl+C, ESC, etc.).
+		if errors.Is(err, huh.ErrUserAborted) {
+			return "", errUtils.ErrUserAborted
+		}
 		errUtils.CheckErrorAndPrint(err, "Prompt for Identity", "")
 		return "", fmt.Errorf("%w: %w", errUtils.ErrUnsupportedInputType, err)
 	}
@@ -449,22 +526,79 @@ func (m *manager) findFirstValidCachedCredentials() int {
 	// Check from target identity (bottom) up to provider (top).
 	for i := len(m.chain) - 1; i >= 0; i-- {
 		identityName := m.chain[i]
+		log.Debug("Checking cached credentials", logKeyChainIndex, i, identityNameKey, identityName)
 
-		// Check if we have cached credentials for this level.
+		// First, try to retrieve from keyring.
 		cachedCreds, err := m.credentialStore.Retrieve(identityName)
+		log.Debug("Keyring retrieve result", logKeyChainIndex, i, identityNameKey, identityName, "hasError", err != nil, "hasCreds", cachedCreds != nil)
 		if err != nil {
-			continue
+			// If not in keyring, try loading from identity storage (AWS files, etc.).
+			// This handles the case where credentials were created outside of Atmos
+			// (e.g., via AWS CLI, SSO) but are available in standard AWS credential files.
+			if !errors.Is(err, credentials.ErrCredentialsNotFound) {
+				log.Debug("Error is not ErrCredentialsNotFound, skipping", logKeyChainIndex, i, identityNameKey, identityName, "error", err)
+				continue
+			}
+
+			identity, exists := m.identities[identityName]
+			if !exists {
+				log.Debug("Identity not in m.identities, skipping", logKeyChainIndex, i, identityNameKey, identityName)
+				continue
+			}
+
+			log.Debug("Credentials not in keyring, trying identity storage", logKeyChainIndex, i, identityNameKey, identityName)
+			loadedCreds, loadErr := identity.LoadCredentials(context.Background())
+			if loadErr != nil || loadedCreds == nil {
+				log.Debug("Failed to load from identity storage", logKeyChainIndex, i, identityNameKey, identityName, "error", loadErr)
+				continue
+			}
+
+			log.Debug("Loaded credentials from identity storage", logKeyChainIndex, i, identityNameKey, identityName)
+			cachedCreds = loadedCreds
 		}
 
-		if valid, expTime := m.isCredentialValid(identityName, cachedCreds); valid {
+		valid, expTime := m.isCredentialValid(identityName, cachedCreds)
+		if valid {
 			if expTime != nil {
-				log.Debug("Found valid cached credentials", "chainIndex", i, identityNameKey, identityName, "expiration", *expTime)
+				log.Debug("Found valid cached credentials", logKeyChainIndex, i, identityNameKey, identityName, "expiration", *expTime)
 			} else {
 				// Non-AWS credentials or no expiration info, assume valid.
-				log.Debug("Found valid cached credentials (non-AWS)", "chainIndex", i, identityNameKey, identityName)
+				log.Debug("Found valid cached credentials (non-AWS)", logKeyChainIndex, i, identityNameKey, identityName)
 			}
 			return i
 		}
+
+		// Credentials are invalid (expired or missing expiration).
+		// Try loading from identity storage in case there's a fresher version.
+		if expTime != nil {
+			log.Debug("Credentials expired, trying identity storage", logKeyChainIndex, i, identityNameKey, identityName, "expiration", *expTime)
+		} else {
+			log.Debug("Credentials invalid (no expiration info), trying identity storage", logKeyChainIndex, i, identityNameKey, identityName)
+		}
+
+		identity, exists := m.identities[identityName]
+		if !exists {
+			log.Debug("Identity not in m.identities, skipping reload", logKeyChainIndex, i, identityNameKey, identityName)
+			continue
+		}
+
+		loadedCreds, loadErr := identity.LoadCredentials(context.Background())
+		if loadErr != nil || loadedCreds == nil {
+			log.Debug("Failed to reload from identity storage", logKeyChainIndex, i, identityNameKey, identityName, "error", loadErr)
+			continue
+		}
+
+		log.Debug("Reloaded credentials from identity storage", logKeyChainIndex, i, identityNameKey, identityName)
+		// Check if the reloaded credentials are valid.
+		if valid, reloadExpTime := m.isCredentialValid(identityName, loadedCreds); valid {
+			if reloadExpTime != nil {
+				log.Debug("Reloaded credentials are valid", logKeyChainIndex, i, identityNameKey, identityName, "expiration", *reloadExpTime)
+			} else {
+				log.Debug("Reloaded credentials are valid (non-AWS)", logKeyChainIndex, i, identityNameKey, identityName)
+			}
+			return i
+		}
+		log.Debug("Reloaded credentials also invalid", logKeyChainIndex, i, identityNameKey, identityName)
 	}
 	return -1 // No valid cached credentials found
 }
@@ -472,11 +606,8 @@ func (m *manager) findFirstValidCachedCredentials() int {
 // isCredentialValid checks if the cached credentials are valid and not expired.
 // Returns whether the credentials are valid and, if AWS expiration is present and valid, the parsed expiration time.
 func (m *manager) isCredentialValid(identityName string, cachedCreds types.ICredentials) (bool, *time.Time) {
-	expired, err := m.credentialStore.IsExpired(identityName)
-	if err != nil || expired {
-		return false, nil
-	}
-
+	// Check expiration from the credentials object itself, not the keyring.
+	// This allows us to validate credentials loaded from any source (keyring, files, etc.).
 	if expTime, err := cachedCreds.GetExpiration(); err == nil && expTime != nil {
 		if expTime.After(time.Now().Add(5 * time.Minute)) {
 			return true, expTime
@@ -484,7 +615,7 @@ func (m *manager) isCredentialValid(identityName string, cachedCreds types.ICred
 		// Expiration exists but is too close or already expired -> treat as invalid.
 		return false, expTime
 	}
-	// Non-expiring credentials (no expiration info).
+	// Non-expiring credentials (no expiration info) -> assume valid.
 	return true, nil
 }
 
@@ -723,265 +854,23 @@ func (m *manager) buildChainRecursive(identityName string, chain *[]string, visi
 	return fmt.Errorf("%w: identity %q has invalid via configuration", errUtils.ErrInvalidIdentityConfig, identityName)
 }
 
-// buildWhoamiInfo creates a WhoamiInfo struct from identity and credentials.
-func (m *manager) buildWhoamiInfo(identityName string, creds types.ICredentials) *types.WhoamiInfo {
-	providerName := m.getProviderForIdentity(identityName)
+// GetEnvironmentVariables returns the environment variables for an identity
+// without performing authentication or validation.
+func (m *manager) GetEnvironmentVariables(identityName string) (map[string]string, error) {
+	defer perf.Track(nil, "auth.Manager.GetEnvironmentVariables")()
 
-	info := &types.WhoamiInfo{
-		Provider:    providerName,
-		Identity:    identityName,
-		LastUpdated: time.Now(),
+	// Verify identity exists.
+	identity, exists := m.identities[identityName]
+	if !exists {
+		return nil, fmt.Errorf(errFormatWithString, errUtils.ErrIdentityNotFound, fmt.Sprintf(backtickedFmt, identityName))
 	}
 
-	// Populate high-level fields from the concrete credential type.
-	info.Credentials = creds
-	creds.BuildWhoamiInfo(info)
-	if expTime, err := creds.GetExpiration(); err == nil && expTime != nil {
-		info.Expiration = expTime
-	}
-	// Get environment variables.
-	if identity, exists := m.identities[identityName]; exists {
-		if env, err := identity.Environment(); err == nil {
-			info.Environment = env
-		}
-	}
-
-	// Store credentials in the keystore and set a reference handle.
-	// Use the identity name as the opaque handle for retrieval. Only clear
-	// in-memory credentials if storage succeeded to avoid losing access.
-	if err := m.credentialStore.Store(identityName, creds); err == nil {
-		info.CredentialsRef = identityName
-		// Clear raw credentials to avoid accidental serialization of secrets.
-		info.Credentials = nil
-	}
-
-	return info
-}
-
-// Logout removes credentials for the specified identity and its authentication chain.
-func (m *manager) Logout(ctx context.Context, identityName string) error {
-	defer perf.Track(nil, "auth.Manager.Logout")()
-
-	// Validate identity exists in configuration.
-	if _, exists := m.identities[identityName]; !exists {
-		return fmt.Errorf("%w: identity %q", errUtils.ErrIdentityNotInConfig, identityName)
-	}
-
-	// Build authentication chain to determine all credentials to remove.
-	chain, err := m.buildAuthenticationChain(identityName)
+	// Get environment variables from the identity.
+	env, err := identity.Environment()
 	if err != nil {
-		log.Debug("Failed to build authentication chain for logout", logKeyIdentity, identityName, "error", err)
-		// Continue with best-effort cleanup of just the identity.
-		chain = []string{identityName}
+		return nil, fmt.Errorf("%w: failed to get environment variables for identity %q: %w",
+			errUtils.ErrInvalidAuthConfig, identityName, err)
 	}
 
-	log.Debug("Logout authentication chain", logKeyIdentity, identityName, "chain", chain)
-
-	var errs []error
-	removedCount := 0
-	identityLogoutCalled := false
-
-	// Step 1: Delete keyring entries for each step in the chain.
-	for _, alias := range chain {
-		if err := m.credentialStore.Delete(alias); err != nil {
-			log.Debug("Failed to delete keyring entry (may not exist)", "alias", alias, "error", err)
-			errs = append(errs, fmt.Errorf("%w for %q: %w", errUtils.ErrKeyringDeletion, alias, err))
-		} else {
-			log.Debug("Deleted keyring entry", "alias", alias)
-			removedCount++
-		}
-	}
-
-	// Step 2: Call provider-specific cleanup (files, etc.) unless skipped.
-	skipProviderLogout, _ := ctx.Value(skipProviderLogoutKey).(bool)
-	if len(chain) > 0 && !skipProviderLogout {
-		providerName := chain[0]
-		if provider, exists := m.providers[providerName]; exists {
-			if err := provider.Logout(ctx); err != nil {
-				// ErrLogoutNotSupported is a successful no-op (exit 0).
-				if errors.Is(err, errUtils.ErrLogoutNotSupported) {
-					log.Debug("Provider logout not supported (no-op)", "provider", providerName)
-				} else {
-					log.Debug("Provider logout failed", "provider", providerName, "error", err)
-					errs = append(errs, fmt.Errorf("%w for %q: %w", errUtils.ErrProviderLogout, providerName, err))
-				}
-			} else {
-				log.Debug("Provider logout successful", "provider", providerName)
-			}
-		} else {
-			// Check if it's an identity (e.g., aws-user standalone).
-			if identity, exists := m.identities[providerName]; exists {
-				identityLogoutCalled = true
-				if err := identity.Logout(ctx); err != nil {
-					// ErrLogoutNotSupported is a successful no-op (exit 0).
-					if errors.Is(err, errUtils.ErrLogoutNotSupported) {
-						log.Debug("Identity logout not supported (no-op)", "identity", providerName)
-					} else {
-						log.Debug("Identity logout failed", "identity", providerName, "error", err)
-						errs = append(errs, fmt.Errorf("%w for %q: %w", errUtils.ErrIdentityLogout, providerName, err))
-					}
-				} else {
-					log.Debug("Identity logout successful", "identity", providerName)
-				}
-			}
-		}
-	}
-
-	// Step 3: Call identity-specific cleanup (only if not already called in Step 2).
-	if !identityLogoutCalled {
-		if identity, exists := m.identities[identityName]; exists {
-			if err := identity.Logout(ctx); err != nil {
-				// ErrLogoutNotSupported is a successful no-op (exit 0).
-				if errors.Is(err, errUtils.ErrLogoutNotSupported) {
-					log.Debug("Identity logout not supported (no-op)", logKeyIdentity, identityName)
-				} else {
-					log.Debug("Identity logout failed", logKeyIdentity, identityName, "error", err)
-					errs = append(errs, fmt.Errorf("%w for %q: %w", errUtils.ErrIdentityLogout, identityName, err))
-				}
-			}
-		}
-	}
-
-	log.Info("Logout completed", logKeyIdentity, identityName, "removed", removedCount, "errors", len(errs))
-
-	// Return success if at least one credential was removed, even if there were errors.
-	if removedCount > 0 && len(errs) > 0 {
-		return errors.Join(append([]error{errUtils.ErrPartialLogout}, errs...)...)
-	}
-	if len(errs) > 0 {
-		return errors.Join(append([]error{errUtils.ErrLogoutFailed}, errs...)...)
-	}
-
-	return nil
-}
-
-// resolveProviderForIdentity follows the Via chain to find the root provider for an identity.
-// Returns empty string if no provider is found or if a cycle is detected.
-func (m *manager) resolveProviderForIdentity(identityName string) string {
-	visited := make(map[string]bool)
-	current := identityName
-
-	for {
-		// Check for cycles.
-		if visited[current] {
-			log.Debug("Cycle detected while resolving provider", "identity", current)
-			return ""
-		}
-		visited[current] = true
-
-		// Get identity configuration.
-		identity, exists := m.config.Identities[current]
-		if !exists {
-			log.Debug("Missing identity reference while resolving provider", "identity", current)
-			return ""
-		}
-
-		// Check if identity has Via configuration.
-		if identity.Via == nil {
-			return ""
-		}
-
-		// Found a direct provider reference.
-		if identity.Via.Provider != "" {
-			return identity.Via.Provider
-		}
-
-		// Follow the identity chain.
-		if identity.Via.Identity != "" {
-			current = identity.Via.Identity
-			continue
-		}
-
-		// No provider or identity reference.
-		return ""
-	}
-}
-
-// LogoutProvider removes all credentials for the specified provider.
-func (m *manager) LogoutProvider(ctx context.Context, providerName string) error {
-	defer perf.Track(nil, "auth.Manager.LogoutProvider")()
-
-	// Validate provider exists in configuration.
-	if _, exists := m.providers[providerName]; !exists {
-		return fmt.Errorf("%w: provider %q", errUtils.ErrProviderNotInConfig, providerName)
-	}
-
-	log.Debug("Logout provider", "provider", providerName)
-
-	// Find all identities that use this provider (directly or transitively).
-	var identityNames []string
-	for name := range m.config.Identities {
-		if m.resolveProviderForIdentity(name) == providerName {
-			identityNames = append(identityNames, name)
-		}
-	}
-
-	if len(identityNames) == 0 {
-		log.Debug("No identities found for provider", "provider", providerName)
-	}
-
-	var errs []error
-
-	// Set context flag to skip provider.Logout during per-identity cleanup.
-	ctxWithSkip := context.WithValue(ctx, skipProviderLogoutKey, true)
-
-	// Logout each identity (skipping provider-specific cleanup).
-	for _, identityName := range identityNames {
-		if err := m.Logout(ctxWithSkip, identityName); err != nil {
-			log.Debug("Failed to logout identity", logKeyIdentity, identityName, "error", err)
-			errs = append(errs, fmt.Errorf("%w for identity %q: %w", errUtils.ErrIdentityLogout, identityName, err))
-		}
-	}
-
-	// Delete provider credentials from keyring.
-	if err := m.credentialStore.Delete(providerName); err != nil {
-		log.Debug("Failed to delete provider keyring entry", "provider", providerName, "error", err)
-		errs = append(errs, fmt.Errorf("%w for provider %q: %w", errUtils.ErrKeyringDeletion, providerName, err))
-	}
-
-	// Call provider-specific cleanup once for the entire provider.
-	if provider, exists := m.providers[providerName]; exists {
-		if err := provider.Logout(ctx); err != nil {
-			// ErrLogoutNotSupported is a successful no-op (exit 0).
-			if errors.Is(err, errUtils.ErrLogoutNotSupported) {
-				log.Debug("Provider logout not supported (no-op)", "provider", providerName)
-			} else {
-				log.Debug("Provider logout failed", "provider", providerName, "error", err)
-				errs = append(errs, fmt.Errorf("%w for %q: %w", errUtils.ErrProviderLogout, providerName, err))
-			}
-		}
-	}
-
-	log.Info("Provider logout completed", "provider", providerName, "identities", len(identityNames), "errors", len(errs))
-
-	if len(errs) > 0 {
-		return errors.Join(append([]error{errUtils.ErrLogoutFailed}, errs...)...)
-	}
-
-	return nil
-}
-
-// LogoutAll removes all cached credentials for all identities.
-func (m *manager) LogoutAll(ctx context.Context) error {
-	defer perf.Track(nil, "auth.Manager.LogoutAll")()
-
-	log.Debug("Logout all identities")
-
-	var errs []error
-
-	// Logout each identity.
-	for identityName := range m.config.Identities {
-		if err := m.Logout(ctx, identityName); err != nil {
-			log.Debug("Failed to logout identity", logKeyIdentity, identityName, "error", err)
-			errs = append(errs, fmt.Errorf("%w for identity %q: %w", errUtils.ErrIdentityLogout, identityName, err))
-		}
-	}
-
-	log.Info("Logout all completed", "identities", len(m.config.Identities), "errors", len(errs))
-
-	if len(errs) > 0 {
-		return errors.Join(append([]error{errUtils.ErrLogoutFailed}, errs...)...)
-	}
-
-	return nil
+	return env, nil
 }

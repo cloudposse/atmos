@@ -6,7 +6,6 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth/types"
-	"github.com/cloudposse/atmos/pkg/auth/utils"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -138,6 +137,9 @@ func getComponentRegionOverride(stackInfo *schema.ConfigAndStacksInfo, identityN
 // This populates ComponentEnvSection/ComponentEnvList for spawned processes.
 // The auth context is the single source of truth; this function derives from it.
 //
+// Uses PrepareEnvironment helper to ensure consistent environment setup across all commands.
+// This clears conflicting credential env vars, sets AWS files/profile/region, and disables IMDS.
+//
 // Parameters:
 //   - authContext: Runtime auth context containing AWS credentials
 //   - stackInfo: Stack configuration to populate with environment variables
@@ -152,13 +154,31 @@ func SetEnvironmentVariables(authContext *schema.AuthContext, stackInfo *schema.
 
 	awsAuth := authContext.AWS
 
-	// Derive environment variables from auth context.
-	utils.SetEnvironmentVariable(stackInfo, "AWS_SHARED_CREDENTIALS_FILE", awsAuth.CredentialsFile)
-	utils.SetEnvironmentVariable(stackInfo, "AWS_CONFIG_FILE", awsAuth.ConfigFile)
-	utils.SetEnvironmentVariable(stackInfo, "AWS_PROFILE", awsAuth.Profile)
+	// Convert existing environment section to map for PrepareEnvironment.
+	environMap := make(map[string]string)
+	if stackInfo.ComponentEnvSection != nil {
+		for k, v := range stackInfo.ComponentEnvSection {
+			if str, ok := v.(string); ok {
+				environMap[k] = str
+			}
+		}
+	}
 
-	if awsAuth.Region != "" {
-		utils.SetEnvironmentVariable(stackInfo, "AWS_REGION", awsAuth.Region)
+	// Use shared PrepareEnvironment helper to get properly configured environment.
+	// This clears conflicting credentials, sets AWS files/profile/region, and disables IMDS.
+	environMap = PrepareEnvironment(
+		environMap,
+		awsAuth.Profile,
+		awsAuth.CredentialsFile,
+		awsAuth.ConfigFile,
+		awsAuth.Region,
+	)
+
+	// Replace ComponentEnvSection with prepared environment.
+	// IMPORTANT: We must completely replace, not merge, to ensure deleted keys stay deleted.
+	stackInfo.ComponentEnvSection = make(map[string]any, len(environMap))
+	for k, v := range environMap {
+		stackInfo.ComponentEnvSection[k] = v
 	}
 
 	return nil

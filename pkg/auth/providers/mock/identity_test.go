@@ -305,3 +305,39 @@ func TestIdentity_Concurrency(t *testing.T) {
 		assert.NoError(t, err, "Concurrent authentication %d should succeed", i)
 	}
 }
+
+func TestIdentity_LoadCredentials(t *testing.T) {
+	tests := []struct {
+		name string
+	}{
+		{
+			name: "returns mock credentials",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			config := &schema.Identity{
+				Kind: "mock",
+			}
+
+			identity := NewIdentity("test-identity", config)
+			ctx := context.Background()
+
+			creds, err := identity.LoadCredentials(ctx)
+
+			require.NoError(t, err)
+			require.NotNil(t, creds)
+
+			// Verify it's mock credentials.
+			mockCreds, ok := creds.(*Credentials)
+			require.True(t, ok, "credentials should be mock Credentials type")
+			assert.Equal(t, "mock-access-key", mockCreds.AccessKeyID)
+			assert.Equal(t, "mock-secret-key", mockCreds.SecretAccessKey)
+			assert.Equal(t, "mock-session-token", mockCreds.SessionToken)
+			assert.Equal(t, "us-east-1", mockCreds.Region)
+			assert.False(t, mockCreds.Expiration.IsZero())
+			assert.True(t, mockCreds.Expiration.After(time.Now()))
+		})
+	}
+}

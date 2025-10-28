@@ -308,7 +308,7 @@ func TestSSOProvider_GetFilesDisplayPath(t *testing.T) {
 				Region:   testRegion,
 				StartURL: testStartURL,
 			},
-			expected: "~/.aws/atmos",
+			expected: "atmos/aws", // XDG path contains atmos/aws
 		},
 		{
 			name: "custom base_path",
@@ -558,7 +558,7 @@ func TestSpinnerModel_Update_KeyPress(t *testing.T) {
 	assert.True(t, updatedModel.done)
 	assert.NotNil(t, updatedModel.result)
 	assert.Error(t, updatedModel.result.err)
-	assert.Contains(t, updatedModel.result.err.Error(), "cancelled")
+	assert.Contains(t, updatedModel.result.err.Error(), "user aborted")
 	assert.True(t, cancelCalled)
 }
 
