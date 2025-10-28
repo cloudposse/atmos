@@ -119,7 +119,18 @@ func ExecuteShell(
 	if err != nil {
 		return err
 	}
-	env = append(env, fmt.Sprintf("ATMOS_SHLVL=%d", newShellLevel))
+
+	// Always start with the current process environment to ensure PATH and other
+	// system variables are available. Custom env vars passed in will override
+	// any existing values with the same key via UpdateEnvVar semantics.
+	// This matches the behavior before commit 9fd7d156a where the environment
+	// was merged rather than replaced.
+	mergedEnv := os.Environ()
+	for _, envVar := range env {
+		mergedEnv = u.UpdateEnvVar(mergedEnv, parseEnvVarKey(envVar), parseEnvVarValue(envVar))
+	}
+
+	mergedEnv = append(mergedEnv, fmt.Sprintf("ATMOS_SHLVL=%d", newShellLevel))
 
 	log.Debug("Executing", "command", command)
 
@@ -127,7 +138,23 @@ func ExecuteShell(
 		return nil
 	}
 
-	return u.ShellRunner(command, name, dir, env, os.Stdout)
+	return u.ShellRunner(command, name, dir, mergedEnv, os.Stdout)
+}
+
+// parseEnvVarKey extracts the key from an environment variable string (KEY=value).
+func parseEnvVarKey(envVar string) string {
+	if idx := strings.IndexByte(envVar, '='); idx >= 0 {
+		return envVar[:idx]
+	}
+	return envVar
+}
+
+// parseEnvVarValue extracts the value from an environment variable string (KEY=value).
+func parseEnvVarValue(envVar string) string {
+	if idx := strings.IndexByte(envVar, '='); idx >= 0 {
+		return envVar[idx+1:]
+	}
+	return ""
 }
 
 // execTerraformShellCommand executes `terraform shell` command by starting a new interactive shell
