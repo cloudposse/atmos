@@ -1275,6 +1275,12 @@ func (m *ChatModel) executeToolCalls(ctx context.Context, toolCalls []aiTypes.To
 
 // handleToolExecutionFlow executes tools, sends results back to AI, and returns the combined response.
 func (m *ChatModel) handleToolExecutionFlow(ctx context.Context, response *aiTypes.Response, messages []aiTypes.Message, availableTools []tools.Tool) tea.Msg {
+	return m.handleToolExecutionFlowWithAccumulator(ctx, response, messages, availableTools, "")
+}
+
+// handleToolExecutionFlowWithAccumulator executes tools, sends results back to AI, and returns the combined response.
+// The accumulatedContent parameter preserves intermediate AI thinking across recursive tool calls.
+func (m *ChatModel) handleToolExecutionFlowWithAccumulator(ctx context.Context, response *aiTypes.Response, messages []aiTypes.Message, availableTools []tools.Tool, accumulatedContent string) tea.Msg {
 	// Execute tools and get results.
 	toolResults := m.executeToolCalls(ctx, response.ToolCalls)
 
@@ -1356,7 +1362,13 @@ func (m *ChatModel) handleToolExecutionFlow(ctx context.Context, response *aiTyp
 	// Check if the final response wants to use more tools.
 	if finalResponse.StopReason == aiTypes.StopReasonToolUse && len(finalResponse.ToolCalls) > 0 {
 		// AI wants to use more tools after seeing the results. Execute them recursively.
-		return m.handleToolExecutionFlow(ctx, finalResponse, messages, availableTools)
+		// Accumulate current response so intermediate thinking is preserved.
+		newAccumulated := accumulatedContent
+		if newAccumulated != "" {
+			newAccumulated += "\n\n"
+		}
+		newAccumulated += resultText
+		return m.handleToolExecutionFlowWithAccumulator(ctx, finalResponse, messages, availableTools, newAccumulated)
 	}
 
 	// Check if AI expressed intent to take more action in the final response.
@@ -1380,18 +1392,32 @@ func (m *ChatModel) handleToolExecutionFlow(ctx context.Context, response *aiTyp
 		// Check if AI now uses tools.
 		if retryResponse.StopReason == aiTypes.StopReasonToolUse && len(retryResponse.ToolCalls) > 0 {
 			// Recursively handle the new tool execution.
-			return m.handleToolExecutionFlow(ctx, retryResponse, messages, availableTools)
+			// Accumulate current response so intermediate thinking is preserved.
+			newAccumulated := accumulatedContent
+			if newAccumulated != "" {
+				newAccumulated += "\n\n"
+			}
+			newAccumulated += resultText
+			return m.handleToolExecutionFlowWithAccumulator(ctx, retryResponse, messages, availableTools, newAccumulated)
 		}
 
 		// If still no tool use, combine all responses.
-		combinedResponse := resultText + "\n\n---\n\n" + finalResponse.Content + "\n\n" + retryResponse.Content
+		combinedResponse := accumulatedContent
+		if combinedResponse != "" {
+			combinedResponse += "\n\n"
+		}
+		combinedResponse += resultText + "\n\n---\n\n" + finalResponse.Content + "\n\n" + retryResponse.Content
 		return aiResponseMsg{content: combinedResponse, usage: combineUsage(finalResponse.Usage, retryResponse.Usage)}
 	}
 
-	// Combine tool execution display with final AI response.
-	combinedResponse := resultText + "\n\n---\n\n" + finalResponse.Content
+	// Combine accumulated content + tool execution display + final AI response.
+	combinedResponse := accumulatedContent
+	if combinedResponse != "" {
+		combinedResponse += "\n\n"
+	}
+	combinedResponse += resultText + "\n\n---\n\n" + finalResponse.Content
 
-	// Return the combined response (tool results + AI's final analysis).
+	// Return the combined response (accumulated + tool results + AI's final analysis).
 	return aiResponseMsg{content: combinedResponse, usage: finalResponse.Usage}
 }
 
