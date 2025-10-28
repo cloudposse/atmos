@@ -106,4 +106,11 @@ test-short-cover: deps
 	@echo "Running quick tests with coverage (skipping long-running tests)"
 	@GOCOVERDIR=coverage go test -short -cover $(TEST) $(TESTARGS) -timeout 5m
 
-.PHONY: lint lintroller gomodcheck build version build-linux build-windows build-macos deps version-linux version-windows version-macos testacc testacc-cover testacc-coverage test-short test-short-cover
+# Regenerate all mocks using go:generate directives
+generate-mocks:
+	@echo "Regenerating mocks using go:generate directives..."
+	@go generate ./pkg/auth/types/...
+	@go generate ./pkg/http/...
+	@echo "Mocks regenerated successfully"
+
+.PHONY: lint lintroller gomodcheck build version build-linux build-windows build-macos deps version-linux version-windows version-macos testacc testacc-cover testacc-coverage test-short test-short-cover generate-mocks
