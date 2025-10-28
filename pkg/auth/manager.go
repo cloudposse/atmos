@@ -34,7 +34,7 @@ const (
 )
 
 const (
-	// MinCredentialValidityBuffer is the minimum duration credentials must be valid.
+	// The minCredentialValidityBuffer is the minimum duration credentials must be valid.
 	// AWS can invalidate credentials before their stated expiration time.
 	minCredentialValidityBuffer = 15 * time.Minute
 )
@@ -763,7 +763,7 @@ func (m *manager) authenticateIdentityChain(ctx context.Context, startIndex int,
 			log.Debug("Cached credentials", "identityStep", identityStep)
 		}
 
-		log.Info("Chained identity", "from", m.getChainStepName(i-1), "to", identityStep)
+		log.Debug("Chained identity", "from", m.getChainStepName(i-1), "to", identityStep)
 	}
 
 	return currentCreds, nil
