@@ -133,10 +133,10 @@ Tests focused on individual methods in isolation, not the full end-to-end flow f
 Create a single source of truth for credential retrieval:
 
 ```go
-// retrieveCredentialWithFallback retrieves credentials from keyring first,
-// then falls back to identity storage (AWS files, etc.).
+// loadCredentialsWithFallback retrieves credentials from keyring first,
+// then falls back to identity storage (XDG directories, etc.).
 // This is the ONLY method that should interact with credential storage.
-func (m *manager) retrieveCredentialWithFallback(ctx context.Context, identityName string) (types.ICredentials, error) {
+func (m *manager) loadCredentialsWithFallback(ctx context.Context, identityName string) (types.ICredentials, error) {
     // 1. Try keyring
     creds, err := m.credentialStore.Retrieve(identityName)
     if err == nil {
@@ -169,9 +169,9 @@ func (m *manager) retrieveCredentialWithFallback(ctx context.Context, identityNa
 
 Then refactor all three paths to use this single method:
 
-1. `GetCachedCredentials` → calls `retrieveCredentialWithFallback`
-2. `findFirstValidCachedCredentials` → calls `retrieveCredentialWithFallback`
-3. `retrieveCachedCredentials` → calls `retrieveCredentialWithFallback`
+1. `GetCachedCredentials` → calls `loadCredentialsWithFallback`
+2. `findFirstValidCachedCredentials` → calls `loadCredentialsWithFallback`
+3. `getChainCredentials` (formerly `retrieveCachedCredentials`) → calls `loadCredentialsWithFallback`
 
 **Benefits:**
 - ✅ Single source of truth

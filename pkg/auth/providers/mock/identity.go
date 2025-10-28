@@ -2,6 +2,7 @@ package mock
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -9,6 +10,10 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
+
+// ErrNoStoredCredentials indicates storage is supported but currently empty.
+// This error is returned when LoadCredentials is called before authentication.
+var ErrNoStoredCredentials = errors.New("mock identity has no stored credentials")
 
 // Identity is a mock authentication identity for testing purposes only.
 // It simulates provider-agnostic credential storage behavior by tracking whether
@@ -129,22 +134,21 @@ func (i *Identity) CredentialsExist() (bool, error) {
 
 // LoadCredentials simulates loading credentials from persistent storage.
 // This method implements provider-agnostic credential loading behavior:
-// - Returns error if credentials haven't been stored yet (no authentication performed)
-// - Returns credentials if they were previously stored via PostAuthenticate
+// - Returns ErrNoStoredCredentials if credentials haven't been stored yet (no authentication performed).
+// - Returns credentials if they were previously stored via PostAuthenticate.
 //
 // This mimics real provider behavior across different storage mechanisms:
-// - AWS: Loading from ~/.aws/credentials after SSO login.
+// - AWS: Loading from XDG directories (~/.config/atmos/aws/{provider}/) after SSO login.
 // - GitHub: Loading token from environment variable or file.
-// - Azure: Loading from ~/.azure/ after authentication.
-// - Google Cloud: Loading from ~/.config/gcloud/ after auth.
+// - Azure: Loading from XDG directories after authentication.
+// - Google Cloud: Loading from XDG directories after auth.
 func (i *Identity) LoadCredentials(ctx context.Context) (types.ICredentials, error) {
 	defer perf.Track(nil, "mock.Identity.LoadCredentials")()
 
 	// Check if credentials have been stored (via PostAuthenticate).
 	if !i.hasStoredCredentials {
-		// Simulate the "no credentials on disk" state before first authentication.
-		// Note: We use fmt.Errorf instead of a static error because this is test-only mock code.
-		return nil, fmt.Errorf("mock identity %q has no stored credentials - use 'atmos auth login' to authenticate", i.name) //nolint:err113
+		// Return a typed error to indicate credentials must be obtained via authentication.
+		return nil, fmt.Errorf("%w: %q — use 'atmos auth login' to authenticate", ErrNoStoredCredentials, i.name)
 	}
 
 	// Use a fixed timestamp far in the future for deterministic testing and snapshot stability.

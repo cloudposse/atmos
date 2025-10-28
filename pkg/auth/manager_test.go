@@ -530,8 +530,8 @@ func TestManager_retrieveCachedCredentials_and_determineStart(t *testing.T) {
 	assert.Error(t, err)
 }
 
-// TestManager_retrieveCachedCredentials_TerraformFlow_Regression reproduces the original bug
-// where terraform commands failed to use file-based credentials even though auth whoami worked.
+// TestManager_retrieveCachedCredentials_TerraformFlow_Regression reproduces the original bug.
+// Where terraform commands failed to use file-based credentials even though auth whoami worked.
 // This test specifically covers the code path used during terraform execution (via fetchCachedCredentials).
 // Before the fix, this test would fail because getChainCredentials didn't fall back to identity storage.
 // After the fix, this test passes because getChainCredentials now has the same fallback logic.
