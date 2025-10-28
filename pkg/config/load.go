@@ -99,6 +99,7 @@ func setEnv(v *viper.Viper) {
 	bindEnv(v, "settings.github_token", "GITHUB_TOKEN")
 	bindEnv(v, "settings.inject_github_token", "ATMOS_INJECT_GITHUB_TOKEN")
 	bindEnv(v, "settings.atmos_github_token", "ATMOS_GITHUB_TOKEN")
+	bindEnv(v, "settings.github_username", "GITHUB_USERNAME")
 
 	bindEnv(v, "settings.bitbucket_token", "BITBUCKET_TOKEN")
 	bindEnv(v, "settings.atmos_bitbucket_token", "ATMOS_BITBUCKET_TOKEN")

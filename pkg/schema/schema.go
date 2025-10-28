@@ -257,6 +257,7 @@ type AtmosSettings struct {
 	InjectGithubToken    bool             `yaml:"inject_github_token,omitempty" mapstructure:"inject_github_token"`
 	GithubToken          string           `yaml:"github_token,omitempty" mapstructure:"github_token"`
 	AtmosGithubToken     string           `yaml:"atmos_github_token,omitempty" mapstructure:"atmos_github_token"`
+	GithubUsername       string           `yaml:"github_username,omitempty" mapstructure:"github_username"`
 	InjectBitbucketToken bool             `yaml:"inject_bitbucket_token,omitempty" mapstructure:"inject_bitbucket_token"`
 	BitbucketToken       string           `yaml:"bitbucket_token,omitempty" mapstructure:"bitbucket_token"`
 	AtmosBitbucketToken  string           `yaml:"atmos_bitbucket_token,omitempty" mapstructure:"atmos_bitbucket_token"`

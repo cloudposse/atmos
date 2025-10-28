@@ -393,6 +393,13 @@ func sanitizeOutput(output string) (string, error) {
 	debugTimestampRegex := regexp.MustCompile(`expiration="[^"]+\s+[+-]\d{4}\s+[A-Z]{3,4}\s+m=[+-][\d.]+`)
 	result = debugTimestampRegex.ReplaceAllString(result, `expiration="2025-01-01 12:00:00.000000 +0000 UTC m=+3600.000000000`)
 
+	// 11. Normalize external absolute paths to avoid environment-specific paths in snapshots.
+	// Replace common absolute path prefixes with generic placeholders.
+	// This handles paths outside the repo (e.g., /Users/username/other-projects/).
+	// Match Unix-style absolute paths (/Users/, /home/, /opt/, etc.) and Windows paths (C:\Users\, etc.).
+	externalPathRegex := regexp.MustCompile(`(/Users/[^/]+/[^/]+/[^/]+/[^/\s":]+|/home/[^/]+/[^/]+/[^/]+/[^/\s":]+|C:\\Users\\[^\\]+\\[^\\]+\\[^\\]+\\[^\\\s":]+)`)
+	result = externalPathRegex.ReplaceAllString(result, "/absolute/path/to/external")
+
 	return result, nil
 }
 

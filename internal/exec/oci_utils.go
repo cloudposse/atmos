@@ -110,28 +110,7 @@ func pullImage(atmosConfig *schema.AtmosConfiguration, ref name.Reference) (*rem
 
 	// If no user credentials, try environment variable token injection for ghcr.io
 	if authMethod == nil && strings.EqualFold(registry, "ghcr.io") {
-		// Try ATMOS_GITHUB_TOKEN first, fall back to GITHUB_TOKEN
-		atmosToken := atmosConfig.Settings.AtmosGithubToken
-		githubToken := atmosConfig.Settings.GithubToken
-
-		var token string
-		var tokenSource string
-
-		if atmosToken != "" {
-			token = atmosToken
-			tokenSource = "ATMOS_GITHUB_TOKEN"
-		} else if githubToken != "" {
-			token = githubToken
-			tokenSource = "GITHUB_TOKEN"
-		}
-
-		if token != "" {
-			authMethod = &authn.Basic{
-				Username: "oauth2",
-				Password: token,
-			}
-			authSource = fmt.Sprintf("environment variable (%s)", tokenSource)
-		}
+		authMethod, authSource = getGHCRAuth(atmosConfig)
 	}
 
 	// Fall back to anonymous authentication if no credentials found
@@ -149,6 +128,45 @@ func pullImage(atmosConfig *schema.AtmosConfiguration, ref name.Reference) (*rem
 	}
 
 	return descriptor, nil
+}
+
+// getGHCRAuth returns authentication credentials for GitHub Container Registry (ghcr.io).
+// It tries ATMOS_GITHUB_TOKEN first, then falls back to GITHUB_TOKEN.
+// For the username, it uses github_username if configured, otherwise uses the token itself (GHCR accepts this).
+func getGHCRAuth(atmosConfig *schema.AtmosConfiguration) (authn.Authenticator, string) {
+	atmosToken := atmosConfig.Settings.AtmosGithubToken
+	githubToken := atmosConfig.Settings.GithubToken
+	githubUsername := atmosConfig.Settings.GithubUsername
+
+	var token string
+	var tokenSource string
+
+	if atmosToken != "" {
+		token = atmosToken
+		tokenSource = "ATMOS_GITHUB_TOKEN"
+	} else if githubToken != "" {
+		token = githubToken
+		tokenSource = "GITHUB_TOKEN"
+	}
+
+	if token == "" {
+		return nil, ""
+	}
+
+	// For GitHub Container Registry, use GitHub username if configured,
+	// otherwise use the token itself as username (GHCR accepts this).
+	username := githubUsername
+	if username == "" {
+		username = token
+	}
+
+	authMethod := &authn.Basic{
+		Username: username,
+		Password: token,
+	}
+	authSource := fmt.Sprintf("environment variable (%s)", tokenSource)
+
+	return authMethod, authSource
 }
 
 // processLayer processes a single OCI layer and extracts its contents to the specified destination directory.
