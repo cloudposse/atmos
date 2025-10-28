@@ -74,7 +74,11 @@ func terraformRun(cmd *cobra.Command, actualCmd *cobra.Command, args []string) e
 	identityFlag, err := flags.GetString("identity")
 	errUtils.CheckErrorPrintAndExit(err, "", "")
 
-	info.Identity = identityFlag
+	// Only override Identity if the flag was explicitly set (not empty).
+	// This preserves the ATMOS_IDENTITY environment variable set in ProcessCommandLineArgs.
+	if identityFlag != "" {
+		info.Identity = identityFlag
+	}
 	// Check Terraform Single-Component and Multi-Component flags
 	err = checkTerraformFlags(&info)
 	errUtils.CheckErrorPrintAndExit(err, "", "")
