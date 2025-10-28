@@ -29,6 +29,14 @@ const (
 	logKeyProfile  = "profile"
 )
 
+// maskAccessKey returns the first 4 characters of an access key for logging.
+func maskAccessKey(accessKey string) string {
+	if len(accessKey) > 4 {
+		return accessKey[:4] + "..."
+	}
+	return accessKey
+}
+
 var (
 	ErrGetHomeDir                    = errors.New("failed to get home directory")
 	ErrCreateCredentialsFile         = errors.New("failed to create credentials file")
@@ -174,9 +182,18 @@ func (m *AWSFileManager) WriteCredentials(providerName, identityName string, cre
 	section.Key("aws_secret_access_key").SetValue(creds.SecretAccessKey)
 	if creds.SessionToken != "" {
 		section.Key("aws_session_token").SetValue(creds.SessionToken)
+		// Debug: Log credential details (masked).
+		log.Debug("Writing credentials to file",
+			"profile", identityName,
+			"access_key_prefix", maskAccessKey(creds.AccessKeyID),
+			"has_session_token", true,
+			"expiration", creds.Expiration)
 	} else {
 		// Remove session token if not present.
 		section.DeleteKey("aws_session_token")
+		log.Debug("Writing credentials to file (no session token)",
+			"profile", identityName,
+			"access_key_prefix", maskAccessKey(creds.AccessKeyID))
 	}
 
 	// Save file with proper permissions.
