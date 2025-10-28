@@ -1,4 +1,4 @@
-base_path: .
+base_path: ./
 components:
   terraform:
     base_path: components/terraform
@@ -7,7 +7,7 @@ components:
     deploy_run_init: true
     init_run_reconfigure: true
     auto_generate_backend_file: true
-    command: tofu
+    command: terraform
     shell:
       prompt: ""
     init:
@@ -17,7 +17,7 @@ components:
   helmfile:
     base_path: components/helmfile
     use_eks: true
-    kubeconfig_path: /conf/.kube/
+    kubeconfig_path: /dev/shm
     helm_aws_profile_pattern: '{namespace}-{tenant}-gbl-{stage}-helm'
     cluster_name_pattern: '{namespace}-{tenant}-{environment}-{stage}-eks-cluster'
     command: ""
@@ -27,181 +27,27 @@ components:
 stacks:
   base_path: stacks
   included_paths:
-    - orgs/**/*
+    - deploy/**/*
   excluded_paths:
     - '**/_defaults.yaml'
-    - workflows/**/*
-  name_pattern: '{tenant}-{environment}-{stage}'
+  name_pattern: '{dev}'
   name_template: ""
-workflows:
-  base_path: stacks/workflows
-  list:
-    format: ""
-    columns: []
 logs:
   file: /dev/stderr
   level: Debug
 commands:
-  - name: infracost
-    description: Runs infracost on existing plans
+  - name: test
+    description: Run all tests with custom command
     env: []
     arguments: []
     flags: []
     component_config:
       component: ""
       stack: ""
-    steps: []
-    commands:
-      - name: plan
-        description: This command runs infracost on a planfile
-        env:
-          - key: ATMOS_COMPONENT
-            value: '{{ .Arguments.component }}'
-            valueCommand: ""
-          - key: ATMOS_STACK
-            value: '{{ .Flags.stack }}'
-            valueCommand: ""
-        arguments:
-          - name: component
-            description: Name of the component
-            required: false
-            default: ""
-        flags:
-          - name: stack
-            shorthand: s
-            type: ""
-            description: Name of the stack
-            usage: ""
-            required: true
-        component_config:
-          component: ""
-          stack: ""
-        steps:
-          - atmos-infracost $ATMOS_COMPONENT $ATMOS_STACK
-        commands: []
-        verbose: false
+    steps:
+      - atmos describe config
+    commands: []
     verbose: false
-  - name: ecs
-    description: command related to ECS clusters
-    env: []
-    arguments: []
-    flags: []
-    component_config:
-      component: ""
-      stack: ""
-    steps: []
-    commands:
-      - name: up
-        description: It stands up the ECS cluster for testing.
-        env: []
-        arguments: []
-        flags: []
-        component_config:
-          component: ""
-          stack: ""
-        steps:
-          - |
-            atmos terraform deploy vpc -s plat-ue2-sandbox -var enabled=true
-            atmos terraform deploy ecs/cluster -s plat-ue2-sandbox -var enabled=true
-            atmos terraform deploy ecs-service/example-app-on-ecs -s plat-ue2-sandbox -var enabled=true
-        commands: []
-        verbose: false
-      - name: down
-        description: It tears down the ECS cluster for testing.
-        env: []
-        arguments: []
-        flags: []
-        component_config:
-          component: ""
-          stack: ""
-        steps:
-          - |
-            atmos terraform destroy ecs-service/example-app-on-ecs -s plat-ue2-sandbox -auto-approve -var enabled=true
-            atmos terraform destroy ecs/cluster -s plat-ue2-sandbox -auto-approve -var enabled=true
-            atmos terraform destroy vpc -s plat-ue2-sandbox -auto-approve -var enabled=true
-        commands: []
-        verbose: false
-      - name: reset
-        description: It tears down the ECS App service and mirror info
-        env: []
-        arguments: []
-        flags: []
-        component_config:
-          component: ""
-          stack: ""
-        steps:
-          - |
-            atmos terraform destroy ecs-service/example-app-on-ecs -s plat-ue2-sandbox -auto-approve -var enabled=true -auto-approve
-            atmos terraform destroy ecs-service/example-app-on-ecs/qa1 -s plat-ue2-sandbox -auto-approve -var enabled=true -auto-approve
-            atmos terraform destroy ecs-service/example-app-on-ecs/qa2 -s plat-ue2-sandbox -auto-approve -var enabled=true -auto-approve
-            AWS_PROFILE=cplive-plat-gbl-sandbox-admin aws s3 rm s3://cplive-plat-ue2-sandbox-ecs-tasks-mirror/cplive-plat-ue2-sandbox-ecs-platform/ --recursive
-        commands: []
-        verbose: false
-    verbose: false
-  - name: eks
-    description: command related to EKS clusters
-    env: []
-    arguments: []
-    flags: []
-    component_config:
-      component: ""
-      stack: ""
-    steps: []
-    commands:
-      - name: addons
-        description: List available addons and their versions
-        env: []
-        arguments: []
-        flags:
-          - name: stack
-            shorthand: s
-            type: ""
-            description: Name of the stack
-            usage: ""
-            required: false
-        component_config:
-          component: '{{ index .Arguments "component" | default "eks/cluster" }}'
-          stack: '{{ index .Flags "stack" | default "core-ue2-auto" }}'
-        steps:
-          - "echo \"Listing available addons versions for {{ .ComponentConfig.component }} in {{ .Flags.stack | default .ComponentConfig.workspace }}\"/nEKS_K8S_VERSION={{ .ComponentConfig.vars.cluster_kubernetes_version }}/n{{ range $name, $details := .ComponentConfig.vars.addons }}/n  ADD_ON={{ $name }}/n  echo \"${ADD_ON}:\"/n  aws eks describe-addon-versions --kubernetes-version $EKS_K8S_VERSION \\/n    --addon-name $ADD_ON --output json --query 'addons[].addonVersions[]' | \\/n    jq -r  '[(.[0] | .addonVersion), (.[] | select(.compatibilities[].defaultVersion == true) | .addonVersion)] /n      | \"  Latest:  \\(.[0])\/n  Default: \\(.[1])\/n\/n\"'/n{{ end }}/n"
-        commands: []
-        verbose: false
-    verbose: false
-aliases:
-  tofu: terraform
-integrations:
-  github:
-    gitops:
-      artifact-storage:
-        bucket: cplive-core-ue2-auto-gitops-plan-storage
-        region: us-east-2
-        role: arn:aws:iam::252494810635:role/cplive-core-ue2-auto-gha-iam-gitops
-        table: cplive-core-ue2-auto-gitops-plan-storage
-      infracost-enabled: false
-      matrix:
-        group-by: .stack_slug | split("-") | [.[0], .[2]] | join("-")
-        sort-by: .stack_slug
-      opentofu-version: 1.7.7
-      role:
-        apply: arn:aws:iam::555042905974:role/cplive-core-gbl-identity-gitops
-        plan: arn:aws:iam::555042905974:role/cplive-core-gbl-identity-planners
-      terraform-version: 1.5.7
-schemas:
-  cue:
-    base_path: stacks/schemas/cue
-  jsonschema:
-    base_path: stacks/schemas/jsonschema
-  opa:
-    base_path: stacks/schemas/opa
-templates:
-  settings:
-    enabled: true
-    sprig:
-      enabled: true
-    gomplate:
-      enabled: true
-      timeout: 0
-      datasources: {}
 settings:
   list_merge_strategy: ""
   terminal:
@@ -224,21 +70,21 @@ settings:
     base_url: https://atmos-pro.com
     endpoint: api/v1
   telemetry:
+    enabled: true
     endpoint: https://us.i.posthog.com
     token: phc_TEST_TOKEN_PLACEHOLDER
     logging: false
 initialized: true
-stacksBaseAbsolutePath: /Users/erik/Dev/cloudposse/infra/infra-live/stacks
+stacksBaseAbsolutePath: /absolute/path/to/repo/tests/fixtures/scenarios/atmos-configuration/stacks
 includeStackAbsolutePaths:
-  - /Users/erik/Dev/cloudposse/infra/infra-live/stacks/orgs/**/*
+  - /absolute/path/to/repo/tests/fixtures/scenarios/atmos-configuration/stacks/deploy/**/*
 excludeStackAbsolutePaths:
-  - /Users/erik/Dev/cloudposse/infra/infra-live/stacks/**/_defaults.yaml
-  - /Users/erik/Dev/cloudposse/infra/infra-live/stacks/workflows/**/*
-terraformDirAbsolutePath: /Users/erik/Dev/cloudposse/infra/infra-live/components/terraform
-helmfileDirAbsolutePath: /Users/erik/Dev/cloudposse/infra/infra-live/components/helmfile
-packerDirAbsolutePath: /Users/erik/Dev/cloudposse/infra/infra-live
+  - /absolute/path/to/repo/tests/fixtures/scenarios/atmos-configuration/stacks/**/_defaults.yaml
+terraformDirAbsolutePath: /absolute/path/to/repo/tests/fixtures/scenarios/atmos-configuration/components/terraform
+helmfileDirAbsolutePath: /absolute/path/to/repo/tests/fixtures/scenarios/atmos-configuration/components/helmfile
+packerDirAbsolutePath: /absolute/path/to/repo/tests/fixtures/scenarios/atmos-configuration
 default: false
-cli_config_path: /Users/erik/Dev/cloudposse/infra/infra-live
+cli_config_path: /absolute/path/to/repo/tests/fixtures/scenarios/atmos-configuration
 import: []
 docs:
   max-width: 0
@@ -246,130 +92,4 @@ docs:
   generate:
     readme:
       output: ./README.md
-auth:
-  logs:
-    file: ""
-    level: Debug
-  providers:
-    cplive-saml:
-      kind: aws/saml
-      url: https://accounts.google.com/o/saml2/initsso?idpid=C01yjz1jl&spid=1081421647897&forceauthn=false
-      region: us-east-2
-    cplive-sso:
-      kind: aws/iam-identity-center
-      start_url: https://cplive.awsapps.com/start/
-      region: us-east-2
-  identities:
-    core-analytics/admin:
-      kind: aws/assume-role
-      via:
-        identity: core-identity/managers-team-access
-      principal:
-        assume_role: arn:aws:iam::372792920107:role/cplive-core-gbl-analytics-admin
-    core-artifacts/admin:
-      kind: aws/assume-role
-      via:
-        identity: core-identity/managers-team-access
-      principal:
-        assume_role: arn:aws:iam::463440035974:role/cplive-core-gbl-artifacts-admin
-    core-audit/admin:
-      kind: aws/assume-role
-      via:
-        identity: core-identity/managers-team-access
-      principal:
-        assume_role: arn:aws:iam::969090876065:role/cplive-core-gbl-audit-admin
-    core-auto/admin:
-      kind: aws/assume-role
-      via:
-        identity: core-identity/managers-team-access
-      principal:
-        assume_role: arn:aws:iam::252494810635:role/cplive-core-gbl-auto-admin
-    core-corp/admin:
-      kind: aws/assume-role
-      via:
-        identity: core-identity/managers-team-access
-      principal:
-        assume_role: arn:aws:iam::092446917473:role/cplive-core-gbl-corp-admin
-    core-dns/admin:
-      kind: aws/assume-role
-      via:
-        identity: core-identity/managers-team-access
-      principal:
-        assume_role: arn:aws:iam::970377366817:role/cplive-core-gbl-dns-admin
-    core-identity/admin:
-      kind: aws/assume-role
-      via:
-        identity: core-identity/managers-team-access
-      principal:
-        assume_role: arn:aws:iam::555042905974:role/cplive-core-gbl-identity-admin
-    core-identity/managers:
-      kind: aws/assume-role
-      via:
-        provider: cplive-saml
-      principal:
-        assume_role: arn:aws:iam::555042905974:role/cplive-core-gbl-identity-managers
-    core-identity/managers-team-access:
-      kind: aws/permission-set
-      via:
-        provider: cplive-sso
-      principal:
-        account:
-          name: core-identity
-        name: IdentityManagersTeamAccess
-    core-marketplace/admin:
-      kind: aws/assume-role
-      via:
-        identity: core-identity/managers-team-access
-      principal:
-        assume_role: arn:aws:iam::978188692326:role/cplive-core-gbl-marketplace-admin
-    core-network/admin:
-      kind: aws/assume-role
-      via:
-        identity: core-identity/managers-team-access
-      principal:
-        assume_role: arn:aws:iam::167168760541:role/cplive-core-gbl-network-admin
-    core-public/admin:
-      kind: aws/assume-role
-      via:
-        identity: core-identity/managers-team-access
-      principal:
-        assume_role: arn:aws:iam::847349463865:role/cplive-core-gbl-public-admin
-    core-root/admin:
-      kind: aws/assume-role
-      via:
-        identity: core-identity/managers-team-access
-      principal:
-        assume_role: arn:aws:iam::828744362454:role/cplive-core-gbl-root-admin
-    core-security/admin:
-      kind: aws/assume-role
-      via:
-        identity: core-identity/managers-team-access
-      principal:
-        assume_role: arn:aws:iam::940613624647:role/cplive-core-gbl-security-admin
-    cplive/superuser:
-      kind: aws/user
-    plat-dev/admin:
-      kind: aws/assume-role
-      via:
-        identity: core-identity/managers-team-access
-      principal:
-        assume_role: arn:aws:iam::068007702576:role/cplive-plat-gbl-dev-admin
-    plat-prod/admin:
-      kind: aws/assume-role
-      via:
-        identity: core-identity/managers-team-access
-      principal:
-        assume_role: arn:aws:iam::557075604627:role/cplive-plat-gbl-prod-admin
-    plat-sandbox/admin:
-      kind: aws/assume-role
-      via:
-        identity: core-identity/managers-team-access
-      principal:
-        assume_role: arn:aws:iam::539916835077:role/cplive-plat-gbl-sandbox-admin
-    plat-staging/admin:
-      kind: aws/assume-role
-      via:
-        identity: core-identity/managers-team-access
-      principal:
-        assume_role: arn:aws:iam::675539733138:role/cplive-plat-gbl-staging-admin
 

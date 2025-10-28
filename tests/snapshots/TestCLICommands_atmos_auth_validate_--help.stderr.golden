@@ -1,2 +1,0 @@
-DEBU Set logs-level=debug logs-file=/dev/stderr
-DEBU Telemetry event enqueued
