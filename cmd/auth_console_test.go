@@ -585,6 +585,10 @@ func (m *mockAuthManagerForProvider) GetProviderKindForIdentity(identityName str
 	return m.providerKind, nil
 }
 
+func (m *mockAuthManagerForProvider) GetCachedCredentials(ctx context.Context, identityName string) (*types.WhoamiInfo, error) {
+	return nil, errors.New("not implemented")
+}
+
 func (m *mockAuthManagerForProvider) Authenticate(ctx context.Context, identityName string) (*types.WhoamiInfo, error) {
 	return nil, errors.New("not implemented")
 }
@@ -649,6 +653,10 @@ func (m *mockAuthManagerForProvider) LogoutAll(ctx context.Context) error {
 	return errors.New("not implemented")
 }
 
+func (m *mockAuthManagerForProvider) GetEnvironmentVariables(identityName string) (map[string]string, error) {
+	return nil, errors.New("not implemented")
+}
+
 // mockAuthManagerForIdentity implements minimal AuthManager for testing resolveIdentityName.
 type mockAuthManagerForIdentity struct {
 	defaultIdentity string
@@ -657,6 +665,10 @@ type mockAuthManagerForIdentity struct {
 
 func (m *mockAuthManagerForIdentity) GetProviderKindForIdentity(identityName string) (string, error) {
 	return "", errors.New("not implemented")
+}
+
+func (m *mockAuthManagerForIdentity) GetCachedCredentials(ctx context.Context, identityName string) (*types.WhoamiInfo, error) {
+	return nil, errors.New("not implemented")
 }
 
 func (m *mockAuthManagerForIdentity) Authenticate(ctx context.Context, identityName string) (*types.WhoamiInfo, error) {
@@ -724,6 +736,10 @@ func (m *mockAuthManagerForIdentity) LogoutProvider(ctx context.Context, provide
 
 func (m *mockAuthManagerForIdentity) LogoutAll(ctx context.Context) error {
 	return errors.New("not implemented")
+}
+
+func (m *mockAuthManagerForIdentity) GetEnvironmentVariables(identityName string) (map[string]string, error) {
+	return nil, errors.New("not implemented")
 }
 
 func TestResolveConsoleDuration(t *testing.T) {

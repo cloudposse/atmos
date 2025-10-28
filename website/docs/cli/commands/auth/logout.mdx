@@ -68,7 +68,7 @@ Removing credentials...
   ✓ Keyring: aws-sso
   ✓ Keyring: dev-org-admin
   ✓ Keyring: dev-admin
-  ✓ Files: ~/.aws/atmos/aws-sso/
+  ✓ Files: ~/.config/atmos/aws/aws-sso/ (XDG-compliant)
 
 Successfully logged out from 3 identities
 
@@ -95,7 +95,7 @@ Removing all credentials for provider...
   ✓ Keyring: dev-org-admin (via aws-sso)
   ✓ Keyring: dev-admin (via aws-sso)
   ✓ Keyring: prod-admin (via aws-sso)
-  ✓ Files: ~/.aws/atmos/aws-sso/
+  ✓ Files: ~/.config/atmos/aws/aws-sso/ (XDG-compliant)
 
 Successfully logged out from 4 identities
 ```
@@ -132,8 +132,8 @@ Would remove from identity: dev-admin
   • Keyring: aws-sso
   • Keyring: dev-org-admin
   • Keyring: dev-admin
-  • Files: ~/.aws/atmos/aws-sso/credentials
-  • Files: ~/.aws/atmos/aws-sso/config
+  • Files: ~/.config/atmos/aws/aws-sso/credentials
+  • Files: ~/.config/atmos/aws/aws-sso/config
 
 3 identities would be logged out
 ```
@@ -172,7 +172,7 @@ Provider → Identity 1 → Identity 2 → Target Identity
 1. Removes keyring entry for `aws-sso` (provider credentials)
 2. Removes keyring entry for `dev-org-admin` (intermediate identity)
 3. Removes keyring entry for `dev-admin` (target identity)
-4. Removes AWS credential files in `~/.aws/atmos/aws-sso/`
+4. Removes AWS credential files in `~/.config/atmos/aws/aws-sso/` (XDG-compliant path)
 
 ### Credential Storage Locations
 
@@ -195,7 +195,7 @@ Some providers (like AWS) also write credential files for compatibility with oth
 - **AWS credentials**: `<base_path>/<provider>/credentials`
 - **AWS config**: `<base_path>/<provider>/config`
 
-The default base path is `~/.aws/atmos`, but this can be customized (see [Custom File Paths](#custom-file-paths)).
+The default base path follows XDG Base Directory Specification (`~/.config/atmos/aws/` on both Linux and macOS), but this can be customized (see [Custom File Paths](#custom-file-paths)).
 
 The logout command removes both keyring entries and file storage.
 
@@ -216,7 +216,7 @@ Building authentication chain...
 Removing credentials...
   ✓ Keyring: aws-sso
   ✗ Keyring: dev-admin (not found - already logged out)
-  ✓ Files: ~/.aws/atmos/aws-sso/
+  ✓ Files: ~/.config/atmos/aws/aws-sso/ (XDG-compliant)
 
 Logged out with warnings (2/3 successful)
 
@@ -250,8 +250,8 @@ To completely end your session and fully logout:
 Logout removes:
 
 - ✅ Credentials stored in system keyring
-- ✅ AWS credential files (`~/.aws/atmos/<provider>/credentials`)
-- ✅ AWS config files (`~/.aws/atmos/<provider>/config`)
+- ✅ AWS credential files (XDG-compliant: `~/.config/atmos/aws/<provider>/credentials` on Linux)
+- ✅ AWS config files (XDG-compliant: `~/.config/atmos/aws/<provider>/config` on Linux)
 - ✅ Empty provider directories
 
 Logout does NOT remove:
@@ -313,13 +313,17 @@ Error: failed to delete credentials from keyring: access denied
 ### Files Not Removed
 
 ```
-✗ Files: ~/.aws/atmos/aws-sso/ (permission denied)
+✗ Files: ~/.config/atmos/aws/aws-sso/ (permission denied)
 ```
 
-**Solution**: Ensure you have write permissions to the `~/.aws/atmos/` directory. Check file ownership and permissions:
+**Solution**: Ensure you have write permissions to the Atmos config directory. Check file ownership and permissions:
 
 ```shell
-ls -la ~/.aws/atmos/
+# On Linux:
+ls -la ~/.config/atmos/
+
+# On macOS:
+ls -la ~/Library/Application\ Support/atmos/
 ```
 
 ## Related Commands
@@ -394,7 +398,7 @@ auth:
 The file path is resolved using this precedence order:
 
 1. **Provider configuration** (`spec.files.base_path` in `atmos.yaml`)
-2. **Default** (`~/.aws/atmos`)
+2. **Default** (XDG-compliant: `~/.config/atmos/aws/` on both Linux and macOS)
 
 #### Path Expansion
 

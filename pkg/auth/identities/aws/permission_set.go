@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
+	"strings"
 	"time"
 
 	awssdk "github.com/aws/aws-sdk-go-v2/aws"
@@ -163,6 +165,38 @@ func (i *permissionSetIdentity) Environment() (map[string]string, error) {
 	return env, nil
 }
 
+// PrepareEnvironment prepares environment variables for external processes.
+// For AWS permission set identities, we use the shared AWS PrepareEnvironment helper
+// which configures credential files, profile, region, and disables IMDS fallback.
+func (i *permissionSetIdentity) PrepareEnvironment(ctx context.Context, environ map[string]string) (map[string]string, error) {
+	defer perf.Track(nil, "aws.permissionSetIdentity.PrepareEnvironment")()
+
+	// Get provider name and construct file paths.
+	providerName, err := i.GetProviderName()
+	if err != nil {
+		return environ, fmt.Errorf("failed to get provider name: %w", err)
+	}
+
+	awsFileManager, err := awsCloud.NewAWSFileManager("")
+	if err != nil {
+		return environ, fmt.Errorf("failed to create AWS file manager: %w", err)
+	}
+
+	credentialsFile := awsFileManager.GetCredentialsPath(providerName)
+	configFile := awsFileManager.GetConfigPath(providerName)
+
+	// Get region from identity config if available.
+	region := ""
+	if i.config.Principal != nil {
+		if r, ok := i.config.Principal["region"].(string); ok {
+			region = r
+		}
+	}
+
+	// Use shared AWS environment preparation helper.
+	return awsCloud.PrepareEnvironment(environ, i.name, credentialsFile, configFile, region), nil
+}
+
 // GetProviderName extracts the provider name from the identity configuration.
 func (i *permissionSetIdentity) GetProviderName() (string, error) {
 	if i.config.Via != nil && i.config.Via.Provider != "" {
@@ -287,6 +321,66 @@ func (i *permissionSetIdentity) buildCredsFromRole(resp *sso.GetRoleCredentialsO
 		Region:          region,
 		Expiration:      expiration,
 	}, nil
+}
+
+// CredentialsExist checks if credentials exist for this identity.
+func (i *permissionSetIdentity) CredentialsExist() (bool, error) {
+	defer perf.Track(nil, "aws.permissionSetIdentity.CredentialsExist")()
+
+	providerName, err := i.GetProviderName()
+	if err != nil {
+		return false, err
+	}
+
+	mgr, err := awsCloud.NewAWSFileManager("")
+	if err != nil {
+		return false, err
+	}
+
+	credPath := mgr.GetCredentialsPath(providerName)
+
+	// Load and parse the credentials file to verify the identity section exists.
+	cfg, err := awsCloud.LoadINIFile(credPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return false, nil
+		}
+		return false, fmt.Errorf("load credentials file: %w", err)
+	}
+
+	// Check if this identity's section exists in the credentials file.
+	sec, err := cfg.GetSection(i.name)
+	if err != nil {
+		// Section doesn't exist - credentials don't exist for this identity.
+		return false, nil
+	}
+
+	// Verify the section has actual credential keys (not just an empty section).
+	if strings.TrimSpace(sec.Key("aws_access_key_id").String()) == "" {
+		return false, nil
+	}
+
+	return true, nil
+}
+
+// LoadCredentials loads AWS credentials from files using environment variables.
+// This is used with noop keyring to enable credential validation in whoami.
+func (i *permissionSetIdentity) LoadCredentials(ctx context.Context) (types.ICredentials, error) {
+	defer perf.Track(nil, "aws.permissionSetIdentity.LoadCredentials")()
+
+	// Get environment variables that specify where credentials are stored.
+	env, err := i.Environment()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get environment variables: %w", err)
+	}
+
+	// Load credentials from files using AWS SDK.
+	creds, err := loadAWSCredentialsFromEnvironment(ctx, env)
+	if err != nil {
+		return nil, err
+	}
+
+	return creds, nil
 }
 
 // Logout removes identity-specific credential storage.
