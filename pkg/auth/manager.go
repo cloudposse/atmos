@@ -433,8 +433,8 @@ func (m *manager) GetFilesDisplayPath(providerName string) string {
 	// Get provider instance.
 	provider, exists := m.providers[providerName]
 	if !exists {
-		// Default path if provider not found.
-		return "~/.aws/atmos"
+		// Default path if provider not found (XDG base directory).
+		return "~/.config/atmos"
 	}
 
 	// Delegate to provider to get display path.
@@ -517,8 +517,8 @@ func (m *manager) findFirstValidCachedCredentials() int {
 			if expTime != nil {
 				log.Debug("Found valid cached credentials", logKeyChainIndex, i, identityNameKey, identityName, "expiration", *expTime)
 			} else {
-				// Non-AWS credentials or no expiration info, assume valid.
-				log.Debug("Found valid cached credentials (non-AWS)", logKeyChainIndex, i, identityNameKey, identityName)
+				// Credentials without expiration (API keys, long-lived tokens, etc.).
+				log.Debug("Found valid cached credentials", logKeyChainIndex, i, identityNameKey, identityName, "expiration", "none")
 			}
 			return i
 		}
@@ -527,7 +527,8 @@ func (m *manager) findFirstValidCachedCredentials() int {
 		if expTime != nil {
 			log.Debug("Credentials are expired", logKeyChainIndex, i, identityNameKey, identityName, "expiration", *expTime)
 		} else {
-			log.Debug("Credentials are invalid (no expiration info)", logKeyChainIndex, i, identityNameKey, identityName)
+			// This shouldn't happen - isCredentialValid returns valid=true when expTime=nil.
+			log.Debug("Credentials are invalid", logKeyChainIndex, i, identityNameKey, identityName)
 		}
 	}
 	return -1 // No valid cached credentials found

@@ -1244,7 +1244,7 @@ func TestManager_GetFilesDisplayPath(t *testing.T) {
 			name:         "provider not found",
 			providerName: "non-existent",
 			provider:     nil,
-			expected:     "~/.aws/atmos", // Default fallback
+			expected:     "~/.config/atmos", // Default fallback (XDG base directory)
 		},
 	}
 
