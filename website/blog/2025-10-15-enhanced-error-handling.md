@@ -13,7 +13,7 @@ We're excited to announce a major improvement to how Atmos handles and reports e
 
 If you've worked with complex infrastructure tooling, you've probably encountered errors like this:
 
-```
+```text
 Error: failed to process component
 ```
 
@@ -27,7 +27,7 @@ We've redesigned Atmos error handling from the ground up with three core princip
 
 Every error now includes detailed context about what was happening when it failed:
 
-```
+```text
 Error: component not found in stack
 
 Explanation:

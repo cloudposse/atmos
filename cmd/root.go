@@ -530,7 +530,7 @@ func Execute() error {
 	// Set atmosConfig for version command (needs access to config).
 	version.SetAtmosConfig(&atmosConfig)
 
-	utils.InitializeMarkdown(atmosConfig)
+	utils.InitializeMarkdown(&atmosConfig)
 	errUtils.InitializeMarkdown(&atmosConfig)
 
 	// Store config error but don't return it yet - we need to parse flags first

@@ -38,8 +38,11 @@ errors/
   - Tags for structured data
 
 - **charmbracelet/lipgloss**: Styled terminal output
-  - Color support
-  - TTY detection
+  - Color and styling utilities
+
+- **charmbracelet/glamour**: Markdown renderer
+  - Markdown → ANSI rendering
+  - Respects configured styles
 
 ## Design Decisions
 
@@ -179,7 +182,7 @@ err := errUtils.Build(baseErr).
 - Collapsed vs verbose modes
 
 **Example Output**:
-```text
+````text
 # Error
 
 workflow file not found
@@ -190,7 +193,7 @@ The workflow manifest file `stacks/workflows/dne.yaml` does not exist.
 
 ## Example
 
-```
+```bash
 # Verify the workflow file exists
 ls -la stacks/workflows/
 
@@ -210,7 +213,7 @@ cat atmos.yaml | grep -A5 workflows
 | file      | stacks/workflows/dne.yaml |
 | base_path | stacks/workflows          |
 
-```
+````
 
 ### 6. Sentry Integration with Full Context
 
