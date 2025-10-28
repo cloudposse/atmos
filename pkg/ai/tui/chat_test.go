@@ -1872,8 +1872,9 @@ func TestChatModel_ProviderFilteredHistory(t *testing.T) {
 			{Role: roleAssistant, Content: "Anthropic response 2", Provider: "anthropic"},
 		}
 
-		// Trigger getAIResponse which should filter messages
-		cmd := m.getAIResponse("New user message")
+		// Trigger getAIResponseWithContext which should filter messages
+		ctx := context.Background()
+		cmd := m.getAIResponseWithContext("New user message", ctx)
 		result := cmd()
 
 		// Verify we got a response
@@ -1932,7 +1933,8 @@ func TestChatModel_ProviderFilteredHistory(t *testing.T) {
 			{Role: roleAssistant, Content: "OpenAI response 2", Provider: "openai"},
 		}
 
-		cmd := m.getAIResponse("New message")
+		ctx := context.Background()
+		cmd := m.getAIResponseWithContext("New message", ctx)
 		cmd()
 
 		// All messages from openai should be included
@@ -1965,7 +1967,8 @@ func TestChatModel_ProviderFilteredHistory(t *testing.T) {
 			{Role: roleAssistant, Content: "OpenAI response", Provider: "openai"},
 		}
 
-		cmd := m.getAIResponse("New message")
+		ctx := context.Background()
+		cmd := m.getAIResponseWithContext("New message", ctx)
 		cmd()
 
 		// Since current provider is gemini and no messages match, only the new user message should be sent
@@ -2265,6 +2268,51 @@ func TestDetectActionIntent(t *testing.T) {
 		{
 			name:     "detects multiple action phrases",
 			content:  "Let me first read the file, then I'll edit it to fix the issue.",
+			expected: true,
+		},
+		{
+			name:     "detects 'I will use' intent",
+			content:  "I will use the atmos_describe_component tool to get the information.",
+			expected: true,
+		},
+		{
+			name:     "detects 'I will start by' intent",
+			content:  "I will start by describing all components in the stack.",
+			expected: true,
+		},
+		{
+			name:     "detects 'I will begin by' intent",
+			content:  "I will begin by trying common component names like 'vpc' and 'eks'.",
+			expected: true,
+		},
+		{
+			name:     "detects 'let me try' intent",
+			content:  "Let me try to get the component details first.",
+			expected: true,
+		},
+		{
+			name:     "detects 'I'll call' intent",
+			content:  "I'll call the API to fetch the data.",
+			expected: true,
+		},
+		{
+			name:     "detects 'I will get' intent",
+			content:  "I will get the list of all available stacks.",
+			expected: true,
+		},
+		{
+			name:     "real Gemini pattern - use tool",
+			content:  "I need to find the inheritance chain of all components in all stacks. To do this, I will first get a list of all stacks using the atmos_list_stacks tool.",
+			expected: true,
+		},
+		{
+			name:     "real Gemini pattern - start describing",
+			content:  "Since I don't know the component names, I will start by describing all components in uw2-prod.",
+			expected: true,
+		},
+		{
+			name:     "real Gemini pattern - begin trying",
+			content:  "I will begin by trying common component names like 'vpc', 'eks', and 'rds'.",
 			expected: true,
 		},
 	}

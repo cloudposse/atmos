@@ -1,4 +1,4 @@
-base_path: ./
+base_path: /absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports
 components:
   terraform:
     base_path: components/terraform

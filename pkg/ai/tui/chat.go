@@ -100,6 +100,8 @@ type ChatModel struct {
 	selectedProviderIdx  int                   // Selected provider index in provider selection
 	markdownRenderer     *glamour.TermRenderer // Cached markdown renderer for performance
 	renderedMessages     []string              // Cache of rendered messages to avoid re-rendering
+	cancelFunc           context.CancelFunc    // Function to cancel ongoing AI request
+	isCancelling         bool                  // Whether we're in the process of cancelling
 }
 
 // ChatMessage represents a single message in the chat.
@@ -476,16 +478,22 @@ func (m *ChatModel) handleMouseMessage(msg tea.MouseMsg) (bool, tea.Cmd) {
 // handleSendMessage handles user message sending.
 func (m *ChatModel) handleSendMessage(msg sendMessageMsg) (bool, tea.Cmd) {
 	m.addMessage(roleUser, string(msg))
-	// Add to message history for navigation
+	// Add to message history for navigation.
 	m.messageHistory = append(m.messageHistory, string(msg))
-	m.historyIndex = -1  // Reset history navigation
-	m.historyBuffer = "" // Clear history buffer
+	m.historyIndex = -1  // Reset history navigation.
+	m.historyBuffer = "" // Clear history buffer.
 	m.textarea.Reset()
 	m.isLoading = true
+	m.isCancelling = false
+
+	// Create cancellable context for this AI request.
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	m.cancelFunc = cancel
+
 	m.updateViewportContent()
 	return true, tea.Batch(
 		m.spinner.Tick,
-		m.getAIResponse(string(msg)),
+		m.getAIResponseWithContext(string(msg), ctx),
 	)
 }
 
@@ -495,9 +503,23 @@ func (m *ChatModel) handleAIMessage(msg tea.Msg) bool {
 	case aiResponseMsg:
 		m.addMessage(roleAssistant, string(msg))
 	case aiErrorMsg:
-		m.addMessage(roleSystem, fmt.Sprintf("Error: %s", string(msg)))
+		errorMsg := string(msg)
+		// Don't show "Request cancelled" if user cancelled.
+		if !m.isCancelling || errorMsg != "Request cancelled" {
+			m.addMessage(roleSystem, fmt.Sprintf("Error: %s", errorMsg))
+		} else if m.isCancelling {
+			m.addMessage(roleSystem, "Request cancelled by user")
+		}
 	}
 	m.isLoading = false
+	m.isCancelling = false
+
+	// Clean up cancel function.
+	if m.cancelFunc != nil {
+		m.cancelFunc()
+		m.cancelFunc = nil
+	}
+
 	m.updateViewportContent()
 
 	// Focus the textarea so the user can immediately type their next message.
@@ -618,7 +640,11 @@ func (m *ChatModel) footerView() string {
 	var content string
 
 	if m.isLoading {
-		content = fmt.Sprintf("%s AI is thinking...", m.spinner.View())
+		cancelHint := lipgloss.NewStyle().
+			Foreground(lipgloss.Color("240")).
+			Italic(true).
+			Render("(Press Esc to cancel)")
+		content = fmt.Sprintf("%s AI is thinking... %s", m.spinner.View(), cancelHint)
 	} else {
 		helpStyle := lipgloss.NewStyle().
 			Foreground(lipgloss.Color("240")).
@@ -1009,10 +1035,12 @@ func (m *ChatModel) sendMessage(content string) tea.Cmd {
 	}
 }
 
-func (m *ChatModel) getAIResponse(userMessage string) tea.Cmd {
+func (m *ChatModel) getAIResponseWithContext(userMessage string, ctx context.Context) tea.Cmd {
 	return func() tea.Msg {
-		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
-		defer cancel()
+		// Check if context is already cancelled before starting.
+		if ctx.Err() != nil {
+			return aiErrorMsg("Request cancelled")
+		}
 
 		// Build message history filtered by provider.
 		// Only include messages from the current provider session for complete isolation.
@@ -1293,35 +1321,60 @@ func detectActionIntent(content string) bool {
 		"i will now",
 	}
 
+	// Check if content contains any action phrase.
+	hasActionPhrase := false
 	for _, phrase := range actionPhrases {
 		if strings.Contains(contentLower, phrase) {
-			// Check if the phrase is followed by action verbs.
-			actionVerbs := []string{
-				"read",
-				"edit",
-				"fix",
-				"update",
-				"modify",
-				"change",
-				"create",
-				"delete",
-				"search",
-				"find",
-				"execute",
-				"run",
-				"check",
-				"validate",
-				"describe",
-				"list",
-			}
+			hasActionPhrase = true
+			break
+		}
+	}
 
-			for _, verb := range actionVerbs {
-				// Look for "I'll <verb>" or "I will <verb>" patterns.
-				pattern := phrase + " " + verb
-				if strings.Contains(contentLower, pattern) {
-					return true
-				}
-			}
+	if !hasActionPhrase {
+		return false
+	}
+
+	// Action verbs that indicate the AI is about to perform an action.
+	actionVerbs := []string{
+		"read",
+		"edit",
+		"fix",
+		"update",
+		"modify",
+		"change",
+		"create",
+		"delete",
+		"search",
+		"find",
+		"execute",
+		"run",
+		"check",
+		"validate",
+		"describe",
+		"list",
+		"use",      // "I will use the tool"
+		"start",    // "I will start by describing"
+		"begin",    // "I will begin by trying"
+		"try",      // "I will try common names"
+		"call",     // "I will call the API"
+		"invoke",   // "I will invoke the function"
+		"get",      // "I will get the data"
+		"fetch",    // "I will fetch the results"
+		"retrieve", // "I will retrieve the information"
+		"query",    // "I will query the database"
+	}
+
+	// Check if any action verb appears anywhere in the content after the action phrase.
+	// This is more flexible than requiring immediate adjacency.
+	for _, verb := range actionVerbs {
+		// Look for the verb as a separate word (with word boundaries).
+		// Match patterns like " use ", " use.", " use,", etc.
+		if strings.Contains(contentLower, " "+verb+" ") ||
+			strings.Contains(contentLower, " "+verb+".") ||
+			strings.Contains(contentLower, " "+verb+",") ||
+			strings.HasPrefix(contentLower, verb+" ") ||
+			strings.HasSuffix(contentLower, " "+verb) {
+			return true
 		}
 	}
 

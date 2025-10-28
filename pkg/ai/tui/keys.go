@@ -38,9 +38,17 @@ func stripANSI(s string) string {
 //revive:disable:cyclomatic // TUI keyboard handlers naturally have high complexity.
 func (m *ChatModel) handleKeyMsg(msg tea.KeyMsg) tea.Cmd {
 	if m.isLoading {
-		// Only allow quitting while loading.
-		if msg.String() == "ctrl+c" {
+		// Allow quitting or cancelling while loading.
+		switch msg.String() {
+		case "ctrl+c":
 			return tea.Quit
+		case "esc":
+			// Cancel the ongoing AI request.
+			if m.cancelFunc != nil && !m.isCancelling {
+				m.isCancelling = true
+				m.cancelFunc()
+			}
+			return func() tea.Msg { return nil }
 		}
 		// Don't pass keys to textarea while loading.
 		return func() tea.Msg { return nil }
