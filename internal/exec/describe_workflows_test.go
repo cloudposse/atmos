@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -90,7 +91,7 @@ workflows:
 		name          string
 		config        schema.AtmosConfiguration
 		wantErr       bool
-		errMsg        string
+		wantErrIs     error
 		wantWorkflows int
 	}{
 		{
@@ -106,8 +107,8 @@ workflows:
 					BasePath: "",
 				},
 			},
-			wantErr: true,
-			errMsg:  "'workflows.base_path' must be configured in 'atmos.yaml'",
+			wantErr:   true,
+			wantErrIs: errUtils.ErrWorkflowBasePathNotConfigured,
 		},
 		{
 			name: "nonexistent workflows directory",
@@ -116,8 +117,8 @@ workflows:
 					BasePath: "nonexistent",
 				},
 			},
-			wantErr: true,
-			errMsg:  "workflow directory does not exist",
+			wantErr:   true,
+			wantErrIs: errUtils.ErrWorkflowDirectoryDoesNotExist,
 		},
 	}
 
@@ -127,8 +128,8 @@ workflows:
 
 			if tt.wantErr {
 				assert.Error(t, err)
-				if tt.errMsg != "" {
-					assert.Contains(t, err.Error(), tt.errMsg)
+				if tt.wantErrIs != nil {
+					assert.ErrorIs(t, err, tt.wantErrIs)
 				}
 			} else {
 				assert.NoError(t, err)
