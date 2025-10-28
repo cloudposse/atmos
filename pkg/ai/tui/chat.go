@@ -102,6 +102,8 @@ type ChatModel struct {
 	renderedMessages     []string              // Cache of rendered messages to avoid re-rendering
 	cancelFunc           context.CancelFunc    // Function to cancel ongoing AI request
 	isCancelling         bool                  // Whether we're in the process of cancelling
+	cumulativeUsage      aiTypes.Usage         // Cumulative token usage for the session
+	lastUsage            *aiTypes.Usage        // Usage from the last AI response
 }
 
 // ChatMessage represents a single message in the chat.
@@ -503,7 +505,26 @@ func (m *ChatModel) handleSendMessage(msg sendMessageMsg) (bool, tea.Cmd) {
 func (m *ChatModel) handleAIMessage(msg tea.Msg) bool {
 	switch msg := msg.(type) {
 	case aiResponseMsg:
-		m.addMessage(roleAssistant, string(msg))
+		// Track usage if available.
+		if msg.usage != nil {
+			m.lastUsage = msg.usage
+			// Accumulate into cumulative usage.
+			m.cumulativeUsage.InputTokens += msg.usage.InputTokens
+			m.cumulativeUsage.OutputTokens += msg.usage.OutputTokens
+			m.cumulativeUsage.TotalTokens += msg.usage.TotalTokens
+			m.cumulativeUsage.CacheReadTokens += msg.usage.CacheReadTokens
+			m.cumulativeUsage.CacheCreationTokens += msg.usage.CacheCreationTokens
+		}
+
+		// Add message with usage information if available.
+		content := msg.content
+		if msg.usage != nil && msg.usage.TotalTokens > 0 {
+			usageInfo := formatUsage(msg.usage)
+			if usageInfo != "" {
+				content = fmt.Sprintf("%s\n\n---\n*Token usage: %s*", content, usageInfo)
+			}
+		}
+		m.addMessage(roleAssistant, content)
 	case aiErrorMsg:
 		errorMsg := string(msg)
 		// Don't show "Request cancelled" if user cancelled.
@@ -646,7 +667,14 @@ func (m *ChatModel) footerView() string {
 			Foreground(lipgloss.Color("240")).
 			Italic(true).
 			Render("(Press Esc to cancel)")
-		content = fmt.Sprintf("%s AI is thinking... %s", m.spinner.View(), cancelHint)
+
+		// Format cumulative usage if available.
+		usageStr := ""
+		if m.cumulativeUsage.TotalTokens > 0 {
+			usageStr = fmt.Sprintf(" · %s tokens", formatTokenCount(m.cumulativeUsage.TotalTokens))
+		}
+
+		content = fmt.Sprintf("%s AI is thinking...%s %s", m.spinner.View(), usageStr, cancelHint)
 	} else {
 		helpStyle := lipgloss.NewStyle().
 			Foreground(lipgloss.Color("240")).
@@ -1020,7 +1048,10 @@ func (m *ChatModel) renderTable(lines []string) string {
 // Custom message types.
 type sendMessageMsg string
 
-type aiResponseMsg string
+type aiResponseMsg struct {
+	content string
+	usage   *aiTypes.Usage
+}
 
 type aiErrorMsg string
 
@@ -1149,11 +1180,11 @@ Always take action using tools rather than describing what action you would take
 				}
 
 				// If still no tool use after retry, just return the retry response.
-				return aiResponseMsg(retryResponse.Content)
+				return aiResponseMsg{content: retryResponse.Content, usage: retryResponse.Usage}
 			}
 
 			// No action intent detected, return the text response.
-			return aiResponseMsg(response.Content)
+			return aiResponseMsg{content: response.Content, usage: response.Usage}
 		}
 
 		// Fallback to message with history but no tools.
@@ -1162,7 +1193,7 @@ Always take action using tools rather than describing what action you would take
 			return aiErrorMsg(err.Error())
 		}
 
-		return aiResponseMsg(response)
+		return aiResponseMsg{content: response, usage: nil}
 	}
 }
 
@@ -1301,14 +1332,83 @@ func (m *ChatModel) handleToolExecutionFlow(ctx context.Context, response *aiTyp
 
 		// If still no tool use, combine all responses.
 		combinedResponse := resultText + "\n\n---\n\n" + finalResponse.Content + "\n\n" + retryResponse.Content
-		return aiResponseMsg(combinedResponse)
+		return aiResponseMsg{content: combinedResponse, usage: combineUsage(finalResponse.Usage, retryResponse.Usage)}
 	}
 
 	// Combine tool execution display with final AI response.
 	combinedResponse := resultText + "\n\n---\n\n" + finalResponse.Content
 
 	// Return the combined response (tool results + AI's final analysis).
-	return aiResponseMsg(combinedResponse)
+	return aiResponseMsg{content: combinedResponse, usage: finalResponse.Usage}
+}
+
+// combineUsage combines two Usage structs by adding their token counts.
+func combineUsage(u1, u2 *aiTypes.Usage) *aiTypes.Usage {
+	if u1 == nil && u2 == nil {
+		return nil
+	}
+	if u1 == nil {
+		return u2
+	}
+	if u2 == nil {
+		return u1
+	}
+
+	return &aiTypes.Usage{
+		InputTokens:         u1.InputTokens + u2.InputTokens,
+		OutputTokens:        u1.OutputTokens + u2.OutputTokens,
+		TotalTokens:         u1.TotalTokens + u2.TotalTokens,
+		CacheReadTokens:     u1.CacheReadTokens + u2.CacheReadTokens,
+		CacheCreationTokens: u1.CacheCreationTokens + u2.CacheCreationTokens,
+	}
+}
+
+// formatTokenCount formats a token count into a human-readable string (e.g., "7.1k").
+func formatTokenCount(count int64) string {
+	if count == 0 {
+		return "0"
+	}
+	if count < 1000 {
+		return fmt.Sprintf("%d", count)
+	}
+	if count < 1000000 {
+		// Format as k (thousands) with one decimal place.
+		k := float64(count) / 1000.0
+		if k < 10 {
+			return fmt.Sprintf("%.1fk", k)
+		}
+		return fmt.Sprintf("%.0fk", k)
+	}
+	// Format as M (millions) with one decimal place.
+	m := float64(count) / 1000000.0
+	if m < 10 {
+		return fmt.Sprintf("%.1fM", m)
+	}
+	return fmt.Sprintf("%.0fM", m)
+}
+
+// formatUsage formats usage information for display.
+func formatUsage(usage *aiTypes.Usage) string {
+	if usage == nil || usage.TotalTokens == 0 {
+		return ""
+	}
+
+	var parts []string
+
+	// Show input/output breakdown.
+	if usage.InputTokens > 0 {
+		parts = append(parts, fmt.Sprintf("↑ %s", formatTokenCount(usage.InputTokens)))
+	}
+	if usage.OutputTokens > 0 {
+		parts = append(parts, fmt.Sprintf("↓ %s", formatTokenCount(usage.OutputTokens)))
+	}
+
+	// Show cache info if available.
+	if usage.CacheReadTokens > 0 {
+		parts = append(parts, fmt.Sprintf("cache: %s", formatTokenCount(usage.CacheReadTokens)))
+	}
+
+	return strings.Join(parts, " · ")
 }
 
 // formatToolParameters formats tool call parameters for display in the UI.

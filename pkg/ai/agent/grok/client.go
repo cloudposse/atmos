@@ -344,6 +344,18 @@ func parseGrokResponse(response *openai.ChatCompletion) (*types.Response, error)
 		}
 	}
 
+	// Extract usage information.
+	if response.Usage.PromptTokens > 0 || response.Usage.CompletionTokens > 0 {
+		result.Usage = &types.Usage{
+			InputTokens:  response.Usage.PromptTokens,
+			OutputTokens: response.Usage.CompletionTokens,
+			TotalTokens:  response.Usage.TotalTokens,
+			// Grok doesn't provide cache tokens.
+			CacheReadTokens:     0,
+			CacheCreationTokens: 0,
+		}
+	}
+
 	return result, nil
 }
 

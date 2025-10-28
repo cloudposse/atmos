@@ -344,6 +344,10 @@ func parseBedrockResponse(responseBody []byte) (*types.Response, error) {
 			Input map[string]interface{} `json:"input,omitempty"`
 		} `json:"content"`
 		StopReason string `json:"stop_reason"`
+		Usage      struct {
+			InputTokens  int64 `json:"input_tokens"`
+			OutputTokens int64 `json:"output_tokens"`
+		} `json:"usage"`
 	}
 
 	if err := json.Unmarshal(responseBody, &apiResponse); err != nil {
@@ -379,6 +383,18 @@ func parseBedrockResponse(responseBody []byte) (*types.Response, error) {
 				Name:  content.Name,
 				Input: content.Input,
 			})
+		}
+	}
+
+	// Extract usage information.
+	if apiResponse.Usage.InputTokens > 0 || apiResponse.Usage.OutputTokens > 0 {
+		result.Usage = &types.Usage{
+			InputTokens:  apiResponse.Usage.InputTokens,
+			OutputTokens: apiResponse.Usage.OutputTokens,
+			TotalTokens:  apiResponse.Usage.InputTokens + apiResponse.Usage.OutputTokens,
+			// Bedrock/Anthropic doesn't provide cache tokens in this format.
+			CacheReadTokens:     0,
+			CacheCreationTokens: 0,
 		}
 	}
 

@@ -10,6 +10,27 @@ type Response struct {
 
 	// StopReason indicates why the model stopped generating.
 	StopReason StopReason
+
+	// Usage contains token usage information from the API.
+	Usage *Usage
+}
+
+// Usage contains token usage statistics from the AI provider.
+type Usage struct {
+	// InputTokens is the number of tokens in the request/prompt.
+	InputTokens int64
+
+	// OutputTokens is the number of tokens in the response/completion.
+	OutputTokens int64
+
+	// TotalTokens is the sum of input and output tokens.
+	TotalTokens int64
+
+	// CacheReadTokens is the number of tokens read from prompt cache (if supported).
+	CacheReadTokens int64
+
+	// CacheCreationTokens is the number of tokens used to create cache (if supported).
+	CacheCreationTokens int64
 }
 
 // ToolCall represents a request from the AI to execute a tool.

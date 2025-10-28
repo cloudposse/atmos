@@ -360,6 +360,18 @@ func parseAzureOpenAIResponse(response *openai.ChatCompletion) (*types.Response,
 		}
 	}
 
+	// Extract usage information.
+	if response.Usage.PromptTokens > 0 || response.Usage.CompletionTokens > 0 {
+		result.Usage = &types.Usage{
+			InputTokens:  response.Usage.PromptTokens,
+			OutputTokens: response.Usage.CompletionTokens,
+			TotalTokens:  response.Usage.TotalTokens,
+			// Azure OpenAI doesn't provide cache tokens.
+			CacheReadTokens:     0,
+			CacheCreationTokens: 0,
+		}
+	}
+
 	return result, nil
 }
 

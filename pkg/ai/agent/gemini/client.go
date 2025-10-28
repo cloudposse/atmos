@@ -351,6 +351,17 @@ func parseGeminiResponse(response *genai.GenerateContentResponse) (*types.Respon
 		}
 	}
 
+	// Extract usage information.
+	if response.UsageMetadata != nil {
+		result.Usage = &types.Usage{
+			InputTokens:         int64(response.UsageMetadata.PromptTokenCount),
+			OutputTokens:        int64(response.UsageMetadata.CandidatesTokenCount),
+			TotalTokens:         int64(response.UsageMetadata.TotalTokenCount),
+			CacheReadTokens:     int64(response.UsageMetadata.CachedContentTokenCount),
+			CacheCreationTokens: 0, // Gemini doesn't separately report cache creation tokens.
+		}
+	}
+
 	return result, nil
 }
 

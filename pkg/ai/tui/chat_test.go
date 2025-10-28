@@ -659,7 +659,7 @@ func TestChatModel_MessageHandling(t *testing.T) {
 		model.isLoading = true
 		initialCount := len(model.messages)
 
-		msg := aiResponseMsg("Test response")
+		msg := aiResponseMsg{content: "Test response", usage: nil}
 		handled := model.handleAIMessage(msg)
 
 		assert.True(t, handled)
@@ -2326,6 +2326,271 @@ func TestDetectActionIntent(t *testing.T) {
 }
 
 // TestFormatToolParameters tests the tool parameter formatting function.
+func TestFormatTokenCount(t *testing.T) {
+	tests := []struct {
+		name     string
+		count    int64
+		expected string
+	}{
+		{
+			name:     "zero tokens",
+			count:    0,
+			expected: "0",
+		},
+		{
+			name:     "small count",
+			count:    500,
+			expected: "500",
+		},
+		{
+			name:     "exactly 1k",
+			count:    1000,
+			expected: "1.0k",
+		},
+		{
+			name:     "7.1k tokens",
+			count:    7100,
+			expected: "7.1k",
+		},
+		{
+			name:     "large count under 10k",
+			count:    9876,
+			expected: "9.9k",
+		},
+		{
+			name:     "10k or more",
+			count:    15000,
+			expected: "15k",
+		},
+		{
+			name:     "millions",
+			count:    2500000,
+			expected: "2.5M",
+		},
+		{
+			name:     "large millions",
+			count:    15000000,
+			expected: "15M",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := formatTokenCount(tt.count)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestFormatUsage(t *testing.T) {
+	tests := []struct {
+		name     string
+		usage    *types.Usage
+		expected string
+	}{
+		{
+			name:     "nil usage",
+			usage:    nil,
+			expected: "",
+		},
+		{
+			name: "zero tokens",
+			usage: &types.Usage{
+				InputTokens:  0,
+				OutputTokens: 0,
+				TotalTokens:  0,
+			},
+			expected: "",
+		},
+		{
+			name: "input and output tokens",
+			usage: &types.Usage{
+				InputTokens:  1500,
+				OutputTokens: 2500,
+				TotalTokens:  4000,
+			},
+			expected: "↑ 1.5k · ↓ 2.5k",
+		},
+		{
+			name: "with cache tokens",
+			usage: &types.Usage{
+				InputTokens:     1500,
+				OutputTokens:    2500,
+				TotalTokens:     4000,
+				CacheReadTokens: 500,
+			},
+			expected: "↑ 1.5k · ↓ 2.5k · cache: 500",
+		},
+		{
+			name: "only input tokens",
+			usage: &types.Usage{
+				InputTokens:  1000,
+				OutputTokens: 0,
+				TotalTokens:  1000,
+			},
+			expected: "↑ 1.0k",
+		},
+		{
+			name: "only output tokens",
+			usage: &types.Usage{
+				InputTokens:  0,
+				OutputTokens: 2000,
+				TotalTokens:  2000,
+			},
+			expected: "↓ 2.0k",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := formatUsage(tt.usage)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestCombineUsage(t *testing.T) {
+	tests := []struct {
+		name     string
+		u1       *types.Usage
+		u2       *types.Usage
+		expected *types.Usage
+	}{
+		{
+			name:     "both nil",
+			u1:       nil,
+			u2:       nil,
+			expected: nil,
+		},
+		{
+			name: "first nil",
+			u1:   nil,
+			u2: &types.Usage{
+				InputTokens:  100,
+				OutputTokens: 200,
+				TotalTokens:  300,
+			},
+			expected: &types.Usage{
+				InputTokens:  100,
+				OutputTokens: 200,
+				TotalTokens:  300,
+			},
+		},
+		{
+			name: "second nil",
+			u1: &types.Usage{
+				InputTokens:  100,
+				OutputTokens: 200,
+				TotalTokens:  300,
+			},
+			u2: nil,
+			expected: &types.Usage{
+				InputTokens:  100,
+				OutputTokens: 200,
+				TotalTokens:  300,
+			},
+		},
+		{
+			name: "combine both",
+			u1: &types.Usage{
+				InputTokens:         100,
+				OutputTokens:        200,
+				TotalTokens:         300,
+				CacheReadTokens:     50,
+				CacheCreationTokens: 10,
+			},
+			u2: &types.Usage{
+				InputTokens:         150,
+				OutputTokens:        250,
+				TotalTokens:         400,
+				CacheReadTokens:     30,
+				CacheCreationTokens: 5,
+			},
+			expected: &types.Usage{
+				InputTokens:         250,
+				OutputTokens:        450,
+				TotalTokens:         700,
+				CacheReadTokens:     80,
+				CacheCreationTokens: 15,
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := combineUsage(tt.u1, tt.u2)
+			if tt.expected == nil {
+				assert.Nil(t, result)
+			} else {
+				assert.NotNil(t, result)
+				assert.Equal(t, tt.expected.InputTokens, result.InputTokens)
+				assert.Equal(t, tt.expected.OutputTokens, result.OutputTokens)
+				assert.Equal(t, tt.expected.TotalTokens, result.TotalTokens)
+				assert.Equal(t, tt.expected.CacheReadTokens, result.CacheReadTokens)
+				assert.Equal(t, tt.expected.CacheCreationTokens, result.CacheCreationTokens)
+			}
+		})
+	}
+}
+
+func TestUsageTrackingInHandleAIMessage(t *testing.T) {
+	client := &mockAIClient{
+		model:     "test-model",
+		maxTokens: 4096,
+		response:  "AI response",
+	}
+
+	model, err := NewChatModel(client, nil, nil, nil, nil, nil)
+	require.NoError(t, err)
+
+	// Create a message with usage.
+	msg := aiResponseMsg{
+		content: "Test response",
+		usage: &types.Usage{
+			InputTokens:  1000,
+			OutputTokens: 2000,
+			TotalTokens:  3000,
+		},
+	}
+
+	// Handle the message.
+	handled := model.handleAIMessage(msg)
+
+	assert.True(t, handled)
+	assert.NotNil(t, model.lastUsage)
+	assert.Equal(t, int64(1000), model.lastUsage.InputTokens)
+	assert.Equal(t, int64(2000), model.lastUsage.OutputTokens)
+	assert.Equal(t, int64(3000), model.lastUsage.TotalTokens)
+
+	// Check cumulative usage.
+	assert.Equal(t, int64(1000), model.cumulativeUsage.InputTokens)
+	assert.Equal(t, int64(2000), model.cumulativeUsage.OutputTokens)
+	assert.Equal(t, int64(3000), model.cumulativeUsage.TotalTokens)
+
+	// Add another message and verify accumulation.
+	msg2 := aiResponseMsg{
+		content: "Another response",
+		usage: &types.Usage{
+			InputTokens:  500,
+			OutputTokens: 1000,
+			TotalTokens:  1500,
+		},
+	}
+
+	handled = model.handleAIMessage(msg2)
+
+	assert.True(t, handled)
+	assert.NotNil(t, model.lastUsage)
+	assert.Equal(t, int64(500), model.lastUsage.InputTokens)
+	assert.Equal(t, int64(1000), model.lastUsage.OutputTokens)
+	assert.Equal(t, int64(1500), model.lastUsage.TotalTokens)
+
+	// Check cumulative usage has accumulated.
+	assert.Equal(t, int64(1500), model.cumulativeUsage.InputTokens)
+	assert.Equal(t, int64(3000), model.cumulativeUsage.OutputTokens)
+	assert.Equal(t, int64(4500), model.cumulativeUsage.TotalTokens)
+}
+
 func TestFormatToolParameters(t *testing.T) {
 	tests := []struct {
 		name     string
