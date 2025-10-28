@@ -7,11 +7,11 @@ import (
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	u "github.com/cloudposse/atmos/pkg/utils"
-	errUtils "github.com/cloudposse/atmos/errors"
 )
 
 // ExecuteTerraformGenerateBackendCmd executes `terraform generate backend` command.
