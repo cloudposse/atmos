@@ -35,7 +35,7 @@ var docsCmd = &cobra.Command{
 				ComponentFolderPrefix: "terraform",
 			}
 
-			atmosConfig, err := cfg.InitCliConfig(info, true)
+			atmosConfig, err := cfg.InitCliConfig(info, false)
 			if err != nil {
 				return err
 			}

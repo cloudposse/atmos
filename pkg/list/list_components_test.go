@@ -36,7 +36,15 @@ func TestListComponents(t *testing.T) {
 	// Add assertions to validate the output structure
 	assert.NotNil(t, dependentsYaml)
 	assert.Greater(t, len(dependentsYaml), 0)
-	t.Log(dependentsYaml)
+	t.Cleanup(func() {
+		if t.Failed() {
+			if dependentsYaml != "" {
+				t.Logf("Components list:\n%s", dependentsYaml)
+			} else {
+				t.Logf("Components list (raw): %+v", output)
+			}
+		}
+	})
 }
 
 func TestListComponentsWithStack(t *testing.T) {

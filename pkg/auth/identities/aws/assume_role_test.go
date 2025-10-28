@@ -230,11 +230,23 @@ func TestAssumeRoleIdentity_PostAuthenticate_SetsEnvAndFiles(t *testing.T) {
 	i := &assumeRoleIdentity{name: "role", config: &schema.Identity{Kind: "aws/assume-role", Principal: map[string]any{
 		"assume_role": "arn:aws:iam::123:role/x",
 	}}}
+	authContext := &schema.AuthContext{}
 	stack := &schema.ConfigAndStacksInfo{}
 	creds := &types.AWSCredentials{AccessKeyID: "AK", SecretAccessKey: "SE", SessionToken: "TK", Region: "us-east-1"}
-	err := i.PostAuthenticate(context.Background(), stack, "aws-sso", "role", creds)
+	err := i.PostAuthenticate(context.Background(), &types.PostAuthenticateParams{
+		AuthContext:  authContext,
+		StackInfo:    stack,
+		ProviderName: "aws-sso",
+		IdentityName: "role",
+		Credentials:  creds,
+	})
 	require.NoError(t, err)
-	// AWS files/env are set under the provider namespace.
+
+	// Auth context populated.
+	require.NotNil(t, authContext.AWS)
+	assert.Equal(t, "role", authContext.AWS.Profile)
+
+	// AWS files/env are set under the provider namespace (derived from auth context).
 	require.Contains(t, stack.ComponentEnvSection["AWS_SHARED_CREDENTIALS_FILE"], "aws-sso")
 }
 
@@ -398,6 +410,9 @@ func TestAssumeRoleIdentity_WithoutCustomResolver(t *testing.T) {
 }
 
 func TestAssumeRoleIdentity_newSTSClient_WithResolver(t *testing.T) {
+	// This test requires AWS credentials to create an STS client.
+	tests.RequireAWSProfile(t, "cplive-core-gbl-identity")
+
 	// Test newSTSClient with custom resolver.
 	config := &schema.Identity{
 		Kind: "aws/assume-role",
@@ -436,6 +451,9 @@ func TestAssumeRoleIdentity_newSTSClient_WithResolver(t *testing.T) {
 }
 
 func TestAssumeRoleIdentity_newSTSClient_WithoutResolver(t *testing.T) {
+	// This test requires AWS credentials to create an STS client.
+	tests.RequireAWSProfile(t, "cplive-core-gbl-identity")
+
 	// Test newSTSClient without custom resolver.
 	config := &schema.Identity{
 		Kind: "aws/assume-role",
@@ -467,7 +485,10 @@ func TestAssumeRoleIdentity_newSTSClient_WithoutResolver(t *testing.T) {
 }
 
 func TestAssumeRoleIdentity_newSTSClient_RegionResolution(t *testing.T) {
-	tests := []struct {
+	// This test requires AWS credentials to create an STS client.
+	tests.RequireAWSProfile(t, "cplive-core-gbl-identity")
+
+	testCases := []struct {
 		name           string
 		identityRegion string
 		baseRegion     string
@@ -493,7 +514,7 @@ func TestAssumeRoleIdentity_newSTSClient_RegionResolution(t *testing.T) {
 		},
 	}
 
-	for _, tt := range tests {
+	for _, tt := range testCases {
 		t.Run(tt.name, func(t *testing.T) {
 			config := &schema.Identity{
 				Kind: "aws/assume-role",
@@ -531,4 +552,21 @@ func TestAssumeRoleIdentity_newSTSClient_RegionResolution(t *testing.T) {
 			assert.Equal(t, tt.expectedRegion, ari.region)
 		})
 	}
+}
+
+func TestAssumeRoleIdentity_Logout(t *testing.T) {
+	// Test that assume-role identity Logout returns nil (no identity-specific cleanup).
+	identity, err := NewAssumeRoleIdentity("test-role", &schema.Identity{
+		Kind: "aws/assume-role",
+		Principal: map[string]interface{}{
+			"assume_role": "arn:aws:iam::123456789012:role/MyRole",
+		},
+	})
+	require.NoError(t, err)
+
+	ctx := context.Background()
+	err = identity.Logout(ctx)
+
+	// Should always succeed with no cleanup.
+	assert.NoError(t, err)
 }

@@ -1,0 +1,4 @@
+export AWS_CONFIG_FILE='/tmp/mock-config'
+export AWS_PROFILE='mock-identity'
+export AWS_SHARED_CREDENTIALS_FILE='/tmp/mock-credentials'
+export MOCK_IDENTITY='mock-identity'

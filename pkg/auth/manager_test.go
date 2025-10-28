@@ -229,8 +229,9 @@ func (c *testCreds) IsExpired() bool {
 	}
 	return time.Now().After(*c.exp)
 }
-func (c *testCreds) GetExpiration() (*time.Time, error)     { return c.exp, nil }
-func (c *testCreds) BuildWhoamiInfo(info *types.WhoamiInfo) {}
+func (c *testCreds) GetExpiration() (*time.Time, error)               { return c.exp, nil }
+func (c *testCreds) BuildWhoamiInfo(info *types.WhoamiInfo)           {}
+func (c *testCreds) Validate(ctx context.Context) (*time.Time, error) { return c.exp, nil }
 
 func (s *testStore) Store(alias string, creds types.ICredentials) error {
 	if s.data == nil {
@@ -283,6 +284,8 @@ func (p *testProvider) Authenticate(_ context.Context) (types.ICredentials, erro
 }
 func (p *testProvider) Validate() error                         { return nil }
 func (p *testProvider) Environment() (map[string]string, error) { return map[string]string{}, nil }
+func (p *testProvider) Logout(_ context.Context) error          { return nil }
+func (p *testProvider) GetFilesDisplayPath() string             { return "~/.aws/atmos" }
 
 func TestManager_getProviderForIdentity_NameAndAlias(t *testing.T) {
 	m := &manager{
@@ -471,9 +474,10 @@ func (s stubUserID) Authenticate(_ context.Context, _ types.ICredentials) (types
 }
 func (s stubUserID) Validate() error                         { return nil }
 func (s stubUserID) Environment() (map[string]string, error) { return map[string]string{}, nil }
-func (s stubUserID) PostAuthenticate(_ context.Context, _ *schema.ConfigAndStacksInfo, _ string, _ string, _ types.ICredentials) error {
+func (s stubUserID) PostAuthenticate(_ context.Context, _ *types.PostAuthenticateParams) error {
 	return nil
 }
+func (s stubUserID) Logout(_ context.Context) error { return nil }
 
 func TestManager_authenticateFromIndex_StandaloneAWSUser(t *testing.T) {
 	creds := &testCreds{}
@@ -539,12 +543,13 @@ func (s stubPSIdentity) Authenticate(_ context.Context, base types.ICredentials)
 }
 func (s stubPSIdentity) Validate() error                         { return nil }
 func (s stubPSIdentity) Environment() (map[string]string, error) { return s.env, nil }
-func (s stubPSIdentity) PostAuthenticate(_ context.Context, _ *schema.ConfigAndStacksInfo, _ string, _ string, _ types.ICredentials) error {
+func (s stubPSIdentity) PostAuthenticate(_ context.Context, _ *types.PostAuthenticateParams) error {
 	if s.postCalled != nil {
 		*s.postCalled = true
 	}
 	return s.postErr
 }
+func (s stubPSIdentity) Logout(_ context.Context) error { return nil }
 
 func TestNewAuthManager_ParamValidation(t *testing.T) {
 	t.Run("nil config", func(t *testing.T) {
@@ -565,13 +570,13 @@ func TestNewAuthManager_InitializeErrors(t *testing.T) {
 	t.Run("invalid provider kind", func(t *testing.T) {
 		cfg := &schema.AuthConfig{Providers: map[string]schema.Provider{"bad": {Kind: "unknown"}}}
 		_, err := NewAuthManager(cfg, &testStore{}, dummyValidator{}, nil)
-		assert.ErrorIs(t, err, errUtils.ErrInitializingProviders)
+		assert.ErrorIs(t, err, errUtils.ErrInvalidProviderConfig)
 	})
 
 	t.Run("invalid identity kind", func(t *testing.T) {
 		cfg := &schema.AuthConfig{Identities: map[string]schema.Identity{"x": {Kind: "unknown"}}}
 		_, err := NewAuthManager(cfg, &testStore{}, dummyValidator{}, nil)
-		assert.ErrorIs(t, err, errUtils.ErrInitializingIdentities)
+		assert.ErrorIs(t, err, errUtils.ErrInvalidIdentityConfig)
 	})
 }
 
@@ -785,9 +790,10 @@ func (s stubIdentity) Authenticate(_ context.Context, _ types.ICredentials) (typ
 }
 func (s stubIdentity) Validate() error                         { return nil }
 func (s stubIdentity) Environment() (map[string]string, error) { return nil, nil }
-func (s stubIdentity) PostAuthenticate(_ context.Context, _ *schema.ConfigAndStacksInfo, _ string, _ string, _ types.ICredentials) error {
+func (s stubIdentity) PostAuthenticate(_ context.Context, _ *types.PostAuthenticateParams) error {
 	return nil
 }
+func (s stubIdentity) Logout(_ context.Context) error { return nil }
 
 func TestBuildAuthenticationChain_Basic(t *testing.T) {
 	m := &manager{config: &schema.AuthConfig{
@@ -986,4 +992,41 @@ func TestManager_fetchCachedCredentials(t *testing.T) {
 	retrievedCreds, nextIndex = m2.fetchCachedCredentials(1)
 	assert.Nil(t, retrievedCreds)
 	assert.Equal(t, 0, nextIndex)
+}
+
+func TestManager_GetFilesDisplayPath(t *testing.T) {
+	tests := []struct {
+		name         string
+		providerName string
+		provider     types.Provider
+		expected     string
+	}{
+		{
+			name:         "provider exists",
+			providerName: "test-provider",
+			provider:     &testProvider{name: "test-provider"},
+			expected:     "~/.aws/atmos",
+		},
+		{
+			name:         "provider not found",
+			providerName: "non-existent",
+			provider:     nil,
+			expected:     "~/.aws/atmos", // Default fallback
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := &manager{
+				providers: make(map[string]types.Provider),
+			}
+
+			if tt.provider != nil {
+				m.providers[tt.providerName] = tt.provider
+			}
+
+			path := m.GetFilesDisplayPath(tt.providerName)
+			assert.Equal(t, tt.expected, path)
+		})
+	}
 }

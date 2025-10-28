@@ -700,21 +700,21 @@ func processYAMLConfigFileWithContextInternal(
 
 			atmosManifestJsonSchemaFileReader, err := os.Open(atmosManifestJsonSchemaFilePath)
 			if err != nil {
-				return nil, nil, nil, nil, nil, nil, nil, fmt.Errorf("%w: Atmos manifest JSON Schema validation error in the file '%s':\n%v", errUtils.ErrStackManifestSchemaValidation, relativeFilePath, err)
+				return nil, nil, nil, nil, nil, nil, nil, fmt.Errorf("%w: Atmos manifest JSON Schema validation error in the file '%s':\n%w", errUtils.ErrStackManifestSchemaValidation, relativeFilePath, err)
 			}
 			defer func() {
 				_ = atmosManifestJsonSchemaFileReader.Close()
 			}()
 
 			if err := compiler.AddResource(atmosManifestJsonSchemaFilePath, atmosManifestJsonSchemaFileReader); err != nil {
-				return nil, nil, nil, nil, nil, nil, nil, fmt.Errorf("%w: Atmos manifest JSON Schema validation error in the file '%s':\n%v", errUtils.ErrStackManifestSchemaValidation, relativeFilePath, err)
+				return nil, nil, nil, nil, nil, nil, nil, fmt.Errorf("%w: Atmos manifest JSON Schema validation error in the file '%s':\n%w", errUtils.ErrStackManifestSchemaValidation, relativeFilePath, err)
 			}
 
 			compiler.Draft = jsonschema.Draft2020
 
 			compiledSchema, err = compiler.Compile(atmosManifestJsonSchemaFilePath)
 			if err != nil {
-				return nil, nil, nil, nil, nil, nil, nil, fmt.Errorf("%w: Atmos manifest JSON Schema validation error in the file '%s':\n%v", errUtils.ErrStackManifestSchemaValidation, relativeFilePath, err)
+				return nil, nil, nil, nil, nil, nil, nil, fmt.Errorf("%w: Atmos manifest JSON Schema validation error in the file '%s':\n%w", errUtils.ErrStackManifestSchemaValidation, relativeFilePath, err)
 			}
 
 			// Store compiled schema in cache for reuse.
@@ -727,11 +727,11 @@ func processYAMLConfigFileWithContextInternal(
 			case *jsonschema.ValidationError:
 				b, err2 := json.MarshalIndent(e.BasicOutput(), "", "  ")
 				if err2 != nil {
-					return nil, nil, nil, nil, nil, nil, nil, fmt.Errorf("%w: Atmos manifest JSON Schema validation error in the file '%s':\n%v", errUtils.ErrStackManifestSchemaValidation, relativeFilePath, err2)
+					return nil, nil, nil, nil, nil, nil, nil, fmt.Errorf("%w: Atmos manifest JSON Schema validation error in the file '%s':\n%w", errUtils.ErrStackManifestSchemaValidation, relativeFilePath, err2)
 				}
 				return nil, nil, nil, nil, nil, nil, nil, fmt.Errorf("%w: Atmos manifest JSON Schema validation error in the file '%s':\n%v", errUtils.ErrStackManifestSchemaValidation, relativeFilePath, string(b))
 			default:
-				return nil, nil, nil, nil, nil, nil, nil, fmt.Errorf("%w: Atmos manifest JSON Schema validation error in the file '%s':\n%v", errUtils.ErrStackManifestSchemaValidation, relativeFilePath, err)
+				return nil, nil, nil, nil, nil, nil, nil, fmt.Errorf("%w: Atmos manifest JSON Schema validation error in the file '%s':\n%w", errUtils.ErrStackManifestSchemaValidation, relativeFilePath, err)
 			}
 		}
 	}
@@ -906,7 +906,7 @@ func processYAMLConfigFileWithContextInternal(
 				// If the import is not a Go template and SkipIfMissing is false, return the error
 				if !isGolangTemplate && !importStruct.SkipIfMissing {
 					if err != nil {
-						return nil, nil, nil, nil, nil, nil, nil, fmt.Errorf("%w: no matches found for the import '%s' in the file '%s'\nError: %s",
+						return nil, nil, nil, nil, nil, nil, nil, fmt.Errorf("%w: no matches found for the import '%s' in the file '%s'\nError: %w",
 							errUtils.ErrStackImportNotFound,
 							imp,
 							relativeFilePath,

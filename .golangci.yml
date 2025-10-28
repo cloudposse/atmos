@@ -27,6 +27,7 @@ linters:
     - dogsled
     - dupl
     - err113
+    - errorlint  # Detects %v instead of %w in fmt.Errorf, errors.Is/errors.As usage
     - forbidigo
     - funlen
     - gocognit
@@ -54,6 +55,17 @@ linters:
       max-blank-identifiers: 3
     dupl:
       threshold: 150
+    errorlint:
+      # Check for non-wrapping format verbs (%v) in fmt.Errorf calls.
+      # Enforces using %w to properly wrap errors for errors.Is/errors.As.
+      errorf: true
+      # Check whether fmt.Errorf uses the %w verb for formatting errors.
+      # Note: supports multiple %w verbs per fmt.Errorf call (requires Go 1.20+).
+      errorf-multi: true
+      # Check for plain type assertions and suggest replacing them with errors.As.
+      asserts: true
+      # Check for plain error comparisons and suggest replacing them with errors.Is.
+      comparison: true
     forbidigo:
       forbid:
         - pattern: os\.Getenv
@@ -74,6 +86,10 @@ linters:
           msg: "Do not use deprecated github.com/pkg/errors; use static sentinel errors from errors/errors.go instead"
         - pattern: '\bpkgerrors\.'
           msg: "Do not use deprecated pkg/errors; use static sentinel errors from errors/errors.go instead"
+        - pattern: github\.com/golang/mock
+          msg: Use `go.uber.org/mock` instead of archived `github.com/golang/mock`
+        - pattern: github\.com/mitchellh/go-homedir
+          msg: Use `github.com/cloudposse/atmos/pkg/config/homedir` (our forked version) instead of `github.com/mitchellh/go-homedir`
       exclude-godoc-examples: false
       analyze-types: true
     funlen:
@@ -120,13 +136,14 @@ linters:
     custom:
       lintroller:
         type: "module"  # Required: indicates this is a module plugin (not Go .so plugin)
-        description: "Atmos project-specific linting rules (t.Setenv/os.Setenv/os.MkdirTemp checks)"
+        description: "Atmos project-specific linting rules (t.Setenv/os.Setenv/os.MkdirTemp/perf.Track checks)"
         settings:
           # These settings are passed to the plugin's Settings struct (see tools/lintroller/plugin.go)
           # Each rule can be independently enabled/disabled
           tsetenv-in-defer: true      # Detects t.Setenv called inside defer blocks (use os.Setenv in defer instead)
           os-setenv-in-test: true     # Detects os.Setenv in test files (use t.Setenv instead for auto cleanup)
           os-mkdirtemp-in-test: true  # Detects os.MkdirTemp in test files (use t.TempDir instead for auto cleanup)
+          perf-track: true            # Detects missing defer perf.Track() in public functions per coding guidelines (see excludedPackages/excludedReceivers in rule_perf_track.go)
 
       # Example: Add another custom linter configuration
       # another-linter:
@@ -205,6 +222,9 @@ linters:
       - legacy
       - std-error-handling
     rules:
+      - linters:
+          - godot
+        path: mock_.*\.go$
       - linters:
           - err113
           - errcheck

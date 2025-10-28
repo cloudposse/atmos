@@ -25,6 +25,7 @@ var terraformStateCache = sync.Map{}
 //   - component: Component identifier
 //   - output: Output variable key to retrieve
 //   - skipCache: Flag to bypass cache lookup
+//   - authContext: Optional auth context containing Atmos-managed credentials
 //
 // Returns the output value or nil if the component is not provisioned.
 func GetTerraformState(
@@ -34,6 +35,7 @@ func GetTerraformState(
 	component string,
 	output string,
 	skipCache bool,
+	authContext *schema.AuthContext,
 ) (any, error) {
 	defer perf.Track(atmosConfig, "exec.GetTerraformState")()
 
@@ -84,7 +86,7 @@ func GetTerraformState(
 	}
 
 	// Read Terraform backend.
-	backend, err := tb.GetTerraformBackend(atmosConfig, &componentSections)
+	backend, err := tb.GetTerraformBackend(atmosConfig, &componentSections, authContext)
 	if err != nil {
 		er := fmt.Errorf("%w for component `%s` in stack `%s`\nin YAML function: `%s`\n%v", errUtils.ErrReadTerraformState, component, stack, yamlFunc, err)
 		return nil, er

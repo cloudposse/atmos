@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"time"
@@ -9,12 +10,15 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/lipgloss/table"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth"
 	"github.com/cloudposse/atmos/pkg/auth/credentials"
 	authTypes "github.com/cloudposse/atmos/pkg/auth/types"
 	"github.com/cloudposse/atmos/pkg/auth/validation"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
@@ -33,26 +37,39 @@ var authLoginCmd = &cobra.Command{
 func executeAuthLoginCommand(cmd *cobra.Command, args []string) error {
 	handleHelpRequest(cmd, args)
 
-	// Load atmos config
+	// Load atmos config.
 	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
 	if err != nil {
-		return fmt.Errorf("failed to load atmos config: %w", err)
+		return errors.Join(errUtils.ErrFailedToInitConfig, err)
 	}
+	defer perf.Track(&atmosConfig, "cmd.executeAuthLoginCommand")()
 
-	// Create auth manager
+	// Create auth manager.
 	authManager, err := createAuthManager(&atmosConfig.Auth)
 	if err != nil {
-		return fmt.Errorf("failed to create auth manager: %w", err)
+		return errors.Join(errUtils.ErrFailedToInitializeAuthManager, err)
 	}
 
-	// Get identity from flag or use default
-	identityName, _ := cmd.Flags().GetString("identity")
+	// Get identity from flag or use default.
+	// Read from cobra flags first (more reliable for persistent flags), then fall back to viper.
+	identityName, _ := cmd.Flags().GetString(IdentityFlagName)
+	if identityName == "" {
+		identityName = viper.GetString(IdentityFlagName)
+	}
 
-	// Perform authentication
+	// If no identity specified, get the default identity (which prompts if needed).
+	if identityName == "" {
+		identityName, err = authManager.GetDefaultIdentity()
+		if err != nil {
+			return errors.Join(errUtils.ErrDefaultIdentity, err)
+		}
+	}
+
+	// Perform authentication.
 	ctx := context.Background()
 	whoami, err := authManager.Authenticate(ctx, identityName)
 	if err != nil {
-		return fmt.Errorf("authentication failed: %w", err)
+		return errors.Join(errUtils.ErrAuthenticationFailed, fmt.Errorf("identity=%s: %w", identityName, err))
 	}
 
 	// Display success message using Atmos theme.
@@ -122,6 +139,9 @@ func displayAuthSuccess(whoami *authTypes.WhoamiInfo) {
 	}
 
 	// Create minimal charmbracelet table.
+	// Note: Padding variation across platforms was causing snapshot test failures.
+	// The table auto-sizes columns but the final width varied (Linux: 40 chars, macOS: 45 chars).
+	// Removed `.Width()` constraint as it was causing word-wrapping issues.
 	t := table.New().
 		Rows(rows...).
 		BorderTop(false).
