@@ -1449,7 +1449,7 @@ func (c *RealGitHubClient) FetchVersions(owner, repo string) ([]versionItem, err
 	}
 
 	if len(items) == 0 {
-		return nil, fmt.Errorf("no non-prerelease versions found")
+		return nil, fmt.Errorf("%w: no non-prerelease versions found for %s/%s", ErrNoVersionsFound, owner, repo)
 	}
 
 	return items, nil
