@@ -7,6 +7,7 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
+	"github.com/spf13/viper"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
@@ -145,6 +146,16 @@ func ProcessCommandLineArgs(
 	configAndStacksInfo.SettingsListMergeStrategy = argsAndFlagsInfo.SettingsListMergeStrategy
 	configAndStacksInfo.Query = argsAndFlagsInfo.Query
 	configAndStacksInfo.Identity = argsAndFlagsInfo.Identity
+
+	// Fallback to environment variable if identity not set via flag.
+	// Bind ATMOS_IDENTITY environment variable temporarily for this check.
+	if configAndStacksInfo.Identity == "" {
+		_ = viper.BindEnv("atmos_identity_temp", "ATMOS_IDENTITY")
+		if envIdentity := viper.GetString("atmos_identity_temp"); envIdentity != "" {
+			configAndStacksInfo.Identity = envIdentity
+		}
+	}
+
 	configAndStacksInfo.Affected = argsAndFlagsInfo.Affected
 	configAndStacksInfo.All = argsAndFlagsInfo.All
 	configAndStacksInfo.PackerDir = argsAndFlagsInfo.PackerDir
