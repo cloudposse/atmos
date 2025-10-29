@@ -1,6 +1,7 @@
 ---
 slug: auth-console-web-access
 title: "Cloud Console Access with atmos auth console"
+sidebar_label: "Cloud Console Access"
 authors: [osterman]
 tags: [feature, auth, aws, cloud-architecture]
 ---

@@ -1,6 +1,7 @@
 ---
 slug: introducing-atmos-auth-list
 title: "Introducing atmos auth list: Visualize Your Authentication Configuration"
+sidebar_label: "Introducing atmos auth list"
 authors: [osterman]
 tags: [atmos, authentication, providers, identities, cli]
 ---

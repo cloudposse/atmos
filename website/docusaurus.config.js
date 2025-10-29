@@ -200,6 +200,7 @@ const config = {
                     exclude: ['README.md'],
                     blogSidebarTitle: 'Recent Changes',
                     blogSidebarCount: 'ALL',
+                    showReadingTime: true,
                 },
                 theme: {
                     customCss: require.resolve('./src/css/custom.css'),

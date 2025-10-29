@@ -1,6 +1,7 @@
 ---
 slug: interactive-identity-selection
 title: "Interactive Identity Selection for Auth Login"
+sidebar_label: "Interactive Identity Selection"
 authors: [osterman]
 tags: [enhancement, auth]
 ---

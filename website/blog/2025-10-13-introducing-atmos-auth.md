@@ -1,6 +1,7 @@
 ---
 slug: introducing-atmos-auth
 title: "Introducing Atmos Auth: Native Cloud Authentication for Platform Teams"
+sidebar_label: "Introducing Atmos Auth"
 authors: [Benbentwo]
 tags: [feature, cloud-architecture]
 date: 2025-10-13

@@ -1,6 +1,7 @@
 ---
 slug: introducing-chdir-flag
 title: "Introducing --chdir: Simplify Your Multi-Repo Workflows"
+sidebar_label: "Introducing --chdir Flag"
 authors: [osterman]
 tags: [atmos, cli, productivity, developer-experience]
 date: 2025-10-19
