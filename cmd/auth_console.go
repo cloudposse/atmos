@@ -3,6 +3,7 @@ package cmd
 import (
 	"context"
 	_ "embed"
+	"errors"
 	"fmt"
 	"os"
 	"time"
@@ -72,11 +73,21 @@ func executeAuthConsoleCommand(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	// Authenticate and get whoami info.
+	// Try to use cached credentials first (passive check, no prompts).
+	// Only authenticate if cached credentials are not available or expired.
 	ctx := context.Background()
-	whoami, err := authManager.Authenticate(ctx, identityName)
+	whoami, err := authManager.GetCachedCredentials(ctx, identityName)
 	if err != nil {
-		return fmt.Errorf("%w: authentication failed: %w", errUtils.ErrAuthConsole, err)
+		log.Debug("No valid cached credentials found, authenticating", "identity", identityName, "error", err)
+		// No valid cached credentials - perform full authentication.
+		whoami, err = authManager.Authenticate(ctx, identityName)
+		if err != nil {
+			// Check for user cancellation - return clean error without wrapping.
+			if errors.Is(err, errUtils.ErrUserAborted) {
+				return errUtils.ErrUserAborted
+			}
+			return fmt.Errorf("%w: authentication failed: %w", errUtils.ErrAuthConsole, err)
+		}
 	}
 
 	// Retrieve credentials.
@@ -91,17 +102,23 @@ func executeAuthConsoleCommand(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("%w: %w", errUtils.ErrAuthConsole, err)
 	}
 
+	// Resolve session duration (flag takes precedence over provider config).
+	sessionDuration, err := resolveConsoleDuration(cmd, authManager, whoami.Provider)
+	if err != nil {
+		return fmt.Errorf("%w: %w", errUtils.ErrAuthConsole, err)
+	}
+
 	// Generate console URL.
 	options := types.ConsoleURLOptions{
 		Destination:     consoleDestination,
-		SessionDuration: consoleDuration,
+		SessionDuration: sessionDuration,
 		Issuer:          consoleIssuer,
 		OpenInBrowser:   !consoleSkipOpen && !consolePrintOnly,
 	}
 
 	consoleURL, duration, err := consoleProvider.GetConsoleURL(ctx, creds, options)
 	if err != nil {
-		return fmt.Errorf("%w: failed to generate console URL: %w", errUtils.ErrAuthConsole, err)
+		return fmt.Errorf("%w: failed to generate console URL for identity %q: %w", errUtils.ErrAuthConsole, identityName, err)
 	}
 
 	if consolePrintOnly {
@@ -256,6 +273,39 @@ func retrieveCredentials(whoami *types.WhoamiInfo) (types.ICredentials, error) {
 	default:
 		return nil, fmt.Errorf("%w: no credentials available", errUtils.ErrAuthConsole)
 	}
+}
+
+// resolveConsoleDuration resolves console session duration from flag or provider config.
+// Flag takes precedence over provider configuration.
+func resolveConsoleDuration(cmd *cobra.Command, authManager types.AuthManager, providerName string) (time.Duration, error) {
+	defer perf.Track(nil, "cmd.resolveConsoleDuration")()
+
+	// Check if flag was explicitly set by user.
+	if cmd.Flags().Changed("duration") {
+		return consoleDuration, nil
+	}
+
+	// Get provider configuration.
+	providers := authManager.GetProviders()
+	provider, exists := providers[providerName]
+	if !exists {
+		// No provider config found, use default from flag.
+		return consoleDuration, nil
+	}
+
+	// Check if provider has console configuration.
+	if provider.Console == nil || provider.Console.SessionDuration == "" {
+		// No console config, use default from flag.
+		return consoleDuration, nil
+	}
+
+	// Parse provider's session duration.
+	duration, err := time.ParseDuration(provider.Console.SessionDuration)
+	if err != nil {
+		return 0, fmt.Errorf("invalid session_duration in provider %q console config: %w", providerName, err)
+	}
+
+	return duration, nil
 }
 
 func init() {

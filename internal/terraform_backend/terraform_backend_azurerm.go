@@ -53,6 +53,8 @@ type azureBlobDownloadResponseWrapper struct {
 }
 
 func (w *azureBlobDownloadResponseWrapper) GetBody() io.ReadCloser {
+	defer perf.Track(nil, "terraform_backend.azureBlobDownloadResponseWrapper.GetBody")()
+
 	return w.response.Body
 }
 
@@ -67,6 +69,8 @@ func (w *azureBlobClientWrapper) DownloadStream(
 	blobName string,
 	options *azblob.DownloadStreamOptions,
 ) (AzureBlobDownloadResponse, error) {
+	defer perf.Track(nil, "terraform_backend.azureBlobClientWrapper.DownloadStream")()
+
 	response, err := w.client.DownloadStream(ctx, containerName, blobName, options)
 	if err != nil {
 		return nil, err
@@ -133,6 +137,7 @@ func getCachedAzureBlobClient(backend *map[string]any) (AzureBlobAPI, error) {
 func ReadTerraformBackendAzurerm(
 	atmosConfig *schema.AtmosConfiguration,
 	componentSections *map[string]any,
+	authContext *schema.AuthContext,
 ) ([]byte, error) {
 	defer perf.Track(atmosConfig, "terraform_backend.ReadTerraformBackendAzurerm")()
 

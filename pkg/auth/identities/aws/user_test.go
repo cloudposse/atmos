@@ -3,6 +3,7 @@ package aws
 import (
 	"context"
 	"errors"
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
@@ -46,9 +47,9 @@ func TestUserIdentity_Environment(t *testing.T) {
 	// Contains the three AWS_* vars and our custom one.
 	assert.NotEmpty(t, env["AWS_SHARED_CREDENTIALS_FILE"])
 	assert.NotEmpty(t, env["AWS_CONFIG_FILE"])
-	// Points under ~/.aws/atmos/aws-user.
-	assert.Contains(t, env["AWS_SHARED_CREDENTIALS_FILE"], filepath.Join(".aws", "atmos", "aws-user"))
-	assert.Contains(t, env["AWS_CONFIG_FILE"], filepath.Join(".aws", "atmos", "aws-user"))
+	// Points under XDG config: atmos/aws/aws-user.
+	assert.Contains(t, env["AWS_SHARED_CREDENTIALS_FILE"], filepath.Join("atmos", "aws", "aws-user"))
+	assert.Contains(t, env["AWS_CONFIG_FILE"], filepath.Join("atmos", "aws", "aws-user"))
 	assert.Equal(t, "BAR", env["FOO"])
 }
 
@@ -73,10 +74,15 @@ func (s stubUser) Authenticate(_ context.Context, _ types.ICredentials) (types.I
 }
 func (s stubUser) Validate() error                         { return nil }
 func (s stubUser) Environment() (map[string]string, error) { return map[string]string{}, nil }
-func (s stubUser) PostAuthenticate(_ context.Context, _ *schema.ConfigAndStacksInfo, _ string, _ string, _ types.ICredentials) error {
+func (s stubUser) PostAuthenticate(_ context.Context, _ *types.PostAuthenticateParams) error {
 	return nil
 }
-func (s stubUser) Logout(_ context.Context) error { return nil }
+func (s stubUser) Logout(_ context.Context) error                                { return nil }
+func (s stubUser) CredentialsExist() (bool, error)                               { return true, nil }
+func (s stubUser) LoadCredentials(_ context.Context) (types.ICredentials, error) { return s.creds, nil }
+func (s stubUser) PrepareEnvironment(_ context.Context, environ map[string]string) (map[string]string, error) {
+	return environ, nil
+}
 
 func TestAuthenticateStandaloneAWSUser(t *testing.T) {
 	// Not found -> error.
@@ -199,11 +205,11 @@ func TestUser_writeAWSFiles(t *testing.T) {
 	err := ui.writeAWSFiles(creds, "us-east-2")
 	require.NoError(t, err)
 
-	// Files should exist under ~/.aws/atmos/aws-user.
-	// Note: we can’t know the exact tempdir path here; assert partial suffix.
+	// Files should exist under XDG config: atmos/aws/aws-user.
+	// Note: we can't know the exact tempdir path here; assert partial suffix.
 	env, _ := id.Environment()
-	require.Contains(t, env["AWS_SHARED_CREDENTIALS_FILE"], filepath.Join(".aws", "atmos", "aws-user", "credentials"))
-	require.Contains(t, env["AWS_CONFIG_FILE"], filepath.Join(".aws", "atmos", "aws-user", "config"))
+	require.Contains(t, env["AWS_SHARED_CREDENTIALS_FILE"], filepath.Join("atmos", "aws", "aws-user", "credentials"))
+	require.Contains(t, env["AWS_CONFIG_FILE"], filepath.Join("atmos", "aws", "aws-user", "config"))
 }
 
 func TestUser_buildGetSessionTokenInput_NoMFA(t *testing.T) {
@@ -242,13 +248,26 @@ func TestUser_PostAuthenticate_SetsEnvAndFiles(t *testing.T) {
 	t.Setenv("HOME", to)
 	id, _ := NewUserIdentity("dev", &schema.Identity{Kind: "aws/user"})
 	ui := id.(*userIdentity)
+	authContext := &schema.AuthContext{}
 	stack := &schema.ConfigAndStacksInfo{}
 	creds := &types.AWSCredentials{AccessKeyID: "AK", SecretAccessKey: "SE", Region: "us-east-1"}
-	err := ui.PostAuthenticate(context.Background(), stack, "aws-user", "dev", creds)
+	err := ui.PostAuthenticate(context.Background(), &types.PostAuthenticateParams{
+		AuthContext:  authContext,
+		StackInfo:    stack,
+		ProviderName: "aws-user",
+		IdentityName: "dev",
+		Credentials:  creds,
+	})
 	require.NoError(t, err)
 
-	// Env set on stack.
-	assert.Contains(t, stack.ComponentEnvSection["AWS_SHARED_CREDENTIALS_FILE"], filepath.Join(".aws", "atmos", "aws-user", "credentials"))
+	// Auth context populated.
+	require.NotNil(t, authContext.AWS)
+	assert.Equal(t, "dev", authContext.AWS.Profile)
+	assert.Equal(t, "us-east-1", authContext.AWS.Region)
+
+	// Env set on stack (derived from auth context).
+	// XDG path contains "atmos/aws/aws-user/credentials"
+	assert.Contains(t, stack.ComponentEnvSection["AWS_SHARED_CREDENTIALS_FILE"], filepath.Join("atmos", "aws", "aws-user", "credentials"))
 	assert.Equal(t, "dev", stack.ComponentEnvSection["AWS_PROFILE"])
 }
 
@@ -349,4 +368,139 @@ func TestUserIdentity_Validate(t *testing.T) {
 
 	err := identity.Validate()
 	assert.NoError(t, err, "user identity validation should always succeed")
+}
+
+func TestUserIdentity_CredentialsExist(t *testing.T) {
+	// Create a temporary directory for credentials.
+	tmpDir := t.TempDir()
+
+	tests := []struct {
+		name           string
+		setupFiles     bool
+		expectedExists bool
+		expectedError  bool
+	}{
+		{
+			name:           "credentials file exists",
+			setupFiles:     true,
+			expectedExists: true,
+			expectedError:  false,
+		},
+		{
+			name:           "credentials file does not exist",
+			setupFiles:     false,
+			expectedExists: false,
+			expectedError:  false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Create identity.
+			identity, err := NewUserIdentity("test-user", &schema.Identity{
+				Kind: "aws/user",
+			})
+			require.NoError(t, err)
+
+			// Setup credentials file if needed.
+			if tt.setupFiles {
+				// Create AWS file manager with custom base path.
+				t.Setenv("ATMOS_XDG_CONFIG_HOME", tmpDir)
+
+				// Create the credentials file.
+				credPath := filepath.Join(tmpDir, "atmos", "aws", "aws-user", "credentials")
+				require.NoError(t, os.MkdirAll(filepath.Dir(credPath), 0o700))
+				require.NoError(t, os.WriteFile(credPath, []byte("[test-user]\naws_access_key_id=test\n"), 0o600))
+			} else {
+				// Use a non-existent directory.
+				t.Setenv("ATMOS_XDG_CONFIG_HOME", filepath.Join(tmpDir, "nonexistent"))
+			}
+
+			// Check if credentials exist.
+			exists, err := identity.CredentialsExist()
+
+			if tt.expectedError {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+				assert.Equal(t, tt.expectedExists, exists)
+			}
+		})
+	}
+}
+
+func TestUserIdentity_LoadCredentials(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	tests := []struct {
+		name          string
+		setupFiles    bool
+		expectedError bool
+	}{
+		{
+			name:          "successfully loads credentials from files",
+			setupFiles:    true,
+			expectedError: false,
+		},
+		{
+			name:          "fails when credentials file does not exist",
+			setupFiles:    false,
+			expectedError: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Create identity.
+			identity, err := NewUserIdentity("test-user", &schema.Identity{
+				Kind: "aws/user",
+			})
+			require.NoError(t, err)
+
+			// Setup credentials and config files if needed.
+			if tt.setupFiles {
+				t.Setenv("ATMOS_XDG_CONFIG_HOME", tmpDir)
+
+				// Create credentials file.
+				credPath := filepath.Join(tmpDir, "atmos", "aws", "aws-user", "credentials")
+				require.NoError(t, os.MkdirAll(filepath.Dir(credPath), 0o700))
+				credContent := `[test-user]
+aws_access_key_id = AKIAIOSFODNN7EXAMPLE
+aws_secret_access_key = wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
+aws_session_token = FwoGZXIvYXdzEBExample
+`
+				require.NoError(t, os.WriteFile(credPath, []byte(credContent), 0o600))
+
+				// Create config file.
+				configPath := filepath.Join(tmpDir, "atmos", "aws", "aws-user", "config")
+				configContent := `[profile test-user]
+region = us-west-2
+output = json
+`
+				require.NoError(t, os.WriteFile(configPath, []byte(configContent), 0o600))
+			} else {
+				t.Setenv("ATMOS_XDG_CONFIG_HOME", filepath.Join(tmpDir, "nonexistent"))
+			}
+
+			// Load credentials.
+			ctx := context.Background()
+			creds, err := identity.LoadCredentials(ctx)
+
+			if tt.expectedError {
+				assert.Error(t, err)
+				assert.Nil(t, creds)
+			} else {
+				require.NoError(t, err)
+				require.NotNil(t, creds)
+
+				// Verify credentials were loaded.
+				awsCreds, ok := creds.(*types.AWSCredentials)
+				require.True(t, ok, "credentials should be AWSCredentials type")
+				assert.Equal(t, "AKIAIOSFODNN7EXAMPLE", awsCreds.AccessKeyID)
+				assert.Equal(t, "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY", awsCreds.SecretAccessKey)
+				assert.Equal(t, "FwoGZXIvYXdzEBExample", awsCreds.SessionToken)
+				assert.Equal(t, "us-west-2", awsCreds.Region)
+			}
+		})
+	}
 }

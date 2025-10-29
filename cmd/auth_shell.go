@@ -60,8 +60,8 @@ func executeAuthShellCommandCore(cmd *cobra.Command, args []string) error {
 	// Get the non-flag arguments (shell arguments after --).
 	shellArgs := cmd.Flags().Args()
 
-	// Load atmos configuration (store as pointer for downstream use).
-	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
+	// Load atmos configuration (processStacks=false since auth commands don't require stack manifests)
+	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
 	if err != nil {
 		return errors.Join(errUtils.ErrFailedToInitializeAtmosConfig, err)
 	}
@@ -83,11 +83,21 @@ func executeAuthShellCommandCore(cmd *cobra.Command, args []string) error {
 		identityName = defaultIdentity
 	}
 
-	// Authenticate and get environment variables.
+	// Try to use cached credentials first (passive check, no prompts).
+	// Only authenticate if cached credentials are not available or expired.
 	ctx := context.Background()
-	whoami, err := authManager.Authenticate(ctx, identityName)
+	whoami, err := authManager.GetCachedCredentials(ctx, identityName)
 	if err != nil {
-		return errors.Join(errUtils.ErrAuthenticationFailed, err)
+		log.Debug("No valid cached credentials found, authenticating", "identity", identityName, "error", err)
+		// No valid cached credentials - perform full authentication.
+		whoami, err = authManager.Authenticate(ctx, identityName)
+		if err != nil {
+			// Check for user cancellation - return clean error without wrapping.
+			if errors.Is(err, errUtils.ErrUserAborted) {
+				return errUtils.ErrUserAborted
+			}
+			return errors.Join(errUtils.ErrAuthenticationFailed, err)
+		}
 	}
 
 	// Get environment variables from authentication result.

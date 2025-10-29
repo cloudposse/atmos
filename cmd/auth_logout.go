@@ -30,6 +30,10 @@ This command removes:
   • AWS credential files (~/.aws/atmos/<provider>/credentials)
   • AWS config files (~/.aws/atmos/<provider>/config)
 
+You can specify the identity to logout using either:
+  • Positional argument: atmos auth logout <identity>
+  • Flag: atmos auth logout --identity <identity>
+
 Note: This only removes local credentials. Your browser session with the
 identity provider (AWS SSO, Okta, etc.) may still be active. To completely
 end your session, visit your identity provider's website and sign out.`,
@@ -60,6 +64,13 @@ func executeAuthLogoutCommand(cmd *cobra.Command, args []string) error {
 	providerFlag, _ := cmd.Flags().GetString("provider")
 	dryRun, _ := cmd.Flags().GetBool("dry-run")
 
+	// Get identity from flag or positional argument.
+	// Note: "identity" is a persistent flag on parent authCmd, so it's automatically available.
+	identityFlag := ""
+	if flag := cmd.Flag("identity"); flag != nil {
+		identityFlag = flag.Value.String()
+	}
+
 	ctx := context.Background()
 
 	// Determine what to logout.
@@ -68,9 +79,17 @@ func executeAuthLogoutCommand(cmd *cobra.Command, args []string) error {
 		return performProviderLogout(ctx, authManager, providerFlag, dryRun)
 	}
 
+	// Support both positional argument and --identity flag for consistency with other auth commands.
+	// Positional argument takes precedence if both are provided.
+	var identityName string
 	if len(args) > 0 {
+		identityName = args[0]
+	} else if identityFlag != "" {
+		identityName = identityFlag
+	}
+
+	if identityName != "" {
 		// Logout specific identity.
-		identityName := args[0]
 		return performIdentityLogout(ctx, authManager, identityName, dryRun)
 	}
 

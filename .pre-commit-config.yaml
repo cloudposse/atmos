@@ -49,6 +49,14 @@ repos:
         pass_filenames: false
         exclude: ^(vendor/|tests/test-cases/|tests/testdata/|tests/snapshots/|tools/lintroller/testdata/)
 
+      - id: gomodcheck
+        name: Check go.mod install compatibility
+        description: Ensure go.mod doesn't have replace/exclude directives that break go install
+        entry: make gomodcheck
+        language: system
+        files: ^go\.mod$
+        pass_filenames: false
+
 
   # General file hygiene
   - repo: https://github.com/pre-commit/pre-commit-hooks
