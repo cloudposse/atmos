@@ -36,10 +36,8 @@ const (
 	logKeyProfile  = "profile"
 )
 
-var (
-	// legacyPathWarningOnce ensures we only warn about legacy path once per execution.
-	legacyPathWarningOnce sync.Once
-)
+// legacyPathWarningOnce ensures we only warn about legacy path once per execution.
+var legacyPathWarningOnce sync.Once
 
 // maskAccessKey returns the first 4 characters of an access key for logging.
 func maskAccessKey(accessKey string) string {
