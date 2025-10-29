@@ -309,11 +309,7 @@ Gemini models offer the most economical pricing ($0.075-$0.30 per 1M tokens) whi
 ```yaml
 providers:
   grok:
-    model: "grok-4-latest"  # Recommended - auto-updates to latest stable
-    # Alternative models:
-    # model: "grok-4-0709"         # Fixed snapshot (July 9, 2025)
-    # model: "grok-beta"           # Stable beta version
-    # model: "grok-vision-beta"    # Vision capabilities
+    model: "grok-4-latest"  # Currently the only working model via API
     api_key_env: "XAI_API_KEY"
     max_tokens: 4096
     base_url: "https://api.x.ai/v1"
@@ -324,11 +320,7 @@ providers:
 
 | Model | API Model ID | Context Window | Features | Best For |
 |-------|--------------|----------------|----------|----------|
-| **Current Generation** | | | | |
-| Grok 4 (Latest) | `grok-4-latest` | 2M tokens | Tool use, real-time search, auto-updates | Production use, always latest (recommended) |
-| Grok 4 (Snapshot) | `grok-4-0709` | 2M tokens | Tool use, real-time search | Fixed version for consistency |
-| Grok Beta | `grok-beta` | - | Stable beta features | Stable production use |
-| Grok Vision Beta | `grok-vision-beta` | - | Vision capabilities | Image understanding tasks |
+| Grok 4 (Latest) | `grok-4-latest` | 2M tokens | Tool use, real-time search, auto-updates | Production use (currently only working model via API) |
 
 **Pricing:** Grok 4: $3 input / $15 output per 1M tokens | Cached tokens: $0.75 per 1M tokens
 
@@ -341,15 +333,11 @@ providers:
 - ✅ Text-to-image generation (Grok 2 Image)
 
 **Model Naming Convention:**
-- `grok-4-latest` - Auto-updated to latest stable version (recommended for most users)
-- `grok-4-0709` - Fixed snapshot from July 9, 2025 (for workflows requiring consistency)
-- `grok-beta` - Stable beta version
+- `grok-4-latest` - Auto-updated to latest stable version (currently the only working model via API)
 
-**Model Selection Guide:**
-- **For production (auto-update)**: `grok-4-latest` - always get latest features automatically
-- **For consistency**: `grok-4-0709` - fixed snapshot, never changes
-- **For stability**: `grok-beta` - proven stable beta version
-- **For vision**: `grok-vision-beta` - image understanding capabilities
+:::warning Model Availability
+As of 2025, only `grok-4-latest` is accessible via the xAI API. Other models like `grok-4-0709`, `grok-beta`, and `grok-vision-beta` are mentioned in xAI's documentation but return "Model not found" errors when used.
+:::
 
 **Key Features:**
 - **2M token context window** (Grok 4 models)
@@ -367,6 +355,10 @@ export XAI_API_KEY="xai-..."
 
 :::tip Real-Time Knowledge
 Grok models have access to real-time information through integrated search capabilities, making them excellent for queries requiring current data and recent events.
+:::
+
+:::info Performance Considerations
+Grok 4 may exhibit slower response times (20+ seconds) with tool-heavy workloads compared to Anthropic, OpenAI, or Gemini. For interactive AI sessions requiring faster responses, consider using Claude Sonnet 4.5 or Gemini 2.5 Flash as your default provider.
 :::
 
 ## Local Provider
@@ -912,7 +904,7 @@ Use the exact model ID strings listed below, not marketing names. For example, u
 | **Anthropic** | `claude-sonnet-4-5-20250929` | `claude-haiku-4-5-20251001` |
 | **OpenAI** | `gpt-4o` | `gpt-5`, `o1` |
 | **Gemini** | `gemini-2.5-flash` | `gemini-2.5-pro` |
-| **Grok** | `grok-4-latest` | `grok-beta` |
+| **Grok** | `grok-4-latest` | (only model available) |
 | **Ollama** | `llama3.3:70b` | `mistral:7b`, `codellama:13b` |
 | **Bedrock** | `anthropic.claude-haiku-4-5-20251001-v1:0` | Global variant |
 | **Azure OpenAI** | `<your-deployment-name>` | N/A |
@@ -1018,21 +1010,17 @@ providers:
 
 | Model | API Model ID | Notes |
 |-------|--------------|-------|
-| Grok 4 (Latest) | `grok-4-latest` | Auto-updated to latest stable ✅ **RECOMMENDED** |
-| Grok 4 (Snapshot) | `grok-4-0709` | Fixed July 9, 2025 version |
-| Grok Beta | `grok-beta` | Beta version, stable |
-| Grok Vision Beta | `grok-vision-beta` | Vision capabilities |
+| Grok 4 (Latest) | `grok-4-latest` | Currently the only working model ✅ **REQUIRED** |
 
-:::tip Grok Naming Convention
-- `<model>` or `<model>-latest` = Auto-updated to latest stable version
-- `<model>-<date>` = Fixed snapshot, never changes (for consistency)
+:::warning Model Availability
+As of 2025, only `grok-4-latest` works via the xAI API. Models like `grok-4-0709`, `grok-beta`, and `grok-vision-beta` appear in documentation but return "Model not found" errors.
 :::
 
 **Example:**
 ```yaml
 providers:
   grok:
-    model: "grok-4-latest"  # Use -latest suffix for auto-updates
+    model: "grok-4-latest"  # Currently the only working model
     api_key_env: "XAI_API_KEY"
     base_url: "https://api.x.ai/v1"
 ```

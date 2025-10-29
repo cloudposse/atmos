@@ -23,7 +23,7 @@ func TestExtractConfig(t *testing.T) {
 			},
 			expectedConfig: &Config{
 				Enabled:   false,
-				Model:     "grok-beta",
+				Model:     "grok-4-latest",
 				APIKeyEnv: "XAI_API_KEY",
 				MaxTokens: 4096,
 				BaseURL:   "https://api.x.ai/v1",
@@ -104,7 +104,7 @@ func TestNewClient_Disabled(t *testing.T) {
 func TestClientGetters(t *testing.T) {
 	config := &Config{
 		Enabled:   true,
-		Model:     "grok-beta",
+		Model:     "grok-4-latest",
 		APIKeyEnv: "XAI_API_KEY",
 		MaxTokens: 4096,
 		BaseURL:   "https://api.x.ai/v1",
@@ -115,7 +115,7 @@ func TestClientGetters(t *testing.T) {
 		config: config,
 	}
 
-	assert.Equal(t, "grok-beta", client.GetModel())
+	assert.Equal(t, "grok-4-latest", client.GetModel())
 	assert.Equal(t, 4096, client.GetMaxTokens())
 	assert.Equal(t, "https://api.x.ai/v1", client.GetBaseURL())
 }

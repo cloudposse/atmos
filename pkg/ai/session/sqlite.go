@@ -84,6 +84,7 @@ func (s *SQLiteStorage) Migrate() error {
 			project_path TEXT NOT NULL,
 			model TEXT NOT NULL,
 			provider TEXT NOT NULL,
+			agent TEXT NOT NULL DEFAULT '',
 			created_at TIMESTAMP NOT NULL,
 			updated_at TIMESTAMP NOT NULL,
 			metadata TEXT
@@ -117,21 +118,6 @@ func (s *SQLiteStorage) Migrate() error {
 	for _, migration := range migrations {
 		if _, err := s.db.Exec(migration); err != nil {
 			return fmt.Errorf("migration failed: %w", err)
-		}
-	}
-
-	// Add agent column to sessions table (migration for existing databases).
-	// Check if column exists first since SQLite doesn't support IF NOT EXISTS in ALTER TABLE.
-	var columnExists bool
-	err := s.db.QueryRow(`SELECT COUNT(*) FROM pragma_table_info('sessions') WHERE name='agent'`).Scan(&columnExists)
-	if err != nil {
-		return fmt.Errorf("failed to check for agent column: %w", err)
-	}
-
-	if !columnExists {
-		// Use empty string as default for backward compatibility.
-		if _, err := s.db.Exec(`ALTER TABLE sessions ADD COLUMN agent TEXT NOT NULL DEFAULT ''`); err != nil {
-			return fmt.Errorf("failed to add agent column: %w", err)
 		}
 	}
 

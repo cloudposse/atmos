@@ -69,7 +69,7 @@ func extractConfig(atmosConfig *schema.AtmosConfiguration) *Config {
 	// Set defaults.
 	config := &Config{
 		Enabled:   false,
-		Model:     "grok-beta",
+		Model:     "grok-4-latest",
 		APIKeyEnv: "XAI_API_KEY",
 		MaxTokens: DefaultMaxTokens,
 		BaseURL:   "https://api.x.ai/v1",
