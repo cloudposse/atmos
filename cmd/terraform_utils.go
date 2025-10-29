@@ -8,6 +8,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
+	"github.com/cloudposse/atmos/internal/tui/templates/term"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	h "github.com/cloudposse/atmos/pkg/hooks"
 	log "github.com/cloudposse/atmos/pkg/logger"
@@ -79,22 +80,32 @@ func terraformRun(cmd *cobra.Command, actualCmd *cobra.Command, args []string) e
 
 	// Handle interactive selection when --identity is used without a value.
 	if forceSelect {
+		// Guard: Fail fast in CI/non-TTY environments instead of hanging.
+		if !term.IsTTYSupportForStdin() {
+			errUtils.CheckErrorPrintAndExit(
+				fmt.Errorf("%w: interactive identity selection requires a TTY", errUtils.ErrDefaultIdentity),
+				"",
+				"",
+			)
+		}
+
 		// Initialize CLI config to get auth configuration.
-		atmosConfig, err := cfg.InitCliConfig(info, true)
+		// Use false to skip stack processing - only auth config is needed.
+		atmosConfig, err := cfg.InitCliConfig(info, false)
 		if err != nil {
-			errUtils.CheckErrorPrintAndExit(errors.Join(errUtils.ErrInitializeCLIConfig, err), "", "")
+			errUtils.CheckErrorPrintAndExit(fmt.Errorf("%w: %w", errUtils.ErrInitializeCLIConfig, err), "", "")
 		}
 
 		// Create auth manager to enable identity selection.
 		authManager, err := createAuthManager(&atmosConfig.Auth)
 		if err != nil {
-			errUtils.CheckErrorPrintAndExit(errors.Join(errUtils.ErrFailedToInitializeAuthManager, err), "", "")
+			errUtils.CheckErrorPrintAndExit(fmt.Errorf("%w: %w", errUtils.ErrFailedToInitializeAuthManager, err), "", "")
 		}
 
 		// Get default identity with forced interactive selection.
 		selectedIdentity, err := authManager.GetDefaultIdentity(true)
 		if err != nil {
-			errUtils.CheckErrorPrintAndExit(errors.Join(errUtils.ErrDefaultIdentity, err), "", "")
+			errUtils.CheckErrorPrintAndExit(fmt.Errorf("%w: %w", errUtils.ErrDefaultIdentity, err), "", "")
 		}
 
 		info.Identity = selectedIdentity
