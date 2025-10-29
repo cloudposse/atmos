@@ -19,7 +19,7 @@ Atmos supports 7 AI providers, giving you flexibility to choose based on your ne
 | **Anthropic (Claude)** | `claude-sonnet-4-20250514` | API Key | Advanced reasoning, default choice |
 | **OpenAI (GPT)** | `gpt-4o` | API Key | Widely available, strong general capabilities |
 | **Google (Gemini)** | `gemini-2.0-flash-exp` | API Key | Fast responses, larger context window |
-| **xAI (Grok)** | `grok-4` | API Key | OpenAI-compatible, real-time knowledge |
+| **xAI (Grok)** | `grok-4-latest` | API Key | OpenAI-compatible, real-time knowledge |
 | **Ollama (Local)** | `llama3.3:70b` | None (local) | Privacy, offline use, zero API costs |
 | **AWS Bedrock** | `anthropic.claude-sonnet-4-20250514-v2:0` | AWS Credentials | Enterprise security, AWS integration |
 | **Azure OpenAI** | `gpt-4o` | API Key / Azure AD | Enterprise compliance, Azure integration |
@@ -309,15 +309,11 @@ Gemini models offer the most economical pricing ($0.075-$0.30 per 1M tokens) whi
 ```yaml
 providers:
   grok:
-    model: "grok-4"  # Recommended (default)
-    # Current models:
-    # model: "grok-4"              # Most intelligent, tool use, real-time search
-    # model: "grok-4-fast"         # Faster variant, 2M token context
-    # model: "grok-3"              # Flagship model, enterprise use cases
-    # model: "grok-3-mini"         # Lightweight reasoning model
-    # model: "grok-2-image"        # Text-to-image generation
-    # Legacy:
-    # model: "grok-beta"           # Previous beta version
+    model: "grok-4-latest"  # Recommended - auto-updates to latest stable
+    # Alternative models:
+    # model: "grok-4-0709"         # Fixed snapshot (July 9, 2025)
+    # model: "grok-beta"           # Stable beta version
+    # model: "grok-vision-beta"    # Vision capabilities
     api_key_env: "XAI_API_KEY"
     max_tokens: 4096
     base_url: "https://api.x.ai/v1"
@@ -326,14 +322,15 @@ providers:
 
 **Available Models (2025):**
 
-| Model | Model ID | Context Window | Features | Pricing (per 1M tokens) | Best For |
-|-------|----------|----------------|----------|-------------------------|----------|
-| **Current Generation** | | | | | |
-| Grok 4 | `grok-4` | 2M tokens | Tool use, real-time search | $3 input / $15 output | Most intelligent, enterprise tasks (recommended) |
-| Grok 4 Fast | `grok-4-fast` | 2M tokens | Faster responses | $0.20-$0.40 input / $0.50-$1.00 output | High-speed queries, lighter workloads |
-| Grok 3 | `grok-3` | - | Data extraction, coding | $3 input / $15 output | Enterprise use, coding, summarization |
-| Grok 3 Mini | `grok-3-mini` | - | Native reasoning | Lower cost | Logic-based tasks, lightweight reasoning |
-| Grok 2 Image | `grok-2-image` | N/A | Text-to-image | Per image pricing | Image generation |
+| Model | API Model ID | Context Window | Features | Best For |
+|-------|--------------|----------------|----------|----------|
+| **Current Generation** | | | | |
+| Grok 4 (Latest) | `grok-4-latest` | 2M tokens | Tool use, real-time search, auto-updates | Production use, always latest (recommended) |
+| Grok 4 (Snapshot) | `grok-4-0709` | 2M tokens | Tool use, real-time search | Fixed version for consistency |
+| Grok Beta | `grok-beta` | - | Stable beta features | Stable production use |
+| Grok Vision Beta | `grok-vision-beta` | - | Vision capabilities | Image understanding tasks |
+
+**Pricing:** Grok 4: $3 input / $15 output per 1M tokens | Cached tokens: $0.75 per 1M tokens
 
 **Model Capabilities:**
 - ✅ Native tool use (Grok 4)
@@ -343,18 +340,22 @@ providers:
 - ✅ OpenAI-compatible API
 - ✅ Text-to-image generation (Grok 2 Image)
 
-**Knowledge Cutoff:** November 2024 (Grok 3, Grok 4)
+**Model Naming Convention:**
+- `grok-4-latest` - Auto-updated to latest stable version (recommended for most users)
+- `grok-4-0709` - Fixed snapshot from July 9, 2025 (for workflows requiring consistency)
+- `grok-beta` - Stable beta version
 
 **Model Selection Guide:**
-- **For enterprise tasks**: Grok 4 - most intelligent with tool use and real-time search
-- **For speed**: Grok 4 Fast - optimized for faster responses with 2M token context
-- **For coding**: Grok 3 - strong data extraction, coding, and text summarization
-- **For budget**: Grok 3 Mini - lightweight model for logic-based tasks
-- **For images**: Grok 2 Image - text-to-image generation
+- **For production (auto-update)**: `grok-4-latest` - always get latest features automatically
+- **For consistency**: `grok-4-0709` - fixed snapshot, never changes
+- **For stability**: `grok-beta` - proven stable beta version
+- **For vision**: `grok-vision-beta` - image understanding capabilities
 
-**Additional Features:**
-- **Live Search API**: Real-time web search integration ($25 per 1,000 sources or $0.025 per source)
-- **Prompt Caching**: Reduce costs on repeated prompts by reusing stored data
+**Key Features:**
+- **2M token context window** (Grok 4 models)
+- **Real-time search integration** - access to current information
+- **Prompt caching** - 75% cost reduction on cached tokens ($0.75 vs $3 per 1M)
+- **OpenAI-compatible API** - easy migration
 
 **Get API Key**: [console.x.ai](https://console.x.ai)
 
@@ -895,6 +896,287 @@ Switch back to OpenAI (Ctrl+P):
 - Reserved capacity available for high volume
 - Pricing varies by region and model
 - Can be included in Enterprise Agreements
+
+## API Model IDs Reference
+
+This section lists the **exact API model IDs** to use when configuring Atmos AI providers. Use these exact strings in your `atmos.yaml` configuration.
+
+:::warning Important
+Use the exact model ID strings listed below, not marketing names. For example, use `grok-4-latest` not `grok-4`.
+:::
+
+### Quick Reference Table
+
+| Provider | Recommended Model ID | Alternative |
+|----------|---------------------|-------------|
+| **Anthropic** | `claude-sonnet-4-5-20250929` | `claude-haiku-4-5-20251001` |
+| **OpenAI** | `gpt-4o` | `gpt-5`, `o1` |
+| **Gemini** | `gemini-2.5-flash` | `gemini-2.5-pro` |
+| **Grok** | `grok-4-latest` | `grok-beta` |
+| **Ollama** | `llama3.3:70b` | `mistral:7b`, `codellama:13b` |
+| **Bedrock** | `anthropic.claude-haiku-4-5-20251001-v1:0` | Global variant |
+| **Azure OpenAI** | `<your-deployment-name>` | N/A |
+
+### Anthropic (Claude) API Model IDs
+
+**Current Models (Recommended):**
+
+| Model | API Model ID | Notes |
+|-------|--------------|-------|
+| Claude Sonnet 4.5 | `claude-sonnet-4-5-20250929` | Latest, best for complex agents and coding |
+| Claude Haiku 4.5 | `claude-haiku-4-5-20251001` | Fastest, near-frontier intelligence |
+| Claude Opus 4.1 | `claude-opus-4-1-20250805` | Exceptional for specialized reasoning |
+
+**Legacy Models:**
+
+| Model | API Model ID | Notes |
+|-------|--------------|-------|
+| Claude Sonnet 4 | `claude-sonnet-4-20250514` | Previous version |
+| Claude 3.7 Sonnet | `claude-3-7-sonnet-20250219` | Legacy |
+| Claude Opus 4 | `claude-opus-4-20250514` | Previous version |
+| Claude 3.5 Haiku | `claude-3-5-haiku-20241022` | Legacy |
+| Claude 3 Haiku | `claude-3-haiku-20240307` | Legacy |
+
+**Example:**
+```yaml
+providers:
+  anthropic:
+    model: "claude-sonnet-4-5-20250929"  # Use exact snapshot ID
+    api_key_env: "ANTHROPIC_API_KEY"
+```
+
+### OpenAI (GPT) API Model IDs
+
+**GPT-5 Models (Latest):**
+
+| Model | API Model ID | Notes |
+|-------|--------------|-------|
+| GPT-5 | `gpt-5` | Latest flagship model |
+| GPT-5 Mini | `gpt-5-mini` | Faster, more affordable |
+| GPT-5 Nano | `gpt-5-nano` | Fastest, lightweight |
+
+**GPT-4o Models:**
+
+| Model | API Model ID | Notes |
+|-------|--------------|-------|
+| GPT-4o | `gpt-4o` | Multimodal, current stable |
+| GPT-4o (dated) | `gpt-4o-2024-08-06` | Specific snapshot |
+| GPT-4o Mini | `gpt-4o-mini` | Fast and affordable |
+| ChatGPT-4o Latest | `chatgpt-4o-latest` | Auto-updated |
+
+**o1 Series (Reasoning Models):**
+
+| Model | API Model ID | Notes |
+|-------|--------------|-------|
+| o1 | `o1` | Flagship reasoning model |
+| o1 Mini | `o1-mini` | Faster reasoning |
+| o3 | `o3` | Advanced reasoning |
+| o3 Mini | `o3-mini` | Faster advanced reasoning |
+
+**Example:**
+```yaml
+providers:
+  openai:
+    model: "gpt-4o"  # Or "gpt-5", "o1", etc.
+    api_key_env: "OPENAI_API_KEY"
+```
+
+### Google (Gemini) API Model IDs
+
+**Gemini 2.5 Series (Latest):**
+
+| Model | API Model ID | Notes |
+|-------|--------------|-------|
+| Gemini 2.5 Pro | `gemini-2.5-pro` | Best reasoning, code, math |
+| Gemini 2.5 Flash | `gemini-2.5-flash` | Best price-performance (recommended) |
+| Gemini 2.5 Flash Lite | `gemini-2.5-flash-lite` | Fastest, most cost-efficient |
+| Gemini 2.5 Flash Image | `gemini-2.5-flash-image` | Image generation |
+
+**Gemini 2.0 Series:**
+
+| Model | API Model ID | Notes |
+|-------|--------------|-------|
+| Gemini 2.0 Flash | `gemini-2.0-flash` | Previous generation |
+| Gemini 2.0 Flash Lite | `gemini-2.0-flash-lite` | Previous lightweight |
+
+**Preview/Experimental:**
+
+| Model | API Model ID | Notes |
+|-------|--------------|-------|
+| Gemini 2.5 Flash (Preview) | `gemini-2.5-flash-preview-09-2025` | Latest features |
+| Gemini 2.5 Flash Lite (Preview) | `gemini-2.5-flash-lite-preview-09-2025` | Latest lite version |
+
+**Example:**
+```yaml
+providers:
+  gemini:
+    model: "gemini-2.5-flash"  # Stable recommended version
+    api_key_env: "GEMINI_API_KEY"
+```
+
+### xAI (Grok) API Model IDs
+
+| Model | API Model ID | Notes |
+|-------|--------------|-------|
+| Grok 4 (Latest) | `grok-4-latest` | Auto-updated to latest stable ✅ **RECOMMENDED** |
+| Grok 4 (Snapshot) | `grok-4-0709` | Fixed July 9, 2025 version |
+| Grok Beta | `grok-beta` | Beta version, stable |
+| Grok Vision Beta | `grok-vision-beta` | Vision capabilities |
+
+:::tip Grok Naming Convention
+- `<model>` or `<model>-latest` = Auto-updated to latest stable version
+- `<model>-<date>` = Fixed snapshot, never changes (for consistency)
+:::
+
+**Example:**
+```yaml
+providers:
+  grok:
+    model: "grok-4-latest"  # Use -latest suffix for auto-updates
+    api_key_env: "XAI_API_KEY"
+    base_url: "https://api.x.ai/v1"
+```
+
+### Ollama API Model IDs
+
+**Llama 3 Models:**
+
+| Model | API Model ID | Size | Notes |
+|-------|--------------|------|-------|
+| Llama 3.3 70B | `llama3.3:70b` | ~40GB | State-of-the-art, recommended |
+| Llama 3.3 (Latest) | `llama3.3` | ~40GB | Alias for :latest tag |
+| Llama 3.1 405B | `llama3.1:405b` | ~230GB | Highest quality |
+| Llama 3.1 70B | `llama3.1:70b` | ~40GB | Excellent quality |
+| Llama 3.1 8B | `llama3.1:8b` | ~5GB | Good for laptops |
+| Llama 3.2 | `llama3.2` | ~2GB | Lightweight |
+
+**Code-Specialized Models:**
+
+| Model | API Model ID | Size | Notes |
+|-------|--------------|------|-------|
+| CodeLlama 34B | `codellama:34b` | ~19GB | Best for coding |
+| CodeLlama 13B | `codellama:13b` | ~8GB | Good for coding |
+| CodeLlama 7B | `codellama:7b` | ~4GB | Lightweight coding |
+
+**Mistral Models:**
+
+| Model | API Model ID | Size | Notes |
+|-------|--------------|------|-------|
+| Mixtral 8x7B | `mixtral:8x7b` | ~26GB | Complex reasoning |
+| Mistral 7B | `mistral:7b` | ~4GB | Fast, efficient |
+| Mistral Small 3 | `mistral-small:latest` | Variable | Latest small model |
+
+:::info Ollama Tags
+- `:latest` = Most recent version (auto-updated)
+- `:70b`, `:8b`, etc. = Specific parameter size
+- `:instruct` = Instruction-tuned variant
+- `:q4_K_M` = Quantization level (affects size/quality)
+
+View all tags: `ollama list` or visit [ollama.com/library](https://ollama.com/library)
+:::
+
+**Example:**
+```yaml
+providers:
+  ollama:
+    model: "llama3.3:70b"  # Or "mistral:7b", "codellama:13b", etc.
+    base_url: "http://localhost:11434/v1"
+```
+
+### AWS Bedrock API Model IDs
+
+**Claude Models on Bedrock:**
+
+| Model | API Model ID | Notes |
+|-------|--------------|-------|
+| Claude Sonnet 4.5 (Global) | `global.anthropic.claude-sonnet-4-5-20250929-v1:0` | Global endpoint |
+| Claude Haiku 4.5 | `anthropic.claude-haiku-4-5-20251001-v1:0` | Regional endpoint |
+| Claude 3.5 Sonnet V2 | `anthropic.claude-3-5-sonnet-20241022-v2:0` | Previous generation |
+| Claude 3 Haiku | `anthropic.claude-3-haiku-20240307-v1:0` | Legacy |
+| Claude 3 Sonnet | `anthropic.claude-3-sonnet-20240229-v1:0` | Legacy |
+
+:::warning Bedrock Endpoints
+- **Global endpoints**: Use `global.` prefix for dynamic routing
+- **Regional endpoints**: Use `anthropic.` prefix for specific regions
+- **Cross-region**: Use inference profile IDs like `us.anthropic.claude-3-5-sonnet-20241022-v2:0`
+:::
+
+**Example:**
+```yaml
+providers:
+  bedrock:
+    model: "anthropic.claude-haiku-4-5-20251001-v1:0"  # Regional
+    # OR
+    # model: "global.anthropic.claude-sonnet-4-5-20250929-v1:0"  # Global
+    base_url: "us-east-1"  # AWS region
+```
+
+### Azure OpenAI API Model IDs
+
+| Model | API Model ID | Notes |
+|-------|--------------|-------|
+| GPT-4o | `gpt-4o` | Your Azure deployment name |
+| GPT-5 | `gpt-5` | Your Azure deployment name |
+| o1 | `o1` | Your Azure deployment name |
+
+:::warning Azure Deployment Names
+Azure OpenAI uses **deployment names** you create in Azure Portal, not OpenAI model names directly.
+
+1. Create a deployment in Azure Portal (e.g., "my-gpt4o-deployment")
+2. Use YOUR deployment name in the configuration
+3. The deployment name can be different from the model name
+:::
+
+**Example:**
+```yaml
+providers:
+  azureopenai:
+    model: "my-gpt4o-deployment"  # YOUR deployment name from Azure Portal
+    api_key_env: "AZURE_OPENAI_API_KEY"
+    base_url: "https://your-resource.openai.azure.com"
+    api_version: "2024-02-15-preview"
+```
+
+### Finding Model IDs via API
+
+**Anthropic:**
+<Terminal title="shell">
+```bash
+curl https://api.anthropic.com/v1/models \
+  -H "x-api-key: $ANTHROPIC_API_KEY"
+```
+</Terminal>
+
+**OpenAI:**
+<Terminal title="shell">
+```bash
+curl https://api.openai.com/v1/models \
+  -H "Authorization: Bearer $OPENAI_API_KEY"
+```
+</Terminal>
+
+**xAI (Grok):**
+<Terminal title="shell">
+```bash
+curl https://api.x.ai/v1/models \
+  -H "Authorization: Bearer $XAI_API_KEY"
+```
+</Terminal>
+
+**Ollama:**
+<Terminal title="shell">
+```bash
+ollama list  # List locally available models
+ollama search <name>  # Search Ollama library
+```
+</Terminal>
+
+**AWS Bedrock:**
+<Terminal title="shell">
+```bash
+aws bedrock list-foundation-models --region us-east-1
+```
+</Terminal>
 
 ## Related Documentation
 
