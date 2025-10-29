@@ -861,52 +861,43 @@ aside[class*="sidebar_"] {
 
 /* Blog sidebar items - match docs sidebar menu items */
 .theme-blog-sidebar-item {
-    margin-bottom: 0 !important;
+    margin-bottom: 0;
 }
 
-.theme-blog-sidebar-item__title,
-.theme-blog-sidebar-item a {
-    font-size: var(--ifm-menu-link-font-size) !important;
-    line-height: var(--ifm-menu-link-line-height) !important;
-    padding: var(--ifm-menu-link-padding-vertical) var(--ifm-menu-link-padding-horizontal) !important;
-    color: var(--ifm-menu-color) !important;
-    text-decoration: none !important;
-    border-radius: var(--ifm-global-radius) !important;
-    display: block !important;
-    overflow: hidden !important;
-    text-overflow: ellipsis !important;
-    white-space: nowrap !important;
+.theme-blog-sidebar-item li {
+    max-width: 100%;
 }
 
-.theme-blog-sidebar-item a:hover {
-    background-color: var(--ifm-menu-color-background-hover) !important;
-    color: var(--ifm-menu-color-active) !important;
+.theme-blog-sidebar-item a,
+a[class*="sidebarItemLink"] {
+    font-size: var(--ifm-menu-link-font-size);
+    line-height: var(--ifm-menu-link-line-height);
+    padding: var(--ifm-menu-link-padding-vertical) var(--ifm-menu-link-padding-horizontal);
+    color: var(--ifm-menu-color);
+    text-decoration: none;
+    border-radius: var(--ifm-global-radius);
+    display: block;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
-/* Widen table of contents column to use available space and make sticky */
+.theme-blog-sidebar-item a:hover,
+a[class*="sidebarItemLink"]:hover {
+    background-color: var(--ifm-menu-color-background-hover);
+    color: var(--ifm-menu-color-active);
+}
+
+/* Table of contents - reasonable width with sticky positioning */
 .theme-doc-toc-desktop,
 div[class*="tableOfContents"],
 .thin-scrollbar {
-    max-width: 450px !important;
-    width: 450px !important;
-    min-width: 450px !important;
-    position: sticky !important;
-    top: var(--ifm-navbar-height) !important;
-    max-height: calc(100vh - var(--ifm-navbar-height)) !important;
-    overflow-y: auto !important;
-}
-
-.table-of-contents,
-.table-of-contents ul,
-ul[class*="table-of-contents"] {
-    max-width: 100% !important;
-    width: 100% !important;
-}
-
-/* Target the actual TOC container and list items */
-aside[class*="tocCollapsible"] {
-    width: 450px !important;
-    max-width: 450px !important;
+    min-width: 250px;
+    position: sticky;
+    top: var(--ifm-navbar-height);
+    max-height: calc(100vh - var(--ifm-navbar-height));
+    overflow-y: auto;
 }
 
 a[class*="table-of-contents__link"] {
@@ -914,24 +905,4 @@ a[class*="table-of-contents__link"] {
     word-wrap: break-word !important;
 }
 
-@media (min-width: 1440px) {
-    .theme-doc-toc-desktop,
-    div[class*="tableOfContents"],
-    .thin-scrollbar,
-    aside[class*="tocCollapsible"] {
-        max-width: 550px !important;
-        width: 550px !important;
-        min-width: 550px !important;
-    }
-}
-
-@media (min-width: 1920px) {
-    .theme-doc-toc-desktop,
-    div[class*="tableOfContents"],
-    .thin-scrollbar,
-    aside[class*="tocCollapsible"] {
-        max-width: 650px !important;
-        width: 650px !important;
-        min-width: 650px !important;
-    }
-}
+/* Let TOC use natural width on all screen sizes */
