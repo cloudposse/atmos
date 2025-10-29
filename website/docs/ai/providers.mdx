@@ -19,7 +19,7 @@ Atmos supports 7 AI providers, giving you flexibility to choose based on your ne
 | **Anthropic (Claude)** | `claude-sonnet-4-20250514` | API Key | Advanced reasoning, default choice |
 | **OpenAI (GPT)** | `gpt-4o` | API Key | Widely available, strong general capabilities |
 | **Google (Gemini)** | `gemini-2.0-flash-exp` | API Key | Fast responses, larger context window |
-| **xAI (Grok)** | `grok-beta` | API Key | OpenAI-compatible, real-time knowledge |
+| **xAI (Grok)** | `grok-4` | API Key | OpenAI-compatible, real-time knowledge |
 | **Ollama (Local)** | `llama3.3:70b` | None (local) | Privacy, offline use, zero API costs |
 | **AWS Bedrock** | `anthropic.claude-sonnet-4-20250514-v2:0` | AWS Credentials | Enterprise security, AWS integration |
 | **Azure OpenAI** | `gpt-4o` | API Key / Azure AD | Enterprise compliance, Azure integration |
@@ -129,20 +129,42 @@ settings:
 
 ### Anthropic (Claude)
 
-**Best for**: Advanced reasoning, code generation, complex analysis
+**Best for**: Advanced reasoning, code generation, complex analysis, specialized agents
 
 <File title="atmos.yaml">
 ```yaml
 providers:
   anthropic:
-    model: "claude-sonnet-4-20250514"  # Default
+    model: "claude-sonnet-4-5-20250929"  # Recommended (default)
     # Alternatives:
-    # model: "claude-3-opus-20240229"     # Most capable
-    # model: "claude-3-haiku-20240307"    # Fastest, cheapest
+    # model: "claude-haiku-4-5-20251001"    # Fastest, most affordable
+    # model: "claude-opus-4-1-20250805"     # Most capable for specialized reasoning
+    # model: "claude-3-opus-20240229"       # Legacy model
+    # model: "claude-3-haiku-20240307"      # Legacy model
     api_key_env: "ANTHROPIC_API_KEY"
     max_tokens: 4096
 ```
 </File>
+
+**Available Models (2025):**
+
+| Model | API ID | Context Window | Max Output | Pricing (per 1M tokens) | Best For |
+|-------|--------|----------------|------------|-------------------------|----------|
+| **Claude Sonnet 4.5** | `claude-sonnet-4-5-20250929` | 200K / 1M (beta) | 64K | $3 input / $15 output | Complex agents, coding, production (recommended) |
+| **Claude Haiku 4.5** | `claude-haiku-4-5-20251001` | 200K | 64K | $1 input / $5 output | Fast responses, high-volume tasks, budget-conscious |
+| **Claude Opus 4.1** | `claude-opus-4-1-20250805` | 200K | 32K | $15 input / $75 output | Specialized reasoning, critical tasks, highest accuracy |
+| **Claude 3 Opus** | `claude-3-opus-20240229` | 200K | 4K | $15 input / $75 output | Legacy model, still supported |
+| **Claude 3 Haiku** | `claude-3-haiku-20240307` | 200K | 4K | $0.25 input / $1.25 output | Legacy model, fastest |
+
+**Model Capabilities:**
+- ✅ Text and image input (multimodal)
+- ✅ Extended thinking for complex reasoning
+- ✅ Vision processing
+- ✅ Multilingual support
+- ✅ Code generation and analysis
+- ✅ Function calling and tool use
+
+**Aliases:** You can use short aliases like `claude-sonnet-4-5` instead of full model IDs.
 
 **Get API Key**: [console.anthropic.com](https://console.anthropic.com/)
 
@@ -152,22 +174,57 @@ export ANTHROPIC_API_KEY="sk-ant-..."
 ```
 </Terminal>
 
+:::tip Model Selection
+- **Production use**: Claude Sonnet 4.5 offers the best balance of performance, speed, and cost
+- **High-volume tasks**: Claude Haiku 4.5 provides near-frontier intelligence at lower cost
+- **Critical reasoning**: Claude Opus 4.1 delivers the highest accuracy for specialized tasks
+:::
+
+
 ### OpenAI (GPT)
 
-**Best for**: General-purpose tasks, wide ecosystem support
+**Best for**: General-purpose tasks, wide ecosystem support, logical and technical reasoning
 
 <File title="atmos.yaml">
 ```yaml
 providers:
   openai:
-    model: "gpt-5"
-    # Alternatives:
-    # model: "gpt-4-turbo"      # More capable
-    # model: "gpt-3.5-turbo"    # Faster, cheaper
+    model: "gpt-4o"  # Recommended (default)
+    # Reasoning models (best for complex, multi-step tasks):
+    # model: "o1"              # Flagship reasoning model
+    # model: "o1-mini"         # Faster, more affordable reasoning
+    # model: "o1-nano"         # Fastest reasoning model
+    # Multimodal models:
+    # model: "gpt-4o"          # Smartest multimodal model
+    # model: "gpt-4o-mini"     # Fast and affordable
+    # Legacy models:
+    # model: "gpt-4-turbo"     # Previous generation
+    # model: "gpt-3.5-turbo"   # Older, cheaper
     api_key_env: "OPENAI_API_KEY"
     max_tokens: 4096
 ```
 </File>
+
+**Available Models (2025):**
+
+| Model Family | Model ID | Context Window | Best For | Notes |
+|--------------|----------|----------------|----------|-------|
+| **Reasoning Models** | | | | |
+| o1 | `o1` | 200K | Complex multi-step tasks, STEM, coding | Flagship reasoning model |
+| o1 mini | `o1-mini` | 200K | Faster reasoning tasks | Balance of power & performance |
+| o1 nano | `o1-nano` | - | Simple tasks, classification | Fastest & most affordable |
+| **Multimodal LLMs** | | | | |
+| GPT-4o | `gpt-4o` | 128K | General-purpose, multimodal tasks | Recommended (default) |
+| GPT-4o mini | `gpt-4o-mini` | - | Fast, simple queries | Affordable option |
+| **Legacy Models** | | | | |
+| GPT-4 Turbo | `gpt-4-turbo` | 128K | Previous generation | Still supported |
+| GPT-3.5 Turbo | `gpt-3.5-turbo` | 16K | Basic tasks | Cheapest option |
+
+**Model Selection Guide:**
+- **For everyday tasks**: GPT-4o or GPT-4o mini (multimodal LLMs)
+- **For complex reasoning**: o1 (large) or o1-mini (small) models
+- **For STEM use cases**: o1 reasoning models excel at math, code, and scientific tasks
+- **For budget**: GPT-3.5-turbo or o1-nano
 
 **Get API Key**: [platform.openai.com/api-keys](https://platform.openai.com/api-keys)
 
@@ -178,25 +235,59 @@ export OPENAI_API_KEY="sk-..."
 </Terminal>
 
 :::info Max Tokens Parameter
-OpenAI's newer models (gpt-5, o1-preview, o1-mini, chatgpt-4o-latest) use `max_completion_tokens` instead of `max_tokens` in their API. Atmos automatically handles this difference based on the model you configure - just use `max_tokens` in your configuration and Atmos will use the correct parameter for your model.
+OpenAI's newer models (o1, o1-mini, o1-nano, chatgpt-4o-latest) use `max_completion_tokens` instead of `max_tokens` in their API. Atmos automatically handles this difference based on the model you configure - just use `max_tokens` in your configuration and Atmos will use the correct parameter for your model.
 :::
 
 ### Google (Gemini)
 
-**Best for**: Fast responses, large context windows
+**Best for**: Fast responses, large context windows, cost-effective AI at scale
 
 <File title="atmos.yaml">
 ```yaml
 providers:
   gemini:
-    model: "gemini-2.0-flash-exp"  # Default
-    # Alternatives:
-    # model: "gemini-1.5-pro"         # Most capable
-    # model: "gemini-1.5-flash"       # Faster
+    model: "gemini-2.5-flash"  # Recommended (default)
+    # Current generation (2.5 series - June 2025):
+    # model: "gemini-2.5-pro"          # Best reasoning, code, math, STEM
+    # model: "gemini-2.5-flash"        # Best price-performance (recommended)
+    # model: "gemini-2.5-flash-lite"   # Fastest, most cost-efficient
+    # Previous generation (2.0 series):
+    # model: "gemini-2.0-flash-exp"    # Experimental flash model
+    # Legacy models (1.5 series):
+    # model: "gemini-1.5-pro"          # Previous pro model
+    # model: "gemini-1.5-flash"        # Previous flash model
     api_key_env: "GEMINI_API_KEY"
     max_tokens: 8192
 ```
 </File>
+
+**Available Models (2025):**
+
+| Model | Model ID | Context Window | Max Output | Best For | Knowledge Cutoff |
+|-------|----------|----------------|------------|----------|------------------|
+| **Current Generation (2.5)** | | | | | |
+| Gemini 2.5 Pro | `gemini-2.5-pro` | 1M tokens | 8K tokens | Complex reasoning, code, math, STEM | Jan 2025 |
+| Gemini 2.5 Flash | `gemini-2.5-flash` | 1M tokens | 8K tokens | Best price-performance, large-scale processing (recommended) | Jan 2025 |
+| Gemini 2.5 Flash-Lite | `gemini-2.5-flash-lite` | 1M tokens | 8K tokens | Fastest, most cost-efficient, high throughput | Jan 2025 |
+| **Previous Generation (2.0)** | | | | | |
+| Gemini 2.0 Flash | `gemini-2.0-flash-exp` | 1M tokens | 8K tokens | Experimental fast model | Nov 2024 |
+| **Legacy Models (1.5)** | | | | | |
+| Gemini 1.5 Pro | `gemini-1.5-pro` | 2M tokens | 8K tokens | Previous generation pro model | Earlier 2024 |
+| Gemini 1.5 Flash | `gemini-1.5-flash` | 1M tokens | 8K tokens | Previous generation flash model | Earlier 2024 |
+
+**Model Capabilities:**
+- ✅ Code execution
+- ✅ Function calling
+- ✅ Structured outputs
+- ✅ Search grounding
+- ✅ Batch API support
+- ✅ Caching for cost reduction
+
+**Model Selection Guide:**
+- **For best reasoning**: Gemini 2.5 Pro - state-of-the-art for complex problems
+- **For production use**: Gemini 2.5 Flash - best balance of cost and performance (recommended)
+- **For high throughput**: Gemini 2.5 Flash-Lite - fastest with lowest latency
+- **For massive contexts**: Gemini 1.5 Pro - supports up to 2M tokens
 
 **Get API Key**: [aistudio.google.com/app/apikey](https://aistudio.google.com/app/apikey)
 
@@ -206,28 +297,76 @@ export GEMINI_API_KEY="AI..."
 ```
 </Terminal>
 
+:::tip Cost-Effective AI
+Gemini models offer the most economical pricing ($0.075-$0.30 per 1M tokens) while maintaining high quality. Gemini 2.5 Flash provides excellent performance at a fraction of the cost of comparable models from other providers.
+:::
+
 ### xAI (Grok)
 
-**Best for**: OpenAI-compatible alternative, real-time information
+**Best for**: OpenAI-compatible alternative, real-time information, reasoning tasks
 
 <File title="atmos.yaml">
 ```yaml
 providers:
   grok:
-    model: "grok-beta"
+    model: "grok-4"  # Recommended (default)
+    # Current models:
+    # model: "grok-4"              # Most intelligent, tool use, real-time search
+    # model: "grok-4-fast"         # Faster variant, 2M token context
+    # model: "grok-3"              # Flagship model, enterprise use cases
+    # model: "grok-3-mini"         # Lightweight reasoning model
+    # model: "grok-2-image"        # Text-to-image generation
+    # Legacy:
+    # model: "grok-beta"           # Previous beta version
     api_key_env: "XAI_API_KEY"
     max_tokens: 4096
     base_url: "https://api.x.ai/v1"
 ```
 </File>
 
-**Get API Key**: [x.ai](https://x.ai/)
+**Available Models (2025):**
+
+| Model | Model ID | Context Window | Features | Pricing (per 1M tokens) | Best For |
+|-------|----------|----------------|----------|-------------------------|----------|
+| **Current Generation** | | | | | |
+| Grok 4 | `grok-4` | 2M tokens | Tool use, real-time search | $3 input / $15 output | Most intelligent, enterprise tasks (recommended) |
+| Grok 4 Fast | `grok-4-fast` | 2M tokens | Faster responses | $0.20-$0.40 input / $0.50-$1.00 output | High-speed queries, lighter workloads |
+| Grok 3 | `grok-3` | - | Data extraction, coding | $3 input / $15 output | Enterprise use, coding, summarization |
+| Grok 3 Mini | `grok-3-mini` | - | Native reasoning | Lower cost | Logic-based tasks, lightweight reasoning |
+| Grok 2 Image | `grok-2-image` | N/A | Text-to-image | Per image pricing | Image generation |
+
+**Model Capabilities:**
+- ✅ Native tool use (Grok 4)
+- ✅ Real-time search integration
+- ✅ 2M token context window (Grok 4, Grok 4 Fast)
+- ✅ Cached prompt tokens for cost reduction
+- ✅ OpenAI-compatible API
+- ✅ Text-to-image generation (Grok 2 Image)
+
+**Knowledge Cutoff:** November 2024 (Grok 3, Grok 4)
+
+**Model Selection Guide:**
+- **For enterprise tasks**: Grok 4 - most intelligent with tool use and real-time search
+- **For speed**: Grok 4 Fast - optimized for faster responses with 2M token context
+- **For coding**: Grok 3 - strong data extraction, coding, and text summarization
+- **For budget**: Grok 3 Mini - lightweight model for logic-based tasks
+- **For images**: Grok 2 Image - text-to-image generation
+
+**Additional Features:**
+- **Live Search API**: Real-time web search integration ($25 per 1,000 sources or $0.025 per source)
+- **Prompt Caching**: Reduce costs on repeated prompts by reusing stored data
+
+**Get API Key**: [console.x.ai](https://console.x.ai)
 
 <Terminal title="shell">
 ```bash
 export XAI_API_KEY="xai-..."
 ```
 </Terminal>
+
+:::tip Real-Time Knowledge
+Grok models have access to real-time information through integrated search capabilities, making them excellent for queries requiring current data and recent events.
+:::
 
 ## Local Provider
 
@@ -299,14 +438,31 @@ docker run -d \
 
 Choose based on your hardware and quality needs:
 
-| Model | Size | RAM Required | Quality | Best For |
-|-------|------|--------------|---------|----------|
-| `llama3.3:70b` | ~40GB | 64GB+ | ⭐⭐⭐⭐⭐ Excellent | Production use (default) |
-| `llama3.1:8b` | ~5GB | 8GB+ | ⭐⭐⭐ Good | Quick queries, limited hardware |
-| `codellama:13b` | ~8GB | 16GB+ | ⭐⭐⭐⭐ Very Good | Code-focused tasks |
-| `mistral:7b` | ~4GB | 8GB+ | ⭐⭐⭐ Good | Fast responses |
-| `mixtral:8x7b` | ~26GB | 32GB+ | ⭐⭐⭐⭐ Very Good | Complex reasoning |
-| `llama3.2:3b` | ~2GB | 4GB+ | ⭐⭐ Fair | Simple tasks only |
+| Model | Model ID | Download Size | RAM Required | Performance | Quality | Best For |
+|-------|----------|---------------|--------------|-------------|---------|----------|
+| **Llama 3 Models** | | | | | | |
+| Llama 3.3 70B | `llama3.3:70b` | ~40GB | 64GB+ | Moderate | ⭐⭐⭐⭐⭐ Excellent | Production use, similar to llama3.1:405b (recommended) |
+| Llama 3.1 405B | `llama3.1:405b` | ~230GB | 256GB+ | Slow | ⭐⭐⭐⭐⭐ Excellent | Highest quality, large servers only |
+| Llama 3.1 70B | `llama3.1:70b` | ~40GB | 64GB+ | Moderate | ⭐⭐⭐⭐⭐ Excellent | Dialogue, instruction following, reasoning |
+| Llama 3.1 8B | `llama3.1:8b` | ~5GB | 8GB+ | Fast | ⭐⭐⭐ Good | Quick queries, limited hardware, laptops |
+| Llama 3.2 | `llama3.2` | ~2GB | 4GB+ | Very Fast | ⭐⭐ Fair | Simple tasks only |
+| **Code-Specialized** | | | | | | |
+| CodeLlama 34B | `codellama:34b` | ~19GB | 32GB+ | Moderate | ⭐⭐⭐⭐⭐ Excellent | Production-ready code, multi-file context |
+| CodeLlama 13B | `codellama:13b` | ~8GB | 16GB+ | Fast | ⭐⭐⭐⭐ Very Good | Code generation, development workflows |
+| **Mistral Models** | | | | | | |
+| Mixtral 8x7B | `mixtral:8x7b` | ~26GB | 32GB+ | Moderate | ⭐⭐⭐⭐ Very Good | Complex reasoning, balanced performance |
+| Mistral 7B v0.3 | `mistral:7b` | ~4GB | 8GB+ | Very Fast | ⭐⭐⭐ Good | Fast responses, consumer hardware, 45 tokens/sec |
+
+**Performance Benchmarks:**
+- **Mistral 7B**: 0.8s response time, 45 tokens/sec, 7GB memory
+- **CodeLlama 13B**: 1.8s response time, 28 tokens/sec, 12GB memory
+- **Llama 3.1 8B**: Best balance for beginners and production systems
+
+**Recommendations by Use Case:**
+- **Beginners**: Start with Mistral 7B (balanced performance & resources)
+- **Production**: Llama 3.1 8B (reliable, efficient)
+- **Development**: CodeLlama 13B (code-focused)
+- **High-end workstations**: Llama 3.3 70B (top quality)
 
 **Download a model:**
 

@@ -74,7 +74,7 @@ settings:
         max_tokens: 8192
 
       grok:
-        model: "grok-beta"
+        model: "grok-4"
         api_key_env: "XAI_API_KEY"
         max_tokens: 4096
         base_url: "https://api.x.ai/v1"
