@@ -123,9 +123,15 @@ commands:
 				assert.Len(t, commands, 4, "Should have all 4 commands from all levels")
 
 				names := make(map[string]bool)
+				t.Cleanup(func() {
+					if t.Failed() {
+						for _, cmd := range commands {
+							t.Logf("  Found: %s - %s", cmd.Name, cmd.Description)
+						}
+					}
+				})
 				for _, cmd := range commands {
 					names[cmd.Name] = true
-					fmt.Printf("  Found: %s - %s\n", cmd.Name, cmd.Description)
 				}
 
 				assert.True(t, names["main"], "Main command present")
@@ -212,7 +218,11 @@ commands:
 			require.NoError(t, err, tt.description)
 
 			// Verify
-			fmt.Printf("\n%s: %s\n", tt.name, tt.description)
+			t.Cleanup(func() {
+				if t.Failed() {
+					t.Logf("\n%s: %s", tt.name, tt.description)
+				}
+			})
 			tt.verifyFunc(t, cfg.Commands)
 		})
 	}
