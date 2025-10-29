@@ -7,5 +7,5 @@
   Principal     arn:aws:iam::123456789012:user/mock-user 
   Account       123456789012                             
   Region        us-east-1                                
-  Expires       2025-10-28 01:28:51 EDT (1h 0m)        
-  Last Updated  2025-10-28 00:28:51 EDT                  
+  Expires       2099-12-31 23:59:59 UTC (1h 0m)    
+  Last Updated  2025-01-01 12:00:00 UTC                  

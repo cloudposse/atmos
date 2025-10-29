@@ -240,11 +240,15 @@ func resolveIdentityName(cmd *cobra.Command, authManager types.AuthManager) (str
 	defer perf.Track(nil, "cmd.resolveIdentityName")()
 
 	identityName, _ := cmd.Flags().GetString(IdentityFlagName)
-	if identityName != "" {
+
+	// Check if user wants to interactively select identity.
+	forceSelect := identityName == IdentityFlagSelectValue
+
+	if identityName != "" && !forceSelect {
 		return identityName, nil
 	}
 
-	identityName, err := authManager.GetDefaultIdentity()
+	identityName, err := authManager.GetDefaultIdentity(forceSelect)
 	if err != nil {
 		return "", fmt.Errorf("%w: failed to get default identity: %w", errUtils.ErrAuthConsole, err)
 	}

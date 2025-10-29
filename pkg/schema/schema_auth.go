@@ -6,6 +6,9 @@ type AuthConfig struct {
 	Keyring    KeyringConfig       `yaml:"keyring,omitempty" json:"keyring,omitempty" mapstructure:"keyring"`
 	Providers  map[string]Provider `yaml:"providers" json:"providers" mapstructure:"providers"`
 	Identities map[string]Identity `yaml:"identities" json:"identities" mapstructure:"identities"`
+	// IdentityCaseMap maps lowercase identity names to their original case.
+	// This is populated during config loading to work around Viper's case-insensitive behavior.
+	IdentityCaseMap map[string]string `yaml:"-" json:"-" mapstructure:"-"`
 }
 
 // KeyringConfig defines keyring backend configuration for credential storage.

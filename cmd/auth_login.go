@@ -57,9 +57,13 @@ func executeAuthLoginCommand(cmd *cobra.Command, args []string) error {
 		identityName = viper.GetString(IdentityFlagName)
 	}
 
+	// Check if user wants to interactively select identity.
+	forceSelect := identityName == IdentityFlagSelectValue
+
 	// If no identity specified, get the default identity (which prompts if needed).
-	if identityName == "" {
-		identityName, err = authManager.GetDefaultIdentity()
+	// If --identity flag was used without value, forceSelect will be true.
+	if identityName == "" || forceSelect {
+		identityName, err = authManager.GetDefaultIdentity(forceSelect)
 		if err != nil {
 			return errors.Join(errUtils.ErrDefaultIdentity, err)
 		}

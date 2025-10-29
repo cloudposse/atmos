@@ -30,8 +30,17 @@ atmos auth shell [--identity <name>] [--shell <path>] [-- <shell-args>...]
 # Launch default shell with default identity
 atmos auth shell
 
+# Interactively select identity (even if default is configured)
+atmos auth shell --identity
+
 # Use a specific identity
 atmos auth shell --identity prod-admin
+
+# Use short form of identity flag
+atmos auth shell -i staging-admin
+
+# Interactive selection with short form
+atmos auth shell -i
 
 # Override shell program
 atmos auth shell --shell /bin/zsh
@@ -50,7 +59,15 @@ atmos auth shell --identity staging-readonly --shell /bin/bash -- -c "terraform 
 
 <dl>
   <dt>`--identity` <em>(alias `-i`)</em></dt>
-  <dd>Specify the identity to use for authentication. If omitted, the default identity is used.</dd>
+  <dd>
+    Specify the identity to use for authentication. This flag has three modes:
+
+    - **With value** (`--identity admin`): Use the specified identity
+    - **Without value** (`--identity`): Force interactive selector, even if a default identity is configured
+    - **Omitted**: Use the default identity configured in `atmos.yaml`, or prompt if no default is set
+
+    **Environment variables:** `ATMOS_IDENTITY` or `IDENTITY` (checked in that order)
+  </dd>
 
   <dt>`--shell`</dt>
   <dd>Specify the shell program to use. Defaults to `$SHELL`, then `bash`, then `sh`. On Windows, defaults to `cmd.exe`.</dd>
