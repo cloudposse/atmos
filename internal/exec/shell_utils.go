@@ -95,9 +95,9 @@ func ExecuteShellCommand(
 			exitCode := exitError.ExitCode()
 			log.Debug("Command exited with non-zero code", "code", exitCode)
 
-			// Return a typed error that preserves the exit code.
-			// main.go will check for this type and exit with the correct code.
-			return errUtils.ExitCodeError{Code: exitCode}
+			// Return ExecError with command details and exit code.
+			// main.go will extract the exit code and use it for the process exit.
+			return errUtils.NewExecError(command, args, exitCode, err)
 		}
 		// If we can't extract exit code, return the original error.
 		return err
@@ -398,7 +398,7 @@ func executeShellProcess(shellCommand string, shellArgs []string, env []string) 
 
 	// Propagate the shell's exit code.
 	if exitCode != 0 {
-		return errUtils.ExitCodeError{Code: exitCode}
+		return errUtils.NewExecError(shellCommand, shellArgs, exitCode, errUtils.ErrCommandFailed)
 	}
 
 	return nil

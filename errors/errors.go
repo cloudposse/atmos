@@ -449,6 +449,7 @@ var (
 	ErrInvalidStackConfig            = errors.New("invalid stack config")
 	ErrNoCommandSpecified            = errors.New("no command specified")
 	ErrCommandNotFound               = errors.New("command not found")
+	ErrCommandFailed                 = errors.New("command execution failed")
 
 	ErrInvalidSubcommand = errors.New("invalid subcommand")
 	ErrSubcommandFailed  = errors.New("subcommand failed")

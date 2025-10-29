@@ -134,26 +134,23 @@ func buildMarkdownSections(err error, config FormatterConfig) string {
 	// Extract sentinel error and wrapped message.
 	sentinelMsg, wrappedMsg := extractSentinelAndWrappedMessage(err)
 
-	// Check if error has an exit code and append it to the message for display.
-	// Skip this for ExitCodeError since it already includes the exit code in its message.
-	var exitCodeErr ExitCodeError
-	if !errors.As(err, &exitCodeErr) {
-		exitCode := GetExitCode(err)
-		if exitCode > 0 {
-			// For non-zero exit codes, append to the error message.
-			// This ensures errors like "workflow step execution failed" become
-			// "workflow step execution failed with exit code 1" in the display.
-			sentinelMsg = sentinelMsg + " with exit code " + fmt.Sprintf("%d", exitCode)
-		}
+	// Check if this is an ExecError - only these should show exit codes.
+	var execErr *ExecError
+	if errors.As(err, &execErr) {
+		md.WriteString(fmt.Sprintf("**Error:** %s with exit code %d%s%s", sentinelMsg, execErr.ExitCode, newline, newline))
+	} else {
+		// All other errors - NO exit code appending.
+		md.WriteString("**Error:** " + sentinelMsg + newline + newline)
 	}
-
-	md.WriteString("**Error:** " + sentinelMsg + newline + newline)
 
 	// Section 2: Explanation.
 	addExplanationSection(&md, err, wrappedMsg)
 
 	// Section 3 & 4: Examples and Hints.
 	addExampleAndHintsSection(&md, err)
+
+	// Section 4.5: Command Output (for ExecError with stderr).
+	addCommandOutputSection(&md, err)
 
 	// Section 5: Context.
 	addContextSection(&md, err)
@@ -283,6 +280,20 @@ func addExampleAndHintsSection(md *strings.Builder, err error) {
 			// Add blank line after each hint to ensure proper line breaks in markdown rendering.
 			md.WriteString("💡 " + hint + newline + newline)
 		}
+	}
+}
+
+// addCommandOutputSection adds the command output section for ExecError with stderr.
+func addCommandOutputSection(md *strings.Builder, err error) {
+	var execErr *ExecError
+	if errors.As(err, &execErr) && execErr.Stderr != "" {
+		md.WriteString(newline + newline + "## Command Output" + newline + newline)
+		md.WriteString("```" + newline)
+		md.WriteString(execErr.Stderr)
+		if !strings.HasSuffix(execErr.Stderr, newline) {
+			md.WriteString(newline)
+		}
+		md.WriteString("```" + newline)
 	}
 }
 

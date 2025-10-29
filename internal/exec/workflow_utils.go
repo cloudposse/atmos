@@ -179,8 +179,8 @@ func ExecuteWorkflow(
 		if err != nil {
 			log.Debug("Workflow failed", "error", err)
 
-			// Extract exit code from error (currently unused - testing bare sentinel)
-			_ = errUtils.GetExitCode(err)
+			// Extract exit code from error.
+			exitCode := errUtils.GetExitCode(err)
 
 			// Remove the workflow base path, stacks/workflows
 			workflowFileName := strings.TrimPrefix(filepath.ToSlash(workflowPath), filepath.ToSlash(atmosConfig.Workflows.BasePath))
@@ -197,7 +197,7 @@ func ExecuteWorkflow(
 				step.Name,
 			)
 
-			// Add stack parameter to resume command if a stack was used
+			// Add stack parameter to resume command if a stack was used.
 			if finalStack != "" {
 				resumeCommand = fmt.Sprintf("%s -s %s", resumeCommand, finalStack)
 			}
@@ -205,15 +205,33 @@ func ExecuteWorkflow(
 			failedCmd := command
 			if commandType == config.AtmosCommand {
 				failedCmd = config.AtmosCommand + " " + command
-				// Add stack parameter to failed command if a stack was used
+				// Add stack parameter to failed command if a stack was used.
 				if finalStack != "" {
 					failedCmd = fmt.Sprintf("%s -s %s", failedCmd, finalStack)
 				}
 			}
 
-			// Create workflow error directly without exit code wrapper.
-			// Just use the sentinel error to test if it gets printed correctly.
-			stepErr := ErrWorkflowStepFailed
+			// Build workflow error with structured context.
+			stepErr := errUtils.Build(ErrWorkflowStepFailed).
+				WithTitle("Workflow Error").
+				WithExplanation(fmt.Sprintf("The following command failed to execute:\n\n%s", failedCmd)).
+				WithHint(fmt.Sprintf("To resume the workflow from this step, run:\n\n%s", resumeCommand)).
+				Err()
+
+			// Wrap with ExecError if it's a command execution failure with exit code.
+			if exitCode > 0 {
+				// Determine command name and args for ExecError.
+				cmdParts := strings.Fields(failedCmd)
+				cmdName := ""
+				cmdArgs := []string{}
+				if len(cmdParts) > 0 {
+					cmdName = cmdParts[0]
+					if len(cmdParts) > 1 {
+						cmdArgs = cmdParts[1:]
+					}
+				}
+				stepErr = errUtils.NewExecError(cmdName, cmdArgs, exitCode, stepErr)
+			}
 
 			errUtils.CheckErrorAndPrint(stepErr, "", "")
 			return stepErr

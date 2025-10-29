@@ -3,10 +3,16 @@
 
 # Error
 
+**Error:** invalid auth config
+
+
+
+# Error
+
 **Error:** identity not found
 
 ## Explanation
 
-"nonexistent"
+nonexistent
 
 

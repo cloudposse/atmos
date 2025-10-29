@@ -14,16 +14,18 @@ Could not find the component mock in the stack idontexist. Check that all the co
 
 # Workflow Error
 
-**Error:** workflow step execution failed
+**Error:** workflow step execution failed with exit code 1
 
 ## Explanation
 
 The following command failed to execute:
 
- atmos terraform plan mock -s idontexist
+atmos terraform plan mock -s idontexist
 
-To resume the workflow from this step, run:
+## Hints
 
- atmos workflow fail -f test --from-step step1
+💡 To resume the workflow from this step, run:
+
+atmos workflow fail -f test --from-step step1
 
 
