@@ -438,7 +438,13 @@ func buildIdentityNode(authManager authTypes.AuthManager, identity *schema.Ident
 // buildIdentityTitle builds the title string for an identity node.
 func buildIdentityTitle(authManager authTypes.AuthManager, identity *schema.Identity, name string) string {
 	// Get authentication status and add indicator.
-	status := getIdentityAuthStatus(authManager, name)
+	// If authManager is nil, use unknown status as safe default.
+	var status authStatus
+	if authManager != nil {
+		status = getIdentityAuthStatus(authManager, name)
+	} else {
+		status = authStatusUnknown
+	}
 	statusIndicator := getStatusIndicator(status)
 
 	// Only prepend status indicator if it's not empty (authenticated identities only).
