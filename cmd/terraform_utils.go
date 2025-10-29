@@ -81,7 +81,8 @@ func terraformRun(cmd *cobra.Command, actualCmd *cobra.Command, args []string) e
 	// Handle interactive selection when --identity is used without a value.
 	if forceSelect {
 		// Guard: Fail fast in CI/non-TTY environments instead of hanging.
-		if !term.IsTTYSupportForStdin() {
+		// Interactive selector requires both stdin (for input) and stdout (for TUI rendering).
+		if !term.IsTTYSupportForStdin() || !term.IsTTYSupportForStdout() {
 			errUtils.CheckErrorPrintAndExit(
 				fmt.Errorf("%w: interactive identity selection requires a TTY", errUtils.ErrDefaultIdentity),
 				"",
