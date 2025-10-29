@@ -11,6 +11,8 @@ import (
 
 // TestResolveIdentityName_CaseSensitivity tests case-insensitive identity name resolution.
 func TestResolveIdentityName_CaseSensitivity(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name             string
 		identities       map[string]types.Identity
@@ -91,6 +93,8 @@ func TestResolveIdentityName_CaseSensitivity(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
 			m := &manager{
 				config: &schema.AuthConfig{
 					IdentityCaseMap: tt.identityCaseMap,

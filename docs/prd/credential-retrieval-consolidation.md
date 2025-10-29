@@ -128,7 +128,7 @@ The problem: **architectural duplication** without a shared abstraction for "ret
 ### Call Flow Analysis
 
 #### Working Path (`atmos auth whoami`):
-```
+```text
 cmd/auth_whoami.go
   → pkg/auth/hooks.go: AuthWhoami()
     → pkg/auth/manager.go: Whoami()
@@ -136,7 +136,7 @@ cmd/auth_whoami.go
 ```
 
 #### Broken Path (`atmos terraform plan`):
-```
+```text
 cmd/terraform.go
   → internal/exec/terraform.go: ExecuteTerraform()
     → pkg/auth/hooks.go: TerraformPreHook()
