@@ -1,12 +1,54 @@
 # PRD: Credential Retrieval Consolidation
 
-## Problem Statement
+> **Status: ✅ IMPLEMENTED**
+> Implemented in commits [76b0d1d25](https://github.com/cloudposse/atmos/commit/76b0d1d25) (consolidate logic) and [5f1e01d33](https://github.com/cloudposse/atmos/commit/5f1e01d33) (address feedback).
+> Implementation: `pkg/auth/manager.go:loadCredentialsWithFallback()`
 
-We have **three different code paths** that retrieve credentials with **inconsistent fallback logic**, leading to bugs where some commands work (e.g., `atmos auth whoami`) while others fail (e.g., `atmos terraform plan`) with the exact same credentials.
+## Implementation Summary
 
-## Current Architecture Analysis
+We successfully implemented **Option 1: Extract Common Retrieval Logic** as recommended in this PRD.
 
-### Three Credential Retrieval Code Paths
+### What Was Implemented
+
+**Created `loadCredentialsWithFallback()` method** (`pkg/auth/manager.go`):
+```go
+func (m *manager) loadCredentialsWithFallback(ctx context.Context, identityName string) (types.ICredentials, error)
+```
+
+This single method now handles all credential retrieval with consistent fallback logic:
+1. **Fast path:** Try keyring cache first
+2. **Slow path:** Fall back to identity storage (AWS files, etc.) if keyring returns `ErrCredentialsNotFound`
+3. **Error handling:** Properly propagates errors vs. "not found" conditions
+
+### Refactored Call Sites
+
+All three problematic code paths now use `loadCredentialsWithFallback()`:
+
+1. ✅ **`GetCachedCredentials`** - Used by `atmos auth whoami`, `atmos auth shell`
+2. ✅ **`findFirstValidCachedCredentials`** - Used during auth chain optimization
+3. ✅ **`getChainCredentials`** (formerly `retrieveCachedCredentials`) - Used by terraform execution
+
+### Test Coverage
+
+Added comprehensive regression tests:
+- `TestManager_retrieveCachedCredentials_TerraformFlow_Regression` - Reproduces original bug
+- `TestRetrieveCachedCredentials_KeyringMiss_IdentityStorageFallback` - Verifies fallback behavior
+- Integration tests covering all three code paths with file-based credentials
+
+### Result
+
+✅ **All auth commands now work consistently** whether credentials are in keyring or identity storage
+✅ **Terraform commands fixed** - No longer fail with file-based credentials
+✅ **Single source of truth** - All credential retrieval goes through one method
+✅ **Tested** - Regression tests prevent future divergence
+
+## Problem Statement (Historical)
+
+We **had** three different code paths that retrieved credentials with **inconsistent fallback logic**, leading to bugs where some commands worked (e.g., `atmos auth whoami`) while others failed (e.g., `atmos terraform plan`) with the exact same credentials.
+
+## Original Architecture Analysis (Before Fix)
+
+### Three Credential Retrieval Code Paths (Historical)
 
 #### 1. `GetCachedCredentials` (Used by `atmos auth whoami`, `atmos auth shell`, etc.)
 **Location:** `pkg/auth/manager.go:195-249`
@@ -378,24 +420,24 @@ func TestCredentialRetrieval_ConsistentBehavior(t *testing.T) {
 }
 ```
 
-## Implementation Plan
+## Implementation Plan (COMPLETED)
 
-### Phase 1: Add Failing Tests (Immediately)
-1. Add `TestTerraformAuthFlow_WithFileBasedCredentials` that reproduces the bug
-2. Verify it fails before our fix
-3. Verify it passes after our fix
+### ✅ Phase 1: Add Failing Tests
+1. ✅ Added `TestManager_retrieveCachedCredentials_TerraformFlow_Regression` that reproduces the bug
+2. ✅ Verified it failed before the fix (commit 76b0d1d25)
+3. ✅ Verified it passes after the fix
 
-### Phase 2: Consolidate Logic (Next PR)
-1. Extract `retrieveCredentialWithFallback` method
-2. Refactor `GetCachedCredentials` to use it
-3. Refactor `findFirstValidCachedCredentials` to use it
-4. Refactor `retrieveCachedCredentials` to use it
-5. Add comprehensive integration tests
+### ✅ Phase 2: Consolidate Logic
+1. ✅ Extracted `loadCredentialsWithFallback` method
+2. ✅ Refactored `GetCachedCredentials` to use it
+3. ✅ Refactored `findFirstValidCachedCredentials` to use it
+4. ✅ Refactored `retrieveCachedCredentials` (renamed to `getChainCredentials`) to use it
+5. ✅ Added comprehensive integration tests
 
-### Phase 3: Enhanced Testing (Next PR)
-1. Add end-to-end tests for all command flows
-2. Add consistency tests across all retrieval paths
-3. Add performance tests for fallback behavior
+### ⏭️ Phase 3: Enhanced Testing (Future Work)
+1. ⏭️ Add end-to-end CLI tests for all command flows
+2. ⏭️ Add consistency tests across all retrieval paths
+3. ⏭️ Add performance tests for fallback behavior
 
 ## Success Criteria
 
