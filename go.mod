@@ -18,14 +18,14 @@ require (
 	github.com/agiledragon/gomonkey/v2 v2.13.0
 	github.com/alecthomas/chroma/v2 v2.20.0
 	github.com/alicebob/miniredis/v2 v2.35.0
-	github.com/anthropics/anthropic-sdk-go v1.15.0
+	github.com/anthropics/anthropic-sdk-go v1.16.0
 	github.com/arsham/figurine v1.3.0
 	github.com/atotto/clipboard v0.1.4
 	github.com/aws/aws-sdk-go-v2 v1.39.4
 	github.com/aws/aws-sdk-go-v2/config v1.31.15
 	github.com/aws/aws-sdk-go-v2/credentials v1.18.19
 	github.com/aws/aws-sdk-go-v2/feature/s3/manager v1.20.1
-	github.com/aws/aws-sdk-go-v2/service/bedrockruntime v1.41.2
+	github.com/aws/aws-sdk-go-v2/service/bedrockruntime v1.42.0
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.89.0
 	github.com/aws/aws-sdk-go-v2/service/ssm v1.66.2
 	github.com/aws/aws-sdk-go-v2/service/sso v1.29.8
