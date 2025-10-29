@@ -97,7 +97,7 @@ func LoadConfig(configAndStacksInfo *schema.ConfigAndStacksInfo) (schema.AtmosCo
 	// Viper lowercases all map keys, but we need to preserve original case for identity names.
 	if err := preserveIdentityCase(v, &atmosConfig); err != nil {
 		log.Debug("Failed to preserve identity case", "error", err)
-		// Don't fail config loading if this step fails, just log it
+		// Don't fail config loading if this step fails, just log it.
 	}
 
 	return atmosConfig, nil
