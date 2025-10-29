@@ -159,11 +159,11 @@ func (m *manager) LogoutProvider(ctx context.Context, providerName string) error
 	return nil
 }
 
-// LogoutAll removes all cached credentials for all identities.
+// LogoutAll removes all cached credentials for all identities and providers.
 func (m *manager) LogoutAll(ctx context.Context) error {
 	defer perf.Track(nil, "auth.Manager.LogoutAll")()
 
-	log.Debug("Logout all identities")
+	log.Debug("Logout all identities and providers")
 
 	var errs []error
 
@@ -175,7 +175,29 @@ func (m *manager) LogoutAll(ctx context.Context) error {
 		}
 	}
 
-	log.Info("Logout all completed", "identities", len(m.config.Identities), "errors", len(errs))
+	// Logout each provider.
+	for providerName, provider := range m.providers {
+		// Delete provider credentials from keyring.
+		if err := m.credentialStore.Delete(providerName); err != nil {
+			log.Debug("Failed to delete provider keyring entry", logKeyProvider, providerName, "error", err)
+			errs = append(errs, fmt.Errorf("%w for provider %q: %w", errUtils.ErrKeyringDeletion, providerName, err))
+		}
+
+		// Call provider-specific cleanup (deletes all provider files).
+		if err := provider.Logout(ctx); err != nil {
+			// ErrLogoutNotSupported is a successful no-op (exit 0).
+			if !errors.Is(err, errUtils.ErrLogoutNotSupported) {
+				log.Debug("Provider logout failed", logKeyProvider, providerName, "error", err)
+				errs = append(errs, fmt.Errorf("%w for provider %q: %w", errUtils.ErrProviderLogout, providerName, err))
+			} else {
+				log.Debug("Provider logout not supported (no-op)", logKeyProvider, providerName)
+			}
+		} else {
+			log.Debug("Provider logout succeeded", logKeyProvider, providerName)
+		}
+	}
+
+	log.Info("Logout all completed", "identities", len(m.config.Identities), "providers", len(m.providers), "errors", len(errs))
 
 	if len(errs) > 0 {
 		return errors.Join(append([]error{errUtils.ErrLogoutFailed}, errs...)...)

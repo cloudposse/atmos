@@ -852,6 +852,10 @@ func TestManager_LogoutAll_WithErrors(t *testing.T) {
 	mockStore.EXPECT().Delete("identity2").Return(errors.New("keyring error"))
 	mockIdentity2.EXPECT().Logout(gomock.Any()).Return(nil)
 
+	// Mock expectations for provider logout (LogoutAll now logs out providers too).
+	mockStore.EXPECT().Delete("provider1").Return(nil)
+	mockProvider.EXPECT().Logout(gomock.Any()).Return(nil)
+
 	ctx := context.Background()
 	err := m.LogoutAll(ctx)
 
