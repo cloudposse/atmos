@@ -1086,30 +1086,53 @@ AWS User identities support MFA devices for enhanced security. When an MFA devic
 **Configuration Options:**
 
 ```yaml
-# Option 1: MFA ARN in YAML (direct value)
+# Option 1: Complete credentials in YAML (direct values or environment variables)
 identities:
   prod-admin:
     kind: aws/user
     credentials:
+      access_key_id: !env AWS_ACCESS_KEY_ID
+      secret_access_key: !env AWS_SECRET_ACCESS_KEY
       mfa_arn: arn:aws:iam::123456789012:mfa/username
       region: us-east-1
 
-# Option 2: MFA ARN from environment variable
+# Option 2: Credentials in keyring, MFA ARN in YAML (RECOMMENDED)
+# Store access keys via 'atmos auth user configure', override MFA ARN in YAML
 identities:
   prod-admin:
     kind: aws/user
     credentials:
-      mfa_arn: !env AWS_MFA_ARN
+      mfa_arn: arn:aws:iam::123456789012:mfa/username  # YAML overrides keyring
       region: us-east-1
 
-# Option 3: MFA ARN stored in keychain (via atmos auth user configure)
-# Omit mfa_arn from YAML - retrieved from keychain during authentication
+# Option 3: All credentials in keyring (via atmos auth user configure)
+# No credentials in YAML - everything retrieved from keyring
 identities:
   prod-admin:
     kind: aws/user
     credentials:
       region: us-east-1
 ```
+
+**Credential Precedence (Deep Merge):**
+
+Atmos uses per-field precedence with deep merge:
+
+1. **If YAML has complete credentials** (both `access_key_id` and `secret_access_key`):
+   - Use YAML entirely (including `mfa_arn` from YAML)
+   - Keyring is ignored
+
+2. **If YAML has no credentials** (both keys empty or omitted):
+   - Use keyring credentials (access keys + MFA ARN)
+   - **Override MFA ARN from YAML if present** (allows version-controlled MFA config)
+
+3. **If YAML has partial credentials** (only one key):
+   - Error: Both keys must be provided or both must be empty
+
+This allows flexible configuration:
+- **Store sensitive credentials in keyring** (local, secure)
+- **Configure MFA ARN in YAML** (version controlled, shared across team)
+- **Override any field** from YAML without losing keyring credentials
 
 **Authentication Flow with MFA:**
 

@@ -81,28 +81,53 @@ func (i *userIdentity) Authenticate(ctx context.Context, _ types.ICredentials) (
 	return i.generateSessionToken(ctx, longLivedCreds, region)
 }
 
-// resolveLongLivedCredentials returns long-lived credentials either from the identity config.
-// (access_key_id/secret_access_key with optional mfa_arn) or from the keyring store.
-// If credentials come from the keyring but MFA ARN is configured in YAML, the MFA ARN from YAML is used.
+// resolveLongLivedCredentials returns long-lived credentials with deep merge precedence.
+// Precedence order (per field): YAML config > Keyring store.
+// This allows users to store credentials in keyring but override specific fields (e.g., MFA ARN) in YAML.
 func (i *userIdentity) resolveLongLivedCredentials() (*types.AWSCredentials, error) {
-	if creds, err := i.credentialsFromConfig(); err != nil || creds != nil {
-		return creds, err
+	// Start with keyring credentials as base (if available).
+	keystoreCreds, keystoreErr := i.credentialsFromStore()
+
+	// Get YAML config values (may be empty or !env that resolved to empty).
+	yamlAccessKeyID, _ := i.config.Credentials["access_key_id"].(string)
+	yamlSecretAccessKey, _ := i.config.Credentials["secret_access_key"].(string)
+	yamlMfaArn, _ := i.config.Credentials["mfa_arn"].(string)
+
+	// If YAML has complete credentials (access key + secret), use YAML entirely.
+	if yamlAccessKeyID != "" && yamlSecretAccessKey != "" {
+		log.Debug("Using credentials from YAML config", logKeyIdentity, i.name, "hasAccessKey", true, "hasMFA", yamlMfaArn != "")
+		return &types.AWSCredentials{
+			AccessKeyID:     yamlAccessKeyID,
+			SecretAccessKey: yamlSecretAccessKey,
+			MfaArn:          yamlMfaArn,
+		}, nil
 	}
 
-	// Get credentials from keyring.
-	creds, err := i.credentialsFromStore()
-	if err != nil {
-		return nil, err
+	// If YAML has partial credentials, that's an error.
+	if yamlAccessKeyID != "" || yamlSecretAccessKey != "" {
+		return nil, fmt.Errorf("%w: access_key_id and secret_access_key must both be provided or both be empty for identity %q", errUtils.ErrInvalidAuthConfig, i.name)
 	}
 
-	// Merge MFA ARN from YAML config if present (keyring credentials take precedence for access keys).
-	// This allows users to configure MFA ARN in YAML even when using keyring-stored credentials.
-	if mfaArn, ok := i.config.Credentials["mfa_arn"].(string); ok && mfaArn != "" {
-		log.Debug("Merging MFA ARN from YAML config with keyring credentials", logKeyIdentity, i.name, "mfa_arn", mfaArn)
-		creds.MfaArn = mfaArn
+	// YAML has no credentials, fall back to keyring.
+	if keystoreErr != nil {
+		return nil, fmt.Errorf("%w: failed to retrieve AWS User credentials for %q: %w", errUtils.ErrAwsUserNotConfigured, i.name, keystoreErr)
 	}
 
-	return creds, nil
+	// Deep merge: Start with keyring, override with non-empty YAML fields.
+	result := &types.AWSCredentials{
+		AccessKeyID:     keystoreCreds.AccessKeyID,
+		SecretAccessKey: keystoreCreds.SecretAccessKey,
+		MfaArn:          keystoreCreds.MfaArn, // Start with keyring MFA ARN
+	}
+
+	// Override MFA ARN from YAML if present (allows version-controlled MFA config).
+	if yamlMfaArn != "" {
+		log.Debug("Overriding MFA ARN from YAML config", logKeyIdentity, i.name, "yaml_mfa_arn", yamlMfaArn, "keyring_mfa_arn", keystoreCreds.MfaArn)
+		result.MfaArn = yamlMfaArn
+	}
+
+	log.Debug("Using credentials from keyring", logKeyIdentity, i.name, "mfa_source", map[bool]string{true: "yaml", false: "keyring"}[yamlMfaArn != ""])
+	return result, nil
 }
 
 // credentialsFromConfig builds AWS credentials from identity config if present.
