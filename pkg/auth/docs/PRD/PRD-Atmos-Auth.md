@@ -1075,7 +1075,7 @@ identities:
 - MFA ARN support integrated directly into `AWSCredentials` schema
 - Primarily used for break-glass scenarios and emergency access
 - Direct AWS API authentication using access key pairs
-- AWS files written to `~/.aws/atmos/aws-user/credentials` and `~/.aws/atmos/aws-user/config`
+- AWS files written to XDG config directory (e.g., `~/.config/atmos/aws/aws-user/credentials` and `~/.config/atmos/aws/aws-user/config` on Linux)
 
 **Multi-Factor Authentication (MFA) - AWS Implementation:**
 
