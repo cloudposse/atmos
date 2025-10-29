@@ -1,0 +1,14 @@
+name: missing-prompt-agent
+display_name: Missing Prompt Agent
+version: 1.0.0
+author: Test Author
+description: Agent with missing prompt file
+category: general
+
+atmos:
+  min_version: 1.0.0
+
+prompt:
+  file: nonexistent.md
+
+repository: https://github.com/test/missing-prompt

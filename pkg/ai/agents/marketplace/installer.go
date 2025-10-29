@@ -16,7 +16,7 @@ import (
 
 // Installer manages agent installation.
 type Installer struct {
-	downloader    *Downloader
+	downloader    DownloaderInterface
 	validator     *Validator
 	localRegistry *LocalRegistry
 	atmosVersion  string

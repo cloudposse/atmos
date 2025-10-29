@@ -1,0 +1,2 @@
+name: invalid-agent
+# Missing required fields: display_name, version, author, description

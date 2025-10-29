@@ -1,0 +1,24 @@
+name: test-agent
+display_name: Test Agent
+version: 1.0.0
+author: Test Author
+description: A test agent for unit testing
+category: general
+
+atmos:
+  min_version: 1.0.0
+  max_version: ""
+
+prompt:
+  file: prompt.md
+
+tools:
+  allowed:
+    - describe_stacks
+    - describe_component
+  restricted:
+    - terraform_apply
+    - terraform_destroy
+
+repository: https://github.com/test/test-agent
+license: MIT
