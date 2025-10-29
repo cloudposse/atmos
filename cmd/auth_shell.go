@@ -75,8 +75,12 @@ func executeAuthShellCommandCore(cmd *cobra.Command, args []string) error {
 
 	// Get identity from viper (respects CLI → ENV → config precedence).
 	identityName := viper.GetString(IdentityFlagName)
-	if identityName == "" {
-		defaultIdentity, err := authManager.GetDefaultIdentity()
+
+	// Check if user wants to interactively select identity.
+	forceSelect := identityName == IdentityFlagSelectValue
+
+	if identityName == "" || forceSelect {
+		defaultIdentity, err := authManager.GetDefaultIdentity(forceSelect)
 		if err != nil {
 			return errors.Join(errUtils.ErrNoDefaultIdentity, err)
 		}

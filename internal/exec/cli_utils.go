@@ -3,6 +3,7 @@ package exec
 import (
 	"errors"
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -145,6 +146,15 @@ func ProcessCommandLineArgs(
 	configAndStacksInfo.SettingsListMergeStrategy = argsAndFlagsInfo.SettingsListMergeStrategy
 	configAndStacksInfo.Query = argsAndFlagsInfo.Query
 	configAndStacksInfo.Identity = argsAndFlagsInfo.Identity
+
+	// Fallback to ATMOS_IDENTITY environment variable if identity not set via flag.
+	// Use os.Getenv directly to avoid polluting viper config with temporary binding.
+	if configAndStacksInfo.Identity == "" {
+		if envIdentity := os.Getenv("ATMOS_IDENTITY"); envIdentity != "" { //nolint:forbidigo // Direct env var read to avoid viper config pollution
+			configAndStacksInfo.Identity = envIdentity
+		}
+	}
+
 	configAndStacksInfo.Affected = argsAndFlagsInfo.Affected
 	configAndStacksInfo.All = argsAndFlagsInfo.All
 	configAndStacksInfo.PackerDir = argsAndFlagsInfo.PackerDir
