@@ -29,6 +29,8 @@ jobs:
       - name: Dependency Review
         uses: actions/dependency-review-action@v4
         with:
+          # Disable OpenSSF scorecard to reduce summary size (prevents 1024k limit errors)
+          show-openssf-scorecard: false
           # Allow only permissive licenses
           # NOTE: GitHub's dependency graph detects Go modules from go.mod automatically
           # License checking works at the manifest level for go.mod dependencies
