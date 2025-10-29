@@ -319,7 +319,8 @@ All Product Requirement Documents (PRDs) MUST be placed in `docs/prd/`. Use keba
 Follow template (what/why/references).
 
 **Blog Posts (CI Enforced):**
-- PRs labeled `minor` or `major` MUST include blog post in `website/blog/YYYY-MM-DD-feature-name.md`
+- PRs labeled `minor` or `major` MUST include blog post in `website/blog/YYYY-MM-DD-feature-name.mdx`
+- Blog posts must use `.mdx` extension with YAML front matter
 - Include `<!--truncate-->` after intro paragraph
 - Tag `feature`/`enhancement`/`bugfix` (user-facing) or `contributors` (internal changes)
 - CI will fail without blog post
