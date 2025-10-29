@@ -242,7 +242,7 @@ All logout commands preserve your `atmos.yaml` configuration. Simply run `atmos 
 
 ### Selective Identity Logout
 
-When you logout of a specific identity, Atmos performs **selective cleanup** to preserve other identities:
+When you log out of a specific identity, Atmos performs **selective cleanup** to preserve other identities:
 
 **Example:** For `atmos auth logout dev-admin` with chain `aws-sso → dev-org-admin → dev-admin`:
 
@@ -256,7 +256,7 @@ Other identities using `aws-sso` (like `prod-admin`, `staging-admin`) remain ful
 
 ### Provider Logout (Complete Cleanup)
 
-When you logout of a provider using `--provider`, Atmos performs **complete cleanup**:
+When you log out of a provider using `--provider`, Atmos performs **complete cleanup**:
 
 **Example:** For `atmos auth logout --provider aws-sso`:
 
