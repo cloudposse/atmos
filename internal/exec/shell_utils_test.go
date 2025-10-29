@@ -467,9 +467,9 @@ func TestExecAuthShellCommand_ExitCodePropagation(t *testing.T) {
 				assert.NoError(t, err)
 			} else {
 				require.Error(t, err)
-				var exitCodeErr errUtils.ExitCodeError
-				require.True(t, errors.As(err, &exitCodeErr), "error should be ExitCodeError")
-				assert.Equal(t, tt.expectedCode, exitCodeErr.Code)
+				var execErr *errUtils.ExecError
+				require.True(t, errors.As(err, &execErr), "error should be ExecError")
+				assert.Equal(t, tt.expectedCode, execErr.ExitCode)
 			}
 		})
 	}
