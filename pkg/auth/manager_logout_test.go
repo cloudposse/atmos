@@ -869,3 +869,68 @@ func TestManager_LogoutAll_WithErrors(t *testing.T) {
 		t.Errorf("LogoutAll() should return ErrLogoutFailed, got: %v", err)
 	}
 }
+
+func TestManager_LogoutAll_LogsOutProviders(t *testing.T) {
+	// Test that LogoutAll explicitly logs out providers in addition to identities.
+	// This test formalizes the bug fix where --all was leaving orphaned provider credentials.
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockStore := types.NewMockCredentialStore(ctrl)
+	mockProvider1 := types.NewMockProvider(ctrl)
+	mockProvider2 := types.NewMockProvider(ctrl)
+	mockIdentity1 := types.NewMockIdentity(ctrl)
+	mockIdentity2 := types.NewMockIdentity(ctrl)
+
+	config := &schema.AuthConfig{
+		Providers: map[string]schema.Provider{
+			"provider1": {Kind: "aws/iam-identity-center"},
+			"provider2": {Kind: "aws/iam-identity-center"},
+		},
+		Identities: map[string]schema.Identity{
+			"identity1": {
+				Kind: "aws/permission-set",
+				Via:  &schema.IdentityVia{Provider: "provider1"},
+			},
+			"identity2": {
+				Kind: "aws/permission-set",
+				Via:  &schema.IdentityVia{Provider: "provider2"},
+			},
+		},
+	}
+
+	m := &manager{
+		config:          config,
+		credentialStore: mockStore,
+		providers: map[string]types.Provider{
+			"provider1": mockProvider1,
+			"provider2": mockProvider2,
+		},
+		identities: map[string]types.Identity{
+			"identity1": mockIdentity1,
+			"identity2": mockIdentity2,
+		},
+	}
+
+	// Expect identity logout calls.
+	mockStore.EXPECT().Delete("identity1").Return(nil)
+	mockIdentity1.EXPECT().Logout(gomock.Any()).Return(nil)
+	mockStore.EXPECT().Delete("identity2").Return(nil)
+	mockIdentity2.EXPECT().Logout(gomock.Any()).Return(nil)
+
+	// CRITICAL: Expect provider logout calls (this is what the bug fix added).
+	// Both provider keyring entries should be deleted.
+	mockStore.EXPECT().Delete("provider1").Return(nil)
+	mockProvider1.EXPECT().Logout(gomock.Any()).Return(nil)
+	mockStore.EXPECT().Delete("provider2").Return(nil)
+	mockProvider2.EXPECT().Logout(gomock.Any()).Return(nil)
+
+	ctx := context.Background()
+	err := m.LogoutAll(ctx)
+	if err != nil {
+		t.Errorf("LogoutAll() should succeed when all operations succeed, got: %v", err)
+	}
+
+	// Verify the test would fail if provider logout wasn't called.
+	// The gomock controller will automatically fail if expected calls aren't made.
+}
