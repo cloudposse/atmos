@@ -19,6 +19,7 @@ import (
 
 	httpClient "github.com/cloudposse/atmos/pkg/http"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/xdg"
 	"github.com/cloudposse/atmos/toolchain/registry"
 	"github.com/cloudposse/atmos/toolchain/registry/cache"
 )
@@ -58,7 +59,14 @@ type scoredTool struct {
 func NewAquaRegistry() *AquaRegistry {
 	defer perf.Track(nil, "aqua.NewAquaRegistry")()
 
-	cacheBaseDir := filepath.Join(os.TempDir(), "atmos-toolchain-cache")
+	// Use XDG-compliant cache directory.
+	// Falls back to ~/.cache/atmos/toolchain on most systems.
+	cacheBaseDir, err := xdg.GetXDGCacheDir("toolchain", 0o755)
+	if err != nil {
+		// Fallback to temp dir if XDG fails.
+		log.Debug("Failed to get XDG cache dir, using temp", "error", err)
+		cacheBaseDir = filepath.Join(os.TempDir(), "atmos-toolchain-cache")
+	}
 
 	return &AquaRegistry{
 		client: httpClient.NewDefaultClient(

@@ -1,6 +1,7 @@
 package aqua
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -552,4 +553,127 @@ packages:
 	tool, err = ar.fetchFromRegistry(registry2.URL, "test", "tool")
 	assert.NoError(t, err)
 	assert.NotNil(t, tool)
+}
+
+func TestAquaRegistry_Search(t *testing.T) {
+	ar := NewAquaRegistry()
+	ctx := context.Background()
+
+	t.Run("search kubectl - should find results", func(t *testing.T) {
+		results, err := ar.Search(ctx, "kubectl", registry.WithLimit(5))
+		require.NoError(t, err)
+		assert.Greater(t, len(results), 0, "expected to find kubectl")
+
+		// Verify all results have required fields.
+		for _, tool := range results {
+			assert.NotEmpty(t, tool.RepoOwner)
+			assert.NotEmpty(t, tool.RepoName)
+			assert.NotEmpty(t, tool.Type)
+			assert.Equal(t, "aqua-public", tool.Registry)
+		}
+	})
+
+	t.Run("search terraform - should find results", func(t *testing.T) {
+		results, err := ar.Search(ctx, "terraform", registry.WithLimit(10))
+		require.NoError(t, err)
+		assert.Greater(t, len(results), 0, "expected to find terraform")
+	})
+
+	t.Run("search nonexistent - should return empty", func(t *testing.T) {
+		results, err := ar.Search(ctx, "nonexistenttool12345xyz", registry.WithLimit(5))
+		require.NoError(t, err)
+		assert.Empty(t, results)
+	})
+
+	t.Run("empty query - returns default results", func(t *testing.T) {
+		results, err := ar.Search(ctx, "", registry.WithLimit(5))
+		require.NoError(t, err)
+		// Empty query can return default results (interpreted as "list all").
+		assert.LessOrEqual(t, len(results), 5)
+	})
+
+	t.Run("limit option", func(t *testing.T) {
+		limit := 3
+		results, err := ar.Search(ctx, "terraform", registry.WithLimit(limit))
+		require.NoError(t, err)
+		assert.LessOrEqual(t, len(results), limit)
+	})
+}
+
+func TestAquaRegistry_ListAll(t *testing.T) {
+	ar := NewAquaRegistry()
+	ctx := context.Background()
+
+	t.Run("list with limit", func(t *testing.T) {
+		limit := 10
+		tools, err := ar.ListAll(ctx, registry.WithListLimit(limit))
+		require.NoError(t, err)
+		assert.Greater(t, len(tools), 0)
+		assert.LessOrEqual(t, len(tools), limit)
+
+		// Verify all tools have type field (some may not have owner/repo populated yet).
+		for _, tool := range tools {
+			assert.NotEmpty(t, tool.Type)
+			assert.Equal(t, "aqua-public", tool.Registry)
+		}
+	})
+
+	t.Run("list with offset", func(t *testing.T) {
+		offset := 5
+		limit := 5
+
+		// Get first batch.
+		firstBatch, err := ar.ListAll(ctx,
+			registry.WithListLimit(limit),
+			registry.WithListOffset(0),
+		)
+		require.NoError(t, err)
+
+		// Get second batch with offset.
+		secondBatch, err := ar.ListAll(ctx,
+			registry.WithListLimit(limit),
+			registry.WithListOffset(offset),
+		)
+		require.NoError(t, err)
+
+		// Verify we got results.
+		assert.Greater(t, len(firstBatch), 0)
+		assert.Greater(t, len(secondBatch), 0)
+	})
+
+	t.Run("list with sort", func(t *testing.T) {
+		tools, err := ar.ListAll(ctx,
+			registry.WithListLimit(10),
+			registry.WithSort("name"),
+		)
+		require.NoError(t, err)
+		assert.Greater(t, len(tools), 0)
+	})
+}
+
+func TestAquaRegistry_GetMetadata(t *testing.T) {
+	ar := NewAquaRegistry()
+	ctx := context.Background()
+
+	meta, err := ar.GetMetadata(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, "aqua-public", meta.Name)
+	assert.Equal(t, "aqua", meta.Type)
+	assert.Contains(t, meta.Source, "aqua-registry")
+	assert.Equal(t, 10, meta.Priority)
+}
+
+func TestAquaRegistry_SearchRelevanceScoring(t *testing.T) {
+	ar := NewAquaRegistry()
+	ctx := context.Background()
+
+	// Search for a specific tool.
+	results, err := ar.Search(ctx, "kubectl", registry.WithLimit(10))
+	require.NoError(t, err)
+	require.Greater(t, len(results), 0)
+
+	// Verify results are sorted by relevance.
+	// The first result should be an exact or close match.
+	firstResult := results[0]
+	assert.Contains(t, firstResult.RepoName, "kubectl")
 }

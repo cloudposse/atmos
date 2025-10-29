@@ -1,6 +1,7 @@
 package toolchain
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
@@ -8,6 +9,8 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/ui/theme"
+	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/cloudposse/atmos/toolchain/registry"
 )
 
@@ -15,56 +18,97 @@ import (
 func InfoExec(toolName, outputFormat string) error {
 	defer perf.Track(nil, "toolchain.RunInfo")()
 
-	// Create installer inside the function
+	ctx := context.Background()
+
+	// Create installer inside the function.
 	installer := NewInstaller()
 
-	// Parse tool name to get owner/repo
+	// Parse tool name to get owner/repo.
 	owner, repo, err := installer.parseToolSpec(toolName)
 	if err != nil {
 		return fmt.Errorf("failed to resolve tool '%s': %w", toolName, err)
 	}
 
-	// Get a real version from tool-versions file or use a default
-	version := "1.11.4" // Use a real version instead of "latest"
-
-	// Try to get the latest installed version from tool-versions file
+	// Get installed versions from tool-versions file.
+	installedVersions := []string{}
+	defaultVersion := ""
 	if toolVersions, err := LoadToolVersions(GetToolVersionsFilePath()); err == nil {
 		if versions, exists := toolVersions.Tools[toolName]; exists && len(versions) > 0 {
-			version = versions[len(versions)-1] // Use the most recent version
+			installedVersions = versions
+			defaultVersion = versions[len(versions)-1] // Last one is default.
 		}
 	}
 
-	// Find the tool configuration
+	// Use default version or pick a reasonable one.
+	version := defaultVersion
+	if version == "" {
+		version = "latest" // Fallback.
+	}
+
+	// Find the tool configuration.
 	tool, err := installer.findTool(owner, repo, version)
 	if err != nil {
 		return fmt.Errorf("failed to find tool %s: %w", toolName, err)
 	}
 
-	// Get evaluated YAML with templates processed
-	evaluatedYAML, err := getEvaluatedToolYAML(tool, version, installer)
-	if err != nil {
-		return fmt.Errorf("failed to get evaluated YAML: %w", err)
+	// Get registry metadata to show which registry this came from.
+	var registryName string
+	reg := NewAquaRegistry()
+	if meta, err := reg.GetMetadata(ctx); err == nil {
+		registryName = meta.Name
 	}
 
-	// Display output based on format
+	// Try to get available versions from GitHub.
+	availableVersions := []string{}
+	if ghVersions, err := fetchGitHubVersions(owner, repo); err == nil {
+		// Show latest 10 versions.
+		limit := 10
+		if len(ghVersions) < limit {
+			limit = len(ghVersions)
+		}
+		for i := 0; i < limit; i++ {
+			availableVersions = append(availableVersions, ghVersions[i].version)
+		}
+	}
+
+	// Display output based on format.
 	if outputFormat == "yaml" {
+		evaluatedYAML, err := getEvaluatedToolYAML(tool, version, installer)
+		if err != nil {
+			return fmt.Errorf("failed to get evaluated YAML: %w", err)
+		}
 		fmt.Print(evaluatedYAML)
 	} else {
-		// Table format (default)
-		table := formatToolInfoAsTable(toolContext{Name: toolName, Owner: owner, Repo: repo, Tool: tool, Version: version, Installer: installer})
-		fmt.Print(table)
+		// Enhanced table format (default).
+		markdown := formatEnhancedToolInfo(&toolContext{
+			Name:              toolName,
+			Owner:             owner,
+			Repo:              repo,
+			Tool:              tool,
+			Version:           version,
+			Installer:         installer,
+			Registry:          registryName,
+			InstalledVersions: installedVersions,
+			AvailableVersions: availableVersions,
+			DefaultVersion:    defaultVersion,
+		})
+		u.PrintfMarkdownToTUI(markdown)
 	}
 
 	return nil
 }
 
 type toolContext struct {
-	Name      string
-	Owner     string
-	Repo      string
-	Version   string
-	Tool      *registry.Tool
-	Installer *Installer
+	Name              string
+	Owner             string
+	Repo              string
+	Version           string
+	Tool              *registry.Tool
+	Installer         *Installer
+	Registry          string
+	InstalledVersions []string
+	AvailableVersions []string
+	DefaultVersion    string
 }
 
 func formatToolInfoAsTable(ctx toolContext) string {
@@ -111,6 +155,90 @@ func formatToolInfoAsTable(ctx toolContext) string {
 	}
 
 	return strings.Join(rows, "\n") + "\n"
+}
+
+// formatEnhancedToolInfo formats tool information with registry data and version info.
+func formatEnhancedToolInfo(ctx *toolContext) string {
+	var output strings.Builder
+
+	formatToolHeader(&output, ctx)
+	formatInstalledVersions(&output, ctx)
+	formatAvailableVersions(&output, ctx)
+	formatInstallExamples(&output, ctx)
+
+	return output.String()
+}
+
+func formatToolHeader(output *strings.Builder, ctx *toolContext) {
+	fmt.Fprintf(output, "**Tool:** %s/%s\n", ctx.Owner, ctx.Repo)
+	if ctx.Registry != "" {
+		fmt.Fprintf(output, "Registry: %s\n", ctx.Registry)
+	}
+	fmt.Fprintf(output, "Type: %s\n\n", ctx.Tool.Type)
+
+	if ctx.Tool.RepoOwner != "" && ctx.Tool.RepoName != "" {
+		fmt.Fprintf(output, "Repository: https://github.com/%s/%s\n\n", ctx.Tool.RepoOwner, ctx.Tool.RepoName)
+	}
+}
+
+func formatInstalledVersions(output *strings.Builder, ctx *toolContext) {
+	if len(ctx.InstalledVersions) == 0 {
+		output.WriteString("No versions installed\n\n")
+		return
+	}
+
+	output.WriteString("**Installed Versions:**\n")
+	for _, v := range ctx.InstalledVersions {
+		marker := " "
+		if v == ctx.DefaultVersion {
+			marker = theme.Styles.Checkmark.String()
+		}
+		fmt.Fprintf(output, "  %s %s", marker, v)
+		if v == ctx.DefaultVersion {
+			output.WriteString(" (default)")
+		}
+		output.WriteString("\n")
+	}
+	output.WriteString("\n")
+}
+
+func formatAvailableVersions(output *strings.Builder, ctx *toolContext) {
+	if len(ctx.AvailableVersions) == 0 {
+		return
+	}
+
+	output.WriteString("**Available Versions** (latest 10):\n")
+	for _, v := range ctx.AvailableVersions {
+		installed := isVersionInstalled(v, ctx.InstalledVersions)
+		marker := " "
+		if installed {
+			marker = theme.Styles.Checkmark.String()
+		}
+		fmt.Fprintf(output, "  %s %s", marker, v)
+		if installed {
+			output.WriteString(" (installed)")
+		}
+		output.WriteString("\n")
+	}
+	output.WriteString("\n")
+}
+
+func isVersionInstalled(version string, installedVersions []string) bool {
+	for _, iv := range installedVersions {
+		if iv == version {
+			return true
+		}
+	}
+	return false
+}
+
+func formatInstallExamples(output *strings.Builder, ctx *toolContext) {
+	output.WriteString("**Install:**\n")
+	fmt.Fprintf(output, "  atmos toolchain install %s@%s\n", ctx.Name, ctx.Version)
+	if len(ctx.AvailableVersions) > 0 {
+		fmt.Fprintf(output, "  atmos toolchain install %s@%s\n", ctx.Name, ctx.AvailableVersions[0])
+	}
+	fmt.Fprintf(output, "  atmos toolchain install %s@latest\n", ctx.Name)
 }
 
 // getEvaluatedToolYAML returns the tool configuration as YAML with all templates evaluated.
