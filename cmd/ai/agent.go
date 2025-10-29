@@ -1,11 +1,12 @@
-package cmd
+package ai
 
 import (
 	"github.com/spf13/cobra"
 )
 
-// aiAgentCmd represents the 'atmos ai agent' command.
-var aiAgentCmd = &cobra.Command{
+// AgentCmd represents the 'atmos ai agent' command.
+// Exported for use by agent subpackage.
+var AgentCmd = &cobra.Command{
 	Use:   "agent",
 	Short: "Manage AI agents",
 	Long: `Manage community and custom AI agents.
@@ -34,5 +35,5 @@ Examples:
 
 func init() {
 	// Add 'agent' subcommand to 'ai' command.
-	aiCmd.AddCommand(aiAgentCmd)
+	aiCmd.AddCommand(AgentCmd)
 }

@@ -1,8 +1,9 @@
-package cmd
+package ai
 
 import (
 	"github.com/spf13/cobra"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -34,6 +35,25 @@ func isAIEnabled(atmosConfig *schema.AtmosConfiguration) bool {
 }
 
 func init() {
-	// Add ai command to root.
-	RootCmd.AddCommand(aiCmd)
+	// Attach subcommands to ai command.
+	// These will be added in the init() functions of each subcommand file.
+
+	// Register this built-in command with the registry.
+	// This happens during package initialization via blank import.
+	internal.Register(&AICommandProvider{})
+}
+
+// AICommandProvider implements the CommandProvider interface.
+type AICommandProvider struct{}
+
+func (a *AICommandProvider) GetCommand() *cobra.Command {
+	return aiCmd
+}
+
+func (a *AICommandProvider) GetName() string {
+	return "ai"
+}
+
+func (a *AICommandProvider) GetGroup() string {
+	return "Other Commands"
 }

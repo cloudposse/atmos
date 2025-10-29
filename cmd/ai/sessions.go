@@ -1,4 +1,4 @@
-package cmd
+package ai
 
 import (
 	"context"
@@ -21,7 +21,7 @@ const (
 )
 
 // aiSessionsCmd represents the ai sessions command.
-var aiSessionsCmd = &cobra.Command{
+var sessionsCmd = &cobra.Command{
 	Use:   "sessions",
 	Short: "Manage AI chat sessions",
 	Long: `Manage persistent AI chat sessions.
@@ -37,7 +37,7 @@ Available operations:
 }
 
 // aiSessionsListCmd lists all sessions.
-var aiSessionsListCmd = &cobra.Command{
+var sessionsListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List all AI chat sessions",
 	Long: `List all available AI chat sessions.
@@ -54,7 +54,7 @@ Example:
 }
 
 // aiSessionsCleanCmd cleans old sessions.
-var aiSessionsCleanCmd = &cobra.Command{
+var sessionsCleanCmd = &cobra.Command{
 	Use:   "clean",
 	Short: "Clean old AI chat sessions",
 	Long: `Remove old AI chat sessions based on retention policy.
@@ -71,14 +71,14 @@ Examples:
 
 func init() {
 	// Add sessions command to ai command.
-	aiCmd.AddCommand(aiSessionsCmd)
+	aiCmd.AddCommand(sessionsCmd)
 
 	// Add subcommands to sessions command.
-	aiSessionsCmd.AddCommand(aiSessionsListCmd)
-	aiSessionsCmd.AddCommand(aiSessionsCleanCmd)
+	sessionsCmd.AddCommand(sessionsListCmd)
+	sessionsCmd.AddCommand(sessionsCleanCmd)
 
 	// Add flags for clean command.
-	aiSessionsCleanCmd.Flags().String("older-than", "30d", "Delete sessions older than this duration (e.g., 30d, 7d, 24h)")
+	sessionsCleanCmd.Flags().String("older-than", "30d", "Delete sessions older than this duration (e.g., 30d, 7d, 24h)")
 }
 
 // initSessionManager initializes and validates session management.

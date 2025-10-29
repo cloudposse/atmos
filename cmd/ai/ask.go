@@ -1,4 +1,4 @@
-package cmd
+package ai
 
 import (
 	"context"
@@ -17,7 +17,7 @@ import (
 )
 
 // aiAskCmd represents the ai ask command.
-var aiAskCmd = &cobra.Command{
+var askCmd = &cobra.Command{
 	Use:   "ask [question]",
 	Short: "Ask the AI assistant a question",
 	Long: `Ask the AI assistant a specific question and get a response.
@@ -103,5 +103,5 @@ Examples:
 }
 
 func init() {
-	aiCmd.AddCommand(aiAskCmd)
+	aiCmd.AddCommand(askCmd)
 }

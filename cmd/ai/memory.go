@@ -1,4 +1,4 @@
-package cmd
+package ai
 
 import (
 	"context"
@@ -19,7 +19,7 @@ import (
 )
 
 // aiMemoryCmd represents the ai memory command.
-var aiMemoryCmd = &cobra.Command{
+var memoryCmd = &cobra.Command{
 	Use:   "memory",
 	Short: "Manage AI project memory",
 	Long: `Manage project memory (ATMOS.md) for the AI assistant.
@@ -38,7 +38,7 @@ Available operations:
 }
 
 // aiMemoryInitCmd initializes project memory.
-var aiMemoryInitCmd = &cobra.Command{
+var memoryInitCmd = &cobra.Command{
 	Use:   "init",
 	Short: "Initialize project memory file",
 	Long: `Create a new ATMOS.md template file in your project.
@@ -59,7 +59,7 @@ Example:
 }
 
 // aiMemoryShowCmd displays memory content.
-var aiMemoryShowCmd = &cobra.Command{
+var memoryShowCmd = &cobra.Command{
 	Use:   "show",
 	Short: "Display project memory content",
 	Long: `Show the current project memory content.
@@ -73,7 +73,7 @@ Example:
 }
 
 // aiMemoryValidateCmd validates memory format.
-var aiMemoryValidateCmd = &cobra.Command{
+var memoryValidateCmd = &cobra.Command{
 	Use:   "validate",
 	Short: "Validate project memory file",
 	Long: `Validate the ATMOS.md file format.
@@ -90,7 +90,7 @@ Example:
 }
 
 // aiMemoryEditCmd opens memory in editor.
-var aiMemoryEditCmd = &cobra.Command{
+var memoryEditCmd = &cobra.Command{
 	Use:   "edit",
 	Short: "Edit project memory in your editor",
 	Long: `Open the ATMOS.md file in your preferred text editor.
@@ -104,7 +104,7 @@ Example:
 }
 
 // aiMemoryPathCmd shows memory file path.
-var aiMemoryPathCmd = &cobra.Command{
+var memoryPathCmd = &cobra.Command{
 	Use:   "path",
 	Short: "Show project memory file path",
 	Long: `Display the absolute path to the ATMOS.md file.
@@ -118,17 +118,17 @@ Example:
 
 func init() {
 	// Add memory command to ai command.
-	aiCmd.AddCommand(aiMemoryCmd)
+	aiCmd.AddCommand(memoryCmd)
 
 	// Add subcommands to memory command.
-	aiMemoryCmd.AddCommand(aiMemoryInitCmd)
-	aiMemoryCmd.AddCommand(aiMemoryShowCmd)
-	aiMemoryCmd.AddCommand(aiMemoryValidateCmd)
-	aiMemoryCmd.AddCommand(aiMemoryEditCmd)
-	aiMemoryCmd.AddCommand(aiMemoryPathCmd)
+	memoryCmd.AddCommand(memoryInitCmd)
+	memoryCmd.AddCommand(memoryShowCmd)
+	memoryCmd.AddCommand(memoryValidateCmd)
+	memoryCmd.AddCommand(memoryEditCmd)
+	memoryCmd.AddCommand(memoryPathCmd)
 
 	// Add flags.
-	aiMemoryInitCmd.Flags().Bool("force", false, "Overwrite existing ATMOS.md file")
+	memoryInitCmd.Flags().Bool("force", false, "Overwrite existing ATMOS.md file")
 }
 
 // initMemoryManager initializes memory manager with configuration.

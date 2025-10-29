@@ -1,4 +1,4 @@
-package cmd
+package ai
 
 import (
 	"context"
@@ -38,7 +38,7 @@ func getModelFromConfig(atmosConfig *schema.AtmosConfiguration) string {
 }
 
 // aiChatCmd represents the ai chat command.
-var aiChatCmd = &cobra.Command{
+var chatCmd = &cobra.Command{
 	Use:   "chat",
 	Short: "Start interactive AI chat session",
 	Long: `Start an interactive chat session with the Atmos AI assistant.
@@ -168,10 +168,10 @@ The AI assistant has access to your current Atmos configuration and can help wit
 }
 
 func init() {
-	aiCmd.AddCommand(aiChatCmd)
+	aiCmd.AddCommand(chatCmd)
 
 	// Add session flag.
-	aiChatCmd.Flags().String("session", "", "Resume or create a named session")
+	chatCmd.Flags().String("session", "", "Resume or create a named session")
 }
 
 // getSessionStoragePath returns the path to the session storage file.

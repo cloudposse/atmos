@@ -1,4 +1,4 @@
-package cmd
+package ai
 
 import (
 	"context"
@@ -17,7 +17,7 @@ import (
 )
 
 // aiHelpCmd represents the ai help command.
-var aiHelpCmd = &cobra.Command{
+var helpCmd = &cobra.Command{
 	Use:   "help [topic]",
 	Short: "Get AI-powered help on Atmos topics",
 	Long: `Get intelligent help on specific Atmos topics from the AI assistant.
@@ -158,5 +158,5 @@ Examples:
 }
 
 func init() {
-	aiCmd.AddCommand(aiHelpCmd)
+	aiCmd.AddCommand(helpCmd)
 }

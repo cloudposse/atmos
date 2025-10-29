@@ -1,9 +1,11 @@
-package cmd
+package agent
 
 import (
 	"fmt"
 
 	"github.com/spf13/cobra"
+
+	ai "github.com/cloudposse/atmos/cmd/ai"
 
 	"github.com/cloudposse/atmos/pkg/ai/agents/marketplace"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -11,7 +13,7 @@ import (
 )
 
 // aiAgentUninstallCmd represents the 'atmos ai agent uninstall' command.
-var aiAgentUninstallCmd = &cobra.Command{
+var uninstallCmd = &cobra.Command{
 	Use:   "uninstall <name>",
 	Short: "Remove an installed agent",
 	Long: `Uninstall a community-contributed agent from this system.
@@ -57,8 +59,8 @@ Examples:
 
 func init() {
 	// Add flags.
-	aiAgentUninstallCmd.Flags().BoolP("force", "f", false, "Skip confirmation prompt")
+	uninstallCmd.Flags().BoolP("force", "f", false, "Skip confirmation prompt")
 
 	// Add 'uninstall' subcommand to 'agent' command.
-	aiAgentCmd.AddCommand(aiAgentUninstallCmd)
+	ai.AgentCmd.AddCommand(uninstallCmd)
 }

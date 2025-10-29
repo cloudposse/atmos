@@ -1,4 +1,4 @@
-package cmd
+package agent
 
 import (
 	"fmt"
@@ -7,13 +7,15 @@ import (
 
 	"github.com/spf13/cobra"
 
+	ai "github.com/cloudposse/atmos/cmd/ai"
+
 	"github.com/cloudposse/atmos/pkg/ai/agents/marketplace"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/version"
 )
 
 // aiAgentListCmd represents the 'atmos ai agent list' command.
-var aiAgentListCmd = &cobra.Command{
+var listCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List installed agents",
 	Long: `List all community-contributed agents installed on this system.
@@ -73,10 +75,10 @@ Examples:
 
 func init() {
 	// Add flags.
-	aiAgentListCmd.Flags().BoolP("detailed", "d", false, "Show detailed information for each agent")
+	listCmd.Flags().BoolP("detailed", "d", false, "Show detailed information for each agent")
 
 	// Add 'list' subcommand to 'agent' command.
-	aiAgentCmd.AddCommand(aiAgentListCmd)
+	ai.AgentCmd.AddCommand(listCmd)
 }
 
 // printAgentSummary prints a one-line summary of an agent.

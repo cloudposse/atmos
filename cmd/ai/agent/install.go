@@ -1,4 +1,4 @@
-package cmd
+package agent
 
 import (
 	"context"
@@ -6,13 +6,15 @@ import (
 
 	"github.com/spf13/cobra"
 
+	ai "github.com/cloudposse/atmos/cmd/ai"
+
 	"github.com/cloudposse/atmos/pkg/ai/agents/marketplace"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/version"
 )
 
 // aiAgentInstallCmd represents the 'atmos ai agent install' command.
-var aiAgentInstallCmd = &cobra.Command{
+var installCmd = &cobra.Command{
 	Use:   "install <source>",
 	Short: "Install an agent from a GitHub repository",
 	Long: `Install a community-contributed agent from a GitHub repository.
@@ -84,9 +86,9 @@ Examples:
 
 func init() {
 	// Add flags.
-	aiAgentInstallCmd.Flags().Bool("force", false, "Reinstall if agent is already installed")
-	aiAgentInstallCmd.Flags().BoolP("yes", "y", false, "Skip confirmation prompt")
+	installCmd.Flags().Bool("force", false, "Reinstall if agent is already installed")
+	installCmd.Flags().BoolP("yes", "y", false, "Skip confirmation prompt")
 
 	// Add 'install' subcommand to 'agent' command.
-	aiAgentCmd.AddCommand(aiAgentInstallCmd)
+	ai.AgentCmd.AddCommand(installCmd)
 }
