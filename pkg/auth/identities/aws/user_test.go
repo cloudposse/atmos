@@ -187,6 +187,153 @@ func TestUser_resolveLongLivedCredentials_Order(t *testing.T) {
 	assert.Equal(t, "AK2", creds.AccessKeyID)
 }
 
+// TestUser_resolveLongLivedCredentials_DeepMerge validates the deep merge precedence rules.
+func TestUser_resolveLongLivedCredentials_DeepMerge(t *testing.T) {
+	store := atmosCreds.NewCredentialStore()
+
+	tests := []struct {
+		name           string
+		identityName   string
+		yamlCreds      map[string]any
+		keystoreCreds  *types.AWSCredentials
+		expectedAccess string
+		expectedSecret string
+		expectedMFA    string
+		expectError    bool
+		errorContains  string
+	}{
+		{
+			name:         "Rule 1: YAML complete credentials - use YAML entirely",
+			identityName: "yaml-complete",
+			yamlCreds: map[string]any{
+				"access_key_id":     "YAML_ACCESS",
+				"secret_access_key": "YAML_SECRET",
+				"mfa_arn":           "arn:aws:iam::111:mfa/yaml",
+			},
+			keystoreCreds: &types.AWSCredentials{
+				AccessKeyID:     "KEYRING_ACCESS",
+				SecretAccessKey: "KEYRING_SECRET",
+				MfaArn:          "arn:aws:iam::111:mfa/keyring",
+			},
+			expectedAccess: "YAML_ACCESS",
+			expectedSecret: "YAML_SECRET",
+			expectedMFA:    "arn:aws:iam::111:mfa/yaml",
+			expectError:    false,
+		},
+		{
+			name:         "Rule 2: YAML empty - use keyring with YAML MFA override",
+			identityName: "yaml-mfa-override",
+			yamlCreds: map[string]any{
+				"mfa_arn": "arn:aws:iam::222:mfa/yaml-override",
+			},
+			keystoreCreds: &types.AWSCredentials{
+				AccessKeyID:     "KEYRING_ACCESS",
+				SecretAccessKey: "KEYRING_SECRET",
+				MfaArn:          "arn:aws:iam::222:mfa/keyring",
+			},
+			expectedAccess: "KEYRING_ACCESS",
+			expectedSecret: "KEYRING_SECRET",
+			expectedMFA:    "arn:aws:iam::222:mfa/yaml-override", // YAML overrides keyring MFA
+			expectError:    false,
+		},
+		{
+			name:         "Rule 2: YAML empty - use keyring entirely (no MFA override)",
+			identityName: "yaml-empty-keyring-mfa",
+			yamlCreds:    map[string]any{},
+			keystoreCreds: &types.AWSCredentials{
+				AccessKeyID:     "KEYRING_ACCESS",
+				SecretAccessKey: "KEYRING_SECRET",
+				MfaArn:          "arn:aws:iam::333:mfa/keyring",
+			},
+			expectedAccess: "KEYRING_ACCESS",
+			expectedSecret: "KEYRING_SECRET",
+			expectedMFA:    "arn:aws:iam::333:mfa/keyring", // Keyring MFA used
+			expectError:    false,
+		},
+		{
+			name:         "Rule 3: YAML partial (only access key) - error",
+			identityName: "yaml-partial-access",
+			yamlCreds: map[string]any{
+				"access_key_id": "YAML_ACCESS",
+				// Missing secret_access_key
+			},
+			keystoreCreds: &types.AWSCredentials{
+				AccessKeyID:     "KEYRING_ACCESS",
+				SecretAccessKey: "KEYRING_SECRET",
+			},
+			expectError:   true,
+			errorContains: "must both be provided or both be empty",
+		},
+		{
+			name:         "Rule 3: YAML partial (only secret key) - error",
+			identityName: "yaml-partial-secret",
+			yamlCreds: map[string]any{
+				"secret_access_key": "YAML_SECRET",
+				// Missing access_key_id
+			},
+			keystoreCreds: &types.AWSCredentials{
+				AccessKeyID:     "KEYRING_ACCESS",
+				SecretAccessKey: "KEYRING_SECRET",
+			},
+			expectError:   true,
+			errorContains: "must both be provided or both be empty",
+		},
+		{
+			name:         "Empty env vars (!env) - use keyring with YAML MFA",
+			identityName: "empty-env-vars",
+			yamlCreds: map[string]any{
+				"access_key_id":     "", // Empty !env result
+				"secret_access_key": "", // Empty !env result
+				"mfa_arn":           "arn:aws:iam::444:mfa/yaml",
+			},
+			keystoreCreds: &types.AWSCredentials{
+				AccessKeyID:     "KEYRING_ACCESS",
+				SecretAccessKey: "KEYRING_SECRET",
+				MfaArn:          "",
+			},
+			expectedAccess: "KEYRING_ACCESS",
+			expectedSecret: "KEYRING_SECRET",
+			expectedMFA:    "arn:aws:iam::444:mfa/yaml", // YAML MFA overrides empty keyring MFA
+			expectError:    false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Prime keyring if test provides keystore credentials.
+			if tt.keystoreCreds != nil {
+				err := store.Store(tt.identityName, tt.keystoreCreds)
+				require.NoError(t, err)
+			}
+
+			// Create identity with YAML credentials.
+			id, err := NewUserIdentity(tt.identityName, &schema.Identity{
+				Kind:        "aws/user",
+				Credentials: tt.yamlCreds,
+			})
+			require.NoError(t, err)
+			ui := id.(*userIdentity)
+
+			// Resolve credentials.
+			creds, err := ui.resolveLongLivedCredentials()
+
+			if tt.expectError {
+				require.Error(t, err)
+				if tt.errorContains != "" {
+					assert.Contains(t, err.Error(), tt.errorContains)
+				}
+				return
+			}
+
+			require.NoError(t, err)
+			require.NotNil(t, creds)
+			assert.Equal(t, tt.expectedAccess, creds.AccessKeyID, "access_key_id mismatch")
+			assert.Equal(t, tt.expectedSecret, creds.SecretAccessKey, "secret_access_key mismatch")
+			assert.Equal(t, tt.expectedMFA, creds.MfaArn, "mfa_arn mismatch")
+		})
+	}
+}
+
 func TestUser_resolveRegion_DefaultAndOverride(t *testing.T) {
 	id, _ := NewUserIdentity("dev", &schema.Identity{Kind: "aws/user"})
 	ui := id.(*userIdentity)
