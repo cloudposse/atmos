@@ -570,9 +570,23 @@ func (m *manager) findFirstValidCachedCredentials() int {
 			return i
 		}
 
-		// Credentials exist but are expired - log and continue to next in chain.
+		// Credentials exist but are expired or expiring too soon - log and continue to next in chain.
 		if expTime != nil {
-			log.Debug("Credentials are expired", logKeyChainIndex, i, identityNameKey, identityName, "expiration", *expTime)
+			timeUntilExpiry := time.Until(*expTime)
+			if timeUntilExpiry <= 0 {
+				log.Debug("Skipping expired credentials in chain",
+					logKeyChainIndex, i,
+					identityNameKey, identityName,
+					"expiration", *expTime,
+					"expired_ago", -timeUntilExpiry)
+			} else {
+				log.Debug("Skipping credentials expiring too soon in chain (within safety buffer)",
+					logKeyChainIndex, i,
+					identityNameKey, identityName,
+					"expiration", *expTime,
+					"time_until_expiry", timeUntilExpiry,
+					"required_buffer", minCredentialValidityBuffer)
+			}
 		} else {
 			// This shouldn't happen - isCredentialValid returns valid=true when expTime=nil.
 			log.Debug("Credentials are invalid", logKeyChainIndex, i, identityNameKey, identityName)
@@ -590,12 +604,21 @@ func (m *manager) isCredentialValid(identityName string, cachedCreds types.ICred
 		if expTime.After(time.Now().Add(minCredentialValidityBuffer)) {
 			return true, expTime
 		}
-		// Expiration exists but is too close or already expired -> treat as invalid.
-		log.Debug("Credentials expiring soon or already expired",
-			logKeyIdentity, identityName,
-			logKeyExpiration, expTime,
-			"time_until_expiry", time.Until(*expTime),
-			"required_buffer", minCredentialValidityBuffer)
+		// Expiration exists but is too close or already expired -> treat as invalid for long-running operations.
+		timeUntilExpiry := time.Until(*expTime)
+		if timeUntilExpiry <= 0 {
+			log.Debug("Credentials are expired",
+				logKeyIdentity, identityName,
+				logKeyExpiration, expTime,
+				"expired_ago", -timeUntilExpiry)
+		} else {
+			log.Debug("Credentials expiring too soon for safe use in long-running operations",
+				logKeyIdentity, identityName,
+				logKeyExpiration, expTime,
+				"time_until_expiry", timeUntilExpiry,
+				"required_buffer", minCredentialValidityBuffer,
+				"recommendation", "re-authenticate to ensure operation completes successfully")
+		}
 		return false, expTime
 	}
 	// Non-expiring credentials (no expiration info) -> assume valid.
