@@ -214,8 +214,8 @@ func ExecuteWorkflow(
 			// Build workflow error with structured context.
 			stepErr := errUtils.Build(ErrWorkflowStepFailed).
 				WithTitle("Workflow Error").
-				WithExplanation(fmt.Sprintf("The following command failed to execute:\n\n%s", failedCmd)).
-				WithHint(fmt.Sprintf("To resume the workflow from this step, run:\n\n%s", resumeCommand)).
+				WithExplanationf("The following command failed to execute:\n\n%s", failedCmd).
+				WithHintf("To resume the workflow from this step, run:\n\n%s", resumeCommand).
 				Err()
 
 			// Wrap with ExecError if it's a command execution failure with exit code.
