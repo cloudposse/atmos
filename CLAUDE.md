@@ -312,6 +312,28 @@ See `docs/developing-atmos-commands.md` and `docs/prd/command-registry-pattern.m
 ### Documentation (MANDATORY)
 All cmds/flags need Docusaurus docs in `website/docs/cli/commands/`. Use `<dl>` for args/flags. Build: `cd website && npm run build`
 
+**Verifying Documentation Links (MANDATORY):**
+Before adding links to documentation pages, ALWAYS verify the correct URL:
+
+```bash
+# Find existing docs to verify URL structure
+find website/docs/cli/commands -name "*keyword*"
+
+# Check how other docs link to the same page
+grep -r "/cli/commands/auth/" website/docs/
+```
+
+**Common mistakes:**
+- Using command name in URL (e.g., `/cli/commands/auth/atmos_auth`) instead of file name (e.g., `/cli/commands/auth/usage`)
+- Not checking the `slug` frontmatter in MDX files which can override default URLs
+- Guessing URLs instead of verifying against existing documentation structure
+
+**Correct approach:**
+1. Find the target doc file in `website/docs/`
+2. Check for `slug:` in frontmatter (if present, that's the URL)
+3. Otherwise, URL is path from `docs/` without extension
+4. Verify by searching for existing links to that page
+
 ### PRD Documentation (MANDATORY)
 All Product Requirement Documents (PRDs) MUST be placed in `docs/prd/`. Use kebab-case filenames. Examples: `command-registry-pattern.md`, `error-handling-strategy.md`, `testing-strategy.md`
 
