@@ -2,15 +2,14 @@ package exec
 
 import (
 	"bytes"
-	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
-	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/stretchr/testify/assert"
 
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/tests"
 )
@@ -458,10 +457,8 @@ func TestPackerComponentEnvSectionConversion(t *testing.T) {
 				ComponentEnvList:    []string{},
 			}
 
-			// Simulate the conversion logic from packer.go.
-			for k, v := range info.ComponentEnvSection {
-				info.ComponentEnvList = append(info.ComponentEnvList, fmt.Sprintf("%s=%v", k, v))
-			}
+			// Call the production conversion function.
+			ConvertComponentEnvSectionToList(&info)
 
 			// Verify all expected environment variables are in ComponentEnvList.
 			envListMap := make(map[string]string)

@@ -914,10 +914,8 @@ func TestComponentEnvSectionConversion(t *testing.T) {
 				ComponentEnvList:    []string{},
 			}
 
-			// Simulate the conversion logic from terraform.go.
-			for k, v := range info.ComponentEnvSection {
-				info.ComponentEnvList = append(info.ComponentEnvList, fmt.Sprintf("%s=%v", k, v))
-			}
+			// Call the production conversion function.
+			ConvertComponentEnvSectionToList(&info)
 
 			// Verify all expected environment variables are in ComponentEnvList.
 			envListMap := make(map[string]string)
