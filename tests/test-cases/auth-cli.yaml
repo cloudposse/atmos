@@ -296,6 +296,7 @@ tests:
       - "--identity"
       - "nonexistent"
     expect:
+      ignore_trailing_whitespace: true
       diff: []
       # Note: Currently falls back to default identity (test-admin) when identity not found.
       # This behavior needs investigation - see related issue about default fallback logic.

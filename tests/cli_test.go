@@ -1385,8 +1385,14 @@ func getSnapshotFilenames(testName string, isTty bool) (stdout, stderr, tty stri
 // verifyTTYSnapshot handles snapshot verification for TTY mode tests.
 func verifyTTYSnapshot(t *testing.T, tc *TestCase, ttyPath, combinedOutput string, regenerate bool) bool {
 	if regenerate {
+		// Strip trailing whitespace from output before saving snapshot if requested.
+		outputToSave := combinedOutput
+		if tc.Expect.IgnoreTrailingWhitespace {
+			outputToSave = stripTrailingWhitespace(combinedOutput)
+		}
+
 		t.Logf("Updating TTY snapshot at %q", ttyPath)
-		updateSnapshot(ttyPath, combinedOutput)
+		updateSnapshot(ttyPath, outputToSave)
 		return true
 	}
 
@@ -1469,10 +1475,18 @@ func verifySnapshot(t *testing.T, tc TestCase, stdoutOutput, stderrOutput string
 
 	// Non-TTY mode: separate stdout and stderr snapshots
 	if regenerate {
+		// Strip trailing whitespace from output before saving snapshot if requested.
+		stdoutToSave := stdoutOutput
+		stderrToSave := stderrOutput
+		if tc.Expect.IgnoreTrailingWhitespace {
+			stdoutToSave = stripTrailingWhitespace(stdoutOutput)
+			stderrToSave = stripTrailingWhitespace(stderrOutput)
+		}
+
 		t.Logf("Updating stdout snapshot at %q", stdoutPath)
-		updateSnapshot(stdoutPath, stdoutOutput)
+		updateSnapshot(stdoutPath, stdoutToSave)
 		t.Logf("Updating stderr snapshot at %q", stderrPath)
-		updateSnapshot(stderrPath, stderrOutput)
+		updateSnapshot(stderrPath, stderrToSave)
 		return true
 	}
 
