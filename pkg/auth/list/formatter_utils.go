@@ -194,7 +194,7 @@ func getExpirationInfo(authManager authTypes.AuthManager, identityName string) (
 }
 
 // formatDuration formats a duration into a human-readable string.
-// Examples: "2h", "45m", "30s", "expired"
+// Examples: "2h", "45m", "30s", "expired".
 func formatDuration(d time.Duration) string {
 	defer perf.Track(nil, "list.formatDuration")()
 
