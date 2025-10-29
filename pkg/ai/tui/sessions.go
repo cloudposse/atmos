@@ -83,6 +83,15 @@ func (m *ChatModel) handleSessionSwitched(msg sessionSwitchedMsg) {
 		// Restore agent from session if available.
 		if msg.session != nil && msg.session.Agent != "" && m.agentRegistry != nil {
 			if agent, err := m.agentRegistry.Get(msg.session.Agent); err == nil {
+				// Load agent's system prompt from file (if configured).
+				systemPrompt, promptErr := agent.LoadSystemPrompt()
+				if promptErr != nil {
+					log.Debug(fmt.Sprintf("Failed to load system prompt for agent %q: %v, using default", agent.Name, promptErr))
+					// Keep the existing SystemPrompt as fallback.
+				} else {
+					// Update agent with loaded prompt.
+					agent.SystemPrompt = systemPrompt
+				}
 				m.currentAgent = agent
 			} else {
 				// If agent not found, log and fall back to default.

@@ -85,6 +85,9 @@ var excludedFunctions = map[string]string{
 	"ClearBaseComponentConfigCache": "Test cleanup function.",
 	"ClearJsonSchemaCache":          "Test cleanup function.",
 	"ClearFileContentCache":         "Test cleanup function.",
+	"GetClientOptions":              "Lightweight utility, would create import cycle (gcp→perf→schema→store→gcp).",
+	"GetCredentialsFromBackend":     "Simple map lookup, would create import cycle (gcp→perf→schema→store→gcp).",
+	"GetCredentialsFromStore":       "Simple pointer dereference, would create import cycle (gcp→perf→schema→store→gcp).",
 }
 
 func (r *PerfTrackRule) Name() string {

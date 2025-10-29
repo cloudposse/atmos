@@ -296,6 +296,225 @@ These visual indicators make it immediately clear which agent is active and help
 Agents are displayed in **alphabetical order by name** in the agent selector for consistent, predictable navigation. This ensures the list never changes order unexpectedly as you navigate.
 :::
 
+## Agent Prompt System
+
+Atmos AI uses a **file-based prompt system** that separates agent knowledge from code infrastructure. Each built-in agent has a dedicated Markdown file containing its specialized instructions, best practices, and workflows.
+
+### Architecture
+
+**Separation of Concerns:**
+- **Go code** (`pkg/ai/agents/`) - Agent infrastructure, tool execution, registry, session management
+- **Markdown files** (`pkg/ai/agents/prompts/`) - Agent knowledge, instructions, domain expertise
+
+This design provides several key benefits:
+
+**For Development:**
+- 🔧 Update agent behavior without recompiling Atmos
+- 📝 Easy to maintain and version control prompt changes
+- 🤝 Community can contribute agent improvements via pull requests
+- 📊 Track prompt evolution in Git history
+- 🧪 Test different prompt strategies easily
+
+**For Users:**
+- 🎯 Richer, more specialized agent responses
+- 🔄 Consistent agent behavior across sessions
+- 📚 Agents stay up-to-date with latest Atmos patterns
+- ⚡ Token-efficient progressive disclosure (prompts load only when agent is activated)
+
+### How It Works
+
+#### 1. Embedded Filesystem
+
+All agent prompt files are embedded into the Atmos binary using Go's `//go:embed` directive:
+
+```
+pkg/ai/agents/prompts/
+├── general.md                     # 🤖 General agent (~6KB)
+├── stack-analyzer.md              # 📊 Stack analysis (~6KB)
+├── component-refactor.md          # 🔧 Component refactoring (~6KB)
+├── security-auditor.md            # 🔒 Security auditing (~6KB)
+└── config-validator.md            # ✅ Config validation (~6KB)
+```
+
+**Key characteristics:**
+- Prompts are **compiled into the binary** (no external files needed at runtime)
+- Source files remain **editable** in the repository
+- Changes require **rebuilding Atmos** to take effect
+- Total size: ~30KB for all 5 agents
+
+#### 2. Dynamic Loading
+
+Prompts are loaded dynamically when you interact with agents:
+
+```
+Agent Initialization (startup)
+  → LoadSystemPrompt("general.md")
+  → Agent has full instructions
+
+Agent Switching (Ctrl+A)
+  → User selects "Stack Analyzer"
+  → LoadSystemPrompt("stack-analyzer.md")
+  → Agent now has specialized stack analysis knowledge
+
+Session Restore
+  → Load saved session
+  → LoadSystemPrompt("<saved-agent>.md")
+  → Continue with same agent from last session
+```
+
+This **progressive disclosure** approach minimizes token usage - each agent's instructions are only loaded when that agent is active.
+
+#### 3. Prompt File Structure
+
+Each agent prompt file follows a consistent structure:
+
+```markdown
+# Agent: [Name] [Icon]
+
+## Role
+Brief description of the agent's purpose and expertise
+
+## Your Expertise
+- Domain knowledge areas
+- Specializations
+- Key competencies
+
+## Instructions
+Step-by-step guidance for the agent to follow
+
+## Best Practices
+Extracted from Atmos documentation (llms.txt, llms-full.txt)
+
+## Tools You Should Use
+Recommended tools for this agent's domain
+
+## Example Workflows
+Common usage patterns and examples
+
+## Response Style
+How the agent should format and present information
+```
+
+**Example excerpt from `stack-analyzer.md`:**
+
+```markdown
+# Agent: Stack Analyzer 📊
+
+## Role
+
+You are a specialized AI agent for analyzing Atmos stack configurations,
+dependencies, architecture, and cross-stack relationships.
+
+## Your Expertise
+
+- **Stack Configuration Analysis** - Deep understanding of YAML structures
+- **Dependency Mapping** - Identifying component relationships
+- **Import Hierarchy** - Analyzing import chains and inheritance patterns
+...
+```
+
+#### 4. Content Sources
+
+Agent prompts are derived from:
+
+| Source | Purpose |
+|--------|---------|
+| **llms.txt** | Atmos documentation index and structure |
+| **llms-full.txt** | Comprehensive Atmos knowledge base |
+| **website/docs/** | Official documentation and examples |
+| **Best Practices** | Proven patterns from production use |
+| **Community Feedback** | User-contributed improvements |
+
+Each agent's prompt extracts relevant sections from these sources. For example:
+
+- **Stack Analyzer** gets: Stack concepts, import patterns, `describe` commands
+- **Component Refactor** gets: Component design best practices, Terraform patterns
+- **Security Auditor** gets: Security checklist, IAM policies, encryption patterns
+- **Config Validator** gets: YAML syntax, schema validation, error messages
+
+### Contributing to Agent Prompts
+
+Want to improve an agent? Here's how:
+
+#### View Current Prompts
+
+Agent prompts are in the Atmos repository:
+
+```bash
+# Clone the repository
+git clone https://github.com/cloudposse/atmos.git
+cd atmos
+
+# View agent prompts
+ls -la pkg/ai/agents/prompts/
+cat pkg/ai/agents/prompts/general.md
+```
+
+#### Modify a Prompt
+
+1. **Edit the Markdown file:**
+   ```bash
+   # Make your improvements
+   vim pkg/ai/agents/prompts/stack-analyzer.md
+   ```
+
+2. **Test locally:**
+   ```bash
+   # Rebuild Atmos with your changes
+   make build
+
+   # Test the agent
+   ./build/atmos ai chat
+   # Press Ctrl+A, select "Stack Analyzer"
+   # Verify the agent behaves as expected
+   ```
+
+3. **Submit a pull request:**
+   ```bash
+   git checkout -b improve-stack-analyzer-agent
+   git add pkg/ai/agents/prompts/stack-analyzer.md
+   git commit -m "Improve Stack Analyzer prompt: add import cycle detection"
+   git push origin improve-stack-analyzer-agent
+   # Create PR on GitHub
+   ```
+
+#### Guidelines for Prompt Changes
+
+When modifying agent prompts, follow these guidelines:
+
+**DO:**
+- ✅ Add specific, actionable instructions
+- ✅ Include concrete examples and workflows
+- ✅ Extract knowledge from official Atmos docs
+- ✅ Test your changes with real scenarios
+- ✅ Maintain the established structure (Role, Expertise, Instructions, etc.)
+
+**DON'T:**
+- ❌ Make prompts unnecessarily long (keep under 10KB)
+- ❌ Duplicate content across multiple agents
+- ❌ Add instructions unrelated to the agent's domain
+- ❌ Remove important safety considerations
+- ❌ Break the Markdown structure
+
+**Example of a good improvement:**
+
+```diff
+# In security-auditor.md
+
+## Instructions
+
++### Check for Unused Security Groups
++
++When auditing network security:
++1. List all security groups in the stack
++2. Check for groups with no attached resources
++3. Flag unused groups as cost/security risk
++4. Recommend cleanup workflow
++
+ ### Issue 1: Overly Permissive IAM
+ ...
+```
+
 ### Setting Default Agent
 
 Configure the default agent in `atmos.yaml`:

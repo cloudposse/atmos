@@ -492,6 +492,17 @@ func (m *ChatModel) handleAgentSelectKeys(msg tea.KeyMsg) tea.Cmd {
 		// Switch to selected agent.
 		if m.selectedAgentIdx < len(availableAgents) {
 			selectedAgent := availableAgents[m.selectedAgentIdx]
+
+			// Load agent's system prompt from file (if configured).
+			systemPrompt, err := selectedAgent.LoadSystemPrompt()
+			if err != nil {
+				log.Warn(fmt.Sprintf("Failed to load system prompt for agent %q: %v, using default", selectedAgent.Name, err))
+				// Keep the existing SystemPrompt as fallback.
+			} else {
+				// Update agent with loaded prompt.
+				selectedAgent.SystemPrompt = systemPrompt
+			}
+
 			m.currentAgent = selectedAgent
 
 			// Persist agent to session if session management is enabled.

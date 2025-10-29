@@ -1,6 +1,9 @@
 package agents
 
 import (
+	"fmt"
+
+	"github.com/cloudposse/atmos/pkg/ai/agents/prompts"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -16,7 +19,13 @@ type Agent struct {
 	Description string
 
 	// SystemPrompt contains specialized instructions for the AI.
+	// This is either set directly or loaded from SystemPromptPath.
 	SystemPrompt string
+
+	// SystemPromptPath is the path to the prompt file in the embedded filesystem.
+	// If set, the prompt will be loaded from this file when LoadSystemPrompt() is called.
+	// For built-in agents, this should be just the filename (e.g., "general.md").
+	SystemPromptPath string
 
 	// AllowedTools lists tool names this agent can use.
 	// Empty list means all tools are allowed.
@@ -71,4 +80,22 @@ func (a *Agent) IsToolRestricted(toolName string) bool {
 		}
 	}
 	return false
+}
+
+// LoadSystemPrompt loads the agent's system prompt from the embedded filesystem.
+// If SystemPromptPath is empty, it returns the existing SystemPrompt value.
+// This allows agents to use either hardcoded prompts or file-based prompts.
+func (a *Agent) LoadSystemPrompt() (string, error) {
+	// If no path specified, use hardcoded prompt (backward compatibility).
+	if a.SystemPromptPath == "" {
+		return a.SystemPrompt, nil
+	}
+
+	// Load prompt from embedded filesystem.
+	content, err := prompts.Read(a.SystemPromptPath)
+	if err != nil {
+		return "", fmt.Errorf("failed to load system prompt for agent %q: %w", a.Name, err)
+	}
+
+	return content, nil
 }

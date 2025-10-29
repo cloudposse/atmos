@@ -179,6 +179,18 @@ func NewChatModel(client ai.Client, atmosConfig *schema.AtmosConfiguration, mana
 		currentAgent, _ = agentRegistry.Get(agents.GeneralAgent)
 	}
 
+	// Load the initial agent's system prompt from file (if configured).
+	if currentAgent != nil {
+		systemPrompt, promptErr := currentAgent.LoadSystemPrompt()
+		if promptErr != nil {
+			log.Debug(fmt.Sprintf("Failed to load system prompt for initial agent %q: %v, using default", currentAgent.Name, promptErr))
+			// Keep the existing SystemPrompt as fallback.
+		} else {
+			// Update agent with loaded prompt.
+			currentAgent.SystemPrompt = systemPrompt
+		}
+	}
+
 	model := &ChatModel{
 		client:               client,
 		atmosConfig:          atmosConfig,
