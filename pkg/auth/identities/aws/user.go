@@ -83,11 +83,26 @@ func (i *userIdentity) Authenticate(ctx context.Context, _ types.ICredentials) (
 
 // resolveLongLivedCredentials returns long-lived credentials either from the identity config.
 // (access_key_id/secret_access_key with optional mfa_arn) or from the keyring store.
+// If credentials come from the keyring but MFA ARN is configured in YAML, the MFA ARN from YAML is used.
 func (i *userIdentity) resolveLongLivedCredentials() (*types.AWSCredentials, error) {
 	if creds, err := i.credentialsFromConfig(); err != nil || creds != nil {
 		return creds, err
 	}
-	return i.credentialsFromStore()
+
+	// Get credentials from keyring.
+	creds, err := i.credentialsFromStore()
+	if err != nil {
+		return nil, err
+	}
+
+	// Merge MFA ARN from YAML config if present (keyring credentials take precedence for access keys).
+	// This allows users to configure MFA ARN in YAML even when using keyring-stored credentials.
+	if mfaArn, ok := i.config.Credentials["mfa_arn"].(string); ok && mfaArn != "" {
+		log.Debug("Merging MFA ARN from YAML config with keyring credentials", logKeyIdentity, i.name, "mfa_arn", mfaArn)
+		creds.MfaArn = mfaArn
+	}
+
+	return creds, nil
 }
 
 // credentialsFromConfig builds AWS credentials from identity config if present.
