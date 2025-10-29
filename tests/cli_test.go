@@ -401,10 +401,10 @@ func sanitizeOutput(output string) (string, error) {
 
 	// 12. Normalize credential expiration durations in auth list output.
 	// These appear as "● mock-identity (mock) [DEFAULT] 650202h14m" in tree output.
-	// The duration changes every minute, so replace with a stable placeholder.
+	// The duration changes every minute, so normalize to "1h 0m" like other duration normalizations.
 	// Matches patterns like "650202h14m", "1h30m", "45m", etc. at the end of identity lines.
 	expirationDurationRegex := regexp.MustCompile(`(\(mock\)(?:\s+\[DEFAULT\])?)\s+\d+h\d+m\b`)
-	result = expirationDurationRegex.ReplaceAllString(result, "$1 <EXPIRATION_TIME>")
+	result = expirationDurationRegex.ReplaceAllString(result, "$1 1h 0m")
 
 	return result, nil
 }
