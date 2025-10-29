@@ -50,8 +50,12 @@ var authEnvCmd = &cobra.Command{
 
 		// Get identity from flag or use default
 		identityName, _ := cmd.Flags().GetString("identity")
-		if identityName == "" {
-			defaultIdentity, err := authManager.GetDefaultIdentity()
+
+		// Check if user wants to interactively select identity.
+		forceSelect := identityName == IdentityFlagSelectValue
+
+		if identityName == "" || forceSelect {
+			defaultIdentity, err := authManager.GetDefaultIdentity(forceSelect)
 			if err != nil {
 				return fmt.Errorf("no default identity configured and no identity specified: %w", err)
 			}

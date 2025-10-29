@@ -275,7 +275,13 @@ func attachTerraformCommands(parentCmd *cobra.Command) {
 	parentCmd.PersistentFlags().Bool("process-templates", true, "Enable/disable Go template processing in Atmos stack manifests when executing terraform commands")
 	parentCmd.PersistentFlags().Bool("process-functions", true, "Enable/disable YAML functions processing in Atmos stack manifests when executing terraform commands")
 	parentCmd.PersistentFlags().StringSlice("skip", nil, "Skip executing specific YAML functions in the Atmos stack manifests when executing terraform commands")
-	parentCmd.PersistentFlags().StringP("identity", "i", "", "Specify the identity to authenticate to before running Terraform commands")
+	parentCmd.PersistentFlags().StringP("identity", "i", "", "Specify the identity to authenticate to before running Terraform commands. Use without value to interactively select.")
+
+	// Set NoOptDefVal to enable optional flag value for identity.
+	// When --identity is used without a value, it will receive IdentityFlagSelectValue.
+	if identityFlag := parentCmd.PersistentFlags().Lookup("identity"); identityFlag != nil {
+		identityFlag.NoOptDefVal = IdentityFlagSelectValue
+	}
 
 	parentCmd.PersistentFlags().StringP("query", "q", "", "Execute `atmos terraform <command>` on the components filtered by a YQ expression, in all stacks or in a specific stack")
 	parentCmd.PersistentFlags().StringSlice("components", nil, "Filter by specific components")

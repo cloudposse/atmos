@@ -68,7 +68,7 @@ func TestAuthCLIIntegrationWithCloudProvider(t *testing.T) {
 		assert.NotNil(t, authManager)
 
 		// Test GetDefaultIdentity
-		defaultIdentity, err := authManager.GetDefaultIdentity()
+		defaultIdentity, err := authManager.GetDefaultIdentity(false)
 		require.NoError(t, err)
 		assert.Equal(t, "test-identity", defaultIdentity)
 
