@@ -241,7 +241,7 @@ type FallbackRetriever struct {
 }
 
 func (r *FallbackRetriever) Retrieve(ctx context.Context, identityName string) (types.ICredentials, error) {
-    // Same logic as retrieveCredentialWithFallback
+    // Same logic as loadCredentialsWithFallback
 }
 ```
 
@@ -281,7 +281,7 @@ func (s *FallbackCredentialStore) Retrieve(alias string) (types.ICredentials, er
 
 **Option 1: Extract Common Retrieval Logic**
 
-1. Create `retrieveCredentialWithFallback` as the single retrieval method
+1. Create `loadCredentialsWithFallback` as the single retrieval method
 2. Refactor all three code paths to use it
 3. Add comprehensive integration tests (see below)
 
