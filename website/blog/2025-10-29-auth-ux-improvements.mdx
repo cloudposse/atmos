@@ -61,7 +61,7 @@ The `auth logout` command now offers three levels of cleanup:
 
 - **`atmos auth logout <identity>`** - Clear one identity's cached credentials (keyring + files)
 - **`atmos auth logout --provider <name>`** - Clear provider and all identities using it (keyring + files + provider directory)
-- **`atmos auth logout --all`** - Clear all identity cached credentials
+- **`atmos auth logout --all`** - Clear all identities AND providers (complete cleanup)
 
 Note: Your `atmos.yaml` configuration is never modified - logout only removes cached credentials.
 
