@@ -292,8 +292,6 @@ commands:
 						}
 					}
 				})
-				for _, cmd := range commands {
-				}
 			},
 		},
 	}

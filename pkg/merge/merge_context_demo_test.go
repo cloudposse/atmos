@@ -2,7 +2,6 @@ package merge
 
 import (
 	"errors"
-	"fmt"
 	"testing"
 )
 
