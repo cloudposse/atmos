@@ -406,6 +406,12 @@ func sanitizeOutput(output string) (string, error) {
 	expirationDurationRegex := regexp.MustCompile(`(\(mock\)(?:\s+\[DEFAULT\])?)\s+\d+h\d+m\b`)
 	result = expirationDurationRegex.ReplaceAllString(result, "$1 1h 0m")
 
+	// 13. Normalize credential_store values in error messages.
+	// The keyring backend varies by platform: "system-keyring" (Mac/Windows) vs "noop" (Linux CI).
+	// Replace with a stable placeholder to avoid platform-specific snapshot differences.
+	credentialStoreRegex := regexp.MustCompile(`credential_store=(system-keyring|noop|file)`)
+	result = credentialStoreRegex.ReplaceAllString(result, "credential_store=<KEYRING_BACKEND>")
+
 	return result, nil
 }
 
