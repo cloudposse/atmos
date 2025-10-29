@@ -399,6 +399,13 @@ func sanitizeOutput(output string) (string, error) {
 	lastUpdatedRegex := regexp.MustCompile(`Last Updated\s+\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}\s+[A-Z]{3,4}`)
 	result = lastUpdatedRegex.ReplaceAllString(result, "Last Updated  2025-01-01 12:00:00 UTC")
 
+	// 12. Normalize credential expiration durations in auth list output.
+	// These appear as "● mock-identity (mock) [DEFAULT] 650202h14m" in tree output.
+	// The duration changes every minute, so replace with a stable placeholder.
+	// Matches patterns like "650202h14m", "1h30m", "45m", etc. at the end of identity lines.
+	expirationDurationRegex := regexp.MustCompile(`(\(mock\)(?:\s+\[DEFAULT\])?)\s+\d+h\d+m\b`)
+	result = expirationDurationRegex.ReplaceAllString(result, "$1 <EXPIRATION_TIME>")
+
 	return result, nil
 }
 

@@ -1,11 +1,11 @@
  Authentication Configuration 
 └──mock-provider (mock)
    └──Identities
-      ├──● mock-identity (mock) [DEFAULT] 650202h14m
+      ├──● mock-identity (mock) [DEFAULT] <EXPIRATION_TIME>
       │  └──Principal
       │     └──account
       │        └──id: 123456789012
-      └──● mock-identity-2 (mock) 650202h14m
+      └──● mock-identity-2 (mock) <EXPIRATION_TIME>
          └──Principal
             └──account
                └──id: 987654321098
