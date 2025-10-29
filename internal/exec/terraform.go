@@ -541,10 +541,11 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 					workspaceSelectRedirectStdErr,
 				)
 				if err != nil {
-					// Check if it's an ExitCodeError with code 1 (workspace doesn't exist)
-					var exitCodeErr errUtils.ExitCodeError
-					if !errors.As(err, &exitCodeErr) || exitCodeErr.Code != 1 {
-						// Different error or different exit code
+					// Check if it's an exit code 1 error (workspace doesn't exist).
+					// Use GetExitCode which works with both ExecError and legacy ExitCodeError.
+					exitCode := errUtils.GetExitCode(err)
+					if exitCode != 1 {
+						// Different exit code, not a "workspace doesn't exist" error.
 						return err
 					}
 					// Workspace doesn't exist, try to create it
