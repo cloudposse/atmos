@@ -375,3 +375,72 @@ func TestExecuteAuthLogoutCommand_SupportsIdentityFlag(t *testing.T) {
 		})
 	}
 }
+
+func TestPerformLogoutAll_WithAllFlag(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	tests := []struct {
+		name          string
+		dryRun        bool
+		setupMocks    func(*types.MockAuthManager)
+		expectedError error
+	}{
+		{
+			name:   "all flag triggers logout all",
+			dryRun: false,
+			setupMocks: func(m *types.MockAuthManager) {
+				m.EXPECT().LogoutAll(gomock.Any()).Return(nil)
+				m.EXPECT().GetIdentities().Return(map[string]schema.Identity{
+					"identity1": {Kind: "aws/permission-set"},
+					"identity2": {Kind: "aws/user"},
+				})
+			},
+			expectedError: nil,
+		},
+		{
+			name:   "all flag with dry run",
+			dryRun: true,
+			setupMocks: func(m *types.MockAuthManager) {
+				m.EXPECT().GetProviders().Return(map[string]schema.Provider{
+					"provider1": {},
+				})
+				m.EXPECT().GetFilesDisplayPath("provider1").Return("/home/user/.config/atmos")
+			},
+			expectedError: nil,
+		},
+		{
+			name:   "all flag with partial logout",
+			dryRun: false,
+			setupMocks: func(m *types.MockAuthManager) {
+				m.EXPECT().LogoutAll(gomock.Any()).Return(errUtils.ErrPartialLogout)
+			},
+			expectedError: nil, // Partial logout treated as success.
+		},
+		{
+			name:   "all flag with logout failure",
+			dryRun: false,
+			setupMocks: func(m *types.MockAuthManager) {
+				m.EXPECT().LogoutAll(gomock.Any()).Return(errUtils.ErrLogoutFailed)
+			},
+			expectedError: errUtils.ErrLogoutFailed,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockManager := types.NewMockAuthManager(ctrl)
+			tt.setupMocks(mockManager)
+
+			ctx := context.Background()
+			err := performLogoutAll(ctx, mockManager, tt.dryRun)
+
+			if tt.expectedError != nil {
+				assert.Error(t, err)
+				assert.ErrorIs(t, err, tt.expectedError)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}

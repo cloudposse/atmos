@@ -857,3 +857,86 @@ components:
 		strings.Contains(errMsg, "credential")
 	assert.True(t, hasAuthError, "Expected auth-related error, got: %v", err)
 }
+
+// TestComponentEnvSectionConversion verifies that ComponentEnvSection is properly
+// converted to ComponentEnvList. This is a unit test that proves the conversion logic
+// works correctly when auth hooks populate ComponentEnvSection.
+//
+//nolint:dupl // Test logic is intentionally similar across terraform/helmfile/packer for consistency
+func TestComponentEnvSectionConversion(t *testing.T) {
+	tests := []struct {
+		name            string
+		envSection      map[string]any
+		expectedEnvList map[string]string // map for easier checking
+	}{
+		{
+			name: "converts AWS auth environment variables",
+			envSection: map[string]any{
+				"AWS_CONFIG_FILE":             "/path/to/config",
+				"AWS_SHARED_CREDENTIALS_FILE": "/path/to/credentials",
+				"AWS_PROFILE":                 "test-profile",
+				"AWS_REGION":                  "us-east-1",
+				"AWS_EC2_METADATA_DISABLED":   "true",
+			},
+			expectedEnvList: map[string]string{
+				"AWS_CONFIG_FILE":             "/path/to/config",
+				"AWS_SHARED_CREDENTIALS_FILE": "/path/to/credentials",
+				"AWS_PROFILE":                 "test-profile",
+				"AWS_REGION":                  "us-east-1",
+				"AWS_EC2_METADATA_DISABLED":   "true",
+			},
+		},
+		{
+			name:            "handles empty ComponentEnvSection",
+			envSection:      map[string]any{},
+			expectedEnvList: map[string]string{},
+		},
+		{
+			name: "converts mixed types to strings",
+			envSection: map[string]any{
+				"STRING_VAR": "value",
+				"INT_VAR":    42,
+				"BOOL_VAR":   true,
+			},
+			expectedEnvList: map[string]string{
+				"STRING_VAR": "value",
+				"INT_VAR":    "42",
+				"BOOL_VAR":   "true",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Create a test ConfigAndStacksInfo with ComponentEnvSection populated.
+			info := schema.ConfigAndStacksInfo{
+				ComponentEnvSection: tt.envSection,
+				ComponentEnvList:    []string{},
+			}
+
+			// Call the production conversion function.
+			ConvertComponentEnvSectionToList(&info)
+
+			// Verify all expected environment variables are in ComponentEnvList.
+			envListMap := make(map[string]string)
+			for _, envVar := range info.ComponentEnvList {
+				parts := strings.SplitN(envVar, "=", 2)
+				if len(parts) == 2 {
+					envListMap[parts[0]] = parts[1]
+				}
+			}
+
+			// Check that all expected vars are present with correct values.
+			for key, expectedValue := range tt.expectedEnvList {
+				actualValue, exists := envListMap[key]
+				assert.True(t, exists, "Expected environment variable %s to be in ComponentEnvList", key)
+				assert.Equal(t, expectedValue, actualValue,
+					"Environment variable %s should have value %s, got %s", key, expectedValue, actualValue)
+			}
+
+			// Verify count matches (no extra vars).
+			assert.Equal(t, len(tt.expectedEnvList), len(envListMap),
+				"ComponentEnvList should contain exactly %d variables", len(tt.expectedEnvList))
+		})
+	}
+}
