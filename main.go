@@ -36,7 +36,13 @@ func main() {
 
 	err := cmd.Execute()
 	if err != nil {
-		// Check for ExecError first to preserve command exit codes.
+		// Check for WorkflowStepError first to preserve workflow step exit codes.
+		var workflowErr *errUtils.WorkflowStepError
+		if errors.As(err, &workflowErr) {
+			log.Debug("Exiting with workflow step exit code", "code", workflowErr.ExitCode)
+			errUtils.Exit(workflowErr.ExitCode)
+		}
+		// Check for ExecError to preserve command exit codes.
 		var execErr *errUtils.ExecError
 		if errors.As(err, &execErr) {
 			log.Debug("Exiting with command exit code", "code", execErr.ExitCode)

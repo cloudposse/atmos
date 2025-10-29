@@ -134,26 +134,20 @@ func buildMarkdownSections(err error, config FormatterConfig) string {
 	// Extract sentinel error and wrapped message.
 	sentinelMsg, wrappedMsg := extractSentinelAndWrappedMessage(err)
 
-	// Check if this is an ExecError or has an exit code attached.
-	// Only ExecError (external command failures) and errors with explicit exit codes
-	// (like workflow errors) should show exit codes.
+	// Check for specific error types that need special formatting.
+	// Priority order: WorkflowStepError > ExecError > generic errors.
+	var workflowErr *WorkflowStepError
 	var execErr *ExecError
-	exitCode := GetExitCode(err)
-
-	// Check if the sentinel message is a workflow error - these take precedence
-	// over ExecError formatting because they're higher-level orchestration failures.
-	isWorkflowError := sentinelMsg == "workflow step execution failed"
 
 	switch {
-	case isWorkflowError && exitCode > 0:
-		// Workflow errors with exit codes - these are orchestration failures,
-		// not raw command executions, but they still need to show the exit code.
-		md.WriteString(fmt.Sprintf("**Error:** %s with exit code %d%s%s", sentinelMsg, exitCode, newline, newline))
+	case errors.As(err, &workflowErr):
+		// Workflow orchestration failures - show workflow-specific message with exit code.
+		md.WriteString(fmt.Sprintf("**Error:** %s%s%s", workflowErr.WorkflowStepMessage(), newline, newline))
 	case errors.As(err, &execErr):
-		// ExecError from external command execution.
+		// External command execution failures - show command and exit code.
 		md.WriteString(fmt.Sprintf("**Error:** %s with exit code %d%s%s", sentinelMsg, execErr.ExitCode, newline, newline))
 	default:
-		// All other errors - NO exit code appending.
+		// All other errors - just show the sentinel message without exit code.
 		md.WriteString("**Error:** " + sentinelMsg + newline + newline)
 	}
 
