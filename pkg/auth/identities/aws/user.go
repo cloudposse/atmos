@@ -474,13 +474,13 @@ func (i *userIdentity) Logout(ctx context.Context) error {
 		return errors.Join(errUtils.ErrLogoutFailed, err)
 	}
 
-	// Use CleanupIdentity to remove only this identity's sections from shared INI files.
+	// Use DeleteIdentity to remove only this identity's sections from shared INI files.
 	// This preserves credentials for other identities using the same provider.
-	if err := fileManager.CleanupIdentity(ctx, "aws-user", i.name); err != nil {
-		log.Debug("Failed to cleanup AWS files for user identity", "identity", i.name, "error", err)
+	if err := fileManager.DeleteIdentity(ctx, "aws-user", i.name); err != nil {
+		log.Debug("Failed to delete AWS files for user identity", "identity", i.name, "error", err)
 		return errors.Join(errUtils.ErrLogoutFailed, err)
 	}
 
-	log.Debug("Cleaned up AWS files for user identity", "identity", i.name)
+	log.Debug("Deleted AWS files for user identity", "identity", i.name)
 	return nil
 }

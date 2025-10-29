@@ -393,6 +393,25 @@ func sanitizeOutput(output string) (string, error) {
 	debugTimestampRegex := regexp.MustCompile(`expiration="[^"]+\s+[+-]\d{4}\s+[A-Z]{3,4}\s+m=[+-][\d.]+`)
 	result = debugTimestampRegex.ReplaceAllString(result, `expiration="2025-01-01 12:00:00.000000 +0000 UTC m=+3600.000000000`)
 
+	// 11. Normalize "Last Updated" timestamps in auth whoami output.
+	// These appear as "Last Updated  2025-10-28 13:10:27 CDT" in table output.
+	// Replace with a fixed timestamp to avoid snapshot mismatches.
+	lastUpdatedRegex := regexp.MustCompile(`Last Updated\s+\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}\s+[A-Z]{3,4}`)
+	result = lastUpdatedRegex.ReplaceAllString(result, "Last Updated  2025-01-01 12:00:00 UTC")
+
+	// 12. Normalize credential expiration durations in auth list output.
+	// These appear as "● mock-identity (mock) [DEFAULT] 650202h14m" in tree output.
+	// The duration changes every minute, so normalize to "1h 0m" like other duration normalizations.
+	// Matches patterns like "650202h14m", "650194h", "1h30m", "45m", etc. at the end of identity lines.
+	expirationDurationRegex := regexp.MustCompile(`(\(mock\)(?:\s+\[DEFAULT\])?)\s+\d+h(?:\d+m)?\b`)
+	result = expirationDurationRegex.ReplaceAllString(result, "$1 1h 0m")
+
+	// 13. Normalize credential_store values in error messages.
+	// The keyring backend varies by platform: "system-keyring" (Mac/Windows) vs "noop" (Linux CI).
+	// Replace with a stable placeholder to avoid platform-specific snapshot differences.
+	credentialStoreRegex := regexp.MustCompile(`credential_store=(system-keyring|noop|file)`)
+	result = credentialStoreRegex.ReplaceAllString(result, "credential_store=keyring-placeholder")
+
 	return result, nil
 }
 
@@ -1366,8 +1385,14 @@ func getSnapshotFilenames(testName string, isTty bool) (stdout, stderr, tty stri
 // verifyTTYSnapshot handles snapshot verification for TTY mode tests.
 func verifyTTYSnapshot(t *testing.T, tc *TestCase, ttyPath, combinedOutput string, regenerate bool) bool {
 	if regenerate {
+		// Strip trailing whitespace from output before saving snapshot if requested.
+		outputToSave := combinedOutput
+		if tc.Expect.IgnoreTrailingWhitespace {
+			outputToSave = stripTrailingWhitespace(combinedOutput)
+		}
+
 		t.Logf("Updating TTY snapshot at %q", ttyPath)
-		updateSnapshot(ttyPath, combinedOutput)
+		updateSnapshot(ttyPath, outputToSave)
 		return true
 	}
 
@@ -1450,10 +1475,18 @@ func verifySnapshot(t *testing.T, tc TestCase, stdoutOutput, stderrOutput string
 
 	// Non-TTY mode: separate stdout and stderr snapshots
 	if regenerate {
+		// Strip trailing whitespace from output before saving snapshot if requested.
+		stdoutToSave := stdoutOutput
+		stderrToSave := stderrOutput
+		if tc.Expect.IgnoreTrailingWhitespace {
+			stdoutToSave = stripTrailingWhitespace(stdoutOutput)
+			stderrToSave = stripTrailingWhitespace(stderrOutput)
+		}
+
 		t.Logf("Updating stdout snapshot at %q", stdoutPath)
-		updateSnapshot(stdoutPath, stdoutOutput)
+		updateSnapshot(stdoutPath, stdoutToSave)
 		t.Logf("Updating stderr snapshot at %q", stderrPath)
-		updateSnapshot(stderrPath, stderrOutput)
+		updateSnapshot(stderrPath, stderrToSave)
 		return true
 	}
 

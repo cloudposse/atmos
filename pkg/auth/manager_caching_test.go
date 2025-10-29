@@ -285,3 +285,70 @@ func (c *mockCreds) Validate(ctx context.Context) (*types.ValidationInfo, error)
 		Expiration: exp,
 	}, nil
 }
+
+// TestRetrieveCachedCredentials_KeyringMiss_IdentityStorageFallback tests that
+// getChainCredentials falls back to identity storage when keyring misses.
+// This is critical for terraform commands to work with file-based credentials.
+func TestRetrieveCachedCredentials_KeyringMiss_IdentityStorageFallback(t *testing.T) {
+	tests := []struct {
+		name              string
+		setupIdentity     func() types.Identity
+		expectSuccess     bool
+		expectCredentials bool
+	}{
+		{
+			name: "keyring miss with valid identity storage credentials",
+			setupIdentity: func() types.Identity {
+				return &mockIdentityWithStorage{
+					creds: &mockCreds{
+						expired: false,
+					},
+				}
+			},
+			expectSuccess:     true,
+			expectCredentials: true,
+		},
+		{
+			name: "keyring miss with no identity storage credentials",
+			setupIdentity: func() types.Identity {
+				return &mockIdentityWithStorage{
+					creds: nil,
+				}
+			},
+			expectSuccess: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Create a credential store that always returns "not found" to simulate keyring miss.
+			store := &keyringMissStore{}
+			identity := tt.setupIdentity()
+
+			m := &manager{
+				config: &schema.AuthConfig{
+					Identities: map[string]schema.Identity{
+						"test-identity": {Kind: "test"},
+					},
+				},
+				identities: map[string]types.Identity{
+					"test-identity": identity,
+				},
+				credentialStore: store,
+				chain:           []string{"test-provider", "test-identity"},
+			}
+
+			// Call getChainCredentials - should fall back to identity storage.
+			creds, err := m.getChainCredentials(m.chain, 1) // Index 1 = test-identity
+
+			if tt.expectSuccess {
+				require.NoError(t, err, "getChainCredentials should succeed via identity storage fallback")
+				if tt.expectCredentials {
+					assert.NotNil(t, creds, "Credentials should be loaded from identity storage")
+				}
+			} else {
+				require.Error(t, err, "getChainCredentials should fail when no credentials available")
+			}
+		})
+	}
+}

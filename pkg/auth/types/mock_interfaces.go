@@ -410,18 +410,18 @@ func (mr *MockAuthManagerMockRecorder) GetChain() *gomock.Call {
 }
 
 // GetDefaultIdentity mocks base method.
-func (m *MockAuthManager) GetDefaultIdentity() (string, error) {
+func (m *MockAuthManager) GetDefaultIdentity(forceSelect bool) (string, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetDefaultIdentity")
+	ret := m.ctrl.Call(m, "GetDefaultIdentity", forceSelect)
 	ret0, _ := ret[0].(string)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // GetDefaultIdentity indicates an expected call of GetDefaultIdentity.
-func (mr *MockAuthManagerMockRecorder) GetDefaultIdentity() *gomock.Call {
+func (mr *MockAuthManagerMockRecorder) GetDefaultIdentity(forceSelect any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetDefaultIdentity", reflect.TypeOf((*MockAuthManager)(nil).GetDefaultIdentity))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetDefaultIdentity", reflect.TypeOf((*MockAuthManager)(nil).GetDefaultIdentity), forceSelect)
 }
 
 // GetEnvironmentVariables mocks base method.

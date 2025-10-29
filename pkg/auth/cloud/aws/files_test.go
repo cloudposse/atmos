@@ -107,13 +107,13 @@ func TestAWSFileManager_PathsEnvCleanup(t *testing.T) {
 	assert.True(t, os.IsNotExist(statErr))
 }
 
-func TestAWSFileManager_CleanupIdentity(t *testing.T) {
+func TestAWSFileManager_DeleteIdentity(t *testing.T) {
 	tests := []struct {
-		name               string
-		setupCredentials   func(*AWSFileManager)
-		providerName       string
-		identityName       string
-		verifyAfterCleanup func(*testing.T, *AWSFileManager)
+		name              string
+		setupCredentials  func(*AWSFileManager)
+		providerName      string
+		identityName      string
+		verifyAfterDelete func(*testing.T, *AWSFileManager)
 	}{
 		{
 			name: "removes single identity section from credentials and config",
@@ -124,7 +124,7 @@ func TestAWSFileManager_CleanupIdentity(t *testing.T) {
 			},
 			providerName: "test-provider",
 			identityName: "identity1",
-			verifyAfterCleanup: func(t *testing.T, m *AWSFileManager) {
+			verifyAfterDelete: func(t *testing.T, m *AWSFileManager) {
 				// Files should be removed since no sections remain (only DEFAULT section left).
 				_, err := os.Stat(m.GetCredentialsPath("test-provider"))
 				assert.True(t, os.IsNotExist(err), "credentials file should be removed when empty")
@@ -145,7 +145,7 @@ func TestAWSFileManager_CleanupIdentity(t *testing.T) {
 			},
 			providerName: "test-provider",
 			identityName: "identity1",
-			verifyAfterCleanup: func(t *testing.T, m *AWSFileManager) {
+			verifyAfterDelete: func(t *testing.T, m *AWSFileManager) {
 				// identity2 should still exist.
 				credsPath := m.GetCredentialsPath("test-provider")
 				cfg, err := ini.Load(credsPath)
@@ -171,7 +171,7 @@ func TestAWSFileManager_CleanupIdentity(t *testing.T) {
 			},
 			providerName: "test-provider",
 			identityName: "nonexistent",
-			verifyAfterCleanup: func(t *testing.T, m *AWSFileManager) {
+			verifyAfterDelete: func(t *testing.T, m *AWSFileManager) {
 				// identity1 should still exist.
 				credsPath := m.GetCredentialsPath("test-provider")
 				cfg, err := ini.Load(credsPath)
@@ -186,7 +186,7 @@ func TestAWSFileManager_CleanupIdentity(t *testing.T) {
 			},
 			providerName: "test-provider",
 			identityName: "identity1",
-			verifyAfterCleanup: func(t *testing.T, m *AWSFileManager) {
+			verifyAfterDelete: func(t *testing.T, m *AWSFileManager) {
 				// No error should occur even though files don't exist.
 			},
 		},
@@ -199,7 +199,7 @@ func TestAWSFileManager_CleanupIdentity(t *testing.T) {
 			},
 			providerName: "test-provider",
 			identityName: "default",
-			verifyAfterCleanup: func(t *testing.T, m *AWSFileManager) {
+			verifyAfterDelete: func(t *testing.T, m *AWSFileManager) {
 				// Files should be removed since no sections remain.
 				_, err := os.Stat(m.GetCredentialsPath("test-provider"))
 				assert.True(t, os.IsNotExist(err), "credentials file should be removed")
@@ -216,10 +216,10 @@ func TestAWSFileManager_CleanupIdentity(t *testing.T) {
 
 			tt.setupCredentials(m)
 
-			err := m.CleanupIdentity(context.Background(), tt.providerName, tt.identityName)
+			err := m.DeleteIdentity(context.Background(), tt.providerName, tt.identityName)
 			assert.NoError(t, err)
 
-			tt.verifyAfterCleanup(t, m)
+			tt.verifyAfterDelete(t, m)
 		})
 	}
 }
