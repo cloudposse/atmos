@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/charmbracelet/huh"
@@ -64,6 +65,30 @@ type manager struct {
 	// chain holds the most recently constructed authentication chain.
 	// where index 0 is the provider name, followed by identities in order.
 	chain []string
+}
+
+// resolveIdentityName performs case-insensitive identity name lookup.
+// If an exact match exists, it returns the exact match.
+// Otherwise, it looks up the lowercase version in the case map.
+// Returns the resolved name and whether it was found.
+func (m *manager) resolveIdentityName(inputName string) (string, bool) {
+	// First try exact match (fast path for already-lowercase names)
+	if _, exists := m.identities[inputName]; exists {
+		return inputName, true
+	}
+
+	// Try case-insensitive lookup using the case map
+	if m.config.IdentityCaseMap != nil {
+		lowercaseName := strings.ToLower(inputName)
+		if _, exists := m.config.IdentityCaseMap[lowercaseName]; exists {
+			// Verify the identity actually exists with the lowercase key
+			if _, identityExists := m.identities[lowercaseName]; identityExists {
+				return lowercaseName, true
+			}
+		}
+	}
+
+	return "", false
 }
 
 // NewAuthManager creates a new AuthManager instance.
@@ -128,10 +153,15 @@ func (m *manager) Authenticate(ctx context.Context, identityName string) (*types
 		errUtils.CheckErrorAndPrint(errUtils.ErrNilParam, identityNameKey, "no identity specified")
 		return nil, fmt.Errorf(errFormatWithString, errUtils.ErrNilParam, identityNameKey)
 	}
-	if _, exists := m.identities[identityName]; !exists {
+
+	// Resolve identity name case-insensitively
+	resolvedName, found := m.resolveIdentityName(identityName)
+	if !found {
 		errUtils.CheckErrorAndPrint(errUtils.ErrInvalidAuthConfig, identityNameKey, "Identity specified was not found in the auth config.")
 		return nil, fmt.Errorf(errFormatWithString, errUtils.ErrIdentityNotFound, fmt.Sprintf(backtickedFmt, identityName))
 	}
+	// Use the resolved lowercase name for internal lookups
+	identityName = resolvedName
 
 	// Build the complete authentication chain.
 	chain, err := m.buildAuthenticationChain(identityName)
@@ -202,9 +232,13 @@ func (m *manager) GetChain() []string {
 func (m *manager) GetCachedCredentials(ctx context.Context, identityName string) (*types.WhoamiInfo, error) {
 	defer perf.Track(nil, "auth.Manager.GetCachedCredentials")()
 
-	if _, exists := m.identities[identityName]; !exists {
+	// Resolve identity name case-insensitively
+	resolvedName, found := m.resolveIdentityName(identityName)
+	if !found {
 		return nil, fmt.Errorf(errFormatWithString, errUtils.ErrIdentityNotFound, fmt.Sprintf(backtickedFmt, identityName))
 	}
+	// Use the resolved lowercase name for internal lookups
+	identityName = resolvedName
 
 	// Retrieve credentials with automatic fallback from keyring to identity storage.
 	creds, err := m.loadCredentialsWithFallback(ctx, identityName)
