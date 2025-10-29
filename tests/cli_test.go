@@ -410,7 +410,7 @@ func sanitizeOutput(output string) (string, error) {
 	// The keyring backend varies by platform: "system-keyring" (Mac/Windows) vs "noop" (Linux CI).
 	// Replace with a stable placeholder to avoid platform-specific snapshot differences.
 	credentialStoreRegex := regexp.MustCompile(`credential_store=(system-keyring|noop|file)`)
-	result = credentialStoreRegex.ReplaceAllString(result, "credential_store=keyring")
+	result = credentialStoreRegex.ReplaceAllString(result, "credential_store=keyring-placeholder")
 
 	return result, nil
 }
