@@ -22,9 +22,6 @@ func RenderTree(
 ) (string, error) {
 	defer perf.Track(nil, "list.RenderTree")()
 
-	// Avoid unused-parameter compile error; pass config to perf if available.
-	_ = authManager
-
 	var output strings.Builder
 
 	// Create h1 header style with solid background.
@@ -47,7 +44,7 @@ func RenderTree(
 	output.WriteString(newline)
 
 	// Build unified tree with providers as roots and identities as children.
-	unifiedTree := buildUnifiedTree(providers, identities)
+	unifiedTree := buildUnifiedTree(authManager, providers, identities)
 	output.WriteString(unifiedTree)
 	output.WriteString(newline)
 
@@ -56,6 +53,7 @@ func RenderTree(
 
 // buildUnifiedTree builds a unified tree with providers as roots and identities as children.
 func buildUnifiedTree(
+	authManager authTypes.AuthManager,
 	providers map[string]schema.Provider,
 	identities map[string]schema.Identity,
 ) string {
@@ -68,13 +66,13 @@ func buildUnifiedTree(
 	identitiesByProvider, standaloneIdentities := groupIdentities(identities)
 
 	// Render provider nodes.
-	renderedProviders := renderProviderNodes(root, providers, identitiesByProvider, identities)
+	renderedProviders := renderProviderNodes(authManager, root, providers, identitiesByProvider, identities)
 
 	// Render filtered provider placeholders.
-	renderFilteredProviders(root, identitiesByProvider, renderedProviders, identities)
+	renderFilteredProviders(authManager, root, identitiesByProvider, renderedProviders, identities)
 
 	// Render standalone identities.
-	renderStandaloneIdentities(root, standaloneIdentities, identities, &branchStyle)
+	renderStandaloneIdentities(authManager, root, standaloneIdentities, identities, &branchStyle)
 
 	return root.String()
 }
@@ -108,6 +106,7 @@ func groupIdentities(identities map[string]schema.Identity) (map[string][]string
 
 // renderProviderNodes renders provider nodes with their identities.
 func renderProviderNodes(
+	authManager authTypes.AuthManager,
 	root *tree.Tree,
 	providers map[string]schema.Provider,
 	identitiesByProvider map[string][]string,
@@ -118,7 +117,7 @@ func renderProviderNodes(
 
 	for _, providerName := range providerNames {
 		provider := providers[providerName]
-		providerNode := buildProviderNodeWithIdentities(&provider, providerName, identitiesByProvider[providerName], allIdentities)
+		providerNode := buildProviderNodeWithIdentities(authManager, &provider, providerName, identitiesByProvider[providerName], allIdentities)
 		root.Child(providerNode)
 		renderedProviders[providerName] = struct{}{}
 	}
@@ -128,6 +127,7 @@ func renderProviderNodes(
 
 // renderFilteredProviders renders placeholder nodes for filtered providers.
 func renderFilteredProviders(
+	authManager authTypes.AuthManager,
 	root *tree.Tree,
 	identitiesByProvider map[string][]string,
 	renderedProviders map[string]struct{},
@@ -147,13 +147,14 @@ func renderFilteredProviders(
 	sort.Strings(missingProviders)
 	for _, providerName := range missingProviders {
 		placeholder := schema.Provider{Kind: "filtered"}
-		providerNode := buildProviderNodeWithIdentities(&placeholder, providerName, identitiesByProvider[providerName], allIdentities)
+		providerNode := buildProviderNodeWithIdentities(authManager, &placeholder, providerName, identitiesByProvider[providerName], allIdentities)
 		root.Child(providerNode)
 	}
 }
 
 // renderStandaloneIdentities renders standalone identities node.
 func renderStandaloneIdentities(
+	authManager authTypes.AuthManager,
 	root *tree.Tree,
 	standaloneIdentities []string,
 	allIdentities map[string]schema.Identity,
@@ -173,7 +174,7 @@ func renderStandaloneIdentities(
 		identity := allIdentities[name]
 		// Create fresh visited map for each standalone identity to track cycles per-path.
 		visited := make(map[string]struct{})
-		identityNode := buildIdentityNodeForProvider(&identity, name, allIdentities, visited)
+		identityNode := buildIdentityNodeForProvider(authManager, &identity, name, allIdentities, visited)
 		standaloneNode.Child(identityNode)
 	}
 
@@ -196,6 +197,7 @@ func formatKeyValueURL(key, value string) string {
 
 // buildProviderNodeWithIdentities builds a provider node with its identities as children.
 func buildProviderNodeWithIdentities(
+	authManager authTypes.AuthManager,
 	provider *schema.Provider,
 	name string,
 	identityNames []string,
@@ -227,7 +229,7 @@ func buildProviderNodeWithIdentities(
 		for _, identityName := range identityNames {
 			identity := allIdentities[identityName]
 			visited := make(map[string]struct{})
-			identityNode := buildIdentityNodeForProvider(&identity, identityName, allIdentities, visited)
+			identityNode := buildIdentityNodeForProvider(authManager, &identity, identityName, allIdentities, visited)
 			identitiesNode.Child(identityNode)
 		}
 		providerNode.Child(identitiesNode)
@@ -238,6 +240,7 @@ func buildProviderNodeWithIdentities(
 
 // buildIdentityNodeForProvider builds an identity node with its child identities (role chains).
 func buildIdentityNodeForProvider(
+	authManager authTypes.AuthManager,
 	identity *schema.Identity,
 	name string,
 	allIdentities map[string]schema.Identity,
@@ -264,7 +267,7 @@ func buildIdentityNodeForProvider(
 	branchStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(treeBranchColor))
 
 	// Build identity title.
-	title := buildIdentityTitle(identity, name)
+	title := buildIdentityTitle(authManager, identity, name)
 	identityNode := tree.New().
 		Root(title).
 		EnumeratorStyle(branchStyle)
@@ -292,7 +295,7 @@ func buildIdentityNodeForProvider(
 		sort.Strings(childIdentities)
 		for _, childName := range childIdentities {
 			childIdentity := allIdentities[childName]
-			childNode := buildIdentityNodeForProvider(&childIdentity, childName, allIdentities, visited)
+			childNode := buildIdentityNodeForProvider(authManager, &childIdentity, childName, allIdentities, visited)
 			identityNode.Child(childNode)
 		}
 	}
@@ -401,7 +404,7 @@ func addProviderAttributesStyled(node *tree.Tree, provider *schema.Provider, bra
 }
 
 // buildIdentitiesTree builds a tree representation of identities.
-func buildIdentitiesTree(identities map[string]schema.Identity) string {
+func buildIdentitiesTree(authManager authTypes.AuthManager, identities map[string]schema.Identity) string {
 	defer perf.Track(nil, "list.buildIdentitiesTree")()
 
 	// Sort identity names.
@@ -411,7 +414,7 @@ func buildIdentitiesTree(identities map[string]schema.Identity) string {
 	root := tree.Root("")
 	for _, name := range names {
 		identity := identities[name]
-		identityNode := buildIdentityNode(&identity, name)
+		identityNode := buildIdentityNode(authManager, &identity, name)
 		root.Child(identityNode)
 	}
 
@@ -419,11 +422,11 @@ func buildIdentitiesTree(identities map[string]schema.Identity) string {
 }
 
 // buildIdentityNode builds a tree node for a single identity.
-func buildIdentityNode(identity *schema.Identity, name string) *tree.Tree {
+func buildIdentityNode(authManager authTypes.AuthManager, identity *schema.Identity, name string) *tree.Tree {
 	defer perf.Track(nil, "list.buildIdentityNode")()
 
 	// Build title with flags.
-	title := buildIdentityTitle(identity, name)
+	title := buildIdentityTitle(authManager, identity, name)
 	identityNode := tree.New().Root(title)
 
 	// Add principal and credentials.
@@ -433,14 +436,35 @@ func buildIdentityNode(identity *schema.Identity, name string) *tree.Tree {
 }
 
 // buildIdentityTitle builds the title string for an identity node.
-func buildIdentityTitle(identity *schema.Identity, name string) string {
-	title := fmt.Sprintf("%s (%s)", name, identity.Kind)
+func buildIdentityTitle(authManager authTypes.AuthManager, identity *schema.Identity, name string) string {
+	// Get authentication status and add indicator.
+	status := getIdentityAuthStatus(authManager, name)
+	statusIndicator := getStatusIndicator(status)
+
+	// Only prepend status indicator if it's not empty (authenticated identities only).
+	var title string
+	if statusIndicator != " " {
+		title = fmt.Sprintf("%s %s (%s)", statusIndicator, name, identity.Kind)
+	} else {
+		title = fmt.Sprintf("%s (%s)", name, identity.Kind)
+	}
+
 	if identity.Default {
 		title += " [DEFAULT]"
 	}
 	if identity.Alias != "" {
 		title += fmt.Sprintf(" [ALIAS: %s]", identity.Alias)
 	}
+
+	// Add expiration info if available.
+	if authManager != nil {
+		expirationStr, expirationStatus := getExpirationInfo(authManager, name)
+		if expirationStr != "" {
+			coloredExpiration := formatExpirationWithColor(expirationStr, expirationStatus)
+			title += fmt.Sprintf(" %s", coloredExpiration)
+		}
+	}
+
 	return title
 }
 

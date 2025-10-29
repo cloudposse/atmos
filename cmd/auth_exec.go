@@ -66,8 +66,12 @@ func executeAuthExecCommandCore(cmd *cobra.Command, args []string) error {
 
 	// Get identity from flag or use default
 	identityName, _ := cmd.Flags().GetString("identity")
-	if identityName == "" {
-		defaultIdentity, err := authManager.GetDefaultIdentity()
+
+	// Check if user wants to interactively select identity.
+	forceSelect := identityName == IdentityFlagSelectValue
+
+	if identityName == "" || forceSelect {
+		defaultIdentity, err := authManager.GetDefaultIdentity(forceSelect)
 		if err != nil {
 			return errors.Join(errUtils.ErrNoDefaultIdentity, err)
 		}

@@ -433,9 +433,24 @@ func (i *assumeRoleIdentity) LoadCredentials(ctx context.Context) (types.ICreden
 func (i *assumeRoleIdentity) Logout(ctx context.Context) error {
 	defer perf.Track(nil, "aws.assumeRoleIdentity.Logout")()
 
-	// AWS assume-role identities don't have identity-specific storage.
-	// File cleanup is handled by the provider's Logout method.
-	// Keyring cleanup is handled by AuthManager.
-	log.Debug("Logout called for assume-role identity (no identity-specific cleanup)", "identity", i.name)
+	log.Debug("Logout assume-role identity", "identity", i.name, "provider", i.rootProviderName)
+
+	// Get base_path from provider spec if configured (requires manager to lookup provider config).
+	// For now, use empty string (default XDG path) since SetupFiles uses empty string too.
+	basePath := ""
+
+	fileManager, err := awsCloud.NewAWSFileManager(basePath)
+	if err != nil {
+		log.Debug("Failed to create file manager for logout", "identity", i.name, "error", err)
+		return fmt.Errorf("failed to create AWS file manager: %w", err)
+	}
+
+	// Remove this identity's profile from the provider's config files.
+	if err := fileManager.DeleteIdentity(ctx, i.rootProviderName, i.name); err != nil {
+		log.Debug("Failed to delete identity files", "identity", i.name, "error", err)
+		return fmt.Errorf("failed to delete identity files: %w", err)
+	}
+
+	log.Debug("Successfully deleted assume-role identity", "identity", i.name)
 	return nil
 }

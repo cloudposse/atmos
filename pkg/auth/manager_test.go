@@ -120,7 +120,7 @@ func TestManager_GetDefaultIdentity(t *testing.T) {
 			}
 
 			// Call the function.
-			result, err := manager.GetDefaultIdentity()
+			result, err := manager.GetDefaultIdentity(false)
 
 			// Assert results.
 			if tt.expectedError != "" {
@@ -160,7 +160,7 @@ func TestManager_GetDefaultIdentity_MultipleDefaultsOrder(t *testing.T) {
 		},
 	}
 
-	_, err := manager.GetDefaultIdentity()
+	_, err := manager.GetDefaultIdentity(false)
 	require.Error(t, err)
 
 	// The error should contain all three default identities.

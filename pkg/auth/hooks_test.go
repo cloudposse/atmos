@@ -34,7 +34,7 @@ func (s *stubAuthManager) GetCachedCredentials(ctx context.Context, identityName
 }
 
 func (s *stubAuthManager) Validate() error { return nil }
-func (s *stubAuthManager) GetDefaultIdentity() (string, error) {
+func (s *stubAuthManager) GetDefaultIdentity(_ bool) (string, error) {
 	return s.defaultIdentity, s.defaultErr
 }
 func (s *stubAuthManager) ListIdentities() []string                          { return []string{"one", "two"} }

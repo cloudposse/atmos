@@ -141,7 +141,8 @@ type AuthManager interface {
 	Validate() error
 
 	// GetDefaultIdentity returns the name of the default identity, if any.
-	GetDefaultIdentity() (string, error)
+	// If forceSelect is true and terminal is interactive, always shows identity selector.
+	GetDefaultIdentity(forceSelect bool) (string, error)
 
 	// ListIdentities returns all available identity names.
 	ListIdentities() []string

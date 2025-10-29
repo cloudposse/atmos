@@ -272,8 +272,14 @@ func (m *manager) Validate() error {
 }
 
 // GetDefaultIdentity returns the name of the default identity, if any.
-func (m *manager) GetDefaultIdentity() (string, error) {
+// If forceSelect is true and terminal is interactive, always shows identity selector.
+func (m *manager) GetDefaultIdentity(forceSelect bool) (string, error) {
 	defer perf.Track(nil, "auth.Manager.GetDefaultIdentity")()
+
+	// If forceSelect is true and we're in interactive mode, always show selector.
+	if forceSelect && isInteractive() {
+		return m.promptForIdentity("Select an identity:", m.ListIdentities())
+	}
 
 	// Find all default identities.
 	var defaultIdentities []string
