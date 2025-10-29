@@ -259,16 +259,18 @@ html[data-theme="dark"] .hero-demo-intro p {
 
 .hero-demo .screenshot-container {
   width: 100%;
-  max-width: 1400px;
+  max-width: 1600px;
   margin: 0 auto;
-  padding: 0 3rem;
+  padding: 0 2rem;
   display: flex;
   justify-content: center;
 }
 
 .hero-demo img.screenshot {
   width: 100%;
+  min-height: 500px;
   height: auto;
+  object-fit: contain;
   box-shadow: 0 0 20px 3px rgb(8 115 115 / 29%);
   border-radius: 10px;
 }

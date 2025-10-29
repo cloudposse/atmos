@@ -23,7 +23,7 @@ function Home() {
             <h1>One Tool to Orchestrate <span className="typing-container"><TypingAnimation words={['Terraform', 'OpenTofu', 'Packer', 'Helmfile', 'and more...']} /></span></h1>
             <p className="hero__description">Treat environments as configuration and eliminate code duplication, custom bash scripts, and complicated tooling with one tool to rule them all</p>
             <div className="hero__cta">
-              <Link to="/quick-start/" className="button button--lg button--primary"><p>Try the Quick Start</p></Link>
+              <Link to="/install" className="button button--lg button--primary"><p>Install Atmos</p></Link>
               <Link to="/introduction" className="button button--lg button--outline button--primary ml20"><p>Learn More</p></Link>
             </div>
           </div>
@@ -133,7 +133,7 @@ function Home() {
             <h2>What are you waiting for? <strong className="atmos__text">It's FREE and Open Source</strong></h2>
             <h3><strong className="underline">Your team can succeed</strong> with Terraform/OpenTofu and Packer today.</h3>
             <section className="cta-section">
-              <Link to="/quick-start/" className="button button--lg button--primary"><p>Try the Quick Start</p></Link>
+              <Link to="/install" className="button button--lg button--primary"><p>Install Atmos</p></Link>
             </section>
         </footer>
       </Layout>
