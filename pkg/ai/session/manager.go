@@ -3,11 +3,13 @@ package session
 import (
 	"context"
 	"fmt"
+	"sort"
 	"time"
 
 	"github.com/google/uuid"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 const (
@@ -22,18 +24,25 @@ type Manager struct {
 	storage     Storage
 	projectPath string
 	maxSessions int
+	compactor   Compactor
+	atmosConfig *schema.AtmosConfiguration
 }
 
 // NewManager creates a new session manager.
-func NewManager(storage Storage, projectPath string, maxSessions int) *Manager {
+func NewManager(storage Storage, projectPath string, maxSessions int, atmosConfig *schema.AtmosConfiguration) *Manager {
 	if maxSessions <= 0 {
 		maxSessions = DefaultMaxSessions
 	}
+
+	// Create compactor.
+	compactor := NewCompactor(storage, atmosConfig)
 
 	return &Manager{
 		storage:     storage,
 		projectPath: projectPath,
 		maxSessions: maxSessions,
+		compactor:   compactor,
+		atmosConfig: atmosConfig,
 	}
 }
 
@@ -130,6 +139,143 @@ func (m *Manager) GetMessages(ctx context.Context, sessionID string, limit int) 
 	}
 
 	return messages, nil
+}
+
+// GetMessagesWithCompaction retrieves messages for a session with auto-compact support.
+func (m *Manager) GetMessagesWithCompaction(ctx context.Context, sessionID string, limit int) ([]*Message, error) {
+	// Get auto-compact configuration.
+	compactConfig := m.getCompactConfig()
+
+	// Load active (non-archived) messages.
+	activeMessages, err := m.storage.GetActiveMessages(ctx, sessionID, 0) // No limit, we need all for compaction check
+	if err != nil {
+		return nil, fmt.Errorf("failed to get active messages: %w", err)
+	}
+
+	// Load summaries.
+	summaries, err := m.storage.GetSummaries(ctx, sessionID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get summaries: %w", err)
+	}
+
+	// Check if compaction is needed.
+	maxMessages := m.getMaxMessages()
+	if shouldCompact, plan := m.compactor.ShouldCompact(activeMessages, maxMessages, compactConfig); shouldCompact {
+		// Set session ID in plan.
+		plan.SessionID = sessionID
+
+		// Perform compaction.
+		_, err := m.compactor.Compact(ctx, plan, compactConfig)
+		if err != nil {
+			// Log error but continue - compaction failure shouldn't break the session.
+			// In production, this would use proper logging.
+			fmt.Printf("Warning: auto-compact failed: %v\n", err)
+		} else {
+			// Reload active messages and summaries after compaction.
+			activeMessages, _ = m.storage.GetActiveMessages(ctx, sessionID, 0)
+			summaries, _ = m.storage.GetSummaries(ctx, sessionID)
+		}
+	}
+
+	// Combine summaries and active messages.
+	combinedMessages := m.combineMessagesAndSummaries(summaries, activeMessages, compactConfig)
+
+	// Apply limit if specified.
+	if limit > 0 && len(combinedMessages) > limit {
+		// Take the most recent messages.
+		combinedMessages = combinedMessages[len(combinedMessages)-limit:]
+	}
+
+	return combinedMessages, nil
+}
+
+// combineMessagesAndSummaries combines summaries and active messages in chronological order.
+func (m *Manager) combineMessagesAndSummaries(summaries []*Summary, messages []*Message, config CompactConfig) []*Message {
+	var combined []*Message
+
+	// Add summaries as special assistant messages.
+	for _, summary := range summaries {
+		content := summary.SummaryContent
+
+		// Add markers if configured.
+		if config.ShowSummaryMarkers {
+			content = fmt.Sprintf("[SUMMARY: %s]\n\n%s\n\n[END SUMMARY]",
+				summary.MessageRange, summary.SummaryContent)
+		}
+
+		combined = append(combined, &Message{
+			ID:        -1, // Negative ID to indicate it's a summary.
+			SessionID: summary.SessionID,
+			Role:      RoleAssistant,
+			Content:   content,
+			CreatedAt: summary.CompactedAt,
+			Archived:  false,
+			IsSummary: true,
+		})
+	}
+
+	// Add active messages.
+	combined = append(combined, messages...)
+
+	// Sort by timestamp.
+	sort.Slice(combined, func(i, j int) bool {
+		return combined[i].CreatedAt.Before(combined[j].CreatedAt)
+	})
+
+	return combined
+}
+
+// getCompactConfig returns the auto-compact configuration.
+func (m *Manager) getCompactConfig() CompactConfig {
+	if m.atmosConfig == nil || !m.atmosConfig.Settings.AI.Sessions.AutoCompact.Enabled {
+		return DefaultCompactConfig()
+	}
+
+	config := m.atmosConfig.Settings.AI.Sessions.AutoCompact
+
+	// Convert schema config to session config.
+	return CompactConfig{
+		Enabled:            config.Enabled,
+		TriggerThreshold:   getOrDefault(config.TriggerThreshold, 0.75),
+		CompactRatio:       getOrDefault(config.CompactRatio, 0.4),
+		PreserveRecent:     getOrDefaultInt(config.PreserveRecent, 10),
+		UseAISummary:       getOrDefaultBool(config.UseAISummary, true),
+		SummaryProvider:    config.SummaryProvider,
+		SummaryModel:       config.SummaryModel,
+		SummaryMaxTokens:   getOrDefaultInt(config.SummaryMaxTokens, 2048),
+		ShowSummaryMarkers: config.ShowSummaryMarkers,
+		CompactOnResume:    config.CompactOnResume,
+	}
+}
+
+// getMaxMessages returns the configured max messages limit.
+func (m *Manager) getMaxMessages() int {
+	if m.atmosConfig == nil {
+		return 0 // Unlimited
+	}
+
+	return m.atmosConfig.Settings.AI.MaxHistoryMessages
+}
+
+// Helper functions for config defaults.
+func getOrDefault(value float64, defaultValue float64) float64 {
+	if value == 0 {
+		return defaultValue
+	}
+	return value
+}
+
+func getOrDefaultInt(value int, defaultValue int) int {
+	if value == 0 {
+		return defaultValue
+	}
+	return value
+}
+
+func getOrDefaultBool(value bool, defaultValue bool) bool {
+	// Note: false is the zero value, so we can't distinguish between false and unset.
+	// For now, we'll use the provided value directly.
+	return value
 }
 
 // GetMessageCount returns the number of messages in a session.

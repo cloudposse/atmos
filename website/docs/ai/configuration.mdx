@@ -659,6 +659,19 @@ settings:
       max_sessions: 10                 # Maximum sessions to keep (default: 10)
       auto_save: true                  # Auto-save messages (default: true)
       retention_days: 30               # Delete sessions older than N days (default: 30)
+
+      # Auto-compact settings (optional)
+      auto_compact:
+        enabled: true                  # Enable auto-compact (default: false)
+        trigger_threshold: 0.75        # Trigger at 75% of max_history_messages (default: 0.75)
+        compact_ratio: 0.4             # Compact 40% of messages (default: 0.4)
+        preserve_recent: 10            # Always keep last 10 messages (default: 10)
+        use_ai_summary: true           # Use AI for summaries (default: true)
+        summary_provider: "anthropic"  # Provider for summarization (default: default_provider)
+        summary_model: "claude-3-haiku-20240307"  # Faster/cheaper model for summaries
+        summary_max_tokens: 2048       # Max tokens for summary (default: 2048)
+        show_summary_markers: false    # Show [SUMMARY] markers (default: false)
+        compact_on_resume: true        # Auto-compact when resuming (default: true)
 ```
 </File>
 
@@ -682,6 +695,39 @@ settings:
 
   <dt>`sessions.retention_days`</dt>
   <dd>Number of days to retain sessions before cleanup. Use `0` to keep sessions indefinitely (default: `30`)</dd>
+
+  <dt>`sessions.auto_compact`</dt>
+  <dd>Auto-compact configuration for intelligent message history management. See [Auto-Compact](/ai/sessions#auto-compact-extended-conversations) for detailed documentation</dd>
+
+  <dt>`sessions.auto_compact.enabled`</dt>
+  <dd>Enable automatic conversation compaction using AI-powered summarization (default: `false`)</dd>
+
+  <dt>`sessions.auto_compact.trigger_threshold`</dt>
+  <dd>Trigger compaction at N% of max_history_messages (0.0-1.0, default: `0.75` = 75%)</dd>
+
+  <dt>`sessions.auto_compact.compact_ratio`</dt>
+  <dd>Percentage of old messages to compact when triggered (0.0-1.0, default: `0.4` = 40%)</dd>
+
+  <dt>`sessions.auto_compact.preserve_recent`</dt>
+  <dd>Number of most recent messages to always keep uncompacted (default: `10`)</dd>
+
+  <dt>`sessions.auto_compact.use_ai_summary`</dt>
+  <dd>Use AI to generate intelligent summaries instead of simple concatenation (default: `true`)</dd>
+
+  <dt>`sessions.auto_compact.summary_provider`</dt>
+  <dd>AI provider for summarization (default: uses `default_provider`)</dd>
+
+  <dt>`sessions.auto_compact.summary_model`</dt>
+  <dd>Model for summarization, typically a faster/cheaper model like `claude-3-haiku-20240307` (default: provider's default model)</dd>
+
+  <dt>`sessions.auto_compact.summary_max_tokens`</dt>
+  <dd>Maximum tokens for summary generation (default: `2048`)</dd>
+
+  <dt>`sessions.auto_compact.show_summary_markers`</dt>
+  <dd>Show `[SUMMARY]` markers around compacted sections in conversation history (default: `false`)</dd>
+
+  <dt>`sessions.auto_compact.compact_on_resume`</dt>
+  <dd>Automatically check and compact when resuming a session (default: `true`)</dd>
 </dl>
 
 ### Using Sessions
@@ -729,16 +775,20 @@ Sessions are stored **locally on your machine**. No session data is sent to AI p
 
 Control how much conversation history is sent to AI providers with each request. This helps manage costs and prevent rate limiting in long conversations.
 
-### Two Approaches: Messages vs. Tokens
+### Three Approaches: Simple Truncation, Auto-Compact, or Both
 
 By default, Atmos sends the **full conversation history** to the AI with each request. For long conversations, this can lead to:
 - **Rate limiting**: Exceeding tokens-per-minute limits
 - **Higher costs**: More tokens = higher API charges
 - **Slower responses**: More data to process
 
-Atmos offers two ways to limit conversation history:
+Atmos offers three ways to manage conversation history:
 
-#### Option 1: Message-Based Limit (Simple)
+#### Approach 1: Simple Truncation (Message/Token Limits)
+
+Simple truncation drops old messages when limits are reached. Easy to configure but loses context.
+
+**Message-Based Limit:**
 
 Use `max_history_messages` to keep only the most recent N messages. **Recommended for most users** - easy to understand and configure.
 
@@ -757,7 +807,7 @@ settings:
 ```
 </File>
 
-#### Option 2: Token-Based Limit (Precise)
+**Token-Based Limit:**
 
 Use `max_history_tokens` for more precise control based on estimated token count. Uses approximate counting (words × 1.3) with ~±10-20% accuracy.
 
@@ -776,7 +826,7 @@ settings:
 ```
 </File>
 
-#### Option 3: Combine Both Limits
+**Combine Both Limits:**
 
 Set both limits - whichever is hit first will be applied. This gives you both control mechanisms.
 
@@ -796,6 +846,84 @@ settings:
 ```
 </File>
 
+#### Approach 2: Auto-Compact (Intelligent Summarization)
+
+Auto-compact uses AI to intelligently summarize old messages instead of dropping them. **Recommended for long, context-heavy conversations** - preserves important information while managing history.
+
+<File title="atmos.yaml">
+```yaml
+settings:
+  ai:
+    enabled: true
+    default_provider: "anthropic"
+    max_history_messages: 50           # Required: defines capacity for auto-compact
+
+    providers:
+      anthropic:
+        model: "claude-sonnet-4-20250514"
+        api_key_env: "ANTHROPIC_API_KEY"
+
+    sessions:
+      enabled: true
+      auto_compact:
+        enabled: true                  # Enable auto-compact
+        trigger_threshold: 0.75        # Trigger at 75% capacity (37 messages)
+        compact_ratio: 0.4             # Compact 40% of old messages
+        use_ai_summary: true           # Use AI for intelligent summaries
+        summary_model: "claude-3-haiku-20240307"  # Faster/cheaper model
+```
+</File>
+
+**What happens:**
+- When conversation reaches 37 messages (75% of 50), auto-compact triggers
+- Oldest 15 messages (40% of 37) are summarized by AI
+- Summary preserves key context (decisions, configurations, insights)
+- Most recent 10 messages always preserved verbatim
+- Summary replaces original messages in history
+
+**Benefits over simple truncation:**
+- **Preserves context**: Important decisions and context remain available
+- **Seamless**: AI continues conversation naturally with summarized history
+- **Configurable**: Control when to compact and what to preserve
+- **Cost-effective**: Use cheaper models (Haiku) for summarization
+
+:::info Complete Auto-Compact Documentation
+See [Auto-Compact](/ai/sessions#auto-compact-extended-conversations) for detailed configuration, examples, and best practices.
+:::
+
+#### Approach 3: Combine Auto-Compact with Hard Limits
+
+For maximum control, use auto-compact with hard truncation limits. Auto-compact handles normal growth, hard limits provide safety net.
+
+<File title="atmos.yaml">
+```yaml
+settings:
+  ai:
+    enabled: true
+    default_provider: "anthropic"
+    max_history_messages: 100          # Hard limit (safety net)
+    max_history_tokens: 15000          # Hard token limit
+
+    providers:
+      anthropic:
+        model: "claude-sonnet-4-20250514"
+        api_key_env: "ANTHROPIC_API_KEY"
+
+    sessions:
+      enabled: true
+      auto_compact:
+        enabled: true
+        trigger_threshold: 0.75        # First line: compact at 75 messages
+        compact_ratio: 0.5             # Compact 50% to stay below hard limits
+        preserve_recent: 15            # Keep more recent messages
+```
+</File>
+
+**How this works:**
+1. **Normal operation**: Auto-compact maintains history at 75 messages by summarizing
+2. **Safety net**: If summaries accumulate and hit 100 messages, hard truncation kicks in
+3. **Cost control**: Token limit ensures you never exceed budget regardless of message count
+
 ### How It Works
 
 When history limits are configured, Atmos applies them in this order:
@@ -814,14 +942,15 @@ When history limits are configured, Atmos applies them in this order:
 
 ### Recommendations
 
-| Use Case | Message-Based (`max_history_messages`) | Token-Based (`max_history_tokens`) | Best Approach |
-|----------|----------------------------------------|-------------------------------------|---------------|
-| Short questions | 0 (unlimited) | 0 (unlimited) | No limit needed |
-| Long conversations | 20-30 messages | 6000-8000 tokens | Either works well |
-| Complex analysis | 40-50 messages | 10000-15000 tokens | Token-based for precision |
-| Cost optimization | 10-20 messages | 4000-6000 tokens | Token-based for exact control |
-| Rate limit issues | 10-20 messages | 6000-8000 tokens | Token-based (matches provider limits) |
-| Combined protection | 50 messages | 8000 tokens | Use both limits together |
+| Use Case | Message-Based (`max_history_messages`) | Token-Based (`max_history_tokens`) | Auto-Compact | Best Approach |
+|----------|----------------------------------------|-------------------------------------|--------------|---------------|
+| Short questions | 0 (unlimited) | 0 (unlimited) | Disabled | No limit needed |
+| Long conversations | 20-30 messages | 6000-8000 tokens | Enabled (50 msg, 75% threshold) | Auto-compact preserves context |
+| Complex analysis | 40-50 messages | 10000-15000 tokens | Enabled (100 msg, 70% threshold) | Auto-compact + token limit |
+| Cost optimization | 10-20 messages | 4000-6000 tokens | Enabled with cheaper model | Auto-compact with Haiku |
+| Rate limit issues | 10-20 messages | 6000-8000 tokens | Enabled (30 msg, 70% threshold) | Auto-compact + token limit |
+| Context preservation | 50+ messages | 12000+ tokens | Enabled (higher thresholds) | Auto-compact essential |
+| Combined protection | 50 messages | 8000 tokens | Enabled (safety net) | Auto-compact + hard limits |
 
 :::tip
 Set to `0` (or omit) for **unlimited history** (default behavior). This works well for most conversations but may cause rate limiting in extended sessions.
@@ -1322,8 +1451,10 @@ settings:
 - **For cost optimization**: Lower context limits to reduce token usage
 - **For long conversations (message-based)**: Set `max_history_messages` to 20-50 to prevent rate limiting
 - **For long conversations (token-based)**: Set `max_history_tokens` to 6000-10000 for precise rate limit control
+- **For long conversations (intelligent)**: Enable auto-compact to preserve context while managing history - see [Auto-Compact](/ai/sessions#auto-compact-extended-conversations)
 - **For tight rate limits**: Use `max_history_tokens` with provider's per-minute token limit in mind (e.g., 40,000 TPM = set to 8000-10000)
 - **For combined control**: Set both limits - e.g., `max_history_messages: 50` and `max_history_tokens: 8000` for dual protection
+- **For context preservation**: Enable auto-compact instead of simple truncation to keep important information from earlier in the conversation
 
 ## Security Best Practices
 

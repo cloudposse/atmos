@@ -31,12 +31,27 @@ type AIProviderConfig struct {
 
 // AISessionSettings contains session management configuration.
 type AISessionSettings struct {
-	Enabled       bool   `yaml:"enabled,omitempty" json:"enabled,omitempty" mapstructure:"enabled"`
-	Storage       string `yaml:"storage,omitempty" json:"storage,omitempty" mapstructure:"storage"` // sqlite, json
-	Path          string `yaml:"path,omitempty" json:"path,omitempty" mapstructure:"path"`          // Storage path
-	MaxSessions   int    `yaml:"max_sessions,omitempty" json:"max_sessions,omitempty" mapstructure:"max_sessions"`
-	AutoSave      bool   `yaml:"auto_save,omitempty" json:"auto_save,omitempty" mapstructure:"auto_save"`
-	RetentionDays int    `yaml:"retention_days,omitempty" json:"retention_days,omitempty" mapstructure:"retention_days"`
+	Enabled       bool                `yaml:"enabled,omitempty" json:"enabled,omitempty" mapstructure:"enabled"`
+	Storage       string              `yaml:"storage,omitempty" json:"storage,omitempty" mapstructure:"storage"` // sqlite, json
+	Path          string              `yaml:"path,omitempty" json:"path,omitempty" mapstructure:"path"`          // Storage path
+	MaxSessions   int                 `yaml:"max_sessions,omitempty" json:"max_sessions,omitempty" mapstructure:"max_sessions"`
+	AutoSave      bool                `yaml:"auto_save,omitempty" json:"auto_save,omitempty" mapstructure:"auto_save"`
+	RetentionDays int                 `yaml:"retention_days,omitempty" json:"retention_days,omitempty" mapstructure:"retention_days"`
+	AutoCompact   AIAutoCompactConfig `yaml:"auto_compact,omitempty" json:"auto_compact,omitempty" mapstructure:"auto_compact"`
+}
+
+// AIAutoCompactConfig contains auto-compact configuration for session history.
+type AIAutoCompactConfig struct {
+	Enabled            bool    `yaml:"enabled,omitempty" json:"enabled,omitempty" mapstructure:"enabled"`
+	TriggerThreshold   float64 `yaml:"trigger_threshold,omitempty" json:"trigger_threshold,omitempty" mapstructure:"trigger_threshold"`
+	CompactRatio       float64 `yaml:"compact_ratio,omitempty" json:"compact_ratio,omitempty" mapstructure:"compact_ratio"`
+	PreserveRecent     int     `yaml:"preserve_recent,omitempty" json:"preserve_recent,omitempty" mapstructure:"preserve_recent"`
+	UseAISummary       bool    `yaml:"use_ai_summary,omitempty" json:"use_ai_summary,omitempty" mapstructure:"use_ai_summary"`
+	SummaryProvider    string  `yaml:"summary_provider,omitempty" json:"summary_provider,omitempty" mapstructure:"summary_provider"`
+	SummaryModel       string  `yaml:"summary_model,omitempty" json:"summary_model,omitempty" mapstructure:"summary_model"`
+	SummaryMaxTokens   int     `yaml:"summary_max_tokens,omitempty" json:"summary_max_tokens,omitempty" mapstructure:"summary_max_tokens"`
+	ShowSummaryMarkers bool    `yaml:"show_summary_markers,omitempty" json:"show_summary_markers,omitempty" mapstructure:"show_summary_markers"`
+	CompactOnResume    bool    `yaml:"compact_on_resume,omitempty" json:"compact_on_resume,omitempty" mapstructure:"compact_on_resume"`
 }
 
 // AIToolSettings contains tool execution configuration.

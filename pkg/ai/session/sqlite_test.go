@@ -767,3 +767,409 @@ func TestSQLiteStorage_Close(t *testing.T) {
 	// Verify database file still exists after close.
 	assert.FileExists(t, dbPath)
 }
+
+// TestSQLiteStorage_StoreSummary tests storing message summaries.
+func TestSQLiteStorage_StoreSummary(t *testing.T) {
+	storage, _, cleanup := setupTestStorage(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	// Create a test session.
+	session := &Session{
+		ID:          "test-session-1",
+		Name:        "test",
+		ProjectPath: "/test",
+		Model:       "test-model",
+		Provider:    "test-provider",
+		CreatedAt:   time.Now(),
+		UpdatedAt:   time.Now(),
+	}
+	err := storage.CreateSession(ctx, session)
+	require.NoError(t, err)
+
+	// Create and store summary.
+	summary := &Summary{
+		ID:                 "summary-1",
+		SessionID:          session.ID,
+		Provider:           "anthropic",
+		OriginalMessageIDs: []int64{1, 2, 3, 4, 5},
+		MessageRange:       "Messages 1-5",
+		SummaryContent:     "Test summary content about VPC configuration",
+		TokenCount:         25,
+		CompactedAt:        time.Now(),
+	}
+
+	err = storage.StoreSummary(ctx, summary)
+	assert.NoError(t, err, "Should store summary successfully")
+
+	// Verify summary was stored.
+	summaries, err := storage.GetSummaries(ctx, session.ID)
+	require.NoError(t, err)
+	require.Len(t, summaries, 1, "Should have one summary")
+
+	stored := summaries[0]
+	assert.Equal(t, summary.ID, stored.ID)
+	assert.Equal(t, summary.SessionID, stored.SessionID)
+	assert.Equal(t, summary.Provider, stored.Provider)
+	assert.Equal(t, summary.MessageRange, stored.MessageRange)
+	assert.Equal(t, summary.SummaryContent, stored.SummaryContent)
+	assert.Equal(t, summary.TokenCount, stored.TokenCount)
+	assert.Equal(t, len(summary.OriginalMessageIDs), len(stored.OriginalMessageIDs))
+}
+
+// TestSQLiteStorage_GetSummaries tests retrieving summaries for a session.
+func TestSQLiteStorage_GetSummaries(t *testing.T) {
+	storage, _, cleanup := setupTestStorage(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	// Create test session.
+	session := &Session{
+		ID:          "test-session-2",
+		Name:        "test",
+		ProjectPath: "/test",
+		Model:       "test-model",
+		Provider:    "test-provider",
+		CreatedAt:   time.Now(),
+		UpdatedAt:   time.Now(),
+	}
+	err := storage.CreateSession(ctx, session)
+	require.NoError(t, err)
+
+	// Store multiple summaries.
+	for i := 1; i <= 3; i++ {
+		summary := &Summary{
+			ID:                 "summary-" + string(rune(i)),
+			SessionID:          session.ID,
+			Provider:           "anthropic",
+			OriginalMessageIDs: []int64{int64(i)},
+			MessageRange:       "Messages " + string(rune(i)),
+			SummaryContent:     "Summary " + string(rune(i)),
+			TokenCount:         10,
+			CompactedAt:        time.Now().Add(time.Minute * time.Duration(i)),
+		}
+		err := storage.StoreSummary(ctx, summary)
+		require.NoError(t, err)
+	}
+
+	// Retrieve summaries.
+	summaries, err := storage.GetSummaries(ctx, session.ID)
+	require.NoError(t, err)
+	assert.Len(t, summaries, 3, "Should retrieve all 3 summaries")
+
+	// Verify summaries are sorted by compacted_at.
+	for i := 0; i < len(summaries)-1; i++ {
+		assert.True(t, summaries[i].CompactedAt.Before(summaries[i+1].CompactedAt),
+			"Summaries should be sorted chronologically")
+	}
+}
+
+// TestSQLiteStorage_GetSummaries_NoSummaries tests retrieving from session with no summaries.
+func TestSQLiteStorage_GetSummaries_NoSummaries(t *testing.T) {
+	storage, _, cleanup := setupTestStorage(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	summaries, err := storage.GetSummaries(ctx, "nonexistent-session")
+	require.NoError(t, err)
+	assert.Empty(t, summaries, "Should return empty slice for session with no summaries")
+}
+
+// TestSQLiteStorage_ArchiveMessages tests marking messages as archived.
+func TestSQLiteStorage_ArchiveMessages(t *testing.T) {
+	storage, _, cleanup := setupTestStorage(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	// Create test session.
+	session := &Session{
+		ID:          "test-session-3",
+		Name:        "test",
+		ProjectPath: "/test",
+		Model:       "test-model",
+		Provider:    "test-provider",
+		CreatedAt:   time.Now(),
+		UpdatedAt:   time.Now(),
+	}
+	err := storage.CreateSession(ctx, session)
+	require.NoError(t, err)
+
+	// Add messages.
+	var messageIDs []int64
+	for i := 1; i <= 5; i++ {
+		msg := &Message{
+			SessionID: session.ID,
+			Role:      RoleUser,
+			Content:   "Message " + string(rune(i)),
+			CreatedAt: time.Now(),
+		}
+		err := storage.AddMessage(ctx, msg)
+		require.NoError(t, err)
+		messageIDs = append(messageIDs, msg.ID)
+	}
+
+	// Archive first 3 messages.
+	err = storage.ArchiveMessages(ctx, messageIDs[:3])
+	require.NoError(t, err)
+
+	// Verify active messages.
+	activeMessages, err := storage.GetActiveMessages(ctx, session.ID, 0)
+	require.NoError(t, err)
+	assert.Len(t, activeMessages, 2, "Should have 2 active messages")
+
+	// Verify archived messages are excluded.
+	for _, msg := range activeMessages {
+		assert.False(t, msg.Archived, "Active messages should not be archived")
+		assert.Contains(t, messageIDs[3:], msg.ID, "Only unarchived messages should be returned")
+	}
+}
+
+// TestSQLiteStorage_ArchiveMessages_Empty tests archiving with empty list.
+func TestSQLiteStorage_ArchiveMessages_Empty(t *testing.T) {
+	storage, _, cleanup := setupTestStorage(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	err := storage.ArchiveMessages(ctx, []int64{})
+	assert.NoError(t, err, "Should handle empty message ID list")
+}
+
+// TestSQLiteStorage_GetActiveMessages tests retrieving non-archived messages.
+func TestSQLiteStorage_GetActiveMessages(t *testing.T) {
+	storage, _, cleanup := setupTestStorage(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	// Create test session.
+	session := &Session{
+		ID:          "test-session-4",
+		Name:        "test",
+		ProjectPath: "/test",
+		Model:       "test-model",
+		Provider:    "test-provider",
+		CreatedAt:   time.Now(),
+		UpdatedAt:   time.Now(),
+	}
+	err := storage.CreateSession(ctx, session)
+	require.NoError(t, err)
+
+	// Add messages.
+	var messageIDs []int64
+	for i := 1; i <= 10; i++ {
+		msg := &Message{
+			SessionID: session.ID,
+			Role:      RoleUser,
+			Content:   "Message " + string(rune(i)),
+			CreatedAt: time.Now().Add(time.Second * time.Duration(i)),
+		}
+		err := storage.AddMessage(ctx, msg)
+		require.NoError(t, err)
+		messageIDs = append(messageIDs, msg.ID)
+	}
+
+	// Archive first 5 messages.
+	err = storage.ArchiveMessages(ctx, messageIDs[:5])
+	require.NoError(t, err)
+
+	// Get active messages.
+	activeMessages, err := storage.GetActiveMessages(ctx, session.ID, 0)
+	require.NoError(t, err)
+	assert.Len(t, activeMessages, 5, "Should have 5 active messages")
+
+	// Verify messages are sorted chronologically.
+	for i := 0; i < len(activeMessages)-1; i++ {
+		assert.True(t, activeMessages[i].CreatedAt.Before(activeMessages[i+1].CreatedAt),
+			"Messages should be sorted by creation time")
+	}
+
+	// Verify archived flag.
+	for _, msg := range activeMessages {
+		assert.False(t, msg.Archived, "Active messages should have archived=false")
+	}
+}
+
+// TestSQLiteStorage_GetActiveMessages_WithLimit tests limit parameter.
+func TestSQLiteStorage_GetActiveMessages_WithLimit(t *testing.T) {
+	storage, _, cleanup := setupTestStorage(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	// Create test session.
+	session := &Session{
+		ID:          "test-session-5",
+		Name:        "test",
+		ProjectPath: "/test",
+		Model:       "test-model",
+		Provider:    "test-provider",
+		CreatedAt:   time.Now(),
+		UpdatedAt:   time.Now(),
+	}
+	err := storage.CreateSession(ctx, session)
+	require.NoError(t, err)
+
+	// Add 20 messages.
+	for i := 1; i <= 20; i++ {
+		msg := &Message{
+			SessionID: session.ID,
+			Role:      RoleUser,
+			Content:   "Message " + string(rune(i)),
+			CreatedAt: time.Now(),
+		}
+		err := storage.AddMessage(ctx, msg)
+		require.NoError(t, err)
+	}
+
+	// Get active messages with limit.
+	activeMessages, err := storage.GetActiveMessages(ctx, session.ID, 5)
+	require.NoError(t, err)
+	assert.Len(t, activeMessages, 5, "Should respect limit parameter")
+}
+
+// TestSQLiteStorage_GetActiveMessages_NoMessages tests empty result.
+func TestSQLiteStorage_GetActiveMessages_NoMessages(t *testing.T) {
+	storage, _, cleanup := setupTestStorage(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	activeMessages, err := storage.GetActiveMessages(ctx, "nonexistent-session", 0)
+	require.NoError(t, err)
+	assert.Empty(t, activeMessages, "Should return empty slice for session with no messages")
+}
+
+// TestSQLiteStorage_Summary_CascadeDelete tests that summaries are deleted with session.
+func TestSQLiteStorage_Summary_CascadeDelete(t *testing.T) {
+	storage, _, cleanup := setupTestStorage(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	// Create test session.
+	session := &Session{
+		ID:          "test-session-6",
+		Name:        "test",
+		ProjectPath: "/test",
+		Model:       "test-model",
+		Provider:    "test-provider",
+		CreatedAt:   time.Now(),
+		UpdatedAt:   time.Now(),
+	}
+	err := storage.CreateSession(ctx, session)
+	require.NoError(t, err)
+
+	// Store summary.
+	summary := &Summary{
+		ID:                 "summary-cascade",
+		SessionID:          session.ID,
+		Provider:           "anthropic",
+		OriginalMessageIDs: []int64{1, 2, 3},
+		MessageRange:       "Messages 1-3",
+		SummaryContent:     "Test summary",
+		TokenCount:         10,
+		CompactedAt:        time.Now(),
+	}
+	err = storage.StoreSummary(ctx, summary)
+	require.NoError(t, err)
+
+	// Verify summary exists.
+	summaries, err := storage.GetSummaries(ctx, session.ID)
+	require.NoError(t, err)
+	require.Len(t, summaries, 1)
+
+	// Delete session.
+	err = storage.DeleteSession(ctx, session.ID)
+	require.NoError(t, err)
+
+	// Verify summary was cascade deleted.
+	summaries, err = storage.GetSummaries(ctx, session.ID)
+	require.NoError(t, err)
+	assert.Empty(t, summaries, "Summaries should be cascade deleted with session")
+}
+
+// TestSQLiteStorage_Migration_ArchivedColumn tests that archived column exists.
+func TestSQLiteStorage_Migration_ArchivedColumn(t *testing.T) {
+	storage, _, cleanup := setupTestStorage(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	// Create test session.
+	session := &Session{
+		ID:          "test-session-7",
+		Name:        "test",
+		ProjectPath: "/test",
+		Model:       "test-model",
+		Provider:    "test-provider",
+		CreatedAt:   time.Now(),
+		UpdatedAt:   time.Now(),
+	}
+	err := storage.CreateSession(ctx, session)
+	require.NoError(t, err)
+
+	// Add message.
+	msg := &Message{
+		SessionID: session.ID,
+		Role:      RoleUser,
+		Content:   "Test message",
+		CreatedAt: time.Now(),
+	}
+	err = storage.AddMessage(ctx, msg)
+	require.NoError(t, err)
+
+	// Verify message has archived field.
+	messages, err := storage.GetActiveMessages(ctx, session.ID, 0)
+	require.NoError(t, err)
+	require.Len(t, messages, 1)
+	assert.False(t, messages[0].Archived, "New messages should have archived=false by default")
+}
+
+// TestSQLiteStorage_ArchiveMessages_MultipleIDs tests archiving multiple messages.
+func TestSQLiteStorage_ArchiveMessages_MultipleIDs(t *testing.T) {
+	storage, _, cleanup := setupTestStorage(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	// Create test session.
+	session := &Session{
+		ID:          "test-session-8",
+		Name:        "test",
+		ProjectPath: "/test",
+		Model:       "test-model",
+		Provider:    "test-provider",
+		CreatedAt:   time.Now(),
+		UpdatedAt:   time.Now(),
+	}
+	err := storage.CreateSession(ctx, session)
+	require.NoError(t, err)
+
+	// Add 100 messages.
+	var messageIDs []int64
+	for i := 1; i <= 100; i++ {
+		msg := &Message{
+			SessionID: session.ID,
+			Role:      RoleUser,
+			Content:   "Message " + string(rune(i)),
+			CreatedAt: time.Now(),
+		}
+		err := storage.AddMessage(ctx, msg)
+		require.NoError(t, err)
+		messageIDs = append(messageIDs, msg.ID)
+	}
+
+	// Archive all messages.
+	err = storage.ArchiveMessages(ctx, messageIDs)
+	require.NoError(t, err)
+
+	// Verify all messages archived.
+	activeMessages, err := storage.GetActiveMessages(ctx, session.ID, 0)
+	require.NoError(t, err)
+	assert.Empty(t, activeMessages, "Should have no active messages after archiving all")
+}

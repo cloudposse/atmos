@@ -26,6 +26,12 @@ type Storage interface {
 	GetContext(ctx context.Context, sessionID string) ([]*ContextItem, error)
 	DeleteContext(ctx context.Context, sessionID string) error
 
+	// Summary operations (auto-compact)
+	StoreSummary(ctx context.Context, summary *Summary) error
+	GetSummaries(ctx context.Context, sessionID string) ([]*Summary, error)
+	ArchiveMessages(ctx context.Context, messageIDs []int64) error
+	GetActiveMessages(ctx context.Context, sessionID string, limit int) ([]*Message, error)
+
 	// Database management
 	Close() error
 	Migrate() error

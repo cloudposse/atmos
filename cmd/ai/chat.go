@@ -90,7 +90,7 @@ The AI assistant has access to your current Atmos configuration and can help wit
 			defer storage.Close()
 
 			// Create session manager.
-			manager = session.NewManager(storage, atmosConfig.BasePath, atmosConfig.Settings.AI.Sessions.MaxSessions)
+			manager = session.NewManager(storage, atmosConfig.BasePath, atmosConfig.Settings.AI.Sessions.MaxSessions, &atmosConfig)
 
 			// Check for --session flag.
 			sessionName, _ := cmd.Flags().GetString("session")

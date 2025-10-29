@@ -854,7 +854,7 @@ func TestChatModel_CreateSession(t *testing.T) {
 	require.NoError(t, err)
 	defer storage.Close()
 
-	manager := session.NewManager(storage, tmpDir, 10)
+	manager := session.NewManager(storage, tmpDir, 10, nil)
 
 	model, err := NewChatModel(client, nil, manager, nil, nil, nil)
 	require.NoError(t, err)

@@ -108,7 +108,7 @@ func initSessionManager() (*session.Manager, func(), error) {
 	}
 
 	// Create session manager.
-	manager := session.NewManager(storage, atmosConfig.BasePath, atmosConfig.Settings.AI.Sessions.MaxSessions)
+	manager := session.NewManager(storage, atmosConfig.BasePath, atmosConfig.Settings.AI.Sessions.MaxSessions, &atmosConfig)
 
 	// Return cleanup function.
 	cleanup := func() {

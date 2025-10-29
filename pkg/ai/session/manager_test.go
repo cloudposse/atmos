@@ -20,7 +20,7 @@ func setupTestManager(t *testing.T) (*Manager, func()) {
 	storage, err := NewSQLiteStorage(dbPath)
 	require.NoError(t, err)
 
-	manager := NewManager(storage, "/test/project", DefaultMaxSessions)
+	manager := NewManager(storage, "/test/project", DefaultMaxSessions, nil)
 
 	cleanup := func() {
 		storage.Close()
@@ -60,7 +60,7 @@ func TestNewManager(t *testing.T) {
 			require.NoError(t, err)
 			defer storage.Close()
 
-			manager := NewManager(storage, "/test", tt.maxSessions)
+			manager := NewManager(storage, "/test", tt.maxSessions, nil)
 
 			assert.NotNil(t, manager)
 			assert.Equal(t, tt.want, manager.maxSessions)

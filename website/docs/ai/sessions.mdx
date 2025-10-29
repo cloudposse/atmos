@@ -222,6 +222,255 @@ settings:
   <dd>Number of days to retain sessions before automatic cleanup. Set to `0` to keep sessions indefinitely (default: `30`)</dd>
 </dl>
 
+## Auto-Compact: Extended Conversations
+
+Sessions support **auto-compact**, which intelligently summarizes older conversation history to enable extended multi-day/week conversations without losing context.
+
+### Why Auto-Compact?
+
+Infrastructure conversations often span days or weeks:
+- **VPC migrations**: Planning, validation, execution across multiple sessions
+- **Security audits**: Reviewing configurations across hundreds of components
+- **Architecture reviews**: Multi-day discussions about design decisions
+
+Without auto-compact, sessions hit message limits (e.g., 50 messages) and start forgetting early context. Auto-compact solves this by:
+- ✅ **Summarizing old messages** instead of dropping them
+- ✅ **Preserving infrastructure decisions** (CIDR choices, security patterns, component configs)
+- ✅ **Enabling unlimited conversations** (sessions can continue indefinitely)
+- ✅ **Working transparently** (users don't notice compaction happening)
+
+### How It Works
+
+<Terminal title="Example: Auto-Compact in Action">
+```bash
+# You have a 50-message session discussing VPC configuration
+# Messages 1-38: VPC design decisions, CIDR planning, security groups
+# Auto-compact triggers at 75% capacity (38/50 messages)
+
+# Compaction process:
+# 1. AI summarizes messages 1-20 (oldest 40%)
+# 2. Summary preserves key decisions: "Chose 10.0.0.0/16 for production,
+#    3 AZs, /20 public subnets, NAT gateway per AZ..."
+# 3. Original messages marked as archived
+# 4. Next message sees: [Summary] + Messages 21-50
+
+# You continue the conversation:
+You: "What CIDR did we choose for production again?"
+
+AI: "Based on our earlier discussion (in the summary), we chose 10.0.0.0/16
+     for production to ensure adequate IP space for growth..."
+     # ✅ AI still knows context from messages 1-20 via summary
+```
+</Terminal>
+
+### Configuration
+
+Enable auto-compact in your `atmos.yaml`:
+
+<File title="atmos.yaml">
+```yaml
+settings:
+  ai:
+    max_history_messages: 50              # Message limit (triggers compaction at 75%)
+
+    sessions:
+      enabled: true
+      auto_compact:
+        enabled: true                     # Enable auto-compact
+        trigger_threshold: 0.75           # Compact at 75% capacity (default)
+        compact_ratio: 0.4                # Summarize oldest 40% (default)
+        preserve_recent: 10               # Always keep last 10 messages (default)
+        use_ai_summary: true              # Use AI for smart summaries (default)
+        summary_provider: "anthropic"     # Optional: specific provider for summaries
+        summary_model: "claude-3-haiku-20240307"  # Optional: cheaper model
+        summary_max_tokens: 2048          # Max tokens for summaries (default)
+        show_summary_markers: false       # Show [SUMMARY] tags (default: false)
+```
+</File>
+
+### Configuration Options
+
+<dl>
+  <dt>`auto_compact.enabled`</dt>
+  <dd>Enable intelligent auto-compaction. When `false`, uses traditional truncation (drops old messages). Default: `false`</dd>
+
+  <dt>`auto_compact.trigger_threshold`</dt>
+  <dd>Percentage (0.0-1.0) of `max_history_messages` at which to trigger compaction. Default: `0.75` (75%). Example: With 50-message limit, triggers at 38 messages.</dd>
+
+  <dt>`auto_compact.compact_ratio`</dt>
+  <dd>Percentage (0.0-1.0) of oldest messages to summarize. Default: `0.4` (40%). Example: With 50 messages, summarizes oldest 20.</dd>
+
+  <dt>`auto_compact.preserve_recent`</dt>
+  <dd>Number of most recent messages to never compact. Default: `10`. Ensures immediate context is always available verbatim.</dd>
+
+  <dt>`auto_compact.use_ai_summary`</dt>
+  <dd>Use AI to generate intelligent summaries. If `false`, uses simple concatenation. Default: `true` (recommended)</dd>
+
+  <dt>`auto_compact.summary_provider`</dt>
+  <dd>AI provider to use for generating summaries. If not specified, uses `default_provider`. Useful for using a cheaper provider (e.g., Haiku instead of Sonnet) to reduce costs.</dd>
+
+  <dt>`auto_compact.summary_model`</dt>
+  <dd>Model to use for summary generation. Defaults to provider's default model. Use faster/cheaper models like `claude-3-haiku-20240307` to optimize costs.</dd>
+
+  <dt>`auto_compact.summary_max_tokens`</dt>
+  <dd>Maximum tokens for generated summaries. Default: `2048`. Controls summary length and cost.</dd>
+
+  <dt>`auto_compact.show_summary_markers`</dt>
+  <dd>Display visual markers `[SUMMARY: Messages 1-20]` around summaries. Default: `false`. Enable for debugging or transparency.</dd>
+</dl>
+
+### What Gets Preserved in Summaries
+
+AI-generated summaries preserve critical infrastructure context:
+
+✅ **Infrastructure Decisions**
+- CIDR choices and reasoning ("Chose 10.0.0.0/16 for growth capacity")
+- Component selections (VPC, RDS, EKS configurations)
+- Architectural patterns and dependencies
+
+✅ **Technical Details**
+- Stack names, component names, environment names
+- File paths, directory structures, configuration values
+- Terraform/Helmfile/component changes made
+
+✅ **Security Context**
+- Security group rules and justifications
+- IAM policies and compliance requirements
+- Encryption settings and key management decisions
+
+✅ **Validation Results**
+- Errors found and how they were resolved
+- Schema validation issues
+- Configuration corrections made
+
+❌ **NOT Preserved** (intentionally filtered out):
+- Conversational filler ("Thanks!", "OK")
+- Step-by-step process details (focuses on outcomes)
+- Tool execution details (focuses on results)
+
+### Example Configurations
+
+#### Cost-Optimized Setup
+
+Use a cheaper model for summaries while keeping powerful model for conversation:
+
+<File title="atmos.yaml">
+```yaml
+settings:
+  ai:
+    default_provider: "anthropic"
+    providers:
+      anthropic:
+        model: "claude-sonnet-4-20250514"     # Powerful model for conversation
+        api_key_env: "ANTHROPIC_API_KEY"
+
+    max_history_messages: 50
+
+    sessions:
+      auto_compact:
+        enabled: true
+        summary_provider: "anthropic"
+        summary_model: "claude-3-haiku-20240307"  # Cheaper model for summaries
+```
+</File>
+
+**Result**: Conversation uses Sonnet (high quality), summaries use Haiku (lower cost).
+
+#### Privacy-First Setup
+
+Keep all data local with Ollama:
+
+<File title="atmos.yaml">
+```yaml
+settings:
+  ai:
+    default_provider: "ollama"
+    providers:
+      ollama:
+        model: "llama3.3:70b"
+        base_url: "http://localhost:11434/v1"
+
+    max_history_messages: 100
+
+    sessions:
+      auto_compact:
+        enabled: true
+        trigger_threshold: 0.8              # Wait until 80% full
+        summary_provider: "ollama"          # Keep summaries local too
+```
+</File>
+
+**Result**: All conversation history and summaries stay on your machine. No external API calls.
+
+#### Aggressive Compaction for Long Sessions
+
+Optimize for very long conversations (100+ messages):
+
+<File title="atmos.yaml">
+```yaml
+settings:
+  ai:
+    max_history_messages: 100
+
+    sessions:
+      auto_compact:
+        enabled: true
+        trigger_threshold: 0.6              # Compact earlier (60%)
+        compact_ratio: 0.5                  # Summarize more (50%)
+        preserve_recent: 15                 # Keep more recent context
+```
+</File>
+
+**Result**: Earlier compaction (at 60 messages), more aggressive summarization, sessions can go 200+ messages.
+
+### Debugging Auto-Compact
+
+#### View Summary Markers
+
+See exactly what was summarized:
+
+<File title="atmos.yaml">
+```yaml
+sessions:
+  auto_compact:
+    enabled: true
+    show_summary_markers: true              # Show [SUMMARY] tags
+```
+</File>
+
+**Result**: Summaries appear with markers in conversation:
+
+<Terminal title="atmos ai chat --session debug">
+```bash
+[SUMMARY: Messages 1-20]
+
+VPC Configuration:
+- Chose 10.0.0.0/16 CIDR for production with 3 AZs
+- Configured /20 public subnets, /22 private subnets
+- NAT gateway per AZ for redundancy
+...
+
+[END SUMMARY]
+
+# Recent messages appear verbatim after summary
+You: Now let's configure RDS...
+```
+</Terminal>
+
+### Performance and Costs
+
+**Token Usage**:
+- **Original messages** (20 messages): ~8,000 tokens
+- **AI-generated summary**: ~300-500 tokens
+- **Savings**: ~94% reduction in context size
+
+**API Costs** (example with Anthropic):
+- **Summary generation**: 1 API call (~8,000 input tokens + 500 output tokens)
+- **Future messages**: Save ~7,500 tokens per message (20x fewer tokens in context)
+- **Break-even**: After ~2 messages, you've saved more than the summary cost
+
+**Recommendation**: Auto-compact pays for itself quickly in long conversations.
+
 ## Using Sessions
 
 ### Starting a Named Session

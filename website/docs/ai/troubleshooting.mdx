@@ -765,6 +765,203 @@ If memory doesn't work, it's a configuration issue, not a provider limitation.
 
 See [Conversation Memory](/ai/sessions#conversation-memory) for details.
 
+### Auto-Compact Not Working
+
+**Problem**: Auto-compact is enabled but summaries are not being generated.
+
+**Solutions**:
+
+1. **Verify auto-compact is enabled with required settings**:
+```yaml
+settings:
+  ai:
+    enabled: true
+    max_history_messages: 50  # Required for auto-compact to calculate thresholds
+    sessions:
+      enabled: true             # Sessions required for auto-compact
+      auto_compact:
+        enabled: true
+        trigger_threshold: 0.75
+```
+
+2. **Check if threshold has been reached**:
+<Terminal title="shell">
+```bash
+# Count messages in current session
+sqlite3 .atmos/sessions/sessions.db \
+  "SELECT COUNT(*) as message_count
+   FROM messages
+   WHERE session_id = 'your-session-id'
+   AND archived = 0;"
+
+# With max_history_messages: 50 and trigger_threshold: 0.75,
+# auto-compact triggers at 37 messages (50 × 0.75)
+```
+</Terminal>
+
+3. **Verify summaries table exists**:
+<Terminal title="shell">
+```bash
+# Check if message_summaries table exists
+sqlite3 .atmos/sessions/sessions.db \
+  ".schema message_summaries"
+
+# Should show CREATE TABLE statement
+```
+</Terminal>
+
+4. **Check for AI summarization errors**:
+If `use_ai_summary: true`, ensure:
+- AI provider configured correctly
+- API key valid
+- Network connectivity available
+- `summary_provider` (if set) is valid
+
+5. **Test with simple summary first**:
+```yaml
+sessions:
+  auto_compact:
+    enabled: true
+    use_ai_summary: false  # Use simple concatenation first
+```
+
+### Auto-Compact Summaries Not Appearing
+
+**Problem**: Auto-compact is working but summaries don't appear in conversation.
+
+**Solutions**:
+
+1. **Check if summaries were created**:
+<Terminal title="shell">
+```bash
+# View summaries for a session
+sqlite3 .atmos/sessions/sessions.db \
+  "SELECT id, message_range, compacted_at
+   FROM message_summaries
+   WHERE session_id = 'your-session-id'
+   ORDER BY compacted_at DESC;"
+```
+</Terminal>
+
+2. **Verify archived messages**:
+<Terminal title="shell">
+```bash
+# Count archived messages (should be compacted)
+sqlite3 .atmos/sessions/sessions.db \
+  "SELECT COUNT(*) as archived_count
+   FROM messages
+   WHERE session_id = 'your-session-id'
+   AND archived = 1;"
+```
+</Terminal>
+
+3. **Enable summary markers for debugging**:
+```yaml
+sessions:
+  auto_compact:
+    enabled: true
+    show_summary_markers: true  # Shows [SUMMARY] markers in conversation
+```
+
+Then check if markers appear in conversation history.
+
+### Auto-Compact Triggering Too Often
+
+**Problem**: Auto-compact runs too frequently, disrupting conversation flow.
+
+**Solutions**:
+
+1. **Increase trigger threshold**:
+```yaml
+sessions:
+  auto_compact:
+    trigger_threshold: 0.85  # Trigger at 85% instead of 75%
+```
+
+2. **Increase max_history_messages**:
+```yaml
+settings:
+  ai:
+    max_history_messages: 100  # More headroom before compaction
+```
+
+3. **Reduce compact_ratio**:
+```yaml
+sessions:
+  auto_compact:
+    compact_ratio: 0.3  # Compact 30% instead of 40%
+```
+
+### Auto-Compact Summaries Too Long
+
+**Problem**: AI-generated summaries are too verbose.
+
+**Solutions**:
+
+1. **Reduce summary_max_tokens**:
+```yaml
+sessions:
+  auto_compact:
+    summary_max_tokens: 1024  # Shorter summaries (default: 2048)
+```
+
+2. **Use faster/cheaper model** (they tend to be more concise):
+```yaml
+sessions:
+  auto_compact:
+    summary_model: "claude-3-haiku-20240307"  # Concise summaries
+```
+
+3. **Adjust compact_ratio** to compact fewer messages at once:
+```yaml
+sessions:
+  auto_compact:
+    compact_ratio: 0.3  # Smaller batches = shorter summaries
+```
+
+### Auto-Compact Using Too Many Tokens
+
+**Problem**: Auto-compact feature causing high API costs.
+
+**Solutions**:
+
+1. **Use cheaper model for summarization**:
+```yaml
+sessions:
+  auto_compact:
+    summary_provider: "anthropic"
+    summary_model: "claude-3-haiku-20240307"  # 10x cheaper than Sonnet
+```
+
+2. **Reduce summary_max_tokens**:
+```yaml
+sessions:
+  auto_compact:
+    summary_max_tokens: 1024  # Lower token limit = lower cost
+```
+
+3. **Increase preserve_recent** to compact fewer messages:
+```yaml
+sessions:
+  auto_compact:
+    preserve_recent: 15  # Keep more messages verbatim
+    compact_ratio: 0.3   # Compact less at once
+```
+
+4. **Disable AI summaries** (use simple concatenation):
+```yaml
+sessions:
+  auto_compact:
+    use_ai_summary: false  # Free, no API calls
+```
+
+**Cost Comparison** (per compaction):
+- Simple concatenation: $0 (no API calls)
+- Claude Haiku: ~$0.01 (15 messages summarized)
+- Claude Sonnet: ~$0.10 (15 messages summarized)
+
+See [Auto-Compact](/ai/sessions#auto-compact-extended-conversations) for detailed configuration and best practices.
+
 ## MCP Server Issues
 
 ### MCP Server Not Starting
