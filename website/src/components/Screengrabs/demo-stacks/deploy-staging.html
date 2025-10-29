@@ -14,40 +14,8 @@ You're now on a new, empty workspace. Workspaces isolate their state,
 so if you run &quot;terraform plan&quot; Terraform will not see any existing state
 for this configuration.</span>
 <span style="font-weight:bold;">data.http.weather: Reading...</span>
-<span style="font-weight:bold;">data.http.weather: Read complete after 1s 
-    [id=https://wttr.in/Los+Angeles?0&amp;format=&amp;lang=en&amp;u=m]</span>
-
-Terraform used the selected providers to generate the following execution plan. 
-  <span style="color:green;">+</span> create
-
-Terraform will perform the following actions:
-
-<span style="font-weight:bold;">  # local_file.cache</span> will be created
-  <span style="color:green;">+</span> resource &quot;local_file&quot; &quot;cache&quot; {
-      <span style="color:green;">+</span> content              =
-
-            Weather report: Los+Angeles
-            
-              <span style="color:#c0c0c0;">     .-.     </span> Rain, mist
-              <span style="color:#c0c0c0;">    (   ).   </span> <span style="color:#87ff00;">+14</span>(<span style="color:#5fff00;">12</span>) °C     
-              <span style="color:#c0c0c0;">   (___(__)  </span> <span style="font-weight:bold;">↗</span> <span style="color:#ff8700;">25</span> km/h      
-              <span style="color:#87afff;">    ‘ ‘ ‘ ‘  </span> 3 km           
-              <span style="color:#87afff;">   ‘ ‘ ‘ ‘   </span> 3.0 mm
-
-
-      <span style="color:green;">+</span> content_base64sha256 = (known after apply)
-      <span style="color:green;">+</span> content_base64sha512 = (known after apply)
-      <span style="color:green;">+</span> content_md5          = (known after apply)
-      <span style="color:green;">+</span> content_sha1         = (known after apply)
-      <span style="color:green;">+</span> content_sha256       = (known after apply)
-      <span style="color:green;">+</span> content_sha512       = (known after apply)
-      <span style="color:green;">+</span> directory_permission = &quot;0777&quot;
-      <span style="color:green;">+</span> file_permission      = &quot;0777&quot;
-      <span style="color:green;">+</span> filename             = &quot;cache.staging.txt&quot;
-      <span style="color:green;">+</span> id                   = (known after apply)
-    }
-
-<span style="font-weight:bold;">Plan:</span> 1 to add, 0 to change, 0 to destroy.
+<span style="font-weight:bold;">data.http.weather: Still reading... [00m10s elapsed]</span>
+<span style="font-weight:bold;">data.http.weather: Still reading... [00m20s elapsed]</span>
 
 Changes to Outputs:
   <span style="color:green;">+</span> lang     = &quot;en&quot;
@@ -55,39 +23,19 @@ Changes to Outputs:
   <span style="color:green;">+</span> stage    = &quot;staging&quot;
   <span style="color:green;">+</span> units    = &quot;m&quot;
   <span style="color:green;">+</span> url      = &quot;https://wttr.in/Los+Angeles?0&amp;format=&amp;lang=en&amp;u=m&quot;
-  <span style="color:green;">+</span> weather  =
 
-        Weather report: Los+Angeles
-        
-          <span style="color:#c0c0c0;">     .-.     </span> Rain, mist
-          <span style="color:#c0c0c0;">    (   ).   </span> <span style="color:#87ff00;">+14</span>(<span style="color:#5fff00;">12</span>) °C     
-          <span style="color:#c0c0c0;">   (___(__)  </span> <span style="font-weight:bold;">↗</span> <span style="color:#ff8700;">25</span> km/h      
-          <span style="color:#87afff;">    ‘ ‘ ‘ ‘  </span> 3 km           
-          <span style="color:#87afff;">   ‘ ‘ ‘ ‘   </span> 3.0 mm
+You can apply this plan to save these new output values to the Terraform state, without changing any real infrastructure.
+<span style="color:red;">╷</span>
+<span style="color:red;">│</span> <span style="font-weight:bold;"></span><span style="font-weight:bold;color:red;">Error: </span><span style="font-weight:bold;">Error making request</span>
+<span style="color:red;">│</span> 
+<span style="color:red;">│</span>   with data.http.weather,
+<span style="color:red;">│</span>   on main.tf line 11, in data &quot;http&quot; &quot;weather&quot;:
+<span style="color:red;">│</span>   11: data &quot;http&quot; &quot;weather&quot; <span style="text-decoration:underline;">{</span>
+<span style="color:red;">│</span> 
+<span style="color:red;">│</span> Error making request: GET https://wttr.in/Los+Angeles?0&amp;format=&amp;lang=en&amp;u=m giving up after 1 attempt(s): Get &quot;https://wttr.in/Los+Angeles?0&amp;format=&amp;lang=en&amp;u=m&quot;: stream error: stream ID 1; INTERNAL_ERROR; received from peer
+<span style="color:red;">╵</span>
 
+<span style="font-weight:bold;"></span><span style="font-weight:bold;"></span><span style="font-weight:bold;"> </span><span style="font-weight:bold;">Error</span><span style="font-weight:bold;"> </span>
 
-<span style="font-weight:bold;">local_file.cache: Creating...</span>
-<span style="font-weight:bold;">local_file.cache: Creation complete after 0s </span>
-<span style="font-weight:bold;"></span><span style="font-weight:bold;color:green;">
-Apply complete! Resources: 1 added, 0 changed, 0 destroyed.
-</span><span style="font-weight:bold;"></span><span style="font-weight:bold;color:green;">
-Outputs:
-
-</span>lang = &quot;en&quot;
-location = &quot;Los Angeles&quot;
-stage = &quot;staging&quot;
-units = &quot;m&quot;
-url = &quot;https://wttr.in/Los+Angeles?0&amp;format=&amp;lang=en&amp;u=m&quot;
-weather =
-
-Weather report: Los+Angeles
-
-  <span style="color:#c0c0c0;">     .-.     </span> Rain, mist
-  <span style="color:#c0c0c0;">    (   ).   </span> <span style="color:#87ff00;">+14</span>(<span style="color:#5fff00;">12</span>) °C     
-  <span style="color:#c0c0c0;">   (___(__)  </span> <span style="font-weight:bold;">↗</span> <span style="color:#ff8700;">25</span> km/h      
-  <span style="color:#87afff;">    ‘ ‘ ‘ ‘  </span> 3 km           
-  <span style="color:#87afff;">   ‘ ‘ ‘ ‘   </span> 3.0 mm         
-
-
-
+ subcommand exited with code 1
 
