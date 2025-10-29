@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gofrs/flock"
@@ -33,6 +34,11 @@ const (
 	logKeyProvider = "provider"
 	logKeyIdentity = "identity"
 	logKeyProfile  = "profile"
+)
+
+var (
+	// legacyPathWarningOnce ensures we only warn about legacy path once per execution.
+	legacyPathWarningOnce sync.Once
 )
 
 // maskAccessKey returns the first 4 characters of an access key for logging.
@@ -140,28 +146,31 @@ func NewAWSFileManager(basePath string) (*AWSFileManager, error) {
 
 // checkLegacyAWSAtmosPath checks if the legacy ~/.aws/atmos directory exists
 // and logs a warning if it does, informing users about the new XDG-compliant location.
+// Uses sync.Once to ensure the warning is only shown once per execution.
 func checkLegacyAWSAtmosPath(newBaseDir string) {
-	homeDir, err := homedir.Dir()
-	if err != nil {
-		return // Cannot determine home directory, skip check.
-	}
+	legacyPathWarningOnce.Do(func() {
+		homeDir, err := homedir.Dir()
+		if err != nil {
+			return // Cannot determine home directory, skip check.
+		}
 
-	legacyPath := filepath.Join(homeDir, ".aws", "atmos")
+		legacyPath := filepath.Join(homeDir, ".aws", "atmos")
 
-	// Check if legacy path exists.
-	if _, err := os.Stat(legacyPath); os.IsNotExist(err) {
-		return // Legacy path doesn't exist, nothing to warn about.
-	}
+		// Check if legacy path exists.
+		if _, err := os.Stat(legacyPath); os.IsNotExist(err) {
+			return // Legacy path doesn't exist, nothing to warn about.
+		}
 
-	// Log warning about legacy path.
-	log.Warn(fmt.Sprintf(
-		"Legacy AWS credentials directory detected at %s. "+
-			"Atmos now uses XDG Base Directory Specification. "+
-			"New credentials are stored at %s. "+
-			"Run 'atmos auth login' to re-authenticate and store credentials in the new location.",
-		legacyPath,
-		newBaseDir,
-	))
+		// Log warning about legacy path.
+		log.Warn(fmt.Sprintf(
+			"Legacy AWS credentials directory detected at %s. "+
+				"Atmos now uses XDG Base Directory Specification. "+
+				"New credentials are stored at %s. "+
+				"Run 'atmos auth login' to re-authenticate and store credentials in the new location.",
+			legacyPath,
+			newBaseDir,
+		))
+	})
 }
 
 // WriteCredentials writes AWS credentials to the provider-specific file with identity profile.
