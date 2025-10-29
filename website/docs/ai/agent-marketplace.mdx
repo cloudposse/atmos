@@ -1,0 +1,903 @@
+---
+title: AI Agent Marketplace
+sidebar_position: 7
+sidebar_label: Agent Marketplace
+description: Install and share community AI agents from GitHub
+id: agent-marketplace
+---
+import Terminal from '@site/src/components/Terminal'
+import File from '@site/src/components/File'
+
+# AI Agent Marketplace
+
+The Atmos AI Agent Marketplace enables you to install, share, and use community-created AI agents from GitHub repositories. Extend Atmos with specialized agents created by the community or publish your own custom agents for others to use.
+
+## Overview
+
+The Agent Marketplace provides:
+
+- **Easy Installation** - Install agents directly from GitHub with a single command
+- **Security Validation** - Automatic validation of agent metadata and version compatibility
+- **Community Sharing** - Publish and discover agents created by the Atmos community
+- **Local Management** - Track installed agents in a local registry at `~/.atmos/agents/`
+- **Version Control** - Install specific versions using Git tags or branches
+- **Safety Features** - Confirmation prompts for agents requesting destructive tool access
+
+### How It Works
+
+1. **Agent Repositories**: Developers create agents with `.agent.yaml` metadata and `prompt.md` files
+2. **GitHub Hosting**: Agents are published as public GitHub repositories
+3. **Installation**: Users install agents with `atmos ai agent install <github-url>`
+4. **Local Registry**: Installed agents are tracked in `~/.atmos/agents/registry.json`
+5. **Automatic Loading**: Installed agents appear in the TUI agent selector (Ctrl+A)
+
+## Installing Agents
+
+### From GitHub
+
+Install agents using various GitHub URL formats:
+
+<Terminal title="terminal">
+```bash
+# GitHub shorthand (recommended)
+atmos ai agent install github.com/cloudposse/atmos-agent-terraform
+
+# With specific version tag
+atmos ai agent install github.com/cloudposse/atmos-agent-terraform@v1.2.3
+
+# With branch name
+atmos ai agent install github.com/cloudposse/atmos-agent-terraform@main
+
+# Full HTTPS URL
+atmos ai agent install https://github.com/cloudposse/atmos-agent-terraform.git
+
+# SSH URL
+atmos ai agent install git@github.com:cloudposse/atmos-agent-terraform.git
+```
+</Terminal>
+
+### Installation Process
+
+When you install an agent, Atmos:
+
+1. **Downloads** the repository from GitHub
+2. **Validates** the agent metadata and structure
+3. **Checks** version compatibility with your Atmos version
+4. **Prompts** for confirmation (shows tool access and permissions)
+5. **Installs** to `~/.atmos/agents/github.com/<owner>/<repo>/`
+6. **Registers** in the local agent registry
+
+### Installation Options
+
+#### Force Reinstall
+
+Reinstall an agent that's already installed:
+
+<Terminal title="terminal">
+```bash
+atmos ai agent install github.com/cloudposse/atmos-agent-terraform --force
+```
+</Terminal>
+
+#### Skip Confirmation
+
+Install without interactive confirmation prompt:
+
+<Terminal title="terminal">
+```bash
+atmos ai agent install github.com/cloudposse/atmos-agent-terraform --skip-confirm
+```
+</Terminal>
+
+:::warning Security Consideration
+Only use `--skip-confirm` with agents from trusted sources. Always review agent metadata before installing, especially the `tools.allowed` section.
+:::
+
+### Example Installation Session
+
+<Terminal title="terminal">
+```bash
+$ atmos ai agent install github.com/cloudposse/atmos-agent-terraform
+
+Downloading agent from https://github.com/cloudposse/atmos-agent-terraform.git...
+
+Agent: Terraform Expert
+Author: Cloud Posse
+Version: 1.0.0
+Repository: https://github.com/cloudposse/atmos-agent-terraform
+
+Tool Access:
+  Allowed: atmos_describe_component, read_component_file, search_files, execute_bash
+
+⚠️  WARNING: This agent requests access to destructive operations.
+   Review the agent source before using:
+   https://github.com/cloudposse/atmos-agent-terraform
+
+Do you want to install this agent? [y/N] y
+
+✓ Agent "Terraform Expert" installed successfully
+  Version: 1.0.0
+  Location: /Users/you/.atmos/agents/github.com/cloudposse/atmos-agent-terraform
+
+Usage: Switch to this agent in the TUI with Ctrl+A
+```
+</Terminal>
+
+## Managing Installed Agents
+
+### List Installed Agents
+
+View all installed community agents:
+
+<Terminal title="terminal">
+```bash
+atmos ai agent list
+```
+</Terminal>
+
+**Example output:**
+
+```
+Installed Community Agents:
+
+┌──────────────────────┬─────────────────────────┬─────────┬─────────────────────────────────────────┬─────────────┐
+│ NAME                 │ DISPLAY NAME            │ VERSION │ SOURCE                                  │ STATUS      │
+├──────────────────────┼─────────────────────────┼─────────┼─────────────────────────────────────────┼─────────────┤
+│ atmos-agent-cost     │ Cost Optimizer          │ 2.1.0   │ github.com/cloudposse/atmos-agent-cost  │ ✓ Enabled   │
+│ atmos-agent-terraform│ Terraform Expert        │ 1.0.0   │ github.com/cloudposse/atmos-agent-...   │ ✓ Enabled   │
+│ custom-compliance    │ Compliance Auditor      │ 1.5.2   │ github.com/myorg/compliance-agent       │ ✗ Disabled  │
+└──────────────────────┴─────────────────────────┴─────────┴─────────────────────────────────────────┴─────────────┘
+
+Total: 3 agents (2 enabled, 1 disabled)
+```
+
+### Uninstall an Agent
+
+Remove an installed agent:
+
+<Terminal title="terminal">
+```bash
+# Interactive confirmation
+atmos ai agent uninstall atmos-agent-terraform
+
+# Force uninstall (no confirmation)
+atmos ai agent uninstall atmos-agent-terraform --force
+```
+</Terminal>
+
+This removes:
+- Agent files from `~/.atmos/agents/`
+- Registry entry from `registry.json`
+
+### Enable/Disable Agents
+
+*(Coming soon)* Temporarily disable agents without uninstalling:
+
+<Terminal title="terminal">
+```bash
+# Disable agent (keeps files, removes from TUI)
+atmos ai agent disable atmos-agent-terraform
+
+# Re-enable agent
+atmos ai agent enable atmos-agent-terraform
+```
+</Terminal>
+
+## Creating Marketplace Agents
+
+### Agent Repository Structure
+
+A marketplace agent repository must follow this structure:
+
+```
+your-agent-repo/
+├── .agent.yaml          # Agent metadata (required)
+├── prompt.md            # Agent system prompt (required)
+├── README.md            # Documentation (recommended)
+├── examples/            # Usage examples (optional)
+└── LICENSE              # License file (recommended)
+```
+
+### Agent Metadata File
+
+Create `.agent.yaml` to define your agent:
+
+<File title=".agent.yaml">
+```yaml
+# Basic Information
+name: terraform-expert                    # Unique agent name (kebab-case)
+display_name: "Terraform Expert"          # User-facing name
+version: 1.0.0                           # Semantic version
+author: Cloud Posse                      # Author name or organization
+description: >                           # Brief description
+  Specialized AI agent for Terraform component development,
+  debugging, and best practices.
+
+# Category (one of: general, analysis, refactor, security, validation, optimization)
+category: refactor
+
+# Atmos Compatibility
+atmos:
+  min_version: 1.50.0                    # Minimum Atmos version (required)
+  max_version: ""                        # Maximum version (optional, empty = no limit)
+
+# Prompt Configuration
+prompt:
+  file: prompt.md                        # Prompt file location (required)
+
+# Tool Access (optional)
+tools:
+  allowed:                               # Tools this agent can use
+    - atmos_describe_component
+    - atmos_list_components
+    - read_component_file
+    - list_component_files
+    - search_files
+    - read_file
+    - edit_file
+    - execute_bash
+
+  restricted:                            # Tools requiring user confirmation
+    - edit_file
+    - execute_bash
+
+# Capabilities (optional)
+capabilities:
+  - terraform-development
+  - component-refactoring
+  - best-practices
+
+# Dependencies (optional)
+dependencies:
+  - git
+  - terraform
+
+# Environment Variables (optional)
+env:
+  - name: TF_VERSION
+    required: false
+    description: Terraform version to use for validation
+
+# Links
+repository: https://github.com/cloudposse/atmos-agent-terraform
+documentation: https://docs.example.com/terraform-agent
+```
+</File>
+
+### Required Fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `name` | string | Unique agent identifier (kebab-case) |
+| `display_name` | string | User-facing display name |
+| `version` | string | Semantic version (e.g., `1.2.3`) |
+| `author` | string | Author name or organization |
+| `description` | string | Brief description of agent purpose |
+| `category` | string | One of: `general`, `analysis`, `refactor`, `security`, `validation`, `optimization` |
+| `atmos.min_version` | string | Minimum compatible Atmos version |
+| `prompt.file` | string | Path to prompt file (usually `prompt.md`) |
+| `repository` | string | GitHub repository URL |
+
+### Prompt File Structure
+
+Create `prompt.md` with your agent's specialized instructions:
+
+<File title="prompt.md">
+```markdown
+# Agent: Terraform Expert
+
+## Role
+
+You are a specialized AI agent for Terraform component development,
+debugging, and applying infrastructure-as-code best practices within
+the Atmos framework.
+
+## Your Expertise
+
+- **Terraform Development** - Writing and maintaining Terraform modules
+- **Component Architecture** - Designing reusable Atmos components
+- **Best Practices** - Applying HashiCorp and Cloud Posse patterns
+- **Debugging** - Troubleshooting plan/apply errors
+- **Refactoring** - Improving existing Terraform code quality
+
+## Instructions
+
+### Analysis Workflow
+
+When a user asks you to analyze or improve Terraform code:
+
+1. **Read the component** - Use `read_component_file` to examine main.tf, variables.tf, outputs.tf
+2. **Understand context** - Use `atmos_describe_component` to see how component is used in stacks
+3. **Identify improvements** - Check for:
+   - Outdated syntax
+   - Missing required providers version constraints
+   - Hardcoded values that should be variables
+   - Missing outputs
+   - Poor resource naming
+   - Security issues
+
+4. **Propose changes** - Explain each improvement before implementing
+5. **Implement incrementally** - Make one change at a time
+6. **Validate** - Run `terraform validate` after changes
+
+### Coding Standards
+
+Apply these Terraform best practices:
+
+**Resource Naming:**
+- Use underscores for resource names: `aws_instance.web_server`
+- Descriptive names: `aws_s3_bucket.artifact_storage` not `aws_s3_bucket.bucket`
+
+**Variables:**
+- Always include description
+- Set appropriate types (string, number, bool, list, map)
+- Use sensible defaults where applicable
+- Group related variables with blank lines
+
+**Outputs:**
+- Include description for all outputs
+- Export all resources that other components might reference
+
+**Modules:**
+- Pin module versions: `version = "~> 5.0"`
+- Use semantic versioning
+
+### Tool Usage
+
+- **Read before write**: Always read files before editing
+- **Validate changes**: Run `terraform validate` after modifications
+- **Test incrementally**: Make small changes and verify each one
+- **Explain reasoning**: Tell the user why you're making each change
+
+### Response Style
+
+- Be concise but thorough
+- Show code examples for recommendations
+- Use Terraform terminology correctly
+- Cite official Terraform documentation when relevant
+- Format code blocks with ```hcl or ```terraform
+
+## Example Interactions
+
+### Example 1: Component Analysis
+
+User: "Analyze the VPC component and suggest improvements"
+
+Your approach:
+1. Read component files: main.tf, variables.tf, outputs.tf
+2. Check component usage: `atmos describe component vpc -s prod-use1`
+3. Identify issues: missing outputs, hardcoded CIDRs, no provider version
+4. Propose specific improvements with code examples
+5. Offer to implement changes incrementally
+
+### Example 2: Debugging
+
+User: "I'm getting 'Error: Reference to undeclared resource' in my EKS component"
+
+Your approach:
+1. Read the component file with the error
+2. Search for the resource reference causing the issue
+3. Explain the root cause clearly
+4. Provide the fix with explanation
+5. Suggest related improvements if found
+
+## Best Practices Summary
+
+**From Atmos Documentation:**
+
+- Use component catalog pattern for reusability
+- Follow stack inheritance hierarchy
+- Use mixins for cross-cutting concerns
+- Leverage atmos.Component() for cross-stack dependencies
+- Keep components focused and composable
+
+**From Terraform Best Practices:**
+
+- Use remote state for production
+- Enable state locking
+- Use workspaces appropriately
+- Apply the principle of least privilege for IAM
+- Enable encryption at rest and in transit
+- Tag all resources consistently
+
+## Restrictions
+
+- Always confirm before executing `terraform apply` or destructive commands
+- Never commit secrets or credentials to code
+- Avoid making multiple unrelated changes simultaneously
+- Don't modify state files manually
+```
+</File>
+
+### Publishing Your Agent
+
+1. **Create repository**:
+   <Terminal title="terminal">
+   ```bash
+   mkdir atmos-agent-terraform
+   cd atmos-agent-terraform
+   git init
+   ```
+   </Terminal>
+
+2. **Add files**:
+   <Terminal title="terminal">
+   ```bash
+   # Create .agent.yaml and prompt.md
+   vim .agent.yaml
+   vim prompt.md
+   vim README.md
+   ```
+   </Terminal>
+
+3. **Commit and push**:
+   <Terminal title="terminal">
+   ```bash
+   git add .
+   git commit -m "Initial agent release"
+   git remote add origin git@github.com:yourorg/atmos-agent-terraform.git
+   git push -u origin main
+   ```
+   </Terminal>
+
+4. **Tag version**:
+   <Terminal title="terminal">
+   ```bash
+   git tag v1.0.0
+   git push origin v1.0.0
+   ```
+   </Terminal>
+
+5. **Share with community**:
+   - Add to [Atmos Agents Community List](https://github.com/cloudposse/atmos/discussions)
+   - Include installation instructions in README
+   - Add usage examples
+
+### Testing Your Agent Locally
+
+Before publishing, test your agent:
+
+<Terminal title="terminal">
+```bash
+# Install from local directory (for testing)
+atmos ai agent install file:///path/to/your-agent
+
+# Or install from your GitHub repo
+atmos ai agent install github.com/yourorg/atmos-agent-terraform
+
+# Test in TUI
+atmos ai chat
+# Press Ctrl+A, select your agent
+# Test various prompts and workflows
+```
+</Terminal>
+
+## Validation Rules
+
+Atmos validates all agents during installation. Your agent must pass these checks:
+
+### Metadata Validation
+
+#### Required Fields
+- ✅ `name` must be present and kebab-case
+- ✅ `display_name` must be present
+- ✅ `version` must be valid semantic version
+- ✅ `author` must be present
+- ✅ `description` must be present
+- ✅ `category` must be one of: `general`, `analysis`, `refactor`, `security`, `validation`, `optimization`
+- ✅ `atmos.min_version` must be present and valid
+- ✅ `prompt.file` must be present
+- ✅ `repository` must be present
+
+#### Tool Configuration
+- ✅ Tool names must be valid Atmos tools
+- ✅ No tool can appear in both `allowed` and `restricted` lists
+
+### File Validation
+
+#### Prompt File
+- ✅ File specified in `prompt.file` must exist
+- ✅ Prompt file must not be empty
+- ✅ Must start with level-1 Markdown heading (`# Agent: Name`)
+- ⚠️ Should be under 100KB for optimal performance
+
+### Version Compatibility
+
+#### Atmos Version Checks
+- ✅ Your Atmos version must be >= `atmos.min_version`
+- ✅ If `atmos.max_version` specified, your version must be <= max version
+
+**Example validation error:**
+
+```
+Error: agent validation failed: agent requires Atmos >= 1.50.0,
+but current version is 1.48.0
+```
+
+**Fix:** Upgrade Atmos or use an older version of the agent:
+
+<Terminal title="terminal">
+```bash
+# Upgrade Atmos
+brew upgrade atmos
+
+# Or install older agent version
+atmos ai agent install github.com/user/agent@v0.9.0
+```
+</Terminal>
+
+## Security Considerations
+
+### Tool Access Control
+
+Agents declare which tools they need access to. Review these carefully:
+
+#### Safe Tools (Read-only)
+```yaml
+tools:
+  allowed:
+    - atmos_describe_component      # Read component config
+    - atmos_list_stacks            # List stacks
+    - read_file                    # Read files
+    - read_component_file          # Read component files
+    - search_files                 # Search in files
+```
+
+#### Potentially Dangerous Tools
+```yaml
+tools:
+  allowed:
+    - edit_file                    # Modifies files
+    - write_file                   # Creates files
+    - execute_bash                 # Executes commands
+    - atmos_terraform_apply        # Applies Terraform
+    - atmos_terraform_destroy      # Destroys infrastructure
+```
+
+:::danger Review Before Installing
+**Always review agent source code on GitHub before installing agents that request:**
+- File write access (`edit_file`, `write_file`)
+- Command execution (`execute_bash`)
+- Infrastructure changes (`terraform_apply`, `terraform_destroy`, `helmfile_apply`)
+:::
+
+### Restricted Tools
+
+Use the `restricted` field to require confirmation for sensitive operations:
+
+<File title=".agent.yaml">
+```yaml
+tools:
+  allowed:
+    - read_file
+    - edit_file
+    - execute_bash
+
+  restricted:
+    - edit_file        # User must confirm before editing
+    - execute_bash     # User must confirm before executing
+```
+</File>
+
+This creates a two-tier safety system:
+1. **Allowed** - Agent can use these tools
+2. **Restricted** - Agent can use, but user must confirm each usage
+
+### Security Best Practices
+
+**For Users:**
+- ✅ Only install agents from trusted sources
+- ✅ Review agent repository on GitHub before installing
+- ✅ Check tool access in `.agent.yaml`
+- ✅ Read agent prompt to understand behavior
+- ✅ Start with `--skip-confirm=false` (default) until you trust an agent
+- ⚠️ Be cautious with agents requesting `terraform_apply`, `execute_bash`, or `edit_file`
+
+**For Agent Authors:**
+- ✅ Request minimal tool access (principle of least privilege)
+- ✅ Mark destructive tools as `restricted`
+- ✅ Document all tool usage in prompt
+- ✅ Include clear descriptions in `.agent.yaml`
+- ✅ Add security warnings in README
+- ✅ Keep prompts focused and transparent
+
+## Marketplace Agent vs Built-in Agent vs Custom Agent
+
+Atmos has three types of agents:
+
+| Feature | Built-in Agents | Marketplace Agents | Custom Agents |
+|---------|----------------|-------------------|---------------|
+| **Location** | Compiled into Atmos binary | `~/.atmos/agents/` | `atmos.yaml` config |
+| **Installation** | Pre-installed | `atmos ai agent install` | Add to config file |
+| **Updates** | Atmos releases | Git pull/reinstall | Edit config |
+| **Sharing** | Everyone has them | Share via GitHub | Team only (via config repo) |
+| **Examples** | General, Stack Analyzer | Community contributions | Company-specific |
+| **Prompt Source** | `pkg/ai/agents/prompts/*.md` | Repository's `prompt.md` | Inline in `atmos.yaml` |
+| **Version Control** | Atmos version | Git tags/branches | Config file changes |
+
+### When to Use Each
+
+**Use Built-in Agents:**
+- Standard Atmos workflows
+- Proven, tested agents
+- No installation needed
+- Examples: Stack Analyzer, Security Auditor
+
+**Use Marketplace Agents:**
+- Specialized community tools
+- Reusable across teams/organizations
+- Version-controlled agents
+- Examples: Cost optimizer, compliance checker, cloud provider specialists
+
+**Use Custom Agents:**
+- Company-specific workflows
+- One-off experimental agents
+- Team-internal tools
+- Quick prototypes
+
+## Example Marketplace Agents
+
+### Terraform State Migrator
+
+<File title=".agent.yaml">
+```yaml
+name: terraform-state-migrator
+display_name: "Terraform State Migrator"
+version: 1.0.0
+author: Cloud Posse
+description: Helps migrate Terraform state between backends and workspaces
+category: refactor
+
+atmos:
+  min_version: 1.50.0
+
+prompt:
+  file: prompt.md
+
+tools:
+  allowed:
+    - atmos_describe_component
+    - read_component_file
+    - read_file
+    - execute_bash
+  restricted:
+    - execute_bash
+
+repository: https://github.com/cloudposse/atmos-agent-state-migrator
+```
+</File>
+
+### Cost Optimization Analyzer
+
+<File title=".agent.yaml">
+```yaml
+name: cost-optimizer
+display_name: "AWS Cost Optimizer"
+version: 2.0.0
+author: Example Corp
+description: Analyzes infrastructure configurations for cost optimization opportunities
+category: optimization
+
+atmos:
+  min_version: 1.48.0
+  max_version: 2.0.0
+
+prompt:
+  file: prompt.md
+
+tools:
+  allowed:
+    - atmos_describe_component
+    - atmos_describe_stacks
+    - atmos_list_stacks
+    - read_component_file
+    - read_stack_file
+    - search_files
+
+capabilities:
+  - cost-analysis
+  - rightsizing-recommendations
+  - reserved-instance-planning
+
+env:
+  - name: AWS_COST_THRESHOLD
+    required: false
+    description: Monthly cost threshold for recommendations (default 1000)
+
+repository: https://github.com/example/atmos-agent-cost-optimizer
+documentation: https://docs.example.com/cost-optimizer
+```
+</File>
+
+### Multi-Cloud Security Auditor
+
+<File title=".agent.yaml">
+```yaml
+name: multicloud-security
+display_name: "Multi-Cloud Security Auditor"
+version: 1.5.0
+author: Security Team
+description: Security auditing for AWS, Azure, and GCP infrastructure
+category: security
+
+atmos:
+  min_version: 1.50.0
+
+prompt:
+  file: prompt.md
+
+tools:
+  allowed:
+    - atmos_describe_component
+    - atmos_list_stacks
+    - atmos_validate_stacks
+    - read_component_file
+    - read_stack_file
+    - search_files
+
+capabilities:
+  - aws-security-audit
+  - azure-security-audit
+  - gcp-security-audit
+  - compliance-checking
+
+dependencies:
+  - tfsec
+  - checkov
+
+repository: https://github.com/example/atmos-agent-multicloud-security
+```
+</File>
+
+## Troubleshooting
+
+### Agent Not Found After Installation
+
+**Symptom:** Agent installed successfully but doesn't appear in TUI (Ctrl+A)
+
+**Cause:** Agent may be disabled or registry is corrupted
+
+**Solution:**
+<Terminal title="terminal">
+```bash
+# List agents to check status
+atmos ai agent list
+
+# Check registry file
+cat ~/.atmos/agents/registry.json
+
+# Restart Atmos AI session
+atmos ai chat
+```
+</Terminal>
+
+### Version Compatibility Error
+
+**Symptom:**
+```
+Error: agent requires Atmos >= 1.50.0, but current version is 1.48.0
+```
+
+**Solution:**
+
+<Terminal title="terminal">
+```bash
+# Option 1: Upgrade Atmos
+brew upgrade atmos
+
+# Option 2: Install older agent version
+atmos ai agent install github.com/user/agent@v0.9.0
+
+# Check compatible versions in agent's README
+```
+</Terminal>
+
+### Invalid Metadata Error
+
+**Symptom:**
+```
+Error: invalid agent metadata: display_name is required
+```
+
+**Cause:** Agent repository has malformed `.agent.yaml`
+
+**Solution:**
+- Report issue to agent author
+- Check agent's GitHub issues for known problems
+- Try different version: `@v1.0.0` instead of `@main`
+
+### Tool Access Error
+
+**Symptom:** Agent can't use certain tools
+
+**Cause:** Tool not in agent's `allowed` list
+
+**Solution:**
+- This is intentional - agent author restricted access
+- Fork the agent and modify `.agent.yaml` if needed (use at your own risk)
+- Request author to add tool access via GitHub issue
+
+### Agent Installation Fails
+
+**Symptom:** Download or installation errors
+
+**Solution:**
+
+<Terminal title="terminal">
+```bash
+# Check internet connection
+curl -I https://github.com
+
+# Verify GitHub URL is correct
+# Check if repository is public
+# Ensure you have git installed
+which git
+
+# Try with HTTPS instead of SSH
+atmos ai agent install https://github.com/user/repo.git
+```
+</Terminal>
+
+### Registry Corruption
+
+**Symptom:** `Error: registry corrupted` or JSON parse errors
+
+**Solution:**
+
+<Terminal title="terminal">
+```bash
+# Backup current registry
+cp ~/.atmos/agents/registry.json ~/.atmos/agents/registry.json.backup
+
+# Reset registry (removes all agent registrations, but keeps agent files)
+rm ~/.atmos/agents/registry.json
+
+# Reinstall agents
+atmos ai agent install github.com/user/agent1
+atmos ai agent install github.com/user/agent2
+```
+</Terminal>
+
+## Related Documentation
+
+- [AI Agents](/ai/agents) - Built-in agents and agent system overview
+- [AI Configuration](/ai/configuration) - Configure AI providers
+- [AI Chat Command](/cli/commands/ai/chat) - Interactive AI chat interface
+- [Tool Execution](/ai/tools) - How AI agents use tools
+
+## Community
+
+### Discover Agents
+
+Browse community agents:
+- [Atmos Agents Discussion](https://github.com/cloudposse/atmos/discussions) - Official agent directory
+- [Awesome Atmos](https://github.com/cloudposse/awesome-atmos) - Curated list of Atmos resources
+
+### Share Your Agent
+
+Share your agent with the community:
+1. Create agent repository on GitHub
+2. Add comprehensive README with examples
+3. Tag initial release (`v1.0.0`)
+4. Post in [Atmos Discussions](https://github.com/cloudposse/atmos/discussions)
+5. Add `atmos-agent` topic to your repository
+
+### Agent Naming Convention
+
+Follow these conventions for community agents:
+
+**Repository name:**
+- Prefix with `atmos-agent-`
+- Use kebab-case
+- Be descriptive
+- Examples: `atmos-agent-terraform`, `atmos-agent-cost-optimizer`
+
+**Agent name in `.agent.yaml`:**
+- No prefix needed
+- Use kebab-case
+- Examples: `terraform-expert`, `cost-optimizer`, `security-auditor`
+
+**Display name:**
+- Human-readable
+- Title Case
+- Examples: "Terraform Expert", "Cost Optimizer", "Security Auditor"
