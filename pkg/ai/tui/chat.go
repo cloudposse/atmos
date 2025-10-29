@@ -865,7 +865,7 @@ func (m *ChatModel) updateViewportContent() {
 		case roleAssistant:
 			style = lipgloss.NewStyle().
 				Foreground(lipgloss.Color(theme.ColorCyan))
-			// Include alien emoji, agent icon, and provider name in the prefix.
+			// Include alien emoji, provider name, and agent icon in the prefix.
 			provider := msg.Provider
 			if provider == "" {
 				provider = "unknown"
@@ -873,9 +873,9 @@ func (m *ChatModel) updateViewportContent() {
 			// Add agent icon if we have a current agent
 			agentIcon := ""
 			if m.currentAgent != nil {
-				agentIcon = getAgentIcon(m.currentAgent.Name) + " "
+				agentIcon = " " + getAgentIcon(m.currentAgent.Name)
 			}
-			prefix = fmt.Sprintf("Atmos AI %s👽 (%s):", agentIcon, provider)
+			prefix = fmt.Sprintf("Atmos AI 👽 (%s)%s:", provider, agentIcon)
 		case roleSystem:
 			style = lipgloss.NewStyle().
 				Foreground(lipgloss.Color(theme.ColorRed)).
