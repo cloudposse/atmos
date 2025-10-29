@@ -211,27 +211,16 @@ func ExecuteWorkflow(
 				}
 			}
 
-			// Build workflow error with structured context.
+			// Build workflow error with structured context and exit code.
+			// Note: We don't wrap with ExecError because workflow errors are
+			// higher-level than raw command execution - they represent orchestration
+			// failures with their own structured context (explanation, resume hints).
 			stepErr := errUtils.Build(ErrWorkflowStepFailed).
 				WithTitle("Workflow Error").
 				WithExplanationf("The following command failed to execute:\n\n%s", failedCmd).
 				WithHintf("To resume the workflow from this step, run:\n\n%s", resumeCommand).
+				WithExitCode(exitCode).
 				Err()
-
-			// Wrap with ExecError if it's a command execution failure with exit code.
-			if exitCode > 0 {
-				// Determine command name and args for ExecError.
-				cmdParts := strings.Fields(failedCmd)
-				cmdName := ""
-				cmdArgs := []string{}
-				if len(cmdParts) > 0 {
-					cmdName = cmdParts[0]
-					if len(cmdParts) > 1 {
-						cmdArgs = cmdParts[1:]
-					}
-				}
-				stepErr = errUtils.NewExecError(cmdName, cmdArgs, exitCode, stepErr)
-			}
 
 			errUtils.CheckErrorAndPrint(stepErr, "", "")
 			return stepErr
