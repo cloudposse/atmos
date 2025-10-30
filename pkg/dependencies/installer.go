@@ -67,7 +67,7 @@ func (i *Installer) ensureTool(tool string, version string) error {
 
 // isToolInstalled checks if a tool version is already installed.
 func (i *Installer) isToolInstalled(tool string, version string) bool {
-	defer perf.Track(i.atmosConfig, "dependencies.isToolInstalled")()
+	defer perf.Track(i.atmosConfig, "dependencies.Installer.isToolInstalled")()
 
 	// Get tools directory
 	toolsDir := i.atmosConfig.Toolchain.InstallPath

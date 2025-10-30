@@ -30,7 +30,7 @@ type toolRow struct {
 }
 
 func RunList() error {
-	defer perf.Track(nil, "toolchain.ListTools")()
+	defer perf.Track(nil, "toolchain.RunList")()
 
 	installer := NewInstaller()
 	toolVersionsFile := GetToolVersionsFilePath()

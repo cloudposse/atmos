@@ -15,7 +15,7 @@ import (
 
 // ListToolVersions handles the logic for listing tool versions.
 func ListToolVersions(showAll bool, limit int, toolName string) error {
-	defer perf.Track(nil, "toolchain.GetVersionForTool")()
+	defer perf.Track(nil, "toolchain.ListToolVersions")()
 
 	filePath := GetToolVersionsFilePath()
 	installer := NewInstaller()

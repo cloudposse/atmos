@@ -16,7 +16,7 @@ import (
 
 // InfoExec handles the core logic for retrieving and formatting tool information.
 func InfoExec(toolName, outputFormat string) error {
-	defer perf.Track(nil, "toolchain.RunInfo")()
+	defer perf.Track(nil, "toolchain.InfoExec")()
 
 	ctx := context.Background()
 
