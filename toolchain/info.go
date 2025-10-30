@@ -243,7 +243,7 @@ func formatInstallExamples(output *strings.Builder, ctx *toolContext) {
 
 // getEvaluatedToolYAML returns the tool configuration as YAML with all templates evaluated.
 func getEvaluatedToolYAML(tool *registry.Tool, version string, installer *Installer) (string, error) {
-	// Build the asset URL to evaluate templates (if Asset is set)
+	// Build the asset URL to evaluate templates (if Asset is set).
 	assetURL := ""
 	var err error
 	if tool.Asset != "" {
@@ -253,7 +253,7 @@ func getEvaluatedToolYAML(tool *registry.Tool, version string, installer *Instal
 		}
 	}
 
-	// Create a copy of the tool with evaluated templates
+	// Create a copy of the tool with evaluated templates.
 	evaluatedTool := struct {
 		Type         string              `yaml:"type"`
 		RepoOwner    string              `yaml:"repo_owner"`
@@ -280,7 +280,7 @@ func getEvaluatedToolYAML(tool *registry.Tool, version string, installer *Instal
 		ProcessedURL: assetURL,
 	}
 
-	// Marshal to YAML
+	// Marshal to YAML.
 	data, err := yaml.Marshal(evaluatedTool)
 	if err != nil {
 		return "", fmt.Errorf("failed to marshal tool to YAML: %w", err)
