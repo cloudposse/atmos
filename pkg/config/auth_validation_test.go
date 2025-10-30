@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/cloudposse/atmos/pkg/authvalidation"
+	"github.com/cloudposse/atmos/pkg/auth/syntax"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -104,7 +104,7 @@ components:
 func TestValidateAuthConfigSyntax_EmptyConfig(t *testing.T) {
 	// Empty auth config should not trigger validation.
 	authConfig := &schema.AuthConfig{}
-	err := authvalidation.ValidateSyntax(authConfig)
+	err := syntax.ValidateSyntax(authConfig)
 	assert.NoError(t, err)
 }
 
@@ -119,7 +119,7 @@ func TestValidateAuthConfigSyntax_OnlyProvidersConfigured(t *testing.T) {
 			},
 		},
 	}
-	err := authvalidation.ValidateSyntax(authConfig)
+	err := syntax.ValidateSyntax(authConfig)
 	assert.NoError(t, err)
 }
 
@@ -132,7 +132,7 @@ func TestValidateAuthConfigSyntax_InvalidProviderKind(t *testing.T) {
 			},
 		},
 	}
-	err := authvalidation.ValidateSyntax(authConfig)
+	err := syntax.ValidateSyntax(authConfig)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "invalid provider kind")
 }

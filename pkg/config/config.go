@@ -9,7 +9,7 @@ import (
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/pkg/errors"
 
-	"github.com/cloudposse/atmos/pkg/authvalidation"
+	"github.com/cloudposse/atmos/pkg/auth/syntax"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/cloudposse/atmos/pkg/version"
@@ -48,7 +48,7 @@ func InitCliConfig(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks
 	// Validate auth configuration syntax early to catch configuration errors.
 	// This performs lightweight validation of provider/identity kinds without
 	// creating instances or attempting authentication.
-	if err = authvalidation.ValidateSyntax(&atmosConfig.Auth); err != nil {
+	if err = syntax.ValidateSyntax(&atmosConfig.Auth); err != nil {
 		return atmosConfig, err
 	}
 

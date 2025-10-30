@@ -1,4 +1,4 @@
-package authvalidation
+package syntax
 
 import (
 	"fmt"
@@ -12,9 +12,9 @@ import (
 // ValidateSyntax performs lightweight syntactic validation of auth configuration.
 // It checks that provider and identity kinds are valid without attempting to create
 // instances or validate actual authentication. This is suitable for early validation
-// during config loading without circular dependencies.
+// during config loading without circular dependencies on the factory package.
 func ValidateSyntax(authConfig *schema.AuthConfig) error {
-	defer perf.Track(nil, "authvalidation.ValidateSyntax")()
+	defer perf.Track(nil, "validation.ValidateSyntax")()
 
 	if authConfig == nil {
 		return fmt.Errorf("%w: auth config cannot be nil", errUtils.ErrInvalidAuthConfig)
