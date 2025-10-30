@@ -16,12 +16,12 @@ func TestWorkflowWithIdentity_ShellCommand(t *testing.T) {
 		t.Skipf("Skipping integration test in short mode: spawns actual shell process")
 	}
 
-	// Get OS-specific shell and commands.
+	// Get OS-specific shell command.
 	var exitCmd string
 	if runtime.GOOS == "windows" {
-		exitCmd = "/c"
+		exitCmd = "cmd /c exit 0"
 	} else {
-		exitCmd = "-c"
+		exitCmd = "true"
 	}
 
 	// Set up test fixture with auth configuration.
@@ -39,7 +39,7 @@ func TestWorkflowWithIdentity_ShellCommand(t *testing.T) {
 		Steps: []schema.WorkflowStep{
 			{
 				Name:     "test-step-with-identity",
-				Command:  exitCmd + " exit 0",
+				Command:  exitCmd,
 				Type:     "shell",
 				Identity: "mock-identity",
 			},
@@ -58,12 +58,12 @@ func TestWorkflowWithIdentity_MultipleSteps(t *testing.T) {
 		t.Skipf("Skipping integration test in short mode: spawns actual shell process")
 	}
 
-	// Get OS-specific shell and commands.
+	// Get OS-specific shell command.
 	var exitCmd string
 	if runtime.GOOS == "windows" {
-		exitCmd = "/c"
+		exitCmd = "cmd /c exit 0"
 	} else {
-		exitCmd = "-c"
+		exitCmd = "true"
 	}
 
 	// Set up test fixture with auth configuration.
@@ -81,18 +81,18 @@ func TestWorkflowWithIdentity_MultipleSteps(t *testing.T) {
 		Steps: []schema.WorkflowStep{
 			{
 				Name:    "step-without-identity",
-				Command: exitCmd + " exit 0",
+				Command: exitCmd,
 				Type:    "shell",
 			},
 			{
 				Name:     "step-with-mock-identity",
-				Command:  exitCmd + " exit 0",
+				Command:  exitCmd,
 				Type:     "shell",
 				Identity: "mock-identity",
 			},
 			{
 				Name:     "step-with-mock-identity-2",
-				Command:  exitCmd + " exit 0",
+				Command:  exitCmd,
 				Type:     "shell",
 				Identity: "mock-identity-2",
 			},
@@ -111,12 +111,12 @@ func TestWorkflowWithIdentity_InvalidIdentity(t *testing.T) {
 		t.Skipf("Skipping integration test in short mode: requires auth configuration")
 	}
 
-	// Get OS-specific shell and commands.
+	// Get OS-specific shell command.
 	var exitCmd string
 	if runtime.GOOS == "windows" {
-		exitCmd = "/c"
+		exitCmd = "cmd /c exit 0"
 	} else {
-		exitCmd = "-c"
+		exitCmd = "true"
 	}
 
 	// Set up test fixture with auth configuration.
@@ -134,7 +134,7 @@ func TestWorkflowWithIdentity_InvalidIdentity(t *testing.T) {
 		Steps: []schema.WorkflowStep{
 			{
 				Name:     "step-with-invalid-identity",
-				Command:  exitCmd + " exit 0",
+				Command:  exitCmd,
 				Type:     "shell",
 				Identity: "nonexistent-identity",
 			},
@@ -218,12 +218,12 @@ func TestWorkflowWithIdentity_CommandLineOverride(t *testing.T) {
 		t.Skipf("Skipping integration test in short mode: spawns actual shell process")
 	}
 
-	// Get OS-specific shell and commands.
+	// Get OS-specific shell command.
 	var exitCmd string
 	if runtime.GOOS == "windows" {
-		exitCmd = "/c"
+		exitCmd = "cmd /c exit 0"
 	} else {
-		exitCmd = "-c"
+		exitCmd = "true"
 	}
 
 	// Set up test fixture with auth configuration.
@@ -241,7 +241,7 @@ func TestWorkflowWithIdentity_CommandLineOverride(t *testing.T) {
 		Steps: []schema.WorkflowStep{
 			{
 				Name:    "step-without-identity",
-				Command: exitCmd + " exit 0",
+				Command: exitCmd,
 				Type:    "shell",
 				// No identity specified in step
 			},
