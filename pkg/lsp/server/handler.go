@@ -81,24 +81,10 @@ func (h *Handler) createServerCapabilities() protocol.ServerCapabilities {
 		},
 		// Hover support.
 		HoverProvider: &trueVal,
-		// Definition support.
+		// Definition support (stub implementation - returns empty).
 		DefinitionProvider: &trueVal,
-		// Document symbols.
-		DocumentSymbolProvider: &trueVal,
-		// Workspace capabilities.
-		Workspace: &protocol.ServerCapabilitiesWorkspace{
-			FileOperations: &protocol.ServerCapabilitiesWorkspaceFileOperations{
-				DidCreate: &protocol.FileOperationRegistrationOptions{
-					Filters: []protocol.FileOperationFilter{
-						{
-							Pattern: protocol.FileOperationPattern{
-								Glob: "**/*.{yaml,yml}",
-							},
-						},
-					},
-				},
-			},
-		},
+		// Note: DocumentSymbolProvider and FileOperations removed until implemented.
+		// See docs/prd/atmos-lsp-verification-report.md for details.
 	}
 }
 

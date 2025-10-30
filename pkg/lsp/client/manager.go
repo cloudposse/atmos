@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/cloudposse/atmos/pkg/lsp"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -117,6 +118,8 @@ func (m *Manager) GetClientForFile(filePath string) (*Client, bool) {
 }
 
 // AnalyzeFile opens a file in the appropriate LSP server and returns diagnostics.
+// It waits up to 500ms for diagnostics to be published by the LSP server to handle
+// asynchronous diagnostic publication.
 func (m *Manager) AnalyzeFile(filePath, content string) ([]lsp.Diagnostic, error) {
 	client, found := m.GetClientForFile(filePath)
 	if !found {
@@ -135,14 +138,32 @@ func (m *Manager) AnalyzeFile(filePath, content string) ([]lsp.Diagnostic, error
 		return nil, fmt.Errorf("failed to open document: %w", err)
 	}
 
-	// Get diagnostics (may need to wait for async diagnostics)
-	// For now, return immediate diagnostics
-	diagnostics := client.GetDiagnostics(uri)
+	// Wait up to 500ms for diagnostics to be published.
+	// LSP servers publish diagnostics asynchronously, so we need to poll
+	// until diagnostics are available or timeout occurs.
+	timeout := time.After(500 * time.Millisecond)
+	ticker := time.NewTicker(50 * time.Millisecond)
+	defer ticker.Stop()
 
-	// Close document
-	_ = client.CloseDocument(uri)
+	var diagnostics []lsp.Diagnostic
 
-	return diagnostics, nil
+	for {
+		select {
+		case <-timeout:
+			// Return whatever diagnostics we have after timeout
+			diagnostics = client.GetDiagnostics(uri)
+			_ = client.CloseDocument(uri)
+			return diagnostics, nil
+
+		case <-ticker.C:
+			// Check if diagnostics are available
+			diagnostics = client.GetDiagnostics(uri)
+			if len(diagnostics) > 0 {
+				_ = client.CloseDocument(uri)
+				return diagnostics, nil
+			}
+		}
+	}
 }
 
 // GetAllDiagnostics returns all diagnostics from all LSP servers.

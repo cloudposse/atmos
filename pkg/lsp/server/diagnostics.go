@@ -2,6 +2,8 @@ package server
 
 import (
 	"path/filepath"
+	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/tliron/glsp"
@@ -71,18 +73,21 @@ func (h *Handler) validateYAMLSyntax(doc *Document) []protocol.Diagnostic {
 	var content interface{}
 	err := yaml.Unmarshal([]byte(doc.Text), &content)
 	if err != nil {
+		// Extract line and column information from error.
+		line, col := h.extractErrorPosition(err)
+
 		// YAML syntax error.
 		diag := protocol.Diagnostic{
 			Range: protocol.Range{
-				Start: protocol.Position{Line: 0, Character: 0},
-				End:   protocol.Position{Line: 0, Character: 0},
+				Start: protocol.Position{Line: uint32(line), Character: uint32(col)},
+				End:   protocol.Position{Line: uint32(line), Character: uint32(col)},
 			},
 			Severity: severityPtr(protocol.DiagnosticSeverityError),
 			Source:   stringPtr("atmos-lsp"),
 			Message:  "YAML syntax error: " + err.Error(),
 		}
 
-		// Try to extract line number from error message if possible.
+		// Try to extract more specific error message if possible.
 		if yamlErr, ok := err.(*yaml.TypeError); ok {
 			if len(yamlErr.Errors) > 0 {
 				diag.Message = "YAML syntax error: " + yamlErr.Errors[0]
@@ -93,6 +98,38 @@ func (h *Handler) validateYAMLSyntax(doc *Document) []protocol.Diagnostic {
 	}
 
 	return diagnostics
+}
+
+// extractErrorPosition extracts line and column numbers from YAML errors.
+// Returns 0-based line and column numbers.
+func (h *Handler) extractErrorPosition(err error) (int, int) {
+	if err == nil {
+		return 0, 0
+	}
+
+	errMsg := err.Error()
+
+	// Try to extract "line X" pattern.
+	// YAML errors typically look like: "yaml: line 5: mapping values are not allowed in this context"
+	lineRegex := regexp.MustCompile(`line\s+(\d+)`)
+	if matches := lineRegex.FindStringSubmatch(errMsg); len(matches) > 1 {
+		if lineNum, err := strconv.Atoi(matches[1]); err == nil {
+			// YAML reports 1-based lines, LSP uses 0-based.
+			return lineNum - 1, 0
+		}
+	}
+
+	// Try to extract "line X: column Y" pattern.
+	lineColRegex := regexp.MustCompile(`line\s+(\d+):\s*column\s+(\d+)`)
+	if matches := lineColRegex.FindStringSubmatch(errMsg); len(matches) > 2 {
+		lineNum, _ := strconv.Atoi(matches[1])
+		colNum, _ := strconv.Atoi(matches[2])
+		// YAML reports 1-based lines and columns, LSP uses 0-based.
+		return lineNum - 1, colNum - 1
+	}
+
+	// No position found, return 0:0.
+	return 0, 0
 }
 
 // validateAtmosStack performs Atmos-specific validation.
@@ -204,7 +241,9 @@ func (h *Handler) validateVarsSection(stackContent map[string]interface{}) []pro
 }
 
 // createDiagnostic creates a protocol diagnostic with error severity.
-// Line and character positions are set to 0 since we don't have precise error locations yet.
+// Note: Position information is not available for structural validation errors,
+// so they are reported at line 0. For YAML syntax errors, use validateYAMLSyntax
+// which extracts actual error positions.
 func (h *Handler) createDiagnostic(message string) protocol.Diagnostic {
 	return protocol.Diagnostic{
 		Range: protocol.Range{

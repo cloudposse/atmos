@@ -882,21 +882,64 @@ ATMOS_LOGS_LEVEL=Debug atmos <command>
 
     Each server handles its configured file types independently.
 
-    ## Security & Privacy
+    ## Security Considerations
 
-    LSP servers run **locally on your machine**:
+    ### External LSP Server Access
 
-    - ✅ No file contents are sent to external servers
-    - ✅ LSP servers only access files you explicitly validate
+    **Important:** External LSP servers have **read access to file contents** sent for validation.
+
+    While most LSP servers run locally, they still have access to your infrastructure code:
+
+    - **File contents:** LSP servers read complete file contents during validation
+    - **Configuration data:** Servers may access environment variables, settings
+    - **Network access:** Some servers may send telemetry or connect to remote services
+    - **Code execution:** LSP servers execute on your machine with your user permissions
+
+    ### Recommendations
+
+    **1. Trust Server Source**
+    - Only use LSP servers from trusted, verified sources
+    - Prefer official servers from language maintainers
+    - Review server source code before installation when possible
+
+    **2. Review Permissions**
+    - Check what data each server collects (review documentation)
+    - Review server network activity (use tools like `lsof`, `netstat`)
+    - Monitor server behavior during validation
+
+    **3. Sensitive Data Handling**
+    - Be cautious validating files containing secrets, credentials, or API keys
+    - Consider using local-only validation for sensitive projects
+    - Use `.gitignore` patterns to exclude sensitive files from validation
+
+    **4. Network & Telemetry**
+    - Some servers send usage data to remote services
+    - Check server configuration for telemetry settings
+    - Disable telemetry if required for compliance
+
+    **5. Server Updates**
+    - Keep LSP servers updated to latest versions
+    - Subscribe to security advisories for servers you use
+    - Test updates in non-production environments first
+
+    ### Trusted Servers
+
+    These official LSP servers are widely trusted:
+
+    - **yaml-language-server:** Open source, actively maintained, no telemetry by default
+    - **terraform-ls:** HashiCorp official, trusted for Terraform validation
+    - **Custom servers:** Always review source code and audit network activity
+
+    ### Local-Only Validation
+
+    LSP servers run **locally on your machine** by default:
+
     - ✅ Communication happens over stdio (standard input/output)
+    - ✅ Servers only access files you explicitly validate
     - ✅ Servers shut down when Atmos exits
-    - ✅ All validation happens offline
+    - ⚠️ However, servers may collect telemetry or access network resources
 
-    **Best Practices:**
-    1. Only install LSP servers from trusted sources
-    2. Keep LSP servers updated to latest versions
-    3. Review `initialization_options` for security-sensitive settings
-    4. Use official LSP servers from language maintainers when available
+    **Note:** This document refers to "external" LSP servers to distinguish them from Atmos' own validation - they are external processes, typically running locally.
 
     ## Example Workflows
 
