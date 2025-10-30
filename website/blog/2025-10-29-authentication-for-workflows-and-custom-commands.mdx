@@ -152,58 +152,6 @@ Run with override:
 atmos plan-all vpc prod --identity production
 ```
 
-## Integration Testing
-
-We've added comprehensive integration tests to ensure authentication works correctly:
-
-- ✅ Environment variables are properly set in subprocesses
-- ✅ Flag overrides work as expected
-- ✅ Multiple identities in workflows
-- ✅ Custom commands with and without authentication
-- ✅ Mock provider for testing without real credentials
-
-## Migration Guide
-
-### Existing Workflows
-
-No changes needed - workflows without `identity` continue to work as before:
-
-```yaml
-workflows:
-  my-workflow:
-    steps:
-      - command: echo "This still works"
-```
-
-### Existing Custom Commands
-
-No changes needed - custom commands without `identity` continue to work:
-
-```yaml
-commands:
-  - name: my-command
-    steps:
-      - echo "This still works"
-```
-
-### Adding Authentication
-
-Simply add the `identity` field to enable authentication:
-
-```yaml
-# Workflow step
-- name: Deploy with auth
-  command: terraform apply
-  identity: my-identity  # Add this line
-
-# Custom command
-commands:
-  - name: deploy
-    identity: my-identity  # Add this line
-    steps:
-      - terraform apply
-```
-
 ## Documentation
 
 For complete details, see:
