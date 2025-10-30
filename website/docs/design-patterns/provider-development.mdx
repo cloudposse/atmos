@@ -88,27 +88,39 @@ Organize your provider development environment:
 
 ```
 my-project/
-├── .terraformrc                    # Terraform CLI config with dev_overrides
-├── .gitignore                      # Exclude .terraformrc (developer-specific)
-├── .terraformrc.example            # Template for team members
 ├── providers/
 │   └── terraform-provider-mycloud/ # Your provider source code
+│       └── bin/                    # Build output directory
 └── infrastructure/
     ├── atmos.yaml
     ├── components/
     │   └── terraform/
-    │       └── myapp/              # Component using your provider
+    │       └── myapp/
+    │           ├── .terraformrc          # CLI config (not committed)
+    │           ├── .gitignore            # Exclude .terraformrc
+    │           ├── .terraformrc.example  # Template for team members
+    │           ├── main.tf
+    │           ├── providers.tf
+    │           └── versions.tf
     └── stacks/
         └── catalog/
             └── myapp/
                 └── defaults.yaml
 ```
 
+:::warning Component-Level Configuration
+
+The `.terraformrc` file must be in the **component folder**, not the infrastructure repository root. This is because
+Atmos executes Terraform from within the component directory, and Terraform loads CLI configuration relative to its
+working directory.
+
+:::
+
 ### Step 2: Create Terraform CLI Configuration
 
-Create `.terraformrc` in your project root (or home directory):
+Create `.terraformrc` in your **component directory**:
 
-<File title=".terraformrc">
+<File title="components/terraform/myapp/.terraformrc">
 ```hcl
 provider_installation {
   # Point to your local provider binary
@@ -131,6 +143,14 @@ The path in `dev_overrides` must be:
 
 :::
 
+:::warning Cannot Use providers.tf
+
+The `provider_installation` block with `dev_overrides` **must** be in a Terraform CLI configuration file
+(`.terraformrc` or `terraform.rc`). It **cannot** be defined in `.tf` files like `providers.tf` because it's a
+CLI-level setting that applies across all Terraform operations, not infrastructure-specific configuration.
+
+:::
+
 ### Step 3: Configure Environment in Atmos
 
 Add the CLI configuration path to your component's environment:
@@ -140,9 +160,10 @@ Add the CLI configuration path to your component's environment:
 components:
   terraform:
     myapp:
-      # Point Terraform to your CLI config
+      # Point Terraform to your CLI config in the component directory
+      # Since Atmos runs Terraform from the component folder, relative path works
       env:
-        TF_CLI_CONFIG_FILE: "${PWD}/.terraformrc"
+        TF_CLI_CONFIG_FILE: ".terraformrc"
 
       # Configure provider behavior (separate from dev overrides)
       providers:
@@ -154,6 +175,13 @@ components:
         name: "my-application"
 ```
 </File>
+
+:::tip Relative Paths
+
+Since Atmos executes Terraform from within the component directory (`components/terraform/myapp`), you can use a
+relative path like `.terraformrc`. This will correctly resolve to the file in the component folder.
+
+:::
 
 ### Step 4: Provider Build Script
 
@@ -201,17 +229,19 @@ atmos terraform plan myapp -s dev
 
 ### Developer-Specific Configuration
 
-The `.terraformrc` file contains paths specific to each developer's machine. Don't commit it:
+The `.terraformrc` file contains paths specific to each developer's machine. Don't commit it to version control. Add
+it to your component's `.gitignore`:
 
-<File title=".gitignore">
+<File title="components/terraform/myapp/.gitignore">
 ```
+# Don't commit developer-specific CLI config with local paths
 .terraformrc
 ```
 </File>
 
-Instead, provide a template:
+Instead, provide a template for team members:
 
-<File title=".terraformrc.example">
+<File title="components/terraform/myapp/.terraformrc.example">
 ```hcl
 # Copy this file to .terraformrc and update paths for your environment
 provider_installation {
@@ -224,15 +254,20 @@ provider_installation {
 ```
 </File>
 
-Document in your README:
+Document in your component's README:
 
+<File title="components/terraform/myapp/README.md">
 ```markdown
 ## Provider Development Setup
 
-1. Copy `.terraformrc.example` to `.terraformrc`
+This component uses a custom provider for local development.
+
+1. Copy `.terraformrc.example` to `.terraformrc` in this directory
 2. Update the path in `.terraformrc` to point to your local provider binary location
-3. Build the provider: `cd providers/terraform-provider-mycloud && ./build.sh`
+3. Build the provider: `cd ../../../providers/terraform-provider-mycloud && ./build.sh`
+4. Run Atmos commands as normal: `atmos terraform plan myapp -s dev`
 ```
+</File>
 
 ### Using settings for Shared Configuration
 
@@ -424,14 +459,45 @@ If you see version-related errors, verify:
 
 Here's a complete working example for developing a custom cloud provider:
 
-<File title=".terraformrc">
+**Project Structure:**
+```
+my-project/
+├── providers/
+│   └── terraform-provider-acme/
+│       ├── main.go
+│       ├── provider.go
+│       └── bin/
+│           └── terraform-provider-acme  # Built binary
+└── infrastructure/
+    ├── components/
+    │   └── terraform/
+    │       └── web-app/
+    │           ├── .terraformrc
+    │           ├── .terraformrc.example
+    │           ├── .gitignore
+    │           ├── main.tf
+    │           ├── providers.tf
+    │           └── versions.tf
+    └── stacks/
+        └── catalog/
+            └── web-app/
+                └── defaults.yaml
+```
+
+<File title="components/terraform/web-app/.terraformrc">
 ```hcl
 provider_installation {
   dev_overrides {
-    "registry.terraform.io/acme/cloud" = "/Users/developer/work/providers/bin"
+    "registry.terraform.io/acme/cloud" = "/Users/developer/work/providers/terraform-provider-acme/bin"
   }
   direct {}
 }
+```
+</File>
+
+<File title="components/terraform/web-app/.gitignore">
+```
+.terraformrc
 ```
 </File>
 
@@ -460,16 +526,29 @@ components:
           debug: "{{ .settings.acme_api_debug }}"
           api_token: "{{ .settings.acme_api_token }}"
 
-      # Point to dev overrides config (only in dev mode)
+      # Point to CLI config in the component directory
       env:
-        TF_CLI_CONFIG_FILE: >-
-          {{ if .settings.provider_dev_mode }}${PWD}/.terraformrc{{ end }}
+        TF_CLI_CONFIG_FILE: ".terraformrc"
 
       vars:
         app_name: "web-app"
         region: "us-east-1"
 ```
 </File>
+
+:::tip Toggle Development Mode
+
+You can use Atmos settings and templating to conditionally enable dev overrides:
+
+```yaml
+env:
+  TF_CLI_CONFIG_FILE: >-
+    {{ if .settings.provider_dev_mode }}.terraformrc{{ end }}
+```
+
+Set `provider_dev_mode: true` in your global defaults when doing provider development, and `false` (or omit) when using published versions.
+
+:::
 
 <File title="providers/terraform-provider-acme/Makefile">
 ```makefile
@@ -479,13 +558,26 @@ build:
 	go build -o terraform-provider-acme
 
 install: build
-	mkdir -p ../../bin
-	mv terraform-provider-acme ../../bin/
-	chmod +x ../../bin/terraform-provider-acme
+	mkdir -p bin
+	mv terraform-provider-acme bin/
+	chmod +x bin/terraform-provider-acme
 
 test: install
-	cd ../../infrastructure && \
+	cd ../infrastructure && \
 	atmos terraform plan web-app -s dev
+```
+</File>
+
+<File title="components/terraform/web-app/.terraformrc.example">
+```hcl
+# Copy this to .terraformrc and update the path for your environment
+provider_installation {
+  dev_overrides {
+    # Update this path to where you build the provider
+    "registry.terraform.io/acme/cloud" = "/absolute/path/to/providers/terraform-provider-acme/bin"
+  }
+  direct {}
+}
 ```
 </File>
 

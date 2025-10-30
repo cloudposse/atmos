@@ -212,15 +212,15 @@ This is configured in Terraform's CLI configuration file (`.terraformrc` or `ter
 
 To use locally-built providers with Atmos, follow these steps:
 
-**1. Create a Terraform CLI configuration file with dev_overrides.**
+**1. Create a Terraform CLI configuration file with dev_overrides in your component folder.**
 
-Create a `.terraformrc` file in your project root or home directory:
+Create a `.terraformrc` file in your **component directory** (e.g., `components/terraform/mycomponent/.terraformrc`):
 
-<File title=".terraformrc">
+<File title="components/terraform/mycomponent/.terraformrc">
 ```hcl
 provider_installation {
   dev_overrides {
-    "registry.terraform.io/myorg/myprovider" = "/path/to/provider/binary"
+    "registry.terraform.io/myorg/myprovider" = "/absolute/path/to/provider/binary/directory"
   }
 
   # For all other providers, install them directly as normal.
@@ -229,20 +229,32 @@ provider_installation {
 ```
 </File>
 
-Replace `myorg/myprovider` with your provider's registry address and `/path/to/provider/binary` with the directory
-containing your locally-built provider binary.
+Replace `myorg/myprovider` with your provider's registry address and `/absolute/path/to/provider/binary/directory`
+with the **absolute path to the directory** containing your locally-built provider binary (not the binary itself).
+
+:::warning Component-Specific Configuration
+
+The `.terraformrc` file should be placed in each **component folder** that needs to use the local provider, not in
+your infrastructure repository root. This is because Terraform's CLI configuration is loaded relative to where
+Terraform runs, and Atmos executes Terraform from within the component directory.
+
+**Do not commit** `.terraformrc` to version control - it contains developer-specific local paths. Add it to your
+component's `.gitignore` or your global `.gitignore`.
+
+:::
+
+:::tip CLI Configuration Requirements
+
+The `provider_installation` block with `dev_overrides` **must** be in a Terraform CLI configuration file
+(`.terraformrc` or `terraform.rc`). It **cannot** be defined in `.tf` files like `providers.tf` because it's a
+CLI-level setting, not infrastructure configuration.
+
+:::
 
 **2. Point Terraform to your CLI configuration.**
 
-Set the `TF_CLI_CONFIG_FILE` environment variable to tell Terraform where to find this configuration:
-
-<Terminal title="bash">
-```bash
-export TF_CLI_CONFIG_FILE="${PWD}/.terraformrc"
-```
-</Terminal>
-
-Or add it to your component's `env` section in Atmos:
+Set the `TF_CLI_CONFIG_FILE` environment variable in your component's `env` section to tell Terraform where to find
+this configuration:
 
 <File title="stacks/catalog/mycomponent/defaults.yaml">
 ```yaml
@@ -250,9 +262,20 @@ components:
   terraform:
     mycomponent:
       env:
-        TF_CLI_CONFIG_FILE: "${PWD}/.terraformrc"
+        # Points to .terraformrc in the component directory
+        # Atmos runs Terraform from the component folder, so this resolves correctly
+        TF_CLI_CONFIG_FILE: ".terraformrc"
 ```
 </File>
+
+:::tip Relative Paths Work
+
+Since Atmos executes Terraform from within the component directory, you can use a relative path like `.terraformrc`.
+Atmos will resolve it correctly to `components/terraform/mycomponent/.terraformrc`.
+
+Alternatively, you can use an absolute path or `${PWD}/.terraformrc` if you prefer explicit paths.
+
+:::
 
 **3. Build your provider.**
 
@@ -327,7 +350,24 @@ This is expected behavior and confirms that your local provider is being used. R
 
 Here's a complete example for developing a custom provider:
 
-<File title=".terraformrc">
+**Directory Structure:**
+```
+infrastructure/
+├── components/
+│   └── terraform/
+│       └── myapp/
+│           ├── .terraformrc          # CLI config (not committed)
+│           ├── .gitignore            # Ignore .terraformrc
+│           ├── main.tf
+│           ├── providers.tf
+│           └── versions.tf
+└── stacks/
+    └── catalog/
+        └── myapp/
+            └── defaults.yaml
+```
+
+<File title="components/terraform/myapp/.terraformrc">
 ```hcl
 provider_installation {
   dev_overrides {
@@ -335,6 +375,13 @@ provider_installation {
   }
   direct {}
 }
+```
+</File>
+
+<File title="components/terraform/myapp/.gitignore">
+```
+# Don't commit developer-specific CLI config
+.terraformrc
 ```
 </File>
 
@@ -349,9 +396,9 @@ components:
           endpoint: "https://api.acme.com"
           api_token: "{{ .settings.acme_api_token }}"
 
-      # Point to the CLI config for dev overrides
+      # Point to the CLI config in the component directory
       env:
-        TF_CLI_CONFIG_FILE: "${PWD}/.terraformrc"
+        TF_CLI_CONFIG_FILE: ".terraformrc"
 
       # Regular component configuration
       vars:
@@ -360,9 +407,11 @@ components:
 </File>
 
 With this setup:
+- `.terraformrc` lives in the component folder where Terraform executes
 - Terraform finds your local provider binary via `.terraformrc`
 - Atmos configures the provider's behavior via the `providers` section
 - Your component works seamlessly with the local provider during development
+- The file is not committed, so each developer can have their own local paths
 
 ## References
 
