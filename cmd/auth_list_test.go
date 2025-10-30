@@ -404,10 +404,15 @@ func TestProvidersFlagCompletion_ReturnsSortedProviders(t *testing.T) {
   providers:
     zebra-provider:
       kind: aws/iam-identity-center
+      region: us-east-1
+      start_url: https://example.awsapps.com/start
     apple-provider:
       kind: aws/saml
+      region: us-east-1
+      url: https://idp.example.com/saml
     mango-provider:
-      kind: azure-ad
+      kind: azure/oidc
+      audience: https://example.com
 `
 	err := os.WriteFile(configFile, []byte(configContent), 0o600)
 	require.NoError(t, err)
