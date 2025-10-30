@@ -381,7 +381,7 @@ func TestSearchRegistryForTool(t *testing.T) {
 		t.Error("Expected owner and repo to be non-empty")
 	}
 
-	owner, repo, err = mockResolver.Resolve("nonexistent-tool-12345")
+	_, _, err = mockResolver.Resolve("nonexistent-tool-12345")
 	if err == nil {
 		t.Error("Expected error for non-existent tool but got none")
 	}
