@@ -16,6 +16,7 @@ Available Commands:
   aws                            Run AWS-specific commands for interacting with cloud resources
   completion                     Generate autocompletion scripts for Bash, Zsh, Fish, and PowerShell
   describe                       Show details about Atmos configurations and components
+  devcontainer                   Manage development containers
   docs                           Open Atmos documentation or display component-specific docs
   helmfile                       Manage Helmfile-based Kubernetes deployments
   help                           Display help information for Atmos commands
