@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
@@ -72,8 +73,17 @@ func terraformRun(cmd *cobra.Command, actualCmd *cobra.Command, args []string) e
 	info.Components = components
 	info.DryRun = dryRun
 
-	identityFlag, err := flags.GetString("identity")
-	errUtils.CheckErrorPrintAndExit(err, "", "")
+	// Get identity from flag or use default.
+	// Check if flag was explicitly set by user to ensure command-line precedence.
+	var identityFlag string
+	if flags.Changed(IdentityFlagName) {
+		// Flag was explicitly provided on command line (either with or without value).
+		identityFlag, err = flags.GetString(IdentityFlagName)
+		errUtils.CheckErrorPrintAndExit(err, "", "")
+	} else {
+		// Flag not provided on command line - fall back to viper (config/env).
+		identityFlag = viper.GetString(IdentityFlagName)
+	}
 
 	// Check if user wants to interactively select identity.
 	forceSelect := identityFlag == IdentityFlagSelectValue

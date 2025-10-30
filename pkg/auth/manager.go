@@ -380,13 +380,23 @@ func (m *manager) promptForIdentity(message string, identities []string) (string
 	return selectedIdentity, nil
 }
 
-// ListIdentities returns all available identity names.
+// ListIdentities returns all available identity names with their original case.
+// Uses IdentityCaseMap to preserve the original case from YAML config,
+// working around Viper's lowercase conversion of map keys.
 func (m *manager) ListIdentities() []string {
 	defer perf.Track(nil, "auth.Manager.ListIdentities")()
 
 	var names []string
-	for name := range m.config.Identities {
-		names = append(names, name)
+	for lowercaseName := range m.config.Identities {
+		// Use original case from IdentityCaseMap if available, otherwise use lowercase.
+		if m.config.IdentityCaseMap != nil {
+			if originalName, exists := m.config.IdentityCaseMap[lowercaseName]; exists {
+				names = append(names, originalName)
+				continue
+			}
+		}
+		// Fallback to lowercase name if case map not available.
+		names = append(names, lowercaseName)
 	}
 	return names
 }
@@ -646,13 +656,14 @@ func (m *manager) authenticateProviderChain(ctx context.Context, startIndex int)
 	actualStartIndex := m.determineStartingIndex(startIndex)
 
 	// Retrieve cached credentials if starting from a cached point.
-	// Important: if we start from index N (>0) because cached creds exist at that step,
-	// those creds are the OUTPUT of identity N and should be used as the base for the NEXT step (N+1).
-	if actualStartIndex > 0 {
+	// Important: if we start from index N (>=0) because cached creds exist at that step,
+	// those creds are the OUTPUT of provider/identity N and should be used as the base for the NEXT step (N+1).
+	if actualStartIndex >= 0 {
 		currentCreds, actualStartIndex = m.fetchCachedCredentials(actualStartIndex)
 	}
 
 	// Step 1: Authenticate with provider if needed.
+	// Only authenticate provider if we don't have cached provider credentials.
 	if actualStartIndex == 0 { //nolint:nestif
 		// Allow provider to inspect the chain and prepare pre-auth preferences.
 		if provider, exists := m.providers[m.chain[0]]; exists {
@@ -673,6 +684,12 @@ func (m *manager) authenticateProviderChain(ctx context.Context, startIndex int)
 }
 
 func (m *manager) fetchCachedCredentials(startIndex int) (types.ICredentials, int) {
+	// Guard against nil credential store (can happen in unit tests).
+	if m.credentialStore == nil {
+		log.Debug("No credential store available, starting from provider")
+		return nil, 0
+	}
+
 	currentCreds, err := m.getChainCredentials(m.chain, startIndex)
 	if err != nil {
 		log.Debug("Failed to retrieve cached credentials, starting from provider", "error", err)
