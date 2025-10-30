@@ -1,7 +1,6 @@
 package exec
 
 import (
-	"runtime"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -16,13 +15,8 @@ func TestWorkflowWithIdentity_ShellCommand(t *testing.T) {
 		t.Skipf("Skipping integration test in short mode: spawns actual shell process")
 	}
 
-	// Get OS-specific shell command.
-	var exitCmd string
-	if runtime.GOOS == "windows" {
-		exitCmd = "cmd /c exit 0"
-	} else {
-		exitCmd = "true"
-	}
+	// Use portable shell command that works in all environments.
+	exitCmd := "echo test"
 
 	// Set up test fixture with auth configuration.
 	testDir := "../../tests/fixtures/scenarios/atmos-auth-mock"
@@ -58,13 +52,8 @@ func TestWorkflowWithIdentity_MultipleSteps(t *testing.T) {
 		t.Skipf("Skipping integration test in short mode: spawns actual shell process")
 	}
 
-	// Get OS-specific shell command.
-	var exitCmd string
-	if runtime.GOOS == "windows" {
-		exitCmd = "cmd /c exit 0"
-	} else {
-		exitCmd = "true"
-	}
+	// Use portable shell command that works in all environments.
+	exitCmd := "echo test"
 
 	// Set up test fixture with auth configuration.
 	testDir := "../../tests/fixtures/scenarios/atmos-auth-mock"
@@ -111,13 +100,8 @@ func TestWorkflowWithIdentity_InvalidIdentity(t *testing.T) {
 		t.Skipf("Skipping integration test in short mode: requires auth configuration")
 	}
 
-	// Get OS-specific shell command.
-	var exitCmd string
-	if runtime.GOOS == "windows" {
-		exitCmd = "cmd /c exit 0"
-	} else {
-		exitCmd = "true"
-	}
+	// Use portable shell command that works in all environments.
+	exitCmd := "echo test"
 
 	// Set up test fixture with auth configuration.
 	testDir := "../../tests/fixtures/scenarios/atmos-auth-mock"
@@ -218,13 +202,8 @@ func TestWorkflowWithIdentity_CommandLineOverride(t *testing.T) {
 		t.Skipf("Skipping integration test in short mode: spawns actual shell process")
 	}
 
-	// Get OS-specific shell command.
-	var exitCmd string
-	if runtime.GOOS == "windows" {
-		exitCmd = "cmd /c exit 0"
-	} else {
-		exitCmd = "true"
-	}
+	// Use portable shell command that works in all environments.
+	exitCmd := "echo test"
 
 	// Set up test fixture with auth configuration.
 	testDir := "../../tests/fixtures/scenarios/atmos-auth-mock"
