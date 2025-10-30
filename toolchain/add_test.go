@@ -89,7 +89,7 @@ func TestAddCommand_InvalidToolWithCanonicalName(t *testing.T) {
 	// Test adding an invalid tool using canonical name
 	err := AddToolVersion("nonexistent/package", "1.0.0")
 	require.Error(t, err, "Should fail when adding invalid tool with canonical name")
-	assert.Contains(t, err.Error(), "not found in any registry")
+	assert.ErrorIs(t, err, ErrToolNotFound)
 
 	// Verify the tool was NOT added to the file
 	toolVersions, err := LoadToolVersions(toolVersionsFile)

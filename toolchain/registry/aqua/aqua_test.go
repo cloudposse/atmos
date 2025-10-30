@@ -386,7 +386,7 @@ func TestAquaRegistry_BuildAssetURL_NoAsset(t *testing.T) {
 	url, err := ar.BuildAssetURL(tool, "1.0.0")
 	assert.Error(t, err)
 	assert.Empty(t, url)
-	assert.Contains(t, err.Error(), "no asset template defined for tool")
+	assert.ErrorIs(t, err, registry.ErrNoAssetTemplate)
 }
 
 func TestAquaRegistry_BuildAssetURL_InvalidTemplate(t *testing.T) {

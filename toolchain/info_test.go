@@ -284,7 +284,7 @@ func TestInfoCommand_NonExistentTool(t *testing.T) {
 	// Test with a non-existent tool
 	_, err := installer.findTool("nonexistent", "tool", "1.0.0")
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "not found in any registry")
+	assert.ErrorIs(t, err, ErrToolNotFound)
 }
 
 func TestInfoCommand_InvalidOutputFormat(t *testing.T) {

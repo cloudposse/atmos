@@ -299,7 +299,7 @@ func TestAddToolToVersionsAsDefault(t *testing.T) {
 
 		err := AddToolToVersionsAsDefault(filePath, "terraform", "")
 		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "cannot add tool")
+		assert.ErrorIs(t, err, ErrInvalidToolSpec)
 	})
 }
 
