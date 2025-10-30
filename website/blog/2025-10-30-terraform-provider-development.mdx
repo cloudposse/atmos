@@ -1,27 +1,18 @@
 ---
 slug: terraform-provider-development
-title: "Developing Custom Terraform Providers with Atmos"
+title: "Testing Custom Terraform Providers with Atmos Components"
 authors: [atmos]
 tags: [feature, terraform, providers]
 date: 2025-10-30
 ---
 
-Atmos now documents how to test custom Terraform providers locally using Terraform's development overrides feature, enabling rapid iteration without publishing development versions to a registry.
+If you develop Terraform providers, you can now test them locally with Atmos-managed components using Terraform's development overrides feature. This enables rapid iteration without publishing development versions to a registry.
 
 <!--truncate-->
 
-## The Problem
+## Overview
 
-When developing custom Terraform providers, the standard workflow requires publishing each version to a registry before testing. This creates several issues:
-
-- Publishing development versions for each change is time-consuming
-- Test versions clutter your registry
-- Breaking changes are difficult to test before release
-- Iteration cycles are slow
-
-## The Solution
-
-Terraform provides a development overrides feature through its CLI configuration that allows pointing to locally-built provider binaries. This works seamlessly with Atmos components.
+When developing Terraform providers, you need to test them with real infrastructure code. Terraform's development overrides let you point to locally-built provider binaries instead of downloading from a registry. This works with Atmos components.
 
 ## How It Works
 
@@ -61,112 +52,86 @@ components:
 
 Atmos continues to generate `providers_override.tf.json` for provider configuration, while Terraform uses your local binary via `dev_overrides`.
 
-## Setup Steps
+## Setup
 
-**1. Place `.terraformrc` in your component directory**
+**1. Create `.terraformrc` in your component directory**
 
-The file must be in the component folder (e.g., `components/terraform/myapp/.terraformrc`) because Atmos executes Terraform from within the component directory.
+Place the file in your component folder (e.g., `components/terraform/myapp/.terraformrc`):
 
-**2. Set the environment variable**
+```hcl
+provider_installation {
+  dev_overrides {
+    "registry.terraform.io/myorg/myprovider" = "/absolute/path/to/provider/bin"
+  }
+  direct {}
+}
+```
 
-Point Terraform to your CLI config using the `env` section:
+Atmos executes Terraform from the component directory, so the file must be there.
+
+**2. Configure the environment variable**
+
+In your stack manifest:
 
 ```yaml
-env:
-  TF_CLI_CONFIG_FILE: ".terraformrc"
+components:
+  terraform:
+    myapp:
+      env:
+        TF_CLI_CONFIG_FILE: ".terraformrc"
 ```
 
-**3. Build your provider**
+**3. Build and test your provider**
 
 ```bash
+# Build provider
 cd providers/terraform-provider-myprovider
-go build -o terraform-provider-myprovider
-mkdir -p bin
-mv terraform-provider-myprovider bin/
-```
+go build -o bin/terraform-provider-myprovider
 
-**4. Test with Atmos**
-
-```bash
+# Test with Atmos
+cd ../../
 atmos terraform plan myapp -s dev
 ```
 
-Terraform uses your local provider binary while Atmos handles configuration as usual.
+Terraform uses your local binary. Atmos handles configuration.
 
-## Development Workflow
+## Workflow
 
 ```bash
 # Edit provider code
 vim providers/terraform-provider-myprovider/provider.go
 
-# Build provider binary
+# Rebuild
 cd providers/terraform-provider-myprovider
-./build.sh
+go build -o bin/terraform-provider-myprovider
 
-# Test immediately with Atmos
-cd ../infrastructure
+# Test with Atmos
+cd ../../
 atmos terraform plan myapp -s dev
 ```
 
-No publishing required. Changes are available immediately.
+Changes are available immediately without publishing.
 
-## Important Details
+## Key Points
 
-### Component-Level Configuration
+**File location**: The `.terraformrc` file goes in the component directory (e.g., `components/terraform/myapp/.terraformrc`), not the repository root. Add it to your component's `.gitignore`.
 
-The `.terraformrc` file must be in the component directory, not the repository root. Add it to your component's `.gitignore`:
+**Template for teams**: Provide `.terraformrc.example` with placeholder paths that team members update for their environment.
 
-```
-# components/terraform/myapp/.gitignore
-.terraformrc
-```
+**CLI configuration only**: The `provider_installation` block must be in a Terraform CLI config file, not in `.tf` files.
 
-Provide a `.terraformrc.example` template for team members with placeholder paths they can update for their environment.
+**Absolute paths**: Use absolute paths to the directory containing the provider binary.
 
-### CLI Config Requirements
-
-The `provider_installation` block must be in a Terraform CLI configuration file. It cannot be defined in `.tf` files like `providers.tf` because it's a CLI-level setting.
-
-### Absolute Paths Required
-
-The path in `dev_overrides` must be an absolute path to the directory containing the provider binary (not the binary itself).
-
-### Warning Message
-
-When dev_overrides are active, Terraform shows a warning:
-
-```
-Warning: Provider development overrides are in effect
-```
-
-This confirms your local provider is being used. Remove the `dev_overrides` block when ready to use published versions.
-
-## Use Cases
-
-This approach is useful when:
-
-- Developing new providers from scratch
-- Adding features to existing providers
-- Testing breaking changes before release
-- Debugging provider issues
-- Contributing to open-source providers
+**Warning message**: Terraform shows "Warning: Provider development overrides are in effect" when using local providers.
 
 ## Documentation
 
-We've added comprehensive documentation covering:
+Full documentation includes setup instructions, team collaboration patterns, and troubleshooting:
 
-- Complete setup instructions
-- Best practices for team collaboration
-- Real-world examples
-- Troubleshooting guide
-- Design pattern for provider development workflows
-
-See the full documentation:
 - [Provider Configuration Guide](/core-concepts/components/terraform/providers)
 - [Provider Development Pattern](/design-patterns/provider-development)
 
-## Get Involved
+## Related
 
 - [GitHub Issue #1726](https://github.com/cloudposse/atmos/issues/1726)
 - [Documentation PR #1730](https://github.com/cloudposse/atmos/pull/1730)
-- Join the [Atmos Community Slack](https://cloudposse.com/slack)
