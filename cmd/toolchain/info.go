@@ -17,3 +17,7 @@ var infoCmd = &cobra.Command{
 		return toolchain.InfoExec(args[0], outputFormat)
 	},
 }
+
+func init() {
+	infoCmd.Flags().StringVarP(&outputFormat, "output", "o", "table", "Output format (table, yaml, json)")
+}

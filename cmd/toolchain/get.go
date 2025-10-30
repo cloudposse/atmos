@@ -24,3 +24,8 @@ var getCmd = &cobra.Command{
 		return toolchain.ListToolVersions(showAllVersions, versionLimit, toolName)
 	},
 }
+
+func init() {
+	getCmd.Flags().BoolVar(&showAllVersions, "all", false, "Show all available versions")
+	getCmd.Flags().IntVar(&versionLimit, "limit", 10, "Limit number of versions to display")
+}

@@ -20,3 +20,9 @@ var pathCmd = &cobra.Command{
 		return toolchain.EmitPath(exportFlag, jsonFlag, relativeFlag)
 	},
 }
+
+func init() {
+	pathCmd.Flags().BoolVar(&exportFlag, "export", false, "Output in shell export format")
+	pathCmd.Flags().BoolVar(&jsonFlag, "json", false, "Output in JSON format")
+	pathCmd.Flags().BoolVar(&relativeFlag, "relative", false, "Use relative paths instead of absolute")
+}

@@ -13,7 +13,10 @@ var removeCmd = &cobra.Command{
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		filePath := toolchain.GetToolVersionsFilePath()
-		tool, version, _ := toolchain.ParseToolVersionArg(args[0])
+		tool, version, err := toolchain.ParseToolVersionArg(args[0])
+		if err != nil {
+			return err
+		}
 		return toolchain.RemoveToolVersion(filePath, tool, version)
 	},
 }

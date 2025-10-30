@@ -28,9 +28,9 @@ var (
 // SetAtmosConfig sets the Atmos configuration for the toolchain command.
 // This is called from root.go after atmosConfig is initialized.
 func SetAtmosConfig(config *schema.AtmosConfiguration) {
-	// Import the toolchain package to access its SetAtmosConfig.
+	// Forward the configuration to the toolchain package.
 	// This ensures the toolchain package has access to the Atmos configuration.
-	_ = config // Currently not used, but available for future expansion.
+	toolchainpkg.SetAtmosConfig(config)
 }
 
 // toolchainCmd represents the toolchain command.

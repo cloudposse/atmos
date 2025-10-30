@@ -22,6 +22,11 @@ The tool should be specified in the format: owner/repo@version
 	RunE: runInstall,
 }
 
+func init() {
+	installCmd.Flags().BoolVar(&reinstallFlag, "reinstall", false, "Reinstall even if already installed")
+	installCmd.Flags().BoolVar(&defaultFlag, "default", false, "Set as default version in .tool-versions")
+}
+
 func runInstall(cmd *cobra.Command, args []string) error {
 	toolSpec := ""
 	if len(args) > 0 {
