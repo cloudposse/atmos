@@ -481,6 +481,10 @@ Large models like `llama3.3:70b` are ~40GB downloads. Ensure you have sufficient
 
 #### Configuration
 
+Ollama can be deployed locally (on your workstation) or remotely (on a dedicated server) to save local disk space and computational resources.
+
+##### Local Deployment
+
 **Basic Local Setup (No API Key):**
 
 <File title="atmos.yaml">
@@ -504,17 +508,729 @@ providers:
 ```
 </File>
 
-**Remote Ollama Server:**
+##### Remote Deployment
+
+Deploy Ollama on a remote server to offload storage and computation from your local machine.
+
+**Benefits of Remote Deployment:**
+- **Save Local Disk Space**: Models can be 40-200GB+ each
+- **Centralized Management**: One server, multiple users
+- **Better Hardware**: Use GPU servers optimized for AI
+- **Shared Models**: Avoid downloading models on every machine
+
+**Server Configuration:**
+
+Ollama by default only accepts connections from `localhost` (127.0.0.1). To enable remote access, configure the `OLLAMA_HOST` environment variable to listen on all interfaces:
+
+**Linux (systemd service):**
+
+<Terminal title="shell">
+```bash
+# Edit the service configuration
+sudo systemctl edit ollama.service
+
+# Add these lines in the editor:
+[Service]
+Environment="OLLAMA_HOST=0.0.0.0:11434"
+
+# For production with CORS protection:
+Environment="OLLAMA_HOST=0.0.0.0:11434"
+Environment="OLLAMA_ORIGINS=https://trusted-domain.com,https://another-trusted.com"
+
+# Save and restart
+sudo systemctl daemon-reload
+sudo systemctl restart ollama.service
+
+# Verify it's listening on all interfaces
+sudo systemctl status ollama.service
+curl http://localhost:11434/api/version
+```
+</Terminal>
+
+**macOS:**
+
+<Terminal title="shell">
+```bash
+# Set environment variable for current session
+launchctl setenv OLLAMA_HOST "0.0.0.0:11434"
+
+# For production with CORS protection
+launchctl setenv OLLAMA_HOST "0.0.0.0:11434"
+launchctl setenv OLLAMA_ORIGINS "https://trusted-domain.com"
+
+# Restart Ollama application
+# (Quit and relaunch from Applications)
+
+# Verify
+curl http://localhost:11434/api/version
+```
+</Terminal>
+
+**Windows:**
+
+<Terminal title="shell">
+```powershell
+# Edit system environment variables
+# Open System Properties > Environment Variables
+
+# Add system variable:
+OLLAMA_HOST=0.0.0.0:11434
+
+# For production with CORS protection:
+OLLAMA_ORIGINS=https://trusted-domain.com,https://another-trusted.com
+
+# Restart Ollama application
+# Verify in PowerShell:
+curl http://localhost:11434/api/version
+```
+</Terminal>
+
+**Docker Deployment with Remote Access:**
+
+<Terminal title="shell">
+```bash
+# Basic remote server deployment
+docker run -d \
+  -v ollama:/root/.ollama \
+  -p 11434:11434 \
+  -e OLLAMA_HOST=0.0.0.0:11434 \
+  --name ollama \
+  ollama/ollama
+
+# Production deployment with GPU and CORS
+docker run -d \
+  --gpus=all \
+  -v ollama:/root/.ollama \
+  -p 11434:11434 \
+  -e OLLAMA_HOST=0.0.0.0:11434 \
+  -e OLLAMA_ORIGINS=https://your-domain.com \
+  --restart unless-stopped \
+  --name ollama \
+  ollama/ollama
+
+# Verify the server is accessible
+curl http://<server-ip>:11434/api/version
+```
+</Terminal>
+
+##### Cloud Provider Deployment
+
+Deploy Ollama to AWS, Azure, or Google Cloud for scalable, managed infrastructure.
+
+###### AWS Deployment
+
+**Option 1: EC2 Instance (Recommended for GPU workloads)**
+
+Best for: GPU acceleration, full control, persistent workloads
+
+<Terminal title="shell">
+```bash
+# 1. Launch EC2 instance (choose GPU instance for better performance)
+# Instance types:
+#   - g5.xlarge (NVIDIA A10G, 24GB GPU, $1.006/hr) - Recommended for production
+#   - g4dn.xlarge (NVIDIA T4, 16GB GPU, $0.526/hr) - Cost-effective
+#   - t3.xlarge (4 vCPU, 16GB RAM, $0.1664/hr) - CPU-only, testing
+
+# 2. SSH into instance and install Ollama
+ssh -i your-key.pem ubuntu@<ec2-public-ip>
+
+# Install Docker
+sudo apt-get update
+sudo apt-get install -y docker.io
+
+# For GPU instances, install NVIDIA Docker runtime
+distribution=$(. /etc/os-release;echo $ID$VERSION_ID)
+curl -s -L https://nvidia.github.io/nvidia-docker/gpgkey | sudo apt-key add -
+curl -s -L https://nvidia.github.io/nvidia-docker/$distribution/nvidia-docker.list | \
+  sudo tee /etc/apt/sources.list.d/nvidia-docker.list
+sudo apt-get update
+sudo apt-get install -y nvidia-docker2
+sudo systemctl restart docker
+
+# 3. Run Ollama with Docker
+sudo docker run -d \
+  --gpus=all \
+  -v ollama:/root/.ollama \
+  -p 11434:11434 \
+  -e OLLAMA_HOST=0.0.0.0:11434 \
+  --restart unless-stopped \
+  --name ollama \
+  ollama/ollama
+
+# 4. Configure security group to allow port 11434
+# AWS Console > EC2 > Security Groups > Add Inbound Rule:
+#   Type: Custom TCP
+#   Port: 11434
+#   Source: Your IP (for testing) or VPC CIDR (for production)
+
+# 5. Pull models
+sudo docker exec -it ollama ollama pull llama3.3:70b
+```
+</Terminal>
+
+**Option 2: ECS/Fargate (Managed containers)**
+
+Best for: Serverless containers, automatic scaling, minimal ops
+
+<File title="task-definition.json">
+```json
+{
+  "family": "ollama-task",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "4096",
+  "memory": "16384",
+  "containerDefinitions": [
+    {
+      "name": "ollama",
+      "image": "ollama/ollama:latest",
+      "portMappings": [
+        {
+          "containerPort": 11434,
+          "protocol": "tcp"
+        }
+      ],
+      "environment": [
+        {
+          "name": "OLLAMA_HOST",
+          "value": "0.0.0.0:11434"
+        }
+      ],
+      "mountPoints": [
+        {
+          "sourceVolume": "ollama-data",
+          "containerPath": "/root/.ollama"
+        }
+      ]
+    }
+  ],
+  "volumes": [
+    {
+      "name": "ollama-data",
+      "efsVolumeConfiguration": {
+        "fileSystemId": "fs-xxxxx",
+        "transitEncryption": "ENABLED"
+      }
+    }
+  ]
+}
+```
+</File>
+
+<Terminal title="shell">
+```bash
+# Create EFS for persistent storage
+aws efs create-file-system --region us-east-1 --tags Key=Name,Value=ollama-storage
+
+# Register task definition
+aws ecs register-task-definition --cli-input-json file://task-definition.json
+
+# Create ECS service
+aws ecs create-service \
+  --cluster your-cluster \
+  --service-name ollama-service \
+  --task-definition ollama-task \
+  --desired-count 1 \
+  --launch-type FARGATE \
+  --network-configuration "awsvpcConfiguration={subnets=[subnet-xxx],securityGroups=[sg-xxx]}"
+```
+</Terminal>
+
+**Option 3: AWS Lightsail (Simplest setup)**
+
+Best for: Quick setup, fixed pricing, development/testing
+
+<Terminal title="shell">
+```bash
+# 1. Create Lightsail instance via AWS Console
+# Plan: 8 GB RAM, 2 vCPUs ($40/month) or higher
+
+# 2. SSH into instance
+ssh ubuntu@<lightsail-ip>
+
+# 3. Install and run Ollama
+curl -fsSL https://ollama.com/install.sh | sh
+sudo systemctl edit ollama.service
+
+# Add environment configuration:
+# [Service]
+# Environment="OLLAMA_HOST=0.0.0.0:11434"
+
+sudo systemctl daemon-reload
+sudo systemctl restart ollama
+
+# 4. Open port 11434 in Lightsail firewall
+# Lightsail Console > Networking > Add rule: Custom TCP 11434
+```
+</Terminal>
+
+**AWS Cost Estimates:**
+- **EC2 g5.xlarge (GPU)**: ~$730/month (24/7)
+- **ECS Fargate (4vCPU/16GB)**: ~$180/month + EFS storage
+- **Lightsail (8GB)**: $40/month fixed
+
+###### Azure Deployment
+
+**Option 1: Virtual Machine (Recommended for GPU workloads)**
+
+Best for: GPU acceleration, full control, persistent workloads
+
+<Terminal title="shell">
+```bash
+# 1. Create VM with Azure CLI
+# VM sizes:
+#   - Standard_NC6s_v3 (NVIDIA V100, 112GB RAM, ~$3.06/hr) - High performance
+#   - Standard_NC4as_T4_v3 (NVIDIA T4, 28GB RAM, ~$0.526/hr) - Cost-effective
+#   - Standard_D4s_v3 (4 vCPU, 16GB RAM, ~$0.192/hr) - CPU-only
+
+az vm create \
+  --resource-group ollama-rg \
+  --name ollama-vm \
+  --image Ubuntu2204 \
+  --size Standard_NC4as_T4_v3 \
+  --admin-username azureuser \
+  --generate-ssh-keys
+
+# 2. Open port 11434
+az vm open-port --port 11434 --resource-group ollama-rg --name ollama-vm
+
+# 3. SSH and install
+ssh azureuser@<vm-public-ip>
+
+# Install Docker
+sudo apt-get update
+sudo apt-get install -y docker.io
+
+# For GPU VMs, install NVIDIA Docker
+distribution=$(. /etc/os-release;echo $ID$VERSION_ID)
+curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey | sudo gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg
+curl -s -L https://nvidia.github.io/libnvidia-container/$distribution/libnvidia-container.list | \
+  sed 's#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#g' | \
+  sudo tee /etc/apt/sources.list.d/nvidia-container-toolkit.list
+sudo apt-get update
+sudo apt-get install -y nvidia-container-toolkit
+sudo systemctl restart docker
+
+# 4. Run Ollama
+sudo docker run -d \
+  --gpus=all \
+  -v ollama:/root/.ollama \
+  -p 11434:11434 \
+  -e OLLAMA_HOST=0.0.0.0:11434 \
+  --restart unless-stopped \
+  --name ollama \
+  ollama/ollama
+
+# 5. Pull models
+sudo docker exec -it ollama ollama pull llama3.3:70b
+```
+</Terminal>
+
+**Option 2: Container Instances (Managed containers)**
+
+Best for: Serverless containers, simple deployment, no cluster management
+
+<Terminal title="shell">
+```bash
+# Create container instance with Azure Files for persistence
+az container create \
+  --resource-group ollama-rg \
+  --name ollama-container \
+  --image ollama/ollama:latest \
+  --cpu 4 \
+  --memory 16 \
+  --ports 11434 \
+  --ip-address Public \
+  --environment-variables OLLAMA_HOST=0.0.0.0:11434 \
+  --azure-file-volume-account-name <storage-account> \
+  --azure-file-volume-account-key <key> \
+  --azure-file-volume-share-name ollama-data \
+  --azure-file-volume-mount-path /root/.ollama
+
+# Get public IP
+az container show --resource-group ollama-rg --name ollama-container --query ipAddress.ip --output tsv
+```
+</Terminal>
+
+**Option 3: Azure Kubernetes Service (AKS)**
+
+Best for: Production at scale, multi-tenant, advanced orchestration
+
+<File title="ollama-deployment.yaml">
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ollama
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ollama
+  template:
+    metadata:
+      labels:
+        app: ollama
+    spec:
+      containers:
+      - name: ollama
+        image: ollama/ollama:latest
+        ports:
+        - containerPort: 11434
+        env:
+        - name: OLLAMA_HOST
+          value: "0.0.0.0:11434"
+        volumeMounts:
+        - name: ollama-storage
+          mountPath: /root/.ollama
+        resources:
+          requests:
+            memory: "16Gi"
+            cpu: "4"
+          limits:
+            nvidia.com/gpu: 1
+      volumes:
+      - name: ollama-storage
+        persistentVolumeClaim:
+          claimName: ollama-pvc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ollama-service
+spec:
+  type: LoadBalancer
+  ports:
+  - port: 11434
+    targetPort: 11434
+  selector:
+    app: ollama
+```
+</File>
+
+<Terminal title="shell">
+```bash
+# Apply deployment
+kubectl apply -f ollama-deployment.yaml
+
+# Get external IP
+kubectl get service ollama-service
+```
+</Terminal>
+
+**Azure Cost Estimates:**
+- **VM Standard_NC4as_T4_v3 (GPU)**: ~$380/month (24/7)
+- **Container Instances (4vCPU/16GB)**: ~$175/month
+- **AKS**: Node costs + management (free control plane)
+
+###### Google Cloud Deployment
+
+**Option 1: Compute Engine (Recommended for GPU workloads)**
+
+Best for: GPU acceleration, full control, persistent workloads
+
+<Terminal title="shell">
+```bash
+# 1. Create VM instance with GPU
+# Machine types:
+#   - n1-standard-4 + NVIDIA T4 (~$0.35/hr GPU + $0.19/hr compute)
+#   - n1-standard-8 + NVIDIA V100 (~$2.48/hr GPU + $0.38/hr compute)
+#   - n2-standard-4 (4 vCPU, 16GB RAM, ~$0.19/hr) - CPU-only
+
+gcloud compute instances create ollama-instance \
+  --zone=us-central1-a \
+  --machine-type=n1-standard-4 \
+  --accelerator=type=nvidia-tesla-t4,count=1 \
+  --image-family=ubuntu-2004-lts \
+  --image-project=ubuntu-os-cloud \
+  --boot-disk-size=100GB \
+  --boot-disk-type=pd-ssd \
+  --maintenance-policy=TERMINATE \
+  --metadata=startup-script='#!/bin/bash
+    # Install NVIDIA drivers
+    curl https://raw.githubusercontent.com/GoogleCloudPlatform/compute-gpu-installation/main/linux/install_gpu_driver.py --output install_gpu_driver.py
+    sudo python3 install_gpu_driver.py
+
+    # Install Docker
+    curl -fsSL https://get.docker.com -o get-docker.sh
+    sudo sh get-docker.sh
+
+    # Install NVIDIA Container Toolkit
+    distribution=$(. /etc/os-release;echo $ID$VERSION_ID)
+    curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey | sudo gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg
+    curl -s -L https://nvidia.github.io/libnvidia-container/$distribution/libnvidia-container.list | \
+      sed "s#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#g" | \
+      sudo tee /etc/apt/sources.list.d/nvidia-container-toolkit.list
+    sudo apt-get update
+    sudo apt-get install -y nvidia-container-toolkit
+    sudo systemctl restart docker
+
+    # Run Ollama
+    sudo docker run -d \
+      --gpus=all \
+      -v ollama:/root/.ollama \
+      -p 11434:11434 \
+      -e OLLAMA_HOST=0.0.0.0:11434 \
+      --restart unless-stopped \
+      --name ollama \
+      ollama/ollama
+  '
+
+# 2. Create firewall rule
+gcloud compute firewall-rules create allow-ollama \
+  --allow=tcp:11434 \
+  --source-ranges=0.0.0.0/0 \
+  --description="Allow Ollama API access"
+
+# 3. SSH into instance
+gcloud compute ssh ollama-instance --zone=us-central1-a
+
+# 4. Pull models
+sudo docker exec -it ollama ollama pull llama3.3:70b
+```
+</Terminal>
+
+**Option 2: Cloud Run (Serverless containers)**
+
+Best for: Serverless, auto-scaling, pay-per-use
+
+:::warning Cloud Run Limitations
+Cloud Run is best for stateless workloads. For Ollama, you'll need to:
+1. Pre-bake models into custom container image
+2. Use Cloud Storage for model persistence (slower startup)
+3. Consider cold start latency (30s-2min for large models)
+
+Not recommended for production Ollama deployments due to these limitations.
+:::
+
+<Terminal title="shell">
+```bash
+# Build custom image with pre-loaded model
+cat > Dockerfile <<EOF
+FROM ollama/ollama:latest
+RUN ollama serve & sleep 10 && ollama pull llama3.3:70b
+ENV OLLAMA_HOST=0.0.0.0:11434
+EXPOSE 11434
+CMD ["ollama", "serve"]
+EOF
+
+# Build and push to Container Registry
+docker build -t gcr.io/your-project/ollama:latest .
+docker push gcr.io/your-project/ollama:latest
+
+# Deploy to Cloud Run
+gcloud run deploy ollama \
+  --image gcr.io/your-project/ollama:latest \
+  --platform managed \
+  --region us-central1 \
+  --memory 16Gi \
+  --cpu 4 \
+  --port 11434 \
+  --allow-unauthenticated
+```
+</Terminal>
+
+**Option 3: Google Kubernetes Engine (GKE)**
+
+Best for: Production at scale, GPU workloads, advanced orchestration
+
+<Terminal title="shell">
+```bash
+# 1. Create GKE cluster with GPU node pool
+gcloud container clusters create ollama-cluster \
+  --zone=us-central1-a \
+  --machine-type=n1-standard-4 \
+  --num-nodes=1
+
+# Add GPU node pool
+gcloud container node-pools create gpu-pool \
+  --cluster=ollama-cluster \
+  --zone=us-central1-a \
+  --machine-type=n1-standard-4 \
+  --accelerator=type=nvidia-tesla-t4,count=1 \
+  --num-nodes=1
+
+# Install NVIDIA GPU driver DaemonSet
+kubectl apply -f https://raw.githubusercontent.com/GoogleCloudPlatform/container-engine-accelerators/master/nvidia-driver-installer/cos/daemonset-preloaded.yaml
+
+# 2. Deploy Ollama
+kubectl apply -f - <<EOF
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ollama
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ollama
+  template:
+    metadata:
+      labels:
+        app: ollama
+    spec:
+      containers:
+      - name: ollama
+        image: ollama/ollama:latest
+        ports:
+        - containerPort: 11434
+        env:
+        - name: OLLAMA_HOST
+          value: "0.0.0.0:11434"
+        resources:
+          limits:
+            nvidia.com/gpu: 1
+        volumeMounts:
+        - name: ollama-storage
+          mountPath: /root/.ollama
+      volumes:
+      - name: ollama-storage
+        persistentVolumeClaim:
+          claimName: ollama-pvc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ollama
+spec:
+  type: LoadBalancer
+  ports:
+  - port: 11434
+    targetPort: 11434
+  selector:
+    app: ollama
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: ollama-pvc
+spec:
+  accessModes:
+  - ReadWriteOnce
+  resources:
+    requests:
+      storage: 100Gi
+EOF
+
+# Get external IP
+kubectl get service ollama
+```
+</Terminal>
+
+**Google Cloud Cost Estimates:**
+- **Compute Engine n1-standard-4 + T4**: ~$400/month (24/7)
+- **Cloud Run (4vCPU/16GB)**: Pay-per-request (not recommended for Ollama)
+- **GKE**: Node costs + cluster management (~$75/month)
+
+##### Cloud Deployment Best Practices
+
+**Cost Optimization:**
+1. **Use spot/preemptible instances**: Save 60-90% for non-critical workloads
+   - AWS: Spot Instances
+   - Azure: Spot VMs
+   - GCP: Preemptible VMs
+
+2. **Right-size your instances**: Start small, scale up based on usage
+   - Monitor GPU utilization (should be &gt;70% for cost efficiency)
+   - CPU-only instances for small models (&lt;13B parameters)
+
+3. **Use auto-shutdown**: Stop instances during off-hours
+   - AWS: Instance Scheduler
+   - Azure: Auto-shutdown feature in VM settings
+   - GCP: Cloud Scheduler + Cloud Functions
+
+4. **Reserved capacity**: Save 30-70% with 1-3 year commitments
+
+**Performance Optimization:**
+1. **Choose regions close to users**: Minimize latency
+2. **Use SSD storage**: 3-5x faster model loading
+3. **Enable GPU acceleration**: 10-50x faster inference
+4. **Pre-pull models**: Avoid cold-start delays
+
+**Security Best Practices:**
+1. **Use private networking**: VPC/VNet peering, PrivateLink
+2. **Deploy behind API Gateway**: Rate limiting, authentication, monitoring
+3. **Enable encryption**: At-rest (disk encryption) and in-transit (TLS)
+4. **Use secrets management**: AWS Secrets Manager, Azure Key Vault, GCP Secret Manager
+5. **Implement IAM policies**: Least-privilege access control
+
+**Client Configuration:**
+
+Once your remote Ollama server is running, configure Atmos to use it:
 
 <File title="atmos.yaml">
 ```yaml
 providers:
   ollama:
     model: "llama3.3:70b"
-    base_url: "https://ollama.company.com/v1"
-    api_key_env: "OLLAMA_API_KEY"  # If authentication enabled
+    base_url: "http://<server-ip>:11434/v1"
+    # Or with domain name and HTTPS:
+    # base_url: "https://ollama.company.com/v1"
+
+    # Optional: If you've added authentication (recommended for production)
+    api_key_env: "OLLAMA_API_KEY"
 ```
 </File>
+
+**Environment Variables Reference:**
+
+| Variable | Purpose | Example | Default |
+|----------|---------|---------|---------|
+| `OLLAMA_HOST` | Server bind address | `0.0.0.0:11434` | `127.0.0.1:11434` |
+| `OLLAMA_ORIGINS` | CORS allowed origins | `https://app.com` | `*` (allow all) |
+| `OLLAMA_MODELS` | Model storage path | `/data/models` | `~/.ollama/models` |
+
+:::warning Security Considerations for Remote Deployment
+
+**Production Security Requirements:**
+
+1. **Never use wildcard CORS origins in production**
+   - ❌ Bad: `OLLAMA_ORIGINS=*` (default, allows all)
+   - ✅ Good: `OLLAMA_ORIGINS=https://trusted.com,https://app.company.com`
+
+2. **Use HTTPS with valid certificates**
+   - Deploy behind reverse proxy (nginx, Caddy, Traefik)
+   - Use Let's Encrypt for free SSL certificates
+
+3. **Implement authentication**
+   - Ollama doesn't have built-in auth - use reverse proxy
+   - Add Basic Auth or OAuth at reverse proxy level
+   - Example with nginx: `auth_basic` + `htpasswd`
+
+4. **Network isolation**
+   - Use VPN or private network when possible
+   - Restrict access with firewall rules (iptables, AWS security groups)
+   - Never expose directly to public internet without authentication
+
+5. **Monitor and log**
+   - Enable access logs on reverse proxy
+   - Monitor for unusual query patterns
+   - Set up resource usage alerts
+
+**Example Secure Setup (nginx reverse proxy):**
+
+```nginx
+server {
+    listen 443 ssl http2;
+    server_name ollama.company.com;
+
+    ssl_certificate /etc/letsencrypt/live/ollama.company.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/ollama.company.com/privkey.pem;
+
+    # Basic authentication
+    auth_basic "Ollama API";
+    auth_basic_user_file /etc/nginx/.htpasswd;
+
+    location / {
+        proxy_pass http://localhost:11434;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+    }
+}
+```
+
+For production deployments, always use HTTPS, authentication, and network restrictions.
+:::
 
 #### Performance Tips
 
