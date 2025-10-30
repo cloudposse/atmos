@@ -192,14 +192,17 @@ Create a build script for your provider:
 #!/bin/bash
 set -e
 
-# Build the provider
+echo "Building provider binary..."
 go build -o terraform-provider-mycloud
 
-# Move to the location specified in .terraformrc
-mkdir -p ../../bin
-mv terraform-provider-mycloud ../../bin/
+echo "Creating output directory..."
+mkdir -p bin
 
-echo "Provider built and installed to ../../bin/"
+echo "Installing provider to bin/..."
+mv terraform-provider-mycloud bin/
+chmod +x bin/terraform-provider-mycloud
+
+echo "Build complete: bin/terraform-provider-mycloud"
 ```
 </File>
 
@@ -209,19 +212,22 @@ Your development workflow now looks like this:
 
 <Terminal title="Provider Development Workflow">
 ```bash
-# 1. Make changes to your provider code
+# Navigate to provider directory
 cd providers/terraform-provider-mycloud
+
+# Edit provider code
 vim provider.go
 
-# 2. Build the provider
+# Build provider binary
 ./build.sh
 
-# 3. Test immediately with Atmos (no publishing needed!)
+# Navigate to infrastructure directory
 cd ../../infrastructure
+
+# Test with Atmos (uses local provider via dev_overrides)
 atmos terraform plan myapp -s dev
 
-# 4. Iterate rapidly
-# Repeat steps 1-3 as needed
+# Repeat: edit code → build → test
 ```
 </Terminal>
 
@@ -555,15 +561,21 @@ Set `provider_dev_mode: true` in your global defaults when doing provider develo
 .PHONY: build install test
 
 build:
-	go build -o terraform-provider-acme
+	@echo "Building provider binary..."
+	@go build -o terraform-provider-acme
+	@echo "Build complete: terraform-provider-acme"
 
 install: build
-	mkdir -p bin
-	mv terraform-provider-acme bin/
-	chmod +x bin/terraform-provider-acme
+	@echo "Creating bin directory..."
+	@mkdir -p bin
+	@echo "Installing provider binary to bin/..."
+	@mv terraform-provider-acme bin/
+	@chmod +x bin/terraform-provider-acme
+	@echo "Installation complete: bin/terraform-provider-acme"
 
 test: install
-	cd ../infrastructure && \
+	@echo "Running Atmos terraform plan..."
+	@cd ../infrastructure && \
 	atmos terraform plan web-app -s dev
 ```
 </File>
@@ -585,20 +597,20 @@ Development workflow:
 
 <Terminal title="Development Workflow">
 ```bash
-# Develop → Build → Test cycle
+# Navigate to provider directory
 cd providers/terraform-provider-acme
 
-# Make changes
+# Edit provider source code
 vim provider.go
 
-# Build and install
+# Build and install provider binary
 make install
 
-# Test immediately
+# Run integration test with Atmos
 make test
 
-# Or test manually with different configurations
-cd ../../infrastructure
+# Test with different stack configurations
+cd ../infrastructure
 atmos terraform plan web-app -s dev
 atmos terraform plan web-app -s staging
 ```
