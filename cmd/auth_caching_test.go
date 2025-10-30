@@ -237,6 +237,73 @@ func TestAuth_MultipleIdentities(t *testing.T) {
 	}
 }
 
+// TestAuth_MultipleIdentitiesSameProvider_ProviderCacheReuse verifies that when
+// multiple identities use the same provider, the provider credentials are cached
+// and reused across identities without triggering re-authentication.
+//
+// This is a regression test for the issue where users with multiple identities
+// using the same IAM Identity Center provider had to authenticate the provider
+// multiple times instead of reusing the cached provider credentials.
+//
+// Expected behavior:
+// 1. First identity login: Authenticate provider + derive identity credentials.
+// 2. Second identity login: Reuse cached provider credentials + derive new identity credentials.
+// 3. Provider authentication should only happen ONCE, not per identity.
+func TestAuth_MultipleIdentitiesSameProvider_ProviderCacheReuse(t *testing.T) {
+	tk := NewTestKit(t)
+
+	setupMockAuthDir(t, tk)
+
+	// Both mock-identity and mock-identity-2 use the same provider: mock-provider.
+	identities := []string{"mock-identity", "mock-identity-2"}
+
+	// Step 1: Authenticate first identity (this will cache provider credentials).
+	t.Run("first identity authenticates provider", func(t *testing.T) {
+		RootCmd.SetArgs([]string{"auth", "login", "--identity", identities[0]})
+		err := RootCmd.Execute()
+		require.NoError(t, err, "First identity login should succeed")
+	})
+
+	// Step 2: Authenticate second identity using the SAME provider.
+	// This should reuse the cached provider credentials and NOT trigger provider re-authentication.
+	t.Run("second identity reuses cached provider credentials", func(t *testing.T) {
+		// Set log level to Debug to see provider authentication attempts.
+		tk.Setenv("ATMOS_LOGS_LEVEL", "Debug")
+
+		RootCmd.SetArgs([]string{"auth", "login", "--identity", identities[1]})
+
+		start := time.Now()
+		err := RootCmd.Execute()
+		duration := time.Since(start)
+
+		require.NoError(t, err, "Second identity login should succeed")
+
+		// Second identity authentication should be fast (<1 second) because:
+		// - Provider credentials are already cached (no browser prompt)
+		// - Only need to derive identity credentials from cached provider credentials.
+		//
+		// If this fails (takes >1 second), it means provider re-authentication occurred,
+		// which would trigger a browser prompt in real SSO scenarios.
+		assert.Less(t, duration, 1*time.Second,
+			"Second identity authentication took %v - provider may have been re-authenticated instead of using cache", duration)
+	})
+
+	// Step 3: Verify both identities have valid cached credentials.
+	for _, identity := range identities {
+		t.Run("verify cached credentials for "+identity, func(t *testing.T) {
+			RootCmd.SetArgs([]string{"auth", "whoami", "--identity", identity})
+
+			start := time.Now()
+			err := RootCmd.Execute()
+			duration := time.Since(start)
+
+			require.NoError(t, err, "Whoami should succeed for %s", identity)
+			assert.Less(t, duration, 1*time.Second,
+				"Whoami for %s took too long (%v)", identity, duration)
+		})
+	}
+}
+
 // TestKeyringStoreRetrieve tests basic store and retrieve operations.
 func TestKeyringStoreRetrieve(t *testing.T) {
 	tempDir := t.TempDir()
