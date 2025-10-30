@@ -597,7 +597,7 @@ func TestInfoExec_InvalidTool(t *testing.T) {
 	// Test with non-existent tool
 	err := InfoExec("nonexistent-tool-xyz", "table")
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "tool not found")
+	assert.ErrorIs(t, err, ErrToolNotFound)
 }
 
 // TestInfoExec_CanonicalOrgRepo tests InfoExec with canonical org/repo format.

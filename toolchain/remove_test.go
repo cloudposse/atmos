@@ -50,7 +50,7 @@ func TestRemoveCommand_NonExistentTool(t *testing.T) {
 	// Test removing non-existent tool
 	err = RemoveToolVersion(toolVersionsFile, "nonexistent", "")
 	require.Error(t, err, "Should error when removing non-existent tool")
-	assert.Contains(t, err.Error(), "not found")
+	assert.ErrorIs(t, err, ErrToolNotFound)
 
 	// Verify file is unchanged
 	updatedToolVersions, err := LoadToolVersions(toolVersionsFile)
@@ -73,7 +73,7 @@ func TestRemoveCommand_EmptyFile(t *testing.T) {
 	// Test removing from empty file
 	err = RemoveToolVersion(toolVersionsFile, "terraform", "")
 	require.Error(t, err, "Should error when removing from empty file")
-	assert.Contains(t, err.Error(), "not found")
+	assert.ErrorIs(t, err, ErrToolNotFound)
 
 	// Verify file remains empty
 	updatedToolVersions, err := LoadToolVersions(toolVersionsFile)
@@ -175,7 +175,7 @@ func TestRemoveCommand_EmptyToolName(t *testing.T) {
 	// Test removing empty tool name
 	err = RemoveToolVersion(toolVersionsFile, "", "")
 	require.Error(t, err, "Should error when removing empty tool name")
-	assert.Contains(t, err.Error(), "empty tool argument")
+	assert.ErrorIs(t, err, ErrInvalidToolSpec)
 
 	// Verify file is unchanged
 	updatedToolVersions, err := LoadToolVersions(toolVersionsFile)
@@ -275,7 +275,7 @@ func TestRemoveCommand_RemoveNonExistentVersion(t *testing.T) {
 
 	err = RemoveToolVersion(toolVersionsFile, "terraform", "2.0.0")
 	require.Error(t, err, "Should error when removing non-existent version")
-	assert.Contains(t, err.Error(), "not found")
+	assert.ErrorIs(t, err, ErrToolNotFound)
 
 	updated, err := LoadToolVersions(toolVersionsFile)
 	require.NoError(t, err)
@@ -397,7 +397,7 @@ func TestRemoveCommand_RemoveNonExistentToolWithVersion(t *testing.T) {
 
 	err = RemoveToolVersion(toolVersionsFile, "nonexistent", "1.0.0")
 	require.Error(t, err, "Should error when removing non-existent tool with version")
-	assert.Contains(t, err.Error(), "not found")
+	assert.ErrorIs(t, err, ErrToolNotFound)
 
 	updated, err := LoadToolVersions(toolVersionsFile)
 	require.NoError(t, err)

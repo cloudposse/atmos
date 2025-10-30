@@ -92,7 +92,7 @@ func InfoExec(toolName, outputFormat string) error {
 			AvailableVersions: availableVersions,
 			DefaultVersion:    defaultVersion,
 		})
-		u.PrintfMarkdownToTUI(markdown)
+		u.PrintfMarkdownToTUI("%s", markdown)
 	}
 
 	return nil

@@ -1776,7 +1776,7 @@ func TestSetToolVersion_WithInvalidTool(t *testing.T) {
 	// Test with an invalid tool name (not in registry or local config)
 	err = SetToolVersion("nonexistent-tool-xyz-invalid", "1.0.0", 3)
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "tool not found")
+	assert.ErrorIs(t, err, ErrToolNotFound)
 }
 
 // TestSetToolVersion_WithCanonicalFormat tests SetToolVersion with org/repo format.
