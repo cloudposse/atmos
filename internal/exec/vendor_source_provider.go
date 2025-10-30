@@ -3,6 +3,7 @@ package exec
 //go:generate mockgen -source=$GOFILE -destination=mock_$GOFILE -package=$GOPACKAGE
 
 import (
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -42,6 +43,8 @@ const (
 
 // GetProviderForSource returns the appropriate VendorSourceProvider for a given source URL.
 func GetProviderForSource(source string) VendorSourceProvider {
+	defer perf.Track(nil, "exec.GetProviderForSource")()
+
 	// Determine provider type from source URL
 	if isGitHubSource(source) {
 		return NewGitHubSourceProvider()

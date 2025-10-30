@@ -178,9 +178,11 @@ type GitHubRateLimitResponse struct {
 
 // CheckGitHubRateLimit checks the current GitHub API rate limit.
 func (g *GitHubSourceProvider) CheckGitHubRateLimit() (*GitHubRateLimitResponse, error) {
+	defer perf.Track(nil, "exec.CheckGitHubRateLimit")()
+
 	req, err := http.NewRequest("GET", "https://api.github.com/rate_limit", nil)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("%w: failed to create rate limit request: %w", errUtils.ErrFailedToCreateRequest, err)
 	}
 
 	if token := getGitHubToken(); token != "" {
@@ -189,13 +191,13 @@ func (g *GitHubSourceProvider) CheckGitHubRateLimit() (*GitHubRateLimitResponse,
 
 	resp, err := g.httpClient.Do(req)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("%w: failed to execute rate limit request: %w", errUtils.ErrHTTPRequestFailed, err)
 	}
 	defer resp.Body.Close()
 
 	var rateLimit GitHubRateLimitResponse
 	if err := json.NewDecoder(resp.Body).Decode(&rateLimit); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("%w: failed to decode rate limit response: %w", errUtils.ErrFailedToUnmarshalAPIResponse, err)
 	}
 
 	return &rateLimit, nil

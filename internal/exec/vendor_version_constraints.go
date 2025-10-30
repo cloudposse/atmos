@@ -8,6 +8,7 @@ import (
 	"github.com/Masterminds/semver/v3"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -17,6 +18,8 @@ func resolveVersionConstraints(
 	availableVersions []string,
 	constraints *schema.VendorConstraints,
 ) (string, error) {
+	defer perf.Track(nil, "exec.resolveVersionConstraints")()
+
 	if constraints == nil {
 		// No constraints - return latest version.
 		if len(availableVersions) == 0 {
