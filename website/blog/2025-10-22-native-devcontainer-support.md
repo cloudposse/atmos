@@ -544,7 +544,7 @@ It's a pretty ingenious system, if we do say so ourselves.
 
 ## Resources
 
-- [Devcontainer Command Documentation](/cli/commands/devcontainer/devcontainer)
+- [Devcontainer Command Documentation](/cli/commands/devcontainer)
 - [Geodesic GitHub Repository](https://github.com/cloudposse/geodesic)
 - [Development Containers Specification](https://containers.dev/)
 - [Atmos Examples - Devcontainer](https://github.com/cloudposse/atmos/tree/main/examples/devcontainer)
