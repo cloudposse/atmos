@@ -97,3 +97,11 @@ func (dm *DocumentManager) Count() int {
 
 	return len(dm.documents)
 }
+
+// Set sets a document directly (used for testing).
+func (dm *DocumentManager) Set(uri protocol.DocumentUri, doc *Document) {
+	dm.mu.Lock()
+	defer dm.mu.Unlock()
+
+	dm.documents[uri] = doc
+}
