@@ -1,0 +1,180 @@
+---
+title: Authentication Support for Workflows and Custom Commands
+description: Add per-step authentication for workflows and custom commands with the new identity field and --identity flag
+slug: authentication-for-workflows-and-custom-commands
+tags:
+  - feature
+  - workflows
+  - custom-commands
+  - authentication
+---
+
+We're excited to announce two major improvements to Atmos authentication: **per-step authentication for workflows** and **authentication support for custom commands**. These features enable you to seamlessly use cloud credentials in your automation while maintaining security through file-based credential management.
+
+<!--truncate-->
+
+## Background: File-Based Credential Security
+
+Atmos uses a secure file-based credential approach to prevent credential exposure:
+
+- **Credentials are written to temporary files** following the XDG Base Directory Specification (e.g., `~/.config/atmos/aws/{provider-name}/credentials`, `~/.config/atmos/aws/{provider-name}/config`)
+- **Environment variables point to these files** (`AWS_SHARED_CREDENTIALS_FILE`, `AWS_CONFIG_FILE`, `AWS_PROFILE`)
+- **Raw credentials are never exposed** in environment variables (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_SESSION_TOKEN` are never set)
+- **SDKs read credentials from files** using the standard credential chain
+- **Provider-organized structure** - credentials are organized by provider under XDG config directories
+
+This approach ensures that credentials are isolated and never serialized in logs, process listings, or other outputs.
+
+## Bug Fix: Auth Shell Environment Variables
+
+We fixed a regression in `atmos auth shell` where it wasn't setting the required environment variables for credential file resolution. Previously, when you ran:
+
+```bash
+atmos auth shell my-identity
+```
+
+The spawned shell didn't have `AWS_SHARED_CREDENTIALS_FILE`, `AWS_CONFIG_FILE`, or `AWS_PROFILE` set, so AWS SDK commands couldn't find credentials even though authentication succeeded.
+
+This is now fixed - `atmos auth shell` properly configures the environment with file-based credential paths.
+
+## Feature 1: Authentication for Workflows
+
+Workflows now support per-step authentication with the new `identity` field:
+
+```yaml
+workflows:
+  deploy-multi-account:
+    description: Deploy infrastructure across multiple AWS accounts
+    steps:
+      - name: Deploy to dev account
+        command: terraform apply
+        identity: dev-account
+
+      - name: Deploy to staging account
+        command: terraform apply
+        identity: staging-account
+
+      - name: Deploy to prod account
+        command: terraform apply
+        identity: prod-account
+```
+
+### Command-Line Override
+
+You can also set a default identity for all steps using the `--identity` flag:
+
+```bash
+# Use dev-account for all steps that don't specify their own identity
+atmos workflow deploy-multi-account --identity dev-account
+```
+
+**Precedence**: Step-level `identity` > `--identity` flag > no authentication
+
+### Use Cases
+
+- **Multi-account deployments**: Authenticate to different AWS accounts per step
+- **Cross-cloud workflows**: Switch between AWS, GCP, and Azure credentials
+- **Role assumption chains**: Use different identities that assume through other identities
+- **Environment-specific automation**: Dev, staging, and production credentials in a single workflow
+
+## Feature 2: Authentication for Custom Commands
+
+Custom commands now support authentication with the `identity` field:
+
+```yaml
+commands:
+  - name: deploy
+    description: Deploy infrastructure with authentication
+    identity: production-account
+    steps:
+      - terraform init
+      - terraform plan
+      - terraform apply
+```
+
+### Runtime Override with --identity Flag
+
+All custom commands automatically get an `--identity` flag for runtime override:
+
+```bash
+# Override the configured identity at runtime
+atmos deploy --identity staging-account
+```
+
+**Precedence**: `--identity` flag > configured `identity` > no authentication
+
+### Shared Identity Across Steps
+
+All steps in a custom command share the same identity - the command authenticates once and all steps execute with those credentials.
+
+## Examples
+
+### Workflow with Mixed Authentication
+
+```yaml
+workflows:
+  multi-cloud-deploy:
+    description: Deploy across AWS and GCP
+    steps:
+      # AWS deployment
+      - name: Deploy AWS infrastructure
+        command: terraform apply -target=module.aws
+        identity: aws-production
+
+      # GCP deployment
+      - name: Deploy GCP infrastructure
+        command: terraform apply -target=module.gcp
+        identity: gcp-production
+
+      # No authentication needed
+      - name: Update documentation
+        command: ./scripts/update-docs.sh
+```
+
+### Custom Command with Component Config
+
+```yaml
+commands:
+  - name: plan-all
+    description: Plan all components in a stack
+    identity: developer
+    component_config:
+      component: "{{ .Arguments.component }}"
+      stack: "{{ .Arguments.stack }}"
+    steps:
+      - atmos terraform plan {{ .ComponentConfig.Component }} -s {{ .ComponentConfig.Stack }}
+```
+
+Run with override:
+
+```bash
+# Use production credentials instead of developer
+atmos plan-all vpc prod --identity production
+```
+
+## Documentation
+
+For complete details, see:
+- [Workflow Authentication](/core-concepts/workflows#using-authentication-with-workflows)
+- [Custom Command Authentication](/core-concepts/custom-commands#using-authentication-with-custom-commands)
+- [Auth Commands](/cli/commands/auth/usage)
+
+## Try It Out
+
+Update to the latest version of Atmos and try the new authentication features:
+
+```bash
+# Authenticate to an identity
+atmos auth login my-identity
+
+# Use in workflows
+atmos workflow deploy --identity my-identity
+
+# Use in custom commands
+atmos my-command --identity my-identity
+
+# Use auth shell (now with proper environment variables!)
+atmos auth shell my-identity
+```
+
+We're excited to see how you use these features to simplify your multi-account and multi-cloud automation!

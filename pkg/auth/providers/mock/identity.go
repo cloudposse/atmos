@@ -118,13 +118,15 @@ func (i *Identity) Environment() (map[string]string, error) {
 }
 
 // PrepareEnvironment prepares environment variables for external processes.
-// For mock identities, we don't modify the environment since mock credentials
-// are only for testing and don't interact with real cloud SDKs.
+// For mock identities, we set ATMOS_IDENTITY to verify that authentication
+// is working correctly in integration tests.
 func (i *Identity) PrepareEnvironment(_ context.Context, environ map[string]string) (map[string]string, error) {
 	defer perf.Track(nil, "mock.Identity.PrepareEnvironment")()
 
-	// Mock identities don't need to modify environment for external processes.
-	// Just return the environment unchanged.
+	// Set ATMOS_IDENTITY to the identity name for integration testing.
+	// This allows tests to verify that authentication flow is working correctly.
+	environ["ATMOS_IDENTITY"] = i.name
+
 	return environ, nil
 }
 
