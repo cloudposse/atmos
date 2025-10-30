@@ -183,8 +183,191 @@ For more details, refer to [Atmos CLI Settings](/cli/configuration/#settings).
 
 :::
 
+## Local Provider Development with Dev Overrides
+
+When developing custom Terraform providers locally, you need a way to test them without publishing to a registry.
+Terraform supports this through [development overrides](https://developer.hashicorp.com/terraform/cli/config/config-file#development-overrides-for-provider-developers),
+which allows you to point Terraform to locally-built provider binaries.
+
+:::info Important Distinction
+
+This section covers **development overrides** for locally-built provider binaries, which is separate from the
+**provider configuration** described in the sections above:
+
+- **Provider Configuration** (`providers` section in Atmos stacks) → Controls provider behavior (credentials, regions, endpoints)
+- **Development Overrides** (`.terraformrc` file) → Points to local provider binaries during development
+
+:::
+
+### Understanding Provider Configuration vs. Development Overrides
+
+The `providers` section in Atmos stack manifests (covered above) configures **how providers behave** - things like
+credentials, regions, and endpoints. This configuration is serialized to `providers_override.tf.json` and used by
+Terraform to override provider settings.
+
+Development overrides work at a different level: they tell Terraform **where to find the provider binary** itself.
+This is configured in Terraform's CLI configuration file (`.terraformrc` or `terraform.rc`), not in your stack manifests.
+
+### Setting Up Development Overrides with Atmos
+
+To use locally-built providers with Atmos, follow these steps:
+
+**1. Create a Terraform CLI configuration file with dev_overrides.**
+
+Create a `.terraformrc` file in your project root or home directory:
+
+<File title=".terraformrc">
+```hcl
+provider_installation {
+  dev_overrides {
+    "registry.terraform.io/myorg/myprovider" = "/path/to/provider/binary"
+  }
+
+  # For all other providers, install them directly as normal.
+  direct {}
+}
+```
+</File>
+
+Replace `myorg/myprovider` with your provider's registry address and `/path/to/provider/binary` with the directory
+containing your locally-built provider binary.
+
+**2. Point Terraform to your CLI configuration.**
+
+Set the `TF_CLI_CONFIG_FILE` environment variable to tell Terraform where to find this configuration:
+
+<Terminal title="bash">
+```bash
+export TF_CLI_CONFIG_FILE="${PWD}/.terraformrc"
+```
+</Terminal>
+
+Or add it to your component's `env` section in Atmos:
+
+<File title="stacks/catalog/mycomponent/defaults.yaml">
+```yaml
+components:
+  terraform:
+    mycomponent:
+      env:
+        TF_CLI_CONFIG_FILE: "${PWD}/.terraformrc"
+```
+</File>
+
+**3. Build your provider.**
+
+Build your provider and place the binary in the directory you specified:
+
+<Terminal title="bash">
+```bash
+cd /path/to/your/provider
+go build -o /path/to/provider/binary/terraform-provider-myprovider
+```
+</Terminal>
+
+**4. Run Atmos commands as usual.**
+
+Now when you run Atmos commands, Terraform will use your locally-built provider:
+
+<Terminal title="atmos terraform plan">
+```bash
+atmos terraform plan mycomponent -s dev
+```
+</Terminal>
+
+:::tip Development Workflow
+
+During active development, you can:
+
+1. Make changes to your provider code
+2. Rebuild the provider binary
+3. Run `atmos terraform plan/apply` immediately without publishing a release
+4. Iterate quickly on provider functionality
+
+This eliminates the need to publish development versions to a registry during active development.
+
+:::
+
+### Using settings Section for Environment Variables
+
+You can also use the `settings` section to manage environment variables across your stack hierarchy:
+
+<File title="stacks/orgs/acme/_defaults.yaml">
+```yaml
+terraform:
+  settings:
+    provider_dev_mode: true
+    provider_dev_path: "/Users/developer/providers/bin"
+
+components:
+  terraform:
+    mycomponent:
+      env:
+        TF_CLI_CONFIG_FILE: "${PWD}/.terraformrc"
+```
+</File>
+
+Then reference these settings in your components as needed. However, note that the actual `.terraformrc` file
+configuration cannot be templated through Atmos - it must exist as a file that Terraform can read directly.
+
+:::warning Dev Overrides Warning
+
+When dev_overrides are active, Terraform will show a warning on every command:
+
+```
+Warning: Provider development overrides are in effect
+```
+
+This is expected behavior and confirms that your local provider is being used. Remove or comment out the
+`dev_overrides` block in `.terraformrc` when you're ready to use the published provider version.
+
+:::
+
+### Example: Complete Setup
+
+Here's a complete example for developing a custom provider:
+
+<File title=".terraformrc">
+```hcl
+provider_installation {
+  dev_overrides {
+    "registry.terraform.io/acme/cloud" = "/Users/developer/providers/bin"
+  }
+  direct {}
+}
+```
+</File>
+
+<File title="stacks/catalog/myapp/defaults.yaml">
+```yaml
+components:
+  terraform:
+    myapp:
+      # Configure the provider's behavior (credentials, endpoints, etc.)
+      providers:
+        acme:
+          endpoint: "https://api.acme.com"
+          api_token: "{{ .settings.acme_api_token }}"
+
+      # Point to the CLI config for dev overrides
+      env:
+        TF_CLI_CONFIG_FILE: "${PWD}/.terraformrc"
+
+      # Regular component configuration
+      vars:
+        name: "my-application"
+```
+</File>
+
+With this setup:
+- Terraform finds your local provider binary via `.terraformrc`
+- Atmos configures the provider's behavior via the `providers` section
+- Your component works seamlessly with the local provider during development
+
 ## References
 
 - [Terraform Providers](https://developer.hashicorp.com/terraform/language/providers)
 - [Terraform Override Files](https://developer.hashicorp.com/terraform/language/files/override)
 - [alias: Multiple Provider Configurations](https://developer.hashicorp.com/terraform/language/providers/configuration#alias-multiple-provider-configurations)
+- [Terraform Development Overrides](https://developer.hashicorp.com/terraform/cli/config/config-file#development-overrides-for-provider-developers)
+- [Provider Development Pattern](/design-patterns/provider-development) - Complete guide for developing custom providers with Atmos
