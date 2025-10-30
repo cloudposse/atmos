@@ -222,16 +222,22 @@ func loadTestFixture(t *testing.T, name string) []byte {
 
 Given the scale (2000 lines of untested code), we'll use an iterative commit strategy:
 
-### Iteration 1: Foundation (Target: 30-40% coverage)
-- Detector tests
-- Config deserialization tests
-- Naming/validation tests (already done)
+### Iteration 1: Foundation (Target: 30-40% coverage) ✅ COMPLETE
+- ✅ Detector tests - pkg/container/detector_test.go
+- ✅ Config deserialization tests - pkg/devcontainer/config_loader_test.go (818 lines)
+- ✅ Naming/validation tests (already done)
+- **Coverage achieved: 48.9%** → 71.5% with runtime tests
 - **Commit checkpoint**
 
-### Iteration 2: Runtime Layer (Target: 50-60% coverage)
-- Runtime.go tests with mock
-- Common.go exec tests
-- Basic docker/podman tests
+### Iteration 2: Runtime Layer (Target: 70-80% coverage) 🔄 IN PROGRESS
+- ✅ Runtime.go tests - pkg/devcontainer/runtime_test.go (100% coverage for runtime.go)
+- ✅ Common.go tests - pkg/container/common_test.go (100% coverage for helper functions)
+  - buildCreateArgs with 8 comprehensive scenarios
+  - All helper functions (addRuntimeFlags, addMetadata, addResourceBindings, addImageAndCommand)
+  - buildExecArgs with 7 scenarios
+  - Note: execWithRuntime not tested (requires exec.Command mocking, low value for coverage boost)
+- ⏳ Basic docker/podman tests - NEXT
+- **Current coverage: 71.5% (devcontainer pkg), 19.9% (container pkg)**
 - **Commit checkpoint**
 
 ### Iteration 3: Execution Layer (Target: 70-80% coverage)
