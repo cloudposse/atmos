@@ -5,6 +5,8 @@ import (
 	_ "embed"
 	"errors"
 	"fmt"
+	"os"
+	"strings"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -90,11 +92,11 @@ func executeAuthShellCommandCore(cmd *cobra.Command, args []string) error {
 	// Try to use cached credentials first (passive check, no prompts).
 	// Only authenticate if cached credentials are not available or expired.
 	ctx := context.Background()
-	whoami, err := authManager.GetCachedCredentials(ctx, identityName)
+	_, err = authManager.GetCachedCredentials(ctx, identityName)
 	if err != nil {
 		log.Debug("No valid cached credentials found, authenticating", "identity", identityName, "error", err)
 		// No valid cached credentials - perform full authentication.
-		whoami, err = authManager.Authenticate(ctx, identityName)
+		_, err = authManager.Authenticate(ctx, identityName)
 		if err != nil {
 			// Check for user cancellation - return clean error without wrapping.
 			if errors.Is(err, errUtils.ErrUserAborted) {
@@ -104,17 +106,28 @@ func executeAuthShellCommandCore(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	// Get environment variables from authentication result.
-	envVars := whoami.Environment
-	if envVars == nil {
-		envVars = make(map[string]string)
+	// Prepare shell environment with file-based credentials.
+	// Start with current OS environment and let PrepareShellEnvironment configure auth.
+	envList, err := authManager.PrepareShellEnvironment(ctx, identityName, os.Environ())
+	if err != nil {
+		return fmt.Errorf("failed to prepare shell environment: %w", err)
 	}
 
 	// Get shell from flag/viper.
 	shell := viper.GetString(shellFlagName)
 
 	// Execute the shell with authentication environment.
-	return exec.ExecAuthShellCommand(atmosConfigPtr, identityName, envVars, shell, shellArgs)
+	// ExecAuthShellCommand expects env vars as a map, so convert the list.
+	envMap := make(map[string]string)
+	for _, envVar := range envList {
+		if idx := strings.IndexByte(envVar, '='); idx >= 0 {
+			key := envVar[:idx]
+			value := envVar[idx+1:]
+			envMap[key] = value
+		}
+	}
+
+	return exec.ExecAuthShellCommand(atmosConfigPtr, identityName, envMap, shell, shellArgs)
 }
 
 func init() {

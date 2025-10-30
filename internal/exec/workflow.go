@@ -80,6 +80,11 @@ func ExecuteWorkflowCmd(cmd *cobra.Command, args []string) error {
 		}
 	}
 
+	commandLineIdentity, err := flags.GetString("identity")
+	if err != nil {
+		return err
+	}
+
 	var workflowPath string
 	if u.IsPathAbsolute(workflowFile) {
 		workflowPath = workflowFile
@@ -145,7 +150,7 @@ func ExecuteWorkflowCmd(cmd *cobra.Command, args []string) error {
 		workflowDefinition = i
 	}
 
-	err = ExecuteWorkflow(atmosConfig, workflowName, workflowPath, &workflowDefinition, dryRun, commandLineStack, fromStep)
+	err = ExecuteWorkflow(atmosConfig, workflowName, workflowPath, &workflowDefinition, dryRun, commandLineStack, fromStep, commandLineIdentity)
 	if err != nil {
 		return err
 	}

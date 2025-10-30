@@ -657,6 +657,10 @@ func (m *mockAuthManagerForProvider) GetEnvironmentVariables(identityName string
 	return nil, errors.New("not implemented")
 }
 
+func (m *mockAuthManagerForProvider) PrepareShellEnvironment(ctx context.Context, identityName string, currentEnv []string) ([]string, error) {
+	return nil, errors.New("not implemented")
+}
+
 // mockAuthManagerForIdentity implements minimal AuthManager for testing resolveIdentityName.
 type mockAuthManagerForIdentity struct {
 	defaultIdentity string
@@ -739,6 +743,10 @@ func (m *mockAuthManagerForIdentity) LogoutAll(ctx context.Context) error {
 }
 
 func (m *mockAuthManagerForIdentity) GetEnvironmentVariables(identityName string) (map[string]string, error) {
+	return nil, errors.New("not implemented")
+}
+
+func (m *mockAuthManagerForIdentity) PrepareShellEnvironment(ctx context.Context, identityName string, currentEnv []string) ([]string, error) {
 	return nil, errors.New("not implemented")
 }
 

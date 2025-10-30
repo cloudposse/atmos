@@ -3,6 +3,7 @@ package auth
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	charm "github.com/charmbracelet/log"
@@ -73,6 +74,34 @@ func (s *stubAuthManager) GetEnvironmentVariables(identityName string) (map[stri
 		return s.envVars, nil
 	}
 	return make(map[string]string), nil
+}
+
+func (s *stubAuthManager) PrepareShellEnvironment(ctx context.Context, identityName string, currentEnv []string) ([]string, error) {
+	// Merge envVars into currentEnv.
+	// This simulates what the real PrepareShellEnvironment does.
+	envMap := make(map[string]string)
+
+	// Parse currentEnv into map.
+	for _, envVar := range currentEnv {
+		if idx := strings.IndexByte(envVar, '='); idx >= 0 {
+			key := envVar[:idx]
+			value := envVar[idx+1:]
+			envMap[key] = value
+		}
+	}
+
+	// Merge in envVars from stub.
+	for k, v := range s.envVars {
+		envMap[k] = v
+	}
+
+	// Convert back to list.
+	result := make([]string, 0, len(envMap))
+	for k, v := range envMap {
+		result = append(result, k+"="+v)
+	}
+
+	return result, nil
 }
 
 func TestGetConfigLogLevels(t *testing.T) {
@@ -356,4 +385,114 @@ func TestTerraformPreHook_InvalidAuthConfig(t *testing.T) {
 	stack := &schema.ConfigAndStacksInfo{ComponentAuthSection: schema.AtmosSectionMapType{"providers": 42}}
 	err := TerraformPreHook(atmosCfg, stack)
 	assert.Error(t, err)
+}
+
+// TestComponentEnvSectionToList tests conversion from ComponentEnvSection map to env list.
+func TestComponentEnvSectionToList(t *testing.T) {
+	tests := []struct {
+		name       string
+		envSection map[string]any
+		validate   func(t *testing.T, result []string)
+	}{
+		{
+			name:       "nil map",
+			envSection: nil,
+			validate: func(t *testing.T, result []string) {
+				assert.Empty(t, result)
+			},
+		},
+		{
+			name:       "empty map",
+			envSection: map[string]any{},
+			validate: func(t *testing.T, result []string) {
+				assert.Empty(t, result)
+			},
+		},
+		{
+			name: "string values",
+			envSection: map[string]any{
+				"STRING_VAR": "value",
+				"ANOTHER":    "test",
+			},
+			validate: func(t *testing.T, result []string) {
+				assert.Len(t, result, 2)
+				assert.Contains(t, result, "STRING_VAR=value")
+				assert.Contains(t, result, "ANOTHER=test")
+			},
+		},
+		{
+			name: "numeric values",
+			envSection: map[string]any{
+				"INT_VAR":   123,
+				"FLOAT_VAR": 45.67,
+			},
+			validate: func(t *testing.T, result []string) {
+				assert.Len(t, result, 2)
+				assert.Contains(t, result, "INT_VAR=123")
+				assert.Contains(t, result, "FLOAT_VAR=45.67")
+			},
+		},
+		{
+			name: "boolean values",
+			envSection: map[string]any{
+				"BOOL_TRUE":  true,
+				"BOOL_FALSE": false,
+			},
+			validate: func(t *testing.T, result []string) {
+				assert.Len(t, result, 2)
+				assert.Contains(t, result, "BOOL_TRUE=true")
+				assert.Contains(t, result, "BOOL_FALSE=false")
+			},
+		},
+		{
+			name: "null values are excluded",
+			envSection: map[string]any{
+				"VALID":   "value",
+				"NULL":    nil,
+				"ALSO_OK": "test",
+			},
+			validate: func(t *testing.T, result []string) {
+				// nil values should be excluded.
+				assert.Len(t, result, 2)
+				assert.Contains(t, result, "VALID=value")
+				assert.Contains(t, result, "ALSO_OK=test")
+				// Verify NULL is not present.
+				for _, envVar := range result {
+					assert.NotContains(t, envVar, "NULL=")
+				}
+			},
+		},
+		{
+			name: "mixed types",
+			envSection: map[string]any{
+				"STRING": "text",
+				"NUM":    42,
+				"BOOL":   true,
+				"NIL":    nil,
+			},
+			validate: func(t *testing.T, result []string) {
+				assert.Len(t, result, 3)
+				assert.Contains(t, result, "STRING=text")
+				assert.Contains(t, result, "NUM=42")
+				assert.Contains(t, result, "BOOL=true")
+			},
+		},
+		{
+			name: "empty string value",
+			envSection: map[string]any{
+				"EMPTY": "",
+			},
+			validate: func(t *testing.T, result []string) {
+				assert.Len(t, result, 1)
+				assert.Contains(t, result, "EMPTY=")
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := componentEnvSectionToList(tt.envSection)
+			tt.validate(t, result)
+		})
+	}
 }
