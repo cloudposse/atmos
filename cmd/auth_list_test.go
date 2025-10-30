@@ -421,7 +421,6 @@ func TestProvidersFlagCompletion_ReturnsSortedProviders(t *testing.T) {
 	results, directive := providersFlagCompletion(cmd, []string{}, "")
 
 	// Verify results are sorted alphabetically.
-	require.NoError(t, err)
 	assert.Equal(t, cobra.ShellCompDirectiveNoFileComp, directive)
 	assert.Equal(t, []string{"apple-provider", "mango-provider", "zebra-provider"}, results)
 }
@@ -461,7 +460,6 @@ func TestIdentitiesFlagCompletion_ReturnsSortedIdentities(t *testing.T) {
 	results, directive := identitiesFlagCompletion(cmd, []string{}, "")
 
 	// Verify results are sorted alphabetically.
-	require.NoError(t, err)
 	assert.Equal(t, cobra.ShellCompDirectiveNoFileComp, directive)
 	assert.Equal(t, []string{"apple-identity", "mango-identity", "zebra-identity"}, results)
 }
