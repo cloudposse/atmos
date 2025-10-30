@@ -114,7 +114,7 @@ func TestAliasFlagPassing(t *testing.T) {
 		// This configuration ensures that:
 		//   atmos shell --instance test
 		// becomes:
-		//   atmos devcontainer start geodesic --attach --instance test
+		//   atmos devcontainer shell geodesic --instance test
 	})
 
 	t.Run("verify alias command construction", func(t *testing.T) {
@@ -124,19 +124,19 @@ func TestAliasFlagPassing(t *testing.T) {
 		// The actual command construction in cmd_utils.go:163 is:
 		//   commandToRun := fmt.Sprintf("%s %s %s", os.Args[0], aliasCmd, strings.Join(args, " "))
 		//
-		// With shell alias = "devcontainer start geodesic --attach" and args = ["--instance", "test"]
-		// This becomes: "atmos devcontainer start geodesic --attach --instance test"
+		// With shell alias = "devcontainer shell geodesic" and args = ["--instance", "test"]
+		// This becomes: "atmos devcontainer shell geodesic --instance test"
 
 		testArgs := []string{"--instance", "myinstance"}
-		expectedCommand := "devcontainer start geodesic --attach " + strings.Join(testArgs, " ")
+		expectedCommand := "devcontainer shell geodesic " + strings.Join(testArgs, " ")
 
 		// The alias should preserve the command structure.
 		shellCmd, _, err := RootCmd.Find([]string{"shell"})
 		require.NoError(t, err)
 
 		// Verify the alias points to the correct command.
-		assert.Contains(t, shellCmd.Short, "devcontainer start geodesic --attach",
-			"alias should be for 'devcontainer start geodesic --attach'")
+		assert.Contains(t, shellCmd.Short, "devcontainer shell geodesic",
+			"alias should be for 'devcontainer shell geodesic'")
 
 		// The actual command that would be executed includes the program name.
 		// We verify the structure by checking that the program name would be prepended

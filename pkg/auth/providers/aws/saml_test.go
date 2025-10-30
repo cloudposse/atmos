@@ -19,6 +19,7 @@ import (
 	"github.com/versent/saml2aws/v2/pkg/creds"
 
 	"github.com/cloudposse/atmos/pkg/auth/types"
+	"github.com/cloudposse/atmos/pkg/config/homedir"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -618,6 +619,10 @@ func TestSAMLProvider_shouldDownloadBrowser(t *testing.T) {
 				t.Setenv("HOME", homeDir)
 				t.Setenv("USERPROFILE", homeDir)
 
+				// Clear homedir cache to ensure environment variables take effect.
+				t.Cleanup(homedir.Reset)
+				homedir.Reset()
+
 				// Create a mock playwright driver directory with a file inside to pass validation.
 				playwrightPath := filepath.Join(homeDir, ".cache", "ms-playwright", "chromium-1084")
 				err := os.MkdirAll(playwrightPath, 0o755)
@@ -632,6 +637,10 @@ func TestSAMLProvider_shouldDownloadBrowser(t *testing.T) {
 				tmpDir := t.TempDir()
 				t.Setenv("HOME", tmpDir)
 				t.Setenv("USERPROFILE", tmpDir)
+
+				// Clear homedir cache to ensure environment variables take effect.
+				t.Cleanup(homedir.Reset)
+				homedir.Reset()
 			}
 
 			result := sp.shouldDownloadBrowser()

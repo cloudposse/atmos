@@ -666,6 +666,10 @@ func (m *mockIdentityForFallback) PrepareEnvironment(_ context.Context, environ 
 	return environ, nil
 }
 
+func (m *mockIdentityForFallback) Paths() ([]types.Path, error) {
+	return []types.Path{}, nil
+}
+
 func TestManager_initializeProvidersAndIdentities(t *testing.T) {
 	// Providers: invalid kind.
 	m := &manager{config: &schema.AuthConfig{Providers: map[string]schema.Provider{"bad": {Kind: "unknown"}}}}
