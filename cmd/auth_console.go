@@ -10,6 +10,7 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	awsAuth "github.com/cloudposse/atmos/pkg/auth/cloud/aws"
@@ -239,7 +240,16 @@ func initializeAuthManager() (types.AuthManager, error) {
 func resolveIdentityName(cmd *cobra.Command, authManager types.AuthManager) (string, error) {
 	defer perf.Track(nil, "cmd.resolveIdentityName")()
 
-	identityName, _ := cmd.Flags().GetString(IdentityFlagName)
+	// Get identity from flag or use default.
+	// Check if flag was explicitly set by user to ensure command-line precedence.
+	var identityName string
+	if cmd.Flags().Changed(IdentityFlagName) {
+		// Flag was explicitly provided on command line (either with or without value).
+		identityName, _ = cmd.Flags().GetString(IdentityFlagName)
+	} else {
+		// Flag not provided on command line - fall back to viper (config/env).
+		identityName = viper.GetString(IdentityFlagName)
+	}
 
 	// Check if user wants to interactively select identity.
 	forceSelect := identityName == IdentityFlagSelectValue

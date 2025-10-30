@@ -20,6 +20,7 @@ type AWSCredentials struct {
 	Region          string `json:"region,omitempty"`
 	Expiration      string `json:"expiration,omitempty"`
 	MfaArn          string `json:"mfa_arn,omitempty"`
+	SessionDuration string `json:"session_duration,omitempty"` // Duration string (e.g., "12h", "24h")
 }
 
 // IsExpired returns true if the credentials are expired.
