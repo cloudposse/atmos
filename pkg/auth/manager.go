@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/charmbracelet/huh"
@@ -30,6 +31,13 @@ const (
 	backtickedFmt            = "`%s`"
 	errFormatWithString      = "%w: %s"
 	errFormatWrapTwo         = "%w for %q: %w"
+	logKeyExpiration         = "expiration"
+)
+
+const (
+	// The minCredentialValidityBuffer is the minimum duration credentials must be valid.
+	// AWS can invalidate credentials before their stated expiration time.
+	minCredentialValidityBuffer = 15 * time.Minute
 )
 
 // contextKey is a type for context keys to avoid collisions.
@@ -57,6 +65,30 @@ type manager struct {
 	// chain holds the most recently constructed authentication chain.
 	// where index 0 is the provider name, followed by identities in order.
 	chain []string
+}
+
+// resolveIdentityName performs case-insensitive identity name lookup.
+// If an exact match exists, it returns the exact match.
+// Otherwise, it looks up the lowercase version in the case map.
+// Returns the resolved name and whether it was found.
+func (m *manager) resolveIdentityName(inputName string) (string, bool) {
+	// First try exact match (fast path for already-lowercase names)
+	if _, exists := m.identities[inputName]; exists {
+		return inputName, true
+	}
+
+	// Try case-insensitive lookup using the case map
+	if m.config.IdentityCaseMap != nil {
+		lowercaseName := strings.ToLower(inputName)
+		if _, exists := m.config.IdentityCaseMap[lowercaseName]; exists {
+			// Verify the identity actually exists with the lowercase key
+			if _, identityExists := m.identities[lowercaseName]; identityExists {
+				return lowercaseName, true
+			}
+		}
+	}
+
+	return "", false
 }
 
 // NewAuthManager creates a new AuthManager instance.
@@ -121,10 +153,15 @@ func (m *manager) Authenticate(ctx context.Context, identityName string) (*types
 		errUtils.CheckErrorAndPrint(errUtils.ErrNilParam, identityNameKey, "no identity specified")
 		return nil, fmt.Errorf(errFormatWithString, errUtils.ErrNilParam, identityNameKey)
 	}
-	if _, exists := m.identities[identityName]; !exists {
+
+	// Resolve identity name case-insensitively
+	resolvedName, found := m.resolveIdentityName(identityName)
+	if !found {
 		errUtils.CheckErrorAndPrint(errUtils.ErrInvalidAuthConfig, identityNameKey, "Identity specified was not found in the auth config.")
 		return nil, fmt.Errorf(errFormatWithString, errUtils.ErrIdentityNotFound, fmt.Sprintf(backtickedFmt, identityName))
 	}
+	// Use the resolved lowercase name for internal lookups
+	identityName = resolvedName
 
 	// Build the complete authentication chain.
 	chain, err := m.buildAuthenticationChain(identityName)
@@ -138,7 +175,7 @@ func (m *manager) Authenticate(ctx context.Context, identityName string) (*types
 	log.Debug("Authentication chain discovered", logKeyIdentity, identityName, "chainLength", len(chain), "chain", chain)
 
 	// Perform hierarchical credential validation (bottom-up).
-	finalCreds, err := m.authenticateHierarchical(ctx, identityName)
+	finalCreds, err := m.authenticateChain(ctx, identityName)
 	if err != nil {
 		wrappedErr := fmt.Errorf("%w: failed to authenticate hierarchically for identity %q: %w", errUtils.ErrAuthenticationFailed, identityName, err)
 		errUtils.CheckErrorAndPrint(wrappedErr, "Authenticate Hierarchical", "")
@@ -147,12 +184,11 @@ func (m *manager) Authenticate(ctx context.Context, identityName string) (*types
 
 	// Call post-authentication hook on the identity (now part of Identity interface).
 	if identity, exists := m.identities[identityName]; exists {
-		providerName, perr := identity.GetProviderName()
-		if perr != nil {
-			wrappedErr := fmt.Errorf("%w: failed to get provider name: %w", errUtils.ErrInvalidAuthConfig, perr)
-			errUtils.CheckErrorAndPrint(wrappedErr, "Get Provider Name", "")
-			return nil, wrappedErr
-		}
+		// Get the root provider name from the authentication chain.
+		// The chain is [provider, identity1, identity2, ..., targetIdentity].
+		// We use the first element (root provider) for file storage to ensure
+		// consistent directory structure regardless of identity chaining.
+		rootProviderName := m.chain[0]
 
 		// Get or create auth context in stackInfo.
 		var authContext *schema.AuthContext
@@ -166,9 +202,10 @@ func (m *manager) Authenticate(ctx context.Context, identityName string) (*types
 		if err := identity.PostAuthenticate(ctx, &types.PostAuthenticateParams{
 			AuthContext:  authContext,
 			StackInfo:    m.stackInfo,
-			ProviderName: providerName,
+			ProviderName: rootProviderName,
 			IdentityName: identityName,
 			Credentials:  finalCreds,
+			Manager:      m,
 		}); err != nil {
 			wrappedErr := fmt.Errorf("%w: post-authentication failed: %w", errUtils.ErrAuthenticationFailed, err)
 			errUtils.CheckErrorAndPrint(wrappedErr, "Post Authenticate", "")
@@ -195,35 +232,17 @@ func (m *manager) GetChain() []string {
 func (m *manager) GetCachedCredentials(ctx context.Context, identityName string) (*types.WhoamiInfo, error) {
 	defer perf.Track(nil, "auth.Manager.GetCachedCredentials")()
 
-	if _, exists := m.identities[identityName]; !exists {
+	// Resolve identity name case-insensitively
+	resolvedName, found := m.resolveIdentityName(identityName)
+	if !found {
 		return nil, fmt.Errorf(errFormatWithString, errUtils.ErrIdentityNotFound, fmt.Sprintf(backtickedFmt, identityName))
 	}
+	// Use the resolved lowercase name for internal lookups
+	identityName = resolvedName
 
-	// Try to retrieve credentials from keyring.
-	creds, err := m.credentialStore.Retrieve(identityName)
-	log.Debug("credentialStore.Retrieve result",
-		logKeyIdentity, identityName,
-		"creds_nil", creds == nil,
-		"error", err,
-	)
-
+	// Retrieve credentials with automatic fallback from keyring to identity storage.
+	creds, err := m.loadCredentialsWithFallback(ctx, identityName)
 	if err != nil {
-		// If not in keyring, try loading from identity-managed storage (AWS files, etc.).
-		if errors.Is(err, credentials.ErrCredentialsNotFound) {
-			log.Debug("Credentials not in keyring, trying to load from identity storage", logKeyIdentity, identityName)
-			info := m.buildWhoamiInfoFromEnvironment(identityName)
-
-			// If we successfully loaded credentials from storage, check if they're expired.
-			if info.Credentials != nil {
-				if info.Credentials.IsExpired() {
-					log.Debug("Credentials from identity storage are expired", logKeyIdentity, identityName)
-					return nil, fmt.Errorf(errFormatWithString, errUtils.ErrExpiredCredentials, fmt.Sprintf(backtickedFmt, identityName))
-				}
-				log.Debug("Successfully loaded credentials from identity storage", logKeyIdentity, identityName)
-				return info, nil
-			}
-		}
-
 		// Credentials not found or error occurred.
 		providerName := "unknown"
 		if prov, provErr := m.identities[identityName].GetProviderName(); provErr == nil {
@@ -238,13 +257,11 @@ func (m *manager) GetCachedCredentials(ctx context.Context, identityName string)
 	}
 
 	// Check if credentials are expired.
-	if expired, err := m.credentialStore.IsExpired(identityName); err != nil {
-		return nil, fmt.Errorf("%w: identity=%s: %w", errUtils.ErrExpiredCredentials, identityName, err)
-	} else if expired {
+	if creds.IsExpired() {
+		log.Debug("Cached credentials are expired", logKeyIdentity, identityName)
 		return nil, fmt.Errorf(errFormatWithString, errUtils.ErrExpiredCredentials, fmt.Sprintf(backtickedFmt, identityName))
 	}
 
-	log.Debug("Using cached credentials from keyring", logKeyIdentity, identityName)
 	return m.buildWhoamiInfo(identityName, creds), nil
 }
 
@@ -289,8 +306,14 @@ func (m *manager) Validate() error {
 }
 
 // GetDefaultIdentity returns the name of the default identity, if any.
-func (m *manager) GetDefaultIdentity() (string, error) {
+// If forceSelect is true and terminal is interactive, always shows identity selector.
+func (m *manager) GetDefaultIdentity(forceSelect bool) (string, error) {
 	defer perf.Track(nil, "auth.Manager.GetDefaultIdentity")()
+
+	// If forceSelect is true and we're in interactive mode, always show selector.
+	if forceSelect && isInteractive() {
+		return m.promptForIdentity("Select an identity:", m.ListIdentities())
+	}
 
 	// Find all default identities.
 	var defaultIdentities []string
@@ -357,13 +380,23 @@ func (m *manager) promptForIdentity(message string, identities []string) (string
 	return selectedIdentity, nil
 }
 
-// ListIdentities returns all available identity names.
+// ListIdentities returns all available identity names with their original case.
+// Uses IdentityCaseMap to preserve the original case from YAML config,
+// working around Viper's lowercase conversion of map keys.
 func (m *manager) ListIdentities() []string {
 	defer perf.Track(nil, "auth.Manager.ListIdentities")()
 
 	var names []string
-	for name := range m.config.Identities {
-		names = append(names, name)
+	for lowercaseName := range m.config.Identities {
+		// Use original case from IdentityCaseMap if available, otherwise use lowercase.
+		if m.config.IdentityCaseMap != nil {
+			if originalName, exists := m.config.IdentityCaseMap[lowercaseName]; exists {
+				names = append(names, originalName)
+				continue
+			}
+		}
+		// Fallback to lowercase name if case map not available.
+		names = append(names, lowercaseName)
 	}
 	return names
 }
@@ -457,8 +490,8 @@ func (m *manager) GetFilesDisplayPath(providerName string) string {
 	// Get provider instance.
 	provider, exists := m.providers[providerName]
 	if !exists {
-		// Default path if provider not found.
-		return "~/.aws/atmos"
+		// Default path if provider not found (XDG base directory).
+		return "~/.config/atmos"
 	}
 
 	// Delegate to provider to get display path.
@@ -498,8 +531,8 @@ func (m *manager) GetProviderKindForIdentity(identityName string) (string, error
 	return "", fmt.Errorf("%w: provider %q not found in configuration", errUtils.ErrInvalidAuthConfig, providerName)
 }
 
-// authenticateHierarchical performs hierarchical authentication with bottom-up validation.
-func (m *manager) authenticateHierarchical(ctx context.Context, targetIdentity string) (types.ICredentials, error) {
+// authenticateChain performs hierarchical authentication with bottom-up validation.
+func (m *manager) authenticateChain(ctx context.Context, targetIdentity string) (types.ICredentials, error) {
 	// Step 1: Bottom-up validation - check cached credentials from target to root.
 	validFromIndex := m.findFirstValidCachedCredentials()
 
@@ -528,77 +561,46 @@ func (m *manager) findFirstValidCachedCredentials() int {
 		identityName := m.chain[i]
 		log.Debug("Checking cached credentials", logKeyChainIndex, i, identityNameKey, identityName)
 
-		// First, try to retrieve from keyring.
-		cachedCreds, err := m.credentialStore.Retrieve(identityName)
-		log.Debug("Keyring retrieve result", logKeyChainIndex, i, identityNameKey, identityName, "hasError", err != nil, "hasCreds", cachedCreds != nil)
+		// Retrieve credentials with automatic keyring → identity storage fallback.
+		cachedCreds, err := m.loadCredentialsWithFallback(context.Background(), identityName)
 		if err != nil {
-			// If not in keyring, try loading from identity storage (AWS files, etc.).
-			// This handles the case where credentials were created outside of Atmos
-			// (e.g., via AWS CLI, SSO) but are available in standard AWS credential files.
-			if !errors.Is(err, credentials.ErrCredentialsNotFound) {
-				log.Debug("Error is not ErrCredentialsNotFound, skipping", logKeyChainIndex, i, identityNameKey, identityName, "error", err)
-				continue
-			}
-
-			identity, exists := m.identities[identityName]
-			if !exists {
-				log.Debug("Identity not in m.identities, skipping", logKeyChainIndex, i, identityNameKey, identityName)
-				continue
-			}
-
-			log.Debug("Credentials not in keyring, trying identity storage", logKeyChainIndex, i, identityNameKey, identityName)
-			loadedCreds, loadErr := identity.LoadCredentials(context.Background())
-			if loadErr != nil || loadedCreds == nil {
-				log.Debug("Failed to load from identity storage", logKeyChainIndex, i, identityNameKey, identityName, "error", loadErr)
-				continue
-			}
-
-			log.Debug("Loaded credentials from identity storage", logKeyChainIndex, i, identityNameKey, identityName)
-			cachedCreds = loadedCreds
+			log.Debug("Failed to retrieve credentials", logKeyChainIndex, i, identityNameKey, identityName, "error", err)
+			continue
 		}
 
+		// Validate credentials are not expired.
 		valid, expTime := m.isCredentialValid(identityName, cachedCreds)
 		if valid {
 			if expTime != nil {
 				log.Debug("Found valid cached credentials", logKeyChainIndex, i, identityNameKey, identityName, "expiration", *expTime)
 			} else {
-				// Non-AWS credentials or no expiration info, assume valid.
-				log.Debug("Found valid cached credentials (non-AWS)", logKeyChainIndex, i, identityNameKey, identityName)
+				// Credentials without expiration (API keys, long-lived tokens, etc.).
+				log.Debug("Found valid cached credentials", logKeyChainIndex, i, identityNameKey, identityName, "expiration", "none")
 			}
 			return i
 		}
 
-		// Credentials are invalid (expired or missing expiration).
-		// Try loading from identity storage in case there's a fresher version.
+		// Credentials exist but are expired or expiring too soon - log and continue to next in chain.
 		if expTime != nil {
-			log.Debug("Credentials expired, trying identity storage", logKeyChainIndex, i, identityNameKey, identityName, "expiration", *expTime)
-		} else {
-			log.Debug("Credentials invalid (no expiration info), trying identity storage", logKeyChainIndex, i, identityNameKey, identityName)
-		}
-
-		identity, exists := m.identities[identityName]
-		if !exists {
-			log.Debug("Identity not in m.identities, skipping reload", logKeyChainIndex, i, identityNameKey, identityName)
-			continue
-		}
-
-		loadedCreds, loadErr := identity.LoadCredentials(context.Background())
-		if loadErr != nil || loadedCreds == nil {
-			log.Debug("Failed to reload from identity storage", logKeyChainIndex, i, identityNameKey, identityName, "error", loadErr)
-			continue
-		}
-
-		log.Debug("Reloaded credentials from identity storage", logKeyChainIndex, i, identityNameKey, identityName)
-		// Check if the reloaded credentials are valid.
-		if valid, reloadExpTime := m.isCredentialValid(identityName, loadedCreds); valid {
-			if reloadExpTime != nil {
-				log.Debug("Reloaded credentials are valid", logKeyChainIndex, i, identityNameKey, identityName, "expiration", *reloadExpTime)
+			timeUntilExpiry := time.Until(*expTime)
+			if timeUntilExpiry <= 0 {
+				log.Debug("Skipping expired credentials in chain",
+					logKeyChainIndex, i,
+					identityNameKey, identityName,
+					"expiration", *expTime,
+					"expired_ago", -timeUntilExpiry)
 			} else {
-				log.Debug("Reloaded credentials are valid (non-AWS)", logKeyChainIndex, i, identityNameKey, identityName)
+				log.Debug("Skipping credentials expiring too soon in chain (within safety buffer)",
+					logKeyChainIndex, i,
+					identityNameKey, identityName,
+					"expiration", *expTime,
+					"time_until_expiry", timeUntilExpiry,
+					"required_buffer", minCredentialValidityBuffer)
 			}
-			return i
+		} else {
+			// This shouldn't happen - isCredentialValid returns valid=true when expTime=nil.
+			log.Debug("Credentials are invalid", logKeyChainIndex, i, identityNameKey, identityName)
 		}
-		log.Debug("Reloaded credentials also invalid", logKeyChainIndex, i, identityNameKey, identityName)
 	}
 	return -1 // No valid cached credentials found
 }
@@ -609,10 +611,24 @@ func (m *manager) isCredentialValid(identityName string, cachedCreds types.ICred
 	// Check expiration from the credentials object itself, not the keyring.
 	// This allows us to validate credentials loaded from any source (keyring, files, etc.).
 	if expTime, err := cachedCreds.GetExpiration(); err == nil && expTime != nil {
-		if expTime.After(time.Now().Add(5 * time.Minute)) {
+		if expTime.After(time.Now().Add(minCredentialValidityBuffer)) {
 			return true, expTime
 		}
-		// Expiration exists but is too close or already expired -> treat as invalid.
+		// Expiration exists but is too close or already expired -> treat as invalid for long-running operations.
+		timeUntilExpiry := time.Until(*expTime)
+		if timeUntilExpiry <= 0 {
+			log.Debug("Credentials are expired",
+				logKeyIdentity, identityName,
+				logKeyExpiration, expTime,
+				"expired_ago", -timeUntilExpiry)
+		} else {
+			log.Debug("Credentials expiring too soon for safe use in long-running operations",
+				logKeyIdentity, identityName,
+				logKeyExpiration, expTime,
+				"time_until_expiry", timeUntilExpiry,
+				"required_buffer", minCredentialValidityBuffer,
+				"recommendation", "re-authenticate to ensure operation completes successfully")
+		}
 		return false, expTime
 	}
 	// Non-expiring credentials (no expiration info) -> assume valid.
@@ -667,7 +683,7 @@ func (m *manager) authenticateProviderChain(ctx context.Context, startIndex int)
 }
 
 func (m *manager) fetchCachedCredentials(startIndex int) (types.ICredentials, int) {
-	currentCreds, err := m.retrieveCachedCredentials(m.chain, startIndex)
+	currentCreds, err := m.getChainCredentials(m.chain, startIndex)
 	if err != nil {
 		log.Debug("Failed to retrieve cached credentials, starting from provider", "error", err)
 		return nil, 0
@@ -699,16 +715,57 @@ func (m *manager) determineStartingIndex(startIndex int) int {
 	return startIndex
 }
 
-// retrieveCachedCredentials retrieves cached credentials from the specified starting point.
-func (m *manager) retrieveCachedCredentials(chain []string, startIndex int) (types.ICredentials, error) {
+// loadCredentialsWithFallback retrieves credentials with keyring → identity storage fallback.
+// This is the single source of truth for credential retrieval across all auth operations.
+// It ensures consistent behavior whether credentials are in keyring or identity storage.
+func (m *manager) loadCredentialsWithFallback(ctx context.Context, identityName string) (types.ICredentials, error) {
+	// Fast path: Try keyring cache first.
+	creds, err := m.credentialStore.Retrieve(identityName)
+	if err == nil {
+		log.Debug("Retrieved credentials from keyring", logKeyIdentity, identityName)
+		return creds, nil
+	}
+
+	// If keyring returned an error other than "not found", propagate it.
+	if !errors.Is(err, credentials.ErrCredentialsNotFound) {
+		return nil, fmt.Errorf("keyring error for identity %q: %w", identityName, err)
+	}
+
+	// Slow path: Fall back to identity storage (AWS files, etc.).
+	// This handles cases where credentials were created outside of Atmos
+	// (e.g., via AWS CLI/SSO) but are available in standard credential files.
+	log.Debug("Credentials not in keyring, trying identity storage", logKeyIdentity, identityName)
+
+	identity, exists := m.identities[identityName]
+	if !exists {
+		return nil, fmt.Errorf("%w: %s", errUtils.ErrIdentityNotInConfig, identityName)
+	}
+
+	// Delegate to identity's LoadCredentials method.
+	// Each identity type knows how to load its own credentials from storage.
+	loadedCreds, loadErr := identity.LoadCredentials(ctx)
+	if loadErr != nil {
+		return nil, fmt.Errorf("failed to load credentials from identity storage for %q: %w", identityName, loadErr)
+	}
+
+	if loadedCreds == nil {
+		return nil, fmt.Errorf("%w: credentials loaded from storage are nil for identity %q", errUtils.ErrNoCredentialsFound, identityName)
+	}
+
+	log.Debug("Successfully loaded credentials from identity storage", logKeyIdentity, identityName)
+	return loadedCreds, nil
+}
+
+// getChainCredentials retrieves cached credentials from the specified starting point.
+func (m *manager) getChainCredentials(chain []string, startIndex int) (types.ICredentials, error) {
 	identityName := chain[startIndex]
-	currentCreds, err := m.credentialStore.Retrieve(identityName)
+	creds, err := m.loadCredentialsWithFallback(context.Background(), identityName)
 	if err != nil {
 		return nil, err
 	}
 
-	log.Debug("Starting authentication from cached credentials", "startIndex", startIndex)
-	return currentCreds, nil
+	log.Debug("Starting authentication from cached credentials", "startIndex", startIndex, logKeyIdentity, identityName)
+	return creds, nil
 }
 
 // authenticateWithProvider handles provider authentication.
@@ -779,7 +836,7 @@ func (m *manager) authenticateIdentityChain(ctx context.Context, startIndex int,
 			log.Debug("Cached credentials", "identityStep", identityStep)
 		}
 
-		log.Info("Chained identity", "from", m.getChainStepName(i-1), "to", identityStep)
+		log.Debug("Chained identity", "from", m.getChainStepName(i-1), "to", identityStep)
 	}
 
 	return currentCreds, nil

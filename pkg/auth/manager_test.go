@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/auth/credentials"
 	"github.com/cloudposse/atmos/pkg/auth/types"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -119,7 +120,7 @@ func TestManager_GetDefaultIdentity(t *testing.T) {
 			}
 
 			// Call the function.
-			result, err := manager.GetDefaultIdentity()
+			result, err := manager.GetDefaultIdentity(false)
 
 			// Assert results.
 			if tt.expectedError != "" {
@@ -159,7 +160,7 @@ func TestManager_GetDefaultIdentity_MultipleDefaultsOrder(t *testing.T) {
 		},
 	}
 
-	_, err := manager.GetDefaultIdentity()
+	_, err := manager.GetDefaultIdentity(false)
 	require.Error(t, err)
 
 	// The error should contain all three default identities.
@@ -192,6 +193,42 @@ func TestManager_ListIdentities(t *testing.T) {
 	assert.Contains(t, result, "identity1")
 	assert.Contains(t, result, "identity2")
 	assert.Contains(t, result, "identity3")
+}
+
+func TestManager_ListIdentities_WithCaseMap(t *testing.T) {
+	// Viper lowercases all map keys, so identities will be lowercase in the config.
+	identities := map[string]schema.Identity{
+		"superadmin":              {Kind: "aws/user", Default: true},
+		"core-identity/terraform": {Kind: "aws/permission-set", Default: false},
+		"devops":                  {Kind: "aws/assume-role", Default: false},
+	}
+
+	// IdentityCaseMap preserves the original case from YAML.
+	caseMap := map[string]string{
+		"superadmin":              "SuperAdmin",
+		"core-identity/terraform": "core-identity/Terraform",
+		"devops":                  "DevOps",
+	}
+
+	manager := &manager{
+		config: &schema.AuthConfig{
+			Identities:      identities,
+			IdentityCaseMap: caseMap,
+		},
+	}
+
+	result := manager.ListIdentities()
+
+	// Should return all identity names with original case preserved.
+	assert.Len(t, result, 3)
+	assert.Contains(t, result, "SuperAdmin")
+	assert.Contains(t, result, "core-identity/Terraform")
+	assert.Contains(t, result, "DevOps")
+
+	// Should NOT contain lowercase versions.
+	assert.NotContains(t, result, "superadmin")
+	assert.NotContains(t, result, "core-identity/terraform")
+	assert.NotContains(t, result, "devops")
 }
 
 func TestManager_promptForIdentity(t *testing.T) {
@@ -346,15 +383,15 @@ func TestManager_isCredentialValid(t *testing.T) {
 	assert.NotNil(t, exp) // Returns the expiration time even when invalid.
 	assert.Equal(t, pastExp, *exp)
 
-	// Expiring soon (less than 5 minutes) -> false, returns expiration time.
-	soonExp := now.Add(3 * time.Minute)
+	// Expiring soon (less than 15 minutes) -> false, returns expiration time.
+	soonExp := now.Add(10 * time.Minute)
 	valid, exp = m.isCredentialValid("expiring-soon", &testCreds{exp: &soonExp})
 	assert.False(t, valid)
 	assert.NotNil(t, exp)
 	assert.Equal(t, soonExp, *exp)
 
-	// Valid credentials with future expiration (>5 minutes) -> true, returns expiration.
-	futureExp := now.Add(10 * time.Minute)
+	// Valid credentials with future expiration (>15 minutes) -> true, returns expiration.
+	futureExp := now.Add(20 * time.Minute)
 	valid, exp = m.isCredentialValid("valid", &testCreds{exp: &futureExp})
 	assert.True(t, valid)
 	require.NotNil(t, exp)
@@ -386,13 +423,14 @@ func TestManager_GetCachedCredentials_Paths(t *testing.T) {
 	assert.Error(t, err)
 
 	// Expired.
-	s.data["dev"] = &testCreds{}
-	s.expired["dev"] = true
+	expiredTime := time.Now().Add(-1 * time.Hour)
+	s.data["dev"] = &testCreds{exp: &expiredTime}
 	_, err = m.GetCachedCredentials(context.Background(), "dev")
 	assert.Error(t, err)
 
 	// Success.
-	s.expired["dev"] = false
+	validTime := time.Now().Add(1 * time.Hour)
+	s.data["dev"] = &testCreds{exp: &validTime}
 	info, err := m.GetCachedCredentials(context.Background(), "dev")
 	require.NoError(t, err)
 	assert.Equal(t, "p", info.Provider)
@@ -519,14 +557,113 @@ func TestManager_retrieveCachedCredentials_and_determineStart(t *testing.T) {
 	assert.Equal(t, 2, m.determineStartingIndex(2))
 
 	// Retrieve credentials succeeds.
-	_, err := m.retrieveCachedCredentials(m.chain, 0)
+	_, err := m.getChainCredentials(m.chain, 0)
 	assert.NoError(t, err)
 
 	// Retrieve credentials returns error.
 	s2 := &testStore{retrieveErr: map[string]error{"y": assert.AnError}}
 	m2 := &manager{credentialStore: s2, chain: []string{"y"}}
-	_, err = m2.retrieveCachedCredentials(m2.chain, 0)
+	_, err = m2.getChainCredentials(m2.chain, 0)
 	assert.Error(t, err)
+}
+
+// TestManager_retrieveCachedCredentials_TerraformFlow_Regression reproduces the original bug.
+// Where terraform commands failed to use file-based credentials even though auth whoami worked.
+// This test specifically covers the code path used during terraform execution (via fetchCachedCredentials).
+// Before the fix, this test would fail because getChainCredentials didn't fall back to identity storage.
+// After the fix, this test passes because getChainCredentials now has the same fallback logic.
+func TestManager_retrieveCachedCredentials_TerraformFlow_Regression(t *testing.T) {
+	// Setup: Simulate the exact scenario from the bug report.
+	// - Credentials exist in identity storage (AWS credential files).
+	// - Credentials do NOT exist in keyring (noop keyring in Docker/Geodesic).
+	// - User has successfully authenticated via SSO and files are up-to-date.
+
+	// Create a keyring that always returns "not found" (simulates noop keyring).
+	store := &testStore{
+		retrieveErr: map[string]error{
+			"test-identity": credentials.ErrCredentialsNotFound,
+		},
+	}
+
+	// Create an identity that has credentials in storage (simulates AWS credential files).
+	identity := &mockIdentityForFallback{
+		hasCredentials: true,
+		creds:          &testCreds{},
+	}
+
+	m := &manager{
+		config: &schema.AuthConfig{
+			Identities: map[string]schema.Identity{
+				"test-identity": {Kind: "test"},
+			},
+		},
+		identities: map[string]types.Identity{
+			"test-identity": identity,
+		},
+		credentialStore: store,
+		chain:           []string{"test-provider", "test-identity"},
+	}
+
+	// This is the EXACT code path used by terraform execution:
+	// ExecuteTerraform → TerraformPreHook → Authenticate → authenticateChain
+	// → authenticateFromIndex → authenticateProviderChain → fetchCachedCredentials
+	// → getChainCredentials
+	creds, err := m.getChainCredentials(m.chain, 1) // Index 1 = test-identity
+
+	// BEFORE FIX: This fails with "credentials not found" because getChainCredentials
+	//             only checks keyring and doesn't fall back to identity storage.
+	// AFTER FIX: This succeeds by loading from identity storage (AWS files).
+	require.NoError(t, err, "getChainCredentials should fall back to identity storage when keyring is empty")
+	assert.NotNil(t, creds, "Credentials should be loaded from identity storage")
+}
+
+// mockIdentityForFallback is a minimal mock identity for testing fallback behavior.
+type mockIdentityForFallback struct {
+	hasCredentials bool
+	creds          types.ICredentials
+}
+
+func (m *mockIdentityForFallback) Kind() string {
+	return "mock"
+}
+
+func (m *mockIdentityForFallback) GetProviderName() (string, error) {
+	return "test-provider", nil
+}
+
+func (m *mockIdentityForFallback) Authenticate(ctx context.Context, previousCredentials types.ICredentials) (types.ICredentials, error) {
+	return nil, fmt.Errorf("authenticate should not be called in retrieval path")
+}
+
+func (m *mockIdentityForFallback) LoadCredentials(ctx context.Context) (types.ICredentials, error) {
+	if !m.hasCredentials {
+		return nil, fmt.Errorf("no credentials in identity storage")
+	}
+	return m.creds, nil
+}
+
+func (m *mockIdentityForFallback) Environment() (map[string]string, error) {
+	return map[string]string{}, nil
+}
+
+func (m *mockIdentityForFallback) CredentialsExist() (bool, error) {
+	return m.hasCredentials, nil
+}
+
+func (m *mockIdentityForFallback) Validate() error {
+	return nil
+}
+
+func (m *mockIdentityForFallback) PostAuthenticate(ctx context.Context, params *types.PostAuthenticateParams) error {
+	return nil
+}
+
+func (m *mockIdentityForFallback) Logout(ctx context.Context) error {
+	return nil
+}
+
+func (m *mockIdentityForFallback) PrepareEnvironment(_ context.Context, environ map[string]string) (map[string]string, error) {
+	return environ, nil
 }
 
 func TestManager_initializeProvidersAndIdentities(t *testing.T) {
@@ -553,7 +690,7 @@ func ptrTime(t time.Time) *time.Time { return &t }
 func TestManager_findFirstValidCachedCredentials(t *testing.T) {
 	s := &testStore{data: map[string]any{}}
 	now := time.Now().UTC()
-	validExp := now.Add(10 * time.Minute) // Valid: expires in 10 minutes.
+	validExp := now.Add(20 * time.Minute) // Valid: expires in 20 minutes (> 15 min buffer).
 	expiredExp := now.Add(-1 * time.Hour) // Expired: expired 1 hour ago.
 	m := &manager{credentialStore: s, chain: []string{"prov", "id1", "id2"}}
 
@@ -1147,7 +1284,7 @@ func TestManager_GetFilesDisplayPath(t *testing.T) {
 			name:         "provider not found",
 			providerName: "non-existent",
 			provider:     nil,
-			expected:     "~/.aws/atmos", // Default fallback
+			expected:     "~/.config/atmos", // Default fallback (XDG base directory)
 		},
 	}
 

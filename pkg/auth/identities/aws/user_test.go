@@ -188,6 +188,153 @@ func TestUser_resolveLongLivedCredentials_Order(t *testing.T) {
 	assert.Equal(t, "AK2", creds.AccessKeyID)
 }
 
+// TestUser_resolveLongLivedCredentials_DeepMerge validates the deep merge precedence rules.
+func TestUser_resolveLongLivedCredentials_DeepMerge(t *testing.T) {
+	store := atmosCreds.NewCredentialStore()
+
+	tests := []struct {
+		name           string
+		identityName   string
+		yamlCreds      map[string]any
+		keystoreCreds  *types.AWSCredentials
+		expectedAccess string
+		expectedSecret string
+		expectedMFA    string
+		expectError    bool
+		errorContains  string
+	}{
+		{
+			name:         "Rule 1: YAML complete credentials - use YAML entirely",
+			identityName: "yaml-complete",
+			yamlCreds: map[string]any{
+				"access_key_id":     "YAML_ACCESS",
+				"secret_access_key": "YAML_SECRET",
+				"mfa_arn":           "arn:aws:iam::111:mfa/yaml",
+			},
+			keystoreCreds: &types.AWSCredentials{
+				AccessKeyID:     "KEYRING_ACCESS",
+				SecretAccessKey: "KEYRING_SECRET",
+				MfaArn:          "arn:aws:iam::111:mfa/keyring",
+			},
+			expectedAccess: "YAML_ACCESS",
+			expectedSecret: "YAML_SECRET",
+			expectedMFA:    "arn:aws:iam::111:mfa/yaml",
+			expectError:    false,
+		},
+		{
+			name:         "Rule 2: YAML empty - use keyring with YAML MFA override",
+			identityName: "yaml-mfa-override",
+			yamlCreds: map[string]any{
+				"mfa_arn": "arn:aws:iam::222:mfa/yaml-override",
+			},
+			keystoreCreds: &types.AWSCredentials{
+				AccessKeyID:     "KEYRING_ACCESS",
+				SecretAccessKey: "KEYRING_SECRET",
+				MfaArn:          "arn:aws:iam::222:mfa/keyring",
+			},
+			expectedAccess: "KEYRING_ACCESS",
+			expectedSecret: "KEYRING_SECRET",
+			expectedMFA:    "arn:aws:iam::222:mfa/yaml-override", // YAML overrides keyring MFA
+			expectError:    false,
+		},
+		{
+			name:         "Rule 2: YAML empty - use keyring entirely (no MFA override)",
+			identityName: "yaml-empty-keyring-mfa",
+			yamlCreds:    map[string]any{},
+			keystoreCreds: &types.AWSCredentials{
+				AccessKeyID:     "KEYRING_ACCESS",
+				SecretAccessKey: "KEYRING_SECRET",
+				MfaArn:          "arn:aws:iam::333:mfa/keyring",
+			},
+			expectedAccess: "KEYRING_ACCESS",
+			expectedSecret: "KEYRING_SECRET",
+			expectedMFA:    "arn:aws:iam::333:mfa/keyring", // Keyring MFA used
+			expectError:    false,
+		},
+		{
+			name:         "Rule 3: YAML partial (only access key) - error",
+			identityName: "yaml-partial-access",
+			yamlCreds: map[string]any{
+				"access_key_id": "YAML_ACCESS",
+				// Missing secret_access_key
+			},
+			keystoreCreds: &types.AWSCredentials{
+				AccessKeyID:     "KEYRING_ACCESS",
+				SecretAccessKey: "KEYRING_SECRET",
+			},
+			expectError:   true,
+			errorContains: "must both be provided or both be empty",
+		},
+		{
+			name:         "Rule 3: YAML partial (only secret key) - error",
+			identityName: "yaml-partial-secret",
+			yamlCreds: map[string]any{
+				"secret_access_key": "YAML_SECRET",
+				// Missing access_key_id
+			},
+			keystoreCreds: &types.AWSCredentials{
+				AccessKeyID:     "KEYRING_ACCESS",
+				SecretAccessKey: "KEYRING_SECRET",
+			},
+			expectError:   true,
+			errorContains: "must both be provided or both be empty",
+		},
+		{
+			name:         "Empty env vars (!env) - use keyring with YAML MFA",
+			identityName: "empty-env-vars",
+			yamlCreds: map[string]any{
+				"access_key_id":     "", // Empty !env result
+				"secret_access_key": "", // Empty !env result
+				"mfa_arn":           "arn:aws:iam::444:mfa/yaml",
+			},
+			keystoreCreds: &types.AWSCredentials{
+				AccessKeyID:     "KEYRING_ACCESS",
+				SecretAccessKey: "KEYRING_SECRET",
+				MfaArn:          "",
+			},
+			expectedAccess: "KEYRING_ACCESS",
+			expectedSecret: "KEYRING_SECRET",
+			expectedMFA:    "arn:aws:iam::444:mfa/yaml", // YAML MFA overrides empty keyring MFA
+			expectError:    false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Prime keyring if test provides keystore credentials.
+			if tt.keystoreCreds != nil {
+				err := store.Store(tt.identityName, tt.keystoreCreds)
+				require.NoError(t, err)
+			}
+
+			// Create identity with YAML credentials.
+			id, err := NewUserIdentity(tt.identityName, &schema.Identity{
+				Kind:        "aws/user",
+				Credentials: tt.yamlCreds,
+			})
+			require.NoError(t, err)
+			ui := id.(*userIdentity)
+
+			// Resolve credentials.
+			creds, err := ui.resolveLongLivedCredentials()
+
+			if tt.expectError {
+				require.Error(t, err)
+				if tt.errorContains != "" {
+					assert.Contains(t, err.Error(), tt.errorContains)
+				}
+				return
+			}
+
+			require.NoError(t, err)
+			require.NotNil(t, creds)
+			assert.Equal(t, tt.expectedAccess, creds.AccessKeyID, "access_key_id mismatch")
+			assert.Equal(t, tt.expectedSecret, creds.SecretAccessKey, "secret_access_key mismatch")
+			assert.Equal(t, tt.expectedMFA, creds.MfaArn, "mfa_arn mismatch")
+		})
+	}
+}
+
 func TestUser_resolveRegion_DefaultAndOverride(t *testing.T) {
 	id, _ := NewUserIdentity("dev", &schema.Identity{Kind: "aws/user"})
 	ui := id.(*userIdentity)
@@ -501,6 +648,311 @@ output = json
 				assert.Equal(t, "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY", awsCreds.SecretAccessKey)
 				assert.Equal(t, "FwoGZXIvYXdzEBExample", awsCreds.SessionToken)
 				assert.Equal(t, "us-west-2", awsCreds.Region)
+			}
+		})
+	}
+}
+
+func TestUserIdentity_GetSessionDuration(t *testing.T) {
+	tests := []struct {
+		name                string
+		sessionConfig       *schema.SessionConfig
+		credentialsDuration string
+		hasMfa              bool
+		expectedDuration    int32
+		description         string
+	}{
+		{
+			name:                "default without MFA",
+			sessionConfig:       nil,
+			credentialsDuration: "",
+			hasMfa:              false,
+			expectedDuration:    43200, // 12 hours default
+			description:         "Should use default 12h when no config provided and no MFA",
+		},
+		{
+			name:                "default with MFA",
+			sessionConfig:       nil,
+			credentialsDuration: "",
+			hasMfa:              true,
+			expectedDuration:    43200, // 12 hours default (same default, but MFA allows up to 36h)
+			description:         "Should use default 12h when no config provided and MFA enabled",
+		},
+		{
+			name: "configured 8 hours in YAML",
+			sessionConfig: &schema.SessionConfig{
+				Duration: "8h",
+			},
+			credentialsDuration: "",
+			hasMfa:              false,
+			expectedDuration:    28800, // 8 hours
+			description:         "Should use configured 8h duration from YAML",
+		},
+		{
+			name: "configured 24 hours with MFA in YAML",
+			sessionConfig: &schema.SessionConfig{
+				Duration: "24h",
+			},
+			credentialsDuration: "",
+			hasMfa:              true,
+			expectedDuration:    86400, // 24 hours (valid with MFA)
+			description:         "Should use configured 24h duration when MFA enabled",
+		},
+		{
+			name:                "configured 8 hours in keyring",
+			sessionConfig:       nil,
+			credentialsDuration: "8h",
+			hasMfa:              false,
+			expectedDuration:    28800, // 8 hours
+			description:         "Should use configured 8h duration from keyring",
+		},
+		{
+			name: "YAML takes precedence over keyring",
+			sessionConfig: &schema.SessionConfig{
+				Duration: "10h",
+			},
+			credentialsDuration: "8h",
+			hasMfa:              false,
+			expectedDuration:    36000, // 10 hours from YAML
+			description:         "Should use YAML config over keyring when both present",
+		},
+		{
+			name: "configured 36 hours with MFA",
+			sessionConfig: &schema.SessionConfig{
+				Duration: "36h",
+			},
+			credentialsDuration: "",
+			hasMfa:              true,
+			expectedDuration:    129600, // 36 hours (max with MFA)
+			description:         "Should use configured 36h duration (max with MFA)",
+		},
+		{
+			name: "configured 24 hours without MFA - clamped to 12h",
+			sessionConfig: &schema.SessionConfig{
+				Duration: "24h",
+			},
+			credentialsDuration: "",
+			hasMfa:              false,
+			expectedDuration:    43200, // 12 hours (clamped from 24h)
+			description:         "Should clamp 24h to 12h max when no MFA",
+		},
+		{
+			name: "configured 48 hours with MFA - clamped to 36h",
+			sessionConfig: &schema.SessionConfig{
+				Duration: "48h",
+			},
+			credentialsDuration: "",
+			hasMfa:              true,
+			expectedDuration:    129600, // 36 hours (clamped from 48h)
+			description:         "Should clamp 48h to 36h max even with MFA",
+		},
+		{
+			name: "configured 5 minutes - clamped to 15m minimum",
+			sessionConfig: &schema.SessionConfig{
+				Duration: "5m",
+			},
+			credentialsDuration: "",
+			hasMfa:              false,
+			expectedDuration:    900, // 15 minutes (clamped from 5m)
+			description:         "Should clamp 5m to 15m minimum",
+		},
+		{
+			name: "invalid duration format in YAML - use default",
+			sessionConfig: &schema.SessionConfig{
+				Duration: "invalid",
+			},
+			credentialsDuration: "",
+			hasMfa:              false,
+			expectedDuration:    43200, // 12 hours default (fallback)
+			description:         "Should use default when duration format is invalid",
+		},
+		{
+			name:                "invalid duration format in keyring - use default",
+			sessionConfig:       nil,
+			credentialsDuration: "invalid",
+			hasMfa:              false,
+			expectedDuration:    43200, // 12 hours default (fallback)
+			description:         "Should use default when keyring duration format is invalid",
+		},
+		{
+			name: "empty duration string - use default",
+			sessionConfig: &schema.SessionConfig{
+				Duration: "",
+			},
+			credentialsDuration: "",
+			hasMfa:              false,
+			expectedDuration:    43200, // 12 hours default
+			description:         "Should use default when duration is empty string",
+		},
+		// NEW: Integer format tests
+		{
+			name: "integer format - 3600 seconds (1 hour)",
+			sessionConfig: &schema.SessionConfig{
+				Duration: "3600",
+			},
+			credentialsDuration: "",
+			hasMfa:              false,
+			expectedDuration:    3600,
+			description:         "Should parse integer as seconds",
+		},
+		{
+			name: "out of bounds - negative value",
+			sessionConfig: &schema.SessionConfig{
+				Duration: "-1",
+			},
+			credentialsDuration: "",
+			hasMfa:              false,
+			expectedDuration:    43200, // Falls back to default
+			description:         "Should reject negative duration and use default",
+		},
+		{
+			name: "out of bounds - exceeds math.MaxInt32",
+			sessionConfig: &schema.SessionConfig{
+				Duration: "9999999999999", // Way beyond int32 range
+			},
+			credentialsDuration: "",
+			hasMfa:              false,
+			expectedDuration:    43200, // Falls back to default
+			description:         "Should reject duration beyond int32 range and use default",
+		},
+		{
+			name:                "integer format in keyring - 7200 seconds (2 hours)",
+			sessionConfig:       nil,
+			credentialsDuration: "7200",
+			hasMfa:              false,
+			expectedDuration:    7200,
+			description:         "Should parse integer from keyring as seconds",
+		},
+		// NEW: Days format tests
+		{
+			name: "days format - 1d",
+			sessionConfig: &schema.SessionConfig{
+				Duration: "1d",
+			},
+			credentialsDuration: "",
+			hasMfa:              true,
+			expectedDuration:    86400, // 24 hours
+			description:         "Should parse 1d as 24 hours",
+		},
+		{
+			name:                "days format in keyring - 2d",
+			sessionConfig:       nil,
+			credentialsDuration: "2d",
+			hasMfa:              true,
+			expectedDuration:    129600, // Max 36h with MFA - clamped from 48h
+			description:         "Should parse 2d but clamp to 36h max with MFA",
+		},
+		// NEW: Complex Go duration format
+		{
+			name: "complex go duration - 1h30m",
+			sessionConfig: &schema.SessionConfig{
+				Duration: "1h30m",
+			},
+			credentialsDuration: "",
+			hasMfa:              false,
+			expectedDuration:    5400, // 1.5 hours
+			description:         "Should parse complex Go duration 1h30m",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			identity := &userIdentity{
+				name: "test-identity",
+				config: &schema.Identity{
+					Kind:    "aws/user",
+					Session: tt.sessionConfig,
+				},
+			}
+
+			duration := identity.getSessionDuration(tt.hasMfa, tt.credentialsDuration)
+			assert.Equal(t, tt.expectedDuration, duration, tt.description)
+		})
+	}
+}
+
+func TestUserIdentity_BuildGetSessionTokenInput_UsesConfiguredDuration(t *testing.T) {
+	tests := []struct {
+		name             string
+		sessionConfig    *schema.SessionConfig
+		mfaArn           string
+		expectedDuration int32
+		description      string
+	}{
+		{
+			name:             "default duration without MFA",
+			sessionConfig:    nil,
+			mfaArn:           "",
+			expectedDuration: 43200, // 12 hours default
+			description:      "Should use default 12h duration when no config and no MFA",
+		},
+		{
+			name: "configured 8h duration without MFA",
+			sessionConfig: &schema.SessionConfig{
+				Duration: "8h",
+			},
+			mfaArn:           "",
+			expectedDuration: 28800, // 8 hours
+			description:      "Should use configured 8h duration when no MFA",
+		},
+		{
+			name:             "default duration with MFA",
+			sessionConfig:    nil,
+			mfaArn:           "arn:aws:iam::123456789012:mfa/test-user",
+			expectedDuration: 43200, // 12 hours default
+			description:      "Should use default 12h duration when no config and MFA enabled",
+		},
+		{
+			name: "configured 24h duration with MFA",
+			sessionConfig: &schema.SessionConfig{
+				Duration: "24h",
+			},
+			mfaArn:           "arn:aws:iam::123456789012:mfa/test-user",
+			expectedDuration: 86400, // 24 hours
+			description:      "Should use configured 24h duration when MFA enabled",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Setup mock MFA prompt to return fixed token.
+			originalPromptFunc := promptMfaTokenFunc
+			t.Cleanup(func() {
+				promptMfaTokenFunc = originalPromptFunc
+			})
+			promptMfaTokenFunc = func(creds *types.AWSCredentials) (string, error) {
+				return "123456", nil
+			}
+
+			identity := &userIdentity{
+				name: "test-identity",
+				config: &schema.Identity{
+					Kind:    "aws/user",
+					Session: tt.sessionConfig,
+				},
+			}
+
+			longLivedCreds := &types.AWSCredentials{
+				AccessKeyID:     "AKIAIOSFODNN7EXAMPLE",
+				SecretAccessKey: "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
+				MfaArn:          tt.mfaArn,
+			}
+
+			input, err := identity.buildGetSessionTokenInput(longLivedCreds)
+			require.NoError(t, err)
+			require.NotNil(t, input)
+
+			assert.Equal(t, tt.expectedDuration, *input.DurationSeconds, tt.description)
+
+			// Verify MFA fields are set correctly.
+			if tt.mfaArn != "" {
+				require.NotNil(t, input.SerialNumber)
+				assert.Equal(t, tt.mfaArn, *input.SerialNumber)
+				require.NotNil(t, input.TokenCode)
+				assert.Equal(t, "123456", *input.TokenCode)
+			} else {
+				assert.Nil(t, input.SerialNumber)
+				assert.Nil(t, input.TokenCode)
 			}
 		})
 	}

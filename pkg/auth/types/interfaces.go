@@ -104,6 +104,7 @@ type PostAuthenticateParams struct {
 	ProviderName string
 	IdentityName string
 	Credentials  ICredentials
+	Manager      AuthManager // Auth manager for resolving provider chains
 }
 
 // Identity defines the interface that all authentication identities must implement.
@@ -185,7 +186,21 @@ type AuthManager interface {
 	Validate() error
 
 	// GetDefaultIdentity returns the name of the default identity, if any.
-	GetDefaultIdentity() (string, error)
+	//
+	// Parameters:
+	//   - forceSelect: When true and terminal is interactive, always displays the identity
+	//     selector even if a default identity is configured. This allows users to override
+	//     the default choice interactively.
+	//
+	// Returns:
+	//   - string: The name of the selected or default identity
+	//   - error: An error if no identity is available or selection fails
+	//
+	// Behavior:
+	//   - If forceSelect is true: Displays interactive selector (if terminal supports it)
+	//   - If forceSelect is false: Returns configured default identity if available
+	//   - If no default and not interactive: Returns error indicating no identity available
+	GetDefaultIdentity(forceSelect bool) (string, error)
 
 	// ListIdentities returns all available identity names.
 	ListIdentities() []string
