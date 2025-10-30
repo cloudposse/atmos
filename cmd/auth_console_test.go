@@ -593,7 +593,7 @@ func (m *mockAuthManagerForProvider) Authenticate(ctx context.Context, identityN
 	return nil, errors.New("not implemented")
 }
 
-func (m *mockAuthManagerForProvider) GetDefaultIdentity() (string, error) {
+func (m *mockAuthManagerForProvider) GetDefaultIdentity(_ bool) (string, error) {
 	return "", errors.New("not implemented")
 }
 
@@ -675,7 +675,7 @@ func (m *mockAuthManagerForIdentity) Authenticate(ctx context.Context, identityN
 	return nil, errors.New("not implemented")
 }
 
-func (m *mockAuthManagerForIdentity) GetDefaultIdentity() (string, error) {
+func (m *mockAuthManagerForIdentity) GetDefaultIdentity(_ bool) (string, error) {
 	if m.defaultErr != nil {
 		return "", m.defaultErr
 	}

@@ -51,15 +51,26 @@ func executeAuthLoginCommand(cmd *cobra.Command, args []string) error {
 	}
 
 	// Get identity from flag or use default.
-	// Read from cobra flags first (more reliable for persistent flags), then fall back to viper.
-	identityName, _ := cmd.Flags().GetString(IdentityFlagName)
-	if identityName == "" {
+	// IMPORTANT: When BindPFlag is used, Viper can override flag values. To ensure
+	// command-line flags take precedence, we check if the flag was explicitly set.
+	// If Changed() returns true, the user provided the flag on the command line.
+	var identityName string
+	if cmd.Flags().Changed(IdentityFlagName) {
+		// Flag was explicitly provided on command line (either with or without value).
+		// GetString() will return the command-line value or NoOptDefVal (__SELECT__).
+		identityName, _ = cmd.Flags().GetString(IdentityFlagName)
+	} else {
+		// Flag not provided on command line - fall back to viper (config/env/defaults).
 		identityName = viper.GetString(IdentityFlagName)
 	}
 
+	// Check if user wants to interactively select identity.
+	forceSelect := identityName == IdentityFlagSelectValue
+
 	// If no identity specified, get the default identity (which prompts if needed).
-	if identityName == "" {
-		identityName, err = authManager.GetDefaultIdentity()
+	// If --identity flag was used without value, forceSelect will be true.
+	if identityName == "" || forceSelect {
+		identityName, err = authManager.GetDefaultIdentity(forceSelect)
 		if err != nil {
 			return errors.Join(errUtils.ErrDefaultIdentity, err)
 		}

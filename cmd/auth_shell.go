@@ -73,10 +73,22 @@ func executeAuthShellCommandCore(cmd *cobra.Command, args []string) error {
 		return errors.Join(errUtils.ErrFailedToInitializeAuthManager, err)
 	}
 
-	// Get identity from viper (respects CLI → ENV → config precedence).
-	identityName := viper.GetString(IdentityFlagName)
-	if identityName == "" {
-		defaultIdentity, err := authManager.GetDefaultIdentity()
+	// Get identity from flag or use default.
+	// Check if flag was explicitly set by user to ensure command-line precedence.
+	var identityName string
+	if cmd.Flags().Changed(IdentityFlagName) {
+		// Flag was explicitly provided on command line (either with or without value).
+		identityName, _ = cmd.Flags().GetString(IdentityFlagName)
+	} else {
+		// Flag not provided on command line - fall back to viper (config/env).
+		identityName = viper.GetString(IdentityFlagName)
+	}
+
+	// Check if user wants to interactively select identity.
+	forceSelect := identityName == IdentityFlagSelectValue
+
+	if identityName == "" || forceSelect {
+		defaultIdentity, err := authManager.GetDefaultIdentity(forceSelect)
 		if err != nil {
 			return errors.Join(errUtils.ErrNoDefaultIdentity, err)
 		}
