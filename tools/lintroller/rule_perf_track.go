@@ -58,6 +58,7 @@ var excludedPackages = []string{
 	"/pkg/ai",        // AI operations are external API calls, not in hot path.
 	"/pkg/mcp",       // MCP protocol implementation, AI infrastructure, not in hot path.
 	"/pkg/lsp",       // LSP protocol implementation, performance-critical JSON-RPC communication.
+	"/internal/gcp",  // GCP utilities would create import cycle with pkg/perf (used by pkg/store).
 }
 
 // Receiver types to exclude from perf.Track() checks.
