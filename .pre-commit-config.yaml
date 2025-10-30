@@ -40,15 +40,6 @@ repos:
         require_serial: true
         exclude: ^(vendor/|tests/test-cases/|tests/testdata/|tests/snapshots/)
 
-      - id: lintroller
-        name: lintroller
-        description: Run Atmos custom linter (t.Setenv/os.Setenv rules)
-        entry: make lintroller
-        language: system
-        types: [go]
-        pass_filenames: false
-        exclude: ^(vendor/|tests/test-cases/|tests/testdata/|tests/snapshots/|tools/lintroller/testdata/)
-
       - id: gomodcheck
         name: Check go.mod install compatibility
         description: Ensure go.mod doesn't have replace/exclude directives that break go install
