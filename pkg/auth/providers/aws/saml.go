@@ -397,7 +397,9 @@ func (p *samlProvider) Environment() (map[string]string, error) {
 	return env, nil
 }
 
-// Paths returns credential files/directories used by this provider.
+// Paths returns provider-namespaced credential and config file paths.
+// Returns AWS credentials and config files using AWSFileManager for proper provider isolation.
+// Credentials file is required, config file is optional.
 func (p *samlProvider) Paths() ([]types.Path, error) {
 	basePath := awsCloud.GetFilesBasePath(p.config)
 

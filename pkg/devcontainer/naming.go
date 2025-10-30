@@ -1,3 +1,14 @@
+// Package devcontainer provides naming and validation for devcontainer instances.
+//
+// # Naming Limitation
+//
+// Container name parsing has an inherent ambiguity when both name and instance contain hyphens.
+// The parsing logic (split by "-", last part is instance) cannot distinguish between:
+//   - name="my-dev-env", instance="test-1" → "atmos-devcontainer-my-dev-env-test-1"
+//   - name="my-dev-env-test", instance="1" → "atmos-devcontainer-my-dev-env-test-1"
+//
+// This is typically acceptable since instance names are usually simple (default, alice, prod),
+// but users should avoid hyphens in instance names when using hyphenated devcontainer names.
 package devcontainer
 
 import (

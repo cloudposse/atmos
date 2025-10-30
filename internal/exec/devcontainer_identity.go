@@ -85,20 +85,27 @@ func addCredentialMounts(config *devcontainer.Config, paths []types.Path) error 
 	hostPath, containerPath := parseMountPaths(config.WorkspaceMount, config.WorkspaceFolder)
 
 	for _, credPath := range paths {
+		// Expand ~ in paths before using them.
+		expandedPath, err := homedir.Expand(credPath.Location)
+		if err != nil {
+			// If expansion fails, fall back to original path.
+			expandedPath = credPath.Location
+		}
+
 		// Check if path exists if required.
 		if credPath.Required {
-			if _, err := os.Stat(credPath.Location); err != nil {
+			if _, err := os.Stat(expandedPath); err != nil {
 				return fmt.Errorf("required credential path %s (%s) does not exist: %w",
-					credPath.Location, credPath.Purpose, err)
+					expandedPath, credPath.Purpose, err)
 			}
-		} else if _, err := os.Stat(credPath.Location); err != nil {
+		} else if _, err := os.Stat(expandedPath); err != nil {
 			// Optional path doesn't exist, skip it.
 			continue
 		}
 
 		// Translate host path to container path.
 		userHome, _ := homedir.Dir()
-		containerMountPath := translatePath(credPath.Location, hostPath, containerPath, userHome)
+		containerMountPath := translatePath(expandedPath, hostPath, containerPath, userHome)
 
 		// Check metadata for hints.
 		readOnly := true // Default to read-only for security.
@@ -107,7 +114,7 @@ func addCredentialMounts(config *devcontainer.Config, paths []types.Path) error 
 		}
 
 		// Build mount string in devcontainer format: "type=bind,source=/host,target=/container,readonly"
-		mountStr := fmt.Sprintf("type=bind,source=%s,target=%s", credPath.Location, containerMountPath)
+		mountStr := fmt.Sprintf("type=bind,source=%s,target=%s", expandedPath, containerMountPath)
 		if readOnly {
 			mountStr += ",readonly"
 		}

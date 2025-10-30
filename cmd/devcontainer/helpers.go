@@ -61,7 +61,8 @@ func getDevcontainerName(args []string) (string, error) {
 	}
 
 	// Check if running in non-interactive mode (CI, piped, etc.).
-	if !isatty.IsTerminal(os.Stdout.Fd()) {
+	// Check stdin since prompts read from stdin, not stdout.
+	if !isatty.IsTerminal(os.Stdin.Fd()) && !isatty.IsCygwinTerminal(os.Stdin.Fd()) {
 		return "", fmt.Errorf("%w: devcontainer name is required in non-interactive mode", errUtils.ErrDevcontainerNameEmpty)
 	}
 

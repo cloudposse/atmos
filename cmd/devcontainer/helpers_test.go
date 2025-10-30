@@ -123,20 +123,16 @@ func TestGetDevcontainerName_EmptyArgs(t *testing.T) {
 		result, err := getDevcontainerName([]string{})
 		// In test environments (non-TTY), we expect an error.
 		// In interactive terminal, this would prompt the user.
-		if err != nil {
-			assert.Error(t, err)
-			assert.Empty(t, result)
-			assert.Contains(t, err.Error(), "required in non-interactive mode")
-		}
+		require.Error(t, err)
+		require.Empty(t, result)
+		require.Contains(t, err.Error(), "required in non-interactive mode")
 	})
 
 	t.Run("empty string in args", func(t *testing.T) {
 		result, err := getDevcontainerName([]string{""})
 		// Empty string should trigger same behavior as no args.
-		if err != nil {
-			assert.Error(t, err)
-			assert.Empty(t, result)
-		}
+		require.Error(t, err)
+		require.Empty(t, result)
 	})
 }
 

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 
@@ -116,7 +117,7 @@ func stopContainerIfRunning(ctx context.Context, runtime container.Runtime, cont
 	}
 
 	return runWithSpinner(fmt.Sprintf("Stopping container %s", containerInfo.Name), func() error {
-		if err := runtime.Stop(ctx, containerInfo.ID, 10); err != nil {
+		if err := runtime.Stop(ctx, containerInfo.ID, 10*time.Second); err != nil {
 			return fmt.Errorf("%w: failed to stop container: %w", errUtils.ErrContainerRuntimeOperation, err)
 		}
 		return nil

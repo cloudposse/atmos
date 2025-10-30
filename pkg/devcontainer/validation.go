@@ -2,6 +2,7 @@ package devcontainer
 
 import (
 	"fmt"
+	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -25,7 +26,7 @@ func ValidateNotImported(importPath string) error {
 func containsDevcontainerConfig(path string) bool {
 	defer perf.Track(nil, "devcontainer.containsDevcontainerConfig")()
 
-	// Check for common devcontainer file names
+	// Check for common devcontainer file names anywhere in the path.
 	devcontainerFiles := []string{
 		"devcontainer.json",
 		".devcontainer/devcontainer.json",
@@ -33,15 +34,10 @@ func containsDevcontainerConfig(path string) bool {
 	}
 
 	for _, file := range devcontainerFiles {
-		if path == file || contains(path, file) {
+		if strings.Contains(path, file) {
 			return true
 		}
 	}
 
 	return false
-}
-
-// contains checks if a string contains a substring.
-func contains(s, substr string) bool {
-	return len(s) >= len(substr) && s[len(s)-len(substr):] == substr
 }

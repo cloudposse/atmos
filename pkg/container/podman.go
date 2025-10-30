@@ -153,8 +153,21 @@ func (p *PodmanRuntime) Remove(ctx context.Context, containerID string, force bo
 func (p *PodmanRuntime) Inspect(ctx context.Context, containerID string) (*Info, error) {
 	defer perf.Track(nil, "container.PodmanRuntime.Inspect")()
 
-	// TODO: Implement actual inspection using podman inspect with JSON output.
-	return nil, errUtils.ErrNotImplemented
+	// Use List to find the container by ID or name.
+	// This provides basic information until full JSON-based podman inspect is implemented.
+	containers, err := p.List(ctx, nil)
+	if err != nil {
+		return nil, fmt.Errorf("%w: failed to list containers: %w", errUtils.ErrContainerRuntimeOperation, err)
+	}
+
+	// Find container by matching ID or name.
+	for _, container := range containers {
+		if container.ID == containerID || container.Name == containerID {
+			return &container, nil
+		}
+	}
+
+	return nil, fmt.Errorf("%w: %s", errUtils.ErrContainerNotFound, containerID)
 }
 
 // List lists containers matching the given filters.

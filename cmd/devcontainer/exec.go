@@ -18,15 +18,12 @@ var execCmd = &cobra.Command{
 The container must already be running. Use '--' to separate devcontainer arguments
 from the command to execute.`,
 	Example: markdown.DevcontainerExecUsageMarkdown,
-	Args:    cobra.MinimumNArgs(1),
+	Args:    cobra.MinimumNArgs(2),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		defer perf.Track(atmosConfigPtr, "devcontainer.exec.RunE")()
 
 		name := args[0]
-		var command []string
-		if len(args) > 1 {
-			command = args[1:]
-		}
+		command := args[1:]
 		return e.ExecuteDevcontainerExec(atmosConfigPtr, name, execInstance, command)
 	},
 }

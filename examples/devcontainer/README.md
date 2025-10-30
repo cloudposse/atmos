@@ -13,7 +13,7 @@ This example demonstrates how to configure devcontainers in Atmos as a replaceme
 
 ```bash
 # Create and attach to the default devcontainer (Geodesic)
-atmos devcontainer create default --attach
+atmos devcontainer start default --attach
 
 # Inside the container
 terraform plan
@@ -24,10 +24,10 @@ atmos terraform apply vpc -s ue2-dev
 
 ```bash
 # Create Terraform-specific devcontainer
-atmos devcontainer create terraform --attach
+atmos devcontainer start terraform --attach
 
 # Create Python devcontainer
-atmos devcontainer create python --attach
+atmos devcontainer start python --attach
 ```
 
 ### Using Multiple Instances

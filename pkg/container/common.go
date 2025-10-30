@@ -144,11 +144,11 @@ func execWithRuntime(ctx context.Context, runtimeName string, containerID string
 		execCmd.Stderr = os.Stderr
 
 		if err := execCmd.Run(); err != nil {
-			// Don't treat exit code as error for interactive sessions.
+			// Propagate exit code to caller so CLI can report failure.
 			var exitErr *exec.ExitError
 			if errors.As(err, &exitErr) {
 				log.Debug("Interactive session exited", "code", exitErr.ExitCode())
-				return nil
+				return fmt.Errorf("%w: %s exec exited with code %d: %w", errUtils.ErrContainerRuntimeOperation, runtimeName, exitErr.ExitCode(), err)
 			}
 			return fmt.Errorf("%w: %s exec failed: %w", errUtils.ErrContainerRuntimeOperation, runtimeName, err)
 		}
