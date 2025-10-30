@@ -8,9 +8,8 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"time"
-
-	"github.com/spf13/viper"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -36,13 +35,19 @@ func WithTimeout(timeout time.Duration) ClientOption {
 }
 
 // WithGitHubToken sets the GitHub token for authenticated requests.
+// Wraps the existing transport instead of replacing it to allow composition with WithTransport.
 func WithGitHubToken(token string) ClientOption {
 	defer perf.Track(nil, "http.WithGitHubToken")()
 
 	return func(c *DefaultClient) {
 		if token != "" {
+			// Wrap existing transport (or use default if none set).
+			base := c.client.Transport
+			if base == nil {
+				base = http.DefaultTransport
+			}
 			c.client.Transport = &GitHubAuthenticatedTransport{
-				Base:        http.DefaultTransport,
+				Base:        base,
 				GitHubToken: token,
 			}
 		}
@@ -111,13 +116,14 @@ func (t *GitHubAuthenticatedTransport) RoundTrip(req *http.Request) (*http.Respo
 
 // GetGitHubTokenFromEnv retrieves GitHub token from environment variables.
 // Checks ATMOS_GITHUB_TOKEN first, then falls back to GITHUB_TOKEN.
+// Uses os.Getenv directly to avoid requiring viper.BindEnv in library code.
 func GetGitHubTokenFromEnv() string {
 	defer perf.Track(nil, "http.GetGitHubTokenFromEnv")()
 
-	if token := viper.GetString("ATMOS_GITHUB_TOKEN"); token != "" {
+	if token := os.Getenv("ATMOS_GITHUB_TOKEN"); token != "" {
 		return token
 	}
-	return viper.GetString("GITHUB_TOKEN")
+	return os.Getenv("GITHUB_TOKEN")
 }
 
 // Do implements Client.Do.

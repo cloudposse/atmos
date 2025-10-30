@@ -98,9 +98,9 @@ func resolveToolPath(tool string) (string, string, error) {
 		return parts[0], parts[1], nil
 	}
 
-	// Fallback: assume tool name is same as repo name with unknown owner
-	// This will fail during install, but we try anyway
-	return "unknown", tool, nil
+	// Cannot resolve tool - return error instead of misleading "unknown" owner.
+	// Callers should handle resolution errors appropriately.
+	return "", "", fmt.Errorf("%w: unable to resolve tool '%s' to owner/repo", registry.ErrToolNotFound, tool)
 }
 
 // fileExists checks if a file exists.
@@ -117,9 +117,10 @@ func UpdatePathForTools(atmosConfig *schema.AtmosConfiguration, dependencies map
 		return nil
 	}
 
-	toolsDir := atmosConfig.Toolchain.InstallPath
-	if toolsDir == "" {
-		toolsDir = ".tools"
+	// Guard against nil atmosConfig.
+	toolsDir := ".tools"
+	if atmosConfig != nil && atmosConfig.Toolchain.InstallPath != "" {
+		toolsDir = atmosConfig.Toolchain.InstallPath
 	}
 
 	var paths []string
