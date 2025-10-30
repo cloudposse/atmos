@@ -225,7 +225,7 @@ func TestAquaRegistry_fetchFromRegistry_NotFound(t *testing.T) {
 	tool, err := ar.fetchFromRegistry(ts.URL, "nonexistent", "tool")
 	assert.Error(t, err)
 	assert.Nil(t, tool)
-	assert.Contains(t, err.Error(), "tool not found in registry")
+	assert.ErrorIs(t, err, registry.ErrToolNotFound)
 }
 
 func TestAquaRegistry_fetchRegistryFile(t *testing.T) {
@@ -316,7 +316,7 @@ func TestAquaRegistry_parseRegistryFile_Invalid(t *testing.T) {
 	tool, err := ar.parseRegistryFile(data)
 	assert.Error(t, err)
 	assert.Nil(t, tool)
-	assert.Contains(t, err.Error(), "no tools or packages found in registry file")
+	assert.ErrorIs(t, err, registry.ErrNoPackagesInRegistry)
 }
 
 func TestAquaRegistry_BuildAssetURL_HTTP(t *testing.T) {
@@ -514,7 +514,7 @@ func TestAquaRegistry_ErrorHandling(t *testing.T) {
 	tool, err := ar.GetTool("nonexistent", "tool")
 	assert.Error(t, err)
 	assert.Nil(t, tool)
-	assert.Contains(t, err.Error(), "not found in any registry")
+	assert.ErrorIs(t, err, registry.ErrToolNotFound)
 
 	// Test getting tool with invalid owner/repo
 	tool, err = ar.GetTool("", "")

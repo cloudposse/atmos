@@ -70,7 +70,7 @@ func TestAddCommand_InvalidTool(t *testing.T) {
 	})
 	err := AddToolVersion("nonexistent-tool", "1.0.0")
 	require.Error(t, err, "Should fail when adding invalid tool")
-	assert.Contains(t, err.Error(), "tool not found")
+	assert.ErrorIs(t, err, ErrToolNotFound)
 
 	// Verify the tool was NOT added to the file
 	toolVersions, err := LoadToolVersions(toolVersionsFile)
