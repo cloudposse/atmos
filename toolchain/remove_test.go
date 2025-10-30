@@ -275,7 +275,7 @@ func TestRemoveCommand_RemoveNonExistentVersion(t *testing.T) {
 
 	err = RemoveToolVersion(toolVersionsFile, "terraform", "2.0.0")
 	require.Error(t, err, "Should error when removing non-existent version")
-	assert.ErrorIs(t, err, ErrToolNotFound)
+	assert.ErrorIs(t, err, ErrNoVersionsFound)
 
 	updated, err := LoadToolVersions(toolVersionsFile)
 	require.NoError(t, err)

@@ -22,7 +22,8 @@ func TestNewAquaRegistry(t *testing.T) {
 	assert.NotNil(t, ar)
 	assert.NotNil(t, ar.client)
 	assert.NotNil(t, ar.cache)
-	assert.Contains(t, ar.cache.baseDir, "atmos-toolchain-cache")
+	// Cache should be in XDG-compliant path: ~/.cache/atmos/toolchain/registry
+	assert.Contains(t, ar.cache.baseDir, filepath.Join("atmos", "toolchain", "registry"))
 }
 
 func TestAquaRegistry_LoadLocalConfig(t *testing.T) {
@@ -495,8 +496,8 @@ func TestGetArch(t *testing.T) {
 func TestAquaRegistry_CacheDirectory(t *testing.T) {
 	ar := NewAquaRegistry()
 
-	// Test that cache directory is created
-	assert.Contains(t, ar.cache.baseDir, "atmos-toolchain-cache")
+	// Test that cache directory is in XDG-compliant path
+	assert.Contains(t, ar.cache.baseDir, filepath.Join("atmos", "toolchain", "registry"))
 
 	// Test that cache directory can be created
 	err := os.MkdirAll(ar.cache.baseDir, defaultMkdirPermissions)
